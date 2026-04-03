@@ -45,7 +45,10 @@ adata = singlet.load("GSE136831", obs_filter={"tissue": "lung"})
 singlet auto-detects file format from the extension:
 
 ```python
-# .spz (SinglePress compressed)
+# .1pz (SinglePress compressed, recommended)
+adata = singlet.load("data/experiment.1pz")
+
+# .spz (legacy SinglePress format)
 adata = singlet.load("data/experiment.spz")
 
 # .h5ad (HDF5)
@@ -60,10 +63,10 @@ adata = singlet.load("data/experiment.zarr")
 For very large files, read a subset of cells:
 
 ```python
-from singlet._io import read_spz
+from singlet._io import read_1pz
 
 # Read only cells 0–999
-adata = read_spz("large_dataset.spz", col_range=(0, 1000))
+adata = read_1pz("large_dataset.1pz", col_range=(0, 1000))
 ```
 
 ## Download Without Loading
@@ -71,5 +74,5 @@ adata = read_spz("large_dataset.spz", col_range=(0, 1000))
 ```python
 # Just download, don't load into memory
 path = singlet.download("GSE136831")
-print(path)  # ~/.singlet/data/GSE136831.spz
+print(path)  # ~/.singlet/data/GSE136831.1pz
 ```

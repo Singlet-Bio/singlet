@@ -34,7 +34,7 @@ adata = singlet.load("GSE136831")
 
 # PyTorch sparse tensor (GPU)
 from singlet.torch import to_sparse_csr
-tensor = to_sparse_csr("~/.singlet/data/GSE136831.spz", device="cuda")
+tensor = to_sparse_csr("~/.singlet/data/GSE136831.1pz", device="cuda")
 ```
 
 ```{toctree}

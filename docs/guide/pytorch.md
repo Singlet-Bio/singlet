@@ -4,7 +4,7 @@ singlet provides native PyTorch sparse tensor support, optimized for GPU machine
 
 ## Zero-Copy Sparse Tensors
 
-The fastest path from .spz to GPU:
+The fastest path from .1pz to GPU:
 
 ```python
 from singlet.torch import to_sparse_csr

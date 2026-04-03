@@ -64,14 +64,18 @@ csc_matrix = singlet.to_csc(adata)
 print(type(csc_matrix))  # scipy.sparse.csc_matrix
 ```
 
-## Direct .spz Conversion
+## Direct .1pz Conversion
 
 ```python
-from singlet.convert import spz_to_h5ad, h5ad_to_spz
+from singlet.convert import pz_to_h5ad, h5ad_to_pz
 
-# .spz → .h5ad
-spz_to_h5ad("input.spz", "output.h5ad")
+# .1pz → .h5ad
+pz_to_h5ad("input.1pz", "output.h5ad")
 
-# .h5ad → .spz
-h5ad_to_spz("input.h5ad", "output.spz")
+# .h5ad → .1pz
+h5ad_to_pz("input.h5ad", "output.1pz")
+
+# Legacy .spz conversion still supported
+from singlet.convert import spz_to_h5ad
+spz_to_h5ad("old_input.spz", "output.h5ad")
 ```

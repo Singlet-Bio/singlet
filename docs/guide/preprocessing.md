@@ -1,7 +1,7 @@
 # Preprocessing Pipeline
 
 The preprocessing module provides tools for processing raw FASTQ data into
-compressed .spz files. These are the same tools used to build the SingletDB
+compressed .1pz files. These are the same tools used to build the SingletDB
 atlas.
 
 ## Overview
@@ -12,7 +12,7 @@ The pipeline processes samples through 5 stages:
 2. **Detect** — Identify the sequencing protocol (10x v2/v3, Drop-seq, Smart-seq2)
 3. **Quantify** — Count matrix generation with simpleaf + piscem
 4. **QC** — Quality control metrics and thresholds
-5. **Export** — Compress to .spz format
+5. **Export** — Compress to .1pz format
 
 ## Supported Species
 
@@ -30,7 +30,7 @@ drosophila, C. elegans, and arabidopsis.
 
 ```python
 from singlet.preprocessing import (
-    download_fastq, detect_protocol, quantify, run_qc, export_to_spz
+    download_fastq, detect_protocol, quantify, run_qc, export_to_1pz
 )
 
 # 1. Download FASTQs
@@ -61,7 +61,7 @@ print(f"QC: {metrics.qc_status} ({metrics.n_cells} cells, "
       f"{metrics.median_genes_per_cell} genes/cell)")
 
 # 5. Export
-export_to_spz("/tmp/quant_output", "GSM1234567.spz")
+export_to_1pz("/tmp/quant_output", "GSM1234567.1pz")
 ```
 
 ## External Dependencies

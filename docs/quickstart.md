@@ -36,18 +36,21 @@ adata = singlet.load("GSE136831", genes=["TP53", "BRCA1", "KRAS"])
 adata = singlet.load("GSE136831", backend="aws")
 ```
 
-## Read/Write .spz Files
+## Read/Write .1pz Files
 
 ```python
-# Write AnnData to compressed .spz
-singlet.write_spz(adata, "my_data.spz")
+# Write AnnData to compressed .1pz (recommended)
+singlet.write_1pz(adata, "my_data.1pz")
 
 # Read it back
-adata2 = singlet.read_spz("my_data.spz")
+adata2 = singlet.read_1pz("my_data.1pz")
 
 # Check file info without loading
-info = singlet.spz_info("my_data.spz")
+info = singlet.info_1pz("my_data.1pz")
 print(f"{info['rows']}×{info['cols']}, ratio={info['ratio']:.1f}×")
+
+# Legacy .spz files are also supported
+adata3 = singlet.read_spz("old_data.spz")
 ```
 
 ## Convert Formats
@@ -69,7 +72,7 @@ adata = singlet.from_h5ad("input.h5ad")
 from singlet.torch import to_sparse_csr, SpzDataset, DataLoader
 
 # Zero-copy sparse CSR tensor (ideal for GPU)
-tensor = to_sparse_csr("my_data.spz", device="cuda")
+tensor = to_sparse_csr("my_data.1pz", device="cuda")
 print(tensor.shape, tensor.device)
 
 # DataLoader for training
