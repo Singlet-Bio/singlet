@@ -1,4 +1,4 @@
-"""Export quantification output to .spz format."""
+"""Export quantification output to .1pz format."""
 
 from __future__ import annotations
 
@@ -9,6 +9,76 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
+def export_to_1pz(
+    quant_dir: str | Path,
+    output_path: str | Path,
+    *,
+    sample_id: Optional[str] = None,
+) -> bool:
+    """Export simpleaf/alevin quantification to .1pz format.
+
+    Reads the count matrix from ``af_quant/alevin/`` and writes a compressed
+    .1pz file (VOCSC + zstd-3).
+
+    Parameters
+    ----------
+    quant_dir : path
+        simpleaf output directory (containing ``af_quant/``).
+    output_path : path
+        Output .1pz file path.
+    sample_id : str, optional
+        Sample identifier for logging.
+
+    Returns
+    -------
+    bool
+        True if export succeeded.
+    """
+    import numpy as np
+    import scipy.io
+    import scipy.sparse as sp
+
+    qdir = Path(quant_dir)
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    # Find count matrix
+    mtx_candidates = [
+        qdir / "af_quant" / "alevin" / "quants_mat.mtx",
+        qdir / "af_quant" / "alevin" / "quants_mat.mtx.gz",
+    ]
+    mtx_path = None
+    for p in mtx_candidates:
+        if p.exists():
+            mtx_path = p
+            break
+
+    if mtx_path is None:
+        logger.error("No count matrix found in %s", qdir)
+        return False
+
+    # Load cells × genes matrix
+    mat = scipy.io.mmread(mtx_path)
+    if sp.issparse(mat):
+        mat = mat.tocsc()
+    else:
+        mat = sp.csc_matrix(mat)
+
+    # Transpose to genes × cells for .1pz container
+    mat_gc = mat.T.tocsc()
+
+    import singlepress
+    singlepress.write_1pz(str(out), mat_gc)
+
+    sid = sample_id or out.stem
+    logger.info(
+        "Exported %s: %d genes × %d cells → %s",
+        sid, mat_gc.shape[0], mat_gc.shape[1], out,
+    )
+    return True
+
+
+# Keep legacy name for backward compatibility
 def export_to_spz(
     quant_dir: str | Path,
     output_path: str | Path,
@@ -16,27 +86,7 @@ def export_to_spz(
     sample_id: Optional[str] = None,
     row_sort: bool = True,
 ) -> bool:
-    """Export simpleaf/alevin quantification to .spz format.
-
-    Reads the count matrix from ``af_quant/alevin/`` and writes a compressed
-    .spz file with gene names and cell barcodes embedded as metadata.
-
-    Parameters
-    ----------
-    quant_dir : path
-        simpleaf output directory (containing ``af_quant/``).
-    output_path : path
-        Output .spz file path.
-    sample_id : str, optional
-        Sample identifier for logging.
-    row_sort : bool
-        Sort genes by nnz for better compression.
-
-    Returns
-    -------
-    bool
-        True if export succeeded.
-    """
+    """Export to .spz format (legacy). Prefer export_to_1pz()."""
     import numpy as np
     import scipy.io
     import scipy.sparse as sp

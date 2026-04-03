@@ -2,7 +2,7 @@
 
 This subpackage wraps the scgeo production pipeline for use within the
 singlet Python package. These tools are used internally to process raw
-FASTQ data into compressed .spz files — they are not documented on the
+FASTQ data into compressed .1pz files — they are not documented on the
 website but are available for power users and infrastructure operators.
 
 Typical workflow::
@@ -24,7 +24,7 @@ from singlet.preprocessing._species import (
     get_species_info,
     get_taxon_id,
 )
-from singlet.preprocessing._export import export_to_spz
+from singlet.preprocessing._export import export_to_1pz, export_to_spz
 
 __all__ = [
     "download_fastq",
@@ -38,5 +38,6 @@ __all__ = [
     "list_supported_species",
     "get_species_info",
     "get_taxon_id",
+    "export_to_1pz",
     "export_to_spz",
 ]

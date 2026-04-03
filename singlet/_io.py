@@ -1,8 +1,14 @@
-""".spz file I/O — wraps the _singlepress C++ extension.
+""".spz / .1pz file I/O — wraps the singlepress C++ extensions.
 
-Supports both new singlepress format (v1, 64-byte header, delta+varint)
-and legacy sparsepress_v2 format (v2, 128-byte header, rANS encoding).
-Legacy format is auto-detected and requires the `sparsepress` package.
+Supports three formats:
+  .1pz — New VOCSC + byte-split + zstd-3 format (preferred)
+  .spz (v1) — singlepress format (64-byte header, delta+varint)
+  .spz (v2) — legacy sparsepress_v2 format (128-byte header, rANS encoding)
+
+Format is auto-detected from magic bytes:
+  TP1Z (0x5A315054) → .1pz
+  SPRZ (0x5A525053) → .spz v1
+  SPZ2 (0x53505A32) → .spz v2
 """
 
 from __future__ import annotations
@@ -12,27 +18,44 @@ from pathlib import Path
 from typing import Optional
 
 
-def _detect_format_version(path: str | Path) -> int:
-    """Detect .spz format version from file header.
+# .1pz magic bytes (little-endian)
+_TP1_MAGIC = b"\x54\x50\x31\x5A"  # 0x5A315054 = "TP1Z"
 
-    Returns 1 for new singlepress format, 2 for legacy sparsepress_v2.
 
-    Discriminator: both formats have version=2 at byte 4, but:
-    - Legacy: uint16 header_size=128 at bytes 6-7
-    - New: uint8 row_sorted (0|1) at byte 6, uint8 reserved=0 at byte 7
+def _detect_format(path: str | Path) -> str:
+    """Detect file format from header magic bytes.
+
+    Returns
+    -------
+    str
+        '1pz' for .1pz format, 'spz1' for singlepress, 'spz2' for legacy.
     """
     with open(path, "rb") as f:
         header = f.read(8)
     if len(header) < 8:
-        raise ValueError(f"File too small to be a valid .spz: {path}")
+        raise ValueError(f"File too small to be a valid matrix file: {path}")
     magic = header[:4]
-    if magic not in (b"SPRZ", b"SPZ2"):
-        raise ValueError(f"Not a .spz file (bad magic): {path}")
-    # Check header_size field at bytes 6-7 (uint16 LE for old format)
-    hdr_size_field = struct.unpack_from("<H", header, 6)[0]
-    if hdr_size_field == 128:
-        return 2  # legacy sparsepress_v2
-    return 1  # new singlepress
+    if magic == _TP1_MAGIC:
+        return "1pz"
+    if magic in (b"SPRZ", b"SPZ2"):
+        hdr_size_field = struct.unpack_from("<H", header, 6)[0]
+        if hdr_size_field == 128:
+            return "spz2"
+        return "spz1"
+    raise ValueError(f"Unknown file format (bad magic): {path}")
+
+
+def _detect_format_version(path: str | Path) -> int:
+    """Detect .spz format version from file header (legacy compat).
+
+    Returns 1 for new singlepress format, 2 for legacy sparsepress_v2.
+    """
+    fmt = _detect_format(path)
+    if fmt == "spz2":
+        return 2
+    if fmt == "spz1":
+        return 1
+    raise ValueError(f"Not a .spz file: {path}")
 
 
 def read_spz(path: str | Path, *, col_range: tuple[int, int] | None = None):
@@ -254,4 +277,107 @@ def _spz_info_legacy(path: str | Path) -> dict:
     return sp_mod.sp_info(str(path))
 
 
+# ============================================================================
+# .1pz format support (VOCSC + byte-split + zstd-3)
+# ============================================================================
+
+def read_1pz(path: str | Path):
+    """Read a .1pz file into AnnData.
+
+    Parameters
+    ----------
+    path : str or Path
+        Path to a .1pz file.
+
+    Returns
+    -------
+    anndata.AnnData
+        Sparse count matrix (CSR) with genes in var.
+        (.1pz stores genes×cells, we transpose.)
+    """
+    import anndata as ad
+    import numpy as np
+    import scipy.sparse as sp
+
+    try:
+        import singlepress
+        m, n, nnz, indptr, indices, values = singlepress.read_1pz(
+            str(path), num_threads=8
+        ).__iter__()  # read_1pz returns csc_matrix
+    except (ImportError, AttributeError):
+        # If singlepress not available with .1pz support, try _pz_codec directly
+        from singlepress._pz_codec import pz_read
+        m, n, nnz, indptr, indices, values = pz_read(str(path), 8)
+
+    # singlepress.read_1pz returns a csc_matrix directly
+    # but if we used pz_read, we got raw arrays
+    if isinstance(m, sp.csc_matrix):
+        mat = m  # read_1pz returned the matrix
+    else:
+        mat = sp.csc_matrix((values, indices, indptr), shape=(int(m), int(n)))
+
+    # Transpose to cells × genes for AnnData
+    adata = ad.AnnData(X=mat.T)
+    return adata
+
+
+def write_1pz(
+    adata,
+    path: str | Path,
+    *,
+    layer: Optional[str] = None,
+) -> dict:
+    """Write AnnData to .1pz format (VOCSC + zstd-3).
+
+    Parameters
+    ----------
+    adata : anndata.AnnData
+        The data to write.
+    path : str or Path
+        Output file path.
+    layer : str, optional
+        Write this layer instead of X.
+
+    Returns
+    -------
+    dict
+        Compression statistics.
+    """
+    import numpy as np
+    import scipy.sparse as sp
+    import singlepress
+
+    mat = adata.layers[layer] if layer else adata.X
+    if not sp.issparse(mat):
+        mat = sp.csc_matrix(mat)
+
+    # AnnData is cells × genes → transpose to genes × cells
+    mat = mat.T.tocsc()
+
+    return singlepress.write_1pz(str(path), mat)
+
+
+def info_1pz(path: str | Path) -> dict:
+    """Read .1pz file header without decompressing."""
+    import singlepress
+    return singlepress.info_1pz(str(path))
+
+
+def read_matrix(path: str | Path, **kwargs):
+    """Auto-detect format and read a .spz or .1pz file into AnnData.
+
+    Parameters
+    ----------
+    path : str or Path
+        Path to a .spz or .1pz file.
+
+    Returns
+    -------
+    anndata.AnnData
+    """
+    fmt = _detect_format(path)
+    if fmt == "1pz":
+        return read_1pz(path)
+    else:
+        return read_spz(path, **kwargs)
 

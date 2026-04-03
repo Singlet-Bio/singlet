@@ -1,4 +1,4 @@
-"""Format conversions: .spz <-> h5ad, zarr, TileDB-SOMA, MTX, CSC."""
+"""Format conversions: .1pz/.spz <-> h5ad, zarr, TileDB-SOMA, MTX, CSC."""
 
 from __future__ import annotations
 
@@ -224,17 +224,31 @@ def from_mtx(directory: str | Path):
     return adata
 
 
-# ─── .spz round-trip convenience ────────────────────────────────────────────
+# ─── .1pz / .spz round-trip convenience ─────────────────────────────────────
+
+def pz_to_h5ad(pz_path: str | Path, h5ad_path: str | Path, **kwargs):
+    """Convert a .1pz file to .h5ad."""
+    from singlet._io import read_1pz
+    adata = read_1pz(pz_path)
+    to_h5ad(adata, h5ad_path, **kwargs)
+
+
+def h5ad_to_pz(h5ad_path: str | Path, pz_path: str | Path, **kwargs):
+    """Convert a .h5ad file to .1pz."""
+    from singlet._io import write_1pz
+    adata = from_h5ad(h5ad_path)
+    write_1pz(adata, pz_path, **kwargs)
+
 
 def spz_to_h5ad(spz_path: str | Path, h5ad_path: str | Path, **kwargs):
-    """Convert a .spz file to .h5ad."""
+    """Convert a .spz file to .h5ad (legacy compat)."""
     from singlet._io import read_spz
     adata = read_spz(spz_path)
     to_h5ad(adata, h5ad_path, **kwargs)
 
 
 def h5ad_to_spz(h5ad_path: str | Path, spz_path: str | Path, **kwargs):
-    """Convert a .h5ad file to .spz."""
+    """Convert a .h5ad file to .spz (legacy compat)."""
     from singlet._io import write_spz
     adata = from_h5ad(h5ad_path)
     write_spz(adata, spz_path, **kwargs)

@@ -12,8 +12,11 @@ Token-priced (requires API key):
     singlet.search(text)                   Natural-language search → AnnData
 
 Format I/O:
-    singlet.read_spz("file.spz")           Read .spz → AnnData
-    singlet.write_spz(adata, "out.spz")    Write AnnData → .spz
+    singlet.read_1pz("file.1pz")           Read .1pz → AnnData (preferred)
+    singlet.write_1pz(adata, "out.1pz")    Write AnnData → .1pz (preferred)
+    singlet.read_spz("file.spz")           Read .spz → AnnData (legacy)
+    singlet.write_spz(adata, "out.spz")    Write AnnData → .spz (legacy)
+    singlet.read_matrix("file")             Auto-detect .spz or .1pz
 
 Conversions:
     singlet.to_h5ad(adata, "out.h5ad")     Convert to HDF5
@@ -26,7 +29,11 @@ from singlet._catalog import catalog, info, species, tissues, datasets
 from singlet._loader import load, download
 from singlet._auth import login
 from singlet._query import query, search
-from singlet._io import read_spz, write_spz, spz_info
+from singlet._io import (
+    read_spz, write_spz, spz_info,
+    read_1pz, write_1pz, info_1pz,
+    read_matrix,
+)
 from singlet.convert import to_h5ad, to_zarr, to_csc, from_h5ad, from_zarr
 
 __all__ = [
@@ -44,6 +51,10 @@ __all__ = [
     "query",
     "search",
     # I/O
+    "read_1pz",
+    "write_1pz",
+    "info_1pz",
+    "read_matrix",
     "read_spz",
     "write_spz",
     "spz_info",
