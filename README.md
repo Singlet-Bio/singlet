@@ -1,8 +1,8 @@
 # singlet
 
-**Python client for SingletDB — the world's largest uniformly processed single-cell database.**
+**Python client for the Singlet single-cell atlas.**
 
-19,790+ datasets • 24 species • ~10× compression • Zero-copy PyTorch sparse tensors
+3,309 datasets • 354M cells • 24 species • ~13× compression • Embedded metadata • PyTorch GPU tensors
 
 ## Install
 
@@ -19,61 +19,54 @@ import singlet
 
 # Browse the catalog (free, works offline)
 df = singlet.catalog(search="lung")
+human = singlet.datasets(organism="Homo sapiens", min_cells=100_000)
 
-# Load a dataset → AnnData
+# Load a dataset → AnnData (with embedded obs, var, uns metadata)
 adata = singlet.load("GSE136831")
-print(adata)
+print(adata.obs.columns)  # barcode, gsm_id, organism, total_counts
+print(adata.uns["title"])  # Study title from GEO
 
-# PyTorch sparse tensor (zero-copy, GPU-ready)
-from singlet.torch import to_sparse_csr
-tensor = to_sparse_csr("~/.singlet/data/GSE136831.1pz", device="cuda")
+# Load a single sample by column-range read
+sample = singlet.load_sample("GSM3308814")
 
-# Convert formats
-singlet.to_h5ad(adata, "output.h5ad")
-singlet.to_zarr(adata, "output.zarr")
+# Kraken2 microbiome matrix
+k2 = singlet.read_kraken2("/path/to/GSE117795/")
+
+# PyTorch DataLoader with normalization
+from singlet.torch import DataLoader
+loader = DataLoader("GSE136831", batch_size=512, normalize=True, device="cuda")
 ```
 
 ## Features
 
 | Feature | Details |
 |---------|---------|
-| **Catalog** | Browse 19,790 datasets by species, tissue, modality |
-| **Compression** | SinglePress .1pz format — ~13× vs raw CSC |
-| **PyTorch** | Zero-copy sparse CSR/COO tensors, GPU via cuSPARSE |
+| **Catalog** | Browse 3,309 datasets by organism, protocol, cell count |
+| **Metadata** | Embedded obs/var/uns in .1pz — barcode, gsm_id, gene_name, study info |
+| **Kraken2** | Per-dataset microbiome matrices (3,240 datasets) |
+| **Compression** | singlepress .1pz format — ~13× vs raw CSC |
+| **PyTorch** | `OnePZDataset` + `DataLoader` with log-normalization |
+| **Sample access** | Column-range reads via `load_sample()` + sample_index |
 | **Formats** | HDF5, Zarr, TileDB-SOMA, MTX, CSC sparse |
-| **Queries** | Cross-atlas structured query + semantic search |
-| **NMF** | Server-side NMF projection with biological annotations |
+| **Local + Remote** | Local catalog (instant) or Zenodo download (free) |
 | **Preprocessing** | Full FASTQ→.1pz pipeline (simpleaf + piscem) |
 
-## Architecture
+## Documentation
 
-```
-singlet/
-├── include/singlepress/
-│   └── singlepress.h          # Header-only C++ compression library
-├── src/
-│   └── _singlepress.cpp       # pybind11 bindings (PyTorch zero-copy)
-├── singlet/
-│   ├── __init__.py             # Public API
-│   ├── _io.py                  # .1pz/.spz read/write → AnnData
-│   ├── _catalog.py             # Dataset catalog (Zenodo parquet)
-│   ├── _loader.py              # Download + load orchestration
-│   ├── _auth.py                # API key management
-│   ├── _query.py               # Cross-atlas queries
-│   ├── nmf.py                  # NMF projection + annotation
-│   ├── torch.py                # PyTorch sparse tensors + DataLoaders
-│   ├── convert.py              # Format interop (h5ad, zarr, tiledb, mtx)
-│   └── preprocessing/          # FASTQ → .1pz pipeline
-│       ├── _download.py        # ENA/SRA parallel downloads
-│       ├── _detect.py          # Protocol detection
-│       ├── _quantify.py        # simpleaf quantification
-│       ├── _qc.py              # Quality control
-│       ├── _species.py         # Species reference configs
-│       └── _export.py          # Count matrix → .1pz export
-├── tests/
-├── docs/
-└── pyproject.toml
-```
+| Document | Description |
+|----------|-------------|
+| [Quick Start](docs/quickstart.md) | Getting started guide |
+| [API Reference](docs/API.md) | Complete Python API |
+
+## Part of Singlet AI
+
+| Repository | Purpose |
+|-----------|---------|
+| [singlepress](https://github.com/Singlet-AI/singlepress) | Sparse matrix compression |
+| [geo-reprocess](https://github.com/Singlet-AI/geo-reprocess) | HPC catalog pipeline |
+| **singlet** | Python client library |
+| [singlet-intelligence](https://github.com/Singlet-AI/singlet-intelligence) | ML models |
+| [papers](https://github.com/Singlet-AI/papers) | Manuscripts |
 
 ## License
 

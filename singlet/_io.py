@@ -292,8 +292,13 @@ def read_1pz(path: str | Path):
     Returns
     -------
     anndata.AnnData
-        Sparse count matrix (CSR) with genes in var.
+        Sparse count matrix (CSR) with genes in var and cells in obs.
         (.1pz stores genes×cells, we transpose.)
+        If the file contains metadata, gene names populate var_names
+        and cell barcodes populate obs_names.
+        Column sums are stored in obs["total_counts"] if available.
+        Embedded obs/var DataFrames are merged into adata.obs/adata.var.
+        Embedded uns dict is stored in adata.uns.
     """
     import anndata as ad
     import numpy as np
@@ -301,23 +306,49 @@ def read_1pz(path: str | Path):
 
     try:
         import singlepress
-        m, n, nnz, indptr, indices, values = singlepress.read_1pz(
-            str(path), num_threads=8
-        ).__iter__()  # read_1pz returns csc_matrix
+        mat = singlepress.read_1pz(str(path), num_threads=8)
     except (ImportError, AttributeError):
-        # If singlepress not available with .1pz support, try _pz_codec directly
         from singlepress._pz_codec import pz_read
-        m, n, nnz, indptr, indices, values = pz_read(str(path), 8)
-
-    # singlepress.read_1pz returns a csc_matrix directly
-    # but if we used pz_read, we got raw arrays
-    if isinstance(m, sp.csc_matrix):
-        mat = m  # read_1pz returned the matrix
-    else:
-        mat = sp.csc_matrix((values, indices, indptr), shape=(int(m), int(n)))
+        result = pz_read(str(path), 8)
+        m, n = result["m"], result["n"]
+        mat = sp.csc_matrix(
+            (result["values"], result["indices"], result["indptr"]),
+            shape=(m, n),
+        )
 
     # Transpose to cells × genes for AnnData
     adata = ad.AnnData(X=mat.T)
+
+    # Attach metadata if present
+    if hasattr(mat, "rownames") and mat.rownames:
+        import pandas as pd
+        adata.var_names = pd.Index(mat.rownames)
+    if hasattr(mat, "colnames") and mat.colnames:
+        import pandas as pd
+        adata.obs_names = pd.Index(mat.colnames)
+    if hasattr(mat, "colsums") and mat.colsums is not None:
+        adata.obs["total_counts"] = mat.colsums.astype(np.float64)
+
+    # Merge embedded obs DataFrame
+    if hasattr(mat, "obs") and mat.obs is not None:
+        import pandas as pd
+        obs_df = mat.obs
+        obs_df.index = adata.obs_names
+        for col in obs_df.columns:
+            adata.obs[col] = obs_df[col].values
+
+    # Merge embedded var DataFrame
+    if hasattr(mat, "var") and mat.var is not None:
+        import pandas as pd
+        var_df = mat.var
+        var_df.index = adata.var_names
+        for col in var_df.columns:
+            adata.var[col] = var_df[col].values
+
+    # Store unstructured metadata
+    if hasattr(mat, "uns") and mat.uns:
+        adata.uns.update(mat.uns)
+
     return adata
 
 
@@ -326,6 +357,10 @@ def write_1pz(
     path: str | Path,
     *,
     layer: Optional[str] = None,
+    store_transpose: bool = False,
+    include_obs: bool = True,
+    include_var: bool = True,
+    include_uns: bool = True,
 ) -> dict:
     """Write AnnData to .1pz format (VOCSC + zstd-3).
 
@@ -337,6 +372,14 @@ def write_1pz(
         Output file path.
     layer : str, optional
         Write this layer instead of X.
+    store_transpose : bool
+        Store transpose for efficient row-range reads.
+    include_obs : bool
+        Embed adata.obs DataFrame in the .1pz file. Default True.
+    include_var : bool
+        Embed adata.var DataFrame in the .1pz file. Default True.
+    include_uns : bool
+        Embed string key-value pairs from adata.uns. Default True.
 
     Returns
     -------
@@ -354,7 +397,31 @@ def write_1pz(
     # AnnData is cells × genes → transpose to genes × cells
     mat = mat.T.tocsc()
 
-    return singlepress.write_1pz(str(path), mat)
+    # Extract names for metadata
+    rownames = list(adata.var_names) if len(adata.var_names) > 0 else None
+    colnames = list(adata.obs_names) if len(adata.obs_names) > 0 else None
+
+    # Extract obs/var DataFrames
+    obs_df = adata.obs if include_obs and len(adata.obs.columns) > 0 else None
+    var_df = adata.var if include_var and len(adata.var.columns) > 0 else None
+
+    # Extract string key-value pairs from uns
+    uns_dict = None
+    if include_uns and adata.uns:
+        uns_dict = {k: str(v) for k, v in adata.uns.items()
+                    if isinstance(v, (str, int, float, bool))}
+        if not uns_dict:
+            uns_dict = None
+
+    return singlepress.write_1pz(
+        str(path), mat,
+        rownames=rownames,
+        colnames=colnames,
+        obs=obs_df,
+        var=var_df,
+        uns=uns_dict,
+        store_transpose=store_transpose,
+    )
 
 
 def info_1pz(path: str | Path) -> dict:
@@ -380,4 +447,64 @@ def read_matrix(path: str | Path, **kwargs):
         return read_1pz(path)
     else:
         return read_spz(path, **kwargs)
+
+
+def read_kraken2(
+    gse_dir: str | Path,
+):
+    """Read a kraken2.1pz microbiome matrix from a GSE directory.
+
+    Parameters
+    ----------
+    gse_dir : str or Path
+        Path to a GSE directory containing ``kraken2.1pz`` and
+        ``kraken2_features.parquet``.
+
+    Returns
+    -------
+    anndata.AnnData
+        Sparse count matrix (cells × taxa) with taxon IDs in var_names.
+        If ``kraken2_features.parquet`` exists, taxon metadata is in var.
+    """
+    import anndata as ad
+    import numpy as np
+    import pandas as pd
+
+    gse_dir = Path(gse_dir)
+    k2_path = gse_dir / "kraken2.1pz"
+    if not k2_path.exists():
+        raise FileNotFoundError(f"No kraken2.1pz in {gse_dir}")
+
+    try:
+        import singlepress
+        mat = singlepress.read_1pz(str(k2_path), num_threads=8)
+    except (ImportError, AttributeError):
+        from singlepress._pz_codec import pz_read
+        import scipy.sparse as sp
+        result = pz_read(str(k2_path), 8)
+        mat = sp.csc_matrix(
+            (result["values"], result["indices"], result["indptr"]),
+            shape=(result["m"], result["n"]),
+        )
+
+    # Transpose: on-disk is taxa × cells → cells × taxa for AnnData
+    adata = ad.AnnData(X=mat.T)
+
+    # Taxon names from rownames
+    if hasattr(mat, "rownames") and mat.rownames:
+        adata.var_names = pd.Index(mat.rownames)
+
+    # Load taxon features if available
+    feat_path = gse_dir / "kraken2_features.parquet"
+    if feat_path.exists():
+        feat_df = pd.read_parquet(feat_path)
+        feat_df.index = adata.var_names
+        for col in feat_df.columns:
+            adata.var[col] = feat_df[col].values
+
+    # Store uns metadata
+    if hasattr(mat, "uns") and mat.uns:
+        adata.uns.update(mat.uns)
+
+    return adata
 

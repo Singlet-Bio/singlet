@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "singlet"
-version = "0.2.0"
-description = "Python client for SingletDB — the world's largest uniformly processed single-cell database"
+version = "1.0.0"
+description = "Python client for the Singlet single-cell atlas — 3,309 datasets, 354M cells, embedded metadata, PyTorch GPU support"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.9"

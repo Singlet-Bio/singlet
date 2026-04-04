@@ -1,4 +1,11 @@
-"""Load datasets from Zenodo (free) or AWS (token-priced streaming)."""
+"""Load datasets from local catalog, Zenodo, or AWS.
+
+Priority order:
+  1. Local file path (.1pz, .spz, .h5ad, .zarr)
+  2. Local catalog directory (set via SINGLET_CATALOG_DIR or singlet.set_catalog_dir())
+  3. Zenodo download (free, cached at ~/.singlet/data/)
+  4. AWS streaming (token-priced)
+"""
 
 from __future__ import annotations
 
@@ -13,6 +20,36 @@ def _cache_dir() -> Path:
     d = Path.home() / ".singlet" / "data"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def _resolve_gse_path(accession: str) -> Optional[Path]:
+    """Resolve a GSE accession to a local .1pz path via the catalog."""
+    from singlet._catalog import _get_catalog_dir, _load_catalog
+
+    cat_dir = _get_catalog_dir()
+    if cat_dir is None:
+        return None
+
+    cat = _load_catalog()
+    rows = cat[cat["gse_id"] == accession]
+    if rows.empty:
+        return None
+
+    row = rows.iloc[0]
+    rel_path = row.get("path", "")
+    if not rel_path:
+        return None
+
+    # path is relative like "pipeline/quant/GSE136831"
+    # cat_dir is the catalog root (e.g. /mnt/projects/.../cellarium)
+    base = cat_dir.parent  # go up from catalog/ to cellarium/
+    gse_dir = base / rel_path
+
+    counts_path = gse_dir / "counts.1pz"
+    if counts_path.exists():
+        return counts_path
+
+    return None
 
 
 def download(
@@ -32,8 +69,7 @@ def download(
     force : bool
         Re-download even if cached.
     source : str
-        ``"zenodo"`` (free, deep archive) or ``"aws"`` (fast streaming,
-        costs tokens proportional to data size).
+        ``"zenodo"`` (free) or ``"aws"`` (token-priced).
 
     Returns
     -------
@@ -48,7 +84,7 @@ def download(
 
     dest_dir = Path(output_dir) if output_dir else _cache_dir()
     dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / f"{accession}.spz"
+    dest = dest_dir / f"{accession}.1pz"
 
     if dest.exists() and not force:
         return dest
@@ -58,7 +94,7 @@ def download(
         url = f"{_AWS_BASE}/{accession}"
         headers = _get_headers()
     else:
-        url = f"{_ZENODO_BASE}/{accession}.spz"
+        url = f"{_ZENODO_BASE}/{accession}.1pz"
         headers = {}
 
     resp = requests.get(url, stream=True, timeout=60, headers=headers)
@@ -78,48 +114,44 @@ def download(
 def load(
     source: str | Path,
     *,
-    layers: Optional[Sequence[str]] = None,
     genes: Optional[Sequence[str]] = None,
     obs_filter: Optional[dict] = None,
     backend: str = "zenodo",
 ):
     """Load a dataset as AnnData.
 
-    This is the primary entry point. Pass a GEO accession to download from
-    Zenodo (free) or AWS (token-priced), or a local path to read directly.
+    This is the primary entry point. Pass a GEO accession to load from
+    local catalog (instant), Zenodo (free download), or AWS (token-priced),
+    or a local file path to read directly.
 
     Parameters
     ----------
     source : str or Path
         GEO accession (e.g. "GSE136831") or path to a local file.
-        Supports ``.spz``, ``.h5ad``, and ``.zarr`` formats.
-    layers : list of str, optional
-        Which layers to include. Default: all available.
+        Supports ``.1pz``, ``.spz``, ``.h5ad``, and ``.zarr``.
     genes : list of str, optional
         Subset to these gene names (column slice).
     obs_filter : dict, optional
-        Filter cells by obs columns, e.g. ``{"tissue": "lung"}``.
+        Filter cells by obs columns, e.g. ``{"organism": "Homo sapiens"}``.
     backend : str
-        ``"zenodo"`` (default, free) or ``"aws"`` (fast streaming,
-        costs tokens). The ``source`` keyword in the public API maps
-        to this parameter.
+        ``"zenodo"`` (default, free) or ``"aws"`` (fast streaming).
 
     Returns
     -------
     anndata.AnnData
-        Count matrix with layers, obs metadata, and var gene names.
+        Count matrix with obs metadata, var gene annotations, and uns study info.
 
     Examples
     --------
     >>> import singlet
     >>> adata = singlet.load("GSE136831")
-    >>> adata = singlet.load("GSE136831", backend="aws")
+    >>> adata = singlet.load("/path/to/counts.1pz")
     >>> adata = singlet.load("GSE136831", genes=["TP53", "BRCA1"])
-    >>> adata = singlet.load("local/file.h5ad")
     """
+    from singlet._io import read_1pz, read_spz, read_matrix
+
     path = Path(source)
 
-    # If it's a local file, read it directly
     if path.exists():
         suffix = path.suffix.lower()
         if suffix == ".h5ad":
@@ -128,14 +160,18 @@ def load(
         elif suffix == ".zarr":
             import anndata as ad
             adata = ad.read_zarr(path)
+        elif suffix in (".1pz", ".spz"):
+            adata = read_matrix(path)
         else:
-            from singlet._io import read_spz
-            adata = read_spz(path)
+            adata = read_matrix(path)
     else:
-        # Treat as accession — download
-        from singlet._io import read_spz
-        local = download(str(source), source=backend)
-        adata = read_spz(local)
+        # Treat as GSE accession
+        local_path = _resolve_gse_path(str(source))
+        if local_path is not None:
+            adata = read_1pz(local_path)
+        else:
+            local = download(str(source), source=backend)
+            adata = read_1pz(local)
 
     # Gene subset
     if genes is not None:
@@ -152,10 +188,71 @@ def load(
                 mask = mask & (adata.obs[col] == val)
         adata = adata[mask].copy()
 
-    # Layer selection
-    if layers is not None:
-        drop = [k for k in list(adata.layers) if k not in layers]
-        for k in drop:
-            del adata.layers[k]
+    return adata
+
+
+def load_sample(
+    gsm_id: str,
+    *,
+    genes: Optional[Sequence[str]] = None,
+):
+    """Load a single GSM sample using column-range reads.
+
+    Requires a local catalog directory with sample_index.parquet.
+
+    Parameters
+    ----------
+    gsm_id : str
+        GEO sample accession (e.g. "GSM3308814").
+    genes : list of str, optional
+        Subset to these gene names.
+
+    Returns
+    -------
+    anndata.AnnData
+        Count matrix for just this sample.
+    """
+    from singlet._catalog import _get_catalog_dir, _load_sample_index
+    import singlepress
+
+    idx = _load_sample_index()
+    rows = idx[idx["gsm_id"] == gsm_id]
+    if rows.empty:
+        raise KeyError(f"Sample {gsm_id!r} not found in sample index")
+
+    row = rows.iloc[0]
+    cat_dir = _get_catalog_dir()
+    if cat_dir is None:
+        raise RuntimeError(
+            "load_sample requires a local catalog. "
+            "Set SINGLET_CATALOG_DIR or call singlet.set_catalog_dir()"
+        )
+
+    base = cat_dir.parent
+    gse_path = row["gse_id"]
+    subdir = row.get("species_subdir", "")
+    if subdir:
+        counts_path = base / "pipeline" / "quant" / gse_path / subdir / "counts.1pz"
+    else:
+        counts_path = base / "pipeline" / "quant" / gse_path / "counts.1pz"
+
+    col_start = int(row["col_offset"])
+    col_end = col_start + int(row["col_count"])
+    mat = singlepress.read_1pz_columns(str(counts_path), col_start, col_end)
+
+    import anndata as ad
+    adata = ad.AnnData(X=mat.T)
+
+    if hasattr(mat, "rownames") and mat.rownames:
+        import pandas as pd
+        adata.var_names = pd.Index(mat.rownames)
+
+    adata.obs["gsm_id"] = gsm_id
+    adata.obs["gse_id"] = row["gse_id"]
+    adata.obs["organism"] = row["organism"]
+
+    if genes is not None:
+        gene_mask = adata.var_names.isin(genes)
+        adata = adata[:, gene_mask].copy()
 
     return adata
