@@ -1,0 +1,33 @@
+Package: singlepress
+Title: Compressed Sparse Matrix I/O for Single-Cell Genomics
+Version: 1.0.0
+Authors@R:
+    person("Zach", "DeBruine", , "debruinz@gvsu.edu", role = c("aut", "cre"))
+Description: Read and write .1pz sparse matrix files with VOCSC + byte-split +
+    bit-plane + bitmap pre-filter + zstd/LZ4 compression achieving 13x compression
+    ratios and 4000+ MB/s decode speed. Integrates with Seurat, SingleCellExperiment,
+    and standard Matrix/dgCMatrix sparse formats. Supports embedded cell/gene/study
+    metadata (AnnData-compatible).
+License: GPL (>= 3)
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+SystemRequirements: zstd (>= 1.4), C++17
+Imports:
+    Matrix,
+    methods,
+    Rcpp
+LinkingTo:
+    Rcpp
+Suggests:
+    Seurat,
+    SingleCellExperiment,
+    SummarizedExperiment,
+    S4Vectors,
+    scater,
+    scran,
+    knitr,
+    rmarkdown,
+    testthat (>= 3.0.0)
+VignetteBuilder: knitr
+URL: https://singlet-ai.github.io/singlepress/
+BugReports: https://github.com/Singlet-AI/singlepress/issues

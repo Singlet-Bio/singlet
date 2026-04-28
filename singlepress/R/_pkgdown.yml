@@ -1,0 +1,82 @@
+url: https://singlet-ai.github.io/singlepress/
+
+template:
+  bootstrap: 5
+  bootswatch: flatly
+
+navbar:
+  structure:
+    left: [intro, reference, articles]
+    right: [search, github]
+  components:
+    github:
+      icon: fa-github
+      href: https://github.com/Singlet-AI/singlepress
+
+reference:
+  - title: Core I/O
+    desc: Read and write .1pz files
+    contents:
+      - read_1pz
+      - write_1pz
+      - info_1pz
+      - validate_1pz
+      - colsums_1pz
+
+  - title: OnePZ File Handle
+    desc: Lazy S4 class for .1pz metadata access and indexing
+    contents:
+      - OnePZ
+      - normalized
+      - n_obs
+      - n_vars
+
+  - title: Dataset Operations
+    desc: Concatenate, subset, and sample .1pz files
+    contents:
+      - cbind_1pz
+      - rbind_1pz
+      - subset_1pz
+      - sample_1pz
+
+  - title: Summary Statistics
+    desc: Quick matrix statistics from .1pz files
+    contents:
+      - nnz_per_col
+      - nnz_per_row
+      - rowsums_1pz
+      - describe_1pz
+
+  - title: Seurat
+    desc: Seurat object integration
+    contents:
+      - read_1pz_seurat
+      - write_1pz_seurat
+
+  - title: SingleCellExperiment
+    desc: Bioconductor SCE integration
+    contents:
+      - read_1pz_sce
+      - write_1pz_sce
+
+  - title: Format Conversions
+    desc: Convert to standard R sparse/dense formats
+    contents:
+      - read_1pz_coo
+      - read_1pz_dense
+      - read_1pz_dataframe
+
+  - title: Normalization
+    desc: Log-normalization utilities
+    contents:
+      - lognorm
+
+articles:
+  - title: Getting Started
+    contents:
+      - quickstart
+
+  - title: Ecosystem Integration
+    contents:
+      - seurat-workflow
+      - sce-workflow

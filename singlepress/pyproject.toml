@@ -1,0 +1,81 @@
+[build-system]
+requires = ["setuptools>=64", "pybind11>=2.11"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "singlepress"
+version = "1.0.0"
+description = "Sparse matrix compression for .1pz format — 13× compression, 4000+ MB/s decode, PyTorch dataloaders, AnnData/Seurat interop"
+readme = "README.md"
+license = {text = "GPL-3.0-or-later"}
+requires-python = ">=3.9"
+authors = [
+    {name = "Zach DeBruine", email = "debruinz@gvsu.edu"},
+    {name = "Singlet AI"},
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: C++",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+]
+keywords = ["sparse-matrix", "compression", "single-cell", "bioinformatics", "pytorch", "anndata", "seurat", "cusparse"]
+
+dependencies = [
+    "numpy>=1.21",
+    "scipy>=1.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "pybind11>=2.11",
+]
+docs = [
+    "sphinx>=7.0",
+    "furo",
+    "myst-parser",
+    "sphinx-copybutton",
+    "sphinx-autodoc-typehints",
+]
+torch = [
+    "torch>=2.0",
+]
+bio = [
+    "anndata>=0.9",
+    "pandas>=1.5",
+]
+hdf5 = [
+    "h5py>=3.0",
+    "anndata>=0.9",
+]
+all = [
+    "torch>=2.0",
+    "anndata>=0.9",
+    "pandas>=1.5",
+    "h5py>=3.0",
+]
+
+[project.urls]
+Homepage = "https://singlet-ai.github.io/singlepress/"
+Documentation = "https://singlet-ai.github.io/singlepress/"
+Repository = "https://github.com/Singlet-AI/singlepress"
+Issues = "https://github.com/Singlet-AI/singlepress/issues"
+
+[project.scripts]
+singlepress = "singlepress.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["singlepress*"]
+exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --cov=singlepress --cov-report=term-missing"
