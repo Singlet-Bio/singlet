@@ -1,0 +1,33 @@
+# Build artifacts
+build/
+*.o
+*.a
+*.so
+*.dylib
+
+# Python
+__pycache__/
+*.egg-info/
+dist/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Data (too large for git)
+*.1pz
+*.bam
+*.fastq*
+*.h5ad
+
+# STAR build artifacts
+star/bin/
