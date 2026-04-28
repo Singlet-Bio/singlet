@@ -1,0 +1,45 @@
+*.o
+Depend.list
+
+.project
+.kdev4/
+source.kdev4
+
+
+# Don't track intermediary files from building the manual
+extras/doc-latex/*.aux
+extras/doc-latex/*.fdb_latexmk
+extras/doc-latex/*.fls
+extras/doc-latex/*.log
+extras/doc-latex/*.out
+extras/doc-latex/*.gz
+extras/doc-latex/*.toc
+
+# Don't track the STAR binary or any variant binaries once built
+source/STAR
+source/STAR_*
+source/parametersDefault.xxd
+
+# PGO profile data (too large for git)
+pgo_profile/
+
+# Benchmark output directories containing FASTQs/BAMs (too large for git)
+experiments/learned_cache/bench_3way_results/
+experiments/learned_cache/bench_sort_ab_results/
+experiments/learned_cache/bench_sort_ab2/
+experiments/learned_cache/sort_exp_results/
+experiments/learned_cache/correctness_test/
+experiments/bench_dedup_results/
+experiments/bench_hashcache_results/
+experiments/bench_lean_results/
+experiments/bench_txfirst_out_baseline/
+experiments/bench_txfirst_out_txfirst/
+experiments/txfirst_out/
+experiments/supertrome_idx/
+experiments/filter_genome_sa
+
+.DS_Store
+*.xcworkspacedata
+*.pbxproj
+*.plist
+*.xcuserstate
