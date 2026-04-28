@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Sphinx docs
+docs/_build/
+
+# Data files
+*.spz
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.nfs*
+
+# Build environments
+.build_venv/
+*.log
+
+# R build artifacts
+R/R/
+R/src/
+R/man/
+R/*.Rcheck
+
+# Local scripts / experiments
+experiments/
+_perf_sandbox/
