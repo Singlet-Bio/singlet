@@ -1,0 +1,20 @@
+[build-system]
+requires = ["scikit-build-core>=0.5", "pybind11>=2.11"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "singlify"
+version = "0.1.0"
+description = "Streaming BAM pileup engine for single-cell multi-omics"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+dependencies = ["scipy>=1.7", "numpy>=1.20"]
+
+[project.optional-dependencies]
+anndata = ["anndata>=0.8"]
+docs = ["sphinx>=7", "sphinx-rtd-theme", "myst-parser"]
+dev = ["pytest", "anndata>=0.8"]
+
+[tool.scikit-build]
+cmake.build-type = "Release"

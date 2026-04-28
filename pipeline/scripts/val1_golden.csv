@@ -1,0 +1,13 @@
+srr_accession,protocol_family,species,expected_cells,expected_mapping_min
+SRR17200121,10x-v3,Homo sapiens,3393,80
+SRR27940103,10x-v3,Mus musculus,10943,70
+SRR29263792,10x-v2,Homo sapiens,24350,85
+SRR18098410,10x-v2,Mus musculus,5494,55
+SRR26829558,10x-v4,Homo sapiens,20024,85
+SRR25495687,10x-v4,Mus musculus,3919,40
+SRR33838457,10x-v3-5prime,Mus musculus,25431,75
+SRR31337416,10x-multiome,Mus musculus,52993,85
+SRR24024789,sci-RNA,Mus musculus,1787,60
+SRR5454718,Drop-seq,Homo sapiens,5443,70
+SRR10721307,Drop-seq,Mus musculus,15897,55
+SRR28825471,10x-v3-5prime,Homo sapiens,19134,60

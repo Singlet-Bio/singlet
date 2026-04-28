@@ -1,0 +1,6 @@
+# Steering prompt for the singlify-perf agent
+# Edit this file and commit to main — the agent reads and clears it at the start of each cycle (~3h).
+# Examples:
+#   "Focus only on .1fq compression this cycle, skip STAR work."
+#   "Check if mouse genome is ready and run C11/C12 corpus tests."
+#   "Send me a brief breakdown of the last 3 dead ends."

@@ -1,0 +1,808 @@
+{
+  "version": 1,
+  "description": "M4.4 100-sample validation batch (single-SRR only)",
+  "date": "2026-04-11",
+  "total": 100,
+  "samples": [
+    {
+      "srr": "SRR16852908",
+      "gsm": "GSM5678567",
+      "gse": "GSE188391",
+      "protocol": "10xv3",
+      "read_count": 2565486,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR32118879",
+      "gsm": "GSM9031324",
+      "gse": "GSE299043",
+      "protocol": "10xv3",
+      "read_count": 30941595,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR24742772",
+      "gsm": "GSM7427187",
+      "gse": "GSE233413",
+      "protocol": "10xv3",
+      "read_count": 21901231,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR20711327",
+      "gsm": "GSM6416576",
+      "gse": "GSE210077",
+      "protocol": "10xv3",
+      "read_count": 56932759,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR25557027",
+      "gsm": "GSM7689426",
+      "gse": "GSE220994",
+      "protocol": "10xv3",
+      "read_count": 10426535,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR21024842",
+      "gsm": "GSM6450338",
+      "gse": "GSE211103",
+      "protocol": "10xv3",
+      "read_count": 28976593,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR23939093",
+      "gsm": "GSM7110901",
+      "gse": "GSE215253",
+      "protocol": "10xv3",
+      "read_count": 45316379,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR21628457",
+      "gsm": "GSM6591794",
+      "gse": "GSE211103",
+      "protocol": "10xv3",
+      "read_count": 51071755,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR21024525",
+      "gsm": "GSM6450543",
+      "gse": "GSE211103",
+      "protocol": "10xv3",
+      "read_count": 58672670,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR13057797",
+      "gsm": "GSM4907533",
+      "gse": "GSE161465",
+      "protocol": "10xv3",
+      "read_count": 104317969,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR15209392",
+      "gsm": "GSM5465088",
+      "gse": "GSE180578",
+      "protocol": "10xv3",
+      "read_count": 70532969,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR13248247",
+      "gsm": "GSM4972268",
+      "gse": "GSE163122",
+      "protocol": "10xv3",
+      "read_count": 6425999,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR17134438",
+      "gsm": "GSM5718021",
+      "gse": "GSE190202",
+      "protocol": "10xv3",
+      "read_count": 43598498,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR32103910",
+      "gsm": "GSM8752775",
+      "gse": "GSE287855",
+      "protocol": "10xv3",
+      "read_count": 53446663,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR17068942",
+      "gsm": "GSM5708494",
+      "gse": "GSE189843",
+      "protocol": "10xv3",
+      "read_count": 195203079,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR21024728",
+      "gsm": "GSM6450372",
+      "gse": "GSE211103",
+      "protocol": "10xv3",
+      "read_count": 32964382,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR17200125",
+      "gsm": "GSM5729047",
+      "gse": "GSE178274",
+      "protocol": "10xv3",
+      "read_count": 65456959,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR8781035",
+      "gsm": "GSM3685104",
+      "gse": "GSE128796",
+      "protocol": "10xv3",
+      "read_count": 5558616,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR26822987",
+      "gsm": "GSM7898933",
+      "gse": "GSE247691",
+      "protocol": "10xv3",
+      "read_count": 46546394,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR14750562",
+      "gsm": "GSM5362320",
+      "gse": "GSE176294",
+      "protocol": "10xv3",
+      "read_count": 9837336,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR11959724",
+      "gsm": "GSM4601986",
+      "gse": "GSE152058",
+      "protocol": "10xv3",
+      "read_count": 31112755,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR22741579",
+      "gsm": "GSM6836563",
+      "gse": "GSE220994",
+      "protocol": "10xv3",
+      "read_count": 9527665,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR22741553",
+      "gsm": "GSM6836637",
+      "gse": "GSE220994",
+      "protocol": "10xv3",
+      "read_count": 17051778,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR12604309",
+      "gsm": "GSM4771240",
+      "gse": "GSE157591",
+      "protocol": "10xv3",
+      "read_count": 53808179,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR23803191",
+      "gsm": "GSM7080431",
+      "gse": "GSE226620",
+      "protocol": "10xv3",
+      "read_count": 169627279,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR26533371",
+      "gsm": "GSM7865934",
+      "gse": "GSE246269",
+      "protocol": "10xv3",
+      "read_count": 6230174,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR17375004",
+      "gsm": "GSM5764317",
+      "gse": "GSE192742",
+      "protocol": "10xv3",
+      "read_count": 3741343,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR12569278",
+      "gsm": "GSM4761102",
+      "gse": "GSE157299",
+      "protocol": "10xv3",
+      "read_count": 5101548,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR25212376",
+      "gsm": "GSM7578604",
+      "gse": "GSE236880",
+      "protocol": "10xv3",
+      "read_count": 45037697,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR11606927",
+      "gsm": "GSM4497132",
+      "gse": "GSE149313",
+      "protocol": "10xv3",
+      "read_count": 46845333,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR8936591",
+      "gsm": "GSM3732342",
+      "gse": "GSE134759",
+      "protocol": "10xv2",
+      "read_count": 179874120,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR31856583",
+      "gsm": "GSM8704268",
+      "gse": "GSE281106",
+      "protocol": "10xv2",
+      "read_count": 50407259,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR31755715",
+      "gsm": "GSM8688803",
+      "gse": "GSE280974",
+      "protocol": "10xv2",
+      "read_count": 47276112,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR24302100",
+      "gsm": "GSM7226855",
+      "gse": "GSE230571",
+      "protocol": "10xv2",
+      "read_count": 39991806,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR28578785",
+      "gsm": "GSM8190580",
+      "gse": "GSE263380",
+      "protocol": "10xv2",
+      "read_count": 33402971,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR13827343",
+      "gsm": "GSM5127823",
+      "gse": "GSE168071",
+      "protocol": "10xv2",
+      "read_count": 45628908,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR12842510",
+      "gsm": "GSM4836010",
+      "gse": "GSE159624",
+      "protocol": "10xv2",
+      "read_count": 183312998,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR24042856",
+      "gsm": "GSM7135604",
+      "gse": "GSE227136",
+      "protocol": "10xv2",
+      "read_count": 27369557,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR24847888",
+      "gsm": "GSM7459119",
+      "gse": "GSE234261",
+      "protocol": "10xv2",
+      "read_count": 6664301,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR13086586",
+      "gsm": "GSM4915290",
+      "gse": "GSE161824",
+      "protocol": "10xv2",
+      "read_count": 173297484,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR11218444",
+      "gsm": "GSM4680845",
+      "gse": "GSE154826",
+      "protocol": "10xv3_5prime",
+      "read_count": 104871659,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR26852617",
+      "gsm": "GSM7902905",
+      "gse": "GSE247903",
+      "protocol": "10xv3_5prime",
+      "read_count": 106388872,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR34797906",
+      "gsm": "GSM9210739",
+      "gse": "GSE306853",
+      "protocol": "10xv3_5prime",
+      "read_count": 32039863,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR23942856",
+      "gsm": "GSM7112026",
+      "gse": "GSE227991",
+      "protocol": "10xv3_5prime",
+      "read_count": 19655425,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR16868616",
+      "gsm": "GSM5682734",
+      "gse": "GSE188429",
+      "protocol": "10xv3_5prime",
+      "read_count": 2744194,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR16868430",
+      "gsm": "GSM5682576",
+      "gse": "GSE188429",
+      "protocol": "10xv3_5prime",
+      "read_count": 49742988,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR19573007",
+      "gsm": "GSM6215246",
+      "gse": "GSE205589",
+      "protocol": "10xv3_5prime",
+      "read_count": 21758687,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR30424853",
+      "gsm": "GSM8494971",
+      "gse": "GSE253352",
+      "protocol": "10xv3_5prime",
+      "read_count": 68367753,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR24044043",
+      "gsm": "GSM7136075",
+      "gse": "GSE228763",
+      "protocol": "10xv3_5prime",
+      "read_count": 11915304,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR33470065",
+      "gsm": "GSM8973641",
+      "gse": "GSE296614",
+      "protocol": "10xv3_5prime",
+      "read_count": 30619603,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR15241491",
+      "gsm": "GSM6199113",
+      "gse": "GSE204864",
+      "protocol": "dropseq",
+      "read_count": 1790863,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR15224049",
+      "gsm": "GSM5468268",
+      "gse": "GSE180697",
+      "protocol": "dropseq",
+      "read_count": 103639711,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR11605338",
+      "gsm": "GSM4495745",
+      "gse": "GSE149298",
+      "protocol": "dropseq",
+      "read_count": 87094953,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR17735693",
+      "gsm": "GSM5834052",
+      "gse": "GSE194357",
+      "protocol": "dropseq",
+      "read_count": 35034462,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR9887686",
+      "gsm": "GSM4008648",
+      "gse": "GSE134355",
+      "protocol": "dropseq",
+      "read_count": 80277642,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR29551303",
+      "gsm": "GSM8351176",
+      "gse": "GSE270735",
+      "protocol": "dropseq",
+      "read_count": 38655243,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR5307725",
+      "gsm": "GSM2518782",
+      "gse": "GSE89164",
+      "protocol": "dropseq",
+      "read_count": 84261879,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR9018374",
+      "gsm": "GSM3753192",
+      "gse": "GSE130756",
+      "protocol": "dropseq",
+      "read_count": 88300872,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR11483966",
+      "gsm": "GSM4454003",
+      "gse": "GSE148093",
+      "protocol": "dropseq",
+      "read_count": 15081045,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR5362211",
+      "gsm": "GSM2544731",
+      "gse": "GSE81750",
+      "protocol": "dropseq",
+      "read_count": 13095436,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR13796827",
+      "gsm": "GSM5112430",
+      "gse": "GSE167786",
+      "protocol": "bd_rhapsody",
+      "read_count": 44426466,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR26557440",
+      "gsm": "GSM7869784",
+      "gse": "GSE246491",
+      "protocol": "bd_rhapsody",
+      "read_count": 195365484,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR33004895",
+      "gsm": "GSM6654398",
+      "gse": "GSE216009",
+      "protocol": "bd_rhapsody",
+      "read_count": 26813211,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR32188676",
+      "gsm": "GSM8768167",
+      "gse": "GSE288452",
+      "protocol": "bd_rhapsody",
+      "read_count": 65065255,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR21983975",
+      "gsm": "GSM6661382",
+      "gse": "GSE216189",
+      "protocol": "bd_rhapsody",
+      "read_count": 176402780,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR19788685",
+      "gsm": "GSM6261648",
+      "gse": "GSE206741",
+      "protocol": "scirna",
+      "read_count": 5726517,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR19788703",
+      "gsm": "GSM6261630",
+      "gse": "GSE206741",
+      "protocol": "scirna",
+      "read_count": 3963602,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR29056798",
+      "gsm": "GSM8271937",
+      "gse": "GSE267655",
+      "protocol": "scirna",
+      "read_count": 1031440,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR29056553",
+      "gsm": "GSM8272117",
+      "gse": "GSE267655",
+      "protocol": "scirna",
+      "read_count": 1183257,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR29056761",
+      "gsm": "GSM8272074",
+      "gse": "GSE267655",
+      "protocol": "scirna",
+      "read_count": 1244861,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR22267059",
+      "gsm": "GSM6727619",
+      "gse": "GSE217850",
+      "protocol": "indrop",
+      "read_count": 110022721,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR28857665",
+      "gsm": "GSM8249738",
+      "gse": "GSE266546",
+      "protocol": "indrop",
+      "read_count": 140796595,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR28857735",
+      "gsm": "GSM8249712",
+      "gse": "GSE266546",
+      "protocol": "indrop",
+      "read_count": 144551489,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR28857737",
+      "gsm": "GSM8249620",
+      "gse": "GSE266546",
+      "protocol": "indrop",
+      "read_count": 149377265,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR22267061",
+      "gsm": "GSM6727617",
+      "gse": "GSE217850",
+      "protocol": "indrop",
+      "read_count": 101877880,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR14530595",
+      "gsm": "GSM5311357",
+      "gse": "GSE162060",
+      "protocol": "parse",
+      "read_count": 84895819,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR30333422",
+      "gsm": "GSM8476467",
+      "gse": "GSE275413",
+      "protocol": "parse",
+      "read_count": 42433133,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR15858801",
+      "gsm": "GSM5575071",
+      "gse": "GSE183965",
+      "protocol": "parse",
+      "read_count": 49275399,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR35326504",
+      "gsm": "GSM9228311",
+      "gse": "GSE293514",
+      "protocol": "parse",
+      "read_count": 26363453,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR25431625",
+      "gsm": "GSM7663546",
+      "gse": "GSE239353",
+      "protocol": "parse",
+      "read_count": 2861951,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR17763156",
+      "gsm": "GSM5837499",
+      "gse": "GSE195452",
+      "protocol": "10x_multiome",
+      "read_count": 6807903,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR17762913",
+      "gsm": "GSM5837322",
+      "gse": "GSE195452",
+      "protocol": "10x_multiome",
+      "read_count": 12202049,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR17763455",
+      "gsm": "GSM5837414",
+      "gse": "GSE195452",
+      "protocol": "10x_multiome",
+      "read_count": 9994014,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR17762753",
+      "gsm": "GSM5836979",
+      "gse": "GSE195452",
+      "protocol": "10x_multiome",
+      "read_count": 7656788,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR17763346",
+      "gsm": "GSM5837593",
+      "gse": "GSE195452",
+      "protocol": "10x_multiome",
+      "read_count": 11673411,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR30128404",
+      "gsm": "GSM8441893",
+      "gse": "GSE274018",
+      "protocol": "10x_suspect",
+      "read_count": 36651146,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR17839239",
+      "gsm": "GSM5851638",
+      "gse": "GSE195832",
+      "protocol": "10x_suspect",
+      "read_count": 57233387,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR17679173",
+      "gsm": "GSM5812130",
+      "gse": "GSE193517",
+      "protocol": "10x_suspect",
+      "read_count": 1252543,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR11546792",
+      "gsm": "GSM4476491",
+      "gse": "GSE148673",
+      "protocol": "10x_suspect",
+      "read_count": 175992415,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR10165279",
+      "gsm": "GSM4090785",
+      "gse": "GSE137877",
+      "protocol": "10x_suspect",
+      "read_count": 183648406,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR35229663",
+      "gsm": "GSM9213305",
+      "gse": "GSE306977",
+      "protocol": "10x_suspect",
+      "read_count": 102181208,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR17678350",
+      "gsm": "GSM5812084",
+      "gse": "GSE193517",
+      "protocol": "10x_suspect",
+      "read_count": 1043789,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR17678920",
+      "gsm": "GSM5811899",
+      "gse": "GSE193517",
+      "protocol": "10x_suspect",
+      "read_count": 3472663,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR29161272",
+      "gsm": "GSM8289253",
+      "gse": "GSE268289",
+      "protocol": "10x_suspect",
+      "read_count": 62998094,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR29504976",
+      "gsm": "GSM8345942",
+      "gse": "GSE270517",
+      "protocol": "10x_suspect",
+      "read_count": 16710636,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR24752716",
+      "gsm": "GSM7431580",
+      "gse": "GSE233622",
+      "protocol": "unknown",
+      "read_count": 9243370,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR19114698",
+      "gsm": "GSM6111801",
+      "gse": "GSE155844",
+      "protocol": "unknown",
+      "read_count": 29482830,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR19912458",
+      "gsm": "GSM6284394",
+      "gse": "GSE207310",
+      "protocol": "unknown",
+      "read_count": 14950933,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR21142733",
+      "gsm": "GSM6482171",
+      "gse": "GSE211664",
+      "protocol": "unknown",
+      "read_count": 30072519,
+      "organism": "human"
+    },
+    {
+      "srr": "SRR22526617",
+      "gsm": "GSM6784586",
+      "gse": "GSE220244",
+      "protocol": "unknown",
+      "read_count": 20702698,
+      "organism": "human"
+    }
+  ]
+}

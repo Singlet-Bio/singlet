@@ -1,0 +1,38 @@
+Package: singlify
+Type: Package
+Title: Read Singlify Pipeline Outputs into R
+Version: 0.2.0
+Authors@R: c(
+    person("Zach", "DeBruine", email = "debruinz@gvsu.edu",
+           role = c("aut", "cre")))
+Description: Reads singlify pipeline output files (.1pz sparse matrices
+    and their embedded GEO metadata) into native R sparse-matrix classes
+    and single-cell analysis objects. Provides converters to
+    SingleCellExperiment and Seurat so the outputs of the singlify
+    single-cell reprocessing pipeline can drop directly into existing
+    Bioconductor and Seurat workflows. All format parsing and
+    decompression happens in a shared header-only C++ reader that is
+    bit-identical to the Python wrapper.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: false
+Depends:
+    R (>= 4.2)
+Imports:
+    Rcpp (>= 1.0.10),
+    Matrix (>= 1.5)
+LinkingTo:
+    Rcpp
+Suggests:
+    SingleCellExperiment,
+    SummarizedExperiment,
+    Seurat,
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
+SystemRequirements: C++17, libzstd (>= 1.4)
+Biarch: FALSE
+RoxygenNote: 7.3.1
+URL: https://github.com/zdebruine/Singlet-AI
+BugReports: https://github.com/zdebruine/Singlet-AI/issues
