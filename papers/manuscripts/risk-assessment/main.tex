@@ -1,0 +1,271 @@
+\documentclass[10pt,twocolumn,letterpaper]{article}
+\usepackage{../../templates/singletai-preprint}
+\usepackage{booktabs}
+\usepackage{array}
+
+\title{Singlify AI: Risk Register\\
+  (22 Risks Across 4 Tiers)}
+
+\author{%
+  Zach DeBruine\textsuperscript{1,*}\\[4pt]
+  \textsuperscript{1}Grand Valley State University, Allendale, MI, USA\\
+  \textsuperscript{*}Correspondence: \texttt{debruinz@gvsu.edu}
+}
+
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We present a comprehensive risk register for Singlify~AI, adapted from standard
+venture risk frameworks (McKinsey 3~Horizons, Bessemer SLAT, YC risk matrix).
+Twenty-two risks are identified and rated on probability~(1--5), impact~(1--5),
+and urgency (immediate / 6~months / 12~months+). Risks are organized into four
+tiers: existential (any one can kill the company), critical (high probability of
+significant damage), significant (material but manageable), and moderate (watch
+and manage). The top risks by composite score are solo founder~(20), insufficient
+runway~(20), no product-market fit validation~(15), and CZI achieving uniform
+FASTQ reprocessing~(15).
+\end{abstract}
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Tier 1: Existential Risks}
+\label{sec:existential}
+
+Any one of these risks can terminate the company.
+
+\subsection{R1: CZI Achieves Uniform FASTQ Reprocessing}
+
+\textbf{Probability:} 3/5 (within 2 years, accelerating with NVIDIA partnership).
+\textbf{Impact:} 5/5 (eliminates primary technical moat).
+\textbf{Urgency:} 12 months.
+
+CZI + NVIDIA partnership (October 2025) explicitly mentions scaling biological
+data processing to petabytes. CZI expanded from 2 to 5 species in one release,
+is adding spatial data, and TranscriptFormer TF-Exemplar already trains on
+5~species.
+
+\textbf{Mitigation:} Build value layers above the data (tools, community,
+intelligence API). Formalize CZI collaboration to become the \emph{supplier}
+of reprocessed data rather than a competitor.
+
+\subsection{R2: Zero Product-Market Fit}
+
+\textbf{Probability:} 3/5 (literally zero validation data).
+\textbf{Impact:} 5/5 (company fails).
+\textbf{Urgency:} Immediate.
+
+No paying customers, no LOIs, no free users, no usage data, no
+willingness-to-pay surveys. The beachhead market (comp bio postdocs) currently
+pays \$0 for data access tools.
+
+\textbf{Mitigation:} Ship free beta immediately. Run 30+ customer discovery
+interviews. Get 5+ LOIs before fundraising.
+
+\subsection{R3: Solo Founder Risk}
+
+\textbf{Probability:} 5/5 (permanent structural weakness).
+\textbf{Impact:} 4/5.
+\textbf{Urgency:} Immediate.
+
+VC data consistently shows solo founders raise less capital at lower valuations
+with higher failure rates. For biotech/health-tech, VCs expect a technical +
+commercial leadership pair.
+
+\textbf{Mitigation:} Recruit a co-founder with 5+ years biotech/SaaS
+commercial experience. Offer 15--25\% equity.
+
+\subsection{R4: Insufficient Runway}
+
+\textbf{Probability:} 5/5 (arithmetic certainty).
+\textbf{Impact:} 4/5.
+\textbf{Urgency:} Immediate.
+
+Founder's own budget shows \$540K--\$1.06M Year~1 cost versus \$500K raise.
+Zero buffer for anything going wrong.
+
+\textbf{Mitigation:} Raise \$750K--\$1M, or cut scope drastically (no clinical
+PGI, no Epic---just atlas + API + 2 hires).
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Tier 2: Critical Risks}
+\label{sec:critical}
+
+\subsection{R5: CZI Virtual Cell Initiative Leapfrogs}
+
+Probability 3/5, Impact 4/5, Urgency 12+ months. CZI's Virtual Cell program
+with NVIDIA, GREmLN, rBio1, and TranscriptFormer is building the same vision
+with $\sim$1000$\times$ more resources.
+
+\textbf{Mitigation:} Don't compete on virtual cell / foundation models.
+Compete on data completeness and interpretability.
+
+\subsection{R6: Cellarium AI Captures Cell Annotation Market}
+
+Probability 3/5, Impact 3/5, Urgency 6 months. Cell Annotation Service is
+exactly Singlify's community tools value proposition. Broad Institute backing.
+
+\textbf{Mitigation:} Differentiate on breadth (200+ species, 6 modalities,
+splicing) where Cellarium focuses on human/mouse RNA.
+
+\subsection{R7: Academic $\to$ Commercial Execution Gap}
+
+Probability 3/5, Impact 4/5, Urgency 6 months. Faculty startup failure mode
+well-documented.
+
+\textbf{Mitigation:} Announce leave of absence. Set hard external deadlines.
+Hire operator/co-founder.
+
+\subsection{R8: Tempus Adds Single-Cell (Acquisition)}
+
+Probability 2/5, Impact 5/5, Urgency 12+ months. Tempus has \$632M revenue
+and could acquire a single-cell data company for $<$\$50M.
+
+\textbf{Mitigation:} Also an opportunity---be the acquisition target.
+
+\subsection{R9: TileDB + CELLxGENE Deepen Integration}
+
+Probability 4/5, Impact 3/5, Urgency 12 months. TileDB-SOMA powers Census.
+Databricks partnership signals integrated platform ambitions.
+
+\textbf{Mitigation:} Build on TileDB-SOMA / AnnData standards. Be part of
+the ecosystem.
+
+\subsection{R10: GPU Open-Source Tools Close Performance Gap}
+
+Probability 4/5, Impact 3/5, Urgency 6 months. rapids-singlecell brings
+GPU acceleration to open-source workflows.
+
+\textbf{Mitigation:} Moat is data completeness, not performance.
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Tier 3: Significant Risks}
+\label{sec:significant}
+
+\subsection{R11: Foundation Model Commoditization}
+
+Probability 4/5, Impact 3/5. Open weights for Geneformer, scGPT, UCE, scVI.
+CELLxGENE hosts 7+ model embeddings. NMF is also open-source.
+
+\textbf{Mitigation:} Position as training data supplier, not foundation model
+company.
+
+\subsection{R12: Pharma Builds Internally}
+
+Probability 3/5, Impact 3/5. Recursion, Insitro, Genentech have \$100M+
+internal capabilities.
+
+\textbf{Mitigation:} Target mid-tier pharma/biotech (\$50M--\$5B market cap).
+
+\subsection{R13: AlphaGenome Licensing Never Opens}
+
+Probability 3/5, Impact 2/5. Google has not committed commercial licensing.
+
+\textbf{Mitigation:} Already trunk-agnostic. Lead with Borzoi (Apache 2.0).
+
+\subsection{R14: Free-Tool Culture Prevents Monetization}
+
+Probability 4/5, Impact 3/5. Scanpy, Seurat, CELLxGENE---all free. 2--5\%
+freemium conversion rates.
+
+\textbf{Mitigation:} Academic free / commercial paid model. Free for .edu.
+Paid for pharma/biotech.
+
+\subsection{R15: Pricing Wrong}
+
+Probability 3/5, Impact 3/5. \$49/mo may be too high for postdocs and too low
+for pharma.
+
+\textbf{Mitigation:} Run Gabor-Granger or Van Westendorp pricing study.
+
+\subsection{R16: Clinical PGI Timeline Destroys Credibility}
+
+Probability 4/5, Impact 3/5. FDA 510(k) + Epic on 18-month timeline with no
+clinical staff is not credible.
+
+\textbf{Mitigation:} Remove clinical PGI from pre-seed pitch. Focus entirely
+on research data platform.
+
+\subsection{R17: Community Tools Don't Get Adoption}
+
+Probability 3/5, Impact 2/5. Zero community developers currently.
+
+\textbf{Mitigation:} Seed ecosystem with 3--5 internal tools first.
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Tier 4: Moderate Risks}
+\label{sec:moderate}
+
+\subsection{R18: Data Quality at Scale}
+
+Probability 3/5, Impact 2/5. One high-profile quality issue could damage trust.
+
+\textbf{Mitigation:} Publish per-dataset QC metrics. Community reporting.
+
+\subsection{R19: Cloud Provider Offers Pre-Processed Data}
+
+Probability 2/5, Impact 3/5. AWS already mirrors GEO on S3.
+
+\textbf{Mitigation:} Be cloud-agnostic. Use Cloudflare R2 as primary hosting.
+
+\subsection{R20: Regulatory Risk for Clinical Applications}
+
+Probability 3/5, Impact 3/5. FDA scrutiny of AI/ML in clinical genomics
+increasing.
+
+\textbf{Mitigation:} Defer clinical applications to Series~A+.
+
+\subsection{R21: University IP Conflict}
+
+Probability 2/5, Impact 4/5. Universities typically claim IP for work using
+university resources.
+
+\textbf{Mitigation:} Get written IP assignment/release from GVSU before
+fundraising.
+
+\subsection{R22: Data Licensing Complications}
+
+Probability 2/5, Impact 3/5. GEO data has varying licensing terms.
+
+\textbf{Mitigation:} Audit licensing for all 19,790 series. Build licensing
+metadata into catalog.
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Risk Heatmap Summary}
+\label{sec:heatmap}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Risk} & \textbf{Prob.} & \textbf{Impact} & \textbf{Score} & \textbf{Urgency} \\
+\midrule
+R3: Solo founder & 5 & 4 & \textbf{20} & Immediate \\
+R4: Runway & 5 & 4 & \textbf{20} & Immediate \\
+R2: No PMF & 3 & 5 & \textbf{15} & Immediate \\
+R1: CZI reprocess & 3 & 5 & \textbf{15} & 12 mo \\
+R5: CZI virtual cell & 3 & 4 & 12 & 12+ mo \\
+R7: Execution gap & 3 & 4 & 12 & 6 mo \\
+R10: GPU open src & 4 & 3 & 12 & 6 mo \\
+R11: FM commodity & 4 & 3 & 12 & 12 mo \\
+R14: Free culture & 4 & 3 & 12 & 6 mo \\
+R16: PGI credibility & 4 & 3 & 12 & Immediate \\
+R8: Tempus acq. & 2 & 5 & 10 & 12+ mo \\
+R6: Cellarium & 3 & 3 & 9 & 6 mo \\
+R21: IP conflict & 2 & 4 & 8 & Immediate \\
+\bottomrule
+\end{tabular}
+\caption{Risk heatmap ordered by composite score.}
+\label{tab:heatmap}
+\end{table}
+
+The top risks by score are solo founder~(20), insufficient runway~(20), no
+product-market fit validation~(15), and CZI reprocessing~(15). These four risks
+demand immediate mitigation before any fundraising attempt.
+
+\bibliographystyle{unsrtnat}
+\bibliography{refs}
+
+\end{document}

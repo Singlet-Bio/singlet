@@ -1,0 +1,2 @@
+name,tissue,n_genes,n_cells,nnz,density,frac_val_1,raw_bytes,pz_bytes,pz_ratio,pz_bytes_per_nnz,h5ad_bytes,h5ad_ratio,tiledb_read_s,pz_read_s,pz_read_mbps,h5ad_read_s,h5ad_read_mbps,pz_col10pct_s,read_speedup,write_speedup,pz_dl_batch_ms,h5ad_dl_batch_ms,dl_speedup,dense_batch_bytes,sparse_batch_bytes,memory_ratio
+tongue,tongue,30945,372,751116,0.0000652,0.65,6008928,964106,6.2,1.28,7441784,0.81,29.4,0.0163,369,0.0290,207,0.0109,1.8,1.0,0.0,0.0,0.0,0,0,0

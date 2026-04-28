@@ -1,0 +1,342 @@
+%% Singlify AI — Development Roadmap
+%% Migrated from singlet-intelligence/docs/roadmap.md
+\documentclass[10pt,twocolumn,letterpaper]{article}
+\usepackage{../../templates/singletai-preprint}
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{natbib}
+\bibliographystyle{unsrtnat}
+
+% ── Metadata ─────────────────────────────────────────────────────
+\title{Singlify AI Development Roadmap: From Transcriptomics \\
+  to Clinical Intelligence}
+\author{
+  Zach DeBruine\textsuperscript{1,*}
+  \\[6pt]
+  \textsuperscript{1}Department of Computing, Grand Valley State University, Allendale, MI 49401
+}
+
+\begin{document}
+\maketitle
+\correspondingauthor{debruinz@gvsu.edu}
+
+\begin{abstract}
+This document defines the four-phase product roadmap for Singlify AI, a
+genomics intelligence platform. Phase~1 (v1.0, Transcriptomics Intelligence)
+delivers a generative model over ${\sim}100$M human single-cell transcriptomes
+via NMF-based gene programs and a Conditional Program Model (CPM) encoder.
+Phase~2 (v2.0) expands to ${\sim}1$B cells with multi-modal prediction
+(ATAC, CITE-seq, spatial) and RNA velocity dynamics. Phase~3 (v3.0, Genomics
+Intelligence) bridges DNA sequence to single-cell expression via
+sequence-to-function models trained on GTEx and TenK10K data. Phase~4 (v4.0,
+Clinical Intelligence) enables variant-to-clinical-consequence reasoning with
+Epic EHR integration. Each phase includes quantitative success metrics,
+validation protocols, and deployment milestones.
+\end{abstract}
+
+% ── Phase 1 ──────────────────────────────────────────────────────
+\section{Phase 1: v1.0 --- Transcriptomics Intelligence}
+
+\subsection{Data Foundation: 100M Human Transcriptomes}
+
+All data comes from NCBI GEO, reprocessed from raw FASTQ through the
+\texttt{scgeo} pipeline. This produces:
+\begin{itemize}
+  \item Spliced/Unspliced/Ambiguous (S/U/A) count layers via simpleaf/alevin-fry
+  \item Kraken2 non-host classification per cell (bacteria, virus, fungi)
+  \item Unified gene references (GENCODE v44 human)
+  \item Consistent QC (doublet scoring, ambient RNA, mitochondrial fraction)
+\end{itemize}
+
+The initial 100M cells are human-only, droplet-based (10x Chromium, Drop-seq,
+inDrop). Plate-based protocols are excluded from v1.0.
+
+\paragraph{Metadata annotations.} Three sources: (1)~automated cell typing via
+SingleR against curated atlases, (2)~LLM extraction from GEO series
+descriptions standardized to controlled vocabularies (Uberon, Cell Ontology,
+MONDO, HsapDv, ChEMBL/DrugBank), and (3)~pipeline QC metrics.
+
+\subsection{NMF Model Training}
+
+\paragraph{Rank determination.} Speckled holdout cross-validation: mask
+${\sim}1\%$ of nonzero entries, train NMF for each candidate rank
+$k \in \{256, 512, 1024, 2048, 4096\}$, select the elbow. Ranks constrained
+to powers of~2 for GPU efficiency.
+
+\paragraph{Hierarchical depth.} Evaluate 1--3 layers of hierarchical NMF
+($X \approx W_1 H_1$ vs.\ $X \approx W_1 W_2 H_2$ vs.\ three layers).
+Selection by held-out reconstruction at matched parameter count.
+
+\paragraph{Regularization.} Two hyperparameters:
+\begin{equation}
+  \min_{W,H \geq 0} \|X - WH\|_F^2
+  + \lambda_{\text{L1}}(\|W\|_1 + \|H\|_1)
+  + \lambda_{\text{ang}} \sum_{j \neq j'} \max(0, \cos(W_{:,j}, W_{:,j'}) - \epsilon)^2
+\end{equation}
+Angular regularization prevents degenerate duplicate programs at high rank.
+L1 promotes sparse, interpretable programs. Selection: grid search on 10\%
+subsample, Pareto-optimal on reconstruction vs.\ revealable rank vs.\ pathway
+enrichment specificity.
+
+\paragraph{Final training.} Spliced count matrix
+$X_S \in \mathbb{R}_{\geq 0}^{G \times N}$ ($G \approx 30{,}000$,
+$N \approx 10^8$) in StreamPress \texttt{.spz} format. CUDA streaming
+out-of-core multiplicative updates. Convergence: relative change $< 10^{-6}$
+for 5 iterations, or max 500 iterations. Estimated compute: 8$\times$ H100
+GPUs, 30--130 GPU-hours.
+
+\subsection{Factor Annotation}
+
+For each of $k$ programs: (1)~enrichment against GO, Reactome, KEGG, MSigDB
+Hallmark; (2)~cell type, tissue, disease, and covariate enrichment;
+(3)~LLM-generated names and descriptions. Quality target: ${>}80\%$ have
+meaningful non-generic names.
+
+\subsection{Conditional Program Encoder (CPM)}
+
+\paragraph{Architecture.} Every metadata field embedded independently
+(512-dim for cell type/tissue/disease/perturbation, 128-dim for sex/assay,
+256-dim for donor). All embeddings attend via multi-head cross-attention, then
+MLP backbone to 256-dim bottleneck $z$. Three output heads: gate ($\alpha$),
+magnitude ($\mu$), spread ($\sigma$).
+
+\paragraph{Spike-and-slab reparameterization.} $h_j = g_j \cdot m_j$ where
+$g_j \in \{0,1\}$ (hard concrete gate) and $m_j = \exp(\mu_j + \sigma_j
+\epsilon_j)$ (log-normal magnitude). Produces exact zeros for inactive
+programs, matching NMF sparsity (Gini ${>}0.7$).
+
+\paragraph{Loss function.}
+\begin{equation}
+  \mathcal{L} = \sum_{j=1}^{k} \ell_j
+  + \lambda_{\text{sparse}} \sum_j \pi_j
+  + \lambda_{\text{consist}} \mathcal{L}_{\text{consist}}
+  + \lambda_{\text{diversity}} \mathcal{L}_{\text{diversity}}
+\end{equation}
+where $\ell_j$ is spike-and-slab NLL (gate + magnitude for active programs,
+gate-only for inactive).
+
+\paragraph{Validation.} Structured holdout at three levels: interpolation
+(random cells within known combos), single-axis extrapolation (hold out one
+metadata value), and combinatorial extrapolation (hold out multi-axis combos).
+Targets: cosine similarity ${>}0.8$, gate accuracy ${>}85\%$, combinatorial
+degradation ${<}15\%$.
+
+\subsection{Prediction Confidence Scores}
+
+Every prediction carries empirical confidence grounded in cross-validation
+performance. During training, systematic holdouts produce an accuracy
+distribution per metadata distance. At inference:
+\begin{enumerate}
+  \item Compute nearest training neighborhood (embedding distance)
+  \item Retrieve empirical accuracy at that distance
+  \item Convert to p-value against null distribution
+\end{enumerate}
+
+Calibration requirement: 90\% CI covers 90\% $\pm$ 3\% of observations
+(Platt scaling + temperature scaling). This is a v1.0-beta launch requirement.
+
+\subsection{Generative Capabilities}
+
+v1.0 supports: (1)~expression profile prediction for fully specified
+conditions, (2)~per-gene expression across cell types, (3)~perturbation
+effect prediction via $\Delta h$, (4)~disease extrapolation across tissues,
+(5)~synthetic reference panel generation.
+
+\subsection{AI Reasoning Layer}
+
+Natural language $\to$ structured CPM queries via LLM parsing. MCP tool
+exposure enables AI agents to call \texttt{predict\_expression} programmatically.
+Plot code generation returns executable Python/R visualizations alongside
+AI interpretation.
+
+\subsection{v1.0 Success Metrics}
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{@{}lr@{}}
+\toprule
+Metric & Target \\
+\midrule
+Speckled holdout $R^2$ & ${>}0.3$ \\
+Meaningful program annotations & ${>}80\%$ of $k$ \\
+Encoder combinatorial generalization & ${<}15\%$ degradation \\
+Gate accuracy & ${>}85\%$ \\
+Confidence calibration & 90\% CI $\pm$ 3\% \\
+Cross-species transfer (v1.3+) & ${>}70\%$ accuracy \\
+Query latency (point) & ${<}200$~ms \\
+Query latency (100 cells) & ${<}2$~s \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ── Phase 2 ──────────────────────────────────────────────────────
+\section{Phase 2: v2.0 --- Expanded Transcriptomics}
+
+\subsection{Expanded Data Corpus}
+
+Scale to ${\sim}500$M--1B human cells including plate-based protocols
+(Smart-seq2, CEL-seq2, MARS-seq). Assay-aware NMF training handles
+distributional shift. Enhanced metadata: ancestry/population, detailed
+perturbation parsing, deeper developmental staging, author-annotated cell
+types.
+
+\subsection{Multi-Modal Prediction}
+
+\paragraph{ATAC-seq.} Reprocess paired scRNA-seq + scATAC-seq (10x Multiome),
+train NMF on peak matrices, learn cross-modal projection from RNA to ATAC
+program space. Deliverable: predict chromatin accessibility for any condition.
+
+\paragraph{CITE-seq.} Predict surface protein expression from condition
+metadata via RNA $\to$ protein program mapping. Relevant to flow cytometry
+panel design and CAR-T target selection.
+
+\paragraph{Spatial (Visium).} Deconvolve spots into cell type proportions via
+NMF projection. Learn spatial neighbor prediction: given a cell's programs,
+predict adjacent cells' programs---generating tissue neighborhoods.
+
+\subsection{Splicing Dynamics and Next-Cell Prediction}
+
+Factor velocities: $V_j = H_{U,j} - \gamma \odot H_{S,j}$. Next-cell
+prediction: train the CPM encoder with a \texttt{next\_state} output head to
+chain trajectory predictions $h_0 \to h_1 \to \cdots \to h_T$.
+
+\subsection{Composition Head}
+
+$\pi = \text{softmax}(W_\pi \cdot z)$ predicts cell type proportions for
+underspecified queries. Label dropout ($p \sim 0.1$--$0.3$) during training
+teaches prediction from partial metadata.
+
+\subsection{v2.0 Success Metrics}
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{@{}lr@{}}
+\toprule
+Metric & Target \\
+\midrule
+RNA $\to$ ATAC (Pearson $r$ per peak) & ${>}0.6$ \\
+Spatial neighbor (top-5 accuracy) & ${>}40\%$ \\
+Next-cell cosine similarity & ${>}0.7$ \\
+Composition KL divergence & ${<}0.1$ \\
+Multi-modal AI query success & ${>}80\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ── Phase 3 ──────────────────────────────────────────────────────
+\section{Phase 3: v3.0 --- Genomics Intelligence}
+
+\subsection{Sequence-to-Function Foundation}
+
+Train a convolutional + transformer model on GTEx (${\sim}1{,}000$ donors,
+54 tissues) + ENCODE/Roadmap to learn regulatory grammar from DNA
+($\pm500$~kb around each gene) $\to$ expression/accessibility/splicing.
+Alternative: fine-tune Borzoi (Apache 2.0, open weights).
+
+\subsection{Single-Cell Prediction Head}
+
+TenK10K dataset (1,925 donors, paired WGS + scRNA-seq, ${\sim}5$M+ cells).
+Architecture: sequence trunk $\to$ condition on cell type + tissue embeddings
+(from CPM vocabulary) $\to$ predict program activities $h$ in NMF space.
+
+\textbf{Novel capability:} For any genetic variant, predict cell-type-specific
+transcriptional perturbation: not ``this gene changes expression'' but
+``Program~847 (hepatocyte cholesterol biosynthesis) is disrupted in
+hepatocytes.''
+
+\subsection{v3.0 Success Metrics}
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{@{}lr@{}}
+\toprule
+Metric & Target \\
+\midrule
+GTEx genotype $\to$ expression (Pearson $r$) & ${>}0.7$ \\
+TenK10K scRNA prediction (cosine sim) & ${>}0.6$ \\
+ClinVar variant mechanism match & ${>}60\%$ \\
+Rare disease blood $R^2$ & ${>}0.4$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ── Phase 4 ──────────────────────────────────────────────────────
+\section{Phase 4: v4.0 --- Clinical Intelligence}
+
+\subsection{Clinical Variant Reasoning}
+
+A clinical LLM with v1.0--v3.0 tools as MCP endpoints. Given a novel variant:
+(1)~genomic prediction of cell-type-specific expression changes,
+(2)~program disruption analysis, (3)~literature grounding, (4)~clinical
+reasoning synthesis.
+
+Training on published clinical case reports: extract variant, run prediction
+stack, compare to actual case presentation. Validation on ${\sim}1{,}000$
+held-out PubMed cases scored by expert clinicians.
+
+\subsection{Epic EHR Integration}
+
+Epic App Orchard application: VUS triggers analysis $\to$ mechanistic
+explanation embedded in patient chart. Initial launch as ``information only''
+(Clinical Decision Support exemption under 21st Century Cures Act).
+
+\subsection{v4.0 Success Metrics}
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{@{}lr@{}}
+\toprule
+Metric & Target \\
+\midrule
+Clinical detail prediction accuracy & ${>}70\%$ \\
+VUS reclassification rate & ${>}20\%$ \\
+Clinician NPS & ${>}50$ \\
+Time to diagnosis (rare disease) & ${<}1$ year \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ── Timeline ─────────────────────────────────────────────────────
+\section{Execution Timeline}
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+Date & Version & Milestone \\
+\midrule
+2026 Q2 & v1.0-$\alpha$ & NMF model + factor annotations \\
+2026 Q3 & v1.0-$\beta$ & CPM encoder + confidence scores \\
+2026 Q4 & v1.0 & AI reasoning layer + MCP tools \\
+2027 Q1 & v1.1 & Composition head \\
+2027 Q1--Q2 & v1.2 & Expanded data (${\sim}300$M cells) \\
+2027 Q2--Q3 & v1.3--v1.4 & Cross-species alignment (201 species) \\
+2027 Q3--Q4 & v2.0 & Multi-modal + splicing dynamics \\
+2027 Q3--Q4 & v3.0 & Sequence-to-function bridge \\
+2028 Q1+ & v4.0 & Clinical intelligence + Epic \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ── Risk Factors ─────────────────────────────────────────────────
+\section{Risk Factors}
+
+\paragraph{v1.0.} NMF rank may be suboptimal at 100M cells (re-run at v1.2).
+Encoder overfitting mitigated via holdout testing + label noise. SingleR
+annotations noisy (cross-reference with LLM-extracted labels). AI layer
+hallucinations mitigated via grounded reasoning (every claim traced to a
+specific program + enrichment). Cross-species adapter may underfit divergent
+programs (start frozen human, escalate to joint training).
+
+\paragraph{v2.0.} Plate-based integration risk (assay-aware encoder terms).
+Cross-modal prediction noise (start with high-quality paired 10x Multiome).
+
+\paragraph{v3.0.} TenK10K is blood-dominated (use GTEx for tissue priors).
+Sequence model requires massive compute (use pre-trained Borzoi trunk).
+
+\paragraph{v4.0.} Regulatory uncertainty (launch as information-only CDS).
+Clinical validation is expensive (academic partnerships for shared cost).
+
+\bibliography{../../shared/refs}
+\end{document}

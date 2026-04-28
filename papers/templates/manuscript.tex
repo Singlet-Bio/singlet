@@ -1,0 +1,77 @@
+%% Full manuscript template — Singlet AI
+%% Copy this to manuscripts/<name>/main.tex and edit.
+\documentclass[10pt,twocolumn,letterpaper]{article}
+\usepackage{singletai-preprint}
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{natbib}
+\bibliographystyle{unsrtnat}
+
+% ── Metadata ─────────────────────────────────────────────────────
+\title{Your Title Here}
+\author{
+  Zach DeBruine\textsuperscript{1,*}
+  \And
+  Co-Author Name\textsuperscript{2}
+  \\[6pt]
+  \textsuperscript{1}Grand Valley State University, Allendale, MI \\
+  \textsuperscript{2}Affiliation
+}
+
+\begin{document}
+\maketitle
+\correspondingauthor{debruinz@gvsu.edu}
+
+\begin{abstract}
+  % 150--250 words. State the problem, approach, key result, and significance.
+  Abstract text goes here.
+\end{abstract}
+
+\keywords{keyword1 \and keyword2 \and keyword3}
+
+% ── Introduction ─────────────────────────────────────────────────
+\section{Introduction}
+% Motivate the problem. End with a clear statement of contributions.
+
+% ── Methods ──────────────────────────────────────────────────────
+\section{Methods}
+
+\subsection{Data}
+% Describe datasets, preprocessing, and availability.
+
+\subsection{Model}
+% Mathematical formulation and algorithm.
+
+\subsection{Implementation}
+% Software, hardware, reproducibility details.
+
+% ── Results ──────────────────────────────────────────────────────
+\section{Results}
+
+% Include figures:
+% \begin{figure}[t]
+%   \centering
+%   \includegraphics[width=\columnwidth]{figures/figure1.pdf}
+%   \caption{Caption with quantitative takeaway.}
+%   \label{fig:example}
+% \end{figure}
+
+% ── Discussion ───────────────────────────────────────────────────
+\section{Discussion}
+% Interpret results, limitations, future work.
+
+% ── Conclusions ──────────────────────────────────────────────────
+\section{Conclusions}
+
+% ── Acknowledgments ──────────────────────────────────────────────
+\section*{Acknowledgments}
+
+% ── Data & Code Availability ─────────────────────────────────────
+\section*{Data \& Code Availability}
+Source code is available at \url{https://github.com/Singlet-AI/}.
+
+% ── References ───────────────────────────────────────────────────
+\bibliography{refs}
+
+\end{document}

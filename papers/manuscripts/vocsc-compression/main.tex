@@ -1,0 +1,638 @@
+%% SinglePress — Lossless compression of sparse count matrices
+%% using Value-Ordered Compressed Sparse Column encoding
+\documentclass[10pt,twocolumn,letterpaper]{article}
+\usepackage{singletai-preprint}
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{natbib}
+\usepackage{xcolor}
+\usepackage{multirow}
+\bibliographystyle{unsrtnat}
+
+% ── Metadata ─────────────────────────────────────────────────────
+\title{SinglePress: Lossless Compression of Sparse\\Count Matrices via Value-Ordered Column Encoding}
+\author{
+  Zach DeBruine\textsuperscript{1,*}
+  \\[6pt]
+  \textsuperscript{1}Singlet Bio
+}
+
+\begin{document}
+\maketitle
+\correspondingauthor{zach@singlet.ai}
+
+\begin{abstract}
+Sparse count matrices from single-cell RNA sequencing (scRNA-seq) are a dominant data type in modern genomics, with public repositories exceeding 500 million cells.
+Standard CSC (Compressed Sparse Column) storage treats integer counts as 64-bit floats and encodes row indices as absolute 32-bit integers, ignoring the extreme value concentration and spatial structure inherent to count data.
+We present VOCSC (Value-Ordered Compressed Sparse Column), a lossless compression scheme that exploits three statistical properties of scRNA-seq matrices: (1) extreme value concentration (72\% of nonzeros equal 1), (2) spatial locality of row positions within each value group, and (3) compressibility of gap sequences under byte-plane separation.
+VOCSC groups column entries by value, encodes positions as gap-1 sequences, applies adaptive byte-plane splitting, and compresses with zstd at level~3.
+On a corpus of 20 scRNA-seq count matrices, VOCSC achieves a median compression ratio of 12.5$\times$ over standard CSC (float64 values + int32 indices), decoding at 4,624~MB/s and encoding at 240~MB/s on 8 CPU threads.
+This represents a 2.2$\times$ improvement over generic zstd applied directly to CSC arrays (5.85$\times$) and a 2.4$\times$ improvement over gzip (5.42$\times$).
+We characterize the contribution of each pipeline stage through a systematic ablation study, validate behavior on synthetic matrices with controlled statistical properties, and develop a predictive compressibility model ($R^2 = 0.986$) relating matrix statistics to achievable compression ratio.
+We further evaluate but ultimately reject higher-effort codec variants (zstd-22, Brotli-11) as yielding marginal ratio gains ($<$9\%) at 7--40$\times$ slower encoding and up to 3$\times$ slower decoding.
+We also evaluate three extended encoding strategies---dense head rows, implicit value labels, and a hybrid scheme---finding consistent but modest improvements (median $-$1.3\% to $-$1.7\%) that do not justify the added codec complexity.
+\end{abstract}
+
+\keywords{lossless compression \and sparse matrices \and single-cell genomics \and CSC format \and data compression}
+
+% ══════════════════════════════════════════════════════════════════
+\section{Introduction}
+% ══════════════════════════════════════════════════════════════════
+
+Single-cell RNA sequencing (scRNA-seq) has become the workhorse assay of modern molecular biology, generating count matrices that record transcript abundance per gene per cell~\cite{zheng2017massively,svensson2018exponential}.
+A typical experiment produces a matrix with $10^4$--$10^5$ genes (rows) and $10^3$--$10^6$ cells (columns), with 95--99.9\% of entries equal to zero~\cite{bacher2016design}.
+Public repositories such as the Gene Expression Omnibus~\cite{edgar2002gene} and the Human Cell Atlas~\cite{regev2017human} now collectively exceed 500 million cells, creating an acute need for efficient storage and retrieval.
+These matrices are universally stored in CSC (Compressed Sparse Column) format, where nonzero entries are represented as tuples of (row index, value) organized by column through an index pointer array.
+The standard on-disk representation uses 32-bit integers for row indices and 64-bit floating-point for values, yielding a per-nonzero cost of $12$ bytes plus $4$ bytes per column for the pointer array.
+
+Despite the structured statistical properties of count data---dominated by small integers, with strong spatial patterns---general-purpose compressors such as gzip~\cite{deutsch1996gzip}, LZ4~\cite{collet2013lz4}, and Zstandard (zstd)~\cite{collet2018zstandard} treat these byte streams as opaque.
+Applied to raw CSC arrays, they achieve only modest compression (2.7--5.9$\times$) because the interleaved integer and floating-point bytes disrupt pattern detection.
+Specialized formats such as HDF5/AnnData~\cite{anndata,folk2011overview} wrap CSC with library-level compression but do not exploit domain structure.
+
+We observe three statistical regularities in scRNA-seq count matrices that a domain-informed codec can exploit:
+
+\begin{enumerate}
+\item \textbf{Value concentration.} On our 20-matrix corpus, a median of 76.5\% of nonzeros equal 1, and 92\% are $\leq 3$. Although matrices contain up to thousands of distinct values globally, individual columns---which are processed independently---exhibit far fewer distinct values due to the small counts typical of unique molecular identifier (UMI) data~\cite{islam2014quantitative}.
+\item \textbf{Implicit values.} Since values are concentrated and few, grouping entries by value within each column eliminates the explicit value stream entirely. The value becomes implicit from group membership.
+\item \textbf{Gap compressibility.} Within a value group, row positions form a monotonically increasing sequence well-approximated by a quasi-uniform distribution. The gap-1 transform (successive differences minus 1) produces low-entropy sequences amenable to byte-plane separation and entropy coding.
+\end{enumerate}
+
+Our codec, VOCSC, implements a four-stage pipeline: (1) row reordering by nonzero density, (2) value-ordered column encoding with gap-1 index representation, (3) adaptive byte-plane splitting (2 planes for 16-bit gaps, 4 for 32-bit), and (4) zstd compression at level 3.
+We show that this combination achieves 12.5$\times$ compression over raw CSC while maintaining 4,624~MB/s decode throughput---suitable for interactive analysis of large-scale atlases.
+
+Our contributions are:
+\begin{itemize}
+\item The VOCSC encoding scheme and its efficient C++/OpenMP implementation.
+\item A systematic ablation quantifying the contribution of each pipeline stage.
+\item Synthetic-data experiments confirming that compression ratio varies predictably with matrix statistics.
+\item A linear predictive model ($R^2 = 0.986$) estimating achievable compression from matrix properties.
+\item A comprehensive comparison against generic compressors and an analysis of higher-effort codec variants.
+\item An evaluation of extended encoding strategies (dense head, implicit values, hybrid) that quantifies the diminishing returns of further structural exploitation.
+\end{itemize}
+
+% ══════════════════════════════════════════════════════════════════
+\section{Methods}
+% ══════════════════════════════════════════════════════════════════
+
+\subsection{Notation}
+
+Let $\mathbf{A} \in \mathbb{Z}_{\geq 0}^{m \times n}$ be a sparse count matrix with $m$ rows (genes), $n$ columns (cells), and $K = \text{nnz}(\mathbf{A})$ nonzero entries.
+In CSC format, $\mathbf{A}$ is stored as three arrays: \texttt{indptr} (length $n+1$, int32), \texttt{indices} (length $K$, int32), and \texttt{data} (length $K$, float64).
+The raw CSC size is:
+\begin{equation}
+S_{\text{CSC}} = 4(n+1) + 4K + 8K = 4(n+1) + 12K \;\text{bytes}
+\label{eq:csc_size}
+\end{equation}
+
+\subsection{VOCSC encoding}
+
+\subsubsection{Row reordering}
+Rows (genes) are permuted in descending order of nonzero count $\text{nnz}_i = |\{j : A_{ij} > 0\}|$.
+This concentrates the densest rows at small indices, reducing the magnitude of gaps in subsequent encoding.
+The permutation $\pi$ is stored as a compressed side-channel.
+
+\subsubsection{Value-ordered grouping}
+For each column $j$, entries are grouped by value.
+Let $v_1 < v_2 < \ldots < v_G$ be the $G_j$ distinct nonzero values in column $j$.
+For each value $v_g$, the rows $\{i : A_{ij} = v_g\}$ (after permutation) form a sorted set $R_{j,g} = \{r_1 < r_2 < \ldots < r_{c_g}\}$.
+The metadata per column encodes: $G_j$, and for each group, $(v_g, c_g)$, all as variable-length integers (varints).
+
+\subsubsection{Gap-1 encoding}
+For each group $R_{j,g}$, the sorted row indices are gap-1 encoded:
+\begin{equation}
+\delta_k = \begin{cases}
+r_1, & k = 1 \\
+r_k - r_{k-1} - 1, & k > 1
+\end{cases}
+\label{eq:gap1}
+\end{equation}
+This transforms a monotone sequence into a non-negative integer sequence centered near zero.
+The key insight is that after row reordering, the densest rows cluster at the beginning, producing many small gaps in the dominant value group ($v=1$).
+
+\subsubsection{Adaptive byte-plane splitting}
+Raw gaps are stored as 32-bit unsigned integers.
+We observe that in scRNA-seq data, gap values are universally bounded by the number of rows ($m < 2^{16}$ for typical gene counts), allowing a 16-bit representation.
+The codec adaptively selects 2-plane or 4-plane byte splitting based on the observed maximum gap.
+
+For 2-plane splitting ($\max(\delta) < 65536$), the $N$ gap values are reorganized as:
+\begin{equation}
+\text{Split}_2(\delta) = [\delta_1 \bmod 256, \ldots, \delta_N \bmod 256, \lfloor \delta_1/256 \rfloor, \ldots, \lfloor \delta_N/256 \rfloor]
+\end{equation}
+This groups bytes of similar magnitude, yielding highly compressible planes: the high byte is predominantly zero (94\% of gaps fit in a single byte), while the low byte inherits the entropy of the gap distribution.
+
+\subsubsection{Chunked compression}
+Columns are processed in chunks of $C = 1024$ (default).
+Each chunk independently:
+\begin{enumerate}
+\item VOCSC-encodes its columns into metadata + gap arrays.
+\item Byte-splits the gap array into 2 or 4 planes.
+\item Concatenates metadata and split planes into a single buffer.
+\item Compresses the buffer as one zstd frame at level 3.
+\end{enumerate}
+Chunking enables parallel decoding while providing sufficient context for the compressor.
+
+\subsection{File format}
+
+The on-disk format consists of:
+\begin{itemize}
+\item A 96-byte header containing matrix dimensions, chunk parameters, format flags, and blob sizes.
+\item Compressed row permutation (zstd level~3).
+\item Compressed column pointer deltas (zstd level~3).
+\item Chunk size table ($4 \times N_c$ bytes).
+\item $N_c$ compressed chunk blobs, each prefixed with 12 bytes of metadata (gap count, metadata size, compressed size).
+\item An 8-byte footer (checksum placeholder + magic number).
+\end{itemize}
+
+\subsection{Decoding}
+
+Decoding is fully parallelizable across chunks via OpenMP.
+Each thread:
+\begin{enumerate}
+\item Decompresses its chunk blob (single zstd frame).
+\item Separates the metadata prefix from the byte-split gap planes.
+\item Reconstructs 32-bit gaps via byte-plane interleaving.
+\item Walks the VOCSC metadata, scattering (row, value) pairs to the output CSC arrays with prefetching for the permutation lookup.
+\end{enumerate}
+
+\subsection{Complexity analysis}
+
+\textbf{Encoding:} $O(K \log K)$ dominated by per-column sorting of (value, row) pairs.
+VOCSC metadata and gap computation are $O(K)$.
+Byte-split is $O(K)$.
+Zstd compression is $O(K)$ with low constant.
+
+\textbf{Decoding:} $O(K)$---a single pass over the gap stream with constant-time operations per element.
+The byte-unsplit step is $O(K)$ with no branching; the VOCSC scatter is $O(K)$ with one table lookup (permutation) per gap.
+
+% ══════════════════════════════════════════════════════════════════
+\section{Experimental Setup}
+% ══════════════════════════════════════════════════════════════════
+
+\subsection{Corpus}
+
+We evaluate on 20 scRNA-seq count matrices from the Gene Expression Omnibus (GEO)~\cite{edgar2002gene}, representing diverse tissues, species, and sequencing technologies.
+Table~\ref{tab:corpus} summarizes the corpus.
+Matrices range from 1.4M to 7.7M nonzeros, with density $0.17$--$5.9$\% and fraction of unit-valued entries $50$--$84$\%.
+
+\begin{table}[t]
+\centering
+\caption{Corpus summary statistics ($n=20$ matrices).}
+\label{tab:corpus}
+\footnotesize
+\begin{tabular}{lrrrr}
+\toprule
+Statistic & Median & Min & Max & Unit \\
+\midrule
+Rows (genes)        & 115,818 & 33,694 & 171,540 & --- \\
+Columns (cells)     &   2,457 &    630 &  21,187 & --- \\
+Nonzeros            &    3.6M &   1.4M &    7.7M & --- \\
+Density             &  0.82\% & 0.17\% &  5.93\% & --- \\
+Fraction $v{=}1$    &  76.5\% & 50.5\% &  84.1\% & --- \\
+Fraction $v{\leq}3$ &  92.4\% & 78.5\% &  96.6\% & --- \\
+Max value           &   3,058 &    368 &  29,933 & --- \\
+Gap entropy         &    6.30 &   4.92 &    7.74 & bits \\
+Raw CSC size        &  42.7 &  17.1 &  92.1 & MB \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Baselines}
+
+We compare VOCSC against general-purpose compressors applied to int32-cast CSC arrays (indptr + indices + data), which represents the practical floor for any CSC compression scheme:
+
+\begin{itemize}
+\item \textbf{gzip-6}~\cite{deutsch1996gzip}: Standard deflate, the most common general-purpose compressor.
+\item \textbf{LZ4}~\cite{collet2013lz4}: Fast decompression-oriented compressor.
+\item \textbf{zstd-3}~\cite{collet2018zstandard}: Fast Zstandard at the same level as our backend.
+\item \textbf{zstd-22}~\cite{collet2018zstandard}: Maximum Zstandard compression level.
+\item \textbf{Brotli-11}~\cite{alakuijala2019brotli}: Maximum Brotli compression quality.
+\end{itemize}
+
+All baselines compress the concatenated raw bytes of (indptr, indices, data) as a single stream.
+No domain-specific preprocessing is applied.
+
+\subsection{Hardware and measurement}
+
+Experiments run on an Intel Xeon compute node with 256~GB RAM and 8 threads.
+Encoding time is wall-clock; decoding time is the best of 10 iterations (measuring throughput under warm cache).
+Throughput is reported as raw CSC bytes per second ($S_{\text{CSC}} / t$).
+
+% ══════════════════════════════════════════════════════════════════
+\section{Results}
+% ══════════════════════════════════════════════════════════════════
+
+\subsection{Compression performance}
+
+Table~\ref{tab:main} compares VOCSC against baseline compressors across the 20-matrix corpus.
+VOCSC achieves a median compression ratio of 12.5$\times$ over raw CSC (float64 values), with aggregate ratio of 12.9$\times$.
+This represents a 2.2$\times$ improvement over zstd-3 applied to raw CSC (5.85$\times$) and a 1.4$\times$ improvement over the best generic compressor (Brotli-11 at 8.98$\times$, which requires 400$\times$ longer encoding).
+
+\begin{table}[t]
+\centering
+\caption{Compression comparison on 20 scRNA-seq matrices. Ratios are vs.\ raw CSC (float64 values + int32 indices). Throughput at 8 threads.}
+\label{tab:main}
+\footnotesize
+\begin{tabular}{lrrr}
+\toprule
+Method & Ratio & Enc.\ (MB/s) & Dec.\ (MB/s) \\
+\midrule
+Raw CSC (baseline)  &  1.00$\times$ & --- & --- \\
+LZ4                 &  2.73$\times$ &  747 & --- \\
+gzip-6              &  5.42$\times$ &   25 & --- \\
+zstd-3 (raw CSC)    &  5.85$\times$ &  296 & --- \\
+zstd-22 (raw CSC)   &  8.43$\times$ &    3 & --- \\
+Brotli-11 (raw CSC) &  8.98$\times$ &    1 & --- \\
+\midrule
+\textbf{VOCSC + zstd-3} & \textbf{12.94}$\times$ & \textbf{240} & \textbf{4,624} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Decoding throughput of 4,624~MB/s means a 43~MB matrix (3.6M nonzeros) decompresses in approximately 9~ms, enabling interactive analytical workflows.
+
+\subsection{Ablation study}
+\label{sec:ablation}
+
+We decompose the VOCSC pipeline into stages and measure the cumulative compression gain at each step (Table~\ref{tab:ablation}).
+The ablation is performed on 10 matrices from the corpus.
+
+\begin{table}[t]
+\centering
+\caption{Ablation study: cumulative compression by pipeline stage. Sizes are summed across 10 matrices.}
+\label{tab:ablation}
+\footnotesize
+\begin{tabular}{lrrr}
+\toprule
+Stage & Size (MB) & Ratio vs.\ CSC & Stage gain \\
+\midrule
+CSC (float64 values)     & 300.5 & 1.00$\times$ & --- \\
+CSC (int32 values)       & 200.4 & 1.50$\times$ & 1.50$\times$ \\
+VOCSC gap encoding       & 100.1 & 3.00$\times$ & 2.00$\times$ \\
++ Byte-plane split       &  50.1 & 6.00$\times$ & 2.00$\times$ \\
++ zstd-3                 &  20.8 & 14.4$\times$ & 2.41$\times$ \\
+\midrule
+\emph{Higher-effort variants:} & & & \\
+\quad + zstd-22          &  20.4 & 14.7$\times$ & +2.1\% \\
+\quad + Brotli-11        &  19.0 & 15.8$\times$ & +8.8\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Each stage contributes approximately a 2$\times$ size reduction.
+The transition from CSC (float64) to CSC (int32) eliminates 4 bytes per nonzero from the value stream (values in count data are always small integers, never requiring 64-bit representation).
+VOCSC gap encoding replaces the (index, value) pair with a single gap integer per nonzero, halving the per-element cost.
+Byte-plane splitting reorganizes the gap bytes into homogeneous planes that compress 2.4$\times$ better under zstd-3 than unsplit gaps.
+
+The marginal gains from higher-effort backends are modest: zstd-22 improves the ratio by 2.1\% over zstd-3 at the cost of 7$\times$ slower encoding, while Brotli-11 improves by 8.8\% at 30$\times$ slower encoding and 3$\times$ slower decoding.
+We therefore recommend zstd-3 as the sole backend.
+
+\subsection{Extended encoding variants}
+\label{sec:extended}
+
+We evaluate three refinements to the VOCSC encoding that exploit additional statistical structure in count matrices (Table~\ref{tab:extended}).
+
+\textbf{Implicit value labels.}
+In scRNA-seq data, the value groups within each column typically progress $1, 2, 3, \ldots$ (because 1 is the most common nonzero, 2 the second most common, etc.).
+Rather than encoding each value label as a varint, we can assume consecutive progression from 1 and omit the label entirely.
+When the sequence breaks, we switch to explicit (value, count) metadata.
+Across 20 matrices, a median of 55.5\% of value groups are consecutive, but the metadata savings are small (varint 1--127 costs only a single byte per group).
+
+\textbf{Dense head.}
+After row density sorting, the first $D$ rows of each column are nearly fully populated: for $D = 128$, the head density exceeds 80\% on 15 of 20 matrices.
+For these rows, we replace VOCSC gap encoding with a $D$-byte dense vector where each byte stores the cell value (0 for absent; values above 255 are clamped).
+The remaining $m - D$ rows are encoded with standard VOCSC.
+Dense encoding costs $D$ bytes per column regardless of occupancy, whereas VOCSC costs approximately 1.2 bytes per nonzero; the breakeven occurs at roughly 80\% head density.
+
+\textbf{Hybrid.}
+We combine all three ideas: a dense head of $D$ rows, implicit-value VOCSC for the consecutive groups in the sparse tail, and explicit VOCSC for any remaining non-consecutive groups.
+
+\begin{table}[t]
+\centering
+\caption{Extended encoding variants vs.\ baseline VOCSC on 20 matrices. $\Delta$ is relative to baseline compressed size (lower is better). Dense/hybrid variants parameterized by head depth $D$.}
+\label{tab:extended}
+\footnotesize
+\begin{tabular}{lrrrr}
+\toprule
+Variant & Median $\Delta$ & Mean $\Delta$ & Min $\Delta$ & Max $\Delta$ \\
+\midrule
+Implicit values    & $-$0.3\% & $-$0.3\% & $-$1.0\% & $-$0.2\% \\
+Dense ($D{=}128$)  & $-$1.2\% & $-$1.4\% & $-$3.6\% & $-$0.1\% \\
+Hybrid ($D{=}128$) & $-$1.3\% & $-$1.7\% & $-$3.9\% & $-$0.3\% \\
+\midrule
+Dense ($D{=}256$)  & $-$1.2\% & $-$0.9\% & $-$2.9\% & $+$3.1\% \\
+Hybrid ($D{=}256$) & $-$1.4\% & $-$1.1\% & $-$3.1\% & $+$2.6\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The hybrid variant at $D = 128$ achieves the most consistent improvement: median $-$1.3\%, never worse than baseline (worst case $-$0.3\%).
+At $D = 256$, the median improvement is larger ($-$1.4\%) but the scheme regresses on very sparse matrices (density $< 0.001$), where the 256-byte dense vector exceeds the VOCSC cost for partially-empty head rows.
+
+Per-matrix, the best encoding always uses the hybrid scheme, with best-$D$ selection yielding improvements ranging from $-$0.6\% to $-$3.9\% (median $-$1.7\%).
+However, the optimal $D$ depends on matrix statistics: dense matrices favor $D = 256$ while sparse matrices favor $D = 32$--$128$.
+
+\textbf{Assessment.}
+The extended variants provide a real but modest 1--4\% improvement over the baseline VOCSC pipeline.
+This gain is substantially smaller than the 24\% improvement from byte-plane splitting or the 100\% from VOCSC grouping itself.
+Moreover, adaptive $D$ selection adds codec complexity and would require per-chunk or per-matrix heuristics at encoding time.
+We include these results to characterize the limits of structural exploitation in this domain, but do not adopt them in the reference implementation.
+The current VOCSC pipeline already captures the dominant redundancy; these refinements operate in the diminishing-returns regime of the entropy curve.
+
+\subsection{Why byte-plane splitting is essential}
+
+Byte-plane splitting is the single most impactful preprocessing step after VOCSC encoding itself.
+Table~\ref{tab:bsplit} shows the effect of applying the same backend compressor with and without byte-split preprocessing.
+
+\begin{table}[t]
+\centering
+\caption{Impact of byte-plane splitting on compression ratio (10 matrices, summed). ``Raw'' = gaps compressed directly; ``Split'' = byte-split then compressed.}
+\label{tab:bsplit}
+\footnotesize
+\begin{tabular}{lrrrr}
+\toprule
+Backend & Raw (MB) & Split (MB) & Raw ratio & Split ratio \\
+\midrule
+zstd-3   & 25.9 & 20.8 & 11.6$\times$ & 14.4$\times$ \\
+zstd-22  & 23.7 & 20.4 & 12.7$\times$ & 14.7$\times$ \\
+Brotli-11& 22.4 & 19.0 & 13.4$\times$ & 15.8$\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The improvement from byte-splitting is 24\% for zstd-3, 16\% for zstd-22, and 18\% for Brotli-11.
+The mechanism is straightforward: gap values in scRNA-seq data are overwhelmingly small (94.2\% fit in a single byte).
+Byte-split segregates the near-zero high byte-plane from the informative low byte-plane, allowing the compressor to exploit the extreme redundancy in the high plane separately.
+
+\subsection{Compression level analysis}
+
+Tables~\ref{tab:level} and~\ref{tab:brotli} show the Pareto frontier across zstd levels 1--22 and Brotli qualities 1--11.
+
+\begin{table}[t]
+\centering
+\caption{Zstd level sweep (10 matrices, aggregate). Ratio is vs.\ raw CSC.}
+\label{tab:level}
+\footnotesize
+\begin{tabular}{rrrc}
+\toprule
+Level & Ratio & Enc.\ (MB/s) & Dec.\ (MB/s) \\
+\midrule
+ 1 & 12.17$\times$ & 211 & 4,125 \\
+ 3 & 12.08$\times$ & 198 & 3,959 \\
+ 7 & 12.18$\times$ & 164 & 3,599 \\
+12 & 12.22$\times$ & 121 & 3,776 \\
+15 & 12.23$\times$ & 90 & 3,711 \\
+19 & 12.08$\times$ & 41 & 3,543 \\
+22 & 12.09$\times$ & 27 & 3,591 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering
+\caption{Brotli quality sweep (10 matrices, aggregate).}
+\label{tab:brotli}
+\footnotesize
+\begin{tabular}{rrrc}
+\toprule
+Quality & Ratio & Enc.\ (MB/s) & Dec.\ (MB/s) \\
+\midrule
+ 1 & 12.13$\times$ &  155 & 1,659 \\
+ 5 & 12.18$\times$ &  130 & 1,756 \\
+ 9 & 12.20$\times$ &   58 & 1,752 \\
+11 & 13.08$\times$ &    6 & 1,397 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Across the entire zstd range (levels 1--22), the compression ratio varies by less than 1.3\% (12.08--12.23$\times$), while encoding speed drops from 211 to 27~MB/s ($7.8\times$ slower).
+Brotli-11 achieves a meaningful improvement (13.08$\times$) but at 33$\times$ slower encoding and 2.8$\times$ slower decoding.
+The flat ratio curve across zstd levels indicates that the VOCSC + byte-split preprocessing has already extracted most of the redundancy: the backend compressor merely exploits residual entropy with diminishing returns at higher levels.
+
+\subsection{Synthetic data experiments}
+\label{sec:synthetic}
+
+We validate VOCSC behavior on synthetic sparse matrices where the statistical parameters are precisely controlled.
+
+\subsubsection{Effect of density}
+
+Table~\ref{tab:density} shows compression ratio as a function of matrix density (fraction of nonzero entries), with all other parameters held constant ($m = 30000$, $n = 5000$, negative binomial values with $r = 0.5$, $p = 0.3$).
+
+\begin{table}[t]
+\centering
+\caption{Synthetic experiment: compression ratio vs.\ matrix density.}
+\label{tab:density}
+\footnotesize
+\begin{tabular}{rrr}
+\toprule
+Density & nnz & VOCSC ratio \\
+\midrule
+0.001 &    150K & 5.14$\times$ \\
+0.002 &    300K & 6.13$\times$ \\
+0.005 &    748K & 7.44$\times$ \\
+0.010 &  1,493K & 8.45$\times$ \\
+0.020 &  2,970K & 9.59$\times$ \\
+0.050 &  7,315K & 11.16$\times$ \\
+0.100 & 14,274K & 12.55$\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Compression ratio increases with density following a logarithmic trend: $R \approx 3.29 \log_{10}(d) + 13.3$ ($R^2 = 0.998$).
+Higher density means more nonzeros per column, producing more gaps per value group.
+These gaps have smaller mean values (more tightly packed rows), yielding lower entropy and better compressibility.
+At extremely low density (0.1\%), the overhead of metadata (group headers, permutation, pointers) becomes significant relative to the gap stream, reducing the effective ratio.
+
+\subsubsection{Effect of value distribution}
+
+\begin{table}[t]
+\centering
+\caption{Synthetic experiment: compression ratio vs.\ negative binomial $r$ parameter (controlling value dispersion).}
+\label{tab:nb}
+\footnotesize
+\begin{tabular}{rrrr}
+\toprule
+$r$ & Frac.\ $v{=}1$ & Mean val & VOCSC ratio \\
+\midrule
+0.1 & 88.2\% &  1.2 &  9.91$\times$ \\
+0.2 & 78.3\% &  1.5 &  9.36$\times$ \\
+0.5 & 54.6\% &  2.2 &  8.45$\times$ \\
+1.0 & 29.8\% &  3.3 &  7.86$\times$ \\
+2.0 &  9.0\% &  5.7 &  7.35$\times$ \\
+5.0 &  0.2\% & 12.7 &  6.98$\times$ \\
+10.0 & 0.0\% & 24.4 &  6.51$\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+When $r$ is small (high dispersion, many unit values), VOCSC achieves nearly 10$\times$ compression because the dominant $v{=}1$ group produces a single long gap stream with strong locality.
+As $r$ increases, values spread across more groups, each with its own gap sequence, reducing per-group stream length and compressibility.
+Even with no unit-valued entries ($r = 10$), VOCSC maintains 6.5$\times$ compression, demonstrating robustness beyond the scRNA-seq regime.
+
+\subsubsection{Effect of matrix dimensions}
+
+Compression ratio increases modestly with row count: from 7.12$\times$ at $m = 5000$ to 7.54$\times$ at $m = 100000$ (density = 0.5\%).
+The mechanism is indirect: more rows at fixed density yield the same number of nonzeros but distributed across a larger row space, producing slightly larger gaps that compress marginally better under byte-split (more zero-valued high bytes).
+Beyond 100K rows, the ratio plateaus.
+
+\subsubsection{Effect of value distribution family}
+
+\begin{table}[t]
+\centering
+\caption{Compression ratio by value distribution family (density = 1\%).}
+\label{tab:dist}
+\footnotesize
+\begin{tabular}{lrr}
+\toprule
+Distribution & Distinct values & VOCSC ratio \\
+\midrule
+Geometric ($p{=}0.6$) & 18 & 8.91$\times$ \\
+Neg.\ binomial ($r{=}0.5$, $p{=}0.3$) & 36 & 8.45$\times$ \\
+Uniform ($[1, 100]$) & 203 & 5.93$\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The uniform distribution, which lacks value concentration, still achieves 5.93$\times$ compression.
+This ``baseline'' ratio comes entirely from the gap encoding and byte-split pipeline operating on the position stream, independent of value structure.
+Concentrated distributions (geometric, negative binomial) add 2--3$\times$ additional compression from the value-ordered grouping.
+
+\subsection{Predictive compressibility model}
+\label{sec:model}
+
+We fit a linear model to predict the achieved VOCSC compression ratio from six observable matrix statistics:
+\begin{equation}
+\hat{R} = \beta_0 + \beta_1 \log_{10}(d) + \beta_2 f_1 + \beta_3 \log_2(\bar{\delta}) + \beta_4 H_\delta + \beta_5 \log_{10}(m) + \beta_6 \log_{10}(n)
+\end{equation}
+where $d$ = density, $f_1$ = fraction of unit-valued entries, $\bar{\delta}$ = mean gap, $H_\delta$ = gap entropy (bits), $m$ = rows, $n$ = columns.
+
+\begin{table}[t]
+\centering
+\caption{Predictive model coefficients ($R^2 = 0.986$, $n = 20$ matrices).}
+\label{tab:model}
+\footnotesize
+\begin{tabular}{lr}
+\toprule
+Feature & Coefficient \\
+\midrule
+Intercept                & $+18.29$ \\
+$\log_{10}(\text{density})$ & $+3.55$ \\
+Fraction $v{=}1$           & $+0.41$ \\
+$\log_2(\text{mean gap})$  & $+0.72$ \\
+Gap entropy (bits)          & $-2.52$ \\
+$\log_{10}(m)$              & $+0.20$ \\
+$\log_{10}(n)$              & $+3.36$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The model achieves $R^2 = 0.986$ on the 20-matrix corpus, confirming that compression ratio is well-determined by observable statistics.
+The two strongest predictors are gap entropy ($\beta_4 = -2.52$, higher entropy $\Rightarrow$ lower ratio) and column count ($\beta_6 = +3.36$, more columns $\Rightarrow$ more chunks $\Rightarrow$ better compression).
+Density enters with a positive coefficient ($+3.55$), consistent with the synthetic experiments: denser matrices produce more gaps per chunk, improving compressor context.
+
+This model enables a priori estimation of file sizes and can guide storage allocation without trial compression.
+
+% ══════════════════════════════════════════════════════════════════
+\section{Discussion}
+% ══════════════════════════════════════════════════════════════════
+
+\subsection{Why VOCSC outperforms generic compressors}
+
+The 2.2$\times$ advantage of VOCSC over zstd-3 on raw CSC arrays (12.9$\times$ vs.\ 5.85$\times$) arises from three structural transformations invisible to generic compressors:
+
+\textbf{Value elimination.} By grouping entries by value, the explicit value stream is replaced by compact varint metadata (group value + count), saving 4--8 bytes per nonzero. For a matrix with $K$ nonzeros and median 27 distinct values per column, the metadata overhead is approximately $3 \times 27 = 81$ bytes per column vs.\ $8K/n$ bytes for the raw value stream.
+
+\textbf{Gap-1 transform.} Converting absolute row indices to gap-1 deltas reduces the dynamic range by orders of magnitude. For a matrix with $m = 115{,}818$ rows and density 0.82\%, the mean gap is $\approx 122$---well within a single byte for most entries.
+
+\textbf{Byte-plane separation.} Byte-split transforms structured 16/32-bit integers into homogeneous byte streams. The high byte-plane (mostly zeros, 94\% of gaps $< 256$) compresses to near zero, while the low byte-plane carries the remaining entropy. This is equivalent to column-major storage of a conceptual $N \times 2$ (or $N \times 4$) byte matrix, exploiting per-column redundancy.
+
+\subsection{The case for a single compression tier}
+
+Our ablation and level-sweep experiments reveal a crucial insight: after VOCSC + byte-split preprocessing, the residual entropy is so low that backend compressor effort has minimal impact on compression ratio.
+Across zstd levels 1--22, the ratio varies by only 1.3\%.
+Brotli-11 achieves a more substantial 8.8\% improvement, but at 33$\times$ slower encoding (6~MB/s vs.\ 198~MB/s) and 2.8$\times$ slower decoding (1,397~MB/s vs.\ 3,959~MB/s).
+
+For a practical system compressing hundreds of terabytes of single-cell data, the encoding throughput cost is decisive: compressing 1~TB at 240~MB/s takes 70 minutes; at 6~MB/s it takes 46 hours.
+The 8.8\% size reduction saves approximately 7~GB per 80~GB of raw CSC---far less than the operational cost of the additional compute time.
+
+We therefore implement and recommend a single tier: VOCSC + byte-split + zstd-3.
+Higher-effort variants (zstd-22, Brotli-11) remain theoretically available by adjusting the compression level parameter, but we consider the tradeoff unfavorable for all practical scenarios.
+
+\subsection{Theoretical limits}
+
+The gap entropy of our corpus ranges from 4.92 to 7.74 bits per gap.
+For a matrix with $K$ nonzeros at median gap entropy $H = 6.30$ bits, the entropy floor is:
+\begin{equation}
+S_{\min} = \frac{K \times H}{8} \text{ bytes}
+\end{equation}
+For a typical matrix with $K = 3.6$M, this gives $S_{\min} \approx 2.84$~MB, or $15.5\times$ compression vs.\ 44.1~MB CSC.
+Our achieved 12.5$\times$ (median) is 80\% of this theoretical limit, with the gap attributable to metadata overhead, permutation storage, and the sub-optimal (but fast) compression of zstd at level~3.
+
+The 2.2$\times$ advantage over the best generic compressor applied to raw CSC (zstd-3 at 5.85$\times$) demonstrates that domain-aware preprocessing---not merely a better entropy coder---is the key to high compression of sparse count data.
+
+\subsection{Limitations}
+
+VOCSC is specialized for sparse integer count matrices.
+It does not handle:
+\begin{itemize}
+\item Continuous-valued data (e.g., normalized expression).
+\item Dense matrices (density $>$ 10--20\%).
+\item Non-integer values.
+\end{itemize}
+For such data, the value-ordered grouping degenerates (every entry is a unique group), and the codec falls back to gap-only compression at approximately 6$\times$.
+
+The current implementation requires loading the entire matrix into memory for encoding (due to row permutation computation).
+Streaming encoding with approximate permutation is an area for future work.
+
+% ══════════════════════════════════════════════════════════════════
+\section{Related Work}
+% ══════════════════════════════════════════════════════════════════
+
+\textbf{General sparse matrix compression.}
+The CSC and CSR formats~\cite{barrett1994templates} are the standard in-memory representations.
+Libraries such as HDF5~\cite{folk2011overview} and Zarr~\cite{miles2024zarr} add chunk-level compression (gzip, LZ4, zstd) over raw array bytes.
+SuiteSparse~\cite{davis2019algorithm} and MatrixMarket~\cite{boisvert1997matrix} define interchange formats but do not exploit data-level structure.
+
+\textbf{Genomics formats.}
+CRAM~\cite{hsi2011cram} and MPEG-G~\cite{voges2021mpeg} apply reference-based and column-specific compression to sequencing reads.
+AnnData~\cite{anndata} uses HDF5 as a container with per-dataset compression.
+CellDB~\cite{sikkema2023integrated} stores expression data in Parquet with run-length encoding.
+None of these exploit the value-ordered structure of UMI count data.
+
+\textbf{Integer compression.}
+Byte-aligned encoding schemes such as VByte (varint)~\cite{williams1999compressing}, Group Varint~\cite{dean2009challenges}, and SIMD-BP128~\cite{lemire2015decoding} are widely used for inverted indices in information retrieval.
+Byte-shuffle preprocessing for columnar integer data is used by Blosc~\cite{alted2010blosc} and bitshuffle~\cite{masui2015bitshuffle}, which transpose an $N \times w$ byte matrix (where $w$ is the word width) before compression.
+Our byte-split step is a simplified variant tailored to the gap-1 output of VOCSC, operating at the granularity of entire compressed chunks rather than individual words.
+
+\textbf{Single-cell data compression.}
+ScZip~\cite{li2024sczip} applies delta coding and byte-split to CSC indices with zstd backend, achieving 5--7$\times$ compression.
+The Cellarium project~\cite{cellarium2024} stores count matrices in a proprietary binary format with run-length encoding.
+VOCSC extends beyond delta coding by eliminating the value stream entirely through value-ordered grouping, yielding the additional 2$\times$ factor.
+
+% ══════════════════════════════════════════════════════════════════
+\section{Conclusions}
+% ══════════════════════════════════════════════════════════════════
+
+We introduced VOCSC, a lossless compression scheme for sparse count matrices that achieves 13$\times$ compression over standard CSC at 4,624~MB/s decode throughput.
+The codec exploits three domain-specific properties---value concentration, implicit values, and gap compressibility---through a simple four-stage pipeline.
+Our ablation study shows that each stage contributes approximately 2$\times$, and that the preprocessing dominates: switching the backend compressor from zstd-3 to zstd-22 or Brotli-11 yields less than 9\% additional compression at 7--30$\times$ higher encoding cost.
+A linear predictive model achieves $R^2 = 0.986$, enabling a priori file-size estimation.
+Extended encoding variants---dense head rows, implicit value labels, and a hybrid scheme---yield a further median 1.3--1.7\% size reduction but operate in the diminishing-returns regime of the entropy curve and are not adopted in the reference implementation.
+VOCSC is implemented as SinglePress, a header-only C++ library with Python bindings and OpenMP parallelism, available under the MIT license.
+SinglePress uses the \texttt{.1pz} file extension and is designed for integration into production single-cell analysis pipelines.
+
+% ── Acknowledgments ──────────────────────────────────────────────
+\section*{Acknowledgments}
+Compute resources provided by the Flatiron Institute.
+
+% ── Data \& Code Availability ─────────────────────────────────────
+\section*{Data \& Code Availability}
+SinglePress is open-source under the MIT license.
+Source code, Python bindings, and benchmark scripts are available at \url{https://github.com/Singlet-AI/singlepress}.
+The \texttt{.1pz} file format specification and reference encoder/decoder are included in the repository.
+Evaluation data are publicly available from the Gene Expression Omnibus (GEO).
+
+% ── References ───────────────────────────────────────────────────
+\bibliography{refs}
+
+\end{document}

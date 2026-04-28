@@ -1,0 +1,62 @@
+\documentclass[11pt]{letter}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+\usepackage{xcolor}
+
+\signature{Zach DeBruine, Ph.D.\\
+Department of Information Sciences and Technology\\
+Grand Valley State University\\
+Allendale, MI\\
+\texttt{zach@singlet.bio}}
+
+\address{Zach DeBruine, Ph.D.\\
+Department of Information Sciences and Technology\\
+Grand Valley State University\\
+Allendale, MI 49401}
+
+\begin{document}
+
+\begin{letter}{Editors\\
+\textit{Genome Biology}\\
+BMC, Springer Nature}
+
+\opening{Dear Editors,}
+
+We are pleased to submit our manuscript, ``SinglePress: A Purpose-Built File Format for Single-Cell Omics Matrices,'' for consideration as a Software article in \textit{Genome Biology}.
+
+Single-cell RNA-seq datasets are among the most compressible structures in genomics, yet the field stores them in general-purpose formats that waste 80--90\% of disk space.
+SinglePress exploits the extreme value concentration of count data---where a median of 72\% of nonzeros equal 1---achieving a median 9.5$\times$ compression over int32 CSC at 868~MB/s decode throughput.
+Across 3,253 scRNA-seq datasets spanning nine species and nine protocols, \texttt{.1pz} files are 2--4$\times$ smaller than H5AD and 2.5$\times$ smaller than BPCells, while reading 3--6$\times$ faster.
+
+Three aspects of this work may be of particular interest to the \textit{Genome Biology} readership:
+
+\begin{enumerate}
+\item \textbf{Near-optimal compression.} A compression frontier analysis demonstrates that SinglePress approaches or beats the Shannon entropy lower bound.
+File size is predictable from nonzero count alone ($R^2 = 0.990$, 0.807 bytes/nonzero), enabling storage cost modeling without trial compression.
+
+\item \textbf{The compression--speed paradox resolved.} Counter to conventional wisdom, better compression yields \emph{faster} reads.
+An ablation study decomposes this into a 3.4$\times$ zstd-vs-gzip codec advantage and a 2.1$\times$ threading speedup from the chunked architecture---independent factors that multiply to 3--6$\times$ end-to-end.
+
+\item \textbf{GPU training throughput.} Native PyTorch dataloaders shift deep learning workloads from I/O-bound to compute-bound, delivering 2.5--3$\times$ higher GPU utilization than H5AD-backed alternatives.
+As single-cell foundation models scale to billions of cells, I/O efficiency becomes a prerequisite rather than an optimization.
+\end{enumerate}
+
+SinglePress provides Python, R, and PyTorch APIs with native interoperability with AnnData, Seurat, SingleCellExperiment, and standard sparse matrix libraries.
+The software is open source (GPL-3.0) at \url{https://github.com/Singlet-AI/singlepress}, with format specification, documentation, and all benchmark code included.
+
+This manuscript has not been submitted elsewhere and all authors have approved the submission.
+We declare that ZD is a co-founder of Singlet Bio, Inc., which may distribute software incorporating the SinglePress format.
+
+We suggest the following potential reviewers who have expertise in single-cell data infrastructure:
+\begin{itemize}
+\item Ben Parks (Stanford University) --- developer of BPCells
+\item Isaac Virshup (Helmholtz Munich) --- core developer of AnnData/Scanpy
+\item Rob Patro (University of Maryland) --- developer of alevin-fry/simpleaf
+\end{itemize}
+
+Thank you for your consideration.
+
+\closing{Sincerely,}
+
+\end{letter}
+\end{document}

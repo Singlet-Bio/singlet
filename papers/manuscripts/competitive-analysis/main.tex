@@ -1,0 +1,258 @@
+\documentclass[10pt,twocolumn,letterpaper]{article}
+\usepackage{../../templates/singletai-preprint}
+\usepackage{booktabs}
+\usepackage{array}
+
+\title{Singlify AI: Competitive Landscape Analysis\\
+  and Strategic De-Risk Roadmap}
+
+\author{%
+  Zach DeBruine\textsuperscript{1,*}\\[4pt]
+  \textsuperscript{1}Grand Valley State University, Allendale, MI, USA\\
+  \textsuperscript{*}Correspondence: \texttt{debruinz@gvsu.edu}
+}
+
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This report provides an exhaustive mapping of competitive threats in the
+single-cell genomics data and intelligence space, their trajectories, and
+implications for Singlify~AI's positioning. We analyze direct competitors
+(CZ~CELLxGENE Census, Cellarium AI, TileDB), adjacent competitors (Tempus AI,
+Recursion, Insitro, SOPHiA Genetics, scverse ecosystem), and cloud
+infrastructure providers. We assess the durability of each claimed competitive
+moat and present five concrete value-creating strategic moves designed to exploit
+structural advantages that no competitor can replicate in 2--3~years: shipping
+an RNA velocity product (S/U/A layers), adopting an academic-free/commercial-paid
+pricing model, formalizing a CZI data contribution partnership, building a 200+
+species explorer, and publishing a definitive single-cell benchmark (GenomicEval).
+\end{abstract}
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Direct Competitors}
+\label{sec:direct}
+
+\subsection{CZ CELLxGENE Census (Existential Threat)}
+
+As of March 2026, Census hosts 149.1M unique cells across 2,080 datasets and
+1,102 cell types. Key trajectory signals include: species expansion from 2 to
+5 in one release (human, mouse, macaque, marmoset, chimp), spatial data
+integration (Slide-seq, Visium now in builds), CZI + NVIDIA partnership
+(October 2025) for petabyte-scale processing, new AI models (GREmLN, rBio1,
+TranscriptFormer), AI Workspace for interactive exploration, and Virtual Cell
+initiative (TIME Magazine coverage).
+
+Foundation models hosted: scVI (106M human, 42.8M mouse), Geneformer (106M cells,
+95M parameters), TranscriptFormer TF-Sapiens (159M cells), TranscriptFormer
+TF-Exemplar (110M cells, 5 species), scGPT (74.3M), UCE, and our NMF (28.5M).
+
+\textbf{What CZI still does NOT do:} uniform FASTQ-level reprocessing (author-processed
+data only), splicing layers (S/U/A), $>$5 species coverage, paid/commercial
+products, per-dataset pipeline standardization.
+
+\subsection{Cellarium AI (Broad Institute)}
+
+Cell Annotation Service (CAS)---inverse search for automated cell type annotation.
+CellBender for artifact removal. CellCap for perturbation experiments.
+``Tokenizing all of cell biology data.'' Backed by Broad Institute of MIT and
+Harvard. Public beta available.
+
+\textbf{Threat level:} Moderate-High. Building the intelligence layer
+(annotations, perturbation analysis) that Singlify wants to own.
+
+\subsection{TileDB (\$142M Raised)}
+
+Array storage infrastructure powering Census backend (TileDB-SOMA). Partnerships
+with Databricks (``Agentic AI in Healthcare''), Snowflake, Strand Life Sciences.
+Building toward ``data substrate for biological analytics.'' HIMSS 2026 healthcare
+AI presence.
+
+\textbf{Threat level:} Moderate. If TileDB builds biology layers on their storage,
+they skip the infrastructure problem.
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Adjacent Competitors}
+\label{sec:adjacent}
+
+\subsection{Foundation Model Companies}
+
+Recursion (\$1.4B+ raised, public), Insitro (\$743M), Genentech/Roche (internal),
+Isomorphic Labs (Google-backed). These companies have 100--1000$\times$ resources
+but build drug discovery platforms, not data access tools. They could become
+\emph{customers} more than competitors.
+
+\subsection{Tempus AI}
+
+8.5M+ de-identified records, 1.5M+ matched clinical + genomic, $\sim$350K+
+transcriptomic profiles. Revenue \$632M+ (FY2024). Partners with 95\% of top-20
+pharma. Tempus Lens conversational AI. Focus: oncology real-world data, clinical
+sequencing. \textbf{No single-cell data at scale.} Could acquire a company like
+Singlify.
+
+\subsection{SOPHiA Genetics}
+
+FDA-cleared genomic analysis platform. 600+ hospitals and labs globally. Clinical
+genomics focus---not single-cell. Potential partner or acquirer for clinical PGI.
+
+\subsection{scverse Ecosystem}
+
+Scanpy, anndata, mudata, scvi-tools, squidpy, pertpy, SnapATAC2,
+rapids-singlecell (GPU-accelerated). The default toolchain for every
+computational biologist. Community-maintained, free. Does not compete on data
+but competes on analysis. If scverse + CELLxGENE = ``good enough,'' there is no
+reason to pay.
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Competitive Moat Assessment}
+\label{sec:moat}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Claimed Moat} & \textbf{Durability} & \textbf{Reasoning} \\
+\midrule
+260M cells vs.\ 149M & Weak & Gap closing \\
+200+ species & Strong (2--3~yr) & Hard to replicate \\
+FASTQ reprocessing & Strong (2--3~yr) & Tedious, unwanted \\
+S/U/A splicing layers & Strong & Requires FASTQ \\
+6 modalities linked & Moderate & CZI adding spatial \\
+NMF interpretability & Moderate & Clinical advantage \\
+.spz compression & Weak & Feature, not moat \\
+\bottomrule
+\end{tabular}
+\caption{Honest durability assessment of competitive moats.}
+\label{tab:moat}
+\end{table}
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Strategic De-Risk Roadmap: Five Value-Creating Moves}
+\label{sec:moves}
+
+Singlify's competitive position rests on three structural advantages no
+competitor currently possesses and none are likely to replicate in 2--3~years:
+(1)~uniform FASTQ-level reprocessing across 200+ species, (2)~splicing layers
+(S/U/A) that require FASTQ and cannot be added retroactively, and (3)~multi-modal
+linking at scale.
+
+\subsection{Move 1: Ship ``Singlify Dynamics''---RNA Velocity at Atlas Scale}
+
+\textbf{Zero competition.} No one else has atlas-scale pre-computed S/U/A matrices.
+CZI \emph{cannot} add this because they take author-processed counts, not FASTQ.
+This is a structural impossibility. RNA velocity papers (scVelo: 2,000+ citations)
+are among the most cited in single-cell biology. Every velocity analysis needs
+S/U/A input data.
+
+\textbf{Effort:} 2--4 weeks (data exists; needs API exposure).
+\textbf{Risks addressed:} CZI replication (structural impossibility), PMF
+validation (velocity researchers), free-tool culture (unavailable even for free).
+
+\subsection{Move 2: Academic Free / Commercial Paid (Benchling Model)}
+
+Eliminate the \$49/mo academic barrier entirely. Free for .edu emails.
+Commercial pricing at \$5K--\$50K/yr. This eliminates the \#1 go-to-market risk
+(comp bio researchers pay \$0), creates an academic adoption funnel (postdocs
+become industry scientists who bring the tool), and enables 10--100$\times$
+higher commercial pricing.
+
+\textbf{Effort:} 1 week. \textbf{Risks addressed:} PMF, free-tool culture,
+pricing uncertainty, runway (focus revenue where budgets exist).
+
+\subsection{Move 3: Formalize CZI Data Contribution Partnership}
+
+Propose contributing uniformly reprocessed data (200+ species, S/U/A layers,
+multimodal) to CELLxGENE Census. If Singlify \emph{is} the supplier, CZI has
+zero incentive to replicate. This neutralizes the existential threat, amplifies
+distribution through Census, and validates credibility. NMF is already hosted.
+
+\textbf{Effort:} 2--4 weeks. \textbf{Risks addressed:} CZI reprocessing threat,
+distribution, solo founder narrative.
+
+\subsection{Move 4: Ship ``Species Explorer''---200+ Species Atlas}
+
+Zero alternatives exist for chicken, pig, cow, wheat, rice, salmon across 200+
+species. Agricultural genomics companies (Corteva, Syngenta, Bayer CropScience)
+have budgets and do not use CELLxGENE. CZI is philosophically committed to human
+disease. USDA SBIR funds agricultural genomics tools.
+
+\textbf{Effort:} 3--6 weeks. \textbf{Risks addressed:} CZI competition (different
+market), new PMF validation, free-tool culture (agricultural biotech pays).
+
+\subsection{Move 5: Publish GenomicEval v0.1}
+
+The first standardized benchmark for single-cell foundation models, using
+uniformly processed data as the test substrate. No standard benchmark exists
+(unlike GLUE for NLP, ImageNet for vision). Every foundation model paper would
+cite it. Benchmark tasks: cell type annotation (200+ species), batch correction
+(uniform data eliminates confounds), RNA velocity prediction (S/U/A data
+required), cross-species transfer, perturbation response.
+
+\textbf{Effort:} 6--8 weeks. \textbf{Risks addressed:} PMF proxy, CZI virtual
+cell must benchmark against our standard, defines evaluation framework.
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Implementation Timeline}
+\label{sec:timeline}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Timeline} & \textbf{Move} \\
+\midrule
+Weeks 1--2 & Move 2: Academic/Commercial pricing \\
+Weeks 1--4 & Move 1: Dynamics / S/U/A API \\
+Weeks 2--4 & Move 3: CZI partnership proposal \\
+Weeks 3--8 & Move 4: Species Explorer \\
+Weeks 4--12 & Move 5: GenomicEval preprint \\
+\bottomrule
+\end{tabular}
+\caption{Parallel implementation schedule for five strategic moves.}
+\label{tab:timeline}
+\end{table}
+
+Moves 1 and 2 are parallel and immediate (deliverable by end of Month~1).
+Move~3 is relationship-dependent but high-leverage. Moves~4 and~5 build over
+Months~2--3 and compound the value of Moves~1--3.
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Acquisition Value}
+\label{sec:acquisition}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}lp{5cm}@{}}
+\toprule
+\textbf{Acquirer} & \textbf{Strategic Value} \\
+\midrule
+Tempus & Single-cell + 200+ species + splicing + NMF = clinical genomics
+  intelligence layer \\
+10x Genomics & Platform making instruments more valuable across 200+ species \\
+Illumina & Downstream data value; agricultural/veterinary markets \\
+TileDB & Biology layer on infrastructure; uniformly processed data \\
+CZI & 200+ species + S/U/A + multimodal fills biggest gaps \\
+\bottomrule
+\end{tabular}
+\caption{Strategic acquisition value by potential acquirer.}
+\label{tab:acquisition}
+\end{table}
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Conclusion}
+
+After five moves, the positioning statement becomes: ``Singlify is the world's
+only uniformly reprocessed single-cell atlas---260M cells, 200+ species, with
+splicing dynamics nobody else has---used by CZI Census, benchmarked by the field,
+free for academics, and already licensed by commercial customers.'' That
+sentence, backed by these five moves, is fundable.
+
+\bibliographystyle{unsrtnat}
+\bibliography{refs}
+
+\end{document}

@@ -1,0 +1,384 @@
+%% Genomics Intelligence Architecture — Conditional Program Model
+%% Migrated from singlet-intelligence/docs/architecture/cpm.md
+\documentclass[10pt,twocolumn,letterpaper]{article}
+\usepackage{../../templates/singletai-preprint}
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{natbib}
+\bibliographystyle{unsrtnat}
+
+% ── Metadata ─────────────────────────────────────────────────────
+\title{The Conditional Program Model: A Generative Architecture \\
+  for Transcriptomics Intelligence}
+\author{
+  Zach DeBruine\textsuperscript{1,*}
+  \\[6pt]
+  \textsuperscript{1}Department of Computing, Grand Valley State University, Allendale, MI 49401
+}
+
+\begin{document}
+\maketitle
+\correspondingauthor{debruinz@gvsu.edu}
+
+\begin{abstract}
+Single-cell transcriptomics generates expression profiles for millions of cells,
+yet researchers can only query conditions that have been experimentally observed.
+We propose the Conditional Program Model (CPM), a generative architecture that
+extends non-negative matrix factorization (NMF) with a conditional neural
+encoder to predict gene program activities for arbitrary, unobserved biological
+conditions. The CPM consists of three components: (1)~a gene program dictionary
+$W \in \mathbb{R}_{\geq 0}^{g \times k}$ learned via regularized NMF on an
+atlas of ${\sim}10^9$ cells, with angular regularization enabling $k = 1024$--$2048$
+programs without degeneracy; (2)~a conditional encoder $f_\theta$ mapping
+categorical and continuous metadata to program activity distributions via
+cross-attention over learned embeddings; and (3)~a parameter-free decoder
+$\hat{x} = W\hat{h}$ that translates predictions to gene space. The encoder
+predicts both mean $\mu$ and variance $\sigma$ of program activities, capturing
+biological variability across donors and cell states. We describe extensions for
+cross-species integration via ortholog-projected shared program spaces,
+perturbation prediction through learned intervention operators in program space,
+and natural language hypothesis testing by parsing biological queries into
+structured model inference calls. The architecture separates the 45~GB gene
+program dictionary (server-side) from the 12~MB encoder (client-side), enabling
+offline inference on commodity hardware. We present a validation framework
+including reconstruction accuracy ($r > 0.85$ per cell type), cross-validation
+of rank selection via speckled holdout, and zero-shot condition prediction
+benchmarks.
+\end{abstract}
+
+\keywords{single-cell transcriptomics \and non-negative matrix factorization
+  \and generative model \and gene programs \and conditional inference}
+
+% ── Introduction ─────────────────────────────────────────────────
+\section{Introduction}
+\label{sec:intro}
+
+The single-cell transcriptomics community currently answers biological questions
+by operating directly on observed data---downloading count matrices, subsetting by
+condition, computing differential expression, running enrichment analyses, and
+fitting dimensionality reductions. This workflow has two structural limitations.
+
+First, one can only answer questions about conditions that have been
+experimentally observed. If a researcher wants to know what happens when gene~$X$
+is knocked out in cell type~$Y$ under disease condition~$Z$, they need a dataset
+where someone actually performed that experiment. Most condition combinations
+have never been observed.
+
+Second, the bottleneck is data wrangling, not analysis. Researchers spend
+60--80\% of their time finding, downloading, formatting, and quality-controlling
+data~\citep{zheng2017massively}. The actual biological insight---``which programs
+changed?''---takes minutes once the data is prepared.
+
+A transcriptomics intelligence platform inverts this paradigm. Instead of
+operating on data, it uses all observed data as training substrate to learn a
+model that can: (i)~\emph{generate} predicted expression profiles for arbitrary
+condition combinations; (ii)~\emph{decompose} those predictions into named,
+interpretable biological programs; (iii)~\emph{predict} how perturbations shift
+program activities; (iv)~\emph{transfer} knowledge across species via shared
+program structure; and (v)~\emph{answer questions in natural language} by parsing
+queries into structured model inference calls.
+
+The key question is: what model architecture achieves all of this while remaining
+interpretable, scalable, and grounded in published biology?
+
+\subsection{NMF as a foundation, not a generative model}
+
+Non-negative matrix factorization decomposes a gene expression matrix
+$X \in \mathbb{R}_{\geq 0}^{g \times n}$ into
+\begin{equation}
+  X \approx WH
+  \label{eq:nmf}
+\end{equation}
+where $W \in \mathbb{R}_{\geq 0}^{g \times k}$ contains $k$ gene program
+loadings and $H \in \mathbb{R}_{\geq 0}^{k \times n}$ contains program activity
+levels for each cell~\citep{lee1999learning,debruine2021rcppml}.
+
+Given only~$W$ (the learned gene programs), NMF has no mechanism to produce~$h$
+(the program activity vector) for a new, unobserved condition. NMF can decompose
+an observed expression vector---given~$x$, solve
+$\min_{h \geq 0} \|x - Wh\|^2$---and reconstruct from known activities---given~$h$,
+compute $\hat{x} = Wh$. But it \emph{cannot} answer: ``What would~$h$ be for a
+human hepatocyte under NASH with a PCSK9 knockout?'' without first observing that
+cell.
+
+What NMF does provide is the critical ingredient that other architectures lack:
+an interpretable, biologically grounded output space. Each dimension of~$h$
+corresponds to a named biological program (e.g., oxidative phosphorylation, T~cell
+activation, cell cycle G2/M). This interpretability is not a nicety---it is the
+product. A black-box expression prediction is scientifically useless; a
+prediction decomposed into ``program~12 (lipid metabolism) increases 2.3$\times$''
+is actionable.
+
+The architecture must therefore \emph{not replace} NMF but \emph{extend it} with
+a conditional generative component that maps metadata to program activities,
+while preserving NMF's gene programs as the structured, interpretable output
+vocabulary.
+
+% ── Methods ──────────────────────────────────────────────────────
+\section{Architecture: The Conditional Program Model}
+\label{sec:cpm}
+
+The Conditional Program Model has three components (Figure~\ref{fig:architecture}):
+\begin{enumerate}
+  \item \textbf{Gene Program Dictionary}~$W$---learned once via NMF on the full
+    atlas, fixed during inference.
+  \item \textbf{Conditional Program Encoder}~$f_\theta$---a neural network
+    mapping metadata conditions to program activity distributions.
+  \item \textbf{Expression Decoder}---the matrix multiplication
+    $\hat{x} = W\hat{h}$, which is parameter-free.
+\end{enumerate}
+
+The generation pathway is:
+\begin{equation}
+  \text{metadata} \xrightarrow{f_\theta} \hat{h} \xrightarrow{\times W} \hat{x}
+  \label{eq:pathway}
+\end{equation}
+
+\subsection{Gene program dictionary via regularized NMF}
+\label{sec:nmf}
+
+The gene program dictionary is learned via NMF on the full atlas
+($g \approx 30{,}000$ genes, $n \approx 10^9$ cells). The objective is:
+\begin{equation}
+  \min_{W, H \geq 0} \|X - WH\|_F^2
+    + \lambda_{\ell_1}(\|W\|_1 + \|H\|_1)
+    + \lambda_{\text{ang}} \!\!\sum_{j \neq j'}\!\!
+      \max\!\bigl(0, \cos(W_{:,j}, W_{:,j'}) - \epsilon\bigr)^2
+  \label{eq:nmf-obj}
+\end{equation}
+
+The $\ell_1$ sparsity penalty promotes sparse gene loadings (each program driven
+by a focused gene set) and sparse activities (each cell uses a subset of
+programs), tuned so that the Gini coefficient of each cell's $h_i$ vector exceeds
+0.7. The angular regularization penalty penalizes program columns whose cosine
+similarity exceeds threshold~$\epsilon$, promoting orthogonality between
+programs. With angular regularization, ranks of 1024--2048 become recoverable
+without degeneracy; without it, programs at high ranks collapse into
+near-duplicates.
+
+The number of programs~$k$ is determined via speckled holdout cross-validation:
+randomly mask 1\% of nonzero entries in~$X$, train NMF on remaining entries,
+evaluate reconstruction error on held-out entries, and select the~$k$ minimizing
+holdout error before overfitting.
+
+\subsection{Conditional program encoder}
+\label{sec:encoder}
+
+The encoder is a neural network $f_\theta : \mathcal{M} \to
+\mathbb{R}_{\geq 0}^k$ mapping metadata space~$\mathcal{M}$ to program activity
+distributions. Each cell's metadata includes:
+
+\begin{table}[t]
+  \centering
+  \caption{Metadata fields for the conditional encoder.}
+  \label{tab:metadata}
+  \small
+  \begin{tabular}{@{}lll@{}}
+    \toprule
+    Field & Type & Representation \\
+    \midrule
+    Tissue & Categorical & Learned embedding \\
+    Cell type & Categorical & Learned embedding \\
+    Disease & Categorical & Learned embedding \\
+    Developmental stage & Continuous & Scalar (days) + embedding \\
+    Sex & Categorical & Learned embedding \\
+    Perturbation & Set & Gene embedding(s) \\
+    Assay & Categorical & Learned embedding \\
+    Donor & Categorical & Learned embedding \\
+    Cell cycle phase & Categorical & Learned embedding \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Categorical fields receive learned embeddings initialized randomly and trained
+end-to-end. Continuous scalars (developmental stage, doublet score, mitochondrial
+fraction) pass through a small MLP to produce $d$-dimensional vectors that
+concatenate with categorical embeddings. Missing fields are replaced with a
+learned \texttt{[UNKNOWN]} token, and the model is trained with random metadata
+dropout for robustness to partial information.
+
+\paragraph{Cross-attention.}
+All embeddings attend to each other via a cross-attention layer that captures
+interactions (e.g., tissue$\times$disease, cell\_type$\times$developmental\_time).
+The attended representations are concatenated and passed through an MLP trunk:
+\begin{align}
+  \mathbf{z} &= \text{CrossAttn}(\mathbf{e}_1, \ldots, \mathbf{e}_m) \\
+  \mu &= \text{Softplus}\bigl(\text{MLP}_\mu(\mathbf{z})\bigr) \\
+  \sigma &= \text{Softplus}\bigl(\text{MLP}_\sigma(\mathbf{z})\bigr)
+\end{align}
+
+The encoder predicts both mean~$\mu$ and variance~$\sigma$ of program
+activities, capturing biological variability. The softplus activation ensures
+non-negativity.
+
+\subsection{Training objective}
+\label{sec:training}
+
+For each cell~$i$ with NMF-derived activities~$h_i$ and metadata~$m_i$, the
+primary loss is Gaussian negative log-likelihood:
+\begin{equation}
+  \mathcal{L}_{\text{NLL}} = \sum_{i=1}^{n} \sum_{j=1}^{k}
+    \left[
+      \frac{(h_{ij} - \mu_j(m_i))^2}{2\sigma_j(m_i)^2} + \log \sigma_j(m_i)
+    \right]
+  \label{eq:nll}
+\end{equation}
+
+The total objective includes program correlation, reconstruction, and
+calibration regularizers:
+\begin{equation}
+  \mathcal{L} = \mathcal{L}_{\text{NLL}}
+    + \lambda_{\text{corr}} \mathcal{L}_{\text{corr}}
+    + \lambda_{\text{recon}} \mathcal{L}_{\text{recon}}
+    + \lambda_{\text{cal}} \mathcal{L}_{\text{cal}}
+  \label{eq:total-loss}
+\end{equation}
+
+% ── Cross-Species ────────────────────────────────────────────────
+\section{Cross-Species Integration}
+\label{sec:cross-species}
+
+Cross-species transfer exploits the structural conservation of gene programs
+across species. Given species $A$ and $B$ with ortholog mapping matrix
+$O \in \{0, 1\}^{g_A \times g_B}$, we project species~$B$'s program dictionary
+into species~$A$'s gene space:
+\begin{equation}
+  W_B^{(A)} = O^\top W_B
+  \label{eq:ortholog-projection}
+\end{equation}
+
+Programs are aligned across species via bipartite matching on cosine similarity
+between $W_A$ and $W_B^{(A)}$ columns. Programs with cosine similarity exceeding
+0.4 are designated as \emph{shared programs}; species-specific residual programs
+capture lineage-specific biology.
+
+This enables zero-shot cross-species prediction: given human metadata, generate
+mouse-space expression by using shared program activities with the mouse gene
+program dictionary.
+
+% ── Perturbation ─────────────────────────────────────────────────
+\section{Perturbation Prediction}
+\label{sec:perturbation}
+
+Perturbation prediction operates in program space rather than gene space.
+A perturbation encoder maps the intervention (gene knockout, drug treatment,
+overexpression) to a perturbation operator:
+\begin{equation}
+  \hat{h}_{\text{perturbed}} = \hat{h}_{\text{baseline}} + \Delta h(\text{perturbation})
+  \label{eq:perturbation}
+\end{equation}
+
+where $\Delta h$ is predicted by a perturbation-specific network that takes
+the baseline program activities and perturbation description as input. Operating
+in the $k$-dimensional program space (rather than the $g$-dimensional gene space)
+makes perturbation prediction tractable and interpretable: the model predicts
+which biological programs change and by how much.
+
+% ── Deployment ───────────────────────────────────────────────────
+\section{Deployment Architecture}
+\label{sec:deployment}
+
+The CPM separates into server and client components:
+
+\begin{table}[t]
+  \centering
+  \caption{Server--client architecture for CPM deployment.}
+  \label{tab:deployment}
+  \small
+  \begin{tabular}{@{}lll@{}}
+    \toprule
+    Component & Size & Location \\
+    \midrule
+    Gene program dictionary $W$ & $\sim$45~GB & Server (GPU) \\
+    Conditional encoder $f_\theta$ & $\sim$12~MB & Client (CPU) \\
+    Program metadata/annotations & $\sim$2~MB & Client \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Client-side inference requires only the encoder and program annotations.
+Full gene-level reconstruction requires server access for the $W$ matrix
+multiplication. The \texttt{singlet} Python client handles this split
+transparently via the SingletDB API.
+
+% ── Validation ───────────────────────────────────────────────────
+\section{Validation Framework}
+\label{sec:validation}
+
+We propose a multi-level validation framework:
+
+\paragraph{Level 1: Reconstruction accuracy.}
+For each cell type with $\geq$1000 cells, split 80/20 into train/test. Train
+NMF + encoder on training cells, predict on test cell metadata, compare
+$\hat{x}$ vs.\ observed~$x$. Target: Pearson $r > 0.85$ per-cell-type mean
+profile.
+
+\paragraph{Level 2: Zero-shot condition prediction.}
+Hold out entire conditions (e.g., all cells under disease~$D$ in tissue~$T$)
+from training. Predict program activities for the held-out condition using the
+encoder trained on remaining data. This tests genuine generalization.
+
+\paragraph{Level 3: Perturbation benchmarks.}
+Evaluate on published Perturb-seq datasets: given control cell profiles and
+perturbation identity, predict post-perturbation profiles. Compare against
+GEARS, scGen, and CPA on standard metrics (Pearson $r$, top-20 differential
+gene overlap).
+
+\paragraph{Level 4: Cross-species transfer.}
+Train on human atlas, predict mouse cell type profiles via ortholog projection.
+Evaluate on held-out mouse cell types against observed mouse data.
+
+% ── Discussion ───────────────────────────────────────────────────
+\section{Discussion}
+\label{sec:discussion}
+
+The CPM architecture addresses a fundamental gap in single-cell analysis: the
+inability to query conditions that have not been experimentally observed. By
+extending NMF with a conditional encoder, the architecture preserves the
+interpretability of gene programs while enabling generative inference.
+
+Several design choices merit discussion. The separation of NMF training (Stage~1)
+from encoder training (Stage~2) means the gene program dictionary is fixed during
+conditional learning. This is a deliberate tradeoff: it ensures that program
+meanings remain stable across all predictions, at the cost of not jointly
+optimizing programs and predictions.
+
+The choice of learned embeddings over ontology-initialized embeddings is
+motivated by the observation that ontological distance does not always predict
+transcriptomic similarity. With ${\sim}500$ cell types and ${\sim}200$ tissues,
+the embedding spaces are small enough for the model to discover relationships
+from data.
+
+\paragraph{Limitations.}
+The architecture assumes that gene programs are condition-invariant---that the
+same biological processes operate across all conditions, only varying in activity.
+This may not hold for highly aberrant states (e.g., cancer) where novel programs
+emerge. The hierarchical NMF extension (Section~\ref{sec:nmf}) partially
+addresses this.
+
+% ── Conclusions ──────────────────────────────────────────────────
+\section{Conclusions}
+\label{sec:conclusions}
+
+We have described the Conditional Program Model, a generative architecture for
+transcriptomics intelligence that extends NMF with conditional inference. The
+CPM decomposes prediction into an interpretable program vocabulary, supports
+cross-species transfer and perturbation prediction, and separates into a compact
+client-side encoder for offline use. This architecture enables a shift from
+data-centric to model-centric analysis in single-cell genomics.
+
+% ── Acknowledgments ──────────────────────────────────────────────
+\section*{Acknowledgments}
+This work was supported by Grand Valley State University.
+
+\section*{Data \& Code Availability}
+Source code: \url{https://github.com/Singlet-AI/singlet}.
+Gene programs: \url{https://singletdb.com}.
+
+% ── References ───────────────────────────────────────────────────
+\bibliography{refs}
+
+\end{document}

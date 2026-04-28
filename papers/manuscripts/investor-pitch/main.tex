@@ -1,0 +1,570 @@
+\documentclass[10pt,twocolumn,letterpaper]{article}
+\usepackage{../../templates/singletai-preprint}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+
+\title{Singlify AI: Personalized Genomics Intelligence\\
+  from Single-Cell Resolution Foundation Models}
+
+\author{%
+  Zach DeBruine\textsuperscript{1,*}\\[4pt]
+  \textsuperscript{1}Grand Valley State University, Allendale, MI, USA\\
+  \textsuperscript{*}Correspondence: \texttt{debruinz@gvsu.edu}
+}
+
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We present the investment thesis and product strategy for Singlify AI, a company
+building the genomics intelligence layer for modern medicine. Our core technical
+asset is the world's largest uniformly reprocessed single-cell atlas: 1.5~billion
+cells across 19,790 GEO series, 201 species, and 6 modalities---all processed
+from raw FASTQ reads through a single pipeline. We propose Singlify PGI
+(Personalized Genomics Intelligence), a post-trained frontier AI agent that
+translates any patient genome into mechanistic, cell-type-specific explanations of
+genetic variants, grounded in interpretable NMF biological programs. The
+architecture freezes a sequence-to-function trunk (Borzoi or equivalent), trains a
+novel single-cell expression prediction head on paired WGS~+~scRNA-seq data
+(TenK10K), projects predictions through multimodal NMF factor models, and
+post-trains LLMs to reproduce clinical genetics case reports. We describe the
+market opportunity (\$175B precision medicine by 2030), competitive positioning,
+technical roadmap, de-risking strategy, and customer segments across clinical
+genetics, pharmaceutical R\&D, academic research, and core facility operations.
+\end{abstract}
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Introduction: Four Convergences}
+\label{sec:convergences}
+
+Four independent advances have converged to make personalized genomics intelligence
+possible for the first time:
+
+\begin{enumerate}
+  \item \textbf{Sequence-to-function models have learned the grammar of genetic
+    variation.} A new class of deep neural networks---Borzoi (Calico, Apache~2.0),
+    Enformer (DeepMind), AlphaGenome (DeepMind, Nature 2026)---predict molecular
+    phenotypes directly from DNA sequence. These models take raw DNA as input and
+    predict functional outputs (gene expression, splicing, chromatin accessibility)
+    at high resolution. Their convolutional~+ transformer trunks have learned the
+    regulatory grammar of the genome. This is fundamentally different from DNA
+    language models like Evo~2 (Arc Institute), which learn sequence
+    \emph{patterns} rather than sequence-to-function mappings.
+
+  \item \textbf{Paired WGS~+ single-cell data now exists at scale.} TenK10K
+    (Cuomo et al., medRxiv 2025) produced 1,925~individuals with matched
+    whole-genome sequencing and scRNA-seq: 5~million+ cells across 28 immune cell
+    types. They demonstrated that $\sim$50\% of genetic regulatory effects are
+    cell-type-specific---invisible to bulk approaches.
+
+  \item \textbf{Single-cell data at atlas scale.} We have uniformly reprocessed all
+    19,790 series from NCBI GEO---1.17~million samples, 201~species, 6
+    modalities---into the world's largest harmonized single-cell repository, 10$\times$
+    the coverage of CZ~CELLxGENE Census.
+
+  \item \textbf{LLMs that reason about biology.} CZI's rbio1 (Istrate et al., 2025)
+    proved that frontier LLMs can be post-trained with biological world models as
+    reward signals, achieving state-of-the-art perturbation prediction. We extend
+    this paradigm with interpretable NMF factors that create reasoning chains
+    clinicians can trust.
+\end{enumerate}
+
+\subsection{The Rare Disease Beachhead}
+
+We start with rare genetic disorders because they offer the clearest validation
+signal. Single variants cause clear phenotypes (high penetrance), an enormous
+unmet need exists (25--30M Americans, 5--7~year average diagnostic odyssey),
+variants of uncertain significance (VUS) are the core pain point, whole-genome
+sequencing adoption is growing rapidly, and PubMed contains thousands of clinical
+case studies that serve as natural benchmarks for evaluation.
+
+%% ──────────────────────────────────────────────────────────────────
+\section{The Product}
+\label{sec:product}
+
+\subsection{Singlify PGI---Personalized Genomics Intelligence}
+
+A post-trained frontier AI agent that takes a patient's genome and returns
+mechanistic, cell-type-specific explanations of genetic variants in natural
+language a clinician can act on.
+
+\paragraph{For Clinicians.} Given a novel missense variant in BMPR1B with
+craniofacial anomalies, PGI returns: affected cell types (cranial neural crest
+cells, maxillary mesenchyme), disrupted pathways (BMP-SMAD in osteoblast
+differentiation), similar known pathogenic variants (BMPR1A, ACVR1), suggested
+clinical workup (3D CT craniofacial, echocardiogram), confidence scores grounded
+in 14~supporting datasets and 7~published case reports.
+
+\paragraph{For Pharma.} Given a PCSK9 inhibitor showing unexpected hepatotoxicity
+in Phase~II, PGI identifies off-target cholangiocyte ER stress driven by NMF
+factor~147 (bile acid transport / ER homeostasis), supported by 3 concordant
+perturbation datasets.
+
+\subsection{The Intelligence Layer---Many Verticals, One Engine}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}llr@{}}
+\toprule
+\textbf{Vertical} & \textbf{Question} & \textbf{Market} \\
+\midrule
+Clinical Genetics & What does this variant do? & \$30B \\
+Pharma R\&D & Which cell types affected? & \$10B+ \\
+DTC Genomics & Cellular-resolution meaning & \$3B \\
+Diagnostics & Phenotype from genotype? & \$12B \\
+Clinical Decision & Monitoring requirements? & \$15B \\
+\bottomrule
+\end{tabular}
+\caption{Application verticals served by a single intelligence engine.}
+\label{tab:verticals}
+\end{table}
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Technical Architecture}
+\label{sec:architecture}
+
+\subsection{The Five-Step Pipeline}
+
+Every prediction follows five steps. The key insight: sequence-to-function models
+have learned the grammar of genetic variation, but they operate at bulk
+resolution. We add the single-cell layer.
+
+\paragraph{Step 1: DNA $\to$ Single-Cell Transcriptomes.} We freeze a
+sequence-to-function trunk (Borzoi, Apache~2.0, fully open weights) and train a
+new prediction head that maps DNA embeddings directly to splicing-resolved
+single-cell expression profiles (S/U/A layers) across cell types, with
+microbiome/virome context (Kraken2). Training data: TenK10K (1,925~donors,
+5M+~cells, 28~immune cell types). This is not eQTL mapping---it is a nonlinear
+neural network learning full sequence context.
+
+\paragraph{Step 2: Multimodal Projection.} Hierarchical NMF models (trained on
+1.5B~cells, 6~modalities, 201~species) project the predicted transcriptome into
+chromatin accessibility (ATAC), surface protein abundance (CITE-seq), spatial
+tissue organization (Visium), RNA velocity / cell dynamics (S/U/A layers),
+perturbation response signatures (Perturb-seq), and microbiome/virome
+interactions.
+
+\paragraph{Step 3: Biological Interpretation.} NMF factors map to named
+biological programs: which cell types are affected, which tissues, which
+developmental time points, how spatial signaling is altered, and what splicing
+programs are disrupted.
+
+\paragraph{Step 4: Post-Trained AI Reasoning.} Rich context from Steps~1--3 feeds
+frontier LLMs post-trained to reproduce published clinical genetics case reports.
+NMF factors serve as soft verifiers (reward signals), grounding the LLM in real
+biological data at every reasoning step.
+
+\paragraph{Step 5: Clinical Intelligence Output.} Natural language interface
+delivering mechanistic explanations, confidence scores, similar known variants,
+suggested clinical workup, and cited evidence. Delivery via Epic App Orchard,
+clinical web portal, and API.
+
+\subsection{Why This Architecture Works}
+
+The critical innovation is going directly from DNA sequence to splicing-resolved
+single-cell transcriptomes---not through a bulk intermediary---and then using NMF
+factor models to reason across every modality relatable to the transcriptome.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Capability} & \textbf{Required For} & \textbf{Status} \\
+\midrule
+DNA sequence grammar & Step 1 & Borzoi (open) \\
+Paired WGS+scRNA & Step 1 & TenK10K \\
+SC atlas (1.5B cells) & Step 2 & \textbf{Our asset} \\
+Interpretable NMF & Steps 2--3 & \textbf{Our models} \\
+S/U/A layers & Steps 2--3 & \textbf{Unique to us} \\
+Biological LLM & Step 4 & rbio1 validates \\
+Clinical knowledge & Step 5 & ClinVar, PubMed \\
+\bottomrule
+\end{tabular}
+\caption{Architecture capability matrix.}
+\label{tab:capabilities}
+\end{table}
+
+\subsection{The TenK10K Bridge}
+
+Blood is the ideal entry point: it is the most commonly collected clinical
+specimen, contains 28+ immune cell types reflecting systemic biology, and is
+where the largest paired WGS~+ scRNA-seq datasets exist. TenK10K Phase~1
+provides 1,925~donors with whole-genome sequencing (not arrays---full rare
+variant resolution), 5M+~cells, regulatory signals for 47\% of genes tested
+(rare variants) and 83\% of all 21,404 genes (common variants).
+
+\subsection{Five AI Reasoning Innovations}
+
+Our architecture extends the rbio1 paradigm with five innovations:
+\begin{enumerate}
+  \item \textbf{Genome as input, not perturbation.} The sequence-to-function trunk
+    translates DNA variants into functional perturbation vectors.
+  \item \textbf{NMF factors as reasoning substrate.} The LLM reasons over
+    biological programs (e.g., ``cardiac repolarization'') rather than
+    $\sim$20,000 individual genes.
+  \item \textbf{NMF factors as soft verifiers.} Dense, grounded biological
+    verification at every reasoning step---interpretable unlike scGPT/Geneformer
+    embedding distances.
+  \item \textbf{Splicing and dynamics as unique signal.} RNA velocity and
+    dynamical information predict not just where a cell is but where it is going.
+  \item \textbf{Clinical literature as evaluation target.} PubMed case studies
+    serve as held-out evaluation for whether the LLM can connect genomic
+    perturbations to clinical phenotypes.
+\end{enumerate}
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Technology Stack}
+\label{sec:technology}
+
+\subsection{The Data Asset}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}lrr@{}}
+\toprule
+\textbf{Metric} & \textbf{Our Atlas} & \textbf{CELLxGENE} \\
+\midrule
+GEO series & 19,790 & $\sim$2,080 \\
+Total samples & 1,166,887 & --- \\
+Estimated cells & $\sim$1.5B & $\sim$149M \\
+Species & 201 & $\sim$10 \\
+Modalities & 6 & 1 (RNA) \\
+S/U/A layers & Yes & No \\
+Kraken2 profiling & Yes & No \\
+Uniform reprocessing & Yes (FASTQ) & No \\
+\bottomrule
+\end{tabular}
+\caption{Data asset comparison.}
+\label{tab:data_comparison}
+\end{table}
+
+Unique capabilities include: spliced/unspliced/ambiguous layers for every sample
+via simpleaf/alevin-fry (enabling RNA velocity), Kraken2 contamination profiling
+per cell, unified gene references (GENCODE~v44 human, vM33 mouse, Ensembl for
+all 201~species), 48+ file formats handled, and 99.5\% success rate across
+processed series.
+
+\subsection{StreamPress}
+
+Custom compressed sparse format delivering $\sim$10$\times$ compression versus
+standard formats, with native GPU streaming and zero-copy PyTorch tensor loading.
+The entire 1.5B-cell atlas fits in $\sim$7~TB (StreamPress) instead of 70+~TB.
+This drives 93--96\% gross margins.
+
+\subsection{FactorNet---Fast Interpretable NMF}
+
+Out-of-core NMF on GPU and CPU scaling to billions of cells, with hierarchical
+factorization, automatic rank determination, and $\sim$100$\times$ faster
+performance than transformer foundation models at comparable accuracy. CZI chose
+to host our NMF embeddings on CELLxGENE Census alongside Geneformer, scGPT,
+TranscriptFormer, and UCE---the only non-transformer model.
+
+\subsection{Multimodal Integration}
+
+The NMF factor space connects all modalities because we train multimodal NMF
+models on transcriptomes \emph{in combination with} ATAC, CITE-seq, spatial, and
+perturbation data. Any prediction in transcriptome space automatically projects
+into every other modality through the shared factor representation.
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Market Opportunity}
+\label{sec:market}
+
+\subsection{Total Addressable Market}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}lrrl@{}}
+\toprule
+\textbf{Market} & \textbf{2024} & \textbf{2030} & \textbf{Role} \\
+\midrule
+Precision medicine & \$73B & \$175B & Intelligence layer \\
+Rare disease & \$8B & \$17B & Beachhead \\
+Clinical genomics & \$12B & \$30B & Variant interpret. \\
+AI drug discovery & \$1.5B & \$10B+ & Target discovery \\
+Single-cell analysis & \$4.9B & \$13.7B & Data infrastructure \\
+\bottomrule
+\end{tabular}
+\caption{Total addressable market by segment.}
+\label{tab:tam}
+\end{table}
+
+\subsection{Revenue Projections}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+\textbf{Year} & \textbf{Intelligence} & \textbf{Data Infra} & \textbf{Total ARR} \\
+\midrule
+1 & --- & \$220K & \$220K \\
+2 & \$200K & \$930K & \$1.1M \\
+3 & \$1.5M & \$3.0M & \$4.5M \\
+4 & \$5.0M & \$5.0M & \$10.0M \\
+5 & \$12.0M & \$7.0M & \$19.0M \\
+\bottomrule
+\end{tabular}
+\caption{Five-year revenue projection.}
+\label{tab:revenue}
+\end{table}
+
+%% ──────────────────────────────────────────────────────────────────
+\section{De-Risking Strategy}
+\label{sec:derisk}
+
+Each milestone creates independent value with multiple de-risking pathways:
+
+\paragraph{De-Risk 1: Single-Cell Data Infrastructure (Tempus Playbook).}
+Tempus built a \$6B company by organizing biomedical data at bulk resolution.
+We do the same at single-cell resolution---10$\times$ more data than CELLxGENE,
+uniformly processed, multimodal.
+
+\paragraph{De-Risk 2: LLM-Annotated Data Products.} Our atlas + LLM annotation
+creates uniquely rich metadata: cell type identity, cell cycle stage, donor
+demographics, developmental time point, disease state, perturbation conditions,
+and differential expression signatures---all standardized across 19,790 datasets.
+
+\paragraph{De-Risk 3: NMF Inference API.} Fast, interpretable cell-type
+decomposition as a service at $\sim$100ms per query, powering virtual cell
+generation from NMF factors.
+
+\paragraph{De-Risk 4: Intermediate Deliverables.} Multiple products on the path
+to clinical PGI: annotated atlas API~(Month~4--6), NMF inference API~(Month~6--8),
+cross-modal prediction~(Month~8--12), genome$\to$transcriptome API~(Month~10--14),
+pharma perturbation tool~(Month~14--18), and full clinical PGI~(Month~18--30).
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Competitive Landscape}
+\label{sec:competition}
+
+\subsection{The Core Differentiator}
+
+No existing system goes directly from genome~$\to$ single cell~$\to$ clinical
+phenotype. Current clinical genomics AI performs database lookup: if a variant is
+known, it returns an actionable mutation; otherwise, 40--60\% of variants end as
+VUS. Singlify PGI traverses the full path: genome~$\to$ single-cell head~$\to$
+NMF multimodal projection~$\to$ post-trained LLM~$\to$ mechanistic clinical
+explanation.
+
+\subsection{Data Infrastructure Competitors}
+
+CZ~CELLxGENE Census (149M cells, 2,080 datasets, free, \$30B+ CZI endowment)
+is the primary benchmark but lacks uniform FASTQ reprocessing, S/U/A layers,
+200+ species coverage, and multimodal linking. TileDB (\$142M raised) provides
+storage infrastructure. 10x~Genomics focuses on instrument sales.
+
+\subsection{Clinical Genomics Competitors}
+
+Tempus AI (\$632M revenue, bulk genomics only), Foundation Medicine (targeted
+panels, cancer only), SOPHiA Genetics (bioinformatics pipeline, database lookup),
+Fabric Genomics (database lookup). None operate at single-cell resolution.
+
+\subsection{Why CZI Is a Collaborator}
+
+CZI is philanthropic, focused on community collaboration. They have no clinical
+product ambitions. Our NMF is already hosted on Census. We could be a data
+supplier---our uniformly reprocessed data flowing into CELLxGENE as higher-quality
+inputs.
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Moat and Defensibility}
+\label{sec:moat}
+
+\subsection{Six-Layer Defense}
+
+The technology stack forms a six-layer defense:
+Layer~1 (Sequence grammar trunk---commoditized),
+Layer~2 (Single-cell prediction head---\textbf{our key innovation}),
+Layer~3 (Multimodal atlas---\textbf{data moat}),
+Layer~4 (Interpretable NMF---\textbf{our models}),
+Layer~5 (Reasoning AI),
+Layer~6 (Clinical product).
+Nobody else has Layers~2--4 simultaneously.
+
+\subsection{The Data Moat}
+
+$\sim$1.5~billion cells across 201~species, 6~modalities, 48+ formats, all one
+pipeline. S/U/A layers for every sample. Kraken2 contamination profiles per cell.
+LLM-extracted metadata (20 structured fields per dataset). Multimodal bridges
+linking RNA~$\leftrightarrow$ ATAC~$\leftrightarrow$ protein~$\leftrightarrow$
+spatial through NMF factors. Replicating this asset requires 600K+ core-hours
+and 1--2~years of pipeline development.
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Business Model}
+\label{sec:business}
+
+\subsection{Pricing}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}llr@{}}
+\toprule
+\textbf{Tier} & \textbf{Target} & \textbf{Price} \\
+\midrule
+Free & Students & \$0 \\
+Pro & Researchers & \$99--\$299/mo \\
+Team & Labs, biotechs & \$999--\$2,999/mo \\
+Enterprise & Pharma, CROs & \$50K--\$200K/yr \\
+Clinical PGI & Hospitals & Per-query + sub. \\
+\bottomrule
+\end{tabular}
+\caption{Pricing tiers.}
+\label{tab:pricing}
+\end{table}
+
+\subsection{Unit Economics}
+
+StreamPress compression drives margin advantage: 96\% gross margin on Pro,
+96\% on Team, 93\% on Enterprise.
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Technical Roadmap and Budget}
+\label{sec:roadmap}
+
+\subsection{The \$50K Foundation}
+
+With $\sim$\$50K of compute, we complete the entire annotated data asset:
+RNA-seq reprocessing (\$8,250), ATAC-seq + Multiome (\$5,400), Visium + CITE-seq
+(\$3,300), processing contingency (\$4,200), LLM metadata extraction (\$300),
+LLM cell-type annotation (\$22,000), and hierarchical NMF training (\$3,000).
+
+\subsection{Phase 1: Data Infrastructure (Months 1--6)}
+
+Complete atlas reprocessing ($\sim$1.4M core-hours, \$21K), LLM annotation
+(\$20K--\$50K), GPU model training (\$9K--\$39K), web app development
+(\$10K--\$20K). Deliverable: singlify.ai public beta.
+
+\subsection{Phase 2: Scale + Bridge (Months 6--12)}
+
+AWS production infrastructure, single-cell head training on seq-to-function trunk
+(\$10K--\$25K), LLM post-training (\$20K--\$50K). Deliverable: revenue from data
+infrastructure + genome$\to$clinical reasoning prototype.
+
+\subsection{Phase 3: Clinical PGI (Months 12--24)}
+
+Extend to non-blood tissues, clinical evaluation harness, PGI alpha, clinical
+partner pilots, Epic App Orchard, FDA regulatory analysis. Total: \$75K--\$175K.
+
+\subsection{Total Budget Summary}
+
+Total Year~1 (low--high): \$520K--\$1.02M. Compute-only: \$163K--\$374K.
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Team and Credibility}
+\label{sec:team}
+
+\subsection{Advisors}
+
+Josh Welch (U.~Michigan)---creator of LIGER, the leading NMF-based single-cell
+integration method. Peter Laird (Van Andel Institute)---Distinguished
+Investigator, led The Cancer Genome Atlas (TCGA).
+
+\subsection{Validation}
+
+$\sim$\$400K in CZI grant funding (Cycle~1 \& 3). NIH Transformative R01 at Van
+Andel Institute. NMF hosted on CZ~CELLxGENE alongside Geneformer, scGPT,
+TranscriptFormer, UCE. NeurIPS and CZ~Benchmarks presentations.
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Go-to-Market}
+\label{sec:gtm}
+
+\textbf{Phase 1 (Months 0--6):} Bottom-up academic adoption---free tier, ISMB
+and NeurIPS presentations, preprint, CLI + Python client.
+\textbf{Phase 2 (Months 6--12):} Enterprise sales---pharma pilots, advisor
+introductions, benchmarking service.
+\textbf{Phase 3 (Months 12--24):} Clinical entry---academic medical center
+partners, rare disease validation, Epic integration.
+\textbf{Phase 4 (Month 24+):} Clinical scale---hospital deployments, DTC
+partnerships, international expansion.
+
+%% ──────────────────────────────────────────────────────────────────
+\section{The Ask}
+\label{sec:ask}
+
+\textbf{\$500K--\$1M in pre-seed funding} to: build the team (\$300K--\$500K),
+complete atlas reprocessing (\$21K--\$35K), train models (\$52K--\$143K), LLM
+annotation (\$20K--\$50K), launch singlify.ai (\$67K--\$163K), and develop
+clinical PGI (\$60K--\$125K).
+
+\paragraph{Return Thesis.} Stage~1 (Year~1--3): \$4.5M~ARR, \$45M valuation,
+15$\times$ on pre-seed. Stage~2 (Year~3--5): \$19M~ARR, \$190M valuation,
+60$\times$ on pre-seed.
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Customer Segments}
+\label{sec:customers}
+
+\subsection{Academic Researchers}
+
+Academic and research laboratories represent 70.8\% of the \$4.89B single-cell
+analysis market. Key pain points include: data acquisition requiring weeks of
+format wrangling across 48+ types, batch effects dominating cross-dataset
+analyses, inconsistent cell type annotation, compute requirements exceeding lab
+budgets, reproducibility crisis from dependency rot, and foundation model
+confusion (scGPT, Geneformer, UCE---none interoperable).
+
+Value proposition: \texttt{singlet.query(species="human", tissue="lung",
+disease="IPF")} returns uniformly processed, annotated AnnData, eliminating the
+2--6~week download and harmonization cycle. NMF gene programs provide
+interpretable biological discovery. Cross-species comparison across 200+ species
+is unmatched.
+
+\subsection{Biotech and AI-Native Companies}
+
+The AI drug discovery market is projected at \$13.8B by 2030 (47\% CAGR). Every
+foundation model team needs the same thing: massive, clean, uniformly processed
+training data. PyTorch DataLoaders that stream directly from compressed matrices
+are essential---current workflows die at scale. NMF pre-embeddings (50--100
+features vs.\ 20,000 genes) offer 200$\times$ faster training.
+
+\subsection{Core Facilities}
+
+$\sim$500 genomics core facilities in the US alone, each supporting 20--100 PIs.
+Analysis bottleneck dominates: sequencing turnaround is 1--3 days, analysis
+turnaround is 2--6~weeks. Atlas-referenced QC scoring
+(\texttt{singlet.benchmark\_qc()}) provides objective, defensible quality
+assessment at percentile resolution against hundreds of comparable datasets.
+
+\subsection{Pharmaceutical Companies}
+
+Pharma routinely pays \$50K--\$500K/yr for data products. Internal data
+harmonization projects cost \$500K+ in FTE time. Cross-species translation
+(mouse~$\to$ human) is critical and unsolved---our 200+ species NMF factor space
+directly addresses this. Target Explorer API
+(\texttt{singlet.query\_gene("TREM2")}) returns cell-type-resolved expression
+across all published studies, replacing 2--4~weeks of FTE time per gene.
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Conclusion}
+\label{sec:conclusion}
+
+Singlify AI occupies a unique position at the intersection of four convergent
+advances: sequence-to-function genomic models, paired WGS + single-cell data,
+atlas-scale uniformly reprocessed single-cell repositories, and biological
+reasoning LLMs. Our six-layer defense---from the open-source sequence grammar
+trunk through our proprietary single-cell prediction head, multimodal atlas,
+interpretable NMF models, reasoning AI, and clinical product---creates a
+defensible path from pre-seed to clinical deployment.
+
+The asymmetric bet: pre-seed funds the data platform (the proven Tempus-like
+model). The clinical PGI upside---AI agents that explain any genome to any
+clinician---is optionality on top.
+
+\bibliographystyle{unsrtnat}
+\bibliography{refs}
+
+\end{document}

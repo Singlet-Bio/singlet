@@ -1,0 +1,1694 @@
+[
+  {
+    "gse_id": "GSE209597",
+    "protocol": "10x Chromium v3",
+    "species": "Homo sapiens",
+    "genome": "GRCh38",
+    "n_genes": 38606,
+    "nrows": 115818,
+    "ncols": 4988,
+    "nnz": 13186476,
+    "density": 0.022825812359443528,
+    "is_usa": true,
+    "raw_int32_bytes": 105511764,
+    "pz_file_size": 10987588,
+    "formats": {
+      "1pz": {
+        "size": 10987588,
+        "ratio_vs_int32": 9.602814011591988,
+        "read_s": 0.13439946481958032,
+        "read_MBps_int32": 785.0608939674012,
+        "write_s": 0.4214479527436197,
+        "write_MBps_int32": 250.35538389288652
+      },
+      "h5ad_gzip": {
+        "size": 34778480,
+        "ratio_vs_int32": 3.0338233298292505,
+        "write_s": 1.6268517500720918,
+        "read_s": 0.41934204706922174,
+        "read_MBps_int32": 251.61265066887734,
+        "write_MBps_int32": 64.85640993122108
+      },
+      "10x_h5": {
+        "size": 35794553,
+        "ratio_vs_int32": 2.9477044733593964,
+        "write_s": 1.5990522420033813,
+        "read_s": 0.36856374982744455,
+        "read_MBps_int32": 286.2781921700082,
+        "write_MBps_int32": 65.98393800305674
+      },
+      "npz": {
+        "size": 28005232,
+        "ratio_vs_int32": 3.7675732877342347,
+        "write_s": 4.862256507854909,
+        "read_s": 0.36807972099632025,
+        "read_MBps_int32": 286.65465110221277,
+        "write_MBps_int32": 21.700164075989655
+      }
+    },
+    "partial_read": {
+      "n_cols": 100,
+      "1pz_s": 0.019266388844698668,
+      "h5ad_s": 0.06470746174454689
+    },
+    "usa_analysis": {
+      "usa_nnz": 13186476,
+      "usa_int32_bytes": 105511764,
+      "usa_pz_size": 10987588,
+      "usa_ratio": 9.602814011591988,
+      "summed_nnz": 11050847,
+      "summed_int32_bytes": 88426732,
+      "summed_pz_size": 8123898,
+      "summed_ratio": 10.884766401547632,
+      "summed_read_s": 0.05478035006672144,
+      "summed_write_s": 0.3754305439069867,
+      "size_ratio_usa_vs_summed": 1.3525019639586808,
+      "nnz_ratio_usa_vs_summed": 1.1932547794752746
+    },
+    "peak_rss_mb": 996.8203125
+  },
+  {
+    "gse_id": "GSE216064",
+    "protocol": "10x Chromium v3",
+    "species": "Homo sapiens",
+    "genome": "GRCh38",
+    "n_genes": 38606,
+    "nrows": 115818,
+    "ncols": 6864,
+    "nnz": 27256359,
+    "density": 0.03428581716768786,
+    "is_usa": true,
+    "raw_int32_bytes": 218078332,
+    "pz_file_size": 22966371,
+    "formats": {
+      "1pz": {
+        "size": 22966371,
+        "ratio_vs_int32": 9.495550341845474,
+        "read_s": 0.1813706113025546,
+        "read_MBps_int32": 1202.3906763825764,
+        "write_s": 0.5891680237837136,
+        "write_MBps_int32": 370.1462455471915
+      },
+      "h5ad_gzip": {
+        "size": 69035392,
+        "ratio_vs_int32": 3.1589352313665433,
+        "write_s": 3.5399885629303753,
+        "read_s": 0.8537153177894652,
+        "read_MBps_int32": 255.4461978785536,
+        "write_MBps_int32": 61.60424761922859
+      },
+      "10x_h5": {
+        "size": 69991049,
+        "ratio_vs_int32": 3.115803165059006,
+        "write_s": 3.537537483032793,
+        "read_s": 0.8093701810576022,
+        "read_MBps_int32": 269.4420144253864,
+        "write_MBps_int32": 61.646931812306235
+      },
+      "npz": {
+        "size": 60943460,
+        "ratio_vs_int32": 3.578371362571144,
+        "write_s": 11.0099540152587,
+        "read_s": 0.8012718767859042,
+        "read_MBps_int32": 272.16521422761656,
+        "write_MBps_int32": 19.807379004286954
+      }
+    },
+    "partial_read": {
+      "n_cols": 100,
+      "1pz_s": 0.02381301112473011,
+      "h5ad_s": 0.07413256587460637
+    },
+    "usa_analysis": {
+      "usa_nnz": 27256359,
+      "usa_int32_bytes": 218078332,
+      "usa_pz_size": 22966371,
+      "usa_ratio": 9.495550341845474,
+      "summed_nnz": 22103816,
+      "summed_int32_bytes": 176857988,
+      "summed_pz_size": 17559468,
+      "summed_ratio": 10.071944548661724,
+      "summed_read_s": 0.08685769187286496,
+      "summed_write_s": 0.43658281676471233,
+      "size_ratio_usa_vs_summed": 1.3079195223909972,
+      "nnz_ratio_usa_vs_summed": 1.2331064916573682
+    },
+    "peak_rss_mb": 1752.65625
+  },
+  {
+    "gse_id": "GSE187438",
+    "protocol": "10x Chromium v3",
+    "species": "Homo sapiens",
+    "genome": "GRCh38",
+    "n_genes": 38606,
+    "nrows": 115818,
+    "ncols": 102151,
+    "nnz": 70115087,
+    "density": 0.005926425013812264,
+    "is_usa": true,
+    "raw_int32_bytes": 561329304,
+    "pz_file_size": 64417342,
+    "formats": {
+      "1pz": {
+        "size": 64417342,
+        "ratio_vs_int32": 8.713946998930815,
+        "read_s": 0.42657188093289733,
+        "read_MBps_int32": 1315.9078905351028,
+        "write_s": 1.1286912732757628,
+        "write_MBps_int32": 497.32758398217504
+      },
+      "h5ad_gzip": {
+        "size": 177709308,
+        "ratio_vs_int32": 3.158693882258548,
+        "write_s": 8.220767616294324,
+        "read_s": 2.0226782192476094,
+        "read_MBps_int32": 277.5178467135528,
+        "write_MBps_int32": 68.28186006467246
+      },
+      "10x_h5": {
+        "size": 176463592,
+        "ratio_vs_int32": 3.180992167494811,
+        "write_s": 8.247135343030095,
+        "read_s": 1.936540205962956,
+        "read_MBps_int32": 289.8619415551332,
+        "write_MBps_int32": 68.06354942075693
+      },
+      "npz": {
+        "size": 149978260,
+        "ratio_vs_int32": 3.742737807466229,
+        "write_s": 24.195693981833756,
+        "read_s": 1.9409526051022112,
+        "read_MBps_int32": 289.20299368692736,
+        "write_MBps_int32": 23.199553789258896
+      }
+    },
+    "partial_read": {
+      "n_cols": 100,
+      "1pz_s": 0.014260686002671719,
+      "h5ad_s": 0.09880040911957622
+    },
+    "usa_analysis": {
+      "usa_nnz": 70115087,
+      "usa_int32_bytes": 561329304,
+      "usa_pz_size": 64417342,
+      "usa_ratio": 8.713946998930815,
+      "summed_nnz": 65320388,
+      "summed_int32_bytes": 522971712,
+      "summed_pz_size": 53420483,
+      "summed_ratio": 9.789722642530206,
+      "summed_read_s": 0.2384411613456905,
+      "summed_write_s": 0.9664731682278216,
+      "size_ratio_usa_vs_summed": 1.205854728045046,
+      "nnz_ratio_usa_vs_summed": 1.073402794239373
+    },
+    "peak_rss_mb": 3848.3359375
+  },
+  {
+    "gse_id": "GSE204704",
+    "protocol": "10x Chromium v3",
+    "species": "Homo sapiens",
+    "genome": "GRCh38",
+    "n_genes": 38606,
+    "nrows": 115818,
+    "ncols": 111155,
+    "nnz": 176632304,
+    "density": 0.013720346199147311,
+    "is_usa": true,
+    "raw_int32_bytes": 1413503056,
+    "pz_file_size": 142158591,
+    "formats": {
+      "1pz": {
+        "size": 142158591,
+        "ratio_vs_int32": 9.943141994140897,
+        "read_s": 0.8566352720372379,
+        "read_MBps_int32": 1650.0640379171255,
+        "write_s": 3.0071836560964584,
+        "write_MBps_int32": 470.0421449599221
+      },
+      "h5ad_gzip": {
+        "size": 419781585,
+        "ratio_vs_int32": 3.3672345488904663,
+        "write_s": 22.445606580004096,
+        "read_s": 4.902822939213365,
+        "read_MBps_int32": 288.3039166465983,
+        "write_MBps_int32": 62.97459821198301
+      },
+      "10x_h5": {
+        "size": 418315108,
+        "ratio_vs_int32": 3.379038980346844,
+        "write_s": 22.483807530719787,
+        "read_s": 4.796051068231463,
+        "read_MBps_int32": 294.72226961111716,
+        "write_MBps_int32": 62.86760167594927
+      },
+      "npz": {
+        "size": 383834849,
+        "ratio_vs_int32": 3.6825813489384336,
+        "write_s": 68.57892459491268,
+        "read_s": 5.044724770821631,
+        "read_MBps_int32": 280.1942861532531,
+        "write_MBps_int32": 20.611333064048317
+      }
+    },
+    "partial_read": {
+      "n_cols": 100,
+      "1pz_s": 0.05783002730458975,
+      "h5ad_s": 0.11192984413355589
+    },
+    "usa_analysis": {
+      "usa_nnz": 176632304,
+      "usa_int32_bytes": 1413503056,
+      "usa_pz_size": 142158591,
+      "usa_ratio": 9.943141994140897,
+      "summed_nnz": 146545334,
+      "summed_int32_bytes": 1172807296,
+      "summed_pz_size": 112222748,
+      "summed_ratio": 10.450709120044005,
+      "summed_read_s": 0.49311234056949615,
+      "summed_write_s": 2.3250440629199147,
+      "size_ratio_usa_vs_summed": 1.2667537868525551,
+      "nnz_ratio_usa_vs_summed": 1.2053082768230614
+    },
+    "peak_rss_mb": 8424.3828125
+  },
+  {
+    "gse_id": "GSE288147",
+    "protocol": "10x Chromium v3",
+    "species": "Homo sapiens",
+    "genome": "GRCh38",
+    "n_genes": 38606,
+    "nrows": 115818,
+    "ncols": 271307,
+    "nnz": 350535551,
+    "density": 0.011155653337518513,
+    "is_usa": true,
+    "raw_int32_bytes": 2805369640,
+    "pz_file_size": 291236959,
+    "formats": {
+      "1pz": {
+        "size": 291236959,
+        "ratio_vs_int32": 9.632601746813323,
+        "read_s": 1.6218827120028436,
+        "read_MBps_int32": 1729.6994531347354,
+        "write_s": 5.61479083634913,
+        "write_MBps_int32": 499.639206831811
+      },
+      "h5ad_gzip": {
+        "size": 851609855,
+        "ratio_vs_int32": 3.294195838069535,
+        "write_s": null,
+        "read_s": 9.754196160007268,
+        "read_MBps_int32": 287.6064407544075,
+        "write_MBps_int32": null
+      },
+      "10x_h5": {
+        "size": 846388549,
+        "ratio_vs_int32": 3.3145174793710495,
+        "write_s": null,
+        "read_s": 9.599727146793157,
+        "read_MBps_int32": 292.23431011131913,
+        "write_MBps_int32": null
+      }
+    },
+    "partial_read": {
+      "n_cols": 100,
+      "1pz_s": 0.11036640731617808,
+      "h5ad_s": 0.19184618908911943
+    },
+    "usa_analysis": {
+      "usa_nnz": 350535551,
+      "usa_int32_bytes": 2805369640,
+      "usa_pz_size": 291236959,
+      "usa_ratio": 9.632601746813323,
+      "summed_nnz": 305532545,
+      "summed_int32_bytes": 2445345592,
+      "summed_pz_size": 237710403,
+      "summed_ratio": 10.287078567613214,
+      "summed_read_s": 1.0133693059906363,
+      "summed_write_s": 6.018510887864977,
+      "size_ratio_usa_vs_summed": 1.2251754880075651,
+      "nnz_ratio_usa_vs_summed": 1.147293657374536
+    },
+    "peak_rss_mb": 16685.59375
+  },
+  {
+    "gse_id": "GSE290216",
+    "protocol": "10x Chromium v2",
+    "species": "Homo sapiens",
+    "genome": "GRCh38",
+    "n_genes": 38606,
+    "nrows": 115818,
+    "ncols": 32759,
+    "nnz": 10955158,
+    "density": 0.0028874332179604405,
+    "is_usa": true,
+    "raw_int32_bytes": 87772304,
+    "pz_file_size": 12016265,
+    "formats": {
+      "1pz": {
+        "size": 12016265,
+        "ratio_vs_int32": 7.304458082440759,
+        "read_s": 0.1301112538203597,
+        "read_MBps_int32": 674.5942524017509,
+        "write_s": 0.24946298683062196,
+        "write_MBps_int32": 351.8449975891406
+      },
+      "h5ad_gzip": {
+        "size": 33697722,
+        "ratio_vs_int32": 2.6046954746673974,
+        "write_s": 1.3187303780578077,
+        "read_s": 0.3815436437726021,
+        "read_MBps_int32": 230.0452528369515,
+        "write_MBps_int32": 66.55818767841596
+      },
+      "10x_h5": {
+        "size": 34059935,
+        "ratio_vs_int32": 2.5769956401854555,
+        "write_s": 1.288545359391719,
+        "read_s": 0.31867572106420994,
+        "read_MBps_int32": 275.428274569793,
+        "write_MBps_int32": 68.1173568010322
+      },
+      "npz": {
+        "size": 24448414,
+        "ratio_vs_int32": 3.590102163682274,
+        "write_s": 3.9003432309255004,
+        "read_s": 0.3138512009754777,
+        "read_MBps_int32": 279.6621575039248,
+        "write_MBps_int32": 22.503738466927892
+      }
+    },
+    "partial_read": {
+      "n_cols": 100,
+      "1pz_s": 0.002788982819765806,
+      "h5ad_s": 0.06481838598847389
+    },
+    "usa_analysis": {
+      "usa_nnz": 10955158,
+      "usa_int32_bytes": 87772304,
+      "usa_pz_size": 12016265,
+      "usa_ratio": 7.304458082440759,
+      "summed_nnz": 10658367,
+      "summed_int32_bytes": 85397976,
+      "summed_pz_size": 9986935,
+      "summed_ratio": 8.550969441575418,
+      "summed_read_s": 0.04853471741080284,
+      "summed_write_s": 0.22569815069437027,
+      "size_ratio_usa_vs_summed": 1.2031984788125687,
+      "nnz_ratio_usa_vs_summed": 1.0278458229107705
+    },
+    "peak_rss_mb": 16685.59375
+  },
+  {
+    "gse_id": "GSE248556",
+    "protocol": "10x Chromium v3 5'",
+    "species": "Homo sapiens",
+    "genome": "GRCh38",
+    "n_genes": 38606,
+    "nrows": 115818,
+    "ncols": 92446,
+    "nnz": 47327191,
+    "density": 0.004420247049805728,
+    "is_usa": true,
+    "raw_int32_bytes": 378987316,
+    "pz_file_size": 48052608,
+    "formats": {
+      "1pz": {
+        "size": 48052608,
+        "ratio_vs_int32": 7.886925013518517,
+        "read_s": 0.3480626712553203,
+        "read_MBps_int32": 1088.847921074521,
+        "write_s": 0.8266397658735514,
+        "write_MBps_int32": 458.46731750136075
+      },
+      "h5ad_gzip": {
+        "size": 128512353,
+        "ratio_vs_int32": 2.9490341368195163,
+        "write_s": 6.0970109840855,
+        "read_s": 1.457376774866134,
+        "read_MBps_int32": 260.0475886098923,
+        "write_MBps_int32": 62.159526526889614
+      },
+      "10x_h5": {
+        "size": 127503433,
+        "ratio_vs_int32": 2.9723695047489427,
+        "write_s": 6.068980139680207,
+        "read_s": 1.3665662128478289,
+        "read_MBps_int32": 277.3281765910316,
+        "write_MBps_int32": 62.44662320150054
+      },
+      "npz": {
+        "size": 108393322,
+        "ratio_vs_int32": 3.4964083488464355,
+        "write_s": 18.589045115746558,
+        "read_s": 1.3948632762767375,
+        "read_MBps_int32": 271.7021248215942,
+        "write_MBps_int32": 20.387669922806545
+      }
+    },
+    "partial_read": {
+      "n_cols": 100,
+      "1pz_s": 0.014186294749379158,
+      "h5ad_s": 0.09538658801466227
+    },
+    "usa_analysis": {
+      "usa_nnz": 47327191,
+      "usa_int32_bytes": 378987316,
+      "usa_pz_size": 48052608,
+      "usa_ratio": 7.886925013518517,
+      "summed_nnz": 44066772,
+      "summed_int32_bytes": 352903964,
+      "summed_pz_size": 40056033,
+      "summed_ratio": 8.810257471078078,
+      "summed_read_s": 0.17955734813585877,
+      "summed_write_s": 0.6949076168239117,
+      "size_ratio_usa_vs_summed": 1.1996347216909873,
+      "nnz_ratio_usa_vs_summed": 1.073988151435281
+    },
+    "peak_rss_mb": 16685.59375
+  },
+  {
+    "gse_id": "GSE286044",
+    "protocol": "10x Chromium v4",
+    "species": "Mus musculus",
+    "genome": "GRCm39",
+    "n_genes": 57180,
+    "nrows": 171540,
+    "ncols": 139070,
+    "nnz": 33807171,
+    "density": 0.0014171309070474725,
+    "is_usa": true,
+    "raw_int32_bytes": 271013652,
+    "pz_file_size": 35392904,
+    "formats": {
+      "1pz": {
+        "size": 35392904,
+        "ratio_vs_int32": 7.657287799836939,
+        "read_s": 0.40875657834112644,
+        "read_MBps_int32": 663.0196707778155,
+        "write_s": 0.8444714639335871,
+        "write_MBps_int32": 320.92695084995046
+      },
+      "h5ad_gzip": {
+        "size": 96109374,
+        "ratio_vs_int32": 2.819846188988808,
+        "write_s": 4.52698547532782,
+        "read_s": 1.1222244841046631,
+        "read_MBps_int32": 241.4968269171395,
+        "write_MBps_int32": 59.866251720274114
+      },
+      "10x_h5": {
+        "size": 95992816,
+        "ratio_vs_int32": 2.823270149716204,
+        "write_s": 4.460753989871591,
+        "read_s": 0.9812617022544146,
+        "read_MBps_int32": 276.1889630231727,
+        "write_MBps_int32": 60.755121805719995
+      },
+      "npz": {
+        "size": 75977128,
+        "ratio_vs_int32": 3.567042597345875,
+        "write_s": 13.163864811882377,
+        "read_s": 1.0015699863433838,
+        "read_MBps_int32": 270.58883123029625,
+        "write_MBps_int32": 20.587696384983325
+      }
+    },
+    "partial_read": {
+      "n_cols": 100,
+      "1pz_s": 0.022727453149855137,
+      "h5ad_s": 0.1658797999843955
+    },
+    "usa_analysis": {
+      "usa_nnz": 33807171,
+      "usa_int32_bytes": 271013652,
+      "usa_pz_size": 35392904,
+      "usa_ratio": 7.657287799836939,
+      "summed_nnz": 27299207,
+      "summed_int32_bytes": 218949940,
+      "summed_pz_size": 26982754,
+      "summed_ratio": 8.114440060491972,
+      "summed_read_s": 0.1577217006124556,
+      "summed_write_s": 0.5989313540048897,
+      "size_ratio_usa_vs_summed": 1.311686123662544,
+      "nnz_ratio_usa_vs_summed": 1.2383938844816995
+    },
+    "peak_rss_mb": 16685.59375
+  },
+  {
+    "gse_id": "GSE150338",
+    "protocol": "10x Chromium v3",
+    "species": "Mus musculus",
+    "genome": "GRCm39",
+    "n_genes": 57180,
+    "nrows": 171540,
+    "ncols": 100172,
+    "nnz": 15379968,
+    "density": 0.0008950425485024798,
+    "is_usa": true,
+    "raw_int32_bytes": 123440436,
+    "pz_file_size": 22125110,
+    "formats": {
+      "1pz": {
+        "size": 22125110,
+        "ratio_vs_int32": 5.579201007362223,
+        "read_s": 0.26485574105754495,
+        "read_MBps_int32": 466.0666803261033,
+        "write_s": 0.3480803850106895,
+        "write_MBps_int32": 354.6319796107131
+      },
+      "h5ad_gzip": {
+        "size": 51659864,
+        "ratio_vs_int32": 2.389484339331594,
+        "write_s": 2.0356563702225685,
+        "read_s": 0.5396688519977033,
+        "read_MBps_int32": 228.73366795778188,
+        "write_MBps_int32": 60.63913232394112
+      },
+      "10x_h5": {
+        "size": 52904597,
+        "ratio_vs_int32": 2.3332648389704205,
+        "write_s": 1.963774514850229,
+        "read_s": 0.4260097532533109,
+        "read_MBps_int32": 289.7596476543595,
+        "write_MBps_int32": 62.85876258528308
+      },
+      "npz": {
+        "size": 38197322,
+        "ratio_vs_int32": 3.2316515801814587,
+        "write_s": 5.3017194932326674,
+        "read_s": 0.4615817777812481,
+        "read_MBps_int32": 267.4291792742751,
+        "write_MBps_int32": 23.283094505011903
+      }
+    },
+    "partial_read": {
+      "n_cols": 100,
+      "1pz_s": 0.004041996784508228,
+      "h5ad_s": 0.11992248706519604
+    },
+    "usa_analysis": {
+      "usa_nnz": 15379968,
+      "usa_int32_bytes": 123440436,
+      "usa_pz_size": 22125110,
+      "usa_ratio": 5.579201007362223,
+      "summed_nnz": 15034819,
+      "summed_int32_bytes": 120679244,
+      "summed_pz_size": 17621101,
+      "summed_ratio": 6.8485643433971575,
+      "summed_read_s": 0.08661391213536263,
+      "summed_write_s": 0.2200718862004578,
+      "size_ratio_usa_vs_summed": 1.2556031544226436,
+      "nnz_ratio_usa_vs_summed": 1.0229566448388903
+    },
+    "peak_rss_mb": 16685.59375
+  },
+  {
+    "gse_id": "GSE103976",
+    "protocol": "10x Chromium v3",
+    "species": "Mus musculus",
+    "genome": "GRCm39",
+    "n_genes": 57180,
+    "nrows": 171540,
+    "ncols": 183350,
+    "nnz": 32044162,
+    "density": 0.001018832050595165,
+    "is_usa": true,
+    "raw_int32_bytes": 257086700,
+    "pz_file_size": 39221098,
+    "formats": {
+      "1pz": {
+        "size": 39221098,
+        "ratio_vs_int32": 6.554806293286333,
+        "read_s": 0.3979777991771698,
+        "read_MBps_int32": 645.9825159381602,
+        "write_s": 0.5833983640186489,
+        "write_MBps_int32": 440.6709306297986
+      },
+      "h5ad_gzip": {
+        "size": 98003629,
+        "ratio_vs_int32": 2.623236533414492,
+        "write_s": 4.2222407991066575,
+        "read_s": 1.102103440091014,
+        "read_MBps_int32": 233.26912034569938,
+        "write_MBps_int32": 60.88868736581639
+      },
+      "10x_h5": {
+        "size": 97619907,
+        "ratio_vs_int32": 2.6335478889567066,
+        "write_s": 4.136025958228856,
+        "read_s": 0.9484074576757848,
+        "read_MBps_int32": 271.0719932865455,
+        "write_MBps_int32": 62.157902923339144
+      },
+      "npz": {
+        "size": 76704403,
+        "ratio_vs_int32": 3.3516550542737424,
+        "write_s": 12.544051215052605,
+        "read_s": 0.9628735729493201,
+        "read_MBps_int32": 266.9994350478778,
+        "write_MBps_int32": 20.494710647506064
+      }
+    },
+    "partial_read": {
+      "n_cols": 100,
+      "1pz_s": 0.012965322937816381,
+      "h5ad_s": 0.16543809697031975
+    },
+    "usa_analysis": {
+      "usa_nnz": 32044162,
+      "usa_int32_bytes": 257086700,
+      "usa_pz_size": 39221098,
+      "usa_ratio": 6.554806293286333,
+      "summed_nnz": 29992419,
+      "summed_int32_bytes": 240672756,
+      "summed_pz_size": 32451367,
+      "summed_ratio": 7.416413490377771,
+      "summed_read_s": 0.15722260996699333,
+      "summed_write_s": 0.4855792880989611,
+      "size_ratio_usa_vs_summed": 1.2086115817555545,
+      "nnz_ratio_usa_vs_summed": 1.0684087202169321
+    },
+    "peak_rss_mb": 16685.59375
+  },
+  {
+    "gse_id": "GSE203171",
+    "protocol": "10x Chromium v3",
+    "species": "Mus musculus",
+    "genome": "GRCm39",
+    "n_genes": 57180,
+    "nrows": 171540,
+    "ncols": 164483,
+    "nnz": 135760744,
+    "density": 0.004811580821251978,
+    "is_usa": true,
+    "raw_int32_bytes": 1086743888,
+    "pz_file_size": 112638191,
+    "formats": {
+      "1pz": {
+        "size": 112638191,
+        "ratio_vs_int32": 9.648094295122336,
+        "read_s": 0.7543065911158919,
+        "read_MBps_int32": 1440.7190667554862,
+        "write_s": 2.17806239426136,
+        "write_MBps_int32": 498.949842237437
+      },
+      "h5ad_gzip": {
+        "size": 329292837,
+        "ratio_vs_int32": 3.3002354314800963,
+        "write_s": 16.814342434052378,
+        "read_s": 3.8171742018312216,
+        "read_MBps_int32": 284.6985310438947,
+        "write_MBps_int32": 64.63195883290257
+      },
+      "10x_h5": {
+        "size": 328596679,
+        "ratio_vs_int32": 3.30722724072327,
+        "write_s": 16.964877631980926,
+        "read_s": 3.686108043882996,
+        "read_MBps_int32": 294.8214960230003,
+        "write_MBps_int32": 64.05845721818537
+      },
+      "npz": {
+        "size": 289816522,
+        "ratio_vs_int32": 3.7497651289873666,
+        "write_s": 47.80532465595752,
+        "read_s": 3.8921899730339646,
+        "read_MBps_int32": 279.21141967098856,
+        "write_MBps_int32": 22.732695485722832
+      }
+    },
+    "partial_read": {
+      "n_cols": 100,
+      "1pz_s": 0.07191728288307786,
+      "h5ad_s": 0.1781632578931749
+    },
+    "usa_analysis": {
+      "usa_nnz": 135760744,
+      "usa_int32_bytes": 1086743888,
+      "usa_pz_size": 112638191,
+      "usa_ratio": 9.648094295122336,
+      "summed_nnz": 120957205,
+      "summed_int32_bytes": 968315576,
+      "summed_pz_size": 93704757,
+      "summed_ratio": 10.333686431735797,
+      "summed_read_s": 0.4220410627312958,
+      "summed_write_s": 1.796201219316572,
+      "size_ratio_usa_vs_summed": 1.202054139044403,
+      "nnz_ratio_usa_vs_summed": 1.122386582924101
+    },
+    "peak_rss_mb": 16685.59375
+  },
+  {
+    "gse_id": "GSE176269",
+    "protocol": "Seq-Well",
+    "species": "Homo sapiens",
+    "genome": "GRCh38",
+    "n_genes": 38606,
+    "nrows": 115818,
+    "ncols": 119301,
+    "nnz": 14124719,
+    "density": 0.0010222560077570106,
+    "is_usa": true,
+    "raw_int32_bytes": 113474960,
+    "pz_file_size": 20386136,
+    "formats": {
+      "1pz": {
+        "size": 20386136,
+        "ratio_vs_int32": 5.5662809273910465,
+        "read_s": 0.22738536912947893,
+        "read_MBps_int32": 499.0424864819887,
+        "write_s": 0.3141106879338622,
+        "write_MBps_int32": 361.25787615317563
+      },
+      "h5ad_gzip": {
+        "size": 46543066,
+        "ratio_vs_int32": 2.438063706417622,
+        "write_s": 1.8271338511258364,
+        "read_s": 0.5042478051036596,
+        "read_MBps_int32": 225.0380841552154,
+        "write_MBps_int32": 62.10544450811823
+      },
+      "10x_h5": {
+        "size": 45383481,
+        "ratio_vs_int32": 2.5003582250555,
+        "write_s": 1.7631358858197927,
+        "read_s": 0.398051967844367,
+        "read_MBps_int32": 285.0757417794432,
+        "write_MBps_int32": 64.35973591861773
+      },
+      "npz": {
+        "size": 34213470,
+        "ratio_vs_int32": 3.3166749821050012,
+        "write_s": 5.5189655385911465,
+        "read_s": 0.4156017219647765,
+        "read_MBps_int32": 273.03775225844066,
+        "write_MBps_int32": 20.56091113570666
+      }
+    },
+    "partial_read": {
+      "n_cols": 100,
+      "1pz_s": 0.004065978340804577,
+      "h5ad_s": 0.1027848836965859
+    },
+    "usa_analysis": {
+      "usa_nnz": 14124719,
+      "usa_int32_bytes": 113474960,
+      "usa_pz_size": 20386136,
+      "usa_ratio": 5.5662809273910465,
+      "summed_nnz": 13382988,
+      "summed_int32_bytes": 107541112,
+      "summed_pz_size": 16723807,
+      "summed_ratio": 6.430420537620411,
+      "summed_read_s": 0.07996701681986451,
+      "summed_write_s": 0.20516170607879758,
+      "size_ratio_usa_vs_summed": 1.218988953890702,
+      "nnz_ratio_usa_vs_summed": 1.055423422631777
+    },
+    "peak_rss_mb": 16685.59375
+  },
+  {
+    "gse_id": "GSE136679",
+    "protocol": "Seq-Well",
+    "species": "Mus musculus",
+    "genome": "GRCm39",
+    "n_genes": 57180,
+    "nrows": 171540,
+    "ncols": 168637,
+    "nnz": 57013386,
+    "density": 0.001970872641636865,
+    "is_usa": true,
+    "raw_int32_bytes": 456781640,
+    "pz_file_size": 58683897,
+    "formats": {
+      "1pz": {
+        "size": 58683897,
+        "ratio_vs_int32": 7.7837645990006425,
+        "read_s": 0.5016252328641713,
+        "read_MBps_int32": 910.6033948728534,
+        "write_s": 1.0654474711045623,
+        "write_MBps_int32": 428.7228158948549
+      },
+      "h5ad_gzip": {
+        "size": 151676420,
+        "ratio_vs_int32": 3.0115534108729625,
+        "write_s": 6.936537254136056,
+        "read_s": 1.7390679270029068,
+        "read_MBps_int32": 262.65888347858447,
+        "write_MBps_int32": 65.85153705152155
+      },
+      "10x_h5": {
+        "size": 151577607,
+        "ratio_vs_int32": 3.013516633759761,
+        "write_s": 6.894144373945892,
+        "read_s": 1.588408226147294,
+        "read_MBps_int32": 287.5719430816158,
+        "write_MBps_int32": 66.25646566472457
+      },
+      "npz": {
+        "size": 124466482,
+        "ratio_vs_int32": 3.6699168535991884,
+        "write_s": 19.723690919112414,
+        "read_s": 1.6502334368415177,
+        "read_MBps_int32": 276.7981970322103,
+        "write_MBps_int32": 23.159034577923492
+      }
+    },
+    "partial_read": {
+      "n_cols": 100,
+      "1pz_s": 0.02426697500050068,
+      "h5ad_s": 0.15770486602559686
+    },
+    "usa_analysis": {
+      "usa_nnz": 57013386,
+      "usa_int32_bytes": 456781640,
+      "usa_pz_size": 58683897,
+      "usa_ratio": 7.7837645990006425,
+      "summed_nnz": 51771522,
+      "summed_int32_bytes": 414846728,
+      "summed_pz_size": 49322716,
+      "summed_ratio": 8.410865451934967,
+      "summed_read_s": 0.2385566532611847,
+      "summed_write_s": 0.8788804789073765,
+      "size_ratio_usa_vs_summed": 1.189794515776463,
+      "nnz_ratio_usa_vs_summed": 1.101249949731051
+    },
+    "peak_rss_mb": 16685.59375
+  },
+  {
+    "gse_id": "GSE155409",
+    "protocol": "Drop-seq",
+    "species": "Homo sapiens",
+    "genome": "GRCh38",
+    "n_genes": 38606,
+    "nrows": 115818,
+    "ncols": 1328,
+    "nnz": 122930,
+    "density": 0.0007992520254566419,
+    "is_usa": true,
+    "raw_int32_bytes": 988756,
+    "pz_file_size": 1123637,
+    "formats": {
+      "1pz": {
+        "size": 1123637,
+        "ratio_vs_int32": 0.8799603430645306,
+        "read_s": 0.0506028002128005,
+        "read_MBps_int32": 19.539551088911555,
+        "write_s": 0.022689852863550186,
+        "write_MBps_int32": 43.57701241810933
+      },
+      "h5ad_gzip": {
+        "size": 4930846,
+        "ratio_vs_int32": 0.20052461585699494,
+        "write_s": 0.06617731414735317,
+        "read_s": 0.049224625807255507,
+        "read_MBps_int32": 20.08661282406867,
+        "write_MBps_int32": 14.941011322979875
+      },
+      "10x_h5": {
+        "size": 6016714,
+        "ratio_vs_int32": 0.16433488445686467,
+        "write_s": 0.034585531800985336,
+        "read_s": 0.0044464110396802425,
+        "read_MBps_int32": 222.3717040948839,
+        "write_MBps_int32": 28.588717550725374
+      },
+      "npz": {
+        "size": 261622,
+        "ratio_vs_int32": 3.779330484439382,
+        "write_s": 0.04455018322914839,
+        "read_s": 0.004014451988041401,
+        "read_MBps_int32": 246.2991220085313,
+        "write_MBps_int32": 22.19420725868249
+      }
+    },
+    "partial_read": {
+      "n_cols": 100,
+      "1pz_s": 0.0010035131126642227,
+      "h5ad_s": 0.050653544254601
+    },
+    "usa_analysis": {
+      "usa_nnz": 122930,
+      "usa_int32_bytes": 988756,
+      "usa_pz_size": 1123637,
+      "usa_ratio": 0.8799603430645306,
+      "summed_nnz": 121178,
+      "summed_int32_bytes": 974740,
+      "summed_pz_size": 368502,
+      "summed_ratio": 2.6451416817276434,
+      "summed_read_s": 0.004128723870962858,
+      "summed_write_s": 0.011394839733839035,
+      "size_ratio_usa_vs_summed": 3.049201903924538,
+      "nnz_ratio_usa_vs_summed": 1.01445806994669
+    },
+    "peak_rss_mb": 16685.59375
+  },
+  {
+    "gse_id": "GSE174189",
+    "protocol": "inDrop",
+    "species": "Homo sapiens",
+    "genome": "GRCh38",
+    "n_genes": 38606,
+    "nrows": 115818,
+    "ncols": 630,
+    "nnz": 291736,
+    "density": 0.0039982819239929536,
+    "is_usa": true,
+    "raw_int32_bytes": 2336412,
+    "pz_file_size": 1238547,
+    "formats": {
+      "1pz": {
+        "size": 1238547,
+        "ratio_vs_int32": 1.8864136766711315,
+        "read_s": 0.05407739197835326,
+        "read_MBps_int32": 43.204968185877874,
+        "write_s": 0.03692829515784979,
+        "write_MBps_int32": 63.26888338638489
+      },
+      "h5ad_gzip": {
+        "size": 5325602,
+        "ratio_vs_int32": 0.43871321965103666,
+        "write_s": 0.08642192417755723,
+        "read_s": 0.05403309594839811,
+        "read_MBps_int32": 43.240387377234235,
+        "write_MBps_int32": 27.03494538260627
+      },
+      "10x_h5": {
+        "size": 6422994,
+        "ratio_vs_int32": 0.3637574626412542,
+        "write_s": 0.05540558509528637,
+        "read_s": 0.009751879144459963,
+        "read_MBps_int32": 239.58582396166327,
+        "write_MBps_int32": 42.16925055446748
+      },
+      "npz": {
+        "size": 633204,
+        "ratio_vs_int32": 3.6898250800689825,
+        "write_s": 0.10304151009768248,
+        "read_s": 0.008642345201224089,
+        "read_MBps_int32": 270.34467446047796,
+        "write_MBps_int32": 22.674473595981866
+      }
+    },
+    "partial_read": {
+      "n_cols": 100,
+      "1pz_s": 0.0018471046350896358,
+      "h5ad_s": 0.05056940205395222
+    },
+    "usa_analysis": {
+      "usa_nnz": 291736,
+      "usa_int32_bytes": 2336412,
+      "usa_pz_size": 1238547,
+      "usa_ratio": 1.8864136766711315,
+      "summed_nnz": 270823,
+      "summed_int32_bytes": 2169108,
+      "summed_pz_size": 461999,
+      "summed_ratio": 4.695049123482951,
+      "summed_read_s": 0.005527215078473091,
+      "summed_write_s": 0.023573086131364107,
+      "size_ratio_usa_vs_summed": 2.6808434650291453,
+      "nnz_ratio_usa_vs_summed": 1.0772201770159846
+    },
+    "peak_rss_mb": 16685.59375
+  },
+  {
+    "gse_id": "GSE210261",
+    "protocol": "BD Rhapsody",
+    "species": "Homo sapiens",
+    "genome": "GRCh38",
+    "n_genes": 38606,
+    "nrows": 115818,
+    "ncols": 4361,
+    "nnz": 4575353,
+    "density": 0.009058628698961055,
+    "is_usa": true,
+    "raw_int32_bytes": 36620272,
+    "pz_file_size": 5195193,
+    "formats": {
+      "1pz": {
+        "size": 5195193,
+        "ratio_vs_int32": 7.048876143773677,
+        "read_s": 0.08526629488915205,
+        "read_MBps_int32": 429.4812158497928,
+        "write_s": 0.1635953988879919,
+        "write_MBps_int32": 223.8465888950375
+      },
+      "h5ad_gzip": {
+        "size": 16357938,
+        "ratio_vs_int32": 2.2386850958843345,
+        "write_s": 0.6144433137960732,
+        "read_s": 0.18401980213820934,
+        "read_MBps_int32": 199.0018007545519,
+        "write_MBps_int32": 59.59910569090163
+      },
+      "10x_h5": {
+        "size": 17384516,
+        "ratio_vs_int32": 2.106487865408505,
+        "write_s": 0.5834624101407826,
+        "read_s": 0.13732034573331475,
+        "read_MBps_int32": 266.6776857022994,
+        "write_MBps_int32": 62.7637211301478
+      },
+      "npz": {
+        "size": 10291309,
+        "ratio_vs_int32": 3.5583687167492495,
+        "write_s": 1.7731668269261718,
+        "read_s": 0.12758152466267347,
+        "read_MBps_int32": 287.0342872670967,
+        "write_MBps_int32": 20.65246847837896
+      }
+    },
+    "partial_read": {
+      "n_cols": 100,
+      "1pz_s": 0.008535767905414104,
+      "h5ad_s": 0.057960580103099346
+    },
+    "usa_analysis": {
+      "usa_nnz": 4575353,
+      "usa_int32_bytes": 36620272,
+      "usa_pz_size": 5195193,
+      "usa_ratio": 7.048876143773677,
+      "summed_nnz": 4142724,
+      "summed_int32_bytes": 33159240,
+      "summed_pz_size": 3848378,
+      "summed_ratio": 8.616419696817724,
+      "summed_read_s": 0.024937282782047987,
+      "summed_write_s": 0.14755448093637824,
+      "size_ratio_usa_vs_summed": 1.3499695196261905,
+      "nnz_ratio_usa_vs_summed": 1.1044310458529218
+    },
+    "peak_rss_mb": 16685.59375
+  },
+  {
+    "gse_id": "GSE278497",
+    "protocol": "DNBelab C4",
+    "species": "Homo sapiens",
+    "genome": "GRCh38",
+    "n_genes": 38606,
+    "nrows": 115818,
+    "ncols": 74831,
+    "nnz": 92836430,
+    "density": 0.01071175969939527,
+    "is_usa": true,
+    "raw_int32_bytes": 742990768,
+    "pz_file_size": 74056525,
+    "formats": {
+      "1pz": {
+        "size": 74056525,
+        "ratio_vs_int32": 10.032752252418002,
+        "read_s": 0.47396894078701735,
+        "read_MBps_int32": 1567.5937895134573,
+        "write_s": 1.499602556694299,
+        "write_MBps_int32": 495.45845643117434
+      },
+      "h5ad_gzip": {
+        "size": 224078020,
+        "ratio_vs_int32": 3.3157681775303085,
+        "write_s": 10.527362194377929,
+        "read_s": 2.6470472631044686,
+        "read_MBps_int32": 280.6866270791921,
+        "write_MBps_int32": 70.57710699806543
+      },
+      "10x_h5": {
+        "size": 223442278,
+        "ratio_vs_int32": 3.3252022609615537,
+        "write_s": 10.55943934712559,
+        "read_s": 2.5737263467162848,
+        "read_MBps_int32": 288.68289317081144,
+        "write_MBps_int32": 70.36270994844544
+      },
+      "npz": {
+        "size": 189809179,
+        "ratio_vs_int32": 3.914409049733048,
+        "write_s": 30.92678203107789,
+        "read_s": 2.5698157376609743,
+        "read_MBps_int32": 289.12219545992207,
+        "write_MBps_int32": 24.024186132698155
+      }
+    },
+    "partial_read": {
+      "n_cols": 100,
+      "1pz_s": 0.021553615108132362,
+      "h5ad_s": 0.08536922000348568
+    },
+    "usa_analysis": {
+      "usa_nnz": 92836430,
+      "usa_int32_bytes": 742990768,
+      "usa_pz_size": 74056525,
+      "usa_ratio": 10.032752252418002,
+      "summed_nnz": 86814113,
+      "summed_int32_bytes": 694812232,
+      "summed_pz_size": 63711243,
+      "summed_ratio": 10.905645523192822,
+      "summed_read_s": 0.2844509342685342,
+      "summed_write_s": 1.286523723974824,
+      "size_ratio_usa_vs_summed": 1.162377651304025,
+      "nnz_ratio_usa_vs_summed": 1.069370253198348
+    },
+    "peak_rss_mb": 16685.59375
+  },
+  {
+    "gse_id": "GSE306871",
+    "protocol": "DNBelab C4",
+    "species": "Mus musculus",
+    "genome": "GRCm39",
+    "n_genes": 57180,
+    "nrows": 171540,
+    "ncols": 91949,
+    "nnz": 117273728,
+    "density": 0.007435125696032156,
+    "is_usa": true,
+    "raw_int32_bytes": 938557624,
+    "pz_file_size": 93867216,
+    "formats": {
+      "1pz": {
+        "size": 93867216,
+        "ratio_vs_int32": 9.99877980827726,
+        "read_s": 0.5440559899434447,
+        "read_MBps_int32": 1725.1121968118837,
+        "write_s": 1.7897879895754158,
+        "write_MBps_int32": 524.3959784435978
+      },
+      "h5ad_gzip": {
+        "size": 289552268,
+        "ratio_vs_int32": 3.2414100241135047,
+        "write_s": 14.283780063968152,
+        "read_s": 3.403993409126997,
+        "read_MBps_int32": 275.72251505642794,
+        "write_MBps_int32": 65.70793023952939
+      },
+      "10x_h5": {
+        "size": 290599769,
+        "ratio_vs_int32": 3.229725980959056,
+        "write_s": 14.305243621114641,
+        "read_s": 3.2886536242440343,
+        "read_MBps_int32": 285.39266558233146,
+        "write_MBps_int32": 65.60934220055381
+      },
+      "npz": {
+        "size": 248452192,
+        "ratio_vs_int32": 3.777618609217181,
+        "write_s": 40.110716219991446,
+        "read_s": 3.3951002289541066,
+        "read_MBps_int32": 276.44474704922976,
+        "write_MBps_int32": 23.39917389787761
+      }
+    },
+    "partial_read": {
+      "n_cols": 100,
+      "1pz_s": 0.02616163482889533,
+      "h5ad_s": 0.12265740521252155
+    },
+    "usa_analysis": {
+      "usa_nnz": 117273728,
+      "usa_int32_bytes": 938557624,
+      "usa_pz_size": 93867216,
+      "usa_ratio": 9.99877980827726,
+      "summed_nnz": 113459498,
+      "summed_int32_bytes": 908043784,
+      "summed_pz_size": 84176587,
+      "summed_ratio": 10.787367561006008,
+      "summed_read_s": 0.372915362007916,
+      "summed_write_s": 1.6815927471034229,
+      "size_ratio_usa_vs_summed": 1.115122617171447,
+      "nnz_ratio_usa_vs_summed": 1.033617546941729
+    },
+    "peak_rss_mb": 16685.59375
+  },
+  {
+    "gse_id": "GSE123662",
+    "protocol": "10x Chromium v2",
+    "species": "Danio rerio",
+    "genome": "GRCz11",
+    "n_genes": 32520,
+    "nrows": 97560,
+    "ncols": 80080,
+    "nnz": 7513984,
+    "density": 0.000961777050337936,
+    "is_usa": true,
+    "raw_int32_bytes": 60432196,
+    "pz_file_size": 8833262,
+    "formats": {
+      "1pz": {
+        "size": 8833262,
+        "ratio_vs_int32": 6.8414359270674865,
+        "read_s": 0.1371996747329831,
+        "read_MBps_int32": 440.4689451167625,
+        "write_s": 0.12549942824989557,
+        "write_MBps_int32": 481.5336359912881
+      },
+      "h5ad_gzip": {
+        "size": 23056110,
+        "ratio_vs_int32": 2.6210924566199587,
+        "write_s": 0.792765153106302,
+        "read_s": 0.26425952510908246,
+        "read_MBps_int32": 228.6850245986572,
+        "write_MBps_int32": 76.22963214668019
+      },
+      "10x_h5": {
+        "size": 22439325,
+        "ratio_vs_int32": 2.6931378729083875,
+        "write_s": 0.7411021329462528,
+        "read_s": 0.190503790974617,
+        "read_MBps_int32": 317.22306254814674,
+        "write_MBps_int32": 81.5436811114707
+      },
+      "npz": {
+        "size": 12993403,
+        "ratio_vs_int32": 4.650990660414366,
+        "write_s": 2.497575988061726,
+        "read_s": 0.185649577062577,
+        "read_MBps_int32": 325.51755277971944,
+        "write_MBps_int32": 24.19633928611683
+      }
+    },
+    "partial_read": {
+      "n_cols": 100,
+      "1pz_s": 0.005085140001028776,
+      "h5ad_s": 0.08234191266819835
+    },
+    "usa_analysis": {
+      "usa_nnz": 7513984,
+      "usa_int32_bytes": 60432196,
+      "usa_pz_size": 8833262,
+      "usa_ratio": 6.8414359270674865,
+      "summed_nnz": 6213406,
+      "summed_int32_bytes": 50027572,
+      "summed_pz_size": 6506457,
+      "summed_ratio": 7.688911492076256,
+      "summed_read_s": 0.03785510594025254,
+      "summed_write_s": 0.09775048634037375,
+      "size_ratio_usa_vs_summed": 1.357614751008114,
+      "nnz_ratio_usa_vs_summed": 1.2093180455292958
+    },
+    "peak_rss_mb": 16685.59375
+  },
+  {
+    "gse_id": "GSE241296",
+    "protocol": "10x Chromium v3",
+    "species": "Danio rerio",
+    "genome": "GRCz11",
+    "n_genes": 32520,
+    "nrows": 97560,
+    "ncols": 79248,
+    "nnz": 29715743,
+    "density": 0.0038434965127715076,
+    "is_usa": true,
+    "raw_int32_bytes": 238042940,
+    "pz_file_size": 30576270,
+    "formats": {
+      "1pz": {
+        "size": 30576270,
+        "ratio_vs_int32": 7.785218406300049,
+        "read_s": 0.24330392805859447,
+        "read_MBps_int32": 978.3768881144924,
+        "write_s": 0.4937787726521492,
+        "write_MBps_int32": 482.08419070232765
+      },
+      "h5ad_gzip": {
+        "size": 81102444,
+        "ratio_vs_int32": 2.9350896009989538,
+        "write_s": 3.637584697920829,
+        "read_s": 0.9341653739102185,
+        "read_MBps_int32": 254.8188432671216,
+        "write_MBps_int32": 65.43983433184678
+      },
+      "10x_h5": {
+        "size": 80522388,
+        "ratio_vs_int32": 2.956232991997207,
+        "write_s": 3.6035807952284813,
+        "read_s": 0.8610359570011497,
+        "read_MBps_int32": 276.46109092710304,
+        "write_MBps_int32": 66.05733394827551
+      },
+      "npz": {
+        "size": 67043168,
+        "ratio_vs_int32": 3.5505920603274594,
+        "write_s": 11.445852365810424,
+        "read_s": 0.8596850852482021,
+        "read_MBps_int32": 276.89550986135106,
+        "write_MBps_int32": 20.79731001170793
+      }
+    },
+    "partial_read": {
+      "n_cols": 100,
+      "1pz_s": 0.017023853957653046,
+      "h5ad_s": 0.09287218796089292
+    },
+    "usa_analysis": {
+      "usa_nnz": 29715743,
+      "usa_int32_bytes": 238042940,
+      "usa_pz_size": 30576270,
+      "usa_ratio": 7.785218406300049,
+      "summed_nnz": 27261639,
+      "summed_int32_bytes": 218410108,
+      "summed_pz_size": 25384765,
+      "summed_ratio": 8.60398384621642,
+      "summed_read_s": 0.1149263009428978,
+      "summed_write_s": 0.40073332097381353,
+      "size_ratio_usa_vs_summed": 1.204512627948299,
+      "nnz_ratio_usa_vs_summed": 1.0900204129326194
+    },
+    "peak_rss_mb": 16685.59375
+  },
+  {
+    "gse_id": "GSE297773",
+    "protocol": "10x Chromium v3",
+    "species": "Rattus norvegicus",
+    "genome": "mRatBN7.2",
+    "n_genes": 30562,
+    "nrows": 91686,
+    "ncols": 92959,
+    "nnz": 40324622,
+    "density": 0.0047312493344378,
+    "is_usa": true,
+    "raw_int32_bytes": 322968816,
+    "pz_file_size": 36604228,
+    "formats": {
+      "1pz": {
+        "size": 36604228,
+        "ratio_vs_int32": 8.82326533426685,
+        "read_s": 0.28666569478809834,
+        "read_MBps_int32": 1126.6392242669174,
+        "write_s": 0.773654542863369,
+        "write_MBps_int32": 417.45869520091196
+      },
+      "h5ad_gzip": {
+        "size": 101410342,
+        "ratio_vs_int32": 3.184771983117856,
+        "write_s": 4.9716492802836,
+        "read_s": 1.2059576627798378,
+        "read_MBps_int32": 267.8110732805732,
+        "write_MBps_int32": 64.96210770152652
+      },
+      "10x_h5": {
+        "size": 100467611,
+        "ratio_vs_int32": 3.2146560745830812,
+        "write_s": 4.965784880332649,
+        "read_s": 1.1252817008644342,
+        "read_MBps_int32": 287.01152409383127,
+        "write_MBps_int32": 65.03882543908445
+      },
+      "npz": {
+        "size": 89442996,
+        "ratio_vs_int32": 3.6108899572192326,
+        "write_s": 15.937902964185923,
+        "read_s": 1.1567170228809118,
+        "read_MBps_int32": 279.2116045769051,
+        "write_MBps_int32": 20.264197663001433
+      }
+    },
+    "partial_read": {
+      "n_cols": 100,
+      "1pz_s": 0.020517501048743725,
+      "h5ad_s": 0.09852769272401929
+    },
+    "usa_analysis": {
+      "usa_nnz": 40324622,
+      "usa_int32_bytes": 322968816,
+      "usa_pz_size": 36604228,
+      "usa_ratio": 8.82326533426685,
+      "summed_nnz": 36771926,
+      "summed_int32_bytes": 294547248,
+      "summed_pz_size": 30749810,
+      "summed_ratio": 9.578831478958731,
+      "summed_read_s": 0.16057568276301026,
+      "summed_write_s": 0.677760565187782,
+      "size_ratio_usa_vs_summed": 1.1903887536215672,
+      "nnz_ratio_usa_vs_summed": 1.096614357376875
+    },
+    "peak_rss_mb": 16685.59375
+  },
+  {
+    "gse_id": "GSE126139",
+    "protocol": "10x Chromium v2",
+    "species": "Drosophila melanogaster",
+    "genome": "BDGP6",
+    "n_genes": 24278,
+    "nrows": 72834,
+    "ncols": 7739,
+    "nnz": 13470716,
+    "density": 0.023898556597873457,
+    "is_usa": true,
+    "raw_int32_bytes": 107796688,
+    "pz_file_size": 10113747,
+    "formats": {
+      "1pz": {
+        "size": 10113747,
+        "ratio_vs_int32": 10.658432329778469,
+        "read_s": 0.0756969009526074,
+        "read_MBps_int32": 1424.0568192810135,
+        "write_s": 0.2867965898476541,
+        "write_MBps_int32": 375.8646086317185
+      },
+      "h5ad_gzip": {
+        "size": 32889333,
+        "ratio_vs_int32": 3.2775577418976543,
+        "write_s": 1.5331130581907928,
+        "read_s": 0.41503192111849785,
+        "read_MBps_int32": 259.73107733374184,
+        "write_MBps_int32": 70.31228872788384
+      },
+      "10x_h5": {
+        "size": 35662599,
+        "ratio_vs_int32": 3.022681773697985,
+        "write_s": 1.520381161943078,
+        "read_s": 0.38379831798374653,
+        "read_MBps_int32": 280.8680573857155,
+        "write_MBps_int32": 70.90109421129215
+      },
+      "npz": {
+        "size": 25485815,
+        "ratio_vs_int32": 4.229673957846748,
+        "write_s": 4.564599347766489,
+        "read_s": 0.36600169306620955,
+        "read_MBps_int32": 294.5251075122749,
+        "write_MBps_int32": 23.615804978096527
+      }
+    },
+    "partial_read": {
+      "n_cols": 100,
+      "1pz_s": 0.009429838042706251,
+      "h5ad_s": 0.04334479570388794
+    },
+    "usa_analysis": {
+      "usa_nnz": 13470716,
+      "usa_int32_bytes": 107796688,
+      "usa_pz_size": 10113747,
+      "usa_ratio": 10.658432329778469,
+      "summed_nnz": 12172825,
+      "summed_int32_bytes": 97413560,
+      "summed_pz_size": 8679464,
+      "summed_ratio": 11.223453429843133,
+      "summed_read_s": 0.04079899983480573,
+      "summed_write_s": 0.1929405969567597,
+      "size_ratio_usa_vs_summed": 1.165250181347604,
+      "nnz_ratio_usa_vs_summed": 1.106622004341638
+    },
+    "peak_rss_mb": 16685.59375
+  },
+  {
+    "gse_id": "GSE245419",
+    "protocol": "10x Chromium v3",
+    "species": "Macaca mulatta",
+    "genome": "Mmul_10",
+    "n_genes": 35432,
+    "nrows": 106296,
+    "ncols": 117074,
+    "nnz": 17250594,
+    "density": 0.001386202491500697,
+    "is_usa": true,
+    "raw_int32_bytes": 138473052,
+    "pz_file_size": 20215856,
+    "formats": {
+      "1pz": {
+        "size": 20215856,
+        "ratio_vs_int32": 6.849724889215673,
+        "read_s": 0.2152158496901393,
+        "read_MBps_int32": 643.4147494218894,
+        "write_s": 0.27521568117663264,
+        "write_MBps_int32": 503.1437576811926
+      },
+      "h5ad_gzip": {
+        "size": 50932939,
+        "ratio_vs_int32": 2.718732802754618,
+        "write_s": 2.038901912048459,
+        "read_s": 0.572198695037514,
+        "read_MBps_int32": 242.00169137212302,
+        "write_MBps_int32": 67.91550450844291
+      },
+      "10x_h5": {
+        "size": 49589187,
+        "ratio_vs_int32": 2.7924041585920736,
+        "write_s": 1.9857731917873025,
+        "read_s": 0.47684369375929236,
+        "read_MBps_int32": 290.3950577773611,
+        "write_MBps_int32": 69.73256189210956
+      },
+      "npz": {
+        "size": 36077135,
+        "ratio_vs_int32": 3.838249683629257,
+        "write_s": 6.397764146793634,
+        "read_s": 0.48581191385164857,
+        "read_MBps_int32": 285.03428601029583,
+        "write_MBps_int32": 21.6439757425879
+      }
+    },
+    "partial_read": {
+      "n_cols": 100,
+      "1pz_s": 0.003993920050561428,
+      "h5ad_s": 0.09705147705972195
+    },
+    "usa_analysis": {
+      "usa_nnz": 17250594,
+      "usa_int32_bytes": 138473052,
+      "usa_pz_size": 20215856,
+      "usa_ratio": 6.849724889215673,
+      "summed_nnz": 16552636,
+      "summed_int32_bytes": 132889388,
+      "summed_pz_size": 16940404,
+      "summed_ratio": 7.844522952345175,
+      "summed_read_s": 0.08613103907555342,
+      "summed_write_s": 0.24710111692547798,
+      "size_ratio_usa_vs_summed": 1.1933514690676799,
+      "nnz_ratio_usa_vs_summed": 1.0421659728396129
+    },
+    "peak_rss_mb": 16685.59375
+  },
+  {
+    "gse_id": "GSE249652",
+    "protocol": "10x Chromium v3",
+    "species": "Gallus gallus",
+    "genome": "bGalGal1",
+    "n_genes": 30108,
+    "nrows": 90324,
+    "ncols": 741178,
+    "nnz": 169036775,
+    "density": 0.002524965894657095,
+    "is_usa": true,
+    "raw_int32_bytes": 1355258916,
+    "pz_file_size": 189542332,
+    "formats": {
+      "1pz": {
+        "size": 189542332,
+        "ratio_vs_int32": 7.1501648296698175,
+        "read_s": 1.386710329912603,
+        "read_MBps_int32": 977.3194060546264,
+        "write_s": 2.629802111070603,
+        "write_MBps_int32": 515.3463487974267
+      },
+      "h5ad_gzip": {
+        "size": 460248975,
+        "ratio_vs_int32": 2.944621258526431,
+        "write_s": 21.093073488678783,
+        "read_s": 4.912489223759621,
+        "read_MBps_int32": 275.88028273837,
+        "write_MBps_int32": 64.25137222071518
+      },
+      "10x_h5": {
+        "size": 444044326,
+        "ratio_vs_int32": 3.052080246601327,
+        "write_s": 20.94829462096095,
+        "read_s": 4.536322559695691,
+        "read_MBps_int32": 298.75717570024705,
+        "write_MBps_int32": 64.6954294142838
+      },
+      "npz": {
+        "size": 386943487,
+        "ratio_vs_int32": 3.502472483791929,
+        "write_s": 66.03658608393744,
+        "read_s": 4.780156237073243,
+        "read_MBps_int32": 283.5177029338663,
+        "write_MBps_int32": 20.522849474340855
+      }
+    },
+    "partial_read": {
+      "n_cols": 100,
+      "1pz_s": 0.05784233706071973,
+      "h5ad_s": 0.38634496089071035
+    },
+    "usa_analysis": {
+      "usa_nnz": 169036775,
+      "usa_int32_bytes": 1355258916,
+      "usa_pz_size": 189542332,
+      "usa_ratio": 7.1501648296698175,
+      "summed_nnz": 161631228,
+      "summed_int32_bytes": 1296014540,
+      "summed_pz_size": 160735703,
+      "summed_ratio": 8.063015968518208,
+      "summed_read_s": 0.7375034429132938,
+      "summed_write_s": 2.3340385970659554,
+      "size_ratio_usa_vs_summed": 1.179217364047613,
+      "nnz_ratio_usa_vs_summed": 1.0458175508015073
+    },
+    "peak_rss_mb": 16685.59375
+  },
+  {
+    "gse_id": "GSE304926",
+    "protocol": "10x Chromium v4",
+    "species": "Xenopus laevis",
+    "genome": "v10.1",
+    "n_genes": 24614,
+    "nrows": 73842,
+    "ncols": 172684,
+    "nnz": 28745574,
+    "density": 0.002254319326193608,
+    "is_usa": true,
+    "raw_int32_bytes": 230655332,
+    "pz_file_size": 28760673,
+    "formats": {
+      "1pz": {
+        "size": 28760673,
+        "ratio_vs_int32": 8.019816921530314,
+        "read_s": 0.27407709835097194,
+        "read_MBps_int32": 841.5709790703936,
+        "write_s": 0.5069826343096793,
+        "write_MBps_int32": 454.95706635803475
+      },
+      "h5ad_gzip": {
+        "size": 76875378,
+        "ratio_vs_int32": 3.0003798095145626,
+        "write_s": 3.2128401417285204,
+        "read_s": 0.8871960933320224,
+        "read_MBps_int32": 259.9823576022894,
+        "write_MBps_int32": 71.79172377867097
+      },
+      "10x_h5": {
+        "size": 73761533,
+        "ratio_vs_int32": 3.1270409198247004,
+        "write_s": 3.1438337760046124,
+        "read_s": 0.7853556056506932,
+        "read_MBps_int32": 293.6954041461185,
+        "write_MBps_int32": 73.36753417451088
+      },
+      "npz": {
+        "size": 57918901,
+        "ratio_vs_int32": 3.98238447238493,
+        "write_s": 10.312822037842125,
+        "read_s": 0.7906960588879883,
+        "read_MBps_int32": 291.7117511934825,
+        "write_MBps_int32": 22.365879208777926
+      }
+    },
+    "partial_read": {
+      "n_cols": 100,
+      "1pz_s": 0.01698379684239626,
+      "h5ad_s": 0.1261800960637629
+    },
+    "usa_analysis": {
+      "usa_nnz": 28745574,
+      "usa_int32_bytes": 230655332,
+      "usa_pz_size": 28760673,
+      "usa_ratio": 8.019816921530314,
+      "summed_nnz": 25548616,
+      "summed_int32_bytes": 205079668,
+      "summed_pz_size": 23285819,
+      "summed_ratio": 8.807062701981836,
+      "summed_read_s": 0.1221176483668387,
+      "summed_write_s": 0.41420520981773734,
+      "size_ratio_usa_vs_summed": 1.2351153721498909,
+      "nnz_ratio_usa_vs_summed": 1.1251323359355356
+    },
+    "peak_rss_mb": 16685.59375
+  }
+]

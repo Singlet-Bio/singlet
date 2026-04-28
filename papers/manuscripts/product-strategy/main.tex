@@ -1,0 +1,362 @@
+\documentclass[10pt,twocolumn,letterpaper]{article}
+\usepackage{../../templates/singletai-preprint}
+\usepackage{booktabs}
+\usepackage{array}
+
+\title{Singlify AI: Product Strategy\\
+  and Go-to-Market Recommendations}
+
+\author{%
+  Zach DeBruine\textsuperscript{1,*}\\[4pt]
+  \textsuperscript{1}Grand Valley State University, Allendale, MI, USA\\
+  \textsuperscript{*}Correspondence: \texttt{debruinz@gvsu.edu}
+}
+
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This report synthesizes product strategy, homepage content design, market
+research, and feature prioritization for Singlify~AI (formerly SingletDB). We
+address the onramp problem (value must be demonstrated in under 60 seconds),
+present ranked feature recommendations across three tiers (must-have, growth
+accelerators, enterprise drivers), propose modifications to the current product
+(simplified pricing, developer-first positioning, scverse integration), and
+outline a zero-to-1,000 paying customers growth strategy. The core
+recommendation: lead with the Python package (\texttt{singlet.load()} in 3 lines),
+not the website; adopt a 4-tier pricing model (Community/Pro/Team/Enterprise);
+and focus on adoption before revenue extraction. Market data shows a \$4.89B
+single-cell analysis market growing at 18.7\%~CAGR, with academic labs
+representing 70.8\% of end-use.
+\end{abstract}
+
+%% ──────────────────────────────────────────────────────────────────
+\section{The Vision}
+\label{sec:vision}
+
+\subsection{Homepage Concept: ``Your Genome, Explained''}
+
+Singlify~AI is building the genomics intelligence layer for modern medicine---
+frontier AI that turns any patient's genome into actionable clinical insight.
+The target customer journey:
+
+\begin{enumerate}
+  \item \textbf{Problem:} Whole-genome sequencing costs under \$200, but 40--60\%
+    of variants return as ``uncertain significance.'' For the 25--30M Americans
+    with rare genetic disorders, this means a 5--7~year diagnostic odyssey.
+  \item \textbf{Solution:} AI that interprets variants at single-cell resolution.
+    Not database lookup---\emph{prediction}: which cell types are disrupted,
+    which programs are rewired, what clinical outcomes follow.
+  \item \textbf{Credibility:} CZI funding, NIH validation, NMF hosted on
+    CELLxGENE alongside Geneformer and scGPT. 1.5B cells, 19,790 datasets,
+    201 species, 6 modalities.
+\end{enumerate}
+
+\subsection{Design Principles}
+
+Sell the outcome, not the technology. Clinicians do not care about NMF factors;
+they care about ``AI that explains your patient's genome.'' Credibility through
+association (CZI, NIH, NeurIPS logos). Pre-product YC-style: ``we're building
+this, here's why it matters, join the waitlist.'' Visual identity: dark
+navy background, clean sans-serif, abstract geometric illustrations.
+
+%% ──────────────────────────────────────────────────────────────────
+\section{The Onramp Problem}
+\label{sec:onramp}
+
+The current product presents too many concepts before delivering value. A
+first-time visitor must understand the product and get value in under 60 seconds.
+
+\subsection{Three Lines to Value}
+
+The homepage hero should be:
+
+\begin{verbatim}
+pip install singlet
+import singlet
+adata = singlet.load("GSE136831")
+\end{verbatim}
+
+Everything else is secondary. The visitor should see this code, understand they
+can run it right now, and feel the pull of ``I need to try this.''
+
+\subsection{Simplified Pricing}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}llr@{}}
+\toprule
+\textbf{Tier} & \textbf{Target} & \textbf{Price} \\
+\midrule
+Community & Everyone & Free forever \\
+Pro & Researchers & \$49/mo \\
+Team & Labs, biotechs & \$199/mo \\
+Enterprise & Pharma & Custom \\
+\bottomrule
+\end{tabular}
+\caption{Simplified 4-tier pricing model.}
+\label{tab:pricing}
+\end{table}
+
+\textbf{Kill the token system (for now).} Tokens are a cognitive burden. Replace
+with rate-limited API: Community (10 req/min), Pro (100 req/min), Team
+(500 req/min). Implement usage-based pricing when you have 1,000+ customers.
+
+\subsection{Value Before Identity}
+
+\texttt{singlet.catalog()} should work immediately with no API key.
+\texttt{singlet.load()} should work for the first 10 datasets without signup.
+All documentation and examples should be runnable without authentication.
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Market Context}
+\label{sec:market}
+
+\subsection{Market Size}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}lrrl@{}}
+\toprule
+\textbf{Market} & \textbf{2024} & \textbf{2030} & \textbf{CAGR} \\
+\midrule
+Single-cell analysis & \$4.9B & \$13.7B & 18.7\% \\
+Bioinformatics & \$12.3B & \$36.7B & 16.9\% \\
+AI drug discovery & \$1.5B & \$13.7B & 37.8\% \\
+Clinical genomics & \$23.5B & \$60B+ & $\sim$16\% \\
+\bottomrule
+\end{tabular}
+\caption{Relevant market sizes and growth rates.}
+\label{tab:markets}
+\end{table}
+
+Addressable markets: near-term (\$200M--\$500M, single-cell data tools),
+medium-term (\$1B--\$3B, FM training data + pharma), long-term (\$30B+,
+clinical genomics---requires \$10M+ and regulatory).
+
+\subsection{Comparable Companies}
+
+Tempus AI: \$632M revenue, \$6B+ market cap, 8.5M records, 95\% of top-20
+pharma. Recursion: \$1.4B+ raised, phenotypic data + drug discovery.
+Insitro: \$743M raised, multimodal cellular data + ML. TileDB: \$142M raised,
+array storage infrastructure. Cellarium AI: Broad Institute, cell annotation
+and perturbation.
+
+\subsection{Defensibility}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Moat} & \textbf{Durability} \\
+\midrule
+200+ species coverage & Strong (2--3 yr) \\
+Uniform FASTQ reprocessing & Strong (2--3 yr) \\
+S/U/A splicing layers & Strong \\
+NMF interpretability & Moderate \\
+CZI validation & Strong \\
+Compression format & Weak \\
+\bottomrule
+\end{tabular}
+\caption{Competitive moat assessment.}
+\label{tab:moats}
+\end{table}
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Feature Priority}
+\label{sec:features}
+
+\subsection{Tier 1: Must-Have for Launch}
+
+\paragraph{F1: \texttt{singlet.load()} Gateway.}
+Flawless one-line data access: downloads .spz from R2, converts to AnnData,
+includes metadata. Must work in $<$10 seconds. No API key for Community tier.
+
+\paragraph{F2: Precomputed Cell Type Annotations.}
+Every dataset ships with standardized cell type annotations (Cell Ontology IDs,
+confidence scores). Users never annotate for basic use cases.
+
+\paragraph{F3: \texttt{singlet.query()} Multi-Dataset Search.}
+Query by species, tissue, disease. Returns matching datasets or merged AnnData
+with batch labels. This is what makes the product worth \$49/month.
+
+\paragraph{F4: Interactive Data Catalog.}
+Filterable web table of 12,000+ GSEs with species, tissue, disease, cell count,
+quality score. Sortable, searchable, direct download links.
+
+\subsection{Tier 2: Growth Accelerators (Months 1--6)}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}llc@{}}
+\toprule
+\textbf{\#} & \textbf{Feature} & \textbf{Persona} \\
+\midrule
+F5 & NMF Gene Program Catalog & Academic, Pharma \\
+F6 & Atlas-Referenced QC & Core Fac., Academic \\
+F7 & PyTorch DataLoader streaming & AI Biotech \\
+F8 & Target Explorer (gene-centric) & Pharma \\
+F9 & MCP Tools for AI agents & AI Biotech \\
+F10 & BYOD: upload $\to$ project & All \\
+\bottomrule
+\end{tabular}
+\caption{Growth accelerator features ranked by commercial impact.}
+\label{tab:features_t2}
+\end{table}
+
+The NMF Gene Program Catalog (F5) is the strongest differentiator: a browsable,
+queryable catalog of interpretable gene programs at atlas scale. No competitor
+has this.
+
+Target Explorer (F8) serves pharma's \#1 use case:
+\texttt{singlet.explore\_gene("TREM2")} returns cell-type-resolved expression
+across all published studies, replacing 2--4 weeks of FTE time per gene.
+
+\subsection{Tier 3: Enterprise Drivers (Months 6--12)}
+
+Private data integration (on-prem), cross-species factor alignment,
+disease-specific NMF program packages, process-as-a-service API for core
+facilities, benchmarking-as-a-service.
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Product Modifications}
+\label{sec:modifications}
+
+\subsection{Simplify to One Clear Story}
+
+Homepage story arc: (1)~Hero with 3-line code block, (2)~what's included
+(counts, QC, annotations, NMF), (3)~why uniform processing matters (one visual),
+(4)~scale (12,000+ datasets, 200+ species), (5)~how to start
+(\texttt{pip install singlet}), (6)~Pro tier for more.
+
+\textbf{Cut from homepage:} CELLxGENE comparison (move to docs), intelligence
+details (product page), community/funding credibility (about page), investor
+metrics (footer link to /invest).
+
+\subsection{Developer-First Positioning}
+
+Lead with Python, not the website. Hero section: dark code editor background
+with syntax-highlighted Python. Primary CTA: \texttt{pip install singlet}.
+``Try in Google Colab'' button. Side-by-side: 47~lines without Singlet vs.\
+3~lines with Singlet. Inspiration: Stripe, Hugging Face, FastAPI.
+
+\subsection{scverse Ecosystem Integration}
+
+scverse (scanpy, anndata, muon, pertpy) is the standard. Integration means:
+AnnData objects natively (done), scverse ecosystem listing, scverse coding
+standards, cross-referenced tutorials.
+
+\subsection{Rename ``Intelligence Layers''}
+
+Replace abstract marketing with concrete descriptions:
+``Standardized Annotations'' $\to$ ``Every dataset comes with cell type labels'';
+``NMF Embeddings'' $\to$ ``Gene programs: which processes are active'';
+``AI-Native Access'' $\to$ ``Ask questions in natural language.''
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Growth Strategy: Zero to 1,000 Customers}
+\label{sec:growth}
+
+\subsection{Phase 1: Community Gravity (Months 1--3)}
+
+Goal: 5,000 PyPI installs, 500 GitHub stars, 50 registered users.
+Actions: bioRxiv atlas preprint, PyPI launch with tutorials, Google Colab
+notebooks, weekly ``Dataset Spotlight'' social posts, scverse ecosystem
+submission, hackathon track.
+
+\subsection{Phase 2: Power User Activation (Months 3--6)}
+
+Goal: 100 Pro subscribers, 10 core facility pilots, first pharma conversation.
+Actions: Pro tier launch (NMF + annotations), Gene Program Catalog, QC tool,
+5 conference workshops (ISMB, ASCB, NeurIPS), cold outreach to 20 core
+facilities, Genome Biology submission.
+
+\subsection{Phase 3: Revenue Growth (Months 6--12)}
+
+Goal: \$200K ARR, 3 enterprise pilots, 500 Pro subscribers.
+Actions: Team tier, BYOD, enterprise conversations, Target Explorer, PyTorch
+streaming, model marketplace.
+
+\subsection{Phase 4: Enterprise Scale (Months 12--18)}
+
+Goal: \$1M ARR, 5 enterprise contracts, 2,000 Pro subscribers.
+Actions: on-prem deployment, cross-species alignment, disease NMF packages,
+process-as-a-service, sequencing company partnerships.
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Business Model: The Benchling Playbook}
+\label{sec:benchling}
+
+Free for academics, paid for industry. Benchling gave biotech R\&D tools free
+to academic labs, then charged \$100K+/yr when researchers moved to pharma.
+Now valued at \$6B+.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}llr@{}}
+\toprule
+\textbf{Tier} & \textbf{User} & \textbf{Price} \\
+\midrule
+Open Source & Everyone & Free (MIT) \\
+Academic & Researchers (.edu) & Free \\
+Pro & Biotech/pharma scientists & \$149/mo \\
+Enterprise & Large pharma & From \$25K/yr \\
+\bottomrule
+\end{tabular}
+\caption{Benchling-model pricing.}
+\label{tab:benchling}
+\end{table}
+
+\subsection{Revenue Projections}
+
+Year~1: \$200K ARR (500 Pro $\times$ \$49/mo $\times$ 8 months).
+Year~2: \$1M ARR (2,000 Pro + 50 Team + 3 Enterprise).
+Year~3: \$5M ARR (10,000 Pro + 500 Team + 15 Enterprise).
+
+%% ──────────────────────────────────────────────────────────────────
+\section{What the Product Currently Has vs.\ Needs}
+\label{sec:status}
+
+\subsection{Built}
+
+World's largest uniformly reprocessed atlas (from FASTQ), 200+ species, S/U/A
+splicing layers, RcppML NMF engine (319K+ downloads), CZI validation,
+$\sim$\$400K CZI grants, CPM architecture designed, $\sim$10$\times$ compression
+engine, NSF ACCESS allocation.
+
+\subsection{Not Yet Built}
+
+CPM encoder (training in progress), inference API, web application, revenue
+(\$0), customers (0), team (solo founder), enterprise sales capability.
+
+\subsection{Honest Positioning}
+
+Pre-product, pre-revenue company with an exceptional technical asset and a
+credible path to a defensible position. The atlas exists. The NMF engine works.
+What is needed: capital to hire an ML engineer, train the encoder, and ship
+the inference API.
+
+%% ──────────────────────────────────────────────────────────────────
+\section{Conclusion}
+\label{sec:conclusion}
+
+The fundamental insight: every serious single-cell researcher needs uniformly
+processed, queryable, annotated data at atlas scale. The critical risk: starting
+from zero customers means the product must demonstrate value in under 5~minutes.
+The one thing that matters most: make \texttt{singlet.load()} work flawlessly,
+and let the data do the talking.
+
+Positioning: Singlify is to single-cell data what Google Scholar is to papers---
+the first place you look when you need to know what has already been measured.
+
+\bibliographystyle{unsrtnat}
+\bibliography{refs}
+
+\end{document}

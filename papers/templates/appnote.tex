@@ -1,0 +1,61 @@
+%% Application note template — Singlet AI
+%% Short-form (2--4 pages) describing a software tool or database.
+\documentclass[10pt,twocolumn,letterpaper]{article}
+\usepackage{singletai-preprint}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{natbib}
+\bibliographystyle{unsrtnat}
+
+% Code listing style
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  columns=fullflexible,
+  breaklines=true,
+  frame=single,
+  backgroundcolor=\color[gray]{0.96},
+  language=Python,
+  showstringspaces=false,
+}
+
+% ── Metadata ─────────────────────────────────────────────────────
+\title{Software Name: A Brief Description}
+\author{
+  Zach DeBruine\textsuperscript{1,*}
+  \\[6pt]
+  \textsuperscript{1}Grand Valley State University, Allendale, MI
+}
+
+\begin{document}
+\maketitle
+\correspondingauthor{debruinz@gvsu.edu}
+
+\begin{abstract}
+  % 50--100 words. What does the tool do, why does it matter?
+  Abstract text goes here.
+\end{abstract}
+
+\keywords{software \and bioinformatics \and single-cell}
+
+\section{Introduction}
+% Brief motivation (1--2 paragraphs).
+
+\section{Features}
+% Key capabilities, with code examples:
+% \begin{lstlisting}
+% import singlet
+% adata = singlet.load("GSE136831")
+% \end{lstlisting}
+
+\section{Implementation}
+% Architecture, dependencies, performance.
+
+\section{Availability}
+Source code: \url{https://github.com/Singlet-AI/}.
+Documentation: \url{https://singlet-ai.github.io/}.
+
+\bibliography{refs}
+
+\end{document}

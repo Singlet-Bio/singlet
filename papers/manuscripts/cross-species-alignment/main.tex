@@ -1,0 +1,556 @@
+%% Cross-Species Alignment via Cycle-Consistent Adapter NMF
+%% Migrated from singlet-intelligence/docs/architecture/cross_species.md
+\documentclass[10pt,twocolumn,letterpaper]{article}
+\usepackage{../../templates/singletai-preprint}
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{natbib}
+\bibliographystyle{unsrtnat}
+
+% ── Metadata ─────────────────────────────────────────────────────
+\title{Cross-Species Alignment via Cycle-Consistent Adapter NMF}
+\author{
+  Zach DeBruine\textsuperscript{1,*}
+  \\[6pt]
+  \textsuperscript{1}Department of Computing, Grand Valley State University, Allendale, MI 49401
+}
+
+\begin{document}
+\maketitle
+\correspondingauthor{debruinz@gvsu.edu}
+
+\begin{abstract}
+We present a cycle-consistent adapter framework for aligning non-negative
+matrix factorization (NMF) models across species without paired observations,
+gene homology tables, or cell type labels. Given independently pre-trained NMF
+models for two species, we learn a non-negative adapter matrix $A$ that maps
+program activities between species while preserving reconstruction fidelity.
+The transpose parameterization $B = A^T$ provides a strong inductive bias
+toward permutation-like mappings, halving parameters and guaranteeing symmetric
+alignment. We derive multiplicative update rules for all variables---adapter,
+activities, and gene dictionaries---ensuring non-negativity by construction.
+Three algorithms are presented: one-sided alignment with a frozen reference
+(Algorithm~1), joint training (Algorithm~2), and a mini-batch extension
+(Algorithm~3) requiring only ${\sim}1.5$~GB memory regardless of dataset size.
+The framework extends naturally to $N > 2$ species via a hub-and-spoke
+architecture with human as the reference frame.
+\end{abstract}
+
+% ── Section 1 ────────────────────────────────────────────────────
+\section{Problem Statement}
+
+We have independently pre-trained NMF models for two species (human, mouse).
+Each model decomposes its atlas into gene programs:
+\begin{equation}
+  X_h \approx W_h H_h, \qquad X_m \approx W_m H_m
+\end{equation}
+where $W_s \in \mathbb{R}_{\geq 0}^{g_s \times k_s}$ are gene program
+dictionaries and $H_s \in \mathbb{R}_{\geq 0}^{k_s \times n_s}$ are program
+activities.
+
+\textbf{The problem:} Learn a mapping between program spaces such that
+biologically equivalent programs are aligned. We never observe paired
+mouse--human cells. We have no gene homology tables. We have no cell type
+labels as training signal. Only the internal geometry of each program space.
+
+\textbf{Key constraints:}
+\begin{itemize}
+  \item All matrices remain non-negative throughout (NMF structure preserved).
+  \item The human model is the \textbf{reference frame}---its program space
+        defines the universal vocabulary.
+  \item The mouse model may be fine-tuned to improve alignment while
+        maintaining reconstruction quality.
+  \item The mapping must be learnable via multiplicative updates (no
+        gradient-based optimizers, no negative intermediate values).
+\end{itemize}
+
+% ── Section 2 ────────────────────────────────────────────────────
+\section{Notation and Setup}
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+Symbol & Shape & Description \\
+\midrule
+$X_s$ & $g_s \times n_s$ & Expression matrix for species $s$ \\
+$W_s$ & $g_s \times k_s$ & Gene program dictionary \\
+$H_s$ & $k_s \times n_s$ & Program activities \\
+$A$ & $k_h \times k_m$ & Adapter: mouse $\to$ human \\
+$G_s = H_s H_s^T$ & $k_s \times k_s$ & Program co-activation Gram matrix \\
+$C_s = G_s / n_s$ & $k_s \times k_s$ & Program covariance \\
+$S = A^T A$ & $k_m \times k_m$ & Mouse-side cycle operator \\
+$P = A A^T$ & $k_h \times k_h$ & Human-side cycle operator \\
+\bottomrule
+\end{tabular}
+\caption{Notation. Typical dimensions: $g \approx 30{,}000$ genes,
+$k \approx 1{,}024$--$2{,}048$ programs, $n \approx 10^7$--$10^9$ cells.}
+\end{table}
+
+% ── Section 3 ────────────────────────────────────────────────────
+\section{Should Adapters Be Transposes?}
+
+\subsection{The Question}
+
+The previous formulation used two independent adapters:
+$A \in \mathbb{R}_{\geq 0}^{k_h \times k_m}$ (mouse$\to$human) and
+$B \in \mathbb{R}_{\geq 0}^{k_m \times k_h}$ (human$\to$mouse). Should we
+instead set $B = A^T$?
+
+\subsection{Analysis}
+
+\textbf{Theorem (Berman--Plemmons).} A non-negative matrix with a
+non-negative inverse is a \emph{monomial matrix}---a product of a permutation
+matrix and a positive diagonal matrix.
+
+If we require both $BA \approx I_{k_m}$ and $AB \approx I_{k_h}$ with
+$A, B \geq 0$, then $A$ is constrained to be approximately monomial. With
+$B = A^T$:
+\begin{itemize}
+  \item $A^T A \approx I_{k_m}$: columns of $A$ are approximately orthonormal.
+  \item $A A^T \approx I_{k_h}$: rows of $A$ are approximately orthonormal.
+  \item Combined with non-negativity: $A$ is approximately a
+        \textbf{permutation matrix} (or a padded permutation if
+        $k_h \neq k_m$).
+\end{itemize}
+
+A non-negative approximately-orthogonal matrix is approximately a permutation.
+This is a \emph{feature}, not a bug---it provides an extremely strong inductive
+bias toward crisp 1-to-1 program correspondences, which is the biologically
+expected structure for well-conserved programs.
+
+\subsection{Many-to-Many Mappings}
+
+If mouse program~12 genuinely corresponds to a blend of human programs
+$\{7, 23\}$, the transpose parameterization cannot represent this as a clean
+mapping. However:
+
+\begin{enumerate}
+  \item \textbf{Fine-tuning $W_m$ absorbs this.} The $W_m$ update can
+        reorganize mouse programs so that two distinct programs each correspond
+        to one human program, while reconstruction loss ensures fidelity.
+  \item \textbf{The cycle residual diagnoses it.} Programs that cannot be
+        cleanly aligned produce high cycle reconstruction error, flagging them
+        as species-divergent---valuable biological signal.
+  \item \textbf{The rectangular case handles dimensionality mismatch.} If
+        $k_h > k_m$, $A$ maps each mouse program to a direction in
+        $\mathbb{R}^{k_h}$. The constraint $A^T A \approx I_{k_m}$ says
+        these directions are orthonormal. The residual
+        $\|(I - AA^T) H_h\|_F^2$ identifies human programs with no mouse
+        counterpart.
+\end{enumerate}
+
+\subsection{Recommendation}
+
+\textbf{Use $B = A^T$ as the default parameterization.}
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+Property & Independent $A, B$ & Transpose $B = A^T$ \\
+\midrule
+Parameters & $2 k_h k_m$ & $k_h k_m$ \\
+Inductive bias & Weak & Strong (permutation) \\
+Identifiability & Degenerate solutions & Well-constrained \\
+Symmetry & May disagree & Guaranteed \\
+Divergent programs & Absorbed & Flagged by residual \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ── Section 4 ────────────────────────────────────────────────────
+\section{Algorithm 1: One-Sided Alignment}
+
+\subsection{Setting}
+
+The human model $(W_h, H_h)$ is frozen. We learn: $A$ (adapter),
+$H_m$ (mouse activities, fine-tuned under cycle pressure), and optionally
+$W_m$ (mouse dictionary, anchored to pretrained $W_m^{(0)}$).
+
+\subsection{Objective}
+
+\begin{align}
+  \mathcal{L} &= \underbrace{\|X_m - W_m H_m\|_F^2}_{\text{reconstruction}}
+  + \lambda_{\text{cyc}} \Big(
+    \underbrace{\|H_m - A^T\!A\,H_m\|_F^2}_{\text{mouse cycle}}
+    + \underbrace{\|H_h - AA^T\!H_h\|_F^2}_{\text{human cycle}}
+  \Big) \nonumber\\
+  &\quad + \lambda_{\text{str}}
+    \underbrace{\|C_h - A\,C_m\,A^T\|_F^2}_{\text{structural alignment}}
+  + \mu \underbrace{\|W_m - W_m^{(0)}\|_F^2}_{\text{anchor}}
+\end{align}
+
+\textbf{Loss terms:}
+\begin{itemize}
+  \item \textbf{Reconstruction:} Mouse model must still explain its data.
+  \item \textbf{Mouse cycle} ($A^T A \approx I$): Round-trip
+        mouse$\to$human$\to$mouse recovers original activities.
+  \item \textbf{Human cycle} ($AA^T \approx I$): Round-trip
+        human$\to$mouse$\to$human recovers activities. For $k_m < k_h$ this
+        cannot go to zero---the residual identifies human-specific programs.
+  \item \textbf{Structural alignment:} Co-activation geometry of mouse
+        programs, when mapped to human space, should match human geometry.
+  \item \textbf{Anchor:} Optional proximity penalty keeping $W_m$ near
+        pretrained value. Set $\mu = 0$ for unconstrained fine-tuning.
+\end{itemize}
+
+\subsection{Multiplicative Update Rules}
+
+Each update is derived by splitting the gradient $\partial \mathcal{L} / \partial \theta$
+into non-negative and non-positive components, yielding the Lee--Seung form:
+\begin{equation}
+  \theta \leftarrow \theta \odot
+    \frac{[\nabla_\theta \mathcal{L}]^-}{[\nabla_\theta \mathcal{L}]^+}
+\end{equation}
+
+\paragraph{$H_m$ Update.}
+\begin{equation}
+  \boxed{H_m \leftarrow H_m \odot
+    \frac{W_m^T X_m + 2\lambda_{\text{cyc}}\,S\,H_m}
+         {W_m^T W_m\,H_m + \lambda_{\text{cyc}}(I + S^2)\,H_m}}
+\end{equation}
+where $S = A^T A$ is $k_m \times k_m$ (precomputed once per iteration).
+
+\paragraph{$W_m$ Update.}
+\begin{equation}
+  \boxed{W_m \leftarrow W_m \odot
+    \frac{X_m H_m^T + \mu\,W_m^{(0)}}{W_m\,G_m + \mu\,W_m}}
+\end{equation}
+where $G_m = H_m H_m^T$. Standard NMF update with proximity anchor.
+
+\paragraph{$A$ Update.}
+Three gradient contributions (mouse cycle, human cycle, structural alignment)
+combine to:
+\begin{equation}
+  \boxed{A \leftarrow A \odot
+    \frac{2\lambda_{\text{cyc}}(AG_m + G_h A) + 2\lambda_{\text{str}}\,C_h A C_m}
+         {\lambda_{\text{cyc}}\big(A(SG_m\!+\!G_m S) + (PG_h\!+\!G_h P)A\big)
+          + 2\lambda_{\text{str}}\,(AC_m A^T)\,A\,C_m}}
+\end{equation}
+where $S = A^T A$, $P = A A^T$, $G_s = H_s H_s^T$, $C_s = G_s / n_s$
+(all precomputed). All terms are non-negative.
+
+\subsection{Algorithm Pseudocode}
+
+\begin{algorithm}[h]
+\caption{One-Sided Cycle-Consistent Adapter NMF}
+\begin{algorithmic}[1]
+\Require $X_m$, frozen $(W_h, H_h)$, pretrained $(W_m^{(0)}, H_m^{(0)})$,
+         $\lambda_{\text{cyc}}, \lambda_{\text{str}}, \mu, T$
+\State $W_m \gets W_m^{(0)}$; $H_m \gets H_m^{(0)}$;
+       $A \gets \text{random non-neg, col-normalized}$
+\State Precompute $G_h \gets H_h H_h^T$; $C_h \gets G_h / n_h$
+\For{$t = 1, \ldots, T$}
+  \State $G_m \gets H_m H_m^T$; $S \gets A^T A$
+  \State Update $H_m$ (Eq.~3)
+  \State $G_m \gets H_m H_m^T$ \Comment{recompute}
+  \State Update $W_m$ (Eq.~4); normalize columns, scale $H_m$
+  \State Recompute $G_m, C_m, S, P$
+  \State Update $A$ (Eq.~5)
+  \State Log losses: $L_{\text{recon}}, L_{\text{cyc\_m}}, L_{\text{cyc\_h}}, L_{\text{str}}$
+\EndFor
+\State \Return $W_m, H_m, A$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Inference}
+
+Given a new mouse cell $x_m$:
+
+\textbf{Step~1} --- Project to mouse programs:
+$h_m = \arg\min_{h \geq 0} \|x_m - W_m h\|^2$.
+
+\textbf{Step~2} --- Map to human program space:
+$h_h^{\text{pred}} = A\,h_m$.
+
+\textbf{Step~3} --- Decode through human dictionary:
+$\hat{x}_h = W_h\,h_h^{\text{pred}}$.
+
+\textbf{Confidence per program:} $(A^T A)_{jj} \approx 1$ means program $j$
+maps cleanly; $(A^T A)_{jj} \ll 1$ means species-divergent.
+$(I - AA^T)_{ii} \approx 1$ identifies human programs absent from the mouse
+mapping.
+
+% ── Section 5 ────────────────────────────────────────────────────
+\section{Algorithm 2: Joint Training}
+
+\subsection{Motivation}
+
+In Algorithm~1, the human model is frozen. Joint training allows both species'
+program spaces to co-adapt, potentially finding a geometry that is
+simultaneously faithful to each species' data and mutually alignable.
+
+\subsection{Objective}
+
+\begin{align}
+  \mathcal{L} &= \|X_h - W_h H_h\|_F^2 + \|X_m - W_m H_m\|_F^2 \nonumber\\
+  &\quad + \lambda_{\text{cyc}} \big(
+    \|H_m - S\,H_m\|_F^2 + \|H_h - P\,H_h\|_F^2
+  \big) \nonumber\\
+  &\quad + \lambda_{\text{str}} \big(
+    \|C_h - A\,C_m\,A^T\|_F^2
+    + \|C_m - A^T C_h\,A\|_F^2
+  \big)
+\end{align}
+
+The new updates for the human model are:
+\begin{equation}
+  H_h \leftarrow H_h \odot
+    \frac{W_h^T X_h + 2\lambda_{\text{cyc}}\,P\,H_h}
+         {W_h^T W_h\,H_h + \lambda_{\text{cyc}}(I + P^2)\,H_h}
+\end{equation}
+\begin{equation}
+  W_h \leftarrow W_h \odot \frac{X_h H_h^T}{W_h\,G_h}
+\end{equation}
+
+The joint $A$ update incorporates the second structural term, yielding
+identical numerator terms ($C_h A C_m$ appears twice, simplifying to
+$4\lambda_{\text{str}} C_h A C_m$).
+
+\subsection{Risk: Co-Adaptation Collapse}
+
+Joint training risks a degenerate solution where both models reorganize
+programs so alignment is trivial ($A \to I$) but programs lose biological
+meaning.
+
+\textbf{Why reconstruction prevents this:} The reconstruction losses are
+computed in \textbf{gene space} ($g \times n$), not program space. With
+$g \approx 30{,}000$ genes and $n \approx 10^8$ cells, reconstruction
+dominates by orders of magnitude.
+
+\textbf{Annealing is critical:} Start with $\lambda_{\text{cyc}} =
+\lambda_{\text{str}} = 0$ and linearly ramp up. Final $\lambda$ values
+should contribute $\leq 10\%$ of total loss.
+
+\textbf{Recommendation:} Run Algorithm~1 first. Use Algorithm~2 only if
+cycle residual on conserved programs is too high.
+
+% ── Section 6 ────────────────────────────────────────────────────
+\section{Computational Analysis}
+
+\subsection{The $C$ Matrix Is Not Large}
+
+All adapter operations are in \textbf{program space}, not gene or cell space:
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{@{}llr@{}}
+\toprule
+Matrix & Dimensions & Memory \\
+\midrule
+$C_s, G_s$ & $k \times k$ & ${\sim}33$~MB \\
+$A$ & $k_h \times k_m$ & ${\sim}33$~MB \\
+$S, P$ & $k \times k$ & ${\sim}33$~MB each \\
+\bottomrule
+\end{tabular}
+\caption{Memory for $k = 2048$, float64. All fit in L2 cache.}
+\end{table}
+
+\subsection{Computing $G = HH^T$ at Scale}
+
+$G_m = \sum_{i=1}^{n_m} h_i h_i^T$ via streaming accumulation. Memory:
+$O(k^2)$. For $k = 2048$, $n = 10^8$: ${\sim}100$~seconds at 4~TFLOPS
+(single A100)---negligible compared to NMF reconstruction updates.
+
+\subsection{Actual Bottlenecks}
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{@{}llr@{}}
+\toprule
+Operation & FLOPs & Note \\
+\midrule
+$W_m^T X_m$ & $O(k \cdot \text{nnz})$ & Sparse \\
+$W_m^T W_m H_m$ & $O(k^2 n)$ & Streamed \\
+Adapter update & $O(k^3)$ & Negligible \\
+\bottomrule
+\end{tabular}
+\caption{Adapter adds ${\sim}10^{10}$ FLOPs per iteration vs.\
+${\sim}10^{13}$ for NMF---three orders of magnitude smaller.}
+\end{table}
+
+% ── Section 7 ────────────────────────────────────────────────────
+\section{Mini-Batch Extension}
+
+To avoid storing the full $H_m$ ($k \times n$ can exceed 1~TB), we adopt an
+epoch-based mini-batch algorithm that accumulates sufficient statistics.
+
+\begin{algorithm}[h]
+\caption{Mini-Batch Cycle-Consistent Adapter NMF}
+\begin{algorithmic}[1]
+\For{each epoch}
+  \State $XH \gets 0 \in \mathbb{R}^{g_m \times k_m}$;
+         $G_m \gets 0 \in \mathbb{R}^{k_m \times k_m}$
+  \For{each batch $B$ of cells ($|B| \sim 10^3$--$10^4$)}
+    \State Load $X_B = X_m[:, B]$ from disk
+    \State $H_B \gets \text{NNLS}(W_m, X_B)$
+    \State Apply MU update to $H_B$ (Eq.~3)
+    \State $XH \mathrel{+}= X_B H_B^T$; \;
+           $G_m \mathrel{+}= H_B H_B^T$
+  \EndFor
+  \State Update $W_m$ using accumulated $XH, G_m$
+  \State Update $A$ using accumulated $G_m, C_m$
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\textbf{Memory budget:} ${\sim}1.5$~GB regardless of dataset size. The full
+$H_m$ is never materialized.
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{@{}llr@{}}
+\toprule
+Object & Size & Lifetime \\
+\midrule
+$X_B$ (batch) & ${\sim}300$~MB & Per-batch \\
+$H_B$ (batch) & ${\sim}20$~MB & Per-batch \\
+$XH$ accumulator & ${\sim}500$~MB & Per-epoch \\
+$W_m, A$ & ${\sim}530$~MB & Persistent \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ── Section 8 ────────────────────────────────────────────────────
+\section{Initialization}
+
+\textbf{$W_m, H_m$:} Start from pretrained mouse NMF (warm start).
+
+\textbf{$A$---Option~A (Random):} $A_{ij} \sim \text{Uniform}(0, 1/\sqrt{k_m})$,
+columns normalized to unit $L_2$.
+
+\textbf{$A$---Option~B (Spectral matching):} Compute eigendecompositions
+$C_s = U_s \Lambda_s U_s^T$, initialize
+$A \approx U_h[:,1{:}k_m] \cdot U_m[:,1{:}k_m]^T$, rectify to non-negative.
+Use when $k > 512$.
+
+\textbf{$A$---Option~C (Diagonal):} $A = \alpha I$ if $k_h = k_m$. Fast
+convergence if programs happen to be index-aligned.
+
+% ── Section 9 ────────────────────────────────────────────────────
+\section{Convergence and Normalization}
+
+\textbf{Monotonic decrease:} Each MU is derived via auxiliary functions
+(Lee \& Seung, 2001). Block-coordinate structure guarantees convergence to a
+stationary point.
+
+\textbf{Column normalization:} Normalize $W_m$ columns to unit $L_2$ after
+each update with compensating $H_m$ rescaling. Do \textbf{not} normalize $A$
+---the cycle loss regulates its scale.
+
+\textbf{Numerical stability:} Add $\epsilon = 10^{-10}$ to both numerator and
+denominator. Rarely triggered with warm starts.
+
+% ── Section 10 ───────────────────────────────────────────────────
+\section{Validation}
+
+\subsection{Intrinsic Metrics (No Labels)}
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{@{}llr@{}}
+\toprule
+Metric & Target \\
+\midrule
+Reconstruction error & $\leq 1.05\times$ pretrained \\
+Mouse cycle fidelity & $< 0.05$ \\
+Human cycle fidelity & Decreasing \\
+Structural alignment & $< 0.1$ \\
+Adapter orthogonality & $< 0.1$ \\
+Sparsity of $A$ (Gini) & $> 0.8$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Extrinsic Metrics (Held-Out Labels)}
+
+Cell type annotations provide post-hoc validation:
+\begin{itemize}
+  \item \textbf{Transfer accuracy:} Mean $h_m$ per mouse cell type, map via
+        $A$, match to nearest human centroid.
+  \item \textbf{Program coherence:} Gene set enrichment overlap for aligned
+        program pairs using ortholog mappings.
+  \item \textbf{Bidirectional consistency:} Transfer accuracy should be
+        similar in both directions.
+\end{itemize}
+
+\subsection{Biological Sanity Checks}
+
+Oxidative phosphorylation, ribosomal, and cell cycle programs should align
+with high confidence (deeply conserved). Immune programs should show partial
+alignment with species-specific residuals. Cycle residual magnitude should
+correlate with evolutionary divergence.
+
+% ── Section 11 ───────────────────────────────────────────────────
+\section{Summary of Design Decisions}
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+Decision & Choice & Rationale \\
+\midrule
+Parameterization & $B = A^T$ & Halves params; permutation bias \\
+Human model & Frozen or joint & Frozen is safer \\
+Loss terms & Recon+cycle+struct & Distinct roles \\
+Optimization & Multiplicative & Preserves non-negativity \\
+$C$ matrix & $k \times k$ & 33~MB regardless of $n$ \\
+Scalability & Mini-batch & 1.5~GB memory \\
+Annealing & $\lambda$ ramp from 0 & Recon first, then align \\
+Initialization & Pretrained + spectral & Warm start \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ── Appendix ─────────────────────────────────────────────────────
+\appendix
+\section{Extension to $N > 2$ Species}
+
+The framework extends to $N$ species by designating human as the hub:
+$A^{(s)} \in \mathbb{R}_{\geq 0}^{k_h \times k_s}$ for each species
+$s \neq \text{human}$. Cross-species transfer routes through human:
+\begin{equation}
+  \hat{h}_{\text{zf}} = (A^{(\text{zf})})^T \cdot A^{(\text{mouse})} \cdot h_{\text{mouse}}
+\end{equation}
+
+This hub-and-spoke architecture avoids $O(N^2)$ pairwise adapters, keeps human
+as the interpretable reference frame, and allows adding new species without
+retraining existing adapters.
+
+\section{Gradient Derivations}
+
+\subsection{Mouse Cycle Term}
+
+$f = \|(I - A^T A) H_m\|_F^2 = \text{tr}\big((I - S)^2 G_m\big)$.
+
+Expanding: $f = \text{tr}(G_m) - 2\,\text{tr}(SG_m) + \text{tr}(S^2 G_m)$.
+
+Using $\frac{\partial}{\partial A}\text{tr}(A^T A\,G_m) = 2AG_m$ and
+$\frac{\partial}{\partial A}\text{tr}(S^2 G_m) = 2A(SG_m + G_m S)$:
+\begin{equation}
+  \nabla_A f = -4AG_m + 2A(SG_m + G_m S)
+\end{equation}
+
+\subsection{Human Cycle Term}
+
+$f = \|(I - AA^T) H_h\|_F^2 = \text{tr}\big((I - P)^2 G_h\big)$.
+
+Using $\frac{\partial}{\partial A}\text{tr}(AA^T G_h) = 2G_h A$ and
+$\frac{\partial}{\partial A}\text{tr}(P^2 G_h) = 2(PG_h + G_h P)A$:
+\begin{equation}
+  \nabla_A f = -4G_h A + 2(PG_h + G_h P)A
+\end{equation}
+
+\subsection{Structural Alignment Term}
+
+$f = \|C_h - AC_m A^T\|_F^2$. Using the standard identity:
+\begin{equation}
+  \nabla_A f = -4C_h A C_m + 4(AC_m A^T)\,A\,C_m
+\end{equation}
+
+\bibliography{../../shared/refs}
+\end{document}

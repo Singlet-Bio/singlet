@@ -1,0 +1,51 @@
+%% Whitepaper template — Singlet AI
+%% Internal technical report or strategic document (single-column).
+\documentclass[11pt,letterpaper]{article}
+\usepackage{singletai-preprint}
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{natbib}
+\bibliographystyle{unsrtnat}
+
+% Override two-column for whitepaper
+\twocolumn[\vspace*{-1cm}]  % suppress — we want single column
+\onecolumn
+
+% ── Metadata ─────────────────────────────────────────────────────
+\title{Whitepaper Title}
+\author{
+  Zach DeBruine\textsuperscript{1,*}
+  \\[6pt]
+  \textsuperscript{1}Grand Valley State University, Allendale, MI
+}
+
+\begin{document}
+\maketitle
+\correspondingauthor{debruinz@gvsu.edu}
+
+\begin{abstract}
+  Executive summary (100--200 words).
+\end{abstract}
+
+\tableofcontents
+\vspace{1em}
+
+\section{Problem Statement}
+% What problem does this address? Market/scientific context.
+
+\section{Approach}
+% Technical or strategic approach.
+
+\section{Analysis}
+% Data, figures, tables supporting the argument.
+
+\section{Recommendations}
+% Concrete next steps.
+
+\section{Conclusion}
+
+\bibliography{refs}
+
+\end{document}
