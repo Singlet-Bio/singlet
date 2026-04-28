@@ -1,0 +1,89 @@
+# singlet-gpu/r/src/Makevars
+#
+# Build flags for the singletGpu Rcpp/CUDA extension.
+#
+# Environment variables read at build time:
+#   SINGLET_GPU_INCLUDE  — path to singlet-gpu/include (host headers + io/ preprocess/ reduce/)
+#                          default: /mnt/home/debruinz/Singlet-AI/singlet-gpu/include
+#   FACTORNET_INCLUDE    — path to factornet/include
+#                          default: /mnt/home/debruinz/factornet/include
+#   CUDA_HOME            — CUDA Toolkit root (default: /usr/local/cuda)
+#
+# The only .cpp file is singlet_gpu_r_bindings.cpp. It #includes the header-only
+# singlet-gpu library and factornet GPU headers.  No separate .cu file is needed
+# because we use -x cu to compile the .cpp as CUDA TU (nvcc accepts this).
+# R CMD SHLIB invokes $(CXX) for .cpp files; we override CXX to nvcc below.
+#
+# Cycle 52b Tier 1 headers (no new .cpp files needed — all header-only):
+#   _bind_fate.hpp      — cospar_cpp, cellrank2_cpp, palantir_cpp
+#   _bind_comm.hpp      — cellchat_cpp
+#   _bind_network.hpp   — hdwgcna_cpp
+#   _bind_abundance.hpp — milo_cpp
+#   _bind_disease.hpp   — scdrs_cpp
+#
+# Cycle 52b Tier 3 headers (no new .cpp files needed — all header-only):
+#   _bind_spatial_phaseb.hpp — flash_deconv_cpp, stagate_fit_cpp,
+#                               stagate_predict_cpp, cell2fate_fit_cpp,
+#                               cell2fate_predict_cpp
+#   _bind_generative.hpp     — discrete_diffusion_train_cpp,
+#                               discrete_diffusion_sample_cpp
+#   _bind_perturbation.hpp   — perturb_graph_fit_cpp, perturb_graph_predict_cpp
+#   _bind_enrich.hpp         — ssgsea_cpp, progeny_cpp
+#   _bind_qc_new.hpp         — omni_doublet_score_cpp, doublet_score_cpp
+#   _bind_nmf_new.hpp        — csi_gep_cpp
+#
+# Cycle 52b Tier 2 headers (no new .cpp files needed — all header-only):
+#   _bind_grn.hpp      — granie_cpp (uses cuSPARSE SpMM + cuRAND Philox for seed)
+#   _bind_eqtl.hpp     — nebula_cpp (uses cub DeviceSegmentedReduce/Sort)
+#   _bind_ase.hpp      — daesc_cpp  (uses cub DeviceRadixSort + DeviceReduce)
+#   _bind_cna.hpp      — detect_cna_cpp (uses cub DeviceReduce + leiden.h)
+#   _bind_variants.hpp — call_variants_cpp (uses cuSPARSE SpMV for LD scoring)
+#   _bind_atac.hpp     — chromvar_cpp (uses cuRAND Philox4x32 for permutations)
+# cuRAND device-side random (Philox): required by chromVAR permutations + GRaNIE seed.
+# cuRAND is header-only for device code; no -lcurand needed at link time for
+# device-side <curand_kernel.h>. curandHost (host API) is NOT used.
+#
+# Cell2fate and PerturbGraph use cuDNN for neural ODE / VAE training.
+# Add -lcudnn to PKG_LIBS (see below).
+#
+# Each header uses the dual-compile #ifndef FACTORNET_HAS_GPU guard to return
+# list(error="GPU not available") stubs when CUDA is not available at build time.
+
+SINGLET_GPU_INCLUDE ?= /mnt/home/debruinz/Singlet-AI/singlet-gpu/include
+FACTORNET_INCLUDE   ?= /mnt/home/debruinz/factornet/include
+CUDA_HOME           ?= /usr/local/cuda
+
+CUDA_INCLUDE = $(CUDA_HOME)/include
+CUDA_LIB     = $(CUDA_HOME)/lib64
+
+# Preprocessor flags
+PKG_CPPFLAGS = \
+    -I$(SINGLET_GPU_INCLUDE) \
+    -I$(FACTORNET_INCLUDE) \
+    -I$(CUDA_INCLUDE) \
+    -DSINGLET_GPU_HEADER_ONLY=1 \
+    -DFACTORNET_HAS_GPU=1 \
+    -std=c++17
+
+# Linker flags — CUDA runtime + cuSPARSE + cuBLAS + cuDNN
+# cuDNN is required by Cell2fate (neural ODE) and PerturbGraph (VAE encoder).
+PKG_LIBS = \
+    -L$(CUDA_LIB) \
+    -lcuda \
+    -lcudart \
+    -lcusparse \
+    -lcublas \
+    -lcudnn \
+    -lzstd
+
+# Override the C++ compiler to nvcc so it can handle CUDA device code in headers.
+# -x cu: treat .cpp as CUDA source.
+# --use_fast_math: enables fast intrinsics (sinf, rsqrtf, etc.).
+# -arch=sm_70,sm_80,sm_90: Volta + Ampere + Hopper.
+# -Xcompiler: forward flags to the host compiler (gcc/clang).
+CXX = $(CUDA_HOME)/bin/nvcc
+CXXFLAGS = -x cu --use_fast_math -O3 \
+    -gencode arch=compute_70,code=sm_70 \
+    -gencode arch=compute_80,code=sm_80 \
+    -gencode arch=compute_90,code=sm_90 \
+    -Xcompiler "-fPIC -O3 -std=c++17"

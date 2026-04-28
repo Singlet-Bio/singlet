@@ -1,0 +1,1 @@
+/var/spool/slurm/d/job360748/slurm_script: line 207: 54831 Aborted                 (core dumped) "${BENCH_BIN}" 2>&1
