@@ -2,14 +2,12 @@
 
 **Python client for the Singlet single-cell atlas.**
 
-3,309 datasets • 354M cells • 24 species • ~13× compression • Embedded metadata • PyTorch GPU tensors
+2,330 samples • 964 successful • 2.8M cells • 7 species • 1,153 GEO series • ~13× .1pz compression
 
 ## Install
 
 ```bash
-pip install singlet                # Core + AnnData
-pip install singlet[torch]         # + PyTorch GPU support
-pip install singlet[all]           # + zarr, TileDB-SOMA, torch
+pip install singlet-bio
 ```
 
 ## Quick Start
@@ -17,39 +15,57 @@ pip install singlet[all]           # + zarr, TileDB-SOMA, torch
 ```python
 import singlet
 
-# Browse the catalog (free, works offline)
-df = singlet.catalog(search="lung")
-human = singlet.datasets(organism="Homo sapiens", min_cells=100_000)
+# Browse the atlas catalog (free, works offline)
+singlet.summary()
+# → 2,330 samples, 964 SUCCESS, 7 species, 2.83M cells
 
-# Load a dataset → AnnData (with embedded obs, var, uns metadata)
-adata = singlet.load("GSE136831")
-print(adata.obs.columns)  # barcode, gsm_id, organism, total_counts
-print(adata.uns["title"])  # Study title from GEO
+df = singlet.samples(organism="Homo sapiens", status="SUCCESS")
+singlet.species()
+singlet.top_series(n=10)
 
-# Load a single sample by column-range read
-sample = singlet.load_sample("GSM3308814")
+# Load a singlify output directory → AnnData
+adata = singlet.load_dir("/path/to/quant/GSM3573650")
+# → 75,420 cells × 38,606 genes
+# obs: total_umis, total_genes, mt_pct, ribo_pct, intronic_pct,
+#      doublet_score, is_doublet
+# var: gene_id (Ensembl)
 
-# Kraken2 microbiome matrix
-k2 = singlet.read_kraken2("/path/to/GSE117795/")
+# Load a .1pz file directly
+adata = singlet.read_1pz("/path/to/gene_counts.1pz")
 
-# PyTorch DataLoader with normalization
-from singlet.torch import DataLoader
-loader = DataLoader("GSE136831", batch_size=512, normalize=True, device="cuda")
+# Standard scanpy workflow
+import scanpy as sc
+adata = adata[~adata.obs['is_doublet'].astype(bool)]
+sc.pp.normalize_total(adata, target_sum=1e4)
+sc.pp.log1p(adata)
+sc.pp.highly_variable_genes(adata)
+sc.tl.pca(adata)
+sc.pp.neighbors(adata)
+sc.tl.umap(adata)
+sc.tl.leiden(adata)
 ```
 
 ## Features
 
 | Feature | Details |
 |---------|---------|
-| **Catalog** | Browse 3,309 datasets by organism, protocol, cell count |
-| **Metadata** | Embedded obs/var/uns in .1pz — barcode, gsm_id, gene_name, study info |
-| **Kraken2** | Per-dataset microbiome matrices (3,240 datasets) |
+| **Catalog** | Browse 2,330 samples by organism, protocol, status, quality tier |
+| **load_dir()** | Read singlify output directory → AnnData with QC + doublets |
+| **read_1pz()** | Read .1pz sparse matrix → AnnData |
 | **Compression** | singlepress .1pz format — ~13× vs raw CSC |
 | **PyTorch** | `OnePZDataset` + `DataLoader` with log-normalization |
-| **Sample access** | Column-range reads via `load_sample()` + sample_index |
-| **Formats** | HDF5, Zarr, TileDB-SOMA, MTX, CSC sparse |
-| **Local + Remote** | Local catalog (instant) or Zenodo download (free) |
-| **Preprocessing** | Full FASTQ→.1pz pipeline (simpleaf + piscem) |
+| **Offline** | Bundled catalog parquet — no network needed for browsing |
+
+## Notebooks
+
+7 executed Jupyter notebooks at [`notebooks/`](notebooks/):
+- **quickstart** — Atlas catalog exploration
+- **gene_counting** — Equivalence vs STARsolo (r=0.9995)
+- **sex_calling** — XIST/SRY validation (100% agreement)
+- **ambient_rna** — Ambient contamination profiling
+- **doublet_detection** — UMI-based doublet scoring
+- **corpus_analytics** — Atlas-wide QC distributions
+- **01_load_and_explore** — Full scanpy pipeline on 75K cells
 
 ## Documentation
 
