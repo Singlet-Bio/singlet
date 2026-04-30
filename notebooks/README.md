@@ -1,12 +1,12 @@
 # singlet Notebooks
 
-17 executed Jupyter notebooks demonstrating the singlet ecosystem.
+18 executed Jupyter notebooks demonstrating the singlet ecosystem.
 
 ## Getting Started
 
 | Notebook | Description |
 |----------|-------------|
-| [quickstart.ipynb](quickstart.ipynb) | Browse the atlas catalog — 2,358 samples, filters, statistics |
+| [quickstart.ipynb](quickstart.ipynb) | Browse the atlas catalog — 2,386 samples, filters, statistics |
 | [01_load_and_explore.ipynb](01_load_and_explore.ipynb) | Load 75K cells with `load_dir()`, cluster with scanpy (PCA→UMAP→Leiden) |
 | [sample_qc_report.ipynb](sample_qc_report.ipynb) | Complete one-call QC report — UMIs, genes, doublets, cell cycle, ancestry |
 | [pipeline_outputs.ipynb](pipeline_outputs.ipynb) | Reference guide: all 40+ files singlify produces per sample |
@@ -36,8 +36,14 @@
 | Notebook | Description |
 |----------|-------------|
 | [gene_counting.ipynb](gene_counting.ipynb) | Formal equivalence vs STARsolo (r=0.9995) |
-| [corpus_analytics.ipynb](corpus_analytics.ipynb) | Atlas-wide QC distributions across 975 samples |
+| [corpus_analytics.ipynb](corpus_analytics.ipynb) | Atlas-wide QC distributions across 993 samples |
 | [protocol_detection.ipynb](protocol_detection.ipynb) | 15+ protocols auto-detected, QC by protocol |
+
+## Format & I/O
+
+| Notebook | Description |
+|----------|-------------|
+| [1pz_format.ipynb](1pz_format.ipynb) | .1pz format: 8.7× smaller than h5ad, faster reads |
 
 ## Requirements
 
@@ -48,9 +54,9 @@ pip install "singlet-bio @ git+https://github.com/Singlet-Bio/singlet#subdirecto
 
 ## Atlas Stats
 
-- **2,358** samples processed
-- **979** successful (42%)
-- **1,164** GEO series
-- **7** species (human, mouse, rat, zebrafish, pig, chicken, macaque)
-- **2.89M** total cells
-- **17** notebooks with executed outputs
+- **2,386** samples processed
+- **993** successful (42%)
+- **1,178** GEO series
+- **7** species (human, mouse, macaque, fruit fly, chicken, zebrafish, chimpanzee)
+- **2.93M** total cells
+- **18** notebooks with executed outputs
