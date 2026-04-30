@@ -375,6 +375,11 @@ def load_dir(
         with open(summary_file) as f:
             adata.uns["summary"] = _json.load(f)
 
+    # Store saturation curve if available
+    sat_file = path / "saturation_curve.tsv"
+    if sat_file.exists():
+        adata.uns["saturation_curve"] = pd.read_csv(sat_file, sep="\t")
+
     # Store source path
     adata.uns["singlify_dir"] = str(path)
 
