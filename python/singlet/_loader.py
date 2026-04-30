@@ -256,3 +256,96 @@ def load_sample(
         adata = adata[:, gene_mask].copy()
 
     return adata
+
+
+def load_dir(
+    path: str | Path,
+    *,
+    layer: str = "gene_counts",
+    with_qc: bool = True,
+    with_doublets: bool = True,
+):
+    """Load a singlify pipeline output directory as AnnData.
+
+    Reads the count matrix (.1pz), attaches gene names from
+    gene_expression.tsv, cell barcodes from auto_barcodes.tsv,
+    and optionally merges QC metrics and doublet scores.
+
+    Parameters
+    ----------
+    path : str or Path
+        Path to a singlify sample output directory (containing
+        gene_counts.1pz, auto_barcodes.tsv, gene_expression.tsv).
+    layer : str
+        Which .1pz to load: "gene_counts", "exon_counts", "intron_counts",
+        or "gene_counts_em". Default "gene_counts".
+    with_qc : bool
+        Merge cell_qc_metrics.tsv into obs if available.
+    with_doublets : bool
+        Merge doublet_scores.tsv into obs if available.
+
+    Returns
+    -------
+    anndata.AnnData
+        Sparse count matrix (cells × genes) with metadata.
+
+    Examples
+    --------
+    >>> import singlet
+    >>> adata = singlet.load_dir("/path/to/quant/GSM3573650")
+    >>> adata
+    AnnData object with n_obs × n_vars = 75420 × 38606
+    """
+    import pandas as pd
+    import numpy as np
+    from singlet._io import read_1pz
+
+    path = Path(path)
+    if not path.is_dir():
+        raise FileNotFoundError(f"Not a directory: {path}")
+
+    # Read count matrix
+    pz_file = path / f"{layer}.1pz"
+    if not pz_file.exists():
+        raise FileNotFoundError(f"Missing {pz_file}")
+    adata = read_1pz(pz_file)
+
+    # Attach gene names
+    gene_file = path / "gene_expression.tsv"
+    if gene_file.exists():
+        genes = pd.read_csv(gene_file, sep="\t", usecols=["gene_id", "gene_name"])
+        if len(genes) == adata.n_vars:
+            adata.var_names = pd.Index(genes["gene_name"].values)
+            adata.var["gene_id"] = genes["gene_id"].values
+
+    # Attach barcodes
+    bc_file = path / "auto_barcodes.tsv"
+    if bc_file.exists():
+        barcodes = pd.read_csv(bc_file, header=None)[0].values
+        if len(barcodes) == adata.n_obs:
+            adata.obs_names = pd.Index(barcodes)
+
+    # Merge QC metrics
+    if with_qc:
+        qc_file = path / "cell_qc_metrics.tsv"
+        if qc_file.exists():
+            qc = pd.read_csv(qc_file, sep="\t", index_col="barcode")
+            overlap = adata.obs_names.intersection(qc.index)
+            if len(overlap) > 0:
+                for col in qc.columns:
+                    adata.obs[col] = qc[col].reindex(adata.obs_names).values
+
+    # Merge doublet scores
+    if with_doublets:
+        dub_file = path / "doublet_scores.tsv"
+        if dub_file.exists():
+            dub = pd.read_csv(dub_file, sep="\t", index_col="barcode")
+            overlap = adata.obs_names.intersection(dub.index)
+            if len(overlap) > 0:
+                for col in dub.columns:
+                    adata.obs[col] = dub[col].reindex(adata.obs_names).values
+
+    # Store source path
+    adata.uns["singlify_dir"] = str(path)
+
+    return adata

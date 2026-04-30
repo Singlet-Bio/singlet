@@ -36,7 +36,7 @@ from singlet._catalog import (
     catalog, info, species, datasets, sample_index, set_catalog_dir,
     summary, samples, top_series,
 )
-from singlet._loader import load, load_sample, download
+from singlet._loader import load, load_sample, load_dir, download
 from singlet._auth import login
 from singlet._query import query, search
 from singlet._io import (
@@ -60,6 +60,7 @@ __all__ = [
     # Load
     "load",
     "load_sample",
+    "load_dir",
     "download",
     # Token-priced
     "login",
