@@ -19,13 +19,29 @@ import sys
 # Ensure we can import from the local package
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from singlet.mcp.server import (
-    _tool_stats,
-    _tool_search,
-    _tool_qc,
-    _tool_load,
-    _tool_browse,
-)
+# Try importing from the server module; if MCP SDK is missing, mock it first
+try:
+    from singlet.mcp.server import (
+        _tool_stats,
+        _tool_search,
+        _tool_qc,
+        _tool_load,
+        _tool_browse,
+    )
+except SystemExit:
+    # MCP SDK not installed — mock it so we can import tool functions
+    from unittest.mock import MagicMock
+    sys.modules["mcp"] = MagicMock()
+    sys.modules["mcp.server"] = MagicMock()
+    sys.modules["mcp.server.stdio"] = MagicMock()
+    sys.modules["mcp.types"] = MagicMock()
+    from singlet.mcp.server import (
+        _tool_stats,
+        _tool_search,
+        _tool_qc,
+        _tool_load,
+        _tool_browse,
+    )
 
 
 async def run_smoke_tests():

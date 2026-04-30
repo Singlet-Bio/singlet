@@ -235,13 +235,42 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
 
 async def _tool_stats() -> dict:
-    """Get corpus-wide statistics."""
+    """Get corpus-wide statistics using the materialized view."""
     client = get_client()
-    resp = client.table("samples").select(
-        "status, cells_called, organism, gse_id, mapping_rate, median_genes"
-    ).execute()
-    rows = resp.data or []
 
+    # Try pre-computed corpus_stats view (refreshed by ETL)
+    try:
+        resp = client.from_("corpus_stats").select("*").execute()
+        if resp.data:
+            row = resp.data[0]
+            return {
+                "total_samples": row.get("total_samples", 0),
+                "successful_samples": row.get("success_samples", 0),
+                "total_cells": row.get("total_cells", 0),
+                "species_count": row.get("species_count", 0),
+                "series_count": row.get("series_count", 0),
+                "success_rate": row.get("success_rate", 0),
+                "avg_mapping_rate": row.get("avg_mapping_rate", 0),
+                "avg_median_genes": row.get("avg_median_genes", 0),
+            }
+    except Exception:
+        pass  # Fall through to direct query
+
+    # Fallback: query directly (paginate to avoid row limit)
+    all_rows = []
+    page_size = 1000
+    offset = 0
+    while True:
+        resp = client.table("samples").select(
+            "status, cells_called, organism, gse_id, mapping_rate, median_genes"
+        ).range(offset, offset + page_size - 1).execute()
+        batch = resp.data or []
+        all_rows.extend(batch)
+        if len(batch) < page_size:
+            break
+        offset += page_size
+
+    rows = all_rows
     success = [r for r in rows if r["status"] == "SUCCESS"]
     terminal = [r for r in rows if r["status"] in ("SUCCESS", "SOFT_FAIL", "HARD_FAIL")]
 
