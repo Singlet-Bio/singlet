@@ -3517,3 +3517,30 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
   - **embed/diffmap** (CYCLE-150, scanpy `sc.tl.diffmap` is the direct ref)
   Default: enrich/score_genes (cleanest scanpy parity reference + similar kernel size).
 
+## Cycle 158 (2026-04-30) — Phase E bench for enrich/score_genes (PARTIAL — GPU PASS, scanpy FAIL)
+- **Feature**: enrich/score_genes (CYCLE-129, Satija et al. 2015 per-cell gene-set scoring). Phase E bench filling the medium-scale rows of the pareto-frontier entry.
+- **Outcome**: PARTIAL. **GPU bench PASS** (10k = 1.110 ms, 30k = 1.403 ms on g003 V100S, job 371072). **scanpy CPU baseline FAILED** with `ValueError: No valid genes were passed for scoring` — the bench ref script `score_genes_ref.py:47` did `var={"gene_id": var_names}` (sets a COLUMN of `var`) instead of setting the var INDEX (`adata.var_names`). scanpy's `gene_list` argument is matched against `adata.var_names`, not against arbitrary columns. Fixed in this commit (3-line change: build AnnData first, then assign `adata.var_names = var_names`).
+- **GPU job timeline (queue-management lesson — extends §J.2)**:
+  - Initial submit job 370982: `--nodelist=g050` (single H100). PD on Priority for 25 min while g050 was busy.
+  - First resubmit job 371067: `--nodelist=g003,g004,g050,g051,g052` to broaden node pool. Surprise! SLURM interpreted the 5-node comma-list as `--nodes=5` (wanted ALL 5 nodes), so the job queued as a 5-node job and stayed PD on Priority.
+  - Final resubmit job 371072: `--exclude=g001,g002,g005` — this rejects busy/unwanted nodes and gives SLURM freedom to pick any one allowed node. Immediately landed on idle g003.
+  - Style-rules §J.2 extended in same iteration with the `--nodelist` vs `--exclude` gotcha.
+- **Files**:
+  - `bench/bench_enrich_score_genes_perf.cpp` (NEW, ~250 LOC): GPU bench driver, 10k/30k synth CSC × 5k genes density 5%, 5 sets × 50 genes random uniform, 2 warmup + 5 timed cudaEvent.
+  - `bench/refs/score_genes_ref.py` (NEW, 116 LOC + 3-line fix): scanpy.tl.score_genes loop CPU baseline. Fixed to use `adata.var_names = var_names` (setting the index) instead of `var={"gene_id":...}` (setting a column).
+  - `state/cycle158_score_genes_bench.sh` (NEW, ~110 LOC): SLURM script. After two failed nodelist submissions, uses `--exclude=g001,g002,g005`.
+  - `bench/CMakeLists.txt`: driver count → 22.
+- **GPU numbers (from job 371072 log)**:
+  ```
+  scale | GPU_wall_ms | scanpy_wall_ms | speedup
+  10k   |       1.110 |           -1.0 | -0.9x  (scanpy errored)
+  30k   |       1.403 |           -1.0 | -0.7x  (scanpy errored)
+  ```
+  GPU throughput: 10k cells in 1.1 ms = 9.0 M cells/s; 30k in 1.4 ms = 21 M cells/s. (Throughput grows with n_cells because the per-call constant overhead amortizes.)
+- **Lessons**:
+  1. **AnnData var_names vs var columns**: `adata.var_names = list_of_names` sets the INDEX of `var` and is what scanpy's `gene_list=` arg matches against. `var={"col": list}` sets a column called "col" — scanpy ignores it for gene-name lookup. Surprisingly easy to confuse; the silent failure mode is "no valid genes were passed". Add to `bench/refs/README` once it exists.
+  2. **§J.2 extension on `--nodelist` semantics**: comma-list of 5 nodes → SLURM treats as 5-node job. Use `--exclude` (reject) for "any node from set" semantics, or single `--nodelist=g003` (pin) for "exactly this node".
+  3. **Mixed-outcome cycles are real and worth committing**: GPU side worked clean and produced 2 new pareto-frontier rows of real data; scanpy side had a 1-line bug that's already fixed in the same commit. Marking the cycle PARTIAL preserves both the partial win and the open follow-up (CYCLE-158.1).
+- **CYCLE-158.1 follow-up filed**: re-run `state/cycle158_score_genes_bench.sh` after the `score_genes_ref.py` fix lands. ~10-min cycle (build is cached; only need to re-run the scanpy CPU portion). Will add scanpy CPU wall_ms to the pareto-frontier rows.
+- **Next cycle**: CYCLE-159 — pick from queue. Options: (a) **CYCLE-158.1 re-run** (small; just resubmits the SLURM script after the Python fix), (b) **next Phase E feature** (preprocess/magic, model_gene_var, embed/diffmap, etc.), (c) **CYCLE-122 enrichment zero-output diagnosis** (single-hypothesis debug). Default: CYCLE-158.1 (smallest concrete cycle, completes the score_genes pareto row).
+

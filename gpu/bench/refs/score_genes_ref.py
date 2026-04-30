@@ -42,9 +42,10 @@ def make_synthetic_adata(n_cells: int, n_genes: int, density: float, seed: int =
                   dtype=np.float32, random_state=rng)
     # Snap to integer counts in [1, 15] for nonzeros (UMI-like).
     X.data = np.clip(np.round(X.data * 15.0).astype(np.float32), 1.0, 15.0)
-    # Assign var names so scanpy can look up gene lists by name.
     var_names = [f"gene_{i}" for i in range(n_genes)]
-    return ad.AnnData(X=X, var={"gene_id": var_names})
+    adata = ad.AnnData(X=X)
+    adata.var_names = var_names
+    return adata
 
 
 def make_gene_lists(n_genes: int, n_sets: int, set_size: int, seed: int = 99):
