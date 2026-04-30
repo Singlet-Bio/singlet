@@ -4,7 +4,7 @@ Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movemen
 
 ## 🔴 Active this cycle
 
-- **CYCLE-159-PHASE-E-MAGIC** (queued): bench preprocess/magic at 10k/30k — cuSPARSE SpMM-heavy kernel, scanpy `sc.external.pp.magic` SOTA. Pattern matches CYCLE-157/158: Sonnet gpu-bench writes 3 files + CMake entry, submits SLURM with `--exclude=g001,g002,g005` per §J.2.
+- **CYCLE-159-PHASE-E-DIFFMAP** (in flight, job 371207 RUNNING on g003): pivoted from preprocess/magic (uncertain `magic-impute` Python dep) to embed/diffmap (clean `sc.tl.diffmap` ref, freshly promoted in CYCLE-150). Sonnet wrote `bench/bench_embed_diffmap_perf.cpp` (10k/30k × 50 PCs dense, k=10 untimed kNN warmup, time only diffmap call), `bench/refs/diffmap_ref.py` (sc.pp.neighbors untimed → sc.tl.diffmap timed), `state/cycle159_diffmap_bench.sh` (`--exclude=g001,g002,g005` per §J.2). CMake → 23 drivers. 30-min walltime; expected ~20 min total runtime.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
