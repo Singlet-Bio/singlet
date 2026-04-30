@@ -10,14 +10,15 @@ Tutorial and reproducibility notebooks for the singlet ecosystem.
 | [01_load_and_explore.ipynb](01_load_and_explore.ipynb) | Load a .1pz file, QC, cluster, and visualize |
 | [02_gpu_analysis.ipynb](02_gpu_analysis.ipynb) | Full GPU-accelerated scRNA-seq pipeline with singlet-gpu |
 
-## Reproducibility
+## Reproducibility & Analysis
 
 | Notebook | Feature | E2E Panel |
 |----------|---------|-----------|
-| gene_counting.ipynb | Gene quantification equivalence vs STARsolo | A |
-| donor_demux.ipynb | Donor demultiplexing | B |
-| atac_fragments.ipynb | ATAC fragment generation | C |
-| cite_seq_adt.ipynb | CITE-seq ADT counting | D |
+| [gene_counting.ipynb](gene_counting.ipynb) | Gene quantification equivalence vs STARsolo (r=0.9995) | A |
+| [sex_calling.ipynb](sex_calling.ipynb) | Sex chromosome calling (100% concordance) | F |
+| [ambient_rna.ipynb](ambient_rna.ipynb) | Ambient RNA contamination profiling | G |
+| [doublet_detection.ipynb](doublet_detection.ipynb) | Computational doublet detection | H |
+| [corpus_analytics.ipynb](corpus_analytics.ipynb) | Atlas-wide QC distributions and filtering | — |
 
 ## Requirements
 
