@@ -291,10 +291,15 @@ def samples(
     if quality_tier is not None:
         df = df[df["status"] == "SUCCESS"]
         cells_col = "cells_called" if "cells_called" in df.columns else "n_cells"
+        has_genes = "median_genes" in df.columns
         if quality_tier == "gold":
-            df = df[(df["mapping_rate"] >= 0.7) & (df["median_genes"] >= 500) & (df[cells_col] >= 500)]
+            df = df[(df["mapping_rate"] >= 0.7) & (df[cells_col] >= 500)]
+            if has_genes:
+                df = df[df["median_genes"] >= 500]
         elif quality_tier == "silver":
-            df = df[(df["mapping_rate"] >= 0.5) & (df["median_genes"] >= 200) & (df[cells_col] >= 100)]
+            df = df[(df["mapping_rate"] >= 0.5) & (df[cells_col] >= 100)]
+            if has_genes:
+                df = df[df["median_genes"] >= 200]
     return df.reset_index(drop=True)
 
 
@@ -326,13 +331,16 @@ def top_series(
 
     cells_col = "cells_called" if "cells_called" in df.columns else "n_cells"
 
-    grouped = df.groupby("gse_id").agg(
-        n_samples=(cells_col, "count"),
-        total_cells=(cells_col, "sum"),
-        avg_mapping_rate=("mapping_rate", "mean"),
-        avg_median_genes=("median_genes", "mean"),
-        organism=("organism", "first"),
-    ).reset_index()
+    agg_dict = {
+        "n_samples": (cells_col, "count"),
+        "total_cells": (cells_col, "sum"),
+        "avg_mapping_rate": ("mapping_rate", "mean"),
+        "organism": ("organism", "first"),
+    }
+    if "median_genes" in df.columns:
+        agg_dict["avg_median_genes"] = ("median_genes", "mean")
+
+    grouped = df.groupby("gse_id").agg(**agg_dict).reset_index()
 
     grouped = grouped[grouped["n_samples"] >= min_samples]
     grouped = grouped.sort_values("total_cells", ascending=False).head(n)
