@@ -2,15 +2,20 @@
 singlet — Python client for the Singlet single-cell atlas.
 
 Browse catalog (works offline):
-    singlet.catalog()                      Browse all 3,309 datasets
+    singlet.catalog()                      Browse all datasets
     singlet.catalog("lung")                Search by keyword
     singlet.info("GSE136831")              Dataset metadata
-    singlet.sample_index("GSE136831")      Per-sample column offsets
+    singlet.sample_index()                 Full sample index DataFrame
+    singlet.species()                      Species breakdown
     singlet.datasets(organism="Homo sapiens", min_cells=100000)
+    singlet.samples(status="SUCCESS")      Filter samples
+    singlet.top_series(n=10)               Largest series
+    singlet.summary()                      Atlas overview
 
 Load data:
     singlet.load("GSE136831")              Load from local catalog or Zenodo → AnnData
     singlet.load("path/to/counts.1pz")     Load local .1pz file
+    singlet.load_dir("/path/to/quant/GSM") Load singlify output directory → AnnData
     singlet.load_sample("GSM3308814")      Load single sample (column-range read)
 
 Format I/O:
