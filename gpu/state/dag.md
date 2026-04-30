@@ -4,7 +4,7 @@ Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movemen
 
 ## 🔴 Active this cycle
 
-- **PAUSED** — HPC emergency maintenance. SLURM jobs cancelled. CYCLE-150 diffmap had Test 1 + Test 2 fixes pending verify (job 370270 cancelled before run). Resume with `sbatch state/cycle150_diffmap.sh` after maintenance window closes.
+- **CYCLE-151-PHASE-H-DOCS-BACKFILL**: write `docs/api/{slug}.md` for the recent frontier features missing API docs (diffmap, kmeans, dendrogram, dpt, soupx, kbet, asw, symphony, celltypist, magic, score_genes, ulm, mlm, viper, ora, wsum_wmean, combat, lisi, empty_drops, model_gene_var, pearson_residuals — Rule 25 debt, dispatched to gpu-doc-scribe in batches). Reduce queue before continuing port spree.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
@@ -30,6 +30,8 @@ Frobenius NMF only (KL / IS / NB-GLM / β-divergence dropped); fast PCA / SVD wi
 
 ## ✅ Recently complete (last 5 cycles — full detail in `state/cycle-log.md`)
 
+- **CYCLE-150** Diffusion Map (Coifman & Lafon 2005, jobs 370267 → 370271): 5/5 tests PASS on retry. First GPU diffusion-map embedding; pairs with CYCLE-142 DPT to complete the diffusion-geometry trajectory toolkit on GPU. Two test-design fixes: signed-embedding canonicalization (Test 1) + max-t-statistic over top 4 components for branch separation (Test 2). Symmetric normalization `D^{-1/2} W D^{-1/2}` for cuSOLVER (CYCLE-142 lesson reused). 476 LOC kernel + 463 LOC tests.
+- **CYCLE-149** k-means clustering (Lloyd 1957, job 369480)
 - **CYCLE-147** Scrublet audit (job 369446): BUILD PASS; 2/5 (real-data + determinism), 3/5 FAIL (Spearman 0.24 vs scrublet ref, AUC 0.63 vs 0.85, n_synth corr 0.69-0.79). Third broken cycle-13/14/44 kernel found via audit. Filed CYCLE-148-SCRUBLET-REWRITE.
 - **CYCLE-146** scanpy.tl.dendrogram (job 369440): 5/5 tests PASS first verify. Cluster correlation distance via cuBLAS Sgemm + host-side UPGMA. Empty-cluster handled via eps guard. **Milestone: 19 ports, 100 tests this session.** 278 LOC + 248 LOC tests.
 - **CYCLE-143** bbknn audit (job 369426): BUILD PASS; 0/3 runtime — 1 real algorithmic break (`BBKNN_TwoBatch_NeighborBalance` 400/400 imbalanced), 1 bbknn-pkg-missing, 1 cuGraph-skipped. Same pattern as CYCLE-119 enrichment audit: cycle-14-vintage at "Correctness: pending". Filed CYCLE-144-BBKNN-REWRITE + umbrella CYCLE-145-PRE-CYCLE-30-FRONTIER-AUDIT.
