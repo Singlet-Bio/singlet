@@ -256,6 +256,7 @@ def samples(
     status: Optional[str] = None,
     min_cells: Optional[int] = None,
     quality_tier: Optional[str] = None,
+    search: Optional[str] = None,
 ) -> pd.DataFrame:
     """Query the sample index with optional filters.
 
@@ -272,6 +273,8 @@ def samples(
     quality_tier : str, optional
         Filter by quality tier: "gold" (MR>=70%, genes>=500, cells>=500),
         "silver" (MR>=50%, genes>=200, cells>=100), or "bronze" (all SUCCESS).
+    search : str, optional
+        Text search across title and other text columns (substring match).
 
     Returns
     -------
@@ -279,6 +282,12 @@ def samples(
         Filtered sample index.
     """
     df = _load_sample_index()
+    if search is not None:
+        text_cols = df.select_dtypes(include="object").columns
+        mask = df[text_cols].apply(
+            lambda col: col.str.contains(search, case=False, na=False)
+        ).any(axis=1)
+        df = df[mask]
     if gse_id is not None:
         df = df[df["gse_id"] == gse_id]
     if organism is not None:
