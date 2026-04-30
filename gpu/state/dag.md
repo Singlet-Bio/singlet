@@ -4,7 +4,7 @@ Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movemen
 
 ## 🔴 Active this cycle
 
-- **CYCLE-161-PHASE-E-DPT** (queued): bench `embed/dpt` at 10k to test the §J.6 hypothesis that dpt has the same scaling-failure pattern as diffmap (CYCLE-160 audit found identical dense-n×n + Ssyevd structure at dpt.h:151/179/215/270/302/453). Either confirms the suspicion (and queues a combined dpt+diffmap sparse-eigensolver rewrite) or refutes it (cheap experiment either way).
+- **CYCLE-161-PHASE-E-DPT-§J.6-TEST** (in flight, job 371312 RUNNING on g008): hypothesis-test cycle. Bench `embed/dpt` at 10k vs `sc.tl.dpt` to test §J.6 prediction (dpt likely scales identically poorly as diffmap given matching dense-n×n + Ssyevd structure). Sonnet wrote `bench/bench_embed_dpt_perf.cpp` (10k only, 30k pre-skipped to avoid expected crash; exception-caught fallback to `-1.0` if memory guard fires), `bench/refs/dpt_ref.py` (sc.tl.diffmap untimed setup → time only sc.tl.dpt; baseline runs both 10k AND 30k since scanpy ARPACK is tractable), `state/cycle161_dpt_bench.sh` (--exclude=g001,g002,g005). CMake → 24 drivers. Awaiting verify; predicted outcome: GPU 5-20× slower or crash.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 

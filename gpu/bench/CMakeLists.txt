@@ -120,9 +120,14 @@ add_bench_driver(bench_enrich_score_genes_perf  bench_enrich_score_genes_perf.cp
 add_bench_driver(bench_embed_diffmap_perf  bench_embed_diffmap_perf.cpp)
 
 # ---------------------------------------------------------------------------
+# Cycle 161 drivers: embed/dpt standalone Phase E benchmark (§J.6 AT-RISK test)
+# ---------------------------------------------------------------------------
+add_bench_driver(bench_embed_dpt_perf  bench_embed_dpt_perf.cpp)
+
+# ---------------------------------------------------------------------------
 # Status message
 # ---------------------------------------------------------------------------
-message(STATUS "singlet-gpu bench: 23 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159)")
+message(STATUS "singlet-gpu bench: 24 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161)")
 message(STATUS "  53a: bench_io_pz_loader_perf")
 message(STATUS "  53a: bench_preprocess_lognorm_perf")
 message(STATUS "  53a: bench_preprocess_hvg_perf")
