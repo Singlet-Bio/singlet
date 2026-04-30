@@ -262,3 +262,72 @@ When `deterministic=true`:
 - Kernel output is bitwise reproducible across runs and across GPU architectures of the same compute capability.
 
 Default is `false` for performance. Tests that need bitwise reproducibility set it to `true`.
+
+---
+
+## §J. Cycle-protocol lessons (added 2026-04-30, autonomous loop session)
+
+These are procedural improvements distilled from CYCLE-153 / 154 / 155. They are not algorithmic rules; they are checklist items the orchestrator should treat as additions to the per-cycle protocol in `agents/singlet-gpu-orchestrator.md`.
+
+### §J.1 — Threshold-masking pitfall (from CYCLE-153 iter-1 FAIL)
+
+When auditing a kernel that has multiple bugs that cancel each other (e.g. a broken score formula PLUS a broken threshold), the test suite's PASS/FAIL bits will hide the real failure. CYCLE-147 audit reported scrublet's real-data test as PASS with `doublet_rate=0.001`; the rate was that low only because a broken right-to-left knee threshold returned ~1.0 (classifying ~0.1% of cells), masking that the underlying scoring inflates real-cell scores into the [0.25, 1.0] range. The CYCLE-153 fix that corrected the knee threshold then exposed the real bug as `doublet_rate=0.92`.
+
+**Rule**: in Phase F (frontier decision), don't rely on test PASS/FAIL bits alone. Sanity-check:
+- Score / output value distributions (`mean_score`, percentiles, range).
+- Threshold values used.
+- Whether the output is in the expected order of magnitude.
+
+If two independent metrics fail, suspect a deeper algorithmic bug, not metric-specific symptoms.
+
+### §J.2 — SLURM nodelist defaults (from CYCLE-153 queue management)
+
+Cycle scripts inheriting from `cycle150_diffmap.sh` template default to `--nodelist=g001`. This caused a 25-min queue wait when g001 was busy with two long-running 2:42-hour jobs while g003, g004, and 5 other GPU nodes sat idle.
+
+**Rule**: do NOT pin `--nodelist=g001` by default. Either:
+- Omit `--nodelist` entirely and let SLURM pick.
+- Check `sinfo -p gpu` before submitting and pick an idle node.
+- Use `--nodelist=g003,g004,g050,g051,g052` to allow any of several nodes.
+
+The `cycle150_diffmap.sh` template has been updated to `--nodelist=g003` post-CYCLE-153. New cycle scripts should match.
+
+### §J.3 — Pareto-frontier rows must be added in Phase F (from CYCLE-154)
+
+The CYCLE-118 → CYCLE-150 stretch promoted 21 features to frontier without adding `state/pareto-frontier.md` rows. CYCLE-154 had to backfill them in a dedicated cycle.
+
+**Rule**: in Phase F (frontier decision), the cycle is not closed until:
+1. `state/cycle-log.md` has the episode appended (was already required).
+2. `state/pareto-frontier.md` has a row entry added with at least the feature path, citation, and TBD-row scaffolding (NEW — was previously deferred to backfill).
+3. `state/dag.md` is updated.
+
+A "Pending Phase E benchmark cycle" placeholder row is ALWAYS preferable to no row — it lets future bench cycles fill numbers without restructuring.
+
+### §J.4 — Phase G publish is part of every frontier-touching cycle (from CYCLE-155)
+
+The orchestrator's Phase G says "Every cycle that updates the frontier MUST run the publish flow." But CYCLE-150 / 151 / 152 / 154 all skipped `frontier_sync.py`; CYCLE-155 had to catch up the publish backlog.
+
+**Rule**: in any cycle that modifies `state/pareto-frontier.md`, the close checklist now includes:
+
+```bash
+source ~/Singlet-AI/singlet-gpu/scripts/load_secrets.sh
+python3 ~/Singlet-AI/singlet-gpu/scripts/frontier_sync.py
+```
+
+If `frontier_sync.py` fails, log to `state/blockers.md` as `INFRA-WEBSITE-*` and continue (existing rule). The `gpu_frontier` row count is by feature_id (not by section header); sub-variants share parent IDs (`scripts/frontier_sync.py:210`).
+
+### §J.5 — Loop pacing — alternate safe + risky cycles
+
+Empirically, in a 6-cycle loop session, the failure mode is "string of debug cycles": each one risks introducing regressions, and a single FAIL costs an iteration of recovery. The pattern that worked for this session was alternating cycle types:
+
+| Cycle type | Risk | Per-cycle artifact |
+|---|---|---|
+| State / docs cleanup (Haiku) | LOW | concrete .md files |
+| Phase H docs page write (Haiku) | LOW | docs/api/*.md |
+| Phase G publish (script run) | LOW | Supabase row refresh |
+| Pareto-frontier row backfill (Haiku) | LOW | rows in state/pareto-frontier.md |
+| Phase E bench (Sonnet + SLURM) | MEDIUM | bench numbers in pareto-frontier |
+| Kernel debug / port (Sonnet + SLURM) | HIGH | new kernel + correctness verify |
+
+After a HIGH-risk cycle, the next 1-2 cycles should be LOW-risk to restore signal-to-noise. CYCLE-153 (HIGH, FAIL) → CYCLE-154 (LOW, PASS) → CYCLE-155 (LOW, PASS) was a healthy recovery pattern. If the orchestrator detects a recent FAIL outcome, it should bias the next cycle's selection toward LOW-risk options in the queue.
+
+This rule sits as a heuristic, not a hard constraint — the priority cascade in Phase A still has primacy.

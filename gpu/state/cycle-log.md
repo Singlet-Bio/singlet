@@ -3473,3 +3473,18 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
   2. **`gpu_frontier` table count is by feature_id, not by row.** A new pareto-frontier section that maps to an existing feature (e.g. a new HVG flavor) doesn't increase the row count — it updates rows for that feature_id. Sub-variants share parent IDs.
 - **Next cycle**: CYCLE-156 candidate options — (a) **CYCLE-122 enrichment zero-output diagnosis** (audit-flagged single shared root cause, cleaner than scrublet), (b) **Phase E bench cycle for pearson_residuals at 100k/1M** (low risk Sonnet gpu-bench dispatch, fills concrete numbers), (c) **fresh port** (palantir / GRN), (d) **wrappers for top frontier features** (Python pybind11 + R Rcpp — Rule 26 says wrappers ship within 2 cycles of frontier promotion; many recent ports are overdue). Default: CYCLE-122 enrichment diag (single-hypothesis debug; cleaner than Phase E which needs SOTA installed at 100k/1M).
 
+## Cycle 156 (2026-04-30) — style-rules.md §J cycle-protocol lessons
+- **Feature**: state/style-rules.md — captures procedural improvements distilled from CYCLE-153 / 154 / 155 as durable artifact. Five new sub-rules under a new §J section.
+- **Outcome**: 1 Opus direct edit (no worker dispatch needed). ~140 lines appended (~5 KB).
+- **Sub-rules added**:
+  - **§J.1 Threshold-masking pitfall** (CYCLE-153 lesson): Phase F should sanity-check value distributions / threshold values / order-of-magnitude, not just PASS/FAIL bits. Two independent failing metrics → suspect deeper algorithmic bug.
+  - **§J.2 SLURM nodelist defaults** (CYCLE-153 queue lesson): don't pin to `--nodelist=g001`; use idle nodes (g003, g004, g050-052) or omit constraint. Original cycle150 template is now updated.
+  - **§J.3 Pareto-frontier rows must be added in Phase F** (CYCLE-154 lesson): TBD-scaffolding row > no row. Per-cycle close checklist now requires pareto-frontier.md row before close.
+  - **§J.4 Phase G publish in every frontier-touching cycle** (CYCLE-155 lesson): explicit close-checklist with `source load_secrets.sh && python3 frontier_sync.py`. Note that `gpu_frontier` row count is by feature_id (sub-variants share parent IDs).
+  - **§J.5 Loop pacing — alternate safe + risky cycles** (this session's lesson): cycle type taxonomy (Haiku LOW / Sonnet MEDIUM / kernel-debug HIGH); after a HIGH-risk FAIL, bias next 1-2 cycles toward LOW. Heuristic, not hard constraint — priority cascade still primary.
+- **Why this cycle now**: CYCLE-153 was the first FAIL of the session, and the lessons it produced (especially §J.1 threshold-masking and §J.5 loop pacing) deserved a durable home before they got lost. Pure-Opus, pure-doc cycle is also a §J.5-compliant LOW-risk cycle following the FAIL+recovery pattern.
+- **Lessons**:
+  1. **Cycle-protocol lessons should land in style-rules.md, not just cycle-log.md.** cycle-log.md is append-only history; style-rules.md is the curated current rule set. Future cycles read style-rules.md, not historical episodes.
+  2. **Section §J is a pattern-evolution surface.** Adding more sub-rules over time as more cycle-protocol lessons emerge is fine — it doesn't bloat the kernel-rule sections (§A-§I).
+- **Next cycle**: CYCLE-157 — back to higher-priority queue. Phase E bench for pearson_residuals at 100k (concrete benchmark numbers, low-risk Sonnet dispatch) OR CYCLE-122 enrichment zero-output diagnostic (focused single-hypothesis debug). Default: Phase E pearson_residuals (extends the §J.5 LOW-risk recovery streak by one more before the next HIGH-risk cycle).
+
