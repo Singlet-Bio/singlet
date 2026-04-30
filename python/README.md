@@ -2,7 +2,7 @@
 
 **Python client for the Singlet single-cell atlas.**
 
-2,330 samples • 964 successful • 2.8M cells • 7 species • 1,153 GEO series • ~13× .1pz compression
+2,358 samples • 979 successful • 2.9M cells • 7 species • 1,164 GEO series • ~13× .1pz compression
 
 ## Install
 
@@ -17,7 +17,7 @@ import singlet
 
 # Browse the atlas catalog (free, works offline)
 singlet.summary()
-# → 2,330 samples, 964 SUCCESS, 7 species, 2.83M cells
+# → 2,358 samples, 979 SUCCESS, 7 species, 2.89M cells
 
 df = singlet.samples(organism="Homo sapiens", status="SUCCESS")
 singlet.species()
@@ -27,8 +27,8 @@ singlet.top_series(n=10)
 adata = singlet.load_dir("/path/to/quant/GSM3573650")
 # → 75,420 cells × 38,606 genes
 # obs: total_umis, total_genes, mt_pct, ribo_pct, intronic_pct,
-#      doublet_score, is_doublet
-# var: gene_id (Ensembl)
+#      doublet_score, is_doublet, phase, s_score, g2m_score
+# uns: ancestry, sex_call, summary, saturation_curve, singlify_dir
 
 # Load a .1pz file directly
 adata = singlet.read_1pz("/path/to/gene_counts.1pz")
@@ -49,8 +49,8 @@ sc.tl.leiden(adata)
 
 | Feature | Details |
 |---------|---------|
-| **Catalog** | Browse 2,330 samples by organism, protocol, status, quality tier |
-| **load_dir()** | Read singlify output directory → AnnData with QC + doublets |
+| **Catalog** | Browse 2,358 samples by organism, protocol, status, quality tier |
+| **load_dir()** | Read singlify output directory → AnnData with QC, doublets, cell cycle, ancestry, sex, summary |
 | **read_1pz()** | Read .1pz sparse matrix → AnnData |
 | **Compression** | singlepress .1pz format — ~13× vs raw CSC |
 | **PyTorch** | `OnePZDataset` + `DataLoader` with log-normalization |
@@ -58,7 +58,7 @@ sc.tl.leiden(adata)
 
 ## Notebooks
 
-7 executed Jupyter notebooks at [`notebooks/`](notebooks/):
+17 executed Jupyter notebooks at [`notebooks/`](notebooks/):
 - **quickstart** — Atlas catalog exploration
 - **gene_counting** — Equivalence vs STARsolo (r=0.9995)
 - **sex_calling** — XIST/SRY validation (100% agreement)
@@ -66,6 +66,16 @@ sc.tl.leiden(adata)
 - **doublet_detection** — UMI-based doublet scoring
 - **corpus_analytics** — Atlas-wide QC distributions
 - **01_load_and_explore** — Full scanpy pipeline on 75K cells
+- **cell_cycle** — Phase scoring (G1/S/G2M)
+- **sample_qc_report** — Complete one-call QC report
+- **saturation_curve** — Sequencing depth analysis
+- **ancestry_calling** — Genetic ancestry inference
+- **mt_variants** — Mitochondrial heteroplasmy
+- **splicing** — Alternative splicing events
+- **rna_velocity** — Spliced/unspliced for scVelo
+- **pipeline_outputs** — Complete outputs reference
+- **cell_calling** — EmptyDrops deviance testing
+- **protocol_detection** — Corpus-wide protocol analysis
 
 ## Documentation
 
@@ -74,15 +84,15 @@ sc.tl.leiden(adata)
 | [Quick Start](docs/quickstart.md) | Getting started guide |
 | [API Reference](docs/API.md) | Complete Python API |
 
-## Part of Singlet AI
+## Part of Singlet
 
 | Repository | Purpose |
 |-----------|---------|
-| [singlepress](https://github.com/Singlet-AI/singlepress) | Sparse matrix compression |
-| [geo-reprocess](https://github.com/Singlet-AI/geo-reprocess) | HPC catalog pipeline |
+| [singlepress](https://github.com/Singlet-Bio/singlepress) | Sparse matrix compression |
+| [geo-reprocess](https://github.com/Singlet-Bio/geo-reprocess) | HPC catalog pipeline |
 | **singlet** | Python client library |
-| [singlet-intelligence](https://github.com/Singlet-AI/singlet-intelligence) | ML models |
-| [papers](https://github.com/Singlet-AI/papers) | Manuscripts |
+| [singlet-intelligence](https://github.com/Singlet-Bio/singlet-intelligence) | ML models |
+| [papers](https://github.com/Singlet-Bio/papers) | Manuscripts |
 
 ## License
 
