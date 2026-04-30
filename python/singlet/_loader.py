@@ -361,6 +361,20 @@ def load_dir(
         with open(ancestry_file) as f:
             adata.uns["ancestry"] = _json.load(f)
 
+    # Store sex call if available
+    sex_file = path / "sex_call.json"
+    if sex_file.exists():
+        import json as _json
+        with open(sex_file) as f:
+            adata.uns["sex_call"] = _json.load(f)
+
+    # Store summary metrics if available
+    summary_file = path / "summary.json"
+    if summary_file.exists():
+        import json as _json
+        with open(summary_file) as f:
+            adata.uns["summary"] = _json.load(f)
+
     # Store source path
     adata.uns["singlify_dir"] = str(path)
 

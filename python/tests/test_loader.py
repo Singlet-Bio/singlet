@@ -80,3 +80,35 @@ class TestLoadDir:
 
         with pytest.raises(FileNotFoundError, match="Missing"):
             load_dir(tmp_path)
+
+    def test_cell_cycle(self):
+        from singlet._loader import load_dir
+
+        adata = load_dir(SAMPLE_DIR)
+        assert 'phase' in adata.obs.columns
+        assert 's_score' in adata.obs.columns
+        assert 'g2m_score' in adata.obs.columns
+        assert set(adata.obs['phase'].unique()) <= {'G1', 'S', 'G2M'}
+
+    def test_ancestry(self):
+        from singlet._loader import load_dir
+
+        adata = load_dir(SAMPLE_DIR)
+        assert 'ancestry' in adata.uns
+        assert 'ancestry' in adata.uns['ancestry']
+        assert 'confidence' in adata.uns['ancestry']
+
+    def test_sex_call(self):
+        from singlet._loader import load_dir
+
+        adata = load_dir(SAMPLE_DIR)
+        assert 'sex_call' in adata.uns
+        assert 'sex' in adata.uns['sex_call']
+
+    def test_summary(self):
+        from singlet._loader import load_dir
+
+        adata = load_dir(SAMPLE_DIR)
+        assert 'summary' in adata.uns
+        assert 'mapping_rate' in adata.uns['summary']
+        assert 'protocol' in adata.uns['summary']
