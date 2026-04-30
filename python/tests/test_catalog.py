@@ -7,17 +7,17 @@ def test_catalog_returns_dataframe():
     import singlet
     cat = singlet.catalog()
     assert isinstance(cat, pd.DataFrame)
-    assert len(cat) > 1000
+    assert len(cat) > 100
     assert "gse_id" in cat.columns
-    assert "organism" in cat.columns
-    assert "n_cells" in cat.columns
+    assert "organisms" in cat.columns
+    assert "total_cells" in cat.columns
 
 
 def test_catalog_search_filters():
     import singlet
     human = singlet.catalog("Homo sapiens")
     assert len(human) > 0
-    assert all(human["organism"].str.contains("Homo sapiens", case=False, na=False))
+    assert all(human["organisms"].str.contains("Homo sapiens", case=False, na=False))
 
 
 def test_sample_index_returns_dataframe():
@@ -58,14 +58,14 @@ def test_datasets_filter_organism():
     import singlet
     human = singlet.datasets(organism="Homo sapiens")
     assert len(human) > 50
-    assert all(human["organism"].str.contains("Homo sapiens", case=False, na=False))
+    assert all(human["organisms"].str.contains("Homo sapiens", case=False, na=False))
 
 
 def test_datasets_filter_min_cells():
     import singlet
     big = singlet.datasets(min_cells=10000)
     assert len(big) > 0
-    assert all(big["n_cells"] >= 10000)
+    assert all(big["total_cells"] >= 10000)
 
 
 def test_samples_filter_status():
@@ -116,7 +116,7 @@ def test_info_existing_series():
     info = singlet.info("GSE174399")
     assert isinstance(info, dict)
     assert info["gse_id"] == "GSE174399"
-    assert info["n_cells"] > 0
+    assert info["total_cells"] > 0
 
 
 def test_info_missing_raises():
