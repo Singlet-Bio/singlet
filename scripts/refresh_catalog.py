@@ -1,89 +1,161 @@
 #!/usr/bin/env python3
-"""Refresh embedded catalog parquet files from Supabase.
+"""Refresh embedded catalog parquet files from Supabase + pipeline results.
 
-Run this after ETL syncs to keep the singlet package's bundled data current.
-Writes to singlet/data/sample_index.parquet and singlet/data/catalog_v1.parquet.
+Merges Supabase metadata (titles, QC metrics) with pipeline result JSONs.
+Writes to python/singlet/data/sample_index.parquet and catalog_v1.parquet.
 
 Usage:
     python scripts/refresh_catalog.py
 
 Requires: SUPABASE_URL, SUPABASE_SERVICE_KEY environment variables.
+Optional: Access to pipeline results for samples not yet in Supabase.
 """
+import json
 import os
+import shutil
 import sys
-import pandas as pd
 from pathlib import Path
 
-try:
-    from supabase import create_client
-except ImportError:
-    print("pip install supabase-py")
-    sys.exit(1)
+import pandas as pd
+import requests
 
-url = os.environ.get("SUPABASE_URL")
-key = os.environ.get("SUPABASE_SERVICE_KEY")
-if not url or not key:
-    print("Set SUPABASE_URL and SUPABASE_SERVICE_KEY")
-    sys.exit(1)
+RESULTS_DIR = "/mnt/projects/debruinz_project/singlify_pipeline/results/2026-04/"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+OUTPUT_DIR = REPO_ROOT / "python" / "singlet" / "data"
+CACHE_DIR = Path.home() / ".singlet" / "cache"
 
-sb = create_client(url, key)
+SUPABASE_FIELDS = "gsm_id,gse_id,organism,status,protocol,mapping_rate,cells_called,median_genes,median_umis,mt_pct,doublet_rate,wall_time_s,title"
 
-# Determine output directory
-repo_root = Path(__file__).resolve().parent.parent
-data_dir = repo_root / "singlet" / "data"
-data_dir.mkdir(parents=True, exist_ok=True)
 
-# Fetch all samples
-print("Fetching samples from Supabase...")
-all_rows = []
-offset = 0
-while True:
-    r = sb.table("samples").select(
-        "gsm_id,gse_id,organism,protocol,status,cells_called,mapping_rate,median_genes,title"
-    ).range(offset, offset + 999).execute()
-    if not r.data:
-        break
-    all_rows.extend(r.data)
-    if len(r.data) < 1000:
-        break
-    offset += 1000
+def fetch_supabase() -> pd.DataFrame:
+    url = os.environ.get("SUPABASE_URL")
+    key = os.environ.get("SUPABASE_SERVICE_KEY")
+    if not url or not key:
+        print("WARNING: SUPABASE_URL/SUPABASE_SERVICE_KEY not set, using pipeline only")
+        return pd.DataFrame()
 
-print(f"  Fetched {len(all_rows)} samples")
+    headers = {"apikey": key, "Authorization": f"Bearer {key}"}
+    all_rows = []
+    offset = 0
+    while True:
+        r = requests.get(
+            f"{url}/rest/v1/samples?select={SUPABASE_FIELDS}&offset={offset}&limit=1000",
+            headers=headers,
+        )
+        r.raise_for_status()
+        data = r.json()
+        if not data:
+            break
+        all_rows.extend(data)
+        offset += 1000
+        if len(data) < 1000:
+            break
+    return pd.DataFrame(all_rows)
 
-# Write sample_index
-df = pd.DataFrame(all_rows)
-df.to_parquet(data_dir / "sample_index.parquet", index=False)
-print(f"  Wrote sample_index.parquet ({len(df)} rows)")
 
-# Build catalog (series-level aggregation)
-cat = df.groupby("gse_id").agg(
-    n_samples=("gsm_id", "count"),
-    organisms=("organism", lambda x: ",".join(sorted(set(str(v) for v in x if v)))),
-    protocols=("protocol", lambda x: ",".join(sorted(set(str(v) for v in x if v)))),
-    total_cells=("cells_called", "sum"),
-    avg_mapping_rate=("mapping_rate", "mean"),
-).reset_index()
-cat.to_parquet(data_dir / "catalog_v1.parquet", index=False)
-print(f"  Wrote catalog_v1.parquet ({len(cat)} series)")
+def load_pipeline_extras(supabase_gsms: set) -> list:
+    """Load pipeline results for samples not in Supabase."""
+    if not os.path.isdir(RESULTS_DIR):
+        return []
+    extras = []
+    for f in os.listdir(RESULTS_DIR):
+        if not f.endswith(".json"):
+            continue
+        gsm = f.replace(".json", "")
+        if gsm in supabase_gsms:
+            continue
+        with open(os.path.join(RESULTS_DIR, f)) as fh:
+            d = json.load(fh)
+        extras.append({
+            "gsm_id": d.get("gsm_id", gsm),
+            "gse_id": d.get("gse_id", ""),
+            "organism": d.get("organism", "") or "",
+            "status": d.get("status", ""),
+            "protocol": d.get("autodetect_protocol") or d.get("protocol", ""),
+            "mapping_rate": d.get("mapping_rate"),
+            "cells_called": d.get("cells_called", 0),
+            "median_genes": None,
+            "median_umis": None,
+            "mt_pct": None,
+            "doublet_rate": None,
+            "wall_time_s": d.get("wall_time_s", 0),
+            "title": None,
+        })
+    return extras
 
-# Also update the user cache
-cache_dir = Path.home() / ".singlet" / "cache"
-cache_dir.mkdir(parents=True, exist_ok=True)
-df.to_parquet(cache_dir / "sample_index.parquet", index=False)
-cat.to_parquet(cache_dir / "catalog_v1.parquet", index=False)
-print(f"  Updated ~/.singlet/cache/")
 
-# Summary
-success = df[df["status"] == "SUCCESS"]
-species = set()
-for org in cat["organisms"].dropna():
-    for s in str(org).replace(";", ",").split(","):
-        s = s.strip()
-        if s and s != "unknown":
-            species.add(s)
+def build_catalog(df: pd.DataFrame) -> pd.DataFrame:
+    catalog = []
+    for gse_id, group in df.groupby("gse_id"):
+        success = group[group["status"] == "SUCCESS"]
+        orgs = group[group["organism"] != ""]["organism"]
+        catalog.append({
+            "gse_id": gse_id,
+            "organism": orgs.mode().iloc[0] if len(orgs.mode()) > 0 else "",
+            "n_samples": len(group),
+            "n_success": len(success),
+            "n_cells": int(success["cells_called"].sum()),
+            "protocol": (
+                success["protocol"].mode().iloc[0]
+                if len(success) > 0 and len(success["protocol"].mode()) > 0
+                else ""
+            ),
+            "median_mapping_rate": (
+                round(success["mapping_rate"].median(), 4)
+                if len(success) > 0 else None
+            ),
+        })
+    return pd.DataFrame(catalog)
 
-print(f"\nCatalog summary:")
-print(f"  {len(df)} samples ({len(success)} SUCCESS)")
-print(f"  {len(cat)} series")
-print(f"  {len(species)} species")
-print(f"  {success['cells_called'].sum():,.0f} total cells")
+
+def main():
+    print("Fetching Supabase samples...")
+    supabase_df = fetch_supabase()
+    print(f"  {len(supabase_df)} from Supabase")
+
+    supabase_gsms = set(supabase_df["gsm_id"]) if len(supabase_df) > 0 else set()
+
+    print("Loading pipeline extras...")
+    extras = load_pipeline_extras(supabase_gsms)
+    print(f"  {len(extras)} pipeline-only samples")
+
+    # Merge
+    if len(supabase_df) > 0:
+        supabase_df["organism"] = supabase_df["organism"].fillna("").replace("unknown", "")
+        supabase_df["protocol"] = supabase_df["protocol"].fillna("").replace("unknown", "")
+        df = supabase_df
+    else:
+        df = pd.DataFrame()
+
+    if extras:
+        extra_df = pd.DataFrame(extras)
+        df = pd.concat([df, extra_df], ignore_index=True) if len(df) > 0 else extra_df
+
+    print(f"\nTotal: {len(df)} samples")
+    success_count = (df["status"] == "SUCCESS").sum()
+    organism_count = (df["organism"] != "").sum()
+    print(f"  SUCCESS: {success_count}")
+    print(f"  Organism coverage: {organism_count}/{len(df)} ({100*organism_count/len(df):.0f}%)")
+
+    print("\nBuilding catalog...")
+    catalog = build_catalog(df)
+    print(f"  {len(catalog)} series, {catalog['n_cells'].sum():,.0f} cells")
+
+    print("\nSaving...")
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(OUTPUT_DIR / "sample_index.parquet", index=False)
+    catalog.to_parquet(OUTPUT_DIR / "catalog_v1.parquet", index=False)
+
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    shutil.copy(OUTPUT_DIR / "sample_index.parquet", CACHE_DIR / "sample_index.parquet")
+    shutil.copy(OUTPUT_DIR / "catalog_v1.parquet", CACHE_DIR / "catalog_v1.parquet")
+
+    si_kb = (OUTPUT_DIR / "sample_index.parquet").stat().st_size // 1024
+    cat_kb = (OUTPUT_DIR / "catalog_v1.parquet").stat().st_size // 1024
+    print(f"  sample_index.parquet: {si_kb} KB")
+    print(f"  catalog_v1.parquet: {cat_kb} KB")
+    print(f"\nDone! {len(df):,} samples • {success_count:,} SUCCESS • {len(catalog):,} series • {catalog['n_cells'].sum():,.0f} cells")
+
+
+if __name__ == "__main__":
+    main()
