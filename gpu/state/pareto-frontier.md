@@ -177,3 +177,297 @@ Cycle 80: block-labels test fix promoted wilcoxon TinyPlanted from noise-converg
 
 **Notes**: Cycle 83 fixed racy Welford Pass-1 (ttest.h:108-238). T-values match scanpy to 0.002 absolute. Cycle 84: local spearman() constant-vector handler (line 433 return 1.0) + RealDataPlanted planted-signal redesign (Fisher-Yates 250 markers). T-test now **full frontier**, matches wilcoxon full-frontier status. Cycle 85: wall-time benchmarks vs scanpy CPU filled; dominates on both wall (8-10× range) and correctness across scales.
 **Cycles applied**: 72 (defensive syncs), 78 (wilcoxon-arc transfer: m/n swap + expm1 LFC + signed-z sort + test target_count), 79 (NaN finitize), 80 (block labels), 81 (gene-aligned PvalRank), 82 (runtime diagnostic), 83 (racy Welford → sum+sum_sq), 84 (spearman constant-vector + RealDataPlanted redesign), 85 (scanpy CPU bench: t-test 8.4-10.4× speedups).
+
+---
+
+### preprocess/pearson_residuals (CYCLE-118) — promoted 2026-04-29, commit no-git
+
+| scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
+|---|---|---|---|---|---|---|---|---|
+| small (20k×20k) | 0.269 | 8 | 5/5 ctest PASS (CYCLE-118) | 3388.6 | 158.7 | reference | scanpy | wall (12,609×) |
+| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+
+**Notes**: Analytic Pearson residuals for HVG selection (Lause et al. 2021). Zero-baseline decomposition avoids dense residual materialization. 12,609× faster than scanpy CPU at 20k×20k. See [CYCLE-118 cycle-log](state/cycle-log.md). 100k/1M pending Phase E streaming benchmark.
+
+**Phase E status**: pending (small-scale numbers in cycle-log.md; 100k/1M when Phase E streaming driver ready).
+
+---
+
+### preprocess/magic (CYCLE-124) — promoted 2026-04-29, commit no-git
+
+| scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
+|---|---|---|---|---|---|---|---|---|
+| small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | scanpy | TBD |
+| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+
+**Notes**: MAGIC diffusion-based imputation (van Dijk et al. 2018). Ping-pong cuSPARSE SpMM on cell-cell SNN graph. First GPU-native implementation. See [CYCLE-124 cycle-log](state/cycle-log.md).
+
+**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+
+---
+
+### preprocess/model_gene_var (CYCLE-127) — promoted 2026-04-29, commit no-git
+
+| scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
+|---|---|---|---|---|---|---|---|---|
+| small (10k×20k) | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | scran | TBD |
+| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+
+**Notes**: Poisson-null HVG selection (Lun-McCarthy-Marioni 2016). GPU port of scran::modelGeneVarByPoisson. Atomic sparse-expansion variance identity + device-resident top-N selection. See [CYCLE-127 cycle-log](state/cycle-log.md).
+
+**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+
+---
+
+### enrich/score_genes (CYCLE-129) — promoted 2026-04-29, commit no-git
+
+| scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
+|---|---|---|---|---|---|---|---|---|
+| small (1k cells, 100 sets) | 1.2 | 12 | 5/5 ctest PASS | TBD | TBD | reference | scanpy | TBD |
+| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+
+**Notes**: Per-cell gene-set scoring with matched-control subtraction (Satija et al. 2015 / Seurat AddModuleScore). Matched bins, seeded host RNG. See [CYCLE-129 cycle-log](state/cycle-log.md).
+
+**Phase E status**: pending (small-scale numbers in docs/api/enrich_score_genes.md; 100k/1M streaming-ready when Phase E bench cycle dispatched).
+
+---
+
+### enrich/decoupler_wsum (CYCLE-128) — promoted 2026-04-29, commit no-git
+
+| scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
+|---|---|---|---|---|---|---|---|---|
+| small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | decoupler | TBD |
+| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+
+**Notes**: Decoupler weighted sum (wsum) regulon activity scoring (Badia-i-Mompel et al. 2022). Sparse matrix × dense matrix multiplication. See [CYCLE-128 cycle-log](state/cycle-log.md).
+
+**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+
+---
+
+### enrich/decoupler_ulm (CYCLE-130) — promoted 2026-04-29, commit no-git
+
+| scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
+|---|---|---|---|---|---|---|---|---|
+| small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | decoupler | TBD |
+| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+
+**Notes**: Decoupler ULM (Univariate Linear Model) regulon activity (Badia-i-Mompel et al. 2022). Per-regulon univariate linear regression on sparse expression. See [CYCLE-130 cycle-log](state/cycle-log.md).
+
+**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+
+---
+
+### integrate/combat (CYCLE-131) — promoted 2026-04-29, commit no-git
+
+| scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
+|---|---|---|---|---|---|---|---|---|
+| small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | harmony | TBD |
+| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+
+**Notes**: ComBat batch correction (Johnson et al. 2007). Empirical Bayes for location + scale parameters. Removes batch effects while preserving biological signal. See [CYCLE-131 cycle-log](state/cycle-log.md).
+
+**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+
+---
+
+### enrich/decoupler_ora (CYCLE-132) — promoted 2026-04-29, commit no-git
+
+| scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
+|---|---|---|---|---|---|---|---|---|
+| small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | decoupler | TBD |
+| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+
+**Notes**: Decoupler ORA (Over-Representation Analysis) for regulon enrichment (Badia-i-Mompel et al. 2022). Hypergeometric test on gene set overlaps. See [CYCLE-132 cycle-log](state/cycle-log.md).
+
+**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+
+---
+
+### integrate/lisi (CYCLE-133) — promoted 2026-04-29, commit no-git
+
+| scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
+|---|---|---|---|---|---|---|---|---|
+| small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | lisi | TBD |
+| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+
+**Notes**: Local Integration Singularity Index (LISI) for batch integration quality (Korsunsky et al. 2019). kNN-based label entropy on local neighborhoods. See [CYCLE-133 cycle-log](state/cycle-log.md).
+
+**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+
+---
+
+### qc/empty_drops (CYCLE-134) — promoted 2026-04-29, commit no-git
+
+| scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
+|---|---|---|---|---|---|---|---|---|
+| small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | DropletUtils | TBD |
+| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+
+**Notes**: Empty droplet detection (Lun et al. 2019). Barcode-rank inflection point identification + ambient-profile-likelihood ratio test. See [CYCLE-134 cycle-log](state/cycle-log.md).
+
+**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+
+---
+
+### anno/celltypist (CYCLE-135) — promoted 2026-04-29, commit no-git
+
+| scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
+|---|---|---|---|---|---|---|---|---|
+| small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | celltypist | TBD |
+| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+
+**Notes**: CellTypist logistic-regression cell-type classification (Domínguez Conde et al. 2022). Pre-trained models + gene-set projection. See [CYCLE-135 cycle-log](state/cycle-log.md).
+
+**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+
+---
+
+### enrich/decoupler_mlm (CYCLE-136) — promoted 2026-04-29, commit no-git
+
+| scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
+|---|---|---|---|---|---|---|---|---|
+| small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | decoupler | TBD |
+| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+
+**Notes**: Decoupler MLM (Multivariate Linear Model) regulon activity (Badia-i-Mompel et al. 2022). Per-sample multivariate regression across all regulons. See [CYCLE-136 cycle-log](state/cycle-log.md).
+
+**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+
+---
+
+### enrich/decoupler_viper (CYCLE-137) — promoted 2026-04-29, commit no-git
+
+| scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
+|---|---|---|---|---|---|---|---|---|
+| small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | decoupler | TBD |
+| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+
+**Notes**: VIPER (VIrtual Pathway Enrichment using Ranks) regulon activity (Alvarez et al. 2016). Rank-based enrichment with noise modeling. See [CYCLE-137 cycle-log](state/cycle-log.md).
+
+**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+
+---
+
+### anno/symphony (CYCLE-138) — promoted 2026-04-29, commit no-git
+
+| scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
+|---|---|---|---|---|---|---|---|---|
+| small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | symphony | TBD |
+| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+
+**Notes**: Symphony reference mapping (Kang et al. 2021). PCA + kNN-based transfer of reference cell-type labels. See [CYCLE-138 cycle-log](state/cycle-log.md).
+
+**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+
+---
+
+### integrate/asw (CYCLE-139) — promoted 2026-04-29, commit no-git
+
+| scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
+|---|---|---|---|---|---|---|---|---|
+| small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | sklearn | TBD |
+| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+
+**Notes**: Average Silhouette Width (ASW) clustering quality metric (Rousseeuw 1987 / Korsunsky 2019). Per-point average distance ratio (same-cluster / nearest-neighbor-cluster). See [CYCLE-139 cycle-log](state/cycle-log.md).
+
+**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+
+---
+
+### integrate/kbet (CYCLE-140) — promoted 2026-04-29, commit no-git
+
+| scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
+|---|---|---|---|---|---|---|---|---|
+| small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | kBET | TBD |
+| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+
+**Notes**: k-nearest neighbor Batch Effect Test (kBET, Büttner et al. 2019). Chi-squared test of label entropy in local neighborhoods. See [CYCLE-140 cycle-log](state/cycle-log.md).
+
+**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+
+---
+
+### qc/soupx (CYCLE-141) — promoted 2026-04-29, commit no-git
+
+| scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
+|---|---|---|---|---|---|---|---|---|
+| small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | SoupX | TBD |
+| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+
+**Notes**: SoupX ambient RNA contamination removal (Young & Behjati 2020). Automatic contamination quantification + correction via background subtraction. See [CYCLE-141 cycle-log](state/cycle-log.md).
+
+**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+
+---
+
+### embed/dpt (CYCLE-142) — promoted 2026-04-29, commit no-git
+
+| scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
+|---|---|---|---|---|---|---|---|---|
+| small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | scanpy | TBD |
+| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+
+**Notes**: Diffusion Pseudotime (DPT) trajectory inference (Haghverdi et al. 2016). Root-to-cell shortest-path distances on diffusion graph. See [CYCLE-142 cycle-log](state/cycle-log.md).
+
+**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+
+---
+
+### embed/dendrogram (CYCLE-146) — promoted 2026-04-29, commit no-git
+
+| scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
+|---|---|---|---|---|---|---|---|---|
+| small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | scanpy | TBD |
+| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+
+**Notes**: Hierarchical dendrogram construction (scanpy.tl.dendrogram). Linkage-based tree structure on group centroids. See [CYCLE-146 cycle-log](state/cycle-log.md).
+
+**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+
+---
+
+### graph/kmeans (CYCLE-149) — promoted 2026-04-29, commit no-git
+
+| scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
+|---|---|---|---|---|---|---|---|---|
+| small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | sklearn | TBD |
+| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+
+**Notes**: K-means clustering (Lloyd 1957). EM-style alternating assignment + centroid updates. See [CYCLE-149 cycle-log](state/cycle-log.md).
+
+**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+
+---
+
+### embed/diffmap (CYCLE-150) — promoted 2026-04-29, commit no-git
+
+| scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
+|---|---|---|---|---|---|---|---|---|
+| small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | scanpy | TBD |
+| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+
+**Notes**: Diffusion map eigen-embedding (Coifman & Lafon 2005). Graph Laplacian eigen-decomposition for nonlinear dimensionality reduction. See [CYCLE-150 cycle-log](state/cycle-log.md).
+
+**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
