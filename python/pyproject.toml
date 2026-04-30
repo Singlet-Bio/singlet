@@ -43,6 +43,7 @@ dependencies = [
 torch = ["torch>=1.12"]
 zarr = ["zarr>=2.12"]
 tiledb = ["tiledbsoma>=1.4"]
+mcp = ["mcp>=0.1", "supabase>=2.0"]
 docs = [
     "sphinx>=5.0",
     "furo",
@@ -79,6 +80,9 @@ exclude = ["_old_toplevel*", "tests*"]
 
 [tool.setuptools.package-data]
 singlet = ["data/*.parquet"]
+
+[project.scripts]
+singlet-mcp = "singlet.mcp.__main__:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
