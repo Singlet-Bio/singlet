@@ -4,7 +4,7 @@ Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movemen
 
 ## 🔴 Active this cycle
 
-- **CYCLE-160-NEXT-PHASE-E** (queued): pick from preprocess/magic, preprocess/model_gene_var, integrate/lisi, etc. CYCLE-159 just exposed a major scaling gap in embed/diffmap; will queue CYCLE-159.1 sparse-eigensolver rewrite separately. Default: preprocess/model_gene_var (Sonnet+SLURM same pattern, scanpy `sc.experimental.pp.highly_variable_genes(flavor='seurat_v3')` as proxy ref).
+- **CYCLE-161-PHASE-E-DPT** (queued): bench `embed/dpt` at 10k to test the §J.6 hypothesis that dpt has the same scaling-failure pattern as diffmap (CYCLE-160 audit found identical dense-n×n + Ssyevd structure at dpt.h:151/179/215/270/302/453). Either confirms the suspicion (and queues a combined dpt+diffmap sparse-eigensolver rewrite) or refutes it (cheap experiment either way).
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
@@ -32,6 +32,7 @@ Frobenius NMF only (KL / IS / NB-GLM / β-divergence dropped); fast PCA / SVD wi
 
 ## ✅ Recently complete (last 5 cycles — full detail in `state/cycle-log.md`)
 
+- **CYCLE-160** style-rules §J.6 + audit at-risk kernels: pure-Opus preventive cycle. Added §J.6 (kernels with O(n²)+ memory or O(n³)+ compute require ≥10k scale-smoke test before frontier). Audited all `include/singlet-gpu/{embed,preprocess,integrate}/*.h` — found `embed/dpt.h` uses the SAME dense-n×n + Ssyevd pattern as broken diffmap. Pareto-frontier dpt row marked ⚠️ AT-RISK; CYCLE-161 will bench dpt at 10k to confirm. Other O(n²+) kernels audited and cleared. Lesson: pattern audits earn 10× return when you have well-characterized failure modes documented.
 - **CYCLE-159** Phase E for embed/diffmap (NEGATIVE — job 371207 g003): GPU 10k = 2257ms vs scanpy 163ms (**0.07× — GPU 14× SLOWER**); 30k CRASHED with cuSOLVER status=3 in Ssyevd. Phase E exposed real scaling gap that small-scale CYCLE-150 ctest didn't catch. Root cause: dense O(n³) Ssyevd vs scanpy's sparse ARPACK O(n·k·n_components). Filed CYCLE-159.1 sparse-eigensolver rewrite. **Lesson**: small-scale ctest correctness ≠ frontier; future kernels with O(n²+) memory/compute should ship a 10k+ scale smoke test as part of frontier promotion. Need new style-rules §J.6.
 - **CYCLE-158.1** score_genes scanpy baseline rerun (no SLURM): scanpy 10k=237.2ms, 30k=692.1ms → **GPU 213.7× / 493.3× faster**. Phase E status COMPLETE for medium scales. Key efficiency lesson: ran scanpy ref directly as Python (saving 25+ min queue wait that re-running the SLURM script would have incurred).
 - **CYCLE-158** Phase E bench for enrich/score_genes (PARTIAL — job 371072 g003 V100S): GPU PASS (10k=1.110ms, 30k=1.403ms; ~9-21 M cells/s throughput); scanpy CPU FAILED with gene-name parity bug — `score_genes_ref.py:47` did `var={"gene_id":...}` (a column) instead of setting `adata.var_names`. Fixed in the same commit. CYCLE-158.1 will re-run scanpy ref. **Queue lesson** (§J.2 extended): `--nodelist=g003,g004,g050,g051,g052` was interpreted as 5-node job; switched to `--exclude=g001,g002,g005` and immediately landed on g003.

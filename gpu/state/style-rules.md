@@ -333,3 +333,19 @@ Empirically, in a 6-cycle loop session, the failure mode is "string of debug cyc
 After a HIGH-risk cycle, the next 1-2 cycles should be LOW-risk to restore signal-to-noise. CYCLE-153 (HIGH, FAIL) → CYCLE-154 (LOW, PASS) → CYCLE-155 (LOW, PASS) was a healthy recovery pattern. If the orchestrator detects a recent FAIL outcome, it should bias the next cycle's selection toward LOW-risk options in the queue.
 
 This rule sits as a heuristic, not a hard constraint — the priority cascade in Phase A still has primacy.
+
+### §J.6 — Frontier promotion requires a scale-smoke test for O(n²⁺) kernels (from CYCLE-159 NEGATIVE result)
+
+CYCLE-150 promoted `embed/diffmap` to frontier based on 5/5 ctest PASS at n=40 cells. CYCLE-159 Phase E discovered the kernel is **14× SLOWER than scanpy CPU at n=10k** and **CRASHES at n=30k** (cuSOLVER status=3 in Ssyevd). The kernel materializes a dense n×n W matrix and runs full Ssyevd; scanpy uses sparse ARPACK on the kNN graph (O(n·k·n_components) vs our O(n³)). Small-n correctness was real but did not validate scaling.
+
+**Rule**: any kernel with O(n²) memory or O(n³) compute (typical signs: dense n×n adjacency, full Sgemm or Ssyevd over a graph) cannot reach `frontier` state until a **scale-smoke test at ≥10k cells** passes within reasonable wall time (rough rule: <2× the small-scale extrapolation by O-bound).
+
+The smoke test can be a single ctest case or a single bench run; what matters is that an actual 10k-cell run completes without OOM / cuSOLVER errors and produces output in roughly the predicted time. This catches dense-eigensolver patterns that look fine at n=40 but explode at n=10k.
+
+**Currently at-risk kernels (audited by CYCLE-160)**:
+- ⚠️ `embed/diffmap.h` — confirmed broken (CYCLE-159 NEGATIVE; filed CYCLE-159.1).
+- ⚠️ `embed/dpt.h` — uses the SAME dense n×n W + `cusolverDnSsyevd` pattern (`dpt.h:151,179,215,270,302,453`). Highly likely to exhibit the same scaling failure at n≥10k. Should be benched (Phase E) before claiming frontier-grade scaling. CYCLE-150 frontier promotion was again only at small ctest n.
+- `embed/dendrogram.h` — uses `cusolverDnSsyevd` only on k×k cluster centroid distance matrix (k=number of clusters, typically ≤100). NOT at risk — k-bound is by clusters, not cells.
+- `integrate/combat.h`, `integrate/asw.h`, `integrate/lisi.h`, `integrate/kbet.h`, `qc/empty_drops.h`, `qc/soupx.h`, `anno/celltypist.h`, `anno/symphony.h`, `enrich/decoupler_*` — all O(n_cells) or O(n_cells × small) by design (per-cell histogram, kNN-aware metrics, or sparse SpMM). NOT at risk.
+
+**Action filed for CYCLE-160 close**: `embed/dpt.h` pareto-frontier row updated with ⚠️ "AT-RISK" marker pending bench. Future Phase E should target dpt early to confirm or reject the suspicion.

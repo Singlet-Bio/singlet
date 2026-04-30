@@ -422,17 +422,17 @@ Cycle 80: block-labels test fix promoted wilcoxon TinyPlanted from noise-converg
 
 ---
 
-### embed/dpt (CYCLE-142) — promoted 2026-04-29, commit no-git
+### embed/dpt (CYCLE-142) — promoted 2026-04-29, commit no-git, ⚠️ AT-RISK FOR SAME SCALING GAP AS DIFFMAP
 
 | scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
 |---|---|---|---|---|---|---|---|---|
 | small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | scanpy | TBD |
-| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
-| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending — same pattern as diffmap, expect SCALING FAILURE) |
+| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending — same pattern as diffmap, expect SCALING FAILURE) |
 
-**Notes**: Diffusion Pseudotime (DPT) trajectory inference (Haghverdi et al. 2016). Root-to-cell shortest-path distances on diffusion graph. See [CYCLE-142 cycle-log](state/cycle-log.md).
+**Notes**: Diffusion Pseudotime (DPT) trajectory inference (Haghverdi et al. 2016). Root-to-cell shortest-path distances on diffusion graph. **CYCLE-160 audit flagged this kernel as at-risk**: `dpt.h` uses the SAME dense n×n W matrix + `cusolverDnSsyevd` pattern at lines 151/179/215/270/302/453 that broke for `embed/diffmap` in CYCLE-159 (14× slower than scanpy at n=10k, cuSOLVER crash at n=30k). The kernel will likely scale identically poorly until rewritten using a sparse eigensolver. See [CYCLE-142 + CYCLE-160 cycle-log](state/cycle-log.md) and `state/style-rules.md` §J.6.
 
-**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+**Phase E status**: ⚠️ **AT-RISK** — kernel passes small-scale ctest but is structurally identical to the broken diffmap pattern. Recommended action: bench at n=10k early to confirm/reject the suspicion; if confirmed, file CYCLE-159.1's sparse-eigensolver rewrite to ALSO cover dpt (same fix applies — symmetric Markov eigendecomp on sparse Laplacian).
 
 ---
 
