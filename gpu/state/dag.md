@@ -4,7 +4,7 @@ Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movemen
 
 ## 🔴 Active this cycle
 
-- **CYCLE-152-PHASE-H-DOCS-BACKFILL-BATCH-2**: 6 remaining `docs/api/*.md` pages — embed_dpt, embed_dendrogram, graph_kmeans, preprocess_magic, preprocess_model_gene_var, preprocess_pearson_residuals. Clears the last of the Rule 25 debt before the loop returns to fresh ports / audits / Phase E benchmarks.
+- **CYCLE-153-SCRUBLET-REWRITE** (queued, no SLURM yet): `qc/doublet_score.h` cycle-13 vintage; audit (CYCLE-147) found Spearman 0.24 vs scrublet reference (target ≥0.95), AUC 0.63 vs 0.85, n_synth correlation 0.69-0.79. Real-data path + determinism test PASS, so the kernel runs and is reproducible — bugs are in (likely) synthetic-doublet generation OR kNN-density math. Smaller lift than full rewrite per audit — focused fixes. Will dispatch `gpu-kernel-dev` (Sonnet) + `analysis-validator` (Sonnet) in parallel.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
@@ -30,6 +30,7 @@ Frobenius NMF only (KL / IS / NB-GLM / β-divergence dropped); fast PCA / SVD wi
 
 ## ✅ Recently complete (last 5 cycles — full detail in `state/cycle-log.md`)
 
+- **CYCLE-152** Phase H docs backfill batch 2 (6 markdown pages, ~53 KB): embed_{dpt, dendrogram}, graph_kmeans, preprocess_{magic, model_gene_var, pearson_residuals}. **Rule 25 debt fully cleared** — every frontier kernel now has a `docs/api/{slug}.md` page. docs/api/ went from 11 → 25 pages across CYCLE-150/151/152. 13-section template is the durable house style.
 - **CYCLE-151** Phase H docs backfill batch 1 (14 markdown pages, ~125 KB): enrich/* (6), integrate/* (4 — scIB triplet cross-linked), qc/* + anno/* (4 — raw-10X duo + reference-mapping pair cross-linked). 13-section template from CYCLE-150's `embed_diffmap.md` is now the house style. Three parallel Haiku dispatches; each produced 100-180-line pages with test tolerances pulled from correctness tests and algorithm summaries quoted from cycle-log.md.
 - **CYCLE-150** Diffusion Map (Coifman & Lafon 2005, jobs 370267 → 370271): 5/5 tests PASS on retry. First GPU diffusion-map embedding; pairs with CYCLE-142 DPT to complete the diffusion-geometry trajectory toolkit on GPU. Two test-design fixes: signed-embedding canonicalization (Test 1) + max-t-statistic over top 4 components for branch separation (Test 2). Symmetric normalization `D^{-1/2} W D^{-1/2}` for cuSOLVER (CYCLE-142 lesson reused). 476 LOC kernel + 463 LOC tests.
 - **CYCLE-149** k-means clustering (Lloyd 1957, job 369480)
