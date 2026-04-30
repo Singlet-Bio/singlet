@@ -14,7 +14,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --gres=gpu:1
-#SBATCH --nodelist=g001
+#SBATCH --nodelist=g003
 #SBATCH --output=/mnt/home/debruinz/Singlet-AI/singlet-gpu/state/cycle153_scrublet_%j.log
 
 set -uo pipefail
