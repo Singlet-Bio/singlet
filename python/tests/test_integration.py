@@ -571,3 +571,36 @@ class TestPreprocessing:
         )
         assert pd.protocol == "10xv3"
         assert pd.chemistry == "10xv3"
+
+
+class TestCatalogNewFunctions:
+    """Tests for summary(), samples(), and top_series()."""
+
+    def test_summary_returns_string(self):
+        import singlet
+        result = singlet.summary()
+        assert isinstance(result, str)
+        assert "singlet atlas" in result
+        assert "samples" in result
+
+    def test_top_series_returns_dataframe(self):
+        import singlet
+        result = singlet.top_series(n=5)
+        assert hasattr(result, "columns")
+        assert "gse_id" in result.columns
+        assert "total_cells" in result.columns
+        assert len(result) <= 5
+        # Should be sorted descending by total_cells
+        if len(result) > 1:
+            assert result["total_cells"].iloc[0] >= result["total_cells"].iloc[1]
+
+    def test_top_series_min_samples(self):
+        import singlet
+        result = singlet.top_series(min_samples=5)
+        assert all(result["n_samples"] >= 5)
+
+    def test_samples_returns_dataframe(self):
+        import singlet
+        result = singlet.samples()
+        assert hasattr(result, "columns")
+        assert "gse_id" in result.columns
