@@ -4,7 +4,7 @@ Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movemen
 
 ## 🔴 Active this cycle
 
-- **CYCLE-158-PHASE-E-SCORE-GENES** (queued, no SLURM yet): next Phase E candidate. enrich/score_genes (CYCLE-129) has clean scanpy parity reference (`sc.tl.score_genes`) and similar kernel size (~480 LOC) to pearson_residuals. Will dispatch Sonnet gpu-bench analogous to CYCLE-157.
+- **CYCLE-158-PHASE-E-SCORE-GENES** (in flight, job 370982 PD on Priority, --nodelist=g050 per §J.2): Sonnet gpu-bench wrote `bench/bench_enrich_score_genes_perf.cpp` (10k/30k × 5k cells, 5 sets × 50 genes, 2 warmup + 5 timed cudaEvent), `bench/refs/score_genes_ref.py` (scanpy.tl.score_genes loop CPU baseline), and `state/cycle158_score_genes_bench.sh`. CMake driver count → 22. Pattern matches CYCLE-157 exactly. Awaiting verify; 30-min walltime; queue wait variable since GPU partition currently all-mix state.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 

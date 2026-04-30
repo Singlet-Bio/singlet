@@ -110,9 +110,14 @@ add_bench_driver(bench_qc_perf                 bench_qc_perf.cpp)
 add_bench_driver(bench_preprocess_pearson_residuals_perf  bench_preprocess_pearson_residuals_perf.cpp)
 
 # ---------------------------------------------------------------------------
+# Cycle 158 drivers: enrich/score_genes standalone Phase E benchmark
+# ---------------------------------------------------------------------------
+add_bench_driver(bench_enrich_score_genes_perf  bench_enrich_score_genes_perf.cpp)
+
+# ---------------------------------------------------------------------------
 # Status message
 # ---------------------------------------------------------------------------
-message(STATUS "singlet-gpu bench: 21 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157)")
+message(STATUS "singlet-gpu bench: 22 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158)")
 message(STATUS "  53a: bench_io_pz_loader_perf")
 message(STATUS "  53a: bench_preprocess_lognorm_perf")
 message(STATUS "  53a: bench_preprocess_hvg_perf")
