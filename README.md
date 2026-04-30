@@ -29,11 +29,11 @@ adata = singlet.load_dir("/path/to/sample")
 # → AnnData with gene counts, QC, doublets, cell cycle, ancestry, sex, summary
 ```
 
-## Notebooks (17 ready)
+## Notebooks (18 ready)
 
 | Notebook | Topic |
 |----------|-------|
-| [quickstart](notebooks/quickstart.ipynb) | Catalog API, browse 2,378 samples |
+| [quickstart](notebooks/quickstart.ipynb) | Catalog API, browse 2,386 samples |
 | [gene_counting](notebooks/gene_counting.ipynb) | STARsolo equivalence (r=0.9995) |
 | [sex_calling](notebooks/sex_calling.ipynb) | Sex/karyotype calling validation |
 | [ambient_rna](notebooks/ambient_rna.ipynb) | Ambient RNA contamination profiling |
@@ -50,11 +50,12 @@ adata = singlet.load_dir("/path/to/sample")
 | [pipeline_outputs](notebooks/pipeline_outputs.ipynb) | Complete outputs reference |
 | [cell_calling](notebooks/cell_calling.ipynb) | EmptyDrops deviance testing |
 | [protocol_detection](notebooks/protocol_detection.ipynb) | 15+ protocol auto-detection |
+| [1pz_format](notebooks/1pz_format.ipynb) | .1pz format: 8.7× smaller than h5ad |
 
 ## Atlas Stats
 
-- **2,378 samples** processed (989 SUCCESS)
-- **1,175 GEO series** covered
+- **2,386 samples** processed (993 SUCCESS)
+- **1,178 GEO series** covered
 - **7 species**: human, mouse, macaque, fruit fly, chicken, zebrafish, chimpanzee
 - **2.9M cells** in the atlas
 - **Text search**: `singlet.samples(search="lung")` across GEO titles

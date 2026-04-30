@@ -2,7 +2,7 @@
 
 **Python client for the Singlet single-cell atlas.**
 
-2,358 samples • 979 successful • 2.9M cells • 7 species • 1,164 GEO series • ~13× .1pz compression
+2,386 samples • 993 successful • 2.9M cells • 7 species • 1,178 GEO series • 8.7× .1pz compression
 
 ## Install
 
@@ -17,7 +17,7 @@ import singlet
 
 # Browse the atlas catalog (free, works offline)
 singlet.summary()
-# → 2,358 samples, 979 SUCCESS, 7 species, 2.89M cells
+# → 2,386 samples, 993 SUCCESS, 7 species, 2.93M cells
 
 df = singlet.samples(organism="Homo sapiens", status="SUCCESS")
 singlet.species()
@@ -49,16 +49,16 @@ sc.tl.leiden(adata)
 
 | Feature | Details |
 |---------|---------|
-| **Catalog** | Browse 2,358 samples by organism, protocol, status, quality tier |
+| **Catalog** | Browse 2,386 samples by organism, protocol, status, quality tier |
 | **load_dir()** | Read singlify output directory → AnnData with QC, doublets, cell cycle, ancestry, sex, summary |
 | **read_1pz()** | Read .1pz sparse matrix → AnnData |
-| **Compression** | singlepress .1pz format — ~13× vs raw CSC |
+| **Compression** | singlepress .1pz format — 8.7× vs h5ad |
 | **PyTorch** | `OnePZDataset` + `DataLoader` with log-normalization |
 | **Offline** | Bundled catalog parquet — no network needed for browsing |
 
 ## Notebooks
 
-17 executed Jupyter notebooks at [`notebooks/`](notebooks/):
+18 executed Jupyter notebooks at [`notebooks/`](notebooks/):
 - **quickstart** — Atlas catalog exploration
 - **gene_counting** — Equivalence vs STARsolo (r=0.9995)
 - **sex_calling** — XIST/SRY validation (100% agreement)
@@ -76,6 +76,7 @@ sc.tl.leiden(adata)
 - **pipeline_outputs** — Complete outputs reference
 - **cell_calling** — EmptyDrops deviance testing
 - **protocol_detection** — Corpus-wide protocol analysis
+- **1pz_format** — .1pz format benchmarks (8.7× smaller than h5ad)
 
 ## Documentation
 
