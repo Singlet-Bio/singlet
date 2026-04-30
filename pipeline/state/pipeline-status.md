@@ -365,12 +365,12 @@ HARD_FAIL breakdown: 9 download_fail, 2 single-end misclass, 1 zero-cells (T13)
 - **Rate stable at 63-65%**: Four consecutive batches (C185-C188) all in 58-65% band — this IS the ceiling
 
 ### Overall Pipeline Totals (updated)
-- **Total COMPLETED (exit 0)**: 627 + 16(C182) + 32(C183) + 39(C184) + 87(C185) + 121(C186) + 112(C187) + 126(C188) = **1,160**
+- **Total COMPLETED (exit 0)**: 627 + 16(C182) + 32(C183) + 39(C184) + 87(C185) + 121(C186) + 112(C187) + 126(C188) + 119(C189) = **1,279**
 - **Species with confirmed SUCCESS**: human, mouse, macaque, drosophila, chicken
-- **True success rate (excl data_incomplete)**: 80-89% on pure 10x batches, ~65% on high-yield mixed
-- **Primary bottleneck**: 1) data_incomplete (~30% even on high-yield), 2) long-runner timeouts (now auto-cancelled)
-- **Protocol bias validated**: High-yield protocols (10xv3/v2/celseq2/scirna/marsseq/dropseq) = 65% raw success
-- **Best batches**: C188 = 126/200 (65.3%), C186 = 121/200 (60.5%), C187 = 112/179 (62.6%)
+- **True success rate (excl data_incomplete)**: 80-89% on pure 10x batches, ~63% on high-yield mixed
+- **Primary bottleneck**: 1) data_incomplete (~30-35% even on high-yield), 2) long-runner timeouts (now auto-cancelled)
+- **Protocol bias validated**: High-yield protocols (10xv3/v2/celseq2/scirna/marsseq/dropseq) = 63% raw success
+- **Best batches**: C188 = 126/200 (65.3%), C189 = 119/200 (61.7%), C186 = 121/200 (60.5%)
 - **Scaling**: 200-task batches on 10 nodes complete in ~5h wall time
 - **2h SLURM timeout**: Standard for all future batches — eliminates stale runners
 
