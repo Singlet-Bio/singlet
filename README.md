@@ -33,7 +33,7 @@ adata = singlet.load_dir("/path/to/sample")
 
 | Notebook | Topic |
 |----------|-------|
-| [quickstart](notebooks/quickstart.ipynb) | Catalog API, browse 2,546 samples |
+| [quickstart](notebooks/quickstart.ipynb) | Catalog API, browse 2,548 samples |
 | [gene_counting](notebooks/gene_counting.ipynb) | STARsolo equivalence (r=0.9995) |
 | [sex_calling](notebooks/sex_calling.ipynb) | Sex/karyotype calling validation |
 | [ambient_rna](notebooks/ambient_rna.ipynb) | Ambient RNA contamination profiling |
@@ -54,8 +54,8 @@ adata = singlet.load_dir("/path/to/sample")
 
 ## Atlas Stats
 
-- **2,546 samples** processed (1,070 SUCCESS)
-- **1,224 GEO series** covered
+- **2,548 samples** processed (1,071 SUCCESS)
+- **1,223 GEO series** covered
 - **7 species**: human, mouse, macaque, fruit fly, chicken, zebrafish, chimpanzee
 - **3.1M cells** in the atlas
 - **18 notebooks** with embedded matplotlib plots ([view on singlet.bio](https://singlet.bio/notebooks))
