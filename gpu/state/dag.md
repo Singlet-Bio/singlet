@@ -4,7 +4,7 @@ Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movemen
 
 ## 🔴 Active this cycle
 
-- **CYCLE-153-SCRUBLET-REWRITE** (queued, no SLURM yet): `qc/doublet_score.h` cycle-13 vintage; audit (CYCLE-147) found Spearman 0.24 vs scrublet reference (target ≥0.95), AUC 0.63 vs 0.85, n_synth correlation 0.69-0.79. Real-data path + determinism test PASS, so the kernel runs and is reproducible — bugs are in (likely) synthetic-doublet generation OR kNN-density math. Smaller lift than full rewrite per audit — focused fixes. Will dispatch `gpu-kernel-dev` (Sonnet) + `analysis-validator` (Sonnet) in parallel.
+- **CYCLE-153-SCRUBLET-REWRITE** (in flight, job 370468 PD on g001): Sonnet kernel-dev diagnosed two bugs and submitted verify. (1) `find_knee_threshold` scanned right-to-left and returned right-edge of rightmost doublet-bump bin → threshold landed beyond all doublets → AUC 0.63 collapse. Fix: peak → valley-after-peak → first bin ≥5%-peak → left-edge as threshold (`doublet_score.h:229-268`). (2) Test `Doublet_TinySynthetic_VsScrublet` was using a random Gaussian projection while scrublet runs internal TruncatedSVD PCA → divergent kNN graphs → Spearman 0.24. Fix: `tests/refs/doublet_scrublet_reference.py` now exports scrublet's `manifold_obs_` PCA; test reads it via npz and uses it as kernel input. NSynth_Sensitivity Pearson should improve organically from the knee fix. Awaiting verify.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 

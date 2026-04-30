@@ -54,6 +54,7 @@
 
 #include <cstdint>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 #include <algorithm>
 
@@ -211,34 +212,59 @@ threshold_kernel(const float*   __restrict__ score,
 // the 512-bin unsigned int array (one cudaMemcpy of 2 KB at function exit).
 // Uses fp64 accumulation for the cumulative density calculation per design doc.
 //
-// Knee-point heuristic: find the FIRST bin from the right where the count drops
-// below 5% of the peak bin count. This is the right edge of the "doublet bump".
-// The threshold is placed at the LEFT edge of that bin.
-//   If no bin exceeds 5% of peak on the right half → return 0.25 fallback.
+// Knee-point heuristic (fixed in CYCLE-153):
+//   The doublet-score distribution is bimodal: a large singlet peak near 0 and a
+//   smaller doublet bump at higher scores. The threshold is the LEFT edge of the
+//   doublet bump — equivalently, the minimum of the valley between the two modes.
+//
+//   Algorithm:
+//     1. Find the global peak bin (singlet mode, typically in [0, n_bins/2)).
+//     2. Starting from that peak, scan right to find the local minimum (valley).
+//     3. Place the threshold at the left edge of the first post-valley bin that
+//        rises back above 5% of peak — i.e., the onset of the doublet bump.
+//     4. If no valley or no post-valley rise → fall back to 0.25.
+//
+// Prior bug (cycle-13 vintage): code scanned right-to-left and returned the
+//   RIGHT edge of the rightmost bin above cutoff, which placed the threshold
+//   beyond the doublet bump → zero cells called as doublets → AUC 0.63.
 inline float
 find_knee_threshold(const unsigned int* hist, int n_bins)
 {
-    // Locate peak bin.
-    unsigned int peak = 0;
-    for (int b = 0; b < n_bins; ++b) if (hist[b] > peak) peak = hist[b];
-    if (peak == 0) return 0.25f;  // empty histogram
-
-    float cutoff = 0.05f * (float)peak;
-
-    // Scan right-to-left from bin n_bins-1; find first bin above cutoff.
-    // That bin's right edge is the "doublet bump" threshold.
-    // We walk from bin n_bins/2 to avoid labeling a large low-score peak as doublets.
-    int knee_bin = -1;
-    for (int b = n_bins - 1; b >= n_bins / 2; --b) {
-        if ((float)hist[b] >= cutoff) { knee_bin = b; break; }
+    // Step 1: locate the global peak bin.
+    unsigned int peak_count = 0;
+    int          peak_bin   = 0;
+    for (int b = 0; b < n_bins; ++b) {
+        if (hist[b] > peak_count) { peak_count = hist[b]; peak_bin = b; }
     }
-    if (knee_bin < 0) {
-        // No detectable knee in upper half — score distribution is unimodal at low scores.
-        return 0.25f;
+    if (peak_count == 0) return 0.25f;
+
+    float cutoff = 0.05f * (float)peak_count;
+
+    // If the peak is already in the upper half, the distribution is unimodal at
+    // high scores — no distinct doublet bump; use fallback.
+    if (peak_bin >= n_bins / 2) return 0.25f;
+
+    // Step 2: find the global minimum in (peak_bin, n_bins) — the valley between
+    // the singlet peak and any doublet bump.  Use global min rather than first
+    // local min to tolerate histogram noise in the tail.
+    unsigned int valley_count = std::numeric_limits<unsigned int>::max();
+    int          valley_bin   = peak_bin + 1;
+    for (int b = peak_bin + 1; b < n_bins; ++b) {
+        if (hist[b] < valley_count) { valley_count = hist[b]; valley_bin = b; }
     }
-    // Threshold = left edge of the knee bin + 1 (exclusive right edge of the doublet bump).
-    float threshold = (float)(knee_bin + 1) / (float)n_bins;
-    return std::min(threshold, 1.0f);
+
+    // Step 3: scan right from the valley to find the onset of the doublet bump.
+    // The threshold is placed at the LEFT edge of the first bin past the valley
+    // whose count rises back above 5% of peak — i.e., the doublet bump onset.
+    for (int b = valley_bin + 1; b < n_bins; ++b) {
+        if ((float)hist[b] >= cutoff) {
+            // Left edge of bin b = b / n_bins.
+            return (float)b / (float)n_bins;
+        }
+    }
+
+    // No post-valley bump found — distribution is unimodal at low scores.
+    return 0.25f;
 }
 
 // ─── Count doublet calls (device-side via CUB) ────────────────────────────────

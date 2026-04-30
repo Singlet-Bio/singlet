@@ -147,6 +147,30 @@ def run_scrublet_reference(
         pos_scores = doublet_scores[predicted_doublets.astype(bool)]
         threshold = float(pos_scores.min()) if len(pos_scores) > 0 else 0.5
 
+    # Export scrublet's internal PCA embedding of the real cells (n_cells × n_pcs).
+    # The C++ test uses this embedding for the GPU kernel so both frameworks score
+    # on the SAME embedding — otherwise a random projection vs scrublet's TruncatedSVD
+    # gives Spearman ≈ 0.24 even though the algorithm is correct.
+    # scrublet stores it in manifold_obs_ (cells × PCs, float64).
+    pca_embedding = None
+    for attr in ('manifold_obs_', '_manifold_obs', 'pca_obs_'):
+        pca_embedding = getattr(scrub, attr, None)
+        if pca_embedding is not None:
+            break
+    if pca_embedding is None:
+        # Fallback: recompute from scrublet's normalized counts using sklearn.
+        try:
+            from sklearn.decomposition import TruncatedSVD
+            n_pcs = min(n_genes - 1, 30)
+            pca_embedding = TruncatedSVD(n_components=n_pcs,
+                                         random_state=seed).fit_transform(
+                scrub._E_obs_norm if hasattr(scrub, '_E_obs_norm')
+                else counts_int.toarray())
+        except Exception:
+            pca_embedding = np.zeros((n_cells, 1), dtype=np.float64)
+
+    pca_embedding = np.asarray(pca_embedding, dtype=np.float32)
+
     np.savez(
         out_path,
         doublet_scores     = doublet_scores,
@@ -154,11 +178,12 @@ def run_scrublet_reference(
         threshold          = np.array([threshold], dtype=np.float64),
         n_cells            = np.array([n_cells], dtype=np.int32),
         n_synth            = np.array([n_synth], dtype=np.int32),
+        pca_embedding      = pca_embedding,   # n_cells × n_pcs, float32
     )
     n_doublets = int(predicted_doublets.sum())
     print(f"[doublet_scrublet_reference] wrote {out_path}  "
           f"n_cells={n_cells} n_synth={n_synth} n_doublets={n_doublets} "
-          f"threshold={threshold:.4f}",
+          f"threshold={threshold:.4f}  pca_shape={pca_embedding.shape}",
           file=sys.stderr)
 
 

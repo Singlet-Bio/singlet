@@ -312,6 +312,50 @@ std::vector<double> read_npz_doublet_scores(const std::string& npz_path,
 }
 
 // ---------------------------------------------------------------------------
+// Read the PCA embedding (n_cells × n_pcs, float32) exported by the scrublet
+// reference script into a HostDense.  Falls back to an empty HostDense (n_cols=0)
+// if the 'pca_embedding' key is absent (older reference output).
+// ---------------------------------------------------------------------------
+HostDense read_npz_pca_embedding(const std::string& npz_path, int n_cells) {
+    std::string extract_script = refs_path("_extract_pca.py");
+    std::string pca_bin        = refs_path("_extract_pca.bin");
+    {
+        std::ofstream s(extract_script);
+        s << "import numpy as np, sys, struct\n";
+        s << "d = np.load('" << npz_path << "', allow_pickle=False)\n";
+        s << "if 'pca_embedding' not in d:\n";
+        s << "    open('" << pca_bin << "', 'wb').write(struct.pack('<II', 0, 0))\n";
+        s << "    sys.exit(0)\n";
+        s << "pca = d['pca_embedding'].astype(np.float32)\n";
+        s << "nr, nc = pca.shape\n";
+        s << "with open('" << pca_bin << "', 'wb') as f:\n";
+        s << "    f.write(struct.pack('<II', nr, nc))\n";
+        s << "    f.write(pca.tobytes())\n";
+    }
+    int rc = run_cmd_rc(std::string(kPython) + " " + extract_script + " 2>/dev/null");
+
+    HostDense out;
+    out.n_rows = 0; out.n_cols = 0;
+    if (rc != 0) return out;
+
+    std::ifstream f(pca_bin, std::ios::binary);
+    if (!f) return out;
+    uint32_t nr = 0, nc = 0;
+    f.read(reinterpret_cast<char*>(&nr), 4);
+    f.read(reinterpret_cast<char*>(&nc), 4);
+    if (nr == 0 || nc == 0) return out;
+    if (static_cast<int>(nr) != n_cells) return out;
+
+    out.n_rows = nr;
+    out.n_cols = nc;
+    out.data.resize(static_cast<size_t>(nr) * nc);
+    f.read(reinterpret_cast<char*>(out.data.data()),
+           static_cast<std::streamsize>(static_cast<size_t>(nr) * nc * sizeof(float)));
+    if (!f) { out.n_rows = 0; out.n_cols = 0; out.data.clear(); }
+    return out;
+}
+
+// ---------------------------------------------------------------------------
 // Spearman rank correlation between two equal-length vectors.
 // ---------------------------------------------------------------------------
 double spearman(const std::vector<double>& x, const std::vector<double>& y) {
@@ -656,9 +700,15 @@ TEST_F(DoubletFixture, Doublet_TinySynthetic_VsScrublet) {
     // Read scrublet scores.
     std::vector<double> ref_scores = read_npz_doublet_scores(ref_npz, kTinyCells);
 
-    // Run singlet-gpu doublet scorer.
-    // Input: PCA projection (cells × PCs).
-    HostDense pca = simple_pca_projection(counts, /*n_pcs=*/10, kSeed + 2);
+    // Run singlet-gpu doublet scorer on the SAME PCA embedding that scrublet used.
+    // Using a different embedding (e.g. random projection) produces Spearman ≈ 0.24
+    // even when the kernel is algorithmically correct, because the kNN graphs diverge.
+    // The reference script exports scrublet's internal PCA as 'pca_embedding' in the npz.
+    HostDense pca = read_npz_pca_embedding(ref_npz, kTinyCells);
+    if (pca.n_cols == 0) {
+        // Fallback if the reference script used an older version without pca_embedding.
+        pca = simple_pca_projection(counts, /*n_pcs=*/10, kSeed + 2);
+    }
     singlet_gpu::core::DeviceMemory<float> d_pca = upload_dense(pca, stream_);
 
     singlet_gpu::qc::DoubletConfig cfg;
