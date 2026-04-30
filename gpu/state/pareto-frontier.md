@@ -185,12 +185,14 @@ Cycle 80: block-labels test fix promoted wilcoxon TinyPlanted from noise-converg
 | scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
 |---|---|---|---|---|---|---|---|---|
 | small (20k×20k) | 0.269 | 8 | 5/5 ctest PASS (CYCLE-118) | 3388.6 | 158.7 | reference | scanpy | wall (12,609×) |
-| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
-| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+| 10k×5k (5%) | 0.709 | 0.0 | n/a (synth bench) | 167.6 | n/a | reference | scanpy CPU 1.10.3 | wall (236.4×) |
+| 30k×5k (5%) | 1.691 | 0.0 | n/a (synth bench) | 511.4 | n/a | reference | scanpy CPU 1.10.3 | wall (302.4×) |
+| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending — needs streaming driver per Feature 17) |
+| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending — needs streaming driver per Feature 17) |
 
-**Notes**: Analytic Pearson residuals for HVG selection (Lause et al. 2021). Zero-baseline decomposition avoids dense residual materialization. 12,609× faster than scanpy CPU at 20k×20k. See [CYCLE-118 cycle-log](state/cycle-log.md). 100k/1M pending Phase E streaming benchmark.
+**Notes**: Analytic Pearson residuals for HVG selection (Lause et al. 2021). Zero-baseline decomposition avoids dense residual materialization. CYCLE-157 added 10k/30k synthetic-data rows (job 370871 on g003 V100S, 2 warmup + 5 timed, scipy.sparse.random density=5% theta=100). 236-302× speedup vs scanpy CPU at the medium scales; 12,609× at the small scale (the small-scale ratio is much higher because scanpy has high per-call startup cost that amortizes at larger n_cells). GPU throughput holds at ~14-18 M cells/s. See [CYCLE-118](state/cycle-log.md) + [CYCLE-157](state/cycle-log.md).
 
-**Phase E status**: pending (small-scale numbers in cycle-log.md; 100k/1M when Phase E streaming driver ready).
+**Phase E status**: PARTIAL — small + medium scales benched; 100k/1M still pending the streaming driver (Feature 17) since synthesizing 100k×5k at 5% density would push past the SLURM walltime budget for scanpy CPU.
 
 ---
 

@@ -4,7 +4,7 @@ Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movemen
 
 ## 🔴 Active this cycle
 
-- **CYCLE-157-PHASE-E-PEARSON-RESIDUALS-MEDIUM** (in flight, job 370871 RUNNING on g003 since 15:46): Sonnet gpu-bench wrote `bench/bench_preprocess_pearson_residuals_perf.cpp` (synthetic CSC 10k/30k × 5k, density 5%, 2 warmup + 5 timed via cudaEvent), `bench/refs/pearson_residuals_ref.py` (scanpy.experimental scanpy CPU baseline at same shapes, theta=100, 2 warmup + 5 timed), and `state/cycle157_pearson_bench.sh` (--nodelist=g003 per §J.2). CMake driver count → 21. Job started 0:04 in queue → §J.2 verified working. Awaiting verify; 45-min walltime; expected total runtime <15 min.
+- **CYCLE-158-PHASE-E-SCORE-GENES** (queued, no SLURM yet): next Phase E candidate. enrich/score_genes (CYCLE-129) has clean scanpy parity reference (`sc.tl.score_genes`) and similar kernel size (~480 LOC) to pearson_residuals. Will dispatch Sonnet gpu-bench analogous to CYCLE-157.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
@@ -31,6 +31,7 @@ Frobenius NMF only (KL / IS / NB-GLM / β-divergence dropped); fast PCA / SVD wi
 
 ## ✅ Recently complete (last 5 cycles — full detail in `state/cycle-log.md`)
 
+- **CYCLE-157** Phase E bench for preprocess/pearson_residuals (job 370871 g003): 10k = **236.4× scanpy CPU** (0.709ms vs 167.6ms), 30k = **302.4×** (1.691ms vs 511.4ms). GPU throughput ~14-18M cells/s. pareto-frontier.md row updated PARTIAL (small + medium done; 100k/1M still pending streaming driver). §J.2 verified working — job started in 0:04 vs CYCLE-153's 25-min wait. 3 new files in bench/ + sbatch script.
 - **CYCLE-156** style-rules.md §J cycle-protocol lessons: 5 sub-rules added (~140 LOC, ~5 KB) capturing procedural improvements from CYCLE-153/154/155: threshold-masking pitfall, SLURM nodelist defaults, pareto rows in Phase F, Phase G publish in close checklist, loop pacing (alternate LOW/HIGH-risk cycles). Pure-Opus direct edit; no worker dispatch.
 - **CYCLE-155** Phase G publish: `frontier_sync.py` ran clean, 24 entries refreshed in Supabase `gpu_frontier` table → singlet.bio/benchmarks. TBD filter at `scripts/frontier_sync.py:101-106` correctly skipped the 20 placeholder rows from CYCLE-154; only real SOTA-comparison numbers reach the public site. Catches up Phase G compliance after CYCLE-150/151/152/154 all skipped publishing.
 - **CYCLE-154** pareto-frontier.md row backfill: 21 entries added (~24.7 KB) for features promoted CYCLE-118-150 that lacked rows. File now has 33 frontier-section entries (1 schema + 11 original + 21 new). One Haiku dispatch; pearson_residuals carried real bench numbers (12,609× scanpy small-scale), other 20 marked "Phase E pending" so future bench cycles fill rows without restructuring. Lesson: every promotion cycle should add the pareto row in Phase F (don't defer to backfill).

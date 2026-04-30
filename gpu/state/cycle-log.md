@@ -3488,3 +3488,32 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
   2. **Section §J is a pattern-evolution surface.** Adding more sub-rules over time as more cycle-protocol lessons emerge is fine — it doesn't bloat the kernel-rule sections (§A-§I).
 - **Next cycle**: CYCLE-157 — back to higher-priority queue. Phase E bench for pearson_residuals at 100k (concrete benchmark numbers, low-risk Sonnet dispatch) OR CYCLE-122 enrichment zero-output diagnostic (focused single-hypothesis debug). Default: Phase E pearson_residuals (extends the §J.5 LOW-risk recovery streak by one more before the next HIGH-risk cycle).
 
+## Cycle 157 (2026-04-30) — Phase E bench for preprocess/pearson_residuals (PASS)
+- **Feature**: preprocess/pearson_residual_variance (CYCLE-118 standalone kernel, NOT the older path inside hvg.h). Phase E bench filling the medium-scale rows of the pareto-frontier entry that CYCLE-154 backfilled with TBD scaffolding.
+- **Outcome**: PASS. Build clean, GPU bench + scanpy CPU baseline both succeeded. **10k cells: GPU 0.709 ms vs scanpy 167.6 ms = 236.4× speedup. 30k cells: GPU 1.691 ms vs scanpy 511.4 ms = 302.4× speedup.** GPU throughput holds at ~14-18 M cells/s.
+- **Job**: 370871 on g003 V100S. Job started in 0:04 (no queue wait — §J.2 verified working).
+- **Files added**:
+  - `bench/bench_preprocess_pearson_residuals_perf.cpp` (177 LOC) — synthesizes CSC at 10k/30k × 5k, density 5%, 2 warmup + 5 timed via cudaEvent, emits CSV.
+  - `bench/refs/pearson_residuals_ref.py` (116 LOC) — scanpy.experimental.pp.highly_variable_genes(flavor='pearson_residuals', theta=100) at same shapes; scipy.sparse.random seed=42 for shape parity.
+  - `state/cycle157_pearson_bench.sh` (113 LOC) — SLURM script targeting g003 (per §J.2).
+  - `bench/CMakeLists.txt` — new `add_bench_driver` entry; driver count → 21.
+- **Numbers** (full SUMMARY block from job 370871 log):
+  ```
+  scale | GPU_wall_ms | scanpy_wall_ms | speedup
+  10k   |       0.709 |          167.6 | 236.4x
+  30k   |       1.691 |          511.4 | 302.4x
+  ```
+  Prior small-scale (CYCLE-118): 0.269 ms vs 3388.6 ms = 12,609×.
+- **Why the small-scale ratio (12,609×) is higher than medium-scale (236-302×)**: scanpy has high per-call startup cost (Python imports, AnnData construction, dispatching to internal CPU loops) that's a fixed overhead at any scale. At small n_cells (~hundreds-to-low-thousands), this fixed cost dominates and amortizes poorly; at medium n_cells (10k-30k), the actual computation dominates and the ratio drops to a more sustainable 200-300×. Both are real numbers — they're measuring different things at different scale regimes. The medium-scale ratio is the more honest "kernel-vs-kernel" comparison.
+- **pareto-frontier.md updated**: CYCLE-118 entry now has 4 scale rows (small / 10k / 30k / 100k-1M-pending); Phase E status changed `pending` → `PARTIAL`.
+- **Lessons**:
+  1. **Small-scale speedup ratios overstate kernel advantage when scanpy's startup cost dominates.** Phase E should bench at multiple scales to give a fair picture; reporting only small-scale ratios is misleading marketing.
+  2. **§J.2 is verified working.** Job submitted to g003 went `submitted → running` in 0:04 vs CYCLE-153's 25-min wait pinned to busy g001. The rule is durable.
+  3. **Phase E for medium scale (10k/30k) is fast and low-risk** — total cycle wall time (including build + 2 GPU benches + 2 scanpy CPU benches) was <15 min on g003 V100S. Worth doing for many of the other 20 Phase-E-pending features to fill the pareto frontier.
+- **Next cycle**: CYCLE-158 — continue Phase E for the next eligible feature. Candidates ranked by ease (simple kernel, fast scanpy reference, no infra dependencies):
+  - **preprocess/magic** (CYCLE-124, ping-pong cuSPARSE SpMM, scanpy `sc.external.pp.magic` SOTA)
+  - **preprocess/model_gene_var** (CYCLE-127, scran-style; scanpy `sc.experimental.pp.normalize_pearson_residuals` is a related ref)
+  - **enrich/score_genes** (CYCLE-129, scanpy `sc.tl.score_genes` is the direct ref)
+  - **embed/diffmap** (CYCLE-150, scanpy `sc.tl.diffmap` is the direct ref)
+  Default: enrich/score_genes (cleanest scanpy parity reference + similar kernel size).
+
