@@ -23,7 +23,38 @@ pip install "singlet @ git+https://github.com/Singlet-Bio/singlet#subdirectory=p
 # Load a processed sample from the Singlet Atlas
 import singlet
 adata = singlet.load("GSM1234567")
+
+# Or load directly from a singlify output directory
+adata = singlet.load_dir("/path/to/sample")
+# → AnnData with gene counts, QC, doublets, cell cycle, ancestry, sex, summary
 ```
+
+## Notebooks (15 ready)
+
+| Notebook | Topic |
+|----------|-------|
+| [quickstart](notebooks/quickstart.ipynb) | Catalog API, browse 2,350+ samples |
+| [gene_counting](notebooks/gene_counting.ipynb) | STARsolo equivalence (r=0.9995) |
+| [sex_calling](notebooks/sex_calling.ipynb) | Sex/karyotype calling validation |
+| [ambient_rna](notebooks/ambient_rna.ipynb) | Ambient RNA contamination profiling |
+| [doublet_detection](notebooks/doublet_detection.ipynb) | UMI-based doublet detection |
+| [corpus_analytics](notebooks/corpus_analytics.ipynb) | Atlas-wide QC distributions |
+| [01_load_and_explore](notebooks/01_load_and_explore.ipynb) | Full scanpy pipeline (PCA→UMAP→Leiden) |
+| [cell_cycle](notebooks/cell_cycle.ipynb) | Cell cycle phase scoring |
+| [sample_qc_report](notebooks/sample_qc_report.ipynb) | Complete one-call QC report |
+| [saturation_curve](notebooks/saturation_curve.ipynb) | Sequencing depth analysis |
+| [ancestry_calling](notebooks/ancestry_calling.ipynb) | Genetic ancestry inference |
+| [mt_variants](notebooks/mt_variants.ipynb) | Mitochondrial heteroplasmy |
+| [splicing](notebooks/splicing.ipynb) | Alternative splicing events |
+| [rna_velocity](notebooks/rna_velocity.ipynb) | Spliced/unspliced for scVelo |
+| [pipeline_outputs](notebooks/pipeline_outputs.ipynb) | Complete outputs reference |
+
+## Atlas Stats
+
+- **2,352 samples** processed (975 SUCCESS)
+- **1,157 GEO series** covered
+- **7 species**: human, mouse, rat, zebrafish, pig, chicken, macaque
+- **2.84M cells** in the atlas
 
 ## Building from Source
 
