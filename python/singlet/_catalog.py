@@ -176,10 +176,13 @@ def info(accession: str) -> dict:
 def species() -> list:
     """Return all species with processed data."""
     df = _load_catalog()
+    col = "organisms" if "organisms" in df.columns else "organism"
     all_species = set()
-    for org in df["organism"].dropna():
-        for s in org.split("|"):
-            all_species.add(s.strip())
+    for org in df[col].dropna():
+        for s in str(org).replace(";", ",").split(","):
+            s = s.strip()
+            if s and s != "unknown":
+                all_species.add(s)
     return sorted(all_species)
 
 
@@ -204,12 +207,15 @@ def datasets(
     """
     df = _load_catalog()
     if organism is not None:
-        df = df[df["organism"].str.contains(organism, case=False, na=False)]
+        col = "organisms" if "organisms" in df.columns else "organism"
+        df = df[df[col].str.contains(organism, case=False, na=False)]
     if protocol is not None:
-        df = df[df["protocol"].str.contains(protocol, case=False, na=False)]
+        col = "protocols" if "protocols" in df.columns else "protocol"
+        df = df[df[col].str.contains(protocol, case=False, na=False)]
     if min_cells is not None:
-        df = df[df["n_cells"] >= min_cells]
-    if has_kraken2 is not None:
+        col = "total_cells" if "total_cells" in df.columns else "n_cells"
+        df = df[df[col] >= min_cells]
+    if has_kraken2 is not None and "has_kraken2" in df.columns:
         df = df[df["has_kraken2"] == has_kraken2]
     return df.reset_index(drop=True)
 
