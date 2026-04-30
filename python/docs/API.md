@@ -5,6 +5,15 @@
 ### `singlet.catalog(search=None)`
 Return the full dataset catalog as a DataFrame. Optionally filter by keyword.
 
+### `singlet.summary()`
+Print a summary of the atlas: total samples, success count, species, cells.
+
+### `singlet.samples(organism=None, status=None, protocol=None)`
+Query individual samples (GSM-level). Returns DataFrame with per-sample metadata.
+
+### `singlet.top_series(n=10)`
+Return the top N series by total cell count.
+
 ### `singlet.info(accession)`
 Return metadata dict for a single GSE accession.
 
@@ -23,6 +32,14 @@ Set local catalog directory containing `catalog_v1.parquet` and `sample_index.pa
 ---
 
 ## Data Loading
+
+### `singlet.load_dir(path)` → `AnnData`
+Load a full singlify output directory as AnnData. Reads count matrix, cell metadata, gene features, doublet scores, cell cycle phases, ancestry, sex call, and pipeline summary.
+
+**Returns:** AnnData with:
+- `obs`: total_umis, total_genes, mt_pct, intronic_pct, doublet_score, is_doublet, phase, s_score, g2m_score
+- `uns`: ancestry, sex_call, summary, singlify_dir
+- `var`: gene_id, gene_name
 
 ### `singlet.load(source, *, genes=None, obs_filter=None, backend="zenodo")`
 Primary entry point. Load a dataset as AnnData from:
@@ -55,6 +72,9 @@ Write AnnData to `.1pz` format with VOCSC + zstd-3 compression.
 
 ### `singlet.info_1pz(path)` → `dict`
 Read `.1pz` header without decompressing. Returns dimensions, nnz, compression ratio.
+
+### `singlet.spz_info(path)` → `dict`
+Read `.spz` header without decompressing. Returns dimensions, nnz, format version.
 
 ### `singlet.read_kraken2(gse_dir)` → `AnnData`
 Read a `kraken2.1pz` microbiome matrix from a GSE directory. Returns cells × taxa.
