@@ -10,7 +10,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --gres=gpu:1
-#SBATCH --nodelist=g050
+#SBATCH --exclude=g001,g002,g005
 #SBATCH --output=/mnt/home/debruinz/Singlet-AI/singlet-gpu/state/cycle158_score_genes_bench_%j.log
 
 set -uo pipefail

@@ -286,10 +286,12 @@ Cycle scripts inheriting from `cycle150_diffmap.sh` template default to `--nodel
 
 **Rule**: do NOT pin `--nodelist=g001` by default. Either:
 - Omit `--nodelist` entirely and let SLURM pick.
-- Check `sinfo -p gpu` before submitting and pick an idle node.
-- Use `--nodelist=g003,g004,g050,g051,g052` to allow any of several nodes.
+- Check `sinfo -p gpu` before submitting and pick a single idle node.
+- Use `--exclude=g001,g002,g005` to reject busy / unwanted nodes (gives SLURM freedom to pick any allowed node).
 
-The `cycle150_diffmap.sh` template has been updated to `--nodelist=g003` post-CYCLE-153. New cycle scripts should match.
+**`--nodelist` vs `--exclude` gotcha (CYCLE-158 lesson)**: `--nodelist=A,B,C` is a HARD "use these specific nodes" constraint and SLURM may interpret the comma-list as "I want all 3 nodes" → forced to `--nodes=3` → much harder to schedule. To say "any one node from set {A, B, C}", use `--exclude=<everything-else>` instead. CYCLE-158's first resubmission used `--nodelist=g003,g004,g050,g051,g052` and went PD as a 5-node job; switching to `--exclude=g001,g002,g005` immediately landed on g003.
+
+The `cycle150_diffmap.sh` template was updated to `--nodelist=g003` post-CYCLE-153 (pin to one idle node). For more flexibility use `--exclude` instead. New cycle scripts can pick either pattern.
 
 ### §J.3 — Pareto-frontier rows must be added in Phase F (from CYCLE-154)
 
