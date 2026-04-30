@@ -3559,3 +3559,24 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
 - **Phase G**: frontier_sync.py runs after this commit; pending.
 - **Next cycle**: CYCLE-159 — Phase E for the next feature. Top candidates: (a) preprocess/magic (cuSPARSE SpMM-heavy, scanpy `sc.external.pp.magic` SOTA), (b) preprocess/model_gene_var (scran-style, scanpy `sc.experimental.pp.normalize_pearson_residuals` related), (c) embed/diffmap (scanpy `sc.tl.diffmap` direct ref). Default: preprocess/magic — cleanest single-pass cuSPARSE comparison.
 
+## Cycle 159 (2026-04-30) — Phase E for embed/diffmap (NEGATIVE RESULT — scaling gap exposed)
+- **Feature**: embed/diffmap (CYCLE-150). Phase E bench at 10k/30k cells × 50 PCs vs `scanpy.tl.diffmap` CPU.
+- **Outcome**: ⚠️ **NEGATIVE — kernel does NOT dominate at scale.** Pivoted from preprocess/magic to diffmap because magic-impute Python dep was uncertain.
+- **Numbers (job 371207, g003 V100S 32GB)**:
+  ```
+  scale | GPU_wall_ms | scanpy_wall_ms | speedup | notes
+  10k   |     2257.2  |          163.1 |   0.07× | GPU 14× SLOWER than scanpy CPU
+  30k   |      CRASH  |          801.1 |    N/A  | cuSOLVER status=3 at diffmap.h:395
+  small (n=40 ctest) | <1 | n/a | n/a | CYCLE-150 correctness still holds
+  ```
+- **Root cause hypothesis**: our diffmap.h materializes the full dense n×n W matrix (3.6 GB at n=30k) and runs full `cusolverDnSsyevd`. scanpy uses scipy's sparse ARPACK eigensolver on the sparse k-NN graph (k=10 nonzeros per row), scaling O(n·k·n_components) instead of our O(n³). At small n (CYCLE-150's n=40 ctest), the constant factors mask this; at n=10k the algorithmic complexity gap is exposed; at n=30k cuSOLVER errors out (probably hit a workspace size limit or numerical issue inside Ssyevd at this size).
+- **Phase E found a real scaling gap that small-scale CYCLE-150 ctests didn't catch.** This is exactly the kind of finding the priority cascade item #2 ("GPU-verify and benchmark unverified frontier features") is designed to surface. CYCLE-150's frontier promotion was technically valid (5/5 ctest PASS at n=40) but the kernel doesn't actually scale to typical scRNA datasets (10k+ cells).
+- **Pareto-frontier.md updated** with explicit ⚠️ marker, NEGATIVE RESULT note, root-cause hypothesis, CYCLE-159.1 follow-up filed for sparse-eigensolver rewrite.
+- **Lessons**:
+  1. **Small-scale ctest correctness ≠ frontier-grade**. CYCLE-150's 5/5 PASS at n=40 was real correctness but did not validate scaling. Future kernels with O(n²) memory or O(n³) compute should ship a scaling test as part of CYCLE-150-style frontier promotion (e.g. n=10k smoke test before claiming frontier).
+  2. **scipy ARPACK on sparse Markov is hard to beat with naive dense Ssyevd.** scanpy's diffmap is fast because (a) the kNN graph is genuinely sparse, (b) scipy.sparse.linalg.eigsh uses Implicitly Restarted Lanczos which is O(n·k·n_components). To beat scanpy at scale we need a sparse-friendly GPU eigensolver: LOBPCG (cuVS has one), cuSOLVERrf, or a custom Lanczos on the symmetric normalized graph Laplacian.
+  3. **§J updates needed**: a new sub-rule §J.6 — "Frontier promotion must include a scale-smoke test (≥10k cells) for any kernel with O(n²) or worse memory/compute." Will land in next cycle's style-rules edit.
+  4. **Benchmark cycles are cheap and high-signal.** This negative result is more valuable than another easy positive result, because it identifies a real kernel weakness and sets up a meaningful CYCLE-159.1 algorithmic improvement task.
+- **Filed**: **CYCLE-159.1-DIFFMAP-SPARSE-EIGENSOLVER** — rewrite `embed/diffmap.h` to use a sparse eigensolver (LOBPCG via cuVS, or in-house Lanczos on the symmetric Laplacian). Required to deliver a real frontier-grade diffmap. ~1-2 day effort with required Phase B research first (lit-scout: GPU sparse eigensolver options + LOBPCG in cuVS).
+- **Next cycle**: CYCLE-160 — pick from queue. Options: (a) **next Phase E** (preprocess/magic, model_gene_var, etc. — keep building negative+positive bench data), (b) **CYCLE-159.1 diffmap rewrite** (substantial; needs Phase B research first), (c) **CYCLE-122 enrichment zero-output diagnostic**. Default: next Phase E (the cycle pattern is well-tuned and even negative results are useful; CYCLE-159.1 is bigger and can wait).
+

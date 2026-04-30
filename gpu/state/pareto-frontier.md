@@ -464,14 +464,16 @@ Cycle 80: block-labels test fix promoted wilcoxon TinyPlanted from noise-converg
 
 ---
 
-### embed/diffmap (CYCLE-150) — promoted 2026-04-29, commit no-git
+### embed/diffmap (CYCLE-150) — promoted 2026-04-29, commit no-git, ⚠️ DOES NOT DOMINATE AT ≥10K
 
 | scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
 |---|---|---|---|---|---|---|---|---|
-| small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | scanpy | TBD |
-| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
-| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
+| small (n=40, ctest) | <1 | <1 | 5/5 ctest PASS (CYCLE-150) | n/a | n/a | n/a | n/a | n/a (correctness only) |
+| 10k×50PCs (k=10, dense) | 2257.2 | n/a | computed (no parity check) | 163.1 | n/a | reference | scanpy 1.10.3 sc.tl.diffmap | **NONE — GPU 14× slower than scanpy CPU** |
+| 30k×50PCs (k=10, dense) | **CRASH** (cuSOLVER status=3 at diffmap.h:395) | n/a | n/a | 801.1 | n/a | reference | scanpy 1.10.3 sc.tl.diffmap | **CRASH** |
+| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending — needs algorithm rewrite) |
+| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending — needs algorithm rewrite) |
 
-**Notes**: Diffusion map eigen-embedding (Coifman & Lafon 2005). Graph Laplacian eigen-decomposition for nonlinear dimensionality reduction. See [CYCLE-150 cycle-log](state/cycle-log.md).
+**Notes**: Diffusion map eigen-embedding (Coifman & Lafon 2005). CYCLE-159 Phase E (job 371207 g003 V100S) found a SCALING GAP: at 10k cells the GPU is 14× SLOWER than scanpy CPU (scanpy: 163 ms; ours: 2257 ms). At 30k the GPU CRASHES with cuSOLVER `CUSOLVER_STATUS_INVALID_VALUE` at `diffmap.h:395` (the Ssyevd call). **Root cause hypothesis**: our kernel materializes the full dense n×n W matrix (3.6 GB at n=30k) and runs full Ssyevd. scanpy uses scipy's sparse ARPACK eigensolver on the sparse k-NN graph (k=10 nonzeros per row), which scales O(n·k·n_components) instead of our O(n³). Filed CYCLE-159.1 to rewrite using LOBPCG / cuSOLVERrf sparse eigensolver. See [CYCLE-150 + CYCLE-159 cycle-log](state/cycle-log.md).
 
-**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+**Phase E status**: ⚠️ **NEGATIVE RESULT** — kernel does NOT dominate at any scale we benched. Frontier promotion was based on small-scale n=40 correctness only; Phase E exposed that this is a research-grade kernel that needs a fundamental algorithm rewrite (sparse eigensolver) before it can be a real Pareto-frontier entry. CYCLE-150 CORRECTNESS still holds; it's the SCALING that fails.

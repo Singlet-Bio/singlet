@@ -4,7 +4,7 @@ Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movemen
 
 ## 🔴 Active this cycle
 
-- **CYCLE-159-PHASE-E-DIFFMAP** (in flight, job 371207 RUNNING on g003): pivoted from preprocess/magic (uncertain `magic-impute` Python dep) to embed/diffmap (clean `sc.tl.diffmap` ref, freshly promoted in CYCLE-150). Sonnet wrote `bench/bench_embed_diffmap_perf.cpp` (10k/30k × 50 PCs dense, k=10 untimed kNN warmup, time only diffmap call), `bench/refs/diffmap_ref.py` (sc.pp.neighbors untimed → sc.tl.diffmap timed), `state/cycle159_diffmap_bench.sh` (`--exclude=g001,g002,g005` per §J.2). CMake → 23 drivers. 30-min walltime; expected ~20 min total runtime.
+- **CYCLE-160-NEXT-PHASE-E** (queued): pick from preprocess/magic, preprocess/model_gene_var, integrate/lisi, etc. CYCLE-159 just exposed a major scaling gap in embed/diffmap; will queue CYCLE-159.1 sparse-eigensolver rewrite separately. Default: preprocess/model_gene_var (Sonnet+SLURM same pattern, scanpy `sc.experimental.pp.highly_variable_genes(flavor='seurat_v3')` as proxy ref).
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
@@ -14,6 +14,7 @@ Frobenius NMF only (KL / IS / NB-GLM / β-divergence dropped); fast PCA / SVD wi
 
 ## 🟡 Queued (priority-ordered)
 
+-1. **CYCLE-159.1-DIFFMAP-SPARSE-EIGENSOLVER** (filed by CYCLE-159 NEGATIVE result): embed/diffmap is 14× SLOWER than scanpy at 10k cells and CRASHES at 30k (cuSOLVER status=3 in Ssyevd). Root cause: we materialize dense n×n W and run full Ssyevd, while scanpy uses sparse ARPACK on the kNN graph (O(n·k·n_components) vs our O(n³)). Rewrite to use LOBPCG (cuVS) or custom Lanczos on symmetric graph Laplacian. Phase B research dispatch required first. ~1-2 days.
 0. **CYCLE-148.1-SCRUBLET-DEEPER-DIAG** (filed by CYCLE-153 iter-1 FAIL): kNN finds too many synthetic neighbors per real cell — either (a) synthetic doublets too close to real cells in PCA space (generation bias), (b) k too small (estimator bias), or (c) self-loops inflating real-cell counts. Needs Phase B Haiku research dispatch first (lit-scout: Wolock 2019 + scrublet Python source neighbor-counting; code-reader: scrublet repo). Then iter-2. Two-iteration rule (Rule 5) means failure here would mark `blocked`.
 1. **CYCLE-122-ENRICHMENT-ZERO-OUTPUT-DIAG** (filed by CYCLE-119): 6 cycle-13/44 tests fail with effectively-zero outputs (AUCell mean_high=0, fgsea q-values all 0, ssgsea/progeny variance=0, 2 determinism subnormal-float noise). NOT a CYCLE-105 regression — these tests were "Correctness: pending" in cycle 13 and never debugged. Likely shared root cause (uninitialized scratch buffer suspected). 1-3 hour kernel debug dispatch.
 2. **CYCLE-123-SCANPY-PARITY-AUDIT**: side-by-side `scanpy.pp.normalize_total + log1p + highly_variable_genes + scale + neighbors + leiden + umap + rank_genes_groups` against shipped wrappers on real `.1pz`. Drives `docs/notebooks/scanpy_parity.ipynb`. NO infra blockers.
@@ -31,6 +32,7 @@ Frobenius NMF only (KL / IS / NB-GLM / β-divergence dropped); fast PCA / SVD wi
 
 ## ✅ Recently complete (last 5 cycles — full detail in `state/cycle-log.md`)
 
+- **CYCLE-159** Phase E for embed/diffmap (NEGATIVE — job 371207 g003): GPU 10k = 2257ms vs scanpy 163ms (**0.07× — GPU 14× SLOWER**); 30k CRASHED with cuSOLVER status=3 in Ssyevd. Phase E exposed real scaling gap that small-scale CYCLE-150 ctest didn't catch. Root cause: dense O(n³) Ssyevd vs scanpy's sparse ARPACK O(n·k·n_components). Filed CYCLE-159.1 sparse-eigensolver rewrite. **Lesson**: small-scale ctest correctness ≠ frontier; future kernels with O(n²+) memory/compute should ship a 10k+ scale smoke test as part of frontier promotion. Need new style-rules §J.6.
 - **CYCLE-158.1** score_genes scanpy baseline rerun (no SLURM): scanpy 10k=237.2ms, 30k=692.1ms → **GPU 213.7× / 493.3× faster**. Phase E status COMPLETE for medium scales. Key efficiency lesson: ran scanpy ref directly as Python (saving 25+ min queue wait that re-running the SLURM script would have incurred).
 - **CYCLE-158** Phase E bench for enrich/score_genes (PARTIAL — job 371072 g003 V100S): GPU PASS (10k=1.110ms, 30k=1.403ms; ~9-21 M cells/s throughput); scanpy CPU FAILED with gene-name parity bug — `score_genes_ref.py:47` did `var={"gene_id":...}` (a column) instead of setting `adata.var_names`. Fixed in the same commit. CYCLE-158.1 will re-run scanpy ref. **Queue lesson** (§J.2 extended): `--nodelist=g003,g004,g050,g051,g052` was interpreted as 5-node job; switched to `--exclude=g001,g002,g005` and immediately landed on g003.
 - **CYCLE-157** Phase E bench for preprocess/pearson_residuals (job 370871 g003): 10k = **236.4× scanpy CPU** (0.709ms vs 167.6ms), 30k = **302.4×** (1.691ms vs 511.4ms). GPU throughput ~14-18M cells/s. pareto-frontier.md row updated PARTIAL (small + medium done; 100k/1M still pending streaming driver). §J.2 verified working — job started in 0:04 vs CYCLE-153's 25-min wait. 3 new files in bench/ + sbatch script.
