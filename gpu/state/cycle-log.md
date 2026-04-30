@@ -3544,3 +3544,18 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
 - **CYCLE-158.1 follow-up filed**: re-run `state/cycle158_score_genes_bench.sh` after the `score_genes_ref.py` fix lands. ~10-min cycle (build is cached; only need to re-run the scanpy CPU portion). Will add scanpy CPU wall_ms to the pareto-frontier rows.
 - **Next cycle**: CYCLE-159 — pick from queue. Options: (a) **CYCLE-158.1 re-run** (small; just resubmits the SLURM script after the Python fix), (b) **next Phase E feature** (preprocess/magic, model_gene_var, embed/diffmap, etc.), (c) **CYCLE-122 enrichment zero-output diagnosis** (single-hypothesis debug). Default: CYCLE-158.1 (smallest concrete cycle, completes the score_genes pareto row).
 
+## Cycle 158.1 (2026-04-30) — score_genes scanpy baseline rerun (PASS)
+- **Feature**: bench/refs/score_genes_ref.py — re-run after the CYCLE-158 gene-name-parity fix landed in commit 9973601.
+- **Outcome**: PASS. Ran the Python script directly (no SLURM needed for CPU-only Python work — saves queue overhead).
+- **Numbers**:
+  ```
+  scale  | scanpy_wall_ms | GPU_wall_ms | speedup
+  10k    |          237.2 |        1.110 |   213.7×
+  30k    |          692.1 |        1.403 |   493.3×
+  ```
+  GPU dominates by 213-493× across the 10k/30k range. Speedup grows with n_cells because GPU has near-constant kernel launch overhead while scanpy CPU scales linearly.
+- **pareto-frontier.md**: scanpy_wall_ms columns filled; dominates_on shows wall (213.7×) at 10k and wall (493.3×) at 30k. Phase E status changed PARTIAL → COMPLETE for medium scales.
+- **Lesson**: **Skip SLURM when the work is pure CPU-Python.** The Python script `bench/refs/score_genes_ref.py` is just scanpy + numpy; running it on the login/CPU node directly avoided 25+ min of queue wait that re-running cycle158_score_genes_bench.sh would have incurred. Add to §J style-rules: cycle-protocol heuristic — if a cycle is gated only on a small Python script's output, run it inline; reserve SLURM for kernel builds and benchmarks that NEED a GPU.
+- **Phase G**: frontier_sync.py runs after this commit; pending.
+- **Next cycle**: CYCLE-159 — Phase E for the next feature. Top candidates: (a) preprocess/magic (cuSPARSE SpMM-heavy, scanpy `sc.external.pp.magic` SOTA), (b) preprocess/model_gene_var (scran-style, scanpy `sc.experimental.pp.normalize_pearson_residuals` related), (c) embed/diffmap (scanpy `sc.tl.diffmap` direct ref). Default: preprocess/magic — cleanest single-pass cuSPARSE comparison.
+

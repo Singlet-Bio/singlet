@@ -4,7 +4,7 @@ Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movemen
 
 ## 🔴 Active this cycle
 
-- **CYCLE-159-NEXT** (queued): pick from CYCLE-158.1 score_genes scanpy re-run (smallest, completes one pareto row), OR next Phase E (magic / model_gene_var / diffmap), OR CYCLE-122 enrichment diagnostic. Default: CYCLE-158.1 follow-up.
+- **CYCLE-159-PHASE-E-MAGIC** (queued): bench preprocess/magic at 10k/30k — cuSPARSE SpMM-heavy kernel, scanpy `sc.external.pp.magic` SOTA. Pattern matches CYCLE-157/158: Sonnet gpu-bench writes 3 files + CMake entry, submits SLURM with `--exclude=g001,g002,g005` per §J.2.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
@@ -31,6 +31,7 @@ Frobenius NMF only (KL / IS / NB-GLM / β-divergence dropped); fast PCA / SVD wi
 
 ## ✅ Recently complete (last 5 cycles — full detail in `state/cycle-log.md`)
 
+- **CYCLE-158.1** score_genes scanpy baseline rerun (no SLURM): scanpy 10k=237.2ms, 30k=692.1ms → **GPU 213.7× / 493.3× faster**. Phase E status COMPLETE for medium scales. Key efficiency lesson: ran scanpy ref directly as Python (saving 25+ min queue wait that re-running the SLURM script would have incurred).
 - **CYCLE-158** Phase E bench for enrich/score_genes (PARTIAL — job 371072 g003 V100S): GPU PASS (10k=1.110ms, 30k=1.403ms; ~9-21 M cells/s throughput); scanpy CPU FAILED with gene-name parity bug — `score_genes_ref.py:47` did `var={"gene_id":...}` (a column) instead of setting `adata.var_names`. Fixed in the same commit. CYCLE-158.1 will re-run scanpy ref. **Queue lesson** (§J.2 extended): `--nodelist=g003,g004,g050,g051,g052` was interpreted as 5-node job; switched to `--exclude=g001,g002,g005` and immediately landed on g003.
 - **CYCLE-157** Phase E bench for preprocess/pearson_residuals (job 370871 g003): 10k = **236.4× scanpy CPU** (0.709ms vs 167.6ms), 30k = **302.4×** (1.691ms vs 511.4ms). GPU throughput ~14-18M cells/s. pareto-frontier.md row updated PARTIAL (small + medium done; 100k/1M still pending streaming driver). §J.2 verified working — job started in 0:04 vs CYCLE-153's 25-min wait. 3 new files in bench/ + sbatch script.
 - **CYCLE-156** style-rules.md §J cycle-protocol lessons: 5 sub-rules added (~140 LOC, ~5 KB) capturing procedural improvements from CYCLE-153/154/155: threshold-masking pitfall, SLURM nodelist defaults, pareto rows in Phase F, Phase G publish in close checklist, loop pacing (alternate LOW/HIGH-risk cycles). Pure-Opus direct edit; no worker dispatch.

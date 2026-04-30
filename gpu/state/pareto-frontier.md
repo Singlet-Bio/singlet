@@ -229,14 +229,14 @@ Cycle 80: block-labels test fix promoted wilcoxon TinyPlanted from noise-converg
 | scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
 |---|---|---|---|---|---|---|---|---|
 | small (1k cells, 100 sets) | 1.2 | 12 | 5/5 ctest PASS | TBD | TBD | reference | scanpy | TBD |
-| 10k×5k (5%, 5 sets × 50 genes) | 1.110 | 0.0 | n/a (synth bench, CYCLE-158) | scanpy ref errored on gene-name parity (CYCLE-158.1 follow-up) | n/a | reference | scanpy 1.10.3 sc.tl.score_genes | wall (TBD pending CYCLE-158.1 re-run) |
-| 30k×5k (5%, 5 sets × 50 genes) | 1.403 | 0.0 | n/a (synth bench, CYCLE-158) | scanpy ref errored on gene-name parity (CYCLE-158.1 follow-up) | n/a | reference | scanpy 1.10.3 sc.tl.score_genes | wall (TBD pending CYCLE-158.1 re-run) |
+| 10k×5k (5%, 5 sets × 50 genes) | 1.110 | 0.0 | n/a (synth bench) | 237.2 | n/a | reference | scanpy 1.10.3 sc.tl.score_genes | wall (213.7×) |
+| 30k×5k (5%, 5 sets × 50 genes) | 1.403 | 0.0 | n/a (synth bench) | 692.1 | n/a | reference | scanpy 1.10.3 sc.tl.score_genes | wall (493.3×) |
 | 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 | 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 
-**Notes**: Per-cell gene-set scoring with matched-control subtraction (Satija et al. 2015 / Seurat AddModuleScore). Matched bins, seeded host RNG. CYCLE-158 added GPU 10k/30k synth-data rows on g003 V100S. GPU side worked clean (job 371072); scanpy CPU baseline failed because the ref `score_genes_ref.py` set `var={"gene_id":...}` (a column) instead of the var index — scanpy's `gene_list` lookup requires names in `adata.var_names`. Fixed in this commit; CYCLE-158.1 will re-run scanpy ref to fill the SOTA columns. See [CYCLE-129 + CYCLE-158 cycle-log](state/cycle-log.md).
+**Notes**: Per-cell gene-set scoring with matched-control subtraction (Satija et al. 2015 / Seurat AddModuleScore). Matched bins, seeded host RNG. CYCLE-158 added GPU 10k/30k synth-data rows on g003 V100S (job 371072). CYCLE-158.1 added the scanpy CPU baseline after fixing the gene-name parity bug (the ref script had set `var={"gene_id":...}` — a column — instead of `adata.var_names = var_names` — the index). 213-493× speedup vs scanpy CPU. See [CYCLE-129 + CYCLE-158 + CYCLE-158.1 cycle-log](state/cycle-log.md).
 
-**Phase E status**: PARTIAL — GPU benched at 10k/30k; scanpy ref needs CYCLE-158.1 re-run after the gene-name-parity fix.
+**Phase E status**: COMPLETE for medium scales (small-scale row from CYCLE-129 still TBD, 100k/1M still pending streaming driver per Feature 17).
 
 ---
 
