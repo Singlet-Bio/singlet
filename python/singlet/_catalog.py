@@ -19,8 +19,8 @@ from typing import Optional
 
 import pandas as pd
 
-_CATALOG_URL = "https://zenodo.org/records/XXXXXX/files/catalog_v1.parquet"
-_SAMPLE_INDEX_URL = "https://zenodo.org/records/XXXXXX/files/sample_index.parquet"
+_CATALOG_URL = "https://raw.githubusercontent.com/Singlet-Bio/singlet/main/python/singlet/data/catalog_v1.parquet"
+_SAMPLE_INDEX_URL = "https://raw.githubusercontent.com/Singlet-Bio/singlet/main/python/singlet/data/sample_index.parquet"
 
 _CATALOG_CACHE: Optional[pd.DataFrame] = None
 _SAMPLE_INDEX_CACHE: Optional[pd.DataFrame] = None
@@ -103,10 +103,32 @@ def _load_sample_index() -> pd.DataFrame:
     try:
         _SAMPLE_INDEX_CACHE = _download_parquet(_SAMPLE_INDEX_URL, cache_path)
     except Exception:
-        raise RuntimeError(
-            "Could not load sample index. Set SINGLET_CATALOG_DIR or check internet."
-        )
+        bundled = Path(__file__).parent / "data" / "sample_index.parquet"
+        if bundled.exists():
+            _SAMPLE_INDEX_CACHE = pd.read_parquet(bundled)
+        else:
+            raise RuntimeError(
+                "Could not load sample index. Set SINGLET_CATALOG_DIR or check internet."
+            )
     return _SAMPLE_INDEX_CACHE
+
+
+def refresh() -> None:
+    """Re-download the latest catalog and sample index from GitHub.
+
+    Clears the in-memory cache and overwrites the local cache files.
+    """
+    global _CATALOG_CACHE, _SAMPLE_INDEX_CACHE
+    _CATALOG_CACHE = None
+    _SAMPLE_INDEX_CACHE = None
+    cache_dir = Path.home() / ".singlet" / "cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    _download_parquet(_CATALOG_URL, cache_dir / "catalog_v1.parquet")
+    _download_parquet(_SAMPLE_INDEX_URL, cache_dir / "sample_index.parquet")
+    # Reload
+    _load_catalog()
+    _load_sample_index()
+    print(f"Updated: {len(_SAMPLE_INDEX_CACHE)} samples, {len(_CATALOG_CACHE)} series")
 
 
 def catalog(search: Optional[str] = None) -> pd.DataFrame:

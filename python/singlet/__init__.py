@@ -35,11 +35,11 @@ Token-priced (requires API key):
     singlet.search(text)                   Natural-language search → AnnData
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 from singlet._catalog import (
     catalog, info, species, datasets, sample_index, set_catalog_dir,
-    summary, samples, top_series,
+    summary, samples, top_series, refresh,
 )
 from singlet._loader import load, load_sample, load_dir, download
 from singlet._auth import login
@@ -62,6 +62,7 @@ __all__ = [
     "summary",
     "samples",
     "top_series",
+    "refresh",
     # Load
     "load",
     "load_sample",
