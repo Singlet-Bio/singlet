@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.1.0] — 2026-04-30
+
+### Added
+- `load_dir()` — load full singlify output directory → AnnData with QC metrics, doublet scores, cell cycle, ancestry, sex call
+- `summary()` — print atlas summary stats
+- `samples()` — query individual samples (not just series)
+- `species()` — list all species with sample counts
+- `top_series()` — show highest-cell-count series
+- 18 reproducibility notebooks with embedded matplotlib plots
+- `notebooks/build_html.sh` — batch HTML generation for website hosting
+- Google Colab integration via GitHub URL pattern
+- GitHub Actions CI: Python 3.9/3.11/3.12 matrix + build verification
+
+### Changed
+- Catalog refreshed: 1,180 series / 2,398 samples / 998 SUCCESS / 2.94M cells
+- README updated with current stats and `load_dir()` examples
+- Tests expanded: 129 passing (up from 99)
+
 ## [1.0.0] — 2026-04-04
 
 ### Added

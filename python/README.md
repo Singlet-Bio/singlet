@@ -2,7 +2,7 @@
 
 **Python client for the Singlet single-cell atlas.**
 
-2,386 samples • 993 successful • 2.9M cells • 7 species • 1,178 GEO series • 8.7× .1pz compression
+2,398 samples • 998 successful • 2.9M cells • 7 species • 1,180 GEO series • 8.7× .1pz compression
 
 ## Install
 
@@ -17,7 +17,7 @@ import singlet
 
 # Browse the atlas catalog (free, works offline)
 singlet.summary()
-# → 2,386 samples, 993 SUCCESS, 7 species, 2.93M cells
+# → 2,398 samples, 998 SUCCESS, 7 species, 2.94M cells
 
 df = singlet.samples(organism="Homo sapiens", status="SUCCESS")
 singlet.species()
@@ -49,7 +49,7 @@ sc.tl.leiden(adata)
 
 | Feature | Details |
 |---------|---------|
-| **Catalog** | Browse 2,386 samples by organism, protocol, status, quality tier |
+| **Catalog** | Browse 2,398 samples by organism, protocol, status, quality tier |
 | **load_dir()** | Read singlify output directory → AnnData with QC, doublets, cell cycle, ancestry, sex, summary |
 | **read_1pz()** | Read .1pz sparse matrix → AnnData |
 | **Compression** | singlepress .1pz format — 8.7× vs h5ad |
