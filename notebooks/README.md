@@ -45,6 +45,22 @@
 |----------|-------------|
 | [1pz_format.ipynb](1pz_format.ipynb) | .1pz format: 8.7× smaller than h5ad, faster reads |
 
+## Open in Google Colab
+
+Any notebook can be opened directly in Colab:
+
+```
+https://colab.research.google.com/github/Singlet-Bio/singlet/blob/main/notebooks/{notebook_name}.ipynb
+```
+
+For example: [Open quickstart in Colab](https://colab.research.google.com/github/Singlet-Bio/singlet/blob/main/notebooks/quickstart.ipynb)
+
+## Rendered HTML
+
+Pre-rendered HTML versions with all plots visible are available at:
+- **Website**: [singlet.bio/notebooks](https://singlet.bio/notebooks)
+- **Local build**: Run `./build_html.sh` to generate `html/` directory
+
 ## Requirements
 
 ```bash
@@ -54,9 +70,9 @@ pip install "singlet-bio @ git+https://github.com/Singlet-Bio/singlet#subdirecto
 
 ## Atlas Stats
 
-- **2,386** samples processed
-- **993** successful (42%)
+- **2,397** samples processed
+- **997** successful (42%)
 - **1,178** GEO series
 - **7** species (human, mouse, macaque, fruit fly, chicken, zebrafish, chimpanzee)
 - **2.93M** total cells
-- **18** notebooks with executed outputs
+- **18** notebooks with embedded matplotlib plots
