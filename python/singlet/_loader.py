@@ -345,6 +345,22 @@ def load_dir(
                 for col in dub.columns:
                     adata.obs[col] = dub[col].reindex(adata.obs_names).values
 
+    # Merge cell cycle scores
+    cc_file = path / "cell_cycle_scores.tsv"
+    if cc_file.exists():
+        cc = pd.read_csv(cc_file, sep="\t", index_col="barcode")
+        overlap = adata.obs_names.intersection(cc.index)
+        if len(overlap) > 0:
+            for col in cc.columns:
+                adata.obs[col] = cc[col].reindex(adata.obs_names).values
+
+    # Store ancestry call if available
+    ancestry_file = path / "ancestry_call.json"
+    if ancestry_file.exists():
+        import json as _json
+        with open(ancestry_file) as f:
+            adata.uns["ancestry"] = _json.load(f)
+
     # Store source path
     adata.uns["singlify_dir"] = str(path)
 
