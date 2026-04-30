@@ -4,7 +4,7 @@ Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movemen
 
 ## 🔴 Active this cycle
 
-- **CYCLE-155-PHASE-E-PEARSON-RESIDUALS-100K-1M**: bench `preprocess/pearson_residual_variance` at 100k and 1M scales vs scanpy.experimental.pp.highly_variable_genes(flavor='pearson_residuals'). Small scale already shows 12,609× speedup; Phase E fills the 100k/1M rows in the pareto-frontier entry just added in CYCLE-154. Low-risk first Phase E candidate post the new row backfill.
+- **CYCLE-156-CHOSEN-NEXT**: CYCLE-155 just published the frontier rows to singlet.bio (`frontier_sync.py` clean run). Picking next: CYCLE-122 enrichment zero-output diag OR Phase E pearson_residuals 100k/1M OR fresh port — to be decided in next iteration based on infra availability.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
@@ -31,6 +31,7 @@ Frobenius NMF only (KL / IS / NB-GLM / β-divergence dropped); fast PCA / SVD wi
 
 ## ✅ Recently complete (last 5 cycles — full detail in `state/cycle-log.md`)
 
+- **CYCLE-155** Phase G publish: `frontier_sync.py` ran clean, 24 entries refreshed in Supabase `gpu_frontier` table → singlet.bio/benchmarks. TBD filter at `scripts/frontier_sync.py:101-106` correctly skipped the 20 placeholder rows from CYCLE-154; only real SOTA-comparison numbers reach the public site. Catches up Phase G compliance after CYCLE-150/151/152/154 all skipped publishing.
 - **CYCLE-154** pareto-frontier.md row backfill: 21 entries added (~24.7 KB) for features promoted CYCLE-118-150 that lacked rows. File now has 33 frontier-section entries (1 schema + 11 original + 21 new). One Haiku dispatch; pearson_residuals carried real bench numbers (12,609× scanpy small-scale), other 20 marked "Phase E pending" so future bench cycles fill rows without restructuring. Lesson: every promotion cycle should add the pareto row in Phase F (don't defer to backfill).
 - **CYCLE-153** Scrublet rewrite iter-1 (job 370501 on g003): 1/5 PASS (Determinism only). T1 partial improvement (Spearman 0.24→0.54), T2 regressed (knee fix exposed score-inflation: real-data doublet_rate 0.92), T3+T5 unchanged. Audit's "focused fix" estimate was wrong — symptoms were masking a deeper algorithmic bug (kNN finding too many synthetic neighbors per real cell). Iter-2 deferred to CYCLE-148.1 with required Phase B research first. Lesson: "passing" test on broken-kernel + broken-threshold can fool an audit when bugs cancel.
 - **CYCLE-152** Phase H docs backfill batch 2 (6 markdown pages, ~53 KB): embed_{dpt, dendrogram}, graph_kmeans, preprocess_{magic, model_gene_var, pearson_residuals}. **Rule 25 debt fully cleared** — every frontier kernel now has a `docs/api/{slug}.md` page. docs/api/ went from 11 → 25 pages across CYCLE-150/151/152. 13-section template is the durable house style.
