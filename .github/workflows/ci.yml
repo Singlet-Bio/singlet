@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.9', '3.11']
+        python-version: ['3.9', '3.11', '3.12']
 
     steps:
       - uses: actions/checkout@v4
@@ -29,9 +29,32 @@ jobs:
         working-directory: python
         run: |
           pip install -e ".[dev]" 2>/dev/null || pip install -e .
-          pip install pytest numpy scipy pandas anndata torch --quiet
+          pip install pytest numpy scipy pandas anndata --quiet
 
       - name: Run tests
         working-directory: python
         run: |
           python -m pytest tests/ -x -q --ignore=tests/test_loader.py
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build wheel
+        working-directory: python
+        run: |
+          pip install build twine --quiet
+          python -m build --wheel
+          twine check dist/*
+
+      - name: Verify install
+        working-directory: python
+        run: |
+          pip install dist/*.whl
+          python -c "import singlet; print(f'singlet OK: {len(singlet.catalog())} series')"
