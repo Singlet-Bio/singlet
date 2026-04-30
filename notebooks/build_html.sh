@@ -12,7 +12,7 @@ echo "Converting notebooks to HTML..."
 for nb in *.ipynb; do
     name="${nb%.ipynb}"
     echo "  $nb → html/$name.html"
-    jupyter nbconvert --to html --output-dir=html --template lab "$nb" 2>/dev/null
+    jupyter nbconvert --to html --output-dir=html --template lab "$nb" 2>/dev/null || echo "    SKIP (invalid)"
 done
 
 echo ""
