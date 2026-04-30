@@ -105,9 +105,14 @@ add_bench_driver(bench_nmf_phaseE_c86          bench_nmf_phaseE_c86.cpp)
 add_bench_driver(bench_qc_perf                 bench_qc_perf.cpp)
 
 # ---------------------------------------------------------------------------
+# Cycle 157 drivers: preprocess/pearson_residuals standalone Phase E benchmark
+# ---------------------------------------------------------------------------
+add_bench_driver(bench_preprocess_pearson_residuals_perf  bench_preprocess_pearson_residuals_perf.cpp)
+
+# ---------------------------------------------------------------------------
 # Status message
 # ---------------------------------------------------------------------------
-message(STATUS "singlet-gpu bench: 20 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E)")
+message(STATUS "singlet-gpu bench: 21 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157)")
 message(STATUS "  53a: bench_io_pz_loader_perf")
 message(STATUS "  53a: bench_preprocess_lognorm_perf")
 message(STATUS "  53a: bench_preprocess_hvg_perf")

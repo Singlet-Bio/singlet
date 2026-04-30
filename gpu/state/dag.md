@@ -4,7 +4,7 @@ Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movemen
 
 ## 🔴 Active this cycle
 
-- **CYCLE-157-PHASE-E-PEARSON-RESIDUALS-100K**: bench `preprocess/pearson_residual_variance` at 100k synthetic data vs scanpy; fills the 100k row of the pareto-frontier entry from CYCLE-154. Sonnet gpu-bench dispatch + SLURM. Continues the §J.5 LOW-risk recovery streak by one more cycle (current run: CYCLE-153 HIGH FAIL → CYCLE-154/155/156 all LOW PASS).
+- **CYCLE-157-PHASE-E-PEARSON-RESIDUALS-MEDIUM** (in flight, job 370871 RUNNING on g003 since 15:46): Sonnet gpu-bench wrote `bench/bench_preprocess_pearson_residuals_perf.cpp` (synthetic CSC 10k/30k × 5k, density 5%, 2 warmup + 5 timed via cudaEvent), `bench/refs/pearson_residuals_ref.py` (scanpy.experimental scanpy CPU baseline at same shapes, theta=100, 2 warmup + 5 timed), and `state/cycle157_pearson_bench.sh` (--nodelist=g003 per §J.2). CMake driver count → 21. Job started 0:04 in queue → §J.2 verified working. Awaiting verify; 45-min walltime; expected total runtime <15 min.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
