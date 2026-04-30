@@ -233,7 +233,7 @@ def summary() -> str:
     total_cells = int(success[cells_col].sum()) if cells_col in success.columns else 0
     n_success = len(success)
     n_series = df["gse_id"].nunique() if "gse_id" in df.columns else 0
-    n_species = df["organism"].nunique() if "organism" in df.columns else 0
+    n_species = len(species())
 
     def _fmt(n: int) -> str:
         if n >= 1e6:
