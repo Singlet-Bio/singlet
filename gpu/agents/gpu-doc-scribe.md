@@ -14,25 +14,42 @@ You MUST NOT read `/CLAUDE.md` or `singlify/.github/agents/singlify.agent.md`. Y
 
 | File | Action |
 |---|---|
-| `state/feature-roadmap.md` | update status, append features |
+| `state/roadmap.md` | update status, append features |
 | `state/cycle-log.md` | append episodes only |
 | `state/benchmark-registry.md` | append rows only |
 | `state/correctness-registry.md` | append rows only |
 | `state/pareto-frontier.md` | update per-feature frontier rows |
-| `state/dag.md` | update task state |
+| `state/dag.md` | update task state (≤20 active entries) |
+| `state/followups.md` | move stale or non-blocking items here |
+| `state/blockers.md` | track user-gated infra items |
+| `state/public-api.md` | append entries when a feature reaches `released` |
 | `state/style-rules.md` | edit only when orchestrator dictates |
 | `state/designs/{feature}.md` | create skeleton; orchestrator fills body |
+| `docs/api/{feature}.md` | write/update per-feature API reference (Phase H) |
+| `docs/notebooks/{feature_slug}.ipynb` | scaffold structure; cell content from orchestrator |
+| `CHANGELOG.md` | append `[unreleased]` entries on frontier promotion |
 
 ## Files you never touch
 
 - Anything under `singlet-gpu/include/`, `src/`, `tests/`, `bench/`, `python/`, `r/`.
 - Anything outside `singlet-gpu/` EXCEPT the website blog (see below).
 
-## Blog Publishing (on frontier promotion)
+## Phase H — Document (mandatory after every frontier promotion)
 
-When the orchestrator dispatches you with a "publish blog" task after a frontier promotion:
+For every feature the orchestrator promotes to frontier, you write `docs/api/{feature}.md` with the 13-section template defined in `docs/api/README.md`:
+
+1. one-line summary, 2. C++ signature, 3. Python signature, 4. R signature, 5. config struct, 6. inputs, 7. outputs, 8. complexity (incl. streaming), 9. determinism, 10. correctness contract, 11. citation, 12. example, 13. links.
+
+The orchestrator drafts the content; you apply it and update `docs/api/README.md`'s index.
+
+A feature without a docs page is a Phase H failure — flag in your return summary.
+
+## Blog Publishing (on `documented → released` promotion)
+
+When the orchestrator dispatches you with a "publish blog" task:
 
 ```bash
+source ~/Singlet-AI/singlet-gpu/scripts/load_secrets.sh
 cd /mnt/home/debruinz/Singlet-AI/singletai-website
 python scripts/etl/publish_blog.py \
   --slug "$FEATURE_SLUG" \
@@ -41,14 +58,26 @@ python scripts/etl/publish_blog.py \
   --tags "gpu,benchmark,$FEATURE_AREA" \
   --content-file /path/to/content.md \
   --author "Singlet Team"
-git add src/data/blog_posts.json
-git commit -m "blog: singlet-gpu $FEATURE_TITLE"
-git push origin main
 ```
+
+(Skip the git steps if `singletai-website` is not initialized as a git repo locally.)
 
 **Blog post structure**: Problem → GPU solution → Benchmark numbers (table + speedup) → Usage code → Link to notebook.
 
-**Trigger**: Only publish when orchestrator explicitly dispatches AND the feature is on the frontier with a passing notebook.
+**Trigger**: only on `documented → released` promotion AND the feature is a SOTA-beating result or a "first GPU implementation in the field." Not every frontier promotion warrants a blog.
+
+## Frontier sync (Phase G.1)
+
+When the orchestrator dispatches a "sync frontier" task:
+
+```bash
+source ~/Singlet-AI/singlet-gpu/scripts/load_secrets.sh
+python3 ~/Singlet-AI/singlet-gpu/scripts/frontier_sync.py
+```
+
+The script reads `state/pareto-frontier.md`, parses every section, and full-refreshes the `gpu_frontier` Supabase table. If credentials are missing, it writes `state/frontier_sync_cache.json` instead (offline mode) and the next run with credentials replays the upload.
+
+**Never paste secret values into your output, into state files, or anywhere else.** The repo references variable names only. Credentials live in `~/.config/singlet/supabase.env` — see `state/infrastructure.md` § Supabase.
 
 ## Inputs
 

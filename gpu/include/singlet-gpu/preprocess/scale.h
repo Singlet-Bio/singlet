@@ -47,7 +47,7 @@
 
 #include <singlet-gpu/core/types.h>
 #include <singlet-gpu/core/handles.h>
-#include <factornet/gpu/types.cuh>
+// CYCLE-106: factornet/gpu/types.cuh replaced by native core/types.h (already included above).
 
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
@@ -194,7 +194,7 @@ inline singlet_gpu::core::DeviceDense scale(
         throw std::runtime_error("scale: n_genes and n_cells must be > 0");
 
     if (stream == nullptr)
-        stream = singlet_gpu::core::default_context().stream;
+        stream = singlet_gpu::core::default_context().stream();
 
     // Allocate dense output: n_genes × n_cells (row-major).
     // DenseMatrixGPU(m, n) allocates m*n elements; we pass (n_genes, n_cells)
@@ -286,7 +286,7 @@ inline void regress_out(
             "regress_out: invalid dimensions (n_genes, n_cells > 0; 0 < p <= 32)");
 
     if (stream == nullptr)
-        stream = singlet_gpu::core::default_context().stream;
+        stream = singlet_gpu::core::default_context().stream();
 
     // Create a local cuBLAS handle bound to the caller's stream.
     cublasHandle_t cublas_h;

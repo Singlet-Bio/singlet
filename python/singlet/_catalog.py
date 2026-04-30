@@ -212,3 +212,122 @@ def datasets(
     if has_kraken2 is not None:
         df = df[df["has_kraken2"] == has_kraken2]
     return df.reset_index(drop=True)
+
+
+def summary() -> str:
+    """Print a one-line summary of the atlas and return it as a string.
+
+    Example output:
+        singlet atlas: 1,814 samples (687 SUCCESS) • 928 series • 8 species • 2.3M cells
+    """
+    df = _load_sample_index()
+    total = len(df)
+    success = df[df["status"] == "SUCCESS"] if "status" in df.columns else df
+    cells_col = "cells_called" if "cells_called" in df.columns else "n_cells"
+    total_cells = int(success[cells_col].sum()) if cells_col in success.columns else 0
+    n_success = len(success)
+    n_series = df["gse_id"].nunique() if "gse_id" in df.columns else 0
+    n_species = df["organism"].nunique() if "organism" in df.columns else 0
+
+    def _fmt(n: int) -> str:
+        if n >= 1e6:
+            return f"{n / 1e6:.1f}M"
+        if n >= 1e3:
+            return f"{n / 1e3:.1f}K"
+        return str(n)
+
+    msg = (
+        f"singlet atlas: {total:,} samples ({n_success:,} SUCCESS) • "
+        f"{n_series:,} series • {n_species} species • {_fmt(total_cells)} cells"
+    )
+    print(msg)
+    return msg
+
+
+def samples(
+    gse_id: Optional[str] = None,
+    organism: Optional[str] = None,
+    status: Optional[str] = None,
+    min_cells: Optional[int] = None,
+    quality_tier: Optional[str] = None,
+) -> pd.DataFrame:
+    """Query the sample index with optional filters.
+
+    Parameters
+    ----------
+    gse_id : str, optional
+        Filter by GEO series accession.
+    organism : str, optional
+        Filter by organism (substring match).
+    status : str, optional
+        Filter by pipeline status (e.g. "SUCCESS").
+    min_cells : int, optional
+        Minimum cell count.
+    quality_tier : str, optional
+        Filter by quality tier: "gold" (MR>=70%, genes>=500, cells>=500),
+        "silver" (MR>=50%, genes>=200, cells>=100), or "bronze" (all SUCCESS).
+
+    Returns
+    -------
+    pd.DataFrame
+        Filtered sample index.
+    """
+    df = _load_sample_index()
+    if gse_id is not None:
+        df = df[df["gse_id"] == gse_id]
+    if organism is not None:
+        df = df[df["organism"].str.contains(organism, case=False, na=False)]
+    if status is not None:
+        df = df[df["status"] == status]
+    if min_cells is not None:
+        col = "cells_called" if "cells_called" in df.columns else "n_cells"
+        df = df[df[col] >= min_cells]
+    if quality_tier is not None:
+        df = df[df["status"] == "SUCCESS"]
+        cells_col = "cells_called" if "cells_called" in df.columns else "n_cells"
+        if quality_tier == "gold":
+            df = df[(df["mapping_rate"] >= 0.7) & (df["median_genes"] >= 500) & (df[cells_col] >= 500)]
+        elif quality_tier == "silver":
+            df = df[(df["mapping_rate"] >= 0.5) & (df["median_genes"] >= 200) & (df[cells_col] >= 100)]
+    return df.reset_index(drop=True)
+
+
+def top_series(
+    n: int = 10,
+    min_samples: int = 3,
+    organism: Optional[str] = None,
+) -> pd.DataFrame:
+    """Return top GEO series ranked by total cell count.
+
+    Parameters
+    ----------
+    n : int
+        Number of series to return (default 10).
+    min_samples : int
+        Minimum number of SUCCESS samples in series (default 3).
+    organism : str, optional
+        Filter by organism (substring match).
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns: gse_id, n_samples, total_cells, avg_mapping_rate, avg_median_genes, organism
+    """
+    df = _load_sample_index()
+    df = df[df["status"] == "SUCCESS"]
+    if organism is not None:
+        df = df[df["organism"].str.contains(organism, case=False, na=False)]
+
+    cells_col = "cells_called" if "cells_called" in df.columns else "n_cells"
+
+    grouped = df.groupby("gse_id").agg(
+        n_samples=(cells_col, "count"),
+        total_cells=(cells_col, "sum"),
+        avg_mapping_rate=("mapping_rate", "mean"),
+        avg_median_genes=("median_genes", "mean"),
+        organism=("organism", "first"),
+    ).reset_index()
+
+    grouped = grouped[grouped["n_samples"] >= min_samples]
+    grouped = grouped.sort_values("total_cells", ascending=False).head(n)
+    return grouped.reset_index(drop=True)

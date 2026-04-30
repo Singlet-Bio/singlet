@@ -91,6 +91,13 @@ struct KnnConfig {
     int cagra_intermediate_graph_degree = 128;  // internal graph size during build
     int cagra_search_width             = 1;     // beam width for search
     int cagra_itopk                    = 0;     // 0 = auto: min(k*5, 512)
+
+    // HNSW compat fields — no-op stubs kept for _bind_kernels.hpp ABI.
+    // HNSW backend was removed in CYCLE-62 (replaced by CAGRA); these fields
+    // allow existing Python-facing bindings that set hnsw_M/hnsw_ef to compile
+    // without a separate binding version bump.
+    int hnsw_M  = 32;   // was HNSW graph degree; now ignored
+    int hnsw_ef = 200;  // was HNSW ef_construction; now ignored
 };
 
 struct KnnResult {

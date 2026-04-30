@@ -21,6 +21,27 @@ set_device()       -- Switch the active CUDA device.
 
 from singlet_gpu.version import __version__
 
+# CYCLE-110: Import submodules at top level so users can do
+#   import singlet_gpu as sg
+#   sg.qc.calculate_qc_metrics(adata, ...)
+# without having to know the full `from singlet_gpu.qc import ...` form.
+# Wrapped in try/except so tooling envs missing optional deps still see the
+# names (will raise meaningful AttributeError on use).
+def _import_submodule(name):
+    try:
+        return __import__(f"singlet_gpu.{name}", fromlist=["*"])
+    except ImportError:
+        return None
+
+preprocess = _import_submodule("preprocess")
+reduce     = _import_submodule("reduce")
+qc         = _import_submodule("qc")
+pp         = _import_submodule("pp")
+tools      = _import_submodule("tools")
+streaming  = _import_submodule("streaming")
+io         = _import_submodule("io")  # io/ subdir (read_anndata, to_anndata helpers)
+del _import_submodule
+
 # Core C++ extension — compiled by CMake/pybind11.
 # ImportError here usually means the wheel was not built yet
 # (no nvcc on login nodes); run: pip install -e python/ on a GPU node.

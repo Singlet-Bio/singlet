@@ -2,18 +2,27 @@
 """
 singlet_gpu.reduce.svd — GPU-native PCA and low-level SVD backends.
 
-Underlying C++ cycle: cycle 5 (reduce/svd/*.h — factornet 5-method SVD
-adapters: lanczos, irlba, randomized, krylov_constrained, deflation,
-auto_select).
+After CYCLE-61 winner consolidation, the C++ surface ships only two backends
+(deflation = primary, randomized = fallback). After CYCLE-105 these are native
+internal kernels; factornet is no longer involved.
 
 The module exposes:
 
-``pca``               — scanpy-compatible PCA entry point with backend auto-select.
-``svd_lanczos``       — Golub–Kahan bidiagonalization (factornet::svd::lanczos_gpu).
-``svd_irlba``         — implicitly-restarted Lanczos  (factornet::svd::irlba_gpu).
-``svd_randomized``    — Halko–Martinsson–Tropp        (factornet::svd::randomized_gpu).
-``svd_krylov``        — Krylov constrained            (factornet::svd::krylov_gpu).
-``svd_deflation``     — rank-1 ALS with deflation     (factornet::svd::deflation_gpu).
+``pca``               — scanpy-compatible PCA entry point with backend auto-select (recommended).
+``svd_randomized``    — Halko–Martinsson–Tropp randomized SVD.
+``svd_deflation``     — successive rank-1 deflation SVD.
+
+**Deprecated since 0.1.0** (will be removed in 0.2.0 per state/release-policy.md):
+
+``svd_lanczos``       — DEPRECATED. Use ``pca(backend="auto")``.
+``svd_irlba``         — DEPRECATED. Use ``pca(backend="auto")``.
+``svd_krylov``        — DEPRECATED. Use ``pca(backend="auto")``.
+
+These three backends were dropped from the C++ surface in CYCLE-61 (Rule 32:
+adopt-the-winner). The Python functions remain callable for one MINOR with a
+``DeprecationWarning`` to give users time to migrate. Calling any of them
+forwards to ``pca(backend="auto")`` which currently routes to ``deflation``
+with ``randomized`` as automatic fallback.
 
 All backends use implicit centering (``A(v) = X·v − μ·(1ᵀv)``) implemented
 inside factornet — the mean vector μ is precomputed once on device and
@@ -260,33 +269,22 @@ def svd_lanczos(
     copy: bool = False,
 ) -> Optional["anndata.AnnData"]:
     """
-    Golub–Kahan Lanczos bidiagonalization SVD (cycle-5, factornet::svd::lanczos_gpu).
+    DEPRECATED (since 0.1.0; removed in 0.2.0).
 
-    Best for dominant components with ``k < 32``.  For larger ``k``,
-    prefer ``svd_irlba`` or use ``pca`` with ``backend="auto"``.
-
-    See ``pca`` for parameter descriptions.
+    The ``lanczos`` SVD backend was dropped from the C++ surface in CYCLE-61
+    (Rule 32 winner consolidation: deflation dominates at every k). Calls now
+    forward to ``pca(backend="auto")`` which routes to deflation with
+    randomized fallback.
     """
-    import singlet_gpu._core as _core
-
-    if not hasattr(_core, "svd_lanczos"):
-        raise AttributeError(
-            "_core.svd_lanczos is not available.  "
-            "See CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE."
-        )
-
-    working_adata = adata if (inplace and not copy) else copy_module.copy(adata)
-    mat = _get_matrix(working_adata, layer)
-    device_csc = _csr_to_device_csc(mat)
-
-    config = {"n_comps": int(n_comps), "center": bool(center),
-               "scale": bool(scale), "seed": int(seed)}
-    result = _core.svd_lanczos(device_csc, config)
-    _write_pca_result(working_adata, result, n_comps=n_comps)
-
-    if inplace and not copy:
-        return None
-    return working_adata
+    import warnings
+    warnings.warn(
+        "svd_lanczos is deprecated since singlet-gpu 0.1.0 and will be removed "
+        "in 0.2.0. Use pca(backend='auto') instead — it routes to the deflation "
+        "winner with randomized fallback. See state/release-policy.md.",
+        DeprecationWarning, stacklevel=2,
+    )
+    return pca(adata, n_comps=n_comps, layer=layer, backend="auto",
+               center=center, scale=scale, seed=seed, inplace=inplace, copy=copy)
 
 
 def svd_irlba(
@@ -301,30 +299,20 @@ def svd_irlba(
     copy: bool = False,
 ) -> Optional["anndata.AnnData"]:
     """
-    factornet IRLBA (implicitly-restarted Lanczos) SVD backend.
+    DEPRECATED (since 0.1.0; removed in 0.2.0).
 
-    Best for ``k ≥ 64``.  See ``pca`` for parameter descriptions.
+    The ``irlba`` (implicitly-restarted Lanczos) SVD backend was dropped from
+    the C++ surface in CYCLE-61 (Rule 32 winner consolidation). Calls now
+    forward to ``pca(backend="auto")``.
     """
-    import singlet_gpu._core as _core
-
-    if not hasattr(_core, "svd_irlba"):
-        raise AttributeError(
-            "_core.svd_irlba is not available.  "
-            "See CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE."
-        )
-
-    working_adata = adata if (inplace and not copy) else copy_module.copy(adata)
-    mat = _get_matrix(working_adata, layer)
-    device_csc = _csr_to_device_csc(mat)
-
-    config = {"n_comps": int(n_comps), "center": bool(center),
-               "scale": bool(scale), "seed": int(seed)}
-    result = _core.svd_irlba(device_csc, config)
-    _write_pca_result(working_adata, result, n_comps=n_comps)
-
-    if inplace and not copy:
-        return None
-    return working_adata
+    import warnings
+    warnings.warn(
+        "svd_irlba is deprecated since singlet-gpu 0.1.0 and will be removed "
+        "in 0.2.0. Use pca(backend='auto') instead. See state/release-policy.md.",
+        DeprecationWarning, stacklevel=2,
+    )
+    return pca(adata, n_comps=n_comps, layer=layer, backend="auto",
+               center=center, scale=scale, seed=seed, inplace=inplace, copy=copy)
 
 
 def svd_randomized(
@@ -397,49 +385,26 @@ def svd_krylov(
     copy: bool = False,
 ) -> Optional["anndata.AnnData"]:
     """
-    Krylov-constrained SVD backend (cycle-5, factornet::svd::krylov_gpu).
+    DEPRECATED (since 0.1.0; removed in 0.2.0).
 
-    Supports L1/L2 regularisation and non-negativity constraints on the
-    singular vectors.  Best for constrained ``k ≥ 8``.
-
-    Parameters
-    ----------
-    l1 : float, default 0.0
-        L1 regularisation weight.
-    l2 : float, default 0.0
-        L2 regularisation weight.
-    non_negative : bool, default False
-        Enforce non-negativity on singular vectors.
-
-    See ``pca`` for standard parameter descriptions.
+    The Krylov-constrained SVD backend (with L1/L2/non-negativity constraints)
+    was dropped from the C++ surface in CYCLE-61 (Rule 32 winner consolidation;
+    deflation handles all the constraint types Krylov did). Calls now forward
+    to ``pca(backend="auto")``. The ``l1``/``l2``/``non_negative`` parameters
+    are silently ignored — pass through ``reduce::nmf::fit`` instead if you need
+    constrained factorisation.
     """
-    import singlet_gpu._core as _core
-
-    if not hasattr(_core, "svd_krylov"):
-        raise AttributeError(
-            "_core.svd_krylov is not available.  "
-            "See CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE."
-        )
-
-    working_adata = adata if (inplace and not copy) else copy_module.copy(adata)
-    mat = _get_matrix(working_adata, layer)
-    device_csc = _csr_to_device_csc(mat)
-
-    config = {
-        "n_comps":      int(n_comps),
-        "center":       bool(center),
-        "scale":        bool(scale),
-        "seed":         int(seed),
-        "l1":           float(l1),
-        "l2":           float(l2),
-        "non_negative": bool(non_negative),
-    }
-    result = _core.svd_krylov(device_csc, config)
-    _write_pca_result(working_adata, result, n_comps=n_comps)
-
-    if inplace and not copy:
-        return None
-    return working_adata
+    import warnings
+    warnings.warn(
+        "svd_krylov is deprecated since singlet-gpu 0.1.0 and will be removed "
+        "in 0.2.0. Use pca(backend='auto') for unconstrained SVD; for "
+        "constrained factorisation use reduce.nmf.nmf instead. The l1/l2/"
+        "non_negative parameters are silently ignored on this deprecated path. "
+        "See state/release-policy.md.",
+        DeprecationWarning, stacklevel=2,
+    )
+    return pca(adata, n_comps=n_comps, layer=layer, backend="auto",
+               center=center, scale=scale, seed=seed, inplace=inplace, copy=copy)
 
 
 def svd_deflation(

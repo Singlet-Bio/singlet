@@ -49,30 +49,47 @@
 // bind_kernels_ext is defined at file scope inside _bind_kernels.hpp.
 
 // Cycle 52a: genomics/SNP domain bindings (grn, eqtl, ase, cna, variants, atac).
-// Each header registers one bind_*() function called in PYBIND11_MODULE below.
-#include "_bind_grn.hpp"
-#include "_bind_eqtl.hpp"
-#include "_bind_ase.hpp"
-#include "_bind_cna.hpp"
-#include "_bind_variants.hpp"
-#include "_bind_atac.hpp"
+// CYCLE-107 (2026-04-29): all of these are deferred-indefinitely per state/roadmap.md
+// and still pull factornet headers transitively. Gated behind SINGLET_GPU_BUILD_DEFERRED
+// to keep the foundational `_core.so` build factornet-independent.
+#ifdef SINGLET_GPU_BUILD_DEFERRED
+#  include "_bind_grn.hpp"        // GRaNIE
+#  include "_bind_eqtl.hpp"       // NEBULA
+#  include "_bind_ase.hpp"        // DAESC
+#  include "_bind_cna.hpp"        // Numbat
+#  include "_bind_variants.hpp"   // Monopogen
+#  include "_bind_atac.hpp"       // chromVAR
+#endif
 
-// Cycle 52a Tier 1: fate, comm, network, abundance, disease domain bindings.
-// Each header exposes a bind_*_module(m) function that creates a submodule.
-#include "_bind_fate.hpp"
-#include "_bind_comm.hpp"
-#include "_bind_network.hpp"
-#include "_bind_abundance.hpp"
-#include "_bind_disease.hpp"
+// Cycle 52a Tier 1: fate, comm, network, abundance, disease (also deferred).
+#ifdef SINGLET_GPU_BUILD_DEFERRED
+#  include "_bind_fate.hpp"          // Cospar, CellRank2, Palantir
+#  include "_bind_comm.hpp"          // CellChat
+#  include "_bind_network.hpp"       // hdWGCNA
+#  include "_bind_abundance.hpp"     // Milo
+#  include "_bind_disease.hpp"       // scDRS
+#endif
 
-// Cycle 52a Tier 3: spatial Phase B, generative, perturbation, enrich, qc, nmf.
-// Include order: headers defining Py* result classes registered before functions.
-#include "_bind_spatial_phaseb.hpp"  // FlashDeconvResult, StagateResult, Cell2FateResult
-#include "_bind_generative.hpp"      // DiscreteDiffusionResult, DDSamples
-#include "_bind_perturbation.hpp"    // PerturbGraphResult (with predict method)
-#include "_bind_enrich.hpp"          // SsGseaResult, ProgenyResult
-#include "_bind_qc_new.hpp"          // DoubletScoreResult, OmniDoubletResult
-#include "_bind_nmf_new.hpp"         // CsiGepResult
+// Cycle 52a Tier 3: spatial Phase B, generative, perturbation, enrich (also deferred).
+#ifdef SINGLET_GPU_BUILD_DEFERRED
+#  include "_bind_spatial_phaseb.hpp"  // FlashDeconv, STAGATE, Cell2Fate
+#  include "_bind_generative.hpp"      // DiscreteDiffusion
+#  include "_bind_perturbation.hpp"    // PerturbGraph
+#  include "_bind_enrich.hpp"          // ssGSEA, PROGENy
+#endif
+
+#include "_bind_qc_new.hpp"          // doublet_score (foundational); OmniDoublet gated within
+// CSI-GEP (cycle 28) is in the deferred-indefinitely scope per state/roadmap.md.
+// Its binding pulls factornet/gpu/loss.cuh which uses unqualified `min` — fails
+// under g++ with C++20. Gated behind SINGLET_GPU_BUILD_DEFERRED until either
+// factornet upstream qualifies the calls or scope reopens.
+#ifdef SINGLET_GPU_BUILD_DEFERRED
+#  include "_bind_nmf_new.hpp"       // CsiGepResult
+#endif
+
+// Cycle 103: QC metrics + filter + preprocess scale/regress_out bindings.
+#include "_bind_qc_metrics.hpp"      // QcResult, calculate_qc_metrics, filter_cells, filter_genes
+#include "_bind_preprocess.hpp"      // DenseResult, scale, regress_out
 
 namespace py = pybind11;
 
@@ -217,38 +234,44 @@ PYBIND11_MODULE(_core, m) {
     singlet_gpu::python::bind_kernels_ext(m);
 
     // -----------------------------------------------------------------------
-    // Cycle 52a: genomics/SNP domain bindings.
-    // Registration order: result owner classes before function bindings
-    // (bind_cna and bind_atac register Py*Owner classes that the m.def
-    // docstrings reference by name).
+    // CYCLE-107: deferred-indefinitely domain bindings — gated.
+    // Per state/roadmap.md, all of these features are deferred indefinitely
+    // and still pull factornet headers transitively. Build them only when
+    // SINGLET_GPU_BUILD_DEFERRED is set (default OFF).
     // -----------------------------------------------------------------------
-    singlet_gpu::python::bind_cna(m);      // registers _CnaResultOwner + detect_cna
-    singlet_gpu::python::bind_atac(m);     // registers _ChromVarResultOwner + chromvar
-    singlet_gpu::python::bind_grn(m);      // run_granie
-    singlet_gpu::python::bind_eqtl(m);     // run_nebula
-    singlet_gpu::python::bind_ase(m);      // run_daesc
-    singlet_gpu::python::bind_variants(m); // call_variants
+#ifdef SINGLET_GPU_BUILD_DEFERRED
+    singlet_gpu::python::bind_cna(m);      // Numbat
+    singlet_gpu::python::bind_atac(m);     // chromVAR
+    singlet_gpu::python::bind_grn(m);      // GRaNIE
+    singlet_gpu::python::bind_eqtl(m);     // NEBULA
+    singlet_gpu::python::bind_ase(m);      // DAESC
+    singlet_gpu::python::bind_variants(m); // Monopogen
+
+    singlet_gpu::python::bind_fate_module(m);       // Cospar, CellRank2, Palantir
+    singlet_gpu::python::bind_comm_module(m);       // CellChat
+    singlet_gpu::python::bind_network_module(m);    // hdWGCNA
+    singlet_gpu::python::bind_abundance_module(m);  // Milo
+    singlet_gpu::python::bind_disease_module(m);    // scDRS
+
+    singlet_gpu::python::bind_spatial_phaseb(m);    // FlashDeconv, STAGATE, Cell2Fate
+    singlet_gpu::python::bind_generative(m);        // DiscreteDiffusion
+    singlet_gpu::python::bind_perturbation(m);      // PerturbGraph
+    singlet_gpu::python::bind_enrich(m);            // ssGSEA, PROGENy
+#endif
+
+    singlet_gpu::python::bind_qc_new(m);           // doublet_score (foundational); OmniDoublet gated within
+#ifdef SINGLET_GPU_BUILD_DEFERRED
+    singlet_gpu::python::bind_nmf_new(m);          // csi_gep — deferred-indefinitely scope
+#endif
 
     // -----------------------------------------------------------------------
-    // Cycle 52a Tier 1: fate, comm, network, abundance, disease submodules.
-    // Each function creates a named submodule and registers Py* result classes
-    // plus kernel functions into that submodule.
+    // Cycle 103: QC metrics + filtering + scale/regress_out.
+    // bind_qc_metrics must come before bind_preprocess (no dependency, but
+    // QcResult class registration should precede DenseResult for stable
+    // Python help() output ordering).
     // -----------------------------------------------------------------------
-    singlet_gpu::python::bind_fate_module(m);      // m.fate.{cospar,cellrank2,palantir}
-    singlet_gpu::python::bind_comm_module(m);      // m.comm.cellchat
-    singlet_gpu::python::bind_network_module(m);   // m.network.hdwgcna
-    singlet_gpu::python::bind_abundance_module(m); // m.abundance.milo
-    singlet_gpu::python::bind_disease_module(m);   // m.disease.scdrs
-
-    // -----------------------------------------------------------------------
-    // Cycle 52a Tier 3: spatial Phase B, generative, perturbation, enrich, qc, nmf.
-    // -----------------------------------------------------------------------
-    singlet_gpu::python::bind_spatial_phaseb(m);  // flash_deconv, stagate, cell2fate_fit
-    singlet_gpu::python::bind_generative(m);       // train_discrete_diffusion, sample_discrete_diffusion
-    singlet_gpu::python::bind_perturbation(m);     // train_perturb_graph (+predict_perturbation method)
-    singlet_gpu::python::bind_enrich(m);           // ssgsea, progeny
-    singlet_gpu::python::bind_qc_new(m);           // doublet_score, omni_doublet
-    singlet_gpu::python::bind_nmf_new(m);          // csi_gep
+    singlet_gpu::python::bind_qc_metrics(m);   // QcResult, calculate_qc_metrics, filter_cells, filter_genes
+    singlet_gpu::python::bind_preprocess(m);   // DenseResult, scale, regress_out
 
     // -----------------------------------------------------------------------
     // Cycle 20: result classes (cycles 1-6).

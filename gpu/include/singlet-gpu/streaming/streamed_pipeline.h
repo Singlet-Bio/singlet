@@ -3,6 +3,11 @@
 //
 // singlet-gpu/streaming/streamed_pipeline.h — streaming end-to-end pipeline driver.
 //
+// CYCLE-106: factornet types removed.
+//   factornet::gpu::DeviceMemory<T>  → singlet_gpu::core::DeviceMemory<T>
+//   factornet::io::Chunk<float>      → singlet_gpu::io::Chunk
+//   factornet::gpu::DeviceMemory<T>::wrap(...) → singlet_gpu::core::DeviceMemory<T>::wrap(...)
+//
 // Algorithm: two-pass (lognorm + HVG) + one-pass (PCA/NMF) over PzDataLoader chunks.
 //
 // Workspace: ~8n + 16m bytes host (cell_totals + gene moments); device bounded by
@@ -11,7 +16,7 @@
 //
 // Stream: caller-provided; per-chunk ops run on it. NMF creates its own GPUContext.
 //
-// Determinism: by construction (fixed file order + chunk_cols). NMF defers to factornet.
+// Determinism: by construction (fixed file order + chunk_cols).
 //
 // Multi-input: gene axis must match across all files (m + rownames checked); cell
 //   axis is logically concatenated. Per-cell outputs are indexed file × chunk order.
@@ -23,10 +28,7 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
+#include <singlet-gpu/io/chunk.h>
 #include <singlet-gpu/io/pz_device_loader.h>
 #include <singlet-gpu/streaming/pz_data_loader.h>
 #include <singlet-gpu/preprocess/lognorm.h>
@@ -35,6 +37,7 @@
 #include <singlet-gpu/reduce/nmf/chunked.h>
 #include <singlet-gpu/reduce/svd/types.h>
 #include <singlet-gpu/reduce/nmf/types.h>
+#include <singlet-gpu/core/types.h>
 
 #include <cuda_runtime.h>
 #include <algorithm>
@@ -169,43 +172,44 @@ inline void check_gene_compat(
     }
 }
 
-// Upload an Eigen sparse chunk to a fresh DeviceCSC.
+// Upload a native Chunk (host CSC vectors) to a fresh DeviceCSC.
 // Returns the DeviceMemory objects alongside the DeviceCSC so lifetimes are tied.
+// WHY separate owning + non-owning: d_indptr/d_indices/d_values own the memory;
+// csc wraps them as non-owning views so they share the device buffers safely.
 struct ChunkGPU {
-    singlet_gpu::core::DeviceCSC             csc;
-    factornet::gpu::DeviceMemory<int>        d_indptr;
-    factornet::gpu::DeviceMemory<int>        d_indices;
-    factornet::gpu::DeviceMemory<float>      d_values;
+    singlet_gpu::core::DeviceCSC              csc;
+    singlet_gpu::core::DeviceMemory<int>      d_indptr;
+    singlet_gpu::core::DeviceMemory<int>      d_indices;
+    singlet_gpu::core::DeviceMemory<float>    d_values;
 };
 
-inline ChunkGPU upload_chunk(const ::factornet::io::Chunk<float>& chunk,
+inline ChunkGPU upload_chunk(const singlet_gpu::io::Chunk& chunk,
                               cudaStream_t stream)
 {
-    const int m   = static_cast<int>(chunk.matrix.rows());
-    const int n   = static_cast<int>(chunk.matrix.cols());
-    const int nnz = static_cast<int>(chunk.matrix.nonZeros());
+    const int m   = chunk.n_rows;
+    const int n   = chunk.n_cols;
+    const int nnz = static_cast<int>(chunk.row_indices.size());
 
     ChunkGPU g;
-    g.d_indptr  = factornet::gpu::DeviceMemory<int>  (n + 1);
-    g.d_indices = factornet::gpu::DeviceMemory<int>  (nnz > 0 ? nnz : 1);
-    g.d_values  = factornet::gpu::DeviceMemory<float>(nnz > 0 ? nnz : 1);
+    g.d_indptr  = singlet_gpu::core::DeviceMemory<int>  (static_cast<size_t>(n + 1));
+    g.d_indices = singlet_gpu::core::DeviceMemory<int>  (static_cast<size_t>(nnz > 0 ? nnz : 1));
+    g.d_values  = singlet_gpu::core::DeviceMemory<float>(static_cast<size_t>(nnz > 0 ? nnz : 1));
 
-    cudaMemcpyAsync(g.d_indptr.get(),  chunk.matrix.outerIndexPtr(),
-                    (n + 1) * sizeof(int),   cudaMemcpyHostToDevice, stream);
-    cudaMemcpyAsync(g.d_indices.get(), chunk.matrix.innerIndexPtr(),
-                    nnz * sizeof(int),        cudaMemcpyHostToDevice, stream);
-    cudaMemcpyAsync(g.d_values.get(),  chunk.matrix.valuePtr(),
-                    nnz * sizeof(float),      cudaMemcpyHostToDevice, stream);
+    cudaMemcpyAsync(g.d_indptr.get(),  chunk.col_ptr.data(),
+                    static_cast<size_t>(n + 1) * sizeof(int),   cudaMemcpyHostToDevice, stream);
+    cudaMemcpyAsync(g.d_indices.get(), chunk.row_indices.data(),
+                    static_cast<size_t>(nnz)   * sizeof(int),   cudaMemcpyHostToDevice, stream);
+    cudaMemcpyAsync(g.d_values.get(),  chunk.values.data(),
+                    static_cast<size_t>(nnz)   * sizeof(float), cudaMemcpyHostToDevice, stream);
     cudaStreamSynchronize(stream);
 
     g.csc.rows        = m;
     g.csc.cols        = n;
     g.csc.nnz         = nnz;
-    // Wrap existing device allocations as non-owning views on the SparseMatrixGPU.
-    // WHY non-owning: g.d_indptr/d_indices/d_values own the memory; g.csc is a view.
-    g.csc.col_ptr     = factornet::gpu::DeviceMemory<int>::wrap(g.d_indptr.get(), n + 1);
-    g.csc.row_indices = factornet::gpu::DeviceMemory<int>::wrap(g.d_indices.get(), nnz);
-    g.csc.values      = factornet::gpu::DeviceMemory<float>::wrap(g.d_values.get(), nnz);
+    // Wrap existing device allocations as non-owning views.
+    g.csc.col_ptr     = singlet_gpu::core::DeviceMemory<int>::wrap(g.d_indptr.get(),  static_cast<size_t>(n + 1));
+    g.csc.row_indices = singlet_gpu::core::DeviceMemory<int>::wrap(g.d_indices.get(), static_cast<size_t>(nnz));
+    g.csc.values      = singlet_gpu::core::DeviceMemory<float>::wrap(g.d_values.get(), static_cast<size_t>(nnz));
     return g;
 }
 
@@ -220,7 +224,7 @@ inline PipelineResult run_pipeline(const PipelineConfig& cfg,
     if (cfg.input_paths.empty())
         throw std::runtime_error("run_pipeline: input_paths is empty");
     if (stream == nullptr)
-        stream = singlet_gpu::core::default_context().stream;  // field, not method
+        stream = singlet_gpu::core::default_context().stream();  // accessor, not field
 
     PipelineResult result;
 
@@ -286,11 +290,10 @@ inline PipelineResult run_pipeline(const PipelineConfig& cfg,
         for (size_t fi = 0; fi < cfg.input_paths.size(); ++fi) {
             singlet_gpu::io::PzDataLoader loader(cfg.input_paths[fi],
                                                   static_cast<uint32_t>(cfg.chunk_cols));
-            ::factornet::io::Chunk<float> chunk;
+            singlet_gpu::io::Chunk chunk;
             while (loader.next_forward(chunk)) {
-                const int n_c = static_cast<int>(chunk.matrix.cols());
+                const int n_c = chunk.n_cols;
                 if (n_c == 0) continue;
-                chunk.matrix.makeCompressed();
 
                 auto g = detail::upload_chunk(chunk, stream);
                 auto lr = singlet_gpu::preprocess::log_normalize(g.csc, cfg_p1, stream);
@@ -299,9 +302,9 @@ inline PipelineResult run_pipeline(const PipelineConfig& cfg,
                 std::vector<float>   sf_buf(static_cast<size_t>(n_c));
                 std::vector<uint8_t> qc_buf(static_cast<size_t>(n_c));
                 cudaMemcpy(sf_buf.data(), lr.size_factors.get(),
-                           n_c * sizeof(float),   cudaMemcpyDeviceToHost);
+                           static_cast<size_t>(n_c) * sizeof(float),   cudaMemcpyDeviceToHost);
                 cudaMemcpy(qc_buf.data(), lr.qc_mask.get(),
-                           n_c * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+                           static_cast<size_t>(n_c) * sizeof(uint8_t), cudaMemcpyDeviceToHost);
 
                 for (int j = 0; j < n_c; ++j) {
                     h_cell_totals[static_cast<size_t>(cell_off + j)] =
@@ -347,12 +350,11 @@ inline PipelineResult run_pipeline(const PipelineConfig& cfg,
         for (size_t fi = 0; fi < cfg.input_paths.size(); ++fi) {
             singlet_gpu::io::PzDataLoader loader2(cfg.input_paths[fi],
                                                    static_cast<uint32_t>(cfg.chunk_cols));
-            ::factornet::io::Chunk<float> chunk;
+            singlet_gpu::io::Chunk chunk;
             while (loader2.next_forward(chunk)) {
-                const int n_c = static_cast<int>(chunk.matrix.cols());
+                const int n_c   = chunk.n_cols;
                 if (n_c == 0) continue;
-                chunk.matrix.makeCompressed();
-                const int nnz_c = static_cast<int>(chunk.matrix.nonZeros());
+                const int nnz_c = static_cast<int>(chunk.row_indices.size());
 
                 auto g = detail::upload_chunk(chunk, stream);
 
@@ -363,9 +365,9 @@ inline PipelineResult run_pipeline(const PipelineConfig& cfg,
                     std::vector<float>   sf_buf(static_cast<size_t>(n_c));
                     std::vector<uint8_t> qc_buf(static_cast<size_t>(n_c));
                     cudaMemcpy(sf_buf.data(), lr2.size_factors.get(),
-                               n_c * sizeof(float),   cudaMemcpyDeviceToHost);
+                               static_cast<size_t>(n_c) * sizeof(float),   cudaMemcpyDeviceToHost);
                     cudaMemcpy(qc_buf.data(), lr2.qc_mask.get(),
-                               n_c * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+                               static_cast<size_t>(n_c) * sizeof(uint8_t), cudaMemcpyDeviceToHost);
                     for (int j = 0; j < n_c; ++j) {
                         h_sf    [static_cast<size_t>(cell_off + j)] = sf_buf[static_cast<size_t>(j)];
                         h_qc_mask[static_cast<size_t>(cell_off + j)] = qc_buf[static_cast<size_t>(j)];
@@ -374,15 +376,12 @@ inline PipelineResult run_pipeline(const PipelineConfig& cfg,
                 }
 
                 // Accumulate per-gene fp64 sum + sum_xx for HVG (Welford source).
-                // FIX (Cycle 74): Use chunk.matrix.valuePtr() directly (host Eigen,
-                // guaranteed same order as outerIndexPtr/innerIndexPtr) instead of
-                // g.csc.values (device copy that may be reordered during upload).
+                // Use chunk.values directly (host vectors, guaranteed order).
                 if (cfg.run_hvg && nnz_c > 0) {
-                    const int*   outer     = chunk.matrix.outerIndexPtr();
-                    const int*   inner     = chunk.matrix.innerIndexPtr();
-                    const float* host_vals = chunk.matrix.valuePtr();
+                    const int*   outer     = chunk.col_ptr.data();
+                    const int*   inner     = chunk.row_indices.data();
+                    const float* host_vals = chunk.values.data();
 
-                    // Cache for optional PCA re-read (uses host values too).
                     if (cache) cache->append(host_vals, nnz_c);
 
                     for (int jc = 0; jc < n_c; ++jc) {
@@ -491,7 +490,7 @@ inline PipelineResult run_pipeline(const PipelineConfig& cfg,
                     cfg.input_paths[fi], stream, /*keep_host_pinned=*/true);
                 if (cudaStreamSynchronize(stream) != cudaSuccess)
                     throw std::runtime_error("run_pipeline: sync failed in PCA concat");
-                const int n_fi  = static_cast<int>(fmat.mat.cols);
+                const int n_fi   = static_cast<int>(fmat.mat.cols);
                 const int nnz_fi = static_cast<int>(fmat.mat.nnz);
                 const int* fi_ip = fmat.host_indptr.get();
                 const int base   = static_cast<int>(h_idx.size());
@@ -502,22 +501,22 @@ inline PipelineResult run_pipeline(const PipelineConfig& cfg,
                 col_off += n_fi;
             }
 
-            factornet::gpu::DeviceMemory<int>   d_iptr(n_total + 1);
-            factornet::gpu::DeviceMemory<int>   d_idx (total_nnz > 0 ? total_nnz : 1);
-            factornet::gpu::DeviceMemory<float> d_val (total_nnz > 0 ? total_nnz : 1);
+            singlet_gpu::core::DeviceMemory<int>   d_iptr(static_cast<size_t>(n_total + 1));
+            singlet_gpu::core::DeviceMemory<int>   d_idx (static_cast<size_t>(total_nnz > 0 ? total_nnz : 1));
+            singlet_gpu::core::DeviceMemory<float> d_val (static_cast<size_t>(total_nnz > 0 ? total_nnz : 1));
             cudaMemcpyAsync(d_iptr.get(), h_iptr.data(),
-                (n_total + 1) * sizeof(int), cudaMemcpyHostToDevice, stream);
+                static_cast<size_t>(n_total + 1) * sizeof(int),  cudaMemcpyHostToDevice, stream);
             cudaMemcpyAsync(d_idx.get(),  h_idx.data(),
-                total_nnz * sizeof(int),    cudaMemcpyHostToDevice, stream);
+                static_cast<size_t>(total_nnz)   * sizeof(int),  cudaMemcpyHostToDevice, stream);
             cudaMemcpyAsync(d_val.get(),  h_val.data(),
-                total_nnz * sizeof(float),  cudaMemcpyHostToDevice, stream);
+                static_cast<size_t>(total_nnz)   * sizeof(float),cudaMemcpyHostToDevice, stream);
             cudaStreamSynchronize(stream);
 
             singlet_gpu::io::PzDeviceMatrix concat;
             concat.mat.rows        = n_genes;
             concat.mat.cols        = n_total;
             concat.mat.nnz         = total_nnz;
-            // Move device buffers into the concat matrix (avoids raw-ptr assign).
+            // Move device buffers into the concat matrix.
             concat.mat.col_ptr     = std::move(d_iptr);
             concat.mat.row_indices = std::move(d_idx);
             concat.mat.values      = std::move(d_val);

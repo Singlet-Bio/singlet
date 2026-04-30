@@ -35,7 +35,7 @@
 
 #include <singlet-gpu/core/types.h>
 #include <singlet-gpu/core/handles.h>
-#include <factornet/gpu/types.cuh>
+// CYCLE-106: factornet/gpu/types.cuh replaced by native core/types.h (already included above).
 
 #include <cuda_runtime.h>
 #include <cusparse.h>
@@ -597,7 +597,7 @@ inline HvgResult select_hvg(
     cudaStream_t                        stream = nullptr)
 {
     if (stream == nullptr)
-        stream = singlet_gpu::core::default_context().stream;
+        stream = singlet_gpu::core::default_context().stream();
 
     const int m = static_cast<int>(mat.rows);  // genes
     const int n = static_cast<int>(mat.cols);  // cells
@@ -617,17 +617,17 @@ inline HvgResult select_hvg(
     {
         size_t buf = 0;
         CUSPARSE_CHECK(cusparseCsr2cscEx2_bufferSize(
-            ctx.cusparse, n, m, N,
+            ctx.sparse(), n, m, N,
             mat.values.get(), mat.col_ptr.get(), mat.row_indices.get(),
             d_csr_v.get(), d_csr_rp.get(), d_csr_ci.get(),
-            factornet::gpu::CudaDataType<float>::value,
+            CUDA_R_32F,
             CUSPARSE_ACTION_NUMERIC, CUSPARSE_INDEX_BASE_ZERO, CUSPARSE_CSR2CSC_ALG1, &buf));
         singlet_gpu::core::DeviceMemory<char> dbuf(buf > 0 ? buf : 1);
         CUSPARSE_CHECK(cusparseCsr2cscEx2(
-            ctx.cusparse, n, m, N,
+            ctx.sparse(), n, m, N,
             mat.values.get(), mat.col_ptr.get(), mat.row_indices.get(),
             d_csr_v.get(), d_csr_rp.get(), d_csr_ci.get(),
-            factornet::gpu::CudaDataType<float>::value,
+            CUDA_R_32F,
             CUSPARSE_ACTION_NUMERIC, CUSPARSE_INDEX_BASE_ZERO, CUSPARSE_CSR2CSC_ALG1, dbuf.get()));
     }
 
@@ -813,9 +813,10 @@ inline HvgResult select_hvg(
 // ---------------------------------------------------------------------------
 
 struct DevianceHvgConfig {
-    int   top_n          = 2000;
-    float min_gene_total = 1.0f;  // genes with s_g < this are zeroed out
-    bool  use_poisson    = false; // Poisson null (faster) vs null-binomial
+    int      top_n          = 2000;
+    float    min_gene_total = 1.0f;  // genes with s_g < this are zeroed out
+    bool     use_poisson    = false; // Poisson null (faster) vs null-binomial
+    uint64_t seed           = 0;     // deterministic kernel — no-op (Rule 17/Rule 9)
 };
 
 struct DevianceHvgResult {
@@ -1018,7 +1019,7 @@ inline DevianceHvgResult deviance_feature_selection_with_lib_sizes(
     cudaStream_t                        stream)
 {
     if (stream == nullptr)
-        stream = singlet_gpu::core::default_context().stream;
+        stream = singlet_gpu::core::default_context().stream();
 
     const int m = static_cast<int>(counts.rows);  // genes
     const int n = static_cast<int>(counts.cols);  // cells
@@ -1027,7 +1028,13 @@ inline DevianceHvgResult deviance_feature_selection_with_lib_sizes(
     if (m <= 0 || n <= 0 || N < 0)
         throw std::runtime_error("deviance_feature_selection: invalid DeviceCSC");
 
-    const int top_n = (cfg.top_n <= 0) ? 0 : (cfg.top_n > m) ? m : cfg.top_n;
+    // top_n_req: how many entries the caller-allocated buffer expects (for result writeback).
+    // top_n: actual HVG count computed (clamped to m — cannot select more genes than exist).
+    // WHY split: if cfg.top_n > m, copy_dev_result_hvg is still called with cfg.top_n,
+    // so out_top must be allocated at top_n_req and zero-padded beyond top_n.
+    // Streaming test (D5): N_GENES=500, TOP_N=2000 → top_n_req=2000, top_n=500.
+    const int top_n_req = (cfg.top_n <= 0) ? 0 : cfg.top_n;
+    const int top_n     = (top_n_req > m)  ? m : top_n_req;
 
     // ------------------------------------------------------------------
     // Pass 1A: gene sums s_g — requires CSR transpose of the CSC matrix.
@@ -1041,18 +1048,18 @@ inline DevianceHvgResult deviance_feature_selection_with_lib_sizes(
     {
         size_t buf = 0;
         CUSPARSE_CHECK(cusparseCsr2cscEx2_bufferSize(
-            ctx.cusparse, n, m, N,
+            ctx.sparse(), n, m, N,
             counts.values.get(), counts.col_ptr.get(), counts.row_indices.get(),
             d_csr_v.get(), d_csr_rp.get(), d_csr_ci.get(),
-            factornet::gpu::CudaDataType<float>::value,
+            CUDA_R_32F,
             CUSPARSE_ACTION_NUMERIC, CUSPARSE_INDEX_BASE_ZERO,
             CUSPARSE_CSR2CSC_ALG1, &buf));
         singlet_gpu::core::DeviceMemory<char> dbuf(buf > 0 ? buf : 1);
         CUSPARSE_CHECK(cusparseCsr2cscEx2(
-            ctx.cusparse, n, m, N,
+            ctx.sparse(), n, m, N,
             counts.values.get(), counts.col_ptr.get(), counts.row_indices.get(),
             d_csr_v.get(), d_csr_rp.get(), d_csr_ci.get(),
-            factornet::gpu::CudaDataType<float>::value,
+            CUDA_R_32F,
             CUSPARSE_ACTION_NUMERIC, CUSPARSE_INDEX_BASE_ZERO,
             CUSPARSE_CSR2CSC_ALG1, dbuf.get()));
     }
@@ -1096,8 +1103,9 @@ inline DevianceHvgResult deviance_feature_selection_with_lib_sizes(
 
     if (grand_total <= 0.f) {
         // Empty matrix: return zero deviance.
+        // WHY top_n_req (not top_n): callers copy top_n_req entries from top_idx.
         singlet_gpu::core::DeviceMemory<float>   dev_out(m);
-        singlet_gpu::core::DeviceMemory<int32_t> top_idx(top_n > 0 ? top_n : 1);
+        singlet_gpu::core::DeviceMemory<int32_t> top_idx(top_n_req > 0 ? top_n_req : 1);
         singlet_gpu::core::DeviceMemory<uint8_t> is_var(m);
         return DevianceHvgResult{ std::move(dev_out), std::move(top_idx),
                                    std::move(is_var), 0 };
@@ -1118,8 +1126,8 @@ inline DevianceHvgResult deviance_feature_selection_with_lib_sizes(
                     cudaMemcpyDeviceToDevice, stream);
     {
         float inv_T = 1.f / grand_total;
-        CUBLAS_CHECK(cublasSetStream(ctx.cublas, stream));
-        CUBLAS_CHECK(cublasSscal(ctx.cublas, m, &inv_T, d_pi.get(), 1));
+        CUBLAS_CHECK(cublasSetStream(ctx.blas(), stream));
+        CUBLAS_CHECK(cublasSscal(ctx.blas(), m, &inv_T, d_pi.get(), 1));
     }
 
     {
@@ -1167,18 +1175,23 @@ inline DevianceHvgResult deviance_feature_selection_with_lib_sizes(
         d_idx.get(),     d_idx_s.get(),
         m, 0, 32, stream);
 
-    // Sorted deviance replaces the unsorted buffer; top_n slice is the result.
-    // Move sorted arrays into final DeviceMemory — avoid extra D2D copy.
-    // We keep d_dev_s (all m values sorted) as the output deviance array so
-    // callers can inspect the full ranking without an expand step.
-
-    singlet_gpu::core::DeviceMemory<int32_t> out_top(top_n > 0 ? top_n : 1);
+    // out_top: allocate top_n_req (caller's requested top-N) so that
+    // copy_dev_result_hvg/copy_deviance_result can cudaMemcpy exactly that many
+    // int32_t entries without going out-of-bounds.  Entries [top_n .. top_n_req)
+    // are zero-filled by cudaMemsetAsync.
+    // WHY top_n_req not top_n: streaming test (D5) has cfg.top_n=2000, n_genes=500;
+    // kernel clamps top_n=500 but caller copies 2000*4 bytes → CUDA_ERROR_INVALID_VALUE
+    // (root cause of the D5 streaming exception in job 368732).
+    singlet_gpu::core::DeviceMemory<int32_t> out_top(top_n_req > 0 ? top_n_req : 1);
     singlet_gpu::core::DeviceMemory<uint8_t> out_mask(m);
-    cudaMemsetAsync(out_mask.get(), 0, m, stream);
+    cudaMemsetAsync(out_mask.get(), 0,         m,                         stream);
+    cudaMemsetAsync(out_top .get(), 0xFF, static_cast<size_t>(top_n_req > 0 ? top_n_req : 1) * sizeof(int32_t), stream);
 
     if (top_n > 0) {
+        // Copy only the valid top_n sorted indices; remainder stays 0xFF (sentinel -1).
         cudaMemcpyAsync(out_top.get(), d_idx_s.get(),
-                        top_n * sizeof(int32_t), cudaMemcpyDeviceToDevice, stream);
+                        static_cast<size_t>(top_n) * sizeof(int32_t),
+                        cudaMemcpyDeviceToDevice, stream);
         int g = (top_n + 255) / 256;
         scatter_variable_mask_kernel<<<g, 256, 0, stream>>>(
             out_top.get(), out_mask.get(), top_n, m);
@@ -1188,13 +1201,35 @@ inline DevianceHvgResult deviance_feature_selection_with_lib_sizes(
     // are live until the async copies above complete.
     CUDA_CHECK(cudaStreamSynchronize(stream));
 
-    // Move sorted-deviance array (all genes) into output.
+    // Return d_deviance (gene-indexed, original gene order) NOT d_dev_s (sorted).
+    // WHY: tests read result.deviance as deviance[gene_id] and compute Spearman vs
+    // numpy's per-gene array.  d_dev_s is score-sorted — not gene-indexed — so
+    // Spearman(d_dev_s, numpy_D_g) ≈ 0 for any non-trivial matrix.
+    // (Root cause of Spearman ≈ 0.05 in all 5 failing tests in job 368732.)
+    // d_dev_s (sorted) is kept alive until StreamSynchronize above; it is NOT
+    // returned because no public API contract specifies sorted output in deviance[].
     DevianceHvgResult result;
-    result.deviance         = std::move(d_dev_s);   // sorted descending, all m
-    result.top_gene_idx     = std::move(out_top);
-    result.is_variable      = std::move(out_mask);
+    result.deviance           = std::move(d_deviance);  // gene-indexed, original order
+    result.top_gene_idx       = std::move(out_top);
+    result.is_variable        = std::move(out_mask);
     result.n_genes_considered = m;
     return result;
+}
+
+// ---------------------------------------------------------------------------
+// deviance_feature_selection_with_lib_sizes — design-doc overload:
+// Accepts a DeviceMemory<float> reference (design doc §Configuration, Rule 33).
+// Delegates to the raw-pointer implementation; pointer is valid for lifetime
+// of this call because d_lib_sizes is a const ref to a live DeviceMemory object.
+// ---------------------------------------------------------------------------
+inline DevianceHvgResult deviance_feature_selection_with_lib_sizes(
+    const singlet_gpu::core::DeviceCSC&       counts,
+    const singlet_gpu::core::DeviceMemory<float>& lib_sizes,
+    const DevianceHvgConfig&                  cfg,
+    cudaStream_t                              stream = nullptr)
+{
+    return deviance_feature_selection_with_lib_sizes(
+        counts, lib_sizes.get(), cfg, stream);
 }
 
 // ---------------------------------------------------------------------------

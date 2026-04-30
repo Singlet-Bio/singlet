@@ -52,7 +52,14 @@
 #include <singlet-gpu/reduce/svd/randomized.h>
 #include <singlet-gpu/reduce/nmf/fit.h>
 #include <singlet-gpu/reduce/nmf/chunked.h>
-#include <singlet-gpu/reduce/nmf/graph.h>
+// reduce/nmf/graph.h transitively instantiates factornet::nmf::nmf_cv_fit_gpu
+// which pulls factornet/gpu/loss.cuh — uses unqualified `min` calls that fail
+// under nvcc-with-g++ in C++20 mode. Tracked as
+// CYCLE-104-FOLLOWUP-FACTORNET-LOSS-ALGORITHM (upstream factornet PR pending).
+// Until merged, multi-modal `nmf_graph_factorize` lives behind the build flag.
+#ifdef SINGLET_GPU_BUILD_NMF_GRAPH
+#  include <singlet-gpu/reduce/nmf/graph.h>
+#endif
 #include <singlet-gpu/streaming/pz_data_loader.h>
 #include <singlet-gpu/streaming/streamed_pipeline.h>
 #include <singlet-gpu/io/pz_device_loader.h>
@@ -432,12 +439,12 @@ static PyNmfResult upload_nmf_result(
     out.converged  = r.converged;
     out.stream     = stream;
 
-    // W: rows × k (col-major Eigen)
-    out.d_W = upload_eigen_matrix(r.W.data(), static_cast<std::size_t>(rows * k));
+    // W: rows × k (col-major)
+    out.d_W = upload_eigen_matrix(r.W.ptr(), static_cast<std::size_t>(rows * k));
     // d: k scale factors
     out.d_d = upload_eigen_matrix(r.d.get(), static_cast<std::size_t>(k));
     // H: k × cols
-    out.d_H = upload_eigen_matrix(r.H.data(), static_cast<std::size_t>(k * cols));
+    out.d_H = upload_eigen_matrix(r.H.ptr(), static_cast<std::size_t>(k * cols));
 
     return out;
 }
@@ -478,6 +485,10 @@ static PyNmfResult py_nmf_chunked(
 // py_nmf_graph_factorize — multi-modal graph NMF.
 // inputs: Python list of DeviceCsc objects (one per modality).
 // topology: "shared_h" (default SharedNode), "concat", "hierarchical"
+//
+// Gated on SINGLET_GPU_BUILD_NMF_GRAPH (default OFF) until the upstream
+// factornet `min`/`<algorithm>` issue lands.
+#ifdef SINGLET_GPU_BUILD_NMF_GRAPH
 static PyNmfResult py_nmf_graph_factorize(
     py::list inputs_list, int rank, std::string topology)
 {
@@ -558,6 +569,7 @@ static PyNmfResult py_nmf_graph_factorize(
             + "'. Supported: 'shared_h'.");
     }
 }
+#endif // SINGLET_GPU_BUILD_NMF_GRAPH
 
 // ===========================================================================
 // bind_kernels — registers all functions in the module.
@@ -708,12 +720,14 @@ inline void bind_kernels(py::module_& m)
           py::arg("seed")        = uint64_t{0},
           "Streaming chunked GPU NMF.  loader: PzDataLoader object.");
 
+#ifdef SINGLET_GPU_BUILD_NMF_GRAPH
     m.def("nmf_graph_factorize", &py_nmf_graph_factorize,
           py::arg("inputs"), py::arg("rank"),
           py::kw_only(),
           py::arg("topology") = std::string("shared_h"),
           "Multi-modal graph NMF.  inputs: list[DeviceCsc]. "
           "topology: 'shared_h' (shared cell embedding H across modalities).");
+#endif
 }
 
 // ===========================================================================

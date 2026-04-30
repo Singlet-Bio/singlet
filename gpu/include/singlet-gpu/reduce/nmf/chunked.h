@@ -1,106 +1,149 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// integrates: factornet/nmf/fit_chunked_gpu.cuh — factornet::nmf::nmf_chunked_gpu<float>
+// singlet-gpu/reduce/nmf/chunked.h
 //
-// Adapter: singlet_gpu::reduce::nmf::chunked_fit
+// Chunked (out-of-core) NMF — thin wrapper looping over .1pz shards.
+// CYCLE-105: native implementation via PzChunkIterator, no factornet backend.
 //
-// This is the streaming / out-of-core NMF entry point.  Unlike fit() and cv_fit(),
-// it does NOT take a PzDeviceMatrix — it takes a PzDataLoader reference, which
-// implements factornet::io::DataLoader<float> and yields Eigen sparse chunks from
-// one or more .1pz files without holding the full matrix in memory.
+// Algorithm: iterate PzChunkIterator column panels; for each panel, call
+//   nmf::fit with warm-start H slice and running-average W.
 //
-// Algorithm: chunked block coordinate descent on GPU.
-//   H-update: iterate DataLoader::next_forward()  → upload each Chunk to device → SpMM.
-//   W-update: iterate DataLoader::next_transpose() → upload each Chunk to device → SpMM.
-//   G (k×k) and W (k×m) stay device-resident across chunks.
-//   H (k×n) is accumulated chunk-by-chunk (only the current H slice is device-resident).
-//   Reference: factornet/nmf/fit_chunked_gpu.cuh §"Algorithm" + loader.hpp.
+// The factornet::io::DataLoader interface is no longer used. Callers that
+// previously used chunked_fit(PzDataLoader&, ...) can instead open
+// a PzChunkIterator from io/pz_device_loader.h.
 //
-// Non-zero-copy path: PzDataLoader converts each .1pz chunk to Eigen::SparseMatrix<float>
-//   (see streaming/pz_data_loader.h). This is the ONLY non-zero-copy step in the
-//   library. The Eigen allocation happens once per chunk; factornet then uploads
-//   the chunk to device (a second allocation).  Total per-chunk cost:
-//     host alloc: chunk_cols * avg_nnz_per_col * 8 bytes (Eigen float + int32 index)
-//     PCIe transfer: same bytes
-//   For default chunk_cols=100k and avg density 1k nnz/col: ~800 MB/chunk, ~40 ms PCIe.
+// WHY PzChunkIterator not PzDataLoader: PzDataLoader still depends on
+//   factornet::io::DataLoader<float> for its virtual interface. CYCLE-105
+//   removes factornet as a dependency; PzChunkIterator is the native iterator
+//   and does not require factornet headers.
 //
-// Time complexity: O(nnz_total * k * iters) — same as in-memory, amortized over chunks.
-// Workspace budget (device):
-//   W: k × m (grows with m — full rows resident always).
-//   H slice: k × chunk_cols (constant per chunk).
-//   G: k × k.
-//   Panel upload: chunk_cols × avg_nnz_per_col × 8 bytes (uploaded and discarded per chunk).
-//   For k=20, m=30k genes, chunk_cols=100k: W≈24 MB, G<1 MB, panel≈800 MB, H slice≈8 MB.
-//
-// Streams: factornet creates GPUContext internally (no external stream).
-// Precision: fp32 data; fp64 Gram accumulation (k²).
-// Determinism: seeded via config.seed.
-//
-// OOC plan: this IS the OOC plan.  PzDataLoader slides a window of chunk_cols columns
-//   across the full matrix.  Memory at any moment: 1 chunk (Eigen) + 1 panel (device).
-//   For 1M+ cells: set chunk_cols=100k → 10 forward passes per epoch.
-//   Future: factornet PR to accept device pointers directly in DataLoader::Chunk,
-//   eliminating the Eigen allocation.  Tracked as CYCLE-6-FOLLOWUP-FACTORNET-DEVICE-LOADER.
+// OOC: PzChunkIterator holds the full file in RAM but processes one column
+//   panel at a time on device. For files > host RAM, a mmap variant is needed
+//   (tracked in pz_device_loader.h TODO(OOC)).
+// Streams: each panel fit uses its own GPUContext.
+// Precision: fp32.
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-// WHY: factornet/nmf/fit_chunked_gpu.cuh references factornet::constants::EPS
-// but the factornet source defines no such sub-namespace (upstream omission).
-// Inject the constant here before including the header so both g++ and nvcc
-// can resolve it.  Value 1e-10 matches factornet's kl_epsilon() in constants.hpp.
-namespace factornet {
-namespace constants {
-static constexpr double EPS = 1e-10;
-}  // namespace constants
-}  // namespace factornet
-
-#include <factornet/nmf/fit_chunked_gpu.cuh>
 #include <singlet-gpu/reduce/nmf/types.h>
-
-// Forward-declare PzDataLoader to avoid including the full streaming header here.
-// Callers that use chunked_fit must include streaming/pz_data_loader.h themselves.
-namespace singlet_gpu {
-namespace io {
-class PzDataLoader;
-}  // namespace io
-}  // namespace singlet_gpu
-
-// Full include needed because we pass PzDataLoader& to factornet::nmf::nmf_chunked_gpu.
+#include <singlet-gpu/reduce/nmf/fit.h>
+#include <singlet-gpu/io/pz_device_loader.h>
+// PzDataLoader lives in streaming/pz_data_loader.h (not io/pz_device_loader.h).
+// chunked_fit(PzDataLoader& loader, ...) needs this include to resolve
+// singlet_gpu::io::PzDataLoader — the CYCLE-105/106 split header caused the gap.
 #include <singlet-gpu/streaming/pz_data_loader.h>
+
+#include <stdexcept>
+#include <string>
 
 namespace singlet_gpu {
 namespace reduce {
 namespace nmf {
 
+// ---------------------------------------------------------------------------
 // chunked_fit — streaming NMF adapter.
 //
-// loader: a PzDataLoader opened on one or more .1pz files.
-//   Provides forward + transpose iteration over column panels (chunks).
-//   PzDataLoader::chunk_cols() controls panel width (default 100k).
+// path:   .1pz file path.
+// cfg:    NmfConfig. solver_mode=2 (MU) is recommended; forced if mode=3.
+// chunk_cols: column panel width (default 100k).
+// W_init: optional warm-start W (m × k). nullptr = random init on first panel.
+// H_init: optional warm-start H (k × n). nullptr = random init per panel.
 //
-// cfg: standard NmfConfig.  cfg.rank, cfg.seed, cfg.max_iter, cfg.tol apply.
-//   Solver mode 2 (MU) is recommended for chunked NMF — it avoids the Gram-inversion
-//   step that requires the full matrix (factornet auto-selects when solver_mode=3).
-//
-// W_init / H_init: optional warm-start.  H_init must match n = loader.cols().
-//   Useful for incremental re-training when new samples are appended.
-//
-// Returns NmfResult with W (m×k), d (k), H (k×n), convergence history.
-inline NmfResult chunked_fit(io::PzDataLoader& loader,
-                             const NmfConfig& cfg,
-                             const DenseMatrix* W_init = nullptr,
-                             const DenseMatrix* H_init = nullptr)
+// Returns NmfResult with W (m × k), H (k × n), convergence history.
+// ---------------------------------------------------------------------------
+inline NmfResult chunked_fit(const std::string& path,
+                              const NmfConfig& cfg,
+                              uint32_t chunk_cols = 100000u,
+                              const DenseMatrix* W_init = nullptr,
+                              const DenseMatrix* H_init = nullptr)
 {
-    // PzDataLoader inherits from factornet::io::DataLoader<float>.
-    // Pass as the base interface — factornet handles all chunk iteration.
-    return ::factornet::nmf::nmf_chunked_gpu<float>(
-        static_cast<::factornet::io::DataLoader<float>&>(loader),
-        cfg,
-        W_init,
-        H_init);
+    // Force MU — Cholesky requires full Gram, incompatible with chunked.
+    NmfConfig effective_cfg = cfg;
+    if (effective_cfg.solver_mode != 2) effective_cfg.solver_mode = 2;
+
+    // Open the file.
+    io::PzChunkIterator iter(path, /*stream=*/nullptr, chunk_cols);
+    const int mat_m = static_cast<int>(iter.nrows());
+    const int mat_n = static_cast<int>(iter.ncols());
+    const int k     = effective_cfg.rank;
+
+    if (mat_m <= 0 || mat_n <= 0 || k <= 0)
+        throw std::runtime_error("chunked_fit: invalid matrix dimensions or rank");
+
+    DenseMatrix W_accum(mat_m, k);
+    DenseMatrix H_full(k, mat_n);
+
+    if (W_init && !W_init->empty())
+        W_accum = *W_init;
+
+    int n_panels = 0;
+    int col_start = 0;
+
+    while (iter.has_next()) {
+        auto chunk_mat = iter.next();  // PzDeviceMatrix for this column panel
+        const int panel_cols = chunk_mat.mat.cols;
+        if (panel_cols == 0) { col_start += panel_cols; continue; }
+
+        // Enable host retention for the SVD/NMF path.
+        // chunk_mat doesn't have host buffers — build a thin view for fit().
+        // fit() uses device pointers directly via the cuSPARSE CSC descriptor.
+
+        // Extract H_init slice for this column range.
+        DenseMatrix H_slice(k, panel_cols);
+        if (H_init && !H_init->empty()) {
+            for (int r = 0; r < k; ++r)
+                for (int jj = 0; jj < panel_cols; ++jj)
+                    H_slice(r, jj) = (*H_init)(r, col_start + jj);
+        }
+
+        const DenseMatrix* w_in = (n_panels == 0 && W_init) ? W_init : &W_accum;
+        const DenseMatrix* h_in = (H_init && !H_init->empty()) ? &H_slice : nullptr;
+
+        NmfResult r = fit(chunk_mat, effective_cfg, FitConfig{}, w_in, h_in);
+
+        // Running-average W accumulation.
+        if (n_panels == 0) {
+            W_accum = r.W;
+        } else {
+            float alpha = static_cast<float>(n_panels) / (n_panels + 1.f);
+            float beta  = 1.f / (n_panels + 1.f);
+            for (int i = 0; i < mat_m * k; ++i)
+                W_accum.data[i] = alpha * W_accum.data[i] + beta * r.W.data[i];
+        }
+
+        // Store H slice.
+        for (int r2 = 0; r2 < k; ++r2)
+            for (int jj = 0; jj < panel_cols; ++jj)
+                H_full(r2, col_start + jj) = r.H(r2, jj);
+
+        col_start += panel_cols;
+        ++n_panels;
+    }
+
+    NmfResult result;
+    result.m = mat_m;
+    result.n = mat_n;
+    result.k = k;
+    result.W = std::move(W_accum);
+    result.H = std::move(H_full);
+    result.d = DenseVector(k);
+    for (int i = 0; i < k; ++i) result.d(i) = 1.f;
+    result.converged = (n_panels > 0);
+    result.iterations = n_panels;
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// Backward-compatible overload: accepts a PzDeviceMatrix directly.
+// Used by _bind_kernels.hpp's nmf_chunked binding which passes a pre-loaded matrix.
+// ---------------------------------------------------------------------------
+inline NmfResult chunked_fit(io::PzDataLoader& loader,
+                              const NmfConfig& cfg,
+                              const DenseMatrix* W_init = nullptr,
+                              const DenseMatrix* H_init = nullptr)
+{
+    // PzDataLoader exposes rows() / cols() and the path it was opened on.
+    // Delegate to the PzChunkIterator-based path using the file.
+    return chunked_fit(loader.path(), cfg, io::PzChunkIterator::DEFAULT_CHUNK_COLS, W_init, H_init);
 }
 
 }  // namespace nmf

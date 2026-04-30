@@ -38,14 +38,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
+// CYCLE-105: removed factornet/gpu/types.cuh dependency — DeviceCSC is now native.
 #include <singlet-gpu/core/types.h>
 #include <singlet-gpu/core/memory.h>
-
-#include <factornet/gpu/types.cuh>
 
 #include <zstd.h>
 #include <cuda_runtime.h>
@@ -721,6 +716,10 @@ inline PzDeviceMatrix load_pz(const std::string& path,
         result.host_retained = true;
     }
 
+    // Populate convenience aliases.
+    result.n_genes = static_cast<int>(hdr.m);
+    result.n_cells = static_cast<int>(hdr.n);
+
     return result;
 }
 
@@ -1026,9 +1025,10 @@ private:
 //
 // PzLoadConfig / PzLoadResult / load(path, cfg) / load(path)
 //
-// PzLoadResult::matrix IS factornet::gpu::SparseMatrixGPU<float> populated
+// PzLoadResult::matrix IS core::DeviceCSC populated
 // in-place — no intermediate copy.  The uint→fp32 conversion is fused on
 // device via detail/uint_to_float_kernel.h.
+// CYCLE-105: replaced factornet::gpu::SparseMatrixGPU<float> with core::DeviceCSC.
 //
 // Design doc: singlet-gpu/state/designs/00-pz-device-loader.md
 // ===========================================================================
@@ -1082,7 +1082,7 @@ struct PzLoadConfig {
 //                  for destroying it with cudaStreamDestroy.
 // ---------------------------------------------------------------------------
 struct PzLoadResult {
-    factornet::gpu::SparseMatrixGPU<float> matrix;
+    core::DeviceCSC matrix;
     std::map<std::string, std::string>     metadata;
     std::vector<std::string>               rownames;
     std::vector<std::string>               colnames;
@@ -1354,8 +1354,8 @@ inline PzLoadResult load(const std::string& path, const PzLoadConfig& cfg) {
     const size_t nnz = bufs.nnz;
     const int    vt  = bufs.vt_code;
 
-    // Allocate SparseMatrixGPU<float> in-place on device.
-    factornet::gpu::SparseMatrixGPU<float> d_mat(
+    // Allocate DeviceCSC on device (CYCLE-105: native, no factornet).
+    core::DeviceCSC d_mat(
         static_cast<int>(m),
         static_cast<int>(n),
         static_cast<int>(nnz));

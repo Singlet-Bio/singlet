@@ -15,7 +15,13 @@
 #include <pybind11/stl.h>
 
 #include <singlet-gpu/qc/doublet_score.h>
-#include <singlet-gpu/qc/omnidoublet.h>
+// OmniDoublet (cycle 39) is in the deferred-indefinitely scope per
+// state/roadmap.md and still uses factornet::SVDConfig + factornet::svd::
+// randomized_svd_gpu_dense. Gated to keep the foundational _core.so build
+// independent of factornet.
+#ifdef SINGLET_GPU_BUILD_DEFERRED
+#  include <singlet-gpu/qc/omnidoublet.h>
+#endif
 #include <singlet-gpu/core/types.h>
 #include <singlet-gpu/core/memory.h>
 
@@ -45,8 +51,9 @@ struct PyDoubletScoreResult {
 };
 
 // ---------------------------------------------------------------------------
-// PyOmniDoubletResult
+// PyOmniDoubletResult — gated; OmniDoublet is in deferred-indefinitely scope.
 // ---------------------------------------------------------------------------
+#ifdef SINGLET_GPU_BUILD_DEFERRED
 struct PyOmniDoubletResult {
     singlet_gpu::core::DeviceMemory<float>   doublet_score;
     singlet_gpu::core::DeviceMemory<uint8_t> doublet_call;
@@ -57,6 +64,7 @@ struct PyOmniDoubletResult {
     int   n_sim                   = 0;
     cudaStream_t stream           = nullptr;
 };
+#endif
 
 // ---------------------------------------------------------------------------
 // Helper: resolve cudaStream_t from Python object (None → nullptr)
@@ -101,7 +109,8 @@ inline void bind_qc_new(py::module_& m) {
                  + " threshold=" + std::to_string(r.threshold_used) + ">";
         });
 
-    // ── OmniDoubletResult ──────────────────────────────────────────────────
+    // ── OmniDoubletResult — gated; deferred-indefinitely scope ─────────────
+#ifdef SINGLET_GPU_BUILD_DEFERRED
     py::class_<PyOmniDoubletResult, std::shared_ptr<PyOmniDoubletResult>>(
         m, "OmniDoubletResult",
         "Result of omni_doublet (multimodal CITE-seq doublet detection).")
@@ -211,7 +220,7 @@ inline void bind_qc_new(py::module_& m) {
         DoubletScoreResult
         )doc");
 
-    // ── omni_doublet function ──────────────────────────────────────────────
+    // ── omni_doublet function ── (still gated by SINGLET_GPU_BUILD_DEFERRED)
     m.def("omni_doublet",
         [](const PyDeviceCsc& rna_counts,
            const PyDeviceCsc& adt_counts,
@@ -292,6 +301,7 @@ inline void bind_qc_new(py::module_& m) {
         -------
         OmniDoubletResult
         )doc");
+#endif // SINGLET_GPU_BUILD_DEFERRED — closes both PyOmniDoubletResult class + omni_doublet fn
 }
 
 }  // namespace python

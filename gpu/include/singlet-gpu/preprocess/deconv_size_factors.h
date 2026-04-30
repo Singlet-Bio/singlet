@@ -61,7 +61,8 @@
 #include "singlet-gpu/core/types.h"
 #include "singlet-gpu/core/handles.h"
 
-#include <factornet/gpu/types.cuh>
+// CYCLE-106: factornet/gpu/types.cuh replaced by native core/types.h.
+#include <singlet-gpu/core/types.h>
 
 #include <cub/device/device_segmented_reduce.cuh>
 #include <cub/device/device_radix_sort.cuh>
@@ -446,11 +447,11 @@ inline DeconvSizeFactorsResult compute_deconv_size_factors(
 
     // Resolve stream.
     if (!stream) {
-        stream = core::default_context().stream;
+        stream = core::default_context().stream();
     }
     // Borrow handles from the default context and rebind to our stream.
-    cusolverDnHandle_t cusolver = core::default_context().cusolver;
-    cublasHandle_t     cublas   = core::default_context().cublas;
+    cusolverDnHandle_t cusolver = core::default_context().solver();
+    cublasHandle_t     cublas   = core::default_context().blas();
     SGPU_DSF_CUSOLVER_CHECK(cusolverDnSetStream(cusolver, stream));
     SGPU_DSF_CUBLAS_CHECK(cublasSetStream(cublas, stream));
 

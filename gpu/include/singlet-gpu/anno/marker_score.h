@@ -673,7 +673,7 @@ inline MarkerScoreResult marker_score(
         auto& ctx = singlet_gpu::core::default_context();
         auto d_inv = detail::compute_gram_inverse(
             gene_sets, n_genes, n_sets, cfg.lambda_tikhonov,
-            cfg.min_n_genes_per_set, ctx.cusolver, stream);
+            cfg.min_n_genes_per_set, ctx.solver(), stream);
 
         // Step 2: G^T x_j per cell → gtx buffer [n_cells × n_sets].
         singlet_gpu::core::DeviceMemory<float> d_gtx((size_t)n_cells * n_sets);
@@ -700,7 +700,7 @@ inline MarkerScoreResult marker_score(
         //   B = d_gtx^T [n_sets × n_cells],  ldb = n_cells  (d_gtx is row-major)
         //   C = scores  [n_sets × n_cells],  ldc = n_sets
         const float alpha = 1.f, beta = 0.f;
-        cublasSgemm(ctx.cublas,
+        cublasSgemm(ctx.blas(),
                     CUBLAS_OP_N, CUBLAS_OP_T,
                     n_sets, n_cells, n_sets,
                     &alpha,

@@ -30,23 +30,41 @@ option(SINGLET_GPU_BUILD_PYTHON "Build the pybind11 Python extension" ON)
 option(SINGLET_GPU_BUILD_TESTS  "Build C++ correctness tests"          OFF)
 option(SINGLET_GPU_BUILD_BENCH  "Build C++ benchmark drivers"          OFF)
 
-# Resolve parent source dir — works whether called from python/ directly or
-# from the repo root with -DSINGLET_GPU_BUILD_PYTHON=ON.
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../CMakeLists.txt" AND
-   NOT "${CMAKE_CURRENT_SOURCE_DIR}" STREQUAL "${CMAKE_SOURCE_DIR}")
-    # Called from python/ directly (standalone build).
-    set(_PARENT_SRC "${CMAKE_CURRENT_SOURCE_DIR}/..")
-else()
-    # scikit-build-core sets CMAKE_SOURCE_DIR to singlet-gpu/; python/ is a subdir.
-    set(_PARENT_SRC "${CMAKE_SOURCE_DIR}")
+# Pull in the parent singlet-gpu INTERFACE library if it isn't already present.
+# Three invocation paths must all work:
+#   (1) Standalone: cmake -S python -B build  →  target doesn't exist, pull parent in.
+#   (2) Parent-driven: cmake -S . -B build -DSINGLET_GPU_BUILD_PYTHON=ON
+#       and parent CMakeLists has add_subdirectory(python)  →  target already
+#       exists by the time the wrapper runs; skip the redundant add.
+#   (3) scikit-build-core (default `cmake.source-dir = "python"`):
+#       cmake source root is python/; target doesn't exist; pull parent in via
+#       a relative path. cmake supports add_subdirectory pointing outside the
+#       cmake source tree; we name the binary subdir explicitly to avoid the
+#       "directory must be a subdir of CMAKE_SOURCE_DIR" warning.
+#
+# Earlier versions of this file derived _PARENT_SRC from CMAKE_SOURCE_DIR. In
+# scikit-build-core's default config CMAKE_SOURCE_DIR == CMAKE_CURRENT_SOURCE_DIR
+# (both point at python/), so add_subdirectory(${CMAKE_SOURCE_DIR}) recursed
+# infinitely. Fixed by using CMAKE_CURRENT_SOURCE_DIR/.. unconditionally and
+# guarding with the target check.
+if(NOT TARGET singlet-gpu::singlet-gpu)
+    add_subdirectory(
+        "${CMAKE_CURRENT_SOURCE_DIR}/.."
+        "${CMAKE_BINARY_DIR}/singlet_gpu_parent"
+        EXCLUDE_FROM_ALL
+    )
 endif()
-
-add_subdirectory("${_PARENT_SRC}" singlet_gpu_parent EXCLUDE_FROM_ALL)
 
 # ---------------------------------------------------------------------------
 # pybind11
 # ---------------------------------------------------------------------------
 find_package(pybind11 2.11 REQUIRED)
+
+# CYCLE-110: anno/reference_map.h has an inline NPZ parser that calls
+# zlib's inflate() to decompress the DEFLATE-compressed npy entries inside
+# .npz archives. The parent INTERFACE target doesn't link zlib because
+# the foundational kernels don't need it; the binding TU does.
+find_package(ZLIB REQUIRED)
 
 # ---------------------------------------------------------------------------
 # _core extension module
@@ -55,11 +73,22 @@ pybind11_add_module(_core MODULE
     src/_singlet_gpu_core.cpp
 )
 
-# Inherit singlet-gpu headers, factornet, CUDA, zstd from the INTERFACE target.
-target_link_libraries(_core PRIVATE singlet-gpu::singlet-gpu)
+# CYCLE-107: the umbrella + module headers contain `__global__` <<< >>> kernel
+# launch syntax inline. Compile the pybind11 entry TU as CUDA so nvcc parses it.
+# Without this, host g++ chokes on the launch syntax (same Cycle-92 lesson at
+# the binding layer).
+set_source_files_properties(src/_singlet_gpu_core.cpp PROPERTIES LANGUAGE CUDA)
+set_target_properties(_core PROPERTIES CUDA_ARCHITECTURES "70;80;90")
+
+# Inherit singlet-gpu headers + CUDA + zstd from the INTERFACE target.
+target_link_libraries(_core PRIVATE singlet-gpu::singlet-gpu ZLIB::ZLIB)
 
 # pybind11 best practice: hide all symbols except the module init.
-target_compile_options(_core PRIVATE -fvisibility=hidden)
+# Use device-aware visibility flag so nvcc threads it through to host pass.
+target_compile_options(_core PRIVATE
+    $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-fvisibility=hidden>
+    $<$<COMPILE_LANGUAGE:CXX>:-fvisibility=hidden>
+)
 
 # The module init function name must match the pybind11_add_module target name.
 # Output file: _core.cpython-3xx-…so → installed into singlet_gpu/.

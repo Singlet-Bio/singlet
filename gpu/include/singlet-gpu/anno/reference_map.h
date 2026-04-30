@@ -567,7 +567,7 @@ inline RefMapResult project_to_reference(
     singlet_gpu::core::DeviceMemory<float> d_logits((size_t)n_cells * n_classes);
 
     auto& ctx = singlet_gpu::core::default_context();
-    cublasSetStream(ctx.cublas, stream);
+    cublasSetStream(ctx.blas(), stream);
 
     // cuBLAS Sgemm: logits = embedding × weights^T
     //   embedding:  n_cells × n_pcs  (row-major = col-major transposed → OP_T)
@@ -579,7 +579,7 @@ inline RefMapResult project_to_reference(
     //   C(n_classes × n_cells) = W(n_classes × n_pcs) · emb^T(n_pcs × n_cells)
     //   → cublasSgemm(OP_N, OP_T, n_classes, n_cells, n_pcs, α, W, n_classes, emb, n_cells, β, C, n_classes)
     const float alpha = 1.f, beta = 0.f;
-    cublasSgemm(ctx.cublas,
+    cublasSgemm(ctx.blas(),
                 CUBLAS_OP_N, CUBLAS_OP_T,
                 n_classes, n_cells, n_pcs,
                 &alpha,

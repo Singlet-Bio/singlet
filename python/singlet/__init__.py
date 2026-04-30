@@ -34,6 +34,7 @@ __version__ = "1.0.0"
 
 from singlet._catalog import (
     catalog, info, species, datasets, sample_index, set_catalog_dir,
+    summary, samples, top_series,
 )
 from singlet._loader import load, load_sample, download
 from singlet._auth import login
@@ -53,6 +54,9 @@ __all__ = [
     "datasets",
     "sample_index",
     "set_catalog_dir",
+    "summary",
+    "samples",
+    "top_series",
     # Load
     "load",
     "load_sample",

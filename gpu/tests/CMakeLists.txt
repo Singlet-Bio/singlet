@@ -108,6 +108,13 @@ set_target_properties(preprocess_hvg_correctness PROPERTIES
 gtest_discover_tests(preprocess_hvg_correctness
     PROPERTIES LABELS "correctness;preprocess")
 
+# preprocess_hvg_deviance_correctness is registered at line ~1958 below
+# (Cycle 88 Phase D). My CYCLE-88-Phase-E investigation found the original
+# block is complete — the apparent "no tests found" in cycle88_verify_367923
+# was because the verify script only ran `cmake --build --target
+# preprocess_hvg_deviance_correctness` then ctest with no `--test-dir` flag
+# pointing at the right subdir.
+
 # ---------------------------------------------------------------------------
 # reduce/svd adapter correctness harness
 # ---------------------------------------------------------------------------
@@ -163,6 +170,30 @@ set_target_properties(reduce_nmf_correctness PROPERTIES
 )
 gtest_discover_tests(reduce_nmf_correctness
     PROPERTIES LABELS "correctness;reduce;nmf")
+
+# ---------------------------------------------------------------------------
+# reduce/nmf regularization correctness harness  (CYCLE-114)
+#
+# Tests the four reg modes (L1/L2/ortho/nonneg) wired into the Frobenius MU
+# kernel.  No factornet dependency — uses the native singlet-gpu NMF path.
+# Must be compiled by nvcc (fit.h contains __global__ kernels).
+# ---------------------------------------------------------------------------
+add_executable(reduce_nmf_regularization_correctness
+    reduce_nmf_regularization_correctness.cpp
+)
+set_source_files_properties(reduce_nmf_regularization_correctness.cpp
+    PROPERTIES LANGUAGE CUDA)
+target_link_libraries(reduce_nmf_regularization_correctness PRIVATE
+    singlet-gpu::singlet-gpu
+    GTest::gtest_main
+)
+target_link_libraries(reduce_nmf_regularization_correctness PRIVATE CUDA::cudart)
+set_target_properties(reduce_nmf_regularization_correctness PROPERTIES
+    CUDA_STANDARD 20
+    CUDA_STANDARD_REQUIRED ON
+)
+gtest_discover_tests(reduce_nmf_regularization_correctness
+    PROPERTIES LABELS "correctness;reduce;nmf;regularization")
 
 # ---------------------------------------------------------------------------
 # streaming/pipeline correctness harness  (cycle 7)
@@ -1959,3 +1990,609 @@ set_target_properties(preprocess_hvg_deviance_correctness PROPERTIES
 )
 gtest_discover_tests(preprocess_hvg_deviance_correctness
     PROPERTIES LABELS "correctness;preprocess;hvg_deviance")
+
+# ---------------------------------------------------------------------------
+# reduce/svd speckled cross-validation correctness harness  (CYCLE-115)
+# ---------------------------------------------------------------------------
+add_executable(reduce_svd_cv_correctness
+    reduce_svd_cv_correctness.cpp
+)
+# cv.h contains __global__ CUDA kernels — must compile with nvcc.
+set_source_files_properties(reduce_svd_cv_correctness.cpp
+    PROPERTIES LANGUAGE CUDA)
+target_link_libraries(reduce_svd_cv_correctness PRIVATE
+    singlet-gpu::singlet-gpu
+    GTest::gtest_main
+)
+target_link_libraries(reduce_svd_cv_correctness PRIVATE CUDA::cudart)
+set_target_properties(reduce_svd_cv_correctness PROPERTIES
+    CUDA_STANDARD 20
+    CUDA_STANDARD_REQUIRED ON
+)
+gtest_discover_tests(reduce_svd_cv_correctness
+    PROPERTIES LABELS "correctness;reduce;svd;cv")
+
+# ---------------------------------------------------------------------------
+# preprocess/pearson_residuals variance correctness harness  (CYCLE-118)
+#
+# Validates the 4-pass closed-form Pearson residuals variance kernel against
+# a CPU closed-form reference (Lause-Berens-Kobak 2021).
+# pearson_residuals.h contains __global__ CUDA kernels — must compile with nvcc.
+# ---------------------------------------------------------------------------
+add_executable(preprocess_pearson_residuals_correctness
+    preprocess_pearson_residuals_correctness.cpp
+)
+set_source_files_properties(preprocess_pearson_residuals_correctness.cpp
+    PROPERTIES LANGUAGE CUDA)
+target_link_libraries(preprocess_pearson_residuals_correctness PRIVATE
+    singlet-gpu::singlet-gpu
+    GTest::gtest_main
+)
+target_link_libraries(preprocess_pearson_residuals_correctness PRIVATE CUDA::cudart)
+set_target_properties(preprocess_pearson_residuals_correctness PROPERTIES
+    CUDA_STANDARD 20
+    CUDA_STANDARD_REQUIRED ON
+)
+gtest_discover_tests(preprocess_pearson_residuals_correctness
+    PROPERTIES LABELS "correctness;preprocess;pearson_residuals")
+
+# ---------------------------------------------------------------------------
+# preprocess/magic imputation correctness harness  (CYCLE-124)
+#
+# Validates the MAGIC diffusion imputation kernel against CPU references.
+# van Dijk et al. (2018) Cell 174:716-729.
+# magic.h contains __global__ CUDA kernels and cuSPARSE SpMM — compile nvcc.
+# ---------------------------------------------------------------------------
+add_executable(preprocess_magic_correctness
+    preprocess_magic_correctness.cpp
+)
+set_source_files_properties(preprocess_magic_correctness.cpp
+    PROPERTIES LANGUAGE CUDA)
+target_link_libraries(preprocess_magic_correctness PRIVATE
+    singlet-gpu::singlet-gpu
+    GTest::gtest_main
+)
+target_link_libraries(preprocess_magic_correctness PRIVATE
+    CUDA::cudart
+    CUDA::cusparse
+)
+set_target_properties(preprocess_magic_correctness PROPERTIES
+    CUDA_STANDARD 20
+    CUDA_STANDARD_REQUIRED ON
+)
+gtest_discover_tests(preprocess_magic_correctness
+    PROPERTIES LABELS "correctness;preprocess;magic")
+
+# ---------------------------------------------------------------------------
+# preprocess/model_gene_var correctness harness  (CYCLE-127)
+#
+# Validates the Poisson-null HVG selection kernel against CPU reference.
+# Lun-McCarthy-Marioni (2016) / scran::modelGeneVarByPoisson.
+# model_gene_var.h contains __global__ CUDA kernels and CUB sort — compile nvcc.
+# ---------------------------------------------------------------------------
+add_executable(preprocess_model_gene_var_correctness
+    preprocess_model_gene_var_correctness.cpp
+)
+set_source_files_properties(preprocess_model_gene_var_correctness.cpp
+    PROPERTIES LANGUAGE CUDA)
+target_link_libraries(preprocess_model_gene_var_correctness PRIVATE
+    singlet-gpu::singlet-gpu
+    GTest::gtest_main
+)
+target_link_libraries(preprocess_model_gene_var_correctness PRIVATE CUDA::cudart)
+set_target_properties(preprocess_model_gene_var_correctness PROPERTIES
+    CUDA_STANDARD 20
+    CUDA_STANDARD_REQUIRED ON
+)
+gtest_discover_tests(preprocess_model_gene_var_correctness
+    PROPERTIES LABELS "correctness;preprocess;model_gene_var")
+
+# ---------------------------------------------------------------------------
+# enrich/decoupler_wsum + wmean correctness harness  (CYCLE-128)
+#
+# Validates WSUM and WMEAN pathway-scoring methods against CPU closed-form and
+# matmul references.  Badia-i-Mompel et al. (2022) Bioinformatics Advances.
+# decoupler_wsum.h contains __global__ CUDA kernels and cuSPARSE SpMM —
+# must compile with nvcc.
+# ---------------------------------------------------------------------------
+add_executable(enrich_decoupler_wsum_correctness
+    enrich_decoupler_wsum_correctness.cpp
+)
+set_source_files_properties(enrich_decoupler_wsum_correctness.cpp
+    PROPERTIES LANGUAGE CUDA)
+target_link_libraries(enrich_decoupler_wsum_correctness PRIVATE
+    singlet-gpu::singlet-gpu
+    GTest::gtest_main
+)
+target_link_libraries(enrich_decoupler_wsum_correctness PRIVATE
+    CUDA::cudart
+    CUDA::cusparse
+)
+target_compile_definitions(enrich_decoupler_wsum_correctness PRIVATE FACTORNET_HAS_GPU)
+set_target_properties(enrich_decoupler_wsum_correctness PROPERTIES
+    CUDA_STANDARD 20
+    CUDA_STANDARD_REQUIRED ON
+)
+gtest_discover_tests(enrich_decoupler_wsum_correctness
+    PROPERTIES LABELS "correctness;enrich;decoupler;wsum;wmean")
+
+# ---------------------------------------------------------------------------
+# enrich/score_genes correctness harness  (CYCLE-129)
+#
+# Validates per-cell gene-set scoring (Satija et al. 2015 / scanpy.tl.score_genes)
+# against CPU closed-form and planted-signal references.
+# score_genes.h contains __global__ CUDA kernels and cuSPARSE SpMM —
+# must compile with nvcc.
+# ---------------------------------------------------------------------------
+add_executable(enrich_score_genes_correctness
+    enrich_score_genes_correctness.cpp
+)
+set_source_files_properties(enrich_score_genes_correctness.cpp
+    PROPERTIES LANGUAGE CUDA)
+target_link_libraries(enrich_score_genes_correctness PRIVATE
+    singlet-gpu::singlet-gpu
+    GTest::gtest_main
+)
+target_link_libraries(enrich_score_genes_correctness PRIVATE
+    CUDA::cudart
+    CUDA::cusparse
+)
+target_compile_definitions(enrich_score_genes_correctness PRIVATE FACTORNET_HAS_GPU)
+set_target_properties(enrich_score_genes_correctness PROPERTIES
+    CUDA_STANDARD 20
+    CUDA_STANDARD_REQUIRED ON
+)
+gtest_discover_tests(enrich_score_genes_correctness
+    PROPERTIES LABELS "correctness;enrich;score_genes")
+
+# ---------------------------------------------------------------------------
+# enrich/decoupler_ulm correctness harness  (CYCLE-130)
+#
+# Validates ULM (Univariate Linear Model) pathway-scoring against CPU
+# closed-form OLS reference.  Badia-i-Mompel et al. (2022) Bioinformatics
+# Advances.  decoupler_ulm.h contains __global__ CUDA kernels and cuSPARSE
+# SpMM — must compile with nvcc.
+# ---------------------------------------------------------------------------
+add_executable(enrich_decoupler_ulm_correctness
+    enrich_decoupler_ulm_correctness.cpp
+)
+set_source_files_properties(enrich_decoupler_ulm_correctness.cpp
+    PROPERTIES LANGUAGE CUDA)
+target_link_libraries(enrich_decoupler_ulm_correctness PRIVATE
+    singlet-gpu::singlet-gpu
+    GTest::gtest_main
+)
+target_link_libraries(enrich_decoupler_ulm_correctness PRIVATE
+    CUDA::cudart
+    CUDA::cusparse
+)
+target_compile_definitions(enrich_decoupler_ulm_correctness PRIVATE FACTORNET_HAS_GPU)
+set_target_properties(enrich_decoupler_ulm_correctness PROPERTIES
+    CUDA_STANDARD 20
+    CUDA_STANDARD_REQUIRED ON
+)
+gtest_discover_tests(enrich_decoupler_ulm_correctness
+    PROPERTIES LABELS "correctness;enrich;decoupler;ulm")
+
+# ---------------------------------------------------------------------------
+# integrate/combat correctness harness  (CYCLE-131)
+#
+# Validates ComBat batch correction against synthetic shift removal, biology
+# preservation, determinism, and memory guard.
+# Johnson WE, Li C, Rabinovic A (2007) Biostatistics 8:118-127.
+# combat.h contains __global__ CUDA kernels — must compile with nvcc.
+# ---------------------------------------------------------------------------
+add_executable(integrate_combat_correctness
+    integrate_combat_correctness.cpp
+)
+set_source_files_properties(integrate_combat_correctness.cpp
+    PROPERTIES LANGUAGE CUDA)
+target_link_libraries(integrate_combat_correctness PRIVATE
+    singlet-gpu::singlet-gpu
+    GTest::gtest_main
+)
+target_link_libraries(integrate_combat_correctness PRIVATE
+    CUDA::cudart
+)
+target_compile_definitions(integrate_combat_correctness PRIVATE FACTORNET_HAS_GPU)
+set_target_properties(integrate_combat_correctness PROPERTIES
+    CUDA_STANDARD 20
+    CUDA_STANDARD_REQUIRED ON
+)
+gtest_discover_tests(integrate_combat_correctness
+    PROPERTIES LABELS "correctness;integrate;combat")
+
+# ---------------------------------------------------------------------------
+# enrich/decoupler_ora correctness harness  (CYCLE-132)
+#
+# Validates ORA (Over-Representation Analysis) hypergeometric per-cell pathway
+# scoring against closed-form reference values and synthetic enrichment cases.
+# Badia-i-Mompel et al. (2022) Bioinformatics Advances. decoupler_ora.h
+# contains __global__ CUDA kernels and cuBLAS Sgemm — must compile with nvcc.
+# ---------------------------------------------------------------------------
+add_executable(enrich_decoupler_ora_correctness
+    enrich_decoupler_ora_correctness.cpp
+)
+set_source_files_properties(enrich_decoupler_ora_correctness.cpp
+    PROPERTIES LANGUAGE CUDA)
+target_link_libraries(enrich_decoupler_ora_correctness PRIVATE
+    singlet-gpu::singlet-gpu
+    GTest::gtest_main
+)
+target_link_libraries(enrich_decoupler_ora_correctness PRIVATE
+    CUDA::cudart
+    CUDA::cublas
+)
+target_compile_definitions(enrich_decoupler_ora_correctness PRIVATE FACTORNET_HAS_GPU)
+set_target_properties(enrich_decoupler_ora_correctness PROPERTIES
+    CUDA_STANDARD 20
+    CUDA_STANDARD_REQUIRED ON
+)
+gtest_discover_tests(enrich_decoupler_ora_correctness
+    PROPERTIES LABELS "correctness;enrich;decoupler;ora")
+
+# ---------------------------------------------------------------------------
+# integrate/lisi correctness harness  (CYCLE-133)
+#
+# Validates LISI (Local Inverse Simpson's Index) per-cell batch-integration
+# and cluster-preservation scoring against synthetic closed-form cases.
+# Korsunsky et al. (2019) Nat Methods 16:1289-1296.
+# lisi.h contains __global__ CUDA kernels — must compile with nvcc.
+# ---------------------------------------------------------------------------
+add_executable(integrate_lisi_correctness
+    integrate_lisi_correctness.cpp
+)
+set_source_files_properties(integrate_lisi_correctness.cpp
+    PROPERTIES LANGUAGE CUDA)
+target_link_libraries(integrate_lisi_correctness PRIVATE
+    singlet-gpu::singlet-gpu
+    GTest::gtest_main
+)
+target_link_libraries(integrate_lisi_correctness PRIVATE
+    CUDA::cudart
+)
+target_compile_definitions(integrate_lisi_correctness PRIVATE FACTORNET_HAS_GPU)
+set_target_properties(integrate_lisi_correctness PROPERTIES
+    CUDA_STANDARD 20
+    CUDA_STANDARD_REQUIRED ON
+)
+gtest_discover_tests(integrate_lisi_correctness
+    PROPERTIES LABELS "correctness;integrate;lisi")
+
+# ---------------------------------------------------------------------------
+# qc/empty_drops correctness harness  (CYCLE-134)
+#
+# Validates emptyDrops (Lun et al. 2019 Genome Biology) cell/empty-droplet
+# calling via Monte Carlo Dirichlet-multinomial test against ambient profile.
+# empty_drops.h contains __global__ CUDA kernels and cuRAND Philox — nvcc.
+# ---------------------------------------------------------------------------
+add_executable(qc_empty_drops_correctness
+    qc_empty_drops_correctness.cpp
+)
+set_source_files_properties(qc_empty_drops_correctness.cpp
+    PROPERTIES LANGUAGE CUDA)
+target_link_libraries(qc_empty_drops_correctness PRIVATE
+    singlet-gpu::singlet-gpu
+    GTest::gtest_main
+)
+target_link_libraries(qc_empty_drops_correctness PRIVATE
+    CUDA::cudart
+)
+find_package(CUDAToolkit QUIET)
+if(CUDAToolkit_FOUND)
+    target_link_libraries(qc_empty_drops_correctness PRIVATE CUDA::curand)
+    message(STATUS "singlet-gpu/tests: cuRAND found — empty_drops MC path enabled.")
+else()
+    message(STATUS "singlet-gpu/tests: CUDAToolkit not found — cuRAND link skipped.")
+endif()
+target_compile_definitions(qc_empty_drops_correctness PRIVATE FACTORNET_HAS_GPU)
+set_target_properties(qc_empty_drops_correctness PROPERTIES
+    CUDA_STANDARD 20
+    CUDA_STANDARD_REQUIRED ON
+)
+gtest_discover_tests(qc_empty_drops_correctness
+    PROPERTIES LABELS "correctness;qc;empty_drops")
+
+# ---------------------------------------------------------------------------
+# anno/celltypist correctness harness  (CYCLE-135)
+#
+# Validates CellTypist cell-type annotation (Dominguez Conde et al. 2022
+# Science 376:eabl5197) via GPU logistic regression predict on pre-trained
+# weight matrices.  Uses cuBLAS Sgemm + custom softmax/argmax kernels.
+# celltypist.h contains __global__ CUDA kernels — must compile with nvcc.
+# ---------------------------------------------------------------------------
+add_executable(anno_celltypist_correctness
+    anno_celltypist_correctness.cpp
+)
+set_source_files_properties(anno_celltypist_correctness.cpp
+    PROPERTIES LANGUAGE CUDA)
+target_link_libraries(anno_celltypist_correctness PRIVATE
+    singlet-gpu::singlet-gpu
+    GTest::gtest_main
+)
+target_link_libraries(anno_celltypist_correctness PRIVATE
+    CUDA::cudart
+    CUDA::cublas
+)
+target_compile_definitions(anno_celltypist_correctness PRIVATE FACTORNET_HAS_GPU)
+set_target_properties(anno_celltypist_correctness PROPERTIES
+    CUDA_STANDARD 20
+    CUDA_STANDARD_REQUIRED ON
+)
+gtest_discover_tests(anno_celltypist_correctness
+    PROPERTIES LABELS "correctness;anno;celltypist")
+
+# ---------------------------------------------------------------------------
+# enrich/decoupler_mlm correctness harness  (CYCLE-136)
+#
+# Validates MLM (Multivariate Linear Model) joint pathway-scoring against CPU
+# closed-form OLS reference (Badia-i-Mompel et al. 2022 Bioinformatics Advances).
+# Uses cuBLAS Sgemm (W^T W), cuSPARSE SpMM (W^T X), cuSOLVER Potrf+Potrs
+# (Cholesky solve), and cuBLAS Sgeam (output transpose).
+# decoupler_mlm.h contains __global__ CUDA kernels — must compile with nvcc.
+# ---------------------------------------------------------------------------
+add_executable(enrich_decoupler_mlm_correctness
+    enrich_decoupler_mlm_correctness.cpp
+)
+set_source_files_properties(enrich_decoupler_mlm_correctness.cpp
+    PROPERTIES LANGUAGE CUDA)
+target_link_libraries(enrich_decoupler_mlm_correctness PRIVATE
+    singlet-gpu::singlet-gpu
+    GTest::gtest_main
+)
+target_link_libraries(enrich_decoupler_mlm_correctness PRIVATE
+    CUDA::cudart
+    CUDA::cublas
+    CUDA::cusparse
+    CUDA::cusolver
+)
+target_compile_definitions(enrich_decoupler_mlm_correctness PRIVATE FACTORNET_HAS_GPU)
+set_target_properties(enrich_decoupler_mlm_correctness PROPERTIES
+    CUDA_STANDARD 20
+    CUDA_STANDARD_REQUIRED ON
+)
+gtest_discover_tests(enrich_decoupler_mlm_correctness
+    PROPERTIES LABELS "correctness;enrich;decoupler;mlm")
+
+# ---------------------------------------------------------------------------
+# enrich/decoupler_viper correctness harness  (CYCLE-137)
+#
+# Validates VIPER/aREA NES scoring against CPU closed-form reference
+# (Alvarez et al. 2016 Nat Genet). Per-cell rank transform via CUB
+# DeviceSegmentedRadixSort + normcdfinvf qnorm; cuBLAS Sgemm for score.
+# decoupler_viper.h contains __global__ CUDA kernels — must compile with nvcc.
+# ---------------------------------------------------------------------------
+add_executable(enrich_decoupler_viper_correctness
+    enrich_decoupler_viper_correctness.cpp
+)
+set_source_files_properties(enrich_decoupler_viper_correctness.cpp
+    PROPERTIES LANGUAGE CUDA)
+target_link_libraries(enrich_decoupler_viper_correctness PRIVATE
+    singlet-gpu::singlet-gpu
+    GTest::gtest_main
+)
+target_link_libraries(enrich_decoupler_viper_correctness PRIVATE
+    CUDA::cudart
+    CUDA::cublas
+    CUDA::cusparse
+)
+target_compile_definitions(enrich_decoupler_viper_correctness PRIVATE FACTORNET_HAS_GPU)
+set_target_properties(enrich_decoupler_viper_correctness PROPERTIES
+    CUDA_STANDARD 20
+    CUDA_STANDARD_REQUIRED ON
+)
+gtest_discover_tests(enrich_decoupler_viper_correctness
+    PROPERTIES LABELS "correctness;enrich;decoupler;viper")
+
+# ---------------------------------------------------------------------------
+# anno/symphony correctness harness  (CYCLE-138)
+#
+# Validates Symphony reference-based cell-type mapping against CPU closed-form
+# reference (Kang et al. 2021 Nat Commun). PCA projection + soft cluster
+# assignment + label transfer via cuBLAS Sgemm + custom element-wise kernels.
+# symphony.h contains __global__ CUDA kernels — must compile with nvcc.
+# ---------------------------------------------------------------------------
+add_executable(anno_symphony_correctness
+    anno_symphony_correctness.cpp
+)
+set_source_files_properties(anno_symphony_correctness.cpp
+    PROPERTIES LANGUAGE CUDA)
+target_link_libraries(anno_symphony_correctness PRIVATE
+    singlet-gpu::singlet-gpu
+    GTest::gtest_main
+)
+target_link_libraries(anno_symphony_correctness PRIVATE
+    CUDA::cudart
+    CUDA::cublas
+)
+target_compile_definitions(anno_symphony_correctness PRIVATE FACTORNET_HAS_GPU)
+set_target_properties(anno_symphony_correctness PROPERTIES
+    CUDA_STANDARD 20
+    CUDA_STANDARD_REQUIRED ON
+)
+gtest_discover_tests(anno_symphony_correctness
+    PROPERTIES LABELS "correctness;anno;symphony")
+
+# ---------------------------------------------------------------------------
+# integrate/asw correctness harness  (CYCLE-139)
+#
+# Validates kNN-approximation Average Silhouette Width (Rousseeuw 1987) kernel.
+# Rousseeuw PJ (1987) J Comput Appl Math 20:53-65.
+# scIB usage: Luecken et al. (2022) Nat Methods 19:41-50.
+# asw.h contains __global__ CUDA kernels — must compile with nvcc.
+# ---------------------------------------------------------------------------
+add_executable(integrate_asw_correctness
+    integrate_asw_correctness.cpp
+)
+set_source_files_properties(integrate_asw_correctness.cpp
+    PROPERTIES LANGUAGE CUDA)
+target_link_libraries(integrate_asw_correctness PRIVATE
+    singlet-gpu::singlet-gpu
+    GTest::gtest_main
+)
+target_link_libraries(integrate_asw_correctness PRIVATE
+    CUDA::cudart
+    CUDA::cublas
+)
+target_compile_definitions(integrate_asw_correctness PRIVATE FACTORNET_HAS_GPU)
+set_target_properties(integrate_asw_correctness PROPERTIES
+    CUDA_STANDARD 20
+    CUDA_STANDARD_REQUIRED ON
+)
+gtest_discover_tests(integrate_asw_correctness
+    PROPERTIES LABELS "correctness;integrate;asw")
+
+# ---------------------------------------------------------------------------
+# integrate/kbet correctness harness  (CYCLE-140)
+#
+# Validates kBET batch-effect test (Buttner et al. 2019 Nat Methods 16:43-49).
+# Reference R package: https://github.com/theislab/kBET
+# kbet.h contains __global__ CUDA kernels — must compile with nvcc.
+# ---------------------------------------------------------------------------
+add_executable(integrate_kbet_correctness
+    integrate_kbet_correctness.cpp
+)
+set_source_files_properties(integrate_kbet_correctness.cpp
+    PROPERTIES LANGUAGE CUDA)
+target_link_libraries(integrate_kbet_correctness PRIVATE
+    singlet-gpu::singlet-gpu
+    GTest::gtest_main
+)
+target_link_libraries(integrate_kbet_correctness PRIVATE
+    CUDA::cudart
+    CUDA::cublas
+)
+target_compile_definitions(integrate_kbet_correctness PRIVATE FACTORNET_HAS_GPU)
+set_target_properties(integrate_kbet_correctness PROPERTIES
+    CUDA_STANDARD 20
+    CUDA_STANDARD_REQUIRED ON
+)
+gtest_discover_tests(integrate_kbet_correctness
+    PROPERTIES LABELS "correctness;integrate;kbet")
+
+# ---------------------------------------------------------------------------
+# qc/soupx correctness harness  (CYCLE-141)
+#
+# Validates SoupX ambient RNA correction (Young & Behjati 2020 GigaScience 9:giaa151).
+# Reference R package: https://github.com/constantAmateur/SoupX
+# soupx.h contains __global__ CUDA kernels — must compile with nvcc.
+# ---------------------------------------------------------------------------
+add_executable(qc_soupx_correctness
+    qc_soupx_correctness.cpp
+)
+set_source_files_properties(qc_soupx_correctness.cpp
+    PROPERTIES LANGUAGE CUDA)
+target_link_libraries(qc_soupx_correctness PRIVATE
+    singlet-gpu::singlet-gpu
+    GTest::gtest_main
+)
+target_link_libraries(qc_soupx_correctness PRIVATE
+    CUDA::cudart
+    CUDA::cublas
+)
+target_compile_definitions(qc_soupx_correctness PRIVATE FACTORNET_HAS_GPU)
+set_target_properties(qc_soupx_correctness PROPERTIES
+    CUDA_STANDARD 20
+    CUDA_STANDARD_REQUIRED ON
+)
+gtest_discover_tests(qc_soupx_correctness
+    PROPERTIES LABELS "correctness;qc;soupx")
+
+# ---------------------------------------------------------------------------
+# embed/dpt correctness harness  (CYCLE-142)
+#
+# Validates Diffusion Pseudotime (Haghverdi et al. 2016 Nat Methods 13:845-848).
+# dpt.h contains __global__ CUDA kernels — must compile with nvcc.
+# ---------------------------------------------------------------------------
+add_executable(embed_dpt_correctness
+    embed_dpt_correctness.cpp
+)
+set_source_files_properties(embed_dpt_correctness.cpp
+    PROPERTIES LANGUAGE CUDA)
+target_link_libraries(embed_dpt_correctness PRIVATE
+    singlet-gpu::singlet-gpu
+    GTest::gtest_main
+)
+target_link_libraries(embed_dpt_correctness PRIVATE
+    CUDA::cudart
+    CUDA::cusolver
+)
+target_compile_definitions(embed_dpt_correctness PRIVATE FACTORNET_HAS_GPU)
+set_target_properties(embed_dpt_correctness PROPERTIES
+    CUDA_STANDARD 20
+    CUDA_STANDARD_REQUIRED ON
+)
+gtest_discover_tests(embed_dpt_correctness
+    PROPERTIES LABELS "correctness;embed;dpt")
+
+# ---------------------------------------------------------------------------
+# embed/dendrogram correctness harness (CYCLE-146)
+# ---------------------------------------------------------------------------
+add_executable(embed_dendrogram_correctness
+    embed_dendrogram_correctness.cpp
+)
+set_source_files_properties(embed_dendrogram_correctness.cpp
+    PROPERTIES LANGUAGE CUDA)
+target_link_libraries(embed_dendrogram_correctness PRIVATE
+    singlet-gpu::singlet-gpu
+    GTest::gtest_main
+)
+target_link_libraries(embed_dendrogram_correctness PRIVATE
+    CUDA::cudart
+    CUDA::cublas
+)
+target_compile_definitions(embed_dendrogram_correctness PRIVATE FACTORNET_HAS_GPU)
+set_target_properties(embed_dendrogram_correctness PROPERTIES
+    CUDA_STANDARD 20
+    CUDA_STANDARD_REQUIRED ON
+)
+gtest_discover_tests(embed_dendrogram_correctness
+    PROPERTIES LABELS "correctness;embed;dendrogram")
+
+# ---------------------------------------------------------------------------
+# graph/kmeans correctness harness (CYCLE-149)
+# ---------------------------------------------------------------------------
+add_executable(graph_kmeans_correctness
+    graph_kmeans_correctness.cpp
+)
+set_source_files_properties(graph_kmeans_correctness.cpp
+    PROPERTIES LANGUAGE CUDA)
+target_link_libraries(graph_kmeans_correctness PRIVATE
+    singlet-gpu::singlet-gpu
+    GTest::gtest_main
+)
+target_link_libraries(graph_kmeans_correctness PRIVATE
+    CUDA::cudart
+    CUDA::cublas
+)
+target_compile_definitions(graph_kmeans_correctness PRIVATE FACTORNET_HAS_GPU)
+set_target_properties(graph_kmeans_correctness PROPERTIES
+    CUDA_STANDARD 20
+    CUDA_STANDARD_REQUIRED ON
+)
+gtest_discover_tests(graph_kmeans_correctness
+    PROPERTIES LABELS "correctness;graph;kmeans")
+
+# ---------------------------------------------------------------------------
+# embed/diffmap correctness harness (CYCLE-150)
+# ---------------------------------------------------------------------------
+add_executable(embed_diffmap_correctness
+    embed_diffmap_correctness.cpp
+)
+set_source_files_properties(embed_diffmap_correctness.cpp
+    PROPERTIES LANGUAGE CUDA)
+target_link_libraries(embed_diffmap_correctness PRIVATE
+    singlet-gpu::singlet-gpu
+    GTest::gtest_main
+)
+target_link_libraries(embed_diffmap_correctness PRIVATE
+    CUDA::cudart
+    CUDA::cusolver
+)
+target_compile_definitions(embed_diffmap_correctness PRIVATE FACTORNET_HAS_GPU)
+set_target_properties(embed_diffmap_correctness PROPERTIES
+    CUDA_STANDARD 20
+    CUDA_STANDARD_REQUIRED ON
+)
+gtest_discover_tests(embed_diffmap_correctness
+    PROPERTIES LABELS "correctness;embed;diffmap")

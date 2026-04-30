@@ -123,7 +123,7 @@ inline void bind_device_csc(py::module_& m) {
             auto& self = self_obj.cast<PyDeviceCsc&>();
             // values: float32 array of length nnz
             return make_view_object<float>(
-                self.csc->values.data(),
+                self.csc->values.get(),
                 static_cast<std::size_t>(self.csc->nnz),
                 self.producer_stream,
                 self_obj
@@ -136,7 +136,7 @@ inline void bind_device_csc(py::module_& m) {
             auto& self = self_obj.cast<PyDeviceCsc&>();
             // row indices: int32 array of length nnz
             return make_view_object<int32_t>(
-                self.csc->row_indices.data(),
+                self.csc->row_indices.get(),
                 static_cast<std::size_t>(self.csc->nnz),
                 self.producer_stream,
                 self_obj
@@ -149,7 +149,7 @@ inline void bind_device_csc(py::module_& m) {
             auto& self = self_obj.cast<PyDeviceCsc&>();
             // column pointer: int32 array of length cols+1
             return make_view_object<int32_t>(
-                self.csc->col_ptr.data(),
+                self.csc->col_ptr.get(),
                 static_cast<std::size_t>(self.csc->cols + 1),
                 self.producer_stream,
                 self_obj
@@ -180,11 +180,11 @@ inline void bind_device_csc(py::module_& m) {
             std::vector<int32_t> h_indices(nnz);
             std::vector<int32_t> h_indptr(cols + 1);
 
-            cudaError_t e1 = cudaMemcpy(h_values.data(),  self.csc->values.data(),
+            cudaError_t e1 = cudaMemcpy(h_values.data(),  self.csc->values.get(),
                                         nnz  * sizeof(float),   cudaMemcpyDeviceToHost);
-            cudaError_t e2 = cudaMemcpy(h_indices.data(), self.csc->row_indices.data(),
+            cudaError_t e2 = cudaMemcpy(h_indices.data(), self.csc->row_indices.get(),
                                         nnz  * sizeof(int32_t), cudaMemcpyDeviceToHost);
-            cudaError_t e3 = cudaMemcpy(h_indptr.data(),  self.csc->col_ptr.data(),
+            cudaError_t e3 = cudaMemcpy(h_indptr.data(),  self.csc->col_ptr.get(),
                                         (cols+1) * sizeof(int32_t), cudaMemcpyDeviceToHost);
 
             for (auto e : {e1, e2, e3}) {

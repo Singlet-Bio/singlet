@@ -1,0 +1,87 @@
+========= COMPUTE-SANITIZER
+Running main() from /mnt/home/debruinz/Singlet-AI/singlet-gpu/build_cycle72_verify/_deps/googletest-src/googletest/src/gtest_main.cc
+Note: Google Test filter = *Test83_RealDataSized_PostNormalize_NoCrash*
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from WilcoxonTest
+[ RUN      ] WilcoxonTest.Test83_RealDataSized_PostNormalize_NoCrash
+========= Invalid __global__ read of size 4 bytes
+=========     at void cusparse::csr2csc_rows_expansion_kernel<(int)128, (int)8, int>(const T3 *, int, T3, const T3 *, T3 *)+0x1170
+=========     by thread (32,0,0) in block (21979,0,0)
+=========     Address 0x7fcfd34138dc is out of bounds
+=========     and is 89 bytes after the nearest allocation at 0x7fcfd3400000 of size 80,004 bytes
+========= 
+========= Invalid __global__ read of size 4 bytes
+=========     at void cusparse::csr2csc_rows_expansion_kernel<(int)128, (int)8, int>(const T3 *, int, T3, const T3 *, T3 *)+0x1170
+=========     by thread (33,0,0) in block (21979,0,0)
+=========     Address 0x7fcfd34138e0 is out of bounds
+=========     and is 93 bytes after the nearest allocation at 0x7fcfd3400000 of size 80,004 bytes
+========= 
+========= Invalid __global__ read of size 4 bytes
+=========     at void cusparse::csr2csc_rows_expansion_kernel<(int)128, (int)8, int>(const T3 *, int, T3, const T3 *, T3 *)+0x1170
+=========     by thread (34,0,0) in block (21979,0,0)
+=========     Address 0x7fcfd34138e4 is out of bounds
+=========     and is 97 bytes after the nearest allocation at 0x7fcfd3400000 of size 80,004 bytes
+========= 
+========= Invalid __global__ read of size 4 bytes
+=========     at void cusparse::csr2csc_rows_expansion_kernel<(int)128, (int)8, int>(const T3 *, int, T3, const T3 *, T3 *)+0x1170
+=========     by thread (35,0,0) in block (21979,0,0)
+=========     Address 0x7fcfd34138e8 is out of bounds
+=========     and is 101 bytes after the nearest allocation at 0x7fcfd3400000 of size 80,004 bytes
+========= 
+========= Invalid __global__ read of size 4 bytes
+=========     at void cusparse::csr2csc_rows_expansion_kernel<(int)128, (int)8, int>(const T3 *, int, T3, const T3 *, T3 *)+0x1170
+=========     by thread (36,0,0) in block (21979,0,0)
+=========     Address 0x7fcfd34138ec is out of bounds
+=========     and is 105 bytes after the nearest allocation at 0x7fcfd3400000 of size 80,004 bytes
+========= 
+========= Invalid __global__ read of size 4 bytes
+=========     at void cusparse::csr2csc_rows_expansion_kernel<(int)128, (int)8, int>(const T3 *, int, T3, const T3 *, T3 *)+0x1170
+=========     by thread (37,0,0) in block (21979,0,0)
+=========     Address 0x7fcfd34138f0 is out of bounds
+=========     and is 109 bytes after the nearest allocation at 0x7fcfd3400000 of size 80,004 bytes
+========= 
+========= Invalid __global__ read of size 4 bytes
+=========     at void cusparse::csr2csc_rows_expansion_kernel<(int)128, (int)8, int>(const T3 *, int, T3, const T3 *, T3 *)+0x1170
+=========     by thread (38,0,0) in block (21979,0,0)
+=========     Address 0x7fcfd34138f4 is out of bounds
+=========     and is 113 bytes after the nearest allocation at 0x7fcfd3400000 of size 80,004 bytes
+========= 
+========= Invalid __global__ read of size 4 bytes
+=========     at void cusparse::csr2csc_rows_expansion_kernel<(int)128, (int)8, int>(const T3 *, int, T3, const T3 *, T3 *)+0x1170
+=========     by thread (39,0,0) in block (21979,0,0)
+=========     Address 0x7fcfd34138f8 is out of bounds
+=========     and is 117 bytes after the nearest allocation at 0x7fcfd3400000 of size 80,004 bytes
+========= 
+========= Invalid __global__ read of size 4 bytes
+=========     at void cusparse::csr2csc_rows_expansion_kernel<(int)128, (int)8, int>(const T3 *, int, T3, const T3 *, T3 *)+0x1170
+=========     by thread (40,0,0) in block (21979,0,0)
+=========     Address 0x7fcfd34138fc is out of bounds
+=========     and is 121 bytes after the nearest allocation at 0x7fcfd3400000 of size 80,004 bytes
+========= 
+========= Invalid __global__ read of size 4 bytes
+=========     at void cusparse::csr2csc_rows_expansion_kernel<(int)128, (int)8, int>(const T3 *, int, T3, const T3 *, T3 *)+0x1170
+=========     by thread (41,0,0) in block (21979,0,0)
+=========     Address 0x7fcfd3413900 is out of bounds
+=========     and is 125 bytes after the nearest allocation at 0x7fcfd3400000 of size 80,004 bytes
+========= 
+CUDA error at /mnt/home/debruinz/factornet/include/factornet/gpu/types.cuh:105: unspecified launch failure
+[Test83] built synthetic CSC: 30000 genes x 20000 cells, nnz=30006143
+/mnt/home/debruinz/Singlet-AI/singlet-gpu/tests/de_wilcoxon_correctness.cpp:1110: Failure
+Expected: { result = singlet_gpu::de::wilcoxon_de(d_mat, d_labels, kGroups, w_cfg, stream_); } doesn't throw an exception.
+  Actual: it throws std::runtime_error with description "unspecified launch failure".
+wilcoxon_de threw after log_normalize with discarded result — lognorm sync fix not yet in place (BUG-WILCOXON-POST-NORMALIZE-CRASH)
+
+[  FAILED  ] WilcoxonTest.Test83_RealDataSized_PostNormalize_NoCrash (8331 ms)
+[----------] 1 test from WilcoxonTest (8331 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (8331 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] WilcoxonTest.Test83_RealDataSized_PostNormalize_NoCrash
+
+ 1 FAILED TEST
+========= Target application returned an error
+========= ERROR SUMMARY: 68 errors
+========= ERROR SUMMARY: 58 errors were not printed. Use --print-limit option to adjust the number of printed errors

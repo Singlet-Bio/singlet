@@ -57,7 +57,8 @@
 #include <singlet-gpu/core/types.h>
 #include <singlet-gpu/core/handles.h>
 
-#include <factornet/gpu/types.cuh>
+// CYCLE-106: factornet/gpu/types.cuh replaced by native core/types.h.
+#include <singlet-gpu/core/types.h>
 
 #include <cuda_runtime.h>
 #include <cooperative_groups.h>
@@ -364,7 +365,7 @@ inline LogNormResult log_normalize(
 
     // --- resolve stream ---
     if (stream == nullptr) {
-        stream = singlet_gpu::core::default_context().stream;
+        stream = singlet_gpu::core::default_context().stream();
     }
 
     const int n_cols = static_cast<int>(mat.cols);
