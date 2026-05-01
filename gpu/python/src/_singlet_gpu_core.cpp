@@ -91,6 +91,11 @@
 #include "_bind_qc_metrics.hpp"      // QcResult, calculate_qc_metrics, filter_cells, filter_genes
 #include "_bind_preprocess.hpp"      // DenseResult, scale, regress_out
 
+// Cycle 186: score_genes pybind11 binding (enrich/score_genes.h, cycle 129).
+// Not gated behind SINGLET_GPU_BUILD_DEFERRED — score_genes.h is factornet-free
+// and scored Phase E benchmark; Rule 26 requires wrappers within 2 cycles.
+#include "_bind_score_genes.hpp"     // ScoreGenesResult, score_genes
+
 namespace py = pybind11;
 
 // ---------------------------------------------------------------------------
@@ -272,6 +277,12 @@ PYBIND11_MODULE(_core, m) {
     // -----------------------------------------------------------------------
     singlet_gpu::python::bind_qc_metrics(m);   // QcResult, calculate_qc_metrics, filter_cells, filter_genes
     singlet_gpu::python::bind_preprocess(m);   // DenseResult, scale, regress_out
+
+    // -----------------------------------------------------------------------
+    // Cycle 186: score_genes (enrich/score_genes.h, cycle 129 kernel).
+    // Ungated — score_genes.h carries no factornet dependency.
+    // -----------------------------------------------------------------------
+    singlet_gpu::python::bind_score_genes(m);  // ScoreGenesResult, score_genes
 
     // -----------------------------------------------------------------------
     // Cycle 20: result classes (cycles 1-6).

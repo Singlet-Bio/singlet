@@ -1,32 +1,42 @@
 """
-Cycle 23 correctness tests for singlet_gpu.enrichment.
+Cycle 23 / 186 correctness tests for singlet_gpu.enrichment.
 
-Tests the GPU-native enrichment wrappers (cycle 13: gsea/{fgsea,aucell}.h):
-  - ``singlet_gpu.enrichment.run_gsea``
-  - ``singlet_gpu.enrichment.run_aucell``
+Tests the GPU-native enrichment wrappers:
+  - cycle 13: gsea/{fgsea,aucell}.h
+      - ``singlet_gpu.enrichment.run_gsea``
+      - ``singlet_gpu.enrichment.run_aucell``
+  - cycle 129: enrich/score_genes.h  (cycle 186 Python wrapper)
+      - ``singlet_gpu.enrich.run_score_genes``
 
 Formal spec: singlet-gpu/state/designs/22-python-kernel-wrappers-3.md
+             singlet-gpu/state/designs/129-score-genes.md (kernel)
 
 API (from spec):
   run_gsea(mat, net, *, source='source', target='target', times=1000,
            min_n=5, seed=42, use_raw=False) -> AnnData | pd.DataFrame
   run_aucell(mat, net, *, source='source', target='target', min_n=5,
              seed=42, use_raw=False) -> AnnData | pd.DataFrame
+  run_score_genes(adata, gene_lists, *, score_name='score_genes',
+                  ctrl_size=50, n_bins=25, seed=0, copy=False) -> None | AnnData
 
 Result locations (spec):
-  - GSEA : adata.obs['gsea_norm_es_<set>'] columns (one per pathway)
-  - AUCell: adata.obsm['X_aucell']  (n_cells × n_pathways)
+  - GSEA       : adata.obs['gsea_norm_es_<set>'] columns (one per pathway)
+  - AUCell     : adata.obsm['X_aucell']  (n_cells × n_pathways)
+  - score_genes: adata.obs['score_genes_<set>'] columns (one per gene set)
 
 Tolerances (from spec):
-  - run_gsea  vs decoupler.run_gsea : Spearman ρ on enrichment scores ≥ 0.95
-  - run_aucell vs decoupler.run_aucell : Spearman ρ on AUC scores ≥ 0.95
+  - run_gsea      vs decoupler.run_gsea    : Spearman ρ ≥ 0.95
+  - run_aucell    vs decoupler.run_aucell  : Spearman ρ ≥ 0.95
+  - run_score_genes vs scanpy.tl.score_genes : Spearman ρ ≥ 0.95 (median over sets)
 
 Skip strategy:
   - Module-level skip if singlet_gpu wheel not built.
   - requires_gpu for all GPU-exercising tests.
-  - vs-decoupler tests additionally skip if decoupleR is not importable.
+  - vs-reference tests additionally skip if reference library is not importable.
 """
 from __future__ import annotations
+
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -36,6 +46,10 @@ singlet_gpu = pytest.importorskip(
     "singlet_gpu",
     reason="singlet_gpu wheel not built. Run `pip install -e singlet-gpu/python/` first.",
 )
+
+# Explicitly import enrich subpackage so singlet_gpu.enrich.run_score_genes
+# is resolvable (enrich/ is not auto-imported by singlet_gpu/__init__.py).
+import singlet_gpu.enrich  # noqa: E402
 
 from conftest import requires_gpu  # noqa: E402
 
@@ -436,4 +450,232 @@ def test_run_aucell_vs_decoupler(gsm4037629_path):
     assert median_rho >= _AUCELL_SPEARMAN_MIN, (
         f"run_aucell median Spearman ρ {median_rho:.4f} < {_AUCELL_SPEARMAN_MIN} "
         f"vs decoupler.run_aucell (computed over {len(rhos)} pathways)"
+    )
+
+
+# ===========================================================================
+# score_genes tests (cycle 186 — wrapper for cycle 129 kernel)
+# ===========================================================================
+
+_SCORE_GENES_SPEARMAN_MIN = 0.95   # Spearman ρ vs scanpy.tl.score_genes
+
+
+def _make_gene_lists_dict(
+    var_names: list[str], n_sets: int = 5, set_size: int = 15
+) -> dict[str, list[str]]:
+    """Build deterministic dict gene_lists from var_names (non-overlapping slices)."""
+    rng = np.random.default_rng(0xDEADBEEF)
+    result: dict[str, list[str]] = {}
+    for i in range(n_sets):
+        start = (i * set_size) % max(1, len(var_names) - set_size)
+        genes = list(var_names[start : start + set_size])
+        rng.shuffle(genes)
+        result[f"SET_{i:02d}"] = genes
+    return result
+
+
+# ---------------------------------------------------------------------------
+# test_run_score_genes_basic
+# ---------------------------------------------------------------------------
+@requires_gpu
+def test_run_score_genes_basic(gsm4037629_path):
+    """run_score_genes() completes inplace and writes obs columns.
+
+    Procedure:
+      1. Load GSM4037629, normalize + log1p (GPU path).
+      2. Build 5 gene sets from var_names (dict form).
+      3. Call singlet_gpu.enrich.run_score_genes(adata, gene_lists, copy=False).
+      4. Assert return is None (inplace).
+      5. Assert adata.obs has columns 'score_genes_SET_00' ... 'score_genes_SET_04'.
+      6. Assert column values are finite float64.
+    """
+    pytest.importorskip("anndata", reason="anndata not installed")
+
+    adata = _load_gpu_adata(gsm4037629_path)
+    _preprocess_gpu(adata)
+
+    gene_lists = _make_gene_lists_dict(list(adata.var_names), n_sets=5, set_size=15)
+
+    result = singlet_gpu.enrich.run_score_genes(
+        adata, gene_lists, score_name="score_genes", ctrl_size=50, seed=0
+    )
+
+    assert result is None, (
+        f"run_score_genes(copy=False) should return None but got {type(result)}"
+    )
+
+    expected_cols = [f"score_genes_{k}" for k in gene_lists]
+    for col in expected_cols:
+        assert col in adata.obs.columns, (
+            f"Expected column '{col}' in adata.obs after run_score_genes"
+        )
+        vals = adata.obs[col].values.astype(np.float64)
+        assert np.all(np.isfinite(vals)), (
+            f"Column '{col}' contains non-finite values: {np.sum(~np.isfinite(vals))}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# test_run_score_genes_copy
+# ---------------------------------------------------------------------------
+@requires_gpu
+def test_run_score_genes_copy(gsm4037629_path):
+    """run_score_genes(copy=True) returns an AnnData without modifying original.
+
+    Procedure:
+      1. Load GSM4037629, normalize + log1p.
+      2. Build 3 gene sets.
+      3. Call with copy=True → returned_adata.
+      4. Assert returned_adata is not adata (different object).
+      5. Assert score columns present in returned_adata.obs.
+      6. Assert score columns absent from original adata.obs.
+    """
+    pytest.importorskip("anndata", reason="anndata not installed")
+
+    adata = _load_gpu_adata(gsm4037629_path)
+    _preprocess_gpu(adata)
+
+    gene_lists = _make_gene_lists_dict(list(adata.var_names), n_sets=3, set_size=10)
+
+    returned = singlet_gpu.enrich.run_score_genes(
+        adata, gene_lists, score_name="sg", copy=True
+    )
+
+    assert returned is not None, "run_score_genes(copy=True) returned None"
+    assert returned is not adata, "run_score_genes(copy=True) returned the same object"
+
+    for k in gene_lists:
+        col = f"sg_{k}"
+        assert col in returned.obs.columns, f"Copy result missing column '{col}'"
+        assert col not in adata.obs.columns, (
+            f"Original adata.obs should NOT have '{col}' (copy mode)"
+        )
+
+
+# ---------------------------------------------------------------------------
+# test_run_score_genes_missing_genes
+# ---------------------------------------------------------------------------
+@requires_gpu
+def test_run_score_genes_missing_genes(gsm4037629_path):
+    """run_score_genes warns on unknown genes; empty set → NaN column.
+
+    Procedure:
+      1. Load GSM4037629, normalize + log1p.
+      2. Build a gene_lists dict:
+         - 'good_set': 10 valid genes from var_names.
+         - 'empty_set': only genes not in var_names ('FAKE_GENE_1', ...).
+      3. Capture UserWarning(s).
+      4. Assert at least one UserWarning emitted.
+      5. Assert 'score_genes_good_set' is finite.
+      6. Assert 'score_genes_empty_set' is all NaN.
+    """
+    pytest.importorskip("anndata", reason="anndata not installed")
+
+    adata = _load_gpu_adata(gsm4037629_path)
+    _preprocess_gpu(adata)
+
+    var_names = list(adata.var_names)
+    gene_lists = {
+        "good_set": var_names[:10],
+        "empty_set": ["FAKE_GENE_AAA", "FAKE_GENE_BBB", "FAKE_GENE_CCC"],
+    }
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        singlet_gpu.enrich.run_score_genes(adata, gene_lists, score_name="score_genes")
+
+    assert len(caught) >= 1, (
+        "Expected at least one UserWarning for empty/missing gene set"
+    )
+
+    good_vals = adata.obs["score_genes_good_set"].values.astype(np.float64)
+    assert np.all(np.isfinite(good_vals)), (
+        "score_genes_good_set should be finite"
+    )
+
+    empty_vals = adata.obs["score_genes_empty_set"].values.astype(np.float64)
+    assert np.all(np.isnan(empty_vals)), (
+        "score_genes_empty_set should be all NaN (no valid genes)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# test_run_score_genes_vs_scanpy
+# ---------------------------------------------------------------------------
+@requires_gpu
+def test_run_score_genes_vs_scanpy(gsm4037629_path):
+    """GPU run_score_genes Spearman ρ ≥ 0.95 vs scanpy.tl.score_genes per set.
+
+    Procedure:
+      1. Load GSM4037629 twice → adata_gpu, adata_cpu.
+      2. Preprocess both (normalize + log1p).
+      3. Build same 5 gene sets (dict).
+      4. singlet_gpu.enrich.run_score_genes(adata_gpu, gene_lists, seed=0).
+      5. For each set: scanpy.tl.score_genes(adata_cpu, gene_list, score_name=key).
+      6. Extract per-cell scores for each set from both.
+      7. Compute Spearman ρ per set; assert median ρ ≥ 0.95.
+
+    Note: scanpy.tl.score_genes is called once per set (its API takes a single
+    list, not a dict).  score_name kwarg is used to avoid column collision.
+    """
+    sc = pytest.importorskip("scanpy", reason="scanpy not installed — skip parity test")
+    pytest.importorskip("scipy.stats", reason="scipy not installed")
+    pytest.importorskip("anndata", reason="anndata not installed")
+
+    adata_gpu = _load_gpu_adata(gsm4037629_path)
+    adata_cpu = _gpu_to_cpu_adata(adata_gpu)
+
+    _preprocess_gpu(adata_gpu)
+    _preprocess_cpu(adata_cpu)
+
+    gene_lists = _make_gene_lists_dict(list(adata_gpu.var_names), n_sets=5, set_size=15)
+
+    # GPU run (inplace).
+    singlet_gpu.enrich.run_score_genes(
+        adata_gpu, gene_lists, score_name="sg", ctrl_size=50, n_bins=25, seed=0
+    )
+
+    # Scanpy reference — one call per set; scanpy writes to adata.obs['score'].
+    rhos = []
+    for key, gene_list in gene_lists.items():
+        sc_col = f"sc_{key}"
+        try:
+            sc.tl.score_genes(
+                adata_cpu,
+                gene_list=gene_list,
+                score_name=sc_col,
+                ctrl_size=50,
+                n_bins=25,
+                random_state=0,
+            )
+        except Exception as e:
+            pytest.skip(f"scanpy.tl.score_genes failed for set '{key}': {e}")
+
+        gpu_col = f"sg_{key}"
+        if gpu_col not in adata_gpu.obs.columns:
+            continue
+        if sc_col not in adata_cpu.obs.columns:
+            continue
+
+        gpu_scores = np.asarray(adata_gpu.obs[gpu_col], dtype=np.float64)
+        cpu_scores = np.asarray(adata_cpu.obs[sc_col], dtype=np.float64)
+
+        valid = np.isfinite(gpu_scores) & np.isfinite(cpu_scores)
+        if valid.sum() < 10:
+            continue
+        if np.std(gpu_scores[valid]) < 1e-9 or np.std(cpu_scores[valid]) < 1e-9:
+            continue
+        rho = _spearman_rho(gpu_scores[valid], cpu_scores[valid])
+        if np.isfinite(rho):
+            rhos.append(rho)
+
+    assert len(rhos) >= 1, (
+        "Could not compute Spearman ρ for any gene set between GPU and scanpy. "
+        "Check that both calls completed without error."
+    )
+
+    median_rho = float(np.median(rhos))
+    assert median_rho >= _SCORE_GENES_SPEARMAN_MIN, (
+        f"run_score_genes median Spearman ρ {median_rho:.4f} < {_SCORE_GENES_SPEARMAN_MIN} "
+        f"vs scanpy.tl.score_genes (computed over {len(rhos)} gene sets)"
     )

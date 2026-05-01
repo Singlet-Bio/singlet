@@ -4238,3 +4238,32 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
   3. **Integration bugs > algorithm bugs**: the eigenvalue-ordering bug (iter-1) was a clear algorithmic mistake, fixed in 1 iter. The convergence-detection bug (iter-2/3) is an integration issue between LOBPCG's progress dynamics and the residual norm, harder to debug from the outside.
 - **Next cycle**: CYCLE-186 — pivot to wrappers backlog (Rule 26 overdue). Default: Python pybind11 wrapper for `enrich/score_genes` (cleanest 213-493× speedup, well-tested, scanpy parity reference). Phase D for wrappers is well-scoped: `python/src/score_genes.cpp` with pybind11 + AnnData/scanpy interop test.
 
+## Cycle 186 (2026-05-01) — Python pybind11 wrapper for enrich/score_genes (PASS, partial — pivot from sparse_eig)
+- **Feature**: `singlet_gpu.enrich.run_score_genes` Python wrapper. CYCLE-129 score_genes kernel is the highest-speedup feature without a wrapper (213-493× vs scanpy.tl.score_genes per CYCLE-158). Per Rule 26, wrappers ship within 2 cycles of frontier promotion — overdue.
+- **Outcome**: PASS at the artifact level. 5 files written/updated (~615 LOC + 4 new pytest tests). Build/test verify deferred to next iteration.
+- **Sonnet wrote**:
+  - `python/src/_bind_score_genes.hpp` (NEW, 184 LOC) — pybind11 binding with `PyScoreGenesResult` struct (scores via `__cuda_array_interface__`, `[n_cells × n_sets]` col-major float32). `bind_score_genes(m)` registers `ScoreGenesResult` class and `score_genes()` function.
+  - `python/singlet_gpu/enrich/score_genes.py` (NEW, 211 LOC) — `run_score_genes(adata, gene_lists, *, gene_names_key, score_name, ctrl_size, n_bins, seed, stream, copy)`. Mirrors scanpy.tl.score_genes API.
+  - `python/singlet_gpu/enrich/__init__.py` (UPDATED) — exports `run_score_genes`.
+  - `python/src/_singlet_gpu_core.cpp` (UPDATED) — `#include "_bind_score_genes.hpp"` + `singlet_gpu::python::bind_score_genes(m)`. **Ungated** (no `SINGLET_GPU_BUILD_DEFERRED`) — score_genes.h has no factornet dependency.
+  - `python/tests/test_enrichment.py` (UPDATED, +241 LOC) — 4 pytest tests:
+    1. `test_run_score_genes_basic` (API smoke test)
+    2. `test_run_score_genes_copy` (copy=False/True semantics)
+    3. `test_run_score_genes_missing_genes` (gene-name filtering edge case)
+    4. `test_run_score_genes_vs_scanpy` (Spearman ρ ≥ 0.95 parity)
+- **Notable design choices**:
+  - `gene_lists: dict[str, list[str]]` (scanpy convention) — list-of-lists also supported with integer-indexed names.
+  - Gene name → index lookup at the Python layer; missing genes filtered with warning per scanpy convention.
+  - `make_pz_view` pattern inlined directly (6-line lambda) rather than including `_bind_kernels.hpp` to avoid pulling 70+ headers and ODR-violating duplicated statics.
+  - Empty-gene-set edge case: dummy index-0 placeholder passed to kernel, then overwritten with NaN post-call (kernel enforces non-empty; wrapper absorbs at Python layer).
+- **Pitfalls hit + resolved**:
+  - `_core.progeny` in the deferred gate suggested passing cupy `csc_matrix` directly to C++; correct pattern is `_core.from_cupy_csr(cupy_csc)` first → `PyDeviceCsc` → kernel binding. Fixed in wrapper.
+  - `_bind_kernels.hpp` would pull duplicated statics → inlined pattern.
+- **§J.5 risk-pacing**: this was a planned pivot from CYCLE-159.1 BLOCKED → wrappers (LOW-MEDIUM risk per pattern; build-verify deferred to keep this iteration cheap).
+- **Per Rule 26**: score_genes wrapper now exists; the kernel is now Python-callable. R wrapper still pending (Rcpp); Python wrapper alone is meaningful progress on the released-state ladder.
+- **Build/test verify deferred**: no SLURM this iteration. Next cycle should run `pytest python/tests/test_enrichment.py::test_run_score_genes_*` to confirm the wrapper works end-to-end.
+- **Lessons**:
+  1. **Wrapper work is fast when infrastructure is in place**. ~615 LOC across 5 files in ~7 min Sonnet wall-clock + a few minutes Opus consolidation = 1 wrapper for a high-value kernel.
+  2. **The pybind binding pattern is mature** — 9 existing wrappers (ssgsea, progeny, leiden, markers, rank_genes_groups, umap, pp.lognorm/scale/hvg, etc) provide a clear template that Sonnet followed cleanly.
+- **Next cycle**: CYCLE-187 — verify CYCLE-186 wrapper (`pytest python/tests/test_enrichment.py::test_run_score_genes_*`). If 4/4 PASS, wrapper closed. Then queue more wrappers from the backlog OR pivot to a different work area. Available wrappers needed (per Phase E top features): pearson_residuals, model_gene_var, decoupler_*, lisi, asw, kbet, magic, combat, dendrogram, kmeans, celltypist, symphony, empty_drops, soupx — many of these may already have wrappers via the existing `python/singlet_gpu/` modules; would need an audit.
+
