@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.3.2] — Unreleased
+
+### Added
+- `singlet_species` MCP tool (11 tools total)
+- MCP smoke test expanded to cover all 11 tools
+- Blog post #39: "4 Million Cells: The Singlet Atlas Passes a Major Milestone"
+
+### Changed
+- Corpus: 3,251 samples / 1,390 SUCCESS / 665 series / 4.0M cells / 8 species / 29 protocols
+- Parquets rebuilt with normalized tissue/cell_type categories (fixed duplicates like `bone_marrow` vs `bone marrow`)
+- MCP README updated with all 11 tools
+
+### Fixed
+- Tissue/cell_type category duplicates in parquet (underscore vs human-readable naming)
+
 ## [1.3.1] — 2026-05-01
 
 ### Added
