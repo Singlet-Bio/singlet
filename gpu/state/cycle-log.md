@@ -4144,3 +4144,27 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
   2. **The header-only constraint actually narrows the design space helpfully** — LOBPCG over cuBLAS/cuSPARSE is the only natural fit; cuVS would force runtime linking.
 - **Next cycle**: CYCLE-182 — Phase D dispatch. Sonnet `gpu-kernel-dev` worker writes `core/sparse_eigensolver.h` per the design doc + analysis-validator writes the n=40/10k ctest in parallel. ~600 LOC kernel + 400 LOC test, expect ~1-2 hours of worker time + SLURM verify.
 
+## Cycle 182 (2026-05-01) — sparse_eigensolver Phase D iter-1 (FAIL — algorithmic bug, 1/5 PASS)
+- **Feature**: core/sparse_eigensolver.h LOBPCG implementation. Phase D step 1 of CYCLE-159.1.
+- **Outcome**: ⚠️ **FAIL — 4/5 tests fail; only Determinism passes (consistently wrong)**.
+- **Numbers (job 372420 g003 V100S)**:
+  ```
+  Test 1 TinyEigSymmetric:              FAIL
+  Test 2 ScaleSmokeMedium (vs scipy):   FAIL
+  Test 3 Determinism_BitIdentical:      PASS  ← only because consistency, not correctness
+  Test 4 Convergence_OnConvergent:      FAIL
+  Test 5 KneeOversampleRobustness:      FAIL  (eigenvalues 1.5/0.43 instead of expected 10/5)
+  ```
+- **Diagnostic from Test 5 output**: top-K eigenvalues returned are dramatically smaller than expected. KneeOversample test built a diagonal matrix with 4 clustered eigenvalues at 5.0 + others at 10. The kernel returned eigenvalues like 1.5 and 0.43 — those look like the SMALLEST eigenvalues, not the LARGEST.
+- **Hypothesis**: the LOBPCG implementation is solving for the smallest eigenvalues (ground state — the natural LOBPCG convention) instead of the largest. The header comment says "descending (largest first)" and includes a `lobpcg_reverse_columns_kernel`, but that may just reverse what's still "smallest first → largest first within that subset". The actual subproblem `cusolverDnSsygvd` with `K_smallest` (per design doc) and the LOBPCG iteration's natural minimization of Rayleigh quotient both find the SMALLEST eigenvalues. For top-K of graph Laplacian we need LARGEST.
+- **Possible fixes**: (a) negate A → eigenvalues come back as -original, take absolute value, (b) reformulate to maximize Rayleigh quotient (less standard), (c) use shift-invert mode (heavy). The cleanest is probably (a) — negate the matrix in `top_k_eigsh_lobpcg` if `cfg.which == "LM"` (largest magnitude).
+- **§J.1 threshold-masking pitfall lesson re-applied**: don't trust Determinism PASS as a sign the kernel works. Two runs producing the same wrong answer is still wrong.
+- **§J.5 LOW-risk recovery needed next**: this was a HIGH-risk new kernel implementation cycle. CYCLE-183 should be either iter-2 fix dispatch (still HIGH-risk) OR a LOW-risk consolidation cycle. Default per §J.5: **iter-2 fix is the right call** because the bug is concrete and localized; iter-2 typically resolves quickly.
+- **pareto-frontier.md**: not updated since the kernel is unverified.
+- **Phase G**: not run (nothing to publish).
+- **Lessons**:
+  1. **LOBPCG default is smallest eigenvalues** (ground state). The design doc didn't make the largest-vs-smallest convention explicit enough. Need to fix in iter-2 + add to design doc as a clarification.
+  2. **Determinism test as the sole "pass" is misleading** — same as CYCLE-153 scrublet pattern. Future Phase D cycles should weight correctness tests more than determinism in the close-criteria.
+  3. **Phase D first-attempts on substantial new kernels often hit algorithmic bugs** that the design doc didn't catch (CYCLE-153 scrublet, CYCLE-150 diffmap pre-fix, CYCLE-182 LOBPCG). The 2-iter rule (Rule 5) accommodates this; the §J framework now also captures this expectation.
+- **Next cycle**: CYCLE-183 — iter-2 fix dispatch. One Sonnet `gpu-kernel-dev` worker reviews the test failures + the algorithmic hypothesis (smallest-vs-largest) and applies the fix (likely negate-A approach). Re-run ctest. After iter-2 PASS, queue CYCLE-184 (refactor diffmap to use sparse_eigensolver).
+

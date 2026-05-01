@@ -2,7 +2,7 @@
 
 Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movement gets demoted to `state/followups.md`. User-gated items live in `state/blockers.md`. Completed entries are moved to `state/cycle-log.md` each cycle.
 
-- **CYCLE-182-SPARSE-EIG-IMPL** (in flight, job 372420 RUNNING on g003): Sonnet gpu-kernel-dev wrote `core/sparse_eigensolver.h` (625 LOC LOBPCG); analysis-validator wrote `tests/core_sparse_eigensolver_correctness.cpp` (731 LOC, 5 tests) + scipy ref script + CMake link. scipy ref npz generated locally (1.5 MB). Submitted SLURM build+run. Awaiting verify.
+- **CYCLE-183-SPARSE-EIG-ITER-2** (queued): iter-2 fix for the smallest-vs-largest eigenvalue bug exposed in CYCLE-182. LOBPCG defaults to smallest eigenvalues (ground state); we need largest for graph Laplacian top-K. Likely fix: negate A in `top_k_eigsh_lobpcg` if `cfg.which == "LM"`, then negate eigenvalues at output. Sonnet `gpu-kernel-dev` dispatch + re-run ctest.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
@@ -30,6 +30,7 @@ Frobenius NMF only (KL / IS / NB-GLM / β-divergence dropped); fast PCA / SVD wi
 
 ## ✅ Recently complete (last 5 cycles — full detail in `state/cycle-log.md`)
 
+- **CYCLE-182** sparse_eigensolver Phase D iter-1 (FAIL — 1/5 PASS, job 372420 g003): only Determinism PASS (consistently wrong). Test 5 returned eigenvalues 1.5/0.43 instead of expected 10/5 — LOBPCG is solving for SMALLEST eigenvalues (natural ground-state convention) instead of LARGEST (top-K Laplacian convention). §J.1 threshold-masking pitfall re-confirmed (Determinism PASS doesn't mean correct). Iter-2 queued: negate A → LOBPCG finds smallest of -A = largest of A.
 - **CYCLE-181** CYCLE-159.1 Phase B research + Phase C design (pure-Opus + 2 Haiku dispatches): **NEW** `state/designs/sparse_eigensolver.md` (~210 LOC). Recommended: in-house LOBPCG over cuBLAS+cuSPARSE (header-only, no extra runtime linking). 4-cycle Phase D plan queued (CYCLE-182 implement core + ctest, CYCLE-183 refactor diffmap, CYCLE-184 refactor dpt + API split, CYCLE-185 re-bench Phase E). Memory at n=10k: 10 MB working vs 400 MB old dense (40× reduction). At n=1M: feasible vs old infeasible.
 - **CYCLE-180** Phase E for qc/soupx (PASS — **21.2-33.5× speedup**, job 372188 g003 + local scipy re-run): GPU 10k=0.580ms vs scipy 12.27ms; 30k=1.074ms vs 35.97ms. Validates §J.7 prediction exactly (predicted class 3 / 10-30×; observed 21-33×). **CLOSES PHASE E BACKFILL SWEEP**: 19 features benched across CYCLE-157-180, range 5× → ~18,000× spanning all 4 §J.7 axes. Major queue items remaining: CYCLE-159.1 sparse-eigensolver rewrite, CYCLE-148.1 scrublet diag, CYCLE-122 enrichment diag, wrappers backlog, continuous optimization.
 - **CYCLE-179** Phase E for qc/empty_drops (PASS — extrapolated **~18,000×**, job 372151 g003): GPU 10k=54.09ms, 30k=159.01ms; scipy ref extrapolated ~10⁶-3×10⁶ ms (15-25 min) from smoke-scale sanity-check (200 droplets × 5000 niters = 6.15s). Class 1 / very-high-overhead per §J.7 — emptyDrops MC is `rng.multinomial` called from Python `for` loop per-candidate × per-iter (80M+ Python loop bodies at 10k scale). Same pattern as ora. New §J.7 tier candidate: "per-element scipy/numpy in inner Python loop" → `python_overhead ≥ 100×`. Phase E corpus: 18 features, 5× to ~18,000×.
