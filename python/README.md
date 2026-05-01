@@ -2,7 +2,7 @@
 
 **Python client for the Singlet single-cell atlas.**
 
-3,150+ samples • 1,349 successful • 3.93M cells • 17 species • 36 tissues • 40 cell types • 28 protocols • 8.7× .1pz compression
+3,180+ samples • 1,365 successful • 3.96M cells • 16 species • 36 tissues • 40 cell types • 29 protocols • 8.7× .1pz compression
 
 ## Install
 
@@ -17,7 +17,7 @@ import singlet
 
 # Browse the atlas catalog (free, works offline)
 singlet.summary()
-# → 3,158 samples (1,349 SUCCESS) • 17 species • 28 protocols • 36 tissues • 40 cell types • 3.93M cells
+# → 3,188 samples (1,365 SUCCESS) • 16 species • 29 protocols • 36 tissues • 40 cell types • 4.0M cells
 
 df = singlet.samples(organism="Homo sapiens", status="SUCCESS")
 singlet.samples(tissue="brain", status="SUCCESS")  # filter by tissue
@@ -53,9 +53,9 @@ sc.tl.leiden(adata)
 
 | Feature | Details |
 |---------|---------|
-| **Catalog** | Browse 3,100+ samples by organism, tissue, cell type, protocol, status, quality tier |
-| **tissues()** | 36 normalized tissue categories (blood, brain, lung, tumor, PBMC, bone marrow...) — 71% coverage |
-| **cell_types()** | 42 normalized cell type categories (PBMC, T cells, stem cells, K562, tumor cells...) — 50% coverage |
+| **Catalog** | Browse 3,180+ samples by organism, tissue, cell type, protocol, status, quality tier |
+| **tissues()** | 36 normalized tissue categories (blood, brain, lung, tumor, PBMC, bone marrow...) — 73% coverage |
+| **cell_types()** | 40 normalized cell type categories (PBMC, T cells, stem cells, K562, tumor cells...) — 57% coverage |
 | **protocols()** | Protocol breakdown: 29 distinct (10xv3, Drop-seq, CEL-Seq2, sci-RNA-seq3, etc.) |
 | **quality_tiers()** | Gold/silver/bronze classification |
 | **failure_categories()** | Pipeline failure breakdown (download, alignment, cells, QC) |
