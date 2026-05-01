@@ -2,7 +2,7 @@
 
 Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movement gets demoted to `state/followups.md`. User-gated items live in `state/blockers.md`. Completed entries are moved to `state/cycle-log.md` each cycle.
 
-- **CYCLE-173-PHASE-E-DENDROGRAM** (queued): embed/dendrogram (UPGMA on cluster centroids). scipy.cluster.hierarchy ref. Same dispatch shape; expected class 3 modest speedup.
+- **CYCLE-173-PHASE-E-DENDROGRAM** (in flight, job 371962 RUNNING on g003): Sonnet wrote 3 files (sanity-check 10k=5.8ms, 30k=21ms scipy), CMake → 35. Predicted class 2 (50-200×).
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 

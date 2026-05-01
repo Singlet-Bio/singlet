@@ -218,9 +218,18 @@ add_bench_driver(bench_integrate_kbet_perf  bench_integrate_kbet_perf.cpp)
 add_bench_driver(bench_graph_kmeans_perf  bench_graph_kmeans_perf.cpp)
 
 # ---------------------------------------------------------------------------
+# Cycle 173 drivers: embed/dendrogram Phase E benchmark
+# UPGMA hierarchical clustering on cluster centroids (CYCLE-146 kernel).
+# Atomic-scatter centroid aggregation (one block/cell); center + L2-normalize;
+# cublasSgemm corr = μ_norm^T · μ_norm (k × k); d = 1 - corr; host UPGMA O(k³).
+# Scales: 10k / 30k cells × 50 PCs, k=20 clusters, round-robin labels, dense CSC.
+# ---------------------------------------------------------------------------
+add_bench_driver(bench_embed_dendrogram_perf  bench_embed_dendrogram_perf.cpp)
+
+# ---------------------------------------------------------------------------
 # Status message
 # ---------------------------------------------------------------------------
-message(STATUS "singlet-gpu bench: 34 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164+165+166+167+169+170+171+172)")
+message(STATUS "singlet-gpu bench: 35 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164+165+166+167+169+170+171+172+173)")
 message(STATUS "  53a: bench_io_pz_loader_perf")
 message(STATUS "  53a: bench_preprocess_lognorm_perf")
 message(STATUS "  53a: bench_preprocess_hvg_perf")
@@ -254,3 +263,4 @@ message(STATUS "  169: bench_integrate_lisi_perf")
 message(STATUS "  170: bench_integrate_asw_perf")
 message(STATUS "  171: bench_integrate_kbet_perf")
 message(STATUS "  172: bench_graph_kmeans_perf")
+message(STATUS "  173: bench_embed_dendrogram_perf")
