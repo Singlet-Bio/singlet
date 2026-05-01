@@ -16,6 +16,7 @@ Browse catalog (works offline):
     singlet.top_series(n=10)               Largest series
     singlet.quality_tiers()                Quality tier breakdown (gold/silver/bronze)
     singlet.failure_categories()           Pipeline failure analysis
+    singlet.cell_types()                   Cell type annotations (56% coverage)
     singlet.summary()                      Atlas overview
 
 Load data:
@@ -45,7 +46,7 @@ __version__ = "1.2.0"
 
 from singlet._catalog import (
     catalog, info, species, tissues, protocols, datasets, sample_index, set_catalog_dir,
-    summary, samples, top_series, refresh, quality_tiers, failure_categories,
+    summary, samples, top_series, refresh, quality_tiers, failure_categories, cell_types,
 )
 from singlet._loader import load, load_sample, load_dir, download
 from singlet._auth import login
@@ -73,6 +74,7 @@ __all__ = [
     "refresh",
     "quality_tiers",
     "failure_categories",
+    "cell_types",
     # Load
     "load",
     "load_sample",

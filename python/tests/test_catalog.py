@@ -143,3 +143,18 @@ def test_tissues():
     assert "tissue" in t.columns
     assert "count" in t.columns
     assert t["count"].iloc[0] >= t["count"].iloc[-1]  # sorted desc
+
+
+def test_cell_types():
+    import singlet
+    ct = singlet.cell_types()
+    assert isinstance(ct, pd.DataFrame)
+    assert len(ct) > 10
+    assert "cell_type" in ct.columns
+    assert "count" in ct.columns
+    # PBMC should be top
+    assert ct.iloc[0]["cell_type"] == "PBMC"
+    # Should cover a meaningful fraction of SUCCESS samples
+    assert ct["count"].sum() > 300
+    # Should be sorted descending
+    assert ct["count"].iloc[0] >= ct["count"].iloc[-1]
