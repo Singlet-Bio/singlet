@@ -246,9 +246,19 @@ add_bench_driver(bench_preprocess_magic_perf  bench_preprocess_magic_perf.cpp)
 add_bench_driver(bench_integrate_combat_perf  bench_integrate_combat_perf.cpp)
 
 # ---------------------------------------------------------------------------
+# Cycle 176 drivers: anno/celltypist Phase E benchmark
+# CellTypist logreg-based reference-mapping annotation (Dominguez Conde 2022).
+# 3 device passes: cuBLAS Sgemm (L = W^T . Z), bias-add kernel,
+# strided softmax-argmax kernel (one block/cell, warp-shuffle log-sum-exp).
+# Outputs pred_class + confidence only (no full P matrix stored).
+# Scales: 10k / 30k cells × 50 PCs, n_classes=20.
+# ---------------------------------------------------------------------------
+add_bench_driver(bench_anno_celltypist_perf  bench_anno_celltypist_perf.cpp)
+
+# ---------------------------------------------------------------------------
 # Status message
 # ---------------------------------------------------------------------------
-message(STATUS "singlet-gpu bench: 37 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164+165+166+167+169+170+171+172+173+174+175)")
+message(STATUS "singlet-gpu bench: 38 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164+165+166+167+169+170+171+172+173+174+175+176)")
 message(STATUS "  53a: bench_io_pz_loader_perf")
 message(STATUS "  53a: bench_preprocess_lognorm_perf")
 message(STATUS "  53a: bench_preprocess_hvg_perf")
@@ -285,3 +295,4 @@ message(STATUS "  172: bench_graph_kmeans_perf")
 message(STATUS "  173: bench_embed_dendrogram_perf")
 message(STATUS "  174: bench_preprocess_magic_perf")
 message(STATUS "  175: bench_integrate_combat_perf")
+message(STATUS "  176: bench_anno_celltypist_perf")

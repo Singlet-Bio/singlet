@@ -2,7 +2,7 @@
 
 Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movement gets demoted to `state/followups.md`. User-gated items live in `state/blockers.md`. Completed entries are moved to `state/cycle-log.md` each cycle.
 
-- **CYCLE-176-PHASE-E-CELLTYPIST** (queued): anno/celltypist Phase E. Manual sklearn LogisticRegression baseline (celltypist Python pkg likely not installed).
+- **CYCLE-177-PHASE-E-SYMPHONY** (queued): anno/symphony Phase E (centroid-projection reference mapping). Pair with celltypist (logreg). 4-5 features remain in Phase E backfill.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
@@ -30,6 +30,7 @@ Frobenius NMF only (KL / IS / NB-GLM / β-divergence dropped); fast PCA / SVD wi
 
 ## ✅ Recently complete (last 5 cycles — full detail in `state/cycle-log.md`)
 
+- **CYCLE-176** Phase E for anno/celltypist (PASS — clean **50.2-51.3× speedup**, job 372114 g003 + local sklearn re-run): GPU 10k=0.059ms vs sklearn 3.029ms; 30k=0.238ms vs 11.940ms. Same ratio across scales (no overhead compounding). Lands above BLAS-tight (kmeans 2-7×) because sklearn predict_proba has Python orchestration overhead floor ~3ms/call dominating the small Sgemm work. Phase E corpus now 16 features.
 - **CYCLE-175** Phase E for integrate/combat — third surprise **2188-2497× speedup** (job 372089 g003 + local scanpy re-run): GPU 10k=6.577ms vs scanpy 14392ms; 30k=17.235ms vs 43042ms. **§J.7 prediction (50-300×) was off by ~10×**. Reason: scanpy.pp.combat compounds 2 overhead sources (per-batch Python orchestration + dense (n×m) intermediates 200-600 MB). Confirms CYCLE-174 magic finding: when SOTA has BOTH per-call Python overhead AND dense intermediates, speedup compounds into 1000-3000× class. Pattern now demonstrated 3× (ora, magic, combat).
 - **CYCLE-174** Phase E for preprocess/magic — surprise **1891-2506× speedup** (job 372009 g003 + local scipy re-run): GPU 10k=2.349ms vs scipy 4441ms; 30k=5.788ms vs 14512ms. **Way above §J.7 prediction (10-30×)**. Why: at t=3 diffusion iterations, the matrix densifies (200-600 MB intermediate); scipy's sparse SpMM with dense intermediate is memory-bandwidth-bound on CPU while cuSPARSE on V100S has HBM ~20× advantage. **§J.7 third-axis candidate**: intermediate matrix size matters as much as SOTA structure + GPU compute. Sparse SpMM with dense intermediate = class 1-2 (1000-3000×).
 - **CYCLE-173** Phase E for embed/dendrogram (PASS — 46.3-106.2× speedup, job 371962 g003 + local scipy re-run): GPU 10k=0.125ms vs scipy 5.789ms; 30k=0.198ms vs 21.023ms. Validates §J.7 class 2 prediction (50-200×). GPU is sub-ms (atomic-scatter dominant), scipy driven by Python orchestration around C kernels. **Phase E corpus: 13 features**, range 2× to 3101×.

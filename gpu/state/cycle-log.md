@@ -3965,3 +3965,31 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
   3. **The corpus is converging**: 15 features benched, 3 distinct speedup regimes (10-100×, 100-500×, 1000-3000×). Phase E is now producing predictable signal.
 - **Next cycle**: CYCLE-176 — continue Phase E. Remaining: qc/empty_drops, qc/soupx, anno/celltypist, anno/symphony. Default: anno/celltypist — reference is `celltypist` Python pkg if installed, else manual scikit-learn LogisticRegression on similar data.
 
+## Cycle 176 (2026-05-01) — Phase E for anno/celltypist (PASS, 50× clean BLAS-vs-BLAS comparison)
+- **Feature**: anno/celltypist (CYCLE-135, logreg cell-type inference). 3-pass GPU kernel.
+- **Outcome**: PASS, **50.2-51.3× speedup**. Above BLAS-tight prediction (5-30×) but below class-2 surprises. Clean steady-state ratio.
+- **Numbers (job 372114 g003 V100S + local sklearn re-run)**:
+  ```
+  scale | GPU_wall_ms | sklearn_wall_ms | speedup
+  10k   |       0.059 |           3.029 |   51.3×
+  30k   |       0.238 |          11.940 |   50.2×
+  ```
+- **Why ~50×**: sklearn LogisticRegression.predict_proba is BLAS-backed (OpenBLAS DGEMM + numpy softmax) but has Python orchestration overhead per predict_proba call. The Sgemm work itself is small (50×20×n_cells = 10K-30K flops), so Python overhead dominates relative to compute, putting it ~10× above pure BLAS-vs-BLAS comparison (kmeans 2-7×).
+- **Same ratio across scales** (51× vs 50×) — clean signal, no overhead compounding (unlike combat/magic). Indicates GPU kernel is actually slower per-cell than its memory-bound bound, but Python overhead on CPU stays constant across scales.
+- **Phase E corpus update** (16 features now), distribution stable:
+  - 2-7×        — kmeans (BLAS-tight + minimal CPU overhead)
+  - 10-32×      — decoupler×4 + kbet (vectorized scipy/numpy)
+  - 46-219×     — dendrogram, viper, asw, lisi, **celltypist** (vectorized SOTA + light GPU)
+  - 213-493×    — score_genes
+  - 229-471×    — model_gene_var
+  - 236-302× + small 12,609× — pearson_residuals
+  - 1891-2506×  — magic
+  - 2188-2497×  — combat
+  - 2832-3101×  — ora
+- **pareto-frontier.md updated**, Phase E status PARTIAL → COMPLETE for medium scales.
+- **Phase G**: needs to run.
+- **Lessons**:
+  1. **§J.7 BLAS-tight class refinement**: sklearn predict_proba lands at ~50× (not 5-30×) because Python orchestration adds an overhead floor ~3ms per call. KMeans's 2-7× was the truly BLAS-tight case (no per-call orchestration). Worth distinguishing in next style-rules edit.
+  2. **Consistent ratios = clean signal**: when speedup is the same at 10k and 30k, you can extrapolate confidently. Compounding ratios (combat 2188→2497, magic 1891→2506) indicate scale-dependent factors at play.
+- **Next cycle**: CYCLE-177 — continue Phase E sweep. Remaining: anno/symphony, qc/empty_drops, qc/soupx. Default: anno/symphony — pair with celltypist (other reference-mapping paradigm). Centroid projection vs logreg comparison would be informative.
+

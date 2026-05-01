@@ -345,12 +345,14 @@ Cycle 80: block-labels test fix promoted wilcoxon TinyPlanted from noise-converg
 | scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
 |---|---|---|---|---|---|---|---|---|
 | small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | celltypist | TBD |
+| 10k×50PCs (20 classes) | 0.059 | 0.0 | n/a (synth bench) | 3.029 | n/a | reference | sklearn LogisticRegression.predict_proba | wall (51.3×) |
+| 30k×50PCs (20 classes) | 0.238 | 0.0 | n/a (synth bench) | 11.940 | n/a | reference | sklearn LogisticRegression.predict_proba | wall (50.2×) |
 | 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 | 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 
-**Notes**: CellTypist logistic-regression cell-type classification (Domínguez Conde et al. 2022). Pre-trained models + gene-set projection. See [CYCLE-135 cycle-log](state/cycle-log.md).
+**Notes**: CellTypist logistic-regression cell-type inference (Domínguez Conde et al. 2022). 3-pass GPU kernel: `cublasSgemm(W^T · Z) → bias-add → softmax-argmax`. CYCLE-176 Phase E (job 372114 g003 V100S + local sklearn re-run). **50.2-51.3× speedup** vs sklearn LogisticRegression.predict_proba. Lands in class 2-3 (50-200×); above BLAS-tight prediction (5-30×) because sklearn's Python overhead per predict_proba call is non-trivial relative to the small Sgemm work (50×20×n_cells). Consistent ratio across scales (no overhead compounding) — clean BLAS-vs-BLAS comparison with kernel-launch-overhead floor. See [CYCLE-135 + CYCLE-176 cycle-log](state/cycle-log.md).
 
-**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+**Phase E status**: COMPLETE for medium scales.
 
 ---
 
