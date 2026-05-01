@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.2.0] — 2026-05-15
+
+### Added
+- `failure_categories()` — pipeline failure breakdown (5 categories: download_fail, align_low_map, cells_below_threshold, unknown, pipeline_crash)
+- `tissues()` — 32 normalized tissue categories with 91% SUCCESS coverage
+- `protocols()` — protocol distribution across 28 distinct protocols
+- `quality_tiers()` — gold/silver/bronze classification with metrics
+- MCP `singlet_failures` tool (10th tool total)
+- Tests for `failure_categories()` and `tissues()` (131 passing)
+
+### Changed
+- Corpus expanded: 2,728 samples / 1,143 SUCCESS / 576 series / 3.3M cells / 16 species
+- Tissue normalization: parses characteristics dict + source field + keyword matching
+- MCP server now has 10 tools (was 9)
+- quickstart notebook updated with all v1.2.0 API features
+- README stats updated (2,716 samples, 121→32 normalized tissues, 10 MCP tools)
+- pyproject.toml description refreshed
+
 ## [1.1.0] — 2026-04-30
 
 ### Added
