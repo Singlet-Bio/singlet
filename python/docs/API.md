@@ -2,32 +2,67 @@
 
 ## Catalog Browsing
 
-### `singlet.catalog(search=None)`
-Return the full dataset catalog as a DataFrame. Optionally filter by keyword.
+### `singlet.summary()` → `str`
+Return a one-line summary of the atlas.
 
-### `singlet.summary()`
-Print a summary of the atlas: total samples, success count, species, cells.
+```python
+>>> singlet.summary()
+'singlet atlas: 3,196 samples (1,368 SUCCESS) • 1,399 series • 8 species • 28 protocols • 36 tissues • 40 cell types • 4.0M cells'
+```
 
-### `singlet.samples(organism=None, status=None, protocol=None)`
-Query individual samples (GSM-level). Returns DataFrame with per-sample metadata.
+### `singlet.samples(gse_id=None, organism=None, status=None, tissue=None, cell_type=None, protocol=None, min_cells=None, quality_tier=None, search=None)` → `DataFrame`
+Query individual samples (GSM-level) with optional filters.
 
-### `singlet.top_series(n=10)`
-Return the top N series by total cell count.
+**Parameters:**
+- `organism` — Filter by organism (substring match, e.g. "Homo sapiens")
+- `status` — Filter by pipeline status ("SUCCESS", "SOFT_FAIL", "HARD_FAIL")
+- `tissue` — Filter by tissue (e.g. "brain", "lung", "blood")
+- `cell_type` — Filter by cell type (e.g. "PBMC", "T cells", "stem cells")
+- `protocol` — Filter by protocol (e.g. "10xv3", "dropseq")
+- `quality_tier` — "gold" (MR≥70%, genes≥500, cells≥500), "silver", or "bronze"
+- `min_cells` — Minimum cell count
+- `search` — Text search across title and text columns
 
-### `singlet.info(accession)`
+**Returns:** DataFrame with columns: gsm_id, gse_id, organism, status, failure_category, protocol, mapping_rate, cells_called, median_genes, median_umis, mt_pct, doublet_rate, wall_time_s, title, source, tissue, cell_type.
+
+### `singlet.catalog(search=None)` → `DataFrame`
+Return the full series-level catalog. Optionally filter by keyword.
+
+### `singlet.top_series(n=10, min_samples=3, organism=None)` → `DataFrame`
+Return the top N series by total cell count. Includes tissue column.
+
+### `singlet.info(accession)` → `dict`
 Return metadata dict for a single GSE accession.
 
-### `singlet.species()`
-Return sorted list of all species with processed data.
+### `singlet.species()` → `list`
+Return sorted list of all species with successful processed data (deduplicated from combo organisms).
 
-### `singlet.datasets(organism=None, protocol=None, min_cells=None, has_kraken2=None)`
+### `singlet.tissues()` → `DataFrame`
+Return tissue distribution across SUCCESS samples. Columns: tissue, count.
+
+### `singlet.cell_types()` → `DataFrame`
+Return cell type distribution across SUCCESS samples. 40 normalized categories. Columns: cell_type, count.
+
+### `singlet.protocols()` → `DataFrame`
+Return protocol distribution across SUCCESS samples. Columns: protocol, count.
+
+### `singlet.quality_tiers()` → `DataFrame`
+Return quality tier breakdown: gold/silver/bronze with average metrics.
+
+### `singlet.failure_categories()` → `DataFrame`
+Return failure category breakdown for non-SUCCESS samples (ground truth from pipeline). Categories: align_low_map, download_fail, cells_below_threshold, pipeline_crash, align_oom, data_incomplete, autodetect_species_fail.
+
+### `singlet.datasets(organism=None, protocol=None, min_cells=None, has_kraken2=None)` → `DataFrame`
 Filter catalog by organism, protocol, minimum cell count, or kraken2 availability.
 
-### `singlet.sample_index(gse_id=None)`
-Return sample-level index with column offsets for partial reads. One row per GSM.
+### `singlet.sample_index(gse_id=None)` → `DataFrame`
+Return sample-level index. One row per GSM.
 
 ### `singlet.set_catalog_dir(path)`
 Set local catalog directory containing `catalog_v1.parquet` and `sample_index.parquet`.
+
+### `singlet.refresh()`
+Re-download the latest catalog and sample index from GitHub. Bypasses bundled data.
 
 ---
 
@@ -42,17 +77,7 @@ Load a full singlify output directory as AnnData. Reads count matrix, cell metad
 - `var`: gene_id, gene_name
 
 ### `singlet.load(source, *, genes=None, obs_filter=None, backend="zenodo")`
-Primary entry point. Load a dataset as AnnData from:
-- Local file path (`.1pz`, `.spz`, `.h5ad`, `.zarr`)
-- GSE accession (resolved via local catalog, then Zenodo download)
-
-**Parameters:**
-- `source` — GEO accession or file path
-- `genes` — Subset to these gene names
-- `obs_filter` — Dict of `{column: value}` to filter cells
-- `backend` — `"zenodo"` (free) or `"aws"` (token-priced)
-
-**Returns:** `anndata.AnnData` with obs, var, and uns metadata.
+Primary entry point. Load a dataset as AnnData from local file path or GEO accession.
 
 ### `singlet.load_sample(gsm_id, *, genes=None)`
 Load a single GSM sample using column-range reads. Requires local catalog.
@@ -73,11 +98,8 @@ Write AnnData to `.1pz` format with VOCSC + zstd-3 compression.
 ### `singlet.info_1pz(path)` → `dict`
 Read `.1pz` header without decompressing. Returns dimensions, nnz, compression ratio.
 
-### `singlet.spz_info(path)` → `dict`
-Read `.spz` header without decompressing. Returns dimensions, nnz, format version.
-
 ### `singlet.read_kraken2(gse_dir)` → `AnnData`
-Read a `kraken2.1pz` microbiome matrix from a GSE directory. Returns cells × taxa.
+Read a `kraken2.1pz` microbiome matrix. Returns cells × taxa.
 
 ### `singlet.read_matrix(path)` → `AnnData`
 Auto-detect format (`.1pz` or `.spz`) and read.
@@ -87,6 +109,9 @@ Read a legacy `.spz` file.
 
 ### `singlet.write_spz(adata, path, *, layer=None, row_sort=False, precision="auto")` → `dict`
 Write AnnData to legacy `.spz` format.
+
+### `singlet.spz_info(path)` → `dict`
+Read `.spz` header without decompressing.
 
 ---
 
@@ -112,53 +137,31 @@ Extract sparse CSC matrix from AnnData.
 ## PyTorch Integration
 
 ```python
-from singlet.torch import OnePZDataset, SpzDataset, DataLoader, to_sparse_csr, to_sparse_coo, from_anndata
+from singlet.torch import OnePZDataset, DataLoader, to_sparse_csr, from_anndata
 ```
 
-### `to_sparse_csr(source, *, dtype="float32", device="cpu")`
-Load a `.spz` file as a PyTorch sparse CSR tensor. Shape: (cells, genes).
+### `OnePZDataset(source, *, genes=None, normalize=False, device="cpu", sparse=False)`
+PyTorch Dataset backed by a `.1pz` file or AnnData. Yields one cell per `__getitem__`.
+- `normalize=True` applies `log1p(x * 10000 / total_counts)`
 
-### `to_sparse_coo(source, *, dtype="float32", device="cpu")`
-Load a `.spz` file as a PyTorch sparse COO tensor.
+### `DataLoader(source, *, batch_size=512, shuffle=True, num_workers=0, device="cpu", genes=None, normalize=False, sparse=False)`
+Convenience wrapper around `torch.utils.data.DataLoader`. Supports multi-dataset training.
+
+### `to_sparse_csr(source, *, dtype="float32", device="cpu")`
+Load to PyTorch sparse CSR tensor.
 
 ### `from_anndata(adata, *, layer=None, dtype="float32", device="cpu")`
 Convert AnnData to PyTorch sparse CSR tensor.
 
-### `OnePZDataset(source, *, genes=None, normalize=False, device="cpu", sparse=False)`
-PyTorch Dataset backed by a `.1pz` file or AnnData. Yields one cell per `__getitem__`.
-
-- `normalize=True` applies `log1p(x * 10000 / total_counts)` normalization.
-- `.n_genes` — number of genes
-- `.gene_names` — gene name list
-
-### `SpzDataset(source, *, layer=None, genes=None, device="cpu", sparse=False)`
-Legacy PyTorch Dataset backed by a `.spz` file or AnnData.
-
-### `DataLoader(source, *, batch_size=512, shuffle=True, num_workers=0, device="cpu", genes=None, normalize=False, sparse=False)`
-Convenience wrapper around `torch.utils.data.DataLoader`. Uses `OnePZDataset` internally. Supports list of sources for multi-dataset training.
-
 ---
 
-## Preprocessing (FASTQ → .1pz)
+## MCP Server
 
-```python
-from singlet.preprocessing import download_fastq, detect_protocol, quantify, run_qc, export_to_1pz
+```bash
+python -m singlet.mcp.server
 ```
 
-### `download_fastq(accession, output_dir, *, source="ena", max_parallel=4)`
-Download FASTQ files for a GEO sample.
-
-### `detect_protocol(fastq_dir)`
-Detect sequencing protocol from FASTQ reads.
-
-### `quantify(fastq_dir, output_dir, *, species="human", protocol=None)`
-Run simpleaf/alevin-fry quantification.
-
-### `run_qc(quant_dir)` → `dict`
-Compute QC metrics (cells, genes detected, mapping rate).
-
-### `export_to_1pz(quant_dir, output_path)`
-Export quantification output to `.1pz` format.
+11 tools: `singlet_stats`, `singlet_search`, `singlet_qc`, `singlet_load`, `singlet_browse`, `singlet_protocols`, `singlet_quality`, `singlet_tissues`, `singlet_failures`, `singlet_cell_types`.
 
 ---
 
