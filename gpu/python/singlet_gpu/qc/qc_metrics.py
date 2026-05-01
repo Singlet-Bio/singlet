@@ -66,13 +66,7 @@ def _csr_to_device_csc(csr_mat):
             "Ensure pybind11 extension compiled with SINGLET_GPU_BUILD_PYTHON=ON."
         )
     csc_mat = csr_mat.T.tocsc()   # genes × cells, CSC
-    rows, cols = csc_mat.shape
-    return _core.from_cupy_csr(
-        csc_mat.data.__cuda_array_interface__,
-        csc_mat.indices.__cuda_array_interface__,
-        csc_mat.indptr.__cuda_array_interface__,
-        rows, cols, int(csc_mat.nnz),
-    )
+    return _core.from_cupy_csr(csc_mat)
 
 
 def _build_gene_mask(var_names, prefix: str) -> np.ndarray:

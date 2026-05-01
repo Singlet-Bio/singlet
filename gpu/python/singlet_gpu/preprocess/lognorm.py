@@ -99,20 +99,11 @@ def _csr_to_device_csc(csr_mat):
     # AnnData stores (cells × genes) CSR; the C++ kernel expects (genes × cells) CSC.
     # .T.tocsc() is in-place — no new data allocation.
     csc_mat = csr_mat.T.tocsc()   # genes × cells, CSC
-    rows, cols = csc_mat.shape
 
-    data_iface    = csc_mat.data.__cuda_array_interface__
-    indices_iface = csc_mat.indices.__cuda_array_interface__
-    indptr_iface  = csc_mat.indptr.__cuda_array_interface__
-
-    return _core.from_cupy_csr(
-        data_iface,
-        indices_iface,
-        indptr_iface,
-        rows,
-        cols,
-        int(csc_mat.nnz),
-    )
+    # _core.from_cupy_csr accepts any object exposing .indptr / .indices / .data
+    # whose backing arrays expose __cuda_array_interface__ (cupy csr_/csc_matrix).
+    # Pass the cupy matrix directly — the binding extracts pointers and shape.
+    return _core.from_cupy_csr(csc_mat)
 
 
 def _device_csc_to_csr(device_csc):
