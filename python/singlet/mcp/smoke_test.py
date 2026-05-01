@@ -27,6 +27,12 @@ try:
         _tool_qc,
         _tool_load,
         _tool_browse,
+        _tool_protocols,
+        _tool_quality,
+        _tool_tissues,
+        _tool_failures,
+        _tool_cell_types,
+        _tool_species,
     )
 except SystemExit:
     # MCP SDK not installed — mock it so we can import tool functions
@@ -41,6 +47,12 @@ except SystemExit:
         _tool_qc,
         _tool_load,
         _tool_browse,
+        _tool_protocols,
+        _tool_quality,
+        _tool_tissues,
+        _tool_failures,
+        _tool_cell_types,
+        _tool_species,
     )
 
 
@@ -52,7 +64,7 @@ async def run_smoke_tests():
     failed = 0
 
     # Test 1: Stats
-    print("\n[1/5] singlet_stats...")
+    print("\n[1/11] singlet_stats...")
     try:
         result = await _tool_stats()
         assert "total_samples" in result, "Missing total_samples"
@@ -66,7 +78,7 @@ async def run_smoke_tests():
         failed += 1
 
     # Test 2: Search
-    print("\n[2/5] singlet_search (organism=Homo sapiens, limit=5)...")
+    print("\n[2/11] singlet_search (organism=Homo sapiens, limit=5)...")
     try:
         result = await _tool_search({"organism": "Homo sapiens", "limit": 5})
         assert "samples" in result, "Missing samples key"
@@ -80,7 +92,7 @@ async def run_smoke_tests():
         failed += 1
 
     # Test 3: QC
-    print("\n[3/5] singlet_qc (first available sample)...")
+    print("\n[3/11] singlet_qc (first available sample)...")
     try:
         # Get a sample to query
         browse = await _tool_browse({"page": 0, "page_size": 1})
@@ -100,7 +112,7 @@ async def run_smoke_tests():
         failed += 1
 
     # Test 4: Load
-    print("\n[4/5] singlet_load...")
+    print("\n[4/11] singlet_load...")
     try:
         browse = await _tool_browse({"page": 0, "page_size": 1})
         if browse["samples"]:
@@ -121,13 +133,86 @@ async def run_smoke_tests():
         failed += 1
 
     # Test 5: Browse with pagination
-    print("\n[5/5] singlet_browse (page 0, size 10)...")
+    print("\n[5/11] singlet_browse (page 0, size 10)...")
     try:
         result = await _tool_browse({"page": 0, "page_size": 10})
         assert "total" in result, "Missing total"
         assert "samples" in result, "Missing samples"
         print(f"  ✓ Page 0: {len(result['samples'])} samples shown, "
               f"{result['total']} total in atlas")
+        passed += 1
+    except Exception as e:
+        print(f"  ✗ FAILED: {e}")
+        failed += 1
+
+    # Test 6: Protocols
+    print("\n[6/11] singlet_protocols...")
+    try:
+        result = await _tool_protocols()
+        assert "protocols" in result, "Missing protocols"
+        print(f"  ✓ {len(result['protocols'])} protocols, "
+              f"top: {result['protocols'][0]['protocol']} ({result['protocols'][0]['count']})")
+        passed += 1
+    except Exception as e:
+        print(f"  ✗ FAILED: {e}")
+        failed += 1
+
+    # Test 7: Quality tiers
+    print("\n[7/11] singlet_quality...")
+    try:
+        result = await _tool_quality()
+        assert "tiers" in result, "Missing tiers"
+        print(f"  ✓ {len(result['tiers'])} tiers: " +
+              ", ".join(f"{t['tier']}={t['count']}" for t in result['tiers']))
+        passed += 1
+    except Exception as e:
+        print(f"  ✗ FAILED: {e}")
+        failed += 1
+
+    # Test 8: Tissues
+    print("\n[8/11] singlet_tissues...")
+    try:
+        result = await _tool_tissues({})
+        assert "tissues" in result, "Missing tissues"
+        print(f"  ✓ {result.get('categories', '?')} tissue categories, "
+              f"{result.get('coverage_pct', '?')}% coverage")
+        passed += 1
+    except Exception as e:
+        print(f"  ✗ FAILED: {e}")
+        failed += 1
+
+    # Test 9: Failures
+    print("\n[9/11] singlet_failures...")
+    try:
+        result = await _tool_failures()
+        assert "categories" in result or "failures" in result, "Missing data"
+        key = "categories" if "categories" in result else "failures"
+        print(f"  ✓ {len(result[key])} failure categories")
+        passed += 1
+    except Exception as e:
+        print(f"  ✗ FAILED: {e}")
+        failed += 1
+
+    # Test 10: Cell types
+    print("\n[10/11] singlet_cell_types...")
+    try:
+        result = await _tool_cell_types({})
+        assert "cell_types" in result, "Missing cell_types"
+        print(f"  ✓ {result.get('categories', '?')} categories, "
+              f"{result.get('coverage_pct', '?')}% coverage")
+        passed += 1
+    except Exception as e:
+        print(f"  ✗ FAILED: {e}")
+        failed += 1
+
+    # Test 11: Species
+    print("\n[11/11] singlet_species...")
+    try:
+        result = await _tool_species()
+        assert "species" in result, "Missing species"
+        assert result["total_species"] > 0, "No species"
+        print(f"  ✓ {result['total_species']} species: " +
+              ", ".join(s['species'].split()[-1] for s in result['species'][:4]))
         passed += 1
     except Exception as e:
         print(f"  ✗ FAILED: {e}")
