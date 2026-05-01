@@ -2,7 +2,7 @@
 
 Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movement gets demoted to `state/followups.md`. User-gated items live in `state/blockers.md`. Completed entries are moved to `state/cycle-log.md` each cycle.
 
-- **CYCLE-174-PHASE-E-MAGIC** (queued): preprocess/magic Phase E (ping-pong cuSPARSE SpMM for graph diffusion). May need magic-impute Python install OR fallback to manual numpy SpMM iteration baseline.
+- **CYCLE-174-PHASE-E-MAGIC** (in flight, job 372009 RUNNING on g003): Sonnet wrote 3 files using manual scipy SpMM iteration (avoids magic-impute Python dep); local sanity-check 10k=4441ms, 30k=14512ms scipy. CMake → 36. Predicted class 3 (10-30×).
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 

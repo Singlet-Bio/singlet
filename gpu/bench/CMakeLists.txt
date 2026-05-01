@@ -227,9 +227,18 @@ add_bench_driver(bench_graph_kmeans_perf  bench_graph_kmeans_perf.cpp)
 add_bench_driver(bench_embed_dendrogram_perf  bench_embed_dendrogram_perf.cpp)
 
 # ---------------------------------------------------------------------------
+# Cycle 174 drivers: preprocess/magic Phase E benchmark
+# MAGIC graph-diffusion imputation (van Dijk et al. 2018 Cell 174:716-729).
+# cuSPARSE SpMM-heavy: row_sum + normalize_weights + csc_transpose_to_dense
+# + cusparseSpMM × t=3 (ping-pong dense buffers, CUSPARSE_SPMM_ALG_DEFAULT).
+# Scales: 10k / 30k cells × 5000 genes, density=5%, k=10 SNN, t=3.
+# ---------------------------------------------------------------------------
+add_bench_driver(bench_preprocess_magic_perf  bench_preprocess_magic_perf.cpp)
+
+# ---------------------------------------------------------------------------
 # Status message
 # ---------------------------------------------------------------------------
-message(STATUS "singlet-gpu bench: 35 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164+165+166+167+169+170+171+172+173)")
+message(STATUS "singlet-gpu bench: 36 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164+165+166+167+169+170+171+172+173+174)")
 message(STATUS "  53a: bench_io_pz_loader_perf")
 message(STATUS "  53a: bench_preprocess_lognorm_perf")
 message(STATUS "  53a: bench_preprocess_hvg_perf")
@@ -264,3 +273,4 @@ message(STATUS "  170: bench_integrate_asw_perf")
 message(STATUS "  171: bench_integrate_kbet_perf")
 message(STATUS "  172: bench_graph_kmeans_perf")
 message(STATUS "  173: bench_embed_dendrogram_perf")
+message(STATUS "  174: bench_preprocess_magic_perf")
