@@ -90,7 +90,7 @@ def _preprocess_and_pca_gpu(adata, n_comps=_N_COMPS):
 def _preprocess_and_pca_cpu(adata, n_comps=_N_COMPS):
     sc = pytest.importorskip("scanpy", reason="scanpy not installed")
     sc.pp.normalize_total(adata, inplace=True)
-    sc.pp.log1p(adata, inplace=True)
+    sc.pp.log1p(adata)  # scanpy 1.11+ removed inplace= from log1p (in-place by default)
     sc.pp.pca(adata, n_comps=n_comps)
 
 

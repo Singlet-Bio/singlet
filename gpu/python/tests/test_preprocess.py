@@ -301,7 +301,7 @@ def test_log1p_vs_scanpy(gsm4037629_path):
 
     # Apply log1p.
     singlet_gpu.preprocess.log1p(adata_gpu, inplace=True)
-    sc.pp.log1p(adata_cpu, inplace=True)
+    sc.pp.log1p(adata_cpu)  # scanpy 1.11+ removed inplace= from log1p
 
     vals_gpu = _get_dense_values(adata_gpu.X)
     vals_cpu = _get_dense_values(adata_cpu.X)

@@ -78,10 +78,12 @@ def _make_mt_adata(n_cells: int = 200, n_sites: int = 50, n_clones: int = 3):
         for s in sites:
             alt[np.ix_(clone_cells, [s])] = rng.integers(12, 18, size=(len(clone_cells), 1))
 
+    # AnnData enforces layers[k].shape == (n_obs, n_vars) — dummy X must use
+    # n_sites as its var dimension to match the mt_alt / mt_depth layers.
     adata = anndata.AnnData(
-        X=sp.csr_matrix(np.ones((n_cells, 10))),  # dummy X
+        X=sp.csr_matrix(np.ones((n_cells, n_sites), dtype=np.float32)),
         obs={"cell": [f"cell_{i}" for i in range(n_cells)]},
-        var={"gene": [f"gene_{j}" for j in range(10)]},
+        var={"site": [f"site_{j}" for j in range(n_sites)]},
     )
     adata.layers["mt_alt"] = sp.csr_matrix(alt)
     adata.layers["mt_depth"] = sp.csr_matrix(depth)
