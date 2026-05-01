@@ -38,8 +38,8 @@
 //   with fixed operand order) rather than classical GS with atomics (Rule 11).
 //
 // D2H transfers: exactly ONE 4-byte scalar per outer iteration (convergence check:
-//   cub::DeviceReduce::Max on |R| → cudaMemcpy 4 bytes). This is the sole exception
-//   per Rule 4. All BLAS and SpMM results remain device-resident.
+//   cub::DeviceReduce::Max on |R|/|rho| → cudaMemcpy 4 bytes). This is the sole
+//   exception per Rule 4. All BLAS and SpMM results remain device-resident.
 //
 // No preconditioner in v0. Jacobi diagonal preconditioner is deferred to v1.
 // Block oversampling: K_block = K + 5 to handle clustered eigenvalues (design doc §Risks).
@@ -56,6 +56,13 @@
 // columns (smallest of -M = largest of M) rather than the last K_block.
 // Residual and rho computation remain unchanged (they use A, not -A).
 // See state/designs/sparse_eigensolver.md §CYCLE-183-fix.
+//
+// CYCLE-185 (iter-3 fix): Switch from absolute to relative residual for
+// convergence. The absolute check max|AX - X*diag(rho)| < tol fails when
+// spectral_radius * eps_fp32 > tol (e.g., tridiagonal with diag~20 gives
+// floor ~4e-6 which exceeds tol=1e-6 and the loop never declares convergence).
+// Fix: the abs kernel now computes |R[i,k]| / |rho[k]|, making the criterion
+// tol-scale-independent and fp32-achievable for any well-conditioned A.
 
 #pragma once
 
@@ -196,21 +203,32 @@ void lobpcg_residual_kernel(
 }
 
 // ---------------------------------------------------------------------------
-// lobpcg_abs_kernel — in-place |x| for cub::DeviceReduce::Max (convergence).
+// lobpcg_abs_kernel — compute |R[i,k]| / |rho[k]| for convergence check.
 //
-// One thread per element. Writes fabsf of each element to out.
-// WHY separate: cub MaxElement needs a T* not a lambda at device scope.
+// One thread per element of the n×K_block residual block R (col-major).
+// Writes fabsf(R[idx]) / max(fabsf(rho[col]), 1e-30f) to out.
+//
+// WHY relative (not absolute) residual: the convergence criterion
+//   max(|R|/|rho|) < tol is scale-independent and fp32-achievable
+//   for any well-conditioned A. The absolute criterion max|R| < tol fails
+//   when spectral_radius * eps_fp32 exceeds tol (CYCLE-185 §iter-3 root cause).
+// WHY 1e-30 guard: prevents division by zero when rho[k]≈0 (zero eigenvalue).
+//   In that case |R[i,k]|/eps ≈ ∞ → max is dominated → no false convergence.
 // ---------------------------------------------------------------------------
 __global__ __launch_bounds__(256, 4)
 void lobpcg_abs_kernel(
-    const float* __restrict__ in,
-    float*       __restrict__ out,
-    int n)
+    const float* __restrict__ R,    // [n × K_block] residual col-major
+    const float* __restrict__ rho,  // [K_block] Rayleigh quotients
+    float*       __restrict__ out,  // [n × K_block] output col-major
+    int n,                          // rows (needed to recover column index)
+    int total)                      // n * K_block (loop bound)
 {
     const int idx = static_cast<int>(blockIdx.x) * static_cast<int>(blockDim.x)
                   + static_cast<int>(threadIdx.x);
-    if (idx >= n) return;
-    out[idx] = fabsf(in[idx]);
+    if (idx >= total) return;
+    const int col = idx / n;
+    const float rho_k = fabsf(rho[col]);
+    out[idx] = fabsf(R[idx]) / (rho_k > 1e-30f ? rho_k : 1e-30f);
 }
 
 // ---------------------------------------------------------------------------
@@ -281,6 +299,39 @@ void lobpcg_extract_rho_kernel(
 //
 // Returns SparseEigResult with device-resident eigenvalues[K] (descending)
 // and eigenvectors[n×K] (col-major). Caller must sync stream before reading.
+//
+// ── §J.9 CONVENTIONS (CYCLE-185) ──────────────────────────────────────────
+//
+// (1) What "converged" means in user terms:
+//     result.converged = true  iff  max_k( max_i |R[i,k]| / |rho[k]| ) < tol
+//     where R = AX - X*diag(rho) is the block residual and rho[k] = (X[:,k])^T
+//     A (X[:,k]) is the Rayleigh quotient of the k-th Ritz vector. This is the
+//     RELATIVE block residual norm (per-column scaled by the Ritz value).
+//     Eigenvalue accuracy in user-space: ||lambda_k - lambda_ref|| / |lambda_ref|
+//     is O(tol²) for non-degenerate eigenvalues (quadratic convergence of LOBPCG).
+//
+// (2) How it is computed:
+//     Step B: rho[k] = diag(X^T AX)[k]  — Rayleigh quotient from A (not -A).
+//     Step C: R[:,k] = AX[:,k] - rho[k] * X[:,k]  — block residual.
+//     Step D: abs_R[i,k] = |R[i,k]| / max(|rho[k]|, 1e-30)  — relative element.
+//             max_rel_r = cub::DeviceReduce::Max(abs_R)  — one D2H scalar/iter.
+//     Declared converged when max_rel_r < cfg.tolerance.
+//
+// (3) Sign/scale convention quirks vs cuSOLVER Ssygvd default:
+//     cuSOLVER cusolverDnSsygvd returns ascending eigenvalues (smallest first).
+//     LOBPCG naturally minimizes the Rayleigh quotient → finds SMALLEST eigenvalues.
+//     To return the K LARGEST eigenvalues of A, the Rayleigh-Ritz subspace matrix
+//     M = S^T(AS) is NEGATED before Ssygvd (ARPACK sign-flip trick, CYCLE-183):
+//       M_input = -M  →  Ssygvd ascending of -M = descending of M = LARGEST of A.
+//     The FIRST K_block eigenvectors of Ssygvd output (of -M) are the K_block
+//     LARGEST Ritz vectors of A — we take columns 0..K_block-1 as X_new.
+//     Importantly: rho and the residual R are computed from A (not -A). The
+//     negated Ssygvd eigenvalues (d_lambda_sub, of -M) are NOT used in the
+//     residual or output — rho is always recomputed from X^T AX.
+//     Output eigenvalues are the Rayleigh quotients diag(X_final^T AX_final),
+//     which match the true eigenvalues of A (positive for PD matrices), not
+//     the negated subspace eigenvalues.
+// ──────────────────────────────────────────────────────────────────────────
 // ---------------------------------------------------------------------------
 template<typename T = float>
 inline SparseEigResult<T> top_k_eigsh_lobpcg(
@@ -597,13 +648,17 @@ inline SparseEigResult<T> top_k_eigsh_lobpcg(
         }
 
         // -------------------------------------------------------------------------
-        // Sub-step D: Convergence check — max|R|  (ONE D2H scalar per iter, Rule 4)
+        // Sub-step D: Convergence check — max(|R|/|rho|) (ONE D2H scalar per iter, Rule 4)
         //
-        // 1. |R| element-wise → d_abs_R.
+        // 1. |R[i,k]|/|rho[k]| element-wise → d_abs_R  (relative residual kernel).
         // 2. cub::DeviceReduce::Max → d_max_r (device scalar).
         // 3. cudaMemcpyAsync → h_max_r (4 bytes, pinned host).
         // 4. cudaStreamSynchronize + host compare.
         //
+        // WHY relative residual: max(|R|/|rho|) < tol is scale-independent;
+        // the absolute criterion stalls when spectral_radius * eps_fp32 > tol
+        // (CYCLE-185 §iter-3 root cause — tridiagonal with max_eig~32 gave floor
+        // ~4e-6 > tol=1e-6 so convergence was never declared).
         // WHY here (before updating X): residual R from the previous subspace is
         // the canonical LOBPCG convergence criterion (Knyazev 2001 §3).
         // -------------------------------------------------------------------------
@@ -611,7 +666,7 @@ inline SparseEigResult<T> top_k_eigsh_lobpcg(
             const int total = n * K_block;
             const int grid  = (total + THREADS - 1) / THREADS;
             lobpcg_abs_kernel<<<grid, THREADS, 0, stream>>>(
-                d_R.get(), d_abs_R.get(), total);
+                d_R.get(), d_rho.get(), d_abs_R.get(), n, total);
         }
         cub::DeviceReduce::Max(d_cub_ws.get(), cub_ws_bytes,
                                d_abs_R.get(), d_max_r.get(),

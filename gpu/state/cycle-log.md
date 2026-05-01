@@ -4213,3 +4213,28 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
   3. **Iter-3 sparse_eig still queued** but deferred. Coming back with fresh perspective often resolves convergence-detection bugs faster than pushing through fatigue.
 - **Next cycle**: CYCLE-185 — back to dev work. Options: (a) iter-3 sparse_eig (HIGH-risk; convergence detection fix), (b) wrappers backlog (Python pybind11 for top frontier features — Rule 26 overdue), (c) optimize weakest-margin kernel (Rule 30, Phase E corpus has clear winners and losers now). Default: **iter-3 sparse_eig** with explicit focus on the convergence path now that §J.9 is captured. If iter-3 also fails, mark CYCLE-159.1 blocked per Rule 5 and pivot to wrappers.
 
+## Cycle 185 (2026-05-01) — sparse_eig iter-3 (FAIL same 2/5; CYCLE-159.1 step 1 → BLOCKED per Rule 5)
+- **Feature**: core/sparse_eigensolver.h LOBPCG. Iter-3 of CYCLE-159.1 step 1 (the third attempt — Rule 5 blocking threshold).
+- **Outcome**: ⚠️ **FAIL — same 2/5 PASS as iter-2**. The relative-residual fix didn't move the needle. **CYCLE-159.1 step 1 is now marked BLOCKED per Rule 5 (3 iters without dominance)**.
+- **Numbers (job 372499 g003 V100S)**:
+  ```
+  Test 1 TinyEigSymmetric:              FAIL  (still no convergence)
+  Test 2 ScaleSmokeMedium:              FAIL  (separate harness bug: load_npz_i32 vector overflow)
+  Test 3 Determinism_BitIdentical:      PASS
+  Test 4 Convergence_OnConvergent:      FAIL  (still iters_run=200=max)
+  Test 5 KneeOversampleRobustness:      PASS  (still cos-sim=1.000)
+  ```
+- **Sonnet's iter-3 fix attempt** (path 3 — relative residual): switched convergence test from `max|R| < tol` to `max|R/rho| < tol`. Hypothesis: fp32 floor for SpMM on tridiagonal at spectral radius ~30 is ~1e-5, which exceeds tol=1e-6. Fix should drop relative-floor below tolerance. **Didn't work** — Tests 1/4 still don't converge.
+- **Bonus finding from Sonnet** (independent of LOBPCG): Test 2's vector overflow is a HOST-SIDE TEST HARNESS BUG in `load_npz_i32` (allocating `total/4` elements where `total = f.tellg()` from position 0 includes the npy header — likely allocates INT_MAX/4). Pre-existing, not caused by any sparse_eig iter. Filed as `CYCLE-185-FOLLOWUP-NPZ-LOADER-BUG` for the test harness.
+- **What's known to work**: Test 5 (KneeOversampleRobustness, n=500, diagonal spectrum with clusters at 5.0) PASS at cos-sim=1.000 across all 3 iters. The algorithm fundamentals are sound — eigenvalue ordering correct, deterministic, can recover clustered eigenvalues. The blocker is **convergence detection on tridiagonal-spectrum matrices specifically**.
+- **Why iter-3 didn't fix it**: relative residual `|R|/|rho|` reduces to fp32-floor / spectral_radius. For tridiagonal n=40 with spectrum ~[0, 4]: floor / 4 ≈ 1.4e-7 / 4 = 3e-8. tol=1e-6. Should converge. But doesn't. Suggests a different root cause: the residual itself may not be decreasing because the algorithm's progress is stalled (Sonnet's hypothesis 4 — stagnation, not non-convergence). Diagnosing stagnation requires instrumented runs (printing |R| at each iter), which goes beyond a single fix attempt.
+- **Per Rule 5**: 3 iters without full PASS → BLOCKED. CYCLE-159.1 (sparse_eig + diffmap+dpt rewrite) cannot proceed without resolving the convergence bug. Filed as `CYCLE-159.1-BLOCKED-CONVERGENCE-DETECTION` with clear diagnostic. Likely needs a deeper algorithmic understanding pass (Phase B research re-do specifically on convergence behavior of LOBPCG on tridiagonal spectra) before another iter.
+- **Net progress** across CYCLE-181/182/183/185: design doc (~210 LOC) + LOBPCG impl (~625 LOC) + ctest (~731 LOC) + 2/5 tests PASS + bug well-characterized. Real artifact value, just not closed.
+- **§J series state**: 9 sub-rules. The 3-iter-FAIL pattern itself may be worth a §J entry — substantial new kernels often need 3+ iters not 2. But that's also already captured implicitly in §J.5 (HIGH-risk → multiple recovery cycles).
+- **Phase G**: not run (sparse_eig not promoted; pareto-frontier unchanged for diffmap/dpt).
+- **Lessons**:
+  1. **Rule 5 blocking is the right call here**. Pushing iter-4 risks burning more cycles on a debug task that needs deeper instrumentation. Better to step back, file the diagnostic, and return with a fresh approach (maybe Phase B research re-do specifically on LOBPCG convergence behavior, or different algorithm like cuVS LOBPCG with runtime linking acceptance).
+  2. **Test design lesson**: Test 5 PASS proved the algorithm is correct, but Tests 1/4 use tridiagonal which exercises a different convergence regime. Future kernels with multiple input shapes should bench across them in iter-1 to catch differential behavior earlier.
+  3. **Integration bugs > algorithm bugs**: the eigenvalue-ordering bug (iter-1) was a clear algorithmic mistake, fixed in 1 iter. The convergence-detection bug (iter-2/3) is an integration issue between LOBPCG's progress dynamics and the residual norm, harder to debug from the outside.
+- **Next cycle**: CYCLE-186 — pivot to wrappers backlog (Rule 26 overdue). Default: Python pybind11 wrapper for `enrich/score_genes` (cleanest 213-493× speedup, well-tested, scanpy parity reference). Phase D for wrappers is well-scoped: `python/src/score_genes.cpp` with pybind11 + AnnData/scanpy interop test.
+
