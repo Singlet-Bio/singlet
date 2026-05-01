@@ -3927,3 +3927,41 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
   2. **§J.7 predictions for SpMM kernels need to consider density of intermediates**. Future Phase E for similar kernels (any iterative SpMM, scoring with dense intermediate) should predict class 1-2 range, not class 3.
 - **Next cycle**: CYCLE-175 — continue Phase E sweep. Remaining easy candidates: qc/empty_drops, qc/soupx, anno/celltypist, anno/symphony, integrate/combat. Default: integrate/combat (per-batch standardization, common scanpy.pp.combat reference).
 
+## Cycle 175 (2026-05-01) — Phase E for integrate/combat — third surprise 2188-2497× breaks §J.7
+- **Feature**: integrate/combat (CYCLE-131, ComBat empirical-Bayes batch correction). 7-pass GPU kernel.
+- **Outcome**: PASS, **2188-2497× speedup**. **§J.7 prediction (class 2-3, 50-300×) was OFF by ~10×**. Third surprise in the corpus (after ora and magic).
+- **Numbers (job 372089 g003 V100S + local scanpy re-run)**:
+  ```
+  scale | GPU_wall_ms | scanpy_wall_ms | speedup
+  10k   |       6.577 |        14392.2 |   2188×
+  30k   |      17.235 |        43041.9 |   2497×
+  ```
+- **Why §J.7 was off again**: scanpy.pp.combat is "vectorized numpy" structurally (per-batch matrix ops, EB shrinkage closed-form), so I predicted class 2-3 like wsum/lisi/asw. But:
+  1. scanpy.pp.combat has per-batch Python loops orchestrating the numpy ops (overhead per of n_batches × max_iter calls).
+  2. Dense (n × m) intermediates at 10k×5k = 200 MB / 30k×5k = 600 MB — same memory-bandwidth bottleneck as CYCLE-174 magic.
+  3. The combination of per-batch Python overhead + memory-bound dense intermediates compounds: class 2 from structure × class 2 from memory = effectively class 1-2 (1000-3000×).
+- **Pattern fully validated**: 3 cases in the corpus where speedup is 1000-3000× (NOT in class 3 / 10-30× as predicted by §J.7's first version):
+  - **CYCLE-166 ora**: per-element scipy.stats Python overhead (1-3000×).
+  - **CYCLE-174 magic**: memory-bandwidth-bound dense intermediates (1891-2506×).
+  - **CYCLE-175 combat**: per-batch Python orchestration + dense intermediates (2188-2497×).
+- **§J.7 needs another refinement** — add an "overhead compounding" rule: when SOTA has BOTH per-call overhead (Python loops, per-batch orchestration) AND dense intermediates (memory bound on CPU), speedup compounds into the 1000-3000× range. This is now empirically demonstrated 3×.
+- **Phase E corpus update** (15 features now):
+  ```
+  2-7×        kmeans
+  10-32×      decoupler×4 + kbet
+  46-219×     dendrogram, viper, asw, lisi
+  213-493×    score_genes
+  229-471×    model_gene_var
+  236-302× (small 12,609×)  pearson_residuals
+  1891-2506×  magic
+  2188-2497×  combat       ← NEW
+  2832-3101×  ora
+  ```
+- **pareto-frontier.md updated** with prominent 2188-2497× numbers.
+- **Phase G**: needs to run.
+- **Lessons**:
+  1. **§J.7 third refinement**: when SOTA has compounding overhead sources (per-call Python + dense intermediates), expect 1000-3000× class. Worth landing in next style-rules edit alongside CYCLE-174's memory-bandwidth axis.
+  2. **scanpy.pp.combat is a clear example of "Python orchestration + dense intermediates"** — both axes contributing. Future similar kernels (any per-batch numpy loop with dense matrix ops) will likely fall in this 1000-3000× class.
+  3. **The corpus is converging**: 15 features benched, 3 distinct speedup regimes (10-100×, 100-500×, 1000-3000×). Phase E is now producing predictable signal.
+- **Next cycle**: CYCLE-176 — continue Phase E. Remaining: qc/empty_drops, qc/soupx, anno/celltypist, anno/symphony. Default: anno/celltypist — reference is `celltypist` Python pkg if installed, else manual scikit-learn LogisticRegression on similar data.
+

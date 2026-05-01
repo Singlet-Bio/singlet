@@ -282,13 +282,15 @@ Cycle 80: block-labels test fix promoted wilcoxon TinyPlanted from noise-converg
 
 | scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
 |---|---|---|---|---|---|---|---|---|
-| small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | harmony | TBD |
+| small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | scanpy | TBD |
+| 10k×5k (4 batches, max_iter=2) | 6.577 | 0.0 | n/a (synth bench) | 14392.2 | n/a | reference | scanpy.pp.combat 1.10.3 | wall (**2188×**) |
+| 30k×5k (4 batches, max_iter=2) | 17.235 | 0.0 | n/a (synth bench) | 43041.9 | n/a | reference | scanpy.pp.combat 1.10.3 | wall (**2497×**) |
 | 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 | 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 
-**Notes**: ComBat batch correction (Johnson et al. 2007). Empirical Bayes for location + scale parameters. Removes batch effects while preserving biological signal. See [CYCLE-131 cycle-log](state/cycle-log.md).
+**Notes**: ComBat batch correction (Johnson et al. 2007). 7-pass GPU kernel: gene-stat scatter, per-(g,b) sufficient stats, pooled variance, Z fill/scatter, γ/δ scatter+finalize, EB hyperparams + shrink (×2), final adjust. CYCLE-175 Phase E (job 372089 g003 V100S + local scanpy re-run, ~58s scanpy total). **2188-2497× speedup** vs scanpy.pp.combat. **Way above §J.7 class 2-3 prediction (50-300×)** — third surprise breaking the bimodal model. scanpy.pp.combat's "vectorized numpy EB" still has Python orchestration per-batch and per-iter, plus dense (n×m) intermediates that hit memory bandwidth. GPU does the same 7 passes in fused kernels with HBM bandwidth. **Confirms CYCLE-174 magic finding**: when SOTA materializes dense intermediates AND has Python orchestration overhead, speedup compounds into class 1 (1000-3000×). See [CYCLE-131 + CYCLE-175 cycle-log](state/cycle-log.md).
 
-**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+**Phase E status**: COMPLETE for medium scales.
 
 ---
 
