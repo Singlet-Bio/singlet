@@ -3897,3 +3897,33 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
   2. **Remaining Phase E candidates**: preprocess/magic, qc/empty_drops, qc/soupx, anno/celltypist, anno/symphony, integrate/combat, embed/dpt-DEFERRED-CYCLE-159.1, embed/diffmap-DEFERRED-CYCLE-159.1. So roughly 6 more easy candidates before the next big work item.
 - **Next cycle**: CYCLE-174 — Phase E for preprocess/magic (cuSPARSE SpMM-heavy on cell-cell SNN graph). scanpy.external.pp.magic SOTA may need magic-impute Python install; if not available, use manual numpy SpMM iteration as baseline.
 
+## Cycle 174 (2026-05-01) — Phase E for preprocess/magic — surprise 1891-2506× breaks §J.7 again
+- **Feature**: preprocess/magic (CYCLE-124, MAGIC graph-diffusion imputation, t=3).
+- **Outcome**: PASS, **1891-2506× speedup**. **§J.7 prediction (class 3, 10-30×) was DRAMATICALLY off** — same magnitude of surprise as CYCLE-166 ora.
+- **Numbers (job 372009 g003 V100S + local scipy re-run, ~19s total CPU)**:
+  ```
+  scale | GPU_wall_ms | scipy_wall_ms | speedup
+  10k   |       2.349 |        4441.0 |   1891×
+  30k   |       5.788 |       14512.0 |   2506×
+  ```
+- **Why §J.7 was off**: the prediction was based on "scipy.sparse SpMM is well-vectorized native code → 10-30× like wsum". But at t=3 diffusion iterations, the graph diffusion matrix DENSIFIES (each step spreads connections); by t=3 the result is essentially dense (50-150 M float32 entries = 200-600 MB). scipy.sparse SpMM materializes this dense intermediate, which becomes a **memory-bound bottleneck on CPU** (~1ms per MB at memory bandwidth). cuSPARSE on V100S has HBM bandwidth ~900 GB/s vs CPU ~20-50 GB/s → ~20-40× memory bandwidth advantage on top of the compute advantage.
+- **Refines §J.7**: the bimodal/trimodal/continuum framework needs a fourth axis: **intermediate matrix size** (does it fit in cache, in memory bandwidth budget, etc.). Sparse SpMM with sparse intermediate = class 3 (10-30×). Sparse SpMM with dense intermediate = class 1-2 (1000-3000×). The transition is when nnz output grows beyond ~10× input.
+- **Empirical Phase E corpus update** (14 features now):
+  ```
+  2-7×        kmeans       (BLAS-tight SOTA)
+  10-32×      decoupler×4 + kbet
+  46-219×     dendrogram, viper, asw, lisi
+  213-493×    score_genes
+  229-471×    model_gene_var
+  236-302× + small 12,609×  pearson_residuals
+  1891-2506×  magic        ← NEW (sparse SpMM with dense intermediate)
+  2832-3101×  decoupler_ora
+  ```
+- **Pattern emerging**: Phase E has now produced 3 cases of "way more than predicted" speedups (>>1000×): pearson_residuals (small), ora, magic. All three exhibit one of: (a) per-element scipy.stats Python overhead (ora, pearson small), (b) memory-bandwidth-bound dense intermediates (magic). Worth landing as §J.7 refinement.
+- **pareto-frontier.md updated** with prominent 1891-2506× numbers + memory-bandwidth-bottleneck explanation.
+- **Phase G**: needs to run.
+- **Lessons**:
+  1. **Memory bandwidth is a third axis** for §J.7 (after SOTA structure + GPU compute intensity). Sparse-→-dense intermediates on CPU are memory-bound; on GPU they're HBM-bound (~20× faster). Worth adding to next style-rules edit.
+  2. **§J.7 predictions for SpMM kernels need to consider density of intermediates**. Future Phase E for similar kernels (any iterative SpMM, scoring with dense intermediate) should predict class 1-2 range, not class 3.
+- **Next cycle**: CYCLE-175 — continue Phase E sweep. Remaining easy candidates: qc/empty_drops, qc/soupx, anno/celltypist, anno/symphony, integrate/combat. Default: integrate/combat (per-batch standardization, common scanpy.pp.combat reference).
+

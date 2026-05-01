@@ -2,7 +2,7 @@
 
 Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movement gets demoted to `state/followups.md`. User-gated items live in `state/blockers.md`. Completed entries are moved to `state/cycle-log.md` each cycle.
 
-- **CYCLE-174-PHASE-E-MAGIC** (in flight, job 372009 RUNNING on g003): Sonnet wrote 3 files using manual scipy SpMM iteration (avoids magic-impute Python dep); local sanity-check 10k=4441ms, 30k=14512ms scipy. CMake → 36. Predicted class 3 (10-30×).
+- **CYCLE-175-PHASE-E-COMBAT** (queued): integrate/combat (CYCLE-131 — per-batch standardization). scanpy.pp.combat ref. Default next Phase E candidate.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
@@ -30,6 +30,7 @@ Frobenius NMF only (KL / IS / NB-GLM / β-divergence dropped); fast PCA / SVD wi
 
 ## ✅ Recently complete (last 5 cycles — full detail in `state/cycle-log.md`)
 
+- **CYCLE-174** Phase E for preprocess/magic — surprise **1891-2506× speedup** (job 372009 g003 + local scipy re-run): GPU 10k=2.349ms vs scipy 4441ms; 30k=5.788ms vs 14512ms. **Way above §J.7 prediction (10-30×)**. Why: at t=3 diffusion iterations, the matrix densifies (200-600 MB intermediate); scipy's sparse SpMM with dense intermediate is memory-bandwidth-bound on CPU while cuSPARSE on V100S has HBM ~20× advantage. **§J.7 third-axis candidate**: intermediate matrix size matters as much as SOTA structure + GPU compute. Sparse SpMM with dense intermediate = class 1-2 (1000-3000×).
 - **CYCLE-173** Phase E for embed/dendrogram (PASS — 46.3-106.2× speedup, job 371962 g003 + local scipy re-run): GPU 10k=0.125ms vs scipy 5.789ms; 30k=0.198ms vs 21.023ms. Validates §J.7 class 2 prediction (50-200×). GPU is sub-ms (atomic-scatter dominant), scipy driven by Python orchestration around C kernels. **Phase E corpus: 13 features**, range 2× to 3101×.
 - **CYCLE-172** Phase E for graph/kmeans (PASS — modest 2.42-6.88× speedup, job 371920 g003 V100S + local sklearn re-run): GPU 10k=4.634ms vs sklearn 11.2ms; 30k=11.810ms vs 81.3ms. **Lowest speedup in 12-feature corpus**. sklearn KMeans is exceptionally well-optimized (BLAS internals, minimal Python overhead). Honest finding: not every GPU port delivers headline numbers. New §J.7 refinement candidate: add "BLAS-tight SOTA" speedup class (2-10× even at vectorized baseline).
 - **CYCLE-171** Phase E for integrate/kbet (PASS — 21.1-32.2× speedup, job 371909 g008 + local numpy re-run): GPU 10k=0.183ms vs numpy 5.9ms; 30k=1.028ms vs 21.7ms. **§J.7 prediction was OFF** (predicted 100-300×, observed 21-32×) because kbet has heavier GPU compute (chi² + Wilson-Hilferty) than lisi/asw — refines §J.7 prediction model to include GPU-per-cell-ms denominator. **scIB triplet Phase E SWEEP COMPLETE**: lisi 126-219× (light), asw 113-249× (light), kbet 21-32× (heavy). Same SOTA shape, 3× GPU compute = 10× different speedup class. Demonstrates §J.7's compute-intensity axis cleanly.

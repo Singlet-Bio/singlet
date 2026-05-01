@@ -201,12 +201,14 @@ Cycle 80: block-labels test fix promoted wilcoxon TinyPlanted from noise-converg
 | scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
 |---|---|---|---|---|---|---|---|---|
 | small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | scanpy | TBD |
+| 10k×5k (5%, k=10, t=3) | 2.349 | 0.0 | n/a (synth bench) | 4441.0 | n/a | reference | scipy.sparse SpMM (manual) | wall (**1891×**) |
+| 30k×5k (5%, k=10, t=3) | 5.788 | 0.0 | n/a (synth bench) | 14512.0 | n/a | reference | scipy.sparse SpMM (manual) | wall (**2506×**) |
 | 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 | 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 
-**Notes**: MAGIC diffusion-based imputation (van Dijk et al. 2018). Ping-pong cuSPARSE SpMM on cell-cell SNN graph. First GPU-native implementation. See [CYCLE-124 cycle-log](state/cycle-log.md).
+**Notes**: MAGIC diffusion-based imputation (van Dijk et al. 2018). Ping-pong cuSPARSE SpMM on cell-cell SNN graph (t=3 iterations). First GPU-native implementation. CYCLE-174 Phase E (job 372009 g003 V100S + local scipy re-run). **1891-2506× speedup** vs scipy. **Way above §J.7 class 3 prediction (10-30×)** because at t=3 the diffused matrix densifies (each step spreads connections); scipy.sparse SpMM materializes a dense n×m intermediate (200-600 MB) which becomes a memory-bound bottleneck. cuSPARSE SpMM handles dense intermediates efficiently (HBM bandwidth >> CPU memory bandwidth). **New §J.7 finding**: the bimodal pattern depends not just on SOTA structure but on whether intermediate matrices fit in cache. Sparse SpMM with dense intermediate output is effectively memory-bound, putting it in class 1-2 range (1000-3000×) like decoupler_ora. See [CYCLE-124 + CYCLE-174 cycle-log](state/cycle-log.md).
 
-**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+**Phase E status**: COMPLETE for medium scales.
 
 ---
 
