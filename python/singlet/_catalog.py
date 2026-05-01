@@ -121,17 +121,16 @@ def refresh() -> None:
     """Re-download the latest catalog and sample index from GitHub.
 
     Clears the in-memory cache and overwrites the local cache files.
+    After refresh, the downloaded data is used directly (bypassing bundled files).
     """
     global _CATALOG_CACHE, _SAMPLE_INDEX_CACHE
     _CATALOG_CACHE = None
     _SAMPLE_INDEX_CACHE = None
     cache_dir = Path.home() / ".singlet" / "cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
-    _download_parquet(_CATALOG_URL, cache_dir / "catalog_v1.parquet")
-    _download_parquet(_SAMPLE_INDEX_URL, cache_dir / "sample_index.parquet")
-    # Reload
-    _load_catalog()
-    _load_sample_index()
+    # Download and load directly into cache (bypasses bundled-first logic)
+    _CATALOG_CACHE = _download_parquet(_CATALOG_URL, cache_dir / "catalog_v1.parquet")
+    _SAMPLE_INDEX_CACHE = _download_parquet(_SAMPLE_INDEX_URL, cache_dir / "sample_index.parquet")
     print(f"Updated: {len(_SAMPLE_INDEX_CACHE)} samples, {len(_CATALOG_CACHE)} series")
 
 
