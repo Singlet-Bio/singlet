@@ -8,6 +8,7 @@ Browse catalog (works offline):
     singlet.sample_index()                 Full sample index DataFrame
     singlet.species()                      Species breakdown
     singlet.tissues()                      Tissue/source breakdown
+    singlet.protocols()                    Protocol breakdown
     singlet.datasets(organism="Homo sapiens", min_cells=100000)
     singlet.samples(status="SUCCESS")      Filter samples
     singlet.samples(tissue="brain")        Filter by tissue/source
@@ -40,7 +41,7 @@ Token-priced (requires API key):
 __version__ = "1.1.0"
 
 from singlet._catalog import (
-    catalog, info, species, tissues, datasets, sample_index, set_catalog_dir,
+    catalog, info, species, tissues, protocols, datasets, sample_index, set_catalog_dir,
     summary, samples, top_series, refresh,
 )
 from singlet._loader import load, load_sample, load_dir, download
@@ -59,6 +60,7 @@ __all__ = [
     "info",
     "species",
     "tissues",
+    "protocols",
     "datasets",
     "sample_index",
     "set_catalog_dir",

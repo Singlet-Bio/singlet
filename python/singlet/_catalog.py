@@ -222,6 +222,22 @@ def tissues() -> pd.DataFrame:
     return counts
 
 
+def protocols() -> pd.DataFrame:
+    """Return protocol breakdown across SUCCESS samples.
+
+    Returns a DataFrame with columns: protocol, count, sorted by count descending.
+    """
+    df = _load_sample_index()
+    df = df[df["status"] == "SUCCESS"]
+    if "protocol" not in df.columns:
+        return pd.DataFrame(columns=["protocol", "count"])
+    valid = df["protocol"].dropna()
+    valid = valid[valid.str.strip() != ""]
+    counts = valid.value_counts().reset_index()
+    counts.columns = ["protocol", "count"]
+    return counts
+
+
 def datasets(
     organism: Optional[str] = None,
     protocol: Optional[str] = None,
