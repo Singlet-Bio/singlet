@@ -265,11 +265,18 @@ def nmf(
     mat = _get_matrix(working_adata, layer)
     device_csc = _csr_to_device_csc(mat)
 
-    config = _build_nmf_config(
-        n_factors=n_factors, loss=loss, solver_mode=solver_mode,
-        init_mode=init_mode, max_iter=max_iter, tol=tol, seed=seed,
+    # _core.nmf signature (py::kw_only after rank):
+    #   nmf(mat, rank, *, loss='MSE', solver_mode=3, init_mode=2,
+    #       max_iter=100, tol=1e-5, seed=0)
+    result = _core.nmf(
+        device_csc, int(n_factors),
+        loss=str(loss),
+        solver_mode=int(solver_mode),
+        init_mode=int(init_mode),
+        max_iter=int(max_iter),
+        tol=float(tol),
+        seed=int(seed),
     )
-    result = _core.nmf(device_csc, config)
     _write_nmf_result(working_adata, result, n_factors=n_factors)
 
     if inplace and not copy:
@@ -394,15 +401,21 @@ def nmf_chunked(
             "See CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE."
         )
 
-    config = _build_nmf_config(
-        n_factors=n_factors, loss=loss, solver_mode=solver_mode,
-        init_mode=init_mode, max_iter=max_iter, tol=tol, seed=seed,
+    # _core.nmf_chunked signature (py::kw_only after rank):
+    #   nmf_chunked(loader, rank, *, loss='MSE', solver_mode=2, init_mode=2,
+    #               max_iter=100, tol=1e-5, seed=0)
+    # NOTE: chunk_cols is bound to the loader, not nmf_chunked itself; passed
+    # through unmodified for now and ignored by the C++ binding (kept for API
+    # parity with the streaming pipeline).
+    raw = _core.nmf_chunked(
+        list(paths), int(n_factors),
+        loss=str(loss),
+        solver_mode=int(solver_mode),
+        init_mode=int(init_mode),
+        max_iter=int(max_iter),
+        tol=float(tol),
+        seed=int(seed),
     )
-    config["chunk_cols"] = int(chunk_cols)
-
-    # _core.nmf_chunked accepts a list of paths and returns a raw result struct
-    # whose fields mirror NmfResult.
-    raw = _core.nmf_chunked(list(paths), config)
 
     return NmfResult(
         W=raw.W,

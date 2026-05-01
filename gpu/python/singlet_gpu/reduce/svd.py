@@ -231,15 +231,16 @@ def pca(
     mat = _get_matrix(working_adata, layer)
     device_csc = _csr_to_device_csc(mat)
 
-    svd_config = {
-        "n_comps":  int(n_comps),
-        "backend":  str(backend),
-        "center":   bool(center),
-        "scale":    bool(scale),
-        "seed":     int(seed),
-    }
-
-    result = _core.pca(device_csc, svd_config)
+    # _core.pca signature (py::kw_only after n_comps):
+    #   pca(mat, n_comps, *, zero_center=True, scale=False, tol=1e-6,
+    #       max_iter=100, seed=0)
+    # backend is selected automatically by the C++ side (see svd_auto_select).
+    result = _core.pca(
+        device_csc, int(n_comps),
+        zero_center=bool(center),
+        scale=bool(scale),
+        seed=int(seed),
+    )
     _write_pca_result(working_adata, result, n_comps=n_comps)
 
     if inplace and not copy:

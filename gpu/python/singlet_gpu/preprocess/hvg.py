@@ -197,24 +197,18 @@ def highly_variable_genes(
     device_csc = _csr_to_device_csc(mat)
 
     # Build a config dict that the C++ kernel understands.
-    hvg_config = {
-        "n_top_genes":  int(n_top_genes),
-        "flavor":       str(flavor),
-        "min_mean":     float(min_mean),
-        "max_mean":     float(max_mean),
-        "min_disp":     float(min_disp),
-        "max_disp":     float(max_disp),
-        "span":         float(span),
-        "n_bins":       int(n_bins),
-    }
-
-    # Result is a lightweight struct with numpy-array fields:
-    #   .highly_variable  (bool,    n_genes)
-    #   .means            (float32, n_genes)
-    #   .variances        (float32, n_genes)
-    #   .variances_norm   (float32, n_genes)
-    #   .highly_variable_rank (int32, n_genes)
-    result = _core.highly_variable_genes(device_csc, hvg_config)
+    # _core.highly_variable_genes signature (py::kw_only after mat):
+    #   highly_variable_genes(mat, *, n_top_genes=2000, flavor='seurat_v3',
+    #                         min_mean=0.0125, max_mean=3.0, pearson_theta=100.0)
+    # min_disp / max_disp / span / n_bins are scanpy-side params not yet plumbed
+    # through to the C++ kernel — accepted by the wrapper for API parity.
+    result = _core.highly_variable_genes(
+        device_csc,
+        n_top_genes=int(n_top_genes),
+        flavor=str(flavor),
+        min_mean=float(min_mean),
+        max_mean=float(max_mean),
+    )
 
     # Write results into adata.var.
     working_adata.var["highly_variable"]      = result.highly_variable
