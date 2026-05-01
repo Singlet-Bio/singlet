@@ -255,10 +255,16 @@ def normalize_total(
     device_csc = _csr_to_device_csc(mat)
 
     # target_sum == None → pass 0.0 to signal "use median" in C++.
+    # _core.normalize_total mutates device_csc in place and returns a
+    # PyNormalizeResult (size_factors, qc_mask, target_used) — NOT a new matrix.
+    # target_sum is keyword-only on the binding side.
     ts = float(target_sum) if target_sum is not None else 0.0
-    result_csc = _core.normalize_total(device_csc, ts)
+    norm_result = _core.normalize_total(device_csc, target_sum=ts)
+    working_adata.uns.setdefault("singlet_gpu", {})["normalize_total"] = {
+        "target_used": float(norm_result.target_used),
+    }
 
-    result_csr = _device_csc_to_csr(result_csc)
+    result_csr = _device_csc_to_csr(device_csc)
     _set_matrix(working_adata, layer, result_csr)
 
     if inplace and not copy:
@@ -333,10 +339,12 @@ def log1p(
     device_csc = _csr_to_device_csc(mat)
 
     # base == None → pass 0.0 to signal "natural log" in C++.
+    # _core.log1p mutates device_csc in place and returns None.
+    # base is keyword-only on the binding side.
     b = float(base) if base is not None else 0.0
-    result_csc = _core.log1p(device_csc, b)
+    _core.log1p(device_csc, base=b)
 
-    result_csr = _device_csc_to_csr(result_csc)
+    result_csr = _device_csc_to_csr(device_csc)
     _set_matrix(working_adata, layer, result_csr)
 
     if inplace and not copy:
