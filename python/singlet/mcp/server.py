@@ -215,6 +215,19 @@ async def list_tools() -> list[Tool]:
                 "required": [],
             },
         ),
+        Tool(
+            name="singlet_protocols",
+            description=(
+                "Get protocol distribution across the atlas. Shows which "
+                "single-cell sequencing protocols (10xv3, 10xv2, dropseq, etc.) "
+                "are represented and their sample counts and success rates."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        ),
     ]
 
 
@@ -232,6 +245,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             result = await _tool_load(arguments)
         elif name == "singlet_browse":
             result = await _tool_browse(arguments)
+        elif name == "singlet_protocols":
+            result = await _tool_protocols()
         else:
             result = {"error": f"Unknown tool: {name}"}
     except Exception as e:
@@ -450,6 +465,52 @@ async def _tool_browse(args: dict) -> dict:
         "page_size": page_size,
         "total": resp.count or 0,
         "samples": resp.data or [],
+    }
+
+
+async def _tool_protocols() -> dict:
+    """Get protocol distribution across the atlas."""
+    client = get_client()
+
+    # Query all samples with protocol info
+    all_rows = []
+    page_size = 1000
+    offset = 0
+    while True:
+        resp = client.table("samples").select(
+            "protocol, status"
+        ).range(offset, offset + page_size - 1).execute()
+        batch = resp.data or []
+        all_rows.extend(batch)
+        if len(batch) < page_size:
+            break
+        offset += page_size
+
+    # Aggregate
+    from collections import Counter
+    total_counts = Counter()
+    success_counts = Counter()
+    for row in all_rows:
+        p = row.get("protocol") or "unknown"
+        if not p.strip():
+            p = "unknown"
+        total_counts[p] += 1
+        if row["status"] == "SUCCESS":
+            success_counts[p] += 1
+
+    protocols = []
+    for protocol, total in total_counts.most_common():
+        success = success_counts.get(protocol, 0)
+        protocols.append({
+            "protocol": protocol,
+            "total_samples": total,
+            "success_samples": success,
+            "success_rate": round(success / total, 3) if total else 0,
+        })
+
+    return {
+        "total_protocols": len([p for p in protocols if p["protocol"] != "unknown"]),
+        "protocols": protocols,
     }
 
 
