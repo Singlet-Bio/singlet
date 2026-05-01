@@ -256,9 +256,21 @@ add_bench_driver(bench_integrate_combat_perf  bench_integrate_combat_perf.cpp)
 add_bench_driver(bench_anno_celltypist_perf  bench_anno_celltypist_perf.cpp)
 
 # ---------------------------------------------------------------------------
+# Cycle 178 drivers: anno/symphony Phase E benchmark
+# Symphony centroid-projection reference mapping (Kang et al. 2021 Nat Commun).
+# 5 device passes: sy_standardize_kernel, cuBLAS Sgemm PCA project,
+# sy_col/row_sumsq + cublasSgemm cross + sy_dist_combine (distances),
+# sy_soft_assign_kernel (1/d + L1-norm per cell),
+# cublasSgemm label transfer + sy_argmax_conf_kernel.
+# Scales: 10k / 30k cells × 50 PCs, n_centroids=20, n_classes=20.
+# n_centroids=20 matches celltypist 20-class config for cross-comparability.
+# ---------------------------------------------------------------------------
+add_bench_driver(bench_anno_symphony_perf  bench_anno_symphony_perf.cpp)
+
+# ---------------------------------------------------------------------------
 # Status message
 # ---------------------------------------------------------------------------
-message(STATUS "singlet-gpu bench: 38 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164+165+166+167+169+170+171+172+173+174+175+176)")
+message(STATUS "singlet-gpu bench: 39 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164+165+166+167+169+170+171+172+173+174+175+176+178)")
 message(STATUS "  53a: bench_io_pz_loader_perf")
 message(STATUS "  53a: bench_preprocess_lognorm_perf")
 message(STATUS "  53a: bench_preprocess_hvg_perf")
@@ -296,3 +308,4 @@ message(STATUS "  173: bench_embed_dendrogram_perf")
 message(STATUS "  174: bench_preprocess_magic_perf")
 message(STATUS "  175: bench_integrate_combat_perf")
 message(STATUS "  176: bench_anno_celltypist_perf")
+message(STATUS "  178: bench_anno_symphony_perf")

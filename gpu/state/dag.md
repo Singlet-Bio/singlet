@@ -2,7 +2,7 @@
 
 Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movement gets demoted to `state/followups.md`. User-gated items live in `state/blockers.md`. Completed entries are moved to `state/cycle-log.md` each cycle.
 
-- **CYCLE-178-PHASE-E-SYMPHONY** (queued): anno/symphony Phase E. First prediction using new §J.7 4-axis formula — real test of the framework.
+- **CYCLE-179-PHASE-E-EMPTY-DROPS** (queued): qc/empty_drops Phase E. First raw-10X kernel benched. Reference: scipy / DropletUtils. Last 2 Phase E candidates: empty_drops + soupx.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
@@ -30,6 +30,7 @@ Frobenius NMF only (KL / IS / NB-GLM / β-divergence dropped); fast PCA / SVD wi
 
 ## ✅ Recently complete (last 5 cycles — full detail in `state/cycle-log.md`)
 
+- **CYCLE-178** Phase E for anno/symphony (PASS — **5.26-10.04× speedup**, job 372130 g003): first 4-axis-formula prediction test. **Predicted 30-100×, observed 5-10×** — Sonnet over-extrapolated by analogy from celltypist (50× from sklearn overhead floor) instead of applying the formula directly. symphony is "BLAS-tight + raw numpy chain" → class 3 territory, not class 2 sklearn-wrapped territory. Pair with celltypist for users: 50× (sklearn-wrapped) vs 5-10× (raw numpy). Lesson: USE the formula directly, don't reason by analogy. Phase E corpus 17 features.
 - **CYCLE-177** Land §J.7 4-axis refinement (pure-Opus, ~120 LOC): captures 4 axes from CYCLE-171/172/174/175/176 — GPU-per-cell denominator, memory bandwidth axis, overhead compounding, BLAS-tight subdivision. Updated prediction formula `speedup ≈ (SOTA_per_cell × python_overhead × memory_bandwidth) / GPU_per_cell`. **Empirical 16-feature corpus calibration table added to §J.7; all 16 predictions land in range when 4 axes considered.** §J.7 is now a real working prediction tool, not just a heuristic.
 - **CYCLE-176** Phase E for anno/celltypist (PASS — clean **50.2-51.3× speedup**, job 372114 g003 + local sklearn re-run): GPU 10k=0.059ms vs sklearn 3.029ms; 30k=0.238ms vs 11.940ms. Same ratio across scales (no overhead compounding). Lands above BLAS-tight (kmeans 2-7×) because sklearn predict_proba has Python orchestration overhead floor ~3ms/call dominating the small Sgemm work. Phase E corpus now 16 features.
 - **CYCLE-175** Phase E for integrate/combat — third surprise **2188-2497× speedup** (job 372089 g003 + local scanpy re-run): GPU 10k=6.577ms vs scanpy 14392ms; 30k=17.235ms vs 43042ms. **§J.7 prediction (50-300×) was off by ~10×**. Reason: scanpy.pp.combat compounds 2 overhead sources (per-batch Python orchestration + dense (n×m) intermediates 200-600 MB). Confirms CYCLE-174 magic finding: when SOTA has BOTH per-call Python overhead AND dense intermediates, speedup compounds into 1000-3000× class. Pattern now demonstrated 3× (ora, magic, combat).

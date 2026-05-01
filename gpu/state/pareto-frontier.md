@@ -393,12 +393,14 @@ Cycle 80: block-labels test fix promoted wilcoxon TinyPlanted from noise-converg
 | scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
 |---|---|---|---|---|---|---|---|---|
 | small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | symphony | TBD |
+| 10k×50PCs (20 centroids) | 0.647 | 0.0 | n/a (synth bench) | 3.405 | n/a | reference | manual numpy 5-pass vectorized | wall (5.26×) |
+| 30k×50PCs (20 centroids) | 1.029 | 0.0 | n/a (synth bench) | 10.333 | n/a | reference | manual numpy 5-pass vectorized | wall (10.04×) |
 | 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 | 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 
-**Notes**: Symphony reference mapping (Kang et al. 2021). PCA + kNN-based transfer of reference cell-type labels. See [CYCLE-138 cycle-log](state/cycle-log.md).
+**Notes**: Symphony centroid-projection reference mapping (Kang et al. 2021). 5-pass GPU kernel: standardize → PCA project (Sgemm) → distance-to-centroids (sumsq + Sgemm cross + combine) → soft-assign → label transfer (Sgemm + argmax). CYCLE-178 Phase E (job 372130 g003 V100S; numpy ran successfully on g003 SLURM env). **5.26-10.04× speedup** vs manual vectorized numpy. **§J.7 prediction was OFF** (predicted 30-100×, observed 5-10×). Why: when CPU baseline is fully-vectorized numpy with NO Python orchestration overhead floor (unlike sklearn predict_proba), `python_overhead_multiplier = 1×` correctly predicts class 3 (10-30×). The reasoning that compared symphony to celltypist (which has 50× from sklearn's overhead floor) was the wrong analog. Pair with celltypist for the reference-mapping comparison: celltypist 50× (sklearn overhead floor) vs symphony 5-10× (raw numpy). See [CYCLE-138 + CYCLE-178 cycle-log](state/cycle-log.md).
 
-**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+**Phase E status**: COMPLETE for medium scales.
 
 ---
 

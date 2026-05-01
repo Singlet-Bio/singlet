@@ -4015,3 +4015,36 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
 - **§J series state**: 8 sub-rules (J.1-J.8). §J.7 is now the most complex and most empirically grounded.
 - **Next cycle**: CYCLE-178 — back to Phase E. Default: anno/symphony (pairs with celltypist; centroid-projection paradigm). Will be the first prediction made USING the new 4-axis formula — a real test of the framework.
 
+## Cycle 178 (2026-05-01) — Phase E for anno/symphony — first 4-axis-formula test (PARTIAL)
+- **Feature**: anno/symphony (CYCLE-138, centroid-projection reference mapping). 5-pass GPU kernel.
+- **Outcome**: PASS, **5.26-10.04× speedup**. **§J.7 prediction was off by ~5×** (predicted 30-100×; observed 5-10×). First test of the new 4-axis formula identified a calibration error.
+- **Numbers (job 372130 g003 V100S; numpy ran on g003 SLURM env this time)**:
+  ```
+  scale | GPU_wall_ms | numpy_wall_ms | speedup
+  10k   |       0.647 |         3.405 |    5.26×
+  30k   |       1.029 |        10.333 |   10.04×
+  ```
+- **Why §J.7 was off** (analyzing the prediction error):
+  - Sonnet's reasoning: "vectorized numpy" SOTA → 1× python overhead → "30-100×" by analogy to celltypist (50×).
+  - Actual: manual numpy ref has NO sklearn-style Python orchestration overhead floor. python_overhead = 1× should predict class 3 (10-30×), NOT 30-100×.
+  - Sonnet conflated celltypist's "Python orchestration overhead floor" (sklearn predict_proba ~3ms/call) with "vectorized SOTA" — those are different things. celltypist is "BLAS-tight + sklearn overhead floor" → 50×. symphony is "BLAS-tight + raw numpy chain" → 5-10×.
+- **§J.7 calibration refinement**: the formula correctly predicted class 3 when applied directly. Sonnet over-extrapolated by analogy. **Lesson for future predictions**: USE the formula directly, don't reason by analogy from a recently-benched feature unless the SOTA shape is identical.
+- **Symphony vs celltypist comparison** (now both benched; useful pair for users):
+  - **celltypist**: sklearn `predict_proba`, single-call API, **50× speedup** (sklearn Python overhead floor of ~3ms dominates relative to small Sgemm work).
+  - **symphony**: manual numpy chain, **5-10× speedup** (no Python orchestration; clean BLAS-vs-BLAS comparison).
+  - Real-world note: in actual usage, BOTH would have user wrappers; the difference is whether the SOTA is sklearn-wrapped (50×) or raw-numpy (5-10×). The advantage to GPU is real but smaller for the raw-numpy SOTA case.
+- **Phase E corpus update** (17 features now):
+  ```
+  2-7×        kmeans
+  5-10×       symphony      ← NEW (raw-numpy SOTA, smallest non-kmeans)
+  10-32×      decoupler×4 + kbet
+  46-219×     dendrogram, viper, asw, lisi, celltypist
+  213-3101×   score_genes, model_gene_var, pearson, magic, combat, ora
+  ```
+- **pareto-frontier.md updated**, Phase E status PARTIAL → COMPLETE for medium scales.
+- **Phase G**: needs to run.
+- **Lessons**:
+  1. **§J.7 formula works when applied directly**. Reasoning by analogy ("similar to celltypist") can mislead — a 4-axis formula needs 4-axis inputs, not 1 analog comparison.
+  2. **The 17-feature corpus now spans 5x to 3000×** (3 orders of magnitude). Symphony at the low end is informative — it shows that raw-numpy SOTAs without sklearn wrapping land in BLAS-tight territory.
+- **Next cycle**: CYCLE-179 — continue Phase E sweep. Remaining: qc/empty_drops, qc/soupx (raw-10X duo). After those, only CYCLE-159.1 sparse-eigensolver rewrite remains in the major work queue.
+
