@@ -3,11 +3,13 @@
 Singlet MCP Server — Model Context Protocol server for the Singlet Atlas.
 
 Exposes these tools to any MCP client (Claude Desktop, Cursor, VS Code Copilot):
-  - singlet_search:  Search processed single-cell datasets
-  - singlet_load:    Get download/access info for a sample
-  - singlet_qc:     Get QC metrics for a sample
-  - singlet_stats:  Get corpus-wide statistics
-  - singlet_browse: Browse samples with filters
+  - singlet_stats:      Get corpus-wide statistics (samples, cells, species)
+  - singlet_search:     Search processed single-cell datasets
+  - singlet_qc:        Get QC metrics for a sample
+  - singlet_load:      Get download/access info for a sample
+  - singlet_browse:    Browse samples with filters (organism, protocol, tissue, status)
+  - singlet_protocols: Get protocol distribution and success rates
+  - singlet_quality:   Get quality tier breakdown (gold/silver/bronze)
 
 Usage:
     # Start the server (stdio transport):
