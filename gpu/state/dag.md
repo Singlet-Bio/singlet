@@ -4,7 +4,7 @@ Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movemen
 
 ## 🔴 Active this cycle
 
-- **CYCLE-167-PHASE-E-DECOUPLER-VIPER** (queued): last decoupler. enrich/decoupler_viper (CYCLE-137, rank-based with closed-form scoring). Tests the new TRIMODAL pattern from CYCLE-166: should be class 3 (10-30×) since rank ops are vectorized native code, NOT class 2 (1000×+) which only triggers if SOTA uses per-element Python-wrapped scipy.stats.
+- **CYCLE-167-PHASE-E-DECOUPLER-VIPER** (in flight, job 371729 RUNNING on g008 after API fix): last decoupler. **Sonnet hallucinated the BenchTimer/PeakMemTracker API** in first attempt (`mem.snapshot_*()` instead of `mem.sample_*()`, `timer.record()`/`median_ms()` which don't exist, `row.wall_ms_med`/`mem_mb_peak` instead of `row.wall_ms`/`mem_mb`). Build FAILed. Manually fixed by aligning to CYCLE-166 ora bench's known-good API; resubmitted as job 371729. Sonnet's local sanity-check was clean (10k=6.4s, 30k=20s scipy) → predicted class 2 (1000-5000×) since scipy.stats.rankdata is per-cell C loop. Awaiting verify.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 

@@ -164,9 +164,19 @@ add_bench_driver(bench_enrich_decoupler_mlm_perf  bench_enrich_decoupler_mlm_per
 add_bench_driver(bench_enrich_decoupler_ora_perf  bench_enrich_decoupler_ora_perf.cpp)
 
 # ---------------------------------------------------------------------------
+# Cycle 167 drivers: enrich/decoupler_viper Phase E benchmark
+# VIPER/aREA (Alvarez et al. 2016 Nat Genet): per-cell rank transform via CUB
+# DeviceSegmentedRadixSort, normcdfinvf qnorm → T1, cuBLAS Sgemm T1^T·W,
+# per-regulon L1-norm warp-shuffle scale.
+# V0 simplification: NES = ES1 = (T1^T · W) / L1(W).
+# NOT at risk of §J.6 dense-n×n bug (T1 is m×n, m=5k genes; Sgemm O(m*n*n_reg)).
+# ---------------------------------------------------------------------------
+add_bench_driver(bench_enrich_decoupler_viper_perf  bench_enrich_decoupler_viper_perf.cpp)
+
+# ---------------------------------------------------------------------------
 # Status message
 # ---------------------------------------------------------------------------
-message(STATUS "singlet-gpu bench: 29 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164+165+166)")
+message(STATUS "singlet-gpu bench: 30 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164+165+166+167)")
 message(STATUS "  53a: bench_io_pz_loader_perf")
 message(STATUS "  53a: bench_preprocess_lognorm_perf")
 message(STATUS "  53a: bench_preprocess_hvg_perf")
@@ -195,3 +205,4 @@ message(STATUS "  163: bench_enrich_decoupler_wsum_perf")
 message(STATUS "  164: bench_enrich_decoupler_ulm_perf")
 message(STATUS "  165: bench_enrich_decoupler_mlm_perf")
 message(STATUS "  166: bench_enrich_decoupler_ora_perf")
+message(STATUS "  167: bench_enrich_decoupler_viper_perf")
