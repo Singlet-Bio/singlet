@@ -177,7 +177,7 @@ async def list_tools() -> list[Tool]:
             name="singlet_browse",
             description=(
                 "Browse samples with pagination. Use for discovering what's "
-                "available in the atlas. Returns a page of samples with basic info."
+                "available in the atlas. Filter by organism, tissue, or status."
             ),
             inputSchema={
                 "type": "object",
@@ -194,7 +194,16 @@ async def list_tools() -> list[Tool]:
                     },
                     "organism": {
                         "type": "string",
-                        "description": "Filter by organism",
+                        "description": "Filter by organism (e.g. 'Homo sapiens')",
+                    },
+                    "tissue": {
+                        "type": "string",
+                        "description": "Filter by tissue/source (substring match, e.g. 'brain', 'lung', 'PBMC')",
+                    },
+                    "status": {
+                        "type": "string",
+                        "description": "Filter by status (SUCCESS, SOFT_FAIL, HARD_FAIL)",
+                        "enum": ["SUCCESS", "SOFT_FAIL", "HARD_FAIL"],
                     },
                     "sort_by": {
                         "type": "string",
@@ -405,12 +414,16 @@ async def _tool_browse(args: dict) -> dict:
     sort_by = args.get("sort_by", "pipeline_date")
 
     query = client.table("samples").select(
-        "gsm_id, gse_id, organism, protocol, status, cells_called, mapping_rate",
+        "gsm_id, gse_id, organism, protocol, status, cells_called, mapping_rate, source",
         count="exact",
     )
 
     if args.get("organism"):
         query = query.eq("organism", args["organism"])
+    if args.get("status"):
+        query = query.eq("status", args["status"])
+    if args.get("tissue"):
+        query = query.ilike("source", f"%{args['tissue']}%")
 
     query = query.order(sort_by, desc=True)
     query = query.range(page * page_size, (page + 1) * page_size - 1)
