@@ -369,12 +369,14 @@ Cycle 80: block-labels test fix promoted wilcoxon TinyPlanted from noise-converg
 | scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
 |---|---|---|---|---|---|---|---|---|
 | small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | decoupler | TBD |
+| 10k×5k (5%, 50 regulons) | 135.429 | 0.0 | n/a (synth bench) | 6405.6 | n/a | reference | scipy.stats.rankdata + norm.ppf | wall (47.3×) |
+| 30k×5k (5%, 50 regulons) | 386.922 | 0.0 | n/a (synth bench) | 19982.9 | n/a | reference | scipy.stats.rankdata + norm.ppf | wall (51.6×) |
 | 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 | 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 
-**Notes**: VIPER (VIrtual Pathway Enrichment using Ranks) regulon activity (Alvarez et al. 2016). Rank-based enrichment with noise modeling. See [CYCLE-137 cycle-log](state/cycle-log.md).
+**Notes**: VIPER (VIrtual Pathway Enrichment using Ranks) regulon activity (Alvarez et al. 2016). 3-pass GPU kernel: CUB sort/rank → assign T1 qnorm → cuBLAS Sgemm T1^T·W → L1-scale. CYCLE-167 Phase E (job 371729 g008 + local scipy re-run). **47.3-51.6× speedup** — between class 3 (10-30×) and class 1 (100-500×) of the trimodal pattern, **breaks Sonnet's class-2 prediction**. Why: scipy's `rankdata(axis=0)` IS vectorized in C across columns (per-cell rank is a tight C loop, not Python overhead), so it's faster than expected. But the GPU has more work per cell (real rank + qnorm + Sgemm) than the simpler ora kernel — GPU is 135ms vs ora's 8ms, so the gap to scipy narrows. **Refines trimodal pattern**: classes overlap and depend on both SOTA structure AND GPU-side compute intensity. CYCLE-166's clean 1000× class assignment for ora was somewhat lucky — the boundary between classes is fuzzy. CPU baseline used manual scipy/numpy (decoupleR Python pkg not installed). See [CYCLE-137 + CYCLE-167 cycle-log](state/cycle-log.md).
 
-**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+**Phase E status**: COMPLETE for medium scales. **Decoupler family Phase E SWEEP COMPLETE (5/5)**: wsum (10.5-15.7×), ulm (9.78-13.07×), mlm (21.0-27.0×), ora (2832-3101×), viper (47.3-51.6×). Spans the full bimodal/trimodal range across one feature family — useful test corpus for future Phase E predictions.
 
 ---
 

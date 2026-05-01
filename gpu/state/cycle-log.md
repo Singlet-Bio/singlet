@@ -3733,3 +3733,27 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
 - **Phase G**: needs to run after this commit.
 - **Next cycle**: CYCLE-167 — last decoupler. enrich/decoupler_viper (CYCLE-137, rank-based VIPER with closed-form scoring). Likely 10-30× (vectorized rank ops are class 3) — confirms or refutes the new trimodal pattern.
 
+## Cycle 167 (2026-05-01) — Phase E for enrich/decoupler_viper (PASS — 47-52×, breaks class-2 prediction; decoupler sweep COMPLETE)
+- **Feature**: enrich/decoupler_viper (CYCLE-137). 3-pass GPU kernel: CUB rank → qnorm → Sgemm.
+- **Outcome**: PASS with caveats. **47.3-51.6× speedup** — between class 3 (10-30×) and class 1 (100-500×); Sonnet's class-2 prediction (1000-5000×) was OFF.
+- **Hot fix to dispatch**: Sonnet's first draft of the bench cpp **hallucinated the BenchTimer/PeakMemTracker/BenchRow API** (9 build errors: `timer.record/median_ms`, `mem.snapshot_*/peak_mb`, `row.wall_ms_med/mem_mb_peak`, `bench::PeakMemoryTracker` typo, `BenchTimer(stream)` with bad ctor). Build FAILed. Manually fixed by aligning to CYCLE-166 ora bench's known-good API (`timer.start(stream)/stop(stream)/elapsed_ms()`, `mem.sample_before/after/peak_delta_mb()`, `row.wall_ms/mem_mb`). Resubmitted as job 371729.
+- **Numbers (job 371729 g008 + Sonnet's local sanity-check scipy)**:
+  ```
+  scale | GPU_wall_ms | scipy_wall_ms | speedup
+  10k   |     135.429 |        6405.6 |    47.3×
+  30k   |     386.922 |       19982.9 |    51.6×
+  ```
+- **Why class-2 prediction was wrong**: Sonnet predicted 1000-5000× because scipy's per-cell rank looks Python-loop-bound. But `scipy.stats.rankdata(axis=0)` IS vectorized in C across columns — each cell's rank is a C-loop, not Python overhead. So the SOTA is closer to class 3 (vectorized native). However, the GPU has more compute per cell here (full rank + qnorm + Sgemm = 135ms) than ora's hypergeometric (8ms), narrowing the gap. **The result lands between classes**.
+- **Refined trimodal pattern**: classes are not crisp boundaries — they're a continuum. Determinants:
+  1. SOTA structure (Python loops vs vectorized C): bias toward class 1/2 vs class 3.
+  2. GPU compute intensity per cell: heavier kernels narrow the speedup ratio (CPU has more work too).
+  3. Per-element overhead: scipy.stats functions called billions of times (ora) is class 2; vectorized scipy.stats.rankdata called once per cell (viper) is class 3-ish.
+  - Rule of thumb: predict speedup as **(SOTA-Python-overhead-factor × GPU-parallelism) / GPU-compute-intensity-per-cell**. Crude but more accurate than the original 3-class buckets.
+- **Decoupler Phase E SWEEP COMPLETE** (5/5): wsum (10.5-15.7×), ulm (9.78-13.07×), mlm (21.0-27.0×), ora (2832-3101×), viper (47.3-51.6×). Spans the full speedup range. Useful corpus for refining Phase E predictions in future cycles.
+- **§J candidate updates** (worth landing in next style-rules edit):
+  - **§J.7 Phase E speedup expectations** — refine to "continuum, not classes; predict by analyzing both SOTA structure and GPU compute".
+  - **§J.8 (NEW) — Bench-helper API verification**: bench-worker workers must read a known-good template's actual call sites (e.g. CYCLE-166 ora bench) before writing new bench drivers. Don't paraphrase the API from intuition. Sonnet's CYCLE-167 build FAIL would have been caught by 30 sec of grep.
+- **pareto-frontier.md**: viper row populated; **decoupler family entry now shows full sweep**. Phase E status PARTIAL → COMPLETE for all 5 family members at medium scale.
+- **Phase G**: needs to run after this commit.
+- **Next cycle**: CYCLE-168 — pivot away from decoupler now that the family is done. Options: (a) **pick a non-enrich Phase E target** (integrate/lisi/asw/kbet for kNN-based metrics, qc/empty_drops or qc/soupx for raw-10X), (b) **§J.7+§J.8 land in style-rules** (small Opus cycle), (c) **CYCLE-159.1 sparse-eigensolver rewrite** (substantial; substantial opportunity since both diffmap+dpt are confirmed broken). Default: §J.7+§J.8 land — captures the trimodal/continuum lesson + bench-helper-API lesson before they're lost.
+
