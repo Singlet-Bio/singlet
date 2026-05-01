@@ -450,13 +450,13 @@ def samples(
         df = df[df["status"] == status]
     if tissue is not None:
         if "tissue" in df.columns:
-            df = df[df["tissue"].str.contains(tissue, case=False, na=False)]
+            df = df[df["tissue"].str.contains(tissue, case=False, na=False, regex=False)]
         elif "source" in df.columns:
-            df = df[df["source"].str.contains(tissue, case=False, na=False)]
+            df = df[df["source"].str.contains(tissue, case=False, na=False, regex=False)]
     if cell_type is not None and "cell_type" in df.columns:
-        df = df[df["cell_type"].str.contains(cell_type, case=False, na=False)]
+        df = df[df["cell_type"].str.contains(cell_type, case=False, na=False, regex=False)]
     if protocol is not None and "protocol" in df.columns:
-        df = df[df["protocol"].str.contains(protocol, case=False, na=False)]
+        df = df[df["protocol"].str.contains(protocol, case=False, na=False, regex=False)]
     if min_cells is not None:
         col = "cells_called" if "cells_called" in df.columns else "n_cells"
         df = df[df[col] >= min_cells]
