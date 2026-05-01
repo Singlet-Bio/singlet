@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.3.0] — 2026-05-01
+
+### Added
+- `cell_types()` — 20 normalized cell type categories (PBMC, T cells, stem cells, K562, etc.) with 24% SUCCESS coverage
+- `samples(cell_type=...)` — filter samples by cell type annotation
+- MCP `singlet_cell_types` tool (11th tool total)
+- Blog post #37: "3,000 Samples Processed" milestone
+
+### Changed
+- Corpus expanded: 3,128 samples / 1,330 SUCCESS / 648 series / 3.67M cells / 16 species
+- QC enrichment: median_genes coverage 86% → 99.5% (from quant summary.json backfill)
+- Tissue normalization: 36 categories, 71% SUCCESS coverage
+- MCP server now has 11 tools (was 10)
+- ETL sync script rewritten: batch metadata index, row-level fallback, proper error handling
+- `summary()` now includes cell type count in one-liner
+- README and pyproject.toml refreshed for 3,100+ stats
+
 ## [1.2.0] — 2026-05-15
 
 ### Added
