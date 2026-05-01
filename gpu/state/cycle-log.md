@@ -3683,3 +3683,29 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
 - **Phase G**: needs to run after this commit.
 - **Next cycle**: CYCLE-165 — continue decoupler Phase E sweep. Default: enrich/decoupler_mlm (CYCLE-136, multivariate linear model — Cholesky-based per-sample OLS, expect similar 10-30× modest speedup since again native-code SOTA).
 
+## Cycle 165 (2026-04-30) — Phase E for enrich/decoupler_mlm (PASS, 21-27× — refines bimodal pattern)
+- **Feature**: enrich/decoupler_mlm (CYCLE-136). 5-pass GPU kernel with Cholesky-based per-sample multivariate OLS.
+- **Outcome**: PASS. **21.0-27.0× speedup** vs scipy Cholesky CPU baseline — HIGHER than wsum (10.5-15.7×) or ulm (9.78-13.07×) despite MLM having more GPU passes.
+- **Numbers (job 371591 g008 + local scipy re-run)**:
+  ```
+  scale | GPU_wall_ms | scipy_wall_ms | speedup
+  10k   |       4.406 |         118.9 |    27.0×
+  30k   |       9.549 |         200.7 |    21.0×
+  ```
+- **Refined understanding of bimodal pattern (CYCLE-163 → CYCLE-165 evolution)**:
+  - CYCLE-163 wsum: 10.5-15.7× — simple SpMM + scalar div (cheap on both CPU and GPU; CPU benefits from BLAS).
+  - CYCLE-164 ulm: 9.78-13.07× — added scalar covariance + variance (cheap on both; modest GPU advantage).
+  - CYCLE-165 mlm: 21.0-27.0× — full multivariate OLS with Cholesky (more compute-intensive; CPU's Cholesky scales worse than per-pathway scalar work, so the GPU's parallel compute advantage amplifies).
+  - Insight: within the "native-code SOTA" cycle class, **more compute-intensive kernels earn larger speedup ratios** because the CPU's serial overhead grows faster than the GPU's. Phase E should report both wall time AND compute intensity per kernel — gives users a meaningful predictor of where they'll see the biggest gains.
+- **All §J lessons applied automatically by Sonnet**:
+  - X @ W not X.T @ W ✓
+  - Local Python ref sanity-check before SLURM ✓
+  - Anticipated scipy-on-g008 issue and noted workaround ✓
+  - The §J system is propagating without orchestrator intervention.
+- **pareto-frontier.md updated**, Phase E status PARTIAL → COMPLETE for medium scales.
+- **Phase G**: needs to run after this commit.
+- **Lessons**:
+  1. **Within-class refinement** (bimodal pattern): the "native-code SOTA → modest speedup" rule is more nuanced than 10-30× flat. Compute-intensive kernels earn the high end of the range (mlm 21-27×), simple kernels earn the low end (wsum/ulm 10-15×). Worth adding to §J as a refinement (e.g. §J.7: "Phase E reports should include compute-intensity classification").
+  2. **The bench-driver template is now mature.** CYCLE-163/164/165 produced ~5-pass MLM bench cycle in <2 wall-clock min of Sonnet work each, with all §J lessons baked in. Decoupler family Phase E is essentially fast-running automation now.
+- **Next cycle**: CYCLE-166 — continue decoupler sweep. Remaining: ora (CYCLE-132 hypergeometric), viper (CYCLE-137 rank-based VIPER). Default: ora — simpler hypergeometric/log-sum-exp closed form, likely similar to wsum profile (low compute intensity → 10-15×).
+

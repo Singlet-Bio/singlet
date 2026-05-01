@@ -351,12 +351,14 @@ Cycle 80: block-labels test fix promoted wilcoxon TinyPlanted from noise-converg
 | scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
 |---|---|---|---|---|---|---|---|---|
 | small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | decoupler | TBD |
+| 10k×5k (5%, 50 pathways) | 4.406 | 0.0 | n/a (synth bench) | 118.9 | n/a | reference | scipy Cholesky (manual decoupleR equiv) | wall (27.0×) |
+| 30k×5k (5%, 50 pathways) | 9.549 | 0.0 | n/a (synth bench) | 200.7 | n/a | reference | scipy Cholesky (manual decoupleR equiv) | wall (21.0×) |
 | 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 | 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 
-**Notes**: Decoupler MLM (Multivariate Linear Model) regulon activity (Badia-i-Mompel et al. 2022). Per-sample multivariate regression across all regulons. See [CYCLE-136 cycle-log](state/cycle-log.md).
+**Notes**: Decoupler MLM (Multivariate Linear Model) regulon activity (Badia-i-Mompel et al. 2022). 5-pass GPU kernel: `Sgemm(W^T W) → ridge → SpMM(X^T W) → Spotrf/Spotrs → Sgeam`. CYCLE-165 Phase E (job 371591 g008 V100S + local scipy re-run). **21.0-27.0× speedup** vs scipy CPU Cholesky baseline — HIGHER than wsum (10.5-15.7×) or ulm (9.78-13.07×) despite MLM having more passes. Reason: MLM is more compute-intensive than wsum/ulm (proper multivariate regression with Cholesky solve, not just SpMM + scalar divide), so the CPU also does more work — the GPU's compute advantage amplifies. Refines CYCLE-163's bimodal-pattern finding: within "native-code SOTA" cycles, MORE-compute-intensive kernels still earn larger ratios. CPU baseline used manual scipy.linalg.cho_factor + cho_solve (decoupleR Python pkg not installed). See [CYCLE-136 + CYCLE-165 cycle-log](state/cycle-log.md).
 
-**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+**Phase E status**: COMPLETE for medium scales (small TBD, 100k/1M still pending streaming driver).
 
 ---
 

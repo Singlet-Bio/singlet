@@ -4,7 +4,7 @@ Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movemen
 
 ## 🔴 Active this cycle
 
-- **CYCLE-165-PHASE-E-DECOUPLER-MLM** (in flight, job 371591 RUNNING on g008): Sonnet wrote 3 files, ran local Python sanity-check (10k=118.9ms, 30k=200.7ms scipy Cholesky), driver count → 28. Expected GPU 8-20× speedup (Cholesky path has more passes than ULM, so lower end of bimodal range).
+- **CYCLE-166-PHASE-E-DECOUPLER-ORA** (queued): continue decoupler Phase E sweep. enrich/decoupler_ora (CYCLE-132 hypergeometric over-representation analysis). Likely modest speedup (10-15×) given simple closed-form is similar to wsum profile.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
@@ -32,6 +32,7 @@ Frobenius NMF only (KL / IS / NB-GLM / β-divergence dropped); fast PCA / SVD wi
 
 ## ✅ Recently complete (last 5 cycles — full detail in `state/cycle-log.md`)
 
+- **CYCLE-165** Phase E for enrich/decoupler_mlm (PASS, jobs 371591 g008 + local scipy re-run): GPU 10k=4.406ms vs scipy 118.9ms = **27.0×**; 30k=9.549ms vs 200.7ms = **21.0×**. HIGHER than wsum/ulm despite more GPU passes — refines the bimodal pattern: compute-intensive kernels earn the high end of "native-code SOTA → 10-30×". §J system propagated all lessons automatically (X@W, local sanity-check, scipy-on-g008 workaround). Filed §J.7 candidate: Phase E reports should classify compute intensity.
 - **CYCLE-164** Phase E for enrich/decoupler_ulm (PASS, jobs 371505 g008 + local scipy re-run): GPU 10k=3.958ms vs numpy 38.7ms = **9.78×**; 30k=9.874ms vs 129.0ms = **13.07×**. Sonnet correctly applied CYCLE-163 lessons (X@W convention + local Python sanity-check). Slightly tighter ratio than wsum (10.5-15.7×) because ulm has 5 passes vs wsum's 2 → less GPU overhead amortization. Bimodal pattern continues for native-code SOTAs.
 - **CYCLE-163** Phase E for enrich/decoupler_wsum (PASS — modest 10.5-15.7× speedup vs scipy SpMM, jobs 371467 + local scipy re-run): GPU 10k WSUM/WMEAN both ~3.7ms vs scipy 39.2ms; 30k both ~8.4ms vs 131.3ms. Two bugs fixed: scipy missing in g008 SLURM Python env (worked around per CYCLE-158.1 lesson by running locally); Sonnet-introduced X.T@W shape error (correct: X@W since X built as n_cells×n_genes). Pattern: **GPU advantage is bimodal** — 100-500× when CPU SOTA is pure-Python (scanpy), 10-30× when SOTA is native code (scipy/BLAS). Phase E should report this for honest user expectations.
 - **CYCLE-162** Phase E for preprocess/model_gene_var (CLEAN PASS, job 371388 g008): GPU 10k=0.570ms vs scanpy pearson 208.3ms (**365×**) / seurat_v3 130.5ms (**229×**); 30k=1.348ms vs 635.5ms (**471×**) / 417.2ms (**310×**). DUAL-flavor scanpy ref pattern (algorithm-closest + most-popular) gives apples-to-apples + apples-to-oranges in one cycle. **§J.6 NOT-at-risk validation** — rule now empirically confirmed in BOTH directions (catches diffmap/dpt, clears model_gene_var).
