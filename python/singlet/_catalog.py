@@ -209,16 +209,21 @@ def species() -> list:
 
 
 def tissues() -> pd.DataFrame:
-    """Return tissue/source breakdown across SUCCESS samples.
+    """Return tissue breakdown across SUCCESS samples.
 
-    Returns a DataFrame with columns: source, count, sorted by count descending.
+    Returns a DataFrame with columns: tissue, count, sorted by count descending.
+    Uses normalized tissue annotations extracted from GEO characteristics.
     """
     df = _load_sample_index()
     df = df[df["status"] == "SUCCESS"]
+    if "tissue" in df.columns:
+        counts = df["tissue"].dropna().value_counts().reset_index()
+        counts.columns = ["tissue", "count"]
+        return counts
     if "source" not in df.columns:
-        return pd.DataFrame(columns=["source", "count"])
+        return pd.DataFrame(columns=["tissue", "count"])
     counts = df["source"].dropna().value_counts().reset_index()
-    counts.columns = ["source", "count"]
+    counts.columns = ["tissue", "count"]
     return counts
 
 
@@ -299,6 +304,12 @@ def summary() -> str:
     else:
         n_protocols = 0
 
+    # Count tissues (SUCCESS only)
+    if "tissue" in success.columns:
+        n_tissues = success["tissue"].dropna().nunique()
+    else:
+        n_tissues = 0
+
     def _fmt(n: int) -> str:
         if n >= 1e6:
             return f"{n / 1e6:.1f}M"
@@ -308,7 +319,8 @@ def summary() -> str:
 
     msg = (
         f"singlet atlas: {total:,} samples ({n_success:,} SUCCESS) • "
-        f"{n_series:,} series • {n_species} species • {n_protocols} protocols • {_fmt(total_cells)} cells"
+        f"{n_series:,} series • {n_species} species • {n_protocols} protocols • "
+        f"{n_tissues} tissues • {_fmt(total_cells)} cells"
     )
     return msg
 
@@ -363,8 +375,11 @@ def samples(
         df = df[df["organism"].str.contains(organism, case=False, na=False)]
     if status is not None:
         df = df[df["status"] == status]
-    if tissue is not None and "source" in df.columns:
-        df = df[df["source"].str.contains(tissue, case=False, na=False)]
+    if tissue is not None:
+        if "tissue" in df.columns:
+            df = df[df["tissue"].str.contains(tissue, case=False, na=False)]
+        elif "source" in df.columns:
+            df = df[df["source"].str.contains(tissue, case=False, na=False)]
     if protocol is not None and "protocol" in df.columns:
         df = df[df["protocol"].str.contains(protocol, case=False, na=False)]
     if min_cells is not None:
