@@ -781,88 +781,23 @@ async def _tool_failures() -> dict:
 
 
 async def _tool_cell_types(arguments: dict) -> dict:
-    """Get cell type distribution from GEO source annotations."""
+    """Get cell type distribution from pre-computed annotations."""
     top_n = arguments.get("top_n", 20)
-    client = get_client()
 
-    # Fetch SUCCESS samples with source field
-    all_rows = []
-    offset = 0
-    while True:
-        r = client.table("samples").select("source").eq("status", "SUCCESS").range(offset, offset + 999).execute()
-        all_rows.extend(r.data)
-        if len(r.data) < 1000:
-            break
-        offset += 1000
-
-    # Cell type normalization (mirrors _catalog.py logic)
-    TISSUE_WORDS = {
-        "blood", "brain", "lung", "liver", "kidney", "skin", "heart", "spleen",
-        "pancreas", "colon", "intestine", "stomach", "ovary", "testis", "breast",
-        "muscle", "bone marrow", "lymph node", "thymus", "prostate", "placenta",
-        "retina", "adipose", "bladder", "thyroid", "embryo", "tumor", "tonsil",
-        "dorsal root ganglion", "esophagus", "hippocampus", "jejunum", "ileum",
-    }
-
-    NORMALIZE = {
-        "pbmcs": "PBMC", "pbmc": "PBMC", "peripheral blood mononuclear cells": "PBMC",
-        "periperal blood mononuclear cells": "PBMC", "peripheral blood": "PBMC",
-        "k562": "cell line (K562)", "k562 cells": "cell line (K562)",
-        "jurkat": "cell line (Jurkat)", "thp-1 cell": "cell line (THP-1)",
-        "thp-1 cells": "cell line (THP-1)", "hek 293t": "cell line (HEK293)",
-        "cell line": "cell line", "hesc": "stem cell (hESC)",
-        "hpsc": "stem cell (hPSC)", "ipsc": "stem cell (iPSC)",
-        "pluripotent stem cells": "stem cell (iPSC)",
-        "t cells": "T cells", "t cell": "T cells",
-        "cd4 t cells": "CD4+ T cells", "cd8 t cells": "CD8+ T cells",
-        "car t cells": "CAR-T cells", "manufactured car t cells": "CAR-T cells",
-        "b cells": "B cells", "b cell": "B cells",
-        "nk cells": "NK cells", "immune cells": "immune cells",
-        "fibroblasts": "fibroblasts", "fibroblast": "fibroblasts",
-        "organoid": "organoid", "organoids": "organoid",
-        "monocytes": "monocytes", "macrophages": "macrophages",
-    }
-
-    KEYWORDS = [
-        ("pbmc", "PBMC"), ("peripheral blood mononuclear", "PBMC"),
-        ("t cell", "T cells"), ("cd4", "CD4+ T cells"), ("cd8", "CD8+ T cells"),
-        ("car-t", "CAR-T cells"), ("car t", "CAR-T cells"),
-        ("b cell", "B cells"), ("nk cell", "NK cells"),
-        ("monocyte", "monocytes"), ("macrophage", "macrophages"),
-        ("stem cell", "stem cells"), ("ipsc", "stem cell (iPSC)"),
-        ("fibroblast", "fibroblasts"), ("organoid", "organoid"),
-        ("neuron", "neurons"), ("astrocyte", "astrocytes"),
-    ]
-
-    cell_types = {}
-    for row in all_rows:
-        src = (row.get("source") or "").lower().strip()
-        if not src or src in TISSUE_WORDS:
-            continue
-        if src in NORMALIZE:
-            ct = NORMALIZE[src]
-        else:
-            ct = None
-            for kw, ctype in KEYWORDS:
-                if kw in src:
-                    ct = ctype
-                    break
-            if not ct:
-                is_tissue = any(tw in src for tw in TISSUE_WORDS)
-                if is_tissue or len(src) >= 40:
-                    continue
-                ct = src
-        cell_types[ct] = cell_types.get(ct, 0) + 1
-
-    sorted_ct = sorted(cell_types.items(), key=lambda x: -x[1])[:top_n]
-    total_annotated = sum(cell_types.values())
+    # Use bundled parquet for fast, consistent results
+    import singlet
+    ct_df = singlet.cell_types()
+    total_success = len(singlet.samples(status="SUCCESS"))
+    total_annotated = int(ct_df["count"].sum())
 
     return {
-        "total_success": len(all_rows),
+        "total_success": total_success,
         "annotated_with_cell_type": total_annotated,
-        "coverage_pct": round(total_annotated / len(all_rows) * 100, 1) if all_rows else 0,
+        "coverage_pct": round(total_annotated / total_success * 100, 1) if total_success else 0,
+        "categories": len(ct_df),
         "cell_types": [
-            {"cell_type": ct, "count": c} for ct, c in sorted_ct
+            {"cell_type": row["cell_type"], "count": int(row["count"])}
+            for _, row in ct_df.head(top_n).iterrows()
         ],
     }
 
