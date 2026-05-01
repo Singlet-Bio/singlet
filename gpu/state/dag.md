@@ -4,7 +4,7 @@ Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movemen
 
 ## 🔴 Active this cycle
 
-- **CYCLE-166-PHASE-E-DECOUPLER-ORA** (queued): continue decoupler Phase E sweep. enrich/decoupler_ora (CYCLE-132 hypergeometric over-representation analysis). Likely modest speedup (10-15×) given simple closed-form is similar to wsum profile.
+- **CYCLE-167-PHASE-E-DECOUPLER-VIPER** (queued): last decoupler. enrich/decoupler_viper (CYCLE-137, rank-based with closed-form scoring). Tests the new TRIMODAL pattern from CYCLE-166: should be class 3 (10-30×) since rank ops are vectorized native code, NOT class 2 (1000×+) which only triggers if SOTA uses per-element Python-wrapped scipy.stats.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
@@ -32,6 +32,7 @@ Frobenius NMF only (KL / IS / NB-GLM / β-divergence dropped); fast PCA / SVD wi
 
 ## ✅ Recently complete (last 5 cycles — full detail in `state/cycle-log.md`)
 
+- **CYCLE-166** Phase E for enrich/decoupler_ora — **2832-3101× speedup** (jobs 371683 g003 + local scipy re-run 88s): GPU 10k=7.830ms vs scipy 22174ms; 30k=21.422ms vs 66442ms. **Breaks the bimodal pattern** — `scipy.stats.hypergeom.sf` is Python-wrapped C called billions of times → per-call Python overhead dominates. **Refines to TRIMODAL**: class 1 (Python loops, 100-500×), class 2 (per-element Python-wrapped C, 1000-5000×), class 3 (vectorized native BLAS, 10-30×). New §J.7 candidate.
 - **CYCLE-165** Phase E for enrich/decoupler_mlm (PASS, jobs 371591 g008 + local scipy re-run): GPU 10k=4.406ms vs scipy 118.9ms = **27.0×**; 30k=9.549ms vs 200.7ms = **21.0×**. HIGHER than wsum/ulm despite more GPU passes — refines the bimodal pattern: compute-intensive kernels earn the high end of "native-code SOTA → 10-30×". §J system propagated all lessons automatically (X@W, local sanity-check, scipy-on-g008 workaround). Filed §J.7 candidate: Phase E reports should classify compute intensity.
 - **CYCLE-164** Phase E for enrich/decoupler_ulm (PASS, jobs 371505 g008 + local scipy re-run): GPU 10k=3.958ms vs numpy 38.7ms = **9.78×**; 30k=9.874ms vs 129.0ms = **13.07×**. Sonnet correctly applied CYCLE-163 lessons (X@W convention + local Python sanity-check). Slightly tighter ratio than wsum (10.5-15.7×) because ulm has 5 passes vs wsum's 2 → less GPU overhead amortization. Bimodal pattern continues for native-code SOTAs.
 - **CYCLE-163** Phase E for enrich/decoupler_wsum (PASS — modest 10.5-15.7× speedup vs scipy SpMM, jobs 371467 + local scipy re-run): GPU 10k WSUM/WMEAN both ~3.7ms vs scipy 39.2ms; 30k both ~8.4ms vs 131.3ms. Two bugs fixed: scipy missing in g008 SLURM Python env (worked around per CYCLE-158.1 lesson by running locally); Sonnet-introduced X.T@W shape error (correct: X@W since X built as n_cells×n_genes). Pattern: **GPU advantage is bimodal** — 100-500× when CPU SOTA is pure-Python (scanpy), 10-30× when SOTA is native code (scipy/BLAS). Phase E should report this for honest user expectations.

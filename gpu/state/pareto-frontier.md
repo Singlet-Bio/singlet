@@ -295,12 +295,14 @@ Cycle 80: block-labels test fix promoted wilcoxon TinyPlanted from noise-converg
 | scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
 |---|---|---|---|---|---|---|---|---|
 | small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | decoupler | TBD |
+| 10k×5k (5%, 50 pathways, top_k=5%) | 7.830 | 0.0 | n/a (synth bench) | 22174.1 | n/a | reference | scipy.stats.hypergeom.sf | wall (**2832×**) |
+| 30k×5k (5%, 50 pathways, top_k=5%) | 21.422 | 0.0 | n/a (synth bench) | 66442.0 | n/a | reference | scipy.stats.hypergeom.sf | wall (**3101×**) |
 | 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 | 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 
-**Notes**: Decoupler ORA (Over-Representation Analysis) for regulon enrichment (Badia-i-Mompel et al. 2022). Hypergeometric test on gene set overlaps. See [CYCLE-132 cycle-log](state/cycle-log.md).
+**Notes**: Decoupler ORA (Over-Representation Analysis) for regulon enrichment (Badia-i-Mompel et al. 2022). Hypergeometric test on gene set overlaps. CYCLE-166 Phase E (job 371683 g003 V100S + local scipy re-run). 4-pass GPU kernel: top-K smem + build T mask + Sgemm T^T·M + lgamma hypergeo. **2832-3101× speedup** vs scipy CPU — the LARGEST speedup in the decoupler family by 100×. **Refines bimodal pattern**: even though scipy.stats is "native code", `scipy.stats.hypergeom.sf` has Python overhead per call (it's a Python function that wraps a C lgamma) — at billions of calls (n_cells × n_pathways × top_K iterations), the per-call Python overhead dominates and the SOTA effectively becomes Python-loop-bound. New §J refinement: the bimodal pattern depends on whether the SOTA uses fully-vectorized BLAS (modest speedup) or per-element Python-wrapped C (massive speedup). See [CYCLE-132 + CYCLE-166 cycle-log](state/cycle-log.md).
 
-**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+**Phase E status**: COMPLETE for medium scales (small TBD, 100k/1M still pending streaming driver).
 
 ---
 

@@ -155,9 +155,18 @@ add_bench_driver(bench_enrich_decoupler_ulm_perf  bench_enrich_decoupler_ulm_per
 add_bench_driver(bench_enrich_decoupler_mlm_perf  bench_enrich_decoupler_mlm_perf.cpp)
 
 # ---------------------------------------------------------------------------
+# Cycle 166 drivers: enrich/decoupler_ora Phase E benchmark
+# ORA (Over-Representation Analysis): top-K (5%) genes per cell via 64-bucket
+# shared-mem histogram; hypergeometric -log10(p) via lgamma log-sum-exp kernel.
+# 4 passes: topk_smem, build_T, Sgemm T^T·M, ora_hypergeo_kernel.
+# NOT at risk of §J.6 dense-n×n bug (T is m×n with m≤5k genes; lgamma O(n*p*K)).
+# ---------------------------------------------------------------------------
+add_bench_driver(bench_enrich_decoupler_ora_perf  bench_enrich_decoupler_ora_perf.cpp)
+
+# ---------------------------------------------------------------------------
 # Status message
 # ---------------------------------------------------------------------------
-message(STATUS "singlet-gpu bench: 28 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164+165)")
+message(STATUS "singlet-gpu bench: 29 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164+165+166)")
 message(STATUS "  53a: bench_io_pz_loader_perf")
 message(STATUS "  53a: bench_preprocess_lognorm_perf")
 message(STATUS "  53a: bench_preprocess_hvg_perf")
@@ -185,3 +194,4 @@ message(STATUS "  162: bench_preprocess_model_gene_var_perf")
 message(STATUS "  163: bench_enrich_decoupler_wsum_perf")
 message(STATUS "  164: bench_enrich_decoupler_ulm_perf")
 message(STATUS "  165: bench_enrich_decoupler_mlm_perf")
+message(STATUS "  166: bench_enrich_decoupler_ora_perf")

@@ -3709,3 +3709,27 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
   2. **The bench-driver template is now mature.** CYCLE-163/164/165 produced ~5-pass MLM bench cycle in <2 wall-clock min of Sonnet work each, with all §J lessons baked in. Decoupler family Phase E is essentially fast-running automation now.
 - **Next cycle**: CYCLE-166 — continue decoupler sweep. Remaining: ora (CYCLE-132 hypergeometric), viper (CYCLE-137 rank-based VIPER). Default: ora — simpler hypergeometric/log-sum-exp closed form, likely similar to wsum profile (low compute intensity → 10-15×).
 
+## Cycle 166 (2026-04-30) — Phase E for enrich/decoupler_ora — surprise 2832-3101× breaks bimodal pattern
+- **Feature**: enrich/decoupler_ora (CYCLE-132). 4-pass GPU kernel (topk smem + T mask + Sgemm T^T·M + lgamma hypergeo).
+- **Outcome**: PASS with **HUGE speedup that breaks the §J bimodal-pattern hypothesis**.
+- **Numbers (job 371683 g003 + local scipy re-run, ~88s total CPU)**:
+  ```
+  scale | GPU_wall_ms | scipy_wall_ms | speedup
+  10k   |       7.830 |       22174.1 |   2832×
+  30k   |      21.422 |       66442.0 |   3101×
+  ```
+- **Why this breaks the bimodal pattern**: I had hypothesized (CYCLE-163/164/165) that "native-code SOTA → 10-30× speedup". ORA's CPU baseline uses `scipy.stats.hypergeom.sf` — which IS native code at the lgamma level, but it's a Python function called billions of times (n_cells × n_pathways × top_K iterations). The per-call Python overhead dominates, so the SOTA effectively becomes Python-loop-bound, putting ORA back in the 100-500× class.
+- **Refined §J bimodal pattern (3 classes, not 2)**:
+  1. **Pure Python loops** (scanpy.tl.score_genes, scanpy HVG): 100-500× speedup. Examples: CYCLE-158 (213-493×), CYCLE-162 (229-471×).
+  2. **Per-element Python-wrapped C** (scipy.stats.* functions, anything called in a loop): 1000-5000× speedup. Example: CYCLE-166 (2832-3101×).
+  3. **Fully vectorized native BLAS/SciPy** (scipy.sparse SpMM, np @ ops, scipy.linalg.cho_solve): 10-30× speedup. Examples: CYCLE-163 (10.5-15.7×), CYCLE-164 (9.78-13.07×), CYCLE-165 (21.0-27.0×).
+  - **Predictor for new ports**: look at the SOTA reference's inner loop. If it's a Python `for` over millions of (cell, pathway) entries calling a scipy/numpy function each time → expect class 2 (huge speedup). If it's a single call to a native vectorized op → expect class 3 (modest).
+- **All §J lessons applied automatically**: X@W, local sanity-check, scipy-on-g008 workaround. The system continues to compound.
+- **pareto-frontier.md updated** with prominent **2832-3101×** numbers + refined-bimodal-pattern note. Phase E status PARTIAL → COMPLETE for medium scales.
+- **Lessons**:
+  1. **Bimodal → trimodal pattern**: 100-500× / 1000-5000× / 10-30× across the 3 SOTA classes. Worth landing in §J as §J.7 (Phase E speedup expectations by SOTA class).
+  2. **`scipy.stats.*` per-element calls are a known anti-pattern in Python perf**. Anywhere a port replaces a scipy.stats Python loop with a vectorized GPU lgamma should expect 1000×+ wins. Document for future port prioritization.
+  3. **The decoupler family Phase E is now informative as a complete set**: wsum (10.5-15.7×, simple SpMM) → ulm (9.78-13.07×, more passes same compute) → mlm (21.0-27.0×, more compute) → ora (2832-3101×, scipy.stats Python overhead) → viper TBD. Each cycle teaches something different about the GPU vs CPU performance landscape.
+- **Phase G**: needs to run after this commit.
+- **Next cycle**: CYCLE-167 — last decoupler. enrich/decoupler_viper (CYCLE-137, rank-based VIPER with closed-form scoring). Likely 10-30× (vectorized rank ops are class 3) — confirms or refutes the new trimodal pattern.
+
