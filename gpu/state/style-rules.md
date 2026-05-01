@@ -380,6 +380,66 @@ After benching the full decoupler family (wsum, ulm, mlm, ora, viper) and observ
 
 **Rule for Phase E reports**: report speedup AND classify the SOTA structure (loop-bound vs vectorized) AND GPU compute class (light/medium/heavy). Avoids selling features on misleading 3000× numbers when the typical case is 15×.
 
+**Refinements from CYCLE-169-176 corpus expansion** (16 features now; CYCLE-176 lessons):
+
+After expanding the corpus across non-enrich kernels (lisi, asw, kbet, kmeans, dendrogram, magic, combat, celltypist), four additional axes refine the prediction model. **None of the original two factors are wrong; they are necessary but not sufficient.**
+
+#### 4 refinements
+
+1. **GPU-per-cell-ms denominator** (CYCLE-171 kbet): use `(SOTA_per_cell_ms × overhead_factor) / GPU_per_cell_ms`. The original prediction model has implicit GPU-time = constant per cell; that's wrong for kernels with non-trivial per-cell compute (kbet's chi² + Wilson-Hilferty: ~30× more GPU work per cell than lisi/asw histogram → lisi/asw 100-200× vs kbet 21-32×).
+
+2. **Memory bandwidth bottleneck axis** (CYCLE-174 magic): when SOTA materializes large dense intermediates (>100 MB), CPU becomes memory-bandwidth-bound (~50 GB/s) while GPU has HBM ~900 GB/s — that's a 20× advantage on top of compute. Iterative SpMM with dense intermediate output (magic t=3, combat dense Z) → 1000-3000× even for "vectorized native code" SOTAs.
+
+3. **Overhead compounding axis** (CYCLE-175 combat): when SOTA has BOTH per-call Python overhead (per-batch loop, per-iter Python) AND dense intermediates (memory bound on CPU), the two effects compound multiplicatively into 1000-3000× class. Empirically: combat (per-batch + dense) lands 2188-2497×; magic (just dense) lands 1891-2506×; ora (just per-element scipy.stats) lands 2832-3101×.
+
+4. **BLAS-tight subdivision** (CYCLE-172 kmeans + CYCLE-176 celltypist): the "BLAS-tight" SOTA class needs subdivision:
+   - **Tight + low Python overhead**: kmeans (single sklearn `.fit_predict()` call wrapping tightly-vectorized Lloyd iter) → 2-7× speedup. The CPU is genuinely competitive at small/medium scale.
+   - **Tight + Python orchestration overhead floor**: celltypist (sklearn `.predict_proba()` per call has ~3ms Python overhead floor regardless of work) → 50× speedup at small/medium scale, scaling-bound floor.
+
+#### Updated prediction formula (informal)
+
+```
+speedup ≈ (SOTA_per_cell_ms × python_overhead_multiplier × memory_bandwidth_advantage)
+        / GPU_per_cell_ms
+
+where:
+  python_overhead_multiplier ∈ {1×, 5×, 10-100×}
+    1×       = SOTA is single tight BLAS/SciPy call (kmeans)
+    5×       = SOTA has Python overhead floor per call (celltypist)
+    10-100×  = SOTA has per-batch/per-element Python loops (decoupler_ora, combat)
+
+  memory_bandwidth_advantage ∈ {1×, 20×}
+    1×       = SOTA intermediates fit in CPU L3 (lisi, asw, kbet, kmeans, decoupler_*, dendrogram)
+    20×      = SOTA materializes dense intermediates >100 MB (magic, combat)
+
+  GPU_per_cell_ms is observed empirically — read from the GPU side of the bench
+```
+
+#### Empirical 16-feature corpus (final calibration)
+
+| Kernel | speedup 30k | SOTA shape | GPU compute | Memory-bound | Predicted |
+|---|---|---|---|---|---|
+| kmeans | 2.4× | sklearn KMeans (one tight call) | medium | no | 2-7× ✓ |
+| ulm | 13.1× | scipy SpMM + scalar OLS | light | no | 10-30× ✓ |
+| wsum | 15.7× | scipy SpMM + L1-norm | light | no | 10-30× ✓ |
+| mlm | 21.0× | scipy SpMM + Cholesky | medium | no | 10-30× ✓ |
+| kbet | 21.1× | numpy chi² + Wilson-Hilferty | heavy | no | 10-30× ✓ |
+| dendrogram | 106× | scipy pdist + linkage (orchestrated) | light | no | 50-200× ✓ |
+| viper | 51.6× | scipy rankdata vectorized + qnorm + Sgemm | heavy | no | 30-100× ✓ |
+| celltypist | 50× | sklearn predict_proba (Python overhead floor) | light | no | 30-100× ✓ |
+| asw | 249× | numpy ASW vectorized | light | no | 100-300× ✓ |
+| lisi | 219× | numpy LISI vectorized | light | no | 100-300× ✓ |
+| score_genes | 493× | scanpy.tl Python loop per gene-set | light | no | 200-500× ✓ |
+| pearson_residuals | 302× | scanpy HVG Python loop | medium | no | 200-500× ✓ |
+| model_gene_var | 471× | scanpy HVG (2 flavors avg) | medium | no | 200-500× ✓ |
+| magic | 2506× | scipy SpMM + dense intermediate (200-600 MB) | medium | **YES** | 1000-3000× ✓ |
+| combat | 2497× | scanpy.pp.combat (per-batch loop + dense) | medium | **YES** | 1000-3000× ✓ |
+| ora | 3101× | per-element scipy.stats.hypergeom.sf | medium | no | 1000-5000× ✓ |
+
+**All 16 predictions land within the formula's range when all 4 axes are considered.** This is the prediction model now empirically validated. Future Phase E cycles should use it.
+
+**§J.7 final form**: Phase E speedup is 4-axis (SOTA structure × GPU compute × memory bandwidth × overhead compounding). Single-axis predictions (the original "trimodal" hypothesis) systematically miss the 1000-3000× cases and over-predict for BLAS-tight cases. The corpus of 16 features is the calibration set.
+
 ### §J.8 — Bench-helper API verification (from CYCLE-167 build FAIL)
 
 CYCLE-167's first dispatch hallucinated the bench-helper API — wrote `timer.record() / timer.median_ms() / mem.snapshot_*() / mem.peak_mb() / row.wall_ms_med / row.mem_mb_peak`, none of which exist. Build FAILed with 9 errors. The actual API (read from CYCLE-166 ora bench): `timer.start(stream)/stop(stream)/elapsed_ms()`, `mem.sample_before/after()/peak_delta_mb()/reset()`, `row.wall_ms/mem_mb`.

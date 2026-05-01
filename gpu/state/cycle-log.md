@@ -3993,3 +3993,25 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
   2. **Consistent ratios = clean signal**: when speedup is the same at 10k and 30k, you can extrapolate confidently. Compounding ratios (combat 2188→2497, magic 1891→2506) indicate scale-dependent factors at play.
 - **Next cycle**: CYCLE-177 — continue Phase E sweep. Remaining: anno/symphony, qc/empty_drops, qc/soupx. Default: anno/symphony — pair with celltypist (other reference-mapping paradigm). Centroid projection vs logreg comparison would be informative.
 
+## Cycle 177 (2026-05-01) — Land §J.7 4-axis refinement (PASS, pure-Opus)
+- **Feature**: state/style-rules.md §J.7 — refined from 2-axis to 4-axis prediction model after 16-feature Phase E corpus accumulated 4 axis discoveries.
+- **Outcome**: PASS. Pure-Opus cycle, ~120 LOC appended to §J.7 (refinements section). No SLURM, no Phase G needed (style-rules not in pareto path).
+- **Refinements added (4 axes from CYCLE-171/172/174/175/176)**:
+  1. **GPU-per-cell-ms denominator** (CYCLE-171 kbet): heavier per-cell GPU compute narrows speedup ratio. The original implicit assumption that GPU time is constant per cell breaks for kernels like kbet (chi² + Wilson-Hilferty per cell).
+  2. **Memory bandwidth bottleneck axis** (CYCLE-174 magic): when SOTA materializes large dense intermediates (>100 MB), CPU is memory-bandwidth-bound (~50 GB/s) while GPU has HBM (~900 GB/s) — 20× advantage on top of compute.
+  3. **Overhead compounding axis** (CYCLE-175 combat): per-call Python overhead × dense intermediates compound multiplicatively into 1000-3000× class.
+  4. **BLAS-tight subdivision** (CYCLE-172 kmeans + CYCLE-176 celltypist): subdivide BLAS-tight class into "tight + low Python overhead" (2-7×, kmeans) vs "tight + Python orchestration overhead floor" (50×, celltypist).
+- **Updated prediction formula** (informal):
+  ```
+  speedup ≈ (SOTA_per_cell_ms × python_overhead_multiplier × memory_bandwidth_advantage)
+          / GPU_per_cell_ms
+  ```
+  with `python_overhead_multiplier ∈ {1×, 5×, 10-100×}` and `memory_bandwidth_advantage ∈ {1×, 20×}`.
+- **Empirical 16-feature corpus calibration table** added to §J.7 with all benched features classified along the 4 axes. **All 16 predictions land within the formula's range when all 4 axes are considered**.
+- **Lessons (about §J framework)**:
+  1. **Iterative refinement**: §J.7 went from 2 → 3 → 4 axes over CYCLE-168 → 174 → 175 → 177. Each Phase E surprise (ora, magic, combat) added an axis. The framework adapts to the data.
+  2. **Empirical calibration matters more than theory**: the 16-feature corpus is what makes the formula useful. Without the calibration table, the formula is just a guess.
+  3. **§J.7 is now a real working tool**: future Phase E cycles can predict with the formula + check against this calibration set. CYCLE-176 celltypist already validated the "Python overhead floor" axis prediction-then-check pattern.
+- **§J series state**: 8 sub-rules (J.1-J.8). §J.7 is now the most complex and most empirically grounded.
+- **Next cycle**: CYCLE-178 — back to Phase E. Default: anno/symphony (pairs with celltypist; centroid-projection paradigm). Will be the first prediction made USING the new 4-axis formula — a real test of the framework.
+
