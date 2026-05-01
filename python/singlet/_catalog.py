@@ -525,6 +525,8 @@ def top_series(
     }
     if "median_genes" in df.columns:
         agg_dict["avg_median_genes"] = ("median_genes", "mean")
+    if "tissue" in df.columns:
+        agg_dict["tissue"] = ("tissue", "first")
 
     grouped = df.groupby("gse_id").agg(**agg_dict).reset_index()
 
