@@ -4116,3 +4116,31 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
   3. **Loop pacing (§J.5) worked**: alternating LOW + MEDIUM risk cycles kept the overall outcome distribution favorable (~30 PASSes + 1 partial-FAIL across the session).
 - **Next cycle**: CYCLE-181 — pivot to substantive dev work after the long Phase E sweep. Default: **start CYCLE-159.1 sparse-eigensolver rewrite** with Phase B research dispatch (Haiku lit-scout + code-reader on LOBPCG / sparse Lanczos / cuVS APIs). This is the highest-priority outstanding work item.
 
+## Cycle 181 (2026-05-01) — CYCLE-159.1 Phase B research + Phase C design (PASS, pure-Opus + 2 Haiku)
+- **Feature**: state/designs/sparse_eigensolver.md (NEW). Sets up CYCLE-159.1 implementation work for diffmap + dpt sparse-eigensolver rewrite.
+- **Outcome**: PASS. Phase B research returns from 2 Haiku workers + Phase C design doc skeleton written. ~210 LOC design doc covering algorithm, sparse interface, refactor plan for diffmap/dpt, memory + complexity analysis, correctness validation, 4-cycle implementation plan.
+- **Phase B research (2 parallel Haiku dispatches)**:
+  - **lit-scout**: Recommended **LOBPCG** (Locally Optimal Block Preconditioned Conjugate Gradient) for top-K exterior eigenvalues. Implementable as header-only C++20 wrappers over cuBLAS + cuSPARSE — no runtime linking beyond what singlet-gpu already uses. ~5-10× speedup over scipy ARPACK in literature. Deterministic with fixed seed.
+  - **code-reader**: scipy.sparse.linalg.eigsh API characterized cleanly (k, which, sigma, return_eigenvectors). cuVS LOBPCG location unconfirmed but likely in RAFT cpp/include. Path confirmed: prefer in-house LOBPCG over runtime linking to cuVS.
+- **Phase C design (Opus, this cycle)**: see `state/designs/sparse_eigensolver.md`. Highlights:
+  - **New header**: `include/singlet-gpu/core/sparse_eigensolver.h` with `top_k_eigsh_lobpcg(A, cfg, stream)` API.
+  - **Sparse interface**: `SparseSymmetricCSR { values, row_ptr, col_idx, n, nnz }` — zero-copy from existing kNN graph.
+  - **Algorithm**: 1 SpMV per iteration, block GS orthogonalization, 3K × 3K dense Rayleigh-Ritz subproblem solved with cusolverDnSsygvd. ~10 MB working memory at n=10k vs 400 MB dense (40× reduction).
+  - **Diffmap refactor**: replace dense W + Ssyevd with sparse W + LOBPCG.
+  - **DPT refactor**: split `compute_diffusion_eigenvectors()` from `dpt(diffusion_result, root_cell)` — fixes the API-design bug from CYCLE-161 (re-running eigendecomp every call).
+  - **Memory at n=1M**: sparse W = 120 MB, vs old dense W = 4 TB (infeasible). LOBPCG handles 1M cleanly.
+- **Phase D implementation plan** (queued):
+  1. **CYCLE-182**: implement `core/sparse_eigensolver.h` LOBPCG core + ctest at n=40, 10k.
+  2. **CYCLE-183**: refactor `embed/diffmap.h` to use sparse_eigensolver. Verify CYCLE-150 ctest + 10k scale-smoke test.
+  3. **CYCLE-184**: refactor `embed/dpt.h` API split + use sparse_eigensolver. Verify CYCLE-142 ctest + scale-smoke + API-design fix.
+  4. **CYCLE-185**: re-run Phase E for diffmap + dpt. Should now beat scanpy at 10k+.
+- **Risks documented** in design doc:
+  - LOBPCG convergence on highly clustered eigenvalues (Laplacians often) → mitigate with K+5 oversampling.
+  - No preconditioner in v0 — may be slow on poorly-conditioned Laplacians. Add Jacobi in v1 if needed.
+  - fp32 numerical stability of block Gram-Schmidt — use modified GS or Cholesky-BGS.
+- **Citations**: Knyazev (2001) LOBPCG, Kalantzi & Saad (2015) GPU Filtered Lanczos, Coifman & Lafon (2006) Diffusion maps, Haghverdi et al. (2016) DPT.
+- **Lessons**:
+  1. **Phase B + C done well in one Opus cycle**. Two Haiku dispatches in parallel = research returns in <5 min combined; Opus design synthesis = ~30 min for ~210 LOC doc. No SLURM needed for Phase B/C.
+  2. **The header-only constraint actually narrows the design space helpfully** — LOBPCG over cuBLAS/cuSPARSE is the only natural fit; cuVS would force runtime linking.
+- **Next cycle**: CYCLE-182 — Phase D dispatch. Sonnet `gpu-kernel-dev` worker writes `core/sparse_eigensolver.h` per the design doc + analysis-validator writes the n=40/10k ctest in parallel. ~600 LOC kernel + 400 LOC test, expect ~1-2 hours of worker time + SLURM verify.
+
