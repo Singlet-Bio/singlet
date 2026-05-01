@@ -4198,3 +4198,18 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
   2. **§J.5 LOW-risk recovery pattern applies after this point**. Two consecutive partial-FAILs on a substantial new kernel = signal to step back, not push harder.
 - **Next cycle**: CYCLE-184 — choose between (a) iter-3 sparse_eig convergence fix (HIGH-risk; if FAIL → mark CYCLE-159.1 blocked), (b) **PIVOT to LOW-risk work** (wrappers backlog, continuous optimization, or §J framework cleanup). Default per §J.5: PIVOT. Return to CYCLE-159.1 with fresh perspective in a later cycle.
 
+## Cycle 184 (2026-05-01) — Land §J.9 algorithmic conventions in design docs (PASS, pure-Opus)
+- **Feature**: state/style-rules.md §J.9 — captures the CYCLE-182 convention-bug lesson durably. Pure-Opus LOW-risk per §J.5 after 2 consecutive HIGH-risk partial-FAILs.
+- **Outcome**: PASS. ~50 LOC appended to §J.7 file.
+- **§J.9 captures**: design docs for new kernels with algorithmic conventions must include an explicit "Conventions" section. CYCLE-182 lost a HIGH-risk cycle because the design doc's algorithm sketch said "K_smallest" casually rather than flagging it as the wrong-convention bug it actually was. The implementer (Sonnet) faithfully followed the design and produced a working LOBPCG that solved the wrong problem.
+- **Convention classes documented**: smallest-vs-largest eigenvalues, ARPACK `which='LM'` vs `'SM'`, eigenvector sign, ordering, indexing, nullspace handling.
+- **Rule**: design docs must state for each convention (1) user-facing convention, (2) library default, (3) bridge between them, (4) reference test that establishes the expected convention.
+- **Generalization**: applies to ANY kernel where the GPU library's default differs from user-facing convention — eigensolvers, layout (col-major vs row-major), indexing, RNG state, SpMM transpose form. Worth flagging in future design docs.
+- **§J series state**: 9 sub-rules now (J.1-J.9). All derived from real cycle outcomes.
+- **§J.5 risk-pacing recovery in action**: CYCLE-182 (HIGH FAIL) + CYCLE-183 (HIGH PARTIAL) → CYCLE-184 (LOW PASS). Restores signal-to-noise before the next risky cycle. The pattern is doing its job.
+- **Lessons**:
+  1. **Each FAIL produces 1+ §J entry**. CYCLE-182 → §J.9. The framework continues to grow from real outcomes.
+  2. **Pure-Opus rule-distillation cycles are quick** (~30 min wall clock for ~50 LOC appended). High value relative to time spent.
+  3. **Iter-3 sparse_eig still queued** but deferred. Coming back with fresh perspective often resolves convergence-detection bugs faster than pushing through fatigue.
+- **Next cycle**: CYCLE-185 — back to dev work. Options: (a) iter-3 sparse_eig (HIGH-risk; convergence detection fix), (b) wrappers backlog (Python pybind11 for top frontier features — Rule 26 overdue), (c) optimize weakest-margin kernel (Rule 30, Phase E corpus has clear winners and losers now). Default: **iter-3 sparse_eig** with explicit focus on the convergence path now that §J.9 is captured. If iter-3 also fails, mark CYCLE-159.1 blocked per Rule 5 and pivot to wrappers.
+

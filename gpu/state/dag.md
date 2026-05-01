@@ -2,7 +2,7 @@
 
 Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movement gets demoted to `state/followups.md`. User-gated items live in `state/blockers.md`. Completed entries are moved to `state/cycle-log.md` each cycle.
 
-- **CYCLE-184-PIVOT-LOW-RISK** (queued, per §J.5 after 2 consecutive HIGH-risk partial-FAILs): pivot away from CYCLE-159.1 sparse_eig (iter-2 PARTIAL) for one cycle. Options: (a) wrappers backlog (Python pybind11 for top frontier features), (b) §J framework cleanup pass, (c) continuous optimization for weakest-margin frontier kernel (per Rule 30). Default: §J framework cleanup (pure-Opus, lowest risk, captures lessons from CYCLE-182/183 explicitly).
+- **CYCLE-185-NEXT** (queued): back to dev work after §J.9 LOW-risk recovery. Default: iter-3 sparse_eig with focus on convergence-detection fix. Per Rule 5 if iter-3 also fails, mark CYCLE-159.1 blocked and pivot to wrappers backlog. Alternates: wrappers (Rule 26 overdue), continuous optimization (Rule 30).
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
@@ -30,6 +30,7 @@ Frobenius NMF only (KL / IS / NB-GLM / β-divergence dropped); fast PCA / SVD wi
 
 ## ✅ Recently complete (last 5 cycles — full detail in `state/cycle-log.md`)
 
+- **CYCLE-184** Land §J.9 algorithmic conventions in design docs (pure-Opus, ~50 LOC): captures CYCLE-182's convention-bug lesson durably. Design docs for new kernels with algorithmic conventions must include explicit "Conventions" section: user-facing convention, library default, bridge between, reference test. Generalizes to any kernel where GPU library default differs from user-facing convention (eigensolvers, layout, indexing, RNG state, SpMM transpose). §J series now 9 sub-rules. §J.5 risk-pacing recovery in action: HIGH FAIL + HIGH PARTIAL + LOW PASS pattern restored signal-to-noise.
 - **CYCLE-183** sparse_eigensolver iter-2 (PARTIAL — 2/5 PASS, job 372480 g003): eigenvalue-ordering fix worked (Test 5 KneeOversampleRobustness now PASS with cos-sim=1.000), but Tests 1/2/4 fail on convergence (iters_run=200=max_iter). Sonnet's negate-M-in-Sygvd path (b) was right algorithmically but exposed/introduced a convergence-detection issue. Real progress (1/5 → 2/5) but two-iter rule (Rule 5) suggests pivoting per §J.5. CYCLE-184 will pivot to LOW-risk work and return to sparse_eig later with fresh perspective.
 - **CYCLE-182** sparse_eigensolver Phase D iter-1 (FAIL — 1/5 PASS, job 372420 g003): only Determinism PASS (consistently wrong). Test 5 returned eigenvalues 1.5/0.43 instead of expected 10/5 — LOBPCG is solving for SMALLEST eigenvalues (natural ground-state convention) instead of LARGEST (top-K Laplacian convention). §J.1 threshold-masking pitfall re-confirmed (Determinism PASS doesn't mean correct). Iter-2 queued: negate A → LOBPCG finds smallest of -A = largest of A.
 - **CYCLE-181** CYCLE-159.1 Phase B research + Phase C design (pure-Opus + 2 Haiku dispatches): **NEW** `state/designs/sparse_eigensolver.md` (~210 LOC). Recommended: in-house LOBPCG over cuBLAS+cuSPARSE (header-only, no extra runtime linking). 4-cycle Phase D plan queued (CYCLE-182 implement core + ctest, CYCLE-183 refactor diffmap, CYCLE-184 refactor dpt + API split, CYCLE-185 re-bench Phase E). Memory at n=10k: 10 MB working vs 400 MB old dense (40× reduction). At n=1M: feasible vs old infeasible.

@@ -449,3 +449,32 @@ CYCLE-167's first dispatch hallucinated the bench-helper API — wrote `timer.re
 Concretely, gpu-bench worker prompts should now require: "Before writing the new bench cpp, run `grep -nE 'BenchTimer|PeakMemTracker|BenchRow|timer\.|mem\.|row\.' <template-bench-cpp>` and only use call sites from that grep output."
 
 This rule generalizes beyond bench helpers — any port that copies a known-good template should grep the template for the actual API call surface, not paraphrase it.
+
+### §J.9 — Algorithmic conventions must be EXPLICIT in design docs (from CYCLE-182 iter-1 FAIL)
+
+CYCLE-182 (sparse_eigensolver Phase D iter-1) failed 4/5 tests because the LOBPCG kernel returned the SMALLEST K eigenvalues instead of the LARGEST. Looking back at the design doc (`state/designs/sparse_eigensolver.md`), the algorithm sketch had a casual comment `cusolverDnSsygvd(M, N, K_smallest)` — the word "smallest" was right there, but framed as an implementation detail rather than as the wrong-convention bug it actually was. The implementer (Sonnet) faithfully followed the design and produced a working LOBPCG that solved the wrong problem.
+
+This is a class of design-doc bug that recurs:
+- LOBPCG defaults to smallest eigenvalues (ground-state) — but for graph Laplacian top-K we need largest.
+- ARPACK's `which='LM'` vs `which='SM'` — top-K in user terms = `'LM'` (largest magnitude) for symmetric problems.
+- Eigenvector sign convention (positive or negative leading entry) — design doc must specify.
+- Ordering convention (ascending vs descending) — design doc must specify.
+- Indexing convention (0-based vs 1-based; row-major vs column-major).
+- Nullspace handling (skip first eigenvalue/vector if it's the trivial λ=1).
+
+**Rule**: design docs for new kernels with algorithmic conventions must include an explicit "Conventions" section that, for each convention, states:
+1. **What the convention is** in user-facing terms (e.g. "top-K largest eigenvalues, descending order").
+2. **What the underlying library defaults to** (e.g. "cusolverDnSsygvd returns ascending; LOBPCG ground-state finds smallest").
+3. **The bridge between the two** (e.g. "negate M before Ssygvd; eigenvalues come back as -original; final reverse").
+4. **A specific reference test or library** that establishes the expected convention (e.g. "matches `scipy.sparse.linalg.eigsh(A, k=15, which='LA')`").
+
+The convention bridge is often a 1-line implementation detail with an n-LOC consequence if wrong. CYCLE-182 lost a full HIGH-risk cycle to a bridge that was implicit. CYCLE-181's design doc has been updated post-CYCLE-183 with the explicit negation.
+
+This rule generalizes to ANY kernel where the GPU library's default convention differs from the user-facing convention. Examples worth documenting in future design docs:
+- cuSOLVER eigensolvers: ascending order; LOBPCG: ground-state.
+- cuBLAS: column-major; numpy: row-major.
+- cuSPARSE: 0-indexed; some BLAS: 1-indexed.
+- cuRAND: stateful; numpy.random: stateless seed-per-call.
+- cuSPARSE SpMM: (m × k) · (k × n) → (m × n); some libs use the transpose form.
+
+**Action**: future Phase C design docs (Opus task) must include the Conventions section before Phase D dispatch. gpu-kernel-dev worker prompts can also explicitly call out the convention check during implementation.
