@@ -174,9 +174,19 @@ add_bench_driver(bench_enrich_decoupler_ora_perf  bench_enrich_decoupler_ora_per
 add_bench_driver(bench_enrich_decoupler_viper_perf  bench_enrich_decoupler_viper_perf.cpp)
 
 # ---------------------------------------------------------------------------
+# Cycle 169 drivers: integrate/lisi Phase E benchmark
+# LISI — Local Inverse Simpson's Index (Korsunsky et al. 2019 Nat Methods).
+# One block per cell; shared-mem histogram of n_labels ints; per-cell D =
+# sum(p_l^2), LISI = 1/D. k=10, n_batches=4 synthetic round-robin labels.
+# kNN (Exact, L2, k=10) is built once as an untimed warmup; only lisi() is
+# timed. Scales: 10k / 30k cells × 50 PCs.
+# ---------------------------------------------------------------------------
+add_bench_driver(bench_integrate_lisi_perf  bench_integrate_lisi_perf.cpp)
+
+# ---------------------------------------------------------------------------
 # Status message
 # ---------------------------------------------------------------------------
-message(STATUS "singlet-gpu bench: 30 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164+165+166+167)")
+message(STATUS "singlet-gpu bench: 31 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164+165+166+167+169)")
 message(STATUS "  53a: bench_io_pz_loader_perf")
 message(STATUS "  53a: bench_preprocess_lognorm_perf")
 message(STATUS "  53a: bench_preprocess_hvg_perf")
@@ -206,3 +216,4 @@ message(STATUS "  164: bench_enrich_decoupler_ulm_perf")
 message(STATUS "  165: bench_enrich_decoupler_mlm_perf")
 message(STATUS "  166: bench_enrich_decoupler_ora_perf")
 message(STATUS "  167: bench_enrich_decoupler_viper_perf")
+message(STATUS "  169: bench_integrate_lisi_perf")

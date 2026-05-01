@@ -2,9 +2,7 @@
 
 Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movement gets demoted to `state/followups.md`. User-gated items live in `state/blockers.md`. Completed entries are moved to `state/cycle-log.md` each cycle.
 
-## 🔴 Active this cycle
-
-- **CYCLE-169-PHASE-E-LISI** (queued): Phase E for `integrate/lisi` (CYCLE-133 — kNN-based local-diversity metric for batch integration eval). First Phase E outside the enrich/ family. Expected clean class-3-ish PASS (kNN-based + scIB Python ref).
+- **CYCLE-169-PHASE-E-LISI** (in flight, job 371814 RUNNING on g008): first non-enrich Phase E. Sonnet wrote 3 files using §J.8-correct API (no hallucination this time), local sanity-check clean (10k=4.4ms, 30k=12.9ms numpy — surprisingly fast vectorized baseline), CMake → 31. Expected modest 30-100× since numpy LISI is well-vectorized.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
