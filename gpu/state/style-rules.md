@@ -559,3 +559,34 @@ The pattern: **stub-era wrappers that have never been integration-tested rot in 
 **Why this matters**: a stub wrapper is **net negative** in the codebase if it ships unverified — it advertises a feature that crashes for users. Better to ship 1 fully-verified wrapper per cycle than 5 stubs that look ready in the import-test but fail in real call paths. This is a strong refinement of §J.11 (wrapper-test-infrastructure-first).
 
 **Concrete process change**: when adding a new wrapper, the SAME cycle must include (a) the wrapper file, (b) at least one pytest that exercises a real .1pz fixture end-to-end through the wrapper, (c) a verify SLURM job that PASSES that pytest. If any of (a)/(b)/(c) is deferred, the wrapper file is `STUB` and not exposed in the public Python namespace until the deferred items land.
+
+### §J.14 — Wrapper-rot SWEEP cycle for INHERITED stub-wrapper trees (from CYCLE-197/198)
+
+§J.13 governs new wrappers we author.  But what about the dozens of pre-existing stub wrappers that already shipped under previous cycles?  CYCLE-187 score_genes verify saga showed sequential per-wrapper peeling costs ~7 cycles per wrapper.  At 30+ stub wrappers in the tree, that is ~210 cycles — unacceptable.
+
+CYCLE-197 demonstrated a dramatically better pattern: **the wrapper-rot SWEEP cycle**.
+
+**The pattern**:
+
+1. **Write a single SLURM job** that runs ALL `python/tests/test_*.py` files in one venv build, captures per-test-FILE pass/fail summaries, and emits a triage table at the end.  Template at `state/cycle197_wrapper_rot_sweep.sh`.  90-min walltime is enough for 17 test files including a fresh wheel build.
+
+2. **Inspect the triage output by failure CLASS**, not by test file.  Group with `grep -E "^FAILED" log | sed 's/.*- //' | sort | uniq -c | sort -rn`.  Common-cause groups are obvious: "TypeError: pca(): incompatible function arguments" hit 10+ tests across 5 files in CYCLE-197.
+
+3. **Fix the largest shared-cause group in ONE cycle**.  CYCLE-198 was a 4-file edit that unblocked ~80 tests.
+
+4. **Re-run the SWEEP** to measure the delta.  Repeat 3-4 until either (a) all groups peeled OR (b) remaining groups need C++-side or new-feature work.
+
+**Empirical result (CYCLE-197/198)**:
+- Before: 0 PASS, ~70 FAIL across 17 test files (only test_tl_markers all-skipped).
+- After 1 sweep + 1 fix cycle: ~80 PASS across the same 17 test files (test_bindings 0→62, test_core 0→12, test_io 0→3, test_preprocess 0→1+long-run, test_enrichment 0→3).
+- Strategic dividend: 2 cycles addressed ~80 tests vs ~80 × 7 = 560 sequential per-wrapper cycles → **~280× speedup**.
+
+**Rules**:
+
+1. **First action upon inheriting a stub-wrapper tree**: write the sweep script (90 min one-time investment).  Do NOT start sequential per-wrapper verifies.
+2. **Read sweep failures by class, not by file**: `sort | uniq -c | sort -rn` reveals the few load-bearing root causes immediately.  Fix the BIGGEST count first.
+3. **Each fix cycle gets one re-sweep**: after the fix lands, re-run the same SWEEP job and compare deltas.  This is the verify gate.
+4. **Stop sweeping when remaining failures are NOT shared-cause**: e.g. 23 `test_new_features_smoke` failures in CYCLE-198 were `_core.X is not available` — those are pure-stub wrappers calling unimplemented C++ bindings.  No shared fix; each needs a real binding implementation.  Convert to roadmap items.
+5. **Segfaults and shape-mismatches that emerge from wrapper-rot fixes are real progress, not regressions**: the CYCLE-198 sweep produced 7 test files segfaulting in `_core.pca` — but those test files were FAILING BEFORE TOO; the fix unmasked deeper kernel bugs.  File those as separate kernel-investigation cycles.
+
+**When to apply**: any time you discover (a) ≥5 stub wrappers in a tree where (b) integration-test rot is suspected.  Cost: 1 sweep cycle + 1-3 shared-cause fix cycles.  Replaces N×7 sequential per-wrapper cycles where N = number of affected wrappers.
