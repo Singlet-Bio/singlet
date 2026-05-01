@@ -422,17 +422,23 @@ Cycle 80: block-labels test fix promoted wilcoxon TinyPlanted from noise-converg
 
 ---
 
-### embed/dpt (CYCLE-142) — promoted 2026-04-29, commit no-git, ⚠️ AT-RISK FOR SAME SCALING GAP AS DIFFMAP
+### embed/dpt (CYCLE-142) — promoted 2026-04-29, commit no-git, ⚠️ §J.6 SCALING GAP CONFIRMED (worse than diffmap)
 
 | scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
 |---|---|---|---|---|---|---|---|---|
-| small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | scanpy | TBD |
-| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending — same pattern as diffmap, expect SCALING FAILURE) |
-| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending — same pattern as diffmap, expect SCALING FAILURE) |
+| small (n=40 ctest) | <1 | <1 | 5/5 ctest PASS (CYCLE-142) | n/a | n/a | n/a | n/a | n/a (correctness only) |
+| 10k×50PCs (k=10, dense, n_eigvecs=15) | 2763.3 | n/a | runs but uses dense Ssyevd | 5.1 | n/a | reference | scanpy 1.10.3 sc.tl.dpt | **NONE — GPU 541× slower than scanpy** |
+| 30k | SKIPPED (expected to crash, same pattern as diffmap) | n/a | n/a | 18.0 | n/a | reference | scanpy | **CRASH-EXPECTED** |
+| 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending — needs CYCLE-159.1 rewrite first) |
+| 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending — needs CYCLE-159.1 rewrite first) |
 
-**Notes**: Diffusion Pseudotime (DPT) trajectory inference (Haghverdi et al. 2016). Root-to-cell shortest-path distances on diffusion graph. **CYCLE-160 audit flagged this kernel as at-risk**: `dpt.h` uses the SAME dense n×n W matrix + `cusolverDnSsyevd` pattern at lines 151/179/215/270/302/453 that broke for `embed/diffmap` in CYCLE-159 (14× slower than scanpy at n=10k, cuSOLVER crash at n=30k). The kernel will likely scale identically poorly until rewritten using a sparse eigensolver. See [CYCLE-142 + CYCLE-160 cycle-log](state/cycle-log.md) and `state/style-rules.md` §J.6.
+**Notes**: Diffusion Pseudotime (DPT) trajectory inference (Haghverdi et al. 2016). CYCLE-161 Phase E (job 371312, g008 V100S) **CONFIRMED §J.6 prediction with stronger-than-expected evidence**: GPU dpt at 10k is **541× SLOWER** than scanpy.tl.dpt (2763.3 ms vs 5.1 ms). Two compounding issues:
+1. **Same dense-n×n + Ssyevd scaling bug as diffmap** (root cause of CYCLE-159 NEGATIVE).
+2. **API design bug** (CYCLE-161 NEW finding): `dpt()` re-runs the full diffusion eigendecomposition on every call, while scanpy properly separates `sc.tl.diffmap` (one-time heavy compute) from `sc.tl.dpt(iroot)` (cheap pseudotime computation on the cached eigenvectors). scanpy's 5.1 ms timing only includes the latter; our GPU re-does the whole eigendecomp. The fix should both (a) use a sparse eigensolver per CYCLE-159.1, AND (b) refactor the dpt API to accept pre-computed diffusion eigenvectors as input.
 
-**Phase E status**: ⚠️ **AT-RISK** — kernel passes small-scale ctest but is structurally identical to the broken diffmap pattern. Recommended action: bench at n=10k early to confirm/reject the suspicion; if confirmed, file CYCLE-159.1's sparse-eigensolver rewrite to ALSO cover dpt (same fix applies — symmetric Markov eigendecomp on sparse Laplacian).
+See [CYCLE-142 + CYCLE-160 + CYCLE-161 cycle-log](state/cycle-log.md), [`style-rules.md` §J.6](state/style-rules.md), and the combined CYCLE-159.1 follow-up.
+
+**Phase E status**: ⚠️ **CONFIRMED NEGATIVE** — kernel does NOT dominate at 10k+. Combined fix queued in CYCLE-159.1 (now expanded to cover both diffmap and dpt, plus the API refactor identified here).
 
 ---
 

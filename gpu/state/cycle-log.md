@@ -3596,3 +3596,26 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
 - **Phase G**: needs to run after this commit to publish the dpt warning row.
 - **Next cycle**: CYCLE-161 — Phase E for the next concrete feature. Top candidates: (a) **bench dpt at 10k** to confirm the §J.6 hypothesis (would be a clean MEDIUM-risk experimental cycle with concrete predicted outcome), (b) **preprocess/magic** Phase E (cuSPARSE SpMM-heavy, scanpy `sc.external.pp.magic` SOTA, may need magic-impute Python), (c) **preprocess/model_gene_var** Phase E. Default: bench dpt at 10k — directly tests the §J.6-derived hypothesis and either confirms (and unblocks pre-filing CYCLE-159.1's rewrite to cover both diffmap + dpt) or refutes (gives us evidence that dpt's algorithm differs subtly).
 
+## Cycle 161 (2026-04-30) — Phase E for embed/dpt — §J.6 hypothesis CONFIRMED with bonus finding
+- **Feature**: embed/dpt (CYCLE-142). Hypothesis-test cycle from CYCLE-160's §J.6 audit. Predicted GPU 5-20× slower than scanpy at 10k or crash; bench at 10k.
+- **Outcome**: ⚠️ **CONFIRMED with stronger evidence** — GPU 541× SLOWER than scanpy at 10k. Plus a **bonus finding**: the dpt kernel has a second, independent design bug.
+- **Numbers (job 371312, g008 V100S)**:
+  ```
+  scale | GPU_wall_ms | scanpy_wall_ms | speedup(scanpy/GPU)
+  10k   |     2763.3  |            5.1 |             541× (GPU SLOWER)
+  30k   |    SKIPPED  |           18.0 |             N/A (GPU pre-skipped per CYCLE-159 crash)
+  small (n=40 ctest)  |   <1 |  n/a  |  n/a  (CYCLE-142 correctness still holds)
+  ```
+- **§J.6 verdict**: CONFIRMED. Same dense-n×n + cusolverDnSsyevd pattern as diffmap → same scaling failure. The `state/style-rules.md` §J.6 rule is empirically validated for the second time.
+- **Bonus finding (CYCLE-161 NEW — not predicted by CYCLE-160 audit)**: scanpy's 5.1 ms timing is so fast because `sc.tl.dpt` ONLY computes the pseudotime values from PRE-COMPUTED diffusion eigenvectors (`adata.obsm['X_diffmap']` populated by the untimed `sc.tl.diffmap` setup). Our GPU `dpt()` re-runs the FULL diffusion eigendecomposition on every call, regardless of whether the eigenvectors were already computed. **This is an API design bug** orthogonal to (and compounding with) the §J.6 algorithmic bug. The expected scanpy/GPU ratio for "dpt only" computations is ~5×; the observed 541× is because we're doing 100× more work per call.
+- **CYCLE-159.1 follow-up EXPANDED** to cover both kernels AND the API refactor:
+  1. **Algorithmic fix (both kernels)**: replace dense `cusolverDnSsyevd` on n×n W with sparse eigensolver (LOBPCG via cuVS, or in-house Lanczos on symmetric Laplacian). Same fix applies to both because they share the underlying graph-eigendecomp step.
+  2. **API refactor (dpt only)**: split `dpt()` into two calls: `compute_diffusion_eigenvectors()` (heavy, run once per dataset) → returns a `DiffusionResult` handle, then `dpt(diffusion_result, root_cell)` (cheap, can be called multiple times with different roots). Mirrors scanpy's `sc.tl.diffmap` + `sc.tl.dpt(adata, iroot=...)` separation.
+  3. **The diffmap + dpt rewrite is now ~2-3 days of work** (was ~1-2 for diffmap alone) but the unified fix produces a much cleaner API for both trajectory and embedding workflows.
+- **Lessons**:
+  1. **Pattern audits surface multiple bugs**: CYCLE-160's §J.6-driven audit predicted dpt would be slower; CYCLE-161 confirmed that AND found a second independent bug (re-computation in the API). Hypothesis-test cycles can find more than they're testing for, IF you're attentive to surprising magnitudes (541× was way bigger than the predicted 5-20×, and that gap was the clue to the API issue).
+  2. **scanpy's API separation is intentional**: `sc.tl.diffmap` once + `sc.tl.dpt` many is a deliberate engineering choice for repeated trajectory analysis with different roots. Our flat `dpt()` API was a port-time oversight that costs us 100× per call. Add to wrapper rules: when porting from scanpy/scran/Seurat, preserve their compute-once / query-many API splits where they exist.
+  3. **§J.6 is now empirically validated twice** (diffmap + dpt). Worth promoting from "heuristic" to "hard rule" in the next style-rules edit.
+  4. **The negative-result chain compounds**: CYCLE-159 (1 broken kernel exposed) → CYCLE-160 (1 audit, 1 more flagged) → CYCLE-161 (audit confirmed + 1 more bug found). Each negative finding earns 2-3× return through derived discoveries. This is the kind of finding that small-scale ctest gates would never catch.
+- **Next cycle**: CYCLE-162 — pivot away from more Phase E for already-known-broken kernels (CYCLE-159.1 will fix those). Options: (a) **next Phase E** (preprocess/magic, model_gene_var, integrate/lisi — known-good kernels likely to PASS), (b) **§J.6 promotion to "must-have" rule** (small Opus edit), (c) **CYCLE-159.1 dispatch** (substantial; needs Phase B research first). Default: Phase E for preprocess/model_gene_var (LOW-MEDIUM risk, known-good kernel from CYCLE-127, scanpy `sc.experimental.pp.highly_variable_genes(flavor='seurat_v3')` proxy ref).
+
