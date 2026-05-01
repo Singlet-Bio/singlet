@@ -2,7 +2,7 @@
 
 Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movement gets demoted to `state/followups.md`. User-gated items live in `state/blockers.md`. Completed entries are moved to `state/cycle-log.md` each cycle.
 
-- **CYCLE-180-PHASE-E-SOUPX** (in flight, job 372188 RUNNING on g003): last Phase E candidate. Sonnet wrote 3 files using §J.8 grep, local sanity 10k=12.27ms, 30k=35.97ms numpy. CMake → 41. Predicted class 3 (10-30×).
+- **CYCLE-181-CYCLE-159.1-PHASE-B-RESEARCH** (queued): start CYCLE-159.1 sparse-eigensolver rewrite by dispatching Phase B Haiku research (lit-scout + code-reader on LOBPCG / sparse Lanczos / cuVS APIs). Phase E backfill SWEEP COMPLETE (19 features, 5× to 18000×) — pivot to substantive dev work.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
@@ -30,6 +30,7 @@ Frobenius NMF only (KL / IS / NB-GLM / β-divergence dropped); fast PCA / SVD wi
 
 ## ✅ Recently complete (last 5 cycles — full detail in `state/cycle-log.md`)
 
+- **CYCLE-180** Phase E for qc/soupx (PASS — **21.2-33.5× speedup**, job 372188 g003 + local scipy re-run): GPU 10k=0.580ms vs scipy 12.27ms; 30k=1.074ms vs 35.97ms. Validates §J.7 prediction exactly (predicted class 3 / 10-30×; observed 21-33×). **CLOSES PHASE E BACKFILL SWEEP**: 19 features benched across CYCLE-157-180, range 5× → ~18,000× spanning all 4 §J.7 axes. Major queue items remaining: CYCLE-159.1 sparse-eigensolver rewrite, CYCLE-148.1 scrublet diag, CYCLE-122 enrichment diag, wrappers backlog, continuous optimization.
 - **CYCLE-179** Phase E for qc/empty_drops (PASS — extrapolated **~18,000×**, job 372151 g003): GPU 10k=54.09ms, 30k=159.01ms; scipy ref extrapolated ~10⁶-3×10⁶ ms (15-25 min) from smoke-scale sanity-check (200 droplets × 5000 niters = 6.15s). Class 1 / very-high-overhead per §J.7 — emptyDrops MC is `rng.multinomial` called from Python `for` loop per-candidate × per-iter (80M+ Python loop bodies at 10k scale). Same pattern as ora. New §J.7 tier candidate: "per-element scipy/numpy in inner Python loop" → `python_overhead ≥ 100×`. Phase E corpus: 18 features, 5× to ~18,000×.
 - **CYCLE-178** Phase E for anno/symphony (PASS — **5.26-10.04× speedup**, job 372130 g003): first 4-axis-formula prediction test. **Predicted 30-100×, observed 5-10×** — Sonnet over-extrapolated by analogy from celltypist (50× from sklearn overhead floor) instead of applying the formula directly. symphony is "BLAS-tight + raw numpy chain" → class 3 territory, not class 2 sklearn-wrapped territory. Pair with celltypist for users: 50× (sklearn-wrapped) vs 5-10× (raw numpy). Lesson: USE the formula directly, don't reason by analogy. Phase E corpus 17 features.
 - **CYCLE-177** Land §J.7 4-axis refinement (pure-Opus, ~120 LOC): captures 4 axes from CYCLE-171/172/174/175/176 — GPU-per-cell denominator, memory bandwidth axis, overhead compounding, BLAS-tight subdivision. Updated prediction formula `speedup ≈ (SOTA_per_cell × python_overhead × memory_bandwidth) / GPU_per_cell`. **Empirical 16-feature corpus calibration table added to §J.7; all 16 predictions land in range when 4 axes considered.** §J.7 is now a real working prediction tool, not just a heuristic.

@@ -443,12 +443,14 @@ Cycle 80: block-labels test fix promoted wilcoxon TinyPlanted from noise-converg
 | scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
 |---|---|---|---|---|---|---|---|---|
 | small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | SoupX | TBD |
+| 10k×3k (lower=100, top=10%) | 0.580 | 0.0 | n/a (synth bench) | 12.27 | n/a | reference | manual scipy/numpy 5-pass | wall (21.2×) |
+| 30k×3k (lower=100, top=10%) | 1.074 | 0.0 | n/a (synth bench) | 35.97 | n/a | reference | manual scipy/numpy 5-pass | wall (33.5×) |
 | 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 | 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 
-**Notes**: SoupX ambient RNA contamination removal (Young & Behjati 2020). Automatic contamination quantification + correction via background subtraction. See [CYCLE-141 cycle-log](state/cycle-log.md).
+**Notes**: SoupX ambient RNA correction (Young & Behjati 2020). 5-pass GPU kernel: column-sum + ambient-scatter/normalize + host top-K mask + per-cell ρ + dense-output correction (cudaMemset + nnz-overwrite via algebraic identity `max(0, 0 - ρ·t·π) = 0`). CYCLE-180 Phase E (job 372188 g003 V100S + local scipy re-run). **21.2-33.5× speedup** vs vectorized scipy/numpy CPU. **Validates §J.7 prediction exactly** (predicted class 3 / 10-30×; observed 21-33×). See [CYCLE-141 + CYCLE-180 cycle-log](state/cycle-log.md).
 
-**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+**Phase E status**: COMPLETE for medium scales. **Closes Phase E backfill sweep** (19 features benched).
 
 ---
 

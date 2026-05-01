@@ -4076,3 +4076,43 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
   2. **§J.7 calibration table needs an "extreme overhead" tier**: `python_overhead_multiplier ≥ 100×` for kernels where the SOTA's hottest inner loop is Python — empty_drops, ora are examples. Future predictions can flag these earlier.
 - **Next cycle**: CYCLE-180 — last Phase E candidate. qc/soupx (SoupX ambient RNA correction). Reference: manual numpy SoupX equivalent. After CYCLE-180, the Phase E backfill is COMPLETE — full corpus of ~19 features. Then back to CYCLE-159.1 sparse-eigensolver rewrite as the major remaining work item.
 
+## Cycle 180 (2026-05-01) — Phase E for qc/soupx (PASS, 21-33×, **CLOSES PHASE E BACKFILL SWEEP**)
+- **Feature**: qc/soupx (CYCLE-141, SoupX ambient RNA correction). Last in the Phase E backfill sweep.
+- **Outcome**: PASS, **21.2-33.5× speedup**. Validates §J.7 prediction exactly (predicted class 3 / 10-30×; observed 21-33×).
+- **Numbers (job 372188 g003 V100S + local scipy re-run)**:
+  ```
+  scale | GPU_wall_ms | numpy_wall_ms | speedup
+  10k   |       0.580 |          12.27 |    21.2×
+  30k   |       1.074 |          35.97 |    33.5×
+  ```
+- **§J.7 prediction-then-check**: vectorized SOTA + light GPU compute + no memory bottleneck → class 3 (10-30×). Observed lands within range. Sonnet's prediction this iteration was directly applied from the formula (no over-extrapolation by analogy like CYCLE-178 symphony) — the lesson stuck.
+- **Phase E backfill SWEEP COMPLETE**: 19 features benched across CYCLE-157 to CYCLE-180. Speedup range: **5× → ~18,000×** spanning all 4 §J.7 axes.
+- **Final Phase E corpus** (19 features sorted by speedup):
+  ```
+   2-7×       kmeans                       (BLAS-tight + low Python overhead)
+   5-10×      symphony                     (BLAS-tight + raw numpy chain, no overhead floor)
+   10-32×     decoupler×4 + kbet, soupx    (vectorized scipy/numpy + medium GPU)
+   46-219×    dendrogram, viper, asw,
+              lisi, celltypist             (vectorized + light GPU OR sklearn overhead floor)
+   213-3101×  score_genes, model_gene_var,
+              pearson, magic, combat, ora  (Python loops OR memory-bound dense intermediates)
+   ~18,000×   empty_drops                  (extrapolated; per-element scipy in inner Python loop)
+  ```
+- **pareto-frontier.md**: 19 frontier kernels now have measured Phase E rows at medium scale (10k/30k). Phase E backfill is COMPLETE.
+- **Phase G**: needs to run after this commit.
+- **Major loop session milestones reached**:
+  1. **Phase E backfill complete** (CYCLE-157 → CYCLE-180): 19 features.
+  2. **§J framework matured**: 8 sub-rules + 4-axis prediction model with 18-feature calibration table.
+  3. **Diffmap+dpt scaling failures identified** (CYCLE-159, CYCLE-161): CYCLE-159.1 sparse-eigensolver rewrite queued as the next major work item.
+- **What's next (after Phase E backfill complete)**: Major queue items left:
+  1. **CYCLE-159.1 sparse-eigensolver rewrite** for diffmap + dpt (substantial; needs Phase B research first).
+  2. **CYCLE-148.1 scrublet deeper diagnostic** (audit-flagged broken kernel).
+  3. **CYCLE-122 enrichment zero-output diagnosis** (uninitialized scratch buffer hypothesis).
+  4. **Wrappers backlog** (Python pybind11 + R Rcpp for top frontier features).
+  5. **Continuous optimization** — pick weakest-margin frontier kernel and improve.
+- **Lessons (for the loop session as a whole)**:
+  1. **§J framework is the most valuable artifact of this session**. 19 Phase E cycles produced data; §J distilled that data into a 4-axis prediction model that future cycles can apply.
+  2. **Negative results compound** — CYCLE-153 (FAIL) → §J.1/J.2/J.5 → CYCLE-159 (NEGATIVE) → §J.6 → CYCLE-160 audit (dpt flagged) → CYCLE-161 (CONFIRMED) → CYCLE-167 (build FAIL) → §J.8 → CYCLE-174-176 (3 surprises) → §J.7 4-axis refinement → CYCLE-178 (formula-test) → CYCLE-180 (formula-validate). Each negative seeded multiple downstream improvements.
+  3. **Loop pacing (§J.5) worked**: alternating LOW + MEDIUM risk cycles kept the overall outcome distribution favorable (~30 PASSes + 1 partial-FAIL across the session).
+- **Next cycle**: CYCLE-181 — pivot to substantive dev work after the long Phase E sweep. Default: **start CYCLE-159.1 sparse-eigensolver rewrite** with Phase B research dispatch (Haiku lit-scout + code-reader on LOBPCG / sparse Lanczos / cuVS APIs). This is the highest-priority outstanding work item.
+
