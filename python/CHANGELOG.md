@@ -1,9 +1,34 @@
 # Changelog
 
+## [1.3.1] — 2026-05-01
+
+### Added
+- `failure_categories()` now uses ground-truth data from pipeline (8 real categories vs 4 inferred)
+- `failure_category` column added to sample_index.parquet
+- `top_series()` now includes tissue column
+- `scripts/rebuild_parquets.py` — automated Supabase → parquet rebuild script
+- Blog post #38: "Cell Type Coverage Doubles to 50%"
+- Prepared `publish_4m_blog.py` for automated 4M milestone publishing
+
+### Changed
+- `species()` now uses sample_index with proper deduplication (8 species, consistent with `summary()`)
+- `summary()` species count uses deduplicated species (was counting combo organisms separately)
+- Loader priority: bundled parquet > cache > download (fixes stale cache issue)
+- `refresh()` loads data directly into cache vars (bypasses bundled-first after download)
+- Corpus: 3,196 samples / 1,368 SUCCESS / 658 series / 3.97M cells / 8 species / 29 protocols
+- Cell type coverage: 57% (40 categories, up from 24%)
+- Tissue coverage: 73% (36 categories)
+- GEO title coverage: 99.8%
+
+### Fixed
+- Stale cache served before bundled parquet (loader reordered)
+- `refresh()` ineffective after bundled-first fix (now bypasses bundled)
+- Tests: `organisms` → `organism`, `total_cells` → `n_cells` column name updates
+
 ## [1.3.0] — 2026-05-01
 
 ### Added
-- `cell_types()` — 20 normalized cell type categories (PBMC, T cells, stem cells, K562, etc.) with 24% SUCCESS coverage
+- `cell_types()` — 40 normalized cell type categories (PBMC, T cells, stem cells, K562, etc.) with 57% SUCCESS coverage
 - `samples(cell_type=...)` — filter samples by cell type annotation
 - MCP `singlet_cell_types` tool (11th tool total)
 - Blog post #37: "3,000 Samples Processed" milestone
