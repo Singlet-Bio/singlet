@@ -129,7 +129,8 @@ def _preprocess_gpu(adata):
 def _preprocess_cpu(adata):
     sc = pytest.importorskip("scanpy", reason="scanpy not installed")
     sc.pp.normalize_total(adata, inplace=True)
-    sc.pp.log1p(adata, inplace=True)
+    # scanpy 1.11+ removed inplace=True from log1p; the call is in-place by default.
+    sc.pp.log1p(adata)
 
 
 # ---------------------------------------------------------------------------

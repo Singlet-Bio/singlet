@@ -161,10 +161,21 @@ def run_score_genes(
         # adata.X is (n_obs=cells) × (n_vars=genes); kernel expects genes × cells.
         if X.shape[0] == working.n_obs:
             X = X.T  # genes × cells
-        if sp.issparse(X):
-            cupy_csc = csp.csc_matrix(X.tocsc())
+        if csp.issparse(X):
+            # cupy sparse — already on device.  Convert layout to CSC if needed.
+            cupy_csc = X if isinstance(X, csp.csc_matrix) else X.tocsc()
+            if cupy_csc.dtype != cp.float32:
+                cupy_csc = cupy_csc.astype(cp.float32)
+        elif sp.issparse(X):
+            # scipy sparse on host — upload as cupy CSC.
+            cupy_csc = csp.csc_matrix(X.tocsc().astype(np.float32))
         else:
-            cupy_csc = csp.csc_matrix(cp.array(np.asarray(X, dtype=np.float32)))
+            # Dense.  cupy ndarray exposes __cuda_array_interface__; numpy
+            # goes through cp.asarray (uploads to device).
+            if hasattr(X, "__cuda_array_interface__"):
+                cupy_csc = csp.csc_matrix(X.astype(cp.float32))
+            else:
+                cupy_csc = csp.csc_matrix(cp.asarray(X, dtype=cp.float32))
 
         # Convert cupy csc_matrix to PyDeviceCsc (zero-copy device pointer wrap).
         device_mat = _core.from_cupy_csr(cupy_csc)
@@ -189,7 +200,11 @@ def run_score_genes(
     n_sets  = result.n_sets
 
     # scores_view is [n_cells × n_sets] col-major float32 on device.
-    scores_gpu = cp.asarray(result.scores_view).reshape(n_sets, n_cells).T
+    # cupy >= 14 dtype-strictness: wrap CAI dict so cp.asarray() gets an
+    # object with __cuda_array_interface__ as an attribute, not a bare dict.
+    class _CaiView:
+        def __init__(self, d): self.__cuda_array_interface__ = d
+    scores_gpu = cp.asarray(_CaiView(result.scores_view)).reshape(n_sets, n_cells).T
     # scores_gpu is now (n_cells, n_sets) in C order.
     scores_cpu = scores_gpu.get()  # D2H once; shape (n_cells, n_sets)
 
