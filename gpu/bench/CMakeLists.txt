@@ -139,9 +139,17 @@ add_bench_driver(bench_preprocess_model_gene_var_perf  bench_preprocess_model_ge
 add_bench_driver(bench_enrich_decoupler_wsum_perf  bench_enrich_decoupler_wsum_perf.cpp)
 
 # ---------------------------------------------------------------------------
+# Cycle 164 drivers: enrich/decoupler_ulm Phase E benchmark
+# ULM (Univariate Linear Model) OLS slope β_1[c,p] = cov(X_c,W_p)/var(W_p).
+# 5 passes: mean_X scatter, W stats fused warp-shuffle, var_W, SpMM, score.
+# NOT at risk of §J.6 dense-n×n bug (SpMM O(nnz × p)).
+# ---------------------------------------------------------------------------
+add_bench_driver(bench_enrich_decoupler_ulm_perf  bench_enrich_decoupler_ulm_perf.cpp)
+
+# ---------------------------------------------------------------------------
 # Status message
 # ---------------------------------------------------------------------------
-message(STATUS "singlet-gpu bench: 26 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163)")
+message(STATUS "singlet-gpu bench: 27 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164)")
 message(STATUS "  53a: bench_io_pz_loader_perf")
 message(STATUS "  53a: bench_preprocess_lognorm_perf")
 message(STATUS "  53a: bench_preprocess_hvg_perf")
@@ -167,3 +175,4 @@ message(STATUS "  159: bench_embed_diffmap_perf")
 message(STATUS "  161: bench_embed_dpt_perf")
 message(STATUS "  162: bench_preprocess_model_gene_var_perf")
 message(STATUS "  163: bench_enrich_decoupler_wsum_perf")
+message(STATUS "  164: bench_enrich_decoupler_ulm_perf")

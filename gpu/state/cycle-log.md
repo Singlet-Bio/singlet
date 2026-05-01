@@ -3662,3 +3662,24 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
 - **Phase G**: needs to run after this commit.
 - **Next cycle**: CYCLE-164 — continue Phase E backfill. Options: (a) **integrate/lisi** or **integrate/asw** or **integrate/kbet** (all kNN-based, NOT-at-risk; scanpy/scIB ref availability uncertain), (b) **enrich/decoupler_ulm** or **mlm** or **viper** (similar bench pattern to wsum, modest speedup expected for the ulm/mlm Sgemm-based methods). Default: enrich/decoupler_ulm — same dispatch pattern as wsum, just-completed CYCLE-163 template will copy cleanly.
 
+## Cycle 164 (2026-04-30) — Phase E for enrich/decoupler_ulm (PASS, modest speedup)
+- **Feature**: enrich/decoupler_ulm (CYCLE-130). 5-pass GPU kernel with closed-form OLS slope. §J.6 NOT-at-risk.
+- **Outcome**: PASS. Sonnet correctly applied CYCLE-163 lessons:
+  1. Used `X @ W` (not `X.T @ W`) — avoided the dimension bug from CYCLE-163.
+  2. Ran the Python ref locally before SLURM submission to sanity-check (returned valid CSV: `10k=38.7ms, 30k=129.0ms`). The CYCLE-163 lesson "sanity-check Python ref locally before SLURM" worked exactly as intended.
+- **Numbers (job 371505 g008 + local scipy re-run)**:
+  ```
+  scale | GPU_wall_ms | numpy_wall_ms | speedup
+  10k   |       3.958 |          38.7 |    9.78×
+  30k   |       9.874 |         129.0 |   13.07×
+  ```
+- **Pattern continues**: 9.8-13× modest speedup confirms CYCLE-163's bimodal-pattern finding for native-code SOTAs. Slightly tighter ratio than wsum (10.5-15.7×) because ulm has 5 passes vs wsum's 2 — less GPU overhead amortization, exactly as Sonnet predicted. The decoupler family is shaping up as a "10-30× consistent" feature class.
+- **scipy-on-g008 issue persists** (CYCLE-163 follow-up not yet filed as INFRA-G008-SCIPY blocker — should do that). For now, runtime workaround is to do local re-runs after SLURM completes.
+- **pareto-frontier.md updated**, Phase E status PARTIAL → COMPLETE for medium scales.
+- **Lessons**:
+  1. **CYCLE-163 lessons applied successfully**: the `X @ W` convention propagated correctly + sanity-check pattern worked. This is what the §J style-rules system is for: each cycle's failure mode becomes the next cycle's defended-against pattern.
+  2. **Decoupler family Phase E is now a fast assembly line**: each cycle takes ~25 min wall clock and produces 2-row pareto-frontier updates. ulm + mlm + viper + ora remain (4 more cycles ~= 100 min total).
+  3. **Should file INFRA-G008-SCIPY** as a low-severity blocker so installing scipy in the SLURM Python env eventually closes the workaround loop. Filed as TODO for next state-cleanup cycle.
+- **Phase G**: needs to run after this commit.
+- **Next cycle**: CYCLE-165 — continue decoupler Phase E sweep. Default: enrich/decoupler_mlm (CYCLE-136, multivariate linear model — Cholesky-based per-sample OLS, expect similar 10-30× modest speedup since again native-code SOTA).
+

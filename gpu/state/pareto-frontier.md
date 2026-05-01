@@ -265,12 +265,14 @@ Cycle 80: block-labels test fix promoted wilcoxon TinyPlanted from noise-converg
 | scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
 |---|---|---|---|---|---|---|---|---|
 | small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | decoupler | TBD |
+| 10k×5k (5%, 50 pathways) | 3.958 | 0.0 | n/a (synth bench) | 38.7 | n/a | reference | numpy ULM (manual decoupleR equiv) | wall (9.78×) |
+| 30k×5k (5%, 50 pathways) | 9.874 | 0.0 | n/a (synth bench) | 129.0 | n/a | reference | numpy ULM (manual decoupleR equiv) | wall (13.07×) |
 | 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 | 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 
-**Notes**: Decoupler ULM (Univariate Linear Model) regulon activity (Badia-i-Mompel et al. 2022). Per-regulon univariate linear regression on sparse expression. See [CYCLE-130 cycle-log](state/cycle-log.md).
+**Notes**: Decoupler ULM (Univariate Linear Model) regulon activity (Badia-i-Mompel et al. 2022). Per-regulon univariate linear regression on sparse expression. CYCLE-164 Phase E (job 371505 g008 + local scipy re-run): 5-pass GPU kernel (mean_X scatter + W stats fused + var_W + SpMM + score). **9.78-13.07× speedup** vs vectorized numpy CPU baseline. Modest, consistent with CYCLE-163's bimodal-pattern finding (numpy/scipy vectorized ULM is native code). Slightly tighter ratio than wsum (10.5-15.7×) because ulm has 5 passes vs wsum's 2 → less GPU overhead amortization. CPU baseline used manual numpy (decoupleR Python pkg not installed). See [CYCLE-130 + CYCLE-164 cycle-log](state/cycle-log.md).
 
-**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+**Phase E status**: COMPLETE for medium scales (small TBD, 100k/1M still pending streaming driver).
 
 ---
 
