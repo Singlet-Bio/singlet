@@ -123,3 +123,23 @@ def test_info_missing_raises():
     import singlet
     with pytest.raises(KeyError):
         singlet.info("GSE000000")
+
+
+def test_failure_categories():
+    import singlet
+    fc = singlet.failure_categories()
+    assert len(fc) > 0
+    assert "category" in fc.columns
+    assert "count" in fc.columns
+    assert "pct" in fc.columns
+    assert fc["count"].sum() > 0
+    assert abs(fc["pct"].sum() - 100.0) < 1.0
+
+
+def test_tissues():
+    import singlet
+    t = singlet.tissues()
+    assert len(t) > 10
+    assert "tissue" in t.columns
+    assert "count" in t.columns
+    assert t["count"].iloc[0] >= t["count"].iloc[-1]  # sorted desc
