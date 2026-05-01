@@ -4168,3 +4168,33 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
   3. **Phase D first-attempts on substantial new kernels often hit algorithmic bugs** that the design doc didn't catch (CYCLE-153 scrublet, CYCLE-150 diffmap pre-fix, CYCLE-182 LOBPCG). The 2-iter rule (Rule 5) accommodates this; the §J framework now also captures this expectation.
 - **Next cycle**: CYCLE-183 — iter-2 fix dispatch. One Sonnet `gpu-kernel-dev` worker reviews the test failures + the algorithmic hypothesis (smallest-vs-largest) and applies the fix (likely negate-A approach). Re-run ctest. After iter-2 PASS, queue CYCLE-184 (refactor diffmap to use sparse_eigensolver).
 
+## Cycle 183 (2026-05-01) — sparse_eigensolver iter-2 (PARTIAL — 2/5 PASS, eigenvalue ordering fixed but convergence broken)
+- **Feature**: core/sparse_eigensolver.h LOBPCG. Iter-2 of Phase D step 1.
+- **Outcome**: ⚠️ **PARTIAL — 2/5 PASS, 3/5 FAIL on convergence**.
+- **Numbers (job 372480 g003 V100S)**:
+  ```
+  Test 1 TinyEigSymmetric:              FAIL  (converged=false on n=40 tridiagonal)
+  Test 2 ScaleSmokeMedium:              FAIL  (likely also non-convergence)
+  Test 3 Determinism_BitIdentical:      PASS  (still consistent)
+  Test 4 Convergence_OnConvergent:      FAIL  (iters_run=200=max_iter; didn't converge)
+  Test 5 KneeOversampleRobustness:      PASS  (cos-sim=1.000! — fix works for clustered diagonal)
+  ```
+- **Sonnet's iter-2 fix** (path b — negate M in subproblem):
+  - `cublasSscal(blas_h, sz*sz, &-1, d_M, 1)` before `cusolverDnSsygvd` — converts ascending Sygvd output to "smallest of -M = largest of M".
+  - Updated `top_start = 0` (first K cols), `p_start = K_block` (next K cols).
+  - Removed dead `lobpcg_reverse_columns_kernel` invocation (kept the function for v1).
+  - 3 sites changed in `sparse_eigensolver.h`, ~20 LOC total.
+  - Design doc updated with the inline correction (algorithm sketch now reflects the negation).
+- **What worked**: Test 5 (KneeOversampleRobustness) achieved cos-sim=1.000 — algorithm CAN find correct eigenvectors when it converges. The eigenvalue-ordering fix is correct.
+- **What's broken now**: convergence detection. Tests 1/4 (n=40 / n=1000 tridiagonal) hit `iters_run = max_iter = 200` without converging. Possible causes:
+  1. **Residual norm still computed with old sign convention** — `|R|_max < ε` may be using stale `rho` from before the negation.
+  2. **Tridiagonal vs diagonal spectrum**: tridiagonal has tightly-clustered eigenvalues at the top of the spectrum; the negation may shuffle the convergence behavior such that the K largest are not the K easiest to find.
+  3. **max_iter=200 too low**: bumping to 1000 might paper over the issue. But Sonnet's earlier KneeOversample test converged in <200 iter on n=500, so 200 should be enough for n=40 tridiagonal. Probably not the root cause.
+- **§J.5 risk-pacing**: 2 consecutive HIGH-risk cycles (CYCLE-182 + CYCLE-183) both partial-FAIL. Per §J.5 the next 1-2 cycles should bias toward LOW-risk. Options for CYCLE-184: (a) iter-3 dispatch (still HIGH-risk) — risk a 3rd consecutive PARTIAL/FAIL, (b) pivot to LOW-risk work like wrappers backlog or another non-CYCLE-159.1 task. Default per §J.5: pivot to LOW-risk now and return to CYCLE-159.1 with fresh perspective later.
+- **Per Rule 5 two-iter rule**: CYCLE-159.1 step 1 has now had 2 iters without full PASS. Strict reading marks as `blocked`. But measurable progress (1/5 → 2/5) suggests the algorithm is on the right track; one more focused iter on convergence might resolve. Trade-off documented; deferring final decision to CYCLE-184.
+- **Phase G**: not run (kernel still unverified).
+- **Lessons**:
+  1. **Iter-2 fixed the easy bug, exposed the hard bug**. Eigenvalue ordering was a 20-LOC fix; convergence detection is a deeper integration issue.
+  2. **§J.5 LOW-risk recovery pattern applies after this point**. Two consecutive partial-FAILs on a substantial new kernel = signal to step back, not push harder.
+- **Next cycle**: CYCLE-184 — choose between (a) iter-3 sparse_eig convergence fix (HIGH-risk; if FAIL → mark CYCLE-159.1 blocked), (b) **PIVOT to LOW-risk work** (wrappers backlog, continuous optimization, or §J framework cleanup). Default per §J.5: PIVOT. Return to CYCLE-159.1 with fresh perspective in a later cycle.
+

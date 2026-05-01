@@ -48,6 +48,14 @@
 //   chunks (future; current header assumes full A fits in device memory).
 //
 // CYCLE-182: initial implementation.
+// CYCLE-183 (iter-2 fix): LOBPCG naturally minimizes the Rayleigh quotient
+// (ground-state convention → SMALLEST eigenvalues). For top-K LARGEST (graph
+// Laplacian diffmap/dpt), we negate M = S^T(AS) before Ssygvd so that
+// "find K_smallest of -M" ≡ "find K_largest of M" (ARPACK sign-flip trick).
+// Specifically: Ssygvd returns ascending for -M; we take the FIRST K_block
+// columns (smallest of -M = largest of M) rather than the last K_block.
+// Residual and rho computation remain unchanged (they use A, not -A).
+// See state/designs/sparse_eigensolver.md §CYCLE-183-fix.
 
 #pragma once
 
@@ -690,7 +698,21 @@ inline SparseEigResult<T> top_k_eigsh_lobpcg(
             &zero,
             d_N.get(), sz));
 
-        // Ssygvd: generalized symmetric eigenproblem M*U = N*U*diag(lambda).
+        // CYCLE-183 fix: negate M before Ssygvd so that cuSOLVER's ascending-order
+        // "smallest" output of (-M) maps to the K_largest of M.
+        // WHY: LOBPCG minimizes the Rayleigh quotient, converging to SMALLEST eigenvalues
+        // of the subspace A-projection. Negating M flips the spectrum so Ssygvd's
+        // ground state (smallest of -M) = largest of M. We then take the FIRST K_block
+        // columns of U instead of the last K_block.
+        // The eigenvectors U are the same (A and -A share eigenvectors); only the
+        // eigenvalue order is inverted. d_lambda_sub holds eigenvalues of -M (unused).
+        {
+            const float neg_one = -1.f;
+            // cublasSscal: in-place scale of all sz*sz elements of d_M by -1.
+            SINGLET_GPU_CUBLAS_CHECK(cublasSscal(blas_h, sz * sz, &neg_one, d_M.get(), 1));
+        }
+
+        // Ssygvd: generalized symmetric eigenproblem (-M)*U = N*U*diag(lambda).
         // d_work_rr was sized for the maximum subproblem (S_cols × S_cols) so
         // lwork_rr is sufficient for the smaller first-iter case (2K_block × 2K_block)
         // since Ssygvd workspace is monotone in n. No per-iter re-query needed.
@@ -700,19 +722,20 @@ inline SparseEigResult<T> top_k_eigsh_lobpcg(
             CUSOLVER_EIG_MODE_VECTOR,
             CUBLAS_FILL_MODE_LOWER,
             sz,
-            d_M.get(), sz,   // on exit: eigenvectors U (col-major, ascending)
+            d_M.get(), sz,   // on exit: eigenvectors U (col-major, ascending of -M)
             d_N.get(), sz,
             d_lambda_sub.get(),
             d_work_rr.get(), lwork_rr,
             d_info_rr.get()));
 
-        // d_M now holds U (sz × sz col-major, ascending eigenvalues).
-        // Top-K_block Ritz vectors are in U[:, sz-K_block .. sz-1].
-        // P directions use U[:, sz-2*K_block .. sz-K_block-1] (the next K_block).
-        // On first_iter: sz = 2*K_block, so P gets U[:, 0 .. K_block-1].
+        // d_M now holds U (sz × sz col-major, ascending eigenvalues of -M).
+        // Since -M eigenvalues are ascending, -M[:,0] = smallest of -M = LARGEST of M.
+        // Top-K_block Ritz vectors for LARGEST eigenvalues of M are U[:, 0 .. K_block-1].
+        // P directions use U[:, K_block .. 2*K_block-1] (the next K_block).
+        // On first_iter: sz = 2*K_block, so P gets U[:, K_block .. 2*K_block-1].
 
-        const int top_start   = sz - K_block;
-        const int p_start     = (sz >= 2 * K_block) ? (sz - 2 * K_block) : 0;
+        const int top_start   = 0;
+        const int p_start     = K_block;
         const int p_count     = std::min(K_block, sz - K_block);
 
         // -------------------------------------------------------------------------
@@ -788,36 +811,32 @@ inline SparseEigResult<T> top_k_eigsh_lobpcg(
     core::DeviceMemory<float> d_out_ev(K);
     core::DeviceMemory<float> d_out_vecs(static_cast<size_t>(n) * K);
 
-    // Copy top-K eigenvalues (d_rho[0..K-1] are ascending from the subproblem;
-    // we want descending). We copy the last K entries of d_rho for the K largest.
-    // But d_rho was filled by extract_rho from the Ritz projection, so d_rho[i]
-    // corresponds to X[:,i]. The X columns are ordered ascending by eigenvalue
-    // (from Ssygvd ascending). Top-K = last K columns of the K_block block.
-    // Copy rho[K_over .. K_block-1] (= the K largest) to out_ev in reverse.
-    //
-    // We do this with a cudaMemcpy2D pattern: copy last K rho values, then
-    // reverse on device using the reverse_columns_kernel (for eigenvectors).
+    // CYCLE-183 fix: after negated-M LOBPCG, X[:,0] = LARGEST eigenvector, X[:,1] = 2nd, ...
+    // because the last Ssygvd (of -M) placed the top-K_block columns first (col 0..K_block-1),
+    // and X was formed as S @ U[:,0:K_block]. Within those K_block columns, column 0 is the
+    // smallest of -M = largest of A. The K_over extra columns are the last K_over (cols K..K_block-1).
+    // So: rho[0..K-1] = top-K Rayleigh quotients (descending), rho[K..K_block-1] = oversample drop.
+    // Copy rho[0..K-1] and X[:,0..K-1] directly — already descending, no reversal needed.
     SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(
         d_out_ev.get(),
-        d_rho.get() + K_over,   // skip first K_over (smallest)
+        d_rho.get(),            // first K rho values (largest K, descending)
         K * sizeof(float),
         cudaMemcpyDeviceToDevice, stream));
 
-    // Copy last K columns of d_X (n × K_block) → d_out_vecs (n × K).
+    // Copy first K columns of d_X (n × K_block) → d_out_vecs (n × K).
     SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(
         d_out_vecs.get(),
-        d_X.get() + static_cast<ptrdiff_t>(K_over) * n,  // skip first K_over cols
+        d_X.get(),              // first K cols = top-K eigenvectors, largest first
         static_cast<size_t>(n) * K * sizeof(float),
         cudaMemcpyDeviceToDevice, stream));
 
-    // Reverse column order (ascending → descending eigenvalues).
-    {
-        const int half_cols = K / 2;
-        const int total_elem = n * half_cols;
-        const int grid = (total_elem + THREADS - 1) / THREADS;
-        lobpcg_reverse_columns_kernel<<<grid, THREADS, 0, stream>>>(
-            d_out_vecs.get(), d_out_ev.get(), n, K);
-    }
+    // No column reversal needed: order is already largest-first (descending) from
+    // the negated-M Ssygvd ascending output mapped to largest-of-A first.
+    // lobpcg_reverse_columns_kernel is not called here (CYCLE-183 fix).
+    // NOTE: rho ordering depends on the last iteration's Ritz step. On pure convergence
+    // the columns are monotone descending; on max_iter exit they may be approximate
+    // but still represent the top-K subspace (the API contract is "top-K", not sorted
+    // exactly). A sort pass would be safe to add in v1 if needed.
 
     SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 

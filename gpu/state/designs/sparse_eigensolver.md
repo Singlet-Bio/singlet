@@ -44,11 +44,15 @@ repeat:
   # Solve K×K Rayleigh-Ritz subproblem:
   M ← S^T @ AS                       # 3K × 3K small matrix via cuBLAS Sgemm
   N ← S^T @ S                        # for generalized; identity if S orthonormal
-  (λ_new, U) ← cusolverDnSsygvd(M, N, K_smallest)  # solve 3K × 3K dense
+  # CYCLE-183 fix: negate M before Ssygvd (ARPACK sign-flip trick).
+  # LOBPCG naturally finds SMALLEST eigenvalues. Negating M makes Ssygvd's
+  # ascending "smallest of -M" output = LARGEST of M = top-K of A.
+  M ← -M                             # cublasSscal by -1 in-place (one kernel call)
+  (λ_new, U) ← cusolverDnSsygvd(-M, N)  # ascending of -M → first cols = largest of A
 
-  # Update X, P:
-  X_new ← S @ U[:, :K]               # cuBLAS Sgemm
-  P_new ← S @ U[:, K:K+P_cols]
+  # Update X, P (take FIRST K columns of U, not last):
+  X_new ← S @ U[:, :K]               # cuBLAS Sgemm — U[:,0] = largest Ritz vector
+  P_new ← S @ U[:, K:K+P_cols]       # next K columns as search direction
   X ← X_new; P ← P_new
   λ ← λ_new
 

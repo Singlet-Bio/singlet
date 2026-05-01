@@ -2,7 +2,7 @@
 
 Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movement gets demoted to `state/followups.md`. User-gated items live in `state/blockers.md`. Completed entries are moved to `state/cycle-log.md` each cycle.
 
-- **CYCLE-183-SPARSE-EIG-ITER-2** (queued): iter-2 fix for the smallest-vs-largest eigenvalue bug exposed in CYCLE-182. LOBPCG defaults to smallest eigenvalues (ground state); we need largest for graph Laplacian top-K. Likely fix: negate A in `top_k_eigsh_lobpcg` if `cfg.which == "LM"`, then negate eigenvalues at output. Sonnet `gpu-kernel-dev` dispatch + re-run ctest.
+- **CYCLE-184-PIVOT-LOW-RISK** (queued, per §J.5 after 2 consecutive HIGH-risk partial-FAILs): pivot away from CYCLE-159.1 sparse_eig (iter-2 PARTIAL) for one cycle. Options: (a) wrappers backlog (Python pybind11 for top frontier features), (b) §J framework cleanup pass, (c) continuous optimization for weakest-margin frontier kernel (per Rule 30). Default: §J framework cleanup (pure-Opus, lowest risk, captures lessons from CYCLE-182/183 explicitly).
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
@@ -30,6 +30,7 @@ Frobenius NMF only (KL / IS / NB-GLM / β-divergence dropped); fast PCA / SVD wi
 
 ## ✅ Recently complete (last 5 cycles — full detail in `state/cycle-log.md`)
 
+- **CYCLE-183** sparse_eigensolver iter-2 (PARTIAL — 2/5 PASS, job 372480 g003): eigenvalue-ordering fix worked (Test 5 KneeOversampleRobustness now PASS with cos-sim=1.000), but Tests 1/2/4 fail on convergence (iters_run=200=max_iter). Sonnet's negate-M-in-Sygvd path (b) was right algorithmically but exposed/introduced a convergence-detection issue. Real progress (1/5 → 2/5) but two-iter rule (Rule 5) suggests pivoting per §J.5. CYCLE-184 will pivot to LOW-risk work and return to sparse_eig later with fresh perspective.
 - **CYCLE-182** sparse_eigensolver Phase D iter-1 (FAIL — 1/5 PASS, job 372420 g003): only Determinism PASS (consistently wrong). Test 5 returned eigenvalues 1.5/0.43 instead of expected 10/5 — LOBPCG is solving for SMALLEST eigenvalues (natural ground-state convention) instead of LARGEST (top-K Laplacian convention). §J.1 threshold-masking pitfall re-confirmed (Determinism PASS doesn't mean correct). Iter-2 queued: negate A → LOBPCG finds smallest of -A = largest of A.
 - **CYCLE-181** CYCLE-159.1 Phase B research + Phase C design (pure-Opus + 2 Haiku dispatches): **NEW** `state/designs/sparse_eigensolver.md` (~210 LOC). Recommended: in-house LOBPCG over cuBLAS+cuSPARSE (header-only, no extra runtime linking). 4-cycle Phase D plan queued (CYCLE-182 implement core + ctest, CYCLE-183 refactor diffmap, CYCLE-184 refactor dpt + API split, CYCLE-185 re-bench Phase E). Memory at n=10k: 10 MB working vs 400 MB old dense (40× reduction). At n=1M: feasible vs old infeasible.
 - **CYCLE-180** Phase E for qc/soupx (PASS — **21.2-33.5× speedup**, job 372188 g003 + local scipy re-run): GPU 10k=0.580ms vs scipy 12.27ms; 30k=1.074ms vs 35.97ms. Validates §J.7 prediction exactly (predicted class 3 / 10-30×; observed 21-33×). **CLOSES PHASE E BACKFILL SWEEP**: 19 features benched across CYCLE-157-180, range 5× → ~18,000× spanning all 4 §J.7 axes. Major queue items remaining: CYCLE-159.1 sparse-eigensolver rewrite, CYCLE-148.1 scrublet diag, CYCLE-122 enrichment diag, wrappers backlog, continuous optimization.
