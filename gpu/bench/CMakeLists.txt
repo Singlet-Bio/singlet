@@ -196,9 +196,22 @@ add_bench_driver(bench_integrate_lisi_perf  bench_integrate_lisi_perf.cpp)
 add_bench_driver(bench_integrate_asw_perf  bench_integrate_asw_perf.cpp)
 
 # ---------------------------------------------------------------------------
+# Cycle 171 drivers: integrate/kbet Phase E benchmark
+# kBET — k-nearest neighbor Batch Effect Test (Büttner et al. 2019 Nat Methods).
+# One block per cell; shared-mem int local_count[n_batches]; thread 0 serial
+# scan builds batch histogram, computes chi2 = Σ_b (obs-exp)²/max(exp,1),
+# p-value via Wilson-Hilferty cube-root transform (df==1: erfc exact).
+# kbet_reject_kernel marks p<0.05; cub::DeviceReduce::Sum for mean_chi2 and
+# reject_rate. k=10/15, n_batches=4 synthetic round-robin labels.
+# kNN (Exact, L2) is built once as an untimed warmup; only kbet() is timed.
+# Scales: 10k cells × 50 PCs (k=10), 30k cells × 50 PCs (k=15).
+# ---------------------------------------------------------------------------
+add_bench_driver(bench_integrate_kbet_perf  bench_integrate_kbet_perf.cpp)
+
+# ---------------------------------------------------------------------------
 # Status message
 # ---------------------------------------------------------------------------
-message(STATUS "singlet-gpu bench: 32 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164+165+166+167+169+170)")
+message(STATUS "singlet-gpu bench: 33 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164+165+166+167+169+170+171)")
 message(STATUS "  53a: bench_io_pz_loader_perf")
 message(STATUS "  53a: bench_preprocess_lognorm_perf")
 message(STATUS "  53a: bench_preprocess_hvg_perf")
@@ -230,3 +243,4 @@ message(STATUS "  166: bench_enrich_decoupler_ora_perf")
 message(STATUS "  167: bench_enrich_decoupler_viper_perf")
 message(STATUS "  169: bench_integrate_lisi_perf")
 message(STATUS "  170: bench_integrate_asw_perf")
+message(STATUS "  171: bench_integrate_kbet_perf")

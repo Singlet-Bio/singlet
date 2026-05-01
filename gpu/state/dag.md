@@ -2,7 +2,7 @@
 
 Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movement gets demoted to `state/followups.md`. User-gated items live in `state/blockers.md`. Completed entries are moved to `state/cycle-log.md` each cycle.
 
-- **CYCLE-171-PHASE-E-KBET** (queued): completes scIB integration-eval triplet (lisi + asw + kbet). Same dispatch shape; expect 100-300× class.
+- **CYCLE-171-PHASE-E-KBET** (in flight, job 371909 RUNNING on g008): completes scIB triplet. Sonnet wrote 3 files using §J.8-correct API, local sanity-check clean (10k=5.9ms, 30k=21.7ms numpy kbet), CMake → 33. Expected 100-300× class.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
