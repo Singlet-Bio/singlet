@@ -4,7 +4,7 @@ Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movemen
 
 ## 🔴 Active this cycle
 
-- **CYCLE-168-NEXT** (queued): decoupler family Phase E SWEEP COMPLETE (5/5). Pivot away from decoupler. Options: (a) §J.7+§J.8 land in style-rules (Opus cleanup), (b) Phase E for non-enrich kernel (integrate/lisi/asw/kbet, qc/empty_drops/soupx), (c) CYCLE-159.1 sparse-eigensolver rewrite (substantial). Default: §J.7+§J.8 land first.
+- **CYCLE-169-PHASE-E-LISI** (queued): Phase E for `integrate/lisi` (CYCLE-133 — kNN-based local-diversity metric for batch integration eval). First Phase E outside the enrich/ family. Expected clean class-3-ish PASS (kNN-based + scIB Python ref).
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
@@ -32,6 +32,7 @@ Frobenius NMF only (KL / IS / NB-GLM / β-divergence dropped); fast PCA / SVD wi
 
 ## ✅ Recently complete (last 5 cycles — full detail in `state/cycle-log.md`)
 
+- **CYCLE-168** style-rules §J.7 + §J.8 (pure-Opus, ~80 LOC): captures CYCLE-163-167 lessons. §J.7 = Phase E speedup is a continuum (predict as `(SOTA_python_overhead × GPU_parallelism) / GPU_compute_intensity_per_cell`); empirical decoupler corpus included as calibration. §J.8 = bench-helper API verification (must grep template for actual call sites; CYCLE-167 hallucinated 9 API names). §J series now has 8 sub-rules, all derived from real cycle outcomes. Meta-lesson: each §J is born from a NEGATIVE cycle — negative results are the highest-leverage outcome.
 - **CYCLE-167** Phase E for enrich/decoupler_viper (PASS — **47.3-51.6× speedup**, jobs 371727/371729 g008 + local scipy re-run): GPU 10k=135.4ms vs scipy 6405.6ms; 30k=386.9ms vs 19982.9ms. **BREAKS Sonnet's class-2 prediction** (predicted 1000-5000×, got 47-52×) — `scipy.stats.rankdata(axis=0)` IS vectorized C, not per-cell Python overhead. Refines pattern: classes are a CONTINUUM, not crisp buckets. Plus: build FAIL on first attempt due to Sonnet hallucinating BenchTimer API (9 errors); fixed by aligning to CYCLE-166 ora's known-good API. **Decoupler Phase E SWEEP COMPLETE (5/5)**: 9.78× to 3101× across the family. §J.7 (continuum pattern) + §J.8 (bench API verification) candidates filed.
 - **CYCLE-166** Phase E for enrich/decoupler_ora — **2832-3101× speedup** (jobs 371683 g003 + local scipy re-run 88s): GPU 10k=7.830ms vs scipy 22174ms; 30k=21.422ms vs 66442ms. **Breaks the bimodal pattern** — `scipy.stats.hypergeom.sf` is Python-wrapped C called billions of times → per-call Python overhead dominates. **Refines to TRIMODAL**: class 1 (Python loops, 100-500×), class 2 (per-element Python-wrapped C, 1000-5000×), class 3 (vectorized native BLAS, 10-30×). New §J.7 candidate.
 - **CYCLE-165** Phase E for enrich/decoupler_mlm (PASS, jobs 371591 g008 + local scipy re-run): GPU 10k=4.406ms vs scipy 118.9ms = **27.0×**; 30k=9.549ms vs 200.7ms = **21.0×**. HIGHER than wsum/ulm despite more GPU passes — refines the bimodal pattern: compute-intensive kernels earn the high end of "native-code SOTA → 10-30×". §J system propagated all lessons automatically (X@W, local sanity-check, scipy-on-g008 workaround). Filed §J.7 candidate: Phase E reports should classify compute intensity.

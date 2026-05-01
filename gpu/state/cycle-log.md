@@ -3757,3 +3757,22 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
 - **Phase G**: needs to run after this commit.
 - **Next cycle**: CYCLE-168 — pivot away from decoupler now that the family is done. Options: (a) **pick a non-enrich Phase E target** (integrate/lisi/asw/kbet for kNN-based metrics, qc/empty_drops or qc/soupx for raw-10X), (b) **§J.7+§J.8 land in style-rules** (small Opus cycle), (c) **CYCLE-159.1 sparse-eigensolver rewrite** (substantial; substantial opportunity since both diffmap+dpt are confirmed broken). Default: §J.7+§J.8 land — captures the trimodal/continuum lesson + bench-helper-API lesson before they're lost.
 
+## Cycle 168 (2026-05-01) — Land §J.7 + §J.8 in style-rules.md (PASS, pure-Opus)
+- **Feature**: state/style-rules.md — captures CYCLE-163-167 lessons as durable §J sub-rules.
+- **Outcome**: PASS. Two new sub-rules appended (~80 LOC total).
+- **§J.7 — Phase E speedup is a continuum**: with full decoupler-family corpus (5 kernels spanning 9.78× to 3101×), shows the original "trimodal" classes are not crisp boundaries. Speedup is a continuum driven by two independent factors:
+  1. SOTA structural factor (Python loops vs vectorized C, 4 levels)
+  2. GPU compute intensity per cell (light/medium/heavy)
+  - Predict speedup as roughly `(SOTA_python_overhead × GPU_parallelism) / GPU_compute_intensity_per_cell`. Crude but more accurate than 3-class buckets.
+  - Empirical decoupler corpus (5 rows) included as calibration table.
+  - Rule for Phase E reports: classify SOTA structure + GPU compute class so users have realistic per-kernel expectations (not just headline numbers).
+- **§J.8 — Bench-helper API verification**: CYCLE-167 build FAILed with 9 errors because Sonnet hallucinated the BenchTimer/PeakMemTracker/BenchRow API. Rule: always grep a known-good template for actual call sites before paraphrasing. Concrete prompt addition for gpu-bench worker: `grep -nE 'BenchTimer|PeakMemTracker|BenchRow|timer\.|mem\.|row\.' <template>.cpp` first.
+  - Generalizes: any port that copies a template should grep for the actual API surface, not paraphrase from intuition.
+- **§J series now has 8 sub-rules**: J.1 threshold-masking, J.2 SLURM nodelist (extended in CYCLE-158 with --exclude lesson), J.3 pareto rows in Phase F, J.4 Phase G publish in close, J.5 alternate LOW+HIGH risk cycles, J.6 scale-smoke-test for O(n²+) kernels, J.7 speedup continuum, J.8 bench API verification. All derived from real cycle outcomes (153-167 range).
+- **Lessons (about §J itself)**:
+  1. **§J is now a real predictive framework**, not just a checklist. Future cycles can use §J.7 to predict their speedup and §J.6 to triage at-risk kernels before benching.
+  2. **Each §J entry is born from a NEGATIVE cycle**: J.1/J.5 from CYCLE-153 FAIL, J.6 from CYCLE-159 NEGATIVE, J.7/J.8 from the CYCLE-163-167 sweep. **Negative results are the highest-leverage cycle outcome** because they generate the durable rules that make subsequent cycles cheaper. This itself is meta-lesson worth landing.
+  3. **The §J meta-pattern**: cycle-N produces NEGATIVE → cycle-N+1 distills into §J → cycles N+2 onward apply §J to avoid the same trap → cycle-N+10 produces a new NEGATIVE on a different axis → repeat. Documented as a culture pattern, not a rule.
+- **No SLURM, no Phase G needed** (style-rules.md not in pareto-frontier path). Pure-Opus cycle.
+- **Next cycle**: CYCLE-169 — pivot to actual work. Options: (a) **Phase E for non-enrich kernel** (integrate/lisi or qc/empty_drops — fresh coverage outside enrich/), (b) **CYCLE-159.1 sparse-eigensolver rewrite** (substantial; the only frontier-broken work item), (c) **wrappers for top frontier features** (Rule 26 says wrappers in 2 cycles; many overdue). Default: Phase E for integrate/lisi (small kernel, kNN-based, expected clean class-3-ish PASS).
+

@@ -349,3 +349,43 @@ The smoke test can be a single ctest case or a single bench run; what matters is
 - `integrate/combat.h`, `integrate/asw.h`, `integrate/lisi.h`, `integrate/kbet.h`, `qc/empty_drops.h`, `qc/soupx.h`, `anno/celltypist.h`, `anno/symphony.h`, `enrich/decoupler_*` — all O(n_cells) or O(n_cells × small) by design (per-cell histogram, kNN-aware metrics, or sparse SpMM). NOT at risk.
 
 **Action filed for CYCLE-160 close**: `embed/dpt.h` pareto-frontier row updated with ⚠️ "AT-RISK" marker pending bench. Future Phase E should target dpt early to confirm or reject the suspicion.
+
+**CYCLE-161 update**: dpt benched, §J.6 hypothesis CONFIRMED (GPU 541× SLOWER than scanpy). Plus a bonus API design bug — dpt re-runs full eigendecomp every call while scanpy splits one-time `sc.tl.diffmap` from cheap `sc.tl.dpt(iroot)`. CYCLE-159.1 follow-up expanded to combined sparse-eigensolver + API refactor for both diffmap and dpt.
+
+### §J.7 — Phase E speedup is a continuum, not crisp classes (from CYCLE-163-167 decoupler sweep)
+
+After benching the full decoupler family (wsum, ulm, mlm, ora, viper) and observing speedups from 9.78× (ulm) up to 3101× (ora), the original "bimodal" / later "trimodal" speedup hypothesis is not crisp. Speedups span a CONTINUUM driven by two independent factors:
+
+1. **SOTA structural factor**: how Python-overhead-bound is the CPU reference?
+   - Pure Python loops (scanpy.tl): high overhead per element → big GPU win.
+   - `scipy.stats.*` called per element in a Python loop: still has Python per-call cost (e.g. ora's `scipy.stats.hypergeom.sf` → 2832-3101×).
+   - Vectorized scipy with `axis=` argument (e.g. `scipy.stats.rankdata(axis=0)`, `scipy.linalg.cho_solve` over batched rhs): native C inner loop, low overhead per call.
+   - Single dense BLAS call (`X @ W`): tightest C native code.
+
+2. **GPU compute intensity per cell**: heavier per-cell GPU work narrows the speedup ratio because the CPU also does more work.
+   - Light kernels (wsum: 2-pass SpMM + scalar div): ~3-8 ms GPU at 30k → ratio dominated by Python overhead.
+   - Heavy kernels (viper: rank + qnorm + Sgemm = 387 ms at 30k): GPU has so much real work that the gap to a vectorized CPU narrows.
+
+**Predict speedup as roughly**: `(SOTA_python_overhead × GPU_parallelism) / GPU_compute_intensity_per_cell`.
+
+**Empirical decoupler corpus** (CYCLE-163-167) for calibration:
+
+| Kernel | GPU 30k ms | scipy 30k ms | speedup | SOTA shape | GPU compute |
+|---|---|---|---|---|---|
+| wsum | 8.4 | 131.3 | 15.7× | sparse @ dense + L1-norm | light |
+| ulm | 9.9 | 129.0 | 13.1× | sparse @ dense + scalar OLS | light |
+| mlm | 9.5 | 200.7 | 21.0× | sparse @ dense + Cholesky solve | medium |
+| ora | 21.4 | 66442.0 | 3101× | top-K + per-element `scipy.stats.hypergeom.sf` | medium |
+| viper | 387 | 19982.9 | 51.6× | per-cell rank + qnorm + Sgemm | heavy |
+
+**Rule for Phase E reports**: report speedup AND classify the SOTA structure (loop-bound vs vectorized) AND GPU compute class (light/medium/heavy). Avoids selling features on misleading 3000× numbers when the typical case is 15×.
+
+### §J.8 — Bench-helper API verification (from CYCLE-167 build FAIL)
+
+CYCLE-167's first dispatch hallucinated the bench-helper API — wrote `timer.record() / timer.median_ms() / mem.snapshot_*() / mem.peak_mb() / row.wall_ms_med / row.mem_mb_peak`, none of which exist. Build FAILed with 9 errors. The actual API (read from CYCLE-166 ora bench): `timer.start(stream)/stop(stream)/elapsed_ms()`, `mem.sample_before/after()/peak_delta_mb()/reset()`, `row.wall_ms/mem_mb`.
+
+**Rule**: when writing a new bench driver based on a template (§J.5 "kernel debug" pattern), always grep the template for actual call sites of every helper used. Do not paraphrase the API from intuition. A 30-second `grep -E "timer\.|mem\.|row\." bench/<template>.cpp` would have caught CYCLE-167's hallucinated names.
+
+Concretely, gpu-bench worker prompts should now require: "Before writing the new bench cpp, run `grep -nE 'BenchTimer|PeakMemTracker|BenchRow|timer\.|mem\.|row\.' <template-bench-cpp>` and only use call sites from that grep output."
+
+This rule generalizes beyond bench helpers — any port that copies a known-good template should grep the template for the actual API call surface, not paraphrase it.
