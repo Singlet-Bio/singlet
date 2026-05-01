@@ -2,7 +2,7 @@
 
 **Python client for the Singlet single-cell atlas.**
 
-2,716 samples • 1,140 successful • 3.3M cells • 16 species • 121 tissues • 28 protocols • 8.7× .1pz compression
+3,100+ samples • 1,318 successful • 3.7M cells • 16 species • 36 tissues • 20 cell types • 29 protocols • 8.7× .1pz compression
 
 ## Install
 
@@ -17,12 +17,14 @@ import singlet
 
 # Browse the atlas catalog (free, works offline)
 singlet.summary()
-# → 2,716 samples (1,140 SUCCESS) • 16 species • 28 protocols • 121 tissues • 3.3M cells
+# → 3,100 samples (1,318 SUCCESS) • 16 species • 29 protocols • 36 tissues • 20 cell types • 3.7M cells
 
 df = singlet.samples(organism="Homo sapiens", status="SUCCESS")
 singlet.samples(tissue="brain", status="SUCCESS")  # filter by tissue
+singlet.samples(cell_type="PBMC")                  # filter by cell type
 singlet.species()
-singlet.tissues()   # normalized tissue breakdown (blood, brain, lung, tumor, etc.)
+singlet.tissues()      # normalized tissue breakdown (blood, brain, lung, tumor, etc.)
+singlet.cell_types()   # cell type annotations (PBMC, T cells, stem cells, etc.)
 singlet.top_series(n=10)
 
 # Load a singlify output directory → AnnData
@@ -51,17 +53,18 @@ sc.tl.leiden(adata)
 
 | Feature | Details |
 |---------|---------|
-| **Catalog** | Browse 2,712 samples by organism, tissue, protocol, status, quality tier |
-| **tissues()** | 121 normalized tissue categories (blood, brain, lung, tumor, pbmc, bone marrow...) — 89% coverage |
-| **protocols()** | Protocol breakdown: 28 distinct (10xv3, Drop-seq, CEL-Seq2, sci-RNA-seq3, etc.) |
-| **quality_tiers()** | Gold/silver/bronze classification (18% / 26% / 56%) |
-| **failure_categories()** | Pipeline failure breakdown (download 47%, alignment 26%, cells 20%) |
+| **Catalog** | Browse 3,100+ samples by organism, tissue, cell type, protocol, status, quality tier |
+| **tissues()** | 36 normalized tissue categories (blood, brain, lung, tumor, PBMC, bone marrow...) — 72% coverage |
+| **cell_types()** | 20 normalized cell type categories (PBMC, T cells, stem cells, K562...) — 24% coverage |
+| **protocols()** | Protocol breakdown: 29 distinct (10xv3, Drop-seq, CEL-Seq2, sci-RNA-seq3, etc.) |
+| **quality_tiers()** | Gold/silver/bronze classification |
+| **failure_categories()** | Pipeline failure breakdown (download, alignment, cells, QC) |
 | **load_dir()** | Read singlify output directory → AnnData with QC, doublets, cell cycle, ancestry, sex, summary |
 | **read_1pz()** | Read .1pz sparse matrix → AnnData |
 | **Compression** | singlepress .1pz format — 8.7× vs h5ad |
 | **PyTorch** | `OnePZDataset` + `DataLoader` with log-normalization |
 | **Offline** | Bundled catalog parquet — no network needed for browsing |
-| **MCP Server** | 10 AI assistant tools via `python -m singlet.mcp.server` (stats, search, browse, QC, tissues, failures) |
+| **MCP Server** | 11 AI assistant tools via `python -m singlet.mcp.server` (stats, search, browse, QC, tissues, cell_types, failures) |
 
 ## Notebooks
 
