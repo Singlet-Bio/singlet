@@ -51,8 +51,9 @@ sc.tl.leiden(adata)
 
 | Feature | Details |
 |---------|---------|
-| **Catalog** | Browse 2,711 samples by organism, tissue, protocol, status, quality tier |
-| **protocols()** | Protocol breakdown: 12 distinct (10xv3, Drop-seq, CEL-Seq2, etc.) |
+| **Catalog** | Browse 2,712 samples by organism, tissue, protocol, status, quality tier |
+| **protocols()** | Protocol breakdown: 29 distinct (10xv3, Drop-seq, CEL-Seq2, sci-RNA-seq3, etc.) |
+| **quality_tiers()** | Gold/silver/bronze classification (18% / 26% / 56%) |
 | **load_dir()** | Read singlify output directory → AnnData with QC, doublets, cell cycle, ancestry, sex, summary |
 | **read_1pz()** | Read .1pz sparse matrix → AnnData |
 | **Compression** | singlepress .1pz format — 8.7× vs h5ad |
