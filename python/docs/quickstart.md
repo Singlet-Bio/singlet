@@ -1,132 +1,97 @@
 # Quick Start
 
-## Browse the Catalog
+## Install
 
-The catalog is free and works offline after the first download:
+```bash
+pip install singlet-bio
+```
+
+## Browse the Atlas
+
+The atlas catalog is bundled with the package — works offline, no API key needed:
 
 ```python
 import singlet
 
-# Full catalog as a DataFrame (3,309 GSE datasets, 354M cells)
-df = singlet.catalog()
-print(f"{len(df)} datasets, {df.n_cells.sum():,} total cells")
+# One-line atlas summary
+singlet.summary()
+# → 'singlet atlas: 3,196 samples (1,368 SUCCESS) • 8 species • 28 protocols • 36 tissues • 40 cell types • 4.0M cells'
 
-# Search by keyword
-lung = singlet.catalog(search="lung")
+# Browse all samples
+df = singlet.samples(status="SUCCESS")
+print(f"{len(df)} successful samples")
 
-# Filter by organism, protocol, cell count
-large_human = singlet.datasets(organism="Homo sapiens", min_cells=100_000)
+# Filter by organism, tissue, cell type, protocol
+brain = singlet.samples(tissue="brain", organism="Homo sapiens")
+pbmc = singlet.samples(cell_type="PBMC")
+gold = singlet.samples(quality_tier="gold")
 
-# Only datasets with microbiome data
-k2 = singlet.datasets(has_kraken2=True)
+# Search by text (title, source, GSM/GSE)
+lung_cancer = singlet.samples(search="lung cancer")
 
-# Get info on a specific dataset
-meta = singlet.info("GSE136831")
-print(meta["gse_id"], meta["organism"], f"— {meta['n_cells']:,} cells")
+# Explore the atlas
+singlet.species()        # → ['Drosophila melanogaster', 'Homo sapiens', 'Mus musculus', ...]
+singlet.tissues()        # → DataFrame of 36 tissue categories
+singlet.cell_types()     # → DataFrame of 40 cell type categories
+singlet.protocols()      # → DataFrame of 29 protocols
+singlet.quality_tiers()  # → gold/silver/bronze breakdown
+singlet.top_series(n=5)  # → top 5 series by cell count
 
-# Sample-level index with column offsets
-samples = singlet.sample_index("GSE136831")
-print(samples[["gsm_id", "n_cells", "col_offset"]])
+# Series-level catalog
+cat = singlet.catalog(search="brain")
 ```
 
-## Load a Dataset
+## Load Data
 
 ```python
-# Load from local catalog (instant) or Zenodo (free download) → AnnData
-adata = singlet.load("GSE136831")
+# Load a singlify output directory → AnnData
+adata = singlet.load_dir("/path/to/quant/GSM3573650")
 print(adata)
-# AnnData with embedded obs (barcode, gsm_id, organism, total_counts),
-# var (gene_name, reference), and uns (title, protocol, pubmed_ids, etc.)
+# → 75,420 cells × 38,606 genes
+# obs: total_umis, total_genes, mt_pct, doublet_score, is_doublet, phase, ...
+# uns: ancestry, sex_call, summary, saturation_curve
 
-# With gene subset
-adata = singlet.load("GSE136831", genes=["TP53", "BRCA1", "KRAS"])
+# Load a .1pz file
+adata = singlet.read_1pz("/path/to/gene_counts.1pz")
 
-# Filter cells at load time
-adata = singlet.load("GSE136831", obs_filter={"organism": "Homo sapiens"})
-
-# Load a single sample (column-range read, no full-matrix decompression)
-sample = singlet.load_sample("GSM3308814")
-```
-
-### Local Catalog
-
-For HPC environments with the full catalog on disk:
-
-```python
-singlet.set_catalog_dir("/path/to/cellarium/catalog")
-# Or set SINGLET_CATALOG_DIR environment variable
-
-# Now load() resolves accessions to local .1pz files (no download)
-adata = singlet.load("GSE136831")
-```
-
-## Read/Write .1pz Files
-
-```python
-# Write AnnData to compressed .1pz
-singlet.write_1pz(adata, "my_data.1pz")
-
-# Read it back — all metadata preserved
-adata2 = singlet.read_1pz("my_data.1pz")
-
-# Check file info without loading
-info = singlet.info_1pz("my_data.1pz")
-print(f"{info['rows']}×{info['cols']}, ratio={info['ratio']:.1f}×")
-
-# Legacy .spz files are also supported
-adata3 = singlet.read_spz("old_data.spz")
-```
-
-## Kraken2 Microbiome Data
-
-```python
-# Load microbiome matrix alongside expression
-adata_expr = singlet.read_1pz("/path/to/GSE117795/counts.1pz")
-adata_k2 = singlet.read_kraken2("/path/to/GSE117795/")
-
-# adata_k2 has cells × taxa with taxon metadata in var
-print(f"{adata_k2.shape[1]} taxa detected across {adata_k2.shape[0]} cells")
-```
-
-## Convert Formats
-
-```python
-singlet.to_h5ad(adata, "output.h5ad")
-singlet.to_zarr(adata, "output.zarr")
-adata = singlet.from_h5ad("input.h5ad")
+# Standard scanpy workflow
+import scanpy as sc
+adata = adata[~adata.obs['is_doublet'].astype(bool)]
+sc.pp.normalize_total(adata, target_sum=1e4)
+sc.pp.log1p(adata)
+sc.pp.highly_variable_genes(adata)
+sc.tl.pca(adata)
+sc.pp.neighbors(adata)
+sc.tl.umap(adata)
+sc.tl.leiden(adata)
 ```
 
 ## PyTorch Integration
 
 ```python
-from singlet.torch import OnePZDataset, DataLoader, to_sparse_csr
+from singlet.torch import OnePZDataset, DataLoader
 
-# Zero-copy sparse CSR tensor (ideal for GPU)
-tensor = to_sparse_csr("my_data.1pz", device="cuda")
+# Load as PyTorch dataset
+dataset = OnePZDataset("counts.1pz", normalize=True)
+loader = DataLoader(dataset, batch_size=512, shuffle=True)
 
-# Dataset with log-normalization
-dataset = OnePZDataset("GSE136831", normalize=True, device="cuda")
-print(f"{len(dataset)} cells, {dataset.n_genes} genes")
-
-# DataLoader for training
-loader = DataLoader("GSE136831", batch_size=512,
-                    normalize=True, device="cuda")
 for batch in loader:
-    # batch: (512, n_genes) dense tensor
-    loss = model(batch)
+    # batch is (batch_size, n_genes) log-normalized tensor
+    pass
 ```
 
-## Cross-Atlas Queries (Token-Priced)
+## Update the Catalog
 
 ```python
-singlet.login("sk-your-api-key")
-
-result = singlet.query(
-    species="human",
-    tissue="lung",
-    cell_type="macrophage",
-    disease="Crohn's disease",
-)
-
-result = singlet.search("exhausted T cells in pediatric leukemia")
+# Download latest catalog from GitHub (when new samples are processed)
+singlet.refresh()
 ```
+
+## MCP Server (for AI Assistants)
+
+```bash
+# Expose atlas data to Claude, Cursor, or VS Code Copilot
+python -m singlet.mcp.server
+```
+
+11 tools available: stats, search, browse, QC, load, protocols, quality, tissues, failures, cell_types.
