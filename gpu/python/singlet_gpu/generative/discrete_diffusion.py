@@ -144,7 +144,10 @@ def train(
 
     try:
         import cupy as cp
-        import cupy.sparse as csp
+        try:
+            import cupyx.scipy.sparse as csp  # cupy >= 14
+        except ImportError:
+            import cupy.sparse as csp         # cupy < 14 fallback
         import scipy.sparse as sp
 
         X = adata.X

@@ -101,7 +101,10 @@ def _matrix_from_adata(
     # For GSEA we need (genes × cells) for the per-gene ranking pass.
     # Transpose lazily — cupy CSC(.T) is a view.
     try:
-        import cupy.sparse as csp
+        try:
+            import cupyx.scipy.sparse as csp  # cupy >= 14
+        except ImportError:
+            import cupy.sparse as csp         # cupy < 14 fallback
         if hasattr(mat, "T"):
             genes_x_cells = mat.T  # cupy CSC or scipy CSC
         else:

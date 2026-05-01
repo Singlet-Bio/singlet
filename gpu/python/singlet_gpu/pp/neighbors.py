@@ -106,7 +106,10 @@ def _get_rep(
     x = adata.X
     # If sparse, return dense (kNN on raw sparse X is unusual but allowed).
     try:
-        import cupy.sparse as csp
+        try:
+            import cupyx.scipy.sparse as csp  # cupy >= 14
+        except ImportError:
+            import cupy.sparse as csp         # cupy < 14 fallback
         if isinstance(x, csp.csc_matrix) or isinstance(x, csp.csr_matrix):
             return x.toarray()
     except ImportError:

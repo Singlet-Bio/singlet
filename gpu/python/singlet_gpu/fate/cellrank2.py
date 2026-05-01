@@ -46,7 +46,10 @@ def _require_core():
 def _csr_to_arrays(T):
     """Extract indptr / indices / data from a CSR matrix (scipy or cupy)."""
     try:
-        import cupy.sparse as csp
+        try:
+            import cupyx.scipy.sparse as csp  # cupy >= 14
+        except ImportError:
+            import cupy.sparse as csp         # cupy < 14 fallback
         if isinstance(T, (csp.csr_matrix, csp.csc_matrix)):
             T_csr = T.tocsr() if hasattr(T, 'tocsr') else T
             return (

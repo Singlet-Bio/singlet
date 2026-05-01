@@ -90,7 +90,11 @@ def _csr_to_device_csc(csr_mat):
             "to_cupy_csr before the GPU preprocess kernels can be called."
         )
 
-    import cupy.sparse as csp  # noqa: F401
+    # cupy >= 14: import from cupyx.scipy.sparse; fall back to cupy.sparse for < 14.
+    try:
+        import cupyx.scipy.sparse as csp  # cupy >= 14
+    except ImportError:
+        import cupy.sparse as csp         # cupy < 14 fallback  # noqa: F401
 
     # AnnData stores (cells × genes) CSR; the C++ kernel expects (genes × cells) CSC.
     # .T.tocsc() is in-place — no new data allocation.
@@ -134,11 +138,19 @@ def _device_csc_to_csr(device_csc):
         # Fallback: use __cuda_array_interface__ views directly.
         # This path works without the binding extension.
         import cupy as cp
-        import cupy.sparse as csp
+        try:
+            import cupyx.scipy.sparse as csp  # cupy >= 14
+        except ImportError:
+            import cupy.sparse as csp         # cupy < 14 fallback
 
-        cu_data    = cp.asarray(device_csc.data_view)
-        cu_indices = cp.asarray(device_csc.indices_view)
-        cu_indptr  = cp.asarray(device_csc.indptr_view)
+        # cupy >= 14 dtype-strictness: wrap CAI dict so cp.asarray() gets an
+        # object with __cuda_array_interface__ as an attribute, not a bare dict.
+        class _CaiView:
+            def __init__(self, d): self.__cuda_array_interface__ = d
+
+        cu_data    = cp.asarray(_CaiView(device_csc.data_view))
+        cu_indices = cp.asarray(_CaiView(device_csc.indices_view))
+        cu_indptr  = cp.asarray(_CaiView(device_csc.indptr_view))
         rows = device_csc.rows
         cols = device_csc.cols
         genes_x_cells_csc = csp.csc_matrix(

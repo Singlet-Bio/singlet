@@ -25,13 +25,14 @@ classifiers = [
     "Environment :: GPU :: NVIDIA CUDA",
 ]
 dependencies = [
-    "cupy-cuda12x>=13.0",
-    "numpy>=1.24",
+    "cupy-cuda12x>=13.0,<15",
+    "numpy>=1.24,<2.6",
 ]
 
 [project.optional-dependencies]
-anndata = ["anndata>=0.10"]
-dev     = ["pytest>=7.0", "scipy>=1.11"]
+anndata = ["anndata>=0.10,<0.13"]
+scanpy  = ["scanpy>=1.10,<1.12", "anndata>=0.10,<0.13"]
+dev     = ["pytest>=7.0", "scipy>=1.11,<1.18"]
 
 [project.urls]
 Homepage   = "https://github.com/zdebruine/Singlet-AI"

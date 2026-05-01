@@ -211,7 +211,10 @@ def run_from_anndata(
         # X may be scipy sparse, cupy sparse, or dense numpy.
         try:
             import scipy.sparse as sp
-            import cupy.sparse as csp
+            try:
+                import cupyx.scipy.sparse as csp  # cupy >= 14
+            except ImportError:
+                import cupy.sparse as csp         # cupy < 14 fallback
             if sp.issparse(X):
                 X_csr = X.tocsr().astype(np.float32)
                 # Upload to device via cupy

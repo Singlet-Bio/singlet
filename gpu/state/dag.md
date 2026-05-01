@@ -2,7 +2,7 @@
 
 Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movement gets demoted to `state/followups.md`. User-gated items live in `state/blockers.md`. Completed entries are moved to `state/cycle-log.md` each cycle.
 
-- **CYCLE-189-DEPENDENCY-COMPAT-SWEEP** (queued, per CYCLE-188 plan): high-leverage cleanup. Audit `python/singlet_gpu/` for cupy 14 incompatibilities, fix test fixture dtype issues, pin pyproject.toml version ranges, document tested install set in state/infrastructure.md. Unblocks score_genes wrapper validation + likely several other latent issues.
+- **CYCLE-189-DEPENDENCY-COMPAT-SWEEP** (in flight, job 372637 RUNNING on g003): Sonnet swept 22 cupy.sparse references across 19 files with try/except cupyx.scipy.sparse fallback. Real root cause of the dtype error: cupy 14 `cp.asarray()` rejects plain `dict`; `__cuda_array_interface__` must be an attribute. Added `_CaiView` shim in 3 files (9 call sites). Pinned cupy<15, numpy<2.6, anndata<0.13, scanpy<1.12, scipy<1.18 in pyproject.toml. Updated state/infrastructure.md. Resubmitted score_genes pytest as job 372637. Awaiting verify.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 

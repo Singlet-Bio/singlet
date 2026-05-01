@@ -114,6 +114,30 @@ Reference: `state/cycle88_verify.sh` (working) vs `state/cycle88_build.sh` (brok
 | factornet (CPU) | C++ | header-only at the path above |
 | fgsea / AUCell / harmonypy | R / Python | per-env |
 
+## Python wrapper test environment (CYCLE-189)
+
+Verified install set used in SLURM job 372552 (g003, V100S-PCIE-32GB, CUDA 12.8):
+
+| Package | Version | Notes |
+|---|---|---|
+| Python | 3.11.14 | via `module load python/3.11.14` |
+| cupy-cuda12x | 14.0.1 | cupy 14 — triggers dtype-strictness + cupy.sparse removal |
+| numpy | 2.4.4 | |
+| anndata | 0.12.11 | |
+| scanpy | 1.11.5 | |
+| scipy | 1.17.1 | |
+| scikit-learn | 1.8.0 | |
+| pandas | 2.3.3 | |
+| pytest | 9.0.3 | |
+
+**pyproject.toml pins (CYCLE-189)**: `cupy-cuda12x>=13.0,<15`, `numpy>=1.24,<2.6`,
+`anndata>=0.10,<0.13`, `scanpy>=1.10,<1.12` (optional), `scipy>=1.11,<1.18` (dev).
+
+**cupy 14 compat fixes applied (CYCLE-189)**:
+- `cupy.sparse` → `cupyx.scipy.sparse` try/except fallback in 14 files.
+- `cp.asarray(dict)` → `cp.asarray(_CaiView(dict))` shim in `io/loader.py` and `io.py`
+  (cupy 14 requires `__cuda_array_interface__` as an object attribute, not a bare dict).
+
 ## Canonical test samples
 
 | Sample | Cells | Notes |

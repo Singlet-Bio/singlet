@@ -93,8 +93,13 @@ def to_anndata(device_csc, metadata):
     try:
         import anndata as ad
         import pandas as pd
-        import cupy.sparse as csp
         import cupy as cp
+        # cupy >= 14 removed `cupy.sparse`; the new home is `cupyx.scipy.sparse`
+        # which exposes the same csc_matrix / csr_matrix API.
+        try:
+            import cupyx.scipy.sparse as csp  # cupy >= 14
+        except ImportError:
+            import cupy.sparse as csp         # cupy < 14 fallback
     except ImportError as e:
         raise ImportError(
             "to_anndata requires anndata, cupy, and pandas. "
@@ -106,23 +111,17 @@ def to_anndata(device_csc, metadata):
     cols = device_csc.cols
 
     # Build zero-copy cupy views.
-    # The cupy.ndarray constructors accept an __cuda_array_interface__ dict
-    # directly as the first argument (cupy v9+).
-    # We construct a csc_matrix from the CSC layout, then convert to csr
-    # because AnnData conventionally stores X as (cells × genes) csr.
-    #
     # WHY .T (transpose): .1pz stores the matrix as (genes × cells) CSC.
     # AnnData convention is (cells × genes) with X in CSR layout.
-    # cupy.sparse.csc_matrix.T returns a csr_matrix without copying data.
+    # cupy >= 14 dtype-strictness: cp.asarray() no longer accepts a plain dict;
+    # the object must expose __cuda_array_interface__ as an *attribute*.
+    # Wrap each dict in a minimal shim so both cupy 13 and 14 work.  Zero copy.
+    class _CaiView:  # lightweight shim — not on the hot path
+        def __init__(self, d): self.__cuda_array_interface__ = d
 
-    data_view    = device_csc.data_view     # dict with __cuda_array_interface__
-    indices_view = device_csc.indices_view
-    indptr_view  = device_csc.indptr_view
-
-    # cupy.asarray reads __cuda_array_interface__ — zero copy.
-    cu_data    = cp.asarray(data_view)
-    cu_indices = cp.asarray(indices_view)
-    cu_indptr  = cp.asarray(indptr_view)
+    cu_data    = cp.asarray(_CaiView(device_csc.data_view))
+    cu_indices = cp.asarray(_CaiView(device_csc.indices_view))
+    cu_indptr  = cp.asarray(_CaiView(device_csc.indptr_view))
 
     # (genes × cells) csc → (cells × genes) csr via transpose (no data copy).
     genes_x_cells_csc = csp.csc_matrix(

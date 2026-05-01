@@ -142,11 +142,15 @@ def _build_anndata(device_csc, metadata) -> "anndata.AnnData":
     cols = device_csc.cols
 
     # Build zero-copy cupy 1-D arrays via __cuda_array_interface__ dicts
-    # returned by the DeviceCsc view properties.  cupy.asarray() accepts
-    # any object with __cuda_array_interface__ — zero device↔host traffic.
-    cu_data    = cp.asarray(device_csc.data_view)
-    cu_indices = cp.asarray(device_csc.indices_view)
-    cu_indptr  = cp.asarray(device_csc.indptr_view)
+    # returned by the DeviceCsc view properties.
+    # cupy >= 14 dtype-strictness: cp.asarray() no longer accepts a plain dict;
+    # the object must expose __cuda_array_interface__ as an *attribute*.
+    # Wrap each dict in a minimal shim so both cupy 13 and 14 work.  Zero copy.
+    class _CaiView:  # lightweight shim — not on the hot path
+        def __init__(self, d): self.__cuda_array_interface__ = d
+    cu_data    = cp.asarray(_CaiView(device_csc.data_view))
+    cu_indices = cp.asarray(_CaiView(device_csc.indices_view))
+    cu_indptr  = cp.asarray(_CaiView(device_csc.indptr_view))
 
     # .1pz stores (genes × cells) CSC.  AnnData convention is (cells × genes)
     # with X in CSR layout.  .T on a csc_matrix returns a view — no data copy.

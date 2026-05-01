@@ -279,7 +279,10 @@ def filter_cells(
 
     try:
         import cupy as cp
-        import cupy.sparse as csp
+        try:
+            import cupyx.scipy.sparse as csp  # cupy >= 14
+        except ImportError:
+            import cupy.sparse as csp         # cupy < 14 fallback
     except ImportError as e:
         raise ImportError(f"singlet_gpu.qc.filter_cells requires cupy.  {e}")
 
@@ -389,7 +392,10 @@ def filter_genes(
 
     try:
         import cupy as cp
-        import cupy.sparse as csp
+        try:
+            import cupyx.scipy.sparse as csp  # cupy >= 14
+        except ImportError:
+            import cupy.sparse as csp         # cupy < 14 fallback
     except ImportError as e:
         raise ImportError(f"singlet_gpu.qc.filter_genes requires cupy.  {e}")
 

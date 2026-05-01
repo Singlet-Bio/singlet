@@ -92,7 +92,10 @@ def run_flash_deconv(
     # ---- Build device matrices -----------------------------------------------
     try:
         import cupy as cp
-        import cupy.sparse as csp
+        try:
+            import cupyx.scipy.sparse as csp  # cupy >= 14
+        except ImportError:
+            import cupy.sparse as csp         # cupy < 14 fallback
 
         def _to_device_csc(X):
             if hasattr(X, "get"):

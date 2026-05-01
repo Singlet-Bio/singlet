@@ -230,7 +230,10 @@ def bbknn(
     # result.distances and result.connectivities are sparse (cells × cells).
     # Transfer to scipy for obsp storage.
     try:
-        import cupy.sparse as csp
+        try:
+            import cupyx.scipy.sparse as csp  # cupy >= 14
+        except ImportError:
+            import cupy.sparse as csp         # cupy < 14 fallback
         if hasattr(result.distances, "get"):
             distances = result.distances.get()
             connectivities = result.connectivities.get()
