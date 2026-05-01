@@ -498,6 +498,7 @@ def samples(
     organism: Optional[str] = None,
     status: Optional[str] = None,
     tissue: Optional[str] = None,
+    cell_type: Optional[str] = None,
     protocol: Optional[str] = None,
     min_cells: Optional[int] = None,
     quality_tier: Optional[str] = None,
@@ -515,6 +516,8 @@ def samples(
         Filter by pipeline status (e.g. "SUCCESS").
     tissue : str, optional
         Filter by tissue/source (substring match, e.g. "brain", "lung", "PBMC").
+    cell_type : str, optional
+        Filter by cell type (substring match, e.g. "PBMC", "T cells", "stem cell").
     protocol : str, optional
         Filter by protocol (e.g. "10xv3", "dropseq", "celseq2").
     min_cells : int, optional
@@ -548,6 +551,8 @@ def samples(
             df = df[df["tissue"].str.contains(tissue, case=False, na=False)]
         elif "source" in df.columns:
             df = df[df["source"].str.contains(tissue, case=False, na=False)]
+    if cell_type is not None and "cell_type" in df.columns:
+        df = df[df["cell_type"].str.contains(cell_type, case=False, na=False)]
     if protocol is not None and "protocol" in df.columns:
         df = df[df["protocol"].str.contains(protocol, case=False, na=False)]
     if min_cells is not None:

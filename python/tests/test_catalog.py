@@ -158,3 +158,10 @@ def test_cell_types():
     assert ct["count"].sum() > 300
     # Should be sorted descending
     assert ct["count"].iloc[0] >= ct["count"].iloc[-1]
+
+
+def test_samples_filter_cell_type():
+    import singlet
+    pbmc = singlet.samples(cell_type="PBMC")
+    assert len(pbmc) > 50
+    assert all(pbmc["cell_type"].str.contains("PBMC", na=False))
