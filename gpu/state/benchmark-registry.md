@@ -264,3 +264,9 @@ layout and are appended directly below:
 | 2026-04-18 | reduce/nmf_c86_phaseE | small-k50-c86 | sklearn-nmf-cpu | 329.12 | 201 | 1519 | — | — | — | baseline |
 | 2026-04-18 | reduce/nmf_c86_phaseE | small-k100-c86 | sklearn-nmf-cpu | 363.64 | 201 | 1375 | — | — | — | baseline |
 | 2026-04-18 | qc/metrics_c86 | small-c86 | scanpy-cpu | 35.34 | 745 | 28300 | — | — | — | baseline |
+| 2026-04-30 | preprocess/pearson_residuals | 10k | singlet-gpu | 0.709216 | 0 | 1.41001e+07 | —  | —  | —  | no-git |
+| 2026-04-30 | preprocess/pearson_residuals | 30k | singlet-gpu | 1.69056 | 0 | 1.77456e+07 | —  | —  | —  | no-git |
+| 2026-04-30 | enrich/score_genes | 10k | singlet-gpu | 1.1096 | 0 | 9.01226e+06 | —  | —  | —  | no-git |
+| 2026-04-30 | enrich/score_genes | 30k | singlet-gpu | 1.4032 | 0 | 2.13797e+07 | —  | —  | —  | no-git |
+| 2026-04-30 | embed/diffmap | 10k | singlet-gpu | 2257.24 | 0 | 4430.19 | —  | —  | —  | no-git |
+| 2026-04-30 | embed/dpt | 10k | singlet-gpu | 2763.33 | 0 | 3618.82 | —  | —  | —  | no-git |

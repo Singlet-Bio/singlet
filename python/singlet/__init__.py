@@ -7,6 +7,7 @@ Browse catalog (works offline):
     singlet.info("GSE136831")              Dataset metadata
     singlet.sample_index()                 Full sample index DataFrame
     singlet.species()                      Species breakdown
+    singlet.tissues()                      Tissue/source breakdown
     singlet.datasets(organism="Homo sapiens", min_cells=100000)
     singlet.samples(status="SUCCESS")      Filter samples
     singlet.top_series(n=10)               Largest series
@@ -38,7 +39,7 @@ Token-priced (requires API key):
 __version__ = "1.1.0"
 
 from singlet._catalog import (
-    catalog, info, species, datasets, sample_index, set_catalog_dir,
+    catalog, info, species, tissues, datasets, sample_index, set_catalog_dir,
     summary, samples, top_series, refresh,
 )
 from singlet._loader import load, load_sample, load_dir, download
@@ -56,6 +57,7 @@ __all__ = [
     "catalog",
     "info",
     "species",
+    "tissues",
     "datasets",
     "sample_index",
     "set_catalog_dir",

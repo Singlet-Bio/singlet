@@ -1,0 +1,5 @@
+if(EXISTS "/mnt/home/debruinz/Singlet-AI/singlet-gpu/build_cycle157_pearson/tests/io_pz_device_loader_correctness[1]_tests.cmake")
+  include("/mnt/home/debruinz/Singlet-AI/singlet-gpu/build_cycle157_pearson/tests/io_pz_device_loader_correctness[1]_tests.cmake")
+else()
+  add_test(io_pz_device_loader_correctness_NOT_BUILT io_pz_device_loader_correctness_NOT_BUILT)
+endif()

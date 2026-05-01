@@ -208,6 +208,20 @@ def species() -> list:
     return sorted(all_species)
 
 
+def tissues() -> pd.DataFrame:
+    """Return tissue/source breakdown across SUCCESS samples.
+
+    Returns a DataFrame with columns: source, count, sorted by count descending.
+    """
+    df = _load_sample_index()
+    df = df[df["status"] == "SUCCESS"]
+    if "source" not in df.columns:
+        return pd.DataFrame(columns=["source", "count"])
+    counts = df["source"].dropna().value_counts().reset_index()
+    counts.columns = ["source", "count"]
+    return counts
+
+
 def datasets(
     organism: Optional[str] = None,
     protocol: Optional[str] = None,

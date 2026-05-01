@@ -1,0 +1,2 @@
+/opt/rh/gcc-toolset-13/root/bin/ar qc ../../../lib/libgtest_main.a CMakeFiles/gtest_main.dir/src/gtest_main.cc.o
+/opt/rh/gcc-toolset-13/root/bin/ranlib ../../../lib/libgtest_main.a
