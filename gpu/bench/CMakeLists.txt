@@ -280,9 +280,21 @@ add_bench_driver(bench_anno_symphony_perf  bench_anno_symphony_perf.cpp)
 add_bench_driver(bench_qc_empty_drops_perf  bench_qc_empty_drops_perf.cpp)
 
 # ---------------------------------------------------------------------------
+# Cycle 180 drivers: qc/soupx Phase E benchmark
+# SoupX ambient RNA correction GPU port (Young & Behjati 2020 GigaScience 9:giaa151).
+# 5 device passes: sx_col_sum_kernel (warp/col), sx_ambient_scatter_kernel (atomic/nnz)
+# + sx_normalize_ambient_kernel (CUB DeviceReduce scalar + kernel),
+# host topK partial_sort + H2D mask (one D2H boundary at Pass 3),
+# sx_rho_kernel (warp/col, top_amb_mask numerator / denom_pi),
+# cudaMemset + sx_correct_kernel (dense nnz-overwrite; algebraic identity for zeros).
+# Scales: 10k / 30k droplets × 3000 genes, lower=100, top_ambient_frac=0.10.
+# ---------------------------------------------------------------------------
+add_bench_driver(bench_qc_soupx_perf  bench_qc_soupx_perf.cpp)
+
+# ---------------------------------------------------------------------------
 # Status message
 # ---------------------------------------------------------------------------
-message(STATUS "singlet-gpu bench: 40 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164+165+166+167+169+170+171+172+173+174+175+176+178+179)")
+message(STATUS "singlet-gpu bench: 41 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164+165+166+167+169+170+171+172+173+174+175+176+178+179+180)")
 message(STATUS "  53a: bench_io_pz_loader_perf")
 message(STATUS "  53a: bench_preprocess_lognorm_perf")
 message(STATUS "  53a: bench_preprocess_hvg_perf")
@@ -322,3 +334,4 @@ message(STATUS "  175: bench_integrate_combat_perf")
 message(STATUS "  176: bench_anno_celltypist_perf")
 message(STATUS "  178: bench_anno_symphony_perf")
 message(STATUS "  179: bench_qc_empty_drops_perf")
+message(STATUS "  180: bench_qc_soupx_perf")

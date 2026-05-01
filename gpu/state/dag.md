@@ -2,7 +2,7 @@
 
 Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movement gets demoted to `state/followups.md`. User-gated items live in `state/blockers.md`. Completed entries are moved to `state/cycle-log.md` each cycle.
 
-- **CYCLE-180-PHASE-E-SOUPX** (queued): qc/soupx Phase E. Last Phase E candidate before backfill is COMPLETE. After CYCLE-180, only CYCLE-159.1 sparse-eigensolver rewrite remains as major work.
+- **CYCLE-180-PHASE-E-SOUPX** (in flight, job 372188 RUNNING on g003): last Phase E candidate. Sonnet wrote 3 files using §J.8 grep, local sanity 10k=12.27ms, 30k=35.97ms numpy. CMake → 41. Predicted class 3 (10-30×).
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
