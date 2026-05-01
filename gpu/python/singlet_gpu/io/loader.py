@@ -126,7 +126,12 @@ def _build_anndata(device_csc, metadata) -> "anndata.AnnData":
         import anndata as ad
         import pandas as pd
         import cupy as cp
-        import cupy.sparse as csp
+        # cupy >= 14 removed `cupy.sparse`; the new home is `cupyx.scipy.sparse`
+        # which exposes the same csc_matrix / csr_matrix API.
+        try:
+            import cupyx.scipy.sparse as csp  # cupy >= 14
+        except ImportError:
+            import cupy.sparse as csp         # cupy < 14 fallback
     except ImportError as exc:
         raise ImportError(
             "read_pz_to_anndata requires anndata, cupy, and pandas. "

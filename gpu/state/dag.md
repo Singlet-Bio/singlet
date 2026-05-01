@@ -2,7 +2,7 @@
 
 Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movement gets demoted to `state/followups.md`. User-gated items live in `state/blockers.md`. Completed entries are moved to `state/cycle-log.md` each cycle.
 
-- **CYCLE-187-VERIFY-SCORE-GENES-WRAPPER** (queued): build + run `pytest python/tests/test_enrichment.py::test_run_score_genes_*` to verify the CYCLE-186 wrapper end-to-end. SLURM dispatch (build wheel + run pytest). After PASS, queue audit of which other Phase E features still need wrappers.
+- **CYCLE-187-VERIFY-SCORE-GENES-WRAPPER** (in flight, job 372552 RUNNING on g003): wheel build PASSed in initial attempt (job 372548) but all 4 score_genes tests FAILed due to **pre-existing cupy 14 API bug** in `python/singlet_gpu/io/loader.py:129` (`cupy.sparse` → `cupyx.scipy.sparse`). Fixed inline (8-line diff with cupy <14 fallback). Resubmitted as job 372552. Awaiting verify.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
