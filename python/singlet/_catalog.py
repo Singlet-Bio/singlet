@@ -295,120 +295,16 @@ def failure_categories() -> pd.DataFrame:
 def cell_types() -> pd.DataFrame:
     """Return cell type distribution across SUCCESS samples.
 
-    Parses the 'source' field for cell type annotations from GEO.
-    Normalizes common variants (e.g., 'PBMCs' → 'PBMC', 'K562' → 'cell line').
-    Excludes tissue-only annotations (brain, blood, lung, etc.).
+    Uses pre-computed cell_type annotations derived from GEO characteristics
+    and source fields. Normalized to canonical categories (e.g., 'PBMCs' → 'PBMC').
 
     Returns a DataFrame with columns: cell_type, count, sorted by count descending.
     """
     df = _load_sample_index()
     success = df[df["status"] == "SUCCESS"]
-
-    # These are tissues, NOT cell types — skip them
-    TISSUE_WORDS = {
-        "blood", "brain", "lung", "liver", "kidney", "skin", "heart", "spleen",
-        "pancreas", "colon", "intestine", "stomach", "ovary", "testis", "breast",
-        "muscle", "bone marrow", "lymph node", "thymus", "prostate", "placenta",
-        "retina", "adipose", "bladder", "thyroid", "embryo", "tumor", "tonsil",
-        "dorsal root ganglion", "leptomeninges", "csf", "esophagus", "villi",
-        "terminal ileum", "cornea", "uterus", "endometrium", "human endometrium",
-        "bronchoalveolar lavage fluid", "melanoma", "cerebrospinal fluid cells",
-        "hippocampus", "jejunum", "ileum", "vulva", "oropharynx", "adnexa",
-        "frontal cortex", "carotid artery", "cardiac left atria", "pancreatic islet",
-    }
-
-    # Cell type normalization
-    NORMALIZE = {
-        "pbmcs": "PBMC", "pbmc": "PBMC", "peripheral blood mononuclear cells": "PBMC",
-        "periperal blood mononuclear cells": "PBMC",
-        "k562": "cell line (K562)", "k562 cells": "cell line (K562)",
-        "jurkat": "cell line (Jurkat)", "jurkat cells": "cell line (Jurkat)",
-        "hek293": "cell line (HEK293)", "hela": "cell line (HeLa)",
-        "mcf7": "cell line (MCF7)", "a549": "cell line (A549)",
-        "mda-mb-231 cells": "cell line (MDA-MB-231)",
-        "mdamb231 cell line": "cell line (MDA-MB-231)",
-        "thp-1 cell": "cell line (THP-1)", "thp-1 cells": "cell line (THP-1)",
-        "cell line": "cell line", "hesc": "stem cell (hESC)",
-        "hek 293t": "cell line (HEK293)",
-        "pluripotent stem cells": "stem cell (iPSC)", "ipsc": "stem cell (iPSC)",
-        "ips cells": "stem cell (iPSC)", "hpsc": "stem cell (hPSC)",
-        "immune cells": "immune cells", "immune cell": "immune cells",
-        "t cells": "T cells", "t cell": "T cells", "cd4 t cells": "CD4+ T cells",
-        "cd8 t cells": "CD8+ T cells", "cd4+ t cells": "CD4+ T cells",
-        "cd8+ t cells": "CD8+ T cells",
-        "car t cells": "CAR-T cells", "manufactured car t cells": "CAR-T cells",
-        "car-t cells": "CAR-T cells",
-        "b cells": "B cells", "b cell": "B cells", "memory b cell": "memory B cells",
-        "nk cells": "NK cells", "nk cell": "NK cells",
-        "sorted memory b and t lymphocytes": "lymphocytes",
-        "plasma cells": "plasma cells", "monocytes": "monocytes",
-        "macrophages": "macrophages", "dendritic cells": "dendritic cells",
-        "fibroblasts": "fibroblasts", "fibroblast": "fibroblasts",
-        "epithelial cells": "epithelial cells", "endothelial cells": "endothelial cells",
-        "neurons": "neurons", "astrocytes": "astrocytes",
-        "organoid": "organoid", "organoids": "organoid",
-        "peripheral blood": "PBMC",
-    }
-
-    KEYWORDS = [
-        ("pbmc", "PBMC"), ("peripheral blood mononuclear", "PBMC"),
-        ("t cell", "T cells"), ("cd4", "CD4+ T cells"), ("cd8", "CD8+ T cells"),
-        ("car-t", "CAR-T cells"), ("car t", "CAR-T cells"),
-        ("b cell", "B cells"), ("memory b", "memory B cells"),
-        ("nk cell", "NK cells"), ("natural killer", "NK cells"),
-        ("monocyte", "monocytes"), ("macrophage", "macrophages"),
-        ("dendritic", "dendritic cells"), ("neutrophil", "neutrophils"),
-        ("stem cell", "stem cells"), ("ipsc", "stem cell (iPSC)"),
-        ("ips ", "stem cell (iPSC)"), ("hesc", "stem cell (hESC)"),
-        ("pluripotent", "stem cells"),
-        ("fibroblast", "fibroblasts"), ("epithelial", "epithelial cells"),
-        ("endothelial", "endothelial cells"), ("neuron", "neurons"),
-        ("astrocyte", "astrocytes"), ("microglia", "microglia"),
-        ("organoid", "organoid"),
-    ]
-
-    from collections import Counter
-    cell_type_counts = Counter()
-
-    for _, row in success.iterrows():
-        src = str(row.get("source") or "").lower().strip()
-        if not src:
-            continue
-
-        # Skip if it's clearly just a tissue
-        if src in TISSUE_WORDS:
-            continue
-
-        # Try exact match
-        if src in NORMALIZE:
-            cell_type_counts[NORMALIZE[src]] += 1
-            continue
-
-        # Try keyword match
-        matched = False
-        for keyword, ct in KEYWORDS:
-            if keyword in src:
-                cell_type_counts[ct] += 1
-                matched = True
-                break
-
-        if not matched:
-            # Skip if it contains only tissue keywords
-            is_tissue = any(tw in src for tw in TISSUE_WORDS)
-            if not is_tissue and len(src) < 40 and not src.startswith("gsm"):
-                # Skip entries that look like experiment descriptions or anatomy
-                skip_words = ("seq", "rna-", "protocol", "library", "experiment",
-                              "sample", "cortex", "artery", "junction", "eminence",
-                              "lobe", "ventricle")
-                if not any(w in src for w in skip_words):
-                    cell_type_counts[src] += 1
-
-    result = pd.DataFrame([
-        {"cell_type": ct, "count": c}
-        for ct, c in cell_type_counts.most_common()
-        if c >= 2  # Filter noise (singletons are too noisy)
-    ])
-    return result
+    ct_counts = success["cell_type"].dropna().value_counts().reset_index()
+    ct_counts.columns = ["cell_type", "count"]
+    return ct_counts
 
 
 def datasets(
