@@ -2,7 +2,7 @@
 
 Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movement gets demoted to `state/followups.md`. User-gated items live in `state/blockers.md`. Completed entries are moved to `state/cycle-log.md` each cycle.
 
-- **CYCLE-175-PHASE-E-COMBAT** (queued): integrate/combat (CYCLE-131 — per-batch standardization). scanpy.pp.combat ref. Default next Phase E candidate.
+- **CYCLE-175-PHASE-E-COMBAT** (in flight, job 372089 RUNNING on g003): Sonnet wrote 3 files using scanpy.pp.combat as ref (sanity-check 10k=14.4s, 30k=43s). CMake → 37. Predicted class 2-3 (50-300×).
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 

@@ -236,9 +236,19 @@ add_bench_driver(bench_embed_dendrogram_perf  bench_embed_dendrogram_perf.cpp)
 add_bench_driver(bench_preprocess_magic_perf  bench_preprocess_magic_perf.cpp)
 
 # ---------------------------------------------------------------------------
+# Cycle 175 drivers: integrate/combat Phase E benchmark
+# ComBat empirical-Bayes batch correction (Johnson et al. 2007 Biostatistics).
+# 7 device passes: atomic-scatter α_g/gb stats, pooled σ²_g, dense Z
+# materialization (in-place reuse), γ/δ² scatter, EB hyperparams (warp-shuffle),
+# EB shrinkage × max_iter=2, X_adj final adjustment kernel.
+# Scales: 10k / 30k cells × 5000 genes, dense, 4 batches, max_iter=2.
+# ---------------------------------------------------------------------------
+add_bench_driver(bench_integrate_combat_perf  bench_integrate_combat_perf.cpp)
+
+# ---------------------------------------------------------------------------
 # Status message
 # ---------------------------------------------------------------------------
-message(STATUS "singlet-gpu bench: 36 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164+165+166+167+169+170+171+172+173+174)")
+message(STATUS "singlet-gpu bench: 37 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164+165+166+167+169+170+171+172+173+174+175)")
 message(STATUS "  53a: bench_io_pz_loader_perf")
 message(STATUS "  53a: bench_preprocess_lognorm_perf")
 message(STATUS "  53a: bench_preprocess_hvg_perf")
@@ -274,3 +284,4 @@ message(STATUS "  171: bench_integrate_kbet_perf")
 message(STATUS "  172: bench_graph_kmeans_perf")
 message(STATUS "  173: bench_embed_dendrogram_perf")
 message(STATUS "  174: bench_preprocess_magic_perf")
+message(STATUS "  175: bench_integrate_combat_perf")
