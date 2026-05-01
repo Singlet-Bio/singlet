@@ -228,6 +228,19 @@ async def list_tools() -> list[Tool]:
                 "required": [],
             },
         ),
+        Tool(
+            name="singlet_quality",
+            description=(
+                "Get quality tier breakdown of SUCCESS samples. Classifies into "
+                "gold (MR>=0.7, genes>=500, cells>=500), silver (MR>=0.5, genes>=200, "
+                "cells>=100), and bronze (all other SUCCESS)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        ),
     ]
 
 
@@ -247,6 +260,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             result = await _tool_browse(arguments)
         elif name == "singlet_protocols":
             result = await _tool_protocols()
+        elif name == "singlet_quality":
+            result = await _tool_quality()
         else:
             result = {"error": f"Unknown tool: {name}"}
     except Exception as e:
@@ -511,6 +526,50 @@ async def _tool_protocols() -> dict:
     return {
         "total_protocols": len([p for p in protocols if p["protocol"] != "unknown"]),
         "protocols": protocols,
+    }
+
+
+async def _tool_quality() -> dict:
+    """Get quality tier breakdown of SUCCESS samples."""
+    client = get_client()
+
+    # Query SUCCESS samples with quality metrics
+    all_rows = []
+    page_size = 1000
+    offset = 0
+    while True:
+        resp = client.table("samples").select(
+            "mapping_rate, median_genes, cells_called"
+        ).eq("status", "SUCCESS").range(offset, offset + page_size - 1).execute()
+        batch = resp.data or []
+        all_rows.extend(batch)
+        if len(batch) < page_size:
+            break
+        offset += page_size
+
+    total = len(all_rows)
+    gold = silver = bronze = 0
+    for row in all_rows:
+        mr = row.get("mapping_rate") or 0
+        mg = row.get("median_genes") or 0
+        cc = row.get("cells_called") or 0
+        if mr >= 0.7 and mg >= 500 and cc >= 500:
+            gold += 1
+        elif mr >= 0.5 and mg >= 200 and cc >= 100:
+            silver += 1
+        else:
+            bronze += 1
+
+    return {
+        "total_success": total,
+        "tiers": {
+            "gold": {"count": gold, "pct": round(gold / total * 100, 1) if total else 0,
+                     "criteria": "mapping_rate>=0.7, median_genes>=500, cells>=500"},
+            "silver": {"count": silver, "pct": round(silver / total * 100, 1) if total else 0,
+                       "criteria": "mapping_rate>=0.5, median_genes>=200, cells>=100"},
+            "bronze": {"count": bronze, "pct": round(bronze / total * 100, 1) if total else 0,
+                       "criteria": "all other SUCCESS samples"},
+        },
     }
 
 

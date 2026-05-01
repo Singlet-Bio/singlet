@@ -14,6 +14,7 @@ Browse catalog (works offline):
     singlet.samples(tissue="brain")        Filter by tissue/source
     singlet.samples(protocol="dropseq")    Filter by protocol
     singlet.top_series(n=10)               Largest series
+    singlet.quality_tiers()                Quality tier breakdown (gold/silver/bronze)
     singlet.summary()                      Atlas overview
 
 Load data:
@@ -43,7 +44,7 @@ __version__ = "1.1.0"
 
 from singlet._catalog import (
     catalog, info, species, tissues, protocols, datasets, sample_index, set_catalog_dir,
-    summary, samples, top_series, refresh,
+    summary, samples, top_series, refresh, quality_tiers,
 )
 from singlet._loader import load, load_sample, load_dir, download
 from singlet._auth import login
@@ -69,6 +70,7 @@ __all__ = [
     "samples",
     "top_series",
     "refresh",
+    "quality_tiers",
     # Load
     "load",
     "load_sample",

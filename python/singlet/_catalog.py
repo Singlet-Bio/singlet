@@ -416,3 +416,49 @@ def top_series(
     grouped = grouped[grouped["n_samples"] >= min_samples]
     grouped = grouped.sort_values("total_cells", ascending=False).head(n)
     return grouped.reset_index(drop=True)
+
+
+def quality_tiers() -> pd.DataFrame:
+    """Classify SUCCESS samples into quality tiers.
+
+    Tiers:
+      - gold: mapping_rate >= 0.7, median_genes >= 500, cells_called >= 500
+      - silver: mapping_rate >= 0.5, median_genes >= 200, cells_called >= 100
+      - bronze: all other SUCCESS samples
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns: tier, count, pct, avg_mapping_rate, avg_median_genes, avg_cells
+    """
+    df = _load_sample_index()
+    success = df[df["status"] == "SUCCESS"].copy()
+    cells_col = "cells_called" if "cells_called" in success.columns else "n_cells"
+
+    gold_mask = (
+        (success["mapping_rate"] >= 0.7) &
+        (success["median_genes"] >= 500) &
+        (success[cells_col] >= 500)
+    )
+    silver_mask = (
+        ~gold_mask &
+        (success["mapping_rate"] >= 0.5) &
+        (success["median_genes"] >= 200) &
+        (success[cells_col] >= 100)
+    )
+    bronze_mask = ~gold_mask & ~silver_mask
+
+    tiers = []
+    for name, mask in [("gold", gold_mask), ("silver", silver_mask), ("bronze", bronze_mask)]:
+        subset = success[mask]
+        n = len(subset)
+        tiers.append({
+            "tier": name,
+            "count": n,
+            "pct": round(n / len(success) * 100, 1) if len(success) > 0 else 0,
+            "avg_mapping_rate": round(subset["mapping_rate"].mean(), 4) if n > 0 else None,
+            "avg_median_genes": round(subset["median_genes"].mean(), 1) if n > 0 and "median_genes" in subset.columns else None,
+            "avg_cells": round(subset[cells_col].mean(), 0) if n > 0 else None,
+        })
+
+    return pd.DataFrame(tiers)
