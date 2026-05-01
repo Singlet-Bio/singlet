@@ -130,31 +130,32 @@ def _device_csc_to_csr(device_csc):
     except ImportError:
         import cupy.sparse as csp         # cupy < 14 fallback
 
+    # cupy >= 14 dtype-strictness: cp.asarray() rejects bare dicts.  The
+    # __cuda_array_interface__ must be an attribute on the source object.
+    # Wrap each CAI dict in a one-line shim — works on cupy 13 and 14.
+    class _CaiView:
+        def __init__(self, d): self.__cuda_array_interface__ = d
+
     if hasattr(_core, "to_cupy_csr"):
         # _core.to_cupy_csr returns a dict {data, indices, indptr, shape, _owner}
-        # of __cuda_array_interface__ views.  Build a cupy csc_matrix and .T to csr.
+        # whose data/indices/indptr values are themselves CAI dicts (from
+        # make_view_object — see python/src/_cupy_interop.hpp).
         d = _core.to_cupy_csr(device_csc)
         rows, cols = d["shape"]
-        genes_x_cells_csc = csp.csc_matrix(
-            (cp.asarray(d["data"]), cp.asarray(d["indices"]), cp.asarray(d["indptr"])),
-            shape=(rows, cols),
-        )
+        cu_data    = cp.asarray(_CaiView(d["data"]))
+        cu_indices = cp.asarray(_CaiView(d["indices"]))
+        cu_indptr  = cp.asarray(_CaiView(d["indptr"]))
     else:
-        # Fallback path — use __cuda_array_interface__ views from DeviceCsc directly.
-        # cupy >= 14 dtype-strictness: wrap CAI dict so cp.asarray() gets an
-        # object with __cuda_array_interface__ as an attribute, not a bare dict.
-        class _CaiView:
-            def __init__(self, d): self.__cuda_array_interface__ = d
-
+        # Fallback — use __cuda_array_interface__ views from DeviceCsc directly.
         cu_data    = cp.asarray(_CaiView(device_csc.data_view))
         cu_indices = cp.asarray(_CaiView(device_csc.indices_view))
         cu_indptr  = cp.asarray(_CaiView(device_csc.indptr_view))
         rows = device_csc.rows
         cols = device_csc.cols
-        genes_x_cells_csc = csp.csc_matrix(
-            (cu_data, cu_indices, cu_indptr), shape=(rows, cols)
-        )
 
+    genes_x_cells_csc = csp.csc_matrix(
+        (cu_data, cu_indices, cu_indptr), shape=(rows, cols)
+    )
     return genes_x_cells_csc.T.tocsr()
 
 

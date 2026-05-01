@@ -315,8 +315,14 @@ def filter_cells(
 
     # Replace X with the device-filtered sparse matrix.
     d = _core.to_cupy_csr(filtered_csc)
+    # cupy >= 14 dtype-strictness: cp.asarray() rejects bare CAI dicts —
+    # __cuda_array_interface__ must be an attribute. Wrap each dict.
+    class _CaiView:
+        def __init__(self, x): self.__cuda_array_interface__ = x
     filtered.X = csp.csc_matrix(
-        (cp.asarray(d["data"]), cp.asarray(d["indices"]), cp.asarray(d["indptr"])),
+        (cp.asarray(_CaiView(d["data"])),
+         cp.asarray(_CaiView(d["indices"])),
+         cp.asarray(_CaiView(d["indptr"]))),
         shape=d["shape"],
     ).T.tocsr()
 
@@ -415,8 +421,14 @@ def filter_genes(
     filtered = adata[:, keep].copy()
 
     d = _core.to_cupy_csr(filtered_csc)
+    # cupy >= 14 dtype-strictness: cp.asarray() rejects bare CAI dicts —
+    # __cuda_array_interface__ must be an attribute. Wrap each dict.
+    class _CaiView:
+        def __init__(self, x): self.__cuda_array_interface__ = x
     filtered.X = csp.csc_matrix(
-        (cp.asarray(d["data"]), cp.asarray(d["indices"]), cp.asarray(d["indptr"])),
+        (cp.asarray(_CaiView(d["data"])),
+         cp.asarray(_CaiView(d["indices"])),
+         cp.asarray(_CaiView(d["indptr"]))),
         shape=d["shape"],
     ).T.tocsr()
 
