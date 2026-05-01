@@ -307,6 +307,7 @@ def samples(
     organism: Optional[str] = None,
     status: Optional[str] = None,
     tissue: Optional[str] = None,
+    protocol: Optional[str] = None,
     min_cells: Optional[int] = None,
     quality_tier: Optional[str] = None,
     search: Optional[str] = None,
@@ -323,6 +324,8 @@ def samples(
         Filter by pipeline status (e.g. "SUCCESS").
     tissue : str, optional
         Filter by tissue/source (substring match, e.g. "brain", "lung", "PBMC").
+    protocol : str, optional
+        Filter by protocol (e.g. "10xv3", "dropseq", "celseq2").
     min_cells : int, optional
         Minimum cell count.
     quality_tier : str, optional
@@ -351,6 +354,8 @@ def samples(
         df = df[df["status"] == status]
     if tissue is not None and "source" in df.columns:
         df = df[df["source"].str.contains(tissue, case=False, na=False)]
+    if protocol is not None and "protocol" in df.columns:
+        df = df[df["protocol"].str.contains(protocol, case=False, na=False)]
     if min_cells is not None:
         col = "cells_called" if "cells_called" in df.columns else "n_cells"
         df = df[df[col] >= min_cells]
