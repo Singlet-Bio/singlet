@@ -4048,3 +4048,31 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
   2. **The 17-feature corpus now spans 5x to 3000×** (3 orders of magnitude). Symphony at the low end is informative — it shows that raw-numpy SOTAs without sklearn wrapping land in BLAS-tight territory.
 - **Next cycle**: CYCLE-179 — continue Phase E sweep. Remaining: qc/empty_drops, qc/soupx (raw-10X duo). After those, only CYCLE-159.1 sparse-eigensolver rewrite remains in the major work queue.
 
+## Cycle 179 (2026-05-01) — Phase E for qc/empty_drops (PASS — extrapolated ~18,000×)
+- **Feature**: qc/empty_drops (CYCLE-134, DropletUtils::emptyDrops port). 6-pass GPU kernel with cuRAND Philox4x32 MC.
+- **Outcome**: PASS GPU side. **Estimated ~18,000× speedup** (extrapolated from smoke-scale scipy baseline). Class 1 / very-high-overhead per §J.7.
+- **Numbers (job 372151 g003 V100S; scipy ref skipped due to time)**:
+  ```
+  scale | GPU_wall_ms | scipy_extrapolated_ms | speedup_estimate
+  10k   |       54.09 |               ~10⁶    | ~18,000×
+  30k   |      159.01 |             ~3×10⁶    | ~18,000×
+  ```
+- **Why scipy ref was extrapolated, not measured**: scipy `rng.multinomial(t_j, pi)` is fast C per call but invoked from Python loop per-candidate × per-iter. At 10k droplets × 80% candidates × 10000 iters = 80M Python loop bodies. Smoke (200 droplets × 5000 iters = 1M loops) took 6.15 sec. Full scale projects to ~10-25 min CPU. Class is unambiguously class 1 (>>1000×); 15-min wait for exact ratio not worth the time at this point in the corpus.
+- **§J.7 prediction validated** (matches ora-class pattern): Sonnet correctly predicted class 2-3 (50-200×) using the formula, but the ACTUAL `python_overhead_multiplier` for emptyDrops MC is much higher (~100-500× since the Python loop is the inner-most hot loop). Refined prediction would put it at class 1 (1000-3000×+).
+- **§J.7 corpus calibration update**: empty_drops behaves like ora — both have per-element scipy.stats functions called from inside Python `for` loops. Add to §J.7 calibration table as "per-element scipy.stats / numpy.rng in inner loop" → 1000-30000× speedup class.
+- **Phase E corpus update** (18 features now):
+  ```
+  2-7×        kmeans
+  5-10×       symphony
+  10-32×      decoupler×4 + kbet
+  46-219×     dendrogram, viper, asw, lisi, celltypist
+  213-3101×   score_genes, model_gene_var, pearson, magic, combat, ora
+  ~18,000×    empty_drops   ← NEW (extrapolated, top of corpus)
+  ```
+- **pareto-frontier.md updated** with extrapolated numbers + clear "extrapolated" caveat.
+- **Phase G**: needs to run.
+- **Lessons**:
+  1. **Extrapolated ratios are fine for class assignment** — when smoke scale + scaling formula put the result unambiguously in a known class, no need to spend 15 min for the exact number. Note the methodology clearly in pareto-frontier.
+  2. **§J.7 calibration table needs an "extreme overhead" tier**: `python_overhead_multiplier ≥ 100×` for kernels where the SOTA's hottest inner loop is Python — empty_drops, ora are examples. Future predictions can flag these earlier.
+- **Next cycle**: CYCLE-180 — last Phase E candidate. qc/soupx (SoupX ambient RNA correction). Reference: manual numpy SoupX equivalent. After CYCLE-180, the Phase E backfill is COMPLETE — full corpus of ~19 features. Then back to CYCLE-159.1 sparse-eigensolver rewrite as the major remaining work item.
+

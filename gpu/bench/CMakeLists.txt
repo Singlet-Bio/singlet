@@ -268,9 +268,21 @@ add_bench_driver(bench_anno_celltypist_perf  bench_anno_celltypist_perf.cpp)
 add_bench_driver(bench_anno_symphony_perf  bench_anno_symphony_perf.cpp)
 
 # ---------------------------------------------------------------------------
+# Cycle 179 drivers: qc/empty_drops Phase E benchmark
+# DropletUtils::emptyDrops GPU port (Lun et al. 2019 Genome Biology 20:63).
+# 6 device passes: col_sum (warp/col), mark_empty + ambient_scatter (atomic/nnz),
+# normalize_ambient, obs_ll (warp/cand), MC p-values (one block/cand, 256 threads,
+# cuRAND Philox4x32, smem cumulative CDF + binary-search categorical sampling,
+# O(log m)/draw, niters distributed across 256 threads),
+# BH FDR (host-side sort+scan at D2H boundary), scatter is_cell.
+# Scales: 10k / 30k droplets × 3000 genes, lower=100, niters=10000, fdr_thresh=0.001.
+# ---------------------------------------------------------------------------
+add_bench_driver(bench_qc_empty_drops_perf  bench_qc_empty_drops_perf.cpp)
+
+# ---------------------------------------------------------------------------
 # Status message
 # ---------------------------------------------------------------------------
-message(STATUS "singlet-gpu bench: 39 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164+165+166+167+169+170+171+172+173+174+175+176+178)")
+message(STATUS "singlet-gpu bench: 40 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164+165+166+167+169+170+171+172+173+174+175+176+178+179)")
 message(STATUS "  53a: bench_io_pz_loader_perf")
 message(STATUS "  53a: bench_preprocess_lognorm_perf")
 message(STATUS "  53a: bench_preprocess_hvg_perf")
@@ -309,3 +321,4 @@ message(STATUS "  174: bench_preprocess_magic_perf")
 message(STATUS "  175: bench_integrate_combat_perf")
 message(STATUS "  176: bench_anno_celltypist_perf")
 message(STATUS "  178: bench_anno_symphony_perf")
+message(STATUS "  179: bench_qc_empty_drops_perf")

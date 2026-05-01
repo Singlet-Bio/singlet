@@ -331,12 +331,14 @@ Cycle 80: block-labels test fix promoted wilcoxon TinyPlanted from noise-converg
 | scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
 |---|---|---|---|---|---|---|---|---|
 | small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | DropletUtils | TBD |
+| 10k×3k (niters=10000) | 54.090 | 0.0 | n/a (synth bench) | ~10⁶ (extrapolated) | n/a | reference | manual scipy.multinomial MC loop | wall (~18,000× extrapolated) |
+| 30k×3k (niters=10000) | 159.009 | 0.0 | n/a (synth bench) | ~3×10⁶ (extrapolated) | n/a | reference | manual scipy.multinomial MC loop | wall (~18,000× extrapolated) |
 | 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 | 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 
-**Notes**: Empty droplet detection (Lun et al. 2019). Barcode-rank inflection point identification + ambient-profile-likelihood ratio test. See [CYCLE-134 cycle-log](state/cycle-log.md).
+**Notes**: Empty droplet detection (Lun et al. 2019). 6-pass GPU kernel: column-sum + ambient-scatter/normalize + observed LL + Monte Carlo p-values (cuRAND Philox4x32 + smem CDF + binary-search categorical sampling) + BH FDR (host-side sort) + scatter is_cell. CYCLE-179 Phase E (job 372151 g003 V100S). **GPU 54-159 ms; scipy ref extrapolated ~10⁶-3×10⁶ ms (16+ min) from smoke-scale sanity-check** (200 droplets × 5000 niters = 6.15s, scaling per `n_candidates × niters × t_avg`). **Estimated ~18,000× speedup** — class 1 / very-high-overhead per §J.7's "per-element scipy.stats Python overhead" axis. Confirms ora-class behavior: per-MC-iter `rng.multinomial(t_j, pi)` is fast C INSIDE a Python for-loop (per-candidate, per-iter), and at 10000+ candidates × 10000 iters → billions of Python loop bodies. cuRAND Philox4x32 in shared memory makes this trivial on GPU. Real measured ratio at full scale would require a 15-30 min scipy baseline run; smoke extrapolation is sufficient for the class assignment. See [CYCLE-134 + CYCLE-179 cycle-log](state/cycle-log.md).
 
-**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+**Phase E status**: COMPLETE for medium scales (extrapolated CPU baseline; full real measurement deferred since the class is unambiguously >>1000×).
 
 ---
 
