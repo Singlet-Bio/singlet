@@ -65,6 +65,12 @@ def _load_catalog() -> pd.DataFrame:
             _CATALOG_CACHE = pd.read_parquet(path)
             return _CATALOG_CACHE
 
+    # Prefer bundled data (always up-to-date with package version)
+    bundled = Path(__file__).parent / "data" / "catalog_v1.parquet"
+    if bundled.exists():
+        _CATALOG_CACHE = pd.read_parquet(bundled)
+        return _CATALOG_CACHE
+
     cache_path = Path.home() / ".singlet" / "cache" / "catalog_v1.parquet"
     if cache_path.exists():
         _CATALOG_CACHE = pd.read_parquet(cache_path)
@@ -73,13 +79,9 @@ def _load_catalog() -> pd.DataFrame:
     try:
         _CATALOG_CACHE = _download_parquet(_CATALOG_URL, cache_path)
     except Exception:
-        bundled = Path(__file__).parent / "data" / "catalog_v1.parquet"
-        if bundled.exists():
-            _CATALOG_CACHE = pd.read_parquet(bundled)
-        else:
-            raise RuntimeError(
-                "Could not load catalog. Set SINGLET_CATALOG_DIR or check internet."
-            )
+        raise RuntimeError(
+            "Could not load catalog. Set SINGLET_CATALOG_DIR or check internet."
+        )
     return _CATALOG_CACHE
 
 
@@ -95,6 +97,12 @@ def _load_sample_index() -> pd.DataFrame:
             _SAMPLE_INDEX_CACHE = pd.read_parquet(path)
             return _SAMPLE_INDEX_CACHE
 
+    # Prefer bundled data (always up-to-date with package version)
+    bundled = Path(__file__).parent / "data" / "sample_index.parquet"
+    if bundled.exists():
+        _SAMPLE_INDEX_CACHE = pd.read_parquet(bundled)
+        return _SAMPLE_INDEX_CACHE
+
     cache_path = Path.home() / ".singlet" / "cache" / "sample_index.parquet"
     if cache_path.exists():
         _SAMPLE_INDEX_CACHE = pd.read_parquet(cache_path)
@@ -103,13 +111,9 @@ def _load_sample_index() -> pd.DataFrame:
     try:
         _SAMPLE_INDEX_CACHE = _download_parquet(_SAMPLE_INDEX_URL, cache_path)
     except Exception:
-        bundled = Path(__file__).parent / "data" / "sample_index.parquet"
-        if bundled.exists():
-            _SAMPLE_INDEX_CACHE = pd.read_parquet(bundled)
-        else:
-            raise RuntimeError(
-                "Could not load sample index. Set SINGLET_CATALOG_DIR or check internet."
-            )
+        raise RuntimeError(
+            "Could not load sample index. Set SINGLET_CATALOG_DIR or check internet."
+        )
     return _SAMPLE_INDEX_CACHE
 
 
