@@ -122,7 +122,7 @@ async def list_tools() -> list[Tool]:
                     },
                     "query": {
                         "type": "string",
-                        "description": "Free-text search across GSM ID, GSE ID, and title",
+                        "description": "Free-text search across GSM ID, GSE ID, title, and tissue/source",
                     },
                     "status": {
                         "type": "string",
@@ -297,7 +297,7 @@ async def _tool_search(args: dict) -> dict:
 
     query = client.table("samples").select(
         "gsm_id, gse_id, organism, protocol, modality, status, "
-        "cells_called, mapping_rate, title"
+        "cells_called, mapping_rate, title, source"
     )
 
     if args.get("organism"):
@@ -311,7 +311,7 @@ async def _tool_search(args: dict) -> dict:
     if args.get("query"):
         q = args["query"]
         query = query.or_(
-            f"gsm_id.ilike.%{q}%,gse_id.ilike.%{q}%,title.ilike.%{q}%"
+            f"gsm_id.ilike.%{q}%,gse_id.ilike.%{q}%,title.ilike.%{q}%,source.ilike.%{q}%"
         )
 
     query = query.order("pipeline_date", desc=True).limit(limit)
@@ -356,6 +356,8 @@ async def _tool_qc(args: dict) -> dict:
             "pipeline_date": sample.get("pipeline_date"),
         },
         "title": sample.get("title"),
+        "source": sample.get("source"),
+        "characteristics": sample.get("characteristics"),
         "web_url": f"https://singlet.bio/sample/{gsm_id}",
     }
 
