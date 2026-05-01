@@ -15,6 +15,7 @@ Browse catalog (works offline):
     singlet.samples(protocol="dropseq")    Filter by protocol
     singlet.top_series(n=10)               Largest series
     singlet.quality_tiers()                Quality tier breakdown (gold/silver/bronze)
+    singlet.failure_categories()           Pipeline failure analysis
     singlet.summary()                      Atlas overview
 
 Load data:
@@ -44,7 +45,7 @@ __version__ = "1.1.0"
 
 from singlet._catalog import (
     catalog, info, species, tissues, protocols, datasets, sample_index, set_catalog_dir,
-    summary, samples, top_series, refresh, quality_tiers,
+    summary, samples, top_series, refresh, quality_tiers, failure_categories,
 )
 from singlet._loader import load, load_sample, load_dir, download
 from singlet._auth import login
@@ -71,6 +72,7 @@ __all__ = [
     "top_series",
     "refresh",
     "quality_tiers",
+    "failure_categories",
     # Load
     "load",
     "load_sample",

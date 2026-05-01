@@ -11,6 +11,7 @@ Exposes these tools to any MCP client (Claude Desktop, Cursor, VS Code Copilot):
   - singlet_protocols: Get protocol distribution and success rates
   - singlet_quality:   Get quality tier breakdown (gold/silver/bronze)
   - singlet_tissues:   Get tissue distribution across samples
+  - singlet_failures:  Get failure category breakdown for non-SUCCESS samples
 
 Usage:
     # Start the server (stdio transport):
@@ -262,6 +263,19 @@ async def list_tools() -> list[Tool]:
                 "required": [],
             },
         ),
+        Tool(
+            name="singlet_failures",
+            description=(
+                "Get failure category breakdown for non-SUCCESS samples. Shows why samples "
+                "failed: download_fail, align_low_map, cells_below_threshold, pipeline_crash, "
+                "align_oom. Useful for understanding pipeline health."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        ),
     ]
 
 
@@ -285,6 +299,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             result = await _tool_quality()
         elif name == "singlet_tissues":
             result = await _tool_tissues(arguments)
+        elif name == "singlet_failures":
+            result = await _tool_failures()
         else:
             result = {"error": f"Unknown tool: {name}"}
     except Exception as e:
@@ -687,6 +703,59 @@ def _normalize_tissue(raw: str) -> str:
     if "pancrea" in raw:
         return "pancreas"
     return raw
+
+
+async def _tool_failures() -> dict:
+    """Get failure category breakdown for non-SUCCESS samples."""
+    client = get_client()
+
+    # Query non-SUCCESS samples
+    all_rows = []
+    page_size = 1000
+    offset = 0
+    while True:
+        resp = client.table("samples").select(
+            "status, mapping_rate, cells_called, failure_category"
+        ).neq("status", "SUCCESS").range(offset, offset + page_size - 1).execute()
+        batch = resp.data or []
+        all_rows.extend(batch)
+        if len(batch) < page_size:
+            break
+        offset += page_size
+
+    total = len(all_rows)
+    categories: dict[str, int] = {}
+    for row in all_rows:
+        cat = row.get("failure_category")
+        if cat:
+            categories[cat] = categories.get(cat, 0) + 1
+        else:
+            # Infer from metrics
+            mr = row.get("mapping_rate") or 0
+            cells = row.get("cells_called") or 0
+            status = row.get("status", "")
+            if mr == 0 and cells == 0:
+                key = "download_fail" if status == "HARD_FAIL" else "pipeline_crash"
+            elif mr > 0 and mr < 0.1:
+                key = "align_low_map"
+            elif mr >= 0.1 and cells < 50:
+                key = "cells_below_threshold"
+            else:
+                key = "align_low_map"
+            categories[key] = categories.get(key, 0) + 1
+
+    sorted_cats = sorted(categories.items(), key=lambda x: -x[1])
+    return {
+        "total_failed": total,
+        "categories": [
+            {"category": cat, "count": c, "pct": round(c / total * 100, 1) if total else 0}
+            for cat, c in sorted_cats
+        ],
+        "status_breakdown": {
+            "HARD_FAIL": sum(1 for r in all_rows if r["status"] == "HARD_FAIL"),
+            "SOFT_FAIL": sum(1 for r in all_rows if r["status"] == "SOFT_FAIL"),
+        },
+    }
 
 
 # ─── Entry point ─────────────────────────────────────────────────────────────

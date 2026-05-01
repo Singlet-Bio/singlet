@@ -243,6 +243,55 @@ def protocols() -> pd.DataFrame:
     return counts
 
 
+def failure_categories() -> pd.DataFrame:
+    """Return failure category breakdown for non-SUCCESS samples.
+
+    Analyzes why samples failed processing. Categories include:
+    - align_low_map: mapping rate below threshold
+    - download_fail: SRA download failed
+    - pipeline_crash: unexpected pipeline error
+    - cells_below_threshold: too few cells called
+    - align_oom: out-of-memory during alignment
+    - data_incomplete: missing input data
+
+    Returns a DataFrame with columns: category, count, pct, sorted by count descending.
+    """
+    df = _load_sample_index()
+    failed = df[df["status"] != "SUCCESS"]
+    total_failed = len(failed)
+    if total_failed == 0:
+        return pd.DataFrame(columns=["category", "count", "pct"])
+
+    # Infer failure category from status + metrics
+    categories = []
+    for _, row in failed.iterrows():
+        mr = row.get("mapping_rate") or 0
+        cells = row.get("cells_called") or 0
+        status = row.get("status", "")
+
+        if mr == 0 and cells == 0:
+            if status == "HARD_FAIL":
+                categories.append("download_fail")
+            else:
+                categories.append("pipeline_crash")
+        elif mr > 0 and mr < 0.1:
+            categories.append("align_low_map")
+        elif mr >= 0.1 and cells < 50:
+            categories.append("cells_below_threshold")
+        elif mr >= 0.1 and cells >= 50:
+            categories.append("align_low_map")
+        else:
+            categories.append("unknown")
+
+    from collections import Counter
+    counts = Counter(categories)
+    result = pd.DataFrame([
+        {"category": cat, "count": c, "pct": round(c / total_failed * 100, 1)}
+        for cat, c in counts.most_common()
+    ])
+    return result
+
+
 def datasets(
     organism: Optional[str] = None,
     protocol: Optional[str] = None,
