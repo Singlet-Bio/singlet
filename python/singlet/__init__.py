@@ -41,7 +41,7 @@ Token-priced (requires API key):
     singlet.search(text)                   Natural-language search → AnnData
 """
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 from singlet._catalog import (
     catalog, info, species, tissues, protocols, datasets, sample_index, set_catalog_dir,
