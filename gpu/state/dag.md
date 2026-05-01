@@ -4,7 +4,7 @@ Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movemen
 
 ## 🔴 Active this cycle
 
-- **CYCLE-162-PHASE-E-NEXT** (queued): pivot away from already-broken kernels (CYCLE-159.1 EXPANDED will fix diffmap+dpt). Default: Phase E for preprocess/model_gene_var (LOW-MEDIUM risk, known-good kernel from CYCLE-127). Alternates: integrate/lisi, integrate/asw, integrate/kbet (all O(n_cells) + sparse, expected clean PASS).
+- **CYCLE-162-PHASE-E-MODEL-GENE-VAR** (in flight, job 371388 RUNNING on g008): Sonnet wrote `bench/bench_preprocess_model_gene_var_perf.cpp` (10k/30k × 5k cells, density 5%, n_top=2000), `bench/refs/model_gene_var_ref.py` (DUAL scanpy baselines: pearson_residuals + seurat_v3 flavors), `state/cycle162_model_gene_var_bench.sh` (--exclude=g001,g002,g005). CMake → 25 drivers. §J.6 NOT-at-risk kernel (O(nnz) + CUB radix sort, no dense n×n materialization). Expected clean PASS.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 

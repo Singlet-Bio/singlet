@@ -125,9 +125,16 @@ add_bench_driver(bench_embed_diffmap_perf  bench_embed_diffmap_perf.cpp)
 add_bench_driver(bench_embed_dpt_perf  bench_embed_dpt_perf.cpp)
 
 # ---------------------------------------------------------------------------
+# Cycle 162 drivers: preprocess/model_gene_var standalone Phase E benchmark
+# GPU port of scran::modelGeneVarByPoisson (Lun-McCarthy-Marioni 2016).
+# O(nnz) scatter + cub::DeviceRadixSort top-N; NOT at risk of §J.6 dense-n×n bug.
+# ---------------------------------------------------------------------------
+add_bench_driver(bench_preprocess_model_gene_var_perf  bench_preprocess_model_gene_var_perf.cpp)
+
+# ---------------------------------------------------------------------------
 # Status message
 # ---------------------------------------------------------------------------
-message(STATUS "singlet-gpu bench: 24 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161)")
+message(STATUS "singlet-gpu bench: 25 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162)")
 message(STATUS "  53a: bench_io_pz_loader_perf")
 message(STATUS "  53a: bench_preprocess_lognorm_perf")
 message(STATUS "  53a: bench_preprocess_hvg_perf")
@@ -144,3 +151,11 @@ message(STATUS "  85: bench_de_wilcoxon_perf_c85")
 message(STATUS "  86: bench_reduce_nmf_c86")
 message(STATUS "  86E: bench_nmf_phaseE_c86")
 message(STATUS "  86E: bench_qc_perf")
+message(STATUS "  57:  io_pz_device_loader_bench")
+message(STATUS "  58:  bench_preprocess_lognorm_phaseE")
+message(STATUS "  60:  bench_reduce_svd_phaseE")
+message(STATUS "  157: bench_preprocess_pearson_residuals_perf")
+message(STATUS "  158: bench_enrich_score_genes_perf")
+message(STATUS "  159: bench_embed_diffmap_perf")
+message(STATUS "  161: bench_embed_dpt_perf")
+message(STATUS "  162: bench_preprocess_model_gene_var_perf")
