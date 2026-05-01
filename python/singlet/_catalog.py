@@ -199,11 +199,12 @@ def info(accession: str) -> dict:
 
 
 def species() -> list:
-    """Return all species with processed data."""
-    df = _load_catalog()
-    col = "organisms" if "organisms" in df.columns else "organism"
+    """Return all species with processed data (SUCCESS samples)."""
+    df = _load_sample_index()
+    success = df[df["status"] == "SUCCESS"] if "status" in df.columns else df
+    col = "organism"
     all_species = set()
-    for org in df[col].dropna():
+    for org in success[col].dropna():
         for s in str(org).replace(";", ",").split(","):
             s = s.strip()
             if s and s != "unknown":
@@ -358,11 +359,8 @@ def summary() -> str:
     n_success = len(success)
     n_series = df["gse_id"].nunique() if "gse_id" in df.columns else 0
 
-    # Count species from sample_index (more complete than catalog)
-    if "organism" in df.columns:
-        n_species = df["organism"].dropna().loc[lambda s: (s != "unknown") & (s.str.strip() != "")].nunique()
-    else:
-        n_species = len(species())
+    # Count species (split combo organisms, deduplicate)
+    n_species = len(species())
 
     # Count protocols (SUCCESS only)
     if "protocol" in success.columns:
