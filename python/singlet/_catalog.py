@@ -478,6 +478,12 @@ def summary() -> str:
     else:
         n_tissues = 0
 
+    # Count cell types (SUCCESS only)
+    if "cell_type" in success.columns:
+        n_cell_types = success["cell_type"].dropna().nunique()
+    else:
+        n_cell_types = 0
+
     def _fmt(n: int) -> str:
         if n >= 1e6:
             return f"{n / 1e6:.1f}M"
@@ -488,7 +494,7 @@ def summary() -> str:
     msg = (
         f"singlet atlas: {total:,} samples ({n_success:,} SUCCESS) • "
         f"{n_series:,} series • {n_species} species • {n_protocols} protocols • "
-        f"{n_tissues} tissues • {_fmt(total_cells)} cells"
+        f"{n_tissues} tissues • {n_cell_types} cell types • {_fmt(total_cells)} cells"
     )
     return msg
 
