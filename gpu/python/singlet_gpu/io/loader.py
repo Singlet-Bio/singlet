@@ -175,9 +175,13 @@ def _build_anndata(device_csc, metadata) -> "anndata.AnnData":
         var=var,
         uns={"singlify": singlify_meta},
     )
-    # Keep device allocation alive: store a reference in uns so Python GC
-    # does not collect it while adata.X is in use.
-    adata.uns["_singlet_gpu_device_ref"] = device_csc
+    # Keep device allocation alive: stash on the AnnData object itself as a
+    # private attribute (NOT in uns — uns is deepcopied by adata.copy() and
+    # pybind11 objects are not picklable, which broke score_genes copy mode).
+    # adata.copy() / _mutated_copy() does not propagate extra Python attrs;
+    # the copy gets its own deep-copied X with fresh device memory, so it
+    # does not need this anchor.  See CYCLE-195.
+    adata._singlet_gpu_device_ref = device_csc
     return adata
 
 
