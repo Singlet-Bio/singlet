@@ -374,14 +374,20 @@ def samples(
         df = df[df["status"] == "SUCCESS"]
         cells_col = "cells_called" if "cells_called" in df.columns else "n_cells"
         has_genes = "median_genes" in df.columns
+        gold_mask = (df["mapping_rate"] >= 0.7) & (df[cells_col] >= 500)
+        if has_genes:
+            gold_mask = gold_mask & (df["median_genes"] >= 500)
+        silver_mask = (df["mapping_rate"] >= 0.5) & (df[cells_col] >= 100)
+        if has_genes:
+            silver_mask = silver_mask & (df["median_genes"] >= 200)
+        silver_mask = silver_mask & ~gold_mask
+
         if quality_tier == "gold":
-            df = df[(df["mapping_rate"] >= 0.7) & (df[cells_col] >= 500)]
-            if has_genes:
-                df = df[df["median_genes"] >= 500]
+            df = df[gold_mask]
         elif quality_tier == "silver":
-            df = df[(df["mapping_rate"] >= 0.5) & (df[cells_col] >= 100)]
-            if has_genes:
-                df = df[df["median_genes"] >= 200]
+            df = df[silver_mask]
+        elif quality_tier == "bronze":
+            df = df[~gold_mask & ~silver_mask]
     return df.reset_index(drop=True)
 
 
