@@ -2663,3 +2663,17 @@
 - **Notebooks updated**: none
 - **Pipeline stats**: 200 submitted, 123 COMPLETED, 59 FAILED, 9 TIMEOUT, 2 OOM
 - **Strategy patch**: C190 strong at 67.6% (excl timeout). Five consecutive batches (C185-C190) sustaining 60-67% — confirmed ceiling. Pipeline total: 1,402 COMPLETED. Crossed 1,400 milestone.
+
+## Cycle 191 (2026-05-01 00:06–04:46 EDT)
+- **Domain**: pipeline-ops
+- **Tasks**: Build and submit C191 (200 tasks, 2h timeout, pure high-yield)
+- **Workers**: orchestrator direct
+- **Expected**: ~126 COMPLETED (65%)
+- **Actual**: 141 COMPLETED (75.4% excl timeout) — **ALL-TIME RECORD**
+- **Delta**: massively exceeded (+15 above previous best)
+- **Commits**: pending
+- **Push**: pending
+- **E2E panels run**: none
+- **Notebooks updated**: none
+- **Pipeline stats**: 200 submitted, 141 COMPLETED (75.4% excl timeout), 46 FAILED, 7 TIMEOUT
+- **Strategy patch**: C191 smashes records — 141 COMPLETED (prev best 126). Protocol mix matters: more 10xv2/dropseq (100% viable) + less 10x_suspect. 10xv2 has zero data_incomplete. Batch composition shift = +15 samples/batch. Pipeline total: 1,543 COMPLETED.
