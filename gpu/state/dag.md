@@ -2,7 +2,7 @@
 
 Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movement gets demoted to `state/followups.md`. User-gated items live in `state/blockers.md`. Completed entries are moved to `state/cycle-log.md` each cycle.
 
-- **CYCLE-182-CYCLE-159.1-PHASE-D-IMPL** (queued): Phase D dispatch — Sonnet gpu-kernel-dev writes `core/sparse_eigensolver.h` (LOBPCG core kernel) + analysis-validator writes ctest at n=40/10k. Per design doc `state/designs/sparse_eigensolver.md`. ~600 LOC kernel + 400 LOC test. Expect SLURM verify cycle.
+- **CYCLE-182-SPARSE-EIG-IMPL** (in flight, job 372420 RUNNING on g003): Sonnet gpu-kernel-dev wrote `core/sparse_eigensolver.h` (625 LOC LOBPCG); analysis-validator wrote `tests/core_sparse_eigensolver_correctness.cpp` (731 LOC, 5 tests) + scipy ref script + CMake link. scipy ref npz generated locally (1.5 MB). Submitted SLURM build+run. Awaiting verify.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 

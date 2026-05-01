@@ -2596,3 +2596,34 @@ set_target_properties(embed_diffmap_correctness PROPERTIES
 )
 gtest_discover_tests(embed_diffmap_correctness
     PROPERTIES LABELS "correctness;embed;diffmap")
+
+# ---------------------------------------------------------------------------
+# core/sparse_eigensolver correctness harness (CYCLE-182 Phase D)
+#
+# Tests top_k_eigsh_lobpcg against analytic tridiagonal eigenpairs, scipy
+# ARPACK reference at n=10k, determinism, convergence, and clustered-spectrum
+# robustness.  Kernel uses cuBLAS + cuSPARSE + cuSOLVER internals.
+# ---------------------------------------------------------------------------
+add_executable(core_sparse_eigensolver_correctness
+    core_sparse_eigensolver_correctness.cpp
+)
+# sparse_eigensolver.h contains __global__ CUDA kernel definitions — must compile with nvcc.
+set_source_files_properties(core_sparse_eigensolver_correctness.cpp
+    PROPERTIES LANGUAGE CUDA)
+target_link_libraries(core_sparse_eigensolver_correctness PRIVATE
+    singlet-gpu::singlet-gpu
+    GTest::gtest_main
+)
+target_link_libraries(core_sparse_eigensolver_correctness PRIVATE
+    CUDA::cudart
+    CUDA::cublas
+    CUDA::cusparse
+    CUDA::cusolver
+)
+target_compile_definitions(core_sparse_eigensolver_correctness PRIVATE FACTORNET_HAS_GPU)
+set_target_properties(core_sparse_eigensolver_correctness PROPERTIES
+    CUDA_STANDARD 20
+    CUDA_STANDARD_REQUIRED ON
+)
+gtest_discover_tests(core_sparse_eigensolver_correctness
+    PROPERTIES LABELS "correctness;core;sparse_eigensolver")

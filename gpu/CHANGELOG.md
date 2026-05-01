@@ -6,6 +6,8 @@ All notable changes to singlet-gpu. Format: [Keep a Changelog](https://keepachan
 
 ### Added
 
+- **`core/sparse_eigensolver.h` (CYCLE-182)**: header-only LOBPCG for top-K exterior eigenvalues of a sparse symmetric CSR matrix via cuRAND Philox + cuBLAS Sgeqrf/Sgemm + cuSPARSE SpMM + cuSOLVER Ssygvd; replaces the n²-dense Ssyevd path in embed/diffmap and embed/dpt; n=10k uses ~8 MB vs 400 MB, n=1M feasible (was completely infeasible). Deterministic (fixed Philox seed + Cholesky BGS). ~620 LOC.
+
 - **Native GPU linear-algebra kernels (CYCLE-105)**: ~2,500 LOC of internal CUDA replacing factornet — `core/{types,handles,memory}.h` (DeviceCSC, DeviceDense, DeviceMemory, GPUContext), `reduce/svd/{deflation,randomized,auto_select}.h` (truncated SVD via successive rank-1 deflation + Halko–Martinsson), `reduce/nmf/{fit,cv,chunked}.h` (Lee–Seung MU + Hsieh–Dhillon CD + speckled-mask cross-validation + multi-shard chunked). Algorithm credit to factornet (Zach DeBruine, 2021–2026, GPL-2.0) preserved in SPDX + per-file derivation comments.
 - **Native streaming types (CYCLE-106)**: `io/chunk.h` `singlet_gpu::io::Chunk` host CSC slab. `streaming/pz_data_loader.h` no longer inherits factornet's loader interface.
 - **5 new Python wrappers (CYCLE-103/107)** — `pip install singlet-gpu` now exposes `pp.calculate_qc_metrics`, `pp.filter_cells`, `pp.filter_genes`, `pp.scale`, `pp.regress_out` (scanpy-style). 1,331 LOC of bindings + Python wrapper code. Wheel: `singlet_gpu-0.1.0-cp311-cp311-linux_x86_64.whl` (8.0 MB).
