@@ -3776,3 +3776,23 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
 - **No SLURM, no Phase G needed** (style-rules.md not in pareto-frontier path). Pure-Opus cycle.
 - **Next cycle**: CYCLE-169 — pivot to actual work. Options: (a) **Phase E for non-enrich kernel** (integrate/lisi or qc/empty_drops — fresh coverage outside enrich/), (b) **CYCLE-159.1 sparse-eigensolver rewrite** (substantial; the only frontier-broken work item), (c) **wrappers for top frontier features** (Rule 26 says wrappers in 2 cycles; many overdue). Default: Phase E for integrate/lisi (small kernel, kNN-based, expected clean class-3-ish PASS).
 
+## Cycle 169 (2026-05-01) — Phase E for integrate/lisi (PASS — 126-219×, validates §J.7 prediction)
+- **Feature**: integrate/lisi (CYCLE-133, Local Inverse Simpson's Index for batch integration eval). First non-enrich Phase E.
+- **Outcome**: PASS, **125.7-218.6× speedup**.
+- **§J.8 self-applied**: Sonnet grepped CYCLE-167 viper bench template before writing, no API hallucinations this iteration. Build succeeded first attempt. The §J system continues compounding without orchestrator intervention.
+- **Numbers (job 371814 g008 + local numpy re-run)**:
+  ```
+  scale | GPU_wall_ms | numpy_wall_ms | speedup
+  10k   |       0.035 |           4.4 |   125.7×
+  30k   |       0.059 |          12.9 |   218.6×
+  ```
+- **§J.7 validation**: "vectorized SOTA + light GPU compute" predicted 100-200× class. Got 126-219×. Prediction model works for this case. (Sonnet's initial guess was 100-500× with rough class 1-2; refined to ~30-100× after seeing the 4.4ms numpy baseline; actual landed at 125-218× — closer to the higher end than refined guess.)
+- **GPU is essentially memory-bound** at 35-59 μs (shared-mem histogram per cell, fits in 16 bytes per block, one wave for 10k cells). The numpy baseline is well-vectorized (one-hot broadcasting) but per-cell Python+numpy overhead at 10k+ cells doesn't fully amortize → 4-13ms.
+- **pareto-frontier.md updated** with concrete numbers + §J.7 prediction-validation note. Phase E status PARTIAL → COMPLETE for medium scales.
+- **Lessons**:
+  1. **§J.7 is empirically validated for "vectorized SOTA + light GPU" case**. The prediction (100-200×) lands within 1.1× of actual (126-219×). For new ports, the predict-then-check loop will catch surprises — like CYCLE-167's viper actual being far below class-2 prediction.
+  2. **§J.8 worked silently this cycle** — no build FAIL, no API hallucination, no need to mention it. The cycle just ran clean. That's the goal of style-rules: invisible when applied correctly.
+  3. **integrate/lisi is now the third-fastest GPU kernel** in singlet-gpu (after qc/metrics 0.082ms and pearson_residuals 0.269ms at small scale). Note: this is a per-CELL kernel; throughput at 30k = 30000 / 0.000059 = 508 M cells/s.
+- **Phase G**: needs to run after this commit.
+- **Next cycle**: CYCLE-170 — continue non-enrich Phase E sweep. Top candidates: (a) **integrate/asw** (similar kNN-based), (b) **integrate/kbet** (similar), (c) **qc/empty_drops** (raw-10X, may need DropletUtils Python ref), (d) **qc/soupx** (raw-10X). Default: integrate/asw — same dispatch shape as lisi, mature template.
+

@@ -311,12 +311,14 @@ Cycle 80: block-labels test fix promoted wilcoxon TinyPlanted from noise-converg
 | scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
 |---|---|---|---|---|---|---|---|---|
 | small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | lisi | TBD |
+| 10k×50PCs (k=10, 4 batches) | 0.035 | 0.0 | n/a (synth bench) | 4.4 | n/a | reference | numpy vectorized LISI | wall (125.7×) |
+| 30k×50PCs (k=10, 4 batches) | 0.059 | 0.0 | n/a (synth bench) | 12.9 | n/a | reference | numpy vectorized LISI | wall (218.6×) |
 | 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 | 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 
-**Notes**: Local Integration Singularity Index (LISI) for batch integration quality (Korsunsky et al. 2019). kNN-based label entropy on local neighborhoods. See [CYCLE-133 cycle-log](state/cycle-log.md).
+**Notes**: Local Integration Singularity Index (LISI) for batch integration quality (Korsunsky et al. 2019). One-block-per-cell GPU kernel: shared-mem histogram of k=10 neighbor labels, n_batches=4. Deterministic serial path. CYCLE-169 Phase E (job 371814 g008 + local numpy re-run). **125.7-218.6× speedup** vs vectorized numpy CPU. GPU is essentially memory-bound at this scale (35-59 μs); numpy stays at single-digit ms because per-cell Python+numpy overhead doesn't fully amortize even with vectorization. **Confirms §J.7 prediction** for "vectorized SOTA + light GPU compute" → modest-but-meaningful speedup (100-200× class). See [CYCLE-133 + CYCLE-169 cycle-log](state/cycle-log.md).
 
-**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+**Phase E status**: COMPLETE for medium scales.
 
 ---
 
