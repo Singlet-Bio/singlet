@@ -3796,3 +3796,22 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
 - **Phase G**: needs to run after this commit.
 - **Next cycle**: CYCLE-170 — continue non-enrich Phase E sweep. Top candidates: (a) **integrate/asw** (similar kNN-based), (b) **integrate/kbet** (similar), (c) **qc/empty_drops** (raw-10X, may need DropletUtils Python ref), (d) **qc/soupx** (raw-10X). Default: integrate/asw — same dispatch shape as lisi, mature template.
 
+## Cycle 170 (2026-05-01) — Phase E for integrate/asw (PASS — 113-249×, validates §J.7 again)
+- **Feature**: integrate/asw (CYCLE-139, ASW kNN-approximated). Same shape as lisi.
+- **Outcome**: PASS, **113.4-248.7× speedup**. Validates §J.7 prediction (class 1-2, 100-300×) for the second consecutive non-enrich Phase E.
+- **Numbers (job 371882 g008 + local numpy re-run)**:
+  ```
+  scale | GPU_wall_ms | numpy_wall_ms | speedup
+  10k   |       0.082 |           9.3 |   113.4×
+  30k   |       0.152 |          37.8 |   248.7×
+  ```
+- **§J.7 validation track record so far**:
+  - lisi: predicted 100-200×, got 126-219× ✓
+  - asw: predicted 100-300×, got 113-249× ✓
+  - viper: predicted class 2 (1000-5000×), got 47-52× ✗ (refined: continuum, not classes)
+  - Decoupler family (5/5): all predictions within range when made post-CYCLE-168 refinement. Pre-refinement predictions over-emphasized class boundaries.
+- **Phase E backfill is approaching steady-state**: 11 features benched (pearson_residuals, score_genes, model_gene_var, decoupler_*, lisi, asw). The remaining "easy" candidates are kbet, empty_drops, soupx, magic, kmeans, dendrogram. After those, CYCLE-159.1 sparse-eigensolver rewrite is the only major outstanding work item.
+- **pareto-frontier.md updated**, Phase E status PARTIAL → COMPLETE for medium scales.
+- **Phase G**: needs to run after this commit.
+- **Next cycle**: CYCLE-171 — continue non-enrich Phase E sweep. Default: integrate/kbet — completes the scIB integration eval triplet (lisi/asw/kbet now all benched). Same dispatch shape; expect 100-300× class.
+

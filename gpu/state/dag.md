@@ -2,7 +2,7 @@
 
 Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movement gets demoted to `state/followups.md`. User-gated items live in `state/blockers.md`. Completed entries are moved to `state/cycle-log.md` each cycle.
 
-- **CYCLE-170-PHASE-E-ASW** (in flight, job 371882 RUNNING on g008): Sonnet wrote 3 files using §J.8-correct API, local sanity-check clean (10k=9.3ms, 30k=37.8ms numpy ASW), CMake → 32. Predicted class 1-2 (100-300×) per §J.7 (similar to lisi).
+- **CYCLE-171-PHASE-E-KBET** (queued): completes scIB integration-eval triplet (lisi + asw + kbet). Same dispatch shape; expect 100-300× class.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
@@ -30,6 +30,7 @@ Frobenius NMF only (KL / IS / NB-GLM / β-divergence dropped); fast PCA / SVD wi
 
 ## ✅ Recently complete (last 5 cycles — full detail in `state/cycle-log.md`)
 
+- **CYCLE-170** Phase E for integrate/asw (PASS — **113.4-248.7× speedup**, job 371882 g008 + local numpy re-run): GPU 10k=0.082ms vs numpy 9.3ms; 30k=0.152ms vs 37.8ms. **Validates §J.7 prediction** for the second consecutive non-enrich Phase E (predicted 100-300×, observed 113-249×). §J.8 self-applied silently.
 - **CYCLE-169** Phase E for integrate/lisi (PASS — **125.7-218.6× speedup**, job 371814 g008 + local numpy re-run): GPU 10k=0.035ms vs numpy 4.4ms; 30k=0.059ms vs 12.9ms. **Validates §J.7 prediction** (vectorized SOTA + light GPU compute → 100-200× class). §J.8 self-applied silently (no build FAIL). Now third-fastest kernel in singlet-gpu (508 M cells/s throughput at 30k). First non-enrich Phase E.
 - **CYCLE-168** style-rules §J.7 + §J.8 (pure-Opus, ~80 LOC): captures CYCLE-163-167 lessons. §J.7 = Phase E speedup is a continuum (predict as `(SOTA_python_overhead × GPU_parallelism) / GPU_compute_intensity_per_cell`); empirical decoupler corpus included as calibration. §J.8 = bench-helper API verification (must grep template for actual call sites; CYCLE-167 hallucinated 9 API names). §J series now has 8 sub-rules, all derived from real cycle outcomes. Meta-lesson: each §J is born from a NEGATIVE cycle — negative results are the highest-leverage outcome.
 - **CYCLE-167** Phase E for enrich/decoupler_viper (PASS — **47.3-51.6× speedup**, jobs 371727/371729 g008 + local scipy re-run): GPU 10k=135.4ms vs scipy 6405.6ms; 30k=386.9ms vs 19982.9ms. **BREAKS Sonnet's class-2 prediction** (predicted 1000-5000×, got 47-52×) — `scipy.stats.rankdata(axis=0)` IS vectorized C, not per-cell Python overhead. Refines pattern: classes are a CONTINUUM, not crisp buckets. Plus: build FAIL on first attempt due to Sonnet hallucinating BenchTimer API (9 errors); fixed by aligning to CYCLE-166 ora's known-good API. **Decoupler Phase E SWEEP COMPLETE (5/5)**: 9.78× to 3101× across the family. §J.7 (continuum pattern) + §J.8 (bench API verification) candidates filed.

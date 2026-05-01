@@ -401,12 +401,14 @@ Cycle 80: block-labels test fix promoted wilcoxon TinyPlanted from noise-converg
 | scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
 |---|---|---|---|---|---|---|---|---|
 | small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | sklearn | TBD |
+| 10k×50PCs (k=10, 4 clusters) | 0.082 | 0.0 | n/a (synth bench) | 9.3 | n/a | reference | numpy vectorized ASW | wall (113.4×) |
+| 30k×50PCs (k=15, 4 clusters) | 0.152 | 0.0 | n/a (synth bench) | 37.8 | n/a | reference | numpy vectorized ASW | wall (248.7×) |
 | 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 | 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 
-**Notes**: Average Silhouette Width (ASW) clustering quality metric (Rousseeuw 1987 / Korsunsky 2019). Per-point average distance ratio (same-cluster / nearest-neighbor-cluster). See [CYCLE-139 cycle-log](state/cycle-log.md).
+**Notes**: Average Silhouette Width (ASW) clustering quality metric (Rousseeuw 1987 / Korsunsky 2019). One-block-per-cell GPU kernel: shared-mem `smem_sum[n_labels]` + `smem_cnt[n_labels]`, thread-0 serial scan (deterministic). CYCLE-170 Phase E (job 371882 g008 + local numpy re-run). **113.4-248.7× speedup** vs vectorized numpy CPU. Validates §J.7 prediction (class 1-2, 100-300×) — same shape as lisi (CYCLE-169 got 126-219×). See [CYCLE-139 + CYCLE-170 cycle-log](state/cycle-log.md).
 
-**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+**Phase E status**: COMPLETE for medium scales.
 
 ---
 
