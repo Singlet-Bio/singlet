@@ -12,6 +12,7 @@ Browse catalog (works offline):
     singlet.datasets(organism="Homo sapiens", min_cells=100000)
     singlet.samples(status="SUCCESS")      Filter samples
     singlet.samples(tissue="brain")        Filter by tissue/source
+    singlet.samples(protocol="dropseq")    Filter by protocol
     singlet.top_series(n=10)               Largest series
     singlet.summary()                      Atlas overview
 
