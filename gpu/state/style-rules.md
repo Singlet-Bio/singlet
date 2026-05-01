@@ -478,3 +478,49 @@ This rule generalizes to ANY kernel where the GPU library's default convention d
 - cuSPARSE SpMM: (m × k) · (k × n) → (m × n); some libs use the transpose form.
 
 **Action**: future Phase C design docs (Opus task) must include the Conventions section before Phase D dispatch. gpu-kernel-dev worker prompts can also explicitly call out the convention check during implementation.
+
+### §J.10 — BLOCKED-vs-iterate methodology (from CYCLE-185 sparse_eig blocking decision)
+
+Rule 5 states "after 2 iterations without dominance, mark `blocked`." This is a hard ceiling, not a soft guideline. CYCLE-159.1 sparse_eig step 1 hit it: iter-1 (1/5 PASS), iter-2 (2/5), iter-3 (still 2/5) → marked BLOCKED per Rule 5 in CYCLE-185.
+
+**The trade-off**: pushing iter-N+1 with an unclear root cause often produces another partial result and burns another HIGH-risk cycle. Marking BLOCKED earlier preserves loop bandwidth for productive work and creates a clean re-entry point with documented diagnostic.
+
+**Decision rule** (when to BLOCK vs continue iterating):
+1. **Blocked if root cause is unclear after 2 iters**. The first iter establishes the bug; the second iter validates a hypothesis. If the second iter doesn't measurably move the failure metric, the hypothesis is wrong and you need fresh diagnostic — not another fix attempt.
+2. **Continue iterating if root cause is clear and concrete**. CYCLE-153 scrublet → CYCLE-148.1 follow-up was correctly NOT iterated because the audit's "focused fix" estimate was already wrong (CYCLE-153 lesson). CYCLE-167 build FAIL → fix in same cycle was correctly inline because the bug was 9 named symbols.
+3. **Always file a follow-up at BLOCKED time** with: (a) what's known to work, (b) what fails, (c) failed hypotheses tested, (d) the smallest reproducer, (e) what fresh perspective might unlock progress (Phase B re-do, instrumented diagnosis, alternative algorithm).
+
+**Anti-pattern to avoid**: "iter-N+1 with the same hypothesis variant" — if you're trying tolerance=1e-5 instead of tolerance=1e-6 in iter-3 after iter-2 already found tolerance wasn't the issue, you're cycling. Stop.
+
+**What CYCLE-185 did right**: filed `CYCLE-159.1-BLOCKED-CONVERGENCE-DETECTION` with concrete what-works (Test 5 PASS at cos-sim=1.000), what-fails (tridiagonal Tests 1/4), failed hypotheses (rho sign, max_iter, relative residual), smallest reproducer (n=40 tridiagonal), and what's needed (instrumented stagnation diagnosis OR Phase B re-do on LOBPCG convergence behavior). The CYCLE-159.1 work can resume cleanly when fresh perspective is available.
+
+### §J.11 — Wrapper-test-infrastructure-first (from CYCLE-187 PARTIAL)
+
+CYCLE-186 wrote a Python pybind11 wrapper for `enrich/score_genes` (binding + Python wrapper + 4 pytest tests). CYCLE-187 verify FAILed at the test fixture (cupy 14 dtype strictness), not the wrapper itself. The wrapper is sound and shipped per Rule 26, but full validation is blocked behind a test-infrastructure issue that affects many tests beyond just score_genes.
+
+**Lesson**: when adding a Python wrapper that needs new pytest tests, **first run an existing pytest in the test module to confirm the test fixture works on the current install** before writing new tests on top. CYCLE-187 would have found the cupy.sparse + cupy 14 dtype issues with a single `pytest python/tests/test_enrichment.py::test_run_progeny_*` smoke run.
+
+**Concretely** for wrapper cycles:
+1. Before writing the new wrapper: run `pytest python/tests/test_<module>.py -k existing_test_name` to confirm fixtures + cupy + scanpy + anndata work on the current install.
+2. If existing tests fail: file an infrastructure-fix follow-up FIRST, before adding more tests on top of the same broken fixture.
+3. If existing tests pass: write the new wrapper + tests with confidence.
+
+**§J.11 rule**: gpu-kernel-dev / wrapper worker prompts must include a step "verify existing test fixtures pass before adding new tests." Saves ~1 verify cycle per wrapper.
+
+### §J.12 — Dependency-version compatibility for Python wrappers (from CYCLE-187 cupy 14)
+
+CYCLE-187 surfaced two distinct cupy 14 incompatibilities in the same iteration:
+1. `cupy.sparse` removed → renamed to `cupyx.scipy.sparse`.
+2. cupy 14 is dtype-strict; `cupy.asarray(np.array(..., dtype=object))` raises `Unsupported dtype object` (cupy <14 was lenient).
+
+Both are real-world breakage that affects existing code, not just new tests. Other libraries with similar tight version compat windows in the singlet-gpu Python stack: scanpy (1.10.x → 1.11), anndata (0.10.x → 0.11), scikit-learn (1.5 → 1.6 had API removals).
+
+**Rule**: when writing or maintaining Python wrappers, treat dependency version compat as a real concern:
+1. **Pin a tested version range** in `pyproject.toml` (`cupy-cuda12x>=13,<15` rather than `>=13`).
+2. **Use try/except import fallback for renamed APIs** when the rename is recent (per the cupy.sparse → cupyx.scipy.sparse fix in `loader.py:128-135`).
+3. **Periodically audit dependency upgrade paths**: dependabot-style sweep cycle every ~10 cycles to surface latent breakages before they bite.
+4. **Document the tested install set** in `state/infrastructure.md` so future cycles know what versions the test fixtures assume.
+
+**Action**: file `CYCLE-188.1-DEPENDENCY-COMPAT-SWEEP` for a future cycle to (a) pin version ranges in pyproject.toml, (b) audit `python/singlet_gpu/` for other cupy 14 incompatibilities, (c) update `state/infrastructure.md` with the tested install set.
+
+This rule is more general than just cupy — it's about treating Python ecosystem dependency drift as a real maintenance burden, not an afterthought.

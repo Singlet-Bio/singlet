@@ -4296,3 +4296,29 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
   3. **Wrapper validation needs test infrastructure ready first**. Future Rule 26 wrapper cycles should verify the test fixture compatibility BEFORE writing new wrapper tests. Add to §J as a candidate.
 - **Next cycle**: CYCLE-188 — pivot to LOW-risk per §J.5. Options: (a) audit cupy 14 compat across `python/singlet_gpu/` (sweep) — fixes test fixture + many other latent issues, (b) §J framework cleanup pass for the 3 new lesson candidates from CYCLE-185/186/187, (c) frontier_sync.py refresh for the recent state changes. Default: **§J framework cleanup** — captures 3 lessons (BLOCKED methodology, wrapper-test-infra-first, cupy-version compat) before they're lost.
 
+## Cycle 188 (2026-05-01) — Land §J.10/.11/.12 in style-rules (PASS, pure-Opus)
+- **Feature**: state/style-rules.md — 3 new sub-rules captured from CYCLE-185/186/187 outcomes. Pure-Opus LOW-risk per §J.5 after 2 PARTIAL CYCLE-187 builds.
+- **Outcome**: PASS. ~120 LOC appended; §J series now 12 sub-rules.
+- **§J.10 — BLOCKED-vs-iterate methodology** (from CYCLE-185 sparse_eig blocking decision):
+  - Decision rule: BLOCKED if root cause unclear after 2 iters (the second iter validates a hypothesis; if metric doesn't move, hypothesis is wrong → need fresh diagnostic, not another fix attempt).
+  - Continue if root cause clear and concrete.
+  - Always file a follow-up at BLOCKED time with: what works, what fails, failed hypotheses, smallest reproducer, what fresh perspective unlocks progress.
+  - Anti-pattern: "iter-N+1 with same hypothesis variant" — if you're trying tolerance=1e-5 after iter-2 already found tolerance wasn't the issue, you're cycling. Stop.
+- **§J.11 — Wrapper-test-infrastructure-first** (from CYCLE-187 PARTIAL):
+  - Before writing a new wrapper test, **first run an existing pytest in the test module** to confirm fixtures + cupy + scanpy + anndata work on the current install.
+  - If existing tests fail: file infrastructure-fix follow-up FIRST.
+  - Saves ~1 verify cycle per wrapper.
+- **§J.12 — Dependency-version compatibility for Python wrappers** (from CYCLE-187 cupy 14):
+  - Pin tested version range in pyproject.toml (e.g. `cupy-cuda12x>=13,<15`).
+  - Use try/except import fallback for renamed APIs.
+  - Periodically audit dependency upgrade paths.
+  - Document tested install set in state/infrastructure.md.
+  - Filed CYCLE-188.1-DEPENDENCY-COMPAT-SWEEP for the upgrade audit.
+- **§J series state**: 12 sub-rules now (J.1-J.12). All derived from real cycle outcomes.
+- **§J.5 risk-pacing recovery in action again**: HIGH FAIL → HIGH FAIL → HIGH BLOCKED → PIVOT TO WRAPPER → 2× PARTIAL → LOW Opus rule-distillation. The pattern keeps the loop's signal-to-noise sustainable.
+- **Lessons**:
+  1. **§J framework keeps growing organically from real cycle outcomes**. 3 new entries in 1 cycle is more than usual but reflects a productive arc of work where multiple lessons accumulated faster than they were distilled.
+  2. **Pure-Opus rule-distillation cycles are reliably PASS**. They're not novel discovery; they're consolidation of work already done. Use as the LOW-risk recovery default after 2+ HIGH-risk cycles.
+  3. **The §J framework is at the point where it could be a separate doc** rather than a section in style-rules.md. ~600 LOC of §J across 12 rules. Not refactoring now — keeping in style-rules.md for now since it's where readers look.
+- **Next cycle**: CYCLE-189 — back to dev work. Options ranked by impact: (a) **CYCLE-188.1 dependency compat sweep** (high-leverage; fixes the test-fixture issue + likely several latent issues), (b) wrappers backlog (more Phase E features need wrappers per Rule 26 audit), (c) continuous optimization (Rule 30; weakest-margin Phase E kernel = kmeans 2-7×). Default: **CYCLE-188.1 dependency compat sweep** — unblocks score_genes wrapper validation + multiple other tests. Single-cycle high-impact work.
+
