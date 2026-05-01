@@ -3639,3 +3639,26 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
 - **Phase G**: needs to run after this commit.
 - **Next cycle**: CYCLE-163 — continue Phase E backfill on known-good kernels. Top candidates: (a) **integrate/lisi** (kNN-based, scanpy `sc.metrics.compute_lisi` if available — may need scIB), (b) **integrate/asw** (similar), (c) **integrate/kbet** (similar), (d) **enrich/decoupler_*** family (5 kernels, common decoupler Python ref). Default: enrich/decoupler_wsum — clean decoupler ref, similar API to score_genes (already proved we can write the bench).
 
+## Cycle 163 (2026-04-30) — Phase E for enrich/decoupler_wsum (PASS — modest speedup)
+- **Feature**: enrich/decoupler_wsum (CYCLE-128, decoupleR WSUM + WMEAN port). Single header exposes both `enrich::wsum()` and `enrich::wmean()`. §J.6 NOT-at-risk (cuSPARSE SpMM, no dense n×n).
+- **Outcome**: PASS with caveats — GPU bench worked clean; scipy ref needed two fixes. **Final speedup: 10.5-15.7× vs scipy CPU SpMM**.
+- **Numbers (job 371467 g008 + local scipy re-run)**:
+  ```
+  scale | method | GPU_wall_ms | scipy_wall_ms | speedup
+  10k   | wsum   |       3.738 |          39.2 |   10.5×
+  10k   | wmean  |       3.728 |          39.2 |   10.5×
+  30k   | wsum   |       8.360 |         131.3 |   15.7×
+  30k   | wmean  |       8.354 |         131.3 |   15.7×
+  ```
+- **Two bugs surfaced and fixed**:
+  1. **scipy not installed in g008 SLURM Python env** — `ModuleNotFoundError: No module named 'scipy'`. The Python ref ran successfully on the login node (which has scipy). Fix: ran ref locally per CYCLE-158.1 lesson (skip SLURM when work is pure CPU-Python).
+  2. **Sonnet-introduced shape error in ref script**: wrote `scores = X.T @ W` while X was constructed as `(n_cells × n_genes)` and W is `(n_genes × n_pathways)`. The transpose made the shapes incompatible — `X.T` is `(n_genes × n_cells)`, not multipliable by W. Correct expression is `X @ W` (no transpose). Fixed inline.
+- **Modest 10.5-15.7× speedup is meaningful real-world data**: scipy's SpMM is itself a well-optimized native library (compiled C + SuiteSparse). The GPU advantage is much smaller than against scanpy's pure-Python HVG loops (CYCLE-162 model_gene_var: 229-471×) or scanpy.tl.score_genes Python loops (CYCLE-158.1: 213-493×). **Pattern**: GPU advantage is largest when the CPU baseline has Python-loop overhead, modest when CPU baseline is itself tight native code (scipy, BLAS, native NumPy). This is honest and directly informs which kernels deliver the biggest user wins.
+- **pareto-frontier.md updated** with 5 scale rows (small TBD, 10k WSUM/WMEAN, 30k WSUM/WMEAN, 100k/1M pending). Phase E status PARTIAL → COMPLETE for medium scales.
+- **Lessons**:
+  1. **Sonnet's draft Python refs need a sanity-check run** — the X.T @ W bug would have been caught by a 5-second local Python test before the SLURM submission. Add to bench-worker spec: "before submitting SLURM, run the Python ref locally to catch shape bugs."
+  2. **GPU advantage is bimodal across SOTA-reference types**: 100-500× when SOTA is pure-Python (scanpy loops); 10-30× when SOTA is native code (scipy SpMM, BLAS). Phase E should report which class each kernel falls into so users can set realistic expectations.
+  3. **scipy not on g008 SLURM Python is an infra annoyance** — file as `INFRA-G008-SCIPY` low-severity blocker. Workaround: run Python refs on the login node (already proven in CYCLE-158.1).
+- **Phase G**: needs to run after this commit.
+- **Next cycle**: CYCLE-164 — continue Phase E backfill. Options: (a) **integrate/lisi** or **integrate/asw** or **integrate/kbet** (all kNN-based, NOT-at-risk; scanpy/scIB ref availability uncertain), (b) **enrich/decoupler_ulm** or **mlm** or **viper** (similar bench pattern to wsum, modest speedup expected for the ulm/mlm Sgemm-based methods). Default: enrich/decoupler_ulm — same dispatch pattern as wsum, just-completed CYCLE-163 template will copy cleanly.
+

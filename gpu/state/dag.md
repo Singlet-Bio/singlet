@@ -4,7 +4,7 @@ Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movemen
 
 ## 🔴 Active this cycle
 
-- **CYCLE-163-PHASE-E-DECOUPLER-WSUM** (queued): next Phase E candidate. enrich/decoupler_wsum (CYCLE-128) — common decoupler Python ref, similar API to score_genes (CYCLE-158/158.1 pattern). Continues the §J.6-validated NOT-at-risk Phase E backfill streak.
+- **CYCLE-164-PHASE-E-DECOUPLER-ULM** (queued): next Phase E candidate. enrich/decoupler_ulm (CYCLE-130) — same dispatch pattern as wsum, CYCLE-163 template copies cleanly. Expected modest speedup (10-30×) since the SOTA is also native-code-heavy.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
@@ -32,6 +32,7 @@ Frobenius NMF only (KL / IS / NB-GLM / β-divergence dropped); fast PCA / SVD wi
 
 ## ✅ Recently complete (last 5 cycles — full detail in `state/cycle-log.md`)
 
+- **CYCLE-163** Phase E for enrich/decoupler_wsum (PASS — modest 10.5-15.7× speedup vs scipy SpMM, jobs 371467 + local scipy re-run): GPU 10k WSUM/WMEAN both ~3.7ms vs scipy 39.2ms; 30k both ~8.4ms vs 131.3ms. Two bugs fixed: scipy missing in g008 SLURM Python env (worked around per CYCLE-158.1 lesson by running locally); Sonnet-introduced X.T@W shape error (correct: X@W since X built as n_cells×n_genes). Pattern: **GPU advantage is bimodal** — 100-500× when CPU SOTA is pure-Python (scanpy), 10-30× when SOTA is native code (scipy/BLAS). Phase E should report this for honest user expectations.
 - **CYCLE-162** Phase E for preprocess/model_gene_var (CLEAN PASS, job 371388 g008): GPU 10k=0.570ms vs scanpy pearson 208.3ms (**365×**) / seurat_v3 130.5ms (**229×**); 30k=1.348ms vs 635.5ms (**471×**) / 417.2ms (**310×**). DUAL-flavor scanpy ref pattern (algorithm-closest + most-popular) gives apples-to-apples + apples-to-oranges in one cycle. **§J.6 NOT-at-risk validation** — rule now empirically confirmed in BOTH directions (catches diffmap/dpt, clears model_gene_var).
 - **CYCLE-161** Phase E for embed/dpt — §J.6 hypothesis CONFIRMED (job 371312 g008): GPU 10k = **2763.3 ms** vs scanpy 5.1 ms = **541× SLOWER** (worse than diffmap's 14×). Bonus finding: scanpy's API splits one-time `sc.tl.diffmap` (heavy) from cheap `sc.tl.dpt(iroot)`; our GPU `dpt()` re-runs the full eigendecomp every call → 100× extra work. CYCLE-159.1 EXPANDED to combined diffmap+dpt sparse-eigensolver rewrite + dpt API refactor (~2-3 days). Lesson: hypothesis-test cycles surface MORE than they test for when you attend to surprising magnitudes.
 - **CYCLE-160** style-rules §J.6 + audit at-risk kernels: pure-Opus preventive cycle. Added §J.6 (kernels with O(n²)+ memory or O(n³)+ compute require ≥10k scale-smoke test before frontier). Audited all `include/singlet-gpu/{embed,preprocess,integrate}/*.h` — found `embed/dpt.h` uses the SAME dense-n×n + Ssyevd pattern as broken diffmap. Pareto-frontier dpt row marked ⚠️ AT-RISK; CYCLE-161 will bench dpt at 10k to confirm. Other O(n²+) kernels audited and cleared. Lesson: pattern audits earn 10× return when you have well-characterized failure modes documented.

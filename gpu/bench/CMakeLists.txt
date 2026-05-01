@@ -132,9 +132,16 @@ add_bench_driver(bench_embed_dpt_perf  bench_embed_dpt_perf.cpp)
 add_bench_driver(bench_preprocess_model_gene_var_perf  bench_preprocess_model_gene_var_perf.cpp)
 
 # ---------------------------------------------------------------------------
+# Cycle 163 drivers: enrich/decoupler_wsum + decoupler_wmean Phase E benchmark
+# cuSPARSE SpMM (X^T · W) + per-pathway normalisation kernels.
+# WSUM (L1-norm) and WMEAN (nnz-count) — NOT at risk of §J.6 dense-n×n bug.
+# ---------------------------------------------------------------------------
+add_bench_driver(bench_enrich_decoupler_wsum_perf  bench_enrich_decoupler_wsum_perf.cpp)
+
+# ---------------------------------------------------------------------------
 # Status message
 # ---------------------------------------------------------------------------
-message(STATUS "singlet-gpu bench: 25 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162)")
+message(STATUS "singlet-gpu bench: 26 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163)")
 message(STATUS "  53a: bench_io_pz_loader_perf")
 message(STATUS "  53a: bench_preprocess_lognorm_perf")
 message(STATUS "  53a: bench_preprocess_hvg_perf")
@@ -159,3 +166,4 @@ message(STATUS "  158: bench_enrich_score_genes_perf")
 message(STATUS "  159: bench_embed_diffmap_perf")
 message(STATUS "  161: bench_embed_dpt_perf")
 message(STATUS "  162: bench_preprocess_model_gene_var_perf")
+message(STATUS "  163: bench_enrich_decoupler_wsum_perf")

@@ -242,17 +242,21 @@ Cycle 80: block-labels test fix promoted wilcoxon TinyPlanted from noise-converg
 
 ---
 
-### enrich/decoupler_wsum (CYCLE-128) — promoted 2026-04-29, commit no-git
+### enrich/decoupler_wsum (CYCLE-128) — promoted 2026-04-29, commit no-git, includes both wsum + wmean
 
 | scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
 |---|---|---|---|---|---|---|---|---|
 | small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | decoupler | TBD |
+| 10k×5k (5%, 50 pathways) WSUM | 3.738 | 0.0 | n/a (synth bench) | 39.2 | n/a | reference | scipy SpMM (manual decoupleR equiv) | wall (10.5×) |
+| 10k×5k (5%, 50 pathways) WMEAN | 3.728 | 0.0 | n/a (synth bench) | 39.2 | n/a | reference | scipy SpMM (manual decoupleR equiv) | wall (10.5×) |
+| 30k×5k (5%, 50 pathways) WSUM | 8.360 | 0.0 | n/a (synth bench) | 131.3 | n/a | reference | scipy SpMM (manual decoupleR equiv) | wall (15.7×) |
+| 30k×5k (5%, 50 pathways) WMEAN | 8.354 | 0.0 | n/a (synth bench) | 131.3 | n/a | reference | scipy SpMM (manual decoupleR equiv) | wall (15.7×) |
 | 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 | 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 
-**Notes**: Decoupler weighted sum (wsum) regulon activity scoring (Badia-i-Mompel et al. 2022). Sparse matrix × dense matrix multiplication. See [CYCLE-128 cycle-log](state/cycle-log.md).
+**Notes**: Decoupler weighted sum (wsum) + weighted mean (wmean) regulon activity scoring (Badia-i-Mompel et al. 2022). Single header exposes both `enrich::wsum()` and `enrich::wmean()` (different normalization). cuSPARSE SpMM (X @ W) + warp-shuffle norm kernel. CYCLE-163 Phase E (job 371467, g008 V100S) added 10k/30k synthetic-data rows. **10.5-15.7× speedup** vs scipy CPU SpMM — modest by Phase E standards because scipy's SpMM is itself a well-optimized native library (compiled C + SuiteSparse). Compare to CYCLE-162 model_gene_var (229-471× vs scanpy) where scanpy's HVG path has Python-loop overhead. Real-world finding: GPU advantage is largest when SOTA is a Python-loop heavy code path; modest when SOTA is also a tight native loop. Note CPU baseline used manual scipy/numpy (decoupleR Python pkg not installed); decoupleR's actual implementation likely matches scipy within ~2× since it also uses scipy under the hood. CYCLE-163 also surfaced an Sonnet-introduced bug in the ref script (X.T @ W vs X @ W shape error — fixed inline). See [CYCLE-128 + CYCLE-163 cycle-log](state/cycle-log.md).
 
-**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+**Phase E status**: COMPLETE for medium scales (small ctest TBD, 100k/1M still pending streaming driver).
 
 ---
 
