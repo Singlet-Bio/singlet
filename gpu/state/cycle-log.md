@@ -3815,3 +3815,31 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
 - **Phase G**: needs to run after this commit.
 - **Next cycle**: CYCLE-171 — continue non-enrich Phase E sweep. Default: integrate/kbet — completes the scIB integration eval triplet (lisi/asw/kbet now all benched). Same dispatch shape; expect 100-300× class.
 
+## Cycle 171 (2026-05-01) — Phase E for integrate/kbet (PASS — 21-32×, completes scIB triplet)
+- **Feature**: integrate/kbet (CYCLE-140, chi-square batch mixing test). Completes scIB integration-eval triplet (lisi + asw + kbet now all benched).
+- **Outcome**: PASS, **21.1-32.2× speedup**. **§J.7 prediction was off** (predicted 100-300× per lisi/asw shape; observed lands in class 3 / 10-30×).
+- **Numbers (job 371909 g008 + local numpy re-run)**:
+  ```
+  scale | GPU_wall_ms | numpy_wall_ms | speedup
+  10k   |       0.183 |           5.9 |    32.2×
+  30k   |       1.028 |          21.7 |    21.1×
+  ```
+- **Why §J.7 prediction was off**: kbet has heavier per-cell GPU compute (chi² statistic + Wilson-Hilferty cube-root p-value transform) on top of the histogram. GPU 30k = 1.028ms vs asw 0.152ms vs lisi 0.059ms — 7-17× more GPU work per cell. The §J.7 continuum framework correctly predicts that heavier GPU compute narrows the speedup. Same pattern as CYCLE-167 viper (heavy GPU compute → mid-range speedup).
+- **scIB integration-eval triplet final speedups**:
+  - lisi (CYCLE-169): 126-219× (light GPU compute)
+  - asw (CYCLE-170): 113-249× (light GPU compute)
+  - kbet (CYCLE-171): 21-32× (heavy GPU compute — chi² + Wilson-Hilferty)
+  - Useful triplet for demonstrating §J.7's compute-intensity axis: same SOTA shape (vectorized numpy + sklearn kNN) gives wildly different speedups based on GPU per-cell work.
+- **§J.7 refined**: predictions should explicitly account for "GPU per-cell work in ms" as a divisor. The prediction model now becomes:
+  - `predicted_speedup ≈ (SOTA_per_cell_ms × overhead_factor) / GPU_per_cell_ms`
+  - For lisi/asw at ~0.06-0.15ms GPU and ~5-13ms numpy → 80-200× ✓
+  - For kbet at ~1ms GPU and ~6-22ms numpy → 6-22× actual was 21-32× (close, off by 2-3×)
+  - For ora at ~0.03ms GPU and ~22000-66000ms scipy.stats per-element → 700,000-2,000,000× theoretical, capped at 3000× by other factors → still highest in corpus
+- **pareto-frontier.md updated**, Phase E status PARTIAL → COMPLETE for medium scales.
+- **Phase E backfill state**: 12 features complete (pearson_residuals, score_genes, model_gene_var, decoupler_×5, lisi, asw, kbet). Remaining easy candidates: empty_drops, soupx, magic, kmeans, dendrogram. Hard candidates: anno_celltypist, anno_symphony, qc_metrics (already done), preprocess_combat. After Phase E backfill, CYCLE-159.1 sparse-eigensolver rewrite is the only major outstanding work item.
+- **Phase G**: needs to run after this commit.
+- **Lessons**:
+  1. **§J.7 needs the GPU-compute-per-cell denominator**: predictions based purely on SOTA structure (lisi/asw shape → class 1-2) miss when the GPU kernel does substantially more work per cell. Worth refining the prediction formula in style-rules.
+  2. **scIB triplet is now a full demonstration corpus**: same SOTA shape (vectorized numpy), 3 different GPU kernels (light/light/heavy), 3 different speedup classes (large/large/modest). Could be cited in user-facing docs as "what to expect from singlet-gpu integration evals".
+- **Next cycle**: CYCLE-172 — continue Phase E sweep. Top candidates by ease: (a) qc/empty_drops (DropletUtils ref — needs scipy on g008 fallback), (b) preprocess/magic (ping-pong cuSPARSE SpMM), (c) graph/kmeans (Lloyd, scikit-learn KMeans ref), (d) embed/dendrogram (UPGMA on cluster centroids). Default: graph/kmeans — clean sklearn reference, similar pattern to lisi/asw.
+

@@ -2,7 +2,7 @@
 
 Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movement gets demoted to `state/followups.md`. User-gated items live in `state/blockers.md`. Completed entries are moved to `state/cycle-log.md` each cycle.
 
-- **CYCLE-171-PHASE-E-KBET** (in flight, job 371909 RUNNING on g008): completes scIB triplet. Sonnet wrote 3 files using §J.8-correct API, local sanity-check clean (10k=5.9ms, 30k=21.7ms numpy kbet), CMake → 33. Expected 100-300× class.
+- **CYCLE-172-PHASE-E-KMEANS** (queued): graph/kmeans Phase E. sklearn KMeans CPU baseline. Same pattern as lisi/asw template; expected 50-200× class (mid-compute kernel).
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
@@ -30,6 +30,7 @@ Frobenius NMF only (KL / IS / NB-GLM / β-divergence dropped); fast PCA / SVD wi
 
 ## ✅ Recently complete (last 5 cycles — full detail in `state/cycle-log.md`)
 
+- **CYCLE-171** Phase E for integrate/kbet (PASS — 21.1-32.2× speedup, job 371909 g008 + local numpy re-run): GPU 10k=0.183ms vs numpy 5.9ms; 30k=1.028ms vs 21.7ms. **§J.7 prediction was OFF** (predicted 100-300×, observed 21-32×) because kbet has heavier GPU compute (chi² + Wilson-Hilferty) than lisi/asw — refines §J.7 prediction model to include GPU-per-cell-ms denominator. **scIB triplet Phase E SWEEP COMPLETE**: lisi 126-219× (light), asw 113-249× (light), kbet 21-32× (heavy). Same SOTA shape, 3× GPU compute = 10× different speedup class. Demonstrates §J.7's compute-intensity axis cleanly.
 - **CYCLE-170** Phase E for integrate/asw (PASS — **113.4-248.7× speedup**, job 371882 g008 + local numpy re-run): GPU 10k=0.082ms vs numpy 9.3ms; 30k=0.152ms vs 37.8ms. **Validates §J.7 prediction** for the second consecutive non-enrich Phase E (predicted 100-300×, observed 113-249×). §J.8 self-applied silently.
 - **CYCLE-169** Phase E for integrate/lisi (PASS — **125.7-218.6× speedup**, job 371814 g008 + local numpy re-run): GPU 10k=0.035ms vs numpy 4.4ms; 30k=0.059ms vs 12.9ms. **Validates §J.7 prediction** (vectorized SOTA + light GPU compute → 100-200× class). §J.8 self-applied silently (no build FAIL). Now third-fastest kernel in singlet-gpu (508 M cells/s throughput at 30k). First non-enrich Phase E.
 - **CYCLE-168** style-rules §J.7 + §J.8 (pure-Opus, ~80 LOC): captures CYCLE-163-167 lessons. §J.7 = Phase E speedup is a continuum (predict as `(SOTA_python_overhead × GPU_parallelism) / GPU_compute_intensity_per_cell`); empirical decoupler corpus included as calibration. §J.8 = bench-helper API verification (must grep template for actual call sites; CYCLE-167 hallucinated 9 API names). §J series now has 8 sub-rules, all derived from real cycle outcomes. Meta-lesson: each §J is born from a NEGATIVE cycle — negative results are the highest-leverage outcome.

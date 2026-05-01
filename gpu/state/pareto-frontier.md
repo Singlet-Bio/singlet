@@ -417,12 +417,14 @@ Cycle 80: block-labels test fix promoted wilcoxon TinyPlanted from noise-converg
 | scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
 |---|---|---|---|---|---|---|---|---|
 | small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | kBET | TBD |
+| 10k×50PCs (k=10, 4 batches) | 0.183 | 0.0 | n/a (synth bench) | 5.9 | n/a | reference | numpy chi² + Wilson-Hilferty | wall (32.2×) |
+| 30k×50PCs (k=15, 4 batches) | 1.028 | 0.0 | n/a (synth bench) | 21.7 | n/a | reference | numpy chi² + Wilson-Hilferty | wall (21.1×) |
 | 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 | 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 
-**Notes**: k-nearest neighbor Batch Effect Test (kBET, Büttner et al. 2019). Chi-squared test of label entropy in local neighborhoods. See [CYCLE-140 cycle-log](state/cycle-log.md).
+**Notes**: k-nearest neighbor Batch Effect Test (kBET, Büttner et al. 2019). Chi² test of batch label distribution in local neighborhoods. CYCLE-171 Phase E (job 371909 g008 + local numpy re-run). **21-32× speedup** vs vectorized numpy CPU. **§J.7 prediction was off** (predicted 100-300× per lisi/asw shape; observed lands in class 3 / 10-30×). Why: GPU 30k took 1.028ms vs asw's 0.152ms — kbet has heavier per-cell GPU compute (chi² stat + Wilson-Hilferty p-value transform on top of histogram). The §J.7 continuum framework correctly predicts that heavier per-cell GPU work narrows the speedup; CYCLE-167 viper showed the same pattern. **scIB triplet final speedups**: lisi 126-219× (light), asw 113-249× (light), kbet 21-32× (heavy compute). Useful triplet for showing how GPU compute intensity bands the speedup ratio. See [CYCLE-140 + CYCLE-171 cycle-log](state/cycle-log.md).
 
-**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+**Phase E status**: COMPLETE for medium scales. **scIB integration-eval triplet Phase E SWEEP COMPLETE** (lisi + asw + kbet).
 
 ---
 
