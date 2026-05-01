@@ -2,7 +2,7 @@
 
 **Python client for the Singlet single-cell atlas.**
 
-3,100+ samples • 1,334 successful • 3.9M cells • 17 species • 36 tissues • 42 cell types • 28 protocols • 8.7× .1pz compression
+3,150+ samples • 1,349 successful • 3.93M cells • 17 species • 36 tissues • 40 cell types • 28 protocols • 8.7× .1pz compression
 
 ## Install
 
@@ -17,7 +17,7 @@ import singlet
 
 # Browse the atlas catalog (free, works offline)
 singlet.summary()
-# → 3,134 samples (1,334 SUCCESS) • 17 species • 28 protocols • 36 tissues • 42 cell types • 3.9M cells
+# → 3,158 samples (1,349 SUCCESS) • 17 species • 28 protocols • 36 tissues • 40 cell types • 3.93M cells
 
 df = singlet.samples(organism="Homo sapiens", status="SUCCESS")
 singlet.samples(tissue="brain", status="SUCCESS")  # filter by tissue
