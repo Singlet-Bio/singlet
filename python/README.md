@@ -2,7 +2,7 @@
 
 **Python client for the Singlet single-cell atlas.**
 
-2,708 samples • 1,138 successful • 3.3M cells • 9 species • 572 GEO series • 476 tissues • 8.7× .1pz compression
+2,712 samples • 1,139 successful • 3.3M cells • 16 species • 81 tissues • 28 protocols • 8.7× .1pz compression
 
 ## Install
 
@@ -17,12 +17,12 @@ import singlet
 
 # Browse the atlas catalog (free, works offline)
 singlet.summary()
-# → 2,708 samples, 1,138 SUCCESS, 6 species, 3.3M cells
+# → 2,712 samples (1,139 SUCCESS) • 16 species • 28 protocols • 81 tissues • 3.3M cells
 
 df = singlet.samples(organism="Homo sapiens", status="SUCCESS")
 singlet.samples(tissue="brain", status="SUCCESS")  # filter by tissue
 singlet.species()
-singlet.tissues()   # tissue/source breakdown
+singlet.tissues()   # normalized tissue breakdown (blood, brain, lung, tumor, etc.)
 singlet.top_series(n=10)
 
 # Load a singlify output directory → AnnData
@@ -52,7 +52,8 @@ sc.tl.leiden(adata)
 | Feature | Details |
 |---------|---------|
 | **Catalog** | Browse 2,712 samples by organism, tissue, protocol, status, quality tier |
-| **protocols()** | Protocol breakdown: 29 distinct (10xv3, Drop-seq, CEL-Seq2, sci-RNA-seq3, etc.) |
+| **tissues()** | 81 normalized tissue categories (blood, brain, lung, tumor, pbmc, bone marrow...) — 81% coverage |
+| **protocols()** | Protocol breakdown: 28 distinct (10xv3, Drop-seq, CEL-Seq2, sci-RNA-seq3, etc.) |
 | **quality_tiers()** | Gold/silver/bronze classification (18% / 26% / 56%) |
 | **load_dir()** | Read singlify output directory → AnnData with QC, doublets, cell cycle, ancestry, sex, summary |
 | **read_1pz()** | Read .1pz sparse matrix → AnnData |
