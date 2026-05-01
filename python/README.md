@@ -2,7 +2,7 @@
 
 **Python client for the Singlet single-cell atlas.**
 
-2,398 samples • 998 successful • 2.9M cells • 7 species • 1,180 GEO series • 8.7× .1pz compression
+2,708 samples • 1,138 successful • 3.3M cells • 9 species • 572 GEO series • 476 tissues • 8.7× .1pz compression
 
 ## Install
 
@@ -17,10 +17,12 @@ import singlet
 
 # Browse the atlas catalog (free, works offline)
 singlet.summary()
-# → 2,398 samples, 998 SUCCESS, 7 species, 2.94M cells
+# → 2,708 samples, 1,138 SUCCESS, 6 species, 3.3M cells
 
 df = singlet.samples(organism="Homo sapiens", status="SUCCESS")
+singlet.samples(tissue="brain", status="SUCCESS")  # filter by tissue
 singlet.species()
+singlet.tissues()   # tissue/source breakdown
 singlet.top_series(n=10)
 
 # Load a singlify output directory → AnnData
@@ -49,12 +51,13 @@ sc.tl.leiden(adata)
 
 | Feature | Details |
 |---------|---------|
-| **Catalog** | Browse 2,398 samples by organism, protocol, status, quality tier |
+| **Catalog** | Browse 2,708 samples by organism, tissue, protocol, status, quality tier |
 | **load_dir()** | Read singlify output directory → AnnData with QC, doublets, cell cycle, ancestry, sex, summary |
 | **read_1pz()** | Read .1pz sparse matrix → AnnData |
 | **Compression** | singlepress .1pz format — 8.7× vs h5ad |
 | **PyTorch** | `OnePZDataset` + `DataLoader` with log-normalization |
 | **Offline** | Bundled catalog parquet — no network needed for browsing |
+| **MCP Server** | AI assistant access via `python -m singlet.mcp.server` |
 
 ## Notebooks
 
