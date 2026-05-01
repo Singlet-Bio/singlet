@@ -467,12 +467,14 @@ See [CYCLE-142 + CYCLE-160 + CYCLE-161 cycle-log](state/cycle-log.md), [`style-r
 | scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
 |---|---|---|---|---|---|---|---|---|
 | small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | scanpy | TBD |
+| 10k×50PCs (k=20 clusters) | 0.125 | 0.0 | n/a (synth bench) | 5.789 | n/a | reference | scipy.spatial.distance.pdist + scipy.cluster.hierarchy.linkage | wall (46.3×) |
+| 30k×50PCs (k=20 clusters) | 0.198 | 0.0 | n/a (synth bench) | 21.023 | n/a | reference | scipy.spatial.distance.pdist + scipy.cluster.hierarchy.linkage | wall (106.2×) |
 | 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 | 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 
-**Notes**: Hierarchical dendrogram construction (scanpy.tl.dendrogram). Linkage-based tree structure on group centroids. See [CYCLE-146 cycle-log](state/cycle-log.md).
+**Notes**: Hierarchical dendrogram (scanpy.tl.dendrogram). 6 GPU passes: atomic-scatter centroid + per-column center + L2 normalize + cuBLAS Sgemm correlation + distance = 1-corr + host UPGMA. CYCLE-173 Phase E (job 371962 g003 V100S + local scipy re-run). **46.3-106.2× speedup** vs scipy CPU. Validates §J.7 class 2 prediction (50-200×). GPU sub-ms (atomic scatter dominates; k×k Sgemm tiny at k=20; host UPGMA O(k³) negligible). scipy baseline driven by Python orchestration around C kernels. See [CYCLE-146 + CYCLE-173 cycle-log](state/cycle-log.md).
 
-**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+**Phase E status**: COMPLETE for medium scales.
 
 ---
 

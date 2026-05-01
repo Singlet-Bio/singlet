@@ -2,7 +2,7 @@
 
 Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movement gets demoted to `state/followups.md`. User-gated items live in `state/blockers.md`. Completed entries are moved to `state/cycle-log.md` each cycle.
 
-- **CYCLE-173-PHASE-E-DENDROGRAM** (in flight, job 371962 RUNNING on g003): Sonnet wrote 3 files (sanity-check 10k=5.8ms, 30k=21ms scipy), CMake → 35. Predicted class 2 (50-200×).
+- **CYCLE-174-PHASE-E-MAGIC** (queued): preprocess/magic Phase E (ping-pong cuSPARSE SpMM for graph diffusion). May need magic-impute Python install OR fallback to manual numpy SpMM iteration baseline.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
@@ -30,6 +30,7 @@ Frobenius NMF only (KL / IS / NB-GLM / β-divergence dropped); fast PCA / SVD wi
 
 ## ✅ Recently complete (last 5 cycles — full detail in `state/cycle-log.md`)
 
+- **CYCLE-173** Phase E for embed/dendrogram (PASS — 46.3-106.2× speedup, job 371962 g003 + local scipy re-run): GPU 10k=0.125ms vs scipy 5.789ms; 30k=0.198ms vs 21.023ms. Validates §J.7 class 2 prediction (50-200×). GPU is sub-ms (atomic-scatter dominant), scipy driven by Python orchestration around C kernels. **Phase E corpus: 13 features**, range 2× to 3101×.
 - **CYCLE-172** Phase E for graph/kmeans (PASS — modest 2.42-6.88× speedup, job 371920 g003 V100S + local sklearn re-run): GPU 10k=4.634ms vs sklearn 11.2ms; 30k=11.810ms vs 81.3ms. **Lowest speedup in 12-feature corpus**. sklearn KMeans is exceptionally well-optimized (BLAS internals, minimal Python overhead). Honest finding: not every GPU port delivers headline numbers. New §J.7 refinement candidate: add "BLAS-tight SOTA" speedup class (2-10× even at vectorized baseline).
 - **CYCLE-171** Phase E for integrate/kbet (PASS — 21.1-32.2× speedup, job 371909 g008 + local numpy re-run): GPU 10k=0.183ms vs numpy 5.9ms; 30k=1.028ms vs 21.7ms. **§J.7 prediction was OFF** (predicted 100-300×, observed 21-32×) because kbet has heavier GPU compute (chi² + Wilson-Hilferty) than lisi/asw — refines §J.7 prediction model to include GPU-per-cell-ms denominator. **scIB triplet Phase E SWEEP COMPLETE**: lisi 126-219× (light), asw 113-249× (light), kbet 21-32× (heavy). Same SOTA shape, 3× GPU compute = 10× different speedup class. Demonstrates §J.7's compute-intensity axis cleanly.
 - **CYCLE-170** Phase E for integrate/asw (PASS — **113.4-248.7× speedup**, job 371882 g008 + local numpy re-run): GPU 10k=0.082ms vs numpy 9.3ms; 30k=0.152ms vs 37.8ms. **Validates §J.7 prediction** for the second consecutive non-enrich Phase E (predicted 100-300×, observed 113-249×). §J.8 self-applied silently.

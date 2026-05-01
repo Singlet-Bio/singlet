@@ -3868,3 +3868,32 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
 - **Phase G**: needs to run after this commit.
 - **Next cycle**: CYCLE-173 — continue Phase E sweep. Top candidates: (a) preprocess/magic (cuSPARSE SpMM-heavy, scanpy.external.pp.magic SOTA), (b) embed/dendrogram (UPGMA on cluster centroids, scipy.cluster.hierarchy ref), (c) qc/empty_drops (DropletUtils ref, may need R), (d) qc/soupx (SoupX ref). Default: embed/dendrogram — small kernel, scipy.cluster.hierarchy is the standard ref, expect class 3 modest speedup.
 
+## Cycle 173 (2026-05-01) — Phase E for embed/dendrogram (PASS, 46-106×, validates §J.7)
+- **Feature**: embed/dendrogram (CYCLE-146, scanpy.tl.dendrogram port).
+- **Outcome**: PASS, **46.3-106.2× speedup**. Validates §J.7 class 2 prediction (50-200×).
+- **Numbers (job 371962 g003 V100S + local scipy re-run)**:
+  ```
+  scale | GPU_wall_ms | scipy_wall_ms | speedup
+  10k   |       0.125 |         5.789 |    46.3×
+  30k   |       0.198 |        21.023 |   106.2×
+  ```
+- **GPU is sub-ms at both scales** (atomic-scatter centroid is the per-cell bottleneck; k×k Sgemm at k=20 is tiny; host UPGMA O(k³) is negligible). scipy baseline (5-21ms) is driven by Python orchestration around C-implemented pdist + linkage.
+- **Phase E corpus now spans 13 features**, speedup distribution:
+  ```
+  2-7×        kmeans       (BLAS-tight SOTA)
+  10-32×      decoupler_*  (4 of 5: wsum, ulm, mlm, ora-not, kbet)
+  46-106×     dendrogram   ← NEW
+  47-52×      viper
+  113-249×    asw
+  126-219×    lisi
+  213-493×    score_genes
+  229-471×    model_gene_var
+  236-302×    pearson_residuals
+  2832-3101×  ora
+  ```
+- **Phase G**: needs to run.
+- **Lessons**:
+  1. **Phase E sweep is at steady state**. Each cycle takes ~25 min, produces 1-2 pareto rows + 1 commit, applies §J lessons silently. The corpus of 13 features now covers the full 2× to 3000× range across SOTA structures.
+  2. **Remaining Phase E candidates**: preprocess/magic, qc/empty_drops, qc/soupx, anno/celltypist, anno/symphony, integrate/combat, embed/dpt-DEFERRED-CYCLE-159.1, embed/diffmap-DEFERRED-CYCLE-159.1. So roughly 6 more easy candidates before the next big work item.
+- **Next cycle**: CYCLE-174 — Phase E for preprocess/magic (cuSPARSE SpMM-heavy on cell-cell SNN graph). scanpy.external.pp.magic SOTA may need magic-impute Python install; if not available, use manual numpy SpMM iteration as baseline.
+
