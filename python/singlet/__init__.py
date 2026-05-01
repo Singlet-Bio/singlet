@@ -16,7 +16,7 @@ Browse catalog (works offline):
     singlet.top_series(n=10)               Largest series
     singlet.quality_tiers()                Quality tier breakdown (gold/silver/bronze)
     singlet.failure_categories()           Pipeline failure analysis
-    singlet.cell_types()                   Cell type annotations (56% coverage)
+    singlet.cell_types()                   Cell type annotations (50% coverage, 42 categories)
     singlet.summary()                      Atlas overview
 
 Load data:
