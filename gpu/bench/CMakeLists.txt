@@ -209,9 +209,18 @@ add_bench_driver(bench_integrate_asw_perf  bench_integrate_asw_perf.cpp)
 add_bench_driver(bench_integrate_kbet_perf  bench_integrate_kbet_perf.cpp)
 
 # ---------------------------------------------------------------------------
+# Cycle 172 drivers: graph/kmeans Phase E benchmark
+# Lloyd k-means clustering on PCA embedding (CYCLE-149 kernel).
+# Forgy init; cublasSgemm D=X^T·C per iter; km_assign_kernel (dist+argmin,
+# one block/cell); atomic-scatter centroid update; inertia kernel.
+# Scales: 10k / 30k cells × 50 PCs, k=10, max_iter=20.
+# ---------------------------------------------------------------------------
+add_bench_driver(bench_graph_kmeans_perf  bench_graph_kmeans_perf.cpp)
+
+# ---------------------------------------------------------------------------
 # Status message
 # ---------------------------------------------------------------------------
-message(STATUS "singlet-gpu bench: 33 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164+165+166+167+169+170+171)")
+message(STATUS "singlet-gpu bench: 34 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164+165+166+167+169+170+171+172)")
 message(STATUS "  53a: bench_io_pz_loader_perf")
 message(STATUS "  53a: bench_preprocess_lognorm_perf")
 message(STATUS "  53a: bench_preprocess_hvg_perf")
@@ -244,3 +253,4 @@ message(STATUS "  167: bench_enrich_decoupler_viper_perf")
 message(STATUS "  169: bench_integrate_lisi_perf")
 message(STATUS "  170: bench_integrate_asw_perf")
 message(STATUS "  171: bench_integrate_kbet_perf")
+message(STATUS "  172: bench_graph_kmeans_perf")

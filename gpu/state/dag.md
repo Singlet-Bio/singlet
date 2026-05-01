@@ -2,7 +2,7 @@
 
 Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movement gets demoted to `state/followups.md`. User-gated items live in `state/blockers.md`. Completed entries are moved to `state/cycle-log.md` each cycle.
 
-- **CYCLE-172-PHASE-E-KMEANS** (queued): graph/kmeans Phase E. sklearn KMeans CPU baseline. Same pattern as lisi/asw template; expected 50-200× class (mid-compute kernel).
+- **CYCLE-172-PHASE-E-KMEANS** (in flight, job 371920 RUNNING on g003): Sonnet wrote 3 files, local sanity-check clean (10k=11.2ms sklearn, 30k=81.3ms), CMake → 34. Predicted class 3-mid (10-50×).
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
