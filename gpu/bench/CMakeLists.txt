@@ -184,9 +184,21 @@ add_bench_driver(bench_enrich_decoupler_viper_perf  bench_enrich_decoupler_viper
 add_bench_driver(bench_integrate_lisi_perf  bench_integrate_lisi_perf.cpp)
 
 # ---------------------------------------------------------------------------
+# Cycle 170 drivers: integrate/asw Phase E benchmark
+# ASW — Average Silhouette Width (Rousseeuw 1987; scIB default, Luecken 2022).
+# One block per cell; shared-mem float smem_sum[n_labels] + int smem_cnt[n_labels];
+# thread 0 sweeps kNN row, computes a (intra-cluster mean dist), b (min other-
+# cluster mean dist), silhouette = (b-a)/max(a,b). cub::DeviceReduce::Sum for
+# scalar ASW mean. k=10/15, n_clusters=4 synthetic round-robin labels.
+# kNN (Exact, L2) is built once as an untimed warmup; only asw() is timed.
+# Scales: 10k cells × 50 PCs (k=10), 30k cells × 50 PCs (k=15).
+# ---------------------------------------------------------------------------
+add_bench_driver(bench_integrate_asw_perf  bench_integrate_asw_perf.cpp)
+
+# ---------------------------------------------------------------------------
 # Status message
 # ---------------------------------------------------------------------------
-message(STATUS "singlet-gpu bench: 31 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164+165+166+167+169)")
+message(STATUS "singlet-gpu bench: 32 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164+165+166+167+169+170)")
 message(STATUS "  53a: bench_io_pz_loader_perf")
 message(STATUS "  53a: bench_preprocess_lognorm_perf")
 message(STATUS "  53a: bench_preprocess_hvg_perf")
@@ -217,3 +229,4 @@ message(STATUS "  165: bench_enrich_decoupler_mlm_perf")
 message(STATUS "  166: bench_enrich_decoupler_ora_perf")
 message(STATUS "  167: bench_enrich_decoupler_viper_perf")
 message(STATUS "  169: bench_integrate_lisi_perf")
+message(STATUS "  170: bench_integrate_asw_perf")

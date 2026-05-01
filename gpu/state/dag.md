@@ -2,7 +2,7 @@
 
 Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movement gets demoted to `state/followups.md`. User-gated items live in `state/blockers.md`. Completed entries are moved to `state/cycle-log.md` each cycle.
 
-- **CYCLE-170-PHASE-E-ASW** (queued): continue non-enrich Phase E sweep. integrate/asw — kNN-based silhouette width, similar dispatch shape to lisi (CYCLE-169 just succeeded, mature template).
+- **CYCLE-170-PHASE-E-ASW** (in flight, job 371882 RUNNING on g008): Sonnet wrote 3 files using §J.8-correct API, local sanity-check clean (10k=9.3ms, 30k=37.8ms numpy ASW), CMake → 32. Predicted class 1-2 (100-300×) per §J.7 (similar to lisi).
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
