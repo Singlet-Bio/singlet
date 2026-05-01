@@ -215,12 +215,14 @@ Cycle 80: block-labels test fix promoted wilcoxon TinyPlanted from noise-converg
 | scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
 |---|---|---|---|---|---|---|---|---|
 | small (10k×20k) | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | scran | TBD |
+| 10k×5k (5%, n_top=2000) | 0.570 | 0.0 | n/a (synth bench) | 208.3 (pearson_residuals) / 130.5 (seurat_v3) | n/a | reference | scanpy 1.10.3 hvg | wall (**365× pearson / 229× seurat_v3**) |
+| 30k×5k (5%, n_top=2000) | 1.348 | 0.0 | n/a (synth bench) | 635.5 (pearson_residuals) / 417.2 (seurat_v3) | n/a | reference | scanpy 1.10.3 hvg | wall (**471× pearson / 310× seurat_v3**) |
 | 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 | 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 
-**Notes**: Poisson-null HVG selection (Lun-McCarthy-Marioni 2016). GPU port of scran::modelGeneVarByPoisson. Atomic sparse-expansion variance identity + device-resident top-N selection. See [CYCLE-127 cycle-log](state/cycle-log.md).
+**Notes**: Poisson-null HVG selection (Lun-McCarthy-Marioni 2016). GPU port of scran::modelGeneVarByPoisson. Atomic sparse-expansion variance identity + device-resident top-N selection (CUB radix sort). CYCLE-162 Phase E (job 371388, g008 V100S) added 10k/30k synthetic-data rows comparing against TWO scanpy HVG flavors: `pearson_residuals` (algorithmically closest — Pearson residuals are Poisson-null) and `seurat_v3` (most popular). 229-471× speedup across all combinations; ratio grows with n_cells (consistent with O(nnz) scaling on GPU vs sparse-Python on CPU). §J.6 NOT-at-risk validation: kernel scaled cleanly with no surprises. See [CYCLE-127 + CYCLE-162 cycle-log](state/cycle-log.md).
 
-**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+**Phase E status**: COMPLETE for medium scales (small-scale ctest row TBD, 100k/1M still pending the streaming driver per Feature 17).
 
 ---
 

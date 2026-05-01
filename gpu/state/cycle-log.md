@@ -3619,3 +3619,23 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
   4. **The negative-result chain compounds**: CYCLE-159 (1 broken kernel exposed) → CYCLE-160 (1 audit, 1 more flagged) → CYCLE-161 (audit confirmed + 1 more bug found). Each negative finding earns 2-3× return through derived discoveries. This is the kind of finding that small-scale ctest gates would never catch.
 - **Next cycle**: CYCLE-162 — pivot away from more Phase E for already-known-broken kernels (CYCLE-159.1 will fix those). Options: (a) **next Phase E** (preprocess/magic, model_gene_var, integrate/lisi — known-good kernels likely to PASS), (b) **§J.6 promotion to "must-have" rule** (small Opus edit), (c) **CYCLE-159.1 dispatch** (substantial; needs Phase B research first). Default: Phase E for preprocess/model_gene_var (LOW-MEDIUM risk, known-good kernel from CYCLE-127, scanpy `sc.experimental.pp.highly_variable_genes(flavor='seurat_v3')` proxy ref).
 
+## Cycle 162 (2026-04-30) — Phase E for preprocess/model_gene_var (CLEAN PASS)
+- **Feature**: preprocess/model_gene_var (CYCLE-127, scran::modelGeneVarByPoisson port). Phase E bench filling medium-scale rows. §J.6 NOT-at-risk kernel — O(nnz) sparse-aware passes + CUB radix sort, no dense n×n.
+- **Outcome**: PASS. Both 10k and 30k scales completed cleanly; all 4 GPU+scanpy comparisons (2 scales × 2 flavors) succeeded.
+- **Numbers (job 371388, g008 V100S)**:
+  ```
+  scale | GPU_wall_ms | scanpy_pearson | scanpy_seurat_v3 | speedup_pearson | speedup_seurat_v3
+  10k   |       0.570 |          208.3 |             130.5 |            365× |              229×
+  30k   |       1.348 |          635.5 |             417.2 |            471× |              310×
+  ```
+  GPU dominates by 229-471× across all flavor comparisons. Speedup grows with n_cells (consistent with O(nnz) scaling on GPU vs Python overhead on CPU).
+- **DUAL-flavor scanpy reference** (CYCLE-162 pattern): bench against BOTH `pearson_residuals` (algorithmically closest — Pearson residuals are Poisson-null) AND `seurat_v3` (most popular HVG). Gives apples-to-apples and apples-to-oranges comparisons in the same cycle. Worth keeping as the standard pattern for HVG-style kernels.
+- **§J.6 NOT-at-risk validation**: kernel scaled cleanly with no surprises. The audit's structural check (no dense n×n, no full Ssyevd) correctly predicted PASS-grade scaling. Two confirmations now: §J.6 catches at-risk kernels (diffmap, dpt) AND clears non-at-risk kernels (model_gene_var). The rule is doing useful work.
+- **pareto-frontier.md row updated** with 4 scale rows (small-ctest TBD, 10k 365×/229×, 30k 471×/310×, 100k/1M pending streaming). Phase E status PARTIAL → COMPLETE for medium scales.
+- **Lessons**:
+  1. **DUAL-flavor scanpy ref is high-leverage.** When the GPU kernel ports a "less common" algorithm (scran's Poisson model) but operates in a category with multiple popular alternatives (HVG selection), benching against multiple flavors honestly informs users which they should compare against. Adopt as default for: HVG flavors, decoupler methods, integration methods.
+  2. **§J.6 audit list is now empirically validated in BOTH directions.** Rule predicts at-risk → confirmed at-risk (diffmap, dpt). Rule predicts NOT-at-risk → confirmed clean PASS (model_gene_var). The pattern is real signal, not noise.
+  3. **Recovery cycles produce concrete value too.** CYCLE-162 was deliberately picked as a "known-good kernel" cycle to recover from the CYCLE-159/161 negative streak; it produced clean 229-471× speedup data, validated §J.6, and demonstrated the dual-flavor comparison pattern. Negative cycles teach about kernels; positive cycles teach about patterns.
+- **Phase G**: needs to run after this commit.
+- **Next cycle**: CYCLE-163 — continue Phase E backfill on known-good kernels. Top candidates: (a) **integrate/lisi** (kNN-based, scanpy `sc.metrics.compute_lisi` if available — may need scIB), (b) **integrate/asw** (similar), (c) **integrate/kbet** (similar), (d) **enrich/decoupler_*** family (5 kernels, common decoupler Python ref). Default: enrich/decoupler_wsum — clean decoupler ref, similar API to score_genes (already proved we can write the bench).
+

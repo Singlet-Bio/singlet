@@ -4,7 +4,7 @@ Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movemen
 
 ## 🔴 Active this cycle
 
-- **CYCLE-162-PHASE-E-MODEL-GENE-VAR** (in flight, job 371388 RUNNING on g008): Sonnet wrote `bench/bench_preprocess_model_gene_var_perf.cpp` (10k/30k × 5k cells, density 5%, n_top=2000), `bench/refs/model_gene_var_ref.py` (DUAL scanpy baselines: pearson_residuals + seurat_v3 flavors), `state/cycle162_model_gene_var_bench.sh` (--exclude=g001,g002,g005). CMake → 25 drivers. §J.6 NOT-at-risk kernel (O(nnz) + CUB radix sort, no dense n×n materialization). Expected clean PASS.
+- **CYCLE-163-PHASE-E-DECOUPLER-WSUM** (queued): next Phase E candidate. enrich/decoupler_wsum (CYCLE-128) — common decoupler Python ref, similar API to score_genes (CYCLE-158/158.1 pattern). Continues the §J.6-validated NOT-at-risk Phase E backfill streak.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
@@ -32,6 +32,7 @@ Frobenius NMF only (KL / IS / NB-GLM / β-divergence dropped); fast PCA / SVD wi
 
 ## ✅ Recently complete (last 5 cycles — full detail in `state/cycle-log.md`)
 
+- **CYCLE-162** Phase E for preprocess/model_gene_var (CLEAN PASS, job 371388 g008): GPU 10k=0.570ms vs scanpy pearson 208.3ms (**365×**) / seurat_v3 130.5ms (**229×**); 30k=1.348ms vs 635.5ms (**471×**) / 417.2ms (**310×**). DUAL-flavor scanpy ref pattern (algorithm-closest + most-popular) gives apples-to-apples + apples-to-oranges in one cycle. **§J.6 NOT-at-risk validation** — rule now empirically confirmed in BOTH directions (catches diffmap/dpt, clears model_gene_var).
 - **CYCLE-161** Phase E for embed/dpt — §J.6 hypothesis CONFIRMED (job 371312 g008): GPU 10k = **2763.3 ms** vs scanpy 5.1 ms = **541× SLOWER** (worse than diffmap's 14×). Bonus finding: scanpy's API splits one-time `sc.tl.diffmap` (heavy) from cheap `sc.tl.dpt(iroot)`; our GPU `dpt()` re-runs the full eigendecomp every call → 100× extra work. CYCLE-159.1 EXPANDED to combined diffmap+dpt sparse-eigensolver rewrite + dpt API refactor (~2-3 days). Lesson: hypothesis-test cycles surface MORE than they test for when you attend to surprising magnitudes.
 - **CYCLE-160** style-rules §J.6 + audit at-risk kernels: pure-Opus preventive cycle. Added §J.6 (kernels with O(n²)+ memory or O(n³)+ compute require ≥10k scale-smoke test before frontier). Audited all `include/singlet-gpu/{embed,preprocess,integrate}/*.h` — found `embed/dpt.h` uses the SAME dense-n×n + Ssyevd pattern as broken diffmap. Pareto-frontier dpt row marked ⚠️ AT-RISK; CYCLE-161 will bench dpt at 10k to confirm. Other O(n²+) kernels audited and cleared. Lesson: pattern audits earn 10× return when you have well-characterized failure modes documented.
 - **CYCLE-159** Phase E for embed/diffmap (NEGATIVE — job 371207 g003): GPU 10k = 2257ms vs scanpy 163ms (**0.07× — GPU 14× SLOWER**); 30k CRASHED with cuSOLVER status=3 in Ssyevd. Phase E exposed real scaling gap that small-scale CYCLE-150 ctest didn't catch. Root cause: dense O(n³) Ssyevd vs scanpy's sparse ARPACK O(n·k·n_components). Filed CYCLE-159.1 sparse-eigensolver rewrite. **Lesson**: small-scale ctest correctness ≠ frontier; future kernels with O(n²+) memory/compute should ship a 10k+ scale smoke test as part of frontier promotion. Need new style-rules §J.6.
