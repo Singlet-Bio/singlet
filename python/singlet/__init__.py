@@ -10,6 +10,7 @@ Browse catalog (works offline):
     singlet.tissues()                      Tissue/source breakdown
     singlet.datasets(organism="Homo sapiens", min_cells=100000)
     singlet.samples(status="SUCCESS")      Filter samples
+    singlet.samples(tissue="brain")        Filter by tissue/source
     singlet.top_series(n=10)               Largest series
     singlet.summary()                      Atlas overview
 
