@@ -273,10 +273,10 @@ def datasets(
 
 
 def summary() -> str:
-    """Print a one-line summary of the atlas and return it as a string.
+    """Return a one-line summary of the atlas.
 
     Example output:
-        singlet atlas: 1,814 samples (687 SUCCESS) • 928 series • 8 species • 2.3M cells
+        singlet atlas: 2,712 samples (1,139 SUCCESS) • 572 series • 17 species • 29 protocols • 3.3M cells
     """
     df = _load_sample_index()
     total = len(df)
@@ -285,7 +285,19 @@ def summary() -> str:
     total_cells = int(success[cells_col].sum()) if cells_col in success.columns else 0
     n_success = len(success)
     n_series = df["gse_id"].nunique() if "gse_id" in df.columns else 0
-    n_species = len(species())
+
+    # Count species from sample_index (more complete than catalog)
+    if "organism" in df.columns:
+        n_species = df["organism"].dropna().loc[lambda s: (s != "unknown") & (s.str.strip() != "")].nunique()
+    else:
+        n_species = len(species())
+
+    # Count protocols (SUCCESS only)
+    if "protocol" in success.columns:
+        valid_protocols = success["protocol"].dropna().loc[lambda s: (s.str.strip() != "") & (s != "unknown")]
+        n_protocols = valid_protocols.nunique()
+    else:
+        n_protocols = 0
 
     def _fmt(n: int) -> str:
         if n >= 1e6:
@@ -296,9 +308,8 @@ def summary() -> str:
 
     msg = (
         f"singlet atlas: {total:,} samples ({n_success:,} SUCCESS) • "
-        f"{n_series:,} series • {n_species} species • {_fmt(total_cells)} cells"
+        f"{n_series:,} series • {n_species} species • {n_protocols} protocols • {_fmt(total_cells)} cells"
     )
-    print(msg)
     return msg
 
 
