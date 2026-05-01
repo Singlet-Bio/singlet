@@ -365,15 +365,15 @@ HARD_FAIL breakdown: 9 download_fail, 2 single-end misclass, 1 zero-cells (T13)
 - **Rate stable at 63-65%**: Four consecutive batches (C185-C188) all in 58-65% band — this IS the ceiling
 
 ### Overall Pipeline Totals (updated)
-- **Total COMPLETED (exit 0)**: 627 + 16(C182) + 32(C183) + 39(C184) + 87(C185) + 121(C186) + 112(C187) + 126(C188) + 119(C189) + 123(C190) + 141(C191) + 145(C192) = **1,688**
+- **Total COMPLETED (exit 0)**: 627 + 16(C182) + 32(C183) + 39(C184) + 87(C185) + 121(C186) + 112(C187) + 126(C188) + 119(C189) + 123(C190) + 141(C191) + 145(C192) + 147(C193) = **1,835**
 - **Species with confirmed SUCCESS**: human, mouse, macaque, drosophila, chicken
-- **True success rate (excl data_incomplete)**: 80-89% on pure 10x, ~75% on high-yield mixed (improved!)
-- **Primary bottleneck**: 1) data_incomplete (~19-30%), 2) timeouts (auto-cancelled, ~6% of batch)
-- **Protocol bias validated**: High-yield protocols = 72-79% success depending on batch composition
-- **Best batches**: C192 = 145/200 (79.2% excl timeout), C191 = 141/200 (75.4%), C188 = 126/200 (65.3%)
+- **True success rate**: ~80% excl timeout on recent batches (climbing trend)
+- **Primary bottleneck**: 1) data_incomplete (~19%), 2) timeouts (~4-6% per batch)
+- **Protocol bias validated**: High-yield protocols = 75-80% success on recent batches
+- **Best batches**: C193 = 147/200 (79.9%), C192 = 145/200 (79.2%), C191 = 141/200 (75.4%)
 - **Scaling**: 200-task batches on 10 nodes complete in ~5h wall time
 - **2h SLURM timeout**: Standard — avg 7-12 timeouts/batch
-- **Key insight**: Higher 10xv3 proportion → higher success (best data integrity in SRA)
+- **Key insight**: Three consecutive records indicate climbing success as obvious bad samples get excluded
 
 ---
 
