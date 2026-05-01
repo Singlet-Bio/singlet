@@ -2,7 +2,7 @@
 
 **Python client for the Singlet single-cell atlas.**
 
-2,712 samples • 1,139 successful • 3.3M cells • 16 species • 81 tissues • 28 protocols • 8.7× .1pz compression
+2,716 samples • 1,140 successful • 3.3M cells • 16 species • 121 tissues • 28 protocols • 8.7× .1pz compression
 
 ## Install
 
@@ -17,7 +17,7 @@ import singlet
 
 # Browse the atlas catalog (free, works offline)
 singlet.summary()
-# → 2,712 samples (1,139 SUCCESS) • 16 species • 28 protocols • 81 tissues • 3.3M cells
+# → 2,716 samples (1,140 SUCCESS) • 16 species • 28 protocols • 121 tissues • 3.3M cells
 
 df = singlet.samples(organism="Homo sapiens", status="SUCCESS")
 singlet.samples(tissue="brain", status="SUCCESS")  # filter by tissue
@@ -52,15 +52,16 @@ sc.tl.leiden(adata)
 | Feature | Details |
 |---------|---------|
 | **Catalog** | Browse 2,712 samples by organism, tissue, protocol, status, quality tier |
-| **tissues()** | 81 normalized tissue categories (blood, brain, lung, tumor, pbmc, bone marrow...) — 81% coverage |
+| **tissues()** | 121 normalized tissue categories (blood, brain, lung, tumor, pbmc, bone marrow...) — 89% coverage |
 | **protocols()** | Protocol breakdown: 28 distinct (10xv3, Drop-seq, CEL-Seq2, sci-RNA-seq3, etc.) |
 | **quality_tiers()** | Gold/silver/bronze classification (18% / 26% / 56%) |
+| **failure_categories()** | Pipeline failure breakdown (download 47%, alignment 26%, cells 20%) |
 | **load_dir()** | Read singlify output directory → AnnData with QC, doublets, cell cycle, ancestry, sex, summary |
 | **read_1pz()** | Read .1pz sparse matrix → AnnData |
 | **Compression** | singlepress .1pz format — 8.7× vs h5ad |
 | **PyTorch** | `OnePZDataset` + `DataLoader` with log-normalization |
 | **Offline** | Bundled catalog parquet — no network needed for browsing |
-| **MCP Server** | AI assistant access via `python -m singlet.mcp.server` |
+| **MCP Server** | 10 AI assistant tools via `python -m singlet.mcp.server` (stats, search, browse, QC, tissues, failures) |
 
 ## Notebooks
 
