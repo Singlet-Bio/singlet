@@ -10,7 +10,13 @@ A [Model Context Protocol](https://modelcontextprotocol.io/) server that exposes
 | `singlet_search` | Filter samples by organism, protocol, modality, or free text |
 | `singlet_qc` | Detailed QC metrics for a specific GSM sample |
 | `singlet_load` | Get access info + code snippets to load a sample |
-| `singlet_browse` | Paginated sample listing |
+| `singlet_browse` | Paginated sample listing with filters |
+| `singlet_protocols` | Protocol distribution and success rates |
+| `singlet_quality` | Quality tier breakdown (gold/silver/bronze) |
+| `singlet_tissues` | Tissue distribution across samples (36 categories) |
+| `singlet_failures` | Failure category breakdown for non-SUCCESS samples |
+| `singlet_cell_types` | Cell type distribution (40 normalized categories) |
+| `singlet_species` | Species list with sample counts |
 
 ## Quick Start
 

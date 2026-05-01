@@ -13,6 +13,7 @@ Exposes these tools to any MCP client (Claude Desktop, Cursor, VS Code Copilot):
   - singlet_tissues:   Get tissue distribution across samples
   - singlet_failures:  Get failure category breakdown for non-SUCCESS samples
   - singlet_cell_types: Get cell type distribution (PBMC, T cells, stem cells, etc.)
+  - singlet_species:   Get species list with sample counts
 
 Usage:
     # Start the server (stdio transport):
@@ -296,10 +297,20 @@ async def list_tools() -> list[Tool]:
                 "required": [],
             },
         ),
+        Tool(
+            name="singlet_species",
+            description=(
+                "Get species list with sample counts. Returns all organisms with "
+                "successfully processed data in the atlas, deduplicated from combo "
+                "organisms (e.g. 'Homo sapiens;Mus musculus' split into separate species)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        ),
     ]
-
-
-@app.call_tool()
 async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     """Route tool calls to implementations."""
     try:
@@ -323,6 +334,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             result = await _tool_failures()
         elif name == "singlet_cell_types":
             result = await _tool_cell_types(arguments)
+        elif name == "singlet_species":
+            result = await _tool_species()
         else:
             result = {"error": f"Unknown tool: {name}"}
     except Exception as e:
@@ -799,6 +812,25 @@ async def _tool_cell_types(arguments: dict) -> dict:
             {"cell_type": row["cell_type"], "count": int(row["count"])}
             for _, row in ct_df.head(top_n).iterrows()
         ],
+    }
+
+
+async def _tool_species() -> dict:
+    """Get species list with sample counts."""
+    import singlet
+    species_list = singlet.species()
+    # Get sample counts per species
+    samples_df = singlet.samples(status="SUCCESS")
+    species_counts = []
+    for sp in species_list:
+        count = len(samples_df[samples_df["organism"].str.contains(sp, na=False)])
+        cells = int(samples_df[samples_df["organism"].str.contains(sp, na=False)]["cells_called"].sum())
+        species_counts.append({"species": sp, "samples": count, "cells": cells})
+    species_counts.sort(key=lambda x: x["samples"], reverse=True)
+
+    return {
+        "total_species": len(species_list),
+        "species": species_counts,
     }
 
 
