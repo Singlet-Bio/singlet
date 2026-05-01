@@ -252,7 +252,7 @@ async def _tool_stats() -> dict:
         resp = client.from_("corpus_stats").select("*").execute()
         if resp.data:
             row = resp.data[0]
-            return {
+            stats = {
                 "total_samples": row.get("total_samples", 0),
                 "successful_samples": row.get("success_samples", 0),
                 "total_cells": row.get("total_cells", 0),
@@ -262,6 +262,22 @@ async def _tool_stats() -> dict:
                 "avg_mapping_rate": row.get("avg_mapping_rate", 0),
                 "avg_median_genes": row.get("avg_median_genes", 0),
             }
+
+            # Add species breakdown
+            try:
+                sp = client.from_("species_stats").select("*").order(
+                    "sample_count", desc=True
+                ).limit(10).execute()
+                if sp.data:
+                    stats["top_species"] = [
+                        {"organism": r["organism"], "samples": r["sample_count"],
+                         "cells": r["total_cells"]}
+                        for r in sp.data
+                    ]
+            except Exception:
+                pass
+
+            return stats
     except Exception:
         pass  # Fall through to direct query
 
