@@ -4,7 +4,7 @@ Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movemen
 
 ## 🔴 Active this cycle
 
-- **CYCLE-165-PHASE-E-DECOUPLER-MLM** (queued): continue decoupler Phase E sweep. enrich/decoupler_mlm (CYCLE-136, Cholesky-based per-sample OLS). Expected 10-30× modest speedup per the bimodal pattern.
+- **CYCLE-165-PHASE-E-DECOUPLER-MLM** (in flight, job 371591 RUNNING on g008): Sonnet wrote 3 files, ran local Python sanity-check (10k=118.9ms, 30k=200.7ms scipy Cholesky), driver count → 28. Expected GPU 8-20× speedup (Cholesky path has more passes than ULM, so lower end of bimodal range).
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 

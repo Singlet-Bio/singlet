@@ -147,9 +147,17 @@ add_bench_driver(bench_enrich_decoupler_wsum_perf  bench_enrich_decoupler_wsum_p
 add_bench_driver(bench_enrich_decoupler_ulm_perf  bench_enrich_decoupler_ulm_perf.cpp)
 
 # ---------------------------------------------------------------------------
+# Cycle 165 drivers: enrich/decoupler_mlm Phase E benchmark
+# MLM (Multivariate Linear Model) Cholesky OLS B = (W^T W + ridge*I)^{-1} W^T X.
+# 5 passes: Sgemm W^T W, ridge kernel, SpMM X^T W, Spotrf/Spotrs, Sgeam.
+# NOT at risk of §J.6 dense-n×n bug (SpMM O(nnz × p); solve O(p^2 × n), p=50).
+# ---------------------------------------------------------------------------
+add_bench_driver(bench_enrich_decoupler_mlm_perf  bench_enrich_decoupler_mlm_perf.cpp)
+
+# ---------------------------------------------------------------------------
 # Status message
 # ---------------------------------------------------------------------------
-message(STATUS "singlet-gpu bench: 27 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164)")
+message(STATUS "singlet-gpu bench: 28 drivers registered (cycles 53a+53b+57+58+59+60+61+85+86+86E+157+158+159+161+162+163+164+165)")
 message(STATUS "  53a: bench_io_pz_loader_perf")
 message(STATUS "  53a: bench_preprocess_lognorm_perf")
 message(STATUS "  53a: bench_preprocess_hvg_perf")
@@ -176,3 +184,4 @@ message(STATUS "  161: bench_embed_dpt_perf")
 message(STATUS "  162: bench_preprocess_model_gene_var_perf")
 message(STATUS "  163: bench_enrich_decoupler_wsum_perf")
 message(STATUS "  164: bench_enrich_decoupler_ulm_perf")
+message(STATUS "  165: bench_enrich_decoupler_mlm_perf")
