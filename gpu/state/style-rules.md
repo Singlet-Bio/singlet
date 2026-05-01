@@ -524,3 +524,38 @@ Both are real-world breakage that affects existing code, not just new tests. Oth
 **Action**: file `CYCLE-188.1-DEPENDENCY-COMPAT-SWEEP` for a future cycle to (a) pin version ranges in pyproject.toml, (b) audit `python/singlet_gpu/` for other cupy 14 incompatibilities, (c) update `state/infrastructure.md` with the tested install set.
 
 This rule is more general than just cupy — it's about treating Python ecosystem dependency drift as a real maintenance burden, not an afterthought.
+
+### §J.13 — Stub-era wrappers fail in N independent ways under first real run (from CYCLE-189-195 score_genes verify saga)
+
+CYCLE-187's wrapper-verify failure for `enrich/score_genes` cascaded through SEVEN independent peeled layers across CYCLE-189 through CYCLE-195 before reaching 3/4 PASS:
+
+| Cycle | Layer peeled | Files touched |
+|-------|-------------|---------------|
+| 189 | `cupy.sparse` rename + cupy 14 dtype-strict CAI dicts (DeviceCsc views) | 19 wrapper files |
+| 190 | `_core.from_cupy_csr` 6-arg → single-arg (5 wrapper helpers carried stub-era signature) | 5 helpers |
+| 191 | `_core.normalize_total/log1p` kw-only enforcement + in-place semantics + void-return | lognorm.py |
+| 192 | `_device_csc_to_csr` returned raw dict (not sparse matrix); fast-path missed transpose | lognorm.py |
+| 193 | `_core.to_cupy_csr` return-dict had nested CAI dicts (3rd recurrence of cupy 14 dtype rule) | lognorm + qc_metrics |
+| 194 | `score_genes.py` sparse-handling: `sp.issparse` missed cupy sparse; `result.scores_view` 4th cupy 14 recurrence; scanpy 1.11 removed `inplace=True` from `log1p` | score_genes + test |
+| 195 | `_build_anndata` stashed C++ DeviceCsc in `adata.uns` → `_mutated_copy` deepcopies uns → unpicklable pybind | io/loader.py |
+
+The pattern: **stub-era wrappers that have never been integration-tested rot in N independent ways under the first real run**. Each verify cycle peels exactly one layer because the next layer's bug is invisible until the previous one is fixed. The expected progression is roughly:
+1. Build/import-time failures (deps, missing symbols)
+2. Direct binding signature mismatches
+3. Semantic mismatches (kw-only, in-place vs return, void)
+4. Cross-layer convention drift (return types, dict-vs-object)
+5. Recurrence of layer-1 issues at deeper call sites
+6. Application-level wrapper logic (sparse-type checks, defaults)
+7. Lifetime/anchor and serialization gotchas (uns vs private attr)
+
+**Rules**:
+
+1. **Wrapper "exists" ≠ "works"**: a wrapper file that imports cleanly is NOT a working wrapper if its full call path has never run end-to-end. Mark it `STUB` until verified.
+2. **Verify the FULL call path of one wrapper before adding another**: do not mass-produce wrapper files in CYCLE-N then leave verify for CYCLE-N+10. Each new wrapper gets its own integration-test cycle BEFORE the next one is written.
+3. **Expect N peels per stub wrapper** (where N = 5-8 in our experience): plan stub-wrapper verify as a 4-7-cycle dispatch, not a single PASS cycle. Use §J.10 BLOCKED-vs-iterate methodology if peels exceed ~8 without convergence.
+4. **Deeper call-site recurrence is normal**: once you find one cupy-14-style issue (or signature-style issue), grep ALL call sites of the same kind in the same cycle, even untested ones (qc_metrics.py:323/423 in CYCLE-193 had the same untested bug as lognorm.py — fixed proactively).
+5. **The C++ binding side may need its own follow-up**: `make_view_object` returning a bare CAI dict was the root cause of 4 separate cupy 14 recurrences. Filed `CYCLE-193-FOLLOWUP` for the C++-side fix (return an object with __cuda_array_interface__ attribute, not a bare dict).
+
+**Why this matters**: a stub wrapper is **net negative** in the codebase if it ships unverified — it advertises a feature that crashes for users. Better to ship 1 fully-verified wrapper per cycle than 5 stubs that look ready in the import-test but fail in real call paths. This is a strong refinement of §J.11 (wrapper-test-infrastructure-first).
+
+**Concrete process change**: when adding a new wrapper, the SAME cycle must include (a) the wrapper file, (b) at least one pytest that exercises a real .1pz fixture end-to-end through the wrapper, (c) a verify SLURM job that PASSES that pytest. If any of (a)/(b)/(c) is deferred, the wrapper file is `STUB` and not exposed in the public Python namespace until the deferred items land.
