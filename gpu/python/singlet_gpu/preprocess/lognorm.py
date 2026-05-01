@@ -124,16 +124,23 @@ def _device_csc_to_csr(device_csc):
     cupy.sparse.csr_matrix  (cells × genes — AnnData convention)
     """
     import singlet_gpu._core as _core  # noqa: F401
+    import cupy as cp
+    try:
+        import cupyx.scipy.sparse as csp  # cupy >= 14
+    except ImportError:
+        import cupy.sparse as csp         # cupy < 14 fallback
 
-    if not hasattr(_core, "to_cupy_csr"):
-        # Fallback: use __cuda_array_interface__ views directly.
-        # This path works without the binding extension.
-        import cupy as cp
-        try:
-            import cupyx.scipy.sparse as csp  # cupy >= 14
-        except ImportError:
-            import cupy.sparse as csp         # cupy < 14 fallback
-
+    if hasattr(_core, "to_cupy_csr"):
+        # _core.to_cupy_csr returns a dict {data, indices, indptr, shape, _owner}
+        # of __cuda_array_interface__ views.  Build a cupy csc_matrix and .T to csr.
+        d = _core.to_cupy_csr(device_csc)
+        rows, cols = d["shape"]
+        genes_x_cells_csc = csp.csc_matrix(
+            (cp.asarray(d["data"]), cp.asarray(d["indices"]), cp.asarray(d["indptr"])),
+            shape=(rows, cols),
+        )
+    else:
+        # Fallback path — use __cuda_array_interface__ views from DeviceCsc directly.
         # cupy >= 14 dtype-strictness: wrap CAI dict so cp.asarray() gets an
         # object with __cuda_array_interface__ as an attribute, not a bare dict.
         class _CaiView:
@@ -147,9 +154,8 @@ def _device_csc_to_csr(device_csc):
         genes_x_cells_csc = csp.csc_matrix(
             (cu_data, cu_indices, cu_indptr), shape=(rows, cols)
         )
-        return genes_x_cells_csc.T.tocsr()
 
-    return _core.to_cupy_csr(device_csc)
+    return genes_x_cells_csc.T.tocsr()
 
 
 def _prepare_adata(
