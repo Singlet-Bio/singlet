@@ -2,7 +2,7 @@
 
 Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movement gets demoted to `state/followups.md`. User-gated items live in `state/blockers.md`. Completed entries are moved to `state/cycle-log.md` each cycle.
 
-- **CYCLE-172-PHASE-E-KMEANS** (in flight, job 371920 RUNNING on g003): Sonnet wrote 3 files, local sanity-check clean (10k=11.2ms sklearn, 30k=81.3ms), CMake → 34. Predicted class 3-mid (10-50×).
+- **CYCLE-173-PHASE-E-DENDROGRAM** (queued): embed/dendrogram (UPGMA on cluster centroids). scipy.cluster.hierarchy ref. Same dispatch shape; expected class 3 modest speedup.
 
 ## 🎯 STRATEGIC SCOPE (2026-04-29 round 2 — locked)
 
@@ -30,6 +30,7 @@ Frobenius NMF only (KL / IS / NB-GLM / β-divergence dropped); fast PCA / SVD wi
 
 ## ✅ Recently complete (last 5 cycles — full detail in `state/cycle-log.md`)
 
+- **CYCLE-172** Phase E for graph/kmeans (PASS — modest 2.42-6.88× speedup, job 371920 g003 V100S + local sklearn re-run): GPU 10k=4.634ms vs sklearn 11.2ms; 30k=11.810ms vs 81.3ms. **Lowest speedup in 12-feature corpus**. sklearn KMeans is exceptionally well-optimized (BLAS internals, minimal Python overhead). Honest finding: not every GPU port delivers headline numbers. New §J.7 refinement candidate: add "BLAS-tight SOTA" speedup class (2-10× even at vectorized baseline).
 - **CYCLE-171** Phase E for integrate/kbet (PASS — 21.1-32.2× speedup, job 371909 g008 + local numpy re-run): GPU 10k=0.183ms vs numpy 5.9ms; 30k=1.028ms vs 21.7ms. **§J.7 prediction was OFF** (predicted 100-300×, observed 21-32×) because kbet has heavier GPU compute (chi² + Wilson-Hilferty) than lisi/asw — refines §J.7 prediction model to include GPU-per-cell-ms denominator. **scIB triplet Phase E SWEEP COMPLETE**: lisi 126-219× (light), asw 113-249× (light), kbet 21-32× (heavy). Same SOTA shape, 3× GPU compute = 10× different speedup class. Demonstrates §J.7's compute-intensity axis cleanly.
 - **CYCLE-170** Phase E for integrate/asw (PASS — **113.4-248.7× speedup**, job 371882 g008 + local numpy re-run): GPU 10k=0.082ms vs numpy 9.3ms; 30k=0.152ms vs 37.8ms. **Validates §J.7 prediction** for the second consecutive non-enrich Phase E (predicted 100-300×, observed 113-249×). §J.8 self-applied silently.
 - **CYCLE-169** Phase E for integrate/lisi (PASS — **125.7-218.6× speedup**, job 371814 g008 + local numpy re-run): GPU 10k=0.035ms vs numpy 4.4ms; 30k=0.059ms vs 12.9ms. **Validates §J.7 prediction** (vectorized SOTA + light GPU compute → 100-200× class). §J.8 self-applied silently (no build FAIL). Now third-fastest kernel in singlet-gpu (508 M cells/s throughput at 30k). First non-enrich Phase E.

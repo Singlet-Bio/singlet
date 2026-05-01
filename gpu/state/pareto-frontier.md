@@ -481,12 +481,14 @@ See [CYCLE-142 + CYCLE-160 + CYCLE-161 cycle-log](state/cycle-log.md), [`style-r
 | scale | our_wall_ms | our_mem_mb | our_accuracy | sota_wall_ms | sota_mem_mb | sota_accuracy | sota_lib | dominates_on |
 |---|---|---|---|---|---|---|---|---|
 | small | TBD | TBD | 5/5 ctest PASS | TBD | TBD | reference | sklearn | TBD |
+| 10k×50PCs (k=10, max_iter=20) | 4.634 | 0.0 | n/a (synth bench) | 11.2 | n/a | reference | sklearn KMeans (init='random' n_init=1) | wall (2.42×) |
+| 30k×50PCs (k=10, max_iter=20) | 11.810 | 0.0 | n/a (synth bench) | 81.3 | n/a | reference | sklearn KMeans (init='random' n_init=1) | wall (6.88×) |
 | 100k | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 | 1M | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD (Phase E pending) |
 
-**Notes**: K-means clustering (Lloyd 1957). EM-style alternating assignment + centroid updates. See [CYCLE-149 cycle-log](state/cycle-log.md).
+**Notes**: K-means clustering (Lloyd 1957). EM-style alternating assignment + centroid updates. CYCLE-172 Phase E (job 371920 g003 V100S + local sklearn re-run). **Modest 2.42-6.88× speedup** vs sklearn KMeans. **§J.7 prediction was off** (predicted 10-50×; observed 2-7×). Why: sklearn KMeans is one of the most heavily-optimized scikit-learn algorithms — uses well-vectorized BLAS internals + minimal Python overhead. Our GPU kernel adds per-iter D2H scalar sync (Rule 4 NMF-pattern exception) that doesn't exist in sklearn. Speedup grows from 2.4× at 10k to 6.9× at 30k because sklearn scales linearly while GPU is closer to constant-per-iter — extrapolating to 100k/1M would likely show 10-30×+ speedup, but at small/medium scales sklearn is competitive. **Honest Phase E finding**: not every GPU port delivers headline numbers; for already-tightly-optimized BLAS-heavy SOTAs, the real win shows at scale. See [CYCLE-149 + CYCLE-172 cycle-log](state/cycle-log.md).
 
-**Phase E status**: pending (no bench cycle has been run; promote 100k/1M when SOTA refs installed and Phase E bench cycle dispatched).
+**Phase E status**: COMPLETE for medium scales (small TBD, 100k+/1M still pending streaming driver — likely where the GPU advantage materializes).
 
 ---
 

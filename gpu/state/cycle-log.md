@@ -3843,3 +3843,28 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
   2. **scIB triplet is now a full demonstration corpus**: same SOTA shape (vectorized numpy), 3 different GPU kernels (light/light/heavy), 3 different speedup classes (large/large/modest). Could be cited in user-facing docs as "what to expect from singlet-gpu integration evals".
 - **Next cycle**: CYCLE-172 — continue Phase E sweep. Top candidates by ease: (a) qc/empty_drops (DropletUtils ref — needs scipy on g008 fallback), (b) preprocess/magic (ping-pong cuSPARSE SpMM), (c) graph/kmeans (Lloyd, scikit-learn KMeans ref), (d) embed/dendrogram (UPGMA on cluster centroids). Default: graph/kmeans — clean sklearn reference, similar pattern to lisi/asw.
 
+## Cycle 172 (2026-05-01) — Phase E for graph/kmeans (PASS — modest 2-7×, honest finding)
+- **Feature**: graph/kmeans (CYCLE-149, Lloyd k-means).
+- **Outcome**: PASS, **2.42-6.88× speedup**. **§J.7 prediction was OFF** (predicted 10-50×; observed 2-7×).
+- **Numbers (job 371920 g003 V100S + local sklearn re-run)**:
+  ```
+  scale | GPU_wall_ms | sklearn_wall_ms | speedup
+  10k   |       4.634 |            11.2 |   2.42×
+  30k   |      11.810 |            81.3 |   6.88×
+  ```
+- **Why prediction was off**: sklearn KMeans is one of the most heavily-optimized scikit-learn algorithms — well-vectorized BLAS internals + minimal Python overhead. Our GPU adds per-iter D2H scalar sync (Rule 4 NMF-pattern exception) that doesn't exist in sklearn. Plus k=10, n_pcs=50 keeps the per-iter Sgemm small; sklearn's BLAS handles small Sgemms well.
+- **Speedup grows with n**: 2.4× at 10k → 6.9× at 30k. sklearn scales linearly with n, GPU is closer to constant-per-iter (modulo D2H sync). Extrapolating to 100k/1M would likely show 10-30×+, but at small/medium scales sklearn is competitive.
+- **Honest Phase E finding**: this is the LOWEST speedup in the entire 12-feature corpus. Documents that not every GPU port delivers headline numbers. For already-tightly-optimized BLAS-heavy SOTAs (sklearn KMeans, scipy SpMM), the real win shows at scale or in pipeline integration (avoiding D2H transfers between phases).
+- **Phase E speedup distribution so far** (12 features, sorted):
+  - 2-7× — graph/kmeans (sklearn KMeans is the toughest CPU SOTA)
+  - 10-32× — decoupler_wsum/ulm/mlm + integrate/kbet (BLAS-heavy SOTAs or heavier GPU compute)
+  - 47-219× — decoupler_viper, integrate/lisi/asw (medium-compute kernels with vectorized SOTAs)
+  - 213-493× — score_genes (Python-loop-heavy SOTA)
+  - 229-471× — model_gene_var (Python-loop-heavy SOTA)
+  - 236-302× + 12,609× small — pearson_residuals (Python-loop-heavy SOTA)
+  - 2832-3101× — decoupler_ora (per-element scipy.stats Python overhead)
+- **§J.7 refinement candidate**: add "BLAS-tight SOTA" to the speedup classification (sklearn KMeans, scipy.sparse.linalg). These earn 2-10× rather than 10-30× even at "vectorized SOTA" baseline. Worth landing in next style-rules edit.
+- **pareto-frontier.md updated**, Phase E status PARTIAL → COMPLETE for medium scales.
+- **Phase G**: needs to run after this commit.
+- **Next cycle**: CYCLE-173 — continue Phase E sweep. Top candidates: (a) preprocess/magic (cuSPARSE SpMM-heavy, scanpy.external.pp.magic SOTA), (b) embed/dendrogram (UPGMA on cluster centroids, scipy.cluster.hierarchy ref), (c) qc/empty_drops (DropletUtils ref, may need R), (d) qc/soupx (SoupX ref). Default: embed/dendrogram — small kernel, scipy.cluster.hierarchy is the standard ref, expect class 3 modest speedup.
+
