@@ -264,9 +264,9 @@ def main():
 
     # Build sample_index.parquet
     sample_cols = [
-        'gsm_id', 'gse_id', 'organism', 'status', 'protocol', 'mapping_rate',
-        'cells_called', 'median_genes', 'median_umis', 'mt_pct', 'doublet_rate',
-        'wall_time_s', 'title', 'source', 'tissue', 'cell_type',
+        'gsm_id', 'gse_id', 'organism', 'status', 'failure_category', 'protocol',
+        'mapping_rate', 'cells_called', 'median_genes', 'median_umis', 'mt_pct',
+        'doublet_rate', 'wall_time_s', 'title', 'source', 'tissue', 'cell_type',
     ]
     sample_index = df[[c for c in sample_cols if c in df.columns]].copy()
     sample_path = OUTPUT_DIR / "sample_index.parquet"
