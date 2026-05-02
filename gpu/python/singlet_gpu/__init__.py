@@ -45,6 +45,7 @@ io         = _import_submodule("io")  # io/ subdir (read_anndata, to_anndata hel
 # (Each submodule remains optional — _import_submodule returns None on
 # ImportError so the package still imports if a sub-tree is missing deps.)
 enrich       = _import_submodule("enrich")
+enrichment   = _import_submodule("enrichment")  # legacy/alt name — separate dir
 integrate    = _import_submodule("integrate")
 embed        = _import_submodule("embed")
 lineage      = _import_submodule("lineage")
