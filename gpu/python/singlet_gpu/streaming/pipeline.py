@@ -321,20 +321,32 @@ def run_pipeline(
     )
     wall = time.perf_counter() - t0
 
+    # _core.StreamingPipelineResult exposes (per _bind_results.hpp):
+    #   n_cells, n_genes_total, n_nnz_total, lognorm_target_used,
+    #   pca_ran, nmf_ran, wall_lognorm_s, wall_hvg_s, wall_pca_s,
+    #   wall_nmf_s, n_chunks_processed, size_factors, qc_mask,
+    #   hvg_indices, hvg_scores, gene_means, gene_vars
+    # cell_ids / gene_ids / X_pca / X_nmf_W / X_nmf_H are NOT yet
+    # exposed by the binding — set to None per CYCLE-21-FOLLOWUP-CYCLE-
+    # 20-BINDING-EXTEND.
+    n_genes_total = int(raw.n_genes_total)
+    hvg_indices = list(raw.hvg_indices) if run_hvg else []
+    n_hvg = len(hvg_indices)
+
     return PipelineResult(
-        cell_ids=list(raw.cell_ids),
-        gene_ids=list(raw.gene_ids),
-        X_pca=raw.X_pca if run_pca else None,
-        X_nmf_W=raw.X_nmf_W if run_nmf else None,
-        X_nmf_H=raw.X_nmf_H if run_nmf else None,
-        hvg_mask=raw.hvg_mask if run_hvg else None,
-        size_factors=raw.size_factors if run_lognorm else None,
+        cell_ids=None,                 # not yet exposed by binding
+        gene_ids=None,                 # not yet exposed by binding
+        X_pca=None,                    # not yet exposed
+        X_nmf_W=None,                  # not yet exposed
+        X_nmf_H=None,                  # not yet exposed
+        hvg_mask=None,                 # derive from hvg_indices below
+        size_factors=list(raw.size_factors) if run_lognorm else None,
         input_paths=resolved,
         chunk_cols=chunk_cols,
         wall_time_s=wall,
         n_cells=int(raw.n_cells),
-        n_genes=int(raw.n_genes),
-        n_hvg=int(raw.n_hvg) if run_hvg else 0,
+        n_genes=n_genes_total,
+        n_hvg=n_hvg,
     )
 
 
