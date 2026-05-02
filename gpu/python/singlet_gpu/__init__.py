@@ -40,6 +40,28 @@ pp         = _import_submodule("pp")
 tools      = _import_submodule("tools")
 streaming  = _import_submodule("streaming")
 io         = _import_submodule("io")  # io/ subdir (read_anndata, to_anndata helpers)
+# Wrapper modules surfaced to the public namespace so tests / users can call
+# `singlet_gpu.lineage.detect_clones(...)` etc without explicit deep imports.
+# (Each submodule remains optional — _import_submodule returns None on
+# ImportError so the package still imports if a sub-tree is missing deps.)
+enrich       = _import_submodule("enrich")
+integrate    = _import_submodule("integrate")
+embed        = _import_submodule("embed")
+lineage      = _import_submodule("lineage")
+fate         = _import_submodule("fate")
+de           = _import_submodule("de")
+spatial      = _import_submodule("spatial")
+generative   = _import_submodule("generative")
+perturbation = _import_submodule("perturbation")
+abundance    = _import_submodule("abundance")
+ase          = _import_submodule("ase")
+atac         = _import_submodule("atac")
+cna          = _import_submodule("cna")
+comm         = _import_submodule("comm")
+disease      = _import_submodule("disease")
+eqtl         = _import_submodule("eqtl")
+grn          = _import_submodule("grn")
+network      = _import_submodule("network")
 del _import_submodule
 
 # Core C++ extension — compiled by CMake/pybind11.

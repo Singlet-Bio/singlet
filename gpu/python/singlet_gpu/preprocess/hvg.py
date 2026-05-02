@@ -210,12 +210,41 @@ def highly_variable_genes(
         max_mean=float(max_mean),
     )
 
-    # Write results into adata.var.
-    working_adata.var["highly_variable"]      = result.highly_variable
-    working_adata.var["means"]                = result.means
-    working_adata.var["variances"]            = result.variances
-    working_adata.var["variances_norm"]       = result.variances_norm
-    working_adata.var["highly_variable_rank"] = result.highly_variable_rank
+    # _core.HvgResult exposes ONLY: indices_view (int32, top_n), scores_view
+    # (float32, top_n), mean_view (float32, n_genes), var_view (float32,
+    # n_genes).  We build the scanpy-style adata.var columns from those.
+    import cupy as cp
+    import numpy as _np
+
+    class _CaiView:  # cupy 14 dtype-strict shim — see CYCLE-193 / §J.13
+        def __init__(self, d): self.__cuda_array_interface__ = d
+
+    indices = cp.asarray(_CaiView(result.indices_view)).get()  # int32, top_n
+    scores  = cp.asarray(_CaiView(result.scores_view)).get()   # float32, top_n
+    means   = cp.asarray(_CaiView(result.mean_view)).get()     # float32, n_genes
+    vars_   = cp.asarray(_CaiView(result.var_view)).get()      # float32, n_genes
+
+    n_genes = int(working_adata.n_vars)
+    highly_variable = _np.zeros(n_genes, dtype=bool)
+    highly_variable[indices] = True
+
+    # Rank: position 0 = top HVG; non-HVGs get -1.
+    highly_variable_rank = _np.full(n_genes, -1, dtype=_np.int32)
+    for rank, gene_idx in enumerate(indices):
+        highly_variable_rank[int(gene_idx)] = rank
+
+    # variances_norm (scanpy-compatible): per-gene normalized dispersion.  The
+    # C++ kernel returns top-N scores only; for non-HVGs we use raw variance
+    # so the column has full length.  Real scanpy parity would require the
+    # kernel to expose normalized dispersion per-gene (CYCLE-202-FOLLOWUP).
+    variances_norm = vars_.copy()
+    variances_norm[indices] = scores  # HVGs carry the kernel's HVG score
+
+    working_adata.var["highly_variable"]      = highly_variable
+    working_adata.var["means"]                = means
+    working_adata.var["variances"]            = vars_
+    working_adata.var["variances_norm"]       = variances_norm
+    working_adata.var["highly_variable_rank"] = highly_variable_rank
 
     # Mirror scanpy: store the parameters used in uns['hvg'].
     working_adata.uns["hvg"] = {
