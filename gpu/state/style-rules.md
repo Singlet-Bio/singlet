@@ -678,3 +678,42 @@ Bug is unfilable / no fix path    | DELETE the test —      | DELETE the test
 **When to apply**: any time a wrapper-rot or stale-test cleanup cycle would otherwise leave a test in a failing state because the underlying bug is real but the fix is deferred.  This eliminates noise from sweep summaries while preserving the test as a future regression-detector.
 
 **Anti-pattern to avoid**: `@pytest.mark.xfail` without `strict=True` or without `raises=...` — silently masks both regressions and the moment of fix.
+
+### §J.17 — Audit ALL consumers before changing a shared C++/Python return-type (from CYCLE-225 regression)
+
+The wrapper-rot SWEEP (§J.14) and the §J.13 deeper-call-site-recurrence rule both apply to FIXES.  But they also apply, with even more force, to **architectural CHANGES** to a shared C++/Python interface.
+
+CYCLE-225 (CYCLE-193-FOLLOWUP, iter-1) tried to fix the make_view_object lifetime bug by changing its C++ return type from `py::dict` (with CAI keys + `_owner` non-standard key) to a `types.SimpleNamespace` (with `__cuda_array_interface__` as attribute + `_owner`).  The change was architecturally well-motivated — solves cupy 14 dtype-strict AND the lifetime issue in one shot.
+
+But the sweep regressed from 5-file PASS milestone down to 1-file PASS (test_bindings only).  Two hidden consumers broke:
+
+1. **Python wrapper code** (lognorm.py:_device_csc_to_csr, qc_metrics.py:filter_cells/filter_genes):
+   ```python
+   d = _core.to_cupy_csr(device_csc)
+   rows, cols = d["shape"]              # ← FAILS: SimpleNamespace not subscriptable
+   cu_data = cp.asarray(_CaiView(d["data"]))
+   ```
+2. **cupy 14 internal code** (`cupy/_core/core.pyx:3118`):
+   ```
+   TypeError: Expected dict, got types.SimpleNamespace
+   ```
+   cupy itself contains an `isinstance(obj, dict)` guard somewhere on the consumption path.
+
+CYCLE-226 reverted.  Net result: 0 forward progress on CYCLE-193-FOLLOWUP, but 2 cycles burned.
+
+**The rule**: before changing a shared interface (C++ binding return type, Python module-level function signature, struct field rename), **grep ALL Python and external consumers of that interface**.  If the change is not 100% transparent (e.g. dict → object), the change must be atomic: update the binding AND every consumer in the SAME cycle, OR pick a backwards-compatible representation (e.g. dict subclass with both `[]` and `__cuda_array_interface__` attribute).
+
+**Concrete process for CYCLE-N considering an architectural binding change**:
+
+1. **Phase 0 — consumer audit**: `grep -rn "<interface_name>" python/ --include="*.py"` AND `grep -rn "<interface_name>" python/src/ --include="*.hpp"`.  Enumerate every site that touches the interface.  For each: which API contract does it depend on?
+2. **Phase 1 — backwards-compatibility decision**: pick ONE of:
+   - **Atomic update**: change the binding AND every consumer in the same cycle.  Estimated diff size: small (≤5-10 sites) → OK; medium (10-30) → high risk, prefer next option; large (30+) → forbidden, pick next option.
+   - **Dual-typed representation**: subclass that supports BOTH old API (e.g. dict semantics) AND new API (e.g. attribute access).  Higher complexity but zero risk to consumers.  Use for medium/large diffs.
+   - **Versioned coexistence**: keep the old binding alongside the new one (`make_view_object_v1` returns dict, `make_view_object_v2` returns object).  Migrate consumers in subsequent cycles, delete v1 when migration complete.  Use for >50 consumers or cross-tree changes.
+3. **Phase 2 — minimal repro before commit**: write a 5-line Python script that exercises the OLD consumption path (e.g. `d = _core.to_cupy_csr(...); rows, cols = d["shape"]`).  Run it against the new binding.  If it fails, pick option 2 or 3 from Phase 1.
+
+**Empirical anti-pattern (CYCLE-225)**: I jumped from "the architectural fix is clear" → "let me change the return type."  Skipped Phase 0 entirely.  Cost: 2 cycles + temporary 4-file PASS regression.
+
+**When to apply**: ANY time the diff would change the *type* or *contract* of a shared binding, struct field, or module-level helper.  Cost of audit: 5-10 minutes.  Cost of skipping: cascading regressions + revert cycle + lost trust in the codebase.
+
+The rule generalizes §J.13 (deeper call-site recurrence is normal) from the FIX direction into the CHANGE direction: just as a single bug class can have N hidden recurrences across call sites, a single API change can have N hidden consumers — and architectural changes have to handle ALL of them.
