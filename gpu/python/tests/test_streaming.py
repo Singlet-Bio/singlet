@@ -178,7 +178,7 @@ def test_run_pipeline_lognorm_hvg(gsm4037629_path):
         chunk_cols=5_000,
         run_lognorm=True,
         run_hvg=True,
-        n_top_hvg=_N_TOP_HVG,
+        n_top_genes=_N_TOP_HVG,  # Wrapper API uses scanpy-style n_top_genes (was n_top_hvg).
         run_pca=False,
         run_nmf=False,
     )

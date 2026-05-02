@@ -287,18 +287,20 @@ def run_pipeline(
     cache_normalized_default = False
     in_memory_pca_threshold_default = 1_000_000  # 1M cells before chunking PCA
 
+    # _core.streaming_pipeline_run signature is `(input_paths, *, kw...)`
+    # — first positional + kw-only after that.
     t0 = time.perf_counter()
     raw = _core.streaming_pipeline_run(
         resolved,
-        int(chunk_cols),
-        bool(run_lognorm),
-        bool(run_hvg),
-        bool(run_pca),
-        int(pca_k),
-        bool(run_nmf),
-        int(nmf_factors),
-        bool(cache_normalized_default),
-        int(in_memory_pca_threshold_default),
+        chunk_cols=int(chunk_cols),
+        run_lognorm=bool(run_lognorm),
+        run_hvg=bool(run_hvg),
+        run_pca=bool(run_pca),
+        pca_k=int(pca_k),
+        run_nmf=bool(run_nmf),
+        nmf_factors=int(nmf_factors),
+        cache_normalized=bool(cache_normalized_default),
+        in_memory_pca_threshold=int(in_memory_pca_threshold_default),
     )
     wall = time.perf_counter() - t0
 
