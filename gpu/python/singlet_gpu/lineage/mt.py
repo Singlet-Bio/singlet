@@ -221,15 +221,19 @@ def detect_clones(
     #   .optimal_K            — int
     #   .bic_per_K            — list of floats, length = max_K - min_K + 1
     #   .n_informative_sites  — int
+    # _core.mt_lineage_call_clones signature (py::kw_only after depth_counts):
+    #   mt_lineage_call_clones(alt_counts, depth_counts, *, min_depth=10,
+    #     min_cells_alt=5, min_vaf=0.01, max_em_iters=100, em_tol=1e-5,
+    #     min_K=2, max_K=10, seed=0) -> ClonePrediction
     result = _core.mt_lineage_call_clones(
         alt_mat,
         depth_mat,
-        int(min_depth),
-        int(min_cells_alt),
-        float(min_vaf),
-        int(min_K),
-        int(max_K),
-        int(seed),
+        min_depth=int(min_depth),
+        min_cells_alt=int(min_cells_alt),
+        min_vaf=float(min_vaf),
+        min_K=int(min_K),
+        max_K=int(max_K),
+        seed=int(seed),
     )
 
     import pandas as pd
