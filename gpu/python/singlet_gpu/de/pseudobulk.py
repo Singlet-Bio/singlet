@@ -238,27 +238,44 @@ def pseudobulk_de(
         working.obs[sample_col].astype("category").cat.categories
     )
     n_groups  = len(group_names)
+    n_donors  = len(donor_names)
 
-    config = _build_pseudobulk_config(
-        mode=mode,
-        min_cells_per_pseudobulk=min_cells_per_pseudobulk,
-        apeglm_shrinkage=apeglm_shrinkage,
-        seed=seed,
-    )
+    # _core.donor_pseudobulk_de signature (py::kw_only after n_donors):
+    #   donor_pseudobulk_de(mat, cluster_labels, n_clusters, donor_labels,
+    #                        n_donors, *, min_cells_per_pseudobulk=10,
+    #                        max_irls_iters=50, irls_tol=1e-5,
+    #                        max_dispersion_iters=10, apeglm_shrinkage=True,
+    #                        top_n=100, seed=0)
+    # mat must be PyDeviceCsc; upload via the same pattern as score_genes /
+    # lineage wrappers (CYCLE-194 / CYCLE-204).
+    import cupy as cp
+    try:
+        import cupyx.scipy.sparse as csp
+    except ImportError:
+        import cupy.sparse as csp
+    import scipy.sparse as sp
 
-    # C++ kernel: donor_pseudobulk_de(mat, donor_codes, group_codes,
-    #                                   n_groups, config)
-    # Returns a list (one per group) of structs with fields:
-    #   .lfc         — (n_genes,) float32 log2-fold-change
-    #   .pvalue      — (n_genes,) float32 Wald-test p-value
-    #   .padj        — (n_genes,) float32 BH-adjusted q-value
-    #   .dispersion  — (n_genes,) float32 NB dispersion
+    if csp.issparse(mat):
+        cu_csc = mat if isinstance(mat, csp.csc_matrix) else mat.tocsc()
+        if cu_csc.dtype != cp.float32:
+            cu_csc = cu_csc.astype(cp.float32)
+    elif sp.issparse(mat):
+        cu_csc = csp.csc_matrix(mat.tocsc().astype(np.float32))
+    elif hasattr(mat, "__cuda_array_interface__"):
+        cu_csc = csp.csc_matrix(mat.astype(cp.float32))
+    else:
+        cu_csc = csp.csc_matrix(cp.asarray(mat, dtype=cp.float32))
+    device_mat = _core.from_cupy_csr(cu_csc)
+
     raw_results = _core.donor_pseudobulk_de(
-        mat,
-        donor_codes,
-        group_codes,
-        int(n_groups),
-        config,
+        device_mat,
+        group_codes,           # cluster_labels
+        int(n_groups),         # n_clusters
+        donor_codes,           # donor_labels
+        int(n_donors),         # n_donors
+        min_cells_per_pseudobulk=int(min_cells_per_pseudobulk),
+        apeglm_shrinkage=bool(apeglm_shrinkage),
+        seed=int(seed),
     )
 
     pb_dict: dict = {}

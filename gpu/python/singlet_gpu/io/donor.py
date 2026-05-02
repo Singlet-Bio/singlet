@@ -30,7 +30,7 @@ from typing import Optional, Union
 def load_donor_assignments(
     tsv_path: Union[str, "Path"],
     *,
-    barcode_col: str = "barcode",
+    barcode_col: Optional[str] = None,
     donor_col: str = "donor_id",
     sep: str = "\t",
     min_prob: Optional[float] = None,
@@ -112,6 +112,21 @@ def load_donor_assignments(
         )
 
     df = pd.read_csv(str(path), sep=sep)
+
+    # Auto-detect the barcode column if not specified.  The singlify pipeline
+    # writes "cell" but pre-singlify formats and many other tools use
+    # "barcode" — accept either by default.
+    if barcode_col is None:
+        for candidate in ("cell", "barcode"):
+            if candidate in df.columns:
+                barcode_col = candidate
+                break
+        if barcode_col is None:
+            raise KeyError(
+                f"Could not auto-detect barcode column in {path.name}.  "
+                f"Tried 'cell' and 'barcode'; available columns: "
+                f"{list(df.columns)}.  Pass barcode_col=... explicitly."
+            )
 
     missing_cols = [c for c in (barcode_col, donor_col) if c not in df.columns]
     if missing_cols:
