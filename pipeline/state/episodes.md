@@ -2761,3 +2761,17 @@
 - **Notebooks updated**: none
 - **Pipeline stats**: 200 submitted, 138 completed → total 2,409
 - **Strategy patch**: none — celseq2/indrop slightly lower yield but still acceptable diversity
+
+## Cycle 198 (2026-05-02 15:15)
+- **Domain**: pipeline-ops
+- **Tasks**: Submit C198 200-sample batch (job 373381)
+- **Workers**: orchestrator (batch build + submit + monitor)
+- **Expected**: ≥140 COMPLETED
+- **Actual**: 136 COMPLETED, 45 FAILED, 3 OOM, 11 TIMEOUT (5 still running → timeout)
+- **Delta**: slightly below (73.9% excl timeout — 3 OOM samples)
+- **Commits**: pending (this cycle)
+- **Push**: pending
+- **E2E panels run**: none
+- **Notebooks updated**: none
+- **Pipeline stats**: 200 submitted, 136 completed → total 2,545
+- **Strategy patch**: none — OOM slightly elevated (3 vs typical 0-2), likely large samples near 100M cap
