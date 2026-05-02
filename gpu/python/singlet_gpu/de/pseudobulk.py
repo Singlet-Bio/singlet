@@ -267,11 +267,16 @@ def pseudobulk_de(
         cu_csc = csp.csc_matrix(cp.asarray(mat, dtype=cp.float32))
     device_mat = _core.from_cupy_csr(cu_csc)
 
+    # cluster_labels and donor_labels must expose __cuda_array_interface__
+    # (per the binding contract).  Upload the int32 numpy arrays to device.
+    group_codes_d = cp.asarray(group_codes, dtype=cp.int32)
+    donor_codes_d = cp.asarray(donor_codes, dtype=cp.int32)
+
     raw_results = _core.donor_pseudobulk_de(
         device_mat,
-        group_codes,           # cluster_labels
+        group_codes_d,         # cluster_labels (device int32)
         int(n_groups),         # n_clusters
-        donor_codes,           # donor_labels
+        donor_codes_d,         # donor_labels (device int32)
         int(n_donors),         # n_donors
         min_cells_per_pseudobulk=int(min_cells_per_pseudobulk),
         apeglm_shrinkage=bool(apeglm_shrinkage),
