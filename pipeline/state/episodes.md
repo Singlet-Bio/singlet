@@ -2747,3 +2747,17 @@
 - **Notebooks updated**: none
 - **Pipeline stats**: 200 submitted, 142 completed → total 2,271
 - **Strategy patch**: none — steady state throughput continues
+
+## Cycle 197 (2026-05-02 10:05)
+- **Domain**: pipeline-ops
+- **Tasks**: Submit C197 200-sample batch (job 373172)
+- **Workers**: orchestrator (batch build + submit + monitor)
+- **Expected**: ≥140 COMPLETED
+- **Actual**: 138 COMPLETED, 46 FAILED, 16 TIMEOUT
+- **Delta**: slightly below (75.0% excl timeout — higher celseq2/indrop share dragged yield)
+- **Commits**: pending (this cycle)
+- **Push**: pending
+- **E2E panels run**: none
+- **Notebooks updated**: none
+- **Pipeline stats**: 200 submitted, 138 completed → total 2,409
+- **Strategy patch**: none — celseq2/indrop slightly lower yield but still acceptable diversity
