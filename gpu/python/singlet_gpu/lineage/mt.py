@@ -212,6 +212,33 @@ def detect_clones(
 
     alt_mat, depth_mat = _get_mt_layers(working, alt_layer, depth_layer)
 
+    # _core.mt_lineage_call_clones expects PyDeviceCsc for both inputs.
+    # Layers may be scipy sparse (host) or cupy sparse (device).  Upload via
+    # cupy → _core.from_cupy_csr (zero-copy if already cupy; H2D otherwise).
+    # We pass the matrices as-is shape-wise; the kernel handles orientation.
+    import cupy as cp
+    try:
+        import cupyx.scipy.sparse as csp  # cupy >= 14
+    except ImportError:
+        import cupy.sparse as csp         # cupy < 14 fallback
+    import scipy.sparse as sp
+
+    def _to_device_csc(mat):
+        if csp.issparse(mat):
+            cu_csc = mat if isinstance(mat, csp.csc_matrix) else mat.tocsc()
+            if cu_csc.dtype != cp.float32:
+                cu_csc = cu_csc.astype(cp.float32)
+        elif sp.issparse(mat):
+            cu_csc = csp.csc_matrix(mat.tocsc().astype(np.float32))
+        elif hasattr(mat, "__cuda_array_interface__"):
+            cu_csc = csp.csc_matrix(mat.astype(cp.float32))
+        else:
+            cu_csc = csp.csc_matrix(cp.asarray(mat, dtype=cp.float32))
+        return _core.from_cupy_csr(cu_csc)
+
+    alt_mat   = _to_device_csc(alt_mat)
+    depth_mat = _to_device_csc(depth_mat)
+
     # C++ kernel: mt_lineage_call_clones(alt_mat, depth_mat,
     #                                     min_depth, min_cells_alt, min_vaf,
     #                                     min_K, max_K, seed)
