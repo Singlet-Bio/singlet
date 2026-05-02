@@ -380,35 +380,37 @@ def test_normalize_result_has_size_factors_view():
 
 
 def test_svd_result_attributes():
-    """SvdResult exposes U, d, V, and k_selected attributes."""
+    """SvdResult exposes U_view, d_view, V_view, and k_selected attributes."""
     SR = _CORE.SvdResult
     attrs = dir(SR)
-    for attr in ("U", "d", "V", "k_selected"):
+    for attr in ("U_view", "d_view", "V_view", "k_selected"):
         assert attr in attrs, (
             f"SvdResult missing attribute '{attr}' "
-            f"(design: U, d, V cupy_views + k_selected int)"
+            f"(actual binding: U_view, d_view, V_view CAI dicts + k_selected int)"
         )
 
 
 def test_nmf_result_attributes():
-    """NmfResult exposes W, d, H, iterations, and converged attributes."""
+    """NmfResult exposes W_view, d_view, H_view, iterations, converged."""
     NR = _CORE.NmfResult
     attrs = dir(NR)
-    for attr in ("W", "d", "H", "iterations", "converged"):
+    for attr in ("W_view", "d_view", "H_view", "iterations", "converged", "k_used"):
         assert attr in attrs, (
             f"NmfResult missing attribute '{attr}' "
-            f"(design: W, d, H cupy_views + iterations int + converged bool)"
+            f"(actual binding: W_view, d_view, H_view CAI dicts + "
+            f"iterations int + converged bool + k_used int)"
         )
 
 
 def test_hvg_result_attributes():
-    """HvgResult exposes indices, scores, means, and variances attributes."""
+    """HvgResult exposes indices_view, scores_view, mean_view, var_view."""
     HR = _CORE.HvgResult
     attrs = dir(HR)
-    for attr in ("indices", "scores", "means", "variances"):
+    for attr in ("indices_view", "scores_view", "mean_view", "var_view"):
         assert attr in attrs, (
             f"HvgResult missing attribute '{attr}' "
-            f"(design: cupy_view<int> indices, cupy_view<float> scores/means/variances)"
+            f"(actual binding: indices_view int32 CAI + "
+            f"scores_view/mean_view/var_view float32 CAI)"
         )
 
 
@@ -1054,7 +1056,11 @@ def test_from_cupy_csr_to_cupy_csr_roundtrip():
     exported dict has the expected keys and matching shape.
     """
     cupy = pytest.importorskip("cupy", reason="cupy not available")
-    import cupy.sparse as csp
+    # cupy 14 removed cupy.sparse; new home is cupyx.scipy.sparse.
+    try:
+        import cupyx.scipy.sparse as csp
+    except ImportError:
+        import cupy.sparse as csp
 
     # 4 rows × 3 cols, 5 non-zeros (float32, int32)
     data = cupy.array([1.0, 2.0, 3.0, 4.0, 5.0], dtype=cupy.float32)
