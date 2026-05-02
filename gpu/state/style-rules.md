@@ -590,3 +590,28 @@ CYCLE-197 demonstrated a dramatically better pattern: **the wrapper-rot SWEEP cy
 5. **Segfaults and shape-mismatches that emerge from wrapper-rot fixes are real progress, not regressions**: the CYCLE-198 sweep produced 7 test files segfaulting in `_core.pca` — but those test files were FAILING BEFORE TOO; the fix unmasked deeper kernel bugs.  File those as separate kernel-investigation cycles.
 
 **When to apply**: any time you discover (a) ≥5 stub wrappers in a tree where (b) integration-test rot is suspected.  Cost: 1 sweep cycle + 1-3 shared-cause fix cycles.  Replaces N×7 sequential per-wrapper cycles where N = number of affected wrappers.
+
+### §J.15 — Minimal-repro before BLOCKED (refines §J.10) (from CYCLE-213/214/215 pca-segfault arc)
+
+§J.10 says "after 2 iters without dominance, mark BLOCKED."  But that decision is dramatically more useful when iter-2 produces a **clean disambiguation**, not just another partial result.
+
+CYCLE-199 (pca C++ kernel segfault, blocking ~7 test files) followed this trajectory:
+- **CYCLE-213** (Opus diagnosis pass): hypothesized `host_retained=false` mismatch.  Code inspection ruled it out (cv.h:254 explicitly says auto_select doesn't need host buffers).  Hypothesis 1 dead — 0/2.
+- **CYCLE-214** (Opus fix attempt): hypothesized lifetime / dangling device-pointer in `result_csr`.  Applied `result_csr.__dict__["_singlet_gpu_device_ref"] = device_csc` anchor.  Sweep showed identical Fatal Python error at the same line.  Hypothesis 2 dead — 0/2.
+
+At this point §J.10 says BLOCKED.  But "blocked because we don't know" is much weaker than "blocked because we know it's a kernel-side bug at scale ≥ 5000×2000."  The ROI of one more cycle to write a minimal repro is enormous.
+
+**CYCLE-215** (minimal-repro dispatch): wrote a 130-line SLURM script that bypassed the lognorm chain entirely — synthetic scipy CSC at 5 progressive sizes, direct `_core.from_cupy_csr → _core.pca`.  Result in 3:28: tiny PASS, small PASS, **medium SEGFAULT**.  Conclusively localizes bug to C++ kernel side, with concrete scale threshold and zero involvement of any wrapper code or lifetime concern.
+
+CYCLE-216 then marked CYCLE-199 BLOCKED with three concrete suspect candidates (cuSPARSE workspace, buffer aliasing, cublas pointer-mode) — a starting brief precise enough that a single bio-exec dispatch with `cuda-memcheck` should resolve it.
+
+**The refinement of §J.10**:
+
+1. **After hypothesis 2 fails, do NOT immediately mark BLOCKED.  Instead, write a minimal repro** that bypasses the entire candidate-cause stack.  One cycle of investment in disambiguation pays back many cycles of next-implementer guesswork.
+2. **A minimal repro is one that holds all but ONE thing constant**.  CYCLE-215 held everything constant except matrix scale — and the failure threshold popped out cleanly.  If you can't think of which axis to vary, that itself is a sign you don't yet have a concrete-enough bug model.
+3. **Repro outcomes are valuable EVEN IF they don't fix the bug**.  CYCLE-215 didn't fix CYCLE-199.  But it converted "we don't know" into "kernel-side, scale ≥ 5000×2000, suspect in {workspace, aliasing, pointer-mode}" — a 10× reduction in hypothesis space for the next implementer.
+4. **The §J.10 BLOCKED decision now incorporates the repro outcome**.  BLOCKED-with-clean-diagnostic is a graceful pause; BLOCKED-with-no-diagnostic is a punt.  Always prefer the former.
+
+**When to apply**: any time §J.10 is about to fire (2 failed hypotheses on the same bug), spend ONE more cycle on a minimal repro before marking BLOCKED.  Bound the investment: the repro script should be writable in <1 hour and runnable in <10 min.  If the repro itself is hard to write, that's a sign the system has too many hidden state dependencies — file as a separate "hard-to-isolate" architectural issue.
+
+**Anti-pattern to avoid**: "iter-3 will work for sure" — if iter-1 and iter-2 with different hypotheses both miss, iter-3 with another hypothesis is gambling.  The minimal repro is a much higher-EV bet because it eliminates entire hypothesis classes at once.
