@@ -272,7 +272,11 @@ def normalize_total(
             "See CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE."
         )
 
-    working_adata = adata if (inplace and not copy) else copy_module.copy(adata)
+    # AnnData.copy() is a deep copy (incl. .X) — required because
+    # _core.normalize_total / _core.log1p mutate device data in place.
+    # `copy_module.copy()` is a SHALLOW copy that shares .X → original
+    # gets mutated too.  See CYCLE-237.
+    working_adata = adata if (inplace and not copy) else adata.copy()
     mat = _get_matrix(working_adata, layer)
 
     device_csc = _csr_to_device_csc(mat)
@@ -356,7 +360,11 @@ def log1p(
             "See CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE."
         )
 
-    working_adata = adata if (inplace and not copy) else copy_module.copy(adata)
+    # AnnData.copy() is a deep copy (incl. .X) — required because
+    # _core.normalize_total / _core.log1p mutate device data in place.
+    # `copy_module.copy()` is a SHALLOW copy that shares .X → original
+    # gets mutated too.  See CYCLE-237.
+    working_adata = adata if (inplace and not copy) else adata.copy()
     mat = _get_matrix(working_adata, layer)
 
     device_csc = _csr_to_device_csc(mat)
