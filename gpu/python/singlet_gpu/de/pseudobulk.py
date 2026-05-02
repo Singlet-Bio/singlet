@@ -283,20 +283,40 @@ def pseudobulk_de(
         seed=int(seed),
     )
 
-    pb_dict: dict = {}
-    for i, group_name in enumerate(group_names):
-        r = raw_results[i]
-        pb_dict[group_name] = pd.DataFrame(
-            {
-                "lfc":        np.asarray(r.lfc,        dtype=np.float32),
-                "pvalue":     np.asarray(r.pvalue,     dtype=np.float32),
-                "padj":       np.asarray(r.padj,       dtype=np.float32),
-                "dispersion": np.asarray(r.dispersion, dtype=np.float32),
-            },
-            index=gene_names,
-        )
+    # _core.DonorPseudobulkResult is a SINGLE struct (not subscriptable) with
+    # per-gene per-cluster CAI views:
+    #   log2_fc_view:  float32 (m × n_clusters × (n_donors-1))  row-major
+    #   p_values_view: float32 (m × n_clusters)
+    #   p_adj_view:    float32 (m × n_clusters)
+    #   dispersion_view: float32 (m × n_clusters)
+    #   pseudobulk_view: float32 (m × n_clusters × n_donors)
+    # Each per-gene index excludes filtered-out genes (n_genes_passing_filter).
+    class _CaiView:  # see CYCLE-193 / §J.13
+        def __init__(self, d): self.__cuda_array_interface__ = d
 
-    working.uns["donor_pseudobulk"] = pb_dict
+    n_pass    = int(raw_results.n_genes_passing_filter)
+    n_donors_ = n_donors  # convenience alias
+
+    log2_fc    = cp.asarray(_CaiView(raw_results.log2_fc_view)).get() \
+                    .reshape(n_pass, n_groups, max(n_donors_ - 1, 1))
+    p_values   = cp.asarray(_CaiView(raw_results.p_values_view)).get() \
+                    .reshape(n_pass, n_groups)
+    p_adj      = cp.asarray(_CaiView(raw_results.p_adj_view)).get() \
+                    .reshape(n_pass, n_groups)
+    dispersion = cp.asarray(_CaiView(raw_results.dispersion_view)).get() \
+                    .reshape(n_pass, n_groups)
+
+    # Test contract: uns['donor_pseudobulk'] = {'lfc', 'pvals', 'qvals',
+    # 'dispersion'} dict of arrays.  We expose the average donor contrast for
+    # lfc (mean across n_donors-1 columns).
+    working.uns["donor_pseudobulk"] = {
+        "lfc":        log2_fc.mean(axis=2).astype(np.float32),  # (n_pass × n_groups)
+        "pvals":      p_values.astype(np.float32),
+        "qvals":      p_adj.astype(np.float32),
+        "dispersion": dispersion.astype(np.float32),
+        "groups":     group_names,
+        "n_genes_passing_filter": n_pass,
+    }
     working.uns["donor_pseudobulk_params"] = {
         "sample_col": sample_col,
         "groupby": groupby,
