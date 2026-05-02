@@ -163,14 +163,18 @@ def test_cuda_array_interface_zero_copy(gsm4037629_path):
     # singlet_gpu device load
     m = singlet_gpu.io.load_pz(str(pz_path))
 
+    # cupy >= 14 dtype-strict: cp.asarray() rejects bare CAI dicts.  Wrap each
+    # *_view dict in a shim object that exposes __cuda_array_interface__ as an
+    # attribute (CYCLE-189 / §J.13 pattern).
+    class _CaiView:
+        def __init__(self, d): self.__cuda_array_interface__ = d
+
     # Zero-copy cupy view (CSC layout on device — same as pz_writer CSC output)
-    # The device holds a CSC: indptr is length (cols+1), indices length nnz.
-    # We build a cupy CSC directly to preserve the native storage order.
     csc_dev = csp.csc_matrix(
         (
-            cupy.asarray(m.mat.data_view),
-            cupy.asarray(m.mat.indices_view),
-            cupy.asarray(m.mat.indptr_view),
+            cupy.asarray(_CaiView(m.mat.data_view)),
+            cupy.asarray(_CaiView(m.mat.indices_view)),
+            cupy.asarray(_CaiView(m.mat.indptr_view)),
         ),
         shape=(m.rows, m.cols),
     )
@@ -351,8 +355,11 @@ def test_lifetime_safety(gsm4037629_path):
     expected_rows = m.rows
     expected_cols = m.cols
 
+    # cupy >= 14 dtype-strict shim (§J.13 / CYCLE-189).
+    class _CaiView:
+        def __init__(self, d): self.__cuda_array_interface__ = d
     # Build a cupy 1-D array wrapping the device data pointer (zero-copy).
-    data_view = cupy.asarray(m.mat.data_view)
+    data_view = cupy.asarray(_CaiView(m.mat.data_view))
 
     # Weak reference to the DeviceCsc wrapper — lets us observe GC.
     m_ref = weakref.ref(m)
