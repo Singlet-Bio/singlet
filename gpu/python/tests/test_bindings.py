@@ -184,11 +184,10 @@ def test_highly_variable_genes_kwargs():
 # Family C — SVD backends
 # ===========================================================================
 
+# Rule 32: svd_lanczos, svd_irlba, svd_krylov backends were removed.
+# svd_deflation is the primary; svd_randomized is the fallback; pca aliases auto_select.
 _SVD_FUNCTIONS = [
-    "svd_lanczos",
-    "svd_irlba",
     "svd_randomized",
-    "svd_krylov",
     "svd_deflation",
     "svd_auto_select",
     "pca",
@@ -245,7 +244,8 @@ def test_svd_function_has_seed_kwarg(func_name):
 _NMF_FUNCTIONS = [
     "nmf",
     "nmf_chunked",
-    "nmf_graph_factorize",
+    # nmf_graph_factorize is feature-flagged behind SINGLET_GPU_BUILD_NMF_GRAPH;
+    # tested separately with skipif when binding is missing.
 ]
 
 
@@ -291,6 +291,10 @@ def test_nmf_chunked_has_loader_and_rank():
     )
 
 
+@pytest.mark.skipif(
+    not hasattr(_CORE, "nmf_graph_factorize"),
+    reason="nmf_graph_factorize feature-flagged behind SINGLET_GPU_BUILD_NMF_GRAPH",
+)
 def test_nmf_graph_factorize_has_inputs_rank_topology():
     """nmf_graph_factorize exposes 'inputs', 'rank', and 'topology' parameters."""
     try:
@@ -305,6 +309,10 @@ def test_nmf_graph_factorize_has_inputs_rank_topology():
         )
 
 
+@pytest.mark.skipif(
+    not hasattr(_CORE, "nmf_graph_factorize"),
+    reason="nmf_graph_factorize feature-flagged behind SINGLET_GPU_BUILD_NMF_GRAPH",
+)
 def test_nmf_graph_factorize_topology_default():
     """nmf_graph_factorize 'topology' defaults to 'shared_h'."""
     try:
@@ -409,7 +417,12 @@ def test_hvg_result_attributes():
 # ===========================================================================
 
 def test_all_cycle20_bindings_present():
-    """Consolidated existence check: all 13 cycle 20 entry points are in _core."""
+    """Consolidated existence check: all post-Rule-32 cycle 20 entry points are in _core.
+
+    Rule 32 removed svd_lanczos / svd_irlba / svd_krylov backends; deflation is
+    primary, randomized is fallback.  nmf_graph_factorize is feature-flagged
+    behind SINGLET_GPU_BUILD_NMF_GRAPH and excluded here.
+    """
     expected = [
         # cupy ingest
         "from_cupy_csr",
@@ -418,18 +431,14 @@ def test_all_cycle20_bindings_present():
         "normalize_total",
         "log1p",
         "highly_variable_genes",
-        # svd (5 backends + auto + pca alias)
-        "svd_lanczos",
-        "svd_irlba",
+        # svd (post-Rule-32: deflation primary + randomized fallback + auto_select + pca alias)
         "svd_randomized",
-        "svd_krylov",
         "svd_deflation",
         "svd_auto_select",
         "pca",
-        # nmf
+        # nmf (nmf_graph_factorize feature-flagged — checked separately)
         "nmf",
         "nmf_chunked",
-        "nmf_graph_factorize",
     ]
     missing = [name for name in expected if not _core_callable(name)]
     assert not missing, (
