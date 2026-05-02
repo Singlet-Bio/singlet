@@ -78,8 +78,8 @@ class PipelineResult:
         Number of HVGs selected (0 when ``run_hvg=False``).
     """
 
-    cell_ids: List[str] = field(default_factory=list)
-    gene_ids: List[str] = field(default_factory=list)
+    cell_ids: Optional[List[str]] = None
+    gene_ids: Optional[List[str]] = None
     X_pca: Optional[object] = None
     X_nmf_W: Optional[object] = None
     X_nmf_H: Optional[object] = None
@@ -91,6 +91,49 @@ class PipelineResult:
     n_cells: int = 0
     n_genes: int = 0
     n_hvg: int = 0
+    # Internal stash for lazy adata construction (gene_means / gene_vars /
+    # hvg_indices from the C++ binding).  Set by run_pipeline; not part of
+    # the public dataclass contract.
+    _hvg_indices: Optional[object] = None
+    _gene_means: Optional[object] = None
+    _gene_vars: Optional[object] = None
+
+    @property
+    def adata(self):
+        """
+        Construct a minimal AnnData from the streaming result.  X is empty
+        (the streaming pipeline does NOT retain the full count matrix on
+        host); var carries `gene_means`, `gene_vars`, and `highly_variable`
+        when run_hvg=True; obs carries `size_factors` when run_lognorm=True.
+        """
+        import anndata
+        import scipy.sparse as sp
+        import numpy as _np
+        n_cells = max(self.n_cells, 1)
+        n_genes = max(self.n_genes, 1)
+        # Build var with available gene-level stats.
+        var = {}
+        if self._gene_means is not None:
+            var["gene_means"] = _np.asarray(self._gene_means, dtype=_np.float32)[:n_genes]
+        if self._gene_vars is not None:
+            var["gene_vars"] = _np.asarray(self._gene_vars, dtype=_np.float32)[:n_genes]
+        if self._hvg_indices is not None:
+            mask = _np.zeros(n_genes, dtype=bool)
+            idx = _np.asarray(self._hvg_indices, dtype=_np.int32)
+            idx = idx[(idx >= 0) & (idx < n_genes)]
+            mask[idx] = True
+            var["highly_variable"] = mask
+        # Build obs with size_factors if available.
+        obs = {}
+        if self.size_factors is not None:
+            sf = _np.asarray(self.size_factors, dtype=_np.float32)[:n_cells]
+            obs["size_factors"] = sf
+        ad = anndata.AnnData(
+            X=sp.csr_matrix((n_cells, n_genes), dtype=_np.float32),
+            obs=obs if obs else None,
+            var=var if var else None,
+        )
+        return ad
 
 
 # ---------------------------------------------------------------------------
@@ -333,6 +376,11 @@ def run_pipeline(
     hvg_indices = list(raw.hvg_indices) if run_hvg else []
     n_hvg = len(hvg_indices)
 
+    # gene_means / gene_vars from the streaming pipeline (per
+    # _bind_results.hpp).  gene_means/gene_vars exist regardless of HVG.
+    gene_means = list(raw.gene_means) if hasattr(raw, "gene_means") else None
+    gene_vars  = list(raw.gene_vars)  if hasattr(raw, "gene_vars")  else None
+
     return PipelineResult(
         cell_ids=None,                 # not yet exposed by binding
         gene_ids=None,                 # not yet exposed by binding
@@ -347,6 +395,9 @@ def run_pipeline(
         n_cells=int(raw.n_cells),
         n_genes=n_genes_total,
         n_hvg=n_hvg,
+        _hvg_indices=hvg_indices if run_hvg else None,
+        _gene_means=gene_means,
+        _gene_vars=gene_vars,
     )
 
 
