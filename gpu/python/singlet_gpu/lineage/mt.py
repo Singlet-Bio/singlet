@@ -265,17 +265,30 @@ def detect_clones(
 
     import pandas as pd
 
+    # _core.ClonePrediction exposes: n_clones, n_informative_sites,
+    # labels_view (int32, n_cells), informative_sites_view (int32),
+    # clone_profiles_view (float32, n_clones × n_informative_sites),
+    # per_cell_heteroplasmy_view (float32, n_cells × n_informative_sites).
+    # All *_view fields are CAI dicts → wrap with _CaiView for cupy 14.
+    class _CaiView:  # see CYCLE-193 / §J.13
+        def __init__(self, d): self.__cuda_array_interface__ = d
+
+    n_clones = int(result.n_clones)
+    n_inf    = int(result.n_informative_sites)
+    n_cells  = int(working.n_obs)
+
+    labels = cp.asarray(_CaiView(result.labels_view)).get()  # int32 (n_cells,)
+    het    = cp.asarray(_CaiView(result.per_cell_heteroplasmy_view)).get() \
+                .reshape(n_cells, n_inf)  # float32 (n_cells × n_informative)
+
     working.obs["mt_clone_id"] = pd.array(
-        np.asarray(result.clone_ids, dtype=np.int32),
-        dtype=pd.Int32Dtype(),  # nullable int, −1 for unassigned cells
+        np.asarray(labels, dtype=np.int32),
+        dtype=pd.Int32Dtype(),  # nullable int, -1 for unassigned cells
     )
-    working.obsm["mt_heteroplasmy"] = np.asarray(
-        result.heteroplasmy_matrix, dtype=np.float32
-    )
+    working.obsm["mt_heteroplasmy"] = np.asarray(het, dtype=np.float32)
     working.uns["mt_lineage_params"] = {
-        "optimal_K": int(result.optimal_K),
-        "bic_per_K": [float(v) for v in result.bic_per_K],
-        "n_informative_sites": int(result.n_informative_sites),
+        "optimal_K": n_clones,             # ClonePrediction.n_clones
+        "n_informative_sites": n_inf,
         "min_depth": min_depth,
         "min_cells_alt": min_cells_alt,
         "min_vaf": min_vaf,
