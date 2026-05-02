@@ -267,7 +267,24 @@ def run_pipeline(
 
     import time
 
-    resolved = [str(Path(p).expanduser().resolve()) for p in input_paths]
+    # Resolve each input path: if it's a sample directory, look for the
+    # default exon_counts.1pz inside (matches io.read_pz_to_anndata behavior).
+    # If it's already a .1pz file, use as-is.
+    def _resolve_input(p):
+        path = Path(p).expanduser().resolve()
+        if path.is_dir():
+            for stem in ("exon_counts.1pz", "gene_counts.1pz", "counts.1pz"):
+                candidate = path / stem
+                if candidate.exists():
+                    return str(candidate)
+            raise FileNotFoundError(
+                f"streaming.run_pipeline: no .1pz file found in directory "
+                f"{path} (looked for exon_counts.1pz / gene_counts.1pz / "
+                f"counts.1pz).  Pass a direct .1pz file path instead."
+            )
+        return str(path)
+
+    resolved = [_resolve_input(p) for p in input_paths]
     seed = _resolve_seed(rng)
 
     # _core.streaming_pipeline_run signature (positional, no config-object):
