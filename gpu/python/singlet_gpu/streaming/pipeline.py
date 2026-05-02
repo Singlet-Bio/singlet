@@ -111,13 +111,26 @@ class PipelineResult:
         import numpy as _np
         n_cells = max(self.n_cells, 1)
         n_genes = max(self.n_genes, 1)
-        # Build var with available gene-level stats.
+        # Build var with available gene-level stats; only add a column if
+        # the buffer's length matches n_genes (defensive against the
+        # CYCLE-220-FOLLOWUP-SIZE_FACTORS-LENGTH-style kernel mismatches).
         var = {}
+        def _fit_or_resize(arr, target_len, dtype):
+            a = _np.asarray(arr, dtype=dtype)
+            if len(a) == target_len:
+                return a
+            if 0 < len(a) < target_len:
+                return _np.resize(a, target_len)
+            return None  # 0-length or oversized — skip column entirely
         if self._gene_means is not None:
-            var["gene_means"] = _np.asarray(self._gene_means, dtype=_np.float32)[:n_genes]
+            v = _fit_or_resize(self._gene_means, n_genes, _np.float32)
+            if v is not None:
+                var["gene_means"] = v
         if self._gene_vars is not None:
-            var["gene_vars"] = _np.asarray(self._gene_vars, dtype=_np.float32)[:n_genes]
-        if self._hvg_indices is not None:
+            v = _fit_or_resize(self._gene_vars, n_genes, _np.float32)
+            if v is not None:
+                var["gene_vars"] = v
+        if self._hvg_indices is not None and len(self._hvg_indices) > 0:
             mask = _np.zeros(n_genes, dtype=bool)
             idx = _np.asarray(self._hvg_indices, dtype=_np.int32)
             idx = idx[(idx >= 0) & (idx < n_genes)]

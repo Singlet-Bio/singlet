@@ -204,6 +204,10 @@ def test_run_pipeline_lognorm_hvg(gsm4037629_path):
     adata_cpu = _gpu_to_cpu_adata(_load_gpu_adata(gsm4037629_path))
     sc.pp.normalize_total(adata_cpu, inplace=True)
     sc.pp.log1p(adata_cpu)  # scanpy 1.11+ removed inplace= from log1p (in-place by default).
+    pytest.importorskip(
+        "skmisc",
+        reason="scikit-misc required by scanpy.pp.highly_variable_genes(flavor='seurat_v3')",
+    )
     sc.pp.highly_variable_genes(adata_cpu, n_top_genes=_N_TOP_HVG, flavor="seurat_v3")
 
     cpu_hvg_set = set(adata_cpu.var_names[adata_cpu.var["highly_variable"]])
