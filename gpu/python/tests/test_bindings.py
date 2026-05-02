@@ -1100,7 +1100,8 @@ def test_normalize_total_returns_normalize_result_type(gsm4037629_path):
     pz_path = gsm4037629_path / _EXON_FILE
     m = singlet_gpu.io.load_pz(str(pz_path))
 
-    result = _CORE.normalize_total(m.to_devicecsc(), target_sum=1e4)
+    # PzDeviceMatrix exposes the underlying DeviceCsc as `.mat` (not `.to_devicecsc()`).
+    result = _CORE.normalize_total(m.mat, target_sum=1e4)
 
     assert isinstance(result, _CORE.NormalizeResult), (
         f"normalize_total must return NormalizeResult, got {type(result)}"

@@ -150,7 +150,10 @@ def test_cuda_array_interface_zero_copy(gsm4037629_path):
     No arithmetic is performed; values are just byte-copied.
     """
     import cupy
-    import cupy.sparse as csp
+    try:
+        import cupyx.scipy.sparse as csp  # cupy >= 14
+    except ImportError:
+        import cupy.sparse as csp         # cupy < 14 fallback
 
     pz_path = gsm4037629_path / _EXON_FILE
 
@@ -534,29 +537,21 @@ def test_binding_pca_exists():
 
 
 # ---------------------------------------------------------------------------
-# test_binding_svd_lanczos_exists
+# test_binding_svd_lanczos_exists — Rule 32 removed svd_lanczos
 # ---------------------------------------------------------------------------
+@pytest.mark.skip(reason="Rule 32: svd_lanczos backend removed")
 def test_binding_svd_lanczos_exists():
-    """_core.svd_lanczos must be exposed as a callable attribute."""
-    assert hasattr(singlet_gpu._core, "svd_lanczos"), (
-        "_core.svd_lanczos not found"
-    )
-    assert callable(singlet_gpu._core.svd_lanczos), (
-        "_core.svd_lanczos is not callable"
-    )
+    """_core.svd_lanczos was removed by Rule 32 (deflation primary, randomized fallback)."""
+    pass
 
 
 # ---------------------------------------------------------------------------
-# test_binding_svd_irlba_exists
+# test_binding_svd_irlba_exists — Rule 32 removed svd_irlba
 # ---------------------------------------------------------------------------
+@pytest.mark.skip(reason="Rule 32: svd_irlba backend removed")
 def test_binding_svd_irlba_exists():
-    """_core.svd_irlba must be exposed as a callable attribute."""
-    assert hasattr(singlet_gpu._core, "svd_irlba"), (
-        "_core.svd_irlba not found"
-    )
-    assert callable(singlet_gpu._core.svd_irlba), (
-        "_core.svd_irlba is not callable"
-    )
+    """_core.svd_irlba was removed by Rule 32."""
+    pass
 
 
 # ---------------------------------------------------------------------------
@@ -573,16 +568,12 @@ def test_binding_svd_randomized_exists():
 
 
 # ---------------------------------------------------------------------------
-# test_binding_svd_krylov_exists
+# test_binding_svd_krylov_exists — Rule 32 removed svd_krylov
 # ---------------------------------------------------------------------------
+@pytest.mark.skip(reason="Rule 32: svd_krylov backend removed")
 def test_binding_svd_krylov_exists():
-    """_core.svd_krylov must be exposed as a callable attribute."""
-    assert hasattr(singlet_gpu._core, "svd_krylov"), (
-        "_core.svd_krylov not found"
-    )
-    assert callable(singlet_gpu._core.svd_krylov), (
-        "_core.svd_krylov is not callable"
-    )
+    """_core.svd_krylov was removed by Rule 32."""
+    pass
 
 
 # ---------------------------------------------------------------------------
@@ -638,15 +629,16 @@ def test_binding_nmf_chunked_exists():
 
 
 # ---------------------------------------------------------------------------
-# test_binding_nmf_graph_factorize_exists
+# test_binding_nmf_graph_factorize_exists — feature-flagged
 # ---------------------------------------------------------------------------
+@pytest.mark.skipif(
+    not hasattr(singlet_gpu._core, "nmf_graph_factorize"),
+    reason="nmf_graph_factorize feature-flagged behind SINGLET_GPU_BUILD_NMF_GRAPH",
+)
 def test_binding_nmf_graph_factorize_exists():
-    """_core.nmf_graph_factorize must be exposed as a callable attribute."""
-    assert hasattr(singlet_gpu._core, "nmf_graph_factorize"), (
-        "_core.nmf_graph_factorize not found — bind_kernels not wired into module"
-    )
+    """_core.nmf_graph_factorize must be exposed (when feature flag is on)."""
     assert callable(singlet_gpu._core.nmf_graph_factorize), (
-        "_core.nmf_graph_factorize is not callable"
+        "_core.nmf_graph_factorize is present but not callable"
     )
 
 
@@ -681,7 +673,10 @@ def test_from_cupy_csr_roundtrip_smoke():
     cupy = pytest.importorskip(
         "cupy", reason="cupy not available — skipping from_cupy_csr roundtrip smoke"
     )
-    import cupy.sparse as csp
+    try:
+        import cupyx.scipy.sparse as csp  # cupy >= 14
+    except ImportError:
+        import cupy.sparse as csp         # cupy < 14 fallback
 
     # Build a tiny 5-row × 4-col CSR (int32 indices, float32 data) on device.
     # The design doc requires: indptr dtype=int32, indices dtype=int32, data=float32.
@@ -743,7 +738,8 @@ def test_normalize_total_callable_smoke(gsm4037629_path):
     pz_path = gsm4037629_path / _EXON_FILE
     m = singlet_gpu.io.load_pz(str(pz_path))
 
-    result = singlet_gpu._core.normalize_total(m.to_devicecsc(), target_sum=10000.0)
+    # PzDeviceMatrix exposes the underlying DeviceCsc as `.mat` (not `.to_devicecsc()`).
+    result = singlet_gpu._core.normalize_total(m.mat, target_sum=10000.0)
 
     assert isinstance(result, singlet_gpu._core.NormalizeResult), (
         f"normalize_total must return a NormalizeResult, got {type(result)}"
