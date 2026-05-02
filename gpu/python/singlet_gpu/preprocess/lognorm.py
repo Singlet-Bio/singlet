@@ -156,7 +156,23 @@ def _device_csc_to_csr(device_csc):
     genes_x_cells_csc = csp.csc_matrix(
         (cu_data, cu_indices, cu_indptr), shape=(rows, cols)
     )
-    return genes_x_cells_csc.T.tocsr()
+    result_csr = genes_x_cells_csc.T.tocsr()
+    # Lifetime anchor (CYCLE-214 — fixes CYCLE-199 pca segfault):
+    # cu_data/cu_indices/cu_indptr are zero-copy views into device_csc's memory.
+    # Without this anchor, device_csc may be GC'd after the wrapper returns,
+    # leaving result_csr's pointers dangling.  Subsequent kernel reads
+    # (e.g. _core.pca on the next wrapper call) then segfault.  Stashing on
+    # result_csr.__dict__ keeps the anchor for the whole lifetime of result_csr.
+    try:
+        result_csr.__dict__["_singlet_gpu_device_ref"] = device_csc
+    except (AttributeError, TypeError):
+        # cupy sparse may not expose __dict__ on some versions; fall back to
+        # storing on the underlying data ndarray.
+        try:
+            result_csr.data._singlet_gpu_device_ref = device_csc
+        except AttributeError:
+            pass  # last-resort no-op; lifetime managed by Python local scope
+    return result_csr
 
 
 def _prepare_adata(
