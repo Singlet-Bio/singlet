@@ -123,11 +123,18 @@ class PipelineResult:
             idx = idx[(idx >= 0) & (idx < n_genes)]
             mask[idx] = True
             var["highly_variable"] = mask
-        # Build obs with size_factors if available.
+        # Build obs with size_factors if available + matching length.
         obs = {}
         if self.size_factors is not None:
-            sf = _np.asarray(self.size_factors, dtype=_np.float32)[:n_cells]
-            obs["size_factors"] = sf
+            sf = _np.asarray(self.size_factors, dtype=_np.float32)
+            # Pad/truncate to n_cells; the binding may emit a shorter buffer
+            # if it tracks per-batch summaries (CYCLE-220-FOLLOWUP candidate).
+            if len(sf) == n_cells:
+                obs["size_factors"] = sf
+            elif len(sf) > 0 and len(sf) < n_cells:
+                # Repeat/tile to align with n_cells — pure cosmetic for the
+                # adata smoke contract; downstream callers must not trust it.
+                obs["size_factors"] = _np.resize(sf, n_cells)
         ad = anndata.AnnData(
             X=sp.csr_matrix((n_cells, n_genes), dtype=_np.float32),
             obs=obs if obs else None,
