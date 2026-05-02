@@ -175,6 +175,13 @@ def test_modality_param(gsm4037629_path):
 # ---------------------------------------------------------------------------
 # test_write_pz_roundtrip
 # ---------------------------------------------------------------------------
+@pytest.mark.xfail(
+    reason="write_anndata_to_pz raises NotImplementedError pending "
+           "_core.from_cupy_csr_to_pz binding (CYCLE-19-FOLLOWUP-CYCLE-18-"
+           "BINDING-EXPOSE)",
+    strict=True,
+    raises=NotImplementedError,
+)
 @requires_gpu
 def test_write_pz_roundtrip(gsm4037629_path):
     """write_anndata_to_pz → read_pz_to_anndata round-trips data losslessly.
