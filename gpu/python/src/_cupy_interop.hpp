@@ -114,27 +114,18 @@ inline py::object make_view_object(
     cudaStream_t stream,
     py::object owner)           // the DeviceCsc Python object — kept alive
 {
-    // CYCLE-225 (CYCLE-193-FOLLOWUP): return a `types.SimpleNamespace` with
-    // `__cuda_array_interface__` exposed as an OBJECT ATTRIBUTE (not a dict
-    // key) plus `_owner` holding the source PyDeviceCsc.
+    // CYCLE-225 attempted to return a `types.SimpleNamespace` to fix cupy 14
+    // dtype-strict + lifetime in one shot.  REVERTED in CYCLE-226: existing
+    // wrappers (lognorm.py + qc_metrics.py) do dict-subscript access on the
+    // to_cupy_csr return (`d["data"]`, `d["shape"]`), and the cupy 14 path
+    // also explicitly checks `isinstance(obj, dict)` somewhere — both broke.
     //
-    // WHY this matters:
-    //  1. cupy >= 14 is dtype-strict: `cp.asarray(bare_cai_dict)` raises
-    //     "Unsupported dtype object".  An object with `__cuda_array_interface__`
-    //     as an attribute IS accepted (the protocol's intended form).
-    //     Eliminates the per-call-site `_CaiView` shim used 7+ times across
-    //     this session (CYCLE-189/193/194/195/202/222 and downstream).
-    //  2. Lifetime anchoring: cupy.asarray() sets the resulting ndarray's
-    //     `.base` to the source object — so as long as the cupy view is alive,
-    //     the SimpleNamespace stays alive, which holds `_owner = py_csc`,
-    //     keeping the PyDeviceCsc alive.  Resolves CYCLE-193-FOLLOWUP /
-    //     test_lifetime_safety AssertionError.
+    // The §J.13 _CaiView shim at the Python call sites remains the working
+    // pattern.  CYCLE-193-FOLLOWUP (the architectural fix that ALSO solves
+    // test_lifetime_safety) requires a custom dict-subclass with __cuda_
+    // array_interface__ attribute AND dict semantics.  Filed as a separate
+    // larger change — out of scope for the current iteration.
     py::dict iface = make_cuda_array_interface<T>(device_ptr, n_elements, stream);
-
-    py::object types_mod = py::module_::import("types");
-    py::object ns = types_mod.attr("SimpleNamespace")();
-    py::setattr(ns, "__cuda_array_interface__", iface);
-    py::setattr(ns, "_owner", owner);   // anchor source DeviceCsc
-
-    return ns;
+    iface["_owner"] = owner;   // non-standard key — cupy ignores; Python GC sees
+    return iface;
 }
