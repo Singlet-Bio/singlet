@@ -615,3 +615,66 @@ CYCLE-216 then marked CYCLE-199 BLOCKED with three concrete suspect candidates (
 **When to apply**: any time §J.10 is about to fire (2 failed hypotheses on the same bug), spend ONE more cycle on a minimal repro before marking BLOCKED.  Bound the investment: the repro script should be writable in <1 hour and runnable in <10 min.  If the repro itself is hard to write, that's a sign the system has too many hidden state dependencies — file as a separate "hard-to-isolate" architectural issue.
 
 **Anti-pattern to avoid**: "iter-3 will work for sure" — if iter-1 and iter-2 with different hypotheses both miss, iter-3 with another hypothesis is gambling.  The minimal repro is a much higher-EV bet because it eliminates entire hypothesis classes at once.
+
+### §J.16 — xfail as regression-detector for deferred fixes (from CYCLE-212/220/223)
+
+When the wrapper-rot SWEEP cycle (§J.14) lands a per-test fix, you regularly run into tests that:
+1. Correctly identify a real bug, but
+2. The fix is architecturally substantial (kernel rewrite, C++ binding work, new feature), AND
+3. The bug is filed as a separate cycle that has not yet landed.
+
+The naive options — leave it FAIL or `@pytest.mark.skip` — both have problems:
+- **Leave FAIL**: noise in the sweep summary; obscures genuine regressions in OTHER tests.
+- **`@pytest.mark.skip`**: silently disables the test forever; if the bug ever IS fixed, the test never runs and its assertion goes stale.
+
+**The right answer**: `@pytest.mark.xfail(strict=True, raises=<ExpectedExc>)` with a comment pointing to the deferred-fix cycle.
+
+```python
+@pytest.mark.xfail(
+    reason="cupy.asarray() of make_view_object's bare CAI dict does NOT "
+           "anchor the source DeviceCsc — see CYCLE-193-FOLLOWUP for the "
+           "C++-side fix.  Test correctly identifies a real lifetime bug.",
+    strict=True,
+    raises=AssertionError,
+)
+@requires_gpu
+def test_lifetime_safety(...):
+    ...
+```
+
+**Why `strict=True` is load-bearing**:
+- `xfail` (default `strict=False`) just records the test as "expected failure" silently.
+- `xfail(strict=True)` records as "expected failure" while the bug is unfixed BUT FAILS THE SUITE if the test unexpectedly passes.  When the deferred fix lands, the test will pass → strict-xfail will FAIL the suite → flags the unmark moment to the next implementer.
+
+**Why `raises=...` is load-bearing**:
+- Without `raises=`, the xfail catches ANY exception, including ones unrelated to the deferred fix (e.g. import errors from a venv breakage).  This masks regressions.
+- With `raises=AssertionError` (or whatever the real bug raises), only the documented failure mode is silently expected.  Anything else surfaces normally.
+
+**Empirical applications in this session**:
+
+| Cycle | Test | Deferred to |
+|-------|------|------------|
+| 212 | test_io.test_write_pz_roundtrip | CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE (NotImplementedError) |
+| 220 | test_core.test_load_pz_keep_host_pinned | same — `host_indptr` not exposed in PzDeviceMatrix binding (used `@pytest.mark.skip` because the test never reaches its assertions; xfail wouldn't help) |
+| 223 | test_core.test_lifetime_safety | CYCLE-193-FOLLOWUP — `make_view_object` C++-side lifetime fix (AssertionError) |
+
+**Decision matrix**:
+
+```
+                                  | Test reaches its       | Test never reaches its  
+                                  | assertion code?        | assertion code?
+─────────────────────────────────────────────────────────────────────────────────
+Bug fix is filed and TBD          | xfail(strict=True,     | skip(reason=...)
+                                  |       raises=...)      | with cycle pointer
+─────────────────────────────────────────────────────────────────────────────────
+Bug is intentional / by-design    | adjust the assertion   | skip(reason=...)
+                                  | to match new contract  | as above
+─────────────────────────────────────────────────────────────────────────────────
+Bug is unfilable / no fix path    | DELETE the test —      | DELETE the test
+                                  | tests of vapor are      | (e.g. removed binding)
+                                  | net-negative
+```
+
+**When to apply**: any time a wrapper-rot or stale-test cleanup cycle would otherwise leave a test in a failing state because the underlying bug is real but the fix is deferred.  This eliminates noise from sweep summaries while preserving the test as a future regression-detector.
+
+**Anti-pattern to avoid**: `@pytest.mark.xfail` without `strict=True` or without `raises=...` — silently masks both regressions and the moment of fix.
