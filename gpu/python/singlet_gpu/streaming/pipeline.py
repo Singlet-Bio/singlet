@@ -270,27 +270,36 @@ def run_pipeline(
     resolved = [str(Path(p).expanduser().resolve()) for p in input_paths]
     seed = _resolve_seed(rng)
 
-    cfg = _core.StreamingPipelineConfig(
-        chunk_cols=chunk_cols,
-        run_lognorm=run_lognorm,
-        target_sum=float(target_sum) if target_sum is not None else 0.0,
-        log_base=float(log_base) if log_base is not None else 0.0,
-        run_hvg=run_hvg,
-        n_top_genes=n_top_genes,
-        hvg_flavor=hvg_flavor,
-        run_pca=run_pca,
-        pca_k=pca_k,
-        pca_solver=pca_solver,
-        run_nmf=run_nmf,
-        nmf_factors=nmf_factors,
-        nmf_loss=nmf_loss,
-        nmf_max_iter=nmf_max_iter,
-        seed=seed,
-        n_threads=n_threads,
-    )
+    # _core.streaming_pipeline_run signature (positional, no config-object):
+    #   streaming_pipeline_run(input_paths_list, chunk_cols, run_lognorm,
+    #                          run_hvg, run_pca, pca_k, run_nmf, nmf_factors,
+    #                          cache_normalized, in_memory_pca_threshold)
+    # The fuller wrapper API (target_sum, hvg_flavor, pca_solver, nmf_loss,
+    # nmf_max_iter, seed, n_threads) is currently NOT plumbed through to the
+    # C++ kernel — accepted by the wrapper for API parity with future
+    # binding extension (see CYCLE-21-FOLLOWUP).  Used vars are passed
+    # below; ignored vars are silent.
+    _ = (target_sum, log_base, hvg_flavor, pca_solver, nmf_loss,
+         nmf_max_iter, seed, n_threads)  # quiet unused-variable warnings
+
+    # cache_normalized + in_memory_pca_threshold are C++ binding params with
+    # no Python-API exposure yet; use sensible defaults from the C++ contract.
+    cache_normalized_default = False
+    in_memory_pca_threshold_default = 1_000_000  # 1M cells before chunking PCA
 
     t0 = time.perf_counter()
-    raw = _core.streaming_pipeline_run(resolved, cfg)
+    raw = _core.streaming_pipeline_run(
+        resolved,
+        int(chunk_cols),
+        bool(run_lognorm),
+        bool(run_hvg),
+        bool(run_pca),
+        int(pca_k),
+        bool(run_nmf),
+        int(nmf_factors),
+        bool(cache_normalized_default),
+        int(in_memory_pca_threshold_default),
+    )
     wall = time.perf_counter() - t0
 
     return PipelineResult(
