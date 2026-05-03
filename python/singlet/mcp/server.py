@@ -384,7 +384,7 @@ async def _tool_search(args: dict) -> dict:
 
     query = client.table("samples").select(
         "gsm_id, gse_id, organism, protocol, modality, status, "
-        "cells_called, mapping_rate, title, source"
+        "cells_called, mapping_rate, title, source, characteristics"
     )
 
     if args.get("organism"):
@@ -396,17 +396,27 @@ async def _tool_search(args: dict) -> dict:
     if args.get("status"):
         query = query.eq("status", args["status"])
     if args.get("query"):
-        q = args["query"]
+        q = args["query"].replace("%", "").replace("(", "").replace(")", "")
         query = query.or_(
-            f"gsm_id.ilike.%{q}%,gse_id.ilike.%{q}%,title.ilike.%{q}%,source.ilike.%{q}%"
+            f"gsm_id.ilike.%{q}%,gse_id.ilike.%{q}%,title.ilike.%{q}%,"
+            f"source.ilike.%{q}%,characteristics->>tissue.ilike.%{q}%,"
+            f"characteristics->>cell type.ilike.%{q}%"
         )
 
     query = query.order("pipeline_date", desc=True).limit(limit)
     resp = query.execute()
 
+    # Extract tissue/cell_type for display
+    samples = []
+    for s in (resp.data or []):
+        chars = s.pop("characteristics", None) or {}
+        s["tissue"] = chars.get("tissue", "")
+        s["cell_type"] = chars.get("cell type", "")
+        samples.append(s)
+
     return {
-        "count": len(resp.data or []),
-        "samples": resp.data or [],
+        "count": len(samples),
+        "samples": samples,
     }
 
 
