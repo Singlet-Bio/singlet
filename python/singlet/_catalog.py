@@ -380,15 +380,17 @@ def summary() -> str:
     else:
         n_protocols = 0
 
-    # Count tissues (SUCCESS only)
+    # Count tissues (SUCCESS only, exclude empty strings)
     if "tissue" in success.columns:
-        n_tissues = success["tissue"].dropna().nunique()
+        valid_tissues = success["tissue"].dropna().loc[lambda s: s.str.strip() != ""]
+        n_tissues = valid_tissues.nunique()
     else:
         n_tissues = 0
 
-    # Count cell types (SUCCESS only)
+    # Count cell types (SUCCESS only, exclude empty strings)
     if "cell_type" in success.columns:
-        n_cell_types = success["cell_type"].dropna().nunique()
+        valid_ct = success["cell_type"].dropna().loc[lambda s: s.str.strip() != ""]
+        n_cell_types = valid_ct.nunique()
     else:
         n_cell_types = 0
 
