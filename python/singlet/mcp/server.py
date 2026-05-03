@@ -649,95 +649,25 @@ async def _tool_quality() -> dict:
 
 async def _tool_tissues(args: dict) -> dict:
     """Get tissue distribution across processed samples."""
-    client = get_client()
+    import singlet
     top_n = args.get("top_n", 25)
 
-    # Query SUCCESS samples with characteristics
-    all_rows = []
-    page_size = 1000
-    offset = 0
-    while True:
-        resp = client.table("samples").select(
-            "characteristics"
-        ).eq("status", "SUCCESS").not_.is_("characteristics", "null").range(
-            offset, offset + page_size - 1
-        ).execute()
-        batch = resp.data or []
-        all_rows.extend(batch)
-        if len(batch) < page_size:
-            break
-        offset += page_size
+    # Use bundled parquet data (properly normalized 37 categories)
+    df = singlet.tissues()
+    total_success = len(singlet.samples(status="SUCCESS"))
+    total_with_tissue = int(df["count"].sum())
 
-    # Extract and normalize tissue
-    tissue_counts: dict[str, int] = {}
-    for row in all_rows:
-        chars = row.get("characteristics")
-        if isinstance(chars, dict) and "tissue" in chars:
-            raw = chars["tissue"].strip().lower()
-            # Basic normalization
-            norm = _normalize_tissue(raw)
-            tissue_counts[norm] = tissue_counts.get(norm, 0) + 1
-
-    total_with_tissue = sum(tissue_counts.values())
-    sorted_tissues = sorted(tissue_counts.items(), key=lambda x: -x[1])[:top_n]
+    top_tissues = df.head(top_n)
 
     return {
-        "total_success_samples": len(all_rows),
+        "total_success_samples": total_success,
         "samples_with_tissue": total_with_tissue,
-        "coverage_pct": round(total_with_tissue / len(all_rows) * 100, 1) if all_rows else 0,
-        "unique_tissues": len(tissue_counts),
-        "top_tissues": [{"tissue": t, "count": c} for t, c in sorted_tissues],
+        "coverage_pct": round(total_with_tissue / total_success * 100, 1) if total_success else 0,
+        "unique_tissues": len(df),
+        "top_tissues": [{"tissue": t, "count": c} for t, c in zip(top_tissues["tissue"], top_tissues["count"])],
     }
 
 
-def _normalize_tissue(raw: str) -> str:
-    """Normalize a raw tissue string to a canonical category."""
-    NORMALIZE = {
-        "pbmc": "pbmc", "pbmcs": "pbmc", "peripheral blood": "blood",
-        "whole blood": "blood", "blood": "blood",
-        "brain": "brain", "dorsolateral prefrontal cortex": "brain",
-        "leptomeninges": "brain", "hippocampus": "brain", "amygdala": "brain",
-        "bone marrow": "bone marrow", "lung": "lung",
-        "liver": "liver", "fetal liver": "liver",
-        "pancreas": "pancreas", "spleen": "spleen", "kidney": "kidney",
-        "breast": "breast", "skin": "skin", "tumor": "tumor",
-        "thyroid": "thyroid", "retina": "retina", "tonsil": "tonsil",
-        "esophagus": "esophagus", "villi": "placenta", "csf": "csf",
-        "hpsc derived cardiomyocytes": "heart",
-    }
-    if raw in NORMALIZE:
-        return NORMALIZE[raw]
-    if "tumor" in raw or "tumour" in raw or "cancer" in raw:
-        return "tumor"
-    if "blood" in raw:
-        return "blood"
-    if "brain" in raw or "cortex" in raw:
-        return "brain"
-    if "liver" in raw:
-        return "liver"
-    if "lung" in raw:
-        return "lung"
-    if "kidney" in raw or "renal" in raw:
-        return "kidney"
-    if "skin" in raw or "dermis" in raw:
-        return "skin"
-    if "bone marrow" in raw:
-        return "bone marrow"
-    if "pbmc" in raw:
-        return "pbmc"
-    if "heart" in raw or "cardiac" in raw:
-        return "heart"
-    if "intestin" in raw or "colon" in raw or "gut" in raw:
-        return "intestine"
-    if "lymph" in raw:
-        return "lymph node"
-    if "muscle" in raw:
-        return "muscle"
-    if "spleen" in raw:
-        return "spleen"
-    if "pancrea" in raw:
-        return "pancreas"
-    return raw
 
 
 async def _tool_failures() -> dict:
