@@ -198,9 +198,19 @@ inline SvdResult deflation(const io::PzDeviceMatrix& m, const SvdConfig& cfg)
     core::DeviceMemory<float> d_v(mat_n);   // right singular vector (length n)
     core::DeviceMemory<float> d_tmp(std::max(mat_m, mat_n)); // SpMV output buffer
 
+    // CYCLE-252 (CYCLE-199 fix): cusparseSpMV reads y before writing in some
+    // internal kernels — initcheck flagged d_tmp as uninitialized.  Zero
+    // d_u, d_v, d_tmp before any SpMV call.  d_v gets overwritten by
+    // curandGenerateUniform below but defensive zero-init is cheap.
+    cudaMemsetAsync(d_u.get(),   0, sizeof(float) * mat_m, stream);
+    cudaMemsetAsync(d_v.get(),   0, sizeof(float) * mat_n, stream);
+    cudaMemsetAsync(d_tmp.get(), 0, sizeof(float) * std::max(mat_m, mat_n), stream);
+
     // Accumulated factor matrices on device (col-major: m×k and n×k)
     core::DeviceMemory<float> d_U_accum(mat_m * k);
     core::DeviceMemory<float> d_V_accum(mat_n * k);
+    cudaMemsetAsync(d_U_accum.get(), 0, sizeof(float) * mat_m * k, stream);
+    cudaMemsetAsync(d_V_accum.get(), 0, sizeof(float) * mat_n * k, stream);
 
     // --- Dense vector descriptors for cuSPARSE SpMV ---
     cusparseDnVecDescr_t dv_u = nullptr, dv_v = nullptr, dv_tmp_m = nullptr, dv_tmp_n = nullptr;
@@ -221,9 +231,13 @@ inline SvdResult deflation(const io::PzDeviceMatrix& m, const SvdConfig& cfg)
 
     size_t ws_total = std::max(ws_Av, ws_Atu);
     core::DeviceMemory<uint8_t> d_spmv_ws(ws_total > 0 ? ws_total : 1);
+    // CYCLE-252: zero-init cusparse workspace (some algorithms read it).
+    if (ws_total > 0)
+        cudaMemsetAsync(d_spmv_ws.get(), 0, ws_total, stream);
 
     // Dots*D buffer on device for subtract_rank1_corrections_kernel
     core::DeviceMemory<float> d_dots_times_D(k > 0 ? k : 1);
+    cudaMemsetAsync(d_dots_times_D.get(), 0, sizeof(float) * (k > 0 ? k : 1), stream);
 
     // Curand seed for initial v (deterministic)
     curandSetPseudoRandomGeneratorSeed(ctx.curand(), cfg.seed);
