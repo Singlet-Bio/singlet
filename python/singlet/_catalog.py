@@ -221,7 +221,9 @@ def tissues() -> pd.DataFrame:
     df = _load_sample_index()
     df = df[df["status"] == "SUCCESS"]
     if "tissue" in df.columns:
-        counts = df["tissue"].dropna().value_counts().reset_index()
+        t = df["tissue"].dropna()
+        t = t[t != ""]
+        counts = t.value_counts().reset_index()
         counts.columns = ["tissue", "count"]
         return counts
     if "source" not in df.columns:
@@ -313,7 +315,9 @@ def cell_types() -> pd.DataFrame:
     """
     df = _load_sample_index()
     success = df[df["status"] == "SUCCESS"]
-    ct_counts = success["cell_type"].dropna().value_counts().reset_index()
+    ct = success["cell_type"].dropna()
+    ct = ct[ct != ""]
+    ct_counts = ct.value_counts().reset_index()
     ct_counts.columns = ["cell_type", "count"]
     return ct_counts
 
