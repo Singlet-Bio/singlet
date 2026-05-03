@@ -348,74 +348,32 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
 
 async def _tool_stats() -> dict:
-    """Get corpus-wide statistics using the materialized view."""
-    client = get_client()
+    """Get corpus-wide statistics from bundled parquet data."""
+    import singlet
 
-    # Try pre-computed corpus_stats view (refreshed by ETL)
-    try:
-        resp = client.from_("corpus_stats").select("*").execute()
-        if resp.data:
-            row = resp.data[0]
-            stats = {
-                "total_samples": row.get("total_samples", 0),
-                "successful_samples": row.get("success_samples", 0),
-                "total_cells": row.get("total_cells", 0),
-                "species_count": row.get("species_count", 0),
-                "series_count": row.get("series_count", 0),
-                "success_rate": row.get("success_rate", 0),
-                "avg_mapping_rate": row.get("avg_mapping_rate", 0),
-                "avg_median_genes": row.get("avg_median_genes", 0),
-            }
+    df = singlet.samples()
+    success = df[df["status"] == "SUCCESS"]
 
-            # Add species breakdown
-            try:
-                sp = client.from_("species_stats").select("*").order(
-                    "sample_count", desc=True
-                ).limit(10).execute()
-                if sp.data:
-                    stats["top_species"] = [
-                        {"organism": r["organism"], "samples": r["sample_count"],
-                         "cells": r["total_cells"]}
-                        for r in sp.data
-                    ]
-            except Exception:
-                pass
-
-            return stats
-    except Exception:
-        pass  # Fall through to direct query
-
-    # Fallback: query directly (paginate to avoid row limit)
-    all_rows = []
-    page_size = 1000
-    offset = 0
-    while True:
-        resp = client.table("samples").select(
-            "status, cells_called, organism, gse_id, mapping_rate, median_genes"
-        ).range(offset, offset + page_size - 1).execute()
-        batch = resp.data or []
-        all_rows.extend(batch)
-        if len(batch) < page_size:
-            break
-        offset += page_size
-
-    rows = all_rows
-    success = [r for r in rows if r["status"] == "SUCCESS"]
-    terminal = [r for r in rows if r["status"] in ("SUCCESS", "SOFT_FAIL", "HARD_FAIL")]
-
-    def avg(vals):
-        nums = [v for v in vals if v is not None]
-        return round(sum(nums) / len(nums), 4) if nums else None
+    # Species breakdown
+    species_list = singlet.species()
+    species_counts = []
+    for sp in species_list:
+        mask = success["organism"].str.contains(sp, na=False)
+        count = int(mask.sum())
+        cells = int(success.loc[mask, "cells_called"].sum())
+        species_counts.append({"organism": sp, "samples": count, "cells": cells})
+    species_counts.sort(key=lambda x: x["samples"], reverse=True)
 
     return {
-        "total_samples": len(rows),
+        "total_samples": len(df),
         "successful_samples": len(success),
-        "total_cells": sum(r.get("cells_called") or 0 for r in success),
-        "species_count": len(set(r["organism"] for r in rows if r.get("organism"))),
-        "series_count": len(set(r["gse_id"] for r in rows if r.get("gse_id"))),
-        "success_rate": round(len(success) / len(terminal), 4) if terminal else None,
-        "avg_mapping_rate": avg([r.get("mapping_rate") for r in success]),
-        "avg_median_genes": avg([r.get("median_genes") for r in success]),
+        "total_cells": int(success["cells_called"].sum()),
+        "species_count": len(species_list),
+        "series_count": int(df["gse_id"].nunique()),
+        "success_rate": round(len(success) / len(df), 4) if len(df) else 0,
+        "avg_mapping_rate": round(float(success["mapping_rate"].mean()), 4) if len(success) else 0,
+        "avg_median_genes": round(float(success["median_genes"].mean()), 1) if len(success) else 0,
+        "top_species": species_counts[:10],
     }
 
 
@@ -559,37 +517,18 @@ async def _tool_browse(args: dict) -> dict:
 
 async def _tool_protocols() -> dict:
     """Get protocol distribution across the atlas."""
-    client = get_client()
+    import singlet
 
-    # Query all samples with protocol info
-    all_rows = []
-    page_size = 1000
-    offset = 0
-    while True:
-        resp = client.table("samples").select(
-            "protocol, status"
-        ).range(offset, offset + page_size - 1).execute()
-        batch = resp.data or []
-        all_rows.extend(batch)
-        if len(batch) < page_size:
-            break
-        offset += page_size
+    df = singlet.samples()
+    # Normalize protocol column
+    df = df.copy()
+    df["protocol"] = df["protocol"].fillna("unknown").replace("", "unknown")
 
-    # Aggregate
-    from collections import Counter
-    total_counts = Counter()
-    success_counts = Counter()
-    for row in all_rows:
-        p = row.get("protocol") or "unknown"
-        if not p.strip():
-            p = "unknown"
-        total_counts[p] += 1
-        if row["status"] == "SUCCESS":
-            success_counts[p] += 1
-
+    # Aggregate by protocol
     protocols = []
-    for protocol, total in total_counts.most_common():
-        success = success_counts.get(protocol, 0)
+    for protocol, group in df.groupby("protocol"):
+        total = len(group)
+        success = int((group["status"] == "SUCCESS").sum())
         protocols.append({
             "protocol": protocol,
             "total_samples": total,
@@ -597,6 +536,7 @@ async def _tool_protocols() -> dict:
             "success_rate": round(success / total, 3) if total else 0,
         })
 
+    protocols.sort(key=lambda x: x["total_samples"], reverse=True)
     return {
         "total_protocols": len([p for p in protocols if p["protocol"] != "unknown"]),
         "protocols": protocols,
@@ -605,45 +545,29 @@ async def _tool_protocols() -> dict:
 
 async def _tool_quality() -> dict:
     """Get quality tier breakdown of SUCCESS samples."""
-    client = get_client()
+    import singlet
 
-    # Query SUCCESS samples with quality metrics
-    all_rows = []
-    page_size = 1000
-    offset = 0
-    while True:
-        resp = client.table("samples").select(
-            "mapping_rate, median_genes, cells_called"
-        ).eq("status", "SUCCESS").range(offset, offset + page_size - 1).execute()
-        batch = resp.data or []
-        all_rows.extend(batch)
-        if len(batch) < page_size:
-            break
-        offset += page_size
+    tiers_df = singlet.quality_tiers()
+    total = int(tiers_df["count"].sum())
 
-    total = len(all_rows)
-    gold = silver = bronze = 0
-    for row in all_rows:
-        mr = row.get("mapping_rate") or 0
-        mg = row.get("median_genes") or 0
-        cc = row.get("cells_called") or 0
-        if mr >= 0.7 and mg >= 500 and cc >= 500:
-            gold += 1
-        elif mr >= 0.5 and mg >= 200 and cc >= 100:
-            silver += 1
-        else:
-            bronze += 1
+    tiers = {}
+    criteria_map = {
+        "gold": "mapping_rate>=0.7, median_genes>=500, cells>=500",
+        "silver": "mapping_rate>=0.5, median_genes>=200, cells>=100",
+        "bronze": "all other SUCCESS samples",
+    }
+    for _, row in tiers_df.iterrows():
+        tier_name = row["tier"]
+        count = int(row["count"])
+        tiers[tier_name] = {
+            "count": count,
+            "pct": round(count / total * 100, 1) if total else 0,
+            "criteria": criteria_map.get(tier_name, ""),
+        }
 
     return {
         "total_success": total,
-        "tiers": {
-            "gold": {"count": gold, "pct": round(gold / total * 100, 1) if total else 0,
-                     "criteria": "mapping_rate>=0.7, median_genes>=500, cells>=500"},
-            "silver": {"count": silver, "pct": round(silver / total * 100, 1) if total else 0,
-                       "criteria": "mapping_rate>=0.5, median_genes>=200, cells>=100"},
-            "bronze": {"count": bronze, "pct": round(bronze / total * 100, 1) if total else 0,
-                       "criteria": "all other SUCCESS samples"},
-        },
+        "tiers": tiers,
     }
 
 
@@ -672,44 +596,16 @@ async def _tool_tissues(args: dict) -> dict:
 
 async def _tool_failures() -> dict:
     """Get failure category breakdown for non-SUCCESS samples."""
-    client = get_client()
+    import singlet
 
-    # Query non-SUCCESS samples
-    all_rows = []
-    page_size = 1000
-    offset = 0
-    while True:
-        resp = client.table("samples").select(
-            "status, mapping_rate, cells_called, failure_category"
-        ).neq("status", "SUCCESS").range(offset, offset + page_size - 1).execute()
-        batch = resp.data or []
-        all_rows.extend(batch)
-        if len(batch) < page_size:
-            break
-        offset += page_size
+    df = singlet.samples()
+    non_success = df[df["status"] != "SUCCESS"]
+    total = len(non_success)
 
-    total = len(all_rows)
-    categories: dict[str, int] = {}
-    for row in all_rows:
-        cat = row.get("failure_category")
-        if cat:
-            categories[cat] = categories.get(cat, 0) + 1
-        else:
-            # Infer from metrics
-            mr = row.get("mapping_rate") or 0
-            cells = row.get("cells_called") or 0
-            status = row.get("status", "")
-            if mr == 0 and cells == 0:
-                key = "download_fail" if status == "HARD_FAIL" else "pipeline_crash"
-            elif mr > 0 and mr < 0.1:
-                key = "align_low_map"
-            elif mr >= 0.1 and cells < 50:
-                key = "cells_below_threshold"
-            else:
-                key = "align_low_map"
-            categories[key] = categories.get(key, 0) + 1
+    # Count by failure_category
+    cats = non_success["failure_category"].dropna().value_counts()
+    sorted_cats = [(cat, int(count)) for cat, count in cats.items()]
 
-    sorted_cats = sorted(categories.items(), key=lambda x: -x[1])
     return {
         "total_failed": total,
         "categories": [
@@ -717,8 +613,8 @@ async def _tool_failures() -> dict:
             for cat, c in sorted_cats
         ],
         "status_breakdown": {
-            "HARD_FAIL": sum(1 for r in all_rows if r["status"] == "HARD_FAIL"),
-            "SOFT_FAIL": sum(1 for r in all_rows if r["status"] == "SOFT_FAIL"),
+            "HARD_FAIL": int((non_success["status"] == "HARD_FAIL").sum()),
+            "SOFT_FAIL": int((non_success["status"] == "SOFT_FAIL").sum()),
         },
     }
 
