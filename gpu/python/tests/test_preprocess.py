@@ -520,9 +520,13 @@ def test_highly_variable_genes_writes_to_var(gsm4037629_path):
 # ---------------------------------------------------------------------------
 # Same root cause as test_normalize_total_vs_scanpy — see CYCLE-220-FOLLOWUP.
 @pytest.mark.xfail(
-    reason="Inherits CYCLE-220-FOLLOWUP normalize_total correctness divergence.",
+    reason="Inherits CYCLE-220-FOLLOWUP normalize_total correctness divergence "
+           "PLUS test monkeypatches scanpy with our wrapper, exposing a "
+           "scipy/cupy sparse type mismatch on second normalize_total call "
+           "(`indptr lacks __cuda_array_interface__`).  Filed CYCLE-237-"
+           "FOLLOWUP for the deepcopy-preserves-cupy-sparse audit.",
     strict=True,
-    raises=AssertionError,
+    raises=(AssertionError, TypeError),
 )
 @requires_gpu
 def test_drop_in_replacement_for_scanpy_pp_normalize_total(gsm4037629_path):
