@@ -2789,3 +2789,15 @@
 - **Notebooks updated**: none
 - **Pipeline stats**: 200 submitted, 148 completed → total 2,693
 - **Strategy patch**: none — C199 recovers to near-record territory
+
+## Cycle 200 (2026-05-02–03)
+- **Domain**: pipeline-ops
+- **Tasks**: C200 batch (200 tasks, 2h timeout, pure high-yield)
+- **Workers**: orchestrator direct
+- **Expected**: ~145 COMPLETED
+- **Actual**: 149 COMPLETED, 36 FAILED, 3 OOM, 12 TIMEOUT
+- **Delta**: met expectations
+- **Commits**: pending
+- **Push**: pending
+- **Pipeline stats**: Pipeline total 2,842 COMPLETED. C200 = 149/200 (79.3% excl timeout)
+- **Strategy patch**: Sustained ~145/batch throughput confirmed over 10+ consecutive batches. Next milestone: 3,000.
