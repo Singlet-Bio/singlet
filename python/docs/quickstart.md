@@ -15,7 +15,7 @@ import singlet
 
 # One-line atlas summary
 singlet.summary()
-# → 'singlet atlas: 4,484 samples (1,968 SUCCESS) • 1,676 series • 8 species • 28 protocols • 237 tissues • 235 cell types • 5.4M cells'
+# → 'singlet atlas: 4,493 samples (1,971 SUCCESS) • 1,676 series • 8 species • 28 protocols • 37 tissues • 40 cell types • 5.4M cells'
 
 # Browse all samples
 df = singlet.samples(status="SUCCESS")
@@ -31,9 +31,9 @@ lung_cancer = singlet.samples(search="lung cancer")
 
 # Explore the atlas
 singlet.species()        # → ['Drosophila melanogaster', 'Homo sapiens', 'Mus musculus', ...]
-singlet.tissues()        # → DataFrame of 237 tissue categories
+singlet.tissues()        # → DataFrame of 37 normalized tissue categories
 singlet.cell_types()     # → DataFrame of 235 cell type categories
-singlet.protocols()      # → DataFrame of 29 protocols (SUCCESS only)
+singlet.protocols()      # → DataFrame of 28 protocols (SUCCESS only)
 singlet.quality_tiers()  # → gold/silver/bronze breakdown
 singlet.top_series(n=5)  # → top 5 series by cell count
 

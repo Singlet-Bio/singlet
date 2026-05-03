@@ -2,7 +2,7 @@
 
 **Python client for the Singlet single-cell atlas.**
 
-4,484+ samples • 1,968 successful • 5.4M cells • 8 species • 237 tissues • 235 cell types • 29 protocols • 8.7× .1pz compression
+4,493+ samples • 1,971 successful • 5.4M cells • 8 species • 37 tissues • 40 cell types • 28 protocols • 8.7× .1pz compression
 
 ## Install
 
@@ -17,7 +17,7 @@ import singlet
 
 # Browse the atlas catalog (free, works offline)
 singlet.summary()
-# → 4,484 samples (1,968 SUCCESS) • 1,676 series • 8 species • 28 protocols • 237 tissues • 235 cell types • 5.4M cells
+# → 4,493 samples (1,971 SUCCESS) • 1,676 series • 8 species • 28 protocols • 37 tissues • 40 cell types • 5.4M cells
 
 df = singlet.samples(organism="Homo sapiens", status="SUCCESS")
 singlet.samples(tissue="brain", status="SUCCESS")  # filter by tissue
@@ -53,10 +53,10 @@ sc.tl.leiden(adata)
 
 | Feature | Details |
 |---------|---------|
-| **Catalog** | Browse 4,484+ samples by organism, tissue, cell type, protocol, status, quality tier |
-| **tissues()** | 237 tissue categories from GEO (blood, brain, bone marrow, lung, PBMC...) — 35% coverage |
-| **cell_types()** | 235 cell type categories (PBMC, immune cells, bone marrow cells, cell line...) — 26% coverage |
-| **protocols()** | Protocol breakdown: 29 distinct (10xv3, Drop-seq, CEL-Seq2, sci-RNA-seq3, etc.) |
+| **Catalog** | Browse 4,493+ samples by organism, tissue, cell type, protocol, status, quality tier |
+| **tissues()** | 37 normalized tissue categories (blood, brain, tumor, bone marrow, lung...) — 64% coverage |
+| **cell_types()** | 40 normalized cell type categories (PBMC, T cells, tumor cells, cell line, K562...) — 44% coverage |
+| **protocols()** | Protocol breakdown: 28 distinct (10xv3, Drop-seq, CEL-Seq2, sci-RNA-seq3, etc.) |
 | **quality_tiers()** | Gold/silver/bronze classification |
 | **failure_categories()** | Pipeline failure breakdown (download, alignment, cells, QC) |
 | **load_dir()** | Read singlify output directory → AnnData with QC, doublets, cell cycle, ancestry, sex, summary |

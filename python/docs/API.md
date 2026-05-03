@@ -7,7 +7,7 @@ Return a one-line summary of the atlas.
 
 ```python
 >>> singlet.summary()
-'singlet atlas: 4,484 samples (1,968 SUCCESS) • 1,676 series • 8 species • 28 protocols • 237 tissues • 235 cell types • 5.4M cells'
+'singlet atlas: 4,493 samples (1,971 SUCCESS) • 1,676 series • 8 species • 28 protocols • 37 tissues • 40 cell types • 5.4M cells'
 ```
 
 ### `singlet.samples(gse_id=None, organism=None, status=None, tissue=None, cell_type=None, protocol=None, min_cells=None, quality_tier=None, search=None)` → `DataFrame`
