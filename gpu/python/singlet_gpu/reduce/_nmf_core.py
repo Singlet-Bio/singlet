@@ -117,26 +117,33 @@ def _write_nmf_result(
     """
     Write a factornet NmfResult struct into an AnnData.
 
-    Expected result fields (host numpy arrays after device transfer):
-      .W   (genes  × k) — basis matrix (gene loadings)
-      .H   (k      × cells) — coefficient matrix (cell scores);
-                               we transpose to (cells × k) for obsm
-      .loss_history (list of floats) — per-iteration loss
+    _core.NmfResult exposes W_view / H_view / d_view as CAI dicts (per
+    binding _bind_kernels.hpp + §J.13 _CaiView shim required for cupy 14).
+    loss_history exists as a Python list attribute.
     """
     import numpy as np
+    import cupy as cp
 
-    # obsm: (cells × k) cell embedding — H transposed
-    H_T = result.H.T.astype(np.float32, copy=False)  # (cells × k)
-    adata.obsm[modality_key] = H_T
+    class _CaiView:  # cupy 14 dtype-strict shim (§J.13 / CYCLE-189)
+        def __init__(self, d): self.__cuda_array_interface__ = d
 
-    # varm: (genes × k) gene loadings — W
-    adata.varm["NMF_loadings"] = result.W.astype(np.float32, copy=False)
+    k = int(result.k_used)
+    # PyNmfResult upload from factornet:
+    #   d_W: shape (rows=genes × k_used) col-major
+    #   d_H: shape (k_used × cols=cells) col-major
+    W = cp.asarray(_CaiView(result.W_view)).reshape(k, -1).T.get()  # genes × k
+    H = cp.asarray(_CaiView(result.H_view)).reshape(-1, k)          # cells × k
 
-    # uns: store convergence + parameters
+    adata.obsm[modality_key] = H.astype(np.float32, copy=False).get() \
+        if hasattr(H, "get") else H.astype(np.float32, copy=False)
+    adata.varm["NMF_loadings"] = W.astype(np.float32, copy=False)
+
+    # loss_history may not be exposed; skip gracefully.
+    loss_hist = list(result.loss_history) if hasattr(result, "loss_history") else []
     adata.uns["nmf"] = {
         "n_factors":     n_factors,
-        "loss_history":  result.loss_history,
-        "final_loss":    float(result.loss_history[-1]) if result.loss_history else float("nan"),
+        "loss_history":  loss_hist,
+        "final_loss":    float(loss_hist[-1]) if loss_hist else float("nan"),
     }
 
 

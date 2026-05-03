@@ -102,21 +102,33 @@ def _write_pca_result(adata: "anndata.AnnData", result, *, n_comps: int) -> None
     """
     Write a PCA result struct into the AnnData in scanpy layout.
 
-    Expected result fields (all host numpy arrays after device transfer):
-      .U       (cells  × n_comps) — left  singular vectors (cell embeddings)
-      .V       (genes  × n_comps) — right singular vectors (gene loadings)
-      .sigma   (n_comps,)         — singular values
+    _core.SvdResult exposes U_view / V_view / d_view as CAI dicts (per
+    binding _bind_kernels.hpp:341 + §J.13 _CaiView shim required for cupy 14).
     """
     import numpy as np
+    import cupy as cp
 
-    # X_pca: cell embeddings (cells × n_comps)
-    adata.obsm["X_pca"] = result.U.astype(np.float32, copy=False)
+    # cupy 14 dtype-strict shim (CYCLE-189 / §J.13).
+    class _CaiView:
+        def __init__(self, d): self.__cuda_array_interface__ = d
 
-    # PCs: gene loadings (genes × n_comps)  — scanpy stores as varm['PCs']
-    adata.varm["PCs"] = result.V.astype(np.float32, copy=False)
+    # PySvdResult fields (per _bind_kernels.hpp:upload_svd_result):
+    #   d_U: shape (rows × k_selected) col-major
+    #   d_V: shape (cols × k_selected) col-major
+    #   d_d: k_selected singular values
+    # Each *_view is a CAI dict from make_view_object.
+    U = cp.asarray(_CaiView(result.U_view)).reshape(int(result.k_selected), int(result.rows)).T.get()
+    V = cp.asarray(_CaiView(result.V_view)).reshape(int(result.k_selected), int(result.cols)).T.get()
+    sigma = cp.asarray(_CaiView(result.d_view)).get()
 
-    # variance and variance_ratio from singular values
-    sigma = result.sigma.astype(np.float64, copy=False)
+    # X_pca: cell embeddings (cells × n_comps).  After our CSC layout swap
+    # in the wrapper, "rows" of the binding are actually genes (the SVD
+    # input was genes × cells), so U here is (genes × k) and V is (cells ×
+    # k).  Restore scanpy convention: X_pca = cells × k = our V; PCs = our U.
+    adata.obsm["X_pca"] = V.astype(np.float32, copy=False)
+    adata.varm["PCs"]   = U.astype(np.float32, copy=False)
+
+    sigma = sigma.astype(np.float64, copy=False)
     variance = sigma ** 2 / max(adata.n_obs - 1, 1)
     total_var = float(adata.X.multiply(adata.X).sum())  # Frobenius² / (n-1)
     denom = total_var / max(adata.n_obs - 1, 1) if total_var > 0 else 1.0
