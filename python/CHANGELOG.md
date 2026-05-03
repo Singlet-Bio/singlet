@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.3] — 2026-05-03
+
+### Changed
+- MCP server: 7/11 tools use bundled parquet (<40ms) instead of Supabase queries (200-500ms)
+- Removed redundant `_normalize_tissue()` from MCP server (-104 net lines)
+- Corpus: 4,506 samples / 1,975 SUCCESS / 847 series / 5.45M cells
+- Tissue coverage: 64% → 70% (1,386/1,975 SUCCESS)
+- Cell type coverage: 44% → 46% (902/1,975 SUCCESS)
+
+### Fixed
+- MCP `singlet_stats` tool: used `singlet.summary()` string instead of DataFrame queries
+- MCP `singlet_quality` tool: `quality_tiers()` returns DataFrame not dict
+
 ## [1.3.2] — 2026-05-02
 
 ### Added

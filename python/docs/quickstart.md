@@ -15,7 +15,7 @@ import singlet
 
 # One-line atlas summary
 singlet.summary()
-# → 'singlet atlas: 4,493 samples (1,971 SUCCESS) • 1,676 series • 8 species • 28 protocols • 37 tissues • 40 cell types • 5.4M cells'
+# → 'singlet atlas: 4,506 samples (1,975 SUCCESS) • 1,679 series • 8 species • 28 protocols • 37 tissues • 40 cell types • 5.4M cells'
 
 # Browse all samples
 df = singlet.samples(status="SUCCESS")
