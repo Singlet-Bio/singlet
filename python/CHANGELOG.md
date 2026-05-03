@@ -8,7 +8,7 @@
 - Blog post #39: "4 Million Cells: The Singlet Atlas Passes a Major Milestone"
 
 ### Changed
-- Corpus: 3,251 samples / 1,390 SUCCESS / 665 series / 4.0M cells / 8 species / 29 protocols
+- Corpus: 4,345 samples / 1,899 SUCCESS / 828 series / 5.3M cells / 8 species / 29 protocols
 - Parquets rebuilt with normalized tissue/cell_type categories (fixed duplicates like `bone_marrow` vs `bone marrow`)
 - MCP README updated with all 11 tools
 
