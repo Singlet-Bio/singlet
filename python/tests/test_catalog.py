@@ -167,3 +167,26 @@ def test_samples_filter_cell_type():
     pbmc = singlet.samples(cell_type="PBMC")
     assert len(pbmc) > 50
     assert all(pbmc["cell_type"].str.contains("PBMC", na=False))
+
+
+def test_quality_tiers():
+    import singlet
+    qt = singlet.quality_tiers()
+    assert isinstance(qt, pd.DataFrame)
+    assert len(qt) == 3
+    assert set(qt["tier"]) == {"gold", "silver", "bronze"}
+    assert "count" in qt.columns
+    assert "pct" in qt.columns
+    assert qt["count"].sum() > 1000
+
+
+def test_protocols():
+    import singlet
+    p = singlet.protocols()
+    assert isinstance(p, pd.DataFrame)
+    assert len(p) > 10
+    assert "protocol" in p.columns
+    assert "count" in p.columns
+    # 10xv3 should be the top protocol
+    assert p.iloc[0]["protocol"] == "10xv3"
+    assert p.iloc[0]["count"] > 500
