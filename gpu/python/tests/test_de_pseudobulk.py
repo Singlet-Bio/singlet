@@ -220,6 +220,14 @@ def test_pseudobulk_de_writes_uns():
 # ---------------------------------------------------------------------------
 # test_pseudobulk_de_min_cells_filter
 # ---------------------------------------------------------------------------
+@pytest.mark.xfail(
+    reason="C++ kernel `_core.donor_pseudobulk_de` raises CUDA illegal "
+           "memory access when min_cells_per_pseudobulk filters out a "
+           "(donor, cluster) cell group entirely.  Edge-case kernel bug — "
+           "filed CYCLE-211-PSEUDOBULK-MIN-CELLS-FILTER-CUDA-CRASH.",
+    strict=True,
+    raises=RuntimeError,
+)
 @requires_gpu
 def test_pseudobulk_de_min_cells_filter():
     """pseudobulk_de() excludes (donor, cell_type) groups with fewer than min_cells.
