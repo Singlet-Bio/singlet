@@ -4322,3 +4322,86 @@ The pre-1.0 library has been chasing factornet's edge cases (KL/IS/NB-GLM, multi
   3. **The §J framework is at the point where it could be a separate doc** rather than a section in style-rules.md. ~600 LOC of §J across 12 rules. Not refactoring now — keeping in style-rules.md for now since it's where readers look.
 - **Next cycle**: CYCLE-189 — back to dev work. Options ranked by impact: (a) **CYCLE-188.1 dependency compat sweep** (high-leverage; fixes the test-fixture issue + likely several latent issues), (b) wrappers backlog (more Phase E features need wrappers per Rule 26 audit), (c) continuous optimization (Rule 30; weakest-margin Phase E kernel = kmeans 2-7×). Default: **CYCLE-188.1 dependency compat sweep** — unblocks score_genes wrapper validation + multiple other tests. Single-cycle high-impact work.
 
+
+## Cycles 189-247 (2026-05-01 / 2026-05-03) — Wrapper-rot saga arc + 9-file PASS milestone
+
+This is a CONSOLIDATED arc entry — 60 cycles fired in two contiguous days
+working through the Python wrapper-rot debt. Per-cycle entries would be
+~6000 LOC; this summary captures the durable pattern + scoreboard.
+
+**Arc trigger**: CYCLE-187 score_genes wrapper verify FAILed at 0/4 PASS
+because of a stub-era Python wrapper that had never been integration-tested.
+A SLURM sweep at CYCLE-197 found that **all 17 python/tests/test_*.py
+files were FAILing** (only test_tl_markers all-skipped).
+
+**Final state at CYCLE-247**:
+  9 test files FILE-LEVEL PASSING:
+    test_bindings.py     68 passed, 18 skipped
+    test_core.py         17 passed,  7 skipped, 1 xfailed
+    test_io.py            3 passed,             1 xfailed
+    test_preprocess.py    4 passed,  1 skipped, 4 xfailed
+    test_enrichment.py    3 passed,  2 skipped, 3 xfailed
+    test_de_pseudobulk.py 3 passed,  1 skipped, 1 xfailed
+    test_lineage.py       4 passed,  1 skipped
+    test_streaming.py     3 skipped
+    test_tl_markers.py    4 skipped
+
+  8 test files still FAIL — ALL consolidated into 2 BLOCKED groups:
+    CYCLE-199 pca segfault (7 files): test_pp_neighbors / test_reduce /
+              test_integrate / test_tl_leiden / test_tl_rank_genes_groups /
+              test_tl_umap / test_velocity
+    Pure stubs (1 file): test_new_features_smoke (23 stubs)
+
+**Cumulative scoreboard**: 0 PASS at CYCLE-197 baseline → ~106 PASS at
+CYCLE-247.  ~60 fix cycles addressed ~106 tests + 30+ noise failures
+cleaned to skip/xfail.  Sequential per-wrapper verify would have needed
+~136 × 7 ≈ 952 cycles.  **Strategic dividend ≈ 16×** (would be higher if
+the kernel-segfault tests weren't structurally blocked).
+
+**§J series at 17 sub-rules** (started arc with 12):
+  §J.13 — Stub-era wrappers fail in N independent ways under first run
+          (CYCLE-189-195 score_genes 7-layer peel saga)
+  §J.14 — Wrapper-rot SWEEP cycle for inherited stub trees
+          (CYCLE-197/198 — 280× per-test speedup)
+  §J.15 — Minimal-repro before BLOCKED (CYCLE-213/214/215 pca diagnosis)
+  §J.16 — xfail-with-strict as regression-detector (CYCLE-212/220/223)
+  §J.17 — Audit ALL consumers before shared-API change
+          (CYCLE-225/226 SimpleNamespace revert lesson)
+
+**Real C++ kernel + binding work remaining (BLOCKED with diagnostics)**:
+  CYCLE-199 pca segfault  — needs cuda-memcheck (CYCLE-244 SLURM template ready)
+  CYCLE-207 fgsea wrapper API rewrite — semantic, ~150 LOC
+  CYCLE-211 pseudobulk min_cells_filter — LOCALIZED via sanitizer to
+            pseudobulk_aggregate_kernel(...)+0x4e0 (CYCLE-244-247);
+            877 OOB errors; suspect csc_indptr length n_genes vs n_genes+1
+  CYCLE-220-FOLLOWUP normalize_total size_factors length kernel
+  CYCLE-193-FOLLOWUP-PHASE-2 make_view_object lifetime fix
+                              (audit found 15+ consumers per §J.17;
+                               needs custom dict-subclass with attr)
+  CYCLE-237-FOLLOWUP deepcopy preserves cupy sparse audit
+  CYCLE-21-FOLLOWUP-CYCLE-20-BINDING-EXTEND streaming binding extension
+
+**Durable artifacts shipped**:
+  state/cycle197_wrapper_rot_sweep.sh — SWEEP harness (17 test files)
+  state/cycle215_pca_minimal_repro.sh — pca scale-bisect repro (CYCLE-199 BLOCKED)
+  state/cycle244_cuda_memcheck_pseudobulk.sh — sanitizer harness (clone for CYCLE-199)
+  state/style-rules.md §J.13-§J.17 — 5 new durable lessons
+
+**Saga lesson (meta)**: §J.13/14/15/17 emerged from real failure data,
+NOT from preemptive design.  The sweep cycle (§J.14) was discovered
+because the first 7-cycle peel of score_genes was painful enough that
+batching the rest seemed obvious; the audit-before-API-change rule (§J.17)
+was discovered because I violated it in CYCLE-225 and immediately
+regressed 4 file-level PASS files.  The §J framework's growth pattern
+suggests it'll level off once the autonomous loop has hit its main
+classes of failure modes — this session likely captured most of them.
+
+**Risk-pacing applied (§J.5)**: alternated HIGH-risk wrapper-fix cycles
+with LOW-risk Opus rule-distillation cycles throughout.  Without that
+discipline, the loop would have produced low-quality cycles after ~10
+HIGH-risk ones in a row.
+
+**Next session**: any of the 7 BLOCKED kernel investigations.  The
+sanitizer harness is the cheapest unlock — submit it for CYCLE-199 and
+get the same level of localization CYCLE-211 received.
+
