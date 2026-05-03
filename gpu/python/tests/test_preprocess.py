@@ -381,6 +381,10 @@ def test_highly_variable_genes_vs_scanpy_seurat_v3(gsm4037629_path):
     singlet_gpu.preprocess.highly_variable_genes(
         adata_gpu, n_top_genes=_N_TOP_HVG, flavor="seurat_v3", inplace=True
     )
+    pytest.importorskip(
+        "skmisc",
+        reason="scikit-misc required by scanpy.pp.highly_variable_genes(flavor='seurat_v3')",
+    )
     sc.pp.highly_variable_genes(
         adata_cpu, n_top_genes=_N_TOP_HVG, flavor="seurat_v3"
     )
