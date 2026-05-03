@@ -150,8 +150,9 @@ async def run_smoke_tests():
     try:
         result = await _tool_protocols()
         assert "protocols" in result, "Missing protocols"
+        top = result['protocols'][0]
         print(f"  ✓ {len(result['protocols'])} protocols, "
-              f"top: {result['protocols'][0]['protocol']} ({result['protocols'][0]['count']})")
+              f"top: {top['protocol']} ({top['total_samples']})")
         passed += 1
     except Exception as e:
         print(f"  ✗ FAILED: {e}")
@@ -162,8 +163,9 @@ async def run_smoke_tests():
     try:
         result = await _tool_quality()
         assert "tiers" in result, "Missing tiers"
-        print(f"  ✓ {len(result['tiers'])} tiers: " +
-              ", ".join(f"{t['tier']}={t['count']}" for t in result['tiers']))
+        tiers = result['tiers']
+        print(f"  ✓ {len(tiers)} tiers: " +
+              ", ".join(f"{k}={v['count']}" for k, v in tiers.items()))
         passed += 1
     except Exception as e:
         print(f"  ✗ FAILED: {e}")
@@ -172,9 +174,9 @@ async def run_smoke_tests():
     # Test 8: Tissues
     print("\n[8/11] singlet_tissues...")
     try:
-        result = await _tool_tissues({})
-        assert "tissues" in result, "Missing tissues"
-        print(f"  ✓ {result.get('categories', '?')} tissue categories, "
+        result = await _tool_tissues({"top_n": 25})
+        assert "top_tissues" in result, "Missing top_tissues"
+        print(f"  ✓ {result.get('unique_tissues', '?')} tissue categories, "
               f"{result.get('coverage_pct', '?')}% coverage")
         passed += 1
     except Exception as e:
