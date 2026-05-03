@@ -492,7 +492,7 @@ async def _tool_browse(args: dict) -> dict:
     sort_by = args.get("sort_by", "pipeline_date")
 
     query = client.table("samples").select(
-        "gsm_id, gse_id, organism, protocol, status, cells_called, mapping_rate, source",
+        "gsm_id, gse_id, organism, protocol, status, cells_called, mapping_rate, source, title, characteristics",
         count="exact",
     )
 
@@ -501,17 +501,28 @@ async def _tool_browse(args: dict) -> dict:
     if args.get("status"):
         query = query.eq("status", args["status"])
     if args.get("tissue"):
-        query = query.ilike("source", f"%{args['tissue']}%")
+        tissue = args["tissue"].replace("%", "").replace("(", "").replace(")", "")
+        query = query.or_(
+            f"source.ilike.%{tissue}%,characteristics->>tissue.ilike.%{tissue}%"
+        )
 
     query = query.order(sort_by, desc=True)
     query = query.range(page * page_size, (page + 1) * page_size - 1)
     resp = query.execute()
 
+    # Extract tissue/cell_type from characteristics for display
+    samples = []
+    for s in (resp.data or []):
+        chars = s.pop("characteristics", None) or {}
+        s["tissue"] = chars.get("tissue", "")
+        s["cell_type"] = chars.get("cell type", "")
+        samples.append(s)
+
     return {
         "page": page,
         "page_size": page_size,
         "total": resp.count or 0,
-        "samples": resp.data or [],
+        "samples": samples,
     }
 
 
