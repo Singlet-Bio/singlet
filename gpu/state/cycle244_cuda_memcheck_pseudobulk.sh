@@ -78,6 +78,9 @@ echo "--- compute-sanitizer pytest test_pseudobulk_de_min_cells_filter ---"
 #   --target-processes all — needed because pytest spawns workers
 #   --print-limit 4       — only print first 4 errors per kernel (full trace
 #                            on first error is enough for diagnosis)
+# Need to cd into the tests dir so pytest finds conftest.py.
+cd "$PY_DIR/tests"
+
 compute-sanitizer \
     --tool memcheck \
     --launch-timeout 0 \
@@ -85,7 +88,7 @@ compute-sanitizer \
     --print-limit 4 \
     --log-file=/mnt/home/debruinz/Singlet-AI/singlet-gpu/state/cycle244_sanitizer_${SLURM_JOB_ID}.log \
     python -m pytest \
-        "$PY_DIR/tests/test_de_pseudobulk.py::test_pseudobulk_de_min_cells_filter" \
+        "test_de_pseudobulk.py::test_pseudobulk_de_min_cells_filter" \
         --runxfail \
         -v --tb=short 2>&1 | tail -60
 
