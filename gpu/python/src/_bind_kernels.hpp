@@ -328,12 +328,18 @@ static PySvdResult upload_svd_result(
     out.cols       = cols;
     out.stream     = stream;
 
-    // U: rows × k (Eigen col-major → flat float array, rows*k elements)
-    out.d_U = upload_eigen_matrix(r.U.data(), static_cast<std::size_t>(rows * k));
-    // d: k singular values
-    out.d_d = upload_eigen_matrix(r.d.get(), static_cast<std::size_t>(k));
-    // V: cols × k
-    out.d_V = upload_eigen_matrix(r.V.data(), static_cast<std::size_t>(cols * k));
+    // CYCLE-257 (CYCLE-199 host-side bug fix): SvdResult::UView::storage is
+    // a `const std::vector<float>* storage = &U_data` set inside finalize().
+    // After return-by-value (RVO miss / move), `&U_data` becomes a stale
+    // address pointing into the source SvdResult that's been moved-from /
+    // destroyed.  `r.U.data() → storage->data()` then dereferences a freed
+    // pointer → cudaMemcpyHostToDevice reads from invalid host address →
+    // crash inside libcuda (CYCLE-256 gdb stack: cudaMemcpy in libcudart
+    // called from _core).  Fix: use the underlying vector data() directly,
+    // which has stable internal heap pointer that survives moves.
+    out.d_U = upload_eigen_matrix(r.U_data.data(), static_cast<std::size_t>(rows * k));
+    out.d_d = upload_eigen_matrix(r.d.get(),       static_cast<std::size_t>(k));
+    out.d_V = upload_eigen_matrix(r.V_data.data(), static_cast<std::size_t>(cols * k));
 
     return out;
 }
