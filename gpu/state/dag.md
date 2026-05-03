@@ -3,6 +3,24 @@
 Live cycle status only. ≤20 entries. Anything 🔴 for >7 days without movement gets demoted to `state/followups.md`. User-gated items live in `state/blockers.md`. Completed entries are moved to `state/cycle-log.md` each cycle.
 
 - **CYCLE-212-TEST_IO-XFAIL-MARK** (PASS — test_io.py FULLY PASSING, sweep job 373038 9:50): marked `test_write_pz_roundtrip` as `xfail(strict=True, raises=NotImplementedError)`. Regression-safe: surfaces if the binding ever lands. test_io now reports 3 PASS + 1 xfailed → file-level PASS.
+- **CYCLE-244/245-CYCLE-211-LOCALIZED** (compute-sanitizer output, sweep job 374038): cuda-memcheck OOB localized precisely:
+  ```
+  Invalid __global__ read of size 4 bytes
+      at singlet_gpu::de::detail::pseudobulk_aggregate_kernel(...)+0x4e0
+      by thread (64,0,0) in block (0,0,0)
+      Address ... is out of bounds, 181 bytes after the nearest
+      allocation at 0x... of size 80 bytes
+  ```
+  **Bug is in `pseudobulk_aggregate_kernel`, NOT apeglm** (CYCLE-242 was wrong, retracted in CYCLE-243). Thread 64 in block 0 (first gene) is reading an OOB float during the inner loop at line 217-223 of donor_pseudobulk.h:
+  ```cpp
+  for (int i = col_start + (int)threadIdx.x; i < col_end; i += (int)blockDim.x) {
+      int   cell  = csc_row_indices[i];        // candidate: cell ≥ n_cells?
+      int   grp   = cell_to_group[cell];       // candidate: cell_to_group[OOB cell]
+      float val   = csc_values[i];             // candidate: csc_values[i ≥ nnz]
+      ...
+  }
+  ```
+  Likely root cause: when min_cells_filter rejects most cells, the resulting CSC layout has `csc_indptr` values that overshoot the actual `csc_values`/`csc_row_indices` allocation. OR `cell_to_group[cell]` indexes past n_cells when cell-renumbering after filter is off-by-one. Sanitizer log + cuda-gdb at instruction +0x4e0 will localize exactly which read fires. **Filed CYCLE-244 SLURM template (state/cycle244_cuda_memcheck_pseudobulk.sh) — next implementer just submits and reads the log.**
 - **CYCLE-242-CYCLE-211-HYPOTHESIS-RETRACTED** (Opus second-pass audit per §J.15/§J.17): CYCLE-242 first-pass hypothesized `apeglm_lfc_shrinkage_kernel` missing `group_valid` guard.  Closer reading: the kernel HAS an `isfinite(v)` check that skips non-finite lfc values, AND the indexing `lfc + g*n_clusters*D_minus1 + clust*D_minus1` is in-bounds for any (g, clust) given the allocated buffer size `m * n_clusters * (n_donors-1)`.  So apeglm is NOT the OOB source.  Without `cuda-memcheck` or `compute-sanitizer` output to localize the actual offending kernel, further hypothesis-spinning would violate §J.15 (write a minimal repro before iter-N+1).  CYCLE-211 needs an actual diagnostic dispatch with `compute-sanitizer` enabled, not Opus speculation.  Retracted the apeglm hypothesis; xfail mark + filed-cycle status remains correct.
 - **CYCLE-211-PSEUDOBULK-MIN-CELLS-FILTER-CUDA-CRASH** (filed by CYCLE-210 sweep): `_core.donor_pseudobulk_de` throws `RuntimeError: CUDA error in include/singlet-gpu/de/donor_pseudobulk.h: an illegal memory access was encountered` when min_cells_per_pseudobulk filters out most genes. Wrapper is shipped (3/4 test_pseudobulk_de PASS); real C++ kernel edge-case bug. Same investigation cycle candidate as CYCLE-199 (pca segfault). Suspect off-by-one or empty-cluster handling in donor_pseudobulk.h.
 - **CYCLE-210-PSEUDOBULK-RESULT-MAPPING** (PASS — pseudobulk_de 3/4 PASS milestone, sweep job 372977): rewrote result-mapping to match actual binding (single struct with CAI views, not list-per-group). Wrapper now ships per Rule 26. 4-cycle wrapper peel: CYCLE-208 sig+device-upload → CYCLE-209 device-upload labels → CYCLE-210 result-mapping → CYCLE-211 (kernel bug, separate fix).
