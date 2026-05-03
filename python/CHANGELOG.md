@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.3.2] — Unreleased
+## [1.3.2] — 2026-05-02
 
 ### Added
 - `singlet_species` MCP tool (11 tools total)

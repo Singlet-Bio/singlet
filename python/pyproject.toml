@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "singlet-bio"
-version = "1.3.1"
-description = "Python client for the Singlet single-cell atlas — 3,244+ samples, 4.0M cells, 8 species, 40 cell types, 11 MCP tools"
+version = "1.3.2"
+description = "Python client for the Singlet single-cell atlas — 4,345+ samples, 5.3M cells, 8 species, 40 cell types, 11 MCP tools"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.9"
