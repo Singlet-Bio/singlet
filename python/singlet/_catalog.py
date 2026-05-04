@@ -424,6 +424,7 @@ def samples(
     protocol: Optional[str] = None,
     min_cells: Optional[int] = None,
     quality_tier: Optional[str] = None,
+    quality: Optional[str] = None,
     search: Optional[str] = None,
 ) -> pd.DataFrame:
     """Query the sample index with optional filters.
@@ -456,6 +457,9 @@ def samples(
         Filtered sample index.
     """
     df = _load_sample_index()
+    # Allow 'quality' as shorthand for 'quality_tier'
+    if quality is not None and quality_tier is None:
+        quality_tier = quality
     if search is not None:
         text_cols = df.select_dtypes(include="object").columns
         mask = df[text_cols].apply(
