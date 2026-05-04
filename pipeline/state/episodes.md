@@ -2814,3 +2814,16 @@
 - **E2E panels run**: none
 - **Pipeline stats**: 200 submitted, 155 COMPLETED, 40 FAILED, 4 TIMEOUT, 1 OOM
 - **Strategy patch**: C201 = 155, new record. Pipeline at 2,997 — just 3 from 3,000. Next batch crosses milestone.
+
+## Cycle 202 (2026-05-04 ~04:00 – 14:58 EDT)
+- **Domain**: pipeline-ops
+- **Tasks**: C202 batch (200 tasks, 2h timeout, high-yield). 3,000 milestone batch.
+- **Workers**: orchestrator direct
+- **Expected**: ~148 COMPLETED (75%)
+- **Actual**: 140 COMPLETED (70%), 44 FAILED, 14 TIMEOUT, 2 OOM
+- **Delta**: missed (-8 below expectation). Higher align_low_map (50) + download_fail (35) than typical.
+- **Commits**: this cycle
+- **Push**: this cycle
+- **E2E panels run**: none
+- **Pipeline stats**: 200 submitted, 140 COMPLETED → pipeline total **3,137**. **3,000 MILESTONE CROSSED!**
+- **Strategy patch**: C202 below average due to elevated SOFT_FAIL (align_low_map=50, cells_below_threshold=7). True SUCCESS (result JSON) = 76/200. Protocol mix was normal. No actionable fix — align_low_map is irreducible for some protocol/organism combos. Sustained throughput confirmed: C203 already running (job 374635), C204+C205 pre-staged.
