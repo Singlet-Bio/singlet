@@ -2,7 +2,7 @@
 
 **Python client for the Singlet single-cell atlas.**
 
-4,500+ samples • 1,975 successful • 5.4M cells • 8 species • 37 tissues • 40 cell types • 28 protocols • 8.7× .1pz compression
+4,525 samples • 1,983 successful • 5.5M cells • 8 species • 37 tissues • 40 cell types • 28 protocols • 8.7× .1pz compression
 
 ## Install
 
@@ -17,7 +17,7 @@ import singlet
 
 # Browse the atlas catalog (free, works offline)
 singlet.summary()
-# → 4,493 samples (1,971 SUCCESS) • 1,676 series • 8 species • 28 protocols • 37 tissues • 40 cell types • 5.4M cells
+# → 4,525 samples (1,983 SUCCESS) • 848 series • 8 species • 28 protocols • 37 tissues • 40 cell types • 5.5M cells
 
 df = singlet.samples(organism="Homo sapiens", status="SUCCESS")
 singlet.samples(tissue="brain", status="SUCCESS")  # filter by tissue
@@ -53,7 +53,7 @@ sc.tl.leiden(adata)
 
 | Feature | Details |
 |---------|---------|
-| **Catalog** | Browse 4,493+ samples by organism, tissue, cell type, protocol, status, quality tier |
+| **Catalog** | Browse 4,525+ samples by organism, tissue, cell type, protocol, status, quality tier |
 | **tissues()** | 37 normalized tissue categories (blood, brain, tumor, bone marrow, lung...) — 70% coverage |
 | **cell_types()** | 40 normalized cell type categories (PBMC, T cells, tumor cells, cell line, K562...) — 46% coverage |
 | **protocols()** | Protocol breakdown: 28 distinct (10xv3, Drop-seq, CEL-Seq2, sci-RNA-seq3, etc.) |
@@ -68,7 +68,7 @@ sc.tl.leiden(adata)
 
 ## Notebooks
 
-18 executed Jupyter notebooks at [`notebooks/`](notebooks/):
+19 executed Jupyter notebooks at [`notebooks/`](notebooks/):
 - **quickstart** — Atlas catalog exploration
 - **gene_counting** — Equivalence vs STARsolo (r=0.9995)
 - **sex_calling** — XIST/SRY validation (100% agreement)
