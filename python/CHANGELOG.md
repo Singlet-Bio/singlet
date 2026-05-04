@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.4] — 2026-05-03
+
+### Changed
+- MCP `singlet_browse`: returns tissue + cell_type from characteristics JSON, searches characteristics->>tissue
+- MCP `singlet_search`: searches characteristics->>tissue and cell type, results include tissue/cell_type fields
+- Corpus: 4,525 → 4,552 samples (active pipeline c201 batch)
+- Parquet: 4,525 samples / 1,983 SUCCESS / 848 series / 5.48M cells
+
+### Fixed
+- MCP browse: tissue filter searched only `source` column — now also searches `characteristics->>tissue`
+- MCP search: input sanitized to prevent PostgREST filter injection
+- ETL: pipeline_date now set on new results (previously null for ~44% of corpus)
+- Backfilled 1,983 null pipeline_dates from result JSON file timestamps
+
 ## [1.3.3] — 2026-05-03
 
 ### Changed
