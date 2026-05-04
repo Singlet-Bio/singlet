@@ -2,12 +2,22 @@
 
 ## [1.3.5] — 2026-05-04
 
+### Added
+- `info()` now accepts GSM accessions (sample lookup from bundled parquet)
+- `samples()` accepts `quality=` as alias for `quality_tier=`
+- Tests for info(GSM) and quality alias (137 tests total)
+
 ### Changed
-- Corpus: 4,552 → 4,678 samples (+126 from c201 batch completion)
-- SUCCESS: 1,983 → 2,066 (+83)
-- Cells: 5.48M → 5.65M (+170K)
+- Corpus: 4,552 → 4,697 samples (+145 from c201 batch completion)
+- SUCCESS: 1,983 → 2,072 (+89)
+- Cells: 5.48M → 5.66M (+180K)
 - Series: 848 → 873 (+25)
 - Quality tiers: gold=464, silver=586, bronze=1,016
+- MCP `singlet_load`: returns organism, protocol, title, tissue, cell_type
+- MCP `singlet_qc`: extracts tissue/cell_type to top-level fields
+
+### Fixed
+- Domain references updated: singletdb.com → singlet.bio in auth, loader, docs
 
 ## [1.3.4] — 2026-05-03
 
