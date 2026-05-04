@@ -17,7 +17,7 @@ import singlet
 
 # Browse the atlas catalog (free, works offline)
 singlet.summary()
-# → 4,525 samples (1,983 SUCCESS) • 848 series • 8 species • 28 protocols • 37 tissues • 40 cell types • 5.5M cells
+# → 4,678 samples (2,066 SUCCESS) • 873 series • 8 species • 38 protocols • 37 tissues • 40 cell types • 5.6M cells
 
 df = singlet.samples(organism="Homo sapiens", status="SUCCESS")
 singlet.samples(tissue="brain", status="SUCCESS")  # filter by tissue
@@ -53,7 +53,7 @@ sc.tl.leiden(adata)
 
 | Feature | Details |
 |---------|---------|
-| **Catalog** | Browse 4,525+ samples by organism, tissue, cell type, protocol, status, quality tier |
+| **Catalog** | Browse 4,678+ samples by organism, tissue, cell type, protocol, status, quality tier |
 | **tissues()** | 37 normalized tissue categories (blood, brain, tumor, bone marrow, lung...) — 70% coverage |
 | **cell_types()** | 40 normalized cell type categories (PBMC, T cells, tumor cells, cell line, K562...) — 46% coverage |
 | **protocols()** | Protocol breakdown: 28 distinct (10xv3, Drop-seq, CEL-Seq2, sci-RNA-seq3, etc.) |
