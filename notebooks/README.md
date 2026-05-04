@@ -36,7 +36,7 @@
 | Notebook | Description |
 |----------|-------------|
 | [gene_counting.ipynb](gene_counting.ipynb) | Formal equivalence vs STARsolo (r=0.9995) |
-| [corpus_analytics.ipynb](corpus_analytics.ipynb) | Atlas-wide QC distributions across 1,983+ samples |
+| [corpus_analytics.ipynb](corpus_analytics.ipynb) | Atlas-wide QC distributions across 2,066+ samples |
 | [protocol_detection.ipynb](protocol_detection.ipynb) | 29 protocols auto-detected, QC by protocol |
 
 ## Format & I/O
@@ -70,11 +70,11 @@ pip install "singlet-bio @ git+https://github.com/Singlet-Bio/singlet#subdirecto
 
 ## Atlas Stats
 
-- **4,525** samples processed
-- **1,983** successful (44%)
-- **848** GEO series
+- **4,678** samples processed
+- **2,066** successful (44%)
+- **873** GEO series
 - **8** species (human, mouse, macaque, fruit fly, chicken, cat, pig, gallus)
-- **5.5M** total cells
+- **5.65M** total cells
 - **37** normalized tissue categories (70% coverage)
-- **40** normalized cell type categories (46% coverage)
+- **40** normalized cell type categories (44% coverage)
 - **19** notebooks with embedded matplotlib plots

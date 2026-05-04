@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.5] — 2026-05-04
+
+### Changed
+- Corpus: 4,552 → 4,678 samples (+126 from c201 batch completion)
+- SUCCESS: 1,983 → 2,066 (+83)
+- Cells: 5.48M → 5.65M (+170K)
+- Series: 848 → 873 (+25)
+- Quality tiers: gold=464, silver=586, bronze=1,016
+
 ## [1.3.4] — 2026-05-03
 
 ### Changed
