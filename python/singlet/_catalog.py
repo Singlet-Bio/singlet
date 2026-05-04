@@ -179,18 +179,24 @@ def sample_index(gse_id: Optional[str] = None) -> pd.DataFrame:
 
 
 def info(accession: str) -> dict:
-    """Return metadata for a single dataset.
+    """Return metadata for a single dataset or sample.
 
     Parameters
     ----------
     accession : str
-        GEO series accession (e.g. "GSE136831").
+        GEO series (GSE*) or sample (GSM*) accession.
 
     Returns
     -------
     dict
-        Dataset metadata including organism, n_cells, protocol, etc.
+        Dataset/sample metadata including organism, n_cells, protocol, etc.
     """
+    if accession.startswith("GSM"):
+        df = _load_sample_index()
+        rows = df[df["gsm_id"] == accession]
+        if rows.empty:
+            raise KeyError(f"Accession {accession!r} not found in sample index")
+        return rows.iloc[0].to_dict()
     df = _load_catalog()
     rows = df[df["gse_id"] == accession]
     if rows.empty:
