@@ -6,7 +6,7 @@ import os
 from typing import Optional
 
 _API_KEY: Optional[str] = None
-_API_BASE = "https://api.singletdb.com/v1"
+_API_BASE = "https://api.singlet.bio/v1"
 
 
 def login(api_key: Optional[str] = None):
@@ -28,7 +28,7 @@ def login(api_key: Optional[str] = None):
     if not key:
         raise ValueError(
             "No API key provided. Pass api_key= or set SINGLET_API_KEY "
-            "environment variable. Get your key at https://singletdb.com/pricing"
+            "environment variable. Get your key at https://singlet.bio/pricing"
         )
     _API_KEY = key
 

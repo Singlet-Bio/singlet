@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 _ZENODO_BASE = "https://zenodo.org/records/XXXXXX/files"
-_AWS_BASE = "https://data.singletdb.com/v1"
+_AWS_BASE = "https://data.singlet.bio/v1"
 
 
 def _cache_dir() -> Path:

@@ -1,6 +1,6 @@
 # singlet
 
-Python client for [SingletDB](https://singletdb.com) — the world's largest uniformly processed single-cell database.
+Python client for [SingletDB](https://singlet.bio) — the world's largest uniformly processed single-cell database.
 
 ## Overview
 
