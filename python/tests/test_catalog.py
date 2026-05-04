@@ -121,10 +121,30 @@ def test_info_existing_series():
     assert info[cells_key] > 0
 
 
+def test_info_gsm_lookup():
+    """info() should also accept GSM accessions."""
+    import singlet
+    df = singlet.samples(status="SUCCESS")
+    gsm = df.iloc[0]["gsm_id"]
+    info = singlet.info(gsm)
+    assert isinstance(info, dict)
+    assert info["gsm_id"] == gsm
+    assert info["status"] == "SUCCESS"
+
+
 def test_info_missing_raises():
     import singlet
     with pytest.raises(KeyError):
         singlet.info("GSE000000")
+
+
+def test_samples_quality_alias():
+    """samples(quality='gold') should work as alias for quality_tier='gold'."""
+    import singlet
+    gold1 = singlet.samples(quality="gold")
+    gold2 = singlet.samples(quality_tier="gold")
+    assert len(gold1) == len(gold2)
+    assert len(gold1) > 0
 
 
 def test_failure_categories():
