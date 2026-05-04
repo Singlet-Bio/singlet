@@ -465,7 +465,7 @@ async def _tool_load(args: dict) -> dict:
     client = get_client()
 
     resp = client.table("samples").select(
-        "gsm_id, gse_id, status, pz_path, pz_size_bytes, cells_called"
+        "gsm_id, gse_id, organism, protocol, status, pz_path, pz_size_bytes, cells_called, title, characteristics"
     ).eq("gsm_id", gsm_id).execute()
 
     if not resp.data:
@@ -481,10 +481,16 @@ async def _tool_load(args: dict) -> dict:
         }
 
     size_mb = round(sample["pz_size_bytes"] / 1e6, 1) if sample.get("pz_size_bytes") else None
+    chars = sample.get("characteristics") or {}
 
     return {
         "gsm_id": gsm_id,
         "gse_id": sample["gse_id"],
+        "organism": sample["organism"],
+        "protocol": sample["protocol"],
+        "title": sample.get("title", ""),
+        "tissue": chars.get("tissue", ""),
+        "cell_type": chars.get("cell type", ""),
         "cells": sample["cells_called"],
         "file_size_mb": size_mb,
         "format": ".1pz (SinglePress compressed sparse matrix)",
