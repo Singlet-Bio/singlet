@@ -430,6 +430,7 @@ async def _tool_qc(args: dict) -> dict:
         return {"error": f"Sample {gsm_id} not found in atlas"}
 
     sample = resp.data[0]
+    chars = sample.get("characteristics") or {}
     return {
         "gsm_id": sample["gsm_id"],
         "gse_id": sample["gse_id"],
@@ -437,6 +438,8 @@ async def _tool_qc(args: dict) -> dict:
         "protocol": sample["protocol"],
         "modality": sample["modality"],
         "status": sample["status"],
+        "tissue": chars.get("tissue", ""),
+        "cell_type": chars.get("cell type", ""),
         "qc_metrics": {
             "mapping_rate": sample.get("mapping_rate"),
             "cells_called": sample.get("cells_called"),
@@ -454,7 +457,7 @@ async def _tool_qc(args: dict) -> dict:
         },
         "title": sample.get("title"),
         "source": sample.get("source"),
-        "characteristics": sample.get("characteristics"),
+        "characteristics": chars,
         "web_url": f"https://singlet.bio/sample/{gsm_id}",
     }
 
