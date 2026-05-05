@@ -153,7 +153,7 @@ def compute(
     if not hasattr(_core, "chromvar"):
         raise ImportError(
             "_core.chromvar is not available.  "
-            "Compile the singlet-gpu pybind11 extension on a CUDA node."
+            "Install with: pip install singlet[gpu]"
         )
 
     # Coerce peak_gc and peak_mean_access to float32 c-contiguous numpy arrays.

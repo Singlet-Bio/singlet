@@ -164,7 +164,7 @@ def detect(
     if not hasattr(_core, "detect_cna"):
         raise ImportError(
             "_core.detect_cna is not available.  "
-            "Compile the singlet-gpu pybind11 extension on a CUDA node."
+            "Install with: pip install singlet[gpu]"
         )
 
     full_window = 2 * smooth_half_win + 1

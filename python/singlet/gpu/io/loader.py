@@ -135,7 +135,7 @@ def _build_anndata(device_csc, metadata) -> "anndata.AnnData":
     except ImportError as exc:
         raise ImportError(
             "read_pz_to_anndata requires anndata, cupy, and pandas. "
-            "Install: pip install 'singlet-gpu[anndata]' cupy-cuda12x"
+            "Install: pip install 'singlet[gpu]'"
         ) from exc
 
     rows = device_csc.rows

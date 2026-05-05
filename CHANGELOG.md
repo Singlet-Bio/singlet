@@ -1,6 +1,37 @@
 # Changelog
 
-All notable changes to the singlet-bio Python package.
+All notable changes to the singlet project.
+
+## [2.0.0] — 2026-05-05
+
+### Breaking Changes
+- **Unified package**: `singlet-bio`, `singlepress`, `singlet-gpu` merged into single `singlet` package
+- **Install**: `pip install singlet` (replaces `pip install singlet-bio`)
+- **R package**: renamed from `singlify` to `singlet`
+- **C++ namespaces**: `singlet::pz`, `singlet::fq`, `singlet::pileup`, `singlet::gpu`
+
+### Features
+- **Monorepo consolidation**: Single repo ships Python, R, and C++ library
+- **Unified C++ library** (`libsinglet`): Header-only with CMake INTERFACE targets
+- **Optional extras**: `pip install singlet[torch]`, `singlet[gpu]`, `singlet[all]`
+- **STAR integration**: STAR aligner built as object library within the unified CMake project
+- **PyTorch module**: `from singlet.torch import OnePZDataset, DataLoader`
+- **GPU module**: `from singlet.gpu import ...` (requires cupy)
+- **CMake find_package**: `find_package(Singlet COMPONENTS pz fq pileup)`
+- **R GPU support**: `singlet::has_gpu()`, `gpu_pca()`, `gpu_neighbors()`, `gpu_leiden()`
+
+### Architecture
+- `include/singlet/pz/` — .1pz VOCSC codec (13x compression, 4000+ MB/s decode)
+- `include/singlet/fq/` — .1fq 2-bit packed FASTQ codec
+- `include/singlet/pileup/` — streaming BAM pileup engine (70+ modules)
+- `include/singlet/gpu/` — CUDA analysis kernels
+- `include/singlet/star/` — STAR aligner API (singlet-lite fork, 48% faster)
+
+### Removed
+- Standalone `singlepress` repository (archived)
+- Standalone `singlet-gpu` repository (archived)
+- Standalone `singlet-bio` repository (archived)
+- Agent configs moved to private `singlet-agents` repo
 
 ## [1.0.0] — 2026-05-04
 

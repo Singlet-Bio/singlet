@@ -41,7 +41,7 @@ def _require_core():
         raise AttributeError(
             "_core.fate.cospar is not available.  "
             "The C++ extension must be compiled on a CUDA-capable node.  "
-            "Run: pip install -e singlet-gpu/python/ on a GPU node."
+            "Run: pip install singlet[gpu] on a GPU node."
         )
     return _core.fate
 

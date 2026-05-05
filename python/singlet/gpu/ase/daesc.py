@@ -130,7 +130,7 @@ def run(
     if not hasattr(_core, "run_daesc"):
         raise ImportError(
             "_core.run_daesc is not available.  "
-            "Compile the singlet-gpu pybind11 extension on a CUDA node."
+            "Install with: pip install singlet[gpu]"
         )
 
     if (cell_type is not None) != (n_types > 0):

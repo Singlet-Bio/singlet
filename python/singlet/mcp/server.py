@@ -498,7 +498,7 @@ async def _tool_load(args: dict) -> dict:
         "file_size_mb": size_mb,
         "format": ".1pz (SinglePress compressed sparse matrix)",
         "python_code": f'import singlet\nadata = singlet.load("{gsm_id}")\nprint(adata)',
-        "r_code": f'library(singlepress)\nmat <- read_1pz(singlet_path("{gsm_id}"))',
+        "r_code": f'library(singlet)\nmat <- read_1pz(singlet_path("{gsm_id}"))',
         "web_url": f"https://singlet.bio/sample/{gsm_id}",
     }
 

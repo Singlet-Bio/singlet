@@ -299,7 +299,7 @@ def svd_lanczos(
     """
     import warnings
     warnings.warn(
-        "svd_lanczos is deprecated since singlet-gpu 0.1.0 and will be removed "
+        "svd_lanczos is deprecated since singlet 2.0.0 and will be removed "
         "in 0.2.0. Use pca(backend='auto') instead — it routes to the deflation "
         "winner with randomized fallback. See state/release-policy.md.",
         DeprecationWarning, stacklevel=2,
@@ -328,7 +328,7 @@ def svd_irlba(
     """
     import warnings
     warnings.warn(
-        "svd_irlba is deprecated since singlet-gpu 0.1.0 and will be removed "
+        "svd_irlba is deprecated since singlet 2.0.0 and will be removed "
         "in 0.2.0. Use pca(backend='auto') instead. See state/release-policy.md.",
         DeprecationWarning, stacklevel=2,
     )
@@ -420,7 +420,7 @@ def svd_krylov(
     """
     import warnings
     warnings.warn(
-        "svd_krylov is deprecated since singlet-gpu 0.1.0 and will be removed "
+        "svd_krylov is deprecated since singlet 2.0.0 and will be removed "
         "in 0.2.0. Use pca(backend='auto') for unconstrained SVD; for "
         "constrained factorisation use reduce.nmf.nmf instead. The l1/l2/"
         "non_negative parameters are silently ignored on this deprecated path. "

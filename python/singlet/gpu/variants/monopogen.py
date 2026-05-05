@@ -148,7 +148,7 @@ def call(
     if not hasattr(_core, "call_variants"):
         raise ImportError(
             "_core.call_variants is not available.  "
-            "Compile the singlet-gpu pybind11 extension on a CUDA node."
+            "Install with: pip install singlet[gpu]"
         )
 
     # Default ld_panels to empty list (no-LD mode).

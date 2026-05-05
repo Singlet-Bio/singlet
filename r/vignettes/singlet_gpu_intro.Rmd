@@ -1,5 +1,5 @@
 ---
-title: "Introduction to singletGpu"
+title: "GPU Analysis with singlet"
 author: "Zachary DeBruine"
 date: "`r Sys.Date()`"
 output:
@@ -7,7 +7,7 @@ output:
     toc: true
     toc_float: true
 vignette: >
-  %\VignetteIndexEntry{Introduction to singletGpu}
+  %\VignetteIndexEntry{GPU Analysis with singlet}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -22,21 +22,20 @@ knitr::opts_chunk$set(
 
 # Overview
 
-**singletGpu** is an R interface to the
-[singlet-gpu](https://github.com/zdebruine/Singlet-AI) header-only C++20/CUDA
-library.  It reads singlify `.1pz` count matrices and runs GPU-native:
+The **singlet** R package includes GPU-accelerated analysis when CUDA 12+ is
+available. It reads `.1pz` count matrices and runs GPU-native:
 
 - Log-normalization (`lognorm`)
 - Highly-variable gene selection (`hvg`)
-- PCA via [factornet](https://github.com/zdebruine/factornet) SVD backends (`run_pca`)
-- NMF via factornet MU/CD/Cholesky (`run_nmf`)
+- PCA via SVD backends (`run_pca`)
+- NMF via MU/CD/Cholesky (`run_nmf`)
 
 An optional reticulate bridge provides Harmony batch correction and UMAP via
 `rapids-singlecell`.
 
 # Requirements
 
-- R >= 4.3.0
+- R >= 4.2
 - CUDA Toolkit >= 12.0
 - GPU with compute capability >= 7.0 (Volta, Turing, Ampere, or Hopper)
 
@@ -47,34 +46,26 @@ if (!requireNamespace("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 BiocManager::install(c("SingleCellExperiment", "SummarizedExperiment"))
 
-remotes::install_github(
-    "zdebruine/Singlet-AI",
-    subdir = "singlet-gpu/r"
-)
+remotes::install_github("Singlet-Bio/singlet", subdir = "r")
 ```
 
-Before installing, ensure `nvcc` is on your PATH:
+Before installing with GPU support, ensure `nvcc` is on your PATH:
 
 ```bash
 export PATH=/usr/local/cuda/bin:$PATH
-export SINGLET_GPU_INCLUDE=/path/to/Singlet-AI/singlet-gpu/include
-export FACTORNET_INCLUDE=/path/to/factornet/include
 ```
 
 # Quick start
 
 ```{r quickstart}
-library(singletGpu)
+library(singlet)
 
-# Load a singlify .1pz output directory
-sce <- read_1pz_sce(
-    pz_dir   = "/path/to/quant/scrna/GSE127/GSE127918/GSM4037629/",
-    modality = "exon"
-)
-
-# Inspect the SCE
+# Load a .1pz file
+sce <- read_1pz("gene_counts.1pz", as = "sce")
 dim(sce)
-metadata(sce)$singlify$gsm_id
+
+# Check GPU availability
+singlet::has_gpu()
 
 # Log-normalization (result in assays(sce)$logcounts)
 sce <- lognorm(sce, target_sum = 1e4)
@@ -94,7 +85,7 @@ head(reducedDim(sce, "PCA"))
 
 # Reticulate bridge (optional)
 
-If `reticulate` and the `singlet_gpu` Python wheel are installed:
+If `reticulate` and the `singlet` Python package are installed:
 
 ```{r harmony}
 # Add a batch covariate
@@ -110,11 +101,11 @@ plot(reducedDim(sce, "UMAP"), pch = ".", main = "UMAP")
 
 # Performance notes
 
-- R does not have a native GPU sparse type.  Every kernel call incurs an O(nnz)
+- R does not have a native GPU sparse type. Every kernel call incurs an O(nnz)
   host copy on input (dgCMatrix → pinned host CSC) and output.
 - For a typical 10k-cell sample this is approximately 100–200 ms per call.
 - Users who require full GPU residency between operations should use the Python
-  wrapper (`singlet_gpu` Python package, cupy zero-copy path).
+  wrapper (`singlet[gpu]`, cupy zero-copy path).
 
 # Session info
 

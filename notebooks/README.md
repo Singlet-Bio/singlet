@@ -64,8 +64,7 @@ Pre-rendered HTML versions with all plots visible are available at:
 ## Requirements
 
 ```bash
-pip install "singlet-bio @ git+https://github.com/Singlet-Bio/singlet#subdirectory=python"
-# Or: pip install singlet-bio  (when published to PyPI)
+pip install singlet
 ```
 
 ## Atlas Stats

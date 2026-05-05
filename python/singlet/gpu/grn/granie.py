@@ -142,8 +142,8 @@ def run_from_csc(
     if not hasattr(_core, "run_granie"):
         raise ImportError(
             "_core.run_granie is not available.  "
-            "Compile the singlet-gpu pybind11 extension on a CUDA node: "
-            "pip install -e singlet-gpu/python/"
+            "Install with: pip install singlet[gpu] "
+            "pip install singlet[gpu]"
         )
 
     return _core.run_granie(

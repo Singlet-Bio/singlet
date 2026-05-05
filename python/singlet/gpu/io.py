@@ -103,7 +103,7 @@ def to_anndata(device_csc, metadata):
     except ImportError as e:
         raise ImportError(
             "to_anndata requires anndata, cupy, and pandas. "
-            f"Install with: pip install 'singlet-gpu[anndata]' cupy-cuda12x\n"
+            f"Install with: pip install 'singlet[gpu]'\n"
             f"Original error: {e}"
         ) from e
 
@@ -216,7 +216,7 @@ def read_anndata(
         raise ImportError(
             "singlet_gpu._core is not available. "
             "The C++ extension must be compiled on a CUDA-capable node. "
-            "Run: pip install -e singlet-gpu/python/ on a GPU node."
+            "Install with: pip install singlet[gpu]"
         )
 
     path = _resolve_path(pz_path, modality)

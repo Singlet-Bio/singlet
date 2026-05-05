@@ -142,7 +142,7 @@ def run(
     if not hasattr(_core, "run_nebula"):
         raise ImportError(
             "_core.run_nebula is not available.  "
-            "Compile the singlet-gpu pybind11 extension on a CUDA node."
+            "Install with: pip install singlet[gpu]"
         )
 
     if n_donors > MAX_DONORS:
