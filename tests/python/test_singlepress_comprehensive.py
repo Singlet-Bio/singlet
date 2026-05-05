@@ -692,25 +692,25 @@ class TestErrors:
     """Test error handling and invalid inputs."""
 
     def test_read_nonexistent_file(self):
-        with pytest.raises(Exception):
+        with pytest.raises((OSError, FileNotFoundError, RuntimeError)):
             sp_read("/nonexistent/file.spz")
 
     def test_read_corrupt_file(self, tmp_path):
         """File with wrong magic bytes should fail."""
         path = tmp_path / "corrupt.spz"
         path.write_bytes(b"NOT_SPZ" + b"\x00" * 100)
-        with pytest.raises(Exception):
+        with pytest.raises((ValueError, RuntimeError)):
             sp_read(str(path))
 
     def test_read_truncated_file(self, tmp_path):
         """Too-small file should fail."""
         path = tmp_path / "tiny.spz"
         path.write_bytes(b"\x00" * 10)
-        with pytest.raises(Exception):
+        with pytest.raises((ValueError, RuntimeError)):
             sp_read(str(path))
 
     def test_info_nonexistent(self):
-        with pytest.raises(Exception):
+        with pytest.raises((OSError, FileNotFoundError, RuntimeError)):
             sp_info("/nonexistent/file.spz")
 
     def test_column_range_empty(self, tmp_path):

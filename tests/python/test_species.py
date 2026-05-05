@@ -85,7 +85,7 @@ class TestSpeciesRefConsistency:
 
     def test_all_species_have_aliases(self):
         """Every species in SPECIES_REF should be reachable via ORGANISM_TO_TAXON."""
-        for txid, info in SPECIES_REF.items():
+        for _txid, info in SPECIES_REF.items():
             assert info["name"].lower() in ORGANISM_TO_TAXON
 
     def test_min_species_count(self):
