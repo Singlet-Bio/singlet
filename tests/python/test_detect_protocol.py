@@ -1,5 +1,7 @@
 """Tests for singlet.preprocessing._detect (protocol detection)."""
 
+from unittest.mock import patch
+
 from singlet.preprocessing._detect import (
     ProtocolDetection,
     _infer_protocol,
@@ -122,3 +124,74 @@ class TestGetChemistryString:
     def test_dropseq(self):
         chem = get_chemistry_string("dropseq")
         assert chem is not None
+
+
+# ---------------------------------------------------------------------------
+# detect_protocol barcode whitelist fallback (lines 197-222)
+# ---------------------------------------------------------------------------
+
+
+class TestDetectProtocolWhitelistFallback:
+    """Test barcode whitelist fallback for ambiguous protocol detection."""
+
+    def _make_fastq(self, path, sequences):
+        """Write a minimal FASTQ file."""
+        with open(path, "w") as f:
+            for i, seq in enumerate(sequences):
+                f.write(f"@read{i}\n{seq}\n+\n{'I' * len(seq)}\n")
+
+    @patch(
+        "singlet.preprocessing._detect._infer_protocol",
+        return_value=ProtocolDetection(
+            protocol="ambiguous", mode="droplet", confidence="low", reason="test"
+        ),
+    )
+    @patch("singlet.preprocessing._detect._load_barcode_whitelist")
+    @patch("singlet.preprocessing._detect._detect_read_length", return_value=28)
+    def test_r1_barcode_match(self, mock_len, mock_wl, mock_infer, tmp_path):
+        """Barcode match on R1 triggers 10xv3 detection."""
+        from singlet.preprocessing._detect import detect_protocol
+
+        # Create fake R1 with barcodes matching whitelist
+        barcodes = {"AAACCCAAGAAACACT", "AAACCCAAGAAACTGT", "AAACCCAAGAAAGCGA"}
+        mock_wl.return_value = barcodes
+
+        # Write FASTQ where > 30% of reads start with whitelist barcodes
+        seqs = [list(barcodes)[i % 3] + "NNNNNNNNNNNNN" for i in range(200)]
+        r1_path = tmp_path / "R1.fq"
+        self._make_fastq(r1_path, seqs)
+
+        result = detect_protocol(r1_path)
+        assert result.protocol == "10xv3"
+        assert result.confidence == "medium"
+        assert "Barcode match: R1=" in result.reason
+
+    @patch(
+        "singlet.preprocessing._detect._infer_protocol",
+        return_value=ProtocolDetection(
+            protocol="ambiguous", mode="droplet", confidence="low", reason="test"
+        ),
+    )
+    @patch("singlet.preprocessing._detect._load_barcode_whitelist")
+    @patch("singlet.preprocessing._detect._detect_read_length", return_value=28)
+    def test_r2_barcode_match(self, mock_len, mock_wl, mock_infer, tmp_path):
+        """Barcode match on R2 (swapped) triggers detection."""
+        from singlet.preprocessing._detect import detect_protocol
+
+        barcodes = {"AAACCCAAGAAACACT", "AAACCCAAGAAACTGT", "AAACCCAAGAAAGCGA"}
+        mock_wl.return_value = barcodes
+
+        # R1 has NO matching barcodes
+        r1_seqs = ["TTTTTTTTTTTTTTTT" + "N" * 12 for _ in range(200)]
+        r1_path = tmp_path / "R1.fq"
+        self._make_fastq(r1_path, r1_seqs)
+
+        # R2 has matching barcodes
+        r2_seqs = [list(barcodes)[i % 3] + "NNNNNNNNNNNNN" for i in range(200)]
+        r2_path = tmp_path / "R2.fq"
+        self._make_fastq(r2_path, r2_seqs)
+
+        result = detect_protocol(r1_path, r2_path)
+        assert result.protocol == "10xv3"
+        assert result.confidence == "medium"
+        assert "R2" in result.reason

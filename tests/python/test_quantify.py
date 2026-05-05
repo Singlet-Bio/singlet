@@ -186,3 +186,20 @@ class TestQuantify:
         )
         cmd = mock_run.call_args[0][0]
         assert "16" in cmd
+
+    @patch(
+        "singlet.preprocessing._species.get_species_info",
+        return_value={},
+    )
+    @patch("singlet.preprocessing._species.get_taxon_id", return_value=9606)
+    def test_no_index_for_organism(self, mock_taxon, mock_info, tmp_path):
+        """Returns error when organism resolves but has no index_path."""
+        result = quantify(
+            ["/tmp/R1.fq.gz"],
+            ["/tmp/R2.fq.gz"],
+            "10xv3",
+            "human",
+            tmp_path,
+        )
+        assert not result.success
+        assert "No index" in result.error

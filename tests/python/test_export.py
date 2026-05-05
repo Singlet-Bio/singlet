@@ -110,3 +110,43 @@ class TestExportToSpz:
         qdir.mkdir()
         result = export_to_spz(qdir, tmp_path / "out.spz")
         assert result is False
+
+    @patch("singlet._singlepress.sp_write")
+    def test_float_export(self, mock_write, tmp_path):
+        """Float matrix uses sp_write (not sp_write_int)."""
+        alevin = tmp_path / "quant" / "af_quant" / "alevin"
+        alevin.mkdir(parents=True)
+        mat = sp.random(10, 5, density=0.3, format="coo", dtype=np.float64)
+        scipy.io.mmwrite(alevin / "quants_mat.mtx", mat)
+
+        out_path = tmp_path / "sample.spz"
+        result = export_to_spz(tmp_path / "quant", out_path, sample_id="test")
+        assert result is True
+        mock_write.assert_called_once()
+
+    @patch("singlepress.write_1pz")
+    def test_dense_matrix_1pz(self, mock_write, tmp_path):
+        """Dense (array-format) MTX is converted to sparse in export_to_1pz."""
+        alevin = tmp_path / "quant" / "af_quant" / "alevin"
+        alevin.mkdir(parents=True)
+        # mmwrite with dense array produces array-format MTX (mmread returns ndarray)
+        dense = np.random.rand(6, 3).astype(np.float64)
+        scipy.io.mmwrite(alevin / "quants_mat.mtx", dense)
+
+        out_path = tmp_path / "sample.1pz"
+        result = export_to_1pz(tmp_path / "quant", out_path)
+        assert result is True
+        mock_write.assert_called_once()
+
+    @patch("singlet._singlepress.sp_write")
+    def test_dense_matrix_spz(self, mock_write, tmp_path):
+        """Dense (array-format) MTX is converted to sparse in export_to_spz."""
+        alevin = tmp_path / "quant" / "af_quant" / "alevin"
+        alevin.mkdir(parents=True)
+        dense = np.random.rand(6, 3).astype(np.float64)
+        scipy.io.mmwrite(alevin / "quants_mat.mtx", dense)
+
+        out_path = tmp_path / "sample.spz"
+        result = export_to_spz(tmp_path / "quant", out_path)
+        assert result is True
+        mock_write.assert_called_once()

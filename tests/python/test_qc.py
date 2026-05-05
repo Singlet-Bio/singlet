@@ -154,3 +154,23 @@ class TestRunQC:
         qc = run_qc(mock_quant_dir, min_cells=1, min_genes_per_cell=1)
         assert qc.total_counts > 0
         assert qc.median_counts_per_cell > 0
+
+    def test_dense_matrix_handled(self, tmp_path):
+        """Dense (array-format) MTX is converted to sparse by run_qc."""
+        alevin_dir = tmp_path / "af_quant" / "alevin"
+        alevin_dir.mkdir(parents=True)
+        # Write dense array (mmread returns ndarray, triggering csr_matrix conversion)
+        dense = np.array([[1, 0, 3], [0, 5, 0], [2, 0, 4]], dtype=np.float64)
+        scipy.io.mmwrite(alevin_dir / "quants_mat.mtx", dense)
+        qc = run_qc(tmp_path, min_cells=1, min_genes_per_cell=1)
+        assert qc.n_cells == 3
+        assert qc.n_genes == 3
+
+
+class TestReadMtxShapeEdge:
+    def test_empty_file_returns_zeros(self, tmp_path):
+        """MTX file with only comment lines returns (0, 0, 0)."""
+        mtx = tmp_path / "empty.mtx"
+        mtx.write_text("%%MatrixMarket matrix coordinate real general\n%\n% empty\n")
+        result = _read_mtx_shape(mtx)
+        assert result == (0, 0, 0)
