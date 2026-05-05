@@ -36,7 +36,7 @@ struct TestCSC {
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 // Sum all counts in a SpeciesCSC column.
-static uint32_t col_sum(const singlet::SpeciesCSC& csc, uint32_t col) {
+[[maybe_unused]] static uint32_t col_sum(const singlet::SpeciesCSC& csc, uint32_t col) {
     uint32_t s = 0;
     for (int32_t i = csc.indptr[col]; i < csc.indptr[col + 1]; ++i)
         s += csc.data[i];
@@ -44,7 +44,7 @@ static uint32_t col_sum(const singlet::SpeciesCSC& csc, uint32_t col) {
 }
 
 // Find count for a specific (row, col) in a SpeciesCSC.
-static uint32_t get_val(const singlet::SpeciesCSC& csc, int32_t row, uint32_t col) {
+[[maybe_unused]] static uint32_t get_val(const singlet::SpeciesCSC& csc, int32_t row, uint32_t col) {
     for (int32_t i = csc.indptr[col]; i < csc.indptr[col + 1]; ++i)
         if (csc.indices[i] == row) return csc.data[i];
     return 0;
@@ -163,10 +163,14 @@ int main() {
 
     // ── Doublet exclusion ─────────────────────────────────────────────────
     // Cell 2 is DOUBLET — its barcode must NOT appear in either species.
-    for (const auto& bc : H.barcodes)
+    for (const auto& bc : H.barcodes) {
+        (void)bc;
         assert(bc != barcodes[2] && "doublet cell must not appear in human matrix");
-    for (const auto& bc : M.barcodes)
+    }
+    for (const auto& bc : M.barcodes) {
+        (void)bc;
         assert(bc != barcodes[2] && "doublet cell must not appear in mouse matrix");
+    }
 
     // ── indptr consistency ────────────────────────────────────────────────
     assert(static_cast<int32_t>(H.indptr.size()) == static_cast<int32_t>(H.ncols) + 1);

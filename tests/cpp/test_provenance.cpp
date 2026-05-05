@@ -12,7 +12,7 @@
 using namespace singlet;
 
 // Helper: check if file exists
-static bool file_exists(const std::string& path) {
+[[maybe_unused]] static bool file_exists(const std::string& path) {
     struct stat buffer;
     return stat(path.c_str(), &buffer) == 0;
 }
@@ -27,7 +27,7 @@ static std::string read_file(const std::string& path) {
 }
 
 // Helper: check if string contains substring
-static bool contains(const std::string& haystack, const std::string& needle) {
+[[maybe_unused]] static bool contains(const std::string& haystack, const std::string& needle) {
     return haystack.find(needle) != std::string::npos;
 }
 

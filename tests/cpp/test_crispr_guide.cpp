@@ -34,6 +34,7 @@ static void test_load_and_exact_match() {
 
     GuideRef ref;
     bool loaded = ref.load_csv(path);
+    (void)loaded;
     std::remove(path.c_str());
     assert(loaded && "load_csv failed");
     assert(ref.size() == 3);
@@ -63,6 +64,7 @@ static void test_no_header_lowercase() {
 
     GuideRef ref;
     bool loaded = ref.load_csv(path);
+    (void)loaded;
     std::remove(path.c_str());
     assert(loaded);
     assert(ref.size() == 2);
@@ -79,6 +81,7 @@ static void test_no_header_lowercase() {
 static void test_empty_and_invalid() {
     GuideRef ref;
     bool r1 = ref.load_csv("/tmp/nonexistent_guide_file_12345.csv");
+    (void)r1;
     assert(!r1);
     assert(ref.empty());
 
@@ -107,6 +110,7 @@ static void test_guide_counter_umi_dedup() {
 
     GuideRef ref;
     bool loaded = ref.load_csv(path);
+    (void)loaded;
     std::remove(path.c_str());
     assert(loaded);
 
@@ -141,11 +145,14 @@ static void test_guide_counter_umi_dedup() {
         for (int p = csc.indptr[col]; p < csc.indptr[col + 1]; ++p) {
             int feat = csc.indices[p];
             int val  = csc.data[p];
+            (void)val;
             if (col == 0 && feat == 0) { assert(val == 2); found_bc0_g0 = true; }
             if (col == 1 && feat == 1) { assert(val == 1); found_bc1_g1 = true; }
         }
     }
     assert(found_bc0_g0 && "BC0/G0 entry missing");
+    (void)found_bc0_g0;
+    (void)found_bc1_g1;
     assert(found_bc1_g1 && "BC1/G1 entry missing");
 
     std::cout << "Test 4 PASS: GuideCounter UMI dedup + CSC export\n";
@@ -158,6 +165,7 @@ static void test_no_umi() {
     const char* csv = "G0,TTTTTTTTTTTTTTTTTTTT\n";
     auto path = write_temp_csv(csv);
     bool loaded = ref.load_csv(path);
+    (void)loaded;
     std::remove(path.c_str());
     assert(loaded);
 
@@ -183,6 +191,7 @@ static void test_merge() {
 
     GuideRef ref;
     bool loaded = ref.load_csv(path);
+    (void)loaded;
     std::remove(path.c_str());
     assert(loaded);
 
@@ -210,6 +219,7 @@ static void test_guide_names() {
     auto path = write_temp_csv(csv);
     GuideRef ref;
     bool loaded = ref.load_csv(path);
+    (void)loaded;
     std::remove(path.c_str());
     assert(loaded);
 

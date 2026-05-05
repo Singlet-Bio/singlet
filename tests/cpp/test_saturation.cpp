@@ -60,6 +60,7 @@ int main() {
         
         // saturation = 1 - 1/5 = 0.8
         double expected_sat = 1.0 - 1.0 / 5.0;
+        (void)expected_sat;
         assert(std::abs(result[0].saturation - expected_sat) < 1e-6);
         
         // reads_per_umi = 5 / 1 = 5.0
@@ -115,6 +116,7 @@ int main() {
         cells.push_back({2, 10, 9, 0.1, 1.111});  // sat=0.1
         
         double med = median_saturation(cells);
+        (void)med;
         // Sorted: [0.1, 0.5, 0.8] → median = 0.5
         assert(std::abs(med - 0.5) < 1e-6);
         std::cout << "Test 4 PASS: median_saturation odd number (3 cells)\n";
@@ -131,6 +133,7 @@ int main() {
         cells.push_back({3, 10, 3, 0.7, 3.333});   // sat=0.7
         
         double med = median_saturation(cells);
+        (void)med;
         // Sorted: [0.1, 0.5, 0.7, 0.8] → median = (0.5 + 0.7) / 2 = 0.6
         assert(std::abs(med - 0.6) < 1e-6);
         std::cout << "Test 5 PASS: median_saturation even number (4 cells)\n";
@@ -142,6 +145,7 @@ int main() {
     {
         std::vector<CellSaturation> cells;
         double med = median_saturation(cells);
+        (void)med;
         assert(med == 0.0);
         std::cout << "Test 6 PASS: median_saturation empty vector returns 0.0\n";
     }
@@ -158,6 +162,7 @@ int main() {
         cells.push_back({3, 0, 0, 0.0, 0.0});      // total_reads=0, skip
         
         double med = median_saturation(cells);
+        (void)med;
         // Filtered: [0.5, 0.8] → median = (0.5 + 0.8) / 2 = 0.65
         assert(std::abs(med - 0.65) < 1e-6);
         std::cout << "Test 7 PASS: median_saturation filters zero-read cells\n";

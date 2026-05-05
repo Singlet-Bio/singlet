@@ -92,6 +92,7 @@ static int test_mismatch_returns_nullopt() {
     // Read full of Ns — won't match anything
     std::string read(60, 'N');
     auto hit = aligner.resolve_unique(read);
+    (void)hit;
     assert(!hit.has_value() && "N-read should not resolve");
     printf("    N-read returns nullopt PASS\n");
     return 0;
@@ -110,6 +111,7 @@ static int test_short_read() {
 
     std::string read(singlet::TxomeIndex::SEED_K - 1, 'A');
     auto hit = aligner.resolve_unique(read);
+    (void)hit;
     assert(!hit.has_value() && "short read should return nullopt");
     printf("    short read returns nullopt PASS\n");
     return 0;
@@ -132,6 +134,7 @@ static int test_multi_mapper() {
 
     std::string read(reinterpret_cast<const char*>(idx.tx_seqs.data()), 60);
     auto hit = aligner.resolve_unique(read);
+    (void)hit;
     assert(!hit.has_value() && "multi-mapper should return nullopt → L3");
     printf("    multi-mapper returns nullopt PASS\n");
     return 0;
@@ -175,6 +178,7 @@ static int test_determinism_seed() {
     std::string read(reinterpret_cast<const char*>(idx.tx_seqs.data()), 60);
     auto h1 = a1.resolve_unique(read);
     auto h2 = a2.resolve_unique(read);
+    (void)h2;
     // Both should resolve the same tx/pos (seed only affects EM tie-breaking,
     // which is unused in v0.1 — both should give identical results)
     assert(h1.has_value() == h2.has_value());

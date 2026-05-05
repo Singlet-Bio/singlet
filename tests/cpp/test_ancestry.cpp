@@ -96,6 +96,7 @@ void test_aim_frequencies() {
     const auto& aims = get_aim_panel();
     for (size_t i = 0; i < aims.size(); ++i) {
         const AIM& aim = aims[i];
+        (void)aim;
         for (int p = 0; p < 5; ++p) {
             assert(aim.freq[p] > 0.0 && aim.freq[p] < 1.0 &&
                    "AIM frequency out of range");

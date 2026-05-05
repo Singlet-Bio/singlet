@@ -12,18 +12,22 @@ using namespace singlet;
 static void test_poisson_pvalue() {
     // P(X >= 100 | lambda=10) must be extremely small
     float pv = poisson_pvalue(100, 10.0f);
+    (void)pv;
     assert(pv < 1e-30f && "poisson_pvalue(100,10) should be < 1e-30");
 
     // P(X >= 0 | lambda=5) == 1
     float pv0 = poisson_pvalue(0, 5.0f);
+    (void)pv0;
     assert(pv0 == 1.0f && "poisson_pvalue(0,5) should be 1");
 
     // P(X >= 1 | lambda=0) == 0
     float pv1 = poisson_pvalue(1, 0.0f);
+    (void)pv1;
     assert(pv1 == 0.0f && "poisson_pvalue(1,0) should be 0");
 
     // P(X >= 5 | lambda=5) ~= 0.56 (reasonable range)
     float pv5 = poisson_pvalue(5, 5.0f);
+    (void)pv5;
     assert(pv5 > 0.3f && pv5 < 0.8f && "poisson_pvalue(5,5) out of expected range");
 
     printf("PASS: poisson_pvalue\n");
@@ -90,6 +94,7 @@ static void test_bed_output() {
 
     std::string path = "/tmp/test_atac_peaks_output.bed";
     bool ok = write_peaks_bed(path, peaks);
+    (void)ok;
     assert(ok && "write_peaks_bed should succeed");
 
     FILE* f = fopen(path.c_str(), "r");
@@ -100,6 +105,7 @@ static void test_bed_output() {
     float score;
     char strand[4];
     int n = fscanf(f, "%63s %u %u %63s %f %3s", chrom, &s, &e, name, &score, strand);
+    (void)n;
     fclose(f);
 
     assert(n == 6 && "BED6: should parse 6 fields");
@@ -133,7 +139,9 @@ static void test_multi_chrom() {
     bool has_chr1 = false, has_chr2 = false;
     for (auto& pk : peaks) {
         if (pk.chrom == "chr1") has_chr1 = true;
+        (void)has_chr1;
         if (pk.chrom == "chr2") has_chr2 = true;
+        (void)has_chr2;
     }
     assert(has_chr1 && "Expected peak on chr1");
     assert(has_chr2 && "Expected peak on chr2");

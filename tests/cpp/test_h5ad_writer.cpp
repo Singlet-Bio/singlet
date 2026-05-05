@@ -19,11 +19,11 @@ using namespace singlet;
 
 // ── Read-back helpers ────────────────────────────────────────────────────────
 
-static bool group_exists(hid_t loc, const char* name) {
+[[maybe_unused]] static bool group_exists(hid_t loc, const char* name) {
     return H5Lexists(loc, name, H5P_DEFAULT) > 0;
 }
 
-static std::string read_str_attr(hid_t loc, const char* name) {
+[[maybe_unused]] static std::string read_str_attr(hid_t loc, const char* name) {
     hid_t attr = H5Aopen(loc, name, H5P_DEFAULT);
     if (attr < 0) return "<missing>";
     hid_t atype = H5Aget_type(attr);
@@ -155,6 +155,7 @@ static void test_basic_write() {
     const std::string path = "/tmp/test_h5ad_basic.h5ad";
     auto cfg = make_small_cfg(path);
     bool ok = write_h5ad(cfg);
+    (void)ok;
     assert(ok && "write_h5ad returned false");                     // assertion 1
 
     FILE* f = fopen(path.c_str(), "rb");
@@ -268,7 +269,7 @@ static void test_shape_attribute() {
 
     hid_t x = H5Gopen2(fid, "X", H5P_DEFAULT);
     assert(x >= 0);
-    auto [n_cells, n_genes] = read_shape_attr(x);
+    [[maybe_unused]] auto [n_cells, n_genes] = read_shape_attr(x);
     assert(n_cells == 2 && "shape n_cells wrong");                 // assertion 23
     assert(n_genes == 3 && "shape n_genes wrong");                 // assertion 24
     H5Gclose(x);
@@ -415,6 +416,7 @@ static void test_empty_matrix() {
     cfg.gene_names    = &genes;
 
     bool ok = write_h5ad(cfg);
+    (void)ok;
     assert(ok && "empty matrix write returned false");             // assertion 39
 
     H5Eset_auto2(H5E_DEFAULT, nullptr, nullptr);
@@ -423,7 +425,7 @@ static void test_empty_matrix() {
 
     hid_t x = H5Gopen2(fid, "X", H5P_DEFAULT);
     assert(x >= 0 && "empty matrix X group missing");              // assertion 41
-    auto [n_cells, n_genes] = read_shape_attr(x);
+    [[maybe_unused]] auto [n_cells, n_genes] = read_shape_attr(x);
     assert(n_cells == 0 && "empty: shape n_cells should be 0");    // assertion 42
     assert(n_genes == 2 && "empty: shape n_genes should be 2");    // assertion 43
     H5Gclose(x);
@@ -474,6 +476,7 @@ static void test_large_matrix() {
     cfg.cell_barcodes = &cell_names;
 
     bool ok = write_h5ad(cfg);
+    (void)ok;
     assert(ok && "large matrix write failed");                     // assertion 44
 
     H5Eset_auto2(H5E_DEFAULT, nullptr, nullptr);
@@ -482,7 +485,7 @@ static void test_large_matrix() {
 
     hid_t x = H5Gopen2(fid, "X", H5P_DEFAULT);
     assert(x >= 0);
-    auto [nc, ng] = read_shape_attr(x);
+    [[maybe_unused]] auto [nc, ng] = read_shape_attr(x);
     assert(nc == N_CELLS && ng == N_GENES && "large matrix shape wrong"); // assertion 46
 
     auto data_back = read_float32_dataset(fid, "/X/data");
@@ -521,6 +524,7 @@ static void test_float_data() {
     cfg.cell_barcodes = &cells;
 
     bool ok = write_h5ad(cfg);
+    (void)ok;
     assert(ok && "float data write failed");                       // assertion 49
 
     H5Eset_auto2(H5E_DEFAULT, nullptr, nullptr);
@@ -559,6 +563,7 @@ static void test_no_gene_ids() {
     assert(fid >= 0);
 
     int exists = H5Lexists(fid, "/var/gene_ids", H5P_DEFAULT);
+    (void)exists;
     assert(exists == 0 && "var/gene_ids should not exist when gene_ids=nullptr"); // assertion 54
 
     H5Fclose(fid);

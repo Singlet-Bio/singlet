@@ -29,7 +29,7 @@
 using namespace singlet;
 
 // ── Helpers ──
-static bool approx_eq(double a, double b, double tol = 0.01) {
+[[maybe_unused]] static bool approx_eq(double a, double b, double tol = 0.01) {
     return std::abs(a - b) <= tol * std::max(1.0, std::abs(b));
 }
 
@@ -75,6 +75,7 @@ static void init_identity_gene_model(GeneModel& gm, uint32_t n_features) {
         }
     }
     bool ok = gm.load_bed(tmp);
+    (void)ok;
     assert(ok && "load_bed must succeed");
     // Under BED load: exon_to_gene_[i] == i (1-to-1)
     assert(gm.exon_to_gene(0) == 0 && "exon 0 -> gene 0");
@@ -220,6 +221,7 @@ static void test_write_tsv() {
 
     const std::string path = "/tmp/test_saturation_curve.tsv";
     bool ok = singlet::write_saturation_curve_tsv(path, curve);
+    (void)ok;
     assert(ok && "write_saturation_curve_tsv should succeed");
 
     // Verify file has header + 3 data rows

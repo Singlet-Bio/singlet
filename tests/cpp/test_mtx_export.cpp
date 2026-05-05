@@ -34,6 +34,7 @@ static void test_write_features_10x() {
     std::vector<std::string> ids = {"ENSG00000000001", "ENSG00000000002", "ENSG00000000003"};
     std::vector<std::string> names = {"GENE1", "GENE2", "GENE3"};
     bool ok = write_features_10x(path, ids, names);
+    (void)ok;
     assert(ok && "write_features_10x returned false");
 
     std::string content = read_file(path);
@@ -54,6 +55,7 @@ static void test_write_barcodes_10x() {
     const std::string path = "/tmp/test_barcodes_10x.tsv.gz";
     std::vector<std::string> barcodes = {"ACGTACGTACGT", "TTTTGGGGCCCC", "AAAACCCCGGGG"};
     bool ok = write_barcodes_10x(path, barcodes, 1);
+    (void)ok;
     assert(ok && "write_barcodes_10x returned false");
 
     std::string content = read_file(path);

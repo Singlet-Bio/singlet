@@ -13,6 +13,7 @@ int main() {
     // ─────────────────────────────────────────────────────────────────────────
     {
         uint64_t result = lander_waterman(1000, 0);
+        (void)result;
         assert(result == 1000);
         std::cout << "Test 1 PASS: lander_waterman n_dup=0 returns n_total\n";
     }
@@ -23,6 +24,7 @@ int main() {
     // ─────────────────────────────────────────────────────────────────────────
     {
         uint64_t result = lander_waterman(100, 50);
+        (void)result;
         assert(result == 100);
         std::cout << "Test 2 PASS: lander_waterman(100, 50) = 100\n";
     }
@@ -33,6 +35,7 @@ int main() {
     // ─────────────────────────────────────────────────────────────────────────
     {
         uint64_t result = lander_waterman(1000, 100);
+        (void)result;
         assert(result == 5000);
         std::cout << "Test 3 PASS: lander_waterman(1000, 100) = 5000\n";
     }
@@ -48,6 +51,7 @@ int main() {
         // d > n (shouldn't happen but be safe)
         result = lander_waterman(100, 150);
         assert(result == 100);
+        (void)result;
         
         std::cout << "Test 4 PASS: lander_waterman guards against d >= n\n";
     }
@@ -59,6 +63,7 @@ int main() {
         // n = 1M, d = 100k
         // C = 1M * 1M / (2 * 100k) = 1e12 / 200k = 5e9
         uint64_t result = lander_waterman(1000000, 100000);
+        (void)result;
         assert(result == 5000000);
         std::cout << "Test 5 PASS: lander_waterman large numbers without overflow\n";
     }
@@ -83,6 +88,7 @@ int main() {
         
         // est_complexity = lander_waterman(10, 4) = 100 / 8 = 12 (rounded)
         uint64_t expected = lander_waterman(10, 4);
+        (void)expected;
         assert(stats[0].est_complexity == expected);
         
         std::cout << "Test 6 PASS: compute_read_stats single cell\n";
@@ -211,6 +217,7 @@ int main() {
         
         // est_complexity = lander_waterman(100, 90) = 100*100 / (2*90) = 55 (approx)
         uint64_t expected = lander_waterman(100, 90);
+        (void)expected;
         assert(stats[0].est_complexity == expected);
         
         std::cout << "Test 11 PASS: compute_read_stats high duplication\n";
@@ -290,6 +297,7 @@ int main() {
         assert(stats[0].total_reads == 10000000);
         // unique_umis = sum of exon_data
         uint64_t expected_sum = 100ULL * 65535;
+        (void)expected_sum;
         assert(stats[0].unique_umis == std::min(expected_sum, static_cast<uint64_t>(UINT32_MAX)));
         
         std::cout << "Test 15 PASS: compute_read_stats guards sum at UINT32_MAX\n";

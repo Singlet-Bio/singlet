@@ -18,7 +18,7 @@
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-static bool approx_eq(double a, double b, double tol = 1e-6) {
+[[maybe_unused]] static bool approx_eq(double a, double b, double tol = 1e-6) {
     return std::fabs(a - b) <= tol;
 }
 
@@ -76,6 +76,7 @@ static void test_effective_lengths() {
 
     singlet::GeneModel gm;
     bool ok = gm.load_gtf(gtf);
+    (void)ok;
     assert(ok && "GTF load failed");
     assert(gm.n_genes() == 2 && "Expected 2 genes");
 
@@ -149,6 +150,7 @@ static void test_zero_counts() {
         tpm_sum += v;
     }
     for (double v : fpkm) {
+        (void)v;
         assert(v == 0.0);
     }
     assert(tpm_sum == 0.0 && "All-zero counts → TPM sum should be 0");
@@ -195,6 +197,7 @@ static void test_tsv_output() {
     auto fpkm = singlet::compute_fpkm(counts, lengths, 500000ULL);
 
     bool ok = singlet::write_gene_expression_tsv(path, lengths, counts, tpm, fpkm);
+    (void)ok;
     assert(ok && "TSV write failed");
 
     std::ifstream f(path);

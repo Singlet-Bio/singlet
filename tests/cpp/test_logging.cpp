@@ -28,7 +28,7 @@ static int count_lines(const std::string& s) {
     return n;
 }
 
-static bool contains(const std::string& haystack, const std::string& needle) {
+[[maybe_unused]] static bool contains(const std::string& haystack, const std::string& needle) {
     return haystack.find(needle) != std::string::npos;
 }
 

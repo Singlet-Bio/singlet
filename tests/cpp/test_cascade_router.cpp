@@ -222,6 +222,7 @@ static int test_l3_passthrough_for_unresolved() {
 
     singlet::CascadeRouterStats stats;
     auto d = router.route(rv, stats);
+    (void)d;
     assert(d == singlet::CascadeDecision::L3_passthrough);
     assert(stats.n_l3_pass == 1);
     printf("    L3 passthrough for junk read PASS\n");
@@ -244,6 +245,7 @@ static int test_l1_resolve_for_exact_hit() {
 
     singlet::CascadeRouterStats stats;
     auto d = router.route(rv, stats);
+    (void)d;
     assert(d == singlet::CascadeDecision::L1_resolve);
     assert(stats.n_l1_resolve == 1);
     printf("    L1 resolve for exact transcript hit PASS\n");

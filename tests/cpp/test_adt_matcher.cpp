@@ -43,6 +43,7 @@ static void test_csv_load_and_exact_match() {
 
     AdtMatcher m;
     bool loaded = m.load_reference(path);
+    (void)loaded;
     std::remove(path.c_str());
     assert(loaded && "load_reference failed");
     assert(m.num_tags() == 3);
@@ -127,6 +128,7 @@ static void test_ambiguous() {
 
     // AACAAGACCCCTCCT is H1 from TAG_A (A→T) and H1 from TAG_B (G→T): ambiguous
     int r = m.match("AACAAGACCCCTCCT");
+    (void)r;
     assert(r == -2 && "expected -2 (ambiguous)");
     assert(m.ambiguous() == 1);
 
@@ -148,6 +150,7 @@ static void test_tsv_and_offset() {
 
     AdtMatcher m;
     bool loaded = m.load_reference(path);
+    (void)loaded;
     std::remove(path.c_str());
     assert(loaded);
     assert(m.num_tags() == 2);
@@ -227,6 +230,7 @@ static void test_empty_ref() {
     assert(m.empty());
 
     bool loaded = m.load_reference("/tmp/nonexistent_adt_ref_99999.csv");
+    (void)loaded;
     assert(!loaded && "nonexistent file should return false");
 
     std::cout << "Test 8 PASS: empty/missing reference graceful\n";

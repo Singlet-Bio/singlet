@@ -40,9 +40,13 @@ int main() {
     assert(csc.indptr[0] == 0);
 
     int nnz_col0 = csc.indptr[1] - csc.indptr[0];
+    (void)nnz_col0;
     int nnz_col1 = csc.indptr[2] - csc.indptr[1];
+    (void)nnz_col1;
     int nnz_col2 = csc.indptr[3] - csc.indptr[2];
+    (void)nnz_col2;
     int nnz_col3 = csc.indptr[4] - csc.indptr[3];
+    (void)nnz_col3;
 
     assert(nnz_col0 == 2);
     assert(nnz_col1 == 1);
@@ -65,6 +69,7 @@ int main() {
 
     // Col 3: feature 2 val=1
     base = csc.indptr[3];
+    (void)base;
     assert(csc.indices[base] == 2);
     assert(csc.data[base] == 1);
     std::cout << "Test 5 PASS: CSC values correct\n";
@@ -124,10 +129,12 @@ int main() {
         // Each column sees N_PER_CELL increments collapsing to N_POS unique feats.
         for (int c = 0; c < 4; ++c) {
             int32_t col_nnz = mt_csc.indptr[c + 1] - mt_csc.indptr[c];
+            (void)col_nnz;
             assert(col_nnz == static_cast<int32_t>(N_POS));
         }
         // Every value should equal N_PER_CELL / N_POS == 250 (saturation-free: fits in uint16)
         const uint32_t expected = N_PER_CELL / N_POS;
+        (void)expected;
         assert(expected <= std::numeric_limits<uint16_t>::max());
         for (size_t k = 0; k < mt_csc.data.size(); ++k) {
             assert(mt_csc.data[k] == static_cast<uint16_t>(expected));

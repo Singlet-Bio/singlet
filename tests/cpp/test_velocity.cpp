@@ -98,6 +98,7 @@ void test_collapse_intron_to_gene_empty_matrix() {
     assert(out.data.empty());
     assert(out.indptr.size() == 51);
     for (int32_t val : out.indptr) {
+        (void)val;
         assert(val == 0);
     }
     

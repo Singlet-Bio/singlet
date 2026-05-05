@@ -85,6 +85,7 @@ static void test_roundtrip_small_uint16() {
     bool ok = pz::write_1pz<uint16_t>(
         path, csc.m, csc.n, csc.indptr, csc.indices, csc.data,
         rownames, colnames, 3, 1024, 1, user_kv);
+    (void)ok;
     assert(ok && "write_1pz failed");
 
     pz::ReadResult r = pz::read_1pz(path);
@@ -115,6 +116,7 @@ static void test_roundtrip_small_uint16() {
     assert(r.user_kv.size() == user_kv.size());
     for (auto& kv : user_kv) {
         auto it = r.user_kv.find(kv.first);
+        (void)it;
         assert(it != r.user_kv.end());
         assert(it->second == kv.second);
     }
@@ -196,6 +198,7 @@ static void test_roundtrip_medium_uint16() {
     bool ok = pz::write_1pz<uint16_t>(
         path, m, n, csc.indptr, csc.indices, csc.data,
         rownames, colnames, 3, 1024, 1, user_kv);
+    (void)ok;
     assert(ok);
 
     pz::ReadResult r = pz::read_1pz(path);
@@ -269,6 +272,7 @@ static void test_roundtrip_uint8() {
     bool ok = pz::write_1pz<uint8_t>(
         path, m, n, indptr, indices, data,
         rownames, colnames, 3, 1024, 1, {});
+    (void)ok;
     assert(ok);
 
     pz::ReadResult r = pz::read_1pz(path);
@@ -278,6 +282,7 @@ static void test_roundtrip_uint8() {
     for (uint32_t j = 0; j < n; ++j) {
         uint32_t exp_len = indptr[j + 1] - indptr[j];
         uint32_t got_len = r.indptr[j + 1] - r.indptr[j];
+        (void)got_len;
         assert(exp_len == got_len);
         for (uint32_t k = 0; k < exp_len; ++k) {
             assert(static_cast<int32_t>(r.indices[r.indptr[j] + k]) == indices[indptr[j] + k]);
@@ -338,6 +343,7 @@ static void test_roundtrip_uint32() {
     bool ok = pz::write_1pz<uint32_t>(
         path, m, n, indptr, indices, data,
         rownames, colnames, 3, 1024, 1, {});
+    (void)ok;
     assert(ok);
 
     pz::ReadResult r = pz::read_1pz(path);
@@ -408,6 +414,7 @@ static void test_roundtrip_multi_chunk() {
     bool ok = pz::write_1pz<uint16_t>(
         path, m, n, indptr, indices, data,
         rownames, colnames, 3, CHUNK_COLS, 1, {});
+    (void)ok;
     assert(ok);
 
     pz::ReadResult r = pz::read_1pz(path);
@@ -416,6 +423,7 @@ static void test_roundtrip_multi_chunk() {
     for (uint32_t j = 0; j < n; ++j) {
         uint32_t exp_len = indptr[j + 1] - indptr[j];
         uint32_t got_len = r.indptr[j + 1] - r.indptr[j];
+        (void)got_len;
         assert(exp_len == got_len);
         for (uint32_t k = 0; k < exp_len; ++k) {
             assert(static_cast<int32_t>(r.indices[r.indptr[j] + k]) == indices[indptr[j] + k]);

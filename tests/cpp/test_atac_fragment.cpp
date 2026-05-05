@@ -186,6 +186,7 @@ static void test_sort_order() {
 
     ex.finalise();
     const auto& frags = ex.fragments();
+    (void)frags;
     assert(frags.size() == 3);
     // Sorted by chrom_idx then start
     assert(frags[0].chrom_idx == 0 && frags[1].chrom_idx == 0);

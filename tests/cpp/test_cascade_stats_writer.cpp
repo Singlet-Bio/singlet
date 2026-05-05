@@ -43,6 +43,7 @@ void test_file_creation() {
     CascadeStats cs;
     cs.L1_txome.reads_in = 1000;
     bool result = write_cascade_stats("/tmp/test_cascade_out", cs);
+    (void)result;
     assert(result == true);
     
     // Verify file exists
@@ -152,6 +153,7 @@ void test_invalid_path() {
     CascadeStats cs;
     // Use a directory that doesn't exist and can't be created
     bool result = write_cascade_stats("/nonexistent/deeply/nested/path/that/does/not/exist", cs);
+    (void)result;
     assert(result == false);
     std::cout << "✓ test_invalid_path passed\n";
 }
@@ -216,6 +218,7 @@ void test_json_structure() {
     assert(content[0] == '{');
     // Find last non-whitespace character
     size_t last = content.find_last_not_of(" \t\n\r");
+    (void)last;
     assert(last != std::string::npos);
     assert(content[last] == '}');
     std::cout << "✓ test_json_structure passed\n";

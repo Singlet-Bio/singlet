@@ -57,6 +57,7 @@ int main() {
         // (or at least, requerying the same kmer2 gives same result)
         bool result1 = bf.query(kmer2);
         bool result2 = bf.query(kmer2);
+        (void)result2;
         assert(result1 == result2);  // Must be deterministic
         std::cout << "Test 3 PASS: query is deterministic (kmer2 result=" << result1 << ")\n";
     }
@@ -77,6 +78,7 @@ int main() {
         }
         
         for (auto kmer : kmers) {
+            (void)kmer;
             assert(bf.query(kmer));
         }
         std::cout << "Test 4 PASS: all " << kmers.size() << " inserted k-mers query true\n";
@@ -109,6 +111,7 @@ int main() {
         {
             BloomFilter bf_loaded;
             bool ok = bf_loaded.load(test_file);
+            (void)ok;
             assert(ok);
             std::cout << "Test 5b PASS: loaded filter from " << test_file << "\n";
             
@@ -183,7 +186,9 @@ int main() {
         uint64_t seed = 0x9e3779b97f4a7c15ULL;
         
         uint64_t hash1 = murmurhash3_mix(key, seed);
+        (void)hash1;
         uint64_t hash2 = murmurhash3_mix(key, seed);
+        (void)hash2;
         
         assert(hash1 == hash2);
         std::cout << "Test 8 PASS: murmurhash3_mix(key, seed) is deterministic\n";
@@ -196,7 +201,9 @@ int main() {
         uint64_t seed2 = 2;
         
         uint64_t hash1 = murmurhash3_mix(key, seed1);
+        (void)hash1;
         uint64_t hash2 = murmurhash3_mix(key, seed2);
+        (void)hash2;
         
         assert(hash1 != hash2);
         std::cout << "Test 9 PASS: murmurhash3_mix different seeds produce different outputs\n";
@@ -209,7 +216,9 @@ int main() {
         uint64_t seed = 0x9e3779b97f4a7c15ULL;
         
         uint64_t hash1 = murmurhash3_mix(key1, seed);
+        (void)hash1;
         uint64_t hash2 = murmurhash3_mix(key2, seed);
+        (void)hash2;
         
         assert(hash1 != hash2);
         std::cout << "Test 10 PASS: murmurhash3_mix different keys produce different outputs\n";

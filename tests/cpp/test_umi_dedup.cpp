@@ -21,6 +21,7 @@ int main() {
     {
         UmiDedup dedup;
         bool inserted = dedup.insert(0, 0, "ACGTACGT", 8);
+        (void)inserted;
         assert(inserted == true);
         assert(dedup.n_unique() == 1);
         assert(dedup.n_duplicate() == 0);
@@ -34,6 +35,7 @@ int main() {
         UmiDedup dedup;
         dedup.insert(0, 0, "ACGTACGT", 8);
         bool inserted = dedup.insert(0, 0, "ACGTACGT", 8);
+        (void)inserted;
         assert(inserted == false);
         assert(dedup.n_unique() == 1);
         assert(dedup.n_duplicate() == 1);
@@ -73,6 +75,7 @@ int main() {
         assert(dedup.size() == 0);
         
         bool inserted = dedup.insert(0, 0, "AAAA", 4);
+        (void)inserted;
         assert(inserted == true);
         assert(dedup.n_unique() == 1);
         std::cout << "Test 4 PASS: UmiDedup clear resets state\n";
@@ -99,6 +102,7 @@ int main() {
         // "ACGT" → A(0) at bits [1:0], C(1) at bits [3:2], G(2) at bits [5:4], T(3) at bits [7:6]
         // = 0b11100100 = 0xE4
         uint64_t packed = umi_pack_2bit("ACGT", 4);
+        (void)packed;
         assert(packed == 0xE4);
         
         // "AA" → A(0) at [1:0], A(0) at [3:2] = 0b00000000 = 0x00
@@ -123,6 +127,7 @@ int main() {
         uint64_t a = umi_pack_2bit("ACGT", 4);
         uint64_t b = umi_pack_2bit("ACGT", 4);
         int dist = umi_hamming_2bit(a, b, 4);
+        (void)dist;
         assert(dist == 0);
         std::cout << "Test 7 PASS: umi_hamming_2bit identical distance=0\n";
     }
@@ -140,6 +145,7 @@ int main() {
         uint64_t c = umi_pack_2bit("ACCT", 4);  // A=0, C=1, C=1, T=3 (position 2 differs)
         dist = umi_hamming_2bit(a, c, 4);
         assert(dist == 1);
+        (void)dist;
         
         std::cout << "Test 8 PASS: umi_hamming_2bit 1-base diff=1\n";
     }
@@ -151,6 +157,7 @@ int main() {
         uint64_t a = umi_pack_2bit("ACGT", 4);
         uint64_t b = umi_pack_2bit("CCCT", 4);  // positions 0 and 2 differ
         int dist = umi_hamming_2bit(a, b, 4);
+        (void)dist;
         assert(dist == 2);
         std::cout << "Test 9 PASS: umi_hamming_2bit 2-base diff=2\n";
     }
@@ -161,6 +168,7 @@ int main() {
     {
         std::vector<std::pair<uint64_t, uint32_t>> umi_counts;
         uint32_t components = directional_dedup(umi_counts, 4);
+        (void)components;
         assert(components == 0);
         std::cout << "Test 10 PASS: directional_dedup empty vector=0\n";
     }
@@ -174,6 +182,7 @@ int main() {
         umi_counts.push_back({packed, 5});
         
         uint32_t components = directional_dedup(umi_counts, 4);
+        (void)components;
         assert(components == 1);
         std::cout << "Test 11 PASS: directional_dedup single element=1\n";
     }
@@ -194,6 +203,7 @@ int main() {
         umi_counts.push_back({umi2, 3});
         
         uint32_t components = directional_dedup(umi_counts, 4);
+        (void)components;
         assert(components == 1);  // merged into one component
         std::cout << "Test 12 PASS: directional_dedup hamming=1 with merge (ratio OK)=1\n";
     }
@@ -214,6 +224,7 @@ int main() {
         umi_counts.push_back({umi2, 3});
         
         uint32_t components = directional_dedup(umi_counts, 4);
+        (void)components;
         assert(components == 2);  // not merged, stay separate
         std::cout << "Test 13 PASS: directional_dedup hamming=1 but count ratio rejects merge=2\n";
     }
@@ -231,6 +242,7 @@ int main() {
         umi_counts.push_back({umi2, 1});
         
         uint32_t components = directional_dedup(umi_counts, 4);
+        (void)components;
         assert(components == 2);  // hamming != 1, so no merge
         std::cout << "Test 14 PASS: directional_dedup hamming=2 no merge=2\n";
     }
@@ -245,6 +257,7 @@ int main() {
         
         MockAccumulator acc;
         uint64_t total = store.finalize(acc, 4);
+        (void)total;
         
         assert(total == 1);
         assert(acc.calls.size() == 1);
@@ -264,6 +277,7 @@ int main() {
         
         MockAccumulator acc;
         uint64_t total = store.finalize(acc, 4);
+        (void)total;
         
         assert(total == 1);
         assert(acc.calls.size() == 1);
@@ -289,6 +303,7 @@ int main() {
         
         MockAccumulator acc;
         uint64_t total = store.finalize(acc, 4);
+        (void)total;
         
         assert(total == 1);  // merged to 1 component
         assert(acc.calls.size() == 1);

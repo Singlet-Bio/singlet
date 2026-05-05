@@ -253,6 +253,7 @@ static void test_pz_round_trip() {
     // Write to temp file
     fs::path tmp = fs::temp_directory_path() / "test_mt_events.1pz";
     bool ok = write_mt_event_matrix(tmp.string(), res, barcodes);
+    (void)ok;
     assert(ok);
     assert(fs::exists(tmp));
     assert(fs::file_size(tmp) > 0);
@@ -292,6 +293,7 @@ static void test_mt_summary_headers() {
 
     fs::path tmp = fs::temp_directory_path() / "test_mt_summary.tsv";
     bool ok = write_mt_summary(tmp.string(), res, barcodes);
+    (void)ok;
     assert(ok);
     assert(fs::exists(tmp));
 
@@ -306,6 +308,7 @@ static void test_mt_summary_headers() {
         "n_frameshifts", "n_premature_stops", "pct_heteroplasmic",
     };
     for (const auto& col : required_cols) {
+        (void)col;
         assert(header.find(col) != std::string::npos);
     }
 
@@ -367,6 +370,7 @@ static void test_pz_meta_keys() {
         "heteroplasmy_threshold",
     };
     for (const auto& k : required_keys) {
+        (void)k;
         assert(res.pz_meta.count(k) == 1);
     }
     assert(res.pz_meta.at("schema_version") == "1.1");

@@ -51,6 +51,7 @@ void test_write_mtx_integer() {
     
     std::string path = "/tmp/test_mtx_writer/test_int.mtx.gz";
     bool result = singlet::write_mtx(path, n_rows, n_cols, indptr, indices, data);
+    (void)result;
     
     assert(result && "write_mtx should return true");
     
@@ -88,6 +89,7 @@ void test_write_mtx_float() {
     
     std::string path = "/tmp/test_mtx_writer/test_float.mtx.gz";
     bool result = singlet::write_mtx(path, n_rows, n_cols, indptr, indices, data);
+    (void)result;
     
     assert(result && "write_mtx should return true");
     
@@ -116,6 +118,7 @@ void test_write_mtx_double() {
     
     std::string path = "/tmp/test_mtx_writer/test_double.mtx.gz";
     bool result = singlet::write_mtx(path, n_rows, n_cols, indptr, indices, data);
+    (void)result;
     
     assert(result && "write_mtx should return true");
     
@@ -141,6 +144,7 @@ void test_write_mtx_invalid_path() {
     // Try to write to a path that doesn't exist
     std::string invalid_path = "/nonexistent/path/that/should/fail/matrix.mtx.gz";
     bool result = singlet::write_mtx(invalid_path, n_rows, n_cols, indptr, indices, data);
+    (void)result;
     
     assert(!result && "write_mtx should return false for invalid path");
     
@@ -158,6 +162,7 @@ void test_write_mtx_empty_matrix() {
     
     std::string path = "/tmp/test_mtx_writer/test_empty.mtx.gz";
     bool result = singlet::write_mtx(path, n_rows, n_cols, indptr, indices, data);
+    (void)result;
     
     assert(result && "write_mtx should return true even for empty matrix");
     
@@ -180,6 +185,7 @@ void test_write_names() {
     std::string path = "/tmp/test_mtx_writer/test_names.tsv.gz";
     
     bool result = singlet::write_names(path, names);
+    (void)result;
     assert(result && "write_names should return true");
     
     std::string content = read_gzip_content(path);
@@ -187,6 +193,7 @@ void test_write_names() {
     
     // Check line count
     int line_count = count_lines(content);
+    (void)line_count;
     assert(line_count == 3 && "Should have exactly 3 lines");
     
     // Check content
@@ -204,11 +211,13 @@ void test_write_names_empty() {
     std::string path = "/tmp/test_mtx_writer/test_names_empty.tsv.gz";
     
     bool result = singlet::write_names(path, names);
+    (void)result;
     assert(result && "write_names should return true even for empty list");
     
     std::string content = read_gzip_content(path);
     // Empty file is OK
     int line_count = count_lines(content);
+    (void)line_count;
     assert(line_count == 0 && "Should have no lines for empty list");
     
     std::cout << "  ✓ write_names empty test passed\n";
@@ -223,6 +232,7 @@ void test_write_features_10x() {
     
     std::string path = "/tmp/test_mtx_writer/test_features.tsv.gz";
     bool result = singlet::write_features_10x(path, gene_ids, gene_names, feature_type);
+    (void)result;
     
     assert(result && "write_features_10x should return true");
     
@@ -231,6 +241,7 @@ void test_write_features_10x() {
     
     // Check line count (one per gene)
     int line_count = count_lines(content);
+    (void)line_count;
     assert(line_count == 3 && "Should have exactly 3 lines");
     
     // Check format: gene_id\tgene_name\tfeature_type
@@ -268,6 +279,7 @@ void test_write_features_10x_with_fallback_names() {
     
     std::string path = "/tmp/test_mtx_writer/test_features_fallback.tsv.gz";
     bool result = singlet::write_features_10x(path, gene_ids, gene_names, feature_type);
+    (void)result;
     
     assert(result && "write_features_10x should return true");
     
@@ -291,6 +303,7 @@ void test_write_features_10x_default_type() {
     
     std::string path = "/tmp/test_mtx_writer/test_features_default.tsv.gz";
     bool result = singlet::write_features_10x(path, gene_ids, gene_names);  // No feature_type
+    (void)result;
     
     assert(result && "write_features_10x should return true");
     

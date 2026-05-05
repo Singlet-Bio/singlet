@@ -8,7 +8,7 @@
 #include "singlet/pileup/atac_bin_counter.h"
 
 // Helper: look up value in CSC matrix at (row, col)
-static uint16_t csc_get(const singlet::SparseAccumulator<uint16_t>::CSCMatrix& m,
+[[maybe_unused]] static uint16_t csc_get(const singlet::SparseAccumulator<uint16_t>::CSCMatrix& m,
                         int32_t row, uint32_t col) {
     if (col >= m.ncols) return 0;
     for (int32_t i = m.indptr[col]; i < m.indptr[col + 1]; ++i) {

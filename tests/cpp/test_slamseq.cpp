@@ -34,6 +34,7 @@ static void test_basic_tc() {
         std::string ref  = "ACTCGA";
         auto q = good_qual(6);
         auto conv = count_tc_conversions(read, ref, q, DEFAULT_PARAMS);
+        (void)conv;
         assert(conv.t_positions == 1);
         assert(conv.tc_count == 1);
         assert(conv.other_conversions == 0);
@@ -50,6 +51,7 @@ static void test_basic_tc() {
         std::string ref  = "ATCGTA";
         auto q = good_qual(6);
         auto conv = count_tc_conversions(read, ref, q, DEFAULT_PARAMS);
+        (void)conv;
         assert(conv.t_positions == 2);
         assert(conv.tc_count == 2);
         assert(conv.other_conversions == 0);
@@ -61,6 +63,7 @@ static void test_basic_tc() {
         std::string ref  = "ACTTGA";
         auto q = good_qual(6);
         auto conv = count_tc_conversions(read, ref, q, DEFAULT_PARAMS);
+        (void)conv;
         assert(conv.tc_count == 0);
         assert(conv.t_positions == 2);  // two T's in ref
         assert(conv.other_conversions == 0);
@@ -76,8 +79,11 @@ static void test_is_new_rna() {
     p.min_tc_conversions = 2;
 
     ConversionCount c2{2, 5, 0};
+    (void)c2;
     ConversionCount c1{1, 5, 0};
+    (void)c1;
     ConversionCount c0{0, 5, 0};
+    (void)c0;
 
     assert(is_new_rna(c2, p) == true);
     assert(is_new_rna(c1, p) == false);
@@ -104,12 +110,14 @@ static void test_quality_filter() {
     q[2] = static_cast<char>(20 + 33);  // Phred 20 = '5', below 27
 
     auto conv = count_tc_conversions(read, ref, q, p);
+    (void)conv;
     assert(conv.tc_count == 0);  // filtered out
     assert(conv.t_positions == 0);  // T at pos 2 skipped due to quality
 
     // High quality: conversion counted
     q[2] = static_cast<char>(30 + 33);
     auto conv2 = count_tc_conversions(read, ref, q, p);
+    (void)conv2;
     assert(conv2.tc_count == 1);
 
     std::cout << "PASS test_quality_filter\n";
@@ -125,6 +133,7 @@ static void test_background_rate() {
     // pos 2: C vs T → T→C
     auto q = good_qual(6);
     auto conv = count_tc_conversions(read, ref, q, DEFAULT_PARAMS);
+    (void)conv;
     assert(conv.tc_count == 1);
     assert(conv.t_positions == 1);
     assert(conv.other_conversions == 1);  // the A→G at pos 0
@@ -153,10 +162,12 @@ static void test_compute_slam_stats() {
     assert(stats[0].new_reads == 2);
     assert(stats[0].old_reads == 1);
     float frac0 = 2.0f / 3.0f;
+    (void)frac0;
     assert(std::fabs(stats[0].new_fraction - frac0) < 1e-5f);
 
     // mean_tc_rate: (2/4 + 3/5 + 1/3) / 3 = (0.5 + 0.6 + 0.333) / 3 = 1.433/3 ≈ 0.4778
     float expected_tc = (2.0f/4 + 3.0f/5 + 1.0f/3) / 3.0f;
+    (void)expected_tc;
     assert(std::fabs(stats[0].mean_tc_rate - expected_tc) < 1e-4f);
 
     // background_rate cell 0 = 0 (no other mismatches)
@@ -169,6 +180,7 @@ static void test_compute_slam_stats() {
     assert(stats[1].new_fraction == 0.0f);
     // background_rate cell 1: (0/2 + 1/3) / 2 = 0.1667
     float expected_bg1 = (0.0f/2 + 1.0f/3) / 2.0f;
+    (void)expected_bg1;
     assert(std::fabs(stats[1].background_rate - expected_bg1) < 1e-4f);
 
     std::cout << "PASS test_compute_slam_stats\n";
@@ -185,6 +197,7 @@ static void test_write_tsv() {
 
     std::string path = "/tmp/test_slam_stats.tsv";
     bool ok = write_slam_stats_tsv(path, stats, barcodes);
+    (void)ok;
     assert(ok);
 
     std::ifstream f(path);
@@ -223,6 +236,7 @@ static void test_stranded() {
     std::string ref_plus  = "ACTCGA";
     auto q = good_qual(6);
     auto conv_plus = count_tc_conversions_stranded(read_plus, ref_plus, q, p, false);
+    (void)conv_plus;
     assert(conv_plus.tc_count == 1);
 
     // On - strand read: ref (+ strand) A → read G = A→G (≡ T→C on minus strand)
@@ -231,11 +245,13 @@ static void test_stranded() {
     std::string ref_minus  = "ACGAGT";
     std::string read_minus = "GCGAGT";
     auto conv_minus = count_tc_conversions_stranded(read_minus, ref_minus, q, p, true);
+    (void)conv_minus;
     assert(conv_minus.tc_count == 1);
     assert(conv_minus.t_positions == 2);  // A at pos 0 and pos 4
 
     // Unstranded (+ orientation) should not count A→G
     auto conv_unstranded = count_tc_conversions(read_minus, ref_minus, q, p);
+    (void)conv_unstranded;
     // ref "ACGAGT" has T at pos 5, so t_positions=1, tc_count=0 (read has T at pos 5 too)
     assert(conv_unstranded.t_positions == 1);
     assert(conv_unstranded.tc_count == 0);
@@ -251,6 +267,7 @@ static void test_length_mismatch() {
         count_tc_conversions("ACG", "AC", good_qual(3), DEFAULT_PARAMS);
     } catch (const std::invalid_argument&) {
         threw = true;
+        (void)threw;
     }
     assert(threw);
     std::cout << "PASS test_length_mismatch\n";

@@ -24,6 +24,7 @@ void test_minimizer_all_A() {
     
     uint64_t hash1 = minimizer_compute(seq, 4, 2);
     uint64_t hash2 = minimizer_compute(seq, 4, 2);
+    (void)hash2;
     
     // Should be deterministic (same result)
     assert(hash1 == hash2 && "minimizer_compute should be deterministic");
@@ -40,6 +41,7 @@ void test_minimizer_with_N() {
     uint8_t seq[5] = {0, 1, 4, 2, 3};  // A, C, N, G, T
     
     uint64_t hash = minimizer_compute(seq, 4, 2);
+    (void)hash;
     
     assert(hash == 0 && "minimizer_compute should return 0 when N (value > 3) is encountered");
     std::cout << "✓ Test 4: minimizer_compute with N in sequence returns 0\n";
@@ -111,6 +113,7 @@ void test_hash_kmer_with_N() {
     uint8_t seq[5] = {0, 1, 4, 3, 0};  // ACNTA where N=4
     
     uint64_t hash = hash_kmer(seq, 5);
+    (void)hash;
     
     assert(hash == 0 && "hash_kmer should return 0 when N (value > 3) is encountered");
     std::cout << "✓ Test 8: hash_kmer with N returns 0\n";
@@ -139,6 +142,7 @@ void test_minimizer_header_magic() {
 // Test 10: MinimizerRecord structure
 void test_minimizer_record_fields() {
     MinimizerRecord rec;
+    (void)rec;
     rec.hash = 123456789;
     rec.SA_lo = 100;
     rec.SA_hi = 200;
@@ -157,6 +161,7 @@ void test_minimizer_single_window() {
     uint8_t seq[4] = {0, 1, 2, 3};  // ACGT for k=4
     
     uint64_t hash = minimizer_compute(seq, 4, 1);
+    (void)hash;
     
     // Should be canonical hash of the single k-mer
     assert(hash != 0 && "Single window minimizer should be non-zero for ACGT");
@@ -174,6 +179,7 @@ void test_minimizer_larger_params() {
     }
     
     uint64_t hash = minimizer_compute(seq, 21, 10);
+    (void)hash;
     
     // Should return a valid hash (could be 0 if all same, but our pattern is varied)
     assert(hash != 0 && "Larger k,w with varied sequence should produce hash");
@@ -185,8 +191,11 @@ void test_minimizer_consistency() {
     uint8_t seq[10] = {0, 1, 2, 3, 0, 1, 2, 3, 0, 1};
     
     uint64_t h1 = minimizer_compute(seq, 7, 4);
+    (void)h1;
     uint64_t h2 = minimizer_compute(seq, 7, 4);
+    (void)h2;
     uint64_t h3 = minimizer_compute(seq, 7, 4);
+    (void)h3;
     
     assert(h1 == h2 && h2 == h3 && "minimizer_compute should be consistent across multiple calls");
     std::cout << "✓ Test 13: minimizer_compute consistency verified\n";
@@ -195,8 +204,11 @@ void test_minimizer_consistency() {
 // Test 14: N at different positions all return 0
 void test_minimizer_N_any_position() {
     uint8_t seq1[5] = {4, 0, 1, 2, 3};  // N at start
+    (void)seq1;
     uint8_t seq2[5] = {0, 4, 1, 2, 3};  // N in middle
+    (void)seq2;
     uint8_t seq3[5] = {0, 1, 2, 3, 4};  // N at end
+    (void)seq3;
     
     assert(minimizer_compute(seq1, 4, 2) == 0 && "N at start should return 0");
     assert(minimizer_compute(seq2, 4, 2) == 0 && "N in middle should return 0");

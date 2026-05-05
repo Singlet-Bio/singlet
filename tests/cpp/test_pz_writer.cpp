@@ -53,6 +53,7 @@ void test_magic_constant() {
 void test_crc32_empty() {
     CRC32 crc;
     uint32_t result = crc.finalize();
+    (void)result;
     // Empty CRC should be specific value
     assert(result == 0);
     std::cout << "✓ test_crc32_empty passed\n";
@@ -62,6 +63,7 @@ void test_crc32_empty() {
 void test_crc32_nonempty() {
     uint8_t data[] = {1, 2, 3, 4, 5};
     uint32_t crc1 = CRC32::compute(data, 5);
+    (void)crc1;
     uint32_t crc2 = CRC32::compute(nullptr, 0);
     crc2 = CRC32().finalize();  // empty
     (void)crc2;
@@ -74,7 +76,9 @@ void test_crc32_nonempty() {
 void test_crc32_deterministic() {
     uint8_t data[] = {10, 20, 30, 40, 50};
     uint32_t crc1 = CRC32::compute(data, 5);
+    (void)crc1;
     uint32_t crc2 = CRC32::compute(data, 5);
+    (void)crc2;
     assert(crc1 == crc2);
     std::cout << "✓ test_crc32_deterministic passed\n";
 }
@@ -84,7 +88,9 @@ void test_crc32_different_payloads() {
     uint8_t data1[] = {1, 2, 3, 4, 5};
     uint8_t data2[] = {5, 4, 3, 2, 1};
     uint32_t crc1 = CRC32::compute(data1, 5);
+    (void)crc1;
     uint32_t crc2 = CRC32::compute(data2, 5);
+    (void)crc2;
     assert(crc1 != crc2);
     std::cout << "✓ test_crc32_different_payloads passed\n";
 }
@@ -107,11 +113,13 @@ void test_write_1pz_magic() {
         m, n, indptr, indices, data,
         rownames, colnames,
         3, 1024, 1);
+    (void)result;
     
     assert(result == true);
     
     // Verify magic
     uint32_t magic = read_magic("/tmp/test_pz_out/test.1pz");
+    (void)magic;
     assert(magic == TP1_MAGIC);
     std::cout << "✓ test_write_1pz_magic passed\n";
 }
@@ -148,6 +156,7 @@ void test_write_1pz_file_size() {
         m, n, indptr, indices, data,
         rownames, colnames,
         3, 1024, 1);
+    (void)result;
     
     assert(result == true);
     
@@ -173,11 +182,14 @@ void test_write_1pz_uint8() {
         "/tmp/test_pz_out/test_uint8.1pz",
         m, n, indptr, indices, data,
         rownames, colnames);
+    (void)result;
     
     assert(result == true);
     uint32_t magic = read_magic("/tmp/test_pz_out/test_uint8.1pz");
+    (void)magic;
     assert(magic == TP1_MAGIC);
     uint64_t file_size = get_file_size("/tmp/test_pz_out/test_uint8.1pz");
+    (void)file_size;
     assert(file_size > 112);  // header + footer minimum
     std::cout << "✓ test_write_1pz_uint8 passed\n";
 }
@@ -199,9 +211,11 @@ void test_write_1pz_uint32() {
         "/tmp/test_pz_out/test_uint32.1pz",
         m, n, indptr, indices, data,
         rownames, colnames);
+    (void)result;
     
     assert(result == true);
     uint32_t magic = read_magic("/tmp/test_pz_out/test_uint32.1pz");
+    (void)magic;
     assert(magic == TP1_MAGIC);
     std::cout << "✓ test_write_1pz_uint32 passed\n";
 }
@@ -227,9 +241,11 @@ void test_write_1pz_metadata() {
         m, n, indptr, indices, data,
         rownames, colnames,
         3, 1024, 1, user_meta);
+    (void)result;
     
     assert(result == true);
     uint32_t magic = read_magic("/tmp/test_pz_out/test_metadata.1pz");
+    (void)magic;
     assert(magic == TP1_MAGIC);
     std::cout << "✓ test_write_1pz_metadata passed\n";
 }
@@ -241,7 +257,9 @@ void test_crc32_large_data() {
         data[i] = static_cast<uint8_t>(i % 256);
     }
     uint32_t crc1 = CRC32::compute(data.data(), data.size());
+    (void)crc1;
     uint32_t crc2 = CRC32::compute(data.data(), data.size());
+    (void)crc2;
     assert(crc1 == crc2);
     std::cout << "✓ test_crc32_large_data passed\n";
 }
@@ -250,11 +268,13 @@ void test_crc32_large_data() {
 void test_crc32_incremental() {
     uint8_t data[] = {1, 2, 3, 4, 5, 6, 7, 8};
     uint32_t crc_batch = CRC32::compute(data, 8);
+    (void)crc_batch;
     
     CRC32 crc_inc;
     crc_inc.update(data, 4);
     crc_inc.update(data + 4, 4);
     uint32_t crc_incremental = crc_inc.finalize();
+    (void)crc_incremental;
     
     assert(crc_batch == crc_incremental);
     std::cout << "✓ test_crc32_incremental passed\n";
@@ -277,9 +297,11 @@ void test_write_1pz_empty() {
         "/tmp/test_pz_out/test_empty.1pz",
         m, n, indptr, indices, data,
         rownames, colnames);
+    (void)result;
     
     assert(result == true);
     uint32_t magic = read_magic("/tmp/test_pz_out/test_empty.1pz");
+    (void)magic;
     assert(magic == TP1_MAGIC);
     std::cout << "✓ test_write_1pz_empty passed\n";
 }
@@ -287,6 +309,7 @@ void test_write_1pz_empty() {
 // Test 16: PZHeader struct layout (basic checks)
 void test_pzheader_layout() {
     PZHeader hdr{};
+    (void)hdr;
     hdr.magic = TP1_MAGIC;
     hdr.version = TP1_VERSION;
     hdr.vt_code = 2;
@@ -307,6 +330,7 @@ void test_pzheader_layout() {
 // Test 17: PZFooter struct layout
 void test_pzfooter_layout() {
     PZFooter ftr{};
+    (void)ftr;
     ftr.file_crc32 = 0x12345678;
     ftr.num_chunks = 10;
     ftr.magic = TP1_MAGIC;

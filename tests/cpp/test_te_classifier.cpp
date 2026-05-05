@@ -126,6 +126,7 @@ static int test_nullopt_on_empty() {
     TeClassifier clf(db);
 
     auto hit = clf.classify("");
+    (void)hit;
     assert(!hit);
     printf("PASS: empty string → nullopt\n");
     return 0;
@@ -159,6 +160,7 @@ static int test_ambiguity_check() {
 
     std::string read = make_te_read(consensus, 10, 90);
     auto hit = clf.classify(read);
+    (void)hit;
     assert(!hit);  // ambiguous: two families tied → nullopt
     printf("PASS: ambiguous (tied families) → nullopt\n");
     return 0;

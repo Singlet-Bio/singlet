@@ -99,6 +99,7 @@ static void test_compute_summary() {
 
     auto records = build_spot_qc(barcodes, umis, genes, mt, parser);
     auto s = compute_visium_summary(records, /*min_umi=*/150);
+    (void)s;
 
     assert(s.n_barcodes == 4);
     assert(s.n_in_tissue == 3);
@@ -133,6 +134,7 @@ static void test_write_tsv() {
 
     const char* tmp = "/tmp/test_visium_qc_out.tsv";
     bool ok = write_visium_qc_tsv(tmp, records);
+    (void)ok;
     assert(ok);
 
     std::ifstream f(tmp);
@@ -140,6 +142,7 @@ static void test_write_tsv() {
     std::getline(f, header);
     // Count tabs: 9 tab-separated columns → 9 tabs
     size_t ntabs = std::count(header.begin(), header.end(), '\t');
+    (void)ntabs;
     assert(ntabs == 9);
 
     // Check header contains expected columns
@@ -174,6 +177,7 @@ static void test_empty_parser() {
     assert(records[0].in_positions == false);
 
     auto s = compute_visium_summary(records, 100);
+    (void)s;
     assert(s.n_in_tissue == 0);
     assert(s.tissue_coverage == 0.0);
     assert(s.median_umis == 0.0);
@@ -195,6 +199,7 @@ static void test_coverage_zero_below_threshold() {
 
     auto records = build_spot_qc(barcodes, umis, genes, mt, parser);
     auto s = compute_visium_summary(records, 100);
+    (void)s;
     assert(s.n_in_tissue == 2);
     assert(s.n_detected_spots == 0);
     assert(s.tissue_coverage == 0.0);
@@ -218,6 +223,7 @@ static void test_median_even() {
 
     auto records = build_spot_qc(barcodes, umis, genes, mt, parser);
     auto s = compute_visium_summary(records, 1);
+    (void)s;
     // Sorted: [100,200,300,400] → median = (200+300)/2 = 250
     assert(std::fabs(s.median_umis - 250.0) < 1e-9);
 }
