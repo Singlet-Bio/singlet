@@ -927,7 +927,7 @@ struct DemuxResult {
 // ============================================================================
 // Main entry point — run donor demultiplexing
 // ============================================================================
-static DemuxResult run_demux(
+inline DemuxResult run_demux(
     uint32_t n_snps, uint32_t n_cells,
     const int32_t* ad_indptr, const int32_t* ad_indices, const uint8_t* ad_data,
     uint64_t /*ad_nnz*/,
@@ -1203,7 +1203,7 @@ struct DonorDepths {
     int n_covered = 0;
 };
 
-static DonorDepths aggregate_donor_depths(
+inline DonorDepths aggregate_donor_depths(
     const DemuxResult& demux,
     uint32_t n_snps, uint32_t n_barcodes,
     const int32_t* ad_indptr, const int32_t* ad_indices, const uint8_t* ad_data,
@@ -1265,7 +1265,7 @@ static void parse_snp_name(const std::string& name,
 // FORMAT: GT:AF:AD:DP per site where the donor has any read depth.
 // Only SNPs with coverage in at least one donor are emitted.
 // ============================================================================
-static void write_donor_vcfs(
+inline void write_donor_vcfs(
     const std::string& out_prefix,
     const DemuxResult& demux,
     const DonorDepths& depths,
@@ -1341,7 +1341,7 @@ static void write_donor_vcfs(
 // Columns: snp_id  chrom  pos  ref  alt  dp  ad  af_vb  gt
 // Only rows where dp > 0 for this donor are written.
 // ============================================================================
-static void write_donor_coverages(
+inline void write_donor_coverages(
     const std::string& out_prefix,
     const DemuxResult& demux,
     const DonorDepths& depths,
@@ -1394,7 +1394,7 @@ static void write_donor_coverages(
 // ============================================================================
 // Write donor assignments TSV
 // ============================================================================
-static bool write_donor_assignments(
+inline bool write_donor_assignments(
     const std::string& path,
     const std::vector<DonorAssignment>& assignments,
     const std::vector<std::string>& barcodes)
@@ -1420,7 +1420,7 @@ static bool write_donor_assignments(
 // all cells belong to donor0) and synthesize a DemuxResult directly.
 // covered_to_original is still populated so per-donor VCF/coverage writes work.
 // ============================================================================
-static DemuxResult make_single_donor_result(
+inline DemuxResult make_single_donor_result(
     uint32_t n_snps, uint32_t n_cells,
     const int32_t* ad_indptr, const int32_t* ad_indices, const uint8_t* ad_data,
     const int32_t* dp_indptr, const int32_t* dp_indices, const uint8_t* dp_data)

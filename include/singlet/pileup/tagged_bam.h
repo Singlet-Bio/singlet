@@ -211,7 +211,7 @@ class TaggedBamWriter {
         }
         if (cfg_.add_index && !cfg_.output_path.empty()) {
             // sam_index_build returns 0 on success; ignore failure gracefully
-            (void)sam_index_build(cfg_.output_path.c_str(), 0);
+            [[maybe_unused]] int rc = sam_index_build(cfg_.output_path.c_str(), 0);
         }
     }
 

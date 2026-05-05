@@ -218,6 +218,8 @@ inline bool ReadDedupStats::is_optical_duplicate(const IlluminaCoords& a,
     return pixel_distance(a.x, a.y, b.x, b.y) < static_cast<double>(config_.optical_distance);
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-result"
 inline ReadDedupStats::Result ReadDedupStats::process_bam(const std::string& bam_path) {
     Result res;
 
@@ -339,5 +341,6 @@ inline ReadDedupStats::Result ReadDedupStats::process_bam(const std::string& bam
 
     return res;
 }
+#pragma GCC diagnostic pop
 
 }  // namespace singlet
