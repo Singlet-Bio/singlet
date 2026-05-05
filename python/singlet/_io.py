@@ -313,6 +313,12 @@ def read_1pz(path: str | Path) -> anndata.AnnData:
     import numpy as np
     import scipy.sparse as sp
 
+    if path is None:
+        raise TypeError("read_1pz() requires a file path, got None")
+    path_str = str(path)
+    if not path_str:
+        raise ValueError("read_1pz() requires a non-empty file path")
+
     try:
         import singlepress
 
@@ -403,6 +409,9 @@ def write_1pz(
     """
     import scipy.sparse as sp
     import singlepress
+
+    if adata is None:
+        raise TypeError("write_1pz() requires an AnnData object, got None")
 
     mat = adata.layers[layer] if layer else adata.X
     if not sp.issparse(mat):

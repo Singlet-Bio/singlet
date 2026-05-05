@@ -336,3 +336,25 @@ class TestLegacyV2Paths:
             adata = read_1pz(str(tmp_path / "fake.1pz"))
             # 3 genes × 4 cells → transposed to 4 cells × 3 genes
             assert adata.shape == (4, 3)
+
+
+class TestReadWrite1pzValidation:
+    """Input validation for read_1pz / write_1pz."""
+
+    def test_read_1pz_none_raises_typeerror(self):
+        from singlet._io import read_1pz
+
+        with pytest.raises(TypeError, match="got None"):
+            read_1pz(None)
+
+    def test_read_1pz_empty_raises_valueerror(self):
+        from singlet._io import read_1pz
+
+        with pytest.raises(ValueError, match="non-empty"):
+            read_1pz("")
+
+    def test_write_1pz_none_raises_typeerror(self):
+        from singlet._io import write_1pz
+
+        with pytest.raises(TypeError, match="got None"):
+            write_1pz(None, "/tmp/out.1pz")
