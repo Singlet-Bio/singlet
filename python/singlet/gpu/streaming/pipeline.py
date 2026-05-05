@@ -26,9 +26,12 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import TYPE_CHECKING, List, Optional, Union
 
 import numpy as np
+
+if TYPE_CHECKING:
+    import anndata
 
 # ---------------------------------------------------------------------------
 # Result dataclass
@@ -99,7 +102,7 @@ class PipelineResult:
     _gene_vars: Optional[object] = None
 
     @property
-    def adata(self):
+    def adata(self) -> anndata.AnnData:
         """
         Construct a minimal AnnData from the streaming result.  X is empty
         (the streaming pipeline does NOT retain the full count matrix on

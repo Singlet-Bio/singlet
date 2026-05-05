@@ -91,9 +91,7 @@ class Cell2FateModel:
         idx = cp.asarray(self.result.module_topgenes_view).reshape(K, n).get()
         return [[self.gene_names[i] for i in row] for row in idx.astype(int)]
 
-    def to_anndata(
-        self, adata: anndata.AnnData, copy: bool = False
-    ) -> Optional[anndata.AnnData]:
+    def to_anndata(self, adata: anndata.AnnData, copy: bool = False) -> Optional[anndata.AnnData]:
         """
         Write Cell2fate results to an AnnData object.
 
@@ -193,7 +191,9 @@ def fit(
         d_spliced = _layer_to_csc(spliced_layer)
         d_unspliced = _layer_to_csc(unspliced_layer)
     except ImportError as e:
-        raise ImportError(f"singlet.gpu.spatial.cell2fate.fit requires cupy.  Original error: {e}") from e
+        raise ImportError(
+            f"singlet.gpu.spatial.cell2fate.fit requires cupy.  Original error: {e}"
+        ) from e
 
     result = _core.cell2fate_fit(
         d_spliced,

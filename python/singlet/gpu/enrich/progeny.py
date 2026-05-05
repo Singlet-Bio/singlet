@@ -97,7 +97,9 @@ def run_progeny(
             X = X.T  # genes × cells
         device_mat = csp.csc_matrix(X) if sp.issparse(X) else csp.csc_matrix(cp.array(X))
     except ImportError as e:
-        raise ImportError(f"singlet.gpu.enrich.run_progeny requires cupy.  Original error: {e}") from e
+        raise ImportError(
+            f"singlet.gpu.enrich.run_progeny requires cupy.  Original error: {e}"
+        ) from e
 
     result = _core.progeny(
         device_mat,

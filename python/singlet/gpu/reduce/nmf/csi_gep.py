@@ -94,7 +94,9 @@ def run_csi_gep(
             X = X.T  # genes × cells
         device_mat = csp.csc_matrix(X) if sp.issparse(X) else csp.csc_matrix(cp.array(X))
     except ImportError as e:
-        raise ImportError(f"singlet.gpu.reduce.nmf.run_csi_gep requires cupy.  Original error: {e}") from e
+        raise ImportError(
+            f"singlet.gpu.reduce.nmf.run_csi_gep requires cupy.  Original error: {e}"
+        ) from e
 
     result = _core.csi_gep(
         device_mat,

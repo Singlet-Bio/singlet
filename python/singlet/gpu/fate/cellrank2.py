@@ -20,12 +20,15 @@ When an AnnData is provided (``run_from_anndata``):
 from __future__ import annotations
 
 import copy as copy_module
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 
 if TYPE_CHECKING:
     import anndata
+
+    # C++ binding type returned by _core.fate.cellrank2()
+    CellRank2Result = Any
 
 
 # ---------------------------------------------------------------------------
@@ -96,7 +99,7 @@ def compute_absorption_probabilities(
     mat=None,
     stream=None,
     seed: int = 0,
-):
+) -> CellRank2Result:
     """
     GPU-native CellRank 2 absorption probability computation (raw inputs).
 

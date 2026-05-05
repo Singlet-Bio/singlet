@@ -87,7 +87,9 @@ def run_doublet_score(
         emb = np.asarray(working.obsm[embedding_key], dtype=np.float32)
         d_emb = cp.asarray(emb)
     except ImportError as e:
-        raise ImportError(f"singlet.gpu.qc.run_doublet_score requires cupy.  Original error: {e}") from e
+        raise ImportError(
+            f"singlet.gpu.qc.run_doublet_score requires cupy.  Original error: {e}"
+        ) from e
 
     result = _core.doublet_score(
         d_emb,

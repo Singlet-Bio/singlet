@@ -104,7 +104,9 @@ def run_stagate(
         coords = cp.asarray(working.obsm[spatial_key].astype(np.float32))
 
     except ImportError as e:
-        raise ImportError(f"singlet.gpu.spatial.run_stagate requires cupy.  Original error: {e}") from e
+        raise ImportError(
+            f"singlet.gpu.spatial.run_stagate requires cupy.  Original error: {e}"
+        ) from e
 
     result = _core.stagate(
         mat,

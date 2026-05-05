@@ -124,7 +124,9 @@ def run_ssgsea(
             X = X.T  # genes × cells
         device_mat = csp.csc_matrix(X) if sp.issparse(X) else csp.csc_matrix(cp.array(X))
     except ImportError as e:
-        raise ImportError(f"singlet.gpu.enrich.run_ssgsea requires cupy.  Original error: {e}") from e
+        raise ImportError(
+            f"singlet.gpu.enrich.run_ssgsea requires cupy.  Original error: {e}"
+        ) from e
 
     result = _core.ssgsea(
         device_mat,

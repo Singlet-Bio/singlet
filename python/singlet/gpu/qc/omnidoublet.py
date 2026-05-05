@@ -116,7 +116,9 @@ def run_omni_doublet(
             X_adt = X_adt.T
         d_adt = csp.csc_matrix(X_adt) if sp.issparse(X_adt) else csp.csc_matrix(cp.array(X_adt))
     except ImportError as e:
-        raise ImportError(f"singlet.gpu.qc.run_omni_doublet requires cupy.  Original error: {e}") from e
+        raise ImportError(
+            f"singlet.gpu.qc.run_omni_doublet requires cupy.  Original error: {e}"
+        ) from e
 
     result = _core.omni_doublet(
         d_rna,
