@@ -285,6 +285,20 @@ class TestLoad:
         loaded = load("GSE100")
         assert loaded.shape == (4, 6)
 
+    def test_load_none_raises_typeerror(self):
+        """load(None) gives a clear TypeError."""
+        from singlet._loader import load
+
+        with pytest.raises(TypeError, match="got None"):
+            load(None)
+
+    def test_load_empty_raises_valueerror(self):
+        """load('') gives a clear ValueError."""
+        from singlet._loader import load
+
+        with pytest.raises(ValueError, match="non-empty"):
+            load("")
+
 
 class TestLoadSample:
     """Test load_sample() with mocked catalog."""

@@ -164,6 +164,11 @@ def load(
     """
     from singlet._io import read_1pz, read_matrix
 
+    if source is None:
+        raise TypeError("load() requires a file path or GEO accession, got None")
+    if not str(source).strip():
+        raise ValueError("load() requires a non-empty file path or GEO accession")
+
     path = Path(source)
 
     if path.exists():
