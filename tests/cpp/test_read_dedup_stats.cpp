@@ -231,7 +231,7 @@ static void test_process_bam_synthetic() {
 
     htsFile* wfp = hts_open(tmpbam, "wb");
     assert(wfp);
-    sam_hdr_write(wfp, hdr);
+    [[maybe_unused]] int rc_hdr = sam_hdr_write(wfp, hdr);
 
     // Write 3 reads all at the same position (2 duplicates of read 0)
     // QNAME format: instrument:run:fc:lane:tile:x:y
@@ -259,7 +259,7 @@ static void test_process_bam_synthetic() {
         b->m_data = data_len;
         std::memcpy(b->data, qnames[i], b->core.l_qname);
 
-        sam_write1(wfp, hdr, b);
+        [[maybe_unused]] int rc_wr = sam_write1(wfp, hdr, b);
         bam_destroy1(b);
     }
 

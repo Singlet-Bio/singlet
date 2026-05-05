@@ -91,7 +91,7 @@ void test_minimizer_window_minimum() {
     // The function should examine all possible k-mer windows within the w-size
     // and return the minimum canonical hash
     // This test just verifies it executes and returns a value
-    assert(hash != 0 || seq[4] > 3 == false && "minimizer_compute should return a value");
+    assert(hash != 0 || ((seq[4] > 3) == false && "minimizer_compute should return a value"));
     
     std::cout << "✓ Test 6: minimizer_compute picks minimum across windows (hash=" << hash << ")\n";
 }

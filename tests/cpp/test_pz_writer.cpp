@@ -64,6 +64,7 @@ void test_crc32_nonempty() {
     uint32_t crc1 = CRC32::compute(data, 5);
     uint32_t crc2 = CRC32::compute(nullptr, 0);
     crc2 = CRC32().finalize();  // empty
+    (void)crc2;
     // Non-empty should differ from empty (which is 0)
     assert(crc1 != 0);
     std::cout << "✓ test_crc32_nonempty passed\n";

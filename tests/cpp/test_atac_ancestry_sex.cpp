@@ -86,6 +86,7 @@ static void test_sex_clear() {
 // Test 7: EUR-like allele frequencies → EUR call
 static void test_ancestry_eur() {
     const auto& aims = get_aim_panel();
+    (void)aims;
     AtacAncestryClassifier anc;
     // Feed 20 ALT observations at index 0 (rs1426654, EUR alt freq ~0.989)
     // and 1 ALT + 19 REF at index 1 (rs16891982, EUR alt freq ~0.879)

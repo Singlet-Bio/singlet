@@ -4,7 +4,7 @@
 //        edge cases (zero/empty metrics), warnings, user_meta passthrough.
 //
 // Run standalone:
-//   g++ -std=c++17 -O2 -I../include -o /tmp/test_summary_json \
+//   g++ -std=c++17 -O2 -I../include -o /tmp/test_summary_json
 //       test/test_summary_json.cpp && /tmp/test_summary_json
 
 #include <algorithm>
@@ -49,7 +49,7 @@ static bool contains(const std::string& haystack, const std::string& needle) {
 }
 
 /// Count occurrences of `needle` in `haystack`
-static int count_substr(const std::string& haystack, const std::string& needle) {
+[[maybe_unused]] static int count_substr(const std::string& haystack, const std::string& needle) {
     int n = 0;
     std::string::size_type pos = 0;
     while ((pos = haystack.find(needle, pos)) != std::string::npos) {

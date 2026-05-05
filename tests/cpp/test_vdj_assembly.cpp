@@ -54,6 +54,7 @@ static void test_translate() {
 
     // All 64 codons: verify stop codons only at TAA/TAG/TGA
     static const char* stops[] = {"TAA", "TAG", "TGA"};
+    (void)stops;
     int stop_count = 0;
     const char bases[] = "ACGT";
     for (int i0 = 0; i0 < 4; ++i0)

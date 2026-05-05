@@ -126,7 +126,7 @@ static void test_basic_em() {
     // A gets ~13 from EC1 (100/150*20=13.3), B gets ~7+8=15.3, C gets ~1.7
     CHECK(rescued[0] >= 10 && rescued[0] <= 17, "gene A rescued 10-17");
     CHECK(rescued[1] >= 10 && rescued[1] <= 20, "gene B rescued 10-20");
-    CHECK(rescued[2] >= 0 && rescued[2] <= 5, "gene C rescued 0-5");
+    CHECK(rescued[2] <= 5, "gene C rescued 0-5");
 }
 
 // ── Test 2: Convergence ───────────────────────────────────────────────────

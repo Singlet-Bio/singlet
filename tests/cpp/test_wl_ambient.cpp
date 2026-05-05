@@ -8,7 +8,7 @@
 //   4. Original (non-WL) path still works when wl_ambient_gene_raw == nullptr
 //
 // Run via ctest or standalone:
-//   g++ -std=c++17 -O2 -I../include -o /tmp/test_wl_ambient \
+//   g++ -std=c++17 -O2 -I../include -o /tmp/test_wl_ambient
 //       test/test_wl_ambient.cpp && /tmp/test_wl_ambient
 
 #include "singlet/pileup/cell_calling.h"

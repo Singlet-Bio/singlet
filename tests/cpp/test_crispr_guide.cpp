@@ -85,6 +85,7 @@ static void test_empty_and_invalid() {
     auto path = write_temp_csv("name,sequence\n"); // header only, no data
     GuideRef ref2;
     bool ok = ref2.load_csv(path);
+    (void)ok;
     // Either false (empty) or true with 0 guides — both acceptable
     assert(ref2.empty());
     std::remove(path.c_str());

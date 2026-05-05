@@ -64,7 +64,7 @@ static NonHostScreener::MultiHit make_bacterial_hit(uint32_t sid, float rate) {
     return mh;
 }
 
-static NonHostScreener::MultiHit make_no_hit() {
+[[maybe_unused]] static NonHostScreener::MultiHit make_no_hit() {
     return {};   // UNKNOWN, empty hit lists
 }
 

@@ -22,6 +22,8 @@ static bool g_tracking = false;
 // Override global new/delete for tracking.
 // Note: this intercepts ALL allocations in this translation unit after the
 // atomic is set.  We bracket the hot-path section explicitly.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmismatched-new-delete"
 void* operator new(std::size_t sz) {
     if (g_tracking) ++g_alloc_count;
     void* p = std::malloc(sz);
@@ -38,6 +40,7 @@ void operator delete(void* p) noexcept  { std::free(p); }
 void operator delete[](void* p) noexcept { std::free(p); }
 void operator delete(void* p, std::size_t) noexcept  { std::free(p); }
 void operator delete[](void* p, std::size_t) noexcept { std::free(p); }
+#pragma GCC diagnostic pop
 
 // ── Now include the cascade headers ──────────────────────────────────────────
 #include "singlet/pileup/cascade_router.h"
