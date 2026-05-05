@@ -1,14 +1,19 @@
-# singlify API Reference
+# C++ API Reference
 
-All C++ APIs are header-only and live under `include/`. Add `include/` to your include path; no separate compilation step is required beyond what the `singlify` CMake target already does.
+All C++ APIs are header-only and live under `include/singlet/`. Add `include/` to your include path.
+
+```cmake
+find_package(Singlet REQUIRED)
+target_link_libraries(myapp PRIVATE singlet::pz singlet::fq singlet::pileup)
+```
 
 ---
 
-## lib1fq — `.1fq` format codec
+## singlet::fq — `.1fq` format codec
 
-Single header include: `#include "lib1fq/lib1fq.h"`
+Include: `#include "singlet/fq/lib1fq.h"`
 
-Namespace: `lib1fq`
+Namespace: `singlet::fq`
 
 ### Core types (`types.h`)
 
@@ -181,9 +186,9 @@ DedupStats dedup_1fq(const DedupConfig& cfg);
 
 ---
 
-## singlet-pileup — streaming BAM pileup engine
+## singlet::pileup — streaming BAM pileup engine
 
-Single header include: `#include "singlet-pileup/pileup_engine.h"` and `#include "singlet-pileup/export.h"`
+Include: `#include "singlet/pileup/pileup_engine.h"` and `#include "singlet/pileup/export.h"`
 
 Namespace: `singlet`
 
@@ -263,8 +268,8 @@ ExportStats export_results(const PileupEngine& engine,
 ### Typical usage
 
 ```cpp
-#include "singlet-pileup/pileup_engine.h"
-#include "singlet-pileup/export.h"
+#include "singlet/pileup/pileup_engine.h"
+#include "singlet/pileup/export.h"
 
 singlet::PileupConfig cfg;
 cfg.exon_gtf_path = "genes.gtf";
@@ -284,10 +289,11 @@ singlet::export_results(engine, cfg, ecfg);
 
 ---
 
-## star_api.h — bundled STAR entry point
+## singlet::star — bundled STAR entry point
+
+Include: `#include "singlet/star/star_api.h"`
 
 ```cpp
-// include/star_api.h
 extern "C++" int star_main_impl(int argc, char* argv[]);
 ```
 
