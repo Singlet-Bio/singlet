@@ -1,4 +1,0 @@
-# file: /mnt/home/debruinz/Singlet-AI/singlet/python/singlet/_query.py
-# hypothesis_version: 6.141.1
-
-[120, 100000, ',', '.spz', 'AnnData', 'cell_type', 'developmental_stage', 'disease', 'max_results', 'min_cells', 'modality', 'perturbation', 'query', 'sex', 'species', 'tissue']

@@ -1,4 +1,0 @@
-# file: /mnt/home/debruinz/Singlet-AI/singlet/python/singlet/_annotate.py
-# hypothesis_version: 6.141.1
-
-[1.0, 100, 120, '.singlet', '_', 'cell_type', 'confidence', 'models', 'organism', 'pd.DataFrame', 'species', 'toarray', 'top_program', 'top_program_loading', 'unknown']

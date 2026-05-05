@@ -1,4 +1,0 @@
-# file: /mnt/home/debruinz/Singlet-AI/singlet/python/singlet/_catalog.py
-# hypothesis_version: 6.141.1
-
-[0.1, 0.5, 0.7, 1000.0, 1000000.0, 100, 120, 200, 500, ',', '.singlet', ';', 'GSM', 'HARD_FAIL', 'SINGLET_CATALOG_DIR', 'SUCCESS', 'align_low_map', 'avg_cells', 'avg_mapping_rate', 'avg_median_genes', 'bronze', 'cache', 'catalog_v1.parquet', 'category', 'cell_type', 'cells_called', 'count', 'data', 'download_fail', 'failure_category', 'first', 'gold', 'gse_id', 'gsm_id', 'has_kraken2', 'mapping_rate', 'mean', 'median_genes', 'n_cells', 'n_samples', 'object', 'organism', 'organisms', 'pct', 'pipeline_crash', 'protocol', 'protocols', 'sample_index.parquet', 'silver', 'source', 'status', 'sum', 'tier', 'tissue', 'total_cells', 'unknown']

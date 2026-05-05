@@ -1,4 +1,0 @@
-# file: /mnt/home/debruinz/Singlet-AI/singlet/python/singlet/preprocessing/_quantify.py
-# hypothesis_version: 6.141.1
-
-[0.0, 14400, ',', '--knee', '--reads1', '--reads2', '--resolution', '--use-piscem', '-c', '-i', '-o', '-t', '4', 'SLURM_CPUS_PER_TASK', 'af_quant', 'alevin', 'cr-like', 'index_path', 'map_info.json', 'num_mapped', 'num_processed', 'num_quantified_cells', 'quant', 'quant.json', 'simpleaf']

@@ -1,4 +1,0 @@
-# file: /mnt/home/debruinz/Singlet-AI/singlet/python/singlet/preprocessing/_detect.py
-# hypothesis_version: 6.141.1
-
-[0.0, 0.3, 100, 200, '.gz', '10xv2', '10xv2_5p', '10xv3', '10xv3_5p', '3M-february-2018.txt', '737K-august-2016.txt', 'ALEVIN_FRY_HOME', 'ambiguous', 'droplet', 'dropseq', 'high', 'low', 'medium', 'rt', 'smartseq', 'unknown']

@@ -1,4 +1,0 @@
-# file: /mnt/home/debruinz/Singlet-AI/singlet/python/singlet/_auth.py
-# hypothesis_version: 6.141.1
-
-['Authorization', 'SINGLET_API_KEY', 'User-Agent', 'singlet-python']

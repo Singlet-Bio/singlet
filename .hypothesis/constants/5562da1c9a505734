@@ -1,4 +1,0 @@
-# file: /mnt/home/debruinz/Singlet-AI/singlet/python/singlet/preprocessing/_download.py
-# hypothesis_version: 6.141.1
-
-[0.0, 1800, 3600, 7200, '--split-3', '-H', '-O', '-e', '-o', '-p', '-sI', '-sL', ':', 'Max retries exceeded', 'content-length:', 'curl', 'ena_cached', 'ena_direct', 'fasterq-dump', 'fasterq_dump', 'ftp://', 'gzip', 'https://', 'pigz', 'rb', 'wb']

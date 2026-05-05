@@ -1,4 +1,0 @@
-# file: /mnt/home/debruinz/Singlet-AI/singlet/python/singlet/pp/__init__.py
-# hypothesis_version: 6.141.1
-
-['DownloadResult', 'ProtocolDetection', 'QCMetrics', 'QuantResult', 'detect_protocol', 'download_fastq', 'export_to_1pz', 'export_to_spz', 'get_species_info', 'get_taxon_id', 'quantify', 'run_qc']

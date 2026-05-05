@@ -1,4 +1,0 @@
-# file: /mnt/home/debruinz/Singlet-AI/singlet/python/singlet/__init__.py
-# hypothesis_version: 6.141.1
-
-['2.0.0', 'annotate', 'catalog', 'cell_types', 'datasets', 'download', 'failure_categories', 'from_h5ad', 'from_mtx', 'from_zarr', 'gene_programs', 'info', 'info_1pz', 'load', 'load_dir', 'load_sample', 'login', 'project', 'protocols', 'quality_tiers', 'query', 'read_1pz', 'read_kraken2', 'read_matrix', 'read_spz', 'refresh', 'sample_index', 'samples', 'search', 'set_catalog_dir', 'species', 'spz_info', 'summary', 'tissues', 'to_csc', 'to_h5ad', 'to_mtx', 'to_zarr', 'top_series', 'write_1pz', 'write_spz']

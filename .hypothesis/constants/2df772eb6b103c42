@@ -1,4 +1,0 @@
-# file: /mnt/home/debruinz/Singlet-AI/singlepress/singlepress/__init__.py
-# hypothesis_version: 6.141.1
-
-[0.0, 10000.0, 100, 1024, ', ', ', obs/var=True', 'B', 'GB', 'KB', 'MB', 'OnePZFile', 'PZReader', 'TB', '__index__', 'cat', 'cbind_1pz', 'codes', 'col', 'colnames', 'colsums', 'colsums_1pz', 'csc', 'density', 'file_size', 'float64', 'has_colsums', 'has_metadata', 'has_obs_var', 'has_transpose', 'indices', 'indptr', 'info_1pz', 'int32', 'interop', 'levels', 'lognorm', 'm', 'n', 'names', 'nnz', 'obs', 'obs/var', 'open_1pz', 'path', 'pd.DataFrame', 'rbind_1pz', 'read_1pz', 'read_1pz_columns', 'read_1pz_int', 'read_1pz_torch', 'row', 'rownames', 'sample_1pz', 'shape', 'string', 'subset_1pz', 'torch', 'transpose', 'uns', 'validate_1pz', 'values', 'var', 'version', 'write_1pz']
