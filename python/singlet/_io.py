@@ -263,15 +263,15 @@ def _read_spz_legacy(
             shape=shape,
         )
         mat = mat[:, col_range[0] : col_range[1]]
+        orig_rownames = result.get("rownames")
         result = {
             "data": mat.data,
             "indices": mat.indices,
             "indptr": mat.indptr,
             "shape": list(mat.shape),
         }
-        # Preserve dimnames if present
-        if "rownames" in result:
-            result["rownames"] = result.get("rownames")
+        if orig_rownames is not None:
+            result["rownames"] = orig_rownames
 
     else:
         result = sp_mod.sp_read(str(path))
