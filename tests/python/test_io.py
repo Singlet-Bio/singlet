@@ -2,13 +2,13 @@
 Cycle 19 correctness tests for singlet_gpu.io (loader.py).
 
 Tests the high-level AnnData I/O wrappers introduced in cycle 19:
-  - ``singlet_gpu.io.read_pz_to_anndata``
-  - ``singlet_gpu.io.write_anndata_to_pz``
+  - ``singlet.gpu.io.read_pz_to_anndata``
+  - ``singlet.gpu.io.write_anndata_to_pz``
 
 Formal spec: singlet-gpu/state/designs/19-python-kernel-wrappers-1.md
 
 Skip strategy:
-  - If ``singlet_gpu`` cannot be imported (wheel not built), the entire
+  - If ``singlet.gpu`` cannot be imported (wheel not built), the entire
     module is skipped via a module-level collect hook.
   - GPU-touching tests are individually skipped via ``requires_gpu``
     when cupy/CUDA is unavailable.
@@ -27,9 +27,9 @@ import pytest
 # Module-level skip when the wheel hasn't been built yet.
 # ---------------------------------------------------------------------------
 singlet_gpu = pytest.importorskip(
-    "singlet_gpu",
+    "singlet.gpu",
     reason=(
-        "singlet_gpu wheel not built. "
+        "singlet.gpu not available. "
         "Run `pip install -e singlet-gpu/python/` first."
     ),
 )

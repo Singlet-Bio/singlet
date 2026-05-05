@@ -112,7 +112,7 @@ def test_cospar_smoke():
     if not gpu_available():
         pytest.skip("GPU not available")
 
-    from singlet_gpu.fate.cospar import run_from_csc
+    from singlet.gpu.fate.cospar import run_from_csc
 
     mat = _tiny_expression()
     clone_ids   = RNG.integers(-1, 5, size=N_CELLS).astype(np.int32)
@@ -147,7 +147,7 @@ def test_cellrank2_smoke():
     if not gpu_available():
         pytest.skip("GPU not available")
 
-    from singlet_gpu.fate.cellrank2 import compute_absorption_probabilities
+    from singlet.gpu.fate.cellrank2 import compute_absorption_probabilities
 
     T = _tiny_transition_matrix()
     n_terminals = 5
@@ -177,7 +177,7 @@ def test_palantir_smoke():
     if not gpu_available():
         pytest.skip("GPU not available")
 
-    from singlet_gpu.fate.palantir import run_from_embedding
+    from singlet.gpu.fate.palantir import run_from_embedding
 
     embedding = _tiny_pca()
     terminal_idx = np.array([0, 5, 10], dtype=np.int32)
@@ -208,7 +208,7 @@ def test_cellchat_smoke():
     if not gpu_available():
         pytest.skip("GPU not available")
 
-    from singlet_gpu.comm.cellchat import run_from_csc
+    from singlet.gpu.comm.cellchat import run_from_csc
 
     mat = _tiny_expression()
     n_types = 4
@@ -239,7 +239,7 @@ def test_hdwgcna_smoke():
     if not gpu_available():
         pytest.skip("GPU not available")
 
-    from singlet_gpu.network.hdwgcna import run_from_csc
+    from singlet.gpu.network.hdwgcna import run_from_csc
 
     mat = _tiny_expression()
 
@@ -267,7 +267,7 @@ def test_milo_smoke():
     if not gpu_available():
         pytest.skip("GPU not available")
 
-    from singlet_gpu.abundance.milo import run_from_embedding
+    from singlet.gpu.abundance.milo import run_from_embedding
 
     embedding = _tiny_pca()
     n_conditions = 2
@@ -295,7 +295,7 @@ def test_scdrs_smoke():
     if not gpu_available():
         pytest.skip("GPU not available")
 
-    from singlet_gpu.disease.scdrs import run_from_csc
+    from singlet.gpu.disease.scdrs import run_from_csc
 
     mat = _tiny_expression()
     n_disease_genes = 20
@@ -324,7 +324,7 @@ def test_granie_smoke():
     if not gpu_available():
         pytest.skip("GPU not available")
 
-    from singlet_gpu.grn.granie import run_from_csc
+    from singlet.gpu.grn.granie import run_from_csc
 
     expr_mat = _tiny_expression()
     peak_mat = _tiny_fragments()
@@ -349,7 +349,7 @@ def test_nebula_smoke():
     if not gpu_available():
         pytest.skip("GPU not available")
 
-    from singlet_gpu.eqtl.nebula import run
+    from singlet.gpu.eqtl.nebula import run
 
     expr_mat = _tiny_expression()   # n_genes × n_cells
     ad_mat, dp_mat = _tiny_snp()    # n_snps × n_cells
@@ -377,7 +377,7 @@ def test_daesc_smoke():
     if not gpu_available():
         pytest.skip("GPU not available")
 
-    from singlet_gpu.ase.daesc import run
+    from singlet.gpu.ase.daesc import run
 
     ad_mat, dp_mat = _tiny_snp()
     n_cell_types = 3
@@ -405,7 +405,7 @@ def test_numbat_smoke():
     if not gpu_available():
         pytest.skip("GPU not available")
 
-    from singlet_gpu.cna.numbat import detect
+    from singlet.gpu.cna.numbat import detect
 
     expr_mat = _tiny_expression()
     ad_mat, dp_mat = _tiny_snp()
@@ -431,7 +431,7 @@ def test_monopogen_smoke():
     if not gpu_available():
         pytest.skip("GPU not available")
 
-    from singlet_gpu.variants.monopogen import call
+    from singlet.gpu.variants.monopogen import call
 
     ad_mat, dp_mat = _tiny_snp()
     chrom_labels = RNG.integers(1, 4, size=N_SNPS).astype(np.int32)
@@ -459,7 +459,7 @@ def test_chromvar_smoke():
     if not gpu_available():
         pytest.skip("GPU not available")
 
-    from singlet_gpu.atac.chromvar import compute
+    from singlet.gpu.atac.chromvar import compute
 
     accessibility = _tiny_fragments()     # n_frags × n_cells (peaks × cells)
     n_peaks = N_FRAGS
@@ -493,7 +493,7 @@ def test_flash_deconv_smoke():
     if not gpu_available():
         pytest.skip("GPU not available")
 
-    from singlet_gpu.spatial.flash_deconv import run_flash_deconv
+    from singlet.gpu.spatial.flash_deconv import run_flash_deconv
 
     n_spots = 80
     n_ref_cells = 60
@@ -526,7 +526,7 @@ def test_stagate_smoke():
     if not gpu_available():
         pytest.skip("GPU not available")
 
-    from singlet_gpu.spatial.stagate import run_stagate
+    from singlet.gpu.spatial.stagate import run_stagate
 
     n_spots = 80
     mat    = _tiny_expression(n_spots, N_GENES)
@@ -559,7 +559,7 @@ def test_cell2fate_smoke():
     if not gpu_available():
         pytest.skip("GPU not available")
 
-    from singlet_gpu.spatial.cell2fate import fit
+    from singlet.gpu.spatial.cell2fate import fit
 
     expr_mat    = _tiny_expression()
     intron_mat  = _tiny_expression()  # unspliced proxy
@@ -597,7 +597,7 @@ def test_discrete_diffusion_smoke():
     if not gpu_available():
         pytest.skip("GPU not available")
 
-    from singlet_gpu.generative.discrete_diffusion import train, sample
+    from singlet.gpu.generative.discrete_diffusion import train, sample
 
     mat = _tiny_expression()   # genes × cells
 
@@ -629,7 +629,7 @@ def test_perturb_graph_smoke():
     if not gpu_available():
         pytest.skip("GPU not available")
 
-    from singlet_gpu.perturbation.perturb_graph import fit
+    from singlet.gpu.perturbation.perturb_graph import fit
 
     mat = _tiny_expression()
     n_perts = 5
@@ -671,7 +671,7 @@ def test_ssgsea_smoke():
     except ImportError:
         pytest.skip("anndata or pandas not installed")
 
-    from singlet_gpu.enrich.ssgsea import run_ssgsea
+    from singlet.gpu.enrich.ssgsea import run_ssgsea
 
     mat_np = _tiny_expression().T.toarray()   # cells × genes
     gene_names = [f"Gene{i}" for i in range(N_GENES)]
@@ -708,7 +708,7 @@ def test_progeny_smoke():
     except ImportError:
         pytest.skip("anndata or pandas not installed")
 
-    from singlet_gpu.enrich.progeny import run_progeny
+    from singlet.gpu.enrich.progeny import run_progeny
 
     mat_np = _tiny_expression().T.toarray()   # cells × genes
     gene_names = [f"Gene{i}" for i in range(N_GENES)]
@@ -747,7 +747,7 @@ def test_omnidoublet_smoke():
     except ImportError:
         pytest.skip("anndata not installed")
 
-    from singlet_gpu.qc.omnidoublet import run_omni_doublet
+    from singlet.gpu.qc.omnidoublet import run_omni_doublet
 
     rna_np  = _tiny_expression().T.toarray()   # cells × genes
     adt_np  = _tiny_adt().T.toarray()           # cells × adt
@@ -782,7 +782,7 @@ def test_doublet_score_smoke():
     except ImportError:
         pytest.skip("anndata not installed")
 
-    from singlet_gpu.qc.doublet_score import run_doublet_score
+    from singlet.gpu.qc.doublet_score import run_doublet_score
 
     pca_mat = _tiny_pca()
     adata = anndata.AnnData(X=_tiny_expression().T.toarray())
@@ -813,7 +813,7 @@ def test_csi_gep_smoke():
     except ImportError:
         pytest.skip("anndata not installed")
 
-    from singlet_gpu.reduce.nmf.csi_gep import run_csi_gep
+    from singlet.gpu.reduce.nmf.csi_gep import run_csi_gep
 
     mat_np = _tiny_expression().T.toarray()   # cells × genes
     adata = anndata.AnnData(X=mat_np)

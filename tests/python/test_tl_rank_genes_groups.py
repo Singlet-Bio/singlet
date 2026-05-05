@@ -2,7 +2,7 @@
 Cycle 21 correctness tests for singlet_gpu.tools.rank_genes_groups().
 
 Tests the GPU-native DE wrapper (cycle 11: de/{wilcoxon,ttest}.h):
-  - ``singlet_gpu.tools.rank_genes_groups``
+  - ``singlet.gpu.tools.rank_genes_groups``
 
 Formal spec: singlet-gpu/state/designs/20-python-kernel-wrappers-2.md
 
@@ -22,7 +22,7 @@ Tests:
   - test_rank_genes_groups_method_t_test              : t-test method accepted, results differ
 
 Skip strategy:
-  - Module-level skip if singlet_gpu wheel not built.
+  - Module-level skip if singlet.gpu not available.
   - requires_gpu marker for all GPU-exercising tests.
 """
 from __future__ import annotations
@@ -31,8 +31,8 @@ import numpy as np
 import pytest
 
 singlet_gpu = pytest.importorskip(
-    "singlet_gpu",
-    reason="singlet_gpu wheel not built. Run `pip install -e singlet-gpu/python/` first.",
+    "singlet.gpu",
+    reason="singlet.gpu not available. Run `pip install -e singlet-gpu/python/` first.",
 )
 
 from conftest import requires_gpu  # noqa: E402

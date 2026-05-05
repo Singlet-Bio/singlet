@@ -2,9 +2,9 @@
 Cycle 19 correctness tests for singlet_gpu.preprocess (lognorm.py + hvg.py).
 
 Tests the GPU-native preprocessing wrappers against scanpy CPU references:
-  - ``singlet_gpu.preprocess.normalize_total``
-  - ``singlet_gpu.preprocess.log1p``
-  - ``singlet_gpu.preprocess.highly_variable_genes``
+  - ``singlet.gpu.preprocess.normalize_total``
+  - ``singlet.gpu.preprocess.log1p``
+  - ``singlet.gpu.preprocess.highly_variable_genes``
 
 Formal spec: singlet-gpu/state/designs/19-python-kernel-wrappers-1.md
 
@@ -13,12 +13,12 @@ Tolerances (from design doc):
   - HVG seurat_v3: top-2000 Jaccard ≥ 0.95
 
 Skip strategy:
-  - Module-level skip if singlet_gpu wheel not built.
+  - Module-level skip if singlet.gpu not available.
   - requires_gpu marker for all GPU-exercising tests.
   - scanpy is imported inline in each test via pytest.importorskip.
 
 Reference: scanpy CPU functions run in the same Python process on the same
-data, loaded via ``singlet_gpu.io.read_pz_to_anndata`` then converted to a
+data, loaded via ``singlet.gpu.io.read_pz_to_anndata`` then converted to a
 host-side copy for scanpy (adata.X.get() if cupy sparse, else pass through).
 """
 from __future__ import annotations
@@ -32,9 +32,9 @@ import pytest
 # Module-level skip when the wheel hasn't been built yet.
 # ---------------------------------------------------------------------------
 singlet_gpu = pytest.importorskip(
-    "singlet_gpu",
+    "singlet.gpu",
     reason=(
-        "singlet_gpu wheel not built. "
+        "singlet.gpu not available. "
         "Run `pip install -e singlet-gpu/python/` first."
     ),
 )

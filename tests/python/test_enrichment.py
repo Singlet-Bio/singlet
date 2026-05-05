@@ -3,10 +3,10 @@ Cycle 23 / 186 correctness tests for singlet_gpu.enrichment.
 
 Tests the GPU-native enrichment wrappers:
   - cycle 13: gsea/{fgsea,aucell}.h
-      - ``singlet_gpu.enrichment.run_gsea``
-      - ``singlet_gpu.enrichment.run_aucell``
+      - ``singlet.gpu.enrichment.run_gsea``
+      - ``singlet.gpu.enrichment.run_aucell``
   - cycle 129: enrich/score_genes.h  (cycle 186 Python wrapper)
-      - ``singlet_gpu.enrich.run_score_genes``
+      - ``singlet.gpu.enrich.run_score_genes``
 
 Formal spec: singlet-gpu/state/designs/22-python-kernel-wrappers-3.md
              singlet-gpu/state/designs/129-score-genes.md (kernel)
@@ -30,7 +30,7 @@ Tolerances (from spec):
   - run_score_genes vs scanpy.tl.score_genes : Spearman ρ ≥ 0.95 (median over sets)
 
 Skip strategy:
-  - Module-level skip if singlet_gpu wheel not built.
+  - Module-level skip if singlet.gpu not available.
   - requires_gpu for all GPU-exercising tests.
   - vs-reference tests additionally skip if reference library is not importable.
 """
@@ -43,13 +43,13 @@ import pandas as pd
 import pytest
 
 singlet_gpu = pytest.importorskip(
-    "singlet_gpu",
-    reason="singlet_gpu wheel not built. Run `pip install -e singlet-gpu/python/` first.",
+    "singlet.gpu",
+    reason="singlet.gpu not available. Run `pip install -e singlet-gpu/python/` first.",
 )
 
 # Explicitly import enrich subpackage so singlet_gpu.enrich.run_score_genes
-# is resolvable (enrich/ is not auto-imported by singlet_gpu/__init__.py).
-import singlet_gpu.enrich  # noqa: E402
+# is resolvable (enrich/ is not auto-imported by singlet/gpu/__init__.py).
+import singlet.gpu.enrich  # noqa: E402
 
 from conftest import requires_gpu  # noqa: E402
 

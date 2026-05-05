@@ -2,7 +2,7 @@
 Cycle 21 correctness tests for singlet_gpu.tools.leiden().
 
 Tests the GPU-native Leiden clustering wrapper (cycle 9: graph/leiden.h):
-  - ``singlet_gpu.tools.leiden``
+  - ``singlet.gpu.tools.leiden``
 
 Formal spec: singlet-gpu/state/designs/20-python-kernel-wrappers-2.md
 
@@ -20,7 +20,7 @@ Tests:
   - test_leiden_vs_scanpy          : ARI vs sc.tl.leiden ≥ 0.85
 
 Skip strategy:
-  - Module-level skip if singlet_gpu wheel not built.
+  - Module-level skip if singlet.gpu not available.
   - requires_gpu marker for all GPU-exercising tests.
 """
 from __future__ import annotations
@@ -29,8 +29,8 @@ import numpy as np
 import pytest
 
 singlet_gpu = pytest.importorskip(
-    "singlet_gpu",
-    reason="singlet_gpu wheel not built. Run `pip install -e singlet-gpu/python/` first.",
+    "singlet.gpu",
+    reason="singlet.gpu not available. Run `pip install -e singlet-gpu/python/` first.",
 )
 
 from conftest import requires_gpu  # noqa: E402

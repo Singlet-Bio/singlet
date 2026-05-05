@@ -2,9 +2,9 @@
 Cycle 19 correctness tests for singlet_gpu.reduce (svd.py + nmf.py).
 
 Tests the GPU-native dimensionality reduction wrappers:
-  - ``singlet_gpu.reduce.pca``
-  - ``singlet_gpu.reduce.nmf``
-  - ``singlet_gpu.reduce.nmf_chunked``
+  - ``singlet.gpu.reduce.pca``
+  - ``singlet.gpu.reduce.nmf``
+  - ``singlet.gpu.reduce.nmf_chunked``
 
 Formal spec: singlet-gpu/state/designs/19-python-kernel-wrappers-1.md
 
@@ -13,7 +13,7 @@ Tolerances (from design doc):
   - NMF: smoke test only (confirms runs and writes correct keys)
 
 Skip strategy:
-  - Module-level skip if singlet_gpu wheel not built.
+  - Module-level skip if singlet.gpu not available.
   - requires_gpu marker for all GPU-exercising tests.
 
 Reference: scanpy.pp.pca CPU reference run on the same host-side AnnData.
@@ -29,9 +29,9 @@ import pytest
 # Module-level skip when the wheel hasn't been built yet.
 # ---------------------------------------------------------------------------
 singlet_gpu = pytest.importorskip(
-    "singlet_gpu",
+    "singlet.gpu",
     reason=(
-        "singlet_gpu wheel not built. "
+        "singlet.gpu not available. "
         "Run `pip install -e singlet-gpu/python/` first."
     ),
 )
@@ -365,7 +365,7 @@ def test_nmf_writes_obsm_X_nmf(gsm4037629_path):
 # ---------------------------------------------------------------------------
 # CYCLE-275: xfail removed — PzDataLoader is now exposed via pybind11 in
 # python/src/_bind_loader.hpp:bind_pz_data_loader. Wrapper at
-# python/singlet_gpu/reduce/_nmf_core.py:417-435 constructs the loader from
+# python/singlet/gpu/reduce/_nmf_core.py:417-435 constructs the loader from
 # the first path.
 @requires_gpu
 def test_nmf_chunked_smoke(gsm4037629_path):

@@ -1,7 +1,7 @@
 """
 Cycle 18 correctness test suite for the singlet-gpu Python wrapper foundation.
 
-Tests the pybind11 ``singlet_gpu._core`` extension against the formal spec in
+Tests the pybind11 ``singlet.gpu._core`` extension against the formal spec in
 ``singlet-gpu/state/designs/18-python-wrapper-foundation.md``.
 
 Correctness reference: ``singlify.io.read_matrix`` (the singlify pure-Python
@@ -9,7 +9,7 @@ Correctness reference: ``singlify.io.read_matrix`` (the singlify pure-Python
 validated in singlify's own test suite).
 
 Skip strategy:
-  - If ``singlet_gpu`` cannot be imported (wheel not built yet), the entire
+  - If ``singlet.gpu`` cannot be imported (wheel not built yet), the entire
     module is skipped via a module-level collect hook.
   - If ``cupy`` is not available or no CUDA device is present, GPU-touching
     tests are individually skipped via the ``requires_gpu`` marker from
@@ -32,9 +32,9 @@ import pytest
 # Module-level skip when the wheel hasn't been built yet.
 # ---------------------------------------------------------------------------
 singlet_gpu = pytest.importorskip(
-    "singlet_gpu",
+    "singlet.gpu",
     reason=(
-        "singlet_gpu wheel not built. "
+        "singlet.gpu not available. "
         "Run `pip install -e singlet-gpu/python/` first."
     ),
 )
@@ -143,7 +143,7 @@ def test_cuda_array_interface_zero_copy(gsm4037629_path):
     """Build a cupy.sparse.csr_matrix from device views and compare element-
     wise to the singlify scipy reference.
 
-    The singlet_gpu loader exposes three CUDA-array-interface objects
+    The singlet.gpu loader exposes three CUDA-array-interface objects
     (m.indptr_view, m.indices_view, m.data_view).  Passing them to
     cupy.sparse.csr_matrix must produce a matrix whose .toarray() matches the
     host-side scipy CSC loaded via singlify.io.read_matrix — bit-exactly.
@@ -160,7 +160,7 @@ def test_cuda_array_interface_zero_copy(gsm4037629_path):
 
     pz_path = gsm4037629_path / _EXON_FILE
 
-    # singlet_gpu device load
+    # singlet.gpu device load
     m = singlet_gpu.io.load_pz(str(pz_path))
 
     # cupy >= 14 dtype-strict: cp.asarray() rejects bare CAI dicts.  Wrap each
@@ -478,7 +478,7 @@ def test_load_pz_keep_host_pinned(gsm4037629_path):
 # is read.
 #
 # Skip strategy (consistent with cycle 18 convention):
-#   - Module-level skip at top of file if singlet_gpu wheel is absent.
+#   - Module-level skip at top of file if singlet.gpu is not available.
 #   - Individual ``requires_gpu`` markers on tests that touch device memory.
 #   - ``pytest.importorskip("cupy", ...)`` inside tests that need cupy.
 # ===========================================================================

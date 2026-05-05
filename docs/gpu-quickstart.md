@@ -57,10 +57,10 @@ int main() {
 
 ## Python
 
-> **Status**: pre-1.0. Wrappers exist module-by-module under `singlet_gpu.preprocess`, `singlet_gpu.reduce`, etc. The flat `singlet_gpu.run_pipeline(...)` convenience entry point is on the roadmap.
+> **Status**: pre-1.0. Wrappers exist module-by-module under `singlet.gpu.preprocess`, `singlet.gpu.reduce`, etc. The flat `singlet.gpu.run_pipeline(...)` convenience entry point is on the roadmap.
 
 ```python
-import singlet_gpu as sg
+import singlet.gpu as sg
 
 mat = sg.io.load_pz("/path/to/exon_counts.1pz")
 

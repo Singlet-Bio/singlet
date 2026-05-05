@@ -2,7 +2,7 @@
 Cycle 21 correctness tests for singlet_gpu.tools.umap().
 
 Tests the GPU-native UMAP embedding wrapper (cycle 10: embed/umap.h):
-  - ``singlet_gpu.tools.umap``
+  - ``singlet.gpu.tools.umap``
 
 Formal spec: singlet-gpu/state/designs/20-python-kernel-wrappers-2.md
 
@@ -21,7 +21,7 @@ Tests:
   - test_umap_vs_scanpy_trustworthiness    : trustworthiness ≥ 0.85 vs sc.tl.umap
 
 Skip strategy:
-  - Module-level skip if singlet_gpu wheel not built.
+  - Module-level skip if singlet.gpu not available.
   - requires_gpu marker for all GPU-exercising tests.
 """
 from __future__ import annotations
@@ -30,8 +30,8 @@ import numpy as np
 import pytest
 
 singlet_gpu = pytest.importorskip(
-    "singlet_gpu",
-    reason="singlet_gpu wheel not built. Run `pip install -e singlet-gpu/python/` first.",
+    "singlet.gpu",
+    reason="singlet.gpu not available. Run `pip install -e singlet-gpu/python/` first.",
 )
 
 from conftest import requires_gpu  # noqa: E402

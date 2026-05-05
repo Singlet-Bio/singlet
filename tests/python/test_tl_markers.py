@@ -4,8 +4,8 @@ singlet_gpu.tools.celltypist_predict().
 
 Tests the GPU-native marker scoring and reference annotation wrappers
 (cycle 12: anno/{marker_score,reference_map}.h):
-  - ``singlet_gpu.tools.score_genes``      — DecoupleR-style MLM/ULM/wsum/UCell
-  - ``singlet_gpu.tools.celltypist_predict`` — GPU CellTypist projection
+  - ``singlet.gpu.tools.score_genes``      — DecoupleR-style MLM/ULM/wsum/UCell
+  - ``singlet.gpu.tools.celltypist_predict`` — GPU CellTypist projection
 
 Formal spec: singlet-gpu/state/designs/20-python-kernel-wrappers-2.md
 
@@ -20,7 +20,7 @@ Tests:
   - test_celltypist_writes_obs_label    : obs[key_added] non-empty string labels
 
 Skip strategy:
-  - Module-level skip if singlet_gpu wheel not built.
+  - Module-level skip if singlet.gpu not available.
   - requires_gpu marker for all GPU-exercising tests.
   - celltypist tests additionally skip if no model file is found.
 """
@@ -30,8 +30,8 @@ import numpy as np
 import pytest
 
 singlet_gpu = pytest.importorskip(
-    "singlet_gpu",
-    reason="singlet_gpu wheel not built. Run `pip install -e singlet-gpu/python/` first.",
+    "singlet.gpu",
+    reason="singlet.gpu not available. Run `pip install -e singlet-gpu/python/` first.",
 )
 
 from conftest import requires_gpu  # noqa: E402

@@ -24,11 +24,11 @@ The `.1pz` format is singlet's compressed single-cell data format. It stores:
 ## Reading
 
 ```python
-import singlepress
-adata = singlepress.read("sample.1pz")
+import singlet
+adata = singlet.read("sample.1pz")
 ```
 
 ```r
-library(singlepress)
+library(singlet)
 sce <- read_1pz("sample.1pz")
 ```

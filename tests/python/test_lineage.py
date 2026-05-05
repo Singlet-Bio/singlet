@@ -2,7 +2,7 @@
 Cycle 23 correctness tests for singlet_gpu.lineage.
 
 Tests the GPU-native MT lineage wrapper (cycle 16: anno/mt_lineage.h):
-  - ``singlet_gpu.lineage.detect_clones``
+  - ``singlet.gpu.lineage.detect_clones``
 
 Formal spec: singlet-gpu/state/designs/22-python-kernel-wrappers-3.md
 
@@ -23,7 +23,7 @@ Notes:
   - min_K constraint: detect_clones must not produce fewer than min_K clones.
 
 Skip strategy:
-  - Module-level skip if singlet_gpu wheel not built.
+  - Module-level skip if singlet.gpu not available.
   - requires_gpu for all GPU-exercising tests.
   - GSM4037629 real-data test skips if mt_alleles.1pz is absent.
 """
@@ -34,8 +34,8 @@ import pathlib
 import pytest
 
 singlet_gpu = pytest.importorskip(
-    "singlet_gpu",
-    reason="singlet_gpu wheel not built. Run `pip install -e singlet-gpu/python/` first.",
+    "singlet.gpu",
+    reason="singlet.gpu not available. Run `pip install -e singlet-gpu/python/` first.",
 )
 
 from conftest import requires_gpu  # noqa: E402

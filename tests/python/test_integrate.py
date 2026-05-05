@@ -2,8 +2,8 @@
 Cycle 23 correctness tests for singlet_gpu.integrate.
 
 Tests the GPU-native batch integration wrappers (cycle 14: integrate/{harmony,bbknn}.h):
-  - ``singlet_gpu.integrate.harmony_integrate``
-  - ``singlet_gpu.integrate.bbknn``
+  - ``singlet.gpu.integrate.harmony_integrate``
+  - ``singlet.gpu.integrate.bbknn``
 
 Formal spec: singlet-gpu/state/designs/22-python-kernel-wrappers-3.md
 
@@ -24,7 +24,7 @@ Tolerances (from spec):
   - bbknn            vs python-bbknn: neighbor list overlap (intersection/union per cell ≥ 0.80)
 
 Skip strategy:
-  - Module-level skip if singlet_gpu wheel not built.
+  - Module-level skip if singlet.gpu not available.
   - requires_gpu for all GPU-exercising tests.
   - vs-harmonypy / vs-python-bbknn additionally skip if reference lib not importable.
 """
@@ -34,8 +34,8 @@ import numpy as np
 import pytest
 
 singlet_gpu = pytest.importorskip(
-    "singlet_gpu",
-    reason="singlet_gpu wheel not built. Run `pip install -e singlet-gpu/python/` first.",
+    "singlet.gpu",
+    reason="singlet.gpu not available. Run `pip install -e singlet-gpu/python/` first.",
 )
 
 from conftest import requires_gpu  # noqa: E402

@@ -3,8 +3,8 @@ Cycle 23 correctness tests for singlet_gpu.de.pseudobulk_de and
 singlet_gpu.io.donor.load_donor_assignments.
 
 Tests the GPU-native donor pseudobulk DE wrapper (cycle 17: de/donor_pseudobulk.h):
-  - ``singlet_gpu.de.pseudobulk_de``
-  - ``singlet_gpu.io.load_donor_assignments``  (helper, not GPU — pure Python)
+  - ``singlet.gpu.de.pseudobulk_de``
+  - ``singlet.gpu.io.load_donor_assignments``  (helper, not GPU — pure Python)
 
 Formal spec: singlet-gpu/state/designs/22-python-kernel-wrappers-3.md
 
@@ -28,7 +28,7 @@ Notes:
     a pd.Series indexed by barcode with values donor_id.
 
 Skip strategy:
-  - Module-level skip if singlet_gpu wheel not built.
+  - Module-level skip if singlet.gpu not available.
   - requires_gpu for all GPU-exercising tests.
   - DESeq2 test skips if Rscript subprocess fails or R/DESeq2 absent.
 """
@@ -44,8 +44,8 @@ import pandas as pd
 import pytest
 
 singlet_gpu = pytest.importorskip(
-    "singlet_gpu",
-    reason="singlet_gpu wheel not built. Run `pip install -e singlet-gpu/python/` first.",
+    "singlet.gpu",
+    reason="singlet.gpu not available. Run `pip install -e singlet-gpu/python/` first.",
 )
 
 from conftest import requires_gpu  # noqa: E402
@@ -222,7 +222,7 @@ def test_pseudobulk_de_writes_uns():
 # ---------------------------------------------------------------------------
 # CYCLE-256: xfail removed. Root cause was Python wrapper passing
 # (cells × genes) CSC to a kernel that expects (genes × cells); applied .T in
-# python/singlet_gpu/de/pseudobulk.py:258-273. Verified PASS via job 374155.
+# python/singlet/gpu/de/pseudobulk.py:258-273. Verified PASS via job 374155.
 @requires_gpu
 def test_pseudobulk_de_min_cells_filter():
     """pseudobulk_de() excludes (donor, cell_type) groups with fewer than min_cells.

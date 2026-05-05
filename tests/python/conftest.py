@@ -5,7 +5,7 @@ Session-scoped fixtures point at the canonical GSM4037629 test sample on
 Clipper NFS.  All GPU tests are automatically skipped when:
   - cupy is not importable, OR
   - no CUDA device is enumerable at cupy.cuda.Device(0), OR
-  - the singlet_gpu C extension wheel has not been built.
+  - the singlet.gpu package is not available.
 
 The environment variable ``SINGLET_GPU_TEST_FIXTURE_DIR`` may override the
 default NFS path (for CI or off-cluster development).

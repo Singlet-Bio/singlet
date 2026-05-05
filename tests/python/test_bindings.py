@@ -16,7 +16,7 @@ Organisation:
   - Family F: signature inspection  (keyword-only arg presence on key functions)
 
 Skip strategy: same as test_core.py — module-level importorskip for
-singlet_gpu; requires_gpu marker for device tests; importorskip("cupy") inside
+singlet.gpu; requires_gpu marker for device tests; importorskip("cupy") inside
 tests that build cupy arrays.
 """
 from __future__ import annotations
@@ -30,9 +30,9 @@ import pytest
 # Module-level skip when wheel is not built.
 # ---------------------------------------------------------------------------
 singlet_gpu = pytest.importorskip(
-    "singlet_gpu",
+    "singlet.gpu",
     reason=(
-        "singlet_gpu wheel not built. "
+        "singlet.gpu not available. "
         "Run `pip install -e singlet-gpu/python/` first."
     ),
 )

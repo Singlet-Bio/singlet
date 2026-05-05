@@ -2,8 +2,8 @@
 Cycle 23 correctness tests for singlet_gpu.velocity.
 
 Tests the GPU-native RNA velocity wrappers (cycle 15: preprocess/velocity_prep.h):
-  - ``singlet_gpu.velocity.moments``
-  - ``singlet_gpu.velocity.velocity``
+  - ``singlet.gpu.velocity.moments``
+  - ``singlet.gpu.velocity.velocity``
 
 Formal spec: singlet-gpu/state/designs/22-python-kernel-wrappers-3.md
 
@@ -29,7 +29,7 @@ Notes:
   - scvelo tests require an scvelo-compatible AnnData with 'spliced'/'unspliced' layers.
 
 Skip strategy:
-  - Module-level skip if singlet_gpu wheel not built.
+  - Module-level skip if singlet.gpu not available.
   - requires_gpu for all GPU-exercising tests.
   - vs-scvelo tests additionally skip if scvelo is not importable.
 """
@@ -39,8 +39,8 @@ import numpy as np
 import pytest
 
 singlet_gpu = pytest.importorskip(
-    "singlet_gpu",
-    reason="singlet_gpu wheel not built. Run `pip install -e singlet-gpu/python/` first.",
+    "singlet.gpu",
+    reason="singlet.gpu not available. Run `pip install -e singlet-gpu/python/` first.",
 )
 
 from conftest import requires_gpu  # noqa: E402

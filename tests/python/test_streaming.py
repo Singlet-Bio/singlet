@@ -2,7 +2,7 @@
 Cycle 21 correctness tests for singlet_gpu.streaming.run_pipeline().
 
 Tests the GPU-native streaming pipeline wrapper (cycle 7: streamed_pipeline.h):
-  - ``singlet_gpu.streaming.run_pipeline``
+  - ``singlet.gpu.streaming.run_pipeline``
 
 Formal spec: singlet-gpu/state/designs/20-python-kernel-wrappers-2.md
 
@@ -12,7 +12,7 @@ Tests:
   - test_run_pipeline_multi_input     : two .1pz paths concatenated via streaming
 
 Skip strategy:
-  - Module-level skip if singlet_gpu wheel not built.
+  - Module-level skip if singlet.gpu not available.
   - requires_gpu marker for all GPU-exercising tests.
   - GSM4037629 path fixture from conftest.
 
@@ -28,9 +28,9 @@ import pytest
 # Module-level skip when the wheel hasn't been built yet.
 # ---------------------------------------------------------------------------
 singlet_gpu = pytest.importorskip(
-    "singlet_gpu",
+    "singlet.gpu",
     reason=(
-        "singlet_gpu wheel not built. "
+        "singlet.gpu not available. "
         "Run `pip install -e singlet-gpu/python/` first."
     ),
 )
