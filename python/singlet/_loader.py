@@ -44,7 +44,7 @@ def _resolve_gse_path(accession: str) -> Optional[Path]:
     if not rel_path:
         return None
 
-    # path is relative like "pipeline/quant/GSE136831"
+    # path is relative like "pipeline/quant/GSE264667"
     # cat_dir is the catalog root (e.g. /mnt/projects/.../cellarium)
     base = cat_dir.parent  # go up from catalog/ to cellarium/
     gse_dir = base / rel_path
@@ -67,7 +67,7 @@ def download(
     Parameters
     ----------
     accession : str
-        GEO series accession (e.g. "GSE136831").
+        GEO series accession (e.g. "GSE264667").
     output_dir : path, optional
         Where to save. Defaults to ``~/.singlet/data/``.
     force : bool
@@ -141,7 +141,7 @@ def load(
     Parameters
     ----------
     source : str or Path
-        GEO accession (e.g. "GSE136831") or path to a local file.
+        GEO accession (e.g. "GSE264667") or path to a local file.
         Supports ``.1pz``, ``.spz``, ``.h5ad``, and ``.zarr``.
     genes : list of str, optional
         Subset to these gene names (column slice).
@@ -158,9 +158,9 @@ def load(
     Examples
     --------
     >>> import singlet
-    >>> adata = singlet.load("GSE136831")
+    >>> adata = singlet.load("GSE264667")
     >>> adata = singlet.load("/path/to/counts.1pz")
-    >>> adata = singlet.load("GSE136831", genes=["TP53", "BRCA1"])
+    >>> adata = singlet.load("GSE264667", genes=["TP53", "BRCA1"])
     """
     from singlet._io import read_1pz, read_matrix
 
