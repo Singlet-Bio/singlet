@@ -119,9 +119,13 @@ cmake --build build -j$(nproc)
 cmake -B build -DSINGLET_BUILD_GPU=ON -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
 
-# Run tests
+# Run C++ tests (88 unit tests — ~72s)
 cmake -B build -DSINGLET_BUILD_TESTS=ON
-cmake --build build && ctest --test-dir build
+cmake --build build -j$(nproc) && ctest --test-dir build -j$(nproc)
+
+# Run Python tests (205 tests)
+pip install -e ".[dev]"
+pytest tests/python/
 ```
 
 ## License
