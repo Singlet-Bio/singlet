@@ -25,6 +25,10 @@ All notable changes to the singlet project.
 - **Python lint**: ruff check + ruff format enforced (0 errors, CI job added)
 - **Type annotations**: 75% of functions annotated with return types (236/312)
 - **Makefile**: `make test`, `make lint`, `make build`, `make pipeline`, `make clean`
+- **Python API reference**: `docs/api/python.md` covers all public modules
+- **Annotation tests**: 15 unit tests for `_annotate.py` (gene_programs, project, annotate)
+- **Security**: `SECURITY.md` vulnerability reporting policy + pip-audit CI job
+- **Python tests**: 257 total (up from 205 at cycle 184)
 
 ### Architecture
 - `include/singlet/pz/` — .1pz VOCSC codec (13x compression, 4000+ MB/s decode)
