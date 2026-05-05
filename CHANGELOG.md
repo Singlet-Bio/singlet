@@ -17,10 +17,14 @@ All notable changes to the singlet project.
 - **STAR integration**: STAR aligner built as object library within the unified CMake project
 - **PyTorch module**: `from singlet.torch import OnePZDataset, DataLoader`
 - **GPU module**: `from singlet.gpu import ...` (requires cupy)
-- **CMake find_package**: `find_package(Singlet COMPONENTS pz fq pileup)`
+- **CMake find_package**: `find_package(Singlet COMPONENTS pz fq pileup)` with version file
 - **R GPU support**: `singlet::has_gpu()`, `gpu_pca()`, `gpu_neighbors()`, `gpu_leiden()`
 - **C++ test suite**: 88 unit tests covering all pileup modules (codec, cell calling, ATAC, ADT, species, nonhost, export, spatial, protocol detection)
 - **IO schema v2 support**: Loader auto-detects singlify v2 subdirectory layout (`donor/snp_ad.1pz`)
+- **MCP server tests**: 25 unit tests covering all parquet-backed tools + call_tool router
+- **Python lint**: ruff check + ruff format enforced (0 errors, CI job added)
+- **Type annotations**: 75% of functions annotated with return types (236/312)
+- **Makefile**: `make test`, `make lint`, `make build`, `make pipeline`, `make clean`
 
 ### Architecture
 - `include/singlet/pz/` — .1pz VOCSC codec (13x compression, 4000+ MB/s decode)
