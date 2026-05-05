@@ -57,7 +57,7 @@ def _detect_format_version(path: str | Path) -> int:
     raise ValueError(f"Not a .spz file: {path}")
 
 
-def read_spz(path: str | Path, *, col_range: tuple[int, int] | None = None):
+def read_spz(path: str | Path, *, col_range: tuple[int, int] | None = None) -> "anndata.AnnData":
     """Read a .spz file into AnnData.
 
     Parameters
@@ -179,7 +179,7 @@ def spz_info(path: str | Path) -> dict:
 # ============================================================================
 
 
-def _import_sparsepress():
+def _import_sparsepress() -> "module":
     """Import the sparsepress package for legacy v2 format support."""
     try:
         import sparsepress
@@ -210,7 +210,7 @@ def _import_sparsepress():
     )
 
 
-def _result_to_anndata(result):
+def _result_to_anndata(result: dict) -> "anndata.AnnData":
     """Convert a raw sp_read result dict to AnnData."""
     import anndata as ad
     import numpy as np
@@ -242,7 +242,7 @@ def _result_to_anndata(result):
     return adata
 
 
-def _read_spz_legacy(path: str | Path, *, col_range=None):
+def _read_spz_legacy(path: str | Path, *, col_range: tuple[int, int] | None = None) -> "anndata.AnnData":
     """Read a legacy sparsepress_v2 file via the sparsepress package."""
     sp_mod = _import_sparsepress()
 
@@ -284,7 +284,7 @@ def _spz_info_legacy(path: str | Path) -> dict:
 # ============================================================================
 
 
-def read_1pz(path: str | Path):
+def read_1pz(path: str | Path) -> "anndata.AnnData":
     """Read a .1pz file into AnnData.
 
     Parameters

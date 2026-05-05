@@ -119,7 +119,7 @@ def load(
     genes: Optional[Sequence[str]] = None,
     obs_filter: Optional[dict] = None,
     backend: str = "zenodo",
-):
+) -> "anndata.AnnData":
     """Load a dataset as AnnData.
 
     This is the primary entry point. Pass a GEO accession to load from
@@ -199,7 +199,7 @@ def load_sample(
     gsm_id: str,
     *,
     genes: Optional[Sequence[str]] = None,
-):
+) -> "anndata.AnnData":
     """Load a single GSM sample using column-range reads.
 
     Requires a local catalog directory with sample_index.parquet.
@@ -271,7 +271,7 @@ def load_dir(
     layer: str = "gene_counts",
     with_qc: bool = True,
     with_doublets: bool = True,
-):
+) -> "anndata.AnnData":
     """Load a singlify pipeline output directory as AnnData.
 
     Reads the count matrix (.1pz), attaches gene names from

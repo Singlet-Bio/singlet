@@ -62,7 +62,7 @@ def _detect_organism(adata) -> str:
     )
 
 
-def gene_programs(organism: str, k: int = 100):
+def gene_programs(organism: str, k: int = 100) -> "pd.DataFrame":
     """Download and return the NMF gene program dictionary (W matrix).
 
     This is a free, citable scientific resource. The W matrix contains
@@ -112,7 +112,7 @@ def gene_programs(organism: str, k: int = 100):
     return pd.DataFrame(W, index=gene_names, columns=program_names)
 
 
-def project(adata, *, organism: Optional[str] = None, k: int = 100):
+def project(adata, *, organism: Optional[str] = None, k: int = 100) -> np.ndarray:
     """Project cells onto NMF gene programs. **Free, runs locally.**
 
     Computes H = NNLS(W, X) where W is the gene program dictionary.
@@ -169,7 +169,7 @@ def project(adata, *, organism: Optional[str] = None, k: int = 100):
     return H
 
 
-def annotate(adata, *, organism: Optional[str] = None, k: int = 100):
+def annotate(adata, *, organism: Optional[str] = None, k: int = 100) -> "pd.DataFrame":
     """Annotate cells with types via NMF projection. **Free, runs locally.**
 
     Projects cells onto gene programs, then maps dominant programs to

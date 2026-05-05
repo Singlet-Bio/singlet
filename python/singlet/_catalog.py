@@ -205,7 +205,7 @@ def info(accession: str) -> dict:
     return rows.iloc[0].to_dict()
 
 
-def species() -> list:
+def species() -> list[str]:
     """Return all species with processed data (SUCCESS samples)."""
     df = _load_sample_index()
     success = df[df["status"] == "SUCCESS"] if "status" in df.columns else df
