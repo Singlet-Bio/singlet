@@ -19,7 +19,7 @@ All notable changes to the singlet project.
 - **GPU module**: `from singlet.gpu import ...` (requires cupy)
 - **CMake find_package**: `find_package(Singlet COMPONENTS pz fq pileup)` with version file
 - **R GPU support**: `singlet::has_gpu()`, `gpu_pca()`, `gpu_neighbors()`, `gpu_leiden()`
-- **C++ test suite**: 97 unit tests covering all pileup modules (codec, cell calling, ATAC, ADT, species, nonhost, export, spatial, protocol detection, UMI dedup, bloom filter, velocity, saturation, read stats, provenance, minimizer index, cascade stats, pz writer)
+- **C++ test suite**: 100 unit tests covering all pileup modules (codec, cell calling, ATAC, ADT, species, nonhost, export, spatial, protocol detection, UMI dedup, bloom filter, velocity, saturation, read stats, provenance, minimizer index, cascade stats, pz writer, ancestry, ASE, MTX writer)
 - **IO schema v2 support**: Loader auto-detects singlify v2 subdirectory layout (`donor/snp_ad.1pz`)
 - **MCP server tests**: 25 unit tests covering all parquet-backed tools + call_tool router
 - **Python lint**: ruff check + ruff format enforced (0 errors, CI job added)

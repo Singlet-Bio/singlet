@@ -9,7 +9,7 @@ help: ## Show available targets
 
 test: test-cpp test-python ## Run all tests (C++ + Python)
 
-test-cpp: ## Build and run 97 C++ unit tests
+test-cpp: ## Build and run 100 C++ unit tests
 	@cmake -B build-tests -DSINGLET_BUILD_TESTS=ON -DSINGLET_BUILD_PIPELINE=OFF 2>&1 | tail -1
 	@cmake --build build-tests -j$$(nproc) 2>&1 | tail -1
 	@ctest --test-dir build-tests -j$$(nproc) --output-on-failure
