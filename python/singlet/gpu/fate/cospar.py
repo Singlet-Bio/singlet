@@ -23,7 +23,7 @@ For raw array usage see ``run_from_csc``.
 from __future__ import annotations
 
 import copy as copy_module
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 
@@ -69,7 +69,7 @@ def run_from_csc(
     max_cells_per_timepoint: int = 30000,
     stream=None,
     seed: int = 0,
-):
+) -> Any:
     """
     GPU-native CoSpar cell fate mapping (raw CSC input).
 

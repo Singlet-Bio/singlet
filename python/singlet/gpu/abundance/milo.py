@@ -23,7 +23,7 @@ When an AnnData is provided (``run_from_anndata``):
 from __future__ import annotations
 
 import copy as copy_module
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 
@@ -85,7 +85,7 @@ def run_from_embedding(
     deterministic: bool = True,
     stream=None,
     seed: int = 42,
-):
+) -> Any:
     """
     GPU-native Milo differential-abundance testing (raw embedding input).
 

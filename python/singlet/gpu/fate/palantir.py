@@ -22,7 +22,7 @@ When an AnnData is provided (``run_from_anndata``):
 from __future__ import annotations
 
 import copy as copy_module
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
 import numpy as np
 
@@ -68,7 +68,7 @@ def run_from_embedding(
     normalize_pseudotime: bool = True,
     stream=None,
     seed: int = 42,
-):
+) -> Any:
     """
     GPU-native Palantir pseudotime + branch probabilities (raw embedding input).
 

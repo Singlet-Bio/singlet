@@ -23,7 +23,10 @@ level so that tools importing singlet_gpu on non-GPU nodes still work.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Union
+from typing import TYPE_CHECKING, Union
+
+if TYPE_CHECKING:
+    import anndata
 
 # ---------------------------------------------------------------------------
 # Modality → canonical filename stem mapping.
@@ -78,7 +81,7 @@ def _resolve_path(pz_path: Union[str, Path], modality: str) -> str:
     raise FileNotFoundError(f"Path does not exist: {pz_path}")
 
 
-def to_anndata(device_csc, metadata):
+def to_anndata(device_csc, metadata) -> anndata.AnnData:
     """
     Wrap a :class:`~singlet.gpu.DeviceCsc` and :class:`~singlet.gpu.Metadata`
     into an AnnData whose ``X`` is a zero-copy ``cupy.sparse.csr_matrix`` view.

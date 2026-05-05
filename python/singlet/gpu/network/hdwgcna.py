@@ -23,7 +23,7 @@ When an AnnData is provided (``run_from_anndata``):
 from __future__ import annotations
 
 import copy as copy_module
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import numpy as np
 
@@ -63,7 +63,7 @@ def run_from_csc(
     ooc_chunk_size: int = 0,
     stream=None,
     seed: int = 42,
-):
+) -> Any:
     """
     GPU-native hdWGCNA co-expression network analysis (raw CSC input).
 

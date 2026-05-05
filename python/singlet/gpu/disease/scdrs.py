@@ -23,7 +23,7 @@ When an AnnData is provided (``run_from_anndata``):
 from __future__ import annotations
 
 import copy as copy_module
-from typing import TYPE_CHECKING, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 import numpy as np
 
@@ -82,7 +82,7 @@ def run_from_csc(
     disease_chunk: int = 5,
     stream=None,
     seed: int = 0,
-):
+) -> Any:
     """
     GPU-native scDRS disease relevance scoring (raw CSC input).
 
