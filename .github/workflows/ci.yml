@@ -29,14 +29,17 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install ruff
-        run: pip install ruff --quiet
+      - name: Install tools
+        run: pip install ruff pyright numpy scipy pandas anndata --quiet
 
       - name: Lint check
         run: ruff check python/ tests/python/
 
       - name: Format check
         run: ruff format --check python/ tests/python/
+
+      - name: Type check
+        run: pyright
 
   python-test:
     runs-on: ubuntu-latest
