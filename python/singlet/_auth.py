@@ -9,7 +9,7 @@ _API_KEY: Optional[str] = None
 _API_BASE = "https://api.singlet.bio/v1"
 
 
-def login(api_key: Optional[str] = None):
+def login(api_key: Optional[str] = None) -> None:
     """Authenticate for token-priced features.
 
     Parameters
