@@ -1,5 +1,6 @@
 # Build artifacts
 build/
+build-tests/
 *.o
 *.a
 *.so

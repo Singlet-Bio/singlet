@@ -1,1 +1,0 @@
-/opt/rh/gcc-toolset-13/root/bin/g++ CMakeFiles/test_nonhost_db_build.dir/test_nonhost_db_build.cpp.o -o test_nonhost_db_build   -L/mnt/home/debruinz/.conda/envs/cellarium/lib  -Wl,-rpath,/mnt/home/debruinz/.conda/envs/cellarium/lib /usr/lib64/libzstd.so /usr/lib64/libz.so -lhts -lgomp /lib64/libpthread.a

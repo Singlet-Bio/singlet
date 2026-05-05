@@ -1,1 +1,0 @@
-/opt/rh/gcc-toolset-13/root/bin/g++ CMakeFiles/test_barnyard_route.dir/test_barnyard_route.cpp.o -o test_barnyard_route   -L/mnt/home/debruinz/.conda/envs/cellarium/lib  -Wl,-rpath,/mnt/home/debruinz/.conda/envs/cellarium/lib /usr/lib64/libzstd.so /usr/lib64/libz.so -lhts -lgomp /lib64/libpthread.a
