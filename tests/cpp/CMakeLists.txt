@@ -1,10 +1,12 @@
 # C++ unit tests — header-only pileup/pz/fq tests
 # Requires: zstd, zlib, htslib, OpenMP, pthreads
+# Optional: HDF5 (for h5ad/loom/molecule_info tests)
 
 include(FindPkgConfig)
 pkg_check_modules(HTSLIB REQUIRED htslib>=1.10)
 find_package(OpenMP REQUIRED)
 find_package(Threads REQUIRED)
+find_package(HDF5 COMPONENTS C)
 
 enable_testing()
 
@@ -142,4 +144,20 @@ add_pileup_test(test_ref_fetch)
 add_pileup_test(test_logging)
 add_pileup_test(test_interval_tree)
 add_pileup_test(test_benchmark_suite)
+
+# HDF5-dependent tests (h5ad, loom, molecule_info)
+if(HDF5_FOUND)
+    macro(add_hdf5_test name)
+        add_executable(${name} ${name}.cpp)
+        target_include_directories(${name} PRIVATE ${PILEUP_TEST_INCLUDE_DIRS} ${HDF5_INCLUDE_DIRS})
+        target_link_libraries(${name} PRIVATE ${PILEUP_TEST_LINK_LIBS} ${HDF5_LIBRARIES})
+        target_link_directories(${name} PRIVATE ${HTSLIB_LIBRARY_DIRS})
+        target_compile_options(${name} PRIVATE -O2)
+        add_test(NAME ${name} COMMAND ${name})
+    endmacro()
+
+    add_hdf5_test(test_h5ad_writer)
+    add_hdf5_test(test_loom_writer)
+    add_hdf5_test(test_molecule_info)
+endif()
 
