@@ -74,6 +74,22 @@ class TestResolveGsePath:
 
         assert _resolve_gse_path("GSE100") is None
 
+    def test_returns_none_no_counts_file(self, tmp_path, monkeypatch):
+        """Returns None when path exists but counts.1pz is missing."""
+        import singlet._catalog as cat_mod
+        from singlet._loader import _resolve_gse_path
+
+        catalog_dir = tmp_path / "catalog"
+        catalog_dir.mkdir()
+        df = pd.DataFrame({"gse_id": ["GSE100"], "path": ["pipeline/quant/GSE100"]})
+        df.to_parquet(catalog_dir / "catalog_v1.parquet")
+        cat_mod.set_catalog_dir(catalog_dir)
+
+        # Create directory but NOT counts.1pz
+        (tmp_path / "pipeline" / "quant" / "GSE100").mkdir(parents=True)
+
+        assert _resolve_gse_path("GSE100") is None
+
 
 class TestDownload:
     """Test download() function."""
@@ -284,3 +300,35 @@ class TestLoadSample:
             loaded = load("GSE999")
 
         assert loaded.shape == (3, 4)
+
+    def test_load_zarr(self, tmp_path):
+        """Loads .zarr path via anndata.read_zarr."""
+        zarr = pytest.importorskip("zarr")  # noqa: F841
+        from singlet._loader import load
+
+        adata = ad.AnnData(X=sp.random(4, 6, density=0.3, format="csr"))
+        adata.obs_names = pd.Index([f"C{i}" for i in range(4)])
+        adata.var_names = pd.Index([f"G{i}" for i in range(6)])
+        zarr_path = tmp_path / "data.zarr"
+        adata.write_zarr(zarr_path)
+
+        loaded = load(zarr_path)
+        assert loaded.shape == (4, 6)
+
+    def test_load_unknown_extension_falls_through(self, tmp_path):
+        """Unknown extension falls through to read_matrix."""
+        from singlet._io import write_spz
+        from singlet._loader import load
+
+        mat = sp.random(5, 7, density=0.3, format="csr", dtype=np.float32)
+        adata = ad.AnnData(X=mat)
+        adata.obs_names = pd.Index([f"C{i}" for i in range(5)])
+        adata.var_names = pd.Index([f"G{i}" for i in range(7)])
+        # Write as .spz but give it a weird extension
+        real_path = tmp_path / "data.spz"
+        write_spz(adata, real_path)
+        weird_path = tmp_path / "data.blob"
+        weird_path.write_bytes(real_path.read_bytes())
+
+        loaded = load(weird_path)
+        assert loaded.shape == (5, 7)

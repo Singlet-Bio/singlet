@@ -222,3 +222,89 @@ class TestWrite1pzUnsFiltering:
         loaded = read_1pz(path)
         assert "version" in loaded.uns
         assert loaded.uns["version"] == "1.0"
+
+
+class TestLegacyV2Paths:
+    """Test legacy sparsepress_v2 read paths (lines 84, 175, 253-285)."""
+
+    def test_read_spz_legacy_dispatches(self):
+        """read_spz dispatches to _read_spz_legacy for v2 files."""
+        from unittest.mock import MagicMock, patch
+
+        mock_adata = MagicMock()
+        with (
+            patch("singlet._io._detect_format_version", return_value=2),
+            patch("singlet._io._read_spz_legacy", return_value=mock_adata) as mock_legacy,
+        ):
+            from singlet._io import read_spz
+
+            result = read_spz("/fake/path.spz")
+            mock_legacy.assert_called_once_with("/fake/path.spz", col_range=None)
+            assert result is mock_adata
+
+    def test_spz_info_legacy_dispatches(self):
+        """spz_info dispatches to _spz_info_legacy for v2 files."""
+        from unittest.mock import patch
+
+        with (
+            patch("singlet._io._detect_format_version", return_value=2),
+            patch("singlet._io._spz_info_legacy", return_value={"rows": 10}) as mock_info,
+        ):
+            from singlet._io import spz_info
+
+            result = spz_info("/fake/path.spz")
+            mock_info.assert_called_once_with("/fake/path.spz")
+            assert result == {"rows": 10}
+
+    def test_read_spz_legacy_full(self):
+        """_read_spz_legacy calls sparsepress and returns AnnData."""
+        from unittest.mock import MagicMock, patch
+
+        mock_sp = MagicMock()
+        mock_sp.sp_read.return_value = {
+            "data": np.array([1.0, 2.0, 3.0]),
+            "indices": np.array([0, 1, 0]),
+            "indptr": np.array([0, 2, 3]),
+            "shape": [2, 2],
+        }
+
+        with patch("singlet._io._import_sparsepress", return_value=mock_sp):
+            from singlet._io import _read_spz_legacy
+
+            adata = _read_spz_legacy("/fake.spz")
+            assert adata.shape == (2, 2)  # transposed: 2 cells × 2 genes
+
+    def test_read_spz_legacy_with_col_range(self):
+        """_read_spz_legacy respects col_range subsetting."""
+        from unittest.mock import MagicMock, patch
+
+        mock_sp = MagicMock()
+        # Full matrix: 3 genes × 4 cells CSC
+        mat = sp.random(3, 4, density=0.6, format="csc", dtype=np.float64)
+        mock_sp.sp_read.return_value = {
+            "data": mat.data,
+            "indices": mat.indices,
+            "indptr": mat.indptr,
+            "shape": list(mat.shape),
+        }
+
+        with patch("singlet._io._import_sparsepress", return_value=mock_sp):
+            from singlet._io import _read_spz_legacy
+
+            adata = _read_spz_legacy("/fake.spz", col_range=(1, 3))
+            # Subsetted to cols 1-3: 3 genes × 2 cells → transposed: 2 cells × 3 genes
+            assert adata.shape == (2, 3)
+
+    def test_spz_info_legacy_impl(self):
+        """_spz_info_legacy delegates to sparsepress.sp_info."""
+        from unittest.mock import MagicMock, patch
+
+        mock_sp = MagicMock()
+        mock_sp.sp_info.return_value = {"rows": 5, "cols": 10, "nnz": 50}
+
+        with patch("singlet._io._import_sparsepress", return_value=mock_sp):
+            from singlet._io import _spz_info_legacy
+
+            result = _spz_info_legacy("/fake.spz")
+            assert result == {"rows": 5, "cols": 10, "nnz": 50}
+            mock_sp.sp_info.assert_called_once_with("/fake.spz")
