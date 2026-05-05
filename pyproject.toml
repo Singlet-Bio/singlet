@@ -77,6 +77,12 @@ markers = [
     "smoke: lightweight smoke tests for new features",
     "gpu: requires CUDA GPU and CuPy",
 ]
+filterwarnings = [
+    "ignore:Sparse CSR tensor support is in beta:UserWarning",
+    "ignore::DeprecationWarning:pyiceberg",
+    "ignore::DeprecationWarning:pyparsing",
+    "ignore::DeprecationWarning:pydantic",
+]
 
 [tool.ruff]
 target-version = "py39"
