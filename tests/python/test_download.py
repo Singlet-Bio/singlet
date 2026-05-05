@@ -341,6 +341,17 @@ class TestParallelDownload:
         assert not success
         assert "network error" in error
 
+    def test_zero_retries_returns_failure(self, tmp_path):
+        """retries=0 immediately returns failure without attempting download."""
+        from singlet.preprocessing._download import _download_parallel_segments
+
+        dest = tmp_path / "file.bin"
+        success, error = _download_parallel_segments(
+            "http://example.com/file.bin", dest, retries=0
+        )
+        assert not success
+        assert error == "Max retries exceeded"
+
     def test_pigz_fallback_to_gzip(self, tmp_path):
         """download_from_sra falls back to gzip if pigz not found."""
         from singlet.preprocessing._download import download_from_sra
