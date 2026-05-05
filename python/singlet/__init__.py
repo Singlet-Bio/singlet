@@ -80,6 +80,7 @@ from singlet._io import (
 )
 from singlet._loader import download, load, load_dir, load_sample
 from singlet._query import query, search
+from singlet._versions import show_versions
 from singlet.convert import from_h5ad, from_mtx, from_zarr, to_csc, to_h5ad, to_mtx, to_zarr
 
 __all__ = [
@@ -129,4 +130,6 @@ __all__ = [
     "from_h5ad",
     "from_zarr",
     "from_mtx",
+    # Diagnostics
+    "show_versions",
 ]

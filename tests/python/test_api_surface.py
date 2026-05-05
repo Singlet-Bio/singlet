@@ -115,3 +115,13 @@ class TestMain:
         captured = capsys.readouterr()
         assert "singlet v" in captured.out
         assert "Quick start" in captured.out
+
+    def test_show_versions(self, capsys):
+        """singlet.show_versions() prints dependency info."""
+        import singlet
+
+        result = singlet.show_versions()
+        assert "singlet: 2.0.0" in result
+        assert "numpy:" in result
+        captured = capsys.readouterr()
+        assert "singlet: 2.0.0" in captured.out
