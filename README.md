@@ -108,7 +108,10 @@ See [docs/installation.md](docs/installation.md) for full details.
 ## Building from Source
 
 ```bash
-# Pipeline binary (C++ — requires htslib, zstd, OpenMP)
+# Pipeline binary (C++ — requires htslib, zstd, ncbi-vdb, OpenMP; HDF5 optional)
+source /opt/rh/gcc-toolset-13/enable  # RHEL/Rocky — need GCC 13+
+export CONDA_PREFIX=/path/to/conda/env  # must have htslib, ncbi-vdb
+export PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$PKG_CONFIG_PATH
 cmake -B build -DSINGLET_BUILD_PIPELINE=ON -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
 
