@@ -16,7 +16,9 @@ Functions:
 try:
     import torch as _torch
 except ImportError:
-    raise ImportError("singlet.torch requires PyTorch. Install with: pip install singlet[torch]") from None
+    raise ImportError(
+        "singlet.torch requires PyTorch. Install with: pip install singlet[torch]"
+    ) from None
 
 from singlet.torch._torch import (
     DataLoader,

@@ -81,7 +81,9 @@ def _load_catalog() -> pd.DataFrame:
     try:
         _CATALOG_CACHE = _download_parquet(_CATALOG_URL, cache_path)
     except Exception:
-        raise RuntimeError("Could not load catalog. Set SINGLET_CATALOG_DIR or check internet.") from None
+        raise RuntimeError(
+            "Could not load catalog. Set SINGLET_CATALOG_DIR or check internet."
+        ) from None
     return _CATALOG_CACHE
 
 
