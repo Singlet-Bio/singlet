@@ -45,6 +45,7 @@ import pytest
 singlet_gpu = pytest.importorskip(
     "singlet.gpu",
     reason="singlet.gpu not available. Run `pip install -e singlet-gpu/python/` first.",
+    exc_type=ImportError,
 )
 
 # Explicitly import enrich subpackage so singlet_gpu.enrich.run_score_genes

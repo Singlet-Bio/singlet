@@ -46,6 +46,7 @@ import pytest
 singlet_gpu = pytest.importorskip(
     "singlet.gpu",
     reason="singlet.gpu not available. Run `pip install -e singlet-gpu/python/` first.",
+    exc_type=ImportError,
 )
 
 from conftest import requires_gpu  # noqa: E402
