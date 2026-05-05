@@ -1,0 +1,929 @@
+
+---
+events:
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeDetermineSystem.cmake:205 (message)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      The system is: Linux - 5.14.0-570.62.1.el9_6.x86_64 - x86_64
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeDetermineCXXCompiler.cmake:126 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" succeeded.
+      Compiler: /opt/rh/gcc-toolset-13/root/bin/g++ 
+      Build flags: 
+      Id flags:  
+      
+      The output was:
+      0
+      
+      
+      Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "a.out"
+      
+      The CXX compiler identification is GNU, found in:
+        /mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/3.31.10/CompilerIdCXX/a.out
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeDetermineCCompiler.cmake:123 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Compiling the C compiler identification source file "CMakeCCompilerId.c" succeeded.
+      Compiler: /opt/rh/gcc-toolset-13/root/bin/gcc 
+      Build flags: 
+      Id flags:  
+      
+      The output was:
+      0
+      
+      
+      Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "a.out"
+      
+      The C compiler identification is GNU, found in:
+        /mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/3.31.10/CompilerIdC/a.out
+      
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeDetermineCompilerABI.cmake:74 (try_compile)"
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:2 (project)"
+    checks:
+      - "Detecting CXX compiler ABI info"
+    directories:
+      source: "/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-KUHlET"
+      binary: "/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-KUHlET"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: ""
+      CMAKE_CXX_FLAGS_DEBUG: "-g"
+      CMAKE_CXX_SCAN_FOR_MODULES: "OFF"
+      CMAKE_EXE_LINKER_FLAGS: ""
+    buildResult:
+      variable: "CMAKE_CXX_ABI_COMPILED"
+      cached: true
+      stdout: |
+        Change Dir: '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-KUHlET'
+        
+        Run Build Command(s): /mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_00054/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_00054.dir/build.make CMakeFiles/cmTC_00054.dir/build
+        gmake[1]: Entering directory '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-KUHlET'
+        Building CXX object CMakeFiles/cmTC_00054.dir/CMakeCXXCompilerABI.cpp.o
+        /opt/rh/gcc-toolset-13/root/bin/g++   -v -o CMakeFiles/cmTC_00054.dir/CMakeCXXCompilerABI.cpp.o -c /mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeCXXCompilerABI.cpp
+        Using built-in specs.
+        COLLECT_GCC=/opt/rh/gcc-toolset-13/root/bin/g++
+        OFFLOAD_TARGET_NAMES=nvptx-none
+        OFFLOAD_TARGET_DEFAULT=1
+        Target: x86_64-redhat-linux
+        Configured with: ../configure --enable-bootstrap --enable-languages=c,c++,fortran,lto --prefix=/opt/rh/gcc-toolset-13/root/usr --mandir=/opt/rh/gcc-toolset-13/root/usr/share/man --infodir=/opt/rh/gcc-toolset-13/root/usr/share/info --with-bugurl=http://bugzilla.redhat.com/bugzilla --enable-shared --enable-threads=posix --enable-checking=release --enable-multilib --with-system-zlib --enable-__cxa_atexit --disable-libunwind-exceptions --enable-gnu-unique-object --enable-linker-build-id --with-gcc-major-version-only --enable-libstdcxx-backtrace --with-libstdcxx-zoneinfo=/usr/share/zoneinfo --with-linker-hash-style=gnu --enable-plugin --enable-initfini-array --without-isl --enable-offload-targets=nvptx-none --without-cuda-driver --enable-offload-defaulted --enable-gnu-indirect-function --enable-cet --with-tune=generic --with-arch_64=x86-64-v2 --with-arch_32=x86-64 --build=x86_64-redhat-linux --with-build-config=bootstrap-lto --enable-link-serialization=1
+        Thread model: posix
+        Supported LTO compression algorithms: zlib zstd
+        gcc version 13.3.1 20240611 (Red Hat 13.3.1-2) (GCC) 
+        COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_00054.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-shared-libgcc' '-mtune=generic' '-march=x86-64-v2' '-dumpdir' 'CMakeFiles/cmTC_00054.dir/'
+         /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/cc1plus -quiet -v -D_GNU_SOURCE /mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeCXXCompilerABI.cpp -quiet -dumpdir CMakeFiles/cmTC_00054.dir/ -dumpbase CMakeCXXCompilerABI.cpp.cpp -dumpbase-ext .cpp -mtune=generic -march=x86-64-v2 -version -o /tmp/ccZLCotI.s
+        GNU C++17 (GCC) version 13.3.1 20240611 (Red Hat 13.3.1-2) (x86_64-redhat-linux)
+        	compiled by GNU C version 13.3.1 20240611 (Red Hat 13.3.1-2), GMP version 6.2.0, MPFR version 4.1.0-p9, MPC version 1.2.1, isl version none
+        GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072
+        ignoring nonexistent directory "/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/include-fixed"
+        ignoring nonexistent directory "/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../x86_64-redhat-linux/include"
+        #include "..." search starts here:
+        #include <...> search starts here:
+         /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../include/c++/13
+         /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../include/c++/13/x86_64-redhat-linux
+         /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../include/c++/13/backward
+         /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/include
+         /usr/local/include
+         /opt/rh/gcc-toolset-13/root/usr/include
+         /usr/include
+        End of search list.
+        Compiler executable checksum: 4b6bcc732f8791264c50a4b8c9d6c0c1
+        COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_00054.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-shared-libgcc' '-mtune=generic' '-march=x86-64-v2' '-dumpdir' 'CMakeFiles/cmTC_00054.dir/'
+         /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/as -v --64 -o CMakeFiles/cmTC_00054.dir/CMakeCXXCompilerABI.cpp.o /tmp/ccZLCotI.s
+        GNU assembler version 2.40 (x86_64-redhat-linux) using BFD version version 2.40-21.el9
+        COMPILER_PATH=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/
+        LIBRARY_PATH=/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64/:/lib/../lib64/:/usr/lib/../lib64/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../:/lib/:/usr/lib/
+        COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_00054.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-shared-libgcc' '-mtune=generic' '-march=x86-64-v2' '-dumpdir' 'CMakeFiles/cmTC_00054.dir/CMakeCXXCompilerABI.cpp.'
+        Linking CXX executable cmTC_00054
+        /mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/bin/cmake -E cmake_link_script CMakeFiles/cmTC_00054.dir/link.txt --verbose=1
+        Using built-in specs.
+        COLLECT_GCC=/opt/rh/gcc-toolset-13/root/bin/g++
+        COLLECT_LTO_WRAPPER=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/lto-wrapper
+        OFFLOAD_TARGET_NAMES=nvptx-none
+        OFFLOAD_TARGET_DEFAULT=1
+        Target: x86_64-redhat-linux
+        Configured with: ../configure --enable-bootstrap --enable-languages=c,c++,fortran,lto --prefix=/opt/rh/gcc-toolset-13/root/usr --mandir=/opt/rh/gcc-toolset-13/root/usr/share/man --infodir=/opt/rh/gcc-toolset-13/root/usr/share/info --with-bugurl=http://bugzilla.redhat.com/bugzilla --enable-shared --enable-threads=posix --enable-checking=release --enable-multilib --with-system-zlib --enable-__cxa_atexit --disable-libunwind-exceptions --enable-gnu-unique-object --enable-linker-build-id --with-gcc-major-version-only --enable-libstdcxx-backtrace --with-libstdcxx-zoneinfo=/usr/share/zoneinfo --with-linker-hash-style=gnu --enable-plugin --enable-initfini-array --without-isl --enable-offload-targets=nvptx-none --without-cuda-driver --enable-offload-defaulted --enable-gnu-indirect-function --enable-cet --with-tune=generic --with-arch_64=x86-64-v2 --with-arch_32=x86-64 --build=x86_64-redhat-linux --with-build-config=bootstrap-lto --enable-link-serialization=1
+        Thread model: posix
+        Supported LTO compression algorithms: zlib zstd
+        gcc version 13.3.1 20240611 (Red Hat 13.3.1-2) (GCC) 
+        COMPILER_PATH=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/
+        LIBRARY_PATH=/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64/:/lib/../lib64/:/usr/lib/../lib64/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../:/lib/:/usr/lib/
+        COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_00054' '-shared-libgcc' '-mtune=generic' '-march=x86-64-v2' '-dumpdir' 'cmTC_00054.'
+         /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/collect2 -plugin /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/liblto_plugin.so -plugin-opt=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/lto-wrapper -plugin-opt=-fresolution=/tmp/ccPKImSo.res -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc --build-id --no-add-needed --eh-frame-hdr --hash-style=gnu -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_00054 /lib/../lib64/crt1.o /lib/../lib64/crti.o /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtbegin.o -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13 -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../.. -v CMakeFiles/cmTC_00054.dir/CMakeCXXCompilerABI.cpp.o -lstdc++ -lm -lgcc_s -lgcc -lc -lgcc_s -lgcc /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtend.o /lib/../lib64/crtn.o
+        collect2 version 13.3.1 20240611 (Red Hat 13.3.1-2)
+        /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/ld -plugin /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/liblto_plugin.so -plugin-opt=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/lto-wrapper -plugin-opt=-fresolution=/tmp/ccPKImSo.res -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc --build-id --no-add-needed --eh-frame-hdr --hash-style=gnu -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_00054 /lib/../lib64/crt1.o /lib/../lib64/crti.o /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtbegin.o -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13 -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../.. -v CMakeFiles/cmTC_00054.dir/CMakeCXXCompilerABI.cpp.o -lstdc++ -lm -lgcc_s -lgcc -lc -lgcc_s -lgcc /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtend.o /lib/../lib64/crtn.o
+        GNU ld version 2.40-21.el9
+        COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_00054' '-shared-libgcc' '-mtune=generic' '-march=x86-64-v2' '-dumpdir' 'cmTC_00054.'
+        /opt/rh/gcc-toolset-13/root/bin/g++  -v -Wl,-v CMakeFiles/cmTC_00054.dir/CMakeCXXCompilerABI.cpp.o -o cmTC_00054
+        gmake[1]: Leaving directory '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-KUHlET'
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeDetermineCompilerABI.cmake:182 (message)"
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Parsed CXX implicit include dir info: rv=done
+        found start of include info
+        found start of implicit include info
+          add: [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../include/c++/13]
+          add: [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../include/c++/13/x86_64-redhat-linux]
+          add: [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../include/c++/13/backward]
+          add: [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/include]
+          add: [/usr/local/include]
+          add: [/opt/rh/gcc-toolset-13/root/usr/include]
+          add: [/usr/include]
+        end of search list found
+        collapse include dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../include/c++/13] ==> [/opt/rh/gcc-toolset-13/root/usr/include/c++/13]
+        collapse include dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../include/c++/13/x86_64-redhat-linux] ==> [/opt/rh/gcc-toolset-13/root/usr/include/c++/13/x86_64-redhat-linux]
+        collapse include dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../include/c++/13/backward] ==> [/opt/rh/gcc-toolset-13/root/usr/include/c++/13/backward]
+        collapse include dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/include] ==> [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/include]
+        collapse include dir [/usr/local/include] ==> [/usr/local/include]
+        collapse include dir [/opt/rh/gcc-toolset-13/root/usr/include] ==> [/opt/rh/gcc-toolset-13/root/usr/include]
+        collapse include dir [/usr/include] ==> [/usr/include]
+        implicit include dirs: [/opt/rh/gcc-toolset-13/root/usr/include/c++/13;/opt/rh/gcc-toolset-13/root/usr/include/c++/13/x86_64-redhat-linux;/opt/rh/gcc-toolset-13/root/usr/include/c++/13/backward;/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/include;/usr/local/include;/opt/rh/gcc-toolset-13/root/usr/include;/usr/include]
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeDetermineCompilerABI.cmake:218 (message)"
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Parsed CXX implicit link information:
+        link line regex: [^( *|.*[/\\])(ld[0-9]*(\\.[a-z]+)?|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        linker tool regex: [^[ 	]*(->|")?[ 	]*(([^"]*[/\\])?(ld[0-9]*(\\.[a-z]+)?))("|,| |$)]
+        ignore line: [Change Dir: '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-KUHlET']
+        ignore line: []
+        ignore line: [Run Build Command(s): /mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_00054/fast]
+        ignore line: [/usr/bin/gmake  -f CMakeFiles/cmTC_00054.dir/build.make CMakeFiles/cmTC_00054.dir/build]
+        ignore line: [gmake[1]: Entering directory '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-KUHlET']
+        ignore line: [Building CXX object CMakeFiles/cmTC_00054.dir/CMakeCXXCompilerABI.cpp.o]
+        ignore line: [/opt/rh/gcc-toolset-13/root/bin/g++   -v -o CMakeFiles/cmTC_00054.dir/CMakeCXXCompilerABI.cpp.o -c /mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeCXXCompilerABI.cpp]
+        ignore line: [Using built-in specs.]
+        ignore line: [COLLECT_GCC=/opt/rh/gcc-toolset-13/root/bin/g++]
+        ignore line: [OFFLOAD_TARGET_NAMES=nvptx-none]
+        ignore line: [OFFLOAD_TARGET_DEFAULT=1]
+        ignore line: [Target: x86_64-redhat-linux]
+        ignore line: [Configured with: ../configure --enable-bootstrap --enable-languages=c c++ fortran lto --prefix=/opt/rh/gcc-toolset-13/root/usr --mandir=/opt/rh/gcc-toolset-13/root/usr/share/man --infodir=/opt/rh/gcc-toolset-13/root/usr/share/info --with-bugurl=http://bugzilla.redhat.com/bugzilla --enable-shared --enable-threads=posix --enable-checking=release --enable-multilib --with-system-zlib --enable-__cxa_atexit --disable-libunwind-exceptions --enable-gnu-unique-object --enable-linker-build-id --with-gcc-major-version-only --enable-libstdcxx-backtrace --with-libstdcxx-zoneinfo=/usr/share/zoneinfo --with-linker-hash-style=gnu --enable-plugin --enable-initfini-array --without-isl --enable-offload-targets=nvptx-none --without-cuda-driver --enable-offload-defaulted --enable-gnu-indirect-function --enable-cet --with-tune=generic --with-arch_64=x86-64-v2 --with-arch_32=x86-64 --build=x86_64-redhat-linux --with-build-config=bootstrap-lto --enable-link-serialization=1]
+        ignore line: [Thread model: posix]
+        ignore line: [Supported LTO compression algorithms: zlib zstd]
+        ignore line: [gcc version 13.3.1 20240611 (Red Hat 13.3.1-2) (GCC) ]
+        ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_00054.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-shared-libgcc' '-mtune=generic' '-march=x86-64-v2' '-dumpdir' 'CMakeFiles/cmTC_00054.dir/']
+        ignore line: [ /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/cc1plus -quiet -v -D_GNU_SOURCE /mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeCXXCompilerABI.cpp -quiet -dumpdir CMakeFiles/cmTC_00054.dir/ -dumpbase CMakeCXXCompilerABI.cpp.cpp -dumpbase-ext .cpp -mtune=generic -march=x86-64-v2 -version -o /tmp/ccZLCotI.s]
+        ignore line: [GNU C++17 (GCC) version 13.3.1 20240611 (Red Hat 13.3.1-2) (x86_64-redhat-linux)]
+        ignore line: [	compiled by GNU C version 13.3.1 20240611 (Red Hat 13.3.1-2)  GMP version 6.2.0  MPFR version 4.1.0-p9  MPC version 1.2.1  isl version none]
+        ignore line: [GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072]
+        ignore line: [ignoring nonexistent directory "/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/include-fixed"]
+        ignore line: [ignoring nonexistent directory "/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../x86_64-redhat-linux/include"]
+        ignore line: [#include "..." search starts here:]
+        ignore line: [#include <...> search starts here:]
+        ignore line: [ /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../include/c++/13]
+        ignore line: [ /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../include/c++/13/x86_64-redhat-linux]
+        ignore line: [ /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../include/c++/13/backward]
+        ignore line: [ /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/include]
+        ignore line: [ /usr/local/include]
+        ignore line: [ /opt/rh/gcc-toolset-13/root/usr/include]
+        ignore line: [ /usr/include]
+        ignore line: [End of search list.]
+        ignore line: [Compiler executable checksum: 4b6bcc732f8791264c50a4b8c9d6c0c1]
+        ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_00054.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-shared-libgcc' '-mtune=generic' '-march=x86-64-v2' '-dumpdir' 'CMakeFiles/cmTC_00054.dir/']
+        ignore line: [ /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/as -v --64 -o CMakeFiles/cmTC_00054.dir/CMakeCXXCompilerABI.cpp.o /tmp/ccZLCotI.s]
+        ignore line: [GNU assembler version 2.40 (x86_64-redhat-linux) using BFD version version 2.40-21.el9]
+        ignore line: [COMPILER_PATH=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/]
+        ignore line: [LIBRARY_PATH=/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64/:/lib/../lib64/:/usr/lib/../lib64/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../:/lib/:/usr/lib/]
+        ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_00054.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-shared-libgcc' '-mtune=generic' '-march=x86-64-v2' '-dumpdir' 'CMakeFiles/cmTC_00054.dir/CMakeCXXCompilerABI.cpp.']
+        ignore line: [Linking CXX executable cmTC_00054]
+        ignore line: [/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/bin/cmake -E cmake_link_script CMakeFiles/cmTC_00054.dir/link.txt --verbose=1]
+        ignore line: [Using built-in specs.]
+        ignore line: [COLLECT_GCC=/opt/rh/gcc-toolset-13/root/bin/g++]
+        ignore line: [COLLECT_LTO_WRAPPER=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/lto-wrapper]
+        ignore line: [OFFLOAD_TARGET_NAMES=nvptx-none]
+        ignore line: [OFFLOAD_TARGET_DEFAULT=1]
+        ignore line: [Target: x86_64-redhat-linux]
+        ignore line: [Configured with: ../configure --enable-bootstrap --enable-languages=c c++ fortran lto --prefix=/opt/rh/gcc-toolset-13/root/usr --mandir=/opt/rh/gcc-toolset-13/root/usr/share/man --infodir=/opt/rh/gcc-toolset-13/root/usr/share/info --with-bugurl=http://bugzilla.redhat.com/bugzilla --enable-shared --enable-threads=posix --enable-checking=release --enable-multilib --with-system-zlib --enable-__cxa_atexit --disable-libunwind-exceptions --enable-gnu-unique-object --enable-linker-build-id --with-gcc-major-version-only --enable-libstdcxx-backtrace --with-libstdcxx-zoneinfo=/usr/share/zoneinfo --with-linker-hash-style=gnu --enable-plugin --enable-initfini-array --without-isl --enable-offload-targets=nvptx-none --without-cuda-driver --enable-offload-defaulted --enable-gnu-indirect-function --enable-cet --with-tune=generic --with-arch_64=x86-64-v2 --with-arch_32=x86-64 --build=x86_64-redhat-linux --with-build-config=bootstrap-lto --enable-link-serialization=1]
+        ignore line: [Thread model: posix]
+        ignore line: [Supported LTO compression algorithms: zlib zstd]
+        ignore line: [gcc version 13.3.1 20240611 (Red Hat 13.3.1-2) (GCC) ]
+        ignore line: [COMPILER_PATH=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/]
+        ignore line: [LIBRARY_PATH=/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64/:/lib/../lib64/:/usr/lib/../lib64/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../:/lib/:/usr/lib/]
+        ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_00054' '-shared-libgcc' '-mtune=generic' '-march=x86-64-v2' '-dumpdir' 'cmTC_00054.']
+        link line: [ /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/collect2 -plugin /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/liblto_plugin.so -plugin-opt=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/lto-wrapper -plugin-opt=-fresolution=/tmp/ccPKImSo.res -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc --build-id --no-add-needed --eh-frame-hdr --hash-style=gnu -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_00054 /lib/../lib64/crt1.o /lib/../lib64/crti.o /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtbegin.o -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13 -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../.. -v CMakeFiles/cmTC_00054.dir/CMakeCXXCompilerABI.cpp.o -lstdc++ -lm -lgcc_s -lgcc -lc -lgcc_s -lgcc /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtend.o /lib/../lib64/crtn.o]
+          arg [/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/collect2] ==> ignore
+          arg [-plugin] ==> ignore
+          arg [/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/liblto_plugin.so] ==> ignore
+          arg [-plugin-opt=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/lto-wrapper] ==> ignore
+          arg [-plugin-opt=-fresolution=/tmp/ccPKImSo.res] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc_s] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc] ==> ignore
+          arg [-plugin-opt=-pass-through=-lc] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc_s] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc] ==> ignore
+          arg [--build-id] ==> ignore
+          arg [--no-add-needed] ==> ignore
+          arg [--eh-frame-hdr] ==> ignore
+          arg [--hash-style=gnu] ==> ignore
+          arg [-m] ==> ignore
+          arg [elf_x86_64] ==> ignore
+          arg [-dynamic-linker] ==> ignore
+          arg [/lib64/ld-linux-x86-64.so.2] ==> ignore
+          arg [-o] ==> ignore
+          arg [cmTC_00054] ==> ignore
+          arg [/lib/../lib64/crt1.o] ==> obj [/lib/../lib64/crt1.o]
+          arg [/lib/../lib64/crti.o] ==> obj [/lib/../lib64/crti.o]
+          arg [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtbegin.o] ==> obj [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtbegin.o]
+          arg [-L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13] ==> dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13]
+          arg [-L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64] ==> dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64]
+          arg [-L/lib/../lib64] ==> dir [/lib/../lib64]
+          arg [-L/usr/lib/../lib64] ==> dir [/usr/lib/../lib64]
+          arg [-L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../..] ==> dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../..]
+          arg [-v] ==> ignore
+          arg [CMakeFiles/cmTC_00054.dir/CMakeCXXCompilerABI.cpp.o] ==> ignore
+          arg [-lstdc++] ==> lib [stdc++]
+          arg [-lm] ==> lib [m]
+          arg [-lgcc_s] ==> lib [gcc_s]
+          arg [-lgcc] ==> lib [gcc]
+          arg [-lc] ==> lib [c]
+          arg [-lgcc_s] ==> lib [gcc_s]
+          arg [-lgcc] ==> lib [gcc]
+          arg [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtend.o] ==> obj [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtend.o]
+          arg [/lib/../lib64/crtn.o] ==> obj [/lib/../lib64/crtn.o]
+        ignore line: [collect2 version 13.3.1 20240611 (Red Hat 13.3.1-2)]
+        ignore line: [/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/ld -plugin /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/liblto_plugin.so -plugin-opt=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/lto-wrapper -plugin-opt=-fresolution=/tmp/ccPKImSo.res -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc --build-id --no-add-needed --eh-frame-hdr --hash-style=gnu -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_00054 /lib/../lib64/crt1.o /lib/../lib64/crti.o /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtbegin.o -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13 -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../.. -v CMakeFiles/cmTC_00054.dir/CMakeCXXCompilerABI.cpp.o -lstdc++ -lm -lgcc_s -lgcc -lc -lgcc_s -lgcc /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtend.o /lib/../lib64/crtn.o]
+        linker tool for 'CXX': /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/ld
+        collapse obj [/lib/../lib64/crt1.o] ==> [/lib64/crt1.o]
+        collapse obj [/lib/../lib64/crti.o] ==> [/lib64/crti.o]
+        collapse obj [/lib/../lib64/crtn.o] ==> [/lib64/crtn.o]
+        collapse library dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13] ==> [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13]
+        collapse library dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64] ==> [/opt/rh/gcc-toolset-13/root/usr/lib64]
+        collapse library dir [/lib/../lib64] ==> [/lib64]
+        collapse library dir [/usr/lib/../lib64] ==> [/usr/lib64]
+        collapse library dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../..] ==> [/opt/rh/gcc-toolset-13/root/usr/lib]
+        implicit libs: [stdc++;m;gcc_s;gcc;c;gcc_s;gcc]
+        implicit objs: [/lib64/crt1.o;/lib64/crti.o;/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtbegin.o;/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtend.o;/lib64/crtn.o]
+        implicit dirs: [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13;/opt/rh/gcc-toolset-13/root/usr/lib64;/lib64;/usr/lib64;/opt/rh/gcc-toolset-13/root/usr/lib]
+        implicit fwks: []
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/Internal/CMakeDetermineLinkerId.cmake:40 (message)"
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeDetermineCompilerABI.cmake:255 (cmake_determine_linker_id)"
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Running the CXX compiler's linker: "/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/ld" "-v"
+      GNU ld version 2.40-21.el9
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeDetermineCompilerABI.cmake:74 (try_compile)"
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:2 (project)"
+    checks:
+      - "Detecting C compiler ABI info"
+    directories:
+      source: "/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-adUkSl"
+      binary: "/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-adUkSl"
+    cmakeVariables:
+      CMAKE_C_FLAGS: ""
+      CMAKE_C_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+    buildResult:
+      variable: "CMAKE_C_ABI_COMPILED"
+      cached: true
+      stdout: |
+        Change Dir: '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-adUkSl'
+        
+        Run Build Command(s): /mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_7956c/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_7956c.dir/build.make CMakeFiles/cmTC_7956c.dir/build
+        gmake[1]: Entering directory '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-adUkSl'
+        Building C object CMakeFiles/cmTC_7956c.dir/CMakeCCompilerABI.c.o
+        /opt/rh/gcc-toolset-13/root/bin/gcc   -v -o CMakeFiles/cmTC_7956c.dir/CMakeCCompilerABI.c.o -c /mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeCCompilerABI.c
+        Using built-in specs.
+        COLLECT_GCC=/opt/rh/gcc-toolset-13/root/bin/gcc
+        OFFLOAD_TARGET_NAMES=nvptx-none
+        OFFLOAD_TARGET_DEFAULT=1
+        Target: x86_64-redhat-linux
+        Configured with: ../configure --enable-bootstrap --enable-languages=c,c++,fortran,lto --prefix=/opt/rh/gcc-toolset-13/root/usr --mandir=/opt/rh/gcc-toolset-13/root/usr/share/man --infodir=/opt/rh/gcc-toolset-13/root/usr/share/info --with-bugurl=http://bugzilla.redhat.com/bugzilla --enable-shared --enable-threads=posix --enable-checking=release --enable-multilib --with-system-zlib --enable-__cxa_atexit --disable-libunwind-exceptions --enable-gnu-unique-object --enable-linker-build-id --with-gcc-major-version-only --enable-libstdcxx-backtrace --with-libstdcxx-zoneinfo=/usr/share/zoneinfo --with-linker-hash-style=gnu --enable-plugin --enable-initfini-array --without-isl --enable-offload-targets=nvptx-none --without-cuda-driver --enable-offload-defaulted --enable-gnu-indirect-function --enable-cet --with-tune=generic --with-arch_64=x86-64-v2 --with-arch_32=x86-64 --build=x86_64-redhat-linux --with-build-config=bootstrap-lto --enable-link-serialization=1
+        Thread model: posix
+        Supported LTO compression algorithms: zlib zstd
+        gcc version 13.3.1 20240611 (Red Hat 13.3.1-2) (GCC) 
+        COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_7956c.dir/CMakeCCompilerABI.c.o' '-c' '-mtune=generic' '-march=x86-64-v2' '-dumpdir' 'CMakeFiles/cmTC_7956c.dir/'
+         /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/cc1 -quiet -v /mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeCCompilerABI.c -quiet -dumpdir CMakeFiles/cmTC_7956c.dir/ -dumpbase CMakeCCompilerABI.c.c -dumpbase-ext .c -mtune=generic -march=x86-64-v2 -version -o /tmp/ccEmiTfs.s
+        GNU C17 (GCC) version 13.3.1 20240611 (Red Hat 13.3.1-2) (x86_64-redhat-linux)
+        	compiled by GNU C version 13.3.1 20240611 (Red Hat 13.3.1-2), GMP version 6.2.0, MPFR version 4.1.0-p9, MPC version 1.2.1, isl version none
+        GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072
+        ignoring nonexistent directory "/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/include-fixed"
+        ignoring nonexistent directory "/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../x86_64-redhat-linux/include"
+        #include "..." search starts here:
+        #include <...> search starts here:
+         /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/include
+         /usr/local/include
+         /opt/rh/gcc-toolset-13/root/usr/include
+         /usr/include
+        End of search list.
+        Compiler executable checksum: b380433485018c56a7800d60b8ea50f2
+        COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_7956c.dir/CMakeCCompilerABI.c.o' '-c' '-mtune=generic' '-march=x86-64-v2' '-dumpdir' 'CMakeFiles/cmTC_7956c.dir/'
+         /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/as -v --64 -o CMakeFiles/cmTC_7956c.dir/CMakeCCompilerABI.c.o /tmp/ccEmiTfs.s
+        GNU assembler version 2.40 (x86_64-redhat-linux) using BFD version version 2.40-21.el9
+        COMPILER_PATH=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/
+        LIBRARY_PATH=/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64/:/lib/../lib64/:/usr/lib/../lib64/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../:/lib/:/usr/lib/
+        COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_7956c.dir/CMakeCCompilerABI.c.o' '-c' '-mtune=generic' '-march=x86-64-v2' '-dumpdir' 'CMakeFiles/cmTC_7956c.dir/CMakeCCompilerABI.c.'
+        Linking C executable cmTC_7956c
+        /mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/bin/cmake -E cmake_link_script CMakeFiles/cmTC_7956c.dir/link.txt --verbose=1
+        Using built-in specs.
+        COLLECT_GCC=/opt/rh/gcc-toolset-13/root/bin/gcc
+        COLLECT_LTO_WRAPPER=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/lto-wrapper
+        OFFLOAD_TARGET_NAMES=nvptx-none
+        OFFLOAD_TARGET_DEFAULT=1
+        Target: x86_64-redhat-linux
+        Configured with: ../configure --enable-bootstrap --enable-languages=c,c++,fortran,lto --prefix=/opt/rh/gcc-toolset-13/root/usr --mandir=/opt/rh/gcc-toolset-13/root/usr/share/man --infodir=/opt/rh/gcc-toolset-13/root/usr/share/info --with-bugurl=http://bugzilla.redhat.com/bugzilla --enable-shared --enable-threads=posix --enable-checking=release --enable-multilib --with-system-zlib --enable-__cxa_atexit --disable-libunwind-exceptions --enable-gnu-unique-object --enable-linker-build-id --with-gcc-major-version-only --enable-libstdcxx-backtrace --with-libstdcxx-zoneinfo=/usr/share/zoneinfo --with-linker-hash-style=gnu --enable-plugin --enable-initfini-array --without-isl --enable-offload-targets=nvptx-none --without-cuda-driver --enable-offload-defaulted --enable-gnu-indirect-function --enable-cet --with-tune=generic --with-arch_64=x86-64-v2 --with-arch_32=x86-64 --build=x86_64-redhat-linux --with-build-config=bootstrap-lto --enable-link-serialization=1
+        Thread model: posix
+        Supported LTO compression algorithms: zlib zstd
+        gcc version 13.3.1 20240611 (Red Hat 13.3.1-2) (GCC) 
+        COMPILER_PATH=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/
+        LIBRARY_PATH=/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64/:/lib/../lib64/:/usr/lib/../lib64/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../:/lib/:/usr/lib/
+        COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_7956c' '-mtune=generic' '-march=x86-64-v2' '-dumpdir' 'cmTC_7956c.'
+         /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/collect2 -plugin /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/liblto_plugin.so -plugin-opt=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/lto-wrapper -plugin-opt=-fresolution=/tmp/ccpEhf35.res -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s --build-id --no-add-needed --eh-frame-hdr --hash-style=gnu -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_7956c /lib/../lib64/crt1.o /lib/../lib64/crti.o /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtbegin.o -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13 -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../.. -v CMakeFiles/cmTC_7956c.dir/CMakeCCompilerABI.c.o -lgcc --push-state --as-needed -lgcc_s --pop-state -lc -lgcc --push-state --as-needed -lgcc_s --pop-state /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtend.o /lib/../lib64/crtn.o
+        collect2 version 13.3.1 20240611 (Red Hat 13.3.1-2)
+        /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/ld -plugin /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/liblto_plugin.so -plugin-opt=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/lto-wrapper -plugin-opt=-fresolution=/tmp/ccpEhf35.res -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s --build-id --no-add-needed --eh-frame-hdr --hash-style=gnu -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_7956c /lib/../lib64/crt1.o /lib/../lib64/crti.o /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtbegin.o -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13 -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../.. -v CMakeFiles/cmTC_7956c.dir/CMakeCCompilerABI.c.o -lgcc --push-state --as-needed -lgcc_s --pop-state -lc -lgcc --push-state --as-needed -lgcc_s --pop-state /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtend.o /lib/../lib64/crtn.o
+        GNU ld version 2.40-21.el9
+        COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_7956c' '-mtune=generic' '-march=x86-64-v2' '-dumpdir' 'cmTC_7956c.'
+        /opt/rh/gcc-toolset-13/root/bin/gcc  -v -Wl,-v CMakeFiles/cmTC_7956c.dir/CMakeCCompilerABI.c.o -o cmTC_7956c
+        gmake[1]: Leaving directory '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-adUkSl'
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeDetermineCompilerABI.cmake:182 (message)"
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Parsed C implicit include dir info: rv=done
+        found start of include info
+        found start of implicit include info
+          add: [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/include]
+          add: [/usr/local/include]
+          add: [/opt/rh/gcc-toolset-13/root/usr/include]
+          add: [/usr/include]
+        end of search list found
+        collapse include dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/include] ==> [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/include]
+        collapse include dir [/usr/local/include] ==> [/usr/local/include]
+        collapse include dir [/opt/rh/gcc-toolset-13/root/usr/include] ==> [/opt/rh/gcc-toolset-13/root/usr/include]
+        collapse include dir [/usr/include] ==> [/usr/include]
+        implicit include dirs: [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/include;/usr/local/include;/opt/rh/gcc-toolset-13/root/usr/include;/usr/include]
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeDetermineCompilerABI.cmake:218 (message)"
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Parsed C implicit link information:
+        link line regex: [^( *|.*[/\\])(ld[0-9]*(\\.[a-z]+)?|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        linker tool regex: [^[ 	]*(->|")?[ 	]*(([^"]*[/\\])?(ld[0-9]*(\\.[a-z]+)?))("|,| |$)]
+        ignore line: [Change Dir: '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-adUkSl']
+        ignore line: []
+        ignore line: [Run Build Command(s): /mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_7956c/fast]
+        ignore line: [/usr/bin/gmake  -f CMakeFiles/cmTC_7956c.dir/build.make CMakeFiles/cmTC_7956c.dir/build]
+        ignore line: [gmake[1]: Entering directory '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-adUkSl']
+        ignore line: [Building C object CMakeFiles/cmTC_7956c.dir/CMakeCCompilerABI.c.o]
+        ignore line: [/opt/rh/gcc-toolset-13/root/bin/gcc   -v -o CMakeFiles/cmTC_7956c.dir/CMakeCCompilerABI.c.o -c /mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeCCompilerABI.c]
+        ignore line: [Using built-in specs.]
+        ignore line: [COLLECT_GCC=/opt/rh/gcc-toolset-13/root/bin/gcc]
+        ignore line: [OFFLOAD_TARGET_NAMES=nvptx-none]
+        ignore line: [OFFLOAD_TARGET_DEFAULT=1]
+        ignore line: [Target: x86_64-redhat-linux]
+        ignore line: [Configured with: ../configure --enable-bootstrap --enable-languages=c c++ fortran lto --prefix=/opt/rh/gcc-toolset-13/root/usr --mandir=/opt/rh/gcc-toolset-13/root/usr/share/man --infodir=/opt/rh/gcc-toolset-13/root/usr/share/info --with-bugurl=http://bugzilla.redhat.com/bugzilla --enable-shared --enable-threads=posix --enable-checking=release --enable-multilib --with-system-zlib --enable-__cxa_atexit --disable-libunwind-exceptions --enable-gnu-unique-object --enable-linker-build-id --with-gcc-major-version-only --enable-libstdcxx-backtrace --with-libstdcxx-zoneinfo=/usr/share/zoneinfo --with-linker-hash-style=gnu --enable-plugin --enable-initfini-array --without-isl --enable-offload-targets=nvptx-none --without-cuda-driver --enable-offload-defaulted --enable-gnu-indirect-function --enable-cet --with-tune=generic --with-arch_64=x86-64-v2 --with-arch_32=x86-64 --build=x86_64-redhat-linux --with-build-config=bootstrap-lto --enable-link-serialization=1]
+        ignore line: [Thread model: posix]
+        ignore line: [Supported LTO compression algorithms: zlib zstd]
+        ignore line: [gcc version 13.3.1 20240611 (Red Hat 13.3.1-2) (GCC) ]
+        ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_7956c.dir/CMakeCCompilerABI.c.o' '-c' '-mtune=generic' '-march=x86-64-v2' '-dumpdir' 'CMakeFiles/cmTC_7956c.dir/']
+        ignore line: [ /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/cc1 -quiet -v /mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeCCompilerABI.c -quiet -dumpdir CMakeFiles/cmTC_7956c.dir/ -dumpbase CMakeCCompilerABI.c.c -dumpbase-ext .c -mtune=generic -march=x86-64-v2 -version -o /tmp/ccEmiTfs.s]
+        ignore line: [GNU C17 (GCC) version 13.3.1 20240611 (Red Hat 13.3.1-2) (x86_64-redhat-linux)]
+        ignore line: [	compiled by GNU C version 13.3.1 20240611 (Red Hat 13.3.1-2)  GMP version 6.2.0  MPFR version 4.1.0-p9  MPC version 1.2.1  isl version none]
+        ignore line: [GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072]
+        ignore line: [ignoring nonexistent directory "/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/include-fixed"]
+        ignore line: [ignoring nonexistent directory "/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../x86_64-redhat-linux/include"]
+        ignore line: [#include "..." search starts here:]
+        ignore line: [#include <...> search starts here:]
+        ignore line: [ /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/include]
+        ignore line: [ /usr/local/include]
+        ignore line: [ /opt/rh/gcc-toolset-13/root/usr/include]
+        ignore line: [ /usr/include]
+        ignore line: [End of search list.]
+        ignore line: [Compiler executable checksum: b380433485018c56a7800d60b8ea50f2]
+        ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_7956c.dir/CMakeCCompilerABI.c.o' '-c' '-mtune=generic' '-march=x86-64-v2' '-dumpdir' 'CMakeFiles/cmTC_7956c.dir/']
+        ignore line: [ /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/as -v --64 -o CMakeFiles/cmTC_7956c.dir/CMakeCCompilerABI.c.o /tmp/ccEmiTfs.s]
+        ignore line: [GNU assembler version 2.40 (x86_64-redhat-linux) using BFD version version 2.40-21.el9]
+        ignore line: [COMPILER_PATH=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/]
+        ignore line: [LIBRARY_PATH=/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64/:/lib/../lib64/:/usr/lib/../lib64/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../:/lib/:/usr/lib/]
+        ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_7956c.dir/CMakeCCompilerABI.c.o' '-c' '-mtune=generic' '-march=x86-64-v2' '-dumpdir' 'CMakeFiles/cmTC_7956c.dir/CMakeCCompilerABI.c.']
+        ignore line: [Linking C executable cmTC_7956c]
+        ignore line: [/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/bin/cmake -E cmake_link_script CMakeFiles/cmTC_7956c.dir/link.txt --verbose=1]
+        ignore line: [Using built-in specs.]
+        ignore line: [COLLECT_GCC=/opt/rh/gcc-toolset-13/root/bin/gcc]
+        ignore line: [COLLECT_LTO_WRAPPER=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/lto-wrapper]
+        ignore line: [OFFLOAD_TARGET_NAMES=nvptx-none]
+        ignore line: [OFFLOAD_TARGET_DEFAULT=1]
+        ignore line: [Target: x86_64-redhat-linux]
+        ignore line: [Configured with: ../configure --enable-bootstrap --enable-languages=c c++ fortran lto --prefix=/opt/rh/gcc-toolset-13/root/usr --mandir=/opt/rh/gcc-toolset-13/root/usr/share/man --infodir=/opt/rh/gcc-toolset-13/root/usr/share/info --with-bugurl=http://bugzilla.redhat.com/bugzilla --enable-shared --enable-threads=posix --enable-checking=release --enable-multilib --with-system-zlib --enable-__cxa_atexit --disable-libunwind-exceptions --enable-gnu-unique-object --enable-linker-build-id --with-gcc-major-version-only --enable-libstdcxx-backtrace --with-libstdcxx-zoneinfo=/usr/share/zoneinfo --with-linker-hash-style=gnu --enable-plugin --enable-initfini-array --without-isl --enable-offload-targets=nvptx-none --without-cuda-driver --enable-offload-defaulted --enable-gnu-indirect-function --enable-cet --with-tune=generic --with-arch_64=x86-64-v2 --with-arch_32=x86-64 --build=x86_64-redhat-linux --with-build-config=bootstrap-lto --enable-link-serialization=1]
+        ignore line: [Thread model: posix]
+        ignore line: [Supported LTO compression algorithms: zlib zstd]
+        ignore line: [gcc version 13.3.1 20240611 (Red Hat 13.3.1-2) (GCC) ]
+        ignore line: [COMPILER_PATH=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/]
+        ignore line: [LIBRARY_PATH=/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64/:/lib/../lib64/:/usr/lib/../lib64/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../:/lib/:/usr/lib/]
+        ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_7956c' '-mtune=generic' '-march=x86-64-v2' '-dumpdir' 'cmTC_7956c.']
+        link line: [ /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/collect2 -plugin /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/liblto_plugin.so -plugin-opt=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/lto-wrapper -plugin-opt=-fresolution=/tmp/ccpEhf35.res -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s --build-id --no-add-needed --eh-frame-hdr --hash-style=gnu -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_7956c /lib/../lib64/crt1.o /lib/../lib64/crti.o /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtbegin.o -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13 -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../.. -v CMakeFiles/cmTC_7956c.dir/CMakeCCompilerABI.c.o -lgcc --push-state --as-needed -lgcc_s --pop-state -lc -lgcc --push-state --as-needed -lgcc_s --pop-state /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtend.o /lib/../lib64/crtn.o]
+          arg [/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/collect2] ==> ignore
+          arg [-plugin] ==> ignore
+          arg [/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/liblto_plugin.so] ==> ignore
+          arg [-plugin-opt=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/lto-wrapper] ==> ignore
+          arg [-plugin-opt=-fresolution=/tmp/ccpEhf35.res] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc_s] ==> ignore
+          arg [-plugin-opt=-pass-through=-lc] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc_s] ==> ignore
+          arg [--build-id] ==> ignore
+          arg [--no-add-needed] ==> ignore
+          arg [--eh-frame-hdr] ==> ignore
+          arg [--hash-style=gnu] ==> ignore
+          arg [-m] ==> ignore
+          arg [elf_x86_64] ==> ignore
+          arg [-dynamic-linker] ==> ignore
+          arg [/lib64/ld-linux-x86-64.so.2] ==> ignore
+          arg [-o] ==> ignore
+          arg [cmTC_7956c] ==> ignore
+          arg [/lib/../lib64/crt1.o] ==> obj [/lib/../lib64/crt1.o]
+          arg [/lib/../lib64/crti.o] ==> obj [/lib/../lib64/crti.o]
+          arg [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtbegin.o] ==> obj [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtbegin.o]
+          arg [-L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13] ==> dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13]
+          arg [-L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64] ==> dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64]
+          arg [-L/lib/../lib64] ==> dir [/lib/../lib64]
+          arg [-L/usr/lib/../lib64] ==> dir [/usr/lib/../lib64]
+          arg [-L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../..] ==> dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../..]
+          arg [-v] ==> ignore
+          arg [CMakeFiles/cmTC_7956c.dir/CMakeCCompilerABI.c.o] ==> ignore
+          arg [-lgcc] ==> lib [gcc]
+          arg [--push-state] ==> ignore
+          arg [--as-needed] ==> ignore
+          arg [-lgcc_s] ==> lib [gcc_s]
+          arg [--pop-state] ==> ignore
+          arg [-lc] ==> lib [c]
+          arg [-lgcc] ==> lib [gcc]
+          arg [--push-state] ==> ignore
+          arg [--as-needed] ==> ignore
+          arg [-lgcc_s] ==> lib [gcc_s]
+          arg [--pop-state] ==> ignore
+          arg [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtend.o] ==> obj [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtend.o]
+          arg [/lib/../lib64/crtn.o] ==> obj [/lib/../lib64/crtn.o]
+        ignore line: [collect2 version 13.3.1 20240611 (Red Hat 13.3.1-2)]
+        ignore line: [/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/ld -plugin /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/liblto_plugin.so -plugin-opt=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/lto-wrapper -plugin-opt=-fresolution=/tmp/ccpEhf35.res -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s --build-id --no-add-needed --eh-frame-hdr --hash-style=gnu -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_7956c /lib/../lib64/crt1.o /lib/../lib64/crti.o /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtbegin.o -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13 -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../.. -v CMakeFiles/cmTC_7956c.dir/CMakeCCompilerABI.c.o -lgcc --push-state --as-needed -lgcc_s --pop-state -lc -lgcc --push-state --as-needed -lgcc_s --pop-state /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtend.o /lib/../lib64/crtn.o]
+        linker tool for 'C': /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/ld
+        collapse obj [/lib/../lib64/crt1.o] ==> [/lib64/crt1.o]
+        collapse obj [/lib/../lib64/crti.o] ==> [/lib64/crti.o]
+        collapse obj [/lib/../lib64/crtn.o] ==> [/lib64/crtn.o]
+        collapse library dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13] ==> [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13]
+        collapse library dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64] ==> [/opt/rh/gcc-toolset-13/root/usr/lib64]
+        collapse library dir [/lib/../lib64] ==> [/lib64]
+        collapse library dir [/usr/lib/../lib64] ==> [/usr/lib64]
+        collapse library dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../..] ==> [/opt/rh/gcc-toolset-13/root/usr/lib]
+        implicit libs: [gcc;gcc_s;c;gcc;gcc_s]
+        implicit objs: [/lib64/crt1.o;/lib64/crti.o;/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtbegin.o;/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtend.o;/lib64/crtn.o]
+        implicit dirs: [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13;/opt/rh/gcc-toolset-13/root/usr/lib64;/lib64;/usr/lib64;/opt/rh/gcc-toolset-13/root/usr/lib]
+        implicit fwks: []
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/Internal/CMakeDetermineLinkerId.cmake:40 (message)"
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeDetermineCompilerABI.cmake:255 (cmake_determine_linker_id)"
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Running the C compiler's linker: "/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/ld" "-v"
+      GNU ld version 2.40-21.el9
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/Internal/CheckSourceCompiles.cmake:108 (try_compile)"
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/CheckCSourceCompiles.cmake:58 (cmake_check_source_compiles)"
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/FindThreads.cmake:97 (CHECK_C_SOURCE_COMPILES)"
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/FindThreads.cmake:163 (_threads_check_libc)"
+      - "CMakeLists.txt:15 (find_package)"
+    checks:
+      - "Performing Test CMAKE_HAVE_LIBC_PTHREAD"
+    directories:
+      source: "/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-00Cgj2"
+      binary: "/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-00Cgj2"
+    cmakeVariables:
+      CMAKE_C_FLAGS: ""
+      CMAKE_C_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+    buildResult:
+      variable: "CMAKE_HAVE_LIBC_PTHREAD"
+      cached: true
+      stdout: |
+        Change Dir: '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-00Cgj2'
+        
+        Run Build Command(s): /mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_7c15f/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_7c15f.dir/build.make CMakeFiles/cmTC_7c15f.dir/build
+        gmake[1]: Entering directory '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-00Cgj2'
+        Building C object CMakeFiles/cmTC_7c15f.dir/src.c.o
+        /opt/rh/gcc-toolset-13/root/bin/gcc -DCMAKE_HAVE_LIBC_PTHREAD   -o CMakeFiles/cmTC_7c15f.dir/src.c.o -c /mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-00Cgj2/src.c
+        Linking C executable cmTC_7c15f
+        /mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/bin/cmake -E cmake_link_script CMakeFiles/cmTC_7c15f.dir/link.txt --verbose=1
+        /opt/rh/gcc-toolset-13/root/bin/gcc CMakeFiles/cmTC_7c15f.dir/src.c.o -o cmTC_7c15f
+        gmake[1]: Leaving directory '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-00Cgj2'
+        
+      exitCode: 0
+...
+
+---
+events:
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/FindOpenMP.cmake:252 (try_compile)"
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/FindOpenMP.cmake:522 (_OPENMP_GET_FLAGS)"
+      - "tests/cpp/CMakeLists.txt:7 (find_package)"
+    description: "Detecting C OpenMP compiler info"
+    directories:
+      source: "/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-k1MxDT"
+      binary: "/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-k1MxDT"
+    cmakeVariables:
+      CMAKE_C_FLAGS: ""
+      CMAKE_C_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+    buildResult:
+      variable: "OpenMP_COMPILE_RESULT_C_fopenmp"
+      cached: true
+      stdout: |
+        Change Dir: '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-k1MxDT'
+        
+        Run Build Command(s): /mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_bd570/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_bd570.dir/build.make CMakeFiles/cmTC_bd570.dir/build
+        gmake[1]: Entering directory '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-k1MxDT'
+        Building C object CMakeFiles/cmTC_bd570.dir/OpenMPTryFlag.c.o
+        /opt/rh/gcc-toolset-13/root/bin/gcc   -fopenmp -o CMakeFiles/cmTC_bd570.dir/OpenMPTryFlag.c.o -c /mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-k1MxDT/OpenMPTryFlag.c
+        Linking C executable cmTC_bd570
+        /mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/bin/cmake -E cmake_link_script CMakeFiles/cmTC_bd570.dir/link.txt --verbose=1
+        Using built-in specs.
+        COLLECT_GCC=/opt/rh/gcc-toolset-13/root/bin/gcc
+        COLLECT_LTO_WRAPPER=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/lto-wrapper
+        OFFLOAD_TARGET_NAMES=nvptx-none
+        OFFLOAD_TARGET_DEFAULT=1
+        Target: x86_64-redhat-linux
+        Configured with: ../configure --enable-bootstrap --enable-languages=c,c++,fortran,lto --prefix=/opt/rh/gcc-toolset-13/root/usr --mandir=/opt/rh/gcc-toolset-13/root/usr/share/man --infodir=/opt/rh/gcc-toolset-13/root/usr/share/info --with-bugurl=http://bugzilla.redhat.com/bugzilla --enable-shared --enable-threads=posix --enable-checking=release --enable-multilib --with-system-zlib --enable-__cxa_atexit --disable-libunwind-exceptions --enable-gnu-unique-object --enable-linker-build-id --with-gcc-major-version-only --enable-libstdcxx-backtrace --with-libstdcxx-zoneinfo=/usr/share/zoneinfo --with-linker-hash-style=gnu --enable-plugin --enable-initfini-array --without-isl --enable-offload-targets=nvptx-none --without-cuda-driver --enable-offload-defaulted --enable-gnu-indirect-function --enable-cet --with-tune=generic --with-arch_64=x86-64-v2 --with-arch_32=x86-64 --build=x86_64-redhat-linux --with-build-config=bootstrap-lto --enable-link-serialization=1
+        Thread model: posix
+        Supported LTO compression algorithms: zlib zstd
+        gcc version 13.3.1 20240611 (Red Hat 13.3.1-2) (GCC) 
+        COMPILER_PATH=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/
+        LIBRARY_PATH=/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64/:/lib/../lib64/:/usr/lib/../lib64/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../:/lib/:/usr/lib/
+        Reading specs from /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/libgomp.spec
+        COLLECT_GCC_OPTIONS='-fopenmp' '-v' '-o' 'cmTC_bd570' '-mtune=generic' '-march=x86-64-v2' '-pthread' '-dumpdir' 'cmTC_bd570.'
+         /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/collect2 -plugin /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/liblto_plugin.so -plugin-opt=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/lto-wrapper -plugin-opt=-fresolution=/tmp/ccaWVp0F.res -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lpthread -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s --build-id --no-add-needed --eh-frame-hdr --hash-style=gnu -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_bd570 /lib/../lib64/crt1.o /lib/../lib64/crti.o /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtbegin.o /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtoffloadbegin.o -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13 -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../.. CMakeFiles/cmTC_bd570.dir/OpenMPTryFlag.c.o -lgomp -lgcc --push-state --as-needed -lgcc_s --pop-state -lpthread -lc -lgcc --push-state --as-needed -lgcc_s --pop-state /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtend.o /lib/../lib64/crtn.o /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtoffloadend.o
+        COLLECT_GCC_OPTIONS='-fopenmp' '-v' '-o' 'cmTC_bd570' '-mtune=generic' '-march=x86-64-v2' '-pthread' '-dumpdir' 'cmTC_bd570.'
+        /opt/rh/gcc-toolset-13/root/bin/gcc  -fopenmp -v CMakeFiles/cmTC_bd570.dir/OpenMPTryFlag.c.o -o cmTC_bd570
+        gmake[1]: Leaving directory '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-k1MxDT'
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/FindOpenMP.cmake:296 (message)"
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/FindOpenMP.cmake:522 (_OPENMP_GET_FLAGS)"
+      - "tests/cpp/CMakeLists.txt:7 (find_package)"
+    message: |
+      Parsed C OpenMP implicit link information from above output:
+        link line regex: [^( *|.*[/\\])(ld[0-9]*(\\.[a-z]+)?|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        ignore line: [Change Dir: '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-k1MxDT']
+        ignore line: []
+        ignore line: [Run Build Command(s): /mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_bd570/fast]
+        ignore line: [/usr/bin/gmake  -f CMakeFiles/cmTC_bd570.dir/build.make CMakeFiles/cmTC_bd570.dir/build]
+        ignore line: [gmake[1]: Entering directory '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-k1MxDT']
+        ignore line: [Building C object CMakeFiles/cmTC_bd570.dir/OpenMPTryFlag.c.o]
+        ignore line: [/opt/rh/gcc-toolset-13/root/bin/gcc   -fopenmp -o CMakeFiles/cmTC_bd570.dir/OpenMPTryFlag.c.o -c /mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-k1MxDT/OpenMPTryFlag.c]
+        ignore line: [Linking C executable cmTC_bd570]
+        ignore line: [/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/bin/cmake -E cmake_link_script CMakeFiles/cmTC_bd570.dir/link.txt --verbose=1]
+        ignore line: [Using built-in specs.]
+        ignore line: [COLLECT_GCC=/opt/rh/gcc-toolset-13/root/bin/gcc]
+        ignore line: [COLLECT_LTO_WRAPPER=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/lto-wrapper]
+        ignore line: [OFFLOAD_TARGET_NAMES=nvptx-none]
+        ignore line: [OFFLOAD_TARGET_DEFAULT=1]
+        ignore line: [Target: x86_64-redhat-linux]
+        ignore line: [Configured with: ../configure --enable-bootstrap --enable-languages=c c++ fortran lto --prefix=/opt/rh/gcc-toolset-13/root/usr --mandir=/opt/rh/gcc-toolset-13/root/usr/share/man --infodir=/opt/rh/gcc-toolset-13/root/usr/share/info --with-bugurl=http://bugzilla.redhat.com/bugzilla --enable-shared --enable-threads=posix --enable-checking=release --enable-multilib --with-system-zlib --enable-__cxa_atexit --disable-libunwind-exceptions --enable-gnu-unique-object --enable-linker-build-id --with-gcc-major-version-only --enable-libstdcxx-backtrace --with-libstdcxx-zoneinfo=/usr/share/zoneinfo --with-linker-hash-style=gnu --enable-plugin --enable-initfini-array --without-isl --enable-offload-targets=nvptx-none --without-cuda-driver --enable-offload-defaulted --enable-gnu-indirect-function --enable-cet --with-tune=generic --with-arch_64=x86-64-v2 --with-arch_32=x86-64 --build=x86_64-redhat-linux --with-build-config=bootstrap-lto --enable-link-serialization=1]
+        ignore line: [Thread model: posix]
+        ignore line: [Supported LTO compression algorithms: zlib zstd]
+        ignore line: [gcc version 13.3.1 20240611 (Red Hat 13.3.1-2) (GCC) ]
+        ignore line: [COMPILER_PATH=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/]
+        ignore line: [LIBRARY_PATH=/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64/:/lib/../lib64/:/usr/lib/../lib64/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../:/lib/:/usr/lib/]
+        ignore line: [Reading specs from /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/libgomp.spec]
+        ignore line: [COLLECT_GCC_OPTIONS='-fopenmp' '-v' '-o' 'cmTC_bd570' '-mtune=generic' '-march=x86-64-v2' '-pthread' '-dumpdir' 'cmTC_bd570.']
+        link line: [ /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/collect2 -plugin /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/liblto_plugin.so -plugin-opt=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/lto-wrapper -plugin-opt=-fresolution=/tmp/ccaWVp0F.res -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lpthread -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s --build-id --no-add-needed --eh-frame-hdr --hash-style=gnu -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_bd570 /lib/../lib64/crt1.o /lib/../lib64/crti.o /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtbegin.o /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtoffloadbegin.o -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13 -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../.. CMakeFiles/cmTC_bd570.dir/OpenMPTryFlag.c.o -lgomp -lgcc --push-state --as-needed -lgcc_s --pop-state -lpthread -lc -lgcc --push-state --as-needed -lgcc_s --pop-state /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtend.o /lib/../lib64/crtn.o /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtoffloadend.o]
+          arg [/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/collect2] ==> ignore
+          arg [-plugin] ==> ignore
+          arg [/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/liblto_plugin.so] ==> ignore
+          arg [-plugin-opt=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/lto-wrapper] ==> ignore
+          arg [-plugin-opt=-fresolution=/tmp/ccaWVp0F.res] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc_s] ==> ignore
+          arg [-plugin-opt=-pass-through=-lpthread] ==> ignore
+          arg [-plugin-opt=-pass-through=-lc] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc_s] ==> ignore
+          arg [--build-id] ==> ignore
+          arg [--no-add-needed] ==> ignore
+          arg [--eh-frame-hdr] ==> ignore
+          arg [--hash-style=gnu] ==> ignore
+          arg [-m] ==> ignore
+          arg [elf_x86_64] ==> ignore
+          arg [-dynamic-linker] ==> ignore
+          arg [/lib64/ld-linux-x86-64.so.2] ==> ignore
+          arg [-o] ==> ignore
+          arg [cmTC_bd570] ==> ignore
+          arg [-L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13] ==> dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13]
+          arg [-L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64] ==> dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64]
+          arg [-L/lib/../lib64] ==> dir [/lib/../lib64]
+          arg [-L/usr/lib/../lib64] ==> dir [/usr/lib/../lib64]
+          arg [-L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../..] ==> dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../..]
+          arg [CMakeFiles/cmTC_bd570.dir/OpenMPTryFlag.c.o] ==> ignore
+          arg [-lgomp] ==> lib [gomp]
+          arg [-lgcc] ==> lib [gcc]
+          arg [--push-state] ==> ignore
+          arg [--as-needed] ==> ignore
+          arg [-lgcc_s] ==> lib [gcc_s]
+          arg [--pop-state] ==> ignore
+          arg [-lpthread] ==> lib [pthread]
+          arg [-lc] ==> lib [c]
+          arg [-lgcc] ==> lib [gcc]
+          arg [--push-state] ==> ignore
+          arg [--as-needed] ==> ignore
+          arg [-lgcc_s] ==> lib [gcc_s]
+          arg [--pop-state] ==> ignore
+        collapse library dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13] ==> [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13]
+        collapse library dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64] ==> [/opt/rh/gcc-toolset-13/root/usr/lib64]
+        collapse library dir [/lib/../lib64] ==> [/lib64]
+        collapse library dir [/usr/lib/../lib64] ==> [/usr/lib64]
+        collapse library dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../..] ==> [/opt/rh/gcc-toolset-13/root/usr/lib]
+        implicit libs: [gomp;gcc;gcc_s;pthread;c;gcc;gcc_s]
+        implicit objs: []
+        implicit dirs: [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13;/opt/rh/gcc-toolset-13/root/usr/lib64;/lib64;/usr/lib64;/opt/rh/gcc-toolset-13/root/usr/lib]
+        implicit fwks: []
+      
+      
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/FindOpenMP.cmake:252 (try_compile)"
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/FindOpenMP.cmake:522 (_OPENMP_GET_FLAGS)"
+      - "tests/cpp/CMakeLists.txt:7 (find_package)"
+    description: "Detecting CXX OpenMP compiler info"
+    directories:
+      source: "/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-4JyOVr"
+      binary: "/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-4JyOVr"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: ""
+      CMAKE_CXX_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+    buildResult:
+      variable: "OpenMP_COMPILE_RESULT_CXX_fopenmp"
+      cached: true
+      stdout: |
+        Change Dir: '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-4JyOVr'
+        
+        Run Build Command(s): /mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_41b56/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_41b56.dir/build.make CMakeFiles/cmTC_41b56.dir/build
+        gmake[1]: Entering directory '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-4JyOVr'
+        Building CXX object CMakeFiles/cmTC_41b56.dir/OpenMPTryFlag.cpp.o
+        /opt/rh/gcc-toolset-13/root/bin/g++   -fopenmp -std=gnu++17 -o CMakeFiles/cmTC_41b56.dir/OpenMPTryFlag.cpp.o -c /mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-4JyOVr/OpenMPTryFlag.cpp
+        Linking CXX executable cmTC_41b56
+        /mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/bin/cmake -E cmake_link_script CMakeFiles/cmTC_41b56.dir/link.txt --verbose=1
+        Using built-in specs.
+        COLLECT_GCC=/opt/rh/gcc-toolset-13/root/bin/g++
+        COLLECT_LTO_WRAPPER=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/lto-wrapper
+        OFFLOAD_TARGET_NAMES=nvptx-none
+        OFFLOAD_TARGET_DEFAULT=1
+        Target: x86_64-redhat-linux
+        Configured with: ../configure --enable-bootstrap --enable-languages=c,c++,fortran,lto --prefix=/opt/rh/gcc-toolset-13/root/usr --mandir=/opt/rh/gcc-toolset-13/root/usr/share/man --infodir=/opt/rh/gcc-toolset-13/root/usr/share/info --with-bugurl=http://bugzilla.redhat.com/bugzilla --enable-shared --enable-threads=posix --enable-checking=release --enable-multilib --with-system-zlib --enable-__cxa_atexit --disable-libunwind-exceptions --enable-gnu-unique-object --enable-linker-build-id --with-gcc-major-version-only --enable-libstdcxx-backtrace --with-libstdcxx-zoneinfo=/usr/share/zoneinfo --with-linker-hash-style=gnu --enable-plugin --enable-initfini-array --without-isl --enable-offload-targets=nvptx-none --without-cuda-driver --enable-offload-defaulted --enable-gnu-indirect-function --enable-cet --with-tune=generic --with-arch_64=x86-64-v2 --with-arch_32=x86-64 --build=x86_64-redhat-linux --with-build-config=bootstrap-lto --enable-link-serialization=1
+        Thread model: posix
+        Supported LTO compression algorithms: zlib zstd
+        gcc version 13.3.1 20240611 (Red Hat 13.3.1-2) (GCC) 
+        COMPILER_PATH=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/
+        LIBRARY_PATH=/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64/:/lib/../lib64/:/usr/lib/../lib64/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../:/lib/:/usr/lib/
+        Reading specs from /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/libgomp.spec
+        COLLECT_GCC_OPTIONS='-fopenmp' '-v' '-o' 'cmTC_41b56' '-shared-libgcc' '-mtune=generic' '-march=x86-64-v2' '-pthread' '-dumpdir' 'cmTC_41b56.'
+         /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/collect2 -plugin /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/liblto_plugin.so -plugin-opt=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/lto-wrapper -plugin-opt=-fresolution=/tmp/ccEdGWYe.res -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lpthread -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc --build-id --no-add-needed --eh-frame-hdr --hash-style=gnu -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_41b56 /lib/../lib64/crt1.o /lib/../lib64/crti.o /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtbegin.o /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtoffloadbegin.o -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13 -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../.. CMakeFiles/cmTC_41b56.dir/OpenMPTryFlag.cpp.o -lstdc++ -lm -lgomp -lgcc_s -lgcc -lpthread -lc -lgcc_s -lgcc /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtend.o /lib/../lib64/crtn.o /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtoffloadend.o
+        COLLECT_GCC_OPTIONS='-fopenmp' '-v' '-o' 'cmTC_41b56' '-shared-libgcc' '-mtune=generic' '-march=x86-64-v2' '-pthread' '-dumpdir' 'cmTC_41b56.'
+        /opt/rh/gcc-toolset-13/root/bin/g++  -fopenmp -v CMakeFiles/cmTC_41b56.dir/OpenMPTryFlag.cpp.o -o cmTC_41b56
+        gmake[1]: Leaving directory '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-4JyOVr'
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/FindOpenMP.cmake:296 (message)"
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/FindOpenMP.cmake:522 (_OPENMP_GET_FLAGS)"
+      - "tests/cpp/CMakeLists.txt:7 (find_package)"
+    message: |
+      Parsed CXX OpenMP implicit link information from above output:
+        link line regex: [^( *|.*[/\\])(ld[0-9]*(\\.[a-z]+)?|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        ignore line: [Change Dir: '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-4JyOVr']
+        ignore line: []
+        ignore line: [Run Build Command(s): /mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_41b56/fast]
+        ignore line: [/usr/bin/gmake  -f CMakeFiles/cmTC_41b56.dir/build.make CMakeFiles/cmTC_41b56.dir/build]
+        ignore line: [gmake[1]: Entering directory '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-4JyOVr']
+        ignore line: [Building CXX object CMakeFiles/cmTC_41b56.dir/OpenMPTryFlag.cpp.o]
+        ignore line: [/opt/rh/gcc-toolset-13/root/bin/g++   -fopenmp -std=gnu++17 -o CMakeFiles/cmTC_41b56.dir/OpenMPTryFlag.cpp.o -c /mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-4JyOVr/OpenMPTryFlag.cpp]
+        ignore line: [Linking CXX executable cmTC_41b56]
+        ignore line: [/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/bin/cmake -E cmake_link_script CMakeFiles/cmTC_41b56.dir/link.txt --verbose=1]
+        ignore line: [Using built-in specs.]
+        ignore line: [COLLECT_GCC=/opt/rh/gcc-toolset-13/root/bin/g++]
+        ignore line: [COLLECT_LTO_WRAPPER=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/lto-wrapper]
+        ignore line: [OFFLOAD_TARGET_NAMES=nvptx-none]
+        ignore line: [OFFLOAD_TARGET_DEFAULT=1]
+        ignore line: [Target: x86_64-redhat-linux]
+        ignore line: [Configured with: ../configure --enable-bootstrap --enable-languages=c c++ fortran lto --prefix=/opt/rh/gcc-toolset-13/root/usr --mandir=/opt/rh/gcc-toolset-13/root/usr/share/man --infodir=/opt/rh/gcc-toolset-13/root/usr/share/info --with-bugurl=http://bugzilla.redhat.com/bugzilla --enable-shared --enable-threads=posix --enable-checking=release --enable-multilib --with-system-zlib --enable-__cxa_atexit --disable-libunwind-exceptions --enable-gnu-unique-object --enable-linker-build-id --with-gcc-major-version-only --enable-libstdcxx-backtrace --with-libstdcxx-zoneinfo=/usr/share/zoneinfo --with-linker-hash-style=gnu --enable-plugin --enable-initfini-array --without-isl --enable-offload-targets=nvptx-none --without-cuda-driver --enable-offload-defaulted --enable-gnu-indirect-function --enable-cet --with-tune=generic --with-arch_64=x86-64-v2 --with-arch_32=x86-64 --build=x86_64-redhat-linux --with-build-config=bootstrap-lto --enable-link-serialization=1]
+        ignore line: [Thread model: posix]
+        ignore line: [Supported LTO compression algorithms: zlib zstd]
+        ignore line: [gcc version 13.3.1 20240611 (Red Hat 13.3.1-2) (GCC) ]
+        ignore line: [COMPILER_PATH=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/]
+        ignore line: [LIBRARY_PATH=/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64/:/lib/../lib64/:/usr/lib/../lib64/:/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../:/lib/:/usr/lib/]
+        ignore line: [Reading specs from /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/libgomp.spec]
+        ignore line: [COLLECT_GCC_OPTIONS='-fopenmp' '-v' '-o' 'cmTC_41b56' '-shared-libgcc' '-mtune=generic' '-march=x86-64-v2' '-pthread' '-dumpdir' 'cmTC_41b56.']
+        link line: [ /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/collect2 -plugin /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/liblto_plugin.so -plugin-opt=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/lto-wrapper -plugin-opt=-fresolution=/tmp/ccEdGWYe.res -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lpthread -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc --build-id --no-add-needed --eh-frame-hdr --hash-style=gnu -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_41b56 /lib/../lib64/crt1.o /lib/../lib64/crti.o /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtbegin.o /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtoffloadbegin.o -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13 -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../.. CMakeFiles/cmTC_41b56.dir/OpenMPTryFlag.cpp.o -lstdc++ -lm -lgomp -lgcc_s -lgcc -lpthread -lc -lgcc_s -lgcc /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtend.o /lib/../lib64/crtn.o /opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/crtoffloadend.o]
+          arg [/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/collect2] ==> ignore
+          arg [-plugin] ==> ignore
+          arg [/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/liblto_plugin.so] ==> ignore
+          arg [-plugin-opt=/opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/lto-wrapper] ==> ignore
+          arg [-plugin-opt=-fresolution=/tmp/ccEdGWYe.res] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc_s] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc] ==> ignore
+          arg [-plugin-opt=-pass-through=-lpthread] ==> ignore
+          arg [-plugin-opt=-pass-through=-lc] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc_s] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc] ==> ignore
+          arg [--build-id] ==> ignore
+          arg [--no-add-needed] ==> ignore
+          arg [--eh-frame-hdr] ==> ignore
+          arg [--hash-style=gnu] ==> ignore
+          arg [-m] ==> ignore
+          arg [elf_x86_64] ==> ignore
+          arg [-dynamic-linker] ==> ignore
+          arg [/lib64/ld-linux-x86-64.so.2] ==> ignore
+          arg [-o] ==> ignore
+          arg [cmTC_41b56] ==> ignore
+          arg [-L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13] ==> dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13]
+          arg [-L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64] ==> dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64]
+          arg [-L/lib/../lib64] ==> dir [/lib/../lib64]
+          arg [-L/usr/lib/../lib64] ==> dir [/usr/lib/../lib64]
+          arg [-L/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../..] ==> dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../..]
+          arg [CMakeFiles/cmTC_41b56.dir/OpenMPTryFlag.cpp.o] ==> ignore
+          arg [-lstdc++] ==> lib [stdc++]
+          arg [-lm] ==> lib [m]
+          arg [-lgomp] ==> lib [gomp]
+          arg [-lgcc_s] ==> lib [gcc_s]
+          arg [-lgcc] ==> lib [gcc]
+          arg [-lpthread] ==> lib [pthread]
+          arg [-lc] ==> lib [c]
+          arg [-lgcc_s] ==> lib [gcc_s]
+          arg [-lgcc] ==> lib [gcc]
+        collapse library dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13] ==> [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13]
+        collapse library dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../../../lib64] ==> [/opt/rh/gcc-toolset-13/root/usr/lib64]
+        collapse library dir [/lib/../lib64] ==> [/lib64]
+        collapse library dir [/usr/lib/../lib64] ==> [/usr/lib64]
+        collapse library dir [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13/../../..] ==> [/opt/rh/gcc-toolset-13/root/usr/lib]
+        implicit libs: [stdc++;m;gomp;gcc_s;gcc;pthread;c;gcc_s;gcc]
+        implicit objs: []
+        implicit dirs: [/opt/rh/gcc-toolset-13/root/usr/lib/gcc/x86_64-redhat-linux/13;/opt/rh/gcc-toolset-13/root/usr/lib64;/lib64;/usr/lib64;/opt/rh/gcc-toolset-13/root/usr/lib]
+        implicit fwks: []
+      
+      
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/FindOpenMP.cmake:456 (try_compile)"
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/FindOpenMP.cmake:596 (_OPENMP_GET_SPEC_DATE)"
+      - "tests/cpp/CMakeLists.txt:7 (find_package)"
+    description: "Detecting C OpenMP version"
+    directories:
+      source: "/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-CiuRtD"
+      binary: "/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-CiuRtD"
+    cmakeVariables:
+      CMAKE_C_FLAGS: ""
+      CMAKE_C_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+    buildResult:
+      variable: "OpenMP_SPECTEST_C_"
+      cached: true
+      stdout: |
+        Change Dir: '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-CiuRtD'
+        
+        Run Build Command(s): /mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_cc0d9/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_cc0d9.dir/build.make CMakeFiles/cmTC_cc0d9.dir/build
+        gmake[1]: Entering directory '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-CiuRtD'
+        Building C object CMakeFiles/cmTC_cc0d9.dir/OpenMPCheckVersion.c.o
+        /opt/rh/gcc-toolset-13/root/bin/gcc   -fopenmp -o CMakeFiles/cmTC_cc0d9.dir/OpenMPCheckVersion.c.o -c /mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-CiuRtD/OpenMPCheckVersion.c
+        Linking C executable cmTC_cc0d9
+        /mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/bin/cmake -E cmake_link_script CMakeFiles/cmTC_cc0d9.dir/link.txt --verbose=1
+        /opt/rh/gcc-toolset-13/root/bin/gcc  -fopenmp CMakeFiles/cmTC_cc0d9.dir/OpenMPCheckVersion.c.o -o cmTC_cc0d9
+        gmake[1]: Leaving directory '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-CiuRtD'
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/FindOpenMP.cmake:456 (try_compile)"
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/FindOpenMP.cmake:596 (_OPENMP_GET_SPEC_DATE)"
+      - "tests/cpp/CMakeLists.txt:7 (find_package)"
+    description: "Detecting CXX OpenMP version"
+    directories:
+      source: "/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-3ZUjFa"
+      binary: "/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-3ZUjFa"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: ""
+      CMAKE_CXX_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+    buildResult:
+      variable: "OpenMP_SPECTEST_CXX_"
+      cached: true
+      stdout: |
+        Change Dir: '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-3ZUjFa'
+        
+        Run Build Command(s): /mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_4ed0e/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_4ed0e.dir/build.make CMakeFiles/cmTC_4ed0e.dir/build
+        gmake[1]: Entering directory '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-3ZUjFa'
+        Building CXX object CMakeFiles/cmTC_4ed0e.dir/OpenMPCheckVersion.cpp.o
+        /opt/rh/gcc-toolset-13/root/bin/g++   -fopenmp -std=gnu++17 -o CMakeFiles/cmTC_4ed0e.dir/OpenMPCheckVersion.cpp.o -c /mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-3ZUjFa/OpenMPCheckVersion.cpp
+        Linking CXX executable cmTC_4ed0e
+        /mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/bin/cmake -E cmake_link_script CMakeFiles/cmTC_4ed0e.dir/link.txt --verbose=1
+        /opt/rh/gcc-toolset-13/root/bin/g++  -fopenmp CMakeFiles/cmTC_4ed0e.dir/OpenMPCheckVersion.cpp.o -o cmTC_4ed0e
+        gmake[1]: Leaving directory '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-3ZUjFa'
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/FindHDF5.cmake:241 (try_compile)"
+      - "/mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/share/cmake-3.31/Modules/FindHDF5.cmake:611 (_HDF5_test_regular_compiler_C)"
+      - "tests/cpp/CMakeLists.txt:9 (find_package)"
+    directories:
+      source: "/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-VXH2UY"
+      binary: "/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-VXH2UY"
+    cmakeVariables:
+      CMAKE_C_FLAGS: ""
+      CMAKE_C_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+    buildResult:
+      variable: "HDF5_C_COMPILER_NO_INTERROGATE"
+      cached: true
+      stdout: |
+        Change Dir: '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-VXH2UY'
+        
+        Run Build Command(s): /mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_7d507/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_7d507.dir/build.make CMakeFiles/cmTC_7d507.dir/build
+        gmake[1]: Entering directory '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-VXH2UY'
+        Building C object CMakeFiles/cmTC_7d507.dir/cmake_hdf5_test.c.o
+        /opt/rh/gcc-toolset-13/root/bin/gcc    -o CMakeFiles/cmTC_7d507.dir/cmake_hdf5_test.c.o -c /mnt/home/debruinz/Singlet-AI/singlet/build-tests/tests/cpp/CMakeFiles/hdf5/cmake_hdf5_test.c
+        Linking C executable cmTC_7d507
+        /mnt/home/debruinz/.local/lib/python3.9/site-packages/cmake/data/bin/cmake -E cmake_link_script CMakeFiles/cmTC_7d507.dir/link.txt --verbose=1
+        /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/ld: CMakeFiles/cmTC_7d507.dir/cmake_hdf5_test.c.o: in function `main':
+        cmake_hdf5_test.c:(.text+0x3e): undefined reference to `H5check_version'
+        /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/ld: cmake_hdf5_test.c:(.text+0x43): undefined reference to `H5open'
+        /opt/rh/gcc-toolset-13/root/usr/libexec/gcc/x86_64-redhat-linux/13/ld: cmake_hdf5_test.c:(.text+0x5c): undefined reference to `H5Fcreate'
+        collect2: error: ld returned 1 exit status
+        /opt/rh/gcc-toolset-13/root/bin/gcc CMakeFiles/cmTC_7d507.dir/cmake_hdf5_test.c.o -o cmTC_7d507
+        gmake[1]: *** [CMakeFiles/cmTC_7d507.dir/build.make:102: cmTC_7d507] Error 1
+        gmake[1]: Leaving directory '/mnt/home/debruinz/Singlet-AI/singlet/build-tests/CMakeFiles/CMakeScratch/TryCompile-VXH2UY'
+        gmake: *** [Makefile:134: cmTC_7d507/fast] Error 2
+        
+      exitCode: 2
+...
