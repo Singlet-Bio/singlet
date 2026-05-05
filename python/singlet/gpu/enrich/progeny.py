@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 
 def run_progeny(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     weights_tsv: str,
     *,
     gene_names_key: Optional[str] = None,
@@ -33,7 +33,7 @@ def run_progeny(
     stream=None,
     seed: int = 0,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     PROGENy pathway activity scoring (cycle 44).
 

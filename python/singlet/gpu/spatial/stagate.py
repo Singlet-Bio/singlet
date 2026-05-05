@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 
 def run_stagate(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     *,
     spatial_key: str = "spatial",
     n_neighbors: int = 6,
@@ -38,7 +38,7 @@ def run_stagate(
     stream=None,
     seed: int = 0,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     Spatial domain segmentation via STAGATE (cycle 29).
 

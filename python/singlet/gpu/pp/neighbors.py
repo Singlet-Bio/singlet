@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
-def _resolve_seed(rng: Optional[Union[int, "np.random.Generator"]]) -> int:
+def _resolve_seed(rng: Optional[Union[int, np.random.Generator]]) -> int:
     """Convert scanpy-style ``rng`` to a uint64 seed for C++."""
     if rng is None:
         return 0
@@ -52,7 +52,7 @@ def _resolve_seed(rng: Optional[Union[int, "np.random.Generator"]]) -> int:
 
 
 def _get_rep(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     use_rep: Optional[str],
     n_pcs: Optional[int],
 ) -> object:
@@ -133,7 +133,7 @@ def _get_rep(
 
 
 def neighbors(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     n_neighbors: int = 15,
     n_pcs: Optional[int] = None,
     *,
@@ -143,10 +143,10 @@ def neighbors(
     transformer: object = None,
     metric: str = "euclidean",
     metric_kwds: Optional[Dict] = None,
-    rng: Optional[Union[int, "np.random.Generator"]] = None,
+    rng: Optional[Union[int, np.random.Generator]] = None,
     key_added: Optional[str] = None,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     Compute a kNN graph on the cell embedding (GPU-native, cycle-8 kernel).
 

@@ -20,7 +20,7 @@ def query(
     modality: Optional[str] = None,
     min_cells: int = 0,
     max_results: int = 100_000,
-) -> "AnnData":
+) -> AnnData:
     """Query the atlas by structured metadata. **Token-priced feature.**
 
     Streams matching cells from AWS as a single AnnData object with
@@ -97,7 +97,7 @@ def query(
     return read_spz(tmp_path)
 
 
-def search(text: str, max_results: int = 100_000) -> "AnnData":
+def search(text: str, max_results: int = 100_000) -> AnnData:
     """Natural-language search across the atlas. **Token-priced feature.**
 
     Parameters

@@ -47,7 +47,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
-def _validate_net(net: "pd.DataFrame", source: str, target: str) -> None:
+def _validate_net(net: pd.DataFrame, source: str, target: str) -> None:
     """Validate that net has the expected source/target columns."""
     import pandas as pd
 
@@ -61,7 +61,7 @@ def _validate_net(net: "pd.DataFrame", source: str, target: str) -> None:
 
 
 def _build_genesets(
-    net: "pd.DataFrame",
+    net: pd.DataFrame,
     source: str,
     target: str,
     min_n: int,
@@ -80,7 +80,7 @@ def _build_genesets(
 
 
 def _matrix_from_adata(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     use_raw: bool,
 ) -> tuple:
     """
@@ -121,8 +121,8 @@ def _matrix_from_adata(
 
 
 def run_gsea(
-    mat: Union["anndata.AnnData", "pd.DataFrame"],
-    net: "pd.DataFrame",
+    mat: Union[anndata.AnnData, pd.DataFrame],
+    net: pd.DataFrame,
     *,
     source: str = "source",
     target: str = "target",
@@ -131,7 +131,7 @@ def run_gsea(
     seed: int = 42,
     use_raw: bool = False,
     copy: bool = False,
-) -> Optional[Union["anndata.AnnData", "pd.DataFrame"]]:
+) -> Optional[Union[anndata.AnnData, pd.DataFrame]]:
     """
     GPU-native preranked GSEA (cycle-13 fgsea kernel).
 

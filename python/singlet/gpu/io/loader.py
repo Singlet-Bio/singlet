@@ -110,7 +110,7 @@ def _resolve_pz_path(pz_dir: Union[str, Path], modality: str) -> str:
     raise FileNotFoundError(f"Path does not exist: {pz_dir}")
 
 
-def _build_anndata(device_csc, metadata) -> "anndata.AnnData":
+def _build_anndata(device_csc, metadata) -> anndata.AnnData:
     """
     Wrap a :class:`~singlet.gpu.DeviceCsc` + :class:`~singlet.gpu.Metadata`
     into an AnnData with a zero-copy ``cupy.sparse.csr_matrix`` at ``.X``.
@@ -195,11 +195,11 @@ def _build_anndata(device_csc, metadata) -> "anndata.AnnData":
 
 
 def read_pz_to_anndata(
-    pz_dir: Union[str, "os.PathLike[str]"],
+    pz_dir: Union[str, os.PathLike[str]],
     *,
     modality: str = "exon",
     keep_host_pinned: bool = False,
-) -> "anndata.AnnData":
+) -> anndata.AnnData:
     """
     Load a ``.1pz`` sample directory (or file) and return a GPU-resident AnnData.
 
@@ -250,8 +250,8 @@ def read_pz_to_anndata(
 
 
 def write_anndata_to_pz(
-    adata: "anndata.AnnData",
-    pz_dir: Union[str, "os.PathLike[str]"],
+    adata: anndata.AnnData,
+    pz_dir: Union[str, os.PathLike[str]],
     *,
     modality: str = "exon",
 ) -> None:

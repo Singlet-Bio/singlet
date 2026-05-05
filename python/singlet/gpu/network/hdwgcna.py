@@ -112,7 +112,7 @@ def run_from_csc(
 
 
 def run_from_anndata(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     *,
     layer: Optional[str] = None,
     soft_power: float = 6.0,
@@ -124,7 +124,7 @@ def run_from_anndata(
     stream=None,
     seed: int = 42,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     GPU-native hdWGCNA co-expression network from an AnnData object.
 

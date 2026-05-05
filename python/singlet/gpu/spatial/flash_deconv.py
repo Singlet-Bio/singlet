@@ -23,8 +23,8 @@ if TYPE_CHECKING:
 
 
 def run_flash_deconv(
-    adata_spatial: "anndata.AnnData",
-    adata_reference: "anndata.AnnData",
+    adata_spatial: anndata.AnnData,
+    adata_reference: anndata.AnnData,
     cell_type_key: str = "cell_type",
     *,
     sketch_size: int = 500,
@@ -38,7 +38,7 @@ def run_flash_deconv(
     stream=None,
     seed: int = 0,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     Spatial deconvolution of a Visium / Xenium spatial dataset.
 

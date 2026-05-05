@@ -45,7 +45,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
-def _get_matrix(adata: "anndata.AnnData", layer: Optional[str]):
+def _get_matrix(adata: anndata.AnnData, layer: Optional[str]):
     """Return the matrix to operate on (X or a layer)."""
     if layer is not None:
         if layer not in adata.layers:
@@ -54,7 +54,7 @@ def _get_matrix(adata: "anndata.AnnData", layer: Optional[str]):
     return adata.X
 
 
-def _set_matrix(adata: "anndata.AnnData", layer: Optional[str], mat) -> None:
+def _set_matrix(adata: anndata.AnnData, layer: Optional[str], mat) -> None:
     """Write *mat* back to adata.X or adata.layers[layer]."""
     if layer is not None:
         adata.layers[layer] = mat
@@ -177,11 +177,11 @@ def _device_csc_to_csr(device_csc):
 
 
 def _prepare_adata(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     *,
     inplace: bool,
     copy: bool,
-) -> "anndata.AnnData":
+) -> anndata.AnnData:
     """
     Return the AnnData to operate on based on scanpy inplace/copy semantics.
 
@@ -205,13 +205,13 @@ import copy as copy_module  # noqa: E402
 
 
 def normalize_total(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     *,
     target_sum: Optional[float] = None,
     layer: Optional[str] = None,
     inplace: bool = True,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     Normalize total counts per cell to *target_sum* (GPU-native, cycle-3 kernel).
 
@@ -301,13 +301,13 @@ def normalize_total(
 
 
 def log1p(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     *,
     base: Optional[float] = None,
     layer: Optional[str] = None,
     inplace: bool = True,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     Compute log(1 + X) element-wise on device (GPU-native, cycle-3 kernel).
 

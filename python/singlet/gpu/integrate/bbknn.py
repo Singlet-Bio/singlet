@@ -40,10 +40,10 @@ if TYPE_CHECKING:
 
 
 def _get_embedding(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     use_rep: str,
     n_pcs: Optional[int],
-) -> "np.ndarray":
+) -> np.ndarray:
     """
     Extract the cell embedding to use for kNN.
 
@@ -79,9 +79,9 @@ def _get_embedding(
 
 
 def _resolve_batch_codes(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     batch_key: str,
-) -> "np.ndarray":
+) -> np.ndarray:
     """Encode batch column as int32 codes."""
     if batch_key not in adata.obs.columns:
         raise KeyError(
@@ -98,7 +98,7 @@ def _resolve_batch_codes(
 
 
 def bbknn(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     *,
     batch_key: str = "batch",
     use_rep: str = "X_pca",
@@ -108,7 +108,7 @@ def bbknn(
     set_op_mix_ratio: float = 1.0,
     local_connectivity: int = 1,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     GPU-native Batch-Balanced KNN graph construction (cycle-14 kernel).
 

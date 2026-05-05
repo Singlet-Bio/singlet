@@ -144,7 +144,7 @@ def run_from_csc(
 
 
 def run_from_anndata(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     gene_sets: Dict[str, Union[List[str], Dict[str, float]]],
     *,
     layer: Optional[str] = None,
@@ -155,7 +155,7 @@ def run_from_anndata(
     stream=None,
     seed: int = 0,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     GPU-native scDRS disease relevance scoring from an AnnData object.
 

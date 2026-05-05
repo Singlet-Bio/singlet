@@ -61,7 +61,7 @@ def _detect_format_version(path: str | Path) -> int:
     raise ValueError(f"Not a .spz file: {path}")
 
 
-def read_spz(path: str | Path, *, col_range: tuple[int, int] | None = None) -> "anndata.AnnData":
+def read_spz(path: str | Path, *, col_range: tuple[int, int] | None = None) -> anndata.AnnData:
     """Read a .spz file into AnnData.
 
     Parameters
@@ -214,7 +214,7 @@ def _import_sparsepress() -> ModuleType:
     )
 
 
-def _result_to_anndata(result: dict) -> "anndata.AnnData":
+def _result_to_anndata(result: dict) -> anndata.AnnData:
     """Convert a raw sp_read result dict to AnnData."""
     import anndata as ad
     import numpy as np
@@ -248,7 +248,7 @@ def _result_to_anndata(result: dict) -> "anndata.AnnData":
 
 def _read_spz_legacy(
     path: str | Path, *, col_range: tuple[int, int] | None = None
-) -> "anndata.AnnData":
+) -> anndata.AnnData:
     """Read a legacy sparsepress_v2 file via the sparsepress package."""
     sp_mod = _import_sparsepress()
 
@@ -290,7 +290,7 @@ def _spz_info_legacy(path: str | Path) -> dict:
 # ============================================================================
 
 
-def read_1pz(path: str | Path) -> "anndata.AnnData":
+def read_1pz(path: str | Path) -> anndata.AnnData:
     """Read a .1pz file into AnnData.
 
     Parameters
@@ -447,7 +447,7 @@ def info_1pz(path: str | Path) -> dict:
     return singlepress.info_1pz(str(path))
 
 
-def read_matrix(path: str | Path, **kwargs) -> "anndata.AnnData":
+def read_matrix(path: str | Path, **kwargs) -> anndata.AnnData:
     """Auto-detect format and read a .spz or .1pz file into AnnData.
 
     Parameters
@@ -468,7 +468,7 @@ def read_matrix(path: str | Path, **kwargs) -> "anndata.AnnData":
 
 def read_kraken2(
     gse_dir: str | Path,
-) -> "anndata.AnnData":
+) -> anndata.AnnData:
     """Read a kraken2.1pz microbiome matrix from a GSE directory.
 
     Parameters

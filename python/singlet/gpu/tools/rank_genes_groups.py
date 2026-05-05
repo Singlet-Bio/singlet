@@ -47,7 +47,7 @@ if TYPE_CHECKING:
 _CORR_METHODS = frozenset(["benjamini-hochberg", "bonferroni", "holm-sidak", "fdr_bh", "fdr_by"])
 
 
-def _bh_correct(pvalues: "np.ndarray") -> "np.ndarray":
+def _bh_correct(pvalues: np.ndarray) -> np.ndarray:
     """
     Apply Benjamini-Hochberg FDR correction to a flat array of p-values.
 
@@ -160,7 +160,7 @@ def _build_result_dict(
 
 
 def _get_expr_matrix(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     layer: Optional[str],
     use_raw: Optional[bool],
 ):
@@ -180,7 +180,7 @@ def _get_expr_matrix(
 
 
 def rank_genes_groups(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     groupby: str,
     *,
     mask_var: Optional[object] = None,
@@ -201,7 +201,7 @@ def rank_genes_groups(
     ] = "benjamini-hochberg",
     tie_correct: bool = False,
     layer: Optional[str] = None,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     Rank genes for characterising groups (GPU-native DE, cycle-11 kernels).
 

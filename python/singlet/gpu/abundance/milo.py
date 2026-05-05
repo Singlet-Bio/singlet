@@ -145,7 +145,7 @@ def run_from_embedding(
 
 
 def run_from_anndata(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     condition_key: str,
     donor_key: str,
     *,
@@ -160,7 +160,7 @@ def run_from_anndata(
     stream=None,
     seed: int = 42,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     GPU-native Milo differential-abundance testing from an AnnData object.
 

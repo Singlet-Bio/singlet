@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
-def _resolve_seed(rng: Optional[Union[int, "np.random.Generator"]]) -> int:
+def _resolve_seed(rng: Optional[Union[int, np.random.Generator]]) -> int:
     """Convert scanpy-style ``rng`` to a uint64 seed for C++."""
     if rng is None:
         return 0
@@ -53,7 +53,7 @@ def _resolve_seed(rng: Optional[Union[int, "np.random.Generator"]]) -> int:
 # ---------------------------------------------------------------------------
 
 
-def _gene_indices(var_names: Sequence[str], gene_list: Sequence[str]) -> "np.ndarray":
+def _gene_indices(var_names: Sequence[str], gene_list: Sequence[str]) -> np.ndarray:
     """
     Return the integer indices of *gene_list* in *var_names*.
 
@@ -91,7 +91,7 @@ def _gene_indices(var_names: Sequence[str], gene_list: Sequence[str]) -> "np.nda
 
 
 def score_genes(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     gene_list: Sequence[str],
     *,
     score_name: str = "score",
@@ -100,9 +100,9 @@ def score_genes(
     use_raw: bool = False,
     ctrl_size: int = 50,
     n_bins: int = 25,
-    rng: Optional[Union[int, "np.random.Generator"]] = None,
+    rng: Optional[Union[int, np.random.Generator]] = None,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     Compute a per-cell marker-gene activity score (GPU-native, cycle-12 kernel).
 
@@ -245,7 +245,7 @@ def score_genes(
 
 
 def celltypist_predict(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     model_path: Union[str, Path],
     *,
     key_added: str = "celltypist",
@@ -255,7 +255,7 @@ def celltypist_predict(
     layer: Optional[str] = None,
     use_raw: bool = False,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     Reference-based cell type prediction via GPU CellTypist projection.
 

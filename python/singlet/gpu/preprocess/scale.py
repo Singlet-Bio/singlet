@@ -53,7 +53,7 @@ if TYPE_CHECKING:
 _SCALE_LAYER = "_singlet_gpu_scale_dense"  # internal cache key in adata.layers
 
 
-def _get_matrix(adata: "anndata.AnnData", layer: Optional[str]):
+def _get_matrix(adata: anndata.AnnData, layer: Optional[str]):
     if layer is not None:
         if layer not in adata.layers:
             raise KeyError(f"Layer '{layer}' not found in adata.layers.")
@@ -73,7 +73,7 @@ def _csr_to_device_csc(csr_mat):
     return _core.from_cupy_csr(csc_mat)
 
 
-def _ensure_gene_stats(adata: "anndata.AnnData", layer: Optional[str], stream) -> None:
+def _ensure_gene_stats(adata: anndata.AnnData, layer: Optional[str], stream) -> None:
     """Run calculate_qc_metrics if mean_counts / var_counts are missing."""
     if "mean_counts" not in adata.var.columns or "var_counts" not in adata.var.columns:
         from singlet.gpu.qc.qc_metrics import calculate_qc_metrics
@@ -87,7 +87,7 @@ def _ensure_gene_stats(adata: "anndata.AnnData", layer: Optional[str], stream) -
 
 
 def scale(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     *,
     max_value: float = 10.0,
     zero_center: bool = True,
@@ -95,7 +95,7 @@ def scale(
     inplace: bool = True,
     copy: bool = False,
     stream=None,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     Z-score scale expression matrix gene-wise (cycle-103, ``preprocess::scale``).
 
@@ -183,14 +183,14 @@ def scale(
 
 
 def regress_out(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     keys: Sequence[str],
     *,
     layer: Optional[str] = None,
     inplace: bool = True,
     copy: bool = False,
     stream=None,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     Remove the linear effect of confounders in-place (cycle-103, ``preprocess::regress_out``).
 

@@ -64,7 +64,7 @@ class PerturbGraphModel:
 
     def predict_perturbation(
         self,
-        adata_query: "anndata.AnnData",
+        adata_query: anndata.AnnData,
         target_pert: str,
         *,
         target_dose: float = 1.0,
@@ -125,7 +125,7 @@ class PerturbGraphModel:
 
 
 def fit(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     pert_key: str = "perturbation",
     *,
     d_latent: int = 64,

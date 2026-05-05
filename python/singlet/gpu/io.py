@@ -171,7 +171,7 @@ def read_anndata(
     *,
     modality: str = "exon",
     keep_host_pinned: bool = False,
-) -> "anndata.AnnData":
+) -> anndata.AnnData:
     """
     Load a ``.1pz`` file (or sample directory) and return an AnnData.
 

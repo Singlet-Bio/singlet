@@ -44,7 +44,7 @@ if TYPE_CHECKING:
 
 
 def _get_layer(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     layer_key: str,
     fallback_key: Optional[str] = None,
 ) -> object:
@@ -71,7 +71,7 @@ def _get_layer(
 
 
 def velocity(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     *,
     mode: str = "steady_state",
     fit_offset: bool = False,
@@ -79,7 +79,7 @@ def velocity(
     layer_spliced: str = "spliced",
     layer_unspliced: str = "unspliced",
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     GPU-native steady-state RNA velocity estimation (cycle-15 kernel).
 

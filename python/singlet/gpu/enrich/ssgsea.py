@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 
 def _build_genesets_csr(
-    net: "pd.DataFrame",
+    net: pd.DataFrame,
     source: str,
     target: str,
     gene_names: list,
@@ -55,8 +55,8 @@ def _build_genesets_csr(
 
 
 def run_ssgsea(
-    mat: "anndata.AnnData",
-    net: "pd.DataFrame",
+    mat: anndata.AnnData,
+    net: pd.DataFrame,
     *,
     source: str = "source",
     target: str = "target",
@@ -69,7 +69,7 @@ def run_ssgsea(
     stream=None,
     seed: int = 0,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     Per-cell single-sample GSEA (ssGSEA, cycle 44).
 

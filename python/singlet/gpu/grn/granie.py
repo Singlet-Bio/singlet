@@ -167,8 +167,8 @@ def run_from_csc(
 
 
 def run_from_anndata(
-    adata_rna: "anndata.AnnData",
-    adata_atac: "anndata.AnnData",
+    adata_rna: anndata.AnnData,
+    adata_atac: anndata.AnnData,
     tf_motif: dict,
     peak_gene_pairs: list,
     **kwargs,

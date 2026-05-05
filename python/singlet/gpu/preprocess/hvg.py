@@ -44,7 +44,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
-def _get_matrix(adata: "anndata.AnnData", layer: Optional[str]):
+def _get_matrix(adata: anndata.AnnData, layer: Optional[str]):
     """Return the matrix to operate on (X or a layer)."""
     if layer is not None:
         if layer not in adata.layers:
@@ -82,7 +82,7 @@ _VALID_FLAVORS = ("seurat_v3", "pearson_residuals")
 
 
 def highly_variable_genes(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     *,
     n_top_genes: int = 2000,
     flavor: str = "seurat_v3",
@@ -95,7 +95,7 @@ def highly_variable_genes(
     layer: Optional[str] = None,
     inplace: bool = True,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     Select highly variable genes using a GPU-native two-pass Welford kernel
     (cycle-4, ``singlet::gpu::preprocess::select_hvg``).

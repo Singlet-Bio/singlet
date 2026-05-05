@@ -28,7 +28,7 @@ from typing import Optional, Union
 
 
 def load_donor_assignments(
-    tsv_path: Union[str, "Path"],
+    tsv_path: Union[str, Path],
     *,
     barcode_col: Optional[str] = None,
     donor_col: str = "donor_id",
@@ -37,7 +37,7 @@ def load_donor_assignments(
     exclude_doublets: bool = False,
     doublet_col: str = "prob_doublet",
     doublet_threshold: float = 0.5,
-) -> "pd.Series":
+) -> pd.Series:
     """
     Load singlify's ``donor_assignments.tsv`` into a ``pd.Series``.
 

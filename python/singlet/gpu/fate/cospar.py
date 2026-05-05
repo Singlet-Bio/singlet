@@ -136,7 +136,7 @@ def run_from_csc(
 
 
 def run_from_anndata(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     clone_key: str = "clone_id",
     time_key: str = "time",
     basis: str = "X_pca",
@@ -152,7 +152,7 @@ def run_from_anndata(
     stream=None,
     seed: int = 0,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     GPU-native CoSpar cell fate mapping from an AnnData object.
 

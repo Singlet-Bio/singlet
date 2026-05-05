@@ -207,7 +207,7 @@ def run_pipeline(
     nmf_loss: str = "mse",
     nmf_max_iter: int = 200,
     # Misc
-    rng: Optional[Union[int, "np.random.Generator"]] = None,
+    rng: Optional[Union[int, np.random.Generator]] = None,
     n_threads: int = 0,
 ) -> PipelineResult:
     """

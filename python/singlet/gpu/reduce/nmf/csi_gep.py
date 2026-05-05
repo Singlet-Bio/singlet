@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 
 def run_csi_gep(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     *,
     k_range: Optional[List[int]] = None,
     n_runs: int = 100,
@@ -36,7 +36,7 @@ def run_csi_gep(
     stream=None,
     seed: int = 0,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     Consensus NMF gene expression programs (cycle 28).
 

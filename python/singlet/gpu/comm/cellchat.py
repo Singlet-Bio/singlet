@@ -127,8 +127,8 @@ def run_from_csc(
 
 
 def run_from_anndata(
-    adata: "anndata.AnnData",
-    lr_database: "pd.DataFrame",
+    adata: anndata.AnnData,
+    lr_database: pd.DataFrame,
     cell_type_key: str = "cell_type",
     *,
     gene_symbol_key: Optional[str] = None,
@@ -138,7 +138,7 @@ def run_from_anndata(
     stream=None,
     seed: int = 0,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     GPU-native CellChat communication scoring from an AnnData object.
 

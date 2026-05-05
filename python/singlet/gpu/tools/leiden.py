@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
-def _resolve_seed(rng: Optional[Union[int, "np.random.Generator"]]) -> int:
+def _resolve_seed(rng: Optional[Union[int, np.random.Generator]]) -> int:
     """Convert scanpy-style ``rng`` to a uint64 seed for C++."""
     if rng is None:
         return 0
@@ -50,7 +50,7 @@ def _resolve_seed(rng: Optional[Union[int, "np.random.Generator"]]) -> int:
 
 
 def _get_connectivities(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     neighbors_key: Optional[str],
     obsp: Optional[str],
 ) -> object:
@@ -100,11 +100,11 @@ def _get_connectivities(
 
 
 def leiden(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     resolution: float = 1,
     *,
     restrict_to: Optional[Tuple[str, Sequence[str]]] = None,
-    rng: Optional[Union[int, "np.random.Generator"]] = None,
+    rng: Optional[Union[int, np.random.Generator]] = None,
     key_added: str = "leiden",
     adjacency: Optional[object] = None,
     directed: Optional[bool] = None,
@@ -114,7 +114,7 @@ def leiden(
     neighbors_key: Optional[str] = None,
     obsp: Optional[str] = None,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     Leiden community detection on the kNN graph (GPU-native, cycle-9 kernel).
 

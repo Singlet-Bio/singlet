@@ -153,7 +153,7 @@ def compute_absorption_probabilities(
 
 
 def run_from_anndata(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     transition_matrix_key: str = "T_fwd",
     terminal_states_key: str = "terminal_states",
     *,
@@ -166,7 +166,7 @@ def run_from_anndata(
     stream=None,
     seed: int = 0,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     GPU-native CellRank 2 absorption probabilities from an AnnData object.
 

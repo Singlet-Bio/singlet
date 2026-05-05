@@ -39,7 +39,7 @@ def to_zarr(adata, path: str | Path, *, chunks: Optional[tuple] = None) -> None:
     adata.write_zarr(Path(path), chunks=chunks)
 
 
-def to_csc(adata, *, layer: Optional[str] = None) -> "scipy.sparse.csc_matrix":
+def to_csc(adata, *, layer: Optional[str] = None) -> scipy.sparse.csc_matrix:
     """Extract the count matrix as a scipy CSC sparse matrix.
 
     Parameters
@@ -127,7 +127,7 @@ def to_mtx(adata, directory: str | Path, *, layer: Optional[str] = None) -> None
 # ─── Import to AnnData ──────────────────────────────────────────────────────
 
 
-def from_h5ad(path: str | Path, *, backed: Optional[str] = None) -> "anndata.AnnData":
+def from_h5ad(path: str | Path, *, backed: Optional[str] = None) -> anndata.AnnData:
     """Read an .h5ad file into AnnData.
 
     Parameters
@@ -145,7 +145,7 @@ def from_h5ad(path: str | Path, *, backed: Optional[str] = None) -> "anndata.Ann
     return ad.read_h5ad(Path(path), backed=backed)
 
 
-def from_zarr(path: str | Path) -> "anndata.AnnData":
+def from_zarr(path: str | Path) -> anndata.AnnData:
     """Read a Zarr store into AnnData.
 
     Parameters
@@ -161,7 +161,7 @@ def from_zarr(path: str | Path) -> "anndata.AnnData":
     return ad.read_zarr(Path(path))
 
 
-def from_tiledb(uri: str, *, measurement_name: str = "RNA") -> "anndata.AnnData":
+def from_tiledb(uri: str, *, measurement_name: str = "RNA") -> anndata.AnnData:
     """Read a TileDB-SOMA experiment into AnnData.
 
     Requires ``tiledbsoma`` to be installed.
@@ -183,7 +183,7 @@ def from_tiledb(uri: str, *, measurement_name: str = "RNA") -> "anndata.AnnData"
     return exp.ms[measurement_name].to_anndata()
 
 
-def from_mtx(directory: str | Path) -> "anndata.AnnData":
+def from_mtx(directory: str | Path) -> anndata.AnnData:
     """Read Market Exchange (MTX) format into AnnData.
 
     Expects ``matrix.mtx`` or ``matrix.mtx.gz``, plus optional

@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
-def _resolve_seed(rng: Optional[Union[int, "np.random.Generator"]]) -> int:
+def _resolve_seed(rng: Optional[Union[int, np.random.Generator]]) -> int:
     """Convert scanpy-style ``rng`` to a uint64 seed for C++."""
     if rng is None:
         return 0
@@ -52,7 +52,7 @@ def _resolve_seed(rng: Optional[Union[int, "np.random.Generator"]]) -> int:
 
 
 def _get_neighbors_data(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     neighbors_key: str,
 ) -> tuple:
     """
@@ -92,7 +92,7 @@ def _get_neighbors_data(
 
 
 def umap(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     *,
     min_dist: float = 0.5,
     spread: float = 1.0,
@@ -101,15 +101,15 @@ def umap(
     alpha: float = 1.0,
     gamma: float = 1.0,
     negative_sample_rate: int = 5,
-    init_pos: Union[Literal["spectral", "random"], "np.ndarray", None] = "random",
-    rng: Optional[Union[int, "np.random.Generator"]] = None,
+    init_pos: Union[Literal["spectral", "random"], np.ndarray, None] = "random",
+    rng: Optional[Union[int, np.random.Generator]] = None,
     a: Optional[float] = None,
     b: Optional[float] = None,
     method: Literal["umap"] = "umap",
     key_added: Optional[str] = None,
     neighbors_key: str = "neighbors",
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     GPU-native UMAP dimensionality reduction (cycle-10 kernel).
 

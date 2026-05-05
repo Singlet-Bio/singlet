@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 
 def run_omni_doublet(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     adt_key: str = "adt",
     *,
     n_sim_mult: int = 2,
@@ -39,7 +39,7 @@ def run_omni_doublet(
     stream=None,
     seed: int = 0,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     Multimodal CITE-seq doublet detection (cycle 39).
 

@@ -75,7 +75,7 @@ _VALID_BACKENDS = ("auto", "lanczos", "irlba", "randomized", "krylov", "deflatio
 # ---------------------------------------------------------------------------
 
 
-def _get_matrix(adata: "anndata.AnnData", layer: Optional[str]):
+def _get_matrix(adata: anndata.AnnData, layer: Optional[str]):
     if layer is not None:
         if layer not in adata.layers:
             raise KeyError(f"Layer '{layer}' not found in adata.layers.")
@@ -96,7 +96,7 @@ def _csr_to_device_csc(csr_mat):
     return _core.from_cupy_csr(csc_mat)
 
 
-def _write_pca_result(adata: "anndata.AnnData", result, *, n_comps: int) -> None:
+def _write_pca_result(adata: anndata.AnnData, result, *, n_comps: int) -> None:
     """
     Write a PCA result struct into the AnnData in scanpy layout.
 
@@ -160,7 +160,7 @@ def _write_pca_result(adata: "anndata.AnnData", result, *, n_comps: int) -> None
 
 
 def pca(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     *,
     n_comps: int = 50,
     layer: Optional[str] = None,
@@ -170,7 +170,7 @@ def pca(
     seed: int = 0,
     inplace: bool = True,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     GPU-native PCA via factornet 5-method SVD with auto-select (cycle-5 kernel).
 
@@ -279,7 +279,7 @@ def pca(
 
 
 def svd_lanczos(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     *,
     n_comps: int = 50,
     layer: Optional[str] = None,
@@ -288,7 +288,7 @@ def svd_lanczos(
     seed: int = 0,
     inplace: bool = True,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     DEPRECATED (since 0.1.0; removed in 0.2.0).
 
@@ -320,7 +320,7 @@ def svd_lanczos(
 
 
 def svd_irlba(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     *,
     n_comps: int = 50,
     layer: Optional[str] = None,
@@ -329,7 +329,7 @@ def svd_irlba(
     seed: int = 0,
     inplace: bool = True,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     DEPRECATED (since 0.1.0; removed in 0.2.0).
 
@@ -359,7 +359,7 @@ def svd_irlba(
 
 
 def svd_randomized(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     *,
     n_comps: int = 50,
     n_oversampling: int = 10,
@@ -370,7 +370,7 @@ def svd_randomized(
     seed: int = 0,
     inplace: bool = True,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     Halko–Martinsson–Tropp randomized SVD (cycle-5, factornet::svd::randomized_gpu).
 
@@ -416,7 +416,7 @@ def svd_randomized(
 
 
 def svd_krylov(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     *,
     n_comps: int = 50,
     layer: Optional[str] = None,
@@ -428,7 +428,7 @@ def svd_krylov(
     non_negative: bool = False,
     inplace: bool = True,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     DEPRECATED (since 0.1.0; removed in 0.2.0).
 
@@ -464,7 +464,7 @@ def svd_krylov(
 
 
 def svd_deflation(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     *,
     n_comps: int = 4,
     layer: Optional[str] = None,
@@ -474,7 +474,7 @@ def svd_deflation(
     robust: bool = False,
     inplace: bool = True,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     Rank-1 ALS with deflation SVD (cycle-5, factornet::svd::deflation_gpu).
 

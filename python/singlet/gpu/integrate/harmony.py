@@ -34,9 +34,9 @@ if TYPE_CHECKING:
 
 
 def _get_embedding(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     basis: str,
-) -> "np.ndarray":
+) -> np.ndarray:
     """
     Extract the PCA embedding from adata.obsm[basis].
 
@@ -62,9 +62,9 @@ def _get_embedding(
 
 
 def _resolve_batch_codes(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     key: Union[str, List[str]],
-) -> "np.ndarray":
+) -> np.ndarray:
     """
     Build an integer batch-code vector from obs column(s).
 
@@ -99,7 +99,7 @@ def _resolve_batch_codes(
 
 
 def harmony_integrate(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     key: Union[str, List[str]],
     *,
     basis: str = "X_pca",
@@ -109,7 +109,7 @@ def harmony_integrate(
     tol: float = 1e-4,
     seed: int = 0,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     GPU-native Harmony batch integration (cycle-14 kernel).
 

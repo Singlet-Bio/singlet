@@ -45,7 +45,7 @@ if TYPE_CHECKING:
 
 
 def _get_mt_layers(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     alt_layer: str,
     depth_layer: str,
 ) -> tuple:
@@ -82,7 +82,7 @@ def _get_mt_layers(
 
 
 def detect_clones(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     *,
     alt_layer: str = "mt_alt",
     depth_layer: str = "mt_depth",
@@ -93,7 +93,7 @@ def detect_clones(
     max_K: int = 10,
     seed: int = 0,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     GPU-native MT heteroplasmy clone calling (cycle-16 kernel).
 

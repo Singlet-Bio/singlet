@@ -76,7 +76,7 @@ class Cell2FateModel:
         n_genes = len(self.gene_names)
         return cp.asarray(self.result.module_loadings_view).reshape(K, n_genes).get()
 
-    def cell_activities(self, adata: "anndata.AnnData") -> np.ndarray:
+    def cell_activities(self, adata: anndata.AnnData) -> np.ndarray:
         """Return [n_cells × K] cell activity matrix (host numpy)."""
         import cupy as cp
 
@@ -92,8 +92,8 @@ class Cell2FateModel:
         return [[self.gene_names[i] for i in row] for row in idx.astype(int)]
 
     def to_anndata(
-        self, adata: "anndata.AnnData", copy: bool = False
-    ) -> Optional["anndata.AnnData"]:
+        self, adata: anndata.AnnData, copy: bool = False
+    ) -> Optional[anndata.AnnData]:
         """
         Write Cell2fate results to an AnnData object.
 
@@ -123,7 +123,7 @@ class Cell2FateModel:
 
 
 def fit(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     spliced_layer: str = "spliced",
     unspliced_layer: str = "unspliced",
     *,

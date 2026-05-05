@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 
 def run_score_genes(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     gene_lists: Union[dict[str, list[str]], list[list[str]]],
     *,
     gene_names_key: Optional[str] = None,
@@ -36,7 +36,7 @@ def run_score_genes(
     seed: int = 0,
     stream=None,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     Per-cell gene-set scoring (cycle 129, Satija et al. 2015 / Seurat AddModuleScore).
 

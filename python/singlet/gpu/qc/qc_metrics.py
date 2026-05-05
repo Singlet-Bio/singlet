@@ -50,7 +50,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
-def _get_matrix(adata: "anndata.AnnData", layer: Optional[str]):
+def _get_matrix(adata: anndata.AnnData, layer: Optional[str]):
     if layer is not None:
         if layer not in adata.layers:
             raise KeyError(f"Layer '{layer}' not found in adata.layers.")
@@ -81,7 +81,7 @@ def _build_gene_mask(var_names, prefix: str) -> np.ndarray:
 
 
 def _run_qc_on_device(
-    adata: "anndata.AnnData", layer: Optional[str], mt_key: str, ribo_key: str, stream
+    adata: anndata.AnnData, layer: Optional[str], mt_key: str, ribo_key: str, stream
 ):
     """
     Run calculate_qc_metrics on device; return (qc_result, device_csc).
@@ -107,7 +107,7 @@ def _run_qc_on_device(
 
 
 def _qc_result_to_obs_var(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     qc_result,
     mt_key: str,
     ribo_key: str,
@@ -144,7 +144,7 @@ def _qc_result_to_obs_var(
 
 
 def calculate_qc_metrics(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     qc_vars: Tuple[str, ...] = ("MT", "RIBO"),
     *,
     layer: Optional[str] = None,
@@ -152,7 +152,7 @@ def calculate_qc_metrics(
     copy: bool = False,
     deterministic: bool = False,
     stream=None,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     Compute per-cell and per-gene QC metrics on device (cycle-103).
 
@@ -235,7 +235,7 @@ def calculate_qc_metrics(
 
 
 def filter_cells(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     *,
     min_genes: Optional[int] = None,
     max_genes: Optional[int] = None,
@@ -247,7 +247,7 @@ def filter_cells(
     inplace: bool = True,
     copy: bool = False,
     stream=None,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     Filter cells by QC thresholds (cycle-103).
 
@@ -377,7 +377,7 @@ def filter_cells(
 
 
 def filter_genes(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     *,
     min_cells: Optional[int] = None,
     min_counts: Optional[int] = None,
@@ -386,7 +386,7 @@ def filter_genes(
     inplace: bool = True,
     copy: bool = False,
     stream=None,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     Filter genes by cell-detection threshold (cycle-103).
 

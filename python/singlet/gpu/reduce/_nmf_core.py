@@ -86,7 +86,7 @@ _VALID_INIT_MODES = (0, 1, 2)
 # ---------------------------------------------------------------------------
 
 
-def _get_matrix(adata: "anndata.AnnData", layer: Optional[str]):
+def _get_matrix(adata: anndata.AnnData, layer: Optional[str]):
     if layer is not None:
         if layer not in adata.layers:
             raise KeyError(f"Layer '{layer}' not found in adata.layers.")
@@ -107,7 +107,7 @@ def _csr_to_device_csc(csr_mat):
 
 
 def _write_nmf_result(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     result,
     *,
     n_factors: int,
@@ -178,7 +178,7 @@ def _build_nmf_config(
 
 
 def nmf(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     *,
     n_factors: int = 20,
     loss: str = "MSE",
@@ -190,7 +190,7 @@ def nmf(
     layer: Optional[str] = None,
     inplace: bool = True,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     GPU-native NMF via factornet (cycle-6 kernel, ``factornet::nmf::fit_gpu``).
 
@@ -353,7 +353,7 @@ def nmf_chunked(
     max_iter: int = 100,
     tol: float = 1e-5,
     seed: int = 0,
-) -> "NmfResult":
+) -> NmfResult:
     """
     Out-of-core streaming NMF over multiple ``.1pz`` files (cycle-6 kernel).
 
@@ -498,7 +498,7 @@ def nmf_chunked(
 
 
 def nmf_graph_factorize(
-    modalities: Dict[str, "anndata.AnnData"],
+    modalities: Dict[str, anndata.AnnData],
     *,
     n_factors: int = 20,
     loss: str = "MSE",
@@ -508,7 +508,7 @@ def nmf_graph_factorize(
     tol: float = 1e-5,
     seed: int = 0,
     shared_h: bool = True,
-) -> Dict[str, "anndata.AnnData"]:
+) -> Dict[str, anndata.AnnData]:
     """
     Multi-modal joint NMF using ``factornet::graph::FactorGraph`` (cycle-6).
 
@@ -622,7 +622,7 @@ def nmf_graph_factorize(
     raw_results = _core.nmf_graph_factorize(device_cscs, config)
 
     # Write back into copies of the input AnnData objects.
-    output: Dict[str, "anndata.AnnData"] = {}
+    output: Dict[str, anndata.AnnData] = {}
     for key in modality_keys:
         out_adata = copy_module.copy(modalities[key])
         _write_nmf_result(out_adata, raw_results[key], n_factors=n_factors)

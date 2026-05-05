@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 
 def run_doublet_score(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     *,
     embedding_key: str = "X_pca",
     n_synth_frac: float = 0.25,
@@ -34,7 +34,7 @@ def run_doublet_score(
     stream=None,
     seed: int = 0,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     Scrublet-style doublet detection on a PCA embedding (cycle 31).
 

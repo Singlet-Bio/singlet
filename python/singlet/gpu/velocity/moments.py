@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 
 
 def _get_layer(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     layer_key: str,
 ) -> object:
     """
@@ -53,7 +53,7 @@ def _get_layer(
 
 
 def _get_connectivities(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     mode: str,
 ) -> object:
     """
@@ -90,7 +90,7 @@ def _get_connectivities(
 
 
 def moments(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     *,
     n_neighbors: int = 30,
     n_pcs: Optional[int] = None,
@@ -99,7 +99,7 @@ def moments(
     layer_spliced: str = "spliced",
     layer_unspliced: str = "unspliced",
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     GPU-native first/second-order moment smoothing for RNA velocity (cycle-15).
 

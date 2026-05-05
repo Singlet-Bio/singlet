@@ -46,7 +46,7 @@ _VALID_MODES = ("sum", "mean")
 
 
 def _validate_obs_column(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     col: str,
 ) -> None:
     """Raise KeyError with helpful message if obs column is missing."""
@@ -76,7 +76,7 @@ def _build_pseudobulk_config(
     }
 
 
-def _extract_matrix(adata: "anndata.AnnData") -> object:
+def _extract_matrix(adata: anndata.AnnData) -> object:
     """Return adata.X (cells × genes), device-resident if available."""
     return adata.X
 
@@ -87,7 +87,7 @@ def _extract_matrix(adata: "anndata.AnnData") -> object:
 
 
 def pseudobulk_de(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     *,
     sample_col: str = "donor_id",
     groupby: str = "cell_type",
@@ -96,7 +96,7 @@ def pseudobulk_de(
     apeglm_shrinkage: bool = True,
     seed: int = 0,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     GPU-native donor-aware pseudobulk DE (cycle-17 NB GLM kernel).
 

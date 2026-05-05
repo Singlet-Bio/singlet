@@ -62,7 +62,7 @@ class DiscreteDiffusionWrapper:
             )
 
     @classmethod
-    def load(cls, path: str) -> "DiscreteDiffusionWrapper":
+    def load(cls, path: str) -> DiscreteDiffusionWrapper:
         """
         Load a model saved with ``save``.
 
@@ -102,7 +102,7 @@ class DiscreteDiffusionWrapper:
 
 
 def train(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     *,
     n_timesteps: int = 100,
     vocab_size: int = 16,

@@ -142,7 +142,7 @@ def run_from_embedding(
 
 
 def run_from_anndata(
-    adata: "anndata.AnnData",
+    adata: anndata.AnnData,
     start_cell: int,
     terminal_cells: Optional[List[int]] = None,
     *,
@@ -159,7 +159,7 @@ def run_from_anndata(
     stream=None,
     seed: int = 42,
     copy: bool = False,
-) -> Optional["anndata.AnnData"]:
+) -> Optional[anndata.AnnData]:
     """
     GPU-native Palantir pseudotime from an AnnData object.
 

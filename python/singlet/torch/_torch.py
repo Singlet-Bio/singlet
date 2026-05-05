@@ -11,7 +11,7 @@ def to_sparse_csr(
     *,
     dtype: str = "float32",
     device: str = "cpu",
-) -> "torch.Tensor":
+) -> torch.Tensor:
     """Load a .spz file as a PyTorch sparse CSR tensor (zero-copy).
 
     CSR format is optimal for GPU operations through cuSPARSE.
@@ -42,7 +42,7 @@ def to_sparse_coo(
     *,
     dtype: str = "float32",
     device: str = "cpu",
-) -> "torch.Tensor":
+) -> torch.Tensor:
     """Load a .spz file as a PyTorch sparse COO tensor.
 
     Parameters
@@ -70,7 +70,7 @@ def from_anndata(
     layer: Optional[str] = None,
     dtype: str = "float32",
     device: str = "cpu",
-) -> "torch.Tensor":
+) -> torch.Tensor:
     """Convert AnnData to a PyTorch sparse CSR tensor.
 
     Parameters
@@ -171,7 +171,7 @@ class SpzDataset:
     def __len__(self) -> int:
         return self._mat.shape[0]
 
-    def __getitem__(self, idx) -> "torch.Tensor":
+    def __getitem__(self, idx) -> torch.Tensor:
         import numpy as np
         import torch
 
@@ -256,7 +256,7 @@ class OnePZDataset:
     def __len__(self) -> int:
         return self._mat.shape[0]
 
-    def __getitem__(self, idx) -> "torch.Tensor":
+    def __getitem__(self, idx) -> torch.Tensor:
         import numpy as np
         import torch
 
