@@ -22,7 +22,8 @@ yet exposed by the cycle-20 binding extension.  The wrapper raises
 from __future__ import annotations
 
 import copy as copy_module
-from typing import TYPE_CHECKING, Optional, Sequence, Tuple, Type, Union
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Optional, Tuple, Type, Union
 
 import numpy as np
 

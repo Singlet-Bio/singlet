@@ -38,7 +38,8 @@ GPU execution path (regress_out)
 from __future__ import annotations
 
 import copy as copy_module
-from typing import TYPE_CHECKING, Optional, Sequence
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 

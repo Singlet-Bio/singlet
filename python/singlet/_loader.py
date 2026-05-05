@@ -9,8 +9,9 @@ Priority order:
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Sequence
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     import anndata
