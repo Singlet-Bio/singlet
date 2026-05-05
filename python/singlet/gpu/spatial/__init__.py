@@ -9,8 +9,8 @@ Exposes:
     cell2fate.Cell2FateModel      — trained model wrapper
 """
 
+from . import cell2fate
 from .flash_deconv import run_flash_deconv
 from .stagate import run_stagate
-from . import cell2fate
 
 __all__ = ["run_flash_deconv", "run_stagate", "cell2fate"]

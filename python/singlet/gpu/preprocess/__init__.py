@@ -13,9 +13,9 @@ regress_out           — OLS confounder regression     (cycle-103 regress_out k
 All functions are drop-in replacements for their scanpy.pp counterparts.
 """
 
-from singlet.gpu.preprocess.lognorm import normalize_total, log1p
 from singlet.gpu.preprocess.hvg import highly_variable_genes
-from singlet.gpu.preprocess.scale import scale, regress_out
+from singlet.gpu.preprocess.lognorm import log1p, normalize_total
+from singlet.gpu.preprocess.scale import regress_out, scale
 
 __all__ = [
     "normalize_total",

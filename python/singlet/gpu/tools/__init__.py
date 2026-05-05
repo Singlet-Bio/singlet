@@ -19,9 +19,9 @@ Underlying C++ cycles:
 """
 
 from singlet.gpu.tools.leiden import leiden
-from singlet.gpu.tools.umap import umap
+from singlet.gpu.tools.markers import celltypist_predict, score_genes
 from singlet.gpu.tools.rank_genes_groups import rank_genes_groups
-from singlet.gpu.tools.markers import score_genes, celltypist_predict
+from singlet.gpu.tools.umap import umap
 
 __all__ = [
     "leiden",

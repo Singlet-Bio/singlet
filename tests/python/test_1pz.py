@@ -11,12 +11,10 @@ Tests:
   8. OnePZFile lazy handle
   9. Transpose storage + row-range reads
 """
-import os
-import tempfile
-import numpy as np
-import scipy.sparse as ss
-import pytest
 
+import numpy as np
+import pytest
+import scipy.sparse as ss
 import singlepress
 
 
@@ -101,8 +99,10 @@ class TestMetadata:
     def test_rownames_colnames(self, sample_matrix, gene_names, cell_barcodes, tmp_path):
         path = str(tmp_path / "meta.1pz")
         singlepress.write_1pz(
-            path, sample_matrix,
-            rownames=gene_names, colnames=cell_barcodes,
+            path,
+            sample_matrix,
+            rownames=gene_names,
+            colnames=cell_barcodes,
         )
         info = singlepress.info_1pz(path)
         assert info["has_metadata"] is True
@@ -177,7 +177,7 @@ class TestLognorm:
         assert norm.shape == sample_matrix.shape
         # Check a few values manually
         for j in range(min(5, sample_matrix.shape[1])):
-            s, e = sample_matrix.indptr[j], sample_matrix.indptr[j+1]
+            s, e = sample_matrix.indptr[j], sample_matrix.indptr[j + 1]
             if s < e:
                 expected = np.log1p(sample_matrix.data[s:e].astype(np.float64) * 10000 / cs[j])
                 np.testing.assert_allclose(norm.data[s:e], expected, rtol=1e-12)
@@ -187,8 +187,10 @@ class TestOnePZFile:
     def test_lazy_access(self, sample_matrix, gene_names, cell_barcodes, tmp_path):
         path = str(tmp_path / "lazy.1pz")
         singlepress.write_1pz(
-            path, sample_matrix,
-            rownames=gene_names, colnames=cell_barcodes,
+            path,
+            sample_matrix,
+            rownames=gene_names,
+            colnames=cell_barcodes,
         )
 
         pz = singlepress.open_1pz(path)
@@ -273,29 +275,41 @@ class TestObsVarUns:
     @pytest.fixture
     def obs_df(self):
         import pandas as pd
-        return pd.DataFrame({
-            "cell_type": [f"type_{i % 5}" for i in range(200)],
-            "n_genes": np.random.RandomState(42).randint(100, 5000, 200),
-            "score": np.random.RandomState(42).random(200).astype(np.float32),
-        }, index=[f"CELL_{i:04d}" for i in range(200)])
+
+        return pd.DataFrame(
+            {
+                "cell_type": [f"type_{i % 5}" for i in range(200)],
+                "n_genes": np.random.RandomState(42).randint(100, 5000, 200),
+                "score": np.random.RandomState(42).random(200).astype(np.float32),
+            },
+            index=[f"CELL_{i:04d}" for i in range(200)],
+        )
 
     @pytest.fixture
     def var_df(self):
         import pandas as pd
-        return pd.DataFrame({
-            "gene_symbol": [f"SYM_{i}" for i in range(500)],
-            "highly_variable": [i % 10 == 0 for i in range(500)],
-        }, index=[f"Gene_{i}" for i in range(500)])
+
+        return pd.DataFrame(
+            {
+                "gene_symbol": [f"SYM_{i}" for i in range(500)],
+                "highly_variable": [i % 10 == 0 for i in range(500)],
+            },
+            index=[f"Gene_{i}" for i in range(500)],
+        )
 
     def test_obs_var_roundtrip(self, sample_matrix, tmp_path, obs_df, var_df):
         import pandas as pd
+
         path = str(tmp_path / "obsvar.1pz")
         uns = {"organism": "human", "version": "1.0"}
         singlepress.write_1pz(
-            path, sample_matrix,
+            path,
+            sample_matrix,
             rownames=[f"Gene_{i}" for i in range(500)],
             colnames=[f"CELL_{i:04d}" for i in range(200)],
-            obs=obs_df, var=var_df, uns=uns,
+            obs=obs_df,
+            var=var_df,
+            uns=uns,
         )
 
         info = singlepress.info_1pz(path)
@@ -347,10 +361,15 @@ class TestObsVarUns:
 
     def test_onepzfile_obs_var(self, sample_matrix, tmp_path, obs_df, var_df):
         import pandas as pd
+
         path = str(tmp_path / "lazy_obsvar.1pz")
         uns = {"key": "value"}
         singlepress.write_1pz(
-            path, sample_matrix, obs=obs_df, var=var_df, uns=uns,
+            path,
+            sample_matrix,
+            obs=obs_df,
+            var=var_df,
+            uns=uns,
         )
         pz = singlepress.open_1pz(path)
         assert pz.has_obs_var is True
@@ -430,8 +449,7 @@ class TestOnTheFlyNormalize:
     def test_getitem_normalize(self, sample_matrix, gene_names, cell_barcodes, tmp_path):
         """pz[rows, cols] respects normalize flag."""
         path = str(tmp_path / "idx.1pz")
-        singlepress.write_1pz(path, sample_matrix,
-                               rownames=gene_names, colnames=cell_barcodes)
+        singlepress.write_1pz(path, sample_matrix, rownames=gene_names, colnames=cell_barcodes)
         pz = singlepress.open_1pz(path, normalize=True)
         sub = pz[:, 0:50]
         expected = self._expected_lognorm(sample_matrix)[:, 0:50]

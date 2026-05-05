@@ -44,19 +44,37 @@ Token-priced (requires API key):
 
 __version__ = "2.0.0"
 
-from singlet._catalog import (
-    catalog, info, species, tissues, protocols, datasets, sample_index, set_catalog_dir,
-    summary, samples, top_series, refresh, quality_tiers, failure_categories, cell_types,
-)
-from singlet._loader import load, load_sample, load_dir, download
 from singlet._auth import login
-from singlet._query import query, search
-from singlet._io import (
-    read_spz, write_spz, spz_info,
-    read_1pz, write_1pz, info_1pz,
-    read_matrix, read_kraken2,
+from singlet._catalog import (
+    catalog,
+    cell_types,
+    datasets,
+    failure_categories,
+    info,
+    protocols,
+    quality_tiers,
+    refresh,
+    sample_index,
+    samples,
+    set_catalog_dir,
+    species,
+    summary,
+    tissues,
+    top_series,
 )
-from singlet.convert import to_h5ad, to_zarr, to_csc, from_h5ad, from_zarr
+from singlet._io import (
+    info_1pz,
+    read_1pz,
+    read_kraken2,
+    read_matrix,
+    read_spz,
+    spz_info,
+    write_1pz,
+    write_spz,
+)
+from singlet._loader import download, load, load_dir, load_sample
+from singlet._query import query, search
+from singlet.convert import from_h5ad, from_zarr, to_csc, to_h5ad, to_zarr
 
 __all__ = [
     # Browse

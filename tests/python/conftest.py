@@ -10,6 +10,7 @@ Clipper NFS.  All GPU tests are automatically skipped when:
 The environment variable ``SINGLET_GPU_TEST_FIXTURE_DIR`` may override the
 default NFS path (for CI or off-cluster development).
 """
+
 from __future__ import annotations
 
 import os
@@ -21,8 +22,7 @@ import pytest
 # Canonical test sample: GSM4037629
 # ---------------------------------------------------------------------------
 _DEFAULT_GSM4037629_PATH = (
-    "/mnt/projects/debruinz_project/singlify_pipeline/"
-    "quant/scrna/GSE127/GSE127918/GSM4037629"
+    "/mnt/projects/debruinz_project/singlify_pipeline/quant/scrna/GSE127/GSE127918/GSM4037629"
 )
 
 _EXON_FILENAME = "exon_counts.1pz"
@@ -88,8 +88,7 @@ def small_anndata():
     import scipy.sparse as sp
 
     rng = np.random.default_rng(42)
-    X = sp.random(20, 50, density=0.3, format="csr", random_state=rng,
-                  dtype=np.float32)
+    X = sp.random(20, 50, density=0.3, format="csr", random_state=rng, dtype=np.float32)
     adata = ad.AnnData(X=X)
     adata.var_names = [f"Gene_{i}" for i in range(50)]
     adata.obs_names = [f"Cell_{i}" for i in range(20)]

@@ -13,8 +13,8 @@ Exposes:
     score_genes.run_score_genes — per-cell gene-set scoring (cycle 129)
 """
 
-from .ssgsea import run_ssgsea
 from .progeny import run_progeny
 from .score_genes import run_score_genes
+from .ssgsea import run_ssgsea
 
 __all__ = ["run_ssgsea", "run_progeny", "run_score_genes"]

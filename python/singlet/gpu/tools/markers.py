@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import copy as copy_module
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Literal, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Literal, Optional, Sequence, Union
 
 import numpy as np
 
@@ -37,6 +37,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # RNG helper
 # ---------------------------------------------------------------------------
+
 
 def _resolve_seed(rng: Optional[Union[int, "np.random.Generator"]]) -> int:
     """Convert scanpy-style ``rng`` to a uint64 seed for C++."""
@@ -50,6 +51,7 @@ def _resolve_seed(rng: Optional[Union[int, "np.random.Generator"]]) -> int:
 # ---------------------------------------------------------------------------
 # Internal: gene index lookup
 # ---------------------------------------------------------------------------
+
 
 def _gene_indices(var_names: Sequence[str], gene_list: Sequence[str]) -> "np.ndarray":
     """
@@ -86,6 +88,7 @@ def _gene_indices(var_names: Sequence[str], gene_list: Sequence[str]) -> "np.nda
 # ---------------------------------------------------------------------------
 # score_genes
 # ---------------------------------------------------------------------------
+
 
 def score_genes(
     adata: "anndata.AnnData",
@@ -202,9 +205,7 @@ def score_genes(
 
     gene_indices = _gene_indices(list(working.var_names), list(gene_list))
     if len(gene_indices) == 0:
-        raise ValueError(
-            "score_genes: no genes from gene_list found in adata.var_names."
-        )
+        raise ValueError("score_genes: no genes from gene_list found in adata.var_names.")
 
     # Resolve expression matrix.
     if use_raw and working.raw is not None:
@@ -228,6 +229,7 @@ def score_genes(
     # Convert device array → pandas Series for adata.obs storage.
     try:
         import cupy as cp
+
         if isinstance(scores, cp.ndarray):
             scores = scores.get()
     except ImportError:
@@ -240,6 +242,7 @@ def score_genes(
 # ---------------------------------------------------------------------------
 # celltypist_predict
 # ---------------------------------------------------------------------------
+
 
 def celltypist_predict(
     adata: "anndata.AnnData",
@@ -374,9 +377,7 @@ def celltypist_predict(
             "key in adata.obs containing cluster labels."
         )
     if majority_voting and over_clustering not in adata.obs.columns:
-        raise ValueError(
-            f"over_clustering='{over_clustering}' not found in adata.obs."
-        )
+        raise ValueError(f"over_clustering='{over_clustering}' not found in adata.obs.")
 
     working = copy_module.copy(adata) if copy else adata
 

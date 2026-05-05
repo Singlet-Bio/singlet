@@ -46,6 +46,7 @@ def _get_catalog_dir() -> Optional[Path]:
 
 def _download_parquet(url: str, cache_path: Path) -> pd.DataFrame:
     import requests
+
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     resp = requests.get(url, timeout=120)
     resp.raise_for_status()
@@ -79,9 +80,7 @@ def _load_catalog() -> pd.DataFrame:
     try:
         _CATALOG_CACHE = _download_parquet(_CATALOG_URL, cache_path)
     except Exception:
-        raise RuntimeError(
-            "Could not load catalog. Set SINGLET_CATALOG_DIR or check internet."
-        )
+        raise RuntimeError("Could not load catalog. Set SINGLET_CATALOG_DIR or check internet.")
     return _CATALOG_CACHE
 
 
@@ -151,9 +150,11 @@ def catalog(search: Optional[str] = None) -> pd.DataFrame:
     df = _load_catalog()
     if search is not None:
         text_cols = df.select_dtypes(include="object").columns
-        mask = df[text_cols].apply(
-            lambda col: col.str.contains(search, case=False, na=False)
-        ).any(axis=1)
+        mask = (
+            df[text_cols]
+            .apply(lambda col: col.str.contains(search, case=False, na=False))
+            .any(axis=1)
+        )
         return df[mask].reset_index(drop=True)
     return df
 
@@ -279,6 +280,7 @@ def failure_categories() -> pd.DataFrame:
         cats = failed["failure_category"].fillna("unknown")
         cats = cats.replace("", "unknown")
         from collections import Counter
+
         counts = Counter(cats)
     else:
         # Fallback: infer from metrics
@@ -302,12 +304,15 @@ def failure_categories() -> pd.DataFrame:
             else:
                 categories.append("unknown")
         from collections import Counter
+
         counts = Counter(categories)
 
-    result = pd.DataFrame([
-        {"category": cat, "count": c, "pct": round(c / total_failed * 100, 1)}
-        for cat, c in counts.most_common()
-    ])
+    result = pd.DataFrame(
+        [
+            {"category": cat, "count": c, "pct": round(c / total_failed * 100, 1)}
+            for cat, c in counts.most_common()
+        ]
+    )
     return result
 
 
@@ -381,7 +386,9 @@ def summary() -> str:
 
     # Count protocols (SUCCESS only)
     if "protocol" in success.columns:
-        valid_protocols = success["protocol"].dropna().loc[lambda s: (s.str.strip() != "") & (s != "unknown")]
+        valid_protocols = (
+            success["protocol"].dropna().loc[lambda s: (s.str.strip() != "") & (s != "unknown")]
+        )
         n_protocols = valid_protocols.nunique()
     else:
         n_protocols = 0
@@ -462,9 +469,11 @@ def samples(
         quality_tier = quality
     if search is not None:
         text_cols = df.select_dtypes(include="object").columns
-        mask = df[text_cols].apply(
-            lambda col: col.str.contains(search, case=False, na=False)
-        ).any(axis=1)
+        mask = (
+            df[text_cols]
+            .apply(lambda col: col.str.contains(search, case=False, na=False))
+            .any(axis=1)
+        )
         df = df[mask]
     if gse_id is not None:
         df = df[df["gse_id"] == gse_id]
@@ -569,15 +578,15 @@ def quality_tiers() -> pd.DataFrame:
     cells_col = "cells_called" if "cells_called" in success.columns else "n_cells"
 
     gold_mask = (
-        (success["mapping_rate"] >= 0.7) &
-        (success["median_genes"] >= 500) &
-        (success[cells_col] >= 500)
+        (success["mapping_rate"] >= 0.7)
+        & (success["median_genes"] >= 500)
+        & (success[cells_col] >= 500)
     )
     silver_mask = (
-        ~gold_mask &
-        (success["mapping_rate"] >= 0.5) &
-        (success["median_genes"] >= 200) &
-        (success[cells_col] >= 100)
+        ~gold_mask
+        & (success["mapping_rate"] >= 0.5)
+        & (success["median_genes"] >= 200)
+        & (success[cells_col] >= 100)
     )
     bronze_mask = ~gold_mask & ~silver_mask
 
@@ -585,13 +594,17 @@ def quality_tiers() -> pd.DataFrame:
     for name, mask in [("gold", gold_mask), ("silver", silver_mask), ("bronze", bronze_mask)]:
         subset = success[mask]
         n = len(subset)
-        tiers.append({
-            "tier": name,
-            "count": n,
-            "pct": round(n / len(success) * 100, 1) if len(success) > 0 else 0,
-            "avg_mapping_rate": round(subset["mapping_rate"].mean(), 4) if n > 0 else None,
-            "avg_median_genes": round(subset["median_genes"].mean(), 1) if n > 0 and "median_genes" in subset.columns else None,
-            "avg_cells": round(subset[cells_col].mean(), 0) if n > 0 else None,
-        })
+        tiers.append(
+            {
+                "tier": name,
+                "count": n,
+                "pct": round(n / len(success) * 100, 1) if len(success) > 0 else 0,
+                "avg_mapping_rate": round(subset["mapping_rate"].mean(), 4) if n > 0 else None,
+                "avg_median_genes": round(subset["median_genes"].mean(), 1)
+                if n > 0 and "median_genes" in subset.columns
+                else None,
+                "avg_cells": round(subset[cells_col].mean(), 0) if n > 0 else None,
+            }
+        )
 
     return pd.DataFrame(tiers)

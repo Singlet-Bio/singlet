@@ -7,7 +7,7 @@ import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,9 @@ def _download_parallel_segments(
             # HEAD to get Content-Length
             head = subprocess.run(
                 ["curl", "-sI", url],
-                capture_output=True, text=True, timeout=30,
+                capture_output=True,
+                text=True,
+                timeout=30,
             )
             content_length = 0
             for line in head.stdout.splitlines():
@@ -49,7 +51,8 @@ def _download_parallel_segments(
                 # Fall back to single download
                 subprocess.run(
                     ["curl", "-sL", "-o", str(dest), url],
-                    timeout=timeout, check=True,
+                    timeout=timeout,
+                    check=True,
                 )
                 return (True, None)
 
@@ -64,9 +67,9 @@ def _download_parallel_segments(
                 seg_path = dest.parent / f"{dest.name}.seg{i}"
                 seg_files.append(seg_path)
                 proc = subprocess.Popen(
-                    ["curl", "-sL", "-o", str(seg_path),
-                     "-H", f"Range: bytes={start}-{end}", url],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                    ["curl", "-sL", "-o", str(seg_path), "-H", f"Range: bytes={start}-{end}", url],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
                 )
                 procs.append(proc)
 
@@ -156,22 +159,22 @@ def download_from_sra(
 
     try:
         subprocess.run(
-            ["fasterq-dump", "--split-3", "-e", str(threads),
-             "-O", str(output_dir), srr_accession],
-            timeout=7200, check=True,
-            capture_output=True, text=True,
+            ["fasterq-dump", "--split-3", "-e", str(threads), "-O", str(output_dir), srr_accession],
+            timeout=7200,
+            check=True,
+            capture_output=True,
+            text=True,
         )
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        return DownloadResult(
-            error=f"fasterq-dump failed: {e}", time_s=time.time() - t0
-        )
+        return DownloadResult(error=f"fasterq-dump failed: {e}", time_s=time.time() - t0)
 
     # Compress with pigz
     for fq in output_dir.glob(f"{srr_accession}*.fastq"):
         try:
             subprocess.run(
                 ["pigz", "-p", str(threads), str(fq)],
-                timeout=1800, check=True,
+                timeout=1800,
+                check=True,
             )
         except FileNotFoundError:
             subprocess.run(["gzip", str(fq)], timeout=1800, check=True)

@@ -147,6 +147,7 @@ def load_donor_assignments(
         prob_col = "prob_max"
         if prob_col not in df.columns:
             import warnings
+
             warnings.warn(
                 f"min_prob filtering requested but column '{prob_col}' not "
                 f"found in {path.name}.  Skipping min_prob filter.",
@@ -161,6 +162,7 @@ def load_donor_assignments(
     if exclude_doublets:
         if doublet_col not in df.columns:
             import warnings
+
             warnings.warn(
                 f"exclude_doublets=True but column '{doublet_col}' not found "
                 f"in {path.name}.  Skipping doublet filter.",

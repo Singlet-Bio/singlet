@@ -17,8 +17,6 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING, Optional
 
-import numpy as np
-
 if TYPE_CHECKING:
     import anndata
 
@@ -87,21 +85,19 @@ def run_progeny(
 
     try:
         import cupy as cp
+
         try:
             import cupyx.scipy.sparse as csp  # cupy >= 14
         except ImportError:
-            import cupy.sparse as csp         # cupy < 14 fallback
+            import cupy.sparse as csp  # cupy < 14 fallback
         import scipy.sparse as sp
 
         X = working.X
         if X.shape[0] == working.n_obs:
-            X = X.T   # genes × cells
+            X = X.T  # genes × cells
         device_mat = csp.csc_matrix(X) if sp.issparse(X) else csp.csc_matrix(cp.array(X))
     except ImportError as e:
-        raise ImportError(
-            "singlet.gpu.enrich.run_progeny requires cupy.  "
-            f"Original error: {e}"
-        )
+        raise ImportError(f"singlet.gpu.enrich.run_progeny requires cupy.  Original error: {e}")
 
     result = _core.progeny(
         device_mat,
@@ -114,12 +110,12 @@ def run_progeny(
         seed=seed,
     )
 
-    n_cells    = result.n_cells
+    n_cells = result.n_cells
     n_pathways = result.n_pathways
-    pw_names   = result.pathway_names
+    pw_names = result.pathway_names
 
     activity = cp.asarray(result.activity_view).reshape(n_cells, n_pathways).get()
-    working.obsm[obsm_key]              = activity
+    working.obsm[obsm_key] = activity
     working.uns["progeny_pathway_names"] = pw_names
     working.uns["progeny_params"] = {
         "weights_tsv": weights_tsv,

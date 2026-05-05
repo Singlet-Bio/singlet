@@ -87,10 +87,7 @@ def run_doublet_score(
         emb = np.asarray(working.obsm[embedding_key], dtype=np.float32)
         d_emb = cp.asarray(emb)
     except ImportError as e:
-        raise ImportError(
-            "singlet.gpu.qc.run_doublet_score requires cupy.  "
-            f"Original error: {e}"
-        )
+        raise ImportError(f"singlet.gpu.qc.run_doublet_score requires cupy.  Original error: {e}")
 
     result = _core.doublet_score(
         d_emb,
@@ -102,7 +99,7 @@ def run_doublet_score(
     )
 
     working.obs[obs_score_key] = cp.asarray(result.score_view).get()
-    working.obs[obs_call_key]  = cp.asarray(result.doublet_call_view).get().astype(bool)
+    working.obs[obs_call_key] = cp.asarray(result.doublet_call_view).get().astype(bool)
     working.uns["doublet_score_params"] = {
         "embedding_key": embedding_key,
         "n_synth_frac": n_synth_frac,

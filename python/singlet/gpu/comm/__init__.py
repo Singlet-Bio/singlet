@@ -7,9 +7,9 @@ Submodules
 cellchat : CellChat ligand-receptor communication scoring (cycle 37).
 """
 
-from singlet.gpu.comm.cellchat import run_from_csc as cellchat_run_from_csc
-from singlet.gpu.comm.cellchat import run_from_anndata as cellchat
 from singlet.gpu.comm import cellchat as cellchat_module
+from singlet.gpu.comm.cellchat import run_from_anndata as cellchat
+from singlet.gpu.comm.cellchat import run_from_csc as cellchat_run_from_csc
 
 __all__ = [
     "cellchat",

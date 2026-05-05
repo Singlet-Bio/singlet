@@ -151,10 +151,11 @@ def run_score_genes(
 
     try:
         import cupy as cp
+
         try:
             import cupyx.scipy.sparse as csp  # cupy >= 14
         except ImportError:
-            import cupy.sparse as csp         # cupy < 14 fallback
+            import cupy.sparse as csp  # cupy < 14 fallback
         import scipy.sparse as sp
 
         X = working.X
@@ -181,8 +182,7 @@ def run_score_genes(
         device_mat = _core.from_cupy_csr(cupy_csc)
     except ImportError as e:
         raise ImportError(
-            "singlet.gpu.enrich.run_score_genes requires cupy.  "
-            f"Original error: {e}"
+            f"singlet.gpu.enrich.run_score_genes requires cupy.  Original error: {e}"
         ) from e
 
     result = _core.score_genes(
@@ -197,13 +197,15 @@ def run_score_genes(
 
     # ── Retrieve scores and write to adata.obs ───────────────────────────────
     n_cells = result.n_cells
-    n_sets  = result.n_sets
+    n_sets = result.n_sets
 
     # scores_view is [n_cells × n_sets] col-major float32 on device.
     # cupy >= 14 dtype-strictness: wrap CAI dict so cp.asarray() gets an
     # object with __cuda_array_interface__ as an attribute, not a bare dict.
     class _CaiView:
-        def __init__(self, d): self.__cuda_array_interface__ = d
+        def __init__(self, d):
+            self.__cuda_array_interface__ = d
+
     scores_gpu = cp.asarray(_CaiView(result.scores_view)).reshape(n_sets, n_cells).T
     # scores_gpu is now (n_cells, n_sets) in C order.
     scores_cpu = scores_gpu.get()  # D2H once; shape (n_cells, n_sets)

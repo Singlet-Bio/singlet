@@ -13,9 +13,6 @@ Tests cover:
 - Performance benchmarks
 """
 
-import os
-import struct
-import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -25,15 +22,16 @@ import scipy.sparse as sp
 # Skip entire module if extension not built
 try:
     from singlet._singlepress import (
-        sp_write_int,
-        sp_write,
-        sp_read,
-        sp_read_columns,
-        sp_info,
+        file_crc32,
         sp_compress,
         sp_decompress,
-        file_crc32,
+        sp_info,
+        sp_read,
+        sp_read_columns,
+        sp_write,
+        sp_write_int,
     )
+
     HAS_EXT = True
 except ImportError:
     HAS_EXT = False
@@ -41,13 +39,18 @@ except ImportError:
 pytestmark = pytest.mark.skipif(not HAS_EXT, reason="_singlepress not built")
 
 # Real .spz file from production GEO pipeline
-REAL_SPZ = Path("/mnt/projects/debruinz_project/cellarium/pipeline/quant/GSE118120/GSM3318872/counts.spz")
-REAL_SPZ_LARGE = Path("/mnt/projects/debruinz_project/cellarium/pipeline/quant/GSE104276/GSM2861510/counts.spz")
+REAL_SPZ = Path(
+    "/mnt/projects/debruinz_project/cellarium/pipeline/quant/GSE118120/GSM3318872/counts.spz"
+)
+REAL_SPZ_LARGE = Path(
+    "/mnt/projects/debruinz_project/cellarium/pipeline/quant/GSE104276/GSM2861510/counts.spz"
+)
 
 
 # ============================================================================
 # Helpers
 # ============================================================================
+
 
 def make_random_csc(rows, cols, density, seed=42, dtype=np.float64, max_val=100):
     """Create a random sparse CSC matrix."""
@@ -98,6 +101,7 @@ def read_as_csc(path):
 # ============================================================================
 # SECTION: Integer round-trip tests
 # ============================================================================
+
 
 class TestIntRoundTrip:
     """Integer-valued matrix round-trips through .spz."""
@@ -167,6 +171,7 @@ class TestIntRoundTrip:
 # SECTION: Float round-trip tests
 # ============================================================================
 
+
 class TestFloatRoundTrip:
     """Float-valued matrix round-trips."""
 
@@ -221,6 +226,7 @@ class TestFloatRoundTrip:
 # ============================================================================
 # SECTION: Dimension names
 # ============================================================================
+
 
 class TestDimnames:
     """Test gene/cell name preservation."""
@@ -288,6 +294,7 @@ class TestDimnames:
 # SECTION: Column subset reading
 # ============================================================================
 
+
 class TestColumnSubset:
     """Test partial column reading for streaming."""
 
@@ -307,9 +314,7 @@ class TestColumnSubset:
             (partial["data"], partial["indices"], partial["indptr"]),
             shape=tuple(partial["shape"]),
         )
-        np.testing.assert_array_equal(
-            mat[:, :10].toarray(), partial_mat.toarray()
-        )
+        np.testing.assert_array_equal(mat[:, :10].toarray(), partial_mat.toarray())
 
     def test_middle_columns(self, medium_spz):
         path, mat = medium_spz
@@ -318,9 +323,7 @@ class TestColumnSubset:
             (partial["data"], partial["indices"], partial["indptr"]),
             shape=tuple(partial["shape"]),
         )
-        np.testing.assert_array_equal(
-            mat[:, 50:100].toarray(), partial_mat.toarray()
-        )
+        np.testing.assert_array_equal(mat[:, 50:100].toarray(), partial_mat.toarray())
 
     def test_last_columns(self, medium_spz):
         path, mat = medium_spz
@@ -329,9 +332,7 @@ class TestColumnSubset:
             (partial["data"], partial["indices"], partial["indptr"]),
             shape=tuple(partial["shape"]),
         )
-        np.testing.assert_array_equal(
-            mat[:, 190:200].toarray(), partial_mat.toarray()
-        )
+        np.testing.assert_array_equal(mat[:, 190:200].toarray(), partial_mat.toarray())
 
     def test_single_column(self, medium_spz):
         path, mat = medium_spz
@@ -340,9 +341,7 @@ class TestColumnSubset:
             (partial["data"], partial["indices"], partial["indptr"]),
             shape=tuple(partial["shape"]),
         )
-        np.testing.assert_array_equal(
-            mat[:, 5:6].toarray(), partial_mat.toarray()
-        )
+        np.testing.assert_array_equal(mat[:, 5:6].toarray(), partial_mat.toarray())
 
     def test_all_columns(self, medium_spz):
         path, mat = medium_spz
@@ -361,14 +360,13 @@ class TestColumnSubset:
             (partial["data"], partial["indices"], partial["indptr"]),
             shape=tuple(partial["shape"]),
         )
-        np.testing.assert_array_equal(
-            mat[:, 195:].toarray(), partial_mat.toarray()
-        )
+        np.testing.assert_array_equal(mat[:, 195:].toarray(), partial_mat.toarray())
 
 
 # ============================================================================
 # SECTION: In-memory compress/decompress
 # ============================================================================
+
 
 class TestInMemory:
     """Test compress/decompress without file I/O."""
@@ -429,6 +427,7 @@ class TestInMemory:
 # SECTION: File info and CRC32
 # ============================================================================
 
+
 class TestFileInfo:
     """Test sp_info and file_crc32."""
 
@@ -471,6 +470,7 @@ class TestFileInfo:
 # ============================================================================
 # SECTION: Edge cases
 # ============================================================================
+
 
 class TestEdgeCases:
     """Edge cases and boundary conditions."""
@@ -577,6 +577,7 @@ class TestEdgeCases:
 # SECTION: Row sort
 # ============================================================================
 
+
 class TestRowSort:
     """Test row-sort compression mode."""
 
@@ -618,10 +619,11 @@ class TestRowSort:
 # SECTION: Real .spz file tests
 # ============================================================================
 
+
 @pytest.mark.skipif(not REAL_SPZ.exists(), reason="No real .spz file available")
 class TestRealSpzFiles:
     """Test against production .spz files from GEO reprocessing.
-    
+
     NOTE: Production files use sparsepress_v2 format (128-byte header, rANS encoding)
     which is incompatible with our new singlepress format (64-byte header, delta+varint).
     These tests verify we can generate and read back large realistic matrices.
@@ -678,14 +680,13 @@ class TestRealSpzFiles:
             (partial["data"], partial["indices"], partial["indptr"]),
             shape=tuple(partial["shape"]),
         )
-        np.testing.assert_array_equal(
-            mat[:, 500:600].toarray(), partial_mat.toarray()
-        )
+        np.testing.assert_array_equal(mat[:, 500:600].toarray(), partial_mat.toarray())
 
 
 # ============================================================================
 # SECTION: Error handling
 # ============================================================================
+
 
 class TestErrors:
     """Test error handling and invalid inputs."""
@@ -729,6 +730,7 @@ class TestErrors:
 # ============================================================================
 # SECTION: Performance benchmarks
 # ============================================================================
+
 
 class TestPerformance:
     """Performance-focused tests."""

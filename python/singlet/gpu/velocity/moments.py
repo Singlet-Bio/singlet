@@ -36,6 +36,7 @@ if TYPE_CHECKING:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _get_layer(
     adata: "anndata.AnnData",
     layer_key: str,
@@ -86,6 +87,7 @@ def _get_connectivities(
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def moments(
     adata: "anndata.AnnData",
@@ -200,9 +202,9 @@ def moments(
 
     working = copy_module.copy(adata) if copy else adata
 
-    spliced_mat   = _get_layer(working, layer_spliced)
+    spliced_mat = _get_layer(working, layer_spliced)
     unspliced_mat = _get_layer(working, layer_unspliced)
-    connectivity  = _get_connectivities(working, mode)
+    connectivity = _get_connectivities(working, mode)
 
     # C++ kernel: velocity_moments(spliced, unspliced, connectivity, n_neighbors)
     # Returns (Ms, Mu) — smoothed matrices, same shape as inputs.

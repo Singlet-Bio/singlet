@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 
 def transform(adata, *, model: str = "human_global_k100"):
     """Project cells onto NMF factors. **Token-priced feature.**
@@ -17,10 +15,10 @@ def transform(adata, *, model: str = "human_global_k100"):
     model : str
         Model name, e.g. ``"human_global_k100"``.
     """
-    from singlet._auth import _headers, _API_BASE
-
-    import requests
     import numpy as np
+    import requests
+
+    from singlet._auth import _API_BASE, _headers
 
     genes = list(adata.var_names)
     resp = requests.post(
@@ -50,9 +48,9 @@ def annotate(adata, *, model: str = "human_global_k100") -> dict:
         Mapping from factor index to annotation string, e.g.
         ``{0: "ventricular cardiomyocyte — repolarization", ...}``.
     """
-    from singlet._auth import _headers, _API_BASE
-
     import requests
+
+    from singlet._auth import _API_BASE, _headers
 
     resp = requests.get(
         f"{_API_BASE}/nmf/annotations",

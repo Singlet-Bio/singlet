@@ -32,6 +32,7 @@ Skip strategy:
   - requires_gpu for all GPU-exercising tests.
   - DESeq2 test skips if Rscript subprocess fails or R/DESeq2 absent.
 """
+
 from __future__ import annotations
 
 import json
@@ -57,7 +58,7 @@ from conftest import requires_gpu  # noqa: E402
 _LFC_SPEARMAN_MIN = 0.97
 _SEED = 0
 _MIN_CELLS = 10
-_N_CELLS = 400       # enough cells per donor × cell_type to pass min_cells filter
+_N_CELLS = 400  # enough cells per donor × cell_type to pass min_cells filter
 _N_GENES = 50
 _N_DONORS = 3
 _N_CELL_TYPES = 3
@@ -67,6 +68,7 @@ _DONOR_ASSIGNMENTS_FILENAME = "donor_assignments.tsv"
 # ---------------------------------------------------------------------------
 # Synthetic data builder
 # ---------------------------------------------------------------------------
+
 
 def _make_pseudobulk_adata(
     n_cells: int = _N_CELLS,
@@ -105,6 +107,7 @@ def _make_pseudobulk_adata(
 
 def _spearman_rho(a: np.ndarray, b: np.ndarray) -> float:
     from scipy.stats import spearmanr
+
     res = spearmanr(a, b)
     return float(res.correlation if hasattr(res, "correlation") else res[0])
 
@@ -114,7 +117,9 @@ def _rscript_available() -> bool:
     try:
         r_check = subprocess.run(
             ["Rscript", "-e", "library(DESeq2); cat('ok')"],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         return r_check.returncode == 0 and "ok" in r_check.stdout
     except Exception:
@@ -148,9 +153,7 @@ def test_pseudobulk_de_basic():
         seed=_SEED,
     )
 
-    assert ret is None, (
-        f"pseudobulk_de() inplace must return None, got {type(ret)}"
-    )
+    assert ret is None, f"pseudobulk_de() inplace must return None, got {type(ret)}"
 
 
 # ---------------------------------------------------------------------------
@@ -193,13 +196,13 @@ def test_pseudobulk_de_writes_uns():
 
     required_keys = ["lfc", "pvals", "qvals", "dispersion"]
     for k in required_keys:
-        assert k in pb, (
-            f"adata.uns['donor_pseudobulk'] missing required key '{k}'"
-        )
+        assert k in pb, f"adata.uns['donor_pseudobulk'] missing required key '{k}'"
 
     # pvals in [0, 1]
-    pvals = np.asarray(list(pb["pvals"].values()) if isinstance(pb["pvals"], dict)
-                       else pb["pvals"], dtype=np.float64).ravel()
+    pvals = np.asarray(
+        list(pb["pvals"].values()) if isinstance(pb["pvals"], dict) else pb["pvals"],
+        dtype=np.float64,
+    ).ravel()
     valid_p = pvals[np.isfinite(pvals)]
     if len(valid_p) > 0:
         assert np.all(valid_p >= 0.0), "pvals contains negative values"
@@ -208,8 +211,10 @@ def test_pseudobulk_de_writes_uns():
         )
 
     # qvals in [0, 1]
-    qvals = np.asarray(list(pb["qvals"].values()) if isinstance(pb["qvals"], dict)
-                       else pb["qvals"], dtype=np.float64).ravel()
+    qvals = np.asarray(
+        list(pb["qvals"].values()) if isinstance(pb["qvals"], dict) else pb["qvals"],
+        dtype=np.float64,
+    ).ravel()
     valid_q = qvals[np.isfinite(qvals)]
     if len(valid_q) > 0:
         assert np.all(valid_q >= 0.0), "qvals contains negative values"
@@ -304,8 +309,8 @@ def test_pseudobulk_de_vs_DESeq2(gsm4037629_path):
       6. Run Rscript DESeq2 pseudobulk DE on those temp files.
       7. Compare LFC vectors: Spearman ρ ≥ 0.97.
     """
-    import tempfile
     import os
+    import tempfile
 
     pytest.importorskip("anndata", reason="anndata not installed")
 
@@ -371,6 +376,7 @@ def test_pseudobulk_de_vs_DESeq2(gsm4037629_path):
 
     # Write pseudobulk count matrix for DESeq2.
     import scipy.sparse as sp
+
     X_host = adata.X
     if hasattr(X_host, "get"):
         X_host = X_host.get()
@@ -392,8 +398,7 @@ def test_pseudobulk_de_vs_DESeq2(gsm4037629_path):
         ).to_csv(counts_csv)
 
         pd.DataFrame(
-            {"donor_id": adata.obs["donor_id"].values,
-             "cell_type": adata.obs["cell_type"].values},
+            {"donor_id": adata.obs["donor_id"].values, "cell_type": adata.obs["cell_type"].values},
             index=list(adata.obs_names),
         ).to_csv(meta_csv)
 
@@ -449,7 +454,9 @@ def test_pseudobulk_de_vs_DESeq2(gsm4037629_path):
         try:
             proc = subprocess.run(
                 ["Rscript", r_file],
-                capture_output=True, text=True, timeout=120,
+                capture_output=True,
+                text=True,
+                timeout=120,
             )
         except subprocess.TimeoutExpired:
             pytest.skip("DESeq2 Rscript timed out (>120s)")

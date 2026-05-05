@@ -14,7 +14,7 @@ When AnnData is provided, results are written into ``adata_spatial.obsm``.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Optional, Union
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
@@ -92,25 +92,26 @@ def run_flash_deconv(
     # ---- Build device matrices -----------------------------------------------
     try:
         import cupy as cp
+
         try:
             import cupyx.scipy.sparse as csp  # cupy >= 14
         except ImportError:
-            import cupy.sparse as csp         # cupy < 14 fallback
+            import cupy.sparse as csp  # cupy < 14 fallback
 
         def _to_device_csc(X):
             if hasattr(X, "get"):
                 return X.tocsc()
             import scipy.sparse as sp
+
             if sp.issparse(X):
                 return csp.csc_matrix(X)
             return csp.csc_matrix(cp.array(X))
 
-        sc = _to_device_csc(working.X.T)        # genes × spots
-        rc = _to_device_csc(adata_reference.X.T) # genes × cells
+        sc = _to_device_csc(working.X.T)  # genes × spots
+        rc = _to_device_csc(adata_reference.X.T)  # genes × cells
     except ImportError as e:
         raise ImportError(
-            "singlet.gpu.spatial.run_flash_deconv requires cupy.  "
-            f"Original error: {e}"
+            f"singlet.gpu.spatial.run_flash_deconv requires cupy.  Original error: {e}"
         )
 
     # ---- Cell-type labels → int32 device array --------------------------------
@@ -131,7 +132,11 @@ def run_flash_deconv(
         d_coords = cp.asarray(working.obsm["spatial"].astype(np.float32))
 
     result = _core.flash_deconv(
-        sc, rc, d_labels, n_types, d_coords,
+        sc,
+        rc,
+        d_labels,
+        n_types,
+        d_coords,
         sketch_size=sketch_size,
         max_admm_iter=max_admm_iter,
         admm_tol=admm_tol,
@@ -145,9 +150,9 @@ def run_flash_deconv(
 
     # Write results to obsm.
     abundance_view = result.abundance_view
-    uncert_view    = result.uncertainty_view
-    working.obsm[obsm_key]              = cp.asarray(abundance_view).get()
-    working.obsm[obsm_key + "_stddev"]  = cp.asarray(uncert_view).get()
+    uncert_view = result.uncertainty_view
+    working.obsm[obsm_key] = cp.asarray(abundance_view).get()
+    working.obsm[obsm_key + "_stddev"] = cp.asarray(uncert_view).get()
     working.uns["flash_deconv_params"] = {
         "sketch_size": sketch_size,
         "n_bootstrap": n_bootstrap,

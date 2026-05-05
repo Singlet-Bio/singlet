@@ -38,7 +38,7 @@ class Cell2FateModel:
     """
 
     def __init__(self, result, gene_names: list):
-        self.result     = result
+        self.result = result
         self.gene_names = gene_names
 
     # ------------------------------------------------------------------ #
@@ -56,12 +56,13 @@ class Cell2FateModel:
         """
         try:
             import cupy as cp
+
             return {
-                "alpha":     cp.asarray(self.result.alpha_view).get(),
-                "beta":      cp.asarray(self.result.beta_view).get(),
-                "gamma":     cp.asarray(self.result.gamma_view).get(),
+                "alpha": cp.asarray(self.result.alpha_view).get(),
+                "beta": cp.asarray(self.result.beta_view).get(),
+                "gamma": cp.asarray(self.result.gamma_view).get(),
                 "alpha_var": cp.asarray(self.result.alpha_var_view).get(),
-                "beta_var":  cp.asarray(self.result.beta_var_view).get(),
+                "beta_var": cp.asarray(self.result.beta_var_view).get(),
                 "gamma_var": cp.asarray(self.result.gamma_var_view).get(),
             }
         except ImportError:
@@ -70,6 +71,7 @@ class Cell2FateModel:
     def module_loadings(self) -> np.ndarray:
         """Return [K × n_genes] module loading matrix (host numpy)."""
         import cupy as cp
+
         K = self.result.K_used
         n_genes = len(self.gene_names)
         return cp.asarray(self.result.module_loadings_view).reshape(K, n_genes).get()
@@ -77,17 +79,21 @@ class Cell2FateModel:
     def cell_activities(self, adata: "anndata.AnnData") -> np.ndarray:
         """Return [n_cells × K] cell activity matrix (host numpy)."""
         import cupy as cp
+
         K = self.result.K_used
         return cp.asarray(self.result.cell_activities_view).reshape(-1, K).get()
 
     def top_genes_per_module(self, n: int = 20) -> list:
         """Return list of length K, each a list of gene names for top-n genes."""
         import cupy as cp
-        K   = self.result.K_used
+
+        K = self.result.K_used
         idx = cp.asarray(self.result.module_topgenes_view).reshape(K, n).get()
         return [[self.gene_names[i] for i in row] for row in idx.astype(int)]
 
-    def to_anndata(self, adata: "anndata.AnnData", copy: bool = False) -> Optional["anndata.AnnData"]:
+    def to_anndata(
+        self, adata: "anndata.AnnData", copy: bool = False
+    ) -> Optional["anndata.AnnData"]:
         """
         Write Cell2fate results to an AnnData object.
 
@@ -99,9 +105,9 @@ class Cell2FateModel:
         """
         working = adata.copy() if copy else adata
         K = self.result.K_used
-        working.varm["cell2fate_module_loadings"] = self.module_loadings().T   # n_genes × K
-        working.obsm["cell2fate_activities"]      = self.cell_activities(adata)
-        working.uns["cell2fate_kinetics"]         = self.kinetic_rates()
+        working.varm["cell2fate_module_loadings"] = self.module_loadings().T  # n_genes × K
+        working.obsm["cell2fate_activities"] = self.cell_activities(adata)
+        working.uns["cell2fate_kinetics"] = self.kinetic_rates()
         working.uns["cell2fate_params"] = {
             "K_used": K,
             "n_iters_used": self.result.n_iters_used,
@@ -169,30 +175,29 @@ def fit(
 
     try:
         import cupy as cp
+
         try:
             import cupyx.scipy.sparse as csp  # cupy >= 14
         except ImportError:
-            import cupy.sparse as csp         # cupy < 14 fallback
+            import cupy.sparse as csp  # cupy < 14 fallback
         import scipy.sparse as sp
 
         def _layer_to_csc(layer_key):
             X = adata.layers[layer_key]
             if X.shape[0] == adata.n_obs:
-                X = X.T   # ensure genes × cells
+                X = X.T  # ensure genes × cells
             if sp.issparse(X):
                 return csp.csc_matrix(X)
             return csp.csc_matrix(cp.array(X))
 
-        d_spliced   = _layer_to_csc(spliced_layer)
+        d_spliced = _layer_to_csc(spliced_layer)
         d_unspliced = _layer_to_csc(unspliced_layer)
     except ImportError as e:
-        raise ImportError(
-            "singlet.gpu.spatial.cell2fate.fit requires cupy.  "
-            f"Original error: {e}"
-        )
+        raise ImportError(f"singlet.gpu.spatial.cell2fate.fit requires cupy.  Original error: {e}")
 
     result = _core.cell2fate_fit(
-        d_spliced, d_unspliced,
+        d_spliced,
+        d_unspliced,
         n_modules=n_modules,
         max_iter=max_iter,
         batch_size=batch_size,

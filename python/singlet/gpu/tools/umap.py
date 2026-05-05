@@ -36,6 +36,7 @@ if TYPE_CHECKING:
 # RNG helper
 # ---------------------------------------------------------------------------
 
+
 def _resolve_seed(rng: Optional[Union[int, "np.random.Generator"]]) -> int:
     """Convert scanpy-style ``rng`` to a uint64 seed for C++."""
     if rng is None:
@@ -48,6 +49,7 @@ def _resolve_seed(rng: Optional[Union[int, "np.random.Generator"]]) -> int:
 # ---------------------------------------------------------------------------
 # Internal: extract the neighbors representation
 # ---------------------------------------------------------------------------
+
 
 def _get_neighbors_data(
     adata: "anndata.AnnData",
@@ -87,6 +89,7 @@ def _get_neighbors_data(
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def umap(
     adata: "anndata.AnnData",
@@ -243,9 +246,9 @@ def umap(
     # init_pos: ndarray init is not supported by the binding; fall back to 'random'.
     if isinstance(init_pos, np.ndarray):
         import warnings
+
         warnings.warn(
-            "umap: init_pos ndarray is not supported by the GPU binding; "
-            "falling back to 'random'.",
+            "umap: init_pos ndarray is not supported by the GPU binding; falling back to 'random'.",
             UserWarning,
             stacklevel=2,
         )

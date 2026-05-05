@@ -12,17 +12,18 @@ Reference: Hu et al. (DAESC, Genome Biology 2023); DAESC+ (bioRxiv 2025).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 if TYPE_CHECKING:
-    import anndata
+    pass
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def run(
     snp_ad,
@@ -129,15 +130,11 @@ def run(
 
     if not hasattr(_core, "run_daesc"):
         raise ImportError(
-            "_core.run_daesc is not available.  "
-            "Install with: pip install singlet[gpu]"
+            "_core.run_daesc is not available.  Install with: pip install singlet[gpu]"
         )
 
     if (cell_type is not None) != (n_types > 0):
-        raise ValueError(
-            "cell_type and n_types must be provided together: "
-            "pass both or neither."
-        )
+        raise ValueError("cell_type and n_types must be provided together: pass both or neither.")
 
     # Coerce cell_type to int32 numpy array.
     if cell_type is not None:

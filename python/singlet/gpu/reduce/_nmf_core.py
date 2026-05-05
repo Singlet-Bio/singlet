@@ -67,11 +67,10 @@ bindings are added.
 from __future__ import annotations
 
 import copy as copy_module
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 if TYPE_CHECKING:
     import anndata
-    import numpy as np
 
 
 # ---------------------------------------------------------------------------
@@ -85,6 +84,7 @@ _VALID_INIT_MODES = (0, 1, 2)
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _get_matrix(adata: "anndata.AnnData", layer: Optional[str]):
     if layer is not None:
@@ -100,8 +100,7 @@ def _csr_to_device_csc(csr_mat):
 
     if not hasattr(_core, "from_cupy_csr"):
         raise AttributeError(
-            "_core.from_cupy_csr is not available.  "
-            "See CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE."
+            "_core.from_cupy_csr is not available.  See CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE."
         )
     csc_mat = csr_mat.T.tocsc()
     return _core.from_cupy_csr(csc_mat)
@@ -121,29 +120,33 @@ def _write_nmf_result(
     binding _bind_kernels.hpp + §J.13 _CaiView shim required for cupy 14).
     loss_history exists as a Python list attribute.
     """
-    import numpy as np
     import cupy as cp
+    import numpy as np
 
     class _CaiView:  # cupy 14 dtype-strict shim (§J.13 / CYCLE-189)
-        def __init__(self, d): self.__cuda_array_interface__ = d
+        def __init__(self, d):
+            self.__cuda_array_interface__ = d
 
     k = int(result.k_used)
     # PyNmfResult upload from factornet:
     #   d_W: shape (rows=genes × k_used) col-major
     #   d_H: shape (k_used × cols=cells) col-major
     W = cp.asarray(_CaiView(result.W_view)).reshape(k, -1).T.get()  # genes × k
-    H = cp.asarray(_CaiView(result.H_view)).reshape(-1, k)          # cells × k
+    H = cp.asarray(_CaiView(result.H_view)).reshape(-1, k)  # cells × k
 
-    adata.obsm[modality_key] = H.astype(np.float32, copy=False).get() \
-        if hasattr(H, "get") else H.astype(np.float32, copy=False)
+    adata.obsm[modality_key] = (
+        H.astype(np.float32, copy=False).get()
+        if hasattr(H, "get")
+        else H.astype(np.float32, copy=False)
+    )
     adata.varm["NMF_loadings"] = W.astype(np.float32, copy=False)
 
     # loss_history may not be exposed; skip gracefully.
     loss_hist = list(result.loss_history) if hasattr(result, "loss_history") else []
     adata.uns["nmf"] = {
-        "n_factors":     n_factors,
-        "loss_history":  loss_hist,
-        "final_loss":    float(loss_hist[-1]) if loss_hist else float("nan"),
+        "n_factors": n_factors,
+        "loss_history": loss_hist,
+        "final_loss": float(loss_hist[-1]) if loss_hist else float("nan"),
     }
 
 
@@ -159,19 +162,20 @@ def _build_nmf_config(
 ) -> dict:
     """Assemble the config dict passed to the C++ binding."""
     return {
-        "n_factors":   int(n_factors),
-        "loss":        str(loss),
+        "n_factors": int(n_factors),
+        "loss": str(loss),
         "solver_mode": int(solver_mode),
-        "init_mode":   int(init_mode),
-        "max_iter":    int(max_iter),
-        "tol":         float(tol),
-        "seed":        int(seed),
+        "init_mode": int(init_mode),
+        "max_iter": int(max_iter),
+        "tol": float(tol),
+        "seed": int(seed),
     }
 
 
 # ---------------------------------------------------------------------------
 # Public API — nmf
 # ---------------------------------------------------------------------------
+
 
 def nmf(
     adata: "anndata.AnnData",
@@ -256,7 +260,9 @@ def nmf(
     if loss not in _VALID_LOSSES:
         raise ValueError(f"loss='{loss}' not recognised.  Choose from: {_VALID_LOSSES}")
     if solver_mode not in _VALID_SOLVER_MODES:
-        raise ValueError(f"solver_mode={solver_mode} not recognised.  Choose from: {_VALID_SOLVER_MODES}")
+        raise ValueError(
+            f"solver_mode={solver_mode} not recognised.  Choose from: {_VALID_SOLVER_MODES}"
+        )
     if init_mode not in _VALID_INIT_MODES:
         raise ValueError(f"init_mode={init_mode} not recognised.  Choose from: {_VALID_INIT_MODES}")
 
@@ -264,8 +270,7 @@ def nmf(
 
     if not hasattr(_core, "nmf"):
         raise AttributeError(
-            "_core.nmf is not available.  "
-            "See CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE."
+            "_core.nmf is not available.  See CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE."
         )
 
     working_adata = adata if (inplace and not copy) else copy_module.copy(adata)
@@ -276,7 +281,8 @@ def nmf(
     #   nmf(mat, rank, *, loss='MSE', solver_mode=3, init_mode=2,
     #       max_iter=100, tol=1e-5, seed=0)
     result = _core.nmf(
-        device_csc, int(n_factors),
+        device_csc,
+        int(n_factors),
         loss=str(loss),
         solver_mode=int(solver_mode),
         init_mode=int(init_mode),
@@ -294,6 +300,7 @@ def nmf(
 # ---------------------------------------------------------------------------
 # Public API — nmf_chunked
 # ---------------------------------------------------------------------------
+
 
 class NmfResult:
     """
@@ -410,8 +417,7 @@ def nmf_chunked(
 
     if not hasattr(_core, "nmf_chunked"):
         raise AttributeError(
-            "_core.nmf_chunked is not available.  "
-            "See CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE."
+            "_core.nmf_chunked is not available.  See CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE."
         )
 
     # _core.nmf_chunked signature (py::kw_only after rank):
@@ -425,6 +431,7 @@ def nmf_chunked(
         raise ValueError("nmf_chunked: paths must be non-empty.")
     if len(paths_list) > 1:
         import warnings
+
         warnings.warn(
             "nmf_chunked: multiple paths provided but only the first is used "
             "(CYCLE-7-MULTI-INPUT-NMF — multi-file streaming requires "
@@ -437,6 +444,7 @@ def nmf_chunked(
     # (a) a directory containing a `gene_counts.1pz` (the standard sample
     #     output), or (b) a direct `*.1pz` file path. Resolve (a) → (b) here.
     import os
+
     p = str(paths_list[0])
     if os.path.isdir(p):
         candidate = os.path.join(p, "gene_counts.1pz")
@@ -444,14 +452,13 @@ def nmf_chunked(
             # Fallback: first .1pz file lexicographically.
             pz_files = sorted(f for f in os.listdir(p) if f.endswith(".1pz"))
             if not pz_files:
-                raise FileNotFoundError(
-                    f"nmf_chunked: no .1pz file found in directory {p!r}."
-                )
+                raise FileNotFoundError(f"nmf_chunked: no .1pz file found in directory {p!r}.")
             candidate = os.path.join(p, pz_files[0])
         p = candidate
     loader = _core.PzDataLoader(p, int(chunk_cols))
     raw = _core.nmf_chunked(
-        loader, int(n_factors),
+        loader,
+        int(n_factors),
         loss=str(loss),
         solver_mode=int(solver_mode),
         init_mode=int(init_mode),
@@ -479,7 +486,7 @@ def nmf_chunked(
     return NmfResult(
         W=W,
         H_list=[H],
-        loss_history=[],   # not exposed by binding; CYCLE-276-FOLLOWUP-NMF-LOSS-HISTORY
+        loss_history=[],  # not exposed by binding; CYCLE-276-FOLLOWUP-NMF-LOSS-HISTORY
         n_genes=int(W.shape[0]),
         n_factors=k_used,
     )
@@ -488,6 +495,7 @@ def nmf_chunked(
 # ---------------------------------------------------------------------------
 # Public API — nmf_graph_factorize
 # ---------------------------------------------------------------------------
+
 
 def nmf_graph_factorize(
     modalities: Dict[str, "anndata.AnnData"],
@@ -582,8 +590,7 @@ def nmf_graph_factorize(
     unique_n_cells = set(n_cells_per_modality.values())
     if len(unique_n_cells) > 1:
         raise ValueError(
-            f"All modalities must have the same number of cells.  "
-            f"Got: {n_cells_per_modality}"
+            f"All modalities must have the same number of cells.  Got: {n_cells_per_modality}"
         )
 
     import singlet.gpu._core as _core
@@ -596,12 +603,16 @@ def nmf_graph_factorize(
 
     # Convert each modality's AnnData to a DeviceCSC.
     modality_keys = list(modalities.keys())
-    device_cscs = {k: _csr_to_device_csc(_get_matrix(v, None))
-                   for k, v in modalities.items()}
+    device_cscs = {k: _csr_to_device_csc(_get_matrix(v, None)) for k, v in modalities.items()}
 
     config = _build_nmf_config(
-        n_factors=n_factors, loss=loss, solver_mode=solver_mode,
-        init_mode=init_mode, max_iter=max_iter, tol=tol, seed=seed,
+        n_factors=n_factors,
+        loss=loss,
+        solver_mode=solver_mode,
+        init_mode=init_mode,
+        max_iter=max_iter,
+        tol=tol,
+        seed=seed,
     )
     config["shared_h"] = bool(shared_h)
 

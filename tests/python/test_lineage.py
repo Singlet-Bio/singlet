@@ -27,10 +27,12 @@ Skip strategy:
   - requires_gpu for all GPU-exercising tests.
   - GSM4037629 real-data test skips if mt_alleles.1pz is absent.
 """
+
 from __future__ import annotations
 
-import numpy as np
 import pathlib
+
+import numpy as np
 import pytest
 
 singlet_gpu = pytest.importorskip(
@@ -45,7 +47,7 @@ from conftest import requires_gpu  # noqa: E402
 # Constants
 # ---------------------------------------------------------------------------
 _MIN_K = 2
-_MAX_K = 6       # reduced from spec for harness speed
+_MAX_K = 6  # reduced from spec for harness speed
 _SEED = 0
 _MIN_DEPTH = 10
 _MIN_CELLS_ALT = 5
@@ -56,6 +58,7 @@ _MT_ALLELES_FILENAME = "mt_alleles.1pz"
 # ---------------------------------------------------------------------------
 # Synthetic MT data builder
 # ---------------------------------------------------------------------------
+
 
 def _make_mt_adata(n_cells: int = 200, n_sites: int = 50, n_clones: int = 3):
     """Build a minimal AnnData with synthetic mt_alt and mt_depth layers.
@@ -120,9 +123,7 @@ def test_detect_clones_basic():
         seed=_SEED,
     )
 
-    assert ret is None, (
-        f"detect_clones() inplace must return None, got {type(ret)}"
-    )
+    assert ret is None, f"detect_clones() inplace must return None, got {type(ret)}"
 
 
 # ---------------------------------------------------------------------------
@@ -219,12 +220,8 @@ def test_detect_clones_writes_obsm_heteroplasmy():
     assert np.all(np.isfinite(het)), (
         f"mt_heteroplasmy contains non-finite values: {np.sum(~np.isfinite(het))}"
     )
-    assert np.all(het >= 0.0 - 1e-9), (
-        f"mt_heteroplasmy contains negative VAFs; min={het.min():.4e}"
-    )
-    assert np.all(het <= 1.0 + 1e-9), (
-        f"mt_heteroplasmy contains VAFs > 1.0; max={het.max():.4e}"
-    )
+    assert np.all(het >= 0.0 - 1e-9), f"mt_heteroplasmy contains negative VAFs; min={het.min():.4e}"
+    assert np.all(het <= 1.0 + 1e-9), f"mt_heteroplasmy contains VAFs > 1.0; max={het.max():.4e}"
 
 
 # ---------------------------------------------------------------------------
@@ -267,8 +264,7 @@ def test_detect_clones_GSM4037629_real_data(gsm4037629_path):
         X_host = X_host.get()
     if sp.issparse(X_host):
         X_host = X_host.tocsr()
-    alt_arr = np.asarray(X_host.todense() if sp.issparse(X_host) else X_host,
-                         dtype=np.float32)
+    alt_arr = np.asarray(X_host.todense() if sp.issparse(X_host) else X_host, dtype=np.float32)
 
     # Use X directly as alt layer; infer pseudo-depth as sum of all sites per cell.
     # (Real use case: singlet_gpu.io.read_mt_pileup handles this natively.)

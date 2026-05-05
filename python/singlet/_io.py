@@ -17,9 +17,8 @@ import struct
 from pathlib import Path
 from typing import Optional
 
-
 # .1pz magic bytes (little-endian)
-_TP1_MAGIC = b"\x54\x50\x31\x5A"  # 0x5A315054 = "TP1Z"
+_TP1_MAGIC = b"\x54\x50\x31\x5a"  # 0x5A315054 = "TP1Z"
 
 
 def _detect_format(path: str | Path) -> str:
@@ -74,9 +73,6 @@ def read_spz(path: str | Path, *, col_range: tuple[int, int] | None = None):
         Sparse count matrix (CSR) with gene names in var and
         cell barcodes in obs. (.spz stores genes×cells, we transpose.)
     """
-    import anndata as ad
-    import numpy as np
-    import scipy.sparse as sp
 
     version = _detect_format_version(path)
 
@@ -174,6 +170,7 @@ def spz_info(path: str | Path) -> dict:
     if version == 2:
         return _spz_info_legacy(path)
     from singlet._singlepress import sp_info
+
     return sp_info(str(path))
 
 
@@ -181,10 +178,12 @@ def spz_info(path: str | Path) -> dict:
 # Legacy sparsepress_v2 support
 # ============================================================================
 
+
 def _import_sparsepress():
     """Import the sparsepress package for legacy v2 format support."""
     try:
         import sparsepress
+
         return sparsepress
     except ImportError:
         pass
@@ -192,12 +191,14 @@ def _import_sparsepress():
     # Try relative to workspace root (development layout)
     import sys
     from pathlib import Path
+
     workspace = Path(__file__).resolve().parent.parent.parent
     sp_dir = workspace / "sparsepress"
     if sp_dir.is_dir() and str(workspace) not in sys.path:
         sys.path.insert(0, str(workspace))
         try:
             import sparsepress
+
             return sparsepress
         except ImportError:
             pass
@@ -231,9 +232,11 @@ def _result_to_anndata(result):
 
     if "rownames" in result and result["rownames"] is not None:
         import pandas as pd
+
         adata.var_names = pd.Index(result["rownames"])
     if "colnames" in result and result["colnames"] is not None:
         import pandas as pd
+
         adata.obs_names = pd.Index(result["colnames"])
 
     return adata
@@ -246,7 +249,6 @@ def _read_spz_legacy(path: str | Path, *, col_range=None):
     if col_range is not None:
         result = sp_mod.sp_read(str(path))
         # Apply column subsetting manually
-        import numpy as np
         import scipy.sparse as sp_lib
 
         shape = tuple(result["shape"])
@@ -254,7 +256,7 @@ def _read_spz_legacy(path: str | Path, *, col_range=None):
             (result["data"], result["indices"], result["indptr"]),
             shape=shape,
         )
-        mat = mat[:, col_range[0]:col_range[1]]
+        mat = mat[:, col_range[0] : col_range[1]]
         result = {
             "data": mat.data,
             "indices": mat.indices,
@@ -281,6 +283,7 @@ def _spz_info_legacy(path: str | Path) -> dict:
 # .1pz format support (VOCSC + byte-split + zstd-3)
 # ============================================================================
 
+
 def read_1pz(path: str | Path):
     """Read a .1pz file into AnnData.
 
@@ -306,9 +309,11 @@ def read_1pz(path: str | Path):
 
     try:
         import singlepress
+
         mat = singlepress.read_1pz(str(path), num_threads=8)
     except (ImportError, AttributeError):
         from singlepress._pz_codec import pz_read
+
         result = pz_read(str(path), 8)
         m, n = result["m"], result["n"]
         mat = sp.csc_matrix(
@@ -322,9 +327,11 @@ def read_1pz(path: str | Path):
     # Attach metadata if present
     if hasattr(mat, "rownames") and mat.rownames:
         import pandas as pd
+
         adata.var_names = pd.Index(mat.rownames)
     if hasattr(mat, "colnames") and mat.colnames:
         import pandas as pd
+
         adata.obs_names = pd.Index(mat.colnames)
     if hasattr(mat, "colsums") and mat.colsums is not None:
         adata.obs["total_counts"] = mat.colsums.astype(np.float64)
@@ -332,6 +339,7 @@ def read_1pz(path: str | Path):
     # Merge embedded obs DataFrame
     if hasattr(mat, "obs") and mat.obs is not None:
         import pandas as pd
+
         obs_df = mat.obs
         obs_df.index = adata.obs_names
         for col in obs_df.columns:
@@ -340,6 +348,7 @@ def read_1pz(path: str | Path):
     # Merge embedded var DataFrame
     if hasattr(mat, "var") and mat.var is not None:
         import pandas as pd
+
         var_df = mat.var
         var_df.index = adata.var_names
         for col in var_df.columns:
@@ -386,7 +395,6 @@ def write_1pz(
     dict
         Compression statistics.
     """
-    import numpy as np
     import scipy.sparse as sp
     import singlepress
 
@@ -408,13 +416,15 @@ def write_1pz(
     # Extract string key-value pairs from uns
     uns_dict = None
     if include_uns and adata.uns:
-        uns_dict = {k: str(v) for k, v in adata.uns.items()
-                    if isinstance(v, (str, int, float, bool))}
+        uns_dict = {
+            k: str(v) for k, v in adata.uns.items() if isinstance(v, (str, int, float, bool))
+        }
         if not uns_dict:
             uns_dict = None
 
     return singlepress.write_1pz(
-        str(path), mat,
+        str(path),
+        mat,
         rownames=rownames,
         colnames=colnames,
         obs=obs_df,
@@ -427,6 +437,7 @@ def write_1pz(
 def info_1pz(path: str | Path) -> dict:
     """Read .1pz file header without decompressing."""
     import singlepress
+
     return singlepress.info_1pz(str(path))
 
 
@@ -467,7 +478,6 @@ def read_kraken2(
         If ``kraken2_features.parquet`` exists, taxon metadata is in var.
     """
     import anndata as ad
-    import numpy as np
     import pandas as pd
 
     gse_dir = Path(gse_dir)
@@ -477,10 +487,12 @@ def read_kraken2(
 
     try:
         import singlepress
+
         mat = singlepress.read_1pz(str(k2_path), num_threads=8)
     except (ImportError, AttributeError):
-        from singlepress._pz_codec import pz_read
         import scipy.sparse as sp
+        from singlepress._pz_codec import pz_read
+
         result = pz_read(str(k2_path), 8)
         mat = sp.csc_matrix(
             (result["values"], result["indices"], result["indptr"]),
@@ -507,4 +519,3 @@ def read_kraken2(
         adata.uns.update(mat.uns)
 
     return adata
-

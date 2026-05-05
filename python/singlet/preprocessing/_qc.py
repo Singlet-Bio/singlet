@@ -6,7 +6,6 @@ import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -119,13 +118,9 @@ def run_qc(
     if n_cells < min_cells:
         fail_reasons.append(f"Too few cells: {n_cells} < {min_cells}")
     if mapping_rate < min_mapping_rate:
-        fail_reasons.append(
-            f"Low mapping rate: {mapping_rate:.1%} < {min_mapping_rate:.0%}"
-        )
+        fail_reasons.append(f"Low mapping rate: {mapping_rate:.1%} < {min_mapping_rate:.0%}")
     if median_genes < min_genes_per_cell:
-        fail_reasons.append(
-            f"Low genes/cell: {median_genes} < {min_genes_per_cell}"
-        )
+        fail_reasons.append(f"Low genes/cell: {median_genes} < {min_genes_per_cell}")
 
     if not fail_reasons:
         qc_status = "pass"

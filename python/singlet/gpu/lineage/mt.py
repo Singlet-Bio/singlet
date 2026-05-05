@@ -43,6 +43,7 @@ if TYPE_CHECKING:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _get_mt_layers(
     adata: "anndata.AnnData",
     alt_layer: str,
@@ -78,6 +79,7 @@ def _get_mt_layers(
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def detect_clones(
     adata: "anndata.AnnData",
@@ -194,9 +196,7 @@ def detect_clones(
     if min_K < 2:
         raise ValueError(f"min_K must be ≥2, got {min_K!r}.")
     if min_K > max_K:
-        raise ValueError(
-            f"min_K ({min_K!r}) must be ≤ max_K ({max_K!r})."
-        )
+        raise ValueError(f"min_K ({min_K!r}) must be ≤ max_K ({max_K!r}).")
 
     import singlet.gpu._core as _core
 
@@ -217,10 +217,11 @@ def detect_clones(
     # cupy → _core.from_cupy_csr (zero-copy if already cupy; H2D otherwise).
     # We pass the matrices as-is shape-wise; the kernel handles orientation.
     import cupy as cp
+
     try:
         import cupyx.scipy.sparse as csp  # cupy >= 14
     except ImportError:
-        import cupy.sparse as csp         # cupy < 14 fallback
+        import cupy.sparse as csp  # cupy < 14 fallback
     import scipy.sparse as sp
 
     def _to_device_csc(mat):
@@ -236,7 +237,7 @@ def detect_clones(
             cu_csc = csp.csc_matrix(cp.asarray(mat, dtype=cp.float32))
         return _core.from_cupy_csr(cu_csc)
 
-    alt_mat   = _to_device_csc(alt_mat)
+    alt_mat = _to_device_csc(alt_mat)
     depth_mat = _to_device_csc(depth_mat)
 
     # C++ kernel: mt_lineage_call_clones(alt_mat, depth_mat,
@@ -271,15 +272,17 @@ def detect_clones(
     # per_cell_heteroplasmy_view (float32, n_cells × n_informative_sites).
     # All *_view fields are CAI dicts → wrap with _CaiView for cupy 14.
     class _CaiView:  # see CYCLE-193 / §J.13
-        def __init__(self, d): self.__cuda_array_interface__ = d
+        def __init__(self, d):
+            self.__cuda_array_interface__ = d
 
     n_clones = int(result.n_clones)
-    n_inf    = int(result.n_informative_sites)
-    n_cells  = int(working.n_obs)
+    n_inf = int(result.n_informative_sites)
+    n_cells = int(working.n_obs)
 
     labels = cp.asarray(_CaiView(result.labels_view)).get()  # int32 (n_cells,)
-    het    = cp.asarray(_CaiView(result.per_cell_heteroplasmy_view)).get() \
-                .reshape(n_cells, n_inf)  # float32 (n_cells × n_informative)
+    het = (
+        cp.asarray(_CaiView(result.per_cell_heteroplasmy_view)).get().reshape(n_cells, n_inf)
+    )  # float32 (n_cells × n_informative)
 
     working.obs["mt_clone_id"] = pd.array(
         np.asarray(labels, dtype=np.int32),
@@ -287,7 +290,7 @@ def detect_clones(
     )
     working.obsm["mt_heteroplasmy"] = np.asarray(het, dtype=np.float32)
     working.uns["mt_lineage_params"] = {
-        "optimal_K": n_clones,             # ClonePrediction.n_clones
+        "optimal_K": n_clones,  # ClonePrediction.n_clones
         "n_informative_sites": n_inf,
         "min_depth": min_depth,
         "min_cells_alt": min_cells_alt,

@@ -54,9 +54,9 @@ def query(
         - ``.obs``: cell_type, disease, tissue, species, accession, ...
         - ``.obsm["X_nmf"]``: NMF embeddings
     """
-    from singlet._auth import _headers, _API_BASE
-
     import requests
+
+    from singlet._auth import _API_BASE, _headers
 
     params = {}
     for field, val in [
@@ -84,6 +84,7 @@ def query(
     resp.raise_for_status()
 
     import tempfile
+
     from singlet._io import read_spz
 
     with tempfile.NamedTemporaryFile(suffix=".spz", delete=False) as f:
@@ -108,9 +109,9 @@ def search(text: str, max_results: int = 100_000):
     anndata.AnnData
         Matching cells with metadata and NMF embeddings.
     """
-    from singlet._auth import _headers, _API_BASE
-
     import requests
+
+    from singlet._auth import _API_BASE, _headers
 
     resp = requests.post(
         f"{_API_BASE}/search",
@@ -121,6 +122,7 @@ def search(text: str, max_results: int = 100_000):
     resp.raise_for_status()
 
     import tempfile
+
     from singlet._io import read_spz
 
     with tempfile.NamedTemporaryFile(suffix=".spz", delete=False) as f:

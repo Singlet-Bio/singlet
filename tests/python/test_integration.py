@@ -8,17 +8,16 @@ Tests cover:
 - Real .spz file loading via the public API
 """
 
-import os
 from pathlib import Path
 
 import numpy as np
 import pytest
 import scipy.sparse as sp
 
-
 # ============================================================================
 # Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def adata_int():
@@ -72,6 +71,7 @@ def adata_large():
 # SECTION: singlet._io (read_spz, write_spz, spz_info)
 # ============================================================================
 
+
 class TestSpzIO:
     """Test the main .spz I/O functions."""
 
@@ -90,9 +90,7 @@ class TestSpzIO:
         adata2 = read_spz(path)
 
         assert adata2.shape == adata_int.shape
-        np.testing.assert_array_equal(
-            adata_int.X.toarray(), adata2.X.toarray()
-        )
+        np.testing.assert_array_equal(adata_int.X.toarray(), adata2.X.toarray())
         assert list(adata2.var_names) == list(adata_int.var_names)
         assert list(adata2.obs_names) == list(adata_int.obs_names)
 
@@ -104,9 +102,7 @@ class TestSpzIO:
         adata2 = read_spz(path)
 
         assert adata2.shape == adata_float.shape
-        np.testing.assert_array_almost_equal(
-            adata_float.X.toarray(), adata2.X.toarray(), decimal=5
-        )
+        np.testing.assert_array_almost_equal(adata_float.X.toarray(), adata2.X.toarray(), decimal=5)
 
     def test_col_range_read(self, tmp_path, adata_int):
         from singlet._io import read_spz, write_spz
@@ -119,7 +115,7 @@ class TestSpzIO:
         assert adata_sub.shape[0] == 10  # 10 cells
 
     def test_spz_info(self, tmp_path, adata_int):
-        from singlet._io import write_spz, spz_info
+        from singlet._io import spz_info, write_spz
 
         path = tmp_path / "info.spz"
         write_spz(adata_int, path)
@@ -139,9 +135,7 @@ class TestSpzIO:
         adata2 = read_spz(path)
 
         assert adata2.shape == adata_large.shape
-        np.testing.assert_array_equal(
-            adata_large.X.toarray(), adata2.X.toarray()
-        )
+        np.testing.assert_array_equal(adata_large.X.toarray(), adata2.X.toarray())
 
     def test_dense_input(self, tmp_path):
         """write_spz should accept dense X."""
@@ -171,18 +165,17 @@ class TestSpzIO:
         adata2 = read_spz(path)
 
         assert adata2.shape == adata_int.shape
-        np.testing.assert_array_equal(
-            adata_int.X.toarray(), adata2.X.toarray()
-        )
+        np.testing.assert_array_equal(adata_int.X.toarray(), adata2.X.toarray())
 
 
 # ============================================================================
 # SECTION: Real .spz file integration
 # ============================================================================
 
+
 class TestLargeRoundTrip:
     """Test round-trip with realistic-sized matrices (synthetic data).
-    
+
     NOTE: Production .spz files use the old sparsepress_v2 format (128-byte header,
     rANS encoding) which is incompatible with the new singlepress format.
     These tests use synthetic data shaped like real scRNA-seq samples.
@@ -213,15 +206,13 @@ class TestLargeRoundTrip:
         write_spz(adata, path)
         adata2 = read_spz(path)
 
-        np.testing.assert_array_equal(
-            adata.X.toarray(), adata2.X.toarray()
-        )
+        np.testing.assert_array_equal(adata.X.toarray(), adata2.X.toarray())
 
     def test_large_spz_info(self, tmp_path):
         """Verify spz_info on a file we wrote."""
         import anndata as ad
         import pandas as pd
-        from singlet._io import write_spz, spz_info
+        from singlet._io import spz_info, write_spz
 
         rng = np.random.default_rng(42)
         dense = rng.poisson(lam=0.1, size=(300, 1000)).astype(np.float64)
@@ -268,18 +259,23 @@ class TestLargeRoundTrip:
 # SECTION: Legacy format support
 # ============================================================================
 
-LEGACY_SPZ = Path("/mnt/projects/debruinz_project/cellarium/pipeline/quant/GSE118120/GSM3318872/counts.spz")
+LEGACY_SPZ = Path(
+    "/mnt/projects/debruinz_project/cellarium/pipeline/quant/GSE118120/GSM3318872/counts.spz"
+)
 
 try:
     import sparsepress as _sp_legacy
+
     HAS_SPARSEPRESS = True
 except ImportError:
     import sys
+
     _ws = Path(__file__).resolve().parent.parent.parent
     if (_ws / "sparsepress").is_dir():
         sys.path.insert(0, str(_ws))
         try:
             import sparsepress as _sp_legacy
+
             HAS_SPARSEPRESS = True
         except ImportError:
             HAS_SPARSEPRESS = False
@@ -296,10 +292,12 @@ class TestLegacyFormat:
 
     def test_detect_legacy_format(self):
         from singlet._io import _detect_format_version
+
         assert _detect_format_version(LEGACY_SPZ) == 2
 
     def test_read_legacy_info(self):
         from singlet._io import spz_info
+
         info = spz_info(LEGACY_SPZ)
         assert info["rows"] == 326
         assert info["cols"] == 171540
@@ -308,6 +306,7 @@ class TestLegacyFormat:
 
     def test_read_legacy_file(self):
         from singlet._io import read_spz
+
         adata = read_spz(LEGACY_SPZ)
         assert adata.n_obs == 171540
         assert adata.n_vars == 326
@@ -316,7 +315,7 @@ class TestLegacyFormat:
 
     def test_legacy_rewrite_new_format(self, tmp_path):
         """Read legacy file, rewrite subset as new format, verify data."""
-        from singlet._io import read_spz, write_spz, _detect_format_version
+        from singlet._io import _detect_format_version, read_spz, write_spz
 
         # Read only first 1000 columns to avoid massive memory use
         adata = read_spz(LEGACY_SPZ, col_range=(0, 1000))
@@ -327,20 +326,19 @@ class TestLegacyFormat:
         assert _detect_format_version(new_path) == 1
         adata2 = read_spz(new_path)
 
-        np.testing.assert_array_equal(
-            adata.X.toarray(), adata2.X.toarray()
-        )
+        np.testing.assert_array_equal(adata.X.toarray(), adata2.X.toarray())
 
 
 # ============================================================================
 # SECTION: Format conversions
 # ============================================================================
 
+
 class TestConversions:
     """Test convert module."""
 
     def test_to_from_h5ad(self, tmp_path, adata_int):
-        from singlet.convert import to_h5ad, from_h5ad
+        from singlet.convert import from_h5ad, to_h5ad
 
         path = tmp_path / "test.h5ad"
         to_h5ad(adata_int, path)
@@ -348,9 +346,7 @@ class TestConversions:
 
         adata2 = from_h5ad(path)
         assert adata2.shape == adata_int.shape
-        np.testing.assert_array_almost_equal(
-            adata_int.X.toarray(), adata2.X.toarray(), decimal=5
-        )
+        np.testing.assert_array_almost_equal(adata_int.X.toarray(), adata2.X.toarray(), decimal=5)
 
     def test_to_csc(self, adata_int):
         from singlet.convert import to_csc
@@ -361,7 +357,7 @@ class TestConversions:
         assert csc.shape == adata_int.shape
 
     def test_to_from_mtx(self, tmp_path, adata_int):
-        from singlet.convert import to_mtx, from_mtx
+        from singlet.convert import from_mtx, to_mtx
 
         mtx_dir = tmp_path / "mtx"
         to_mtx(adata_int, mtx_dir)
@@ -382,7 +378,7 @@ class TestConversions:
 
     def test_spz_to_h5ad(self, tmp_path, adata_int, _skip_if_no_ext):
         from singlet._io import write_spz
-        from singlet.convert import spz_to_h5ad, from_h5ad
+        from singlet.convert import from_h5ad, spz_to_h5ad
 
         spz_path = tmp_path / "input.spz"
         h5ad_path = tmp_path / "output.h5ad"
@@ -394,8 +390,8 @@ class TestConversions:
         assert adata2.shape == adata_int.shape
 
     def test_h5ad_to_spz(self, tmp_path, adata_int, _skip_if_no_ext):
-        from singlet.convert import to_h5ad, h5ad_to_spz
         from singlet._io import read_spz
+        from singlet.convert import h5ad_to_spz, to_h5ad
 
         h5ad_path = tmp_path / "input.h5ad"
         spz_path = tmp_path / "output.spz"
@@ -413,6 +409,7 @@ class TestConversions:
 
 try:
     import torch as _torch
+
     HAS_TORCH = True
 except ImportError:
     HAS_TORCH = False
@@ -483,9 +480,7 @@ class TestTorchIntegration:
         batches = list(loader)
         assert len(batches) == 1
         result = batches[0].numpy()
-        np.testing.assert_array_almost_equal(
-            result, adata_int.X.toarray(), decimal=5
-        )
+        np.testing.assert_array_almost_equal(result, adata_int.X.toarray(), decimal=5)
 
     def test_gene_subsetting(self, adata_int):
         from singlet.torch import SpzDataset
@@ -502,11 +497,12 @@ class TestTorchIntegration:
 # SECTION: Preprocessing utilities
 # ============================================================================
 
+
 class TestPreprocessing:
     """Test preprocessing utilities."""
 
     def test_species_human(self):
-        from singlet.preprocessing import get_taxon_id, get_species_info
+        from singlet.preprocessing import get_species_info, get_taxon_id
 
         assert get_taxon_id("human") == 9606
         assert get_taxon_id("Homo sapiens") == 9606
@@ -564,9 +560,12 @@ class TestPreprocessing:
         from singlet.preprocessing import ProtocolDetection
 
         pd = ProtocolDetection(
-            protocol="10xv3", mode="droplet",
-            confidence="high", reason="test",
-            r1_len=28, r2_len=91,
+            protocol="10xv3",
+            mode="droplet",
+            confidence="high",
+            reason="test",
+            r1_len=28,
+            r2_len=91,
             chemistry="10xv3",
         )
         assert pd.protocol == "10xv3"
@@ -578,6 +577,7 @@ class TestCatalogNewFunctions:
 
     def test_summary_returns_string(self):
         import singlet
+
         result = singlet.summary()
         assert isinstance(result, str)
         assert "singlet atlas" in result
@@ -585,6 +585,7 @@ class TestCatalogNewFunctions:
 
     def test_top_series_returns_dataframe(self):
         import singlet
+
         result = singlet.top_series(n=5)
         assert hasattr(result, "columns")
         assert "gse_id" in result.columns
@@ -596,11 +597,13 @@ class TestCatalogNewFunctions:
 
     def test_top_series_min_samples(self):
         import singlet
+
         result = singlet.top_series(min_samples=5)
         assert all(result["n_samples"] >= 5)
 
     def test_samples_returns_dataframe(self):
         import singlet
+
         result = singlet.samples()
         assert hasattr(result, "columns")
         assert "gse_id" in result.columns

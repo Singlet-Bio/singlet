@@ -36,6 +36,7 @@ if TYPE_CHECKING:
 # RNG helper
 # ---------------------------------------------------------------------------
 
+
 def _resolve_seed(rng: Optional[Union[int, "np.random.Generator"]]) -> int:
     """Convert scanpy-style ``rng`` to a uint64 seed for C++."""
     if rng is None:
@@ -48,6 +49,7 @@ def _resolve_seed(rng: Optional[Union[int, "np.random.Generator"]]) -> int:
 # ---------------------------------------------------------------------------
 # Internal: extract embedding matrix
 # ---------------------------------------------------------------------------
+
 
 def _get_rep(
     adata: "anndata.AnnData",
@@ -97,6 +99,7 @@ def _get_rep(
     # Fallback: use adata.X directly.
     # Callers are responsible for ensuring this is sensible (e.g. after HVG).
     import warnings
+
     warnings.warn(
         "neighbors: 'X_pca' not found in adata.obsm and use_rep is None. "
         "Falling back to adata.X.  Consider running singlet.gpu.pp.pca() first.",
@@ -109,13 +112,14 @@ def _get_rep(
         try:
             import cupyx.scipy.sparse as csp  # cupy >= 14
         except ImportError:
-            import cupy.sparse as csp         # cupy < 14 fallback
+            import cupy.sparse as csp  # cupy < 14 fallback
         if isinstance(x, csp.csc_matrix) or isinstance(x, csp.csr_matrix):
             return x.toarray()
     except ImportError:
         pass
     try:
         import scipy.sparse as sp
+
         if sp.issparse(x):
             return x.toarray()
     except ImportError:
@@ -126,6 +130,7 @@ def _get_rep(
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def neighbors(
     adata: "anndata.AnnData",
@@ -278,9 +283,14 @@ def neighbors(
     else:
         # Translate scanpy-style metric names to binding-expected literals.
         _METRIC_MAP = {
-            "euclidean": "L2", "l2": "L2", "L2": "L2",
-            "cosine": "Cosine", "Cosine": "Cosine",
-            "inner": "Inner", "Inner": "Inner", "IP": "Inner",
+            "euclidean": "L2",
+            "l2": "L2",
+            "L2": "L2",
+            "cosine": "Cosine",
+            "Cosine": "Cosine",
+            "inner": "Inner",
+            "Inner": "Inner",
+            "IP": "Inner",
         }
         _metric_str = _METRIC_MAP.get(metric, "L2")
         # CYCLE-261: _core.knn_graph requires CAI-exposing embedding.
@@ -288,6 +298,7 @@ def neighbors(
         # upload to cupy before the call.
         if not hasattr(rep, "__cuda_array_interface__"):
             import cupy as cp
+
             rep = cp.asarray(rep, dtype=cp.float32)
         raw = _core.knn_graph(
             rep,
@@ -311,8 +322,8 @@ def neighbors(
     # attrs. Build scipy CSR matrices from views, with shape (n_cells × n_cells)
     # per scanpy obsp convention.
     import cupy as cp
-    import scipy.sparse as sp
     import numpy as np
+    import scipy.sparse as sp
 
     class _CaiView:
         def __init__(self, d):
@@ -321,8 +332,8 @@ def neighbors(
     n = int(raw.n)
     k = int(raw.k)
     row_offsets = cp.asarray(_CaiView(raw.row_offsets_view)).get().astype(np.int32)
-    nbr_idx     = cp.asarray(_CaiView(raw.neighbors_view)).get().astype(np.int32)
-    nbr_dist    = cp.asarray(_CaiView(raw.distances_view)).get().astype(np.float32)
+    nbr_idx = cp.asarray(_CaiView(raw.neighbors_view)).get().astype(np.int32)
+    nbr_dist = cp.asarray(_CaiView(raw.distances_view)).get().astype(np.float32)
 
     distances_csr = sp.csr_matrix(
         (nbr_dist, nbr_idx, row_offsets),

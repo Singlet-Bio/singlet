@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-
 # ─── Export from AnnData ─────────────────────────────────────────────────────
+
 
 def to_h5ad(adata, path: str | Path, *, compression: str = "gzip"):
     """Write AnnData to HDF5 (.h5ad) format.
@@ -94,6 +94,7 @@ def to_mtx(adata, directory: str | Path, *, layer: Optional[str] = None):
         Use this layer instead of X.
     """
     import gzip
+
     import scipy.io
     import scipy.sparse as sp
 
@@ -121,6 +122,7 @@ def to_mtx(adata, directory: str | Path, *, layer: Optional[str] = None):
 
 # ─── Import to AnnData ──────────────────────────────────────────────────────
 
+
 def from_h5ad(path: str | Path, *, backed: Optional[str] = None):
     """Read an .h5ad file into AnnData.
 
@@ -135,6 +137,7 @@ def from_h5ad(path: str | Path, *, backed: Optional[str] = None):
     anndata.AnnData
     """
     import anndata as ad
+
     return ad.read_h5ad(Path(path), backed=backed)
 
 
@@ -150,6 +153,7 @@ def from_zarr(path: str | Path):
     anndata.AnnData
     """
     import anndata as ad
+
     return ad.read_zarr(Path(path))
 
 
@@ -190,8 +194,8 @@ def from_mtx(directory: str | Path):
     anndata.AnnData
     """
     import anndata as ad
-    import scipy.io
     import pandas as pd
+    import scipy.io
 
     d = Path(directory)
 
@@ -226,9 +230,11 @@ def from_mtx(directory: str | Path):
 
 # ─── .1pz / .spz round-trip convenience ─────────────────────────────────────
 
+
 def pz_to_h5ad(pz_path: str | Path, h5ad_path: str | Path, **kwargs):
     """Convert a .1pz file to .h5ad."""
     from singlet._io import read_1pz
+
     adata = read_1pz(pz_path)
     to_h5ad(adata, h5ad_path, **kwargs)
 
@@ -236,6 +242,7 @@ def pz_to_h5ad(pz_path: str | Path, h5ad_path: str | Path, **kwargs):
 def h5ad_to_pz(h5ad_path: str | Path, pz_path: str | Path, **kwargs):
     """Convert a .h5ad file to .1pz."""
     from singlet._io import write_1pz
+
     adata = from_h5ad(h5ad_path)
     write_1pz(adata, pz_path, **kwargs)
 
@@ -243,6 +250,7 @@ def h5ad_to_pz(h5ad_path: str | Path, pz_path: str | Path, **kwargs):
 def spz_to_h5ad(spz_path: str | Path, h5ad_path: str | Path, **kwargs):
     """Convert a .spz file to .h5ad (legacy compat)."""
     from singlet._io import read_spz
+
     adata = read_spz(spz_path)
     to_h5ad(adata, h5ad_path, **kwargs)
 
@@ -250,5 +258,6 @@ def spz_to_h5ad(spz_path: str | Path, h5ad_path: str | Path, **kwargs):
 def h5ad_to_spz(h5ad_path: str | Path, spz_path: str | Path, **kwargs):
     """Convert a .h5ad file to .spz (legacy compat)."""
     from singlet._io import write_spz
+
     adata = from_h5ad(h5ad_path)
     write_spz(adata, spz_path, **kwargs)

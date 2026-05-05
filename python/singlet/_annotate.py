@@ -11,7 +11,6 @@ The annotation pipeline:
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Optional
 
@@ -27,6 +26,7 @@ def _models_dir() -> Path:
 def _download_model(organism: str, k: int) -> Path:
     """Download W matrix for an organism from R2 if not cached."""
     import requests
+
     from singlet._catalog import _R2_BASE
 
     safe_name = organism.lower().replace(" ", "_")
@@ -89,6 +89,7 @@ def gene_programs(organism: str, k: int = 100):
     >>> W.iloc[:5, :3]  # top 5 genes, first 3 programs
     """
     import pandas as pd
+
     from singlet._io import read_1pz
 
     model_path = _download_model(organism, k)
@@ -104,7 +105,7 @@ def gene_programs(organism: str, k: int = 100):
     program_names = list(adata.var_names) if len(adata.var_names) > 0 else None
 
     if program_names is None:
-        program_names = [f"P{i+1:03d}" for i in range(W.shape[1])]
+        program_names = [f"P{i + 1:03d}" for i in range(W.shape[1])]
     if gene_names is None:
         gene_names = [f"gene_{i}" for i in range(W.shape[0])]
 
@@ -152,7 +153,7 @@ def project(adata, *, organism: Optional[str] = None, k: int = 100):
         )
 
     W = W_df.loc[shared_genes].values  # (n_shared_genes, k)
-    X = adata[:, shared_genes].X       # (n_cells, n_shared_genes)
+    X = adata[:, shared_genes].X  # (n_cells, n_shared_genes)
     if sp.issparse(X):
         X = X.toarray()
 
@@ -217,21 +218,26 @@ def annotate(adata, *, organism: Optional[str] = None, k: int = 100):
     confidence = top_loading / row_sums
 
     # Map to cell type labels
-    program_ids = [f"P{i+1:03d}" for i in top_program_idx]
+    program_ids = [f"P{i + 1:03d}" for i in top_program_idx]
     cell_types = [labels.get(pid, "unknown") for pid in program_ids]
 
-    return pd.DataFrame({
-        "cell_type": cell_types,
-        "confidence": confidence,
-        "top_program": program_ids,
-        "top_program_loading": top_loading,
-    }, index=adata.obs_names)
+    return pd.DataFrame(
+        {
+            "cell_type": cell_types,
+            "confidence": confidence,
+            "top_program": program_ids,
+            "top_program_loading": top_loading,
+        },
+        index=adata.obs_names,
+    )
 
 
 def _load_program_labels(organism: str, k: int) -> dict:
     """Load the program → cell type label mapping from R2."""
     import json
+
     import requests
+
     from singlet._catalog import _R2_BASE
 
     safe_name = organism.lower().replace(" ", "_")

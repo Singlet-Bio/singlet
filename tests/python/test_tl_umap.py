@@ -24,6 +24,7 @@ Skip strategy:
   - Module-level skip if singlet.gpu not available.
   - requires_gpu marker for all GPU-exercising tests.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -40,15 +41,16 @@ from conftest import requires_gpu  # noqa: E402
 # ---------------------------------------------------------------------------
 # Tolerance constants
 # ---------------------------------------------------------------------------
-_TRUST_MIN = 0.85        # trustworthiness vs scanpy UMAP (spec tolerance)
+_TRUST_MIN = 0.85  # trustworthiness vs scanpy UMAP (spec tolerance)
 _SEED = 0xC0FFEE
 _N_NEIGHBORS = 15
 _N_COMPS = 50
-_TRUST_K = 15            # k for trustworthiness metric
+_TRUST_K = 15  # k for trustworthiness metric
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _load_gpu_adata(gsm4037629_path):
     return singlet_gpu.io.read_pz_to_anndata(str(gsm4037629_path))
@@ -101,6 +103,7 @@ def _trustworthiness(X_high, X_low, k=15):
     """
     try:
         from sklearn.manifold import trustworthiness as sk_trust
+
         return float(sk_trust(X_high, X_low, n_neighbors=k))
     except ImportError:
         pass
@@ -114,7 +117,7 @@ def _trustworthiness(X_high, X_low, k=15):
 
     # For each point i, rank neighbours by distance in high-dim space.
     rank_high = np.argsort(np.argsort(D_high, axis=1), axis=1)
-    nn_low = np.argsort(D_low, axis=1)[:, 1:k + 1]  # k NN in low-dim (exclude self)
+    nn_low = np.argsort(D_low, axis=1)[:, 1 : k + 1]  # k NN in low-dim (exclude self)
 
     t_sum = 0.0
     for i in range(n):
@@ -138,7 +141,8 @@ def _to_numpy(arr):
 # test_umap_basic
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
-    strict=True, raises=RuntimeError,
+    strict=True,
+    raises=RuntimeError,
     reason="INFRA-CUVS-CUGRAPH-INSTALL: umap_embed requires cuML; not installed on GPU nodes (state/blockers.md)",
 )
 @requires_gpu
@@ -158,19 +162,16 @@ def test_umap_basic(gsm4037629_path):
 
     ret = singlet_gpu.tools.umap(adata, init_pos="random", rng=_SEED)
 
-    assert ret is None, (
-        f"umap() inplace must return None (scanpy convention), got {type(ret)}"
-    )
-    assert "X_umap" in adata.obsm, (
-        "umap(): adata.obsm['X_umap'] not written"
-    )
+    assert ret is None, f"umap() inplace must return None (scanpy convention), got {type(ret)}"
+    assert "X_umap" in adata.obsm, "umap(): adata.obsm['X_umap'] not written"
 
 
 # ---------------------------------------------------------------------------
 # test_umap_writes_obsm
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
-    strict=True, raises=RuntimeError,
+    strict=True,
+    raises=RuntimeError,
     reason="INFRA-CUVS-CUGRAPH-INSTALL: umap_embed requires cuML; not installed on GPU nodes (state/blockers.md)",
 )
 @requires_gpu
@@ -193,9 +194,7 @@ def test_umap_writes_obsm(gsm4037629_path):
     X_umap = _to_numpy(adata.obsm["X_umap"])
 
     assert X_umap.ndim == 2, f"X_umap must be 2-D, got {X_umap.ndim}-D"
-    assert X_umap.shape == (adata.n_obs, 2), (
-        f"X_umap shape {X_umap.shape} != ({adata.n_obs}, 2)"
-    )
+    assert X_umap.shape == (adata.n_obs, 2), f"X_umap shape {X_umap.shape} != ({adata.n_obs}, 2)"
     assert np.all(np.isfinite(X_umap)), "X_umap contains NaN or Inf"
 
     # Each UMAP dimension must have non-zero variance.
@@ -210,7 +209,8 @@ def test_umap_writes_obsm(gsm4037629_path):
 # test_umap_n_components
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
-    strict=True, raises=RuntimeError,
+    strict=True,
+    raises=RuntimeError,
     reason="INFRA-CUVS-CUGRAPH-INSTALL: umap_embed requires cuML; not installed on GPU nodes (state/blockers.md)",
 )
 @requires_gpu
@@ -230,19 +230,17 @@ def test_umap_n_components(gsm4037629_path):
 
         X_umap = _to_numpy(adata.obsm["X_umap"])
         assert X_umap.shape == (adata.n_obs, n_comp), (
-            f"n_components={n_comp}: X_umap shape {X_umap.shape} != "
-            f"({adata.n_obs}, {n_comp})"
+            f"n_components={n_comp}: X_umap shape {X_umap.shape} != ({adata.n_obs}, {n_comp})"
         )
-        assert np.all(np.isfinite(X_umap)), (
-            f"n_components={n_comp}: X_umap contains NaN or Inf"
-        )
+        assert np.all(np.isfinite(X_umap)), f"n_components={n_comp}: X_umap contains NaN or Inf"
 
 
 # ---------------------------------------------------------------------------
 # test_umap_vs_scanpy_trustworthiness
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
-    strict=True, raises=RuntimeError,
+    strict=True,
+    raises=RuntimeError,
     reason="INFRA-CUVS-CUGRAPH-INSTALL: umap_embed requires cuML; not installed on GPU nodes (state/blockers.md)",
 )
 @requires_gpu

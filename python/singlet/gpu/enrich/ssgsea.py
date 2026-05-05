@@ -19,8 +19,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
-import numpy as np
-
 if TYPE_CHECKING:
     import anndata
     import pandas as pd
@@ -47,7 +45,7 @@ def _build_genesets_csr(
         raise ValueError(
             f"No gene-sets with ≥{min_n} genes found after intersection with expression matrix."
         )
-    names   = list(sets.keys())
+    names = list(sets.keys())
     offsets = [0]
     indices = []
     for name in names:
@@ -114,21 +112,19 @@ def run_ssgsea(
 
     try:
         import cupy as cp
+
         try:
             import cupyx.scipy.sparse as csp  # cupy >= 14
         except ImportError:
-            import cupy.sparse as csp         # cupy < 14 fallback
+            import cupy.sparse as csp  # cupy < 14 fallback
         import scipy.sparse as sp
 
         X = working.X
         if X.shape[0] == working.n_obs:
-            X = X.T   # genes × cells
+            X = X.T  # genes × cells
         device_mat = csp.csc_matrix(X) if sp.issparse(X) else csp.csc_matrix(cp.array(X))
     except ImportError as e:
-        raise ImportError(
-            "singlet.gpu.enrich.run_ssgsea requires cupy.  "
-            f"Original error: {e}"
-        )
+        raise ImportError(f"singlet.gpu.enrich.run_ssgsea requires cupy.  Original error: {e}")
 
     result = _core.ssgsea(
         device_mat,
@@ -144,12 +140,13 @@ def run_ssgsea(
     )
 
     # scores is [n_sets × n_cells] col-major → transpose to [n_cells × n_sets]
-    n_sets  = result.n_sets
+    n_sets = result.n_sets
     n_cells = result.n_cells
     scores_device = cp.asarray(result.scores_view).reshape(n_sets, n_cells)
-    scores_host   = scores_device.T.get()    # n_cells × n_sets
+    scores_host = scores_device.T.get()  # n_cells × n_sets
 
     import pandas as pd
+
     df = pd.DataFrame(scores_host, index=working.obs_names, columns=names)
     working.obsm[obsm_key] = scores_host
     working.uns["ssgsea_gene_set_names"] = names

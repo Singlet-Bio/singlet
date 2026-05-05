@@ -47,7 +47,7 @@ from typing import Any
 try:
     from mcp.server import Server
     from mcp.server.stdio import stdio_server
-    from mcp.types import Tool, TextContent
+    from mcp.types import TextContent, Tool
 except ImportError:
     sys.exit(
         "MCP SDK not installed. Run: pip install mcp\n"
@@ -55,16 +55,14 @@ except ImportError:
     )
 
 try:
-    from supabase import create_client, Client
+    from supabase import Client, create_client
 except ImportError:
     sys.exit("Supabase client not installed. Run: pip install supabase")
 
 
 # ─── Configuration ───────────────────────────────────────────────────────────
 
-SUPABASE_URL = os.environ.get(
-    "SUPABASE_URL", "https://vbswbitfyallghbgxkuw.supabase.co"
-)
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://vbswbitfyallghbgxkuw.supabase.co")
 SUPABASE_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
 
 if not SUPABASE_KEY:
@@ -73,8 +71,7 @@ if not SUPABASE_KEY:
 
 if not SUPABASE_KEY:
     print(
-        "Warning: No SUPABASE_ANON_KEY or SUPABASE_SERVICE_KEY set. "
-        "Tools will fail at runtime.",
+        "Warning: No SUPABASE_ANON_KEY or SUPABASE_SERVICE_KEY set. Tools will fail at runtime.",
         file=sys.stderr,
     )
 
@@ -311,6 +308,8 @@ async def list_tools() -> list[Tool]:
             },
         ),
     ]
+
+
 async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     """Route tool calls to implementations."""
     try:
@@ -408,7 +407,7 @@ async def _tool_search(args: dict) -> dict:
 
     # Extract tissue/cell_type for display
     samples = []
-    for s in (resp.data or []):
+    for s in resp.data or []:
         chars = s.pop("characteristics", None) or {}
         s["tissue"] = chars.get("tissue", "")
         s["cell_type"] = chars.get("cell type", "")
@@ -467,9 +466,14 @@ async def _tool_load(args: dict) -> dict:
     gsm_id = args["gsm_id"]
     client = get_client()
 
-    resp = client.table("samples").select(
-        "gsm_id, gse_id, organism, protocol, status, pz_path, pz_size_bytes, cells_called, title, characteristics"
-    ).eq("gsm_id", gsm_id).execute()
+    resp = (
+        client.table("samples")
+        .select(
+            "gsm_id, gse_id, organism, protocol, status, pz_path, pz_size_bytes, cells_called, title, characteristics"
+        )
+        .eq("gsm_id", gsm_id)
+        .execute()
+    )
 
     if not resp.data:
         return {"error": f"Sample {gsm_id} not found in atlas"}
@@ -521,9 +525,7 @@ async def _tool_browse(args: dict) -> dict:
         query = query.eq("status", args["status"])
     if args.get("tissue"):
         tissue = args["tissue"].replace("%", "").replace("(", "").replace(")", "")
-        query = query.or_(
-            f"source.ilike.%{tissue}%,characteristics->>tissue.ilike.%{tissue}%"
-        )
+        query = query.or_(f"source.ilike.%{tissue}%,characteristics->>tissue.ilike.%{tissue}%")
 
     query = query.order(sort_by, desc=True)
     query = query.range(page * page_size, (page + 1) * page_size - 1)
@@ -531,7 +533,7 @@ async def _tool_browse(args: dict) -> dict:
 
     # Extract tissue/cell_type from characteristics for display
     samples = []
-    for s in (resp.data or []):
+    for s in resp.data or []:
         chars = s.pop("characteristics", None) or {}
         s["tissue"] = chars.get("tissue", "")
         s["cell_type"] = chars.get("cell type", "")
@@ -559,12 +561,14 @@ async def _tool_protocols() -> dict:
     for protocol, group in df.groupby("protocol"):
         total = len(group)
         success = int((group["status"] == "SUCCESS").sum())
-        protocols.append({
-            "protocol": protocol,
-            "total_samples": total,
-            "success_samples": success,
-            "success_rate": round(success / total, 3) if total else 0,
-        })
+        protocols.append(
+            {
+                "protocol": protocol,
+                "total_samples": total,
+                "success_samples": success,
+                "success_rate": round(success / total, 3) if total else 0,
+            }
+        )
 
     protocols.sort(key=lambda x: x["total_samples"], reverse=True)
     return {
@@ -604,6 +608,7 @@ async def _tool_quality() -> dict:
 async def _tool_tissues(args: dict) -> dict:
     """Get tissue distribution across processed samples."""
     import singlet
+
     top_n = args.get("top_n", 25)
 
     # Use bundled parquet data (properly normalized 37 categories)
@@ -618,10 +623,10 @@ async def _tool_tissues(args: dict) -> dict:
         "samples_with_tissue": total_with_tissue,
         "coverage_pct": round(total_with_tissue / total_success * 100, 1) if total_success else 0,
         "unique_tissues": len(df),
-        "top_tissues": [{"tissue": t, "count": c} for t, c in zip(top_tissues["tissue"], top_tissues["count"])],
+        "top_tissues": [
+            {"tissue": t, "count": c} for t, c in zip(top_tissues["tissue"], top_tissues["count"])
+        ],
     }
-
-
 
 
 async def _tool_failures() -> dict:
@@ -655,6 +660,7 @@ async def _tool_cell_types(arguments: dict) -> dict:
 
     # Use bundled parquet for fast, consistent results
     import singlet
+
     ct_df = singlet.cell_types()
     total_success = len(singlet.samples(status="SUCCESS"))
     total_annotated = int(ct_df["count"].sum())
@@ -674,13 +680,16 @@ async def _tool_cell_types(arguments: dict) -> dict:
 async def _tool_species() -> dict:
     """Get species list with sample counts."""
     import singlet
+
     species_list = singlet.species()
     # Get sample counts per species
     samples_df = singlet.samples(status="SUCCESS")
     species_counts = []
     for sp in species_list:
         count = len(samples_df[samples_df["organism"].str.contains(sp, na=False)])
-        cells = int(samples_df[samples_df["organism"].str.contains(sp, na=False)]["cells_called"].sum())
+        cells = int(
+            samples_df[samples_df["organism"].str.contains(sp, na=False)]["cells_called"].sum()
+        )
         species_counts.append({"species": sp, "samples": count, "cells": cells})
     species_counts.sort(key=lambda x: x["samples"], reverse=True)
 
@@ -701,4 +710,5 @@ async def main():
 
 if __name__ == "__main__":
     import asyncio
+
     asyncio.run(main())

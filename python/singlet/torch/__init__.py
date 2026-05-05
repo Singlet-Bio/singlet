@@ -12,19 +12,26 @@ Functions:
     to_sparse_coo       Load .spz as COO tensor
     from_anndata        Convert AnnData to sparse tensor
 """
+
 try:
     import torch as _torch
 except ImportError:
-    raise ImportError(
-        "singlet.torch requires PyTorch. Install with: pip install singlet[torch]"
-    )
+    raise ImportError("singlet.torch requires PyTorch. Install with: pip install singlet[torch]")
 
 from singlet.torch._torch import (
-    to_sparse_csr, to_sparse_coo, from_anndata,
-    SpzDataset, OnePZDataset, DataLoader,
+    DataLoader,
+    OnePZDataset,
+    SpzDataset,
+    from_anndata,
+    to_sparse_coo,
+    to_sparse_csr,
 )
 
 __all__ = [
-    "to_sparse_csr", "to_sparse_coo", "from_anndata",
-    "SpzDataset", "OnePZDataset", "DataLoader",
+    "to_sparse_csr",
+    "to_sparse_coo",
+    "from_anndata",
+    "SpzDataset",
+    "OnePZDataset",
+    "DataLoader",
 ]

@@ -15,16 +15,16 @@ Typical workflow::
     metrics = qc("/tmp/quant")
 """
 
-from singlet.preprocessing._download import download_fastq, DownloadResult
-from singlet.preprocessing._detect import detect_protocol, ProtocolDetection
-from singlet.preprocessing._quantify import quantify, QuantResult
-from singlet.preprocessing._qc import run_qc, QCMetrics
+from singlet.preprocessing._detect import ProtocolDetection, detect_protocol
+from singlet.preprocessing._download import DownloadResult, download_fastq
+from singlet.preprocessing._export import export_to_1pz, export_to_spz
+from singlet.preprocessing._qc import QCMetrics, run_qc
+from singlet.preprocessing._quantify import QuantResult, quantify
 from singlet.preprocessing._species import (
-    list_supported_species,
     get_species_info,
     get_taxon_id,
+    list_supported_species,
 )
-from singlet.preprocessing._export import export_to_1pz, export_to_spz
 
 __all__ = [
     "download_fastq",

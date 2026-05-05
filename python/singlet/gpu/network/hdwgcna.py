@@ -35,8 +35,10 @@ if TYPE_CHECKING:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _require_core():
     import singlet.gpu._core as _core
+
     if not hasattr(_core, "network") or not hasattr(_core.network, "hdwgcna"):
         raise AttributeError(
             "_core.network.hdwgcna is not available.  "
@@ -48,6 +50,7 @@ def _require_core():
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def run_from_csc(
     mat,
@@ -162,10 +165,7 @@ def run_from_anndata(
 
     mat = working.layers[layer] if layer is not None else working.X
     if not isinstance(mat, singlet.gpu.DeviceCsc):
-        raise TypeError(
-            "Expression matrix must be a DeviceCsc.  "
-            "Call singlet.gpu.load_pz() first."
-        )
+        raise TypeError("Expression matrix must be a DeviceCsc.  Call singlet.gpu.load_pz() first.")
 
     result = run_from_csc(
         mat,
@@ -180,15 +180,15 @@ def run_from_anndata(
     )
 
     module_assignment = np.asarray(result.module_assignment, dtype=np.int32)
-    kme               = np.asarray(result.kme,               dtype=np.float32)
-    eigengenes        = np.asarray(result.eigengenes,         dtype=np.float32)
-    hub_genes_mat     = np.asarray(result.hub_genes,          dtype=np.int32)
+    kme = np.asarray(result.kme, dtype=np.float32)
+    eigengenes = np.asarray(result.eigengenes, dtype=np.float32)
+    hub_genes_mat = np.asarray(result.hub_genes, dtype=np.int32)
 
     # eigengenes: (n_modules × n_cells) → (n_cells × n_modules)
     eigengenes_T = eigengenes.reshape(result.n_modules, result.n_cells).T
 
     working.var["hdwgcna_module"] = module_assignment
-    working.var["hdwgcna_kme"]    = kme
+    working.var["hdwgcna_kme"] = kme
     working.obsm["X_hdwgcna_eigen"] = eigengenes_T
 
     # Build hub gene dict: {module_id (int): [gene_idx, ...]}

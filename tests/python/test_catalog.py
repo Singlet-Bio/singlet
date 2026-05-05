@@ -1,10 +1,12 @@
 """Tests for singlet catalog functions using bundled parquet data."""
-import pytest
+
 import pandas as pd
+import pytest
 
 
 def test_catalog_returns_dataframe():
     import singlet
+
     cat = singlet.catalog()
     assert isinstance(cat, pd.DataFrame)
     assert len(cat) > 100
@@ -15,6 +17,7 @@ def test_catalog_returns_dataframe():
 
 def test_catalog_search_filters():
     import singlet
+
     human = singlet.catalog("Homo sapiens")
     assert len(human) > 0
     assert all(human["organism"].str.contains("Homo sapiens", case=False, na=False))
@@ -22,6 +25,7 @@ def test_catalog_search_filters():
 
 def test_sample_index_returns_dataframe():
     import singlet
+
     idx = singlet.sample_index()
     assert isinstance(idx, pd.DataFrame)
     assert len(idx) > 2000
@@ -31,6 +35,7 @@ def test_sample_index_returns_dataframe():
 
 def test_sample_index_filter_by_gse():
     import singlet
+
     idx = singlet.sample_index(gse_id="GSE174399")
     assert len(idx) > 0
     assert all(idx["gse_id"] == "GSE174399")
@@ -38,6 +43,7 @@ def test_sample_index_filter_by_gse():
 
 def test_species_returns_list():
     import singlet
+
     sp = singlet.species()
     assert isinstance(sp, list)
     assert len(sp) >= 5
@@ -47,6 +53,7 @@ def test_species_returns_list():
 
 def test_summary_returns_string():
     import singlet
+
     s = singlet.summary()
     assert isinstance(s, str)
     assert "samples" in s
@@ -56,6 +63,7 @@ def test_summary_returns_string():
 
 def test_datasets_filter_organism():
     import singlet
+
     human = singlet.datasets(organism="Homo sapiens")
     assert len(human) > 50
     assert all(human["organism"].str.contains("Homo sapiens", case=False, na=False))
@@ -63,6 +71,7 @@ def test_datasets_filter_organism():
 
 def test_datasets_filter_min_cells():
     import singlet
+
     big = singlet.datasets(min_cells=10000)
     assert len(big) > 0
     cells_col = "total_cells" if "total_cells" in big.columns else "n_cells"
@@ -71,6 +80,7 @@ def test_datasets_filter_min_cells():
 
 def test_samples_filter_status():
     import singlet
+
     success = singlet.samples(status="SUCCESS")
     assert len(success) > 500
     assert all(success["status"] == "SUCCESS")
@@ -78,6 +88,7 @@ def test_samples_filter_status():
 
 def test_samples_filter_organism():
     import singlet
+
     mouse = singlet.samples(organism="Mus musculus")
     assert len(mouse) > 100
     assert all(mouse["organism"].str.contains("Mus musculus", case=False, na=False))
@@ -85,12 +96,14 @@ def test_samples_filter_organism():
 
 def test_samples_text_search():
     import singlet
+
     results = singlet.samples(search="lung")
     assert len(results) > 0
 
 
 def test_samples_quality_tier_gold():
     import singlet
+
     gold = singlet.samples(quality_tier="gold")
     assert len(gold) > 0
     assert all(gold["status"] == "SUCCESS")
@@ -99,6 +112,7 @@ def test_samples_quality_tier_gold():
 
 def test_top_series():
     import singlet
+
     top = singlet.top_series(n=5)
     assert len(top) == 5
     assert "total_cells" in top.columns
@@ -107,6 +121,7 @@ def test_top_series():
 
 def test_top_series_filter_organism():
     import singlet
+
     human_top = singlet.top_series(organism="Homo sapiens", n=3)
     assert len(human_top) <= 3
     assert all(human_top["organism"].str.contains("Homo sapiens", case=False, na=False))
@@ -114,6 +129,7 @@ def test_top_series_filter_organism():
 
 def test_info_existing_series():
     import singlet
+
     info = singlet.info("GSE174399")
     assert isinstance(info, dict)
     assert info["gse_id"] == "GSE174399"
@@ -124,6 +140,7 @@ def test_info_existing_series():
 def test_info_gsm_lookup():
     """info() should also accept GSM accessions."""
     import singlet
+
     df = singlet.samples(status="SUCCESS")
     gsm = df.iloc[0]["gsm_id"]
     info = singlet.info(gsm)
@@ -134,6 +151,7 @@ def test_info_gsm_lookup():
 
 def test_info_missing_raises():
     import singlet
+
     with pytest.raises(KeyError):
         singlet.info("GSE000000")
 
@@ -141,6 +159,7 @@ def test_info_missing_raises():
 def test_samples_quality_alias():
     """samples(quality='gold') should work as alias for quality_tier='gold'."""
     import singlet
+
     gold1 = singlet.samples(quality="gold")
     gold2 = singlet.samples(quality_tier="gold")
     assert len(gold1) == len(gold2)
@@ -149,6 +168,7 @@ def test_samples_quality_alias():
 
 def test_failure_categories():
     import singlet
+
     fc = singlet.failure_categories()
     assert len(fc) > 0
     assert "category" in fc.columns
@@ -160,6 +180,7 @@ def test_failure_categories():
 
 def test_tissues():
     import singlet
+
     t = singlet.tissues()
     assert len(t) > 10
     assert "tissue" in t.columns
@@ -169,6 +190,7 @@ def test_tissues():
 
 def test_cell_types():
     import singlet
+
     ct = singlet.cell_types()
     assert isinstance(ct, pd.DataFrame)
     assert len(ct) > 10
@@ -184,6 +206,7 @@ def test_cell_types():
 
 def test_samples_filter_cell_type():
     import singlet
+
     pbmc = singlet.samples(cell_type="PBMC")
     assert len(pbmc) > 50
     assert all(pbmc["cell_type"].str.contains("PBMC", na=False))
@@ -191,6 +214,7 @@ def test_samples_filter_cell_type():
 
 def test_quality_tiers():
     import singlet
+
     qt = singlet.quality_tiers()
     assert isinstance(qt, pd.DataFrame)
     assert len(qt) == 3
@@ -202,6 +226,7 @@ def test_quality_tiers():
 
 def test_protocols():
     import singlet
+
     p = singlet.protocols()
     assert isinstance(p, pd.DataFrame)
     assert len(p) > 10

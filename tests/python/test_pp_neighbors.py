@@ -22,6 +22,7 @@ Skip strategy:
   - Module-level skip if singlet.gpu not available.
   - requires_gpu marker for all GPU-exercising tests.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -38,13 +39,14 @@ from conftest import requires_gpu  # noqa: E402
 # ---------------------------------------------------------------------------
 # Tolerance constants
 # ---------------------------------------------------------------------------
-_JACCARD_MIN = 0.95    # connectivities graph edge-set Jaccard vs scanpy
-_N_NEIGHBORS = 15      # match scanpy default
-_N_COMPS = 50          # PCA components for embedding
+_JACCARD_MIN = 0.95  # connectivities graph edge-set Jaccard vs scanpy
+_N_NEIGHBORS = 15  # match scanpy default
+_N_COMPS = 50  # PCA components for embedding
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _load_gpu_adata(gsm4037629_path):
     return singlet_gpu.io.read_pz_to_anndata(str(gsm4037629_path))
@@ -134,18 +136,10 @@ def test_neighbors_basic(gsm4037629_path):
 
     ret = singlet_gpu.pp.neighbors(adata, n_neighbors=_N_NEIGHBORS)
 
-    assert ret is None, (
-        f"neighbors() inplace must return None (scanpy convention), got {type(ret)}"
-    )
-    assert "distances" in adata.obsp, (
-        "neighbors(): adata.obsp['distances'] not written"
-    )
-    assert "connectivities" in adata.obsp, (
-        "neighbors(): adata.obsp['connectivities'] not written"
-    )
-    assert "neighbors" in adata.uns, (
-        "neighbors(): adata.uns['neighbors'] not written"
-    )
+    assert ret is None, f"neighbors() inplace must return None (scanpy convention), got {type(ret)}"
+    assert "distances" in adata.obsp, "neighbors(): adata.obsp['distances'] not written"
+    assert "connectivities" in adata.obsp, "neighbors(): adata.obsp['connectivities'] not written"
+    assert "neighbors" in adata.uns, "neighbors(): adata.uns['neighbors'] not written"
 
 
 # ---------------------------------------------------------------------------
@@ -199,9 +193,7 @@ def test_neighbors_writes_obsp(gsm4037629_path):
     assert C.shape == (n_cells, n_cells), (
         f"obsp['connectivities'] shape {C.shape} != ({n_cells}, {n_cells})"
     )
-    assert np.all(C.data >= 0.0), (
-        f"obsp['connectivities'] contains negative values"
-    )
+    assert np.all(C.data >= 0.0), "obsp['connectivities'] contains negative values"
     assert np.all(C.data <= 1.0 + 1e-6), (
         f"obsp['connectivities'] contains values > 1.0; max={C.data.max():.4f}"
     )
@@ -210,8 +202,7 @@ def test_neighbors_writes_obsp(gsm4037629_path):
     params = adata.uns.get("neighbors", {}).get("params", {})
     if "n_neighbors" in params:
         assert int(params["n_neighbors"]) == _N_NEIGHBORS, (
-            f"uns['neighbors']['params']['n_neighbors'] = {params['n_neighbors']} "
-            f"!= {_N_NEIGHBORS}"
+            f"uns['neighbors']['params']['n_neighbors'] = {params['n_neighbors']} != {_N_NEIGHBORS}"
         )
 
 
@@ -219,11 +210,12 @@ def test_neighbors_writes_obsp(gsm4037629_path):
 # test_neighbors_vs_scanpy
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
-    strict=True, raises=AssertionError,
+    strict=True,
+    raises=AssertionError,
     reason="CYCLE-262-FOLLOWUP-CONNECTIVITIES-FUZZY-SIMPLICIAL: pp/neighbors.py "
-           "computes connectivities via per-row Gaussian (placeholder); scanpy uses "
-           "UMAP fuzzy_simplicial_set. Jaccard ~0.03 vs 0.95 threshold. Real "
-           "algorithmic divergence — landing fuzzy_simplicial_set is a separate cycle.",
+    "computes connectivities via per-row Gaussian (placeholder); scanpy uses "
+    "UMAP fuzzy_simplicial_set. Jaccard ~0.03 vs 0.95 threshold. Real "
+    "algorithmic divergence — landing fuzzy_simplicial_set is a separate cycle.",
 )
 @requires_gpu
 def test_neighbors_vs_scanpy(gsm4037629_path):

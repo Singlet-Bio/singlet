@@ -21,7 +21,7 @@ extension.  Both wrappers raise ``AttributeError`` with this tag if the
 bindings are missing.
 """
 
-from .gsea import run_gsea
 from .aucell import run_aucell
+from .gsea import run_gsea
 
 __all__ = ["run_gsea", "run_aucell"]

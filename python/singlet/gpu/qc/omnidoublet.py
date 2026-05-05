@@ -17,8 +17,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
-import numpy as np
-
 if TYPE_CHECKING:
     import anndata
 
@@ -91,10 +89,11 @@ def run_omni_doublet(
 
     try:
         import cupy as cp
+
         try:
             import cupyx.scipy.sparse as csp  # cupy >= 14
         except ImportError:
-            import cupy.sparse as csp         # cupy < 14 fallback
+            import cupy.sparse as csp  # cupy < 14 fallback
         import scipy.sparse as sp
 
         # RNA: genes × cells CSC.
@@ -117,13 +116,11 @@ def run_omni_doublet(
             X_adt = X_adt.T
         d_adt = csp.csc_matrix(X_adt) if sp.issparse(X_adt) else csp.csc_matrix(cp.array(X_adt))
     except ImportError as e:
-        raise ImportError(
-            "singlet.gpu.qc.run_omni_doublet requires cupy.  "
-            f"Original error: {e}"
-        )
+        raise ImportError(f"singlet.gpu.qc.run_omni_doublet requires cupy.  Original error: {e}")
 
     result = _core.omni_doublet(
-        d_rna, d_adt,
+        d_rna,
+        d_adt,
         n_sim_mult=n_sim_mult,
         n_pcs_rna=n_pcs_rna,
         n_pcs_adt=n_pcs_adt,
@@ -138,7 +135,7 @@ def run_omni_doublet(
     )
 
     working.obs[obs_score_key] = cp.asarray(result.doublet_score_view).get()
-    working.obs[obs_call_key]  = cp.asarray(result.doublet_call_view).get().astype(bool)
+    working.obs[obs_call_key] = cp.asarray(result.doublet_call_view).get().astype(bool)
     working.uns["omni_doublet_params"] = {
         "n_sim_mult": n_sim_mult,
         "threshold_used": float(result.threshold_used),

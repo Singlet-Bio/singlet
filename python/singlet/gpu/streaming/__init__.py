@@ -15,6 +15,6 @@ multiple inputs and does not map cleanly to a single AnnData, the
 result is a ``PipelineResult`` dataclass.
 """
 
-from singlet.gpu.streaming.pipeline import run_pipeline, PipelineResult
+from singlet.gpu.streaming.pipeline import PipelineResult, run_pipeline
 
 __all__ = ["run_pipeline", "PipelineResult"]

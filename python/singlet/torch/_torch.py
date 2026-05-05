@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional, Sequence, Union
+from typing import Optional, Sequence
 
 
 def to_sparse_csr(
@@ -33,6 +33,7 @@ def to_sparse_csr(
         Sparse CSR tensor, shape (n_cells, n_genes).
     """
     from singlet._singlepress import sp_to_torch_csr
+
     return sp_to_torch_csr(str(source), dtype=dtype, device=device)
 
 
@@ -59,6 +60,7 @@ def to_sparse_coo(
         Sparse COO tensor, shape (n_cells, n_genes).
     """
     from singlet._singlepress import sp_to_torch_coo
+
     return sp_to_torch_coo(str(source), dtype=dtype, device=device)
 
 
@@ -87,9 +89,9 @@ def from_anndata(
     torch.Tensor
         Sparse CSR tensor on the specified device.
     """
-    import torch
     import numpy as np
     import scipy.sparse as sp
+    import torch
 
     mat = adata.layers[layer] if layer else adata.X
     if not sp.issparse(mat):
@@ -141,13 +143,14 @@ class SpzDataset:
         device: str = "cpu",
         sparse: bool = False,
     ):
-        import torch
         import scipy.sparse as sp
+        import torch
 
         if hasattr(source, "X"):
             self._adata = source
         else:
             from singlet._loader import load
+
             self._adata = load(source)
 
         if genes is not None:
@@ -169,8 +172,8 @@ class SpzDataset:
         return self._mat.shape[0]
 
     def __getitem__(self, idx):
-        import torch
         import numpy as np
+        import torch
 
         row = self._mat[idx]
 
@@ -178,13 +181,9 @@ class SpzDataset:
             # Return as sparse COO tensor (single row)
             if hasattr(row, "tocoo"):
                 coo = row.tocoo()
-                indices = torch.tensor(
-                    np.stack([coo.row, coo.col]), dtype=torch.long
-                )
+                indices = torch.tensor(np.stack([coo.row, coo.col]), dtype=torch.long)
                 values = torch.tensor(coo.data, dtype=torch.float32)
-                return torch.sparse_coo_tensor(
-                    indices, values, row.shape
-                ).to(self._device)
+                return torch.sparse_coo_tensor(indices, values, row.shape).to(self._device)
 
         if hasattr(row, "toarray"):
             row = row.toarray().squeeze()
@@ -220,13 +219,14 @@ class OnePZDataset:
         device: str = "cpu",
         sparse: bool = False,
     ):
-        import torch
         import scipy.sparse as sp
+        import torch
 
         if hasattr(source, "X"):
             self._adata = source
         else:
             from singlet._loader import load
+
             self._adata = load(source)
 
         if genes is not None:
@@ -241,6 +241,7 @@ class OnePZDataset:
 
         if normalize:
             import numpy as np
+
             totals = np.array(mat.sum(axis=1)).ravel()
             totals[totals == 0] = 1
             mat = mat.multiply(1.0 / totals[:, None]).multiply(10000)
@@ -256,21 +257,17 @@ class OnePZDataset:
         return self._mat.shape[0]
 
     def __getitem__(self, idx):
-        import torch
         import numpy as np
+        import torch
 
         row = self._mat[idx]
 
         if self._sparse:
             if hasattr(row, "tocoo"):
                 coo = row.tocoo()
-                indices = torch.tensor(
-                    np.stack([coo.row, coo.col]), dtype=torch.long
-                )
+                indices = torch.tensor(np.stack([coo.row, coo.col]), dtype=torch.long)
                 values = torch.tensor(coo.data, dtype=torch.float32)
-                return torch.sparse_coo_tensor(
-                    indices, values, row.shape
-                ).to(self._device)
+                return torch.sparse_coo_tensor(indices, values, row.shape).to(self._device)
 
         if hasattr(row, "toarray"):
             row = row.toarray().squeeze()
@@ -312,19 +309,22 @@ class DataLoader:
         normalize: bool = False,
         sparse: bool = False,
     ):
-        from torch.utils.data import DataLoader as TorchDL, ConcatDataset
+        from torch.utils.data import ConcatDataset
+        from torch.utils.data import DataLoader as TorchDL
 
         if isinstance(source, (list, tuple)):
             datasets = [
-                OnePZDataset(s, genes=genes, normalize=normalize,
-                             device=device, sparse=sparse)
+                OnePZDataset(s, genes=genes, normalize=normalize, device=device, sparse=sparse)
                 for s in source
             ]
             dataset = ConcatDataset(datasets)
         else:
             dataset = OnePZDataset(
-                source, genes=genes, normalize=normalize,
-                device=device, sparse=sparse,
+                source,
+                genes=genes,
+                normalize=normalize,
+                device=device,
+                sparse=sparse,
             )
 
         self._loader = TorchDL(

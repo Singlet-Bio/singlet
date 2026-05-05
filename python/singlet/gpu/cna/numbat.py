@@ -16,25 +16,26 @@ Reference: Gao et al. (Numbat, Genome Biology 2024).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional, List, Dict
+from typing import TYPE_CHECKING, List
 
 import numpy as np
 
 if TYPE_CHECKING:
-    import anndata
+    pass
 
 
 # ---------------------------------------------------------------------------
 # HMM state constants (mirrors C++ HMM_LOSS / HMM_NEUTRAL / HMM_GAIN)
 # ---------------------------------------------------------------------------
-STATE_LOSS    = 0
+STATE_LOSS = 0
 STATE_NEUTRAL = 1
-STATE_GAIN    = 2
+STATE_GAIN = 2
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def detect(
     expr,
@@ -163,8 +164,7 @@ def detect(
 
     if not hasattr(_core, "detect_cna"):
         raise ImportError(
-            "_core.detect_cna is not available.  "
-            "Install with: pip install singlet[gpu]"
+            "_core.detect_cna is not available.  Install with: pip install singlet[gpu]"
         )
 
     full_window = 2 * smooth_half_win + 1
@@ -174,9 +174,7 @@ def detect(
             "which exceeds MAX_SMOOTH_WINDOW=15."
         )
     if not (0.0 < trans_prob < 0.5):
-        raise ValueError(
-            f"trans_prob={trans_prob} must be in (0, 0.5)."
-        )
+        raise ValueError(f"trans_prob={trans_prob} must be in (0, 0.5).")
 
     # Coerce ref to float32 c-contiguous numpy array if provided.
     if ref is not None:

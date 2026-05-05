@@ -109,11 +109,29 @@ endif()
 
 # ─── Install targets ─────────────────────────────────────────────────────────
 include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
 install(DIRECTORY include/singlet DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(TARGETS singlet_pz singlet_fq singlet_pileup
     EXPORT SingletTargets
 )
 install(EXPORT SingletTargets
     NAMESPACE Singlet::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Singlet
+)
+
+configure_package_config_file(
+    cmake/SingletConfig.cmake.in
+    "${CMAKE_CURRENT_BINARY_DIR}/SingletConfig.cmake"
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Singlet
+)
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/SingletConfigVersion.cmake"
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/SingletConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/SingletConfigVersion.cmake"
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Singlet
 )

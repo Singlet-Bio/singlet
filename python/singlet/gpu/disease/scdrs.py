@@ -35,8 +35,10 @@ if TYPE_CHECKING:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _require_core():
     import singlet.gpu._core as _core
+
     if not hasattr(_core, "disease") or not hasattr(_core.disease, "scdrs"):
         raise AttributeError(
             "_core.disease.scdrs is not available.  "
@@ -50,23 +52,25 @@ def _view_to_numpy_2d(view, n_cells, n_diseases):
     n = n_cells * n_diseases
     try:
         import cupy as cp
+
         arr = cp.ndarray(
-            shape=(n,), dtype=cp.float32,
-            memptr=cp.cuda.MemoryPointer(
-                cp.cuda.UnownedMemory(view["data"][0], n * 4, None), 0)
+            shape=(n,),
+            dtype=cp.float32,
+            memptr=cp.cuda.MemoryPointer(cp.cuda.UnownedMemory(view["data"][0], n * 4, None), 0),
         ).get()
         return arr.reshape(n_cells, n_diseases)
     except (ImportError, Exception):
         import ctypes
+
         buf = (ctypes.c_float * n)()
-        ctypes.memmove(ctypes.addressof(buf),
-                       ctypes.c_void_p(view["data"][0]), n * 4)
+        ctypes.memmove(ctypes.addressof(buf), ctypes.c_void_p(view["data"][0]), n * 4)
         return np.frombuffer(buf, dtype=np.float32).copy().reshape(n_cells, n_diseases)
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def run_from_csc(
     mat,
@@ -112,8 +116,8 @@ def run_from_csc(
     """
     dis = _require_core()
 
-    names       = list(gene_sets.keys())
-    gene_lists  = []
+    names = list(gene_sets.keys())
+    gene_lists = []
     weight_lists = []
 
     for name in names:
@@ -123,14 +127,14 @@ def run_from_csc(
             weight_lists.append(list(gs.values()))
         else:
             gene_lists.append(list(gs))
-            weight_lists.append([])   # empty → all 1.0
+            weight_lists.append([])  # empty → all 1.0
 
     return dis.scdrs(
         mat,
         names,
         gene_lists,
         weight_lists,
-        np.array([], dtype=np.int32),   # gene_name_index placeholder
+        np.array([], dtype=np.int32),  # gene_name_index placeholder
         n_controls=int(n_controls),
         n_bins=int(n_bins),
         disease_chunk=int(disease_chunk),
@@ -200,10 +204,7 @@ def run_from_anndata(
 
     mat = working.layers[layer] if layer is not None else working.X
     if not isinstance(mat, singlet.gpu.DeviceCsc):
-        raise TypeError(
-            "Expression matrix must be a DeviceCsc.  "
-            "Call singlet.gpu.load_pz() first."
-        )
+        raise TypeError("Expression matrix must be a DeviceCsc.  Call singlet.gpu.load_pz() first.")
 
     # Gene names for row mapping.
     if gene_symbol_key is not None and gene_symbol_key in working.var.columns:
@@ -212,7 +213,9 @@ def run_from_anndata(
         gene_names = list(working.var_names)
 
     result = run_from_csc(
-        mat, gene_sets, gene_names,
+        mat,
+        gene_sets,
+        gene_names,
         n_controls=n_controls,
         n_bins=n_bins,
         disease_chunk=disease_chunk,
@@ -224,10 +227,10 @@ def run_from_anndata(
     n_d = result.n_diseases
     disease_names = list(gene_sets.keys())
 
-    working.obsm["scdrs_raw_score"]  = _view_to_numpy_2d(result.raw_score_view,        n_c, n_d)
+    working.obsm["scdrs_raw_score"] = _view_to_numpy_2d(result.raw_score_view, n_c, n_d)
     working.obsm["scdrs_norm_score"] = _view_to_numpy_2d(result.normalized_score_view, n_c, n_d)
-    working.obsm["scdrs_p_value"]    = _view_to_numpy_2d(result.p_value_view,          n_c, n_d)
-    working.obsm["scdrs_fdr"]        = _view_to_numpy_2d(result.fdr_view,              n_c, n_d)
+    working.obsm["scdrs_p_value"] = _view_to_numpy_2d(result.p_value_view, n_c, n_d)
+    working.obsm["scdrs_fdr"] = _view_to_numpy_2d(result.fdr_view, n_c, n_d)
 
     working.uns["scdrs_disease_names"] = disease_names
     working.uns["scdrs_params"] = {

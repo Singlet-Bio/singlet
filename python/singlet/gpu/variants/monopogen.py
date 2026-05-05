@@ -20,9 +20,7 @@ Reference: Dou et al. (Monopogen, Nature Biotechnology 2023).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional, List, Dict
-
-import numpy as np
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 if TYPE_CHECKING:
     pass
@@ -31,6 +29,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def call(
     snp_ad,
@@ -147,8 +146,7 @@ def call(
 
     if not hasattr(_core, "call_variants"):
         raise ImportError(
-            "_core.call_variants is not available.  "
-            "Install with: pip install singlet[gpu]"
+            "_core.call_variants is not available.  Install with: pip install singlet[gpu]"
         )
 
     # Default ld_panels to empty list (no-LD mode).

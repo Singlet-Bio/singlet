@@ -34,7 +34,6 @@ def export_to_1pz(
     bool
         True if export succeeded.
     """
-    import numpy as np
     import scipy.io
     import scipy.sparse as sp
 
@@ -68,12 +67,16 @@ def export_to_1pz(
     mat_gc = mat.T.tocsc()
 
     import singlepress
+
     singlepress.write_1pz(str(out), mat_gc)
 
     sid = sample_id or out.stem
     logger.info(
         "Exported %s: %d genes × %d cells → %s",
-        sid, mat_gc.shape[0], mat_gc.shape[1], out,
+        sid,
+        mat_gc.shape[0],
+        mat_gc.shape[1],
+        out,
     )
     return True
 
@@ -139,7 +142,7 @@ def export_to_spz(
     # mat is cells × genes, so we need mat.T
     mat_gc = mat.T.tocsc()
 
-    from singlet._singlepress import sp_write_int, sp_write
+    from singlet._singlepress import sp_write, sp_write_int
 
     if np.issubdtype(mat_gc.dtype, np.integer):
         sp_write_int(
@@ -167,6 +170,9 @@ def export_to_spz(
     sid = sample_id or out.stem
     logger.info(
         "Exported %s: %d genes × %d cells → %s",
-        sid, mat_gc.shape[0], mat_gc.shape[1], out,
+        sid,
+        mat_gc.shape[0],
+        mat_gc.shape[1],
+        out,
     )
     return True

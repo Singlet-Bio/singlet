@@ -9,7 +9,7 @@ import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, List
+from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -76,23 +76,21 @@ def quantify(
 
     # Resolve index from organism
     if index_dir is None:
-        from singlet.preprocessing._species import get_taxon_id, get_species_info
+        from singlet.preprocessing._species import get_species_info, get_taxon_id
+
         try:
             txid = get_taxon_id(organism)
             info = get_species_info(txid)
             index_dir = info.get("index_path")
         except KeyError:
-            return QuantResult(
-                error=f"Unknown organism: {organism}", time_s=time.time() - t0
-            )
+            return QuantResult(error=f"Unknown organism: {organism}", time_s=time.time() - t0)
 
     if index_dir is None:
-        return QuantResult(
-            error=f"No index for organism: {organism}", time_s=time.time() - t0
-        )
+        return QuantResult(error=f"No index for organism: {organism}", time_s=time.time() - t0)
 
     # Map protocol to chemistry
     from singlet.preprocessing._detect import get_chemistry_string
+
     chemistry = get_chemistry_string(protocol)
     if chemistry is None:
         return QuantResult(
@@ -104,15 +102,23 @@ def quantify(
     r2_str = ",".join(str(p) for p in r2_paths)
 
     cmd = [
-        "simpleaf", "quant",
-        "--reads1", r1_str,
-        "--reads2", r2_str,
-        "-c", chemistry,
+        "simpleaf",
+        "quant",
+        "--reads1",
+        r1_str,
+        "--reads2",
+        r2_str,
+        "-c",
+        chemistry,
         "--use-piscem",
-        "-i", str(index_dir),
-        "-o", str(out),
-        "-t", str(threads),
-        "--resolution", resolution,
+        "-i",
+        str(index_dir),
+        "-o",
+        str(out),
+        "-t",
+        str(threads),
+        "--resolution",
+        resolution,
     ]
     if use_knee:
         cmd.append("--knee")

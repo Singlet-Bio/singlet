@@ -15,8 +15,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, List, Optional
 
-import numpy as np
-
 if TYPE_CHECKING:
     import anndata
 
@@ -84,21 +82,19 @@ def run_csi_gep(
 
     try:
         import cupy as cp
+
         try:
             import cupyx.scipy.sparse as csp  # cupy >= 14
         except ImportError:
-            import cupy.sparse as csp         # cupy < 14 fallback
+            import cupy.sparse as csp  # cupy < 14 fallback
         import scipy.sparse as sp
 
         X = working.X
         if X.shape[0] == working.n_obs:
-            X = X.T   # genes × cells
+            X = X.T  # genes × cells
         device_mat = csp.csc_matrix(X) if sp.issparse(X) else csp.csc_matrix(cp.array(X))
     except ImportError as e:
-        raise ImportError(
-            "singlet.gpu.reduce.nmf.run_csi_gep requires cupy.  "
-            f"Original error: {e}"
-        )
+        raise ImportError(f"singlet.gpu.reduce.nmf.run_csi_gep requires cupy.  Original error: {e}")
 
     result = _core.csi_gep(
         device_mat,
@@ -116,14 +112,14 @@ def run_csi_gep(
     )
 
     chosen_k = result.chosen_k
-    n_genes  = result.n_genes
-    n_cells  = result.n_cells
+    n_genes = result.n_genes
+    n_cells = result.n_cells
 
     programs = cp.asarray(result.consensus_programs_view).reshape(chosen_k, n_genes).get()
-    usage    = cp.asarray(result.program_usage_view).reshape(n_cells, chosen_k).get()
+    usage = cp.asarray(result.program_usage_view).reshape(n_cells, chosen_k).get()
 
-    working.varm[varm_key] = programs.T          # n_genes × chosen_k
-    working.obsm[obsm_key] = usage               # n_cells × chosen_k
+    working.varm[varm_key] = programs.T  # n_genes × chosen_k
+    working.obsm[obsm_key] = usage  # n_cells × chosen_k
     working.uns["csi_gep_params"] = {
         "chosen_k": chosen_k,
         "k_range": k_range,

@@ -23,6 +23,7 @@ Skip strategy:
   - Module-level skip if singlet.gpu not available.
   - requires_gpu marker for all GPU-exercising tests.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -39,14 +40,15 @@ from conftest import requires_gpu  # noqa: E402
 # ---------------------------------------------------------------------------
 # Tolerance constants
 # ---------------------------------------------------------------------------
-_ARI_MIN = 0.85          # ARI vs scanpy Leiden (spec tolerance)
-_SEED = 0xC0FFEE         # fixed seed for reproducibility
+_ARI_MIN = 0.85  # ARI vs scanpy Leiden (spec tolerance)
+_SEED = 0xC0FFEE  # fixed seed for reproducibility
 _N_NEIGHBORS = 15
 _N_COMPS = 50
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _load_gpu_adata(gsm4037629_path):
     return singlet_gpu.io.read_pz_to_anndata(str(gsm4037629_path))
@@ -93,9 +95,7 @@ def _full_pipeline_cpu(adata_cpu):
 
 def _adjusted_rand_index(labels_a, labels_b):
     """Compute ARI between two label arrays using sklearn."""
-    sklearn_metrics = pytest.importorskip(
-        "sklearn.metrics", reason="sklearn not installed"
-    )
+    sklearn_metrics = pytest.importorskip("sklearn.metrics", reason="sklearn not installed")
     a = np.asarray(labels_a, dtype=str)
     b = np.asarray(labels_b, dtype=str)
     return float(sklearn_metrics.adjusted_rand_score(a, b))
@@ -105,7 +105,8 @@ def _adjusted_rand_index(labels_a, labels_b):
 # test_leiden_basic
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
-    strict=True, raises=RuntimeError,
+    strict=True,
+    raises=RuntimeError,
     reason="INFRA-CUVS-CUGRAPH-INSTALL: leiden requires cuGraph; not installed on GPU nodes (state/blockers.md)",
 )
 @requires_gpu
@@ -125,12 +126,8 @@ def test_leiden_basic(gsm4037629_path):
 
     ret = singlet_gpu.tools.leiden(adata, rng=_SEED)
 
-    assert ret is None, (
-        f"leiden() inplace must return None (scanpy convention), got {type(ret)}"
-    )
-    assert "leiden" in adata.obs.columns, (
-        "leiden(): adata.obs['leiden'] column not written"
-    )
+    assert ret is None, f"leiden() inplace must return None (scanpy convention), got {type(ret)}"
+    assert "leiden" in adata.obs.columns, "leiden(): adata.obs['leiden'] column not written"
     assert len(adata.obs["leiden"]) == adata.n_obs, (
         f"adata.obs['leiden'] length {len(adata.obs['leiden'])} != n_obs {adata.n_obs}"
     )
@@ -140,7 +137,8 @@ def test_leiden_basic(gsm4037629_path):
 # test_leiden_resolution_param
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
-    strict=True, raises=RuntimeError,
+    strict=True,
+    raises=RuntimeError,
     reason="INFRA-CUVS-CUGRAPH-INSTALL: leiden requires cuGraph; not installed on GPU nodes (state/blockers.md)",
 )
 @requires_gpu
@@ -168,8 +166,8 @@ def test_leiden_resolution_param(gsm4037629_path):
     n_low = int(adata_low.obs["leiden_low"].nunique())
     n_high = int(adata_high.obs["leiden_high"].nunique())
 
-    assert n_low >= 1, f"resolution=0.3 produced 0 clusters"
-    assert n_high >= 1, f"resolution=1.5 produced 0 clusters"
+    assert n_low >= 1, "resolution=0.3 produced 0 clusters"
+    assert n_high >= 1, "resolution=1.5 produced 0 clusters"
     assert n_high > n_low, (
         f"Higher resolution must produce more clusters: "
         f"low(res=0.3)={n_low}, high(res=1.5)={n_high}"
@@ -180,7 +178,8 @@ def test_leiden_resolution_param(gsm4037629_path):
 # test_leiden_writes_obs
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
-    strict=True, raises=RuntimeError,
+    strict=True,
+    raises=RuntimeError,
     reason="INFRA-CUVS-CUGRAPH-INSTALL: leiden requires cuGraph; not installed on GPU nodes (state/blockers.md)",
 )
 @requires_gpu
@@ -207,14 +206,10 @@ def test_leiden_writes_obs(gsm4037629_path):
     assert len(labels) == adata.n_obs, (
         f"obs['my_leiden'] length {len(labels)} != n_obs {adata.n_obs}"
     )
-    assert labels.isna().sum() == 0, (
-        f"obs['my_leiden'] contains {labels.isna().sum()} NaN values"
-    )
+    assert labels.isna().sum() == 0, f"obs['my_leiden'] contains {labels.isna().sum()} NaN values"
 
     n_clusters = int(labels.nunique())
-    assert n_clusters >= 2, (
-        f"leiden produced only {n_clusters} cluster(s) — expected ≥ 2"
-    )
+    assert n_clusters >= 2, f"leiden produced only {n_clusters} cluster(s) — expected ≥ 2"
     assert n_clusters <= adata.n_obs // 2, (
         f"leiden produced {n_clusters} clusters for {adata.n_obs} cells — seems too fragmented"
     )
@@ -224,7 +219,8 @@ def test_leiden_writes_obs(gsm4037629_path):
 # test_leiden_vs_scanpy
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
-    strict=True, raises=RuntimeError,
+    strict=True,
+    raises=RuntimeError,
     reason="INFRA-CUVS-CUGRAPH-INSTALL: leiden requires cuGraph; not installed on GPU nodes (state/blockers.md)",
 )
 @requires_gpu

@@ -2,16 +2,31 @@
 
 Provides read/write for .1pz (native), .spz (legacy), h5ad, zarr, and 10x formats.
 """
+
 from singlet._io import (
-    read_1pz, write_1pz, info_1pz,
-    read_spz, write_spz, spz_info,
-    read_matrix, read_kraken2,
+    info_1pz,
+    read_1pz,
+    read_kraken2,
+    read_matrix,
+    read_spz,
+    spz_info,
+    write_1pz,
+    write_spz,
 )
-from singlet.io.convert import to_h5ad, to_zarr, to_csc, from_h5ad, from_zarr
+from singlet.io.convert import from_h5ad, from_zarr, to_csc, to_h5ad, to_zarr
 
 __all__ = [
-    "read_1pz", "write_1pz", "info_1pz",
-    "read_spz", "write_spz", "spz_info",
-    "read_matrix", "read_kraken2",
-    "to_h5ad", "to_zarr", "to_csc", "from_h5ad", "from_zarr",
+    "read_1pz",
+    "write_1pz",
+    "info_1pz",
+    "read_spz",
+    "write_spz",
+    "spz_info",
+    "read_matrix",
+    "read_kraken2",
+    "to_h5ad",
+    "to_zarr",
+    "to_csc",
+    "from_h5ad",
+    "from_zarr",
 ]

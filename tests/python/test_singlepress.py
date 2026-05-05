@@ -4,7 +4,6 @@ import numpy as np
 import pytest
 import scipy.sparse as sp
 
-
 pytestmark = pytest.mark.skipif(
     not pytest.importorskip("singlet._singlepress", reason="_singlepress not built"),
     reason="_singlepress extension not built",
@@ -23,7 +22,8 @@ def tmp_spz(tmp_path):
         mat.indptr.astype(np.int32),
         mat.indices.astype(np.int32),
         mat.data.astype(np.int32),
-        mat.shape[0], str(path),
+        mat.shape[0],
+        str(path),
     )
     return path
 
@@ -32,7 +32,7 @@ class TestRoundTrip:
     """Test compress → decompress preserves data."""
 
     def test_int_roundtrip(self, tmp_path):
-        from singlet._singlepress import sp_write_int, sp_read
+        from singlet._singlepress import sp_read, sp_write_int
 
         rng = np.random.default_rng(42)
         dense = rng.poisson(lam=0.3, size=(100, 50)).astype(np.int32)
@@ -43,7 +43,8 @@ class TestRoundTrip:
             mat.indptr.astype(np.int32),
             mat.indices.astype(np.int32),
             mat.data.astype(np.int32),
-            mat.shape[0], path,
+            mat.shape[0],
+            path,
         )
 
         result = sp_read(path)
@@ -55,7 +56,7 @@ class TestRoundTrip:
         np.testing.assert_array_equal(mat.toarray(), out.toarray())
 
     def test_float_roundtrip(self, tmp_path):
-        from singlet._singlepress import sp_write, sp_read
+        from singlet._singlepress import sp_read, sp_write
 
         rng = np.random.default_rng(42)
         dense = rng.random((50, 30)) * (rng.random((50, 30)) < 0.1)
@@ -66,7 +67,8 @@ class TestRoundTrip:
             mat.indptr.astype(np.int32),
             mat.indices.astype(np.int32),
             mat.data.astype(np.float64),
-            mat.shape[0], path,
+            mat.shape[0],
+            path,
         )
 
         result = sp_read(path)
@@ -78,7 +80,7 @@ class TestRoundTrip:
         np.testing.assert_array_almost_equal(mat.toarray(), out.toarray(), decimal=5)
 
     def test_dimnames_preserved(self, tmp_path):
-        from singlet._singlepress import sp_write_int, sp_read
+        from singlet._singlepress import sp_read, sp_write_int
 
         rng = np.random.default_rng(42)
         mat = sp.csc_matrix(rng.poisson(1, size=(10, 5)).astype(np.int32))
@@ -90,8 +92,10 @@ class TestRoundTrip:
             mat.indptr.astype(np.int32),
             mat.indices.astype(np.int32),
             mat.data.astype(np.int32),
-            mat.shape[0], path,
-            rownames=genes, colnames=cells,
+            mat.shape[0],
+            path,
+            rownames=genes,
+            colnames=cells,
         )
 
         result = sp_read(path)

@@ -12,6 +12,7 @@ Submodules:
     singlet.gpu.velocity    RNA velocity
     singlet.gpu.integrate   Batch integration
 """
+
 try:
     import cupy as _cp
 except ImportError:
@@ -19,6 +20,6 @@ except ImportError:
         "singlet.gpu requires CuPy with CUDA 12+. Install with: pip install singlet[gpu]"
     )
 
-from singlet.gpu._core import load_pz, DeviceCsc, Metadata, device_count, set_device
+from singlet.gpu._core import DeviceCsc, Metadata, device_count, load_pz, set_device
 
 __all__ = ["load_pz", "DeviceCsc", "Metadata", "device_count", "set_device"]

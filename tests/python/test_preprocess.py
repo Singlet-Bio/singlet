@@ -21,9 +21,8 @@ Reference: scanpy CPU functions run in the same Python process on the same
 data, loaded via ``singlet.gpu.io.read_pz_to_anndata`` then converted to a
 host-side copy for scanpy (adata.X.get() if cupy sparse, else pass through).
 """
-from __future__ import annotations
 
-import copy
+from __future__ import annotations
 
 import numpy as np
 import pytest
@@ -33,10 +32,7 @@ import pytest
 # ---------------------------------------------------------------------------
 singlet_gpu = pytest.importorskip(
     "singlet.gpu",
-    reason=(
-        "singlet.gpu not available. "
-        "Run `pip install -e singlet-gpu/python/` first."
-    ),
+    reason=("singlet.gpu not available. Run `pip install -e singlet-gpu/python/` first."),
     exc_type=ImportError,
 )
 
@@ -45,7 +41,7 @@ from conftest import requires_gpu  # noqa: E402 — after importorskip
 # ---------------------------------------------------------------------------
 # Shared tolerance constants
 # ---------------------------------------------------------------------------
-_REL_ERR_TOL = 1e-5      # normalize_total and log1p
+_REL_ERR_TOL = 1e-5  # normalize_total and log1p
 _HVG_JACCARD_MIN = 0.95  # HVG seurat_v3 top-2000
 _N_TOP_HVG = 2000
 
@@ -133,9 +129,9 @@ def _rel_err(a: np.ndarray, b: np.ndarray) -> float:
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
     reason="Real correctness divergence: GPU normalize_total kernel emits "
-           "values with rel_err ~0.5 vs scanpy.pp.normalize_total.  Filed as "
-           "CYCLE-220-FOLLOWUP-NORMALIZE_TOTAL-CORRECTNESS for kernel "
-           "investigation (likely related to the size_factors length mystery).",
+    "values with rel_err ~0.5 vs scanpy.pp.normalize_total.  Filed as "
+    "CYCLE-220-FOLLOWUP-NORMALIZE_TOTAL-CORRECTNESS for kernel "
+    "investigation (likely related to the size_factors length mystery).",
     strict=True,
     raises=AssertionError,
 )
@@ -171,8 +167,7 @@ def test_normalize_total_vs_scanpy(gsm4037629_path):
 
     err = _rel_err(vals_gpu, vals_cpu)
     assert err <= _REL_ERR_TOL, (
-        f"normalize_total rel_err {err:.2e} exceeds tolerance {_REL_ERR_TOL:.0e} "
-        f"(scanpy reference)"
+        f"normalize_total rel_err {err:.2e} exceeds tolerance {_REL_ERR_TOL:.0e} (scanpy reference)"
     )
 
 
@@ -185,7 +180,6 @@ def test_normalize_total_inplace_vs_copy(gsm4037629_path):
     inplace=False / copy=True returns a new AnnData; original is unchanged.
     """
     pytest.importorskip("anndata", reason="anndata not installed")
-    import scipy.sparse as sp
 
     adata = _load_gpu_adata(gsm4037629_path)
 
@@ -198,9 +192,7 @@ def test_normalize_total_inplace_vs_copy(gsm4037629_path):
 
     # --- inplace=True path ---
     ret = singlet_gpu.preprocess.normalize_total(adata, inplace=True)
-    assert ret is None, (
-        f"normalize_total(inplace=True) must return None, got {type(ret)}"
-    )
+    assert ret is None, f"normalize_total(inplace=True) must return None, got {type(ret)}"
     # adata.X should have changed (normalized values are floats, no longer raw counts).
     X_after = adata.X
     if hasattr(X_after, "get"):
@@ -252,7 +244,6 @@ def test_normalize_total_layer_param(gsm4037629_path):
     adata = _load_gpu_adata(gsm4037629_path)
 
     # Store original X before normalization.
-    import copy as _copy
     X_orig = adata.X
 
     # Add a copy as a layer.
@@ -260,9 +251,7 @@ def test_normalize_total_layer_param(gsm4037629_path):
 
     ret = singlet_gpu.preprocess.normalize_total(adata, layer="raw", inplace=True)
     # inplace=True returns None.
-    assert ret is None, (
-        "normalize_total(layer='raw', inplace=True) must return None"
-    )
+    assert ret is None, "normalize_total(layer='raw', inplace=True) must return None"
 
     assert "raw" in adata.layers, "layers['raw'] must exist after normalization"
 
@@ -292,9 +281,9 @@ def test_normalize_total_layer_param(gsm4037629_path):
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
     reason="C++ py_log1p binding currently uses LogNormConfig with "
-           "target_count=1 — applies log1p(x/col_sum) instead of plain log1p(x).  "
-           "True log1p needs preprocess::log1p_inplace kernel (cycle-21 target).  "
-           "Real correctness divergence — rel_err ~0.99 vs scanpy.",
+    "target_count=1 — applies log1p(x/col_sum) instead of plain log1p(x).  "
+    "True log1p needs preprocess::log1p_inplace kernel (cycle-21 target).  "
+    "Real correctness divergence — rel_err ~0.99 vs scanpy.",
     strict=True,
     raises=AssertionError,
 )
@@ -338,8 +327,8 @@ def test_log1p_vs_scanpy(gsm4037629_path):
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
     reason="py_log1p ignores the `base` parameter (line 247 in _bind_kernels.hpp: "
-           "`(void)base;`).  base scaling deferred to cycle-21 "
-           "preprocess::log1p_inplace kernel.",
+    "`(void)base;`).  base scaling deferred to cycle-21 "
+    "preprocess::log1p_inplace kernel.",
     strict=True,
     raises=AssertionError,
 )
@@ -361,8 +350,8 @@ def test_log1p_base_param(gsm4037629_path):
     singlet_gpu.preprocess.normalize_total(adata_nat, inplace=True)
     singlet_gpu.preprocess.normalize_total(adata_b2, inplace=True)
 
-    singlet_gpu.preprocess.log1p(adata_nat, inplace=True)          # natural log
-    singlet_gpu.preprocess.log1p(adata_b2, base=2.0, inplace=True) # log2
+    singlet_gpu.preprocess.log1p(adata_nat, inplace=True)  # natural log
+    singlet_gpu.preprocess.log1p(adata_b2, base=2.0, inplace=True)  # log2
 
     vals_nat = _get_dense_values(adata_nat.X)
     vals_b2 = _get_dense_values(adata_b2.X)
@@ -409,9 +398,7 @@ def test_highly_variable_genes_vs_scanpy_seurat_v3(gsm4037629_path):
         "skmisc",
         reason="scikit-misc required by scanpy.pp.highly_variable_genes(flavor='seurat_v3')",
     )
-    sc.pp.highly_variable_genes(
-        adata_cpu, n_top_genes=_N_TOP_HVG, flavor="seurat_v3"
-    )
+    sc.pp.highly_variable_genes(adata_cpu, n_top_genes=_N_TOP_HVG, flavor="seurat_v3")
 
     assert "highly_variable" in adata_gpu.var.columns, (
         "adata_gpu.var must contain 'highly_variable' column after HVG selection"
@@ -461,9 +448,7 @@ def test_highly_variable_genes_pearson_residuals(gsm4037629_path):
         "pearson_residuals: 'highly_variable' column missing from adata.var"
     )
     n_marked = int(adata.var["highly_variable"].sum())
-    assert n_marked == n_top, (
-        f"pearson_residuals: expected {n_top} HVGs marked, got {n_marked}"
-    )
+    assert n_marked == n_top, f"pearson_residuals: expected {n_top} HVGs marked, got {n_marked}"
     assert "variances_norm" in adata.var.columns, (
         "pearson_residuals: 'variances_norm' column missing from adata.var"
     )
@@ -493,7 +478,7 @@ def test_highly_variable_genes_writes_to_var(gsm4037629_path):
 
     required_cols = {
         "highly_variable": np.dtype("bool"),
-        "means": None,       # float (exact dtype may vary fp32/fp64)
+        "means": None,  # float (exact dtype may vary fp32/fp64)
         "variances": None,
         "variances_norm": None,
     }
@@ -511,9 +496,7 @@ def test_highly_variable_genes_writes_to_var(gsm4037629_path):
 
     # Exactly n_top_genes must be True.
     n_hvg = int(adata.var["highly_variable"].sum())
-    assert n_hvg == _N_TOP_HVG, (
-        f"Expected {_N_TOP_HVG} HVGs marked True, got {n_hvg}"
-    )
+    assert n_hvg == _N_TOP_HVG, f"Expected {_N_TOP_HVG} HVGs marked True, got {n_hvg}"
 
 
 # ---------------------------------------------------------------------------
@@ -522,10 +505,10 @@ def test_highly_variable_genes_writes_to_var(gsm4037629_path):
 # Same root cause as test_normalize_total_vs_scanpy — see CYCLE-220-FOLLOWUP.
 @pytest.mark.xfail(
     reason="Inherits CYCLE-220-FOLLOWUP normalize_total correctness divergence "
-           "PLUS test monkeypatches scanpy with our wrapper, exposing a "
-           "scipy/cupy sparse type mismatch on second normalize_total call "
-           "(`indptr lacks __cuda_array_interface__`).  Filed CYCLE-237-"
-           "FOLLOWUP for the deepcopy-preserves-cupy-sparse audit.",
+    "PLUS test monkeypatches scanpy with our wrapper, exposing a "
+    "scipy/cupy sparse type mismatch on second normalize_total call "
+    "(`indptr lacks __cuda_array_interface__`).  Filed CYCLE-237-"
+    "FOLLOWUP for the deepcopy-preserves-cupy-sparse audit.",
     strict=True,
     raises=(AssertionError, TypeError),
 )
@@ -562,11 +545,9 @@ def test_drop_in_replacement_for_scanpy_pp_normalize_total(gsm4037629_path):
         sc.pp.normalize_total = singlet_gpu.preprocess.normalize_total
 
         # Run minimal scanpy pipeline using the patched function.
-        sc.pp.normalize_total(adata_cpu)      # ← our GPU wrapper
+        sc.pp.normalize_total(adata_cpu)  # ← our GPU wrapper
         sc.pp.log1p(adata_cpu)
-        sc.pp.highly_variable_genes(
-            adata_cpu, n_top_genes=2000, flavor="seurat_v3"
-        )
+        sc.pp.highly_variable_genes(adata_cpu, n_top_genes=2000, flavor="seurat_v3")
 
     finally:
         # Always restore the original, even if the test raises.
@@ -579,6 +560,5 @@ def test_drop_in_replacement_for_scanpy_pp_normalize_total(gsm4037629_path):
     )
     n_hvg = int(adata_cpu.var["highly_variable"].sum())
     assert n_hvg > 0, (
-        f"Mini scanpy pipeline produced 0 HVGs — something went wrong "
-        f"in the patched normalize_total"
+        "Mini scanpy pipeline produced 0 HVGs — something went wrong in the patched normalize_total"
     )

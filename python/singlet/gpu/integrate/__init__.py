@@ -14,7 +14,7 @@ extension.  Both wrappers raise ``AttributeError`` with this tag if the
 bindings are missing.
 """
 
-from .harmony import harmony_integrate
 from .bbknn import bbknn
+from .harmony import harmony_integrate
 
 __all__ = ["harmony_integrate", "bbknn"]

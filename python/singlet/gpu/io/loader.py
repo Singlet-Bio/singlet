@@ -33,10 +33,9 @@ write_anndata_to_pz(adata, pz_dir, *, modality="exon") -> None
 
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
     import anndata
@@ -46,14 +45,14 @@ if TYPE_CHECKING:
 # Mirrors the singlify output artifact table.
 # ---------------------------------------------------------------------------
 _MODALITY_TO_STEM: dict[str, str] = {
-    "exon":      "exon_counts",
-    "intron":    "intron_counts",
-    "gene":      "gene_counts",
-    "sj":        "splice_junctions",
-    "snp_ad":    "snp_ad",
-    "snp_dp":    "snp_dp",
-    "mt":        "mt_alleles",
-    "adt":       "adt",
+    "exon": "exon_counts",
+    "intron": "intron_counts",
+    "gene": "gene_counts",
+    "sj": "splice_junctions",
+    "snp_ad": "snp_ad",
+    "snp_dp": "snp_dp",
+    "mt": "mt_alleles",
+    "adt": "adt",
     "fragments": "fragments",
 }
 
@@ -95,8 +94,7 @@ def _resolve_pz_path(pz_dir: Union[str, Path], modality: str) -> str:
         stem = _MODALITY_TO_STEM.get(modality)
         if stem is None:
             raise ValueError(
-                f"Unknown modality '{modality}'. "
-                f"Recognised values: {sorted(_MODALITY_TO_STEM)}"
+                f"Unknown modality '{modality}'. Recognised values: {sorted(_MODALITY_TO_STEM)}"
             )
         candidate = p / f"{stem}.1pz"
         if not candidate.exists():
@@ -106,8 +104,7 @@ def _resolve_pz_path(pz_dir: Union[str, Path], modality: str) -> str:
                 candidate = p / subdir / f"{stem}.1pz"
         if not candidate.exists():
             raise FileNotFoundError(
-                f"Expected {stem}.1pz for modality='{modality}' "
-                f"but file not found in {p}"
+                f"Expected {stem}.1pz for modality='{modality}' but file not found in {p}"
             )
         return str(candidate)
     raise FileNotFoundError(f"Path does not exist: {pz_dir}")
@@ -135,14 +132,15 @@ def _build_anndata(device_csc, metadata) -> "anndata.AnnData":
     """
     try:
         import anndata as ad
-        import pandas as pd
         import cupy as cp
+        import pandas as pd
+
         # cupy >= 14 removed `cupy.sparse`; the new home is `cupyx.scipy.sparse`
         # which exposes the same csc_matrix / csr_matrix API.
         try:
             import cupyx.scipy.sparse as csp  # cupy >= 14
         except ImportError:
-            import cupy.sparse as csp         # cupy < 14 fallback
+            import cupy.sparse as csp  # cupy < 14 fallback
     except ImportError as exc:
         raise ImportError(
             "read_pz_to_anndata requires anndata, cupy, and pandas. "
@@ -158,16 +156,16 @@ def _build_anndata(device_csc, metadata) -> "anndata.AnnData":
     # the object must expose __cuda_array_interface__ as an *attribute*.
     # Wrap each dict in a minimal shim so both cupy 13 and 14 work.  Zero copy.
     class _CaiView:  # lightweight shim — not on the hot path
-        def __init__(self, d): self.__cuda_array_interface__ = d
-    cu_data    = cp.asarray(_CaiView(device_csc.data_view))
+        def __init__(self, d):
+            self.__cuda_array_interface__ = d
+
+    cu_data = cp.asarray(_CaiView(device_csc.data_view))
     cu_indices = cp.asarray(_CaiView(device_csc.indices_view))
-    cu_indptr  = cp.asarray(_CaiView(device_csc.indptr_view))
+    cu_indptr = cp.asarray(_CaiView(device_csc.indptr_view))
 
     # .1pz stores (genes × cells) CSC.  AnnData convention is (cells × genes)
     # with X in CSR layout.  .T on a csc_matrix returns a view — no data copy.
-    genes_x_cells_csc = csp.csc_matrix(
-        (cu_data, cu_indices, cu_indptr), shape=(rows, cols)
-    )
+    genes_x_cells_csc = csp.csc_matrix((cu_data, cu_indices, cu_indptr), shape=(rows, cols))
     cells_x_genes_csr = genes_x_cells_csc.T.tocsr()
 
     obs_names = list(metadata.colnames) if metadata.colnames else [str(i) for i in range(cols)]
@@ -288,8 +286,7 @@ def write_anndata_to_pz(
     stem = _MODALITY_TO_STEM.get(modality)
     if stem is None:
         raise ValueError(
-            f"Unknown modality '{modality}'. "
-            f"Recognised values: {sorted(_MODALITY_TO_STEM)}"
+            f"Unknown modality '{modality}'. Recognised values: {sorted(_MODALITY_TO_STEM)}"
         )
     out_path = Path(pz_dir) / f"{stem}.1pz"
     raise NotImplementedError(

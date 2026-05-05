@@ -99,8 +99,10 @@ def _infer_protocol(
     if catalog_hint:
         hint = catalog_hint.lower().strip()
         for proto, mode in [
-            ("10xv3", "droplet"), ("10xv2", "droplet"),
-            ("dropseq", "droplet"), ("smartseq", "smartseq"),
+            ("10xv3", "droplet"),
+            ("10xv2", "droplet"),
+            ("dropseq", "droplet"),
+            ("smartseq", "smartseq"),
         ]:
             if proto in hint:
                 return ProtocolDetection(
@@ -118,9 +120,12 @@ def _infer_protocol(
         # Classic 10x: short R1 (barcode+UMI), long R2 (cDNA)
         proto = "10xv3" if r1_len >= 28 else "10xv2"
         return ProtocolDetection(
-            protocol=proto, mode="droplet", confidence="high",
+            protocol=proto,
+            mode="droplet",
+            confidence="high",
             reason=f"R1={r1_len}bp (barcode), R2={r2_len}bp (cDNA)",
-            r1_len=r1_len, r2_len=r2_len,
+            r1_len=r1_len,
+            r2_len=r2_len,
             chemistry=CHEMISTRY_MAP.get(proto),
         )
 
@@ -128,23 +133,32 @@ def _infer_protocol(
         # Swapped orientation
         proto = "10xv3" if r2_len >= 28 else "10xv2"
         return ProtocolDetection(
-            protocol=proto, mode="droplet", confidence="medium",
+            protocol=proto,
+            mode="droplet",
+            confidence="medium",
             reason=f"Swapped: R1={r1_len}bp (cDNA), R2={r2_len}bp (barcode)",
-            r1_len=r1_len, r2_len=r2_len,
+            r1_len=r1_len,
+            r2_len=r2_len,
             chemistry=CHEMISTRY_MAP.get(proto),
         )
 
     if r1_len >= 50 and r2_len >= 50:
         return ProtocolDetection(
-            protocol="ambiguous", mode="unknown", confidence="low",
+            protocol="ambiguous",
+            mode="unknown",
+            confidence="low",
             reason=f"Both reads long: R1={r1_len}bp, R2={r2_len}bp",
-            r1_len=r1_len, r2_len=r2_len,
+            r1_len=r1_len,
+            r2_len=r2_len,
         )
 
     return ProtocolDetection(
-        protocol="unknown", mode="unknown", confidence="low",
+        protocol="unknown",
+        mode="unknown",
+        confidence="low",
         reason=f"Unrecognized: R1={r1_len}bp, R2={r2_len}bp",
-        r1_len=r1_len, r2_len=r2_len,
+        r1_len=r1_len,
+        r2_len=r2_len,
     )
 
 
@@ -184,22 +198,26 @@ def detect_protocol(
         whitelist = _load_barcode_whitelist()
         if whitelist:
             r1_frac = _check_barcode_fraction(r1_path, whitelist)
-            r2_frac = (
-                _check_barcode_fraction(Path(r2_path), whitelist) if r2_path else 0.0
-            )
+            r2_frac = _check_barcode_fraction(Path(r2_path), whitelist) if r2_path else 0.0
 
             if r1_frac >= 0.3:
                 return ProtocolDetection(
-                    protocol="10xv3", mode="droplet", confidence="medium",
+                    protocol="10xv3",
+                    mode="droplet",
+                    confidence="medium",
                     reason=f"Barcode match: R1={r1_frac:.0%}",
-                    r1_len=r1_len, r2_len=r2_len,
+                    r1_len=r1_len,
+                    r2_len=r2_len,
                     chemistry="10xv3",
                 )
             elif r2_frac >= 0.3:
                 return ProtocolDetection(
-                    protocol="10xv3", mode="droplet", confidence="medium",
+                    protocol="10xv3",
+                    mode="droplet",
+                    confidence="medium",
                     reason=f"Barcode match R2 (swapped): R2={r2_frac:.0%}",
-                    r1_len=r1_len, r2_len=r2_len,
+                    r1_len=r1_len,
+                    r2_len=r2_len,
                     chemistry="10xv3",
                 )
 

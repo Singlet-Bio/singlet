@@ -17,18 +17,18 @@ Reference: Gaumondo et al. (2024) GRaNIE, Nature Methods.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 if TYPE_CHECKING:
     import anndata
-    import scipy.sparse
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def run_from_csc(
     gex,
@@ -211,10 +211,11 @@ def run_from_anndata(
         # X may be scipy sparse, cupy sparse, or dense numpy.
         try:
             import scipy.sparse as sp
+
             try:
                 import cupyx.scipy.sparse as csp  # cupy >= 14
             except ImportError:
-                import cupy.sparse as csp         # cupy < 14 fallback
+                import cupy.sparse as csp  # cupy < 14 fallback
             if sp.issparse(X):
                 X_csr = X.tocsr().astype(np.float32)
                 # Upload to device via cupy
@@ -227,7 +228,7 @@ def run_from_anndata(
             "Load your data with singlet.gpu.load_pz() for direct device access."
         )
 
-    gex   = _to_device_csc(adata_rna.X)
+    gex = _to_device_csc(adata_rna.X)
     peaks = _to_device_csc(adata_atac.X)
     return run_from_csc(gex, peaks, tf_motif, peak_gene_pairs, **kwargs)
 

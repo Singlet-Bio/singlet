@@ -91,6 +91,7 @@ def download(
 
     if source == "aws":
         from singlet._auth import _get_headers
+
         url = f"{_AWS_BASE}/{accession}"
         headers = _get_headers()
     else:
@@ -101,9 +102,10 @@ def download(
     resp.raise_for_status()
 
     total = int(resp.headers.get("content-length", 0))
-    with open(dest, "wb") as f, tqdm(
-        total=total, unit="B", unit_scale=True, desc=accession
-    ) as pbar:
+    with (
+        open(dest, "wb") as f,
+        tqdm(total=total, unit="B", unit_scale=True, desc=accession) as pbar,
+    ):
         for chunk in resp.iter_content(chunk_size=1 << 16):
             f.write(chunk)
             pbar.update(len(chunk))
@@ -148,7 +150,7 @@ def load(
     >>> adata = singlet.load("/path/to/counts.1pz")
     >>> adata = singlet.load("GSE136831", genes=["TP53", "BRCA1"])
     """
-    from singlet._io import read_1pz, read_spz, read_matrix
+    from singlet._io import read_1pz, read_matrix
 
     path = Path(source)
 
@@ -156,9 +158,11 @@ def load(
         suffix = path.suffix.lower()
         if suffix == ".h5ad":
             import anndata as ad
+
             adata = ad.read_h5ad(path)
         elif suffix == ".zarr":
             import anndata as ad
+
             adata = ad.read_zarr(path)
         elif suffix in (".1pz", ".spz"):
             adata = read_matrix(path)
@@ -212,8 +216,9 @@ def load_sample(
     anndata.AnnData
         Count matrix for just this sample.
     """
-    from singlet._catalog import _get_catalog_dir, _load_sample_index
     import singlepress
+
+    from singlet._catalog import _get_catalog_dir, _load_sample_index
 
     idx = _load_sample_index()
     rows = idx[idx["gsm_id"] == gsm_id]
@@ -241,10 +246,12 @@ def load_sample(
     mat = singlepress.read_1pz_columns(str(counts_path), col_start, col_end)
 
     import anndata as ad
+
     adata = ad.AnnData(X=mat.T)
 
     if hasattr(mat, "rownames") and mat.rownames:
         import pandas as pd
+
         adata.var_names = pd.Index(mat.rownames)
 
     adata.obs["gsm_id"] = gsm_id
@@ -297,7 +304,7 @@ def load_dir(
     AnnData object with n_obs × n_vars = 75420 × 38606
     """
     import pandas as pd
-    import numpy as np
+
     from singlet._io import read_1pz
 
     path = Path(path)
@@ -358,6 +365,7 @@ def load_dir(
     ancestry_file = path / "ancestry_call.json"
     if ancestry_file.exists():
         import json as _json
+
         with open(ancestry_file) as f:
             adata.uns["ancestry"] = _json.load(f)
 
@@ -365,6 +373,7 @@ def load_dir(
     sex_file = path / "sex_call.json"
     if sex_file.exists():
         import json as _json
+
         with open(sex_file) as f:
             adata.uns["sex_call"] = _json.load(f)
 
@@ -372,6 +381,7 @@ def load_dir(
     summary_file = path / "summary.json"
     if summary_file.exists():
         import json as _json
+
         with open(summary_file) as f:
             adata.uns["summary"] = _json.load(f)
 

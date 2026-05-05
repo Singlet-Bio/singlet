@@ -17,7 +17,7 @@ The trained model weights are host-resident (serialisable via pickle / torch.sav
 from __future__ import annotations
 
 import pickle
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -34,7 +34,7 @@ class DiscreteDiffusionWrapper:
     """
 
     def __init__(self, result, gene_names: list):
-        self._result    = result
+        self._result = result
         self.gene_names = gene_names
 
     @property
@@ -49,12 +49,17 @@ class DiscreteDiffusionWrapper:
     def save(self, path: str) -> None:
         """Pickle the model to *path*."""
         with open(path, "wb") as f:
-            pickle.dump({"weights": self._result.model_weights,
-                         "shape":   self._result.model_shape,
-                         "loss":    self._result.loss_history,
-                         "bins":    self._result.bin_edges,
-                         "epochs":  self._result.n_epochs_used,
-                         "genes":   self.gene_names}, f)
+            pickle.dump(
+                {
+                    "weights": self._result.model_weights,
+                    "shape": self._result.model_shape,
+                    "loss": self._result.loss_history,
+                    "bins": self._result.bin_edges,
+                    "epochs": self._result.n_epochs_used,
+                    "genes": self.gene_names,
+                },
+                f,
+            )
 
     @classmethod
     def load(cls, path: str) -> "DiscreteDiffusionWrapper":
@@ -71,6 +76,7 @@ class DiscreteDiffusionWrapper:
         DiscreteDiffusionWrapper
         """
         import singlet.gpu._core as _core
+
         with open(path, "rb") as f:
             d = pickle.load(f)
         # Reconstruct a Python-level result; C++ side not needed for sampling
@@ -80,19 +86,18 @@ class DiscreteDiffusionWrapper:
         # in the wrapper and pass them through sample_discrete_diffusion by
         # re-creating a thin wrapper struct at sample time.
         obj = cls.__new__(cls)
-        obj._result    = r
-        obj._weights   = d["weights"]
-        obj._shape     = d["shape"]
-        obj._loss      = d["loss"]
-        obj._bins      = d["bins"]
-        obj._epochs    = d["epochs"]
+        obj._result = r
+        obj._weights = d["weights"]
+        obj._shape = d["shape"]
+        obj._loss = d["loss"]
+        obj._bins = d["bins"]
+        obj._epochs = d["epochs"]
         obj.gene_names = d["genes"]
         return obj
 
     def __repr__(self) -> str:
         return (
-            f"<DiscreteDiffusionWrapper genes={len(self.gene_names)} "
-            f"epochs={self.n_epochs_used}>"
+            f"<DiscreteDiffusionWrapper genes={len(self.gene_names)} epochs={self.n_epochs_used}>"
         )
 
 
@@ -144,20 +149,20 @@ def train(
 
     try:
         import cupy as cp
+
         try:
             import cupyx.scipy.sparse as csp  # cupy >= 14
         except ImportError:
-            import cupy.sparse as csp         # cupy < 14 fallback
+            import cupy.sparse as csp  # cupy < 14 fallback
         import scipy.sparse as sp
 
         X = adata.X
         if X.shape[0] == adata.n_obs:
-            X = X.T   # genes × cells
+            X = X.T  # genes × cells
         mat = csp.csc_matrix(X) if sp.issparse(X) else csp.csc_matrix(cp.array(X))
     except ImportError as e:
         raise ImportError(
-            "singlet.gpu.generative.discrete_diffusion.train requires cupy.  "
-            f"Original error: {e}"
+            f"singlet.gpu.generative.discrete_diffusion.train requires cupy.  Original error: {e}"
         )
 
     result = _core.train_discrete_diffusion(
@@ -202,8 +207,9 @@ def sample(
     numpy.ndarray
         [n_samples × n_genes] float32 synthetic expression matrix.
     """
-    import singlet.gpu._core as _core
     import cupy as cp
+
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "sample_discrete_diffusion"):
         raise AttributeError(
@@ -211,9 +217,7 @@ def sample(
             "Ensure the cycle-52a binding extension has been compiled."
         )
 
-    result = _core.sample_discrete_diffusion(
-        model._result, n_samples, stream=stream, seed=seed
-    )
+    result = _core.sample_discrete_diffusion(model._result, n_samples, stream=stream, seed=seed)
     arr = cp.asarray(result.data_view)
     if result.n_genes > 0:
         arr = arr.reshape(n_samples, result.n_genes)

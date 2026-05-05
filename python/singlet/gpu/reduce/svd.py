@@ -58,12 +58,10 @@ is the factornet GPUContext pool, not user Python code).
 
 from __future__ import annotations
 
-import copy as copy_module
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     import anndata
-    import numpy as np
 
 # ---------------------------------------------------------------------------
 # Valid backend names (matching factornet routing table)
@@ -75,6 +73,7 @@ _VALID_BACKENDS = ("auto", "lanczos", "irlba", "randomized", "krylov", "deflatio
 # Internal helpers (shared with preprocess — duplicated to avoid circular
 # imports; a future refactor can move them to a _common.py)
 # ---------------------------------------------------------------------------
+
 
 def _get_matrix(adata: "anndata.AnnData", layer: Optional[str]):
     if layer is not None:
@@ -90,8 +89,7 @@ def _csr_to_device_csc(csr_mat):
 
     if not hasattr(_core, "from_cupy_csr"):
         raise AttributeError(
-            "_core.from_cupy_csr is not available.  "
-            "See CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE."
+            "_core.from_cupy_csr is not available.  See CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE."
         )
 
     csc_mat = csr_mat.T.tocsc()
@@ -105,12 +103,13 @@ def _write_pca_result(adata: "anndata.AnnData", result, *, n_comps: int) -> None
     _core.SvdResult exposes U_view / V_view / d_view as CAI dicts (per
     binding _bind_kernels.hpp:341 + §J.13 _CaiView shim required for cupy 14).
     """
-    import numpy as np
     import cupy as cp
+    import numpy as np
 
     # cupy 14 dtype-strict shim (CYCLE-189 / §J.13).
     class _CaiView:
-        def __init__(self, d): self.__cuda_array_interface__ = d
+        def __init__(self, d):
+            self.__cuda_array_interface__ = d
 
     # PySvdResult fields (per _bind_kernels.hpp:upload_svd_result):
     #   d_U: shape (rows × k_selected) col-major
@@ -127,7 +126,7 @@ def _write_pca_result(adata: "anndata.AnnData", result, *, n_comps: int) -> None
     # rows = n_vars and cols = n_obs.
     n_rows = int(adata.n_vars)
     n_cols = int(adata.n_obs)
-    k_sel  = int(result.k_selected)
+    k_sel = int(result.k_selected)
     U = cp.asarray(_CaiView(result.U_view)).reshape(k_sel, n_rows).T.get()
     V = cp.asarray(_CaiView(result.V_view)).reshape(k_sel, n_cols).T.get()
     sigma = cp.asarray(_CaiView(result.d_view)).get()
@@ -137,16 +136,16 @@ def _write_pca_result(adata: "anndata.AnnData", result, *, n_comps: int) -> None
     # input was genes × cells), so U here is (genes × k) and V is (cells ×
     # k).  Restore scanpy convention: X_pca = cells × k = our V; PCs = our U.
     adata.obsm["X_pca"] = V.astype(np.float32, copy=False)
-    adata.varm["PCs"]   = U.astype(np.float32, copy=False)
+    adata.varm["PCs"] = U.astype(np.float32, copy=False)
 
     sigma = sigma.astype(np.float64, copy=False)
-    variance = sigma ** 2 / max(adata.n_obs - 1, 1)
+    variance = sigma**2 / max(adata.n_obs - 1, 1)
     total_var = float(adata.X.multiply(adata.X).sum())  # Frobenius² / (n-1)
     denom = total_var / max(adata.n_obs - 1, 1) if total_var > 0 else 1.0
     variance_ratio = variance / denom
 
     adata.uns["pca"] = {
-        "variance":       variance,
+        "variance": variance,
         "variance_ratio": variance_ratio,
         "params": {
             "n_comps": n_comps,
@@ -158,6 +157,7 @@ def _write_pca_result(adata: "anndata.AnnData", result, *, n_comps: int) -> None
 # ---------------------------------------------------------------------------
 # Public API — pca (scanpy-compatible)
 # ---------------------------------------------------------------------------
+
 
 def pca(
     adata: "anndata.AnnData",
@@ -238,16 +238,14 @@ def pca(
     """
     if backend not in _VALID_BACKENDS:
         raise ValueError(
-            f"backend='{backend}' is not recognised.  "
-            f"Choose one of: {_VALID_BACKENDS}"
+            f"backend='{backend}' is not recognised.  Choose one of: {_VALID_BACKENDS}"
         )
 
     import singlet.gpu._core as _core
 
     if not hasattr(_core, "pca"):
         raise AttributeError(
-            "_core.pca is not available.  "
-            "See CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE."
+            "_core.pca is not available.  See CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE."
         )
 
     # CYCLE-274 (test_pca_inplace_vs_copy): copy_module.copy(adata) is a
@@ -262,7 +260,8 @@ def pca(
     #       max_iter=100, seed=0)
     # backend is selected automatically by the C++ side (see svd_auto_select).
     result = _core.pca(
-        device_csc, int(n_comps),
+        device_csc,
+        int(n_comps),
         zero_center=bool(center),
         scale=bool(scale),
         seed=int(seed),
@@ -277,6 +276,7 @@ def pca(
 # ---------------------------------------------------------------------------
 # Low-level SVD backends (named entry points for advanced users)
 # ---------------------------------------------------------------------------
+
 
 def svd_lanczos(
     adata: "anndata.AnnData",
@@ -298,14 +298,25 @@ def svd_lanczos(
     randomized fallback.
     """
     import warnings
+
     warnings.warn(
         "svd_lanczos is deprecated since singlet 2.0.0 and will be removed "
         "in 0.2.0. Use pca(backend='auto') instead — it routes to the deflation "
         "winner with randomized fallback. See state/release-policy.md.",
-        DeprecationWarning, stacklevel=2,
+        DeprecationWarning,
+        stacklevel=2,
     )
-    return pca(adata, n_comps=n_comps, layer=layer, backend="auto",
-               center=center, scale=scale, seed=seed, inplace=inplace, copy=copy)
+    return pca(
+        adata,
+        n_comps=n_comps,
+        layer=layer,
+        backend="auto",
+        center=center,
+        scale=scale,
+        seed=seed,
+        inplace=inplace,
+        copy=copy,
+    )
 
 
 def svd_irlba(
@@ -327,13 +338,24 @@ def svd_irlba(
     forward to ``pca(backend="auto")``.
     """
     import warnings
+
     warnings.warn(
         "svd_irlba is deprecated since singlet 2.0.0 and will be removed "
         "in 0.2.0. Use pca(backend='auto') instead. See state/release-policy.md.",
-        DeprecationWarning, stacklevel=2,
+        DeprecationWarning,
+        stacklevel=2,
     )
-    return pca(adata, n_comps=n_comps, layer=layer, backend="auto",
-               center=center, scale=scale, seed=seed, inplace=inplace, copy=copy)
+    return pca(
+        adata,
+        n_comps=n_comps,
+        layer=layer,
+        backend="auto",
+        center=center,
+        scale=scale,
+        seed=seed,
+        inplace=inplace,
+        copy=copy,
+    )
 
 
 def svd_randomized(
@@ -367,8 +389,7 @@ def svd_randomized(
 
     if not hasattr(_core, "svd_randomized"):
         raise AttributeError(
-            "_core.svd_randomized is not available.  "
-            "See CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE."
+            "_core.svd_randomized is not available.  See CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE."
         )
 
     # CYCLE-274 (test_pca_inplace_vs_copy): copy_module.copy(adata) is a
@@ -379,12 +400,12 @@ def svd_randomized(
     device_csc = _csr_to_device_csc(mat)
 
     config = {
-        "n_comps":        int(n_comps),
+        "n_comps": int(n_comps),
         "n_oversampling": int(n_oversampling),
-        "n_power_iter":   int(n_power_iter),
-        "center":         bool(center),
-        "scale":          bool(scale),
-        "seed":           int(seed),
+        "n_power_iter": int(n_power_iter),
+        "center": bool(center),
+        "scale": bool(scale),
+        "seed": int(seed),
     }
     result = _core.svd_randomized(device_csc, config)
     _write_pca_result(working_adata, result, n_comps=n_comps)
@@ -419,16 +440,27 @@ def svd_krylov(
     constrained factorisation.
     """
     import warnings
+
     warnings.warn(
         "svd_krylov is deprecated since singlet 2.0.0 and will be removed "
         "in 0.2.0. Use pca(backend='auto') for unconstrained SVD; for "
         "constrained factorisation use reduce.nmf.nmf instead. The l1/l2/"
         "non_negative parameters are silently ignored on this deprecated path. "
         "See state/release-policy.md.",
-        DeprecationWarning, stacklevel=2,
+        DeprecationWarning,
+        stacklevel=2,
     )
-    return pca(adata, n_comps=n_comps, layer=layer, backend="auto",
-               center=center, scale=scale, seed=seed, inplace=inplace, copy=copy)
+    return pca(
+        adata,
+        n_comps=n_comps,
+        layer=layer,
+        backend="auto",
+        center=center,
+        scale=scale,
+        seed=seed,
+        inplace=inplace,
+        copy=copy,
+    )
 
 
 def svd_deflation(
@@ -461,8 +493,7 @@ def svd_deflation(
 
     if not hasattr(_core, "svd_deflation"):
         raise AttributeError(
-            "_core.svd_deflation is not available.  "
-            "See CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE."
+            "_core.svd_deflation is not available.  See CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE."
         )
 
     # CYCLE-274 (test_pca_inplace_vs_copy): copy_module.copy(adata) is a
@@ -474,10 +505,10 @@ def svd_deflation(
 
     config = {
         "n_comps": int(n_comps),
-        "center":  bool(center),
-        "scale":   bool(scale),
-        "seed":    int(seed),
-        "robust":  bool(robust),
+        "center": bool(center),
+        "scale": bool(scale),
+        "seed": int(seed),
+        "robust": bool(robust),
     }
     result = _core.svd_deflation(device_csc, config)
     _write_pca_result(working_adata, result, n_comps=n_comps)

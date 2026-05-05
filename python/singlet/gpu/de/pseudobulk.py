@@ -31,7 +31,6 @@ import numpy as np
 
 if TYPE_CHECKING:
     import anndata
-    import pandas as pd
 
 
 # ---------------------------------------------------------------------------
@@ -44,6 +43,7 @@ _VALID_MODES = ("sum", "mean")
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _validate_obs_column(
     adata: "anndata.AnnData",
@@ -84,6 +84,7 @@ def _extract_matrix(adata: "anndata.AnnData") -> object:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def pseudobulk_de(
     adata: "anndata.AnnData",
@@ -201,10 +202,7 @@ def pseudobulk_de(
         sgde.pseudobulk_de(adata, apeglm_shrinkage=False)
     """
     if mode not in _VALID_MODES:
-        raise ValueError(
-            f"mode='{mode}' not recognised.  "
-            f"Choose from: {_VALID_MODES}."
-        )
+        raise ValueError(f"mode='{mode}' not recognised.  Choose from: {_VALID_MODES}.")
 
     _validate_obs_column(adata, sample_col)
     _validate_obs_column(adata, groupby)
@@ -219,26 +217,16 @@ def pseudobulk_de(
             "before singlet.gpu.de.pseudobulk_de() is callable."
         )
 
-    import pandas as pd
-
     working = copy_module.copy(adata) if copy else adata
 
-    mat = _extract_matrix(working)                           # (cells × genes)
-    gene_names  = list(working.var_names)
-    donor_codes = working.obs[sample_col].astype("category").cat.codes.to_numpy(
-        dtype=np.int32
-    )
-    group_codes = working.obs[groupby].astype("category").cat.codes.to_numpy(
-        dtype=np.int32
-    )
-    group_names = list(
-        working.obs[groupby].astype("category").cat.categories
-    )
-    donor_names = list(
-        working.obs[sample_col].astype("category").cat.categories
-    )
-    n_groups  = len(group_names)
-    n_donors  = len(donor_names)
+    mat = _extract_matrix(working)  # (cells × genes)
+    gene_names = list(working.var_names)
+    donor_codes = working.obs[sample_col].astype("category").cat.codes.to_numpy(dtype=np.int32)
+    group_codes = working.obs[groupby].astype("category").cat.codes.to_numpy(dtype=np.int32)
+    group_names = list(working.obs[groupby].astype("category").cat.categories)
+    donor_names = list(working.obs[sample_col].astype("category").cat.categories)
+    n_groups = len(group_names)
+    n_donors = len(donor_names)
 
     # _core.donor_pseudobulk_de signature (py::kw_only after n_donors):
     #   donor_pseudobulk_de(mat, cluster_labels, n_clusters, donor_labels,
@@ -249,6 +237,7 @@ def pseudobulk_de(
     # mat must be PyDeviceCsc; upload via the same pattern as score_genes /
     # lineage wrappers (CYCLE-194 / CYCLE-204).
     import cupy as cp
+
     try:
         import cupyx.scipy.sparse as csp
     except ImportError:
@@ -280,10 +269,10 @@ def pseudobulk_de(
 
     raw_results = _core.donor_pseudobulk_de(
         device_mat,
-        group_codes_d,         # cluster_labels (device int32)
-        int(n_groups),         # n_clusters
-        donor_codes_d,         # donor_labels (device int32)
-        int(n_donors),         # n_donors
+        group_codes_d,  # cluster_labels (device int32)
+        int(n_groups),  # n_clusters
+        donor_codes_d,  # donor_labels (device int32)
+        int(n_donors),  # n_donors
         min_cells_per_pseudobulk=int(min_cells_per_pseudobulk),
         apeglm_shrinkage=bool(apeglm_shrinkage),
         seed=int(seed),
@@ -298,29 +287,30 @@ def pseudobulk_de(
     #   pseudobulk_view: float32 (m × n_clusters × n_donors)
     # Each per-gene index excludes filtered-out genes (n_genes_passing_filter).
     class _CaiView:  # see CYCLE-193 / §J.13
-        def __init__(self, d): self.__cuda_array_interface__ = d
+        def __init__(self, d):
+            self.__cuda_array_interface__ = d
 
-    n_pass    = int(raw_results.n_genes_passing_filter)
+    n_pass = int(raw_results.n_genes_passing_filter)
     n_donors_ = n_donors  # convenience alias
 
-    log2_fc    = cp.asarray(_CaiView(raw_results.log2_fc_view)).get() \
-                    .reshape(n_pass, n_groups, max(n_donors_ - 1, 1))
-    p_values   = cp.asarray(_CaiView(raw_results.p_values_view)).get() \
-                    .reshape(n_pass, n_groups)
-    p_adj      = cp.asarray(_CaiView(raw_results.p_adj_view)).get() \
-                    .reshape(n_pass, n_groups)
-    dispersion = cp.asarray(_CaiView(raw_results.dispersion_view)).get() \
-                    .reshape(n_pass, n_groups)
+    log2_fc = (
+        cp.asarray(_CaiView(raw_results.log2_fc_view))
+        .get()
+        .reshape(n_pass, n_groups, max(n_donors_ - 1, 1))
+    )
+    p_values = cp.asarray(_CaiView(raw_results.p_values_view)).get().reshape(n_pass, n_groups)
+    p_adj = cp.asarray(_CaiView(raw_results.p_adj_view)).get().reshape(n_pass, n_groups)
+    dispersion = cp.asarray(_CaiView(raw_results.dispersion_view)).get().reshape(n_pass, n_groups)
 
     # Test contract: uns['donor_pseudobulk'] = {'lfc', 'pvals', 'qvals',
     # 'dispersion'} dict of arrays.  We expose the average donor contrast for
     # lfc (mean across n_donors-1 columns).
     working.uns["donor_pseudobulk"] = {
-        "lfc":        log2_fc.mean(axis=2).astype(np.float32),  # (n_pass × n_groups)
-        "pvals":      p_values.astype(np.float32),
-        "qvals":      p_adj.astype(np.float32),
+        "lfc": log2_fc.mean(axis=2).astype(np.float32),  # (n_pass × n_groups)
+        "pvals": p_values.astype(np.float32),
+        "qvals": p_adj.astype(np.float32),
         "dispersion": dispersion.astype(np.float32),
-        "groups":     group_names,
+        "groups": group_names,
         "n_genes_passing_filter": n_pass,
     }
     working.uns["donor_pseudobulk_params"] = {
