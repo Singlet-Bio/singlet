@@ -80,3 +80,12 @@ class TestPublicAPI:
         assert callable(to_h5ad)
         assert callable(to_mtx)
         assert callable(to_zarr)
+
+    def test_catalog_function_callable(self):
+        """singlet.catalog is a callable function, not a subpackage."""
+        import singlet
+
+        assert callable(singlet.catalog)
+        assert hasattr(singlet, "samples")
+        assert hasattr(singlet, "species")
+        assert hasattr(singlet, "summary")
