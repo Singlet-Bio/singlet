@@ -39,7 +39,7 @@ singlet/
 ├── src/                   C++ source (pipeline binary, GPU kernels)
 ├── tests/
 │   ├── cpp/               100 C++ unit tests
-│   └── python/            569 Python tests
+│   └── python/            583 Python tests
 ├── docs/                  Documentation
 ├── pipeline/              singlify pipeline scripts
 └── notebooks/             Jupyter notebooks and examples
@@ -54,7 +54,7 @@ make test
 # C++ only (100 tests, ~72s)
 make test-cpp
 
-# Python only (569 tests, ~15s)
+# Python only (583 tests, ~16s)
 make test-python
 
 # Lint check

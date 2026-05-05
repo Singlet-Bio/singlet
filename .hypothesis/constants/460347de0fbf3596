@@ -1,0 +1,4 @@
+# file: /mnt/home/debruinz/Singlet-AI/singlet/python/singlet/convert.py
+# hypothesis_version: 6.141.1
+
+['RNA', 'anndata.AnnData', 'barcodes.tsv', 'barcodes.tsv.gz', 'features.tsv', 'features.tsv.gz', 'gene_name', 'genes.tsv', 'genes.tsv.gz', 'gzip', 'matrix.mtx', 'matrix.mtx.gz', 'wb', 'wt']

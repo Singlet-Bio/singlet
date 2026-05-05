@@ -1,0 +1,4 @@
+# file: /mnt/home/debruinz/Singlet-AI/singlet/python/singlet/preprocessing/_qc.py
+# hypothesis_version: 6.141.1
+
+[0.0, 0.1, 200, '%', '.gz', 'af_quant', 'alevin', 'fail', 'map_info.json', 'num_mapped', 'num_processed', 'pass', 'quants_mat.mtx', 'quants_mat.mtx.gz', 'rt', 'unknown', 'warn']

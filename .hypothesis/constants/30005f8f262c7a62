@@ -1,0 +1,4 @@
+# file: /mnt/home/debruinz/Singlet-AI/singlet/python/singlet/_loader.py
+# hypothesis_version: 6.141.1
+
+['.1pz', '.h5ad', '.singlet', '.spz', '.zarr', 'B', 'ancestry', 'ancestry_call.json', 'anndata.AnnData', 'auto_barcodes.tsv', 'aws', 'barcode', 'cell_qc_metrics.tsv', 'col_count', 'col_offset', 'content-length', 'counts.1pz', 'data', 'doublet_scores.tsv', 'gene_counts', 'gene_expression.tsv', 'gene_id', 'gene_name', 'gse_id', 'gsm_id', 'organism', 'path', 'pipeline', 'quant', 'rownames', 'saturation_curve', 'saturation_curve.tsv', 'sex_call', 'sex_call.json', 'singlify_dir', 'species_subdir', 'summary', 'summary.json', 'wb', 'zenodo']

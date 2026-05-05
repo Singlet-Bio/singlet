@@ -1,0 +1,4 @@
+# file: /mnt/home/debruinz/Singlet-AI/singlet/python/singlet/io/__init__.py
+# hypothesis_version: 6.141.1
+
+['from_h5ad', 'from_mtx', 'from_zarr', 'info_1pz', 'read_1pz', 'read_kraken2', 'read_matrix', 'read_spz', 'spz_info', 'to_csc', 'to_h5ad', 'to_mtx', 'to_zarr', 'write_1pz', 'write_spz']

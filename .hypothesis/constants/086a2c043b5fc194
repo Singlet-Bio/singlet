@@ -1,0 +1,4 @@
+# file: /mnt/home/debruinz/Singlet-AI/singlet/python/singlet/preprocessing/_export.py
+# hypothesis_version: 6.141.1
+
+['af_quant', 'alevin', 'barcodes.tsv', 'features.tsv', 'genes.tsv', 'quants_mat.mtx', 'quants_mat.mtx.gz', 'quants_mat_cols.txt', 'quants_mat_rows.txt']

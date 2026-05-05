@@ -1,0 +1,4 @@
+# file: /mnt/home/debruinz/Singlet-AI/singlet/python/singlet/_io.py
+# hypothesis_version: 6.141.1
+
+[b'SPRZ', b'SPZ2', b'TP1Z', 128, '1pz', '<H', 'anndata.AnnData', 'auto', 'colnames', 'colsums', 'data', 'indices', 'indptr', 'kraken2.1pz', 'm', 'n', 'obs', 'rb', 'rownames', 'shape', 'sparsepress', 'spz1', 'spz2', 'total_counts', 'uns', 'values', 'var']
