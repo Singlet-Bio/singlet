@@ -238,7 +238,7 @@ inline ReadDedupStats::Result ReadDedupStats::process_bam(const std::string& bam
     htsFile* out_fp = nullptr;
     if (!config_.out_bam_path.empty()) {
         out_fp = hts_open(config_.out_bam_path.c_str(), "wb");
-        if (out_fp) sam_hdr_write(out_fp, hdr);
+        if (out_fp) (void)sam_hdr_write(out_fp, hdr);
     }
 
     // ── Per-position read group ──────────────────────────────────────────
@@ -286,7 +286,7 @@ inline ReadDedupStats::Result ReadDedupStats::process_bam(const std::string& bam
         // Write to output BAM (all reads in group, flags updated)
         if (out_fp) {
             for (auto& e : group)
-                sam_write1(out_fp, hdr, e.b);
+                (void)sam_write1(out_fp, hdr, e.b);
         }
 
         for (auto& e : group) bam_destroy1(e.b);
@@ -300,7 +300,7 @@ inline ReadDedupStats::Result ReadDedupStats::process_bam(const std::string& bam
         ++res.total_reads;
 
         if (b->core.flag & BAM_FUNMAP) {
-            if (out_fp) sam_write1(out_fp, hdr, b);
+            if (out_fp) (void)sam_write1(out_fp, hdr, b);
             continue;
         }
         ++res.mapped_reads;

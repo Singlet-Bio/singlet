@@ -1248,7 +1248,8 @@ inline ExportStats export_results(const PileupEngine& engine,
                 std::vector<uint16_t> scaled(mt_het.data.size());
                 for (size_t i = 0; i < mt_het.data.size(); ++i) {
                     float v = mt_het.data[i];
-                    if (v < 0.f) v = 0.f; if (v > 1.f) v = 1.f;
+                    if (v < 0.f) v = 0.f;
+                    if (v > 1.f) v = 1.f;
                     scaled[i] = static_cast<uint16_t>(v * 10000.f + 0.5f);
                 }
                 pz::write_1pz(out_prefix + "/mt_heteroplasmy.1pz",
