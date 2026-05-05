@@ -117,6 +117,19 @@ class TestRefresh:
         assert cat_mod._CATALOG_CACHE is cat_df
         assert cat_mod._SAMPLE_INDEX_CACHE is idx_df
 
+    def test_refresh_raises_on_failure(self, tmp_path, monkeypatch):
+        """refresh() raises RuntimeError with helpful message on download failure."""
+        import singlet._catalog as cat_mod
+
+        def mock_download_fail(url, path):
+            raise Exception("404 Not Found")
+
+        monkeypatch.setattr(cat_mod, "_download_parquet", mock_download_fail)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        with pytest.raises(RuntimeError, match="Could not refresh catalog"):
+            cat_mod.refresh()
+
 
 class TestFailureCategoriesInference:
     """Test failure_categories with no failure_category column."""

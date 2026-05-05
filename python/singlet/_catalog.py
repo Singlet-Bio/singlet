@@ -124,15 +124,28 @@ def refresh() -> None:
 
     Clears the in-memory cache and overwrites the local cache files.
     After refresh, the downloaded data is used directly (bypassing bundled files).
+
+    Raises
+    ------
+    RuntimeError
+        If the catalog cannot be downloaded (e.g., repository is private).
     """
     global _CATALOG_CACHE, _SAMPLE_INDEX_CACHE
     _CATALOG_CACHE = None
     _SAMPLE_INDEX_CACHE = None
     cache_dir = Path.home() / ".singlet" / "cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
-    # Download and load directly into cache (bypasses bundled-first logic)
-    _CATALOG_CACHE = _download_parquet(_CATALOG_URL, cache_dir / "catalog_v1.parquet")
-    _SAMPLE_INDEX_CACHE = _download_parquet(_SAMPLE_INDEX_URL, cache_dir / "sample_index.parquet")
+    try:
+        _CATALOG_CACHE = _download_parquet(_CATALOG_URL, cache_dir / "catalog_v1.parquet")
+        _SAMPLE_INDEX_CACHE = _download_parquet(
+            _SAMPLE_INDEX_URL, cache_dir / "sample_index.parquet"
+        )
+    except Exception as e:
+        raise RuntimeError(
+            "Could not refresh catalog from GitHub. "
+            "The bundled catalog (included with the package) is still available. "
+            "If this is a private repo, update the package instead: pip install --upgrade singlet"
+        ) from e
     print(f"Updated: {len(_SAMPLE_INDEX_CACHE)} samples, {len(_CATALOG_CACHE)} series")
 
 
