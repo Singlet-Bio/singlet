@@ -148,6 +148,11 @@ add_pileup_test(test_logging)
 add_pileup_test(test_interval_tree)
 add_pileup_test(test_benchmark_suite)
 
+# UMI / dedup / velocity / bloom
+add_pileup_test(test_umi_dedup)
+add_pileup_test(test_bloom_filter)
+add_pileup_test(test_velocity)
+
 # HDF5-dependent tests (h5ad, loom, molecule_info)
 if(HDF5_FOUND)
     macro(add_hdf5_test name)
