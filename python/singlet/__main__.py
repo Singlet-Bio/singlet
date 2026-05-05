@@ -15,6 +15,7 @@ def main() -> None:
     print('  adata = singlet.load("GSM...")   # load → AnnData')
     print()
     print("For the MCP server:  python -m singlet.mcp")
+    print("Debug info:          singlet.show_versions()")
     print("Full docs:           https://singlet.bio")
 
 

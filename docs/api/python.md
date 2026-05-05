@@ -153,10 +153,11 @@ from singlet.pp import download_fastq, detect_protocol, quantify, run_qc
 
 ---
 
-## Configuration
+## Configuration & Diagnostics
 
 | Function | Description |
 |----------|-------------|
 | `singlet.set_catalog_dir(path)` | Set local catalog directory |
+| `singlet.show_versions()` | Print version info for bug reports |
 | Environment: `SINGLET_CATALOG_DIR` | Auto-detected catalog path |
 | Environment: `SUPABASE_ANON_KEY` | Required for MCP server |
