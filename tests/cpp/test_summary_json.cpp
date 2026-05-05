@@ -130,7 +130,7 @@ static void test_all_keys_present() {
     std::string json = read_file(path);
 
     check("key_sample_id",              contains(json, "\"sample_id\""));
-    check("key_protocol",               contains(json, "\"protocol\""));
+        check("key_protocol",               contains(json, "\"protocol_id\""));
     check("key_organism",               contains(json, "\"organism\""));
     check("key_singlify_version",       contains(json, "\"singlify_version\""));
     check("key_total_reads",            contains(json, "\"total_reads\""));
@@ -185,7 +185,7 @@ static void test_classify_outcome_low_mapping() {
     s.total_reads     = 10000000;
     s.mapping_rate    = 0.35;   // < 50% threshold
     s.estimated_cells = 500;
-    check("classify_low_mapping", classify_outcome(s) == "low_mapping");
+    check("classify_low_mapping", classify_outcome(s) == "align_low_map");
 }
 
 // ── Test 6: classify_outcome — no_cells ──────────────────────────────────────
@@ -194,7 +194,7 @@ static void test_classify_outcome_no_cells() {
     s.total_reads     = 5000000;
     s.mapping_rate    = 0.85;
     s.estimated_cells = 0;
-    check("classify_no_cells", classify_outcome(s) == "no_cells");
+    check("classify_no_cells", classify_outcome(s) == "align_zero_cells");
 }
 
 // ── Test 7: classify_outcome — low_cells ─────────────────────────────────────
@@ -204,7 +204,7 @@ static void test_classify_outcome_low_cells() {
     s.mapping_rate     = 0.80;
     s.estimated_cells  = 5;
     s.median_genes_per_cell = 1800.0;
-    check("classify_low_cells", classify_outcome(s) == "low_cells");
+    check("classify_low_cells", classify_outcome(s) == "align_low_cells");
 }
 
 // ── Test 8: classify_outcome — low_genes ─────────────────────────────────────
@@ -214,7 +214,7 @@ static void test_classify_outcome_low_genes() {
     s.mapping_rate          = 0.80;
     s.estimated_cells       = 150;
     s.median_genes_per_cell = 85.0;  // < 200 threshold
-    check("classify_low_genes", classify_outcome(s) == "low_genes");
+    check("classify_low_genes", classify_outcome(s) == "align_low_genes");
 }
 
 // ── Test 9: classify_outcome — zero total_reads → success (no-data) ──────────
@@ -230,7 +230,7 @@ static void test_classify_outcome_atac() {
     s.total_reads     = 10000000;
     s.mapping_rate    = 0.25;  // below atac floor (30%)
     s.estimated_cells = 0;
-    check("classify_atac_low_mapping", classify_outcome(s, "atac") == "low_mapping");
+    check("classify_atac_low_mapping", classify_outcome(s, "atac") == "align_low_map");
 
     PipelineSummary s2;
     s2.total_reads     = 10000000;
@@ -369,7 +369,7 @@ static void test_classify_boundary() {
     s2.total_reads     = 1000000;
     s2.mapping_rate    = 0.499;  // just below threshold
     s2.estimated_cells = 100;
-    check("classify_below_threshold_low", classify_outcome(s2) == "low_mapping");
+    check("classify_below_threshold_low", classify_outcome(s2) == "align_low_map");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

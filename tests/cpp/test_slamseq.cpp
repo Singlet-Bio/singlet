@@ -236,8 +236,8 @@ static void test_stranded() {
 
     // Unstranded (+ orientation) should not count A→G
     auto conv_unstranded = count_tc_conversions(read_minus, ref_minus, q, p);
-    // ref has no T, so t_positions=0, tc_count=0
-    assert(conv_unstranded.t_positions == 0);
+    // ref "ACGAGT" has T at pos 5, so t_positions=1, tc_count=0 (read has T at pos 5 too)
+    assert(conv_unstranded.t_positions == 1);
     assert(conv_unstranded.tc_count == 0);
 
     std::cout << "PASS test_stranded\n";
