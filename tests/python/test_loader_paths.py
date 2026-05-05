@@ -6,6 +6,7 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
+import requests
 import scipy.sparse as sp
 
 
@@ -135,6 +136,32 @@ class TestDownload:
 
         assert result == dest
         assert dest.read_bytes() == b"new!"
+
+    def test_404_raises_file_not_found(self, tmp_path):
+        """404 response gives clear FileNotFoundError with guidance."""
+        from singlet._loader import download
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 404
+        mock_resp.raise_for_status.side_effect = requests.HTTPError(response=mock_resp)
+
+        with patch("requests.get", return_value=mock_resp):
+            with pytest.raises(FileNotFoundError, match="not found on zenodo"):
+                download("GSE_FAKE", output_dir=tmp_path, force=True)
+
+    def test_500_raises_runtime_error(self, tmp_path):
+        """Non-404 HTTP errors give RuntimeError with context."""
+        from singlet._loader import download
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 500
+        mock_resp.raise_for_status.side_effect = requests.HTTPError(
+            "500 Server Error", response=mock_resp
+        )
+
+        with patch("requests.get", return_value=mock_resp):
+            with pytest.raises(RuntimeError, match="Failed to download"):
+                download("GSE_FAKE", output_dir=tmp_path, force=True)
 
 
 class TestLoad:

@@ -111,9 +111,7 @@ def download(
                 f"Dataset '{accession}' not found on {source}. "
                 f"Check the accession or use singlet.catalog() to browse available datasets."
             ) from None
-        raise RuntimeError(
-            f"Failed to download '{accession}' from {source}: {e}"
-        ) from e
+        raise RuntimeError(f"Failed to download '{accession}' from {source}: {e}") from e
 
     total = int(resp.headers.get("content-length", 0))
     with (

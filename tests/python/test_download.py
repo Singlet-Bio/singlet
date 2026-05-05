@@ -346,9 +346,7 @@ class TestParallelDownload:
         from singlet.preprocessing._download import _download_parallel_segments
 
         dest = tmp_path / "file.bin"
-        success, error = _download_parallel_segments(
-            "http://example.com/file.bin", dest, retries=0
-        )
+        success, error = _download_parallel_segments("http://example.com/file.bin", dest, retries=0)
         assert not success
         assert error == "Max retries exceeded"
 
