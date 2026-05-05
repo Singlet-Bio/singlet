@@ -5,13 +5,19 @@ on:
     branches: [main]
     paths:
       - 'python/**'
+      - 'include/**'
+      - 'tests/**'
+      - 'CMakeLists.txt'
   pull_request:
     branches: [main]
     paths:
       - 'python/**'
+      - 'include/**'
+      - 'tests/**'
+      - 'CMakeLists.txt'
 
 jobs:
-  test:
+  python-test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -26,15 +32,32 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
-        working-directory: python
         run: |
-          pip install -e ".[dev]" 2>/dev/null || pip install -e .
+          pip install -e "python/.[dev]" 2>/dev/null || pip install -e "python/."
           pip install pytest numpy scipy pandas anndata --quiet
 
       - name: Run tests
-        working-directory: python
         run: |
-          python -m pytest tests/ -x -q --ignore=tests/test_loader.py
+          python -m pytest tests/python/ -x -q --ignore=tests/python/test_loader.py
+
+  cpp-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libhtslib-dev libzstd-dev zlib1g-dev libhdf5-dev pkg-config
+
+      - name: Configure
+        run: cmake -B build -DSINGLET_BUILD_TESTS=ON -DSINGLET_BUILD_PIPELINE=OFF
+
+      - name: Build
+        run: cmake --build build -j$(nproc)
+
+      - name: Run tests
+        run: ctest --test-dir build -j$(nproc) --output-on-failure
 
   build:
     runs-on: ubuntu-latest
@@ -47,14 +70,12 @@ jobs:
           python-version: '3.11'
 
       - name: Build wheel
-        working-directory: python
         run: |
           pip install build twine --quiet
-          python -m build --wheel
+          cd python && python -m build --wheel
           twine check dist/*
 
       - name: Verify install
-        working-directory: python
         run: |
-          pip install dist/*.whl
+          pip install python/dist/*.whl
           python -c "import singlet; print(f'singlet OK: {len(singlet.catalog())} series')"
