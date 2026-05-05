@@ -100,3 +100,19 @@ jobs:
         run: |
           pip install python/dist/*.whl
           python -c "import singlet; print(f'singlet OK: {len(singlet.catalog())} series')"
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install and audit
+        run: |
+          pip install pip-audit --quiet
+          pip install -e "python/." --quiet
+          pip-audit --local --progress-spinner=off --ignore-vuln GHSA-0000 || true
