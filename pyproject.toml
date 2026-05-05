@@ -72,6 +72,10 @@ singlet = ["data/*.parquet"]
 [tool.pytest.ini_options]
 testpaths = ["tests/python"]
 addopts = "-v --tb=short"
+markers = [
+    "smoke: lightweight smoke tests for new features",
+    "gpu: requires CUDA GPU and CuPy",
+]
 
 [tool.ruff]
 target-version = "py39"
