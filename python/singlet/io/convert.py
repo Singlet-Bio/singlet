@@ -127,7 +127,7 @@ def to_mtx(adata, directory: str | Path, *, layer: Optional[str] = None) -> None
 # ─── Import to AnnData ──────────────────────────────────────────────────────
 
 
-def from_h5ad(path: str | Path, *, backed: Optional[str] = None) -> anndata.AnnData:
+def from_h5ad(path: str | Path, *, backed: str | None = None) -> anndata.AnnData:
     """Read an .h5ad file into AnnData.
 
     Parameters
@@ -142,7 +142,7 @@ def from_h5ad(path: str | Path, *, backed: Optional[str] = None) -> anndata.AnnD
     """
     import anndata as ad
 
-    return ad.read_h5ad(Path(path), backed=backed)
+    return ad.read_h5ad(Path(path), backed=backed)  # type: ignore[arg-type]
 
 
 def from_zarr(path: str | Path) -> anndata.AnnData:
