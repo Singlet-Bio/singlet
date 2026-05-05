@@ -22,6 +22,7 @@
 #include <pybind11/stl.h>
 
 #include <singlet-gpu/io/pz_device_loader.h>
+#include <singlet-gpu/streaming/pz_data_loader.h>
 #include <singlet-gpu/core/types.h>
 #include <singlet-gpu/core/memory.h>
 
@@ -340,4 +341,39 @@ inline void bind_pz_device_matrix(py::module_& m) {
             the last Python reference to this object (or any cupy view derived
             from it) is garbage-collected.
         )doc");
+}
+
+// CYCLE-275: PzDataLoader binding — exposes streaming/pz_data_loader.h's
+// `singlet_gpu::io::PzDataLoader` so Python can construct one and pass it to
+// `_core.nmf_chunked` (and future streaming kernels).  Single-path ctor only;
+// multi-file streaming is filed as CYCLE-7-MULTI-INPUT-NMF in followups.
+inline void bind_pz_data_loader(py::module_& m) {
+    py::class_<singlet_gpu::io::PzDataLoader,
+               std::shared_ptr<singlet_gpu::io::PzDataLoader>>(m, "PzDataLoader",
+        "Streaming loader for a single .1pz dataset (forward + transpose chunks).")
+    .def(py::init<const std::string&, uint32_t>(),
+         py::arg("path"),
+         py::arg("chunk_cols") = singlet_gpu::io::PzDataLoader::DEFAULT_CHUNK_COLS)
+    .def_property_readonly("rows",
+        [](const singlet_gpu::io::PzDataLoader& self) { return self.rows(); },
+        "Number of rows (genes).")
+    .def_property_readonly("cols",
+        [](const singlet_gpu::io::PzDataLoader& self) { return self.cols(); },
+        "Number of cols (cells).")
+    .def_property_readonly("nnz",
+        [](const singlet_gpu::io::PzDataLoader& self) { return self.nnz(); },
+        "Total non-zero entries.")
+    .def_property_readonly("path",
+        [](const singlet_gpu::io::PzDataLoader& self) { return self.path(); },
+        "Source .1pz path.")
+    .def_property_readonly("num_forward_chunks",
+        [](const singlet_gpu::io::PzDataLoader& self) { return self.num_forward_chunks(); })
+    .def_property_readonly("num_transpose_chunks",
+        [](const singlet_gpu::io::PzDataLoader& self) { return self.num_transpose_chunks(); })
+    .def("__repr__",
+        [](const singlet_gpu::io::PzDataLoader& self) {
+            return "<PzDataLoader rows=" + std::to_string(self.rows())
+                 + " cols=" + std::to_string(self.cols())
+                 + " nnz=" + std::to_string(self.nnz()) + ">";
+        });
 }

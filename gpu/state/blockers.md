@@ -17,9 +17,9 @@ Only externally-gated items. Every entry has a one-line "what user action unbloc
 
 ### INFRA-CUVS-CUGRAPH-INSTALL
 - **Blocked**: feature 8 (kNN CAGRA tier 2), feature 9 (Leiden), feature 10 (UMAP). Affects 3 P0 features.
-- **What unblocks**: `pip install cuvs-cu12` + RAPIDS cuGraph on g001/g008/g051. User confirmation required before installing system-wide.
-- **Workaround**: feature 8 Exact backend is on frontier without CAGRA. Features 9 and 10 in `todo`.
-- **Severity**: high — gates 3 roadmap features.
+- **What unblocks**: `pip install cuvs-cu12` + RAPIDS cuGraph + cuML on g001/g008/g051. User confirmation required before installing system-wide.
+- **Workaround**: feature 8 Exact backend is on frontier without CAGRA. Features 9 and 10 in `todo`. CYCLE-263 verified the wrapper chain through `pp.neighbors → tools.leiden / tools.umap` works cleanly — kernels throw `RuntimeError("requires cuGraph"/"requires cuML")` at the C++ frontier. 13 tests now xfail-marked with `INFRA-CUVS-CUGRAPH-INSTALL` reason; flip-back to PASS will be automatic once cuGraph + cuML are installed (xfail strict=True will surface as XPASS-strict-fail = "blocker resolved" signal).
+- **Severity**: high — gates 3 roadmap features + 13 wrapper tests waiting for kernel availability.
 
 ### INFRA-R-SCRAN-INSTALL
 - **Blocked**: feature 2 scran deconvolution Test 5 (`RealData_GSM4037629_vs_R_scran`). Wall-SOTA gate cannot complete.

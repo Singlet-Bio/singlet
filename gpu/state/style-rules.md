@@ -717,3 +717,72 @@ CYCLE-226 reverted.  Net result: 0 forward progress on CYCLE-193-FOLLOWUP, but 2
 **When to apply**: ANY time the diff would change the *type* or *contract* of a shared binding, struct field, or module-level helper.  Cost of audit: 5-10 minutes.  Cost of skipping: cascading regressions + revert cycle + lost trust in the codebase.
 
 The rule generalizes §J.13 (deeper call-site recurrence is normal) from the FIX direction into the CHANGE direction: just as a single bug class can have N hidden recurrences across call sites, a single API change can have N hidden consumers — and architectural changes have to handle ALL of them.
+
+### §J.18 — Silent C-API failures mask Python-level wrapper bugs (from CYCLE-251/254/257)
+
+When a Python test fails with what looks like a C++ kernel segfault, the very first action — before any cuda-memcheck, gdb, or kernel rewrite — should be to **defensively wrap every cuSPARSE / cuBLAS / cuRAND / cuFFT / cuSOLVER status-returning call in the suspect path with a CHECK macro that throws `std::runtime_error` with file:line on non-SUCCESS**.
+
+**Empirical evidence (CYCLE-199 saga, ~2 weeks of investigation)**:
+
+1. CYCLE-199 (PCA segfault on real data) was treated as a kernel bug for 4+ cycles: hypotheses included `host_retained` lifetime mismatch (CYCLE-213 — wrong), `result_csr` lifetime / dangling pointers (CYCLE-214 — wrong), kernel scale-bisect (CYCLE-215 — confirmed kernel runs at small scale but segfaults at ~5000×2000).
+2. CYCLE-249 cuda-memcheck reported `ERROR SUMMARY: 0 errors` — no GPU-side memory violation. CYCLE-251 initcheck found ONE real bug (cusparseSpMV reading uninitialized `d_tmp`); CYCLE-253 fixed it. **Initcheck cleared, segfault remained.**
+3. CYCLE-254 spent another cycle ruling out stack overflow and bad pointer dereferences in host code.
+4. CYCLE-255 wrapped 19 cuSPARSE/cuBLAS/cuRAND calls in `reduce/svd/deflation.h` with CHECK macros. Cost: 1 Sonnet dispatch, ~3 minutes of work.
+5. CYCLE-257 gdb job, with the wrapped calls in place, surfaced the actual root cause in **2 lines of pytest output**: `AttributeError: 'singlet_gpu._core.SvdResult' object has no attribute 'rows'` at `singlet_gpu/reduce/svd.py:120`. **A 4-line Python wrapper fix closed the entire arc.**
+
+**Mechanism**: when `cusparseSpMV` (or any C library call) returns a non-SUCCESS status that the caller doesn't check, the handle is left in an undefined state. Later cleanup (e.g. `cusparseDestroySpMat` or the kernel's RAII destructor) sees the corrupted handle and segfaults inside the library. The host-side fault appears at a destructor or stack-unwind site, **far from the actual root cause**, and looks for all the world like a kernel-internal bug.
+
+In CYCLE-257's specific case: the Python wrapper raised `AttributeError`, and during the exception unwind cupy/pybind11 destroyed the `SvdResult` object while a child cuSPARSE handle was still in a non-SUCCESS state from an earlier silent failure. The destructor then faulted, masquerading as a "kernel segfault." With status checks added, the offending C-API call would have thrown a `std::runtime_error` immediately — but more importantly, the destructor path saw clean handles and the `AttributeError` propagated cleanly.
+
+**The rule**:
+
+1. **At the first sign of an unexplained C++-looking segfault** in a path that goes through C libraries (cuSPARSE / cuBLAS / cuRAND / cuFFT / cuSOLVER / cublasLt / cuTENSOR / cuSparseLt / cudnn / nccl / mpi), the FIRST hypothesis is "we have an unchecked status code that's masking a different bug."
+2. **Dispatch a Sonnet kernel-dev to wrap every C-API call in the suspect file** with the existing CUSPARSE_CHECK / CUBLAS_CHECK / CURAND_CHECK / CUDA_CHECK macros (or add the macros to `core/types.h` if missing). This is mechanical 30-min work, requires no algorithmic understanding, and is a permanent codebase improvement.
+3. **Re-run the failing test**. One of three outcomes:
+   - **(a) An exception now throws with a real file:line** — that's the actual bug. Fix it.
+   - **(b) The test now passes** — the silent failure was the only bug. Done.
+   - **(c) Still segfaults, no exception** — the bug is genuinely host-side (stack overflow, double free, etc.), and you've eliminated the silent-status-corruption hypothesis. Move on to gdb/sanitizer with confidence.
+
+**Why this works**: status checks are cheap (one branch per call), defensive (no algorithm change, no API change, no semantics change), and durably valuable (every future bug in the same path benefits from clean exceptions). They're net-positive even when not the root cause.
+
+**Anti-pattern** (CYCLE-199 first 6 cycles): "the kernel is segfaulting → the kernel must be buggy → spend cycles diffing kernel logic." Wrong premise. The kernel was always correct. The wrapper was always slightly broken. The C-API silence let the wrapper bug masquerade as a kernel bug for 2 weeks.
+
+**Cost-benefit**: §J.18's first-cycle dispatch costs ~30 minutes of Sonnet time and lands a permanent codebase improvement. Skipping it cost CYCLE-199 ~12 cycles of Opus + Sonnet investigation across CYCLE-213/214/215/244/245/247/249/251/253/254. The leverage ratio is on the order of 24×.
+
+**When to apply**: any unexplained C++ segfault in a Python wrapper path. Cost: 30 min + 1 Sonnet dispatch. Default = always do this BEFORE any cuda-memcheck / initcheck / gdb cycle. If status-check audit clears the path with no new exceptions, then the bug is genuinely deeper and the heavy diagnostic tools are warranted.
+
+This rule generalizes §J.5 (risk-pacing): the cheapest, most defensive cycle should always come before expensive investigative cycles. §J.18 is its concrete instantiation for C-library-status-code bugs.
+
+The §J series now has 18 sub-rules. §J.5 risk-pacing recovery: HIGH×2 (CYCLE-256 wrapper-fix PASS + CYCLE-257 wrapper-fix verify in flight) → LOW Opus rule-distillation (this entry).
+
+### §J.19 — Predictive 5-layer wrapper-rot model (from CYCLE-189-272 saga arc, 2026-05-03/04)
+
+§J.13 said "stub-era wrappers fail in N (5-8) independent ways under first real run."  After two more saga arcs — pp.neighbors → leiden/umap (CYCLE-260-263, 4 layers) and integrate.harmony+bbknn (CYCLE-267-270, 4 layers) — a clear 5-layer **predictive model** has emerged.  Every wrapper that calls into a `_core.<kernel>(...)` follows the same peel order:
+
+**Layer 1 — Signature mismatch.** Wrapper passes scanpy-style kwargs (`n_neighbors=`, `inplace=`, `method=`, `metric='euclidean'`, etc.); binding accepts kw_only with different names (`k=`, no `inplace`, no `method`, `metric='L2'`).  Failure mode: `TypeError: <kernel>(): incompatible function arguments`.  Fix shape: rename/drop kwargs; map enum strings; pass positional where binding requires.  Cost: 1 Sonnet diagnosis + 1 verify (~30min).
+
+**Layer 2 — CAI upload.** Binding requires `__cuda_array_interface__`-exposing input (numpy doesn't qualify).  Wrapper now passes a numpy array (commonly because upstream wrappers store results in `obsm['X_pca']` as numpy per scanpy convention).  Failure mode: `TypeError: <input> must expose __cuda_array_interface__`.  Fix shape: `if not hasattr(x, "__cuda_array_interface__"): x = cp.asarray(x, dtype=cp.float32)` immediately before the call.  Cost: 1 Opus 5-line edit + 1 verify.
+
+**Layer 3 — Result-attr access.** Binding returns a `Py<Kind>Result` struct exposing only `*_view` CAI-dict properties (no `.distances`, `.connectivities`, `.embedding` direct attrs); `__repr__` may use the underlying private fields, fooling readers into thinking they're exposed.  Failure mode: `AttributeError: '_core.<Kind>Result' object has no attribute '<name>'`.  Fix shape: read `result.<thing>_view` (a CAI dict), wrap in `_CaiView` shim per §J.13, `cp.asarray(...).get()` for host transfer.  Cost: 1 Opus diagnosis after grep'ing `class_<PyKindResult>` in `_singlet_gpu_core.cpp` or `_bind_results.hpp`.
+
+**Layer 4 — Structured-data construction.** Wrapper wants a structured object (sparse CSR for obsp, ndarray for obsm, etc.) but the views are flat 1-D buffers; need to reshape and assemble on the Python side.  Failure mode varies: shape errors, AssertionErrors on non-negative / [0,1] checks, scipy CSR canonicalize anomalies.  Common subcase: kernel emits `-1` sentinel padding in `neighbors_view` for under-filled rows (e.g. bbknn with batches having fewer cells than `k_within`); naive scipy CSR construction passes negative column indices and produces corrupted matrices.  Fix shape: reshape `(n*k,)` → `(n, k)`, build `valid_mask = nbr_idx >= 0`, rebuild `row_offsets` from per-row valid counts via cumsum, filter both `data` and `indices` by the mask before CSR construction.  Cost: 1 Opus 20-line edit (most expensive layer because it requires understanding the kernel's output contract).
+
+**Layer 5 — Real algorithmic divergence.** With layers 1-4 fixed, basic-shape tests pass.  Correctness tests now exercise the actual algorithm, and reveal that the GPU kernel uses a different formulation than scanpy/seurat (e.g. our connectivities use per-row Gaussian, scanpy uses UMAP `fuzzy_simplicial_set`).  Failure mode: AssertionError with metric below threshold (Jaccard < 0.95, Pearson r < 0.999, etc.).  These are NOT wrapper bugs — they're real algorithmic deferrals.  Fix shape: `pytest.mark.xfail(strict=True, raises=AssertionError, reason="...placeholder algorithm...")` per §J.16; file a follow-up cycle for the proper port.  Cost: 1 xfail decorator + filed followup.
+
+**The predictive model**:
+
+1. When you pick up a stub wrapper to verify, **expect 4-5 layers**.
+2. When you peel layer 1, the next verify reveals layer 2 as a NEW failure mode — that's normal and expected, not a regression.
+3. The first 2 layers are pure-Sonnet dispatch territory (pattern-match against existing wrappers like pp/neighbors.py).
+4. Layer 3 needs Opus to understand the binding's actual exposure (read `class_<...>` registration).
+5. Layer 4 needs Opus to understand the kernel output contract (reshape, sentinels, padding).
+6. Layer 5 is a deferral, not a fix.
+7. **Total cost per wrapper: 3-5 Sonnet/Opus cycles + 3-5 verifies**.  At ~10 min/cycle that's 30-50 min wall-clock per wrapper.  Compare to the score_genes saga (CYCLE-189-195) at 7 cycles before §J.13 was distilled.
+
+**When to apply**: any time a stub wrapper is being verified for the first time, OR a wrapper's first verify after a major upstream change (e.g. binding signature update).  Plan for 4-5 cycles of peel.  Halt if peel exceeds 7 layers — that's a sign the wrapper is fundamentally misaligned and needs a redesign rather than a peel.
+
+**Why it's predictive, not just descriptive**: every saga in this session (knn_graph, leiden_partition, umap_embed, harmony, bbknn) followed the same layer order with NO out-of-sequence surprises.  When CYCLE-262 was at layer 3 (KnnResult.distances missing), I correctly predicted CYCLE-263 would be layer 4 (build scipy CSR from views) — and it was.  Same for harmony+bbknn (CYCLE-267 layer 1 → CYCLE-268 layer 2/3 → CYCLE-269/270 layer 4).  The model is reliable enough to plan dispatches in advance.
+
+**§J.19 vs §J.13/§J.18**: §J.13 said "expect N peels"; §J.19 says "the N peels follow a predictable layer order."  §J.18 said "wrap C-API status checks first to unmask wrapper bugs"; §J.19 says "after the unmask, the wrapper bugs themselves follow the 5-layer model."  Together they form the complete diagnostic playbook for any GPU-kernel-Python-wrapper failure.
+
+The §J series now has 19 sub-rules.  §J.5 risk-pacing recovery: HIGH×12 (CYCLE-256-271 minus 2 LOWs) → LOW Opus rule-distillation (this entry).

@@ -255,16 +255,22 @@ def pseudobulk_de(
         import cupy.sparse as csp
     import scipy.sparse as sp
 
+    # CYCLE-256 (CYCLE-211 root cause): _core.donor_pseudobulk_de expects a
+    # (genes × cells) CSC — its kernel reads `mat.rows` as n_genes and
+    # `mat.cols` as n_cells (donor_pseudobulk.h:873-874, "m genes × n cells").
+    # `_extract_matrix` returns AnnData (cells × genes); transpose before
+    # building the cupy CSC so the C++ axis convention is satisfied.
     if csp.issparse(mat):
-        cu_csc = mat if isinstance(mat, csp.csc_matrix) else mat.tocsc()
+        cu_csc = mat.T
+        cu_csc = cu_csc if isinstance(cu_csc, csp.csc_matrix) else cu_csc.tocsc()
         if cu_csc.dtype != cp.float32:
             cu_csc = cu_csc.astype(cp.float32)
     elif sp.issparse(mat):
-        cu_csc = csp.csc_matrix(mat.tocsc().astype(np.float32))
+        cu_csc = csp.csc_matrix(mat.T.tocsc().astype(np.float32))
     elif hasattr(mat, "__cuda_array_interface__"):
-        cu_csc = csp.csc_matrix(mat.astype(cp.float32))
+        cu_csc = csp.csc_matrix(cp.asarray(mat).T.astype(cp.float32))
     else:
-        cu_csc = csp.csc_matrix(cp.asarray(mat, dtype=cp.float32))
+        cu_csc = csp.csc_matrix(cp.asarray(mat, dtype=cp.float32).T)
     device_mat = _core.from_cupy_csr(cu_csc)
 
     # cluster_labels and donor_labels must expose __cuda_array_interface__

@@ -136,6 +136,10 @@ def _to_numpy(arr):
 # ---------------------------------------------------------------------------
 # test_umap_basic
 # ---------------------------------------------------------------------------
+@pytest.mark.xfail(
+    strict=True, raises=RuntimeError,
+    reason="INFRA-CUVS-CUGRAPH-INSTALL: umap_embed requires cuML; not installed on GPU nodes (state/blockers.md)",
+)
 @requires_gpu
 def test_umap_basic(gsm4037629_path):
     """umap() completes without error and writes adata.obsm['X_umap'].
@@ -164,6 +168,10 @@ def test_umap_basic(gsm4037629_path):
 # ---------------------------------------------------------------------------
 # test_umap_writes_obsm
 # ---------------------------------------------------------------------------
+@pytest.mark.xfail(
+    strict=True, raises=RuntimeError,
+    reason="INFRA-CUVS-CUGRAPH-INSTALL: umap_embed requires cuML; not installed on GPU nodes (state/blockers.md)",
+)
 @requires_gpu
 def test_umap_writes_obsm(gsm4037629_path):
     """umap() writes obsm['X_umap'] with shape (n_cells, 2), finite values.
@@ -200,6 +208,10 @@ def test_umap_writes_obsm(gsm4037629_path):
 # ---------------------------------------------------------------------------
 # test_umap_n_components
 # ---------------------------------------------------------------------------
+@pytest.mark.xfail(
+    strict=True, raises=RuntimeError,
+    reason="INFRA-CUVS-CUGRAPH-INSTALL: umap_embed requires cuML; not installed on GPU nodes (state/blockers.md)",
+)
 @requires_gpu
 def test_umap_n_components(gsm4037629_path):
     """umap() honors the n_components parameter (2 and 3 tested).
@@ -228,6 +240,10 @@ def test_umap_n_components(gsm4037629_path):
 # ---------------------------------------------------------------------------
 # test_umap_vs_scanpy_trustworthiness
 # ---------------------------------------------------------------------------
+@pytest.mark.xfail(
+    strict=True, raises=RuntimeError,
+    reason="INFRA-CUVS-CUGRAPH-INSTALL: umap_embed requires cuML; not installed on GPU nodes (state/blockers.md)",
+)
 @requires_gpu
 def test_umap_vs_scanpy_trustworthiness(gsm4037629_path):
     """GPU UMAP embedding trustworthiness ≥ 0.85 on the PCA high-dim space.

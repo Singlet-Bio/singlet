@@ -227,34 +227,55 @@ def umap(
     seed = _resolve_seed(rng)
     obsm_key = key_added if key_added is not None else "X_umap"
 
-    distances, connectivities = _get_neighbors_data(working, neighbors_key)
+    # CYCLE-263: read cached KnnResult; raise a clear error if absent.
+    if neighbors_key not in working.uns or "_knn_result" not in working.uns[neighbors_key]:
+        raise KeyError(
+            f"No cached KnnResult found in adata.uns['{neighbors_key}']['_knn_result']. "
+            "Call singlet_gpu.pp.neighbors() before singlet_gpu.tools.umap()."
+        )
+    knn_result = working.uns[neighbors_key]["_knn_result"]
 
-    # Handle init_pos: convert ndarray to the raw __cuda_array_interface__ dict
-    # so C++ can accept it without a host copy.
-    init_arr = None
-    init_mode = "random"
+    # Map scanpy kwargs → binding kwargs.
+    # Dropped (scanpy-only, not accepted by umap_embed):
+    #   distances, connectivities (implicit in knn_result)
+    #   alpha → learning_rate, gamma, a, b, maxiter → n_epochs,
+    #   init_arr (binding only accepts 'Random'/'Spectral' string)
+    # init_pos: ndarray init is not supported by the binding; fall back to 'random'.
     if isinstance(init_pos, np.ndarray):
-        init_mode = "provided"
-        init_arr = init_pos
-    elif init_pos is not None:
-        init_mode = init_pos  # 'spectral' or 'random'
+        import warnings
+        warnings.warn(
+            "umap: init_pos ndarray is not supported by the GPU binding; "
+            "falling back to 'random'.",
+            UserWarning,
+            stacklevel=2,
+        )
+        init_str = "random"
+    else:
+        init_str = init_pos if init_pos is not None else "random"
 
-    embedding = _core.umap_embed(
-        distances=distances,
-        connectivities=connectivities,
+    n_epochs_val = int(maxiter) if maxiter is not None else 0  # 0 = binding default
+
+    umap_res = _core.umap_embed(
+        knn_result,
         n_components=int(n_components),
+        n_epochs=n_epochs_val,
         min_dist=float(min_dist),
         spread=float(spread),
-        maxiter=int(maxiter) if maxiter is not None else -1,
-        alpha=float(alpha),
-        gamma=float(gamma),
-        negative_sample_rate=int(negative_sample_rate),
-        init_mode=init_mode,
-        init_arr=init_arr,
-        a=float(a) if a is not None else -1.0,
-        b=float(b) if b is not None else -1.0,
+        learning_rate=float(alpha),
+        init=init_str,
         seed=seed,
+        negative_sample_rate=int(negative_sample_rate),
     )
+
+    # Extract embedding from device via CAI view → numpy array (n × n_components).
+    import cupy as cp
+
+    class _CaiView:
+        def __init__(self, d):
+            self.__cuda_array_interface__ = d
+
+    emb_gpu = cp.asarray(_CaiView(umap_res.embedding_view))
+    embedding = emb_gpu.get().reshape(working.n_obs, n_components)
 
     working.obsm[obsm_key] = embedding
 

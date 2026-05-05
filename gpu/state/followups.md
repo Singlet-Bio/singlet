@@ -37,10 +37,19 @@ Post-cycle-N items grouped by module. Pulled from `state/dag.md` when an entry h
 
 ## graph
 
+- 🟡 **CYCLE-262-FOLLOWUP-CONNECTIVITIES-FUZZY-SIMPLICIAL** (cycle 266, pp/neighbors) — `pp/neighbors.py:300-360` computes connectivities via per-row Gaussian on distances (placeholder). Scanpy uses UMAP `fuzzy_simplicial_set`. Real algorithmic divergence — Jaccard ≈ 0.03 vs 0.95 threshold in test_neighbors_vs_scanpy (currently xfail-strict). Implement either: (a) port `umap.umap_.fuzzy_simplicial_set` to GPU, (b) call host-side `umap.umap_.fuzzy_simplicial_set` from the wrapper after pulling distances down, (c) inline the smooth-knn-distance + binary-search-sigma + cross-entropy union compute. ~150-300 LOC. Address when scanpy-parity audit picks neighbors.
 - 🟡 **CYCLE-GATE-2F** (cycle gate, knn/leiden) — replace static_assert guards in `graph/knn.h:430`, `graph/leiden.h:388,442` with `#ifdef SINGLET_GPU_HAS_CUGRAPH` / `HAS_CUVS` preprocessor guards. Compile-time assertion fails even when enclosing test is GTEST_SKIP-gated.
 - 🟡 **CYCLE-35-KNN-WRAPPER-FIELD-STYLE** — already resolved cycle 49a; remove from active.
 
 ## de
+
+- 🟡 **CYCLE-276-FOLLOWUP-NMF-LOSS-HISTORY** (cycle 276, pybind/nmf) — `_core.NmfResult` binding does not expose `loss_history` (per-iteration reconstruction loss), even though the C++ struct likely tracks it. nmf_chunked wrapper now returns `loss_history=[]`. Add `def_property_readonly("loss_history", ...)` to `_singlet_gpu_core.cpp:406` mirror once the C++ struct's loss_history field is verified. ~5 LOC.
+
+- 🔴 **CYCLE-274-FOLLOWUP-PCA-VARIANCE-RATIO-PARITY** (cycle 274, reduce/svd) — `test_pca_vs_scanpy` fails on PCA variance_ratio assertion. Likely root cause: our deflation kernel takes (genes × cells) input (CYCLE-257 wrapper transpose), so the singular-values-squared / total-variance ratio differs from scanpy's (cells × genes) convention. xfail-strict in place. Real algorithmic alignment needed (not a quick wrapper fix).
+
+- 🔴 **CYCLE-274-FOLLOWUP-PZDATALOADER-PYTHON-CTOR** (cycle 274, pybind/io) — `_core.nmf_chunked` takes a `PzDataLoader` cast from `py::object` (`_bind_kernels.hpp:482`), but `PzDataLoader` is NOT exposed as a Python class. Wrapper at `_nmf_core.py:417` passes `list(paths)` and fails the cast. Add either: (a) `py::class_<PzDataLoader>` registration with a path-list constructor, or (b) a path-list overload of `nmf_chunked` that builds the loader internally. ~30 LOC.
+
+- 🔴 **CYCLE-23-FOLLOWUP-VELOCITY-FULL-KERNEL** (cycle 271-272, kernel + pybind) — `_core.velocity_moments` and `_core.velocity_velocity` are NOT exposed by the pybind11 binding **AND the underlying C++ kernels don't exist yet** (only `preprocess/velocity_prep.h` is implemented). Wrappers `python/singlet_gpu/velocity/moments.py` + `velocity.py` raise `AttributeError` from a defensive `hasattr(_core, "velocity_moments")` check. 3 tests currently xfail-strict (test_moments_writes_layers_Ms_Mu, test_velocity_writes_layers_velocity, test_velocity_writes_var_gamma). Implementation requires: (a) `include/singlet-gpu/embed/velocity/moments.h` (Ms/Mu first-order moments via knn smoothing), (b) `include/singlet-gpu/embed/velocity/velocity.h` (steady-state, deterministic, dynamical models), (c) pybind11 bindings. **Estimated 400-800 LOC of CUDA + 60 LOC of binding scaffold.** Full feature, not a quick fix. Address as a roadmap item when scvelo-parity becomes priority.
 
 - 🟡 **CYCLE-21-LOGREG-DE** (cycle 21, wrappers) — `rank_genes_groups(method='logreg')` currently dispatches to Wilcoxon with a warning. Add GPU logreg DE.
 - 🟡 **CYCLE-85-BENCH-HARNESS-OOM** (cycle 85, de) — large-scale DE bench (100k × 30k) skipped due to host `vector::reserve` OOM before GPU OOM check. Move OOM-gate before vector reserves in bench drivers. ~30 LOC.
@@ -53,6 +62,7 @@ Post-cycle-N items grouped by module. Pulled from `state/dag.md` when an entry h
 
 ## pybind / wrappers
 
+- 🟡 **CYCLE-257-FOLLOWUP-SVDRESULT-EXPOSE-ROWS-COLS** (cycle 257, pybind) — `PySvdResult` C++ struct has `rows`/`cols` int fields and uses them in `__repr__`, but `_singlet_gpu_core.cpp:360-397` does NOT expose them via `def_property_readonly`. Wrapper at `svd.py:115-128` works around this by deriving from `adata.n_vars`/`adata.n_obs`. Fragile — any non-AnnData caller breaks. Add 6 lines to the binding (mirror `k_selected` pattern). ~6 LOC C++ + drop the 3-line workaround in svd.py. Address next time the wrapper interface needs touching.
 - 🟡 **CYCLE-104-FOLLOWUP-PYBIND-DEVICEMEMORY-AUDIT** (cycle 104, pybind) — one-time audit to catch any other `DeviceMemory::data()` strays in the bindings. Run `grep -rn "DeviceMemory.*\.data()" python/src/ r/src/ | grep -v "vector\|host_indptr\|host_indices\|host_values"` and fix every site to `.get()` (Cycle 54 sweep missed `_bind_loader.hpp`).
 - 🟡 **CYCLE-104-FOLLOWUP-DEFERRED-BINDINGS-GATE** (cycle 104, pybind) — apply the `SINGLET_GPU_BUILD_DEFERRED` gate consistently to all bindings whose underlying features are in the deferred-indefinitely scope: `_bind_spatial_phaseb`, `_bind_generative`, `_bind_perturbation`, `_bind_enrich`, `_bind_atac`, `_bind_cna`, `_bind_eqtl`, `_bind_grn`, `_bind_disease`, `_bind_abundance`, `_bind_comm`, `_bind_ase`, `_bind_variants`, `_bind_network`. Keeps foundational build small + fast. ~30 LOC of `#ifdef` gates.
 
@@ -61,6 +71,10 @@ Post-cycle-N items grouped by module. Pulled from `state/dag.md` when an entry h
 - 🟡 **CYCLE-93-FOLLOWUP-FEATURE-ID-CROSSCHECK** (cycle 93, infra) — add a tiny script (Python or Node) that asserts every short ID in `scripts/frontier_sync.py` `_LONG_TO_SHORT` is present in `singletai-website/src/pages/Benchmarks.tsx` `FEATURES[].id`, and warns when a frontier feature has no website entry. ~40 LOC. Wire into a pre-publish check or the cycle 90 cron.
 - 🟡 **CYCLE-92-FOLLOWUP-NVCC-ONLY-DOCS** (cycle 92, docs) — update `docs/install.md` to make the nvcc-only requirement explicit: header-only, but the umbrella header includes CUDA kernel launch syntax inline, so consumers compile their own TUs with nvcc (or nvcc -ccbin g++). ~10 LOC.
 - 🟡 **CYCLE-92-FOLLOWUP-CMAKE-COMMIT-SHA** (cycle 92, build) — once git is initialized at workspace root, add `git describe`/`git rev-parse HEAD` to the top-level CMakeLists.txt and pass `-DSINGLET_GPU_COMMIT_SHA="..."` to compilation so `singlet_gpu::commit_sha()` returns a real value instead of the literal "pre-1.0".
+
+## doc / state
+
+- 🔴 **CYCLE-258-FOLLOWUP-DAG-PRUNE** (cycle 258, doc) — `state/dag.md` has 119 entries vs the ≤20 cap (orchestrator Rule). Many are PASS entries already replicated in `state/cycle-log.md`. Dispatch `gpu-doc-scribe` (Haiku) to: (a) move all PASS entries older than CYCLE-240 to followups.md or cycle-log.md, (b) drop pure status duplicates already in cycle-log, (c) keep only the active ≤20 entries that are in-flight or the most recent 5 PASS milestones. Estimated 1 dispatch, ~5 min Haiku work. Address next LOW-risk cycle.
 
 ## tests / infra
 

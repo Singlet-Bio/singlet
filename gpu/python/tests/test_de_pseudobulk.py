@@ -220,14 +220,9 @@ def test_pseudobulk_de_writes_uns():
 # ---------------------------------------------------------------------------
 # test_pseudobulk_de_min_cells_filter
 # ---------------------------------------------------------------------------
-@pytest.mark.xfail(
-    reason="C++ kernel `_core.donor_pseudobulk_de` raises CUDA illegal "
-           "memory access when min_cells_per_pseudobulk filters out a "
-           "(donor, cluster) cell group entirely.  Edge-case kernel bug — "
-           "filed CYCLE-211-PSEUDOBULK-MIN-CELLS-FILTER-CUDA-CRASH.",
-    strict=True,
-    raises=RuntimeError,
-)
+# CYCLE-256: xfail removed. Root cause was Python wrapper passing
+# (cells × genes) CSC to a kernel that expects (genes × cells); applied .T in
+# python/singlet_gpu/de/pseudobulk.py:258-273. Verified PASS via job 374155.
 @requires_gpu
 def test_pseudobulk_de_min_cells_filter():
     """pseudobulk_de() excludes (donor, cell_type) groups with fewer than min_cells.

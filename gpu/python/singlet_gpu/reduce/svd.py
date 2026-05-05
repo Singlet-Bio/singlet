@@ -117,8 +117,19 @@ def _write_pca_result(adata: "anndata.AnnData", result, *, n_comps: int) -> None
     #   d_V: shape (cols × k_selected) col-major
     #   d_d: k_selected singular values
     # Each *_view is a CAI dict from make_view_object.
-    U = cp.asarray(_CaiView(result.U_view)).reshape(int(result.k_selected), int(result.rows)).T.get()
-    V = cp.asarray(_CaiView(result.V_view)).reshape(int(result.k_selected), int(result.cols)).T.get()
+    #
+    # CYCLE-257 (CYCLE-199 root cause closed): SvdResult does NOT expose `rows`
+    # / `cols` attributes via pybind11 (struct fields exist but only `__repr__`
+    # uses them; see _singlet_gpu_core.cpp:360-397). The CYCLE-254 "host-side
+    # segfault" was actually this AttributeError that surfaced once the
+    # CYCLE-255 status-check audit removed the silent cuSPARSE failures
+    # masking it. Wrapper transposed mat to (genes × cells) at line 97 so
+    # rows = n_vars and cols = n_obs.
+    n_rows = int(adata.n_vars)
+    n_cols = int(adata.n_obs)
+    k_sel  = int(result.k_selected)
+    U = cp.asarray(_CaiView(result.U_view)).reshape(k_sel, n_rows).T.get()
+    V = cp.asarray(_CaiView(result.V_view)).reshape(k_sel, n_cols).T.get()
     sigma = cp.asarray(_CaiView(result.d_view)).get()
 
     # X_pca: cell embeddings (cells × n_comps).  After our CSC layout swap
@@ -239,7 +250,10 @@ def pca(
             "See CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE."
         )
 
-    working_adata = adata if (inplace and not copy) else copy_module.copy(adata)
+    # CYCLE-274 (test_pca_inplace_vs_copy): copy_module.copy(adata) is a
+    # shallow copy — adata.obsm is shared with the original, so writing
+    # X_pca mutates the input. Use anndata's deep copy instead.
+    working_adata = adata if (inplace and not copy) else adata.copy()
     mat = _get_matrix(working_adata, layer)
     device_csc = _csr_to_device_csc(mat)
 
@@ -357,7 +371,10 @@ def svd_randomized(
             "See CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE."
         )
 
-    working_adata = adata if (inplace and not copy) else copy_module.copy(adata)
+    # CYCLE-274 (test_pca_inplace_vs_copy): copy_module.copy(adata) is a
+    # shallow copy — adata.obsm is shared with the original, so writing
+    # X_pca mutates the input. Use anndata's deep copy instead.
+    working_adata = adata if (inplace and not copy) else adata.copy()
     mat = _get_matrix(working_adata, layer)
     device_csc = _csr_to_device_csc(mat)
 
@@ -448,7 +465,10 @@ def svd_deflation(
             "See CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE."
         )
 
-    working_adata = adata if (inplace and not copy) else copy_module.copy(adata)
+    # CYCLE-274 (test_pca_inplace_vs_copy): copy_module.copy(adata) is a
+    # shallow copy — adata.obsm is shared with the original, so writing
+    # X_pca mutates the input. Use anndata's deep copy instead.
+    working_adata = adata if (inplace and not copy) else adata.copy()
     mat = _get_matrix(working_adata, layer)
     device_csc = _csr_to_device_csc(mat)
 

@@ -213,36 +213,77 @@ def bbknn(
     batch_codes = _resolve_batch_codes(working, batch_key)    # (n_cells,) int32
     n_batches = int(batch_codes.max()) + 1
 
-    # C++ kernel: bbknn(embedding, batch_codes, n_batches,
-    #                    neighbors_within_batch, metric,
-    #                    set_op_mix_ratio, local_connectivity)
-    # Returns (distances_sparse, connectivities_sparse) — scipy/cupy sparse.
+    # CYCLE-267: binding signature (kw_only after n_batches):
+    #   bbknn(embedding, batch_labels, n_batches,
+    #         *, k_within=3, approx_threshold=100000) -> KnnResult
+    # `metric` / `set_op_mix_ratio` / `local_connectivity` are scanpy-only
+    # kwargs not accepted by the binding — drop them. Returns a KnnResult.
+    if not hasattr(emb, "__cuda_array_interface__"):
+        import cupy as cp
+        emb = cp.asarray(emb, dtype=cp.float32)
+    if not hasattr(batch_codes, "__cuda_array_interface__"):
+        import cupy as cp
+        batch_codes = cp.asarray(batch_codes, dtype=cp.int32)
     result = _core.bbknn(
         emb,
         batch_codes,
         n_batches,
-        int(neighbors_within_batch),
-        str(metric),
-        float(set_op_mix_ratio),
-        int(local_connectivity),
+        k_within=int(neighbors_within_batch),
     )
 
-    # result.distances and result.connectivities are sparse (cells × cells).
-    # Transfer to scipy for obsp storage.
-    try:
-        try:
-            import cupyx.scipy.sparse as csp  # cupy >= 14
-        except ImportError:
-            import cupy.sparse as csp         # cupy < 14 fallback
-        if hasattr(result.distances, "get"):
-            distances = result.distances.get()
-            connectivities = result.connectivities.get()
-        else:
-            distances = result.distances
-            connectivities = result.connectivities
-    except ImportError:
-        distances = result.distances
-        connectivities = result.connectivities
+    # CYCLE-268: bbknn returns KnnResult (per _bind_kernels.hpp:1748),
+    # which exposes only `n`, `k`, `row_offsets_view`, `neighbors_view`,
+    # `distances_view` (per _bind_results.hpp:362-390).  Build scipy CSR
+    # matrices `(n × n)` from the views — same pattern as CYCLE-262
+    # pp/neighbors.py.  Connectivities use a per-row Gaussian (placeholder;
+    # see CYCLE-262-FOLLOWUP-CONNECTIVITIES-FUZZY-SIMPLICIAL).
+    import cupy as cp
+    import scipy.sparse as sp
+
+    class _CaiView:
+        def __init__(self, d):
+            self.__cuda_array_interface__ = d
+
+    n = int(result.n)
+    k = int(result.k)
+    nbr_idx_flat  = cp.asarray(_CaiView(result.neighbors_view)).get().astype(np.int32)
+    nbr_dist_flat = cp.asarray(_CaiView(result.distances_view)).get().astype(np.float32)
+
+    # CYCLE-269: bbknn KnnResult uses (n*k,) flat row-major buffers.
+    # The kernel pads under-filled batches with -1 sentinels in
+    # `neighbors_view` (and matching values in `distances_view`).
+    # `row_offsets_view` reflects the FULL (n*k) layout, not filtered counts.
+    # Filter sentinels before building the scipy CSR; rebuild row_offsets
+    # from a reshape view so under-filled rows have fewer entries.
+    nbr_idx_2d  = nbr_idx_flat.reshape(n, k)
+    nbr_dist_2d = nbr_dist_flat.reshape(n, k)
+
+    valid_mask = nbr_idx_2d >= 0
+    counts = valid_mask.sum(axis=1).astype(np.int32)
+    row_offsets = np.zeros(n + 1, dtype=np.int32)
+    np.cumsum(counts, out=row_offsets[1:])
+
+    valid_idx  = nbr_idx_2d[valid_mask].astype(np.int32)
+    valid_dist = nbr_dist_2d[valid_mask].astype(np.float32)
+
+    # Distances: clamp negative floats (paranoid; mask should already filter).
+    dist_data = np.where(valid_dist >= 0, valid_dist, 0.0).astype(np.float32)
+    distances = sp.csr_matrix(
+        (dist_data, valid_idx, row_offsets),
+        shape=(n, n),
+    )
+
+    if valid_dist.size > 0:
+        local_max = max(float(valid_dist.max()), 1e-9)
+        sigma_sq = local_max * local_max
+        conn_data = np.exp(-(dist_data * dist_data) / sigma_sq).astype(np.float32)
+        conn_data = np.clip(conn_data, 0.0, 1.0)
+    else:
+        conn_data = valid_dist
+    connectivities = sp.csr_matrix(
+        (conn_data, valid_idx, row_offsets),
+        shape=(n, n),
+    )
 
     working.obsp["distances"] = distances
     working.obsp["connectivities"] = connectivities

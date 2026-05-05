@@ -182,7 +182,7 @@ inline SvdResult deflation(const io::PzDeviceMatrix& m, const SvdConfig& cfg)
     // cuSPARSE generic API: A in CSC = A^T in CSR.
     // We use CUSPARSE_FORMAT_CSC directly.
     cusparseSpMatDescr_t spA = nullptr;
-    cusparseCreateCsc(
+    CUSPARSE_CHECK(cusparseCreateCsc(
         &spA,
         (int64_t)mat_m, (int64_t)mat_n, (int64_t)m.mat.nnz,
         m.mat.col_ptr.get(),
@@ -191,7 +191,7 @@ inline SvdResult deflation(const io::PzDeviceMatrix& m, const SvdConfig& cfg)
         CUSPARSE_INDEX_32I,
         CUSPARSE_INDEX_32I,
         CUSPARSE_INDEX_BASE_ZERO,
-        CUDA_R_32F);
+        CUDA_R_32F));
 
     // --- Allocate working device buffers ---
     core::DeviceMemory<float> d_u(mat_m);   // left singular vector (length m)
@@ -214,20 +214,20 @@ inline SvdResult deflation(const io::PzDeviceMatrix& m, const SvdConfig& cfg)
 
     // --- Dense vector descriptors for cuSPARSE SpMV ---
     cusparseDnVecDescr_t dv_u = nullptr, dv_v = nullptr, dv_tmp_m = nullptr, dv_tmp_n = nullptr;
-    cusparseCreateDnVec(&dv_u,     mat_m, d_u.get(),   CUDA_R_32F);
-    cusparseCreateDnVec(&dv_v,     mat_n, d_v.get(),   CUDA_R_32F);
-    cusparseCreateDnVec(&dv_tmp_m, mat_m, d_tmp.get(), CUDA_R_32F);
-    cusparseCreateDnVec(&dv_tmp_n, mat_n, d_tmp.get(), CUDA_R_32F);
+    CUSPARSE_CHECK(cusparseCreateDnVec(&dv_u,     mat_m, d_u.get(),   CUDA_R_32F));
+    CUSPARSE_CHECK(cusparseCreateDnVec(&dv_v,     mat_n, d_v.get(),   CUDA_R_32F));
+    CUSPARSE_CHECK(cusparseCreateDnVec(&dv_tmp_m, mat_m, d_tmp.get(), CUDA_R_32F));
+    CUSPARSE_CHECK(cusparseCreateDnVec(&dv_tmp_n, mat_n, d_tmp.get(), CUDA_R_32F));
 
     // Query SpMV workspace sizes (A*v and A^T*u).
     size_t ws_Av = 0, ws_Atu = 0;
     float alpha = 1.f, beta = 0.f;
-    cusparseSpMV_bufferSize(ctx.sparse(), CUSPARSE_OPERATION_NON_TRANSPOSE,
+    CUSPARSE_CHECK(cusparseSpMV_bufferSize(ctx.sparse(), CUSPARSE_OPERATION_NON_TRANSPOSE,
         &alpha, spA, dv_v, &beta, dv_tmp_m, CUDA_R_32F,
-        CUSPARSE_SPMV_ALG_DEFAULT, &ws_Av);
-    cusparseSpMV_bufferSize(ctx.sparse(), CUSPARSE_OPERATION_TRANSPOSE,
+        CUSPARSE_SPMV_ALG_DEFAULT, &ws_Av));
+    CUSPARSE_CHECK(cusparseSpMV_bufferSize(ctx.sparse(), CUSPARSE_OPERATION_TRANSPOSE,
         &alpha, spA, dv_u, &beta, dv_tmp_n, CUDA_R_32F,
-        CUSPARSE_SPMV_ALG_DEFAULT, &ws_Atu);
+        CUSPARSE_SPMV_ALG_DEFAULT, &ws_Atu));
 
     size_t ws_total = std::max(ws_Av, ws_Atu);
     core::DeviceMemory<uint8_t> d_spmv_ws(ws_total > 0 ? ws_total : 1);
@@ -240,7 +240,7 @@ inline SvdResult deflation(const io::PzDeviceMatrix& m, const SvdConfig& cfg)
     cudaMemsetAsync(d_dots_times_D.get(), 0, sizeof(float) * (k > 0 ? k : 1), stream);
 
     // Curand seed for initial v (deterministic)
-    curandSetPseudoRandomGeneratorSeed(ctx.curand(), cfg.seed);
+    CURAND_CHECK(curandSetPseudoRandomGeneratorSeed(ctx.curand(), cfg.seed));
 
     // Output storage
     std::vector<float> U_out(mat_m * k, 0.f);
@@ -257,10 +257,10 @@ inline SvdResult deflation(const io::PzDeviceMatrix& m, const SvdConfig& cfg)
     for (int r = 0; r < k; ++r) {
         // --- Initialize v with uniform random values via cuRAND Philox ---
         // curandGenerateUniform fills d_v with [0,1).
-        curandGenerateUniform(ctx.curand(), d_v.get(), mat_n);
+        CURAND_CHECK(curandGenerateUniform(ctx.curand(), d_v.get(), mat_n));
         // Normalize v: norm = ||v||, then v ← v / norm
         float v_norm_sq = 0.f;
-        cublasSdot(ctx.blas(), mat_n, d_v.get(), 1, d_v.get(), 1, &v_norm_sq);
+        CUBLAS_CHECK(cublasSdot(ctx.blas(), mat_n, d_v.get(), 1, d_v.get(), 1, &v_norm_sq));
         cudaStreamSynchronize(stream);  // ← APPROVED: scalar init normalize (setup, not hot loop)
         float v_norm = std::sqrt(v_norm_sq);
         if (v_norm < kMinSigma) break;
@@ -275,9 +275,9 @@ inline SvdResult deflation(const io::PzDeviceMatrix& m, const SvdConfig& cfg)
         for (int it = 0; it < max_iter; ++it) {
             // === A * v → d_tmp (length m) ===
             alpha = 1.f; beta = 0.f;
-            cusparseSpMV(ctx.sparse(), CUSPARSE_OPERATION_NON_TRANSPOSE,
+            CUSPARSE_CHECK(cusparseSpMV(ctx.sparse(), CUSPARSE_OPERATION_NON_TRANSPOSE,
                 &alpha, spA, dv_v, &beta, dv_tmp_m, CUDA_R_32F,
-                CUSPARSE_SPMV_ALG_DEFAULT, d_spmv_ws.get());
+                CUSPARSE_SPMV_ALG_DEFAULT, d_spmv_ws.get()));
 
             // Subtract rank-1 corrections for prior factors:
             //   d_tmp -= sum_{j<r} D[j] * U[:,j] * (V[:,j]^T v)
@@ -287,10 +287,10 @@ inline SvdResult deflation(const io::PzDeviceMatrix& m, const SvdConfig& cfg)
                 // This is a one-time setup per outer iteration, not per-SpMV (Rule 4).
                 std::vector<float> dots(r);
                 for (int j = 0; j < r; ++j) {
-                    cublasSdot(ctx.blas(), mat_n,
+                    CUBLAS_CHECK(cublasSdot(ctx.blas(), mat_n,
                         d_V_accum.get() + j * mat_n, 1,
                         d_v.get(), 1,
-                        &dots[j]);
+                        &dots[j]));
                 }
                 cudaStreamSynchronize(stream);  // ← APPROVED: r scalar dots at start of iter (not per-row)
                 for (int j = 0; j < r; ++j)
@@ -309,7 +309,7 @@ inline SvdResult deflation(const io::PzDeviceMatrix& m, const SvdConfig& cfg)
                 cudaMemcpyDeviceToDevice, stream);
 
             float u_norm_sq = 0.f;
-            cublasSdot(ctx.blas(), mat_m, d_u.get(), 1, d_u.get(), 1, &u_norm_sq);
+            CUBLAS_CHECK(cublasSdot(ctx.blas(), mat_m, d_u.get(), 1, d_u.get(), 1, &u_norm_sq));
             cudaStreamSynchronize(stream);  // ← APPROVED: scalar convergence check, once per power iter
             float u_norm = std::sqrt(u_norm_sq);
             if (u_norm < kMinSigma) { sigma_prev = 0.f; break; }
@@ -321,7 +321,7 @@ inline SvdResult deflation(const io::PzDeviceMatrix& m, const SvdConfig& cfg)
             if (cfg.nonneg_u) {
                 nonneg_clamp_kernel<<<(mat_m+255)/256, 256, 0, stream>>>(d_u.get(), mat_m);
                 // Renormalize after clamp
-                cublasSdot(ctx.blas(), mat_m, d_u.get(), 1, d_u.get(), 1, &u_norm_sq);
+                CUBLAS_CHECK(cublasSdot(ctx.blas(), mat_m, d_u.get(), 1, d_u.get(), 1, &u_norm_sq));
                 cudaStreamSynchronize(stream);
                 u_norm = std::sqrt(u_norm_sq);
                 if (u_norm > kMinSigma)
@@ -330,18 +330,18 @@ inline SvdResult deflation(const io::PzDeviceMatrix& m, const SvdConfig& cfg)
 
             // === A^T * u → d_tmp (length n) ===
             alpha = 1.f; beta = 0.f;
-            cusparseSpMV(ctx.sparse(), CUSPARSE_OPERATION_TRANSPOSE,
+            CUSPARSE_CHECK(cusparseSpMV(ctx.sparse(), CUSPARSE_OPERATION_TRANSPOSE,
                 &alpha, spA, dv_u, &beta, dv_tmp_n, CUDA_R_32F,
-                CUSPARSE_SPMV_ALG_DEFAULT, d_spmv_ws.get());
+                CUSPARSE_SPMV_ALG_DEFAULT, d_spmv_ws.get()));
 
             // Subtract corrections for prior factors on v side.
             if (r > 0) {
                 std::vector<float> dots_u(r);
                 for (int j = 0; j < r; ++j) {
-                    cublasSdot(ctx.blas(), mat_m,
+                    CUBLAS_CHECK(cublasSdot(ctx.blas(), mat_m,
                         d_U_accum.get() + j * mat_m, 1,
                         d_u.get(), 1,
-                        &dots_u[j]);
+                        &dots_u[j]));
                 }
                 cudaStreamSynchronize(stream);  // ← APPROVED: scalar, r ≤ k, once per power iter
                 for (int j = 0; j < r; ++j)
@@ -358,7 +358,7 @@ inline SvdResult deflation(const io::PzDeviceMatrix& m, const SvdConfig& cfg)
                 cudaMemcpyDeviceToDevice, stream);
 
             float v_norm_sq2 = 0.f;
-            cublasSdot(ctx.blas(), mat_n, d_v.get(), 1, d_v.get(), 1, &v_norm_sq2);
+            CUBLAS_CHECK(cublasSdot(ctx.blas(), mat_n, d_v.get(), 1, d_v.get(), 1, &v_norm_sq2));
             cudaStreamSynchronize(stream);  // ← APPROVED: scalar
             float sigma = std::sqrt(v_norm_sq2);
 
@@ -369,7 +369,7 @@ inline SvdResult deflation(const io::PzDeviceMatrix& m, const SvdConfig& cfg)
             if (cfg.nonneg_v) {
                 nonneg_clamp_kernel<<<(mat_n+255)/256, 256, 0, stream>>>(d_v.get(), mat_n);
                 float vnq = 0.f;
-                cublasSdot(ctx.blas(), mat_n, d_v.get(), 1, d_v.get(), 1, &vnq);
+                CUBLAS_CHECK(cublasSdot(ctx.blas(), mat_n, d_v.get(), 1, d_v.get(), 1, &vnq));
                 cudaStreamSynchronize(stream);
                 float vnorm = std::sqrt(vnq);
                 if (vnorm > kMinSigma)
@@ -387,7 +387,7 @@ inline SvdResult deflation(const io::PzDeviceMatrix& m, const SvdConfig& cfg)
         // --- Extract sigma = ||A*v|| (already computed as u_norm in last iter) ---
         // Recompute u_norm (sigma) accurately:
         float u_sq = 0.f;
-        cublasSdot(ctx.blas(), mat_m, d_u.get(), 1, d_u.get(), 1, &u_sq);
+        CUBLAS_CHECK(cublasSdot(ctx.blas(), mat_m, d_u.get(), 1, d_u.get(), 1, &u_sq));
         // Actually sigma ≈ u_norm * sigma_prev, but we use the ALS result directly.
         // sigma is the norm before normalization in the last v step.
         float sigma = sigma_prev > 0.f ? sigma_prev : 0.f;

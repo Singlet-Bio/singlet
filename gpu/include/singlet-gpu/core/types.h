@@ -72,6 +72,27 @@
 #  define CUBLAS_CHECK(call) SINGLET_GPU_CUBLAS_CHECK(call)
 #endif
 
+// cuRAND status check — throws on any error code other than SUCCESS.
+// WHY here: deflation.h calls curandSetPseudoRandomGeneratorSeed /
+// curandGenerateUniform directly on ctx.curand(); needs the macro without
+// pulling in sparse_eigensolver.h.  Defined with the same guard pattern as
+// the macros above so sparse_eigensolver.h's local define still wins if it
+// is included first.
+#include <curand.h>
+#define SINGLET_GPU_CURAND_CHECK(call)                                          \
+    do {                                                                        \
+        curandStatus_t _singlet_cr = (call);                                    \
+        if (_singlet_cr != CURAND_STATUS_SUCCESS) {                             \
+            throw std::runtime_error(                                           \
+                std::string("cuRAND error in " __FILE__ ": ")                   \
+                + std::to_string(static_cast<int>(_singlet_cr)));               \
+        }                                                                       \
+    } while (0)
+
+#ifndef CURAND_CHECK
+#  define CURAND_CHECK(call) SINGLET_GPU_CURAND_CHECK(call)
+#endif
+
 namespace singlet_gpu {
 namespace core {
 

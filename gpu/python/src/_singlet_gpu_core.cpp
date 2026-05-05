@@ -176,6 +176,12 @@ PYBIND11_MODULE(_core, m) {
     bind_pz_device_matrix(m);
 
     // -----------------------------------------------------------------------
+    // CYCLE-275: PzDataLoader (streaming loader for nmf_chunked + future
+    // streaming kernels).
+    // -----------------------------------------------------------------------
+    bind_pz_data_loader(m);
+
+    // -----------------------------------------------------------------------
     // Cycle 20: cupy ingest functions.
     // -----------------------------------------------------------------------
     m.def("from_cupy_csr",

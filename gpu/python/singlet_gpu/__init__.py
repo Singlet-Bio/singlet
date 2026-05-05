@@ -63,6 +63,7 @@ disease      = _import_submodule("disease")
 eqtl         = _import_submodule("eqtl")
 grn          = _import_submodule("grn")
 network      = _import_submodule("network")
+velocity     = _import_submodule("velocity")
 del _import_submodule
 
 # Core C++ extension — compiled by CMake/pybind11.

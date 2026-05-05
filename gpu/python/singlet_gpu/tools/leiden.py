@@ -231,13 +231,18 @@ def leiden(
     working = copy_module.copy(adata) if copy else adata
     seed = _resolve_seed(rng)
 
-    # Resolve adjacency matrix.
-    if adjacency is not None:
-        conn_mat = adjacency
-    else:
-        conn_mat = _get_connectivities(working, neighbors_key, obsp)
+    # CYCLE-263: resolve KnnResult from cache (preferred) or raise a clear error.
+    # adjacency/obsp override paths are scanpy-compat shims — they cannot supply
+    # a KnnResult so we always read from adata.uns here.
+    nbrs_key = neighbors_key if neighbors_key is not None else "neighbors"
+    if nbrs_key not in working.uns or "_knn_result" not in working.uns[nbrs_key]:
+        raise KeyError(
+            f"No cached KnnResult found in adata.uns['{nbrs_key}']['_knn_result']. "
+            "Call singlet_gpu.pp.neighbors() before singlet_gpu.tools.leiden()."
+        )
+    knn_result = working.uns[nbrs_key]["_knn_result"]
 
-    # Build restriction mask if needed.
+    # Build restriction mask if needed (scanpy compat — applied post-labels).
     restrict_mask = None
     if restrict_to is not None:
         restrict_col, restrict_vals = restrict_to
@@ -247,27 +252,31 @@ def leiden(
             )
         restrict_mask = working.obs[restrict_col].isin(restrict_vals).values
 
-    # Resolve partition type name for C++ binding.
-    part_type_name = (
-        partition_type.__name__
-        if partition_type is not None
-        else "RBConfigurationVertexPartition"
-    )
+    # Map scanpy kwargs → binding kwargs.
+    # Dropped (scanpy-only, not accepted by leiden_partition):
+    #   n_iterations (→ max_iter; -1 means run-to-convergence — C++ default 100
+    #     is used when n_iterations == -1 since the binding has no convergence
+    #     sentinel; callers expecting -1 == infinite should pass a large value)
+    #   use_weights, directed, partition_type, restrict_mask, adjacency
+    max_iter_val = int(n_iterations) if n_iterations > 0 else 100
 
     # Dispatch to C++ Leiden kernel.
-    raw_labels = _core.leiden_partition(
-        conn_mat,
-        resolution=float(resolution),
-        n_iterations=int(n_iterations),
-        use_weights=bool(use_weights),
-        directed=bool(directed) if directed is not None else None,
-        partition_type=part_type_name,
+    leiden_res = _core.leiden_partition(
+        knn_result,
+        float(resolution),
+        max_iter=max_iter_val,
         seed=seed,
-        restrict_mask=restrict_mask,
     )
 
-    # Write results: labels as pandas Categorical (matches scanpy).
-    labels = np.asarray(raw_labels, dtype=str)
+    # Extract per-cell labels from device via CAI view → numpy.
+    import cupy as cp
+
+    class _CaiView:
+        def __init__(self, d):
+            self.__cuda_array_interface__ = d
+
+    labels_gpu = cp.asarray(_CaiView(leiden_res.labels_view))
+    labels = labels_gpu.get().astype(str)
     if restrict_to is not None:
         # Merge back: cells outside the mask keep existing or NaN.
         full_labels = (

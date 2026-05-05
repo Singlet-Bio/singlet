@@ -200,19 +200,38 @@ def harmony_integrate(
     batch_codes = _resolve_batch_codes(working, key)  # (n_cells,) int32
     n_batches = int(batch_codes.max()) + 1
 
-    # C++ kernel: harmony(embedding, batch_codes, n_batches, n_clusters,
-    #                      max_iter, tol, seed)
-    # Returns corrected embedding (n_cells × n_pcs) as a device/host array.
-    corrected = _core.harmony(
+    # CYCLE-267: binding signature (kw_only after n_batches):
+    #   harmony(embedding, batch_labels, n_batches, *, n_clusters, max_iter,
+    #           tol, lambda, seed: uint64)
+    # Upload to device if not already CAI-exposing (CYCLE-261 pattern).
+    if not hasattr(emb, "__cuda_array_interface__"):
+        import cupy as cp
+        emb = cp.asarray(emb, dtype=cp.float32)
+    if not hasattr(batch_codes, "__cuda_array_interface__"):
+        import cupy as cp
+        batch_codes = cp.asarray(batch_codes, dtype=cp.int32)
+    result = _core.harmony(
         emb,
         batch_codes,
         n_batches,
-        int(n_clusters),
-        int(max_iter),
-        float(tol),
-        int(seed),
+        n_clusters=int(n_clusters),
+        max_iter=int(max_iter),
+        tol=float(tol),
+        seed=int(seed),
     )
 
+    # CYCLE-268: HarmonyResult exposes corrected_view (CAI dict) per
+    # _bind_results.hpp (n_iters_used, final_delta, corrected_view, __repr__).
+    # The corrected embedding is float32 (n × d, row-major).
+    import cupy as cp
+
+    class _CaiView:
+        def __init__(self, d):
+            self.__cuda_array_interface__ = d
+
+    n_cells = int(emb.shape[0])
+    corrected_flat = cp.asarray(_CaiView(result.corrected_view))
+    corrected = corrected_flat.reshape(n_cells, -1).get()
     working.obsm[adjusted_basis] = np.asarray(corrected, dtype=np.float32)
 
     return working if copy else None

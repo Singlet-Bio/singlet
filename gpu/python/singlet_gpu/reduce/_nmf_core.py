@@ -320,6 +320,12 @@ class NmfResult:
         self.loss_history = loss_history
         self.n_genes = n_genes
         self.n_factors = n_factors
+        # CYCLE-277-FOLLOWUP: tests expect `H` (or `loadings`) for the gene
+        # factor matrix.  In our convention W is genes × k (loadings) and H
+        # is k × cells (factors).  Expose both `H` (alias to first chunk)
+        # and `loadings` (= W) for scanpy-parity test contract.
+        self.H = H_list[0] if H_list else None
+        self.loadings = W
 
     def __repr__(self) -> str:
         return (
@@ -411,11 +417,41 @@ def nmf_chunked(
     # _core.nmf_chunked signature (py::kw_only after rank):
     #   nmf_chunked(loader, rank, *, loss='MSE', solver_mode=2, init_mode=2,
     #               max_iter=100, tol=1e-5, seed=0)
-    # NOTE: chunk_cols is bound to the loader, not nmf_chunked itself; passed
-    # through unmodified for now and ignored by the C++ binding (kept for API
-    # parity with the streaming pipeline).
+    # CYCLE-275: PzDataLoader is now exposed as a Python class. Construct it
+    # from the first path. Multi-file streaming NMF is filed as
+    # CYCLE-7-MULTI-INPUT-NMF (factornet FactorGraph::SharedNode wiring needed).
+    paths_list = list(paths)
+    if len(paths_list) == 0:
+        raise ValueError("nmf_chunked: paths must be non-empty.")
+    if len(paths_list) > 1:
+        import warnings
+        warnings.warn(
+            "nmf_chunked: multiple paths provided but only the first is used "
+            "(CYCLE-7-MULTI-INPUT-NMF — multi-file streaming requires "
+            "factornet FactorGraph::SharedNode wiring).",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    # CYCLE-275: each `path` is per the singlify-pipeline convention either:
+    # (a) a directory containing a `gene_counts.1pz` (the standard sample
+    #     output), or (b) a direct `*.1pz` file path. Resolve (a) → (b) here.
+    import os
+    p = str(paths_list[0])
+    if os.path.isdir(p):
+        candidate = os.path.join(p, "gene_counts.1pz")
+        if not os.path.isfile(candidate):
+            # Fallback: first .1pz file lexicographically.
+            pz_files = sorted(f for f in os.listdir(p) if f.endswith(".1pz"))
+            if not pz_files:
+                raise FileNotFoundError(
+                    f"nmf_chunked: no .1pz file found in directory {p!r}."
+                )
+            candidate = os.path.join(p, pz_files[0])
+        p = candidate
+    loader = _core.PzDataLoader(p, int(chunk_cols))
     raw = _core.nmf_chunked(
-        list(paths), int(n_factors),
+        loader, int(n_factors),
         loss=str(loss),
         solver_mode=int(solver_mode),
         init_mode=int(init_mode),
@@ -424,12 +460,28 @@ def nmf_chunked(
         seed=int(seed),
     )
 
+    # CYCLE-276: NmfResult binding (per _singlet_gpu_core.cpp:406-435) exposes
+    # only k_used / iterations / converged / W_view / d_view / H_view (no
+    # direct .W / .H_list / .loss_history). Build the host arrays from the
+    # device CAI views — same pattern as nmf_basic at line 134.
+    import cupy as cp_local
+
+    class _CaiView:
+        def __init__(self, d):
+            self.__cuda_array_interface__ = d
+
+    k_used = int(raw.k_used)
+    # W_view is (rows*k,) flat col-major; reshape to (k, rows) then T → (rows, k)
+    W = cp_local.asarray(_CaiView(raw.W_view)).reshape(k_used, -1).T.get()
+    # H_view is (k*cols,) row-major; reshape to (k, cols)
+    H = cp_local.asarray(_CaiView(raw.H_view)).reshape(k_used, -1).get()
+
     return NmfResult(
-        W=raw.W,
-        H_list=raw.H_list,
-        loss_history=raw.loss_history,
-        n_genes=int(raw.W.shape[0]),
-        n_factors=int(n_factors),
+        W=W,
+        H_list=[H],
+        loss_history=[],   # not exposed by binding; CYCLE-276-FOLLOWUP-NMF-LOSS-HISTORY
+        n_genes=int(W.shape[0]),
+        n_factors=k_used,
     )
 
 
