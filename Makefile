@@ -1,7 +1,7 @@
 # singlet monorepo — convenience targets
 # Usage: make test | make build | make pipeline | make clean
 
-.PHONY: test test-cpp test-python lint format typecheck coverage build pipeline clean help
+.PHONY: test test-cpp test-python lint format typecheck coverage build pipeline clean check help
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -14,7 +14,7 @@ test-cpp: ## Build and run 100 C++ unit tests
 	@cmake --build build-tests -j$$(nproc) 2>&1 | tail -1
 	@ctest --test-dir build-tests -j$$(nproc) --output-on-failure
 
-test-python: ## Run 588 Python tests
+test-python: ## Run 587 Python tests
 	@python -m pytest tests/python/ -x -q
 
 coverage: ## Run tests with coverage report
@@ -42,3 +42,5 @@ pipeline: ## Build the singlify pipeline binary
 
 clean: ## Remove all build directories
 	rm -rf build build-tests build-gpu
+
+check: lint typecheck test ## Run lint + typecheck + all tests
