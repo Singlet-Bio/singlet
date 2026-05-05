@@ -365,16 +365,16 @@ HARD_FAIL breakdown: 9 download_fail, 2 single-end misclass, 1 zero-cells (T13)
 - **Rate stable at 63-65%**: Four consecutive batches (C185-C188) all in 58-65% band — this IS the ceiling
 
 ### Overall Pipeline Totals (updated)
-- **Total COMPLETED (exit 0)**: ...C200(149) + C201(155) + C202(140) = **3,137**
+- **Total COMPLETED (exit 0)**: ...C202(140) + C203(159) + C204(135) = **3,431**
 - **Species with confirmed SUCCESS**: human, mouse, macaque, drosophila, chicken
-- **True success rate**: ~75% excl timeout on recent batches (C191-C202 average)
+- **True success rate**: ~75% excl timeout on recent batches (C191-C204 average)
 - **Primary bottleneck**: 1) data_incomplete (~20%), 2) timeouts (~7% per batch), 3) align_low_map (~25%)
 - **Protocol bias validated**: High-yield protocols = 70-82% success consistently
-- **Best batches**: C201 = 155/200 (79.1%!), C194 = 156/200, C199 = 153/200
-- **Scaling**: 200-task batches on 10 nodes, ~5h wall, ~145 samples/batch sustained
+- **Best batches**: C203 = 159/200 (79.5%! NEW RECORD!), C201 = 155/200 (79.1%), C194 = 156/200
+- **Scaling**: 200-task batches on 10 nodes, ~5h wall, ~147 samples/batch sustained
 - **2h SLURM timeout**: Standard — eliminates stale runners cleanly
-- **Remaining pool**: ~36,100 eligible samples in catalog
-- **3,000 MILESTONE CROSSED** at C202 (2026-05-04)!
+- **Remaining pool**: ~35,900 eligible samples in catalog
+- **3,000 MILESTONE CROSSED** at C202 (2026-05-04). **3,400+ reached at C204**.
 
 ---
 

@@ -2827,3 +2827,29 @@
 - **E2E panels run**: none
 - **Pipeline stats**: 200 submitted, 140 COMPLETED → pipeline total **3,137**. **3,000 MILESTONE CROSSED!**
 - **Strategy patch**: C202 below average due to elevated SOFT_FAIL (align_low_map=50, cells_below_threshold=7). True SUCCESS (result JSON) = 76/200. Protocol mix was normal. No actionable fix — align_low_map is irreducible for some protocol/organism combos. Sustained throughput confirmed: C203 already running (job 374635), C204+C205 pre-staged.
+
+## Cycle 203 (2026-05-04 ~14:35 – 2026-05-05 ~08:00 EDT)
+- **Domain**: pipeline-ops
+- **Tasks**: C203 batch (200 tasks, 2h timeout, high-yield)
+- **Workers**: orchestrator direct
+- **Expected**: ~145 COMPLETED
+- **Actual**: 159 COMPLETED (79.5%) — NEW ALL-TIME RECORD!
+- **Delta**: exceeded (+14 above expectation)
+- **Commits**: this cycle
+- **Push**: this cycle
+- **E2E panels run**: none
+- **Pipeline stats**: 200 submitted, 159 COMPLETED, 31 FAILED, 9 TIMEOUT, 1 OOM → pipeline total **3,296**
+- **Strategy patch**: C203 = 159, new all-time record (surpassing C201's 155). Strong 10xv3 draw. Continue same sampling strategy.
+
+## Cycle 204 (2026-05-04 ~16:00 – 2026-05-05 ~08:00 EDT)
+- **Domain**: pipeline-ops
+- **Tasks**: C204 batch (200 tasks, 2h timeout, high-yield)
+- **Workers**: orchestrator direct
+- **Expected**: ~145 COMPLETED
+- **Actual**: 135 COMPLETED (67.5%)
+- **Delta**: missed (-10 below expectation). 5 OOM elevated (large 10xv3 samples near 100M read cap).
+- **Commits**: this cycle
+- **Push**: this cycle
+- **E2E panels run**: none
+- **Pipeline stats**: 200 submitted, 135 COMPLETED, 45 FAILED, 15 TIMEOUT, 5 OOM → pipeline total **3,431**
+- **Strategy patch**: C204 OOM rate elevated (5 vs typical 1-2). May need to tighten read_count ceiling to 80M for 10xv3 samples to reduce OOM hits.
