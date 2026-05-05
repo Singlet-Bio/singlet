@@ -59,7 +59,10 @@ void usage(int usageType)
     exit(0);
 };
 
-int main(int argInN, char *argIn[])
+// Entry point callable from singlify (replaces standalone main).
+// Renamed from main() so singlify links this translation unit without
+// duplicate-symbol conflicts.
+int star_main_impl(int argInN, char *argIn[])
 {
     // If no argument is given, or the first argument is either '-h' or '--help', run usage()
     if (argInN == 1)

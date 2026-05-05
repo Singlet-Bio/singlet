@@ -446,5 +446,13 @@ inline std::vector<std::string> het_feature_names(const MtHetResult& het) {
     return names;
 }
 
+/// A single mt indel event captured during CIGAR parsing.
+struct MtIndelEvent {
+    uint32_t bc_idx;  ///< cell barcode column index
+    uint32_t pos;     ///< 0-based chrM anchor position
+    uint16_t len;     ///< CIGAR op length in bases
+    bool     is_ins;  ///< true=BAM_CINS, false=BAM_CDEL
+};
+
 } // namespace mt
 } // namespace singlet

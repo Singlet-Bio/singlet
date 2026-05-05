@@ -1413,4 +1413,33 @@ static bool write_donor_assignments(
     return true;
 }
 
+
+// ============================================================================
+// B-G5-3: K=1 single-donor workaround
+// When --n-donors 1 is requested, skip VB entirely (it is trivially correct that
+// all cells belong to donor0) and synthesize a DemuxResult directly.
+// covered_to_original is still populated so per-donor VCF/coverage writes work.
+// ============================================================================
+static DemuxResult make_single_donor_result(
+    uint32_t n_snps, uint32_t n_cells,
+    const int32_t* ad_indptr, const int32_t* ad_indices, const uint8_t* ad_data,
+    const int32_t* dp_indptr, const int32_t* dp_indices, const uint8_t* dp_data)
+{
+    std::cerr << "[demux] K=1 workaround: skipping VB inference, assigning all "
+              << n_cells << " cells to donor0\n";
+    DemuxResult result;
+    result.n_donors_k = 1;
+    result.assignments.resize(n_cells);
+    for (uint32_t c = 0; c < n_cells; ++c)
+        result.assignments[c] = {0, 1.0f, 0.0f, "donor0", "cell"};
+    // Populate covered_to_original so aggregate_donor_depths / write_donor_vcfs work.
+    auto cov = extract_covered_snps(n_snps, n_cells,
+        ad_indptr, ad_indices, ad_data,
+        dp_indptr, dp_indices, dp_data);
+    result.covered_to_original = std::move(cov.covered_to_original);
+    std::cerr << "[demux] K=1 single-donor: " << result.covered_to_original.size()
+              << " covered SNPs indexed for donor outputs\n";
+    return result;
+}
+
 }  // namespace singlet

@@ -36,8 +36,8 @@ enum class CascadeDecision : uint8_t {
 };
 
 // ── Forward declarations of L1 and L2 classifiers (header-only stubs) ──────────
-class TxomeAligner;   // include/singlet/pileup/txome_aligner.h
-class TeClassifier;   // include/singlet/pileup/te_classifier.h (bio-exec, T-L2-3)
+class TxomeAligner;   // include/singlet-pileup/txome_aligner.h
+class TeClassifier;   // include/singlet-pileup/te_classifier.h (bio-exec, T-L2-3)
 
 // ── CascadeRouterStats — per-run layer accounting ─────────────────────────────
 struct CascadeRouterStats {

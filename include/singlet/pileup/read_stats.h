@@ -131,4 +131,40 @@ inline double median_dup_rate(const std::vector<CellReadStats>& stats) {
     return static_cast<double>(rates[rates.size() / 2]);
 }
 
+// ─── Per-stage pipeline read statistics (§3.2 schema) ─────────────────────────
+
+/// One row per processing stage in the pipeline.
+struct PipelineStageStats {
+    std::string stage;        ///< "encode", "align", "pileup"
+    uint64_t reads_in = 0;   ///< Reads entering this stage
+    uint64_t reads_out = 0;  ///< Reads passing this stage
+    std::string fail_reason;  ///< Empty if no failure; else e.g. "unmapped", "no_barcode"
+    uint64_t bytes_in = 0;   ///< Input bytes (0 if not tracked)
+    uint64_t bytes_out = 0;  ///< Output bytes (0 if not tracked)
+    double wall_seconds = 0.0;
+};
+
+/// Write per-stage read statistics to read_stats.tsv (§3.2 schema).
+inline bool write_stage_read_stats_tsv(
+    const std::string& path,
+    const std::vector<PipelineStageStats>& stages) {
+    std::ofstream f(path);
+    if (!f) {
+        std::cerr << "[read_stats] ERROR: Cannot write " << path << "\n";
+        return false;
+    }
+    f << "stage\treads_in\treads_out\tfail_reason\tbytes_in\tbytes_out\twall_seconds\n";
+    f << std::fixed << std::setprecision(2);
+    for (const auto& s : stages) {
+        f << s.stage << '\t'
+          << s.reads_in << '\t'
+          << s.reads_out << '\t'
+          << s.fail_reason << '\t'
+          << s.bytes_in << '\t'
+          << s.bytes_out << '\t'
+          << s.wall_seconds << '\n';
+    }
+    return f.good();
+}
+
 }  // namespace singlet

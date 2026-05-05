@@ -25,6 +25,7 @@
 #include "pz_writer.h"
 #include "donor_demux.h"
 #include "mt_heteroplasmy.h"
+#include "mt_event_caller.h"
 #include "provenance.h"
 #include "saturation.h"
 #include "saturation_curve.h"
@@ -184,6 +185,17 @@ struct ExportConfig {
     // G-METRICS: pileup stats for metrics_summary.csv
     const PileupStats* pileup_stats = nullptr; ///< Non-owning pointer; valid for duration of export_results()
     bool write_raw_matrix = false;             ///< Write raw (unfiltered) barcode matrix alongside filtered
+    // §3.6 required fields passed from singlify.cpp
+    int         protocol_id   = 0;
+    std::string protocol_name;
+    std::string species;
+    std::string reference_build;
+    double      peak_rss_gb   = 0.0;
+    std::string memory_tier   = "unknown";
+    bool        nonhost_was_screened    = false;
+    int         nonhost_species_above_em = 0;
+    // §3.2 per-stage read statistics
+    std::vector<singlet::PipelineStageStats> stage_stats;
 };
 
 /// Result statistics from export_results().
@@ -257,16 +269,17 @@ inline ExportStats export_results(const PileupEngine& engine,
     std::cerr << "[export] CSC conversion: " << result.csc_time_s
               << "s (" << result.n_csc_threads << " threads)\n";
 
-    // ── Phase 1.5: Cell QC metrics ──
+    // ── Phase 1.5: Cell QC metrics (compute only; write deferred to Phase 1.8) ──
     // Computed from already-converted CSC matrices — no BAM re-processing.
     // Only runs when a GTF gene model with hierarchy is available.
+    CellQCMetrics cell_qc;
+    bool have_cell_qc = false;
     if (!pileup_cfg.exon_gtf_path.empty()
         && engine.gene_model().has_gene_hierarchy()
         && exon_csc.ncols > 0) {
-        auto qc = singlet::compute_cell_qc(exon_csc, intron_csc,
+        cell_qc = singlet::compute_cell_qc(exon_csc, intron_csc,
                                            engine.gene_model());
-        singlet::write_cell_qc_tsv(out_prefix + "/cell_qc_metrics.tsv",
-                                   qc, barcodes);
+        have_cell_qc = true;
     }
 
     // ── Phase 1.55: Sex calling (N14) ──
@@ -289,11 +302,12 @@ inline ExportStats export_results(const PileupEngine& engine,
 
     // ── Phase 1.57: Cell cycle scoring (N19) ──
     // Runs when a GTF gene model with hierarchy is present and exon data available.
+    CellCycleResult cc_result_cycle;
     if (!pileup_cfg.exon_gtf_path.empty()
         && engine.gene_model().has_gene_hierarchy()
         && exon_csc.ncols > 0) {
         auto t_cc0 = std::chrono::high_resolution_clock::now();
-        auto cc_result_cycle = singlet::score_cell_cycle(exon_csc, engine.gene_model());
+        cc_result_cycle = singlet::score_cell_cycle(exon_csc, engine.gene_model());
         singlet::write_cell_cycle_tsv(
             out_prefix + "/cell_cycle_scores.tsv", cc_result_cycle, barcodes);
         auto t_cc1 = std::chrono::high_resolution_clock::now();
@@ -311,22 +325,26 @@ inline ExportStats export_results(const PileupEngine& engine,
     // ── Phase 1.58: Per-cell read statistics (N20) ──
     // Derived from per_cell_reads_ (pre-dedup barcoded reads) + CSC column sums.
     // Zero overhead: all data already in memory, no BAM re-processing.
+    std::vector<CellReadStats> cell_read_stats;
     if (!engine.per_cell_reads().empty() && exon_csc.ncols > 0) {
         auto t_rs0 = std::chrono::high_resolution_clock::now();
         const int32_t* intron_ip = pileup_cfg.count_introns && intron_csc.ncols > 0
                                    ? intron_csc.indptr.data() : nullptr;
         const uint16_t* intron_d = pileup_cfg.count_introns && intron_csc.data.size() > 0
                                    ? intron_csc.data.data() : nullptr;
-        auto rs = singlet::compute_read_stats(
+        cell_read_stats = singlet::compute_read_stats(
             engine.per_cell_reads(),
             exon_csc.indptr.data(), exon_csc.data.data(),
             intron_ip, intron_d,
             exon_csc.ncols);
-        singlet::write_read_stats_tsv(out_prefix + "/read_stats.tsv", rs, barcodes);
-        double med_dr = singlet::median_dup_rate(rs);
+        // Per-stage read_stats.tsv (§3.2 schema): write from pipeline stage data
+        if (!export_cfg.stage_stats.empty()) {
+            singlet::write_stage_read_stats_tsv(out_prefix + "/read_stats.tsv", export_cfg.stage_stats);
+        }
+        double med_dr = singlet::median_dup_rate(cell_read_stats);
         auto t_rs1 = std::chrono::high_resolution_clock::now();
         double rs_s = std::chrono::duration<double>(t_rs1 - t_rs0).count();
-        std::cerr << "[read_stats] n_cells=" << rs.size()
+        std::cerr << "[read_stats] n_cells=" << cell_read_stats.size()
                   << " median_dup_rate=" << med_dr
                   << " time=" << rs_s << "s\n";
     }
@@ -359,8 +377,9 @@ inline ExportStats export_results(const PileupEngine& engine,
 
     // ── Phase 1.6: Sequencing saturation (N7, directional dedup path only) ──
     // Uses the DirectionalUmiStore groups built during run() — no extra BAM pass.
+    std::vector<CellSaturation> sat_cells;
     if (pileup_cfg.umi_dedup_directional && !engine.dir_exon_store().empty()) {
-        auto sat_cells = singlet::compute_saturation(
+        sat_cells = singlet::compute_saturation(
             engine.dir_exon_store(), pileup_cfg.umi_len);
         if (!sat_cells.empty()) {
             double med_sat = singlet::median_saturation(sat_cells);
@@ -626,7 +645,8 @@ inline ExportStats export_results(const PileupEngine& engine,
         double cc_s = std::chrono::duration<double>(t_cc1 - t_cc0).count();
         singlet::write_cell_calls(out_prefix + "/cell_calls.tsv",
                                   cc_result, barcodes, bc_totals,
-                                  export_cfg.fdr_threshold);
+                                  export_cfg.fdr_threshold,
+                                  cell_caller_method);
         std::cerr << "[cell_calling] n_cells=" << cc_result.cell_indices.size()
                   << " cell_caller=" << cell_caller_method
                   << " time=" << cc_s << "s\n";
@@ -717,9 +737,10 @@ inline ExportStats export_results(const PileupEngine& engine,
     // Runs when we have called cells OR when --barcodes was provided (all barcodes
     // are treated as cells in that case, cc_result.cell_indices is empty).
     // Hybrid score: 0.6 × kNN-sim-fraction + 0.4 × UMI-ratio component.
+    std::vector<DoubletResult> dbl_results;
+    std::vector<uint32_t> dbl_cell_indices;
     {
         // Build cell index set: prefer cc_result (cell calling ran), else all barcodes
-        std::vector<uint32_t> dbl_cell_indices;
         if (!cc_result.cell_indices.empty()) {
             dbl_cell_indices = cc_result.cell_indices;
         } else if (exon_csc.ncols > 0 && !pileup_cfg.exon_gtf_path.empty()) {
@@ -729,7 +750,7 @@ inline ExportStats export_results(const PileupEngine& engine,
         }
         if (!dbl_cell_indices.empty() && exon_csc.ncols > 0) {
             auto t_dbl0 = std::chrono::high_resolution_clock::now();
-            auto dbl_results = singlet::detect_doublets(exon_csc, dbl_cell_indices);
+            dbl_results = singlet::detect_doublets(exon_csc, dbl_cell_indices);
             singlet::write_doublet_tsv(
                 out_prefix + "/doublet_scores.tsv",
                 dbl_results, dbl_cell_indices, barcodes, exon_csc);
@@ -745,6 +766,65 @@ inline ExportStats export_results(const PileupEngine& engine,
         }  // if (!dbl_cell_indices.empty())
     }  // Phase 1.76 block
 
+    // ── Phase 1.8: Write unified cell_qc_metrics.tsv ──
+    // Merges data from Phase 1.5 (QC), 1.57 (cell cycle), 1.58 (read stats),
+    // 1.6 (saturation), and 1.76 (doublet) into the schema-compliant TSV.
+    if (have_cell_qc) {
+        const uint32_t n = static_cast<uint32_t>(barcodes.size());
+        std::ofstream f(out_prefix + "/cell_qc_metrics.tsv");
+        if (f) {
+            f << std::fixed << std::setprecision(4);
+            f << "barcode\tn_umi\tn_genes\tpct_mt\tpct_ribo\tintronic_pct"
+                 "\tn_reads\tduplication_rate\tsaturation\tcell_cycle_phase\tdoublet_score\n";
+
+            // Build doublet score lookup (indexed by barcode column)
+            std::unordered_map<uint32_t, double> dbl_score_map;
+            for (size_t di = 0; di < dbl_results.size() && di < dbl_cell_indices.size(); ++di)
+                dbl_score_map[dbl_cell_indices[di]] = dbl_results[di].score;
+
+            for (uint32_t i = 0; i < n; ++i) {
+                f << barcodes[i] << '\t'
+                  << cell_qc.total_umis[i] << '\t'
+                  << cell_qc.total_genes[i] << '\t'
+                  << cell_qc.mt_pct[i] << '\t'
+                  << cell_qc.ribo_pct[i] << '\t'
+                  << cell_qc.intronic_pct[i] << '\t';
+                // n_reads
+                if (i < cell_read_stats.size())
+                    f << cell_read_stats[i].total_reads;
+                else
+                    f << 0;
+                f << '\t';
+                // duplication_rate
+                if (i < cell_read_stats.size())
+                    f << cell_read_stats[i].dup_rate;
+                else
+                    f << "0.0000";
+                f << '\t';
+                // saturation
+                if (i < sat_cells.size())
+                    f << sat_cells[i].saturation;
+                else
+                    f << "NA";
+                f << '\t';
+                // cell_cycle_phase
+                if (i < cc_result_cycle.cells.size())
+                    f << cc_result_cycle.cells[i].phase;
+                else
+                    f << "NA";
+                f << '\t';
+                // doublet_score
+                auto dit = dbl_score_map.find(i);
+                if (dit != dbl_score_map.end())
+                    f << dit->second;
+                else
+                    f << "NA";
+                f << '\n';
+            }
+            std::cerr << "[cell_qc] Wrote: " << out_prefix << "/cell_qc_metrics.tsv (" << n << " cells)\n";
+        }
+    }
+
     // ── Phase 2: mt heteroplasmy (pipeline mode) ──
     mt::MtHetResult mt_het;
     if (export_cfg.pipeline_mode && mt_csc.data.size() > 0) {
@@ -759,17 +839,27 @@ inline ExportStats export_results(const PileupEngine& engine,
     DemuxResult demux_result;
     if (export_cfg.pipeline_mode && !pileup_cfg.snp_path.empty() && snp_ad_csc.data.size() > 0) {
         demux_thread = std::thread([&]() {
-            DonorDemuxConfig dcfg;
-            dcfg.n_donors = export_cfg.n_donors;
-            dcfg.threads = export_cfg.threads;
-            dcfg.seed = 42;
-            demux_result = run_demux(
-                snp_ad_csc.nrows, snp_ad_csc.ncols,
-                snp_ad_csc.indptr.data(), snp_ad_csc.indices.data(), snp_ad_csc.data.data(),
-                snp_ad_csc.data.size(),
-                snp_dp_csc.indptr.data(), snp_dp_csc.indices.data(), snp_dp_csc.data.data(),
-                snp_dp_csc.data.size(), dcfg,
-                cc_result.cell_indices); // filter VB to EmptyDrops-called cells only
+            // B-G5-3: K=1 workaround — skip VB entirely; synthesize all-donor0 result.
+            // vireoSNP (and our VB) crash or are meaningless at K=1; the correct answer
+            // is trivially that every cell belongs to donor0.
+            if (export_cfg.n_donors == 1) {
+                demux_result = make_single_donor_result(
+                    snp_ad_csc.nrows, snp_ad_csc.ncols,
+                    snp_ad_csc.indptr.data(), snp_ad_csc.indices.data(), snp_ad_csc.data.data(),
+                    snp_dp_csc.indptr.data(), snp_dp_csc.indices.data(), snp_dp_csc.data.data());
+            } else {
+                DonorDemuxConfig dcfg;
+                dcfg.n_donors = export_cfg.n_donors;
+                dcfg.threads = export_cfg.threads;
+                dcfg.seed = 42;
+                demux_result = run_demux(
+                    snp_ad_csc.nrows, snp_ad_csc.ncols,
+                    snp_ad_csc.indptr.data(), snp_ad_csc.indices.data(), snp_ad_csc.data.data(),
+                    snp_ad_csc.data.size(),
+                    snp_dp_csc.indptr.data(), snp_dp_csc.indices.data(), snp_dp_csc.data.data(),
+                    snp_dp_csc.data.size(), dcfg,
+                    cc_result.cell_indices); // filter VB to EmptyDrops-called cells only
+            }
         });
     }
 
@@ -796,8 +886,9 @@ inline ExportStats export_results(const PileupEngine& engine,
     // matrices (snp_ad.1pz / snp_dp.1pz) are independently required by downstream
     // tools (vireo, cellsnp-lite comparison, ASE, ancestry) and MUST be present.
     if (!pileup_cfg.snp_path.empty()) {
-        write_threads.emplace_back([&]() { write_matrix("snp_ad", snp_ad_csc, engine.snp_names()); });
-        write_threads.emplace_back([&]() { write_matrix("snp_dp", snp_dp_csc, engine.snp_names()); });
+        std::filesystem::create_directories(out_prefix + "/donor");
+        write_threads.emplace_back([&]() { write_matrix("donor/snp_ad", snp_ad_csc, engine.snp_names()); });
+        write_threads.emplace_back([&]() { write_matrix("donor/snp_dp", snp_dp_csc, engine.snp_names()); });
     }
 
     // N15: ASE — per-cell, per-SNP allele counts (both pipeline and non-pipeline).
@@ -1177,10 +1268,13 @@ inline ExportStats export_results(const PileupEngine& engine,
     for (auto& t : write_threads) t.join();
     result.n_write_threads = static_cast<int>(write_threads.size());
 
+    // G6 stats declared here so they are visible to the summary block below
+    mt::MtDonorOutputStats g6_stats;
+
     // Wait for demux; then aggregate per-donor depths and write VCF + coverage maps
     if (demux_thread.joinable()) {
         demux_thread.join();
-        write_donor_assignments(out_prefix + "/donor_assignments.tsv",
+        write_donor_assignments(out_prefix + "/donor/donor_assignments.tsv",
                                 demux_result.assignments, barcodes);
 
         if (demux_result.n_donors_k > 0 && !demux_result.covered_to_original.empty()) {
@@ -1190,8 +1284,27 @@ inline ExportStats export_results(const PileupEngine& engine,
                 snp_ad_csc.indptr.data(), snp_ad_csc.indices.data(), snp_ad_csc.data.data(),
                 snp_dp_csc.indptr.data(), snp_dp_csc.indices.data(), snp_dp_csc.data.data());
 
-            write_donor_vcfs(out_prefix, demux_result, depths, engine.snp_names());
-            write_donor_coverages(out_prefix, demux_result, depths, engine.snp_names());
+            write_donor_vcfs(out_prefix + "/donor", demux_result, depths, engine.snp_names());
+            write_donor_coverages(out_prefix + "/donor", demux_result, depths, engine.snp_names());
+        }
+
+        // ── G6: Donor-aware mitochondrial outputs ──
+        // Runs when --snps was set (donor demux ran) and mt pileup data exists.
+        // Writes mt/ directory with: donor{N}_mt_consensus.fa,
+        //   donor{N}_mt_variants.vcf, mt_events.1pz, mt_summary.tsv.
+        // Now passes CIGAR indel events (codes 5-7) and GTF path (codes 7/8).
+        if (pileup_cfg.count_mt && mt_csc.data.size() > 0 &&
+            demux_result.n_donors_k > 0) {
+            auto t_g6_0 = std::chrono::high_resolution_clock::now();
+            g6_stats = mt::write_mt_donor_outputs(
+                out_prefix, mt_csc, demux_result, barcodes,
+                export_cfg.user_meta,
+                engine.mt_indels(),
+                pileup_cfg.exon_gtf_path);
+            auto t_g6_1 = std::chrono::high_resolution_clock::now();
+            std::cerr << "[mt_event_caller] G6 time: "
+                      << std::chrono::duration<double>(t_g6_1 - t_g6_0).count()
+                      << "s\n";
         }
 
         // Release SNP matrices — they were only needed for demux
@@ -1253,6 +1366,26 @@ inline ExportStats export_results(const PileupEngine& engine,
         summary.protocol         = meta_get("protocol");
         summary.organism         = meta_get("organism");
         summary.singlify_version = export_cfg.provenance.singlify_version;
+        summary.track            = export_cfg.provenance.cascade_enabled ? "B" : "A";
+        summary.cascade_used     = export_cfg.provenance.cascade_enabled;
+        // §3.6 required fields from ExportConfig
+        summary.protocol_id     = export_cfg.protocol_id;
+        summary.protocol_name   = export_cfg.protocol_name.empty()
+            ? meta_get("protocol") : export_cfg.protocol_name;
+        summary.species         = export_cfg.species.empty()
+            ? meta_get("organism") : export_cfg.species;
+        summary.reference_build = export_cfg.reference_build;
+        summary.peak_rss_gb     = export_cfg.peak_rss_gb;
+        summary.memory_tier     = export_cfg.memory_tier;
+        // Donor block (filled after demux)
+        summary.donor_n_donors_inferred = demux_result.n_donors_k;
+        summary.donor_demux_method = (demux_result.n_donors_k > 0) ? "vb_binomial" : "";
+        // mt block (from G6 stats)
+        summary.mt_donors_with_consensus = g6_stats.n_donors_with_consensus;
+        summary.mt_n_events_total        = g6_stats.n_mt_events_total;
+        // nonhost block
+        summary.nonhost_screened         = export_cfg.nonhost_was_screened;
+        summary.nonhost_species_above_em = export_cfg.nonhost_species_above_em;
         // Read metrics
         if (export_cfg.pileup_stats) {
             const auto& ps = *export_cfg.pileup_stats;

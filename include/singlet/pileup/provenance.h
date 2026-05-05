@@ -8,9 +8,13 @@
 // See INTEGRATION_NOTES.md for singlify.cpp wiring instructions.
 
 #include <chrono>
+#include <cstdlib>
 #include <ctime>
 #include <fstream>
+#include <iomanip>
 #include <string>
+#include <unistd.h>
+#include <vector>
 
 namespace singlet {
 
@@ -29,9 +33,18 @@ struct ProvenanceConfig {
     double      wall_seconds        = 0.0;
     double      star_seconds        = 0.0;
     double      pileup_seconds      = 0.0;
-    /// Cell caller method used: "emptydrops", "knee_fallback", "top_n_fallback",
-    /// "forced_cells", or "user_barcodes".  Empty = cell calling not run.
     std::string cell_caller;
+
+    // §3.7 required fields
+    std::string singlify_git_sha    = "unknown";  ///< set via CMake -DGIT_SHA=...
+    std::vector<std::string> command_line;         ///< argv[0..argc-1]
+    std::string snp_vcf_path;                      ///< --snps arg (for references block)
+    std::string whitelist_name;                    ///< whitelist file basename
+
+    // Track B cascade state (I-4, B-X-3)
+    bool        cascade_enabled     = false;
+    std::string cascade_mode        = "off";       ///< off, on, auto
+    std::string te_classify_mode    = "off";       ///< off, on
 };
 
 /// Write {out_prefix}/provenance.json.
@@ -94,37 +107,107 @@ inline void write_provenance_json(
         return r;
     };
 
+    // Derive hostname and kernel string
+    char hostname[256] = "unknown";
+    gethostname(hostname, sizeof(hostname));
+    hostname[sizeof(hostname)-1] = '\0';
+
+    // Peak RSS from /proc/self/status (Linux)
+    double peak_rss_gb = 0.0;
+    {
+        std::ifstream proc("/proc/self/status");
+        std::string ln;
+        while (std::getline(proc, ln)) {
+            if (ln.rfind("VmPeak:", 0) == 0 || ln.rfind("VmRSS:", 0) == 0) {
+                // format: "VmPeak:   123456 kB"
+                const char* p = ln.c_str() + 7;
+                while (*p == ' ' || *p == '\t') ++p;
+                double kb = std::strtod(p, nullptr);
+                if (kb > 0) { peak_rss_gb = kb / (1024.0 * 1024.0); break; }
+            }
+        }
+    }
+
     std::ofstream f(out_prefix + "/provenance.json");
     if (!f) return;
 
     f << "{\n"
+      << "  \"schema_version\": \"1.0\",\n"
+      << "  \"singlify_git_sha\": \""  << esc(prov.singlify_git_sha) << "\",\n"
       << "  \"singlify_version\": \""  << esc(prov.singlify_version) << "\",\n"
       << "  \"timestamp\": \""         << ts << "\",\n"
-      << "  \"input\": {\n"
+      << "  \"build_flags\": [\"-O3\", \"-DNDEBUG\"],\n";
+
+    // command_line array
+    f << "  \"command_line\": [";
+    for (size_t i = 0; i < prov.command_line.size(); ++i) {
+        if (i > 0) f << ", ";
+        f << "\"" << esc(prov.command_line[i]) << "\"";
+    }
+    f << "],\n";
+
+    // env object
+    auto env_get = [](const char* name) -> std::string {
+        const char* v = std::getenv(name);
+        return v ? std::string(v) : std::string("");
+    };
+    f << "  \"env\": {"
+      << "\"OMP_NUM_THREADS\": \"" << esc(env_get("OMP_NUM_THREADS")) << "\""
+      << ", \"TMPDIR\": \""        << esc(env_get("TMPDIR")) << "\""
+      << "},\n";
+
+    // host object
+    f << "  \"host\": {"
+      << "\"node\": \"" << esc(hostname) << "\""
+      << ", \"ram_gb\": " << std::fixed << std::setprecision(1) << peak_rss_gb
+      << "},\n";
+
+    // input object
+    f << "  \"input\": {\n"
       << "    \"file\": \""            << esc(basename(prov.input_file)) << "\",\n"
       << "    \"reads\": "             << prov.input_reads << "\n"
-      << "  },\n"
-      << "  \"reference\": {\n"
-      << "    \"genome\": \""          << esc(genome_label(prov.genome_dir)) << "\",\n"
-      << "    \"gtf\": \""             << esc(basename(prov.gtf_path)) << "\"\n"
-      << "  },\n"
-      << "  \"parameters\": {\n"
+      << "  },\n";
+
+    // references object
+    f << "  \"references\": {\n"
+      << "    \"genome\": {\"build\": \"" << esc(genome_label(prov.genome_dir)) << "\""
+      << ", \"gtf\": \"" << esc(basename(prov.gtf_path)) << "\"},\n"
+      << "    \"whitelist\": {\"name\": \"" << esc(prov.whitelist_name) << "\"},\n"
+      << "    \"snp_vcf\": {\"name\": \"" << esc(basename(prov.snp_vcf_path)) << "\"}\n"
+      << "  },\n";
+
+    // parameters
+    f << "  \"parameters\": {\n"
       << "    \"threads\": "           << prov.threads << ",\n"
       << "    \"umi_dedup\": "         << (prov.umi_dedup ? "true" : "false") << ",\n"
       << "    \"umi_dedup_directional\": " << (prov.umi_dedup_directional ? "true" : "false") << ",\n"
       << "    \"pipeline\": "          << (prov.pipeline ? "true" : "false") << "\n"
-      << "  },\n"
-      << "  \"cell_caller\": \""       << esc(prov.cell_caller) << "\",\n"
-      << "  \"output\": {\n"
+      << "  },\n";
+
+    // Track B cascade state (I-4)
+    f << "  \"cascade\": {\n"
+      << "    \"enabled\": "           << (prov.cascade_enabled ? "true" : "false") << ",\n"
+      << "    \"mode\": \""            << esc(prov.cascade_mode) << "\",\n"
+      << "    \"te_classify\": \""     << esc(prov.te_classify_mode) << "\"\n"
+      << "  },\n";
+
+    f << "  \"cell_caller\": \""       << esc(prov.cell_caller) << "\",\n";
+
+    // output block
+    f << "  \"output\": {\n"
       << "    \"exon_features\": "     << n_exon_features << ",\n"
       << "    \"cells\": "             << n_cells << ",\n"
       << "    \"total_umis\": "        << total_umis << "\n"
-      << "  },\n"
-      << "  \"timings\": {\n"
+      << "  },\n";
+
+    // timings
+    f << "  \"timings\": {\n"
       << "    \"wall_seconds\": "      << prov.wall_seconds << ",\n"
       << "    \"star_seconds\": "      << prov.star_seconds << ",\n"
       << "    \"pileup_seconds\": "    << prov.pileup_seconds << "\n"
-      << "  }\n"
+      << "  },\n";
+
+    f << "  \"output_schema_version\": \"1.0\"\n"
       << "}\n";
 }
 

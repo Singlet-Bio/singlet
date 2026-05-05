@@ -160,9 +160,17 @@ SexCallResult call_sex(const CSCMat& exon_csc, const GeneModel& model) {
         result.sex = "male";
         result.confidence = std::min(1.0, y_signal / (Y_MALE_THRESH * 10.0));
     } else if (female_xist && male_y) {
-        // Both signals present — unusual (XXY, contamination, mixed sample)
-        result.sex = "unknown";
-        result.confidence = 0.0;
+        // Both signals present — ratio test to resolve ambient noise
+        if (xist_signal > 0 && y_signal / xist_signal > 10.0) {
+            result.sex = "male";
+            result.confidence = 1.0 - (xist_signal / y_signal);
+        } else if (y_signal > 0 && xist_signal / y_signal > 10.0) {
+            result.sex = "female";
+            result.confidence = 1.0 - (y_signal / xist_signal);
+        } else {
+            result.sex = "unknown";
+            result.confidence = 0.0;
+        }
     } else {
         // Neither clear signal
         result.sex = "unknown";

@@ -33,6 +33,7 @@
 #include <cmath>
 #include <cstdint>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <numeric>
 #include <random>
@@ -937,7 +938,8 @@ inline void write_cell_calls(
     const CellCallResult&        result,
     const std::vector<std::string>& barcodes,
     const std::vector<uint64_t>& counts_per_barcode,
-    double fdr_threshold = 0.01)
+    double fdr_threshold = 0.01,
+    const std::string& call_method = "emptydrops")
 {
     // Build a set of called-cell barcode indices so that fallback overrides
     // (CR2, top-N, knee) are correctly reflected in the is_cell column even
@@ -950,14 +952,16 @@ inline void write_cell_calls(
         std::cerr << "[cell_calling] ERROR: cannot write " << outpath << "\n";
         return;
     }
-    out << "barcode\ttotal_umi\tdeviance\tfdr\tis_cell\n";
+    out << "barcode\tis_cell\tlog10_umi\tempty_drops_pvalue\tcall_method\n";
     for (size_t i = 0; i < result.tested_indices.size(); ++i) {
         uint32_t bc = result.tested_indices[i];
+        double log10_umi = counts_per_barcode[bc] > 0
+            ? std::log10(static_cast<double>(counts_per_barcode[bc])) : 0.0;
         out << barcodes[bc]            << '\t'
-            << counts_per_barcode[bc]  << '\t'
-            << result.deviance[i]      << '\t'
-            << result.fdr[i]           << '\t'
-            << (cell_set.count(bc) ? "TRUE" : "FALSE") << '\n';
+            << (cell_set.count(bc) ? "TRUE" : "FALSE") << '\t'
+            << std::fixed << std::setprecision(4) << log10_umi << '\t'
+            << std::scientific << std::setprecision(4) << result.fdr[i] << '\t'
+            << call_method << '\n';
     }
 }
 

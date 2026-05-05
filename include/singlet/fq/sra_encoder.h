@@ -358,8 +358,10 @@ class SraEncoder {
         uint64_t total_spots = reader.total_spots();
         prof.vdb_read_s += std::chrono::duration<double>(Clock::now() - t0).count();
 
-        // ── Phase 1: Probe first 10K spots (buffered for protocol detection) ──
-        uint32_t probe_count = std::min<uint64_t>(10000, total_spots);
+        // ── Phase 1: Probe first 100K spots (buffered for protocol detection) ──
+        // B-G2-1: spec requires 100K probe to reliably score both R1/R2 orientations
+        // against 10x v2/v3/v4/5p whitelists before committing to a swap direction.
+        uint32_t probe_count = static_cast<uint32_t>(std::min<uint64_t>(100000ULL, total_spots));
         std::vector<SpotData> probe_spots;
         probe_spots.reserve(probe_count);
 
@@ -515,6 +517,14 @@ class SraEncoder {
         ProtocolCandidate detected_proto =
             {"UNKNOWN", 0, 0, 0, 0, 0, 0, 0.0, 0.0, Confidence::NONE};
 
+        // B-G2-1: swap control — declared at function scope so finalization
+        // can read them regardless of which protocol-detection branch ran.
+        const bool swap_force = (cfg.swap_reads_mode == "on");
+        const bool swap_skip  = (cfg.swap_reads_mode == "off" ||
+                                 cfg.swap_reads_mode == "none");
+        bool geometry_swap_fired = false;  // hard R1>2×R2 geometry rule
+        bool vdb_swap_fired      = false;  // AUTOFIX-VDB-READ-SWAP-PROTOCOL pass
+
         if (!probe_spots.empty()) {
             r1_len = probe_spots[0].r1_len;
             r2_len = probe_spots[0].r2_len;
@@ -613,9 +623,13 @@ class SraEncoder {
             // never >34bp.  Without this rule, a deposit with an absent or low-hit
             // whitelist leaves the swap unfired and sends cDNA to STAR as the barcode
             // read (→ 0 cells).  Example: SRR34789664 (mouse 10x-3p-v3, 5M reads).
-            bool geometry_swap_fired = false;
-            if (should_hard_geometry_swap(r1_len, r2_len) &&
-                detected_proto.confidence < Confidence::HIGH) {
+            // B-G2-1: When swap_reads_mode=="on", force swap unconditionally.
+            //         When swap_reads_mode=="off"/"none", skip all swap passes.
+            // (swap_force and swap_skip are declared at function scope above.)
+            if (!swap_skip &&
+                (swap_force ||
+                 (should_hard_geometry_swap(r1_len, r2_len) &&
+                  detected_proto.confidence < Confidence::HIGH))) {
                 std::cerr << "[1fq-encode] Hard geometry swap: R1=" << r1_len
                           << "bp(cDNA)\u2194R2=" << r2_len
                           << "bp(barcode) — forced by asymmetric read lengths"
@@ -893,7 +907,7 @@ class SraEncoder {
             // 10K VDB spots.  If still sub-MEDIUM confidence, open a second reader at
             // max(50K, total_spots/4) and run detect_protocol on 5000 spots from there.
             // Those later spots are reliably cell reads.  The main encode thread still
-            // starts at probe_count (10K) so no reads are lost; this reader is
+            // starts at probe_count (100K) so no reads are lost; this reader is
             // detection-only.
             if (detected_proto.confidence < Confidence::MEDIUM && total_spots > 60000) {
                 int64_t late_start = static_cast<int64_t>(
@@ -963,9 +977,19 @@ class SraEncoder {
                             // of the observed R1 length from the late-probe reads.
                             // Catches e.g. celseq2 (r1_len=12) matching a 28bp 10xv3
                             // R1 read by kmer coincidence.
-                            else if (late_result.r1_length > 0 &&
-                                     std::abs(static_cast<int>(late_result.r1_length) -
-                                              static_cast<int>(late_r1)) > 6) {
+                            //
+                            // Relaxation: for non-whitelist protocols (CEL-Seq2, Drop-seq,
+                            // MARS-seq), the barcode is a prefix of R1. A longer observed
+                            // R1 is normal (adapter, polyT, cDNA tail) — only reject if
+                            // observed is SHORTER than expected. For WL protocols, enforce
+                            // the strict ±6bp check.
+                            else if (late_result.r1_length > 0 && [&]() {
+                                bool has_wl = (late_result.wl_match_rate > 0.0);
+                                if (late_r1 < late_result.r1_length) return true; // too short
+                                if (has_wl && std::abs(static_cast<int>(late_result.r1_length) -
+                                             static_cast<int>(late_r1)) > 6) return true;
+                                return false; // non-WL with observed >= expected: OK
+                            }()) {
                                 std::cerr << "[1fq-encode] Late-probe: rejecting switch to "
                                           << late_result.tag << " (expected R1="
                                           << late_result.r1_length << "bp, observed R1="
@@ -1040,7 +1064,7 @@ class SraEncoder {
             // scores), physically swap R1↔R2 here.
             // Handles both constant-R2 (2-seg) and variable-R2 (mixed multi-seg)
             // VDB deposits where R1=cDNA and R2=CB+UMI.
-            if (detected_proto.reads_swapped) {
+            if (!swap_skip && detected_proto.reads_swapped) {
                 std::cerr << "[1fq-encode] VDB read-swap: R1=" << r1_len
                           << "bp(cDNA)\u2194R2=" << r2_len
                           << "bp(barcode) — fixing orientation\n";
@@ -1066,6 +1090,7 @@ class SraEncoder {
                 std::swap(probe_r1_offset, probe_r2_offset);
                 three_seg_swapped = !three_seg_swapped;
                 detected_proto.reads_swapped = false;  // consumed
+                vdb_swap_fired = true;  // B-G2-1: mark for header flag
             }
 
             if (detected_proto.confidence >= Confidence::LOW) {
@@ -1281,7 +1306,7 @@ class SraEncoder {
                             }
                         }
 
-                        if (r2_viable > 0 && r2_rate >= 0.05 && r2_rate > r1_rate) {
+                        if (!swap_skip && r2_viable > 0 && r2_rate >= 0.05 && r2_rate > r1_rate) {
                             std::cerr << "[1fq-encode] Read swap detected: "
                                          "using VDB Read 2 as barcode read\n";
 
@@ -2225,6 +2250,14 @@ class SraEncoder {
         std::string meta = build_metadata_json(
             sra_path, protocol_tag, protocol_id, confidence, assay,
             stats.wl_match_rate, r1_len, r2_len, count, clip5p_length, cfg);
+        // B-G2-1: persist swap flag in Header::reserved[1] so downstream processing
+        // can verify that R1↔R2 orientation was corrected during encoding.
+        // All three swap paths must be covered:
+        //   geometry_swap_fired — hard R1>2×R2 geometry rule
+        //   wl_orientation_swap — WL validation barcode-in-R2 detected
+        //   vdb_swap_fired      — AUTOFIX-VDB-READ-SWAP-PROTOCOL
+        if (geometry_swap_fired || wl_orientation_swap || vdb_swap_fired)
+            writer.mark_reads_swapped();
         writer.finish(meta);
         prof.finalize_s += std::chrono::duration<double>(Clock::now() - t0).count();
 

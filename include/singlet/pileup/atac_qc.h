@@ -29,8 +29,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include "singlet/pileup/atac_bin_counter.h"
-#include "singlet/pileup/atac_fragment.h"
+#include "atac_bin_counter.h"
+#include "atac_fragment.h"
 
 namespace singlet {
 

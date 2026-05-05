@@ -1,4 +1,4 @@
-// singlet/pileup/species_detect.h — N1: Species auto-detection
+// singlet-pileup/species_detect.h — N1: Species auto-detection
 //
 // Determines the reference species (organism) from a .1fq file so that
 // --genome-dir can be resolved automatically.
@@ -60,7 +60,8 @@ static constexpr int   KMER_K              = 21;
 static constexpr int   SAMPLE_READS        = 5000;   // R2 reads to sample
 static constexpr float CONFIDENCE_THRESH   = 0.001f; // min hit-rate to call species
 static constexpr float HIGH_CONF_THRESH    = 0.01f;  // "high confidence" threshold
-static constexpr float MIN_RATIO           = 2.0f;   // winner must have 2x more hits than runner-up
+static constexpr float MIN_RATIO           = 1.5f;   // fast path for distant species
+static constexpr float MIN_Z_SQUARED       = 100.0f; // z^2 > 100 ↔ z > 10 (p < 1e-23)
 
 // ── Result ────────────────────────────────────────────────────────────────────
 
@@ -106,7 +107,7 @@ struct DetectionResult {
             species.empty() ? "unknown" : species.c_str(),
             genome_tag.empty() ? "unknown" : genome_tag.c_str(),
             confidence, method.c_str());
-        if (method == "kmer")
+        if (method == "kmer" || method == "bloom")
             std::fprintf(stderr, " (%d hits / %d kmers sampled from %d reads)",
                          kmers_hit, kmers_tested, reads_sampled);
         std::fprintf(stderr, "\n");
@@ -568,7 +569,7 @@ inline DetectionResult detect(const std::string& onefq_path, bool verbose = true
         // Add path relative to this header's install location
         // (determined at build time via __FILE__ — strip filename)
         {
-            std::string hpath = __FILE__;  // .../include/singlet/pileup/species_detect.h
+            std::string hpath = __FILE__;  // .../include/singlet-pileup/species_detect.h
             auto slash = hpath.rfind('/');
             if (slash != std::string::npos) {
                 std::string base = hpath.substr(0, slash); // .../include/singlet-pileup
@@ -637,15 +638,32 @@ inline DetectionResult detect(const std::string& onefq_path, bool verbose = true
                     float m_rate = static_cast<float>(mouse_hits) / total_kmers;
                     float h_vs_m = h_rate / (m_rate + 1e-9f);
                     float m_vs_h = m_rate / (h_rate + 1e-9f);
+                    float winner_rate = std::max(h_rate, m_rate);
+                    float loser_rate  = std::min(h_rate, m_rate);
 
-                    if (h_rate >= CONFIDENCE_THRESH && h_vs_m >= MIN_RATIO && h_rate > m_rate) {
+                    // Two-proportion z-test (avoids sqrt via z^2 comparison).
+                    // Detects human vs mouse even when k-mer overlap is ~94%.
+                    float p_avg = (h_rate + m_rate) * 0.5f;
+                    float denom = p_avg * (1.0f - p_avg) * 2.0f / total_kmers;
+                    float diff  = h_rate - m_rate;
+                    float z_sq  = (denom > 1e-15f) ? (diff * diff / denom) : 0.0f;
+
+                    // Fast path: large ratio (distant species, e.g. human vs yeast)
+                    bool fast_call = (winner_rate >= CONFIDENCE_THRESH &&
+                                     std::max(h_vs_m, m_vs_h) >= MIN_RATIO);
+                    // z-test path: close relatives (human vs mouse, ~1.06x ratio)
+                    bool ztest_call = (winner_rate >= CONFIDENCE_THRESH &&
+                                      z_sq >= MIN_Z_SQUARED &&
+                                      winner_rate > loser_rate);
+
+                    if ((fast_call || ztest_call) && h_rate > m_rate) {
                         result.genome_tag  = "GRCh38";
                         result.species     = "Homo sapiens";
                         result.taxon_id    = "9606";
                         result.confidence  = h_rate / (h_rate + m_rate + 1e-9f);
                         result.kmers_hit   = human_hits;
                         result.method      = "bloom";
-                    } else if (m_rate >= CONFIDENCE_THRESH && m_vs_h >= MIN_RATIO && m_rate > h_rate) {
+                    } else if ((fast_call || ztest_call) && m_rate > h_rate) {
                         result.genome_tag  = "GRCm39";
                         result.species     = "Mus musculus";
                         result.taxon_id    = "10090";

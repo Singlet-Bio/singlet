@@ -78,7 +78,7 @@
 #include "singlet/pileup/rna_variant_caller.h"
 #include "singlet/pileup/read_dedup_stats.h"
 #include "singlet/pileup/tagged_bam.h"
-#include "sra_reader.h"
+#include "singlet/fq/sra_reader.h"
 #include "singlet/fq/lib1fq.h"
 #include "singlet/fq/sra_encoder.h"
 #include "singlet/fq/fastq_encoder.h"

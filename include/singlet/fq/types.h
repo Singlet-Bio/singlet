@@ -81,6 +81,12 @@ namespace ExtraStreams {
 static constexpr uint8_t HAS_I2 = 0x01;  // I2 barcode stream present (scATAC 3-read)
 }
 
+// ── Swap flags (stored in Header::reserved[1]) ──
+// Set when the encoder performed a R1↔R2 orientation swap during encoding.
+namespace SwapFlags {
+static constexpr uint8_t READS_SWAPPED = 0x01;  ///< R1↔R2 were swapped during encoding
+}
+
 // ── Assay / modality type ──
 
 enum class AssayType : uint8_t {
@@ -650,6 +656,12 @@ struct EncoderConfig {
     // When non-empty and auto-detection returns confidence <= LOW (1),
     // the detected protocol is replaced by this value (see AUTOFIX-PROTOCOL-CONFIDENCE-OVERRIDE).
     std::string metadata_protocol;
+
+    // Read-swap mode: controls R1↔R2 orientation correction during encoding.
+    //   "auto" (default): apply heuristic swap passes (geometry, whitelist, detection)
+    //   "on"            : force swap regardless of detection outcome
+    //   "off" / "none"  : skip all swap passes (use VDB segment order as-is)
+    std::string swap_reads_mode = "auto";
 
     // Whitelist paths for auto-detection (searched in order)
     std::vector<std::string> whitelist_dirs;

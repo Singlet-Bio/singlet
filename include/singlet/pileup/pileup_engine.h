@@ -1089,6 +1089,9 @@ public:
         // chrM allele counts (if count_mt enabled)
         SparseAccumulator<uint16_t> mt;
 
+        // chrM indel events captured during CIGAR walk
+        std::vector<mt::MtIndelEvent> mt_indels;
+
         UmiDedup exon_umi, intron_umi, snp_umi, sj_umi;
         // N6: Directional UMI stores (parallel path — per-worker, finalized after thread join)
         DirectionalUmiStore dir_exon_store;
@@ -1527,6 +1530,12 @@ public:
         merge_accumulators(snp_dp_, workers, [](WorkerContext& w) -> SparseAccumulator<uint8_t>& { return w.snp_dp; });
         if (config_.count_mt) {
             merge_accumulators(mt_acc_, workers, [](WorkerContext& w) -> SparseAccumulator<uint16_t>& { return w.mt; });
+            for (auto& wc : workers) {
+                mt_indels_.insert(mt_indels_.end(),
+                    std::make_move_iterator(wc.mt_indels.begin()),
+                    std::make_move_iterator(wc.mt_indels.end()));
+                wc.mt_indels.clear();
+            }
         }
         if (has_gene_model_) {
             merge_accumulators(exon_acc_, workers, [](WorkerContext& w) -> SparseAccumulator<uint16_t>& { return w.exon; });
@@ -1638,6 +1647,7 @@ public:
     const SparseAccumulator<uint16_t>& introns() const { return intron_acc_; }
     const SparseAccumulator<uint16_t>& splice_junctions() const { return sj_acc_; }
     const SparseAccumulator<uint16_t>& mt_alleles() const { return mt_acc_; }
+    const std::vector<mt::MtIndelEvent>& mt_indels() const { return mt_indels_; }
 
     // N18: CRISPR guide counts accessor
     const SparseAccumulator<uint16_t>& guide_counts() const { return guide_ctr_.accumulator(); }
@@ -1780,6 +1790,7 @@ private:
     SparseAccumulator<uint16_t> intron_acc_;
     SparseAccumulator<uint16_t> sj_acc_;
     SparseAccumulator<uint16_t> mt_acc_;   // chrM allele counts: feat = pos*4 + base
+    std::vector<mt::MtIndelEvent> mt_indels_;  // chrM indels captured during CIGAR walk
     UmiDedup snp_umi_dedup_;  // UMI dedup for SNP positions
     UmiDedup sj_umi_dedup_;  // UMI dedup for splice junctions
 
@@ -2400,10 +2411,18 @@ private:
                     query_pos += len;
                     break;
                 case BAM_CINS:
+                    if (static_cast<uint32_t>(ref_pos) < mt::MT_LEN)
+                        mt_indels_.push_back({bc_idx, static_cast<uint32_t>(ref_pos), static_cast<uint16_t>(std::min(len, 0xFFFF)), true});
+                    query_pos += len;
+                    break;
                 case BAM_CSOFT_CLIP:
                     query_pos += len;
                     break;
                 case BAM_CDEL:
+                    if (static_cast<uint32_t>(ref_pos) < mt::MT_LEN)
+                        mt_indels_.push_back({bc_idx, static_cast<uint32_t>(ref_pos), static_cast<uint16_t>(std::min(len, 0xFFFF)), false});
+                    ref_pos += len;
+                    break;
                 case BAM_CREF_SKIP:
                     ref_pos += len;
                     break;
@@ -2443,10 +2462,18 @@ private:
                     query_pos += len;
                     break;
                 case BAM_CINS:
+                    if (static_cast<uint32_t>(ref_pos) < mt::MT_LEN)
+                        wc.mt_indels.push_back({bc_idx, static_cast<uint32_t>(ref_pos), static_cast<uint16_t>(std::min(len, 0xFFFF)), true});
+                    query_pos += len;
+                    break;
                 case BAM_CSOFT_CLIP:
                     query_pos += len;
                     break;
                 case BAM_CDEL:
+                    if (static_cast<uint32_t>(ref_pos) < mt::MT_LEN)
+                        wc.mt_indels.push_back({bc_idx, static_cast<uint32_t>(ref_pos), static_cast<uint16_t>(std::min(len, 0xFFFF)), false});
+                    ref_pos += len;
+                    break;
                 case BAM_CREF_SKIP:
                     ref_pos += len;
                     break;

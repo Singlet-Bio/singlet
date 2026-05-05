@@ -16,15 +16,19 @@ list(REMOVE_ITEM STAR_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/ReadAlign_outputVariation.cpp"
 )
 
+# bam_cat.c is compiled as C++ (uses C++ linkage in STAR)
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/bam_cat.c PROPERTIES LANGUAGE CXX)
+
 add_library(singlet_star OBJECT
     ${STAR_SOURCES}
     ${STAR_OPAL}
     ${STAR_SGT}
+    ${CMAKE_CURRENT_SOURCE_DIR}/bam_cat.c
 )
 
 target_include_directories(singlet_star PUBLIC
     ${CMAKE_SOURCE_DIR}/include/singlet/star
-    ${CMAKE_SOURCE_DIR}/include/singlet/star/htslib
+    ${CMAKE_CURRENT_SOURCE_DIR}/htslib
 )
 
 # STAR source files #include "VERSION" and "parametersDefault.xxd" from their
@@ -32,6 +36,7 @@ target_include_directories(singlet_star PUBLIC
 target_include_directories(singlet_star PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/opal
+    ${HTSLIB_INCLUDE_DIRS}
 )
 
 target_compile_options(singlet_star PRIVATE
@@ -47,6 +52,7 @@ target_compile_definitions(singlet_star PRIVATE
 )
 
 target_link_libraries(singlet_star PUBLIC
+    ${HTSLIB_LIBRARIES}
     ZLIB::ZLIB
     Threads::Threads
 )

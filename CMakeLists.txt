@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(singlet VERSION 2.0.0 LANGUAGES CXX)
+project(singlet VERSION 2.0.0 LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -52,6 +52,38 @@ target_link_libraries(singlet_pileup INTERFACE singlet_pz singlet_fq Threads::Th
 
 # ─── Pipeline binary (optional) ──────────────────────────────────────────────
 if(SINGLET_BUILD_PIPELINE)
+    find_package(OpenMP REQUIRED)
+    include(FindPkgConfig)
+
+    # NCBI VDB library for native SRA reading
+    find_library(NCBI_VDB_LIB ncbi-vdb
+        HINTS $ENV{CONDA_PREFIX}/lib ENV LD_LIBRARY_PATH)
+    find_path(NCBI_VDB_INCLUDE vdb/manager.h
+        HINTS $ENV{CONDA_PREFIX}/include)
+    if(NOT NCBI_VDB_LIB OR NOT NCBI_VDB_INCLUDE)
+        message(FATAL_ERROR
+            "libncbi-vdb not found. Install sra-tools or set CONDA_PREFIX.\n"
+            "  conda install -c bioconda sra-tools")
+    endif()
+    message(STATUS "Found ncbi-vdb: ${NCBI_VDB_LIB}")
+    message(STATUS "Found ncbi-vdb headers: ${NCBI_VDB_INCLUDE}")
+
+    # htslib (required for BAM/CRAM I/O)
+    pkg_check_modules(HTSLIB REQUIRED htslib>=1.10)
+
+    # HDF5 C library (for h5ad/loom export)
+    find_library(HDF5_C_LIB hdf5
+        HINTS $ENV{CONDA_PREFIX}/lib /usr/lib64)
+    find_path(HDF5_C_INCLUDE hdf5.h
+        HINTS $ENV{CONDA_PREFIX}/include /usr/include)
+    if(HDF5_C_LIB)
+        set(HDF5_AVAILABLE TRUE)
+        message(STATUS "Found HDF5: ${HDF5_C_LIB}")
+    else()
+        set(HDF5_AVAILABLE FALSE)
+        message(WARNING "HDF5 not found — h5ad/loom export disabled")
+    endif()
+
     add_subdirectory(src/star)
     add_subdirectory(src/pipeline)
 endif()

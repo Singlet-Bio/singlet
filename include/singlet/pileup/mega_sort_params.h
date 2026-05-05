@@ -53,6 +53,37 @@ namespace mega_sort {
 constexpr uint64_t MEGA_READ_THRESHOLD  = 200'000'000ULL;  // >  this  => comp=1, 50% cap
 constexpr uint64_t ULTRA_READ_THRESHOLD = 500'000'000ULL;  // >= this  => 15% + 64 GiB hard cap + bins=100
 
+// ── B-G3-3/4: SLURM allocation tier → XL tier read threshold ──────────────
+// Clipper-class HPC memory tiers (SLURM --mem):
+//
+//   Standard  64 GB   n_reads ≤  50M   limitBAMsortRAM = 25 GB  (~39%)
+//   Large    128 GB   n_reads ≤ 200M   limitBAMsortRAM = 50 GB  (~39%)
+//   XL-192   192 GB   n_reads > 200M   limitBAMsortRAM = 75 GB  (~39%)
+//   XL-384   384 GB   n_reads > 200M   limitBAMsortRAM = 150 GB (~39%)
+//
+// These are *floor-pinned* values: the MEGA/ULTRA fraction caps above may
+// reduce limitBAMsortRAM further for large samples where RSS would otherwise
+// exceed the cgroup cap.  The tier table provides the deterministic starting
+// point; mega_sort::ram_cap_bytes() applies the final safety ceiling.
+constexpr uint64_t XL_READ_THRESHOLD   = 200'000'000ULL;  // > this   => XL tier required
+
+// Deterministic limitBAMsortRAM given a known SLURM tier allocation (bytes).
+// Returns 0 if slurm_mem_bytes does not match a recognised tier (caller should
+// fall back to the fraction-based ram_cap_bytes() heuristic).
+inline uint64_t slurm_tier_bamsort_ram(uint64_t slurm_mem_bytes) {
+    // Tolerance: ±1 GiB around each known tier boundary
+    constexpr uint64_t GiB = 1024ULL * 1024 * 1024;
+    auto near = [&](uint64_t tier_gib) {
+        return slurm_mem_bytes >= (tier_gib - 1) * GiB &&
+               slurm_mem_bytes <= (tier_gib + 1) * GiB;
+    };
+    if (near(64))  return 25ULL * GiB;   // Standard  64 GB → 25 GB
+    if (near(128)) return 50ULL * GiB;   // Large    128 GB → 50 GB
+    if (near(192)) return 75ULL * GiB;   // XL-192   192 GB → 75 GB
+    if (near(384)) return 150ULL * GiB;  // XL-384   384 GB → 150 GB
+    return 0;  // not a recognised tier
+}
+
 // outBAMsortingBinsN for the ultra tier. STAR's default is 50; we use 100
 // here to halve per-bin memory (useful with the tight 15%/64-GiB cap) while
 // staying well inside STAR's tested range. Previous value of 500 triggered

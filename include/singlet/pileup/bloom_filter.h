@@ -1,4 +1,4 @@
-// singlet/pileup/bloom_filter.h — N1: Species Bloom filter
+// singlet-pileup/bloom_filter.h — N1: Species Bloom filter
 //
 // Simple bit-vector Bloom filter for k-mer sets (~50MB per species).
 // Uses 3 MurmurHash3 variants for low collision rate.
@@ -56,7 +56,7 @@ public:
     /// Insert a canonical k-mer (64-bit encoded)
     void insert(uint64_t kmer) {
         for (int i = 0; i < N_HASH; ++i) {
-            uint64_t h = murmurhash3_mix(kmer, static_cast<uint64_t>(i) * 0x9e3779b97f4a7c15ULL);
+            uint64_t h = murmurhash3_mix(kmer, static_cast<uint64_t>(i + 1) * 0x9e3779b97f4a7c15ULL);
             uint64_t pos = h % n_bits_;
             bits_[pos >> 6] |= (1ULL << (pos & 63));
         }
@@ -65,7 +65,7 @@ public:
     /// Query a canonical k-mer; returns true if possibly in set (may false-positive)
     bool query(uint64_t kmer) const {
         for (int i = 0; i < N_HASH; ++i) {
-            uint64_t h = murmurhash3_mix(kmer, static_cast<uint64_t>(i) * 0x9e3779b97f4a7c15ULL);
+            uint64_t h = murmurhash3_mix(kmer, static_cast<uint64_t>(i + 1) * 0x9e3779b97f4a7c15ULL);
             uint64_t pos = h % n_bits_;
             if (!(bits_[pos >> 6] & (1ULL << (pos & 63)))) return false;
         }

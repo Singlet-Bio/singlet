@@ -334,6 +334,14 @@ class Writer {
         }
     }
 
+    /// Mark that R1↔R2 were swapped during encoding.
+    /// Sets SwapFlags::READS_SWAPPED in Header::reserved[1].
+    /// Must be called before finish() — the flag is written when the header is
+    /// rewritten at the end of finish().
+    void mark_reads_swapped() {
+        hdr_.reserved[1] |= SwapFlags::READS_SWAPPED;
+    }
+
     // Finalize the file: flush remaining reads, write index + footer.
     // metadata_json: optional JSON string stored as compressed metadata block.
     void finish(const std::string& metadata_json = "") {

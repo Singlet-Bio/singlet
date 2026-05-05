@@ -220,7 +220,7 @@ inline void write_cell_qc_tsv(const std::string& path,
         return;
     }
     f << std::fixed << std::setprecision(2);
-    f << "barcode\ttotal_umis\ttotal_genes\tmt_pct\tribo_pct\tintronic_pct\n";
+    f << "barcode\tn_umi\tn_genes\tpct_mt\tpct_ribo\tintronic_pct\n";
 
     const uint32_t n = static_cast<uint32_t>(barcodes.size());
     for (uint32_t i = 0; i < n; ++i) {

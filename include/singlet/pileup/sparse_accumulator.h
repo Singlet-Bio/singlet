@@ -1,4 +1,5 @@
 #pragma once
+#define SINGLET_SPARSE_ACCUMULATOR_DEFINED
 // singlet-pileup: sparse_accumulator.h
 // Memory-efficient sparse matrix accumulator for streaming BAM pileup.
 //
