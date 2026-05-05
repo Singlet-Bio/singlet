@@ -49,9 +49,9 @@ gpu.tools.leiden(adata)
 gpu.tools.umap(adata)
 
 # PyTorch training (pip install singlet[torch])
-from singlet.torch import OnePZDataset, PZBufferedLoader
-dataset = OnePZDataset("atlas/*.1pz")
-loader = PZBufferedLoader(dataset, batch_size=512)
+from singlet.torch import OnePZDataset, DataLoader
+dataset = OnePZDataset("counts.1pz")
+loader = DataLoader(dataset, batch_size=512)
 ```
 
 ## Repository Layout
@@ -123,9 +123,12 @@ cmake --build build -j$(nproc)
 cmake -B build -DSINGLET_BUILD_TESTS=ON
 cmake --build build -j$(nproc) && ctest --test-dir build -j$(nproc)
 
-# Run Python tests (205 tests)
+# Run Python tests (230 tests)
 pip install -e ".[dev]"
 pytest tests/python/
+
+# Lint
+make lint
 ```
 
 ## License
