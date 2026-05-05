@@ -9,6 +9,7 @@ on:
       - 'tests/**'
       - 'CMakeLists.txt'
       - 'pyproject.toml'
+      - '.github/workflows/**'
   pull_request:
     branches: [main]
     paths:
@@ -17,6 +18,7 @@ on:
       - 'tests/**'
       - 'CMakeLists.txt'
       - 'pyproject.toml'
+      - '.github/workflows/**'
 
 jobs:
   lint:
@@ -57,8 +59,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -e "python/.[dev]" 2>/dev/null || pip install -e "python/."
-          pip install pytest numpy scipy pandas anndata --quiet
+          pip install -e ".[dev]" --quiet
+          pip install hypothesis --quiet
 
       - name: Run tests
         run: |
@@ -96,12 +98,12 @@ jobs:
       - name: Build wheel
         run: |
           pip install build twine --quiet
-          cd python && python -m build --wheel
+          python -m build --wheel
           twine check dist/*
 
       - name: Verify install
         run: |
-          pip install python/dist/*.whl
+          pip install dist/*.whl
           python -c "import singlet; print(f'singlet OK: {len(singlet.catalog())} series')"
 
   security:
@@ -117,5 +119,5 @@ jobs:
       - name: Install and audit
         run: |
           pip install pip-audit --quiet
-          pip install -e "python/." --quiet
+          pip install -e "." --quiet
           pip-audit --local --progress-spinner=off --ignore-vuln GHSA-0000 || true
