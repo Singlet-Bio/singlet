@@ -19,17 +19,20 @@ All notable changes to the singlet project.
 - **GPU module**: `from singlet.gpu import ...` (requires cupy)
 - **CMake find_package**: `find_package(Singlet COMPONENTS pz fq pileup)` with version file
 - **R GPU support**: `singlet::has_gpu()`, `gpu_pca()`, `gpu_neighbors()`, `gpu_leiden()`
-- **C++ test suite**: 100 unit tests covering all pileup modules (codec, cell calling, ATAC, ADT, species, nonhost, export, spatial, protocol detection, UMI dedup, bloom filter, velocity, saturation, read stats, provenance, minimizer index, cascade stats, pz writer, ancestry, ASE, MTX writer)
+- **C++ test suite**: 102 unit tests covering all pileup modules (codec, cell calling, ATAC, ADT, species, nonhost, export, spatial, protocol detection, UMI dedup, bloom filter, velocity, saturation, read stats, provenance, minimizer index, cascade stats, pz writer, ancestry, ASE, MTX writer)
 - **IO schema v2 support**: Loader auto-detects singlify v2 subdirectory layout (`donor/snp_ad.1pz`)
 - **MCP server tests**: 25 unit tests covering all parquet-backed tools + call_tool router
 - **Python lint**: ruff check + ruff format enforced (0 errors, CI job added)
-- **Type annotations**: 75% of functions annotated with return types (236/312)
+- **Type annotations**: All public functions annotated with return types
 - **Makefile**: `make test`, `make lint`, `make build`, `make pipeline`, `make clean`
 - **Python API reference**: `docs/api/python.md` covers all public modules
 - **Annotation tests**: 15 unit tests for `_annotate.py` (gene_programs, project, annotate)
 - **Security**: `SECURITY.md` vulnerability reporting policy + pip-audit CI job
 - **Python tests**: 584 total (up from 205 at cycle 184, 98% core coverage)
-- **Type checking**: pyright with 0 errors (basic mode, pyrightconfig.json)
+- **Property-based tests**: 14 hypothesis tests for codec round-trip verification
+- **Code deduplication**: `convert.py` thin re-export (was 267-line copy)
+- **Lint compliance**: 0 ruff errors (B904, UP037, UP035 all resolved)
+- **Type checking**: pyright with 0 errors, 20 warnings (all optional-dep false positives)
 - **Format conversion tests**: MTX round-trip, to_csc, from_mtx edge cases
 - **Preprocessing tests**: protocol detection, FASTQ download, quantify, QC, species, export
 
