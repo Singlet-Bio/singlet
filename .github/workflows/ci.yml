@@ -66,6 +66,13 @@ jobs:
         run: |
           python -m pytest tests/python/ -x -q --ignore=tests/python/test_loader.py
 
+      - name: Coverage report
+        if: matrix.python-version == '3.12'
+        run: |
+          pip install coverage --quiet
+          python -m coverage run -m pytest tests/python/ -q --no-header --ignore=tests/python/test_loader.py
+          python -m coverage report --fail-under=95
+
   cpp-test:
     runs-on: ubuntu-latest
     steps:

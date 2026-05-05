@@ -18,8 +18,8 @@ test-python: ## Run 584 Python tests
 	@python -m pytest tests/python/ -x -q
 
 coverage: ## Run tests with coverage report
-	@python -m coverage run --source=python/singlet -m pytest tests/python/ -q --no-header
-	@python -m coverage report --skip-covered --omit="*/gpu/*,*/mcp/*,*/torch/*"
+	@python -m coverage run -m pytest tests/python/ -q --no-header
+	@python -m coverage report
 
 lint: ## Lint Python code with ruff
 	@ruff check python/ tests/python/
