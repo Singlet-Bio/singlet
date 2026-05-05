@@ -56,6 +56,10 @@
 \flushbottom
 \sloppy
 
+% ── Brand color ──────────────────────────────────────────────────
+\RequirePackage{xcolor}
+\definecolor{singletprimary}{HTML}{0C8B84}
+
 % ── ORCiD icon ───────────────────────────────────────────────────
 \RequirePackage{scalerel}
 \RequirePackage{tikz}
@@ -195,9 +199,9 @@
 % ── Hyperref (load last) ────────────────────────────────────────
 \RequirePackage[
   colorlinks=true,
-  linkcolor={teal!70!black},
-  citecolor={teal!70!black},
-  urlcolor={teal!70!black},
+  linkcolor=singletprimary,
+  citecolor=singletprimary,
+  urlcolor=singletprimary,
   bookmarks=true,
   bookmarksnumbered=true
 ]{hyperref}
@@ -205,5 +209,29 @@
 % ── Corresponding author helper ──────────────────────────────────
 \newcommand{\correspondingauthor}[1]{%
   \footnotetext[0]{\textsuperscript{*}Corresponding author: \href{mailto:#1}{#1}}}
+
+% ── AI disclosure environment ────────────────────────────────────
+\newsavebox{\AIdisclosurebox}
+\newenvironment{AIdisclosure}{%
+  \par\vspace{0.8\baselineskip}%
+  \noindent\textbf{\textsc{AI Disclosure}}\par\vspace{0.3\baselineskip}%
+  \noindent\hbox to \z@{\color{singletprimary}\vrule width 2.5pt\hss}%
+  \hspace{8pt}\begin{minipage}{\dimexpr\columnwidth-10pt}%
+  \footnotesize\color{black!80}%
+}{%
+  \end{minipage}\par\vspace{0.5\baselineskip}%
+}
+
+% ── Singlet Bio logo (4-cell: 3 circles + "1" digit) ────────────
+\newcommand{\singletlogo}[1][16pt]{%
+  \begin{tikzpicture}[x=#1,y=#1]
+    % Three filled circles
+    \fill[singletprimary] (0,1) circle (0.38);
+    \fill[singletprimary] (1,1) circle (0.38);
+    \fill[singletprimary] (0,0) circle (0.38);
+    % "1" digit in bottom-right cell
+    \node[singletprimary,font=\bfseries\fontsize{12}{12}\selectfont] at (1,0) {1};
+  \end{tikzpicture}%
+}
 
 \endinput

@@ -48,6 +48,7 @@ __all__ = [
     "write_1pz",
     "read_1pz",
     "read_1pz_int",
+    "read_1pz_torch",
     "read_1pz_columns",
     "info_1pz",
     "validate_1pz",
@@ -59,10 +60,37 @@ __all__ = [
     "sample_1pz",
     "lognorm",
     "OnePZFile",
+    "PZReader",
     # Submodules (lazy-loaded)
     "interop",
     "torch",
 ]
+
+
+def PZReader(path: str):
+    """Create a cached file reader for zero-allocation batch decoding.
+
+    The reader opens the .1pz file once and caches the raw blob,
+    permutation table, full indptr, and chunk offset table in memory.
+    Use ``reader.decode_columns_into()`` with pre-allocated numpy
+    arrays to decode column ranges without any per-call allocation.
+
+    See ``singlepress.torch.PZBufferedLoader`` for the high-level
+    DataLoader that builds on this.
+
+    Parameters
+    ----------
+    path : str
+        Path to a .1pz file.
+
+    Returns
+    -------
+    _pz_codec.PZReader
+        Cached reader with ``nrows``, ``ncols``, ``total_nnz``,
+        ``range_nnz()``, ``colsums()``, and ``decode_columns_into()``.
+    """
+    from ._pz_codec import PZReader as _PZReader
+    return _PZReader(str(path))
 
 
 # ============================================================================
@@ -166,9 +194,8 @@ def write_1pz(
     uns: Optional[dict[str, str]] = None,
     store_transpose: bool = False,
     num_threads: int = 8,
-    level: int = 3,
     chunk_cols: int = 1024,
-    mode: str = "default",
+    level: int = 3,
 ) -> dict:
     """Write a scipy sparse matrix to a .1pz file.
 
@@ -197,19 +224,10 @@ def write_1pz(
         Roughly doubles file size but enables fast gene-range access.
     num_threads : int
         OpenMP threads for parallel encoding. Default 8.
-    level : int
-        Zstd compression level (used when mode="default"). Default 3.
     chunk_cols : int
         Columns per chunk. Default 1024.
-    mode : str
-        Compression mode controlling the speed/ratio trade-off:
-
-        - ``"fast"`` — LZ4 (3x faster reads, ~6% larger files)
-        - ``"default"`` — zstd level 3 (balanced)
-        - ``"small"`` — zstd level 16 (best compression, slower writes)
-
-        When *mode* is set, it overrides *level* with the optimal preset.
-        To use a custom zstd level, leave mode as ``"default"`` and set *level*.
+    level : int
+        Zstd compression level (1–22). Default 3 (Pareto-optimal for VOCSC).
 
     Returns
     -------
@@ -218,23 +236,12 @@ def write_1pz(
     """
     from ._pz_codec import pz_write, pz_write_int, pz_write_i64, pz_write_int_i64
 
-    _MODE_PRESETS = {
-        "fast":    (1, 1),   # codec_id=LZ4,  level=1
-        "default": (0, 3),   # codec_id=ZSTD, level=3
-        "small":   (0, 16),  # codec_id=ZSTD, level=16
-    }
-    if mode not in _MODE_PRESETS:
-        raise ValueError(
-            f"Unknown mode {mode!r}; choose from {list(_MODE_PRESETS)}")
-    codec_id, preset_level = _MODE_PRESETS[mode]
-    if mode != "default":
-        level = preset_level
-
     if not ss.issparse(matrix):
         matrix = ss.csc_matrix(matrix)
     elif not ss.isspmatrix_csc(matrix):
         matrix = matrix.tocsc()
-    matrix.sort_indices()
+    # Note: sort_indices() is NOT needed — the VOCSC encoder handles
+    # arbitrary row order within columns (partitions by value, sorts internally)
 
     nrows, ncols = matrix.shape
     nnz = matrix.nnz
@@ -257,16 +264,14 @@ def write_1pz(
         return write_fn(indptr, indices, data, nrows, path,
                         num_threads, level, chunk_cols, rn, cn,
                         store_transpose, kv_pairs,
-                        obs_index, obs_cols, var_index, var_cols,
-                        codec_id)
+                        obs_index, obs_cols, var_index, var_cols)
     else:
         data = np.ascontiguousarray(matrix.data, dtype=np.float64)
         write_fn = pz_write_i64 if use_i64 else pz_write
         return write_fn(indptr, indices, data, nrows, path,
                         num_threads, level, chunk_cols, rn, cn,
                         store_transpose, kv_pairs,
-                        obs_index, obs_cols, var_index, var_cols,
-                        codec_id)
+                        obs_index, obs_cols, var_index, var_cols)
 
 
 def read_1pz(
@@ -275,6 +280,8 @@ def read_1pz(
     num_threads: int = 8,
     normalize: bool = False,
     scale: float = 10000.0,
+    verify: bool = True,
+    sorted: bool = True,
 ) -> ss.csc_matrix:
     """Read a .1pz file and return a scipy.sparse.csc_matrix.
 
@@ -292,6 +299,14 @@ def read_1pz(
         Equivalent to Seurat's ``LogNormalize``. Requires stored column sums.
     scale : float
         Scaling factor for normalization. Default 10000 (standard for scRNA-seq).
+    verify : bool
+        If True (default), verify the file-level CRC32 before decoding.
+        Per-chunk CRCs are always checked regardless. Set to False for
+        maximum read speed on trusted files.
+    sorted : bool
+        If True (default), sort indices within each column after decoding.
+        Set to False to skip sorting for ~4x faster reads when downstream
+        code (e.g. cuSPARSE, PyTorch sparse) does not require sorted indices.
 
     Returns
     -------
@@ -301,12 +316,13 @@ def read_1pz(
     """
     from ._pz_codec import pz_read
 
-    result = pz_read(path, num_threads)
+    result = pz_read(path, num_threads, verify, sorted)
     m, n, nnz = result["m"], result["n"], result["nnz"]
     mat = ss.csc_matrix(
         (result["values"], result["indices"], result["indptr"]),
         shape=(m, n),
     )
+    mat.has_sorted_indices = sorted  # C++ decoder sorts per-column when sorted=True
     if "rownames" in result:
         mat.rownames = list(result["rownames"])
     if "colnames" in result:
@@ -330,8 +346,20 @@ def read_1pz_int(
     path: str,
     *,
     num_threads: int = 8,
+    sorted: bool = True,
 ) -> ss.csc_matrix:
     """Read a .1pz file with native int32 values (avoids float conversion).
+
+    Parameters
+    ----------
+    path : str
+        Path to a .1pz file.
+    num_threads : int
+        Number of decompression threads. Default 8.
+    sorted : bool
+        If True (default), sort indices within each column after decoding.
+        Set to False to skip sorting for ~4x faster reads when downstream
+        code (e.g. cuSPARSE, PyTorch sparse) does not require sorted indices.
 
     Returns
     -------
@@ -339,12 +367,13 @@ def read_1pz_int(
     """
     from ._pz_codec import pz_read_int
 
-    result = pz_read_int(path, num_threads)
+    result = pz_read_int(path, num_threads, verify=True, sorted=sorted)
     m, n = result["m"], result["n"]
     mat = ss.csc_matrix(
         (result["values"], result["indices"], result["indptr"]),
         shape=(m, n),
     )
+    mat.has_sorted_indices = sorted  # C++ decoder sorts per-column when sorted=True
     if "rownames" in result:
         mat.rownames = list(result["rownames"])
     if "colnames" in result:
@@ -363,10 +392,26 @@ def read_1pz_columns(
     col_end: int,
     *,
     num_threads: int = 8,
+    sorted: bool = True,
 ) -> ss.csc_matrix:
     """Read a column range [col_start, col_end) from a .1pz file.
 
     Only decompresses the chunks covering the requested columns.
+
+    Parameters
+    ----------
+    path : str
+        Path to a .1pz file.
+    col_start : int
+        First column index (inclusive).
+    col_end : int
+        Last column index (exclusive).
+    num_threads : int
+        Number of decompression threads. Default 8.
+    sorted : bool
+        If True (default), sort indices within each column after decoding.
+        Set to False to skip sorting for faster reads when downstream
+        code (e.g. cuSPARSE, PyTorch sparse) does not require sorted indices.
 
     Returns
     -------
@@ -375,12 +420,74 @@ def read_1pz_columns(
     """
     from ._pz_codec import pz_read_columns
 
-    result = pz_read_columns(path, col_start, col_end, num_threads)
+    result = pz_read_columns(path, col_start, col_end, num_threads, sorted)
     m, n = result["m"], result["n"]
-    return ss.csc_matrix(
+    mat = ss.csc_matrix(
         (result["values"], result["indices"], result["indptr"]),
         shape=(m, n),
     )
+    mat.has_sorted_indices = sorted
+    return mat
+
+
+def read_1pz_torch(
+    path: str,
+    *,
+    normalize: bool = False,
+    scale: float = 10000.0,
+    device=None,
+    num_threads: int = 8,
+):
+    """Read a .1pz file and return a torch.sparse_csr_tensor (cells × genes).
+
+    One-liner for PyTorch workflows — zero-copy where possible, no sorting
+    overhead, batch dimension first. Ready for ``nn.Linear`` and cuSPARSE.
+
+    Returns **int32** values by default (raw counts). When ``normalize=True``,
+    applies log-normalization (``log1p(x * scale / colsum)``) and returns
+    **float32**.
+
+    Parameters
+    ----------
+    path : str
+        Path to a .1pz file.
+    normalize : bool
+        If True, log-normalize and return float32. If False (default),
+        return raw int32 counts.
+    scale : float
+        Normalization scale factor (only used when normalize=True). Default 10000.
+    device : str or torch.device, optional
+        Target device (``"cuda"``, ``"cpu"``). Default: CPU.
+    num_threads : int
+        Number of decompression threads. Default 8.
+
+    Returns
+    -------
+    torch.Tensor
+        Sparse CSR tensor, shape ``(n_cells, n_genes)``.
+        dtype is int32 (raw) or float32 (normalized).
+
+    Example
+    -------
+    >>> import singlepress as sp
+    >>> raw = sp.read_1pz_torch("counts.1pz")                     # int32
+    >>> norm = sp.read_1pz_torch("counts.1pz", normalize=True)    # float32
+    >>> gpu = sp.read_1pz_torch("counts.1pz", device="cuda")      # GPU
+    """
+    from .torch import _to_torch_csr, _resolve_dtype
+    import torch as _torch
+
+    if normalize:
+        mat = read_1pz(path, num_threads=num_threads, normalize=True,
+                       scale=scale, sorted=False, verify=False)
+        t = _to_torch_csr(mat, dtype=_torch.float32)
+    else:
+        mat = read_1pz_int(path, num_threads=num_threads, sorted=False)
+        t = _to_torch_csr(mat, dtype=_torch.int32)
+
+    if device is not None:
+        t = t.to(device, non_blocking=True)
+    return t
 
 
 def info_1pz(path: str) -> dict:

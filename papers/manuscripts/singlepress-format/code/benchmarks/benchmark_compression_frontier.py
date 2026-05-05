@@ -37,7 +37,9 @@ import singlepress as sp
 
 # ── Configuration ──────────────────────────────────────────────
 PZ_DIR = "/mnt/projects/debruinz_project/cellarium/pipeline/quant"
-OUT_CSV = "/mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlepress-format/compression_frontier.csv"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+CODE_DATA_DIR = os.path.join(SCRIPT_DIR, "..", "data")
+OUT_CSV = os.path.join(CODE_DATA_DIR, "compression_frontier.csv")
 
 # Stratified 20 datasets spanning 1M–5.6B nnz
 DATASETS = [
@@ -281,8 +283,16 @@ def main():
         colnames = pz.colnames
         del pz
         
-        print(f"  Shape: {nrows}×{ncols}, nnz={nnz:,}, read in {t_read:.1f}s")
-        
+        print(f"  Shape: {nrows}x{ncols}, nnz={nnz:,}, read in {t_read:.1f}s")
+
+        # Re-encode at default level to get accurate pz_default_bytes
+        tmp_default = f"/dev/shm/bench_default_{gse}.1pz"
+        sp.write_1pz(tmp_default, mat_csc, rownames=rownames, colnames=colnames,
+                     num_threads=8)
+        pz_size = os.path.getsize(tmp_default)
+        os.remove(tmp_default)
+        print(f"  Re-encoded default: {pz_size/1e6:.1f} MB")
+
         # ── 1. Entropy analysis ──────────────────────────────────
         print(f"  Computing entropy...", end="", flush=True)
         entropy = compute_entropy_stats(mat_csc)
@@ -412,6 +422,7 @@ def main():
                     print(f" FAILED: {e}")
         
         # Flush results after each dataset
+        os.makedirs(CODE_DATA_DIR, exist_ok=True)
         with open(OUT_CSV, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=rows[0].keys())
             writer.writeheader()

@@ -1,5 +1,5 @@
 %% SinglePress: A purpose-built file format for single-cell omics matrices
-%% Target: Genome Biology — Software article
+%% Target: bioRxiv preprint
 \documentclass[10pt,twocolumn,letterpaper]{article}
 \usepackage{singletai-preprint}
 \usepackage{graphicx}
@@ -29,9 +29,9 @@
 % ── Metadata ─────────────────────────────────────────────────────
 \title{SinglePress: A Purpose-Built File Format\\for Single-Cell Omics Matrices}
 \author{
-  Zach DeBruine\textsuperscript{1,2,*}
+  Zachary DeBruine\textsuperscript{1,2}\orcidicon{0000-0003-2234-4827}
   \\[6pt]
-  \textsuperscript{1}Department of Information Sciences and Technology, Grand Valley State University, Allendale, MI
+  \textsuperscript{1}Department of Information Sciences and Technologies, Grand Valley State University, Grand Rapids, MI
   \\[2pt]
   \textsuperscript{2}Singlet Bio, Inc., Grand Rapids, MI
 }
@@ -46,7 +46,7 @@
 \begin{abstract}
 Single-cell count matrices are among the most compressible structures in genomics, yet the field stores them in formats that waste 80--90\% of disk space.
 We introduce SinglePress and its \texttt{.1pz} format, which exploits the extreme value concentration of count data to achieve a median 9.5$\times$ compression at 868~MB/s decode throughput.
-Across 3{,}253 scRNA-seq datasets spanning nine species and nine protocols, \texttt{.1pz} files are 2--4$\times$ smaller than H5AD and 2.5$\times$ smaller than BPCells.
+Across 3{,}253 scRNA-seq datasets spanning nine species and ten protocols, \texttt{.1pz} files are 2--4$\times$ smaller than H5AD and 2.5$\times$ smaller than BPCells.
 The same encoding generalizes to scATAC-seq peak matrices (4.7$\times$ median compression) without format modifications.
 Column-range reads are 2--20$\times$ faster, native PyTorch dataloaders deliver 2.5--3$\times$ higher GPU utilization than H5AD, and sparse-native batching eliminates the dense materialization bottleneck of TileDB-SOMA-ML.
 SinglePress is available at \url{https://github.com/Singlet-AI/singlepress}.
@@ -255,13 +255,13 @@ Compared to H5AD, SinglePress decodes 1.9--5.6$\times$ faster (median 3.1$\times
 
 \textbf{Why higher compression yields faster reads.}
 Achieving simultaneously better compression \emph{and} faster decompression appears paradoxical: VOCSC decoding adds work, and smaller files contain more information per byte.
-An ablation study across seven datasets (4.6M--113M nonzeros) decomposes the speed advantage into three independent factors.
+An ablation study across six datasets (4.6M--113M nonzeros) decomposes the speed advantage into three independent factors.
 First, the zstd backend decompresses raw data at 750--1{,}060~MB/s per core, versus 245--290~MB/s for gzip---a median 3.4$\times$ codec-level speedup on identical byte streams (Table~\ref{tab:ablation}).
 This alone nearly offsets VOCSC's decode overhead: single-threaded \texttt{.1pz} reads are already 1.1--2.2$\times$ faster than single-threaded H5AD-gzip.
 Second, the chunked file layout enables OpenMP parallelism with thread-local decompression contexts and dynamic scheduling, contributing an additional 1.8--2.8$\times$ speedup at 8 threads.
 Third, uncompressed H5AD reads faster than \texttt{.1pz} at 1 thread (by 2--3$\times$), confirming that VOCSC decoding is real overhead---but gzip compression slows H5AD by 2.2--7.0$\times$, far exceeding the format overhead.
 The net effect: \texttt{.1pz} at 8 threads reads 2.6--5.9$\times$ faster than H5AD-gzip for datasets above 20M nonzeros.
-The comparison is apples-to-apples: both read the same matrix, report median wall-clock time over 5 trials with warmup, and measure from function call to usable sparse matrix---but H5AD's use of gzip inside HDF5 precludes multi-threaded decompression even in principle, whereas the \texttt{.1pz} chunk architecture was designed for it.
+The comparison is apples-to-apples: both read the same matrix, report median wall-clock time over 3 trials with warmup, and measure from function call to usable sparse matrix---but H5AD's use of gzip inside HDF5 precludes multi-threaded decompression even in principle, whereas the \texttt{.1pz} chunk architecture was designed for it.
 
 \begin{table}[t]
 \centering
@@ -288,6 +288,18 @@ GSE248138 & 112.7 &    968 & 282 & 1.8$\times$ & 2.1$\times$ \\
 Thread scaling (Figure~\ref{fig:performance}b) shows effective parallelization: at 8 threads, median decode throughput reaches 2.1$\times$ the single-thread baseline (0.87 vs.\ 0.41~GB/s).
 Beyond 16 threads, returns diminish as serial I/O and memory bandwidth saturate.
 This behavior is favorable: moderate parallelism (4--8 threads) extracts most of the available performance, leaving the majority of CPU cores available for downstream analysis.
+
+\textbf{Decode pipeline breakdown.}\label{sec:decode_pipeline}
+Profiling the full decode path on a representative 25.8M-nonzero dataset (115K cells, 172K genes) decomposes the read into three stages.
+With zstd-3, decompression and VOCSC decode together complete in 58~ms.
+When row-index sorting is enabled (the default for scipy consumers), an additional 214~ms counting sort step brings the total to 272~ms---meaning sorting accounts for 79\% of read time.
+Crucially, NVIDIA cuSPARSE~\cite{nvidia_cusparse} and PyTorch's sparse CSR layout do not require sorted column indices, and we verified empirically that unsorted index order has no effect on sparse matrix--matrix multiply (SpMM) results or autoencoder training loss (Figure~\ref{fig:sort_effect}).
+The \texttt{read\_1pz\_torch()} convenience function therefore skips the sort by default, yielding a 4.7$\times$ speedup for GPU training paths (58~ms vs.\ 272~ms).
+File-level CRC verification adds $<$7~ms and is negligible.
+
+We evaluated LZ4 as an alternative backend but found it counterintuitively \emph{slower} than zstd-3: 91~ms vs.\ 58~ms for the full decode, despite LZ4's faster per-byte decompression rate.
+The reason is that zstd-3 achieves 10\% better compression (22.0 vs.\ 24.2~MB), and the VOCSC encoding pipeline is dominated by memory-bandwidth and entropy decoding, not decompression alone.
+High-ratio zstd compression (level~16, 21.5~MB) decodes in 96~ms---slower than zstd-3 but still competitive---confirming that zstd-3 occupies the Pareto-optimal point for both compression ratio and decode speed.
 
 \begin{figure*}[t]
 \centering
@@ -320,10 +332,21 @@ SinglePress additionally provides fused on-the-fly log-normalization: \texttt{re
 Column-range reads complete in 8--193~ms for a 10\% slice across the 13 benchmarked datasets with cross-format comparison, with the chunked layout decompressing only $\lceil k / 1024 \rceil$ chunks for $k$ requested columns.
 Row-range queries (gene subsets) complete in comparable time via the optional transpose section.
 
+Modern quantification pipelines~\cite{he2022alevin} produce USA-resolved matrices (unspliced, spliced, ambiguous) with three count layers stored as consecutive row blocks.
+Across the evaluation datasets, USA-resolved \texttt{.1pz} files require only 12--36\% more space than summed matrices, making three-layer distribution practical without significant storage penalty.
+
 \subsection{GPU training with PyTorch dataloaders}
 
-To quantify how file-format I/O overhead limits GPU utilization as a function of model complexity, we swept the hidden dimension of a single-layer autoencoder ($G \to h \to G$, ReLU, Adam) from $h = 32$ to $h = 4{,}096$, corresponding to 8~GFLOP--1~TFLOP per training step ($12 B n h$ FLOPs, batch size $B = 1{,}024$, $n = 20{,}000$ genes).
-Three datasets spanning 10K--150K cells were benchmarked on an NVIDIA H100~NVL GPU using the native PyTorch \texttt{OnePZDataset} dataloader with four prefetch workers; H5AD files were read in backed mode with equivalent batch logic.
+To quantify how file-format I/O overhead limits GPU utilization as a function of model complexity, we swept the hidden dimension of a single-layer autoencoder ($G \to h \to G$, ReLU, Adam) from $h = 32$ to $h = 2{,}048$, corresponding to 8~GFLOP--0.5~TFLOP per training step ($12 B n h$ FLOPs, batch size $B = 1{,}024$, $n = 20{,}000$ genes).
+Five datasets spanning 3K--91K cells were benchmarked on an NVIDIA H100~NVL GPU using the native PyTorch \texttt{OnePZDataset} dataloader; H5AD files were read in backed mode with equivalent batch logic.
+A detailed I/O--compute breakdown by latent dimension is given in Figure~\ref{fig:io_compute}, and per-dataset training load fractions in Figure~\ref{fig:autoencoder}.
+
+\textbf{Zero-copy CSC$\to$CSR reinterpretation.}
+The \texttt{.1pz} on-disk layout stores count data in CSC (compressed sparse column) format, indexed by cell.
+Because CSC(genes$\times$cells) and CSR(cells$\times$genes) share identical memory layout---the cell-indexed \texttt{indptr}, gene-position \texttt{indices}, and \texttt{values} arrays are physically the same---the format conversion is a free $O(1)$ reinterpretation: \texttt{torch.sparse\_csr\_tensor(indptr, indices, values, size=(n\_cells, n\_genes))} wraps the numpy buffers in $<$1~ms with no copies.
+The resulting CSR(cells$\times$genes) orientation places the batch dimension first, matching \texttt{nn.Linear} and cuSPARSE~SpMM conventions.
+Combined with the \texttt{sorted=False} read mode, the full path from \texttt{.1pz} file to GPU-ready sparse CSR tensor completes in 66~ms (int32) or 155~ms (float32) for a 25.8M-nonzero matrix---a 5.6--9.2$\times$ speedup over the previous read-convert-sort-wrap pipeline (1{,}429~ms).
+The one-liner \texttt{read\_1pz\_torch(path)} encapsulates this entire path.
 
 GPU utilization rises hyperbolically with model FLOPs and is well described by the saturation model $U = F / (F + k)$, where $k$ is the format's I/O overhead in FLOP-equivalent units (Figure~\ref{fig:performance}e).
 Fitting across all datasets yields $k_{\texttt{.1pz}} \approx 2{,}200$~GFLOP and $k_{\text{H5AD}} \approx 7{,}200$~GFLOP---a 3.3$\times$ gap.
@@ -379,11 +402,6 @@ SCE / HDF5Array         & $\approx$2.5--3$\times$ & embedded & chunk \\
 \bottomrule
 \end{tabular}
 \end{table}
-
-\subsection{Partial reads and USA-resolved storage}
-
-Modern quantification pipelines~\cite{he2022alevin} produce USA-resolved matrices with three count layers (spliced, unspliced, ambiguous) stored as consecutive row blocks.
-Across the evaluation datasets, USA-resolved \texttt{.1pz} files require only 12--36\% more space than summed matrices, making three-layer distribution practical without significant storage penalty.
 
 \subsection{scATAC-seq peak matrix compression}
 
@@ -450,8 +468,8 @@ For a Census tissue slice with $\sim$60K genes, each batch of 1{,}024 cells mate
 Enabling sparse mode (\texttt{return\_sparse\_X=True}) reduces memory but raises \texttt{NotImplementedError} when \texttt{num\_workers > 0}, due to a known PyTorch limitation on pickling sparse tensors across process boundaries (PyTorch issue \#20248).
 
 SinglePress's \texttt{OnePZCellDataset} avoids this entirely.
-Each batch is assembled as a sparse CSR tensor via zero-copy conversion from the pre-loaded scipy matrix.
-The \texttt{collate\_fn} handles sparse-to-sparse batching within the DataLoader's worker processes.
+Each batch is assembled as a sparse CSR tensor via zero-copy CSC$\to$CSR reinterpretation from the pre-loaded scipy matrix---no format conversion or index sorting is performed.
+The \texttt{collate\_fn} handles sparse-to-sparse batching within the DataLoader's worker processes using pure-torch CSR row concatenation (no scipy round-trip).
 On-the-fly log-normalization is fused into the data loading path using stored column sums, eliminating a separate normalization step.
 
 On Census tissue slices, the per-batch data preparation time---from stored matrix to training-ready tensor---is substantially lower for \texttt{OnePZCellDataset} than for the dense-materialization approach used by TileDB-SOMA-ML.
@@ -493,6 +511,7 @@ Row-range random access        & \checkmark$^*$ & --- & \checkmark & \checkmark 
 Stored column sums             & \checkmark & --- & --- & --- & --- & --- & --- & --- & --- \\
 On-the-fly normalization       & \checkmark & --- & --- & --- & --- & --- & --- & --- & --- \\
 CRC32 integrity validation     & \checkmark & --- & --- & --- & --- & --- & --- & --- & --- \\
+Disk-backed lazy operations    & --- & --- & \checkmark & --- & --- & --- & --- & --- & --- \\
 Single-file (no sidecar)       & \checkmark & \checkmark & --- & --- & \checkmark & --- & \checkmark & --- & \checkmark \\
 Python API                     & \checkmark & \checkmark & --- & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark \\
 R API                          & \checkmark & \checkmark$^\dagger$ & \checkmark & \checkmark$^\dagger$ & \checkmark & \checkmark & \checkmark & --- & --- \\
@@ -647,6 +666,7 @@ The bytes-per-nonzero metric (Figure~\ref{fig:ecosystem}b) reveals a predictable
 The head-to-head comparison with BPCells (Figure~\ref{fig:ecosystem}c--d) highlights a fundamental trade-off.
 BPCells' BP-128 bitpacking provides fast in-memory decompression (7--8~GB/s reported) but generic encoding limits on-disk compression to 3.8$\times$ median.
 SinglePress's VOCSC encoding exploits value-frequency structure to achieve 9.5$\times$ with 2.5$\times$ smaller files, meaning fewer bytes transferred from disk even when per-byte decode is comparable.
+Critically, BPCells also provides disk-backed lazy matrix operations (arithmetic, subsetting, transposition) that enable full analysis of million-cell datasets without loading the matrix into RAM---a computation-engine capability that SinglePress, as a pure storage format, does not replicate.
 Similarly, while TileDB-SOMA provides powerful federated queries over 74M Census cells, the practical latency of remote API access (29~s for a small tissue slice) motivates local \texttt{.1pz} caches for iterative analysis and ML training.
 
 \textbf{Limitations.}
@@ -673,17 +693,19 @@ As single-cell datasets scale to billions of cells, domain-aware compression wil
 
 \subsection{Dataset selection}
 
-We evaluated SinglePress across 3{,}253 scRNA-seq datasets from the Gene Expression Omnibus (GEO), spanning nine species (\textit{H.\,sapiens}, \textit{M.\,musculus}, \textit{D.\,rerio}, \textit{R.\,norvegicus}, \textit{D.\,melanogaster}, \textit{M.\,mulatta}, \textit{G.\,gallus}, \textit{X.\,laevis}, \textit{S.\,scrofa}) and nine protocols (10x Chromium v2/v3/v4/5$'$/Multiome, Drop-seq, Seq-Well, DNBelab~C4, BD~Rhapsody, inDrop).
+We evaluated SinglePress across 3{,}253 scRNA-seq datasets from the Gene Expression Omnibus (GEO), spanning nine species (\textit{H.\,sapiens}, \textit{M.\,musculus}, \textit{D.\,rerio}, \textit{R.\,norvegicus}, \textit{D.\,melanogaster}, \textit{M.\,mulatta}, \textit{G.\,gallus}, \textit{X.\,laevis}, \textit{S.\,scrofa}) and ten protocols (10x Chromium v2/v3/v4/5$'$/Multiome, Drop-seq, Seq-Well, DNBelab~C4, BD~Rhapsody, inDrop).
 All datasets were quantified with \texttt{simpleaf}~\cite{he2022alevin} and store USA-resolved counts (spliced, unspliced, ambiguous layers as consecutive row blocks).
 For cross-format benchmarks, a stratified subsample of 200 datasets covering four orders of magnitude in nonzero count ($10^5$--$3.5 \times 10^8$) was selected.
 The R-ecosystem comparison used 20 datasets shared across all R-native formats.
 
 \subsection{Benchmark hardware and timing}
 
-All benchmarks were run on a single CPU node (AMD EPYC, 128~GB RAM) with files stored on a shared parallel filesystem.
-Timing measurements report the median of 5 replicates with a warm-up run discarded.
+All CPU benchmarks were run on a single compute node (AMD EPYC, 128~GB RAM, Linux) with files stored on a shared Lustre parallel filesystem.
+Files were read from warm page cache (pre-loaded by a discarded warm-up run) to measure decode throughput independent of storage-layer variability; cold-cache reads on the same filesystem are I/O-bound at $\sim$2~GB/s.
+Timing measurements report the median of 3 replicates with one warm-up run discarded; the threading benchmark used 100 replicates.
 Throughput is reported in MB/s of int32-equivalent output (i.e., the size of the uncompressed CSC matrix divided by wall-clock time).
 GPU benchmarks used an NVIDIA H100~NVL (80~GB HBM3) with CUDA 12.8 and PyTorch 2.4.
+Key software versions: Python~3.9, R~4.3, h5py~3.11, scipy~1.13, anndata~0.10, BPCells~0.2.0, zstd~1.5.6 (library), GCC~11.
 
 \subsection{scATAC-seq benchmark}
 
@@ -707,7 +729,7 @@ Alternative codec comparison used ten configurations: LZ4 (levels 0, 9), gzip (1
 
 \subsection{GPU utilization measurement}
 
-We swept the hidden dimension of a single-layer autoencoder ($G \to h \to G$, ReLU, Adam) from $h = 32$ to $h = 4{,}096$, corresponding to 8~GFLOP--1~TFLOP per training step ($12Bnh$ FLOPs, batch size $B = 1{,}024$, $n = 20{,}000$ genes).
+We swept the hidden dimension of a single-layer autoencoder ($G \to h \to G$, ReLU, Adam) from $h = 32$ to $h = 2{,}048$, corresponding to 8~GFLOP--0.5~TFLOP per training step ($12Bnh$ FLOPs, batch size $B = 1{,}024$, $n = 20{,}000$ genes).
 GPU utilization was measured via \texttt{torch.cuda} event timing as the fraction of wall-clock time spent in forward/backward passes versus data loading.
 The saturation model $U = F / (F + k)$ was fitted per format using nonlinear least squares.
 
@@ -736,10 +758,11 @@ We thank the Flatiron Institute for compute resources.
 \subsection*{Authors' contributions}
 ZD conceived, designed, and implemented the SinglePress format and codec; conducted all benchmarks; analyzed the data; and wrote the manuscript.
 
-\subsection*{Use of AI tools}
+\begin{AIdisclosure}
 The core innovations---value-ordered compressed sparse column (VOCSC) encoding and byte-plane splitting for count data---were conceived and designed by the author.
 Claude (Opus~4.6, Anthropic) was used as a development tool to optimize encoding parameters, implement benchmark harnesses, and iterate on manuscript text.
 All scientific claims, experimental designs, and architectural decisions were made by the author.
+\end{AIdisclosure}
 
 % ── Availability ──────────────────────────────────────────────────
 
@@ -980,7 +1003,7 @@ Levels above 9 actually \emph{decrease} the ratio because VOCSC output lacks the
 LZMA-6, the strongest general-purpose compressor, achieves only 3.64$\times$ on VOCSC output at 80~MB/s decompress---worse ratio \emph{and} 31$\times$ slower than zstd-1.
 This counterintuitive result arises because VOCSC preprocessing has already removed the redundancy that asymmetric codecs exploit: what remains is high-entropy data that benefits from fast, shallow matching (zstd) rather than deep dictionary search (LZMA).
 
-LZ4 provides 3.34$\times$ at 4{,}692~MB/s---a viable fast-read tier that trades 22\% compression for 1.9$\times$ faster decompression.
+LZ4 provides 3.34$\times$ at 4{,}692~MB/s---faster decompression but 22\% worse compression than zstd-1.
 
 \paragraph{Interaction with pre-filters.}
 The level landscape changes dramatically when the bit-plane + bitmap pre-filter pipeline (Section~S4) is applied.
@@ -1080,7 +1103,7 @@ Several transforms that are effective in other domains provide no benefit on VOC
 \item \textbf{Cross-plane conditioning}: Knowing plane~1 provides only 0.1--0.45 bits of information about plane~0 (conditional entropy analysis), insufficient to justify the implementation complexity.
 \end{itemize}
 
-\subsection*{S4. The production codec: bit-planes + bitmap + zstd-1}
+\subsection*{S4. The production codec: bit-planes + bitmap + zstd-3}
 
 Combining the two effective transforms produces the production codec, summarized in Algorithm~\ref{alg:encode}.
 
@@ -1109,7 +1132,7 @@ $j \gets 0$\;
 }
 $B' \gets M \| D[0:j]$\tcp*{Bitmap + nonzero bytes}
 \tcp{Step 3: Entropy coding}
-$F \gets \text{zstd-1}(B')$\;
+$F \gets \text{zstd-3}(B')$\;
 \Return{$F$}\;
 \end{algorithm}
 
@@ -1119,7 +1142,7 @@ $F \gets \text{zstd-1}(B')$\;
 \label{alg:decode}
 \KwIn{Compressed frame $F$; original chunk size $N$; plane~0 region $[a, b)$}
 \KwOut{Decoded VOCSC chunk buffer $B$}
-$B' \gets \text{zstd-1-decompress}(F)$\;
+$B' \gets \text{zstd-3-decompress}(F)$\;
 \tcp{Step 1: Bitmap decode}
 Extract bitmap $M$ ($\lceil N/8 \rceil$ bytes) and packed data $D$ from $B'$\;
 $j \gets 0$\;
@@ -1143,12 +1166,12 @@ $j \gets 0$\;
 Bit-plane recombination in the decoder uses SSE2 SIMD intrinsics (\texttt{\_mm\_movemask\_epi8}) to reconstruct 16 bytes per cycle, making the decode overhead negligible ($<$5\% of total decompression time at 4{,}823~MB/s throughput).
 
 \paragraph{Performance.}
-The combined pipeline achieves a median 4.89$\times$ compression at 4{,}823~MB/s decompression---simultaneously +4.4\% better ratio and +68\% faster than the previous production codec (byte-split + zstd-1 without pre-filters; Table~\ref{tab:champion}).
+The combined pipeline achieves a median 4.89$\times$ compression at 4{,}823~MB/s decompression---simultaneously +4.4\% better ratio and +68\% faster than the previous production codec (byte-split + zstd-3 without pre-filters; Table~\ref{tab:champion}).
 The improvement scales with sparsity: dense datasets (73\% small-gap fraction) show $-$1.1\% regression, while very sparse datasets (98\% small-gap fraction) gain up to +6.0\%.
 
 \begin{table}[h]
 \centering
-\caption{Production codec (bit-planes + bitmap + zstd-1) vs.\ baselines across four representative datasets spanning the density spectrum.}
+\caption{Production codec (bit-planes + bitmap + zstd-3) vs.\ baselines across four representative datasets spanning the density spectrum.}
 \label{tab:champion}
 \footnotesize
 \begin{tabular}{l r r r r r}
@@ -1166,18 +1189,18 @@ GSE241998 & 349M & 98 & 6.23$\times$ & 6.61$\times$ & +6.0\% \\
 
 \paragraph{Speed tiers.}
 By substituting the entropy backend, the same pre-filter pipeline supports three distinct speed/ratio tiers (Table~\ref{tab:speed_tiers}).
-The LZ4 tier achieves 13{,}000--16{,}000~MB/s decompression (2.7$\times$ faster than zstd) at the cost of 10\% lower ratio, making it suitable for read-hot workloads where decompression throughput is the bottleneck.
-LZ4 is also 2.3$\times$ faster on the \emph{write} path (4{,}400 vs.\ 1{,}900~MB/s at level~1), which may be relevant for pipelines where compress speed matters.
-However, the 10\% ratio penalty accumulates at scale: for a 100~TB corpus, LZ4 requires $\sim$10~TB more storage than zstd.
+We also evaluated LZ4 as an alternative backend.
+While LZ4 achieves 13{,}000--16{,}000~MB/s raw decompression throughput (2.7$\times$ faster than zstd per byte), the 10\% lower compression ratio means more bytes must be decompressed, largely negating the speed advantage in end-to-end decode time (see Section~\ref{sec:decode_pipeline}).
+Combined with the 10\% storage penalty (which accumulates at scale: $\sim$10~TB more for a 100~TB corpus), zstd dominates the Pareto frontier for .1pz production use.
 
 The zstd-16 tier merits special attention: it achieves the best compression ratio \emph{and} the fastest zstd decompression speed simultaneously.
 This is because the \texttt{btopt} (binary tree optimal parsing) strategy activated at level~16 discovers longer LZ77 matches that are both more compact and more cache-friendly to decode.
-The penalty is entirely on the write path: zstd-16 compresses at only 45~MB/s, which is 42$\times$ slower than zstd-1.
+The penalty is entirely on the write path: zstd-16 compresses at only 45~MB/s, which is 42$\times$ slower than zstd-3.
 For write-once/read-many workloads (the typical .1pz use case), this tradeoff is favorable.
 
 \begin{table}[h]
 \centering
-\caption{Speed tiers for the bit-planes + bitmap pre-filter with different entropy backends (four holdout datasets, 40 chunks, 5 decompress / 3 compress trials per chunk). All tiers share the same pre-filter; only the compressor changes.}
+\caption{Speed tiers for the bit-planes + bitmap pre-filter with the zstd entropy backend at different compression levels (four holdout datasets, 40 chunks, 5 decompress / 3 compress trials per chunk). All tiers share the same pre-filter; only the compression level changes.}
 \label{tab:speed_tiers}
 \footnotesize
 \begin{tabular}{lrrr}
@@ -1187,8 +1210,6 @@ Configuration & Ratio & Decomp.\ (MB/s) & Compress (MB/s) \\
 \textbf{bp + bitmap + zstd-16} & \textbf{5.27}$\times$ & \textbf{5{,}100} & 45 \\
 bp + bitmap + zstd-3       & 5.21$\times$ & 4{,}700  & 1{,}150 \\
 bp + bitmap + zstd-1       & 5.20$\times$ & 4{,}800  & 1{,}900 \\
-bp + bitmap + lz4hc-9      & 4.91$\times$ & 13{,}100 & 77 \\
-bp + bitmap + lz4-1        & 4.68$\times$ & 13{,}300 & 4{,}400 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -1228,7 +1249,7 @@ Separately tested on raw chunks and champion-filtered chunks.
 
 \begin{table*}[h]
 \centering
-\caption{Side information experiments: median compression ratio across four representative datasets. Champion = bit-planes + bitmap + zstd-1 (no side information). Every side-information variant matches or underperforms the champion. For the three sparse datasets (GSE151346/277034/241998), all dictionary and prefix variants achieve $\pm$0.00\% difference from champion.}
+\caption{Side information experiments: median compression ratio across four representative datasets. Champion = bit-planes + bitmap + zstd-3 (no side information). Every side-information variant matches or underperforms the champion. For the three sparse datasets (GSE151346/277034/241998), all dictionary and prefix variants achieve $\pm$0.00\% difference from champion.}
 \label{tab:side_info}
 \footnotesize
 \begin{tabular}{l r r r r r l}
@@ -1318,7 +1339,7 @@ Varint (1--4B) & 4.74$\times$ & 5{,}011 & Lower ratio, complex decode \\
 Group-4 varint & 4.37$\times$ & 4{,}333 & Tag byte overhead ($-$7\%) \\
 Rice ($k$=4-9) & 4.21$\times$ & 21{,}156 & Max throughput, poor ratio \\
 \midrule
-\multicolumn{4}{l}{\textit{Production: bit-planes + bitmap + zstd-1}} \\
+\multicolumn{4}{l}{\textit{Production: bit-planes + bitmap + zstd-3}} \\
  & 4.89$\times$ & 4{,}823 & Best ratio, fast, minimal change \\
 \bottomrule
 \end{tabular}
@@ -1546,35 +1567,9 @@ Strategy & Ratio & Compress ($\mu$s) & Decomp.\ ($\mu$s) \\
 \end{tabular}
 \end{table}
 
-\paragraph{LZ4 as a fast tier.}
-LZ4 provides a qualitatively different speed/ratio tradeoff through the champion pipeline.
-On the four holdout datasets (Table~\ref{tab:lz4_detail}), LZ4-1 achieves 2.7$\times$ faster decompression and 2.3$\times$ faster compression than zstd-1, at the cost of 10\% lower ratio.
-The decompression advantage scales with sparsity: dense data sees 3.5$\times$ faster reads (4{,}294 vs.\ 1{,}233~MB/s), while very sparse data sees 2.7$\times$ faster reads (15{,}997 vs.\ 5{,}963~MB/s).
-LZ4-HC level~9 recovers most of the ratio gap (4.91$\times$ vs.\ 5.20$\times$), maintaining 13{,}100~MB/s decompression, but compresses at only 77~MB/s---slower than zstd-16.
-
-\begin{table}[h]
-\centering
-\caption{LZ4 vs.\ zstd per-dataset comparison through the champion pre-filter pipeline (bit-planes + bitmap). All speeds are median of 5 decompress / 3 compress trials.}
-\label{tab:lz4_detail}
-\footnotesize
-\begin{tabular}{llrrrr}
-\toprule
- & & \multicolumn{2}{c}{Ratio} & \multicolumn{2}{c}{Decomp.\ (MB/s)} \\
-\cmidrule(lr){3-4} \cmidrule(lr){5-6}
-Dataset & Density & lz4-1 & zstd-1 & lz4-1 & zstd-1 \\
-\midrule
-GSE135310 & Dense    & 1.53$\times$ & 1.69$\times$ & 4{,}294  & 1{,}233 \\
-GSE151346 & Medium   & 4.59$\times$ & 5.08$\times$ & 13{,}100 & 4{,}700 \\
-GSE277034 & Sparse   & 4.77$\times$ & 5.33$\times$ & 13{,}590 & 4{,}927 \\
-GSE241998 & V.~sparse & 5.82$\times$ & 6.49$\times$ & 15{,}997 & 5{,}963 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
 \paragraph{Summary.}
 Across $\sim$70 codec variants and $\sim$3{,}200 measurements, no modification to the champion pipeline's pre-filter architecture (bit-plane decomposition + zero-byte bitmap) improves compression.
 The only actionable finding is that zstd level~16 is Pareto-dominant over level~1 for pre-filtered output: +1.2\% ratio and +1.4\% decompression speed, at the cost of 42$\times$ slower compression.
-LZ4-1 provides a viable fast-read tier at 2.7$\times$ faster decompression with 10\% lower ratio.
 
 \subsection*{S10. Data layout optimization}
 \label{sec:layout_opt}
@@ -1652,8 +1647,7 @@ Gap encoding & Byte-split (2 planes) & Varint, width-bitmap, Rice, group varint 
 Plane layout & Concatenated & Interleaved, reverse order & Interleaved destroys ratio: 1.75$\times$ vs 4.39$\times$; reverse order $\pm$0.0\% \\[3pt]
 Pre-filter 1 & Bit-plane decomp.\ (plane~0 only) & Nibble split, freq.\ remap, MTF, delta, Gray, XOR-delta, BWT, pred.\ XOR, context~MTF, full-chunk bit-planes ($\sim$25 transforms total) & Plane~0-only avoids metadata damage; +33--41\% on bottleneck stream; \emph{all} transforms on pre-filtered output hurt $\leq -0.04$\% (Table~\ref{tab:extended_transforms}) \\[3pt]
 Pre-filter 2 & Zero-byte bitmap & RLE, two-level bitmap, per-plane separate & RLE futile (avg.\ run = 1.06); two-level and per-plane add overhead for $<$0.3\% gain \\[3pt]
-Entropy backend & zstd level~16 & zstd 1--22, LZ4, LZ4-HC 1--12, brotli 0--11, LZMA 1/3/6 & z16 Pareto-dominant on pre-filtered output: +1.2\% ratio, +1.4\% decompress vs.\ z1 (Table~\ref{tab:extended_summary}) \\[3pt]
-Fast-read tier & LZ4-1 (optional) & LZ4-HC 1/4/9/12 & lz4-1: 2.7$\times$ faster decompress, $-$10\% ratio; lz4hc-9: similar speed, $-$6\% ratio (Tables~\ref{tab:lz4_detail},~\ref{tab:mode_pareto}) \\[3pt]
+Entropy backend & zstd level~16 & zstd 1--22, LZ4, LZ4-HC 1--12, brotli 0--11, LZMA 1/3/6 & z16 Pareto-dominant on pre-filtered output: +1.2\% ratio, +1.4\% decompress vs.\ z1; LZ4 trades 22\% compression for 1.9$\times$ faster raw decompression but loses on end-to-end decode (Table~\ref{tab:extended_summary}) \\[3pt]
 Chunk strategy & Full chunk, single codec & Per-stream selection, split meta/planes & Per-stream 3--12\% worse; split +0.1\% (Table~\ref{tab:structural_v2}) \\[3pt]
 Sorting/reorder & None & Sort by p1, multi-key sort (mk2/mk4/mk6), column reorder by nnz/avg & All require permutation overhead; honest colsort is $-$1.3\% vs champion (Table~\ref{tab:sorting_honest}) \\[3pt]
 Data layout & Prod.\ default & Col-nnz sort, MinHash, Jaccard TSP, iterswap, 2D tiling, chunk 128--4096, asc.\ row sort (139 experiments, 4 datasets) & All within $\pm$0.5\% for typical density; only col-nnz sort helps extreme sparsity ($-$6.6\% at 0.007\%) (Table~\ref{tab:layout_summary}) \\[3pt]
@@ -1662,53 +1656,74 @@ Side information & None (self-contained) & Cross/within-dataset dict, prefix, co
 \end{tabular}
 \end{table*}
 
-\subsection*{S12. Compression mode system}
+\subsection*{S12. Entropy backend selection rationale}
 
-The production codec pipeline (bit-plane decomposition $\rightarrow$ bitmap $\rightarrow$ entropy backend) achieves near-theoretical compression ratios (Section~S5), but practical workloads vary in their ratio--speed requirements.
-Archival pipelines prioritize file size while interactive analysis needs fast decompression.
-We therefore expose three \emph{compression modes} that select the entropy backend and level, while the pre-filter chain remains fixed.
+The production codec uses zstd level~3 as its sole entropy backend.
+We evaluated 14 backend configurations---zstd levels \{1,3,6,9,12,16,17,19,22\}, LZ4-1, and LZ4-HC levels \{1,4,9,12\}---across four holdout datasets spanning density from 0.007\% to 2.4\% (10 chunks per dataset, 3 compress trials, 5 decompress trials).
 
-\paragraph{Pareto frontier.}
-We benchmarked 14 backend configurations---zstd levels \{1,3,6,9,12,16,17,19,22\}, LZ4-1, and LZ4-HC levels \{1,4,9,12\}---across four holdout datasets spanning density from 0.007\% to 2.4\% (10 chunks per dataset, 3 compress trials, 5 decompress trials).
-Three tiers emerge on the Pareto frontier of compression ratio versus decompression throughput (Table~\ref{tab:mode_pareto}).
+On pre-filtered output, zstd-16 achieves both the best compression ratio \emph{and} the fastest zstd decompression speed (Section~S4, Table~\ref{tab:speed_tiers}), because the \texttt{btopt} (binary tree optimal parsing) strategy discovers longer LZ77 matches that are both more compact and more cache-friendly to decode.
+However, zstd-16 compresses at only 45~MB/s (42$\times$ slower than zstd-1), making it impractical for pipelines that write many files.
+Zstd-3 provides the best balance: near-optimal ratio, fast decompression, and practical write speed.
 
-\begin{table}[h]
-\centering
-\caption{Compression mode Pareto tiers, averaged across four datasets. Compress and decompress throughput in MB/s (single-threaded, pre-filtered data). Ratio is raw/compressed bytes after the full codec pipeline.}
-\label{tab:mode_pareto}
-\footnotesize
-\begin{tabular}{llrrr}
-\toprule
-Mode & Backend & Ratio & Compress & Decompress \\
- & & ($\times$) & (MB/s) & (MB/s) \\
-\midrule
-\texttt{fast}    & LZ4-1    & 1.25 & 1\,097 & 3\,814 \\
-\texttt{default} & zstd-3   & 1.38 &   287  & 1\,216 \\
-\texttt{small}   & zstd-16  & 1.41 &    12  & 1\,212 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-The \texttt{fast} mode sacrifices 10\% compression ratio for a $3.1\times$ decompression speedup, suitable for repeatedly queried datasets or latency-sensitive applications.
-The \texttt{small} mode gains 2.2\% ratio over \texttt{default} at the cost of $\sim$24$\times$ slower compression; decompression speed is identical to \texttt{default}.
-Since the pre-filter pipeline contributes the majority of compression gain (Section~S4), all three modes share the same structural transforms and differ only in the final entropy coding pass.
+LZ4 was evaluated as an alternative fast-decompression backend (Section~S2).
+While LZ4-1 achieves 2.7$\times$ faster raw decompression throughput than zstd per byte, the 10\% lower compression ratio means more bytes must be read and decompressed, largely negating the speed advantage in end-to-end decode time.
+Combined with the storage penalty at scale, zstd-3 dominates the Pareto frontier for production use.
 
 \paragraph{Format integration.}
-The compression mode is stored as a single byte (\texttt{codec\_id}) in the 16-byte reserved region of the \texttt{.1pz} header (byte offset~80): 0~= zstd (default, backward-compatible), 1~= LZ4, 2~= LZ4-HC.
-Existing files with zeroed reserved bytes decode correctly as zstd.
-On read, the codec is auto-detected from the header; no user intervention is required.
-Only the data chunk payloads use the selected backend; metadata sections (column permutation, pointer arrays, column sums, obs/var/uns) always use zstd for their small overhead.
+The \texttt{.1pz} header contains a 16-byte reserved region (byte offset~80) for future extensibility.
+All production files use zstd; the codec is implicit and no mode selection is required on read or write.
+Only the data chunk payloads use zstd-3; metadata sections (column permutation, pointer arrays, column sums, obs/var/uns) also use zstd for their small overhead.
 
 \paragraph{Python API.}
-The \texttt{write\_1pz()} function accepts a \texttt{mode} parameter:
+The \texttt{write\_1pz()} function writes with zstd-3 compression:
 
 \begin{verbatim}
-sp.write_1pz("out.1pz", matrix, mode="fast")
-sp.write_1pz("out.1pz", matrix, mode="default")
-sp.write_1pz("out.1pz", matrix, mode="small")
+sp.write_1pz("out.1pz", matrix)
 \end{verbatim}
 
-Each mode sets both the backend and compression level to the optimal Pareto configuration.
-Custom zstd levels remain accessible via the \texttt{level} parameter when \texttt{mode="default"}.
+No mode or level parameter is exposed; the optimal configuration is hardcoded to eliminate user-facing complexity.
+Custom compression levels may be added in future versions if workload-specific tuning becomes necessary.
+
+\subsection*{S13. Sort effect benchmark}
+
+Figure~\ref{fig:sort_effect} quantifies the decode-path sorting cost and its effect on downstream GPU operations across five datasets spanning 2.4M--117M nonzeros on an NVIDIA H100~NVL.
+Counting-sort overhead scales linearly with nnz (34--283~ms, 63--79\% of total read time), while cuSPARSE SpMM timing is identical between sorted and unsorted inputs (max difference $<$0.01~ms), confirming that the sort can be safely elided for GPU paths.
+
+\begin{figure*}[h]
+\centering
+\includegraphics[width=\textwidth]{fig_sort_effect.pdf}
+\caption{Sort effect on decode performance and GPU operation invariance (H100~NVL).
+\textbf{(a)}~Sort overhead scales linearly with nonzero count, consuming 63--79\% of total decode time.
+\textbf{(b)}~cuSPARSE SpMM timing is identical for sorted vs.\ unsorted CSR inputs across all five datasets.}
+\label{fig:sort_effect}
+\end{figure*}
+
+\subsection*{S14. I/O--compute breakdown}
+
+Figure~\ref{fig:io_compute} decomposes per-step training time into CPU chunk-read I/O and GPU forward--backward compute as a function of latent dimension on an H100~NVL.
+At $h = 32$, I/O accounts for 85\% of step time (94~ms read vs.\ 17~ms compute); by $h = 2{,}048$, compute dominates at 76\% (301~ms vs.\ 94~ms).
+GPU throughput saturates near 49~TFLOP/s, consistent with the H100's theoretical fp32 peak.
+
+Figure~\ref{fig:autoencoder} shows the load-vs-compute breakdown during full autoencoder training (3~epochs, 256$\to$128$\to$256 architecture) across all five datasets.
+Data loading consumes 6--26\% of training time; the larger gene-count datasets (171K genes) have higher load fractions due to larger per-chunk decompressions.
+End-to-end throughput ranges from 2.0K to 7.6K cells/s depending on matrix density and gene count.
+
+\begin{figure*}[h]
+\centering
+\includegraphics[width=\textwidth]{fig_io_compute.pdf}
+\caption{I/O--compute ratio across latent dimensions (H100~NVL, GSE153845, 17M~nnz).
+\textbf{(a)}~Stacked bar: CPU I/O time is constant ($\sim$94~ms); GPU compute scales with model size.
+\textbf{(b)}~I/O fraction decreases from 0.85 to 0.24 as latent dimension grows; GPU throughput saturates near 49~TFLOP/s.}
+\label{fig:io_compute}
+\end{figure*}
+
+\begin{figure*}[h]
+\centering
+\includegraphics[width=\textwidth]{fig_autoencoder.pdf}
+\caption{Autoencoder training load vs.\ compute breakdown (H100~NVL, 3~epochs each).
+\textbf{(a)}~Data loading consumes 6--26\% of total training time; 171K-gene datasets have the highest load fraction.
+\textbf{(b)}~Training throughput (cells/s) vs.\ dataset nonzero count.}
+\label{fig:autoencoder}
+\end{figure*}
 
 \end{document}

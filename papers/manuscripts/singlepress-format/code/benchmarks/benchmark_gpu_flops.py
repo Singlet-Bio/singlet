@@ -1,28 +1,23 @@
 #!/usr/bin/env python3
 """GPU FLOP sweep: GPU utilization vs. model compute intensity.
+Produces data for Figure 2 panels (e) and (f).
 
-Instead of reporting GPU utilization for one arbitrary autoencoder, this
-benchmark sweeps model FLOPs per training step and shows how GPU utilization
-scales with compute intensity for each file format.
+Sweeps model FLOPs per training step and shows how GPU utilization scales
+with compute intensity for .1pz (DataLoader with multi-worker prefetch)
+vs H5AD (backed-mode sequential reads).
 
-Design:
-  - .1pz: uses DataLoader with multi-worker prefetch (PZDenseDataset returns
-    dense tensors from workers, avoiding sparse-tensor IPC issues)
-  - H5AD: uses manual backed-mode slicing (no multi-worker prefetch available)
-  - This mirrors real-world usage: .1pz users get DataLoader parallelism;
-    H5AD users are stuck with sequential reads
-  - FLOPs per training step = 12 × batch_size × n_features × hidden_dim
-    (two dense linear layers, forward + backward)
+Re-encodes .1pz datasets with the CURRENT codec before benchmarking.
+
+Output: code/data/gpu_flop_sweep.csv
 
 Usage (H100):
     sbatch --partition=gpu --gres=gpu:1 --constraint=nvidia_h100_nvl \\
            --time=120 --mem=64G --cpus-per-task=8 \\
            --wrap='source /mnt/home/debruinz/venv/bin/activate && \\
-                   cd /tmp && python3 -u \\
-                   /mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlepress-format/benchmark_gpu_flops.py'
+                   cd /tmp && python3 -u <this_script>'
 """
 
-import os, sys, time, csv, gc, tempfile, shutil
+import os, sys, time, csv, gc, shutil
 import numpy as np
 
 sys.stdout.reconfigure(line_buffering=True) if hasattr(sys.stdout, "reconfigure") else None
@@ -33,9 +28,6 @@ if "" in sys.path:
     sys.path.remove("")
 
 import torch
-# Use default 'fork' start method (compatible with batch scripts).
-# PZDenseDataset returns dense tensors, so no sparse-IPC issues.
-
 import torch.nn as nn
 import pandas as pd
 import scipy.sparse as ss
@@ -43,8 +35,9 @@ import anndata as ad
 import singlepress as sp
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+CODE_DATA_DIR = os.path.join(SCRIPT_DIR, "..", "data")
 QUANT_DIR = "/mnt/projects/debruinz_project/cellarium/pipeline/quant"
-OUT_CSV = os.path.join(SCRIPT_DIR, "gpu_flop_sweep.csv")
+TMPFS = "/dev/shm"
 
 # ── Parameters ─────────────────────────────────────────────────────
 HIDDEN_DIMS = [32, 64, 128, 256, 512, 1024, 2048, 4096]
@@ -52,52 +45,60 @@ N_STEPS = 100
 N_WARMUP = 10
 BATCH_SIZE = 1024
 NUM_WORKERS = 4
-N_FEATURES = 20_000  # gene subsetting for realistic input dim
+N_FEATURES = 20_000
 
 
 # ── Dataset selection ──────────────────────────────────────────────
-survey = pd.read_csv(os.path.join(SCRIPT_DIR, "all_datasets_survey.csv"))
-survey_m = survey[(survey["nrows"] == 171540) &
-                  (survey["ncols"] >= BATCH_SIZE * 5)].copy()
+def select_datasets():
+    """Select small/medium/large mouse datasets from the survey."""
+    survey_path = os.path.join(CODE_DATA_DIR, "all_datasets_survey.csv")
+    survey = pd.read_csv(survey_path)
+    survey_m = survey[(survey["nrows"] == 171540) &
+                      (survey["ncols"] >= BATCH_SIZE * 5)].copy()
+
+    def pick(df, target, used, tol=0.5):
+        lo, hi = int(target * (1 - tol)), int(target * (1 + tol))
+        c = df[(df["ncols"] >= lo) & (df["ncols"] <= hi) &
+               ~df["gse_id"].isin(used)].copy()
+        c["d"] = abs(c["ncols"] - target)
+        for _, row in c.sort_values("d").iterrows():
+            pz = os.path.join(QUANT_DIR, row["gse_id"], "counts.1pz")
+            if os.path.exists(pz):
+                return row
+        return None
+
+    used = set()
+    datasets = []
+    for label, target in [("small", 10_000), ("medium", 50_000),
+                           ("large", 150_000)]:
+        row = pick(survey_m, target, used)
+        if row is not None:
+            used.add(row["gse_id"])
+            datasets.append(dict(
+                label=label, gse_id=row["gse_id"],
+                n_genes=int(row["nrows"]), n_cells=int(row["ncols"]),
+                nnz=int(row["nnz"]),
+            ))
+            print(f"  {label}: {row['gse_id']}  "
+                  f"{int(row['ncols']):,} cells x {int(row['nrows']):,} genes")
+    return datasets
 
 
-def pick_dataset(df, target, used, tol=0.5):
-    lo, hi = int(target * (1 - tol)), int(target * (1 + tol))
-    c = df[(df["ncols"] >= lo) & (df["ncols"] <= hi) &
-           ~df["gse_id"].isin(used)].copy()
-    c["d"] = abs(c["ncols"] - target)
-    for _, row in c.sort_values("d").iterrows():
-        pz = os.path.join(QUANT_DIR, row["gse_id"], "counts.1pz")
-        if os.path.exists(pz):
-            return row
-    return None
-
-
-used = set()
-datasets = []
-for label, target in [("small", 10_000), ("medium", 50_000), ("large", 150_000)]:
-    row = pick_dataset(survey_m, target, used)
-    if row is not None:
-        used.add(row["gse_id"])
-        datasets.append(dict(
-            label=label, gse_id=row["gse_id"],
-            n_genes=int(row["nrows"]), n_cells=int(row["ncols"]),
-            nnz=int(row["nnz"]),
-        ))
-        print(f"  {label}: {row['gse_id']}  "
-              f"{int(row['ncols']):,} cells x {int(row['nrows']):,} genes")
-    else:
-        print(f"  {label}: no dataset found near {target:,}")
-
-if not datasets:
-    sys.exit("ERROR: no datasets found")
-
-device_name = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"
-print(f"\nDevice: {device_name}")
-print(f"PyTorch {torch.__version__}, CUDA {torch.version.cuda}")
-print(f"Feature dim: {N_FEATURES}  Hidden dims: {HIDDEN_DIMS}")
-print(f"Batch: {BATCH_SIZE}  Steps/config: {N_STEPS}")
-print(f"Configurations: {len(datasets) * len(HIDDEN_DIMS) * 2}")
+def reencode(gse_id):
+    """Re-encode a production .1pz with the current codec to tmpfs."""
+    src = os.path.join(QUANT_DIR, gse_id, "counts.1pz")
+    dst = os.path.join(TMPFS, f"gpu_bench_{gse_id}.1pz")
+    if os.path.exists(dst):
+        return dst
+    print(f"  Re-encoding {gse_id}...", end="", flush=True)
+    mat = sp.read_1pz(src)
+    pz = sp.open_1pz(src)
+    sp.write_1pz(dst, mat.tocsc(),
+                  rownames=list(pz.rownames) if pz.rownames else [],
+                  colnames=list(pz.colnames) if pz.colnames else [])
+    del mat, pz; gc.collect()
+    print(f" {os.path.getsize(dst)/1e6:.1f} MB")
+    return dst
 
 
 # ── Model ──────────────────────────────────────────────────────────
@@ -115,10 +116,8 @@ def calc_flops(n_feat, h, B):
     return 12 * B * n_feat * h
 
 
-# ── .1pz Dataset (returns dense tensors — worker-safe) ────────────
+# ── .1pz Dataset (returns dense tensors -- worker-safe) ────────────
 class PZDenseDataset(torch.utils.data.Dataset):
-    """Read .1pz chunks in workers, return dense [B, n_features] tensors."""
-
     def __init__(self, pz_path, batch_size, gene_idx):
         info = sp.info_1pz(pz_path)
         self.pz_path = pz_path
@@ -239,112 +238,140 @@ FIELDS = [
     "gpu_util_pct", "cells_per_sec", "device",
 ]
 
-with open(OUT_CSV, "w", newline="") as f:
-    writer = csv.DictWriter(f, fieldnames=FIELDS)
-    writer.writeheader()
-    f.flush()
 
-    for ds in datasets:
-        gse = ds["gse_id"]
-        n_cells = ds["n_cells"]
-        pz_path = os.path.join(QUANT_DIR, gse, "counts.1pz")
+def main():
+    print(f"GPU FLOP sweep benchmark")
+    print(f"singlepress {getattr(sp, '__version__', 'dev')}")
 
-        print(f"\n{'='*65}")
-        print(f"{ds['label'].upper()}: {gse}  ({n_cells:,} cells)")
+    datasets = select_datasets()
+    if not datasets:
+        sys.exit("ERROR: no datasets found")
 
-        # Identify top-expressed genes
-        print("  Identifying features... ", end="", flush=True)
-        mat_full = sp.read_1pz(pz_path)
-        gene_totals = np.array(mat_full.sum(axis=1)).ravel()
-        gene_idx = np.sort(np.argsort(gene_totals)[-N_FEATURES:])
-        n_feat = len(gene_idx)
-        print(f"{n_feat} genes selected")
+    device_name = (torch.cuda.get_device_name(0)
+                   if torch.cuda.is_available() else "CPU")
+    print(f"\nDevice: {device_name}")
+    print(f"PyTorch {torch.__version__}, CUDA {torch.version.cuda}")
+    print(f"Feature dim: {N_FEATURES}  Hidden dims: {HIDDEN_DIMS}")
+    print(f"Batch: {BATCH_SIZE}  Steps/config: {N_STEPS}")
+    print(f"Configurations: {len(datasets) * len(HIDDEN_DIMS) * 2}")
 
-        # Copy .1pz to /tmp for consistent I/O
-        local_pz = f"/tmp/{gse}_counts.1pz"
-        if not os.path.exists(local_pz):
-            print(f"  Copying .1pz to /tmp... ", end="", flush=True)
-            shutil.copy2(pz_path, local_pz)
-            print("done")
+    os.makedirs(CODE_DATA_DIR, exist_ok=True)
+    out_csv = os.path.join(CODE_DATA_DIR, "gpu_flop_sweep.csv")
 
-        # Create H5AD in /tmp
-        h5ad_path = f"/tmp/{gse}.h5ad"
-        if not os.path.exists(h5ad_path):
-            print(f"  Writing H5AD to /tmp... ", end="", flush=True)
-            t0 = time.time()
-            adata_w = ad.AnnData(X=mat_full.T)
-            adata_w.write_h5ad(h5ad_path)
-            del adata_w
-            print(f"done ({time.time()-t0:.1f}s)")
+    with open(out_csv, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=FIELDS)
+        writer.writeheader()
+        f.flush()
 
-        del mat_full; gc.collect()
-        adata = ad.read_h5ad(h5ad_path, backed="r")
+        for ds in datasets:
+            gse = ds["gse_id"]
+            n_cells = ds["n_cells"]
 
-        for hidden_dim in HIDDEN_DIMS:
-            F = calc_flops(n_feat, hidden_dim, BATCH_SIZE)
-            print(f"\n  h={hidden_dim:>5d}   FLOPs/step={F/1e9:>7.1f}G")
+            print(f"\n{'='*65}")
+            print(f"{ds['label'].upper()}: {gse}  ({n_cells:,} cells)")
 
-            # .1pz
-            try:
-                prep, comp, cells = bench_1pz(local_pz, gene_idx, hidden_dim)
-                tot = prep + comp
-                pct = 100 * comp / max(tot, 1e-9)
-                row = dict(
-                    gse_id=gse, label=ds["label"], n_features=n_feat,
-                    n_cells=n_cells, nnz=ds["nnz"],
-                    format="1pz", hidden_dim=hidden_dim,
-                    flops_per_step=F, n_steps=N_STEPS, total_cells=cells,
-                    prep_s=round(prep, 4), compute_s=round(comp, 4),
-                    total_s=round(tot, 4),
-                    gpu_util_pct=round(pct, 1),
-                    cells_per_sec=round(cells / max(tot, 1e-9)),
-                    device=device_name,
-                )
-                writer.writerow(row); f.flush()
-                print(f"    .1pz   GPU {pct:5.1f}%  prep={prep:.2f}s  "
-                      f"compute={comp:.2f}s  ({cells/max(tot,1e-9):,.0f} c/s)")
-            except Exception as e:
-                import traceback; traceback.print_exc()
-                print(f"    .1pz   FAILED: {e}")
+            # Re-encode with current codec
+            local_pz = reencode(gse)
 
-            # H5AD
-            try:
-                prep, comp, cells = bench_h5ad(
-                    adata, n_cells, gene_idx, hidden_dim)
-                tot = prep + comp
-                pct = 100 * comp / max(tot, 1e-9)
-                row = dict(
-                    gse_id=gse, label=ds["label"], n_features=n_feat,
-                    n_cells=n_cells, nnz=ds["nnz"],
-                    format="h5ad", hidden_dim=hidden_dim,
-                    flops_per_step=F, n_steps=N_STEPS, total_cells=cells,
-                    prep_s=round(prep, 4), compute_s=round(comp, 4),
-                    total_s=round(tot, 4),
-                    gpu_util_pct=round(pct, 1),
-                    cells_per_sec=round(cells / max(tot, 1e-9)),
-                    device=device_name,
-                )
-                writer.writerow(row); f.flush()
-                print(f"    h5ad   GPU {pct:5.1f}%  prep={prep:.2f}s  "
-                      f"compute={comp:.2f}s  ({cells/max(tot,1e-9):,.0f} c/s)")
-            except Exception as e:
-                import traceback; traceback.print_exc()
-                print(f"    h5ad   FAILED: {e}")
+            # Identify top-expressed genes
+            print("  Identifying features... ", end="", flush=True)
+            mat_full = sp.read_1pz(local_pz)
+            gene_totals = np.array(mat_full.sum(axis=1)).ravel()
+            gene_idx = np.sort(np.argsort(gene_totals)[-N_FEATURES:])
+            n_feat = len(gene_idx)
+            print(f"{n_feat} genes selected")
 
-        adata.file.close(); del adata
-        gc.collect(); torch.cuda.empty_cache()
-        print(f"\n  Done with {gse}")
+            # Create H5AD in tmpfs
+            h5ad_path = os.path.join(TMPFS, f"gpu_bench_{gse}.h5ad")
+            if not os.path.exists(h5ad_path):
+                print(f"  Writing H5AD...", end="", flush=True)
+                t0 = time.time()
+                adata_w = ad.AnnData(X=mat_full.T)
+                adata_w.write_h5ad(h5ad_path)
+                del adata_w
+                print(f" done ({time.time()-t0:.1f}s)")
 
-print(f"\n{'='*65}")
-print(f"Results: {OUT_CSV}")
-df = pd.read_csv(OUT_CSV)
-for fmt in ["1pz", "h5ad"]:
-    sub = df[df["format"] == fmt]
-    if sub.empty: continue
-    print(f"\n  {fmt}: GPU util {sub['gpu_util_pct'].min():.1f}%"
-          f" - {sub['gpu_util_pct'].max():.1f}%")
-    for _, r in sub.sort_values("flops_per_step").iterrows():
-        if r["gpu_util_pct"] >= 50:
-            print(f"    50% crossover at h={int(r['hidden_dim'])} "
-                  f"({r['flops_per_step']/1e9:.0f} GFLOPs)")
-            break
+            del mat_full; gc.collect()
+            adata = ad.read_h5ad(h5ad_path, backed="r")
+
+            for hidden_dim in HIDDEN_DIMS:
+                F = calc_flops(n_feat, hidden_dim, BATCH_SIZE)
+                print(f"\n  h={hidden_dim:>5d}   FLOPs/step={F/1e9:>7.1f}G")
+
+                # .1pz
+                try:
+                    prep, comp, cells = bench_1pz(local_pz, gene_idx,
+                                                  hidden_dim)
+                    tot = prep + comp
+                    pct = 100 * comp / max(tot, 1e-9)
+                    row = dict(
+                        gse_id=gse, label=ds["label"], n_features=n_feat,
+                        n_cells=n_cells, nnz=ds["nnz"],
+                        format="1pz", hidden_dim=hidden_dim,
+                        flops_per_step=F, n_steps=N_STEPS, total_cells=cells,
+                        prep_s=round(prep, 4), compute_s=round(comp, 4),
+                        total_s=round(tot, 4),
+                        gpu_util_pct=round(pct, 1),
+                        cells_per_sec=round(cells / max(tot, 1e-9)),
+                        device=device_name,
+                    )
+                    writer.writerow(row); f.flush()
+                    print(f"    .1pz   GPU {pct:5.1f}%  prep={prep:.2f}s  "
+                          f"compute={comp:.2f}s  "
+                          f"({cells/max(tot,1e-9):,.0f} c/s)")
+                except Exception as e:
+                    import traceback; traceback.print_exc()
+                    print(f"    .1pz   FAILED: {e}")
+
+                # H5AD
+                try:
+                    prep, comp, cells = bench_h5ad(
+                        adata, n_cells, gene_idx, hidden_dim)
+                    tot = prep + comp
+                    pct = 100 * comp / max(tot, 1e-9)
+                    row = dict(
+                        gse_id=gse, label=ds["label"], n_features=n_feat,
+                        n_cells=n_cells, nnz=ds["nnz"],
+                        format="h5ad", hidden_dim=hidden_dim,
+                        flops_per_step=F, n_steps=N_STEPS, total_cells=cells,
+                        prep_s=round(prep, 4), compute_s=round(comp, 4),
+                        total_s=round(tot, 4),
+                        gpu_util_pct=round(pct, 1),
+                        cells_per_sec=round(cells / max(tot, 1e-9)),
+                        device=device_name,
+                    )
+                    writer.writerow(row); f.flush()
+                    print(f"    h5ad   GPU {pct:5.1f}%  prep={prep:.2f}s  "
+                          f"compute={comp:.2f}s  "
+                          f"({cells/max(tot,1e-9):,.0f} c/s)")
+                except Exception as e:
+                    import traceback; traceback.print_exc()
+                    print(f"    h5ad   FAILED: {e}")
+
+            adata.file.close(); del adata
+
+            # Cleanup tmpfs
+            for p in [local_pz, h5ad_path]:
+                if os.path.exists(p):
+                    os.remove(p)
+            gc.collect(); torch.cuda.empty_cache()
+            print(f"\n  Done with {gse}")
+
+    print(f"\n{'='*65}")
+    print(f"Results: {out_csv}")
+    df = pd.read_csv(out_csv)
+    for fmt in ["1pz", "h5ad"]:
+        sub = df[df["format"] == fmt]
+        if sub.empty:
+            continue
+        print(f"\n  {fmt}: GPU util {sub['gpu_util_pct'].min():.1f}%"
+              f" - {sub['gpu_util_pct'].max():.1f}%")
+        for _, r in sub.sort_values("flops_per_step").iterrows():
+            if r["gpu_util_pct"] >= 50:
+                print(f"    50% crossover at h={int(r['hidden_dim'])} "
+                      f"({r['flops_per_step']/1e9:.0f} GFLOPs)")
+                break
+
+
+if __name__ == "__main__":
+    main()

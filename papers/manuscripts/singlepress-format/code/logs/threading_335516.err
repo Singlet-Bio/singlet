@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlepress-format/code/benchmarks/benchmark_threading_v2.py", line 140, in <module>
+    main()
+  File "/mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlepress-format/code/benchmarks/benchmark_threading_v2.py", line 74, in main
+    print(f"singlepress {sp.__version__}")
+AttributeError: module 'singlepress' has no attribute '__version__'

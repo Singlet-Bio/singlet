@@ -1,0 +1,339 @@
+======================================================================
+1. PROCESSING CATALOG OVERVIEW
+======================================================================
+Total samples (rows): 1,490,358
+Columns: 70
+Unique GSE series: 22,601
+
+Filtered catalog (KEEP): 208,911
+Filtered unique GSE: 12,112
+
+======================================================================
+2. TARGET ASSAY DISTRIBUTION (full catalog)
+======================================================================
+  plate_scrna                1,083,262  (72.7%)
+  scrna                        193,758  (13.0%)
+  non_rna                      114,757  (7.7%)
+  atac                          53,543  (3.6%)
+  ambiguous                     38,655  (2.6%)
+  multiome                       3,325  (0.2%)
+  vdj                            1,550  (0.1%)
+  spatial                        1,123  (0.1%)
+  cite                             385  (0.0%)
+
+======================================================================
+3. ORGANISM DISTRIBUTION (full catalog, top 30)
+======================================================================
+  Mus musculus                                        674,454
+  Homo sapiens                                        577,483
+  Homo sapiens; Mus musculus                           60,579
+  Drosophila melanogaster                              33,576
+  Mus musculus; Homo sapiens                           19,518
+  Macaca mulatta                                       14,080
+  Danio rerio                                          14,045
+  Gallus gallus                                         9,363
+  Macaca nemestrina; Mus musculus; Homo sapiens; Macaca fascicularis    5,552
+  Arabidopsis thaliana                                  4,035
+  Ambystoma mexicanum                                   3,778
+  Zea mays                                              3,772
+  Caenorhabditis elegans                                3,492
+  Rattus norvegicus                                     3,425
+  Macaca fascicularis                                   3,256
+  Macaca mulatta; Homo sapiens; Pan troglodytes         3,096
+  Pleurodeles waltl                                     3,067
+  Macaca fascicularis; Homo sapiens                     2,491
+  Sus scrofa                                            2,107
+  Ciona robusta                                         1,989
+  Homo sapiens; Canis lupus familiaris; Mus musculus    1,867
+  Saccharomyces cerevisiae                              1,627
+  Ovis aries                                            1,454
+  blank sample; Homo sapiens                            1,381
+  blank sample; Arabidopsis thaliana                    1,375
+  synthetic construct; Mus musculus                     1,254
+  Bos taurus                                            1,230
+  Mus musculus; Pogona vitticeps                        1,200
+  Plasmodium falciparum NF54                            1,155
+  Schmidtea mediterranea                                1,153
+
+======================================================================
+4. ORGANISM DISTRIBUTION (filtered, top 20)
+======================================================================
+  Mus musculus                                        109,578
+  Homo sapiens                                         68,195
+  Homo sapiens; Mus musculus                            4,565
+  Mus musculus; Homo sapiens                            3,754
+  Drosophila melanogaster                               3,283
+  Macaca mulatta                                        1,975
+  Macaca fascicularis                                   1,734
+  Danio rerio                                           1,665
+  Ovis aries                                            1,328
+  Rattus norvegicus                                     1,109
+  Bos indicus; Bos indicus x Bos taurus; Bos taurus       938
+  Saccharomyces cerevisiae                                928
+  blank sample; Homo sapiens                              890
+  Sorghum bicolor; Oryza sativa                           884
+  Sus scrofa                                              543
+  Mus                                                     542
+  Macaca mulatta; Homo sapiens                            487
+  Arabidopsis thaliana                                    454
+  Gallus gallus                                           357
+  Bos taurus                                              330
+
+======================================================================
+5. PROCESSING STATUS DISTRIBUTION (full catalog)
+======================================================================
+  skip_plate_based                       983,965  (66.0%)
+  pending                                169,398  (11.4%)
+  skip_likely_plate                      116,660  (7.8%)
+  skip_non_rna                           114,729  (7.7%)
+  skip_atac                               53,469  (3.6%)
+  done                                    32,494  (2.2%)
+  skip_reclassified                        7,447  (0.5%)
+  fail_qc_low_genes                        4,317  (0.3%)
+  skip_vdj                                 1,550  (0.1%)
+  fail_simpleaf_permit                     1,524  (0.1%)
+  fail_protocol_detect                     1,162  (0.1%)
+  fail_download                            1,149  (0.1%)
+  skip_spatial                             1,123  (0.1%)
+  fail_no_r2                                 380  (0.0%)
+  fail_simpleaf_map                          367  (0.0%)
+  fail_simpleaf_timeout                      285  (0.0%)
+  fail_qc_other                              164  (0.0%)
+  fail_simpleaf_other                         63  (0.0%)
+  done_qc_warn                                51  (0.0%)
+  fail_qc_few_cells                           32  (0.0%)
+  retry_skipped                               27  (0.0%)
+  fail_low_mapping                             2  (0.0%)
+
+======================================================================
+6. PROCESSING STATUS (filtered catalog)
+======================================================================
+  pending                                117,462  (56.2%)
+  skip_atac                               49,821  (23.8%)
+  done                                    30,262  (14.5%)
+  skip_reclassified                        7,353  (3.5%)
+  fail_download                            1,119  (0.5%)
+  fail_protocol_detect                     1,101  (0.5%)
+  skip_spatial                             1,035  (0.5%)
+  fail_simpleaf_map                          353  (0.2%)
+  fail_simpleaf_timeout                      273  (0.1%)
+  fail_simpleaf_other                         62  (0.0%)
+  done_qc_warn                                43  (0.0%)
+  retry_skipped                               27  (0.0%)
+
+======================================================================
+7. PROTOCOL CONFIDENCE (filtered)
+======================================================================
+  low                 81,526  (39.0%)
+  medium              68,090  (32.6%)
+  high                59,295  (28.4%)
+
+======================================================================
+8. PROTOCOL INFERRED (filtered, top 20)
+======================================================================
+  10xv3                         48,402
+  scATAC                        29,151
+  indrop                        27,365
+  10x_atac                      20,741
+  10x_suspect                   20,715
+  scirna                        14,394
+  10xv2                         11,464
+  unknown                        9,851
+  10xv3_5prime                   9,265
+  unknown_sc                     6,230
+  dropseq                        2,494
+  10x_multiome                   2,440
+  snRNA_unknown                  1,514
+  bd_rhapsody                    1,388
+  parse                          1,046
+  dnbelab                          663
+  seqwell                          369
+  10xv4                            361
+  citeseq                          289
+  ddseq                            285
+
+======================================================================
+9. SUBMISSION YEAR (full catalog)
+======================================================================
+
+======================================================================
+10. ALL CATALOG COLUMNS
+======================================================================
+  actionable                                   16,916 non-null (1%)
+  avg_read_length                           1,336,628 non-null (90%)
+  base_count                                1,351,771 non-null (91%)
+  bioproject                                1,490,358 non-null (100%)
+  contact_institute                         1,490,358 non-null (100%)
+  contact_name                              1,490,358 non-null (100%)
+  ena_fastq_r1                              1,490,358 non-null (100%)
+  ena_fastq_r2                              1,490,358 non-null (100%)
+  failure_category                             81,748 non-null (5%)
+  failure_detail                               81,748 non-null (5%)
+  gse_id                                    1,490,358 non-null (100%)
+  gsm_id                                    1,490,358 non-null (100%)
+  instrument_model                          1,351,771 non-null (91%)
+  instrument_platform                       1,351,771 non-null (91%)
+  last_update_date                          1,490,358 non-null (100%)
+  library_layout                            1,351,771 non-null (91%)
+  library_selection                         1,351,771 non-null (91%)
+  library_source                            1,351,771 non-null (91%)
+  library_strategy                          1,351,771 non-null (91%)
+  migrated                                  1,490,358 non-null (100%)
+  migration_mapping_rate                       19,484 non-null (1%)
+  migration_n_cells                            20,103 non-null (1%)
+  migration_n_genes                            20,103 non-null (1%)
+  migration_pipeline_version                   20,103 non-null (1%)
+  migration_qc_status                          20,103 non-null (1%)
+  migration_status                          1,490,358 non-null (100%)
+  n_gsm_in_series                           1,490,358 non-null (100%)
+  ncbi_sra_s3                               1,490,358 non-null (100%)
+  notes                                     1,490,358 non-null (100%)
+  organism                                  1,490,358 non-null (100%)
+  overall_design                            1,490,358 non-null (100%)
+  pipeline_batch_file                          81,478 non-null (5%)
+  pipeline_batch_source                        81,478 non-null (5%)
+  pipeline_error                               66,931 non-null (4%)
+  pipeline_mapping_rate                        24,739 non-null (2%)
+  pipeline_mode                                61,564 non-null (4%)
+  pipeline_protocol_detected                   61,564 non-null (4%)
+  pipeline_status_raw                          81,478 non-null (5%)
+  pipeline_total_time_s                        81,478 non-null (5%)
+  processing_status                         1,490,358 non-null (100%)
+  production_ready                          1,490,358 non-null (100%)
+  protocol_confidence                       1,490,358 non-null (100%)
+  protocol_inferred                         1,490,358 non-null (100%)
+  pubmed_ids                                1,490,358 non-null (100%)
+  read_count                                1,351,771 non-null (91%)
+  sample_characteristics                    1,490,358 non-null (100%)
+  sample_organism                           1,490,358 non-null (100%)
+  sample_source                             1,490,358 non-null (100%)
+  screen_any_flag                           1,490,358 non-null (100%)
+  screen_low_reads                          1,490,358 non-null (100%)
+  screen_no_fastq                           1,490,358 non-null (100%)
+  screen_no_r2                              1,490,358 non-null (100%)
+  screen_no_srx                             1,490,358 non-null (100%)
+  screen_non_illumina                       1,490,358 non-null (100%)
+  screen_single_end_10x                     1,490,358 non-null (100%)
+  screen_spatial_suspect                    1,490,358 non-null (100%)
+  screen_unsupported_organism               1,490,358 non-null (100%)
+  screen_vdj                                1,490,358 non-null (100%)
+  series_title                              1,490,358 non-null (100%)
+  species_annotation                        1,490,358 non-null (100%)
+  species_ref_genome                        1,490,358 non-null (100%)
+  sra_study                                 1,490,358 non-null (100%)
+  srr_accessions                            1,351,771 non-null (91%)
+  srx_accession                             1,490,358 non-null (100%)
+  submission_date                           1,490,358 non-null (100%)
+  summary                                   1,490,358 non-null (100%)
+  supplementary_files                       1,490,358 non-null (100%)
+  target_assay                              1,490,358 non-null (100%)
+  taxon_id                                  1,490,358 non-null (100%)
+  v12_eligible                              1,490,358 non-null (100%)
+
+======================================================================
+11. SCREEN FLAGS (full catalog)
+======================================================================
+  screen_any_flag                             359,082  (24.1%)
+  screen_low_reads                            118,897  (8.0%)
+  screen_no_fastq                             138,587  (9.3%)
+  screen_no_r2                                120,640  (8.1%)
+  screen_no_srx                               119,884  (8.0%)
+  screen_non_illumina                           3,507  (0.2%)
+  screen_single_end_10x                        14,885  (1.0%)
+  screen_spatial_suspect                        3,238  (0.2%)
+  screen_unsupported_organism                  30,998  (2.1%)
+  screen_vdj                                    3,059  (0.2%)
+
+======================================================================
+12. FAILURE CATEGORIES
+======================================================================
+  skip_plate_based                        33,058
+                                          31,957
+  fail_simpleaf_permit                     6,371
+  fail_protocol_detect                     3,709
+  fail_qc_low_genes                        2,028
+  fail_qc_other                            1,628
+  fail_download                            1,326
+  fail_low_mapping                           844
+  fail_simpleaf_map                          303
+  fail_no_r2                                 253
+  fail_simpleaf_timeout                      161
+  fail_simpleaf_other                         93
+  fail_qc_few_cells                           17
+
+======================================================================
+13. SPECIES INDICES
+======================================================================
+  Total splici index dirs: 44
+    ambystoma_mexicanum_splici                    (no ctab)
+    anolis_carolinensis_splici                       492.6 MB
+    aplysia_californica_splici                       161.9 MB
+    arabidopsis_thaliana_splici                        6.5 MB
+    astyanax_mexicanus_splici                        325.9 MB
+    bos_taurus_splici                                874.2 MB
+    caenorhabditis_elegans_splici                      9.2 MB
+    callithrix_jacchus_splici                        735.7 MB
+    canis_lupus_familiaris_splici                    325.0 MB
+    capra_hircus_splici                           (no ctab)
+    cavia_porcellus_splici                           155.0 MB
+    ciona_intestinalis_splici                          8.5 MB
+    cricetulus_griseus_splici                        311.1 MB
+    danio_rerio_splici                               533.4 MB
+    dictyostelium_discoideum_splici                    4.2 MB
+    drosophila_melanogaster_splici                    14.1 MB
+    equus_caballus_splici                            383.7 MB
+    felis_catus_splici                               390.6 MB
+    gallus_gallus_splici                             101.0 MB
+    homo_sapiens_splici                             1418.3 MB
+    human_splici                                    1012.6 MB
+    lytechinus_variegatus_splici                     257.1 MB
+    macaca_fascicularis_splici                       622.7 MB
+    macaca_mulatta_splici                            640.4 MB
+    mesocricetus_auratus_splici                       90.9 MB
+    monodelphis_domestica_splici                     685.7 MB
+    mouse_splici                                     517.8 MB
+    mus_musculus_splici                              766.7 MB
+    mustela_putorius_furo_splici                     196.9 MB
+    nothobranchius_furzeri_splici                    285.2 MB
+    oryctolagus_cuniculus_splici                     573.6 MB
+    oryzias_latipes_splici                           136.2 MB
+    ovis_aries_splici                                871.0 MB
+    pan_troglodytes_splici                           522.3 MB
+    plasmodium_falciparum_splici                       1.5 MB
+    pleurodeles_waltl_splici                      (no ctab)
+    rattus_norvegicus_splici                         396.2 MB
+    saccharomyces_cerevisiae_splici                    0.1 MB
+    schistosoma_mansoni_splici                        87.2 MB
+    schmidtea_mediterranea_splici                 (no ctab)
+    sus_scrofa_splici                                473.1 MB
+    trypanosoma_brucei_brucei_splici                   0.3 MB
+    xenopus_tropicalis_splici                        680.3 MB
+    zea_mays_splici                                   59.7 MB
+
+======================================================================
+14. SAMPLE MANIFEST STATS
+======================================================================
+  Total manifests: 95,815
+
+  QC status:
+    unknown                67,990
+    qc_pass                21,119
+    qc_fail                 6,116
+                              496
+    qc_warn                    94
+
+  Cell count stats (n=27,825):
+    Total cells: 1,953,846,456
+    Mean: 70,219
+    Median: 5,661
+    Q25/Q75: 2,239 / 13,881
+    Min/Max: 0 / 16,188,412
+
+  Mapping rate stats (n=27,636):
+Traceback (most recent call last):
+  File "/mnt/home/debruinz/Singlet-AI/scripts/gather_manuscript_stats.py", line 183, in <module>
+    print(f"    Mean: {arr.mean():.3f}")
+                       ~~~~~~~~^^
+  File "/mnt/home/debruinz/.conda/envs/cellarium/lib/python3.14/site-packages/numpy/_core/_methods.py", line 132, in _mean
+    ret = umr_sum(arr, axis, dtype, out, keepdims, where=where)
+TypeError: unsupported operand type(s) for +: 'NoneType' and 'NoneType'

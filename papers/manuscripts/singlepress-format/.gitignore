@@ -1,0 +1,33 @@
+# Research artifacts (not part of reproducible manuscript)
+# Leading / = top-level only (protects code/ subdirectory)
+/*.err
+/*.png
+/*_backup.tex
+/main_v*.tex
+/preview_*.png
+/BENCHMARKING_PLAN.md
+/singletai-preprint.sty
+
+# Old benchmark scripts (superseded by code/benchmarks/)
+/benchmarks.py
+/benchmarks_v2.py
+/benchmarks_v3.py
+/anndata_vs_1pz_bench.py
+/compression_model.py
+/survey_all_datasets.py
+/threading_bench.py
+/autoencoder_bench.py
+/benchmark_*.py
+/benchmark_*.R
+/extract_zinb_data.py
+/fast_bench.py
+/figures.R
+/figures_v*.R
+/figures_frontier.R
+
+# Old results (data in code/data/)
+/*.json
+/*.csv
+
+# SLURM batch files
+/*.sbatch

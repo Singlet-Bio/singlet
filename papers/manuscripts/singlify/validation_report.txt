@@ -1,0 +1,60 @@
+============================================================
+1. GENE-LEVEL COUNT VALIDATION vs STARsolo
+============================================================
+  Singlify: 38606 genes × 144 cells, nnz=53421
+  STARsolo: 38606 genes × 144 cells, nnz=53014
+  Common barcodes: 144/144
+  Common genes: 38606
+  Pearson r (per-gene totals): 0.996051
+  Spearman ρ (per-gene totals): 0.993303
+  Pearson r (per-cell totals): 0.999934
+  Exact gene matches: 38143/38606 (98.8%)
+  Mean |diff|: 0.05 UMIs/gene
+  Max |diff|: 437 UMIs (gene ENSG00000152348)
+  Singlify total UMIs: 82400
+  STARsolo total UMIs: 81116
+  → Saved /mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlify/figures/fig_gene_scatter.pdf
+  → Saved /mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlify/figures/fig_cell_scatter.pdf
+
+============================================================
+2. SNP PILEUP VALIDATION vs cellSNP-lite
+============================================================
+  Singlify AD: (7352497, 144), nnz=42053
+  Singlify DP: (7352497, 144), nnz=128059
+  cellSNP AD: (53534, 144), nnz=42050
+  cellSNP DP: (53534, 144), nnz=127471
+  cellSNP sites: 53533
+  Common SNP positions: 53533
+  Common barcodes (SNP): 144
+  Exact position matches: 53534
+  Per-site DP Pearson r: 0.984804
+  Per-site DP Spearman ρ: 0.991643
+  Per-site AD Pearson r: 1.000000
+  Per-cell DP Pearson r: 0.992530
+  Per-cell AD Pearson r: 1.000000
+  DP ratio (Singlify/cellSNP): 0.9952
+  Sites covered by both: 53351
+  Singlify-only sites: 176
+  cellSNP-only sites: 0
+  AD ≤ DP constraint satisfied: True
+  → Saved /mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlify/figures/fig_cellsnp_scatter.pdf
+
+============================================================
+3. INTERNAL CONSISTENCY CHECKS
+============================================================
+  Exon matrix: (310797, 144), nnz=57361
+  Unique genes from exons: 38606
+  GeneFull ≥ Gene (all genes): True
+  GeneFull total: 204208, Gene total: 82400
+  Intronic fraction: 59.6%
+  AD ≤ DP for all entries: True
+  Splice junctions: 58000 unique junctions × 144 cells, nnz=253600
+  Total SJ UMIs: 835106
+
+============================================================
+4. BENCHMARK FIGURES
+============================================================
+  → Saved /mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlify/figures/fig_scaling.pdf
+  → Saved /mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlify/figures/fig_runtime_comparison.pdf
+  → Saved /mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlify/figures/fig_profiling_pie.pdf
+  → Saved /mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlify/figures/fig_memory_scaling.pdf

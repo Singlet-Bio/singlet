@@ -1,11 +1,28 @@
 """
 singlepress.torch — Zero-copy PyTorch dataloaders for .1pz files.
 
-Three dataset classes for different shuffle/memory trade-offs:
+All sparse tensors are returned in CSR(cells × genes) orientation — batch
+dimension first, ready for ``nn.Linear`` and cuSPARSE. No format conversion
+or index sorting is performed; CSC on-disk layout is reinterpreted as CSR
+in O(1) time.
+
+Four dataset/loader classes for different shuffle/memory trade-offs:
 
   OnePZDataset         — chunk-level map-style, optional within-chunk shuffle
   OnePZCellDataset     — pre-loaded, true uniform cell-level shuffle
   OnePZShuffleDataset  — streaming shuffle buffer, bounded memory, ~uniform
+  PZBufferedLoader     — zero-alloc buffer-reuse loader with GPU double-buffering
+
+Usage (zero-alloc GPU training with buffer pool):
+    from singlepress.torch import PZBufferedLoader
+
+    loader = PZBufferedLoader("counts.1pz", device="cuda")
+    for epoch in range(10):
+        loader.reset_timing()
+        for batch in loader:
+            loss = model(batch)
+            loss.backward()
+        print(loader.timing_report())
 
 Usage (true uniform cell shuffle):
     from singlepress.torch import OnePZCellDataset
@@ -36,6 +53,7 @@ Usage (streaming shuffle buffer):
 from __future__ import annotations
 
 import math
+import time
 import numpy as np
 import scipy.sparse as ss
 from typing import Optional, Union
@@ -54,60 +72,64 @@ def _resolve_dtype(dtype_str: str):
 
 
 def _to_torch_csr(mat: ss.csc_matrix, dtype=None):
-    """Convert scipy CSC matrix to torch sparse CSR tensor (zero-copy where possible).
+    """Reinterpret scipy CSC(genes×cells) as torch CSR(cells×genes) — zero-copy.
+
+    CSC(genes×cells) and CSR(cells×genes) share identical memory layout:
+    indptr indexes columns (cells), indices hold row (gene) positions.
+    No format conversion or index sorting is needed.
 
     Parameters
     ----------
     mat : scipy.sparse.csc_matrix
-        Input sparse matrix.
+        Input sparse matrix in CSC format (genes × cells).
     dtype : torch.dtype, optional
         Value dtype. Default: torch.float32.
 
     Returns
     -------
     torch.Tensor
-        Sparse CSR tensor. Call .to("cuda", non_blocking=True) for GPU transfer.
+        Sparse CSR tensor of shape (cells, genes).
+        Call .to("cuda", non_blocking=True) for GPU transfer.
     """
     import torch
 
     if dtype is None:
         dtype = torch.float32
 
-    csr = mat.tocsr()
-    csr.sort_indices()
-
-    crow_indices = torch.from_numpy(np.asarray(csr.indptr, dtype=np.int32))
-    col_indices = torch.from_numpy(np.asarray(csr.indices, dtype=np.int32))
+    # Zero-copy for int32 indptr/indices (C++ decoder returns int32)
+    crow_indices = torch.from_numpy(np.asarray(mat.indptr, dtype=np.int32))
+    col_indices = torch.from_numpy(np.asarray(mat.indices, dtype=np.int32))
 
     if dtype == torch.float32:
-        values = torch.from_numpy(np.asarray(csr.data, dtype=np.float32))
+        values = torch.from_numpy(np.asarray(mat.data, dtype=np.float32))
     elif dtype == torch.float64:
-        values = torch.from_numpy(np.asarray(csr.data, dtype=np.float64))
+        values = torch.from_numpy(np.asarray(mat.data, dtype=np.float64))
     elif dtype == torch.int32:
-        values = torch.from_numpy(np.asarray(csr.data, dtype=np.int32))
+        values = torch.from_numpy(np.asarray(mat.data, dtype=np.int32))
     else:
-        values = torch.from_numpy(np.asarray(csr.data, dtype=np.float32))
+        values = torch.from_numpy(np.asarray(mat.data, dtype=np.float32))
 
     return torch.sparse_csr_tensor(
         crow_indices, col_indices, values,
-        size=csr.shape, dtype=dtype,
+        size=(mat.shape[1], mat.shape[0]),  # (cells, genes)
+        dtype=dtype,
     )
 
 
 def _to_torch_coo(mat: ss.csc_matrix, dtype=None):
-    """Convert scipy CSC matrix to torch sparse COO tensor.
+    """Convert scipy CSC(genes×cells) to torch COO(cells×genes).
 
     Parameters
     ----------
     mat : scipy.sparse.csc_matrix
-        Input sparse matrix.
+        Input sparse matrix in CSC format (genes × cells).
     dtype : torch.dtype, optional
         Value dtype. Default: torch.float32.
 
     Returns
     -------
     torch.Tensor
-        Sparse COO tensor.
+        Sparse COO tensor of shape (cells, genes).
     """
     import torch
 
@@ -115,9 +137,10 @@ def _to_torch_coo(mat: ss.csc_matrix, dtype=None):
         dtype = torch.float32
 
     coo = mat.tocoo()
+    # Transpose: CSC rows (genes) → COO cols, CSC cols (cells) → COO rows
     indices = torch.stack([
-        torch.from_numpy(np.asarray(coo.row, dtype=np.int64)),
         torch.from_numpy(np.asarray(coo.col, dtype=np.int64)),
+        torch.from_numpy(np.asarray(coo.row, dtype=np.int64)),
     ])
 
     if dtype == torch.float32:
@@ -127,6 +150,10 @@ def _to_torch_coo(mat: ss.csc_matrix, dtype=None):
     else:
         values = torch.from_numpy(np.asarray(coo.data, dtype=np.float32))
 
+        indices, values,
+        size=(coo.shape[1], coo.shape[0]),  # (cells, genes)
+        dtype=dtype,
+    
     return torch.sparse_coo_tensor(indices, values, size=coo.shape, dtype=dtype)
 
 
@@ -155,8 +182,6 @@ class OnePZDataset:
         Apply log-normalization using stored column sums. Default False.
     scale : float
         Normalization scale factor. Default 10000.
-    dtype : str
-        "float32" (default), "float64", or "int32".
     sparse_format : str
         "csr" (default, cuSPARSE-compatible) or "coo".
     seed : int or None
@@ -170,7 +195,6 @@ class OnePZDataset:
         shuffle: bool = False,
         normalize: bool = False,
         scale: float = 10000.0,
-        dtype: str = "float32",
         sparse_format: str = "csr",
         seed: Optional[int] = None,
     ):
@@ -180,7 +204,7 @@ class OnePZDataset:
         self.normalize = normalize
         self.scale = scale
         self.sparse_format = sparse_format
-        self._dtype_str = dtype
+        self._dtype_str = "float32" if normalize else "int32"
 
         self._handle = singlepress.open_1pz(self.path)
         self._nrows, self._ncols = self._handle.shape
@@ -201,7 +225,8 @@ class OnePZDataset:
         col_start = idx * self.chunk_size
         col_end = min(col_start + self.chunk_size, self._ncols)
 
-        mat = singlepress.read_1pz_columns(self.path, col_start, col_end)
+        mat = singlepress.read_1pz_columns(self.path, col_start, col_end,
+                                            sorted=False)
 
         if self.normalize and self._colsums is not None:
             chunk_colsums = self._colsums[col_start:col_end]
@@ -256,8 +281,6 @@ class OnePZCellDataset:
         Apply log-normalization at load time. Default False.
     scale : float
         Normalization scale factor. Default 10000.
-    dtype : str
-        "float32" (default), "float64", or "int32".
     sparse_format : str
         "csr" (default) or "coo" for batch output tensors.
     """
@@ -267,23 +290,21 @@ class OnePZCellDataset:
         path: str,
         normalize: bool = False,
         scale: float = 10000.0,
-        dtype: str = "float32",
         sparse_format: str = "csr",
     ):
         self.path = str(path)
         self.sparse_format = sparse_format
-        self._dtype_str = dtype
+        self._dtype_str = "float32" if normalize else "int32"
 
-        if dtype == "int32" and not normalize:
-            self._mat = singlepress.read_1pz_int(path)
+        if not normalize:
+            self._mat = singlepress.read_1pz_int(path, sorted=False)
         else:
-            self._mat = singlepress.read_1pz(path)
+            self._mat = singlepress.read_1pz(path, sorted=False)
 
         if normalize:
             cs = singlepress.colsums_1pz(path)
             self._mat = singlepress.lognorm(self._mat, cs, scale=scale)
 
-        self._mat.sort_indices()
         self._nrows, self._ncols = self._mat.shape
 
     def __len__(self) -> int:
@@ -375,8 +396,6 @@ class OnePZShuffleDataset:
         Apply log-normalization. Default False.
     scale : float
         Normalization scale. Default 10000.
-    dtype : str
-        "float32" (default), "float64", or "int32".
     sparse_format : str
         "csr" (default) or "coo".
     """
@@ -388,7 +407,6 @@ class OnePZShuffleDataset:
         batch_size: int = 1024,
         normalize: bool = False,
         scale: float = 10000.0,
-        dtype: str = "float32",
         sparse_format: str = "csr",
     ):
         self.path = str(path)
@@ -397,7 +415,7 @@ class OnePZShuffleDataset:
         self.normalize = normalize
         self.scale = scale
         self.sparse_format = sparse_format
-        self._dtype_str = dtype
+        self._dtype_str = "float32" if normalize else "int32"
 
         handle = singlepress.open_1pz(self.path)
         self._nrows, self._ncols = handle.shape
@@ -462,7 +480,8 @@ class OnePZShuffleDataset:
         for ci in chunk_order:
             col_start = int(ci) * self._chunk_cols
             col_end = min(col_start + self._chunk_cols, self._ncols)
-            chunk = singlepress.read_1pz_columns(self.path, col_start, col_end)
+            chunk = singlepress.read_1pz_columns(self.path, col_start, col_end,
+                                                    sorted=False)
 
             if self.normalize and self._colsums is not None:
                 cs = self._colsums[col_start:col_end]
@@ -494,44 +513,48 @@ class OnePZShuffleDataset:
 # ============================================================================
 
 def collate_sparse(batch: list):
-    """Collate function for DataLoader that concatenates sparse CSR tensors.
+    """Collate function that row-concatenates sparse CSR tensors (cells x genes).
 
-    Horizontally stacks sparse tensors along the column dimension (cells).
-    Use as: ``DataLoader(dataset, collate_fn=collate_sparse, ...)``.
+    Stacks sparse tensors along the cell (row) dimension in pure torch
+    -- no scipy round-trip. Use as: ``DataLoader(dataset, collate_fn=collate_sparse, ...)``.
 
     Parameters
     ----------
     batch : list of torch.Tensor
-        Sparse CSR or COO tensors from OnePZDataset.__getitem__.
+        Sparse CSR tensors from OnePZDataset.__getitem__, each (chunk_cells, genes).
 
     Returns
     -------
     torch.Tensor
-        Single sparse tensor with all cells concatenated.
+        Single sparse CSR tensor with all cells concatenated, (total_cells, genes).
     """
     import torch
 
     if len(batch) == 1:
         return batch[0]
 
-    scipy_mats = []
-    for t in batch:
-        if t.is_sparse_csr:
-            crow = t.crow_indices().numpy()
-            col = t.col_indices().numpy()
-            vals = t.values().numpy()
-            m = ss.csr_matrix((vals, col, crow), shape=t.shape)
-            scipy_mats.append(m.tocsc())
-        elif t.is_sparse:
-            indices = t.coalesce().indices().numpy()
-            vals = t.coalesce().values().numpy()
-            m = ss.coo_matrix((vals, (indices[0], indices[1])), shape=t.shape)
-            scipy_mats.append(m.tocsc())
-        else:
-            raise TypeError(f"Expected sparse tensor, got {type(t)}")
+    all_crow = []
+    all_col = []
+    all_val = []
+    offset = 0
+    nrows_total = 0
+    ncols = batch[0].shape[1]
 
-    combined = ss.hstack(scipy_mats, format="csc")
-    return _to_torch_csr(combined, dtype=batch[0].dtype)
+    for t in batch:
+        crow = t.crow_indices()
+        all_crow.append(crow[:-1] + offset)
+        all_col.append(t.col_indices())
+        all_val.append(t.values())
+        offset += t._nnz()
+        nrows_total += t.shape[0]
+
+    # Append final pointer
+    all_crow.append(torch.tensor([offset], dtype=all_crow[0].dtype))
+
+    return torch.sparse_csr_tensor(
+        torch.cat(all_crow), torch.cat(all_col), torch.cat(all_val),
+        size=(nrows_total, ncols), dtype=all_val[0].dtype,
+    )
 
 
 # ============================================================================
@@ -593,7 +616,8 @@ class OnePZIterableDataset:
             col_start = idx * self.chunk_size
             col_end = min(col_start + self.chunk_size, self._ncols)
 
-            mat = singlepress.read_1pz_columns(self.path, col_start, col_end)
+            mat = singlepress.read_1pz_columns(self.path, col_start, col_end,
+                                                sorted=False)
 
             if self.normalize and self._colsums is not None:
                 chunk_colsums = self._colsums[col_start:col_end]
@@ -606,3 +630,360 @@ class OnePZIterableDataset:
 
     def __len__(self) -> int:
         return self._n_chunks
+
+
+# ============================================================================
+# BufferPool + PZBufferedLoader — zero-alloc loader with buffer reuse
+# ============================================================================
+
+class BufferPool:
+    """Reusable memory pool for .1pz column-range decode output.
+
+    Holds indptr / indices / values arrays that persist across batches.
+    Decompression is **destructive**: each ``decode_columns_into`` call
+    overwrites the previous batch's data in-place.
+
+    Buffers grow on demand but never shrink, so capacity stabilises after
+    the densest batch (typically within the first epoch).
+
+    When ``pinned=True``, arrays are backed by CUDA page-locked memory via
+    ``torch.empty(..., pin_memory=True)`` for non-blocking H2D transfers.
+    The numpy views share the same underlying memory (zero-copy).
+    """
+
+    __slots__ = ("indptr", "indices", "values",
+                 "_indptr_t", "_indices_t", "_values_t",
+                 "nnz_cap", "ncols_max", "pinned",
+                 "grow_ns", "grow_count")
+
+    def __init__(self, nnz_cap: int, ncols_max: int, *, pinned: bool = False):
+        self.ncols_max = ncols_max
+        self.pinned = pinned
+        self.grow_ns = 0
+        self.grow_count = 0
+        self._alloc_indptr(ncols_max)
+        self._alloc_nnz(nnz_cap)
+
+    def _alloc_indptr(self, ncols_max: int):
+        if self.pinned:
+            import torch
+            self._indptr_t = torch.zeros(ncols_max + 1, dtype=torch.int32,
+                                         pin_memory=True)
+            self.indptr = self._indptr_t.numpy()
+        else:
+            self.indptr = np.zeros(ncols_max + 1, dtype=np.int32)
+            self._indptr_t = None
+
+    def _alloc_nnz(self, nnz_cap: int):
+        self.nnz_cap = nnz_cap
+        if self.pinned:
+            import torch
+            self._indices_t = torch.zeros(nnz_cap, dtype=torch.int32,
+                                          pin_memory=True)
+            self._values_t = torch.zeros(nnz_cap, dtype=torch.int32,
+                                         pin_memory=True)
+            self.indices = self._indices_t.numpy()
+            self.values = self._values_t.numpy()
+        else:
+            self.indices = np.zeros(nnz_cap, dtype=np.int32)
+            self.values = np.zeros(nnz_cap, dtype=np.int32)
+            self._indices_t = None
+            self._values_t = None
+
+    def ensure_capacity(self, nnz_needed: int) -> int:
+        """Grow nnz buffers if ``nnz_needed > nnz_cap``.  Returns ns spent."""
+        if nnz_needed <= self.nnz_cap:
+            return 0
+        t0 = time.monotonic_ns()
+        self._alloc_nnz(nnz_needed)
+        ns = time.monotonic_ns() - t0
+        self.grow_ns += ns
+        self.grow_count += 1
+        return ns
+
+
+class PZBufferedLoader:
+    """Zero-allocation DataLoader for .1pz files with GPU double-buffering.
+
+    Standard DataLoaders re-open and re-parse the .1pz file for **every
+    batch**, allocating fresh file-blob, permutation, indptr, and output
+    arrays each time.  ``PZBufferedLoader`` eliminates this overhead:
+
+    1. **File cache** — A C++ ``PZReader`` reads the file once and caches
+       the raw blob, permutation table, full indptr, and chunk offset table
+       in memory.  Subsequent batches decode directly from the cache.
+    2. **Buffer reuse** — Two ``BufferPool`` instances hold indptr / indices /
+       values arrays.  Each batch's decompression is **destructive**: it
+       overwrites the previous batch's data in-place.  Buffers grow on
+       demand but never shrink, stabilising within one epoch.
+    3. **GPU double-buffering** (``device="cuda"``) — A background thread
+       decompresses the next batch into pool B while pool A's data is on
+       the GPU for forward/backward.  Since decompression is always faster
+       than a GPU forward pass, the CPU is ready before the GPU finishes.
+
+    Decompression within each chunk is also destructive: the per-thread OMP
+    scratch buffers (raw bytes, gap tables, packed/prefix buffers) reuse
+    ``std::vector`` storage that only grows, never shrinks — so they
+    stabilise after the first chunk and incur zero ``malloc`` thereafter.
+
+    Access ``.timing`` after iteration for a per-batch breakdown of time
+    spent on allocation (buffer grows), decompression, and H2D transfer.
+
+    Parameters
+    ----------
+    path : str
+        Path to .1pz file.
+    chunk_size : int
+        Cells per batch (columns decoded per iteration).  Default 1024.
+        Best performance when aligned to the file's ``chunk_cols``.
+    device : str
+        ``"cpu"`` for single-buffer sequential mode, ``"cuda"`` (or
+        ``"cuda:N"``) for double-buffered GPU mode with pinned memory.
+    num_threads : int
+        OMP threads for zstd decompression + VOCSC decode.  Default 4.
+    normalize : bool
+        Apply log1p-normalization (``log1p(x * scale / colsum)``) using
+        stored per-cell column sums.  Default False.
+    scale : float
+        Normalization scale factor.  Default 10_000.
+    dtype : str
+        Output values dtype: ``"float32"`` (default) or ``"int32"``.
+        Ignored when ``normalize=True`` (always float32).
+
+    Examples
+    --------
+    GPU training with timing:
+
+    >>> loader = PZBufferedLoader("counts.1pz", device="cuda")
+    >>> for epoch in range(10):
+    ...     loader.reset_timing()
+    ...     for batch in loader:
+    ...         loss = model(batch)
+    ...         loss.backward()
+    ...     print(loader.timing_report())
+
+    CPU out-of-core (single buffer, destructive overwrite):
+
+    >>> loader = PZBufferedLoader("counts.1pz", device="cpu", dtype="int32")
+    >>> for batch in loader:
+    ...     # batch wraps pool memory — valid until next iteration
+    ...     process(batch)
+    """
+
+    def __init__(
+        self,
+        path: str,
+        chunk_size: int = 1024,
+        device: str = "cpu",
+        num_threads: int = 4,
+        normalize: bool = False,
+        scale: float = 10_000.0,
+        dtype: str = "float32",
+    ):
+        import singlepress._pz_codec as C
+
+        self._reader = C.PZReader(str(path))
+        self._chunk_size = chunk_size
+        self._device = device
+        self._num_threads = num_threads
+        self._normalize = normalize
+        self._scale = scale
+        self._dtype_str = "float32" if normalize else dtype
+
+        self._nrows = self._reader.nrows
+        self._ncols = self._reader.ncols
+        self._n_chunks = math.ceil(self._ncols / chunk_size)
+        self._colsums = self._reader.colsums() if normalize else None
+
+        # Pre-scan chunk nnz to size pools for the densest batch
+        max_nnz = 0
+        for ci in range(self._n_chunks):
+            cs = ci * chunk_size
+            ce = min(cs + chunk_size, self._ncols)
+            max_nnz = max(max_nnz, self._reader.range_nnz(cs, ce))
+
+        use_pinned = device != "cpu"
+        n_pools = 2 if use_pinned else 1
+        self._pools = [
+            BufferPool(max_nnz, chunk_size, pinned=use_pinned)
+            for _ in range(n_pools)
+        ]
+
+        self.timing = {
+            "alloc_ns": 0, "decompress_ns": 0, "h2d_ns": 0,
+            "total_ns": 0, "batches": 0, "buffer_grows": 0,
+        }
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _decode_batch(self, pool: BufferPool, col_start: int, col_end: int):
+        """Decompress [col_start, col_end) into *pool* (destructive)."""
+        nnz_needed = self._reader.range_nnz(col_start, col_end)
+
+        alloc_ns = pool.ensure_capacity(nnz_needed)
+        if alloc_ns > 0:
+            self.timing["alloc_ns"] += alloc_ns
+            self.timing["buffer_grows"] += 1
+
+        t0 = time.monotonic_ns()
+        result = self._reader.decode_columns_into(
+            col_start, col_end,
+            pool.indptr, pool.indices, pool.values,
+            self._num_threads,
+        )
+        self.timing["decompress_ns"] += time.monotonic_ns() - t0
+        return result["nnz"], col_end - col_start
+
+    def _pool_to_csr(self, pool: BufferPool, ncols: int, nnz: int,
+                     col_start: int = 0):
+        """Build a sparse CSR tensor from *pool*'s buffers.
+
+        For pinned pools the tensor slices reference pinned memory directly
+        (zero-copy for indptr/indices; values may be cast to float32).
+        For unpinned pools, ``torch.from_numpy`` provides the zero-copy view.
+        """
+        import torch
+
+        use_float = self._dtype_str == "float32"
+
+        if pool.pinned and pool._indptr_t is not None:
+            crow = pool._indptr_t[:ncols + 1]
+            col_idx = pool._indices_t[:nnz]
+            vals = (pool._values_t[:nnz].float() if use_float
+                    else pool._values_t[:nnz])
+        else:
+            crow = torch.from_numpy(pool.indptr[:ncols + 1])
+            col_idx = torch.from_numpy(pool.indices[:nnz])
+            vals = (torch.from_numpy(pool.values[:nnz]).float() if use_float
+                    else torch.from_numpy(pool.values[:nnz]))
+
+        if self._normalize and self._colsums is not None:
+            chunk_cs = self._colsums[col_start:col_start + ncols]
+            cell_scale = np.divide(
+                self._scale, chunk_cs,
+                out=np.empty(ncols, dtype=np.float32),
+            )
+            nnz_per = np.diff(pool.indptr[:ncols + 1])
+            el_scale = torch.from_numpy(np.repeat(cell_scale, nnz_per))
+            vals = torch.log1p(vals * el_scale)
+
+        return torch.sparse_csr_tensor(
+            crow, col_idx, vals,
+            size=(ncols, self._nrows),
+        )
+
+    # ------------------------------------------------------------------
+    # Iteration
+    # ------------------------------------------------------------------
+
+    def __iter__(self):
+        import torch
+
+        t_total = time.monotonic_ns()
+
+        if (self._device != "cpu"
+                and torch.cuda.is_available()
+                and len(self._pools) == 2):
+            yield from self._iter_gpu_prefetch()
+        else:
+            yield from self._iter_sequential()
+
+        self.timing["total_ns"] += time.monotonic_ns() - t_total
+
+    def _iter_sequential(self):
+        """Single-buffer sequential iteration (CPU or fallback)."""
+        pool = self._pools[0]
+        for ci in range(self._n_chunks):
+            cs = ci * self._chunk_size
+            ce = min(cs + self._chunk_size, self._ncols)
+            nnz, ncols = self._decode_batch(pool, cs, ce)
+            csr = self._pool_to_csr(pool, ncols, nnz, col_start=cs)
+            self.timing["batches"] += 1
+            yield csr
+
+    def _iter_gpu_prefetch(self):
+        """Double-buffered GPU iteration with background decode thread.
+
+        A producer thread decompresses the next batch on the CPU while the
+        consumer runs the forward / backward pass on the GPU.  Two buffer
+        pools alternate so decompression always writes to memory the GPU
+        has already finished reading.
+        """
+        import torch
+        from threading import Thread
+        from queue import Queue
+
+        q: Queue = Queue(maxsize=2)
+
+        def _produce():
+            cur = 0
+            for ci in range(self._n_chunks):
+                cs = ci * self._chunk_size
+                ce = min(cs + self._chunk_size, self._ncols)
+                pool = self._pools[cur]
+
+                nnz, ncols = self._decode_batch(pool, cs, ce)
+                csr = self._pool_to_csr(pool, ncols, nnz, col_start=cs)
+
+                t0 = time.monotonic_ns()
+                gpu_csr = csr.to(self._device)
+                self.timing["h2d_ns"] += time.monotonic_ns() - t0
+
+                self.timing["batches"] += 1
+                q.put(gpu_csr)
+                cur = 1 - cur
+            q.put(None)
+
+        thread = Thread(target=_produce, daemon=True)
+        thread.start()
+
+        while True:
+            batch = q.get()
+            if batch is None:
+                break
+            yield batch
+
+        thread.join()
+
+    # ------------------------------------------------------------------
+    # Properties and utilities
+    # ------------------------------------------------------------------
+
+    def __len__(self) -> int:
+        return self._n_chunks
+
+    @property
+    def shape(self) -> tuple[int, int]:
+        return (self._nrows, self._ncols)
+
+    @property
+    def num_features(self) -> int:
+        return self._nrows
+
+    @property
+    def num_cells(self) -> int:
+        return self._ncols
+
+    def reset_timing(self):
+        """Clear timing accumulators (call between epochs)."""
+        for k in self.timing:
+            self.timing[k] = 0
+
+    def timing_report(self) -> str:
+        """Human-readable timing breakdown."""
+        t = self.timing
+        n = max(t["batches"], 1)
+        total_ms = t["total_ns"] / 1e6
+        dec_ms = t["decompress_ns"] / 1e6
+        alloc_ms = t["alloc_ns"] / 1e6
+        h2d_ms = t["h2d_ns"] / 1e6
+        other_ms = max(0, total_ms - dec_ms - alloc_ms - h2d_ms)
+        return (
+            f"PZBufferedLoader · {n} batches · {total_ms:.1f} ms total\n"
+            f"  decompress  {dec_ms:8.1f} ms  ({dec_ms / n:6.2f} ms/batch)\n"
+            f"  alloc/grow  {alloc_ms:8.1f} ms  ({t['buffer_grows']} grow events)\n"
+            f"  H2D         {h2d_ms:8.1f} ms  ({h2d_ms / n:6.2f} ms/batch)\n"
+            f"  overhead    {other_ms:8.1f} ms  ({other_ms / n:6.2f} ms/batch)"
+        )

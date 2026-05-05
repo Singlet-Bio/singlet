@@ -1,0 +1,89 @@
+---
+title: "SinglePress (.1pz) — R Companion"
+author: "Zachary DeBruine"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+## Installation
+
+Install the `singlepress` R package from GitHub:
+
+```{r install, eval=FALSE}
+# install.packages("devtools")
+devtools::install_github("Singlet-Bio/singlepress", subdir = "R")
+```
+
+```{r load}
+library(singlepress)
+```
+
+## Read a 1pz File
+
+This assumes `pbmc3k.1pz` was created by the Python companion notebook.
+Adjust the path to match your local setup.
+
+```{r read}
+pz_path <- "pbmc3k.1pz"  # adjust path as needed
+opz <- OnePZ(pz_path)
+opz
+```
+
+## Inspect Dimensions
+
+```{r dims}
+cat(sprintf("Cells:    %d\n", ncol(opz)))
+cat(sprintf("Genes:    %d\n", nrow(opz)))
+cat(sprintf("Nonzeros: %s\n", format(describe_1pz(pz_path)$nnz, big.mark = ",")))
+```
+
+## Convert to dgCMatrix
+
+The standard sparse matrix class used by Seurat, scran, and other
+Bioconductor tools:
+
+```{r convert}
+mat <- as(opz, "dgCMatrix")
+cat(sprintf("Class: %s\n", class(mat)))
+cat(sprintf("Dimensions: %d × %d\n", nrow(mat), ncol(mat)))
+cat(sprintf("Density: %.4f%%\n", 100 * length(mat@x) / prod(dim(mat))))
+```
+
+## Column Subsetting (Lazy)
+
+SinglePress supports lazy column slicing — only the requested cells are
+decompressed:
+
+```{r subset}
+first100 <- opz[, 1:100]
+cat(sprintf("Subset: %d genes × %d cells\n", nrow(first100), ncol(first100)))
+```
+
+## Benchmark: 1pz vs MatrixMarket
+
+Compare read time for the same dataset stored as Market Matrix (.mtx)
+vs SinglePress (.1pz):
+
+```{r benchmark, eval=FALSE}
+# Requires Matrix package and the original MTX directory
+library(Matrix)
+
+mtx_path <- "filtered_gene_bc_matrices/hg19/matrix.mtx"
+
+t_mtx <- system.time(readMM(mtx_path))["elapsed"]
+t_1pz <- system.time(as(OnePZ(pz_path), "dgCMatrix"))["elapsed"]
+
+cat(sprintf("MatrixMarket read: %.3f s\n", t_mtx))
+cat(sprintf("SinglePress read:  %.3f s\n", t_1pz))
+cat(sprintf("Speedup: %.1f×\n", t_mtx / t_1pz))
+```
+
+## Session Info
+
+```{r session}
+sessionInfo()
+```

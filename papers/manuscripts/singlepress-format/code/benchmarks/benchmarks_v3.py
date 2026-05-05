@@ -305,18 +305,16 @@ def read_npz(path):
 # ── Benchmark Functions ─────────────────────────────────────────
 
 def benchmark_single(gse_id, meta, tmpdir):
-    """Benchmark a single dataset (read from original .1pz)."""
+    """Benchmark a single dataset. Re-encodes .1pz with current codec first."""
     pz_path = os.path.join(QUANT_DIR, gse_id, "counts.1pz")
     if not os.path.isfile(pz_path):
         print(f"  {gse_id}: counts.1pz not found, skipping")
         return None
 
-    pz_size = os.path.getsize(pz_path)
     print(f"\n{'='*60}")
     print(f"Dataset: {gse_id} ({meta['protocol']}, {meta['notes']})")
-    print(f"  .1pz file: {pz_size/1e6:.1f} MB")
 
-    # Read the matrix
+    # Read the matrix from production file
     try:
         mat = sp.read_1pz(pz_path)
     except Exception as e:
@@ -348,6 +346,12 @@ def benchmark_single(gse_id, meta, tmpdir):
     # int32 CSC baseline: indptr + indices + data (all int32)
     raw_int32_bytes = csc.indptr.nbytes + csc.indices.nbytes + nnz * 4
 
+    # Re-encode with current codec to tmpfs for accurate size/read timing
+    pz_staged = os.path.join("/dev/shm", f"bench_{gse_id}.1pz")
+    sp.write_1pz(pz_staged, csc, rownames=list(rownames), colnames=list(colnames))
+    pz_size = os.path.getsize(pz_staged)
+    print(f"  Re-encoded .1pz: {pz_size/1e6:.1f} MB")
+
     result = {
         "gse_id": gse_id,
         "protocol": meta["protocol"],
@@ -364,9 +368,9 @@ def benchmark_single(gse_id, meta, tmpdir):
         "formats": {},
     }
 
-    # ── .1pz read from original file ──
+    # ── .1pz read from re-encoded file ──
     try:
-        t_read, _ = timer(lambda: sp.read_1pz(pz_path))
+        t_read, _ = timer(lambda: sp.read_1pz(pz_staged))
         result["formats"]["1pz"] = {
             "size": pz_size,
             "ratio_vs_int32": raw_int32_bytes / pz_size,
@@ -377,7 +381,11 @@ def benchmark_single(gse_id, meta, tmpdir):
     except Exception as e:
         print(f"  1pz read FAILED: {e}")
 
-    # ── Write .1pz (may fail for large matrices with codec bug) ──
+    # Clean up staged file
+    if os.path.exists(pz_staged):
+        os.remove(pz_staged)
+
+    # ── Write .1pz ──
     pz_write_path = os.path.join(tmpdir, f"{gse_id}.1pz")
     try:
         t_write, _ = timer(lambda: write_1pz(csc, list(rownames), list(colnames), pz_write_path),
@@ -572,7 +580,9 @@ def main():
                 traceback.print_exc()
 
     # Save results
-    out_path = os.path.join(SCRIPT_DIR, "benchmark_results_v3.json")
+    data_dir = os.path.join(SCRIPT_DIR, "..", "data")
+    os.makedirs(data_dir, exist_ok=True)
+    out_path = os.path.join(data_dir, "benchmark_results_v3.json")
     with open(out_path, "w") as f:
         json.dump(all_results, f, indent=2)
     print(f"\nResults saved to {out_path}")

@@ -11,7 +11,7 @@ suppressMessages({
 })
 
 QUANT_DIR <- "/mnt/projects/debruinz_project/cellarium/pipeline/quant"
-SCRIPT_DIR <- "/mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlepress-format"
+DATA_DIR <- "/mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlepress-format/code/data"
 
 cat("Loading singlepress via reticulate...\n")
 use_python("/usr/bin/python3", required = TRUE)
@@ -19,7 +19,7 @@ sp <- import("singlepress")
 scipy_sparse <- import("scipy.sparse")
 
 # Read survey to pick datasets
-survey <- read.csv(file.path(SCRIPT_DIR, "all_datasets_survey.csv"), stringsAsFactors = FALSE)
+survey <- read.csv(file.path(DATA_DIR, "all_datasets_survey.csv"), stringsAsFactors = FALSE)
 # Filter: 1M < nnz < 100M, to keep memory reasonable
 survey <- survey[survey$nnz > 1e6 & survey$nnz < 100e6, ]
 survey <- survey[order(survey$nnz), ]
@@ -177,6 +177,6 @@ _nnz = csc.nnz
   })
 }
 
-out_path <- file.path(SCRIPT_DIR, "r_format_benchmarks.csv")
+out_path <- file.path(DATA_DIR, "r_format_benchmarks.csv")
 write.csv(results, out_path, row.names = FALSE)
 cat(sprintf("\nSaved %d results to %s\n", nrow(results), out_path))

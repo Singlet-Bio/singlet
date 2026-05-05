@@ -39,7 +39,7 @@ class BuildExt(build_ext):
 ext_modules = [
     Extension(
         "singlepress._pz_codec",
-        sources=["singlepress/pz_codec.cpp", "singlepress/lz4.c", "singlepress/lz4hc.c"],
+        sources=["singlepress/pz_codec.cpp"],
         libraries=["zstd"],
         include_dirs=["singlepress"],
         extra_compile_args=["-std=c++17", "-O3", "-fopenmp", "-march=native"],

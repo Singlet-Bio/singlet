@@ -31,10 +31,11 @@ import singlepress as sp
 
 QUANT_DIR = "/mnt/projects/debruinz_project/cellarium/pipeline/quant"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(SCRIPT_DIR, "..", "data")
 N_TRIALS = 3
 
 # Load the dataset list from the v3 results to match exactly
-with open(os.path.join(SCRIPT_DIR, "benchmark_results_v3.json")) as f:
+with open(os.path.join(DATA_DIR, "benchmark_results_v3.json")) as f:
     v3_data = json.load(f)
 
 datasets = [(r["gse_id"], r["nnz"], r["raw_int32_bytes"]) for r in v3_data]
@@ -191,7 +192,7 @@ def main():
                 os.remove(rds_path)
 
     # Write CSV
-    out_path = os.path.join(SCRIPT_DIR, "r_write_benchmarks.csv")
+    out_path = os.path.join(DATA_DIR, "r_write_benchmarks.csv")
     if rows:
         with open(out_path, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=rows[0].keys())

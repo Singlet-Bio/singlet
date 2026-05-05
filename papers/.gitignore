@@ -1,0 +1,36 @@
+# LaTeX build artifacts
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+*.nav
+*.snm
+*.vrb
+*.run.xml
+*.bcf
+*-blx.bib
+*.lof
+*.lot
+
+# Compiled PDFs (track selectively via git add -f)
+manuscripts/**/*.pdf
+
+# Editor
+*.swp
+*~
+.DS_Store
+
+# R artifacts
+.Rhistory
+.RData
+Rplots.pdf
+
+# Python
+__pycache__/
+*.pyc
+.venv/
