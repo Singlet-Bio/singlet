@@ -145,9 +145,6 @@ def run_ssgsea(
     scores_device = cp.asarray(result.scores_view).reshape(n_sets, n_cells)
     scores_host = scores_device.T.get()  # n_cells × n_sets
 
-    import pandas as pd
-
-    df = pd.DataFrame(scores_host, index=working.obs_names, columns=names)
     working.obsm[obsm_key] = scores_host
     working.uns["ssgsea_gene_set_names"] = names
     working.uns["ssgsea_params"] = {

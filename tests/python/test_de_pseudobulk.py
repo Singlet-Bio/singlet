@@ -388,7 +388,6 @@ def test_pseudobulk_de_vs_DESeq2(gsm4037629_path):
     with tempfile.TemporaryDirectory() as tmpdir:
         counts_csv = os.path.join(tmpdir, "counts.csv")
         meta_csv = os.path.join(tmpdir, "meta.csv")
-        result_json = os.path.join(tmpdir, "deseq2_lfc.json")
 
         # Write transposed: genes as rows, cells as cols (DESeq2 convention).
         pd.DataFrame(

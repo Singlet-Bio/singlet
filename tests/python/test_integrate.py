@@ -247,7 +247,6 @@ def test_harmony_vs_harmonypy(gsm4037629_path):
 
     # harmonypy reference.
     pca_cpu = adata_cpu.obsm["X_pca"]  # (n_cells, n_comps)
-    batch_labels = adata_cpu.obs["batch"].values
     try:
         ho = harmonypy.run_harmony(
             pca_cpu,

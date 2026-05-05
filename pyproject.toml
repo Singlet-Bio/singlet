@@ -83,3 +83,12 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
+ignore = ["E501", "F821"]
+
+[tool.ruff.lint.per-file-ignores]
+"python/singlet/gpu/__init__.py" = ["F401"]
+"python/singlet/torch/__init__.py" = ["F401"]
+"python/singlet/gpu/enrichment/gsea.py" = ["F401"]
+"python/singlet/gpu/perturbation/*" = ["E741"]
+"python/singlet/gpu/spatial/*" = ["E741"]
+"tests/python/test_integration.py" = ["F401"]

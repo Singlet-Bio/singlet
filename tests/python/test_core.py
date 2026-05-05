@@ -351,8 +351,6 @@ def test_lifetime_safety(gsm4037629_path):
 
     m = singlet_gpu.io.load_pz(str(pz_path))
     expected_nnz = m.nnz
-    expected_rows = m.rows
-    expected_cols = m.cols
 
     # cupy >= 14 dtype-strict shim (§J.13 / CYCLE-189).
     class _CaiView:

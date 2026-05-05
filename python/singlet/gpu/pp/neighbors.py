@@ -330,7 +330,7 @@ def neighbors(
             self.__cuda_array_interface__ = d
 
     n = int(raw.n)
-    k = int(raw.k)
+    _k = int(raw.k)  # noqa: F841 — kept for debug introspection
     row_offsets = cp.asarray(_CaiView(raw.row_offsets_view)).get().astype(np.int32)
     nbr_idx = cp.asarray(_CaiView(raw.neighbors_view)).get().astype(np.int32)
     nbr_dist = cp.asarray(_CaiView(raw.distances_view)).get().astype(np.float32)

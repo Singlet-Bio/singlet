@@ -258,9 +258,9 @@ def test_normalize_total_layer_param(gsm4037629_path):
     # The layer should have been modified (float normalized values).
     layer_data = adata.layers["raw"]
     if hasattr(layer_data, "get"):
-        layer_vals = layer_data.get().data
+        _layer_vals = layer_data.get().data  # noqa: F841
     else:
-        layer_vals = layer_data.data
+        _layer_vals = layer_data.data  # noqa: F841
 
     # adata.X must NOT have been touched (layer target).
     X_after = adata.X
