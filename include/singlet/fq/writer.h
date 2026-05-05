@@ -408,8 +408,6 @@ class Writer {
 
         // Compute file CRC32 over everything before the footer
         uint32_t fcrc = 0;
-        long file_size = static_cast<long>(sizeof(Header)) +
-                         static_cast<long>(file_offset_ - sizeof(Header));
         // file_offset_ tracks cumulative write position up to end of blocks;
         // metadata + index follow. Re-read from start to footer.
         std::fseek(fp_, 0, SEEK_END);

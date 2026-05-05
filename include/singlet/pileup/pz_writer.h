@@ -646,6 +646,7 @@ bool write_1pz(
     off += fwd.num_chunks * 4;  // chunk table
     for (int c = 0; c < fwd.num_chunks; ++c) off += fwd.blobs[c].size();
     size_t colsums_offset = off; off += colsums_z.size();
+    (void)colsums_offset;
     size_t metadata_offset = off; off += meta_z.size();
     size_t footer_offset = off;
 

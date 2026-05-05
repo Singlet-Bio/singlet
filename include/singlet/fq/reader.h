@@ -576,6 +576,7 @@ class Reader {
             raw_size = compress::decompress_block(
                 codec_, comp.data(), comp_size, raw.data(), raw.size());
         }
+        (void)raw_size;
 
         // Parse: [n_dicts][stream][segment][varint n_entries][bc_len][seq_data]
         const uint8_t* p = raw.data();

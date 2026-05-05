@@ -120,7 +120,6 @@ inline ValidationResult validate_fragments_tsv(const std::string& file_path) {
     std::ifstream f(file_path);
     std::string line;
     int lineno = 0;
-    int64_t prev_start = -1;
     std::string prev_chr;
 
     while (std::getline(f, line)) {
@@ -205,6 +204,7 @@ inline ValidationResult validate_4dn_pairs(const std::string& file_path) {
         if (line.find("#columns") != std::string::npos)
             found_columns = true;
     }
+    (void)found_columns;
 
     return {true, ""};
 }

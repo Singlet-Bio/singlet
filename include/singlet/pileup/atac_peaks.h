@@ -120,6 +120,7 @@ std::vector<ATACPeak> call_peaks(
 
         // Merge significant bins into peaks
         const uint32_t merge_bins = (params.merge_distance + params.bin_size - 1) / params.bin_size;
+        (void)merge_bins;
 
         // Identify significant bins
         std::vector<bool> sig(M, false);

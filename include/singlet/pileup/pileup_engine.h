@@ -1147,6 +1147,7 @@ public:
 
     PileupStats run_parallel(const std::string& bam_path, int n_workers) {
         auto t0 = std::chrono::high_resolution_clock::now();
+        (void)t0;
 
         // ── Open BAM, load header, check index ──
         htsFile* master_fp = hts_open(bam_path.c_str(), "r");

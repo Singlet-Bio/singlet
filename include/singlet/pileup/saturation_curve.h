@@ -77,6 +77,7 @@ inline std::vector<SaturationPoint> compute_saturation_curve(
 
     const uint32_t n_cells = exon_csc.ncols;
     const uint32_t n_fracs = static_cast<uint32_t>(fractions.size());
+    (void)n_fracs;
 
     // Pre-compute total reads across all cells (for sampled_reads column)
     uint64_t total_all_reads = 0;

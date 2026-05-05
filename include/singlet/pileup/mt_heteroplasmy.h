@@ -97,8 +97,10 @@ inline std::string infer_ref_from_data(
     // For each position, find the most common base across all cells
     for (uint32_t pos = 0; pos < MT_LEN; ++pos) {
         uint64_t counts[4] = {0, 0, 0, 0};
+        (void)counts;
         for (int b = 0; b < 4; ++b) {
             uint32_t feat = pos * 4 + b;
+            (void)feat;
             // Sum across all cells for this feature
             // We need to iterate the CSC column-wise
             // Since mt_csc is features × cells (row=feature, col=cell),
