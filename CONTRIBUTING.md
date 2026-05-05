@@ -11,7 +11,7 @@ git clone https://github.com/Singlet-Bio/singlet.git
 cd singlet
 
 # Install Python package in development mode
-pip install -e "python/.[dev]"
+pip install -e ".[dev]"
 
 # Build C++ tests (requires GCC 13+, htslib, zstd, zlib)
 make build
@@ -38,7 +38,7 @@ singlet/
 ├── r/                     R package (singlet)
 ├── src/                   C++ source (pipeline binary, GPU kernels)
 ├── tests/
-│   ├── cpp/               100 C++ unit tests
+│   ├── cpp/               102 C++ unit tests
 │   └── python/            584 Python tests
 ├── docs/                  Documentation
 ├── pipeline/              singlify pipeline scripts
@@ -51,7 +51,7 @@ singlet/
 # All tests
 make test
 
-# C++ only (100 tests, ~72s)
+# C++ only (102 tests, ~72s)
 make test-cpp
 
 # Python only (584 tests, ~16s)

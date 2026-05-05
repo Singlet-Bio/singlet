@@ -65,12 +65,11 @@ singlet/
 │   └── gpu/             CUDA analysis kernels
 ├── python/singlet/      Python package source
 │   ├── io/              Format I/O (.1pz, h5ad, zarr)
-│   ├── catalog/         Atlas browsing
+│   ├── preprocessing/   Pipeline QC & preprocessing
 │   ├── torch/           PyTorch integration
 │   └── gpu/             GPU analysis wrappers
 ├── r/                   R package (CRAN-ready)
-├── src/                 Compiled sources (pipeline binary, GPU kernels, bindings)
-├── star/                Vendored STAR aligner (48% faster singlet-lite fork)
+├── src/                 Compiled sources (pipeline binary, STAR aligner, GPU kernels)
 ├── tests/               Unified test suite (Python + C++ + R)
 ├── notebooks/           Jupyter tutorial notebooks
 ├── docs/                User documentation
@@ -119,7 +118,7 @@ cmake --build build -j$(nproc)
 cmake -B build -DSINGLET_BUILD_GPU=ON -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
 
-# Run C++ tests (100 unit tests — ~72s)
+# Run C++ tests (102 unit tests — ~72s)
 cmake -B build -DSINGLET_BUILD_TESTS=ON
 cmake --build build -j$(nproc) && ctest --test-dir build -j$(nproc)
 
