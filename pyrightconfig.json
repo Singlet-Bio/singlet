@@ -9,7 +9,6 @@
     "reportAttributeAccessIssue": false,
     "reportReturnType": "warning",
     "reportArgumentType": "warning",
-    "reportGeneralClassIssues": false,
     "reportIndexIssue": false,
     "reportOperatorIssue": false,
     "reportCallIssue": false,
