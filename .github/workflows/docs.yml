@@ -1,0 +1,21 @@
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'notebooks/**'
+      - 'python/singlet/**'
+
+jobs:
+  trigger-website-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger website docs rebuild
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+          repository: zdebruine/singlet-website
+          event-type: docs-updated
+          client-payload: '{"ref": "${{ github.sha }}", "source": "singlet"}'
