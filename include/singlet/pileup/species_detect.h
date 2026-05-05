@@ -31,8 +31,8 @@
 
 #pragma once
 
-#include "../lib1fq/reader.h"
-#include "../lib1fq/species_registry.h"
+#include "../fq/reader.h"
+#include "../fq/species_registry.h"
 #include "bloom_filter.h"
 
 #include <algorithm>
