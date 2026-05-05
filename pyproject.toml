@@ -67,7 +67,7 @@ where = ["python"]
 include = ["singlet*"]
 
 [tool.setuptools.package-data]
-singlet = ["data/*.parquet"]
+singlet = ["data/*.parquet", "py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/python"]
