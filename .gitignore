@@ -32,3 +32,6 @@ Thumbs.db
 # STAR build artifacts
 star/bin/
 star/pgo_profile/
+
+# Pipeline operational state (lives in singlet-agents repo)
+pipeline/
