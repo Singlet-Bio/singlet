@@ -315,8 +315,8 @@ int main() {
         std::string line;
         std::getline(f, line);  // header
         bool header_ok = (line.find("barcode") != std::string::npos &&
-                          line.find("total_umis") != std::string::npos &&
-                          line.find("mt_pct") != std::string::npos);
+                          line.find("n_umi") != std::string::npos &&
+                          line.find("pct_mt") != std::string::npos);
         if (header_ok)
             PASS("TSV header present");
         else
