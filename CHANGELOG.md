@@ -28,11 +28,13 @@ All notable changes to the singlet project.
 - **Python API reference**: `docs/api/python.md` covers all public modules
 - **Annotation tests**: 15 unit tests for `_annotate.py` (gene_programs, project, annotate)
 - **Security**: `SECURITY.md` vulnerability reporting policy + pip-audit CI job
-- **Python tests**: 584 total (up from 205 at cycle 184, 98% core coverage)
+- **Python tests**: 588 total (up from 205 at cycle 184, 98% core coverage)
 - **Property-based tests**: 14 hypothesis tests for codec round-trip verification
 - **Code deduplication**: `convert.py` thin re-export (was 267-line copy)
 - **Lint compliance**: 0 ruff errors (B904, UP037, UP035 all resolved)
-- **Type checking**: pyright with 0 errors, 20 warnings (all optional-dep false positives)
+- **Type checking**: pyright with 0 errors, 10 warnings (all optional-dep false positives)
+- **C++ zero-warning build**: -Wall -Wextra with 0 warnings across all 100 test executables
+- **Better error messages**: download 404 → FileNotFoundError with catalog guidance
 - **Format conversion tests**: MTX round-trip, to_csc, from_mtx edge cases
 - **Preprocessing tests**: protocol detection, FASTQ download, quantify, QC, species, export
 
