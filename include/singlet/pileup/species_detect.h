@@ -46,7 +46,10 @@
 
 // Include generated k-mer DB if it exists (optional — fallback only)
 #if __has_include("species_kmer_db_gen.h")
+#   pragma GCC diagnostic push
+#   pragma GCC diagnostic ignored "-Wunused-variable"
 #   include "species_kmer_db_gen.h"
+#   pragma GCC diagnostic pop
 #   define SINGLET_HAVE_KMER_DB 1
 #else
 #   define SINGLET_HAVE_KMER_DB 0
