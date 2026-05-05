@@ -28,7 +28,7 @@ All notable changes to the singlet project.
 - **Python API reference**: `docs/api/python.md` covers all public modules
 - **Annotation tests**: 15 unit tests for `_annotate.py` (gene_programs, project, annotate)
 - **Security**: `SECURITY.md` vulnerability reporting policy + pip-audit CI job
-- **Python tests**: 432 total (up from 205 at cycle 184)
+- **Python tests**: 492 total (up from 205 at cycle 184, 80% core coverage)
 - **Type checking**: pyright with 0 errors (basic mode, pyrightconfig.json)
 - **Format conversion tests**: MTX round-trip, to_csc, from_mtx edge cases
 - **Preprocessing tests**: protocol detection, FASTQ download, quantify, QC, species, export
