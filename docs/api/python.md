@@ -51,7 +51,17 @@
 | `singlet.from_h5ad(path)` | Read .h5ad → AnnData |
 | `singlet.to_zarr(adata, path)` | Write AnnData → Zarr |
 | `singlet.from_zarr(path)` | Read Zarr → AnnData |
+| `singlet.to_mtx(adata, directory)` | Write AnnData → 10x MTX directory |
+| `singlet.from_mtx(directory)` | Read 10x MTX directory → AnnData |
 | `singlet.to_csc(adata)` | Extract scipy CSC matrix |
+
+### Cell Type Annotation (free, local)
+
+| Function | Description |
+|----------|-------------|
+| `singlet.gene_programs(organism)` | Download NMF gene programs (W matrix) |
+| `singlet.project(adata)` | Project cells into gene program space (H matrix) |
+| `singlet.annotate(adata)` | Annotate cells with predicted cell types |
 
 ### Token-Priced Features
 
@@ -120,6 +130,26 @@ python -m singlet.mcp.server  # Start stdio server
 Exposes 11 tools: `singlet_stats`, `singlet_search`, `singlet_qc`,
 `singlet_load`, `singlet_browse`, `singlet_protocols`, `singlet_quality`,
 `singlet_tissues`, `singlet_failures`, `singlet_cell_types`, `singlet_species`.
+
+---
+
+## Module: `singlet.pp` / `singlet.preprocessing`
+
+Pipeline-level preprocessing (power users / infrastructure operators).
+
+```python
+from singlet.pp import download_fastq, detect_protocol, quantify, run_qc
+```
+
+| Function | Description |
+|----------|-------------|
+| `download_fastq(gsm_id, *, ena_r1_url, output_dir)` | Download FASTQ from ENA/SRA |
+| `detect_protocol(r1_path, r2_path)` | Auto-detect scRNA-seq protocol |
+| `quantify(r1_paths, r2_paths, protocol, species, output_dir)` | Run STAR alignment + counting |
+| `run_qc(quant_dir)` | Compute quality metrics |
+| `export_to_1pz(quant_dir, output_path)` | Export quantification to .1pz |
+| `list_supported_species()` | List available reference genomes |
+| `get_species_info(species)` | Get reference paths for a species |
 
 ---
 
