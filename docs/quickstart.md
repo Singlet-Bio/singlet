@@ -16,7 +16,7 @@ print(adata)
 ## Browse Available Samples
 
 ```python
-results = singlet.search(organism="Homo sapiens", protocol="10xv3")
+results = singlet.samples(organism="Homo sapiens", protocol="10xv3")
 print(f"{len(results)} samples found")
 ```
 
