@@ -131,3 +131,25 @@ class TestPzH5adConvenience:
         orig = sample_adata.X.toarray()
         load = loaded.X.toarray() if sp.issparse(loaded.X) else loaded.X
         np.testing.assert_allclose(load, orig, atol=1e-4)
+
+
+class TestMtxViaSingletConvert:
+    """Test to_mtx/from_mtx via singlet.convert (not singlet.io.convert)."""
+
+    def test_to_mtx_dense_via_convert(self, tmp_path):
+        """to_mtx handles dense matrix input by converting to sparse."""
+        import anndata as ad
+        from singlet.convert import from_mtx, to_mtx
+
+        X = np.array([[1, 0, 3], [0, 5, 0], [2, 0, 4]], dtype=np.float32)
+        adata = ad.AnnData(X=X)  # dense input
+        adata.var_names = pd.Index(["A", "B", "C"])
+        adata.obs_names = pd.Index(["c1", "c2", "c3"])
+
+        outdir = tmp_path / "mtx_out"
+        to_mtx(adata, outdir)
+        assert (outdir / "matrix.mtx.gz").exists()
+
+        loaded = from_mtx(outdir)
+        load_dense = loaded.X.toarray() if sp.issparse(loaded.X) else loaded.X
+        np.testing.assert_allclose(load_dense, X, atol=1e-6)
