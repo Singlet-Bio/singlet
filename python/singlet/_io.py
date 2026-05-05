@@ -441,7 +441,7 @@ def info_1pz(path: str | Path) -> dict:
     return singlepress.info_1pz(str(path))
 
 
-def read_matrix(path: str | Path, **kwargs):
+def read_matrix(path: str | Path, **kwargs) -> "anndata.AnnData":
     """Auto-detect format and read a .spz or .1pz file into AnnData.
 
     Parameters
@@ -462,7 +462,7 @@ def read_matrix(path: str | Path, **kwargs):
 
 def read_kraken2(
     gse_dir: str | Path,
-):
+) -> "anndata.AnnData":
     """Read a kraken2.1pz microbiome matrix from a GSE directory.
 
     Parameters
