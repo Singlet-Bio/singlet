@@ -5,7 +5,7 @@
 # content below is the minimum viable namespace so that R CMD check can
 # load the package at phase R-10.
 
-useDynLib(singlify, .registration = TRUE)
+useDynLib(singlet, .registration = TRUE)
 importFrom(Rcpp, evalCpp)
 
 export(read_1pz)

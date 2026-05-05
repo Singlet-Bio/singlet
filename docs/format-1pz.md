@@ -8,7 +8,7 @@
 2. **Very high compression ratio** — UMI count matrices compress 40–80× vs MTX
 3. **Direct read into R/Python sparse objects** — no intermediate copy
 
-Output `.1pz` files are readable by [singlepress](https://github.com/Singlet-Bio/singlepress) (`singlepress.read()` in Python, `singlepress::read_1pz()` in R).
+Output `.1pz` files are readable by singlet (`singlet.read_1pz()` in Python, `singlet::read_1pz()` in R).
 
 ---
 
@@ -159,29 +159,29 @@ Rownames are feature identifiers (gene IDs or SNP positions). Colnames are cell 
 
 ## Reading .1pz files
 
-### Python (singlepress)
+### Python (singlet)
 
 ```python
-import singlepress
+import singlet
 
-# Returns scipy.sparse.csc_matrix
-mat = singlepress.read("exon_counts.1pz")
-# Shape: (n_genes, n_cells); rownames and colnames in mat.rownames, mat.colnames
+# Returns scipy.sparse.csc_matrix via AnnData
+adata = singlet.read_1pz("exon_counts.1pz")
 
-# Read only specific cells (column slicing, does not decompress unused chunks)
-mat = singlepress.read("exon_counts.1pz", cols=range(1000))
+# Or use the low-level I/O
+from singlet.io import read_1pz
+mat = read_1pz("exon_counts.1pz")
 ```
 
-### R (singlepress)
+### R (singlet)
 
 ```r
-library(singlepress)
+library(singlet)
 
 # Returns dgCMatrix
 mat <- read_1pz("exon_counts.1pz")
 
 # Or directly into a SingleCellExperiment
-sce <- read_singlet_dir("results/")
+sce <- as_sce("results/")
 ```
 
 ---
