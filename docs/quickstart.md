@@ -1,38 +1,45 @@
 # Quick Start
 
-## Load a Pre-Processed Sample
+## Browse the Atlas
 
-Every public GEO single-cell sample is processed by the singlet pipeline and available instantly:
+The bundled catalog works offline — no internet needed:
 
 ```python
 import singlet
 
-# Load by GEO accession
+# One-line summary
+print(singlet.summary())
+# singlet atlas: 4,697 samples (2,072 SUCCESS) • 1,711 series • ...
+
+# Search datasets
+singlet.catalog("lung")
+
+# Filter samples
+singlet.samples(organism="Homo sapiens", tissue="brain", min_cells=1000)
+```
+
+## Load a Pre-Processed Sample
+
+Every public GEO single-cell sample processed by the singlet pipeline is available:
+
+```python
+# Load by GEO accession (downloads from Zenodo)
 adata = singlet.load("GSM5238385")
 print(adata)
 # AnnData object with n_obs × n_vars = 8234 × 33538
 ```
 
-## Browse Available Samples
-
-```python
-results = singlet.samples(organism="Homo sapiens", protocol="10xv3")
-print(f"{len(results)} samples found")
-```
-
 ## GPU-Accelerated Analysis
 
 ```python
-import singlet.gpu as sg
+from singlet import gpu
 
-# Full pipeline on GPU (100-500× faster than Scanpy)
-sg.pp.normalize_total(adata)
-sg.pp.log1p(adata)
-sg.pp.highly_variable_genes(adata)
-sg.pp.scale(adata)
-sg.tl.pca(adata)
-sg.tl.neighbors(adata)
-sg.tl.leiden(adata)
-sg.tl.umap(adata)
-sg.tl.rank_genes_groups(adata)
+# Full pipeline on GPU (10-50× faster than Scanpy for 100k+ cells)
+gpu.pp.normalize_total(adata)
+gpu.pp.log1p(adata)
+gpu.pp.highly_variable_genes(adata, n_top_genes=2000)
+gpu.reduce.pca(adata, n_comps=50)
+gpu.pp.neighbors(adata, n_neighbors=15)
+gpu.tools.leiden(adata, resolution=1.0)
+gpu.tools.umap(adata)
 ```
