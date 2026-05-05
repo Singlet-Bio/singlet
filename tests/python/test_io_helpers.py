@@ -182,3 +182,43 @@ class TestWriteSpzIntegerPath:
         expected = mat.toarray()
         actual = loaded.X.toarray() if sp.issparse(loaded.X) else loaded.X
         np.testing.assert_array_equal(actual, expected)
+
+
+class TestWrite1pzUnsFiltering:
+    """Test write_1pz with non-scalar uns values."""
+
+    def test_non_scalar_uns_excluded(self, tmp_path):
+        """Non-scalar uns values (arrays, dicts) are excluded from metadata."""
+        import anndata as ad
+        from singlet._io import read_1pz, write_1pz
+
+        mat = sp.csr_matrix(np.array([[1, 2], [3, 4]], dtype=np.float32))
+        adata = ad.AnnData(X=mat)
+        adata.uns["array_val"] = np.array([1, 2, 3])
+        adata.uns["dict_val"] = {"nested": True}
+        adata.uns["list_val"] = [1, 2, 3]
+        # No scalar values → uns_dict should be None internally
+
+        path = tmp_path / "no_uns.1pz"
+        write_1pz(adata, path)
+        loaded = read_1pz(path)
+        assert loaded.shape == (2, 2)
+        # No uns should survive (all non-scalar)
+        assert len(loaded.uns) == 0
+
+    def test_mixed_uns_keeps_scalars(self, tmp_path):
+        """Scalar uns values survive roundtrip, non-scalars are excluded."""
+        import anndata as ad
+        from singlet._io import read_1pz, write_1pz
+
+        mat = sp.csr_matrix(np.array([[5, 6], [7, 8]], dtype=np.float32))
+        adata = ad.AnnData(X=mat)
+        adata.uns["version"] = "1.0"
+        adata.uns["n_cells"] = 42
+        adata.uns["big_array"] = np.zeros(1000)
+
+        path = tmp_path / "mixed_uns.1pz"
+        write_1pz(adata, path)
+        loaded = read_1pz(path)
+        assert "version" in loaded.uns
+        assert loaded.uns["version"] == "1.0"

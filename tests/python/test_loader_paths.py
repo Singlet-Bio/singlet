@@ -260,3 +260,27 @@ class TestLoadSample:
 
         with pytest.raises(RuntimeError, match="load_sample requires a local catalog"):
             load_sample("GSM001")
+
+    def test_load_gse_download_fallback(self, tmp_path, monkeypatch):
+        """Falls back to download when GSE not in local catalog."""
+        import singlet._catalog as cat_mod
+        from singlet._io import write_1pz
+        from singlet._loader import load
+
+        # No catalog dir → resolve returns None → triggers download
+        cat_mod._CATALOG_DIR = None
+
+        # Create a .1pz to be "downloaded"
+        mat = sp.random(3, 4, density=0.5, format="csr", dtype=np.float32)
+        mat.data = np.round(mat.data * 100).astype(np.float32)
+        adata = ad.AnnData(X=mat)
+        adata.var_names = pd.Index([f"G{i}" for i in range(4)])
+        adata.obs_names = pd.Index([f"C{i}" for i in range(3)])
+        download_path = tmp_path / "GSE999.1pz"
+        write_1pz(adata, download_path)
+
+        # Mock download to return our file
+        with patch("singlet._loader.download", return_value=download_path):
+            loaded = load("GSE999")
+
+        assert loaded.shape == (3, 4)
