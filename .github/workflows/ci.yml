@@ -87,7 +87,12 @@ jobs:
         run: cmake -B build -DSINGLET_BUILD_TESTS=ON -DSINGLET_BUILD_PIPELINE=OFF
 
       - name: Build
-        run: cmake --build build -j$(nproc)
+        run: |
+          cmake --build build -j$(nproc) 2>&1 | tee /tmp/build.log
+          if grep -q "warning:" /tmp/build.log; then
+            echo "::warning::Build produced compiler warnings"
+            grep "warning:" /tmp/build.log
+          fi
 
       - name: Run tests
         run: ctest --test-dir build -j$(nproc) --output-on-failure

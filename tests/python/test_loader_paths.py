@@ -10,6 +10,15 @@ import requests
 import scipy.sparse as sp
 
 
+def _has_zarr() -> bool:
+    try:
+        import zarr  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
 @pytest.fixture(autouse=True)
 def reset_catalog(monkeypatch):
     """Reset catalog state before each test."""
@@ -184,6 +193,21 @@ class TestLoad:
 
         adata = load(h5ad_file)
         assert adata.shape == (5, 10)
+
+    @pytest.mark.skipif(not _has_zarr(), reason="zarr not installed")
+    def test_load_zarr(self, tmp_path):
+        """Loads .zarr directory directly."""
+        from singlet._loader import load
+
+        mat = sp.random(4, 6, density=0.5, format="csr", dtype=np.float32)
+        adata = ad.AnnData(X=mat)
+        adata.var_names = pd.Index([f"G{i}" for i in range(6)])
+        adata.obs_names = pd.Index([f"C{i}" for i in range(4)])
+        zarr_path = tmp_path / "test.zarr"
+        adata.write_zarr(zarr_path)
+
+        loaded = load(zarr_path)
+        assert loaded.shape == (4, 6)
 
     def test_load_1pz_file(self, tmp_path):
         """Loads .1pz file directly."""
