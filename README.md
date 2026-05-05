@@ -31,7 +31,7 @@ import singlet
 
 # Browse the atlas
 singlet.catalog()
-singlet.info("GSE136831")
+singlet.info("GSE264667")
 
 # Load a sample (returns AnnData)
 adata = singlet.load("GSM1234567")
