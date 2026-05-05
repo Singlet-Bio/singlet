@@ -89,3 +89,20 @@ class TestPublicAPI:
         assert hasattr(singlet, "samples")
         assert hasattr(singlet, "species")
         assert hasattr(singlet, "summary")
+
+
+class TestMain:
+    def test_python_m_singlet(self):
+        """python -m singlet prints atlas summary without error."""
+        import subprocess
+        import sys
+
+        result = subprocess.run(
+            [sys.executable, "-m", "singlet"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert result.returncode == 0
+        assert "singlet v" in result.stdout
+        assert "atlas" in result.stdout
