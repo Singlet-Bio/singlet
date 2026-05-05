@@ -1,12 +1,15 @@
 """Tests for singlet.preprocessing._download (FASTQ download logic)."""
 
-from unittest.mock import patch
+import subprocess
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from singlet.preprocessing._download import (
     DownloadResult,
     _convert_ftp_to_https,
     download_fastq,
     download_from_ena,
+    download_from_sra,
 )
 
 # ---------------------------------------------------------------------------
@@ -179,3 +182,75 @@ class TestDownloadFastq:
             prefer_ena=False,
         )
         assert result.success
+
+
+# ---------------------------------------------------------------------------
+# download_from_sra (mocked subprocess)
+# ---------------------------------------------------------------------------
+
+
+class TestDownloadFromSra:
+    @patch("singlet.preprocessing._download.subprocess.run")
+    def test_success(self, mock_run, tmp_path):
+        """Successful fasterq-dump + pigz compression."""
+
+        # fasterq-dump "creates" fastq files
+        def fake_run(cmd, **kwargs):
+            if "fasterq-dump" in cmd:
+                # Simulate output files
+                (tmp_path / "SRR123_1.fastq").write_text("@read\nACGT\n+\nIIII\n")
+                (tmp_path / "SRR123_2.fastq").write_text("@read\nACGT\n+\nIIII\n")
+            elif "pigz" in cmd or "gzip" in cmd:
+                # Simulate compression
+                src = Path(cmd[-1])
+                gz = src.with_suffix(".fastq.gz")
+                gz.write_bytes(b"compressed")
+                src.unlink()
+            return MagicMock(returncode=0)
+
+        mock_run.side_effect = fake_run
+
+        result = download_from_sra("SRR123", tmp_path, threads=2)
+        assert result.success
+        assert result.method == "fasterq_dump"
+
+    @patch("singlet.preprocessing._download.subprocess.run")
+    def test_fasterq_dump_failure(self, mock_run, tmp_path):
+        """CalledProcessError returns error result."""
+        mock_run.side_effect = subprocess.CalledProcessError(1, "fasterq-dump")
+        result = download_from_sra("SRR123", tmp_path)
+        assert not result.success
+        assert "fasterq-dump failed" in result.error
+
+    @patch("singlet.preprocessing._download.subprocess.run")
+    def test_fasterq_dump_not_found(self, mock_run, tmp_path):
+        """FileNotFoundError returns error result."""
+        mock_run.side_effect = FileNotFoundError("fasterq-dump not installed")
+        result = download_from_sra("SRR123", tmp_path)
+        assert not result.success
+        assert "fasterq-dump failed" in result.error
+
+
+# ---------------------------------------------------------------------------
+# ENA cache with R2 file
+# ---------------------------------------------------------------------------
+
+
+class TestEnaCacheR2:
+    def test_cache_hit_r1_and_r2(self, tmp_path):
+        """Both R1 and R2 cached → returns both paths."""
+        r1 = tmp_path / "GSM456_R1.fastq.gz"
+        r2 = tmp_path / "GSM456_R2.fastq.gz"
+        r1.write_bytes(b"r1_data")
+        r2.write_bytes(b"r2_data")
+
+        result = download_from_ena(
+            "https://ftp.ebi.ac.uk/R1.fq.gz",
+            "https://ftp.ebi.ac.uk/R2.fq.gz",
+            tmp_path,
+            "GSM456",
+        )
+        assert result.success
+        assert result.method == "ena_cached"
+        assert len(result.r1_paths) == 1
+        assert len(result.r2_paths) == 1
