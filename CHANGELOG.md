@@ -19,6 +19,8 @@ All notable changes to the singlet project.
 - **GPU module**: `from singlet.gpu import ...` (requires cupy)
 - **CMake find_package**: `find_package(Singlet COMPONENTS pz fq pileup)`
 - **R GPU support**: `singlet::has_gpu()`, `gpu_pca()`, `gpu_neighbors()`, `gpu_leiden()`
+- **C++ test suite**: 88 unit tests covering all pileup modules (codec, cell calling, ATAC, ADT, species, nonhost, export, spatial, protocol detection)
+- **IO schema v2 support**: Loader auto-detects singlify v2 subdirectory layout (`donor/snp_ad.1pz`)
 
 ### Architecture
 - `include/singlet/pz/` — .1pz VOCSC codec (13x compression, 4000+ MB/s decode)
