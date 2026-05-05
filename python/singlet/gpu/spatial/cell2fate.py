@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.spatial.cell2fate — GPU-native RNA velocity module decomposition.
+singlet.gpu.spatial.cell2fate — GPU-native RNA velocity module decomposition.
 
 Underlying C++: cycle 27, ``embed/cell2fate.h``.
 Algorithm: Poisson SVI over K interpretable velocity modules
@@ -65,7 +65,7 @@ class Cell2FateModel:
                 "gamma_var": cp.asarray(self.result.gamma_var_view).get(),
             }
         except ImportError:
-            raise ImportError("singlet_gpu.spatial.cell2fate requires cupy.")
+            raise ImportError("singlet.gpu.spatial.cell2fate requires cupy.")
 
     def module_loadings(self) -> np.ndarray:
         """Return [K × n_genes] module loading matrix (host numpy)."""
@@ -159,7 +159,7 @@ def fit(
     -------
     Cell2FateModel
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "cell2fate_fit"):
         raise AttributeError(
@@ -187,7 +187,7 @@ def fit(
         d_unspliced = _layer_to_csc(unspliced_layer)
     except ImportError as e:
         raise ImportError(
-            "singlet_gpu.spatial.cell2fate.fit requires cupy.  "
+            "singlet.gpu.spatial.cell2fate.fit requires cupy.  "
             f"Original error: {e}"
         )
 

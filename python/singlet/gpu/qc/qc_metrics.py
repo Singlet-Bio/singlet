@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.qc.qc_metrics — GPU-native QC metrics + cell/gene filtering.
+singlet.gpu.qc.qc_metrics — GPU-native QC metrics + cell/gene filtering.
 
 Underlying C++: cycle-103, ``qc/metrics.h``.
 Matches scanpy.pp.calculate_qc_metrics / filter_cells / filter_genes signatures.
@@ -59,7 +59,7 @@ def _get_matrix(adata: "anndata.AnnData", layer: Optional[str]):
 
 def _csr_to_device_csc(csr_mat):
     """Convert cupy.sparse.csr_matrix → singlet_gpu DeviceCsc."""
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
     if not hasattr(_core, "from_cupy_csr"):
         raise AttributeError(
             "_core.from_cupy_csr is not available.  "
@@ -85,7 +85,7 @@ def _run_qc_on_device(adata: "anndata.AnnData", layer: Optional[str],
 
     Both are needed by filter_cells / filter_genes to avoid running twice.
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
     import cupy as cp
 
     mat = _get_matrix(adata, layer)
@@ -187,7 +187,7 @@ def calculate_qc_metrics(
         n_cells_by_counts   — number of cells expressing this gene (int)
         is_{P}              — bool gene-group mask, for each P in qc_vars
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "calculate_qc_metrics"):
         raise AttributeError(
@@ -199,7 +199,7 @@ def calculate_qc_metrics(
         import cupy as cp
     except ImportError as e:
         raise ImportError(
-            f"singlet_gpu.qc.calculate_qc_metrics requires cupy.  {e}"
+            f"singlet.gpu.qc.calculate_qc_metrics requires cupy.  {e}"
         )
 
     working = adata if (inplace and not copy) else copy_module.copy(adata)
@@ -263,7 +263,7 @@ def filter_cells(
     -------
     None (inplace) or AnnData (copy).
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "filter_cells"):
         raise AttributeError(
@@ -278,7 +278,7 @@ def filter_cells(
         except ImportError:
             import cupy.sparse as csp         # cupy < 14 fallback
     except ImportError as e:
-        raise ImportError(f"singlet_gpu.qc.filter_cells requires cupy.  {e}")
+        raise ImportError(f"singlet.gpu.qc.filter_cells requires cupy.  {e}")
 
     mt_key   = qc_vars[0] if len(qc_vars) > 0 else "MT"
     ribo_key = qc_vars[1] if len(qc_vars) > 1 else "RIBO"
@@ -382,7 +382,7 @@ def filter_genes(
     -------
     None (inplace) or AnnData (copy).
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "filter_genes"):
         raise AttributeError(
@@ -397,7 +397,7 @@ def filter_genes(
         except ImportError:
             import cupy.sparse as csp         # cupy < 14 fallback
     except ImportError as e:
-        raise ImportError(f"singlet_gpu.qc.filter_genes requires cupy.  {e}")
+        raise ImportError(f"singlet.gpu.qc.filter_genes requires cupy.  {e}")
 
     mt_key   = qc_vars[0] if len(qc_vars) > 0 else "MT"
     ribo_key = qc_vars[1] if len(qc_vars) > 1 else "RIBO"

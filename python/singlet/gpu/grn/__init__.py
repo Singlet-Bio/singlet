@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.grn — GPU-native gene regulatory network inference.
+singlet.gpu.grn — GPU-native gene regulatory network inference.
 
 Exposes:
     granie.run_from_csc — GRaNIE multiome GRN inference (cycle 36).

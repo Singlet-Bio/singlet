@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.qc — GPU-native quality control.
+singlet.gpu.qc — GPU-native quality control.
 
 Exposes:
     doublet_score.run_doublet_score  — Scrublet-style RNA-only (cycle 31)

@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.eqtl.nebula — GPU-native NEBULA single-cell eQTL mapping.
+singlet.gpu.eqtl.nebula — GPU-native NEBULA single-cell eQTL mapping.
 
-Underlying C++ kernel: singlet_gpu::eqtl::run_nebula (cycle 38, eqtl/nebula.h).
+Underlying C++ kernel: singlet::gpu::eqtl::run_nebula (cycle 38, eqtl/nebula.h).
 
 NEBULA fits a Negative Binomial mixed model at each (SNP, gene) pair via
 GPU Fisher scoring in shared memory, with BH FDR correction per gene.
@@ -127,7 +127,7 @@ def run(
 
     Examples
     --------
-    >>> result = singlet_gpu.eqtl.nebula.run(
+    >>> result = singlet.gpu.eqtl.nebula.run(
     ...     counts, snp_ad, snp_dp,
     ...     donor_id=cell_donor_ids,
     ...     n_donors=80,
@@ -137,7 +137,7 @@ def run(
     >>> import pandas as pd
     >>> beta_df = pd.DataFrame(result["beta"], columns=gene_names)
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "run_nebula"):
         raise ImportError(

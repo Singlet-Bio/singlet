@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.enrichment — GPU-native gene-set enrichment analysis.
+singlet.gpu.enrichment — GPU-native gene-set enrichment analysis.
 
 Exposes:
     run_gsea   — preranked GSEA via cycle-13 fgsea kernel (decoupleR-compatible).

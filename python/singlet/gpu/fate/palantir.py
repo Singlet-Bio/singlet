@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.fate.palantir — GPU-native Palantir diffusion pseudotime.
+singlet.gpu.fate.palantir — GPU-native Palantir diffusion pseudotime.
 
 Underlying C++ cycle: cycle 45 (fate/palantir.h —
-``singlet_gpu::fate::run_palantir`` kernel).
+``singlet::gpu::fate::run_palantir`` kernel).
 
 Reference: Setty et al., "Characterization of cell fate probabilities in
 single-cell data with Palantir," Nature Biotechnology 2019.
@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 def _require_core():
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
     if not hasattr(_core, "fate") or not hasattr(_core.fate, "palantir"):
         raise AttributeError(
             "_core.fate.palantir is not available.  "

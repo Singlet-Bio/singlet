@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.enrich.ssgsea — Per-cell single-sample GSEA enrichment.
+singlet.gpu.enrich.ssgsea — Per-cell single-sample GSEA enrichment.
 
 Underlying C++: cycle 44, ``enrich/ssgsea.h``.
 Algorithm: per-cell KS enrichment over ranked gene expression
            (Barbie et al. 2009; PLAID 2025).
 
-Distinct from ``singlet_gpu.enrichment.run_gsea`` (ranked-list fgsea.h):
+Distinct from ``singlet.gpu.enrichment.run_gsea`` (ranked-list fgsea.h):
 - ssgsea scores every (cell, gene-set) pair.
 - fgsea scores gene-set enrichment against a ranked statistic vector.
 
@@ -99,7 +99,7 @@ def run_ssgsea(
     -------
     None or AnnData
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "ssgsea"):
         raise AttributeError(
@@ -126,7 +126,7 @@ def run_ssgsea(
         device_mat = csp.csc_matrix(X) if sp.issparse(X) else csp.csc_matrix(cp.array(X))
     except ImportError as e:
         raise ImportError(
-            "singlet_gpu.enrich.run_ssgsea requires cupy.  "
+            "singlet.gpu.enrich.run_ssgsea requires cupy.  "
             f"Original error: {e}"
         )
 

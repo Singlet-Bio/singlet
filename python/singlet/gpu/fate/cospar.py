@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.fate.cospar — GPU-native CoSpar cell fate transition mapping.
+singlet.gpu.fate.cospar — GPU-native CoSpar cell fate transition mapping.
 
 Underlying C++ cycle: cycle 41 (fate/cospar.h —
-``singlet_gpu::fate::run_cospar`` kernel).
+``singlet::gpu::fate::run_cospar`` kernel).
 
 Reference: Wang et al., "CoSpar: integrating lineage and transcriptomes for
 robust trajectory inference," Nature Biotechnology 2022.
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 def _require_core():
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
     if not hasattr(_core, "fate") or not hasattr(_core.fate, "cospar"):
         raise AttributeError(
             "_core.fate.cospar is not available.  "
@@ -151,7 +151,7 @@ def run_from_anndata(
     GPU-native CoSpar cell fate mapping from an AnnData object.
 
     Reads the expression matrix from ``adata.X`` (must be a DeviceCsc or
-    convertible to one via ``singlet_gpu.load_pz``), clone labels from
+    convertible to one via ``singlet.gpu.load_pz``), clone labels from
     ``adata.obs[clone_key]``, time labels from ``adata.obs[time_key]``,
     and the PCA embedding from ``adata.obsm[basis]``.
 
@@ -180,7 +180,7 @@ def run_from_anndata(
     - ``adata.obs['potency']``       — float32.
     - ``adata.uns['cospar_params']`` — run parameters.
     """
-    import singlet_gpu
+    import singlet.gpu
 
     working = copy_module.copy(adata) if copy else adata
 
@@ -205,10 +205,10 @@ def run_from_anndata(
     embedding   = np.asarray(working.obsm[basis], dtype=np.float32)
 
     # Load expression matrix to device if not already there.
-    if not isinstance(working.X, singlet_gpu.DeviceCsc):
+    if not isinstance(working.X, singlet.gpu.DeviceCsc):
         raise TypeError(
             "adata.X must be a DeviceCsc.  "
-            "Call singlet_gpu.load_pz() first, or pass mat directly to run_from_csc()."
+            "Call singlet.gpu.load_pz() first, or pass mat directly to run_from_csc()."
         )
 
     result = run_from_csc(

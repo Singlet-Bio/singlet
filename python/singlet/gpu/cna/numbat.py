@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.cna.numbat — GPU-native Numbat copy-number alteration detection.
+singlet.gpu.cna.numbat — GPU-native Numbat copy-number alteration detection.
 
-Underlying C++ kernel: singlet_gpu::cna::detect_cna (cycle 35, cna/numbat.h).
+Underlying C++ kernel: singlet::gpu::cna::detect_cna (cycle 35, cna/numbat.h).
 
 Detects CNAs at single-cell resolution:
   1. Log-ratio vs reference expression.
@@ -151,7 +151,7 @@ def detect(
     Examples
     --------
     >>> import numpy as np
-    >>> result = singlet_gpu.cna.numbat.detect(
+    >>> result = singlet.gpu.cna.numbat.detect(
     ...     expr_csc,
     ...     chr=gene_chr_list,        # list of ints, length n_genes
     ...     start_bp=gene_start_list, # list of ints, length n_genes
@@ -159,7 +159,7 @@ def detect(
     >>> print(f"Detected {result['n_clones']} clones across "
     ...       f"{result['n_total_segments']} segments")
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "detect_cna"):
         raise ImportError(

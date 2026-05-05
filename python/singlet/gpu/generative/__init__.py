@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.generative — GPU-native generative models.
+singlet.gpu.generative — GPU-native generative models.
 
 Exposes:
     discrete_diffusion.train   — train D3PM model (cycle 30)

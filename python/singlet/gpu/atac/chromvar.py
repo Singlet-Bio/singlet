@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.atac.chromvar — GPU-native chromVAR motif enrichment.
+singlet.gpu.atac.chromvar — GPU-native chromVAR motif enrichment.
 
-Underlying C++ kernel: singlet_gpu::atac::chromvar (cycle 34, atac/chromvar.h).
+Underlying C++ kernel: singlet::gpu::atac::chromvar (cycle 34, atac/chromvar.h).
 
 chromVAR computes bias-corrected motif deviation scores per cell from
 scATAC-seq peak accessibility, with permutation-based p-values.
@@ -128,7 +128,7 @@ def compute(
 
     Examples
     --------
-    >>> result = singlet_gpu.atac.chromvar.compute(
+    >>> result = singlet.gpu.atac.chromvar.compute(
     ...     access_csc,
     ...     motif_csc,
     ...     peak_gc=peak_gc_arr,
@@ -148,7 +148,7 @@ def compute(
         )
         deviation_np = deviation_cp.get()  # host copy
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "chromvar"):
         raise ImportError(

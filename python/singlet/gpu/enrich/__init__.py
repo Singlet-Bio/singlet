@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.enrich — GPU-native pathway and gene-set enrichment.
+singlet.gpu.enrich — GPU-native pathway and gene-set enrichment.
 
 NOTE: this package contains ssGSEA (per-cell KS enrichment), PROGENy
 (weighted-sum pathway activity scoring), and score_genes (Satija et al. 2015
 / Seurat AddModuleScore per-cell gene-set scoring).
-For ranked-list GSEA, see ``singlet_gpu.enrichment.run_gsea`` (fgsea.h, cycle 13).
+For ranked-list GSEA, see ``singlet.gpu.enrichment.run_gsea`` (fgsea.h, cycle 13).
 
 Exposes:
     ssgsea.run_ssgsea          — per-cell ssGSEA (cycle 44)

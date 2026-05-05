@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.abundance.milo — GPU-native Milo differential abundance testing.
+singlet.gpu.abundance.milo — GPU-native Milo differential abundance testing.
 
 Underlying C++ cycle: cycle 47 (abundance/milo.h —
-``singlet_gpu::abundance::run_milo`` kernel).
+``singlet::gpu::abundance::run_milo`` kernel).
 
 Reference: Dann et al., "Differential abundance testing on single-cell data
 using k-nearest neighbor graphs," Nature Biotechnology 2022.
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 def _require_core():
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
     if not hasattr(_core, "abundance") or not hasattr(_core.abundance, "milo"):
         raise AttributeError(
             "_core.abundance.milo is not available.  "

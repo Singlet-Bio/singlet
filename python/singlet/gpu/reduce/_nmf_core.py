@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.reduce.nmf — GPU-native NMF via factornet.
+singlet.gpu.reduce.nmf — GPU-native NMF via factornet.
 
 Underlying C++ cycle: cycle 6 (reduce/nmf/*.h — factornet NMF adapters:
 fit.h, chunked.h, graph.h, types.h).
@@ -15,7 +15,7 @@ Three entry points:
 
 ``nmf_chunked``
     Out-of-core streaming NMF over a list of ``.1pz`` file paths.  Uses
-    ``singlet_gpu::io::PzDataLoader`` (which implements
+    ``singlet::gpu::io::PzDataLoader`` (which implements
     ``factornet::io::DataLoader<float>``) so the data is never fully
     materialised on device.  Returns a raw ``NmfResult`` rather than an
     AnnData because the data is too large to fit in memory.
@@ -96,7 +96,7 @@ def _get_matrix(adata: "anndata.AnnData", layer: Optional[str]):
 
 def _csr_to_device_csc(csr_mat):
     """CSR (cells × genes) → DeviceCSC (genes × cells)."""
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "from_cupy_csr"):
         raise AttributeError(
@@ -246,7 +246,7 @@ def nmf(
     --------
     Default (MSE, k=20, IRLBA init)::
 
-        import singlet_gpu.reduce as sgr
+        import singlet.gpu.reduce as sgr
         sgr.nmf(adata)
 
     Negative Binomial loss (count data)::
@@ -260,7 +260,7 @@ def nmf(
     if init_mode not in _VALID_INIT_MODES:
         raise ValueError(f"init_mode={init_mode} not recognised.  Choose from: {_VALID_INIT_MODES}")
 
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "nmf"):
         raise AttributeError(
@@ -350,7 +350,7 @@ def nmf_chunked(
     """
     Out-of-core streaming NMF over multiple ``.1pz`` files (cycle-6 kernel).
 
-    Uses ``singlet_gpu::io::PzDataLoader`` as a ``factornet::io::DataLoader``
+    Uses ``singlet::gpu::io::PzDataLoader`` as a ``factornet::io::DataLoader``
     so data is loaded in chunks and never fully materialised on device.
     Bypasses AnnData because the total data may be too large to hold in GPU
     memory simultaneously.
@@ -395,7 +395,7 @@ def nmf_chunked(
     --------
     Stream 5 samples at 100k cells per chunk::
 
-        from singlet_gpu.reduce import nmf_chunked
+        from singlet.gpu.reduce import nmf_chunked
         result = nmf_chunked(paths, n_factors=30, chunk_cols=100_000)
         # result.W is (genes × 30), result.H_list[i] is (30 × cells_i)
     """
@@ -406,7 +406,7 @@ def nmf_chunked(
     if init_mode not in _VALID_INIT_MODES:
         raise ValueError(f"init_mode={init_mode} not recognised.")
 
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "nmf_chunked"):
         raise AttributeError(
@@ -560,7 +560,7 @@ def nmf_graph_factorize(
     --------
     Joint RNA + ATAC NMF with shared H::
 
-        from singlet_gpu.reduce import nmf_graph_factorize
+        from singlet.gpu.reduce import nmf_graph_factorize
         results = nmf_graph_factorize(
             {"rna": adata_rna, "atac": adata_atac},
             n_factors=20,
@@ -586,7 +586,7 @@ def nmf_graph_factorize(
             f"Got: {n_cells_per_modality}"
         )
 
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "nmf_graph_factorize"):
         raise AttributeError(

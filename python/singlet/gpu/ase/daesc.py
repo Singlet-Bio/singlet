@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.ase.daesc — GPU-native DAESC beta-binomial ASE calling.
+singlet.gpu.ase.daesc — GPU-native DAESC beta-binomial ASE calling.
 
-Underlying C++ kernel: singlet_gpu::ase::run_daesc (cycle 40, ase/daesc.h).
+Underlying C++ kernel: singlet::gpu::ase::run_daesc (cycle 40, ase/daesc.h).
 
 DAESC fits per-SNP beta-binomial MLE (intercept-only model) to detect
 allele-specific expression at single-cell resolution.
@@ -112,20 +112,20 @@ def run(
     --------
     Global ASE only::
 
-        result = singlet_gpu.ase.daesc.run(snp_ad, snp_dp)
+        result = singlet.gpu.ase.daesc.run(snp_ad, snp_dp)
         sig_mask = result["p_adj"] < 0.05
         print(f"Significant ASE SNPs: {sig_mask.sum()}")
 
     With cell-type stratification::
 
         cell_types = np.array([0, 1, 0, 2, ...], dtype=np.int32)  # n_cells
-        result = singlet_gpu.ase.daesc.run(
+        result = singlet.gpu.ase.daesc.run(
             snp_ad, snp_dp,
             cell_type=cell_types, n_types=3
         )
         # result["strat_beta"] has shape (n_snps, 3)
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "run_daesc"):
         raise ImportError(

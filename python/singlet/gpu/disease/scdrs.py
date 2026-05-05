@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.disease.scdrs — GPU-native scDRS cell-level disease relevance scoring.
+singlet.gpu.disease.scdrs — GPU-native scDRS cell-level disease relevance scoring.
 
 Underlying C++ cycle: cycle 50 (disease/scdrs.h —
-``singlet_gpu::disease::run_scdrs`` kernel).
+``singlet::gpu::disease::run_scdrs`` kernel).
 
 Reference: Zhang et al., "Polygenic enrichment distinguishes disease
 associations of individual cells in single-cell RNA-seq data," Nature Genetics 2022.
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 def _require_core():
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
     if not hasattr(_core, "disease") or not hasattr(_core.disease, "scdrs"):
         raise AttributeError(
             "_core.disease.scdrs is not available.  "
@@ -194,15 +194,15 @@ def run_from_anndata(
     - ``adata.uns['scdrs_disease_names']`` — list of disease names.
     - ``adata.uns['scdrs_params']``        — run parameters.
     """
-    import singlet_gpu
+    import singlet.gpu
 
     working = copy_module.copy(adata) if copy else adata
 
     mat = working.layers[layer] if layer is not None else working.X
-    if not isinstance(mat, singlet_gpu.DeviceCsc):
+    if not isinstance(mat, singlet.gpu.DeviceCsc):
         raise TypeError(
             "Expression matrix must be a DeviceCsc.  "
-            "Call singlet_gpu.load_pz() first."
+            "Call singlet.gpu.load_pz() first."
         )
 
     # Gene names for row mapping.

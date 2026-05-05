@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.streaming.pipeline — ``run_pipeline`` implementation.
+singlet.gpu.streaming.pipeline — ``run_pipeline`` implementation.
 
-Wraps ``singlet_gpu::streaming::StreamedPipeline`` (cycle 7,
+Wraps ``singlet::gpu::streaming::StreamedPipeline`` (cycle 7,
 ``streaming/streamed_pipeline.h``).
 
 The pipeline processes multiple .1pz inputs in column-major streaming
@@ -13,7 +13,7 @@ accumulate their state before emitting the consolidated result.
 
 Since the output spans multiple input files, this function does NOT
 return an AnnData.  It returns a ``PipelineResult`` whose fields
-mirror the C++ struct ``singlet_gpu::streaming::PipelineResult``.
+mirror the C++ struct ``singlet::gpu::streaming::PipelineResult``.
 
 CYCLE-21-FOLLOWUP-CYCLE-20-BINDING-EXTEND: ``_core.streaming_pipeline_run``
 is not yet exposed by the cycle-20 binding extension.  The wrapper is
@@ -297,7 +297,7 @@ def run_pipeline(
     --------
     Basic run (lognorm + HVG only)::
 
-        from singlet_gpu.streaming import run_pipeline
+        from singlet.gpu.streaming import run_pipeline
         result = run_pipeline(["GSM4037629/counts.1pz"])
         print(result.n_cells, result.n_hvg)
 
@@ -318,7 +318,7 @@ def run_pipeline(
     if chunk_cols < 1:
         raise ValueError(f"chunk_cols must be ≥1, got {chunk_cols!r}.")
 
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "streaming_pipeline_run"):
         raise AttributeError(

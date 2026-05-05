@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.tools.markers — GPU-native marker scoring and cell type annotation.
+singlet.gpu.tools.markers — GPU-native marker scoring and cell type annotation.
 
 Wraps:
-    ``singlet_gpu::anno::marker_score``   (cycle 12, ``anno/marker_score.h``)
-    ``singlet_gpu::anno::celltypist_project`` (cycle 12, ``anno/reference_map.h``)
+    ``singlet::gpu::anno::marker_score``   (cycle 12, ``anno/marker_score.h``)
+    ``singlet::gpu::anno::celltypist_project`` (cycle 12, ``anno/reference_map.h``)
 
 Exposes two public functions:
 
@@ -179,7 +179,7 @@ def score_genes(
     --------
     Score a T-cell marker set::
 
-        import singlet_gpu.tools as sgt
+        import singlet.gpu.tools as sgt
         sgt.score_genes(adata, ['CD3D', 'CD3E', 'CD3G'], score_name='T_score')
         print(adata.obs['T_score'].describe())
 
@@ -187,14 +187,14 @@ def score_genes(
 
         sgt.score_genes(adata, tcell_markers, method='ucell', score_name='ucell_T')
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "marker_score"):
         raise AttributeError(
             "_core.marker_score is not available.  "
             "See CYCLE-21-FOLLOWUP-CYCLE-20-BINDING-EXTEND — the cycle-20 "
             "pybind11 binding extension must expose marker_score before "
-            "singlet_gpu.tools.score_genes() is callable."
+            "singlet.gpu.tools.score_genes() is callable."
         )
 
     working = copy_module.copy(adata) if copy else adata
@@ -256,12 +256,12 @@ def celltypist_predict(
     """
     Reference-based cell type prediction via GPU CellTypist projection.
 
-    Wraps ``singlet_gpu::anno::celltypist_project`` (cycle 12,
+    Wraps ``singlet::gpu::anno::celltypist_project`` (cycle 12,
     ``anno/reference_map.h``).
 
     Follows the CellTypist Python API (``celltypist.annotate(adata, model=...)``):
 
-        import singlet_gpu.tools as sgt
+        import singlet.gpu.tools as sgt
         sgt.celltypist_predict(adata, 'Immune_All_High.pkl')
 
     Parameters
@@ -339,7 +339,7 @@ def celltypist_predict(
     --------
     Predict cell types with a CellTypist Immune model::
 
-        import singlet_gpu.tools as sgt
+        import singlet.gpu.tools as sgt
         sgt.celltypist_predict(adata, 'models/Immune_All_High.pkl')
         print(adata.obs['celltypist'].value_counts())
 
@@ -352,14 +352,14 @@ def celltypist_predict(
             over_clustering='leiden',
         )
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "celltypist_project"):
         raise AttributeError(
             "_core.celltypist_project is not available.  "
             "See CYCLE-21-FOLLOWUP-CYCLE-20-BINDING-EXTEND — the cycle-20 "
             "pybind11 binding extension must expose celltypist_project before "
-            "singlet_gpu.tools.celltypist_predict() is callable."
+            "singlet.gpu.tools.celltypist_predict() is callable."
         )
 
     import pandas as pd

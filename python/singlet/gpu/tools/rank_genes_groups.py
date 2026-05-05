@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.tools.rank_genes_groups — GPU-native differential expression.
+singlet.gpu.tools.rank_genes_groups — GPU-native differential expression.
 
 Wraps:
-    ``singlet_gpu::de::wilcoxon``  (cycle 11, ``de/wilcoxon.h``)
-    ``singlet_gpu::de::ttest``     (cycle 11, ``de/ttest.h``)
+    ``singlet::gpu::de::wilcoxon``  (cycle 11, ``de/wilcoxon.h``)
+    ``singlet::gpu::de::ttest``     (cycle 11, ``de/ttest.h``)
 
 Drop-in replacement for ``sc.tl.rank_genes_groups``.  All parameter
 names and defaults match the scanpy 1.10 signature verified by the
 cycle-19 code-reader:
 
-    import singlet_gpu.tools as sgt
+    import singlet.gpu.tools as sgt
     sgt.rank_genes_groups(adata, 'leiden')
 
 Result location (matches scanpy):
@@ -290,7 +290,7 @@ def rank_genes_groups(
     --------
     Wilcoxon DE for Leiden clusters::
 
-        import singlet_gpu.tools as sgt
+        import singlet.gpu.tools as sgt
         sgt.rank_genes_groups(adata, 'leiden')
         # result in adata.uns['rank_genes_groups']
 
@@ -306,7 +306,7 @@ def rank_genes_groups(
     if groupby not in adata.obs.columns:
         raise KeyError(f"groupby='{groupby}' not found in adata.obs.")
 
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
     import warnings
 
     # Map 'logreg' to wilcoxon with a warning (not yet implemented).
@@ -334,7 +334,7 @@ def rank_genes_groups(
             "_core.wilcoxon_de is not available.  "
             "See CYCLE-21-FOLLOWUP-CYCLE-20-BINDING-EXTEND — the cycle-20 "
             "pybind11 binding extension must expose wilcoxon_de before "
-            "singlet_gpu.tools.rank_genes_groups() can run Wilcoxon DE."
+            "singlet.gpu.tools.rank_genes_groups() can run Wilcoxon DE."
         )
 
     if use_ttest and not hasattr(_core, "ttest_de"):
@@ -342,7 +342,7 @@ def rank_genes_groups(
             "_core.ttest_de is not available.  "
             "See CYCLE-21-FOLLOWUP-CYCLE-20-BINDING-EXTEND — the cycle-20 "
             "pybind11 binding extension must expose ttest_de before "
-            "singlet_gpu.tools.rank_genes_groups() can run t-test DE."
+            "singlet.gpu.tools.rank_genes_groups() can run t-test DE."
         )
 
     working = copy_module.copy(adata) if copy else adata

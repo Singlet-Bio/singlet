@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.spatial.flash_deconv — GPU-native spatial deconvolution.
+singlet.gpu.spatial.flash_deconv — GPU-native spatial deconvolution.
 
 Underlying C++: cycle 33, ``spatial/flash_deconv.h``.
 Algorithm: leverage-score sketching + ADMM (FlashDeconv, bioRxiv 2026).
@@ -79,7 +79,7 @@ def run_flash_deconv(
     -------
     None or AnnData
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "flash_deconv"):
         raise AttributeError(
@@ -109,7 +109,7 @@ def run_flash_deconv(
         rc = _to_device_csc(adata_reference.X.T) # genes × cells
     except ImportError as e:
         raise ImportError(
-            "singlet_gpu.spatial.run_flash_deconv requires cupy.  "
+            "singlet.gpu.spatial.run_flash_deconv requires cupy.  "
             f"Original error: {e}"
         )
 

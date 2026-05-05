@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.network.hdwgcna — GPU-native hdWGCNA co-expression network analysis.
+singlet.gpu.network.hdwgcna — GPU-native hdWGCNA co-expression network analysis.
 
 Underlying C++ cycle: cycle 46 (network/hdwgcna.h —
-``singlet_gpu::network::run_hdwgcna`` kernel).
+``singlet::gpu::network::run_hdwgcna`` kernel).
 
 Reference: Morabito et al., "hdWGCNA identifies co-expression networks in
 high-dimensional transcriptomics data," Cell Reports Methods 2023.
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 def _require_core():
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
     if not hasattr(_core, "network") or not hasattr(_core.network, "hdwgcna"):
         raise AttributeError(
             "_core.network.hdwgcna is not available.  "
@@ -156,15 +156,15 @@ def run_from_anndata(
     - ``adata.uns['hdwgcna_hub_genes']``— {module_id: [gene_idx, ...]}.
     - ``adata.uns['hdwgcna_params']``   — run parameters.
     """
-    import singlet_gpu
+    import singlet.gpu
 
     working = copy_module.copy(adata) if copy else adata
 
     mat = working.layers[layer] if layer is not None else working.X
-    if not isinstance(mat, singlet_gpu.DeviceCsc):
+    if not isinstance(mat, singlet.gpu.DeviceCsc):
         raise TypeError(
             "Expression matrix must be a DeviceCsc.  "
-            "Call singlet_gpu.load_pz() first."
+            "Call singlet.gpu.load_pz() first."
         )
 
     result = run_from_csc(

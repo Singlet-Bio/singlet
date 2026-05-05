@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.tools.umap — GPU-native UMAP dimensionality reduction.
+singlet.gpu.tools.umap — GPU-native UMAP dimensionality reduction.
 
-Wraps ``singlet_gpu::embed::umap`` (cycle 10, ``embed/umap.h``).
+Wraps ``singlet::gpu::embed::umap`` (cycle 10, ``embed/umap.h``).
 
 Drop-in replacement for ``sc.tl.umap``.  All parameter names and
 defaults match the scanpy 1.10 signature verified by the cycle-19
@@ -63,7 +63,7 @@ def _get_neighbors_data(
     if neighbors_key not in adata.uns:
         raise KeyError(
             f"Neighbors key '{neighbors_key}' not found in adata.uns.  "
-            "Run singlet_gpu.pp.neighbors() (or sc.pp.neighbors()) first."
+            "Run singlet.gpu.pp.neighbors() (or sc.pp.neighbors()) first."
         )
 
     nbrs = adata.uns[neighbors_key]
@@ -73,12 +73,12 @@ def _get_neighbors_data(
     if dist_key not in adata.obsp:
         raise KeyError(
             f"Distances key '{dist_key}' not found in adata.obsp.  "
-            "Run singlet_gpu.pp.neighbors() first."
+            "Run singlet.gpu.pp.neighbors() first."
         )
     if conn_key not in adata.obsp:
         raise KeyError(
             f"Connectivities key '{conn_key}' not found in adata.obsp.  "
-            "Run singlet_gpu.pp.neighbors() first."
+            "Run singlet.gpu.pp.neighbors() first."
         )
 
     return adata.obsp[dist_key], adata.obsp[conn_key]
@@ -121,7 +121,7 @@ def umap(
     ----------
     adata : AnnData
         Must contain a precomputed kNN graph in ``adata.obsp`` and
-        ``adata.uns[neighbors_key]`` (from ``singlet_gpu.pp.neighbors``
+        ``adata.uns[neighbors_key]`` (from ``singlet.gpu.pp.neighbors``
         or ``sc.pp.neighbors``).
     min_dist : float, default 0.5
         Minimum distance between embedded points.  Controls compactness
@@ -200,7 +200,7 @@ def umap(
     --------
     Default UMAP (2D, random init)::
 
-        import singlet_gpu.tools as sgt
+        import singlet.gpu.tools as sgt
         sgt.umap(adata)
         print(adata.obsm['X_umap'].shape)  # (n_cells, 2)
 
@@ -213,14 +213,14 @@ def umap(
     if n_components < 2:
         raise ValueError(f"n_components must be ≥2, got {n_components!r}.")
 
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "umap_embed"):
         raise AttributeError(
             "_core.umap_embed is not available.  "
             "See CYCLE-21-FOLLOWUP-CYCLE-20-BINDING-EXTEND — the cycle-20 "
             "pybind11 binding extension must expose umap_embed before "
-            "singlet_gpu.tools.umap() is callable."
+            "singlet.gpu.tools.umap() is callable."
         )
 
     working = copy_module.copy(adata) if copy else adata
@@ -231,7 +231,7 @@ def umap(
     if neighbors_key not in working.uns or "_knn_result" not in working.uns[neighbors_key]:
         raise KeyError(
             f"No cached KnnResult found in adata.uns['{neighbors_key}']['_knn_result']. "
-            "Call singlet_gpu.pp.neighbors() before singlet_gpu.tools.umap()."
+            "Call singlet.gpu.pp.neighbors() before singlet.gpu.tools.umap()."
         )
     knn_result = working.uns[neighbors_key]["_knn_result"]
 

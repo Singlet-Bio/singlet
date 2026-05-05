@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.integrate — GPU-native batch integration methods.
+singlet.gpu.integrate — GPU-native batch integration methods.
 
 Exposes:
     harmony_integrate — GPU Harmony integration (drop-in for sc.external.pp.harmony_integrate).

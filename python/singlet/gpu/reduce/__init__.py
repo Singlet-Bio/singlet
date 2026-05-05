@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.reduce — GPU-native dimensionality reduction.
+singlet.gpu.reduce — GPU-native dimensionality reduction.
 
 Public API
 ----------
@@ -16,7 +16,7 @@ nmf_chunked          — out-of-core streaming NMF                    (cycle 6)
 nmf_graph_factorize  — multi-modal joint NMF via FactorGraph        (cycle 6)
 """
 
-from singlet_gpu.reduce.svd import (
+from singlet.gpu.reduce.svd import (
     pca,
     svd_lanczos,
     svd_irlba,
@@ -24,7 +24,7 @@ from singlet_gpu.reduce.svd import (
     svd_krylov,
     svd_deflation,
 )
-from singlet_gpu.reduce.nmf import (
+from singlet.gpu.reduce.nmf import (
     nmf,
     nmf_chunked,
     nmf_graph_factorize,

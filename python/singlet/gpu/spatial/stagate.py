@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.spatial.stagate — GPU-native spatial domain segmentation.
+singlet.gpu.spatial.stagate — GPU-native spatial domain segmentation.
 
 Underlying C++: cycle 29, ``spatial/stagate.h``.
 Algorithm: GAT autoencoder + Leiden clustering (Dong & Zhang, Nat Commun 2022).
@@ -66,7 +66,7 @@ def run_stagate(
     -------
     None or AnnData
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "stagate"):
         raise AttributeError(
@@ -103,7 +103,7 @@ def run_stagate(
 
     except ImportError as e:
         raise ImportError(
-            "singlet_gpu.spatial.run_stagate requires cupy.  "
+            "singlet.gpu.spatial.run_stagate requires cupy.  "
             f"Original error: {e}"
         )
 

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.atac — GPU-native ATAC-seq analysis.
+singlet.gpu.atac — GPU-native ATAC-seq analysis.
 
 Exposes:
     chromvar.compute — chromVAR motif enrichment scoring (cycle 34).

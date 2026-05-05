@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.enrichment.gsea — GPU-native preranked GSEA.
+singlet.gpu.enrichment.gsea — GPU-native preranked GSEA.
 
 Underlying C++ cycle: cycle 13 (gsea/fgsea.h —
-``singlet_gpu::gsea::fgsea`` kernel).
+``singlet::gpu::gsea::fgsea`` kernel).
 
 decoupleR-compatible API
 -------------------------
@@ -204,7 +204,7 @@ def run_gsea(
     --------
     AnnData mode::
 
-        import singlet_gpu.enrichment as sge
+        import singlet.gpu.enrichment as sge
         sge.run_gsea(adata, net)
         print(adata.obs.filter(like='gsea_norm_es_').head())
 
@@ -227,14 +227,14 @@ def run_gsea(
             "Check min_n or the target column."
         )
 
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "fgsea"):
         raise AttributeError(
             "_core.fgsea is not available.  "
             "See CYCLE-23-FOLLOWUP-CYCLE-22-BINDING-EXPOSE — the cycle-22 "
             "pybind11 binding extension must expose fgsea before "
-            "singlet_gpu.enrichment.run_gsea() is callable."
+            "singlet.gpu.enrichment.run_gsea() is callable."
         )
 
     # ---- AnnData mode -------------------------------------------------------

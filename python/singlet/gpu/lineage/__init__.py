@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.lineage — GPU-native mitochondrial lineage tracing.
+singlet.gpu.lineage — GPU-native mitochondrial lineage tracing.
 
 Exposes:
     detect_clones — MT heteroplasmy clone calling (NEW, no scanpy/MQuad equivalent).
 
 Underlying C++ cycle: cycle 16 (anno/mt_lineage.h —
-``singlet_gpu::anno::mt_lineage_call_clones`` kernel).
+``singlet::gpu::anno::mt_lineage_call_clones`` kernel).
 
 This module exploits the ``mt_alleles.1pz`` singlify output — a (MT sites ×
 cells) matrix of per-site heteroplasmy counts — that no other framework reads

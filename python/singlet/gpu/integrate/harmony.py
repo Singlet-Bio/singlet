@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.integrate.harmony — GPU-native Harmony batch integration.
+singlet.gpu.integrate.harmony — GPU-native Harmony batch integration.
 
 Underlying C++ cycle: cycle 14 (integrate/harmony.h —
-``singlet_gpu::integrate::harmony`` kernel).
+``singlet::gpu::integrate::harmony`` kernel).
 
 Drop-in for ``sc.external.pp.harmony_integrate``.  All parameter names and
 defaults match the harmonypy / scanpy 1.10 external API.  The GPU kernel
@@ -47,7 +47,7 @@ def _get_embedding(
         raise KeyError(
             f"Embedding key '{basis}' not found in adata.obsm.  "
             f"Available keys: {list(adata.obsm.keys())}.  "
-            "Run sc.pp.pca() or singlet_gpu.reduce.svd() first."
+            "Run sc.pp.pca() or singlet.gpu.reduce.svd() first."
         )
     emb = adata.obsm[basis]
     try:
@@ -173,7 +173,7 @@ def harmony_integrate(
     --------
     Single batch key::
 
-        import singlet_gpu.integrate as sgi
+        import singlet.gpu.integrate as sgi
         sgi.harmony_integrate(adata, key="batch")
 
     Multiple batch keys::
@@ -184,14 +184,14 @@ def harmony_integrate(
 
         print(adata.obsm['X_pca_harmony'].shape)  # (n_cells, n_pcs)
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "harmony"):
         raise AttributeError(
             "_core.harmony is not available.  "
             "See CYCLE-23-FOLLOWUP-CYCLE-22-BINDING-EXPOSE — the cycle-22 "
             "pybind11 binding extension must expose harmony before "
-            "singlet_gpu.integrate.harmony_integrate() is callable."
+            "singlet.gpu.integrate.harmony_integrate() is callable."
         )
 
     working = copy_module.copy(adata) if copy else adata

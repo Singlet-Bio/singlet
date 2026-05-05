@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.io.donor — helpers for loading singlify donor assignment outputs.
+singlet.gpu.io.donor — helpers for loading singlify donor assignment outputs.
 
 Singlify writes ``donor_assignments.tsv`` for samples processed with
 ``--snps`` + ``--pipeline``.  This module provides a convenience loader
 that returns a ``pd.Series`` indexed by cell barcode, ready to assign to
 ``adata.obs['donor_id']`` before calling
-``singlet_gpu.de.pseudobulk_de``.
+``singlet.gpu.de.pseudobulk_de``.
 
 TSV schema (singlify donor_assignments.tsv)
 -------------------------------------------
@@ -88,7 +88,7 @@ def load_donor_assignments(
     --------
     Basic load::
 
-        from singlet_gpu.io.donor import load_donor_assignments
+        from singlet.gpu.io.donor import load_donor_assignments
         donor_series = load_donor_assignments(
             "/path/to/GSM4037629/donor_assignments.tsv"
         )

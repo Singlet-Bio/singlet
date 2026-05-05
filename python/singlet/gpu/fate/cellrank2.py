@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.fate.cellrank2 — GPU-native CellRank 2 absorption probability solver.
+singlet.gpu.fate.cellrank2 — GPU-native CellRank 2 absorption probability solver.
 
 Underlying C++ cycle: cycle 43 (fate/cellrank2.h —
-``singlet_gpu::fate::run_cellrank2`` kernel).
+``singlet::gpu::fate::run_cellrank2`` kernel).
 
 Reference: Weiler et al., "CellRank 2: unified fate mapping in multiview
 single-cell data," Nature Methods 2024.
@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 def _require_core():
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
     if not hasattr(_core, "fate") or not hasattr(_core.fate, "cellrank2"):
         raise AttributeError(
             "_core.fate.cellrank2 is not available.  "

@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.comm.cellchat — GPU-native CellChat cell communication scoring.
+singlet.gpu.comm.cellchat — GPU-native CellChat cell communication scoring.
 
 Underlying C++ cycle: cycle 37 (comm/cellchat.h —
-``singlet_gpu::comm::run_cellchat`` kernel).
+``singlet::gpu::comm::run_cellchat`` kernel).
 
 Reference: Jin et al., "Inference and analysis of cell-cell communication
 using CellChat," Nature Communications 2021.
@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 def _require_core():
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
     if not hasattr(_core, "comm") or not hasattr(_core.comm, "cellchat"):
         raise AttributeError(
             "_core.comm.cellchat is not available.  "
@@ -166,14 +166,14 @@ def run_from_anndata(
     - ``cell_types``       — ordered list of cell-type labels.
     - ``params``           — run parameters dict.
     """
-    import singlet_gpu
+    import singlet.gpu
 
     working = copy_module.copy(adata) if copy else adata
 
-    if not isinstance(working.X, singlet_gpu.DeviceCsc):
+    if not isinstance(working.X, singlet.gpu.DeviceCsc):
         raise TypeError(
             "adata.X must be a DeviceCsc.  "
-            "Call singlet_gpu.load_pz() first."
+            "Call singlet.gpu.load_pz() first."
         )
     if cell_type_key not in working.obs.columns:
         raise KeyError(

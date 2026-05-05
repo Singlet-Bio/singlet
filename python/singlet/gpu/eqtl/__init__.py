@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.eqtl — GPU-native single-cell eQTL mapping.
+singlet.gpu.eqtl — GPU-native single-cell eQTL mapping.
 
 Exposes:
     nebula.run — NEBULA NB mixed-model eQTL mapping (cycle 38).

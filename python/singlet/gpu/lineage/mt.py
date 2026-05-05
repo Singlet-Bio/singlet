@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.lineage.mt — GPU-native MT heteroplasmy clone detection.
+singlet.gpu.lineage.mt — GPU-native MT heteroplasmy clone detection.
 
 Underlying C++ cycle: cycle 16 (anno/mt_lineage.h —
-``singlet_gpu::anno::mt_lineage_call_clones`` kernel).
+``singlet::gpu::anno::mt_lineage_call_clones`` kernel).
 
 This is a NEW addition to the single-cell ecosystem.  scanpy, Seurat, and
 MQuad do not expose an AnnData-native MT clone calling interface that
@@ -182,7 +182,7 @@ def detect_clones(
     --------
     Default clone detection::
 
-        import singlet_gpu.lineage as sgl
+        import singlet.gpu.lineage as sgl
         sgl.detect_clones(adata)
         print(adata.obs['mt_clone_id'].value_counts())
         print(adata.obsm['mt_heteroplasmy'].shape)
@@ -198,14 +198,14 @@ def detect_clones(
             f"min_K ({min_K!r}) must be ≤ max_K ({max_K!r})."
         )
 
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "mt_lineage_call_clones"):
         raise AttributeError(
             "_core.mt_lineage_call_clones is not available.  "
             "See CYCLE-23-FOLLOWUP-CYCLE-22-BINDING-EXPOSE — the cycle-22 "
             "pybind11 binding extension must expose mt_lineage_call_clones "
-            "before singlet_gpu.lineage.detect_clones() is callable."
+            "before singlet.gpu.lineage.detect_clones() is callable."
         )
 
     working = copy_module.copy(adata) if copy else adata

@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.qc.omnidoublet — Multimodal CITE-seq doublet detection.
+singlet.gpu.qc.omnidoublet — Multimodal CITE-seq doublet detection.
 
 Underlying C++: cycle 39, ``qc/omnidoublet.h``.
 Algorithm: joint RNA+ADT PCA embedding + logistic IRLS classifier
            (OmniDoublet, Briefings in Bioinformatics 2024).
 
-For RNA-only datasets use ``singlet_gpu.qc.doublet_score.run_doublet_score``.
+For RNA-only datasets use ``singlet.gpu.qc.doublet_score.run_doublet_score``.
 
 API
 ---
@@ -79,7 +79,7 @@ def run_omni_doublet(
     -------
     None or AnnData
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "omni_doublet"):
         raise AttributeError(
@@ -118,7 +118,7 @@ def run_omni_doublet(
         d_adt = csp.csc_matrix(X_adt) if sp.issparse(X_adt) else csp.csc_matrix(cp.array(X_adt))
     except ImportError as e:
         raise ImportError(
-            "singlet_gpu.qc.run_omni_doublet requires cupy.  "
+            "singlet.gpu.qc.run_omni_doublet requires cupy.  "
             f"Original error: {e}"
         )
 

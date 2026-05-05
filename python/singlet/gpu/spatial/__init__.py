@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.spatial — GPU-native spatial analysis.
+singlet.gpu.spatial — GPU-native spatial analysis.
 
 Exposes:
     flash_deconv.run_flash_deconv — atlas-scale spatial deconvolution (cycle 33)

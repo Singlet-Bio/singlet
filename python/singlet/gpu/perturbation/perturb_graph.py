@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.perturbation.perturb_graph — GPU-native CPA perturbation autoencoder.
+singlet.gpu.perturbation.perturb_graph — GPU-native CPA perturbation autoencoder.
 
 Underlying C++: cycle 32, ``perturbation/perturb_graph.h``.
 Algorithm: Compositional Perturbation Autoencoder (Lotfollahi et al., Nat Methods 2023).
@@ -107,7 +107,7 @@ class PerturbGraphModel:
             mat = csp.csc_matrix(X) if sp.issparse(X) else csp.csc_matrix(cp.array(X))
         except ImportError as e:
             raise ImportError(
-                "singlet_gpu.perturbation.perturb_graph requires cupy.  "
+                "singlet.gpu.perturbation.perturb_graph requires cupy.  "
                 f"Original error: {e}"
             )
 
@@ -155,7 +155,7 @@ def fit(
     -------
     PerturbGraphModel
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "train_perturb_graph"):
         raise AttributeError(
@@ -177,7 +177,7 @@ def fit(
         mat = csp.csc_matrix(X) if sp.issparse(X) else csp.csc_matrix(cp.array(X))
     except ImportError as e:
         raise ImportError(
-            "singlet_gpu.perturbation.perturb_graph.fit requires cupy.  "
+            "singlet.gpu.perturbation.perturb_graph.fit requires cupy.  "
             f"Original error: {e}"
         )
 

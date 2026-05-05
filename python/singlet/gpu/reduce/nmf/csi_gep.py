@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.reduce.nmf.csi_gep — Consensus NMF gene expression programs.
+singlet.gpu.reduce.nmf.csi_gep — Consensus NMF gene expression programs.
 
 Underlying C++: cycle 28, ``reduce/nmf/csi_gep.h``.
 Algorithm: bootstrap NMF + spherical k-means + elbow auto-rank
@@ -46,7 +46,7 @@ def run_csi_gep(
     ----------
     adata : AnnData
         ``adata.X`` is cells × genes (raw counts recommended).
-        Must have been loaded via ``singlet_gpu.io.load_pz`` (host-pinned CSC).
+        Must have been loaded via ``singlet.gpu.io.load_pz`` (host-pinned CSC).
     k_range : list[int] or None
         Ranks to evaluate.  Default: [5, 10, 15, 20, 25, 30].
     n_runs : int
@@ -69,7 +69,7 @@ def run_csi_gep(
     -------
     None or AnnData
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "csi_gep"):
         raise AttributeError(
@@ -96,7 +96,7 @@ def run_csi_gep(
         device_mat = csp.csc_matrix(X) if sp.issparse(X) else csp.csc_matrix(cp.array(X))
     except ImportError as e:
         raise ImportError(
-            "singlet_gpu.reduce.nmf.run_csi_gep requires cupy.  "
+            "singlet.gpu.reduce.nmf.run_csi_gep requires cupy.  "
             f"Original error: {e}"
         )
 

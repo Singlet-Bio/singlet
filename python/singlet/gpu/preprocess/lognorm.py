@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.preprocess.lognorm — GPU-native total-count normalisation + log1p.
+singlet.gpu.preprocess.lognorm — GPU-native total-count normalisation + log1p.
 
 Underlying C++ cycle: cycle 3 (preprocess/lognorm.h —
-``singlet_gpu::preprocess::log_normalize`` fused kernel).
+``singlet::gpu::preprocess::log_normalize`` fused kernel).
 
 Both functions mirror the scanpy.pp.normalize_total / scanpy.pp.log1p
 signatures exactly so they can be used as drop-in replacements:
 
-    import singlet_gpu.preprocess as sgpp
+    import singlet.gpu.preprocess as sgpp
     sgpp.normalize_total(adata)     # instead of sc.pp.normalize_total(adata)
     sgpp.log1p(adata)               # instead of sc.pp.log1p(adata)
 
@@ -19,7 +19,7 @@ GPU execution path
    AnnData was loaded via ``read_pz_to_anndata``.
 2. Convert CSR → CSC if needed (``_csr_to_device_csc``) so the C++ kernel
    can accept a column-major sparse input.
-3. Call ``singlet_gpu._core.normalize_total`` / ``_core.log1p`` on the
+3. Call ``singlet.gpu._core.normalize_total`` / ``_core.log1p`` on the
    ``DeviceCSC`` — no host copies in the hot path.
 4. Convert the result ``DeviceCSC`` back to ``cupy.sparse.csr_matrix`` via
    the ``__cuda_array_interface__`` protocol.
@@ -64,7 +64,7 @@ def _set_matrix(adata: "anndata.AnnData", layer: Optional[str], mat) -> None:
 
 def _csr_to_device_csc(csr_mat):
     """
-    Convert a cupy.sparse.csr_matrix to a singlet_gpu.DeviceCsc.
+    Convert a cupy.sparse.csr_matrix to a singlet.gpu.DeviceCsc.
 
     Requires ``_core.from_cupy_csr`` (CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE).
 
@@ -78,9 +78,9 @@ def _csr_to_device_csc(csr_mat):
 
     Returns
     -------
-    singlet_gpu.DeviceCsc   (genes × cells — C++ kernel convention)
+    singlet.gpu.DeviceCsc   (genes × cells — C++ kernel convention)
     """
-    import singlet_gpu._core as _core  # noqa: F401  (will AttributeError if not built)
+    import singlet.gpu._core as _core  # noqa: F401  (will AttributeError if not built)
 
     if not hasattr(_core, "from_cupy_csr"):
         raise AttributeError(
@@ -108,7 +108,7 @@ def _csr_to_device_csc(csr_mat):
 
 def _device_csc_to_csr(device_csc):
     """
-    Convert a singlet_gpu.DeviceCsc back to a cupy.sparse.csr_matrix.
+    Convert a singlet.gpu.DeviceCsc back to a cupy.sparse.csr_matrix.
 
     Requires ``_core.to_cupy_csr`` (CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE).
 
@@ -117,13 +117,13 @@ def _device_csc_to_csr(device_csc):
 
     Parameters
     ----------
-    device_csc : singlet_gpu.DeviceCsc  (genes × cells)
+    device_csc : singlet.gpu.DeviceCsc  (genes × cells)
 
     Returns
     -------
     cupy.sparse.csr_matrix  (cells × genes — AnnData convention)
     """
-    import singlet_gpu._core as _core  # noqa: F401
+    import singlet.gpu._core as _core  # noqa: F401
     import cupy as cp
     try:
         import cupyx.scipy.sparse as csp  # cupy >= 14
@@ -253,7 +253,7 @@ def normalize_total(
     --------
     In-place (default, matches scanpy)::
 
-        import singlet_gpu.preprocess as sgpp
+        import singlet.gpu.preprocess as sgpp
         sgpp.normalize_total(adata)                 # target_sum = median
 
     With explicit target::
@@ -264,7 +264,7 @@ def normalize_total(
 
         sgpp.normalize_total(adata, layer="raw_counts")
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "normalize_total"):
         raise AttributeError(
@@ -345,14 +345,14 @@ def log1p(
     --------
     Natural log1p (default, matches scanpy)::
 
-        import singlet_gpu.preprocess as sgpp
+        import singlet.gpu.preprocess as sgpp
         sgpp.log1p(adata)
 
     Base-2 log1p::
 
         sgpp.log1p(adata, base=2)
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "log1p"):
         raise AttributeError(

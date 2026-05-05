@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.generative.discrete_diffusion — D3PM generative model for scRNA-seq.
+singlet.gpu.generative.discrete_diffusion — D3PM generative model for scRNA-seq.
 
 Underlying C++: cycle 30, ``generative/discrete_diffusion.h``.
 Algorithm: Absorbing-state discrete diffusion over log2-tokenized counts
@@ -70,7 +70,7 @@ class DiscreteDiffusionWrapper:
         -------
         DiscreteDiffusionWrapper
         """
-        import singlet_gpu._core as _core
+        import singlet.gpu._core as _core
         with open(path, "rb") as f:
             d = pickle.load(f)
         # Reconstruct a Python-level result; C++ side not needed for sampling
@@ -134,7 +134,7 @@ def train(
     -------
     DiscreteDiffusionWrapper
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "train_discrete_diffusion"):
         raise AttributeError(
@@ -156,7 +156,7 @@ def train(
         mat = csp.csc_matrix(X) if sp.issparse(X) else csp.csc_matrix(cp.array(X))
     except ImportError as e:
         raise ImportError(
-            "singlet_gpu.generative.discrete_diffusion.train requires cupy.  "
+            "singlet.gpu.generative.discrete_diffusion.train requires cupy.  "
             f"Original error: {e}"
         )
 
@@ -202,7 +202,7 @@ def sample(
     numpy.ndarray
         [n_samples × n_genes] float32 synthetic expression matrix.
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
     import cupy as cp
 
     if not hasattr(_core, "sample_discrete_diffusion"):

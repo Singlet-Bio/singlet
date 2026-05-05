@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.enrichment.aucell — GPU-native AUCell gene-set scoring.
+singlet.gpu.enrichment.aucell — GPU-native AUCell gene-set scoring.
 
 Underlying C++ cycle: cycle 13 (gsea/aucell.h —
-``singlet_gpu::gsea::aucell`` kernel).
+``singlet::gpu::gsea::aucell`` kernel).
 
 decoupleR-compatible API
 -------------------------
@@ -178,7 +178,7 @@ def run_aucell(
     --------
     Default AUCell::
 
-        import singlet_gpu.enrichment as sge
+        import singlet.gpu.enrichment as sge
         sge.run_aucell(adata, net)
         print(adata.obsm['X_aucell'].shape)  # (n_cells, n_sets)
 
@@ -197,14 +197,14 @@ def run_aucell(
             "Check min_n or the target column."
         )
 
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "aucell"):
         raise AttributeError(
             "_core.aucell is not available.  "
             "See CYCLE-23-FOLLOWUP-CYCLE-22-BINDING-EXPOSE — the cycle-22 "
             "pybind11 binding extension must expose aucell before "
-            "singlet_gpu.enrichment.run_aucell() is callable."
+            "singlet.gpu.enrichment.run_aucell() is callable."
         )
 
     set_names = list(genesets.keys())

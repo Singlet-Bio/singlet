@@ -1,22 +1,22 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.preprocess.hvg — GPU-native highly variable gene selection.
+singlet.gpu.preprocess.hvg — GPU-native highly variable gene selection.
 
 Underlying C++ cycle: cycle 4 (preprocess/hvg.h —
-``singlet_gpu::preprocess::select_hvg`` two-pass Welford kernel with
+``singlet::gpu::preprocess::select_hvg`` two-pass Welford kernel with
 Pearson residuals and seurat_v3 variance-stabilization flavors).
 
 This wrapper mirrors ``scanpy.pp.highly_variable_genes`` exactly —
 parameter names and defaults are identical so it is a drop-in replacement:
 
-    import singlet_gpu.preprocess as sgpp
+    import singlet.gpu.preprocess as sgpp
     sgpp.highly_variable_genes(adata, n_top_genes=2000)
 
 GPU execution path
 ------------------
 1. Extract ``adata.X`` (or ``adata.layers[layer]``) as a
    ``cupy.sparse.csr_matrix``.
-2. Convert CSR → CSC and wrap in a ``singlet_gpu.DeviceCsc`` via
+2. Convert CSR → CSC and wrap in a ``singlet.gpu.DeviceCsc`` via
    ``_core.from_cupy_csr`` (CSC is the natural layout for per-gene stats).
 3. Call ``_core.highly_variable_genes`` which runs the two-pass Welford
    variance calculation entirely on device (fp32 values, fp64 accumulator
@@ -55,12 +55,12 @@ def _get_matrix(adata: "anndata.AnnData", layer: Optional[str]):
 
 def _csr_to_device_csc(csr_mat):
     """
-    Convert a ``cupy.sparse.csr_matrix`` to a ``singlet_gpu.DeviceCsc``.
+    Convert a ``cupy.sparse.csr_matrix`` to a ``singlet.gpu.DeviceCsc``.
 
     Requires ``_core.from_cupy_csr``
     (CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE).
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "from_cupy_csr"):
         raise AttributeError(
@@ -97,7 +97,7 @@ def highly_variable_genes(
 ) -> Optional["anndata.AnnData"]:
     """
     Select highly variable genes using a GPU-native two-pass Welford kernel
-    (cycle-4, ``singlet_gpu::preprocess::select_hvg``).
+    (cycle-4, ``singlet::gpu::preprocess::select_hvg``).
 
     Mirrors ``scanpy.pp.highly_variable_genes`` exactly — parameter names
     and defaults are identical so this function is a drop-in replacement.
@@ -164,7 +164,7 @@ def highly_variable_genes(
     --------
     Default (seurat_v3, top 2000 genes)::
 
-        import singlet_gpu.preprocess as sgpp
+        import singlet.gpu.preprocess as sgpp
         sgpp.highly_variable_genes(adata)
 
     Pearson residuals::
@@ -182,7 +182,7 @@ def highly_variable_genes(
             f"Choose one of: {_VALID_FLAVORS}"
         )
 
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
     import numpy as np  # small host transfer for per-gene stats
 
     if not hasattr(_core, "highly_variable_genes"):

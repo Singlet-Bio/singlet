@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.tools.leiden — GPU-native Leiden community detection.
+singlet.gpu.tools.leiden — GPU-native Leiden community detection.
 
-Wraps ``singlet_gpu::graph::leiden`` (cycle 9, ``graph/leiden.h``).
+Wraps ``singlet::gpu::graph::leiden`` (cycle 9, ``graph/leiden.h``).
 
 Drop-in replacement for ``sc.tl.leiden``.  All parameter names and
 defaults match the scanpy 1.10 signature verified by the cycle-19
 code-reader:
 
-    import singlet_gpu.tools as sgt
+    import singlet.gpu.tools as sgt
     sgt.leiden(adata, resolution=0.5)   # instead of sc.tl.leiden(adata, 0.5)
 
 Result location (matches scanpy):
@@ -89,7 +89,7 @@ def _get_connectivities(
     if conn_key not in adata.obsp:
         raise KeyError(
             f"Connectivities key '{conn_key}' not found in adata.obsp. "
-            "Run singlet_gpu.pp.neighbors() (or sc.pp.neighbors()) first."
+            "Run singlet.gpu.pp.neighbors() (or sc.pp.neighbors()) first."
         )
     return adata.obsp[conn_key]
 
@@ -127,7 +127,7 @@ def leiden(
     Parameters
     ----------
     adata : AnnData
-        Must contain a connectivities matrix (from ``singlet_gpu.pp.neighbors``
+        Must contain a connectivities matrix (from ``singlet.gpu.pp.neighbors``
         or ``sc.pp.neighbors``).
     resolution : float, default 1
         Resolution parameter controlling partition granularity.  Higher
@@ -200,7 +200,7 @@ def leiden(
     --------
     Default Leiden (resolution=1)::
 
-        import singlet_gpu.tools as sgt
+        import singlet.gpu.tools as sgt
         sgt.leiden(adata)
         print(adata.obs['leiden'].value_counts())
 
@@ -216,14 +216,14 @@ def leiden(
     if resolution <= 0:
         raise ValueError(f"resolution must be >0, got {resolution!r}.")
 
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "leiden_partition"):
         raise AttributeError(
             "_core.leiden_partition is not available.  "
             "See CYCLE-21-FOLLOWUP-CYCLE-20-BINDING-EXTEND — the cycle-20 "
             "pybind11 binding extension must expose leiden_partition before "
-            "singlet_gpu.tools.leiden() is callable."
+            "singlet.gpu.tools.leiden() is callable."
         )
 
     import pandas as pd
@@ -238,7 +238,7 @@ def leiden(
     if nbrs_key not in working.uns or "_knn_result" not in working.uns[nbrs_key]:
         raise KeyError(
             f"No cached KnnResult found in adata.uns['{nbrs_key}']['_knn_result']. "
-            "Call singlet_gpu.pp.neighbors() before singlet_gpu.tools.leiden()."
+            "Call singlet.gpu.pp.neighbors() before singlet.gpu.tools.leiden()."
         )
     knn_result = working.uns[nbrs_key]["_knn_result"]
 

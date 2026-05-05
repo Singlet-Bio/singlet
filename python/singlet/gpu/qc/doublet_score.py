@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.qc.doublet_score — Scrublet-style RNA-only doublet detection.
+singlet.gpu.qc.doublet_score — Scrublet-style RNA-only doublet detection.
 
 Underlying C++: cycle 31, ``qc/doublet_score.h``.
 Algorithm: synthetic doublet PCA scoring (Wolock et al. 2019, Scrublet).
 
-For CITE-seq (RNA + ADT) use ``singlet_gpu.qc.omnidoublet.run_omni_doublet``.
+For CITE-seq (RNA + ADT) use ``singlet.gpu.qc.omnidoublet.run_omni_doublet``.
 
 API
 ---
@@ -39,7 +39,7 @@ def run_doublet_score(
     Scrublet-style doublet detection on a PCA embedding (cycle 31).
 
     Requires ``adata.obsm[embedding_key]`` to exist (e.g., run
-    ``singlet_gpu.reduce.pca(adata)`` first).
+    ``singlet.gpu.reduce.pca(adata)`` first).
 
     Parameters
     ----------
@@ -65,7 +65,7 @@ def run_doublet_score(
     -------
     None or AnnData
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "doublet_score"):
         raise AttributeError(
@@ -76,7 +76,7 @@ def run_doublet_score(
     if embedding_key not in adata.obsm:
         raise KeyError(
             f"adata.obsm['{embedding_key}'] not found.  "
-            "Run PCA first (e.g., singlet_gpu.reduce.pca(adata))."
+            "Run PCA first (e.g., singlet.gpu.reduce.pca(adata))."
         )
 
     working = adata.copy() if copy else adata
@@ -88,7 +88,7 @@ def run_doublet_score(
         d_emb = cp.asarray(emb)
     except ImportError as e:
         raise ImportError(
-            "singlet_gpu.qc.run_doublet_score requires cupy.  "
+            "singlet.gpu.qc.run_doublet_score requires cupy.  "
             f"Original error: {e}"
         )
 

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.io — high-level I/O helpers for .1pz pipeline outputs.
+singlet.gpu.io — high-level I/O helpers for .1pz pipeline outputs.
 
 Functions
 ---------
@@ -72,14 +72,14 @@ def _resolve_path(pz_path: Union[str, Path], modality: str) -> str:
 
 def to_anndata(device_csc, metadata):
     """
-    Wrap a :class:`~singlet_gpu.DeviceCsc` and :class:`~singlet_gpu.Metadata`
+    Wrap a :class:`~singlet.gpu.DeviceCsc` and :class:`~singlet.gpu.Metadata`
     into an AnnData whose ``X`` is a zero-copy ``cupy.sparse.csr_matrix`` view.
 
     Parameters
     ----------
-    device_csc : singlet_gpu.DeviceCsc
+    device_csc : singlet.gpu.DeviceCsc
         Device CSC matrix (rows = genes, cols = cells).
-    metadata : singlet_gpu.Metadata
+    metadata : singlet.gpu.Metadata
         Embedded GEO metadata from the .1pz file.
 
     Returns
@@ -180,7 +180,7 @@ def read_anndata(
         One of: ``"exon"``, ``"intron"``, ``"gene"``, ``"sj"``,
         ``"snp_ad"``, ``"snp_dp"``, ``"mt"``, ``"adt"``, ``"fragments"``.
     keep_host_pinned : bool, default False
-        Passed through to :func:`~singlet_gpu.load_pz`.  When ``True``,
+        Passed through to :func:`~singlet.gpu.load_pz`.  When ``True``,
         retains pinned host copies — useful for SVD adapters.
 
     Returns
@@ -195,15 +195,15 @@ def read_anndata(
     --------
     Load by file path::
 
-        adata = singlet_gpu.io.read_anndata("path/to/exon_counts.1pz")
+        adata = singlet.gpu.io.read_anndata("path/to/exon_counts.1pz")
 
     Load by sample directory (auto-detects exon_counts.1pz)::
 
-        adata = singlet_gpu.io.read_anndata("quant/scrna/GSE127/GSE127918/GSM4037629/")
+        adata = singlet.gpu.io.read_anndata("quant/scrna/GSE127/GSE127918/GSM4037629/")
 
     Load unspliced counts::
 
-        adata_unspliced = singlet_gpu.io.read_anndata(sample_dir, modality="intron")
+        adata_unspliced = singlet.gpu.io.read_anndata(sample_dir, modality="intron")
 
     Access metadata::
 
@@ -211,10 +211,10 @@ def read_anndata(
     """
     # Import here (not at module top) so the module can be imported on login nodes.
     try:
-        from singlet_gpu import load_pz as _load_pz
+        from singlet.gpu import load_pz as _load_pz
     except (ImportError, TypeError):
         raise ImportError(
-            "singlet_gpu._core is not available. "
+            "singlet.gpu._core is not available. "
             "The C++ extension must be compiled on a CUDA-capable node. "
             "Install with: pip install singlet[gpu]"
         )

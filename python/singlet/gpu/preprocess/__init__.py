@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.preprocess — GPU-native preprocessing for single-cell AnnData.
+singlet.gpu.preprocess — GPU-native preprocessing for single-cell AnnData.
 
 Public API
 ----------
@@ -13,9 +13,9 @@ regress_out           — OLS confounder regression     (cycle-103 regress_out k
 All functions are drop-in replacements for their scanpy.pp counterparts.
 """
 
-from singlet_gpu.preprocess.lognorm import normalize_total, log1p
-from singlet_gpu.preprocess.hvg import highly_variable_genes
-from singlet_gpu.preprocess.scale import scale, regress_out
+from singlet.gpu.preprocess.lognorm import normalize_total, log1p
+from singlet.gpu.preprocess.hvg import highly_variable_genes
+from singlet.gpu.preprocess.scale import scale, regress_out
 
 __all__ = [
     "normalize_total",

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.enrich.progeny — GPU-native PROGENy pathway activity scoring.
+singlet.gpu.enrich.progeny — GPU-native PROGENy pathway activity scoring.
 
 Underlying C++: cycle 44, ``enrich/progeny.h``.
 Algorithm: weighted sum of expression × pre-trained pathway weights
@@ -63,7 +63,7 @@ def run_progeny(
     -------
     None or AnnData
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "progeny"):
         raise AttributeError(
@@ -75,7 +75,7 @@ def run_progeny(
         raise FileNotFoundError(
             f"PROGENy weight file not found: {weights_tsv}.  "
             "Download from the decoupleR/PROGENy R package or use "
-            "`singlet_gpu.enrich.progeny.download_progeny_weights()`."
+            "`singlet.gpu.enrich.progeny.download_progeny_weights()`."
         )
 
     working = adata.copy() if copy else adata
@@ -99,7 +99,7 @@ def run_progeny(
         device_mat = csp.csc_matrix(X) if sp.issparse(X) else csp.csc_matrix(cp.array(X))
     except ImportError as e:
         raise ImportError(
-            "singlet_gpu.enrich.run_progeny requires cupy.  "
+            "singlet.gpu.enrich.run_progeny requires cupy.  "
             f"Original error: {e}"
         )
 

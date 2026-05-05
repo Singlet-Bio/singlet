@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.pp.neighbors — GPU-native kNN graph construction.
+singlet.gpu.pp.neighbors — GPU-native kNN graph construction.
 
-Wraps ``singlet_gpu::graph::knn`` (cycle 8, ``graph/knn.h``).
+Wraps ``singlet::gpu::graph::knn`` (cycle 8, ``graph/knn.h``).
 
 Drop-in replacement for ``sc.pp.neighbors``.  All parameter names and
 default values match the scanpy 1.10 signature verified by the cycle-19
 code-reader; this function can be substituted without changing call sites:
 
-    import singlet_gpu.pp as sgp
+    import singlet.gpu.pp as sgp
     sgp.neighbors(adata, n_neighbors=15)   # instead of sc.pp.neighbors(adata)
 
 Result locations (match scanpy exactly):
@@ -99,7 +99,7 @@ def _get_rep(
     import warnings
     warnings.warn(
         "neighbors: 'X_pca' not found in adata.obsm and use_rep is None. "
-        "Falling back to adata.X.  Consider running singlet_gpu.pp.pca() first.",
+        "Falling back to adata.X.  Consider running singlet.gpu.pp.pca() first.",
         UserWarning,
         stacklevel=3,
     )
@@ -240,7 +240,7 @@ def neighbors(
     --------
     Default kNN (15 neighbours, using X_pca)::
 
-        import singlet_gpu.pp as sgp
+        import singlet.gpu.pp as sgp
         sgp.neighbors(adata)
 
     Custom representation and distance::
@@ -250,14 +250,14 @@ def neighbors(
     if n_neighbors < 2:
         raise ValueError(f"n_neighbors must be ≥2, got {n_neighbors!r}.")
 
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "knn_graph"):
         raise AttributeError(
             "_core.knn_graph is not available.  "
             "See CYCLE-21-FOLLOWUP-CYCLE-20-BINDING-EXTEND — the cycle-20 "
             "pybind11 binding extension must expose knn_graph before "
-            "singlet_gpu.pp.neighbors() is callable."
+            "singlet.gpu.pp.neighbors() is callable."
         )
 
     working = copy_module.copy(adata) if copy else adata

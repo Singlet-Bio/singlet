@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.grn.granie — GPU-native GRaNIE gene regulatory network inference.
+singlet.gpu.grn.granie — GPU-native GRaNIE gene regulatory network inference.
 
-Underlying C++ kernel: singlet_gpu::grn::run_granie (cycle 36, grn/granie.h).
+Underlying C++ kernel: singlet::gpu::grn::run_granie (cycle 36, grn/granie.h).
 
 GRaNIE reconstructs enhancer-mediated GRNs from multiome (scATAC + scRNA) data:
   1. Peak filtering (Welford mean + variance).
@@ -129,7 +129,7 @@ def run_from_csc(
 
     Examples
     --------
-    >>> result = singlet_gpu.grn.granie.run_from_csc(
+    >>> result = singlet.gpu.grn.granie.run_from_csc(
     ...     gex, peaks, tf_motif, peak_gene_pairs,
     ...     min_abs_r=0.3, tf_target_fdr=0.05,
     ... )
@@ -137,7 +137,7 @@ def run_from_csc(
     >>> import pandas as pd
     >>> edges_df = pd.DataFrame(result["edges"])
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "run_granie"):
         raise ImportError(
@@ -177,7 +177,7 @@ def run_from_anndata(
     Convenience wrapper: load GEX + ATAC from AnnData objects.
 
     Extracts ``adata_rna.X`` and ``adata_atac.X`` as DeviceCsc via
-    ``singlet_gpu.load_pz`` (or directly from cupy if already on device),
+    ``singlet.gpu.load_pz`` (or directly from cupy if already on device),
     then delegates to :func:`run_from_csc`.
 
     Parameters
@@ -199,11 +199,11 @@ def run_from_anndata(
     dict
         Same as :func:`run_from_csc`.
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "from_cupy_csr"):
         raise ImportError(
-            "singlet_gpu._core.from_cupy_csr not available. "
+            "singlet.gpu._core.from_cupy_csr not available. "
             "Build the extension on a CUDA node first."
         )
 
@@ -224,7 +224,7 @@ def run_from_anndata(
             pass
         raise TypeError(
             "adata.X must be a scipy sparse matrix or cupy sparse matrix. "
-            "Load your data with singlet_gpu.load_pz() for direct device access."
+            "Load your data with singlet.gpu.load_pz() for direct device access."
         )
 
     gex   = _to_device_csc(adata_rna.X)

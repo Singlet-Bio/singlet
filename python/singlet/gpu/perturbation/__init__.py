@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.perturbation — GPU-native perturbation modeling.
+singlet.gpu.perturbation — GPU-native perturbation modeling.
 
 Exposes:
     perturb_graph.fit                  — train CPA (cycle 32)

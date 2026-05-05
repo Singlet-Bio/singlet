@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.de.pseudobulk — GPU-native donor-aware pseudobulk DE.
+singlet.gpu.de.pseudobulk — GPU-native donor-aware pseudobulk DE.
 
 Underlying C++ cycle: cycle 17 (de/donor_pseudobulk.h —
-``singlet_gpu::de::donor_pseudobulk_de`` kernel).
+``singlet::gpu::de::donor_pseudobulk_de`` kernel).
 
 Pseudobulk DE aggregates per-cell counts into per-donor pseudo-samples,
 then fits a Negative Binomial GLM (with optional apeglm shrinkage) to
 identify differentially expressed genes across conditions or cell types.
 
 Donor labels come from singlify's ``donor_assignments.tsv`` — load with
-``singlet_gpu.io.donor.load_donor_assignments(path)`` and add to
+``singlet.gpu.io.donor.load_donor_assignments(path)`` and add to
 ``adata.obs['donor_id']``.
 
 Result location
@@ -55,7 +55,7 @@ def _validate_obs_column(
             f"obs column '{col}' not found in adata.obs.  "
             f"Available columns: {list(adata.obs.columns)}.  "
             f"Hint: load donor assignments with "
-            f"singlet_gpu.io.donor.load_donor_assignments(path) and "
+            f"singlet.gpu.io.donor.load_donor_assignments(path) and "
             f"assign to adata.obs['donor_id']."
         )
 
@@ -106,7 +106,7 @@ def pseudobulk_de(
 
     Donor labels are expected in ``adata.obs[sample_col]`` — load them
     from singlify's ``donor_assignments.tsv`` using
-    ``singlet_gpu.io.donor.load_donor_assignments(path)``.
+    ``singlet.gpu.io.donor.load_donor_assignments(path)``.
 
     Parameters
     ----------
@@ -178,7 +178,7 @@ def pseudobulk_de(
 
     **Donor label loading**: singlify writes ``donor_assignments.tsv``
     with columns ``barcode``, ``donor_id``, ``prob_max``, ``prob_doublet``.
-    Use ``singlet_gpu.io.donor.load_donor_assignments(path)`` to load as a
+    Use ``singlet.gpu.io.donor.load_donor_assignments(path)`` to load as a
     ``pd.Series`` indexed by barcode, then assign::
 
         adata.obs['donor_id'] = load_donor_assignments(tsv_path)
@@ -187,7 +187,7 @@ def pseudobulk_de(
     --------
     Default (sum aggregation, apeglm shrinkage)::
 
-        import singlet_gpu.de as sgde
+        import singlet.gpu.de as sgde
         sgde.pseudobulk_de(adata)
         print(list(adata.uns['donor_pseudobulk'].keys()))  # cell types
 
@@ -209,14 +209,14 @@ def pseudobulk_de(
     _validate_obs_column(adata, sample_col)
     _validate_obs_column(adata, groupby)
 
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "donor_pseudobulk_de"):
         raise AttributeError(
             "_core.donor_pseudobulk_de is not available.  "
             "See CYCLE-23-FOLLOWUP-CYCLE-22-BINDING-EXPOSE — the cycle-22 "
             "pybind11 binding extension must expose donor_pseudobulk_de "
-            "before singlet_gpu.de.pseudobulk_de() is callable."
+            "before singlet.gpu.de.pseudobulk_de() is callable."
         )
 
     import pandas as pd

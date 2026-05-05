@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.io.loader — high-level .1pz ↔ AnnData I/O wrappers.
+singlet.gpu.io.loader — high-level .1pz ↔ AnnData I/O wrappers.
 
 Underlying C++ cycle: cycle 1 (io/pz_device_loader.h — zero-copy .1pz →
 DeviceCSC) and cycle 18 (pybind11 _core module exposing load_pz,
@@ -104,14 +104,14 @@ def _resolve_pz_path(pz_dir: Union[str, Path], modality: str) -> str:
 
 def _build_anndata(device_csc, metadata) -> "anndata.AnnData":
     """
-    Wrap a :class:`~singlet_gpu.DeviceCsc` + :class:`~singlet_gpu.Metadata`
+    Wrap a :class:`~singlet.gpu.DeviceCsc` + :class:`~singlet.gpu.Metadata`
     into an AnnData with a zero-copy ``cupy.sparse.csr_matrix`` at ``.X``.
 
     Parameters
     ----------
-    device_csc : singlet_gpu.DeviceCsc
+    device_csc : singlet.gpu.DeviceCsc
         Device CSC matrix (genes × cells).
-    metadata : singlet_gpu.Metadata
+    metadata : singlet.gpu.Metadata
         Embedded GEO metadata.
 
     Returns
@@ -227,10 +227,10 @@ def read_pz_to_anndata(
         adata_u = read_pz_to_anndata(sample_dir, modality="intron")
     """
     try:
-        from singlet_gpu import load_pz as _load_pz
+        from singlet.gpu import load_pz as _load_pz
     except (ImportError, TypeError) as exc:
         raise ImportError(
-            "singlet_gpu._core is not available — the C++ extension must be "
+            "singlet.gpu._core is not available — the C++ extension must be "
             "compiled on a CUDA-capable node.  Run: pip install -e python/ "
             "on a GPU node."
         ) from exc

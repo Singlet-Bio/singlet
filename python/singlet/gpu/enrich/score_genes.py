@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.enrich.score_genes — GPU-native per-cell gene-set scoring.
+singlet.gpu.enrich.score_genes — GPU-native per-cell gene-set scoring.
 
 Underlying C++: cycle 129, ``enrich/score_genes.h``.
 Algorithm: Satija et al. 2015 / Seurat AddModuleScore — difference of means
@@ -80,7 +80,7 @@ def run_score_genes(
     zero valid genes after filtering, its score column is set to ``NaN``
     with a ``UserWarning``.
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "score_genes"):
         raise AttributeError(
@@ -181,7 +181,7 @@ def run_score_genes(
         device_mat = _core.from_cupy_csr(cupy_csc)
     except ImportError as e:
         raise ImportError(
-            "singlet_gpu.enrich.run_score_genes requires cupy.  "
+            "singlet.gpu.enrich.run_score_genes requires cupy.  "
             f"Original error: {e}"
         ) from e
 

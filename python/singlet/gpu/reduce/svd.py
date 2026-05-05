@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.reduce.svd — GPU-native PCA and low-level SVD backends.
+singlet.gpu.reduce.svd — GPU-native PCA and low-level SVD backends.
 
 After CYCLE-61 winner consolidation, the C++ surface ships only two backends
 (deflation = primary, randomized = fallback). After CYCLE-105 these are native
@@ -33,7 +33,7 @@ GPU execution path (pca)
 ------------------------
 1. Extract ``adata.X`` (or ``adata.layers[layer]``) as
    ``cupy.sparse.csr_matrix``.
-2. Convert CSR → CSC, wrap in ``singlet_gpu.DeviceCSC`` via ``from_cupy_csr``
+2. Convert CSR → CSC, wrap in ``singlet.gpu.DeviceCSC`` via ``from_cupy_csr``
    (CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE).
 3. Call ``_core.pca`` (or the named backend) — factornet GPU kernels run,
    producing device-resident U, Σ, V matrices.
@@ -86,7 +86,7 @@ def _get_matrix(adata: "anndata.AnnData", layer: Optional[str]):
 
 def _csr_to_device_csc(csr_mat):
     """CSR (cells × genes) → DeviceCSC (genes × cells)."""
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "from_cupy_csr"):
         raise AttributeError(
@@ -229,7 +229,7 @@ def pca(
     --------
     Default (auto backend, 50 PCs, matches scanpy)::
 
-        import singlet_gpu.reduce as sgr
+        import singlet.gpu.reduce as sgr
         sgr.pca(adata)
 
     Force IRLBA with 100 PCs::
@@ -242,7 +242,7 @@ def pca(
             f"Choose one of: {_VALID_BACKENDS}"
         )
 
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "pca"):
         raise AttributeError(
@@ -363,7 +363,7 @@ def svd_randomized(
     n_power_iter : int, default 3
         Number of power iterations for accuracy improvement.
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "svd_randomized"):
         raise AttributeError(
@@ -457,7 +457,7 @@ def svd_deflation(
 
     See ``pca`` for standard parameter descriptions.
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "svd_deflation"):
         raise AttributeError(

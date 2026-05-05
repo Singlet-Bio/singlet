@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.cna — GPU-native copy-number alteration detection.
+singlet.gpu.cna — GPU-native copy-number alteration detection.
 
 Exposes:
     numbat.detect — Numbat CNA detection (cycle 35).

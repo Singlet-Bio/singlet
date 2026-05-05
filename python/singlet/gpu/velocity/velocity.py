@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.velocity.velocity — GPU-native steady-state RNA velocity.
+singlet.gpu.velocity.velocity — GPU-native steady-state RNA velocity.
 
 Underlying C++ cycle: cycle 15 (preprocess/velocity_prep.h —
-``singlet_gpu::preprocess::velocity_prep_compute`` kernel).
+``singlet::gpu::preprocess::velocity_prep_compute`` kernel).
 
 Drop-in for ``scvelo.tl.velocity`` with ``mode='steady_state'``.  All
 parameter names and defaults match the scvelo 0.3 API for this mode.
@@ -59,7 +59,7 @@ def _get_layer(
     raise KeyError(
         f"Layer '{layer_key}' not found in adata.layers.  "
         f"Available layers: {available}.  "
-        "Run singlet_gpu.velocity.moments() first (which creates 'Ms', 'Mu') "
+        "Run singlet.gpu.velocity.moments() first (which creates 'Ms', 'Mu') "
         "or set layer_spliced/layer_unspliced to the correct keys."
     )
 
@@ -91,7 +91,7 @@ def velocity(
         ``velocity = Mu − gamma × Ms``
 
     where ``Ms`` / ``Mu`` are the smoothed spliced / unspliced layers
-    (written by ``singlet_gpu.velocity.moments``).  If ``Ms`` / ``Mu`` are
+    (written by ``singlet.gpu.velocity.moments``).  If ``Ms`` / ``Mu`` are
     not present, the unsmoothed layers are used as a fallback.
 
     Parameters
@@ -102,7 +102,7 @@ def velocity(
         - ``adata.layers['Ms']`` (or ``layer_spliced``)   — smoothed spliced.
         - ``adata.layers['Mu']`` (or ``layer_unspliced``) — smoothed unspliced.
 
-        Produced by ``singlet_gpu.velocity.moments`` or ``scvelo.pp.moments``.
+        Produced by ``singlet.gpu.velocity.moments`` or ``scvelo.pp.moments``.
     mode : str, default ``"steady_state"``
         Velocity estimation mode.  Only ``'steady_state'`` is supported.
         ``'dynamical'`` and ``'stochastic'`` raise ``NotImplementedError``.
@@ -156,7 +156,7 @@ def velocity(
     --------
     Default steady-state velocity::
 
-        import singlet_gpu.velocity as sgv
+        import singlet.gpu.velocity as sgv
         sgv.moments(adata)
         sgv.velocity(adata)
         print(adata.layers['velocity'].shape)  # (n_cells, n_genes)
@@ -180,14 +180,14 @@ def velocity(
             f"got {perc!r}."
         )
 
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "velocity_prep_compute"):
         raise AttributeError(
             "_core.velocity_prep_compute is not available.  "
             "See CYCLE-23-FOLLOWUP-CYCLE-22-BINDING-EXPOSE — the cycle-22 "
             "pybind11 binding extension must expose velocity_prep_compute "
-            "before singlet_gpu.velocity.velocity() is callable."
+            "before singlet.gpu.velocity.velocity() is callable."
         )
 
     working = copy_module.copy(adata) if copy else adata

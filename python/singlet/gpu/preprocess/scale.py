@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.preprocess.scale — GPU-native scale + regress_out.
+singlet.gpu.preprocess.scale — GPU-native scale + regress_out.
 
 Underlying C++: cycle-103, ``preprocess/scale.h``.
 Matches scanpy.pp.scale / scanpy.pp.regress_out signatures.
@@ -63,7 +63,7 @@ def _get_matrix(adata: "anndata.AnnData", layer: Optional[str]):
 
 
 def _csr_to_device_csc(csr_mat):
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
     if not hasattr(_core, "from_cupy_csr"):
         raise AttributeError(
             "_core.from_cupy_csr is not available.  "
@@ -77,7 +77,7 @@ def _ensure_gene_stats(adata: "anndata.AnnData", layer: Optional[str],
                        stream) -> None:
     """Run calculate_qc_metrics if mean_counts / var_counts are missing."""
     if "mean_counts" not in adata.var.columns or "var_counts" not in adata.var.columns:
-        from singlet_gpu.qc.qc_metrics import calculate_qc_metrics
+        from singlet.gpu.qc.qc_metrics import calculate_qc_metrics
         calculate_qc_metrics(adata, layer=layer, inplace=True, stream=stream)
 
 
@@ -127,7 +127,7 @@ def scale(
     -------
     None (inplace) or AnnData (copy).
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "scale"):
         raise AttributeError(
@@ -138,7 +138,7 @@ def scale(
     try:
         import cupy as cp
     except ImportError as e:
-        raise ImportError(f"singlet_gpu.preprocess.scale requires cupy.  {e}")
+        raise ImportError(f"singlet.gpu.preprocess.scale requires cupy.  {e}")
 
     working = adata if (inplace and not copy) else copy_module.copy(adata)
 
@@ -222,7 +222,7 @@ def regress_out(
     KeyError
         If any key in ``keys`` is not in ``adata.obs``.
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "regress_out"):
         raise AttributeError(
@@ -250,7 +250,7 @@ def regress_out(
     try:
         import cupy as cp
     except ImportError as e:
-        raise ImportError(f"singlet_gpu.preprocess.regress_out requires cupy.  {e}")
+        raise ImportError(f"singlet.gpu.preprocess.regress_out requires cupy.  {e}")
 
     working = adata if (inplace and not copy) else copy_module.copy(adata)
 
@@ -264,7 +264,7 @@ def regress_out(
     if not hasattr(dense_result, "data_view"):
         raise TypeError(
             f"adata.layers['{_SCALE_LAYER}'] is not a DenseResult object.  "
-            "Re-run singlet_gpu.preprocess.scale(adata) to regenerate it."
+            "Re-run singlet.gpu.preprocess.scale(adata) to regenerate it."
         )
 
     # Build design matrix C [n_cells × p] col-major float32.

@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.integrate.bbknn — GPU-native Batch-Balanced KNN graph.
+singlet.gpu.integrate.bbknn — GPU-native Batch-Balanced KNN graph.
 
 Underlying C++ cycle: cycle 14 (integrate/bbknn.h —
-``singlet_gpu::integrate::bbknn`` kernel).
+``singlet::gpu::integrate::bbknn`` kernel).
 
 Drop-in for ``sc.external.pp.bbknn``.  All parameter names and defaults
 match the BBKNN / scanpy 1.10 external API.
@@ -183,7 +183,7 @@ def bbknn(
     --------
     Default BBKNN::
 
-        import singlet_gpu.integrate as sgi
+        import singlet.gpu.integrate as sgi
         sgi.bbknn(adata, batch_key="batch")
         print(adata.obsp['distances'].shape)
 
@@ -197,14 +197,14 @@ def bbknn(
             f"neighbors_within_batch must be ≥1, got {neighbors_within_batch!r}."
         )
 
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "bbknn"):
         raise AttributeError(
             "_core.bbknn is not available.  "
             "See CYCLE-23-FOLLOWUP-CYCLE-22-BINDING-EXPOSE — the cycle-22 "
             "pybind11 binding extension must expose bbknn before "
-            "singlet_gpu.integrate.bbknn() is callable."
+            "singlet.gpu.integrate.bbknn() is callable."
         )
 
     working = copy_module.copy(adata) if copy else adata

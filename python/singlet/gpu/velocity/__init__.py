@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.velocity — GPU-native RNA velocity preprocessing and estimation.
+singlet.gpu.velocity — GPU-native RNA velocity preprocessing and estimation.
 
 Exposes:
     moments  — first/second-order moment smoothing (drop-in for scvelo.pp.moments).
     velocity — steady-state RNA velocity (drop-in for scvelo.tl.velocity, mode='steady_state').
 
 Underlying C++ cycle: cycle 15 (preprocess/velocity_prep.h —
-``singlet_gpu::preprocess::velocity_prep_compute`` kernel).
+``singlet::gpu::preprocess::velocity_prep_compute`` kernel).
 
 scvelo parity
 -------------

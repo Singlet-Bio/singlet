@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.velocity.moments — GPU-native first/second-order moment smoothing.
+singlet.gpu.velocity.moments — GPU-native first/second-order moment smoothing.
 
 Underlying C++ cycle: cycle 15 (preprocess/velocity_prep.h —
-``singlet_gpu::preprocess::velocity_moments`` kernel).
+``singlet::gpu::preprocess::velocity_moments`` kernel).
 
 Drop-in for ``scvelo.pp.moments``.  All parameter names and defaults match
 the scvelo 0.3 API.
 
 Moment smoothing averages spliced and unspliced counts over each cell's
 local neighbourhood to reduce measurement noise before velocity estimation.
-The smoothed matrices are the inputs to ``singlet_gpu.velocity.velocity``.
+The smoothed matrices are the inputs to ``singlet.gpu.velocity.velocity``.
 
 Result location (matches scvelo)
 ---------------------------------
@@ -78,7 +78,7 @@ def _get_connectivities(
     if nbrs_key not in adata.obsp:
         raise KeyError(
             f"Connectivity key '{nbrs_key}' not found in adata.obsp.  "
-            "Run singlet_gpu.pp.neighbors() (or sc.pp.neighbors()) first."
+            "Run singlet.gpu.pp.neighbors() (or sc.pp.neighbors()) first."
         )
     return adata.obsp[nbrs_key]
 
@@ -117,7 +117,7 @@ def moments(
         - ``adata.layers[layer_spliced]``   — spliced count matrix.
         - ``adata.layers[layer_unspliced]`` — unspliced count matrix.
         - ``adata.obsp['connectivities']`` (or ``'distances'``) —
-          precomputed kNN graph (from ``singlet_gpu.pp.neighbors`` or
+          precomputed kNN graph (from ``singlet.gpu.pp.neighbors`` or
           ``sc.pp.neighbors``).
     n_neighbors : int, default 30
         Number of nearest neighbours to use for smoothing.  The kNN
@@ -180,7 +180,7 @@ def moments(
     --------
     Default (scvelo-style)::
 
-        import singlet_gpu.velocity as sgv
+        import singlet.gpu.velocity as sgv
         sgv.moments(adata)
         print(adata.layers['Ms'].shape)  # (n_cells, n_genes)
 
@@ -188,14 +188,14 @@ def moments(
 
         sgv.moments(adata, layer_spliced='exon', layer_unspliced='intron')
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "velocity_moments"):
         raise AttributeError(
             "_core.velocity_moments is not available.  "
             "See CYCLE-23-FOLLOWUP-CYCLE-22-BINDING-EXPOSE — the cycle-22 "
             "pybind11 binding extension must expose velocity_moments before "
-            "singlet_gpu.velocity.moments() is callable."
+            "singlet.gpu.velocity.moments() is callable."
         )
 
     working = copy_module.copy(adata) if copy else adata

@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet_gpu.variants.monopogen — GPU-native Monopogen somatic SNV calling.
+singlet.gpu.variants.monopogen — GPU-native Monopogen somatic SNV calling.
 
-Underlying C++ kernel: singlet_gpu::variants::call_variants (cycle 42,
+Underlying C++ kernel: singlet::gpu::variants::call_variants (cycle 42,
 variants/monopogen.h).
 
 Germline genotyping + somatic SNV discovery from singlify snp_ad / snp_dp
@@ -127,7 +127,7 @@ def call(
     --------
     Without LD panels (fast, lower precision)::
 
-        result = singlet_gpu.variants.monopogen.call(
+        result = singlet.gpu.variants.monopogen.call(
             snp_ad, snp_dp, chromosome=snp_chromosomes
         )
         print(f"Germline SNPs called: {result['n_snps']}")
@@ -139,11 +139,11 @@ def call(
             {"n_snps": n_chr1, "indptr": ..., "col_idx": ..., "val": ...},
             # one entry per chromosome
         ]
-        result = singlet_gpu.variants.monopogen.call(
+        result = singlet.gpu.variants.monopogen.call(
             snp_ad, snp_dp, chromosome=snp_chromosomes, ld_panels=ld_panels
         )
     """
-    import singlet_gpu._core as _core
+    import singlet.gpu._core as _core
 
     if not hasattr(_core, "call_variants"):
         raise ImportError(
