@@ -324,7 +324,7 @@ def load_dir(
     # Attach gene names
     gene_file = path / "gene_expression.tsv"
     if gene_file.exists():
-        genes = pd.read_csv(gene_file, sep="\t", usecols=["gene_id", "gene_name"])
+        genes = pd.read_csv(gene_file, sep="\t", usecols=["gene_id", "gene_name"])  # type: ignore[arg-type]
         if len(genes) == adata.n_vars:
             adata.var_names = pd.Index(genes["gene_name"].values)
             adata.var["gene_id"] = genes["gene_id"].values

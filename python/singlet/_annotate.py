@@ -112,7 +112,7 @@ def gene_programs(organism: str, k: int = 100) -> pd.DataFrame:
     if gene_names is None:
         gene_names = [f"gene_{i}" for i in range(W.shape[0])]
 
-    return pd.DataFrame(W, index=gene_names, columns=program_names)
+    return pd.DataFrame(W, index=gene_names, columns=program_names)  # type: ignore[arg-type]
 
 
 def project(adata, *, organism: Optional[str] = None, k: int = 100) -> np.ndarray:

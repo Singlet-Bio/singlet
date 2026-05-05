@@ -158,7 +158,7 @@ def catalog(search: Optional[str] = None) -> pd.DataFrame:
             .apply(lambda col: col.str.contains(search, case=False, na=False))
             .any(axis=1)
         )
-        return df[mask].reset_index(drop=True)
+        return df[mask].reset_index(drop=True)  # type: ignore[return-value]
     return df
 
 
@@ -179,7 +179,7 @@ def sample_index(gse_id: Optional[str] = None) -> pd.DataFrame:
     df = _load_sample_index()
     if gse_id is not None:
         df = df[df["gse_id"] == gse_id]
-    return df.reset_index(drop=True)
+    return df.reset_index(drop=True)  # type: ignore[return-value]
 
 
 def info(accession: str) -> dict:
@@ -237,7 +237,7 @@ def tissues() -> pd.DataFrame:
         counts.columns = ["tissue", "count"]
         return counts
     if "source" not in df.columns:
-        return pd.DataFrame(columns=["tissue", "count"])
+        return pd.DataFrame(columns=["tissue", "count"])  # type: ignore[arg-type]
     counts = df["source"].dropna().value_counts().reset_index()
     counts.columns = ["tissue", "count"]
     return counts
@@ -251,7 +251,7 @@ def protocols() -> pd.DataFrame:
     df = _load_sample_index()
     df = df[df["status"] == "SUCCESS"]
     if "protocol" not in df.columns:
-        return pd.DataFrame(columns=["protocol", "count"])
+        return pd.DataFrame(columns=["protocol", "count"])  # type: ignore[arg-type]
     valid = df["protocol"].dropna()
     valid = valid[valid.str.strip() != ""]
     counts = valid.value_counts().reset_index()
@@ -276,7 +276,7 @@ def failure_categories() -> pd.DataFrame:
     failed = df[df["status"] != "SUCCESS"]
     total_failed = len(failed)
     if total_failed == 0:
-        return pd.DataFrame(columns=["category", "count", "pct"])
+        return pd.DataFrame(columns=["category", "count", "pct"])  # type: ignore[arg-type]
 
     # Use ground-truth failure_category column if available
     if "failure_category" in failed.columns:
@@ -367,7 +367,7 @@ def datasets(
         df = df[df[col] >= min_cells]
     if has_kraken2 is not None and "has_kraken2" in df.columns:
         df = df[df["has_kraken2"] == has_kraken2]
-    return df.reset_index(drop=True)
+    return df.reset_index(drop=True)  # type: ignore[return-value]
 
 
 def summary() -> str:
@@ -514,7 +514,7 @@ def samples(
             df = df[silver_mask]
         elif quality_tier == "bronze":
             df = df[~gold_mask & ~silver_mask]
-    return df.reset_index(drop=True)
+    return df.reset_index(drop=True)  # type: ignore[return-value]
 
 
 def top_series(
