@@ -103,7 +103,17 @@ def download(
         headers = {}
 
     resp = requests.get(url, stream=True, timeout=60, headers=headers)
-    resp.raise_for_status()
+    try:
+        resp.raise_for_status()
+    except requests.HTTPError as e:
+        if resp.status_code == 404:
+            raise FileNotFoundError(
+                f"Dataset '{accession}' not found on {source}. "
+                f"Check the accession or use singlet.catalog() to browse available datasets."
+            ) from None
+        raise RuntimeError(
+            f"Failed to download '{accession}' from {source}: {e}"
+        ) from e
 
     total = int(resp.headers.get("content-length", 0))
     with (
