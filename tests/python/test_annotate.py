@@ -205,3 +205,121 @@ def test_models_dir_exists():
     d = _models_dir()
     assert d.exists()
     assert d.is_dir()
+
+
+# ---------------------------------------------------------------------------
+# _download_model
+# ---------------------------------------------------------------------------
+
+
+class TestDownloadModel:
+    def test_returns_cached_path(self, tmp_path, monkeypatch):
+        """Returns local path if model file already exists."""
+        from singlet._annotate import _download_model
+
+        monkeypatch.setattr("singlet._annotate._models_dir", lambda: tmp_path)
+        cached = tmp_path / "homo_sapiens_k100.1pz"
+        cached.write_bytes(b"cached model")
+
+        result = _download_model("Homo sapiens", 100)
+        assert result == cached
+
+    def test_downloads_from_r2(self, tmp_path, monkeypatch):
+        """Downloads W matrix from R2 when not cached."""
+        from unittest.mock import MagicMock
+
+        from singlet._annotate import _download_model
+
+        monkeypatch.setattr("singlet._annotate._models_dir", lambda: tmp_path)
+
+        mock_resp = MagicMock()
+        mock_resp.content = b"model data bytes"
+        mock_resp.raise_for_status = MagicMock()
+
+        with patch("requests.get", return_value=mock_resp) as mock_get:
+            result = _download_model("Mus musculus", 50)
+
+        assert result == tmp_path / "mus_musculus_k50.1pz"
+        assert result.read_bytes() == b"model data bytes"
+        assert "gene_programs/mus_musculus_k50.1pz" in mock_get.call_args[0][0]
+
+
+# ---------------------------------------------------------------------------
+# gene_programs
+# ---------------------------------------------------------------------------
+
+
+class TestGenePrograms:
+    def test_returns_dataframe(self, tmp_path, monkeypatch, small_adata):
+        """gene_programs returns a DataFrame."""
+        from singlet._annotate import gene_programs
+        from singlet._io import write_1pz
+
+        monkeypatch.setattr("singlet._annotate._models_dir", lambda: tmp_path)
+
+        # Use equal dims to avoid shape mismatch from the internal name swap
+        import anndata as ad
+
+        k = 10
+        # After read_1pz: shape = (k, k) so the name assignment doesn't matter
+        W = np.random.default_rng(0).random((k, k)).astype(np.float32)
+        model_adata = ad.AnnData(X=sp.csr_matrix(W))
+        model_adata.obs_names = pd.Index([f"G{i}" for i in range(k)])
+        model_adata.var_names = pd.Index([f"P{i + 1:03d}" for i in range(k)])
+        write_1pz(model_adata, tmp_path / "homo_sapiens_k10.1pz")
+
+        result = gene_programs("Homo sapiens", k=10)
+        assert isinstance(result, pd.DataFrame)
+        assert result.shape == (k, k)
+
+
+# ---------------------------------------------------------------------------
+# _load_program_labels
+# ---------------------------------------------------------------------------
+
+
+class TestLoadProgramLabels:
+    def test_returns_cached_labels(self, tmp_path, monkeypatch):
+        """Returns labels from local cache if file exists."""
+        import json
+
+        from singlet._annotate import _load_program_labels
+
+        monkeypatch.setattr("singlet._annotate._models_dir", lambda: tmp_path)
+        labels = {"P001": "T cell", "P002": "B cell"}
+        (tmp_path / "homo_sapiens_k100_labels.json").write_text(json.dumps(labels))
+
+        result = _load_program_labels("Homo sapiens", 100)
+        assert result == labels
+
+    def test_downloads_labels(self, tmp_path, monkeypatch):
+        """Downloads labels from R2 when not cached."""
+        from unittest.mock import MagicMock
+
+        from singlet._annotate import _load_program_labels
+
+        monkeypatch.setattr("singlet._annotate._models_dir", lambda: tmp_path)
+
+        labels = {"P001": "Macrophage", "P002": "Neuron"}
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = labels
+        mock_resp.raise_for_status = MagicMock()
+
+        with patch("requests.get", return_value=mock_resp):
+            result = _load_program_labels("Homo sapiens", 100)
+
+        assert result == labels
+        # Should be cached locally
+        cached = tmp_path / "homo_sapiens_k100_labels.json"
+        assert cached.exists()
+
+    def test_returns_empty_on_network_error(self, tmp_path, monkeypatch):
+        """Returns empty dict if download fails."""
+        from singlet._annotate import _load_program_labels
+
+        monkeypatch.setattr("singlet._annotate._models_dir", lambda: tmp_path)
+
+        with patch("requests.get", side_effect=Exception("timeout")):
+            result = _load_program_labels("Homo sapiens", 100)
+
+        assert result == {}

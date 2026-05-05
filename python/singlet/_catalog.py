@@ -21,6 +21,7 @@ import pandas as pd
 
 _CATALOG_URL = "https://raw.githubusercontent.com/Singlet-Bio/singlet/main/python/singlet/data/catalog_v1.parquet"
 _SAMPLE_INDEX_URL = "https://raw.githubusercontent.com/Singlet-Bio/singlet/main/python/singlet/data/sample_index.parquet"
+_R2_BASE = "https://models.singlet.bio"
 
 _CATALOG_CACHE: Optional[pd.DataFrame] = None
 _SAMPLE_INDEX_CACHE: Optional[pd.DataFrame] = None
