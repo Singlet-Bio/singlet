@@ -1,0 +1,437 @@
+{
+  "gdc": {
+    "strategy_WXS": 337461,
+    "strategy_RNA-Seq": 244386,
+    "strategy_WGS": 231252,
+    "strategy_Genotyping Array": 147734,
+    "strategy_Targeted Sequencing": 86978,
+    "strategy_Methylation Array": 61191,
+    "strategy_miRNA-Seq": 60144,
+    "strategy_Tissue Slide": 24177,
+    "strategy_Diagnostic Slide": 11901,
+    "strategy_Reverse Phase Protein Array": 7906,
+    "strategy_Expression Array": 1426,
+    "strategy_ATAC-Seq": 410,
+    "strategy_scRNA-Seq": 268,
+    "strategy__missing": 56216,
+    "access_open": 222,
+    "access_controlled": 46,
+    "total_files": 268,
+    "projects": [
+      {
+        "project": "CPTAC-3",
+        "files": 220
+      },
+      {
+        "project": "BEATAML1.0-COHORT",
+        "files": 48
+      }
+    ],
+    "fastq_bam_files": 46
+  },
+  "htan": {
+    "note": "HTAN metadata from public dashboard - actual data requires dbGaP",
+    "atlases": 12,
+    "sc_rnaseq_files_approx": 15000,
+    "sc_atacseq_files_approx": 3000,
+    "spatial_files_approx": 5000,
+    "total_cases_approx": 3000,
+    "dbgap_study": "phs002371",
+    "assays": [
+      "scRNA-seq (10x Chromium)",
+      "snRNA-seq (10x Chromium)",
+      "scATAC-seq (10x Chromium)",
+      "snATAC-seq (10x Chromium)",
+      "10x Multiome",
+      "10x Visium",
+      "MERFISH",
+      "CODEX",
+      "CITE-seq",
+      "bulk RNA-seq",
+      "bulk WGS/WES"
+    ],
+    "data_access": "Controlled via dbGaP (phs002371), Level 3+ data may be open"
+  },
+  "encode": {
+    "total_sc_experiments": 963,
+    "assay_breakdown": [
+      {
+        "assay": "snRNA-seq",
+        "count": 395
+      },
+      {
+        "assay": "snATAC-seq",
+        "count": 370
+      },
+      {
+        "assay": "scRNA-seq",
+        "count": 129
+      },
+      {
+        "assay": "long read scRNA-seq",
+        "count": 64
+      },
+      {
+        "assay": "seqFISH",
+        "count": 5
+      }
+    ]
+  },
+  "hubmap": {
+    "total_datasets": 6790,
+    "assay_types": [
+      {
+        "type": "RNAseq",
+        "count": 1165,
+        "is_single_cell": false
+      },
+      {
+        "type": "ATACseq",
+        "count": 856,
+        "is_single_cell": false
+      },
+      {
+        "type": "Histology",
+        "count": 555,
+        "is_single_cell": false
+      },
+      {
+        "type": "LC-MS",
+        "count": 474,
+        "is_single_cell": false
+      },
+      {
+        "type": "RNAseq [Salmon]",
+        "count": 438,
+        "is_single_cell": false
+      },
+      {
+        "type": "Histology [Image Pyramid]",
+        "count": 342,
+        "is_single_cell": false
+      },
+      {
+        "type": "SNARE-seq2",
+        "count": 296,
+        "is_single_cell": false
+      },
+      {
+        "type": "Auto-fluorescence",
+        "count": 248,
+        "is_single_cell": false
+      },
+      {
+        "type": "Auto-fluorescence [Image Pyramid]",
+        "count": 248,
+        "is_single_cell": false
+      },
+      {
+        "type": "MIBI",
+        "count": 211,
+        "is_single_cell": false
+      },
+      {
+        "type": "CODEX [Cytokit + SPRM]",
+        "count": 172,
+        "is_single_cell": false
+      },
+      {
+        "type": "MIBI [DeepCell + SPRM]",
+        "count": 172,
+        "is_single_cell": false
+      },
+      {
+        "type": "Visium (no probes)",
+        "count": 157,
+        "is_single_cell": true
+      },
+      {
+        "type": "PhenoCycler",
+        "count": 130,
+        "is_single_cell": false
+      },
+      {
+        "type": "CODEX",
+        "count": 128,
+        "is_single_cell": false
+      },
+      {
+        "type": "10X Multiome",
+        "count": 123,
+        "is_single_cell": true
+      },
+      {
+        "type": "Slide-seq [Salmon]",
+        "count": 112,
+        "is_single_cell": true
+      },
+      {
+        "type": "ATACseq [SnapATAC]",
+        "count": 109,
+        "is_single_cell": false
+      },
+      {
+        "type": "MALDI",
+        "count": 104,
+        "is_single_cell": false
+      },
+      {
+        "type": "MALDI [Image Pyramid]",
+        "count": 104,
+        "is_single_cell": false
+      },
+      {
+        "type": "ATACseq [BWA + MACS2]",
+        "count": 100,
+        "is_single_cell": false
+      },
+      {
+        "type": "Visium (no probes) [Salmon + Scanpy]",
+        "count": 74,
+        "is_single_cell": true
+      },
+      {
+        "type": "10X Multiome [Salmon + ArchR + Muon]",
+        "count": 66,
+        "is_single_cell": true
+      },
+      {
+        "type": "Cell DIVE",
+        "count": 66,
+        "is_single_cell": false
+      },
+      {
+        "type": "Histology [Kaggle-1 Segmentation]",
+        "count": 46,
+        "is_single_cell": false
+      },
+      {
+        "type": "Slide-seq",
+        "count": 42,
+        "is_single_cell": true
+      },
+      {
+        "type": "Histology [Kaggle-1 Glomerulus Segmentation]",
+        "count": 37,
+        "is_single_cell": false
+      },
+      {
+        "type": "CyTOF",
+        "count": 23,
+        "is_single_cell": false
+      },
+      {
+        "type": "WGS",
+        "count": 17,
+        "is_single_cell": false
+      },
+      {
+        "type": "DESI",
+        "count": 15,
+        "is_single_cell": false
+      },
+      {
+        "type": "DESI [Image Pyramid]",
+        "count": 15,
+        "is_single_cell": false
+      },
+      {
+        "type": "MUSIC",
+        "count": 14,
+        "is_single_cell": false
+      },
+      {
+        "type": "2D Imaging Mass Cytometry",
+        "count": 13,
+        "is_single_cell": false
+      },
+      {
+        "type": "2D Imaging Mass Cytometry [Image Pyramid]",
+        "count": 13,
+        "is_single_cell": false
+      },
+      {
+        "type": "CosMx Transcriptomics",
+        "count": 12,
+        "is_single_cell": false
+      },
+      {
+        "type": "Light Sheet",
+        "count": 11,
+        "is_single_cell": false
+      },
+      {
+        "type": "ATACseq [ArchR]",
+        "count": 9,
+        "is_single_cell": false
+      },
+      {
+        "type": "Publication [ancillary]",
+        "count": 9,
+        "is_single_cell": false
+      },
+      {
+        "type": "seqFISH",
+        "count": 9,
+        "is_single_cell": false
+      },
+      {
+        "type": "seqFISH [Image Pyramid]",
+        "count": 9,
+        "is_single_cell": false
+      },
+      {
+        "type": "seqFISH [Lab Processed]",
+        "count": 9,
+        "is_single_cell": false
+      },
+      {
+        "type": "Cell DIVE [DeepCell + SPRM]",
+        "count": 8,
+        "is_single_cell": false
+      },
+      {
+        "type": "SNARE-seq2 [Salmon + ArchR + Muon]",
+        "count": 8,
+        "is_single_cell": false
+      },
+      {
+        "type": "ATACseq [Lab Processed]",
+        "count": 4,
+        "is_single_cell": false
+      },
+      {
+        "type": "PhenoCycler [DeepCell + SPRM]",
+        "count": 4,
+        "is_single_cell": false
+      },
+      {
+        "type": "RNAseq [Lab Processed]",
+        "count": 4,
+        "is_single_cell": false
+      },
+      {
+        "type": "3D Imaging Mass Cytometry",
+        "count": 3,
+        "is_single_cell": false
+      },
+      {
+        "type": "3D Imaging Mass Cytometry [Image Pyramid]",
+        "count": 3,
+        "is_single_cell": false
+      },
+      {
+        "type": "Light Sheet [Image Pyramid]",
+        "count": 3,
+        "is_single_cell": false
+      }
+    ],
+    "sc_datasets": 574
+  },
+  "cellxgene": {
+    "total_collections": 359,
+    "total_datasets": 2083,
+    "dbgap_linked": 0,
+    "ega_linked": 0,
+    "assay_counts": {
+      "10x 3' v2": 464,
+      "10x 3' v3": 1015,
+      "10x 5' v1": 142,
+      "10x multiome": 102,
+      "Smart-seq2": 100,
+      "Visium Spatial Gene Expression V1": 338,
+      "10x 3' v1": 34,
+      "10x 5' transcription profiling": 40,
+      "10x 5' v2": 108,
+      "Drop-seq": 29,
+      "Seq-Well": 10,
+      "modified STRT-seq": 1,
+      "snmC-Seq2": 10,
+      "ScaleBio single cell RNA sequencing": 3,
+      "BD Rhapsody Whole Transcriptome Analysis": 13,
+      "Smart-seq3": 11,
+      "inDrop": 9,
+      "10x 3' transcription profiling": 12,
+      "MARS-seq": 2,
+      "MERFISH": 13,
+      "Patch-seq": 7,
+      "Slide-seqV2": 240,
+      "Smart-seq v4": 7,
+      "GEXSCOPE technology": 2,
+      "CEL-seq2": 7,
+      "Parse Evercode Whole Transcriptome v2": 3,
+      "Seq-Well S3": 4,
+      "10x gene expression flex": 14,
+      "10x scATAC-seq": 5,
+      "sci-RNA-seq3": 81,
+      "STRT-seq": 2,
+      "microwell-seq": 3,
+      "10x transcription profiling": 1,
+      "SORT-seq": 3,
+      "Quartz-seq": 2,
+      "SPLiT-seq": 5,
+      "mCT-seq": 1,
+      "Smart-seq": 2,
+      "snm3C-seq": 6,
+      "scATAC-seq": 3,
+      "BD Rhapsody Targeted mRNA": 3,
+      "sci-Plex": 3,
+      "HIVE CLX Single-Cell RNAseq Solution": 3,
+      "Asteria scRNA-seq kit": 3,
+      "particle-templated instant partition sequencing": 4,
+      "TruDrop": 3,
+      "CEL-seq": 1,
+      "DroNc-seq": 1,
+      "Fluidigm C1-based library preparation": 2,
+      "SCRB-seq": 2
+    },
+    "organism_counts": {
+      "Homo sapiens": 1559,
+      "Mus musculus": 416,
+      "Macaca mulatta": 19,
+      "Callithrix jacchus": 27,
+      "Pan troglodytes": 1,
+      "Sus scrofa": 1,
+      "Sus scrofa domesticus": 1,
+      "Danio rerio": 32,
+      "Microcebus murinus": 27
+    }
+  },
+  "brain_initiative": {
+    "note": "NeMO archive requires specific access; metadata from published sources",
+    "portal": "https://nemoarchive.org",
+    "data_portal": "https://assets.nemoarchive.org",
+    "known_datasets": {
+      "BICCN": {
+        "description": "Brain Initiative Cell Census Network",
+        "estimated_cells": "50M+",
+        "assays": [
+          "scRNA-seq",
+          "snRNA-seq",
+          "scATAC-seq",
+          "snATAC-seq",
+          "MERFISH",
+          "snmC-seq",
+          "snm3C-seq"
+        ],
+        "access": "Mix of open and controlled (dbGaP phs002673)",
+        "organisms": [
+          "Human",
+          "Mouse",
+          "Marmoset"
+        ]
+      },
+      "BICAN": {
+        "description": "Brain Initiative Cell Atlas Network (successor to BICCN)",
+        "estimated_cells": "200M+ (ongoing)",
+        "assays": [
+          "snRNA-seq",
+          "10x Multiome",
+          "MERFISH",
+          "Patch-seq"
+        ],
+        "access": "Controlled (dbGaP)"
+      }
+    }
+  }
+}

@@ -1,0 +1,124 @@
+{
+  "timestamp": "2026-04-01 10:18:55",
+  "summary": {
+    "pass": 18,
+    "warn": 0,
+    "fail": 1
+  },
+  "results": [
+    {
+      "layer": 5,
+      "name": "proto_10xv3",
+      "status": "PASS",
+      "detail": "cells=144, mapping=85.7%, 21s"
+    },
+    {
+      "layer": 5,
+      "name": "proto_10xv2",
+      "status": "PASS",
+      "detail": "cells=97, mapping=26.1%, 14s"
+    },
+    {
+      "layer": 5,
+      "name": "proto_10xv4",
+      "status": "PASS",
+      "detail": "cells=92, mapping=75.7%, 114s"
+    },
+    {
+      "layer": 5,
+      "name": "proto_10x_multiome",
+      "status": "FAIL",
+      "detail": "simpleaf_error: exit=2, error: a value is required for '--reads2 <READS2>' but none was supplied\n\nFor more information, try '--help'.\n"
+    },
+    {
+      "layer": 5,
+      "name": "proto_dropseq",
+      "status": "PASS",
+      "detail": "cells=258, mapping=69.8%, 69s"
+    },
+    {
+      "layer": 5,
+      "name": "proto_indrop",
+      "status": "PASS",
+      "detail": "cells=145, mapping=11.2%, 23s"
+    },
+    {
+      "layer": 5,
+      "name": "proto_celseq",
+      "status": "PASS",
+      "detail": "cells=8, mapping=64.3%, 14s"
+    },
+    {
+      "layer": 5,
+      "name": "proto_celseq2",
+      "status": "PASS",
+      "detail": "cells=1633, mapping=57.9%, 27s"
+    },
+    {
+      "layer": 5,
+      "name": "proto_marsseq",
+      "status": "PASS",
+      "detail": "cells=31, mapping=86.7%, 17s"
+    },
+    {
+      "layer": 5,
+      "name": "proto_scirna",
+      "status": "PASS",
+      "detail": "cells=1163, mapping=65.2%, 14s"
+    },
+    {
+      "layer": 5,
+      "name": "proto_bd_rhapsody",
+      "status": "PASS",
+      "detail": "cells=1724, mapping=13.9%, 143s"
+    },
+    {
+      "layer": 5,
+      "name": "proto_dnbelab",
+      "status": "PASS",
+      "detail": "cells=14850, mapping=88.3%, 19s"
+    },
+    {
+      "layer": 5,
+      "name": "proto_icell8",
+      "status": "PASS",
+      "detail": "cells=323322, mapping=84.7%, 349s"
+    },
+    {
+      "layer": 5,
+      "name": "proto_strtseq",
+      "status": "PASS",
+      "detail": "cells=1389, mapping=87.0%, 29s"
+    },
+    {
+      "layer": 5,
+      "name": "proto_quartzseq",
+      "status": "PASS",
+      "detail": "cells=9265, mapping=79.7%, 20s"
+    },
+    {
+      "layer": 5,
+      "name": "proto_microwell",
+      "status": "PASS",
+      "detail": "cells=50, mapping=46.4%, 42s"
+    },
+    {
+      "layer": 5,
+      "name": "proto_seqwell",
+      "status": "PASS",
+      "detail": "cells=1551, mapping=50.8%, 1194s"
+    },
+    {
+      "layer": 5,
+      "name": "proto_parse",
+      "status": "PASS",
+      "detail": "cells=135, mapping=28.6%, 138s"
+    },
+    {
+      "layer": 5,
+      "name": "proto_ddseq",
+      "status": "PASS",
+      "detail": "cells=117, mapping=72.6%, 363s"
+    }
+  ]
+}

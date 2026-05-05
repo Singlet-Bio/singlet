@@ -1,0 +1,99 @@
+{
+  "gsa_human": {
+    "unique_accessions": [],
+    "known_stats": {
+      "as_of": "2025",
+      "total_studies": 10919,
+      "total_individuals": 1080000,
+      "total_samples": "millions",
+      "note": "GSA-Human requires Chinese institution sponsor for DAC access",
+      "api_limitation": "Search API may require Chinese IP or institutional access",
+      "sc_studies_estimated": "800-2000 based on growth trends"
+    }
+  },
+  "jgas": {
+    "known_stats": {
+      "total_projects": "500+",
+      "human_studies": "300+",
+      "sc_studies_estimated": "50-150",
+      "access": "Controlled - requires Japanese NBDC approval",
+      "note": "JGAS data often also deposited in EGA or dbGaP",
+      "portal": "https://humandbs.dbcls.jp/en/",
+      "key_consortia": [
+        "Japanese Human Cell Atlas",
+        "Tohoku Medical Megabank (ToMMo)",
+        "BioBank Japan"
+      ]
+    }
+  },
+  "additional": {
+    "kids_first": {
+      "note": "API not accessible from this network",
+      "known_sc_studies": "50+ pediatric cancer SC studies",
+      "dbgap_studies": [
+        "phs001436",
+        "phs001228"
+      ],
+      "access": "Controlled via dbGaP"
+    },
+    "stjude": {
+      "note": "St. Jude Cloud hosts pediatric cancer genomics",
+      "sc_data": "Growing collection of scRNA-seq from pediatric tumors",
+      "access": "Controlled - requires data access agreement",
+      "portal": "https://www.stjude.cloud/",
+      "key_datasets": [
+        "Pediatric Cancer Genome Project",
+        "Real-Time Clinical Genomics"
+      ]
+    },
+    "gtex": {
+      "note": "GTEx v9+ includes snRNA-seq for 8 tissues",
+      "dbgap_study": "phs000424",
+      "sc_data": {
+        "snRNA_seq": "~200K nuclei across 8 tissues",
+        "tissues": [
+          "Brain",
+          "Heart",
+          "Lung",
+          "Liver",
+          "Kidney",
+          "Prostate",
+          "Skin",
+          "Esophagus"
+        ],
+        "protocol": "10x Chromium 3' v3 (snRNA-seq)"
+      },
+      "access": "Controlled via dbGaP; processed counts on GTEx portal",
+      "portal": "https://gtexportal.org/"
+    },
+    "topmed": {
+      "note": "Trans-Omics for Precision Medicine - some SC components",
+      "dbgap_study": "phs001024 (umbrella)",
+      "sc_data": "Limited but growing; primarily bulk",
+      "access": "Controlled via dbGaP"
+    },
+    "hca": {
+      "status": "HTTP 404"
+    },
+    "allen_brain": {
+      "note": "Large-scale brain cell atlas data",
+      "key_datasets": {
+        "Allen Brain Cell Atlas": "~4M cells, mouse whole-brain",
+        "SEA-AD": "Seattle Alzheimer's Disease Brain Cell Atlas - 5M+ cells",
+        "Human MTG": "Human middle temporal gyrus - 76K cells"
+      },
+      "access": "Mix of open (processed) and controlled (raw FASTQs via NeMO/dbGaP)",
+      "portals": [
+        "https://portal.brain-map.org/",
+        "https://knowledge.brain-map.org/celltypes"
+      ]
+    },
+    "uk_biobank": {
+      "note": "Population-scale - limited single-cell currently",
+      "sc_data": "Pilot single-cell studies being integrated",
+      "access": "Controlled - must use RAP (Research Analysis Platform) cloud",
+      "constraint": "Data must stay on RAP - cannot download to university HPC",
+      "portal": "https://www.ukbiobank.ac.uk/"
+    }
+  }
+}

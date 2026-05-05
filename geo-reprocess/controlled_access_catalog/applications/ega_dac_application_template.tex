@@ -1,0 +1,240 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{parskip}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{\small EGA Data Access Request}
+\lhead{\small Singlet AI --- Grand Rapids, MI}
+\cfoot{\thepage}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!60!black,
+    urlcolor=blue!60!black,
+}
+
+\titleformat{\section}{\large\bfseries}{\thesection.}{0.5em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection.}{0.5em}{}
+
+\newcommand{\DACName}{{\color{red}\textbf{[DAC NAME]}}}
+\newcommand{\DACInstitution}{{\color{red}\textbf{[DAC INSTITUTION]}}}
+\newcommand{\StudyList}{{\color{red}\textbf{[STUDY LIST --- see Appendix]}}}
+
+\title{%
+    \vspace{-1.5cm}
+    \textbf{EGA Data Access Request}\\[0.3em]
+    \large Application to \DACName\\[0.3em]
+    \normalsize Universal Single-Cell Transcriptomic Reference\\
+    via Non-Negative Matrix Factorization\\[0.3em]
+    \normalsize Principal Investigator: Zach DeBruine, PhD
+}
+\author{
+    Singlet AI\\
+    Grand Rapids, Michigan\\
+    \texttt{zach@singlet.ai}
+}
+\date{\today}
+
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Applicant Information}
+% ══════════════════════════════════════════════════════════════════════════
+
+\begin{tabular}{@{} l p{9cm} @{}}
+\textbf{Principal Investigator:} & Zach DeBruine, PhD \\
+\textbf{Institution:} & \textit{[University Name]} \\
+\textbf{Department:} & \textit{[Department]} \\
+\textbf{Position:} & \textit{[Title]} \\
+\textbf{Email:} & zach@singlet.ai \\
+\textbf{ORCID:} & \textit{[ORCID ID]} \\
+\textbf{Ethics approval:} & \textit{[IRB/Ethics committee reference]} \\
+\end{tabular}
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Datasets Requested}
+% ══════════════════════════════════════════════════════════════════════════
+
+We request access to the following EGA studies and datasets managed by
+\DACName{} at \DACInstitution:
+
+\StudyList{}
+
+\noindent For each dataset we request:
+\begin{itemize}[nosep]
+    \item Raw sequencing data (FASTQ files)
+    \item Associated sample and donor metadata (cell type, tissue,
+          disease status, age, sex)
+\end{itemize}
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Research Purpose}
+% ══════════════════════════════════════════════════════════════════════════
+
+\subsection{Scientific Justification}
+
+We are constructing a comprehensive, splicing-resolved single-cell
+transcriptomic reference by reprocessing raw FASTQ files from all
+available single-cell and single-nucleus sequencing studies into
+harmonized count matrices. These matrices are decomposed via
+\textbf{Non-Negative Matrix Factorization (NMF)} to identify universal
+gene expression programs that capture the full diversity of human
+cellular states.
+
+The requested datasets are essential because they contain
+\textbf{unique tissue types, disease contexts, and patient populations}
+not represented in publicly accessible repositories (GEO, ENCODE). The
+European-origin cohorts in EGA are particularly valuable for ensuring
+that the reference captures population-level variation in gene programs.
+
+\subsection{Specific Use of Data}
+
+\begin{enumerate}[nosep]
+    \item \textbf{Reprocessing:} Raw FASTQ files will be aligned to
+          GRCh38 using STARsolo with splice-aware quantification,
+          producing per-sample count matrices with spliced/unspliced
+          layers.
+
+    \item \textbf{NMF Decomposition:} Count matrices will be integrated with
+          our existing catalog ($\sim$180K public samples) and
+          decomposed into a genes-by-factors matrix $\mathbf{W}$ and a
+          factors-by-cells matrix $\mathbf{H}$.
+
+    \item \textbf{Public Output:} Only the non-identifiable
+          $\mathbf{W}$ matrix (gene loadings, a population-level
+          gene-program dictionary) and k-anonymized summary statistics
+          will be released publicly. No individual-level data is
+          distributed.
+\end{enumerate}
+
+\subsection{Non-commercial Declaration}
+
+This research is conducted in a \textbf{non-commercial, academic
+capacity}. No individual-level data, derived products containing
+individual information, or sequence data will be sold, licensed, or
+transferred to commercial entities.
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Data Security and Processing Environment}
+% ══════════════════════════════════════════════════════════════════════════
+
+\subsection{Processing Location}
+
+All data will be downloaded to and processed on the university's
+\textbf{on-premises High-Performance Computing (HPC) cluster}. No data
+will be uploaded to commercial cloud services.
+
+\begin{tabular}{@{} l p{9cm} @{}}
+\textbf{HPC System:} & \textit{[Cluster name]} at \textit{[University]} \\
+\textbf{Location:} & \textit{[City, Country]} \\
+\textbf{Data jurisdiction:} & United States \\
+\textbf{Physical security:} & University data center, badge access, 24/7 surveillance \\
+\textbf{Network:} & Campus firewall, IDS/IPS, VPN-only access \\
+\textbf{Authentication:} & University SSO + MFA; SSH key-based HPC access \\
+\textbf{Encryption:} & AES-256 at rest; TLS 1.3 in transit \\
+\textbf{Access control:} & POSIX ACLs; PI + approved personnel only \\
+\textbf{Audit logging:} & \texttt{auditd}; quarterly security reviews \\
+\end{tabular}
+
+\subsection{Data Transfer}
+
+Data will be downloaded to the university HPC via the \textbf{EGA
+Download Client} (\texttt{pyega3}) over encrypted HTTPS connections.
+No data will be transferred to any other system.
+
+\subsection{Data Retention and Destruction}
+
+\begin{itemize}[nosep]
+    \item Raw FASTQ files will be deleted after successful alignment
+          and QC verification.
+    \item Count matrices will be retained only for the approved project
+          duration.
+    \item All data will be securely destroyed (NIST 800-88 guidelines)
+          upon project completion, access expiration, or revocation.
+    \item A deletion certificate will be provided to the DAC upon
+          request.
+\end{itemize}
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Privacy and Ethical Considerations}
+% ══════════════════════════════════════════════════════════════════════════
+
+\subsection{No Re-identification}
+
+We will make no attempt to re-identify study participants from the
+genomic data. Metadata is used solely for annotating NMF factors
+(e.g., associating factors with tissue types or disease categories)
+at the aggregate level.
+
+\subsection{Output Privacy}
+
+The $\mathbf{W}$ matrix is a population-level parameter containing no
+individual data. Each column represents a gene co-expression program
+learned from millions of cells collectively. Removing any single donor
+changes $\mathbf{W}$ by $O(1/N)$, making individual contributions
+non-recoverable.
+
+Summary statistics are released only after k-anonymization ($k \geq 10$
+donors per group).
+
+\subsection{GDPR Considerations}
+
+As the data originates from European subjects and is processed in the
+United States:
+\begin{itemize}[nosep]
+    \item Processing is conducted under the \textbf{scientific research
+          exemption} (GDPR Article 89).
+    \item No individual-level data leaves the secure compute
+          environment.
+    \item A \textbf{Data Processing Agreement (DPA)} can be executed
+          with the data controller if required.
+    \item The university maintains Standard Contractual Clauses (SCCs)
+          for EU--US data transfers as required post-Schrems~II.
+\end{itemize}
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Personnel}
+% ══════════════════════════════════════════════════════════════════════════
+
+\begin{tabular}{@{} l l p{5.5cm} @{}}
+\toprule
+\textbf{Name} & \textbf{Role} & \textbf{Responsibilities} \\
+\midrule
+Zach DeBruine, PhD & PI & Study design, NMF methods, oversight \\
+\textit{[TBD]} & Co-I & Pipeline development, QC \\
+\textit{[TBD]} & Data Analyst & Reprocessing, metadata curation \\
+\bottomrule
+\end{tabular}
+
+\bigskip
+\noindent All personnel have completed appropriate research ethics
+training and will not access data until formal approval is received
+from the DAC.
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Signatures}
+% ══════════════════════════════════════════════════════════════════════════
+
+\bigskip
+\begin{tabular}{@{} p{6cm} p{6cm} @{}}
+\rule{5.5cm}{0.4pt} & \rule{5.5cm}{0.4pt} \\
+Zach DeBruine, PhD & Date \\
+Principal Investigator & \\[1.5cm]
+\rule{5.5cm}{0.4pt} & \rule{5.5cm}{0.4pt} \\
+\textit{[Signing Official Name]} & Date \\
+\textit{[Title]}, \textit{[University]} & \\
+\end{tabular}
+
+\end{document}

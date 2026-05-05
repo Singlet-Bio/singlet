@@ -1,0 +1,5841 @@
+{
+  "phs_studies": {
+    "phs000007": {
+      "phs": "phs000007",
+      "name": "NHLBI Framingham SABRe CVD",
+      "sc_runs": 0,
+      "wgs_runs": 1264,
+      "total_runs": 8746,
+      "has_sc": false,
+      "has_wgs": true,
+      "has_paired": false
+    },
+    "phs000159": {
+      "phs": "phs000159",
+      "name": "Single-cell discovery and multi-omic characterization of therapeutic targets in ",
+      "sc_runs": 0,
+      "wgs_runs": 944,
+      "total_runs": 4189,
+      "has_sc": false,
+      "has_wgs": true,
+      "has_paired": false
+    },
+    "phs000178": {
+      "phs": "phs000178",
+      "name": "GDC/TCGA",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 0,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs000187": {
+      "phs": "phs000187",
+      "name": "High Density SNP Association Analysis of Melanoma",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 0,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs000218": {
+      "phs": "phs000218",
+      "name": "TARGET",
+      "sc_runs": 0,
+      "wgs_runs": 2361,
+      "total_runs": 14493,
+      "has_sc": false,
+      "has_wgs": true,
+      "has_paired": false
+    },
+    "phs000363": {
+      "phs": "phs000363",
+      "name": "NHLBI Framingham SABRe CVD",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 0,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs000424": {
+      "phs": "phs000424",
+      "name": "GTEx",
+      "sc_runs": 0,
+      "wgs_runs": 1302,
+      "total_runs": 24455,
+      "has_sc": false,
+      "has_wgs": true,
+      "has_paired": false
+    },
+    "phs000549": {
+      "phs": "phs000549",
+      "name": "Clonal Evolution of Pre-Leukemic HSC Precedes Human AML",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 12,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs000640": {
+      "phs": "phs000640",
+      "name": "Massively Multiplex Single-Cell Hi-C",
+      "sc_runs": 0,
+      "wgs_runs": 25,
+      "total_runs": 326,
+      "has_sc": false,
+      "has_wgs": true,
+      "has_paired": false
+    },
+    "phs000748": {
+      "phs": "phs000748",
+      "name": "Single-cell discovery and multi-omic characterization of therapeutic targets in ",
+      "sc_runs": 0,
+      "wgs_runs": 2007,
+      "total_runs": 5026,
+      "has_sc": false,
+      "has_wgs": true,
+      "has_paired": false
+    },
+    "phs000815": {
+      "phs": "phs000815",
+      "name": "Gene Expression and Regulatory Networks in Human Leukocytes",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 797,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs000833": {
+      "phs": "phs000833",
+      "name": "Single Cell Analysis Program - Transcriptome (SCAP-T)",
+      "sc_runs": 0,
+      "wgs_runs": 22,
+      "total_runs": 9529,
+      "has_sc": false,
+      "has_wgs": true,
+      "has_paired": false
+    },
+    "phs000834": {
+      "phs": "phs000834",
+      "name": "Single Cell Analysis Program - Transcriptome (SCAP-T) (UCSD)",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 5161,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs000835": {
+      "phs": "phs000835",
+      "name": "Single Cell Analysis Program - Transcriptome (SCAP-T) (U. Penn)",
+      "sc_runs": 0,
+      "wgs_runs": 22,
+      "total_runs": 1069,
+      "has_sc": false,
+      "has_wgs": true,
+      "has_paired": false
+    },
+    "phs000836": {
+      "phs": "phs000836",
+      "name": "Single Cell Analysis Program - Transcriptome (SCAP-T) (USC)",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 3299,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs000924": {
+      "phs": "phs000924",
+      "name": "NextGen Consortium: The iPSCORE (iPSC Collection for Omic Research) Resource",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 2280,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs000933": {
+      "phs": "phs000933",
+      "name": "Integrative molecular and clinical profiling of acral melanoma links focal ampli",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 999,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs000958": {
+      "phs": "phs000958",
+      "name": "CSER-MedSeq",
+      "sc_runs": 0,
+      "wgs_runs": 100,
+      "total_runs": 100,
+      "has_sc": false,
+      "has_wgs": true,
+      "has_paired": false
+    },
+    "phs000989": {
+      "phs": "phs000989",
+      "name": "Study of Human Developmental Neurogenesis",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 7899,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs000993": {
+      "phs": "phs000993",
+      "name": "",
+      "sc_runs": 0,
+      "wgs_runs": 699,
+      "total_runs": 699,
+      "has_sc": false,
+      "has_wgs": true,
+      "has_paired": false
+    },
+    "phs001016": {
+      "phs": "phs001016",
+      "name": "Fixed Single Cell Study (Radial Glia Cells)",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 136,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001024": {
+      "phs": "phs001024",
+      "name": "",
+      "sc_runs": 0,
+      "wgs_runs": 128,
+      "total_runs": 128,
+      "has_sc": false,
+      "has_wgs": true,
+      "has_paired": false
+    },
+    "phs001027": {
+      "phs": "phs001027",
+      "name": "Homo sapiens",
+      "sc_runs": 0,
+      "wgs_runs": 140,
+      "total_runs": 910,
+      "has_sc": false,
+      "has_wgs": true,
+      "has_paired": false
+    },
+    "phs001029": {
+      "phs": "phs001029",
+      "name": "Full-Length Single-Cell RNA-seq Applied to HeLa S3 Cells",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 60,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001048": {
+      "phs": "phs001048",
+      "name": "The FUSION Tissue Biopsy Study",
+      "sc_runs": 0,
+      "wgs_runs": 290,
+      "total_runs": 2741,
+      "has_sc": false,
+      "has_wgs": true,
+      "has_paired": false
+    },
+    "phs001068": {
+      "phs": "phs001068",
+      "name": "The FUSION Tissue Biopsy Study - Muscle Expression by RNAseq",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 0,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001110": {
+      "phs": "phs001110",
+      "name": "Kids First: Pediatric Research Project on the Genomic Analysis of Congenital Dia",
+      "sc_runs": 0,
+      "wgs_runs": 594,
+      "total_runs": 594,
+      "has_sc": false,
+      "has_wgs": true,
+      "has_paired": false
+    },
+    "phs001158": {
+      "phs": "phs001158",
+      "name": "Spatial transcriptomics of human dorsal root ganglia from subjects with a histor",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 274,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001181": {
+      "phs": "phs001181",
+      "name": "Single-Cell DNA and RNA Sequencing over A 29-Year Period of A CLL Patient",
+      "sc_runs": 0,
+      "wgs_runs": 121,
+      "total_runs": 483,
+      "has_sc": false,
+      "has_wgs": true,
+      "has_paired": false
+    },
+    "phs001187": {
+      "phs": "phs001187",
+      "name": "Epigenomics of Human CD8 T cell Differentiation and Aging",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 75,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001188": {
+      "phs": "phs001188",
+      "name": "The FUSION Study - Islet Expression and Regulation",
+      "sc_runs": 0,
+      "wgs_runs": 17,
+      "total_runs": 1181,
+      "has_sc": false,
+      "has_wgs": true,
+      "has_paired": false
+    },
+    "phs001200": {
+      "phs": "phs001200",
+      "name": "Neutralizing Antibodies against West Nile Virus from Human B Cells",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 26,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001205": {
+      "phs": "phs001205",
+      "name": "Cell types and lineages of hESC-derived brain cells",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 472,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001211": {
+      "phs": "phs001211",
+      "name": "TOPMed",
+      "sc_runs": 0,
+      "wgs_runs": 3156,
+      "total_runs": 3156,
+      "has_sc": false,
+      "has_wgs": true,
+      "has_paired": false
+    },
+    "phs001231": {
+      "phs": "phs001231",
+      "name": "NeuroLINCS",
+      "sc_runs": 0,
+      "wgs_runs": 20,
+      "total_runs": 148,
+      "has_sc": false,
+      "has_wgs": true,
+      "has_paired": false
+    },
+    "phs001255": {
+      "phs": "phs001255",
+      "name": "Molecular Evolution of Cancer",
+      "sc_runs": 0,
+      "wgs_runs": 20,
+      "total_runs": 20,
+      "has_sc": false,
+      "has_wgs": true,
+      "has_paired": false
+    },
+    "phs001268": {
+      "phs": "phs001268",
+      "name": "Sequencing Thousands of Single Cell Genomes with Combinatorial Indexing",
+      "sc_runs": 0,
+      "wgs_runs": 3,
+      "total_runs": 3,
+      "has_sc": false,
+      "has_wgs": true,
+      "has_paired": false
+    },
+    "phs001269": {
+      "phs": "phs001269",
+      "name": "Massively Multiplex Single-Cell Hi-C",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 6,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001276": {
+      "phs": "phs001276",
+      "name": "Single-cell profiling of hESC-derived interneuron development",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 104,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001294": {
+      "phs": "phs001294",
+      "name": "Homo sapiens",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 0,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001300": {
+      "phs": "phs001300",
+      "name": "Single Nuclei Multiome of the NABEC Cerebral Cortex",
+      "sc_runs": 0,
+      "wgs_runs": 354,
+      "total_runs": 2262,
+      "has_sc": false,
+      "has_wgs": true,
+      "has_paired": false
+    },
+    "phs001323": {
+      "phs": "phs001323",
+      "name": "Single-cell RNA-sequencing identifies immune biomarkers of response to immunothe",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 1078,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001362": {
+      "phs": "phs001362",
+      "name": "Linked Read Sequencing of Gastric Cancer Metastases",
+      "sc_runs": 0,
+      "wgs_runs": 3,
+      "total_runs": 3,
+      "has_sc": false,
+      "has_wgs": true,
+      "has_paired": false
+    },
+    "phs001372": {
+      "phs": "phs001372",
+      "name": "Integrated Single-Cell Analysis in Chronic Lymphocytic Leukemia",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 0,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001378": {
+      "phs": "phs001378",
+      "name": "scRNA-Seq Reveals Lymphoma B Cell Diversity and T Cell Immune Checkpoint Co-Expr",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 21,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001438": {
+      "phs": "phs001438",
+      "name": "Chromatin Accessibility in Developing Human Brain",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 37,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001457": {
+      "phs": "phs001457",
+      "name": "Accelerating Medicines Partnership-Rheumatoid Arthritis (AMP-RA)",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 10001,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001515": {
+      "phs": "phs001515",
+      "name": "",
+      "sc_runs": 0,
+      "wgs_runs": 5137,
+      "total_runs": 5137,
+      "has_sc": false,
+      "has_wgs": true,
+      "has_paired": false
+    },
+    "phs001519": {
+      "phs": "phs001519",
+      "name": "Personalized Neoantigen Cancer Vaccine in Glioblastoma Multiforme",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 36,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001525": {
+      "phs": "phs001525",
+      "name": "Genome and Transcriptome Analysis of X-Linked Dystonia Parkinsonism Cohort",
+      "sc_runs": 0,
+      "wgs_runs": 15,
+      "total_runs": 359,
+      "has_sc": false,
+      "has_wgs": true,
+      "has_paired": false
+    },
+    "phs001529": {
+      "phs": "phs001529",
+      "name": "Single-Cell RNA-Seq of Rheumatoid Arthritis Synovial Tissue",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 17,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001587": {
+      "phs": "phs001587",
+      "name": "The origin and dynamics of cellular heterogeneity vary across lineage subtypes o",
+      "sc_runs": 0,
+      "wgs_runs": 23,
+      "total_runs": 415,
+      "has_sc": false,
+      "has_wgs": true,
+      "has_paired": false
+    },
+    "phs001615": {
+      "phs": "phs001615",
+      "name": "Comprehensive Epigenetic Landscape of Rheumatoid Arthritis FLS",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 213,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001627": {
+      "phs": "phs001627",
+      "name": "Single-Cell DNA Sequencing of AML with Droplet Microfluidics",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 3,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001671": {
+      "phs": "phs001671",
+      "name": "RNA Ligation Precedes U6 snRNA/LINE-1 Retrotransposition",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 3,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001680": {
+      "phs": "phs001680",
+      "name": "T Cell States Associated with Response to Checkpoint Blockade in Melanoma",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 98,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001703": {
+      "phs": "phs001703",
+      "name": "Impact of Genetic Polymorphisms on Human Immune Cell Gene Expression",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 2018,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001704": {
+      "phs": "phs001704",
+      "name": "Enhancer Mapping in Chronic Lymphocytic Leukemia",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 87,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001750": {
+      "phs": "phs001750",
+      "name": "Single Cell Analysis of Pulmonary Fibrosis",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 83,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001763": {
+      "phs": "phs001763",
+      "name": "All of Us",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 0,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001773": {
+      "phs": "phs001773",
+      "name": "Linked-Read Sequencing to Resolve Complex Structural Variants",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 0,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001790": {
+      "phs": "phs001790",
+      "name": "NIMH Human Middle Temporal Gyrus (MTG) Cell Types",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 0,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001810": {
+      "phs": "phs001810",
+      "name": "HuBMAP",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 0,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001836": {
+      "phs": "phs001836",
+      "name": "A Single Cell Transcriptomic Analysis of Human Neocortical Development",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 76,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001840": {
+      "phs": "phs001840",
+      "name": "Single-Cell Analysis of Human Pancreatic Ductal Adenocarcinoma",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 9,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001854": {
+      "phs": "phs001854",
+      "name": "Human Pilocytic Astrocytoma Single Cell RNA Sequencing",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 1234,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001861": {
+      "phs": "phs001861",
+      "name": "Single cell analysis reveals new evolutionary complexity in uveal melanoma",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 24,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001886": {
+      "phs": "phs001886",
+      "name": "Single Cell Analysis of the Human Placenta",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 76,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001907": {
+      "phs": "phs001907",
+      "name": "",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 58,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001934": {
+      "phs": "phs001934",
+      "name": "Sexual Dimorphism in Human Immune System Aging",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 371,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs001961": {
+      "phs": "phs001961",
+      "name": "Single Nucleus Multiomic Profiling Reveals Age-Dynamic Regulation of Host Genes ",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 25,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs002003": {
+      "phs": "phs002003",
+      "name": "A human cell atlas of fetal gene expression",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 161,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs002007": {
+      "phs": "phs002007",
+      "name": "Transcriptomic characterization of human innate T cells",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 85,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs002008": {
+      "phs": "phs002008",
+      "name": "Developmental cell type specific enhancers in orofacial morphology and disease [",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 118,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs002048": {
+      "phs": "phs002048",
+      "name": "A single cell approach to map cellular subsets involved in Systemic Lupus Erythe",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 57,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs002062": {
+      "phs": "phs002062",
+      "name": "",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 0,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs002071": {
+      "phs": "phs002071",
+      "name": "Analysis of donor pancreata defines the transcriptomic signature and microenviro",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 41,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs002159": {
+      "phs": "phs002159",
+      "name": "",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 0,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs002204": {
+      "phs": "phs002204",
+      "name": "Cardiac cell type-specific gene regulatory programs and disease risk association",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 21,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs002256": {
+      "phs": "phs002256",
+      "name": "KPMP",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 0,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs002258": {
+      "phs": "phs002258",
+      "name": "",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 900,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs002280": {
+      "phs": "phs002280",
+      "name": "Multimodal Analysis for Human ex vivo Studies Shows Extensive Molecular Changes ",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 55,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs002316": {
+      "phs": "phs002316",
+      "name": "Simultaneous trimodal single cell measurement of transcripts, epitopes, and chro",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 49,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs002361": {
+      "phs": "phs002361",
+      "name": "Distinct baseline immune characteristics associated with responses to conjugated",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 269,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs002362": {
+      "phs": "phs002362",
+      "name": "HTAN-HTAPP",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 0,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs002371": {
+      "phs": "phs002371",
+      "name": "HTAN",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 0,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs002386": {
+      "phs": "phs002386",
+      "name": "",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 0,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs002407": {
+      "phs": "phs002407",
+      "name": "A Single Cell Atlas of MMRd and MMRp Colorectal Cancer",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 453,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs002443": {
+      "phs": "phs002443",
+      "name": "Molecular signatures of in-situ to invasive progression for basal-like breast ca",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 18,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs002507": {
+      "phs": "phs002507",
+      "name": "",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 5,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs002624": {
+      "phs": "phs002624",
+      "name": "SenNet",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 122,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs002655": {
+      "phs": "phs002655",
+      "name": "SARS-CoV-2 induced immune perturbations in infants vary with disease severity an",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 40,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs002673": {
+      "phs": "phs002673",
+      "name": "BICCN",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 0,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs002716": {
+      "phs": "phs002716",
+      "name": "AMP-PD",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 0,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs002790": {
+      "phs": "phs002790",
+      "name": "",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 7356,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs002808": {
+      "phs": "phs002808",
+      "name": "",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 0,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs002915": {
+      "phs": "phs002915",
+      "name": "Single-cell multi-omic velocity infers dynamic and decoupled gene regulation",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 14,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs002922": {
+      "phs": "phs002922",
+      "name": "Baseline Immune State and T cell Clonal Kinetics are Associated with Response to",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 246,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs002926": {
+      "phs": "phs002926",
+      "name": "Young infants display heterogeneous serological responses and extensive but reve",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 18,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs003002": {
+      "phs": "phs003002",
+      "name": "CD137 agonism enhances anti-PD1 induced activation of clonally expanded CD8+ T c",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 595,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs003015": {
+      "phs": "phs003015",
+      "name": "Tracking of donor and recipient immune and leukemia phenotypes after allogeneic ",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 324,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs003123": {
+      "phs": "phs003123",
+      "name": "",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 0,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs003169": {
+      "phs": "phs003169",
+      "name": "HCA",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 123,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs003230": {
+      "phs": "phs003230",
+      "name": "Temporal evolution reveals bifurcated lineages in aggressive neuroendocrine smal",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 142,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs003260": {
+      "phs": "phs003260",
+      "name": "Single Nucleus Transcriptomes from the Ventral Midbrain of Opioid Overdose Cases",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 16,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs003366": {
+      "phs": "phs003366",
+      "name": "",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 0,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs003417": {
+      "phs": "phs003417",
+      "name": "Multimodal gene expression and chromatin accessibility profiles at the single-ce",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 44,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs003418": {
+      "phs": "phs003418",
+      "name": "Single-cell Transcriptomic Characterization of Microscopic Colitis",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 171,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs003427": {
+      "phs": "phs003427",
+      "name": "Single-Cell Profiling of Premature Neonate Airways Reveals a Continuum of Myeloi",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 10,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs003431": {
+      "phs": "phs003431",
+      "name": "BICAN",
+      "sc_runs": 0,
+      "wgs_runs": 491,
+      "total_runs": 491,
+      "has_sc": false,
+      "has_wgs": true,
+      "has_paired": false
+    },
+    "phs003629": {
+      "phs": "phs003629",
+      "name": "Pre-existing skin-resident CD8 and \u03b3\u03b4 T cell circuits mediate immune response in",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 184,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs003672": {
+      "phs": "phs003672",
+      "name": "Late-stage tertiary lymphoid structures in hepatocellular carcinoma treated with",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 0,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs003848": {
+      "phs": "phs003848",
+      "name": "Single-cell RNA-seq of peripheral blood links cell-type-specific regulation of s",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 0,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs003991": {
+      "phs": "phs003991",
+      "name": "Single Cell Opioid Responses in the Context of HIV (SCORCH)",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 0,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs004269": {
+      "phs": "phs004269",
+      "name": "Remodeling of the immune microenvironment is linked to adverse outcome in pediat",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 66,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs004377": {
+      "phs": "phs004377",
+      "name": "Metabolic Adaptations Rewire CD4 T Cells in a Subset-Specific Manner in Human Cr",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 0,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs004458": {
+      "phs": "phs004458",
+      "name": "Gene expression profile at single cell level  of Drug-tolerant persister cells i",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 0,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs004468": {
+      "phs": "phs004468",
+      "name": "Comprehensive Benchmarking of CITE-seq versus DOGMA-seq Single Cell Multimodal O",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 8,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    },
+    "phs004521": {
+      "phs": "phs004521",
+      "name": "Myofibroblast programming blocks differentiation of TLS-organizing fibroblastic ",
+      "sc_runs": 0,
+      "wgs_runs": 0,
+      "total_runs": 0,
+      "has_sc": false,
+      "has_wgs": false,
+      "has_paired": false
+    }
+  },
+  "paired_wgs_sc": [],
+  "total_sc_runs": 0,
+  "total_phs_with_sc": 0,
+  "detailed_phs": {
+    "phs001680": {
+      "phs": "phs001680",
+      "name": "T Cell States Associated with Response to Checkpoint Blockade in Melanoma",
+      "gap_uids": [
+        "1909414"
+      ],
+      "study_results": {
+        "d_study_id": "phs001680.v1.p1",
+        "d_study_name": "T Cell States Associated with Response to Checkpoint Blockade in Melanoma",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "Smart-Seq2"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "NextSeq 500"
+          },
+          {
+            "d_genotype_vendor": "Agilent",
+            "d_genotype_platform": "SureSelect Targeted Enrichment"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500 V4"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "ATAC-seq",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "WXS",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "19",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "32",
+        "d_study_type": " Cohort",
+        "d_study_type_list": [
+          {
+            "d_type": "Cohort"
+          }
+        ],
+        "d_study_design": "Prospective Longitudinal Cohort",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2019-07-23",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Cancer Institute"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Immunotherapy",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Melanoma",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "T-Lymphocytes",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Immunotherapy",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "DNA"
+          },
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          },
+          {
+            "d_tumor_type": "tumor"
+          }
+        ]
+      },
+      "bioproject_ids": [
+        "493623"
+      ]
+    },
+    "phs001886": {
+      "phs": "phs001886",
+      "name": "Single Cell Analysis of the Human Placenta",
+      "gap_uids": [
+        "1975324"
+      ],
+      "study_results": {
+        "d_study_id": "phs001886.v1.p1",
+        "d_study_name": "Single Cell Analysis of the Human Placenta",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "NovaSeq 6000"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "OTHER",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "16",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "9",
+        "d_study_type": " Case-Control",
+        "d_study_type_list": [
+          {
+            "d_type": "Case-Control"
+          }
+        ],
+        "d_study_design": "Case-Control",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2019-12-18",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Institute of Child Health and Human Development"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Labor, Obstetric",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Premature Birth",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Labor, Obstetric",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          }
+        ]
+      }
+    },
+    "phs001188": {
+      "phs": "phs001188",
+      "name": "The FUSION Study - Islet Expression and Regulation",
+      "gap_uids": [
+        "1925479"
+      ],
+      "study_results": {
+        "d_study_id": "phs001188.v2.p1",
+        "d_study_name": "The FUSION Study - Islet Expression and Regulation",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "Infinium Omni2.5 BeadChip"
+          },
+          {
+            "d_genotype_vendor": "Haplotype Reference Consortium",
+            "d_genotype_platform": "HRC.r1.1.2016 (GRCh37/hg19)"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2000"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "Infinium MethylationEPIC"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "TruSeq Small RNA Sample Prep Kit"
+          },
+          {
+            "d_genotype_vendor": "DNAFORM",
+            "d_genotype_platform": "nAnT-iCAGE"
+          },
+          {
+            "d_genotype_vendor": "10x Genomics",
+            "d_genotype_platform": "Chromium Single Cell 3' v2"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "NextSeq 550"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq X"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500 V4 1T"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "ATAC-seq",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "Bisulfite-Seq",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "Methylation (CpG)",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "QTL Results",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "RNA Seq expression levels",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "SNP Genotypes (Array)",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "SNP Genotypes (imputed)",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "WGS",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "miRNA-Seq",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "28",
+        "d_num_documents_in_subtree": "1",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "106",
+        "d_study_type": " Control Set",
+        "d_study_type_list": [
+          {
+            "d_type": "Control Set"
+          }
+        ],
+        "d_study_design": "Control Set",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo|Version 2: ",
+        "d_study_release_date": " ",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Human Genome Research Institute"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Diabetes Mellitus, Type 2",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Diabetes Mellitus, Type 2",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "dedifferentiated"
+          },
+          {
+            "d_analyte_type": "DNA"
+          },
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          }
+        ]
+      },
+      "bioproject_ids": [
+        "1101984"
+      ]
+    },
+    "phs001378": {
+      "phs": "phs001378",
+      "name": "scRNA-Seq Reveals Lymphoma B Cell Diversity and T Cell Immune Checkpoint Co-Expression",
+      "gap_uids": [
+        "1716962"
+      ],
+      "study_results": {
+        "d_study_id": "phs001378.v1.p1",
+        "d_study_name": "scRNA-Seq Reveals Lymphoma B Cell Diversity and T Cell Immune Checkpoint Co-Expression",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "10x Genomics",
+            "d_genotype_platform": "Chromium v1 Single Cell 3? Reagent kit"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "22",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "10",
+        "d_study_type": " Case-Control",
+        "d_study_type_list": [
+          {
+            "d_type": "Case-Control"
+          }
+        ],
+        "d_study_design": "Case-Control",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2019-05-07",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Human Genome Research Institute"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Lymphoma, Follicular",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Lymphoma, Non-Hodgkin",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Lymphoma, Follicular",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          },
+          {
+            "d_tumor_type": "tumor"
+          }
+        ]
+      }
+    },
+    "phs001703": {
+      "phs": "phs001703",
+      "name": "Impact of Genetic Polymorphisms on Human Immune Cell Gene Expression",
+      "gap_uids": [
+        "1914814"
+      ],
+      "study_results": {
+        "d_study_id": "phs001703.v2.p1",
+        "d_study_name": "Impact of Genetic Polymorphisms on Human Immune Cell Gene Expression",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500"
+          },
+          {
+            "d_genotype_vendor": "Affymetrix",
+            "d_genotype_platform": "MEGA EX Beadchip"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "RNA Seq expression levels",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "SNP Genotypes (Array)",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "14",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "91",
+        "d_study_type": " Longitudinal Cohort",
+        "d_study_type_list": [
+          {
+            "d_type": "Longitudinal Cohort"
+          }
+        ],
+        "d_study_design": "Prospective Longitudinal Cohort",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Versions 1-2: passed embargo",
+        "d_study_release_date": " 2019-01-15",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Institute of Allergy and Infectious Diseases"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "DNA"
+          },
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          }
+        ]
+      }
+    },
+    "phs001205": {
+      "phs": "phs001205",
+      "name": "Cell types and lineages of hESC-derived brain cells",
+      "gap_uids": [
+        "1598897"
+      ],
+      "study_results": {
+        "d_study_id": "phs001205.v1.p1",
+        "d_study_name": "Cell types and lineages of hESC-derived brain cells",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "RNA Seq (NGS)",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "19",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "2",
+        "d_study_type": " Single Cell Analysis, Transcriptome Analysis, Stem Cell Lines",
+        "d_study_type_list": [
+          {
+            "d_type": "Single Cell Analysis"
+          },
+          {
+            "d_type": "Transcriptome Analysis"
+          },
+          {
+            "d_type": "Stem Cell Lines"
+          }
+        ],
+        "d_study_design": "Control Set",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2016-10-27",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Institute of Neurological Disorders and Stroke"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Neural Stem Cells",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Embryonic Stem Cells",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Neural Stem Cells",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "mRNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "unspecified"
+          }
+        ]
+      }
+    },
+    "phs001525": {
+      "phs": "phs001525",
+      "name": "Genome and Transcriptome Analysis of X-Linked Dystonia Parkinsonism Cohort",
+      "gap_uids": [
+        "1770844"
+      ],
+      "study_results": {
+        "d_study_id": "phs001525.v1.p1",
+        "d_study_name": "Genome and Transcriptome Analysis of X-Linked Dystonia Parkinsonism Cohort",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "Targeted-Capture",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "WGS",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "40",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "62",
+        "d_study_type": " Cohort",
+        "d_study_type_list": [
+          {
+            "d_type": "Cohort"
+          }
+        ],
+        "d_study_design": "Mendelian",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2018-03-12",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Institute of Neurological Disorders and Stroke"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "X-Linked Dystonia Parkinsonism",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Lubag Syndrome",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Dystonia 3, Torsion, X-linked",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Torsion Dystonia-Parkinsonism, Filipino Type",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "DYT3",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "X-Linked Dystonia Parkinsonism",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "DNA"
+          },
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "unspecified"
+          }
+        ]
+      }
+    },
+    "phs001840": {
+      "phs": "phs001840",
+      "name": "Single-Cell Analysis of Human Pancreatic Ductal Adenocarcinoma",
+      "gap_uids": [
+        "1943229"
+      ],
+      "study_results": {
+        "d_study_id": "phs001840.v1.p1",
+        "d_study_name": "Single-Cell Analysis of Human Pancreatic Ductal Adenocarcinoma",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 4000"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "RNA Seq expression levels",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "15",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "6",
+        "d_study_type": " Cohort",
+        "d_study_type_list": [
+          {
+            "d_type": "Cohort"
+          }
+        ],
+        "d_study_design": "Prospective Longitudinal Cohort",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2019-07-17",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Cancer Institute"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Carcinoma, Pancreatic Ductal",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Cancer-Associated Fibroblasts",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Tumor Microenvironment",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Carcinoma, Pancreatic Ductal",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          },
+          {
+            "d_tumor_type": "tumor"
+          }
+        ]
+      }
+    },
+    "phs001615": {
+      "phs": "phs001615",
+      "name": "Comprehensive Epigenetic Landscape of Rheumatoid Arthritis FLS",
+      "gap_uids": [
+        "1900143"
+      ],
+      "study_results": {
+        "d_study_id": "phs001615.v1.p1",
+        "d_study_name": "Comprehensive Epigenetic Landscape of Rheumatoid Arthritis FLS",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "TruSeq RNA Sample Preparation Kit"
+          },
+          {
+            "d_genotype_vendor": "Zymo Research",
+            "d_genotype_platform": "Zymo-Spin ChIP Kit"
+          },
+          {
+            "d_genotype_vendor": "Epinomics",
+            "d_genotype_platform": "ATAC-Seq"
+          },
+          {
+            "d_genotype_vendor": "Eurofins Genomics",
+            "d_genotype_platform": "Whole Genome Bisulfite Sequencing"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "ATAC-seq",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "Bisulfite-Seq",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "ChIP-Seq",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "14",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "22",
+        "d_study_type": " Case-Control",
+        "d_study_type_list": [
+          {
+            "d_type": "Case-Control"
+          }
+        ],
+        "d_study_design": "Case-Control",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2018-09-27",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Institute of Arthritis and Musculoskeletal and Skin Diseases"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Arthritis, Rheumatoid",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Osteoarthritis",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Arthritis, Rheumatoid",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "DNA"
+          },
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          }
+        ]
+      }
+    },
+    "phs001790": {
+      "phs": "phs001790",
+      "name": "NIMH Human Middle Temporal Gyrus (MTG) Cell Types",
+      "gap_uids": [
+        "1925596"
+      ],
+      "study_results": {
+        "d_study_id": "phs001790.v1.p1",
+        "d_study_name": "NIMH Human Middle Temporal Gyrus (MTG) Cell Types",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Clontech",
+            "d_genotype_platform": "SMART-Seq v4 Ultra Low Input RNA Kit"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "Nextera XT DNA Library Prep Kit"
+          }
+        ],
+        "d_study_molecular_data_type_list": [],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": " ",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "8",
+        "d_study_type": " RNA Sequencing",
+        "d_study_type_list": [
+          {
+            "d_type": "RNA Sequencing"
+          }
+        ],
+        "d_study_design": "Cross-Sectional",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2019-03-21",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Institute of Mental Health"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Cerebral Cortex",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Sequence Analysis, RNA",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Cerebral Cortex",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          }
+        ]
+      }
+    },
+    "phs001200": {
+      "phs": "phs001200",
+      "name": "Neutralizing Antibodies against West Nile Virus from Human B Cells",
+      "gap_uids": [
+        "1598062"
+      ],
+      "study_results": {
+        "d_study_id": "phs001200.v1.p1",
+        "d_study_name": "Neutralizing Antibodies against West Nile Virus from Human B Cells",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "MiSeq"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "AMPLICON",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "18",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "7",
+        "d_study_type": " Case Set",
+        "d_study_type_list": [
+          {
+            "d_type": "Case Set"
+          }
+        ],
+        "d_study_design": "Case Set",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2017-02-23",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Institute of Allergy and Infectious Diseases"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "West Nile Fever",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "West Nile virus",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "West Nile Fever",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          },
+          {
+            "d_tumor_type": "unspecified"
+          }
+        ]
+      }
+    },
+    "phs000924": {
+      "phs": "phs000924",
+      "name": "NextGen Consortium: The iPSCORE (iPSC Collection for Omic Research) Resource",
+      "gap_uids": [
+        "1934464"
+      ],
+      "study_results": {
+        "d_study_id": "phs000924.v3.p1",
+        "d_study_name": "NextGen Consortium: The iPSCORE (iPSC Collection for Omic Research) Resource",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "Infinium HumanCore BeadChips"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "Infinium HumanMethylation450 BeadChip"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 4000"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 4000"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 4000"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 4000"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 4000"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "ATAC-seq",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "ChIP-Seq",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "Hi-C",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "Methylation (CpG)",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "RNA Seq expression levels",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "SNP Genotypes (Array)",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "65",
+        "d_num_documents_in_subtree": "1",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "277",
+        "d_study_type": " Control Set, Family, Twin",
+        "d_study_type_list": [
+          {
+            "d_type": "Control Set"
+          },
+          {
+            "d_type": "Family"
+          },
+          {
+            "d_type": "Twin"
+          }
+        ],
+        "d_study_design": "Family/Twin/Trios",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Versions 1-3: passed embargo",
+        "d_study_release_date": " 2019-06-27",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Heart, Lung, Blood Institute"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Heart Diseases",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Cardiovascular Diseases",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Healthy Volunteers",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Heart Diseases",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "DNA"
+          },
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          }
+        ]
+      },
+      "bioproject_ids": [
+        "639821"
+      ]
+    },
+    "phs000640": {
+      "phs": "phs000640",
+      "name": "Massively Multiplex Single-Cell Hi-C",
+      "gap_uids": [
+        "1883979",
+        "1883977",
+        "1883978",
+        "1907133"
+      ],
+      "study_results": {
+        "d_study_id": "phs001269.v3.p1",
+        "d_study_name": "Massively Multiplex Single-Cell Hi-C",
+        "d_study_ancestor": [
+          {
+            "d_ancestor_id": "phs000640.v7.p1",
+            "d_ancestor_name": "HeLa Cell Genome Sequencing Studies"
+          }
+        ],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "Massively-multiplex single-cell Hi-C"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "OTHER",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "12",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "1",
+        "d_study_type": " Case Set",
+        "d_study_type_list": [
+          {
+            "d_type": "Case Set"
+          }
+        ],
+        "d_study_design": "Case Set",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Versions 1-3: passed embargo",
+        "d_study_release_date": " 2018-10-26",
+        "d_study_project_list": [
+          {
+            "d_project_name": "Office of the Director"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Uterine Cervical Neoplasms",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Uterine Cervical Neoplasms",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "NA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "tumor"
+          }
+        ]
+      }
+    },
+    "phs001269": {
+      "phs": "phs001269",
+      "name": "Massively Multiplex Single-Cell Hi-C",
+      "gap_uids": [
+        "1883979"
+      ],
+      "study_results": {
+        "d_study_id": "phs001269.v3.p1",
+        "d_study_name": "Massively Multiplex Single-Cell Hi-C",
+        "d_study_ancestor": [
+          {
+            "d_ancestor_id": "phs000640.v7.p1",
+            "d_ancestor_name": "HeLa Cell Genome Sequencing Studies"
+          }
+        ],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "Massively-multiplex single-cell Hi-C"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "OTHER",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "12",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "1",
+        "d_study_type": " Case Set",
+        "d_study_type_list": [
+          {
+            "d_type": "Case Set"
+          }
+        ],
+        "d_study_design": "Case Set",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Versions 1-3: passed embargo",
+        "d_study_release_date": " 2018-10-26",
+        "d_study_project_list": [
+          {
+            "d_project_name": "Office of the Director"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Uterine Cervical Neoplasms",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Uterine Cervical Neoplasms",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "NA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "tumor"
+          }
+        ]
+      },
+      "bioproject_ids": [
+        "335638"
+      ]
+    },
+    "phs001362": {
+      "phs": "phs001362",
+      "name": "Linked Read Sequencing of Gastric Cancer Metastases",
+      "gap_uids": [
+        "1700903"
+      ],
+      "study_results": {
+        "d_study_id": "phs001362.v1.p1",
+        "d_study_name": "Linked Read Sequencing of Gastric Cancer Metastases",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "10x Genomics",
+            "d_genotype_platform": "Bclprocessor (v1.2.0)"
+          },
+          {
+            "d_genotype_vendor": "10x Genomics",
+            "d_genotype_platform": "Long Ranger (v1.2.0)"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "WGS",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "16",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "1",
+        "d_study_type": " Case-Control",
+        "d_study_type_list": [
+          {
+            "d_type": "Case-Control"
+          }
+        ],
+        "d_study_design": "Case-Control",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2017-06-09",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Human Genome Research Institute"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Stomach Neoplasms",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Krukenberg Tumor",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Stomach Neoplasms",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "DNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          },
+          {
+            "d_tumor_type": "tumor"
+          }
+        ]
+      }
+    },
+    "phs001519": {
+      "phs": "phs001519",
+      "name": "Personalized Neoantigen Cancer Vaccine in Glioblastoma Multiforme",
+      "gap_uids": [
+        "1768723"
+      ],
+      "study_results": {
+        "d_study_id": "phs001519.v1.p1",
+        "d_study_name": "Personalized Neoantigen Cancer Vaccine in Glioblastoma Multiforme",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "WXS",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "15",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "10",
+        "d_study_type": " Clinical Trial",
+        "d_study_type_list": [
+          {
+            "d_type": "Clinical Trial"
+          }
+        ],
+        "d_study_design": "Clinical Trial",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2018-12-14",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Cancer Institute"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Glioblastoma",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Glioblastoma",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "DNA"
+          },
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          },
+          {
+            "d_tumor_type": "tumor"
+          }
+        ]
+      }
+    },
+    "phs000833": {
+      "phs": "phs000833",
+      "name": "Single Cell Analysis Program - Transcriptome (SCAP-T)",
+      "gap_uids": [
+        "1725742",
+        "1725744",
+        "1725743",
+        "1725745"
+      ],
+      "study_results": {
+        "d_study_id": "phs000833.v7.p1",
+        "d_study_name": "Single Cell Analysis Program - Transcriptome (SCAP-T)",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [],
+        "d_study_molecular_data_type_list": [],
+        "d_num_descendants_in_subtree": "3",
+        "d_num_variables_in_subtree": "410",
+        "d_num_documents_in_subtree": "1370",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "215",
+        "d_study_type": " Case Set, Single Cell Analysis",
+        "d_study_type_list": [
+          {
+            "d_type": "Case Set"
+          },
+          {
+            "d_type": "Single Cell Analysis"
+          }
+        ],
+        "d_study_design": "Case Set",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Versions 1-7: passed embargo",
+        "d_study_release_date": " 2017-11-27",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Institute of Mental Health"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "N/A",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "N/A",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": " ",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "DNA"
+          },
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          }
+        ]
+      }
+    },
+    "phs001048": {
+      "phs": "phs001048",
+      "name": "The FUSION Tissue Biopsy Study",
+      "gap_uids": [
+        "1914846",
+        "1493003"
+      ],
+      "study_results": {
+        "d_study_id": "phs001048.v2.p1",
+        "d_study_name": "The FUSION Tissue Biopsy Study",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HumanOmni2.5-4v1"
+          },
+          {
+            "d_genotype_vendor": "Haplotype Reference Consortium",
+            "d_genotype_platform": "HRC Version r1.1 2016"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2000"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "Infinium MethylationEPIC v1.0 Array"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "TruSeq Small RNA Library Prep Kit v1.5"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "TruSeq Nano"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq X"
+          },
+          {
+            "d_genotype_vendor": "Zymo Research",
+            "d_genotype_platform": "EZ DNA Methylation-Gold"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500 V4 1T"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "ATAC-seq",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "Bisulfite-Seq",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "Methylation (CpG)",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "RNA Seq expression levels",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "SNP Genotypes (Array)",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "SNP Genotypes (imputed)",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "WGS",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "miRNA-Seq",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "34",
+        "d_num_documents_in_subtree": "1",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "307",
+        "d_study_type": " Cohort, Prospective",
+        "d_study_type_list": [
+          {
+            "d_type": "Cohort"
+          },
+          {
+            "d_type": "Prospective"
+          }
+        ],
+        "d_study_design": "Prospective Longitudinal Cohort",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Versions 1-2: passed embargo",
+        "d_study_release_date": " 2019-05-06",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Human Genome Research Institute"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Diabetes Mellitus, Type 2",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Diabetes Mellitus, Type 2",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "DNA"
+          },
+          {
+            "d_analyte_type": "miRNA"
+          },
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          }
+        ]
+      }
+    },
+    "phs000815": {
+      "phs": "phs000815",
+      "name": "Gene Expression and Regulatory Networks in Human Leukocytes",
+      "gap_uids": [
+        "1255542"
+      ],
+      "study_results": {
+        "d_study_id": "phs000815.v1.p1",
+        "d_study_name": "Gene Expression and Regulatory Networks in Human Leukocytes",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HumanOmniExpressExome BeadChip"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "OTHER",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "SNP Genotypes (Array)",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "25",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "688",
+        "d_study_type": " Control Set",
+        "d_study_type_list": [
+          {
+            "d_type": "Control Set"
+          }
+        ],
+        "d_study_design": "Control Set",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2018-10-12",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Institute of General Medical Sciences"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": " ",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "DNA"
+          },
+          {
+            "d_analyte_type": "RNA"
+          },
+          {
+            "d_analyte_type": "DNA/RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "unspecified"
+          }
+        ]
+      }
+    },
+    "phs001704": {
+      "phs": "phs001704",
+      "name": "Enhancer Mapping in Chronic Lymphocytic Leukemia",
+      "gap_uids": [
+        "1912953"
+      ],
+      "study_results": {
+        "d_study_id": "phs001704.v1.p1",
+        "d_study_name": "Enhancer Mapping in Chronic Lymphocytic Leukemia",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2000"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2000"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "ATAC-seq",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "ChIP-Seq",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "19",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "28",
+        "d_study_type": " Case-Control",
+        "d_study_type_list": [
+          {
+            "d_type": "Case-Control"
+          }
+        ],
+        "d_study_design": "Case-Control",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2018-12-18",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Cancer Institute"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Leukemia, Lymphocytic, Chronic, B-Cell",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Leukemia, Lymphocytic, Chronic, B-Cell",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "DNA"
+          },
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          },
+          {
+            "d_tumor_type": "tumor"
+          }
+        ]
+      }
+    },
+    "phs000007": {
+      "phs": "phs000007",
+      "name": "NHLBI Framingham SABRe CVD",
+      "gap_uids": [
+        "1701702"
+      ],
+      "study_results": {
+        "d_study_id": "phs000363.v17.p11",
+        "d_study_name": "NHLBI Framingham SABRe CVD",
+        "d_study_ancestor": [
+          {
+            "d_ancestor_id": "phs000007.v30.p11",
+            "d_ancestor_name": "Framingham Cohort"
+          }
+        ],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Affymetrix",
+            "d_genotype_platform": "GeneChip Human Exon 1.0 ST Array"
+          },
+          {
+            "d_genotype_vendor": "Luminex",
+            "d_genotype_platform": "Custom Panel"
+          },
+          {
+            "d_genotype_vendor": "Invitrogen",
+            "d_genotype_platform": "TaqMan 350 MicroRNA Custom Panels"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "mRNA Expression (Array)",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "miRNA Expression (Array)",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "1404",
+        "d_num_documents_in_subtree": "73",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "7558",
+        "d_study_type": " Cohort",
+        "d_study_type_list": [
+          {
+            "d_type": "Cohort"
+          }
+        ],
+        "d_study_design": "Prospective Longitudinal Cohort",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Versions 1-17: passed embargo",
+        "d_study_release_date": " 2018-10-12",
+        "d_study_project_list": [
+          {
+            "d_project_name": "Systems Approach to Biomarker Research"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Cardiovascular Diseases",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Cardiovascular System",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Myocardial Infarction",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Coronary Artery Bypass Grafting",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Percutaneous Transluminal Coronary Angioplasty",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Stroke",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Cardiovascular Diseases",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": " ",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "DNA"
+          },
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          },
+          {
+            "d_tumor_type": "unspecified"
+          }
+        ]
+      }
+    },
+    "phs000363": {
+      "phs": "phs000363",
+      "name": "NHLBI Framingham SABRe CVD",
+      "gap_uids": [
+        "1701702"
+      ],
+      "study_results": {
+        "d_study_id": "phs000363.v17.p11",
+        "d_study_name": "NHLBI Framingham SABRe CVD",
+        "d_study_ancestor": [
+          {
+            "d_ancestor_id": "phs000007.v30.p11",
+            "d_ancestor_name": "Framingham Cohort"
+          }
+        ],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Affymetrix",
+            "d_genotype_platform": "GeneChip Human Exon 1.0 ST Array"
+          },
+          {
+            "d_genotype_vendor": "Luminex",
+            "d_genotype_platform": "Custom Panel"
+          },
+          {
+            "d_genotype_vendor": "Invitrogen",
+            "d_genotype_platform": "TaqMan 350 MicroRNA Custom Panels"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "mRNA Expression (Array)",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "miRNA Expression (Array)",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "1404",
+        "d_num_documents_in_subtree": "73",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "7558",
+        "d_study_type": " Cohort",
+        "d_study_type_list": [
+          {
+            "d_type": "Cohort"
+          }
+        ],
+        "d_study_design": "Prospective Longitudinal Cohort",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Versions 1-17: passed embargo",
+        "d_study_release_date": " 2018-10-12",
+        "d_study_project_list": [
+          {
+            "d_project_name": "Systems Approach to Biomarker Research"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Cardiovascular Diseases",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Cardiovascular System",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Myocardial Infarction",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Coronary Artery Bypass Grafting",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Percutaneous Transluminal Coronary Angioplasty",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Stroke",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Cardiovascular Diseases",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": " ",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "DNA"
+          },
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          },
+          {
+            "d_tumor_type": "unspecified"
+          }
+        ]
+      }
+    },
+    "phs001068": {
+      "phs": "phs001068",
+      "name": "The FUSION Tissue Biopsy Study - Muscle Expression by RNAseq",
+      "gap_uids": [
+        "1493003"
+      ],
+      "study_results": {
+        "d_study_id": "phs001068.v1.p1",
+        "d_study_name": "The FUSION Tissue Biopsy Study - Muscle Expression by RNAseq",
+        "d_study_ancestor": [
+          {
+            "d_ancestor_id": "phs001048.v1.p1",
+            "d_ancestor_name": "The FUSION Tissue Biopsy Study"
+          }
+        ],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "Infinium Omni2.5 BeadChip"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2000"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500"
+          },
+          {
+            "d_genotype_vendor": "GoT2D Consortium",
+            "d_genotype_platform": "GoT2D Integrated Panel"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "ATAC-seq",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "QTL Results",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "RNA Seq expression levels",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "SNP Genotypes (Array)",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "SNP/CNV Genotypes (imputed)",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": " ",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "251",
+        "d_study_type": " Cohort",
+        "d_study_type_list": [
+          {
+            "d_type": "Cohort"
+          }
+        ],
+        "d_study_design": "Prospective Longitudinal Cohort",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2017-07-13",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Human Genome Research Institute"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Diabetes Mellitus, Type 2",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Diabetes Mellitus, Type 2",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "DNA"
+          },
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          }
+        ]
+      }
+    },
+    "phs001110": {
+      "phs": "phs001110",
+      "name": "Kids First: Pediatric Research Project on the Genomic Analysis of Congenital Diaphragmatic Hernia",
+      "gap_uids": [
+        "2132535"
+      ],
+      "study_results": {
+        "d_study_id": "phs001110.v3.p1",
+        "d_study_name": "Kids First: Pediatric Research Project on the Genomic Analysis of Congenital Diaphragmatic Hernia",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq X"
+          },
+          {
+            "d_genotype_vendor": "10X Genomics",
+            "d_genotype_platform": "Linked Long Read"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "CNV Genotypes",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "SNP Genotypes (NGS)",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "WGS",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "26",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "2312",
+        "d_study_type": " Parent-Offspring Trios",
+        "d_study_type_list": [
+          {
+            "d_type": "Parent-Offspring Trios"
+          }
+        ],
+        "d_study_design": "Family/Twin/Trios",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Versions 1-3: passed embargo",
+        "d_study_release_date": " 2020-09-16",
+        "d_study_project_list": [
+          {
+            "d_project_name": "Gabriella Miller Kids First"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Hernias, Diaphragmatic, Congenital",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Hernias, Diaphragmatic, Congenital",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "DNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          },
+          {
+            "d_tumor_type": "unspecified"
+          }
+        ]
+      }
+    },
+    "phs001627": {
+      "phs": "phs001627",
+      "name": "Single-Cell DNA Sequencing of AML with Droplet Microfluidics",
+      "gap_uids": [
+        "1901516"
+      ],
+      "study_results": {
+        "d_study_id": "phs001627.v1.p1",
+        "d_study_name": "Single-Cell DNA Sequencing of AML with Droplet Microfluidics",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Mission Bio",
+            "d_genotype_platform": "Tapestri"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "MiSeq"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "AMPLICON",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "14",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "1",
+        "d_study_type": " Longitudinal",
+        "d_study_type_list": [
+          {
+            "d_type": "Longitudinal"
+          }
+        ],
+        "d_study_design": "Prospective Longitudinal Cohort",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2018-07-24",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Human Genome Research Institute"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Leukemia, Myeloid, Acute",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Leukemia, Myeloid, Acute",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "DNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          },
+          {
+            "d_tumor_type": "tumor"
+          }
+        ]
+      }
+    },
+    "phs001029": {
+      "phs": "phs001029",
+      "name": "Full-Length Single-Cell RNA-seq Applied to HeLa S3 Cells",
+      "gap_uids": [
+        "1883977"
+      ],
+      "study_results": {
+        "d_study_id": "phs001029.v5.p1",
+        "d_study_name": "Full-Length Single-Cell RNA-seq Applied to HeLa S3 Cells",
+        "d_study_ancestor": [
+          {
+            "d_ancestor_id": "phs000640.v7.p1",
+            "d_ancestor_name": "HeLa Cell Genome Sequencing Studies"
+          }
+        ],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2000"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "8",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "1",
+        "d_study_type": " Case Set",
+        "d_study_type_list": [
+          {
+            "d_type": "Case Set"
+          }
+        ],
+        "d_study_design": "Case Set",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Versions 1-5: passed embargo",
+        "d_study_release_date": " 2018-10-26",
+        "d_study_project_list": [
+          {
+            "d_project_name": "Office of the Director"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Uterine Cervical Neoplasms",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Papillomavirus Infections",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Uterine Cervical Neoplasms",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": " ",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "tumor"
+          }
+        ]
+      }
+    },
+    "phs000958": {
+      "phs": "phs000958",
+      "name": "CSER-MedSeq",
+      "gap_uids": [
+        "1404344"
+      ],
+      "study_results": {
+        "d_study_id": "phs000958.v1.p1",
+        "d_study_name": "CSER-MedSeq",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "Infinium Omni2.5 BeadChip"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "SNP Genotypes (Array)",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "WGS",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "22",
+        "d_num_documents_in_subtree": "3",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "100",
+        "d_study_type": " Case-Control",
+        "d_study_type_list": [
+          {
+            "d_type": "Case-Control"
+          }
+        ],
+        "d_study_design": "Case-Control",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2015-10-21",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Human Genome Research Institute"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Cardiomyopathies",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Cardiomyopathy, Dilated",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Cardiomyopathy, Hypertrophic",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Cardiomyopathies",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "DNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "unspecified"
+          }
+        ]
+      }
+    },
+    "phs001372": {
+      "phs": "phs001372",
+      "name": "Integrated Single-Cell Analysis in Chronic Lymphocytic Leukemia",
+      "gap_uids": [
+        "1713360"
+      ],
+      "study_results": {
+        "d_study_id": "phs001372.v1.p1",
+        "d_study_name": "Integrated Single-Cell Analysis in Chronic Lymphocytic Leukemia",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "MiSeq"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "RNA Seq expression levels",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "SNP Genotypes (NGS)",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "15",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "5",
+        "d_study_type": " Case Set",
+        "d_study_type_list": [
+          {
+            "d_type": "Case Set"
+          }
+        ],
+        "d_study_design": "Case Set",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2018-10-18",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Cancer Institute"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Leukemia, Lymphoid",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Leukemia, Lymphoid",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "DNA"
+          },
+          {
+            "d_analyte_type": "RNA"
+          },
+          {
+            "d_analyte_type": "DNA/RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "tumor"
+          }
+        ]
+      }
+    },
+    "phs001276": {
+      "phs": "phs001276",
+      "name": "Single-cell profiling of hESC-derived interneuron development",
+      "gap_uids": [
+        "1677221"
+      ],
+      "study_results": {
+        "d_study_id": "phs001276.v1.p1",
+        "d_study_name": "Single-cell profiling of hESC-derived interneuron development",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "MiSeq"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "RNA Seq (NGS)",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "17",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "4",
+        "d_study_type": " Single Cell Analysis",
+        "d_study_type_list": [
+          {
+            "d_type": "Single Cell Analysis"
+          }
+        ],
+        "d_study_design": "Control Set",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2017-03-10",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Institute of Neurological Disorders and Stroke"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Growth and Development",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Growth and Development",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "mRNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "unspecified"
+          }
+        ]
+      }
+    },
+    "phs001773": {
+      "phs": "phs001773",
+      "name": "Linked-Read Sequencing to Resolve Complex Structural Variants",
+      "gap_uids": [
+        "1915408"
+      ],
+      "study_results": {
+        "d_study_id": "phs001773.v1.p1",
+        "d_study_name": "Linked-Read Sequencing to Resolve Complex Structural Variants",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 4000"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500"
+          },
+          {
+            "d_genotype_vendor": "10x Genomics",
+            "d_genotype_platform": "Long Ranger (v1.2.0)"
+          }
+        ],
+        "d_study_molecular_data_type_list": [],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": " ",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": " ",
+        "d_study_type": " Case Set",
+        "d_study_type_list": [
+          {
+            "d_type": "Case Set"
+          }
+        ],
+        "d_study_design": "Case Set",
+        "d_study_status": " ",
+        "d_study_embargo_date": " |Version 1: ",
+        "d_study_release_date": " ",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Cancer Institute"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Sex",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Sex",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [],
+        "d_study_tumor_type_list": []
+      }
+    },
+    "phs000989": {
+      "phs": "phs000989",
+      "name": "Study of Human Developmental Neurogenesis",
+      "gap_uids": [
+        "1597514"
+      ],
+      "study_results": {
+        "d_study_id": "phs000989.v3.p1",
+        "d_study_name": "Study of Human Developmental Neurogenesis",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2000"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "12",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "73",
+        "d_study_type": " Cohort",
+        "d_study_type_list": [
+          {
+            "d_type": "Cohort"
+          }
+        ],
+        "d_study_design": "Prospective Longitudinal Cohort",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Versions 1-3: passed embargo",
+        "d_study_release_date": " 2017-11-28",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Institute of Mental Health"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Stem cells, neural",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Cerebral Cortex",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Stem cells, neural",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          },
+          {
+            "d_tumor_type": "unspecified"
+          }
+        ]
+      }
+    },
+    "phs001181": {
+      "phs": "phs001181",
+      "name": "Single-Cell DNA and RNA Sequencing over A 29-Year Period of A CLL Patient",
+      "gap_uids": [
+        "1596880"
+      ],
+      "study_results": {
+        "d_study_id": "phs001181.v1.p1",
+        "d_study_name": "Single-Cell DNA and RNA Sequencing over A 29-Year Period of A CLL Patient",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HumanOmniExpress-12v1_A"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HumanOmniExpress-12v1-1_B"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HumanOmniExpress-24v1-0_a"
+          },
+          {
+            "d_genotype_vendor": "Complete Genomics",
+            "d_genotype_platform": "Complete Genomics version 1.5"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "SNP Genotypes (Array)",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "WGS",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "15",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "1",
+        "d_study_type": " Case Set",
+        "d_study_type_list": [
+          {
+            "d_type": "Case Set"
+          }
+        ],
+        "d_study_design": "Case Set",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2017-03-24",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Cancer Institute"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Leukemia, Lymphocytic, Chronic, B-Cell",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Leukemia, Lymphocytic, Chronic, B-Cell",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "DNA"
+          },
+          {
+            "d_analyte_type": "DNA;RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "tumor"
+          }
+        ]
+      }
+    },
+    "phs001861": {
+      "phs": "phs001861",
+      "name": "Single cell analysis reveals new evolutionary complexity in uveal melanoma",
+      "gap_uids": [
+        "1954742"
+      ],
+      "study_results": {
+        "d_study_id": "phs001861.v1.p1",
+        "d_study_name": "Single cell analysis reveals new evolutionary complexity in uveal melanoma",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "10x Genomics",
+            "d_genotype_platform": "Chromium Single Cell"
+          },
+          {
+            "d_genotype_vendor": "10x Genomics",
+            "d_genotype_platform": "Chromium Single Cell"
+          },
+          {
+            "d_genotype_vendor": "10x Genomics",
+            "d_genotype_platform": "Chromium Single Cell"
+          },
+          {
+            "d_genotype_vendor": "10x Genomics",
+            "d_genotype_platform": "Chromium Single Cell"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": " ",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "11",
+        "d_study_type": " Case Set",
+        "d_study_type_list": [
+          {
+            "d_type": "Case Set"
+          }
+        ],
+        "d_study_design": "Case Set",
+        "d_study_status": " ",
+        "d_study_embargo_date": " |Version 1: ",
+        "d_study_release_date": " ",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Cancer Institute"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Uveal melanoma",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Uveal melanoma",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "B cell receptor - RNA"
+          },
+          {
+            "d_analyte_type": "DNA"
+          },
+          {
+            "d_analyte_type": "RNA"
+          },
+          {
+            "d_analyte_type": "T cell receptor - RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "tumor"
+          }
+        ]
+      },
+      "bioproject_ids": [
+        "587118"
+      ]
+    },
+    "phs001750": {
+      "phs": "phs001750",
+      "name": "Single Cell Analysis of Pulmonary Fibrosis",
+      "gap_uids": [
+        "1914498"
+      ],
+      "study_results": {
+        "d_study_id": "phs001750.v1.p1",
+        "d_study_name": "Single Cell Analysis of Pulmonary Fibrosis",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 4000"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "NextSeq 500"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "RNA Seq expression levels",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "18",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "39",
+        "d_study_type": " Cohort",
+        "d_study_type_list": [
+          {
+            "d_type": "Cohort"
+          }
+        ],
+        "d_study_design": "Prospective Longitudinal Cohort",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2019-01-14",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Heart, Lung, Blood Institute"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Pulmonary Fibrosis",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Pulmonary Fibrosis",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          },
+          {
+            "d_tumor_type": "unspecified"
+          }
+        ]
+      },
+      "bioproject_ids": [
+        "507000"
+      ]
+    },
+    "phs000835": {
+      "phs": "phs000835",
+      "name": "Single Cell Analysis Program - Transcriptome (SCAP-T) (U. Penn)",
+      "gap_uids": [
+        "1725744"
+      ],
+      "study_results": {
+        "d_study_id": "phs000835.v7.p1",
+        "d_study_name": "Single Cell Analysis Program - Transcriptome (SCAP-T) (U. Penn)",
+        "d_study_ancestor": [
+          {
+            "d_ancestor_id": "phs000833.v7.p1",
+            "d_ancestor_name": "Single Cell Analysis Program - Transcriptome (SCAP-T)"
+          }
+        ],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "NextSeq 500"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "RNA Seq (NGS)",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "WGS",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "128",
+        "d_num_documents_in_subtree": "330",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "38",
+        "d_study_type": " Case Set",
+        "d_study_type_list": [
+          {
+            "d_type": "Case Set"
+          }
+        ],
+        "d_study_design": "Case Set",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Versions 1-7: passed embargo",
+        "d_study_release_date": " 2017-11-27",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Institute of Mental Health"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Brain",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Endothelial Cells",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Neurons",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Astrocytes",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Oligodendroglia",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Microglia",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Myocardium",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Myocytes, Cardiac",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Brain",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "DNA"
+          },
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          }
+        ]
+      }
+    },
+    "phs001268": {
+      "phs": "phs001268",
+      "name": "Sequencing Thousands of Single Cell Genomes with Combinatorial Indexing",
+      "gap_uids": [
+        "1883978"
+      ],
+      "study_results": {
+        "d_study_id": "phs001268.v3.p1",
+        "d_study_name": "Sequencing Thousands of Single Cell Genomes with Combinatorial Indexing",
+        "d_study_ancestor": [
+          {
+            "d_ancestor_id": "phs000640.v7.p1",
+            "d_ancestor_name": "HeLa Cell Genome Sequencing Studies"
+          }
+        ],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "NextSeq 500"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "WGS",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "12",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "1",
+        "d_study_type": " Case Set",
+        "d_study_type_list": [
+          {
+            "d_type": "Case Set"
+          }
+        ],
+        "d_study_design": "Case Set",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Versions 1-3: passed embargo",
+        "d_study_release_date": " 2018-10-26",
+        "d_study_project_list": [
+          {
+            "d_project_name": "Office of the Director"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Uterine Cervical Neoplasms",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Uterine Cervical Neoplasms",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "DNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "tumor"
+          }
+        ]
+      }
+    },
+    "phs001529": {
+      "phs": "phs001529",
+      "name": "Single-Cell RNA-Seq of Rheumatoid Arthritis Synovial Tissue",
+      "gap_uids": [
+        "1770938"
+      ],
+      "study_results": {
+        "d_study_id": "phs001529.v1.p1",
+        "d_study_name": "Single-Cell RNA-Seq of Rheumatoid Arthritis Synovial Tissue",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "RNA Seq expression levels",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "13",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "6",
+        "d_study_type": " Case Set, Methods Development",
+        "d_study_type_list": [
+          {
+            "d_type": "Case Set"
+          },
+          {
+            "d_type": "Methods Development"
+          }
+        ],
+        "d_study_design": "Methods",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2018-04-16",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Institute of Arthritis and Musculoskeletal and Skin Diseases"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Arthritis, Rheumatoid",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Arthritis, Rheumatoid",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          }
+        ]
+      }
+    },
+    "phs001231": {
+      "phs": "phs001231",
+      "name": "NeuroLINCS",
+      "gap_uids": [
+        "1716257"
+      ],
+      "study_results": {
+        "d_study_id": "phs001231.v2.p1",
+        "d_study_name": "NeuroLINCS",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 4000"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq X"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2000"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "OTHER",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "SNP Genotypes (NGS)",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "WGS",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "37",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "20",
+        "d_study_type": " Case-Control",
+        "d_study_type_list": [
+          {
+            "d_type": "Case-Control"
+          }
+        ],
+        "d_study_design": "Case-Control",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Versions 1-2: passed embargo",
+        "d_study_release_date": " 2018-05-11",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Institute of Neurological Disorders and Stroke"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Amyotrophic Lateral Sclerosis",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Muscular Atrophy, Spinal",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Spinal Muscular Atrophies of Childhood",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Amyotrophic Lateral Sclerosis",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "DNA"
+          },
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          }
+        ]
+      }
+    },
+    "phs001438": {
+      "phs": "phs001438",
+      "name": "Chromatin Accessibility in Developing Human Brain",
+      "gap_uids": [
+        "1730690"
+      ],
+      "study_results": {
+        "d_study_id": "phs001438.v1.p1",
+        "d_study_name": "Chromatin Accessibility in Developing Human Brain",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2000"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "TruSeq"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "ATAC-seq",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "28",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "3",
+        "d_study_type": " Collection",
+        "d_study_type_list": [
+          {
+            "d_type": "Collection"
+          }
+        ],
+        "d_study_design": "Collection",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2017-12-21",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Institute of Mental Health"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Chromatin",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Gene Expression",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Chromatin",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "DNA"
+          },
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          }
+        ]
+      }
+    },
+    "phs001457": {
+      "phs": "phs001457",
+      "name": "Accelerating Medicines Partnership-Rheumatoid Arthritis (AMP-RA)",
+      "gap_uids": [
+        "1733580"
+      ],
+      "study_results": {
+        "d_study_id": "phs001457.v1.p1",
+        "d_study_name": "Accelerating Medicines Partnership-Rheumatoid Arthritis (AMP-RA)",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HTSeq"
+          },
+          {
+            "d_genotype_vendor": "Fluidigm",
+            "d_genotype_platform": "Helios: Version 6.7.1014"
+          },
+          {
+            "d_genotype_vendor": "BD",
+            "d_genotype_platform": "BD FACS Aria Fusion: Diva 8.0.1"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "21",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "55",
+        "d_study_type": " Case-Control",
+        "d_study_type_list": [
+          {
+            "d_type": "Case-Control"
+          }
+        ],
+        "d_study_design": "Case-Control",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2018-07-30",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Institute of Arthritis and Musculoskeletal and Skin Diseases"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Arthritis, Rheumatoid",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Osteoarthritis",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Arthritis, Rheumatoid",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "unspecified"
+          }
+        ]
+      },
+      "bioproject_ids": [
+        "835813"
+      ]
+    },
+    "phs001934": {
+      "phs": "phs001934",
+      "name": "Sexual Dimorphism in Human Immune System Aging",
+      "gap_uids": [
+        "2012725"
+      ],
+      "study_results": {
+        "d_study_id": "phs001934.v1.p1",
+        "d_study_name": "Sexual Dimorphism in Human Immune System Aging",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [],
+        "d_study_molecular_data_type_list": [],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": " ",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": " ",
+        "d_study_type": " Cross-Sectional, Cohort",
+        "d_study_type_list": [
+          {
+            "d_type": "Cross-Sectional"
+          },
+          {
+            "d_type": "Cohort"
+          }
+        ],
+        "d_study_design": "Cross-Sectional",
+        "d_study_status": " ",
+        "d_study_embargo_date": " |Version 1: ",
+        "d_study_release_date": " ",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Institute of General Medical Sciences"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": " ",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [],
+        "d_study_tumor_type_list": []
+      }
+    },
+    "phs000834": {
+      "phs": "phs000834",
+      "name": "Single Cell Analysis Program - Transcriptome (SCAP-T) (UCSD)",
+      "gap_uids": [
+        "1725743"
+      ],
+      "study_results": {
+        "d_study_id": "phs000834.v7.p1",
+        "d_study_name": "Single Cell Analysis Program - Transcriptome (SCAP-T) (UCSD)",
+        "d_study_ancestor": [
+          {
+            "d_ancestor_id": "phs000833.v7.p1",
+            "d_ancestor_name": "Single Cell Analysis Program - Transcriptome (SCAP-T)"
+          }
+        ],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2000"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "RNA Seq (NGS)",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "123",
+        "d_num_documents_in_subtree": "2",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "6",
+        "d_study_type": " Case Set",
+        "d_study_type_list": [
+          {
+            "d_type": "Case Set"
+          }
+        ],
+        "d_study_design": "Case Set",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Versions 1-7: passed embargo",
+        "d_study_release_date": " 2017-11-27",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Institute of Mental Health"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Prefrontal Cortex",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Visual Cortex",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Cerebral Cortex",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Prefrontal Cortex",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          }
+        ]
+      }
+    },
+    "phs001016": {
+      "phs": "phs001016",
+      "name": "Fixed Single Cell Study (Radial Glia Cells)",
+      "gap_uids": [
+        "1428577"
+      ],
+      "study_results": {
+        "d_study_id": "phs001016.v1.p1",
+        "d_study_name": "Fixed Single Cell Study (Radial Glia Cells)",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "MiSeq"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "RNA Seq (NGS)",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "18",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "3",
+        "d_study_type": " Single Cell Analysis",
+        "d_study_type_list": [
+          {
+            "d_type": "Single Cell Analysis"
+          }
+        ],
+        "d_study_design": "Control Set",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2015-11-06",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Institute of Neurological Disorders and Stroke"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Neuroglia",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Growth and Development",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Neuroglia",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "mRNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "unspecified"
+          }
+        ]
+      }
+    },
+    "phs000549": {
+      "phs": "phs000549",
+      "name": "Clonal Evolution of Pre-Leukemic HSC Precedes Human AML",
+      "gap_uids": [
+        "865442"
+      ],
+      "study_results": {
+        "d_study_id": "phs000549.v1.p1",
+        "d_study_name": "Clonal Evolution of Pre-Leukemic HSC Precedes Human AML",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Roche NimbleGen",
+            "d_genotype_platform": "SeqCap EZ Human Exome Library v2.0"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "WXS",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "16",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "6",
+        "d_study_type": " Case Set",
+        "d_study_type_list": [
+          {
+            "d_type": "Case Set"
+          }
+        ],
+        "d_study_design": "Case Set",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2013-06-13",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Cancer Institute"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Leukemia, Myeloid, Acute",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Leukemia, Myeloid, Acute",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "DNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          },
+          {
+            "d_tumor_type": "tumor"
+          }
+        ]
+      }
+    },
+    "phs001671": {
+      "phs": "phs001671",
+      "name": "RNA Ligation Precedes U6 snRNA/LINE-1 Retrotransposition",
+      "gap_uids": [
+        "1907133"
+      ],
+      "study_results": {
+        "d_study_id": "phs001671.v1.p1",
+        "d_study_name": "RNA Ligation Precedes U6 snRNA/LINE-1 Retrotransposition",
+        "d_study_ancestor": [
+          {
+            "d_ancestor_id": "phs000640.v7.p1",
+            "d_ancestor_name": "HeLa Cell Genome Sequencing Studies"
+          }
+        ],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "5",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "1",
+        "d_study_type": " Case Set",
+        "d_study_type_list": [
+          {
+            "d_type": "Case Set"
+          }
+        ],
+        "d_study_design": "Case Set",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2018-10-26",
+        "d_study_project_list": [
+          {
+            "d_project_name": "Office of the Director"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "tumor"
+          }
+        ]
+      }
+    },
+    "phs001187": {
+      "phs": "phs001187",
+      "name": "Epigenomics of Human CD8 T cell Differentiation and Aging",
+      "gap_uids": [
+        "1597253"
+      ],
+      "study_results": {
+        "d_study_id": "phs001187.v1.p1",
+        "d_study_name": "Epigenomics of Human CD8 T cell Differentiation and Aging",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "ChIP-Seq",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "Tn-Seq",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "16",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "23",
+        "d_study_type": " Case-Control",
+        "d_study_type_list": [
+          {
+            "d_type": "Case-Control"
+          }
+        ],
+        "d_study_design": "Case-Control",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2017-02-16",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Institute of Allergy and Infectious Diseases"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Aging",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Antigens, Differentiation, T-Lymphocyte",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "T-Lymphocytes",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Aging",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "DNA"
+          },
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          }
+        ]
+      }
+    },
+    "phs001854": {
+      "phs": "phs001854",
+      "name": "Human Pilocytic Astrocytoma Single Cell RNA Sequencing",
+      "gap_uids": [
+        "1953532"
+      ],
+      "study_results": {
+        "d_study_id": "phs001854.v1.p1",
+        "d_study_name": "Human Pilocytic Astrocytoma Single Cell RNA Sequencing",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "NextSeq 500"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "Smart-Seq2"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "11",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "6",
+        "d_study_type": " Case Set",
+        "d_study_type_list": [
+          {
+            "d_type": "Case Set"
+          }
+        ],
+        "d_study_design": "Case Set",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2019-12-03",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Cancer Institute"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Astrocytoma",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Astrocytoma",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "tumor"
+          },
+          {
+            "d_tumor_type": "unspecified"
+          }
+        ]
+      }
+    },
+    "phs000187": {
+      "phs": "phs000187",
+      "name": "High Density SNP Association Analysis of Melanoma",
+      "gap_uids": [
+        "159740"
+      ],
+      "study_results": {
+        "d_study_id": "phs000187.v1.p1",
+        "d_study_name": "High Density SNP Association Analysis of Melanoma",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HumanOmni1-Quad_v1-0_B"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "SNP Genotypes (Array)",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "SNP Genotypes (imputed)",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "38",
+        "d_num_documents_in_subtree": "7",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "3115",
+        "d_study_type": " Case-Control, Case Set",
+        "d_study_type_list": [
+          {
+            "d_type": "Case-Control"
+          },
+          {
+            "d_type": "Case Set"
+          }
+        ],
+        "d_study_design": "Case-Control",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2010-05-18",
+        "d_study_project_list": [
+          {
+            "d_project_name": "Center for Inherited Disease Research"
+          },
+          {
+            "d_project_name": "Gene Environment Association Studies"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Melanoma",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Melanoma",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": " ",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "DNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          },
+          {
+            "d_tumor_type": "unspecified"
+          }
+        ]
+      }
+    },
+    "phs001836": {
+      "phs": "phs001836",
+      "name": "A Single Cell Transcriptomic Analysis of Human Neocortical Development",
+      "gap_uids": [
+        "1943103"
+      ],
+      "study_results": {
+        "d_study_id": "phs001836.v1.p1",
+        "d_study_name": "A Single Cell Transcriptomic Analysis of Human Neocortical Development",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "19",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "4",
+        "d_study_type": " Cohort",
+        "d_study_type_list": [
+          {
+            "d_type": "Cohort"
+          }
+        ],
+        "d_study_design": "Prospective Longitudinal Cohort",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2019-07-18",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Institute of Mental Health"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Autism Spectrum Disorder",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Schizophrenia",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Intellectual disability",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Epilepsy",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Autism Spectrum Disorder",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          }
+        ]
+      }
+    },
+    "phs001255": {
+      "phs": "phs001255",
+      "name": "Molecular Evolution of Cancer",
+      "gap_uids": [
+        "1609740"
+      ],
+      "study_results": {
+        "d_study_id": "phs001255.v1.p1",
+        "d_study_name": "Molecular Evolution of Cancer",
+        "d_study_ancestor": [],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "10x Genomics",
+            "d_genotype_platform": "GemCode"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "Mate Pair Sequencing"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "TruSeq DNA PCR-Free Sample Preparation Kit"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "WGS",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "11",
+        "d_num_documents_in_subtree": " ",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "1",
+        "d_study_type": " Tumor vs. Matched-Normal",
+        "d_study_type_list": [
+          {
+            "d_type": "Tumor vs. Matched-Normal"
+          }
+        ],
+        "d_study_design": "Tumor vs. Matched-Normal",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Version 1: passed embargo",
+        "d_study_release_date": " 2017-06-09",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Cancer Institute"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Liposarcoma",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Liposarcoma",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "DNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          },
+          {
+            "d_tumor_type": "tumor"
+          }
+        ]
+      }
+    },
+    "phs000836": {
+      "phs": "phs000836",
+      "name": "Single Cell Analysis Program - Transcriptome (SCAP-T) (USC)",
+      "gap_uids": [
+        "1725745"
+      ],
+      "study_results": {
+        "d_study_id": "phs000836.v7.p1",
+        "d_study_name": "Single Cell Analysis Program - Transcriptome (SCAP-T) (USC)",
+        "d_study_ancestor": [
+          {
+            "d_ancestor_id": "phs000833.v7.p1",
+            "d_ancestor_name": "Single Cell Analysis Program - Transcriptome (SCAP-T)"
+          }
+        ],
+        "d_study_genotype_platform_list": [
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2000"
+          },
+          {
+            "d_genotype_vendor": "Illumina",
+            "d_genotype_platform": "HiSeq 2500"
+          }
+        ],
+        "d_study_molecular_data_type_list": [
+          {
+            "d_molecular_data_type_name": "RNA Seq (NGS)",
+            "d_molecular_data_type_feature": ""
+          },
+          {
+            "d_molecular_data_type_name": "RNA-Seq",
+            "d_molecular_data_type_feature": ""
+          }
+        ],
+        "d_num_descendants_in_subtree": " ",
+        "d_num_variables_in_subtree": "137",
+        "d_num_documents_in_subtree": "1037",
+        "d_num_analyses_in_subtree": " ",
+        "d_num_participants_in_subtree": "170",
+        "d_study_type": " Case Set",
+        "d_study_type_list": [
+          {
+            "d_type": "Case Set"
+          }
+        ],
+        "d_study_design": "Case Set",
+        "d_study_status": " ",
+        "d_study_embargo_date": "|Versions 1-7: passed embargo",
+        "d_study_release_date": " 2017-11-27",
+        "d_study_project_list": [
+          {
+            "d_project_name": "National Institute of Mental Health"
+          }
+        ],
+        "d_study_disease_list": [
+          {
+            "d_disease_name": "Neurons",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Trophoblasts",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Olfactory Receptor Neurons",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Purkinje Cells",
+            "d_disease_importance": "secondary"
+          },
+          {
+            "d_disease_name": "Neurons",
+            "d_disease_importance": "primary"
+          }
+        ],
+        "d_study_has_sra": "1",
+        "d_study_archive": "dbGaP",
+        "d_study_analyte_type_list": [
+          {
+            "d_analyte_type": "RNA"
+          }
+        ],
+        "d_study_tumor_type_list": [
+          {
+            "d_tumor_type": "germline"
+          }
+        ]
+      }
+    },
+    "phs002361": {
+      "phs": "phs002361",
+      "name": "Distinct baseline immune characteristics associated with responses to conjugated and unconjugated pneumococcal polysaccharide vaccines in older adults [scRNA-seq]",
+      "bioproject_ids": [
+        "1037044",
+        "1037045"
+      ]
+    },
+    "phs001961": {
+      "phs": "phs001961",
+      "name": "Single Nucleus Multiomic Profiling Reveals Age-Dynamic Regulation of Host Genes Associated with SARS-CoV-2 Infection",
+      "bioproject_ids": [
+        "677981",
+        "677986",
+        "677987"
+      ]
+    },
+    "phs001587": {
+      "phs": "phs001587",
+      "name": "The origin and dynamics of cellular heterogeneity vary across lineage subtypes of castrate resistant prostate cancer [scRNA-seq]",
+      "bioproject_ids": [
+        "995802",
+        "995801"
+      ]
+    },
+    "phs003015": {
+      "phs": "phs003015",
+      "name": "Tracking of donor and recipient immune and leukemia phenotypes after allogeneic stem cell transplantation using mitochondrial DNA mutations. [Tapestri]",
+      "bioproject_ids": [
+        "982043",
+        "982044",
+        "928660"
+      ]
+    },
+    "phs002316": {
+      "phs": "phs002316",
+      "name": "Simultaneous trimodal single cell measurement of transcripts, epitopes, and chromatin accessibility using TEA-seq",
+      "bioproject_ids": [
+        "663623"
+      ]
+    },
+    "phs001294": {
+      "phs": "phs001294",
+      "name": "Homo sapiens",
+      "bioproject_ids": [
+        "374527"
+      ]
+    },
+    "phs002922": {
+      "phs": "phs002922",
+      "name": "Baseline Immune State and T cell Clonal Kinetics are Associated with Response to CAR-T Therapy in Large B-cell Lymphoma",
+      "bioproject_ids": [
+        "1140521"
+      ]
+    },
+    "phs003417": {
+      "phs": "phs003417",
+      "name": "Multimodal gene expression and chromatin accessibility profiles at the single-cell level of synovial tissue from individuals with arthritis",
+      "bioproject_ids": [
+        "1020568"
+      ]
+    },
+    "phs004269": {
+      "phs": "phs004269",
+      "name": "Remodeling of the immune microenvironment is linked to adverse outcome in pediatric T cell acute lymphoblastic leukemia",
+      "bioproject_ids": [
+        "1043165"
+      ]
+    },
+    "phs003848": {
+      "phs": "phs003848",
+      "name": "Single-cell RNA-seq of peripheral blood links cell-type-specific regulation of splicing to autoimmune and inflammatory diseases [scRNAseq_KR_SGI]",
+      "bioproject_ids": [
+        "1182290",
+        "1181752"
+      ]
+    },
+    "phs003002": {
+      "phs": "phs003002",
+      "name": "CD137 agonism enhances anti-PD1 induced activation of clonally expanded CD8+ T cells in a neoadjuvant pancreatic cancer clinical trial",
+      "bioproject_ids": [
+        "1174340"
+      ]
+    },
+    "phs002443": {
+      "phs": "phs002443",
+      "name": "Molecular signatures of in-situ to invasive progression for basal-like breast cancers: An integrated mouse model and human tumor study [human]",
+      "bioproject_ids": [
+        "756990"
+      ]
+    },
+    "phs002407": {
+      "phs": "phs002407",
+      "name": "A Single Cell Atlas of MMRd and MMRp Colorectal Cancer",
+      "bioproject_ids": [
+        "738517"
+      ]
+    },
+    "phs004377": {
+      "phs": "phs004377",
+      "name": "Metabolic Adaptations Rewire CD4 T Cells in a Subset-Specific Manner in Human Critical Illness with and without Sepsis",
+      "bioproject_ids": [
+        "1229534"
+      ]
+    },
+    "phs003672": {
+      "phs": "phs003672",
+      "name": "Late-stage tertiary lymphoid structures in hepatocellular carcinoma treated with neoadjuvant immune checkpoint blockade [bulk RNA-seq]",
+      "bioproject_ids": [
+        "1136492",
+        "1136494"
+      ]
+    },
+    "phs003230": {
+      "phs": "phs003230",
+      "name": "Temporal evolution reveals bifurcated lineages in aggressive neuroendocrine small cell prostate cancer trans-differentiation (scRNA-Seq)",
+      "bioproject_ids": [
+        "1001995",
+        "1001996"
+      ]
+    },
+    "phs002926": {
+      "phs": "phs002926",
+      "name": "Young infants display heterogeneous serological responses and extensive but reversible transcriptional changes following initial immunizations",
+      "bioproject_ids": [
+        "842002"
+      ]
+    },
+    "phs000748": {
+      "phs": "phs000748",
+      "name": "Single-cell discovery and multi-omic characterization of therapeutic targets in multiple myeloma [bulk RNA-seq]",
+      "bioproject_ids": [
+        "924778"
+      ]
+    },
+    "phs002003": {
+      "phs": "phs002003",
+      "name": "A human cell atlas of fetal gene expression",
+      "bioproject_ids": [
+        "659041",
+        "629599"
+      ]
+    },
+    "phs003418": {
+      "phs": "phs003418",
+      "name": "Single-cell Transcriptomic Characterization of Microscopic Colitis",
+      "bioproject_ids": [
+        "1205007",
+        "1205008"
+      ]
+    },
+    "phs002007": {
+      "phs": "phs002007",
+      "name": "Transcriptomic characterization of human innate T cells",
+      "bioproject_ids": [
+        "513294"
+      ]
+    },
+    "phs003629": {
+      "phs": "phs003629",
+      "name": "Pre-existing skin-resident CD8 and \u03b3\u03b4 T cell circuits mediate immune response in Merkel cell carcinoma and Predict immunotherapy efficacy [scRNA_tissue]",
+      "bioproject_ids": [
+        "984316"
+      ]
+    },
+    "phs001323": {
+      "phs": "phs001323",
+      "name": "Single-cell RNA-sequencing identifies immune biomarkers of response to immunotherapy in patients with high-risk Smoldering Myeloma",
+      "bioproject_ids": [
+        "740370",
+        "740371",
+        "796547"
+      ]
+    },
+    "phs002280": {
+      "phs": "phs002280",
+      "name": "Multimodal Analysis for Human ex vivo Studies Shows Extensive Molecular Changes from Delays in Blood Processing",
+      "bioproject_ids": [
+        "659732"
+      ]
+    },
+    "phs001300": {
+      "phs": "phs001300",
+      "name": "Single Nuclei Multiome of the NABEC Cerebral Cortex",
+      "bioproject_ids": [
+        "1300501"
+      ]
+    },
+    "phs003427": {
+      "phs": "phs003427",
+      "name": "Single-Cell Profiling of Premature Neonate Airways Reveals a Continuum of Myeloid Differentiation",
+      "bioproject_ids": [
+        "859193"
+      ]
+    },
+    "phs004521": {
+      "phs": "phs004521",
+      "name": "Myofibroblast programming blocks differentiation of TLS-organizing fibroblastic reticular cells in pancreatic cancer",
+      "bioproject_ids": [
+        "1431453"
+      ]
+    },
+    "phs004468": {
+      "phs": "phs004468",
+      "name": "Comprehensive Benchmarking of CITE-seq versus DOGMA-seq Single Cell Multimodal Omics",
+      "bioproject_ids": [
+        "824482"
+      ]
+    },
+    "phs002048": {
+      "phs": "phs002048",
+      "name": "A single cell approach to map cellular subsets involved in Systemic Lupus Erythematosus (SLE) heterogeneity",
+      "bioproject_ids": [
+        "560047"
+      ]
+    },
+    "phs004458": {
+      "phs": "phs004458",
+      "name": "Gene expression profile at single cell level  of Drug-tolerant persister cells induced by targeted therapy in lung adenocarcinoma.",
+      "bioproject_ids": [
+        "1149772",
+        "1150227"
+      ]
+    },
+    "phs003991": {
+      "phs": "phs003991",
+      "name": "Single Cell Opioid Responses in the Context of HIV (SCORCH)",
+      "bioproject_ids": [
+        "1242410",
+        "1242411"
+      ]
+    },
+    "phs002915": {
+      "phs": "phs002915",
+      "name": "Single-cell multi-omic velocity infers dynamic and decoupled gene regulation",
+      "bioproject_ids": [
+        "862872",
+        "910208",
+        "1196903"
+      ]
+    },
+    "phs002204": {
+      "phs": "phs002204",
+      "name": "Cardiac cell type-specific gene regulatory programs and disease risk association [RNA-seq]",
+      "bioproject_ids": [
+        "698274",
+        "698273"
+      ]
+    },
+    "phs002071": {
+      "phs": "phs002071",
+      "name": "Analysis of donor pancreata defines the transcriptomic signature and microenvironment of early neoplastic lesions.",
+      "bioproject_ids": [
+        "954383",
+        "655238"
+      ]
+    },
+    "phs003260": {
+      "phs": "phs003260",
+      "name": "Single Nucleus Transcriptomes from the Ventral Midbrain of Opioid Overdose Cases and Controls",
+      "bioproject_ids": [
+        "1003845"
+      ]
+    },
+    "phs002655": {
+      "phs": "phs002655",
+      "name": "SARS-CoV-2 induced immune perturbations in infants vary with disease severity and differ from adults\u2019 responses",
+      "bioproject_ids": [
+        "849968"
+      ]
+    },
+    "phs001158": {
+      "phs": "phs001158",
+      "name": "Spatial transcriptomics of human dorsal root ganglia from subjects with a history of diabetes",
+      "bioproject_ids": [
+        "1253704"
+      ]
+    },
+    "phs001027": {
+      "phs": "phs001027",
+      "name": "Homo sapiens",
+      "bioproject_ids": [
+        "326266"
+      ]
+    },
+    "phs000933": {
+      "phs": "phs000933",
+      "name": "Integrative molecular and clinical profiling of acral melanoma links focal amplification of chr22q11.21 to metastasis",
+      "bioproject_ids": [
+        "782616"
+      ]
+    },
+    "phs000159": {
+      "phs": "phs000159",
+      "name": "Single-cell discovery and multi-omic characterization of therapeutic targets in multiple myeloma [scRNA-seq]",
+      "bioproject_ids": [
+        "924769"
+      ]
+    },
+    "phs002008": {
+      "phs": "phs002008",
+      "name": "Developmental cell type specific enhancers in orofacial morphology and disease [human]",
+      "bioproject_ids": [
+        "1049389"
+      ]
+    }
+  }
+}
