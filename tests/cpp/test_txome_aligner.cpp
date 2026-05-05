@@ -19,9 +19,16 @@
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 static std::string make_tx(char base, int len) {
-    std::string s(len, base);
-    // slight variation so hash doesn't collide with other transcripts
-    for (int i = 3; i < len; i += 11) s[i] = 'T';
+    // Generate a pseudo-random transcript seeded by 'base' with unique 22-mers
+    uint32_t state = static_cast<uint32_t>(base) * 2654435761u + 1;
+    const char bases[] = "ACGT";
+    std::string s(len, 'A');
+    for (int i = 0; i < len; ++i) {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        s[i] = bases[state & 3];
+    }
     return s;
 }
 

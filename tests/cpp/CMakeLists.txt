@@ -73,6 +73,7 @@ add_pileup_test(test_cuttag)
 
 # ADT / HTO / feature barcodes
 add_pileup_test(test_adt_counter)
+add_pileup_test(test_adt_matcher)
 add_pileup_test(test_hto_demux)
 add_pileup_test(test_cellplex)
 add_pileup_test(test_crispr_guide)
@@ -83,6 +84,7 @@ add_pileup_test(test_species_registry)
 add_pileup_test(test_alignment_qc)
 add_pileup_test(test_sex_calling)
 add_pileup_test(test_rrna_detect)
+add_pileup_test(test_txome_aligner)
 
 # Nonhost detection
 add_pileup_test(test_nonhost)
@@ -107,6 +109,7 @@ add_pileup_test(test_ambient_profile)
 add_pileup_test(test_read_dedup_stats)
 add_pileup_test(test_donor_demux_perf)
 add_pileup_test(test_wl_ambient)
+add_pileup_test(test_sparse_accumulator)
 
 # Modality-specific
 add_pileup_test(test_mt_events)

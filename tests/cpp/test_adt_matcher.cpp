@@ -33,11 +33,12 @@ static std::string write_temp(const char* content, const char* suffix = ".csv") 
 // ── Test 1: CSV loading with header + exact match ─────────────────────────
 
 static void test_csv_load_and_exact_match() {
+    // All tags must be same length (matcher uses fixed tag_len from first entry)
     const char* csv =
         "name,sequence\n"
         "CD4,AACAAGACCCCTCCT\n"
-        "CD8a,TGCATGTCATCGGTGG\n"
-        "CD19,CTGGGCAATTCATGGC\n";
+        "CD8a,TGCATGTCATCGGTG\n"
+        "CD19,CTGGGCAATTCATGG\n";
     auto path = write_temp(csv);
 
     AdtMatcher m;
@@ -50,11 +51,11 @@ static void test_csv_load_and_exact_match() {
 
     // Exact match at offset 0
     assert(m.match("AACAAGACCCCTCCT") == 0 && "CD4 not matched");
-    assert(m.match("TGCATGTCATCGGTGG") == 1 && "CD8a not matched");
-    assert(m.match("CTGGGCAATTCATGGC") == 2 && "CD19 not matched");
+    assert(m.match("TGCATGTCATCGGTG") == 1 && "CD8a not matched");
+    assert(m.match("CTGGGCAATTCATGG") == 2 && "CD19 not matched");
 
     // Completely different sequence → no match
-    assert(m.match("NNNNNNNNNNNNNNNN") == -1 && "spurious match");
+    assert(m.match("NNNNNNNNNNNNNNN") == -1 && "spurious match");
 
     assert(m.tag_name(0) == "CD4");
     assert(m.tag_name(1) == "CD8a");
@@ -68,13 +69,13 @@ static void test_csv_load_and_exact_match() {
 static void test_hamming1_match() {
     AdtMatcher m;
     m.add_tag("TAG_A", "AACAAGACCCCTCCT");
-    m.add_tag("TAG_B", "TGCATGTCATCGGTGG");
+    m.add_tag("TAG_B", "TGCATGTCATCGGTG");
     m.build_index();
 
     // 1 substitution at position 0: A→C
     assert(m.match("CACAAGACCCCTCCT") == 0 && "Hamm-1 pos0 failed");
 
-    // 1 substitution at position 7: A→G
+    // 1 substitution at position 7: A→G (pos 8 in seq: AACAAGAC[C→G]CCTCCT)
     assert(m.match("AACAAGACGCCTCCT") == 0 && "Hamm-1 pos7 failed");
 
     // 1 substitution at last position
@@ -188,7 +189,7 @@ static void test_names() {
 static void test_thread_safe_concurrent_match() {
     AdtMatcher m;
     m.add_tag("T0", "AACAAGACCCCTCCT");
-    m.add_tag("T1", "TGCATGTCATCGGTGG");
+    m.add_tag("T1", "TGCATGTCATCGGTG");
     m.build_index();
 
     static constexpr int N_THREADS = 8;
@@ -201,8 +202,8 @@ static void test_thread_safe_concurrent_match() {
         threads.emplace_back([&m, &errors]() {
             for (int i = 0; i < N_QUERIES; ++i) {
                 int r0 = m.match("AACAAGACCCCTCCT");
-                int r1 = m.match("TGCATGTCATCGGTGG");
-                int rn = m.match("NNNNNNNNNNNNNNNN");
+                int r1 = m.match("TGCATGTCATCGGTG");
+                int rn = m.match("NNNNNNNNNNNNNNN");
                 if (r0 != 0 || r1 != 1 || rn != -1)
                     ++errors;
             }

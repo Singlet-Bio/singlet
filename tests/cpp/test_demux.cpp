@@ -90,14 +90,14 @@ int main(int argc, char* argv[]) {
     cfg.threads = 8;
     cfg.seed = 42;
 
-    auto assignments = singlet::run_demux(
+    auto result = singlet::run_demux(
         (uint32_t)ad_rows, (uint32_t)ad_cols,
         ad_indptr.data(), ad_indices.data(), ad_data.data(), ad_data.size(),
         dp_indptr.data(), dp_indices.data(), dp_data.data(), dp_data.size(),
         cfg);
 
     // Write assignments
-    singlet::write_donor_assignments(out_path, assignments, barcodes);
+    singlet::write_donor_assignments(out_path, result.assignments, barcodes);
 
     return 0;
 }
