@@ -148,7 +148,7 @@ add_pileup_test(test_logging)
 add_pileup_test(test_interval_tree)
 add_pileup_test(test_benchmark_suite)
 
-# UMI / dedup / velocity / bloom / saturation / read_stats / provenance / minimizer
+# UMI / dedup / velocity / bloom / saturation / read_stats / provenance / minimizer / cascade / pz_writer
 add_pileup_test(test_umi_dedup)
 add_pileup_test(test_bloom_filter)
 add_pileup_test(test_velocity)
@@ -156,6 +156,8 @@ add_pileup_test(test_saturation)
 add_pileup_test(test_read_stats)
 add_pileup_test(test_provenance)
 add_pileup_test(test_minimizer_index)
+add_pileup_test(test_cascade_stats_writer)
+add_pileup_test(test_pz_writer)
 
 # HDF5-dependent tests (h5ad, loom, molecule_info)
 if(HDF5_FOUND)
