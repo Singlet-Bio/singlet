@@ -120,3 +120,65 @@ class TestReadSpzColRange:
         full_dense = full.X.toarray() if sp.issparse(full.X) else full.X
         sub_dense = subset.X.toarray() if sp.issparse(subset.X) else subset.X
         np.testing.assert_allclose(sub_dense, full_dense, atol=1e-4)
+
+
+class TestImportSparsepress:
+    """Test _import_sparsepress legacy import helper."""
+
+    def test_import_sparsepress_not_installed(self, monkeypatch):
+        """Raises ImportError when sparsepress is not available."""
+        import builtins
+        import sys
+
+        from singlet._io import _import_sparsepress
+
+        # Remove sparsepress from sys.modules if present
+        monkeypatch.delitem(sys.modules, "sparsepress", raising=False)
+
+        original_import = builtins.__import__
+
+        def fail_import(name, *args, **kwargs):
+            if name == "sparsepress":
+                raise ImportError("no sparsepress")
+            return original_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", fail_import)
+        with pytest.raises(ImportError, match="legacy sparsepress_v2 format"):
+            _import_sparsepress()
+
+    def test_import_sparsepress_installed(self, monkeypatch):
+        """Returns module when sparsepress is importable."""
+        import sys
+        from types import ModuleType
+
+        from singlet._io import _import_sparsepress
+
+        mock_sp = ModuleType("sparsepress")
+        mock_sp.sp_read = lambda *a: None
+        monkeypatch.setitem(sys.modules, "sparsepress", mock_sp)
+
+        result = _import_sparsepress()
+        assert result is mock_sp
+
+
+class TestWriteSpzIntegerPath:
+    """Test write_spz with integer-typed data."""
+
+    def test_write_read_integer_matrix(self, tmp_path):
+        """Integer AnnData roundtrips via write_spz/read_spz."""
+        import anndata as ad
+        from singlet._io import read_spz, write_spz
+
+        # Create integer-typed matrix
+        mat = sp.csr_matrix(np.array([[1, 0, 3], [0, 5, 0], [2, 0, 4]], dtype=np.int32))
+        adata = ad.AnnData(X=mat)
+        adata.obs_names = pd.Index(["c0", "c1", "c2"])
+        adata.var_names = pd.Index(["g0", "g1", "g2"])
+
+        path = tmp_path / "int.spz"
+        write_spz(adata, path)
+        loaded = read_spz(path)
+
+        expected = mat.toarray()
+        actual = loaded.X.toarray() if sp.issparse(loaded.X) else loaded.X
+        np.testing.assert_array_equal(actual, expected)
