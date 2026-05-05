@@ -1,6 +1,5 @@
 """Tests for singlet.io.convert (format conversion utilities)."""
 
-
 import numpy as np
 import pytest
 import scipy.io
@@ -160,3 +159,76 @@ class TestFromMtx:
         loaded = from_mtx(tmp_path)
         assert list(loaded.var_names) == ["ENSG001", "ENSG002"]
         assert list(loaded.var["gene_name"]) == ["TP53", "BRCA1"]
+
+
+class TestSpzH5adConvenience:
+    """Test spz_to_h5ad, h5ad_to_spz, pz_to_h5ad, h5ad_to_pz via singlet.io."""
+
+    @pytest.fixture
+    def int_adata(self):
+        """Integer-valued AnnData for lossless roundtrips."""
+        import anndata as ad
+        import pandas as pd
+        import scipy.sparse as sp
+
+        mat = sp.random(4, 6, density=0.5, format="csr", dtype=np.float32)
+        mat.data = np.round(mat.data * 50).astype(np.float32)
+        adata = ad.AnnData(X=mat)
+        adata.obs_names = pd.Index([f"C{i}" for i in range(4)])
+        adata.var_names = pd.Index([f"G{j}" for j in range(6)])
+        return adata
+
+    def test_spz_to_h5ad(self, int_adata, tmp_path):
+        """Convert .spz → .h5ad via singlet.io.convert."""
+        from singlet._io import write_spz
+        from singlet.io.convert import spz_to_h5ad
+
+        spz_path = tmp_path / "data.spz"
+        write_spz(int_adata, spz_path)
+
+        h5ad_path = tmp_path / "out.h5ad"
+        spz_to_h5ad(spz_path, h5ad_path)
+        assert h5ad_path.exists()
+
+    def test_h5ad_to_spz(self, int_adata, tmp_path):
+        """Convert .h5ad → .spz via singlet.io.convert."""
+        from singlet.io.convert import h5ad_to_spz, to_h5ad
+
+        h5ad_path = tmp_path / "data.h5ad"
+        to_h5ad(int_adata, h5ad_path)
+
+        spz_path = tmp_path / "out.spz"
+        h5ad_to_spz(h5ad_path, spz_path)
+        assert spz_path.exists()
+
+    def test_pz_to_h5ad_via_io(self, int_adata, tmp_path):
+        """Convert .1pz → .h5ad via singlet.io.convert."""
+        from singlet._io import write_1pz
+        from singlet.io.convert import pz_to_h5ad
+
+        pz_path = tmp_path / "data.1pz"
+        write_1pz(int_adata, pz_path)
+
+        h5ad_path = tmp_path / "out.h5ad"
+        pz_to_h5ad(pz_path, h5ad_path)
+        assert h5ad_path.exists()
+
+    def test_h5ad_to_pz_via_io(self, int_adata, tmp_path):
+        """Convert .h5ad → .1pz via singlet.io.convert."""
+        from singlet.io.convert import h5ad_to_pz, to_h5ad
+
+        h5ad_path = tmp_path / "data.h5ad"
+        to_h5ad(int_adata, h5ad_path)
+
+        pz_path = tmp_path / "out.1pz"
+        h5ad_to_pz(h5ad_path, pz_path)
+        assert pz_path.exists()
+
+    def test_from_h5ad_via_io(self, int_adata, tmp_path):
+        """from_h5ad imported from singlet.io.convert reads correctly."""
+        from singlet.io.convert import from_h5ad, to_h5ad
+
+        path = tmp_path / "test.h5ad"
+        to_h5ad(int_adata, path)
+        loaded = from_h5ad(path)
+        assert loaded.shape == int_adata.shape

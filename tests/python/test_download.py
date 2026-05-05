@@ -254,3 +254,118 @@ class TestEnaCacheR2:
         assert result.method == "ena_cached"
         assert len(result.r1_paths) == 1
         assert len(result.r2_paths) == 1
+
+
+# ---------------------------------------------------------------------------
+# _download_parallel_segments
+# ---------------------------------------------------------------------------
+
+
+class TestParallelDownload:
+    """Test _download_parallel_segments with mocked subprocess."""
+
+    def test_success_with_content_length(self, tmp_path):
+        """Downloads via parallel segments when content-length is available."""
+        from singlet.preprocessing._download import _download_parallel_segments
+
+        dest = tmp_path / "file.bin"
+        data = b"A" * 100
+
+        def mock_run(cmd, **kwargs):
+            result = MagicMock()
+            result.stdout = "Content-Length: 100\n"
+            result.returncode = 0
+            return result
+
+        def mock_popen(cmd, **kwargs):
+            proc = MagicMock()
+            # Write segment data to the file specified in -o flag
+            out_idx = cmd.index("-o") + 1
+            seg_path = Path(cmd[out_idx])
+            # Parse range from the header
+            range_hdr = cmd[cmd.index("-H") + 1]
+            start, end = [int(x) for x in range_hdr.replace("Range: bytes=", "").split("-")]
+            seg_path.write_bytes(data[start : end + 1])
+            proc.wait = MagicMock(return_value=0)
+            return proc
+
+        with patch("subprocess.run", side_effect=mock_run):
+            with patch("subprocess.Popen", side_effect=mock_popen):
+                success, error = _download_parallel_segments(
+                    "http://example.com/file.bin", dest, segments=4, retries=1
+                )
+
+        assert success
+        assert error is None
+        assert dest.exists()
+        assert dest.read_bytes() == data
+
+    def test_fallback_single_download_no_content_length(self, tmp_path):
+        """Falls back to single curl if Content-Length is 0."""
+        from singlet.preprocessing._download import _download_parallel_segments
+
+        dest = tmp_path / "file.bin"
+
+        def mock_run(cmd, **kwargs):
+            result = MagicMock()
+            if "-sI" in cmd:
+                # HEAD request — no Content-Length
+                result.stdout = "HTTP/1.1 200 OK\n"
+                result.returncode = 0
+            else:
+                # Single download
+                dest.write_bytes(b"single download data")
+                result.returncode = 0
+            return result
+
+        with patch("subprocess.run", side_effect=mock_run):
+            success, error = _download_parallel_segments(
+                "http://example.com/file.bin", dest, retries=1
+            )
+
+        assert success
+        assert error is None
+
+    def test_retry_on_failure(self, tmp_path):
+        """Retries on exception and returns failure after max retries."""
+        from singlet.preprocessing._download import _download_parallel_segments
+
+        dest = tmp_path / "file.bin"
+
+        with patch("subprocess.run", side_effect=Exception("network error")):
+            with patch("time.sleep"):
+                success, error = _download_parallel_segments(
+                    "http://example.com/fail.bin", dest, retries=2
+                )
+
+        assert not success
+        assert "network error" in error
+
+    def test_pigz_fallback_to_gzip(self, tmp_path):
+        """download_from_sra falls back to gzip if pigz not found."""
+        from singlet.preprocessing._download import download_from_sra
+
+        call_log = []
+
+        def mock_run(cmd, **kwargs):
+            call_log.append(cmd[0] if cmd else "")
+            if cmd[0] == "fasterq-dump":
+                # Simulate creating FASTQ files
+                (tmp_path / "SRR123_1.fastq").write_text("@read\nACGT\n+\nIIII\n")
+                return MagicMock(returncode=0)
+            elif cmd[0] == "pigz":
+                raise FileNotFoundError("pigz not found")
+            elif cmd[0] == "gzip":
+                # Simulate gzip compression
+                fq = Path(cmd[1])
+                gz = fq.with_suffix(".fastq.gz")
+                gz.write_bytes(fq.read_bytes())
+                fq.unlink()
+                return MagicMock(returncode=0)
+            return MagicMock(returncode=0)
+
+        with patch("subprocess.run", side_effect=mock_run):
+            result = download_from_sra("SRR123", tmp_path)
+
+        assert result.success
+        assert "gzip" in call_log
