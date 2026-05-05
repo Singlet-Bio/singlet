@@ -48,6 +48,7 @@ all = ["singlet[torch,gpu,zarr,mcp]"]
 dev = [
     "pytest>=7.0",
     "pytest-cov",
+    "hypothesis>=6.0",
     "ruff",
     "pybind11>=2.11",
 ]
