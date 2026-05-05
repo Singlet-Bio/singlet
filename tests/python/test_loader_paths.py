@@ -332,3 +332,71 @@ class TestLoadSample:
 
         loaded = load(weird_path)
         assert loaded.shape == (5, 7)
+
+    def test_load_sample_success(self, tmp_path, monkeypatch):
+        """load_sample reads sample via singlepress.read_1pz_columns."""
+        from unittest.mock import MagicMock
+
+        import singlet._catalog as cat_mod
+        from singlet._loader import load_sample
+
+        # Setup sample index
+        idx_df = pd.DataFrame(
+            {
+                "gsm_id": ["GSM001"],
+                "gse_id": ["GSE001"],
+                "organism": ["human"],
+                "species_subdir": [""],
+                "col_offset": [10],
+                "col_count": [5],
+            }
+        )
+        idx_df.to_parquet(tmp_path / "sample_index.parquet")
+        cat_mod.set_catalog_dir(tmp_path)
+
+        # Create mock matrix returned by singlepress
+        mock_mat = sp.random(3, 5, density=0.5, format="csc", dtype=np.float32)
+        mock_mat.rownames = ["G1", "G2", "G3"]
+        mock_mat.colnames = None
+
+        mock_sp = MagicMock()
+        mock_sp.read_1pz_columns.return_value = mock_mat
+        monkeypatch.setitem(__import__("sys").modules, "singlepress", mock_sp)
+
+        adata = load_sample("GSM001")
+        assert adata.shape == (5, 3)  # transposed: 5 cells × 3 genes
+        assert list(adata.var_names) == ["G1", "G2", "G3"]
+        assert adata.obs["gsm_id"].iloc[0] == "GSM001"
+        assert adata.obs["gse_id"].iloc[0] == "GSE001"
+
+    def test_load_sample_with_gene_filter(self, tmp_path, monkeypatch):
+        """load_sample filters to requested genes."""
+        from unittest.mock import MagicMock
+
+        import singlet._catalog as cat_mod
+        from singlet._loader import load_sample
+
+        idx_df = pd.DataFrame(
+            {
+                "gsm_id": ["GSM002"],
+                "gse_id": ["GSE002"],
+                "organism": ["mouse"],
+                "species_subdir": ["mus"],
+                "col_offset": [0],
+                "col_count": [3],
+            }
+        )
+        idx_df.to_parquet(tmp_path / "sample_index.parquet")
+        cat_mod.set_catalog_dir(tmp_path)
+
+        mock_mat = sp.random(4, 3, density=0.5, format="csc", dtype=np.float32)
+        mock_mat.rownames = ["GeneA", "GeneB", "GeneC", "GeneD"]
+        mock_mat.colnames = None
+
+        mock_sp = MagicMock()
+        mock_sp.read_1pz_columns.return_value = mock_mat
+        monkeypatch.setitem(__import__("sys").modules, "singlepress", mock_sp)
+
+        adata = load_sample("GSM002", genes=["GeneA", "GeneC"])
+        assert adata.shape == (3, 2)  # 3 cells × 2 genes
+        assert set(adata.var_names) == {"GeneA", "GeneC"}

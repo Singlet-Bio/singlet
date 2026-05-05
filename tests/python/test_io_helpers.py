@@ -308,3 +308,31 @@ class TestLegacyV2Paths:
             result = _spz_info_legacy("/fake.spz")
             assert result == {"rows": 5, "cols": 10, "nnz": 50}
             mock_sp.sp_info.assert_called_once_with("/fake.spz")
+
+    def test_read_1pz_fallback_pz_codec(self, tmp_path):
+        """read_1pz falls back to pz_read when singlepress.read_1pz missing."""
+        from types import ModuleType
+        from unittest.mock import MagicMock, patch
+
+        # Create a fake singlepress module WITHOUT read_1pz
+        fake_sp = ModuleType("singlepress")
+        fake_sp._pz_codec = MagicMock()
+        fake_sp._pz_codec.pz_read.return_value = {
+            "m": 3,
+            "n": 4,
+            "values": np.array([1.0, 2.0, 3.0]),
+            "indices": np.array([0, 1, 2]),
+            "indptr": np.array([0, 1, 2, 3, 3]),
+        }
+
+        import sys
+
+        with patch.dict(
+            sys.modules, {"singlepress": fake_sp, "singlepress._pz_codec": fake_sp._pz_codec}
+        ):
+            # Force AttributeError on read_1pz
+            from singlet._io import read_1pz
+
+            adata = read_1pz(str(tmp_path / "fake.1pz"))
+            # 3 genes × 4 cells → transposed to 4 cells × 3 genes
+            assert adata.shape == (4, 3)
