@@ -8,7 +8,7 @@ from typing import Optional
 # ─── Export from AnnData ─────────────────────────────────────────────────────
 
 
-def to_h5ad(adata, path: str | Path, *, compression: str = "gzip"):
+def to_h5ad(adata, path: str | Path, *, compression: str = "gzip") -> None:
     """Write AnnData to HDF5 (.h5ad) format.
 
     Parameters
@@ -21,7 +21,7 @@ def to_h5ad(adata, path: str | Path, *, compression: str = "gzip"):
     adata.write_h5ad(Path(path), compression=compression)
 
 
-def to_zarr(adata, path: str | Path, *, chunks: Optional[tuple] = None):
+def to_zarr(adata, path: str | Path, *, chunks: Optional[tuple] = None) -> None:
     """Write AnnData to Zarr store.
 
     Parameters
@@ -35,7 +35,7 @@ def to_zarr(adata, path: str | Path, *, chunks: Optional[tuple] = None):
     adata.write_zarr(Path(path), chunks=chunks)
 
 
-def to_csc(adata, *, layer: Optional[str] = None):
+def to_csc(adata, *, layer: Optional[str] = None) -> "scipy.sparse.csc_matrix":
     """Extract the count matrix as a scipy CSC sparse matrix.
 
     Parameters
@@ -57,7 +57,7 @@ def to_csc(adata, *, layer: Optional[str] = None):
     return sp.csc_matrix(mat)
 
 
-def to_tiledb(adata, uri: str, *, measurement_name: str = "RNA"):
+def to_tiledb(adata, uri: str, *, measurement_name: str = "RNA") -> None:
     """Write AnnData to a TileDB-SOMA experiment.
 
     Requires ``tiledbsoma`` to be installed.
@@ -80,7 +80,7 @@ def to_tiledb(adata, uri: str, *, measurement_name: str = "RNA"):
     )
 
 
-def to_mtx(adata, directory: str | Path, *, layer: Optional[str] = None):
+def to_mtx(adata, directory: str | Path, *, layer: Optional[str] = None) -> None:
     """Write AnnData to Market Exchange (MTX) format.
 
     Creates ``matrix.mtx.gz``, ``barcodes.tsv.gz``, ``features.tsv.gz``
@@ -123,7 +123,7 @@ def to_mtx(adata, directory: str | Path, *, layer: Optional[str] = None):
 # ─── Import to AnnData ──────────────────────────────────────────────────────
 
 
-def from_h5ad(path: str | Path, *, backed: Optional[str] = None):
+def from_h5ad(path: str | Path, *, backed: Optional[str] = None) -> "anndata.AnnData":
     """Read an .h5ad file into AnnData.
 
     Parameters
@@ -141,7 +141,7 @@ def from_h5ad(path: str | Path, *, backed: Optional[str] = None):
     return ad.read_h5ad(Path(path), backed=backed)
 
 
-def from_zarr(path: str | Path):
+def from_zarr(path: str | Path) -> "anndata.AnnData":
     """Read a Zarr store into AnnData.
 
     Parameters
@@ -157,7 +157,7 @@ def from_zarr(path: str | Path):
     return ad.read_zarr(Path(path))
 
 
-def from_tiledb(uri: str, *, measurement_name: str = "RNA"):
+def from_tiledb(uri: str, *, measurement_name: str = "RNA") -> "anndata.AnnData":
     """Read a TileDB-SOMA experiment into AnnData.
 
     Requires ``tiledbsoma`` to be installed.
@@ -179,7 +179,7 @@ def from_tiledb(uri: str, *, measurement_name: str = "RNA"):
     return exp.ms[measurement_name].to_anndata()
 
 
-def from_mtx(directory: str | Path):
+def from_mtx(directory: str | Path) -> "anndata.AnnData":
     """Read Market Exchange (MTX) format into AnnData.
 
     Expects ``matrix.mtx`` or ``matrix.mtx.gz``, plus optional
@@ -231,7 +231,7 @@ def from_mtx(directory: str | Path):
 # ─── .1pz / .spz round-trip convenience ─────────────────────────────────────
 
 
-def pz_to_h5ad(pz_path: str | Path, h5ad_path: str | Path, **kwargs):
+def pz_to_h5ad(pz_path: str | Path, h5ad_path: str | Path, **kwargs) -> None:
     """Convert a .1pz file to .h5ad."""
     from singlet._io import read_1pz
 
@@ -239,7 +239,7 @@ def pz_to_h5ad(pz_path: str | Path, h5ad_path: str | Path, **kwargs):
     to_h5ad(adata, h5ad_path, **kwargs)
 
 
-def h5ad_to_pz(h5ad_path: str | Path, pz_path: str | Path, **kwargs):
+def h5ad_to_pz(h5ad_path: str | Path, pz_path: str | Path, **kwargs) -> None:
     """Convert a .h5ad file to .1pz."""
     from singlet._io import write_1pz
 
@@ -247,7 +247,7 @@ def h5ad_to_pz(h5ad_path: str | Path, pz_path: str | Path, **kwargs):
     write_1pz(adata, pz_path, **kwargs)
 
 
-def spz_to_h5ad(spz_path: str | Path, h5ad_path: str | Path, **kwargs):
+def spz_to_h5ad(spz_path: str | Path, h5ad_path: str | Path, **kwargs) -> None:
     """Convert a .spz file to .h5ad (legacy compat)."""
     from singlet._io import read_spz
 
@@ -255,7 +255,7 @@ def spz_to_h5ad(spz_path: str | Path, h5ad_path: str | Path, **kwargs):
     to_h5ad(adata, h5ad_path, **kwargs)
 
 
-def h5ad_to_spz(h5ad_path: str | Path, spz_path: str | Path, **kwargs):
+def h5ad_to_spz(h5ad_path: str | Path, spz_path: str | Path, **kwargs) -> None:
     """Convert a .h5ad file to .spz (legacy compat)."""
     from singlet._io import write_spz
 
