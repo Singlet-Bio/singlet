@@ -36,3 +36,4 @@ star/pgo_profile/
 # Pipeline operational state (lives in singlet-agents repo)
 pipeline/
 src/star/htslib/htslib/
+.coverage
