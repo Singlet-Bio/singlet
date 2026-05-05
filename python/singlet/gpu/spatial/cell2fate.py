@@ -66,7 +66,7 @@ class Cell2FateModel:
                 "gamma_var": cp.asarray(self.result.gamma_var_view).get(),
             }
         except ImportError:
-            raise ImportError("singlet.gpu.spatial.cell2fate requires cupy.")
+            raise ImportError("singlet.gpu.spatial.cell2fate requires cupy.") from None
 
     def module_loadings(self) -> np.ndarray:
         """Return [K × n_genes] module loading matrix (host numpy)."""
@@ -193,7 +193,7 @@ def fit(
         d_spliced = _layer_to_csc(spliced_layer)
         d_unspliced = _layer_to_csc(unspliced_layer)
     except ImportError as e:
-        raise ImportError(f"singlet.gpu.spatial.cell2fate.fit requires cupy.  Original error: {e}")
+        raise ImportError(f"singlet.gpu.spatial.cell2fate.fit requires cupy.  Original error: {e}") from e
 
     result = _core.cell2fate_fit(
         d_spliced,

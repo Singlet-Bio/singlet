@@ -18,7 +18,7 @@ try:
 except ImportError:
     raise ImportError(
         "singlet.gpu requires CuPy with CUDA 12+. Install with: pip install singlet[gpu]"
-    )
+    ) from None
 
 from singlet.gpu._core import DeviceCsc, Metadata, device_count, load_pz, set_device
 

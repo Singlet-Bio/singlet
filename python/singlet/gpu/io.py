@@ -225,7 +225,7 @@ def read_anndata(
             "singlet.gpu._core is not available. "
             "The C++ extension must be compiled on a CUDA-capable node. "
             "Install with: pip install singlet[gpu]"
-        )
+        ) from None
 
     path = _resolve_path(pz_path, modality)
     result = _load_pz(path, keep_host_pinned=keep_host_pinned)

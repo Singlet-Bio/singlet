@@ -112,7 +112,7 @@ def run_flash_deconv(
     except ImportError as e:
         raise ImportError(
             f"singlet.gpu.spatial.run_flash_deconv requires cupy.  Original error: {e}"
-        )
+        ) from e
 
     # ---- Cell-type labels → int32 device array --------------------------------
     labels = adata_reference.obs[cell_type_key].values

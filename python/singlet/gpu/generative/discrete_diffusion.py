@@ -163,7 +163,7 @@ def train(
     except ImportError as e:
         raise ImportError(
             f"singlet.gpu.generative.discrete_diffusion.train requires cupy.  Original error: {e}"
-        )
+        ) from e
 
     result = _core.train_discrete_diffusion(
         mat,

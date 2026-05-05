@@ -207,7 +207,7 @@ def calculate_qc_metrics(
     try:
         import cupy as cp
     except ImportError as e:
-        raise ImportError(f"singlet.gpu.qc.calculate_qc_metrics requires cupy.  {e}")
+        raise ImportError(f"singlet.gpu.qc.calculate_qc_metrics requires cupy.  {e}") from e
 
     working = adata if (inplace and not copy) else copy_module.copy(adata)
 
@@ -285,7 +285,7 @@ def filter_cells(
         except ImportError:
             import cupy.sparse as csp  # cupy < 14 fallback
     except ImportError as e:
-        raise ImportError(f"singlet.gpu.qc.filter_cells requires cupy.  {e}")
+        raise ImportError(f"singlet.gpu.qc.filter_cells requires cupy.  {e}") from e
 
     mt_key = qc_vars[0] if len(qc_vars) > 0 else "MT"
     ribo_key = qc_vars[1] if len(qc_vars) > 1 else "RIBO"
@@ -420,7 +420,7 @@ def filter_genes(
         except ImportError:
             import cupy.sparse as csp  # cupy < 14 fallback
     except ImportError as e:
-        raise ImportError(f"singlet.gpu.qc.filter_genes requires cupy.  {e}")
+        raise ImportError(f"singlet.gpu.qc.filter_genes requires cupy.  {e}") from e
 
     mt_key = qc_vars[0] if len(qc_vars) > 0 else "MT"
     ribo_key = qc_vars[1] if len(qc_vars) > 1 else "RIBO"

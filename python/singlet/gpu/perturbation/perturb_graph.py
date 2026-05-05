@@ -110,7 +110,7 @@ class PerturbGraphModel:
         except ImportError as e:
             raise ImportError(
                 f"singlet.gpu.perturbation.perturb_graph requires cupy.  Original error: {e}"
-            )
+            ) from e
 
         view = self._result.predict_perturbation(mat, pert_id, target_dose, stream)
         n_query = adata_query.n_obs
@@ -179,7 +179,7 @@ def fit(
     except ImportError as e:
         raise ImportError(
             f"singlet.gpu.perturbation.perturb_graph.fit requires cupy.  Original error: {e}"
-        )
+        ) from e
 
     # Encode perturbation labels as integers.
     raw_labels = adata.obs[pert_key].values

@@ -139,7 +139,7 @@ def scale(
     try:
         import cupy as cp
     except ImportError as e:
-        raise ImportError(f"singlet.gpu.preprocess.scale requires cupy.  {e}")
+        raise ImportError(f"singlet.gpu.preprocess.scale requires cupy.  {e}") from e
 
     working = adata if (inplace and not copy) else copy_module.copy(adata)
 
@@ -252,7 +252,7 @@ def regress_out(
     try:
         import cupy as cp
     except ImportError as e:
-        raise ImportError(f"singlet.gpu.preprocess.regress_out requires cupy.  {e}")
+        raise ImportError(f"singlet.gpu.preprocess.regress_out requires cupy.  {e}") from e
 
     working = adata if (inplace and not copy) else copy_module.copy(adata)
 
@@ -267,7 +267,7 @@ def regress_out(
         raise TypeError(
             f"adata.layers['{_SCALE_LAYER}'] is not a DenseResult object.  "
             "Re-run singlet.gpu.preprocess.scale(adata) to regenerate it."
-        )
+        ) from e
 
     # Build design matrix C [n_cells × p] col-major float32.
     # scanpy convention: intercept is NOT included; user passes explicit obs columns.
