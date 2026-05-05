@@ -246,7 +246,9 @@ def _result_to_anndata(result: dict) -> "anndata.AnnData":
     return adata
 
 
-def _read_spz_legacy(path: str | Path, *, col_range: tuple[int, int] | None = None) -> "anndata.AnnData":
+def _read_spz_legacy(
+    path: str | Path, *, col_range: tuple[int, int] | None = None
+) -> "anndata.AnnData":
     """Read a legacy sparsepress_v2 file via the sparsepress package."""
     sp_mod = _import_sparsepress()
 
