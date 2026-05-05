@@ -36,6 +36,11 @@ Format I/O:
 Configuration:
     singlet.set_catalog_dir("/path/to/catalog")  Set local catalog path
 
+Cell type annotation (free, local):
+    singlet.gene_programs("Homo sapiens")  Download NMF gene programs (W matrix)
+    singlet.project(adata)                 Project cells → gene program space (H matrix)
+    singlet.annotate(adata)                Annotate cells with types (NMF-based)
+
 Token-priced (requires API key):
     singlet.login(key)                     Authenticate
     singlet.query(...)                     Cross-atlas query → AnnData
@@ -44,6 +49,7 @@ Token-priced (requires API key):
 
 __version__ = "2.0.0"
 
+from singlet._annotate import annotate, gene_programs, project
 from singlet._auth import login
 from singlet._catalog import (
     catalog,
@@ -102,6 +108,10 @@ __all__ = [
     "login",
     "query",
     "search",
+    # Annotation (free, local)
+    "gene_programs",
+    "project",
+    "annotate",
     # I/O
     "read_1pz",
     "write_1pz",
