@@ -323,3 +323,53 @@ class TestLoadProgramLabels:
             result = _load_program_labels("Homo sapiens", 100)
 
         assert result == {}
+
+
+class TestGeneProgramsNoNames:
+    """Test gene_programs fallback when model has no obs/var names."""
+
+    def test_generates_default_names(self, tmp_path, monkeypatch):
+        """gene_programs generates default names when model has empty names."""
+        from singlet._annotate import gene_programs
+
+        monkeypatch.setattr("singlet._annotate._models_dir", lambda: tmp_path)
+
+        k = 5
+        W = np.random.default_rng(42).random((k, k)).astype(np.float32)
+
+        class FakeAdata:
+            X = sp.csr_matrix(W)
+            obs_names = pd.Index([])
+            var_names = pd.Index([])
+
+        with patch("singlet._io.read_1pz", return_value=FakeAdata()):
+            with patch(
+                "singlet._annotate._download_model",
+                return_value=tmp_path / "model.1pz",
+            ):
+                result = gene_programs("Homo sapiens", k=k)
+
+        assert result.shape == (k, k)
+        assert list(result.columns) == [f"P{i + 1:03d}" for i in range(k)]
+        assert list(result.index) == [f"gene_{i}" for i in range(k)]
+
+
+class TestAnnotateDetectOrganism:
+    """Test annotate() auto-detecting organism via _detect_organism."""
+
+    @patch("singlet._annotate._load_program_labels")
+    @patch("singlet._annotate.project")
+    def test_annotate_without_organism(self, mock_proj, mock_labels_fn, small_adata):
+        """annotate() calls _detect_organism when organism is None."""
+        k = 5
+        H = np.random.default_rng(0).random((10, k)).astype(np.float32)
+        mock_proj.return_value = H
+        mock_labels_fn.return_value = {f"P{i + 1:03d}": f"type_{i}" for i in range(k)}
+
+        result = annotate(small_adata, k=5)  # no organism → triggers _detect_organism
+        assert isinstance(result, pd.DataFrame)
+        assert result.shape[0] == 10
+        # Verify project was called with detected organism
+        mock_proj.assert_called_once()
+        call_kwargs = mock_proj.call_args
+        assert call_kwargs[1]["organism"] is not None  # organism was detected
