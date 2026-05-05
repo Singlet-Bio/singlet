@@ -75,3 +75,22 @@ requires_gpu = pytest.mark.skipif(
     not _gpu_available(),
     reason="CUDA device not available (cupy import failed or no GPU visible)",
 )
+
+
+# ---------------------------------------------------------------------------
+# Lightweight AnnData fixture for torch/integration tests
+# ---------------------------------------------------------------------------
+@pytest.fixture
+def small_anndata():
+    """Create a small synthetic AnnData for testing."""
+    ad = pytest.importorskip("anndata")
+    import numpy as np
+    import scipy.sparse as sp
+
+    rng = np.random.default_rng(42)
+    X = sp.random(20, 50, density=0.3, format="csr", random_state=rng,
+                  dtype=np.float32)
+    adata = ad.AnnData(X=X)
+    adata.var_names = [f"Gene_{i}" for i in range(50)]
+    adata.obs_names = [f"Cell_{i}" for i in range(20)]
+    return adata

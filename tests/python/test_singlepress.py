@@ -11,6 +11,23 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+@pytest.fixture
+def tmp_spz(tmp_path):
+    """Create a temporary SPZ file for tests that need a pre-written file."""
+    from singlet._singlepress import sp_write_int
+
+    rng = np.random.default_rng(42)
+    mat = sp.csc_matrix(rng.poisson(1, size=(5, 10)).astype(np.int32))
+    path = tmp_path / "fixture.spz"
+    sp_write_int(
+        mat.indptr.astype(np.int32),
+        mat.indices.astype(np.int32),
+        mat.data.astype(np.int32),
+        mat.shape[0], str(path),
+    )
+    return path
+
+
 class TestRoundTrip:
     """Test compress → decompress preserves data."""
 
