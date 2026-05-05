@@ -57,6 +57,12 @@ _MODALITY_TO_STEM: dict[str, str] = {
     "fragments": "fragments",
 }
 
+# Modality → subdirectory (singlify v2 schema moves donor/nonhost into subdirs)
+_MODALITY_TO_SUBDIR: dict[str, str] = {
+    "snp_ad": "donor",
+    "snp_dp": "donor",
+}
+
 
 def _resolve_pz_path(pz_dir: Union[str, Path], modality: str) -> str:
     """
@@ -94,8 +100,13 @@ def _resolve_pz_path(pz_dir: Union[str, Path], modality: str) -> str:
             )
         candidate = p / f"{stem}.1pz"
         if not candidate.exists():
+            # Check subdirectory layout (singlify v2 schema)
+            subdir = _MODALITY_TO_SUBDIR.get(modality)
+            if subdir:
+                candidate = p / subdir / f"{stem}.1pz"
+        if not candidate.exists():
             raise FileNotFoundError(
-                f"Expected {candidate} for modality='{modality}' "
+                f"Expected {stem}.1pz for modality='{modality}' "
                 f"but file not found in {p}"
             )
         return str(candidate)
