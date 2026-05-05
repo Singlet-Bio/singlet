@@ -235,3 +235,77 @@ def test_protocols():
     # 10xv3 should be the top protocol
     assert p.iloc[0]["protocol"] == "10xv3"
     assert p.iloc[0]["count"] > 500
+
+
+def test_samples_filter_tissue():
+    """samples(tissue=...) filters by tissue column."""
+    import singlet
+
+    lung = singlet.samples(tissue="lung")
+    assert len(lung) > 0
+    assert all(lung["tissue"].str.contains("lung", case=False, na=False))
+
+
+def test_samples_filter_protocol():
+    """samples(protocol=...) filters by protocol column."""
+    import singlet
+
+    v3 = singlet.samples(protocol="10xv3")
+    assert len(v3) > 100
+    assert all(v3["protocol"].str.contains("10xv3", case=False, na=False))
+
+
+def test_samples_filter_min_cells():
+    """samples(min_cells=...) filters by cell count."""
+    import singlet
+
+    big = singlet.samples(min_cells=5000)
+    assert len(big) > 0
+    cells_col = "cells_called" if "cells_called" in big.columns else "n_cells"
+    assert all(big[cells_col] >= 5000)
+
+
+def test_samples_quality_silver():
+    """samples(quality_tier='silver') returns mid-tier samples."""
+    import singlet
+
+    silver = singlet.samples(quality_tier="silver")
+    assert len(silver) > 0
+    assert all(silver["status"] == "SUCCESS")
+
+
+def test_samples_quality_bronze():
+    """samples(quality_tier='bronze') returns low-tier samples."""
+    import singlet
+
+    bronze = singlet.samples(quality_tier="bronze")
+    assert len(bronze) > 0
+    assert all(bronze["status"] == "SUCCESS")
+
+
+def test_datasets_filter_protocol():
+    """datasets(protocol=...) filters catalog by protocol."""
+    import singlet
+
+    v2 = singlet.datasets(protocol="10xv2")
+    assert len(v2) > 0
+
+
+def test_datasets_filter_has_kraken2():
+    """datasets(has_kraken2=True) filters catalog."""
+    import singlet
+
+    k2 = singlet.datasets(has_kraken2=True)
+    if "has_kraken2" in k2.columns:
+        assert all(k2["has_kraken2"])
+
+
+def test_summary_format():
+    """summary() returns a formatted string with key stats."""
+    import singlet
+
+    s = singlet.summary()
+    assert "singlet atlas" in s
+    assert "samples" in s
+    assert "series" in s
+    assert "species" in s
