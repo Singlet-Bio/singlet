@@ -106,3 +106,12 @@ class TestMain:
         assert result.returncode == 0
         assert "singlet v" in result.stdout
         assert "atlas" in result.stdout
+
+    def test_main_function(self, capsys):
+        """singlet.__main__.main() prints usage info."""
+        from singlet.__main__ import main
+
+        main()
+        captured = capsys.readouterr()
+        assert "singlet v" in captured.out
+        assert "Quick start" in captured.out
