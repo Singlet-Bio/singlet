@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "lib1fq/species_registry.h"
+#include "species_registry.h"
 
 namespace singlet::ref_fetch {
 

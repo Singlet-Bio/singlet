@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "lib1fq/types.h"
+#include "../fq/types.h"
 
 namespace singlet {
 

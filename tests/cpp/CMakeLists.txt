@@ -132,7 +132,11 @@ add_pileup_test(test_complex_whitelist)
 add_pileup_test(test_indrop_detect)
 add_pileup_test(test_seqwell_detect)
 add_pileup_test(test_cascade_router)
+add_pileup_test(test_multiome_router)
 add_pileup_test(test_interop)
+
+# Reference / fq
+add_pileup_test(test_ref_fetch)
 
 # Misc
 add_pileup_test(test_logging)
