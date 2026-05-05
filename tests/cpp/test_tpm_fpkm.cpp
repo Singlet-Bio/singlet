@@ -13,8 +13,8 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/gene_model.h"
-#include "singlet-pileup/tpm_fpkm.h"
+#include "singlet/pileup/gene_model.h"
+#include "singlet/pileup/tpm_fpkm.h"
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 

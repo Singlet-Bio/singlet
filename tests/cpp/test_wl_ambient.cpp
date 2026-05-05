@@ -11,8 +11,8 @@
 //   g++ -std=c++17 -O2 -I../include -o /tmp/test_wl_ambient \
 //       test/test_wl_ambient.cpp && /tmp/test_wl_ambient
 
-#include "singlet-pileup/cell_calling.h"
-#include "singlet-pileup/sparse_accumulator.h"
+#include "singlet/pileup/cell_calling.h"
+#include "singlet/pileup/sparse_accumulator.h"
 #include <cassert>
 #include <cmath>
 #include <iostream>

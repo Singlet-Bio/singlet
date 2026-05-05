@@ -19,7 +19,7 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/donor_demux.h"
+#include "singlet/pileup/donor_demux.h"
 
 using namespace singlet;
 

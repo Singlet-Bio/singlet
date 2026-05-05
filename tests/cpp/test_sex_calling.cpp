@@ -4,8 +4,8 @@
 // Approach: write a minimal in-memory GTF to a tmp file, load it into GeneModel,
 // construct a synthetic sparse exon matrix, and verify call_sex() output.
 
-#include "singlet-pileup/sex_calling.h"
-#include "singlet-pileup/gene_model.h"
+#include "singlet/pileup/sex_calling.h"
+#include "singlet/pileup/gene_model.h"
 
 #include <cassert>
 #include <fstream>

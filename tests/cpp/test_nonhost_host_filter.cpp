@@ -13,10 +13,10 @@
 // Build:
 //   ninja -C build test_nonhost_host_filter && ./build/test_nonhost_host_filter
 
-#include "singlet-pileup/nonhost/host_kmer_filter.h"
-#include "singlet-pileup/nonhost/nonhost_screener.h"
-#include "singlet-pileup/nonhost/min_sketch.h"
-#include "singlet-pileup/nonhost/nonhost_em.h"
+#include "singlet/pileup/nonhost/host_kmer_filter.h"
+#include "singlet/pileup/nonhost/nonhost_screener.h"
+#include "singlet/pileup/nonhost/min_sketch.h"
+#include "singlet/pileup/nonhost/nonhost_em.h"
 
 #include <cassert>
 #include <cstdio>

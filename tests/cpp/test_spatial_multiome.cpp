@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/spatial_multiome.h"
+#include "singlet/pileup/spatial_multiome.h"
 
 using namespace singlet;
 

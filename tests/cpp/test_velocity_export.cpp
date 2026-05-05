@@ -13,7 +13,7 @@
 #include <vector>
 
 // Only velocity.h — no htslib dependency
-#include "singlet-pileup/velocity.h"
+#include "singlet/pileup/velocity.h"
 
 static int n_pass = 0;
 static int n_fail = 0;

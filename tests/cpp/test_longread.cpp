@@ -42,7 +42,7 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/longread.h"
+#include "singlet/pileup/longread.h"
 
 using namespace singlet;
 

@@ -1,9 +1,9 @@
-// test_tiny_dataset_guard.cpp — Unit tests for singlet-pileup/tiny_dataset_guard.h
+// test_tiny_dataset_guard.cpp — Unit tests for singlet/pileup/tiny_dataset_guard.h
 #include <cassert>
 #include <iostream>
 #include <string>
 
-#include "singlet-pileup/tiny_dataset_guard.h"
+#include "singlet/pileup/tiny_dataset_guard.h"
 
 using singlet_pileup::TinyDatasetGuard;
 

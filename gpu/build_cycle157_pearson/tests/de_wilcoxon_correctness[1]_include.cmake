@@ -1,5 +1,0 @@
-if(EXISTS "/mnt/home/debruinz/Singlet-AI/singlet-gpu/build_cycle157_pearson/tests/de_wilcoxon_correctness[1]_tests.cmake")
-  include("/mnt/home/debruinz/Singlet-AI/singlet-gpu/build_cycle157_pearson/tests/de_wilcoxon_correctness[1]_tests.cmake")
-else()
-  add_test(de_wilcoxon_correctness_NOT_BUILT de_wilcoxon_correctness_NOT_BUILT)
-endif()

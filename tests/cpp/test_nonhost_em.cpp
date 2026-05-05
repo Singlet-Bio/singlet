@@ -14,7 +14,7 @@
 //   4. Convergence check:        iter count < max_iter (= 100) for all test cases
 //   5. Min-abundance filter:     species with θ < threshold are removed from output
 
-#include "singlet-pileup/nonhost/nonhost_em.h"
+#include "singlet/pileup/nonhost/nonhost_em.h"
 
 #include <cassert>
 #include <cmath>

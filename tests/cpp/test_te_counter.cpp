@@ -17,7 +17,7 @@
 #include <unistd.h>
 #include <vector>
 
-#include "singlet-pileup/te_counter.h"
+#include "singlet/pileup/te_counter.h"
 
 using namespace singlet;
 

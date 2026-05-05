@@ -41,7 +41,7 @@
 #include <vector>
 
 #include <iostream>
-#include "singlet-pileup/ancestry.h"  // AIM, AncestryResult, get_aim_panel, kPopNames, Pop
+#include "singlet/pileup/ancestry.h"  // AIM, AncestryResult, get_aim_panel, kPopNames, Pop
 
 namespace singlet {
 

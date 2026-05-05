@@ -12,8 +12,8 @@
 #include <iostream>
 #include <unistd.h>
 
-#include "singlet-pileup/pileup_engine.h"
-#include "singlet-pileup/mtx_writer.h"
+#include "singlet/pileup/pileup_engine.h"
+#include "singlet/pileup/mtx_writer.h"
 
 // Create SAM text and convert to BAM via samtools (reliable)
 static bool create_test_bam(const std::string& bam_path, const std::string& tmp_dir) {

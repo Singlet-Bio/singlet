@@ -1,4 +1,4 @@
-// test_wgs_assembly.cpp — Unit tests for singlet-pileup/wgs_assembly.h
+// test_wgs_assembly.cpp — Unit tests for singlet/pileup/wgs_assembly.h
 #include <cassert>
 #include <cmath>
 #include <cstdio>
@@ -7,7 +7,7 @@
 #include <iostream>
 #include <sstream>
 
-#include "singlet-pileup/wgs_assembly.h"
+#include "singlet/pileup/wgs_assembly.h"
 
 using namespace singlet;
 

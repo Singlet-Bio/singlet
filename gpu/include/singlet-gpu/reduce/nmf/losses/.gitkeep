@@ -1,8 +1,0 @@
-# Feature 5: factornet NMF loss kernels
-# - mse.h
-# - kl.h
-# - nb.h
-# - gp.h
-# - gamma.h
-# - tweedie.h
-# - zigp.h

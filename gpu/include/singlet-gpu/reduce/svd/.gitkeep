@@ -1,7 +1,0 @@
-# Feature 4: factornet 5-method SVD ports
-# - lanczos.h
-# - irlba_factornet.h
-# - randomized.h
-# - krylov_constrained.h
-# - deflation.h
-# - auto_select.h

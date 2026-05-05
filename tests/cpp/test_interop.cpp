@@ -1,4 +1,4 @@
-// test_interop.cpp — Unit tests for singlet-pileup/interop.h
+// test_interop.cpp — Unit tests for singlet/pileup/interop.h
 #include <cassert>
 #include <cstdio>
 #include <filesystem>
@@ -6,7 +6,7 @@
 #include <iostream>
 #include <string>
 
-#include "singlet-pileup/interop.h"
+#include "singlet/pileup/interop.h"
 
 using namespace singlet_pileup::interop;
 namespace fs = std::filesystem;

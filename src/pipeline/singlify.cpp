@@ -52,37 +52,37 @@
 #include <unistd.h>
 #include <vector>
 #include <filesystem>
-#include "singlet-pileup/pileup_engine.h"
-#include "singlet-pileup/export.h"
-#include "singlet-pileup/species_detect.h"
-#include "singlet-pileup/nonhost/min_sketch.h"
-#include "singlet-pileup/nonhost/host_kmer_filter.h"
-#include "singlet-pileup/nonhost/nonhost_screener.h"
-#include "singlet-pileup/nonhost/nonhost_em.h"
-#include "singlet-pileup/nonhost/nonhost_aligner.h"
-#include "singlet-pileup/nonhost/nonhost_cell_matrix.h"
-#include "singlet-pileup/tiny_dataset_guard.h"
-#include "singlet-pileup/mega_sort_params.h"
-#include "singlet-pileup/atac_fragment.h"
-#include "singlet-pileup/atac_bin_counter.h"
-#include "singlet-pileup/atac_peaks.h"
-#include "singlet-pileup/atac_qc.h"
-#include "singlet-pileup/atac_cell_caller.h"
-#include "singlet-pileup/adt_matcher.h"
-#include "singlet-pileup/adt_counter.h"
-#include "singlet-pileup/hto_demux.h"
-#include "singlet-pileup/visium_spatial.h"
-#include "singlet-pileup/cascade_router.h"
-#include "singlet-pileup/cascade_stats_writer.h"
-#include "singlet-pileup/visium_qc.h"
-#include "singlet-pileup/rna_variant_caller.h"
-#include "singlet-pileup/read_dedup_stats.h"
-#include "singlet-pileup/tagged_bam.h"
+#include "singlet/pileup/pileup_engine.h"
+#include "singlet/pileup/export.h"
+#include "singlet/pileup/species_detect.h"
+#include "singlet/pileup/nonhost/min_sketch.h"
+#include "singlet/pileup/nonhost/host_kmer_filter.h"
+#include "singlet/pileup/nonhost/nonhost_screener.h"
+#include "singlet/pileup/nonhost/nonhost_em.h"
+#include "singlet/pileup/nonhost/nonhost_aligner.h"
+#include "singlet/pileup/nonhost/nonhost_cell_matrix.h"
+#include "singlet/pileup/tiny_dataset_guard.h"
+#include "singlet/pileup/mega_sort_params.h"
+#include "singlet/pileup/atac_fragment.h"
+#include "singlet/pileup/atac_bin_counter.h"
+#include "singlet/pileup/atac_peaks.h"
+#include "singlet/pileup/atac_qc.h"
+#include "singlet/pileup/atac_cell_caller.h"
+#include "singlet/pileup/adt_matcher.h"
+#include "singlet/pileup/adt_counter.h"
+#include "singlet/pileup/hto_demux.h"
+#include "singlet/pileup/visium_spatial.h"
+#include "singlet/pileup/cascade_router.h"
+#include "singlet/pileup/cascade_stats_writer.h"
+#include "singlet/pileup/visium_qc.h"
+#include "singlet/pileup/rna_variant_caller.h"
+#include "singlet/pileup/read_dedup_stats.h"
+#include "singlet/pileup/tagged_bam.h"
 #include "sra_reader.h"
-#include "lib1fq/lib1fq.h"
-#include "lib1fq/sra_encoder.h"
-#include "lib1fq/fastq_encoder.h"
-#include "star_api.h"  // star_main_impl() — bundled aligner (singlet-lite)
+#include "singlet/fq/lib1fq.h"
+#include "singlet/fq/sra_encoder.h"
+#include "singlet/fq/fastq_encoder.h"
+#include "singlet/star/star_api.h"  // star_main_impl() — bundled aligner (singlet-lite)
 
 // ── Timing helper ──
 struct StopWatch {
@@ -6333,7 +6333,7 @@ int main(int argc, char* argv[]) {
                     }
                 }
 
-                // BAM compression tier (see include/singlet-pileup/mega_sort_params.h):
+                // BAM compression tier (see include/singlet/pileup/mega_sort_params.h):
                 //   normal  (<=200M)           compression=0  (uncompressed; fastest)
                 //   mega    (>200M, <500M)     compression=1  (4x smaller BAM, ~5% CPU)
                 //   ultra   (>=500M)           compression=0  (uncompressed; the tight

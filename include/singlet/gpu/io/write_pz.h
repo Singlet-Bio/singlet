@@ -3,7 +3,7 @@
 //
 // Minimal host-only .1pz writer for test utilities.
 //
-// Produces TP1Z v1 files bit-exact with singlify/include/singlet-pileup/pz_writer.h.
+// Produces TP1Z v1 files bit-exact with include/singlet/pz/pz_writer.h.
 // This is NOT a production kernel — it is a test helper used only in
 // streaming_pipeline_correctness.cpp and other test fixtures that need to
 // create synthetic .1pz files on disk for round-trip verification.

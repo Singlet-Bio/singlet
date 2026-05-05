@@ -7,7 +7,7 @@
 //  4. kmer revcomp and canonical functions
 //  5. Smoke test: detect() on a real .1fq file (optional, skip if missing)
 
-#include "singlet-pileup/species_detect.h"
+#include "singlet/pileup/species_detect.h"
 
 #include <cassert>
 #include <cstdio>

@@ -18,8 +18,8 @@
 //   9. empty_umi             : reads with empty UMI tracked in n_reads but n_umis=0
 //  10. no_valid_barcodes     : valid_barcodes empty set means ALL barcodes pass
 
-#include "singlet-pileup/nonhost/nonhost_cell_matrix.h"
-#include "singlet-pileup/nonhost/nonhost_screener.h"
+#include "singlet/pileup/nonhost/nonhost_cell_matrix.h"
+#include "singlet/pileup/nonhost/nonhost_screener.h"
 
 #include <cassert>
 #include <cstdlib>

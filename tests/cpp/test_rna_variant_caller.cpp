@@ -8,7 +8,7 @@
 #include <iostream>
 #include <vector>
 
-#include "singlet-pileup/rna_variant_caller.h"
+#include "singlet/pileup/rna_variant_caller.h"
 
 using namespace singlet;
 

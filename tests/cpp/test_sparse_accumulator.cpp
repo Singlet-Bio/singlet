@@ -1,5 +1,5 @@
 // Test for SparseAccumulator
-#include "singlet-pileup/sparse_accumulator.h"
+#include "singlet/pileup/sparse_accumulator.h"
 #include <cassert>
 #include <iostream>
 

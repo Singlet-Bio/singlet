@@ -30,7 +30,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "singlet-pileup/donor_demux.h"  // run_demux, DemuxResult, DonorDemuxConfig
+#include "singlet/pileup/donor_demux.h"  // run_demux, DemuxResult, DonorDemuxConfig
 
 namespace singlet {
 

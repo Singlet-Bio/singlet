@@ -12,8 +12,8 @@
 #include <iostream>
 #include <string>
 
-#include "lib1fq/protocol.h"
-#include "lib1fq/types.h"
+#include "singlet/fq/protocol.h"
+#include "singlet/fq/types.h"
 
 static int g_pass = 0;
 static int g_fail = 0;

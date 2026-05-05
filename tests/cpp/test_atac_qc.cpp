@@ -15,7 +15,7 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/atac_qc.h"
+#include "singlet/pileup/atac_qc.h"
 
 using namespace singlet;
 

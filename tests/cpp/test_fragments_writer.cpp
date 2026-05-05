@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/fragments_writer.h"
+#include "singlet/pileup/fragments_writer.h"
 
 // ---------------------------------------------------------------------------
 // Test framework

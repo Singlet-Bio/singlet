@@ -21,8 +21,8 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/barnyard.h"
-#include "singlet-pileup/barnyard_route.h"
+#include "singlet/pileup/barnyard.h"
+#include "singlet/pileup/barnyard_route.h"
 
 // ── Minimal CSC struct ────────────────────────────────────────────────────
 struct TestCSC {

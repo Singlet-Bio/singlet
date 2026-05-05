@@ -3,8 +3,8 @@
 //   g++ -std=c++17 -O2 -fopenmp -I../include -o /tmp/test_nonhost test/test_nonhost.cpp \
 //       && /tmp/test_nonhost
 
-#include "singlet-pileup/nonhost/min_sketch.h"
-#include "singlet-pileup/nonhost/nonhost_screener.h"
+#include "singlet/pileup/nonhost/min_sketch.h"
+#include "singlet/pileup/nonhost/nonhost_screener.h"
 
 #include <cassert>
 #include <cmath>

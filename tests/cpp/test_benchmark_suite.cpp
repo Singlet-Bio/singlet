@@ -1,11 +1,11 @@
-// test_benchmark_suite.cpp — Unit tests for singlet-pileup/benchmark_suite.h
+// test_benchmark_suite.cpp — Unit tests for singlet/pileup/benchmark_suite.h
 #include <cassert>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <string>
 
-#include "singlet-pileup/benchmark_suite.h"
+#include "singlet/pileup/benchmark_suite.h"
 
 using namespace singlet_pileup::benchmark;
 namespace fs = std::filesystem;

@@ -15,16 +15,16 @@
 // Avoid pulling in GTF parsing; build minimal mocks instead.
 
 // ── Minimal SparseAccumulator mock (just the CSCMatrix typedef) ──
-#include "singlet-pileup/sparse_accumulator.h"
+#include "singlet/pileup/sparse_accumulator.h"
 
 // ── Minimal read_stats (CellReadStats struct) ──
-#include "singlet-pileup/read_stats.h"
+#include "singlet/pileup/read_stats.h"
 
 // ── GeneModel — we need exon_to_gene(); use a thin wrapper around the real class ──
-#include "singlet-pileup/gene_model.h"
+#include "singlet/pileup/gene_model.h"
 
 // ── Feature under test ──
-#include "singlet-pileup/saturation_curve.h"
+#include "singlet/pileup/saturation_curve.h"
 
 using namespace singlet;
 

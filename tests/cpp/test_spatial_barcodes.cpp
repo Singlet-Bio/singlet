@@ -7,7 +7,7 @@
 #include <iostream>
 #include <string>
 
-#include "singlet-pileup/spatial_barcodes.h"
+#include "singlet/pileup/spatial_barcodes.h"
 
 using namespace singlet;
 

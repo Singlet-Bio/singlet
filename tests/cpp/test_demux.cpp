@@ -7,7 +7,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
-#include "singlet-pileup/donor_demux.h"
+#include "singlet/pileup/donor_demux.h"
 
 // Minimal COO MTX reader
 struct COOEntry { int32_t row, col; uint8_t val; };

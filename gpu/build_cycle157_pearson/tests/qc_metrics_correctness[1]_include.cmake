@@ -1,5 +1,0 @@
-if(EXISTS "/mnt/home/debruinz/Singlet-AI/singlet-gpu/build_cycle157_pearson/tests/qc_metrics_correctness[1]_tests.cmake")
-  include("/mnt/home/debruinz/Singlet-AI/singlet-gpu/build_cycle157_pearson/tests/qc_metrics_correctness[1]_tests.cmake")
-else()
-  add_test(qc_metrics_correctness_NOT_BUILT qc_metrics_correctness_NOT_BUILT)
-endif()

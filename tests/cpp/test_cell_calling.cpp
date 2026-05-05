@@ -2,8 +2,8 @@
 // Run via ctest or standalone:
 //   g++ -std=c++17 -O2 -I../include -o /tmp/test_cc test/test_cell_calling.cpp && /tmp/test_cc
 
-#include "singlet-pileup/cell_calling.h"
-#include "singlet-pileup/sparse_accumulator.h"
+#include "singlet/pileup/cell_calling.h"
+#include "singlet/pileup/sparse_accumulator.h"
 #include <cassert>
 #include <cmath>
 #include <iostream>

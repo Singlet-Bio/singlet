@@ -1,4 +1,4 @@
-// singlet-pileup/bloom_filter.h — N1: Species Bloom filter
+// singlet/pileup/bloom_filter.h — N1: Species Bloom filter
 //
 // Simple bit-vector Bloom filter for k-mer sets (~50MB per species).
 // Uses 3 MurmurHash3 variants for low collision rate.

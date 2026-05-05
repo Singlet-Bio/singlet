@@ -5,7 +5,7 @@
 #include <cassert>
 #include <iostream>
 
-#include "singlet-pileup/adt_counter.h"
+#include "singlet/pileup/adt_counter.h"
 
 using namespace singlet;
 

@@ -16,7 +16,7 @@
 #include <iostream>
 #include <vector>
 
-#include "singlet-pileup/em_rescue.h"
+#include "singlet/pileup/em_rescue.h"
 
 using namespace singlet;
 using namespace singlet::em_rescue;

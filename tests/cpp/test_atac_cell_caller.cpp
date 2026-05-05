@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/atac_cell_caller.h"
+#include "singlet/pileup/atac_cell_caller.h"
 
 using namespace singlet;
 

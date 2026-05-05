@@ -5,7 +5,7 @@
 #include <iostream>
 #include <string>
 
-#include "singlet-pileup/combinatorial_barcode.h"
+#include "singlet/pileup/combinatorial_barcode.h"
 
 using namespace singlet;
 

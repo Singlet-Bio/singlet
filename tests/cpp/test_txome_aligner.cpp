@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/txome_aligner.h"
+#include "singlet/pileup/txome_aligner.h"
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

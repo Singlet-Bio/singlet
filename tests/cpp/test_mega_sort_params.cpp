@@ -22,7 +22,7 @@
 #include <cstdint>
 #include <iostream>
 
-#include "singlet-pileup/mega_sort_params.h"
+#include "singlet/pileup/mega_sort_params.h"
 
 using singlet_pileup::mega_sort::compression_level;
 using singlet_pileup::mega_sort::ram_cap_bytes;

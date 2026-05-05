@@ -1,4 +1,4 @@
-#include "singlet-pileup/slamseq.h"
+#include "singlet/pileup/slamseq.h"
 #include <cassert>
 #include <cmath>
 #include <iostream>

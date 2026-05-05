@@ -12,9 +12,9 @@
 #include <tuple>
 #include <vector>
 
-#include "singlet-pileup/cell_qc_metrics.h"
-#include "singlet-pileup/gene_model.h"
-#include "singlet-pileup/sparse_accumulator.h"
+#include "singlet/pileup/cell_qc_metrics.h"
+#include "singlet/pileup/gene_model.h"
+#include "singlet/pileup/sparse_accumulator.h"
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 

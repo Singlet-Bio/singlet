@@ -52,7 +52,7 @@ target_link_libraries(singlet_pileup INTERFACE singlet_pz singlet_fq Threads::Th
 
 # ─── Pipeline binary (optional) ──────────────────────────────────────────────
 if(SINGLET_BUILD_PIPELINE)
-    add_subdirectory(star)
+    add_subdirectory(src/star)
     add_subdirectory(src/pipeline)
 endif()
 

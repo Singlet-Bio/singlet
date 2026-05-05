@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/web_summary.h"
+#include "singlet/pileup/web_summary.h"
 
 using namespace singlet;
 

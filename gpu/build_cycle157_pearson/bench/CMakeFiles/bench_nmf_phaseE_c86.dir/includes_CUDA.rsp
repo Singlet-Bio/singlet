@@ -1,1 +1,0 @@
--I"/mnt/home/debruinz/Singlet-AI/singlet-gpu/bench/include" -I"/mnt/home/debruinz/Singlet-AI/singlet-gpu/include" -isystem "/usr/local/cuda/targets/x86_64-linux/include"

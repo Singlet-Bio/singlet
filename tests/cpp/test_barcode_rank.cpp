@@ -11,7 +11,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include "singlet-pileup/barcode_rank.h"
+#include "singlet/pileup/barcode_rank.h"
 
 // ---------------------------------------------------------------------------
 // Minimal test framework

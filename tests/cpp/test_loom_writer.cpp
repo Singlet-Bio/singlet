@@ -12,7 +12,7 @@
 #include <vector>
 
 #include <hdf5.h>
-#include "singlet-pileup/loom_writer.h"
+#include "singlet/pileup/loom_writer.h"
 
 using namespace singlet;
 

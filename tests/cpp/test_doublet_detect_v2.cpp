@@ -8,7 +8,7 @@
 //  T4: Large simulation path (n_cells=5000): scores in [0,1], scoring not degenerate.
 //  T5: DoubletResult struct fields behave as documented.
 
-#include "singlet-pileup/doublet_detect.h"
+#include "singlet/pileup/doublet_detect.h"
 
 #include <cmath>
 #include <iostream>

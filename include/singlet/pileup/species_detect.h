@@ -1,4 +1,4 @@
-// singlet-pileup/species_detect.h — N1: Species auto-detection
+// singlet/pileup/species_detect.h — N1: Species auto-detection
 //
 // Determines the reference species (organism) from a .1fq file so that
 // --genome-dir can be resolved automatically.
@@ -568,7 +568,7 @@ inline DetectionResult detect(const std::string& onefq_path, bool verbose = true
         // Add path relative to this header's install location
         // (determined at build time via __FILE__ — strip filename)
         {
-            std::string hpath = __FILE__;  // .../include/singlet-pileup/species_detect.h
+            std::string hpath = __FILE__;  // .../include/singlet/pileup/species_detect.h
             auto slash = hpath.rfind('/');
             if (slash != std::string::npos) {
                 std::string base = hpath.substr(0, slash); // .../include/singlet-pileup

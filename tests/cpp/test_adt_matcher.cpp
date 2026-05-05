@@ -9,7 +9,7 @@
 #include <thread>
 #include <vector>
 
-#include "singlet-pileup/adt_matcher.h"
+#include "singlet/pileup/adt_matcher.h"
 
 using namespace singlet;
 

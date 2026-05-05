@@ -17,7 +17,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include "singlet-pileup/tagged_bam.h"
+#include "singlet/pileup/tagged_bam.h"
 
 using namespace singlet;
 namespace fs = std::filesystem;

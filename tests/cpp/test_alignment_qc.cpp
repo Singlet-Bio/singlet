@@ -19,7 +19,7 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/alignment_qc.h"
+#include "singlet/pileup/alignment_qc.h"
 
 using namespace singlet;
 

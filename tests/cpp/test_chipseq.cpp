@@ -25,7 +25,7 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/chipseq.h"
+#include "singlet/pileup/chipseq.h"
 
 using namespace singlet;
 

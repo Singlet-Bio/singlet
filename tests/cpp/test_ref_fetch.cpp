@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-#include "lib1fq/ref_fetch.h"
+#include "singlet/fq/ref_fetch.h"
 
 using namespace singlet::ref_fetch;
 using namespace singlet::species_registry;

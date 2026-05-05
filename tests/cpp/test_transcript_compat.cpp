@@ -17,7 +17,7 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/transcript_compat.h"
+#include "singlet/pileup/transcript_compat.h"
 
 using namespace singlet;
 

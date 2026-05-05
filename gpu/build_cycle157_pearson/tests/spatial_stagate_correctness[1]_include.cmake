@@ -1,5 +1,0 @@
-if(EXISTS "/mnt/home/debruinz/Singlet-AI/singlet-gpu/build_cycle157_pearson/tests/spatial_stagate_correctness[1]_tests.cmake")
-  include("/mnt/home/debruinz/Singlet-AI/singlet-gpu/build_cycle157_pearson/tests/spatial_stagate_correctness[1]_tests.cmake")
-else()
-  add_test(spatial_stagate_correctness_NOT_BUILT spatial_stagate_correctness_NOT_BUILT)
-endif()

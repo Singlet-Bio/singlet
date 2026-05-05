@@ -28,10 +28,10 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/mt_event_caller.h"
-#include "singlet-pileup/mt_event_matrix.h"
-#include "singlet-pileup/mt_summary.h"
-#include "singlet-pileup/pz_reader.h"
+#include "singlet/pileup/mt_event_caller.h"
+#include "singlet/pileup/mt_event_matrix.h"
+#include "singlet/pileup/mt_summary.h"
+#include "singlet/pileup/pz_reader.h"
 
 namespace fs = std::filesystem;
 using namespace singlet;

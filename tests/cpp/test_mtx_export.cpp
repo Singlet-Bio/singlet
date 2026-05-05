@@ -10,8 +10,8 @@
 #include <vector>
 #include <zlib.h>
 
-#include "singlet-pileup/mtx_writer.h"
-#include "singlet-pileup/sparse_accumulator.h"
+#include "singlet/pileup/mtx_writer.h"
+#include "singlet/pileup/sparse_accumulator.h"
 
 using namespace singlet;
 

@@ -25,7 +25,7 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/cuttag.h"
+#include "singlet/pileup/cuttag.h"
 
 using namespace singlet;
 

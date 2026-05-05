@@ -23,7 +23,7 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/barnyard.h"
+#include "singlet/pileup/barnyard.h"
 
 using namespace singlet;
 

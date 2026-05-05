@@ -1,7 +1,7 @@
 // test_seqwell_detect.cpp — Unit tests for lib1fq/seqwell_detect.h
 #include <iostream>
 
-#include "lib1fq/seqwell_detect.h"
+#include "singlet/fq/seqwell_detect.h"
 
 static int g_pass = 0;
 static int g_fail = 0;

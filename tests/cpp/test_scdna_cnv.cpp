@@ -22,7 +22,7 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/scdna_cnv.h"
+#include "singlet/pileup/scdna_cnv.h"
 
 using namespace singlet;
 

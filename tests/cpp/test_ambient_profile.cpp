@@ -13,7 +13,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include "singlet-pileup/ambient_profile.h"
+#include "singlet/pileup/ambient_profile.h"
 
 // ---------------------------------------------------------------------------
 // Minimal test framework

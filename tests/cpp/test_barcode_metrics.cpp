@@ -11,7 +11,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include "singlet-pileup/barcode_metrics.h"
+#include "singlet/pileup/barcode_metrics.h"
 
 // ---------------------------------------------------------------------------
 // Test framework

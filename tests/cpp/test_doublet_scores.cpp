@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/doublet_scores.h"
+#include "singlet/pileup/doublet_scores.h"
 
 // ---------------------------------------------------------------------------
 // Minimal test framework

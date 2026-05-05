@@ -16,7 +16,7 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/summary_json.h"
+#include "singlet/pileup/summary_json.h"
 
 using namespace singlet;
 

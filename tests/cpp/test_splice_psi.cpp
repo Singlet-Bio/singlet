@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/splice_psi.h"
+#include "singlet/pileup/splice_psi.h"
 
 using namespace singlet;
 

@@ -19,8 +19,8 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/atac_fragment.h"
-#include "singlet-pileup/sparse_accumulator.h"
+#include "singlet/pileup/atac_fragment.h"
+#include "singlet/pileup/sparse_accumulator.h"
 
 namespace singlet {
 

@@ -8,8 +8,8 @@
 #include <iostream>
 #include <string>
 
-#include "singlet-pileup/hto_demux.h"
-#include "singlet-pileup/sparse_accumulator.h"
+#include "singlet/pileup/hto_demux.h"
+#include "singlet/pileup/sparse_accumulator.h"
 
 using namespace singlet;
 

@@ -4,8 +4,8 @@
 //        column-count ptr decode, metadata TLV decode, and nnz consistency.
 // CPP-2: adds full CSC data round-trip (values, indices, per-column layout).
 
-#include "singlet-pileup/pz_reader.h"
-#include "singlet-pileup/pz_writer.h"
+#include "singlet/pileup/pz_reader.h"
+#include "singlet/pileup/pz_writer.h"
 
 #include <cassert>
 #include <cstdio>

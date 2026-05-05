@@ -22,7 +22,7 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/bulk_atac.h"
+#include "singlet/pileup/bulk_atac.h"
 
 using namespace singlet;
 

@@ -13,7 +13,7 @@
 #include <map>
 
 #include <hdf5.h>
-#include "singlet-pileup/h5ad_writer.h"
+#include "singlet/pileup/h5ad_writer.h"
 
 using namespace singlet;
 

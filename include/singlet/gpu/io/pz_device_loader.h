@@ -4,7 +4,7 @@
 // Zero-copy .1pz → device CSC loader.
 //
 // Algorithm reference: design doc at singlet-gpu/state/designs/00-pz-device-loader.md
-// Format reference: singlify/include/singlet-pileup/pz_writer.h (TP1Z v1, VOCSC encoding)
+// Format reference: include/singlet/pz/pz_writer.h (TP1Z v1, VOCSC encoding)
 //
 // Pipeline (one call to load_pz):
 //   1. slurp file + validate magic / CRC32 (body-of-file CRC, not per-chunk)

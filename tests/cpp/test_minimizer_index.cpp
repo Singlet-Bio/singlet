@@ -9,7 +9,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include "singlet-pileup/minimizer_index.h"
+#include "singlet/pileup/minimizer_index.h"
 
 // Read a PackedArray SA entry (33-bit for GRCh38)
 static uint64_t sa_get(const char* arr, uint64_t ii, int bits) {

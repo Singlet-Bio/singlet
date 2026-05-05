@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/te_classifier.h"
+#include "singlet/pileup/te_classifier.h"
 
 using namespace singlet;
 

@@ -1,5 +1,5 @@
 // Test for IntervalTree
-#include "singlet-pileup/interval_tree.h"
+#include "singlet/pileup/interval_tree.h"
 #include <cassert>
 #include <iostream>
 #include <vector>

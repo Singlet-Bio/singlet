@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/vdj_assembly.h"
+#include "singlet/pileup/vdj_assembly.h"
 
 using namespace singlet;
 

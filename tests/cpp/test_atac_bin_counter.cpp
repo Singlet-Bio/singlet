@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/atac_bin_counter.h"
+#include "singlet/pileup/atac_bin_counter.h"
 
 // Helper: look up value in CSC matrix at (row, col)
 static uint16_t csc_get(const singlet::SparseAccumulator<uint16_t>::CSCMatrix& m,

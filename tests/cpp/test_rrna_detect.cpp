@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/rrna_detect.h"
+#include "singlet/pileup/rrna_detect.h"
 
 using namespace singlet;
 

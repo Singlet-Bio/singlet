@@ -14,10 +14,10 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/export.h"
-#include "singlet-pileup/metrics_summary.h"
-#include "singlet-pileup/pileup_engine.h"
-#include "singlet-pileup/sparse_accumulator.h"
+#include "singlet/pileup/export.h"
+#include "singlet/pileup/metrics_summary.h"
+#include "singlet/pileup/pileup_engine.h"
+#include "singlet/pileup/sparse_accumulator.h"
 
 using namespace singlet;
 

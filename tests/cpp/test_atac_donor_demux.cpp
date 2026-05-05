@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/atac_donor_demux.h"
+#include "singlet/pileup/atac_donor_demux.h"
 
 using namespace singlet;
 

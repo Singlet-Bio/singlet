@@ -40,7 +40,7 @@ void operator delete(void* p, std::size_t) noexcept  { std::free(p); }
 void operator delete[](void* p, std::size_t) noexcept { std::free(p); }
 
 // ── Now include the cascade headers ──────────────────────────────────────────
-#include "singlet-pileup/cascade_router.h"
+#include "singlet/pileup/cascade_router.h"
 
 // ── Tiny synthetic transcriptome for L1 hits ─────────────────────────────────
 static singlet::TxomeIndex build_test_txome() {

@@ -2,7 +2,7 @@
 #include <cassert>
 #include <iostream>
 
-#include "lib1fq/indrop_detect.h"
+#include "singlet/fq/indrop_detect.h"
 
 static int g_pass = 0;
 static int g_fail = 0;

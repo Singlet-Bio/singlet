@@ -1,7 +1,7 @@
 // test_atac_ancestry_sex.cpp
 // A5: Tests for ATAC ancestry classification + sex/karyotype calling.
 
-#include "singlet-pileup/atac_ancestry_sex.h"
+#include "singlet/pileup/atac_ancestry_sex.h"
 #include <cassert>
 #include <cmath>
 #include <cstdio>

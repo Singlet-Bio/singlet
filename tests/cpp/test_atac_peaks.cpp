@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/atac_peaks.h"
+#include "singlet/pileup/atac_peaks.h"
 
 using namespace singlet;
 

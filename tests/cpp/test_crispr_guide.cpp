@@ -1,6 +1,6 @@
 // test_crispr_guide.cpp — unit tests for N18 CRISPR guide capture
 // Tests GuideRef::load_csv, GuideRef::match, GuideCounter::count + UMI dedup
-#include "singlet-pileup/crispr_guide.h"
+#include "singlet/pileup/crispr_guide.h"
 #include <cassert>
 #include <cstdio>
 #include <cstring>

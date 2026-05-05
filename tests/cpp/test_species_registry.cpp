@@ -6,7 +6,7 @@
 #include <iostream>
 #include <string>
 
-#include "lib1fq/species_registry.h"
+#include "singlet/fq/species_registry.h"
 
 using namespace singlet::species_registry;
 

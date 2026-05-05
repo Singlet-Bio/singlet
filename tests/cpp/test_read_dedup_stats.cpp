@@ -10,7 +10,7 @@
 #include <iostream>
 #include <string>
 
-#include "singlet-pileup/read_dedup_stats.h"
+#include "singlet/pileup/read_dedup_stats.h"
 
 using namespace singlet;
 

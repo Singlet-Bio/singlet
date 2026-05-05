@@ -5,7 +5,7 @@
 #include <cstring>
 #include <string>
 
-#include "singlet-pileup/multiome_router.h"
+#include "singlet/pileup/multiome_router.h"
 
 using namespace singlet;
 

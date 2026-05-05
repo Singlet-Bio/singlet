@@ -13,8 +13,8 @@
 #include <algorithm>
 
 #include <hdf5.h>
-#include "singlet-pileup/bus_writer.h"
-#include "singlet-pileup/molecule_info.h"
+#include "singlet/pileup/bus_writer.h"
+#include "singlet/pileup/molecule_info.h"
 
 using namespace singlet;
 using namespace singlet::mol_info_detail;

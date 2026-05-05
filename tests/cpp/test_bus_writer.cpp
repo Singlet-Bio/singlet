@@ -13,7 +13,7 @@
 #include <vector>
 #include <algorithm>
 
-#include "singlet-pileup/bus_writer.h"
+#include "singlet/pileup/bus_writer.h"
 
 using namespace singlet;
 namespace fs = std::filesystem;

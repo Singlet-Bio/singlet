@@ -12,8 +12,8 @@
 // Run via ctest:
 //   ctest -R nonhost_db_build --output-on-failure
 
-#include "singlet-pileup/nonhost/min_sketch.h"
-#include "singlet-pileup/nonhost/nonhost_screener.h"
+#include "singlet/pileup/nonhost/min_sketch.h"
+#include "singlet/pileup/nonhost/nonhost_screener.h"
 
 #include <cassert>
 #include <cstdio>

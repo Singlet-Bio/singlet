@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/mirna.h"
+#include "singlet/pileup/mirna.h"
 
 using namespace singlet;
 

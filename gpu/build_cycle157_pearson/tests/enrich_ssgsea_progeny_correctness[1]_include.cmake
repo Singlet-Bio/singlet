@@ -1,5 +1,0 @@
-if(EXISTS "/mnt/home/debruinz/Singlet-AI/singlet-gpu/build_cycle157_pearson/tests/enrich_ssgsea_progeny_correctness[1]_tests.cmake")
-  include("/mnt/home/debruinz/Singlet-AI/singlet-gpu/build_cycle157_pearson/tests/enrich_ssgsea_progeny_correctness[1]_tests.cmake")
-else()
-  add_test(enrich_ssgsea_progeny_correctness_NOT_BUILT enrich_ssgsea_progeny_correctness_NOT_BUILT)
-endif()

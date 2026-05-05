@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/visium_spatial.h"
+#include "singlet/pileup/visium_spatial.h"
 
 using namespace singlet;
 

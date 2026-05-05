@@ -7,8 +7,8 @@
 #include <iostream>
 #include <string>
 
-#include "singlet-pileup/cellplex_demux.h"
-#include "singlet-pileup/sparse_accumulator.h"
+#include "singlet/pileup/cellplex_demux.h"
+#include "singlet/pileup/sparse_accumulator.h"
 
 using namespace singlet;
 

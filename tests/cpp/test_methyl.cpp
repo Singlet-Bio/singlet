@@ -1,4 +1,4 @@
-// test_methyl.cpp — Unit tests for singlet-pileup/methyl.h
+// test_methyl.cpp — Unit tests for singlet/pileup/methyl.h
 #include <cassert>
 #include <cmath>
 #include <cstdio>
@@ -8,7 +8,7 @@
 #include <iostream>
 #include <sstream>
 
-#include "singlet-pileup/methyl.h"
+#include "singlet/pileup/methyl.h"
 
 using namespace singlet;
 

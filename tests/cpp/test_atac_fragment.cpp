@@ -6,7 +6,7 @@
 #include <cstring>
 #include <string>
 
-#include "singlet-pileup/atac_fragment.h"
+#include "singlet/pileup/atac_fragment.h"
 
 static bam1_t* make_record(const char* qname,
                            int32_t tid, int32_t pos, int32_t isize,

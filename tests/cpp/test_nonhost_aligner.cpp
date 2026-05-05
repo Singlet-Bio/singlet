@@ -13,7 +13,7 @@
 //   4. abundance_filter      : species at 0.0005 abundance → skipped; species at 0.01 → aligned
 //   5. chain_gap             : seeds within 500 bp → chained; seeds > 500 bp apart → not chained
 
-#include "singlet-pileup/nonhost/nonhost_aligner.h"
+#include "singlet/pileup/nonhost/nonhost_aligner.h"
 
 #include <cassert>
 #include <cstdlib>

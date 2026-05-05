@@ -1,5 +1,0 @@
-if(EXISTS "/mnt/home/debruinz/Singlet-AI/singlet-gpu/build_cycle157_pearson/tests/anno_reference_map_correctness[1]_tests.cmake")
-  include("/mnt/home/debruinz/Singlet-AI/singlet-gpu/build_cycle157_pearson/tests/anno_reference_map_correctness[1]_tests.cmake")
-else()
-  add_test(anno_reference_map_correctness_NOT_BUILT anno_reference_map_correctness_NOT_BUILT)
-endif()

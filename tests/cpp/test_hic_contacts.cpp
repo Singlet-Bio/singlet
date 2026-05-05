@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-#include "singlet-pileup/hic_contacts.h"
+#include "singlet/pileup/hic_contacts.h"
 
 using namespace singlet;
 
