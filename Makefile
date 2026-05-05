@@ -14,7 +14,7 @@ test-cpp: ## Build and run 88 C++ unit tests
 	@cmake --build build-tests -j$$(nproc) 2>&1 | tail -1
 	@ctest --test-dir build-tests -j$$(nproc) --output-on-failure
 
-test-python: ## Run 515 Python tests
+test-python: ## Run 532 Python tests
 	@python -m pytest tests/python/ -x -q
 
 coverage: ## Run tests with coverage report
