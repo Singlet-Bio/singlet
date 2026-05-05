@@ -38,8 +38,8 @@ singlet/
 ├── r/                     R package (singlet)
 ├── src/                   C++ source (pipeline binary, GPU kernels)
 ├── tests/
-│   ├── cpp/               88 C++ unit tests
-│   └── python/            230 Python tests
+│   ├── cpp/               100 C++ unit tests
+│   └── python/            569 Python tests
 ├── docs/                  Documentation
 ├── pipeline/              singlify pipeline scripts
 └── notebooks/             Jupyter notebooks and examples
@@ -51,10 +51,10 @@ singlet/
 # All tests
 make test
 
-# C++ only (88 tests, ~72s)
+# C++ only (100 tests, ~72s)
 make test-cpp
 
-# Python only (230 tests, ~13s)
+# Python only (569 tests, ~15s)
 make test-python
 
 # Lint check
