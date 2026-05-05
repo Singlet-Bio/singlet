@@ -62,7 +62,7 @@ def show_versions() -> str:
     # GPU availability
     lines.append("")
     try:
-        import cupy
+        import cupy  # type: ignore[import-not-found]
 
         lines.append(f"GPU: {cupy.cuda.runtime.getDeviceCount()} device(s)")
     except Exception:
