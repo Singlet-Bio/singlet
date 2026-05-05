@@ -1,82 +1,126 @@
 # singlet
 
-A unified single-cell genomics platform: raw SRA reads → processed atlas in one command.
+A unified single-cell genomics library: process, load, and analyze single-cell data at scale.
 
-## Repository Layout
+**One package. Three languages. Zero friction.**
 
-| Directory | Contents |
-|-----------|----------|
-| `pipeline/` | C++ `singlify` binary — SRA download, STAR alignment, UMI dedup, cell calling, .1pz output |
-| `python/` | Python `singlet` package — load, annotate, analyze .1pz files |
-| `singlepress/` | .1pz format codec (Python + R bindings) |
-| `gpu/` | CUDA/cuSPARSE GPU analysis kernels (lognorm, HVG, PCA, NMF, kNN, leiden, UMAP, DE) |
-| `star/` | STAR aligner fork (singlet-lite branch — PGO + header-only integration) |
-| `papers/` | Scientific manuscripts |
-| `docs/` | User-facing documentation (rendered on singlet.bio) |
+```python
+pip install singlet                    # Python
+```
+```r
+remotes::install_github("Singlet-Bio/singlet", subdir = "r")  # R
+```
+```cmake
+find_package(Singlet REQUIRED)         # C++
+```
+
+## What singlet does
+
+| Layer | Capability |
+|-------|-----------|
+| **Format** | .1pz sparse matrix codec (13x compression, 4000+ MB/s decode) |
+| **Pipeline** | Raw SRA reads → aligned, deduplicated, annotated .1pz files |
+| **Analysis** | GPU-accelerated PCA, NMF, kNN, Leiden, UMAP, DE, integration |
+| **Atlas** | Browse and load 4,600+ processed single-cell samples |
+| **PyTorch** | Zero-copy sparse DataLoaders for ML training |
 
 ## Quick Start
 
-```bash
-# Install Python client
-pip install "singlet @ git+https://github.com/Singlet-Bio/singlet#subdirectory=python"
-
-# Load a processed sample from the Singlet Atlas
+```python
 import singlet
+
+# Browse the atlas
+singlet.catalog()
+singlet.info("GSE136831")
+
+# Load a sample (returns AnnData)
 adata = singlet.load("GSM1234567")
 
-# Or load directly from a singlify output directory
-adata = singlet.load_dir("/path/to/sample")
-# → AnnData with gene counts, QC, doublets, cell cycle, ancestry, sex, summary
+# File I/O
+adata = singlet.read_1pz("counts.1pz")
+singlet.write_1pz(adata, "output.1pz")
+
+# GPU analysis (pip install singlet[gpu])
+from singlet import gpu
+gpu.pp.normalize(adata)
+gpu.reduce.pca(adata, n_components=50)
+gpu.tools.neighbors(adata)
+gpu.tools.leiden(adata)
+gpu.tools.umap(adata)
+
+# PyTorch training (pip install singlet[torch])
+from singlet.torch import OnePZDataset, PZBufferedLoader
+dataset = OnePZDataset("atlas/*.1pz")
+loader = PZBufferedLoader(dataset, batch_size=512)
 ```
 
-## Notebooks (18 ready)
+## Repository Layout
+
+```
+singlet/
+├── include/singlet/     C++ headers (libsinglet — header-only)
+│   ├── pz/              .1pz format codec
+│   ├── fq/              .1fq encoded FASTQ codec
+│   ├── pileup/          Streaming BAM pileup engine
+│   └── gpu/             CUDA analysis kernels
+├── python/singlet/      Python package source
+│   ├── io/              Format I/O (.1pz, h5ad, zarr)
+│   ├── catalog/         Atlas browsing
+│   ├── torch/           PyTorch integration
+│   └── gpu/             GPU analysis wrappers
+├── r/                   R package (CRAN-ready)
+├── src/                 Compiled sources (pipeline binary, GPU kernels, bindings)
+├── star/                Vendored STAR aligner (48% faster singlet-lite fork)
+├── tests/               Unified test suite (Python + C++ + R)
+├── notebooks/           Jupyter tutorial notebooks
+├── docs/                User documentation
+└── papers/              Scientific manuscripts
+```
+
+## Installation
+
+See [docs/installation.md](docs/installation.md) for full details.
+
+| Install | Command |
+|---------|---------|
+| Python (core) | `pip install singlet` |
+| Python + GPU | `pip install singlet[gpu]` |
+| Python + PyTorch | `pip install singlet[torch]` |
+| Python (everything) | `pip install singlet[all]` |
+| R | `remotes::install_github("Singlet-Bio/singlet", subdir = "r")` |
+| C++ (CMake) | `find_package(Singlet COMPONENTS pz fq pileup)` |
+| Pipeline binary | `cmake -B build -DSINGLET_BUILD_PIPELINE=ON` |
+
+## Notebooks
 
 | Notebook | Topic |
 |----------|-------|
-| [quickstart](notebooks/quickstart.ipynb) | Catalog API, browse 2,547 samples |
+| [01_load_and_explore](notebooks/01_load_and_explore.ipynb) | Full analysis pipeline |
+| [02_gpu_analysis](notebooks/02_gpu_analysis.ipynb) | GPU-accelerated workflows |
+| [quickstart](notebooks/quickstart.ipynb) | Catalog API |
 | [gene_counting](notebooks/gene_counting.ipynb) | STARsolo equivalence (r=0.9995) |
-| [sex_calling](notebooks/sex_calling.ipynb) | Sex/karyotype calling validation |
-| [ambient_rna](notebooks/ambient_rna.ipynb) | Ambient RNA contamination profiling |
+| [1pz_format](notebooks/1pz_format.ipynb) | Format internals |
 | [doublet_detection](notebooks/doublet_detection.ipynb) | UMI-based doublet detection |
-| [corpus_analytics](notebooks/corpus_analytics.ipynb) | Atlas-wide QC distributions |
-| [01_load_and_explore](notebooks/01_load_and_explore.ipynb) | Full scanpy pipeline (PCA→UMAP→Leiden) |
-| [cell_cycle](notebooks/cell_cycle.ipynb) | Cell cycle phase scoring |
-| [sample_qc_report](notebooks/sample_qc_report.ipynb) | Complete one-call QC report |
-| [saturation_curve](notebooks/saturation_curve.ipynb) | Sequencing depth analysis |
-| [ancestry_calling](notebooks/ancestry_calling.ipynb) | Genetic ancestry inference |
-| [mt_variants](notebooks/mt_variants.ipynb) | Mitochondrial heteroplasmy |
-| [splicing](notebooks/splicing.ipynb) | Alternative splicing events |
 | [rna_velocity](notebooks/rna_velocity.ipynb) | Spliced/unspliced for scVelo |
-| [pipeline_outputs](notebooks/pipeline_outputs.ipynb) | Complete outputs reference |
 | [cell_calling](notebooks/cell_calling.ipynb) | EmptyDrops deviance testing |
-| [protocol_detection](notebooks/protocol_detection.ipynb) | 15+ protocol auto-detection |
-| [1pz_format](notebooks/1pz_format.ipynb) | .1pz format: 8.7× smaller than h5ad |
-
-## Atlas Stats
-
-- **2,547 samples** processed (1,071 SUCCESS)
-- **1,222 GEO series** covered
-- **5 species**: human, mouse, macaque, fruit fly, chicken
-- **3.1M cells** in the atlas
-- **18 notebooks** with embedded matplotlib plots ([view on singlet.bio](https://singlet.bio/notebooks))
-- **Text search**: `singlet.samples(search="lung")` across GEO titles
+| + 10 more | QC, ancestry, sex, splicing, saturation, etc. |
 
 ## Building from Source
 
-### Pipeline (C++)
 ```bash
-cd pipeline && mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-make -j$(nproc) singlify
-```
+# Pipeline binary (C++ — requires htslib, zstd, OpenMP)
+cmake -B build -DSINGLET_BUILD_PIPELINE=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc)
 
-### GPU Library (CUDA 12+)
-```bash
-cd gpu && mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-make -j$(nproc)
+# GPU library (requires CUDA 12+)
+cmake -B build -DSINGLET_BUILD_GPU=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc)
+
+# Run tests
+cmake -B build -DSINGLET_BUILD_TESTS=ON
+cmake --build build && ctest --test-dir build
 ```
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+MIT (core library) — GPU kernels are GPL-2.0. See [LICENSE](LICENSE).

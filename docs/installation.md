@@ -1,38 +1,61 @@
 # Installation
 
-## Python Client
+## Python (PyPI)
 
 ```bash
+# Core package (catalog browsing, .1pz I/O, AnnData integration)
 pip install singlet
+
+# With PyTorch support (sparse tensor dataloaders)
+pip install singlet[torch]
+
+# With GPU analysis (requires CUDA 12+)
+pip install singlet[gpu]
+
+# Everything
+pip install singlet[all]
 ```
 
-Or install from GitHub:
-```bash
-pip install "singlet @ git+https://github.com/Singlet-Bio/singlet#subdirectory=python"
-```
-
-## R Package
+## R (GitHub / CRAN)
 
 ```r
-# install.packages("remotes")
-remotes::install_github("Singlet-Bio/singlet", subdir = "singlepress/R")
+# From GitHub (recommended for latest)
+remotes::install_github("Singlet-Bio/singlet", subdir = "r")
+
+# Requirements: C++17 compiler, libzstd >= 1.4
+# Optional: CUDA 12+ for GPU functions
 ```
 
-## GPU Library (requires CUDA 12+)
+## C++ (CMake)
 
 ```bash
-git clone https://github.com/Singlet-Bio/singlet
-cd singlet/gpu
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-make -j$(nproc)
+git clone https://github.com/Singlet-Bio/singlet.git
+cd singlet
+
+# Header-only usage (just copy include/singlet/)
+cmake -B build
+cmake --install build --prefix /usr/local
+
+# In your CMakeLists.txt:
+find_package(Singlet REQUIRED COMPONENTS pz fq)
+target_link_libraries(myapp Singlet::pz)
 ```
 
-## Pipeline Binary (C++17)
+## Building the pipeline binary
 
 ```bash
-cd singlet/pipeline
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release -DSTAR_DIR=../../star/source
-make -j$(nproc) singlify
+cmake -B build \
+    -DSINGLET_BUILD_PIPELINE=ON \
+    -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc)
+# Binary: build/src/pipeline/singlify
 ```
+
+## Dependencies
+
+| Component | Required | Optional |
+|-----------|----------|----------|
+| Python core | numpy, scipy, pandas, anndata, requests | torch, cupy, zarr |
+| R package | Rcpp, Matrix, C++17, libzstd | CUDA 12+, SingleCellExperiment, Seurat |
+| C++ headers | zstd, zlib | htslib (pipeline), CUDA (GPU) |
+| Pipeline binary | htslib, zstd, zlib, OpenMP, ncbi-vdb | LZ4 |

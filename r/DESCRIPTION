@@ -1,0 +1,37 @@
+Package: singlet
+Type: Package
+Title: Single-Cell Genomics Toolkit
+Version: 2.0.0
+Authors@R: c(
+    person("Zach", "DeBruine", email = "debruinz@gvsu.edu",
+           role = c("aut", "cre")))
+Description: Read, write, and analyze single-cell data in the .1pz format.
+    Provides zero-copy sparse matrix I/O with 13x compression, GPU-accelerated
+    analysis (optional, requires CUDA 12+), and integration with
+    SingleCellExperiment and Seurat objects. The .1pz codec is implemented in
+    shared header-only C++ that is bit-identical to the Python package.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: false
+Depends:
+    R (>= 4.2)
+Imports:
+    Rcpp (>= 1.0.10),
+    Matrix (>= 1.5),
+    methods
+LinkingTo:
+    Rcpp
+Suggests:
+    SingleCellExperiment,
+    SummarizedExperiment,
+    Seurat,
+    BiocGenerics,
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
+SystemRequirements: C++17, libzstd (>= 1.4); optional: CUDA (>= 12.0)
+Biarch: FALSE
+RoxygenNote: 7.3.1
+URL: https://github.com/Singlet-Bio/singlet
+BugReports: https://github.com/Singlet-Bio/singlet/issues

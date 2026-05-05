@@ -31,7 +31,4 @@ Thumbs.db
 
 # STAR build artifacts
 star/bin/
-singlet/
-dist/
-*.egg-info/
-__pycache__/
+star/pgo_profile/

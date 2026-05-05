@@ -1,0 +1,11 @@
+# singlify R package — native build flags
+#
+# Architecture: src/pz_io.cpp is a thin Rcpp wrapper around the header-only
+# C++ reader at ../inst/include/singlet-pileup/pz_reader.h (which in turn
+# includes pz_writer.h from the same dir). The -I flag adds that path to
+# the include search.
+
+PKG_CPPFLAGS = -I../inst/include -std=c++17
+PKG_CXXFLAGS = -std=c++17
+PKG_LIBS = -lzstd -lpthread
+CXX_STD = CXX17
