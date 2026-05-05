@@ -3,23 +3,22 @@
 // This is a *thin* wrapper. All decode work (format parsing, VOCSC chunk
 // decompression, bit-plane / bitmap / byte-split inverse transforms,
 // permutation unmap, varint column decoding) happens inside the header-only
-// C++ reader at ../inst/include/singlet-pileup/pz_reader.h. The R binding
+// C++ reader at ../inst/include/singlet/pz_reader.h. The R binding
 // just marshals the returned ReadResult into R-native objects:
 //
 //   * a dgCMatrix (Matrix package sparse column-compressed)
 //   * attributes for rownames / colnames / user_kv / vt_code
 //
 // The pz_reader.h file is a bit-exact copy of the one used by the Python
-// wrapper at singlify/python/singlify/_pz_io.cpp. It is staged into
-// `inst/include/singlet-pileup/` at package build time so R CMD INSTALL
-// can find it via the -I flag in Makevars.
+// wrapper. It is staged into `inst/include/singlet/` at package build time
+// so R CMD INSTALL can find it via the -I flag in Makevars.
 
 #include <Rcpp.h>
 
 #include <exception>
 #include <string>
 
-#include "singlet-pileup/pz_reader.h"
+#include "singlet/pz_reader.h"
 
 namespace pz = singlet::pz;
 
