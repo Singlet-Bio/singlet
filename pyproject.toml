@@ -93,3 +93,20 @@ ignore = ["E501", "F821"]
 "python/singlet/gpu/perturbation/*" = ["E741"]
 "python/singlet/gpu/spatial/*" = ["E741"]
 "tests/python/test_integration.py" = ["F401"]
+
+[tool.coverage.run]
+source = ["python/singlet"]
+omit = [
+    "python/singlet/gpu/*",
+    "python/singlet/mcp/*",
+    "python/singlet/torch/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
+show_missing = true
+skip_covered = true
