@@ -80,7 +80,7 @@ from singlet._io import (
 )
 from singlet._loader import download, load, load_dir, load_sample
 from singlet._query import query, search
-from singlet.convert import from_h5ad, from_zarr, to_csc, to_h5ad, to_zarr
+from singlet.convert import from_h5ad, from_mtx, from_zarr, to_csc, to_h5ad, to_mtx, to_zarr
 
 __all__ = [
     # Browse
@@ -124,7 +124,9 @@ __all__ = [
     # Conversions
     "to_h5ad",
     "to_zarr",
+    "to_mtx",
     "to_csc",
     "from_h5ad",
     "from_zarr",
+    "from_mtx",
 ]
