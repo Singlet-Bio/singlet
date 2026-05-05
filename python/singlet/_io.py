@@ -15,7 +15,11 @@ from __future__ import annotations
 
 import struct
 from pathlib import Path
-from typing import Optional
+from types import ModuleType
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    import anndata
 
 # .1pz magic bytes (little-endian)
 _TP1_MAGIC = b"\x54\x50\x31\x5a"  # 0x5A315054 = "TP1Z"
@@ -179,7 +183,7 @@ def spz_info(path: str | Path) -> dict:
 # ============================================================================
 
 
-def _import_sparsepress() -> "module":
+def _import_sparsepress() -> ModuleType:
     """Import the sparsepress package for legacy v2 format support."""
     try:
         import sparsepress

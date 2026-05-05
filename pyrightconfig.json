@@ -1,0 +1,17 @@
+{
+    "include": ["python/singlet"],
+    "exclude": ["python/singlet/gpu/**", "python/singlet/mcp/**", "python/singlet/torch/**"],
+    "pythonVersion": "3.9",
+    "pythonPlatform": "Linux",
+    "typeCheckingMode": "basic",
+    "reportMissingImports": "warning",
+    "reportMissingTypeStubs": false,
+    "reportAttributeAccessIssue": false,
+    "reportReturnType": "warning",
+    "reportArgumentType": "warning",
+    "reportGeneralClassIssues": false,
+    "reportIndexIssue": false,
+    "reportOperatorIssue": false,
+    "reportCallIssue": false,
+    "reportPrivateImportUsage": false
+}

@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    import anndata
+    import scipy.sparse
 
 # ─── Export from AnnData ─────────────────────────────────────────────────────
 

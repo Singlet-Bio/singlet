@@ -10,7 +10,10 @@ Priority order:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import TYPE_CHECKING, Optional, Sequence
+
+if TYPE_CHECKING:
+    import anndata
 
 _ZENODO_BASE = "https://zenodo.org/records/XXXXXX/files"
 _AWS_BASE = "https://data.singlet.bio/v1"

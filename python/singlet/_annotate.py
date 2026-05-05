@@ -12,9 +12,12 @@ The annotation pipeline:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 def _models_dir() -> Path:
@@ -97,7 +100,7 @@ def gene_programs(organism: str, k: int = 100) -> "pd.DataFrame":
 
     # W is stored as genes × programs in the 1pz file
     # After read_1pz transpose, it's programs × genes → we need to transpose back
-    W = adata.X.T
+    W = adata.X.T  # type: ignore[union-attr]
     if hasattr(W, "toarray"):
         W = W.toarray()
 
