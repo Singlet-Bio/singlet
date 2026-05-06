@@ -112,6 +112,7 @@ from singlet._harmony import harmony
 from singlet._hvg import highly_variable_genes
 from singlet._hvg_cell_ranger import highly_variable_genes_cell_ranger
 from singlet._hvg_seurat import highly_variable_genes_seurat_v3
+from singlet._infer_grn import infer_grn
 from singlet._ingest import ingest
 from singlet._io import (
     info_1pz,
@@ -151,6 +152,7 @@ from singlet._plot_stacked_violin import plot_stacked_violin
 from singlet._plot_tracks import rank_genes_groups_tracksplot
 from singlet._pseudobulk import pseudobulk
 from singlet._qc import calculate_qc_metrics
+from singlet._qc_summary import qc_summary
 from singlet._query import query, search
 from singlet._rank_genes import rank_genes
 from singlet._recipes import recipe_seurat, recipe_zheng17
@@ -165,6 +167,7 @@ from singlet._splicing_ratio import splicing_ratio
 from singlet._subcluster import leiden_subclustering
 from singlet._subsample import subsample
 from singlet._subsample_balanced import subsample_balanced
+from singlet._trajectory_genes import trajectory_genes
 from singlet._transfer_labels import transfer_labels
 from singlet._transforms import expm1, log1p, sqrt_transform
 from singlet._tsne import tsne
@@ -241,6 +244,7 @@ __all__ = [
     "var_df",
     # QC filtering
     "calculate_qc_metrics",
+    "qc_summary",
     "filter_cells",
     "filter_genes",
     "subsample",
@@ -334,12 +338,16 @@ __all__ = [
     "wishart_test",
     # Pseudotime
     "velocity_pseudotime",
+    # Trajectory analysis
+    "trajectory_genes",
     # Denoising
     "denoise",
     # Metacell
     "metacell",
     # Gene correlation network
     "gene_correlation_network",
+    # Gene regulatory network
+    "infer_grn",
     # PhenoGraph clustering
     "phenograph",
     # Comprehensive marker finding
