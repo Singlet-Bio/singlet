@@ -62,6 +62,7 @@ Token-priced (requires API key):
 
 __version__ = "2.0.0"
 
+from singlet._aggregate import aggregate
 from singlet._annotate import annotate, gene_programs, project
 from singlet._auth import login
 from singlet._catalog import (
@@ -136,7 +137,9 @@ from singlet._regress import regress_out
 from singlet._scale import scale
 from singlet._scrublet import scrublet
 from singlet._score import score_genes
+from singlet._subcluster import leiden_subclustering
 from singlet._subsample import subsample
+from singlet._transforms import expm1, log1p, sqrt_transform
 from singlet._tsne import tsne
 from singlet._umap import umap
 from singlet._versions import show_versions
@@ -210,6 +213,7 @@ __all__ = [
     "subsample",
     "downsample_counts",
     "concatenate",
+    "aggregate",
     # Preprocessing
     "normalize",
     "highly_variable_genes",
@@ -220,6 +224,7 @@ __all__ = [
     "pca",
     "neighbors",
     "leiden",
+    "leiden_subclustering",
     "louvain",
     "tsne",
     "diffmap",
@@ -269,4 +274,8 @@ __all__ = [
     "ingest",
     # Diagnostics
     "show_versions",
+    # Transforms
+    "log1p",
+    "expm1",
+    "sqrt_transform",
 ]
