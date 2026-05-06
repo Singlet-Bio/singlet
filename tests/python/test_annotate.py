@@ -243,6 +243,17 @@ class TestDownloadModel:
         assert result.read_bytes() == b"model data bytes"
         assert "gene_programs/mus_musculus_k50.1pz" in mock_get.call_args[0][0]
 
+    def test_connection_error_gives_guidance(self, tmp_path, monkeypatch):
+        """ConnectionError gives clear guidance about network."""
+        import requests
+        from singlet._annotate import _download_model
+
+        monkeypatch.setattr("singlet._annotate._models_dir", lambda: tmp_path)
+
+        with patch("requests.get", side_effect=requests.ConnectionError("no network")):
+            with pytest.raises(RuntimeError, match="Cannot reach model server"):
+                _download_model("Homo sapiens", 100)
+
 
 # ---------------------------------------------------------------------------
 # gene_programs
