@@ -299,6 +299,20 @@ class TestLoad:
         with pytest.raises(ValueError, match="non-empty"):
             load("")
 
+    def test_load_nonexistent_path_raises_filenotfound(self):
+        """load('/nonexistent/file.1pz') gives FileNotFoundError (not zenodo error)."""
+        from singlet._loader import load
+
+        with pytest.raises(FileNotFoundError, match="File not found"):
+            load("/nonexistent/file.1pz")
+
+    def test_load_nonexistent_relative_path_raises_filenotfound(self):
+        """load('missing.h5ad') gives FileNotFoundError."""
+        from singlet._loader import load
+
+        with pytest.raises(FileNotFoundError, match="File not found"):
+            load("missing.h5ad")
+
 
 class TestLoadSample:
     """Test load_sample() with mocked catalog."""

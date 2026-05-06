@@ -171,6 +171,19 @@ def load(
 
     path = Path(source)
 
+    # Detect if source looks like a file path (has directory separators or known extension)
+    _is_path = (
+        "/" in str(source)
+        or "\\" in str(source)
+        or path.suffix.lower()
+        in (
+            ".1pz",
+            ".spz",
+            ".h5ad",
+            ".zarr",
+        )
+    )
+
     if path.exists():
         suffix = path.suffix.lower()
         if suffix == ".h5ad":
@@ -185,6 +198,8 @@ def load(
             adata = read_matrix(path)
         else:
             adata = read_matrix(path)
+    elif _is_path:
+        raise FileNotFoundError(f"File not found: {path}")
     else:
         # Treat as GSE accession
         local_path = _resolve_gse_path(str(source))
