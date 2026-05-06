@@ -101,6 +101,7 @@ from singlet._loader import download, load, load_dir, load_sample
 from singlet._neighbors import neighbors
 from singlet._normalize import normalize
 from singlet._pca import pca
+from singlet._plot import plot_umap, plot_violin
 from singlet._query import query, search
 from singlet._subsample import subsample
 from singlet._umap import umap
@@ -183,6 +184,9 @@ __all__ = [
     "rank_genes_groups",
     # Batch correction
     "harmony",
+    # Plotting
+    "plot_umap",
+    "plot_violin",
     # Diagnostics
     "show_versions",
 ]
