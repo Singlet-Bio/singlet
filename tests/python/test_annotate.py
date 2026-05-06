@@ -202,6 +202,21 @@ class TestAnnotate:
         result = annotate(small_adata, organism="Homo sapiens", k=5)
         assert list(result.index) == list(small_adata.obs_names)
 
+    @patch("singlet._annotate._load_program_labels")
+    @patch("singlet._annotate.gene_programs")
+    def test_inplace_stores_in_adata(
+        self, mock_gp, mock_labels_fn, small_adata, mock_W, mock_labels
+    ):
+        mock_gp.return_value = mock_W
+        mock_labels_fn.return_value = mock_labels
+
+        result = annotate(small_adata, organism="Homo sapiens", k=5, inplace=True)
+        assert "cell_type" in small_adata.obs.columns
+        assert "cell_type_confidence" in small_adata.obs.columns
+        assert "X_nmf" in small_adata.obsm
+        assert small_adata.obsm["X_nmf"].shape == (10, 5)
+        assert isinstance(result, pd.DataFrame)  # still returns DataFrame
+
 
 # ---------------------------------------------------------------------------
 # _models_dir

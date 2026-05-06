@@ -226,7 +226,9 @@ def project(adata, *, organism: Optional[str] = None, k: int = 100) -> np.ndarra
     return H
 
 
-def annotate(adata, *, organism: Optional[str] = None, k: int = 100) -> pd.DataFrame:
+def annotate(
+    adata, *, organism: Optional[str] = None, k: int = 100, inplace: bool = False
+) -> pd.DataFrame:
     """Annotate cells with types via NMF projection. **Free, runs locally.**
 
     Projects cells onto gene programs, then maps dominant programs to
@@ -240,6 +242,8 @@ def annotate(adata, *, organism: Optional[str] = None, k: int = 100) -> pd.DataF
         Species name. Auto-detected from adata if not provided.
     k : int
         Number of gene programs. Default 100.
+    inplace : bool
+        If True, also store results in ``adata.obs`` and ``adata.obsm['X_nmf']``.
 
     Returns
     -------
@@ -281,7 +285,7 @@ def annotate(adata, *, organism: Optional[str] = None, k: int = 100) -> pd.DataF
     program_ids = [f"P{i + 1:03d}" for i in top_program_idx]
     cell_types = [labels.get(pid, "unknown") for pid in program_ids]
 
-    return pd.DataFrame(
+    result = pd.DataFrame(
         {
             "cell_type": cell_types,
             "confidence": confidence,
@@ -290,6 +294,13 @@ def annotate(adata, *, organism: Optional[str] = None, k: int = 100) -> pd.DataF
         },
         index=adata.obs_names,
     )
+
+    if inplace:
+        adata.obs["cell_type"] = result["cell_type"].values
+        adata.obs["cell_type_confidence"] = result["confidence"].values
+        adata.obsm["X_nmf"] = H
+
+    return result
 
 
 def _load_program_labels(organism: str, k: int) -> dict:
