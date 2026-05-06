@@ -325,6 +325,10 @@ class TestLegacyV2Paths:
             "indptr": np.array([0, 1, 2, 3, 3]),
         }
 
+        # Create a dummy file so the existence check passes
+        fake_file = tmp_path / "fake.1pz"
+        fake_file.write_bytes(b"\x00")
+
         import sys
 
         with patch.dict(
@@ -333,7 +337,7 @@ class TestLegacyV2Paths:
             # Force AttributeError on read_1pz
             from singlet._io import read_1pz
 
-            adata = read_1pz(str(tmp_path / "fake.1pz"))
+            adata = read_1pz(str(fake_file))
             # 3 genes × 4 cells → transposed to 4 cells × 3 genes
             assert adata.shape == (4, 3)
 
@@ -352,6 +356,12 @@ class TestReadWrite1pzValidation:
 
         with pytest.raises(ValueError, match="non-empty"):
             read_1pz("")
+
+    def test_read_1pz_nonexistent_raises_filenotfounderror(self):
+        from singlet._io import read_1pz
+
+        with pytest.raises(FileNotFoundError, match="File not found"):
+            read_1pz("/nonexistent/path/to/file.1pz")
 
     def test_write_1pz_none_raises_typeerror(self):
         from singlet._io import write_1pz

@@ -322,6 +322,8 @@ def read_1pz(path: str | Path) -> anndata.AnnData:
     path_str = str(path)
     if not path_str:
         raise ValueError("read_1pz() requires a non-empty file path")
+    if not Path(path_str).exists():
+        raise FileNotFoundError(f"File not found: {path_str}")
 
     try:
         import singlepress
