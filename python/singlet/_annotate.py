@@ -73,6 +73,29 @@ def _detect_organism(adata) -> str:
     if "organism" in adata.uns:
         return str(adata.uns["organism"])
 
+    # Heuristic: infer from gene name capitalization
+    # Human genes: ALL CAPS (TP53, BRCA1, EGFR)
+    # Mouse genes: Title Case (Tp53, Brca1, Egfr)
+    if hasattr(adata, "var_names") and len(adata.var_names) >= 100:
+
+        def _alpha_part(g: str) -> str:
+            return "".join(c for c in g if c.isalpha())
+
+        sample = [
+            g
+            for g in adata.var_names[:500]
+            if len(g) >= 3 and g[0].isalpha() and len(_alpha_part(g)) >= 2
+        ]
+        if len(sample) >= 50:
+            upper_frac = sum(1 for g in sample if _alpha_part(g).isupper()) / len(sample)
+            if upper_frac > 0.7:
+                return "Homo sapiens"
+            title_frac = sum(
+                1 for g in sample if _alpha_part(g)[0].isupper() and not _alpha_part(g).isupper()
+            ) / len(sample)
+            if title_frac > 0.7:
+                return "Mus musculus"
+
     raise ValueError(
         "Could not detect organism from adata. Pass organism= explicitly "
         "or ensure adata.obs['organism'] or adata.uns['organism'] is set."

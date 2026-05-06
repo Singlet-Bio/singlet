@@ -70,10 +70,17 @@ class TestDetectOrganism:
         small_adata.obs["species"] = "Danio rerio"
         assert _detect_organism(small_adata) == "Danio rerio"
 
-    def test_raises_when_missing(self, small_adata):
-        del small_adata.uns["organism"]
+    def test_raises_when_missing(self):
+        import anndata as ad
+
+        # Use ambiguous gene names that won't trigger the capitalization heuristic
+        mixed_genes = [f"gene{i}" for i in range(200)]  # all lowercase → no match
+        adata = ad.AnnData(
+            X=sp.csr_matrix(np.ones((3, 200))),
+            var=pd.DataFrame(index=mixed_genes),
+        )
         with pytest.raises(ValueError, match="Could not detect organism"):
-            _detect_organism(small_adata)
+            _detect_organism(adata)
 
 
 # ---------------------------------------------------------------------------
@@ -384,3 +391,52 @@ class TestAnnotateDetectOrganism:
         mock_proj.assert_called_once()
         call_kwargs = mock_proj.call_args
         assert call_kwargs[1]["organism"] is not None  # organism was detected
+
+
+class TestDetectOrganismFromGenes:
+    """Test _detect_organism gene-name heuristic."""
+
+    def test_human_genes_detected(self):
+        """ALL-CAPS gene names → Homo sapiens."""
+        import anndata as ad
+
+        human_genes = [f"GENE{i}" for i in range(200)]
+        adata = ad.AnnData(
+            X=sp.csr_matrix(np.ones((3, 200))),
+            var=pd.DataFrame(index=human_genes),
+        )
+        assert _detect_organism(adata) == "Homo sapiens"
+
+    def test_mouse_genes_detected(self):
+        """Title-case gene names → Mus musculus."""
+        import anndata as ad
+
+        mouse_genes = [f"Gene{i}" for i in range(200)]
+        adata = ad.AnnData(
+            X=sp.csr_matrix(np.ones((3, 200))),
+            var=pd.DataFrame(index=mouse_genes),
+        )
+        assert _detect_organism(adata) == "Mus musculus"
+
+    def test_obs_organism_takes_priority(self):
+        """obs['organism'] takes priority over gene heuristic."""
+        import anndata as ad
+
+        human_genes = [f"GENE{i}" for i in range(200)]
+        adata = ad.AnnData(
+            X=sp.csr_matrix(np.ones((3, 200))),
+            obs=pd.DataFrame({"organism": ["Mus musculus"] * 3}, index=["c0", "c1", "c2"]),
+            var=pd.DataFrame(index=human_genes),
+        )
+        assert _detect_organism(adata) == "Mus musculus"
+
+    def test_too_few_genes_raises(self):
+        """Too few gene names → ValueError (can't infer)."""
+        import anndata as ad
+
+        adata = ad.AnnData(
+            X=sp.csr_matrix(np.ones((3, 10))),
+            var=pd.DataFrame(index=[f"GENE{i}" for i in range(10)]),
+        )
+        with pytest.raises(ValueError, match="Could not detect organism"):
+            _detect_organism(adata)
