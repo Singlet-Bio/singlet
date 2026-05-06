@@ -129,7 +129,7 @@ gpu.de.pseudobulk_de(adata, groupby="cell_type", sample_col="donor_id")
 MCP (Model Context Protocol) server for AI assistants.
 
 ```bash
-python -m singlet.mcp.server  # Start stdio server
+python -m singlet.mcp  # Start stdio server
 ```
 
 Exposes 11 tools: `singlet_stats`, `singlet_search`, `singlet_qc`,
