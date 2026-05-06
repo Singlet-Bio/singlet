@@ -44,12 +44,22 @@ singlet.filter_cells(adata, min_genes=200, inplace=True)
 singlet.filter_genes(adata, min_cells=3, inplace=True)
 singlet.normalize(adata)          # library-size + log1p
 singlet.highly_variable_genes(adata)  # feature selection
+singlet.scale(adata)              # z-score normalization
 
 # Analysis pipeline (built-in, no scanpy needed)
 singlet.pca(adata)                # dimensionality reduction
+singlet.harmony(adata, "batch")   # batch correction (optional)
 singlet.neighbors(adata)          # kNN graph
 singlet.leiden(adata)             # clustering
 singlet.umap(adata)               # 2D visualization
+
+# Differential expression & gene scoring
+singlet.rank_genes_groups(adata, "leiden")  # marker genes (BH-corrected)
+singlet.score_genes(adata, ["MCM5", "PCNA"], score_name="S_score")
+
+# Visualization
+singlet.plot_umap(adata, color="leiden")
+singlet.plot_violin(adata, ["n_genes", "total_counts"], groupby="leiden")
 
 # Cell type annotation (free, local — no API key needed)
 singlet.annotate(adata, inplace=True)  # stores in adata.obs
