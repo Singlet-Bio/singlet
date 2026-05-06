@@ -126,6 +126,7 @@ from singlet._gene_module_score import gene_module_score
 from singlet._gene_set_enrichment import gene_set_enrichment
 from singlet._gene_set_variation import gene_set_variation
 from singlet._gene_space_embedding import gene_space_embedding
+from singlet._gene_trend_clustering import gene_trend_clustering
 from singlet._harmony import harmony
 from singlet._hotspot_genes import hotspot_genes
 from singlet._hvg import highly_variable_genes
@@ -164,6 +165,7 @@ from singlet._optimal_transport import optimal_transport
 from singlet._paga import paga
 from singlet._palantir_pseudotime import palantir_pseudotime
 from singlet._pca import pca
+from singlet._perturbation_signature import perturbation_signature
 from singlet._phate import phate
 from singlet._phenograph import phenograph
 from singlet._plot import plot_dotplot, plot_umap, plot_violin
@@ -191,6 +193,7 @@ from singlet._score import score_genes
 from singlet._scrublet import scrublet
 from singlet._sparse_pca import sparse_pca
 from singlet._spatial import spatial_neighbors
+from singlet._spectral_clustering import spectral_clustering
 from singlet._splicing_ratio import splicing_ratio
 from singlet._subcluster import leiden_subclustering
 from singlet._subsample import subsample
@@ -451,4 +454,10 @@ __all__ = [
     "augur_prioritize",
     # PHATE embedding
     "phate",
+    # Spectral clustering
+    "spectral_clustering",
+    # Gene trend clustering
+    "gene_trend_clustering",
+    # Perturbation signature
+    "perturbation_signature",
 ]
