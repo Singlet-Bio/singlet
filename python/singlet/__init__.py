@@ -80,6 +80,7 @@ from singlet._catalog import (
     tissues,
     top_series,
 )
+from singlet._de import rank_genes_groups
 from singlet._describe import describe
 from singlet._filter import filter_cells, filter_genes
 from singlet._hvg import highly_variable_genes
@@ -174,6 +175,8 @@ __all__ = [
     "neighbors",
     "leiden",
     "umap",
+    # Differential expression
+    "rank_genes_groups",
     # Diagnostics
     "show_versions",
 ]
