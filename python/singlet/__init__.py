@@ -100,6 +100,7 @@ from singlet._dendrogram import dendrogram
 from singlet._diffmap import diffmap
 from singlet._dpt import dpt
 from singlet._describe import describe
+from singlet._export_df import obs_df, to_df, var_df
 from singlet._embedding_density import embedding_density
 from singlet._enrichr import enrichr, enrichr_from_de
 from singlet._filter import filter_cells, filter_genes
@@ -211,6 +212,10 @@ __all__ = [
     "from_tiledb",
     # Exploration
     "describe",
+    # DataFrame export
+    "to_df",
+    "obs_df",
+    "var_df",
     # QC filtering
     "calculate_qc_metrics",
     "filter_cells",
