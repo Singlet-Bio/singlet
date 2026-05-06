@@ -104,6 +104,7 @@ from singlet._pca import pca
 from singlet._plot import plot_umap, plot_violin
 from singlet._query import query, search
 from singlet._scale import scale
+from singlet._score import score_genes
 from singlet._subsample import subsample
 from singlet._umap import umap
 from singlet._versions import show_versions
@@ -184,6 +185,7 @@ __all__ = [
     "umap",
     # Differential expression
     "rank_genes_groups",
+    "score_genes",
     # Batch correction
     "harmony",
     # Plotting
