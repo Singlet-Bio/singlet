@@ -513,6 +513,11 @@ def samples(
         col = "cells_called" if "cells_called" in df.columns else "n_cells"
         df = df[df[col] >= min_cells]
     if quality_tier is not None:
+        valid_tiers = ("gold", "silver", "bronze")
+        if quality_tier not in valid_tiers:
+            raise ValueError(
+                f"Invalid quality_tier={quality_tier!r}. Must be one of: {valid_tiers}"
+            )
         df = df[df["status"] == "SUCCESS"]
         cells_col = "cells_called" if "cells_called" in df.columns else "n_cells"
         has_genes = "median_genes" in df.columns

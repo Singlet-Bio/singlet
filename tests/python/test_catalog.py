@@ -332,3 +332,11 @@ def test_set_catalog_dir_rejects_nonexistent():
 
     with pytest.raises(FileNotFoundError, match="does not exist"):
         singlet.set_catalog_dir("/nonexistent/fake/path")
+
+
+def test_samples_invalid_quality_tier():
+    """samples(quality_tier='invalid') raises ValueError."""
+    import singlet
+
+    with pytest.raises(ValueError, match="Invalid quality_tier"):
+        singlet.samples(quality_tier="platinum")
