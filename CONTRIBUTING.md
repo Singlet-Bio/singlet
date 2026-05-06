@@ -57,7 +57,7 @@ make check
 # C++ only (100 tests, ~72s)
 make test-cpp
 
-# Python only (602 tests, ~17s)
+# Python only (603 tests, ~17s)
 make test-python
 
 # Lint check
