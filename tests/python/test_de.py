@@ -1,11 +1,11 @@
-"""Tests for singlet.rank_genes_groups()."""
+"""Tests for singlet.rank_genes_groups() and rank_genes_groups_df()."""
 
 import numpy as np
 import pandas as pd
 import pytest
 import scipy.sparse as sp
 import singlet
-from singlet._de import rank_genes_groups
+from singlet._de import rank_genes_groups, rank_genes_groups_df
 
 
 def _make_clustered_adata(n_cells=60, n_genes=100):
@@ -147,3 +147,51 @@ class TestRankGenesGroups:
         # Top markers for cluster 0 should be significant after correction
         top_pvals = result["pvals_adj"]["0"][:5]
         assert all(p < 0.05 for p in top_pvals)
+
+
+class TestRankGenesGroupsDf:
+    def test_basic(self):
+        """Should return a DataFrame with expected columns."""
+        adata = _make_clustered_adata()
+        rank_genes_groups(adata, "cluster")
+        df = rank_genes_groups_df(adata)
+        assert isinstance(df, pd.DataFrame)
+        assert "group" in df.columns
+        assert "names" in df.columns
+        assert "scores" in df.columns
+        assert "pvals" in df.columns
+        assert "pvals_adj" in df.columns
+        assert "logfoldchanges" in df.columns
+
+    def test_single_group(self):
+        """Should filter to specific group."""
+        adata = _make_clustered_adata()
+        rank_genes_groups(adata, "cluster", n_genes=10)
+        df = rank_genes_groups_df(adata, group="0")
+        assert len(df) == 10
+        assert all(df["group"] == "0")
+
+    def test_all_groups(self):
+        """group=None should return all groups."""
+        adata = _make_clustered_adata()
+        rank_genes_groups(adata, "cluster", n_genes=10)
+        df = rank_genes_groups_df(adata)
+        groups = df["group"].unique()
+        assert len(groups) == 3  # 3 clusters
+
+    def test_missing_de_raises(self):
+        """Should raise KeyError when DE not run."""
+        adata = _make_clustered_adata()
+        with pytest.raises(KeyError, match="rank_genes_groups"):
+            rank_genes_groups_df(adata)
+
+    def test_invalid_group_raises(self):
+        """Should raise KeyError for nonexistent group."""
+        adata = _make_clustered_adata()
+        rank_genes_groups(adata, "cluster")
+        with pytest.raises(KeyError, match="nonexistent"):
+            rank_genes_groups_df(adata, group="nonexistent")
+
+    def test_public_api(self):
+        assert hasattr(singlet, "rank_genes_groups_df")
+        assert callable(singlet.rank_genes_groups_df)

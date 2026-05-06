@@ -83,7 +83,7 @@ from singlet._catalog import (
 )
 from singlet._combat import combat
 from singlet._concat import concatenate
-from singlet._de import rank_genes_groups
+from singlet._de import rank_genes_groups, rank_genes_groups_df
 from singlet._dendrogram import dendrogram
 from singlet._describe import describe
 from singlet._enrichr import enrichr, enrichr_from_de
@@ -194,6 +194,7 @@ __all__ = [
     "umap",
     # Differential expression
     "rank_genes_groups",
+    "rank_genes_groups_df",
     "score_genes",
     "dendrogram",
     "enrichr",

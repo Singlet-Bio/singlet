@@ -6,7 +6,10 @@ cluster/group using Wilcoxon rank-sum test.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 def rank_genes_groups(
@@ -122,6 +125,54 @@ def rank_genes_groups(
         return None
     else:
         return result
+
+
+def rank_genes_groups_df(
+    adata,
+    group: Optional[str] = None,
+) -> "pd.DataFrame":
+    """Get DE results as a tidy DataFrame.
+
+    Parameters
+    ----------
+    adata : anndata.AnnData
+        Must have 'rank_genes_groups' in adata.uns.
+    group : str or None, default None
+        Specific group to return. If None, returns all groups.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Columns: 'group', 'names', 'scores', 'pvals', 'pvals_adj', 'logfoldchanges'.
+    """
+    import pandas as pd
+
+    if not hasattr(adata, "uns") or "rank_genes_groups" not in adata.uns:
+        raise KeyError(
+            "adata.uns['rank_genes_groups'] not found. Run singlet.rank_genes_groups() first."
+        )
+
+    result = adata.uns["rank_genes_groups"]
+    groups_to_show = [group] if group is not None else list(result["names"].keys())
+
+    rows = []
+    for grp in groups_to_show:
+        if grp not in result["names"]:
+            raise KeyError(f"Group '{grp}' not found in rank_genes_groups results.")
+        n = len(result["names"][grp])
+        for i in range(n):
+            row = {"group": grp, "names": result["names"][grp][i]}
+            if "scores" in result:
+                row["scores"] = result["scores"][grp][i]
+            if "pvals" in result:
+                row["pvals"] = result["pvals"][grp][i]
+            if "pvals_adj" in result:
+                row["pvals_adj"] = result["pvals_adj"][grp][i]
+            if "logfoldchanges" in result:
+                row["logfoldchanges"] = result["logfoldchanges"][grp][i]
+            rows.append(row)
+
+    return pd.DataFrame(rows)
 
 
 def _vectorized_mannwhitney(X_in, X_out, n_in: int, n_out: int):
