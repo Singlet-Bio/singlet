@@ -88,6 +88,7 @@ from singlet._catalog import (
 from singlet._cca import cca
 from singlet._cell_cycle import score_cell_cycle
 from singlet._cell_distances import cell_distances
+from singlet._cell_level_de import cell_level_de
 from singlet._cell_type_proportions import cell_type_proportions
 from singlet._cluster_stability import cluster_stability
 from singlet._combat import combat
@@ -120,6 +121,7 @@ from singlet._gene_correlation_network import gene_correlation_network
 from singlet._gene_module_score import gene_module_score
 from singlet._gene_set_enrichment import gene_set_enrichment
 from singlet._harmony import harmony
+from singlet._hotspot_genes import hotspot_genes
 from singlet._hvg import highly_variable_genes
 from singlet._hvg_cell_ranger import highly_variable_genes_cell_ranger
 from singlet._hvg_seurat import highly_variable_genes_seurat_v3
@@ -150,6 +152,7 @@ from singlet._morans_i import morans_i
 from singlet._neighbors import neighbors
 from singlet._nmf import nmf
 from singlet._normalize import normalize
+from singlet._optimal_transport import optimal_transport
 from singlet._paga import paga
 from singlet._pca import pca
 from singlet._phenograph import phenograph
@@ -406,4 +409,10 @@ __all__ = [
     "variance_partition",
     # Cell distances
     "cell_distances",
+    # Optimal transport
+    "optimal_transport",
+    # Hotspot genes
+    "hotspot_genes",
+    # Cell-level DE
+    "cell_level_de",
 ]
