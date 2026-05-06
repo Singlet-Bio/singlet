@@ -81,7 +81,11 @@ def download(
         Path to the downloaded file.
     """
     import requests
-    from tqdm import tqdm
+
+    try:
+        from tqdm import tqdm
+    except ImportError:
+        tqdm = None  # type: ignore[assignment]
 
     if source not in ("zenodo", "aws"):
         raise ValueError(f"source must be 'zenodo' or 'aws', got {source!r}")
@@ -114,13 +118,18 @@ def download(
         raise RuntimeError(f"Failed to download '{accession}' from {source}: {e}") from e
 
     total = int(resp.headers.get("content-length", 0))
-    with (
-        open(dest, "wb") as f,
-        tqdm(total=total, unit="B", unit_scale=True, desc=accession) as pbar,
-    ):
-        for chunk in resp.iter_content(chunk_size=1 << 16):
-            f.write(chunk)
-            pbar.update(len(chunk))
+    if tqdm is not None:
+        with (
+            open(dest, "wb") as f,
+            tqdm(total=total, unit="B", unit_scale=True, desc=accession) as pbar,
+        ):
+            for chunk in resp.iter_content(chunk_size=1 << 16):
+                f.write(chunk)
+                pbar.update(len(chunk))
+    else:
+        with open(dest, "wb") as f:
+            for chunk in resp.iter_content(chunk_size=1 << 16):
+                f.write(chunk)
 
     return dest
 
