@@ -128,6 +128,7 @@ from singlet._paga import paga
 from singlet._pca import pca
 from singlet._plot import plot_dotplot, plot_umap, plot_violin
 from singlet._plot_embedding import plot_embedding
+from singlet._plot_genes_in_groups import plot_genes_in_groups
 from singlet._plot_heatmap import plot_heatmap
 from singlet._plot_markers import rank_genes_groups_dotplot
 from singlet._plot_matrix import rank_genes_groups_matrixplot
@@ -150,6 +151,7 @@ from singlet._subsample import subsample
 from singlet._transforms import expm1, log1p, sqrt_transform
 from singlet._tsne import tsne
 from singlet._umap import umap
+from singlet._velocity_pseudotime import velocity_pseudotime
 from singlet._versions import show_versions
 from singlet._wishart import wishart_test
 from singlet.convert import (
@@ -283,6 +285,7 @@ __all__ = [
     "plot_violin",
     "plot_dotplot",
     "plot_embedding",
+    "plot_genes_in_groups",
     "plot_heatmap",
     "plot_ranking",
     "plot_scatter",
@@ -301,4 +304,6 @@ __all__ = [
     "calinski_harabasz_score",
     "cross_validate_resolution",
     "wishart_test",
+    # Pseudotime
+    "velocity_pseudotime",
 ]

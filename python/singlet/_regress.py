@@ -16,6 +16,7 @@ def regress_out(
     adata,
     keys: list[str],
     *,
+    layer: Optional[str] = None,
     inplace: bool = True,
 ) -> Optional["np.ndarray"]:
     """Regress out unwanted sources of variation.
@@ -30,8 +31,11 @@ def regress_out(
         Annotated data matrix. Should be log-normalized.
     keys : list[str]
         Columns in adata.obs to regress out.
+    layer : str or None, default None
+        If set, regress the specified layer instead of adata.X.
+        The corrected values are stored back in the same layer (if inplace).
     inplace : bool, default True
-        If True, modifies adata.X in place.
+        If True, modifies adata.X (or the specified layer) in place.
         If False, returns corrected matrix.
 
     Returns
@@ -45,6 +49,10 @@ def regress_out(
     >>> adata = singlet.load("GSE264667")
     >>> singlet.normalize(adata)
     >>> singlet.regress_out(adata, ["total_counts", "pct_counts_mt"])
+
+    Use a specific layer:
+
+    >>> singlet.regress_out(adata, ["total_counts"], layer="log_normalized")
     """
     import numpy as np
     import scipy.sparse as sp
@@ -59,23 +67,31 @@ def regress_out(
         if key not in adata.obs.columns:
             raise KeyError(f"'{key}' not found in adata.obs.columns")
 
-    # Get expression as dense float64
-    X = adata.X
-    if sp.issparse(X):
-        X = np.asarray(X.todense(), dtype=np.float64)
+    if layer is not None and layer not in adata.layers:
+        raise KeyError(f"Layer '{layer}' not found in adata.layers")
+
+    # Get expression source
+    if layer is not None:
+        X_source = adata.layers[layer]
     else:
-        X = np.array(X, dtype=np.float64)
+        X_source = adata.X
+
+    # Convert to dense float64
+    if sp.issparse(X_source):
+        X = np.asarray(X_source.todense(), dtype=np.float64)
+    else:
+        X = np.array(X_source, dtype=np.float64)
 
     n_cells = X.shape[0]
 
     # Build design matrix: intercept + covariates
     design = np.ones((n_cells, 1 + len(keys)), dtype=np.float64)
-    for i, key in enumerate(keys):
+    for idx, key in enumerate(keys):
         values = adata.obs[key].values
         if hasattr(values, "codes"):
-            design[:, i + 1] = values.codes.astype(np.float64)
+            design[:, idx + 1] = values.codes.astype(np.float64)
         else:
-            design[:, i + 1] = np.array(values, dtype=np.float64)
+            design[:, idx + 1] = np.array(values, dtype=np.float64)
 
     # Solve normal equations: beta = (X^T X)^-1 X^T Y
     # Use least squares for numerical stability
@@ -85,6 +101,9 @@ def regress_out(
     X_corrected = X - design[:, 1:] @ beta[1:, :]
 
     if inplace:
-        adata.X = X_corrected
+        if layer is not None:
+            adata.layers[layer] = X_corrected
+        else:
+            adata.X = X_corrected
         return None
     return X_corrected

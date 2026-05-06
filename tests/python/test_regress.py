@@ -122,3 +122,28 @@ class TestRegressOut:
     def test_public_api(self):
         assert hasattr(singlet, "regress_out")
         assert callable(singlet.regress_out)
+
+    def test_layer_parameter(self):
+        """Should regress out from a specific layer."""
+        adata = _make_adata()
+        adata.layers["raw_counts"] = adata.X.copy()
+        regress_out(adata, ["total_counts"], layer="raw_counts")
+        # Layer should be modified (dense)
+        assert isinstance(adata.layers["raw_counts"], np.ndarray)
+        # Original X should be untouched (still sparse)
+        assert sp.issparse(adata.X)
+
+    def test_layer_not_found_raises(self):
+        """Should raise KeyError for missing layer."""
+        adata = _make_adata()
+        with pytest.raises(KeyError, match="nonexistent_layer"):
+            regress_out(adata, ["total_counts"], layer="nonexistent_layer")
+
+    def test_layer_inplace_false(self):
+        """layer + inplace=False returns array without modifying layer."""
+        adata = _make_adata()
+        adata.layers["test_layer"] = adata.X.copy()
+        result = regress_out(adata, ["total_counts"], layer="test_layer", inplace=False)
+        assert isinstance(result, np.ndarray)
+        # Layer should still be sparse
+        assert sp.issparse(adata.layers["test_layer"])
