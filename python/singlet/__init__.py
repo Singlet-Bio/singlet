@@ -116,12 +116,14 @@ from singlet._loader import download, load, load_dir, load_sample
 from singlet._marker_overlap import marker_gene_overlap
 from singlet._neighbors import neighbors
 from singlet._paga import paga
+from singlet._nmf import nmf
 from singlet._normalize import normalize
 from singlet._pca import pca
 from singlet._plot import plot_dotplot, plot_umap, plot_violin
 from singlet._plot_paga import plot_paga
 from singlet._plot_heatmap import plot_heatmap
 from singlet._plot_markers import rank_genes_groups_dotplot
+from singlet._plot_matrix import rank_genes_groups_matrixplot
 from singlet._plot_tracks import rank_genes_groups_tracksplot
 from singlet._plot_ranking import plot_ranking
 from singlet._plot_scatter import plot_scatter
@@ -212,6 +214,7 @@ __all__ = [
     "highly_variable_genes_seurat_v3",
     "scale",
     "regress_out",
+    "nmf",
     "pca",
     "neighbors",
     "leiden",
@@ -225,6 +228,7 @@ __all__ = [
     "rank_genes_groups",
     "rank_genes_groups_df",
     "rank_genes_groups_dotplot",
+    "rank_genes_groups_matrixplot",
     "rank_genes_groups_tracksplot",
     "score_genes",
     "dendrogram",

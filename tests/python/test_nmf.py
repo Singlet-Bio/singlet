@@ -15,7 +15,7 @@ class TestNmfTransform:
     @patch("requests.post")
     def test_transform_success(self, mock_post):
         """transform adds obsm['X_nmf'] on success."""
-        from singlet.nmf import transform
+        from singlet._nmf_serve import transform
 
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"loadings": [[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]]}
@@ -38,7 +38,7 @@ class TestNmfTransform:
     @patch("requests.post")
     def test_transform_raises_on_http_error(self, mock_post):
         """transform raises if API returns error."""
-        from singlet.nmf import transform
+        from singlet._nmf_serve import transform
 
         mock_resp = MagicMock()
         mock_resp.raise_for_status.side_effect = Exception("401 Unauthorized")
@@ -56,7 +56,7 @@ class TestNmfAnnotate:
     @patch("requests.get")
     def test_annotate_success(self, mock_get):
         """annotate returns factor → annotation dict."""
-        from singlet.nmf import annotate
+        from singlet._nmf_serve import annotate
 
         mock_resp = MagicMock()
         mock_resp.json.return_value = {
@@ -75,7 +75,7 @@ class TestNmfAnnotate:
     @patch("requests.get")
     def test_annotate_raises_on_http_error(self, mock_get):
         """annotate raises if API returns error."""
-        from singlet.nmf import annotate
+        from singlet._nmf_serve import annotate
 
         mock_resp = MagicMock()
         mock_resp.raise_for_status.side_effect = Exception("404 Not Found")
