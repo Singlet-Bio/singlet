@@ -93,6 +93,7 @@ from singlet._io import (
     write_1pz,
     write_spz,
 )
+from singlet._leiden import leiden
 from singlet._loader import download, load, load_dir, load_sample
 from singlet._neighbors import neighbors
 from singlet._normalize import normalize
@@ -170,6 +171,7 @@ __all__ = [
     "highly_variable_genes",
     "pca",
     "neighbors",
+    "leiden",
     # Diagnostics
     "show_versions",
 ]
