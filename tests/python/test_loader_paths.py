@@ -479,3 +479,19 @@ class TestLoadSample:
         adata = load_sample("GSM002", genes=["GeneA", "GeneC"])
         assert adata.shape == (3, 2)  # 3 cells × 2 genes
         assert set(adata.var_names) == {"GeneA", "GeneC"}
+
+
+def test_load_obs_filter_bad_column(tmp_path):
+    """load() with obs_filter referencing non-existent column gives clear error."""
+    import singlet
+
+    adata = ad.AnnData(
+        X=sp.csr_matrix(np.ones((3, 5))),
+        obs=pd.DataFrame({"cell_type": ["T", "B", "T"]}, index=["c0", "c1", "c2"]),
+        var=pd.DataFrame(index=[f"g{i}" for i in range(5)]),
+    )
+    path = tmp_path / "test.h5ad"
+    adata.write_h5ad(path)
+
+    with pytest.raises(KeyError, match="obs_filter column.*not found"):
+        singlet.load(str(path), obs_filter={"nonexistent": "val"})
