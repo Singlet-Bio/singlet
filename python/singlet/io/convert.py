@@ -22,7 +22,7 @@ def to_h5ad(adata, path: str | Path, *, compression: str = "gzip") -> None:
     compression : str
         HDF5 compression filter. Default ``"gzip"``.
     """
-    adata.write_h5ad(Path(path), compression=compression)
+    adata.write_h5ad(Path(path).expanduser(), compression=compression)
 
 
 def to_zarr(adata, path: str | Path, *, chunks: Optional[tuple] = None) -> None:
@@ -36,7 +36,7 @@ def to_zarr(adata, path: str | Path, *, chunks: Optional[tuple] = None) -> None:
     chunks : tuple, optional
         Chunk shape for the X matrix.
     """
-    adata.write_zarr(Path(path), chunks=chunks)
+    adata.write_zarr(Path(path).expanduser(), chunks=chunks)
 
 
 def to_csc(adata, *, layer: Optional[str] = None) -> scipy.sparse.csc_matrix:
@@ -102,7 +102,7 @@ def to_mtx(adata, directory: str | Path, *, layer: Optional[str] = None) -> None
     import scipy.io
     import scipy.sparse as sp
 
-    out = Path(directory)
+    out = Path(directory).expanduser()
     out.mkdir(parents=True, exist_ok=True)
 
     mat = adata.layers[layer] if layer else adata.X
@@ -142,7 +142,7 @@ def from_h5ad(path: str | Path, *, backed: str | None = None) -> anndata.AnnData
     """
     import anndata as ad
 
-    return ad.read_h5ad(Path(path), backed=backed)  # type: ignore[arg-type]
+    return ad.read_h5ad(Path(path).expanduser(), backed=backed)  # type: ignore[arg-type]
 
 
 def from_zarr(path: str | Path) -> anndata.AnnData:
@@ -158,7 +158,7 @@ def from_zarr(path: str | Path) -> anndata.AnnData:
     """
     import anndata as ad
 
-    return ad.read_zarr(Path(path))
+    return ad.read_zarr(Path(path).expanduser())
 
 
 def from_tiledb(uri: str, *, measurement_name: str = "RNA") -> anndata.AnnData:
@@ -202,7 +202,7 @@ def from_mtx(directory: str | Path) -> anndata.AnnData:
     import pandas as pd
     import scipy.io
 
-    d = Path(directory)
+    d = Path(directory).expanduser()
 
     # Find matrix file
     for name in ["matrix.mtx.gz", "matrix.mtx"]:
