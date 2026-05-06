@@ -66,6 +66,7 @@ from singlet._aggregate import aggregate
 from singlet._ambient_rna_score import ambient_rna_score
 from singlet._annotate import annotate, gene_programs, project
 from singlet._annotate_cell_types import annotate_cell_types
+from singlet._augur_prioritize import augur_prioritize
 from singlet._auth import login
 from singlet._batch_evaluation import batch_evaluation
 from singlet._catalog import (
@@ -161,7 +162,9 @@ from singlet._nmf import nmf
 from singlet._normalize import normalize
 from singlet._optimal_transport import optimal_transport
 from singlet._paga import paga
+from singlet._palantir_pseudotime import palantir_pseudotime
 from singlet._pca import pca
+from singlet._phate import phate
 from singlet._phenograph import phenograph
 from singlet._plot import plot_dotplot, plot_umap, plot_violin
 from singlet._plot_embedding import plot_embedding
@@ -366,6 +369,8 @@ __all__ = [
     "wishart_test",
     # Pseudotime
     "velocity_pseudotime",
+    # Palantir pseudotime
+    "palantir_pseudotime",
     # Trajectory analysis
     "trajectory_genes",
     # Cell fate probabilities
@@ -442,4 +447,8 @@ __all__ = [
     "differential_test",
     # Multi-modal factor analysis
     "multiome_factor_analysis",
+    # Cell type prioritization
+    "augur_prioritize",
+    # PHATE embedding
+    "phate",
 ]
