@@ -28,7 +28,7 @@ All notable changes to the singlet project.
 - **Python API reference**: `docs/api/python.md` covers all public modules
 - **Annotation tests**: 15 unit tests for `_annotate.py` (gene_programs, project, annotate)
 - **Security**: `SECURITY.md` vulnerability reporting policy + pip-audit CI job
-- **Python tests**: 608 total (up from 205 at cycle 184, 98% core coverage)
+- **Python tests**: 617 total (up from 205 at cycle 184, 97% core coverage)
 - **Property-based tests**: 14 hypothesis tests for codec round-trip verification
 - **Code deduplication**: `convert.py` thin re-export (was 267-line copy)
 - **Lint compliance**: 0 ruff errors (B904, UP037, UP035 all resolved)
@@ -38,6 +38,9 @@ All notable changes to the singlet project.
 - **Regex-safe search**: All catalog filters use literal matching; special chars like `(`, `[`, `+` no longer crash
 - **CLI entry point**: `python -m singlet` prints atlas summary and usage
 - **make check**: single target for lint + typecheck + tests
+- **Organism auto-detection**: Gene name capitalization heuristic (ALL CAPS → human, Title Case → mouse)
+- **Memory-safe NNLS**: Row-at-a-time projection avoids full .toarray() OOM on large datasets
+- **Input validation**: write_1pz/write_spz/project/annotate validate AnnData input; quality_tier/precision checked
 - **Format conversion tests**: MTX round-trip, to_csc, from_mtx edge cases
 - **Preprocessing tests**: protocol detection, FASTQ download, quantify, QC, species, export
 

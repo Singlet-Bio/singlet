@@ -495,3 +495,11 @@ def test_load_obs_filter_bad_column(tmp_path):
 
     with pytest.raises(KeyError, match="obs_filter column.*not found"):
         singlet.load(str(path), obs_filter={"nonexistent": "val"})
+
+
+def test_load_directory_gives_helpful_error(tmp_path):
+    """load() on a directory raises IsADirectoryError with guidance."""
+    import singlet
+
+    with pytest.raises(IsADirectoryError, match="load_dir"):
+        singlet.load(str(tmp_path))

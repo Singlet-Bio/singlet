@@ -194,6 +194,11 @@ def load(
     )
 
     if path.exists():
+        if path.is_dir():
+            raise IsADirectoryError(
+                f"'{path}' is a directory. Use singlet.load_dir() for pipeline output directories, "
+                f"or provide a file path (.1pz, .spz, .h5ad)."
+            )
         suffix = path.suffix.lower()
         if suffix == ".h5ad":
             import anndata as ad

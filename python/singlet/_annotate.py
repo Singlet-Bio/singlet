@@ -204,12 +204,23 @@ def project(adata, *, organism: Optional[str] = None, k: int = 100) -> np.ndarra
     n_cells = X.shape[0]
     H = np.zeros((n_cells, k), dtype=np.float64)
 
+    # Progress bar for large datasets (>1000 cells, ~14ms/cell)
+    try:
+        from tqdm import tqdm
+
+        show_progress = n_cells >= 1000
+    except ImportError:
+        show_progress = False
+
+    iterator = range(n_cells)
+    if show_progress:
+        iterator = tqdm(iterator, desc="Projecting cells", unit="cell")
+
     if sp.issparse(X):
-        # Row-at-a-time to avoid full .toarray() OOM on large matrices
-        for i in range(n_cells):
+        for i in iterator:
             H[i], _ = nnls(W, X[i].toarray().ravel())
     else:
-        for i in range(n_cells):
+        for i in iterator:
             H[i], _ = nnls(W, X[i])
 
     return H
