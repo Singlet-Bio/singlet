@@ -99,6 +99,7 @@ from singlet._neighbors import neighbors
 from singlet._normalize import normalize
 from singlet._pca import pca
 from singlet._query import query, search
+from singlet._umap import umap
 from singlet._versions import show_versions
 from singlet.convert import (
     from_h5ad,
@@ -172,6 +173,7 @@ __all__ = [
     "pca",
     "neighbors",
     "leiden",
+    "umap",
     # Diagnostics
     "show_versions",
 ]
