@@ -65,6 +65,10 @@
 | `singlet.project(adata)` | Project cells into gene program space (H matrix) |
 | `singlet.annotate(adata)` | Annotate cells with predicted cell types |
 
+> **Auto-detection**: `project()` and `annotate()` auto-detect the organism from
+> `adata.uns["organism"]`, `adata.obs["organism"]`, or gene name capitalization
+> (ALL CAPS → human, Title Case → mouse). Pass `organism=` explicitly to override.
+
 ### Token-Priced Features
 
 | Function | Description |

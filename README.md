@@ -36,6 +36,10 @@ singlet.info("GSE264667")
 # Load a sample (returns AnnData)
 adata = singlet.load("GSM1234567")
 
+# Cell type annotation (free, local — no API key needed)
+labels = singlet.annotate(adata)  # auto-detects organism
+H = singlet.project(adata)        # NMF gene program loadings
+
 # File I/O
 adata = singlet.read_1pz("counts.1pz")
 singlet.write_1pz(adata, "output.1pz")
@@ -124,7 +128,7 @@ cmake --build build -j$(nproc)
 cmake -B build -DSINGLET_BUILD_TESTS=ON
 cmake --build build -j$(nproc) && ctest --test-dir build -j$(nproc)
 
-# Run Python tests (608 tests)
+# Run Python tests (618 tests)
 pip install -e ".[dev]"
 pytest tests/python/
 
