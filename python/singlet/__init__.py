@@ -179,6 +179,7 @@ from singlet._plot_ranking import plot_ranking
 from singlet._plot_scatter import plot_scatter
 from singlet._plot_stacked_violin import plot_stacked_violin
 from singlet._plot_tracks import rank_genes_groups_tracksplot
+from singlet._predict_cell_type import predict_cell_type
 from singlet._pseudobulk import pseudobulk
 from singlet._qc import calculate_qc_metrics
 from singlet._qc_summary import qc_summary
@@ -198,12 +199,14 @@ from singlet._splicing_ratio import splicing_ratio
 from singlet._subcluster import leiden_subclustering
 from singlet._subsample import subsample
 from singlet._subsample_balanced import subsample_balanced
+from singlet._topic_model import topic_model
 from singlet._trajectory_genes import trajectory_genes
 from singlet._transfer_labels import transfer_labels
 from singlet._transforms import expm1, log1p, sqrt_transform
 from singlet._tsne import tsne
 from singlet._umap import umap
 from singlet._variance_partition import variance_partition
+from singlet._variational_inference import variational_inference
 from singlet._velocity_pseudotime import velocity_pseudotime
 from singlet._versions import show_versions
 from singlet._weighted_nearest_neighbors import weighted_nearest_neighbors
@@ -460,4 +463,10 @@ __all__ = [
     "gene_trend_clustering",
     # Perturbation signature
     "perturbation_signature",
+    # Topic modeling
+    "topic_model",
+    # Cell type prediction
+    "predict_cell_type",
+    # Variational inference
+    "variational_inference",
 ]
