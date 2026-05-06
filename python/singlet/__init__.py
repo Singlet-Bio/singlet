@@ -105,6 +105,7 @@ from singlet._dendrogram import dendrogram
 from singlet._denoise import denoise
 from singlet._describe import describe
 from singlet._differential_abundance import differential_abundance
+from singlet._differential_test import differential_test
 from singlet._diffmap import diffmap
 from singlet._doublet_score_hybrid import doublet_score_hybrid
 from singlet._downsample import downsample_counts
@@ -154,6 +155,7 @@ from singlet._metacell import metacell
 from singlet._metrics import calinski_harabasz_score, silhouette_score
 from singlet._mnn import mnn_correct
 from singlet._morans_i import morans_i
+from singlet._multiome_factor_analysis import multiome_factor_analysis
 from singlet._neighbors import neighbors
 from singlet._nmf import nmf
 from singlet._normalize import normalize
@@ -179,6 +181,7 @@ from singlet._query import query, search
 from singlet._rank_genes import rank_genes
 from singlet._recipes import recipe_seurat, recipe_zheng17
 from singlet._regress import regress_out
+from singlet._reprogramming_score import reprogramming_score
 from singlet._scale import scale
 from singlet._scanorama_integrate import scanorama_integrate
 from singlet._score import score_genes
@@ -433,4 +436,10 @@ __all__ = [
     "marker_specificity",
     # Gene-space embedding
     "gene_space_embedding",
+    # Reprogramming potential
+    "reprogramming_score",
+    # Distribution-level differential testing
+    "differential_test",
+    # Multi-modal factor analysis
+    "multiome_factor_analysis",
 ]
