@@ -88,6 +88,8 @@ from singlet._combat import combat
 from singlet._mnn import mnn_correct
 from singlet._concat import concatenate
 from singlet._de import rank_genes_groups, rank_genes_groups_df
+from singlet._draw_graph import draw_graph
+from singlet._filter_de import filter_rank_genes_groups
 from singlet._downsample import downsample_counts
 from singlet._dendrogram import dendrogram
 from singlet._diffmap import diffmap
@@ -224,9 +226,12 @@ __all__ = [
     "dpt",
     "umap",
     "paga",
+    # Graph layout
+    "draw_graph",
     # Differential expression
     "rank_genes_groups",
     "rank_genes_groups_df",
+    "filter_rank_genes_groups",
     "rank_genes_groups_dotplot",
     "rank_genes_groups_matrixplot",
     "rank_genes_groups_tracksplot",
