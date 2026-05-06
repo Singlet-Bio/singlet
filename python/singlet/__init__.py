@@ -83,6 +83,9 @@ from singlet._catalog import (
     top_series,
 )
 from singlet._correlation import correlation_matrix
+from singlet._cv_resolution import cross_validate_resolution
+from singlet._metrics import calinski_harabasz_score, silhouette_score
+from singlet._wishart import wishart_test
 from singlet._recipes import recipe_seurat, recipe_zheng17
 from singlet._spatial import spatial_neighbors
 from singlet._combat import combat
@@ -278,4 +281,9 @@ __all__ = [
     "log1p",
     "expm1",
     "sqrt_transform",
+    # Clustering metrics
+    "silhouette_score",
+    "calinski_harabasz_score",
+    "cross_validate_resolution",
+    "wishart_test",
 ]
