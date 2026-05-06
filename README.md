@@ -42,7 +42,9 @@ singlet.write_1pz(adata, "output.1pz")
 
 # GPU analysis (pip install singlet[gpu])
 from singlet import gpu
-gpu.pp.normalize(adata)
+from singlet.gpu import preprocess as sgpp
+sgpp.normalize_total(adata)
+sgpp.log1p(adata)
 gpu.reduce.pca(adata, n_components=50)
 gpu.pp.neighbors(adata)
 gpu.tools.leiden(adata)

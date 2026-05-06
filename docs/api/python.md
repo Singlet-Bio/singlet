@@ -97,25 +97,28 @@ GPU-accelerated analysis (requires `pip install singlet[gpu]`).
 
 ```python
 from singlet import gpu
+from singlet.gpu import preprocess as sgpp
 
-gpu.pp.normalize(adata)
+sgpp.normalize_total(adata)
+sgpp.log1p(adata)
 gpu.reduce.pca(adata, n_components=50)
 gpu.pp.neighbors(adata, n_neighbors=15)
 gpu.tools.leiden(adata)
 gpu.tools.umap(adata)
-gpu.de.pseudobulk(adata, groupby="cell_type", sample_col="donor_id")
+gpu.de.pseudobulk_de(adata, groupby="cell_type", sample_col="donor_id")
 ```
 
 ### Submodules
 
 | Submodule | Functions |
 |-----------|-----------|
-| `gpu.pp` | `normalize`, `log1p`, `highly_variable_genes`, `neighbors` |
-| `gpu.reduce` | `pca`, `nmf`, `svd` |
-| `gpu.tools` | `leiden`, `umap`, `diffmap` |
-| `gpu.de` | `pseudobulk` (donor-level DESeq2-style) |
-| `gpu.enrich` | `ssgsea` (single-sample GSEA) |
-| `gpu.io` | `load_pz` (direct GPU load) |
+| `gpu.pp` | `neighbors` |
+| `gpu.preprocess` | `normalize_total`, `log1p`, `highly_variable_genes`, `scale`, `regress_out` |
+| `gpu.reduce` | `pca`, `nmf`, `nmf_chunked`, `nmf_graph_factorize`, `svd_*` |
+| `gpu.tools` | `leiden`, `umap`, `rank_genes_groups`, `score_genes`, `celltypist_predict` |
+| `gpu.de` | `pseudobulk_de` (donor-level NB GLM) |
+| `gpu.enrich` | `run_ssgsea`, `run_progeny`, `run_score_genes` |
+| `gpu.io` | `read_pz_to_anndata`, `write_anndata_to_pz`, `load_pz` |
 
 ---
 

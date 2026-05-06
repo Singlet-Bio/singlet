@@ -33,11 +33,12 @@ print(adata)
 
 ```python
 from singlet import gpu
+from singlet.gpu import preprocess as sgpp
 
 # Full pipeline on GPU (10-50× faster than Scanpy for 100k+ cells)
-gpu.pp.normalize_total(adata)
-gpu.pp.log1p(adata)
-gpu.pp.highly_variable_genes(adata, n_top_genes=2000)
+sgpp.normalize_total(adata)
+sgpp.log1p(adata)
+sgpp.highly_variable_genes(adata, n_top_genes=2000)
 gpu.reduce.pca(adata, n_comps=50)
 gpu.pp.neighbors(adata, n_neighbors=15)
 gpu.tools.leiden(adata, resolution=1.0)
