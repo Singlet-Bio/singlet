@@ -85,6 +85,7 @@ from singlet._catalog import (
 )
 from singlet._cell_cycle import score_cell_cycle
 from singlet._combat import combat
+from singlet._composition_analysis import composition_analysis
 from singlet._concat import concatenate
 from singlet._connectivity_score import connectivity_score
 from singlet._correlation import correlation_matrix
@@ -94,6 +95,7 @@ from singlet._dendrogram import dendrogram
 from singlet._denoise import denoise
 from singlet._describe import describe
 from singlet._diffmap import diffmap
+from singlet._doublet_score_hybrid import doublet_score_hybrid
 from singlet._downsample import downsample_counts
 from singlet._dpt import dpt
 from singlet._draw_graph import draw_graph
@@ -157,6 +159,7 @@ from singlet._score import score_genes
 from singlet._scrublet import scrublet
 from singlet._sparse_pca import sparse_pca
 from singlet._spatial import spatial_neighbors
+from singlet._splicing_ratio import splicing_ratio
 from singlet._subcluster import leiden_subclustering
 from singlet._subsample import subsample
 from singlet._transfer_labels import transfer_labels
@@ -289,6 +292,7 @@ __all__ = [
     "scanorama_integrate",
     # Doublet detection
     "scrublet",
+    "doublet_score_hybrid",
     # Correlation
     "correlation_matrix",
     # Connectivity
@@ -337,4 +341,8 @@ __all__ = [
     "phenograph",
     # Comprehensive marker finding
     "find_all_markers",
+    # Cell composition
+    "composition_analysis",
+    # Splicing
+    "splicing_ratio",
 ]
