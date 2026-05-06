@@ -82,6 +82,7 @@ from singlet._catalog import (
     top_series,
 )
 from singlet._combat import combat
+from singlet._concat import concatenate
 from singlet._de import rank_genes_groups
 from singlet._dendrogram import dendrogram
 from singlet._describe import describe
@@ -178,6 +179,7 @@ __all__ = [
     "filter_cells",
     "filter_genes",
     "subsample",
+    "concatenate",
     # Preprocessing
     "normalize",
     "highly_variable_genes",
