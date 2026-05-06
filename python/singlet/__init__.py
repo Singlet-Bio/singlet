@@ -41,6 +41,9 @@ Cell type annotation (free, local):
     singlet.project(adata)                 Project cells → gene program space (H matrix)
     singlet.annotate(adata)                Annotate cells with types (NMF-based)
 
+Exploration:
+    singlet.describe(adata)                Quick summary stats (sparsity, counts, genes)
+
 Token-priced (requires API key):
     singlet.login(key)                     Authenticate
     singlet.query(...)                     Cross-atlas query → AnnData
@@ -68,6 +71,7 @@ from singlet._catalog import (
     tissues,
     top_series,
 )
+from singlet._describe import describe
 from singlet._io import (
     info_1pz,
     read_1pz,
@@ -142,6 +146,8 @@ __all__ = [
     "from_zarr",
     "from_mtx",
     "from_tiledb",
+    # Exploration
+    "describe",
     # Diagnostics
     "show_versions",
 ]
