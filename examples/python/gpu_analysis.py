@@ -11,6 +11,7 @@ Typical speedup: 10-50x vs scanpy on CPU for 100k+ cells.
 
 import singlet
 from singlet import gpu
+from singlet.gpu import preprocess as sgpp
 
 # Load sample
 adata = singlet.load("GSM4037629")
@@ -20,9 +21,9 @@ print(f"Loaded: {adata.n_obs} cells × {adata.n_vars} genes")
 adata = gpu.io.to_device(adata)
 
 # Preprocessing (runs on GPU)
-gpu.pp.normalize_total(adata)
-gpu.pp.log1p(adata)
-gpu.pp.highly_variable_genes(adata, n_top_genes=2000)
+sgpp.normalize_total(adata)
+sgpp.log1p(adata)
+sgpp.highly_variable_genes(adata, n_top_genes=2000)
 
 # Dimensionality reduction
 adata_hvg = adata[:, adata.var["highly_variable"]].copy()
