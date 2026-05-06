@@ -136,6 +136,26 @@ class TestProject:
         assert H.shape == (5, 5)
         assert np.all(H >= 0)
 
+    @patch("singlet._annotate.gene_programs")
+    def test_low_overlap_warns(self, mock_gp, small_adata):
+        """project() warns when <50% of model genes overlap."""
+        import warnings
+
+        # W has 500 genes but only 200 overlap with small_adata (40% overlap → warns)
+        W_large = pd.DataFrame(
+            np.random.rand(500, 5),
+            index=[f"GENE{i}" for i in range(200)] + [f"OTHER{i}" for i in range(300)],
+            columns=[f"P{i + 1:03d}" for i in range(5)],
+        )
+        mock_gp.return_value = W_large
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            H = project(small_adata, organism="Homo sapiens", k=5)
+            assert len(w) == 1
+            assert "200/500" in str(w[0].message)
+        assert H.shape == (10, 5)
+
 
 # ---------------------------------------------------------------------------
 # annotate

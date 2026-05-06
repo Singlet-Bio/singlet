@@ -374,3 +374,11 @@ class TestReadWrite1pzValidation:
 
         with pytest.raises(TypeError, match="write_1pz.*requires an AnnData"):
             write_1pz({"X": [1, 2]}, "/tmp/out.1pz")
+
+
+def test_info_1pz_nonexistent_raises():
+    """info_1pz raises FileNotFoundError for missing file."""
+    from singlet._io import info_1pz
+
+    with pytest.raises(FileNotFoundError, match="File not found"):
+        info_1pz("/nonexistent/path/data.1pz")

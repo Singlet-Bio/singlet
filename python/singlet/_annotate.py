@@ -194,6 +194,16 @@ def project(adata, *, organism: Optional[str] = None, k: int = 100) -> np.ndarra
             f"Only {len(shared_genes)} genes overlap between your data and "
             f"the {organism} gene program model. Need at least 100."
         )
+    if len(shared_genes) < len(W_df) * 0.5:
+        import warnings
+
+        warnings.warn(
+            f"Only {len(shared_genes)}/{len(W_df)} genes overlap with the model. "
+            f"Results may be less accurate. Check that gene names match "
+            f"(e.g., Ensembl IDs vs symbols).",
+            UserWarning,
+            stacklevel=2,
+        )
 
     W = W_df.loc[shared_genes].values  # (n_shared_genes, k)
     X = adata[:, shared_genes].X  # (n_cells, n_shared_genes)
