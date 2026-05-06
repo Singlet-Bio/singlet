@@ -82,6 +82,7 @@ from singlet._catalog import (
     top_series,
 )
 from singlet._combat import combat
+from singlet._mnn import mnn_correct
 from singlet._concat import concatenate
 from singlet._de import rank_genes_groups, rank_genes_groups_df
 from singlet._dendrogram import dendrogram
@@ -123,6 +124,7 @@ from singlet._qc import calculate_qc_metrics
 from singlet._query import query, search
 from singlet._regress import regress_out
 from singlet._scale import scale
+from singlet._scrublet import scrublet
 from singlet._score import score_genes
 from singlet._subsample import subsample
 from singlet._tsne import tsne
@@ -227,6 +229,9 @@ __all__ = [
     # Batch correction
     "harmony",
     "combat",
+    "mnn_correct",
+    # Doublet detection
+    "scrublet",
     # Plotting
     "plot_umap",
     "plot_violin",
