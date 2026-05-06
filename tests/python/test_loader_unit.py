@@ -75,6 +75,23 @@ class TestDownload:
         assert "Authorization" in headers
         auth._API_KEY = None
 
+    @patch("requests.get")
+    def test_interrupted_download_no_corrupt_file(self, mock_get, tmp_path):
+        """Interrupted download does not leave a corrupt .1pz file."""
+        from singlet._loader import download
+
+        mock_resp = MagicMock()
+        mock_resp.headers = {"content-length": "100"}
+        mock_resp.iter_content.side_effect = ConnectionError("network dropped")
+        mock_get.return_value = mock_resp
+
+        with pytest.raises(ConnectionError):
+            download("GSE_INTERRUPT", output_dir=tmp_path, source="zenodo")
+
+        # The .1pz file should NOT exist (only .part was written and cleaned up)
+        assert not (tmp_path / "GSE_INTERRUPT.1pz").exists()
+        assert not (tmp_path / "GSE_INTERRUPT.1pz.part").exists()
+
 
 # ---------------------------------------------------------------------------
 # load()

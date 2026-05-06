@@ -117,19 +117,26 @@ def download(
             ) from None
         raise RuntimeError(f"Failed to download '{accession}' from {source}: {e}") from e
 
+    # Write to temp file first, then atomic rename (interrupted downloads don't corrupt cache)
+    tmp_dest = dest.with_suffix(".1pz.part")
     total = int(resp.headers.get("content-length", 0))
-    if tqdm is not None:
-        with (
-            open(dest, "wb") as f,
-            tqdm(total=total, unit="B", unit_scale=True, desc=accession) as pbar,
-        ):
-            for chunk in resp.iter_content(chunk_size=1 << 16):
-                f.write(chunk)
-                pbar.update(len(chunk))
-    else:
-        with open(dest, "wb") as f:
-            for chunk in resp.iter_content(chunk_size=1 << 16):
-                f.write(chunk)
+    try:
+        if tqdm is not None:
+            with (
+                open(tmp_dest, "wb") as f,
+                tqdm(total=total, unit="B", unit_scale=True, desc=accession) as pbar,
+            ):
+                for chunk in resp.iter_content(chunk_size=1 << 16):
+                    f.write(chunk)
+                    pbar.update(len(chunk))
+        else:
+            with open(tmp_dest, "wb") as f:
+                for chunk in resp.iter_content(chunk_size=1 << 16):
+                    f.write(chunk)
+        tmp_dest.rename(dest)
+    except BaseException:
+        tmp_dest.unlink(missing_ok=True)
+        raise
 
     return dest
 
