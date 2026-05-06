@@ -40,8 +40,22 @@ def _download_model(organism: str, k: int) -> Path:
         return local_path
 
     url = f"{_R2_BASE}/gene_programs/{filename}"
-    resp = requests.get(url, timeout=120)
-    resp.raise_for_status()
+    try:
+        resp = requests.get(url, timeout=120)
+        resp.raise_for_status()
+    except requests.ConnectionError:
+        raise RuntimeError(
+            f"Cannot reach model server ({_R2_BASE}). "
+            "Check your internet connection, or cache models locally with "
+            "'singlet.gene_programs(organism)' while online."
+        ) from None
+    except requests.HTTPError as e:
+        if resp.status_code == 404:
+            raise FileNotFoundError(
+                f"No gene program model for organism={organism!r}, k={k}. "
+                "Available: Homo sapiens, Mus musculus."
+            ) from None
+        raise RuntimeError(f"Failed to download model: {e}") from e
     local_path.write_bytes(resp.content)
     return local_path
 
