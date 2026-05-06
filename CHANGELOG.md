@@ -28,12 +28,12 @@ All notable changes to the singlet project.
 - **Python API reference**: `docs/api/python.md` covers all public modules
 - **Annotation tests**: 15 unit tests for `_annotate.py` (gene_programs, project, annotate)
 - **Security**: `SECURITY.md` vulnerability reporting policy + pip-audit CI job
-- **Python tests**: 1002 total (up from 205 at cycle 184, 98% core coverage)
-- **Public API**: 80 functions exported
-- **Preprocessing API**: `describe()`, `filter_cells()`, `filter_genes()`, `normalize()`, `highly_variable_genes()`, `highly_variable_genes_seurat_v3()`, `scale()`, `subsample()`, `concatenate()`, `calculate_qc_metrics()`, `regress_out()` — standard scRNA-seq workflow without scanpy
-- **Analysis pipeline**: `pca()`, `neighbors()`, `leiden()`, `louvain()`, `umap()`, `tsne()`, `diffmap()`, `dpt()`, `harmony()`, `combat()`, `paga()`, `ingest()` — full dimensionality reduction + clustering + batch correction + trajectory + label transfer without scanpy
+- **Python tests**: 1085 total (up from 205 at cycle 184, 98% core coverage)
+- **Public API**: 91 functions exported
+- **Preprocessing API**: `describe()`, `filter_cells()`, `filter_genes()`, `normalize()`, `highly_variable_genes()`, `highly_variable_genes_seurat_v3()`, `scale()`, `subsample()`, `concatenate()`, `calculate_qc_metrics()`, `regress_out()`, `downsample_counts()`, `recipe_seurat()`, `recipe_zheng17()` — standard scRNA-seq workflow without scanpy
+- **Analysis pipeline**: `pca()`, `neighbors()`, `spatial_neighbors()`, `leiden()`, `louvain()`, `umap()`, `tsne()`, `diffmap()`, `dpt()`, `harmony()`, `combat()`, `mnn_correct()`, `paga()`, `ingest()`, `scrublet()`, `embedding_density()`, `correlation_matrix()`, `marker_gene_overlap()` — full dimensionality reduction + clustering + batch correction + trajectory + QC without scanpy
 - **Differential expression**: `rank_genes_groups()` with BH-corrected p-values, `rank_genes_groups_df()`, `score_genes()` for gene set activity scoring, `dendrogram()` for hierarchical group ordering, `enrichr()` for pathway enrichment
-- **Visualization**: `plot_umap()`, `plot_violin()`, `plot_dotplot()`, `plot_scatter()`, `plot_heatmap()`, `plot_stacked_violin()`, `plot_paga()`, `rank_genes_groups_dotplot()` — publication-ready matplotlib plots
+- **Visualization**: `plot_umap()`, `plot_violin()`, `plot_dotplot()`, `plot_scatter()`, `plot_heatmap()`, `plot_stacked_violin()`, `plot_paga()`, `plot_ranking()`, `rank_genes_groups_dotplot()`, `rank_genes_groups_tracksplot()` — publication-ready matplotlib plots
 - **Property-based tests**: 14 hypothesis tests for codec round-trip verification
 - **Code deduplication**: `convert.py` thin re-export (was 267-line copy)
 - **Lint compliance**: 0 ruff errors (B904, UP037, UP035 all resolved)
