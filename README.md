@@ -124,7 +124,7 @@ cmake --build build -j$(nproc)
 cmake -B build -DSINGLET_BUILD_TESTS=ON
 cmake --build build -j$(nproc) && ctest --test-dir build -j$(nproc)
 
-# Run Python tests (600 tests)
+# Run Python tests (602 tests)
 pip install -e ".[dev]"
 pytest tests/python/
 
