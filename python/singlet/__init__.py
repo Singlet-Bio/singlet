@@ -89,10 +89,12 @@ from singlet._catalog import (
 from singlet._cca import cca
 from singlet._cell_communication import cell_communication
 from singlet._cell_cycle import score_cell_cycle
+from singlet._cell_cycle_regression import cell_cycle_regression
 from singlet._cell_distances import cell_distances
 from singlet._cell_level_de import cell_level_de
 from singlet._cell_type_proportions import cell_type_proportions
 from singlet._cluster_stability import cluster_stability
+from singlet._coexpression_modules import coexpression_modules
 from singlet._combat import combat
 from singlet._composition_analysis import composition_analysis
 from singlet._concat import concatenate
@@ -122,6 +124,7 @@ from singlet._filter_de import filter_rank_genes_groups
 from singlet._find_all_markers import find_all_markers
 from singlet._gene_activity_score import gene_activity_score
 from singlet._gene_correlation_network import gene_correlation_network
+from singlet._gene_importance import gene_importance
 from singlet._gene_module_score import gene_module_score
 from singlet._gene_set_enrichment import gene_set_enrichment
 from singlet._gene_set_variation import gene_set_variation
@@ -469,4 +472,10 @@ __all__ = [
     "predict_cell_type",
     # Variational inference
     "variational_inference",
+    # Coexpression modules
+    "coexpression_modules",
+    # Gene importance
+    "gene_importance",
+    # Cell cycle regression
+    "cell_cycle_regression",
 ]
