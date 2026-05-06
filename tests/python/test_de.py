@@ -69,6 +69,7 @@ class TestRankGenesGroups:
         assert "names" in result
         assert "scores" in result
         assert "pvals" in result
+        assert "pvals_adj" in result
         assert "logfoldchanges" in result
         assert "rank_genes_groups" not in adata.uns
 
@@ -121,3 +122,28 @@ class TestRankGenesGroups:
     def test_public_api(self):
         assert hasattr(singlet, "rank_genes_groups")
         assert callable(singlet.rank_genes_groups)
+
+    def test_pvals_adj_present(self):
+        """Adjusted p-values should be in the result dict."""
+        adata = _make_clustered_adata()
+        result = rank_genes_groups(adata, "cluster", inplace=False)
+        assert "pvals_adj" in result
+        for group in result["pvals_adj"]:
+            pvals_adj = result["pvals_adj"][group]
+            assert all(0 <= p <= 1 for p in pvals_adj)
+
+    def test_pvals_adj_geq_pvals(self):
+        """Adjusted p-values should be >= raw p-values (BH only inflates)."""
+        adata = _make_clustered_adata()
+        result = rank_genes_groups(adata, "cluster", inplace=False)
+        for group in result["pvals"]:
+            for raw, adj in zip(result["pvals"][group], result["pvals_adj"][group]):
+                assert adj >= raw - 1e-15  # numerical tolerance
+
+    def test_pvals_adj_markers_significant(self):
+        """Known marker genes should have small adjusted p-values."""
+        adata = _make_clustered_adata()
+        result = rank_genes_groups(adata, "cluster", inplace=False)
+        # Top markers for cluster 0 should be significant after correction
+        top_pvals = result["pvals_adj"]["0"][:5]
+        assert all(p < 0.05 for p in top_pvals)

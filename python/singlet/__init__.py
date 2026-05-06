@@ -100,6 +100,7 @@ from singlet._neighbors import neighbors
 from singlet._normalize import normalize
 from singlet._pca import pca
 from singlet._query import query, search
+from singlet._subsample import subsample
 from singlet._umap import umap
 from singlet._versions import show_versions
 from singlet.convert import (
@@ -168,6 +169,7 @@ __all__ = [
     # QC filtering
     "filter_cells",
     "filter_genes",
+    "subsample",
     # Preprocessing
     "normalize",
     "highly_variable_genes",

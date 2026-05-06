@@ -39,7 +39,7 @@ def rank_genes_groups(
     Returns
     -------
     dict or None
-        Dict with keys: 'names', 'scores', 'pvals', 'logfoldchanges'
+        Dict with keys: 'names', 'scores', 'pvals', 'pvals_adj', 'logfoldchanges'
         (each a dict mapping group → array). Or None if inplace=True.
 
     Examples
@@ -77,7 +77,7 @@ def rank_genes_groups(
     gene_names = np.array(adata.var_names)
     n_genes = min(n_genes, len(gene_names))
 
-    result = {"names": {}, "scores": {}, "pvals": {}, "logfoldchanges": {}}
+    result = {"names": {}, "scores": {}, "pvals": {}, "pvals_adj": {}, "logfoldchanges": {}}
 
     for group in test_groups:
         mask_in = (adata.obs[groupby] == group).values
@@ -106,11 +106,15 @@ def rank_genes_groups(
         # Vectorized Mann-Whitney U via rank sums
         scores, pvals = _vectorized_mannwhitney(X_in, X_out, n_in, n_out)
 
+        # Benjamini-Hochberg FDR correction
+        pvals_adj = _benjamini_hochberg(pvals)
+
         # Sort by score (descending)
         sorted_idx = np.argsort(-scores)[:n_genes]
         result["names"][str(group)] = gene_names[sorted_idx].tolist()
         result["scores"][str(group)] = scores[sorted_idx].tolist()
         result["pvals"][str(group)] = pvals[sorted_idx].tolist()
+        result["pvals_adj"][str(group)] = pvals_adj[sorted_idx].tolist()
         result["logfoldchanges"][str(group)] = lfc[sorted_idx].tolist()
 
     if inplace:
@@ -172,3 +176,33 @@ def _vectorized_mannwhitney(X_in, X_out, n_in: int, n_out: int):
             pvals[start:end] = 2.0 * norm.sf(np.abs(z))
 
     return scores, pvals
+
+
+def _benjamini_hochberg(pvals):
+    """Benjamini-Hochberg FDR correction.
+
+    Returns adjusted p-values (same length as input).
+    """
+    import numpy as np
+
+    n = len(pvals)
+    if n == 0:
+        return pvals.copy()
+
+    # Sort p-values and track original order
+    sorted_idx = np.argsort(pvals)
+    sorted_pvals = pvals[sorted_idx]
+
+    # BH adjustment: p_adj[i] = p[i] * n / rank
+    adjusted = sorted_pvals * n / np.arange(1, n + 1)
+
+    # Enforce monotonicity (cumulative minimum from the end)
+    adjusted = np.minimum.accumulate(adjusted[::-1])[::-1]
+
+    # Clip to [0, 1]
+    adjusted = np.clip(adjusted, 0.0, 1.0)
+
+    # Restore original order
+    result = np.empty(n, dtype=np.float64)
+    result[sorted_idx] = adjusted
+    return result
