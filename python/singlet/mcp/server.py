@@ -357,7 +357,7 @@ async def _tool_stats() -> dict:
     species_list = singlet.species()
     species_counts = []
     for sp in species_list:
-        mask = success["organism"].str.contains(sp, na=False)
+        mask = success["organism"].str.contains(sp, na=False, regex=False)
         count = int(mask.sum())
         cells = int(success.loc[mask, "cells_called"].sum())
         species_counts.append({"organism": sp, "samples": count, "cells": cells})
@@ -686,9 +686,9 @@ async def _tool_species() -> dict:
     samples_df = singlet.samples(status="SUCCESS")
     species_counts = []
     for sp in species_list:
-        count = len(samples_df[samples_df["organism"].str.contains(sp, na=False)])
+        count = len(samples_df[samples_df["organism"].str.contains(sp, na=False, regex=False)])
         cells = int(
-            samples_df[samples_df["organism"].str.contains(sp, na=False)]["cells_called"].sum()
+            samples_df[samples_df["organism"].str.contains(sp, na=False, regex=False)]["cells_called"].sum()
         )
         species_counts.append({"species": sp, "samples": count, "cells": cells})
     species_counts.sort(key=lambda x: x["samples"], reverse=True)
