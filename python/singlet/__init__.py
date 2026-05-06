@@ -106,7 +106,9 @@ from singlet._neighbors import neighbors
 from singlet._normalize import normalize
 from singlet._pca import pca
 from singlet._plot import plot_dotplot, plot_umap, plot_violin
+from singlet._qc import calculate_qc_metrics
 from singlet._query import query, search
+from singlet._regress import regress_out
 from singlet._scale import scale
 from singlet._score import score_genes
 from singlet._subsample import subsample
@@ -176,6 +178,7 @@ __all__ = [
     # Exploration
     "describe",
     # QC filtering
+    "calculate_qc_metrics",
     "filter_cells",
     "filter_genes",
     "subsample",
@@ -184,6 +187,7 @@ __all__ = [
     "normalize",
     "highly_variable_genes",
     "scale",
+    "regress_out",
     "pca",
     "neighbors",
     "leiden",
