@@ -28,7 +28,7 @@ All notable changes to the singlet project.
 - **Python API reference**: `docs/api/python.md` covers all public modules
 - **Annotation tests**: 15 unit tests for `_annotate.py` (gene_programs, project, annotate)
 - **Security**: `SECURITY.md` vulnerability reporting policy + pip-audit CI job
-- **Python tests**: 603 total (up from 205 at cycle 184, 98% core coverage)
+- **Python tests**: 607 total (up from 205 at cycle 184, 98% core coverage)
 - **Property-based tests**: 14 hypothesis tests for codec round-trip verification
 - **Code deduplication**: `convert.py` thin re-export (was 267-line copy)
 - **Lint compliance**: 0 ruff errors (B904, UP037, UP035 all resolved)
