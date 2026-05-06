@@ -64,6 +64,7 @@ __version__ = "2.0.0"
 
 from singlet._aggregate import aggregate
 from singlet._annotate import annotate, gene_programs, project
+from singlet._annotate_cell_types import annotate_cell_types
 from singlet._auth import login
 from singlet._catalog import (
     catalog,
@@ -138,12 +139,14 @@ from singlet._plot_ranking import plot_ranking
 from singlet._plot_scatter import plot_scatter
 from singlet._plot_stacked_violin import plot_stacked_violin
 from singlet._plot_tracks import rank_genes_groups_tracksplot
+from singlet._pseudobulk import pseudobulk
 from singlet._qc import calculate_qc_metrics
 from singlet._query import query, search
 from singlet._rank_genes import rank_genes
 from singlet._recipes import recipe_seurat, recipe_zheng17
 from singlet._regress import regress_out
 from singlet._scale import scale
+from singlet._scanorama_integrate import scanorama_integrate
 from singlet._score import score_genes
 from singlet._scrublet import scrublet
 from singlet._sparse_pca import sparse_pca
@@ -232,6 +235,7 @@ __all__ = [
     "downsample_counts",
     "concatenate",
     "aggregate",
+    "pseudobulk",
     # Preprocessing
     "normalize",
     "highly_variable_genes",
@@ -276,6 +280,7 @@ __all__ = [
     "harmony",
     "combat",
     "mnn_correct",
+    "scanorama_integrate",
     # Doublet detection
     "scrublet",
     # Correlation
@@ -299,6 +304,8 @@ __all__ = [
     # Integration
     "ingest",
     "transfer_labels",
+    # Cell type annotation
+    "annotate_cell_types",
     # Diagnostics
     "show_versions",
     # Transforms
