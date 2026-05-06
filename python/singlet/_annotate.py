@@ -156,6 +156,9 @@ def project(adata, *, organism: Optional[str] = None, k: int = 100) -> np.ndarra
     """
     import scipy.sparse as sp
 
+    if not hasattr(adata, "X") or not hasattr(adata, "var_names"):
+        raise TypeError(f"project() requires an AnnData object, got {type(adata).__name__}")
+
     if organism is None:
         organism = _detect_organism(adata)
 
@@ -216,6 +219,9 @@ def annotate(adata, *, organism: Optional[str] = None, k: int = 100) -> pd.DataF
     >>> annotations["cell_type"].value_counts()
     """
     import pandas as pd
+
+    if not hasattr(adata, "X") or not hasattr(adata, "var_names"):
+        raise TypeError(f"annotate() requires an AnnData object, got {type(adata).__name__}")
 
     if organism is None:
         organism = _detect_organism(adata)
