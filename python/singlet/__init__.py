@@ -87,6 +87,7 @@ from singlet._catalog import (
 )
 from singlet._cca import cca
 from singlet._cell_cycle import score_cell_cycle
+from singlet._cell_type_proportions import cell_type_proportions
 from singlet._combat import combat
 from singlet._composition_analysis import composition_analysis
 from singlet._concat import concatenate
@@ -107,6 +108,7 @@ from singlet._embedding_density import embedding_density
 from singlet._enrichr import enrichr, enrichr_from_de
 from singlet._entropy_score import entropy_score
 from singlet._export_df import obs_df, to_df, var_df
+from singlet._fate_probabilities import fate_probabilities
 from singlet._filter import filter_cells, filter_genes
 from singlet._filter_de import filter_rank_genes_groups
 from singlet._find_all_markers import find_all_markers
@@ -117,6 +119,7 @@ from singlet._harmony import harmony
 from singlet._hvg import highly_variable_genes
 from singlet._hvg_cell_ranger import highly_variable_genes_cell_ranger
 from singlet._hvg_seurat import highly_variable_genes_seurat_v3
+from singlet._ica import ica
 from singlet._infer_grn import infer_grn
 from singlet._ingest import ingest
 from singlet._io import (
@@ -268,6 +271,7 @@ __all__ = [
     "nmf",
     "pca",
     "sparse_pca",
+    "ica",
     "magic",
     "neighbors",
     "leiden",
@@ -346,6 +350,8 @@ __all__ = [
     "velocity_pseudotime",
     # Trajectory analysis
     "trajectory_genes",
+    # Cell fate probabilities
+    "fate_probabilities",
     # Denoising
     "denoise",
     # Metacell
@@ -360,6 +366,8 @@ __all__ = [
     "find_all_markers",
     # Cell composition
     "composition_analysis",
+    # Cell type proportions
+    "cell_type_proportions",
     # Splicing
     "splicing_ratio",
     # Neighborhood entropy
