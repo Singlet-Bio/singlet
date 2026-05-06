@@ -94,6 +94,7 @@ from singlet._io import (
     write_spz,
 )
 from singlet._loader import download, load, load_dir, load_sample
+from singlet._neighbors import neighbors
 from singlet._normalize import normalize
 from singlet._pca import pca
 from singlet._query import query, search
@@ -168,6 +169,7 @@ __all__ = [
     "normalize",
     "highly_variable_genes",
     "pca",
+    "neighbors",
     # Diagnostics
     "show_versions",
 ]
