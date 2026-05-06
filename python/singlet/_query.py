@@ -86,6 +86,7 @@ def query(
     )
     resp.raise_for_status()
 
+    import os
     import tempfile
 
     from singlet._io import read_spz
@@ -94,7 +95,10 @@ def query(
         f.write(resp.content)
         tmp_path = f.name
 
-    return read_spz(tmp_path)
+    try:
+        return read_spz(tmp_path)
+    finally:
+        os.unlink(tmp_path)
 
 
 def search(text: str, max_results: int = 100_000) -> AnnData:
@@ -124,6 +128,7 @@ def search(text: str, max_results: int = 100_000) -> AnnData:
     )
     resp.raise_for_status()
 
+    import os
     import tempfile
 
     from singlet._io import read_spz
@@ -132,4 +137,7 @@ def search(text: str, max_results: int = 100_000) -> AnnData:
         f.write(resp.content)
         tmp_path = f.name
 
-    return read_spz(tmp_path)
+    try:
+        return read_spz(tmp_path)
+    finally:
+        os.unlink(tmp_path)
