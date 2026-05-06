@@ -115,3 +115,19 @@ def test_write_spz_invalid_precision(tmp_path):
     adata = ad.AnnData(X=sp.csr_matrix(np.ones((3, 5))))
     with pytest.raises(ValueError, match="Invalid precision"):
         write_spz(adata, tmp_path / "test.spz", precision="invalid")
+
+
+def test_write_spz_rejects_none(tmp_path):
+    """write_spz raises TypeError for None adata."""
+    from singlet._io import write_spz
+
+    with pytest.raises(TypeError, match="write_spz.*requires an AnnData"):
+        write_spz(None, tmp_path / "test.spz")
+
+
+def test_write_spz_rejects_non_adata(tmp_path):
+    """write_spz raises TypeError for non-AnnData."""
+    from singlet._io import write_spz
+
+    with pytest.raises(TypeError, match="write_spz.*requires an AnnData"):
+        write_spz({"X": [1]}, tmp_path / "test.spz")

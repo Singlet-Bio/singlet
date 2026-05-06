@@ -197,8 +197,6 @@ def project(adata, *, organism: Optional[str] = None, k: int = 100) -> np.ndarra
 
     W = W_df.loc[shared_genes].values  # (n_shared_genes, k)
     X = adata[:, shared_genes].X  # (n_cells, n_shared_genes)
-    if sp.issparse(X):
-        X = X.toarray()
 
     # Non-negative least squares: solve min ||x - W @ h|| s.t. h >= 0
     from scipy.optimize import nnls
@@ -206,8 +204,13 @@ def project(adata, *, organism: Optional[str] = None, k: int = 100) -> np.ndarra
     n_cells = X.shape[0]
     H = np.zeros((n_cells, k), dtype=np.float64)
 
-    for i in range(n_cells):
-        H[i], _ = nnls(W, X[i])
+    if sp.issparse(X):
+        # Row-at-a-time to avoid full .toarray() OOM on large matrices
+        for i in range(n_cells):
+            H[i], _ = nnls(W, X[i].toarray().ravel())
+    else:
+        for i in range(n_cells):
+            H[i], _ = nnls(W, X[i])
 
     return H
 

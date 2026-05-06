@@ -368,3 +368,9 @@ class TestReadWrite1pzValidation:
 
         with pytest.raises(TypeError, match="got None"):
             write_1pz(None, "/tmp/out.1pz")
+
+    def test_write_1pz_non_adata_raises_typeerror(self):
+        from singlet._io import write_1pz
+
+        with pytest.raises(TypeError, match="write_1pz.*requires an AnnData"):
+            write_1pz({"X": [1, 2]}, "/tmp/out.1pz")

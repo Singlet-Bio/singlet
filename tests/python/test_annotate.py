@@ -440,3 +440,17 @@ class TestDetectOrganismFromGenes:
         )
         with pytest.raises(ValueError, match="Could not detect organism"):
             _detect_organism(adata)
+
+
+class TestProjectAnnotateTypeValidation:
+    """project() and annotate() reject non-AnnData inputs."""
+
+    def test_project_rejects_non_adata(self):
+        with pytest.raises(TypeError, match="project\\(\\) requires an AnnData"):
+            project("not_an_adata", organism="Homo sapiens")
+
+    def test_annotate_rejects_non_adata(self):
+        from singlet._annotate import annotate
+
+        with pytest.raises(TypeError, match="annotate\\(\\) requires an AnnData"):
+            annotate({"X": [1, 2, 3]}, organism="Homo sapiens")
