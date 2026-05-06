@@ -297,3 +297,162 @@ def plot_violin(
         return None
     else:
         return fig
+
+
+def plot_dotplot(
+    adata,
+    var_names: Union[list[str], dict[str, list[str]]],
+    groupby: str,
+    *,
+    layer: Optional[str] = None,
+    cmap: str = "Reds",
+    figsize: Optional[tuple] = None,
+    dendrogram: bool = False,
+    save: Optional[str] = None,
+    show: bool = True,
+) -> Optional["matplotlib.figure.Figure"]:
+    """Dot plot showing gene expression by group.
+
+    Dot size = fraction of cells expressing the gene.
+    Dot color = mean expression among expressing cells.
+
+    Parameters
+    ----------
+    adata : anndata.AnnData
+        Annotated data matrix.
+    var_names : list[str] or dict[str, list[str]]
+        Genes to plot. If dict, keys are category labels.
+    groupby : str
+        Column in adata.obs to group cells by.
+    layer : str or None, default None
+        Layer for expression values.
+    cmap : str, default "Reds"
+        Colormap for mean expression.
+    figsize : tuple or None, default None
+        Figure size. Auto-computed if None.
+    dendrogram : bool, default False
+        If True, order groups by dendrogram (requires prior dendrogram call).
+    save : str or None, default None
+        Path to save figure.
+    show : bool, default True
+        Whether to display the plot.
+
+    Returns
+    -------
+    matplotlib.figure.Figure or None
+        Figure if show=False.
+
+    Examples
+    --------
+    >>> import singlet
+    >>> singlet.plot_dotplot(adata, ["CD3D", "MS4A1", "NKG7"], groupby="leiden")
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import scipy.sparse as sp
+
+    if not hasattr(adata, "obs"):
+        raise TypeError(f"plot_dotplot() requires an AnnData object, got {type(adata).__name__}")
+
+    if groupby not in adata.obs.columns:
+        raise KeyError(f"'{groupby}' not found in adata.obs.columns")
+
+    # Flatten gene list
+    if isinstance(var_names, dict):
+        genes = []
+        for gene_group in var_names.values():
+            genes.extend(gene_group)
+    else:
+        genes = list(var_names)
+
+    # Filter to available genes
+    available = [g for g in genes if g in adata.var_names]
+    if not available:
+        raise ValueError("None of the specified genes are in adata.var_names")
+
+    # Get groups order
+    groups = adata.obs[groupby]
+    if dendrogram and f"dendrogram_{groupby}" in adata.uns:
+        categories = adata.uns[f"dendrogram_{groupby}"]["categories_ordered"]
+    else:
+        categories = sorted(groups.unique(), key=str)
+
+    n_groups = len(categories)
+    n_genes = len(available)
+
+    # Compute fraction expressing and mean expression
+    frac_expr = np.zeros((n_groups, n_genes), dtype=np.float64)
+    mean_expr = np.zeros((n_groups, n_genes), dtype=np.float64)
+
+    if layer is not None and layer in adata.layers:
+        X_source = adata.layers[layer]
+    else:
+        X_source = adata.X
+
+    for gi, gene in enumerate(available):
+        gene_idx = list(adata.var_names).index(gene)
+        if sp.issparse(X_source):
+            col = np.asarray(X_source[:, gene_idx].todense()).ravel()
+        else:
+            col = np.array(X_source[:, gene_idx]).ravel()
+
+        for ci, cat in enumerate(categories):
+            mask = np.array(groups == cat)
+            n_cells = mask.sum()
+            if n_cells == 0:
+                continue
+            values = col[mask]
+            expressing = values > 0
+            frac_expr[ci, gi] = expressing.sum() / n_cells
+            if expressing.any():
+                mean_expr[ci, gi] = values[expressing].mean()
+
+    # Plot
+    if figsize is None:
+        figsize = (max(4, n_genes * 0.6 + 2), max(3, n_groups * 0.5 + 1))
+
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
+
+    max_size = 200
+    for ci in range(n_groups):
+        for gi in range(n_genes):
+            size = frac_expr[ci, gi] * max_size
+            if size > 0:
+                ax.scatter(
+                    gi,
+                    ci,
+                    s=size,
+                    c=[mean_expr[ci, gi]],
+                    cmap=cmap,
+                    vmin=0,
+                    vmax=mean_expr.max() if mean_expr.max() > 0 else 1,
+                    edgecolors="gray",
+                    linewidths=0.5,
+                )
+
+    ax.set_xticks(range(n_genes))
+    ax.set_xticklabels(available, rotation=90)
+    ax.set_yticks(range(n_groups))
+    ax.set_yticklabels([str(c) for c in categories])
+    ax.set_xlabel("Genes")
+    ax.set_ylabel(groupby)
+
+    for frac in [0.25, 0.5, 0.75, 1.0]:
+        ax.scatter([], [], s=frac * max_size, c="gray", alpha=0.5, label=f"{int(frac * 100)}%")
+    ax.legend(
+        title="% expressing",
+        bbox_to_anchor=(1.15, 1),
+        loc="upper left",
+        frameon=False,
+    )
+
+    plt.tight_layout()
+
+    if save is not None:
+        fig.savefig(save, dpi=150, bbox_inches="tight")
+
+    if show:
+        plt.show()
+        return None
+    else:
+        return fig

@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 import scipy.sparse as sp
 import singlet
-from singlet._plot import plot_umap, plot_violin
+from singlet._plot import plot_dotplot, plot_umap, plot_violin
 
 
 def _make_plot_adata(n_cells=100, n_genes=50):
@@ -214,3 +214,63 @@ class TestPlotViolin:
     def test_public_api(self):
         assert hasattr(singlet, "plot_violin")
         assert callable(singlet.plot_violin)
+
+
+class TestPlotDotplot:
+    def test_basic(self):
+        """Should plot dot plot for given genes."""
+        adata = _make_plot_adata()
+        fig = plot_dotplot(adata, ["GENE0", "GENE1", "GENE2"], groupby="leiden", show=False)
+        assert fig is not None
+        import matplotlib.pyplot as plt
+
+        plt.close(fig)
+
+    def test_dict_var_names(self):
+        """Should accept dict of gene groups."""
+        adata = _make_plot_adata()
+        var_dict = {"group_a": ["GENE0", "GENE1"], "group_b": ["GENE2", "GENE3"]}
+        fig = plot_dotplot(adata, var_dict, groupby="leiden", show=False)
+        assert fig is not None
+        import matplotlib.pyplot as plt
+
+        plt.close(fig)
+
+    def test_missing_genes_filtered(self):
+        """Should work when some genes missing (filters to available)."""
+        adata = _make_plot_adata()
+        fig = plot_dotplot(adata, ["GENE0", "NOTEXIST"], groupby="leiden", show=False)
+        assert fig is not None
+        import matplotlib.pyplot as plt
+
+        plt.close(fig)
+
+    def test_all_missing_raises(self):
+        """Should raise ValueError when no genes found."""
+        adata = _make_plot_adata()
+        with pytest.raises(ValueError, match="None of the specified"):
+            plot_dotplot(adata, ["FAKE1", "FAKE2"], groupby="leiden", show=False)
+
+    def test_missing_groupby_raises(self):
+        """Should raise KeyError for missing groupby."""
+        adata = _make_plot_adata()
+        with pytest.raises(KeyError, match="bad_col"):
+            plot_dotplot(adata, ["GENE0"], groupby="bad_col", show=False)
+
+    def test_type_error(self):
+        """Should raise TypeError for non-AnnData."""
+        with pytest.raises(TypeError, match="plot_dotplot"):
+            plot_dotplot("not_adata", ["GENE0"], groupby="x", show=False)
+
+    def test_save(self, tmp_path):
+        """Should save to file."""
+        adata = _make_plot_adata()
+        path = str(tmp_path / "dotplot.png")
+        plot_dotplot(adata, ["GENE0", "GENE1"], groupby="leiden", save=path, show=False)
+        import os
+
+        assert os.path.exists(path)
+
+    def test_public_api(self):
+        assert hasattr(singlet, "plot_dotplot")
+        assert callable(singlet.plot_dotplot)

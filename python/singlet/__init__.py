@@ -83,6 +83,7 @@ from singlet._catalog import (
 )
 from singlet._combat import combat
 from singlet._de import rank_genes_groups
+from singlet._dendrogram import dendrogram
 from singlet._describe import describe
 from singlet._filter import filter_cells, filter_genes
 from singlet._harmony import harmony
@@ -102,7 +103,7 @@ from singlet._loader import download, load, load_dir, load_sample
 from singlet._neighbors import neighbors
 from singlet._normalize import normalize
 from singlet._pca import pca
-from singlet._plot import plot_umap, plot_violin
+from singlet._plot import plot_dotplot, plot_umap, plot_violin
 from singlet._query import query, search
 from singlet._scale import scale
 from singlet._score import score_genes
@@ -187,12 +188,14 @@ __all__ = [
     # Differential expression
     "rank_genes_groups",
     "score_genes",
+    "dendrogram",
     # Batch correction
     "harmony",
     "combat",
     # Plotting
     "plot_umap",
     "plot_violin",
+    "plot_dotplot",
     # Diagnostics
     "show_versions",
 ]
