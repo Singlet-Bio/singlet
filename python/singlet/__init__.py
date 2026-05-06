@@ -101,6 +101,7 @@ from singlet._dpt import dpt
 from singlet._draw_graph import draw_graph
 from singlet._embedding_density import embedding_density
 from singlet._enrichr import enrichr, enrichr_from_de
+from singlet._entropy_score import entropy_score
 from singlet._export_df import obs_df, to_df, var_df
 from singlet._filter import filter_cells, filter_genes
 from singlet._filter_de import filter_rank_genes_groups
@@ -122,6 +123,7 @@ from singlet._io import (
     write_1pz,
     write_spz,
 )
+from singlet._knn_impute import knn_impute
 from singlet._leiden import leiden
 from singlet._loader import download, load, load_dir, load_sample
 from singlet._louvain import louvain
@@ -162,6 +164,7 @@ from singlet._spatial import spatial_neighbors
 from singlet._splicing_ratio import splicing_ratio
 from singlet._subcluster import leiden_subclustering
 from singlet._subsample import subsample
+from singlet._subsample_balanced import subsample_balanced
 from singlet._transfer_labels import transfer_labels
 from singlet._transforms import expm1, log1p, sqrt_transform
 from singlet._tsne import tsne
@@ -345,4 +348,10 @@ __all__ = [
     "composition_analysis",
     # Splicing
     "splicing_ratio",
+    # Neighborhood entropy
+    "entropy_score",
+    # kNN imputation
+    "knn_impute",
+    # Balanced subsampling
+    "subsample_balanced",
 ]
