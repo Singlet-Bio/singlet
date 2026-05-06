@@ -102,11 +102,13 @@ from singlet._io import (
     write_spz,
 )
 from singlet._leiden import leiden
+from singlet._louvain import louvain
 from singlet._loader import download, load, load_dir, load_sample
 from singlet._neighbors import neighbors
 from singlet._normalize import normalize
 from singlet._pca import pca
 from singlet._plot import plot_dotplot, plot_umap, plot_violin
+from singlet._plot_scatter import plot_scatter
 from singlet._qc import calculate_qc_metrics
 from singlet._query import query, search
 from singlet._regress import regress_out
@@ -193,6 +195,7 @@ __all__ = [
     "pca",
     "neighbors",
     "leiden",
+    "louvain",
     "tsne",
     "diffmap",
     "umap",
@@ -210,6 +213,7 @@ __all__ = [
     "plot_umap",
     "plot_violin",
     "plot_dotplot",
+    "plot_scatter",
     # Diagnostics
     "show_versions",
 ]
