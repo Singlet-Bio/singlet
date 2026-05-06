@@ -85,6 +85,7 @@ from singlet._catalog import (
     tissues,
     top_series,
 )
+from singlet._cca import cca
 from singlet._cell_cycle import score_cell_cycle
 from singlet._combat import combat
 from singlet._composition_analysis import composition_analysis
@@ -96,6 +97,7 @@ from singlet._de import rank_genes_groups, rank_genes_groups_df
 from singlet._dendrogram import dendrogram
 from singlet._denoise import denoise
 from singlet._describe import describe
+from singlet._differential_abundance import differential_abundance
 from singlet._diffmap import diffmap
 from singlet._doublet_score_hybrid import doublet_score_hybrid
 from singlet._downsample import downsample_counts
@@ -109,6 +111,7 @@ from singlet._filter import filter_cells, filter_genes
 from singlet._filter_de import filter_rank_genes_groups
 from singlet._find_all_markers import find_all_markers
 from singlet._gene_correlation_network import gene_correlation_network
+from singlet._gene_module_score import gene_module_score
 from singlet._gene_set_enrichment import gene_set_enrichment
 from singlet._harmony import harmony
 from singlet._hvg import highly_variable_genes
@@ -371,4 +374,10 @@ __all__ = [
     "ambient_rna_score",
     # Batch evaluation
     "batch_evaluation",
+    # Canonical Correlation Analysis
+    "cca",
+    # Differential abundance
+    "differential_abundance",
+    # Gene module scoring
+    "gene_module_score",
 ]
