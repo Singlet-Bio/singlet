@@ -55,7 +55,6 @@ def rank_genes_groups(
     """
     import numpy as np
     import scipy.sparse as sp
-    from scipy.stats import rankdata
 
     if not hasattr(adata, "X") or not hasattr(adata, "var_names"):
         raise TypeError(
@@ -83,8 +82,8 @@ def rank_genes_groups(
     for group in test_groups:
         mask_in = (adata.obs[groupby] == group).values
         mask_out = ~mask_in
-        n_in = mask_in.sum()
-        n_out = mask_out.sum()
+        n_in = int(mask_in.sum())
+        n_out = int(mask_out.sum())
 
         if n_in == 0 or n_out == 0:
             continue
@@ -98,43 +97,14 @@ def rank_genes_groups(
         else:
             X_in = X[mask_in]
             X_out = X[mask_out]
-            mean_in = X_in.mean(axis=0)
-            mean_out = X_out.mean(axis=0)
+            mean_in = np.asarray(X_in.mean(axis=0)).ravel()
+            mean_out = np.asarray(X_out.mean(axis=0)).ravel()
 
         # Log fold change (add pseudocount to avoid log(0))
         lfc = np.log2((mean_in + 1e-9) / (mean_out + 1e-9))
 
-        # Wilcoxon rank-sum (Mann-Whitney U) — vectorized across genes
-        scores = np.zeros(len(gene_names), dtype=np.float64)
-        pvals = np.ones(len(gene_names), dtype=np.float64)
-
-        for j in range(len(gene_names)):
-            if sp.issparse(X):
-                x_in = np.asarray(X_in[:, j].todense()).ravel()
-                x_out = np.asarray(X_out[:, j].todense()).ravel()
-            else:
-                x_in = X_in[:, j]
-                x_out = X_out[:, j]
-
-            # Skip genes with no expression in either group
-            if x_in.sum() == 0 and x_out.sum() == 0:
-                continue
-
-            # Mann-Whitney U statistic
-            combined = np.concatenate([x_in, x_out])
-            ranks = rankdata(combined)
-            R_in = ranks[:n_in].sum()
-            U = R_in - n_in * (n_in + 1) / 2
-            # Normalize to z-score
-            mu = n_in * n_out / 2
-            sigma = np.sqrt(n_in * n_out * (n_in + n_out + 1) / 12)
-            if sigma > 0:
-                z = (U - mu) / sigma
-                scores[j] = z
-                # Two-sided p-value from normal approximation
-                from scipy.stats import norm
-
-                pvals[j] = 2 * norm.sf(abs(z))
+        # Vectorized Mann-Whitney U via rank sums
+        scores, pvals = _vectorized_mannwhitney(X_in, X_out, n_in, n_out)
 
         # Sort by score (descending)
         sorted_idx = np.argsort(-scores)[:n_genes]
@@ -148,3 +118,57 @@ def rank_genes_groups(
         return None
     else:
         return result
+
+
+def _vectorized_mannwhitney(X_in, X_out, n_in: int, n_out: int):
+    """Vectorized Mann-Whitney U test across all genes simultaneously.
+
+    Returns z-scores and p-values arrays of shape (n_genes,).
+    """
+    import numpy as np
+    import scipy.sparse as sp
+    from scipy.stats import norm, rankdata
+
+    n_total = n_in + n_out
+    n_genes = X_in.shape[1]
+
+    # Stack in-group on top of out-group
+    if sp.issparse(X_in):
+        X_combined = sp.vstack([X_in, X_out]).tocsc()
+    else:
+        X_combined = np.vstack([X_in, X_out])
+
+    # Compute rank sums for in-group across all genes
+    scores = np.zeros(n_genes, dtype=np.float64)
+    pvals = np.ones(n_genes, dtype=np.float64)
+
+    # Process genes in chunks for memory efficiency
+    chunk_size = 500
+    mu = n_in * n_out / 2.0
+    sigma = np.sqrt(n_in * n_out * (n_total + 1) / 12.0)
+
+    for start in range(0, n_genes, chunk_size):
+        end = min(start + chunk_size, n_genes)
+
+        if sp.issparse(X_combined):
+            chunk = X_combined[:, start:end].toarray()
+        else:
+            chunk = X_combined[:, start:end]
+
+        # Rank each column independently
+        # rankdata along axis=0 ranks within each column
+        ranks = np.apply_along_axis(rankdata, 0, chunk)
+
+        # Sum of ranks for in-group (first n_in rows)
+        R_in = ranks[:n_in, :].sum(axis=0)
+
+        # U statistic
+        U = R_in - n_in * (n_in + 1) / 2.0
+
+        # Z-scores
+        if sigma > 0:
+            z = (U - mu) / sigma
+            scores[start:end] = z
+            pvals[start:end] = 2.0 * norm.sf(np.abs(z))
+
+    return scores, pvals
