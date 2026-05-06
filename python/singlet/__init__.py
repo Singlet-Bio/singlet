@@ -65,6 +65,7 @@ __version__ = "2.0.0"
 from singlet._aggregate import aggregate
 from singlet._annotate import annotate, gene_programs, project
 from singlet._auth import login
+from singlet._cell_cycle import score_cell_cycle
 from singlet._catalog import (
     catalog,
     cell_types,
@@ -135,6 +136,7 @@ from singlet._plot_ranking import plot_ranking
 from singlet._plot_scatter import plot_scatter
 from singlet._plot_stacked_violin import plot_stacked_violin
 from singlet._qc import calculate_qc_metrics
+from singlet._rank_genes import rank_genes
 from singlet._query import query, search
 from singlet._regress import regress_out
 from singlet._scale import scale
@@ -244,6 +246,8 @@ __all__ = [
     "rank_genes_groups_matrixplot",
     "rank_genes_groups_tracksplot",
     "score_genes",
+    "score_cell_cycle",
+    "rank_genes",
     "dendrogram",
     "enrichr",
     "enrichr_from_de",
