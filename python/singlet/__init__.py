@@ -103,6 +103,7 @@ from singlet._normalize import normalize
 from singlet._pca import pca
 from singlet._plot import plot_umap, plot_violin
 from singlet._query import query, search
+from singlet._scale import scale
 from singlet._subsample import subsample
 from singlet._umap import umap
 from singlet._versions import show_versions
@@ -176,6 +177,7 @@ __all__ = [
     # Preprocessing
     "normalize",
     "highly_variable_genes",
+    "scale",
     "pca",
     "neighbors",
     "leiden",
