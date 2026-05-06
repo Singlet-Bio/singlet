@@ -88,6 +88,7 @@ from singlet._dendrogram import dendrogram
 from singlet._diffmap import diffmap
 from singlet._dpt import dpt
 from singlet._describe import describe
+from singlet._embedding_density import embedding_density
 from singlet._enrichr import enrichr, enrichr_from_de
 from singlet._filter import filter_cells, filter_genes
 from singlet._harmony import harmony
@@ -107,6 +108,7 @@ from singlet._io import (
 from singlet._leiden import leiden
 from singlet._louvain import louvain
 from singlet._loader import download, load, load_dir, load_sample
+from singlet._marker_overlap import marker_gene_overlap
 from singlet._neighbors import neighbors
 from singlet._paga import paga
 from singlet._normalize import normalize
@@ -218,6 +220,10 @@ __all__ = [
     "dendrogram",
     "enrichr",
     "enrichr_from_de",
+    # Marker overlap
+    "marker_gene_overlap",
+    # Embedding density
+    "embedding_density",
     # Batch correction
     "harmony",
     "combat",
