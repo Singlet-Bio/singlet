@@ -178,9 +178,10 @@ def from_tiledb(uri: str, *, measurement_name: str = "RNA") -> anndata.AnnData:
     anndata.AnnData
     """
     import tiledbsoma
+    import tiledbsoma.io
 
     exp = tiledbsoma.Experiment.open(uri)
-    return exp.ms[measurement_name].to_anndata()
+    return tiledbsoma.io.to_anndata(exp, measurement_name)
 
 
 def from_mtx(directory: str | Path) -> anndata.AnnData:

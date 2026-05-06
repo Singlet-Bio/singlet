@@ -153,3 +153,36 @@ class TestMtxViaSingletConvert:
         loaded = from_mtx(outdir)
         load_dense = loaded.X.toarray() if sp.issparse(loaded.X) else loaded.X
         np.testing.assert_allclose(load_dense, X, atol=1e-6)
+
+
+class TestTileDBConversion:
+    """TileDB-SOMA roundtrip tests."""
+
+    def test_to_tiledb_creates_store(self, sample_adata, tmp_path):
+        """to_tiledb creates a TileDB-SOMA experiment."""
+        tiledbsoma = pytest.importorskip("tiledbsoma")  # noqa: F841
+        from singlet.convert import to_tiledb
+
+        uri = str(tmp_path / "test.tiledb")
+        to_tiledb(sample_adata, uri)
+        assert (tmp_path / "test.tiledb").exists()
+
+    def test_roundtrip_tiledb(self, sample_adata, tmp_path):
+        """Write and read back via TileDB-SOMA preserves shape."""
+        tiledbsoma = pytest.importorskip("tiledbsoma")  # noqa: F841
+        from singlet.convert import from_tiledb, to_tiledb
+
+        uri = str(tmp_path / "rt.tiledb")
+        to_tiledb(sample_adata, uri)
+        loaded = from_tiledb(uri)
+        assert loaded.shape == sample_adata.shape
+
+    def test_from_tiledb_top_level(self, sample_adata, tmp_path):
+        """singlet.from_tiledb works at package level."""
+        tiledbsoma = pytest.importorskip("tiledbsoma")  # noqa: F841
+        import singlet
+
+        uri = str(tmp_path / "pkg.tiledb")
+        singlet.to_tiledb(sample_adata, uri)
+        loaded = singlet.from_tiledb(uri)
+        assert loaded.shape == sample_adata.shape
