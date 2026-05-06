@@ -25,7 +25,7 @@ The `.1pz` format is singlet's compressed single-cell data format. It stores:
 
 ```python
 import singlet
-adata = singlet.read("sample.1pz")
+adata = singlet.read_1pz("sample.1pz")
 ```
 
 ```r
