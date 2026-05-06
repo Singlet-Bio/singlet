@@ -31,7 +31,7 @@ export SUPABASE_ANON_KEY="<your-anon-key>"
 python -m singlet.mcp.smoke_test
 
 # Start server
-python -m singlet.mcp.server
+python -m singlet.mcp
 ```
 
 ## Configure in Claude Desktop
@@ -43,7 +43,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
   "mcpServers": {
     "singlet": {
       "command": "python",
-      "args": ["-m", "singlet.mcp.server"],
+      "args": ["-m", "singlet.mcp"],
       "env": {
         "SUPABASE_URL": "https://vbswbitfyallghbgxkuw.supabase.co",
         "SUPABASE_ANON_KEY": "<your-anon-key>"
@@ -62,7 +62,7 @@ Add to `.vscode/mcp.json`:
   "servers": {
     "singlet": {
       "command": "python",
-      "args": ["-m", "singlet.mcp.server"],
+      "args": ["-m", "singlet.mcp"],
       "env": {
         "SUPABASE_URL": "https://vbswbitfyallghbgxkuw.supabase.co",
         "SUPABASE_ANON_KEY": "<your-anon-key>"
@@ -81,7 +81,7 @@ Add to `~/.cursor/mcp.json`:
   "mcpServers": {
     "singlet": {
       "command": "python",
-      "args": ["-m", "singlet.mcp.server"],
+      "args": ["-m", "singlet.mcp"],
       "env": {
         "SUPABASE_URL": "https://vbswbitfyallghbgxkuw.supabase.co",
         "SUPABASE_ANON_KEY": "<your-anon-key>"

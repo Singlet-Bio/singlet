@@ -17,17 +17,17 @@ Exposes these tools to any MCP client (Claude Desktop, Cursor, VS Code Copilot):
 
 Usage:
     # Start the server (stdio transport):
-    python -m singlet.mcp.server
+    python -m singlet.mcp
 
     # Or use the entry point:
-    singlet-mcp
+    singlet
 
     # Configure in Claude Desktop's claude_desktop_config.json:
     {
       "mcpServers": {
         "singlet": {
           "command": "python",
-          "args": ["-m", "singlet.mcp.server"],
+          "args": ["-m", "singlet.mcp"],
           "env": {
             "SUPABASE_URL": "https://vbswbitfyallghbgxkuw.supabase.co",
             "SUPABASE_ANON_KEY": "<your-anon-key>"
