@@ -126,6 +126,10 @@ def write_spz(
 
     from singlet._singlepress import sp_write, sp_write_int
 
+    _VALID_PRECISIONS = ("auto", "uint8", "uint16", "int32", "fp32", "fp64")
+    if precision not in _VALID_PRECISIONS:
+        raise ValueError(f"Invalid precision={precision!r}. Must be one of: {_VALID_PRECISIONS}")
+
     mat = adata.layers[layer] if layer else adata.X
     if not sp.issparse(mat):
         mat = sp.csc_matrix(mat)

@@ -102,3 +102,16 @@ class TestReadMatrix:
         path.write_bytes(b"\x00" * 16)
         with pytest.raises(ValueError, match="Unknown file format"):
             read_matrix(path)
+
+
+def test_write_spz_invalid_precision(tmp_path):
+    """write_spz raises ValueError for invalid precision."""
+    import anndata as ad
+    import numpy as np
+    import pytest
+    import scipy.sparse as sp
+    from singlet._io import write_spz
+
+    adata = ad.AnnData(X=sp.csr_matrix(np.ones((3, 5))))
+    with pytest.raises(ValueError, match="Invalid precision"):
+        write_spz(adata, tmp_path / "test.spz", precision="invalid")
