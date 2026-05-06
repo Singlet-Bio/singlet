@@ -99,6 +99,7 @@ from singlet._enrichr import enrichr, enrichr_from_de
 from singlet._export_df import obs_df, to_df, var_df
 from singlet._filter import filter_cells, filter_genes
 from singlet._filter_de import filter_rank_genes_groups
+from singlet._gene_set_enrichment import gene_set_enrichment
 from singlet._harmony import harmony
 from singlet._hvg import highly_variable_genes
 from singlet._hvg_cell_ranger import highly_variable_genes_cell_ranger
@@ -145,9 +146,11 @@ from singlet._regress import regress_out
 from singlet._scale import scale
 from singlet._score import score_genes
 from singlet._scrublet import scrublet
+from singlet._sparse_pca import sparse_pca
 from singlet._spatial import spatial_neighbors
 from singlet._subcluster import leiden_subclustering
 from singlet._subsample import subsample
+from singlet._transfer_labels import transfer_labels
 from singlet._transforms import expm1, log1p, sqrt_transform
 from singlet._tsne import tsne
 from singlet._umap import umap
@@ -238,6 +241,7 @@ __all__ = [
     "regress_out",
     "nmf",
     "pca",
+    "sparse_pca",
     "magic",
     "neighbors",
     "leiden",
@@ -263,6 +267,7 @@ __all__ = [
     "dendrogram",
     "enrichr",
     "enrichr_from_de",
+    "gene_set_enrichment",
     # Marker overlap
     "marker_gene_overlap",
     # Embedding density
@@ -293,6 +298,7 @@ __all__ = [
     "plot_paga",
     # Integration
     "ingest",
+    "transfer_labels",
     # Diagnostics
     "show_versions",
     # Transforms
