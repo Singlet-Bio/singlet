@@ -88,6 +88,7 @@ from singlet._combat import combat
 from singlet._mnn import mnn_correct
 from singlet._concat import concatenate
 from singlet._de import rank_genes_groups, rank_genes_groups_df
+from singlet._downsample import downsample_counts
 from singlet._dendrogram import dendrogram
 from singlet._diffmap import diffmap
 from singlet._dpt import dpt
@@ -121,6 +122,7 @@ from singlet._plot import plot_dotplot, plot_umap, plot_violin
 from singlet._plot_paga import plot_paga
 from singlet._plot_heatmap import plot_heatmap
 from singlet._plot_markers import rank_genes_groups_dotplot
+from singlet._plot_tracks import rank_genes_groups_tracksplot
 from singlet._plot_ranking import plot_ranking
 from singlet._plot_scatter import plot_scatter
 from singlet._plot_stacked_violin import plot_stacked_violin
@@ -202,6 +204,7 @@ __all__ = [
     "filter_cells",
     "filter_genes",
     "subsample",
+    "downsample_counts",
     "concatenate",
     # Preprocessing
     "normalize",
@@ -222,6 +225,7 @@ __all__ = [
     "rank_genes_groups",
     "rank_genes_groups_df",
     "rank_genes_groups_dotplot",
+    "rank_genes_groups_tracksplot",
     "score_genes",
     "dendrogram",
     "enrichr",
