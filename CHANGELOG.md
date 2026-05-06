@@ -28,7 +28,8 @@ All notable changes to the singlet project.
 - **Python API reference**: `docs/api/python.md` covers all public modules
 - **Annotation tests**: 15 unit tests for `_annotate.py` (gene_programs, project, annotate)
 - **Security**: `SECURITY.md` vulnerability reporting policy + pip-audit CI job
-- **Python tests**: 618 total (up from 205 at cycle 184, 97% core coverage)
+- **Python tests**: 681 total (up from 205 at cycle 184, 98% core coverage)
+- **Preprocessing API**: `describe()`, `filter_cells()`, `filter_genes()`, `normalize()`, `highly_variable_genes()` — standard scRNA-seq workflow without scanpy
 - **Property-based tests**: 14 hypothesis tests for codec round-trip verification
 - **Code deduplication**: `convert.py` thin re-export (was 267-line copy)
 - **Lint compliance**: 0 ruff errors (B904, UP037, UP035 all resolved)
@@ -41,6 +42,10 @@ All notable changes to the singlet project.
 - **Organism auto-detection**: Gene name capitalization heuristic (ALL CAPS → human, Title Case → mouse)
 - **Memory-safe NNLS**: Row-at-a-time projection avoids full .toarray() OOM on large datasets
 - **Input validation**: write_1pz/write_spz/project/annotate validate AnnData input; quality_tier/precision checked
+- **Path UX**: All path-accepting functions expand `~`; write functions auto-create parent directories
+- **Helpful warnings**: `load(genes=[...])` warns for missing genes; `project()` warns on low gene overlap (<50%)
+- **Atomic downloads**: Interrupted downloads don't corrupt cache (writes to .part file, renames on success)
+- **annotate(inplace=True)**: Stores cell_type, cell_type_confidence in adata.obs, X_nmf in adata.obsm
 - **Format conversion tests**: MTX round-trip, to_csc, from_mtx edge cases
 - **Preprocessing tests**: protocol detection, FASTQ download, quantify, QC, species, export
 

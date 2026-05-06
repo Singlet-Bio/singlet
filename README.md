@@ -36,6 +36,15 @@ singlet.info("GSE264667")
 # Load a sample (returns AnnData)
 adata = singlet.load("GSM1234567")
 
+# Explore your data
+singlet.describe(adata)           # quick summary stats
+
+# Preprocessing (no scanpy required)
+singlet.filter_cells(adata, min_genes=200, inplace=True)
+singlet.filter_genes(adata, min_cells=3, inplace=True)
+singlet.normalize(adata)          # library-size + log1p
+singlet.highly_variable_genes(adata)  # feature selection
+
 # Cell type annotation (free, local — no API key needed)
 labels = singlet.annotate(adata)  # auto-detects organism
 H = singlet.project(adata)        # NMF gene program loadings
