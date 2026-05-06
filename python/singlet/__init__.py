@@ -44,6 +44,10 @@ Cell type annotation (free, local):
 Exploration:
     singlet.describe(adata)                Quick summary stats (sparsity, counts, genes)
 
+QC filtering:
+    singlet.filter_cells(adata, min_genes=200)  Filter low-quality cells
+    singlet.filter_genes(adata, min_cells=3)    Filter rarely-detected genes
+
 Token-priced (requires API key):
     singlet.login(key)                     Authenticate
     singlet.query(...)                     Cross-atlas query → AnnData
@@ -72,6 +76,7 @@ from singlet._catalog import (
     top_series,
 )
 from singlet._describe import describe
+from singlet._filter import filter_cells, filter_genes
 from singlet._io import (
     info_1pz,
     read_1pz,
@@ -148,6 +153,9 @@ __all__ = [
     "from_tiledb",
     # Exploration
     "describe",
+    # QC filtering
+    "filter_cells",
+    "filter_genes",
     # Diagnostics
     "show_versions",
 ]
