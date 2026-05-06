@@ -268,7 +268,7 @@ def regress_out(
         raise TypeError(
             f"adata.layers['{_SCALE_LAYER}'] is not a DenseResult object.  "
             "Re-run singlet.gpu.preprocess.scale(adata) to regenerate it."
-        ) from e
+        ) from None
 
     # Build design matrix C [n_cells × p] col-major float32.
     # scanpy convention: intercept is NOT included; user passes explicit obs columns.
