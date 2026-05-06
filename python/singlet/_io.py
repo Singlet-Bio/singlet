@@ -130,6 +130,11 @@ def write_spz(
     if precision not in _VALID_PRECISIONS:
         raise ValueError(f"Invalid precision={precision!r}. Must be one of: {_VALID_PRECISIONS}")
 
+    if adata is None:
+        raise TypeError("write_spz() requires an AnnData object, got None")
+    if not hasattr(adata, "X") or not hasattr(adata, "obs"):
+        raise TypeError(f"write_spz() requires an AnnData object, got {type(adata).__name__}")
+
     mat = adata.layers[layer] if layer else adata.X
     if not sp.issparse(mat):
         mat = sp.csc_matrix(mat)
@@ -418,6 +423,8 @@ def write_1pz(
 
     if adata is None:
         raise TypeError("write_1pz() requires an AnnData object, got None")
+    if not hasattr(adata, "X") or not hasattr(adata, "obs"):
+        raise TypeError(f"write_1pz() requires an AnnData object, got {type(adata).__name__}")
 
     mat = adata.layers[layer] if layer else adata.X
     if not sp.issparse(mat):
