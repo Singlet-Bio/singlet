@@ -88,11 +88,13 @@ from singlet._catalog import (
 from singlet._cca import cca
 from singlet._cell_cycle import score_cell_cycle
 from singlet._cell_type_proportions import cell_type_proportions
+from singlet._cluster_stability import cluster_stability
 from singlet._combat import combat
 from singlet._composition_analysis import composition_analysis
 from singlet._concat import concatenate
 from singlet._connectivity_score import connectivity_score
 from singlet._correlation import correlation_matrix
+from singlet._cross_species_correlation import cross_species_correlation
 from singlet._cv_resolution import cross_validate_resolution
 from singlet._de import rank_genes_groups, rank_genes_groups_df
 from singlet._dendrogram import dendrogram
@@ -112,6 +114,7 @@ from singlet._fate_probabilities import fate_probabilities
 from singlet._filter import filter_cells, filter_genes
 from singlet._filter_de import filter_rank_genes_groups
 from singlet._find_all_markers import find_all_markers
+from singlet._gene_activity_score import gene_activity_score
 from singlet._gene_correlation_network import gene_correlation_network
 from singlet._gene_module_score import gene_module_score
 from singlet._gene_set_enrichment import gene_set_enrichment
@@ -388,4 +391,10 @@ __all__ = [
     "differential_abundance",
     # Gene module scoring
     "gene_module_score",
+    # Gene activity/pathway scoring
+    "gene_activity_score",
+    # Cross-species correlation
+    "cross_species_correlation",
+    # Cluster stability
+    "cluster_stability",
 ]
