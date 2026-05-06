@@ -53,6 +53,8 @@
 | `singlet.from_zarr(path)` | Read Zarr → AnnData |
 | `singlet.to_mtx(adata, directory)` | Write AnnData → 10x MTX directory |
 | `singlet.from_mtx(directory)` | Read 10x MTX directory → AnnData |
+| `singlet.to_tiledb(adata, uri)` | Write AnnData → TileDB-SOMA (requires `tiledbsoma`) |
+| `singlet.from_tiledb(uri)` | Read TileDB-SOMA → AnnData (requires `tiledbsoma`) |
 | `singlet.to_csc(adata)` | Extract scipy CSC matrix |
 
 ### Cell Type Annotation (free, local)
