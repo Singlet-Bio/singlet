@@ -44,7 +44,7 @@ singlet.write_1pz(adata, "output.1pz")
 from singlet import gpu
 gpu.pp.normalize(adata)
 gpu.reduce.pca(adata, n_components=50)
-gpu.tools.neighbors(adata)
+gpu.pp.neighbors(adata)
 gpu.tools.leiden(adata)
 gpu.tools.umap(adata)
 
