@@ -92,6 +92,7 @@ from singlet._enrichr import enrichr, enrichr_from_de
 from singlet._filter import filter_cells, filter_genes
 from singlet._harmony import harmony
 from singlet._hvg import highly_variable_genes
+from singlet._hvg_seurat import highly_variable_genes_seurat_v3
 from singlet._io import (
     info_1pz,
     read_1pz,
@@ -110,6 +111,7 @@ from singlet._normalize import normalize
 from singlet._pca import pca
 from singlet._plot import plot_dotplot, plot_umap, plot_violin
 from singlet._plot_heatmap import plot_heatmap
+from singlet._plot_markers import rank_genes_groups_dotplot
 from singlet._plot_scatter import plot_scatter
 from singlet._qc import calculate_qc_metrics
 from singlet._query import query, search
@@ -192,6 +194,7 @@ __all__ = [
     # Preprocessing
     "normalize",
     "highly_variable_genes",
+    "highly_variable_genes_seurat_v3",
     "scale",
     "regress_out",
     "pca",
@@ -205,6 +208,7 @@ __all__ = [
     # Differential expression
     "rank_genes_groups",
     "rank_genes_groups_df",
+    "rank_genes_groups_dotplot",
     "score_genes",
     "dendrogram",
     "enrichr",
