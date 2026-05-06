@@ -48,6 +48,9 @@ QC filtering:
     singlet.filter_cells(adata, min_genes=200)  Filter low-quality cells
     singlet.filter_genes(adata, min_cells=3)    Filter rarely-detected genes
 
+Preprocessing:
+    singlet.normalize(adata)                    Library-size normalize + log1p
+
 Token-priced (requires API key):
     singlet.login(key)                     Authenticate
     singlet.query(...)                     Cross-atlas query → AnnData
@@ -88,6 +91,7 @@ from singlet._io import (
     write_spz,
 )
 from singlet._loader import download, load, load_dir, load_sample
+from singlet._normalize import normalize
 from singlet._query import query, search
 from singlet._versions import show_versions
 from singlet.convert import (
@@ -156,6 +160,8 @@ __all__ = [
     # QC filtering
     "filter_cells",
     "filter_genes",
+    # Preprocessing
+    "normalize",
     # Diagnostics
     "show_versions",
 ]
