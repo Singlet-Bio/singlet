@@ -63,9 +63,11 @@ Token-priced (requires API key):
 __version__ = "2.0.0"
 
 from singlet._aggregate import aggregate
+from singlet._ambient_rna_score import ambient_rna_score
 from singlet._annotate import annotate, gene_programs, project
 from singlet._annotate_cell_types import annotate_cell_types
 from singlet._auth import login
+from singlet._batch_evaluation import batch_evaluation
 from singlet._catalog import (
     catalog,
     cell_types,
@@ -133,6 +135,7 @@ from singlet._marker_overlap import marker_gene_overlap
 from singlet._metacell import metacell
 from singlet._metrics import calinski_harabasz_score, silhouette_score
 from singlet._mnn import mnn_correct
+from singlet._morans_i import morans_i
 from singlet._neighbors import neighbors
 from singlet._nmf import nmf
 from singlet._normalize import normalize
@@ -362,4 +365,10 @@ __all__ = [
     "knn_impute",
     # Balanced subsampling
     "subsample_balanced",
+    # Spatial statistics
+    "morans_i",
+    # Ambient RNA
+    "ambient_rna_score",
+    # Batch evaluation
+    "batch_evaluation",
 ]
