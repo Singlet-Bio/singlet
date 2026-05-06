@@ -457,6 +457,8 @@ def write_1pz(
 
 def info_1pz(path: str | Path) -> dict:
     """Read .1pz file header without decompressing."""
+    if not Path(path).exists():
+        raise FileNotFoundError(f"File not found: {path}")
     import singlepress
 
     return singlepress.info_1pz(str(path))
