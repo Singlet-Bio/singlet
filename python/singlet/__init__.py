@@ -102,6 +102,8 @@ from singlet._enrichr import enrichr, enrichr_from_de
 from singlet._export_df import obs_df, to_df, var_df
 from singlet._filter import filter_cells, filter_genes
 from singlet._filter_de import filter_rank_genes_groups
+from singlet._find_all_markers import find_all_markers
+from singlet._gene_correlation_network import gene_correlation_network
 from singlet._gene_set_enrichment import gene_set_enrichment
 from singlet._harmony import harmony
 from singlet._hvg import highly_variable_genes
@@ -131,6 +133,7 @@ from singlet._nmf import nmf
 from singlet._normalize import normalize
 from singlet._paga import paga
 from singlet._pca import pca
+from singlet._phenograph import phenograph
 from singlet._plot import plot_dotplot, plot_umap, plot_violin
 from singlet._plot_embedding import plot_embedding
 from singlet._plot_genes_in_groups import plot_genes_in_groups
@@ -328,4 +331,10 @@ __all__ = [
     "denoise",
     # Metacell
     "metacell",
+    # Gene correlation network
+    "gene_correlation_network",
+    # PhenoGraph clustering
+    "phenograph",
+    # Comprehensive marker finding
+    "find_all_markers",
 ]
