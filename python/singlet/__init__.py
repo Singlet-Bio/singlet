@@ -85,6 +85,7 @@ from singlet._combat import combat
 from singlet._concat import concatenate
 from singlet._de import rank_genes_groups, rank_genes_groups_df
 from singlet._dendrogram import dendrogram
+from singlet._diffmap import diffmap
 from singlet._describe import describe
 from singlet._enrichr import enrichr, enrichr_from_de
 from singlet._filter import filter_cells, filter_genes
@@ -112,6 +113,7 @@ from singlet._regress import regress_out
 from singlet._scale import scale
 from singlet._score import score_genes
 from singlet._subsample import subsample
+from singlet._tsne import tsne
 from singlet._umap import umap
 from singlet._versions import show_versions
 from singlet.convert import (
@@ -191,6 +193,8 @@ __all__ = [
     "pca",
     "neighbors",
     "leiden",
+    "tsne",
+    "diffmap",
     "umap",
     # Differential expression
     "rank_genes_groups",
