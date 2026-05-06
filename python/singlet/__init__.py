@@ -86,6 +86,7 @@ from singlet._catalog import (
     top_series,
 )
 from singlet._cca import cca
+from singlet._cell_communication import cell_communication
 from singlet._cell_cycle import score_cell_cycle
 from singlet._cell_distances import cell_distances
 from singlet._cell_level_de import cell_level_de
@@ -120,6 +121,7 @@ from singlet._gene_activity_score import gene_activity_score
 from singlet._gene_correlation_network import gene_correlation_network
 from singlet._gene_module_score import gene_module_score
 from singlet._gene_set_enrichment import gene_set_enrichment
+from singlet._gene_set_variation import gene_set_variation
 from singlet._harmony import harmony
 from singlet._hotspot_genes import hotspot_genes
 from singlet._hvg import highly_variable_genes
@@ -192,6 +194,7 @@ from singlet._umap import umap
 from singlet._variance_partition import variance_partition
 from singlet._velocity_pseudotime import velocity_pseudotime
 from singlet._versions import show_versions
+from singlet._weighted_nearest_neighbors import weighted_nearest_neighbors
 from singlet._wishart import wishart_test
 from singlet.convert import (
     from_h5ad,
@@ -415,4 +418,10 @@ __all__ = [
     "hotspot_genes",
     # Cell-level DE
     "cell_level_de",
+    # Weighted Nearest Neighbors
+    "weighted_nearest_neighbors",
+    # Gene Set Variation Analysis
+    "gene_set_variation",
+    # Cell-cell communication
+    "cell_communication",
 ]
