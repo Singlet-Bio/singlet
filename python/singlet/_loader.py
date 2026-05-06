@@ -178,7 +178,7 @@ def load(
     if not str(source).strip():
         raise ValueError("load() requires a non-empty file path or GEO accession")
 
-    path = Path(source)
+    path = Path(source).expanduser()
 
     # Detect if source looks like a file path (has directory separators or known extension)
     _is_path = (
@@ -357,7 +357,7 @@ def load_dir(
 
     from singlet._io import read_1pz
 
-    path = Path(path)
+    path = Path(path).expanduser()
     if not path.is_dir():
         raise FileNotFoundError(f"Not a directory: {path}")
 

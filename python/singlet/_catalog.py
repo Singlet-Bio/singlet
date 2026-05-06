@@ -31,7 +31,7 @@ _CATALOG_DIR: Optional[Path] = None
 def set_catalog_dir(path: str | Path) -> None:
     """Set the local catalog directory containing catalog_v1.parquet and sample_index.parquet."""
     global _CATALOG_DIR, _CATALOG_CACHE, _SAMPLE_INDEX_CACHE
-    p = Path(path)
+    p = Path(path).expanduser().resolve()
     if not p.is_dir():
         raise FileNotFoundError(f"Catalog directory does not exist: {p}")
     _CATALOG_DIR = p

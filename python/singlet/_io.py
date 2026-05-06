@@ -324,9 +324,9 @@ def read_1pz(path: str | Path) -> anndata.AnnData:
 
     if path is None:
         raise TypeError("read_1pz() requires a file path, got None")
-    path_str = str(path)
-    if not path_str:
+    if not str(path).strip():
         raise ValueError("read_1pz() requires a non-empty file path")
+    path_str = str(Path(path).expanduser())
     if not Path(path_str).exists():
         raise FileNotFoundError(f"File not found: {path_str}")
 
@@ -464,7 +464,8 @@ def write_1pz(
 
 def info_1pz(path: str | Path) -> dict:
     """Read .1pz file header without decompressing."""
-    if not Path(path).exists():
+    path = Path(path).expanduser()
+    if not path.exists():
         raise FileNotFoundError(f"File not found: {path}")
     import singlepress
 
