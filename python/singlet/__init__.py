@@ -51,6 +51,7 @@ QC filtering:
 Preprocessing:
     singlet.normalize(adata)                    Library-size normalize + log1p
     singlet.highly_variable_genes(adata)        Select top variable genes
+    singlet.pca(adata)                          PCA dimensionality reduction
 
 Token-priced (requires API key):
     singlet.login(key)                     Authenticate
@@ -94,6 +95,7 @@ from singlet._io import (
 )
 from singlet._loader import download, load, load_dir, load_sample
 from singlet._normalize import normalize
+from singlet._pca import pca
 from singlet._query import query, search
 from singlet._versions import show_versions
 from singlet.convert import (
@@ -165,6 +167,7 @@ __all__ = [
     # Preprocessing
     "normalize",
     "highly_variable_genes",
+    "pca",
     # Diagnostics
     "show_versions",
 ]
