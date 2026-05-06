@@ -52,6 +52,7 @@ Preprocessing:
     singlet.normalize(adata)                    Library-size normalize + log1p
     singlet.highly_variable_genes(adata)        Select top variable genes
     singlet.pca(adata)                          PCA dimensionality reduction
+    singlet.harmony(adata, "batch")             Batch correction (Harmony)
 
 Token-priced (requires API key):
     singlet.login(key)                     Authenticate
@@ -83,6 +84,7 @@ from singlet._catalog import (
 from singlet._de import rank_genes_groups
 from singlet._describe import describe
 from singlet._filter import filter_cells, filter_genes
+from singlet._harmony import harmony
 from singlet._hvg import highly_variable_genes
 from singlet._io import (
     info_1pz,
@@ -179,6 +181,8 @@ __all__ = [
     "umap",
     # Differential expression
     "rank_genes_groups",
+    # Batch correction
+    "harmony",
     # Diagnostics
     "show_versions",
 ]
