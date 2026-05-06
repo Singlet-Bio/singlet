@@ -162,12 +162,25 @@ def project(adata, *, organism: Optional[str] = None, k: int = 100) -> np.ndarra
 
     # Non-negative least squares: solve min ||X.T - W @ H|| s.t. H >= 0
     # For each cell: solve min ||x - W @ h|| s.t. h >= 0
+    # scipy NNLS releases the GIL (Fortran), so threads give ~linear speedup
+    from concurrent.futures import ThreadPoolExecutor
+    from os import cpu_count
+
     from scipy.optimize import nnls
 
     n_cells = X.shape[0]
     H = np.zeros((n_cells, k), dtype=np.float64)
-    for i in range(n_cells):
+
+    def _solve_cell(i: int) -> None:
         H[i], _ = nnls(W, X[i])
+
+    n_workers = min(cpu_count() or 4, n_cells, 8)
+    if n_cells <= n_workers:
+        for i in range(n_cells):
+            _solve_cell(i)
+    else:
+        with ThreadPoolExecutor(max_workers=n_workers) as pool:
+            list(pool.map(_solve_cell, range(n_cells)))
 
     return H
 
