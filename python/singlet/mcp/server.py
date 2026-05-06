@@ -688,7 +688,9 @@ async def _tool_species() -> dict:
     for sp in species_list:
         count = len(samples_df[samples_df["organism"].str.contains(sp, na=False, regex=False)])
         cells = int(
-            samples_df[samples_df["organism"].str.contains(sp, na=False, regex=False)]["cells_called"].sum()
+            samples_df[samples_df["organism"].str.contains(sp, na=False, regex=False)][
+                "cells_called"
+            ].sum()
         )
         species_counts.append({"species": sp, "samples": count, "cells": cells})
     species_counts.sort(key=lambda x: x["samples"], reverse=True)

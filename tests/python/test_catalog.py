@@ -324,3 +324,11 @@ def test_search_with_regex_special_chars():
 
     result = singlet.datasets(organism="Mus (house)")
     assert isinstance(result, pd.DataFrame)
+
+
+def test_set_catalog_dir_rejects_nonexistent():
+    """set_catalog_dir raises FileNotFoundError for non-existent path."""
+    import singlet
+
+    with pytest.raises(FileNotFoundError, match="does not exist"):
+        singlet.set_catalog_dir("/nonexistent/fake/path")

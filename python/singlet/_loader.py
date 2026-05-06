@@ -229,8 +229,7 @@ def load(
         for col, val in obs_filter.items():
             if col not in adata.obs.columns:
                 raise KeyError(
-                    f"obs_filter column {col!r} not found. "
-                    f"Available: {list(adata.obs.columns)}"
+                    f"obs_filter column {col!r} not found. Available: {list(adata.obs.columns)}"
                 )
             if isinstance(val, list):
                 mask = mask & adata.obs[col].isin(val)
