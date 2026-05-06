@@ -86,10 +86,12 @@ from singlet._catalog import (
 from singlet._cell_cycle import score_cell_cycle
 from singlet._combat import combat
 from singlet._concat import concatenate
+from singlet._connectivity_score import connectivity_score
 from singlet._correlation import correlation_matrix
 from singlet._cv_resolution import cross_validate_resolution
 from singlet._de import rank_genes_groups, rank_genes_groups_df
 from singlet._dendrogram import dendrogram
+from singlet._denoise import denoise
 from singlet._describe import describe
 from singlet._diffmap import diffmap
 from singlet._downsample import downsample_counts
@@ -121,6 +123,7 @@ from singlet._loader import download, load, load_dir, load_sample
 from singlet._louvain import louvain
 from singlet._magic import magic
 from singlet._marker_overlap import marker_gene_overlap
+from singlet._metacell import metacell
 from singlet._metrics import calinski_harabasz_score, silhouette_score
 from singlet._mnn import mnn_correct
 from singlet._neighbors import neighbors
@@ -285,6 +288,8 @@ __all__ = [
     "scrublet",
     # Correlation
     "correlation_matrix",
+    # Connectivity
+    "connectivity_score",
     # Recipes
     "recipe_seurat",
     "recipe_zheng17",
@@ -319,4 +324,8 @@ __all__ = [
     "wishart_test",
     # Pseudotime
     "velocity_pseudotime",
+    # Denoising
+    "denoise",
+    # Metacell
+    "metacell",
 ]
