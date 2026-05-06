@@ -81,6 +81,7 @@ from singlet._catalog import (
     tissues,
     top_series,
 )
+from singlet._correlation import correlation_matrix
 from singlet._combat import combat
 from singlet._mnn import mnn_correct
 from singlet._concat import concatenate
@@ -118,6 +119,7 @@ from singlet._plot import plot_dotplot, plot_umap, plot_violin
 from singlet._plot_paga import plot_paga
 from singlet._plot_heatmap import plot_heatmap
 from singlet._plot_markers import rank_genes_groups_dotplot
+from singlet._plot_ranking import plot_ranking
 from singlet._plot_scatter import plot_scatter
 from singlet._plot_stacked_violin import plot_stacked_violin
 from singlet._qc import calculate_qc_metrics
@@ -232,11 +234,14 @@ __all__ = [
     "mnn_correct",
     # Doublet detection
     "scrublet",
+    # Correlation
+    "correlation_matrix",
     # Plotting
     "plot_umap",
     "plot_violin",
     "plot_dotplot",
     "plot_heatmap",
+    "plot_ranking",
     "plot_scatter",
     "plot_stacked_violin",
     "plot_paga",
