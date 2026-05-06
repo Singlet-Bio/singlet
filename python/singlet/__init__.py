@@ -96,6 +96,7 @@ from singlet._combat import combat
 from singlet._composition_analysis import composition_analysis
 from singlet._concat import concatenate
 from singlet._connectivity_score import connectivity_score
+from singlet._consensus_clustering import consensus_clustering
 from singlet._correlation import correlation_matrix
 from singlet._cross_species_correlation import cross_species_correlation
 from singlet._cv_resolution import cross_validate_resolution
@@ -122,6 +123,7 @@ from singlet._gene_correlation_network import gene_correlation_network
 from singlet._gene_module_score import gene_module_score
 from singlet._gene_set_enrichment import gene_set_enrichment
 from singlet._gene_set_variation import gene_set_variation
+from singlet._gene_space_embedding import gene_space_embedding
 from singlet._harmony import harmony
 from singlet._hotspot_genes import hotspot_genes
 from singlet._hvg import highly_variable_genes
@@ -147,6 +149,7 @@ from singlet._loader import download, load, load_dir, load_sample
 from singlet._louvain import louvain
 from singlet._magic import magic
 from singlet._marker_overlap import marker_gene_overlap
+from singlet._marker_specificity import marker_specificity
 from singlet._metacell import metacell
 from singlet._metrics import calinski_harabasz_score, silhouette_score
 from singlet._mnn import mnn_correct
@@ -424,4 +427,10 @@ __all__ = [
     "gene_set_variation",
     # Cell-cell communication
     "cell_communication",
+    # Consensus clustering
+    "consensus_clustering",
+    # Marker specificity scoring
+    "marker_specificity",
+    # Gene-space embedding
+    "gene_space_embedding",
 ]
