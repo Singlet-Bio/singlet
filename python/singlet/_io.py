@@ -135,6 +135,9 @@ def write_spz(
     if not hasattr(adata, "X") or not hasattr(adata, "obs"):
         raise TypeError(f"write_spz() requires an AnnData object, got {type(adata).__name__}")
 
+    path = Path(path).expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+
     mat = adata.layers[layer] if layer else adata.X
     if not sp.issparse(mat):
         mat = sp.csc_matrix(mat)
@@ -425,6 +428,9 @@ def write_1pz(
         raise TypeError("write_1pz() requires an AnnData object, got None")
     if not hasattr(adata, "X") or not hasattr(adata, "obs"):
         raise TypeError(f"write_1pz() requires an AnnData object, got {type(adata).__name__}")
+
+    path = Path(path).expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
 
     mat = adata.layers[layer] if layer else adata.X
     if not sp.issparse(mat):
