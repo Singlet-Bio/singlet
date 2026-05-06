@@ -503,3 +503,45 @@ def test_load_directory_gives_helpful_error(tmp_path):
 
     with pytest.raises(IsADirectoryError, match="load_dir"):
         singlet.load(str(tmp_path))
+
+
+def test_load_genes_warns_on_missing(tmp_path):
+    """load() warns when some requested genes are not found."""
+    import warnings
+
+    import singlet
+
+    adata = ad.AnnData(
+        X=sp.csr_matrix(np.ones((3, 5))),
+        var=pd.DataFrame(index=["TP53", "BRCA1", "EGFR", "MYC", "KRAS"]),
+    )
+    path = tmp_path / "test.h5ad"
+    adata.write_h5ad(path)
+
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        result = singlet.load(str(path), genes=["TP53", "TYPO_GENE"])
+        assert len(w) == 1
+        assert "TYPO_GENE" in str(w[0].message)
+    assert result.shape == (3, 1)  # only TP53 found
+
+
+def test_load_genes_warns_all_missing(tmp_path):
+    """load() warns when none of the requested genes are found."""
+    import warnings
+
+    import singlet
+
+    adata = ad.AnnData(
+        X=sp.csr_matrix(np.ones((3, 5))),
+        var=pd.DataFrame(index=["TP53", "BRCA1", "EGFR", "MYC", "KRAS"]),
+    )
+    path = tmp_path / "test.h5ad"
+    adata.write_h5ad(path)
+
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        result = singlet.load(str(path), genes=["FAKE1", "FAKE2"])
+        assert len(w) == 1
+        assert "None of the" in str(w[0].message)
+    assert result.shape[1] == 0

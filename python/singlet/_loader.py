@@ -226,6 +226,26 @@ def load(
     # Gene subset
     if genes is not None:
         gene_mask = adata.var_names.isin(genes)
+        n_found = gene_mask.sum()
+        if n_found == 0:
+            import warnings
+
+            warnings.warn(
+                f"None of the {len(genes)} requested genes were found in the dataset. "
+                f"First few available: {list(adata.var_names[:5])}",
+                UserWarning,
+                stacklevel=2,
+            )
+        elif n_found < len(genes):
+            import warnings
+
+            missing = sorted(set(genes) - set(adata.var_names))
+            warnings.warn(
+                f"{len(missing)} of {len(genes)} requested genes not found: "
+                f"{missing[:5]}{'...' if len(missing) > 5 else ''}",
+                UserWarning,
+                stacklevel=2,
+            )
         adata = adata[:, gene_mask].copy()
 
     # Obs filter
