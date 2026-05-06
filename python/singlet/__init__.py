@@ -86,6 +86,7 @@ from singlet._concat import concatenate
 from singlet._de import rank_genes_groups, rank_genes_groups_df
 from singlet._dendrogram import dendrogram
 from singlet._diffmap import diffmap
+from singlet._dpt import dpt
 from singlet._describe import describe
 from singlet._enrichr import enrichr, enrichr_from_de
 from singlet._filter import filter_cells, filter_genes
@@ -108,6 +109,7 @@ from singlet._neighbors import neighbors
 from singlet._normalize import normalize
 from singlet._pca import pca
 from singlet._plot import plot_dotplot, plot_umap, plot_violin
+from singlet._plot_heatmap import plot_heatmap
 from singlet._plot_scatter import plot_scatter
 from singlet._qc import calculate_qc_metrics
 from singlet._query import query, search
@@ -198,6 +200,7 @@ __all__ = [
     "louvain",
     "tsne",
     "diffmap",
+    "dpt",
     "umap",
     # Differential expression
     "rank_genes_groups",
@@ -213,6 +216,7 @@ __all__ = [
     "plot_umap",
     "plot_violin",
     "plot_dotplot",
+    "plot_heatmap",
     "plot_scatter",
     # Diagnostics
     "show_versions",
