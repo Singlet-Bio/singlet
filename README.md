@@ -45,9 +45,15 @@ singlet.filter_genes(adata, min_cells=3, inplace=True)
 singlet.normalize(adata)          # library-size + log1p
 singlet.highly_variable_genes(adata)  # feature selection
 
+# Analysis pipeline (built-in, no scanpy needed)
+singlet.pca(adata)                # dimensionality reduction
+singlet.neighbors(adata)          # kNN graph
+singlet.leiden(adata)             # clustering
+singlet.umap(adata)               # 2D visualization
+
 # Cell type annotation (free, local — no API key needed)
-labels = singlet.annotate(adata)  # auto-detects organism
-H = singlet.project(adata)        # NMF gene program loadings
+singlet.annotate(adata, inplace=True)  # stores in adata.obs
+H = singlet.project(adata)             # NMF gene program loadings
 
 # File I/O
 adata = singlet.read_1pz("counts.1pz")
