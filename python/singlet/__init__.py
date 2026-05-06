@@ -85,6 +85,7 @@ from singlet._combat import combat
 from singlet._de import rank_genes_groups
 from singlet._dendrogram import dendrogram
 from singlet._describe import describe
+from singlet._enrichr import enrichr, enrichr_from_de
 from singlet._filter import filter_cells, filter_genes
 from singlet._harmony import harmony
 from singlet._hvg import highly_variable_genes
@@ -189,6 +190,8 @@ __all__ = [
     "rank_genes_groups",
     "score_genes",
     "dendrogram",
+    "enrichr",
+    "enrichr_from_de",
     # Batch correction
     "harmony",
     "combat",
