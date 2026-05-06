@@ -50,6 +50,7 @@ QC filtering:
 
 Preprocessing:
     singlet.normalize(adata)                    Library-size normalize + log1p
+    singlet.highly_variable_genes(adata)        Select top variable genes
 
 Token-priced (requires API key):
     singlet.login(key)                     Authenticate
@@ -80,6 +81,7 @@ from singlet._catalog import (
 )
 from singlet._describe import describe
 from singlet._filter import filter_cells, filter_genes
+from singlet._hvg import highly_variable_genes
 from singlet._io import (
     info_1pz,
     read_1pz,
@@ -162,6 +164,7 @@ __all__ = [
     "filter_genes",
     # Preprocessing
     "normalize",
+    "highly_variable_genes",
     # Diagnostics
     "show_versions",
 ]
