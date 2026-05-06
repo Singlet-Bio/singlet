@@ -108,9 +108,11 @@ from singlet._leiden import leiden
 from singlet._louvain import louvain
 from singlet._loader import download, load, load_dir, load_sample
 from singlet._neighbors import neighbors
+from singlet._paga import paga
 from singlet._normalize import normalize
 from singlet._pca import pca
 from singlet._plot import plot_dotplot, plot_umap, plot_violin
+from singlet._plot_paga import plot_paga
 from singlet._plot_heatmap import plot_heatmap
 from singlet._plot_markers import rank_genes_groups_dotplot
 from singlet._plot_scatter import plot_scatter
@@ -207,6 +209,7 @@ __all__ = [
     "diffmap",
     "dpt",
     "umap",
+    "paga",
     # Differential expression
     "rank_genes_groups",
     "rank_genes_groups_df",
@@ -225,6 +228,7 @@ __all__ = [
     "plot_heatmap",
     "plot_scatter",
     "plot_stacked_violin",
+    "plot_paga",
     # Integration
     "ingest",
     # Diagnostics
