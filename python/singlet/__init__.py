@@ -87,6 +87,7 @@ from singlet._catalog import (
 )
 from singlet._cca import cca
 from singlet._cell_cycle import score_cell_cycle
+from singlet._cell_distances import cell_distances
 from singlet._cell_type_proportions import cell_type_proportions
 from singlet._cluster_stability import cluster_stability
 from singlet._combat import combat
@@ -123,6 +124,7 @@ from singlet._hvg import highly_variable_genes
 from singlet._hvg_cell_ranger import highly_variable_genes_cell_ranger
 from singlet._hvg_seurat import highly_variable_genes_seurat_v3
 from singlet._ica import ica
+from singlet._identify_bipotent_cells import identify_bipotent_cells
 from singlet._infer_grn import infer_grn
 from singlet._ingest import ingest
 from singlet._io import (
@@ -184,6 +186,7 @@ from singlet._transfer_labels import transfer_labels
 from singlet._transforms import expm1, log1p, sqrt_transform
 from singlet._tsne import tsne
 from singlet._umap import umap
+from singlet._variance_partition import variance_partition
 from singlet._velocity_pseudotime import velocity_pseudotime
 from singlet._versions import show_versions
 from singlet._wishart import wishart_test
@@ -397,4 +400,10 @@ __all__ = [
     "cross_species_correlation",
     # Cluster stability
     "cluster_stability",
+    # Bipotent cell identification
+    "identify_bipotent_cells",
+    # Variance partitioning
+    "variance_partition",
+    # Cell distances
+    "cell_distances",
 ]
