@@ -81,6 +81,7 @@ from singlet._catalog import (
     tissues,
     top_series,
 )
+from singlet._combat import combat
 from singlet._de import rank_genes_groups
 from singlet._describe import describe
 from singlet._filter import filter_cells, filter_genes
@@ -188,6 +189,7 @@ __all__ = [
     "score_genes",
     # Batch correction
     "harmony",
+    "combat",
     # Plotting
     "plot_umap",
     "plot_violin",
