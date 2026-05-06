@@ -82,6 +82,8 @@ from singlet._catalog import (
     top_series,
 )
 from singlet._correlation import correlation_matrix
+from singlet._recipes import recipe_seurat, recipe_zheng17
+from singlet._spatial import spatial_neighbors
 from singlet._combat import combat
 from singlet._mnn import mnn_correct
 from singlet._concat import concatenate
@@ -236,6 +238,11 @@ __all__ = [
     "scrublet",
     # Correlation
     "correlation_matrix",
+    # Recipes
+    "recipe_seurat",
+    "recipe_zheng17",
+    # Spatial
+    "spatial_neighbors",
     # Plotting
     "plot_umap",
     "plot_violin",
