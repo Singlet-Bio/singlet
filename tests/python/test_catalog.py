@@ -309,3 +309,18 @@ def test_summary_format():
     assert "samples" in s
     assert "series" in s
     assert "species" in s
+
+
+def test_search_with_regex_special_chars():
+    """search parameters with regex special chars don't crash."""
+    import singlet
+
+    # These should NOT raise re.error — they use literal matching
+    result = singlet.samples(search="(lung")
+    assert isinstance(result, pd.DataFrame)
+
+    result = singlet.catalog("C++ [test]")
+    assert isinstance(result, pd.DataFrame)
+
+    result = singlet.datasets(organism="Mus (house)")
+    assert isinstance(result, pd.DataFrame)

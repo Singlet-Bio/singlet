@@ -168,7 +168,7 @@ def catalog(search: Optional[str] = None) -> pd.DataFrame:
         text_cols = df.select_dtypes(include="object").columns
         mask = (
             df[text_cols]
-            .apply(lambda col: col.str.contains(search, case=False, na=False))
+            .apply(lambda col: col.str.contains(search, case=False, na=False, regex=False))
             .any(axis=1)
         )
         return df[mask].reset_index(drop=True)  # type: ignore[return-value]
@@ -371,10 +371,10 @@ def datasets(
     df = _load_catalog()
     if organism is not None:
         col = "organisms" if "organisms" in df.columns else "organism"
-        df = df[df[col].str.contains(organism, case=False, na=False)]
+        df = df[df[col].str.contains(organism, case=False, na=False, regex=False)]
     if protocol is not None:
         col = "protocols" if "protocols" in df.columns else "protocol"
-        df = df[df[col].str.contains(protocol, case=False, na=False)]
+        df = df[df[col].str.contains(protocol, case=False, na=False, regex=False)]
     if min_cells is not None:
         col = "total_cells" if "total_cells" in df.columns else "n_cells"
         df = df[df[col] >= min_cells]
@@ -487,14 +487,14 @@ def samples(
         text_cols = df.select_dtypes(include="object").columns
         mask = (
             df[text_cols]
-            .apply(lambda col: col.str.contains(search, case=False, na=False))
+            .apply(lambda col: col.str.contains(search, case=False, na=False, regex=False))
             .any(axis=1)
         )
         df = df[mask]
     if gse_id is not None:
         df = df[df["gse_id"] == gse_id]
     if organism is not None:
-        df = df[df["organism"].str.contains(organism, case=False, na=False)]
+        df = df[df["organism"].str.contains(organism, case=False, na=False, regex=False)]
     if status is not None:
         df = df[df["status"] == status]
     if tissue is not None:
@@ -554,7 +554,7 @@ def top_series(
     df = _load_sample_index()
     df = df[df["status"] == "SUCCESS"]
     if organism is not None:
-        df = df[df["organism"].str.contains(organism, case=False, na=False)]
+        df = df[df["organism"].str.contains(organism, case=False, na=False, regex=False)]
 
     cells_col = "cells_called" if "cells_called" in df.columns else "n_cells"
 
