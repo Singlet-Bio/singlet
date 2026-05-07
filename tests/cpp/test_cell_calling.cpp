@@ -328,6 +328,226 @@ int main() {
                    std::to_string(expected_dev1)).c_str());
     }
 
+    // ── 9. T_OVERLAP: Overlapping UMI distributions ──────────────────────────
+    // 50 true cells (bc 0-49): genes 0-4 only, 100 UMI per gene = 500 UMI.
+    // 1000 ambient (bc 50-1049): Poisson(0.1) per gene × 200 genes ≈ 20 UMI.
+    // 200 gray-zone (bc 1050-1249): Poisson(0.5) per gene × 200 genes ≈ 100 UMI.
+    // n_ambient ≈ 1000 >> 300 and ambient_tot ≈ 20000 >> 10000 → no supplement.
+    {
+        const uint32_t N_GENES   = 200;
+        const uint32_t N_CELLS   = 50;
+        const uint32_t N_AMBIENT = 1000;
+        const uint32_t N_GRAY    = 200;
+        const uint32_t N_BC      = N_CELLS + N_AMBIENT + N_GRAY;
+
+        std::vector<uint64_t> counts(N_BC, 0);
+        std::vector<std::tuple<uint32_t,uint32_t,uint16_t>> entries;
+
+        // True cells: concentrated profile on genes 0-4, high deviance vs ambient
+        for (uint32_t b = 0; b < N_CELLS; ++b)
+            for (uint32_t g = 0; g < 5; ++g) {
+                entries.emplace_back(g, b, uint16_t(100));
+                counts[b] += 100;
+            }
+
+        // Ambient pool: Poisson(0.1) per gene → count ≤ lower=40 (Poisson(20) << 40)
+        std::mt19937 rng9(12345u);
+        std::poisson_distribution<int> pdist_amb9(0.1);
+        for (uint32_t b = N_CELLS; b < N_CELLS + N_AMBIENT; ++b)
+            for (uint32_t g = 0; g < N_GENES; ++g) {
+                int v = pdist_amb9(rng9);
+                if (v > 0) {
+                    entries.emplace_back(g, b, uint16_t(v));
+                    counts[b] += static_cast<uint64_t>(v);
+                }
+            }
+
+        // Gray-zone: same ambient profile but deeper; deviance ≈ 0 → not called
+        std::poisson_distribution<int> pdist_gray9(0.5);
+        for (uint32_t b = N_CELLS + N_AMBIENT; b < N_BC; ++b)
+            for (uint32_t g = 0; g < N_GENES; ++g) {
+                int v = pdist_gray9(rng9);
+                if (v > 0) {
+                    entries.emplace_back(g, b, uint16_t(v));
+                    counts[b] += static_cast<uint64_t>(v);
+                }
+            }
+
+        auto csc = make_csc(N_GENES, N_BC, entries);
+        auto res = call_cells_emptydrops(counts, csc, 0.01, 40, 200000, 80, 2000);
+
+        uint32_t tp = 0, fp_gray = 0;
+        for (uint32_t bc : res.cell_indices) {
+            if (bc < N_CELLS) ++tp;
+            if (bc >= N_CELLS + N_AMBIENT) ++fp_gray;
+        }
+        std::cerr << "  T_OVERLAP: tp=" << tp << " fp_gray=" << fp_gray
+                  << " total_called=" << res.cell_indices.size() << "\n";
+
+        if (tp >= 45) PASS("T_OVERLAP: recall >= 90%");
+        else FAIL("T_OVERLAP: recall >= 90%",
+                  ("tp=" + std::to_string(tp) + "/50").c_str());
+        if (fp_gray <= 7) PASS("T_OVERLAP: precision >= 85%");
+        else FAIL("T_OVERLAP: precision >= 85%",
+                  ("fp_gray=" + std::to_string(fp_gray) + "/200").c_str());
+    }
+
+    // ── 10. T_DEEP_AMBIENT: Deep ambient not overcalled ──────────────────────
+    // 20 true cells (bc 0-19): genes 0-9 only, 100 UMI per gene = 1000 UMI.
+    // 500 ambient (bc 20-519): genes 0-99, 1 UMI per gene = 100 UMI.
+    // 100 deep ambient (bc 520-619): genes 0-99, 5 UMI per gene = 500 UMI.
+    // Deviance for deep ambient: 2×Σ 5×[log(5)-log(500)-log(0.01)] = 0 exactly.
+    {
+        const uint32_t N_GENES    = 100;
+        const uint32_t N_CELLS    = 20;
+        const uint32_t N_AMBIENT  = 500;
+        const uint32_t N_DEEP_AMB = 100;
+        const uint32_t N_BC       = N_CELLS + N_AMBIENT + N_DEEP_AMB;
+
+        std::vector<uint64_t> counts(N_BC, 0);
+        std::vector<std::tuple<uint32_t,uint32_t,uint16_t>> entries;
+
+        // Cells: concentrated on genes 0-9 only → massive deviance
+        for (uint32_t b = 0; b < N_CELLS; ++b)
+            for (uint32_t g = 0; g < 10; ++g) {
+                entries.emplace_back(g, b, uint16_t(100));
+                counts[b] += 100;
+            }
+
+        // Low-UMI ambient: uniform across all 100 genes (count=100 ≤ lower=150)
+        for (uint32_t b = N_CELLS; b < N_CELLS + N_AMBIENT; ++b)
+            for (uint32_t g = 0; g < N_GENES; ++g) {
+                entries.emplace_back(g, b, uint16_t(1));
+                counts[b] += 1;
+            }
+
+        // Deep ambient: same uniform profile, 5× deeper (count=500, tested)
+        for (uint32_t b = N_CELLS + N_AMBIENT; b < N_BC; ++b)
+            for (uint32_t g = 0; g < N_GENES; ++g) {
+                entries.emplace_back(g, b, uint16_t(5));
+                counts[b] += 5;
+            }
+
+        auto csc = make_csc(N_GENES, N_BC, entries);
+        // n_ambient=500>300, ambient_tot=50000>10000 → no gray supplement
+        auto res = call_cells_emptydrops(counts, csc, 0.01, 150, 200000, 200, 2000);
+
+        uint32_t tp = 0, fp_deep = 0;
+        for (uint32_t bc : res.cell_indices) {
+            if (bc < N_CELLS) ++tp;
+            if (bc >= N_CELLS + N_AMBIENT) ++fp_deep;
+        }
+        std::cerr << "  T_DEEP_AMBIENT: tp=" << tp << " fp_deep=" << fp_deep
+                  << " total_called=" << res.cell_indices.size() << "\n";
+
+        if (tp >= 18) PASS("T_DEEP_AMBIENT: >=18 true cells called");
+        else FAIL("T_DEEP_AMBIENT: >=18 true cells called",
+                  ("tp=" + std::to_string(tp) + "/20").c_str());
+        if (fp_deep == 0) PASS("T_DEEP_AMBIENT: 0 deep ambient overcalled");
+        else FAIL("T_DEEP_AMBIENT: 0 deep ambient overcalled",
+                  ("fp_deep=" + std::to_string(fp_deep)).c_str());
+    }
+
+    // ── 11. T_MC_CALIBRATION: FPR under null ─────────────────────────────────
+    // 500 ambient (bc 0-499): Poisson(0.5)×50 genes ≈ 25 UMI.  lower=35.
+    // 500 null (bc 500-999): Poisson(5)×50 genes ≈ 250 UMI.  Same profile.
+    // Under H0 deviance ≈ 0 → p ≈ 1 → FDR ≈ 1; BH@0.01 expects ≤5 FP.
+    {
+        const uint32_t N_GENES   = 50;
+        const uint32_t N_AMBIENT = 500;
+        const uint32_t N_NULL_BC = 500;
+        const uint32_t N_BC      = N_AMBIENT + N_NULL_BC;
+
+        std::vector<uint64_t> counts(N_BC, 0);
+        std::vector<std::tuple<uint32_t,uint32_t,uint16_t>> entries;
+
+        // Ambient pool: Poisson(0.5)×50 → mean 25 UMI; P(count≤35) ≈ 97.7%
+        std::mt19937 rng11(99999u);
+        std::poisson_distribution<int> pdist_amb11(0.5);
+        for (uint32_t b = 0; b < N_AMBIENT; ++b)
+            for (uint32_t g = 0; g < N_GENES; ++g) {
+                int v = pdist_amb11(rng11);
+                if (v > 0) {
+                    entries.emplace_back(g, b, uint16_t(v));
+                    counts[b] += static_cast<uint64_t>(v);
+                }
+            }
+
+        // Null barcodes: same gene profile, 10× deeper → deviance ≈ 0
+        std::poisson_distribution<int> pdist_null11(5.0);
+        for (uint32_t b = N_AMBIENT; b < N_BC; ++b)
+            for (uint32_t g = 0; g < N_GENES; ++g) {
+                int v = pdist_null11(rng11);
+                if (v > 0) {
+                    entries.emplace_back(g, b, uint16_t(v));
+                    counts[b] += static_cast<uint64_t>(v);
+                }
+            }
+
+        auto csc = make_csc(N_GENES, N_BC, entries);
+        auto res = call_cells_emptydrops(counts, csc, 0.01, 35, 200000, 100, 2000);
+
+        uint32_t null_called = 0;
+        for (uint32_t bc : res.cell_indices)
+            if (bc >= N_AMBIENT) ++null_called;
+        std::cerr << "  T_MC_CALIBRATION: null_called=" << null_called << "/500\n";
+
+        if (null_called <= 10) PASS("T_MC_CALIBRATION: FPR <= 2% on null");
+        else FAIL("T_MC_CALIBRATION: FPR <= 2% on null",
+                  ("null_called=" + std::to_string(null_called)).c_str());
+    }
+
+    // ── 12. T_KNEE_FALLBACK_CORRECTNESS: Knee finds right boundary ───────────
+    // 30 cells (bc 0-29): genes 0-4, (360+bc×2) UMI per gene → 1800–2090 UMI.
+    // 200 empties (bc 30-229): genes 0-24, 1 UMI per gene = 25 UMI.
+    // lower=10: ALL barcodes > 10 → ambient pool empty → knee fallback fires.
+    // Knee lands at the cell/empty boundary (~rank 27-29).  lower updated to
+    // knee_umi ≈ 1800-1820.  Empties below new lower → not tested.  29 cells
+    // above new lower → tested with huge deviance → all called.
+    {
+        const uint32_t N_GENES = 50;
+        const uint32_t N_CELLS = 30;
+        const uint32_t N_EMPTY = 200;
+        const uint32_t N_BC    = N_CELLS + N_EMPTY;
+
+        std::vector<uint64_t> counts(N_BC, 0);
+        std::vector<std::tuple<uint32_t,uint32_t,uint16_t>> entries;
+
+        // Cells: staggered UMI creates a clear elbow at rank 29
+        for (uint32_t b = 0; b < N_CELLS; ++b) {
+            uint16_t umi_per_gene = static_cast<uint16_t>(360 + b * 2);
+            for (uint32_t g = 0; g < 5; ++g) {
+                entries.emplace_back(g, b, umi_per_gene);
+                counts[b] += umi_per_gene;
+            }
+        }
+
+        // Empty barcodes: genes 0-24, 1 UMI each = 25 UMI total
+        for (uint32_t b = N_CELLS; b < N_BC; ++b)
+            for (uint32_t g = 0; g < 25; ++g) {
+                entries.emplace_back(g, b, uint16_t(1));
+                counts[b] += 1;
+            }
+
+        auto csc = make_csc(N_GENES, N_BC, entries);
+        // lower=10: knee fallback fires; min_umi_test=500 so only cells (≥1800) tested
+        auto res = call_cells_emptydrops(counts, csc, 0.01, 10, 200000, 500, 2000);
+
+        uint32_t cells_called = static_cast<uint32_t>(res.cell_indices.size());
+        uint32_t fp_empty = 0;
+        for (uint32_t bc : res.cell_indices)
+            if (bc >= N_CELLS) ++fp_empty;
+        std::cerr << "  T_KNEE_FALLBACK: cells_called=" << cells_called
+                  << " fp_empty=" << fp_empty << "\n";
+
+        if (cells_called >= 25) PASS("T_KNEE_FALLBACK: >=25 cells called");
+        else FAIL("T_KNEE_FALLBACK: >=25 cells called",
+                  ("cells_called=" + std::to_string(cells_called)).c_str());
+        if (fp_empty <= 5) PASS("T_KNEE_FALLBACK: <=5 false positives");
+        else FAIL("T_KNEE_FALLBACK: <=5 false positives",
+                  ("fp_empty=" + std::to_string(fp_empty)).c_str());
+    }
+
     // ── Summary ──────────────────────────────────────────────────────────────
     std::cerr << "\n" << passed << " passed, " << failed << " failed\n";
     return (failed > 0) ? 1 : 0;
