@@ -305,12 +305,10 @@ inline std::vector<double> mc_null_deviances(
 /// This brings the total simulation cost from O(n_tested * n_mc) draws
 /// to O(n_bins * n_mc) draws (typically 20–40 bins × 10000 draws).
 ///
-/// Early stopping: if after `early_stop_iter` simulations the running
-/// p-value estimate is already > 10 * fdr_alpha * n_tests, skip the rest
-/// (that barcode cannot become significant after BH correction).
-///
 /// @param n_monte_carlo  Simulations per UMI-depth bin (default 10000).
-/// @param early_stop_iter  Minimum draws before early stop (default 200).
+/// @param early_stop_iter  Reserved for future early-stopping optimisation
+///        (currently unused). TODO(N5): implement early stopping to skip
+///        barcodes whose null distribution is already determined.
 inline std::vector<double> mc_emptydrops_pvalues(
     const std::vector<uint32_t>& tested_indices,
     const std::vector<double>&   deviances,
@@ -320,6 +318,7 @@ inline std::vector<double> mc_emptydrops_pvalues(
     int n_monte_carlo  = 10000,
     int early_stop_iter = 200)
 {
+    (void)early_stop_iter;  // TODO(N5): implement early stopping
     const size_t n_tested = tested_indices.size();
     std::vector<double> pvals(n_tested, 1.0);
     if (n_tested == 0) return pvals;
@@ -436,7 +435,8 @@ inline CellCallResult call_cells_knee_fallback(
     const size_t n = ranked.size();
 
     // Find inflection index via smoothed second derivative
-    size_t knee_idx = n > 0 ? n / 2 : 0;  // sensible default
+    size_t knee_idx  = 0;       // updated only when an inflection is found
+    bool found_knee  = false;   // guards against silent n/2 fallback on monotone curves
     if (n >= 3) {
         // log10(count) for each rank
         std::vector<double> lc(n);
@@ -456,12 +456,27 @@ inline CellCallResult call_cells_knee_fallback(
             sm[i] = s / static_cast<double>(hi - lo + 1);
         }
 
-        // Smoothed second derivative; find most-negative (steepest bend)
+        // Smoothed second derivative; find most-negative (steepest bend).
+        // Strict < means the FIRST occurrence wins on exact ties
+        // (earlier rank = higher UMI = more conservative cell set).
         double min_d2 = 0.0;
         for (size_t i = 1; i + 1 < n; ++i) {
             double d2 = sm[i + 1] - 2.0 * sm[i] + sm[i - 1];
-            if (d2 < min_d2) { min_d2 = d2; knee_idx = i; }
+            if (d2 < min_d2) { min_d2 = d2; knee_idx = i; found_knee = true; }
         }
+    }
+
+    // If no inflection was found (monotone or flat curve), the barcode-rank
+    // curve has no clear cell/empty boundary.  Return 0 cells conservatively
+    // rather than silently calling n/2 barcodes as cells.
+    if (!found_knee) {
+        std::cerr << "[cell-call] knee-point fallback: no inflection found in "
+                  << "barcode-rank curve (n=" << n << ", monotone/flat) — "
+                  << "returning 0 cells (conservative).\n";
+        CellCallResult empty;
+        empty.n_ambient    = 0;
+        empty.ambient_total = 0.0;
+        return empty;
     }
 
     // Threshold = UMI count at knee, clamped to ≥ lower
@@ -651,7 +666,8 @@ inline CellCallResult call_cells_emptydrops(
         for (; nv < n_barcodes; ++nv)
             if (counts_per_barcode[sorted_bc[nv]] == 0) break;
 
-        size_t knee_rank = (nv > 0) ? nv / 2 : 0;
+        size_t knee_rank = 0;
+        bool   found_knee_for_ambient = false;
         uint64_t knee_umi = 0;
 
         if (nv >= 5) {
@@ -672,12 +688,24 @@ inline CellCallResult call_cells_emptydrops(
                 sm[i] = s / static_cast<double>(hi - lo + 1);
             }
 
-            // Most-negative smoothed second derivative → inflection (knee)
+            // Most-negative smoothed second derivative → inflection (knee).
+            // Strict < means the FIRST occurrence wins on exact ties
+            // (earlier rank = higher UMI = more conservative ambient boundary).
             double min_d2 = 0.0;
             for (size_t i = 1; i + 1 < nv; ++i) {
                 double d2 = sm[i + 1] - 2.0 * sm[i] + sm[i - 1];
-                if (d2 < min_d2) { min_d2 = d2; knee_rank = i; }
+                if (d2 < min_d2) { min_d2 = d2; knee_rank = i; found_knee_for_ambient = true; }
             }
+        }
+
+        if (!found_knee_for_ambient) {
+            // No inflection in barcode-rank curve — curve is monotone or flat.
+            // Fall back to nv/2 as the ambient/cell boundary (arbitrary but
+            // allows EmptyDrops to proceed with some ambient barcodes).
+            knee_rank = (nv > 0) ? nv / 2 : 0;
+            std::cerr << "[cell-call] ambient-pool knee: no inflection found "
+                      << "(nv=" << nv << ") — using nv/2=" << knee_rank
+                      << " as ambient boundary.\n";
         }
 
         knee_umi = counts_per_barcode[sorted_bc[knee_rank]];

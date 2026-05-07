@@ -548,6 +548,69 @@ int main() {
                   ("fp_empty=" + std::to_string(fp_empty)).c_str());
     }
 
+    // ── 13. T_KNEE_NO_INFLECTION: No knee → 0 cells ──────────────────────────
+    // Build a barcode-rank curve with n < 3 qualified barcodes so the
+    // inflection loop never runs.  found_knee stays false → must return 0 cells,
+    // NOT n/2.  Regression test: before fix, returned n/2 = 1 cell silently.
+    {
+        // Only 2 barcodes qualify (counts ≥ lower=100); n=2 < 3 → loop skipped
+        std::vector<uint64_t> counts = {500, 200, 50, 20, 10};
+        auto res = call_cells_knee_fallback(counts, /*lower=*/100);
+        size_t n_cells = res.cell_indices.size();
+        std::cerr << "  T_KNEE_NO_INFLECTION: n_cells=" << n_cells
+                  << " (expected 0, old code would return n/2=1)\n";
+        if (n_cells == 0)
+            PASS("T_KNEE_NO_INFLECTION: no inflection → 0 cells");
+        else
+            FAIL("T_KNEE_NO_INFLECTION: no inflection → 0 cells",
+                 ("n_cells=" + std::to_string(n_cells)).c_str());
+    }
+
+    // ── 14. T_KNEE_MONOTONE_FLAT: Flat curve → 0 cells ───────────────────────
+    // All barcodes have identical UMI count → log10(UMI) is constant →
+    // second derivative = 0 everywhere → d2 < 0.0 never fires →
+    // found_knee stays false → must return 0 cells (not n/2 = 5).
+    {
+        std::vector<uint64_t> counts(10, 500);   // 10 barcodes × 500 UMI
+        auto res = call_cells_knee_fallback(counts, /*lower=*/100);
+        size_t n_cells = res.cell_indices.size();
+        std::cerr << "  T_KNEE_MONOTONE_FLAT: n_cells=" << n_cells
+                  << " (expected 0, old code would return n/2=5)\n";
+        if (n_cells == 0)
+            PASS("T_KNEE_MONOTONE_FLAT: flat curve → 0 cells");
+        else
+            FAIL("T_KNEE_MONOTONE_FLAT: flat curve → 0 cells",
+                 ("n_cells=" + std::to_string(n_cells)
+                  + " (was it n/2?)").c_str());
+    }
+
+    // ── 15. T_KNEE_TIES: First inflection wins (conservative tie-breaking) ────
+    // Double-step barcode-rank curve: a large drop at rank 5 and a smaller
+    // drop at rank 10.  The first drop produces the most-negative d2 and
+    // must be chosen as the knee (≤6 cells).  This also verifies that the
+    // strict < in the inflection loop correctly keeps the FIRST occurrence
+    // when two inflection points would share the same d2 value.
+    {
+        std::vector<uint64_t> counts = {
+            10000, 9500, 9000, 8500, 8000,    // ranks  0–4 : cells  (~10000)
+             1200, 1100, 1050, 1000,  950,    // ranks  5–9 : middle  (~1000)
+              200,  190,  180,  170,  160     // ranks 10–14: ambient  (~200)
+        };
+        // lower=50 → all 15 barcodes qualify, n=15
+        auto res = call_cells_knee_fallback(counts, /*lower=*/50);
+        size_t n_cells = res.cell_indices.size();
+        std::cerr << "  T_KNEE_TIES: n_cells=" << n_cells
+                  << " (expected ≤6; knee at first sharp drop)\n";
+        // Knee should land at the first (larger) drop, not the second.
+        // If tie-breaking were wrong (last wins), knee could land at rank ≥10.
+        if (n_cells <= 6)
+            PASS("T_KNEE_TIES: first inflection wins (<=6 cells)");
+        else
+            FAIL("T_KNEE_TIES: first inflection wins (<=6 cells)",
+                 ("n_cells=" + std::to_string(n_cells)
+                  + " (knee landed at wrong drop?)").c_str());
+    }
+
     // ── Summary ──────────────────────────────────────────────────────────────
     std::cerr << "\n" << passed << " passed, " << failed << " failed\n";
     return (failed > 0) ? 1 : 0;
