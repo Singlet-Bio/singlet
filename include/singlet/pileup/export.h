@@ -46,6 +46,7 @@
 #include "h5ad_writer.h"
 #include "loom_writer.h"
 #include "summary_json.h"
+#include "multiome_router.h"
 
 namespace singlet {
 
@@ -518,9 +519,21 @@ inline ExportStats export_results(const PileupEngine& engine,
                       << " (top-" << n << " by UMI count)\n";
             cell_caller_method = "forced_cells";
         } else {
+            // Multiome GEX libraries have ~3-10× fewer RNA UMI per cell (sequencing
+            // depth split between RNA and ATAC).  Lower the ambient/test thresholds
+            // to avoid the 0-cell bug where all cells fall below min_umi_test.
+            uint64_t effective_lower = export_cfg.lower_umi;
+            uint64_t effective_min_umi_test = export_cfg.min_umi_test;
+            if (is_multiome_protocol(export_cfg.protocol_name)) {
+                effective_lower = std::min(effective_lower, uint64_t(30));
+                effective_min_umi_test = std::min(effective_min_umi_test, uint64_t(100));
+                std::cerr << "[cell_calling] Multiome detected (" << export_cfg.protocol_name
+                          << ") — adjusted thresholds: lower=" << effective_lower
+                          << " min_umi_test=" << effective_min_umi_test << "\n";
+            }
             cc_result = singlet::call_cells_emptydrops(
-                bc_totals, gene_csc_for_ed, export_cfg.fdr_threshold, export_cfg.lower_umi,
-                50000, export_cfg.min_umi_test, 10000,
+                bc_totals, gene_csc_for_ed, export_cfg.fdr_threshold, effective_lower,
+                50000, effective_min_umi_test, 10000,
                 // N22: full-whitelist ambient override (nullptr when whitelist not loaded)
                 engine.wl_umi_counts().empty()             ? nullptr : &engine.wl_umi_counts(),
                 engine.wl_ambient_gene_counts().empty()    ? nullptr : &engine.wl_ambient_gene_counts(),
