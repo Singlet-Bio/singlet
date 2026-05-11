@@ -36,7 +36,7 @@ build: ## Build C++ tests only (no run)
 	cmake -B build-tests -DSINGLET_BUILD_TESTS=ON -DSINGLET_BUILD_PIPELINE=OFF
 	cmake --build build-tests -j$$(nproc)
 
-pipeline: ## Build the singlify pipeline binary
+pipeline: ## Build the singlet pipeline binary
 	cmake -B build -DSINGLET_BUILD_PIPELINE=ON -DCMAKE_BUILD_TYPE=Release
 	cmake --build build -j$$(nproc)
 

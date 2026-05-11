@@ -98,7 +98,7 @@ while (auto shard = iter.next(ctx)) {
 }
 ```
 
-See [`api/streaming.md`](api/streaming.md) for the full streaming kernel contract.
+Streaming kernel contract documentation is forthcoming.
 
 ## Reproducibility
 

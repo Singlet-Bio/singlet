@@ -48,7 +48,7 @@ cmake -B build \
     -DSINGLET_BUILD_PIPELINE=ON \
     -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
-# Binary: build/src/pipeline/singlify
+# Binary: build/src/pipeline/singlet
 ```
 
 ## Dependencies

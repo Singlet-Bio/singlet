@@ -2,7 +2,7 @@
 
 All notable changes to the singlet project.
 
-## [2.0.0] — 2026-05-05
+## [2.0.0] — Unreleased
 
 ### Breaking Changes
 - **Unified package**: `singlet-bio`, `singlepress`, `singlet-gpu` merged into single `singlet` package
@@ -66,7 +66,7 @@ All notable changes to the singlet project.
 - Standalone `singlet-bio` repository (archived)
 - Agent configs moved to private `singlet-agents` repo
 
-## [1.0.0] — 2026-05-04
+## [1.0.0] — Unreleased
 
 ### Features
 - **Bundled catalog**: Package ships with `catalog_v1.parquet` (1,175 series) and `sample_index.parquet` (2,378 samples). No downloads needed to browse the atlas.

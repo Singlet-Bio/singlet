@@ -41,7 +41,7 @@ singlet/
 │   ├── cpp/               100 C++ unit tests
 │   └── python/            608 Python tests
 ├── docs/                  Documentation
-├── pipeline/              singlify pipeline scripts
+├── pipeline/              singlet pipeline scripts
 └── notebooks/             Jupyter notebooks and examples
 ```
 
