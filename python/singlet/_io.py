@@ -1,4 +1,4 @@
-""".spz / .1pz file I/O — wraps the singlepress C++ extensions.
+""".spz / .1pz file I/O — wraps the singlet codec C++ extensions.
 
 Supports three formats:
   .1pz — New VOCSC + byte-split + zstd-3 format (preferred)

@@ -44,7 +44,7 @@ gpu = ["cupy-cuda12x>=13.0"]
 zarr = ["zarr>=2.12"]
 tiledb = ["tiledbsoma>=1.4"]
 mcp = ["mcp>=0.1", "supabase>=2.0"]
-all = ["singlet[torch,gpu,zarr,mcp]"]
+all = ["singlet[torch,gpu,zarr,tiledb,mcp]"]
 dev = [
     "pytest>=7.0",
     "pytest-cov",

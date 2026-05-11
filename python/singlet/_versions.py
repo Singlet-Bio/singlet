@@ -38,7 +38,6 @@ def show_versions() -> str:
         "anndata",
     ]
     optional = [
-        ("singlepress", "singlepress"),
         ("sparsepress", "sparsepress"),
         ("torch", "PyTorch"),
         ("cupy", "CuPy (GPU)"),
