@@ -812,6 +812,13 @@ inline CellCallResult call_cells_emptydrops(
     // significant for every barcode (100% call rate → CR2 fallback).
     // Keeping the gray zone tight (lower..lower*2) ensures only true empty
     // droplets enter the ambient pool.
+    //
+    // Concrete example (10x Chromium v3, lower=100):
+    //   • Typical cell UMI starts at ~200-300; lower*2 = 200 keeps a
+    //     safety margin just below the cell UMI distribution.
+    //   • Going higher (e.g., lower*3 = 300) risks including true cells
+    //     in the ambient pool, inflating the profile with cell-derived
+    //     signal and causing systematic miscalling.
     static const uint32_t MIN_AMBIENT_BARCODES = 300;
     static const double   MIN_AMBIENT_UMI      = 1e4;
     if (n_ambient < MIN_AMBIENT_BARCODES || ambient_tot < MIN_AMBIENT_UMI) {
