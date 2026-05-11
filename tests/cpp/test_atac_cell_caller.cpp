@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdio>
 #include <iostream>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -329,6 +330,182 @@ static void test_empty_input() {
     pass("empty_input");
 }
 
+// ── Test 11: T_OTSU_BIMODAL — bimodal PBMC 500 ATAC simulation ──────────────
+
+static void test_otsu_bimodal() {
+    std::mt19937 rng(42);
+
+    const int n_cells = 500;
+    const int n_empties = 3000;
+    const int N = n_cells + n_empties;
+
+    std::vector<std::string> barcodes(N);
+    std::vector<uint64_t> frags(N);
+    std::vector<double> tss(N);
+    std::vector<double> frip(N);
+
+    // Cell barcodes: log-normal centered at log10(5000)≈3.7, σ=0.2
+    std::normal_distribution<double> cell_log_frag(3.7, 0.2);
+    std::normal_distribution<double> cell_tss_dist(0.25, 0.05);
+    std::normal_distribution<double> cell_frip_dist(0.30, 0.05);
+
+    for (int i = 0; i < n_cells; ++i) {
+        barcodes[i] = "cell_" + std::to_string(i);
+        double lf = cell_log_frag(rng);
+        frags[i] = std::max(uint64_t(1), static_cast<uint64_t>(std::pow(10.0, lf)));
+        tss[i] = std::max(0.0, cell_tss_dist(rng));
+        frip[i] = std::max(0.0, cell_frip_dist(rng));
+    }
+
+    // Empty barcodes: log-normal centered at log10(50)≈1.7, σ=0.3
+    std::normal_distribution<double> empty_log_frag(1.7, 0.3);
+    std::normal_distribution<double> empty_tss_dist(0.03, 0.01);
+    std::normal_distribution<double> empty_frip_dist(0.05, 0.02);
+
+    for (int i = 0; i < n_empties; ++i) {
+        int idx = n_cells + i;
+        barcodes[idx] = "empty_" + std::to_string(i);
+        double lf = empty_log_frag(rng);
+        frags[idx] = std::max(uint64_t(1), static_cast<uint64_t>(std::pow(10.0, lf)));
+        tss[idx] = std::max(0.0, empty_tss_dist(rng));
+        frip[idx] = std::max(0.0, empty_frip_dist(rng));
+    }
+
+    AtacCellCaller caller;  // default config
+    std::vector<AtacCellCaller::CellCallResult> results;
+    auto summary = caller.call_cells(barcodes, frags, tss, frip, results);
+
+    // Count precision and recall
+    int true_pos = 0, false_pos = 0, false_neg = 0;
+    for (int i = 0; i < N; ++i) {
+        bool is_true_cell = (i < n_cells);
+        if (results[i].is_cell && is_true_cell) ++true_pos;
+        if (results[i].is_cell && !is_true_cell) ++false_pos;
+        if (!results[i].is_cell && is_true_cell) ++false_neg;
+    }
+
+    double precision = (true_pos + false_pos > 0)
+                           ? static_cast<double>(true_pos) / (true_pos + false_pos)
+                           : 0.0;
+    double recall = (n_cells > 0) ? static_cast<double>(true_pos) / n_cells : 0.0;
+
+    require(summary.cells_called >= 400 && summary.cells_called <= 600,
+            "T_OTSU_BIMODAL: cells_called in [400, 600]");
+    require(precision >= 0.90,
+            "T_OTSU_BIMODAL: precision >= 0.90");
+    require(recall >= 0.80,
+            "T_OTSU_BIMODAL: recall >= 0.80");
+
+    pass("T_OTSU_BIMODAL");
+}
+
+// ── Test 12: T_OTSU_THRESHOLD_SEPARATES — auto_fragment_threshold finds valley
+
+static void test_otsu_threshold_separates() {
+    std::mt19937 rng(123);
+
+    std::vector<uint64_t> counts;
+    counts.reserve(3500);
+
+    // 500 values in [3000, 8000]
+    std::uniform_int_distribution<uint64_t> cell_dist(3000, 8000);
+    for (int i = 0; i < 500; ++i)
+        counts.push_back(cell_dist(rng));
+
+    // 3000 values in [20, 200]
+    std::uniform_int_distribution<uint64_t> empty_dist(20, 200);
+    for (int i = 0; i < 3000; ++i)
+        counts.push_back(empty_dist(rng));
+
+    AtacCellCaller::Config cfg;
+    cfg.min_unique_fragments = 1;  // don't clamp for this test
+    AtacCellCaller caller(cfg);
+
+    uint32_t threshold = caller.auto_fragment_threshold(counts);
+
+    require(threshold >= 200 && threshold <= 3000,
+            "T_OTSU_THRESHOLD_SEPARATES: threshold in [200, 3000]");
+
+    pass("T_OTSU_THRESHOLD_SEPARATES");
+}
+
+// ── Test 13: T_UNIMODAL_FALLBACK — no bimodal split → min_unique_fragments ──
+
+static void test_unimodal_fallback() {
+    std::mt19937 rng(99);
+    std::uniform_int_distribution<uint64_t> dist(800, 1200);
+
+    std::vector<uint64_t> counts(1000);
+    for (auto& c : counts) c = dist(rng);
+
+    AtacCellCaller::Config cfg;
+    cfg.min_unique_fragments = 500;
+    AtacCellCaller caller(cfg);
+
+    uint32_t threshold = caller.auto_fragment_threshold(counts);
+
+    require(threshold == 500,
+            "T_UNIMODAL_FALLBACK: threshold == 500 (min_unique_fragments)");
+
+    pass("T_UNIMODAL_FALLBACK");
+}
+
+// ── Test 14: T_MIN_FLOOR — valley below min_unique_fragments is clamped ──────
+
+static void test_min_floor() {
+    std::vector<uint64_t> counts;
+    // 100 cells at ~1000
+    for (int i = 0; i < 100; ++i) counts.push_back(1000);
+    // 500 empties at ~10
+    for (int i = 0; i < 500; ++i) counts.push_back(10);
+
+    AtacCellCaller::Config cfg;
+    cfg.min_unique_fragments = 500;
+    AtacCellCaller caller(cfg);
+
+    uint32_t threshold = caller.auto_fragment_threshold(counts);
+
+    require(threshold >= 500,
+            "T_MIN_FLOOR: threshold >= 500 (clamped to min_unique_fragments)");
+
+    pass("T_MIN_FLOOR");
+}
+
+// ── Test 15: T_EMPTY_AND_EDGE — degenerate inputs ───────────────────────────
+
+static void test_empty_and_edge() {
+    AtacCellCaller::Config cfg;
+    cfg.min_unique_fragments = 500;
+    AtacCellCaller caller(cfg);
+
+    // Empty input
+    {
+        uint32_t t = caller.auto_fragment_threshold({});
+        require(t == 500, "T_EMPTY_AND_EDGE: empty → 500");
+    }
+
+    // Single barcode above min
+    {
+        uint32_t t = caller.auto_fragment_threshold({1000});
+        require(t >= 500, "T_EMPTY_AND_EDGE: single barcode(1000) >= 500");
+    }
+
+    // Single barcode below min
+    {
+        uint32_t t = caller.auto_fragment_threshold({100});
+        require(t >= 500, "T_EMPTY_AND_EDGE: single barcode(100) >= 500");
+    }
+
+    // All zeros
+    {
+        std::vector<uint64_t> zeros(50, 0);
+        uint32_t t = caller.auto_fragment_threshold(zeros);
+        require(t == 500, "T_EMPTY_AND_EDGE: all zeros → 500");
+    }
+
+    pass("T_EMPTY_AND_EDGE");
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 int main() {
@@ -344,6 +521,11 @@ int main() {
     test_fragment_filter_alone();
     test_median_statistics();
     test_empty_input();
+    test_otsu_bimodal();
+    test_otsu_threshold_separates();
+    test_unimodal_fallback();
+    test_min_floor();
+    test_empty_and_edge();
 
     std::printf("All tests passed.\n");
     return 0;

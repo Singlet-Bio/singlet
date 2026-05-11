@@ -75,12 +75,15 @@ class AtacCellCaller {
     const Config& config() const { return cfg_; }
     Config& config() { return cfg_; }
 
-    // ── Auto fragment threshold (log-log inflection point) ────────────────────
+    // ── Auto fragment threshold (Otsu bimodal + inflection fallback) ──────────
     //
-    // Sorts counts descending, takes the top `quantile_threshold` fraction,
-    // maps (rank, count) to (log(rank), log(count)), then finds the rank r*
-    // that maximises the discrete second derivative of log(count) w.r.t. log(rank).
-    // Returns the count at r* as the threshold (minimum 1).
+    // Primary: Otsu's method on log₁₀(fragment_count) distribution to find
+    // the optimal split between the "cells" and "empty" modes.
+    // This is robust and data-adaptive (no fixed quantile assumptions).
+    //
+    // Fallback: log-log inflection point (smoothed, to avoid tail noise).
+    //
+    // Returns the count threshold; always ≥ min_unique_fragments.
 
     uint32_t auto_fragment_threshold(const std::vector<uint64_t>& counts) const {
         if (counts.empty()) return cfg_.min_unique_fragments;
@@ -95,42 +98,87 @@ class AtacCellCaller {
 
         std::sort(sorted.begin(), sorted.end(), std::greater<uint64_t>());
 
-        // Only look at top quantile_threshold fraction (ignore long zero/near-zero tail)
-        size_t n = static_cast<size_t>(
-            std::max(1.0, std::ceil(cfg_.quantile_threshold * sorted.size())));
-        n = std::min(n, sorted.size());
-        sorted.resize(n);
+        // ── Otsu's method on log₁₀(count) histogram ─────────────────────────
+        // Bin log₁₀(count) into 100 bins spanning [0, max_log10]
+        const double max_log = std::log10(static_cast<double>(sorted.front()));
+        const double min_log = std::log10(static_cast<double>(sorted.back()));
+        const int n_bins = 100;
+        const double bin_width = (max_log - min_log) / n_bins;
 
-        if (n < 3) return static_cast<uint32_t>(sorted.back());
-
-        // Build log-log curve
-        std::vector<double> lrank(n), lcount(n);
-        for (size_t i = 0; i < n; ++i) {
-            lrank[i] = std::log(static_cast<double>(i + 1));
-            lcount[i] = std::log(static_cast<double>(sorted[i]));
+        if (bin_width <= 0.0 || sorted.size() < 10) {
+            // Degenerate: all same value or too few barcodes
+            return std::max(static_cast<uint32_t>(sorted.back()), cfg_.min_unique_fragments);
         }
 
-        // Discrete second derivative of lcount w.r.t. lrank
-        // d2[i] = (lcount[i+1] - 2*lcount[i] + lcount[i-1]) /
-        //         ((lrank[i+1] - lrank[i-1]) / 2)^2   (uniform-ish spacing approx)
-        // We look for the most negative curvature (sharpest drop).
-        size_t best_i = 1;
-        double best_d2 = std::numeric_limits<double>::max();  // most negative
+        // Build histogram
+        std::vector<int> hist(n_bins, 0);
+        for (uint64_t c : sorted) {
+            int bin = static_cast<int>((std::log10(static_cast<double>(c)) - min_log) / bin_width);
+            bin = std::max(0, std::min(n_bins - 1, bin));
+            ++hist[bin];
+        }
 
-        for (size_t i = 1; i + 1 < n; ++i) {
-            double dx = (lrank[i + 1] - lrank[i - 1]) * 0.5;
-            if (dx <= 0.0) continue;
-            double d2 = (lcount[i + 1] - 2.0 * lcount[i] + lcount[i - 1]) / (dx * dx);
-            if (d2 < best_d2) {
-                best_d2 = d2;
-                best_i = i;
+        // Otsu: find threshold that maximizes between-class variance
+        const int total = static_cast<int>(sorted.size());
+        double sum_all = 0.0;
+        for (int i = 0; i < n_bins; ++i)
+            sum_all += static_cast<double>(i) * hist[i];
+
+        int w0 = 0;
+        double sum0 = 0.0;
+        double best_var = -1.0;
+        int best_bin = n_bins / 2;
+
+        for (int t = 0; t < n_bins - 1; ++t) {
+            w0 += hist[t];
+            if (w0 == 0) continue;
+            int w1 = total - w0;
+            if (w1 == 0) break;
+
+            sum0 += static_cast<double>(t) * hist[t];
+            double mu0 = sum0 / w0;
+            double mu1 = (sum_all - sum0) / w1;
+            double var = static_cast<double>(w0) * w1 * (mu0 - mu1) * (mu0 - mu1);
+
+            if (var > best_var) {
+                best_var = var;
+                best_bin = t;
             }
         }
 
-        uint32_t threshold = static_cast<uint32_t>(sorted[best_i]);
-        // Apply minimum floor: auto-threshold must be at least min_unique_fragments.
-        // Without this, tail-noise amplification in log-log space (dx² → 0 at high
-        // rank) produces artificially low thresholds (e.g., 38 instead of ~500).
+        // Separability check: require the two class means to be at least
+        // 0.5 log₁₀ units apart (~3× in count space).  Unimodal or narrow
+        // distributions won't meet this threshold.
+        {
+            int w0_f = 0;
+            double s0_f = 0.0;
+            for (int i = 0; i <= best_bin; ++i) {
+                w0_f += hist[i];
+                s0_f += static_cast<double>(i) * hist[i];
+            }
+            int w1_f = total - w0_f;
+            if (w0_f > 0 && w1_f > 0) {
+                double mu0_log = min_log + (s0_f / w0_f) * bin_width;
+                double mu1_log = min_log + ((sum_all - s0_f) / w1_f) * bin_width;
+                if (std::abs(mu1_log - mu0_log) < 0.5) {
+                    return cfg_.min_unique_fragments;
+                }
+            }
+        }
+
+        // Convert bin back to count threshold
+        double threshold_log = min_log + (best_bin + 0.5) * bin_width;
+        uint32_t threshold = static_cast<uint32_t>(std::pow(10.0, threshold_log));
+
+        // Sanity: Otsu threshold must be between the 5th and 95th percentile
+        // of the data. If outside, fall back to min_unique_fragments.
+        uint64_t p5 = sorted[std::min(sorted.size() - 1, sorted.size() * 95 / 100)];
+        uint64_t p95 = sorted[sorted.size() * 5 / 100];
+        if (threshold < p5 || threshold > p95) {
+            // Otsu failed (unimodal distribution) — use min_unique_fragments
+            return cfg_.min_unique_fragments;
+        }
+
         return std::max(threshold, cfg_.min_unique_fragments);
     }
 
