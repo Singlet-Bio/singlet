@@ -3,13 +3,13 @@
 #
 # GPU MT lineage tracing:
 #   detect_clones()      — MT heteroplasmy-based clone calling
-#   read_pz_mt_sce()     — load mt_alt / mt_depth from singlify output dir
+#   read_pz_mt_sce()     — load mt_alt / mt_depth from singlet output dir
 #
 # NEW — closest published CPU analog is MitoTrace (R) / MQuad (Python).
 
-#' Load MT allele and depth matrices from a singlify output directory
+#' Load MT allele and depth matrices from a singlet output directory
 #'
-#' Reads \code{mt_alleles.1pz} from a singlify pipeline output directory
+#' Reads \code{mt_alleles.1pz} from a singlet pipeline output directory
 #' and constructs an SCE with assays \code{"mt_alt"} (alternate allele counts)
 #' and \code{"mt_depth"} (total depth), ready for \code{\link{detect_clones}}.
 #'
@@ -22,7 +22,7 @@
 #' If an existing SCE is provided via \code{sce}, the two assays are added to
 #' it (overwriting if already present).
 #'
-#' @param pz_dir Character.  Path to a singlify sample output directory
+#' @param pz_dir Character.  Path to a singlet sample output directory
 #'   containing \code{mt_alleles.1pz}.
 #' @param sce    Optional \code{SingleCellExperiment}.  If provided, MT assays
 #'   are added to it.  Default: \code{NULL} (new SCE).
@@ -95,7 +95,7 @@ read_pz_mt_sce <- function(pz_dir, sce = NULL) {
 #'
 #' @param sce           A \code{\link[SingleCellExperiment]{SingleCellExperiment}}
 #'   with assays \code{"mt_alt"} and \code{"mt_depth"}.  Use
-#'   \code{\link{read_pz_mt_sce}} to load these from a singlify output dir.
+#'   \code{\link{read_pz_mt_sce}} to load these from a singlet output dir.
 #' @param alt_assay     Character.  Alt-allele count assay.
 #'   Default: \code{"mt_alt"}.
 #' @param depth_assay   Character.  Depth assay.  Default: \code{"mt_depth"}.

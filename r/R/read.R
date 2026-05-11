@@ -1,7 +1,7 @@
-#' singlify: Read singlify pipeline outputs into R.
+#' singlet: Read singlet pipeline outputs into R.
 #'
 #' This package provides R readers for the ``.1pz`` files produced by the
-#' singlify single-cell reprocessing pipeline. All decode work happens in
+#' singlet single-cell reprocessing pipeline. All decode work happens in
 #' a header-only C++ reader shared with the Python wrapper; R only
 #' marshals the result into native sparse-matrix classes and single-cell
 #' objects.
@@ -9,13 +9,13 @@
 #' @section Entry points:
 #' \describe{
 #'   \item{\code{\link{read_1pz}}}{Read a single ``.1pz`` file into a ``dgCMatrix``.}
-#'   \item{\code{\link{read_singlify_dir}}}{Read a pipeline output directory into a named list of matrices.}
+#'   \item{\code{\link{read_singlet_dir}}}{Read a pipeline output directory into a named list of matrices.}
 #'   \item{\code{\link{as_sce}}}{Convert to a ``SingleCellExperiment``.}
 #'   \item{\code{\link{as_seurat}}}{Convert to a ``Seurat`` object.}
 #' }
 #'
 #' @keywords internal
-#' @aliases singlify-package
+#' @aliases singlet-package
 "_PACKAGE"
 
 
@@ -27,7 +27,7 @@
 #'   \describe{
 #'     \item{\code{user_kv}}{Named character vector of the embedded
 #'       pipeline metadata (gsm_id, gse_id, organism, protocol,
-#'       singlify_version, pipeline_date, etc.).}
+#'       singlet_version, pipeline_date, etc.).}
 #'     \item{\code{vt_code}}{Writer's value-type hint (1=uint8, 2=uint16, 3=uint32).}
 #'   }
 #'
@@ -75,14 +75,14 @@ read_1pz <- function(path) {
 #'
 #' @examples
 #' \dontrun{
-#' dd <- read_singlify_dir("quant/scrna/GSE174/GSE174399/GSM5293863")
+#' dd <- read_singlet_dir("quant/scrna/GSE174/GSE174399/GSM5293863")
 #' names(dd)
 #' attr(dd, "user_kv")[["gsm_id"]]
 #' dd$gene_counts
 #' }
 #'
 #' @export
-read_singlify_dir <- function(path, include = NULL, exclude = NULL) {
+read_singlet_dir <- function(path, include = NULL, exclude = NULL) {
     path <- path.expand(as.character(path))
     if (!dir.exists(path)) {
         stop(sprintf("not a directory: %s", path))
@@ -108,12 +108,12 @@ read_singlify_dir <- function(path, include = NULL, exclude = NULL) {
 
     attr(out, "user_kv") <- user_kv
     attr(out, "path") <- path
-    class(out) <- c("singlify_dir", class(out))
+    class(out) <- c("singlet_dir", class(out))
     out
 }
 
 
-#' Bulk-read the same matrix from many singlify pipeline output directories.
+#' Bulk-read the same matrix from many singlet pipeline output directories.
 #'
 #' Cohort-level convenience reader. Walks a list of GSM sample directories
 #' and loads the same matrix from each. The most common use case: you have
@@ -166,10 +166,10 @@ read_cohort <- function(paths, matrix_name = "spliced", show_progress = FALSE) {
 
 
 #' @export
-print.singlify_dir <- function(x, ...) {
+print.singlet_dir <- function(x, ...) {
     gsm <- attr(x, "user_kv")
     gsm_id <- if (!is.null(gsm) && "gsm_id" %in% names(gsm)) gsm[["gsm_id"]] else "?"
-    cat(sprintf("singlify pipeline directory (%d matrices, gsm=%s)\n",
+    cat(sprintf("singlet pipeline directory (%d matrices, gsm=%s)\n",
                 length(x), gsm_id))
     for (nm in names(x)) {
         d <- dim(x[[nm]])

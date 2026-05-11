@@ -4,27 +4,27 @@
 # GPU RNA velocity:
 #   velocity_moments()  — compute first-order moments (Ms, Mu)
 #   velocity_prep()     — estimate gamma + compute velocity matrix
-#   read_pz_velocity_sce() — load spliced/unspliced from singlify output dir
+#   read_pz_velocity_sce() — load spliced/unspliced from singlet output dir
 #
 # Analog of velociraptor::scvelo() / scVelo Python API.
 
-#' Load spliced and unspliced assays from a singlify output directory
+#' Load spliced and unspliced assays from a singlet output directory
 #'
 #' Reads \code{exon_counts.1pz} (spliced) and \code{intron_counts.1pz}
-#' (unspliced) from a singlify pipeline output directory and returns a
+#' (unspliced) from a singlet pipeline output directory and returns a
 #' \code{SingleCellExperiment} with assays \code{"spliced"} and
 #' \code{"unspliced"}.
 #'
 #' @details
 #' This helper is provided because \code{velocity_moments()} requires an SCE
 #' with \code{assays(sce)$spliced} and \code{assays(sce)$unspliced} — the
-#' singlify-native names for the exon and intron count matrices respectively.
+#' singlet-native names for the exon and intron count matrices respectively.
 #'
 #' If an existing SCE is provided via \code{sce}, the two assays are added to
 #' it (overwriting if already present).  Otherwise a new SCE is created from
 #' the two matrices.
 #'
-#' @param pz_dir Character.  Path to a singlify output directory containing
+#' @param pz_dir Character.  Path to a singlet output directory containing
 #'   \code{exon_counts.1pz} and \code{intron_counts.1pz}.
 #' @param sce    Optional \code{SingleCellExperiment}.  If provided, the
 #'   spliced/unspliced assays are added to it.  Default: \code{NULL} (new SCE).
@@ -77,7 +77,7 @@ read_pz_velocity_sce <- function(pz_dir, sce = NULL) {
 #'
 #' @param sce              A \code{\link[SingleCellExperiment]{SingleCellExperiment}}
 #'   with assays \code{"spliced"} and \code{"unspliced"}.  Use
-#'   \code{\link{read_pz_velocity_sce}} to populate these from a singlify
+#'   \code{\link{read_pz_velocity_sce}} to populate these from a singlet
 #'   output directory.
 #' @param n_neighbors      Integer.  k for kNN smoothing.  Default: \code{30L}.
 #' @param use_dimred       Character.  \code{reducedDim} slot used to build

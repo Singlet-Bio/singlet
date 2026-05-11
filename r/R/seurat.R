@@ -1,6 +1,6 @@
-#' Convert a singlify pipeline directory to a Seurat object.
+#' Convert a singlet pipeline directory to a Seurat object.
 #'
-#' Builds a \code{\link[Seurat:Seurat]{Seurat}} object from a singlify
+#' Builds a \code{\link[Seurat:Seurat]{Seurat}} object from a singlet
 #' pipeline output directory. The primary per-gene matrix becomes the
 #' default ``RNA`` assay; the velocity trio
 #' (``spliced`` / ``unspliced`` / ``ambiguous``) become additional assays
@@ -8,7 +8,7 @@
 #' analyses work without extra renaming.
 #'
 #' Per-cell TSV sidecars are loaded into ``obj@meta.data``. The embedded
-#' GEO metadata goes into ``obj@misc$singlify``.
+#' GEO metadata goes into ``obj@misc$singlet``.
 #'
 #' @param path Directory containing the pipeline's ``.1pz`` + TSV files.
 #' @param primary_assay Matrix name for the default ``RNA`` assay. Tried
@@ -21,7 +21,7 @@
 #' \dontrun{
 #' obj <- as_seurat("quant/scrna/GSE174/GSE174399/GSM5293863")
 #' obj
-#' obj@misc$singlify[["gsm_id"]]
+#' obj@misc$singlet[["gsm_id"]]
 #' }
 #'
 #' @export
@@ -31,7 +31,7 @@ as_seurat <- function(path, primary_assay = "spliced", project = NULL) {
              "Install with `install.packages('Seurat')`.")
     }
 
-    dd <- read_singlify_dir(path)
+    dd <- read_singlet_dir(path)
 
     per_gene <- c(primary_assay, "spliced", "gene_counts", "gene_counts_em")
     chosen <- NULL
@@ -46,7 +46,7 @@ as_seurat <- function(path, primary_assay = "spliced", project = NULL) {
     user_kv <- attr(dd, "user_kv")
     if (is.null(project)) {
         project <- if (!is.null(user_kv) && "gsm_id" %in% names(user_kv))
-                       user_kv[["gsm_id"]] else "singlify"
+                       user_kv[["gsm_id"]] else "singlet"
     }
 
     obj <- Seurat::CreateSeuratObject(
@@ -86,11 +86,11 @@ as_seurat <- function(path, primary_assay = "spliced", project = NULL) {
     }
 
     # GEO context
-    obj@misc$singlify <- as.list(user_kv)
-    obj@misc$singlify_primary_assay <- chosen
-    obj@misc$singlify_source_path <- attr(dd, "path")
+    obj@misc$singlet <- as.list(user_kv)
+    obj@misc$singlet_primary_assay <- chosen
+    obj@misc$singlet_source_path <- attr(dd, "path")
     if (length(derived_assays) > 0L) {
-        obj@misc$singlify_derived_assays <- derived_assays
+        obj@misc$singlet_derived_assays <- derived_assays
     }
 
     obj

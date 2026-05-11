@@ -1,6 +1,6 @@
 #' Aggregate a per-feature matrix to per-gene by summing exons of each gene.
 #'
-#' The singlify pipeline writes per-feature rownames in the format
+#' The singlet pipeline writes per-feature rownames in the format
 #' \code{ENSG00000000003_TSPAN6_chrX:100627107-100629986} where the leading
 #' Ensembl gene ID is everything before the first underscore. This helper
 #' parses the gene ID, builds a gene-projection matrix, and returns a

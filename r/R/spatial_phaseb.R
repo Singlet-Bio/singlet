@@ -328,7 +328,7 @@ setMethod("predict", "StagateModel", function(object, newdata, layer = "logcount
 #' \code{cell2fate.models.Cell2fate_DynamicalModel.train()} (Python/PyTorch).
 #'
 #' Requires assays \code{"spliced"} and \code{"unspliced"} in \code{sce}.
-#' Use \code{\link{read_pz_velocity_sce}} to populate these from a singlify
+#' Use \code{\link{read_pz_velocity_sce}} to populate these from a singlet
 #' output directory.
 #'
 #' @param sce              A \code{SingleCellExperiment} with \code{"spliced"}

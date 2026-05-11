@@ -1,12 +1,12 @@
-#' Convert a singlify pipeline directory to a SingleCellExperiment.
+#' Convert a singlet pipeline directory to a SingleCellExperiment.
 #'
 #' Builds a \code{\link[SingleCellExperiment:SingleCellExperiment]{SingleCellExperiment}}
-#' from a singlify pipeline output directory. The primary per-gene matrix
+#' from a singlet pipeline output directory. The primary per-gene matrix
 #' goes into ``assays$counts``; the velocity trio (spliced / unspliced /
 #' ambiguous) become additional assays when present; per-cell TSV sidecars
 #' (``cell_qc_metrics.tsv``, ``cell_cycle_scores.tsv``, etc.) are loaded
 #' into ``colData``; the embedded GEO metadata (``user_kv``) becomes
-#' ``metadata(sce)$singlify``.
+#' ``metadata(sce)$singlet``.
 #'
 #' Per-feature matrices with a different axis than the per-gene matrices
 #' (``exon_counts``, ``intron_counts``, ``sj_counts``, ``splice_psi``,
@@ -23,7 +23,7 @@
 #' \dontrun{
 #' sce <- as_sce("quant/scrna/GSE174/GSE174399/GSM5293863")
 #' sce
-#' metadata(sce)$singlify[["gsm_id"]]
+#' metadata(sce)$singlet[["gsm_id"]]
 #' }
 #'
 #' @export
@@ -36,7 +36,7 @@ as_sce <- function(path, primary_assay = "spliced") {
         stop("as_sce requires the SummarizedExperiment package.")
     }
 
-    dd <- read_singlify_dir(path)
+    dd <- read_singlet_dir(path)
 
     # Pick the primary per-gene assay
     per_gene <- c(primary_assay, "spliced", "gene_counts", "gene_counts_em")
@@ -100,12 +100,12 @@ as_sce <- function(path, primary_assay = "spliced") {
     # Embedded GEO metadata
     user_kv <- attr(dd, "user_kv")
     if (!is.null(user_kv)) {
-        SummarizedExperiment::metadata(sce)$singlify <- as.list(user_kv)
+        SummarizedExperiment::metadata(sce)$singlet <- as.list(user_kv)
     }
-    SummarizedExperiment::metadata(sce)$singlify_primary_assay <- chosen
-    SummarizedExperiment::metadata(sce)$singlify_source_path <- attr(dd, "path")
+    SummarizedExperiment::metadata(sce)$singlet_primary_assay <- chosen
+    SummarizedExperiment::metadata(sce)$singlet_source_path <- attr(dd, "path")
     if (length(derived_assays) > 0L) {
-        SummarizedExperiment::metadata(sce)$singlify_derived_assays <- derived_assays
+        SummarizedExperiment::metadata(sce)$singlet_derived_assays <- derived_assays
     }
 
     sce

@@ -3,7 +3,7 @@
 #
 # GPU Numbat-style copy-number alteration (CNA) detection:
 #   detect_cna()     — per-cell CNA state calls + clone clustering
-#   read_pz_cna_sce() — load expression from singlify output for CNA analysis
+#   read_pz_cna_sce() — load expression from singlet output for CNA analysis
 #
 # Mirrors the Numbat R package (Gao et al. 2024) output format.
 
@@ -124,14 +124,14 @@ detect_cna <- function(sce,
 }
 
 
-#' Load singlify expression output into an SCE suitable for CNA detection
+#' Load singlet expression output into an SCE suitable for CNA detection
 #'
-#' Reads \code{gene_counts.1pz} (or \code{counts.1pz}) from a singlify output
+#' Reads \code{gene_counts.1pz} (or \code{counts.1pz}) from a singlet output
 #' directory into a \code{SingleCellExperiment} with log-normalized expression
 #' in assay \code{"logcounts"}.  Provides a convenient entry point for
 #' \code{\link{detect_cna}}.
 #'
-#' @param pz_dir  Character.  Path to a singlify output directory.
+#' @param pz_dir  Character.  Path to a singlet output directory.
 #' @param use_gene_counts Logical.  Use \code{gene_counts.1pz} (GeneFull,
 #'   exon + intron) instead of \code{counts.1pz} (exon only).
 #'   Default: \code{TRUE}.

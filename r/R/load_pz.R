@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # singlet-gpu/r/R/load_pz.R
 #
-# read_1pz_sce() — load a singlify .1pz count matrix into a SingleCellExperiment.
+# read_1pz_sce() — load a singlet .1pz count matrix into a SingleCellExperiment.
 
-#' Load a singlify .1pz directory into a SingleCellExperiment
+#' Load a singlet .1pz directory into a SingleCellExperiment
 #'
-#' Reads a singlify `.1pz` count matrix from disk, decompresses it on the CPU,
+#' Reads a singlet `.1pz` count matrix from disk, decompresses it on the CPU,
 #' uploads it to the GPU, copies the result back to host as a
 #' \code{Matrix::dgCMatrix}, and wraps it in a
 #' \code{\link[SingleCellExperiment]{SingleCellExperiment}}.
@@ -18,7 +18,7 @@
 #' GPU residency between multiple kernel calls should use the Python wrapper.
 #'
 #' The embedded GEO metadata (gsm_id, gse_id, organism, protocol, …) is stored
-#' in \code{metadata(sce)$singlify} as a named list.
+#' in \code{metadata(sce)$singlet} as a named list.
 #'
 #' @param pz_dir   Character scalar. Path to the sample output directory
 #'   containing one or more `.1pz` files (e.g.
@@ -41,10 +41,10 @@
 #'   \describe{
 #'     \item{\code{assays(sce)$counts}}{The count matrix as a
 #'       \code{Matrix::dgCMatrix} (genes × cells).}
-#'     \item{\code{metadata(sce)$singlify}}{Named list of GEO metadata fields:
+#'     \item{\code{metadata(sce)$singlet}}{Named list of GEO metadata fields:
 #'       \code{gsm_id}, \code{gse_id}, \code{organism}, \code{taxon_id},
 #'       \code{protocol}, \code{modality}, \code{srr_ids}, \code{read_count},
-#'       \code{geo_title}, \code{geo_source_name}, \code{singlify_version},
+#'       \code{geo_title}, \code{geo_source_name}, \code{singlet_version},
 #'       \code{pipeline_date}.}
 #'   }
 #'   Row names are gene names (from the .1pz metadata TLV); column names are
@@ -54,7 +54,7 @@
 #' \dontrun{
 #' sce <- read_1pz_sce("/path/to/GSM4037629/", modality = "exon")
 #' dim(sce)
-#' metadata(sce)$singlify$gsm_id
+#' metadata(sce)$singlet$gsm_id
 #' }
 #'
 #' @seealso \code{\link{lognorm}}, \code{\link{hvg}}, \code{\link{run_pca}}
@@ -98,8 +98,8 @@ read_1pz_sce <- function(pz_dir,
         assays = list(counts = counts)
     )
 
-    # Embed singlify GEO metadata
-    SummarizedExperiment::metadata(sce)$singlify <- meta
+    # Embed singlet GEO metadata
+    SummarizedExperiment::metadata(sce)$singlet <- meta
 
     sce
 }
