@@ -59,18 +59,19 @@ ORDER BY id;
 
 | Todo ID | Title | Status | Depends On |
 |---------|-------|--------|------------|
-| `pseudocount-sensitivity` | Pseudocount ablation — derive `pseudo=0.3` from first principles | 🔴 | — |
-| `barcode-rank-groundtruth` | Barcode rank ground-truth test (replace self-referential checks) | 🔴 | — |
-| `gray-zone-testing` | Test and bound gray-zone ambient supplement | 🔴 | — |
-| `wl-ambient-validation` | Fix `wl_total_reads/25` guess; validate WL ambient path | 🔴 | — |
-| `mc-pvalue-calibration` | MC p-value uniformity + fix large-library 0-cell bug | 🔴 | pseudocount-sensitivity |
-| `ambient-realistic` | Ambient correction test with realistic contamination (ρ=10%/20%) | 🔴 | pseudocount-sensitivity |
-| `doublet-edge-cases` | Doublet edge cases: same-type, ultra-sparse, GMM fallbacks | 🔴 | barcode-rank-groundtruth |
+All validation hardening todos are **COMPLETE** ✅ (10/10 done).
 
 **Completed:**
 - 🟢 `cell-calling-tests` — Overlapping distributions, T_OVERLAP/T_DEEP_AMBIENT/T_MC_CALIBRATION (5369ba8)
 - 🟢 `knee-detection-hardening` — Guard n/2 default → return 0, tie-breaking (0144fbe)
 - 🟢 `remove-early-stopping-docstring` — Removed false early-stopping claim (0144fbe)
+- 🟢 `pseudocount-sensitivity` — Ablation sweep, robustness band [0.1,0.5], optimal=0.3 derived (cd0eccf)
+- 🟢 `barcode-rank-groundtruth` — 77 ground-truth assertions, tie-breaking, TSV format (09386c8)
+- 🟢 `gray-zone-testing` — Ambient supplement, contamination rejection, sensitivity (fec7152)
+- 🟢 `wl-ambient-validation` — Replaced /25 guess with count-based, bounds clamping (63a3942)
+- 🟢 `mc-pvalue-calibration` — Uniformity test, deep-library path, Poisson vs alias (ea8a0c0)
+- 🟢 `ambient-realistic` — PBMC-like ρ=10%/20% correction accuracy (65e344f)
+- 🟢 `doublet-edge-cases` — T7-T11: same-type, sparse, unimodal, small-n, correlation (8b40277)
 
 ### Droplet Hardening Cycle (run BEFORE codebase health each cycle)
 
