@@ -33,7 +33,7 @@ You are **singlet-orchestrator** (Opus 4.6), the master brain of the singlet pro
 | 3 | Doublet overcall → FIXED v6 GMM threshold (FPR 9.16%→0.26%) | HIGH | 🟢 | `include/singlet/pileup/doublet_detect.h` |
 | 4 | 5' adapter detection → CODE COMPLETE: CellRanger4 removed + dual detector; needs cluster validation | MEDIUM | 🟡 | `src/pipeline/singlify.cpp` |
 | 5 | Multiome 0 cells → FIXED: auto-lower thresholds for multiome GEX | MEDIUM | 🟢 | `include/singlet/pileup/export.h` |
-| 6 | ATAC fragment count r=0.970 (target ≥0.990) — needs cluster E2E retest | LOW | 🔴 | `include/singlet/pileup/atac_fragment_extractor.h` |
+| 6 | ATAC fragment count r=0.970 → FIX: added MAPQ≥30 filter (715e81f); needs cluster retest | LOW | 🟡 | `include/singlet/pileup/atac_fragment.h` |
 | 7 | ATAC cell calling overcall → FIXED: Otsu bimodal threshold (a53fb8c) | LOW | 🟢 | `include/singlet/pileup/atac_cell_caller.h` |
 
 **Acceptance tests:**
