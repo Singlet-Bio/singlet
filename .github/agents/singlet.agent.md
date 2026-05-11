@@ -29,10 +29,10 @@ You are **singlet-orchestrator** (Opus 4.6), the master brain of the singlet pro
 | # | Issue | Severity | Status | File |
 |---|-------|----------|--------|------|
 | 1 | ATAC zero fragments (STAR missing CB tags in ATAC mode) | CRITICAL | 🔴 | `include/singlet/pileup/atac_fragment_extractor.h` |
-| 2 | EmptyDrops large-library 0-cell bug (>12M read 10xv3 → 0 cells) | HIGH | 🔴 | `include/singlet/pileup/cell_calling.h` |
+| 2 | EmptyDrops large-library 0-cell → FIXED: conditioned Poisson path | HIGH | 🟢 | `include/singlet/pileup/cell_calling.h` |
 | 3 | Doublet overcall → FIXED v6 GMM threshold (FPR 9.16%→0.26%) | HIGH | 🟢 | `include/singlet/pileup/doublet_detect.h` |
 | 4 | 5' adapter detection (CellRanger4 + clip5pNbases conflict) | MEDIUM | 🔴 | `src/pipeline/singlify.cpp` |
-| 5 | Multiome 0 cells (EmptyDrops threshold wrong for multiome) | MEDIUM | 🔴 | `include/singlet/pileup/cell_calling.h` |
+| 5 | Multiome 0 cells → FIXED: auto-lower thresholds for multiome GEX | MEDIUM | 🟢 | `include/singlet/pileup/export.h` |
 | 6 | ATAC fragment count r=0.970 (target ≥0.990) | LOW | 🔴 | `include/singlet/pileup/atac_fragment_extractor.h` |
 | 7 | ATAC cell calling overcall (2178 vs ~500 expected) | LOW | 🔴 | `include/singlet/pileup/atac_cell_caller.h` |
 
