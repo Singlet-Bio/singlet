@@ -142,6 +142,7 @@ add_pileup_test(test_indrop_detect)
 add_pileup_test(test_seqwell_detect)
 add_pileup_test(test_cascade_router)
 add_pileup_test(test_multiome_router)
+add_pileup_test(test_multiome_cell_calling)
 add_pileup_test(test_interop)
 
 # Reference / fq
