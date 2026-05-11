@@ -195,6 +195,51 @@ static void test_sort_order() {
     std::printf("  test_sort_order: PASS\n");
 }
 
+static void test_low_mapq_filtered() {
+    singlet::ATACFragmentExtractor ex;
+    std::unordered_map<std::string, uint32_t> bc_map;
+    bc_map["AACCGGTTAACCGGTT"] = 0;
+    ex.set_barcode_map(bc_map);
+
+    uint16_t flag = BAM_FPROPER_PAIR | BAM_FREAD1;
+
+    // MAPQ=29 → below default threshold of 30 → filtered
+    bam1_t* b1 = make_record("BC:AACCGGTTAACCGGTT_LOW", 0, 1000, 200, flag);
+    b1->core.qual = 29;
+    ex.process_record(b1, nullptr);
+    free_record(b1);
+    assert(ex.unique_fragments() == 0);
+    assert(ex.low_mapq_reads() == 1);
+
+    // MAPQ=30 → passes
+    bam1_t* b2 = make_record("BC:AACCGGTTAACCGGTT_OK", 0, 2000, 200, flag);
+    b2->core.qual = 30;
+    ex.process_record(b2, nullptr);
+    free_record(b2);
+    assert(ex.unique_fragments() == 1);
+
+    std::printf("  test_low_mapq_filtered: PASS\n");
+}
+
+static void test_custom_mapq_threshold() {
+    singlet::ATACFragmentExtractor ex;
+    std::unordered_map<std::string, uint32_t> bc_map;
+    bc_map["AACCGGTTAACCGGTT"] = 0;
+    ex.set_barcode_map(bc_map);
+    ex.set_min_mapq(10);  // lower threshold
+
+    uint16_t flag = BAM_FPROPER_PAIR | BAM_FREAD1;
+
+    // MAPQ=10 → passes with custom threshold
+    bam1_t* b = make_record("BC:AACCGGTTAACCGGTT_R", 0, 1000, 200, flag);
+    b->core.qual = 10;
+    ex.process_record(b, nullptr);
+    free_record(b);
+    assert(ex.unique_fragments() == 1);
+
+    std::printf("  test_custom_mapq_threshold: PASS\n");
+}
+
 int main() {
     std::printf("=== test_atac_fragment ===\n");
     test_basic_fragment();
@@ -205,6 +250,8 @@ int main() {
     test_large_fragment_skipped();
     test_not_proper_pair_skipped();
     test_sort_order();
+    test_low_mapq_filtered();
+    test_custom_mapq_threshold();
     std::printf("All tests PASSED\n");
     return 0;
 }

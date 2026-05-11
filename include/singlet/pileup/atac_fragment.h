@@ -85,6 +85,7 @@ class ATACFragmentExtractor {
 
     void set_min_fragment_size(int min_size = 10) { min_frag_ = min_size; }
     void set_max_fragment_size(int max_size = 2000) { max_frag_ = max_size; }
+    void set_min_mapq(uint8_t min_mapq = 30) { min_mapq_ = min_mapq; }
 
     // ------------------------------------------------------------------
     // Core processing loop — call once per BAM record
@@ -104,6 +105,13 @@ class ATACFragmentExtractor {
         if (flag & BAM_FSUPPLEMENTARY) return;
         // Process only read1 — read2 carries the same fragment info
         if (!(flag & BAM_FREAD1)) return;
+
+        // MAPQ filter — exclude ambiguous multi-mappers (standard: MAPQ≥30,
+        // matching CellRanger-ATAC, ArchR, sinto conventions).
+        if (b->core.qual < min_mapq_) {
+            ++stats_.low_mapq;
+            return;
+        }
 
         ++stats_.proper_pairs;
 
@@ -160,6 +168,7 @@ class ATACFragmentExtractor {
     const std::vector<ATACFragment>& fragments() const { return fragments_; }
     size_t total_reads() const { return stats_.total_reads; }
     size_t proper_pairs() const { return stats_.proper_pairs; }
+    size_t low_mapq_reads() const { return stats_.low_mapq; }
     size_t duplicate_fragments() const { return stats_.duplicate_fragments; }
     size_t unique_fragments() const { return stats_.unique_fragments; }
     size_t no_barcode_reads() const { return stats_.no_barcode; }
@@ -206,6 +215,7 @@ class ATACFragmentExtractor {
 
     int min_frag_ = 10;
     int max_frag_ = 2000;
+    uint8_t min_mapq_ = 30;
 
     std::unordered_set<FragmentKey, FragmentKeyHash> dedup_set_;
     std::vector<ATACFragment> fragments_;
@@ -213,6 +223,7 @@ class ATACFragmentExtractor {
     struct Stats {
         size_t total_reads = 0;
         size_t proper_pairs = 0;
+        size_t low_mapq = 0;
         size_t no_barcode = 0;
         size_t duplicate_fragments = 0;
         size_t unique_fragments = 0;
