@@ -110,6 +110,7 @@ add_pileup_test(test_read_dedup_stats)
 add_pileup_test(test_donor_demux_perf)
 add_pileup_test(test_wl_ambient)
 add_pileup_test(test_sparse_accumulator)
+add_pileup_test(test_pseudocount_sensitivity)
 
 # Modality-specific
 add_pileup_test(test_mt_events)
