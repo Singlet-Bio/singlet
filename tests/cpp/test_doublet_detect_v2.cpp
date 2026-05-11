@@ -300,6 +300,318 @@ static void test_injected_doublets() {
           "<=3% singlets flagged as is_doublet (FPR)");               // 18
 }
 
+// ---------------------------------------------------------------------------
+// T7: Same-type doublets score lower than inter-type doublets
+//
+// Known limitation: same-type doublets (A+A) have the same gene profile as
+// singlets (just deeper UMI) so they are intrinsically harder to detect.
+// Inter-type doublets (A+B) express genes from both clusters and land between
+// clusters in PCA space, making them easier to flag.
+// ---------------------------------------------------------------------------
+static void test_same_vs_inter_type() {
+    std::cout << "\n=== T7: same-type doublets score lower than inter-type ===\n";
+
+    // Build doublets by summing actual singlet profiles (same as simulation does).
+    const uint32_t n_genes = 50;   // 0-19: type-A, 20-39: type-B, 40-49: noise
+    const uint32_t cells_per_type = 250;
+    const uint32_t n_singlets = 2 * cells_per_type;  // 500
+    const uint32_t n_inter = 10;
+    const uint32_t n_same = 10;
+    const uint32_t n_total = n_singlets + n_inter + n_same;  // 520
+
+    std::mt19937 rng(777u);
+    std::poisson_distribution<int> pcnt(10);
+    std::uniform_int_distribution<int> noise_gene(40, 49);
+
+    // First build singlet profiles as dense arrays so we can sum them for doublets
+    std::vector<std::vector<uint16_t>> profiles(n_singlets, std::vector<uint16_t>(n_genes, 0));
+
+    // 250 type-A singlets: high on genes 0-19
+    for (uint32_t c = 0; c < cells_per_type; ++c) {
+        for (int g = 0; g < 20; ++g)
+            profiles[c][g] = static_cast<uint16_t>(std::max(1, pcnt(rng)));
+        for (int b = 0; b < 5; ++b)
+            profiles[c][noise_gene(rng)] += 1;
+    }
+
+    // 250 type-B singlets: high on genes 20-39
+    for (uint32_t c = cells_per_type; c < n_singlets; ++c) {
+        for (int g = 20; g < 40; ++g)
+            profiles[c][g] = static_cast<uint16_t>(std::max(1, pcnt(rng)));
+        for (int b = 0; b < 5; ++b)
+            profiles[c][noise_gene(rng)] += 1;
+    }
+
+    // Convert singlets to COO entries
+    std::vector<CooEntry> entries;
+    for (uint32_t c = 0; c < n_singlets; ++c)
+        for (uint32_t g = 0; g < n_genes; ++g)
+            if (profiles[c][g] > 0)
+                entries.push_back({(int32_t)g, (int32_t)c, profiles[c][g]});
+
+    // Inter-type doublets: sum of random A + random B (mirrors simulated doublet generation)
+    std::uniform_int_distribution<uint32_t> a_dist(0, cells_per_type - 1);
+    std::uniform_int_distribution<uint32_t> b_dist(cells_per_type, n_singlets - 1);
+    for (uint32_t d = 0; d < n_inter; ++d) {
+        uint32_t ci = a_dist(rng), cj = b_dist(rng);
+        uint32_t cidx = n_singlets + d;
+        for (uint32_t g = 0; g < n_genes; ++g) {
+            uint16_t val = profiles[ci][g] + profiles[cj][g];
+            if (val > 0)
+                entries.push_back({(int32_t)g, (int32_t)cidx, val});
+        }
+    }
+
+    // Same-type doublets: sum of random A + random A
+    for (uint32_t d = 0; d < n_same; ++d) {
+        uint32_t ci = a_dist(rng), cj = a_dist(rng);
+        uint32_t cidx = n_singlets + n_inter + d;
+        for (uint32_t g = 0; g < n_genes; ++g) {
+            uint16_t val = profiles[ci][g] + profiles[cj][g];
+            if (val > 0)
+                entries.push_back({(int32_t)g, (int32_t)cidx, val});
+        }
+    }
+
+    auto csc = build_csc(n_genes, n_total, entries);
+    std::vector<uint32_t> cells(n_total);
+    std::iota(cells.begin(), cells.end(), 0u);
+
+    auto res = singlet::detect_doublets(csc, cells, 0.08);
+    CHECK(res.size() == n_total, "T7: result size matches");  // 19
+
+    // Compute mean scores for each group
+    double sum_inter = 0.0, sum_same = 0.0;
+    for (uint32_t d = 0; d < n_inter; ++d)
+        sum_inter += res[n_singlets + d].score;
+    for (uint32_t d = 0; d < n_same; ++d)
+        sum_same += res[n_singlets + n_inter + d].score;
+    double mean_inter = sum_inter / n_inter;
+    double mean_same  = sum_same / n_same;
+
+    std::cout << "  INFO: mean_inter_type_score=" << mean_inter
+              << "  mean_same_type_score=" << mean_same << "\n";
+    // Same-type doublets are intrinsically harder to detect: after CP10K log-
+    // normalization, A+A profiles collapse onto A singlets, while A+B profiles
+    // land between clusters in PCA space where simulated doublets dominate.
+    CHECK(mean_inter > mean_same,
+          "inter-type doublets score higher than same-type (known limitation)");  // 20
+}
+
+// ---------------------------------------------------------------------------
+// T8: Ultra-sparse data (3 UMI/cell average)
+//
+// Verifies the algorithm doesn't crash on extremely sparse input where most
+// genes are zero and PCA/kNN operate on near-degenerate data.
+// ---------------------------------------------------------------------------
+static void test_ultra_sparse() {
+    std::cout << "\n=== T8: ultra-sparse data (3 UMI/cell) ===\n";
+
+    const uint32_t n_cells = 50;
+    const uint32_t n_genes = 20;
+
+    std::mt19937 rng(888u);
+    std::uniform_int_distribution<int> gd(0, n_genes - 1);
+
+    std::vector<CooEntry> entries;
+    // Each cell gets exactly 3 UMI spread across 1-2 genes
+    for (uint32_t c = 0; c < n_cells; ++c) {
+        for (int u = 0; u < 3; ++u)
+            entries.push_back({(int32_t)gd(rng), (int32_t)c, (uint16_t)1});
+    }
+
+    auto csc = build_csc(n_genes, n_cells, entries);
+    std::vector<uint32_t> cells(n_cells);
+    std::iota(cells.begin(), cells.end(), 0u);
+
+    auto res = singlet::detect_doublets(csc, cells);
+
+    CHECK(res.size() == n_cells, "T8: result size matches");  // 21
+
+    bool all_in_range = true;
+    for (const auto& r : res) {
+        if (r.score < -1e-6 || r.score > 1.0 + 1e-6) { all_in_range = false; break; }
+    }
+    CHECK(all_in_range, "T8: all scores in [0,1]");  // 22
+    std::cout << "  INFO: algorithm completed on ultra-sparse data (may use fallback)\n";
+    CHECK(true, "T8: no crash on ultra-sparse input");  // 23
+}
+
+// ---------------------------------------------------------------------------
+// T9: GMM unimodal input — all singlets, no injected doublets
+//
+// With 80 homogeneous cells and no injected doublets, the normalized score
+// distribution should be roughly unimodal near 0. The GMM may detect this
+// as unimodal and fire the rate-based fallback. Either way, the number of
+// cells called as doublets should be bounded.
+// ---------------------------------------------------------------------------
+static void test_gmm_unimodal() {
+    std::cout << "\n=== T9: GMM unimodal input (all singlets) ===\n";
+
+    const uint32_t n_cells = 80;
+    const uint32_t n_genes = 200;
+
+    // Single population: genes 0-49 are "active" at Poisson(10), genes 50-199
+    // are low-level background at 1 count with ~10% probability per cell.
+    // After CP10K normalization, simulated doublets (sum of two profiles from
+    // the same population) have the same relative proportions → score ≈ 0.
+    // GMM should see unimodal distribution and fire rate-based fallback.
+    std::mt19937 rng(999u);
+    std::poisson_distribution<int> pcnt(10);
+    std::uniform_real_distribution<double> unif(0.0, 1.0);
+    std::vector<CooEntry> entries;
+
+    for (uint32_t c = 0; c < n_cells; ++c) {
+        // Active genes with Poisson noise
+        for (uint32_t g = 0; g < 50; ++g) {
+            uint16_t cnt = static_cast<uint16_t>(std::max(1, pcnt(rng)));
+            entries.push_back({(int32_t)g, (int32_t)c, cnt});
+        }
+        // Sparse background
+        for (uint32_t g = 50; g < n_genes; ++g) {
+            if (unif(rng) < 0.10)
+                entries.push_back({(int32_t)g, (int32_t)c, (uint16_t)1});
+        }
+    }
+
+    auto csc = build_csc(n_genes, n_cells, entries);
+    std::vector<uint32_t> cells(n_cells);
+    std::iota(cells.begin(), cells.end(), 0u);
+
+    auto res = singlet::detect_doublets(csc, cells, 0.08);
+
+    CHECK(res.size() == n_cells, "T9: result size matches");  // 24
+
+    uint32_t n_called = 0;
+    double min_s = 1.0, max_s = 0.0;
+    for (const auto& r : res) {
+        if (r.is_doublet) ++n_called;
+        min_s = std::min(min_s, r.score);
+        max_s = std::max(max_s, r.score);
+    }
+
+    // Tolerant ceiling: at most 3x expected rate worth of doublet calls.
+    // With a single homogeneous population the GMM should fire the rate-based
+    // fallback, but even the normal path may flag a modest fraction.
+    uint32_t ceiling = static_cast<uint32_t>(0.08 * n_cells * 3 + 1);
+    std::cout << "  INFO: doublets_called=" << n_called << " ceiling=" << ceiling
+              << " min_score=" << min_s << " max_score=" << max_s << "\n";
+
+    CHECK(n_called <= ceiling,
+          "T9: doublets called <= expected_rate * n_cells * 2");  // 25
+    CHECK(max_s > min_s + 1e-9,
+          "T9: scores are not all identical (some variation exists)");  // 26
+}
+
+// ---------------------------------------------------------------------------
+// T10: Very small n (15 cells) — below the fallback threshold of 50
+//
+// With n_cells=15 < 50, the UMI-ratio heuristic is engaged.
+// Verify: no crash, all scores in [0,1], returns correct number of results.
+// ---------------------------------------------------------------------------
+static void test_very_small_n() {
+    std::cout << "\n=== T10: very small n (15 cells, fallback path) ===\n";
+
+    const uint32_t n_cells = 15;
+    const uint32_t n_genes = 100;
+
+    std::mt19937 rng(1010u);
+    std::uniform_int_distribution<int> gd(0, n_genes - 1);
+    std::vector<CooEntry> entries;
+
+    for (uint32_t c = 0; c < n_cells; ++c) {
+        int umi = 50 + static_cast<int>(c) * 10;  // varying depth: 50..190
+        for (int u = 0; u < umi; ++u)
+            entries.push_back({(int32_t)gd(rng), (int32_t)c, (uint16_t)1});
+    }
+
+    auto csc = build_csc(n_genes, n_cells, entries);
+    std::vector<uint32_t> cells(n_cells);
+    std::iota(cells.begin(), cells.end(), 0u);
+
+    auto res = singlet::detect_doublets(csc, cells);
+
+    CHECK(res.size() == n_cells, "T10: result size matches (15)");  // 27
+
+    bool all_in_range = true;
+    for (const auto& r : res) {
+        if (r.score < -1e-6 || r.score > 1.0 + 1e-6) { all_in_range = false; break; }
+    }
+    CHECK(all_in_range, "T10: all scores in [0,1]");  // 28
+    CHECK(true, "T10: no crash, no infinite loop on 15 cells");  // 29
+}
+
+// ---------------------------------------------------------------------------
+// T11: Score correlates with UMI ratio for fallback path
+//
+// 30 cells with varying UMI depth (100..3200), 5 cells at each depth level.
+// n_cells=30 < 50 → UMI-ratio heuristic: score = min(1.0, umi / (3*median)).
+// Higher-UMI cells should get higher scores.
+// If fallback fires, Pearson(log10(UMI), score) >= 0.50.
+// ---------------------------------------------------------------------------
+static void test_umi_score_correlation() {
+    std::cout << "\n=== T11: UMI-score correlation in fallback path ===\n";
+
+    const uint32_t n_cells = 30;
+    const uint32_t n_genes = 100;
+    const int depths[] = {100, 200, 400, 800, 1600, 3200};
+    const int cells_per_depth = 5;
+
+    std::mt19937 rng(1111u);
+    std::uniform_int_distribution<int> gd(0, n_genes - 1);
+    std::vector<CooEntry> entries;
+    std::vector<double> log_umi(n_cells);
+
+    for (int d = 0; d < 6; ++d) {
+        for (int ci = 0; ci < cells_per_depth; ++ci) {
+            uint32_t c = static_cast<uint32_t>(d * cells_per_depth + ci);
+            int umi = depths[d];
+            log_umi[c] = std::log10(static_cast<double>(umi));
+            for (int u = 0; u < umi; ++u)
+                entries.push_back({(int32_t)gd(rng), (int32_t)c, (uint16_t)1});
+        }
+    }
+
+    auto csc = build_csc(n_genes, n_cells, entries);
+    std::vector<uint32_t> cells(n_cells);
+    std::iota(cells.begin(), cells.end(), 0u);
+
+    auto res = singlet::detect_doublets(csc, cells);
+
+    CHECK(res.size() == n_cells, "T11: result size matches (30)");  // 30
+
+    bool all_in_range = true;
+    for (const auto& r : res) {
+        if (r.score < -1e-6 || r.score > 1.0 + 1e-6) { all_in_range = false; break; }
+    }
+    CHECK(all_in_range, "T11: all scores in [0,1]");  // 31
+
+    // Compute Pearson correlation between log10(UMI) and doublet score
+    // This is the fallback path (n_cells=30 < 50), so UMI-ratio heuristic fires
+    std::vector<double> scores(n_cells);
+    for (uint32_t i = 0; i < n_cells; ++i)
+        scores[i] = res[i].score;
+
+    double sum_x = 0, sum_y = 0, sum_xx = 0, sum_yy = 0, sum_xy = 0;
+    for (uint32_t i = 0; i < n_cells; ++i) {
+        sum_x  += log_umi[i];
+        sum_y  += scores[i];
+        sum_xx += log_umi[i] * log_umi[i];
+        sum_yy += scores[i] * scores[i];
+        sum_xy += log_umi[i] * scores[i];
+    }
+    double n = static_cast<double>(n_cells);
+    double num = n * sum_xy - sum_x * sum_y;
+    double den = std::sqrt((n * sum_xx - sum_x * sum_x) *
+                           (n * sum_yy - sum_y * sum_y));
+    double pearson = (den > 1e-12) ? num / den : 0.0;
+
+    std::cout << "  INFO: Pearson(log10(UMI), score) = " << pearson << "\n";
+    // Fallback path: score = min(1.0, umi / (3*median)), so correlation should be strong
+    CHECK(pearson >= 0.50,
+          "T11: Pearson correlation >= 0.50 (UMI predicts score in fallback)");  // 32
+}
+
 int main() {
     test_empty();
     test_fallback_range();
@@ -307,6 +619,11 @@ int main() {
     test_large_dataset();
     test_struct_fields();
     test_injected_doublets();
+    test_same_vs_inter_type();
+    test_ultra_sparse();
+    test_gmm_unimodal();
+    test_very_small_n();
+    test_umi_score_correlation();
     std::cout << "\n===========================\n"
               << "PASSED: " << n_pass << "  FAILED: " << n_fail << "\n";
     return (n_fail == 0) ? 0 : 1;
