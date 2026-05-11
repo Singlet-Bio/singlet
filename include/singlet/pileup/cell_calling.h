@@ -587,16 +587,28 @@ inline CellCallResult call_cells_emptydrops(
                 ambient_profile[g] = static_cast<double>(wg[g]);
                 ambient_tot       += ambient_profile[g];
             }
-            // Count WL barcodes with 1 ≤ UMI ≤ wl_ambient_ceil as the ambient pool size
+            // Count WL barcodes with 1 ≤ UMI ≤ wl_ambient_ceil as the ambient pool size.
+            // This is the ground-truth ambient barcode count — each WL barcode with
+            // non-zero UMI below the ceiling IS an empty droplet, no estimation needed.
             if (wl_umi_counts != nullptr) {
                 for (uint32_t cnt : *wl_umi_counts) {
                     if (cnt >= 1 && cnt <= wl_ambient_ceil) {
                         ++n_ambient;
                     }
                 }
-            } else {
-                // Estimate from total reads assuming ~25 reads per ambient droplet
-                n_ambient = static_cast<uint32_t>(wl_total_reads / 25u);
+            }
+            // When wl_umi_counts is unavailable (nullptr) or yielded zero ambient
+            // barcodes, leave n_ambient = 0 and let the standard barcode scan (step 2a)
+            // and gray-zone supplement populate it from the discovered-barcode matrix.
+            // Previous code estimated n_ambient = wl_total_reads / 25 (unjustified
+            // magic number); removing it in favour of the data-driven fallback chain.
+
+            // Clamp to reasonable bounds for 10x experiments when count-based.
+            static constexpr uint32_t WL_AMBIENT_MIN = 10;
+            static constexpr uint32_t WL_AMBIENT_MAX = 100000;
+            if (n_ambient > 0) {
+                n_ambient = std::max(n_ambient, WL_AMBIENT_MIN);
+                n_ambient = std::min(n_ambient, WL_AMBIENT_MAX);
             }
             std::cerr << "[cell-call] WL ambient pool: n_ambient=" << n_ambient
                       << " total_wl_reads=" << wl_total_reads
