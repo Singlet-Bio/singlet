@@ -266,10 +266,17 @@ inline std::vector<double> mc_null_deviances(
             sim_devs[s] = (dev > 0.0) ? 2.0 * dev : 0.0;
         }
     } else {
-        // ── Poisson path (N ≥ K): O(Ka) per draw ────────────────────────────
-        // Faster when K << N (e.g., small test panels with K=20-50 genes).
-        // Approximates Multinomial(N, p) by {Poisson(N*p_g)} independently.
+        // ── Conditioned-Poisson path (N ≥ K): O(Ka) per draw ────────────────
+        // Used when N ≥ K (e.g., small test panels with K=20-50 genes, or
+        // very deep cells in production with N > 38K).
+        //
+        // Draw independent Poisson(N*p_g) then CONDITION on observed total:
+        // normalize counts to sum to exactly N.  Without conditioning, the
+        // Poisson total has variance ~N, inflating null deviance variance and
+        // compressing p-values toward 0.5 — the root cause of the large-library
+        // 0-cell bug for ultra-deep cells (N > K ≈ 38606 in production).
         struct ActiveGene {
+            uint32_t gene_idx;
             double log_p;
             std::poisson_distribution<int> dist;
         };
@@ -279,15 +286,32 @@ inline std::vector<double> mc_null_deviances(
         for (uint32_t g : nonzero_ambient_genes) {
             double lambda = N_d * ambient_profile[g];
             if (lambda < 0.01) continue;
-            active.push_back({log_ambient[g],
+            active.push_back({g, log_ambient[g],
                               std::poisson_distribution<int>(lambda)});
         }
         const size_t Ka = active.size();
+        std::vector<int> raw_counts(Ka);
+
         for (int s = 0; s < n_draw; ++s) {
+            // Draw raw Poisson counts
+            int64_t raw_total = 0;
+            for (size_t i = 0; i < Ka; ++i) {
+                raw_counts[i] = active[i].dist(rng);
+                raw_total += raw_counts[i];
+            }
+
+            // Condition on N: rescale counts proportionally to sum to n_total.
+            // Uses integer rounding with residual correction to preserve exactness.
+            const double scale = (raw_total > 0)
+                ? N_d / static_cast<double>(raw_total) : 0.0;
+            int64_t conditioned_total = 0;
             double dev = 0.0;
             for (size_t i = 0; i < Ka; ++i) {
-                int ng = active[i].dist(rng);
-                if (ng == 0) continue;
+                // Round to nearest integer, ensuring non-negative
+                int ng = static_cast<int>(
+                    static_cast<double>(raw_counts[i]) * scale + 0.5);
+                if (ng <= 0) continue;
+                conditioned_total += ng;
                 double dng = static_cast<double>(ng);
                 dev += dng * (std::log(dng) - log_N - active[i].log_p);
             }
