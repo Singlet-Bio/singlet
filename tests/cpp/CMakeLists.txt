@@ -112,6 +112,7 @@ add_pileup_test(test_wl_ambient)
 add_pileup_test(test_sparse_accumulator)
 add_pileup_test(test_pseudocount_sensitivity)
 add_pileup_test(test_gray_zone)
+add_pileup_test(test_mc_pvalue_calibration)
 
 # Modality-specific
 add_pileup_test(test_mt_events)
