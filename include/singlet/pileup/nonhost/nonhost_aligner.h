@@ -4,7 +4,7 @@
 // module performs per-species secondary alignment:
 //
 //   1. Load species reference FASTA from
-//        ${SINGLIFY_REF_BASE}/nonhost/{kingdom}_genomes/species_{id}.fna
+//        ${SINGLET_REF_BASE}/nonhost/{kingdom}_genomes/species_{id}.fna
 //   2. Build a minimizer → (contig_id, position) seed index (k=21, w=11).
 //   3. For each unmapped read: extract minimizers, gather seed hits per contig,
 //      sort positions, find longest chain of seeds within 500 bp gap.
@@ -13,12 +13,12 @@
 // Output: nonhost_secondary_alignment.tsv (written by NonHostAligner::write_tsv).
 //
 // Wiring (NONHOST-SECONDARY-ALIGN):
-//   Called from run_nonhost_em_screening() in singlify.cpp immediately after
-//   em_deconvolve() returns.  SINGLIFY_REF_BASE must be set in the environment.
+//   Called from run_nonhost_em_screening() in singlet.cpp immediately after
+//   em_deconvolve() returns.  SINGLET_REF_BASE must be set in the environment.
 //   Missing FASTAs are skipped gracefully (logged at INFO level).
 //
 // Pipeline insertion point: inside run_nonhost_em_screening(), after em_deconvolve()
-// CLI flag: none (automatic when --nonhost-db is provided and SINGLIFY_REF_BASE is set).
+// CLI flag: none (automatic when --nonhost-db is provided and SINGLET_REF_BASE is set).
 
 #pragma once
 
@@ -199,7 +199,7 @@ public:
     static constexpr int      MIN_CHAIN_SEEDS             = 3;
     static constexpr uint32_t MAX_GAP_BP                  = 500;
 
-    // ref_base: path to the singlify reference directory (SINGLIFY_REF_BASE).
+    // ref_base: path to the singlet reference directory (SINGLET_REF_BASE).
     explicit NonHostAligner(const std::string& ref_base,
                             float abundance_threshold = DEFAULT_ABUNDANCE_THRESHOLD)
         : ref_base_(ref_base), abundance_threshold_(abundance_threshold) {}

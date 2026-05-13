@@ -1,20 +1,20 @@
-// singlify: .1fq → align → pileup → .1pz
+// singlet: .1fq → align → pileup → .1pz
 //
-// Self-contained monorepo binary.  The aligner (singlet-lite, derived from
-// STAR 2.7.11b) is compiled in as a CMake OBJECT library.  In processing
-// mode, singlify forks a child that calls star_main_impl(), which writes
+// Self-contained monorepo binary.  The aligner (STAR, vendored in src/star/)
+// is compiled in as a CMake OBJECT library.  In processing
+// mode, singlet forks a child that calls star_main_impl(), which writes
 // unsorted BAM to a pipe; the parent reads the pipe through the
 // singlet-pileup engine and exports .1pz matrices.
 //
 // .1fq is the ONLY production input format.  Raw data (SRA, FASTQ) must
-// first be archived to .1fq via `singlify download` or `singlify encode`,
-// then processed with `singlify process` (or the bare `singlify <file.1fq>`
+// first be archived to .1fq via `singlet download` or `singlet encode`,
+// then processed with `singlet process` (or the bare `singlet <file.1fq>`
 // shorthand).  Legacy --reads and --sra flags still work but print
 // deprecation warnings.
 //
 // Pipeline stages:
 //   1. .1fq reader → decode blocks (byte-numeric, pre-parsed BC/UMI)
-//   2. Aligner (singlet-lite, forked child, star_main_impl)
+//   2. Aligner (bundled STAR, forked child, star_main_impl)
 //   3. Pileup engine (parent, streaming BAM pipe)
 //   4. Export → .1pz
 //
@@ -82,7 +82,7 @@
 #include "singlet/fq/lib1fq.h"
 #include "singlet/fq/sra_encoder.h"
 #include "singlet/fq/fastq_encoder.h"
-#include "singlet/star/star_api.h"  // star_main_impl() — bundled aligner (singlet-lite)
+#include "singlet/star/star_api.h"  // star_main_impl() — bundled aligner
 
 // ── Timing helper ──
 struct StopWatch {
@@ -103,7 +103,7 @@ static bool mkdir_p(const std::string& path) {
 }
 
 // ════════════════════════════════════════════════════════════
-// singlify download — Stream SRA → .1fq (no alignment, no temp files)
+// singlet download — Stream SRA → .1fq (no alignment, no temp files)
 // ════════════════════════════════════════════════════════════
 
 static int cmd_download(int argc, char* argv[]) {
@@ -129,8 +129,8 @@ static int cmd_download(int argc, char* argv[]) {
         std::string arg = argv[i];
         if (arg == "-h" || arg == "--help") {
             std::cerr
-                << "singlify download — Stream SRA → .1fq archive\n\n"
-                << "Usage: singlify download <SRR_accession | file.sra> [OPTIONS]\n\n"
+                << "singlet download — Stream SRA → .1fq archive\n\n"
+                << "Usage: singlet download <SRR_accession | file.sra> [OPTIONS]\n\n"
                 << "Input:\n"
                 << "  Positional arg       SRR accession or local .sra file path\n\n"
                 << "Output:\n"
@@ -147,7 +147,7 @@ static int cmd_download(int argc, char* argv[]) {
                 << "  --max-reads N        Stop after N reads (0=all, default: 0)\n"
                 << "  --whitelist-dir DIR  Search dir for whitelists (repeatable)\n"
                 << "  --no-profile         Suppress profiling output\n"
-                << "  --metadata-json FILE Write metadata JSON file (auto-fills singlify_version,\n"
+                << "  --metadata-json FILE Write metadata JSON file (auto-fills singlet_version,\n"
                 << "                       pipeline_date, srr_ids, protocol, read_count)\n"
                 << "  --swap-reads MODE    R1\u2194R2 swap mode: auto (default)|on|off|none\n"
                 << "                       auto: heuristic swap passes (geometry + whitelist)\n"
@@ -191,7 +191,7 @@ static int cmd_download(int argc, char* argv[]) {
 
     if (sra_input.empty()) {
         std::cerr << "ERROR: SRA accession or .sra file required\n"
-                  << "Usage: singlify download <SRRxxxxxxx | file.sra> [-o output.1fq]\n";
+                  << "Usage: singlet download <SRRxxxxxxx | file.sra> [-o output.1fq]\n";
         return 1;
     }
 
@@ -251,7 +251,7 @@ static int cmd_download(int argc, char* argv[]) {
     ecfg.progress_cb = [max_reads](uint64_t reads, uint64_t total) {
         if (max_reads > 0) total = max_reads;
         double pct = (total > 0) ? 100.0 * reads / total : 0.0;
-        std::cerr << "\r[singlify-download] " << reads << " / " << total
+        std::cerr << "\r[singlet-download] " << reads << " / " << total
                   << " reads (" << static_cast<int>(pct) << "%)" << std::flush;
     };
     ecfg.progress_interval = 500000;
@@ -341,13 +341,13 @@ static int cmd_download(int argc, char* argv[]) {
     // B-G2-1: pass swap_reads_mode to encoder
     ecfg.swap_reads_mode = swap_reads_mode;
     if (swap_reads_mode != "auto")
-        std::cerr << "[singlify-download] swap-reads mode: " << swap_reads_mode << "\n";
+        std::cerr << "[singlet-download] swap-reads mode: " << swap_reads_mode << "\n";
 
-    std::cerr << "[singlify-download] " << sra_input << " → " << output_path << "\n";
+    std::cerr << "[singlet-download] " << sra_input << " → " << output_path << "\n";
     if (declared_read_count > 0)
-        std::cerr << "[singlify-download] Declared read count (catalog): " << declared_read_count << "\n";
+        std::cerr << "[singlet-download] Declared read count (catalog): " << declared_read_count << "\n";
     if (!catalog_protocol.empty())
-        std::cerr << "[singlify-download] Catalog protocol (metadata): " << catalog_protocol << "\n";
+        std::cerr << "[singlet-download] Catalog protocol (metadata): " << catalog_protocol << "\n";
 
     // Encode
     lib1fq::SraEncoder encoder;
@@ -355,11 +355,11 @@ static int cmd_download(int argc, char* argv[]) {
 
     if (stats.exit_code != 0) return stats.exit_code;
 
-    std::cerr << "\n[singlify-download] Done: " << stats.total_reads << " reads"
+    std::cerr << "\n[singlet-download] Done: " << stats.total_reads << " reads"
               << ", " << stats.blocks_written << " blocks\n";
-    std::cerr << "[singlify-download] Protocol: " << stats.protocol_tag
+    std::cerr << "[singlet-download] Protocol: " << stats.protocol_tag
               << " (confidence: " << static_cast<int>(stats.confidence) << ")\n";
-    std::cerr << "[singlify-download] Output: " << output_path << "\n";
+    std::cerr << "[singlet-download] Output: " << output_path << "\n";
 
     if (show_profile) {
         stats.profile.print(stats.total_reads);
@@ -379,7 +379,7 @@ static int cmd_download(int argc, char* argv[]) {
         // a real single-cell library regardless of what the catalog says.
         if (actual < singlet_pileup::TinyDatasetGuard::MIN_READS_FOR_PIPELINE) {
             std::fprintf(stderr,
-                "[singlify] WARNING: Only %zu reads downloaded"
+                "[singlet] WARNING: Only %zu reads downloaded"
                 " (minimum %zu for meaningful analysis). Aborting.\n",
                 static_cast<size_t>(actual),
                 static_cast<size_t>(singlet_pileup::TinyDatasetGuard::MIN_READS_FOR_PIPELINE));
@@ -393,7 +393,7 @@ static int cmd_download(int argc, char* argv[]) {
             const uint64_t floor      = std::max(floor_pct, floor_abs);
             if (actual < floor) {
                 std::fprintf(stderr,
-                    "[singlify-download] ERROR: VDB returned %zu spots but catalog declared "
+                    "[singlet-download] ERROR: VDB returned %zu spots but catalog declared "
                     "%zu reads (%.1f%%). This typically indicates VDB rate-limiting, a "
                     "corrupt/stub SRA entry, or a network truncation. "
                     "Exiting with code 2 (download_fail) to avoid wasting a STAR slot.\n",
@@ -406,7 +406,7 @@ static int cmd_download(int argc, char* argv[]) {
             // No metadata — absolute floor: <10 000 reads is never a real scRNA run
             if (actual < 10000ULL) {
                 std::fprintf(stderr,
-                    "[singlify-download] ERROR: VDB returned only %zu spots with no catalog "
+                    "[singlet-download] ERROR: VDB returned only %zu spots with no catalog "
                     "metadata to compare against. A real scRNA-seq run always has ≥10 000 reads. "
                     "Exiting with code 2 (download_fail).\n",
                     static_cast<size_t>(actual));
@@ -433,11 +433,11 @@ static int cmd_download(int argc, char* argv[]) {
         }
 
         // Preserve fields from any pre-existing metadata JSON (e.g. written by
-        // the job script before calling singlify download).  Crucially: organism,
+        // the job script before calling singlet download).  Crucially: organism,
         // taxon_id, gsm_id, gse_id, modality, geo_title, geo_source_name must NOT
         // be overwritten with empty values — they were populated from the catalog
         // by the job script and are critical for species auto-detection in the
-        // subsequent singlify process step.
+        // subsequent singlet process step.
         std::string pre_organism, pre_taxon_id, pre_gsm, pre_gse;
         std::string pre_modality, pre_geo_title, pre_geo_source;
         {
@@ -482,14 +482,14 @@ static int cmd_download(int argc, char* argv[]) {
            << "  \"read_count\": " << stats.total_reads << ",\n"
            << "  \"geo_title\": \"" << pre_geo_title << "\",\n"
            << "  \"geo_source_name\": \"" << pre_geo_source << "\",\n"
-           << "  \"singlify_version\": \"0.3.0\",\n"
+           << "  \"singlet_version\": \"0.3.0\",\n"
            << "  \"pipeline_date\": \"" << date_buf << "\"\n"
            << "}\n";
         mf.close();
         if (!pre_organism.empty())
-            std::cerr << "[singlify-download] Metadata JSON preserved organism: "
+            std::cerr << "[singlet-download] Metadata JSON preserved organism: "
                       << pre_organism << " (taxon " << pre_taxon_id << ")\n";
-        std::cerr << "[singlify-download] Metadata JSON: " << metadata_json_path << "\n";
+        std::cerr << "[singlet-download] Metadata JSON: " << metadata_json_path << "\n";
     }
 
     return 0;
@@ -498,7 +498,7 @@ static int cmd_download(int argc, char* argv[]) {
 // ════════════════════════════════════════════════════════════
 
 // ════════════════════════════════════════════════════════════
-// singlify encode — FASTQ pair → .1fq (archive raw data before processing)
+// singlet encode — FASTQ pair → .1fq (archive raw data before processing)
 // ════════════════════════════════════════════════════════════
 
 static int cmd_encode(int argc, char* argv[]) {
@@ -520,8 +520,8 @@ static int cmd_encode(int argc, char* argv[]) {
         std::string arg = argv[i];
         if (arg == "-h" || arg == "--help") {
             std::cerr
-                << "singlify encode — Archive FASTQ pair → .1fq\n\n"
-                << "Usage: singlify encode --reads R1.fq.gz R2.fq.gz -o sample.1fq\n\n"
+                << "singlet encode — Archive FASTQ pair → .1fq\n\n"
+                << "Usage: singlet encode --reads R1.fq.gz R2.fq.gz -o sample.1fq\n\n"
                 << "Input:\n"
                 << "  --reads R1 R2        Paired FASTQ files (.gz supported)\n\n"
                 << "Output:\n"
@@ -573,7 +573,7 @@ static int cmd_encode(int argc, char* argv[]) {
 
     if (reads_r1.empty()) {
         std::cerr << "ERROR: --reads R1 R2 required\n"
-                  << "Usage: singlify encode --reads R1.fq.gz R2.fq.gz -o sample.1fq\n";
+                  << "Usage: singlet encode --reads R1.fq.gz R2.fq.gz -o sample.1fq\n";
         return 1;
     }
     if (output_path.empty()) {
@@ -625,7 +625,7 @@ static int cmd_encode(int argc, char* argv[]) {
     ecfg.verbose = verbose;
     ecfg.progress_cb = [](uint64_t reads, uint64_t total) {
         double pct = (total > 0) ? 100.0 * reads / total : 0.0;
-        std::cerr << "\r[singlify-encode] " << reads << " / " << total
+        std::cerr << "\r[singlet-encode] " << reads << " / " << total
                   << " reads (" << static_cast<int>(pct) << "%)" << std::flush;
     };
 
@@ -633,30 +633,30 @@ static int cmd_encode(int argc, char* argv[]) {
 
     if (!reads_r3.empty()) {
         // 3-read ATAC mode: R1 genomic + R2 barcode + R3 genomic
-        std::cerr << "[singlify-encode] ATAC 3-read mode: "
+        std::cerr << "[singlet-encode] ATAC 3-read mode: "
                   << reads_r1 << " + " << reads_r2 << "(bc) + " << reads_r3
                   << " → " << output_path << "\n";
         auto stats = encoder.encode_atac(reads_r1, reads_r2, reads_r3, ecfg);
-        std::cerr << "\n[singlify-encode] Done: " << stats.total_reads << " reads"
+        std::cerr << "\n[singlet-encode] Done: " << stats.total_reads << " reads"
                   << ", " << stats.blocks_written << " blocks\n";
-        std::cerr << "[singlify-encode] Protocol: " << stats.protocol_tag
+        std::cerr << "[singlet-encode] Protocol: " << stats.protocol_tag
                   << " (I2 barcode stream stored)\n";
-        std::cerr << "[singlify-encode] Output: " << output_path << "\n";
+        std::cerr << "[singlet-encode] Output: " << output_path << "\n";
     } else {
-        std::cerr << "[singlify-encode] " << reads_r1 << " + " << reads_r2
+        std::cerr << "[singlet-encode] " << reads_r1 << " + " << reads_r2
                   << " → " << output_path << "\n";
         auto stats = encoder.encode(reads_r1, reads_r2, ecfg);
-        std::cerr << "\n[singlify-encode] Done: " << stats.total_reads << " reads"
+        std::cerr << "\n[singlet-encode] Done: " << stats.total_reads << " reads"
                   << ", " << stats.blocks_written << " blocks\n";
-        std::cerr << "[singlify-encode] Protocol: " << stats.protocol_tag
+        std::cerr << "[singlet-encode] Protocol: " << stats.protocol_tag
                   << " (confidence: " << static_cast<int>(stats.confidence) << ")\n";
-        std::cerr << "[singlify-encode] Output: " << output_path << "\n";
+        std::cerr << "[singlet-encode] Output: " << output_path << "\n";
     }
     return 0;
 }
 
 // ════════════════════════════════════════════════════════════
-// singlify decode — .1fq → FASTQ pair (standalone, no alignment)
+// singlet decode — .1fq → FASTQ pair (standalone, no alignment)
 // ════════════════════════════════════════════════════════════
 
 static int cmd_decode(int argc, char* argv[]) {
@@ -670,8 +670,8 @@ static int cmd_decode(int argc, char* argv[]) {
         std::string arg = argv[i];
         if (arg == "-h" || arg == "--help") {
             std::cerr
-                << "singlify decode — Decode .1fq archive to FASTQ\n\n"
-                << "Usage: singlify decode <file.1fq> [OPTIONS]\n\n"
+                << "singlet decode — Decode .1fq archive to FASTQ\n\n"
+                << "Usage: singlet decode <file.1fq> [OPTIONS]\n\n"
                 << "Options:\n"
                 << "  --r1 FILE       Output R1 FASTQ (barcode+UMI) [stdout summary]\n"
                 << "  --r2 FILE       Output R2 FASTQ (cDNA)\n"
@@ -894,7 +894,7 @@ static int cmd_decode(int argc, char* argv[]) {
 }
 
 // ════════════════════════════════════════════════════════════
-// singlify archive — Strip quality from .1fq for cold storage
+// singlet archive — Strip quality from .1fq for cold storage
 // ════════════════════════════════════════════════════════════
 
 static int cmd_archive(int argc, char* argv[]) {
@@ -906,8 +906,8 @@ static int cmd_archive(int argc, char* argv[]) {
         std::string arg = argv[i];
         if (arg == "-h" || arg == "--help") {
             std::cerr
-                << "singlify archive — Strip quality scores for cold storage\n\n"
-                << "Usage: singlify archive <input.1fq> -o <output.1fq>\n\n"
+                << "singlet archive — Strip quality scores for cold storage\n\n"
+                << "Usage: singlet archive <input.1fq> -o <output.1fq>\n\n"
                 << "  After pileup is complete, quality scores are no longer needed.\n"
                 << "  This command re-encodes the .1fq without quality, reducing size ~25%.\n"
                 << "  The resulting archive can still be aligned but quality will be uniform.\n\n"
@@ -929,7 +929,7 @@ static int cmd_archive(int argc, char* argv[]) {
 
     if (input_path.empty()) {
         std::cerr << "ERROR: input .1fq file required\n"
-                  << "Usage: singlify archive <input.1fq> -o <output.1fq>\n";
+                  << "Usage: singlet archive <input.1fq> -o <output.1fq>\n";
         return 1;
     }
 
@@ -1164,7 +1164,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
             std::string db_dir = first_db.substr(0, first_db.rfind('/') + 1);
             std::string bloom_path = db_dir + "host_" + std::to_string(eff_k) + "mer.bloom";
 
-            const char* ref_base = getenv("SINGLIFY_REF_BASE");
+            const char* ref_base = getenv("SINGLET_REF_BASE");
             std::string bloom_fallback;
             if (!HostKmerFilter::exists(bloom_path) && ref_base)
                 bloom_fallback = std::string(ref_base) + "/nonhost/host_"
@@ -1183,7 +1183,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
             } else {
                 std::cerr << "[nonhost] WARNING: host Bloom filter not found at "
                           << bloom_path << " — host-shared k-mer FP suppression disabled.\n"
-                          << "[nonhost]   Build with: singlify build-host-filter"
+                          << "[nonhost]   Build with: singlet build-host-filter"
                              " --genome-fasta <genome.fa> --output " << bloom_path << "\n";
             }
         }
@@ -1246,7 +1246,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
         // For each EM-detected species, try seed-chain-extend alignment against
         // a per-species FASTA. Missing FASTAs are logged and skipped gracefully.
         if (!em_result.empty()) {
-            const char* ref_base_env = getenv("SINGLIFY_REF_BASE");
+            const char* ref_base_env = getenv("SINGLET_REF_BASE");
             const std::string eff_ref_dir = !nonhost_ref_dir.empty() ? nonhost_ref_dir :
                                             ref_base_env             ? ref_base_env    :
                                                                         std::string{};
@@ -1273,7 +1273,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
                     singlet::nonhost::NonHostAligner::write_tsv(sec_results, out_prefix + "/nonhost");
             } else {
                 std::cerr << "[nonhost] Skipping secondary alignment:"
-                             " set SINGLIFY_REF_BASE or --nonhost-ref-dir\n";
+                             " set SINGLET_REF_BASE or --nonhost-ref-dir\n";
             }
         }
 
@@ -1426,10 +1426,10 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
 }
 
 // ════════════════════════════════════════════════════════════
-// singlify build-nonhost-db — Build MinSketchIndex from a FASTA
+// singlet build-nonhost-db — Build MinSketchIndex from a FASTA
 //
 // Usage:
-//   singlify build-nonhost-db <output.snhskidx> \
+//   singlet build-nonhost-db <output.snhskidx> \
 //       --kingdom VIRAL|BACTERIAL|FUNGAL \
 //       --fasta <input.fna[.gz]> [--threads N]
 //
@@ -1454,7 +1454,7 @@ static int cmd_build_nonhost_db(int argc, char* argv[]) {
         else if (arg == "--kingdom"  && i+1 < argc) kingdom      = argv[++i];
         else if (arg == "--threads"  && i+1 < argc) { /* reserved — index build is single-threaded */ (void)argv[++i]; }
         else if (arg == "-h" || arg == "--help") {
-            std::cerr << "Usage: singlify build-nonhost-db <output.snhskidx>"
+            std::cerr << "Usage: singlet build-nonhost-db <output.snhskidx>"
                          " --fasta <in.fna[.gz]> --kingdom VIRAL|BACTERIAL|FUNGAL [--threads N]\n";
             return 0;
         }
@@ -1462,7 +1462,7 @@ static int cmd_build_nonhost_db(int argc, char* argv[]) {
     }
 
     if (output_path.empty() || fasta_path.empty()) {
-        std::cerr << "Usage: singlify build-nonhost-db <output.snhskidx>"
+        std::cerr << "Usage: singlet build-nonhost-db <output.snhskidx>"
                      " --fasta <in.fna[.gz]> --kingdom VIRAL|BACTERIAL|FUNGAL [--threads N]\n";
         return 1;
     }
@@ -1555,10 +1555,10 @@ static int cmd_build_nonhost_db(int argc, char* argv[]) {
 }
 
 // ════════════════════════════════════════════════════════════
-// singlify build-host-filter — Build HostKmerFilter Bloom filter
+// singlet build-host-filter — Build HostKmerFilter Bloom filter
 //
 // Usage:
-//   singlify build-host-filter \
+//   singlet build-host-filter \
 //       --genome-fasta <genome.fa[.gz]> \
 //       --output <host_21mer.bloom> \
 //       [--kmer K] [--window W] [--threads N]
@@ -1587,7 +1587,7 @@ static int cmd_build_host_filter(int argc, char* argv[]) {
         else if (arg == "--window"       && i+1 < argc) w           = std::stoi(argv[++i]);
         else if (arg == "--threads"      && i+1 < argc) nthreads    = std::stoi(argv[++i]);
         else if (arg == "-h" || arg == "--help") {
-            std::cerr << "Usage: singlify build-host-filter"
+            std::cerr << "Usage: singlet build-host-filter"
                          " --genome-fasta <genome.fa[.gz]> --output <host_21mer.bloom>"
                          " [--kmer 21] [--window 11] [--threads N]\n";
             return 0;
@@ -1599,7 +1599,7 @@ static int cmd_build_host_filter(int argc, char* argv[]) {
     }
 
     if (fasta_path.empty() || output_path.empty()) {
-        std::cerr << "Usage: singlify build-host-filter"
+        std::cerr << "Usage: singlet build-host-filter"
                      " --genome-fasta <genome.fa[.gz]> --output <host_21mer.bloom>"
                      " [--kmer 21] [--window 11] [--threads N]\n";
         return 1;
@@ -1633,7 +1633,7 @@ static int cmd_build_host_filter(int argc, char* argv[]) {
 }
 
 // ════════════════════════════════════════════════════════════
-// singlify genome build-minimizers — Build MinimizerSAIndex
+// singlet genome build-minimizers — Build MinimizerSAIndex
 // Data structure: flat sorted array of {hash, SA_lo, SA_hi} (16 B/entry)
 // Serialized as minimizerIndex.bin alongside the STAR genome files.
 // ════════════════════════════════════════════════════════════
@@ -1896,32 +1896,32 @@ static int cmd_genome_build_minimizers(const std::string& genome_dir) {
 }
 
 // ════════════════════════════════════════════════════════════
-// singlify nonhost — Cache k-mer indices in /dev/shm for fast loading
+// singlet nonhost — Cache k-mer indices in /dev/shm for fast loading
 // ════════════════════════════════════════════════════════════
 
-static const char* NONHOST_SHM_DIR = "/dev/shm/singlify_nonhost";
+static const char* NONHOST_SHM_DIR = "/dev/shm/singlet_nonhost";
 
 static int cmd_nonhost(int argc, char* argv[]) {
     if (argc < 1) {
         std::cerr
-            << "singlify nonhost — Cache nonhost screening indices in /dev/shm\n\n"
+            << "singlet nonhost — Cache nonhost screening indices in /dev/shm\n\n"
             << "Usage:\n"
-            << "  singlify nonhost load [--ref-base PATH]  Copy indices to /dev/shm/singlify_nonhost/\n"
-            << "  singlify nonhost unload                  Remove cached indices from /dev/shm\n"
-            << "  singlify nonhost status                  Show which indices are cached\n\n"
-            << "When indices are cached, subsequent 'singlify process' runs load from RAM disk\n"
+            << "  singlet nonhost load [--ref-base PATH]  Copy indices to /dev/shm/singlet_nonhost/\n"
+            << "  singlet nonhost unload                  Remove cached indices from /dev/shm\n"
+            << "  singlet nonhost status                  Show which indices are cached\n\n"
+            << "When indices are cached, subsequent 'singlet process' runs load from RAM disk\n"
             << "(~5-10s) instead of NFS (~1300s).\n";
         return 0;
     }
     std::string op = argv[0];
     if (op == "help" || op == "-h" || op == "--help") {
         std::cerr
-            << "singlify nonhost — Cache nonhost screening indices in /dev/shm\n\n"
+            << "singlet nonhost — Cache nonhost screening indices in /dev/shm\n\n"
             << "Usage:\n"
-            << "  singlify nonhost load [--ref-base PATH]  Copy indices to /dev/shm/singlify_nonhost/\n"
-            << "  singlify nonhost unload                  Remove cached indices from /dev/shm\n"
-            << "  singlify nonhost status                  Show which indices are cached\n\n"
-            << "When indices are cached, subsequent 'singlify process' runs load from RAM disk\n"
+            << "  singlet nonhost load [--ref-base PATH]  Copy indices to /dev/shm/singlet_nonhost/\n"
+            << "  singlet nonhost unload                  Remove cached indices from /dev/shm\n"
+            << "  singlet nonhost status                  Show which indices are cached\n\n"
+            << "When indices are cached, subsequent 'singlet process' runs load from RAM disk\n"
             << "(~5-10s) instead of NFS (~1300s).\n";
         return 0;
     }
@@ -1933,7 +1933,7 @@ static int cmd_nonhost(int argc, char* argv[]) {
     };
 
     if (op == "status") {
-        std::cerr << "[singlify nonhost] Cache directory: " << NONHOST_SHM_DIR << "\n";
+        std::cerr << "[singlet nonhost] Cache directory: " << NONHOST_SHM_DIR << "\n";
         bool any = false;
         for (const char* name : {"viral.snhskidx", "bacterial.snhskidx", "fungal.snhskidx"}) {
             std::string p = std::string(NONHOST_SHM_DIR) + "/" + name;
@@ -1955,22 +1955,22 @@ static int cmd_nonhost(int argc, char* argv[]) {
     if (op == "unload") {
         struct stat st{};
         if (stat(NONHOST_SHM_DIR, &st) != 0) {
-            std::cerr << "[singlify nonhost] Cache directory not found — nothing to unload.\n";
+            std::cerr << "[singlet nonhost] Cache directory not found — nothing to unload.\n";
             return 0;
         }
-        std::cerr << "[singlify nonhost] Removing cache directory: " << NONHOST_SHM_DIR << "\n";
+        std::cerr << "[singlet nonhost] Removing cache directory: " << NONHOST_SHM_DIR << "\n";
         std::string cmd = std::string("rm -rf ") + NONHOST_SHM_DIR;
         int rc = system(cmd.c_str());
         if (rc != 0) {
-            std::cerr << "[singlify nonhost] ERROR: rm -rf failed (rc=" << rc << ")\n";
+            std::cerr << "[singlet nonhost] ERROR: rm -rf failed (rc=" << rc << ")\n";
             return 1;
         }
-        std::cerr << "[singlify nonhost] Nonhost cache removed.\n";
+        std::cerr << "[singlet nonhost] Nonhost cache removed.\n";
         return 0;
     }
 
     if (op == "load") {
-        // Resolve ref_base: --ref-base flag or SINGLIFY_REF_BASE env
+        // Resolve ref_base: --ref-base flag or SINGLET_REF_BASE env
         std::string ref_base_val;
         for (int i = 1; i < argc; i++) {
             std::string a = argv[i];
@@ -1978,24 +1978,24 @@ static int cmd_nonhost(int argc, char* argv[]) {
                 ref_base_val = argv[++i];
         }
         if (ref_base_val.empty()) {
-            const char* env = getenv("SINGLIFY_REF_BASE");
+            const char* env = getenv("SINGLET_REF_BASE");
             if (env) ref_base_val = env;
         }
         if (ref_base_val.empty()) {
-            std::cerr << "[singlify nonhost] ERROR: --ref-base not specified and SINGLIFY_REF_BASE not set.\n";
+            std::cerr << "[singlet nonhost] ERROR: --ref-base not specified and SINGLET_REF_BASE not set.\n";
             return 1;
         }
         std::string nhdir = ref_base_val + "/nonhost/";
         // Verify source directory exists
         struct stat nhst{};
         if (stat(nhdir.c_str(), &nhst) != 0) {
-            std::cerr << "[singlify nonhost] ERROR: nonhost source directory not found: " << nhdir << "\n";
+            std::cerr << "[singlet nonhost] ERROR: nonhost source directory not found: " << nhdir << "\n";
             return 1;
         }
 
         // Create destination directory
         if (mkdir(NONHOST_SHM_DIR, 0755) != 0 && errno != EEXIST) {
-            std::cerr << "[singlify nonhost] ERROR: cannot create " << NONHOST_SHM_DIR
+            std::cerr << "[singlet nonhost] ERROR: cannot create " << NONHOST_SHM_DIR
                       << ": " << strerror(errno) << "\n";
             return 1;
         }
@@ -2007,69 +2007,69 @@ static int cmd_nonhost(int argc, char* argv[]) {
             std::string dst = std::string(NONHOST_SHM_DIR) + "/" + name;
             struct stat src_st{};
             if (stat(src.c_str(), &src_st) != 0) {
-                std::cerr << "[singlify nonhost] Skipping " << name << " (not found in " << nhdir << ")\n";
+                std::cerr << "[singlet nonhost] Skipping " << name << " (not found in " << nhdir << ")\n";
                 continue;
             }
             // Skip if already cached with the same size
             struct stat dst_st{};
             if (stat(dst.c_str(), &dst_st) == 0 && dst_st.st_size == src_st.st_size) {
-                std::cerr << "[singlify nonhost] Already cached: " << name
+                std::cerr << "[singlet nonhost] Already cached: " << name
                           << " (" << static_cast<double>(src_st.st_size)/1073741824.0 << " GiB)\n";
                 continue;
             }
             double gb = static_cast<double>(src_st.st_size) / 1073741824.0;
-            std::cerr << "[singlify nonhost] Copying " << name << " (" << gb << " GiB) ...\n";
+            std::cerr << "[singlet nonhost] Copying " << name << " (" << gb << " GiB) ...\n";
             StopWatch sw;
             // Use cp via system() — this is a one-time setup operation; cp uses kernel splice/sendfile
             std::string cp_cmd = "cp " + src + " " + dst;
             int rc = system(cp_cmd.c_str());
             if (rc != 0) {
-                std::cerr << "[singlify nonhost] ERROR: cp failed for " << name << " (rc=" << rc << ")\n";
+                std::cerr << "[singlet nonhost] ERROR: cp failed for " << name << " (rc=" << rc << ")\n";
                 overall_rc = 1;
             } else {
-                std::cerr << "[singlify nonhost] Cached " << name
+                std::cerr << "[singlet nonhost] Cached " << name
                           << " in " << sw.elapsed_s() << "s (" << gb << " GiB)\n";
             }
         }
         if (overall_rc == 0)
-            std::cerr << "[singlify nonhost] All available indices cached in " << NONHOST_SHM_DIR << ".\n"
-                      << "Subsequent singlify process runs will load from RAM disk.\n";
+            std::cerr << "[singlet nonhost] All available indices cached in " << NONHOST_SHM_DIR << ".\n"
+                      << "Subsequent singlet process runs will load from RAM disk.\n";
         return overall_rc;
     }
 
     std::cerr << "ERROR: unknown nonhost subcommand: " << op << "\n"
-              << "Use: singlify nonhost load|unload|status\n";
+              << "Use: singlet nonhost load|unload|status\n";
     return 1;
 }
 
 // ════════════════════════════════════════════════════════════
-// singlify genome — Load/unload genome into System V shared memory
+// singlet genome — Load/unload genome into System V shared memory
 // ════════════════════════════════════════════════════════════
 static int cmd_genome(int argc, char* argv[]) {
     if (argc < 1) {
         std::cerr
-            << "singlify genome — Manage genome in shared memory\n\n"
+            << "singlet genome — Manage genome in shared memory\n\n"
             << "Usage:\n"
-            << "  singlify genome load <genome-dir>          Load genome into shared RAM\n"
-            << "  singlify genome unload <genome-dir>        Remove genome from shared RAM\n"
-            << "  singlify genome status <genome-dir>        Check if genome is loaded\n"
-            << "  singlify genome build-minimizers \n"
+            << "  singlet genome load <genome-dir>          Load genome into shared RAM\n"
+            << "  singlet genome unload <genome-dir>        Remove genome from shared RAM\n"
+            << "  singlet genome status <genome-dir>        Check if genome is loaded\n"
+            << "  singlet genome build-minimizers \n"
             << "           --genome-dir <path>               Build minimizerIndex.bin\n\n"
-            << "When the genome is loaded, subsequent 'singlify process' runs skip\n"
+            << "When the genome is loaded, subsequent 'singlet process' runs skip\n"
             << "the ~40s genome loading phase automatically.\n";
         return 0;
     }
     std::string op = argv[0];
     if (op == "help" || op == "-h" || op == "--help") {
         std::cerr
-            << "singlify genome — Manage genome in shared memory\n\n"
+            << "singlet genome — Manage genome in shared memory\n\n"
             << "Usage:\n"
-            << "  singlify genome load <genome-dir>          Load genome into shared RAM\n"
-            << "  singlify genome unload <genome-dir>        Remove genome from shared RAM\n"
-            << "  singlify genome status <genome-dir>        Check if genome is loaded\n"
-            << "  singlify genome build-minimizers \n"
+            << "  singlet genome load <genome-dir>          Load genome into shared RAM\n"
+            << "  singlet genome unload <genome-dir>        Remove genome from shared RAM\n"
+            << "  singlet genome status <genome-dir>        Check if genome is loaded\n"
+            << "  singlet genome build-minimizers \n"
             << "           --genome-dir <path>               Build minimizerIndex.bin\n\n"
-            << "When the genome is loaded, subsequent 'singlify process' runs skip\n"
+            << "When the genome is loaded, subsequent 'singlet process' runs skip\n"
             << "the ~40s genome loading phase automatically.\n";
         return 0;
     }
@@ -2084,7 +2084,7 @@ static int cmd_genome(int argc, char* argv[]) {
                 gdir = a;  // positional fallback
         }
         if (gdir.empty()) {
-            std::cerr << "Usage: singlify genome build-minimizers --genome-dir <path>\n";
+            std::cerr << "Usage: singlet genome build-minimizers --genome-dir <path>\n";
             return 1;
         }
         struct stat bst{};
@@ -2096,7 +2096,7 @@ static int cmd_genome(int argc, char* argv[]) {
     }
     if (argc < 2) {
         std::cerr << "ERROR: genome-dir required\n"
-                  << "Usage: singlify genome " << op << " <genome-dir>\n";
+                  << "Usage: singlet genome " << op << " <genome-dir>\n";
         return 1;
     }
     std::string genome_dir = argv[1];
@@ -2109,7 +2109,7 @@ static int cmd_genome(int argc, char* argv[]) {
     if (op == "status") {
         bool loaded = star_genome_in_shm(genome_dir);
         key_t k = star_genome_shmkey(genome_dir);
-        std::cerr << "[singlify genome] " << genome_dir << "\n"
+        std::cerr << "[singlet genome] " << genome_dir << "\n"
                   << "  shmKey = 0x" << std::hex << k << std::dec << "\n"
                   << "  status = " << (loaded ? "LOADED (in shared memory)" : "NOT loaded") << "\n";
         return loaded ? 0 : 1;
@@ -2117,22 +2117,22 @@ static int cmd_genome(int argc, char* argv[]) {
 
     if (op == "load") {
         if (star_genome_in_shm(genome_dir)) {
-            std::cerr << "[singlify genome] Genome already in shared memory — nothing to do.\n";
+            std::cerr << "[singlet genome] Genome already in shared memory — nothing to do.\n";
             return 0;
         }
-        std::cerr << "[singlify genome] Loading genome into shared memory: " << genome_dir << "\n";
+        std::cerr << "[singlet genome] Loading genome into shared memory: " << genome_dir << "\n";
         StopWatch sw;
-        std::string tmp_prefix = std::string("/dev/shm/singlify_genome_load_") + std::to_string(getpid());
+        std::string tmp_prefix = std::string("/dev/shm/singlet_genome_load_") + std::to_string(getpid());
         int rc = run_star_genome_op(genome_dir, "LoadAndExit", tmp_prefix);
         // STAR exits with 0 from within LoadAndExit (calls exit(0) internally),
         // so rc==0 is expected. Verify the segment actually appeared.
         if (!star_genome_in_shm(genome_dir)) {
-            std::cerr << "[singlify genome] ERROR: genome load failed (shmid not found after STAR exit).\n"
+            std::cerr << "[singlet genome] ERROR: genome load failed (shmid not found after STAR exit).\n"
                       << "  STAR log: " << tmp_prefix << "/star_genome.log\n";
             return 1;
         }
-        std::cerr << "[singlify genome] Genome loaded in " << sw.elapsed_s() << "s. "
-                  << "Subsequent singlify process runs will reuse shared memory.\n";
+        std::cerr << "[singlet genome] Genome loaded in " << sw.elapsed_s() << "s. "
+                  << "Subsequent singlet process runs will reuse shared memory.\n";
         // Clean up STAR log dir
         std::string rmcmd = "rm -rf " + tmp_prefix;
         system(rmcmd.c_str());
@@ -2141,16 +2141,16 @@ static int cmd_genome(int argc, char* argv[]) {
 
     if (op == "unload") {
         if (!star_genome_in_shm(genome_dir)) {
-            std::cerr << "[singlify genome] Genome not in shared memory — nothing to unload.\n";
+            std::cerr << "[singlet genome] Genome not in shared memory — nothing to unload.\n";
             return 0;
         }
-        std::cerr << "[singlify genome] Removing genome from shared memory: " << genome_dir << "\n";
-        std::string tmp_prefix = std::string("/dev/shm/singlify_genome_unload_") + std::to_string(getpid());
+        std::cerr << "[singlet genome] Removing genome from shared memory: " << genome_dir << "\n";
+        std::string tmp_prefix = std::string("/dev/shm/singlet_genome_unload_") + std::to_string(getpid());
         int rc = run_star_genome_op(genome_dir, "Remove", tmp_prefix);
         if (star_genome_in_shm(genome_dir)) {
-            std::cerr << "[singlify genome] WARNING: genome may still be in shared memory.\n";
+            std::cerr << "[singlet genome] WARNING: genome may still be in shared memory.\n";
         } else {
-            std::cerr << "[singlify genome] Genome removed from shared memory.\n";
+            std::cerr << "[singlet genome] Genome removed from shared memory.\n";
         }
         std::string rmcmd = "rm -rf " + tmp_prefix;
         system(rmcmd.c_str());
@@ -2158,13 +2158,13 @@ static int cmd_genome(int argc, char* argv[]) {
     }
 
     std::cerr << "ERROR: unknown genome subcommand: " << op << "\n"
-              << "Use: singlify genome load|unload|status <genome-dir>\n";
+              << "Use: singlet genome load|unload|status <genome-dir>\n";
     return 1;
 }
 
 static void usage(const char* prog) {
     std::cerr
-        << "singlify v0.3.0 — .1fq → align → pileup → .1pz\n\n"
+        << "singlet v0.3.0 — .1fq → align → pileup → .1pz\n\n"
         << "Subcommands:\n"
         << "  " << prog << " <file.1fq> [options]        Process .1fq → .1pz (align + pileup)\n"
         << "  " << prog << " download <SRR> [-o]         Stream SRA → .1fq archive\n"
@@ -2179,7 +2179,7 @@ static void usage(const char* prog) {
         << "Processing options (requires .1fq input):\n"
         << "  --genome-dir DIR       Aligner genome index directory\n"
         << "  --ref-base DIR         Reference root dir for auto-detection (overrides\n"
-        << "                         SINGLIFY_REF_BASE env var)\n"
+        << "                         SINGLET_REF_BASE env var)\n"
         << "  --whitelist FILE       Barcode whitelist (for barcode correction)\n"
         << "  --barcodes FILE        Filtered barcode list\n\n"
         << "Feature layers (at least one required):\n"
@@ -2187,7 +2187,7 @@ static void usage(const char* prog) {
         << "  --snps FILE            VCF of SNP positions\n"
         << "  --feature-ref FILE     CITE-seq ADT/HTO tag reference CSV (name,sequence)\n\n"
         << "Output:\n"
-        << "  --out-prefix DIR       Output directory [./singlify_out]\n"
+        << "  --out-prefix DIR       Output directory [./singlet_out]\n"
         << "  --output-format F      1pz (default), mtx, h5ad, loom, or all (1pz+h5ad)\n"
         << "  --tagged-bam [PATH]    Write Cell Ranger-compatible tagged BAM with CB/UB/GX/GN/RE\n"
         << "                         tags (default: {out_prefix}/possorted_genome_bam.bam).\n"
@@ -2220,7 +2220,7 @@ static void usage(const char* prog) {
         << "  --lower-umi N          Lower UMI bound for ambient pool [100]\n"
         << "  --raw-matrix           Write raw_feature_bc_matrix/ (all barcodes) alongside filtered\n"
         << "  --metadata-json FILE   JSON file with GEO/pipeline metadata to embed in .1pz output\n"
-        << "  --nonhost-db PATH      Viral sketch database (.snhskidx); auto-discovered from SINGLIFY_REF_BASE/nonhost/\n"
+        << "  --nonhost-db PATH      Viral sketch database (.snhskidx); auto-discovered from SINGLET_REF_BASE/nonhost/\n"
         << "  --bacterial-db PATH    Bacterial sketch database; auto-discovered alongside viral DB\n"
         << "  --fungal-db PATH       Fungal sketch database; auto-discovered alongside viral DB\n"
         << "  --nonhost-ref-dir PATH Directory of per-species FASTAs for secondary alignment\n"
@@ -2232,8 +2232,8 @@ static void usage(const char* prog) {
         << "                         memory: force in-memory sort (current behaviour, fastest)\n"
         << "                         disk: force disk-backed sort (prevents OOM on very large samples)\n\n"
         << "Legacy (deprecated — archive to .1fq first, then process):\n"
-        << "  --reads R2 R1          FASTQ files (use 'singlify encode' instead)\n"
-        << "  --sra FILE             SRA file (use 'singlify download' instead)\n"
+        << "  --reads R2 R1          FASTQ files (use 'singlet encode' instead)\n"
+        << "  --sra FILE             SRA file (use 'singlet download' instead)\n"
         << "  --bam-file BAM         Read from existing BAM (debug only)\n"
         << "  --1fq FILE             Equivalent to positional .1fq argument\n"
         << "  --star-threads N       Alias for --threads\n"
@@ -2272,7 +2272,7 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         if (sub == "process" && argc >= 3) {
-            // `singlify process file.1fq [opts]` → shift argv so file.1fq
+            // `singlet process file.1fq [opts]` → shift argv so file.1fq
             // is picked up as positional arg below
             argc--; argv++;
         }
@@ -2282,7 +2282,7 @@ int main(int argc, char* argv[]) {
     std::string genome_dir, reads_r2, reads_r1;
     std::string ref_base;
     std::string barcode_file, whitelist_file;
-    std::string out_prefix = "./singlify_out";
+    std::string out_prefix = "./singlet_out";
     std::string output_format = "1pz";
     std::string genome_load = "NoSharedMemory";
     std::string bam_file;
@@ -2456,10 +2456,10 @@ int main(int argc, char* argv[]) {
     // Priority order:
     //   1. Explicit CLI flags (--nonhost-db / --bacterial-db / --fungal-db)
     //   2. Auto-discovery from same directory as the first explicit DB
-    //   3. Auto-discovery from $SINGLIFY_REF_BASE/nonhost/ (auto-enable when indices exist)
+    //   3. Auto-discovery from $SINGLET_REF_BASE/nonhost/ (auto-enable when indices exist)
     //
     // --nonhost-db is treated as the viral DB (legacy alias); if neither --nonhost-db
-    // nor --bacterial-db/--fungal-db is given, we auto-discover from SINGLIFY_REF_BASE.
+    // nor --bacterial-db/--fungal-db is given, we auto-discover from SINGLET_REF_BASE.
     {
         // Treat legacy --nonhost-db as the viral path
         if (!nonhost_db_path.empty() && !no_viral_screen) {
@@ -2507,8 +2507,8 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        // Step 4: auto-discover from /dev/shm/singlify_nonhost/ (cached) or
-        //         $SINGLIFY_REF_BASE/nonhost/ (NFS fallback).  (auto-enable)
+        // Step 4: auto-discover from /dev/shm/singlet_nonhost/ (cached) or
+        //         $SINGLET_REF_BASE/nonhost/ (NFS fallback).  (auto-enable)
         if (eff_viral_db.empty() && eff_bact_db.empty() && eff_fung_db.empty()) {
             auto file_exists = [](const std::string& p) {
                 struct stat st{};
@@ -2519,7 +2519,7 @@ int main(int argc, char* argv[]) {
             bool shm_has_any = file_exists(shm_nhdir + "viral.snhskidx")
                              || file_exists(shm_nhdir + "bacterial.snhskidx")
                              || file_exists(shm_nhdir + "fungal.snhskidx");
-            const char* ref_base_env = getenv("SINGLIFY_REF_BASE");
+            const char* ref_base_env = getenv("SINGLET_REF_BASE");
             std::string nfs_nhdir = ref_base_env ? std::string(ref_base_env) + "/nonhost/" : "";
             // Probe both directories; shm preferred when file exists there
             auto resolve_db = [&](const std::string& filename) -> std::string {
@@ -2566,20 +2566,20 @@ int main(int argc, char* argv[]) {
     // Deprecation warnings for legacy input paths
     if (!reads_r2.empty()) {
         std::cerr << "WARNING: --reads is deprecated. Archive to .1fq first:\n"
-                  << "  singlify encode --reads " << reads_r1 << " " << reads_r2
+                  << "  singlet encode --reads " << reads_r1 << " " << reads_r2
                   << " -o sample.1fq\n"
-                  << "  singlify sample.1fq [options]\n"
+                  << "  singlet sample.1fq [options]\n"
                   << "Proceeding with legacy FASTQ path...\n\n";
     }
     if (sra_mode) {
         std::cerr << "WARNING: --sra is deprecated. Archive to .1fq first:\n"
-                  << "  singlify download " << sra_file << " -o sample.1fq\n"
-                  << "  singlify sample.1fq [options]\n"
+                  << "  singlet download " << sra_file << " -o sample.1fq\n"
+                  << "  singlet sample.1fq [options]\n"
                   << "Proceeding with legacy SRA path...\n\n";
     }
     if (!bam_file.empty()) {
         std::cerr << "NOTE: --bam-file is a debug/interop path. "
-                  << "Production workflow: singlify <file.1fq> [options]\n\n";
+                  << "Production workflow: singlet <file.1fq> [options]\n\n";
     }
 
     if ((int)!reads_r2.empty() + (int)sra_mode + (int)onefq_mode + (int)!bam_file.empty() > 1) {
@@ -2617,7 +2617,7 @@ int main(int argc, char* argv[]) {
                     meta_json_proto_id  = spec->protocol_id;
                     meta_json_proto_tag = spec->tag;
                 } else {
-                    std::cerr << "[singlify] WARNING: --metadata-json protocol='" << proto_override
+                    std::cerr << "[singlet] WARNING: --metadata-json protocol='" << proto_override
                               << "' not found in known_protocols() — ignoring override\n";
                 }
             }
@@ -2675,13 +2675,13 @@ int main(int argc, char* argv[]) {
                         whitelist_file = candidate;
                         whitelist_auto_resolved = true;
                         resolved = true;
-                        std::cerr << "[singlify] Auto-resolved whitelist: " << proto_tag
+                        std::cerr << "[singlet] Auto-resolved whitelist: " << proto_tag
                                   << " → " << wl_name << "\n";
                     }
                 }
                 if (!resolved) {
                     // Whitelist file not found at install path (or readlink failed)
-                    std::cerr << "[singlify] Whitelist " << wl_name
+                    std::cerr << "[singlet] Whitelist " << wl_name
                               << " not found for " << proto_tag
                               << " — using barcode auto-discovery\n";
                     whitelist_file = "None";
@@ -2691,7 +2691,7 @@ int main(int argc, char* argv[]) {
                 // Whitelist-free protocol or unknown protocol_id
                 whitelist_file = "None";
                 whitelist_auto_resolved = true;
-                std::cerr << "[singlify] Protocol "
+                std::cerr << "[singlet] Protocol "
                           << (proto_tag.empty() ? "unknown" : proto_tag)
                           << " (id=" << (int)pid << ") is whitelist-free"
                              " — using barcode auto-discovery\n";
@@ -2701,16 +2701,16 @@ int main(int argc, char* argv[]) {
             // fall back to barcode auto-discovery rather than leaving whitelist empty.
             whitelist_file = "None";
             whitelist_auto_resolved = true;
-            std::cerr << "[singlify] WARNING: cannot read .1fq header for whitelist "
+            std::cerr << "[singlet] WARNING: cannot read .1fq header for whitelist "
                          "auto-resolution — using barcode auto-discovery\n";
         }
     }
 
     // ── N1: Species auto-detection — resolve genome_dir when not supplied ──
     if (onefq_mode && genome_dir.empty()) {
-        // Resolve reference base: --ref-base > SINGLIFY_REF_BASE env > skip
+        // Resolve reference base: --ref-base > SINGLET_REF_BASE env > skip
         if (ref_base.empty()) {
-            const char* env_ref = std::getenv("SINGLIFY_REF_BASE");
+            const char* env_ref = std::getenv("SINGLET_REF_BASE");
             if (env_ref && *env_ref) ref_base = env_ref;
         }
         if (!ref_base.empty()) {
@@ -2722,7 +2722,7 @@ int main(int argc, char* argv[]) {
                     struct stat gd_st;
                     if (stat(candidate.c_str(), &gd_st) == 0) {
                         genome_dir = candidate;
-                        std::cerr << "[singlify] Auto-resolved genome: " << det.genome_tag
+                        std::cerr << "[singlet] Auto-resolved genome: " << det.genome_tag
                                   << " → " << genome_dir << "\n";
                         // Auto-resolve GTF from {species_dir}/genes/genes.gtf if --exons not supplied
                         if (config.exon_gtf_path.empty()) {
@@ -2732,12 +2732,12 @@ int main(int argc, char* argv[]) {
                                 struct stat gtf_st;
                                 if (stat(gtf_candidate.c_str(), &gtf_st) == 0) {
                                     config.exon_gtf_path = gtf_candidate;
-                                    std::cerr << "[singlify] Auto-resolved GTF: " << config.exon_gtf_path << "\n";
+                                    std::cerr << "[singlet] Auto-resolved GTF: " << config.exon_gtf_path << "\n";
                                 }
                             }
                         }
                     } else {
-                        std::cerr << "[singlify] Species detected as " << det.genome_tag
+                        std::cerr << "[singlet] Species detected as " << det.genome_tag
                                   << " but genome dir not found: " << candidate << "\n"
                                   << "  Set --genome-dir explicitly or check --ref-base.\n";
                     }
@@ -2770,7 +2770,7 @@ int main(int argc, char* argv[]) {
         };
         if (is_clipper_node() && star_genome_in_shm(genome_dir)) {
             genome_load = "LoadAndKeep";
-            std::cerr << "[singlify] N21: Clipper node + genome in shared memory — using LoadAndKeep.\n";
+            std::cerr << "[singlet] N21: Clipper node + genome in shared memory — using LoadAndKeep.\n";
         }
     }
 
@@ -2780,7 +2780,7 @@ int main(int argc, char* argv[]) {
             std::cerr << "ERROR: .1fq processing requires --genome-dir (and optionally --whitelist)\n"
                          "  Tip: Whitelist is auto-resolved from .1fq metadata. Use --whitelist None\n"
                          "  for protocols without a universal whitelist (e.g. Drop-seq)\n"
-                         "  Tip: Set SINGLIFY_REF_BASE or use --ref-base for genome auto-detection\n";
+                         "  Tip: Set SINGLET_REF_BASE or use --ref-base for genome auto-detection\n";
             usage(argv[0]);
             return 1;
         }
@@ -2803,11 +2803,11 @@ int main(int argc, char* argv[]) {
         if (genome_dir.empty() || reads_r2.empty() ||
             reads_r1.empty() || whitelist_file.empty()) {
             std::cerr << "ERROR: .1fq file required. Usage:\n"
-                         "  singlify <file.1fq> --genome-dir DIR --whitelist WL "
+                         "  singlet <file.1fq> --genome-dir DIR --whitelist WL "
                          "--barcodes BC --exons GTF\n\n"
                          "To archive raw data first:\n"
-                         "  singlify download <SRR> -o sample.1fq   (from SRA)\n"
-                         "  singlify encode --reads R1 R2 -o sample.1fq  (from FASTQ)\n";
+                         "  singlet download <SRR> -o sample.1fq   (from SRA)\n"
+                         "  singlet encode --reads R1 R2 -o sample.1fq  (from FASTQ)\n";
             return 1;
         }
     }
@@ -2849,17 +2849,17 @@ int main(int argc, char* argv[]) {
             // B-G2-3: feature-barcode-only = ADT/HTO stream, no GEX
             is_feature_barcode_only = (eahdr.assay_type == static_cast<uint8_t>(lib1fq::AssayType::CITE_SEQ_ADT));
             if (is_atac_mode)
-                std::cerr << "[singlify] ATAC assay detected (assay_type=" << (int)eahdr.assay_type << ")\n";
+                std::cerr << "[singlet] ATAC assay detected (assay_type=" << (int)eahdr.assay_type << ")\n";
             if (is_cite_seq_mode)
-                std::cerr << "[singlify] CITE-seq assay detected (assay_type=" << (int)eahdr.assay_type << ")\n";
+                std::cerr << "[singlet] CITE-seq assay detected (assay_type=" << (int)eahdr.assay_type << ")\n";
             if (is_feature_barcode_only)
-                std::cerr << "[singlify] Feature-barcode-only (ADT/HTO) assay detected\n";
+                std::cerr << "[singlet] Feature-barcode-only (ADT/HTO) assay detected\n";
             if (is_visium_mode)
-                std::cerr << "[singlify] Visium spatial assay detected (assay_type=" << (int)eahdr.assay_type << ")\n";
+                std::cerr << "[singlet] Visium spatial assay detected (assay_type=" << (int)eahdr.assay_type << ")\n";
             if (is_smart_seq2_mode)
-                std::cerr << "[singlify] Smart-seq2/plate assay detected (assay_type=" << (int)eahdr.assay_type << ")\n";
+                std::cerr << "[singlet] Smart-seq2/plate assay detected (assay_type=" << (int)eahdr.assay_type << ")\n";
             if (is_bulk_rna_mode)
-                std::cerr << "[singlify] Bulk RNA-seq assay detected (assay_type=" << (int)eahdr.assay_type << ")\n";
+                std::cerr << "[singlet] Bulk RNA-seq assay detected (assay_type=" << (int)eahdr.assay_type << ")\n";
         } catch (...) {}
     }
 
@@ -2922,7 +2922,7 @@ int main(int argc, char* argv[]) {
                    << "}\n";
             }
         }
-        std::cerr << "[singlify] feature_barcode_not_gex: summary.json written to " << out_prefix << "\n";
+        std::cerr << "[singlet] feature_barcode_not_gex: summary.json written to " << out_prefix << "\n";
         return 0;  // B-G2-3: clean exit per contract §5
     }
 
@@ -2971,7 +2971,7 @@ int main(int argc, char* argv[]) {
     }
 
     StopWatch total_sw;
-    std::cerr << "singlify v0.3.0\n";
+    std::cerr << "singlet v0.3.0\n";
     if (cascade_enabled)
         std::cerr << "  cascade: " << cascade_mode << " | te-classify: " << te_classify_mode << "\n";
 
@@ -3025,7 +3025,7 @@ int main(int argc, char* argv[]) {
     // Loads barcodes, SNPs, GTF into memory BEFORE starting STAR.
     // This overlaps reference loading with STAR's genome load when using
     // --genomeLoad LoadAndKeep (genome already in shared memory).
-    std::cerr << "[singlify] Loading pileup references...\n";
+    std::cerr << "[singlet] Loading pileup references...\n";
     StopWatch ref_sw;
 
     // If barcode discovery is needed (--whitelist None or auto-resolved whitelist, no --barcodes),
@@ -3040,7 +3040,7 @@ int main(int argc, char* argv[]) {
             std::cerr << "ERROR: Failed to load pileup references\n";
             return 1;
         }
-        std::cerr << "[singlify] References loaded: " << ref_sw.elapsed_s() << "s\n";
+        std::cerr << "[singlet] References loaded: " << ref_sw.elapsed_s() << "s\n";
     }
 
     // ── Phase 0.5: SRA streaming setup (FIFOs + native VDB reader) ──
@@ -3054,7 +3054,7 @@ int main(int argc, char* argv[]) {
     pid_t demux_pid = -1;
 
     if (sra_mode) {
-        std::cerr << "[singlify] SRA mode (native VDB): " << sra_file << "\n";
+        std::cerr << "[singlet] SRA mode (native VDB): " << sra_file << "\n";
 
         // Create temp directory for FIFOs
         fifo_dir = out_prefix + "/.sra_fifos";
@@ -3167,7 +3167,7 @@ int main(int argc, char* argv[]) {
         reads_r1 = r1_fifo_path;
         reads_r2 = r2_fifo_path;
 
-        std::cerr << "[singlify] SRA demuxer pid=" << demux_pid << "\n";
+        std::cerr << "[singlet] SRA demuxer pid=" << demux_pid << "\n";
     }
 
     // Barcode frequency data captured during .1fq decode (avoids separate
@@ -3182,13 +3182,13 @@ int main(int argc, char* argv[]) {
 
     // ── FIFO decode state ──
     // FIFO decode is the default for .1fq mode: eliminates 50-300 GB temp FASTQ files
-    // by streaming decode → named FIFOs → STAR reads live. Set SINGLIFY_FILE_DECODE=1
+    // by streaming decode → named FIFOs → STAR reads live. Set SINGLET_FILE_DECODE=1
     // to revert to the legacy file-based decode (writes full FASTQs to TMPDIR).
     // Pass 1: lightweight BC count + R2 prefix capture (no FASTQ files written)
     // Pass 2: full decode streamed to named FIFOs → STAR reads live from them
     const bool use_fifo_decode = onefq_mode &&
-        !(getenv("SINGLIFY_FILE_DECODE") &&
-          std::string(getenv("SINGLIFY_FILE_DECODE")) == "1");
+        !(getenv("SINGLET_FILE_DECODE") &&
+          std::string(getenv("SINGLET_FILE_DECODE")) == "1");
     std::thread fifo_writer_thread;    // Pass 2 writer (started after Phase 0.9)
     std::string fifo_r1_path;          // original R1 stream FIFO path (before reads_inverted swap)
     std::string fifo_r2_path;          // original R2 stream FIFO path
@@ -3220,7 +3220,7 @@ int main(int argc, char* argv[]) {
     // byte-numeric, converts to FASTQ text, and writes to R1/R2 FIFOs.
     // STAR reads from the FIFOs exactly like the SRA path.
     if (onefq_mode) {
-        std::cerr << "[singlify] .1fq mode: " << onefq_file << "\n";
+        std::cerr << "[singlet] .1fq mode: " << onefq_file << "\n";
 
         // Read .1fq header + metadata to auto-configure STAR params
         {
@@ -3228,7 +3228,7 @@ int main(int argc, char* argv[]) {
             try {
                 probe.open(onefq_file.c_str());
             } catch (const std::exception& e) {
-                std::cerr << "[singlify] ERROR: Cannot open .1fq file '" << onefq_file
+                std::cerr << "[singlet] ERROR: Cannot open .1fq file '" << onefq_file
                           << "': " << e.what() << "\n";
                 return 1;
             }
@@ -3268,7 +3268,7 @@ int main(int argc, char* argv[]) {
                     if (cb > 0 && ui > 0) {
                         detected_bc_len = cb;
                         detected_umi_len = ui;
-                        std::cerr << "[singlify] .1fq metadata: soloCBlen="
+                        std::cerr << "[singlet] .1fq metadata: soloCBlen="
                                   << cb << " soloUMIlen=" << ui << "\n";
                     }
                     int r2l = extract_int("r2_length");
@@ -3277,7 +3277,7 @@ int main(int argc, char* argv[]) {
                     std::string solo_type = extract_str("soloType");
                     if (!solo_type.empty()) {
                         detected_soloType = solo_type;
-                        std::cerr << "[singlify] .1fq metadata: soloType="
+                        std::cerr << "[singlet] .1fq metadata: soloType="
                                   << solo_type << "\n";
                     }
                     std::string umi_pos = extract_str("soloUMIposition");
@@ -3309,7 +3309,7 @@ int main(int argc, char* argv[]) {
                     // Fix: protocol.tag is nested inside "protocol": {...}, extract "tag" directly
                     std::string proto_tag_meta = extract_str("tag");
                     if (!proto_tag_meta.empty())
-                        std::cerr << "[singlify] .1fq metadata: protocol=" << proto_tag_meta << "\n";
+                        std::cerr << "[singlet] .1fq metadata: protocol=" << proto_tag_meta << "\n";
                     // S5-UMI-LEN: fallback tag-string → UMI length when metadata
                     // lacked soloUMIlen and user did not explicitly set --umi-len
                     if (detected_umi_len == 0 && !umi_len_explicit && !proto_tag_meta.empty()) {
@@ -3344,7 +3344,7 @@ int main(int argc, char* argv[]) {
                             detected_umi_len = 12;
                         }
                         if (detected_umi_len > 0)
-                            std::cerr << "[singlify] S5-UMI-LEN: tag='" << proto_tag_meta
+                            std::cerr << "[singlet] S5-UMI-LEN: tag='" << proto_tag_meta
                                       << "' → umi_len=" << detected_umi_len << "\n";
                     }
                     // Read clip5p_length: constant 5' prefix detected during .1fq encoding
@@ -3353,11 +3353,11 @@ int main(int argc, char* argv[]) {
                     int clip5p_from_meta = extract_int("clip5p_length");
                     if (clip5p_from_meta > 0) {
                         r2_clip5p = clip5p_from_meta;
-                        std::cerr << "[singlify] Auto-clip5p: " << r2_clip5p
+                        std::cerr << "[singlet] Auto-clip5p: " << r2_clip5p
                                   << " bp from cDNA read (.1fq metadata)\n";
                     }
                 } catch (const std::exception& e) {
-                    std::cerr << "[singlify] .1fq metadata read error: "
+                    std::cerr << "[singlet] .1fq metadata read error: "
                               << e.what() << " (falling back to header)\n";
                 }
             }
@@ -3371,7 +3371,7 @@ int main(int argc, char* argv[]) {
                 for (const auto& sp : lib1fq::known_protocols())
                     if (sp.protocol_id == hdr.protocol_id) { old_tag = sp.tag; break; }
                 if (old_tag.empty()) old_tag = std::to_string((int)hdr.protocol_id);
-                std::cerr << "[singlify] Protocol override: .1fq header protocol_id="
+                std::cerr << "[singlet] Protocol override: .1fq header protocol_id="
                           << old_tag << " overridden by --metadata-json protocol="
                           << meta_json_proto_tag << "\n";
                 hdr.protocol_id = meta_json_proto_id;
@@ -3383,7 +3383,7 @@ int main(int argc, char* argv[]) {
                     detected_soloType.clear();
                     detected_cb_positions.clear();
                     detected_umi_position.clear();
-                    std::cerr << "[singlify] Protocol override: cleared stale CB/UMI params"
+                    std::cerr << "[singlet] Protocol override: cleared stale CB/UMI params"
                                  " derived from old .1fq header protocol\n";
                 }
             }
@@ -3408,7 +3408,7 @@ int main(int argc, char* argv[]) {
                         // N10: capture protocol-specific 3' adapter
                         if (!spec.adapter3p.empty())
                             detected_adapter3p = spec.adapter3p;
-                        std::cerr << "[singlify] N2: protocol_id=" << (int)hdr.protocol_id
+                        std::cerr << "[singlet] N2: protocol_id=" << (int)hdr.protocol_id
                                   << " (" << spec.tag << ")"
                                   << " → CB=" << spec.bc_len << "bp@" << detected_cb_start
                                   << " UMI=" << spec.umi_len << "bp@" << detected_umi_start
@@ -3424,7 +3424,7 @@ int main(int argc, char* argv[]) {
                 for (const auto& spec : lib1fq::known_protocols()) {
                     if (spec.protocol_id == hdr.protocol_id && !spec.adapter3p.empty()) {
                         detected_adapter3p = spec.adapter3p;
-                        std::cerr << "[singlify] N10: adapter3p auto-selected for "
+                        std::cerr << "[singlet] N10: adapter3p auto-selected for "
                                   << spec.tag << " ("
                                   << detected_adapter3p.substr(0, 12) << "...)\n";
                         break;
@@ -3456,9 +3456,9 @@ int main(int argc, char* argv[]) {
                        detected_umi_len = r2_for_invert - detected_bc_len; }
                 detected_cb_start = 1;
                 detected_umi_start = detected_bc_len + 1;
-                std::cerr << "[singlify] Inverted reads detected: R1=" << r1_len
+                std::cerr << "[singlet] Inverted reads detected: R1=" << r1_len
                           << "bp (cDNA), R2=" << r2_for_invert << "bp (barcode)\n"
-                          << "[singlify] Override: BC=" << detected_bc_len
+                          << "[singlet] Override: BC=" << detected_bc_len
                           << " UMI=" << detected_umi_len << "\n";
             } else if (detected_umi_len == 0 && r1_len > 0) {
                 if (r1_len == 28)      { detected_bc_len = 16; detected_umi_len = 12; }
@@ -3468,7 +3468,7 @@ int main(int argc, char* argv[]) {
                 else if (r1_len == 12) { detected_bc_len = 6;  detected_umi_len = 6;  }
                 else if (r1_len == 15) { detected_bc_len = 7;  detected_umi_len = 8;  }
                 if (detected_umi_len > 0) {
-                    std::cerr << "[singlify] .1fq header heuristic: R1=" << r1_len
+                    std::cerr << "[singlet] .1fq header heuristic: R1=" << r1_len
                               << "bp → BC=" << detected_bc_len
                               << " UMI=" << detected_umi_len << "\n";
                 }
@@ -3477,7 +3477,7 @@ int main(int argc, char* argv[]) {
             if (detected_umi_len > 0 && !umi_len_explicit) {
                 umi_len = detected_umi_len;
             } else if (r1_len > 0 && detected_umi_len == 0) {
-                std::cerr << "[singlify] .1fq header: R1=" << r1_len
+                std::cerr << "[singlet] .1fq header: R1=" << r1_len
                           << "bp (unknown geometry, using --umi-len=" << umi_len << ")\n";
             }
 
@@ -3485,17 +3485,17 @@ int main(int argc, char* argv[]) {
             // No real scRNA-seq protocol has CBlen > 32 or UMIlen > 16.
             // Values this large indicate bad metadata from a failed protocol detection.
             if (detected_bc_len > 32 || detected_umi_len > 16) {
-                std::cerr << "[singlify] ERROR: Invalid barcode configuration"
+                std::cerr << "[singlet] ERROR: Invalid barcode configuration"
                           << " (CBlen=" << detected_bc_len
                           << ", UMIlen=" << detected_umi_len << ").\n"
-                          << "[singlify] This suggests the protocol was not correctly "
+                          << "[singlet] This suggests the protocol was not correctly "
                              "detected during download.\n"
-                          << "[singlify] Try re-downloading with --protocol <protocol_name> "
+                          << "[singlet] Try re-downloading with --protocol <protocol_name> "
                              "to specify the protocol explicitly.\n";
                 return 1;
             }
 
-            std::cerr << "[singlify] .1fq: " << hdr.n_unique << " reads, "
+            std::cerr << "[singlet] .1fq: " << hdr.n_unique << " reads, "
                       << hdr.block_count << " blocks, protocol_id="
                       << (int)hdr.protocol_id
                       << ", confidence=" << (int)hdr.confidence
@@ -3510,12 +3510,12 @@ int main(int argc, char* argv[]) {
             if (!is_atac_mode &&
                 hdr.confidence <= static_cast<uint8_t>(lib1fq::Confidence::LOW) &&
                 detected_r2_len > 0 && detected_r2_len < 50) {
-                std::cerr << "[singlify] AUTOFIX-SPECIES-VAL-R2-SHORT:"
+                std::cerr << "[singlet] AUTOFIX-SPECIES-VAL-R2-SHORT:"
                           << " confidence=LOW, R2=" << detected_r2_len
                           << "bp < 50bp threshold — protocol_id=" << (int)hdr.protocol_id
                           << " may be misdetected due to adapter-trimmed R2.\n"
-                          << "[singlify] status=autodetect_species_fail\n"
-                          << "[singlify] Re-download with explicit --protocol or check ENA"
+                          << "[singlet] status=autodetect_species_fail\n"
+                          << "[singlet] Re-download with explicit --protocol or check ENA"
                              " adapter trimming settings.\n";
                 return 3;  // autodetect_species_fail terminal exit
             }
@@ -3526,7 +3526,7 @@ int main(int argc, char* argv[]) {
                 uint8_t pid = hdr.protocol_id;
                 if (pid == 4 || pid == 5 || pid == 14 || pid == 21) {
                     config.reverse_strand = true;
-                    std::cerr << "[singlify] 5' protocol detected → using reverse strand\n";
+                    std::cerr << "[singlet] 5' protocol detected → using reverse strand\n";
                 }
             }
             onefq_r1_len = r1_len;
@@ -3537,7 +3537,7 @@ int main(int argc, char* argv[]) {
             // ── Absolute minimum read count — abort before STAR to avoid fast-crash waste ──
             if (onefq_n_reads < singlet_pileup::TinyDatasetGuard::MIN_READS_FOR_PIPELINE) {
                 std::fprintf(stderr,
-                    "[singlify] WARNING: Only %llu reads in .1fq file"
+                    "[singlet] WARNING: Only %llu reads in .1fq file"
                     " (minimum %zu for meaningful analysis). Aborting.\n",
                     (unsigned long long)onefq_n_reads,
                     static_cast<size_t>(singlet_pileup::TinyDatasetGuard::MIN_READS_FOR_PIPELINE));
@@ -3549,7 +3549,7 @@ int main(int argc, char* argv[]) {
                 using singlet_pileup::TinyDatasetGuard;
                 std::string tiny_warn = TinyDatasetGuard::warning_message(onefq_n_reads);
                 if (!tiny_warn.empty())
-                    std::cerr << "[singlify] WARNING: " << tiny_warn << "\n";
+                    std::cerr << "[singlet] WARNING: " << tiny_warn << "\n";
             }
         }
 
@@ -3644,7 +3644,7 @@ int main(int argc, char* argv[]) {
             if (cc_ok && !complex_concat_segs_all.empty() && concat_umi_len_c > 0) {
                 for (const auto& seg : complex_concat_segs_all) concat_bc_total += seg.len;
                 use_complex_concat = true;
-                std::cerr << "[singlify] CB_UMI_Complex\xE2\x86\x92concat: "
+                std::cerr << "[singlet] CB_UMI_Complex\xE2\x86\x92concat: "
                           << complex_concat_segs_all.size() << " segs \xE2\x86\x92 BClen="
                           << concat_bc_total << " UMIlen=" << concat_umi_len_c << "\n";
             } else {
@@ -3656,7 +3656,7 @@ int main(int argc, char* argv[]) {
         std::string tmpdir = "/dev/shm";
         if (const char* td = std::getenv("TMPDIR"))
             tmpdir = td;
-        std::string decode_dir = tmpdir + "/singlify_1fq_" + std::to_string(getpid());
+        std::string decode_dir = tmpdir + "/singlet_1fq_" + std::to_string(getpid());
         mkdir_p(decode_dir);
         std::string r1_tmp = decode_dir + "/R1.fastq";
         std::string r2_tmp = decode_dir + "/R2.fastq";
@@ -3680,7 +3680,7 @@ int main(int argc, char* argv[]) {
             try {
                 reader.open(onefq_file.c_str());
             } catch (const std::exception& e) {
-                std::cerr << "[singlify] ERROR: Cannot read .1fq file '" << onefq_file
+                std::cerr << "[singlet] ERROR: Cannot read .1fq file '" << onefq_file
                           << "': " << e.what() << "\n";
                 _exit(1);
             }
@@ -4253,13 +4253,13 @@ int main(int argc, char* argv[]) {
                         if (remaining >= 15) {
                             if (prefix_len > r2_clip5p) {
                                 r2_clip5p = prefix_len;
-                                std::cerr << "[singlify] WARNING: Detected " << prefix_len
+                                std::cerr << "[singlet] WARNING: Detected " << prefix_len
                                           << "bp constant 5' prefix in R2 reads.\n"
-                                          << "[singlify] Will trim " << prefix_len
+                                          << "[singlet] Will trim " << prefix_len
                                           << " bases from R2 5' end (file level; cDNA only).\n";
                             }
                         } else {
-                            std::cerr << "[singlify] WARNING: Detected " << prefix_len
+                            std::cerr << "[singlet] WARNING: Detected " << prefix_len
                                       << "bp constant 5' prefix in R2 (total " << max_r2_len
                                       << "bp). Clipping would leave <15bp — skipping clip.\n";
                         }
@@ -4268,15 +4268,15 @@ int main(int argc, char* argv[]) {
                 if (!has_seq || !has_r1_seq) {
                     const bool r2_empty = !has_seq;
                     const bool r1_empty = !has_r1_seq;
-                    std::cerr << "[singlify] ERROR: ";
+                    std::cerr << "[singlet] ERROR: ";
                     if (r1_empty && r2_empty)
                         std::cerr << "Both R1 and R2 (barcode + biological reads) are empty.\n";
                     else if (r2_empty)
                         std::cerr << "R2 (biological read) is empty for all reads.\n";
                     else
                         std::cerr << "R1 (barcode read) is empty for all reads.\n";
-                    std::cerr << "[singlify] This may be a single-end dataset or protocol misclassification.\n"
-                              << "[singlify] Cannot align without paired-end biological read data.\n";
+                    std::cerr << "[singlet] This may be a single-end dataset or protocol misclassification.\n"
+                              << "[singlet] Cannot align without paired-end biological read data.\n";
                     if (!use_fifo_decode) {
                         unlink(r1_tmp.c_str());
                         unlink(r2_tmp.c_str());
@@ -4336,7 +4336,7 @@ int main(int argc, char* argv[]) {
                             if (pj) {
                                 pj << "{\n"
                                    << "  \"schema_version\": \"1.0\",\n"
-                                   << "  \"singlify_git_sha\": \"unknown\",\n"
+                                   << "  \"singlet_git_sha\": \"unknown\",\n"
                                    << "  \"build_flags\": \"\",\n"
                                    << "  \"command_line\": \"\",\n"
                                    << "  \"env\": {},\n"
@@ -4347,15 +4347,15 @@ int main(int argc, char* argv[]) {
                                    << "}\n";
                             }
                         }
-                        std::cerr << "[singlify] data_incomplete: summary.json written to "
+                        std::cerr << "[singlet] data_incomplete: summary.json written to "
                                   << out_prefix << "\n";
                     }
                     return 0;  // B-G2-2: clean exit per contract (summary.json carries status)
                 }
                 if (max_r2_len < 30) {
-                    std::cerr << "[singlify] WARNING: R2 (biological read) max length is "
+                    std::cerr << "[singlet] WARNING: R2 (biological read) max length is "
                               << max_r2_len << "bp (< 30bp minimum for alignment).\n"
-                              << "[singlify] Alignment results may be poor. "
+                              << "[singlet] Alignment results may be poor. "
                               << "Check that protocol detection assigned R1/R2 correctly.\n";
                 }
         }
@@ -4364,7 +4364,7 @@ int main(int argc, char* argv[]) {
         // so STAR gets --readFilesIn cDNA barcode in the correct order
         if (reads_inverted) {
             std::swap(reads_r1, reads_r2);
-            std::cerr << "[singlify] Swapped R1↔R2 for STAR (barcode was in R2)\n";
+            std::cerr << "[singlet] Swapped R1↔R2 for STAR (barcode was in R2)\n";
         }
 
         // File-level 5' trim of the cDNA read (reads_r2 after any R1/R2 swap).
@@ -4384,7 +4384,7 @@ int main(int argc, char* argv[]) {
                 // FIFO mode: r2_clip5p will be applied inline during Pass 2 FIFO streaming.
                 // Do NOT reset here — the FIFO creation block (after Phase 0.9) captures the
                 // value and resets r2_clip5p to 0 before STAR args are built.
-                std::cerr << "[singlify] 5' clip: " << r2_clip5p
+                std::cerr << "[singlet] 5' clip: " << r2_clip5p
                           << "bp will be applied inline in Pass 2 FIFO encoder\n";
             } else {
             std::string reads_r2_clipped = reads_r2 + ".clip5p";
@@ -4413,20 +4413,20 @@ int main(int argc, char* argv[]) {
                 // Atomically replace the original R2 file with the trimmed version.
                 unlink(reads_r2.c_str());
                 rename(reads_r2_clipped.c_str(), reads_r2.c_str());
-                std::cerr << "[singlify] 5' clip: trimmed " << r2_clip5p
+                std::cerr << "[singlet] 5' clip: trimmed " << r2_clip5p
                           << "bp from cDNA reads (file level); barcode reads untouched\n";
                 r2_clip5p = 0;  // signal that clipping is done — no STAR flag needed
             } else {
                 if (clip_in)  { fclose(clip_in);  clip_in  = nullptr; }
                 if (clip_out) { fclose(clip_out); unlink(reads_r2_clipped.c_str()); }
-                std::cerr << "[singlify] WARNING: Could not open R2 temp file for file-level 5' trim; "
+                std::cerr << "[singlet] WARNING: Could not open R2 temp file for file-level 5' trim; "
                           << "r2_clip5p=" << r2_clip5p << " will be passed to STAR as fallback\n";
                 // r2_clip5p left non-zero → handled by the STAR fallback block below
             }
             }  // end !use_fifo_decode else branch
         }
 
-        std::cerr << "[singlify] .1fq decoded to temp files\n";
+        std::cerr << "[singlet] .1fq decoded to temp files\n";
     }
 
     // ── Phase 0.9: Barcode discovery for --whitelist None / auto-resolved whitelist without --barcodes ──
@@ -4524,7 +4524,7 @@ int main(int argc, char* argv[]) {
             barcode_file = auto_barcode_file;
             config.barcode_path = barcode_file;
 
-            std::cerr << "[singlify] Discovered " << sorted_bcs.size()
+            std::cerr << "[singlet] Discovered " << sorted_bcs.size()
                       << " barcodes (≥100 reads) from .1fq BC dictionary ("
                       << onefq_bc_dict_n << " entries)\n";
 
@@ -4579,7 +4579,7 @@ int main(int argc, char* argv[]) {
             barcode_file = auto_barcode_file;
             config.barcode_path = barcode_file;
 
-            std::cerr << "[singlify] Discovered " << sorted_bcs.size()
+            std::cerr << "[singlet] Discovered " << sorted_bcs.size()
                       << " barcodes (≥100 reads) from decode-time counting ("
                       << onefq_bc_counts.size() << " unique)\n";
 
@@ -4590,7 +4590,7 @@ int main(int argc, char* argv[]) {
                 double mean_g2 = onefq_bc_counts.empty() ? 0.0
                     : static_cast<double>(total_reads_g2) / onefq_bc_counts.size();
                 if (mean_g2 < 5.0) {
-                    std::cerr << "[singlify] WARNING: Barcode explosion detected — "
+                    std::cerr << "[singlet] WARNING: Barcode explosion detected — "
                               << onefq_bc_counts.size() << " unique barcodes with mean "
                               << std::fixed << std::setprecision(1) << mean_g2
                               << " reads/barcode. Check protocol detection.\n";
@@ -4681,11 +4681,11 @@ int main(int argc, char* argv[]) {
 
         // For CB_UMI_Complex protocols, log the discovery positions.
         if (detected_soloType == "CB_UMI_Complex" && !detected_cb_positions.empty()) {
-            std::cerr << "[singlify] CB_UMI_Complex: using first CB segment for discovery "
+            std::cerr << "[singlet] CB_UMI_Complex: using first CB segment for discovery "
                       << "(start=" << bc_start_0 << ", len=" << bc_len << ")\n";
         }
 
-        std::cerr << "[singlify] Auto-discovering barcodes from " << bc_read_file
+        std::cerr << "[singlet] Auto-discovering barcodes from " << bc_read_file
                   << " (start=" << bc_start_0 << ", len=" << bc_len << ")\n";
 
         std::unordered_map<std::string, uint32_t> bc_counts;
@@ -4726,7 +4726,7 @@ int main(int argc, char* argv[]) {
         barcode_file = auto_barcode_file;
         config.barcode_path = barcode_file;
 
-        std::cerr << "[singlify] Discovered " << sorted_bcs.size()
+        std::cerr << "[singlet] Discovered " << sorted_bcs.size()
                   << " barcodes (≥100 reads) from " << bc_counts.size()
                   << " unique sequences\n";
 
@@ -4737,7 +4737,7 @@ int main(int argc, char* argv[]) {
             double mean_g2b = bc_counts.empty() ? 0.0
                 : static_cast<double>(total_reads_g2b) / bc_counts.size();
             if (mean_g2b < 5.0) {
-                std::cerr << "[singlify] WARNING: Barcode explosion detected — "
+                std::cerr << "[singlet] WARNING: Barcode explosion detected — "
                           << bc_counts.size() << " unique barcodes with mean "
                           << std::fixed << std::setprecision(1) << mean_g2b
                           << " reads/barcode. Check protocol detection.\n";
@@ -4749,7 +4749,7 @@ int main(int argc, char* argv[]) {
             // used different parameters (common for low-confidence detections).
             bool retried = false;
             if (bc_len != 16 || bc_start_0 != 0) {
-                std::cerr << "[singlify] No barcodes found with detected params"
+                std::cerr << "[singlet] No barcodes found with detected params"
                           << " (start=" << bc_start_0 << ", len=" << bc_len
                           << "). Retrying with 10x-v3 defaults (start=0, len=16)...\n";
                 bc_counts.clear();
@@ -4780,7 +4780,7 @@ int main(int argc, char* argv[]) {
                     detected_cb_start = 1;
                     detected_umi_start = 17;
                     umi_len = 12;
-                    std::cerr << "[singlify] Retry succeeded: " << sorted_bcs.size()
+                    std::cerr << "[singlet] Retry succeeded: " << sorted_bcs.size()
                               << " barcodes found with 10x-v3 geometry\n";
                     // Rewrite barcode file
                     std::ofstream bc_rewrite(auto_barcode_file);
@@ -4848,7 +4848,7 @@ int main(int argc, char* argv[]) {
             }
         }
         } // end else (fallback text scanning)
-        std::cerr << "[singlify] References loaded: " << ref_sw.elapsed_s() << "s\n";
+        std::cerr << "[singlet] References loaded: " << ref_sw.elapsed_s() << "s\n";
     }
 
     // ── Per-segment whitelist discovery for CB_UMI_Complex protocols ──
@@ -4903,14 +4903,14 @@ int main(int argc, char* argv[]) {
                 for (auto& [cnt, bc] : seg_bcs) out << bc << "\n";
             }
             per_seg_barcode_files.push_back(seg_file);
-            std::cerr << "[singlify] CB_UMI_Complex seg" << (ex + 1)
+            std::cerr << "[singlet] CB_UMI_Complex seg" << (ex + 1)
                       << ": " << seg_bcs.size() << " barcodes discovered (≥" << MIN_SEG_READS
                       << " reads) → " << seg_file << "\n";
         }
         if (!all_segs_ok || per_seg_barcode_files.size() != detected_cb_positions.size()) {
             // Clear: not all segments discovered, fall back to CB_samTagOut
             per_seg_barcode_files.clear();
-            std::cerr << "[singlify] CB_UMI_Complex: incomplete per-segment discovery;"
+            std::cerr << "[singlet] CB_UMI_Complex: incomplete per-segment discovery;"
                          " falling back to CB_samTagOut with seg-0\n";
         } else {
             // Explosion guard: check Cartesian product of per-segment whitelist sizes.
@@ -4929,10 +4929,10 @@ int main(int argc, char* argv[]) {
             }
             if (explodes) {
                 per_seg_barcode_files.clear();
-                std::cerr << "[singlify] CB_UMI_Complex: per-segment Cartesian product > 2M;"
+                std::cerr << "[singlet] CB_UMI_Complex: per-segment Cartesian product > 2M;"
                              " falling back to CB_samTagOut with seg-0\n";
             } else {
-                std::cerr << "[singlify] CB_UMI_Complex: using CB_UMI_Complex mode with "
+                std::cerr << "[singlet] CB_UMI_Complex: using CB_UMI_Complex mode with "
                           << per_seg_barcode_files.size() << " per-segment whitelist files"
                           << " (product=" << product << " max combinations)\n";
             }
@@ -4990,11 +4990,11 @@ int main(int argc, char* argv[]) {
                 for (auto& se : seg_entries) product *= se.size();
                 const char* td_env = std::getenv("TMPDIR");
                 std::string wl_base = td_env ? td_env : "/dev/shm";
-                std::string wl_path = wl_base + "/singlify_combwl_"
+                std::string wl_path = wl_base + "/singlet_combwl_"
                                       + std::to_string(getpid()) + ".txt";
                 std::ofstream wl_out(wl_path);
                 if (!wl_out) {
-                    std::cerr << "[singlify] WARNING: cannot write combined WL to "
+                    std::cerr << "[singlet] WARNING: cannot write combined WL to "
                               << wl_path << " — concat mode without whitelist\n";
                 } else {
                     const size_t ns = n_segs;
@@ -5009,7 +5009,7 @@ int main(int argc, char* argv[]) {
                     }
                     wl_out.close();
                     combined_wl_file = wl_path;
-                    std::cerr << "[singlify] Combined WL: " << product
+                    std::cerr << "[singlet] Combined WL: " << product
                               << " entries \xE2\x86\x92 " << wl_path << "\n";
 
                     // ── Barcode pre-scan: filter Cartesian WL to observed barcodes ──
@@ -5059,13 +5059,13 @@ int main(int argc, char* argv[]) {
                             // (Encoder fix in protocol.h prevents new files from hitting this.)
                             if (ps_reader.has_bc_dict() &&
                                     complex_concat_segs_all.size() > 1) {
-                                std::cerr << "[singlify] Prescan: BC dict encodes segment-0 only"
+                                std::cerr << "[singlet] Prescan: BC dict encodes segment-0 only"
                                              " (" << ps_reader.bc_length() << "bp BC + "
                                           << ps_reader.umi_length() << "bp UMI); decoded R1 "
                                              "lacks segment 1.."
                                           << (complex_concat_segs_all.size() - 1)
                                           << " data — keeping full Cartesian WL\n"
-                                             "[singlify] NOTE: re-download this sample to get "
+                                             "[singlet] NOTE: re-download this sample to get "
                                              "full-R1 .1fq and enable pre-scan\n";
                                 prescan_ok = true;  // not an error; no reads_scanned
                             } else {
@@ -5098,7 +5098,7 @@ int main(int argc, char* argv[]) {
                             prescan_ok = true;
                             }  // end else (no BC dict / single-segment BC dict)
                         } catch (const std::exception& ps_ex) {
-                            std::cerr << "[singlify] Prescan: reader error: "
+                            std::cerr << "[singlet] Prescan: reader error: "
                                       << ps_ex.what()
                                       << " — keeping full Cartesian WL\n";
                         }
@@ -5107,7 +5107,7 @@ int main(int argc, char* argv[]) {
                             const uint32_t min_cnt =
                                 (reads_scanned >= 1'000'000ULL) ? MIN_COUNT_HI : MIN_COUNT_LO;
                             std::string filt_path = wl_base
-                                + "/singlify_combwl_filtered_"
+                                + "/singlet_combwl_filtered_"
                                 + std::to_string(getpid()) + ".txt";
                             std::ofstream filt_out(filt_path);
                             uint64_t n_kept = 0;
@@ -5123,18 +5123,18 @@ int main(int argc, char* argv[]) {
                                 if (n_kept > 0) {
                                     std::remove(wl_path.c_str());  // delete full Cartesian WL
                                     combined_wl_file = filt_path;
-                                    std::cerr << "[singlify] Prescan: "
+                                    std::cerr << "[singlet] Prescan: "
                                               << reads_scanned << " reads \xE2\x86\x92 "
                                               << n_kept << "/" << product
                                               << " barcodes (min_count=" << min_cnt
                                               << ") \xE2\x86\x92 " << filt_path << "\n";
                                 } else {
                                     std::remove(filt_path.c_str());
-                                    std::cerr << "[singlify] Prescan: 0 barcodes met"
+                                    std::cerr << "[singlet] Prescan: 0 barcodes met"
                                                  " threshold — keeping full Cartesian WL\n";
                                 }
                             } else {
-                                std::cerr << "[singlify] Prescan: cannot write "
+                                std::cerr << "[singlet] Prescan: cannot write "
                                           << filt_path
                                           << " — keeping full Cartesian WL\n";
                             }
@@ -5142,35 +5142,35 @@ int main(int argc, char* argv[]) {
                     }  // end barcode pre-scan
                 }
             } else {
-                std::cerr << "[singlify] CB_UMI_Complex\xE2\x86\x92concat: "
+                std::cerr << "[singlet] CB_UMI_Complex\xE2\x86\x92concat: "
                              "per-seg WL read failed, running without whitelist\n";
             }
         } else {
-            std::cerr << "[singlify] CB_UMI_Complex\xE2\x86\x92concat: "
+            std::cerr << "[singlet] CB_UMI_Complex\xE2\x86\x92concat: "
                          "no per-seg WLs found, running without whitelist\n";
         }
     }
 
     // ── FIFO mode: create named pipes + spawn Pass 2 writer thread ──
     // Must run AFTER Phase 0.9 (barcode discovery consumed onefq_bc_counts from Pass 1)
-    // and BEFORE STAR fork (STAR opens FIFOs for reading; writer uses O_RDWR trick to
+    // and BEFORE the STAR child fork (STAR opens FIFOs for reading; writer uses O_RDWR trick to
     // avoid deadlock — same approach as the SRA streaming path).
     if (use_fifo_decode && onefq_mode) {
         // Ensure decode directory exists (was set up in Pass 1 preamble)
         {
             std::string tmpdir_fifo = "/dev/shm";
             if (const char* td = getenv("TMPDIR")) tmpdir_fifo = td;
-            mkdir_p(tmpdir_fifo + "/singlify_1fq_" + std::to_string(getpid()));
+            mkdir_p(tmpdir_fifo + "/singlet_1fq_" + std::to_string(getpid()));
         }
         // Remove stale files / FIFOs at these paths
         unlink(fifo_r1_path.c_str());
         unlink(fifo_r2_path.c_str());
         if (mkfifo(fifo_r1_path.c_str(), 0600) != 0) {
-            std::cerr << "[singlify] ERROR: mkfifo R1 FIFO failed: " << strerror(errno) << "\n";
+            std::cerr << "[singlet] ERROR: mkfifo R1 FIFO failed: " << strerror(errno) << "\n";
             return 1;
         }
         if (mkfifo(fifo_r2_path.c_str(), 0600) != 0) {
-            std::cerr << "[singlify] ERROR: mkfifo R2 FIFO failed: " << strerror(errno) << "\n";
+            std::cerr << "[singlet] ERROR: mkfifo R2 FIFO failed: " << strerror(errno) << "\n";
             return 1;
         }
         std::cerr << "[1fq-fifo] FIFOs created: " << fifo_r1_path << ", " << fifo_r2_path << "\n";
@@ -5544,7 +5544,7 @@ int main(int argc, char* argv[]) {
         if (statvfs("/dev/shm", &svfs) == 0) {
             uint64_t free_bytes = (uint64_t)svfs.f_bavail * svfs.f_frsize;
             parallel_pileup = (free_bytes >= (uint64_t)10 * 1024 * 1024 * 1024) ? 1 : 0;
-            std::cerr << "[singlify] /dev/shm free: " << free_bytes / (1024*1024*1024)
+            std::cerr << "[singlet] /dev/shm free: " << free_bytes / (1024*1024*1024)
                       << " GB → parallel_pileup=" << parallel_pileup << "\n";
         } else {
             parallel_pileup = 0;
@@ -5556,12 +5556,12 @@ int main(int argc, char* argv[]) {
     // ATAC requires sorted BAM (ATACFragmentExtractor reads coordinate-sorted records).
     if (is_atac_mode && parallel_pileup != 1) {
         parallel_pileup = 1;
-        std::cerr << "[singlify] ATAC mode: forcing sorted BAM (parallel_pileup=1)\n";
+        std::cerr << "[singlet] ATAC mode: forcing sorted BAM (parallel_pileup=1)\n";
     }
     // Smart-seq2 / Bulk RNA: counting reads from sorted BAM (no pileup engine needed).
     if ((is_smart_seq2_mode || is_bulk_rna_mode) && parallel_pileup != 1) {
         parallel_pileup = 1;
-        std::cerr << "[singlify] " << (is_bulk_rna_mode ? "Bulk RNA" : "Smart-seq2")
+        std::cerr << "[singlet] " << (is_bulk_rna_mode ? "Bulk RNA" : "Smart-seq2")
                   << " mode: forcing sorted BAM (parallel_pileup=1)\n";
     }
 
@@ -5575,7 +5575,7 @@ int main(int argc, char* argv[]) {
     if (!bam_file.empty()) {
         // Mode A: existing BAM
         bam_source = bam_file;
-        std::cerr << "[singlify] Reading from BAM: " << bam_file << "\n";
+        std::cerr << "[singlet] Reading from BAM: " << bam_file << "\n";
     } else {
         // Mode B: fork STAR — either write sorted BAM to file (parallel) or pipe (streaming)
         if (parallel_pileup != 1) {
@@ -5814,9 +5814,9 @@ int main(int argc, char* argv[]) {
                             break;
                         }
                     }
-                    std::cerr << "[singlify] Bulk RNA: single-end mode\n";
+                    std::cerr << "[singlet] Bulk RNA: single-end mode\n";
                 } else {
-                    std::cerr << "[singlify] Bulk RNA: paired-end mode\n";
+                    std::cerr << "[singlet] Bulk RNA: paired-end mode\n";
                 }
 
                 for (const auto& a : star_extra) args.push_back(a.c_str());
@@ -5897,7 +5897,7 @@ int main(int argc, char* argv[]) {
                     int cb_len_calc = cb_e - cb_s + 1;
                     int umi_len_calc = umi_e_pos - umi_s_pos + 1;
 
-                    std::cerr << "[singlify] CB_UMI_Complex→CB_samTagOut (1 segment): CB@"
+                    std::cerr << "[singlet] CB_UMI_Complex→CB_samTagOut (1 segment): CB@"
                               << (cb_s+1) << ":" << cb_len_calc
                               << " UMI@" << (umi_s_pos+1) << ":" << umi_len_calc << "\n";
 
@@ -5919,7 +5919,7 @@ int main(int argc, char* argv[]) {
                     use_complex = false;
                 } else {
                     // Multi-segment CB (BD Rhapsody 3×9bp, inDrop 2-part, ddSEQ 3×6bp, etc.)
-                    std::cerr << "[singlify] CB_UMI_Complex: "
+                    std::cerr << "[singlet] CB_UMI_Complex: "
                               << detected_cb_positions.size() << " CB segments + UMI="
                               << detected_umi_position << "\n";
 
@@ -5929,7 +5929,7 @@ int main(int argc, char* argv[]) {
                         static std::string concat_wl_arg;
                         concat_wl_arg = !combined_wl_file.empty() ? combined_wl_file
                             : (has_auto_barcodes ? barcode_file : std::string("None"));
-                        std::cerr << "[singlify] CB_UMI_Complex\xE2\x86\x92CB_samTagOut concat:"
+                        std::cerr << "[singlet] CB_UMI_Complex\xE2\x86\x92CB_samTagOut concat:"
                                   << " BClen=" << concat_bc_total
                                   << " UMIlen=" << concat_umi_len_c
                                   << " WL=" << concat_wl_arg << "\n";
@@ -5996,7 +5996,7 @@ int main(int argc, char* argv[]) {
                             args.push_back("--soloUMIlen"); args.push_back(umi_s.c_str());
                             umi_len_set = true;
                         }
-                        std::cerr << "[singlify] CB_UMI_Complex: using CB_UMI_Complex with "
+                        std::cerr << "[singlet] CB_UMI_Complex: using CB_UMI_Complex with "
                                   << per_seg_wl_strs.size() << " per-segment whitelist files\n";
                     } else if (has_auto_barcodes) {
                         // Priority 2: Seg-0 auto-barcodes only → CB_samTagOut fallback.
@@ -6008,7 +6008,7 @@ int main(int argc, char* argv[]) {
                         auto [umi_s0, umi_e0] = parse_pos_ms(detected_umi_position);
                         int umi_len_ms = umi_e0 - umi_s0 + 1;
 
-                        std::cerr << "[singlify] CB_UMI_Complex→CB_samTagOut"
+                        std::cerr << "[singlet] CB_UMI_Complex→CB_samTagOut"
                                   << " (auto-barcodes: seg0 CB@" << (cb_s0+1) << ":" << cb_len_ms
                                   << " UMI@" << (umi_s0+1) << ":" << umi_len_ms << ")\n";
 
@@ -6048,7 +6048,7 @@ int main(int argc, char* argv[]) {
                         if (!resolved_wls.empty()) {
                             // Fixed per-segment whitelist: use CB_UMI_Complex natively.
                             // Whitelist product stays bounded (e.g. surecell 96^3 = 884K).
-                            std::cerr << "[singlify] CB_UMI_Complex: using disk per-segment"
+                            std::cerr << "[singlet] CB_UMI_Complex: using disk per-segment"
                                       << " whitelists (" << resolved_wls.size() << " segs)\n";
                             args.push_back("--soloType"); args.push_back("CB_UMI_Complex");
                             // STAR requires one --soloCBwhitelist entry per CB segment.
@@ -6082,7 +6082,7 @@ int main(int argc, char* argv[]) {
                             // Fall back to CB_samTagOut with seg-0 geometry (whitelist-free).
                             // STAR CB_samTagOut accepts "None"; CB_UMI_Complex does not.
                             // This allows EmptyDrops to call cells without a barcode whitelist.
-                            std::cerr << "[singlify] WARNING: CB_UMI_Complex: no whitelist files"
+                            std::cerr << "[singlet] WARNING: CB_UMI_Complex: no whitelist files"
                                          " found for '" << complex_protocol_tag
                                       << "'. Using CB_samTagOut seg-0 fallback (whitelist-free).\n"
                                       << "  Install whitelist files in whitelists/ for full"
@@ -6146,7 +6146,7 @@ int main(int argc, char* argv[]) {
                     cbl_s      = std::to_string(cb);
                     cb_start_s = std::to_string(detected_cb_start);
                     umi_start_s = std::to_string(detected_umi_start > 0 ? detected_umi_start : cb + 1);
-                    std::cerr << "[singlify] CB_UMI_Simple: native STAR mode"
+                    std::cerr << "[singlet] CB_UMI_Simple: native STAR mode"
                               << " CB@" << detected_cb_start << ":" << cb
                               << " UMI@" << umi_start_s << ":" << umi_len
                               << " WL=" << whitelist_file << "\n";
@@ -6185,7 +6185,7 @@ int main(int argc, char* argv[]) {
                     } else if (use_auto_as_star_wl) {
                         // Use auto-discovered barcodes as STAR whitelist: handles protocols
                         // where the pre-built WL doesn't match (e.g. 10x-arc-gex wrong file).
-                        std::cerr << "[singlify] auto_barcodes → STAR whitelist"
+                        std::cerr << "[singlet] auto_barcodes → STAR whitelist"
                                   << " (CB_samTagOut fallback: WL may not match chemistry)\n";
                         args.push_back(barcode_file.c_str());
                         args.push_back("--soloBarcodeReadLength"); args.push_back("0");
@@ -6222,7 +6222,7 @@ int main(int argc, char* argv[]) {
                         new_start = umi_start_val;
                         new_len   = static_cast<int>(onefq_r1_len) - umi_start_val + 1;
                     }
-                    std::cerr << "[singlify] WARNING: UMI position extends beyond R1 read length.\n"
+                    std::cerr << "[singlet] WARNING: UMI position extends beyond R1 read length.\n"
                               << "  soloUMIstart=" << umi_start_val
                               << " + soloUMIlen=" << umi_len_val
                               << " = " << (umi_start_val + umi_len_val - 1)
@@ -6323,7 +6323,7 @@ int main(int argc, char* argv[]) {
                         if (sp.tag == complex_protocol_tag &&
                             !sp.per_seg_whitelist_files.empty()) {
                             use_complex = true;
-                            std::cerr << "[singlify] CB_UMI_COMPLEX memory tier: '"
+                            std::cerr << "[singlet] CB_UMI_COMPLEX memory tier: '"
                                       << complex_protocol_tag
                                       << "' has " << sp.per_seg_whitelist_files.size()
                                       << " per-seg whitelists — applying complex BAM"
@@ -6360,15 +6360,15 @@ int main(int argc, char* argv[]) {
                 args.push_back("--outSAMtype");    args.push_back("BAM"); args.push_back("SortedByCoordinate");
                 args.push_back("--outBAMcompression"); args.push_back(bam_comp_str);
                 if (is_ultra)
-                    std::cerr << "[singlify] ULTRA: --outBAMcompression=" << bam_comp_level
+                    std::cerr << "[singlet] ULTRA: --outBAMcompression=" << bam_comp_level
                               << " (n_reads=" << onefq_n_reads
                               << " >= " << singlet_pileup::mega_sort::ULTRA_READ_THRESHOLD
                               << "; memory lever is limitBAMsortRAM+bins, not compression)\n";
                 else if (is_mega)
-                    std::cerr << "[singlify] MEGA: --outBAMcompression=" << bam_comp_level
+                    std::cerr << "[singlet] MEGA: --outBAMcompression=" << bam_comp_level
                               << " (n_reads=" << onefq_n_reads << ")\n";
                 if (use_complex && !is_mega && !is_ultra)
-                    std::cerr << "[singlify] CB_UMI_COMPLEX: --outBAMcompression=" << bam_comp_level
+                    std::cerr << "[singlet] CB_UMI_COMPLEX: --outBAMcompression=" << bam_comp_level
                               << " (combinatorial barcode matching)\n";
 
                 // ── Compute limitBAMsortRAM based on selected mode ──
@@ -6385,7 +6385,7 @@ int main(int argc, char* argv[]) {
                         available_ram_bytes);
                     if (tier_bam > 0) {
                         bam_sort_ram = tier_bam;
-                        std::cerr << "[singlify] B-G3-4: SLURM tier "
+                        std::cerr << "[singlet] B-G3-4: SLURM tier "
                                   << alloc_gib << "GiB → limitBAMsortRAM="
                                   << (bam_sort_ram >> 30) << "GiB (deterministic)\n";
                     } else {
@@ -6397,7 +6397,7 @@ int main(int argc, char* argv[]) {
                         if (stat(sa_path.c_str(), &sa_st) == 0 && sa_st.st_size > 0) {
                             bam_sort_ram = static_cast<uint64_t>(sa_st.st_size) * 3
                                            + 8ULL * 1024 * 1024 * 1024;
-                            std::cerr << "[singlify] S5-BAM-RAM: SA="
+                            std::cerr << "[singlet] S5-BAM-RAM: SA="
                                       << (sa_st.st_size >> 30)
                                       << "GiB → limitBAMsortRAM="
                                       << (bam_sort_ram >> 30) << "GiB\n";
@@ -6408,7 +6408,7 @@ int main(int argc, char* argv[]) {
                         uint64_t read_based = (onefq_n_reads / 1000000ULL) * 300000000ULL;
                         if (read_based > bam_sort_ram) {
                             bam_sort_ram = read_based;
-                            std::cerr << "[singlify] MEGA: " << onefq_n_reads
+                            std::cerr << "[singlet] MEGA: " << onefq_n_reads
                                       << " reads → limitBAMsortRAM="
                                       << (bam_sort_ram >> 30) << "GiB\n";
                         }
@@ -6418,7 +6418,7 @@ int main(int argc, char* argv[]) {
                         uint64_t tiny_ram = singlet_pileup::TinyDatasetGuard::recommended_bam_sort_ram(onefq_n_reads);
                         if (tiny_ram < bam_sort_ram) {
                             bam_sort_ram = tiny_ram;
-                            std::cerr << "[singlify] G-TINY: " << onefq_n_reads
+                            std::cerr << "[singlet] G-TINY: " << onefq_n_reads
                                       << " reads → limitBAMsortRAM="
                                       << (bam_sort_ram >> 30) << "GiB\n";
                         }
@@ -6437,7 +6437,7 @@ int main(int argc, char* argv[]) {
                         if (max_bam_sort > 0 && bam_sort_ram > max_bam_sort) {
                             uint64_t auto_computed = bam_sort_ram;
                             bam_sort_ram = max_bam_sort;
-                            std::cerr << "[singlify] limitBAMsortRAM ["
+                            std::cerr << "[singlet] limitBAMsortRAM ["
                                       << singlet_pileup::mega_sort::tier_name(tier) << "]: "
                                       << (auto_computed >> 30) << " GiB → capped at "
                                       << (bam_sort_ram >> 30) << " GiB (node allocation: "
@@ -6453,7 +6453,7 @@ int main(int argc, char* argv[]) {
                     if (is_ultra) {
                         bam_sort_bins_s = std::to_string(
                             singlet_pileup::mega_sort::ULTRA_SORT_BINS);
-                        std::cerr << "[singlify] ULTRA: outBAMsortingBinsN="
+                        std::cerr << "[singlet] ULTRA: outBAMsortingBinsN="
                                   << singlet_pileup::mega_sort::ULTRA_SORT_BINS
                                   << " (reduces per-bin merge memory, limitBAMsortRAM="
                                   << (bam_sort_ram >> 30) << "GiB)\n";
@@ -6466,7 +6466,7 @@ int main(int argc, char* argv[]) {
                     if (sort_threads < 1) sort_threads = 1;
                     bam_sort_bins_s = "100";
                     bam_sort_threads_s = std::to_string(sort_threads);
-                    std::cerr << "[singlify] BAM sort strategy: hybrid (est BAM: "
+                    std::cerr << "[singlet] BAM sort strategy: hybrid (est BAM: "
                               << (est_bam_bytes >> 30) << "GB, avail RAM: "
                               << alloc_gib << "GB, limitBAMsortRAM: "
                               << (bam_sort_ram >> 30) << "GB, bins: 100)\n";
@@ -6477,7 +6477,7 @@ int main(int argc, char* argv[]) {
                     uint64_t cap_32g = 32ULL * 1024 * 1024 * 1024;
                     bam_sort_ram = (quarter_ram < cap_32g) ? quarter_ram : cap_32g;
                     bam_sort_bins_s = "200";
-                    std::cerr << "[singlify] BAM sort strategy: disk (est BAM: "
+                    std::cerr << "[singlet] BAM sort strategy: disk (est BAM: "
                               << (est_bam_bytes >> 30) << "GB, avail RAM: "
                               << alloc_gib << "GB, limitBAMsortRAM: "
                               << (bam_sort_ram >> 30) << "GB, bins: 200)\n";
@@ -6485,7 +6485,7 @@ int main(int argc, char* argv[]) {
 
                 // Ensure we always emit the mode for Mode 1 so logs are consistent
                 if (sort_mode == BamSortMode::Memory) {
-                    std::cerr << "[singlify] BAM sort strategy: memory (est BAM: "
+                    std::cerr << "[singlet] BAM sort strategy: memory (est BAM: "
                               << (est_bam_bytes >> 30) << "GB, avail RAM: "
                               << alloc_gib << "GB, limitBAMsortRAM: "
                               << (bam_sort_ram >> 30) << "GB)\n";
@@ -6499,7 +6499,7 @@ int main(int argc, char* argv[]) {
                 if (sort_mode == BamSortMode::Memory && solo_type_is_sam_tag_out
                         && onefq_n_reads > 10000000ULL && bam_sort_bins_s.empty()) {
                     bam_sort_bins_s = "200";
-                    std::cerr << "[singlify] CB_samTagOut sort bins: 200 ("
+                    std::cerr << "[singlet] CB_samTagOut sort bins: 200 ("
                               << onefq_n_reads << " reads, AUTOFIX-SCI3-CBSAM-HANG)\n";
                 }
 
@@ -6549,7 +6549,7 @@ int main(int argc, char* argv[]) {
             // clipping: STAR's alignment soft-clipping handles polyA naturally.
             // NOTE: --clipAdapterType CellRanger4 was removed because STAR's
             // CellRanger4 mode relies on quality-score heuristics that break
-            // when singlify decodes with --quality none (constant Phred=30),
+            // when singlet decodes with --quality none (constant Phred=30),
             // causing 0% mapping on mouse 10xv3 and other samples.
             if (!detected_adapter3p.empty()) {
                 args.push_back("--clip3pAdapterSeq");
@@ -6625,18 +6625,18 @@ int main(int argc, char* argv[]) {
                         tmp_free_bytes = tmp_svfs.f_bsize * tmp_svfs.f_bavail;
                     const uint64_t min_tmp_needed = 50ULL * 1024 * 1024 * 1024;  // 50 GiB threshold
                     if (tmp_free_bytes >= min_tmp_needed) {
-                        star_tmpdir = tmp_root + "/singlify_star_" + std::to_string(getpid());
-                        std::cerr << "[singlify] ADAPTIVE-BAM-SORT: outTmpDir=" << star_tmpdir
+                        star_tmpdir = tmp_root + "/singlet_star_" + std::to_string(getpid());
+                        std::cerr << "[singlet] ADAPTIVE-BAM-SORT: outTmpDir=" << star_tmpdir
                                   << " (/tmp, " << (tmp_free_bytes >> 30) << "GiB free)\n";
                     } else {
                         // /tmp too small — fall back to NFS output directory (always has space)
                         star_tmpdir = out_prefix + "/star_tmp_" + std::to_string(getpid());
-                        std::cerr << "[singlify] ADAPTIVE-BAM-SORT: outTmpDir=" << star_tmpdir
+                        std::cerr << "[singlet] ADAPTIVE-BAM-SORT: outTmpDir=" << star_tmpdir
                                   << " (NFS fallback; /tmp only "
                                   << (tmp_free_bytes >> 30) << "GiB free)\n";
                     }
                 } else {
-                    star_tmpdir = "/dev/shm/singlify_star_" + std::to_string(getpid());
+                    star_tmpdir = "/dev/shm/singlet_star_" + std::to_string(getpid());
                 }
             }
             if (parallel_pileup == 1) {
@@ -6664,12 +6664,12 @@ int main(int argc, char* argv[]) {
             parallel_bam_path = star_prefix + "Aligned.sortedByCoord.out.bam";
             parallel_bai_path = parallel_bam_path + ".bai";
             bam_source = parallel_bam_path;
-            std::cerr << "[singlify] STAR pid=" << star_pid
+            std::cerr << "[singlet] STAR pid=" << star_pid
                       << ", " << star_threads << " threads, sorted BAM → " << parallel_bam_path << "\n";
         } else {
             close(pipe_fd[1]);
             bam_source = "/dev/fd/" + std::to_string(pipe_fd[0]);
-            std::cerr << "[singlify] STAR pid=" << star_pid
+            std::cerr << "[singlet] STAR pid=" << star_pid
                       << ", " << star_threads << " threads, pipe fd=" << pipe_fd[0] << "\n";
         }
     }
@@ -6685,7 +6685,7 @@ int main(int argc, char* argv[]) {
 
     if (parallel_pileup == 1 && star_pid > 0) {
         // ── 2a: Wait for STAR to finish writing sorted BAM ──
-        std::cerr << "[singlify] Waiting for STAR to finish sorting...\n";
+        std::cerr << "[singlet] Waiting for STAR to finish sorting...\n";
         StopWatch star_sw;
         int wstatus;
         waitpid(star_pid, &wstatus, 0);
@@ -6697,32 +6697,32 @@ int main(int argc, char* argv[]) {
         if (WIFEXITED(wstatus)) {
             star_exit = WEXITSTATUS(wstatus);
             if (star_exit != 0) {
-                std::cerr << "[singlify] ERROR: STAR exited " << star_exit << "\n";
+                std::cerr << "[singlet] ERROR: STAR exited " << star_exit << "\n";
                 return star_exit;
             }
             star_time = star_sw.elapsed_s();
-            std::cerr << "[singlify] STAR completed in " << star_time << "s\n";
+            std::cerr << "[singlet] STAR completed in " << star_time << "s\n";
         } else if (WIFSIGNALED(wstatus)) {
-            std::cerr << "[singlify] ERROR: STAR killed by signal " << WTERMSIG(wstatus) << "\n";
+            std::cerr << "[singlet] ERROR: STAR killed by signal " << WTERMSIG(wstatus) << "\n";
             return 1;
         }
 
         // ── 2b: Index sorted BAM with htslib ──
-        std::cerr << "[singlify] Indexing BAM: " << parallel_bam_path << "\n";
+        std::cerr << "[singlet] Indexing BAM: " << parallel_bam_path << "\n";
         StopWatch idx_sw;
         int idx_ret = sam_index_build3(parallel_bam_path.c_str(),
                                        parallel_bai_path.c_str(),
                                        0,          // min_shift=0 → BAI format
                                        star_threads);
         if (idx_ret < 0) {
-            std::cerr << "[singlify] ERROR: BAM index failed (" << idx_ret << ")\n";
+            std::cerr << "[singlet] ERROR: BAM index failed (" << idx_ret << ")\n";
             return 1;
         }
-        std::cerr << "[singlify] BAM indexed in " << idx_sw.elapsed_s() << "s\n";
+        std::cerr << "[singlet] BAM indexed in " << idx_sw.elapsed_s() << "s\n";
 
         // ── 2c-ATAC: Fragment extraction + bin counting (ATAC mode only) ──
         if (is_atac_mode) {
-            std::cerr << "[singlify] ATAC: extracting fragments from sorted BAM...\n";
+            std::cerr << "[singlet] ATAC: extracting fragments from sorted BAM...\n";
             StopWatch atac_sw;
 
             // Build barcode → index map from discovered/user-provided barcode file
@@ -6734,7 +6734,7 @@ int main(int argc, char* argv[]) {
                 while (std::getline(bcf, bc)) {
                     if (!bc.empty()) atac_bc_map[bc] = idx++;
                 }
-                std::cerr << "[singlify] ATAC: loaded " << atac_bc_map.size() << " barcodes\n";
+                std::cerr << "[singlet] ATAC: loaded " << atac_bc_map.size() << " barcodes\n";
             }
 
             // Stream BAM records through ATACFragmentExtractor
@@ -6760,7 +6760,7 @@ int main(int argc, char* argv[]) {
             bam_hdr_destroy(bam_hdr_atac);
             sam_close(bam_fp);
 
-            std::cerr << "[singlify] ATAC: " << extractor.unique_fragments()
+            std::cerr << "[singlet] ATAC: " << extractor.unique_fragments()
                       << " unique fragments (" << extractor.duplicate_fragments()
                       << " dupes)\n";
 
@@ -6790,7 +6790,7 @@ int main(int argc, char* argv[]) {
                 const std::string frag_path = out_prefix + "/fragments.tsv.gz";
                 gzFile ftsv = gzopen(frag_path.c_str(), "wb");
                 if (!ftsv) {
-                    std::cerr << "[singlify] ERROR: could not open " << frag_path << " for writing\n";
+                    std::cerr << "[singlet] ERROR: could not open " << frag_path << " for writing\n";
                 } else {
                     char buf[4096];
                     for (const auto& f : frags) {
@@ -6801,7 +6801,7 @@ int main(int argc, char* argv[]) {
                         if (n > 0) gzwrite(ftsv, buf, static_cast<unsigned>(n));
                     }
                     gzclose(ftsv);
-                    std::cerr << "[singlify] ATAC: wrote " << frags.size()
+                    std::cerr << "[singlet] ATAC: wrote " << frags.size()
                               << " fragments to fragments.tsv.gz\n";
                 }
             }
@@ -6847,7 +6847,7 @@ int main(int argc, char* argv[]) {
                          << r.tss_enrichment << '\t'
                          << r.frip << '\t'
                          << r.filter_reason << '\n';
-                std::cerr << "[singlify] ATAC: " << summary.cells_called
+                std::cerr << "[singlet] ATAC: " << summary.cells_called
                           << "/" << summary.total_barcodes
                           << " cells called (frag_threshold=" << summary.fragment_threshold
                           << ", median_tss=" << summary.median_tss_cells << ")\n";
@@ -6876,10 +6876,10 @@ int main(int argc, char* argv[]) {
 
                 auto peaks = singlet::call_peaks(bin_agg, bin_chroms, bin_starts);
                 if (singlet::write_peaks_bed(out_prefix + "/peaks.bed", peaks))
-                    std::cerr << "[singlify] ATAC peaks: " << peaks.size()
+                    std::cerr << "[singlet] ATAC peaks: " << peaks.size()
                               << " peaks called, wrote peaks.bed\n";
                 else
-                    std::cerr << "[singlify] ATAC peaks: write_peaks_bed failed\n";
+                    std::cerr << "[singlet] ATAC peaks: write_peaks_bed failed\n";
             }
 
             // Cleanup temp BAM + BAI
@@ -6890,16 +6890,16 @@ int main(int argc, char* argv[]) {
             if (onefq_mode) {
                 std::string tmpdir2 = "/dev/shm";
                 if (const char* td = std::getenv("TMPDIR")) tmpdir2 = td;
-                std::string dec_dir2 = tmpdir2 + "/singlify_1fq_" + std::to_string(getpid());
+                std::string dec_dir2 = tmpdir2 + "/singlet_1fq_" + std::to_string(getpid());
                 unlink((dec_dir2 + "/R1.fastq").c_str());
                 unlink((dec_dir2 + "/R2.fastq").c_str());
                 rmdir(dec_dir2.c_str());
             }
 
-            std::cerr << "[singlify] ATAC: " << counter.total_bins() << " bins × "
+            std::cerr << "[singlet] ATAC: " << counter.total_bins() << " bins × "
                       << n_cells << " cells, " << atac_sw.elapsed_s() << "s\n";
-            std::cerr << "[singlify] ATAC outputs: " << out_prefix << "\n";
-            std::cerr << "[singlify] Total: " << total_sw.elapsed_s() << "s\n";
+            std::cerr << "[singlet] ATAC outputs: " << out_prefix << "\n";
+            std::cerr << "[singlet] Total: " << total_sw.elapsed_s() << "s\n";
             // Nonhost EM screening: screen STAR unmapped reads
             if (!nonhost_db_path.empty() || !bacterial_db_path.empty() || !fungal_db_path.empty())
                 run_nonhost_em_screening(nonhost_db_path, bacterial_db_path, fungal_db_path,
@@ -6909,7 +6909,7 @@ int main(int argc, char* argv[]) {
 
         // ── 2c-SS2: Smart-seq2 read counting (plate mode, one sample = one cell) ──
         if (is_smart_seq2_mode) {
-            std::cerr << "[singlify] Smart-seq2: counting reads per gene from sorted BAM...\n";
+            std::cerr << "[singlet] Smart-seq2: counting reads per gene from sorted BAM...\n";
             StopWatch ss2_sw;
 
             // Load gene model (GTF already validated above)
@@ -7004,7 +7004,7 @@ int main(int argc, char* argv[]) {
 
             // Variant calling (Smart-seq2)
             if (variant_calling) {
-                std::cerr << "[singlify] Smart-seq2: running RNA variant caller...\n";
+                std::cerr << "[singlet] Smart-seq2: running RNA variant caller...\n";
                 singlet::RNAVariantCaller vc_ss2;
                 vc_ss2.set_min_coverage(vc_min_coverage);
                 vc_ss2.set_min_alt_count(vc_min_alt_count);
@@ -7012,14 +7012,14 @@ int main(int argc, char* argv[]) {
                 vc_ss2.process_bam(parallel_bam_path);
                 vc_ss2.write_vcf(out_prefix + "/variants.vcf", vc_ss2.chrom_names());
                 vc_ss2.write_tsv(out_prefix + "/variants.tsv", vc_ss2.chrom_names());
-                std::cerr << "[singlify] Smart-seq2: " << vc_ss2.variants_called()
+                std::cerr << "[singlet] Smart-seq2: " << vc_ss2.variants_called()
                           << " variants called at " << vc_ss2.positions_examined()
                           << " positions\n";
             }
 
             // Dedup stats (Smart-seq2)
             if (do_dedup_stats) {
-                std::cerr << "[singlify] Smart-seq2: collecting dedup stats...\n";
+                std::cerr << "[singlet] Smart-seq2: collecting dedup stats...\n";
                 singlet::ReadDedupStats dedup_ss2;
                 singlet::ReadDedupStats::Config dedup_cfg;
                 dedup_cfg.optical_distance = optical_distance;
@@ -7046,25 +7046,25 @@ int main(int argc, char* argv[]) {
             if (onefq_mode) {
                 std::string tmpdir_ss2 = "/dev/shm";
                 if (const char* td = std::getenv("TMPDIR")) tmpdir_ss2 = td;
-                std::string dec_dir_ss2 = tmpdir_ss2 + "/singlify_1fq_" + std::to_string(getpid());
+                std::string dec_dir_ss2 = tmpdir_ss2 + "/singlet_1fq_" + std::to_string(getpid());
                 unlink((dec_dir_ss2 + "/R1.fastq").c_str());
                 unlink((dec_dir_ss2 + "/R2.fastq").c_str());
                 rmdir(dec_dir_ss2.c_str());
             }
 
-            std::cerr << "[singlify] Smart-seq2: " << total_reads << " total, "
+            std::cerr << "[singlet] Smart-seq2: " << total_reads << " total, "
                       << counted_reads << " counted, "
                       << ambiguous_reads << " ambiguous, "
                       << data.size() << " genes expressed, "
                       << ss2_sw.elapsed_s() << "s\n";
-            std::cerr << "[singlify] SS2 outputs: " << out_prefix << "\n";
-            std::cerr << "[singlify] Total: " << total_sw.elapsed_s() << "s\n";
+            std::cerr << "[singlet] SS2 outputs: " << out_prefix << "\n";
+            std::cerr << "[singlet] Total: " << total_sw.elapsed_s() << "s\n";
             return 0;
         }
 
         // ── 2c-Bulk: Bulk RNA-seq gene counting from sorted BAM ──
         if (is_bulk_rna_mode) {
-            std::cerr << "[singlify] Bulk RNA: counting reads per gene from sorted BAM...\n";
+            std::cerr << "[singlet] Bulk RNA: counting reads per gene from sorted BAM...\n";
             StopWatch bulk_sw;
 
             singlet::GeneModel bulk_gm;
@@ -7114,7 +7114,7 @@ int main(int argc, char* argv[]) {
                     else                           { strand_mode = 0; }  // unstranded
                 }
                 const char* strand_names[] = {"unstranded", "forward", "reverse(dUTP)"};
-                std::cerr << "[singlify] Bulk RNA: strandedness="
+                std::cerr << "[singlet] Bulk RNA: strandedness="
                           << strand_names[strand_mode]
                           << " (sense=" << sense_hits << " antisense=" << antisense_hits
                           << " probed=" << probe_reads << ")\n";
@@ -7181,7 +7181,7 @@ int main(int argc, char* argv[]) {
             std::vector<int32_t> bulk_indptr(2, 0);
             // ── Variant calling (Bulk RNA) ──
             if (variant_calling) {
-                std::cerr << "[singlify] Bulk RNA: running RNA variant caller...\n";
+                std::cerr << "[singlet] Bulk RNA: running RNA variant caller...\n";
                 singlet::RNAVariantCaller vc_bulk;
                 vc_bulk.set_min_coverage(vc_min_coverage);
                 vc_bulk.set_min_alt_count(vc_min_alt_count);
@@ -7189,14 +7189,14 @@ int main(int argc, char* argv[]) {
                 vc_bulk.process_bam(parallel_bam_path);
                 vc_bulk.write_vcf(out_prefix + "/variants.vcf", vc_bulk.chrom_names());
                 vc_bulk.write_tsv(out_prefix + "/variants.tsv", vc_bulk.chrom_names());
-                std::cerr << "[singlify] Bulk RNA: " << vc_bulk.variants_called()
+                std::cerr << "[singlet] Bulk RNA: " << vc_bulk.variants_called()
                           << " variants called at " << vc_bulk.positions_examined()
                           << " positions\n";
             }
 
             // ── Dedup stats (Bulk RNA) ──
             if (do_dedup_stats) {
-                std::cerr << "[singlify] Bulk RNA: collecting dedup stats...\n";
+                std::cerr << "[singlet] Bulk RNA: collecting dedup stats...\n";
                 singlet::ReadDedupStats dedup_bulk;
                 singlet::ReadDedupStats::Config dedup_cfg_bulk;
                 dedup_cfg_bulk.optical_distance = optical_distance;
@@ -7241,22 +7241,22 @@ int main(int argc, char* argv[]) {
             if (onefq_mode) {
                 std::string tmpdir_bulk = "/dev/shm";
                 if (const char* td = std::getenv("TMPDIR")) tmpdir_bulk = td;
-                std::string dec_dir_bulk = tmpdir_bulk + "/singlify_1fq_" + std::to_string(getpid());
+                std::string dec_dir_bulk = tmpdir_bulk + "/singlet_1fq_" + std::to_string(getpid());
                 unlink((dec_dir_bulk + "/R1.fastq").c_str());
                 unlink((dec_dir_bulk + "/R2.fastq").c_str());
                 rmdir(dec_dir_bulk.c_str());
             }
 
             const char* strand_label[] = {"unstranded", "forward", "reverse"};
-            std::cerr << "[singlify] Bulk RNA: " << bulk_total << " total, "
+            std::cerr << "[singlet] Bulk RNA: " << bulk_total << " total, "
                       << bulk_counted << " counted, "
                       << bulk_ambiguous << " ambiguous, "
                       << bulk_wrong_strand << " wrong-strand, "
                       << bulk_data.size() << " genes expressed, "
                       << "strand=" << strand_label[strand_mode] << ", "
                       << bulk_sw.elapsed_s() << "s\n";
-            std::cerr << "[singlify] Bulk outputs: " << out_prefix << "\n";
-            std::cerr << "[singlify] Total: " << total_sw.elapsed_s() << "s\n";
+            std::cerr << "[singlet] Bulk outputs: " << out_prefix << "\n";
+            std::cerr << "[singlet] Total: " << total_sw.elapsed_s() << "s\n";
             // Nonhost EM screening: screen STAR unmapped reads
             if (!nonhost_db_path.empty() || !bacterial_db_path.empty() || !fungal_db_path.empty())
                 run_nonhost_em_screening(nonhost_db_path, bacterial_db_path, fungal_db_path,
@@ -7309,20 +7309,20 @@ int main(int argc, char* argv[]) {
                 bc_out.close();
                 config.barcode_path = auto_barcode_file;
                 engine_ptr->reload_barcodes(auto_barcode_file);
-                std::cerr << "[singlify] CB-tag barcode refresh: " << cb_sorted.size()
+                std::cerr << "[singlet] CB-tag barcode refresh: " << cb_sorted.size()
                           << " barcodes (>=" << CB_MIN_READS << " CB reads) in "
                           << cb_scan_sw.elapsed_s() << "s\n";
             } else {
-                std::cerr << "[singlify] CB-tag barcode refresh: no barcodes with >="
+                std::cerr << "[singlet] CB-tag barcode refresh: no barcodes with >="
                           << CB_MIN_READS << " CB reads; keeping decode-time barcodes\n";
             }
         }
 
-        std::cerr << "[singlify] Pileup: parallel (" << star_threads << " workers) on indexed BAM\n";
+        std::cerr << "[singlet] Pileup: parallel (" << star_threads << " workers) on indexed BAM\n";
         StopWatch pileup_sw;
         stats = engine_ptr->run_parallel(parallel_bam_path, star_threads);
         pileup_time = pileup_sw.elapsed_s();
-        std::cerr << "[singlify] Pileup: " << stats.total_reads << " reads, " << pileup_time << "s";
+        std::cerr << "[singlet] Pileup: " << stats.total_reads << " reads, " << pileup_time << "s";
         if (stats.total_reads > 0)
             std::cerr << " (" << static_cast<int>(stats.total_reads / pileup_time / 1e6) << "M reads/s)";
         std::cerr << "\n";
@@ -7337,20 +7337,20 @@ int main(int argc, char* argv[]) {
             double ws_frac = static_cast<double>(stats.wrong_strand) /
                              (stats.exon_hits + stats.wrong_strand);
             if (ws_frac > 0.50) {
-                std::cerr << "[singlify] Auto-correcting strand: "
+                std::cerr << "[singlet] Auto-correcting strand: "
                           << static_cast<int>(ws_frac * 100)
                           << "% wrong-strand reads detected → re-running pileup with reversed strand\n";
                 config.reverse_strand = true;
                 engine_ptr = std::make_unique<singlet::PileupEngine>(config);
                 if (!engine_ptr->load_references()) {
-                    std::cerr << "[singlify] WARNING: Could not reload references for strand retry; "
+                    std::cerr << "[singlet] WARNING: Could not reload references for strand retry; "
                               << "keeping initial pileup result\n";
                     config.reverse_strand = false; // revert so exported JSON reflects truth
                 } else {
                     StopWatch retry_sw;
                     stats = engine_ptr->run_parallel(parallel_bam_path, star_threads);
                     pileup_time += retry_sw.elapsed_s();
-                    std::cerr << "[singlify] Strand-retry pileup: "
+                    std::cerr << "[singlet] Strand-retry pileup: "
                               << stats.total_reads << " reads, "
                               << retry_sw.elapsed_s() << "s\n";
                 }
@@ -7370,11 +7370,11 @@ int main(int argc, char* argv[]) {
             ? (onefq_mode ? "STAR pipe (.1fq stream)" :
                sra_mode ? "STAR pipe (SRA stream)" : "STAR pipe")
             : "BAM file";
-        std::cerr << "[singlify] Pileup: streaming from " << source_desc << "...\n";
+        std::cerr << "[singlet] Pileup: streaming from " << source_desc << "...\n";
         StopWatch pileup_sw;
         stats = engine_ptr->run(bam_source);
         pileup_time = pileup_sw.elapsed_s();
-        std::cerr << "[singlify] Pileup: " << stats.total_reads << " reads, "
+        std::cerr << "[singlet] Pileup: " << stats.total_reads << " reads, "
                   << pileup_time << "s";
         if (stats.total_reads > 0)
             std::cerr << " (" << static_cast<int>(stats.total_reads / pileup_time / 1e6) << "M reads/s)";
@@ -7386,7 +7386,7 @@ int main(int argc, char* argv[]) {
             double ws_frac = static_cast<double>(stats.wrong_strand) /
                              (stats.exon_hits + stats.wrong_strand);
             if (ws_frac > 0.35 && !config.reverse_strand) {
-                std::cerr << "[singlify] WARNING: " << static_cast<int>(ws_frac * 100)
+                std::cerr << "[singlet] WARNING: " << static_cast<int>(ws_frac * 100)
                           << "% wrong-strand reads detected. This sample may use a 5' capture "
                           << "protocol. Re-run with --reverse-strand for correct gene counting.\n";
             }
@@ -7400,11 +7400,11 @@ int main(int argc, char* argv[]) {
             if (WIFEXITED(wstatus)) {
                 star_exit = WEXITSTATUS(wstatus);
                 if (star_exit != 0)
-                    std::cerr << "[singlify] WARNING: STAR exited " << star_exit << "\n";
+                    std::cerr << "[singlet] WARNING: STAR exited " << star_exit << "\n";
                 else
-                    std::cerr << "[singlify] STAR completed\n";
+                    std::cerr << "[singlet] STAR completed\n";
             } else if (WIFSIGNALED(wstatus)) {
-                std::cerr << "[singlify] ERROR: STAR killed by signal " << WTERMSIG(wstatus) << "\n";
+                std::cerr << "[singlet] ERROR: STAR killed by signal " << WTERMSIG(wstatus) << "\n";
                 if (fifo_writer_thread.joinable()) fifo_writer_thread.join();
                 return 1;
             }
@@ -7427,7 +7427,7 @@ int main(int argc, char* argv[]) {
                     if (pipe) {
                         double rate = std::atof(pipe + 1);
                         if (rate < 1.0) {
-                            std::cerr << "[singlify] WARNING: Very low mapping rate ("
+                            std::cerr << "[singlet] WARNING: Very low mapping rate ("
                                       << std::fixed << std::setprecision(2) << rate
                                       << "%). Possible wrong reference genome.\n";
                         }
@@ -7447,9 +7447,9 @@ int main(int argc, char* argv[]) {
         if (WIFEXITED(wstatus)) {
             demux_exit = WEXITSTATUS(wstatus);
             if (demux_exit != 0)
-                std::cerr << "[singlify] WARNING: SRA demuxer exited " << demux_exit << "\n";
+                std::cerr << "[singlet] WARNING: SRA demuxer exited " << demux_exit << "\n";
             else
-                std::cerr << "[singlify] SRA demuxer completed\n";
+                std::cerr << "[singlet] SRA demuxer completed\n";
         }
         // Cleanup FIFOs and temp dir
         unlink(r1_fifo_path.c_str());
@@ -7462,14 +7462,14 @@ int main(int argc, char* argv[]) {
         std::string tmpdir = "/dev/shm";
         if (const char* td = std::getenv("TMPDIR"))
             tmpdir = td;
-        std::string decode_dir = tmpdir + "/singlify_1fq_" + std::to_string(getpid());
+        std::string decode_dir = tmpdir + "/singlet_1fq_" + std::to_string(getpid());
         unlink((decode_dir + "/R1.fastq").c_str());
         unlink((decode_dir + "/R2.fastq").c_str());
         rmdir(decode_dir.c_str());
     }
 
     if (stats.total_reads == 0) {
-        std::cerr << "[singlify] ERROR: No reads processed\n";
+        std::cerr << "[singlet] ERROR: No reads processed\n";
         return 1;
     }
 
@@ -7490,7 +7490,7 @@ int main(int argc, char* argv[]) {
     }
 
     // ── Phase 3: Export ──
-    std::cerr << "[singlify] Exporting feature matrices...\n";
+    std::cerr << "[singlet] Exporting feature matrices...\n";
 
     singlet::ExportConfig export_cfg;
     export_cfg.out_prefix = out_prefix;
@@ -7498,6 +7498,7 @@ int main(int argc, char* argv[]) {
     export_cfg.pipeline_mode = pipeline_mode;
     export_cfg.n_donors = n_donors;
     export_cfg.threads = config.threads;
+    export_cfg.genome_dir = genome_dir;
 
     // ── §3.6 fields for summary.json ──
     {
@@ -7559,7 +7560,7 @@ int main(int argc, char* argv[]) {
     }
 
     // ── N8: Populate provenance manifest ──
-    export_cfg.provenance.singlify_version      = "0.3.0";
+    export_cfg.provenance.singlet_version      = "0.3.0";
     export_cfg.provenance.input_file            = onefq_file.empty() ? sra_file : onefq_file;
     export_cfg.provenance.input_reads           = stats.total_reads;
     export_cfg.provenance.genome_dir            = genome_dir;
@@ -7664,7 +7665,7 @@ int main(int argc, char* argv[]) {
             }
             export_cfg.user_meta[key] = value;
         }
-        std::cerr << "[singlify] Loaded " << export_cfg.user_meta.size()
+        std::cerr << "[singlet] Loaded " << export_cfg.user_meta.size()
                   << " metadata fields from " << metadata_json_path << "\n";
     }
 
@@ -7676,17 +7677,17 @@ int main(int argc, char* argv[]) {
     // For CITE_SEQ_GEX assay with 3-stream bundle: feature stream decoding
     // requires future lib1fq reader extension (tracked in ROADMAP.md T4-EXT).
     if (is_cite_seq_mode && !feature_ref_path.empty() && onefq_mode) {
-        std::cerr << "[singlify] CITE-seq: processing ADT/HTO reads from " << feature_ref_path << "\n";
+        std::cerr << "[singlet] CITE-seq: processing ADT/HTO reads from " << feature_ref_path << "\n";
         StopWatch adt_sw;
 
         // ── Load tag reference ─────────────────────────────────────────────
         singlet::AdtMatcher matcher;
         if (!matcher.load_reference(feature_ref_path)) {
-            std::cerr << "[singlify] ERROR: Failed to load feature reference: "
+            std::cerr << "[singlet] ERROR: Failed to load feature reference: "
                       << feature_ref_path << "\n";
         } else {
             matcher.build_index();
-            std::cerr << "[singlify] CITE-seq: loaded " << matcher.num_tags()
+            std::cerr << "[singlet] CITE-seq: loaded " << matcher.num_tags()
                       << " tags from " << feature_ref_path << "\n";
 
             // ── Barcode → index map (from GEX barcodes) ────────────────────
@@ -7801,7 +7802,7 @@ int main(int argc, char* argv[]) {
             singlet::write_names(out_prefix + "/adt_features.tsv", matcher.names());
             singlet::write_names(out_prefix + "/adt_barcodes.tsv", gex_barcodes);
 
-            std::cerr << "[singlify] CITE-seq: matched=" << matcher.matched()
+            std::cerr << "[singlet] CITE-seq: matched=" << matcher.matched()
                       << " ambiguous=" << matcher.ambiguous()
                       << " unmatched=" << matcher.unmatched() << "\n";
 
@@ -7821,17 +7822,17 @@ int main(int argc, char* argv[]) {
                 is_hto = (hto_name_count == matcher.num_tags());
             }
             if (is_hto) {
-                std::cerr << "[singlify] CITE-seq: HTO detected — running demux\n";
+                std::cerr << "[singlet] CITE-seq: HTO detected — running demux\n";
                 singlet::HtoDemux demux;
                 auto hto_results = demux.demux(counter.counts(),
                                                matcher.names(),
                                                n_cells);
                 demux.write_tsv(out_prefix + "/hto_classification.tsv",
                                 gex_barcodes, hto_results);
-                std::cerr << "[singlify] CITE-seq: HTO classification written\n";
+                std::cerr << "[singlet] CITE-seq: HTO classification written\n";
             }
 
-            std::cerr << "[singlify] CITE-seq: ADT/HTO done in " << adt_sw.elapsed_s() << "s\n";
+            std::cerr << "[singlet] CITE-seq: ADT/HTO done in " << adt_sw.elapsed_s() << "s\n";
         }
     }
 
@@ -8017,7 +8018,7 @@ int main(int argc, char* argv[]) {
         double ws_frac = static_cast<double>(stats.wrong_strand) /
                          (stats.exon_hits + stats.wrong_strand);
         if (ws_frac > 0.35 && !config.reverse_strand) {
-            std::cerr << "[singlify] WARNING: " << static_cast<int>(ws_frac * 100)
+            std::cerr << "[singlet] WARNING: " << static_cast<int>(ws_frac * 100)
                       << "% wrong-strand reads detected. This sample may use a 5' capture "
                       << "protocol. Re-run with --reverse-strand for correct gene counting.\n";
         }
@@ -8037,7 +8038,7 @@ int main(int argc, char* argv[]) {
         "  \"strand_auto_flipped\": " + (engine_ptr->strand_was_flipped() ? "true" : "false") + ",\n"
         "  \"reverse_strand\": " + (config.reverse_strand ? "true" : "false") + ",\n";
     singlet::write_stats_json(out_prefix + "/pileup_stats.json",
-                              stats, "singlify-0.3.0", total_sw.elapsed_s(), extra_json);
+                              stats, "singlet-0.3.0", total_sw.elapsed_s(), extra_json);
 
     // ── Track B: write cascade_stats.json if enabled (T-L2-8) ───────────────
     if (cascade_enabled && cascade_stats_enabled) {
@@ -8065,7 +8066,7 @@ int main(int argc, char* argv[]) {
         std::cerr << "[cascade] cascade_stats.json written (mode=" << cascade_mode << ")\n";
     }
 
-    std::cerr << "[singlify] Total: " << total_sw.elapsed_s() << "s\n";
-    std::cerr << "[singlify] Outputs: " << out_prefix << "\n";
+    std::cerr << "[singlet] Total: " << total_sw.elapsed_s() << "s\n";
+    std::cerr << "[singlet] Outputs: " << out_prefix << "\n";
     return star_exit;
 }

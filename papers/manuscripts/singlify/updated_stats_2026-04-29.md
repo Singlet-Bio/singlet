@@ -1,4 +1,4 @@
-# Singlify Manuscript — Updated Benchmark Stats (2026-04-29)
+# Singlet Manuscript — Updated Benchmark Stats (2026-04-29)
 
 ## Gene Counting (Panel A — SRR32855204, 10x Chromium 3' v3, human PBMC)
 
@@ -7,12 +7,12 @@
 | Gene Pearson r | 0.9960 | **0.9990** | gene_counting.ipynb, 38,606 genes × 2,520 cells |
 | Cell UMI Pearson r | 0.9999 | **0.9993** | gene_counting.ipynb, 2,520 shared cells |
 | Splice Junction Jaccard | — | **0.9636** | gene_counting.ipynb |
-| Gold cell recall | — | **100%** | All 2,520 STARsolo cells found in singlify output |
-| Cells called (singlify) | — | 10,341 (EmptyDrops) | E2E Panel A |
+| Gold cell recall | — | **100%** | All 2,520 STARsolo cells found in singlet output |
+| Cells called (singlet) | — | 10,341 (EmptyDrops) | E2E Panel A |
 | Cells called (STARsolo) | — | 2,520 | E2E Panel A |
 | Input reads | 40,358,185 | same | |
 | Mapping rate | 82.91% | same | |
-| Singlify commit | — | b0fe019 | |
+| Singlet commit | — | b0fe019 | |
 
 ## Sex Calling (Panel F — SRR32855204)
 

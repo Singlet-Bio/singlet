@@ -1,7 +1,7 @@
-test_that("read_singlify_dir loads every .1pz and attaches metadata", {
+test_that("read_singlet_dir loads every .1pz and attaches metadata", {
     dir <- skip_if_no_fixture()
 
-    dd <- read_singlify_dir(dir)
+    dd <- read_singlet_dir(dir)
     expect_true(length(dd) > 0L)
     expect_true("gene_counts" %in% names(dd) || "spliced" %in% names(dd))
 
@@ -12,14 +12,14 @@ test_that("read_singlify_dir loads every .1pz and attaches metadata", {
 
 test_that("include= filters to only requested matrices", {
     dir <- skip_if_no_fixture()
-    dd <- read_singlify_dir(dir, include = c("gene_counts", "spliced"))
+    dd <- read_singlet_dir(dir, include = c("gene_counts", "spliced"))
     expect_true(length(dd) <= 2L)
     expect_true(all(names(dd) %in% c("gene_counts", "spliced")))
 })
 
 test_that("exclude= drops specific matrices", {
     dir <- skip_if_no_fixture()
-    dd <- read_singlify_dir(dir, exclude = c("gene_counts"))
+    dd <- read_singlet_dir(dir, exclude = c("gene_counts"))
     expect_false("gene_counts" %in% names(dd))
 })
 
@@ -28,7 +28,7 @@ test_that("gene_counts equals spliced + unspliced + ambiguous on real outputs", 
     # pipeline's NFS copy tree. If this fails on any new sample, the drop
     # policy is unsafe and must be reverted.
     dir <- skip_if_no_fixture()
-    dd <- read_singlify_dir(
+    dd <- read_singlet_dir(
         dir,
         include = c("gene_counts", "spliced", "unspliced", "ambiguous")
     )
@@ -42,6 +42,6 @@ test_that("gene_counts equals spliced + unspliced + ambiguous on real outputs", 
     expect_equal(length(diff@x), 0L)
 })
 
-test_that("read_singlify_dir errors on a non-directory", {
-    expect_error(read_singlify_dir("/nonexistent_dir"), "not a directory")
+test_that("read_singlet_dir errors on a non-directory", {
+    expect_error(read_singlet_dir("/nonexistent_dir"), "not a directory")
 })

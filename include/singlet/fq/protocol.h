@@ -1491,7 +1491,7 @@ inline void apply_protocol_to_writer(
 // Returns an empty vector if no whitelist can be resolved (caller falls back to
 // auto-discovered barcodes or CB_samTagOut).
 //
-// bin_dir: directory containing the singlify binary (from /proc/self/exe).
+// bin_dir: directory containing the singlet binary (from /proc/self/exe).
 // protocol_tag: canonical protocol tag (e.g. "bd-rhapsody").
 // n_segs: number of CB segments (must match len(soloCBposition)).
 inline std::vector<std::string> resolve_per_seg_whitelists(
@@ -1526,7 +1526,7 @@ inline std::vector<std::string> resolve_per_seg_whitelists(
         struct stat st{};
         if (stat(path.c_str(), &st) != 0) {
             // File missing — report and bail out (caller uses fallback).
-            std::cerr << "[singlify] CB_UMI_Complex whitelist missing: " << path
+            std::cerr << "[singlet] CB_UMI_Complex whitelist missing: " << path
                       << " (seg " << i << ")\n";
             resolved.clear();
             return {};

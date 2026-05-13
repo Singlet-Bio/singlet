@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """
-singlet.gpu.io.donor — helpers for loading singlify donor assignment outputs.
+singlet.gpu.io.donor — helpers for loading singlet donor assignment outputs.
 
-Singlify writes ``donor_assignments.tsv`` for samples processed with
+Singlet writes ``donor_assignments.tsv`` for samples processed with
 ``--snps`` + ``--pipeline``.  This module provides a convenience loader
 that returns a ``pd.Series`` indexed by cell barcode, ready to assign to
 ``adata.obs['donor_id']`` before calling
 ``singlet.gpu.de.pseudobulk_de``.
 
-TSV schema (singlify donor_assignments.tsv)
+TSV schema (singlet donor_assignments.tsv)
 -------------------------------------------
 barcode       — cell barcode (index)
 donor_id      — assigned donor label (str, e.g. "donor_0", "donor_1", …)
@@ -42,7 +42,7 @@ def load_donor_assignments(
     doublet_threshold: float = 0.5,
 ) -> pd.Series:
     """
-    Load singlify's ``donor_assignments.tsv`` into a ``pd.Series``.
+    Load singlet's ``donor_assignments.tsv`` into a ``pd.Series``.
 
     Returns a ``pd.Series`` indexed by cell barcode with values equal to
     the donor label.  Cells that fail quality filters are returned with
@@ -52,7 +52,7 @@ def load_donor_assignments(
     Parameters
     ----------
     tsv_path : str or Path
-        Path to the ``donor_assignments.tsv`` file produced by singlify.
+        Path to the ``donor_assignments.tsv`` file produced by singlet.
     barcode_col : str, default ``"barcode"``
         Column name for cell barcodes.
     donor_col : str, default ``"donor_id"``
@@ -111,13 +111,13 @@ def load_donor_assignments(
     if not path.exists():
         raise FileNotFoundError(
             f"donor_assignments.tsv not found: {path}.  "
-            "Singlify produces this file when run with --snps + --pipeline."
+            "Singlet produces this file when run with --snps + --pipeline."
         )
 
     df = pd.read_csv(str(path), sep=sep)
 
-    # Auto-detect the barcode column if not specified.  The singlify pipeline
-    # writes "cell" but pre-singlify formats and many other tools use
+    # Auto-detect the barcode column if not specified.  The singlet pipeline
+    # writes "cell" but pre-singlet formats and many other tools use
     # "barcode" — accept either by default.
     if barcode_col is None:
         for candidate in ("cell", "barcode"):

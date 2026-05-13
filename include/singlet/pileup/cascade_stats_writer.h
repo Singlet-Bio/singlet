@@ -3,7 +3,7 @@
 // Writes cascade_stats.json alongside summary.json when cascade is active.
 // Schema: DROPLET_OUTPUT_SCHEMA.md §6.6 (v1.1).
 //
-// Integration point: call write_cascade_stats() in the singlify success-path
+// Integration point: call write_cascade_stats() in the singlet success-path
 // write block, after pileup_stats.json is written, when cascade is enabled.
 // See INTEGRATION_NOTES.md §Feature: CascadeStatsWriter (T-L2-8).
 

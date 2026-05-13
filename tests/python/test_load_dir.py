@@ -1,4 +1,4 @@
-"""Tests for singlet._loader.load_dir (singlify output loading)."""
+"""Tests for singlet._loader.load_dir (singlet output loading)."""
 
 import json
 
@@ -9,8 +9,8 @@ import scipy.sparse as sp
 
 
 @pytest.fixture
-def singlify_dir(tmp_path):
-    """Create a fake singlify output directory with all expected files."""
+def singlet_dir(tmp_path):
+    """Create a fake singlet output directory with all expected files."""
     import anndata as ad
     from singlet._io import write_1pz
 
@@ -76,100 +76,100 @@ def singlify_dir(tmp_path):
 
 
 class TestLoadDir:
-    def test_basic_load(self, singlify_dir):
+    def test_basic_load(self, singlet_dir):
         """Loads count matrix with correct shape."""
         from singlet._loader import load_dir
 
-        adata = load_dir(singlify_dir)
+        adata = load_dir(singlet_dir)
         assert adata.shape == (20, 10)
 
-    def test_gene_names(self, singlify_dir):
+    def test_gene_names(self, singlet_dir):
         """Gene names from gene_expression.tsv are attached."""
         from singlet._loader import load_dir
 
-        adata = load_dir(singlify_dir)
+        adata = load_dir(singlet_dir)
         assert "Gene0" in adata.var_names
         assert "gene_id" in adata.var.columns
 
-    def test_barcodes(self, singlify_dir):
+    def test_barcodes(self, singlet_dir):
         """Barcodes from auto_barcodes.tsv are attached."""
         from singlet._loader import load_dir
 
-        adata = load_dir(singlify_dir)
+        adata = load_dir(singlet_dir)
         assert "ACGT0000" in adata.obs_names
 
-    def test_qc_metrics(self, singlify_dir):
+    def test_qc_metrics(self, singlet_dir):
         """QC metrics merged into obs."""
         from singlet._loader import load_dir
 
-        adata = load_dir(singlify_dir)
+        adata = load_dir(singlet_dir)
         assert "n_genes" in adata.obs.columns
         assert "total_counts" in adata.obs.columns
 
-    def test_doublet_scores(self, singlify_dir):
+    def test_doublet_scores(self, singlet_dir):
         """Doublet scores merged into obs."""
         from singlet._loader import load_dir
 
-        adata = load_dir(singlify_dir)
+        adata = load_dir(singlet_dir)
         assert "doublet_score" in adata.obs.columns
 
-    def test_cell_cycle(self, singlify_dir):
+    def test_cell_cycle(self, singlet_dir):
         """Cell cycle phases merged into obs."""
         from singlet._loader import load_dir
 
-        adata = load_dir(singlify_dir)
+        adata = load_dir(singlet_dir)
         assert "phase" in adata.obs.columns
 
-    def test_ancestry_uns(self, singlify_dir):
+    def test_ancestry_uns(self, singlet_dir):
         """Ancestry JSON stored in uns."""
         from singlet._loader import load_dir
 
-        adata = load_dir(singlify_dir)
+        adata = load_dir(singlet_dir)
         assert "ancestry" in adata.uns
         assert adata.uns["ancestry"]["ancestry"] == "European"
 
-    def test_sex_call_uns(self, singlify_dir):
+    def test_sex_call_uns(self, singlet_dir):
         """Sex call JSON stored in uns."""
         from singlet._loader import load_dir
 
-        adata = load_dir(singlify_dir)
+        adata = load_dir(singlet_dir)
         assert "sex_call" in adata.uns
 
-    def test_summary_uns(self, singlify_dir):
+    def test_summary_uns(self, singlet_dir):
         """Summary JSON stored in uns."""
         from singlet._loader import load_dir
 
-        adata = load_dir(singlify_dir)
+        adata = load_dir(singlet_dir)
         assert "summary" in adata.uns
         assert adata.uns["summary"]["mapping_rate"] == 0.87
 
-    def test_saturation_curve(self, singlify_dir):
+    def test_saturation_curve(self, singlet_dir):
         """Saturation curve stored as DataFrame in uns."""
         from singlet._loader import load_dir
 
-        adata = load_dir(singlify_dir)
+        adata = load_dir(singlet_dir)
         assert "saturation_curve" in adata.uns
         assert len(adata.uns["saturation_curve"]) == 3
 
-    def test_singlify_dir_in_uns(self, singlify_dir):
+    def test_singlet_dir_in_uns(self, singlet_dir):
         """Source directory path stored in uns."""
         from singlet._loader import load_dir
 
-        adata = load_dir(singlify_dir)
-        assert adata.uns["singlify_dir"] == str(singlify_dir)
+        adata = load_dir(singlet_dir)
+        assert adata.uns["singlet_dir"] == str(singlet_dir)
 
-    def test_without_qc(self, singlify_dir):
+    def test_without_qc(self, singlet_dir):
         """with_qc=False skips QC merge."""
         from singlet._loader import load_dir
 
-        adata = load_dir(singlify_dir, with_qc=False)
+        adata = load_dir(singlet_dir, with_qc=False)
         assert "n_genes" not in adata.obs.columns
 
-    def test_without_doublets(self, singlify_dir):
+    def test_without_doublets(self, singlet_dir):
         """with_doublets=False skips doublet merge."""
         from singlet._loader import load_dir
 
-        adata = load_dir(singlify_dir, with_doublets=False)
+        adata = load_dir(singlet_dir, with_doublets=False)
         assert "doublet_score" not in adata.obs.columns
 
     def test_not_a_directory_raises(self, tmp_path):

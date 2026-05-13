@@ -13,7 +13,7 @@
 //   ├── varm/      (empty)
 //   ├── obsp/      (empty)
 //   ├── varp/      (empty)
-//   └── uns/singlify/  Key-value string metadata
+//   └── uns/singlet/  Key-value string metadata
 //
 // CSC→CSR EQUIVALENCE:
 //   Our internal GeneCSC has columns=cells, rows=genes.
@@ -62,7 +62,7 @@ struct H5adWriteConfig {
     };
     std::vector<Layer> layers;
 
-    std::map<std::string, std::string> metadata;  // written to uns/singlify/
+    std::map<std::string, std::string> metadata;  // written to uns/singlet/
 };
 
 // write_h5ad() — main export entry point.
@@ -361,11 +361,11 @@ inline bool write_h5ad(const H5adWriteConfig& cfg) {
         }
     }
 
-    // uns/singlify/ — pipeline key-value metadata
+    // uns/singlet/ — pipeline key-value metadata
     {
         hid_t uns_grp = H5Gcreate2(fid, "uns", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         if (uns_grp >= 0) {
-            hid_t sg_grp = H5Gcreate2(uns_grp, "singlify",
+            hid_t sg_grp = H5Gcreate2(uns_grp, "singlet",
                                        H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
             if (sg_grp >= 0) {
                 for (const auto& kv : cfg.metadata) {

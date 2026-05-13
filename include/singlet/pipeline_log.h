@@ -17,10 +17,10 @@ enum class LogLevel { QUIET = 0,
                       VERBOSE = 2,
                       DEBUG = 3 };
 
-class SinglifyLogger {
+class PipelineLogger {
    public:
-    static SinglifyLogger& instance() {
-        static SinglifyLogger inst;
+    static PipelineLogger& instance() {
+        static PipelineLogger inst;
         return inst;
     }
 
@@ -139,7 +139,7 @@ class SinglifyLogger {
     LogLevel level() const { return level_; }
 
    private:
-    SinglifyLogger() {
+    PipelineLogger() {
         last_progress_ = std::chrono::steady_clock::now() -
                          std::chrono::seconds(100);
     }
@@ -199,11 +199,11 @@ class SinglifyLogger {
 };
 
 // Convenience macros
-#define SLOG(...) singlet::SinglifyLogger::instance().info(__VA_ARGS__)
-#define SLOG_VERBOSE(...) singlet::SinglifyLogger::instance().verbose(__VA_ARGS__)
-#define SLOG_DEBUG(...) singlet::SinglifyLogger::instance().debug(__VA_ARGS__)
-#define SLOG_ERROR(...) singlet::SinglifyLogger::instance().error(__VA_ARGS__)
-#define SLOG_WARN(...) singlet::SinglifyLogger::instance().warn(__VA_ARGS__)
-#define SLOG_EVENT(type, ...) singlet::SinglifyLogger::instance().event(type, __VA_ARGS__)
+#define SLOG(...) singlet::PipelineLogger::instance().info(__VA_ARGS__)
+#define SLOG_VERBOSE(...) singlet::PipelineLogger::instance().verbose(__VA_ARGS__)
+#define SLOG_DEBUG(...) singlet::PipelineLogger::instance().debug(__VA_ARGS__)
+#define SLOG_ERROR(...) singlet::PipelineLogger::instance().error(__VA_ARGS__)
+#define SLOG_WARN(...) singlet::PipelineLogger::instance().warn(__VA_ARGS__)
+#define SLOG_EVENT(type, ...) singlet::PipelineLogger::instance().event(type, __VA_ARGS__)
 
 }  // namespace singlet

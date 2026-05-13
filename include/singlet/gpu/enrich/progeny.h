@@ -19,7 +19,7 @@
 //     activity[n_cells × n_pathways] = expression[n_cells × n_genes]ᵀ · weights[n_genes × n_pathways]
 //     = cuSPARSE SpMM (CSC expression as CSR transpose, dense progeny_weights).
 //     WHY SpMM not GEMM: expression is sparse (10x data: ~5% nonzero); SpMM is 10–20× faster.
-//     WHY transpose: expression in singlify is genes × cells (CSC); SpMM wants cells × genes,
+//     WHY transpose: expression in singlet is genes × cells (CSC); SpMM wants cells × genes,
 //     so we treat the CSC as CSR (transposed), which cuSPARSE supports natively.
 //
 //   Step 2 — two-pass Welford normalization (optional):

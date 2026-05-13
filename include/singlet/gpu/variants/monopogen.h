@@ -4,7 +4,7 @@
 // variants/monopogen.h — Germline genotyping + somatic SNV discovery from scRNA pileup.
 //
 // Algorithm: Dou et al. (Monopogen, Nature Biotechnology 2023), first GPU implementation.
-//   Inputs are snp_ad.1pz and snp_dp.1pz produced by singlify with --snps.
+//   Inputs are snp_ad.1pz and snp_dp.1pz produced by singlet with --snps.
 //   Zero CPU fallback for any math kernel.  CPU role: chromosome tile loop only.
 //
 // Pipeline (one call to call_variants):
@@ -966,7 +966,7 @@ inline MonopogenResult call_variants(
     if (n_snps == 0)
         throw std::runtime_error("monopogen: chromosome array is empty");
 
-    // Validate CSC dimensions (n_cols = n_snps for SNP-major CSC from singlify).
+    // Validate CSC dimensions (n_cols = n_snps for SNP-major CSC from singlet).
     if (snp_ad.cols != n_snps || snp_dp.cols != n_snps)
         throw std::runtime_error("monopogen: CSC n_cols does not match chromosome array size");
 
@@ -986,8 +986,8 @@ inline MonopogenResult call_variants(
 
     // Collect contiguous SNP ranges per chromosome.
     // WHY contiguous requirement: the CSC column layout is SNP-ordered; chromosomes
-    // must be pre-sorted in the input (this matches the singlify output order — SNPs
-    // are written in genomic coordinate order by singlify's STARsolo SNP pipeline).
+    // must be pre-sorted in the input (this matches the singlet output order — SNPs
+    // are written in genomic coordinate order by singlet's STARsolo SNP pipeline).
     std::vector<int> chr_start(MAX_CHROMOSOMES, n_snps);
     std::vector<int> chr_end(MAX_CHROMOSOMES, 0);
     for (int s = 0; s < n_snps; ++s) {

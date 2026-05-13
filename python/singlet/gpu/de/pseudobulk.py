@@ -9,7 +9,7 @@ Pseudobulk DE aggregates per-cell counts into per-donor pseudo-samples,
 then fits a Negative Binomial GLM (with optional apeglm shrinkage) to
 identify differentially expressed genes across conditions or cell types.
 
-Donor labels come from singlify's ``donor_assignments.tsv`` — load with
+Donor labels come from singlet's ``donor_assignments.tsv`` — load with
 ``singlet.gpu.io.donor.load_donor_assignments(path)`` and add to
 ``adata.obs['donor_id']``.
 
@@ -106,7 +106,7 @@ def pseudobulk_de(
     is applied to log-fold-change estimates (DESeq2-style).
 
     Donor labels are expected in ``adata.obs[sample_col]`` — load them
-    from singlify's ``donor_assignments.tsv`` using
+    from singlet's ``donor_assignments.tsv`` using
     ``singlet.gpu.io.donor.load_donor_assignments(path)``.
 
     Parameters
@@ -177,7 +177,7 @@ def pseudobulk_de(
     ``pvalue`` the Wald-test p-value, ``padj`` the BH-adjusted q-value,
     and ``dispersion`` the NB dispersion estimate per gene.
 
-    **Donor label loading**: singlify writes ``donor_assignments.tsv``
+    **Donor label loading**: singlet writes ``donor_assignments.tsv``
     with columns ``barcode``, ``donor_id``, ``prob_max``, ``prob_doublet``.
     Use ``singlet.gpu.io.donor.load_donor_assignments(path)`` to load as a
     ``pd.Series`` indexed by barcode, then assign::

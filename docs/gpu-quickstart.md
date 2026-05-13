@@ -1,6 +1,6 @@
 # Quickstart
 
-Run the standard single-cell EDA pipeline on a singlify `.1pz` output, end-to-end on device. This is the canonical "what does the library do" walkthrough.
+Run the standard single-cell EDA pipeline on a singlet `.1pz` output, end-to-end on device. This is the canonical "what does the library do" walkthrough.
 
 ## What you'll build
 

@@ -40,7 +40,7 @@ Classify failures:
 ### Pipeline Results Parsing
 ```bash
 # Read run_result.json from completed pipeline runs
-cat /mnt/projects/debruinz_project/singlify_pipeline/results/<gsm>/run_result.json
+cat /mnt/projects/debruinz_project/singlet_pipeline/results/<gsm>/run_result.json
 ```
 
 Extract: exit_code, map_rate_pct, cell_count, protocol_detected, wall_seconds, species_detected
@@ -63,8 +63,8 @@ Read SOFT files and GSM descriptions for:
 
 | Resource | Path |
 |----------|------|
-| Pipeline results | `/mnt/projects/debruinz_project/singlify_pipeline/results/` |
-| Validation results | `/mnt/projects/debruinz_project/singlify_validation/` |
+| Pipeline results | `/mnt/projects/debruinz_project/singlet_pipeline/results/` |
+| Validation results | `/mnt/projects/debruinz_project/singlet_validation/` |
 | Catalog data | `singlet-agents/geo-reprocess/catalogs/` |
 | Resource model | `singlet-agents/state/resource-model.json` |
 | Failure registry | `singlet-agents/state/failure-registry.md` |

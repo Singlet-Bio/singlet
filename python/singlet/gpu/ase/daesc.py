@@ -52,10 +52,10 @@ def run(
     ----------
     snp_ad : DeviceCsc
         Alternate-allele counts (SNP sites × cells, CSC).
-        From singlify ``snp_ad.1pz``.
+        From singlet ``snp_ad.1pz``.
     snp_dp : DeviceCsc
         Total depth at SNP sites (SNP sites × cells, CSC).
-        From singlify ``snp_dp.1pz``.
+        From singlet ``snp_dp.1pz``.
     cell_type : list[int] or ndarray int32, shape (n_cells,), optional
         Per-cell cell-type labels (0-indexed, range [0, n_types)).
         Required if n_types > 0.  None = no stratification.

@@ -349,7 +349,7 @@ def load_dir(
     with_qc: bool = True,
     with_doublets: bool = True,
 ) -> anndata.AnnData:
-    """Load a singlify pipeline output directory as AnnData.
+    """Load a singlet pipeline output directory as AnnData.
 
     Reads the count matrix (.1pz), attaches gene names from
     gene_expression.tsv, cell barcodes from auto_barcodes.tsv,
@@ -358,7 +358,7 @@ def load_dir(
     Parameters
     ----------
     path : str or Path
-        Path to a singlify sample output directory (containing
+        Path to a singlet sample output directory (containing
         gene_counts.1pz, auto_barcodes.tsv, gene_expression.tsv).
     layer : str
         Which .1pz to load: "gene_counts", "exon_counts", "intron_counts",
@@ -468,6 +468,6 @@ def load_dir(
         adata.uns["saturation_curve"] = pd.read_csv(sat_file, sep="\t")
 
     # Store source path
-    adata.uns["singlify_dir"] = str(path)
+    adata.uns["singlet_dir"] = str(path)
 
     return adata

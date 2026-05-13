@@ -131,7 +131,7 @@ static void test_header_verification() {
     cfg.filepath    = path;
     cfg.cb_len      = 16;
     cfg.umi_len     = 10;
-    cfg.header_text = "singlify test";
+    cfg.header_text = "singlet test";
 
     {
         BusWriter w;
@@ -147,7 +147,7 @@ static void test_header_verification() {
     CHECK(hdr.version  == 1,  "version == 1");
     CHECK(hdr.cb_len   == 16, "cb_len == 16");
     CHECK(hdr.umi_len  == 10, "umi_len == 10");
-    CHECK(hdr.header_text == "singlify test", "header_text round-trip");
+    CHECK(hdr.header_text == "singlet test", "header_text round-trip");
     CHECK(hdr.is_valid(), "is_valid() returns true");
 
     fs::remove(path);

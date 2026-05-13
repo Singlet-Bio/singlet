@@ -64,10 +64,10 @@ def run(
         Count matrix (cells × genes, CSC, float32).
     snp_ad : DeviceCsc
         Alternate-allele counts (SNP sites × cells, CSC).
-        From singlify ``snp_ad.1pz``.
+        From singlet ``snp_ad.1pz``.
     snp_dp : DeviceCsc
         Total depth at SNP sites (SNP sites × cells, CSC).
-        From singlify ``snp_dp.1pz``.
+        From singlet ``snp_dp.1pz``.
     donor_id : list[int] or ndarray int32, shape (n_cells,)
         Per-cell donor assignment.  Must be 0-indexed integers in [0, n_donors).
         Donors must be sorted (ascending) for correct cub::DeviceSegmentedReduce —

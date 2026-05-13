@@ -76,9 +76,9 @@ static void test_parse_modality_unknown() {
 
 static void test_add_and_filter_by_modality() {
     BenchmarkRegistry reg;
-    reg.add(make_result("singlify", Modality::SCRNA, "SRR1", 10.0));
+    reg.add(make_result("singlet", Modality::SCRNA, "SRR1", 10.0));
     reg.add(make_result("starsolo", Modality::SCRNA, "SRR1", 30.0));
-    reg.add(make_result("singlify", Modality::ATAC, "SRR2", 20.0));
+    reg.add(make_result("singlet", Modality::ATAC, "SRR2", 20.0));
 
     auto rna_results = reg.by_modality(Modality::SCRNA);
     CHECK(rna_results.size() == 2);
@@ -90,12 +90,12 @@ static void test_add_and_filter_by_modality() {
 
 static void test_filter_by_tool() {
     BenchmarkRegistry reg;
-    reg.add(make_result("singlify", Modality::SCRNA, "SRR1", 10.0));
+    reg.add(make_result("singlet", Modality::SCRNA, "SRR1", 10.0));
     reg.add(make_result("starsolo", Modality::SCRNA, "SRR1", 30.0));
-    reg.add(make_result("singlify", Modality::ATAC, "SRR2", 20.0));
+    reg.add(make_result("singlet", Modality::ATAC, "SRR2", 20.0));
 
-    auto singlify_results = reg.by_tool("singlify");
-    CHECK(singlify_results.size() == 2);
+    auto singlet_results = reg.by_tool("singlet");
+    CHECK(singlet_results.size() == 2);
 
     auto star_results = reg.by_tool("starsolo");
     CHECK(star_results.size() == 1);
@@ -103,9 +103,9 @@ static void test_filter_by_tool() {
 
 static void test_filter_by_dataset() {
     BenchmarkRegistry reg;
-    reg.add(make_result("singlify", Modality::SCRNA, "SRR1", 10.0));
+    reg.add(make_result("singlet", Modality::SCRNA, "SRR1", 10.0));
     reg.add(make_result("starsolo", Modality::SCRNA, "SRR1", 30.0));
-    reg.add(make_result("singlify", Modality::ATAC, "SRR2", 20.0));
+    reg.add(make_result("singlet", Modality::ATAC, "SRR2", 20.0));
 
     auto srr1 = reg.by_dataset("SRR1");
     CHECK(srr1.size() == 2);
@@ -118,7 +118,7 @@ static void test_filter_by_dataset() {
 
 static void test_speedup_calculation() {
     BenchmarkRegistry reg;
-    reg.add(make_result("singlify", Modality::SCRNA, "SRR1", 10.0));
+    reg.add(make_result("singlet", Modality::SCRNA, "SRR1", 10.0));
     reg.add(make_result("cellranger", Modality::SCRNA, "SRR1", 30.0));
 
     double sp = reg.speedup("cellranger", "SRR1");
@@ -128,7 +128,7 @@ static void test_speedup_calculation() {
 
 static void test_speedup_missing_data() {
     BenchmarkRegistry reg;
-    reg.add(make_result("singlify", Modality::SCRNA, "SRR1", 10.0));
+    reg.add(make_result("singlet", Modality::SCRNA, "SRR1", 10.0));
 
     // Competitor not present
     double sp = reg.speedup("cellranger", "SRR1");
@@ -143,24 +143,24 @@ static void test_speedup_missing_data() {
 
 static void test_pareto_frontier_true() {
     BenchmarkRegistry reg;
-    // singlify: faster + higher concordance → on Pareto frontier
-    reg.add(make_result("singlify", Modality::SCRNA, "SRR1", 10.0, 0.9998));
+    // singlet: faster + higher concordance → on Pareto frontier
+    reg.add(make_result("singlet", Modality::SCRNA, "SRR1", 10.0, 0.9998));
     reg.add(make_result("starsolo", Modality::SCRNA, "SRR1", 30.0, 0.9990));
     CHECK(reg.at_pareto_frontier("starsolo", "SRR1") == true);
 }
 
 static void test_pareto_frontier_false_lower_accuracy() {
     BenchmarkRegistry reg;
-    // singlify: faster but LOWER concordance → NOT on Pareto frontier
-    reg.add(make_result("singlify", Modality::SCRNA, "SRR1", 10.0, 0.9950));
+    // singlet: faster but LOWER concordance → NOT on Pareto frontier
+    reg.add(make_result("singlet", Modality::SCRNA, "SRR1", 10.0, 0.9950));
     reg.add(make_result("starsolo", Modality::SCRNA, "SRR1", 30.0, 0.9990));
     CHECK(reg.at_pareto_frontier("starsolo", "SRR1") == false);
 }
 
 static void test_pareto_frontier_false_slower() {
     BenchmarkRegistry reg;
-    // singlify: slower → NOT on Pareto frontier
-    reg.add(make_result("singlify", Modality::SCRNA, "SRR1", 40.0, 0.9998));
+    // singlet: slower → NOT on Pareto frontier
+    reg.add(make_result("singlet", Modality::SCRNA, "SRR1", 40.0, 0.9998));
     reg.add(make_result("starsolo", Modality::SCRNA, "SRR1", 30.0, 0.9990));
     CHECK(reg.at_pareto_frontier("starsolo", "SRR1") == false);
 }
@@ -168,7 +168,7 @@ static void test_pareto_frontier_false_slower() {
 static void test_pareto_frontier_no_concordance() {
     BenchmarkRegistry reg;
     // No concordance data: only speed matters
-    reg.add(make_result("singlify", Modality::SCRNA, "SRR1", 10.0));
+    reg.add(make_result("singlet", Modality::SCRNA, "SRR1", 10.0));
     reg.add(make_result("starsolo", Modality::SCRNA, "SRR1", 30.0));
     CHECK(reg.at_pareto_frontier("starsolo", "SRR1") == true);
 }
@@ -177,9 +177,9 @@ static void test_pareto_frontier_no_concordance() {
 
 static void test_tsv_round_trip() {
     BenchmarkRegistry reg;
-    reg.add(make_result("singlify", Modality::SCRNA, "SRR32855204", 82.3, 0.9998));
+    reg.add(make_result("singlet", Modality::SCRNA, "SRR32855204", 82.3, 0.9998));
     reg.add(make_result("starsolo", Modality::SCRNA, "SRR32855204", 200.0, 0.9995));
-    reg.add(make_result("singlify", Modality::ATAC, "SRR_ATAC", 55.0, -1.0));
+    reg.add(make_result("singlet", Modality::ATAC, "SRR_ATAC", 55.0, -1.0));
 
     std::string tmp = "/tmp/bench_test_" + std::to_string(std::rand()) + ".tsv";
     write_benchmark_tsv(reg, tmp);
@@ -187,7 +187,7 @@ static void test_tsv_round_trip() {
     fs::remove(tmp);
 
     CHECK(reg2.results.size() == 3);
-    CHECK(reg2.results[0].tool_name == "singlify");
+    CHECK(reg2.results[0].tool_name == "singlet");
     CHECK(reg2.results[0].modality == Modality::SCRNA);
     CHECK(reg2.results[0].concordance > 0.9997 && reg2.results[0].concordance < 0.9999);
     CHECK(reg2.results[1].wall_seconds > 199.9 && reg2.results[1].wall_seconds < 200.1);
@@ -198,12 +198,12 @@ static void test_tsv_round_trip() {
 
 static void test_markdown_formatting() {
     BenchmarkRegistry reg;
-    reg.add(make_result("singlify", Modality::SCRNA, "SRR1", 10.0, 0.9998));
+    reg.add(make_result("singlet", Modality::SCRNA, "SRR1", 10.0, 0.9998));
     reg.add(make_result("starsolo", Modality::SCRNA, "SRR1", 30.0, 0.9990));
 
     std::string md = format_benchmark_markdown(reg);
     CHECK(md.find("| Tool |") != std::string::npos);
-    CHECK(md.find("singlify") != std::string::npos);
+    CHECK(md.find("singlet") != std::string::npos);
     CHECK(md.find("starsolo") != std::string::npos);
     CHECK(md.find("scRNA") != std::string::npos);
 }

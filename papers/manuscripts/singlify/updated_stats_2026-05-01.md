@@ -1,4 +1,4 @@
-# Singlify Manuscript — Updated Benchmark Stats (2026-05-01)
+# Singlet Manuscript — Updated Benchmark Stats (2026-05-01)
 
 ## Gene Counting (Panel A — SRR32855204, 10x Chromium 3' v3, human PBMC)
 
@@ -7,20 +7,20 @@
 | Gene Pearson r | 0.9960 | **0.9995** | E2E Panel A (spliced.1pz vs Gene/filtered) |
 | Cell UMI Pearson r | 0.9999 | **0.9999** | E2E Panel A, 2,520 shared cells |
 | Splice Junction Jaccard | — | **0.9999** | E2E Panel A |
-| UMI ratio (singlify/gold) | — | **1.019 ± 0.013** | E2E Panel A |
-| Gold cell recall | — | **100%** | All 2,520 STARsolo cells found in singlify output |
-| Cells called (singlify) | — | 10,341 (EmptyDrops) | E2E Panel A |
+| UMI ratio (singlet/gold) | — | **1.019 ± 0.013** | E2E Panel A |
+| Gold cell recall | — | **100%** | All 2,520 STARsolo cells found in singlet output |
+| Cells called (singlet) | — | 10,341 (EmptyDrops) | E2E Panel A |
 | Cells called (STARsolo) | — | 2,520 | E2E Panel A |
 | Input reads | 40,358,185 | same | |
 | Mapping rate | 82.91% | same | |
-| Singlify commit | — | b0fe019 | |
+| Singlet commit | — | b0fe019 | |
 
 ## Sex Calling (Panel F — SRR32855204)
 
 | Metric | Value |
 |--------|-------|
 | Agreement | 100% (Female) |
-| XIST CPM (singlify) | 556.7 |
+| XIST CPM (singlet) | 556.7 |
 | XIST CPM (STARsolo) | 474.6 |
 | Y-marker CPM | 0.0 |
 
@@ -71,4 +71,4 @@
 - Quality tiers and tissue/cell type annotations are NEW features not in manuscript
 - Gene correlation improved from 0.996 → 0.9995 due to bug fixes
 - Cell calling discrepancy (10,341 vs 2,520) is a protocol auto-detection issue, not a counting error
-- All 2,520 STARsolo gold cells have 100% recall in singlify output
+- All 2,520 STARsolo gold cells have 100% recall in singlet output

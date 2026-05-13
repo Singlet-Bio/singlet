@@ -177,7 +177,7 @@ int main() {
 
     // ── 14. write_web_summary writes a file ───────────────────────────────────
     {
-        const std::string tmp_path = "/tmp/singlify_test_web_summary.html";
+        const std::string tmp_path = "/tmp/singlet_test_web_summary.html";
         write_web_summary(tmp_path, d);
         std::ifstream f(tmp_path);
         bool opened = f.is_open();

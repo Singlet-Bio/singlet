@@ -1,6 +1,6 @@
-# singlify binary
-add_executable(singlify singlify.cpp)
-target_link_libraries(singlify PRIVATE
+# singlet binary
+add_executable(singlet singlet.cpp)
+target_link_libraries(singlet PRIVATE
     singlet_pileup
     singlet_fq
     singlet_pz
@@ -12,17 +12,17 @@ target_link_libraries(singlify PRIVATE
     OpenMP::OpenMP_CXX
     Threads::Threads
 )
-target_link_directories(singlify PRIVATE ${HTSLIB_LIBRARY_DIRS})
-target_include_directories(singlify PRIVATE
+target_link_directories(singlet PRIVATE ${HTSLIB_LIBRARY_DIRS})
+target_include_directories(singlet PRIVATE
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/include/singlet/pileup
     ${CMAKE_SOURCE_DIR}/include/singlet/star
     ${HTSLIB_INCLUDE_DIRS}
     ${NCBI_VDB_INCLUDE}
 )
-target_compile_options(singlify PRIVATE -O3 -march=native)
+target_compile_options(singlet PRIVATE -O3 -march=native)
 
 if(HDF5_AVAILABLE)
-    target_link_libraries(singlify PRIVATE ${HDF5_C_LIB})
-    target_include_directories(singlify PRIVATE ${HDF5_C_INCLUDE})
+    target_link_libraries(singlet PRIVATE ${HDF5_C_LIB})
+    target_include_directories(singlet PRIVATE ${HDF5_C_INCLUDE})
 endif()

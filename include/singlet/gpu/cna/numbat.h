@@ -38,7 +38,7 @@
 // cuFFT: Not used (smoothing window ≤ MAX_SMOOTH_WINDOW → direct kernel).
 //
 // Deferred to follow-up:
-//   - Allele-specific CNA integration using snp_ad / snp_dp from singlify.
+//   - Allele-specific CNA integration using snp_ad / snp_dp from singlet.
 //   - Spatial regularization.
 //   - cuFFT-based smoothing for windows > MAX_SMOOTH_WINDOW.
 //

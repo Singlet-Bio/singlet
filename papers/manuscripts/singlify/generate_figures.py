@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Comprehensive validation & figure generation for the Singlify manuscript.
-Produces publication-quality evidence comparing Singlify outputs against
+Comprehensive validation & figure generation for the Singlet manuscript.
+Produces publication-quality evidence comparing Singlet outputs against
 STARsolo, cellSNP-lite, and samtools ground truths.
 
 Outputs:
@@ -85,7 +85,7 @@ report("=" * 60)
 report("1. GENE-LEVEL COUNT VALIDATION vs STARsolo")
 report("=" * 60)
 
-# Load Singlify gene counts (aggregated from exons)
+# Load Singlet gene counts (aggregated from exons)
 p_feats = load_features(f"{PILEUP}/gene_counts/features.tsv")
 p_bcs   = load_barcodes(f"{PILEUP}/gene_counts/barcodes.tsv")
 P       = sio.mmread(f"{PILEUP}/gene_counts/matrix.mtx").tocsc()
@@ -95,7 +95,7 @@ s_feats = load_features(f"{STAR}/features.tsv")
 s_bcs   = load_barcodes(f"{STAR}/barcodes.tsv")
 S       = sio.mmread(f"{STAR}/matrix.mtx").tocsc()
 
-report(f"  Singlify: {P.shape[0]} genes × {P.shape[1]} cells, nnz={P.nnz}")
+report(f"  Singlet: {P.shape[0]} genes × {P.shape[1]} cells, nnz={P.nnz}")
 report(f"  STARsolo: {S.shape[0]} genes × {S.shape[1]} cells, nnz={S.nnz}")
 
 # Map common barcodes (handle -1 suffix difference)
@@ -168,7 +168,7 @@ report(f"  Pearson r (per-cell totals): {r_cell:.6f}")
 report(f"  Exact gene matches: {n_exact}/{n_total} ({100*n_exact/n_total:.1f}%)")
 report(f"  Mean |diff|: {mean_abs_diff:.2f} UMIs/gene")
 report(f"  Max |diff|: {max_diff:.0f} UMIs (gene {max_diff_gene})")
-report(f"  Singlify total UMIs: {int(p_gene_totals.sum())}")
+report(f"  Singlet total UMIs: {int(p_gene_totals.sum())}")
 report(f"  STARsolo total UMIs: {int(s_gene_totals.sum())}")
 
 # ── Figure 1a: Gene-level scatter ──
@@ -180,7 +180,7 @@ ax.scatter(s_nz[mask_both], p_nz[mask_both], s=3, alpha=0.3, c=BLUE, edgecolors=
 max_val = max(s_nz.max(), p_nz.max())
 ax.plot([0, max_val], [0, max_val], 'k--', alpha=0.5, lw=0.8)
 ax.set_xlabel('STARsolo Gene UMI Count')
-ax.set_ylabel('Singlify Gene UMI Count')
+ax.set_ylabel('Singlet Gene UMI Count')
 ax.set_title(f'Gene-Level Concordance (r = {r_gene:.4f})')
 ax.set_xscale('log')
 ax.set_yscale('log')
@@ -200,8 +200,8 @@ ax.axhline(0, color='k', lw=0.8, ls='--')
 ax.axhline(np.mean(gene_diff), color='red', lw=0.8, ls='-', label=f'Mean diff = {np.mean(gene_diff):.2f}')
 ax.axhline(np.mean(gene_diff) + 1.96*np.std(gene_diff), color='red', lw=0.5, ls=':', alpha=0.5)
 ax.axhline(np.mean(gene_diff) - 1.96*np.std(gene_diff), color='red', lw=0.5, ls=':', alpha=0.5)
-ax.set_xlabel('Mean UMI Count (Singlify + STARsolo) / 2')
-ax.set_ylabel('Difference (Singlify − STARsolo)')
+ax.set_xlabel('Mean UMI Count (Singlet + STARsolo) / 2')
+ax.set_ylabel('Difference (Singlet − STARsolo)')
 ax.set_title('Bland-Altman Residual Analysis')
 ax.set_xscale('log')
 ax.legend(fontsize=8)
@@ -217,7 +217,7 @@ ax.scatter(s_cell_totals, p_cell_totals, s=15, alpha=0.6, c=BLUE, edgecolors='no
 max_cell = max(s_cell_totals.max(), p_cell_totals.max())
 ax.plot([0, max_cell], [0, max_cell], 'k--', alpha=0.5, lw=0.8)
 ax.set_xlabel('STARsolo Total UMIs per Cell')
-ax.set_ylabel('Singlify Total UMIs per Cell')
+ax.set_ylabel('Singlet Total UMIs per Cell')
 ax.set_title(f'Per-Cell UMI Concordance (r = {r_cell:.4f})')
 ax.text(0.05, 0.92, f'n = {len(common_bcs)} cells\nr = {r_cell:.4f}',
         transform=ax.transAxes, fontsize=9, verticalalignment='top',
@@ -234,14 +234,14 @@ report("\n" + "=" * 60)
 report("2. SNP PILEUP VALIDATION vs cellSNP-lite")
 report("=" * 60)
 
-# Load Singlify SNP matrices
+# Load Singlet SNP matrices
 p_ad = sio.mmread(f"{PILEUP}/snp_ad.mtx").tocsc()
 p_dp = sio.mmread(f"{PILEUP}/snp_dp.mtx").tocsc()
 p_snp_feats = load_features(f"{PILEUP}/snp_ad_features.tsv")
 p_snp_bcs   = load_barcodes(f"{PILEUP}/snp_ad_barcodes.tsv")
 
-report(f"  Singlify AD: {p_ad.shape}, nnz={p_ad.nnz}")
-report(f"  Singlify DP: {p_dp.shape}, nnz={p_dp.nnz}")
+report(f"  Singlet AD: {p_ad.shape}, nnz={p_ad.nnz}")
+report(f"  Singlet DP: {p_dp.shape}, nnz={p_dp.nnz}")
 
 # Load cellSNP-lite matrices
 c_ad = sio.mmread(f"{CELLSNP}/cellSNP.tag.AD.mtx").tocsc()
@@ -267,21 +267,21 @@ with gzip.open(f"{CELLSNP}/cellSNP.base.vcf.gz", 'rt') as f:
 
 report(f"  cellSNP sites: {len(cellsnp_positions)}")
 
-# Map Singlify SNP features — format is "1:12345:A>G" (chrom:pos:ref>alt)
-singlify_positions = {}
+# Map Singlet SNP features — format is "1:12345:A>G" (chrom:pos:ref>alt)
+singlet_positions = {}
 for i, feat in enumerate(p_snp_feats):
     name = feat[0]
     # Parse "1:12345:A>G" → "1:12345"
     parts = name.split(':')
     if len(parts) >= 2:
         pos_key = f"{parts[0]}:{parts[1]}"
-        singlify_positions[pos_key] = i
+        singlet_positions[pos_key] = i
 
 # Find common positions
 common_snps = []
 for pos_key, c_idx in cellsnp_positions.items():
-    if pos_key in singlify_positions:
-        common_snps.append((singlify_positions[pos_key], c_idx))
+    if pos_key in singlet_positions:
+        common_snps.append((singlet_positions[pos_key], c_idx))
 
 report(f"  Common SNP positions: {len(common_snps)}")
 
@@ -366,14 +366,14 @@ if len(common_snps) > 0:
     r_cell_ad, _ = pearsonr(p_cell_ad, c_cell_ad)
     report(f"  Per-cell DP Pearson r: {r_cell_dp:.6f}")
     report(f"  Per-cell AD Pearson r: {r_cell_ad:.6f}")
-    report(f"  DP ratio (Singlify/cellSNP): {p_snp_totals[mask_dp].sum()/c_snp_totals[mask_dp].sum():.4f}")
+    report(f"  DP ratio (Singlet/cellSNP): {p_snp_totals[mask_dp].sum()/c_snp_totals[mask_dp].sum():.4f}")
 
     # Coverage agreement
     both_covered = (p_snp_totals > 0) & (c_snp_totals > 0)
-    singlify_only = (p_snp_totals > 0) & (c_snp_totals == 0)
+    singlet_only = (p_snp_totals > 0) & (c_snp_totals == 0)
     cellsnp_only = (p_snp_totals == 0) & (c_snp_totals > 0)
     report(f"  Sites covered by both: {both_covered.sum()}")
-    report(f"  Singlify-only sites: {singlify_only.sum()}")
+    report(f"  Singlet-only sites: {singlet_only.sum()}")
     report(f"  cellSNP-only sites: {cellsnp_only.sum()}")
 
     # AD/DP consistency check
@@ -390,7 +390,7 @@ if len(common_snps) > 0:
     max_dp = max(c_snp_totals[m].max(), p_snp_totals[m].max())
     ax.plot([0, max_dp], [0, max_dp], 'k--', alpha=0.5, lw=0.8)
     ax.set_xlabel('cellSNP-lite Total DP per Site')
-    ax.set_ylabel('Singlify Total DP per Site')
+    ax.set_ylabel('Singlet Total DP per Site')
     ax.set_title(f'(A) Per-Site Depth (r = {r_dp:.4f}, ρ = {rho_dp:.4f})')
     ax.set_xscale('symlog', linthresh=1)
     ax.set_yscale('symlog', linthresh=1)
@@ -405,7 +405,7 @@ if len(common_snps) > 0:
     max_ad = max(c_ad_totals[m2].max(), p_ad_totals[m2].max()) if m2.sum() > 0 else 1
     ax.plot([0, max_ad], [0, max_ad], 'k--', alpha=0.5, lw=0.8)
     ax.set_xlabel('cellSNP-lite Total AD per Site')
-    ax.set_ylabel('Singlify Total AD per Site')
+    ax.set_ylabel('Singlet Total AD per Site')
     ax.set_title(f'(B) Per-Site Alt Allele Depth (r = {r_ad:.4f})')
     ax.set_xscale('symlog', linthresh=1)
     ax.set_yscale('symlog', linthresh=1)
@@ -416,7 +416,7 @@ if len(common_snps) > 0:
     max_cdp = max(c_cell_dp.max(), p_cell_dp.max())
     ax.plot([0, max_cdp], [0, max_cdp], 'k--', alpha=0.5, lw=0.8)
     ax.set_xlabel('cellSNP-lite Total DP per Cell')
-    ax.set_ylabel('Singlify Total DP per Cell')
+    ax.set_ylabel('Singlet Total DP per Cell')
     ax.set_title(f'(C) Per-Cell Depth (r = {r_cell_dp:.4f})')
 
     # Panel D: Per-cell AD
@@ -425,7 +425,7 @@ if len(common_snps) > 0:
     max_cad = max(c_cell_ad.max(), p_cell_ad.max())
     ax.plot([0, max_cad], [0, max_cad], 'k--', alpha=0.5, lw=0.8)
     ax.set_xlabel('cellSNP-lite Total AD per Cell')
-    ax.set_ylabel('Singlify Total AD per Cell')
+    ax.set_ylabel('Singlet Total AD per Cell')
     ax.set_title(f'(D) Per-Cell Alt Allele Depth (r = {r_cell_ad:.4f})')
 
     plt.tight_layout()
@@ -495,7 +495,7 @@ thread_times   = np.array([20.02, 12.93, 6.47, 6.88])
 thread_mem     = np.array([0.90, 0.95, 1.01, 1.11])
 
 # Tool comparison data
-tools = ['Singlify\n(all features)', 'cellSNP-lite\n(SNP only)', 'STARsolo\n(gene+SJ)', 'velocyto\n(spliced/unspliced)', 'mgatk\n(MT hetero.)']
+tools = ['Singlet\n(all features)', 'cellSNP-lite\n(SNP only)', 'STARsolo\n(gene+SJ)', 'velocyto\n(spliced/unspliced)', 'mgatk\n(MT hetero.)']
 tool_times = [6.54, 491.6, 2100, 840, 320]
 tool_colors = [BLUE, GREEN, ORANGE, PURPLE, '#666666']
 tool_measured = [True, True, False, False, False]  # True = measured, False = literature
@@ -504,11 +504,11 @@ tool_measured = [True, True, False, False, False]  # True = measured, False = li
 fig, axes = plt.subplots(1, 2, figsize=(10, 4.5))
 
 ax = axes[0]
-ax.plot(scaling_reads, scaling_times, 'o-', color=BLUE, lw=2, ms=6, label='Singlify (8 workers)')
+ax.plot(scaling_reads, scaling_times, 'o-', color=BLUE, lw=2, ms=6, label='Singlet (8 workers)')
 # Linear fit
 m, b = np.polyfit(scaling_reads, scaling_times, 1)
 ax.plot([0, 80], [b, 80*m + b], '--', color=BLUE, alpha=0.4, label=f'Linear fit: T = {m:.3f}n + {b:.2f}')
-ax.scatter([72.72], [20.02], marker='s', s=60, color=ORANGE, zorder=5, label='Singlify (1 worker)')
+ax.scatter([72.72], [20.02], marker='s', s=60, color=ORANGE, zorder=5, label='Singlet (1 worker)')
 ax.set_xlabel('Million Reads')
 ax.set_ylabel('Wall-Clock Time (s)')
 ax.set_title('Throughput Scaling')

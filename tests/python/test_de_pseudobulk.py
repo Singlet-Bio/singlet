@@ -24,7 +24,7 @@ Tolerances (from spec):
 Notes:
   - Synthetic data: 200 cells, 2 donors, 3 cell types, 50 genes.
   - Real data for DESeq2 comparison: GSM4037629 with donor_assignments.tsv.
-  - load_donor_assignments reads the singlify donor_assignments.tsv and returns
+  - load_donor_assignments reads the singlet donor_assignments.tsv and returns
     a pd.Series indexed by barcode with values donor_id.
 
 Skip strategy:
@@ -321,7 +321,7 @@ def test_pseudobulk_de_vs_DESeq2(gsm4037629_path):
     if not donor_tsv.is_file():
         pytest.skip(
             f"donor_assignments.tsv not found at {donor_tsv}. "
-            "Run singlify with --snps --pipeline to generate this file."
+            "Run singlet with --snps --pipeline to generate this file."
         )
 
     adata = singlet_gpu.io.read_pz_to_anndata(str(gsm4037629_path))
@@ -515,7 +515,7 @@ def test_load_donor_assignments_helper(gsm4037629_path):
     if not donor_tsv.is_file():
         pytest.skip(
             f"donor_assignments.tsv not found at {donor_tsv}. "
-            "Run singlify with --snps --pipeline to generate this file."
+            "Run singlet with --snps --pipeline to generate this file."
         )
 
     result = singlet_gpu.io.load_donor_assignments(str(donor_tsv))

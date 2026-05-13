@@ -1,7 +1,7 @@
 #pragma once
 // singlet-pileup: wgs_assembly.h — G-WGS
 // WGS/de novo assembly QC, coverage analysis, and subprocess management.
-// singlify handles data routing and quality assessment; actual assembly
+// singlet handles data routing and quality assessment; actual assembly
 // is delegated to external tools (hifiasm, flye, SPAdes, MEGAHIT).
 
 #include <algorithm>

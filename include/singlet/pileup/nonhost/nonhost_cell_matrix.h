@@ -34,7 +34,7 @@
 //                                         valid_barcodes, species_names, kingdom_map);
 //     mat.write(out_prefix);
 //
-//   See INTEGRATION_NOTES.md for the full diff against singlify.cpp.
+//   See INTEGRATION_NOTES.md for the full diff against singlet.cpp.
 //
 // Thread safety: not thread-safe during build(); read-only after build() returns.
 

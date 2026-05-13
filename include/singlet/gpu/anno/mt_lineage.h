@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// integrates: original (first GPU MT lineage tracing — exploits singlify mt_alleles.1pz directly)
+// integrates: original (first GPU MT lineage tracing — exploits singlet mt_alleles.1pz directly)
 //
 // anno/mt_lineage.h — GPU-native mitochondrial heteroplasmy clone calling.
 //
@@ -819,9 +819,9 @@ bic_for_gmm(
 // call_clones() — GPU-native MT heteroplasmy clone calling.
 //
 // alt_counts:   DeviceCSC (cells × MT_sites) of alternate allele counts.
-//               Source: singlify mt_alleles.1pz loaded via pz_device_loader.
+//               Source: singlet mt_alleles.1pz loaded via pz_device_loader.
 // depth_counts: DeviceCSC (cells × MT_sites) of total read depth per (cell, site).
-//               Source: singlify mt_depth.1pz or equivalent.
+//               Source: singlet mt_depth.1pz or equivalent.
 // cfg:          MtLineageConfig with filter thresholds and EM parameters.
 // stream:       caller-provided CUDA stream.
 //

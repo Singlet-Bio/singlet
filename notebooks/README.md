@@ -9,7 +9,7 @@
 | [quickstart.ipynb](quickstart.ipynb) | Browse the atlas catalog — 4,500+ samples, filters, statistics |
 | [01_load_and_explore.ipynb](01_load_and_explore.ipynb) | Load 75K cells with `load_dir()`, cluster with scanpy (PCA→UMAP→Leiden) |
 | [sample_qc_report.ipynb](sample_qc_report.ipynb) | Complete one-call QC report — UMIs, genes, doublets, cell cycle, ancestry |
-| [pipeline_outputs.ipynb](pipeline_outputs.ipynb) | Reference guide: all 40+ files singlify produces per sample |
+| [pipeline_outputs.ipynb](pipeline_outputs.ipynb) | Reference guide: all 40+ files singlet produces per sample |
 
 ## QC & Quality Control
 

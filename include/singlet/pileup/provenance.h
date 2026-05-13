@@ -5,7 +5,7 @@
 //
 // Integration: populate ProvenanceConfig and add to ExportConfig.provenance;
 // export_results() calls write_provenance_json() automatically.
-// See INTEGRATION_NOTES.md for singlify.cpp wiring instructions.
+// See INTEGRATION_NOTES.md for singlet.cpp wiring instructions.
 
 #include <chrono>
 #include <cstdlib>
@@ -21,7 +21,7 @@ namespace singlet {
 /// Configuration for the provenance manifest.
 /// If input_file is empty, no provenance.json is written.
 struct ProvenanceConfig {
-    std::string singlify_version    = "0.3.0";
+    std::string singlet_version    = "0.3.0";
     std::string input_file;          ///< .1fq path (empty = skip provenance)
     uint64_t    input_reads         = 0;
     std::string genome_dir;
@@ -36,7 +36,7 @@ struct ProvenanceConfig {
     std::string cell_caller;
 
     // §3.7 required fields
-    std::string singlify_git_sha    = "unknown";  ///< set via CMake -DGIT_SHA=...
+    std::string singlet_git_sha    = "unknown";  ///< set via CMake -DGIT_SHA=...
     std::vector<std::string> command_line;         ///< argv[0..argc-1]
     std::string snp_vcf_path;                      ///< --snps arg (for references block)
     std::string whitelist_name;                    ///< whitelist file basename
@@ -133,8 +133,8 @@ inline void write_provenance_json(
 
     f << "{\n"
       << "  \"schema_version\": \"1.0\",\n"
-      << "  \"singlify_git_sha\": \""  << esc(prov.singlify_git_sha) << "\",\n"
-      << "  \"singlify_version\": \""  << esc(prov.singlify_version) << "\",\n"
+      << "  \"singlet_git_sha\": \""  << esc(prov.singlet_git_sha) << "\",\n"
+      << "  \"singlet_version\": \""  << esc(prov.singlet_version) << "\",\n"
       << "  \"timestamp\": \""         << ts << "\",\n"
       << "  \"build_flags\": [\"-O3\", \"-DNDEBUG\"],\n";
 

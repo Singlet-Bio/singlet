@@ -140,10 +140,10 @@ def moments(
         Included for scvelo signature parity.
     layer_spliced : str, default ``"spliced"``
         Layer key for spliced counts.  Must exist in ``adata.layers``.
-        Set to ``"exon"`` when loading singlify ``exon_counts.1pz`` output.
+        Set to ``"exon"`` when loading singlet ``exon_counts.1pz`` output.
     layer_unspliced : str, default ``"unspliced"``
         Layer key for unspliced counts.  Must exist in ``adata.layers``.
-        Set to ``"intron"`` when loading singlify ``intron_counts.1pz``.
+        Set to ``"intron"`` when loading singlet ``intron_counts.1pz``.
     copy : bool, default False
         Return a modified copy of *adata*.  When ``False`` (default),
         *adata* is modified in-place and ``None`` is returned.
@@ -170,7 +170,7 @@ def moments(
     - ``adata.layers['Ms']`` — smoothed spliced matrix, float32.
     - ``adata.layers['Mu']`` — smoothed unspliced matrix, float32.
 
-    **Singlify note**: singlify outputs ``exon_counts.1pz`` (spliced) and
+    **Singlet note**: singlet outputs ``exon_counts.1pz`` (spliced) and
     ``intron_counts.1pz`` (unspliced).  Load them as::
 
         adata.layers['spliced'] = load_pz_to_anndata(sample_dir, modality='exon').X
@@ -186,7 +186,7 @@ def moments(
         sgv.moments(adata)
         print(adata.layers['Ms'].shape)  # (n_cells, n_genes)
 
-    Using singlify layer names::
+    Using singlet layer names::
 
         sgv.moments(adata, layer_spliced='exon', layer_unspliced='intron')
     """

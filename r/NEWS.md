@@ -1,8 +1,8 @@
-# singlify (R) — NEWS
+# singlet (R) — NEWS
 
-## singlify 0.2.0
+## singlet 0.2.0
 
-Initial release of the R wrapper. Reads singlify pipeline output
+Initial release of the R wrapper. Reads singlet pipeline output
 directories (`.1pz` files plus per-cell TSV sidecars) into native R
 sparse matrices and single-cell analysis objects.
 
@@ -20,7 +20,7 @@ sparse matrices and single-cell analysis objects.
 
 - `read_1pz(path)` — read a single `.1pz` into a `Matrix::dgCMatrix`
   with `user_kv` and `vt_code` attributes.
-- `read_singlify_dir(path, include = NULL, exclude = NULL)` — read a
+- `read_singlet_dir(path, include = NULL, exclude = NULL)` — read a
   whole pipeline output directory into a named list of matrices,
   with `attr(., "user_kv")` carrying the embedded GEO context.
 - `as_sce(path, primary_assay = "spliced")` — build a
@@ -32,16 +32,16 @@ sparse matrices and single-cell analysis objects.
     - `colData` auto-loaded from `cell_qc_metrics.tsv`,
       `cell_cycle_scores.tsv`, `doublet_scores.tsv`, `read_stats.tsv`,
       `ambient_contamination.tsv`
-    - `metadata(sce)$singlify` from the embedded GEO context
+    - `metadata(sce)$singlet` from the embedded GEO context
 - `as_seurat(path, primary_assay = "spliced", project = NULL)` —
   build a `Seurat` object with:
     - `RNA` assay from the chosen per-gene matrix
     - `spliced` / `unspliced` / `ambiguous` as additional assays
       (scvelo-compatible naming, so velocity workflows just work)
     - `@meta.data` auto-populated from per-cell sidecars
-    - `@misc$singlify` from the embedded GEO context
+    - `@misc$singlet` from the embedded GEO context
     - `@project.name` defaulting to `gsm_id`
-- `print.singlify_dir` S3 method for human-readable directory dumps.
+- `print.singlet_dir` S3 method for human-readable directory dumps.
 
 ### Documentation
 
@@ -68,6 +68,6 @@ sparse matrices and single-cell analysis objects.
 - `.github/workflows/R-CMD-check.yml` runs `R CMD check --as-cran`
   on Ubuntu + macOS + Windows × R release + devel. A header-sync
   preflight step copies `pz_reader.h`, `pz_writer.h`, and
-  `sparse_accumulator.h` from `singlify/include/` into
+  `sparse_accumulator.h` from `singlet/include/` into
   `r/inst/include/singlet-pileup/` before each check, keeping the
   C++ reader as a single source of truth across both wrappers.

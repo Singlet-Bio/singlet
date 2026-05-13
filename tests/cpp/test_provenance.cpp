@@ -54,7 +54,7 @@ void test_valid_config_writes_file() {
     
     ProvenanceConfig prov;
     prov.input_file = "/data/reads.fq";
-    prov.singlify_version = "1.0.0";
+    prov.singlet_version = "1.0.0";
     prov.genome_dir = "/ref/GRCh38-2024-A";
     prov.gtf_path = "/ref/GRCh38-2024-A/genes.gtf";
     prov.input_reads = 50000000;
@@ -69,7 +69,7 @@ void test_valid_config_writes_file() {
     assert(!content.empty() && "provenance.json should not be empty");
     
     // Check for expected JSON keys
-    assert(contains(content, "\"singlify_version\"") && "Missing singlify_version key");
+    assert(contains(content, "\"singlet_version\"") && "Missing singlet_version key");
     assert(contains(content, "\"input\"") && "Missing input block key");
     assert(contains(content, "\"genome\"") && "Missing genome key");
     assert(contains(content, "\"output\"") && "Missing output key");
@@ -140,7 +140,7 @@ void test_command_line_serialization() {
     
     ProvenanceConfig prov;
     prov.input_file = "/data/reads.fq";
-    prov.command_line = {"singlify", "--arg1", "val1", "positional_arg"};
+    prov.command_line = {"singlet", "--arg1", "val1", "positional_arg"};
     
     write_provenance_json(out_dir, prov, 10, 5, 1000);
     
@@ -148,7 +148,7 @@ void test_command_line_serialization() {
     
     // Check for command_line array with our values
     assert(contains(content, "\"command_line\"") && "Missing command_line field");
-    assert(contains(content, "singlify") && "Missing command name");
+    assert(contains(content, "singlet") && "Missing command name");
     assert(contains(content, "--arg1") && "Missing --arg1 argument");
     assert(contains(content, "val1") && "Missing val1 value");
     assert(contains(content, "positional_arg") && "Missing positional_arg");
@@ -161,7 +161,7 @@ void test_default_config_values() {
     ProvenanceConfig prov;
     
     // Check default version
-    assert(prov.singlify_version == "0.3.0" && "Default version should be 0.3.0");
+    assert(prov.singlet_version == "0.3.0" && "Default version should be 0.3.0");
     
     // Check default boolean values
     assert(prov.umi_dedup == true && "Default umi_dedup should be true");
@@ -180,28 +180,28 @@ void test_default_config_values() {
     
     // Check empty strings
     assert(prov.input_file.empty() && "Default input_file should be empty");
-    assert(prov.singlify_git_sha == "unknown" && "Default git_sha should be 'unknown'");
+    assert(prov.singlet_git_sha == "unknown" && "Default git_sha should be 'unknown'");
     
     std::cout << "✓ Test 6: Default ProvenanceConfig has reasonable values\n";
 }
 
-// Test 7: Verify schema_version and singlify_version in output
+// Test 7: Verify schema_version and singlet_version in output
 void test_version_fields() {
     std::string out_dir = "/tmp/test_prov_7";
     system(("mkdir -p " + out_dir).c_str());
     
     ProvenanceConfig prov;
     prov.input_file = "/data/reads.fq";
-    prov.singlify_version = "2.0.0";
-    prov.singlify_git_sha = "abc123def456";
+    prov.singlet_version = "2.0.0";
+    prov.singlet_git_sha = "abc123def456";
     
     write_provenance_json(out_dir, prov, 10, 5, 1000);
     
     std::string content = read_file(out_dir + "/provenance.json");
     
     assert(contains(content, "\"schema_version\": \"1.0\"") && "Schema version should be 1.0");
-    assert(contains(content, "\"singlify_version\": \"2.0.0\"") && "Singlify version should match provided");
-    assert(contains(content, "\"singlify_git_sha\": \"abc123def456\"") && "Git SHA should match provided");
+    assert(contains(content, "\"singlet_version\": \"2.0.0\"") && "Singlet version should match provided");
+    assert(contains(content, "\"singlet_git_sha\": \"abc123def456\"") && "Git SHA should match provided");
     
     std::cout << "✓ Test 7: Version fields correctly populated\n";
 }

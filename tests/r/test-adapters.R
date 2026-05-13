@@ -8,8 +8,8 @@ test_that("as_sce builds a SingleCellExperiment with the right assays", {
 
     # Metadata should carry the embedded GEO context
     md <- SummarizedExperiment::metadata(sce)
-    expect_true(!is.null(md$singlify))
-    expect_true("gsm_id" %in% names(md$singlify))
+    expect_true(!is.null(md$singlet))
+    expect_true("gsm_id" %in% names(md$singlet))
 })
 
 test_that("as_sce attaches per-cell sidecars into colData", {
@@ -59,6 +59,6 @@ test_that("as_seurat builds a Seurat object with velocity assays", {
     expect_true(length(velo_candidates) >= 1L)
 
     # Embedded metadata is in @misc
-    expect_true(!is.null(obj@misc$singlify))
-    expect_true("gsm_id" %in% names(obj@misc$singlify))
+    expect_true(!is.null(obj@misc$singlet))
+    expect_true("gsm_id" %in% names(obj@misc$singlet))
 })

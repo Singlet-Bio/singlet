@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # ─── Options ──────────────────────────────────────────────────────────────────
 option(SINGLET_BUILD_GPU      "Build GPU kernels (requires CUDA 12+)" OFF)
-option(SINGLET_BUILD_PIPELINE "Build singlify binary"                 OFF)
+option(SINGLET_BUILD_PIPELINE "Build singlet binary"                 OFF)
 option(SINGLET_BUILD_PYTHON   "Build Python bindings"                 OFF)
 option(SINGLET_BUILD_TESTS    "Build test suite"                      OFF)
 

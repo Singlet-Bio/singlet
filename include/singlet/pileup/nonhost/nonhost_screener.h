@@ -11,7 +11,7 @@
 //   to be unmapped — e.g., reads from repetitive/centromeric regions).
 //
 // Wiring (NONHOST-UNMAPPED-CAPTURE — separate DAG task):
-//   singlify pipeline captures unmapped reads from the STAR phase after
+//   singlet pipeline captures unmapped reads from the STAR phase after
 //   alignment (reads with SAM flag 0x4 in the STARsolo-tagged BAM).
 //   These sequences are passed to NonHostScreener::classify_batch().
 //   Cell barcodes for unmapped reads are recovered from the CB tag in the BAM.

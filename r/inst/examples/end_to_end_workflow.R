@@ -1,6 +1,6 @@
-# End-to-end singlify pipeline-output workflow example (R version).
+# End-to-end singlet pipeline-output workflow example (R version).
 #
-# Demonstrates the typical user journey from a singlify pipeline output
+# Demonstrates the typical user journey from a singlet pipeline output
 # directory to a SingleCellExperiment ready for Bioconductor downstream
 # analysis. This script is meant to be readable as documentation as much
 # as it is to be executed.
@@ -11,10 +11,10 @@
 # If no path is given, the script picks one of the canonical small
 # fixtures on the Clipper NFS tree (GSM7103327, ~410 cells).
 #
-# Requirements: singlify, SingleCellExperiment, scater, scran (optional)
+# Requirements: singlet, SingleCellExperiment, scater, scran (optional)
 
 suppressPackageStartupMessages({
-    library(singlify)
+    library(singlet)
 })
 
 args <- commandArgs(trailingOnly = TRUE)
@@ -22,7 +22,7 @@ if (length(args) >= 1L) {
     sample_dir <- args[1]
 } else {
     sample_dir <- file.path(
-        "/mnt/projects/debruinz_project/singlify_pipeline",
+        "/mnt/projects/debruinz_project/singlet_pipeline",
         "quant/scrna/GSE227/GSE227136/GSM7103327"
     )
 }
@@ -31,7 +31,7 @@ if (!dir.exists(sample_dir)) {
     stop("not a directory: ", sample_dir)
 }
 
-cat("=== singlify R end-to-end workflow ===\n")
+cat("=== singlet R end-to-end workflow ===\n")
 cat("sample:", sample_dir, "\n\n")
 
 # ----------------------------------------------------------------------
@@ -39,7 +39,7 @@ cat("sample:", sample_dir, "\n\n")
 # ----------------------------------------------------------------------
 cat("Step 1: reading pipeline directory\n")
 t0 <- Sys.time()
-dd <- read_singlify_dir(sample_dir)
+dd <- read_singlet_dir(sample_dir)
 elapsed <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
 cat(sprintf("  loaded %d matrices in %.2fs\n", length(dd), elapsed))
 cat("  matrices:", paste(names(dd), collapse = ", "), "\n")
@@ -48,7 +48,7 @@ cat("  gsm_id:    ", kv[["gsm_id"]], "\n")
 cat("  gse_id:    ", kv[["gse_id"]], "\n")
 cat("  organism:  ", kv[["organism"]], "\n")
 cat("  protocol:  ", kv[["protocol"]], "\n")
-cat("  pipeline:  ", kv[["singlify_version"]], "(", kv[["pipeline_date"]], ")\n\n")
+cat("  pipeline:  ", kv[["singlet_version"]], "(", kv[["pipeline_date"]], ")\n\n")
 
 # ----------------------------------------------------------------------
 # Step 2: Convert to SingleCellExperiment
@@ -67,8 +67,8 @@ cat("  assays:    ", paste(SummarizedExperiment::assayNames(sce), collapse = ", 
 cat("  altExps:   ", paste(SingleCellExperiment::altExpNames(sce), collapse = ", "), "\n")
 cat("  colData cols:", ncol(SummarizedExperiment::colData(sce)), "(from auto-loaded sidecars)\n")
 md <- SummarizedExperiment::metadata(sce)
-cat("  metadata$singlify$gsm_id:", md$singlify[["gsm_id"]], "\n")
-derived <- md$singlify_derived_assays
+cat("  metadata$singlet$gsm_id:", md$singlet[["gsm_id"]], "\n")
+derived <- md$singlet_derived_assays
 if (!is.null(derived) && length(derived) > 0) {
     cat("  *** derived assays from per-feature matrices:", paste(derived, collapse = ", "), "\n")
 }
@@ -90,7 +90,7 @@ cat("  cells:    ", ncol(obj), "\n")
 cat("  features: ", nrow(obj), "\n")
 cat("  assays:   ", paste(Seurat::Assays(obj), collapse = ", "), "\n")
 cat("  meta.data cols:", ncol(obj@meta.data), "\n")
-cat("  misc$singlify$gsm_id:", obj@misc$singlify[["gsm_id"]], "\n")
+cat("  misc$singlet$gsm_id:", obj@misc$singlet[["gsm_id"]], "\n")
 cat("\n")
 
 # ----------------------------------------------------------------------

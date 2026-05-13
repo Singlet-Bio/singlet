@@ -274,7 +274,7 @@ static void test_indrop_seg_pos() {
 }
 
 // Test 11: Verify that "None" check is essential (no bypass possible).
-//   The guard in singlify.cpp ensures effective_whitelist != "None"
+//   The guard in singlet.cpp ensures effective_whitelist != "None"
 //   before CB_UMI_Complex args are emitted.  Simulate the check here.
 static void test_none_guard() {
     auto would_use_cb_umi_complex = [](const std::string& wl,

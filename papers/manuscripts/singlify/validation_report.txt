@@ -1,7 +1,7 @@
 ============================================================
 1. GENE-LEVEL COUNT VALIDATION vs STARsolo
 ============================================================
-  Singlify: 38606 genes × 144 cells, nnz=53421
+  Singlet: 38606 genes × 144 cells, nnz=53421
   STARsolo: 38606 genes × 144 cells, nnz=53014
   Common barcodes: 144/144
   Common genes: 38606
@@ -11,16 +11,16 @@
   Exact gene matches: 38143/38606 (98.8%)
   Mean |diff|: 0.05 UMIs/gene
   Max |diff|: 437 UMIs (gene ENSG00000152348)
-  Singlify total UMIs: 82400
+  Singlet total UMIs: 82400
   STARsolo total UMIs: 81116
-  → Saved /mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlify/figures/fig_gene_scatter.pdf
-  → Saved /mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlify/figures/fig_cell_scatter.pdf
+  → Saved /mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlet/figures/fig_gene_scatter.pdf
+  → Saved /mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlet/figures/fig_cell_scatter.pdf
 
 ============================================================
 2. SNP PILEUP VALIDATION vs cellSNP-lite
 ============================================================
-  Singlify AD: (7352497, 144), nnz=42053
-  Singlify DP: (7352497, 144), nnz=128059
+  Singlet AD: (7352497, 144), nnz=42053
+  Singlet DP: (7352497, 144), nnz=128059
   cellSNP AD: (53534, 144), nnz=42050
   cellSNP DP: (53534, 144), nnz=127471
   cellSNP sites: 53533
@@ -32,12 +32,12 @@
   Per-site AD Pearson r: 1.000000
   Per-cell DP Pearson r: 0.992530
   Per-cell AD Pearson r: 1.000000
-  DP ratio (Singlify/cellSNP): 0.9952
+  DP ratio (Singlet/cellSNP): 0.9952
   Sites covered by both: 53351
-  Singlify-only sites: 176
+  Singlet-only sites: 176
   cellSNP-only sites: 0
   AD ≤ DP constraint satisfied: True
-  → Saved /mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlify/figures/fig_cellsnp_scatter.pdf
+  → Saved /mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlet/figures/fig_cellsnp_scatter.pdf
 
 ============================================================
 3. INTERNAL CONSISTENCY CHECKS
@@ -54,7 +54,7 @@
 ============================================================
 4. BENCHMARK FIGURES
 ============================================================
-  → Saved /mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlify/figures/fig_scaling.pdf
-  → Saved /mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlify/figures/fig_runtime_comparison.pdf
-  → Saved /mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlify/figures/fig_profiling_pie.pdf
-  → Saved /mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlify/figures/fig_memory_scaling.pdf
+  → Saved /mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlet/figures/fig_scaling.pdf
+  → Saved /mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlet/figures/fig_runtime_comparison.pdf
+  → Saved /mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlet/figures/fig_profiling_pie.pdf
+  → Saved /mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlet/figures/fig_memory_scaling.pdf

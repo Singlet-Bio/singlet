@@ -2,7 +2,7 @@
 
 ## Overview
 
-`.1pz` is singlify's native sparse matrix format — a **VOCSC** (Value-Offset Compressed Sparse Column) file with zstd block compression. It stores single-cell feature matrices (genes × cells) in a format optimised for:
+`.1pz` is singlet's native sparse matrix format — a **VOCSC** (Value-Offset Compressed Sparse Column) file with zstd block compression. It stores single-cell feature matrices (genes × cells) in a format optimised for:
 
 1. **Fast random column (cell) access** — one column decompresses in ~10 µs
 2. **Very high compression ratio** — UMI count matrices compress 40–80× vs MTX
@@ -134,7 +134,7 @@ When `FLAG_HAS_METADATA` is set, the metadata block is a zstd-compressed UTF-8 J
 {
   "rownames": ["ENSG00000001", "ENSG00000002", ...],
   "colnames": ["AACGTAGCTAGCT-1", "AACCTTGCTAGCT-1", ...],
-  "singlify_version": "0.2.0",
+  "singlet_version": "0.2.0",
   "pipeline_mode": "exon_counts",
   "created": "2026-04-10T14:30:00Z"
 }
@@ -144,7 +144,7 @@ Rownames are feature identifiers (gene IDs or SNP positions). Colnames are cell 
 
 ---
 
-## Outputs produced by singlify
+## Outputs produced by singlet
 
 | File | Value type | Rows | Columns | Description |
 |------|-----------|------|---------|-------------|

@@ -683,7 +683,7 @@ inline CellCallResult call_cells_emptydrops(
     //
     // The knee marks the cell/empty transition.  Barcodes below the knee are
     // the best available proxy for ambient RNA in the absence of truly low-UMI
-    // barcodes (which exist in the full whitelist but not in singlify's pileup
+    // barcodes (which exist in the full whitelist but not in singlet's pileup
     // matrix that only accumulates barcodes with >= discovery_threshold reads).
     //
     // Algorithm identical to call_cells_knee_fallback's inflection finder:
@@ -833,7 +833,7 @@ inline CellCallResult call_cells_emptydrops(
     //
     // Minimum ambient pool size for reliable MC calibration:
     //   300 barcodes  (DropletUtils recommends 10 000; 300 is a safe floor for
-    //                  singlify's narrower discovered-barcode set)
+    //                  singlet's narrower discovered-barcode set)
     //   10 000 UMI    (ensures enough reads to cover ambient genes)
     //
     // sorted_bc is sorted DESCENDING; iterating from i=n_barcodes−1 → 0 visits

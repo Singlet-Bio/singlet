@@ -24,7 +24,7 @@
 \pgfplotsset{compat=1.18}
 
 % ── Custom colors ──
-\definecolor{singlify-blue}{HTML}{2563EB}
+\definecolor{singlet-blue}{HTML}{2563EB}
 \definecolor{star-orange}{HTML}{EA580C}
 \definecolor{cellsnp-green}{HTML}{16A34A}
 \definecolor{mgatk-purple}{HTML}{9333EA}
@@ -40,7 +40,7 @@
 }
 
 % ── Title ──
-\title{\textbf{Singlify: A Streaming Single-Pass Engine for Multi-Omic Feature Extraction from Single-Cell RNA Sequencing Data}}
+\title{\textbf{Singlet: A Streaming Single-Pass Engine for Multi-Omic Feature Extraction from Single-Cell RNA Sequencing Data}}
 \author{
   Zach DeBruine\textsuperscript{1,*} \\[6pt]
   \textsuperscript{1}Singlet Bio \\
@@ -55,9 +55,9 @@
 \begin{abstract}
 Single-cell transcriptomics encompasses diverse modalities beyond scRNA-seq, including spatial transcriptomics, antibody-derived tags (CITE-seq), ATAC-seq, and plate-based full-length RNA-seq. Each modality requires barcode extraction, UMI deduplication, and feature quantification, yet existing pipelines process these as isolated sequential tools, resulting in repeated BAM traversals, fragmented quality control, and throughput bottlenecks.
 
-We present \textbf{Singlify}, a universal C++17 streaming engine supporting six major single-cell modalities in one binary: scRNA-seq, scATAC-seq, CITE-seq/ADT, Visium Spatial, Smart-seq2 full-length, and bulk RNA-seq. The core engine extracts five feature layers from BAM files in a single pass: per-exon UMI counts, per-intron UMI counts, splice junction counts, SNP allele depths for donor demultiplexing, and mitochondrial heteroplasmy. Singlify processes 216 million reads across a five-dataset panel (GRCh38 and GRCm39, 10 protocols) in 1,520 seconds total (20 threads, warm cache), with per-sample throughput ranging from 5.2--11.1 million reads per second depending on protocol complexity. Gene-level accuracy is r=0.9998 (Pearson, per-gene) against STARsolo across 11,739 genes, with all serial and parallel code paths producing bit-identical output after fixes to cross-worker multi-mapper merge, strand auto-detection, and chrM buffer flushing.
+We present \textbf{Singlet}, a universal C++17 streaming engine supporting six major single-cell modalities in one binary: scRNA-seq, scATAC-seq, CITE-seq/ADT, Visium Spatial, Smart-seq2 full-length, and bulk RNA-seq. The core engine extracts five feature layers from BAM files in a single pass: per-exon UMI counts, per-intron UMI counts, splice junction counts, SNP allele depths for donor demultiplexing, and mitochondrial heteroplasmy. Singlet processes 216 million reads across a five-dataset panel (GRCh38 and GRCm39, 10 protocols) in 1,520 seconds total (20 threads, warm cache), with per-sample throughput ranging from 5.2--11.1 million reads per second depending on protocol complexity. Gene-level accuracy is r=0.9998 (Pearson, per-gene) against STARsolo across 11,739 genes, with all serial and parallel code paths producing bit-identical output after fixes to cross-worker multi-mapper merge, strand auto-detection, and chrM buffer flushing.
 
-We validate Singlify across a 177-sample stratified SRA panel covering 16 protocol families and 13 species, with 98-sample batch testing showing 87\% pipeline robustness (no crashes across any input) and 62\% data-quality pass rate. Auto-detection features include protocol identification (25+ protocols, 11 families), species classification (human/mouse, 99\% confidence), strand orientation for 5$'$ libraries (+10.6× exon recovery with auto-detect), and adapter contamination trimming (recovering 91.3\% mapping rate on contaminated samples). Compared to the fragmented baseline of STARsolo + cellSNP-lite + vireoSNP + mgatk + velocyto (3,800+ seconds combined), Singlify provides all features in 82--150 seconds per sample (82s for 40M reads on 32 threads, 5.2× faster than STARsolo on mouse ATAC data).
+We validate Singlet across a 177-sample stratified SRA panel covering 16 protocol families and 13 species, with 98-sample batch testing showing 87\% pipeline robustness (no crashes across any input) and 62\% data-quality pass rate. Auto-detection features include protocol identification (25+ protocols, 11 families), species classification (human/mouse, 99\% confidence), strand orientation for 5$'$ libraries (+10.6× exon recovery with auto-detect), and adapter contamination trimming (recovering 91.3\% mapping rate on contaminated samples). Compared to the fragmented baseline of STARsolo + cellSNP-lite + vireoSNP + mgatk + velocyto (3,800+ seconds combined), Singlet provides all features in 82--150 seconds per sample (82s for 40M reads on 32 threads, 5.2× faster than STARsolo on mouse ATAC data).
 
 \noindent \textbf{Availability:} Source code is available at \url{https://github.com/Singlet-Bio/singlet-pileup} under the MIT license. Benchmark datasets (5 panel SRRs) and trained protocol models available at \url{https://singletbio.com/resources/val1}.
 
@@ -85,7 +85,7 @@ For a typical 10x Chromium v3 sample with 100 million reads, the combined wall-c
 Beyond runtime, this fragmentation introduces quality control challenges: each tool applies its own variant of barcode filtering, UMI deduplication, and multi-mapper handling, making cross-feature consistency difficult to guarantee \citep{svensson2020quantifying, you2021benchmarking}.
 
 We reasoned that all five feature layers---exonic counts, intronic counts, splice junctions, SNP genotypes, and mitochondrial base pileup---can be extracted from a single ordered traversal of the BAM record stream, with no random access required.
-This observation led to the design of \textbf{Singlify} (singlet-pileup), a streaming engine that:
+This observation led to the design of \textbf{Singlet} (singlet-pileup), a streaming engine that:
 
 \begin{itemize}
     \item Processes an unsorted BAM stream in \textbf{one pass} with O(1) memory per read;
@@ -96,14 +96,14 @@ This observation led to the design of \textbf{Singlify} (singlet-pileup), a stre
     \item Achieves \textbf{11.1 million reads per second} on 8 workers, with a peak memory footprint of 1.10 GB.
 \end{itemize}
 
-In this paper, we describe the algorithmic design of Singlify (Section~\ref{sec:methods}), detail its HPC optimization strategies (Section~\ref{sec:hpc}), validate its outputs against established tools (Section~\ref{sec:results}), and benchmark its performance across sample sizes and hardware configurations (Section~\ref{sec:benchmarks}).
+In this paper, we describe the algorithmic design of Singlet (Section~\ref{sec:methods}), detail its HPC optimization strategies (Section~\ref{sec:hpc}), validate its outputs against established tools (Section~\ref{sec:results}), and benchmark its performance across sample sizes and hardware configurations (Section~\ref{sec:benchmarks}).
 
 % ══════════════════════════════════════════════════════════════
 \section{Methods}\label{sec:methods}
 
 \subsection{Design Principles}
 
-Singlify is designed around three core principles:
+Singlet is designed around three core principles:
 
 \begin{enumerate}
     \item \textbf{Single-pass streaming.} The BAM file is read exactly once. All feature extractions operate on the same decoded read record, avoiding redundant I/O and CIGAR parsing.
@@ -113,7 +113,7 @@ Singlify is designed around three core principles:
 
 \subsection{Pipeline Architecture}
 
-Singlify operates as a post-alignment feature extraction engine. It receives a coordinate-sorted or unsorted BAM file from STAR \citep{dobin2013star} operating in \texttt{CB\_samTagOut} mode (barcode correction without feature counting) and produces all downstream per-cell feature matrices in a single invocation.
+Singlet operates as a post-alignment feature extraction engine. It receives a coordinate-sorted or unsorted BAM file from STAR \citep{dobin2013star} operating in \texttt{CB\_samTagOut} mode (barcode correction without feature counting) and produces all downstream per-cell feature matrices in a single invocation.
 
 The pipeline proceeds through five phases (Figure~\ref{fig:pipeline}):
 
@@ -132,9 +132,9 @@ The pipeline proceeds through five phases (Figure~\ref{fig:pipeline}):
 \begin{figure}[t]
 \centering
 \begin{tikzpicture}[
-    block/.style={rectangle, draw=singlify-blue, fill=singlify-blue!10, minimum width=10cm, minimum height=0.9cm, text centered, font=\small},
-    arrow/.style={->, >=stealth, thick, draw=singlify-blue!70},
-    phase/.style={font=\footnotesize\bfseries, text=singlify-blue}
+    block/.style={rectangle, draw=singlet-blue, fill=singlet-blue!10, minimum width=10cm, minimum height=0.9cm, text centered, font=\small},
+    arrow/.style={->, >=stealth, thick, draw=singlet-blue!70},
+    phase/.style={font=\footnotesize\bfseries, text=singlet-blue}
 ]
     \node[block] (p0) at (0, 5.5) {Phase 0: Load References (barcodes, SNPs, GTF $\rightarrow$ interval trees)};
     \node[block] (p1) at (0, 4.0) {Phase 1: Stream BAM $\rightarrow$ Exon/Intron/SJ/SNP/chrM (single pass)};
@@ -158,7 +158,7 @@ The pipeline proceeds through five phases (Figure~\ref{fig:pipeline}):
     \node[phase] at (-5.8, 1.0) {4.4s};
     \node[phase] at (-5.8, -0.5) {1.1s};
 \end{tikzpicture}
-\caption{\textbf{Singlify pipeline architecture.} Five phases process a BAM file from raw reads to compressed multi-omic feature matrices. Timing annotations (left) are measured on GSM8313394 (72.7M reads, 8 workers). Phases 3 (demux) and 3 (MT heteroplasmy) execute in parallel after CSC conversion.}
+\caption{\textbf{Singlet pipeline architecture.} Five phases process a BAM file from raw reads to compressed multi-omic feature matrices. Timing annotations (left) are measured on GSM8313394 (72.7M reads, 8 workers). Phases 3 (demux) and 3 (MT heteroplasmy) execute in parallel after CSC conversion.}
 \label{fig:pipeline}
 \end{figure}
 
@@ -207,7 +207,7 @@ Splice junctions are identified from CIGAR N-operations (intron skipping), where
 
 \subsubsection{SNP Genotype Pileup}
 
-Given a VCF file of known polymorphic sites (e.g., the 1000 Genomes Phase 3 common variant panel with 7.4 million sites at $\text{AF} > 5\%$), Singlify performs a base-resolution pileup at each covered position. For each read overlapping a SNP site:
+Given a VCF file of known polymorphic sites (e.g., the 1000 Genomes Phase 3 common variant panel with 7.4 million sites at $\text{AF} > 5\%$), Singlet performs a base-resolution pileup at each covered position. For each read overlapping a SNP site:
 
 \begin{enumerate}
     \item The SNP position within the read is determined by a CIGAR base walk (Algorithm~\ref{alg:cigarwalk}).
@@ -244,7 +244,7 @@ SNP positions are stored in per-chromosome sorted arrays and queried via binary 
 
 \subsubsection{Mitochondrial Heteroplasmy}
 
-For reads aligning to chrM (the mitochondrial genome, $\sim$16.5 kb), Singlify performs a per-base pileup using a feature encoding scheme where feature index $f = 4p + b$, where $p \in [0, 16{,}569)$ is the genomic position and $b \in \{0, 1, 2, 3\}$ encodes the base (A, C, G, T). This produces a $66{,}276 \times n_\text{cells}$ sparse matrix of per-position, per-base, per-cell read counts.
+For reads aligning to chrM (the mitochondrial genome, $\sim$16.5 kb), Singlet performs a per-base pileup using a feature encoding scheme where feature index $f = 4p + b$, where $p \in [0, 16{,}569)$ is the genomic position and $b \in \{0, 1, 2, 3\}$ encodes the base (A, C, G, T). This produces a $66{,}276 \times n_\text{cells}$ sparse matrix of per-position, per-base, per-cell read counts.
 
 After the streaming phase, heteroplasmic sites are identified in two steps:
 
@@ -257,7 +257,7 @@ The output is a sparse VAF matrix (variants $\times$ cells), stored as uint16 va
 
 \subsubsection{Integrated Donor Demultiplexing}
 
-Singlify includes an implementation of the Variational Bayes Beta-Binomial mixture model for genetic donor demultiplexing \citep{huang2019vireo}. Given the AD and DP matrices at covered SNP sites:
+Singlet includes an implementation of the Variational Bayes Beta-Binomial mixture model for genetic donor demultiplexing \citep{huang2019vireo}. Given the AD and DP matrices at covered SNP sites:
 
 \begin{itemize}
     \item \textbf{Model}: Each cell $c$ is assigned to donor $k \in \{0, \ldots, K-1\}$ with latent variable $z_c$. For each SNP $j$ and donor $k$, the allele frequency $\theta_{jk} \sim \text{Beta}(\alpha, \beta)$, with likelihood $\text{AD}_{jc} \mid \text{DP}_{jc}, \theta_{j,z_c} \sim \text{Binomial}$.
@@ -278,7 +278,7 @@ Singlify includes an implementation of the Variational Bayes Beta-Binomial mixtu
 
 \subsection{Output Format: .1pz (VOCSC)}
 
-Singlify writes sparse matrices in the \texttt{.1pz} format, a Variable-width Ordered Compressed Sparse Column (VOCSC) format designed for single-cell genomics data. Key features:
+Singlet writes sparse matrices in the \texttt{.1pz} format, a Variable-width Ordered Compressed Sparse Column (VOCSC) format designed for single-cell genomics data. Key features:
 
 \begin{itemize}
     \item \textbf{Byte-split encoding}: For $k$-byte integer values, the low bytes and high bytes are stored in separate contiguous arrays before compression. This exploits the locality of low-order bytes (most values $< 256$), achieving 40\% better compression than interleaved storage.
@@ -348,7 +348,7 @@ Each feature matrix is exported to \texttt{.1pz} format independently on a separ
 
 \subsection{RDTSC Profiling}
 
-Singlify includes an optional compile-time profiling mode using the x86 \texttt{RDTSC} (Read Time-Stamp Counter) instruction. This provides cycle-level timing for individual operations within the hot loop with near-zero overhead ($<0.5\%$ perturbation), avoiding the measurement interference of sampling-based profilers. The profiling counters track:
+Singlet includes an optional compile-time profiling mode using the x86 \texttt{RDTSC} (Read Time-Stamp Counter) instruction. This provides cycle-level timing for individual operations within the hot loop with near-zero overhead ($<0.5\%$ perturbation), avoiding the measurement interference of sampling-based profilers. The profiling counters track:
 
 \begin{itemize}
     \item BAM I/O time (\texttt{sam\_read1})
@@ -362,18 +362,18 @@ Singlify includes an optional compile-time profiling mode using the x86 \texttt{
 
 \subsection{BGZ Thread Scaling}
 
-BAM files use blocked gzip (BGZ) compression, which allows parallel decompression of independent blocks. Singlify delegates BGZ decompression to htslib's thread pool via \texttt{hts\_set\_threads()}. Our profiling reveals sharp diminishing returns: two decompression threads reduce I/O time from 26.4 to 4.8 seconds (5.5$\times$), while increasing beyond four threads provides marginal benefit ($<3\%$ improvement), as the main processing loop becomes the bottleneck.
+BAM files use blocked gzip (BGZ) compression, which allows parallel decompression of independent blocks. Singlet delegates BGZ decompression to htslib's thread pool via \texttt{hts\_set\_threads()}. Our profiling reveals sharp diminishing returns: two decompression threads reduce I/O time from 26.4 to 4.8 seconds (5.5$\times$), while increasing beyond four threads provides marginal benefit ($<3\%$ improvement), as the main processing loop becomes the bottleneck.
 
 % ══════════════════════════════════════════════════════════════
 \section{Results}\label{sec:results}
 
 \subsection{Multi-Modality Support and Auto-Detection}
 
-Beyond scRNA-seq, Singlify supports five additional modalities through protocol-aware barcode parsing and feature extraction strategies (Table~\ref{tab:modalities}). Each modality is auto-detected from read structure or explicitly specified via the~\texttt{--protocol}~flag, enabling zero-configuration deployments across diverse experimental designs.
+Beyond scRNA-seq, Singlet supports five additional modalities through protocol-aware barcode parsing and feature extraction strategies (Table~\ref{tab:modalities}). Each modality is auto-detected from read structure or explicitly specified via the~\texttt{--protocol}~flag, enabling zero-configuration deployments across diverse experimental designs.
 
 \begin{table}[t]
 \centering
-\caption{\textbf{Singlify multi-modality support matrix (fully integrated, Cycles 73-85).}}
+\caption{\textbf{Singlet multi-modality support matrix (fully integrated, Cycles 73-85).}}
 \label{tab:modalities}
 \begin{tabular}{p{2cm}p{1.4cm}p{3.5cm}p{2.5cm}}
 \toprule
@@ -436,17 +436,17 @@ Critical improvements in Cycles 73-90 focused on parallel parity, production rob
 
 \\subsection{Validation Against STARsolo Gene Counts}
 
-To validate the accuracy of Singlify's exon-level counting, we compared gene-level counts derived from Singlify's per-exon matrix against STARsolo's Gene feature output on the GSM8313394 sample (72.7 million reads, 2,013 cells from a 10x Chromium v3 library aligned to GRCh38).
+To validate the accuracy of Singlet's exon-level counting, we compared gene-level counts derived from Singlet's per-exon matrix against STARsolo's Gene feature output on the GSM8313394 sample (72.7 million reads, 2,013 cells from a 10x Chromium v3 library aligned to GRCh38).
 
-Gene-level counts were derived from Singlify's per-exon counts by summing all exons belonging to each ENSEMBL gene ID. This aggregation required no additional BAM access and completed in under 200 milliseconds.
+Gene-level counts were derived from Singlet's per-exon counts by summing all exons belonging to each ENSEMBL gene ID. This aggregation required no additional BAM access and completed in under 200 milliseconds.
 
 \begin{table}[t]
 \centering
-\caption{\textbf{Gene-level count comparison: Singlify vs.\ STARsolo.} Gene counts are aggregated from Singlify's per-exon counts and compared to STARsolo's native Gene output.}
+\caption{\textbf{Gene-level count comparison: Singlet vs.\ STARsolo.} Gene counts are aggregated from Singlet's per-exon counts and compared to STARsolo's native Gene output.}
 \label{tab:starsolo_validation}
 \begin{tabular}{lrr}
 \toprule
-\textbf{Metric} & \textbf{Singlify (aggregated)} & \textbf{STARsolo Gene} \\
+\textbf{Metric} & \textbf{Singlet (aggregated)} & \textbf{STARsolo Gene} \\
 \midrule
 Total UMI counts & 82,400 & 81,116 \\
 Non-zero entries (nnz) & 53,421 & 53,014 \\
@@ -469,24 +469,24 @@ Max difference (any gene) & \multicolumn{2}{c}{437 UMIs} \\
 \label{fig:gene_scatter}
 \end{figure}
 
-The Pearson correlation of per-gene total counts was $r = 0.996$ across 38,606 common genes, with a per-cell correlation of $r > 0.999$ (Table~\ref{tab:starsolo_validation}, Figure~\ref{fig:gene_scatter}). Of 38,606 genes, 98.8\% produce identical counts. The largest discrepancy (437 UMIs, ENSG00000152348/ATG10) arises from a locus where overlapping gene models cause Singlify and STARsolo to resolve multi-mapper gene-uniqueness differently.
+The Pearson correlation of per-gene total counts was $r = 0.996$ across 38,606 common genes, with a per-cell correlation of $r > 0.999$ (Table~\ref{tab:starsolo_validation}, Figure~\ref{fig:gene_scatter}). Of 38,606 genes, 98.8\% produce identical counts. The largest discrepancy (437 UMIs, ENSG00000152348/ATG10) arises from a locus where overlapping gene models cause Singlet and STARsolo to resolve multi-mapper gene-uniqueness differently.
 
-Residual differences arise from three sources: (1) multi-mapper resolution boundary cases, where Singlify's merged-exon gene model determines gene-uniqueness differently than STARsolo's transcript-level model; (2) intron/exon boundary reads classified differently by the two interval strategies; and (3) strand-ambiguous reads at antisense gene loci.  These differences are consistent with known inter-tool variability reported in prior benchmarks~\citep{you2021benchmarking}.
+Residual differences arise from three sources: (1) multi-mapper resolution boundary cases, where Singlet's merged-exon gene model determines gene-uniqueness differently than STARsolo's transcript-level model; (2) intron/exon boundary reads classified differently by the two interval strategies; and (3) strand-ambiguous reads at antisense gene loci.  These differences are consistent with known inter-tool variability reported in prior benchmarks~\citep{you2021benchmarking}.
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.6\textwidth]{figures/fig_cell_scatter.pdf}
-\caption{\textbf{Per-cell UMI count concordance.} Total UMI counts per barcode from Singlify vs.\ STARsolo across 144 cells ($r > 0.999$). Near-identity agreement confirms consistent cell-level quantification.}
+\caption{\textbf{Per-cell UMI count concordance.} Total UMI counts per barcode from Singlet vs.\ STARsolo across 144 cells ($r > 0.999$). Near-identity agreement confirms consistent cell-level quantification.}
 \label{fig:cell_scatter}
 \end{figure}
 
 \subsection{Validation of SNP Pileup Against cellSNP-lite}
 
-Singlify's SNP pileup was validated against cellSNP-lite~\citep{huang2021cellsnp} on the same sample and VCF panel (1000 Genomes Phase 3, 7.4M sites). Of 53,534 cellSNP-lite-reported sites, 53,534 (100\%) were exactly matched by position in Singlify's output (Table~\ref{tab:cellsnp_validation}, Figure~\ref{fig:cellsnp_scatter}).
+Singlet's SNP pileup was validated against cellSNP-lite~\citep{huang2021cellsnp} on the same sample and VCF panel (1000 Genomes Phase 3, 7.4M sites). Of 53,534 cellSNP-lite-reported sites, 53,534 (100\%) were exactly matched by position in Singlet's output (Table~\ref{tab:cellsnp_validation}, Figure~\ref{fig:cellsnp_scatter}).
 
 \begin{table}[t]
 \centering
-\caption{\textbf{SNP pileup comparison: Singlify vs.\ cellSNP-lite.} Per-site and per-cell concordance across 53,534 common SNP positions and 144 cells.}
+\caption{\textbf{SNP pileup comparison: Singlet vs.\ cellSNP-lite.} Per-site and per-cell concordance across 53,534 common SNP positions and 144 cells.}
 \label{tab:cellsnp_validation}
 \begin{tabular}{lr}
 \toprule
@@ -494,7 +494,7 @@ Singlify's SNP pileup was validated against cellSNP-lite~\citep{huang2021cellsnp
 \midrule
 Common SNP positions & 53,534 (100\% of cellSNP sites) \\
 Sites covered by both & 53,351 (99.7\%) \\
-Singlify-only sites & 176 (0.3\%) \\
+Singlet-only sites & 176 (0.3\%) \\
 cellSNP-only sites & 0 \\
 \midrule
 Per-site DP Pearson $r$ & 0.985 \\
@@ -504,7 +504,7 @@ Per-site AD Pearson $r$ & 1.000 \\
 Per-cell DP Pearson $r$ & 0.993 \\
 Per-cell AD Pearson $r$ & 1.000 \\
 \midrule
-DP ratio (Singlify/cellSNP) & 0.995 \\
+DP ratio (Singlet/cellSNP) & 0.995 \\
 AD $\leq$ DP constraint & Satisfied (100\%) \\
 \bottomrule
 \end{tabular}
@@ -513,23 +513,23 @@ AD $\leq$ DP constraint & Satisfied (100\%) \\
 \begin{figure}[t]
 \centering
 \includegraphics[width=\textwidth]{figures/fig_cellsnp_scatter.pdf}
-\caption{\textbf{SNP pileup concordance with cellSNP-lite.} (A)~Per-site total depth across 53,534 common positions. (B)~Per-site alternate allele depth (perfect $r = 1.000$). (C)~Per-cell total depth. (D)~Per-cell alternate allele depth. Singlify recovers 99.5\% of cellSNP-lite's total depth, with perfect allele-level concordance.}
+\caption{\textbf{SNP pileup concordance with cellSNP-lite.} (A)~Per-site total depth across 53,534 common positions. (B)~Per-site alternate allele depth (perfect $r = 1.000$). (C)~Per-cell total depth. (D)~Per-cell alternate allele depth. Singlet recovers 99.5\% of cellSNP-lite's total depth, with perfect allele-level concordance.}
 \label{fig:cellsnp_scatter}
 \end{figure}
 
-The per-site AD correlation is $r = 1.000$, confirming that Singlify and cellSNP-lite agree perfectly on which allele is observed at each position. The modest DP discordance ($r = 0.985$) arises because cellSNP-lite applies a base quality threshold of BQ~$\geq 20$ by default, while Singlify uses BQ~$\geq 10$; different quality-trimmed reads at low-coverage sites account for the 0.5\% total depth shortfall. The 176 Singlify-only sites represent low-coverage positions below cellSNP-lite's minimum total depth threshold.
+The per-site AD correlation is $r = 1.000$, confirming that Singlet and cellSNP-lite agree perfectly on which allele is observed at each position. The modest DP discordance ($r = 0.985$) arises because cellSNP-lite applies a base quality threshold of BQ~$\geq 20$ by default, while Singlet uses BQ~$\geq 10$; different quality-trimmed reads at low-coverage sites account for the 0.5\% total depth shortfall. The 176 Singlet-only sites represent low-coverage positions below cellSNP-lite's minimum total depth threshold.
 
 \subsection{Validation of Donor Demultiplexing}
 
-Singlify's integrated Variational Bayes demux module was validated against vireoSNP \citep{huang2019vireo} on the same sample (Table~\ref{tab:demux_validation}). Both methods received identical AD/DP matrices as input.
+Singlet's integrated Variational Bayes demux module was validated against vireoSNP \citep{huang2019vireo} on the same sample (Table~\ref{tab:demux_validation}). Both methods received identical AD/DP matrices as input.
 
 \begin{table}[t]
 \centering
-\caption{\textbf{Donor demultiplexing comparison: Singlify VB vs.\ vireoSNP.} Agreement is computed after resolving label permutation.}
+\caption{\textbf{Donor demultiplexing comparison: Singlet VB vs.\ vireoSNP.} Agreement is computed after resolving label permutation.}
 \label{tab:demux_validation}
 \begin{tabular}{lrr}
 \toprule
-\textbf{Metric} & \textbf{Singlify VB} & \textbf{vireoSNP} \\
+\textbf{Metric} & \textbf{Singlet VB} & \textbf{vireoSNP} \\
 \midrule
 Donors detected ($K$) & 2 & 2 \\
 Donor 0 cells & 71 & 73 \\
@@ -543,17 +543,17 @@ Wall-clock time & 4.43s & 8.2s \\
 \end{tabular}
 \end{table}
 
-Agreement was 97.9\% (141/144 cells) after resolving label permutation, with an Adjusted Mutual Information of 0.89. The three disagreements occurred at cells with low SNP coverage ($<15$ covered sites), where both methods produced low-confidence assignments ($p_\text{max} < 0.7$). Singlify's VB converged in fewer iterations (47 vs.\ 62) and ran 1.9$\times$ faster than vireoSNP, likely due to native C++ execution versus Python/NumPy overhead.
+Agreement was 97.9\% (141/144 cells) after resolving label permutation, with an Adjusted Mutual Information of 0.89. The three disagreements occurred at cells with low SNP coverage ($<15$ covered sites), where both methods produced low-confidence assignments ($p_\text{max} < 0.7$). Singlet's VB converged in fewer iterations (47 vs.\ 62) and ran 1.9$\times$ faster than vireoSNP, likely due to native C++ execution versus Python/NumPy overhead.
 
-On a synthetic two-donor dataset (5,000 SNPs, 200 cells, $30\%$ informative sites), both Singlify and vireoSNP achieved $>99\%$ agreement with ground truth, confirming equivalence of the underlying model.
+On a synthetic two-donor dataset (5,000 SNPs, 200 cells, $30\%$ informative sites), both Singlet and vireoSNP achieved $>99\%$ agreement with ground truth, confirming equivalence of the underlying model.
 
 \subsection{Splice Junction Concordance}
 
-Singlify's splice junction counts were compared against STARsolo's \texttt{SJ.out.tab} file. After UMI deduplication, Singlify reported 835,106 splice junction UMI counts across 58,000 unique junctions across 144 cells, compared to STARsolo's 91,103 unique junctions (pre-UMI, including multi-mapped reads). The discrepancy reflects Singlify's stricter UMI deduplication per (barcode, junction, UMI) triple, which STARsolo does not apply to SJ features.
+Singlet's splice junction counts were compared against STARsolo's \texttt{SJ.out.tab} file. After UMI deduplication, Singlet reported 835,106 splice junction UMI counts across 58,000 unique junctions across 144 cells, compared to STARsolo's 91,103 unique junctions (pre-UMI, including multi-mapped reads). The discrepancy reflects Singlet's stricter UMI deduplication per (barcode, junction, UMI) triple, which STARsolo does not apply to SJ features.
 
 \subsection{Mitochondrial Heteroplasmy Detection}
 
-On GSM8313394, Singlify detected 3,782,390 chrM-mapped reads with 18,632,604 piled bases across 16,569 mitochondrial positions. After global and per-cell filtering, 12 heteroplasmic sites were identified across 87 cell-site pairs, with VAFs ranging from 1.2\% to 43.7\%. The median per-cell chrM coverage was 1,126 reads, sufficient for reliable heteroplasmy detection above the 1\% VAF threshold \citep{lareau2021mgatk}.
+On GSM8313394, Singlet detected 3,782,390 chrM-mapped reads with 18,632,604 piled bases across 16,569 mitochondrial positions. After global and per-cell filtering, 12 heteroplasmic sites were identified across 87 cell-site pairs, with VAFs ranging from 1.2\% to 43.7\%. The median per-cell chrM coverage was 1,126 reads, sufficient for reliable heteroplasmy detection above the 1\% VAF threshold \citep{lareau2021mgatk}.
 
 \subsection{Internal Consistency Checks}
 
@@ -562,7 +562,7 @@ Several internal consistency properties were verified across all output matrices
 \begin{enumerate}
     \item \textbf{GeneFull $\geq$ Gene.} The gene-full count (exonic + intronic) is at least as large as the gene-only count for every gene, with a measured intronic fraction of 59.6\%.
     \item \textbf{AD $\leq$ DP.} For every cell--SNP pair, the alternate allele depth does not exceed the total depth (verified across all 128,059 nonzero entries).
-    \item \textbf{Exon $\rightarrow$ Gene reconstruction.} Gene-level counts derived by summing per-exon values exactly match the native gene counts from Singlify's gene model.
+    \item \textbf{Exon $\rightarrow$ Gene reconstruction.} Gene-level counts derived by summing per-exon values exactly match the native gene counts from Singlet's gene model.
 \end{enumerate}
 
 % ══════════════════════════════════════════════════════════════
@@ -570,7 +570,7 @@ Several internal consistency properties were verified across all output matrices
 
 \subsection{Runtime Profiling}
 
-Table~\ref{tab:profiling} presents the RDTSC-based profiling breakdown of Singlify's streaming phase on the GSM8313394 benchmark sample.
+Table~\ref{tab:profiling} presents the RDTSC-based profiling breakdown of Singlet's streaming phase on the GSM8313394 benchmark sample.
 
 \begin{table}[t]
 \centering
@@ -603,7 +603,7 @@ Loop overhead & $\sim$1.0 & $\sim$5.2 \\
 \label{fig:profiling_pie}
 \end{figure}
 
-The profiling reveals that Singlify's performance is dominated by BAM parsing overhead (55.2\% from barcode lookup + secondary tracking + I/O), while all five feature extractions collectively consume only 9.4\% of the loop time. This validates the single-pass design: the marginal cost of adding a feature layer is negligible compared to the fixed cost of BAM traversal.
+The profiling reveals that Singlet's performance is dominated by BAM parsing overhead (55.2\% from barcode lookup + secondary tracking + I/O), while all five feature extractions collectively consume only 9.4\% of the loop time. This validates the single-pass design: the marginal cost of adding a feature layer is negligible compared to the fixed cost of BAM traversal.
 
 \subsection{Phase-Level Timing}
 
@@ -651,7 +651,7 @@ Figure~\ref{fig:threadscaling} shows the effect of increasing the number of para
     nodes near coords style={font=\tiny, above},
     point meta=explicit symbolic
 ]
-\addplot[color=singlify-blue, mark=*, thick] coordinates {
+\addplot[color=singlet-blue, mark=*, thick] coordinates {
     (1, 20.02) [20.0s]
     (2, 12.93) [12.9s]
     (4, 6.47) [6.5s]
@@ -667,7 +667,7 @@ Speedup from 1 to 4 workers is $3.1\times$ ($20.0 \rightarrow 6.5$s), with 8 wor
 
 \subsection{Multi-Sample Scaling Analysis}
 
-Table~\ref{tab:scaling_multi} summarizes Singlify's performance across a range of read counts, demonstrating consistent throughput and feature extraction quality from 0.73M to 72.7M reads.
+Table~\ref{tab:scaling_multi} summarizes Singlet's performance across a range of read counts, demonstrating consistent throughput and feature extraction quality from 0.73M to 72.7M reads.
 
 \begin{table}[t]
 \centering
@@ -697,7 +697,7 @@ The throughput is remarkably stable at $11.1 \pm 0.5$ million reads per second a
 
 \subsection{Comparison with Existing Tools}
 
-Table~\ref{tab:comparison} compares Singlify against the individual tools it replaces. All measurements are on the same hardware (Intel Xeon Gold 6248, 40 cores, 754 GB RAM) and the same sample (GSM8313394, 72.7M reads).
+Table~\ref{tab:comparison} compares Singlet against the individual tools it replaces. All measurements are on the same hardware (Intel Xeon Gold 6248, 40 cores, 754 GB RAM) and the same sample (GSM8313394, 72.7M reads).
 
 \begin{table}[t]
 \centering
@@ -707,7 +707,7 @@ Table~\ref{tab:comparison} compares Singlify against the individual tools it rep
 \toprule
 \textbf{Tool} & \textbf{Feature} & \textbf{Time (s)} & \textbf{Mem (GB)} & \textbf{BAM passes} & \textbf{Output} \\
 \midrule
-\multirow{5}{*}{\textbf{Singlify}} 
+\multirow{5}{*}{\textbf{Singlet}} 
   & Gene counts & \multirow{5}{*}{\textbf{6.54}} & \multirow{5}{*}{\textbf{1.10}} & \multirow{5}{*}{\textbf{1}} & .1pz \\
   & Exon/Intron/SJ &  &  &  & .1pz \\
   & SNP AD/DP &  &  &  & .1pz \\
@@ -725,7 +725,7 @@ velocyto & Spliced/unspliced & 840 & 6.2 & 1 & .loom \\
 \end{tabular}
 \begin{flushleft}4
 \footnotesize
-$^\dagger$ STARsolo time includes alignment (STAR as aligner is required for Singlify too; this time is shared). For fair comparison, the feature counting portion of STARsolo adds $\sim$5 min to alignment. \\
+$^\dagger$ STARsolo time includes alignment (STAR as aligner is required for Singlet too; this time is shared). For fair comparison, the feature counting portion of STARsolo adds $\sim$5 min to alignment. \\
 $^\ddagger$ vireoSNP operates on matrices, not BAM; cellSNP-lite is its upstream dependency.
 \end{flushleft}
 \end{table}
@@ -736,7 +736,7 @@ $^\ddagger$ vireoSNP operates on matrices, not BAM; cellSNP-lite is its upstream
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.75\textwidth]{figures/fig_runtime_comparison.pdf}
-\caption{\textbf{Runtime comparison with existing tools.} Singlify (6.54s, single pass) replaces four separate BAM traversals whose combined runtime exceeds 3,800 seconds. Note the log scale.}
+\caption{\textbf{Runtime comparison with existing tools.} Singlet (6.54s, single pass) replaces four separate BAM traversals whose combined runtime exceeds 3,800 seconds. Note the log scale.}
 \label{fig:runtime_comparison}
 \end{figure}
 
@@ -747,23 +747,23 @@ $^\ddagger$ vireoSNP operates on matrices, not BAM; cellSNP-lite is its upstream
 \label{fig:memory_scaling}
 \end{figure}
 \begin{enumerate}
-    \item \textbf{Single-pass advantage.} Singlify replaces four BAM traversals with one, eliminating $\sim$3$\times$ the I/O overhead. The total BAM I/O cost (4.1s) is paid once instead of four times.
+    \item \textbf{Single-pass advantage.} Singlet replaces four BAM traversals with one, eliminating $\sim$3$\times$ the I/O overhead. The total BAM I/O cost (4.1s) is paid once instead of four times.
     
     \item \textbf{Feature extraction is ``free.''} Adding exon/intron/SJ counting to the SNP pileup loop adds $<$5\% overhead (0.83s out of 19.08s), because the CIGAR parsing and barcode validation---which dominate runtime---are shared across all features.
     
-    \item \textbf{75$\times$ faster SNP pileup than cellSNP-lite.} On the same sample and hardware, Singlify's integrated SNP pileup (included in the 6.5s total) is 75$\times$ faster than cellSNP-lite's standalone 491.6s, measured with 8 threads each.
-    This difference arises because cellSNP-lite performs an independent BAM traversal with its own barcode and quality filtering, while Singlify amortizes these costs across all features.
+    \item \textbf{75$\times$ faster SNP pileup than cellSNP-lite.} On the same sample and hardware, Singlet's integrated SNP pileup (included in the 6.5s total) is 75$\times$ faster than cellSNP-lite's standalone 491.6s, measured with 8 threads each.
+    This difference arises because cellSNP-lite performs an independent BAM traversal with its own barcode and quality filtering, while Singlet amortizes these costs across all features.
     
-    \item \textbf{Inline demux eliminates vireoSNP Python overhead.} Singlify's native C++ VB implementation runs 1.9$\times$ faster than vireoSNP's NumPy-based equivalent with identical model specification.
+    \item \textbf{Inline demux eliminates vireoSNP Python overhead.} Singlet's native C++ VB implementation runs 1.9$\times$ faster than vireoSNP's NumPy-based equivalent with identical model specification.
     
-    \item \textbf{Memory efficiency.} Singlify's 1.10 GB peak (8 workers) is 29$\times$ lower than STARsolo (which loads the $\sim$32 GB genome index), enabling processing on commodity hardware. Even cellSNP-lite alone uses 0.57 GB for its single feature.
+    \item \textbf{Memory efficiency.} Singlet's 1.10 GB peak (8 workers) is 29$\times$ lower than STARsolo (which loads the $\sim$32 GB genome index), enabling processing on commodity hardware. Even cellSNP-lite alone uses 0.57 GB for its single feature.
     
-    \item \textbf{Atomic output.} Singlify produces per-exon and per-intron counts (the ``atomic'' representation), from which gene-level, spliced/unspliced, and velocity-compatible matrices can all be derived without re-processing.
+    \item \textbf{Atomic output.} Singlet produces per-exon and per-intron counts (the ``atomic'' representation), from which gene-level, spliced/unspliced, and velocity-compatible matrices can all be derived without re-processing.
 \end{enumerate}
 
 \subsection{Output Statistics Summary}
 
-Table~\ref{tab:output_stats} summarizes the complete output statistics from Singlify's pipeline run on GSM8313394.
+Table~\ref{tab:output_stats} summarizes the complete output statistics from Singlet's pipeline run on GSM8313394.
 
 \begin{table}[t]
 \centering
@@ -851,7 +851,7 @@ Table~\ref{tab:e2e} presents a direct comparison of complete processing pipeline
 
 \begin{table}[t]
 \centering
-\caption{\textbf{End-to-end pipeline comparison on SRR32855204} (40.4M reads, 10x Multiome GEX, 20 threads, warm cache). Singlify produces six feature matrices in a single invocation via protocol auto-detection and multi-modality support.}
+\caption{\textbf{End-to-end pipeline comparison on SRR32855204} (40.4M reads, 10x Multiome GEX, 20 threads, warm cache). Singlet produces six feature matrices in a single invocation via protocol auto-detection and multi-modality support.}
 \label{tab:e2e}
 \begin{tabular}{lrrrl}
 \toprule
@@ -859,7 +859,7 @@ Table~\ref{tab:e2e} presents a direct comparison of complete processing pipeline
 \midrule
 STARsolo (stock 2.7.11b) & 158.5 & 21.3 & 665 & Gene, GeneFull, SJ, BAM \\
 simpleaf/alevin-fry (pseudoalign) & 20.7 & 3.1 & 740 & Gene counts (Salmon mapper) \\
-\textbf{Singlify} (.1fq auto-detect + align + pileup) & \textbf{149.9} & 22.0 & 1228 & \textbf{6 outputs}\textsuperscript{$\dagger$} \\
+\textbf{Singlet} (.1fq auto-detect + align + pileup) & \textbf{149.9} & 22.0 & 1228 & \textbf{6 outputs}\textsuperscript{$\dagger$} \\
 \bottomrule
 \end{tabular}
 \begin{flushleft}
@@ -868,17 +868,17 @@ $^\dagger$ Exon counts, intron counts, splice junctions, SNP allele depths (7.35
 \end{flushleft}
 \end{table}
 
-Singlify processes alignment and pileup in 82.0 seconds wall time on Intel Xeon Gold 6248 with 32 threads and profile-guided optimization (PGO), or 92.1 seconds at the efficiency-optimal 24 threads. A novel genome init prefetch technique pre-reads suffix array entries to compute and prefetch genome comparison positions 50--100ns ahead of their use in the binary search, reducing STAR alignment time by 9.2\% (75.1$\to$68.2s). Combined with eliminating the \texttt{cat} pipe intermediary (cycle~52) and optimized thread scaling, the full pipeline improved 24.7\% from the cycle~48 baseline (108.9$\to$82.0s wall). Both configurations include .1fq decoding (6.0s, 20-thread parallel), STAR alignment via direct file I/O from tmpfs, and streaming pileup across all five feature layers. The speed advantage arises because Singlify streams unsorted BAM records directly to the pileup engine without coordinate sorting. Despite including SNP pileup across 7.35 million sites, the total processing remains under 2 minutes. Gene-level correlation with STARsolo is $r = 0.9998$ (Pearson, per-gene totals across 11,739 genes), with a per-cell correlation of $r = 0.9997$.
+Singlet processes alignment and pileup in 82.0 seconds wall time on Intel Xeon Gold 6248 with 32 threads and profile-guided optimization (PGO), or 92.1 seconds at the efficiency-optimal 24 threads. A novel genome init prefetch technique pre-reads suffix array entries to compute and prefetch genome comparison positions 50--100ns ahead of their use in the binary search, reducing STAR alignment time by 9.2\% (75.1$\to$68.2s). Combined with eliminating the \texttt{cat} pipe intermediary (cycle~52) and optimized thread scaling, the full pipeline improved 24.7\% from the cycle~48 baseline (108.9$\to$82.0s wall). Both configurations include .1fq decoding (6.0s, 20-thread parallel), STAR alignment via direct file I/O from tmpfs, and streaming pileup across all five feature layers. The speed advantage arises because Singlet streams unsorted BAM records directly to the pileup engine without coordinate sorting. Despite including SNP pileup across 7.35 million sites, the total processing remains under 2 minutes. Gene-level correlation with STARsolo is $r = 0.9998$ (Pearson, per-gene totals across 11,739 genes), with a per-cell correlation of $r = 0.9997$.
 
 The simpleaf/alevin-fry pipeline achieves the fastest gene-only quantification (20.7s) using pseudoalignment with the piscem mapper, but does not support splice junction extraction, SNP pileup, or mitochondrial heteroplasmy.
 
 \subsection{Multi-Modality Support}
 
-Beyond scRNA-seq, Singlify supports five additional modalities through protocol-aware barcode parsing and feature extraction strategies (Table~\ref{tab:modalities}). Each modality is auto-detected from the .1fq protocol identifier or inferred from read structure, enabling zero-configuration deployments.
+Beyond scRNA-seq, Singlet supports five additional modalities through protocol-aware barcode parsing and feature extraction strategies (Table~\ref{tab:modalities}). Each modality is auto-detected from the .1fq protocol identifier or inferred from read structure, enabling zero-configuration deployments.
 
 \begin{table}[t]
 \centering
-\caption{\textbf{Singlify modality support matrix (Cycle 85).} All six modalities are production-ready with validated E2E pipelines.}
+\caption{\textbf{Singlet modality support matrix (Cycle 85).} All six modalities are production-ready with validated E2E pipelines.}
 \label{tab:modalities}
 \begin{tabular}{p{2.2cm}p{1.5cm}p{3cm}p{3cm}}
 \toprule
@@ -896,11 +896,11 @@ Beyond scRNA-seq, Singlify supports five additional modalities through protocol-
 
 \subsection{Cross-Dataset and Cross-Species Generalization}
 
-Table~\ref{tab:crossdataset} demonstrates that Singlify generalizes across multiple protocols and species without protocol-specific tuning. All samples use the same binary with \texttt{--whitelist None} (auto-discovery) and default parameters.
+Table~\ref{tab:crossdataset} demonstrates that Singlet generalizes across multiple protocols and species without protocol-specific tuning. All samples use the same binary with \texttt{--whitelist None} (auto-discovery) and default parameters.
 
 \begin{table}[t]
 \centering
-\caption{\textbf{Cross-dataset pipeline benchmark} (16 threads, warm cache, c001 node). All runs use identical singlify binary with barcode auto-discovery.}
+\caption{\textbf{Cross-dataset pipeline benchmark} (16 threads, warm cache, c001 node). All runs use identical singlet binary with barcode auto-discovery.}
 \label{tab:crossdataset}
 \sisetup{group-separator={,}, group-minimum-digits=4}
 \begin{tabular}{llrrrrrr}
@@ -932,13 +932,13 @@ Throughput varies $\\sim$2$\\times$ across protocols (0.10--0.36~Mreads/s) due t
 
 \subsection{The Single-Pass Advantage}
 
-The central insight motivating Singlify is that all commonly extracted single-cell features---gene counts, splice junctions, SNP genotypes, and mitochondrial allele frequencies---require the same preprocessing: BAM flag filtering, barcode validation, CIGAR parsing, and quality checking. By performing these operations once and dispatching the result to multiple feature accumulators, Singlify eliminates the dominant cost of feature extraction, which is not the feature-specific computation but the BAM I/O and record parsing overhead.
+The central insight motivating Singlet is that all commonly extracted single-cell features---gene counts, splice junctions, SNP genotypes, and mitochondrial allele frequencies---require the same preprocessing: BAM flag filtering, barcode validation, CIGAR parsing, and quality checking. By performing these operations once and dispatching the result to multiple feature accumulators, Singlet eliminates the dominant cost of feature extraction, which is not the feature-specific computation but the BAM I/O and record parsing overhead.
 
-Our RDTSC profiling quantifies this: 85.3\% of the streaming loop time is consumed by operations shared across all features (BAM I/O, barcode lookup, secondary tracking), while all five feature-specific extractions together consume only 9.4\%. Adding a feature layer to Singlify costs $\sim$1\% of wall time.
+Our RDTSC profiling quantifies this: 85.3\% of the streaming loop time is consumed by operations shared across all features (BAM I/O, barcode lookup, secondary tracking), while all five feature-specific extractions together consume only 9.4\%. Adding a feature layer to Singlet costs $\sim$1\% of wall time.
 
 \subsection{Atomic vs.\ Aggregated Output}
 
-A deliberate design decision in Singlify is to store per-exon and per-intron counts rather than pre-aggregated gene-level counts. This ``atomic'' representation:
+A deliberate design decision in Singlet is to store per-exon and per-intron counts rather than pre-aggregated gene-level counts. This ``atomic'' representation:
 
 \begin{enumerate}
     \item Enables gene-level count derivation for any gene model without re-processing;
@@ -952,13 +952,13 @@ The cost is modestly larger file sizes ($\sim$2$\times$ more than gene-level), f
 \subsection{Limitations}
 
 \begin{enumerate}
-    \item \textbf{Alignment-dependent.} Singlify bundles STAR 2.7.11b (singlet-lite) as its aligner and streams unsorted BAM through a pipe. STAR alignment remains the runtime bottleneck ($\sim$106s of the 115.0s total on 40M reads with 16 threads). Genome page access profiling reveals that STAR's suffix array binary search touches genome pages ($4$~KB granularity) nearly uniformly across the $3.1$~GB reference: $50\%$ of accesses require $508$~MB of genome pages, and $80\%$ require $1.5$~GB. The L3 cache ($19.25$~MB per socket on Intel Xeon Gold 6226) can cover only $\sim\!15\%$ of genome accesses, fundamentally limiting cache-based optimization strategies. This uniform access pattern arises because binary search intermediate steps traverse the full suffix array tree before converging to expressed gene positions.
+    \item \textbf{Alignment-dependent.} Singlet bundles STAR 2.7.11b (singlet-lite) as its aligner and streams unsorted BAM through a pipe. STAR alignment remains the runtime bottleneck ($\sim$106s of the 115.0s total on 40M reads with 16 threads). Genome page access profiling reveals that STAR's suffix array binary search touches genome pages ($4$~KB granularity) nearly uniformly across the $3.1$~GB reference: $50\%$ of accesses require $508$~MB of genome pages, and $80\%$ require $1.5$~GB. The L3 cache ($19.25$~MB per socket on Intel Xeon Gold 6226) can cover only $\sim\!15\%$ of genome accesses, fundamentally limiting cache-based optimization strategies. This uniform access pattern arises because binary search intermediate steps traverse the full suffix array tree before converging to expressed gene positions.
     
     \item \textbf{Gene-unique multi-mappers only.} The current implementation does not support fractional $1/\text{NH}$ multi-mapper counting or EM-based multi-mapper redistribution, which are relevant for transposable element and repetitive region quantification.
     
     \item \textbf{Exact UMI matching.} UMI deduplication uses exact triple matching without 1-mismatch correction. For high-duplication libraries, this may modestly overcount UMIs with sequencing errors.
     
-    \item \textbf{Single-sample processing.} Singlify processes one BAM file per invocation. Cross-sample joint variant calling (e.g., for cohort-level VCF generation) requires external tools.
+    \item \textbf{Single-sample processing.} Singlet processes one BAM file per invocation. Cross-sample joint variant calling (e.g., for cohort-level VCF generation) requires external tools.
     
     \item \textbf{Protocol coverage.} The barcode handling supports 10x Chromium v2/v3/v4, 10x Multiome GEX, Drop-seq, inDrop, sci-RNA-seq3, BD Rhapsody/ddSEQ, Parse Bio, and other protocols via the .1fq format's protocol auto-detection. Full end-to-end pipeline validation has been completed for 10 distinct protocol families (10x-v2, 10x-v3/arc-gex, 10x-v4, 10x-5p, Drop-seq, sci-RNA-seq3, BD Rhapsody/ddSEQ, inDrop, 10x-multiome, Parse Bio) across 15 samples, including both human and mouse genomes. Complex barcode protocols (CB\_UMI\_Complex) are handled via a CB\_samTagOut fallback for streaming compatibility. Inverted read layouts (barcode in R2, cDNA in R1) are auto-detected and corrected.
 \end{enumerate}
@@ -979,7 +979,7 @@ Recent development cycles (April 2026) have added:
     \item \textbf{Graceful error handling.} All subcommands now produce clear error messages and exit code 1 for malformed, empty, truncated, or nonexistent inputs. Ten distinct failure scenarios were validated with no crashes or core dumps. Additionally, a pre-flight check detects empty or ultra-short R2 (biological read $<30$~bp), catching protocol misclassification before STAR launch.
     \item \textbf{Large-scale protocol validation.} A random 98-sample survey drawn from the filtered catalog (208,911 GEO series) was run through the full SRA$\to$.1fq$\to$STAR$\to$.1pz pipeline across 11 protocol groups. The pipeline handles all 98 samples without crashes; 85/98 (87\%) run to completion with output files. For known scRNA-seq protocols (10x~v2, Drop-seq, inDrop, 10x~Multiome, BD~Rhapsody, sci-RNA-seq, 10x~5$'$), 37/48 (77\%) produce meaningful exon output ($>$100 hits). Protocol auto-detection sometimes assigns compatible but non-identical protocols (e.g., 10xv3$\to$ddseq) and 69\% of samples still pass because barcode structure is similar enough. The overall 62\% data-quality pass rate reflects catalog contamination---approximately 40\% of entries labeled ``10xv3'' are bulk RNA-seq, CRISPR screens, or ATAC-seq that lack barcode structure. Empty R2 and ultra-short R2 ($<$30~bp) are caught by pre-flight validation before STAR launch.
     \item \textbf{Adapter contamination handling.} Testing on C02 (SRR27329891, 123.6M reads, 10xv3) revealed that R2 reads contained a Nextera ME adapter sequence (\texttt{CGCGGTTAG}) starting at position~$\sim$58, leaving only 58/100~bp as alignable cDNA. STAR's default \texttt{outFilterMatchNminOverLread~0.66} requires 66\% of the read to align, causing 99.97\% of reads to be rejected as ``too short.'' The encoder now includes automatic adapter detection: during the probe phase (first 10K reads), it scans each R2 position for base frequency dominance ($>$75\% at $\geq$5 consecutive positions), automatically trimming at the adapter boundary. On C02, this detects adapter at position~50 and auto-sets \texttt{r2\_maxlen=50}, recovering 91.3\% uniquely mapped reads with 29M exon hits.
-    \item \textbf{Parallel barcode discovery.} For samples without a pre-supplied barcode list (\texttt{--whitelist None}), singlify auto-discovers cell barcodes by counting barcode frequencies. Previously this required a sequential scan of the decoded R1 FASTQ file ($\sim$10.7s for 40M reads). The decoder now counts barcodes in thread-local hash maps during the parallel decode phase, merging counts sequentially. This eliminates the separate scan, reducing the references phase from 19.0s to 12.75s ($-33\%$) and the overall pipeline wall time from 120.6s to 113.3s ($-6.0\%$).
+    \item \textbf{Parallel barcode discovery.} For samples without a pre-supplied barcode list (\texttt{--whitelist None}), singlet auto-discovers cell barcodes by counting barcode frequencies. Previously this required a sequential scan of the decoded R1 FASTQ file ($\sim$10.7s for 40M reads). The decoder now counts barcodes in thread-local hash maps during the parallel decode phase, merging counts sequentially. This eliminates the separate scan, reducing the references phase from 19.0s to 12.75s ($-33\%$) and the overall pipeline wall time from 120.6s to 113.3s ($-6.0\%$).
     \item \textbf{5$'$ prefix contamination detection.} Some library preparations produce R2 reads with a long constant prefix ($>$10~bp) of non-genomic sequence. Without detection, these reads align at $<$1\% mapping rate. The pipeline now scans decoded R2 reads for constant prefixes and invokes STAR with \texttt{--clip5pNbases N} to trim before alignment. On C11 (SRR34789664, mouse 10xv3 with 50~bp constant prefix), this recovered 3.2M exon hits (from~3) and 8,675 barcodes.
 \\item \\textbf{Multi-species validation.} The pipeline is validated on both human (GRCh38) and mouse (GRCm39) references across 15 samples spanning 10 protocol families, both species, and read counts from 5M to 123.6M.
 \end{itemize}
@@ -987,12 +987,12 @@ Recent development cycles (April 2026) have added:
 % ══════════════════════════════════════════════════════════════
 \section{Conclusion}
 
-...cell multi-omic feature extraction is a fundamentally single-pass problem. By integrating STAR alignment with five feature extraction layers in one streaming binary, Singlify reduces the per-sample processing cost from 3+ minutes with a fragmented toolchain to 78--82 seconds (40M reads, hardware-dependent), while producing gene-level counts with Pearson $r = 0.9998$ correlation to STARsolo. Three optimizations combine for a 24.7\% cumulative improvement over the cycle~48 baseline: direct file I/O eliminates pipe overhead ($-8.3\%$), genome init prefetch overlaps DRAM loads in the suffix array binary search ($-9.2\%$), and thread scaling to 32T exploits the freed I/O bandwidth. Profile-guided optimization (PGO) of the STAR alignment hot path reduces wall time by an additional $3.7\%$; fresh PGO profiles must be regenerated after code changes, as stale profiles cause $12\%$ regression. The integrated .1fq format enables 5$\times$ faster I/O than gzipped FASTQ, and the .1pz output format reduces storage by $\sim$6$\times$ compared to Matrix Market.
+...cell multi-omic feature extraction is a fundamentally single-pass problem. By integrating STAR alignment with five feature extraction layers in one streaming binary, Singlet reduces the per-sample processing cost from 3+ minutes with a fragmented toolchain to 78--82 seconds (40M reads, hardware-dependent), while producing gene-level counts with Pearson $r = 0.9998$ correlation to STARsolo. Three optimizations combine for a 24.7\% cumulative improvement over the cycle~48 baseline: direct file I/O eliminates pipe overhead ($-8.3\%$), genome init prefetch overlaps DRAM loads in the suffix array binary search ($-9.2\%$), and thread scaling to 32T exploits the freed I/O bandwidth. Profile-guided optimization (PGO) of the STAR alignment hot path reduces wall time by an additional $3.7\%$; fresh PGO profiles must be regenerated after code changes, as stale profiles cause $12\%$ regression. The integrated .1fq format enables 5$\times$ faster I/O than gzipped FASTQ, and the .1pz output format reduces storage by $\sim$6$\times$ compared to Matrix Market.
 
 % ══════════════════════════════════════════════════════════════
 \section*{Acknowledgments}
 
-We thank the developers of htslib \citep{danecek2021twelve}, STAR \citep{dobin2013star}, STARsolo \citep{kaminow2021starsolo}, cellSNP-lite \citep{huang2021cellsnp}, vireoSNP \citep{huang2019vireo}, mgatk \citep{lareau2021mgatk}, and velocyto \citep{la2018rna} for the foundational tools that informed Singlify's design and provided validation references.
+We thank the developers of htslib \citep{danecek2021twelve}, STAR \citep{dobin2013star}, STARsolo \citep{kaminow2021starsolo}, cellSNP-lite \citep{huang2021cellsnp}, vireoSNP \citep{huang2019vireo}, mgatk \citep{lareau2021mgatk}, and velocyto \citep{la2018rna} for the foundational tools that informed Singlet's design and provided validation references.
 
 % ══════════════════════════════════════════════════════════════
 \begin{thebibliography}{20}

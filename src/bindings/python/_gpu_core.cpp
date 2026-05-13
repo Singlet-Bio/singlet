@@ -116,7 +116,7 @@ PYBIND11_MODULE(_core, m) {
     Public API
     ----------
     load_pz(path, keep_host_pinned=False) -> PzDeviceMatrix
-        Load a singlify `.1pz` file to GPU device.  Returns a :class:`PzDeviceMatrix`
+        Load a singlet `.1pz` file to GPU device.  Returns a :class:`PzDeviceMatrix`
         containing a :class:`DeviceCsc` and a :class:`Metadata` object.
 
     DeviceCsc

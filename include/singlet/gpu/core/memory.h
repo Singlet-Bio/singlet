@@ -125,7 +125,7 @@ struct Metadata {
     std::string geo_source_name;
 
     // Pipeline provenance
-    std::string singlify_version;
+    std::string singlet_version;
     std::string pipeline_date;
 
     // Row / column names from the .1pz metadata TLV (optional).

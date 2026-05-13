@@ -16,7 +16,7 @@ Result locations (spec):
   - adata.obsm['mt_heteroplasmy']  : n_cells × n_informative_sites (float, in [0,1])
 
 Notes:
-  - GSM4037629 has mt_alleles.1pz (singlify --pipeline output).
+  - GSM4037629 has mt_alleles.1pz (singlet --pipeline output).
     We load it into 'mt_alt' and 'mt_depth' layers for the real-data test.
   - detect_clones is a NEW function with no established SOTA AnnData equivalent.
     No vs-reference test; correctness is structural + real-data finite-output.
@@ -231,7 +231,7 @@ def test_detect_clones_writes_obsm_heteroplasmy():
 def test_detect_clones_GSM4037629_real_data(gsm4037629_path):
     """detect_clones() returns finite results on real GSM4037629 MT data.
 
-    Loads mt_alleles.1pz from the singlify pipeline output and runs
+    Loads mt_alleles.1pz from the singlet pipeline output and runs
     detect_clones. Asserts:
       - obs['mt_clone_id'] written, all values finite integers ≥ 0.
       - obsm['mt_heteroplasmy'] written, all values finite and in [0,1].
@@ -244,7 +244,7 @@ def test_detect_clones_GSM4037629_real_data(gsm4037629_path):
     if not mt_path.is_file():
         pytest.skip(
             f"mt_alleles.1pz not found at {mt_path}. "
-            "Run the singlify pipeline with --pipeline flag to generate this file."
+            "Run the singlet pipeline with --pipeline flag to generate this file."
         )
 
     # Load mt_alleles as the main matrix; treat as alt counts.

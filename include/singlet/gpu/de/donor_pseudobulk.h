@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// integrates: original (first GPU NB GLM for donor-aware pseudobulk DE — exploits singlify donor_assignments.tsv)
+// integrates: original (first GPU NB GLM for donor-aware pseudobulk DE — exploits singlet donor_assignments.tsv)
 //
 // de/donor_pseudobulk.h — Donor-aware pseudobulk differential expression via
 //   Negative Binomial GLM, GPU-native.

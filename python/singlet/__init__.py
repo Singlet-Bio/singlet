@@ -22,7 +22,7 @@ Browse catalog (works offline):
 Load data:
     singlet.load("GSE264667")              Load from local catalog or Zenodo → AnnData
     singlet.load("path/to/counts.1pz")     Load local .1pz file
-    singlet.load_dir("/path/to/quant/GSM") Load singlify output directory → AnnData
+    singlet.load_dir("/path/to/quant/GSM") Load singlet output directory → AnnData
     singlet.load_sample("GSM3308814")      Load single sample (column-range read)
 
 Format I/O:

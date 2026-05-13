@@ -26,7 +26,7 @@ struct PipelineSummary {
     std::string sample_id;
     std::string protocol;           ///< legacy/internal; kept for backward compat
     std::string organism;           ///< legacy/internal; kept for backward compat
-    std::string singlify_version;
+    std::string singlet_version;
     // §3.6 canonical names
     int         protocol_id   = 0;
     std::string protocol_name;
@@ -198,7 +198,7 @@ inline bool write_summary_json(const PipelineSummary& s, const std::string& file
       << ", \"l4_nonhost\": " << s.cascade_l4_nonhost
       << " } },\n";
     // Legacy / extra metrics (for downstream tools that read old keys)
-    f << "  \"singlify_version\": \""   << json_escape(s.singlify_version)   << "\",\n";
+    f << "  \"singlet_version\": \""   << json_escape(s.singlet_version)   << "\",\n";
     f << "  \"total_reads\": "          << s.total_reads         << ",\n";
     f << "  \"mapped_reads\": "         << s.mapped_reads        << ",\n";
     f << "  \"mapping_rate\": "         << jd(s.mapping_rate)    << ",\n";

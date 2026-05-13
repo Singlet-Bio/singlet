@@ -42,7 +42,7 @@ if TYPE_CHECKING:
 
 # ---------------------------------------------------------------------------
 # Modality → canonical filename stem mapping.
-# Mirrors the singlify output artifact table.
+# Mirrors the singlet output artifact table.
 # ---------------------------------------------------------------------------
 _MODALITY_TO_STEM: dict[str, str] = {
     "exon": "exon_counts",
@@ -56,7 +56,7 @@ _MODALITY_TO_STEM: dict[str, str] = {
     "fragments": "fragments",
 }
 
-# Modality → subdirectory (singlify v2 schema moves donor/nonhost into subdirs)
+# Modality → subdirectory (singlet v2 schema moves donor/nonhost into subdirs)
 _MODALITY_TO_SUBDIR: dict[str, str] = {
     "snp_ad": "donor",
     "snp_dp": "donor",
@@ -98,7 +98,7 @@ def _resolve_pz_path(pz_dir: Union[str, Path], modality: str) -> str:
             )
         candidate = p / f"{stem}.1pz"
         if not candidate.exists():
-            # Check subdirectory layout (singlify v2 schema)
+            # Check subdirectory layout (singlet v2 schema)
             subdir = _MODALITY_TO_SUBDIR.get(modality)
             if subdir:
                 candidate = p / subdir / f"{stem}.1pz"
@@ -128,7 +128,7 @@ def _build_anndata(device_csc, metadata) -> anndata.AnnData:
         ``adata.X``  — cupy.sparse.csr_matrix (cells × genes), zero-copy.
         ``adata.obs`` — DataFrame indexed by cell barcodes.
         ``adata.var`` — DataFrame indexed by gene names.
-        ``adata.uns['singlify']`` — GEO + provenance dict.
+        ``adata.uns['singlet']`` — GEO + provenance dict.
     """
     try:
         import anndata as ad
@@ -174,15 +174,15 @@ def _build_anndata(device_csc, metadata) -> anndata.AnnData:
     obs = pd.DataFrame(index=obs_names)
     var = pd.DataFrame(index=var_names)
 
-    singlify_meta = dict(metadata.to_dict())
-    singlify_meta["n_genes"] = rows
-    singlify_meta["n_cells"] = cols
+    singlet_meta = dict(metadata.to_dict())
+    singlet_meta["n_genes"] = rows
+    singlet_meta["n_cells"] = cols
 
     adata = ad.AnnData(
         X=cells_x_genes_csr,
         obs=obs,
         var=var,
-        uns={"singlify": singlify_meta},
+        uns={"singlet": singlet_meta},
     )
     # Keep device allocation alive: stash on the AnnData object itself as a
     # private attribute (NOT in uns — uns is deepcopied by adata.copy() and
@@ -223,7 +223,7 @@ def read_pz_to_anndata(
     -------
     anndata.AnnData
         ``adata.X`` — cupy.sparse.csr_matrix (cells × genes), zero-copy.
-        ``adata.uns['singlify']`` — GEO + provenance dict.
+        ``adata.uns['singlet']`` — GEO + provenance dict.
 
     Examples
     --------

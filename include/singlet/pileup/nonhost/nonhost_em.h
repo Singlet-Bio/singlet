@@ -14,7 +14,7 @@
 //   Stop:  max|θ_new − θ_old| < tolerance OR iter ≥ max_iter
 //
 // Wiring:
-//   Called from singlify.cpp after STAR unmapped reads are classified with
+//   Called from singlet.cpp after STAR unmapped reads are classified with
 //   NonHostScreener::classify_multi_batch().  em_deconvolve() replaces the
 //   single-best-hit counting with statistically rigorous per-species abundances.
 //   Outputs: nonhost_em_abundance.tsv + updated nonhost_summary.json.

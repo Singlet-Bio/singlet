@@ -22,7 +22,7 @@ struct FetchPlan {
     std::string assembly;
     std::string fasta_url;       // Ensembl FTP URL for genome FASTA (.fa.gz)
     std::string gtf_url;         // Ensembl FTP URL for GTF (.gtf.gz)
-    std::string install_dir;     // e.g. ~/.config/singlify/references/GRCh38/
+    std::string install_dir;     // e.g. ~/.config/singlet/references/GRCh38/
     std::string star_dir;        // install_dir + "star_2.7.11b/"
     int genome_size_gb;          // estimated peak RAM for STAR genome build (GB)
     std::string download_cmd;    // wget commands for FASTA + GTF
@@ -150,7 +150,7 @@ inline std::string build_install_all_script(const std::string& ref_base,
     const auto& species = species_registry::all_species();
     std::ostringstream ss;
     ss << "#!/bin/bash\n"
-       << "#SBATCH --job-name=singlify_ref_install\n"
+       << "#SBATCH --job-name=singlet_ref_install\n"
        << "#SBATCH --array=0-" << (species.size() - 1) << "\n"
        << "#SBATCH --cpus-per-task=" << threads << "\n"
        << "#SBATCH --time=04:00:00\n"
@@ -169,7 +169,7 @@ inline std::string build_install_all_script(const std::string& ref_base,
        << "ASSEMBLY=$(echo $ENTRY | cut -d: -f3)\n"
        << "\n"
        << "echo \"Installing $NAME ($ASSEMBLY) ...\"\n"
-       << "singlify index fetch --species \"$NAME\" --ref-base " << ref_base
+       << "singlet index fetch --species \"$NAME\" --ref-base " << ref_base
        << " --threads " << threads << "\n";
     return ss.str();
 }

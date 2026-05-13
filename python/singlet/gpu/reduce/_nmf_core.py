@@ -440,7 +440,7 @@ def nmf_chunked(
             stacklevel=2,
         )
 
-    # CYCLE-275: each `path` is per the singlify-pipeline convention either:
+    # CYCLE-275: each `path` is per the singlet-pipeline convention either:
     # (a) a directory containing a `gene_counts.1pz` (the standard sample
     #     output), or (b) a direct `*.1pz` file path. Resolve (a) → (b) here.
     import os

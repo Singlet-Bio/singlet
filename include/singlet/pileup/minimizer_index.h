@@ -4,7 +4,7 @@
 //   • 32-byte MinimizerIndexHeader
 //   • nRecords × 16-byte MinimizerRecord, sorted ascending by hash
 //
-// Built by: singlify genome build-minimizers --genome-dir <path>
+// Built by: singlet genome build-minimizers --genome-dir <path>
 //
 // Used in Phase 2 by STAR's seed search to narrow SA binary search range
 // from log₂(3.2B) ≈ 32 probes to ~10 probes per seed.
@@ -23,7 +23,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-// ─── Binary structures (must match builder in singlify.cpp) ─────────────────
+// ─── Binary structures (must match builder in singlet.cpp) ─────────────────
 
 struct MinimizerRecord {        // 16 bytes/entry
     uint64_t hash;              // canonical minimizer hash (2-bit packed k-mer)

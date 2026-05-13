@@ -1,5 +1,5 @@
 #pragma once
-// benchmark_suite.h — Lightweight benchmark registry for singlify vs SOTA tools
+// benchmark_suite.h — Lightweight benchmark registry for singlet vs SOTA tools
 // Tracks performance and accuracy results across modalities; NOT a runtime runner.
 #include <algorithm>
 #include <chrono>
@@ -32,7 +32,7 @@ enum class Modality {
 };
 
 struct BenchmarkResult {
-    std::string tool_name;  // "singlify", "cellranger", "starsolo", etc.
+    std::string tool_name;  // "singlet", "cellranger", "starsolo", etc.
     std::string tool_version;
     Modality modality;
     std::string dataset_id;  // SRR accession or dataset name
@@ -140,41 +140,41 @@ struct BenchmarkRegistry {
         return out;
     }
 
-    // Returns competitor_wall / singlify_wall (>1 means singlify is faster).
+    // Returns competitor_wall / singlet_wall (>1 means singlet is faster).
     // Returns -1.0 if either result is missing.
     double speedup(const std::string& competitor, const std::string& dataset) const {
-        double singlify_wall = -1.0, competitor_wall = -1.0;
+        double singlet_wall = -1.0, competitor_wall = -1.0;
         for (const auto& r : results) {
             if (r.dataset_id != dataset) continue;
-            if (r.tool_name == "singlify") singlify_wall = r.wall_seconds;
+            if (r.tool_name == "singlet") singlet_wall = r.wall_seconds;
             if (r.tool_name == competitor) competitor_wall = r.wall_seconds;
         }
-        if (singlify_wall <= 0.0 || competitor_wall <= 0.0) return -1.0;
-        return competitor_wall / singlify_wall;
+        if (singlet_wall <= 0.0 || competitor_wall <= 0.0) return -1.0;
+        return competitor_wall / singlet_wall;
     }
 
-    // Returns true iff singlify is faster AND has concordance >= competitor on this dataset.
-    // Returns false if data is missing or singlify is slower.
+    // Returns true iff singlet is faster AND has concordance >= competitor on this dataset.
+    // Returns false if data is missing or singlet is slower.
     bool at_pareto_frontier(const std::string& competitor, const std::string& dataset) const {
-        double singlify_wall = -1.0, competitor_wall = -1.0;
-        double singlify_conc = -1.0, competitor_conc = -1.0;
+        double singlet_wall = -1.0, competitor_wall = -1.0;
+        double singlet_conc = -1.0, competitor_conc = -1.0;
         for (const auto& r : results) {
             if (r.dataset_id != dataset) continue;
-            if (r.tool_name == "singlify") {
-                singlify_wall = r.wall_seconds;
-                singlify_conc = r.concordance;
+            if (r.tool_name == "singlet") {
+                singlet_wall = r.wall_seconds;
+                singlet_conc = r.concordance;
             }
             if (r.tool_name == competitor) {
                 competitor_wall = r.wall_seconds;
                 competitor_conc = r.concordance;
             }
         }
-        if (singlify_wall <= 0.0 || competitor_wall <= 0.0) return false;
-        bool faster = singlify_wall < competitor_wall;
-        // If concordance measurements exist, require singlify >= competitor
+        if (singlet_wall <= 0.0 || competitor_wall <= 0.0) return false;
+        bool faster = singlet_wall < competitor_wall;
+        // If concordance measurements exist, require singlet >= competitor
         bool as_accurate = true;
-        if (singlify_conc >= 0.0 && competitor_conc >= 0.0)
-            as_accurate = (singlify_conc >= competitor_conc);
+        if (singlet_conc >= 0.0 && competitor_conc >= 0.0)
+            as_accurate = (singlet_conc >= competitor_conc);
         return faster && as_accurate;
     }
 };
@@ -262,7 +262,7 @@ inline std::string format_benchmark_markdown(const BenchmarkRegistry& reg) {
 
     for (const auto& r : reg.results) {
         double sp = -1.0;
-        if (r.tool_name != "singlify") {
+        if (r.tool_name != "singlet") {
             sp = reg.speedup(r.tool_name, r.dataset_id);
         }
         std::string sp_str = (sp > 0) ? (std::to_string(sp).substr(0, 4) + "x") : "—";

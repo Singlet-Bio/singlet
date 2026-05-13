@@ -10,7 +10,7 @@ You are **singlet-orchestrator** (Opus 4.6), the master brain of the singlet pro
 
 ## Ownership
 
-1. **Pipeline C++** — singlify binary, STAR, .1fq/.1pz codecs, pileup engine
+1. **Pipeline C++** — singlet binary, STAR, .1fq/.1pz codecs, pileup engine
 2. **Droplet hardening** (TOP PRIORITY) — EmptyDrops calibration, doublet detection, ATAC fragments, cell calling
 3. **Codebase health** — continuous audit-fix loops, dead code removal, import hygiene
 4. **Python/R packaging** — pip install singlet, CRAN package, bindings
@@ -31,7 +31,7 @@ You are **singlet-orchestrator** (Opus 4.6), the master brain of the singlet pro
 | 1 | ATAC zero fragments → FIXED: barcode propagation via QNAME prefix (24def34) | CRITICAL | 🟢 | `include/singlet/pileup/atac_fragment_extractor.h` |
 | 2 | EmptyDrops large-library 0-cell → FIXED: conditioned Poisson path | HIGH | 🟢 | `include/singlet/pileup/cell_calling.h` |
 | 3 | Doublet overcall → FIXED v6 GMM threshold (FPR 9.16%→0.26%) | HIGH | 🟢 | `include/singlet/pileup/doublet_detect.h` |
-| 4 | 5' adapter detection → CODE COMPLETE: CellRanger4 removed + dual detector; needs cluster validation | MEDIUM | 🟡 | `src/pipeline/singlify.cpp` |
+| 4 | 5' adapter detection → CODE COMPLETE: CellRanger4 removed + dual detector; needs cluster validation | MEDIUM | 🟡 | `src/pipeline/singlet.cpp` |
 | 5 | Multiome 0 cells → FIXED: auto-lower thresholds for multiome GEX | MEDIUM | 🟢 | `include/singlet/pileup/export.h` |
 | 6 | ATAC fragment count r=0.970 → FIX: added MAPQ≥30 filter (715e81f); needs cluster retest | LOW | 🟡 | `include/singlet/pileup/atac_fragment.h` |
 | 7 | ATAC cell calling overcall → FIXED: Otsu bimodal threshold (a53fb8c) | LOW | 🟢 | `include/singlet/pileup/atac_cell_caller.h` |
@@ -215,7 +215,7 @@ Singlet-Bio/singlet/
 │   ├── pileup/                 # 70+ headers: cell_calling.h, doublet_detection.h, ...
 │   ├── gpu/                    # CUDA kernels (owned by singlet-gpu agent)
 │   └── star/                   # STAR aligner API
-├── src/pipeline/singlify.cpp   # Pipeline binary
+├── src/pipeline/singlet.cpp   # Pipeline binary
 ├── src/star/                   # Vendored STAR (object library)
 ├── python/singlet/             # Python package
 ├── r/                          # R/CRAN package
@@ -225,10 +225,10 @@ Singlet-Bio/singlet/
 
 ## Infrastructure (Clipper HPC)
 
-- **Pipeline binary**: `/mnt/home/debruinz/Singlet-AI/singlet/build/src/pipeline/singlify`
+- **Pipeline binary**: `/mnt/home/debruinz/Singlet-AI/singlet/build/src/pipeline/singlet`
 - **Build**: `source /opt/rh/gcc-toolset-13/enable && cmake -B build -DSINGLET_BUILD_PIPELINE=ON && cmake --build build -j$(nproc)`
 - **Reference genomes**: `/mnt/projects/debruinz_project/cellarium/reference/`
-- **Pipeline results**: `/mnt/projects/debruinz_project/singlify_pipeline/results/`
+- **Pipeline results**: `/mnt/projects/debruinz_project/singlet_pipeline/results/`
 - **Compute nodes**: c001-c010 (40-52 cores), b001-b004 (bigmem 1.5TB)
 - **State files**: `/mnt/home/debruinz/Singlet-AI/singlet-agents/state/`
 

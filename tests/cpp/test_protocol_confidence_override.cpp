@@ -64,7 +64,7 @@ static OverrideResult apply_override(
 // ── Confidence enum ordering ──────────────────────────────────────────────────
 
 static void test_confidence_ordering() {
-    // Verify enum numeric values used throughout singlify.
+    // Verify enum numeric values used throughout singlet.
     CHECK(static_cast<uint8_t>(lib1fq::Confidence::NONE)   == 0);
     CHECK(static_cast<uint8_t>(lib1fq::Confidence::LOW)    == 1);
     CHECK(static_cast<uint8_t>(lib1fq::Confidence::MEDIUM) == 2);

@@ -7,7 +7,7 @@ All notable changes to the singlet project.
 ### Breaking Changes
 - **Unified package**: `singlet-bio`, `singlepress`, `singlet-gpu` merged into single `singlet` package
 - **Install**: `pip install singlet` (replaces `pip install singlet-bio`)
-- **R package**: renamed from `singlify` to `singlet`
+- **R package**: renamed from `singlet` to `singlet`
 - **C++ namespaces**: `singlet::pz`, `singlet::fq`, `singlet::pileup`, `singlet::gpu`
 
 ### Features
@@ -20,7 +20,7 @@ All notable changes to the singlet project.
 - **CMake find_package**: `find_package(Singlet COMPONENTS pz fq pileup)` with version file
 - **R GPU support**: `singlet::has_gpu()`, `gpu_pca()`, `gpu_neighbors()`, `gpu_leiden()`
 - **C++ test suite**: 100 unit tests covering all pileup modules (codec, cell calling, ATAC, ADT, species, nonhost, export, spatial, protocol detection, UMI dedup, bloom filter, velocity, saturation, read stats, provenance, minimizer index, cascade stats, pz writer, ancestry, ASE, MTX writer)
-- **IO schema v2 support**: Loader auto-detects singlify v2 subdirectory layout (`donor/snp_ad.1pz`)
+- **IO schema v2 support**: Loader auto-detects singlet v2 subdirectory layout (`donor/snp_ad.1pz`)
 - **MCP server tests**: 25 unit tests covering all parquet-backed tools + call_tool router
 - **Python lint**: ruff check + ruff format enforced (0 errors, CI job added)
 - **Type annotations**: All public functions annotated with return types
@@ -58,7 +58,7 @@ All notable changes to the singlet project.
 - `include/singlet/fq/` — .1fq 2-bit packed FASTQ codec
 - `include/singlet/pileup/` — streaming BAM pileup engine (70+ modules)
 - `include/singlet/gpu/` — CUDA analysis kernels
-- `include/singlet/star/` — STAR aligner API (singlet-lite fork, 48% faster)
+- `include/singlet/star/` — STAR aligner API (vendored, MIT license)
 
 ### Removed
 - Standalone `singlepress` repository (archived)
@@ -72,7 +72,7 @@ All notable changes to the singlet project.
 - **Bundled catalog**: Package ships with `catalog_v1.parquet` (1,175 series) and `sample_index.parquet` (2,378 samples). No downloads needed to browse the atlas.
 - **Text search**: `singlet.samples(search="lung")` — full-text search across GEO titles, organisms, protocols.
 - **Quality tiers**: `singlet.samples(quality_tier="gold")` — filter by mapping rate and cell count.
-- **load_dir() v3**: Reads 10 singlify output files into a single AnnData with cell cycle phases, ancestry, sex call, pipeline summary, and saturation curves in `obs`/`uns`.
+- **load_dir() v3**: Reads 10 singlet output files into a single AnnData with cell cycle phases, ancestry, sex call, pipeline summary, and saturation curves in `obs`/`uns`.
 - **17 notebooks**: Complete reproducibility collection covering QC, genomic features, and validation.
 - **MCP server**: `python -m singlet.mcp.server` exposes atlas data to AI assistants (requires Python 3.10+).
 
@@ -87,7 +87,7 @@ All notable changes to the singlet project.
 - `singlet.info(accession)` — series metadata dict
 
 ### Data Loading
-- `singlet.load_dir(path)` — singlify output → AnnData (primary interface)
+- `singlet.load_dir(path)` — singlet output → AnnData (primary interface)
 - `singlet.load(source)` — load local .1pz/.spz/.h5ad files
 - `singlet.read_1pz(path)` — read .1pz sparse matrix format
 - `singlet.write_1pz(adata, path)` — write .1pz format
@@ -98,7 +98,7 @@ All notable changes to the singlet project.
 
 ### load_dir() Output
 - **obs**: total_umis, total_genes, mt_pct, ribo_pct, intronic_pct, doublet_score, is_doublet, phase, s_score, g2m_score
-- **uns**: ancestry, sex_call, summary, saturation_curve, singlify_dir
+- **uns**: ancestry, sex_call, summary, saturation_curve, singlet_dir
 - **var**: gene_id (Ensembl), gene_name
 - **Layers**: gene_counts (default), exon_counts, intron_counts, gene_counts_em
 

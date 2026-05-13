@@ -1,4 +1,4 @@
-// singlify R package — Rcpp binding for pz_reader.h.
+// singlet R package — Rcpp binding for pz_reader.h.
 //
 // This is a *thin* wrapper. All decode work (format parsing, VOCSC chunk
 // decompression, bit-plane / bitmap / byte-split inverse transforms,
@@ -42,7 +42,7 @@ namespace pz = singlet::pz;
 //'   \item{rownames}{Character vector of feature names.}
 //'   \item{colnames}{Character vector of cell barcodes.}
 //'   \item{user_kv}{Named character vector of embedded pipeline metadata
-//'     (gsm_id, gse_id, organism, protocol, singlify_version,
+//'     (gsm_id, gse_id, organism, protocol, singlet_version,
 //'     pipeline_date, etc.).}
 //' }
 //' @keywords internal

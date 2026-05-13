@@ -47,7 +47,7 @@ struct TxomeHit {
 // ── TxomeIndex — pre-built in-memory index over spliced transcriptome ──────────
 //
 // Build from a FASTA of spliced transcripts (one entry per transcript).
-// Persisted at ${SINGLIFY_REF_BASE}/txome/{species}/tx_index.sa (future SA version).
+// Persisted at ${SINGLET_REF_BASE}/txome/{species}/tx_index.sa (future SA version).
 // For v0.1 the index is built in RAM from the tx_fa string vector.
 //
 // Layout:

@@ -26,7 +26,7 @@
 | Function | Description |
 |----------|-------------|
 | `singlet.load(source, *, genes=None, obs_filter=None)` | Load GSE accession or file path → AnnData |
-| `singlet.load_dir(path, *, layer="gene_counts")` | Load singlify output directory → AnnData |
+| `singlet.load_dir(path, *, layer="gene_counts")` | Load singlet output directory → AnnData |
 | `singlet.load_sample(gsm_id, *, genes=None)` | Load single GSM via column-range read |
 | `singlet.download(accession, *, source="zenodo")` | Download .1pz file from Zenodo/AWS |
 

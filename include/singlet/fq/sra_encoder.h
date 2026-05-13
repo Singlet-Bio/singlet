@@ -1432,7 +1432,7 @@ class SraEncoder {
         // ── Phase 2b+: ATAC 3-read barcode enablement ──────────────────────────────
         // When the SRA deposit has 3 segments (R1 genomic + barcode + R3 genomic),
         // enable I2 stream in the writer so barcodes are captured and embedded in
-        // .1fq QNAMEs during singlify process.  Without this, barcode is discarded
+        // .1fq QNAMEs during singlet process.  Without this, barcode is discarded
         // and fragment extraction silently assigns all reads to the N-pad barcode
         // (BC:NNNNNNNNNNNNNNNN), yielding 0 valid fragments.
         //
@@ -1592,7 +1592,7 @@ class SraEncoder {
         // that probe spots have usable R2 data.  If median R2 == 0 and no
         // structural fix applies, the SRA R2 has no sequence data — abort early
         // rather than encoding millions of reads with empty R2, which causes
-        // singlify process to crash with "R2 empty for all reads" after wasting
+        // singlet process to crash with "R2 empty for all reads" after wasting
         // download bandwidth and STAR alignment time.
         uint16_t median_probe_r2 = 0;  // used in streaming phase to filter stray zero-R2 reads
         {
@@ -1611,7 +1611,7 @@ class SraEncoder {
                 std::sort(r2_lens_probe.begin(), r2_lens_probe.end());
                 median_probe_r2 = r2_lens_probe[r2_lens_probe.size() / 2];
 
-                std::cerr << "[singlify] R2 variable-length check: median="
+                std::cerr << "[singlet] R2 variable-length check: median="
                           << median_probe_r2 << "bp, zero="
                           << static_cast<int>(r2_zero_frac * 100) << "% ("
                           << n_r2_zero << "/" << n_probe << " probe reads)\n";
@@ -1622,12 +1622,12 @@ class SraEncoder {
                     // Most likely: barcode-stripped SRA deposit or quality-only
                     // R2 column (SRA strips sequence leaving only quality scores).
                     // Abort before wasting download + alignment time.
-                    std::cerr << "[singlify] ERROR: R2 (biological read) has no sequence"
+                    std::cerr << "[singlet] ERROR: R2 (biological read) has no sequence"
                                  " data in SRA.\n"
-                              << "[singlify]   median R2 = 0bp over " << n_probe
+                              << "[singlet]   median R2 = 0bp over " << n_probe
                               << " probe reads (" << static_cast<int>(r2_zero_frac * 100)
                               << "% zero-length).\n"
-                              << "[singlify]   Barcode-stripped or quality-only R2 deposit."
+                              << "[singlet]   Barcode-stripped or quality-only R2 deposit."
                                  " Classifying as data_incomplete.\n";
                     stats.protocol_tag = "data_incomplete";
                     stats.confidence   = Confidence::NONE;
@@ -1636,7 +1636,7 @@ class SraEncoder {
                     return stats;
                 }
                 if (r2_zero_frac > 0.10 && median_probe_r2 > 0) {
-                    std::cerr << "[singlify] WARNING: R2 variable-length detected"
+                    std::cerr << "[singlet] WARNING: R2 variable-length detected"
                                  " (median: " << median_probe_r2 << "bp, zero-length: "
                               << static_cast<int>(r2_zero_frac * 100)
                               << "%). Zero-length R2 reads will be filtered.\n";
@@ -1659,7 +1659,7 @@ class SraEncoder {
         wcfg.assay_type = assay;
 
         // ATAC 3-read: enable I2 barcode stream so barcodes survive into the .1fq
-        // and are injected into QNAMEs during singlify process fragment extraction.
+        // and are injected into QNAMEs during singlet process fragment extraction.
         if (atac_3seg_i2) {
             wcfg.has_i2_stream = true;
             wcfg.i2_length = probe_bc_len;
@@ -2373,7 +2373,7 @@ class SraEncoder {
                 // encoding the detected BC length (N) and UMI length (M) directly
                 // in the tag.  Parse these instead of running the r1_len/2 heuristic,
                 // which produces nonsensical values (e.g. CBlen=19, UMIlen=19 for a
-                // 38bp R1) that are then rejected by singlify's sanity check.
+                // 38bp R1) that are then rejected by singlet's sanity check.
                 if (canonical_tag.size() > 8 &&
                     canonical_tag.compare(0, 8, "agnostic") == 0) {
                     auto bc_pos  = canonical_tag.find("-bc");

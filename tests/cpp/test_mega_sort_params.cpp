@@ -192,11 +192,11 @@ static void test_spec_acceptance() {
     // Ultra sort bins: the primary acceptance check for iteration #2.
     // Samples at or above ULTRA_READ_THRESHOLD MUST use ULTRA_SORT_BINS = 100.
     // This is asserted structurally: the header constant is the single source
-    // of truth for singlify.cpp's --outBAMsortingBinsN value in the ultra tier.
+    // of truth for singlet.cpp's --outBAMsortingBinsN value in the ultra tier.
     CHECK(ULTRA_SORT_BINS == 100);
 
     // GSM7102845 witness: 666M on a 384G node should tier-classify to Ultra,
-    // which then selects ULTRA_SORT_BINS via singlify.cpp.
+    // which then selects ULTRA_SORT_BINS via singlet.cpp.
     CHECK(tier_for(666'000'000ULL, false) == Tier::Ultra);
     CHECK(tier_for(800'000'000ULL, false) == Tier::Ultra);
 }

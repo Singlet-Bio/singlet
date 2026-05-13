@@ -1241,7 +1241,7 @@ inline DonorDepths aggregate_donor_depths(
 }
 
 // ============================================================================
-// Parse a singlify SNP name "chr:pos:R>A" into component fields.
+// Parse a singlet SNP name "chr:pos:R>A" into component fields.
 // pos is 1-based in the name (as stored) and returned 1-based.
 // ============================================================================
 static void parse_snp_name(const std::string& name,
@@ -1270,7 +1270,7 @@ inline void write_donor_vcfs(
     const DemuxResult& demux,
     const DonorDepths& depths,
     const std::vector<std::string>& snp_names,
-    const std::string& singlify_version = "0.2.0")
+    const std::string& singlet_version = "0.2.0")
 {
     const int K = demux.n_donors_k;
     const int nc = depths.n_covered;
@@ -1284,7 +1284,7 @@ inline void write_donor_vcfs(
         }
 
         f << "##fileformat=VCFv4.2\n";
-        f << "##source=singlify v" << singlify_version << "\n";
+        f << "##source=singlet v" << singlet_version << "\n";
         f << "##donorID=donor" << k << "\n";
         f << "##FILTER=<ID=PASS,Description=\"All filters passed\">\n";
         f << "##INFO=<ID=NS,Number=1,Type=Integer,Description=\"Number of donors with any coverage at site\">\n";

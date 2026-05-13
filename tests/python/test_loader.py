@@ -5,7 +5,7 @@ import os
 import pytest
 
 SAMPLE_DIR = (
-    "/mnt/projects/debruinz_project/singlify_pipeline/quant/scrna/GSE125/GSE125416/GSM3573650"
+    "/mnt/projects/debruinz_project/singlet_pipeline/quant/scrna/GSE125/GSE125416/GSM3573650"
 )
 HAS_SAMPLE = os.path.isdir(SAMPLE_DIR)
 
@@ -68,7 +68,7 @@ class TestLoadDir:
         from singlet._loader import load_dir
 
         adata = load_dir(SAMPLE_DIR, with_qc=False, with_doublets=False)
-        assert adata.uns["singlify_dir"] == SAMPLE_DIR
+        assert adata.uns["singlet_dir"] == SAMPLE_DIR
 
     def test_missing_dir(self):
         from singlet._loader import load_dir

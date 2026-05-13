@@ -16,15 +16,15 @@ knitr::opts_chunk$set(
 ```
 
 This vignette shows three common downstream workflows against a
-singlify pipeline output: Bioconductor `scater` + `scran`, Seurat,
+singlet pipeline output: Bioconductor `scater` + `scran`, Seurat,
 and RNA velocity via scVelo. The goal is to demonstrate that the
-`singlify` package drops the pipeline outputs into standard ecosystem
+`singlet` package drops the pipeline outputs into standard ecosystem
 objects without any reshape, rename, or dtype conversion.
 
 ## Setup
 
 ```{r setup}
-library(singlify)
+library(singlet)
 
 sample_dir <- "quant/scrna/GSE174/GSE174399/GSM5293863"
 ```
@@ -69,8 +69,8 @@ scater::plotUMAP(sce, colour_by = "cluster")
 Note how the embedded metadata is still first-class:
 
 ```{r bioc_meta}
-metadata(sce)$singlify[["gsm_id"]]
-metadata(sce)$singlify[["protocol"]]
+metadata(sce)$singlet[["gsm_id"]]
+metadata(sce)$singlet[["protocol"]]
 ```
 
 ## Seurat: standard pipeline
@@ -96,11 +96,11 @@ obj <- RunUMAP(obj, dims = 1:30)
 DimPlot(obj, group.by = "seurat_clusters")
 ```
 
-GEO context is in `@misc$singlify`:
+GEO context is in `@misc$singlet`:
 
 ```{r seurat_meta}
-obj@misc$singlify[["gsm_id"]]
-obj@misc$singlify[["organism"]]
+obj@misc$singlet[["gsm_id"]]
+obj@misc$singlet[["organism"]]
 ```
 
 ## RNA velocity
@@ -135,7 +135,7 @@ cohort_dirs <- list.dirs("quant/scrna/GSE174/GSE174399", recursive = FALSE)
 sces <- lapply(cohort_dirs, as_sce)
 names(sces) <- vapply(
     sces,
-    function(x) metadata(x)$singlify[["gsm_id"]],
+    function(x) metadata(x)$singlet[["gsm_id"]],
     character(1)
 )
 
@@ -152,7 +152,7 @@ merged$sample <- rep(names(sces), vapply(sces, ncol, integer(1)))
 
 ## What's kept vs dropped
 
-The singlify pipeline ships only non-redundant outputs. Matrices that
+The singlet pipeline ships only non-redundant outputs. Matrices that
 are element-wise derivable from others (`gene_counts = spliced +
 unspliced + ambiguous`) and always-zero matrices on 3'/5' 10x and
 drop-seq (`ambiguous`) are dropped from the NFS copy. Everything you
@@ -170,5 +170,5 @@ need for downstream analysis is still present:
 | Per-cell QC               | `colData(sce)`            |
 | Cell-cycle phase          | `colData(sce)$cell_cycle_scores__phase` |
 | Doublet scores            | `colData(sce)$doublet_scores__doublet_score` |
-| Sample / GEO context      | `metadata(sce)$singlify`  |
+| Sample / GEO context      | `metadata(sce)$singlet`  |
 | Donor assignments         | read `donor_assignments.tsv` directly from `attr(dd, "path")` |

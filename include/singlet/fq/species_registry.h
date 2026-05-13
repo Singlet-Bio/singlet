@@ -1,5 +1,5 @@
 #pragma once
-// SPECIES-KMER-DB: Compile-time registry of all 37 species singlify supports
+// SPECIES-KMER-DB: Compile-time registry of all 37 species singlet supports
 // Derived from scgeo/config/species.py + Ensembl release 111 / EnsemblGenomes release 59
 // No external dependencies — header-only.
 
@@ -20,7 +20,7 @@ struct SpeciesInfo {
     const char* ensembl_name;      // Ensembl species directory name (lowercase, underscored)
     const char* ensembl_division;  // "ensembl", "plants", "metazoa", "protists"
     int ensembl_release;           // 111 for main Ensembl, 59 for EnsemblGenomes divisions
-    bool has_local_index;          // true if reference is installed in SINGLIFY_REF_BASE
+    bool has_local_index;          // true if reference is installed in SINGLET_REF_BASE
 };
 
 // All 37 supported species (from scgeo/config/species.py)

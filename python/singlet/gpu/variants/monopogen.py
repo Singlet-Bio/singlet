@@ -5,7 +5,7 @@ singlet.gpu.variants.monopogen — GPU-native Monopogen somatic SNV calling.
 Underlying C++ kernel: singlet::gpu::variants::call_variants (cycle 42,
 variants/monopogen.h).
 
-Germline genotyping + somatic SNV discovery from singlify snp_ad / snp_dp
+Germline genotyping + somatic SNV discovery from singlet snp_ad / snp_dp
 outputs.  Pipeline:
   1. Per-SNP pileup (cub::DeviceSegmentedReduce).
   2. Binomial likelihood germline genotyping (0/0, 0/1, 1/1).
@@ -49,7 +49,7 @@ def call(
     """
     GPU-native Monopogen somatic SNV calling from scRNA pileup (cycle 42).
 
-    Performs germline genotyping and somatic variant discovery from singlify
+    Performs germline genotyping and somatic variant discovery from singlet
     pileup data.  Returns germline calls for all SNPs and a sparse list of
     somatic candidates that pass the rule-based filter.
 
@@ -57,10 +57,10 @@ def call(
     ----------
     snp_ad : DeviceCsc
         Alternate-allele counts (SNP sites × cells, CSC).
-        From singlify ``snp_ad.1pz``.
+        From singlet ``snp_ad.1pz``.
     snp_dp : DeviceCsc
         Total depth at SNP sites (SNP sites × cells, CSC).
-        From singlify ``snp_dp.1pz``.
+        From singlet ``snp_dp.1pz``.
     chromosome : list[int]
         Per-SNP chromosome assignment (1-based integers, 1-26).
         Length = number of SNP columns in snp_ad/snp_dp.

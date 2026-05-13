@@ -1,7 +1,7 @@
-# STAR aligner — compiled as object library, linked into singlify
-# singlet-lite fork: 48% faster than stock STAR via PGO, LTO, and
-# algorithmic optimizations (SA boundary prefetch, lazy winBin reset,
-# hash barcode lookup, 14-mer chunk sort, NUMA interleave)
+# STAR aligner — compiled as object library, linked into singlet
+# Vendored from STAR 2.7.11b (MIT license, see LICENSE.STAR).
+# Optimizations: PGO, LTO, SA boundary prefetch, lazy winBin reset,
+# hash barcode lookup, 14-mer chunk sort, NUMA interleave.
 
 file(GLOB STAR_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
 file(GLOB STAR_OPAL "${CMAKE_CURRENT_SOURCE_DIR}/opal/*.cpp")

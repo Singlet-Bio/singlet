@@ -32,7 +32,7 @@ dim(mat)                             # 38606 × 16079
 attr(mat, "user_kv")[["gsm_id"]]     # "GSM5293863"
 
 # Mid-level: a whole pipeline directory → named list of matrices
-dd <- read_singlify_dir("quant/scrna/GSE174/GSE174399/GSM5293863")
+dd <- read_singlet_dir("quant/scrna/GSE174/GSE174399/GSM5293863")
 print(dd)
 
 # High-level: drop into Bioconductor

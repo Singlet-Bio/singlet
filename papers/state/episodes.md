@@ -8,7 +8,7 @@
 - **Phase**: Infrastructure setup
 - **Worker**: orchestrator (manual bootstrap)
 - **Expected**: State files created, all 8 agent files in place
-- **Actual**: State dir initialized, orchestrator rewritten to singlify-style architecture
+- **Actual**: State dir initialized, orchestrator rewritten to singlet-style architecture
 - **Decision**: advance — begin Phase 1 (curator) next cycle
 - **Strategy patch**: none (first cycle)
 

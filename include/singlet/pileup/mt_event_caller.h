@@ -199,7 +199,7 @@ inline void write_donor_consensus_fa(
         return;
     }
     f << ">donor" << donor_idx << "_mt"
-      << "  source=singlify-vb-demux"
+      << "  source=singlet-vb-demux"
       << " ref=chrM"
       << " ref_build=" << ref_build << "\n";
     for (size_t i = 0; i < consensus.size(); i += 60)
@@ -218,7 +218,7 @@ inline void write_donor_variants_vcf(
     const std::string& donor_consensus,
     const std::string& species_ref,
     const std::string& ref_build,
-    const std::string& singlify_version)
+    const std::string& singlet_version)
 {
     const std::string path =
         mt_dir + "/donor" + std::to_string(donor_idx) + "_mt_variants.vcf";
@@ -228,8 +228,8 @@ inline void write_donor_variants_vcf(
         return;
     }
     f << "##fileformat=VCFv4.2\n"
-      << "##source=singlify-vb-demux\n"
-      << "##singlify_version=" << singlify_version << "\n"
+      << "##source=singlet-vb-demux\n"
+      << "##singlet_version=" << singlet_version << "\n"
       << "##donor=donor" << donor_idx << "\n"
       << "##ref_build=" << ref_build << "\n"
       << "##contig=<ID=chrM,length=" << MT_LEN << ">\n"
@@ -691,8 +691,8 @@ inline MtDonorOutputStats write_mt_donor_outputs(
     };
     const std::string ref_build =
         meta_get("reference_build", "GRCh38-2024-A");
-    const std::string singlify_version =
-        meta_get("singlify_version", "");
+    const std::string singlet_version =
+        meta_get("singlet_version", "");
 
     const int n_donors = demux_result.n_donors_k;
     const auto& assignments = demux_result.assignments;
@@ -711,7 +711,7 @@ inline MtDonorOutputStats write_mt_donor_outputs(
     for (int d = 0; d < n_donors; ++d) {
         write_donor_consensus_fa(mt_dir, d, donor_cons[d], ref_build);
         write_donor_variants_vcf(mt_dir, d, donor_cons[d], species_ref,
-                                 ref_build, singlify_version);
+                                 ref_build, singlet_version);
         // Count donors that have at least some consensus (not all-N)
         bool has_seq = false;
         for (char c : donor_cons[d]) { if (c != 'N') { has_seq = true; break; } }

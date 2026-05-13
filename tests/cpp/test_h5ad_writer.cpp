@@ -144,7 +144,7 @@ static H5adWriteConfig make_small_cfg(const std::string& path) {
     cfg.gene_names    = &genes;
     cfg.gene_ids      = &gene_ids;
     cfg.cell_barcodes = &cells;
-    cfg.metadata["singlify_version"] = "0.3.0";
+    cfg.metadata["singlet_version"] = "0.3.0";
     cfg.metadata["organism"]         = "Homo sapiens";
     return cfg;
 }
@@ -370,7 +370,7 @@ static void test_layers() {
     std::cout << "  test_layers: PASS\n";
 }
 
-// ── Test 9: uns/singlify/ metadata written as string attributes ──────────────
+// ── Test 9: uns/singlet/ metadata written as string attributes ──────────────
 
 static void test_metadata() {
     const std::string path = "/tmp/test_h5ad_meta.h5ad";
@@ -381,12 +381,12 @@ static void test_metadata() {
     hid_t fid = H5Fopen(path.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
     assert(fid >= 0);
 
-    assert(group_exists(fid, "/uns/singlify") && "uns/singlify missing"); // assertion 36
+    assert(group_exists(fid, "/uns/singlet") && "uns/singlet missing"); // assertion 36
 
-    hid_t sg = H5Gopen2(fid, "/uns/singlify", H5P_DEFAULT);
+    hid_t sg = H5Gopen2(fid, "/uns/singlet", H5P_DEFAULT);
     assert(sg >= 0);
-    assert(read_str_attr(sg, "singlify_version") == "0.3.0" &&
-           "singlify_version attr wrong");                          // assertion 37
+    assert(read_str_attr(sg, "singlet_version") == "0.3.0" &&
+           "singlet_version attr wrong");                          // assertion 37
     assert(read_str_attr(sg, "organism") == "Homo sapiens" &&
            "organism attr wrong");                                  // assertion 38
     H5Gclose(sg);

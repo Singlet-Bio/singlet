@@ -52,7 +52,7 @@ bash singlet-agents/scripts/job_dispatch.sh submit \
   --node c006 --threads 16 --timeout 3600 \
   --expected-duration 400 --dag-task "regression-3dataset" --cycle ${CYCLE} \
   --cmd 'for SRR in SRR32855204 SRR10010840 SRR34789664; do
-  /mnt/home/debruinz/Singlet-AI/singlet/build/src/pipeline/singlify ... \
+  /mnt/home/debruinz/Singlet-AI/singlet/build/src/pipeline/singlet ... \
   python3 singlet-agents/scripts/validate_e2e.py ...
 done'
 # Return immediately — orchestrator harvests next cycle
@@ -126,8 +126,8 @@ For each new feature or optimization, run ALL of these:
 Compare to gold standard on C01 (primary benchmark):
 ```bash
 python3 singlet-agents/scripts/validate_e2e.py \
-  /mnt/projects/debruinz_project/singlify_validation/singlify_out/$SRR/ \
-  /mnt/projects/debruinz_project/singlify_validation/starsolo/$SRR/Solo.out/Gene/filtered \
+  /mnt/projects/debruinz_project/singlet_validation/singlet_out/$SRR/ \
+  /mnt/projects/debruinz_project/singlet_validation/starsolo/$SRR/Solo.out/Gene/filtered \
   --skip-vireo --skip-mt
 ```
 

@@ -3,8 +3,8 @@
 ## Overview
 
 `.1fq` is a column-oriented, block-compressed archival format for sequencing
-reads, **purpose-built for the singlify pipeline**. It is not designed for
-generic aligner compatibility — it integrates directly with singlify's internal
+reads, **purpose-built for the singlet pipeline**. It is not designed for
+generic aligner compatibility — it integrates directly with singlet's internal
 STAR alignment engine and singlet-pileup feature extraction.
 
 **Design goals**, in priority order:
@@ -18,7 +18,7 @@ STAR alignment engine and singlet-pileup feature extraction.
 7. **Read folding** — deduplicate at R2-sequence level, align each unique R2 once (5–8×)
 8. **2-bit alignment path** — packed genome/reads for 4× cache, 16× comparison (1.5–2×)
 
-### Architecture in the singlify pipeline
+### Architecture in the singlet pipeline
 
 ```
 DOWNLOAD (streaming):
@@ -26,7 +26,7 @@ DOWNLOAD (streaming):
                    (never saved)            (single-thread)        (archival)
 
 PROCESS (later):
-  .1fq on disk  ─→  lib1fq reader  ─→  singlify core  ─→  .1pz
+  .1fq on disk  ─→  lib1fq reader  ─→  singlet core  ─→  .1pz
                      (numeric bytes      (STAR + pileup     (counts)
                       + pre-parsed BC      in-process)
                       + UMI + quality)
@@ -41,7 +41,7 @@ download and read many times for (re-)processing.
 
 ### 1.1 Architecture: destructive compression at download speed
 
-The existing `SraReader` in singlify uses VDB's `VCursorCellDataDirect` for
+The existing `SraReader` in singlet uses VDB's `VCursorCellDataDirect` for
 zero-copy access to SRA columns: `READ`, `QUALITY`, `READ_LEN`, `READ_START`,
 `NAME`. The .1fq encoder wraps this same VDB cursor but writes .1fq blocks
 instead of FASTQ text:
@@ -289,11 +289,11 @@ Each signal tests a different biological/technical property.
 
 | Level | Score | Optimizations applied |
 |---|---|---|
-| `HIGH` (≥0.85) | >70% WL | BC dict + dedup + trim + singlify STARsolo params |
+| `HIGH` (≥0.85) | >70% WL | BC dict + dedup + trim + singlet STARsolo params |
 | `MEDIUM` (0.60–0.85) | 50–70% WL | BC dict + trim; skip dedup |
 | `LOW` (0.40–0.60) | 20–50% WL | BC dict only |
-| `UNKNOWN` (<0.40) | <20% WL | Base layer only; singlify uses generic mode |
-| `MANUAL` | User override | Full optimizations + singlify uses specified params |
+| `UNKNOWN` (<0.40) | <20% WL | Base layer only; singlet uses generic mode |
+| `MANUAL` | User override | Full optimizations + singlet uses specified params |
 
 ### 2.6 Safety guarantee
 
@@ -304,14 +304,14 @@ Every protocol-aware transform has a verification gate:
 | Barcode dictionary | <70% WL match → fail | Raw 2-bit encoding |
 | PCR dedup | No identity matches → 0 dedup | Reads stored verbatim |
 | PolyA trim | No polyA found | No trimming |
-| singlify STARsolo params | Metadata mismatch → fallback | Generic alignment |
+| singlet STARsolo params | Metadata mismatch → fallback | Generic alignment |
 
 **The .1fq file always preserves all original nucleotides.** Wrong protocol =
 worse compression ratio, not wrong alignment results.
 
 ---
 
-## 3. Direct Read Feed into singlify (No ASCII)
+## 3. Direct Read Feed into singlet (No ASCII)
 
 ### 3.1 Current data path (wasteful)
 
@@ -372,7 +372,7 @@ can be used. A flag in the header selects the format.
 
 The .1fq file already has barcodes extracted, dictionary-encoded, and
 whitelist-matched. Instead of STAR redoing barcode extraction and whitelist
-correction, singlify can:
+correction, singlet can:
 
 1. Read barcode dictionary index from .1fq block
 2. Look up the actual barcode sequence from the dictionary
@@ -386,7 +386,7 @@ verified accuracy.
 ### 3.4 Integration modes
 
 ```
-singlify --1fq input.1fq [--protocol manual-override] \
+singlet --1fq input.1fq [--protocol manual-override] \
          --genome-dir /path/to/star \
          --barcodes filtered.tsv \
          --exons genes.gtf --snps variants.vcf \
@@ -411,9 +411,9 @@ Internal flow:
 
 ## 4. Quality Score Encoding
 
-### 4.1 Why quality matters for singlify
+### 4.1 Why quality matters for singlet
 
-singlify's pileup engine uses `min_baseq = 10` for SNP and RNA editing
+singlet's pileup engine uses `min_baseq = 10` for SNP and RNA editing
 pileup. This filters low-quality bases at variant positions to avoid
 false-positive allele calls. The per-donor VCF construction depends on
 accurate allele depth (AD/DP), which requires per-base quality.
@@ -450,7 +450,7 @@ Map Phred 0–41 to 4 bins:
 | 3 | 30–41 | 11 | 37 | High quality |
 
 **The critical threshold is preserved**: bin 0 (Phred <10) vs bins 1–3
-(Phred ≥10). This is exactly the `min_baseq=10` filter used by singlify's
+(Phred ≥10). This is exactly the `min_baseq=10` filter used by singlet's
 SNP pileup. Binned-4 quality has >95% concordance with full-quality
 variant calls because the dominant signal is "low vs not-low."
 
@@ -478,7 +478,7 @@ Storage overhead for 100bp R2, binned quality:
 
 ### 5.1 Concept
 
-After initial .1fq creation (at download time) and first singlify alignment,
+After initial .1fq creation (at download time) and first singlet alignment,
 we know the genomic mapping position for each read. R2 sequences that align
 to the same region share near-identical sequence with the reference. We can
 delta-encode R2 against the transcript reference:
@@ -501,7 +501,7 @@ Tier 1 (.1fq):
   Self-contained. Can always decode without reference.
 
 Tier 2 (.1fq with FLAG_REF_COMPRESSED):
-  Created after first singlify run. R2/cDNA column replaced with:
+  Created after first singlet run. R2/cDNA column replaced with:
     [uint32_t ref_tid]              // chromosome/transcript ID
     [uint32_t ref_pos]              // 0-based position
     [uint8_t  strand]               // 0=fwd, 1=rev
@@ -528,17 +528,17 @@ Combined with other columns: **total .1fq shrinks by ~30–40%** in tier 2.
 
 ```
 1. Download → .1fq tier 1 (stream encode, fast)
-2. singlify processes .1fq → .1pz (alignment + counting)
+2. singlet processes .1fq → .1pz (alignment + counting)
 3. Background job: 1fq_refcompress reads alignment output + .1fq tier 1
    → writes .1fq tier 2 (in-place upgrade or new file)
-4. Future singlify re-runs read tier 2 .1fq:
+4. Future singlet re-runs read tier 2 .1fq:
    Reconstruct R2 from reference + delta at decode time
 ```
 
 Tier 2 requires the genome reference at decode time. This is always
-available in singlify (it loads the STAR genome index anyway).
+available in singlet (it loads the STAR genome index anyway).
 
-### 5.5 Decode for singlify
+### 5.5 Decode for singlet
 
 The tier 2 decoder:
 1. Looks up `ref_tid:ref_pos` in the loaded genome sequence
@@ -567,7 +567,7 @@ genome, mismatch application is ~3 byte writes.
 | Bulk RNA/WGS PE | R1(prefix 50bp) + R2(prefix 50bp) | 5–30% |
 | UNKNOWN | All streams concatenated | Very conservative |
 
-### 6.2 singlify integration: dedup-aware counting
+### 6.2 singlet integration: dedup-aware counting
 
 When `FLAG_DEDUPED` is set, each .1fq read has a duplicate count. Two modes:
 
@@ -576,7 +576,7 @@ aligns once per unique read, pileup counts normally. This is correct but
 wastes STAR cycles re-aligning identical sequences.
 
 **Mode B — Count-forward** (optimized): Emit each unique read once to STAR.
-The alignment produces one BAM record. singlify's pileup engine receives the
+The alignment produces one BAM record. singlet's pileup engine receives the
 BAM record + the duplicate count from the .1fq block, and multiplies
 `increment()` calls by the count:
 
@@ -722,7 +722,7 @@ FLAG_INCOMPLETE    = 0x80  // Download was interrupted; valid to last block
 
 ### 9.3 Metadata Block (compressed JSON)
 
-Stores everything needed for singlify to configure STAR:
+Stores everything needed for singlet to configure STAR:
 
 ```json
 {
@@ -797,7 +797,7 @@ For each:
   [byte_numeric sequences: n_entries × bc_length bytes]
 ```
 
-Barcodes stored as byte-numeric (0/1/2/3) for direct use by singlify.
+Barcodes stored as byte-numeric (0/1/2/3) for direct use by singlet.
 Frequency-sorted: index 0 = most common barcode.
 
 ### 9.5 Data Block Format
@@ -926,7 +926,7 @@ Options:
 ```
 1fq refcompress -i input.1fq -o output.1fq \
     --genome-dir /path/to/star/genome \
-    --alignments /path/to/singlify/Aligned.bam
+    --alignments /path/to/singlet/Aligned.bam
 ```
 
 ### 12.3 `1fq inspect`
@@ -960,12 +960,12 @@ Output:
 
 ## 13. Implementation Roadmap
 
-### Phase 1: Streaming encode + singlify native read
+### Phase 1: Streaming encode + singlet native read
 
 1. `lib1fq`: C library for encode/decode (single header, like stb)
 2. `SraReader` → `Sra1fqEncoder`: VDB cursor → .1fq blocks (stream mode)
 3. `1fqBlockReader`: block-by-block decode to numeric bytes
-4. singlify `--1fq` mode: block reader → STAR Read1[] buffers
+4. singlet `--1fq` mode: block reader → STAR Read1[] buffers
 5. VDB accession streaming: direct NCBI download → .1fq
 
 ### Phase 2: Protocol-aware optimizations
@@ -978,23 +978,23 @@ Output:
 ### Phase 3: Dedup + reference compression
 
 10. PCR duplicate collapsing (offline pass)
-11. Count-forward mode in singlify pileup
+11. Count-forward mode in singlet pileup
 12. Reference-aware R2 compression (tier 2)
 
 ### Phase 4: Read folding + alignment cache
 
 13. R2-only sequence dedup in .1fq encoder (unique_seq_id mapping)
-14. Alignment result cache in singlify core
+14. Alignment result cache in singlet core
 15. Count-forward with cached alignments in pileup
 16. Prefix-based seed cache for sorted blocks (optional)
 
-### Phase 5: 2-bit packed alignment (STAR singlet-lite)
+### Phase 5: 2-bit packed alignment (vendored STAR)
 
 17. `compareSeqToGenome` rewrite: 64-bit XOR (32 bases/op)
 18. Packed genome loading (`G_packed` + N-bitmap)
 19. SA index build from packed reads (single shift+mask)
 20. Precomputed reverse complement genome strand
-21. Custom genome index generation for singlify
+21. Custom genome index generation for singlet
 
 ### Phase 6: Performance tuning
 
@@ -1095,7 +1095,7 @@ starting range can also accelerate the extension binary search. Net benefit:
 
 | Scenario | Reads aligned | STAR time vs baseline |
 |---|---|---|
-| No dedup (current singlify) | 100M | 1.0× |
+| No dedup (current singlet) | 100M | 1.0× |
 | Level 1: exact BC+UMI+R2 dedup (§6) | 40M | 0.40× |
 | Level 2: R2-only alignment cache | 12M | 0.12× |
 | Level 2 + prefix seed cache | 12M | 0.11× |
@@ -1106,8 +1106,8 @@ minutes. The pileup engine becomes the bottleneck.
 ### 14.6 Where to implement
 
 - **Level 1**: Already specified (§6, count-forward mode). In .1fq encoder.
-- **Level 2**: New alignment cache in singlify core. The .1fq encoder stores
-  the `read_idx → unique_seq_id` mapping in block metadata. singlify's
+- **Level 2**: New alignment cache in singlet core. The .1fq encoder stores
+  the `read_idx → unique_seq_id` mapping in block metadata. singlet's
   `readLoad1fq()` emits unique R2s, caches BAM results, and replays them
   during pileup with per-read BC/UMI/count.
 - **Level 3**: Optional seed cache in STAR's `maxMappableLength2strands`.
@@ -1119,7 +1119,7 @@ minutes. The pileup engine becomes the bottleneck.
 
 ### 15.1 How STAR currently encodes data
 
-Discovered by reading the singlet-lite STAR fork source:
+Discovered by reading the vendored STAR source:
 
 | Data | Storage | Size (human genome) | Source file |
 |---|---|---|---|
@@ -1277,7 +1277,7 @@ eliminates per-read complement computation entirely.
 | **Total** | **Medium-High** | **Medium** |
 
 **Critical risk**: Changing the genome representation potentially requires
-regenerating STAR genome indices. For our singlet-lite fork with fixed genome
+regenerating STAR genome indices. For our vendored STAR with fixed genome
 builds, this is a one-time cost. But it means the modified STAR can't use
 standard genome indices.
 
@@ -1288,7 +1288,7 @@ format and read folding are working):
 
 1. **Read folding (§14) delivers 5–8× speedup** with minimal STAR changes
 2. **2-bit alignment delivers 1.5–2× speedup** with significant STAR changes
-3. Combined: **8–16× total speedup** over current singlify STAR alignment
+3. Combined: **8–16× total speedup** over current singlet STAR alignment
 4. The two optimizations are orthogonal — read folding reduces the number of
    STAR invocations, 2-bit makes each invocation faster
 
@@ -1316,7 +1316,7 @@ operates on packed data. The format doesn't need to change.
    strategies are fundamentally different.
 
 5. **STAR code changes**: The `readLoad1fq()` function requires modifying
-   STAR source. Since we maintain the singlet-lite fork, this is feasible.
+   STAR source. Since we maintain a vendored copy, this is feasible.
    Minimal change: new `readFilesType` value + a ~50-line read loader.
 
 6. **R2-only alignment cache memory**: Caching BAM results for 12M unique R2s
@@ -1326,7 +1326,7 @@ operates on packed data. The format doesn't need to change.
 7. **2-bit genome index compatibility**: A 2-bit packed genome breaks
    compatibility with standard STAR genome indices. Evaluate whether to
    maintain dual-format loading (byte for standard, packed for .1fq mode)
-   or commit to a custom genome build for singlify.
+   or commit to a custom genome build for singlet.
 
 8. **Read folding vs multi-mapper resolution**: When using R2-only alignment
    cache (§14.3), a single R2 may multi-map to N locations. Each originating

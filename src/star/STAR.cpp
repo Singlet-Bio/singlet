@@ -40,12 +40,10 @@
 void usage(int usageType)
 {
     cout << "Usage: STAR  [options]... --genomeDir /path/to/genome/index/   --readFilesIn R1.fq R2.fq\n";
-    cout << "Spliced Transcripts Alignment to a Reference (c) Alexander Dobin, 2009-2022\n\n";
+    cout << "Spliced Transcripts Alignment to a Reference\n";
+    cout << "Originally by Alexander Dobin (MIT license). Bundled in singlet.\n\n";
     cout << "STAR version=" << STAR_VERSION << "\n";
     cout << "STAR compilation time,server,dir=" << COMPILATION_TIME_PLACE << "\n";
-    cout << "For more details see:\n";
-    cout << "<https://github.com/alexdobin/STAR>\n";
-    cout << "<https://github.com/alexdobin/STAR/blob/master/doc/STARmanual.pdf>\n";
 
     if (usageType == 0)
     { // brief
@@ -59,8 +57,8 @@ void usage(int usageType)
     exit(0);
 };
 
-// Entry point callable from singlify (replaces standalone main).
-// Renamed from main() so singlify links this translation unit without
+// Entry point callable from singlet (replaces standalone main).
+// Renamed from main() so singlet links this translation unit without
 // duplicate-symbol conflicts.
 int star_main_impl(int argInN, char *argIn[])
 {
@@ -95,7 +93,7 @@ int star_main_impl(int argInN, char *argIn[])
     P.inputParameters(argInN, argIn);
 
     *(P.inOut->logStdOut) << "\t" << P.commandLine << '\n';
-    *(P.inOut->logStdOut) << "\tSTAR version: " << STAR_VERSION << "   compiled: " << COMPILATION_TIME_PLACE << '\n';
+    *(P.inOut->logStdOut) << "\tSTAR version: " << STAR_VERSION << "   (singlet-bundled)   compiled: " << COMPILATION_TIME_PLACE << '\n';
     *(P.inOut->logStdOut) << timeMonthDayTime(g_statsAll.timeStart) << " ..... started STAR run\n"
                           << flush;
 

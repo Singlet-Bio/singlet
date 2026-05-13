@@ -30,7 +30,7 @@ struct TeCounterMeta {
     std::string species;              // "human" | "mouse"
     std::string te_family_table_hash; // hex SHA-256 of family_table.tsv
     std::string sample_id;
-    std::string singlify_version;
+    std::string singlet_version;
     std::string reference_build;
     // Derived constants (fixed for L2)
     std::string te_family_table_source = "Dfam_3.8";
@@ -109,7 +109,7 @@ class TeCounter {
         user_meta["protocol_id"]              = meta.protocol_id;
         user_meta["species"]                  = meta.species;
         user_meta["sample_id"]                = meta.sample_id;
-        user_meta["singlify_version"]         = meta.singlify_version;
+        user_meta["singlet_version"]         = meta.singlet_version;
         user_meta["reference_build"]          = meta.reference_build;
         user_meta["em_seed"]                  = meta.em_seed;
         user_meta["cascade_layer"]            = meta.cascade_layer;

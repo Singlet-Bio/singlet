@@ -25,7 +25,7 @@ Tolerances (from spec):
 
 Notes:
   - GSM4037629 has intron_counts.1pz; we load it as 'unspliced' and exon_counts.1pz
-    as 'spliced' per the singlify data contract.
+    as 'spliced' per the singlet data contract.
   - scvelo tests require an scvelo-compatible AnnData with 'spliced'/'unspliced' layers.
 
 Skip strategy:

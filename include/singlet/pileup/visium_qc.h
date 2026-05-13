@@ -178,7 +178,7 @@ inline bool write_visium_qc_tsv(
     return true;
 }
 
-/// Print summary QC to stderr in the singlify log style.
+/// Print summary QC to stderr in the singlet log style.
 inline void log_visium_summary(const VisiumQCSummary& s) {
     std::cerr << "[visium_qc] Spots: " << s.n_barcodes << " barcodes, "
               << s.n_in_tissue << " in-tissue\n";

@@ -77,7 +77,7 @@ static void test_roundtrip_small_uint16() {
         {"gse_id", "GSE_TEST_0001"},
         {"organism", "Homo sapiens"},
         {"protocol", "dropseq"},
-        {"singlify_version", "0.3.0"},
+        {"singlet_version", "0.3.0"},
         {"pipeline_date", "2026-04-13"},
     };
 

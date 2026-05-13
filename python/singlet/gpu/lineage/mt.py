@@ -7,7 +7,7 @@ Underlying C++ cycle: cycle 16 (anno/mt_lineage.h —
 
 This is a NEW addition to the single-cell ecosystem.  scanpy, Seurat, and
 MQuad do not expose an AnnData-native MT clone calling interface that
-integrates with the singlify ``mt_alleles.1pz`` output.
+integrates with the singlet ``mt_alleles.1pz`` output.
 
 Algorithm overview
 ------------------
@@ -52,7 +52,7 @@ def _get_mt_layers(
     """
     Return the (MT sites × cells) alt-count and depth matrices.
 
-    These correspond to singlify's ``mt_alleles.1pz`` output loaded into two
+    These correspond to singlet's ``mt_alleles.1pz`` output loaded into two
     layers: alt counts and total depth.  Both must be (sites × cells) or
     (cells × sites) — the wrapper normalises to (sites × cells) for the C++
     kernel.
@@ -101,7 +101,7 @@ def detect_clones(
     GPU Gaussian Mixture Model clustering.  This is a NEW capability with
     no direct scanpy or MQuad AnnData-native equivalent.
 
-    The function consumes singlify's ``mt_alleles.1pz`` output (loaded as
+    The function consumes singlet's ``mt_alleles.1pz`` output (loaded as
     two layers: ``mt_alt`` and ``mt_depth``).  Informative sites are
     selected, VAF is computed, and GMM clustering at K = min_K … max_K
     is run on device.  Optimal K is chosen by BIC.
@@ -109,12 +109,12 @@ def detect_clones(
     Parameters
     ----------
     adata : AnnData
-        Must contain two layers from singlify's MT output:
+        Must contain two layers from singlet's MT output:
 
         - ``adata.layers[alt_layer]``   — per-site alt-allele counts.
         - ``adata.layers[depth_layer]`` — per-site total depth counts.
 
-        Canonical singlify layer names after loading ``mt_alleles.1pz``
+        Canonical singlet layer names after loading ``mt_alleles.1pz``
         are ``'mt_alt'`` and ``'mt_depth'`` (see ``io.read_pz_to_anndata``).
     alt_layer : str, default ``"mt_alt"``
         Layer key for per-site alternate-allele counts.
@@ -172,12 +172,12 @@ def detect_clones(
         - ``'n_informative_sites'``:  int.
         - run parameters.
 
-    **Singlify integration**: singlify produces ``mt_alleles.1pz`` when
+    **Singlet integration**: singlet produces ``mt_alleles.1pz`` when
     ``--pipeline`` is used.  Load it with::
 
         adata_mt = read_pz_to_anndata(sample_dir, modality='mt')
         adata.layers['mt_alt']   = adata_mt.X   # alt counts
-        # The depth layer must be constructed from singlify provenance or
+        # The depth layer must be constructed from singlet provenance or
         # the separate mt_depth output once available in the format.
 
     Examples

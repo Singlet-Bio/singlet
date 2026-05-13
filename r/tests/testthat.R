@@ -1,4 +1,4 @@
 library(testthat)
-library(singlify)
+library(singlet)
 
-test_check("singlify")
+test_check("singlet")

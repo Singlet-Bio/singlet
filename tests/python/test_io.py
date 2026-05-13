@@ -92,10 +92,10 @@ def test_read_pz_to_anndata_basic(gsm4037629_path):
 # ---------------------------------------------------------------------------
 @requires_gpu
 def test_anndata_metadata_in_uns(gsm4037629_path):
-    """GEO metadata embedded in the .1pz TLV block must appear in adata.uns['singlify'].
+    """GEO metadata embedded in the .1pz TLV block must appear in adata.uns['singlet'].
 
     The design doc specifies that read_pz_to_anndata embeds all user_kv fields
-    from the .1pz TLV into adata.uns['singlify'] as a flat dict.
+    from the .1pz TLV into adata.uns['singlet'] as a flat dict.
 
     Required keys: gsm_id, gse_id.
     Non-empty string checks: protocol, organism.
@@ -104,25 +104,25 @@ def test_anndata_metadata_in_uns(gsm4037629_path):
 
     adata = singlet_gpu.io.read_pz_to_anndata(str(gsm4037629_path))
 
-    assert "singlify" in adata.uns, (
-        "adata.uns must contain 'singlify' key with embedded GEO metadata"
+    assert "singlet" in adata.uns, (
+        "adata.uns must contain 'singlet' key with embedded GEO metadata"
     )
-    meta = adata.uns["singlify"]
+    meta = adata.uns["singlet"]
 
     assert meta.get("gsm_id") == _EXPECTED_GSM_ID, (
-        f"uns['singlify']['gsm_id'] = {meta.get('gsm_id')!r}, expected {_EXPECTED_GSM_ID!r}"
+        f"uns['singlet']['gsm_id'] = {meta.get('gsm_id')!r}, expected {_EXPECTED_GSM_ID!r}"
     )
     assert meta.get("gse_id") == _EXPECTED_GSE_ID, (
-        f"uns['singlify']['gse_id'] = {meta.get('gse_id')!r}, expected {_EXPECTED_GSE_ID!r}"
+        f"uns['singlet']['gse_id'] = {meta.get('gse_id')!r}, expected {_EXPECTED_GSE_ID!r}"
     )
 
     protocol = meta.get("protocol", "")
     assert isinstance(protocol, str) and len(protocol) > 0, (
-        f"uns['singlify']['protocol'] must be a non-empty string, got {protocol!r}"
+        f"uns['singlet']['protocol'] must be a non-empty string, got {protocol!r}"
     )
     organism = meta.get("organism", "")
     assert isinstance(organism, str) and len(organism) > 0, (
-        f"uns['singlify']['organism'] must be a non-empty string, got {organism!r}"
+        f"uns['singlet']['organism'] must be a non-empty string, got {organism!r}"
     )
 
 
@@ -244,6 +244,6 @@ def test_write_pz_roundtrip(gsm4037629_path):
     ), "Round-trip: count values differ (should be bit-identical integer data)"
 
     # GEO metadata must survive the round-trip.
-    assert adata_rt.uns.get("singlify", {}).get("gsm_id") == _EXPECTED_GSM_ID, (
-        "uns['singlify']['gsm_id'] must survive round-trip"
+    assert adata_rt.uns.get("singlet", {}).get("gsm_id") == _EXPECTED_GSM_ID, (
+        "uns['singlet']['gsm_id'] must survive round-trip"
     )

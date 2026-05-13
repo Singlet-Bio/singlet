@@ -19,7 +19,7 @@ You are **bio-exec**, a specialist C++ biological feature implementation worker 
 2. Never run compute on the login node
 3. Never push git without explicit instruction
 4. Never modify `src/star/` (owned by perf-exec)
-5. Never modify `src/pipeline/singlify.cpp` directly — document integration in `INTEGRATION_NOTES.md`
+5. Never modify `src/pipeline/singlet.cpp` directly — document integration in `INTEGRATION_NOTES.md`
 6. Never modify `include/singlet/gpu/` (owned by singlet-gpu orchestrator)
 7. Every feature MUST validate against gold-standard on ≥3 datasets
 8. Return results in **≤30 lines**: validation metrics, wall overhead, commit hash
@@ -43,8 +43,8 @@ export PKG_CONFIG_PATH=/mnt/home/debruinz/.conda/envs/cellarium/lib/pkgconfig
 | Resource | Path |
 |----------|------|
 | Pileup headers | `singlet/include/singlet/pileup/` |
-| singlify binary | `singlet/build/src/pipeline/singlify` |
-| Validation dir | `/mnt/projects/debruinz_project/singlify_validation/` |
+| singlet binary | `singlet/build/src/pipeline/singlet` |
+| Validation dir | `/mnt/projects/debruinz_project/singlet_validation/` |
 | GRCh38 genome | `/mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/star_2.7.11b` |
 | GRCh38 GTF | `/mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/genes/genes.gtf` |
 | GRCm39 genome | `/mnt/projects/debruinz_project/cellarium/reference/GRCm39-2024-A/star_2.7.11b` |
@@ -97,7 +97,7 @@ bash singlet-agents/scripts/job_dispatch.sh submit \
 
 ## Build Protocol
 
-> **Build isolation**: perf-exec and bio-exec share the same `singlify/build/` directory.
+> **Build isolation**: perf-exec and bio-exec share the same `singlet/build/` directory.
 > If both workers are dispatched in the same cycle, avoid running `cmake --build` concurrently.
 > Use `$$`-suffixed `/dev/shm/` dirs for all output to avoid cross-contamination.
 
@@ -113,16 +113,16 @@ cd /mnt/home/debruinz/Singlet-AI/singlet/build && ctest --output-on-failure'
 ## Validation Protocol
 
 ```bash
-SINGLIFY=/mnt/home/debruinz/Singlet-AI/singlet/build/src/pipeline/singlify
-VALDIR=/mnt/projects/debruinz_project/singlify_validation
+SINGLET=/mnt/home/debruinz/Singlet-AI/singlet/build/src/pipeline/singlet
+VALDIR=/mnt/projects/debruinz_project/singlet_validation
 REFDIR=/mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A
 
-$SINGLIFY $VALDIR/corpus/$SRR.1fq \
+$SINGLET $VALDIR/corpus/$SRR.1fq \
   --genome-dir $REFDIR/star_2.7.11b --exons $REFDIR/genes/genes.gtf \
-  --out-prefix $VALDIR/singlify_out/$SRR/ --threads 16
+  --out-prefix $VALDIR/singlet_out/$SRR/ --threads 16
 
 python3 singlet-agents/scripts/validate_e2e.py \
-  $VALDIR/singlify_out/$SRR/ $VALDIR/starsolo/$SRR/Solo.out/Gene/filtered \
+  $VALDIR/singlet_out/$SRR/ $VALDIR/starsolo/$SRR/Solo.out/Gene/filtered \
   --skip-vireo --skip-mt
 ```
 
@@ -132,7 +132,7 @@ All pileup features go in `include/singlet/pileup/` as header-only C++:
 - No CMakeLists.txt changes for new headers
 - Unit tests in `tests/cpp/test_*.cpp` (these DO need CMake entry)
 - Each feature: clean API, well-defined inputs/outputs, no side effects
-- Document integration into singlify.cpp in `INTEGRATION_NOTES.md`
+- Document integration into singlet.cpp in `INTEGRATION_NOTES.md`
 
 ## Per-Run Result Schema
 
@@ -146,7 +146,7 @@ Every pipeline run must write a machine-readable `run_result.json` to `--out-pre
   "cell_count": 2565,
   "protocol_detected": "10x-arc-gex",
   "species_detected": "human",
-  "singlify_version": "...",
+  "singlet_version": "...",
   "wall_seconds": 140
 }
 ```

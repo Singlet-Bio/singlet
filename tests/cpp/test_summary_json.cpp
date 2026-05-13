@@ -82,7 +82,7 @@ static PipelineSummary make_full_summary() {
     s.sample_id            = "GSM1234567";
     s.protocol             = "10xv3";
     s.organism             = "Homo sapiens";
-    s.singlify_version     = "0.3.0";
+    s.singlet_version     = "0.3.0";
     s.total_reads          = 50000000;
     s.mapped_reads         = 46000000;
     s.mapping_rate         = 0.92;
@@ -132,7 +132,7 @@ static void test_all_keys_present() {
     check("key_sample_id",              contains(json, "\"sample_id\""));
         check("key_protocol",               contains(json, "\"protocol_id\""));
     check("key_organism",               contains(json, "\"organism\""));
-    check("key_singlify_version",       contains(json, "\"singlify_version\""));
+    check("key_singlet_version",       contains(json, "\"singlet_version\""));
     check("key_total_reads",            contains(json, "\"total_reads\""));
     check("key_mapped_reads",           contains(json, "\"mapped_reads\""));
     check("key_mapping_rate",           contains(json, "\"mapping_rate\""));

@@ -23,7 +23,7 @@ int main() {
         std::cerr << "FAIL: " << name << " — " << msg << "\n";
     };
 
-    const std::string ref_base = "/tmp/singlify_refs";
+    const std::string ref_base = "/tmp/singlet_refs";
 
     // ── 1. Fetch plan — human ─────────────────────────────────────────────────
     const SpeciesInfo* human = find_by_taxon(9606);
@@ -131,10 +131,10 @@ int main() {
         bool has_sbatch = script.find("#SBATCH") != std::string::npos;
         bool has_array = script.find("--array=0-") != std::string::npos;
         bool has_cpus = script.find("cpus-per-task=20") != std::string::npos;
-        bool has_singlify = script.find("singlify index fetch") != std::string::npos;
+        bool has_singlet = script.find("singlet index fetch") != std::string::npos;
         bool has_human = script.find("9606:human") != std::string::npos;
-        if (has_sbatch && has_array && has_cpus && has_singlify && has_human)
-            PASS("SLURM script has #SBATCH, array, cpus, singlify index fetch, human entry");
+        if (has_sbatch && has_array && has_cpus && has_singlet && has_human)
+            PASS("SLURM script has #SBATCH, array, cpus, singlet index fetch, human entry");
         else
             FAIL("SLURM script", script.substr(0, 200).c_str());
     }

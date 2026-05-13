@@ -330,7 +330,7 @@ inline void parse_metadata_tlv(
     meta.modality         = g("modality");
     meta.geo_title        = g("geo_title");
     meta.geo_source_name  = g("geo_source_name");
-    meta.singlify_version = g("singlify_version");
+    meta.singlet_version = g("singlet_version");
     meta.pipeline_date    = g("pipeline_date");
 
     // taxon_id and read_count are stored as strings in user_kv.
@@ -1394,7 +1394,7 @@ inline PzLoadResult load(const std::string& path, const PzLoadConfig& cfg) {
         if (!md.modality.empty())         meta_map["modality"]         = md.modality;
         if (!md.geo_title.empty())        meta_map["geo_title"]        = md.geo_title;
         if (!md.geo_source_name.empty())  meta_map["geo_source_name"]  = md.geo_source_name;
-        if (!md.singlify_version.empty()) meta_map["singlify_version"] = md.singlify_version;
+        if (!md.singlet_version.empty()) meta_map["singlet_version"] = md.singlet_version;
         if (!md.pipeline_date.empty())    meta_map["pipeline_date"]    = md.pipeline_date;
         if (md.read_count != 0)           meta_map["read_count"]       = std::to_string(md.read_count);
         if (!md.srr_ids.empty()) {

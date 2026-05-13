@@ -29,7 +29,7 @@ Given cycle results, append to the appropriate section of `/mnt/home/debruinz/Si
 ```bash
 # --headline: 5-6 words (key result of cycle, not "cycle N")
 # --bullets: caller-supplied plain-text bullet lines (starting with *)
-cd /mnt/home/debruinz/Singlet-AI/singlify/scripts
+cd /mnt/home/debruinz/Singlet-AI/singlet/scripts
 bash send_cycle_update.sh \
   --cycle "$CYCLE" \
   --headline "$HEADLINE" \
@@ -44,7 +44,7 @@ bash send_cycle_update.sh \
 The checkpoint system reads from `state/` files (the source of truth) and generates a resume prompt. After updating all state files, run:
 
 ```bash
-cd /mnt/home/debruinz/Singlet-AI/singlify
+cd /mnt/home/debruinz/Singlet-AI/singlet
 python3 scripts/agent_checkpoint.py resume-prompt
 ```
 
@@ -52,7 +52,7 @@ This generates `scripts/RESUME.txt` from `state/dag.md`, `state/episodes.md`, an
 
 ### Update Context Index
 
-Given a scout report with new function signatures, update the relevant section of `singlify/state/context-index.md` at the appropriate level (file, module, or system).
+Given a scout report with new function signatures, update the relevant section of `singlet/state/context-index.md` at the appropriate level (file, module, or system).
 
 **File-level reconciliation rule**: After any cycle where a new `.h` or `.cpp` file was created, add an entry to the `## File Level` section of the context index with format:
 ```
@@ -65,7 +65,7 @@ Never leave a new source file untracked. An untracked file cannot be dispatched 
 
 ### Append Episode
 
-Append to `singlify/state/episodes.md`. **Before appending**: tail the last 5 entries to find the highest cycle number N. Assign cycle N+1. Never reuse or skip numbers. If a gap exists in the existing log, do NOT fix it retroactively — just continue from current_max+1 and log a note in the entry.
+Append to `singlet/state/episodes.md`. **Before appending**: tail the last 5 entries to find the highest cycle number N. Assign cycle N+1. Never reuse or skip numbers. If a gap exists in the existing log, do NOT fix it retroactively — just continue from current_max+1 and log a note in the entry.
 
 ```markdown
 ## Cycle N (YYYY-MM-DD HH:MM)
@@ -83,11 +83,11 @@ Append to `singlify/state/episodes.md`. **Before appending**: tail the last 5 en
 
 ### Update DAG
 
-Edit `singlify/state/dag.md` to change node status emoji as instructed.
+Edit `singlet/state/dag.md` to change node status emoji as instructed.
 
 ### Update Model Routing
 
-After every cycle where a worker outcome is known, append a row to the `## Routing Table` in `singlify/state/model-routing.md`:
+After every cycle where a worker outcome is known, append a row to the `## Routing Table` in `singlet/state/model-routing.md`:
 
 ```
 | [task-type] | [model used] | [pass/fail + metric] | cycle N | [brief note] |
@@ -104,16 +104,16 @@ This table is the orchestrator's empirical basis for model assignment. A stale t
 ### Update Manuscript (every ~10 cycles)
 
 ```bash
-cd /mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlify
-pdflatex singlify.tex && pdflatex singlify.tex
+cd /mnt/home/debruinz/Singlet-AI/papers/manuscripts/singlet
+pdflatex singlet.tex && pdflatex singlet.tex
 ```
 
 ### Watchdog Email (every 3 cycles)
 
 ```bash
-cd /mnt/home/debruinz/Singlet-AI/singlify/scripts
+cd /mnt/home/debruinz/Singlet-AI/singlet/scripts
 python3 agent_checkpoint.py resume-prompt | \
-  mailx -s "singlify: alive, cycle $CYCLE" debruinz@gvsu.edu
+  mailx -s "singlet: alive, cycle $CYCLE" debruinz@gvsu.edu
 ```
 
 ## Output Format

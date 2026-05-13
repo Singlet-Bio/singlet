@@ -22,7 +22,7 @@ import pytest
 # Canonical test sample: GSM4037629
 # ---------------------------------------------------------------------------
 _DEFAULT_GSM4037629_PATH = (
-    "/mnt/projects/debruinz_project/singlify_pipeline/quant/scrna/GSE127/GSE127918/GSM4037629"
+    "/mnt/projects/debruinz_project/singlet_pipeline/quant/scrna/GSE127/GSE127918/GSM4037629"
 )
 
 _EXON_FILENAME = "exon_counts.1pz"

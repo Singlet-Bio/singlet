@@ -26,8 +26,8 @@
 //       genome_dir = res.suggested_genome_dir("/path/to/reference/base");
 //   }
 //
-// Bloom filter location: singlify/species_filters/ (relative to binary), or
-// set SINGLIFY_SPECIES_FILTERS env var to override.
+// Bloom filter location: singlet/species_filters/ (relative to binary), or
+// set SINGLET_SPECIES_FILTERS env var to override.
 
 #pragma once
 
@@ -378,7 +378,7 @@ inline int count_hits_numeric(const uint8_t* seq, uint16_t len,
 /// @param onefq_path       Path to the .1fq input file
 /// @param verbose          Print diagnostic messages to stderr
 /// @param extra_json_path  Optional: path to an external JSON file (e.g. the
-///                         --metadata-json passed to singlify process) that may
+///                         --metadata-json passed to singlet process) that may
 ///                         contain "organism" and/or "taxon_id" fields.  Checked
 ///                         as Path 1c — after .1fq metadata and sidecar but
 ///                         before expensive Bloom / k-mer sampling.  When
@@ -486,9 +486,9 @@ inline DetectionResult detect(const std::string& onefq_path, bool verbose = true
         }
     }
 
-    // ── Path 1c: Extra JSON (--metadata-json passed to singlify process) ──────
+    // ── Path 1c: Extra JSON (--metadata-json passed to singlet process) ──────
     // The job script writes organism/taxon_id to a JSON before calling download.
-    // singlify download unfortunately overwrites the JSON with an empty skeleton,
+    // singlet download unfortunately overwrites the JSON with an empty skeleton,
     // losing the organism field. This path re-reads the --metadata-json explicitly
     // passed by the caller as a last-resort metadata source before expensive sampling.
     if (!extra_json_path.empty()) {
@@ -562,12 +562,12 @@ inline DetectionResult detect(const std::string& onefq_path, bool verbose = true
 
     // ── Path 2: Bloom filter scoring ──────────────────────────────────────────
     // Try Bloom filter files first (comprehensive transcriptome coverage).
-    // Bloom filter location: ${SINGLIFY_SPECIES_FILTERS} env var, or
+    // Bloom filter location: ${SINGLET_SPECIES_FILTERS} env var, or
     // species_filters/ relative to the binary's source directory.
     {
         // Candidate directories to search for *.bloom files
         std::vector<std::string> bloom_dirs;
-        if (const char* env = std::getenv("SINGLIFY_SPECIES_FILTERS"))
+        if (const char* env = std::getenv("SINGLET_SPECIES_FILTERS"))
             bloom_dirs.push_back(env);
         // Add path relative to this header's install location
         // (determined at build time via __FILE__ — strip filename)
@@ -581,7 +581,7 @@ inline DetectionResult detect(const std::string& onefq_path, bool verbose = true
                     base = base.substr(0, slash2); // .../include
                 slash2 = base.rfind('/');
                 if (slash2 != std::string::npos)
-                    base = base.substr(0, slash2); // singlify root
+                    base = base.substr(0, slash2); // singlet root
                 bloom_dirs.push_back(base + "/species_filters");
             }
         }

@@ -1,4 +1,4 @@
-// test_logging.cpp — unit tests for singlify_log.h (G-LOGGING)
+// test_logging.cpp — unit tests for pipeline_log.h (G-LOGGING)
 #include <atomic>
 #include <cassert>
 #include <chrono>
@@ -9,7 +9,7 @@
 #include <thread>
 #include <vector>
 
-#include "singlify_log.h"
+#include "pipeline_log.h"
 
 using namespace singlet;
 
@@ -34,7 +34,7 @@ static int count_lines(const std::string& s) {
 
 // Reset singleton to known state between tests
 static void reset_logger() {
-    auto& L = SinglifyLogger::instance();
+    auto& L = PipelineLogger::instance();
     L.close();
     L.set_level(LogLevel::NORMAL);
     L.set_stderr(false);  // suppress stderr in tests
@@ -44,7 +44,7 @@ static void reset_logger() {
 
 static void test_level_filtering() {
     reset_logger();
-    auto& L = SinglifyLogger::instance();
+    auto& L = PipelineLogger::instance();
 
     // Only NORMAL messages should pass at NORMAL level
     // (compile-time check: verbose/debug methods exist and accept format strings)
@@ -67,10 +67,10 @@ static void test_level_filtering() {
 
 static void test_jsonl_format() {
     reset_logger();
-    auto& L = SinglifyLogger::instance();
+    auto& L = PipelineLogger::instance();
     L.set_level(LogLevel::DEBUG);
 
-    const char* path = "/tmp/test_singlify_log.jsonl";
+    const char* path = "/tmp/test_singlet_log.jsonl";
     L.set_log_file(path);
 
     // Write several event types from the required 11
@@ -118,10 +118,10 @@ static void test_jsonl_format() {
 
 static void test_json_escaping() {
     reset_logger();
-    auto& L = SinglifyLogger::instance();
+    auto& L = PipelineLogger::instance();
     L.set_level(LogLevel::NORMAL);
 
-    const char* path = "/tmp/test_singlify_escape.jsonl";
+    const char* path = "/tmp/test_singlet_escape.jsonl";
     L.set_log_file(path);
 
     SLOG_EVENT("info", "path=\"/tmp/my dir\\file\" note:\ttab");
@@ -142,10 +142,10 @@ static void test_json_escaping() {
 
 static void test_macros() {
     reset_logger();
-    auto& L = SinglifyLogger::instance();
+    auto& L = PipelineLogger::instance();
     L.set_level(LogLevel::DEBUG);
 
-    const char* path = "/tmp/test_singlify_macros.jsonl";
+    const char* path = "/tmp/test_singlet_macros.jsonl";
     L.set_log_file(path);
 
     SLOG("info message %d", 1);
@@ -174,10 +174,10 @@ static void test_macros() {
 
 static void test_level_suppresses_jsonl() {
     reset_logger();
-    auto& L = SinglifyLogger::instance();
+    auto& L = PipelineLogger::instance();
     L.set_level(LogLevel::NORMAL);  // verbose/debug should not write
 
-    const char* path = "/tmp/test_singlify_suppress.jsonl";
+    const char* path = "/tmp/test_singlet_suppress.jsonl";
     L.set_log_file(path);
 
     SLOG("normal message");   // written
@@ -203,10 +203,10 @@ static void test_level_suppresses_jsonl() {
 
 static void test_quiet_level() {
     reset_logger();
-    auto& L = SinglifyLogger::instance();
+    auto& L = PipelineLogger::instance();
     L.set_level(LogLevel::QUIET);
 
-    const char* path = "/tmp/test_singlify_quiet.jsonl";
+    const char* path = "/tmp/test_singlet_quiet.jsonl";
     L.set_log_file(path);
 
     SLOG("normal message");     // suppressed (QUIET)
@@ -229,10 +229,10 @@ static void test_quiet_level() {
 
 static void test_progress_throttle() {
     reset_logger();
-    auto& L = SinglifyLogger::instance();
+    auto& L = PipelineLogger::instance();
     L.set_level(LogLevel::NORMAL);
 
-    const char* path = "/tmp/test_singlify_progress.jsonl";
+    const char* path = "/tmp/test_singlet_progress.jsonl";
     L.set_log_file(path);
 
     // Fire 100 rapid progress events — only the first should go through
@@ -259,10 +259,10 @@ static void test_progress_throttle() {
 
 static void test_line_budget() {
     reset_logger();
-    auto& L = SinglifyLogger::instance();
+    auto& L = PipelineLogger::instance();
     L.set_level(LogLevel::VERBOSE);
 
-    const char* path = "/tmp/test_singlify_budget.jsonl";
+    const char* path = "/tmp/test_singlet_budget.jsonl";
     L.set_log_file(path);
 
     // Simulate what a typical pipeline would log
@@ -294,10 +294,10 @@ static void test_line_budget() {
 
 static void test_thread_safety() {
     reset_logger();
-    auto& L = SinglifyLogger::instance();
+    auto& L = PipelineLogger::instance();
     L.set_level(LogLevel::DEBUG);
 
-    const char* path = "/tmp/test_singlify_threads.jsonl";
+    const char* path = "/tmp/test_singlet_threads.jsonl";
     L.set_log_file(path);
 
     const int N_THREADS = 8;

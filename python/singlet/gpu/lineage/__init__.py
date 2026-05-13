@@ -8,7 +8,7 @@ Exposes:
 Underlying C++ cycle: cycle 16 (anno/mt_lineage.h —
 ``singlet::gpu::anno::mt_lineage_call_clones`` kernel).
 
-This module exploits the ``mt_alleles.1pz`` singlify output — a (MT sites ×
+This module exploits the ``mt_alleles.1pz`` singlet output — a (MT sites ×
 cells) matrix of per-site heteroplasmy counts — that no other framework reads
 natively.  Clone detection is performed entirely on device.
 

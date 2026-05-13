@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// integrates: original (intron-aware velocity prep — first to exploit singlify's exon+intron output)
+// integrates: original (intron-aware velocity prep — first to exploit singlet's exon+intron output)
 //
 // preprocess/velocity_prep.h — GPU RNA velocity preprocessing.
 //

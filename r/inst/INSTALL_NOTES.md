@@ -1,4 +1,4 @@
-# singlify (R) — build and portability notes
+# singlet (R) — build and portability notes
 
 This document explains how the package's C++ source is compiled and what
 system requirements must be satisfied on the build host. It's aimed at
@@ -69,9 +69,9 @@ this automatically on every push.
 ## Running `R CMD check --as-cran`
 
 ```bash
-cd singlify/r
+cd singlet/r
 R CMD build .
-R CMD check --as-cran singlify_0.2.0.tar.gz
+R CMD check --as-cran singlet_0.2.0.tar.gz
 ```
 
 Expected output: **0 ERRORs, 0 WARNINGs**. One NOTE is acceptable if

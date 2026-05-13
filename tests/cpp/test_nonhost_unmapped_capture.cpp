@@ -7,7 +7,7 @@
 //   - Verify nonhost_summary.json structure is written correctly
 //
 // This test exercises the classify_batch() path that is wired into the
-// singlify pipeline after STAR alignment for unmapped read screening.
+// singlet pipeline after STAR alignment for unmapped read screening.
 //
 // Run via ctest:
 //   ctest -R nonhost_unmapped_capture --output-on-failure
@@ -64,7 +64,7 @@ static std::vector<std::string> read_fastq(const char* path) {
     return seqs;
 }
 
-// Write nonhost_summary.json from classification results (mirrors singlify pipeline logic).
+// Write nonhost_summary.json from classification results (mirrors singlet pipeline logic).
 static void write_nonhost_summary_json(
         const char* json_path,
         size_t total_reads,
@@ -156,7 +156,7 @@ int main() {
 
     test2:
     // ── Test 2: FASTQ read/write + NonHostScreener + write nonhost_summary.json ──
-    // End-to-end simulation of what singlify does after STAR completes.
+    // End-to-end simulation of what singlet does after STAR completes.
     {
         const char* fastq_path = "/tmp/test_nonhost_unmapped.fq";
         const char* json_path  = "/tmp/test_nonhost_summary.json";
@@ -179,7 +179,7 @@ int main() {
         }
 
         {
-            // Read the FASTQ back (simulates singlify reading Unmapped.out.mate1)
+            // Read the FASTQ back (simulates singlet reading Unmapped.out.mate1)
             auto read_seqs = read_fastq(fastq_path);
             if (read_seqs.size() != 10) {
                 char buf[64];

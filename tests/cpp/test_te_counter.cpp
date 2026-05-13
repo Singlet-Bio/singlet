@@ -88,7 +88,7 @@ static int test_write_1pz() {
     meta.species              = "human";
     meta.te_family_table_hash = "abc123";
     meta.sample_id            = "SRR_TEST";
-    meta.singlify_version     = "test-0.0.1";
+    meta.singlet_version     = "test-0.0.1";
     meta.reference_build      = "GRCh38-2024-A";
 
     std::string out_path = tmp_dir + "/te_counts.1pz";

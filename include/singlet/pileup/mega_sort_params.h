@@ -16,7 +16,7 @@
 //   At ~500M+ reads, STAR's limitBAMsortRAM is a *soft hint* — the 50%/comp=1
 //   regime observed RSS hitting the full 384G cgroup cap and SIGKILL during
 //   sort (GSM7102845 666M, GSM5239644 817M). Cutting the cap to 15% WITH a
-//   hard ceiling of 64 GiB and raising sort bins to 100 (singlify.cpp)
+//   hard ceiling of 64 GiB and raising sort bins to 100 (singlet.cpp)
 //   shrinks per-bin allocations during the merge phase. At 384G:
 //   limitBAMsortRAM ≤ 57 GiB (15%) leaving ≥327 GiB for genome + thread
 //   buffers. At any allocation with 15% > 64 GiB the hard cap takes over,
@@ -116,7 +116,7 @@ inline int compression_level(uint64_t n_reads, bool use_complex) {
 //   slurm_mem_bytes * 3/4                   otherwise
 //
 // The ultra/complex hard cap of 64 GiB prevents OOM regardless of how large
-// the SLURM allocation is. Above that threshold, more sort bins (singlify.cpp
+// the SLURM allocation is. Above that threshold, more sort bins (singlet.cpp
 // sets --outBAMsortingBinsN=ULTRA_SORT_BINS for ultra) is the correct
 // scaling strategy.
 //

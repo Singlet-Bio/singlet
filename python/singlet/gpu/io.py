@@ -11,7 +11,7 @@ read_anndata(pz_path, *, modality="exon") -> AnnData
 to_anndata(device_csc, metadata) -> AnnData
     Wrap an already-loaded DeviceCsc + Metadata into an AnnData.
 
-Both functions populate ``adata.uns['singlify']`` with the embedded GEO
+Both functions populate ``adata.uns['singlet']`` with the embedded GEO
 metadata dict (gsm_id, gse_id, protocol, organism, …).
 
 Requirements
@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 
 # ---------------------------------------------------------------------------
 # Modality → canonical filename stem mapping.
-# Mirrors the singlify output artifact table in CLAUDE.md §Full Output Artifacts.
+# Mirrors the singlet output artifact table in CLAUDE.md §Full Output Artifacts.
 # ---------------------------------------------------------------------------
 _MODALITY_TO_STEM = {
     "exon": "exon_counts",
@@ -44,7 +44,7 @@ _MODALITY_TO_STEM = {
     "fragments": "fragments",
 }
 
-# Modality → subdirectory (singlify v2 schema moves donor/nonhost into subdirs)
+# Modality → subdirectory (singlet v2 schema moves donor/nonhost into subdirs)
 _MODALITY_TO_SUBDIR = {
     "snp_ad": "donor",
     "snp_dp": "donor",
@@ -57,7 +57,7 @@ def _resolve_path(pz_path: Union[str, Path], modality: str) -> str:
 
     If *pz_path* is a file, it is used directly.
     If it is a directory, we look for ``{stem}.1pz`` matching *modality*.
-    Falls back to subdirectory layout (singlify v2 schema).
+    Falls back to subdirectory layout (singlet v2 schema).
     """
     p = Path(pz_path)
     if p.is_file():
@@ -99,7 +99,7 @@ def to_anndata(device_csc, metadata) -> anndata.AnnData:
         ``adata.X``  — cupy.sparse.csr_matrix (cells × genes), zero-copy.
         ``adata.obs`` — DataFrame indexed by cell barcodes (from metadata.colnames).
         ``adata.var`` — DataFrame indexed by gene names (from metadata.rownames).
-        ``adata.uns['singlify']`` — dict of all GEO + provenance fields.
+        ``adata.uns['singlet']`` — dict of all GEO + provenance fields.
     """
     try:
         import anndata as ad
@@ -147,17 +147,17 @@ def to_anndata(device_csc, metadata) -> anndata.AnnData:
     obs = pd.DataFrame(index=obs_names)
     var = pd.DataFrame(index=var_names)
 
-    # uns['singlify'] — GEO + provenance dict.
-    singlify_meta = dict(metadata.to_dict())
+    # uns['singlet'] — GEO + provenance dict.
+    singlet_meta = dict(metadata.to_dict())
     # Also include rownames and colnames counts for convenience.
-    singlify_meta["n_genes"] = rows
-    singlify_meta["n_cells"] = cols
+    singlet_meta["n_genes"] = rows
+    singlet_meta["n_cells"] = cols
 
     adata = ad.AnnData(
         X=cells_x_genes_csr,
         obs=obs,
         var=var,
-        uns={"singlify": singlify_meta},
+        uns={"singlet": singlet_meta},
     )
 
     # Keep a reference to the DeviceCsc alive via obsm so Python's GC
@@ -200,7 +200,7 @@ def read_anndata(
         ``adata.X``  — cupy.sparse.csr_matrix (cells × genes), zero-copy device view.
         ``adata.obs`` — cell barcodes from metadata (if embedded).
         ``adata.var`` — gene names from metadata (if embedded).
-        ``adata.uns['singlify']`` — GEO + provenance dict.
+        ``adata.uns['singlet']`` — GEO + provenance dict.
 
     Examples
     --------
@@ -218,7 +218,7 @@ def read_anndata(
 
     Access metadata::
 
-        print(adata.uns['singlify']['gsm_id'])   # "GSM4037629"
+        print(adata.uns['singlet']['gsm_id'])   # "GSM4037629"
     """
     # Import here (not at module top) so the module can be imported on login nodes.
     try:
