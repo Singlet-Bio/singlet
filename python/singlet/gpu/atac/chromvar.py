@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.atac.chromvar — GPU-native chromVAR motif enrichment.
 
@@ -12,18 +12,19 @@ Reference: Schep et al. (2017) Nature Methods — chromVAR.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
+from singlet.gpu._coreutil import require_core
+
 if TYPE_CHECKING:
-    pass
+    import anndata
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
-
 
 def compute(
     accessibility,
@@ -149,12 +150,7 @@ def compute(
         )
         deviation_np = deviation_cp.get()  # host copy
     """
-    import singlet.gpu._core as _core
-
-    if not hasattr(_core, "chromvar"):
-        raise ImportError(
-            "_core.chromvar is not available.  Install with: pip install singlet[gpu]"
-        )
+    _core = require_core("chromvar")
 
     # Coerce peak_gc and peak_mean_access to float32 c-contiguous numpy arrays.
     def _to_f32(arr):
@@ -166,7 +162,7 @@ def compute(
             arr = np.ascontiguousarray(arr)
         return arr
 
-    peak_gc_np = _to_f32(peak_gc)
+    peak_gc_np   = _to_f32(peak_gc)
     peak_mean_np = _to_f32(peak_mean_access)
 
     return _core.chromvar(

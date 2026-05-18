@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (first GPU NB GLM for donor-aware pseudobulk DE — exploits singlet donor_assignments.tsv)
 //
 // de/donor_pseudobulk.h — Donor-aware pseudobulk differential expression via
@@ -71,11 +71,7 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
+#include <singlet/gpu/core/types.h>
 
 #include <cuda_runtime.h>
 #include <cub/device/device_radix_sort.cuh>
@@ -90,7 +86,7 @@
 #include <algorithm>
 #include <numeric>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace de {
 
 // ─── Public API types ─────────────────────────────────────────────────────────
@@ -1198,11 +1194,11 @@ donor_pseudobulk_de(
     // final cudaMemcpyAsync above (and any still-running kernels) may race with
     // DeviceMemory::~DeviceMemory calling cudaFree. Rule 9 compliant — function
     // boundary, not a hot loop.
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     result.n_genes_passing_filter = (int)m;  // all genes; filter is at the group level
     return result;
 }
 
 }  // namespace de
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

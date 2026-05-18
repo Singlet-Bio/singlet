@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: tpm_fpkm.h
 // TPM (Transcripts Per Million) and FPKM (Fragments Per Kilobase Million)

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.spatial_neighbors()."""
 
 import numpy as np

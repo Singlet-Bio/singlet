@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (first GPU Milo-style kNN-neighborhood differential abundance)
 //
 // abundance/milo.h — GPU-native Milo differential abundance via kNN neighborhoods
@@ -49,12 +49,8 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/graph/knn.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/graph/knn.h>
 
 #include <cuda_runtime.h>
 #include <cub/device/device_radix_sort.cuh>
@@ -67,7 +63,7 @@
 #include <numeric>
 #include <algorithm>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace abundance {
 
 // ─── Public API types ──────────────────────────────────────────────────────────
@@ -752,4 +748,4 @@ compute_milo(
 }
 
 }  // namespace abundance
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

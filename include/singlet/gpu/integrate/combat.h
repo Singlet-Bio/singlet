@@ -1,6 +1,6 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: scanpy.pp.combat (Johnson et al. 2007)
-// singlet-gpu/integrate/combat.h
+// singlet/gpu/integrate/combat.h
 //
 // ComBat — empirical Bayes batch correction.
 // Johnson WE, Li C, Rabinovic A (2007) Biostatistics 8:118-127.
@@ -23,13 +23,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/io/pz_device_loader.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/io/pz_device_loader.h>
 
 #include <cuda_runtime.h>
 
@@ -38,7 +34,7 @@
 #include <stdexcept>
 #include <string>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace integrate {
 
 // ---------------------------------------------------------------------------
@@ -408,7 +404,7 @@ inline CombatResult combat(
     cudaStream_t              stream = nullptr)
 {
     if (stream == nullptr) {
-        stream = singlet_gpu::core::default_context().stream();
+        stream = singlet::gpu::core::default_context().stream();
     }
 
     const int m   = X.mat.rows;
@@ -581,7 +577,7 @@ inline CombatResult combat(
             d_batch, m, n, n_batches);
     }
 
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     CombatResult res;
     res.X_adj     = std::move(d_X_adj);
@@ -592,4 +588,4 @@ inline CombatResult combat(
 }
 
 }  // namespace integrate
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

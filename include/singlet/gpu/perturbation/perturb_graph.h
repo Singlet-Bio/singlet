@@ -1,7 +1,7 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (CPA — first GPU; GNN deferred to followup)
 //
-// singlet-gpu/perturbation/perturb_graph.h
+// singlet/gpu/perturbation/perturb_graph.h
 //
 // CYCLE-32 RETRY: Simplified CPA (Compositional Perturbation Autoencoder).
 //
@@ -44,13 +44,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/memory.h>
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
+#include <singlet/gpu/core/memory.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
 
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
@@ -66,7 +62,7 @@
 #include <string>
 #include <vector>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace perturbation {
 
 // ---------------------------------------------------------------------------
@@ -928,4 +924,4 @@ inline core::DeviceMemory<float> predict_perturbation(
 }
 
 }  // namespace perturbation
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

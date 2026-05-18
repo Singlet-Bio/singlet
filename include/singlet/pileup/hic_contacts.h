@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // G-HIC: Hi-C / Micro-C contact pair extraction and QC
 // 4DN Nucleome Network .pairs format compliant

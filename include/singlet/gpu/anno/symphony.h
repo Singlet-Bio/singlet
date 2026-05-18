@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: Symphony (Kang et al. 2021)
 // anno/symphony.h — GPU-native reference-based cell-type mapping via
 // PCA projection + soft cluster assignment + label transfer.
@@ -30,12 +30,8 @@
 // CYCLE-138: initial implementation.
 
 #pragma once
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
 
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
@@ -44,7 +40,7 @@
 #include <stdexcept>
 #include <string>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace anno {
 
 // ---------------------------------------------------------------------------
@@ -312,7 +308,7 @@ inline SymphonyResult symphony_predict(
     cudaStream_t          stream = nullptr)
 {
     if (stream == nullptr)
-        stream = singlet_gpu::core::default_context().stream();
+        stream = singlet::gpu::core::default_context().stream();
 
     if (n_features <= 0 || n_query_cells <= 0 || k_pcs <= 0 ||
         k_clusters <= 0 || n_classes <= 0)
@@ -325,7 +321,7 @@ inline SymphonyResult symphony_predict(
     if (!d_Z_query || !d_W_pca || !d_C_ref || !d_P_label || !d_mu_ref || !d_sigma_ref)
         throw std::runtime_error("symphony_predict: null input pointer");
 
-    cublasHandle_t blas = singlet_gpu::core::default_context().blas();
+    cublasHandle_t blas = singlet::gpu::core::default_context().blas();
     cublasSetStream(blas, stream);
 
     // --- Allocate intermediate and output buffers ---
@@ -471,9 +467,9 @@ inline SymphonyResult symphony_predict(
             n_classes, n_query_cells);
     }
 
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
     return result;
 }
 
 }  // namespace anno
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

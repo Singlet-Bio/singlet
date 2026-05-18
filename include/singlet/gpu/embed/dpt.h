@@ -1,7 +1,7 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: Haghverdi et al. 2016 (Diffusion Pseudotime)
 //
-// singlet-gpu/embed/dpt.h
+// singlet/gpu/embed/dpt.h
 //
 // DPT — Diffusion Pseudotime.
 //
@@ -11,7 +11,7 @@
 //   Nat Methods 13:845-848. https://doi.org/10.1038/nmeth.3971
 //   scanpy implementation: scanpy.tl.dpt
 //
-// Given a kNN graph (KnnResult from singlet_gpu::graph::knn) with n cells and
+// Given a kNN graph (KnnResult from singlet::gpu::graph::knn) with n cells and
 // k neighbors per cell, and a root cell index r, compute a per-cell pseudotime
 // dpt[c] based on diffusion-map distances from the root.
 //
@@ -39,13 +39,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/graph/knn.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/graph/knn.h>
 
 #include <cuda_runtime.h>
 #include <cusolverDn.h>
@@ -56,7 +52,7 @@
 #include <string>
 
 // Local CUSOLVER_CHECK — throws on cuSOLVER error. core/types.h ships only
-// CUDA_CHECK / CUSPARSE_CHECK / CUBLAS_CHECK; cuSOLVER callers roll their own.
+// SINGLET_GPU_CUDA_CHECK / CUSPARSE_CHECK / CUBLAS_CHECK; cuSOLVER callers roll their own.
 #ifndef CUSOLVER_CHECK
 #  define CUSOLVER_CHECK(call) \
     do { cusolverStatus_t _s = (call); \
@@ -66,7 +62,7 @@
                 + " status=" + std::to_string(_s)); } while (0)
 #endif
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace embed {
 
 // ---------------------------------------------------------------------------
@@ -335,7 +331,7 @@ void dpt_pseudotime_kernel(
 // dpt() — public entry point
 //
 // Inputs:
-//   knn  — KnnResult from singlet_gpu::graph::compute_knn (uses .neighbors,
+//   knn  — KnnResult from singlet::gpu::graph::compute_knn (uses .neighbors,
 //           .distances, .n, .k).
 //   cfg  — DptConfig (root_cell, n_eigenvecs, eps_lambda, deterministic).
 //   stream — optional CUDA stream (nullptr → default context stream).
@@ -352,7 +348,7 @@ inline DptResult dpt(
     cudaStream_t            stream = nullptr)
 {
     if (stream == nullptr) {
-        stream = singlet_gpu::core::default_context().stream();
+        stream = singlet::gpu::core::default_context().stream();
     }
 
     const int n = knn.n;
@@ -414,7 +410,7 @@ inline DptResult dpt(
     // -------------------------------------------------------------------------
     const size_t W_sz = static_cast<size_t>(n) * static_cast<size_t>(n);
     core::DeviceMemory<float> d_W(W_sz);
-    CUDA_CHECK(cudaMemsetAsync(d_W.get(), 0, W_sz * sizeof(float), stream));
+    SINGLET_GPU_CUDA_CHECK(cudaMemsetAsync(d_W.get(), 0, W_sz * sizeof(float), stream));
 
     {
         const int total_edges = n * k;
@@ -456,7 +452,7 @@ inline DptResult dpt(
     // (col-major, in-place in d_W). LOWER fill mode.
     // d_info: one D2H scalar (canonical one-shot exception to Rule 4).
     // -------------------------------------------------------------------------
-    cusolverDnHandle_t solver_h = singlet_gpu::core::default_context().solver();
+    cusolverDnHandle_t solver_h = singlet::gpu::core::default_context().solver();
     cusolverDnSetStream(solver_h, stream);
 
     // Eigenvalue output (ascending order).
@@ -490,7 +486,7 @@ inline DptResult dpt(
         d_info.get()));
 
     // Sync and check eigendecomp info (one D2H scalar — Rule 4 one-shot exception).
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
     int h_info = 0;
     cudaMemcpy(&h_info, d_info.get(), sizeof(int), cudaMemcpyDeviceToHost);
     if (h_info != 0) {
@@ -515,7 +511,7 @@ inline DptResult dpt(
             n, cfg.root_cell, cfg.n_eigenvecs, cfg.eps_lambda);
     }
 
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     DptResult res;
     res.pseudotime = std::move(d_dpt);
@@ -524,4 +520,4 @@ inline DptResult dpt(
 }
 
 }  // namespace embed
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

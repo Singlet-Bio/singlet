@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (first GPU hdWGCNA-style scRNA co-expression network analysis)
 //
 // network/hdwgcna.h — GPU-native weighted gene co-expression network analysis
@@ -15,7 +15,7 @@
 //      cub::DeviceReduce::ArgMin (strictly device-side outer loop; only one
 //      4-byte scalar convergence check per merge is copied to host).
 //   6. Dynamic tree cutting: merge-tree BFS on host (n_genes ≤ 20k — O(n) data).
-//   7. Per-module eigengene: randomized_svd_gpu_dense (factornet), top-1.
+//   7. Per-module eigengene: singlet::gpu::reduce::svd::randomized (native), top-1.
 //   8. Hub-gene kME: per-module Pearson(gene, eigengene) via cuBLAS Sdot batches.
 //
 // Workspace budget (5000 HVG × 100k cells):
@@ -52,18 +52,13 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/core/memory.h>
+#include <singlet/gpu/io/pz_device_loader.h>
 
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/core/memory.h>
-#include <singlet-gpu/io/pz_device_loader.h>
-
-#include <factornet/svd/randomized_gpu.cuh>
-#include <factornet/core/svd_config.hpp>
-#include <factornet/core/svd_result.hpp>
+#include <singlet/gpu/reduce/svd/randomized.h>
+#include <singlet/gpu/reduce/svd/types.h>
 
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
@@ -78,32 +73,10 @@
 #include <string>
 #include <vector>
 
-// ─────────────────────────────────────────────────────────────────────────────
-// cuBLAS / CUDA error macros (idiomatic, match other singlet-gpu headers)
-// ─────────────────────────────────────────────────────────────────────────────
-#ifndef SINGLET_CUBLAS_CHECK
-#define SINGLET_CUBLAS_CHECK(call) do {                                        \
-    cublasStatus_t _s = (call);                                                \
-    if (_s != CUBLAS_STATUS_SUCCESS) {                                         \
-        throw std::runtime_error(                                              \
-            std::string("cuBLAS error ") + std::to_string((int)_s)            \
-            + " at " __FILE__ ":" + std::to_string(__LINE__));                \
-    }                                                                          \
-} while(0)
-#endif
+// cuBLAS / CUDA error checks use the canonical SINGLET_GPU_*_CHECK macros
+// from <singlet/gpu/core/types.h> (included above).
 
-#ifndef SINGLET_CUDA_CHECK
-#define SINGLET_CUDA_CHECK(call) do {                                          \
-    cudaError_t _e = (call);                                                   \
-    if (_e != cudaSuccess) {                                                   \
-        throw std::runtime_error(                                              \
-            std::string("CUDA error: ") + cudaGetErrorString(_e)              \
-            + " at " __FILE__ ":" + std::to_string(__LINE__));                \
-    }                                                                          \
-} while(0)
-#endif
-
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace network {
 
 // =============================================================================
@@ -540,7 +513,7 @@ inline void hierarchical_average_linkage(
     std::vector<std::array<int,2>>& merge_order,
     std::vector<float>&             merge_heights)
 {
-    using namespace singlet_gpu::core;
+    using namespace singlet::gpu::core;
 
     const int N = n_genes;
     const size_t N2 = (size_t)N * N;
@@ -549,7 +522,7 @@ inline void hierarchical_average_linkage(
     DeviceMemory<int> d_active(N);
     {
         std::vector<int> ones(N, 1);
-        SINGLET_CUDA_CHECK(cudaMemcpyAsync(d_active.get(), ones.data(),
+        SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(d_active.get(), ones.data(),
                                            N * sizeof(int),
                                            cudaMemcpyHostToDevice, stream));
     }
@@ -567,7 +540,7 @@ inline void hierarchical_average_linkage(
 
     // cub temporary storage.
     size_t cub_tmp_bytes = 0;
-    SINGLET_CUDA_CHECK(cub::DeviceReduce::Reduce(
+    SINGLET_GPU_CUDA_CHECK(cub::DeviceReduce::Reduce(
         nullptr, cub_tmp_bytes,
         d_pairs.get(), d_out.get(), (int)N2,
         DistPairMin{}, DistPair{HUGE_VALF, 0}, stream));
@@ -595,16 +568,16 @@ inline void hierarchical_average_linkage(
         }
 
         // Reduce to find minimum-distance pair.
-        SINGLET_CUDA_CHECK(cub::DeviceReduce::Reduce(
+        SINGLET_GPU_CUDA_CHECK(cub::DeviceReduce::Reduce(
             d_tmp.get(), cub_tmp_bytes,
             d_pairs.get(), d_out.get(), (int)N2,
             DistPairMin{}, DistPair{HUGE_VALF, 0}, stream));
 
         // Wait for reduce, then copy scalar result.  8 bytes, once per iter.
-        SINGLET_CUDA_CHECK(cudaStreamSynchronize(stream));
+        SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
         // [cudaMemcpy #1 — SCALAR EXCEPTION: 8 bytes, one per merge iteration,
         //  required to dispatch the merge update kernel on the correct pair.]
-        SINGLET_CUDA_CHECK(cudaMemcpy(&h_min, d_out.get(),
+        SINGLET_GPU_CUDA_CHECK(cudaMemcpy(&h_min, d_out.get(),
                                       sizeof(DistPair),
                                       cudaMemcpyDeviceToHost));
 
@@ -635,7 +608,7 @@ inline void hierarchical_average_linkage(
         cluster_size[b]  = 0.0f;
     }
 
-    SINGLET_CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 }
 
 // =============================================================================
@@ -757,13 +730,13 @@ inline HdwgcnaResult run_hdwgcna(
         throw std::invalid_argument("hdwgcna: n_genes > 20000; enable OOC mode (not yet implemented for >20k)");
 
     using DevMem = core::DeviceMemory<float>;
-    cudaStream_t stream = ctx.stream;
+    cudaStream_t stream = ctx.stream();
 
     // ─────────────────────────────────────────────────────────────────────
     // 0. Optional determinism: set cuBLAS atomics mode before any BLAS call.
     // ─────────────────────────────────────────────────────────────────────
     if (cfg.deterministic) {
-        SINGLET_CUBLAS_CHECK(cublasSetAtomicsMode(ctx.cublas,
+        SINGLET_GPU_CUBLAS_CHECK(cublasSetAtomicsMode(ctx.blas(),
                                                    CUBLAS_ATOMICS_NOT_ALLOWED));
     }
 
@@ -777,7 +750,7 @@ inline HdwgcnaResult run_hdwgcna(
     // [cudaMemcpy #2 — ONE-TIME SETUP: host→device expression upload.]
     // ─────────────────────────────────────────────────────────────────────
     DevMem d_expr((size_t)n_genes * n_cells);
-    SINGLET_CUDA_CHECK(cudaMemcpyAsync(d_expr.get(), h_expr,
+    SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(d_expr.get(), h_expr,
                                         (size_t)n_genes * n_cells * sizeof(float),
                                         cudaMemcpyHostToDevice, stream));
 
@@ -812,13 +785,13 @@ inline HdwgcnaResult run_hdwgcna(
     {
         // Zero the lower triangle so the normalization kernel can safely
         // mirror the upper → lower.
-        SINGLET_CUDA_CHECK(cudaMemsetAsync(d_corr.get(), 0,
+        SINGLET_GPU_CUDA_CHECK(cudaMemsetAsync(d_corr.get(), 0,
                                             (size_t)n_genes * n_genes * sizeof(float),
                                             stream));
 
         const float alpha = 1.0f, beta = 0.0f;
-        SINGLET_CUBLAS_CHECK(cublasSsyrk(
-            ctx.cublas,
+        SINGLET_GPU_CUBLAS_CHECK(cublasSsyrk(
+            ctx.blas(),
             CUBLAS_FILL_MODE_UPPER,  // fill upper triangle
             CUBLAS_OP_N,             // X already in the right layout
             n_genes, n_cells,
@@ -865,8 +838,8 @@ inline HdwgcnaResult run_hdwgcna(
     {
         // Numerator = adj * adj (square symmetric, n_genes × n_genes).
         const float alpha = 1.0f, beta = 0.0f;
-        SINGLET_CUBLAS_CHECK(cublasSgemm(
-            ctx.cublas,
+        SINGLET_GPU_CUBLAS_CHECK(cublasSgemm(
+            ctx.blas(),
             CUBLAS_OP_N, CUBLAS_OP_N,
             n_genes, n_genes, n_genes,
             &alpha,
@@ -940,17 +913,17 @@ inline HdwgcnaResult run_hdwgcna(
     if (n_modules == 0) return result;  // all grey
 
     // ─────────────────────────────────────────────────────────────────────
-    // 9. Eigengene computation via factornet randomized_svd_gpu_dense.
+    // 9. Eigengene computation via native singlet reduce::svd::randomized.
     //
     // For each module: extract the (n_module_genes × n_cells) sub-matrix
     // (host-side, from d_expr downloaded once), run randomized SVD top-1,
-    // take the first left singular vector as the eigengene.
+    // take the first right singular vector as the eigengene.
     //
     // [cudaMemcpy #3 — ONE-TIME EXIT: download d_expr (centered expression)
     //  from device to host for sub-matrix extraction.  Done once, not per module.]
     // ─────────────────────────────────────────────────────────────────────
     std::vector<float> h_centered((size_t)n_genes * n_cells);
-    SINGLET_CUDA_CHECK(cudaMemcpy(h_centered.data(), d_expr.get(),
+    SINGLET_GPU_CUDA_CHECK(cudaMemcpy(h_centered.data(), d_expr.get(),
                                    (size_t)n_genes * n_cells * sizeof(float),
                                    cudaMemcpyDeviceToHost));
     // d_expr no longer needed on device.
@@ -978,22 +951,38 @@ inline HdwgcnaResult run_hdwgcna(
             }
         }
 
-        // Randomized SVD: top-1 left singular vector = eigengene (n_cells).
+        // Randomized SVD: top-1 right singular vector = eigengene (n_cells).
         // WHY top-1: by definition the first PC of the module expression is the
-        // WGCNA eigengene.  randomized_svd_gpu_dense handles the GPU compute.
-        factornet::SVDConfig<float> svd_cfg;
+        // WGCNA eigengene.  reduce::svd::randomized handles the GPU compute.
+        reduce::svd::SvdConfig svd_cfg;
         svd_cfg.k_max    = 1;
         svd_cfg.center   = false;  // already centered above
         svd_cfg.max_iter = 2;
         svd_cfg.verbose  = false;
+        (void)svd_cfg;
 
-        auto svd = factornet::svd::randomized_svd_gpu_dense<float>(
-            sub.data(), ng, n_cells, svd_cfg);
+        // ⚠ API GAP (TODO CYCLE-105-FOLLOWUP): the native reduce::svd::randomized
+        // entry point only accepts an io::PzDeviceMatrix.  This loop holds a raw
+        // HOST DENSE per-module sub-matrix (sub, ng × n_cells); there is NO
+        // native randomized-SVD overload for a host dense pointer
+        // (factornet::svd::randomized_svd_gpu_dense provided this; it was
+        // deleted).  Needed native entry point:
+        //   reduce::svd::SvdResult randomized_host_dense(
+        //       const float* h_A, int m, int n, const SvdConfig& cfg);
+        // Until that exists, this deferred-scope path throws at runtime.
+        throw std::runtime_error(
+            "run_hdwgcna: native reduce::svd::randomized has no host-dense "
+            "entry point; needs reduce::svd::randomized_host_dense (see TODO "
+            "CYCLE-105-FOLLOWUP). Deferred-scope path.");
 
-        // V[:, 0] is the n_cells-length right singular vector (eigengene).
+        // --- Unreachable below: documents the intended result wiring once a
+        //     host-dense native SVD entry point exists. ---
+        reduce::svd::SvdResult svd;
+
+        // V.col(0) is the n_cells-length right singular vector (eigengene).
         float* eg = result.eigengenes.data() + (size_t)(mod - 1) * n_cells;
         for (int c = 0; c < n_cells; ++c) {
-            eg[c] = svd.V(c, 0);
+            eg[c] = svd.V.col(0)(c);
         }
     }
 
@@ -1005,12 +994,12 @@ inline HdwgcnaResult run_hdwgcna(
     {
         // Re-upload expression for kME computation (we freed d_expr above).
         DevMem d_expr2((size_t)n_genes * n_cells);
-        SINGLET_CUDA_CHECK(cudaMemcpyAsync(d_expr2.get(), h_centered.data(),
+        SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(d_expr2.get(), h_centered.data(),
                                             (size_t)n_genes * n_cells * sizeof(float),
                                             cudaMemcpyHostToDevice, stream));
 
         core::DeviceMemory<float> d_eigengenes((size_t)n_modules * n_cells);
-        SINGLET_CUDA_CHECK(cudaMemcpyAsync(d_eigengenes.get(),
+        SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(d_eigengenes.get(),
                                             result.eigengenes.data(),
                                             (size_t)n_modules * n_cells * sizeof(float),
                                             cudaMemcpyHostToDevice, stream));
@@ -1021,7 +1010,7 @@ inline HdwgcnaResult run_hdwgcna(
             assign_0indexed[g] = (assignment[g] > 0) ? (assignment[g] - 1) : -1;
 
         core::DeviceMemory<int> d_module(n_genes);
-        SINGLET_CUDA_CHECK(cudaMemcpyAsync(d_module.get(), assign_0indexed.data(),
+        SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(d_module.get(), assign_0indexed.data(),
                                             n_genes * sizeof(int),
                                             cudaMemcpyHostToDevice, stream));
 
@@ -1033,9 +1022,9 @@ inline HdwgcnaResult run_hdwgcna(
             d_expr2.get(), d_eigengenes.get(), d_module.get(),
             d_kme.get(), n_genes, n_cells, n_modules);
 
-        SINGLET_CUDA_CHECK(cudaStreamSynchronize(stream));
+        SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
         // [cudaMemcpy #4 — ONE-TIME EXIT: download kME values.]
-        SINGLET_CUDA_CHECK(cudaMemcpy(result.kme.data(), d_kme.get(),
+        SINGLET_GPU_CUDA_CHECK(cudaMemcpy(result.kme.data(), d_kme.get(),
                                        n_genes * sizeof(float),
                                        cudaMemcpyDeviceToHost));
     }
@@ -1069,7 +1058,7 @@ inline HdwgcnaResult run_hdwgcna(
     // 12. Restore determinism default (if we changed it).
     // ─────────────────────────────────────────────────────────────────────
     if (cfg.deterministic) {
-        SINGLET_CUBLAS_CHECK(cublasSetAtomicsMode(ctx.cublas,
+        SINGLET_GPU_CUBLAS_CHECK(cublasSetAtomicsMode(ctx.blas(),
                                                    CUBLAS_ATOMICS_ALLOWED));
     }
 
@@ -1117,14 +1106,14 @@ inline HdwgcnaResult run_hdwgcna(
 
 }  // namespace network
 
-// ── Top-level singlet_gpu::DeviceCSC alias ────────────────────────────────────
-using DeviceCSC = singlet_gpu::core::DeviceCSC;
+// ── Top-level singlet::gpu::DeviceCSC alias ────────────────────────────────────
+using DeviceCSC = singlet::gpu::core::DeviceCSC;
 
-// ── singlet_gpu::testing::dense_to_device_csc ─────────────────────────────────
+// ── singlet::gpu::testing::dense_to_device_csc ─────────────────────────────────
 namespace testing {
 // Creates a DeviceCSC from a dense row-major host buffer (cells × genes).
 // Only nonzeros are stored (skips zero entries).
-inline singlet_gpu::core::DeviceCSC dense_to_device_csc(
+inline singlet::gpu::core::DeviceCSC dense_to_device_csc(
     const float* h_data, int n_cells, int n_genes)
 {
     // Build host CSC: columns = cells, rows = genes.
@@ -1142,18 +1131,23 @@ inline singlet_gpu::core::DeviceCSC dense_to_device_csc(
         col_ptr[c + 1] = static_cast<int>(row_idx.size());
     }
     int nnz = static_cast<int>(vals.size());
-    return singlet_gpu::core::DeviceCSC(
-        n_genes, n_cells, nnz,
-        col_ptr.data(), row_idx.data(), vals.data());
+    singlet::gpu::core::DeviceCSC csc(n_genes, n_cells, nnz);
+    cudaMemcpy(csc.col_ptr.get(),     col_ptr.data(),
+               (n_cells + 1) * sizeof(int32_t), cudaMemcpyHostToDevice);
+    cudaMemcpy(csc.row_indices.get(), row_idx.data(),
+               nnz * sizeof(int32_t), cudaMemcpyHostToDevice);
+    cudaMemcpy(csc.values.get(),      vals.data(),
+               nnz * sizeof(float), cudaMemcpyHostToDevice);
+    return csc;
 }
 }  // namespace testing
 
 // ── PzDeviceLoader compat (returns DeviceCSC from a .1pz path) ────────────────
 namespace io {
 struct PzDeviceLoader {
-    singlet_gpu::core::DeviceCSC load(const std::string& path,
+    singlet::gpu::core::DeviceCSC load(const std::string& path,
                                        cudaStream_t stream = nullptr) const {
-        PzDeviceMatrix m = singlet_gpu::io::load_pz(path, stream);
+        PzDeviceMatrix m = singlet::gpu::io::load_pz(path, stream);
         return std::move(m.mat);
     }
 };
@@ -1171,8 +1165,8 @@ struct HvgParams {
     float min_disp    = 0.5f;
 };
 // lognorm: returns CSC unchanged (stub; real data test SKIPs if data absent)
-inline singlet_gpu::core::DeviceCSC lognorm(
-    const singlet_gpu::core::DeviceCSC& csc,
+inline singlet::gpu::core::DeviceCSC lognorm(
+    const singlet::gpu::core::DeviceCSC& csc,
     const LognormParams& /*lp*/)
 {
     // In a real implementation this would call log_normalize.
@@ -1186,11 +1180,18 @@ inline singlet_gpu::core::DeviceCSC lognorm(
     cudaMemcpy(h_cp.data(), csc.col_ptr.get(),    (n_cells+1)*sizeof(int), cudaMemcpyDeviceToHost);
     cudaMemcpy(h_ri.data(), csc.row_indices.get(), nnz*sizeof(int),        cudaMemcpyDeviceToHost);
     cudaMemcpy(h_v.data(),  csc.values.get(),      nnz*sizeof(float),      cudaMemcpyDeviceToHost);
-    return singlet_gpu::core::DeviceCSC(n_genes, n_cells, nnz, h_cp.data(), h_ri.data(), h_v.data());
+    singlet::gpu::core::DeviceCSC out(n_genes, n_cells, nnz);
+    cudaMemcpy(out.col_ptr.get(),     h_cp.data(),
+               (n_cells + 1) * sizeof(int32_t), cudaMemcpyHostToDevice);
+    cudaMemcpy(out.row_indices.get(), h_ri.data(),
+               nnz * sizeof(int32_t), cudaMemcpyHostToDevice);
+    cudaMemcpy(out.values.get(),      h_v.data(),
+               nnz * sizeof(float), cudaMemcpyHostToDevice);
+    return out;
 }
 // select_hvg: returns CSC unchanged (stub)
-inline singlet_gpu::core::DeviceCSC select_hvg(
-    const singlet_gpu::core::DeviceCSC& csc,
+inline singlet::gpu::core::DeviceCSC select_hvg(
+    const singlet::gpu::core::DeviceCSC& csc,
     const HvgParams& /*hvg_p*/)
 {
     const int n_genes = csc.rows;
@@ -1201,8 +1202,15 @@ inline singlet_gpu::core::DeviceCSC select_hvg(
     cudaMemcpy(h_cp.data(), csc.col_ptr.get(),    (n_cells+1)*sizeof(int), cudaMemcpyDeviceToHost);
     cudaMemcpy(h_ri.data(), csc.row_indices.get(), nnz*sizeof(int),        cudaMemcpyDeviceToHost);
     cudaMemcpy(h_v.data(),  csc.values.get(),      nnz*sizeof(float),      cudaMemcpyDeviceToHost);
-    return singlet_gpu::core::DeviceCSC(n_genes, n_cells, nnz, h_cp.data(), h_ri.data(), h_v.data());
+    singlet::gpu::core::DeviceCSC out(n_genes, n_cells, nnz);
+    cudaMemcpy(out.col_ptr.get(),     h_cp.data(),
+               (n_cells + 1) * sizeof(int32_t), cudaMemcpyHostToDevice);
+    cudaMemcpy(out.row_indices.get(), h_ri.data(),
+               nnz * sizeof(int32_t), cudaMemcpyHostToDevice);
+    cudaMemcpy(out.values.get(),      h_v.data(),
+               nnz * sizeof(float), cudaMemcpyHostToDevice);
+    return out;
 }
 }  // namespace preprocess
 
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

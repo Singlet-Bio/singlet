@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-// singlet-gpu/reduce/nmf/graph.h
+// SPDX-License-Identifier: MIT
+// singlet/gpu/reduce/nmf/graph.h
 //
 // FactorGraph multi-modal NMF — DEFERRED INDEFINITELY as of CYCLE-105.
 //

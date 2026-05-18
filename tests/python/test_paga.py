@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.paga() and singlet.plot_paga()."""
 
 import numpy as np

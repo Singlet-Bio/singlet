@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """PyTorch integration: zero-copy sparse tensors and DataLoaders for .1pz/.spz files."""
 
 from __future__ import annotations

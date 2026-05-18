@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: atac_qc.h
 // A3 — Per-cell QC metrics for ATAC-seq.

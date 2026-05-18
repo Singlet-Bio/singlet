@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Cell-cell communication inference (CellPhoneDB-style).
 
 Estimates intercellular signalling by scoring ligand-receptor interactions

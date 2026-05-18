@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.preprocess.hvg — GPU-native highly variable gene selection.
 
@@ -37,14 +37,14 @@ from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     import anndata
+    import numpy as np
 
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-
-def _get_matrix(adata: anndata.AnnData, layer: Optional[str]):
+def _get_matrix(adata: "anndata.AnnData", layer: Optional[str]):
     """Return the matrix to operate on (X or a layer)."""
     if layer is not None:
         if layer not in adata.layers:
@@ -69,7 +69,7 @@ def _csr_to_device_csc(csr_mat):
             "pybind11 binding must expose from_cupy_csr / to_cupy_csr."
         )
 
-    csc_mat = csr_mat.T.tocsc()  # genes × cells, CSC
+    csc_mat = csr_mat.T.tocsc()   # genes × cells, CSC
     return _core.from_cupy_csr(csc_mat)
 
 
@@ -80,9 +80,8 @@ _VALID_FLAVORS = ("seurat_v3", "pearson_residuals")
 # Public API
 # ---------------------------------------------------------------------------
 
-
 def highly_variable_genes(
-    adata: anndata.AnnData,
+    adata: "anndata.AnnData",
     *,
     n_top_genes: int = 2000,
     flavor: str = "seurat_v3",
@@ -95,7 +94,7 @@ def highly_variable_genes(
     layer: Optional[str] = None,
     inplace: bool = True,
     copy: bool = False,
-) -> Optional[anndata.AnnData]:
+) -> Optional["anndata.AnnData"]:
     """
     Select highly variable genes using a GPU-native two-pass Welford kernel
     (cycle-4, ``singlet::gpu::preprocess::select_hvg``).
@@ -178,9 +177,13 @@ def highly_variable_genes(
         sgpp.highly_variable_genes(adata, layer="raw_counts")
     """
     if flavor not in _VALID_FLAVORS:
-        raise ValueError(f"flavor='{flavor}' is not recognised.  Choose one of: {_VALID_FLAVORS}")
+        raise ValueError(
+            f"flavor='{flavor}' is not recognised.  "
+            f"Choose one of: {_VALID_FLAVORS}"
+        )
 
     import singlet.gpu._core as _core
+    import numpy as np  # small host transfer for per-gene stats
 
     if not hasattr(_core, "highly_variable_genes"):
         raise AttributeError(
@@ -214,13 +217,12 @@ def highly_variable_genes(
     import numpy as _np
 
     class _CaiView:  # cupy 14 dtype-strict shim — see CYCLE-193 / §J.13
-        def __init__(self, d):
-            self.__cuda_array_interface__ = d
+        def __init__(self, d): self.__cuda_array_interface__ = d
 
     indices = cp.asarray(_CaiView(result.indices_view)).get()  # int32, top_n
-    scores = cp.asarray(_CaiView(result.scores_view)).get()  # float32, top_n
-    means = cp.asarray(_CaiView(result.mean_view)).get()  # float32, n_genes
-    vars_ = cp.asarray(_CaiView(result.var_view)).get()  # float32, n_genes
+    scores  = cp.asarray(_CaiView(result.scores_view)).get()   # float32, top_n
+    means   = cp.asarray(_CaiView(result.mean_view)).get()     # float32, n_genes
+    vars_   = cp.asarray(_CaiView(result.var_view)).get()      # float32, n_genes
 
     n_genes = int(working_adata.n_vars)
     highly_variable = _np.zeros(n_genes, dtype=bool)
@@ -238,20 +240,20 @@ def highly_variable_genes(
     variances_norm = vars_.copy()
     variances_norm[indices] = scores  # HVGs carry the kernel's HVG score
 
-    working_adata.var["highly_variable"] = highly_variable
-    working_adata.var["means"] = means
-    working_adata.var["variances"] = vars_
-    working_adata.var["variances_norm"] = variances_norm
+    working_adata.var["highly_variable"]      = highly_variable
+    working_adata.var["means"]                = means
+    working_adata.var["variances"]            = vars_
+    working_adata.var["variances_norm"]       = variances_norm
     working_adata.var["highly_variable_rank"] = highly_variable_rank
 
     # Mirror scanpy: store the parameters used in uns['hvg'].
     working_adata.uns["hvg"] = {
-        "flavor": flavor,
-        "n_top_genes": n_top_genes,
-        "min_mean": min_mean,
-        "max_mean": max_mean,
-        "min_disp": min_disp,
-        "max_disp": max_disp,
+        "flavor":       flavor,
+        "n_top_genes":  n_top_genes,
+        "min_mean":     min_mean,
+        "max_mean":     max_mean,
+        "min_disp":     min_disp,
+        "max_disp":     max_disp,
     }
 
     if inplace and not copy:

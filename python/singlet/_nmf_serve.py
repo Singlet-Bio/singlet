@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """NMF model serving — project data onto interpretable biological programs."""
 
 from __future__ import annotations

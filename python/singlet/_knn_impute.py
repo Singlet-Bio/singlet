@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """kNN-based expression imputation.
 
 Provides singlet.knn_impute() — for each cell, impute expression by

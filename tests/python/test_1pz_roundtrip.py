@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Integration tests for singlet._io read_1pz/write_1pz round-trip."""
 
 import numpy as np

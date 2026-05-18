@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: barnyard_route.h
 // G-BARNYARD-ROUTE: Per-cell species routing for barnyard mixture experiments.

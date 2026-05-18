@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_barcode_rank.cpp — ground-truth unit tests for barcode_rank.h
 //
 // Every assertion compares against pre-computed expected values rather than
@@ -16,19 +17,7 @@
 // ---------------------------------------------------------------------------
 // Minimal test framework
 // ---------------------------------------------------------------------------
-static int n_pass = 0;
-static int n_fail = 0;
-
-#define CHECK(cond, msg)                                                          \
-    do {                                                                          \
-        if (cond) {                                                               \
-            std::cout << "  PASS: " << (msg) << "\n";                            \
-            ++n_pass;                                                             \
-        } else {                                                                  \
-            std::cout << "  FAIL: " << (msg) << " [line " << __LINE__ << "]\n";  \
-            ++n_fail;                                                             \
-        }                                                                         \
-    } while (0)
+#include "test_harness.h"  // CHECK(cond, msg) + n_pass / n_fail
 
 static std::string read_file_str(const std::string& path) {
     std::ifstream ifs(path);

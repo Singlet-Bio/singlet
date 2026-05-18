@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.normalize()."""
 
 import numpy as np

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // singlet-pileup/longread.h — Long-read scRNA-seq (PacBio MAS-seq / ONT) support
 //
 // Detects long-read data, splits MAS-seq concatenated reads, extracts barcodes

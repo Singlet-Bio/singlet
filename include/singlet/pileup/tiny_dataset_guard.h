@@ -1,10 +1,11 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // tiny_dataset_guard.h — Guards against STAR crashes on very small datasets.
 // Provides threshold checks and conservative memory recommendations for tiny inputs.
 #include <cstdint>
 #include <string>
 
-namespace singlet_pileup {
+namespace singlet::pileup {
 
 struct TinyDatasetGuard {
     static constexpr uint64_t MIN_READS_FOR_PIPELINE  = 10000; ///< Absolute floor: <10K reads is never a real single-cell run
@@ -50,4 +51,4 @@ struct TinyDatasetGuard {
     }
 };
 
-}  // namespace singlet_pileup
+}  // namespace singlet::pileup

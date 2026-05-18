@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_mega_sort_params.cpp — Unit tests for mega_sort_params.h
 //
 // Verifies the three-tier STAR BAM-sort parameter policy enforced for the
@@ -24,27 +25,16 @@
 
 #include "singlet/pileup/mega_sort_params.h"
 
-using singlet_pileup::mega_sort::compression_level;
-using singlet_pileup::mega_sort::ram_cap_bytes;
-using singlet_pileup::mega_sort::tier_for;
-using singlet_pileup::mega_sort::Tier;
-using singlet_pileup::mega_sort::MEGA_READ_THRESHOLD;
-using singlet_pileup::mega_sort::ULTRA_READ_THRESHOLD;
-using singlet_pileup::mega_sort::ULTRA_SORT_BINS;
+using singlet::pileup::mega_sort::compression_level;
+using singlet::pileup::mega_sort::ram_cap_bytes;
+using singlet::pileup::mega_sort::tier_for;
+using singlet::pileup::mega_sort::Tier;
+using singlet::pileup::mega_sort::MEGA_READ_THRESHOLD;
+using singlet::pileup::mega_sort::ULTRA_READ_THRESHOLD;
+using singlet::pileup::mega_sort::ULTRA_SORT_BINS;
 
-static int g_pass = 0;
-static int g_fail = 0;
-
-#define CHECK(cond)                                                         \
-    do {                                                                    \
-        if (cond) {                                                         \
-            ++g_pass;                                                       \
-        } else {                                                            \
-            ++g_fail;                                                       \
-            std::cerr << "FAIL: " << #cond                                  \
-                      << " at " << __FILE__ << ":" << __LINE__ << "\n";    \
-        }                                                                   \
-    } while (0)
+#define SINGLET_TEST_HARNESS_TERSE
+#include "test_harness.h"  // CHECK(cond) + g_pass / g_fail
 
 static constexpr uint64_t GiB = 1ULL << 30;
 

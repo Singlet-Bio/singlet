@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Find marker genes for all clusters with filtering.
 
 Provides singlet.find_all_markers() — comprehensive marker discovery

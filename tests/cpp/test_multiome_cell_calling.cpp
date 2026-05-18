@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Test: multiome EmptyDrops threshold adjustment
 // Verifies that multiome-appropriate thresholds (lower=30, min_umi_test=100)
 // are necessary for calling cells with low UMI counts typical of multiome GEX.

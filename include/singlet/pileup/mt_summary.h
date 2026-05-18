@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: mt_summary.h
 // Per-cell mitochondrial summary TSV writer for mt_summary.tsv.

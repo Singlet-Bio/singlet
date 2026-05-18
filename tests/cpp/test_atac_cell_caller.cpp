@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_atac_cell_caller.cpp
 // Unit tests for A7: AtacCellCaller
 // Tests: basic cell calling, auto-threshold, edge cases, filter isolation.

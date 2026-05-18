@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.batch_evaluation()."""
 
 import numpy as np

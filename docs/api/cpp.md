@@ -297,6 +297,6 @@ Include: `#include "singlet/star/star_api.h"`
 extern "C++" int star_main_impl(int argc, char* argv[]);
 ```
 
-`star_main_impl()` is the renamed `main()` of the vendored STAR aligner. It accepts the same command-line arguments as the STAR binary. singlet calls it in a forked child process, which writes unsorted BAM to stdout (a pipe) that the parent reads into the pileup engine.
+`star_main_impl()` is the renamed `main()` of the vendored STAR aligner. It accepts the same command-line arguments as the STAR binary. singlify calls it in a forked child process, which writes unsorted BAM to stdout (a pipe) that the parent reads into the pileup engine.
 
-You do not need to call `star_main_impl()` directly — `singlet` handles the fork+pipe+pileup orchestration. This header is exposed for advanced use cases (e.g., embedding singlet as a library).
+You do not need to call `star_main_impl()` directly — `singlify` handles the fork+pipe+pileup orchestration. This header is exposed for advanced use cases (e.g., embedding singlify as a library).

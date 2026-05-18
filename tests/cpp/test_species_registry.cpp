@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // SPECIES-KMER-DB: Unit tests for species_registry.h
 // Run via ctest or standalone:
 //   g++ -std=c++17 -O2 -I../include -o /tmp/test_sr test/test_species_registry.cpp && /tmp/test_sr

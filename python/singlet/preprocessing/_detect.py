@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Protocol detection for single-cell RNA-seq samples."""
 
 from __future__ import annotations

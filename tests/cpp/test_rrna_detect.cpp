@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test/test_rrna_detect.cpp — Unit tests for G-RRNA rRNA contamination detection
 // Tests: detect(), batch_detect(), subunit accounting, write_rrna_report().
 
@@ -12,18 +13,8 @@
 
 using namespace singlet;
 
-static int g_pass = 0;
-static int g_fail = 0;
-
-#define CHECK(cond, msg)                                               \
-    do {                                                               \
-        if (!(cond)) {                                                 \
-            std::cerr << "FAIL [" << __LINE__ << "]: " << msg << "\n"; \
-            ++g_fail;                                                  \
-        } else {                                                       \
-            ++g_pass;                                                  \
-        }                                                              \
-    } while (0)
+#define SINGLET_TEST_HARNESS_QUIET
+#include "test_harness.h"  // CHECK(cond, msg) + g_pass / g_fail
 
 // Grab a k-mer that is definitely in the index from the human 28S array.
 // We embed two consecutive 21-mers from the human_28S list so detect() fires.

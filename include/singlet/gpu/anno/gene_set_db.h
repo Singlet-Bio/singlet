@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-// singlet-gpu/anno/gene_set_db.h — Gene set database type.
+// SPDX-License-Identifier: MIT
+// singlet/gpu/anno/gene_set_db.h — Gene set database type.
 //
 // GeneSetDB is defined in anno/types.h along with the rest of the annotation
 // module's shared types.  This header is a convenience re-export so test
@@ -8,4 +8,4 @@
 
 #pragma once
 
-#include <singlet-gpu/anno/types.h>
+#include <singlet/gpu/anno/types.h>

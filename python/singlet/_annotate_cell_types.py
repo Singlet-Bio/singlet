@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Automated cell type annotation from marker gene sets."""
 
 from __future__ import annotations

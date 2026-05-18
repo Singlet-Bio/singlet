@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_te_classifier.cpp — T-L2-3 unit tests
 // Validates TeClassifier:
 //   - ≥99% family-level recall on TE consensus reads.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """UMAP embedding for AnnData objects.
 
 Provides singlet.umap() — computes 2D/3D UMAP embedding from the kNN graph

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.harmony() batch correction."""
 
 import numpy as np

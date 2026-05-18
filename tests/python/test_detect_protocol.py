@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.preprocessing._detect (protocol detection)."""
 
 from unittest.mock import patch

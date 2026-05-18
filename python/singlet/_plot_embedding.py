@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Unified multi-panel embedding plot."""
 
 from __future__ import annotations

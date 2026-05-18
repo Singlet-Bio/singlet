@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_crispr_guide.cpp — unit tests for N18 CRISPR guide capture
 // Tests GuideRef::load_csv, GuideRef::match, GuideCounter::count + UMI dedup
 #include "singlet/pileup/crispr_guide.h"

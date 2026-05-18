@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Tests for singlet/pileup/saturation.h
 #include "singlet/pileup/saturation.h"
 #include "singlet/pileup/umi_dedup.h"

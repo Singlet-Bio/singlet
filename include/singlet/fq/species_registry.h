@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // SPECIES-KMER-DB: Compile-time registry of all 37 species singlet supports
 // Derived from scgeo/config/species.py + Ensembl release 111 / EnsemblGenomes release 59

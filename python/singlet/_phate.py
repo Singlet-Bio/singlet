@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """PHATE embedding — Potential of Heat-diffusion for Affinity-based Trajectory Embedding."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test/test_complex_whitelist.cpp
 // Unit tests for AUTOFIX-BD-RHAPSODY-WHITELIST:
 //   Per-segment whitelist discovery for CB_UMI_Complex protocols.

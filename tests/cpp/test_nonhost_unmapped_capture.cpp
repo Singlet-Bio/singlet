@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_nonhost_unmapped_capture.cpp — Tests for NONHOST-UNMAPPED-CAPTURE task
 //
 // Tests the NonHostScreener pipeline on FASTQ-like reads:

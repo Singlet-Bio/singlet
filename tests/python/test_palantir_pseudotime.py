@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.palantir_pseudotime."""
 
 import numpy as np

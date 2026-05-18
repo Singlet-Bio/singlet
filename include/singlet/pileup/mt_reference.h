@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: mt_reference.h
 // Extract and write the mitochondrial reference genome from STAR's Genome binary.

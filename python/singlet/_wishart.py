@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Cluster membership confidence scoring."""
 
 from __future__ import annotations

@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-// integrates: original (consensus bootstrap NMF; reuses factornet::nmf::fit_gpu via cycle 5 adapter)
+// SPDX-License-Identifier: MIT
+// integrates: original (consensus bootstrap NMF; uses native singlet reduce::nmf::fit)
 //
 // reduce/nmf/csi_gep.h — CSI-GEP: Consensus Single-Integration Gene Expression Programs
 //
@@ -19,8 +19,8 @@
 //     - gather_csc_columns_kernel: device-only.
 //     - cub::DeviceScan::ExclusiveSum: device-only.
 //     - copy_csc_columns_kernel: device-only.
-//     - D2H of sub-CSC for factornet: classified as "one-time setup per fit call"
-//       (factornet's GPU NMF API takes host CSC pointers and stages internally).
+//     - D2H of sub-CSC for the native NMF fit: classified as "one-time setup per
+//       fit call" (the intended native host-CSC NMF entry point stages internally).
 //       Each fit is a self-contained unit; this is NOT per-NMF-iteration.
 //     - H2D upload of W result: one-time per-fit result extraction, not per NMF iter.
 //   Per-k-means-iter (outer convergence loop, ≤ max_kmeans_iters=100):
@@ -71,14 +71,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/reduce/nmf/types.h>
-
-#include <factornet/nmf/fit_gpu.cuh>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/reduce/nmf/types.h>
+#include <singlet/gpu/reduce/nmf/fit.h>
 
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
@@ -94,7 +89,7 @@
 #include <numeric>
 #include <cassert>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace reduce {
 namespace nmf {
 
@@ -372,7 +367,7 @@ namespace detail {
 
 // Build the host sub-CSC for one run.
 // All device ops use the caller-provided stream.
-// Returns host-resident CSC ready for factornet::nmf::nmf_fit_gpu.
+// Returns host-resident CSC ready for the native host-CSC NMF fit entry point.
 struct HostSubCSC {
     std::vector<int32_t> indptr;
     std::vector<int32_t> indices;
@@ -441,7 +436,7 @@ inline HostSubCSC build_sub_csc(
     h.indices.resize(sub_nnz);
     h.values.resize(sub_nnz);
 
-    // One D2H per run (one-time result staging for factornet, not per NMF iteration).
+    // One D2H per run (one-time result staging for the native NMF fit, not per NMF iteration).
     cudaMemcpyAsync(h.indptr.data(),  d_sub_indptr.get(),
                     (n_sel + 1) * sizeof(int32_t), cudaMemcpyDeviceToHost, stream);
     cudaMemcpyAsync(h.indices.data(), d_sub_indices.get(),
@@ -678,8 +673,9 @@ inline CsiGepResult csi_gep(
         throw std::invalid_argument("csi_gep: subsample_frac out of (0, 1]");
     const int64_t nnz_full = mat.nnz;
 
-    // Download full matrix to host for factornet final NNLS projection (Phase 4).
-    // factornet::nmf::nmf_fit_gpu takes host CSC pointers and stages to device internally.
+    // Download full matrix to host for the final NNLS projection (Phase 4).
+    // The intended native host-CSC NMF entry point takes host CSC pointers and
+    // stages to device internally.
     // This one-time D2H copy (outside all hot loops) satisfies the no-PCIe-in-hot-loops rule.
     std::vector<int>   h_col_ptr_full(static_cast<size_t>(n_cells) + 1);
     std::vector<int>   h_row_indices_full(static_cast<size_t>(nnz_full));
@@ -738,7 +734,7 @@ inline CsiGepResult csi_gep(
         core::DeviceMemory<float> d_candidates(static_cast<size_t>(m) * n_cand);
 
         for (int run = 0; run < cfg.n_runs; ++run) {
-            // Build sub-CSC (one D2H per run for factornet staging — valid per-call).
+            // Build sub-CSC (one D2H per run for native NMF staging — valid per-call).
             detail::HostSubCSC h_sub = detail::build_sub_csc(
                 mat, n_sel, cfg.seed, static_cast<uint32_t>(run),
                 d_flags, d_cell_range, d_sel_cols, d_n_sel_dev,
@@ -754,18 +750,34 @@ inline CsiGepResult csi_gep(
                                 + static_cast<uint64_t>(ki)  * 6364136223846793005ULL
                                 + static_cast<uint64_t>(run) * 2862933555777941757ULL;
 
-            // NMF fit (factornet — host-staged, GPU-resident inner loop).
-            NmfResult result = ::factornet::nmf::nmf_fit_gpu<float>(
-                h_sub.indptr.data(),
-                h_sub.indices.data(),
-                h_sub.values.data(),
-                m, n_sel, h_sub.nnz,
-                run_cfg,
-                nullptr, nullptr);
+            // NMF fit (native singlet — host-staged, GPU-resident inner loop).
+            //
+            // ⚠ API GAP (TODO CYCLE-105-FOLLOWUP): the native reduce::nmf::fit
+            // entry point only accepts an io::PzDeviceMatrix.  This loop holds a
+            // raw HOST CSC sub-matrix (h_sub.indptr/indices/values, built per
+            // run by build_sub_csc); there is NO native nmf::fit overload that
+            // accepts raw host CSC pointers (factornet::nmf::nmf_fit_gpu
+            // provided this; it was deleted).  PzDeviceMatrix is only produced
+            // by io::load_pz from a .1pz file and has no host-CSC constructor,
+            // so we cannot legitimately bridge here.  Needed native entry point:
+            //   reduce::nmf::NmfResult fit_host_csc(
+            //       const int* indptr, const int* indices, const float* values,
+            //       int n_rows, int n_cols, int nnz, const NmfConfig& cfg,
+            //       const DenseMatrix* W_init, const DenseMatrix* H_init);
+            // Until that exists, this deferred-scope path throws at runtime.
+            (void)run_cfg;
+            throw std::runtime_error(
+                "csi_gep: native reduce::nmf::fit has no host-CSC entry point; "
+                "needs reduce::nmf::fit_host_csc (see TODO CYCLE-105-FOLLOWUP). "
+                "Deferred-scope path.");
+
+            // --- Unreachable below: documents the intended result wiring once a
+            //     host-CSC native NMF entry point exists. ---
+            NmfResult result;
 
             // Upload W (m × k) to candidate stash: one H2D per run (valid result extraction).
             float* dst = d_candidates.get() + static_cast<size_t>(run) * k * m;
-            cudaMemcpyAsync(dst, result.W.data(),
+            cudaMemcpyAsync(dst, result.W.ptr(),
                             static_cast<size_t>(m) * k * sizeof(float),
                             cudaMemcpyHostToDevice, stream);
             cudaStreamSynchronize(stream);  // ensure W is staged before next run
@@ -803,7 +815,8 @@ inline CsiGepResult csi_gep(
     cudaStreamSynchronize(stream);
 
     // ---- Phase 4: NNLS projection for all cells ----
-    // Use factornet with W fixed to consensus (one NMF iter = one NNLS solve for H).
+    // Use the native NMF fit with W fixed to consensus (one NMF iter = one NNLS
+    // solve for H).
     NmfConfig proj_cfg  = cfg.nmf_cfg;
     proj_cfg.rank       = best_k;
     proj_cfg.seed       = cfg.seed;
@@ -811,24 +824,31 @@ inline CsiGepResult csi_gep(
 
     DenseMatrix W_init(m, best_k);
     std::copy(all_consensus[best_ki].begin(), all_consensus[best_ki].end(),
-              W_init.data());
+              W_init.data.begin());
 
-    NmfResult proj = ::factornet::nmf::nmf_fit_gpu<float>(
-        h_col_ptr_full.data(),
-        h_row_indices_full.data(),
-        h_values_full.data(),
-        m, n_cells, static_cast<int>(nnz_full),
-        proj_cfg,
-        &W_init, nullptr);
+    // ⚠ API GAP (TODO CYCLE-105-FOLLOWUP): same gap as the per-run fit above —
+    // the native reduce::nmf::fit only accepts an io::PzDeviceMatrix, and this
+    // call holds raw HOST CSC pointers (h_col_ptr_full / h_row_indices_full /
+    // h_values_full).  Needs reduce::nmf::fit_host_csc (see TODO above).
+    // Until that exists, this deferred-scope path throws at runtime.
+    (void)proj_cfg; (void)W_init;
+    throw std::runtime_error(
+        "csi_gep: native reduce::nmf::fit has no host-CSC entry point for the "
+        "NNLS projection; needs reduce::nmf::fit_host_csc (see TODO "
+        "CYCLE-105-FOLLOWUP). Deferred-scope path.");
 
-    // H: best_k × n_cells col-major (factornet convention).
+    // --- Unreachable below: documents the intended result wiring once a
+    //     host-CSC native NMF entry point exists. ---
+    NmfResult proj;
+
+    // H: best_k × n_cells col-major (native NMF convention).
     // Transpose to n_cells × best_k for program_usage output.
     core::DeviceMemory<float> d_usage(static_cast<size_t>(n_cells) * best_k);
     {
         // H is best_k × n_cells col-major: element (r, c) = H[r + best_k * c].
         // Output is n_cells × best_k row-major: element (c, r) = h_H_T[c * best_k + r].
         std::vector<float> h_H_T(static_cast<size_t>(n_cells) * best_k);
-        const float* H = proj.H.data();
+        const float* H = proj.H.ptr();
         for (int c = 0; c < n_cells; ++c)
             for (int r = 0; r < best_k; ++r)
                 h_H_T[static_cast<size_t>(c) * best_k + r] =
@@ -850,4 +870,4 @@ inline CsiGepResult csi_gep(
 
 } // namespace nmf
 } // namespace reduce
-} // namespace singlet_gpu
+} // namespace singlet::gpu

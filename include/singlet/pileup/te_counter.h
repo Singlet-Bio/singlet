@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: te_counter.h  — T-L2-4
 // Per-cell × TE-family sparse UMI counter writing te_counts.1pz

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Unit tests for the singlet MCP server module.
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_te_counter.cpp — T-L2-4 unit tests
 // Validates:
 //   1. TeCounter accumulates correctly across multiple add() calls.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.preprocessing._download (FASTQ download logic)."""
 
 import subprocess

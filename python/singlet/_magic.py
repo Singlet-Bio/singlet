@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """MAGIC imputation for AnnData objects.
 
 Provides singlet.magic() — Markov Affinity-based Graph Imputation of Cells,

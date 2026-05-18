@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_atac_qc.cpp — Unit tests for A3: ATAC QC metrics (atac_qc.h)
 //
 // Tests:

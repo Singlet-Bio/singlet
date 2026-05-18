@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Differential expression (rank genes by groups) for AnnData objects.
 
 Provides singlet.rank_genes_groups() — identifies marker genes for each

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Differential abundance testing for AnnData objects.
 
 Tests whether cell populations are differentially abundant between

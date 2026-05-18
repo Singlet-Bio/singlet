@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Gene-space dimensionality reduction.
 
 Provides singlet.gene_space_embedding() — embed genes (not cells) in 2D

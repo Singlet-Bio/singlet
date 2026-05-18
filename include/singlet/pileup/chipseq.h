@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: chipseq.h
 // G-CHIPSEQ — Bulk ChIP-seq QC metrics.

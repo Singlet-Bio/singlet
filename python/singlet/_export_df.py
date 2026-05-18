@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """DataFrame export utilities."""
 
 from __future__ import annotations

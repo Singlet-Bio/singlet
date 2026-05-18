@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # End-to-end singlet pipeline-output workflow example (R version).
 #
 # Demonstrates the typical user journey from a singlet pipeline output

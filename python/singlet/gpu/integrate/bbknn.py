@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.integrate.bbknn — GPU-native Batch-Balanced KNN graph.
 
@@ -38,12 +38,11 @@ if TYPE_CHECKING:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-
 def _get_embedding(
-    adata: anndata.AnnData,
+    adata: "anndata.AnnData",
     use_rep: str,
     n_pcs: Optional[int],
-) -> np.ndarray:
+) -> "np.ndarray":
     """
     Extract the cell embedding to use for kNN.
 
@@ -67,7 +66,6 @@ def _get_embedding(
     emb = adata.obsm[use_rep]
     try:
         import cupy as cp
-
         if isinstance(emb, cp.ndarray):
             emb = emb.get()
     except ImportError:
@@ -79,9 +77,9 @@ def _get_embedding(
 
 
 def _resolve_batch_codes(
-    adata: anndata.AnnData,
+    adata: "anndata.AnnData",
     batch_key: str,
-) -> np.ndarray:
+) -> "np.ndarray":
     """Encode batch column as int32 codes."""
     if batch_key not in adata.obs.columns:
         raise KeyError(
@@ -96,9 +94,8 @@ def _resolve_batch_codes(
 # Public API
 # ---------------------------------------------------------------------------
 
-
 def bbknn(
-    adata: anndata.AnnData,
+    adata: "anndata.AnnData",
     *,
     batch_key: str = "batch",
     use_rep: str = "X_pca",
@@ -108,7 +105,7 @@ def bbknn(
     set_op_mix_ratio: float = 1.0,
     local_connectivity: int = 1,
     copy: bool = False,
-) -> Optional[anndata.AnnData]:
+) -> Optional["anndata.AnnData"]:
     """
     GPU-native Batch-Balanced KNN graph construction (cycle-14 kernel).
 
@@ -196,7 +193,9 @@ def bbknn(
                   metric="cosine")
     """
     if neighbors_within_batch < 1:
-        raise ValueError(f"neighbors_within_batch must be ≥1, got {neighbors_within_batch!r}.")
+        raise ValueError(
+            f"neighbors_within_batch must be ≥1, got {neighbors_within_batch!r}."
+        )
 
     import singlet.gpu._core as _core
 
@@ -210,8 +209,8 @@ def bbknn(
 
     working = copy_module.copy(adata) if copy else adata
 
-    emb = _get_embedding(working, use_rep, n_pcs)  # (n_cells, n_dims) f32
-    batch_codes = _resolve_batch_codes(working, batch_key)  # (n_cells,) int32
+    emb = _get_embedding(working, use_rep, n_pcs)            # (n_cells, n_dims) f32
+    batch_codes = _resolve_batch_codes(working, batch_key)    # (n_cells,) int32
     n_batches = int(batch_codes.max()) + 1
 
     # CYCLE-267: binding signature (kw_only after n_batches):
@@ -221,11 +220,9 @@ def bbknn(
     # kwargs not accepted by the binding — drop them. Returns a KnnResult.
     if not hasattr(emb, "__cuda_array_interface__"):
         import cupy as cp
-
         emb = cp.asarray(emb, dtype=cp.float32)
     if not hasattr(batch_codes, "__cuda_array_interface__"):
         import cupy as cp
-
         batch_codes = cp.asarray(batch_codes, dtype=cp.int32)
     result = _core.bbknn(
         emb,
@@ -249,7 +246,7 @@ def bbknn(
 
     n = int(result.n)
     k = int(result.k)
-    nbr_idx_flat = cp.asarray(_CaiView(result.neighbors_view)).get().astype(np.int32)
+    nbr_idx_flat  = cp.asarray(_CaiView(result.neighbors_view)).get().astype(np.int32)
     nbr_dist_flat = cp.asarray(_CaiView(result.distances_view)).get().astype(np.float32)
 
     # CYCLE-269: bbknn KnnResult uses (n*k,) flat row-major buffers.
@@ -258,7 +255,7 @@ def bbknn(
     # `row_offsets_view` reflects the FULL (n*k) layout, not filtered counts.
     # Filter sentinels before building the scipy CSR; rebuild row_offsets
     # from a reshape view so under-filled rows have fewer entries.
-    nbr_idx_2d = nbr_idx_flat.reshape(n, k)
+    nbr_idx_2d  = nbr_idx_flat.reshape(n, k)
     nbr_dist_2d = nbr_dist_flat.reshape(n, k)
 
     valid_mask = nbr_idx_2d >= 0
@@ -266,7 +263,7 @@ def bbknn(
     row_offsets = np.zeros(n + 1, dtype=np.int32)
     np.cumsum(counts, out=row_offsets[1:])
 
-    valid_idx = nbr_idx_2d[valid_mask].astype(np.int32)
+    valid_idx  = nbr_idx_2d[valid_mask].astype(np.int32)
     valid_dist = nbr_dist_2d[valid_mask].astype(np.float32)
 
     # Distances: clamp negative floats (paranoid; mask should already filter).

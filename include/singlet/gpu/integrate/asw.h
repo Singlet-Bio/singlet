@@ -1,6 +1,6 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: Rousseeuw (1987) Average Silhouette Width metric
-// singlet-gpu/integrate/asw.h
+// singlet/gpu/integrate/asw.h
 //
 // ASW — Average Silhouette Width.
 // Rousseeuw PJ (1987) J Comput Appl Math 20:53-65.
@@ -32,13 +32,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/graph/knn.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/graph/knn.h>
 
 #include <cub/device/device_reduce.cuh>
 
@@ -48,7 +44,7 @@
 #include <stdexcept>
 #include <string>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace integrate {
 
 // ---------------------------------------------------------------------------
@@ -155,7 +151,7 @@ void asw_kernel_serial(
 // asw() — public entry point
 // ---------------------------------------------------------------------------
 //
-// knn:      KnnResult from singlet_gpu::graph::compute_knn(...).
+// knn:      KnnResult from singlet::gpu::graph::compute_knn(...).
 //           Uses knn.neighbors [n*k], knn.distances [n*k], knn.n, knn.k.
 // d_label:  device int[n_cells] with values in [0, n_labels).
 // n_labels: number of distinct label classes.  Must be >= 1.
@@ -172,7 +168,7 @@ inline AswResult asw(
     cudaStream_t            stream = nullptr)
 {
     if (stream == nullptr) {
-        stream = singlet_gpu::core::default_context().stream();
+        stream = singlet::gpu::core::default_context().stream();
     }
 
     const int n = knn.n;
@@ -211,7 +207,7 @@ inline AswResult asw(
         knn.neighbors.get(), knn.distances.get(), d_label,
         d_sil.get(), n, k, n_labels);
 
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     // Compute asw_mean = sum(silhouette) / n via cub::DeviceReduce::Sum.
     // One D2H readback of the scalar result (Rule 4 compliant).
@@ -223,10 +219,10 @@ inline AswResult asw(
     cub::DeviceReduce::Sum(d_tmp.get(), temp_bytes,
         d_sil.get(), d_sum.get(), n, stream);
 
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     float h_sum = 0.f;
-    CUDA_CHECK(cudaMemcpy(&h_sum, d_sum.get(), sizeof(float),
+    SINGLET_GPU_CUDA_CHECK(cudaMemcpy(&h_sum, d_sum.get(), sizeof(float),
                           cudaMemcpyDeviceToHost));
 
     AswResult res;
@@ -238,4 +234,4 @@ inline AswResult asw(
 }
 
 }  // namespace integrate
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

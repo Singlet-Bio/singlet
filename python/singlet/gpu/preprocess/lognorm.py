@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.preprocess.lognorm — GPU-native total-count normalisation + log1p.
 
@@ -34,7 +34,8 @@ cycle must add those bindings before this module is functional.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+import copy
+from typing import TYPE_CHECKING, Optional, Union
 
 if TYPE_CHECKING:
     import anndata
@@ -44,8 +45,7 @@ if TYPE_CHECKING:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-
-def _get_matrix(adata: anndata.AnnData, layer: Optional[str]):
+def _get_matrix(adata: "anndata.AnnData", layer: Optional[str]):
     """Return the matrix to operate on (X or a layer)."""
     if layer is not None:
         if layer not in adata.layers:
@@ -54,7 +54,7 @@ def _get_matrix(adata: anndata.AnnData, layer: Optional[str]):
     return adata.X
 
 
-def _set_matrix(adata: anndata.AnnData, layer: Optional[str], mat) -> None:
+def _set_matrix(adata: "anndata.AnnData", layer: Optional[str], mat) -> None:
     """Write *mat* back to adata.X or adata.layers[layer]."""
     if layer is not None:
         adata.layers[layer] = mat
@@ -94,11 +94,11 @@ def _csr_to_device_csc(csr_mat):
     try:
         import cupyx.scipy.sparse as csp  # cupy >= 14
     except ImportError:
-        import cupy.sparse as csp  # cupy < 14 fallback  # noqa: F401
+        import cupy.sparse as csp         # cupy < 14 fallback  # noqa: F401
 
     # AnnData stores (cells × genes) CSR; the C++ kernel expects (genes × cells) CSC.
     # .T.tocsc() is in-place — no new data allocation.
-    csc_mat = csr_mat.T.tocsc()  # genes × cells, CSC
+    csc_mat = csr_mat.T.tocsc()   # genes × cells, CSC
 
     # _core.from_cupy_csr accepts any object exposing .indptr / .indices / .data
     # whose backing arrays expose __cuda_array_interface__ (cupy csr_/csc_matrix).
@@ -123,21 +123,18 @@ def _device_csc_to_csr(device_csc):
     -------
     cupy.sparse.csr_matrix  (cells × genes — AnnData convention)
     """
-    import cupy as cp
-
     import singlet.gpu._core as _core  # noqa: F401
-
+    import cupy as cp
     try:
         import cupyx.scipy.sparse as csp  # cupy >= 14
     except ImportError:
-        import cupy.sparse as csp  # cupy < 14 fallback
+        import cupy.sparse as csp         # cupy < 14 fallback
 
     # cupy >= 14 dtype-strictness: cp.asarray() rejects bare dicts.  The
     # __cuda_array_interface__ must be an attribute on the source object.
     # Wrap each CAI dict in a one-line shim — works on cupy 13 and 14.
     class _CaiView:
-        def __init__(self, d):
-            self.__cuda_array_interface__ = d
+        def __init__(self, d): self.__cuda_array_interface__ = d
 
     if hasattr(_core, "to_cupy_csr"):
         # _core.to_cupy_csr returns a dict {data, indices, indptr, shape, _owner}
@@ -145,18 +142,20 @@ def _device_csc_to_csr(device_csc):
         # make_view_object — see python/src/_cupy_interop.hpp).
         d = _core.to_cupy_csr(device_csc)
         rows, cols = d["shape"]
-        cu_data = cp.asarray(_CaiView(d["data"]))
+        cu_data    = cp.asarray(_CaiView(d["data"]))
         cu_indices = cp.asarray(_CaiView(d["indices"]))
-        cu_indptr = cp.asarray(_CaiView(d["indptr"]))
+        cu_indptr  = cp.asarray(_CaiView(d["indptr"]))
     else:
         # Fallback — use __cuda_array_interface__ views from DeviceCsc directly.
-        cu_data = cp.asarray(_CaiView(device_csc.data_view))
+        cu_data    = cp.asarray(_CaiView(device_csc.data_view))
         cu_indices = cp.asarray(_CaiView(device_csc.indices_view))
-        cu_indptr = cp.asarray(_CaiView(device_csc.indptr_view))
+        cu_indptr  = cp.asarray(_CaiView(device_csc.indptr_view))
         rows = device_csc.rows
         cols = device_csc.cols
 
-    genes_x_cells_csc = csp.csc_matrix((cu_data, cu_indices, cu_indptr), shape=(rows, cols))
+    genes_x_cells_csc = csp.csc_matrix(
+        (cu_data, cu_indices, cu_indptr), shape=(rows, cols)
+    )
     result_csr = genes_x_cells_csc.T.tocsr()
     # Lifetime anchor (CYCLE-214 — fixes CYCLE-199 pca segfault):
     # cu_data/cu_indices/cu_indptr are zero-copy views into device_csc's memory.
@@ -177,11 +176,11 @@ def _device_csc_to_csr(device_csc):
 
 
 def _prepare_adata(
-    adata: anndata.AnnData,
+    adata: "anndata.AnnData",
     *,
     inplace: bool,
     copy: bool,
-) -> anndata.AnnData:
+) -> "anndata.AnnData":
     """
     Return the AnnData to operate on based on scanpy inplace/copy semantics.
 
@@ -199,19 +198,19 @@ def _prepare_adata(
 # Alias: we shadow the ``copy`` builtin locally — import the module once.
 import copy as copy_module  # noqa: E402
 
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
-
 def normalize_total(
-    adata: anndata.AnnData,
+    adata: "anndata.AnnData",
     *,
     target_sum: Optional[float] = None,
     layer: Optional[str] = None,
     inplace: bool = True,
     copy: bool = False,
-) -> Optional[anndata.AnnData]:
+) -> Optional["anndata.AnnData"]:
     """
     Normalize total counts per cell to *target_sum* (GPU-native, cycle-3 kernel).
 
@@ -301,13 +300,13 @@ def normalize_total(
 
 
 def log1p(
-    adata: anndata.AnnData,
+    adata: "anndata.AnnData",
     *,
     base: Optional[float] = None,
     layer: Optional[str] = None,
     inplace: bool = True,
     copy: bool = False,
-) -> Optional[anndata.AnnData]:
+) -> Optional["anndata.AnnData"]:
     """
     Compute log(1 + X) element-wise on device (GPU-native, cycle-3 kernel).
 
@@ -357,7 +356,8 @@ def log1p(
 
     if not hasattr(_core, "log1p"):
         raise AttributeError(
-            "_core.log1p is not available.  See CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE."
+            "_core.log1p is not available.  "
+            "See CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE."
         )
 
     # AnnData.copy() is a deep copy (incl. .X) — required because

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.fate_probabilities()."""
 
 import numpy as np

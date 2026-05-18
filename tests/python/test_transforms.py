@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.log1p(), expm1(), sqrt_transform()."""
 
 import numpy as np

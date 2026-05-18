@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (first GPU STAGATE; manual CUDA GAT gradients vs PyG auto-diff)
 //
 // spatial/stagate.h — GPU-native STAGATE: Spatial domain segmentation via graph
@@ -66,13 +66,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/graph/knn.h>
-#include <singlet-gpu/graph/leiden.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/graph/knn.h>
+#include <singlet/gpu/graph/leiden.h>
 
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
@@ -89,7 +85,7 @@
 #include <limits>
 #include <algorithm>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace spatial {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -1163,4 +1159,4 @@ stagate(
 }
 
 }  // namespace spatial
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

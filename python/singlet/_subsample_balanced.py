@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Balanced subsampling for AnnData objects.
 
 Provides singlet.subsample_balanced() — subsample cells ensuring equal

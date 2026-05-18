@@ -1,7 +1,7 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (no GPU implementation exists in the literature)
 //
-// singlet-gpu/preprocess/magic.h
+// singlet/gpu/preprocess/magic.h
 //
 // MAGIC imputation — Markov Affinity-based Graph Imputation of Cells.
 //
@@ -13,7 +13,7 @@
 // Overview:
 //   Given a log-normalised sparse expression matrix X (m genes × n cells, CSC)
 //   and a cell-cell affinity graph W (n × n, CSR with Jaccard weights from
-//   singlet_gpu::graph::compute_snn), this kernel imputes missing expression by
+//   singlet::gpu::graph::compute_snn), this kernel imputes missing expression by
 //   diffusing signals through the graph for t steps.
 //
 //   Step 1. Build Markov transition matrix M = D⁻¹ W (row-stochastic).
@@ -65,14 +65,10 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/io/pz_device_loader.h>
-#include <singlet-gpu/graph/snn.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/io/pz_device_loader.h>
+#include <singlet/gpu/graph/snn.h>
 
 #include <cuda_runtime.h>
 #include <cusparse.h>
@@ -83,7 +79,7 @@
 #include <string>
 #include <vector>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace preprocess {
 
 // ---------------------------------------------------------------------------
@@ -246,7 +242,7 @@ void csc_transpose_to_dense_kernel(
 //
 // Inputs:
 //   X      — sparse expression matrix m_genes × n_cells (CSC, log-normalised)
-//   graph  — SNN cell-cell graph (n × n CSR, from singlet_gpu::graph::compute_snn)
+//   graph  — SNN cell-cell graph (n × n CSR, from singlet::gpu::graph::compute_snn)
 //   cfg    — MagicConfig (defaults: t=3, epsilon=1e-9)
 //   stream — optional cudaStream_t (nullptr → default context)
 //
@@ -260,7 +256,7 @@ inline MagicResult magic_impute(
     cudaStream_t              stream = nullptr)
 {
     if (stream == nullptr) {
-        stream = singlet_gpu::core::default_context().stream();
+        stream = singlet::gpu::core::default_context().stream();
     }
 
     const int m   = X.mat.rows;   // genes
@@ -355,7 +351,7 @@ inline MagicResult magic_impute(
 
     // Special case: t=0 → return transposed input unchanged.
     if (cfg.t == 0) {
-        CUDA_CHECK(cudaStreamSynchronize(stream));
+        SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
         MagicResult res;
         res.imputed = std::move(Y_a);
         res.n_cells = n;
@@ -451,7 +447,7 @@ inline MagicResult magic_impute(
 
     // Function-boundary sync (Rule 9): guarantees all kernels complete before
     // workspace and descriptor resources go out of scope.
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     // The final result lives in Y_b if t is odd (a_is_input=true → last write to Y_b),
     // or Y_a if t is even. a_is_input tracks which buffer was used as input last,
@@ -472,4 +468,4 @@ inline MagicResult magic_impute(
 }
 
 }  // namespace preprocess
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

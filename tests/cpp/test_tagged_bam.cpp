@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test/test_tagged_bam.cpp
 // Unit tests for TaggedBamWriter (G-TAGGED-BAM).
 //
@@ -24,19 +25,7 @@ namespace fs = std::filesystem;
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-static int n_pass = 0;
-static int n_fail = 0;
-
-#define CHECK(cond, name)                                                        \
-    do {                                                                         \
-        if (cond) {                                                              \
-            std::cout << "  PASS: " << (name) << "\n";                           \
-            ++n_pass;                                                            \
-        } else {                                                                 \
-            std::cout << "  FAIL: " << (name) << " [line " << __LINE__ << "]\n"; \
-            ++n_fail;                                                            \
-        }                                                                        \
-    } while (0)
+#include "test_harness.h"  // CHECK(cond, msg) + n_pass / n_fail
 
 // Build a minimal sam_hdr_t with 1 reference "chr1" and SO:coordinate tag.
 static sam_hdr_t* make_header() {

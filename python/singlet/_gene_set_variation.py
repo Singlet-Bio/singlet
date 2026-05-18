@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Gene Set Variation Analysis (GSVA) and ssGSEA.
 
 Provides singlet.gene_set_variation() — computes per-cell pathway enrichment

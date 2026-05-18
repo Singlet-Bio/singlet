@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test/test_read_dedup_stats.cpp
 // Unit tests for ReadDedupStats (B4 feature).
 // Tests exercise static helpers directly — no external BAM files required.
@@ -14,19 +15,7 @@
 
 using namespace singlet;
 
-static int n_pass = 0;
-static int n_fail = 0;
-
-#define CHECK(cond, name)                                                        \
-    do {                                                                         \
-        if (cond) {                                                              \
-            std::cout << "  PASS: " << (name) << "\n";                           \
-            ++n_pass;                                                            \
-        } else {                                                                 \
-            std::cout << "  FAIL: " << (name) << " [line " << __LINE__ << "]\n"; \
-            ++n_fail;                                                            \
-        }                                                                        \
-    } while (0)
+#include "test_harness.h"  // CHECK(cond, msg) + n_pass / n_fail
 
 // ── Test 1: estimate_library_size — zero inputs return 0 ────────────────────
 static void test_library_size_zero() {

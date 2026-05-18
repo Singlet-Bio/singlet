@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_adt_matcher.cpp — unit tests for T1 ADT antibody barcode matching
 // Tests AdtMatcher: CSV loading, exact match, Hamming-1, no-match, ambiguous,
 // multi-offset scanning, stats counters, and thread-safety (read-only phase).

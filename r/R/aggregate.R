@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 #' Aggregate a per-feature matrix to per-gene by summing exons of each gene.
 #'
 #' The singlet pipeline writes per-feature rownames in the format

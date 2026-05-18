@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # singlet-gpu/r/R/network.R
 #
 # GPU weighted gene co-expression network analysis:

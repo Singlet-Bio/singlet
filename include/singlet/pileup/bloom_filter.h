@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // singlet-pileup/bloom_filter.h — N1: Species Bloom filter
 //
 // Simple bit-vector Bloom filter for k-mer sets (~50MB per species).
@@ -22,7 +23,9 @@
 #include <string>
 #include <vector>
 
-namespace singlet_pileup {
+#include "kmer_util.h"
+
+namespace singlet::pileup {
 
 // ── MurmurHash3 mixing ─────────────────────────────────────────────────────
 inline uint64_t murmurhash3_mix(uint64_t key, uint64_t seed) {
@@ -76,7 +79,6 @@ public:
     /// Input: byte-numeric STAR sequence (A=0, C=1, G=2, T=3), length len, K=21
     int count_hits_numeric(const uint8_t* seq, int len, int k = 21) const {
         if (len < k) return 0;
-        static const uint8_t COMP[4] = {3, 2, 1, 0};
         const uint64_t mask = (1ULL << (2 * k)) - 1;
         int hits = 0;
         uint64_t kmer = 0;
@@ -86,14 +88,7 @@ public:
             if (b > 3) { valid = 0; kmer = 0; continue; }
             kmer = ((kmer << 2) | b) & mask;
             if (++valid >= k) {
-                // Compute canonical
-                uint64_t tmp = kmer, rc = 0;
-                for (int j = 0; j < k; ++j) {
-                    rc = (rc << 2) | COMP[tmp & 3];
-                    tmp >>= 2;
-                }
-                rc &= mask;
-                uint64_t canon = (kmer < rc) ? kmer : rc;
+                uint64_t canon = kmer::canonical_2bit(kmer, k);
                 if (query(canon)) ++hits;
             }
         }
@@ -137,4 +132,4 @@ private:
     std::vector<uint64_t> bits_;
 };
 
-} // namespace singlet_pileup
+} // namespace singlet::pileup

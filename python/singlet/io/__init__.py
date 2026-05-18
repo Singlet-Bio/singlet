@@ -1,6 +1,7 @@
+# SPDX-License-Identifier: MIT
 """singlet.io — Format I/O for single-cell data.
 
-Provides read/write for .1pz (native), .spz (legacy), h5ad, zarr, and 10x formats.
+Provides read/write for .1pz (native), h5ad, zarr, and 10x formats.
 """
 
 from singlet._io import (
@@ -8,10 +9,7 @@ from singlet._io import (
     read_1pz,
     read_kraken2,
     read_matrix,
-    read_spz,
-    spz_info,
     write_1pz,
-    write_spz,
 )
 from singlet.io.convert import (
     from_h5ad,
@@ -24,14 +22,18 @@ from singlet.io.convert import (
     to_tiledb,
     to_zarr,
 )
+from singlet.io.sample import (
+    SingletCounts,
+    SingletMt,
+    SingletNonhost,
+    SingletSample,
+    SingletSnp,
+)
 
 __all__ = [
     "read_1pz",
     "write_1pz",
     "info_1pz",
-    "read_spz",
-    "write_spz",
-    "spz_info",
     "read_matrix",
     "read_kraken2",
     "to_h5ad",
@@ -43,4 +45,10 @@ __all__ = [
     "from_zarr",
     "from_mtx",
     "from_tiledb",
+    # Canonical v2 readers (singlet.io.sample)
+    "SingletSample",
+    "SingletCounts",
+    "SingletSnp",
+    "SingletMt",
+    "SingletNonhost",
 ]

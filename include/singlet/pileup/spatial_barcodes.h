@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: spatial_barcodes.h
 // G-SPATIAL-BARCODES: Spatial transcriptomics barcode decoders.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 library(testthat)
 library(singlet)
 

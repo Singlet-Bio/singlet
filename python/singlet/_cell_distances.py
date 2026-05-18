@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Pairwise cell and group distance computation.
 
 Provides singlet.cell_distances() — compute distances between cells or

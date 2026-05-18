@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-// singlet-gpu/core/handles.h
+// SPDX-License-Identifier: MIT
+// singlet/gpu/core/handles.h
 //
 // GPUContext — owns cuBLAS, cuSPARSE, cuSOLVER, cuRAND handles + one CUDA stream.
 // Replaces factornet::gpu::GPUContext re-export as of CYCLE-105 (2026-04-29).
@@ -22,7 +22,7 @@
 #include <stdexcept>
 #include <string>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace core {
 
 // ---------------------------------------------------------------------------
@@ -158,9 +158,9 @@ inline GPUContext& default_context() {
         ctx = std::make_unique<GPUContext>();
     });
     if (!ctx) throw std::runtime_error(
-        "singlet_gpu::core::default_context() failed to initialize");
+        "singlet::gpu::core::default_context() failed to initialize");
     return *ctx;
 }
 
 }  // namespace core
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

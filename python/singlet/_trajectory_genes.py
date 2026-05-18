@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Trajectory gene detection for AnnData objects.
 
 Provides singlet.trajectory_genes() — identifies genes with significant

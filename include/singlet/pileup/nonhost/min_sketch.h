@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // min_sketch.h — MinSketch: canonical k-mer minimizer index for non-host screening
 //
 // Part of NONHOST-SYLPH-PORT (DAG task). Implements a minimizer-based sketch

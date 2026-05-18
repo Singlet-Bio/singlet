@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_mt_events.cpp
 // Unit tests for mt_event_caller.h, mt_event_matrix.h, mt_summary.h
 // (Gate G6 — donor-aware mitochondrial outputs)

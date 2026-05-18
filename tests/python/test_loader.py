@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet._loader (load, load_dir)."""
 
 import os

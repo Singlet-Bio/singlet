@@ -1,11 +1,11 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-// singlet-gpu/reduce/nmf/cv.h
+// SPDX-License-Identifier: MIT
+// singlet/gpu/reduce/nmf/cv.h
 //
 // Speckled cross-validation NMF — random-mask hold-out, vary k, find elbow.
 // Replaces factornet::nmf::nmf_cv_fit_gpu adapter (CYCLE-105, 2026-04-29).
 //
 // // algorithm derived from factornet/nmf/fit_cv_gpu.cuh
-// // Credit: Zach DeBruine, factornet 2021-2026, GPL-2.0
+// Credit: Zach DeBruine, factornet 2021-2026
 //
 // Algorithm:
 //   1. Randomly mask holdout_fraction of nonzero entries (deterministic per seed).
@@ -35,13 +35,13 @@
 
 #pragma once
 
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/core/memory.h>
-#include <singlet-gpu/io/pz_device_loader.h>
-#include <singlet-gpu/reduce/nmf/types.h>
-#include <singlet-gpu/reduce/nmf/fit.h>
-#include <singlet-gpu/reduce/svd/deflation.h>  // require_host_retained
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/core/memory.h>
+#include <singlet/gpu/io/pz_device_loader.h>
+#include <singlet/gpu/reduce/nmf/types.h>
+#include <singlet/gpu/reduce/nmf/fit.h>
+#include <singlet/gpu/reduce/svd/deflation.h>  // require_host_retained
 
 #include <cuda_runtime.h>
 #include <cusparse.h>
@@ -108,7 +108,7 @@ __global__ void test_mse_kernel(
 
 }  // anonymous namespace
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace reduce {
 namespace nmf {
 
@@ -307,4 +307,4 @@ inline CVNMFResult speckled_cv(
 
 }  // namespace nmf
 }  // namespace reduce
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Partition-based graph abstraction (PAGA)."""
 
 from __future__ import annotations

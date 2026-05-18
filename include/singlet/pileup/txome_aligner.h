@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // txome_aligner.h — Transcriptome-first unique-resolver (Track B L1, v0.1)
 // Part of droplet-hardening Track B prototype (T-L2-2).
 //

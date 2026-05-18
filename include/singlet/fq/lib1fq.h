@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // lib1fq/lib1fq.h — Single include for the .1fq library
 //
 // Header-only C++17 library for reading and writing .1fq files.

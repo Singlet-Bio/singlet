@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Metacell aggregation for AnnData objects.
 
 Provides singlet.metacell() — group similar cells into metacells

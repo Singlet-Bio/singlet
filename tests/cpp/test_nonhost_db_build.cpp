@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_nonhost_db_build.cpp — Tests for NONHOST-VIRALDB/MICROBIALDB task
 //
 // Tests the build-nonhost-db workflow: building a MinSketchIndex from a

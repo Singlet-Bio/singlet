@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.silhouette_score() and calinski_harabasz_score()."""
 
 import numpy as np

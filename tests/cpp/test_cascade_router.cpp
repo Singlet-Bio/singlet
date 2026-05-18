@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_cascade_router.cpp — Unit tests for CascadeRouter (T-L2-1)
 // Tests:
 //   1. 100K mock read stream: asserts deterministic class distribution

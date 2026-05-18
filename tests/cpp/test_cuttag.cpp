@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_cuttag.cpp — Unit tests for G-CUTTAG: cuttag.h
 //
 // Tests:

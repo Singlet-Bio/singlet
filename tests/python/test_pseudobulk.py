@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.pseudobulk()."""
 
 import numpy as np

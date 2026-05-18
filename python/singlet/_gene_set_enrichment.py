@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Gene set enrichment / over-representation analysis.
 
 Provides singlet.gene_set_enrichment() — tests whether marker genes for

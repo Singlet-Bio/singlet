@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #include <cassert>
 #include <cstdlib>
 #include <fstream>

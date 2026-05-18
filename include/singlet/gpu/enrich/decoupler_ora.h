@@ -1,7 +1,7 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: decoupleR (Badia-i-Mompel et al. 2022)
 //
-// singlet-gpu/enrich/decoupler_ora.h
+// singlet/gpu/enrich/decoupler_ora.h
 //
 // ORA (Over-Representation Analysis) pathway-scoring method from decoupleR.
 //
@@ -59,13 +59,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/io/pz_device_loader.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/io/pz_device_loader.h>
 
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
@@ -78,7 +74,7 @@
 #include <unordered_set>
 #include <vector>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace enrich {
 
 // ---------------------------------------------------------------------------
@@ -418,7 +414,7 @@ inline OraResult ora(
     cudaStream_t                          stream = nullptr)
 {
     if (stream == nullptr) {
-        stream = singlet_gpu::core::default_context().stream();
+        stream = singlet::gpu::core::default_context().stream();
     }
 
     const int m      = X.mat.rows;
@@ -586,7 +582,7 @@ inline OraResult ora(
             n, n_sets, m);
     }
 
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     OraResult res;
     res.scores  = std::move(d_scores);
@@ -596,4 +592,4 @@ inline OraResult ora(
 }
 
 }  // namespace enrich
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

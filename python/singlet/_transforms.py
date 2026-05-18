@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Expression matrix transformations."""
 
 from __future__ import annotations

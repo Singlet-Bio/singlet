@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.reduce.nmf — GPU-native NMF.
 
@@ -20,10 +20,10 @@ CSI-GEP (`run_csi_gep`) stays gated behind the deferred-indefinitely scope.
 
 # CYCLE-110: re-export the entry points from the renamed core module.
 from singlet.gpu.reduce._nmf_core import (
-    NmfResult,
     nmf,
     nmf_chunked,
     nmf_graph_factorize,
+    NmfResult,
 )
 
 # CSI-GEP — deferred-indefinitely scope. Importable but gated; underlying

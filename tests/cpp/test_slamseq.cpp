@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #include "singlet/pileup/slamseq.h"
 #include <cassert>
 #include <cmath>

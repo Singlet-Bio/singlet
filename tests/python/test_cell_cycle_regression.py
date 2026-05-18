@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.cell_cycle_regression()."""
 
 import numpy as np

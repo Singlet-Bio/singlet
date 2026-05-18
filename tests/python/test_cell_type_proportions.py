@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.cell_type_proportions()."""
 
 import numpy as np

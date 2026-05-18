@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Shared pytest fixtures for the singlet-gpu Python wrapper test suite.
 

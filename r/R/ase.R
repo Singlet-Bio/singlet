@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # singlet-gpu/r/R/ase.R
 #
 # GPU DAESC-style allele-specific expression (ASE) scanning:

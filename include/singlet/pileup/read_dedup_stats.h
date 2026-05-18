@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // singlet-pileup: read_dedup_stats.h
 // PCR + optical duplicate detection and library complexity estimation for
 // coordinate-sorted BAM files (Bulk RNA / Smart-seq2 modes).

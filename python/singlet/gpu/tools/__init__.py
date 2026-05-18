@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.tools — GPU-native analysis tools.
 
@@ -18,10 +18,10 @@ Underlying C++ cycles:
                        reference_map}.h)
 """
 
-from singlet.gpu.tools.leiden import leiden
-from singlet.gpu.tools.markers import celltypist_predict, score_genes
-from singlet.gpu.tools.rank_genes_groups import rank_genes_groups
-from singlet.gpu.tools.umap import umap
+from .leiden import leiden
+from .umap import umap
+from .rank_genes_groups import rank_genes_groups
+from .markers import score_genes, celltypist_predict
 
 __all__ = [
     "leiden",

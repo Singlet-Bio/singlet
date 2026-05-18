@@ -1,11 +1,11 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-// singlet-gpu/reduce/svd/deflation.h
+// SPDX-License-Identifier: MIT
+// singlet/gpu/reduce/svd/deflation.h
 //
 // Deflation truncated SVD via successive rank-1 power iteration on GPU.
 // Replaces factornet::svd::deflation_svd_gpu adapter (CYCLE-105, 2026-04-29).
 //
 // // algorithm derived from factornet/svd/deflation_gpu.cuh
-// // Credit: Zach DeBruine, factornet 2021-2026, GPL-2.0
+// Credit: Zach DeBruine, factornet 2021-2026
 //
 // Algorithm (rank-1 ALS deflation):
 //   For i = 1..k:
@@ -47,11 +47,11 @@
 
 #pragma once
 
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/core/memory.h>
-#include <singlet-gpu/io/pz_device_loader.h>
-#include <singlet-gpu/reduce/svd/types.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/core/memory.h>
+#include <singlet/gpu/io/pz_device_loader.h>
+#include <singlet/gpu/reduce/svd/types.h>
 
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
@@ -68,7 +68,7 @@
 // Internal helper: require_host_retained — SVD functions need host CSC pointers.
 // canonical owner: deflation.h (other SVD headers include this one).
 // ---------------------------------------------------------------------------
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace reduce {
 namespace svd {
 
@@ -83,7 +83,7 @@ inline void require_host_retained(const io::PzDeviceMatrix& m,
 
 }  // namespace svd
 }  // namespace reduce
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu
 
 // ---------------------------------------------------------------------------
 // Internal CUDA kernel for rank-1 correction (implicit deflation step).
@@ -148,7 +148,7 @@ __global__ void nonneg_clamp_kernel(float* __restrict__ vec, int n) {
 
 }  // anonymous namespace
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace reduce {
 namespace svd {
 
@@ -433,4 +433,4 @@ inline SvdResult deflation(const io::PzDeviceMatrix& m, const SvdConfig& cfg)
 
 }  // namespace svd
 }  // namespace reduce
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_fragments_writer.cpp — unit tests for fragments_writer.h
 // Tests: file creation, bgzf validity, data correctness, sort, barcode suffix,
 // empty input, multiple chromosomes, fragment count field, sort function.
@@ -15,19 +16,7 @@
 // ---------------------------------------------------------------------------
 // Test framework
 // ---------------------------------------------------------------------------
-static int n_pass = 0;
-static int n_fail = 0;
-
-#define CHECK(cond, msg)                                                         \
-    do {                                                                         \
-        if (cond) {                                                              \
-            std::cout << "  PASS: " << (msg) << "\n";                           \
-            ++n_pass;                                                            \
-        } else {                                                                 \
-            std::cout << "  FAIL: " << (msg) << " [line " << __LINE__ << "]\n"; \
-            ++n_fail;                                                            \
-        }                                                                        \
-    } while (0)
+#include "test_harness.h"  // CHECK(cond, msg) + n_pass / n_fail
 
 // ---------------------------------------------------------------------------
 // Helpers

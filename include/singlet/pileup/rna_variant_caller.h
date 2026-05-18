@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // singlet-pileup: rna_variant_caller.h
 // De novo RNA variant discovery from aligned BAM (no prior VCF required).
 // Designed for Smart-seq2 (SS3) and bulk RNA (B3) where per-gene coverage
@@ -26,24 +27,17 @@
 #include <htslib/hts.h>
 #include <htslib/sam.h>
 
+#include "nucleotide_encoding.h"
+
 namespace singlet {
 
 // ── Base helpers ──────────────────────────────────────────────────────────────
 
-// htslib bam_seqi 4-bit encoding → [0,3] index (A=0,C=1,G=2,T=3) or -1
-static constexpr int8_t SEQI_TO_IDX[16] = {
-    -1,  // 0 = unknown
-    0,   // 1 = A
-    1,   // 2 = C
-    -1,  // 3
-    2,   // 4 = G
-    -1, -1, -1,
-    3,  // 8 = T
-    -1, -1, -1, -1, -1, -1,
-    -1  // 15 = N
-};
-
-static constexpr char IDX_TO_BASE[4] = {'A', 'C', 'G', 'T'};
+// Base encoding tables — canonical definitions live in nucleotide_encoding.h.
+//   SEQI_TO_IDX: htslib bam_seqi 4-bit code -> 0-3 index (or -1)
+//   IDX_TO_BASE: 0-3 index -> ASCII char
+using ::singlet::pileup::nt::IDX_TO_BASE;
+inline constexpr const int8_t (&SEQI_TO_IDX)[16] = ::singlet::pileup::nt::BASE_TO_IDX;
 
 // ── Per-position allele counts ────────────────────────────────────────────────
 

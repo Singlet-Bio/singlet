@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Non-negative matrix factorization."""
 
 from __future__ import annotations

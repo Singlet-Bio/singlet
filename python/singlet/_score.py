@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Gene set scoring for AnnData objects.
 
 Provides singlet.score_genes() — scores cells based on expression of a gene

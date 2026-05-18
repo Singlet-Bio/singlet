@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_interop.cpp — Unit tests for singlet/pileup/interop.h
 #include <cassert>
 #include <cstdio>
@@ -8,22 +9,11 @@
 
 #include "singlet/pileup/interop.h"
 
-using namespace singlet_pileup::interop;
+using namespace singlet::pileup::interop;
 namespace fs = std::filesystem;
 
-static int g_pass = 0;
-static int g_fail = 0;
-
-#define CHECK(cond)                                                     \
-    do {                                                                \
-        if (cond) {                                                     \
-            ++g_pass;                                                   \
-        } else {                                                        \
-            ++g_fail;                                                   \
-            std::cerr << "FAIL: " << #cond                              \
-                      << " at " << __FILE__ << ":" << __LINE__ << "\n"; \
-        }                                                               \
-    } while (0)
+#define SINGLET_TEST_HARNESS_TERSE
+#include "test_harness.h"  // CHECK(cond) + g_pass / g_fail
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

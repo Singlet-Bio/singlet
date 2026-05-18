@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: web_summary.h
 // G-WEBSUMMARY: Generate a self-contained HTML web summary report, similar to

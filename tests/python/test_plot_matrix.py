@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.rank_genes_groups_matrixplot()."""
 
 import numpy as np

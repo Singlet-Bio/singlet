@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.plot_embedding()."""
 
 import numpy as np

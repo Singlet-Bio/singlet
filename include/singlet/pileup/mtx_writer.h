@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: mtx_writer.h
 // Write sparse matrices in Matrix Market format for downstream conversion to .1pz

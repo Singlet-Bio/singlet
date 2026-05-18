@@ -1,7 +1,7 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: decoupleR (Badia-i-Mompel et al. 2022)
 //
-// singlet-gpu/enrich/decoupler_wsum.h
+// singlet/gpu/enrich/decoupler_wsum.h
 //
 // WSUM and WMEAN pathway-scoring methods from decoupleR.
 //
@@ -58,13 +58,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/io/pz_device_loader.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/io/pz_device_loader.h>
 
 #include <cuda_runtime.h>
 #include <cusparse.h>
@@ -74,7 +70,7 @@
 #include <stdexcept>
 #include <string>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace enrich {
 
 // ---------------------------------------------------------------------------
@@ -363,7 +359,7 @@ inline WsumResult wsum(
     cudaStream_t              stream = nullptr)
 {
     if (stream == nullptr) {
-        stream = singlet_gpu::core::default_context().stream();
+        stream = singlet::gpu::core::default_context().stream();
     }
 
     const int m = X.mat.rows;
@@ -401,7 +397,7 @@ inline WsumResult wsum(
             0 /* WSUM mode */);
     }
 
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     WsumResult res;
     res.scores     = std::move(d_scores);
@@ -431,7 +427,7 @@ inline WsumResult wmean(
     (void)cfg;  // deterministic flag is a no-op
 
     if (stream == nullptr) {
-        stream = singlet_gpu::core::default_context().stream();
+        stream = singlet::gpu::core::default_context().stream();
     }
 
     const int m = X.mat.rows;
@@ -469,7 +465,7 @@ inline WsumResult wmean(
             1 /* WMEAN mode */);
     }
 
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     WsumResult res;
     res.scores     = std::move(d_scores);
@@ -479,4 +475,4 @@ inline WsumResult wmean(
 }
 
 }  // namespace enrich
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

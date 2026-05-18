@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Doublet detection using Scrublet-like algorithm."""
 
 from __future__ import annotations

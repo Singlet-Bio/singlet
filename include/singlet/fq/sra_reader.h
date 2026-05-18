@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // sra_reader.h — Native SRA file reader using NCBI VDB C API
 //
 // Zero-copy reads from .sra files via VCursorCellDataDirect.

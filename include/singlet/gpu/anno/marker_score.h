@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (DecoupleR-style scoring + CellTypist projection)
 //
 // anno/marker_score.h — GPU-native cell-type marker scoring (four methods).
@@ -63,13 +63,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/anno/types.h>
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
+#include <singlet/gpu/anno/types.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
 
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
@@ -85,7 +81,7 @@
 #include <algorithm>
 #include <string>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace anno {
 
 // ============================================================================
@@ -99,9 +95,9 @@ namespace detail {
 // each set contains only ~10–500 genes → dense G would be 30k×200 = 24 MB mostly zeros.
 // Sparse membership lets the per-cell kernel walk only relevant genes.
 struct DeviceGeneSetDB {
-    singlet_gpu::core::DeviceMemory<int>   set_row_ptr;  // [n_sets + 1]
-    singlet_gpu::core::DeviceMemory<int>   gene_indices; // [total_members]
-    singlet_gpu::core::DeviceMemory<float> weights;      // [total_members], 1.0 if unit
+    singlet::gpu::core::DeviceMemory<int>   set_row_ptr;  // [n_sets + 1]
+    singlet::gpu::core::DeviceMemory<int>   gene_indices; // [total_members]
+    singlet::gpu::core::DeviceMemory<float> weights;      // [total_members], 1.0 if unit
     int n_sets         = 0;
     int total_members  = 0;
     int n_genes        = 0; // rows of the expression matrix
@@ -155,9 +151,9 @@ inline DeviceGeneSetDB upload_gene_set_db(
 
     // Allocate and upload via cudaMemcpyAsync — no sync required before kernel launch
     // since the kernels are on the same stream.
-    dev.set_row_ptr  = singlet_gpu::core::DeviceMemory<int>(n_sets_raw + 1);
-    dev.gene_indices = singlet_gpu::core::DeviceMemory<int>(total_members > 0 ? total_members : 1);
-    dev.weights      = singlet_gpu::core::DeviceMemory<float>(total_members > 0 ? total_members : 1);
+    dev.set_row_ptr  = singlet::gpu::core::DeviceMemory<int>(n_sets_raw + 1);
+    dev.gene_indices = singlet::gpu::core::DeviceMemory<int>(total_members > 0 ? total_members : 1);
+    dev.weights      = singlet::gpu::core::DeviceMemory<float>(total_members > 0 ? total_members : 1);
 
     cudaMemcpyAsync(dev.set_row_ptr.get(),  h_row_ptr.data(),
                     (n_sets_raw + 1) * sizeof(int), cudaMemcpyHostToDevice, stream);
@@ -221,7 +217,7 @@ inline std::vector<double> compute_gram_host(
 // Returns flattened fp32 device buffer of size n_sets × n_sets.
 // cuSOLVER is called synchronously (host-side solve, small matrix).
 // WHY synchronous: n_sets ≤ 200 means this is microseconds; no need to make it async.
-inline singlet_gpu::core::DeviceMemory<float> compute_gram_inverse(
+inline singlet::gpu::core::DeviceMemory<float> compute_gram_inverse(
     const GeneSetDB& db,
     int              n_genes,
     int              n_sets,
@@ -245,10 +241,10 @@ inline singlet_gpu::core::DeviceMemory<float> compute_gram_inverse(
 
     // Upload gram and build RHS = I (fp64) for dgesv.
     int n = n_sets;
-    singlet_gpu::core::DeviceMemory<double> d_A(n * n);
-    singlet_gpu::core::DeviceMemory<double> d_B(n * n); // identity → becomes inv
-    singlet_gpu::core::DeviceMemory<int>    d_ipiv(n);
-    singlet_gpu::core::DeviceMemory<int>    d_info(1);
+    singlet::gpu::core::DeviceMemory<double> d_A(n * n);
+    singlet::gpu::core::DeviceMemory<double> d_B(n * n); // identity → becomes inv
+    singlet::gpu::core::DeviceMemory<int>    d_ipiv(n);
+    singlet::gpu::core::DeviceMemory<int>    d_info(1);
 
     std::vector<double> identity(n * n, 0.0);
     for (int i = 0; i < n; ++i) identity[i * n + i] = 1.0;
@@ -259,7 +255,7 @@ inline singlet_gpu::core::DeviceMemory<float> compute_gram_inverse(
 
     int lwork = 0;
     cusolverDnDgetrf_bufferSize(solver_handle, n, n, d_A.get(), n, &lwork);
-    singlet_gpu::core::DeviceMemory<double> d_work(lwork > 0 ? lwork : 1);
+    singlet::gpu::core::DeviceMemory<double> d_work(lwork > 0 ? lwork : 1);
     cusolverDnDgetrf(solver_handle, n, n, d_A.get(), n, d_work.get(), d_ipiv.get(), d_info.get());
     cusolverDnDgetrs(solver_handle, CUBLAS_OP_N, n, n, d_A.get(), n, d_ipiv.get(),
                      d_B.get(), n, d_info.get());
@@ -267,7 +263,7 @@ inline singlet_gpu::core::DeviceMemory<float> compute_gram_inverse(
 
     // Downcast to fp32 for storage — n_sets ≤ 200 so precision loss is negligible
     // after inversion; absolute error from fp32 downcast << Tikhonov regulariser.
-    singlet_gpu::core::DeviceMemory<float> d_inv_fp32(n * n);
+    singlet::gpu::core::DeviceMemory<float> d_inv_fp32(n * n);
     // Small size: copy via host downcast.
     std::vector<double> h_inv(n * n);
     cudaMemcpy(h_inv.data(), d_B.get(), n * n * sizeof(double), cudaMemcpyDeviceToHost);
@@ -640,7 +636,7 @@ void ucell_auc_kernel(
 // All memory goes through core::DeviceMemory (RAII).
 
 inline MarkerScoreResult marker_score(
-    const singlet_gpu::core::DeviceCSC& mat,
+    const singlet::gpu::core::DeviceCSC& mat,
     const GeneSetDB&       gene_sets,
     const MarkerScoreConfig& cfg,
     cudaStream_t           stream)
@@ -660,7 +656,7 @@ inline MarkerScoreResult marker_score(
     MarkerScoreResult result;
     result.n_sets  = n_sets;
     result.n_cells = n_cells;
-    result.scores  = singlet_gpu::core::DeviceMemory<float>((size_t)n_sets * n_cells);
+    result.scores  = singlet::gpu::core::DeviceMemory<float>((size_t)n_sets * n_cells);
     // Zero-initialise so skipped sets are 0.
     cudaMemsetAsync(result.scores.get(), 0, (size_t)n_sets * n_cells * sizeof(float), stream);
 
@@ -670,13 +666,13 @@ inline MarkerScoreResult marker_score(
     // ---- Mlm ---------------------------------------------------------------
     case MarkerMethod::Mlm: {
         // Step 1: compute (G^T G + λI)^{-1} — fp64, host-mediated, called once.
-        auto& ctx = singlet_gpu::core::default_context();
+        auto& ctx = singlet::gpu::core::default_context();
         auto d_inv = detail::compute_gram_inverse(
             gene_sets, n_genes, n_sets, cfg.lambda_tikhonov,
             cfg.min_n_genes_per_set, ctx.solver(), stream);
 
         // Step 2: G^T x_j per cell → gtx buffer [n_cells × n_sets].
-        singlet_gpu::core::DeviceMemory<float> d_gtx((size_t)n_cells * n_sets);
+        singlet::gpu::core::DeviceMemory<float> d_gtx((size_t)n_cells * n_sets);
         cudaMemsetAsync(d_gtx.get(), 0, (size_t)n_cells * n_sets * sizeof(float), stream);
 
         int smem_bytes = n_sets * sizeof(float);
@@ -760,7 +756,7 @@ inline MarkerScoreResult marker_score(
         // Correct approach: use a separate single-pass kernel; here for compilation
         // we initialise to log1pf(0.5f) as a neutral default.
         for (int g = 0; g < n_genes; ++g) h_gene_log1p[g] = log1pf(0.5f);
-        singlet_gpu::core::DeviceMemory<float> d_gene_log1p(n_genes);
+        singlet::gpu::core::DeviceMemory<float> d_gene_log1p(n_genes);
         cudaMemcpyAsync(d_gene_log1p.get(), h_gene_log1p.data(),
                         n_genes * sizeof(float), cudaMemcpyHostToDevice, stream);
 
@@ -770,7 +766,7 @@ inline MarkerScoreResult marker_score(
             const int nc = c1 - c0;
 
             // Histogram workspace for this chunk.
-            singlet_gpu::core::DeviceMemory<uint32_t> d_hist((size_t)nc * B);
+            singlet::gpu::core::DeviceMemory<uint32_t> d_hist((size_t)nc * B);
             cudaMemsetAsync(d_hist.get(), 0, (size_t)nc * B * sizeof(uint32_t), stream);
 
             // Adjust col_ptr for the chunk: pass pointer offset.
@@ -803,4 +799,4 @@ inline MarkerScoreResult marker_score(
 }
 
 } // namespace anno
-} // namespace singlet_gpu
+} // namespace singlet::gpu

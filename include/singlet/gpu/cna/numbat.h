@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (first GPU Numbat-style CNA detection)
 //
 // cna/numbat.h — GPU-native Numbat-style copy-number alteration detection
@@ -63,14 +63,10 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/memory.h>
-#include <singlet-gpu/graph/leiden.h>
-#include <singlet-gpu/graph/knn.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/memory.h>
+#include <singlet/gpu/graph/leiden.h>
+#include <singlet/gpu/graph/knn.h>
 
 #include <cuda_runtime.h>
 #include <cub/device/device_reduce.cuh>
@@ -83,7 +79,7 @@
 #include <string>
 #include <vector>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace cna {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -185,7 +181,7 @@ namespace detail {
 // WHY row-major (gene outer, cell inner): the smoothing and log-ratio kernels
 // read all cells for one gene → gene-outer layout gives coalesced cell reads.
 //
-// col_ptr, row_indices, vals: CSC arrays from DeviceCSC (factornet field names).
+// col_ptr, row_indices, vals: CSC arrays from singlet::gpu::core::DeviceCSC.
 // tile: (gene_end-gene_start) × n_cells, row-major. Pre-zeroed by caller.
 // Each thread handles one cell column; iterates over its CSC column entries.
 __global__ void __launch_bounds__(256, 4)
@@ -570,7 +566,7 @@ inline void build_log_trans(float tp, float (&lt)[HMM_NSTATES][HMM_NSTATES]) {
 //
 // expr:   DeviceCSC (genes × cells). Uses field-access style:
 //           col_ptr.data(), row_indices.data(), values.data(), .rows, .cols.
-//         This matches factornet::gpu::SparseMatrixGPU<float> (cycle 34 lesson).
+//         These are the public fields of singlet::gpu::core::DeviceCSC.
 // annot:  GeneAnnotation mapping gene indices → chromosome + position.
 //         Must have n_genes() == expr.rows.
 // ref:    Optional device pointer to per-gene reference normal expression
@@ -692,7 +688,7 @@ inline CnaResult detect_cna(
                         (size_t)n_gc * n_cells * sizeof(float), stream);
 
         // -- 5b. Expand CSC → dense tile. -------------------------------------
-        // Use factornet field-access style per cycle 34 lesson.
+        // Use direct DeviceCSC field access (.col_ptr/.row_indices/.values).
         {
             const int blk = 256, grd = (n_cells + blk - 1) / blk;
             detail::expand_csc_tile_kernel<<<grd, blk, 0, stream>>>(
@@ -843,4 +839,4 @@ inline CnaResult detect_cna(
 }
 
 }  // namespace cna
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

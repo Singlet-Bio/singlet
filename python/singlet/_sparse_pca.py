@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Sparse PCA for interpretable dimensionality reduction.
 
 Provides singlet.sparse_pca() — wrapper around sklearn SparsePCA that

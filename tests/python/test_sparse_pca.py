@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.sparse_pca()."""
 
 import numpy as np

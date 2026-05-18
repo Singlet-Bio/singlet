@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: atac_cell_caller.h
 // A7 — ATAC-seq cell calling via TSS enrichment + unique fragment count thresholding.

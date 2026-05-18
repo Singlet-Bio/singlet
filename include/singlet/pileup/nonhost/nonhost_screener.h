@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // nonhost_screener.h — Per-read viral/bacterial/fungal classification
 //
 // Part of NONHOST-SYLPH-PORT (DAG task). Classifies unmapped reads against

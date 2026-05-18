@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.plot_umap() and singlet.plot_violin()."""
 
 import matplotlib

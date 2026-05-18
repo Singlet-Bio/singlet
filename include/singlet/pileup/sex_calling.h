@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: sex_calling.h
 // N14: Sex & karyotype calling from gene expression data.

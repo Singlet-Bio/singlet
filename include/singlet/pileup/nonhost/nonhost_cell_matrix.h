@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // nonhost_cell_matrix.h — Per-cell non-host species count matrix (NONHOST-CB-SPECIES-MATRIX)
 //
 // After NonHostScreener::classify_multi_batch() assigns reads to species via EM,

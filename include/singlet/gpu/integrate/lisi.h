@@ -1,6 +1,6 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: Korsunsky et al. 2019 Harmony LISI metric
-// singlet-gpu/integrate/lisi.h
+// singlet/gpu/integrate/lisi.h
 //
 // LISI — Local Inverse Simpson's Index.
 // Korsunsky I, Millard N, Fan J, et al. (2019) Nat Methods 16:1289-1296.
@@ -37,13 +37,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/graph/knn.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/graph/knn.h>
 
 #include <cuda_runtime.h>
 
@@ -51,7 +47,7 @@
 #include <stdexcept>
 #include <string>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace integrate {
 
 // ---------------------------------------------------------------------------
@@ -185,7 +181,7 @@ void lisi_kernel_serial(
 // lisi() — public entry point
 // ---------------------------------------------------------------------------
 //
-// knn:      KnnResult from singlet_gpu::graph::compute_knn(...).
+// knn:      KnnResult from singlet::gpu::graph::compute_knn(...).
 //           Uses knn.neighbors [n*k] and knn.n, knn.k.  Distances unused.
 // d_label:  device int[n_cells] with values in [0, n_labels).
 // n_labels: number of distinct label classes.  Must be >= 1.
@@ -202,7 +198,7 @@ inline LisiResult lisi(
     cudaStream_t            stream = nullptr)
 {
     if (stream == nullptr) {
-        stream = singlet_gpu::core::default_context().stream();
+        stream = singlet::gpu::core::default_context().stream();
     }
 
     const int n = knn.n;
@@ -246,7 +242,7 @@ inline LisiResult lisi(
             n, k, n_labels);
     }
 
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     LisiResult res;
     res.lisi     = std::move(d_lisi);
@@ -256,4 +252,4 @@ inline LisiResult lisi(
 }
 
 }  // namespace integrate
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

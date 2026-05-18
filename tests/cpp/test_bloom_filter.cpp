@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Test for BloomFilter
 #include "singlet/pileup/bloom_filter.h"
 #include <cassert>
@@ -6,7 +7,7 @@
 #include <cstdlib>
 
 int main() {
-    using namespace singlet_pileup;
+    using namespace singlet::pileup;
 
     // ── Test 1: Constructor rounds up to 64-bit boundary ──────────────────────
     {

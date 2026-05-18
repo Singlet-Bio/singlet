@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-// singlet-gpu/qc/metrics.h
+// SPDX-License-Identifier: MIT
+// singlet/gpu/qc/metrics.h
 //
 // QC metrics calculation and cell/gene filtering for CSC count matrices.
 //
@@ -63,11 +63,7 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
+#include <singlet/gpu/core/types.h>
 
 #include <cuda_runtime.h>
 #include <cub/block/block_reduce.cuh>
@@ -81,7 +77,7 @@
 #include <string>
 #include <vector>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace qc {
 
 // ---------------------------------------------------------------------------
@@ -369,20 +365,6 @@ void remap_row_indices_kernel(
 }  // anonymous namespace
 
 // ---------------------------------------------------------------------------
-// CUDA error helper (mirrors pattern in factornet/gpu/types.cuh)
-// ---------------------------------------------------------------------------
-#ifndef SINGLET_GPU_CUDA_CHECK
-#define SINGLET_GPU_CUDA_CHECK(call) do {                                     \
-    cudaError_t _e = (call);                                                  \
-    if (_e != cudaSuccess) {                                                  \
-        throw std::runtime_error(                                             \
-            std::string("CUDA error [singlet-gpu/qc/metrics.h]: ")            \
-            + cudaGetErrorString(_e));                                         \
-    }                                                                         \
-} while (0)
-#endif
-
-// ---------------------------------------------------------------------------
 // calculate_qc_metrics — public entry point
 //
 // Takes raw CSC device pointers (compatible with DeviceCSC / SparseMatrixGPU)
@@ -405,7 +387,7 @@ inline QcResult calculate_qc_metrics(
 ) {
     if (n_cells <= 0 || n_genes <= 0) {
         throw std::runtime_error(
-            "singlet_gpu::qc::calculate_qc_metrics: n_cells and n_genes must be > 0");
+            "singlet::gpu::qc::calculate_qc_metrics: n_cells and n_genes must be > 0");
     }
 
     QcResult res;
@@ -696,4 +678,4 @@ inline core::DeviceCSC filter_genes(
 }
 
 }  // namespace qc
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.velocity_pseudotime()."""
 
 import numpy as np

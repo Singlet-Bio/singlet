@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: atomic_io.h
 // Atomic file I/O helpers for crash-safe output writing.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // REF-FETCH-CMD: Unit tests for ref_fetch.h
 // Run via ctest or standalone:
 //   g++ -std=c++17 -O2 -I../include -o /tmp/test_rf test/test_ref_fetch.cpp && /tmp/test_rf

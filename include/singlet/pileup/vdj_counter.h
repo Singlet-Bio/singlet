@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: vdj_counter.h — N17
 // V(D)J immune receptor gene usage counting per cell barcode.

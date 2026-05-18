@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_tiny_dataset_guard.cpp — Unit tests for singlet/pileup/tiny_dataset_guard.h
 #include <cassert>
 #include <iostream>
@@ -5,21 +6,10 @@
 
 #include "singlet/pileup/tiny_dataset_guard.h"
 
-using singlet_pileup::TinyDatasetGuard;
+using singlet::pileup::TinyDatasetGuard;
 
-static int g_pass = 0;
-static int g_fail = 0;
-
-#define CHECK(cond)                                                     \
-    do {                                                                \
-        if (cond) {                                                     \
-            ++g_pass;                                                   \
-        } else {                                                        \
-            ++g_fail;                                                   \
-            std::cerr << "FAIL: " << #cond                              \
-                      << " at " << __FILE__ << ":" << __LINE__ << "\n"; \
-        }                                                               \
-    } while (0)
+#define SINGLET_TEST_HARNESS_TERSE
+#include "test_harness.h"  // CHECK(cond) + g_pass / g_fail
 
 // ── 1. is_too_small ───────────────────────────────────────────────────────────
 

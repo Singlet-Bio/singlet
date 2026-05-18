@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Clustering metrics."""
 
 from __future__ import annotations

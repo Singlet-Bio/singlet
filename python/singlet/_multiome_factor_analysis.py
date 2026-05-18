@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Multi-modal factor analysis (MOFA-lite).
 
 Joint SVD/NMF decomposition across multiple modalities to discover

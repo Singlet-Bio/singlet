@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Independent Component Analysis for AnnData objects.
 
 Provides singlet.ica() — FastICA for separating independent sources

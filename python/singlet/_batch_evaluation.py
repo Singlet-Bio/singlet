@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Batch effect evaluation metrics.
 
 Provides singlet.batch_evaluation() — compute multiple batch mixing metrics

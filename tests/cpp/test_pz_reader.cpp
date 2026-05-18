@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_pz_reader.cpp — round-trip test for pz_writer.h ↔ pz_reader.h
 //
 // CPP-1: verifies header parsing, CRC32 validation, permutation decode,

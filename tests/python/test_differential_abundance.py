@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.differential_abundance() differential abundance testing."""
 
 import numpy as np

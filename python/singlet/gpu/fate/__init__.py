@@ -1,23 +1,23 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.fate — GPU-native cell fate trajectory analysis.
 
-Submodules
+Public API
 ----------
-cospar    : CoSpar cell fate transition mapping (cycle 41).
-cellrank2 : CellRank 2 absorption probability solver (cycle 43).
-palantir  : Palantir diffusion pseudotime + branch probabilities (cycle 45).
+cospar                           — CoSpar cell fate transition mapping (cycle 41).
+cospar_run_from_csc              — CoSpar from a raw DeviceCsc.
+cellrank2                        — CellRank 2 fate analysis (cycle 43).
+compute_absorption_probabilities — CellRank 2 absorption probability solver.
+palantir                         — Palantir diffusion pseudotime (cycle 45).
+palantir_run_from_embedding      — Palantir from a raw embedding.
 """
 
-from singlet.gpu.fate import cellrank2 as cellrank2_module
-from singlet.gpu.fate import cospar as cospar_module
-from singlet.gpu.fate import palantir as palantir_module
-from singlet.gpu.fate.cellrank2 import compute_absorption_probabilities
-from singlet.gpu.fate.cellrank2 import run_from_anndata as cellrank2
-from singlet.gpu.fate.cospar import run_from_anndata as cospar
-from singlet.gpu.fate.cospar import run_from_csc as cospar_run_from_csc
-from singlet.gpu.fate.palantir import run_from_anndata as palantir
-from singlet.gpu.fate.palantir import run_from_embedding as palantir_run_from_embedding
+from .cospar import run_from_csc as cospar_run_from_csc
+from .cospar import run_from_anndata as cospar
+from .cellrank2 import compute_absorption_probabilities
+from .cellrank2 import run_from_anndata as cellrank2
+from .palantir import run_from_embedding as palantir_run_from_embedding
+from .palantir import run_from_anndata as palantir
 
 __all__ = [
     "cospar",
@@ -26,7 +26,4 @@ __all__ = [
     "compute_absorption_probabilities",
     "palantir",
     "palantir_run_from_embedding",
-    "cospar_module",
-    "cellrank2_module",
-    "palantir_module",
 ]

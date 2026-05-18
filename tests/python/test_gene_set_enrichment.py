@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.gene_set_enrichment()."""
 
 import numpy as np

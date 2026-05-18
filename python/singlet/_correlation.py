@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Correlation matrix computation."""
 
 from __future__ import annotations

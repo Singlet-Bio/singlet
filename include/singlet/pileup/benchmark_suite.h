@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // benchmark_suite.h — Lightweight benchmark registry for singlet vs SOTA tools
 // Tracks performance and accuracy results across modalities; NOT a runtime runner.
@@ -12,7 +13,7 @@
 #include <string>
 #include <vector>
 
-namespace singlet_pileup::benchmark {
+namespace singlet::pileup::benchmark {
 
 enum class Modality {
     SCRNA,
@@ -282,4 +283,4 @@ inline std::string format_benchmark_markdown(const BenchmarkRegistry& reg) {
     return md.str();
 }
 
-}  // namespace singlet_pileup::benchmark
+}  // namespace singlet::pileup::benchmark

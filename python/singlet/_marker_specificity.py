@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Marker gene specificity scoring.
 
 Provides singlet.marker_specificity() — for each gene in each cluster,

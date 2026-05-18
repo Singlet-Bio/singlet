@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Browse the SingletDB catalog.
 
 Loads catalog_v1.parquet and sample_index.parquet from either:

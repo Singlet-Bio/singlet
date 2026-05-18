@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet catalog functions using bundled parquet data."""
 
 import pandas as pd

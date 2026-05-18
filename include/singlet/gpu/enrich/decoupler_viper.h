@@ -1,7 +1,7 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: decoupleR VIPER / aREA (Alvarez et al. 2016)
 //
-// singlet-gpu/enrich/decoupler_viper.h
+// singlet/gpu/enrich/decoupler_viper.h
 //
 // VIPER (Virtual Inference of Protein-activity by Enriched Regulon analysis)
 // via aREA (analytical Rank-based Enrichment Analysis) on GPU.
@@ -63,13 +63,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/io/pz_device_loader.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/io/pz_device_loader.h>
 
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
@@ -80,7 +76,7 @@
 #include <stdexcept>
 #include <string>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace enrich {
 
 // ---------------------------------------------------------------------------
@@ -271,7 +267,7 @@ inline ViperResult viper(
     cudaStream_t              stream = nullptr)
 {
     if (stream == nullptr) {
-        stream = singlet_gpu::core::default_context().stream();
+        stream = singlet::gpu::core::default_context().stream();
     }
 
     const int m   = X.mat.rows;   // genes
@@ -474,7 +470,7 @@ inline ViperResult viper(
             cfg.epsilon);
     }
 
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     ViperResult res;
     res.nes        = std::move(d_nes);
@@ -484,4 +480,4 @@ inline ViperResult viper(
 }
 
 }  // namespace enrich
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

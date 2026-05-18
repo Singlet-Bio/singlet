@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: cell_qc_metrics.h
 // Per-cell QC metrics computed from accumulated CSC count matrices.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.reprogramming_score."""
 
 from __future__ import annotations

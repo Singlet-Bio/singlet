@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-// singlet-gpu/core/memory.h
+// SPDX-License-Identifier: MIT
+// singlet/gpu/core/memory.h
 //
 // PinnedPool  — RAII pinned host memory via cudaMallocHost / cudaFreeHost.
 // Metadata    — POD struct mirroring the GEO key-value set embedded in every
@@ -19,7 +19,7 @@
 #include <string>
 #include <vector>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace core {
 
 // ---------------------------------------------------------------------------
@@ -135,4 +135,4 @@ struct Metadata {
 };
 
 }  // namespace core
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

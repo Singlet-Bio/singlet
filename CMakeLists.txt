@@ -89,10 +89,53 @@ if(SINGLET_BUILD_PIPELINE)
 endif()
 
 # ─── GPU library (optional, requires CUDA) ───────────────────────────────────
+# Integrated from former standalone singlet-gpu repo (2026-05-13).
+# Header-only INTERFACE library — every kernel lives in include/singlet/gpu/.
 if(SINGLET_BUILD_GPU)
     enable_language(CUDA)
     set(CMAKE_CUDA_STANDARD 20)
-    add_subdirectory(src/gpu)
+    set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+    if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+        set(CMAKE_CUDA_ARCHITECTURES 70 80 90)
+    endif()
+    set(CMAKE_CUDA_FLAGS_RELEASE "-O3 -DNDEBUG --use_fast_math -lineinfo")
+
+    find_package(CUDAToolkit REQUIRED)
+
+    # singlet::gpu — header-only INTERFACE target
+    add_library(singlet_gpu INTERFACE)
+    add_library(Singlet::gpu ALIAS singlet_gpu)
+    target_include_directories(singlet_gpu INTERFACE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+    )
+    target_compile_features(singlet_gpu INTERFACE cxx_std_20 cuda_std_20)
+    target_link_libraries(singlet_gpu INTERFACE
+        CUDA::cudart
+        CUDA::cublas
+        CUDA::cusparse
+        CUDA::cusolver
+        CUDA::curand
+        ${ZSTD_LIBRARY}
+    )
+    target_include_directories(singlet_gpu INTERFACE ${ZSTD_INCLUDE_DIR})
+
+    # Optional .cu translation units (template instantiations, kernel helpers)
+    file(GLOB_RECURSE SINGLET_GPU_CU_SOURCES CONFIGURE_DEPENDS src/gpu/*.cu)
+    if(SINGLET_GPU_CU_SOURCES)
+        add_library(singlet_gpu_impl STATIC ${SINGLET_GPU_CU_SOURCES})
+        target_link_libraries(singlet_gpu_impl PUBLIC singlet_gpu)
+        set_target_properties(singlet_gpu_impl PROPERTIES
+            CUDA_SEPARABLE_COMPILATION ON
+            POSITION_INDEPENDENT_CODE ON
+        )
+    endif()
+
+    # Benchmarks — owned by gpu-bench. Built only when SINGLET_BUILD_GPU=ON
+    # (drivers stay .cpp; kernel-launching helpers live in bench/common/*.cu).
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/bench/CMakeLists.txt)
+        add_subdirectory(bench EXCLUDE_FROM_ALL)
+    endif()
 endif()
 
 # ─── Python bindings (optional) ──────────────────────────────────────────────

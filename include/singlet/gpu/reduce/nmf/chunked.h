@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-// singlet-gpu/reduce/nmf/chunked.h
+// SPDX-License-Identifier: MIT
+// singlet/gpu/reduce/nmf/chunked.h
 //
 // Chunked (out-of-core) NMF — thin wrapper looping over .1pz shards.
 // CYCLE-105: native implementation via PzChunkIterator, no factornet backend.
@@ -24,18 +24,18 @@
 
 #pragma once
 
-#include <singlet-gpu/reduce/nmf/types.h>
-#include <singlet-gpu/reduce/nmf/fit.h>
-#include <singlet-gpu/io/pz_device_loader.h>
+#include <singlet/gpu/reduce/nmf/types.h>
+#include <singlet/gpu/reduce/nmf/fit.h>
+#include <singlet/gpu/io/pz_device_loader.h>
 // PzDataLoader lives in streaming/pz_data_loader.h (not io/pz_device_loader.h).
 // chunked_fit(PzDataLoader& loader, ...) needs this include to resolve
-// singlet_gpu::io::PzDataLoader — the CYCLE-105/106 split header caused the gap.
-#include <singlet-gpu/streaming/pz_data_loader.h>
+// singlet::gpu::io::PzDataLoader — the CYCLE-105/106 split header caused the gap.
+#include <singlet/gpu/streaming/pz_data_loader.h>
 
 #include <stdexcept>
 #include <string>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace reduce {
 namespace nmf {
 
@@ -148,4 +148,4 @@ inline NmfResult chunked_fit(io::PzDataLoader& loader,
 
 }  // namespace nmf
 }  // namespace reduce
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

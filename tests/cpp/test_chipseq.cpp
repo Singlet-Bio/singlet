@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_chipseq.cpp — Unit tests for G-CHIPSEQ: chipseq.h
 //
 // Tests:

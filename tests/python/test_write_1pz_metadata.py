@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet._io.write_1pz with metadata embedding."""
 
 import numpy as np

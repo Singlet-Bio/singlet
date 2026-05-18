@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (first GPU GSEA implementation)
 //
 // gsea/fgsea.h — Preranked GSEA with adaptive multilevel permutation, GPU-native.
@@ -45,13 +45,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/anno/types.h>
-#include <singlet-gpu/gsea/types.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/anno/types.h>
+#include <singlet/gpu/gsea/types.h>
 
 #include <cuda_runtime.h>
 #include <curand_kernel.h>
@@ -67,7 +63,7 @@
 #include <algorithm>
 #include <numeric>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace gsea {
 
 // ---------------------------------------------------------------------------
@@ -607,13 +603,13 @@ void iota_kernel(int* arr, int n) {
 // min_set_size / max_set_size filter.
 
 inline FgseaResult fgsea(
-    const singlet_gpu::core::DeviceMemory<float>& stats,
-    const singlet_gpu::anno::GeneSetDB&           gene_sets,
+    const singlet::gpu::core::DeviceMemory<float>& stats,
+    const singlet::gpu::anno::GeneSetDB&           gene_sets,
     const FgseaConfig&                            cfg,
     cudaStream_t                                  stream)
 {
-    using DM = singlet_gpu::core::DeviceMemory<float>;
-    using DI = singlet_gpu::core::DeviceMemory<int>;
+    using DM = singlet::gpu::core::DeviceMemory<float>;
+    using DI = singlet::gpu::core::DeviceMemory<int>;
 
     const int m = (int)stats.size();
     if (m == 0) return {};
@@ -657,8 +653,8 @@ inline FgseaResult fgsea(
 
     // Initialize sorted_indices as 0..m-1 then sort by -stat (ascending sort of negative stat = descending sort of stat).
     {
-        singlet_gpu::core::DeviceMemory<int>   d_iota(m);
-        singlet_gpu::core::DeviceMemory<float> d_neg_stats(m);
+        singlet::gpu::core::DeviceMemory<int>   d_iota(m);
+        singlet::gpu::core::DeviceMemory<float> d_neg_stats(m);
 
         // Launch iota and negate kernels.
         int threads = 256;
@@ -687,7 +683,7 @@ inline FgseaResult fgsea(
             d_iota.get(), d_sorted_indices.get(),
             m, 0, sizeof(float)*8, stream);
 
-        singlet_gpu::core::DeviceMemory<uint8_t> cub_tmp(cub_tmp_bytes);
+        singlet::gpu::core::DeviceMemory<uint8_t> cub_tmp(cub_tmp_bytes);
         cub::DeviceRadixSort::SortPairsDescending(
             cub_tmp.get(), cub_tmp_bytes,
             stats.get(), d_sorted_stats.get(),
@@ -704,12 +700,10 @@ inline FgseaResult fgsea(
         // We define an abs kernel in the detail namespace.
         // For header-only: define inline below.
         // Here we use a lambda via a templated helper.
-        auto* src = d_sorted_stats.get();
-        auto* dst = d_sorted_abs_stats.get();
-        // abs_kernel defined below in detail namespace.
-        // Placeholder: the abs and cumsum calls are wired via helper kernels at the end of
-        // this file in the detail namespace.  See detail::abs_kernel and the cub scan call.
-        (void)src; (void)dst; // resolved by abs_kernel below
+        // FIX: abs_kernel was declared but never launched; d_sorted_abs_stats stayed zero,
+        // making all ES values and permutation null distributions collapse to zero.
+        detail::abs_kernel<<<blocks, threads, 0, stream>>>(
+            d_sorted_stats.get(), d_sorted_abs_stats.get(), m);
     }
 
     // ---- Step 2: cumsum of |sorted_stats| ------------------------------------
@@ -719,7 +713,7 @@ inline FgseaResult fgsea(
         cub::DeviceScan::InclusiveSum(
             nullptr, cub_tmp_bytes,
             d_sorted_abs_stats.get(), d_cumsum_abs.get(), m, stream);
-        singlet_gpu::core::DeviceMemory<uint8_t> cub_tmp(cub_tmp_bytes);
+        singlet::gpu::core::DeviceMemory<uint8_t> cub_tmp(cub_tmp_bytes);
         cub::DeviceScan::InclusiveSum(
             cub_tmp.get(), cub_tmp_bytes,
             d_sorted_abs_stats.get(), d_cumsum_abs.get(), m, stream);
@@ -730,9 +724,11 @@ inline FgseaResult fgsea(
     {
         int threads = 256;
         int blocks  = (m + threads - 1) / threads;
-        // scatter: d_gene_rank_lut[d_sorted_indices[r]] = r for all r.
-        // Defined as scatter_kernel below.
-        (void)blocks; (void)threads;
+        // FIX: scatter_lut_kernel was declared but never launched; d_gene_rank_lut stayed
+        // zero, so compute_member_abs_sum_kernel read sorted_abs_stats[0] for every member
+        // gene, making pw_member_abs_sum[pw] = n_member * max_stat (wrong).
+        detail::scatter_lut_kernel<<<blocks, threads, 0, stream>>>(
+            d_sorted_indices.get(), d_gene_rank_lut.get(), m);
     }
 
     // ---- Step 4: Upload pathway metadata to device ----------------------------
@@ -775,9 +771,9 @@ inline FgseaResult fgsea(
 
     // ---- Step 7: Adaptive permutation loop ------------------------------------
     DM  d_perm_null_abssum(n_pathways); cudaMemsetAsync(d_perm_null_abssum.get(), 0, n_pathways * sizeof(float), stream);
-    singlet_gpu::core::DeviceMemory<int> d_perm_count_ge(n_pathways);
-    singlet_gpu::core::DeviceMemory<int> d_perm_total(n_pathways);
-    singlet_gpu::core::DeviceMemory<int> d_active_mask(n_pathways);
+    singlet::gpu::core::DeviceMemory<int> d_perm_count_ge(n_pathways);
+    singlet::gpu::core::DeviceMemory<int> d_perm_total(n_pathways);
+    singlet::gpu::core::DeviceMemory<int> d_active_mask(n_pathways);
     cudaMemsetAsync(d_perm_count_ge.get(), 0, n_pathways * sizeof(int), stream);
     cudaMemsetAsync(d_perm_total.get(),    0, n_pathways * sizeof(int), stream);
 
@@ -785,9 +781,9 @@ inline FgseaResult fgsea(
     {
         int threads = 256;
         int blocks  = (n_pathways + threads - 1) / threads;
-        detail::iota_kernel<<<blocks, threads, 0, stream>>>(d_active_mask.get(), n_pathways);
-        // WHY iota to fill: we need all 1s; a memset of 0x01010101 doesn't give int 1.
-        // Use a dedicated fill-ones kernel (set_ones_kernel defined below).
+        // FIX: iota_kernel was used here, writing 0,1,2,... so active_mask[0]=0 and
+        // pathway 0 received zero permutations (p_value=1).  Use set_ones_kernel instead.
+        detail::set_ones_kernel<<<blocks, threads, 0, stream>>>(d_active_mask.get(), n_pathways);
     }
 
     // Shared memory per block = warps_per_block * 512 * sizeof(int).
@@ -870,8 +866,13 @@ inline FgseaResult fgsea(
     }
 
     // ---- Step 9: BH correction ------------------------------------------------
-    DM  d_pval_sorted(n_pathways);
+    // FIX: SortPairs was called with d_idx.get() as BOTH values_in and values_out
+    // (in-place), which CUB does not support.  The index array was corrupted, so
+    // bh_scatter_kernel wrote q-values to garbage addresses, leaving d_q at
+    // cudaMalloc'd zero.  Use a separate d_idx_sorted output buffer.
+    DI  d_pval_sorted(n_pathways);
     DI  d_idx(n_pathways);
+    DI  d_idx_sorted(n_pathways);
     DM  d_q(n_pathways);
 
     // Initialize index array for SortPairs.
@@ -886,15 +887,15 @@ inline FgseaResult fgsea(
         cub::DeviceRadixSort::SortPairs(
             nullptr, cub_tmp_bytes,
             d_pval.get(), d_pval_sorted.get(),
-            d_idx.get(), d_idx.get(), n_pathways, 0, 32, stream);
-        singlet_gpu::core::DeviceMemory<uint8_t> cub_tmp(cub_tmp_bytes);
+            d_idx.get(), d_idx_sorted.get(), n_pathways, 0, 32, stream);
+        singlet::gpu::core::DeviceMemory<uint8_t> cub_tmp(cub_tmp_bytes);
         cub::DeviceRadixSort::SortPairs(
             cub_tmp.get(), cub_tmp_bytes,
             d_pval.get(), d_pval_sorted.get(),
-            d_idx.get(), d_idx.get(), n_pathways, 0, 32, stream);
+            d_idx.get(), d_idx_sorted.get(), n_pathways, 0, 32, stream);
 
         detail::bh_scatter_kernel<<<1, 1, 0, stream>>>(
-            d_pval_sorted.get(), d_idx.get(), d_q.get(), n_pathways);
+            d_pval_sorted.get(), d_idx_sorted.get(), d_q.get(), n_pathways);
     }
 
     // ---- Step 10: Copy results to host ----------------------------------------
@@ -965,4 +966,4 @@ void set_ones_kernel(int* __restrict__ arr, int n) {
 // (the function does a final cudaStreamSynchronize before returning).
 
 } // namespace gsea
-} // namespace singlet_gpu
+} // namespace singlet::gpu

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.highly_variable_genes()."""
 
 import numpy as np

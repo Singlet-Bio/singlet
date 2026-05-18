@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // examples/cpp_minimal/main.cpp — public API smoke test.
 //
-// Compiles only against the umbrella `<singlet-gpu/singlet_gpu.hpp>`. If
+// Compiles only against the umbrella `<singlet/gpu/singlet::gpu.hpp>`. If
 // this file fails to build, the public API surface is broken — Rule 23 +
 // release-policy violation.
 //
@@ -9,7 +9,7 @@
 //   ./cpp_minimal                        # version + load library only
 //   ./cpp_minimal /path/to/exon_counts.1pz   # also load a real .1pz
 
-#include <singlet-gpu/singlet_gpu.hpp>
+#include <singlet/gpu/singlet::gpu.hpp>
 
 #include <cstdio>
 #include <cstdlib>
@@ -17,10 +17,10 @@
 
 int main(int argc, char** argv) {
     std::printf("singlet-gpu %d.%d.%d (commit %s)\n",
-                singlet_gpu::version_major(),
-                singlet_gpu::version_minor(),
-                singlet_gpu::version_patch(),
-                singlet_gpu::commit_sha());
+                singlet::gpu::version_major(),
+                singlet::gpu::version_minor(),
+                singlet::gpu::version_patch(),
+                singlet::gpu::commit_sha());
 
     if (argc < 2) {
         std::printf("Pass a .1pz path to test the loader.\n");
@@ -28,7 +28,7 @@ int main(int argc, char** argv) {
     }
 
     const std::string path = argv[1];
-    auto mat = singlet_gpu::load_pz(path);
+    auto mat = singlet::gpu::load_pz(path);
     cudaStreamSynchronize(mat.producer_stream);
 
     std::printf("loaded %s: %d genes x %d cells, %lld nnz\n",

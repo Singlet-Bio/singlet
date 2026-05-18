@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.gene_space_embedding()."""
 
 import numpy as np

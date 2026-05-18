@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Scanorama-style batch integration via mutual nearest neighbors."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Cell cycle regression.
 
 Provides singlet.cell_cycle_regression() — score cell cycle phases and

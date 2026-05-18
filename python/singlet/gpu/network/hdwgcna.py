@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.network.hdwgcna — GPU-native hdWGCNA co-expression network analysis.
 
@@ -23,34 +23,19 @@ When an AnnData is provided (``run_from_anndata``):
 from __future__ import annotations
 
 import copy as copy_module
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 import numpy as np
+
+from singlet.gpu._coreutil import require_core
 
 if TYPE_CHECKING:
     import anndata
 
 
 # ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-
-def _require_core():
-    import singlet.gpu._core as _core
-
-    if not hasattr(_core, "network") or not hasattr(_core.network, "hdwgcna"):
-        raise AttributeError(
-            "_core.network.hdwgcna is not available.  "
-            "The C++ extension must be compiled on a CUDA-capable node."
-        )
-    return _core.network
-
-
-# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
-
 
 def run_from_csc(
     mat,
@@ -63,7 +48,7 @@ def run_from_csc(
     ooc_chunk_size: int = 0,
     stream=None,
     seed: int = 42,
-) -> Any:
+):
     """
     GPU-native hdWGCNA co-expression network analysis (raw CSC input).
 
@@ -97,7 +82,7 @@ def run_from_csc(
         ``.hub_genes`` (n_modules × n_hub_genes numpy int32)
         ``.kme`` (n_genes numpy float32)
     """
-    net = _require_core()
+    net = require_core("network", "hdwgcna")
     return net.hdwgcna(
         mat,
         soft_power=float(soft_power),
@@ -112,7 +97,7 @@ def run_from_csc(
 
 
 def run_from_anndata(
-    adata: anndata.AnnData,
+    adata: "anndata.AnnData",
     *,
     layer: Optional[str] = None,
     soft_power: float = 6.0,
@@ -124,7 +109,7 @@ def run_from_anndata(
     stream=None,
     seed: int = 42,
     copy: bool = False,
-) -> Optional[anndata.AnnData]:
+) -> Optional["anndata.AnnData"]:
     """
     GPU-native hdWGCNA co-expression network from an AnnData object.
 
@@ -165,7 +150,10 @@ def run_from_anndata(
 
     mat = working.layers[layer] if layer is not None else working.X
     if not isinstance(mat, singlet.gpu.DeviceCsc):
-        raise TypeError("Expression matrix must be a DeviceCsc.  Call singlet.gpu.load_pz() first.")
+        raise TypeError(
+            "Expression matrix must be a DeviceCsc.  "
+            "Call singlet.gpu.load_pz() first."
+        )
 
     result = run_from_csc(
         mat,
@@ -180,15 +168,15 @@ def run_from_anndata(
     )
 
     module_assignment = np.asarray(result.module_assignment, dtype=np.int32)
-    kme = np.asarray(result.kme, dtype=np.float32)
-    eigengenes = np.asarray(result.eigengenes, dtype=np.float32)
-    hub_genes_mat = np.asarray(result.hub_genes, dtype=np.int32)
+    kme               = np.asarray(result.kme,               dtype=np.float32)
+    eigengenes        = np.asarray(result.eigengenes,         dtype=np.float32)
+    hub_genes_mat     = np.asarray(result.hub_genes,          dtype=np.int32)
 
     # eigengenes: (n_modules × n_cells) → (n_cells × n_modules)
     eigengenes_T = eigengenes.reshape(result.n_modules, result.n_cells).T
 
     working.var["hdwgcna_module"] = module_assignment
-    working.var["hdwgcna_kme"] = kme
+    working.var["hdwgcna_kme"]    = kme
     working.obsm["X_hdwgcna_eigen"] = eigengenes_T
 
     # Build hub gene dict: {module_id (int): [gene_idx, ...]}

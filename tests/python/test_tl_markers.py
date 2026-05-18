@@ -1,6 +1,7 @@
+# SPDX-License-Identifier: MIT
 """
-Cycle 21 correctness tests for singlet_gpu.tools.score_genes() and
-singlet_gpu.tools.celltypist_predict().
+Cycle 21 correctness tests for singlet.gpu.tools.score_genes() and
+singlet.gpu.tools.celltypist_predict().
 
 Tests the GPU-native marker scoring and reference annotation wrappers
 (cycle 12: anno/{marker_score,reference_map}.h):
@@ -20,20 +21,18 @@ Tests:
   - test_celltypist_writes_obs_label    : obs[key_added] non-empty string labels
 
 Skip strategy:
-  - Module-level skip if singlet.gpu not available.
+  - Module-level skip if singlet_gpu wheel not built.
   - requires_gpu marker for all GPU-exercising tests.
   - celltypist tests additionally skip if no model file is found.
 """
-
 from __future__ import annotations
 
 import numpy as np
 import pytest
 
 singlet_gpu = pytest.importorskip(
-    "singlet.gpu",
-    reason="singlet.gpu not available. Run `pip install -e singlet-gpu/python/` first.",
-    exc_type=ImportError,
+    "singlet_gpu",
+    reason="singlet_gpu wheel not built. Run `pip install -e singlet-gpu/python/` first.",
 )
 
 from conftest import requires_gpu  # noqa: E402
@@ -45,50 +44,27 @@ from conftest import requires_gpu  # noqa: E402
 # S-phase gene signature from Tirosh et al. 2016 (used by scanpy as default
 # cell-cycle genes). We use a small validated subset for the marker smoke test.
 _S_PHASE_GENES = [
-    "MCM5",
-    "PCNA",
-    "TYMS",
-    "FEN1",
-    "MCM2",
-    "MCM4",
-    "RRM1",
-    "UNG",
-    "GINS2",
-    "MCM6",
-    "CDCA7",
-    "DTL",
-    "PRIM1",
-    "UHRF1",
-    "MLF1IP",
+    "MCM5", "PCNA", "TYMS", "FEN1", "MCM2", "MCM4", "RRM1", "UNG",
+    "GINS2", "MCM6", "CDCA7", "DTL", "PRIM1", "UHRF1", "MLF1IP",
 ]
 
 _G2M_GENES = [
-    "HMGB2",
-    "CDK1",
-    "NUSAP1",
-    "UBE2C",
-    "BIRC5",
-    "TPX2",
-    "TOP2A",
-    "NDC80",
-    "CKS2",
-    "NUF2",
-    "CKS1B",
-    "MKI67",
+    "HMGB2", "CDK1", "NUSAP1", "UBE2C", "BIRC5", "TPX2", "TOP2A",
+    "NDC80", "CKS2", "NUF2", "CKS1B", "MKI67",
 ]
 
 # CellTypist model path — skip celltypist tests if model not present.
 _CELLTYPIST_MODEL_PATH = (
-    "/mnt/projects/debruinz_project/cellarium/celltypist_models/Immune_All_Low.pkl"
+    "/mnt/projects/debruinz_project/cellarium/celltypist_models/"
+    "Immune_All_Low.pkl"
 )
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-
 def _load_gpu_adata(gsm4037629_path):
-    return singlet_gpu.io.read_pz_to_anndata(str(gsm4037629_path))
+    return singlet.gpu.io.read_pz_to_anndata(str(gsm4037629_path))
 
 
 def _gpu_to_cpu_adata(adata_gpu):
@@ -115,8 +91,8 @@ def _gpu_to_cpu_adata(adata_gpu):
 
 def _preprocess_gpu(adata_gpu):
     """Normalize + log1p (GPU). Minimal preprocessing for marker scoring."""
-    singlet_gpu.preprocess.normalize_total(adata_gpu, inplace=True)
-    singlet_gpu.preprocess.log1p(adata_gpu, inplace=True)
+    singlet.gpu.preprocess.normalize_total(adata_gpu, inplace=True)
+    singlet.gpu.preprocess.log1p(adata_gpu, inplace=True)
 
 
 def _filter_to_present(adata, gene_list):
@@ -129,7 +105,6 @@ def _filter_to_present(adata, gene_list):
 def _celltypist_model_available():
     """Return True if the CellTypist model file exists on disk."""
     import pathlib
-
     return pathlib.Path(_CELLTYPIST_MODEL_PATH).is_file()
 
 
@@ -144,7 +119,7 @@ def test_score_genes_mlm_basic(gsm4037629_path):
       1. Load GSM4037629, normalize + log1p.
       2. Filter S-phase gene list to genes present in the dataset.
          Skip if fewer than 3 genes present (insufficient signal).
-      3. Call singlet_gpu.tools.score_genes(adata, gene_list, method='mlm').
+      3. Call singlet.gpu.tools.score_genes(adata, gene_list, method='mlm').
       4. Assert returns None (inplace convention, score written to obs).
       5. Assert adata.obs[score_name] exists.
     """
@@ -160,10 +135,16 @@ def test_score_genes_mlm_basic(gsm4037629_path):
             "cannot meaningfully test score_genes"
         )
 
-    ret = singlet_gpu.tools.score_genes(adata, gene_list, score_name="s_score", method="mlm")
+    ret = singlet.gpu.tools.score_genes(
+        adata, gene_list, score_name="s_score", method="mlm"
+    )
 
-    assert ret is None, f"score_genes() inplace must return None, got {type(ret)}"
-    assert "s_score" in adata.obs.columns, "score_genes(): adata.obs['s_score'] not written"
+    assert ret is None, (
+        f"score_genes() inplace must return None, got {type(ret)}"
+    )
+    assert "s_score" in adata.obs.columns, (
+        "score_genes(): adata.obs['s_score'] not written"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -193,17 +174,20 @@ def test_score_genes_writes_obs(gsm4037629_path):
     if len(s_genes) < 3:
         pytest.skip(f"Too few S-phase genes ({len(s_genes)})")
 
-    singlet_gpu.tools.score_genes(adata, s_genes, score_name="s_score", method="mlm")
+    singlet.gpu.tools.score_genes(adata, s_genes, score_name="s_score", method="mlm")
 
     # Validate s_score column.
     assert "s_score" in adata.obs.columns, "s_score column not written"
     scores = np.asarray(adata.obs["s_score"], dtype=np.float64)
-    assert len(scores) == adata.n_obs, f"s_score length {len(scores)} != n_obs {adata.n_obs}"
+    assert len(scores) == adata.n_obs, (
+        f"s_score length {len(scores)} != n_obs {adata.n_obs}"
+    )
     assert np.all(np.isfinite(scores)), (
         f"s_score contains NaN or Inf: {np.sum(~np.isfinite(scores))} non-finite values"
     )
     assert np.std(scores) > 1e-6, (
-        f"s_score has near-zero variance (std={np.std(scores):.2e}); scores may be all identical"
+        f"s_score has near-zero variance (std={np.std(scores):.2e}); "
+        "scores may be all identical"
     )
 
     # Validate score_name isolation — g2m_score must NOT exist if we haven't called it.
@@ -214,7 +198,7 @@ def test_score_genes_writes_obs(gsm4037629_path):
         )
 
     if len(g2m_genes) >= 3:
-        singlet_gpu.tools.score_genes(adata, g2m_genes, score_name="g2m_score", method="mlm")
+        singlet.gpu.tools.score_genes(adata, g2m_genes, score_name="g2m_score", method="mlm")
         assert "g2m_score" in adata.obs.columns, "g2m_score column not written"
         # Both columns must coexist and be independent.
         g2m_scores = np.asarray(adata.obs["g2m_score"], dtype=np.float64)
@@ -235,7 +219,7 @@ def test_celltypist_predict_basic(gsm4037629_path):
 
     Procedure:
       1. Load GSM4037629, normalize + log1p.
-      2. Call singlet_gpu.tools.celltypist_predict(adata, model_path).
+      2. Call singlet.gpu.tools.celltypist_predict(adata, model_path).
       3. Assert returns None (inplace convention).
       4. Assert adata.obs['celltypist'] or adata.obs[key_added] exists.
     """
@@ -248,15 +232,18 @@ def test_celltypist_predict_basic(gsm4037629_path):
     pytest.importorskip("anndata", reason="anndata not installed")
 
     import os
-
-    model_path = os.environ.get("SINGLET_GPU_CELLTYPIST_MODEL", _CELLTYPIST_MODEL_PATH)
+    model_path = os.environ.get(
+        "SINGLET_GPU_CELLTYPIST_MODEL", _CELLTYPIST_MODEL_PATH
+    )
 
     adata = _load_gpu_adata(gsm4037629_path)
     _preprocess_gpu(adata)
 
-    ret = singlet_gpu.tools.celltypist_predict(adata, model_path=model_path)
+    ret = singlet.gpu.tools.celltypist_predict(adata, model_path=model_path)
 
-    assert ret is None, f"celltypist_predict() inplace must return None, got {type(ret)}"
+    assert ret is None, (
+        f"celltypist_predict() inplace must return None, got {type(ret)}"
+    )
     assert "celltypist" in adata.obs.columns, (
         "celltypist_predict(): adata.obs['celltypist'] not written"
     )
@@ -278,31 +265,38 @@ def test_celltypist_writes_obs_label(gsm4037629_path):
     Skipped if CellTypist model not present.
     """
     if not _celltypist_model_available():
-        pytest.skip(f"CellTypist model not found at {_CELLTYPIST_MODEL_PATH}.")
+        pytest.skip(
+            f"CellTypist model not found at {_CELLTYPIST_MODEL_PATH}."
+        )
 
     pytest.importorskip("anndata", reason="anndata not installed")
 
     import os
-
-    model_path = os.environ.get("SINGLET_GPU_CELLTYPIST_MODEL", _CELLTYPIST_MODEL_PATH)
+    model_path = os.environ.get(
+        "SINGLET_GPU_CELLTYPIST_MODEL", _CELLTYPIST_MODEL_PATH
+    )
 
     adata = _load_gpu_adata(gsm4037629_path)
     _preprocess_gpu(adata)
 
     key = "ct_label"
-    singlet_gpu.tools.celltypist_predict(adata, model_path=model_path, key_added=key)
+    singlet.gpu.tools.celltypist_predict(adata, model_path=model_path, key_added=key)
 
     assert key in adata.obs.columns, (
         f"celltypist_predict(key_added='{key}'): column '{key}' not in adata.obs"
     )
 
     labels = adata.obs[key]
-    assert len(labels) == adata.n_obs, f"obs['{key}'] length {len(labels)} != n_obs {adata.n_obs}"
+    assert len(labels) == adata.n_obs, (
+        f"obs['{key}'] length {len(labels)} != n_obs {adata.n_obs}"
+    )
 
     # All labels must be non-empty strings.
     label_arr = np.asarray(labels, dtype=str)
     empty_mask = (label_arr == "") | (label_arr == "None") | (label_arr == "nan")
-    assert empty_mask.sum() == 0, f"obs['{key}'] contains {empty_mask.sum()} empty/None/nan labels"
+    assert empty_mask.sum() == 0, (
+        f"obs['{key}'] contains {empty_mask.sum()} empty/None/nan labels"
+    )
 
     # Non-trivial: expect at least 2 distinct cell types for a PBMC-like sample.
     n_types = int(len(set(label_arr)))

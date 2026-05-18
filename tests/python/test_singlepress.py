@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for SinglePress C++ extension (compression round-trips)."""
 
 import numpy as np

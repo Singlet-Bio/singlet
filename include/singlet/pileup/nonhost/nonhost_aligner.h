@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // nonhost_aligner.h — Seed-chain-extend secondary alignment for EM-detected nonhost species
 //
 // After em_deconvolve() identifies candidate species above an abundance threshold, this

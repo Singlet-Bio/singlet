@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-// singlet-gpu/reduce/svd/types.h
+// SPDX-License-Identifier: MIT
+// singlet/gpu/reduce/svd/types.h
 //
 // Native SvdConfig and SvdResult — replaces factornet type re-exports.
 // CYCLE-105: fully internal; no factornet dependency.
@@ -11,7 +11,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace reduce {
 namespace svd {
 
@@ -178,4 +178,4 @@ enum class SvdMethod { DEFLATION, RANDOMIZED };
 
 }  // namespace svd
 }  // namespace reduce
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

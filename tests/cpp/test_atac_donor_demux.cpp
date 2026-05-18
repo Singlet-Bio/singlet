@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test/test_atac_donor_demux.cpp
 // Unit tests for AtacDonorDemux (A4 feature).
 // All tests synthetic — no BAM / disk files required.
@@ -12,19 +13,7 @@
 
 using namespace singlet;
 
-static int n_pass = 0;
-static int n_fail = 0;
-
-#define CHECK(cond, name)                                                        \
-    do {                                                                         \
-        if (cond) {                                                              \
-            std::cout << "  PASS: " << (name) << "\n";                           \
-            ++n_pass;                                                            \
-        } else {                                                                 \
-            std::cout << "  FAIL: " << (name) << " [line " << __LINE__ << "]\n"; \
-            ++n_fail;                                                            \
-        }                                                                        \
-    } while (0)
+#include "test_harness.h"  // CHECK(cond, msg) + n_pass / n_fail
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Automated cell type prediction.
 
 Provides singlet.predict_cell_type() — train on a labeled reference and

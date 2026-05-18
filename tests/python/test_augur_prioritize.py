@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.augur_prioritize."""
 
 import numpy as np

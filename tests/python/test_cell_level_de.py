@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.cell_level_de()."""
 
 import numpy as np

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Load datasets from local catalog, Zenodo, or AWS.
 
 Priority order:

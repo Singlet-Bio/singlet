@@ -1,5 +1,6 @@
+# SPDX-License-Identifier: MIT
 """
-Cycle 21 correctness tests for singlet_gpu.tools.leiden().
+Cycle 21 correctness tests for singlet.gpu.tools.leiden().
 
 Tests the GPU-native Leiden clustering wrapper (cycle 9: graph/leiden.h):
   - ``singlet.gpu.tools.leiden``
@@ -20,19 +21,17 @@ Tests:
   - test_leiden_vs_scanpy          : ARI vs sc.tl.leiden ≥ 0.85
 
 Skip strategy:
-  - Module-level skip if singlet.gpu not available.
+  - Module-level skip if singlet_gpu wheel not built.
   - requires_gpu marker for all GPU-exercising tests.
 """
-
 from __future__ import annotations
 
 import numpy as np
 import pytest
 
 singlet_gpu = pytest.importorskip(
-    "singlet.gpu",
-    reason="singlet.gpu not available. Run `pip install -e singlet-gpu/python/` first.",
-    exc_type=ImportError,
+    "singlet_gpu",
+    reason="singlet_gpu wheel not built. Run `pip install -e singlet-gpu/python/` first.",
 )
 
 from conftest import requires_gpu  # noqa: E402
@@ -40,8 +39,8 @@ from conftest import requires_gpu  # noqa: E402
 # ---------------------------------------------------------------------------
 # Tolerance constants
 # ---------------------------------------------------------------------------
-_ARI_MIN = 0.85  # ARI vs scanpy Leiden (spec tolerance)
-_SEED = 0xC0FFEE  # fixed seed for reproducibility
+_ARI_MIN = 0.85          # ARI vs scanpy Leiden (spec tolerance)
+_SEED = 0xC0FFEE         # fixed seed for reproducibility
 _N_NEIGHBORS = 15
 _N_COMPS = 50
 
@@ -49,9 +48,8 @@ _N_COMPS = 50
 # Helpers
 # ---------------------------------------------------------------------------
 
-
 def _load_gpu_adata(gsm4037629_path):
-    return singlet_gpu.io.read_pz_to_anndata(str(gsm4037629_path))
+    return singlet.gpu.io.read_pz_to_anndata(str(gsm4037629_path))
 
 
 def _gpu_to_cpu_adata(adata_gpu):
@@ -78,10 +76,10 @@ def _gpu_to_cpu_adata(adata_gpu):
 
 def _full_pipeline_gpu(adata_gpu, resolution=1.0):
     """Preprocess + PCA + neighbors on GPU, then return without leiden."""
-    singlet_gpu.preprocess.normalize_total(adata_gpu, inplace=True)
-    singlet_gpu.preprocess.log1p(adata_gpu, inplace=True)
-    singlet_gpu.reduce.pca(adata_gpu, n_comps=_N_COMPS, inplace=True)
-    singlet_gpu.pp.neighbors(adata_gpu, n_neighbors=_N_NEIGHBORS)
+    singlet.gpu.preprocess.normalize_total(adata_gpu, inplace=True)
+    singlet.gpu.preprocess.log1p(adata_gpu, inplace=True)
+    singlet.gpu.reduce.pca(adata_gpu, n_comps=_N_COMPS, inplace=True)
+    singlet.gpu.preprocess.neighbors(adata_gpu, n_neighbors=_N_NEIGHBORS)
 
 
 def _full_pipeline_cpu(adata_cpu):
@@ -95,7 +93,9 @@ def _full_pipeline_cpu(adata_cpu):
 
 def _adjusted_rand_index(labels_a, labels_b):
     """Compute ARI between two label arrays using sklearn."""
-    sklearn_metrics = pytest.importorskip("sklearn.metrics", reason="sklearn not installed")
+    sklearn_metrics = pytest.importorskip(
+        "sklearn.metrics", reason="sklearn not installed"
+    )
     a = np.asarray(labels_a, dtype=str)
     b = np.asarray(labels_b, dtype=str)
     return float(sklearn_metrics.adjusted_rand_score(a, b))
@@ -105,8 +105,7 @@ def _adjusted_rand_index(labels_a, labels_b):
 # test_leiden_basic
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
-    strict=True,
-    raises=RuntimeError,
+    strict=True, raises=RuntimeError,
     reason="INFRA-CUVS-CUGRAPH-INSTALL: leiden requires cuGraph; not installed on GPU nodes (state/blockers.md)",
 )
 @requires_gpu
@@ -115,7 +114,7 @@ def test_leiden_basic(gsm4037629_path):
 
     Procedure:
       1. Load GSM4037629, preprocess + PCA + neighbors.
-      2. Call singlet_gpu.tools.leiden(adata).
+      2. Call singlet.gpu.tools.leiden(adata).
       3. Assert returns None (inplace convention).
       4. Assert adata.obs['leiden'] exists and has n_obs entries.
     """
@@ -124,10 +123,14 @@ def test_leiden_basic(gsm4037629_path):
     adata = _load_gpu_adata(gsm4037629_path)
     _full_pipeline_gpu(adata)
 
-    ret = singlet_gpu.tools.leiden(adata, rng=_SEED)
+    ret = singlet.gpu.tools.leiden(adata, rng=_SEED)
 
-    assert ret is None, f"leiden() inplace must return None (scanpy convention), got {type(ret)}"
-    assert "leiden" in adata.obs.columns, "leiden(): adata.obs['leiden'] column not written"
+    assert ret is None, (
+        f"leiden() inplace must return None (scanpy convention), got {type(ret)}"
+    )
+    assert "leiden" in adata.obs.columns, (
+        "leiden(): adata.obs['leiden'] column not written"
+    )
     assert len(adata.obs["leiden"]) == adata.n_obs, (
         f"adata.obs['leiden'] length {len(adata.obs['leiden'])} != n_obs {adata.n_obs}"
     )
@@ -137,8 +140,7 @@ def test_leiden_basic(gsm4037629_path):
 # test_leiden_resolution_param
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
-    strict=True,
-    raises=RuntimeError,
+    strict=True, raises=RuntimeError,
     reason="INFRA-CUVS-CUGRAPH-INSTALL: leiden requires cuGraph; not installed on GPU nodes (state/blockers.md)",
 )
 @requires_gpu
@@ -157,17 +159,17 @@ def test_leiden_resolution_param(gsm4037629_path):
 
     adata_low = _load_gpu_adata(gsm4037629_path)
     _full_pipeline_gpu(adata_low)
-    singlet_gpu.tools.leiden(adata_low, 0.3, rng=_SEED, key_added="leiden_low")
+    singlet.gpu.tools.leiden(adata_low, 0.3, rng=_SEED, key_added="leiden_low")
 
     adata_high = _load_gpu_adata(gsm4037629_path)
     _full_pipeline_gpu(adata_high)
-    singlet_gpu.tools.leiden(adata_high, 1.5, rng=_SEED, key_added="leiden_high")
+    singlet.gpu.tools.leiden(adata_high, 1.5, rng=_SEED, key_added="leiden_high")
 
     n_low = int(adata_low.obs["leiden_low"].nunique())
     n_high = int(adata_high.obs["leiden_high"].nunique())
 
-    assert n_low >= 1, "resolution=0.3 produced 0 clusters"
-    assert n_high >= 1, "resolution=1.5 produced 0 clusters"
+    assert n_low >= 1, f"resolution=0.3 produced 0 clusters"
+    assert n_high >= 1, f"resolution=1.5 produced 0 clusters"
     assert n_high > n_low, (
         f"Higher resolution must produce more clusters: "
         f"low(res=0.3)={n_low}, high(res=1.5)={n_high}"
@@ -178,8 +180,7 @@ def test_leiden_resolution_param(gsm4037629_path):
 # test_leiden_writes_obs
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
-    strict=True,
-    raises=RuntimeError,
+    strict=True, raises=RuntimeError,
     reason="INFRA-CUVS-CUGRAPH-INSTALL: leiden requires cuGraph; not installed on GPU nodes (state/blockers.md)",
 )
 @requires_gpu
@@ -196,7 +197,7 @@ def test_leiden_writes_obs(gsm4037629_path):
 
     adata = _load_gpu_adata(gsm4037629_path)
     _full_pipeline_gpu(adata)
-    singlet_gpu.tools.leiden(adata, rng=_SEED, key_added="my_leiden")
+    singlet.gpu.tools.leiden(adata, rng=_SEED, key_added="my_leiden")
 
     assert "my_leiden" in adata.obs.columns, (
         "leiden(key_added='my_leiden'): 'my_leiden' column not in adata.obs"
@@ -206,10 +207,14 @@ def test_leiden_writes_obs(gsm4037629_path):
     assert len(labels) == adata.n_obs, (
         f"obs['my_leiden'] length {len(labels)} != n_obs {adata.n_obs}"
     )
-    assert labels.isna().sum() == 0, f"obs['my_leiden'] contains {labels.isna().sum()} NaN values"
+    assert labels.isna().sum() == 0, (
+        f"obs['my_leiden'] contains {labels.isna().sum()} NaN values"
+    )
 
     n_clusters = int(labels.nunique())
-    assert n_clusters >= 2, f"leiden produced only {n_clusters} cluster(s) — expected ≥ 2"
+    assert n_clusters >= 2, (
+        f"leiden produced only {n_clusters} cluster(s) — expected ≥ 2"
+    )
     assert n_clusters <= adata.n_obs // 2, (
         f"leiden produced {n_clusters} clusters for {adata.n_obs} cells — seems too fragmented"
     )
@@ -219,8 +224,7 @@ def test_leiden_writes_obs(gsm4037629_path):
 # test_leiden_vs_scanpy
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
-    strict=True,
-    raises=RuntimeError,
+    strict=True, raises=RuntimeError,
     reason="INFRA-CUVS-CUGRAPH-INSTALL: leiden requires cuGraph; not installed on GPU nodes (state/blockers.md)",
 )
 @requires_gpu
@@ -244,7 +248,7 @@ def test_leiden_vs_scanpy(gsm4037629_path):
     adata_cpu = _gpu_to_cpu_adata(adata_gpu)
 
     _full_pipeline_gpu(adata_gpu)
-    singlet_gpu.tools.leiden(adata_gpu, 1.0, rng=_SEED)
+    singlet.gpu.tools.leiden(adata_gpu, 1.0, rng=_SEED)
 
     _full_pipeline_cpu(adata_cpu)
     sc.tl.leiden(adata_cpu, 1.0, rng=_SEED)

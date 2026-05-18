@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: bus_writer.h
 // BUS (Barcode, UMI, Set) binary format export — kallisto|bustools compatible.

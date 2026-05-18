@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Marker gene dot plot visualization."""
 
 from __future__ import annotations

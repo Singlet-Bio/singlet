@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Basic normalization for AnnData objects.
 
 Provides singlet.normalize() — library-size normalization + log1p,

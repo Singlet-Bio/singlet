@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: validate_output.h
 // Post-export output validation for production-hardened pipeline runs.

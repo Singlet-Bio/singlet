@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (Wilcoxon binned + Welch t)
 //
 // de/types.h — Shared result types for differential-expression kernels.
@@ -11,9 +11,9 @@
 #pragma once
 
 #include <vector>
-#include <singlet-gpu/core/types.h>
+#include <singlet/gpu/core/types.h>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace de {
 
 // Per-cluster top-N marker gene result.
@@ -41,4 +41,4 @@ struct TtestResult {
 };
 
 }  // namespace de
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

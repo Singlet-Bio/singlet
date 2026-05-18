@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // lib1fq/benchmark.h — Codec benchmarking for .1fq (Phase 6)
 //
 // Tests compression codecs at various levels against synthetic and real
@@ -18,7 +19,7 @@
 #include <string>
 #include <vector>
 
-namespace lib1fq {
+namespace singlet::fq {
 namespace benchmark {
 
 struct BenchResult {
@@ -267,4 +268,4 @@ inline std::vector<BenchResult> run_benchmark(
 }
 
 } // namespace benchmark
-} // namespace lib1fq
+} // namespace singlet::fq

@@ -1,5 +1,6 @@
+# SPDX-License-Identifier: MIT
 """
-Cycle 23 correctness tests for singlet_gpu.lineage.
+Cycle 23 correctness tests for singlet.gpu.lineage.
 
 Tests the GPU-native MT lineage wrapper (cycle 16: anno/mt_lineage.h):
   - ``singlet.gpu.lineage.detect_clones``
@@ -23,22 +24,19 @@ Notes:
   - min_K constraint: detect_clones must not produce fewer than min_K clones.
 
 Skip strategy:
-  - Module-level skip if singlet.gpu not available.
+  - Module-level skip if singlet_gpu wheel not built.
   - requires_gpu for all GPU-exercising tests.
   - GSM4037629 real-data test skips if mt_alleles.1pz is absent.
 """
-
 from __future__ import annotations
 
-import pathlib
-
 import numpy as np
+import pathlib
 import pytest
 
 singlet_gpu = pytest.importorskip(
-    "singlet.gpu",
-    reason="singlet.gpu not available. Run `pip install -e singlet-gpu/python/` first.",
-    exc_type=ImportError,
+    "singlet_gpu",
+    reason="singlet_gpu wheel not built. Run `pip install -e singlet-gpu/python/` first.",
 )
 
 from conftest import requires_gpu  # noqa: E402
@@ -47,7 +45,7 @@ from conftest import requires_gpu  # noqa: E402
 # Constants
 # ---------------------------------------------------------------------------
 _MIN_K = 2
-_MAX_K = 6  # reduced from spec for harness speed
+_MAX_K = 6       # reduced from spec for harness speed
 _SEED = 0
 _MIN_DEPTH = 10
 _MIN_CELLS_ALT = 5
@@ -58,7 +56,6 @@ _MT_ALLELES_FILENAME = "mt_alleles.1pz"
 # ---------------------------------------------------------------------------
 # Synthetic MT data builder
 # ---------------------------------------------------------------------------
-
 
 def _make_mt_adata(n_cells: int = 200, n_sites: int = 50, n_clones: int = 3):
     """Build a minimal AnnData with synthetic mt_alt and mt_depth layers.
@@ -103,7 +100,7 @@ def test_detect_clones_basic():
 
     Procedure:
       1. Build synthetic 200-cell, 50-site MT AnnData with 3 ground-truth clones.
-      2. Call singlet_gpu.lineage.detect_clones(adata, min_K=2, max_K=6, seed=0).
+      2. Call singlet.gpu.lineage.detect_clones(adata, min_K=2, max_K=6, seed=0).
       3. Assert returns None (inplace convention).
     """
     pytest.importorskip("anndata", reason="anndata not installed")
@@ -111,7 +108,7 @@ def test_detect_clones_basic():
 
     adata = _make_mt_adata(n_cells=200, n_sites=50, n_clones=3)
 
-    ret = singlet_gpu.lineage.detect_clones(
+    ret = singlet.gpu.lineage.detect_clones(
         adata,
         alt_layer="mt_alt",
         depth_layer="mt_depth",
@@ -123,7 +120,9 @@ def test_detect_clones_basic():
         seed=_SEED,
     )
 
-    assert ret is None, f"detect_clones() inplace must return None, got {type(ret)}"
+    assert ret is None, (
+        f"detect_clones() inplace must return None, got {type(ret)}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -143,7 +142,7 @@ def test_detect_clones_writes_obs_clone_id():
     pytest.importorskip("scipy", reason="scipy not installed")
 
     adata = _make_mt_adata(n_cells=200, n_sites=50, n_clones=3)
-    singlet_gpu.lineage.detect_clones(
+    singlet.gpu.lineage.detect_clones(
         adata,
         alt_layer="mt_alt",
         depth_layer="mt_depth",
@@ -194,7 +193,7 @@ def test_detect_clones_writes_obsm_heteroplasmy():
     pytest.importorskip("scipy", reason="scipy not installed")
 
     adata = _make_mt_adata(n_cells=200, n_sites=50, n_clones=3)
-    singlet_gpu.lineage.detect_clones(
+    singlet.gpu.lineage.detect_clones(
         adata,
         alt_layer="mt_alt",
         depth_layer="mt_depth",
@@ -220,8 +219,12 @@ def test_detect_clones_writes_obsm_heteroplasmy():
     assert np.all(np.isfinite(het)), (
         f"mt_heteroplasmy contains non-finite values: {np.sum(~np.isfinite(het))}"
     )
-    assert np.all(het >= 0.0 - 1e-9), f"mt_heteroplasmy contains negative VAFs; min={het.min():.4e}"
-    assert np.all(het <= 1.0 + 1e-9), f"mt_heteroplasmy contains VAFs > 1.0; max={het.max():.4e}"
+    assert np.all(het >= 0.0 - 1e-9), (
+        f"mt_heteroplasmy contains negative VAFs; min={het.min():.4e}"
+    )
+    assert np.all(het <= 1.0 + 1e-9), (
+        f"mt_heteroplasmy contains VAFs > 1.0; max={het.max():.4e}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -250,13 +253,13 @@ def test_detect_clones_GSM4037629_real_data(gsm4037629_path):
     # Load mt_alleles as the main matrix; treat as alt counts.
     # For a real test we need both alt and depth. Try to load both:
     try:
-        mt_adata = singlet_gpu.io.read_pz_to_anndata(str(mt_path))
+        mt_adata = singlet.gpu.io.read_pz_to_anndata(str(mt_path))
     except Exception as e:
         pytest.skip(f"Could not read mt_alleles.1pz: {e}")
 
     # mt_alleles.1pz may encode alt+depth interleaved, or just alt counts.
     # If detect_clones accepts a single layer, use it as alt; derive depth as sum.
-    # This mirrors the expected singlet_gpu.io contract.
+    # This mirrors the expected singlet.gpu.io contract.
     import scipy.sparse as sp
 
     X_host = mt_adata.X
@@ -264,15 +267,16 @@ def test_detect_clones_GSM4037629_real_data(gsm4037629_path):
         X_host = X_host.get()
     if sp.issparse(X_host):
         X_host = X_host.tocsr()
-    alt_arr = np.asarray(X_host.todense() if sp.issparse(X_host) else X_host, dtype=np.float32)
+    alt_arr = np.asarray(X_host.todense() if sp.issparse(X_host) else X_host,
+                         dtype=np.float32)
 
     # Use X directly as alt layer; infer pseudo-depth as sum of all sites per cell.
-    # (Real use case: singlet_gpu.io.read_mt_pileup handles this natively.)
+    # (Real use case: singlet.gpu.io.read_mt_pileup handles this natively.)
     mt_adata.layers["mt_alt"] = sp.csr_matrix(alt_arr)
     depth_arr = np.clip(alt_arr * 10 + 1, 10, None)  # pseudo-depth for harness
     mt_adata.layers["mt_depth"] = sp.csr_matrix(depth_arr)
 
-    singlet_gpu.lineage.detect_clones(
+    singlet.gpu.lineage.detect_clones(
         mt_adata,
         alt_layer="mt_alt",
         depth_layer="mt_depth",
@@ -322,7 +326,7 @@ def test_detect_clones_min_K_constraint():
     adata = _make_mt_adata(n_cells=400, n_sites=80, n_clones=4)
 
     min_K_test = 3
-    singlet_gpu.lineage.detect_clones(
+    singlet.gpu.lineage.detect_clones(
         adata,
         alt_layer="mt_alt",
         depth_layer="mt_depth",

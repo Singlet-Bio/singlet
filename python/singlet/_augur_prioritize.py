@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Augur-style cell type prioritization."""
 
 from __future__ import annotations

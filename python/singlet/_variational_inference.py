@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Variational inference for single-cell latent space.
 
 Provides singlet.variational_inference() — a lightweight probabilistic PCA

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: hto_demux.h
 // T3: HTO (hashtag oligonucleotide) demultiplexing for CITE-seq experiments.

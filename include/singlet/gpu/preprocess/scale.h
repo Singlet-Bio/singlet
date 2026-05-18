@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-// singlet-gpu/preprocess/scale.h
+// SPDX-License-Identifier: MIT
+// singlet/gpu/preprocess/scale.h
 //
 // Z-score scaling (sparse → dense with centering/clipping) and
 // batch OLS regress_out for single-cell expression matrices.
@@ -41,12 +41,8 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
 // CYCLE-106: factornet/gpu/types.cuh replaced by native core/types.h (already included above).
 
 #include <cuda_runtime.h>
@@ -60,7 +56,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace preprocess {
 
 // ---------------------------------------------------------------------------
@@ -92,10 +88,10 @@ namespace {
 // The alternative (cuSPARSE csc2dense + separate scale kernel) requires an extra
 // kernel launch and 800 MB dense write; fusion saves the round-trip.
 //
-// WHY row-major output: downstream PCA (factornet SVD) expects genes × cells
+// WHY row-major output: downstream PCA (reduce::svd) expects genes × cells
 // in row-major (or equivalently col-major transposed), consistent with the
-// cuBLAS GEMM calls in regress_out. DenseMatrixGPU<float> is declared col-major
-// by factornet, but we document clearly that this buffer is row-major.
+// cuBLAS GEMM calls in regress_out. core::DeviceDense is declared col-major,
+// but we document clearly that this buffer is row-major.
 //
 // Thread layout: 2D grid, blockDim=(32,8): 32 cells per warp × 8 genes per block.
 // For typical 2000×100k: gridDim = (ceil(100k/32), ceil(2000/8)) = (3125, 250).
@@ -176,11 +172,11 @@ void subtract_predicted_kernel(
 // a (n_genes × n_cells) row-major buffer when passing to cuBLAS (use
 // CUBLAS_OP_N with lda=n_cells, or CUBLAS_OP_T with lda=n_genes as needed).
 //
-// WHY return DenseMatrixGPU rather than a raw DeviceMemory: DenseMatrixGPU
-// carries rows/cols metadata and owns its DeviceMemory via RAII. This is the
-// factornet-idiomatic container for downstream GEMMs and SVD calls.
+// WHY return core::DeviceDense rather than a raw DeviceMemory: DeviceDense
+// carries rows/cols metadata and owns its DeviceMemory via RAII. It is the
+// standard container for downstream GEMMs and SVD calls.
 // ---------------------------------------------------------------------------
-inline singlet_gpu::core::DeviceDense scale(
+inline singlet::gpu::core::DeviceDense scale(
     const int*   d_indptr,   // [n_cells+1] device pointer
     const int*   d_indices,  // [nnz] device pointer
     const float* d_data,     // [nnz] device pointer
@@ -194,12 +190,12 @@ inline singlet_gpu::core::DeviceDense scale(
         throw std::runtime_error("scale: n_genes and n_cells must be > 0");
 
     if (stream == nullptr)
-        stream = singlet_gpu::core::default_context().stream();
+        stream = singlet::gpu::core::default_context().stream();
 
     // Allocate dense output: n_genes × n_cells (row-major).
     // DenseMatrixGPU(m, n) allocates m*n elements; we pass (n_genes, n_cells)
     // so rows=n_genes, cols=n_cells, matching downstream regress_out expectations.
-    singlet_gpu::core::DeviceDense out(n_genes, n_cells);
+    singlet::gpu::core::DeviceDense out(n_genes, n_cells);
 
     // 2D thread block: 32 cells (warp width) × 8 genes = 256 threads/block.
     const dim3 block(32, 8);
@@ -218,8 +214,8 @@ inline singlet_gpu::core::DeviceDense scale(
 }
 
 // Convenience overload accepting DeviceCSC directly.
-inline singlet_gpu::core::DeviceDense scale(
-    const singlet_gpu::core::DeviceCSC& mat,
+inline singlet::gpu::core::DeviceDense scale(
+    const singlet::gpu::core::DeviceCSC& mat,
     const float* d_mean,
     const float* d_std,
     const ScaleConfig& cfg = {},
@@ -232,10 +228,10 @@ inline singlet_gpu::core::DeviceDense scale(
 }
 
 // Convenience overload accepting DeviceMemory<float> wrappers for mean/std.
-inline singlet_gpu::core::DeviceDense scale(
-    const singlet_gpu::core::DeviceCSC&           mat,
-    const singlet_gpu::core::DeviceMemory<float>& d_mean,
-    const singlet_gpu::core::DeviceMemory<float>& d_std,
+inline singlet::gpu::core::DeviceDense scale(
+    const singlet::gpu::core::DeviceCSC&           mat,
+    const singlet::gpu::core::DeviceMemory<float>& d_mean,
+    const singlet::gpu::core::DeviceMemory<float>& d_std,
     const ScaleConfig& cfg = {},
     cudaStream_t stream    = nullptr)
 {
@@ -286,7 +282,7 @@ inline void regress_out(
             "regress_out: invalid dimensions (n_genes, n_cells > 0; 0 < p <= 32)");
 
     if (stream == nullptr)
-        stream = singlet_gpu::core::default_context().stream();
+        stream = singlet::gpu::core::default_context().stream();
 
     // Create a local cuBLAS handle bound to the caller's stream.
     cublasHandle_t cublas_h;
@@ -327,14 +323,14 @@ inline void regress_out(
     // cuSOLVER cusolverDnSgeqrf destroys C in-place with Householder reflectors.
     // We work on a copy to preserve C for the caller.
     // -------------------------------------------------------------------------
-    singlet_gpu::core::DeviceMemory<float> d_C_copy(
+    singlet::gpu::core::DeviceMemory<float> d_C_copy(
         static_cast<size_t>(n_cells) * p);
     cuda_check(cudaMemcpyAsync(
         d_C_copy.get(), C,
         static_cast<size_t>(n_cells) * p * sizeof(float),
         cudaMemcpyDeviceToDevice, stream), "memcpy C");
 
-    singlet_gpu::core::DeviceMemory<float> d_tau(p);  // Householder scalars
+    singlet::gpu::core::DeviceMemory<float> d_tau(p);  // Householder scalars
 
     // Query workspace size (requires a sync: host needs the scalar lwork).
     int lwork = 0;
@@ -346,8 +342,8 @@ inline void regress_out(
     // function entry, not inside any per-element or per-iteration loop.
     cuda_check(cudaStreamSynchronize(stream), "sync after geqrf bufsize");
 
-    singlet_gpu::core::DeviceMemory<float> d_work(std::max(lwork, 1));
-    singlet_gpu::core::DeviceMemory<int>   d_info(1);
+    singlet::gpu::core::DeviceMemory<float> d_work(std::max(lwork, 1));
+    singlet::gpu::core::DeviceMemory<int>   d_info(1);
 
     if (cusolverDnSgeqrf(solver_h, n_cells, p,
                           d_C_copy.get(), n_cells,
@@ -372,7 +368,7 @@ inline void regress_out(
     cuda_check(cudaStreamSynchronize(stream), "sync after orgqr bufsize");
 
     if (lwork_q > lwork) {
-        d_work = singlet_gpu::core::DeviceMemory<float>(lwork_q);
+        d_work = singlet::gpu::core::DeviceMemory<float>(lwork_q);
     }
 
     if (cusolverDnSorgqr(solver_h, n_cells, p, p,
@@ -405,7 +401,7 @@ inline void regress_out(
     // Note: X row-major [n_genes × n_cells] with lda_X=n_cells is the SAME as
     //       X col-major [n_cells × n_genes] with lda_X=n_cells. We exploit this.
     // -------------------------------------------------------------------------
-    singlet_gpu::core::DeviceMemory<float> d_Beta(
+    singlet::gpu::core::DeviceMemory<float> d_Beta(
         static_cast<size_t>(p) * n_genes);
     {
         const float alpha = 1.0f, beta_val = 0.0f;
@@ -454,7 +450,7 @@ inline void regress_out(
     // are at the SAME index: gene*n_cells+cell == cell+gene*n_cells. ✓
     // So we can subtract PredT directly from X.
     // -------------------------------------------------------------------------
-    singlet_gpu::core::DeviceMemory<float> d_PredT(
+    singlet::gpu::core::DeviceMemory<float> d_PredT(
         static_cast<size_t>(n_cells) * n_genes);
     {
         const float alpha = 1.0f, beta_val = 0.0f;
@@ -485,13 +481,13 @@ inline void regress_out(
     // read by subtract_predicted_kernel. Without this sync, d_PredT destructs on
     // return while the kernel may still be reading it — same race as lognorm.h.
     // Rule 9 compliant — function boundary, not a hot loop.
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 }
 
 // Convenience overload accepting DeviceDense containers.
 inline void regress_out(
-    singlet_gpu::core::DeviceDense& X,      // [n_genes × n_cells] row-major, in-place
-    const singlet_gpu::core::DeviceDense& C, // [n_cells × p] col-major design matrix
+    singlet::gpu::core::DeviceDense& X,      // [n_genes × n_cells] row-major, in-place
+    const singlet::gpu::core::DeviceDense& C, // [n_cells × p] col-major design matrix
     cudaStream_t stream = nullptr)
 {
     if (X.rows == 0 || X.cols == 0 || C.cols == 0)
@@ -503,4 +499,4 @@ inline void regress_out(
 }
 
 } // namespace preprocess
-} // namespace singlet_gpu
+} // namespace singlet::gpu

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Concatenation of multiple AnnData objects.
 
 Provides singlet.concatenate() — merges multiple AnnData objects into one,

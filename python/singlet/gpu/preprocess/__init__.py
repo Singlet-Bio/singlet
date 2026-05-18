@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.preprocess — GPU-native preprocessing for single-cell AnnData.
 
@@ -9,13 +9,15 @@ log1p                 — natural log1p transform       (cycle-3 lognorm kernel)
 highly_variable_genes — HVG selection                (cycle-4 HVG kernel)
 scale                 — Z-score scaling               (cycle-103 scale kernel)
 regress_out           — OLS confounder regression     (cycle-103 regress_out kernel)
+neighbors             — GPU kNN graph construction     (cycle-8 graph/knn kernel)
 
 All functions are drop-in replacements for their scanpy.pp counterparts.
 """
 
-from singlet.gpu.preprocess.hvg import highly_variable_genes
-from singlet.gpu.preprocess.lognorm import log1p, normalize_total
-from singlet.gpu.preprocess.scale import regress_out, scale
+from .lognorm import normalize_total, log1p
+from .hvg import highly_variable_genes
+from .scale import scale, regress_out
+from .neighbors import neighbors
 
 __all__ = [
     "normalize_total",
@@ -23,4 +25,5 @@ __all__ = [
     "highly_variable_genes",
     "scale",
     "regress_out",
+    "neighbors",
 ]

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: cascade_stats_writer.h  — T-L2-8
 // Writes cascade_stats.json alongside summary.json when cascade is active.

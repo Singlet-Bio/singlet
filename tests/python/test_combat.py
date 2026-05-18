@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.combat() batch correction."""
 
 import numpy as np

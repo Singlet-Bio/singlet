@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 #' Convert a singlet pipeline directory to a Seurat object.
 #'
 #' Builds a \code{\link[Seurat:Seurat]{Seurat}} object from a singlet

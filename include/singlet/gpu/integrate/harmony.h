@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (Harmony adapted) + cycle 8 KNN (BBKNN)
 //
 // integrate/harmony.h — GPU Harmony batch-integration kernel.
@@ -54,12 +54,8 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/integrate/types.h>
-#include <singlet-gpu/core/types.h>
+#include <singlet/gpu/integrate/types.h>
+#include <singlet/gpu/core/types.h>
 
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
@@ -76,7 +72,7 @@
 #include <numeric>
 #include <random>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace integrate {
 
 // ─── Device kernels ───────────────────────────────────────────────────────────
@@ -615,4 +611,4 @@ harmony(const core::DeviceDense& embedding,
 }
 
 }  // namespace integrate
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

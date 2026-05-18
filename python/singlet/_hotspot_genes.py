@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Hotspot-style spatially variable gene detection.
 
 Provides singlet.hotspot_genes() — identify genes with local autocorrelation

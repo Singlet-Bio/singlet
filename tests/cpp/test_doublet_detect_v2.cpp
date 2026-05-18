@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_doublet_detect_v2.cpp — Standalone validation of the v2 Scrublet-style
 // doublet detection algorithm in doublet_detect.h.
 //
@@ -16,14 +17,7 @@
 #include <random>
 #include <vector>
 
-static int n_pass = 0, n_fail = 0;
-
-#define CHECK(cond, msg)                                                          \
-    do {                                                                          \
-        if (cond) { std::cout << "  PASS: " << (msg) << "\n"; ++n_pass; }        \
-        else { std::cout << "  FAIL: " << (msg)                                   \
-                         << " [line " << __LINE__ << "]\n"; ++n_fail; }           \
-    } while (0)
+#include "test_harness.h"  // CHECK(cond, msg) + n_pass / n_fail
 
 using CSC = singlet::SparseAccumulator<uint16_t>::CSCMatrix;
 

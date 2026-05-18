@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """t-SNE dimensionality reduction."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.fate.palantir — GPU-native Palantir diffusion pseudotime.
 
@@ -22,34 +22,19 @@ When an AnnData is provided (``run_from_anndata``):
 from __future__ import annotations
 
 import copy as copy_module
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 import numpy as np
+
+from singlet.gpu._coreutil import require_core
 
 if TYPE_CHECKING:
     import anndata
 
 
 # ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-
-def _require_core():
-    import singlet.gpu._core as _core
-
-    if not hasattr(_core, "fate") or not hasattr(_core.fate, "palantir"):
-        raise AttributeError(
-            "_core.fate.palantir is not available.  "
-            "The C++ extension must be compiled on a CUDA-capable node."
-        )
-    return _core.fate
-
-
-# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
-
 
 def run_from_embedding(
     embedding: np.ndarray,
@@ -68,7 +53,7 @@ def run_from_embedding(
     normalize_pseudotime: bool = True,
     stream=None,
     seed: int = 42,
-) -> Any:
+):
     """
     GPU-native Palantir pseudotime + branch probabilities (raw embedding input).
 
@@ -115,7 +100,7 @@ def run_from_embedding(
         ``.terminal_indices`` (n_terminals numpy int32)
         ``.eigenvectors_view`` — __cuda_array_interface__ dict (device).
     """
-    fate = _require_core()
+    fate = require_core("fate", "palantir")
     embedding = np.asarray(embedding, dtype=np.float32)
     if terminal_indices is None:
         terminal_indices = np.array([], dtype=np.int32)
@@ -142,7 +127,7 @@ def run_from_embedding(
 
 
 def run_from_anndata(
-    adata: anndata.AnnData,
+    adata: "anndata.AnnData",
     start_cell: int,
     terminal_cells: Optional[List[int]] = None,
     *,
@@ -159,7 +144,7 @@ def run_from_anndata(
     stream=None,
     seed: int = 42,
     copy: bool = False,
-) -> Optional[anndata.AnnData]:
+) -> Optional["anndata.AnnData"]:
     """
     GPU-native Palantir pseudotime from an AnnData object.
 
@@ -192,17 +177,18 @@ def run_from_anndata(
 
     if basis not in working.obsm:
         raise KeyError(
-            f"basis='{basis}' not in adata.obsm.  Available keys: {list(working.obsm.keys())}"
+            f"basis='{basis}' not in adata.obsm.  "
+            f"Available keys: {list(working.obsm.keys())}"
         )
     embedding = np.asarray(working.obsm[basis], dtype=np.float32)
     terminal_indices = (
-        np.asarray(terminal_cells, dtype=np.int32) if terminal_cells is not None else None
+        np.asarray(terminal_cells, dtype=np.int32)
+        if terminal_cells is not None
+        else None
     )
 
     result = run_from_embedding(
-        embedding,
-        start_cell,
-        terminal_indices,
+        embedding, start_cell, terminal_indices,
         k_neighbors=k_neighbors,
         n_pcs=embedding.shape[1],
         k_eig=k_eig,
@@ -217,26 +203,23 @@ def run_from_anndata(
         seed=seed,
     )
 
-    working.obs["palantir_pseudotime"] = np.asarray(result.pseudotime, dtype=np.float32)
-    working.obsm["palantir_branch_prob"] = np.asarray(result.branch_prob, dtype=np.float32)
+    working.obs["palantir_pseudotime"]     = np.asarray(result.pseudotime,   dtype=np.float32)
+    working.obsm["palantir_branch_prob"]   = np.asarray(result.branch_prob,  dtype=np.float32)
 
     # Eigenvectors: copy from device to host for obsm storage.
     n_eig = result.k_eig
-    n_c = result.n_cells
+    n_c   = result.n_cells
     ev_view = result.eigenvectors_view
     try:
         import cupy as cp
-
         ev_host = cp.ndarray(
-            shape=(n_eig * n_c,),
-            dtype=cp.float32,
+            shape=(n_eig * n_c,), dtype=cp.float32,
             memptr=cp.cuda.MemoryPointer(
-                cp.cuda.UnownedMemory(ev_view["data"][0], n_eig * n_c * 4, None), 0
-            ),
+                cp.cuda.UnownedMemory(ev_view["data"][0], n_eig * n_c * 4, None),
+                0)
         ).get()
     except (ImportError, Exception):
         import ctypes
-
         buf = (ctypes.c_float * (n_eig * n_c))()
         ctypes.memmove(
             ctypes.addressof(buf),

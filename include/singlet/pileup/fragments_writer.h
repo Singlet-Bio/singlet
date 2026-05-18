@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: fragments_writer.h
 // G-FRAGMENTS — Standard fragments.tsv.gz writer (10x Cell Ranger ATAC / ArchR / Signac compatible).

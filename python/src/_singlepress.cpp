@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 /**
  * @file _singlepress.cpp
  * @brief pybind11 bindings for SinglePress sparse matrix compression.

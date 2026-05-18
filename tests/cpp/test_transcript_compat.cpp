@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test/test_transcript_compat.cpp
 // Unit tests for G-TXLEVEL: transcript-level equivalence class counting.
 //
@@ -21,19 +22,7 @@
 
 using namespace singlet;
 
-static int n_pass = 0;
-static int n_fail = 0;
-
-#define CHECK(cond, name)                                                        \
-    do {                                                                         \
-        if (cond) {                                                              \
-            std::cout << "  PASS: " << (name) << "\n";                           \
-            ++n_pass;                                                            \
-        } else {                                                                 \
-            std::cout << "  FAIL: " << (name) << " [line " << __LINE__ << "]\n"; \
-            ++n_fail;                                                            \
-        }                                                                        \
-    } while (0)
+#include "test_harness.h"  // CHECK(cond, msg) + n_pass / n_fail
 
 // ── Test fixture ──────────────────────────────────────────────────────────────
 // Gene A: tx0 (exons 0+1), tx1 (exons 0+2)   → exon 0: {tx0,tx1}; exon 1: {tx0}; exon 2: {tx1}

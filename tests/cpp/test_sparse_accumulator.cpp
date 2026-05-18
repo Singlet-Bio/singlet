@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Test for SparseAccumulator
 #include "singlet/pileup/sparse_accumulator.h"
 #include <cassert>

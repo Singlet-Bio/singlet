@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """WGCNA-style coexpression module detection.
 
 Provides singlet.coexpression_modules() — identify modules of co-expressed

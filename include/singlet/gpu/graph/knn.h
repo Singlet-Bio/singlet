@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (Exact) + cuVS (CAGRA)
 //
 // graph/knn.h — GPU k-nearest-neighbour graph construction
@@ -38,7 +38,7 @@
 //   on all query rows of a tile at once. Zero cudaMemcpy in the hot loop.
 // CYCLE-35-FOLLOWUP-KNN-WRAPPER-FIELD-STYLE: replaced .rows()/.cols() method
 //   calls in compute_knn with direct field access (.rows, .cols) matching
-//   factornet::gpu::DenseMatrixGPU<float> public fields.
+//   the singlet::gpu::core::DeviceDense public fields.
 // CYCLE-62-CAGRA-ADOPT-WINNER: HNSW→CAGRA, threshold 10M→50k, config cleanup.
 
 #pragma once
@@ -56,7 +56,7 @@
 #include <cub/device/device_radix_sort.cuh>
 #include <cub/device/device_segmented_radix_sort.cuh>
 
-#include <singlet-gpu/core/types.h>
+#include <singlet/gpu/core/types.h>
 
 // Conditional cuVS / RAFT CAGRA include.
 // We probe cagra.hpp directly — no HNSW conversion needed.
@@ -72,7 +72,7 @@
 #  endif
 #endif
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace graph {
 
 // ─── Public types ─────────────────────────────────────────────────────────────
@@ -430,7 +430,7 @@ compute_cagra(const float* emb, int n, int d, const KnnConfig& cfg, cudaStream_t
 
 // Compute a k-nearest-neighbour graph from a dense embedding.
 //
-// embedding: core::DeviceDense (= factornet::gpu::DenseMatrixGPU<float>), row-major,
+// embedding: core::DeviceDense, row-major,
 //   n × d (cells × PCA components).
 // cfg: KnnConfig (defaults: k=15, Auto backend, L2, no squared output).
 // stream: caller-provided CUDA stream (nullptr = default stream).
@@ -442,9 +442,9 @@ compute_knn(const core::DeviceDense& embedding,
             const KnnConfig& cfg,
             cudaStream_t stream)
 {
-    // CYCLE-35 fix: use field-style access (.rows, .cols) matching
-    // factornet::gpu::DenseMatrixGPU<float> public member fields,
-    // not method calls (.rows(), .cols()) which do not exist on this type.
+    // CYCLE-35 fix: use field-style access (.rows, .cols) — the public
+    // member fields of singlet::gpu::core::DeviceDense — not method calls
+    // (.rows(), .cols()) which do not exist on this type.
     const int n = embedding.rows;
     const int d = embedding.cols;
     if (n <= 0 || d <= 0)
@@ -499,4 +499,4 @@ compute_knn(const core::DeviceDense& embedding,
 }
 
 }  // namespace graph
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

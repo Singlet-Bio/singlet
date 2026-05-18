@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // singlet R package — Rcpp binding for pz_reader.h.
 //
 // This is a *thin* wrapper. All decode work (format parsing, VOCSC chunk

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: summary_json.h
 // Comprehensive structured pipeline summary JSON.

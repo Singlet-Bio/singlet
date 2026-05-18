@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: ancestry.h
 // N13: Continental ancestry classification from SNP pileup data.

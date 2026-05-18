@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.nmf (NMF model serving)."""
 
 from unittest.mock import MagicMock, patch

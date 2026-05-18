@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: sparse_accumulator.h
 // Memory-efficient sparse matrix accumulator for streaming BAM pileup.

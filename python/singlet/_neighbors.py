@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """k-Nearest neighbors graph construction for AnnData objects.
 
 Provides singlet.neighbors() — computes a kNN graph in PCA space,

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: atac_bin_counter.h
 // A2 — Fixed-width bin matrix generator for ATAC-seq.

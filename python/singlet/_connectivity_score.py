@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Inter-cluster connectivity scoring for AnnData objects.
 
 Provides singlet.connectivity_score() — compute pairwise connectivity

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Label transfer from a reference dataset to query cells.
 
 Provides singlet.transfer_labels() — projects query cells into reference

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.fate.cospar — GPU-native CoSpar cell fate transition mapping.
 
@@ -23,41 +23,25 @@ For raw array usage see ``run_from_csc``.
 from __future__ import annotations
 
 import copy as copy_module
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 import numpy as np
+
+from singlet.gpu._coreutil import require_core
 
 if TYPE_CHECKING:
     import anndata
 
 
 # ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-
-def _require_core():
-    import singlet.gpu._core as _core
-
-    if not hasattr(_core, "fate") or not hasattr(_core.fate, "cospar"):
-        raise AttributeError(
-            "_core.fate.cospar is not available.  "
-            "The C++ extension must be compiled on a CUDA-capable node.  "
-            "Run: pip install singlet[gpu] on a GPU node."
-        )
-    return _core.fate
-
-
-# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
-
 def run_from_csc(
-    mat,  # DeviceCsc
-    clone_ids: np.ndarray,  # int32 (n_cells,)
-    time_labels: np.ndarray,  # int32 (n_cells,)
-    embedding: np.ndarray,  # float32 (n_cells, n_pcs)
+    mat,                                     # DeviceCsc
+    clone_ids: np.ndarray,                   # int32 (n_cells,)
+    time_labels: np.ndarray,                 # int32 (n_cells,)
+    embedding: np.ndarray,                   # float32 (n_cells, n_pcs)
     *,
     k_neighbors: int = 50,
     max_iters: int = 50,
@@ -69,7 +53,7 @@ def run_from_csc(
     max_cells_per_timepoint: int = 30000,
     stream=None,
     seed: int = 0,
-) -> Any:
+):
     """
     GPU-native CoSpar cell fate mapping (raw CSC input).
 
@@ -112,16 +96,13 @@ def run_from_csc(
         ``.driver_genes`` (n_fates × n_genes numpy float32)
         ``.transition_map_view(pair_idx)`` — __cuda_array_interface__ dict.
     """
-    fate = _require_core()
-    clone_ids = np.asarray(clone_ids, dtype=np.int32)
+    fate = require_core("fate", "cospar")
+    clone_ids   = np.asarray(clone_ids,   dtype=np.int32)
     time_labels = np.asarray(time_labels, dtype=np.int32)
-    embedding = np.asarray(embedding, dtype=np.float32)
+    embedding   = np.asarray(embedding,   dtype=np.float32)
 
     return fate.cospar(
-        mat,
-        clone_ids,
-        time_labels,
-        embedding,
+        mat, clone_ids, time_labels, embedding,
         k_neighbors=k_neighbors,
         max_iters=max_iters,
         lambda1=float(lambda1),
@@ -136,7 +117,7 @@ def run_from_csc(
 
 
 def run_from_anndata(
-    adata: anndata.AnnData,
+    adata: "anndata.AnnData",
     clone_key: str = "clone_id",
     time_key: str = "time",
     basis: str = "X_pca",
@@ -152,7 +133,7 @@ def run_from_anndata(
     stream=None,
     seed: int = 0,
     copy: bool = False,
-) -> Optional[anndata.AnnData]:
+) -> Optional["anndata.AnnData"]:
     """
     GPU-native CoSpar cell fate mapping from an AnnData object.
 
@@ -202,12 +183,13 @@ def run_from_anndata(
         )
     if basis not in working.obsm:
         raise KeyError(
-            f"basis='{basis}' not in adata.obsm.  Available keys: {list(working.obsm.keys())}"
+            f"basis='{basis}' not in adata.obsm.  "
+            f"Available keys: {list(working.obsm.keys())}"
         )
 
-    clone_ids = working.obs[clone_key].to_numpy(dtype=np.int32)
+    clone_ids   = working.obs[clone_key].to_numpy(dtype=np.int32)
     time_labels = working.obs[time_key].to_numpy(dtype=np.int32)
-    embedding = np.asarray(working.obsm[basis], dtype=np.float32)
+    embedding   = np.asarray(working.obsm[basis], dtype=np.float32)
 
     # Load expression matrix to device if not already there.
     if not isinstance(working.X, singlet.gpu.DeviceCsc):
@@ -217,10 +199,7 @@ def run_from_anndata(
         )
 
     result = run_from_csc(
-        working.X,
-        clone_ids,
-        time_labels,
-        embedding,
+        working.X, clone_ids, time_labels, embedding,
         k_neighbors=k_neighbors,
         max_iters=max_iters,
         lambda1=lambda1,
@@ -233,8 +212,8 @@ def run_from_anndata(
         seed=seed,
     )
 
-    working.obsm["fate_bias"] = np.asarray(result.fate_bias, dtype=np.float32)
-    working.obs["potency"] = np.asarray(result.potency_score, dtype=np.float32)
+    working.obsm["fate_bias"]   = np.asarray(result.fate_bias,     dtype=np.float32)
+    working.obs["potency"]      = np.asarray(result.potency_score,  dtype=np.float32)
     working.uns["cospar_params"] = {
         "k_neighbors": k_neighbors,
         "max_iters": max_iters,

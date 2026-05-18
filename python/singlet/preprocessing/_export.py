@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Export quantification output to .1pz format."""
 
 from __future__ import annotations

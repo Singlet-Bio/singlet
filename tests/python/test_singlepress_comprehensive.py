@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Comprehensive tests for SinglePress C++ extension and Python wrappers.
 
 Tests cover:

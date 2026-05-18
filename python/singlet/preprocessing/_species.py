@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Species reference configuration."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Filter DE results."""
 
 from __future__ import annotations

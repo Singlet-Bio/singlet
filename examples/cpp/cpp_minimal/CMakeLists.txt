@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-# examples/cpp_minimal/CMakeLists.txt
+# examples/cpp/cpp_minimal/CMakeLists.txt
 #
 # Standalone smoke test for the public umbrella header. Built as part of the
 # main project when SINGLET_GPU_BUILD_EXAMPLES=ON, OR independently via

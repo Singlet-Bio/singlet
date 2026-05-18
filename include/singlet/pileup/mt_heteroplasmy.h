@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // singlet-pileup: mt_heteroplasmy.h
 // Mitochondrial heteroplasmy computation from inline chrM base pileup.
 // Replaces mgatk (Python/Snakemake) with a single-pass C++ implementation.
@@ -18,6 +19,8 @@
 #include <string>
 #include <vector>
 
+#include "nucleotide_encoding.h"
+
 namespace singlet {
 namespace mt {
 
@@ -25,21 +28,11 @@ namespace mt {
 static constexpr uint32_t MT_LEN = 16569;
 static constexpr uint32_t MT_N_FEATURES = MT_LEN * 4;  // pos*4 + base
 
-// Base encoding: htslib bam_seqi returns 1=A, 2=C, 4=G, 8=T, 15=N
-// Map to our 0-3 index
-static constexpr int8_t BASE_TO_IDX[16] = {
-    -1,  // 0
-     0,  // 1 = A
-     1,  // 2 = C
-    -1,  // 3
-     2,  // 4 = G
-    -1, -1, -1,
-     3,  // 8 = T
-    -1, -1, -1, -1, -1, -1,
-    -1   // 15 = N
-};
-
-static constexpr char IDX_TO_BASE[4] = {'A', 'C', 'G', 'T'};
+// Base encoding tables — canonical definitions live in nucleotide_encoding.h.
+//   BASE_TO_IDX: htslib bam_seqi 4-bit code (1=A,2=C,4=G,8=T,15=N) -> 0-3 index
+//   IDX_TO_BASE: 0-3 index -> ASCII char
+using ::singlet::pileup::nt::BASE_TO_IDX;
+using ::singlet::pileup::nt::IDX_TO_BASE;
 
 // Inline feature index computation
 inline uint32_t mt_feature(uint32_t pos, int base_idx) {

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Plotting utilities for single-cell data visualization.
 
 Provides singlet.plot_umap() and singlet.plot_violin() for quick,

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test/test_rna_variant_caller.cpp
 // Unit tests for RNAVariantCaller (SS3 + B3 de novo variant discovery).
 // Tests exercise call_position() directly — no BAM I/O required.
@@ -12,19 +13,7 @@
 
 using namespace singlet;
 
-static int n_pass = 0;
-static int n_fail = 0;
-
-#define CHECK(cond, name)                                                        \
-    do {                                                                         \
-        if (cond) {                                                              \
-            std::cout << "  PASS: " << (name) << "\n";                           \
-            ++n_pass;                                                            \
-        } else {                                                                 \
-            std::cout << "  FAIL: " << (name) << " [line " << __LINE__ << "]\n"; \
-            ++n_fail;                                                            \
-        }                                                                        \
-    } while (0)
+#include "test_harness.h"  // CHECK(cond, msg) + n_pass / n_fail
 
 // ── Test 1: clear het variant — 30 ref (A), 20 alt (T) → VAF=0.4 ────────────
 static void test_clear_het_variant() {

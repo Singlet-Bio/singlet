@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (Seurat FindNeighbors Jaccard SNN)
 //
 // graph/snn.h — Shared Nearest Neighbour graph construction via Jaccard overlap pruning.
@@ -41,10 +41,10 @@
 #include <cub/cub.cuh>
 #include <cub/device/device_scan.cuh>
 
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/graph/knn.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/graph/knn.h>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace graph {
 
 // ─── Public types ─────────────────────────────────────────────────────────────
@@ -231,4 +231,4 @@ compute_snn(const KnnResult& knn, const SnnConfig& cfg = {}, cudaStream_t stream
 }
 
 }  // namespace graph
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

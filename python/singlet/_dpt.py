@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Diffusion pseudotime."""
 
 from __future__ import annotations

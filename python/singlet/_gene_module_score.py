@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Gene module scoring for AnnData objects.
 
 Computes per-cell enrichment scores for user-defined gene modules using a

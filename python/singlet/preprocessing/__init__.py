@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Preprocessing tools for building and processing single-cell datasets.
 
 This subpackage wraps the scgeo production pipeline for use within the

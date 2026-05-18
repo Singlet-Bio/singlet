@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // N22: Unit tests for full-whitelist ambient profiling in EmptyDrops cell calling.
 //
 // Tests:

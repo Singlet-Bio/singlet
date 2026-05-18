@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: bulk_atac.h
 // G-BULK-ATAC — Bulk ATAC-seq auto-detection and QC.

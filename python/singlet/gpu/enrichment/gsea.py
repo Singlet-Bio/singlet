@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.enrichment.gsea — GPU-native preranked GSEA.
 
@@ -33,7 +33,7 @@ exposed by the cycle-22 pybind11 binding extension.
 from __future__ import annotations
 
 import copy as copy_module
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, List, Optional, Union
 
 import numpy as np
 
@@ -46,8 +46,7 @@ if TYPE_CHECKING:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-
-def _validate_net(net: pd.DataFrame, source: str, target: str) -> None:
+def _validate_net(net: "pd.DataFrame", source: str, target: str) -> None:
     """Validate that net has the expected source/target columns."""
     import pandas as pd
 
@@ -56,12 +55,13 @@ def _validate_net(net: pd.DataFrame, source: str, target: str) -> None:
     missing = [c for c in (source, target) if c not in net.columns]
     if missing:
         raise KeyError(
-            f"net DataFrame is missing columns: {missing}.  Available columns: {list(net.columns)}"
+            f"net DataFrame is missing columns: {missing}.  "
+            f"Available columns: {list(net.columns)}"
         )
 
 
 def _build_genesets(
-    net: pd.DataFrame,
+    net: "pd.DataFrame",
     source: str,
     target: str,
     min_n: int,
@@ -80,7 +80,7 @@ def _build_genesets(
 
 
 def _matrix_from_adata(
-    adata: anndata.AnnData,
+    adata: "anndata.AnnData",
     use_raw: bool,
 ) -> tuple:
     """
@@ -104,7 +104,7 @@ def _matrix_from_adata(
         try:
             import cupyx.scipy.sparse as csp  # cupy >= 14
         except ImportError:
-            import cupy.sparse as csp  # cupy < 14 fallback
+            import cupy.sparse as csp         # cupy < 14 fallback
         if hasattr(mat, "T"):
             genes_x_cells = mat.T  # cupy CSC or scipy CSC
         else:
@@ -119,10 +119,9 @@ def _matrix_from_adata(
 # Public API
 # ---------------------------------------------------------------------------
 
-
 def run_gsea(
-    mat: Union[anndata.AnnData, pd.DataFrame],
-    net: pd.DataFrame,
+    mat: Union["anndata.AnnData", "pd.DataFrame"],
+    net: "pd.DataFrame",
     *,
     source: str = "source",
     target: str = "target",
@@ -131,7 +130,7 @@ def run_gsea(
     seed: int = 42,
     use_raw: bool = False,
     copy: bool = False,
-) -> Optional[Union[anndata.AnnData, pd.DataFrame]]:
+) -> Optional[Union["anndata.AnnData", "pd.DataFrame"]]:
     """
     GPU-native preranked GSEA (cycle-13 fgsea kernel).
 
@@ -290,7 +289,9 @@ def run_gsea(
 
         return pd.DataFrame(results_dict).T  # samples × gene-sets
 
-    raise TypeError(f"mat must be an AnnData or pd.DataFrame, got {type(mat).__name__!r}.")
+    raise TypeError(
+        f"mat must be an AnnData or pd.DataFrame, got {type(mat).__name__!r}."
+    )
 
 
 __all__ = ["run_gsea"]

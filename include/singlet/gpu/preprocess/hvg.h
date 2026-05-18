@@ -1,7 +1,7 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (no factornet equivalent for HVG)
 //
-// singlet-gpu/preprocess/hvg.h — Highly variable gene selection.
+// singlet/gpu/preprocess/hvg.h — Highly variable gene selection.
 // Flavors: SeuratV3 (Hafemeister & Satija 2019) and PearsonResiduals (Lause et al. 2021).
 //
 // Passes:
@@ -11,8 +11,8 @@
 //   3. SeuratV3: clipped normalized variance.  O(nnz).
 //   4. Top-N: cub::DeviceRadixSort on negated scores.  O(m log m).
 //
-// CSR strategy: cusparseCsr2cscEx2 inline (same as factornet DualCSR).
-//   WHY not DualCSR: mat is a const ref; GPUMatrix takes ownership.
+// CSR strategy: cusparseCsr2cscEx2 inline.
+//   WHY inline conversion: mat is a const ref, so we build a transient CSC.
 //   Workspace: cuSPARSE buf + 12N + 4m bytes.
 //
 // LOWESS: single-block, 1024 threads, shared memory (max 8192 genes × 4 arrays × 4B).
@@ -29,12 +29,8 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
 // CYCLE-106: factornet/gpu/types.cuh replaced by native core/types.h (already included above).
 
 #include <cuda_runtime.h>
@@ -48,7 +44,7 @@
 #include <vector>
 #include <algorithm>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace preprocess {
 
 // ---------------------------------------------------------------------------
@@ -70,11 +66,11 @@ struct HvgConfig {
 };
 
 struct HvgResult {
-    singlet_gpu::core::DeviceMemory<int>   indices;      // top_n gene indices, score-desc order
-    singlet_gpu::core::DeviceMemory<float> scores;       // top_n scores (score-desc order, matches indices)
-    singlet_gpu::core::DeviceMemory<float> scores_all;   // all m genes in original gene order
-    singlet_gpu::core::DeviceMemory<float> mean;         // per-gene mean (m genes)
-    singlet_gpu::core::DeviceMemory<float> var;          // per-gene variance (m genes)
+    singlet::gpu::core::DeviceMemory<int>   indices;      // top_n gene indices, score-desc order
+    singlet::gpu::core::DeviceMemory<float> scores;       // top_n scores (score-desc order, matches indices)
+    singlet::gpu::core::DeviceMemory<float> scores_all;   // all m genes in original gene order
+    singlet::gpu::core::DeviceMemory<float> mean;         // per-gene mean (m genes)
+    singlet::gpu::core::DeviceMemory<float> var;          // per-gene variance (m genes)
     // WHY scores_all: correctness tests compute Spearman ρ across all m genes against the
     // Python reference (which returns all-gene scores).  Returning only top_n scores forces
     // expand_scores_to_all_genes to fill non-selected genes with 0, collapsing 450/500 genes
@@ -592,12 +588,12 @@ void fill_indices_kernel(int* __restrict__ d, int n) {
 // select_hvg — public entry point
 // ---------------------------------------------------------------------------
 inline HvgResult select_hvg(
-    const singlet_gpu::core::DeviceCSC& mat,
+    const singlet::gpu::core::DeviceCSC& mat,
     const HvgConfig&                    cfg    = {},
     cudaStream_t                        stream = nullptr)
 {
     if (stream == nullptr)
-        stream = singlet_gpu::core::default_context().stream();
+        stream = singlet::gpu::core::default_context().stream();
 
     const int m = static_cast<int>(mat.rows);  // genes
     const int n = static_cast<int>(mat.cols);  // cells
@@ -609,11 +605,11 @@ inline HvgResult select_hvg(
     const int top_n = (cfg.top_n <= 0) ? 0 : (cfg.top_n > m) ? m : cfg.top_n;
 
     // Build CSR(A) from CSC = CSR(A^T): transpose via cusparseCsr2cscEx2.
-    singlet_gpu::core::DeviceMemory<int>   d_csr_rp(m + 1);
-    singlet_gpu::core::DeviceMemory<int>   d_csr_ci(N);
-    singlet_gpu::core::DeviceMemory<float> d_csr_v (N);
+    singlet::gpu::core::DeviceMemory<int>   d_csr_rp(m + 1);
+    singlet::gpu::core::DeviceMemory<int>   d_csr_ci(N);
+    singlet::gpu::core::DeviceMemory<float> d_csr_v (N);
 
-    auto& ctx = singlet_gpu::core::default_context();
+    auto& ctx = singlet::gpu::core::default_context();
     {
         size_t buf = 0;
         CUSPARSE_CHECK(cusparseCsr2cscEx2_bufferSize(
@@ -622,7 +618,7 @@ inline HvgResult select_hvg(
             d_csr_v.get(), d_csr_rp.get(), d_csr_ci.get(),
             CUDA_R_32F,
             CUSPARSE_ACTION_NUMERIC, CUSPARSE_INDEX_BASE_ZERO, CUSPARSE_CSR2CSC_ALG1, &buf));
-        singlet_gpu::core::DeviceMemory<char> dbuf(buf > 0 ? buf : 1);
+        singlet::gpu::core::DeviceMemory<char> dbuf(buf > 0 ? buf : 1);
         CUSPARSE_CHECK(cusparseCsr2cscEx2(
             ctx.sparse(), n, m, N,
             mat.values.get(), mat.col_ptr.get(), mat.row_indices.get(),
@@ -631,8 +627,8 @@ inline HvgResult select_hvg(
             CUSPARSE_ACTION_NUMERIC, CUSPARSE_INDEX_BASE_ZERO, CUSPARSE_CSR2CSC_ALG1, dbuf.get()));
     }
 
-    singlet_gpu::core::DeviceMemory<float>   d_mean(m), d_var(m);
-    singlet_gpu::core::DeviceMemory<uint8_t> d_promo(m);
+    singlet::gpu::core::DeviceMemory<float>   d_mean(m), d_var(m);
+    singlet::gpu::core::DeviceMemory<uint8_t> d_promo(m);
 
     compute_gene_moments_kernel<<<m, 256, 0, stream>>>(
         d_csr_v.get(), d_csr_rp.get(), n,
@@ -646,7 +642,7 @@ inline HvgResult select_hvg(
         std::vector<int> fl;
         for (int g = 0; g < m; ++g) if (h_pr[g]) fl.push_back(g);
         if (!fl.empty()) {
-            singlet_gpu::core::DeviceMemory<int> d_fl(fl.size());
+            singlet::gpu::core::DeviceMemory<int> d_fl(fl.size());
             cudaMemcpyAsync(d_fl.get(), fl.data(), fl.size() * sizeof(int),
                             cudaMemcpyHostToDevice, stream);
             compute_gene_moments_fp64_kernel<<<(int)fl.size(), 256, 0, stream>>>(
@@ -656,7 +652,7 @@ inline HvgResult select_hvg(
     }
 
     // Validity mask.
-    singlet_gpu::core::DeviceMemory<uint8_t> d_valid(m);
+    singlet::gpu::core::DeviceMemory<uint8_t> d_valid(m);
     {
         int g = (m + 255) / 256;
         mark_valid_kernel<<<g, 256, 0, stream>>>(
@@ -666,18 +662,18 @@ inline HvgResult select_hvg(
     // ------------------------------------------------------------------
     // Flavor-specific passes.
     // ------------------------------------------------------------------
-    singlet_gpu::core::DeviceMemory<float> d_scores(m);
+    singlet::gpu::core::DeviceMemory<float> d_scores(m);
 
     if (cfg.flavor == HvgFlavor::SeuratV3) {
 
-        singlet_gpu::core::DeviceMemory<float> d_lm(m), d_lv(m);
+        singlet::gpu::core::DeviceMemory<float> d_lm(m), d_lv(m);
         {
             int g = (m + 255) / 256;
             log10_transform_kernel<<<g, 256, 0, stream>>>(
                 d_mean.get(), d_var.get(), d_valid.get(), d_lm.get(), d_lv.get(), m);
         }
 
-        singlet_gpu::core::DeviceMemory<float> d_ve(m);
+        singlet::gpu::core::DeviceMemory<float> d_ve(m);
         {
             int threads = min(1024, m);
             // WHY: LOWESS_MAX_SHARED = 8192 → smem = 4×8192×4 = 131 KB.
@@ -700,17 +696,17 @@ inline HvgResult select_hvg(
     } else {
         // PearsonResiduals.
 
-        singlet_gpu::core::DeviceMemory<float> d_gs(m);
+        singlet::gpu::core::DeviceMemory<float> d_gs(m);
         {
             int warpb = 256 / 32;
             int g = (m + warpb - 1) / warpb;
             hvg_gene_sums_kernel<<<g, 256, 0, stream>>>(d_csr_v.get(), d_csr_rp.get(), d_gs.get(), m);
         }
 
-        singlet_gpu::core::DeviceMemory<float> d_cs_local;
+        singlet::gpu::core::DeviceMemory<float> d_cs_local;
         const float* cs_ptr = cfg.cell_sums;
         if (cs_ptr == nullptr) {
-            d_cs_local = singlet_gpu::core::DeviceMemory<float>(n);
+            d_cs_local = singlet::gpu::core::DeviceMemory<float>(n);
             int warpb = 256 / 32;
             int g = (n + warpb - 1) / warpb;
             hvg_col_sums_kernel<<<g, 256, 0, stream>>>(
@@ -736,11 +732,11 @@ inline HvgResult select_hvg(
     // WHY keep scores_all: expand_scores_to_all_genes(top_n_only, m) fills 450/500 genes
     // with 0, collapsing their ranks and driving Spearman below 0.99 even when jaccard=1.
     // Moving d_scores into HvgResult.scores_all (original gene order) solves this cleanly.
-    singlet_gpu::core::DeviceMemory<float> d_scores_all = std::move(d_scores);
+    singlet::gpu::core::DeviceMemory<float> d_scores_all = std::move(d_scores);
 
     if (top_n == 0) {
-        return HvgResult{ singlet_gpu::core::DeviceMemory<int>(0),
-                          singlet_gpu::core::DeviceMemory<float>(0),
+        return HvgResult{ singlet::gpu::core::DeviceMemory<int>(0),
+                          singlet::gpu::core::DeviceMemory<float>(0),
                           std::move(d_scores_all),
                           std::move(d_mean), std::move(d_var) };
     }
@@ -751,23 +747,23 @@ inline HvgResult select_hvg(
     // scores) sort AFTER positive floats (including score=0 for invalid genes),
     // placing invalid genes at the top of the sorted list (a correctness bug).
     // SortPairsDescending correctly places largest positive scores first.
-    singlet_gpu::core::DeviceMemory<int> d_idx(m);
+    singlet::gpu::core::DeviceMemory<int> d_idx(m);
     {   int g = (m + 255) / 256;
         fill_indices_kernel<<<g, 256, 0, stream>>>(d_idx.get(), m); }
 
     // Sort into fresh output buffers (d_scores_all is already saved above).
-    singlet_gpu::core::DeviceMemory<float> d_sc_s(m);
-    singlet_gpu::core::DeviceMemory<int>   d_ix_s(m);
+    singlet::gpu::core::DeviceMemory<float> d_sc_s(m);
+    singlet::gpu::core::DeviceMemory<int>   d_ix_s(m);
 
     size_t tmp_sz = 0;
     cub::DeviceRadixSort::SortPairsDescending(nullptr, tmp_sz,
         d_scores_all.get(), d_sc_s.get(), d_idx.get(), d_ix_s.get(), m, 0, 32, stream);
-    singlet_gpu::core::DeviceMemory<char> d_tmp(tmp_sz > 0 ? tmp_sz : 1);
+    singlet::gpu::core::DeviceMemory<char> d_tmp(tmp_sz > 0 ? tmp_sz : 1);
     cub::DeviceRadixSort::SortPairsDescending(d_tmp.get(), tmp_sz,
         d_scores_all.get(), d_sc_s.get(), d_idx.get(), d_ix_s.get(), m, 0, 32, stream);
 
-    singlet_gpu::core::DeviceMemory<int>   out_idx(top_n);
-    singlet_gpu::core::DeviceMemory<float> out_sc (top_n);
+    singlet::gpu::core::DeviceMemory<int>   out_idx(top_n);
+    singlet::gpu::core::DeviceMemory<float> out_sc (top_n);
     cudaMemcpyAsync(out_idx.get(), d_ix_s.get(), top_n * sizeof(int),   cudaMemcpyDeviceToDevice, stream);
     cudaMemcpyAsync(out_sc .get(), d_sc_s.get(), top_n * sizeof(float), cudaMemcpyDeviceToDevice, stream);
 
@@ -776,7 +772,7 @@ inline HvgResult select_hvg(
     // above read from d_sc_s and d_ix_s; without this sync those buffers may be
     // freed while the copies are still in flight. Rule 9 compliant — function
     // boundary, not a hot loop.
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     return HvgResult{ std::move(out_idx), std::move(out_sc), std::move(d_scores_all),
                       std::move(d_mean), std::move(d_var) };
@@ -820,9 +816,9 @@ struct DevianceHvgConfig {
 };
 
 struct DevianceHvgResult {
-    singlet_gpu::core::DeviceMemory<float>   deviance;      // [n_genes]
-    singlet_gpu::core::DeviceMemory<int32_t> top_gene_idx;  // [top_n]
-    singlet_gpu::core::DeviceMemory<uint8_t> is_variable;   // [n_genes]
+    singlet::gpu::core::DeviceMemory<float>   deviance;      // [n_genes]
+    singlet::gpu::core::DeviceMemory<int32_t> top_gene_idx;  // [top_n]
+    singlet::gpu::core::DeviceMemory<uint8_t> is_variable;   // [n_genes]
     int n_genes_considered = 0;
 };
 
@@ -1013,13 +1009,13 @@ void scatter_variable_mask_kernel(
 // Caller can provide pre-computed per-cell lib sizes from log_normalize.
 // ---------------------------------------------------------------------------
 inline DevianceHvgResult deviance_feature_selection_with_lib_sizes(
-    const singlet_gpu::core::DeviceCSC& counts,
+    const singlet::gpu::core::DeviceCSC& counts,
     const float*                        d_lib_sizes,  // [n_cells], device-only
     const DevianceHvgConfig&            cfg,
     cudaStream_t                        stream)
 {
     if (stream == nullptr)
-        stream = singlet_gpu::core::default_context().stream();
+        stream = singlet::gpu::core::default_context().stream();
 
     const int m = static_cast<int>(counts.rows);  // genes
     const int n = static_cast<int>(counts.cols);  // cells
@@ -1040,11 +1036,11 @@ inline DevianceHvgResult deviance_feature_selection_with_lib_sizes(
     // Pass 1A: gene sums s_g — requires CSR transpose of the CSC matrix.
     // Reuse the same cuSPARSE Csc2Csr path as select_hvg.
     // ------------------------------------------------------------------
-    singlet_gpu::core::DeviceMemory<int>   d_csr_rp(m + 1);
-    singlet_gpu::core::DeviceMemory<int>   d_csr_ci(N > 0 ? N : 1);
-    singlet_gpu::core::DeviceMemory<float> d_csr_v (N > 0 ? N : 1);
+    singlet::gpu::core::DeviceMemory<int>   d_csr_rp(m + 1);
+    singlet::gpu::core::DeviceMemory<int>   d_csr_ci(N > 0 ? N : 1);
+    singlet::gpu::core::DeviceMemory<float> d_csr_v (N > 0 ? N : 1);
 
-    auto& ctx = singlet_gpu::core::default_context();
+    auto& ctx = singlet::gpu::core::default_context();
     {
         size_t buf = 0;
         CUSPARSE_CHECK(cusparseCsr2cscEx2_bufferSize(
@@ -1054,7 +1050,7 @@ inline DevianceHvgResult deviance_feature_selection_with_lib_sizes(
             CUDA_R_32F,
             CUSPARSE_ACTION_NUMERIC, CUSPARSE_INDEX_BASE_ZERO,
             CUSPARSE_CSR2CSC_ALG1, &buf));
-        singlet_gpu::core::DeviceMemory<char> dbuf(buf > 0 ? buf : 1);
+        singlet::gpu::core::DeviceMemory<char> dbuf(buf > 0 ? buf : 1);
         CUSPARSE_CHECK(cusparseCsr2cscEx2(
             ctx.sparse(), n, m, N,
             counts.values.get(), counts.col_ptr.get(), counts.row_indices.get(),
@@ -1065,7 +1061,7 @@ inline DevianceHvgResult deviance_feature_selection_with_lib_sizes(
     }
 
     // Gene sums via CSR.
-    singlet_gpu::core::DeviceMemory<float> d_sg(m);
+    singlet::gpu::core::DeviceMemory<float> d_sg(m);
     {
         int warpb = 256 / 32;
         int g = (m + warpb - 1) / warpb;
@@ -1078,10 +1074,10 @@ inline DevianceHvgResult deviance_feature_selection_with_lib_sizes(
     // If d_lib_sizes is supplied by the caller, skip the kernel.
     // Grand total: sum lib_sizes on host (sync exception per §D.9 — O(n) once).
     // ------------------------------------------------------------------
-    singlet_gpu::core::DeviceMemory<float> d_ls_local;
+    singlet::gpu::core::DeviceMemory<float> d_ls_local;
     const float* ls_ptr = d_lib_sizes;
     if (ls_ptr == nullptr) {
-        d_ls_local = singlet_gpu::core::DeviceMemory<float>(n);
+        d_ls_local = singlet::gpu::core::DeviceMemory<float>(n);
         int warpb = 256 / 32;
         int g = (n + warpb - 1) / warpb;
         deviance_col_sums_kernel<<<g, 256, 0, stream>>>(
@@ -1104,9 +1100,9 @@ inline DevianceHvgResult deviance_feature_selection_with_lib_sizes(
     if (grand_total <= 0.f) {
         // Empty matrix: return zero deviance.
         // WHY top_n_req (not top_n): callers copy top_n_req entries from top_idx.
-        singlet_gpu::core::DeviceMemory<float>   dev_out(m);
-        singlet_gpu::core::DeviceMemory<int32_t> top_idx(top_n_req > 0 ? top_n_req : 1);
-        singlet_gpu::core::DeviceMemory<uint8_t> is_var(m);
+        singlet::gpu::core::DeviceMemory<float>   dev_out(m);
+        singlet::gpu::core::DeviceMemory<int32_t> top_idx(top_n_req > 0 ? top_n_req : 1);
+        singlet::gpu::core::DeviceMemory<uint8_t> is_var(m);
         return DevianceHvgResult{ std::move(dev_out), std::move(top_idx),
                                    std::move(is_var), 0 };
     }
@@ -1114,14 +1110,14 @@ inline DevianceHvgResult deviance_feature_selection_with_lib_sizes(
     // ------------------------------------------------------------------
     // Pass 2: per-nnz D_g^{nnz} and L_g accumulation.
     // ------------------------------------------------------------------
-    singlet_gpu::core::DeviceMemory<float> d_Dnnz(m);
-    singlet_gpu::core::DeviceMemory<float> d_Lg  (m);
+    singlet::gpu::core::DeviceMemory<float> d_Dnnz(m);
+    singlet::gpu::core::DeviceMemory<float> d_Lg  (m);
     cudaMemsetAsync(d_Dnnz.get(), 0, m * sizeof(float), stream);
     cudaMemsetAsync(d_Lg  .get(), 0, m * sizeof(float), stream);
 
     // π_g = s_g / T on device. WHY cublasScal: avoids a new __global__ kernel
     // declaration while keeping the pi array on device for the nnz kernel.
-    singlet_gpu::core::DeviceMemory<float> d_pi(m);
+    singlet::gpu::core::DeviceMemory<float> d_pi(m);
     cudaMemcpyAsync(d_pi.get(), d_sg.get(), m * sizeof(float),
                     cudaMemcpyDeviceToDevice, stream);
     {
@@ -1143,7 +1139,7 @@ inline DevianceHvgResult deviance_feature_selection_with_lib_sizes(
     // ------------------------------------------------------------------
     // Pass 3: elementwise merge D_g = D_g^{nnz} + D_g^{zero}.
     // ------------------------------------------------------------------
-    singlet_gpu::core::DeviceMemory<float> d_deviance(m);
+    singlet::gpu::core::DeviceMemory<float> d_deviance(m);
     {
         int g = (m + 255) / 256;
         deviance_merge_kernel<<<g, 256, 0, stream>>>(
@@ -1155,21 +1151,21 @@ inline DevianceHvgResult deviance_feature_selection_with_lib_sizes(
     // ------------------------------------------------------------------
     // Top-N selection: cub::DeviceRadixSort descending on deviance.
     // ------------------------------------------------------------------
-    singlet_gpu::core::DeviceMemory<int32_t> d_idx(m);
+    singlet::gpu::core::DeviceMemory<int32_t> d_idx(m);
     {
         int g = (m + 255) / 256;
         fill_indices_kernel<<<g, 256, 0, stream>>>(d_idx.get(), m);
     }
 
-    singlet_gpu::core::DeviceMemory<float>   d_dev_s(m);
-    singlet_gpu::core::DeviceMemory<int32_t> d_idx_s(m);
+    singlet::gpu::core::DeviceMemory<float>   d_dev_s(m);
+    singlet::gpu::core::DeviceMemory<int32_t> d_idx_s(m);
 
     size_t tmp_sz = 0;
     cub::DeviceRadixSort::SortPairsDescending(nullptr, tmp_sz,
         d_deviance.get(), d_dev_s.get(),
         d_idx.get(),     d_idx_s.get(),
         m, 0, 32, stream);
-    singlet_gpu::core::DeviceMemory<char> d_tmp(tmp_sz > 0 ? tmp_sz : 1);
+    singlet::gpu::core::DeviceMemory<char> d_tmp(tmp_sz > 0 ? tmp_sz : 1);
     cub::DeviceRadixSort::SortPairsDescending(d_tmp.get(), tmp_sz,
         d_deviance.get(), d_dev_s.get(),
         d_idx.get(),     d_idx_s.get(),
@@ -1182,8 +1178,8 @@ inline DevianceHvgResult deviance_feature_selection_with_lib_sizes(
     // WHY top_n_req not top_n: streaming test (D5) has cfg.top_n=2000, n_genes=500;
     // kernel clamps top_n=500 but caller copies 2000*4 bytes → CUDA_ERROR_INVALID_VALUE
     // (root cause of the D5 streaming exception in job 368732).
-    singlet_gpu::core::DeviceMemory<int32_t> out_top(top_n_req > 0 ? top_n_req : 1);
-    singlet_gpu::core::DeviceMemory<uint8_t> out_mask(m);
+    singlet::gpu::core::DeviceMemory<int32_t> out_top(top_n_req > 0 ? top_n_req : 1);
+    singlet::gpu::core::DeviceMemory<uint8_t> out_mask(m);
     cudaMemsetAsync(out_mask.get(), 0,         m,                         stream);
     cudaMemsetAsync(out_top .get(), 0xFF, static_cast<size_t>(top_n_req > 0 ? top_n_req : 1) * sizeof(int32_t), stream);
 
@@ -1199,7 +1195,7 @@ inline DevianceHvgResult deviance_feature_selection_with_lib_sizes(
 
     // Function-boundary sync: locally-owned sort scratch and d_idx_s/d_dev_s
     // are live until the async copies above complete.
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     // Return d_deviance (gene-indexed, original gene order) NOT d_dev_s (sorted).
     // WHY: tests read result.deviance as deviance[gene_id] and compute Spearman vs
@@ -1223,8 +1219,8 @@ inline DevianceHvgResult deviance_feature_selection_with_lib_sizes(
 // of this call because d_lib_sizes is a const ref to a live DeviceMemory object.
 // ---------------------------------------------------------------------------
 inline DevianceHvgResult deviance_feature_selection_with_lib_sizes(
-    const singlet_gpu::core::DeviceCSC&       counts,
-    const singlet_gpu::core::DeviceMemory<float>& lib_sizes,
+    const singlet::gpu::core::DeviceCSC&       counts,
+    const singlet::gpu::core::DeviceMemory<float>& lib_sizes,
     const DevianceHvgConfig&                  cfg,
     cudaStream_t                              stream = nullptr)
 {
@@ -1236,7 +1232,7 @@ inline DevianceHvgResult deviance_feature_selection_with_lib_sizes(
 // deviance_feature_selection — public entry point (computes own lib sizes)
 // ---------------------------------------------------------------------------
 inline DevianceHvgResult deviance_feature_selection(
-    const singlet_gpu::core::DeviceCSC& counts,
+    const singlet::gpu::core::DeviceCSC& counts,
     const DevianceHvgConfig&            cfg    = {},
     cudaStream_t                        stream = nullptr)
 {
@@ -1244,4 +1240,4 @@ inline DevianceHvgResult deviance_feature_selection(
 }
 
 } // namespace preprocess
-} // namespace singlet_gpu
+} // namespace singlet::gpu

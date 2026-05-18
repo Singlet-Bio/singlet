@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.enrichr() and singlet.enrichr_from_de()."""
 
 import pandas as pd

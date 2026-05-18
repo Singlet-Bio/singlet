@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Cellular reprogramming potential score.
 
 Estimates how close each cell is to transitioning from a source cell type

@@ -1,5 +1,6 @@
+# SPDX-License-Identifier: MIT
 """
-Cycle 23 correctness tests for singlet_gpu.integrate.
+Cycle 23 correctness tests for singlet.gpu.integrate.
 
 Tests the GPU-native batch integration wrappers (cycle 14: integrate/{harmony,bbknn}.h):
   - ``singlet.gpu.integrate.harmony_integrate``
@@ -24,20 +25,18 @@ Tolerances (from spec):
   - bbknn            vs python-bbknn: neighbor list overlap (intersection/union per cell ≥ 0.80)
 
 Skip strategy:
-  - Module-level skip if singlet.gpu not available.
+  - Module-level skip if singlet_gpu wheel not built.
   - requires_gpu for all GPU-exercising tests.
   - vs-harmonypy / vs-python-bbknn additionally skip if reference lib not importable.
 """
-
 from __future__ import annotations
 
 import numpy as np
 import pytest
 
 singlet_gpu = pytest.importorskip(
-    "singlet.gpu",
-    reason="singlet.gpu not available. Run `pip install -e singlet-gpu/python/` first.",
-    exc_type=ImportError,
+    "singlet_gpu",
+    reason="singlet_gpu wheel not built. Run `pip install -e singlet-gpu/python/` first.",
 )
 
 from conftest import requires_gpu  # noqa: E402
@@ -45,21 +44,20 @@ from conftest import requires_gpu  # noqa: E402
 # ---------------------------------------------------------------------------
 # Tolerance constants
 # ---------------------------------------------------------------------------
-_HARMONY_CCA_MIN = 0.95  # mean cosine similarity of CCA-aligned embeddings
-_BBKNN_OVERLAP_MIN = 0.80  # mean per-cell neighbor list intersection/union
-_N_COMPS = 20  # reduced PCA dims (fast for harness)
+_HARMONY_CCA_MIN = 0.95       # mean cosine similarity of CCA-aligned embeddings
+_BBKNN_OVERLAP_MIN = 0.80     # mean per-cell neighbor list intersection/union
+_N_COMPS = 20                 # reduced PCA dims (fast for harness)
 _SEED = 0
-_N_CLUSTERS = 10  # Harmony clusters (reduced for speed)
-_MAX_ITER = 5  # reduced for speed in harness
+_N_CLUSTERS = 10              # Harmony clusters (reduced for speed)
+_MAX_ITER = 5                 # reduced for speed in harness
 _NEIGHBORS_WITHIN_BATCH = 3
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-
 def _load_gpu_adata(gsm4037629_path):
-    return singlet_gpu.io.read_pz_to_anndata(str(gsm4037629_path))
+    return singlet.gpu.io.read_pz_to_anndata(str(gsm4037629_path))
 
 
 def _gpu_to_cpu_adata(adata_gpu):
@@ -85,9 +83,9 @@ def _gpu_to_cpu_adata(adata_gpu):
 
 
 def _preprocess_and_pca_gpu(adata, n_comps=_N_COMPS):
-    singlet_gpu.preprocess.normalize_total(adata, inplace=True)
-    singlet_gpu.preprocess.log1p(adata, inplace=True)
-    singlet_gpu.reduce.pca(adata, n_comps=n_comps, inplace=True)
+    singlet.gpu.preprocess.normalize_total(adata, inplace=True)
+    singlet.gpu.preprocess.log1p(adata, inplace=True)
+    singlet.gpu.reduce.pca(adata, n_comps=n_comps, inplace=True)
 
 
 def _preprocess_and_pca_cpu(adata, n_comps=_N_COMPS):
@@ -121,7 +119,7 @@ def test_harmony_integrate_basic(gsm4037629_path):
     Procedure:
       1. Load GSM4037629, preprocess + PCA (n_comps=20).
       2. Assign 2-batch synthetic label to adata.obs['batch'].
-      3. Call singlet_gpu.integrate.harmony_integrate(adata, 'batch').
+      3. Call singlet.gpu.integrate.harmony_integrate(adata, 'batch').
       4. Assert returns None (inplace convention).
     """
     pytest.importorskip("anndata", reason="anndata not installed")
@@ -130,15 +128,14 @@ def test_harmony_integrate_basic(gsm4037629_path):
     _preprocess_and_pca_gpu(adata, n_comps=_N_COMPS)
     _add_dummy_batch(adata)
 
-    ret = singlet_gpu.integrate.harmony_integrate(
-        adata,
-        "batch",
-        n_clusters=_N_CLUSTERS,
-        max_iter=_MAX_ITER,
-        seed=_SEED,
+    ret = singlet.gpu.integrate.harmony_integrate(
+        adata, "batch",
+        n_clusters=_N_CLUSTERS, max_iter=_MAX_ITER, seed=_SEED,
     )
 
-    assert ret is None, f"harmony_integrate() inplace must return None, got {type(ret)}"
+    assert ret is None, (
+        f"harmony_integrate() inplace must return None, got {type(ret)}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -160,12 +157,9 @@ def test_harmony_writes_obsm_X_pca_harmony(gsm4037629_path):
     _preprocess_and_pca_gpu(adata, n_comps=_N_COMPS)
     _add_dummy_batch(adata)
 
-    singlet_gpu.integrate.harmony_integrate(
-        adata,
-        "batch",
-        n_clusters=_N_CLUSTERS,
-        max_iter=_MAX_ITER,
-        seed=_SEED,
+    singlet.gpu.integrate.harmony_integrate(
+        adata, "batch",
+        n_clusters=_N_CLUSTERS, max_iter=_MAX_ITER, seed=_SEED,
     )
 
     assert "X_pca_harmony" in adata.obsm, (
@@ -188,13 +182,10 @@ def test_harmony_writes_obsm_X_pca_harmony(gsm4037629_path):
     adata2 = _load_gpu_adata(gsm4037629_path)
     _preprocess_and_pca_gpu(adata2, n_comps=_N_COMPS)
     _add_dummy_batch(adata2)
-    singlet_gpu.integrate.harmony_integrate(
-        adata2,
-        "batch",
+    singlet.gpu.integrate.harmony_integrate(
+        adata2, "batch",
         adjusted_basis="X_harmony_custom",
-        n_clusters=_N_CLUSTERS,
-        max_iter=_MAX_ITER,
-        seed=_SEED,
+        n_clusters=_N_CLUSTERS, max_iter=_MAX_ITER, seed=_SEED,
     )
     assert "X_harmony_custom" in adata2.obsm, (
         "harmony_integrate(adjusted_basis='X_harmony_custom'): key not written"
@@ -215,7 +206,7 @@ def test_harmony_vs_harmonypy(gsm4037629_path):
       1. Load GSM4037629 twice → adata_gpu, adata_cpu.
       2. Preprocess + PCA on both (same n_comps).
       3. Assign identical dummy batch labels.
-      4. GPU: singlet_gpu.integrate.harmony_integrate(adata_gpu, 'batch').
+      4. GPU: singlet.gpu.integrate.harmony_integrate(adata_gpu, 'batch').
       5. CPU: harmonypy.run_harmony(pca_cpu, batch_labels, max_iter=5, random_state=0).
       6. Extract X_pca_harmony from GPU; Z_corr.T from harmonypy.
       7. Compute per-cell cosine similarity between matched rows.
@@ -236,22 +227,18 @@ def test_harmony_vs_harmonypy(gsm4037629_path):
     adata_cpu.obs["batch"] = adata_gpu.obs["batch"].values
 
     # GPU Harmony.
-    singlet_gpu.integrate.harmony_integrate(
-        adata_gpu,
-        "batch",
-        n_clusters=_N_CLUSTERS,
-        max_iter=_MAX_ITER,
-        seed=_SEED,
+    singlet.gpu.integrate.harmony_integrate(
+        adata_gpu, "batch",
+        n_clusters=_N_CLUSTERS, max_iter=_MAX_ITER, seed=_SEED,
     )
     gpu_emb = _to_host_array(adata_gpu.obsm["X_pca_harmony"])  # (n_cells, n_comps)
 
     # harmonypy reference.
     pca_cpu = adata_cpu.obsm["X_pca"]  # (n_cells, n_comps)
+    batch_labels = adata_cpu.obs["batch"].values
     try:
         ho = harmonypy.run_harmony(
-            pca_cpu,
-            adata_cpu.obs,
-            "batch",
+            pca_cpu, adata_cpu.obs, "batch",
             max_iter_harmony=_MAX_ITER,
             random_state=_SEED,
         )
@@ -286,7 +273,7 @@ def test_bbknn_basic(gsm4037629_path):
     Procedure:
       1. Load GSM4037629, preprocess + PCA (n_comps=20).
       2. Assign 2-batch synthetic label.
-      3. Call singlet_gpu.integrate.bbknn(adata, batch_key='batch').
+      3. Call singlet.gpu.integrate.bbknn(adata, batch_key='batch').
       4. Assert returns None.
     """
     pytest.importorskip("anndata", reason="anndata not installed")
@@ -295,13 +282,15 @@ def test_bbknn_basic(gsm4037629_path):
     _preprocess_and_pca_gpu(adata, n_comps=_N_COMPS)
     _add_dummy_batch(adata)
 
-    ret = singlet_gpu.integrate.bbknn(
+    ret = singlet.gpu.integrate.bbknn(
         adata,
         batch_key="batch",
         neighbors_within_batch=_NEIGHBORS_WITHIN_BATCH,
     )
 
-    assert ret is None, f"bbknn() inplace must return None (copy=False default), got {type(ret)}"
+    assert ret is None, (
+        f"bbknn() inplace must return None (copy=False default), got {type(ret)}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -324,7 +313,7 @@ def test_bbknn_writes_obsp(gsm4037629_path):
     _preprocess_and_pca_gpu(adata, n_comps=_N_COMPS)
     _add_dummy_batch(adata)
 
-    singlet_gpu.integrate.bbknn(
+    singlet.gpu.integrate.bbknn(
         adata,
         batch_key="batch",
         neighbors_within_batch=_NEIGHBORS_WITHIN_BATCH,
@@ -339,7 +328,9 @@ def test_bbknn_writes_obsp(gsm4037629_path):
         D_host = sp.csr_matrix(D_host)
     else:
         D_host = D_host.tocsr()
-    assert D_host.shape == (n, n), f"obsp['distances'] shape {D_host.shape} != ({n}, {n})"
+    assert D_host.shape == (n, n), (
+        f"obsp['distances'] shape {D_host.shape} != ({n}, {n})"
+    )
     assert np.all(D_host.data >= 0.0), "obsp['distances'] has negative values"
 
     # connectivities
@@ -349,7 +340,9 @@ def test_bbknn_writes_obsp(gsm4037629_path):
         C_host = sp.csr_matrix(C_host)
     else:
         C_host = C_host.tocsr()
-    assert C_host.shape == (n, n), f"obsp['connectivities'] shape {C_host.shape} != ({n}, {n})"
+    assert C_host.shape == (n, n), (
+        f"obsp['connectivities'] shape {C_host.shape} != ({n}, {n})"
+    )
     assert np.all(C_host.data >= 0.0), "obsp['connectivities'] has negative values"
     assert np.all(C_host.data <= 1.0 + 1e-6), (
         f"obsp['connectivities'] max={C_host.data.max():.4f} > 1.0"
@@ -372,7 +365,7 @@ def test_bbknn_vs_python_bbknn(gsm4037629_path):
       1. Load GSM4037629 twice → adata_gpu, adata_cpu.
       2. Preprocess + PCA on both (same n_comps, same PCA basis).
       3. Assign identical batch labels.
-      4. singlet_gpu.integrate.bbknn(adata_gpu, batch_key='batch',
+      4. singlet.gpu.integrate.bbknn(adata_gpu, batch_key='batch',
                                      neighbors_within_batch=3).
       5. bbknn.bbknn(adata_cpu, batch_key='batch',
                      neighbors_within_batch=3, use_rep='X_pca').
@@ -396,7 +389,7 @@ def test_bbknn_vs_python_bbknn(gsm4037629_path):
     adata_cpu.obs["batch"] = adata_gpu.obs["batch"].values
 
     # GPU BBKNN.
-    singlet_gpu.integrate.bbknn(
+    singlet.gpu.integrate.bbknn(
         adata_gpu,
         batch_key="batch",
         neighbors_within_batch=_NEIGHBORS_WITHIN_BATCH,
@@ -424,7 +417,7 @@ def test_bbknn_vs_python_bbknn(gsm4037629_path):
             D_host = D_host.tocsr()
         sets = []
         for i in range(D_host.shape[0]):
-            neighbors = set(D_host.indices[D_host.indptr[i] : D_host.indptr[i + 1]])
+            neighbors = set(D_host.indices[D_host.indptr[i]:D_host.indptr[i + 1]])
             sets.append(neighbors)
         return sets
 

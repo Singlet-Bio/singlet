@@ -1,12 +1,12 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (composes singlet-gpu kernels over PzDataLoader chunks)
 //
-// singlet-gpu/streaming/streamed_pipeline.h — streaming end-to-end pipeline driver.
+// singlet/gpu/streaming/streamed_pipeline.h — streaming end-to-end pipeline driver.
 //
 // CYCLE-106: factornet types removed.
-//   factornet::gpu::DeviceMemory<T>  → singlet_gpu::core::DeviceMemory<T>
-//   factornet::io::Chunk<float>      → singlet_gpu::io::Chunk
-//   factornet::gpu::DeviceMemory<T>::wrap(...) → singlet_gpu::core::DeviceMemory<T>::wrap(...)
+//   factornet::gpu::DeviceMemory<T>  → singlet::gpu::core::DeviceMemory<T>
+//   factornet::io::Chunk<float>      → singlet::gpu::io::Chunk
+//   factornet::gpu::DeviceMemory<T>::wrap(...) → singlet::gpu::core::DeviceMemory<T>::wrap(...)
 //
 // Algorithm: two-pass (lognorm + HVG) + one-pass (PCA/NMF) over PzDataLoader chunks.
 //
@@ -28,16 +28,16 @@
 
 #pragma once
 
-#include <singlet-gpu/io/chunk.h>
-#include <singlet-gpu/io/pz_device_loader.h>
-#include <singlet-gpu/streaming/pz_data_loader.h>
-#include <singlet-gpu/preprocess/lognorm.h>
-#include <singlet-gpu/preprocess/hvg.h>
-#include <singlet-gpu/reduce/svd/auto_select.h>
-#include <singlet-gpu/reduce/nmf/chunked.h>
-#include <singlet-gpu/reduce/svd/types.h>
-#include <singlet-gpu/reduce/nmf/types.h>
-#include <singlet-gpu/core/types.h>
+#include <singlet/gpu/io/chunk.h>
+#include <singlet/gpu/io/pz_device_loader.h>
+#include <singlet/gpu/streaming/pz_data_loader.h>
+#include <singlet/gpu/preprocess/lognorm.h>
+#include <singlet/gpu/preprocess/hvg.h>
+#include <singlet/gpu/reduce/svd/auto_select.h>
+#include <singlet/gpu/reduce/nmf/chunked.h>
+#include <singlet/gpu/reduce/svd/types.h>
+#include <singlet/gpu/reduce/nmf/types.h>
+#include <singlet/gpu/core/types.h>
 
 #include <cuda_runtime.h>
 #include <algorithm>
@@ -51,7 +51,7 @@
 #include <string>
 #include <vector>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace streaming {
 
 // ---------------------------------------------------------------------------
@@ -62,18 +62,18 @@ struct PipelineConfig {
     int chunk_cols = 100'000;
 
     bool run_lognorm = true;
-    singlet_gpu::preprocess::LogNormConfig lognorm_cfg = {};
+    singlet::gpu::preprocess::LogNormConfig lognorm_cfg = {};
 
     bool run_hvg = true;
-    singlet_gpu::preprocess::HvgConfig hvg_cfg = {};
+    singlet::gpu::preprocess::HvgConfig hvg_cfg = {};
 
     // PCA in-memory fallback; skipped when n_cells > in_memory_pca_threshold.
     bool run_pca = false;
     int  pca_k   = 50;
-    singlet_gpu::reduce::svd::SvdConfig pca_cfg = {};
+    singlet::gpu::reduce::svd::SvdConfig pca_cfg = {};
 
     bool run_nmf = false;
-    singlet_gpu::reduce::nmf::NmfConfig nmf_cfg = {};
+    singlet::gpu::reduce::nmf::NmfConfig nmf_cfg = {};
 
     // Write normalized values to a tmp file after lognorm so HVG/PCA can avoid
     // re-decompressing.  Off by default (touches filesystem; disk-space risk).
@@ -100,10 +100,10 @@ struct PipelineResult {
     std::vector<float> gene_means;
     std::vector<float> gene_vars;
 
-    singlet_gpu::reduce::svd::SvdResult pca = {};
+    singlet::gpu::reduce::svd::SvdResult pca = {};
     bool                                pca_ran = false;
 
-    singlet_gpu::reduce::nmf::NmfResult nmf = {};
+    singlet::gpu::reduce::nmf::NmfResult nmf = {};
     bool                                nmf_ran = false;
 
     double wall_lognorm_s     = 0;
@@ -154,8 +154,8 @@ struct NormCache {
 
 // Validate gene axis compatibility between files.
 inline void check_gene_compat(
-    const singlet_gpu::core::Metadata& ref, int64_t ref_m,
-    const singlet_gpu::core::Metadata& nw,  int64_t nw_m,
+    const singlet::gpu::core::Metadata& ref, int64_t ref_m,
+    const singlet::gpu::core::Metadata& nw,  int64_t nw_m,
     const std::string& path)
 {
     if (nw_m != ref_m)
@@ -177,13 +177,13 @@ inline void check_gene_compat(
 // WHY separate owning + non-owning: d_indptr/d_indices/d_values own the memory;
 // csc wraps them as non-owning views so they share the device buffers safely.
 struct ChunkGPU {
-    singlet_gpu::core::DeviceCSC              csc;
-    singlet_gpu::core::DeviceMemory<int>      d_indptr;
-    singlet_gpu::core::DeviceMemory<int>      d_indices;
-    singlet_gpu::core::DeviceMemory<float>    d_values;
+    singlet::gpu::core::DeviceCSC              csc;
+    singlet::gpu::core::DeviceMemory<int>      d_indptr;
+    singlet::gpu::core::DeviceMemory<int>      d_indices;
+    singlet::gpu::core::DeviceMemory<float>    d_values;
 };
 
-inline ChunkGPU upload_chunk(const singlet_gpu::io::Chunk& chunk,
+inline ChunkGPU upload_chunk(const singlet::gpu::io::Chunk& chunk,
                               cudaStream_t stream)
 {
     const int m   = chunk.n_rows;
@@ -191,9 +191,9 @@ inline ChunkGPU upload_chunk(const singlet_gpu::io::Chunk& chunk,
     const int nnz = static_cast<int>(chunk.row_indices.size());
 
     ChunkGPU g;
-    g.d_indptr  = singlet_gpu::core::DeviceMemory<int>  (static_cast<size_t>(n + 1));
-    g.d_indices = singlet_gpu::core::DeviceMemory<int>  (static_cast<size_t>(nnz > 0 ? nnz : 1));
-    g.d_values  = singlet_gpu::core::DeviceMemory<float>(static_cast<size_t>(nnz > 0 ? nnz : 1));
+    g.d_indptr  = singlet::gpu::core::DeviceMemory<int>  (static_cast<size_t>(n + 1));
+    g.d_indices = singlet::gpu::core::DeviceMemory<int>  (static_cast<size_t>(nnz > 0 ? nnz : 1));
+    g.d_values  = singlet::gpu::core::DeviceMemory<float>(static_cast<size_t>(nnz > 0 ? nnz : 1));
 
     cudaMemcpyAsync(g.d_indptr.get(),  chunk.col_ptr.data(),
                     static_cast<size_t>(n + 1) * sizeof(int),   cudaMemcpyHostToDevice, stream);
@@ -207,9 +207,9 @@ inline ChunkGPU upload_chunk(const singlet_gpu::io::Chunk& chunk,
     g.csc.cols        = n;
     g.csc.nnz         = nnz;
     // Wrap existing device allocations as non-owning views.
-    g.csc.col_ptr     = singlet_gpu::core::DeviceMemory<int>::wrap(g.d_indptr.get(),  static_cast<size_t>(n + 1));
-    g.csc.row_indices = singlet_gpu::core::DeviceMemory<int>::wrap(g.d_indices.get(), static_cast<size_t>(nnz));
-    g.csc.values      = singlet_gpu::core::DeviceMemory<float>::wrap(g.d_values.get(), static_cast<size_t>(nnz));
+    g.csc.col_ptr     = singlet::gpu::core::DeviceMemory<int>::wrap(g.d_indptr.get(),  static_cast<size_t>(n + 1));
+    g.csc.row_indices = singlet::gpu::core::DeviceMemory<int>::wrap(g.d_indices.get(), static_cast<size_t>(nnz));
+    g.csc.values      = singlet::gpu::core::DeviceMemory<float>::wrap(g.d_values.get(), static_cast<size_t>(nnz));
     return g;
 }
 
@@ -224,7 +224,7 @@ inline PipelineResult run_pipeline(const PipelineConfig& cfg,
     if (cfg.input_paths.empty())
         throw std::runtime_error("run_pipeline: input_paths is empty");
     if (stream == nullptr)
-        stream = singlet_gpu::core::default_context().stream();  // accessor, not field
+        stream = singlet::gpu::core::default_context().stream();  // accessor, not field
 
     PipelineResult result;
 
@@ -234,11 +234,11 @@ inline PipelineResult run_pipeline(const PipelineConfig& cfg,
     //    in cycle 2 API); the matrix is immediately discarded after dimension read.
     // -----------------------------------------------------------------------
     int64_t n_genes = 0;
-    singlet_gpu::core::Metadata ref_meta;
+    singlet::gpu::core::Metadata ref_meta;
     std::vector<int64_t> file_ncells(cfg.input_paths.size(), 0);
 
     for (size_t fi = 0; fi < cfg.input_paths.size(); ++fi) {
-        auto probe = singlet_gpu::io::load_pz(
+        auto probe = singlet::gpu::io::load_pz(
             cfg.input_paths[fi], stream, /*keep_host_pinned=*/false);
         if (cudaStreamSynchronize(stream) != cudaSuccess)
             throw std::runtime_error(
@@ -277,26 +277,26 @@ inline PipelineResult run_pipeline(const PipelineConfig& cfg,
     // -----------------------------------------------------------------------
     float global_T = cfg.lognorm_cfg.target_count;
     const bool need_pass1 = cfg.run_lognorm
-        && (cfg.lognorm_cfg.method == singlet_gpu::preprocess::LogNormMethod::TotalCount)
+        && (cfg.lognorm_cfg.method == singlet::gpu::preprocess::LogNormMethod::TotalCount)
         && (global_T <= 0.0f);
 
     auto t_lognorm = detail::sclock::now();
 
     if (need_pass1) {
-        singlet_gpu::preprocess::LogNormConfig cfg_p1 = cfg.lognorm_cfg;
+        singlet::gpu::preprocess::LogNormConfig cfg_p1 = cfg.lognorm_cfg;
         cfg_p1.target_count = 1.0f;
         int64_t cell_off = 0;
 
         for (size_t fi = 0; fi < cfg.input_paths.size(); ++fi) {
-            singlet_gpu::io::PzDataLoader loader(cfg.input_paths[fi],
+            singlet::gpu::io::PzDataLoader loader(cfg.input_paths[fi],
                                                   static_cast<uint32_t>(cfg.chunk_cols));
-            singlet_gpu::io::Chunk chunk;
+            singlet::gpu::io::Chunk chunk;
             while (loader.next_forward(chunk)) {
                 const int n_c = chunk.n_cols;
                 if (n_c == 0) continue;
 
                 auto g = detail::upload_chunk(chunk, stream);
-                auto lr = singlet_gpu::preprocess::log_normalize(g.csc, cfg_p1, stream);
+                auto lr = singlet::gpu::preprocess::log_normalize(g.csc, cfg_p1, stream);
                 cudaStreamSynchronize(stream);
 
                 std::vector<float>   sf_buf(static_cast<size_t>(n_c));
@@ -343,14 +343,14 @@ inline PipelineResult run_pipeline(const PipelineConfig& cfg,
         cache = std::make_unique<detail::NormCache>();
 
     {
-        singlet_gpu::preprocess::LogNormConfig cfg2 = cfg.lognorm_cfg;
+        singlet::gpu::preprocess::LogNormConfig cfg2 = cfg.lognorm_cfg;
         cfg2.target_count = (cfg.run_lognorm ? global_T : 1.0f);
         int64_t cell_off  = 0;
 
         for (size_t fi = 0; fi < cfg.input_paths.size(); ++fi) {
-            singlet_gpu::io::PzDataLoader loader2(cfg.input_paths[fi],
+            singlet::gpu::io::PzDataLoader loader2(cfg.input_paths[fi],
                                                    static_cast<uint32_t>(cfg.chunk_cols));
-            singlet_gpu::io::Chunk chunk;
+            singlet::gpu::io::Chunk chunk;
             while (loader2.next_forward(chunk)) {
                 const int n_c   = chunk.n_cols;
                 if (n_c == 0) continue;
@@ -359,7 +359,7 @@ inline PipelineResult run_pipeline(const PipelineConfig& cfg,
                 auto g = detail::upload_chunk(chunk, stream);
 
                 if (cfg.run_lognorm) {
-                    auto lr2 = singlet_gpu::preprocess::log_normalize(g.csc, cfg2, stream);
+                    auto lr2 = singlet::gpu::preprocess::log_normalize(g.csc, cfg2, stream);
                     cudaStreamSynchronize(stream);
 
                     std::vector<float>   sf_buf(static_cast<size_t>(n_c));
@@ -468,11 +468,11 @@ inline PipelineResult run_pipeline(const PipelineConfig& cfg,
         if (n_total > cfg.in_memory_pca_threshold) {
             result.pca_ran = false;  // int32 nnz cap; defer to cycle ≥ 8
         } else if (cfg.input_paths.size() == 1) {
-            auto full = singlet_gpu::io::load_pz(
+            auto full = singlet::gpu::io::load_pz(
                 cfg.input_paths[0], stream, /*keep_host_pinned=*/true);
             if (cudaStreamSynchronize(stream) != cudaSuccess)
                 throw std::runtime_error("run_pipeline: sync failed before PCA");
-            result.pca     = singlet_gpu::reduce::svd::auto_select(full, cfg.pca_k, cfg.pca_cfg);
+            result.pca     = singlet::gpu::reduce::svd::auto_select(full, cfg.pca_k, cfg.pca_cfg);
             result.pca_ran = true;
         } else {
             // Multi-file host-side CSC concatenation.
@@ -486,7 +486,7 @@ inline PipelineResult run_pipeline(const PipelineConfig& cfg,
 
             int64_t col_off = 0;
             for (size_t fi = 0; fi < cfg.input_paths.size(); ++fi) {
-                auto fmat = singlet_gpu::io::load_pz(
+                auto fmat = singlet::gpu::io::load_pz(
                     cfg.input_paths[fi], stream, /*keep_host_pinned=*/true);
                 if (cudaStreamSynchronize(stream) != cudaSuccess)
                     throw std::runtime_error("run_pipeline: sync failed in PCA concat");
@@ -501,9 +501,9 @@ inline PipelineResult run_pipeline(const PipelineConfig& cfg,
                 col_off += n_fi;
             }
 
-            singlet_gpu::core::DeviceMemory<int>   d_iptr(static_cast<size_t>(n_total + 1));
-            singlet_gpu::core::DeviceMemory<int>   d_idx (static_cast<size_t>(total_nnz > 0 ? total_nnz : 1));
-            singlet_gpu::core::DeviceMemory<float> d_val (static_cast<size_t>(total_nnz > 0 ? total_nnz : 1));
+            singlet::gpu::core::DeviceMemory<int>   d_iptr(static_cast<size_t>(n_total + 1));
+            singlet::gpu::core::DeviceMemory<int>   d_idx (static_cast<size_t>(total_nnz > 0 ? total_nnz : 1));
+            singlet::gpu::core::DeviceMemory<float> d_val (static_cast<size_t>(total_nnz > 0 ? total_nnz : 1));
             cudaMemcpyAsync(d_iptr.get(), h_iptr.data(),
                 static_cast<size_t>(n_total + 1) * sizeof(int),  cudaMemcpyHostToDevice, stream);
             cudaMemcpyAsync(d_idx.get(),  h_idx.data(),
@@ -512,7 +512,7 @@ inline PipelineResult run_pipeline(const PipelineConfig& cfg,
                 static_cast<size_t>(total_nnz)   * sizeof(float),cudaMemcpyHostToDevice, stream);
             cudaStreamSynchronize(stream);
 
-            singlet_gpu::io::PzDeviceMatrix concat;
+            singlet::gpu::io::PzDeviceMatrix concat;
             concat.mat.rows        = n_genes;
             concat.mat.cols        = n_total;
             concat.mat.nnz         = total_nnz;
@@ -526,7 +526,7 @@ inline PipelineResult run_pipeline(const PipelineConfig& cfg,
             concat.host_indices = std::shared_ptr<int>  (h_idx.data(),  [](int*){});
             concat.host_values  = std::shared_ptr<float>(h_val.data(),  [](float*){});
 
-            result.pca     = singlet_gpu::reduce::svd::auto_select(concat, cfg.pca_k, cfg.pca_cfg);
+            result.pca     = singlet::gpu::reduce::svd::auto_select(concat, cfg.pca_k, cfg.pca_cfg);
             result.pca_ran = true;
         }
     }
@@ -541,9 +541,9 @@ inline PipelineResult run_pipeline(const PipelineConfig& cfg,
     auto t_nmf = detail::sclock::now();
 
     if (cfg.run_nmf) {
-        singlet_gpu::io::PzDataLoader nmf_loader(
+        singlet::gpu::io::PzDataLoader nmf_loader(
             cfg.input_paths[0], static_cast<uint32_t>(cfg.chunk_cols));
-        result.nmf     = singlet_gpu::reduce::nmf::chunked_fit(nmf_loader, cfg.nmf_cfg);
+        result.nmf     = singlet::gpu::reduce::nmf::chunked_fit(nmf_loader, cfg.nmf_cfg);
         result.nmf_ran = true;
     }
 
@@ -552,4 +552,4 @@ inline PipelineResult run_pipeline(const PipelineConfig& cfg,
 }
 
 }  // namespace streaming
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

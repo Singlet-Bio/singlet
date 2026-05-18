@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Mutual nearest neighbors batch correction."""
 
 from __future__ import annotations

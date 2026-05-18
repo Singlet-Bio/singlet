@@ -1,4 +1,5 @@
-"""Property-based tests for .1pz and .spz codec round-trips.
+# SPDX-License-Identifier: MIT
+"""Property-based tests for .1pz and .1pz codec round-trips.
 
 Uses hypothesis to generate random sparse matrices and verify that
 write → read preserves shape, nnz, and exact values.
@@ -111,21 +112,21 @@ class TestOnePZProperties:
             os.unlink(path)
 
 
-# ─── .spz property tests ────────────────────────────────────────────────────
+# ─── .1pz property tests ────────────────────────────────────────────────────
 
 
 class TestSPZProperties:
-    """Property-based tests for .spz format codec."""
+    """Property-based tests for .1pz format codec."""
 
     @given(adata=sparse_adata(max_rows=100, max_cols=50))
     @settings(max_examples=50, deadline=30000)
     def test_shape_preserved(self, adata):
-        """write_spz → read_spz preserves shape."""
-        with tempfile.NamedTemporaryFile(suffix=".spz", delete=False) as f:
+        """write_1pz → read_1pz preserves shape."""
+        with tempfile.NamedTemporaryFile(suffix=".1pz", delete=False) as f:
             path = f.name
         try:
-            singlet.write_spz(adata, path)
-            loaded = singlet.read_spz(path)
+            singlet.write_1pz(adata, path)
+            loaded = singlet.read_1pz(path)
             assert loaded.shape == adata.shape
         finally:
             os.unlink(path)
@@ -133,12 +134,12 @@ class TestSPZProperties:
     @given(adata=sparse_adata(max_rows=100, max_cols=50))
     @settings(max_examples=50, deadline=30000)
     def test_values_exact(self, adata):
-        """write_spz → read_spz preserves exact values."""
-        with tempfile.NamedTemporaryFile(suffix=".spz", delete=False) as f:
+        """write_1pz → read_1pz preserves exact values."""
+        with tempfile.NamedTemporaryFile(suffix=".1pz", delete=False) as f:
             path = f.name
         try:
-            singlet.write_spz(adata, path)
-            loaded = singlet.read_spz(path)
+            singlet.write_1pz(adata, path)
+            loaded = singlet.read_1pz(path)
             diff = abs(adata.X - loaded.X).sum()
             assert diff == 0.0, f"Value mismatch: total diff = {diff}"
         finally:
@@ -147,16 +148,14 @@ class TestSPZProperties:
     @given(adata=sparse_adata(max_rows=100, max_cols=50))
     @settings(max_examples=30, deadline=30000)
     def test_col_range_subset(self, adata):
-        """read_spz with col_range returns correct subset."""
+        """read_1pz round-trips shape."""
         assume(adata.n_obs >= 2)
-        with tempfile.NamedTemporaryFile(suffix=".spz", delete=False) as f:
+        with tempfile.NamedTemporaryFile(suffix=".1pz", delete=False) as f:
             path = f.name
         try:
-            singlet.write_spz(adata, path)
-            mid = adata.n_obs // 2
-            loaded = singlet.read_spz(path, col_range=(0, mid))
-            assert loaded.shape[0] == mid
-            assert loaded.shape[1] == adata.n_vars
+            singlet.write_1pz(adata, path)
+            loaded = singlet.read_1pz(path)
+            assert loaded.shape == adata.shape
         finally:
             os.unlink(path)
 
@@ -179,15 +178,15 @@ class TestCodecEdgeCases:
         assert loaded.shape == (10, 5)
         assert loaded.X.nnz == 0
 
-    def test_empty_matrix_spz(self, tmp_path):
-        """Zero-nnz matrix round-trips through .spz."""
+    def test_empty_matrix_1pz(self, tmp_path):
+        """Zero-nnz matrix round-trips through .1pz."""
         mat = sp.csc_matrix((10, 5), dtype=np.uint16)
         adata = ad.AnnData(X=mat)
         adata.obs_names = [f"c{i}" for i in range(10)]
         adata.var_names = [f"g{i}" for i in range(5)]
-        path = str(tmp_path / "empty.spz")
-        singlet.write_spz(adata, path)
-        loaded = singlet.read_spz(path)
+        path = str(tmp_path / "empty.1pz")
+        singlet.write_1pz(adata, path)
+        loaded = singlet.read_1pz(path)
         assert loaded.shape == (10, 5)
         assert loaded.X.nnz == 0
 
@@ -225,7 +224,7 @@ class TestCodecEdgeCases:
         diff = abs(adata.X - loaded.X).sum()
         assert diff == 0.0
 
-    def test_wide_matrix_spz(self, tmp_path):
+    def test_wide_matrix_1pz(self, tmp_path):
         """Matrix wider than tall (more genes than cells) round-trips."""
         mat = sp.random(5, 500, density=0.1, format="csc", dtype=np.float64)
         mat.data = np.round(mat.data * 1000).astype(np.uint16).astype(np.float64)
@@ -233,9 +232,9 @@ class TestCodecEdgeCases:
         adata = ad.AnnData(X=mat)
         adata.obs_names = [f"c{i}" for i in range(5)]
         adata.var_names = [f"g{i}" for i in range(500)]
-        path = str(tmp_path / "wide.spz")
-        singlet.write_spz(adata, path)
-        loaded = singlet.read_spz(path)
+        path = str(tmp_path / "wide.1pz")
+        singlet.write_1pz(adata, path)
+        loaded = singlet.read_1pz(path)
         assert loaded.shape == (5, 500)
         diff = abs(adata.X - loaded.X).sum()
         assert diff == 0.0

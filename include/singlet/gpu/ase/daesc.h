@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (first GPU DAESC-style beta-binomial ASE calling)
 //
 // ase/daesc.h — Allele-Specific Expression via beta-binomial MLE, GPU-native.
@@ -63,13 +63,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/core/memory.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/core/memory.h>
 
 #include <cuda_runtime.h>
 #include <cub/device/device_segmented_sort.cuh>
@@ -104,7 +100,7 @@ __device__ __forceinline__ float digammaf(float x) {
 #include <algorithm>
 #include <limits>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace ase {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -1217,4 +1213,4 @@ inline void daesc(
 }
 
 }  // namespace ase
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

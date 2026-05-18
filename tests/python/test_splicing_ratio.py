@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.splicing_ratio()."""
 
 import numpy as np

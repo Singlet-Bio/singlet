@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (first GPU GSEA implementation)
 //
 // gsea/aucell.h — Per-cell AUC pathway scoring (AUCell-style), GPU-native.
@@ -53,13 +53,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/anno/types.h>
-#include <singlet-gpu/gsea/types.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/anno/types.h>
+#include <singlet/gpu/gsea/types.h>
 
 #include <cuda_runtime.h>
 #include <cub/device/device_scan.cuh>
@@ -71,7 +67,7 @@
 #include <vector>
 #include <algorithm>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace gsea {
 
 // ---------------------------------------------------------------------------
@@ -279,72 +275,38 @@ void aucell_score_kernel(
     // We use a warp-serial scan over B/32 per lane (each lane processes 32 bins,
     // but needs the running total from higher bins — handled by warp shuffle).
 
-    // Compute per-lane totals (total genes and members in bins handled by this lane).
-    int lane_start = (B - 1) - lane;   // highest bin for this lane; stride -32
-    int lane_total_genes   = 0;
-    int lane_total_members = 0;
+    // Serial AUC scan on lane 0 only.
+    // The warp-parallel interleaved-bin approach had the prefix/suffix direction
+    // reversed: suffix_genes accumulated counts from LOWER-expression bins and
+    // was used as the starting cumulative, causing cum_genes >= top_k immediately
+    // for every lane and producing auc=0.  The serial scan is correct, simple,
+    // and fast enough for B=4096 bins.
+    if (lane == 0) {
+        int   cum_genes   = 0;
+        int   cum_members = 0;
+        float auc         = 0.f;
 
-    for (int b = lane_start; b >= 0; b -= 32) {
-        int ng = (int)hist[b];
-        int nm = (int)roundf((float)ng * (float)n_member / (float)m_panel);
-        lane_total_genes   += ng;
-        lane_total_members += nm;
+        for (int b = B - 1; b >= 0 && cum_genes < top_k; --b) {
+            int ng = (int)hist[b];
+            if (ng == 0) continue;
+
+            int nm = (int)roundf((float)ng * (float)n_member / (float)m_panel);
+            int genes_to_count   = min(ng, top_k - cum_genes);
+            int members_to_count = (int)roundf(
+                (float)nm * (float)genes_to_count / (float)ng);
+
+            // Trapezoidal AUC contribution.
+            float auc_bin = (float)genes_to_count
+                * (float)(2 * cum_members + members_to_count)
+                / (2.f * (float)n_member * (float)top_k);
+            auc += auc_bin;
+
+            cum_genes   += genes_to_count;
+            cum_members += members_to_count;
+        }
+
+        scores_out[(size_t)pw * tile_cells + cell_local] = auc;
     }
-
-    // Warp prefix sum (exclusive, right-to-left) to get the cumulative totals
-    // *before* each lane's first bin.
-    // WHY exclusive prefix: cumulative_genes at the START of lane l's bin range
-    // = sum of lane_total_genes for lanes l+1..31 (lanes with higher bins).
-    int prefix_genes   = 0;
-    int prefix_members = 0;
-    for (int off = 1; off < 32; off <<= 1) {
-        int other_g = warp.shfl_up(lane_total_genes,   off);
-        int other_m = warp.shfl_up(lane_total_members, off);
-        if (lane >= off) { prefix_genes += other_g; prefix_members += other_m; }
-    }
-    // prefix_genes for lane l is Σ lane_total_genes[0..l-1] (lanes with LOWER bin ranges).
-    // We want prefix from HIGHER bins (lanes with higher lane index = lower bins).
-    // Recompute as suffix: prefix for lane l (higher bins) = total - prefix_genes_from_left - lane_total.
-    int warp_total_genes   = warp.shfl(lane_total_genes   + prefix_genes,   31);
-    int warp_total_members = warp.shfl(lane_total_members + prefix_members, 31);
-    // Suffix prefix (genes from bins higher than this lane's range):
-    int suffix_genes   = warp_total_genes   - (prefix_genes   + lane_total_genes);
-    int suffix_members = warp_total_members - (prefix_members + lane_total_members);
-
-    // Now each lane computes its AUC contribution using (suffix_genes, suffix_members)
-    // as the cumulative totals before entering this lane's bin range.
-    float auc_lane = 0.f;
-    int   cum_genes   = suffix_genes;
-    int   cum_members = suffix_members;
-
-    for (int b = lane_start; b >= 0; b -= 32) {
-        if (cum_genes >= top_k) break; // already counted top_k genes
-
-        int ng = (int)hist[b];
-        int nm = (int)roundf((float)ng * (float)n_member / (float)m_panel);
-
-        int genes_to_count = min(ng, top_k - cum_genes);
-        // Pro-rate members if we don't count the full bin.
-        int members_to_count = (ng > 0)
-            ? (int)roundf((float)nm * (float)genes_to_count / (float)ng)
-            : 0;
-
-        // Trapezoidal AUC contribution (see derivation above).
-        float auc_bin = (float)genes_to_count
-            * (float)(2 * cum_members + members_to_count)
-            / (2.f * (float)n_member * (float)top_k);
-        auc_lane += auc_bin;
-
-        cum_genes   += genes_to_count;
-        cum_members += members_to_count;
-    }
-
-    // Warp reduce auc_lane sum.
-    for (int mask = 16; mask > 0; mask >>= 1)
-        auc_lane += warp.shfl_xor(auc_lane, mask);
-
-    if (lane == 0)
-        scores_out[(size_t)pw * tile_cells + cell_local] = auc_lane;
 }
 
 } // namespace detail
@@ -366,8 +328,8 @@ void aucell_score_kernel(
 // The caller is responsible for synchronizing the stream before reading scores.
 
 inline AUCellResult aucell(
-    const singlet_gpu::core::DeviceCSC&  mat,
-    const singlet_gpu::anno::GeneSetDB&  gene_sets,
+    const singlet::gpu::core::DeviceCSC&  mat,
+    const singlet::gpu::anno::GeneSetDB&  gene_sets,
     const AUCellConfig&                  cfg,
     cudaStream_t                         stream)
 {
@@ -410,9 +372,9 @@ inline AUCellResult aucell(
     if (m_panel == 0) m_panel = m; // fallback: all genes
 
     // ---- Upload pathway metadata to device ------------------------------------
-    singlet_gpu::core::DeviceMemory<int> d_pw_members_flat((int)pw_members_flat_h.size());
-    singlet_gpu::core::DeviceMemory<int> d_pw_offsets(n_pathways + 1);
-    singlet_gpu::core::DeviceMemory<int> d_pw_sizes(n_pathways);
+    singlet::gpu::core::DeviceMemory<int> d_pw_members_flat((int)pw_members_flat_h.size());
+    singlet::gpu::core::DeviceMemory<int> d_pw_offsets(n_pathways + 1);
+    singlet::gpu::core::DeviceMemory<int> d_pw_sizes(n_pathways);
 
     cudaMemcpyAsync(d_pw_members_flat.get(), pw_members_flat_h.data(),
                     pw_members_flat_h.size() * sizeof(int), cudaMemcpyHostToDevice, stream);
@@ -425,7 +387,7 @@ inline AUCellResult aucell(
     AUCellResult result;
     result.n_pathways = n_pathways;
     result.n_cells    = n;
-    result.scores     = singlet_gpu::core::DeviceMemory<float>((size_t)n_pathways * n);
+    result.scores     = singlet::gpu::core::DeviceMemory<float>((size_t)n_pathways * n);
 
     // ---- Tile loop over cells -------------------------------------------------
     // Per-tile workspace: histogram [C × B] + nnz_per_cell [C] + score_tile [n_pathways × C].
@@ -433,7 +395,7 @@ inline AUCellResult aucell(
     const size_t nnz_bytes   = (size_t)C * sizeof(uint32_t);
     const size_t score_bytes = (size_t)n_pathways * C * sizeof(float);
 
-    singlet_gpu::core::DeviceMemory<uint8_t> d_workspace(hist_bytes + nnz_bytes + score_bytes);
+    singlet::gpu::core::DeviceMemory<uint8_t> d_workspace(hist_bytes + nnz_bytes + score_bytes);
     uint32_t* d_hist       = reinterpret_cast<uint32_t*>(d_workspace.get());
     uint32_t* d_nnz        = reinterpret_cast<uint32_t*>(d_workspace.get() + hist_bytes);
     float*    d_score_tile = reinterpret_cast<float*>(d_workspace.get() + hist_bytes + nnz_bytes);
@@ -449,12 +411,12 @@ inline AUCellResult aucell(
     // indptr[c_start..c_start+tile_cells+1].  We copy just this slice to device per tile.
     // The nnz slice is then csc_values[indptr[c_start]..indptr[c_start+tile_cells]].
     //
-    // The concrete type is factornet::gpu::SparseMatrixGPU<float> (from core/types.h).
+    // The concrete type is singlet::gpu::core::DeviceCSC (from core/types.h).
     // Fields: col_ptr (DeviceMemory<int>), row_indices (DeviceMemory<int>),
     //         values (DeviceMemory<float>), rows (int), cols (int), nnz (int).
     // Raw device pointers are obtained via .col_ptr.get(), .row_indices.get(), .values.get().
 
-    // Extract device pointers from the DeviceCSC (factornet layout).
+    // Extract device pointers from the DeviceCSC.
     const int*   d_global_indptr = mat.col_ptr.get();     // [n+1] device pointer
     const int*   d_global_rowidx = mat.row_indices.get(); // [nnz] device pointer
     const float* d_global_vals   = mat.values.get();      // [nnz] device pointer
@@ -578,4 +540,4 @@ void per_cell_histogram_kernel_tiled(
 } // namespace detail
 
 } // namespace gsea
-} // namespace singlet_gpu
+} // namespace singlet::gpu

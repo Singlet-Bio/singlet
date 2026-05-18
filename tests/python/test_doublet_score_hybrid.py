@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.doublet_score_hybrid()."""
 
 import numpy as np

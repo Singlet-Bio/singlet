@@ -7,8 +7,9 @@ All notable changes to the singlet project.
 ### Breaking Changes
 - **Unified package**: `singlet-bio`, `singlepress`, `singlet-gpu` merged into single `singlet` package
 - **Install**: `pip install singlet` (replaces `pip install singlet-bio`)
-- **R package**: renamed from `singlet` to `singlet`
+- **R package**: renamed from `singlify` to `singlet`
 - **C++ namespaces**: `singlet::pz`, `singlet::fq`, `singlet::pileup`, `singlet::gpu`
+- **License unified to MIT** across all first-party code. The former GPU library (ex-`singlet-gpu`) was relicensed from GPL-2.0-or-later to MIT; SPDX identifiers added to all 1,067 first-party source files. Vendored `include/singlet/star/` (STAR — MIT; SIMDe — CC0-1.0) retains its own licenses.
 
 ### Features
 - **Monorepo consolidation**: Single repo ships Python, R, and C++ library
@@ -20,7 +21,13 @@ All notable changes to the singlet project.
 - **CMake find_package**: `find_package(Singlet COMPONENTS pz fq pileup)` with version file
 - **R GPU support**: `singlet::has_gpu()`, `gpu_pca()`, `gpu_neighbors()`, `gpu_leiden()`
 - **C++ test suite**: 100 unit tests covering all pileup modules (codec, cell calling, ATAC, ADT, species, nonhost, export, spatial, protocol detection, UMI dedup, bloom filter, velocity, saturation, read stats, provenance, minimizer index, cascade stats, pz writer, ancestry, ASE, MTX writer)
-- **IO schema v2 support**: Loader auto-detects singlet v2 subdirectory layout (`donor/snp_ad.1pz`)
+- **GPU library** (merged from the former standalone `singlet-gpu` repo, developed over ~162 cycles; full per-cycle record in `state/gpu/cycle-log.md`):
+  - `core/sparse_eigensolver.h` — header-only LOBPCG for top-K exterior eigenvalues of sparse symmetric CSR (cuRAND Philox + cuBLAS + cuSPARSE SpMM + cuSOLVER); replaces the n²-dense path in `embed/diffmap`/`embed/dpt` (n=10k: ~8 MB vs 400 MB; n=1M now feasible)
+  - Native GPU linear-algebra kernels (~2,500 LOC CUDA) — `core/{types,handles,memory}.h`, `reduce/svd/{deflation,randomized,auto_select}.h`, `reduce/nmf/{fit,cv,chunked}.h` — replaced the factornet runtime dependency
+  - 71 C++ correctness tests under `tests/cpp/gpu/`, 49 perf benchmark drivers under `bench/`
+  - Frontier kernels vs SOTA: pz_device_loader 6.4× anndata-gpu; lognorm 370× scanpy; hvg pearson-residuals 12,609× scanpy; svd-deflation 27×; nmf 1.82–8.66× sklearn; qc/metrics 429× scanpy; de/wilcoxon up to 388.8× scanpy; de/ttest 8.4–10.4× scanpy
+  - `FACTORNET_INCLUDE_DIR` is now an optional migration safety-valve; 14+ deferred-scope binding modules gated behind `SINGLET_GPU_BUILD_DEFERRED` (default OFF)
+- **IO schema v2 support**: Loader auto-detects singlify v2 subdirectory layout (`donor/snp_ad.1pz`)
 - **MCP server tests**: 25 unit tests covering all parquet-backed tools + call_tool router
 - **Python lint**: ruff check + ruff format enforced (0 errors, CI job added)
 - **Type annotations**: All public functions annotated with return types
@@ -72,7 +79,7 @@ All notable changes to the singlet project.
 - **Bundled catalog**: Package ships with `catalog_v1.parquet` (1,175 series) and `sample_index.parquet` (2,378 samples). No downloads needed to browse the atlas.
 - **Text search**: `singlet.samples(search="lung")` — full-text search across GEO titles, organisms, protocols.
 - **Quality tiers**: `singlet.samples(quality_tier="gold")` — filter by mapping rate and cell count.
-- **load_dir() v3**: Reads 10 singlet output files into a single AnnData with cell cycle phases, ancestry, sex call, pipeline summary, and saturation curves in `obs`/`uns`.
+- **load_dir() v3**: Reads 10 singlify output files into a single AnnData with cell cycle phases, ancestry, sex call, pipeline summary, and saturation curves in `obs`/`uns`.
 - **17 notebooks**: Complete reproducibility collection covering QC, genomic features, and validation.
 - **MCP server**: `python -m singlet.mcp.server` exposes atlas data to AI assistants (requires Python 3.10+).
 
@@ -87,7 +94,7 @@ All notable changes to the singlet project.
 - `singlet.info(accession)` — series metadata dict
 
 ### Data Loading
-- `singlet.load_dir(path)` — singlet output → AnnData (primary interface)
+- `singlet.load_dir(path)` — singlify output → AnnData (primary interface)
 - `singlet.load(source)` — load local .1pz/.spz/.h5ad files
 - `singlet.read_1pz(path)` — read .1pz sparse matrix format
 - `singlet.write_1pz(adata, path)` — write .1pz format
@@ -98,7 +105,7 @@ All notable changes to the singlet project.
 
 ### load_dir() Output
 - **obs**: total_umis, total_genes, mt_pct, ribo_pct, intronic_pct, doublet_score, is_doublet, phase, s_score, g2m_score
-- **uns**: ancestry, sex_call, summary, saturation_curve, singlet_dir
+- **uns**: ancestry, sex_call, summary, saturation_curve, singlify_dir
 - **var**: gene_id (Ensembl), gene_name
 - **Layers**: gene_counts (default), exon_counts, intron_counts, gene_counts_em
 

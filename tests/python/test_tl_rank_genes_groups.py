@@ -1,5 +1,6 @@
+# SPDX-License-Identifier: MIT
 """
-Cycle 21 correctness tests for singlet_gpu.tools.rank_genes_groups().
+Cycle 21 correctness tests for singlet.gpu.tools.rank_genes_groups().
 
 Tests the GPU-native DE wrapper (cycle 11: de/{wilcoxon,ttest}.h):
   - ``singlet.gpu.tools.rank_genes_groups``
@@ -22,19 +23,17 @@ Tests:
   - test_rank_genes_groups_method_t_test              : t-test method accepted, results differ
 
 Skip strategy:
-  - Module-level skip if singlet.gpu not available.
+  - Module-level skip if singlet_gpu wheel not built.
   - requires_gpu marker for all GPU-exercising tests.
 """
-
 from __future__ import annotations
 
 import numpy as np
 import pytest
 
 singlet_gpu = pytest.importorskip(
-    "singlet.gpu",
-    reason="singlet.gpu not available. Run `pip install -e singlet-gpu/python/` first.",
-    exc_type=ImportError,
+    "singlet_gpu",
+    reason="singlet_gpu wheel not built. Run `pip install -e singlet-gpu/python/` first.",
 )
 
 from conftest import requires_gpu  # noqa: E402
@@ -42,21 +41,20 @@ from conftest import requires_gpu  # noqa: E402
 # ---------------------------------------------------------------------------
 # Tolerance constants
 # ---------------------------------------------------------------------------
-_LFC_SPEARMAN_MIN = 0.97  # LFC Spearman ρ vs scanpy (spec tolerance)
-_MARKER_JACCARD_MIN = 0.90  # top-50 markers Jaccard vs scanpy (spec tolerance)
-_TOP_N_MARKERS = 50  # marker set size for Jaccard
+_LFC_SPEARMAN_MIN = 0.97   # LFC Spearman ρ vs scanpy (spec tolerance)
+_MARKER_JACCARD_MIN = 0.90 # top-50 markers Jaccard vs scanpy (spec tolerance)
+_TOP_N_MARKERS = 50        # marker set size for Jaccard
 _SEED = 0xC0FFEE
 _N_NEIGHBORS = 15
 _N_COMPS = 50
-_GROUPBY = "leiden"  # cluster labels from leiden step
+_GROUPBY = "leiden"        # cluster labels from leiden step
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-
 def _load_gpu_adata(gsm4037629_path):
-    return singlet_gpu.io.read_pz_to_anndata(str(gsm4037629_path))
+    return singlet.gpu.io.read_pz_to_anndata(str(gsm4037629_path))
 
 
 def _gpu_to_cpu_adata(adata_gpu):
@@ -83,11 +81,11 @@ def _gpu_to_cpu_adata(adata_gpu):
 
 def _full_pipeline_gpu(adata_gpu):
     """Preprocess + PCA + neighbors + leiden (GPU)."""
-    singlet_gpu.preprocess.normalize_total(adata_gpu, inplace=True)
-    singlet_gpu.preprocess.log1p(adata_gpu, inplace=True)
-    singlet_gpu.reduce.pca(adata_gpu, n_comps=_N_COMPS, inplace=True)
-    singlet_gpu.pp.neighbors(adata_gpu, n_neighbors=_N_NEIGHBORS)
-    singlet_gpu.tools.leiden(adata_gpu, 1.0, rng=_SEED)
+    singlet.gpu.preprocess.normalize_total(adata_gpu, inplace=True)
+    singlet.gpu.preprocess.log1p(adata_gpu, inplace=True)
+    singlet.gpu.reduce.pca(adata_gpu, n_comps=_N_COMPS, inplace=True)
+    singlet.gpu.preprocess.neighbors(adata_gpu, n_neighbors=_N_NEIGHBORS)
+    singlet.gpu.tools.leiden(adata_gpu, 1.0, rng=_SEED)
 
 
 def _full_pipeline_cpu(adata_cpu):
@@ -102,7 +100,9 @@ def _full_pipeline_cpu(adata_cpu):
 
 def _extract_uns_rgg(adata, key="rank_genes_groups"):
     """Extract adata.uns['rank_genes_groups'] with validation."""
-    assert key in adata.uns, f"adata.uns['{key}'] not found; rank_genes_groups may have failed"
+    assert key in adata.uns, (
+        f"adata.uns['{key}'] not found; rank_genes_groups may have failed"
+    )
     return adata.uns[key]
 
 
@@ -137,7 +137,6 @@ def _gene_names_array(rgg_result, group):
 def _spearman_rho(a, b):
     """Compute Spearman correlation between two arrays."""
     from scipy.stats import spearmanr
-
     res = spearmanr(a, b)
     return float(res.correlation if hasattr(res, "correlation") else res[0])
 
@@ -146,8 +145,7 @@ def _spearman_rho(a, b):
 # test_rank_genes_groups_wilcoxon_basic
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
-    strict=True,
-    raises=RuntimeError,
+    strict=True, raises=RuntimeError,
     reason="INFRA-CUVS-CUGRAPH-INSTALL: rank_genes_groups indirectly invokes leiden which requires cuGraph; not installed on GPU nodes (state/blockers.md)",
 )
 @requires_gpu
@@ -156,7 +154,7 @@ def test_rank_genes_groups_wilcoxon_basic(gsm4037629_path):
 
     Procedure:
       1. Load GSM4037629, run full pipeline (preprocess + PCA + neighbors + leiden).
-      2. Call singlet_gpu.tools.rank_genes_groups(adata, 'leiden', method='wilcoxon').
+      2. Call singlet.gpu.tools.rank_genes_groups(adata, 'leiden', method='wilcoxon').
       3. Assert returns None (inplace convention).
       4. Assert adata.uns['rank_genes_groups'] exists.
     """
@@ -165,9 +163,11 @@ def test_rank_genes_groups_wilcoxon_basic(gsm4037629_path):
     adata = _load_gpu_adata(gsm4037629_path)
     _full_pipeline_gpu(adata)
 
-    ret = singlet_gpu.tools.rank_genes_groups(adata, _GROUPBY, method="wilcoxon")
+    ret = singlet.gpu.tools.rank_genes_groups(adata, _GROUPBY, method="wilcoxon")
 
-    assert ret is None, f"rank_genes_groups() inplace must return None, got {type(ret)}"
+    assert ret is None, (
+        f"rank_genes_groups() inplace must return None, got {type(ret)}"
+    )
     assert "rank_genes_groups" in adata.uns, (
         "rank_genes_groups(): adata.uns['rank_genes_groups'] not written"
     )
@@ -177,8 +177,7 @@ def test_rank_genes_groups_wilcoxon_basic(gsm4037629_path):
 # test_rank_genes_groups_writes_uns
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
-    strict=True,
-    raises=RuntimeError,
+    strict=True, raises=RuntimeError,
     reason="INFRA-CUVS-CUGRAPH-INSTALL: rank_genes_groups indirectly invokes leiden which requires cuGraph; not installed on GPU nodes (state/blockers.md)",
 )
 @requires_gpu
@@ -199,13 +198,15 @@ def test_rank_genes_groups_writes_uns(gsm4037629_path):
 
     adata = _load_gpu_adata(gsm4037629_path)
     _full_pipeline_gpu(adata)
-    singlet_gpu.tools.rank_genes_groups(adata, _GROUPBY, method="wilcoxon")
+    singlet.gpu.tools.rank_genes_groups(adata, _GROUPBY, method="wilcoxon")
 
     rgg = _extract_uns_rgg(adata)
 
     required_keys = ["names", "scores", "pvals", "pvals_adj", "logfoldchanges", "params"]
     for k in required_keys:
-        assert k in rgg, f"adata.uns['rank_genes_groups'] missing required key '{k}'"
+        assert k in rgg, (
+            f"adata.uns['rank_genes_groups'] missing required key '{k}'"
+        )
 
     # Validate params sub-dict.
     params = rgg["params"]
@@ -228,15 +229,16 @@ def test_rank_genes_groups_writes_uns(gsm4037629_path):
         pv = np.asarray(pvals_adj, dtype=np.float64).ravel()
 
     assert np.all(pv >= 0.0), "pvals_adj contains values < 0"
-    assert np.all(pv <= 1.0 + 1e-9), f"pvals_adj contains values > 1.0; max={pv.max():.4e}"
+    assert np.all(pv <= 1.0 + 1e-9), (
+        f"pvals_adj contains values > 1.0; max={pv.max():.4e}"
+    )
 
 
 # ---------------------------------------------------------------------------
 # test_rank_genes_groups_vs_scanpy_lfc_spearman
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
-    strict=True,
-    raises=RuntimeError,
+    strict=True, raises=RuntimeError,
     reason="INFRA-CUVS-CUGRAPH-INSTALL: rank_genes_groups indirectly invokes leiden which requires cuGraph; not installed on GPU nodes (state/blockers.md)",
 )
 @requires_gpu
@@ -246,7 +248,7 @@ def test_rank_genes_groups_vs_scanpy_lfc_spearman(gsm4037629_path):
     Procedure:
       1. Load GSM4037629 twice → adata_gpu, adata_cpu.
       2. Run full pipeline on both.
-      3. singlet_gpu.tools.rank_genes_groups(adata_gpu, 'leiden', method='wilcoxon').
+      3. singlet.gpu.tools.rank_genes_groups(adata_gpu, 'leiden', method='wilcoxon').
       4. sc.tl.rank_genes_groups(adata_cpu, 'leiden', method='wilcoxon').
       5. For each cluster, extract LFC vectors from both results.
          Align by gene name (set intersection), compute Spearman ρ.
@@ -262,7 +264,7 @@ def test_rank_genes_groups_vs_scanpy_lfc_spearman(gsm4037629_path):
     _full_pipeline_gpu(adata_gpu)
     _full_pipeline_cpu(adata_cpu)
 
-    singlet_gpu.tools.rank_genes_groups(adata_gpu, _GROUPBY, method="wilcoxon")
+    singlet.gpu.tools.rank_genes_groups(adata_gpu, _GROUPBY, method="wilcoxon")
     sc.tl.rank_genes_groups(adata_cpu, _GROUPBY, method="wilcoxon")
 
     rgg_gpu = _extract_uns_rgg(adata_gpu)
@@ -320,8 +322,7 @@ def test_rank_genes_groups_vs_scanpy_lfc_spearman(gsm4037629_path):
 # test_rank_genes_groups_vs_scanpy_top_markers_jaccard
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
-    strict=True,
-    raises=RuntimeError,
+    strict=True, raises=RuntimeError,
     reason="INFRA-CUVS-CUGRAPH-INSTALL: rank_genes_groups indirectly invokes leiden which requires cuGraph; not installed on GPU nodes (state/blockers.md)",
 )
 @requires_gpu
@@ -345,10 +346,10 @@ def test_rank_genes_groups_vs_scanpy_top_markers_jaccard(gsm4037629_path):
     _full_pipeline_gpu(adata_gpu)
     _full_pipeline_cpu(adata_cpu)
 
-    singlet_gpu.tools.rank_genes_groups(
-        adata_gpu, _GROUPBY, method="wilcoxon", n_genes=_TOP_N_MARKERS
-    )
-    sc.tl.rank_genes_groups(adata_cpu, _GROUPBY, method="wilcoxon", n_genes=_TOP_N_MARKERS)
+    singlet.gpu.tools.rank_genes_groups(adata_gpu, _GROUPBY, method="wilcoxon",
+                                        n_genes=_TOP_N_MARKERS)
+    sc.tl.rank_genes_groups(adata_cpu, _GROUPBY, method="wilcoxon",
+                            n_genes=_TOP_N_MARKERS)
 
     rgg_gpu = _extract_uns_rgg(adata_gpu)
     rgg_cpu = _extract_uns_rgg(adata_cpu)
@@ -373,7 +374,9 @@ def test_rank_genes_groups_vs_scanpy_top_markers_jaccard(gsm4037629_path):
         union = len(gpu_genes | cpu_genes)
         jaccards.append(inter / union if union > 0 else 0.0)
 
-    assert len(jaccards) >= 1, "Could not compute top-marker Jaccard for any cluster pair"
+    assert len(jaccards) >= 1, (
+        "Could not compute top-marker Jaccard for any cluster pair"
+    )
 
     median_j = float(np.median(jaccards))
     assert median_j >= _MARKER_JACCARD_MIN, (
@@ -386,8 +389,7 @@ def test_rank_genes_groups_vs_scanpy_top_markers_jaccard(gsm4037629_path):
 # test_rank_genes_groups_method_t_test
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
-    strict=True,
-    raises=RuntimeError,
+    strict=True, raises=RuntimeError,
     reason="INFRA-CUVS-CUGRAPH-INSTALL: rank_genes_groups indirectly invokes leiden which requires cuGraph; not installed on GPU nodes (state/blockers.md)",
 )
 @requires_gpu
@@ -403,11 +405,11 @@ def test_rank_genes_groups_method_t_test(gsm4037629_path):
 
     adata_wc = _load_gpu_adata(gsm4037629_path)
     _full_pipeline_gpu(adata_wc)
-    singlet_gpu.tools.rank_genes_groups(adata_wc, _GROUPBY, method="wilcoxon")
+    singlet.gpu.tools.rank_genes_groups(adata_wc, _GROUPBY, method="wilcoxon")
 
     adata_tt = _load_gpu_adata(gsm4037629_path)
     _full_pipeline_gpu(adata_tt)
-    singlet_gpu.tools.rank_genes_groups(adata_tt, _GROUPBY, method="t-test")
+    singlet.gpu.tools.rank_genes_groups(adata_tt, _GROUPBY, method="t-test")
 
     rgg_wc = _extract_uns_rgg(adata_wc)
     rgg_tt = _extract_uns_rgg(adata_tt)
@@ -441,7 +443,6 @@ def test_rank_genes_groups_method_t_test(gsm4037629_path):
     # the primary check is that t-test ran without error and set params correctly.
     if not methods_differ:
         import warnings
-
         warnings.warn(
             f"wilcoxon and t-test top-5 genes for group '{first_group}' are identical: "
             f"{genes_wc}. This may indicate both methods are using the same code path.",

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // lib1fq/packing.h — 2-bit sequence packing and unpacking
 //
 // Pack DNA sequences (byte-numeric 0/1/2/3/4) into 2-bit representation
@@ -15,7 +16,7 @@
 #include <cstring>
 #include <vector>
 
-namespace lib1fq {
+namespace singlet::fq {
 namespace pack {
 
 // ── Pack byte-numeric sequence → 2-bit packed + optional N-bitmap ──
@@ -256,4 +257,4 @@ inline uint32_t decode_varint(const uint8_t* src, uint64_t& value) {
 }
 
 } // namespace pack
-} // namespace lib1fq
+} // namespace singlet::fq

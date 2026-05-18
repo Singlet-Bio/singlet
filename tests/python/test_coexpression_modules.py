@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.coexpression_modules()."""
 
 import numpy as np

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_atac_fragment.cpp — unit tests for atac_fragment.h
 // Synthetic bam1_t construction, no BAM file on disk required.
 

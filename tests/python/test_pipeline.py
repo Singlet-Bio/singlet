@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """End-to-end integration test: full singlet analysis pipeline.
 
 Tests the complete workflow from data creation through differential expression,

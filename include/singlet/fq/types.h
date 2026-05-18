@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // lib1fq/types.h — Core types and constants for the .1fq format
 //
 // Single-header definitions shared by encoder, decoder, and tools.
@@ -11,7 +12,7 @@
 #include <string>
 #include <vector>
 
-namespace lib1fq {
+namespace singlet::fq {
 
 // ── Magic & version ──
 
@@ -688,4 +689,4 @@ struct EncoderConfig {
     uint64_t progress_interval = 1000000;
 };
 
-}  // namespace lib1fq
+}  // namespace singlet::fq

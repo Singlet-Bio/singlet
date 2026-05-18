@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Identify bipotent/multipotent cells co-expressing multiple lineage markers.
 
 Provides singlet.identify_bipotent_cells() — find cells in transition states

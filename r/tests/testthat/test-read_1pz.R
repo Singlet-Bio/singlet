@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 test_that("read_1pz returns a dgCMatrix with the right shape and attributes", {
     dir <- skip_if_no_fixture()
     gc_path <- file.path(dir, "gene_counts.1pz")

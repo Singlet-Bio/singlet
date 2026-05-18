@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.grn.granie — GPU-native GRaNIE gene regulatory network inference.
 
@@ -17,18 +17,20 @@ Reference: Gaumondo et al. (2024) GRaNIE, Nature Methods.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
+from singlet.gpu._coreutil import require_core
+
 if TYPE_CHECKING:
     import anndata
+    import scipy.sparse
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
-
 
 def run_from_csc(
     gex,
@@ -137,14 +139,7 @@ def run_from_csc(
     >>> import pandas as pd
     >>> edges_df = pd.DataFrame(result["edges"])
     """
-    import singlet.gpu._core as _core
-
-    if not hasattr(_core, "run_granie"):
-        raise ImportError(
-            "_core.run_granie is not available.  "
-            "Install with: pip install singlet[gpu] "
-            "pip install singlet[gpu]"
-        )
+    _core = require_core("run_granie")
 
     return _core.run_granie(
         gex,
@@ -167,8 +162,8 @@ def run_from_csc(
 
 
 def run_from_anndata(
-    adata_rna: anndata.AnnData,
-    adata_atac: anndata.AnnData,
+    adata_rna: "anndata.AnnData",
+    adata_atac: "anndata.AnnData",
     tf_motif: dict,
     peak_gene_pairs: list,
     **kwargs,
@@ -199,23 +194,16 @@ def run_from_anndata(
     dict
         Same as :func:`run_from_csc`.
     """
-    import singlet.gpu._core as _core
-
-    if not hasattr(_core, "from_cupy_csr"):
-        raise ImportError(
-            "singlet.gpu._core.from_cupy_csr not available. "
-            "Build the extension on a CUDA node first."
-        )
+    _core = require_core("from_cupy_csr")
 
     def _to_device_csc(X):
         # X may be scipy sparse, cupy sparse, or dense numpy.
         try:
             import scipy.sparse as sp
-
             try:
                 import cupyx.scipy.sparse as csp  # cupy >= 14
             except ImportError:
-                import cupy.sparse as csp  # cupy < 14 fallback
+                import cupy.sparse as csp         # cupy < 14 fallback
             if sp.issparse(X):
                 X_csr = X.tocsr().astype(np.float32)
                 # Upload to device via cupy
@@ -228,7 +216,7 @@ def run_from_anndata(
             "Load your data with singlet.gpu.load_pz() for direct device access."
         )
 
-    gex = _to_device_csc(adata_rna.X)
+    gex   = _to_device_csc(adata_rna.X)
     peaks = _to_device_csc(adata_atac.X)
     return run_from_csc(gex, peaks, tf_motif, peak_gene_pairs, **kwargs)
 

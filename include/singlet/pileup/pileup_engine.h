@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: pileup_engine.h
 // Core streaming BAM pileup engine for Pipeline V2.

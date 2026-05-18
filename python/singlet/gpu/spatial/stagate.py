@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.spatial.stagate — GPU-native spatial domain segmentation.
 
@@ -16,12 +16,14 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
+from singlet.gpu._coreutil import require_core
+
 if TYPE_CHECKING:
     import anndata
 
 
 def run_stagate(
-    adata: anndata.AnnData,
+    adata: "anndata.AnnData",
     *,
     spatial_key: str = "spatial",
     n_neighbors: int = 6,
@@ -38,7 +40,7 @@ def run_stagate(
     stream=None,
     seed: int = 0,
     copy: bool = False,
-) -> Optional[anndata.AnnData]:
+) -> Optional["anndata.AnnData"]:
     """
     Spatial domain segmentation via STAGATE (cycle 29).
 
@@ -66,13 +68,7 @@ def run_stagate(
     -------
     None or AnnData
     """
-    import singlet.gpu._core as _core
-
-    if not hasattr(_core, "stagate"):
-        raise AttributeError(
-            "_core.stagate is not available.  "
-            "Ensure the cycle-52a binding extension has been compiled."
-        )
+    _core = require_core("stagate")
 
     working = adata.copy() if copy else adata
 
@@ -84,18 +80,16 @@ def run_stagate(
 
     try:
         import cupy as cp
-
         try:
             import cupyx.scipy.sparse as csp  # cupy >= 14
         except ImportError:
-            import cupy.sparse as csp  # cupy < 14 fallback
+            import cupy.sparse as csp         # cupy < 14 fallback
 
         X = working.X
         if X.shape[0] == working.n_obs:
-            X = X.T  # ensure genes × spots
+            X = X.T   # ensure genes × spots
 
         import scipy.sparse as sp
-
         if sp.issparse(X):
             mat = csp.csc_matrix(X)
         else:
@@ -105,12 +99,12 @@ def run_stagate(
 
     except ImportError as e:
         raise ImportError(
-            f"singlet.gpu.spatial.run_stagate requires cupy.  Original error: {e}"
-        ) from e
+            "singlet.gpu.spatial.run_stagate requires cupy.  "
+            f"Original error: {e}"
+        )
 
     result = _core.stagate(
-        mat,
-        coords,
+        mat, coords,
         n_neighbors=n_neighbors,
         d_hidden=d_hidden,
         d_embed=d_embed,
@@ -125,7 +119,7 @@ def run_stagate(
     )
 
     n_spots = result.n_spots
-    d_emb = result.d_embed
+    d_emb   = result.d_embed
 
     emb_arr = cp.asarray(result.embedding_view).reshape(n_spots, d_emb).get()
     working.obsm[embedding_key] = emb_arr

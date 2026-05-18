@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for _io format detection, read_matrix dispatch, and read_kraken2."""
 
 import struct
@@ -22,34 +23,15 @@ class TestDetectFormat:
         path.write_bytes(b"\x54\x50\x31\x5a" + b"\x00" * 4)
         assert _detect_format(path) == "1pz"
 
-    def test_spz1_magic(self, tmp_path):
-        """Detects spz1 (new singlepress) from SPRZ + hdr_size != 128."""
+    def test_spz_magic_no_longer_supported(self, tmp_path):
+        """Legacy SPRZ/SPZ2 magic is rejected as unknown."""
         from singlet._io import _detect_format
 
         path = tmp_path / "test.spz"
-        # SPRZ magic + 2 padding bytes + hdr_size=256 (little-endian u16)
         header = b"SPRZ" + b"\x00\x00" + struct.pack("<H", 256)
         path.write_bytes(header)
-        assert _detect_format(path) == "spz1"
-
-    def test_spz2_magic(self, tmp_path):
-        """Detects spz2 (legacy) from SPRZ/SPZ2 + hdr_size=128."""
-        from singlet._io import _detect_format
-
-        path = tmp_path / "test.spz"
-        # SPRZ magic + 2 bytes + hdr_size=128
-        header = b"SPRZ" + b"\x00\x00" + struct.pack("<H", 128)
-        path.write_bytes(header)
-        assert _detect_format(path) == "spz2"
-
-    def test_spz2_alt_magic(self, tmp_path):
-        """SPZ2 four-byte magic with hdr_size=128 also returns spz2."""
-        from singlet._io import _detect_format
-
-        path = tmp_path / "test.spz"
-        header = b"SPZ2" + b"\x00\x00" + struct.pack("<H", 128)
-        path.write_bytes(header)
-        assert _detect_format(path) == "spz2"
+        with pytest.raises(ValueError, match="Unknown file format"):
+            _detect_format(path)
 
     def test_unknown_magic_raises(self, tmp_path):
         """Raises ValueError for unrecognized magic."""
@@ -69,36 +51,32 @@ class TestDetectFormat:
         with pytest.raises(ValueError, match="too small"):
             _detect_format(path)
 
+    def test_empty_file_raises(self, tmp_path):
+        """Empty file raises ValueError."""
+        from singlet._io import _detect_format
 
-class TestDetectFormatVersion:
-    """Test _detect_format_version for spz files."""
+        path = tmp_path / "empty.bin"
+        path.write_bytes(b"")
+        with pytest.raises(ValueError, match="too small"):
+            _detect_format(path)
 
-    def test_version_1(self, tmp_path):
-        """Returns 1 for new singlepress format."""
-        from singlet._io import _detect_format_version
 
-        path = tmp_path / "v1.spz"
-        header = b"SPRZ" + b"\x00\x00" + struct.pack("<H", 256)
-        path.write_bytes(header)
-        assert _detect_format_version(path) == 1
+class TestReadMatrix:
+    """Test read_matrix format dispatch."""
 
-    def test_version_2(self, tmp_path):
-        """Returns 2 for legacy sparsepress format."""
-        from singlet._io import _detect_format_version
+    def test_nonexistent_file_raises(self):
+        from singlet._io import read_matrix
 
-        path = tmp_path / "v2.spz"
-        header = b"SPRZ" + b"\x00\x00" + struct.pack("<H", 128)
-        path.write_bytes(header)
-        assert _detect_format_version(path) == 2
+        with pytest.raises((FileNotFoundError, OSError)):
+            read_matrix("/nonexistent/path/file.1pz")
 
-    def test_non_spz_raises(self, tmp_path):
-        """Raises for non-.spz format (e.g., .1pz)."""
-        from singlet._io import _detect_format_version
+    def test_bad_format_raises(self, tmp_path):
+        from singlet._io import read_matrix
 
-        path = tmp_path / "test.1pz"
-        path.write_bytes(b"\x54\x50\x31\x5a" + b"\x00" * 4)
-        with pytest.raises(ValueError, match="Not a .spz file"):
-            _detect_format_version(path)
+        f = tmp_path / "garbage.1pz"
+        f.write_bytes(b"XXXX" + b"\x00" * 100)
+        with pytest.raises(ValueError, match="Unknown file format"):
+            read_matrix(f)
 
 
 class TestReadKraken2:

@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-// singlet-gpu/reduce/nmf/types.h
+// SPDX-License-Identifier: MIT
+// singlet/gpu/reduce/nmf/types.h
 //
 // Native NMF config and result types — replaces factornet re-exports.
 // CYCLE-105: fully internal; no factornet dependency.
@@ -12,7 +12,7 @@
 #include <vector>
 #include <cmath>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace reduce {
 namespace nmf {
 
@@ -136,7 +136,7 @@ struct FactorConfig {
 // ---------------------------------------------------------------------------
 // NmfConfig — algorithm parameters for fit().
 //
-// Field names match factornet::NMFConfig<float> for call-site compatibility.
+// Field names follow the long-standing NmfConfig layout for call-site stability.
 // Sane GPU-tuned defaults (Rule 31).
 // algorithm derived from factornet/core/config.hpp
 // ---------------------------------------------------------------------------
@@ -233,4 +233,4 @@ struct CVNMFResult {
 
 }  // namespace nmf
 }  // namespace reduce
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

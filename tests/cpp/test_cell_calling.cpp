@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // N5: Unit tests for EmptyDrops cell calling
 // Run via ctest or standalone:
 //   g++ -std=c++17 -O2 -I../include -o /tmp/test_cc test/test_cell_calling.cpp && /tmp/test_cc

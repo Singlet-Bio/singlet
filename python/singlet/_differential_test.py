@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Distribution-level differential testing between cell groups.
 
 Tests whether the overall distribution of cells differs between groups

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: metrics_summary.h
 // G-METRICS: Write metrics_summary.csv compatible with Cell Ranger output.

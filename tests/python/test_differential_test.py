@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.differential_test."""
 
 from __future__ import annotations

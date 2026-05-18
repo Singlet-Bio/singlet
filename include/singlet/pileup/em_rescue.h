@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: em_rescue.h
 // G-EM: Equivalence-class EM multi-mapper rescue.

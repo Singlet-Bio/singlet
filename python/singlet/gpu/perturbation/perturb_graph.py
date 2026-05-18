@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.perturbation.perturb_graph — GPU-native CPA perturbation autoencoder.
 
@@ -13,9 +13,11 @@ API
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
+
+from singlet.gpu._coreutil import require_core
 
 if TYPE_CHECKING:
     import anndata
@@ -34,7 +36,7 @@ class PerturbGraphModel:
     """
 
     def __init__(self, result, pert_names: list):
-        self._result = result
+        self._result    = result
         self.pert_names = pert_names
 
     @property
@@ -50,21 +52,19 @@ class PerturbGraphModel:
     def pert_embeddings(self) -> np.ndarray:
         """Return [n_perts × d_latent] perturbation embedding (host numpy)."""
         import cupy as cp
-
         n_perts = self._result.n_perts
-        d = self._result.d_latent
+        d       = self._result.d_latent
         return cp.asarray(self._result.pert_embeddings_view).reshape(n_perts, d).get()
 
     def cell_latents(self) -> np.ndarray:
         """Return [n_cells × d_latent] basal cell latents (host numpy)."""
         import cupy as cp
-
         d = self._result.d_latent
         return cp.asarray(self._result.cell_latents_view).reshape(-1, d).get()
 
     def predict_perturbation(
         self,
-        adata_query: anndata.AnnData,
+        adata_query: "anndata.AnnData",
         target_pert: str,
         *,
         target_dose: float = 1.0,
@@ -90,17 +90,17 @@ class PerturbGraphModel:
         """
         if target_pert not in self.pert_names:
             raise ValueError(
-                f"'{target_pert}' not in trained perturbation set.  Available: {self.pert_names}"
+                f"'{target_pert}' not in trained perturbation set.  "
+                f"Available: {self.pert_names}"
             )
         pert_id = self.pert_names.index(target_pert)
 
         try:
             import cupy as cp
-
             try:
                 import cupyx.scipy.sparse as csp  # cupy >= 14
             except ImportError:
-                import cupy.sparse as csp  # cupy < 14 fallback
+                import cupy.sparse as csp         # cupy < 14 fallback
             import scipy.sparse as sp
 
             X = adata_query.X
@@ -109,8 +109,9 @@ class PerturbGraphModel:
             mat = csp.csc_matrix(X) if sp.issparse(X) else csp.csc_matrix(cp.array(X))
         except ImportError as e:
             raise ImportError(
-                f"singlet.gpu.perturbation.perturb_graph requires cupy.  Original error: {e}"
-            ) from e
+                "singlet.gpu.perturbation.perturb_graph requires cupy.  "
+                f"Original error: {e}"
+            )
 
         view = self._result.predict_perturbation(mat, pert_id, target_dose, stream)
         n_query = adata_query.n_obs
@@ -120,12 +121,13 @@ class PerturbGraphModel:
 
     def __repr__(self) -> str:
         return (
-            f"<PerturbGraphModel n_perts={self._result.n_perts} d_latent={self._result.d_latent}>"
+            f"<PerturbGraphModel n_perts={self._result.n_perts} "
+            f"d_latent={self._result.d_latent}>"
         )
 
 
 def fit(
-    adata: anndata.AnnData,
+    adata: "anndata.AnnData",
     pert_key: str = "perturbation",
     *,
     d_latent: int = 64,
@@ -155,21 +157,14 @@ def fit(
     -------
     PerturbGraphModel
     """
-    import singlet.gpu._core as _core
-
-    if not hasattr(_core, "train_perturb_graph"):
-        raise AttributeError(
-            "_core.train_perturb_graph is not available.  "
-            "Ensure the cycle-52a binding extension has been compiled."
-        )
+    _core = require_core("train_perturb_graph")
 
     try:
         import cupy as cp
-
         try:
             import cupyx.scipy.sparse as csp  # cupy >= 14
         except ImportError:
-            import cupy.sparse as csp  # cupy < 14 fallback
+            import cupy.sparse as csp         # cupy < 14 fallback
         import scipy.sparse as sp
 
         X = adata.X
@@ -178,14 +173,15 @@ def fit(
         mat = csp.csc_matrix(X) if sp.issparse(X) else csp.csc_matrix(cp.array(X))
     except ImportError as e:
         raise ImportError(
-            f"singlet.gpu.perturbation.perturb_graph.fit requires cupy.  Original error: {e}"
-        ) from e
+            "singlet.gpu.perturbation.perturb_graph.fit requires cupy.  "
+            f"Original error: {e}"
+        )
 
     # Encode perturbation labels as integers.
     raw_labels = adata.obs[pert_key].values
     if raw_labels.dtype.kind not in ("i", "u"):
         pert_names = list(dict.fromkeys(raw_labels))
-        label_map = {n: i for i, n in enumerate(pert_names)}
+        label_map  = {n: i for i, n in enumerate(pert_names)}
         int_labels = np.array([label_map[l] for l in raw_labels], dtype=np.int32)
     else:
         pert_names = [str(i) for i in range(int(raw_labels.max()) + 1)]
@@ -194,9 +190,8 @@ def fit(
     d_pert_ids = cp.asarray(int_labels)
 
     result = _core.train_perturb_graph(
-        mat,
-        d_pert_ids,
-        None,  # dose: 1.0 for all cells
+        mat, d_pert_ids,
+        None,    # dose: 1.0 for all cells
         d_latent=d_latent,
         d_hidden=d_hidden,
         n_epochs=n_epochs,

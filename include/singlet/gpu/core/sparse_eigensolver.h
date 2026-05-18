@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-// singlet-gpu/core/sparse_eigensolver.h
+// SPDX-License-Identifier: MIT
+// singlet/gpu/core/sparse_eigensolver.h
 //
 // LOBPCG — Locally Optimal Block Preconditioned Conjugate Gradient.
 // Computes top-K exterior eigenvalues + eigenvectors of a sparse symmetric matrix.
@@ -66,12 +66,8 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
 
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
@@ -113,7 +109,7 @@
 #  define CURAND_CHECK(call) SINGLET_GPU_CURAND_CHECK(call)
 #endif
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace core {
 
 // ---------------------------------------------------------------------------
@@ -343,7 +339,7 @@ inline SparseEigResult<T> top_k_eigsh_lobpcg(
         "top_k_eigsh_lobpcg: only T=float supported in v0 (fp32 default, Rule 3)");
 
     if (stream == nullptr) {
-        stream = singlet_gpu::core::default_context().stream();
+        stream = singlet::gpu::core::default_context().stream();
     }
 
     const int n = A.n;
@@ -376,7 +372,7 @@ inline SparseEigResult<T> top_k_eigsh_lobpcg(
     // Retrieve library handles from the default context. Rebind stream.
     // WHY default_context: Rule 6 — handles from core/handles.h only.
     // -------------------------------------------------------------------------
-    GPUContext& ctx = singlet_gpu::core::default_context();
+    GPUContext& ctx = singlet::gpu::core::default_context();
     cublasHandle_t      blas_h   = ctx.blas();
     cusparseHandle_t    sp_h     = ctx.sparse();
     cusolverDnHandle_t  solver_h = ctx.solver();
@@ -908,4 +904,4 @@ inline SparseEigResult<T> top_k_eigsh_lobpcg(
 }
 
 }  // namespace core
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

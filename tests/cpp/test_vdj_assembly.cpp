@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_vdj_assembly.cpp — unit tests for G-VDJ CDR3 assembly
 #include <cassert>
 #include <iostream>

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: doublet_detect.h
 // N12: Doublet detection using a simulation-based kNN approach (v6 — GMM threshold).

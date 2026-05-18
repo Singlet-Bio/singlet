@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Gene set enrichment analysis via Enrichr API.
 
 Provides singlet.enrichr() — queries the Enrichr web API for pathway

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.nmf() — local NMF decomposition."""
 
 import numpy as np

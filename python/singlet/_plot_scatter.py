@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Generic scatter plot for any 2D embedding."""
 
 from __future__ import annotations

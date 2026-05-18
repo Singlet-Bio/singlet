@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Ranking plot for DE genes."""
 
 from __future__ import annotations

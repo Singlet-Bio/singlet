@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: ase.h
 // N15: Allele-specific expression (ASE) from existing SNP pileup AD/DP matrices.

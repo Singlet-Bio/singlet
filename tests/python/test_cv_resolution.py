@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.cross_validate_resolution()."""
 
 import numpy as np

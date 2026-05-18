@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Quality control metric calculation for AnnData objects.
 
 Provides singlet.calculate_qc_metrics() — computes per-cell and per-gene

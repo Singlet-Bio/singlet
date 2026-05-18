@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: cugraph/algorithms.hpp (cugraph::leiden + cugraph::louvain)
 //
 // graph/leiden.h — Leiden / Louvain community detection wrapping cuGraph
@@ -65,8 +65,8 @@
 #include <cub/device/device_reduce.cuh>
 #include <cub/device/device_radix_sort.cuh>
 
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/graph/knn.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/graph/knn.h>
 
 // cuGraph is an optional compile-time dependency. The __has_include guard lets
 // this header be parsed (e.g., by IDEs and static analysers) even when cuGraph
@@ -84,7 +84,7 @@
 #  endif
 #endif
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace graph {
 
 // ─── Public API types ─────────────────────────────────────────────────────────
@@ -389,7 +389,7 @@ leiden(const KnnResult& graph,
     // static_assert(sizeof(graph) == 0, "cuGraph required");
     (void)cfg; (void)stream;
     throw std::runtime_error(
-        "singlet_gpu::graph::leiden requires cuGraph. "
+        "singlet::gpu::graph::leiden requires cuGraph. "
         "Rebuild with find_package(cugraph) resolving in CMakeLists.txt.");
     LeidenResult r; return r;
 #else
@@ -442,7 +442,7 @@ leiden_multi(const KnnResult& graph,
     // static_assert(sizeof(graph) == 0, "cuGraph required for leiden_multi");
     (void)resolutions; (void)cfg; (void)stream;
     throw std::runtime_error(
-        "singlet_gpu::graph::leiden_multi requires cuGraph. "
+        "singlet::gpu::graph::leiden_multi requires cuGraph. "
         "Rebuild with find_package(cugraph) resolving in CMakeLists.txt.");
     std::vector<LeidenResult> r; return r;
 #else
@@ -486,4 +486,4 @@ leiden_multi(const KnnResult& graph,
 }
 
 }  // namespace graph
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

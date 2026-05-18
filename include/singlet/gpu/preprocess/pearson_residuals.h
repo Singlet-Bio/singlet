@@ -1,7 +1,7 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (no factornet equivalent for pearson_residuals)
 //
-// singlet-gpu/preprocess/pearson_residuals.h
+// singlet/gpu/preprocess/pearson_residuals.h
 //
 // Analytic Pearson residuals normalization for sparse UMI count matrices.
 // Primary use: per-gene residual variance for HVG selection.
@@ -81,13 +81,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/io/pz_device_loader.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/io/pz_device_loader.h>
 
 #include <cuda_runtime.h>
 #include <cooperative_groups.h>
@@ -97,7 +93,7 @@
 #include <stdexcept>
 #include <vector>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace preprocess {
 
 // ---------------------------------------------------------------------------
@@ -349,7 +345,7 @@ inline core::DeviceMemory<float> pearson_residual_variance(
     cudaStream_t                  stream = nullptr)
 {
     if (stream == nullptr) {
-        stream = singlet_gpu::core::default_context().stream();
+        stream = singlet::gpu::core::default_context().stream();
     }
 
     const int m = m_.mat.rows;  // genes
@@ -365,7 +361,7 @@ inline core::DeviceMemory<float> pearson_residual_variance(
         // All-zero matrix: all variances are zero.
         core::DeviceMemory<float> var_out(m);
         cudaMemsetAsync(var_out.get(), 0, m * sizeof(float), stream);
-        CUDA_CHECK(cudaStreamSynchronize(stream));
+        SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
         return var_out;
     }
 
@@ -410,7 +406,7 @@ inline core::DeviceMemory<float> pearson_residual_variance(
 
     // --- Grand total N: reduce u[m] on host (one D2H, Rule 4 exception) ---
     // Sync after pass 1a/1b to ensure u[] is ready.
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
     std::vector<float> h_u(m);
     cudaMemcpy(h_u.data(), d_u.get(), m * sizeof(float), cudaMemcpyDeviceToHost);
     double N_dbl = 0.0;
@@ -418,7 +414,7 @@ inline core::DeviceMemory<float> pearson_residual_variance(
     if (N_dbl <= 0.0) {
         // All-zero values after row sum — return zero variance.
         cudaMemsetAsync(d_var.get(), 0, m * sizeof(float), stream);
-        CUDA_CHECK(cudaStreamSynchronize(stream));
+        SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
         return d_var;
     }
     const float N_inv = static_cast<float>(1.0 / N_dbl);
@@ -472,10 +468,10 @@ inline core::DeviceMemory<float> pearson_residual_variance(
 
     // Function-boundary sync (Rule 9): guarantee all kernels complete before
     // workspace DeviceMemory objects go out of scope.
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     return d_var;
 }
 
 } // namespace preprocess
-} // namespace singlet_gpu
+} // namespace singlet::gpu

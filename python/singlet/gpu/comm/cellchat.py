@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.comm.cellchat — GPU-native CellChat cell communication scoring.
 
@@ -21,9 +21,11 @@ When an AnnData is provided (``run_from_anndata``):
 from __future__ import annotations
 
 import copy as copy_module
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 import numpy as np
+
+from singlet.gpu._coreutil import require_core
 
 if TYPE_CHECKING:
     import anndata
@@ -31,25 +33,8 @@ if TYPE_CHECKING:
 
 
 # ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-
-def _require_core():
-    import singlet.gpu._core as _core
-
-    if not hasattr(_core, "comm") or not hasattr(_core.comm, "cellchat"):
-        raise AttributeError(
-            "_core.comm.cellchat is not available.  "
-            "The C++ extension must be compiled on a CUDA-capable node."
-        )
-    return _core.comm
-
-
-# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
-
 
 def run_from_csc(
     mat,
@@ -64,7 +49,7 @@ def run_from_csc(
     deterministic: bool = False,
     stream=None,
     seed: int = 0,
-) -> Any:
+):
     """
     GPU-native CellChat communication probability scoring (raw CSC input).
 
@@ -100,9 +85,9 @@ def run_from_csc(
         ``.p_values_view``         — __cuda_array_interface__ [n_lr × n_types²].
         ``.pathway_activity_view`` — __cuda_array_interface__ [n_pathways × n_types²].
     """
-    comm = _require_core()
-    cell_type = np.asarray(cell_type, dtype=np.int32)
-    lr_ligand = np.asarray(lr_ligand, dtype=np.int32)
+    comm = require_core("comm", "cellchat")
+    cell_type   = np.asarray(cell_type,   dtype=np.int32)
+    lr_ligand   = np.asarray(lr_ligand,   dtype=np.int32)
     lr_receptor = np.asarray(lr_receptor, dtype=np.int32)
     if pathway_id is None:
         pathway_id = np.zeros(len(lr_ligand), dtype=np.int32)
@@ -112,11 +97,7 @@ def run_from_csc(
         n_pathways = int(pathway_id.max()) + 1
 
     return comm.cellchat(
-        mat,
-        cell_type,
-        lr_receptor,
-        lr_ligand,
-        pathway_id,
+        mat, cell_type, lr_receptor, lr_ligand, pathway_id,
         n_pathways=int(n_pathways),
         n_permutations=int(n_permutations),
         hill_K=float(hill_K),
@@ -127,8 +108,8 @@ def run_from_csc(
 
 
 def run_from_anndata(
-    adata: anndata.AnnData,
-    lr_database: pd.DataFrame,
+    adata: "anndata.AnnData",
+    lr_database: "pd.DataFrame",
     cell_type_key: str = "cell_type",
     *,
     gene_symbol_key: Optional[str] = None,
@@ -138,7 +119,7 @@ def run_from_anndata(
     stream=None,
     seed: int = 0,
     copy: bool = False,
-) -> Optional[anndata.AnnData]:
+) -> Optional["anndata.AnnData"]:
     """
     GPU-native CellChat communication scoring from an AnnData object.
 
@@ -178,9 +159,14 @@ def run_from_anndata(
     working = copy_module.copy(adata) if copy else adata
 
     if not isinstance(working.X, singlet.gpu.DeviceCsc):
-        raise TypeError("adata.X must be a DeviceCsc.  Call singlet.gpu.load_pz() first.")
+        raise TypeError(
+            "adata.X must be a DeviceCsc.  "
+            "Call singlet.gpu.load_pz() first."
+        )
     if cell_type_key not in working.obs.columns:
-        raise KeyError(f"cell_type_key='{cell_type_key}' not in adata.obs.")
+        raise KeyError(
+            f"cell_type_key='{cell_type_key}' not in adata.obs."
+        )
 
     # Build gene name → row-index map.
     if gene_symbol_key is not None and gene_symbol_key in working.var.columns:
@@ -203,14 +189,9 @@ def run_from_anndata(
         )
 
     import pandas as pd
-
-    valid_df = pd.DataFrame(valid_rows)
-    lr_ligand = np.array(
-        [gene_idx_map[r["ligand"]] for _, r in valid_df.iterrows()], dtype=np.int32
-    )
-    lr_receptor = np.array(
-        [gene_idx_map[r["receptor"]] for _, r in valid_df.iterrows()], dtype=np.int32
-    )
+    valid_df   = pd.DataFrame(valid_rows)
+    lr_ligand  = np.array([gene_idx_map[r["ligand"]]   for _, r in valid_df.iterrows()], dtype=np.int32)
+    lr_receptor= np.array([gene_idx_map[r["receptor"]] for _, r in valid_df.iterrows()], dtype=np.int32)
 
     # Pathway assignment.
     if "pathway" in valid_df.columns:
@@ -224,17 +205,13 @@ def run_from_anndata(
         n_pathways = 1
 
     # Cell-type codes.
-    ct_series = working.obs[cell_type_key].astype("category")
-    cell_type = ct_series.cat.codes.to_numpy(dtype=np.int32)
-    cell_types = list(ct_series.cat.categories)
-    n_types = len(cell_types)
+    ct_series   = working.obs[cell_type_key].astype("category")
+    cell_type   = ct_series.cat.codes.to_numpy(dtype=np.int32)
+    cell_types  = list(ct_series.cat.categories)
+    n_types     = len(cell_types)
 
     result = run_from_csc(
-        working.X,
-        cell_type,
-        lr_ligand,
-        lr_receptor,
-        pathway_id,
+        working.X, cell_type, lr_ligand, lr_receptor, pathway_id,
         n_pathways=n_pathways,
         n_permutations=n_permutations,
         hill_K=hill_K,
@@ -250,34 +227,31 @@ def run_from_anndata(
         """Copy a __cuda_array_interface__ dict to a numpy array."""
         try:
             import cupy as cp
-
             arr_gpu = cp.ndarray(
-                shape=(int(np.prod(shape)),),
-                dtype=cp.float32,
+                shape=(int(np.prod(shape)),), dtype=cp.float32,
                 memptr=cp.cuda.MemoryPointer(
-                    cp.cuda.UnownedMemory(view["data"][0], int(np.prod(shape)) * 4, None), 0
-                ),
+                    cp.cuda.UnownedMemory(view["data"][0], int(np.prod(shape)) * 4, None), 0)
             )
             return arr_gpu.get().reshape(shape)
         except (ImportError, Exception):
             import ctypes
-
             n = int(np.prod(shape))
             buf = (ctypes.c_float * n)()
-            ctypes.memmove(ctypes.addressof(buf), ctypes.c_void_p(view["data"][0]), n * 4)
+            ctypes.memmove(ctypes.addressof(buf),
+                           ctypes.c_void_p(view["data"][0]), n * 4)
             return np.frombuffer(buf, dtype=np.float32).copy().reshape(shape)
 
-    comm_prob = _d2h(result.comm_prob_view, (n_lr, n_types, n_types))
-    p_values = _d2h(result.p_values_view, (n_lr, n_types, n_types))
+    comm_prob        = _d2h(result.comm_prob_view,        (n_lr, n_types, n_types))
+    p_values         = _d2h(result.p_values_view,         (n_lr, n_types, n_types))
     pathway_activity = _d2h(result.pathway_activity_view, (n_pathways, n_types, n_types))
 
     working.uns["cellchat"] = {
-        "comm_prob": comm_prob,
-        "p_values": p_values,
+        "comm_prob":        comm_prob,
+        "p_values":         p_values,
         "pathway_activity": pathway_activity,
-        "lr_pairs": list(zip(valid_df["ligand"].tolist(), valid_df["receptor"].tolist())),
-        "pathways": pathway_names,
-        "cell_types": cell_types,
+        "lr_pairs":         list(zip(valid_df["ligand"].tolist(), valid_df["receptor"].tolist())),
+        "pathways":         pathway_names,
+        "cell_types":       cell_types,
         "params": {
             "n_permutations": n_permutations,
             "hill_K": hill_K,

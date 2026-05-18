@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Hierarchical clustering (dendrogram) for AnnData groups.
 
 Provides singlet.dendrogram() — computes hierarchical clustering of cell

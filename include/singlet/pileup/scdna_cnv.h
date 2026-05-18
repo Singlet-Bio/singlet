@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: scdna_cnv.h
 // G-SCDNA — Single-cell DNA copy-number variant (CNV) bin counting and QC.

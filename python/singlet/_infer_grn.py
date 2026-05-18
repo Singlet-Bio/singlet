@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Gene regulatory network inference for AnnData objects.
 
 Provides singlet.infer_grn() — infers TF-target regulatory links from

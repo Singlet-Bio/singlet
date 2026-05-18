@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: loom_writer.h
 // Loom v3 format export (loompy.org specification).
@@ -32,6 +33,8 @@
 #include <iostream>
 #include <string>
 #include <vector>
+
+#include "h5_util.h"
 
 namespace singlet {
 
@@ -74,53 +77,13 @@ inline bool write_loom(const LoomWriteConfig& cfg);
 
 namespace loom_detail {
 
-/// Create a variable-length UTF-8 C-string HDF5 type. Caller must H5Tclose().
-inline hid_t make_vlen_str_type() {
-    hid_t t = H5Tcopy(H5T_C_S1);
-    H5Tset_size(t, H5T_VARIABLE);
-    H5Tset_strpad(t, H5T_STR_NULLTERM);
-    H5Tset_cset(t, H5T_CSET_UTF8);
-    return t;
-}
-
-/// Write a scalar VL-string attribute on `loc`.
-inline bool write_str_attr(hid_t loc, const char* name, const char* value) {
-    hid_t stype = make_vlen_str_type();
-    hid_t space = H5Screate(H5S_SCALAR);
-    hid_t attr  = H5Acreate2(loc, name, stype, space, H5P_DEFAULT, H5P_DEFAULT);
-    bool ok = (attr >= 0);
-    if (ok) {
-        // VL string write: H5Awrite expects a pointer to const char*
-        ok = (H5Awrite(attr, stype, &value) >= 0);
-        H5Aclose(attr);
-    }
-    H5Sclose(space);
-    H5Tclose(stype);
-    return ok;
-}
-
-/// Write a 1-D VL-string dataset `name` under `loc`.
+// Shared HDF5 boilerplate — canonical definitions live in h5_util.h.
+using ::singlet::pileup::h5::make_vlen_str_type;
+using ::singlet::pileup::h5::write_str_attr;
+// loom historically spells its VL-string dataset helper write_str_dataset.
 inline bool write_str_dataset(hid_t loc, const char* name,
-                               const std::vector<std::string>& values) {
-    hid_t stype = make_vlen_str_type();
-    hsize_t n   = static_cast<hsize_t>(values.size());
-    hid_t space = H5Screate_simple(1, &n, nullptr);
-    hid_t ds    = H5Dcreate2(loc, name, stype, space,
-                              H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    bool ok = (ds >= 0);
-    if (ok) {
-        if (n > 0) {
-            std::vector<const char*> ptrs;
-            ptrs.reserve(n);
-            for (const auto& s : values) ptrs.push_back(s.c_str());
-            ok = (H5Dwrite(ds, stype, H5S_ALL, H5S_ALL,
-                           H5P_DEFAULT, ptrs.data()) >= 0);
-        }
-        H5Dclose(ds);
-    }
-    H5Sclose(space);
-    H5Tclose(stype);
-    return ok;
+                              const std::vector<std::string>& values) {
+    return ::singlet::pileup::h5::write_vlen_str_dataset(loc, name, values);
 }
 
 /// Write a dense [n_genes × n_cells] int32 HDF5 dataset named `name` under

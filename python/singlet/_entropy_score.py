@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Cell neighborhood entropy scoring.
 
 Provides singlet.entropy_score() — compute Shannon entropy of cluster labels

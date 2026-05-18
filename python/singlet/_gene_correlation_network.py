@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Gene-gene correlation network construction.
 
 Provides singlet.gene_correlation_network() — compute pairwise gene correlations

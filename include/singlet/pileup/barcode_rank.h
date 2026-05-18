@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: barcode_rank.h
 // G-BARCODE-RANK — Barcode rank data for knee / inflection plot generation.

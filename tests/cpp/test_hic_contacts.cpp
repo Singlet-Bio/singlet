@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // tests/test_hic_contacts.cpp — Unit tests for G-HIC contact pair extraction
 // Tests: classify_contact, compute_hic_qc, write_pairs, write_hic_qc
 // No htslib dependency; all synthetic ContactPair data.
@@ -14,18 +15,8 @@
 
 using namespace singlet;
 
-static int g_pass = 0;
-static int g_fail = 0;
-
-#define CHECK(cond, msg)                                               \
-    do {                                                               \
-        if (!(cond)) {                                                 \
-            std::cerr << "FAIL [" << __LINE__ << "]: " << msg << "\n"; \
-            ++g_fail;                                                  \
-        } else {                                                       \
-            ++g_pass;                                                  \
-        }                                                              \
-    } while (0)
+#define SINGLET_TEST_HARNESS_QUIET
+#include "test_harness.h"  // CHECK(cond, msg) + g_pass / g_fail
 
 // ---------------------------------------------------------------------------
 // Helper: build a ContactPair

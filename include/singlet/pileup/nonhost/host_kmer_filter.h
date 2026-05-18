@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // host_kmer_filter.h — Host genome minimizer Bloom filter for false-positive suppression
 //
 // Part of NONHOST-HOST-SUBTRACT (DAG task). Builds a Bloom filter from all

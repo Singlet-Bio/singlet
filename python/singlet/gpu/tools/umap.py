@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.tools.umap — GPU-native UMAP dimensionality reduction.
 
@@ -36,8 +36,7 @@ if TYPE_CHECKING:
 # RNG helper
 # ---------------------------------------------------------------------------
 
-
-def _resolve_seed(rng: Optional[Union[int, np.random.Generator]]) -> int:
+def _resolve_seed(rng: Optional[Union[int, "np.random.Generator"]]) -> int:
     """Convert scanpy-style ``rng`` to a uint64 seed for C++."""
     if rng is None:
         return 0
@@ -50,9 +49,8 @@ def _resolve_seed(rng: Optional[Union[int, np.random.Generator]]) -> int:
 # Internal: extract the neighbors representation
 # ---------------------------------------------------------------------------
 
-
 def _get_neighbors_data(
-    adata: anndata.AnnData,
+    adata: "anndata.AnnData",
     neighbors_key: str,
 ) -> tuple:
     """
@@ -65,7 +63,7 @@ def _get_neighbors_data(
     if neighbors_key not in adata.uns:
         raise KeyError(
             f"Neighbors key '{neighbors_key}' not found in adata.uns.  "
-            "Run singlet.gpu.pp.neighbors() (or sc.pp.neighbors()) first."
+            "Run singlet.gpu.preprocess.neighbors() (or sc.pp.neighbors()) first."
         )
 
     nbrs = adata.uns[neighbors_key]
@@ -75,12 +73,12 @@ def _get_neighbors_data(
     if dist_key not in adata.obsp:
         raise KeyError(
             f"Distances key '{dist_key}' not found in adata.obsp.  "
-            "Run singlet.gpu.pp.neighbors() first."
+            "Run singlet.gpu.preprocess.neighbors() first."
         )
     if conn_key not in adata.obsp:
         raise KeyError(
             f"Connectivities key '{conn_key}' not found in adata.obsp.  "
-            "Run singlet.gpu.pp.neighbors() first."
+            "Run singlet.gpu.preprocess.neighbors() first."
         )
 
     return adata.obsp[dist_key], adata.obsp[conn_key]
@@ -90,9 +88,8 @@ def _get_neighbors_data(
 # Public API
 # ---------------------------------------------------------------------------
 
-
 def umap(
-    adata: anndata.AnnData,
+    adata: "anndata.AnnData",
     *,
     min_dist: float = 0.5,
     spread: float = 1.0,
@@ -101,15 +98,15 @@ def umap(
     alpha: float = 1.0,
     gamma: float = 1.0,
     negative_sample_rate: int = 5,
-    init_pos: Union[Literal["spectral", "random"], np.ndarray, None] = "random",
-    rng: Optional[Union[int, np.random.Generator]] = None,
+    init_pos: Union[Literal["spectral", "random"], "np.ndarray", None] = "random",
+    rng: Optional[Union[int, "np.random.Generator"]] = None,
     a: Optional[float] = None,
     b: Optional[float] = None,
     method: Literal["umap"] = "umap",
     key_added: Optional[str] = None,
     neighbors_key: str = "neighbors",
     copy: bool = False,
-) -> Optional[anndata.AnnData]:
+) -> Optional["anndata.AnnData"]:
     """
     GPU-native UMAP dimensionality reduction (cycle-10 kernel).
 
@@ -124,7 +121,7 @@ def umap(
     ----------
     adata : AnnData
         Must contain a precomputed kNN graph in ``adata.obsp`` and
-        ``adata.uns[neighbors_key]`` (from ``singlet.gpu.pp.neighbors``
+        ``adata.uns[neighbors_key]`` (from ``singlet.gpu.preprocess.neighbors``
         or ``sc.pp.neighbors``).
     min_dist : float, default 0.5
         Minimum distance between embedded points.  Controls compactness
@@ -234,7 +231,7 @@ def umap(
     if neighbors_key not in working.uns or "_knn_result" not in working.uns[neighbors_key]:
         raise KeyError(
             f"No cached KnnResult found in adata.uns['{neighbors_key}']['_knn_result']. "
-            "Call singlet.gpu.pp.neighbors() before singlet.gpu.tools.umap()."
+            "Call singlet.gpu.preprocess.neighbors() before singlet.gpu.tools.umap()."
         )
     knn_result = working.uns[neighbors_key]["_knn_result"]
 
@@ -246,9 +243,9 @@ def umap(
     # init_pos: ndarray init is not supported by the binding; fall back to 'random'.
     if isinstance(init_pos, np.ndarray):
         import warnings
-
         warnings.warn(
-            "umap: init_pos ndarray is not supported by the GPU binding; falling back to 'random'.",
+            "umap: init_pos ndarray is not supported by the GPU binding; "
+            "falling back to 'random'.",
             UserWarning,
             stacklevel=2,
         )

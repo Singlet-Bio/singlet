@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Free cell type annotation via NMF gene program projection.
 
 Unlike the token-priced nmf.transform/annotate, these functions run entirely

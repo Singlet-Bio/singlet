@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.perturbation_signature()."""
 
 import numpy as np

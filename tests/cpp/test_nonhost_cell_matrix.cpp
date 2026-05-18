@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_nonhost_cell_matrix.cpp — Unit tests for nonhost_cell_matrix.h
 //
 // Tests NonHostCellMatrix::build(), ::read_mate_pairs(), and ::write().

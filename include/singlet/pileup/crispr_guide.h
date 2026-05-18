@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: crispr_guide.h
 // N18: CRISPR guide capture counting

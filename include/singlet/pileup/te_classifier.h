@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: te_classifier.h  — T-L2-3
 // Transposable element family classifier using 21-mer FracMinHash sketches
@@ -27,6 +28,8 @@
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include "kmer_util.h"
 
 namespace singlet {
 
@@ -139,30 +142,16 @@ inline uint64_t mix64(uint64_t x) {
 }
 
 // Encode a single base to 2 bits (ACGT → 0,1,2,3; anything else → 4=invalid).
+// Thin wrapper over the shared singlet::pileup::kmer helper.
 inline uint8_t base2bit(char c) {
-    switch (c | 32) {
-        case 'a': return 0;
-        case 'c': return 1;
-        case 'g': return 2;
-        case 't': return 3;
-        default:  return 4;
-    }
+    return ::singlet::pileup::kmer::base2bit(c);
 }
 
 // Canonical 2-bit k-mer (minimum of forward / reverse-complement).
 // Returns ~0 if any ambiguous base is present.
+// Thin wrapper over the shared singlet::pileup::kmer helper.
 inline uint64_t canonical_kmer(const char* seq, uint32_t k) {
-    uint64_t fwd = 0, rev = 0;
-    // Precomputed RC bit: A(0)↔T(3), C(1)↔G(2)
-    static constexpr uint8_t rc_bit[4] = {3, 2, 1, 0};
-    const uint64_t mask = (k < 32) ? ((1ULL << (2 * k)) - 1) : ~0ULL;
-    for (uint32_t i = 0; i < k; ++i) {
-        uint8_t b = base2bit(seq[i]);
-        if (b == 4) return ~0ULL;  // ambiguous base
-        fwd = ((fwd << 2) | b) & mask;
-        rev = (rev >> 2) | (static_cast<uint64_t>(rc_bit[b]) << (2 * (k - 1)));
-    }
-    return std::min(fwd, rev);
+    return ::singlet::pileup::kmer::canonical_kmer_ascii(seq, k);
 }
 
 // Compute all bottom-s MinHash hashes for a sequence with given k-mer size.

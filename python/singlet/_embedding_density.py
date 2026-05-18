@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Embedding density estimation."""
 
 from __future__ import annotations

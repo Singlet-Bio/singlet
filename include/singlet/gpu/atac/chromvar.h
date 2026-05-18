@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (first GPU chromVAR for scATAC-seq motif enrichment)
 //
 // atac/chromvar.h — chromVAR: Chromatin Variation Across Regions (Schep et al. 2017)
@@ -82,13 +82,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/core/memory.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/core/memory.h>
 
 #include <cuda_runtime.h>
 #include <cusparse.h>
@@ -108,7 +104,7 @@
 #include <random>
 #include <cassert>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace atac {
 
 // ---------------------------------------------------------------------------
@@ -1124,4 +1120,4 @@ ChromVarResult chromvar(
 }
 
 }  // namespace atac
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

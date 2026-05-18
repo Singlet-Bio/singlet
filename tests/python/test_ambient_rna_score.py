@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.ambient_rna_score()."""
 
 import numpy as np

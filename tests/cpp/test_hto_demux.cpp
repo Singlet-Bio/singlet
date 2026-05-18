@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_hto_demux.cpp — unit tests for T3 HTO demultiplexing
 // Tests: perfect HTO separation → all singlets, all-low HTO → negatives,
 //        two HTOs above threshold → doublet, write_tsv output.

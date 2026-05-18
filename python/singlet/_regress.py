@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Regression of confounding variables from expression data.
 
 Provides singlet.regress_out() — removes effects of specified variables

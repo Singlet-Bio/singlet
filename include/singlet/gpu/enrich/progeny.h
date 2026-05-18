@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (first GPU PROGENy pathway activity scoring)
 //
 // enrich/progeny.h — PROGENy pathway activity scoring, GPU-native.
@@ -59,11 +59,7 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
+#include <singlet/gpu/core/types.h>
 
 #include <cuda_runtime.h>
 #include <cusparse.h>
@@ -80,7 +76,7 @@
 #include <unordered_map>
 #include <tuple>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace enrich {
 
 // ---------------------------------------------------------------------------
@@ -103,7 +99,7 @@ struct PROGENyWeights {
     std::vector<float>       weights_dense;    // [n_genes × n_pathways], column-major (n_genes rows)
 
     // GPU copy of weights — uploaded once at program start.
-    singlet_gpu::core::DeviceMemory<float> d_weights;
+    singlet::gpu::core::DeviceMemory<float> d_weights;
 
     // Whether d_weights has been uploaded.
     bool gpu_ready = false;
@@ -118,7 +114,7 @@ struct PROGENyConfig {
 
 // PROGENy result
 struct PROGENyResult {
-    singlet_gpu::core::DeviceMemory<float> activity;  // [n_cells × n_pathways], row-major (device)
+    singlet::gpu::core::DeviceMemory<float> activity;  // [n_cells × n_pathways], row-major (device)
     int n_cells    = 0;
     int n_pathways = 0;
     std::vector<std::string> pathway_names;
@@ -195,7 +191,7 @@ inline PROGENyWeights load_progeny_weights_tsv(
 // CUDAMEMCPY AUDIT (1 of 2): HostToDevice, one-time setup at program start.
 inline void upload_progeny_weights(PROGENyWeights& pw, cudaStream_t stream) {
     if (pw.gpu_ready) return;
-    pw.d_weights = singlet_gpu::core::DeviceMemory<float>((size_t)pw.n_genes * pw.n_pathways);
+    pw.d_weights = singlet::gpu::core::DeviceMemory<float>((size_t)pw.n_genes * pw.n_pathways);
     cudaMemcpyAsync(pw.d_weights.get(), pw.weights_dense.data(),
                     pw.weights_dense.size() * sizeof(float),
                     cudaMemcpyHostToDevice, stream);
@@ -334,7 +330,7 @@ void pathway_normalize_kernel(
 // Caller synchronizes stream before reading.
 
 inline PROGENyResult progeny(
-    const singlet_gpu::core::DeviceCSC& mat,
+    const singlet::gpu::core::DeviceCSC& mat,
     PROGENyWeights&                     pw,
     const PROGENyConfig&                cfg,
     cudaStream_t                        stream,
@@ -355,7 +351,7 @@ inline PROGENyResult progeny(
     result.pathway_names = pw.pathway_names;
 
     // Allocate activity output: [n_cells × n_pathways] row-major.
-    result.activity = singlet_gpu::core::DeviceMemory<float>((size_t)n_cells * n_pathways);
+    result.activity = singlet::gpu::core::DeviceMemory<float>((size_t)n_cells * n_pathways);
     cudaMemsetAsync(result.activity.get(), 0, (size_t)n_cells * n_pathways * sizeof(float), stream);
 
     // ------------------------------------------------------------------
@@ -427,7 +423,7 @@ inline PROGENyResult progeny(
         CUDA_R_32F, CUSPARSE_SPMM_ALG_DEFAULT,
         &spmm_bytes);
 
-    singlet_gpu::core::DeviceMemory<uint8_t> d_spmm_buf(spmm_bytes + 1);
+    singlet::gpu::core::DeviceMemory<uint8_t> d_spmm_buf(spmm_bytes + 1);
 
     // Execute SpMM: activity = expressionᵀ × weights.
     cusparseSpMM(
@@ -494,4 +490,4 @@ inline PROGENyWeights progeny_load_human(
 }
 
 } // namespace enrich
-} // namespace singlet_gpu
+} // namespace singlet::gpu

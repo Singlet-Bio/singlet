@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Leiden community detection for AnnData objects.
 
 Provides singlet.leiden() — graph-based clustering using the Leiden algorithm.

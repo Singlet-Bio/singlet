@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: Lloyd (1982) "Least squares quantization in PCM." IEEE TIT 28:129-137.
 //
 // graph/kmeans.h — GPU k-means clustering (Lloyd's algorithm)
@@ -24,12 +24,8 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
 
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
@@ -42,7 +38,7 @@
 #include <string>
 #include <vector>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace graph {
 
 // ---------------------------------------------------------------------------
@@ -293,7 +289,7 @@ inline KmeansResult kmeans(
     cudaStream_t        stream = nullptr)
 {
     if (stream == nullptr)
-        stream = singlet_gpu::core::default_context().stream();
+        stream = singlet::gpu::core::default_context().stream();
 
     if (k_clusters <= 0)
         throw std::invalid_argument(
@@ -340,7 +336,7 @@ inline KmeansResult kmeans(
         // Copy selected columns of X into C, one per centroid
         for (int ki = 0; ki < k_clusters; ++ki) {
             const int src_col = indices[static_cast<size_t>(ki)];
-            CUDA_CHECK(cudaMemcpyAsync(
+            SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(
                 d_C.get() + static_cast<ptrdiff_t>(ki) * d_pcs,
                 d_X       + static_cast<ptrdiff_t>(src_col) * d_pcs,
                 static_cast<size_t>(d_pcs) * sizeof(float),
@@ -355,10 +351,10 @@ inline KmeansResult kmeans(
         d_X, d_x_norm.get(), d_pcs, n_cells);
 
     // Seed labels to -1 so first iteration always counts all cells as changed
-    CUDA_CHECK(cudaMemsetAsync(d_labels.get(), 0xff,
+    SINGLET_GPU_CUDA_CHECK(cudaMemsetAsync(d_labels.get(), 0xff,
         static_cast<size_t>(n_cells) * sizeof(int), stream));
 
-    cublasHandle_t blas = singlet_gpu::core::default_context().blas();
+    cublasHandle_t blas = singlet::gpu::core::default_context().blas();
     cublasSetStream(blas, stream);
 
     const float sgemm_alpha = 1.f, sgemm_beta = 0.f;
@@ -401,21 +397,21 @@ inline KmeansResult kmeans(
             d_labels_new.get(), n_cells, k_clusters);
 
         // (d) Count changes (D2H scalar — Rule 4 approved exception)
-        CUDA_CHECK(cudaMemsetAsync(d_changes.get(), 0, sizeof(int), stream));
+        SINGLET_GPU_CUDA_CHECK(cudaMemsetAsync(d_changes.get(), 0, sizeof(int), stream));
         {
             const int g = (n_cells + KM_THREADS - 1) / KM_THREADS;
             km_count_changes_kernel<<<g, KM_THREADS, 0, stream>>>(
                 d_labels.get(), d_labels_new.get(), d_changes.get(), n_cells);
         }
-        CUDA_CHECK(cudaStreamSynchronize(stream));
+        SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
         int h_changes = 0;
-        CUDA_CHECK(cudaMemcpy(&h_changes, d_changes.get(), sizeof(int), cudaMemcpyDeviceToHost));
+        SINGLET_GPU_CUDA_CHECK(cudaMemcpy(&h_changes, d_changes.get(), sizeof(int), cudaMemcpyDeviceToHost));
 
         // Swap labels
         {
             int* tmp = d_labels.get();
             // Manual pointer swap via underlying raw get — use cudaMemcpy swap:
-            CUDA_CHECK(cudaMemcpyAsync(d_labels.get(), d_labels_new.get(),
+            SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(d_labels.get(), d_labels_new.get(),
                 static_cast<size_t>(n_cells) * sizeof(int),
                 cudaMemcpyDeviceToDevice, stream));
         }
@@ -429,8 +425,8 @@ inline KmeansResult kmeans(
         }
 
         // (f) Update centroids: zero C_new, atomic scatter, divide
-        CUDA_CHECK(cudaMemsetAsync(d_C_new.get(), 0, dk_sz * sizeof(float), stream));
-        CUDA_CHECK(cudaMemsetAsync(d_count.get(), 0,
+        SINGLET_GPU_CUDA_CHECK(cudaMemsetAsync(d_C_new.get(), 0, dk_sz * sizeof(float), stream));
+        SINGLET_GPU_CUDA_CHECK(cudaMemsetAsync(d_count.get(), 0,
             static_cast<size_t>(k_clusters) * sizeof(int), stream));
         {
             const int g = (n_cells + KM_THREADS - 1) / KM_THREADS;
@@ -444,18 +440,18 @@ inline KmeansResult kmeans(
                 d_C_new.get(), d_count.get(), d_pcs, k_clusters);
         }
         // Swap C and C_new (device-to-device copy)
-        CUDA_CHECK(cudaMemcpyAsync(d_C.get(), d_C_new.get(),
+        SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(d_C.get(), d_C_new.get(),
             dk_sz * sizeof(float), cudaMemcpyDeviceToDevice, stream));
     }
 
     // -------------------------------------------------------------------------
     // Final inertia
     // -------------------------------------------------------------------------
-    CUDA_CHECK(cudaMemsetAsync(d_inertia.get(), 0, sizeof(float), stream));
+    SINGLET_GPU_CUDA_CHECK(cudaMemsetAsync(d_inertia.get(), 0, sizeof(float), stream));
     km_inertia_kernel<<<n_cells, KM_THREADS, 0, stream>>>(
         d_X, d_C.get(), d_labels.get(), d_inertia.get(), d_pcs, n_cells);
-    CUDA_CHECK(cudaStreamSynchronize(stream));
-    CUDA_CHECK(cudaMemcpy(&res.inertia, d_inertia.get(),
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaMemcpy(&res.inertia, d_inertia.get(),
         sizeof(float), cudaMemcpyDeviceToHost));
 
     res.labels    = std::move(d_labels);
@@ -464,4 +460,4 @@ inline KmeansResult kmeans(
 }
 
 }  // namespace graph
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

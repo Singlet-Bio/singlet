@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (first GPU NEBULA-style single-cell eQTL mapping)
 //
 // eqtl/nebula.h — Single-cell eQTL mapping via Negative Binomial mixed-model
@@ -70,13 +70,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/core/memory.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/core/memory.h>
 
 #include <cuda_runtime.h>
 #include <cub/device/device_segmented_reduce.cuh>
@@ -90,7 +86,7 @@
 #include <algorithm>
 #include <limits>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace eqtl {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -1077,10 +1073,10 @@ run_nebula(
 }
 
 // ─── Kernel definitions (defined here; referenced by forward declarations above) ──
-// These are __global__ functions in the singlet_gpu::eqtl namespace at file scope
+// These are __global__ functions in the singlet::gpu::eqtl namespace at file scope
 // (CUDA requires __global__ at namespace scope, not inside function bodies).
 // NOTE: NOT in detail:: — the extern __global__ forward declarations in run_nebula
-// resolve relative to singlet_gpu::eqtl, so the definitions must live here.
+// resolve relative to singlet::gpu::eqtl, so the definitions must live here.
 
 // Expression/count pseudobulk aggregation kernel.
 // One block per gene; shared mem = n_donors floats.
@@ -1164,4 +1160,4 @@ init_sort_indices_kernel(
 }
 
 }  // namespace eqtl
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

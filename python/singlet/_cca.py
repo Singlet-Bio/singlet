@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Canonical Correlation Analysis for AnnData objects.
 
 Implements CCA for integrating single-cell datasets by finding shared

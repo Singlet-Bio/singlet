@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet._loader.load_dir (singlet output loading)."""
 
 import json

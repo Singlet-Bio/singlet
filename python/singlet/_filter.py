@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Basic quality-control filtering for AnnData objects.
 
 Provides singlet.filter_cells() and singlet.filter_genes() so users can do

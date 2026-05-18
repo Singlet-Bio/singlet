@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test/test_cell_qc.cpp
 // Unit tests for cell_qc_metrics.h (G-QC feature).
 // Constructs a minimal in-memory GTF → GeneModel, builds synthetic CSC matrices,

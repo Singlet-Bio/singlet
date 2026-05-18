@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for PyTorch integration."""
 
 import pytest

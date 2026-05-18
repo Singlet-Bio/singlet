@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_mtx_export.cpp
 // Unit tests for G-EXPORT: CellRanger-compatible MTX export
 // Tests: write_features_10x, write_barcodes_10x, collapse_exon_to_gene

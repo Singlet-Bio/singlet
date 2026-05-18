@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: wgs_assembly.h — G-WGS
 // WGS/de novo assembly QC, coverage analysis, and subprocess management.

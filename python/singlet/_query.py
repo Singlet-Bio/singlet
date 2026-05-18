@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Token-priced: cross-atlas query and semantic search."""
 
 from __future__ import annotations
@@ -89,14 +90,14 @@ def query(
     import os
     import tempfile
 
-    from singlet._io import read_spz
+    from singlet._io import read_1pz
 
-    with tempfile.NamedTemporaryFile(suffix=".spz", delete=False) as f:
+    with tempfile.NamedTemporaryFile(suffix=".1pz", delete=False) as f:
         f.write(resp.content)
         tmp_path = f.name
 
     try:
-        return read_spz(tmp_path)
+        return read_1pz(tmp_path)
     finally:
         os.unlink(tmp_path)
 
@@ -131,13 +132,13 @@ def search(text: str, max_results: int = 100_000) -> AnnData:
     import os
     import tempfile
 
-    from singlet._io import read_spz
+    from singlet._io import read_1pz
 
-    with tempfile.NamedTemporaryFile(suffix=".spz", delete=False) as f:
+    with tempfile.NamedTemporaryFile(suffix=".1pz", delete=False) as f:
         f.write(resp.content)
         tmp_path = f.name
 
     try:
-        return read_spz(tmp_path)
+        return read_1pz(tmp_path)
     finally:
         os.unlink(tmp_path)

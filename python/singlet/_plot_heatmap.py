@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Heatmap visualization for gene expression."""
 
 from __future__ import annotations

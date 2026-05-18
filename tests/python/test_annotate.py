@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet._annotate (gene_programs, project, annotate)."""
 
 from unittest.mock import patch

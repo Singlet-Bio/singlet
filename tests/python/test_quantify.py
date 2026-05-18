@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.preprocessing._quantify (simpleaf quantification)."""
 
 import json

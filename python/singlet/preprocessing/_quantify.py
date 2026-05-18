@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Quantification module — simpleaf with piscem mapper."""
 
 from __future__ import annotations

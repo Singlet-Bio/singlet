@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // G-WEBSUMMARY: unit tests for web_summary.h
 // Verifies HTML structure, required sections, SVG elements, and well-formedness.
 // Run via ctest or standalone:

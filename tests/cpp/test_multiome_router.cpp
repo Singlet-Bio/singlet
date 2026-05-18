@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_multiome_router.cpp
 // Unit tests for singlet::multiome_router (G-MULTIOME-ROUTE)
 #include <cassert>
@@ -81,7 +82,7 @@ static void test_classify_empty() {
 
 // Simulate mixed GEX+ATAC by writing tiny fake .1fq files whose byte[57]
 // encodes the appropriate AssayType.
-static std::string write_fake_1fq(const char* name, lib1fq::AssayType at) {
+static std::string write_fake_1fq(const char* name, singlet::fq::AssayType at) {
     std::string path = std::string("/dev/shm/") + name;
     FILE* f = std::fopen(path.c_str(), "wb");
     if (!f) return "";
@@ -97,7 +98,7 @@ static std::string write_fake_1fq(const char* name, lib1fq::AssayType at) {
 }
 
 static void test_classify_gex_only() {
-    std::string p = write_fake_1fq("tmr_gex.1fq", lib1fq::AssayType::SC_MULTIOME_GEX);
+    std::string p = write_fake_1fq("tmr_gex.1fq", singlet::fq::AssayType::SC_MULTIOME_GEX);
     if (p.empty()) return;  // skip if /dev/shm unavailable
 
     MultiomeInputs r = classify_inputs({p});
@@ -108,7 +109,7 @@ static void test_classify_gex_only() {
 }
 
 static void test_classify_atac_only() {
-    std::string p = write_fake_1fq("tmr_atac.1fq", lib1fq::AssayType::SC_MULTIOME_ATAC);
+    std::string p = write_fake_1fq("tmr_atac.1fq", singlet::fq::AssayType::SC_MULTIOME_ATAC);
     if (p.empty()) return;
 
     MultiomeInputs r = classify_inputs({p});
@@ -119,8 +120,8 @@ static void test_classify_atac_only() {
 }
 
 static void test_classify_mixed_is_multiome() {
-    std::string pg = write_fake_1fq("tmr_mix_gex.1fq", lib1fq::AssayType::SC_MULTIOME_GEX);
-    std::string pa = write_fake_1fq("tmr_mix_atac.1fq", lib1fq::AssayType::SC_MULTIOME_ATAC);
+    std::string pg = write_fake_1fq("tmr_mix_gex.1fq", singlet::fq::AssayType::SC_MULTIOME_GEX);
+    std::string pa = write_fake_1fq("tmr_mix_atac.1fq", singlet::fq::AssayType::SC_MULTIOME_ATAC);
     if (pg.empty() || pa.empty()) return;
 
     MultiomeInputs r = classify_inputs({pg, pa});

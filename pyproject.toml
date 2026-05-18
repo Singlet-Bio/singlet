@@ -62,6 +62,7 @@ Changelog = "https://github.com/Singlet-Bio/singlet/blob/main/CHANGELOG.md"
 
 [project.scripts]
 singlet = "singlet.mcp.__main__:main"
+singlet-process = "singlet.pipeline.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["python"]

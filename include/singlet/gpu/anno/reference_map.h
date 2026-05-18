@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (DecoupleR-style scoring + CellTypist projection)
 //
 // anno/reference_map.h — CellTypist-style reference projection on GPU.
@@ -52,13 +52,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/anno/types.h>
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
+#include <singlet/gpu/anno/types.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
 
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
@@ -90,7 +86,7 @@
 // DEFLATE decompression uses zlib (always available on CUDA systems).
 #include <zlib.h>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace anno {
 
 // ============================================================================
@@ -530,8 +526,8 @@ inline CelltypistModel load_celltypist_model(const std::string& npz_path) {
     model.n_pcs      = n_pcs;
     model.class_names = class_names;
 
-    model.weights    = singlet_gpu::core::DeviceMemory<float>(n_classes * n_pcs);
-    model.intercepts = singlet_gpu::core::DeviceMemory<float>(n_classes);
+    model.weights    = singlet::gpu::core::DeviceMemory<float>(n_classes * n_pcs);
+    model.intercepts = singlet::gpu::core::DeviceMemory<float>(n_classes);
 
     // No stream available at model-load time — use default stream (sync operation).
     // WHY: load_celltypist_model is called once at startup; host I/O dominates anyway.
@@ -552,7 +548,7 @@ inline CelltypistModel load_celltypist_model(const std::string& npz_path) {
 // Returns: probabilities [n_classes × n_cells] (col-major), labels [n_cells].
 
 inline RefMapResult project_to_reference(
-    const singlet_gpu::core::DeviceDense& embedding,
+    const singlet::gpu::core::DeviceDense& embedding,
     const CelltypistModel& model,
     cudaStream_t stream)
 {
@@ -564,9 +560,9 @@ inline RefMapResult project_to_reference(
         throw std::runtime_error("project_to_reference: embedding n_pcs mismatch");
 
     // Allocate logits [n_cells × n_classes], row-major.
-    singlet_gpu::core::DeviceMemory<float> d_logits((size_t)n_cells * n_classes);
+    singlet::gpu::core::DeviceMemory<float> d_logits((size_t)n_cells * n_classes);
 
-    auto& ctx = singlet_gpu::core::default_context();
+    auto& ctx = singlet::gpu::core::default_context();
     cublasSetStream(ctx.blas(), stream);
 
     // cuBLAS Sgemm: logits = embedding × weights^T
@@ -607,7 +603,7 @@ inline RefMapResult project_to_reference(
     // NOT contiguous.  So: allocate a transposed scratch buffer and transpose first.
 
     // Transpose d_logits from [n_classes × n_cells] col-major to [n_cells × n_classes] row-major.
-    singlet_gpu::core::DeviceMemory<float> d_logits_row((size_t)n_cells * n_classes);
+    singlet::gpu::core::DeviceMemory<float> d_logits_row((size_t)n_cells * n_classes);
     {
         constexpr int TILE = 32;
         dim3 blocks((n_classes + TILE - 1) / TILE, (n_cells + TILE - 1) / TILE, 1);
@@ -640,7 +636,7 @@ inline RefMapResult project_to_reference(
     }
 
     // Transpose probabilities back to column-major [n_classes × n_cells] for result.
-    singlet_gpu::core::DeviceMemory<float> d_probs((size_t)n_classes * n_cells);
+    singlet::gpu::core::DeviceMemory<float> d_probs((size_t)n_classes * n_cells);
     {
         constexpr int TILE = 32;
         dim3 blocks((n_classes + TILE - 1) / TILE, (n_cells + TILE - 1) / TILE, 1);
@@ -656,10 +652,10 @@ inline RefMapResult project_to_reference(
     // Probabilities are [n_classes × n_cells] col-major.  For argmax over classes
     // per cell, we need to segment by cell.  Reuse d_logits_row [n_cells × n_classes]
     // row-major where row i = cell i's probabilities — segmented over rows.
-    singlet_gpu::core::DeviceMemory<int> d_labels(n_cells);
+    singlet::gpu::core::DeviceMemory<int> d_labels(n_cells);
 
     // Build segment offsets on device: offsets[i] = i * n_classes.
-    singlet_gpu::core::DeviceMemory<int> d_offsets(n_cells + 1);
+    singlet::gpu::core::DeviceMemory<int> d_offsets(n_cells + 1);
     {
         // Small kernel to fill offsets[i] = i * n_classes.
         auto fill_offsets = [&]() {
@@ -692,8 +688,8 @@ inline RefMapResult project_to_reference(
         stream);
 
     // ArgMax returns KeyValuePair<int,float>; allocate properly.
-    singlet_gpu::core::DeviceMemory<cub::KeyValuePair<int,float>> d_kv(n_cells);
-    singlet_gpu::core::DeviceMemory<uint8_t> d_tmp_buf(tmp_bytes > 0 ? tmp_bytes : 1);
+    singlet::gpu::core::DeviceMemory<cub::KeyValuePair<int,float>> d_kv(n_cells);
+    singlet::gpu::core::DeviceMemory<uint8_t> d_tmp_buf(tmp_bytes > 0 ? tmp_bytes : 1);
     void* tmp_ptr = d_tmp_buf.get();
     cub::DeviceSegmentedReduce::ArgMax(
         tmp_ptr, tmp_bytes,
@@ -723,9 +719,9 @@ inline RefMapResult project_to_reference(
 // cluster_ids: device buffer [n_cells], values in [0, n_clusters).
 // Returns per-cluster label [n_clusters].
 
-inline singlet_gpu::core::DeviceMemory<int> aggregate_cluster_labels(
+inline singlet::gpu::core::DeviceMemory<int> aggregate_cluster_labels(
     const RefMapResult& per_cell,
-    const singlet_gpu::core::DeviceMemory<int>& cluster_ids,
+    const singlet::gpu::core::DeviceMemory<int>& cluster_ids,
     int  n_clusters,
     int  n_classes,
     int  n_cells,
@@ -733,10 +729,10 @@ inline singlet_gpu::core::DeviceMemory<int> aggregate_cluster_labels(
 {
     // Accumulate probability sums per (cluster, class) using a small kernel.
     // cluster_probs [n_clusters × n_classes], row-major.
-    singlet_gpu::core::DeviceMemory<float> d_cluster_probs((size_t)n_clusters * n_classes);
+    singlet::gpu::core::DeviceMemory<float> d_cluster_probs((size_t)n_clusters * n_classes);
     cudaMemsetAsync(d_cluster_probs.get(), 0,
                     (size_t)n_clusters * n_classes * sizeof(float), stream);
-    singlet_gpu::core::DeviceMemory<int>   d_cluster_counts(n_clusters);
+    singlet::gpu::core::DeviceMemory<int>   d_cluster_counts(n_clusters);
     cudaMemsetAsync(d_cluster_counts.get(), 0, n_clusters * sizeof(int), stream);
 
     // One kernel: per-cell, atomic add to cluster row.
@@ -751,7 +747,7 @@ inline singlet_gpu::core::DeviceMemory<int> aggregate_cluster_labels(
         n_cells, n_classes);
 
     // Normalise by counts and argmax per cluster.
-    singlet_gpu::core::DeviceMemory<int> d_cluster_labels(n_clusters);
+    singlet::gpu::core::DeviceMemory<int> d_cluster_labels(n_clusters);
     detail::argmax_norm_kernel<<<n_clusters, std::min(n_classes, 256), 0, stream>>>(
         d_cluster_probs.get(), d_cluster_counts.get(),
         d_cluster_labels.get(), n_clusters, n_classes);
@@ -760,4 +756,4 @@ inline singlet_gpu::core::DeviceMemory<int> aggregate_cluster_labels(
 }
 
 } // namespace anno
-} // namespace singlet_gpu
+} // namespace singlet::gpu

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.io.donor — helpers for loading singlet donor assignment outputs.
 
@@ -24,14 +24,11 @@ load_donor_assignments(tsv_path) -> pd.Series
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Union
-
-if TYPE_CHECKING:
-    import pandas as pd
+from typing import Optional, Union
 
 
 def load_donor_assignments(
-    tsv_path: Union[str, Path],
+    tsv_path: Union[str, "Path"],
     *,
     barcode_col: Optional[str] = None,
     donor_col: str = "donor_id",
@@ -40,7 +37,7 @@ def load_donor_assignments(
     exclude_doublets: bool = False,
     doublet_col: str = "prob_doublet",
     doublet_threshold: float = 0.5,
-) -> pd.Series:
+) -> "pd.Series":
     """
     Load singlet's ``donor_assignments.tsv`` into a ``pd.Series``.
 
@@ -150,7 +147,6 @@ def load_donor_assignments(
         prob_col = "prob_max"
         if prob_col not in df.columns:
             import warnings
-
             warnings.warn(
                 f"min_prob filtering requested but column '{prob_col}' not "
                 f"found in {path.name}.  Skipping min_prob filter.",
@@ -165,7 +161,6 @@ def load_donor_assignments(
     if exclude_doublets:
         if doublet_col not in df.columns:
             import warnings
-
             warnings.warn(
                 f"exclude_doublets=True but column '{doublet_col}' not found "
                 f"in {path.name}.  Skipping doublet filter.",

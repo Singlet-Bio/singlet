@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_saturation_curve.cpp — Unit tests for G-SATCURVE: saturation downsampling curves
 //
 // Tests the analytical Lander-Waterman + Poisson gene approximation.

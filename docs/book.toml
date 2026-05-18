@@ -1,0 +1,23 @@
+[book]
+title = "singlet-gpu"
+description = "Bare-metal cuBLAS / cuSPARSE / cuSOLVER GPU library for single-cell analysis"
+authors = ["Singlet Team"]
+language = "en"
+multilingual = false
+src = "."
+
+[output.html]
+default-theme = "light"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/Singlet-Bio/singlet"
+edit-url-template = "https://github.com/Singlet-Bio/singlet/edit/main/singlet-gpu/docs/{path}"
+mathjax-support = true
+
+[output.html.fold]
+enable = true
+level = 1
+
+[output.html.playground]
+runnable = false
+
+[preprocessor.links]

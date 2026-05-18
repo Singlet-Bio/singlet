@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Spatial analysis utilities."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: cuml/manifold/umap.hpp (ML::UMAP::fit + precomputed kNN path)
 //
 // embed/umap.h — GPU UMAP dimensionality reduction wrapping cuML UMAP
@@ -69,8 +69,8 @@
 
 #include <cuda_runtime.h>
 
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/graph/knn.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/graph/knn.h>
 
 // cuML UMAP is an optional compile-time dependency. The __has_include guard
 // lets the header be parsed by IDEs and static analysers without cuML.
@@ -85,7 +85,7 @@
 #  endif
 #endif
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace embed {
 
 // ─── Public API types ─────────────────────────────────────────────────────────
@@ -164,7 +164,7 @@ umap(const graph::KnnResult& knn,
     // static_assert(sizeof(knn) == 0, "cuML required");
     (void)cfg; (void)stream;
     throw std::runtime_error(
-        "singlet_gpu::embed::umap requires cuML. "
+        "singlet::gpu::embed::umap requires cuML. "
         "Rebuild with find_package(cuml) resolving in CMakeLists.txt.");
     UmapResult r; return r;
 #else
@@ -265,4 +265,4 @@ umap(const graph::KnnResult& knn,
 }
 
 }  // namespace embed
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_h5ad_writer.cpp
 // Tests for G-H5AD: AnnData .h5ad export (h5ad_writer.h)
 // Run: ./test_h5ad_writer

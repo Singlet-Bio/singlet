@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.integrate.harmony — GPU-native Harmony batch integration.
 
@@ -32,11 +32,10 @@ if TYPE_CHECKING:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-
 def _get_embedding(
-    adata: anndata.AnnData,
+    adata: "anndata.AnnData",
     basis: str,
-) -> np.ndarray:
+) -> "np.ndarray":
     """
     Extract the PCA embedding from adata.obsm[basis].
 
@@ -53,7 +52,6 @@ def _get_embedding(
     emb = adata.obsm[basis]
     try:
         import cupy as cp
-
         if isinstance(emb, cp.ndarray):
             return emb.astype(cp.float32, copy=False)
     except ImportError:
@@ -62,9 +60,9 @@ def _get_embedding(
 
 
 def _resolve_batch_codes(
-    adata: anndata.AnnData,
+    adata: "anndata.AnnData",
     key: Union[str, List[str]],
-) -> np.ndarray:
+) -> "np.ndarray":
     """
     Build an integer batch-code vector from obs column(s).
 
@@ -75,6 +73,7 @@ def _resolve_batch_codes(
     -------
     np.ndarray of shape (n_cells,), dtype int32.
     """
+    import pandas as pd
 
     keys = [key] if isinstance(key, str) else list(key)
     missing = [k for k in keys if k not in adata.obs.columns]
@@ -97,9 +96,8 @@ def _resolve_batch_codes(
 # Public API
 # ---------------------------------------------------------------------------
 
-
 def harmony_integrate(
-    adata: anndata.AnnData,
+    adata: "anndata.AnnData",
     key: Union[str, List[str]],
     *,
     basis: str = "X_pca",
@@ -109,7 +107,7 @@ def harmony_integrate(
     tol: float = 1e-4,
     seed: int = 0,
     copy: bool = False,
-) -> Optional[anndata.AnnData]:
+) -> Optional["anndata.AnnData"]:
     """
     GPU-native Harmony batch integration (cycle-14 kernel).
 
@@ -198,7 +196,7 @@ def harmony_integrate(
 
     working = copy_module.copy(adata) if copy else adata
 
-    emb = _get_embedding(working, basis)  # (n_cells, n_pcs) float32
+    emb = _get_embedding(working, basis)        # (n_cells, n_pcs) float32
     batch_codes = _resolve_batch_codes(working, key)  # (n_cells,) int32
     n_batches = int(batch_codes.max()) + 1
 
@@ -208,11 +206,9 @@ def harmony_integrate(
     # Upload to device if not already CAI-exposing (CYCLE-261 pattern).
     if not hasattr(emb, "__cuda_array_interface__"):
         import cupy as cp
-
         emb = cp.asarray(emb, dtype=cp.float32)
     if not hasattr(batch_codes, "__cuda_array_interface__"):
         import cupy as cp
-
         batch_codes = cp.asarray(batch_codes, dtype=cp.int32)
     result = _core.harmony(
         emb,

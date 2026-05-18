@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Variance partitioning for gene expression data.
 
 Provides singlet.variance_partition() — decompose gene expression variance

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test/test_longread.cpp
 // Unit tests for G-LONGREAD: long-read scRNA-seq (PacBio MAS-seq / ONT) support.
 //
@@ -50,21 +51,7 @@ using namespace singlet;
 // Test infrastructure
 // ─────────────────────────────────────────────────────────────────────────────
 
-static int n_pass = 0;
-static int n_fail = 0;
-
-#define CHECK(cond, name)                                                        \
-    do {                                                                         \
-        if (cond) {                                                              \
-            std::cout << "  PASS: " << (name) << "\n";                           \
-            ++n_pass;                                                            \
-        } else {                                                                 \
-            std::cout << "  FAIL: " << (name) << " [line " << __LINE__ << "]\n"; \
-            ++n_fail;                                                            \
-        }                                                                        \
-    } while (0)
-
-#define CHECK_NEAR(a, b, eps, name) CHECK(std::abs((double)(a) - (double)(b)) <= (eps), name)
+#include "test_harness.h"  // CHECK(cond, msg), CHECK_NEAR(...) + n_pass / n_fail
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers

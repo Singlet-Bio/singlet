@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test/test_pileup_integration.cpp
 // Integration test: create a synthetic BAM via SAM text + samtools conversion,
 // then run the pileup engine end-to-end.

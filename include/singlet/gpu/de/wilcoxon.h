@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (Wilcoxon binned + Welch t)
 //
 // de/wilcoxon.h — Histogram-binned Wilcoxon rank-sum test for GPU DE.
@@ -58,12 +58,8 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/de/types.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/de/types.h>
 
 #include <cuda_runtime.h>
 #include <cusparse.h>
@@ -80,7 +76,7 @@
 #include <vector>
 #include <algorithm>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace de {
 
 // ---------------------------------------------------------------------------
@@ -1049,4 +1045,4 @@ WilcoxonResult wilcoxon_de(
 }
 
 }  // namespace de
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

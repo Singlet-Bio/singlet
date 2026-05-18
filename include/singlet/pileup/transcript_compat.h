@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: transcript_compat.h
 // G-TXLEVEL: Transcript-Level Equivalence Class Counting (TCC)

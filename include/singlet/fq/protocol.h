@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // lib1fq/protocol.h — Protocol detection and whitelist utilities
 //
 // Shared by SraEncoder and FastqEncoder for chemistry auto-detection,
@@ -18,7 +19,7 @@
 #include <unordered_set>
 #include <vector>
 
-namespace lib1fq {
+namespace singlet::fq {
 
 // ── Protocol candidate from auto-detection ──
 
@@ -2271,4 +2272,4 @@ AgnosticLayout detect_structure_agnostic(
     return layout;
 }
 
-} // namespace lib1fq
+} // namespace singlet::fq

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_doublet_scores.cpp — unit tests for doublet_scores.h
 // Tests: TSV header, data rows, score range, class labels, empty input,
 // all barcodes present, make_doublet_score_entry helper, IO error path.
@@ -15,19 +16,7 @@
 // ---------------------------------------------------------------------------
 // Minimal test framework
 // ---------------------------------------------------------------------------
-static int n_pass = 0;
-static int n_fail = 0;
-
-#define CHECK(cond, msg)                                                          \
-    do {                                                                          \
-        if (cond) {                                                               \
-            std::cout << "  PASS: " << (msg) << "\n";                            \
-            ++n_pass;                                                             \
-        } else {                                                                  \
-            std::cout << "  FAIL: " << (msg) << " [line " << __LINE__ << "]\n";  \
-            ++n_fail;                                                             \
-        }                                                                         \
-    } while (0)
+#include "test_harness.h"  // CHECK(cond, msg) + n_pass / n_fail
 
 static std::string read_file_str(const std::string& path) {
     std::ifstream ifs(path);

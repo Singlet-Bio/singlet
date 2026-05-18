@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_adt_counter.cpp — unit tests for T2 ADT UMI deduplication + counting
 // Tests: single observation, duplicate UMI dedup, multi-UMI counting,
 //        multi-tag independence, cross-cell isolation, merge().

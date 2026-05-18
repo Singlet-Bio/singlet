@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: donor_demux.h
 // Variational Bayes binomial mixture model for donor demultiplexing.

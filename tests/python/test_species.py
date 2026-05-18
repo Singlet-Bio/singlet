@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.preprocessing._species (taxonomy lookups)."""
 
 import pytest

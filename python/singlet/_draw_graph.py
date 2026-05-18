@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Force-directed graph layout."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Ambient RNA contamination scoring per cell.
 
 Provides singlet.ambient_rna_score() — estimate ambient RNA contamination

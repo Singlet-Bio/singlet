@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.to_df(), obs_df(), var_df()."""
 
 import numpy as np

@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-// singlet-gpu/reduce/svd::auto_select
+// SPDX-License-Identifier: MIT
+// singlet/gpu/reduce/svd::auto_select
 //
 // Routes to deflation (primary) or randomized (automatic fallback).
 // CYCLE-105: both backends are now native — no factornet dependency.
@@ -13,10 +13,10 @@
 
 #pragma once
 
-#include <singlet-gpu/reduce/svd/deflation.h>
-#include <singlet-gpu/reduce/svd/randomized.h>
+#include <singlet/gpu/reduce/svd/deflation.h>
+#include <singlet/gpu/reduce/svd/randomized.h>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace reduce {
 namespace svd {
 
@@ -54,4 +54,4 @@ inline SvdResult auto_select(const io::PzDeviceMatrix& m, int k, const SvdConfig
 
 }  // namespace svd
 }  // namespace reduce
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Subclustering within existing clusters."""
 
 from __future__ import annotations

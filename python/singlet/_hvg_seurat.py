@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Seurat v3 highly variable genes selection."""
 
 from __future__ import annotations

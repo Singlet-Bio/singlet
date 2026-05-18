@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-// singlet-gpu/r/src/singlet_gpu_r_bindings.cpp
+// SPDX-License-Identifier: MIT
+// singlet/gpu/r/src/singlet_gpu_r_bindings.cpp
 //
 // Rcpp entry point for the singletGpu R package.
 //
@@ -15,9 +15,9 @@
 //   only in its own .cu files which we do not link here.
 //
 // Build:
-//   R CMD INSTALL singlet-gpu/r/
+//   R CMD INSTALL singlet/gpu/r/
 //   or from within R:
-//     devtools::install_local("singlet-gpu/r/")
+//     devtools::install_local("singlet/gpu/r/")
 //
 //   The Makevars file overrides CXX to nvcc so CUDA device code embedded in
 //   factornet headers is compiled correctly.  nvcc must be on PATH.

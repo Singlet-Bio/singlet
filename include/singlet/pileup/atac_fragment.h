@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: atac_fragment.h
 // A1 — Fragment extraction from paired-end BAM for 10x ATAC / ATAC-seq.

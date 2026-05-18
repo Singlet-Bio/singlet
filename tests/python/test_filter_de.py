@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.filter_rank_genes_groups()."""
 
 import numpy as np

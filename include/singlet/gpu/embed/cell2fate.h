@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (first GPU Cell2fate; manual gradients vs Pyro)
 //
 // embed/cell2fate.h — GPU-native Cell2fate velocity module decomposition.
@@ -73,14 +73,10 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/preprocess/velocity_prep.h>
-#include <singlet-gpu/reduce/nmf/fit.h>
-#include <singlet-gpu/reduce/nmf/types.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/preprocess/velocity_prep.h>
+#include <singlet/gpu/reduce/nmf/fit.h>
+#include <singlet/gpu/reduce/nmf/types.h>
 
 #include <cuda_runtime.h>
 #include <curand_kernel.h>
@@ -96,7 +92,7 @@
 #include <limits>
 #include <numeric>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace embed {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -732,7 +728,7 @@ inline Cell2FateResult cell2fate_fit(
     }
 
     // ── NMF initialization for module loadings ────────────────────────────────
-    // Call singlet_gpu::reduce::nmf::fit on the spliced matrix to factorize into
+    // Call singlet::gpu::reduce::nmf::fit on the spliced matrix to factorize into
     // W (genes × K) and H (K × cells), then use |W| as initial log_w.
     //
     // WHY NMF: NMF factors are non-negative and sparse — a natural prior for
@@ -746,10 +742,11 @@ inline Cell2FateResult cell2fate_fit(
         nmf_cfg.solver_mode = 3;     // auto
 
         // PzDeviceMatrix wrapper: construct a view over the spliced DeviceCSC.
-        // factornet::nmf::nmf_fit_gpu requires host CSC pointers (pinned).
-        // We check spliced has host pinned data via require_host_retained.
-        // WHY require_host_retained: factornet's NMF GPU API stages data from pinned
-        // host pointers internally. If host pointers are unavailable, we fall back
+        // reduce::nmf::fit consumes a PzDeviceMatrix that retains host CSC
+        // pointers (pinned). We check spliced has host pinned data via
+        // require_host_retained.
+        // WHY require_host_retained: the NMF path stages data from pinned host
+        // pointers internally. If host pointers are unavailable, we fall back
         // to a uniform random init for log_w (the NMF path is optional warm-start).
         // DeviceCSC does not retain host pointers after upload; skip NMF warm-start.
         bool nmf_ok = false;
@@ -1237,4 +1234,4 @@ inline Cell2FateResult cell2fate_fit(
 }
 
 }  // namespace embed
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

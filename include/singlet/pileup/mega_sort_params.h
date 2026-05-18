@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // mega_sort_params.h — STAR BAM-sort parameter tiers for large samples
 //
 // Pure, header-only helpers that decide:
@@ -41,12 +42,11 @@
 //   + 64 GiB hard cap regardless of read count; the 97^3 combinatorial match
 //   tables plus BAM sort OOM at 50% even on 30M samples.
 
-#ifndef SINGLET_PILEUP_MEGA_SORT_PARAMS_H
-#define SINGLET_PILEUP_MEGA_SORT_PARAMS_H
+#pragma once
 
 #include <cstdint>
 
-namespace singlet_pileup {
+namespace singlet::pileup {
 namespace mega_sort {
 
 // Thresholds (exposed so tests can sanity-check them without hard-coding).
@@ -160,6 +160,4 @@ inline const char* tier_name(Tier t) {
 }
 
 }  // namespace mega_sort
-}  // namespace singlet_pileup
-
-#endif  // SINGLET_PILEUP_MEGA_SORT_PARAMS_H
+}  // namespace singlet::pileup

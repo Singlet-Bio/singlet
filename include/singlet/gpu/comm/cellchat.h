@@ -1,10 +1,10 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (first GPU CellChat-style cell-cell communication)
 //
 // comm/cellchat.h — CellChat: GPU-native cell-cell communication inference
 //   (Jin et al. Nature Protocols 2024, Nat Comm 2024)
 //
-// Algorithm (see design doc singlet-gpu/state/designs/37-cellchat-gpu.md):
+// Algorithm (see design doc singlet/gpu/state/designs/37-cellchat-gpu.md):
 //   Inputs:
 //     expression (n_genes × n_cells CSC), cell_type[n_cells],
 //     lr_db: per-LR-pair lists of ligand + receptor gene indices,
@@ -87,13 +87,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/core/memory.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/core/memory.h>
 
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
@@ -106,7 +102,7 @@
 #include <algorithm>
 #include <string>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace comm {
 
 // ---------------------------------------------------------------------------
@@ -833,4 +829,4 @@ inline CellChatResult cellchat_gpu_spatial(
 }
 
 }  // namespace comm
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

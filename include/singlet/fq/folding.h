@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // lib1fq/folding.h — R2 sequence folding for alignment cache (Phase 4)
 //
 // Builds a mapping from read_idx → unique_seq_id based on R2 cDNA identity.
@@ -13,7 +14,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace lib1fq {
+namespace singlet::fq {
 
 // ── R2 sequence fold map ──
 // Maps each read in a block to its unique R2 sequence ID.
@@ -163,4 +164,4 @@ private:
     std::unordered_map<uint64_t, CachedAlignment> cache_;
 };
 
-} // namespace lib1fq
+} // namespace singlet::fq

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // lib1fq/fastq_encoder.h — FASTQ → .1fq encoder
 //
 // Reads paired-end FASTQ files (optionally gzipped) and writes .1fq.
@@ -17,7 +18,7 @@
 
 #include "lib1fq.h"
 
-namespace lib1fq {
+namespace singlet::fq {
 
 class FastqEncoder {
    public:
@@ -468,13 +469,13 @@ class FastqEncoder {
         // Protocol: force 10x-atac (or use cfg.protocol_tag if set)
         std::string proto = cfg.protocol_tag.empty() ? "10x-atac" : cfg.protocol_tag;
 
-        lib1fq::Codec codec = lib1fq::Codec::ZSTD;
-        if (cfg.codec == lib1fq::Codec::LZ4)
-            codec = lib1fq::Codec::LZ4;
-        else if (cfg.codec == lib1fq::Codec::NONE)
-            codec = lib1fq::Codec::NONE;
+        singlet::fq::Codec codec = singlet::fq::Codec::ZSTD;
+        if (cfg.codec == singlet::fq::Codec::LZ4)
+            codec = singlet::fq::Codec::LZ4;
+        else if (cfg.codec == singlet::fq::Codec::NONE)
+            codec = singlet::fq::Codec::NONE;
 
-        lib1fq::QualMode qual_mode = lib1fq::QualMode::BINNED4;
+        singlet::fq::QualMode qual_mode = singlet::fq::QualMode::BINNED4;
         // (quality is not typically needed for the barcode stream; R1/R3 use default)
 
         std::string output_path = cfg.output_path;
@@ -567,4 +568,4 @@ class FastqEncoder {
     }
 };  // class FastqEncoder
 
-}  // namespace lib1fq
+}  // namespace singlet::fq

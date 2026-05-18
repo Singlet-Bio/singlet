@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Quality control metrics for single-cell RNA-seq outputs."""
 
 from __future__ import annotations

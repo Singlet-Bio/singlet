@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Cross-species/dataset correlation analysis.
 
 Provides singlet.cross_species_correlation() — correlate gene programs or

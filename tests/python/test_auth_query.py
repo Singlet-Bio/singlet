@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet._auth and singlet._query modules."""
 
 from unittest.mock import patch

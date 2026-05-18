@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: rrna_detect.h
 // G-RRNA: rRNA contamination detection via hard-coded diagnostic k-mers.

@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-// singlet-gpu/preprocess/deconv_size_factors.h
+// SPDX-License-Identifier: MIT
+// singlet/gpu/preprocess/deconv_size_factors.h
 //
 // Scran deconvolution size factors (Lun, Bach, Marioni 2016, Genome Biology).
 // GPU port of scran::computeSumFactors — entirely device-side, zero H/D copies
@@ -54,15 +54,11 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include "singlet-gpu/core/types.h"
-#include "singlet-gpu/core/handles.h"
+#include "singlet/gpu/core/types.h"
+#include "singlet/gpu/core/handles.h"
 
 // CYCLE-106: factornet/gpu/types.cuh replaced by native core/types.h.
-#include <singlet-gpu/core/types.h>
+#include <singlet/gpu/core/types.h>
 
 #include <cub/device/device_segmented_reduce.cuh>
 #include <cub/device/device_radix_sort.cuh>
@@ -81,7 +77,7 @@
 #include <cmath>
 #include <vector>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace preprocess {
 
 // ---------------------------------------------------------------------------
@@ -112,35 +108,8 @@ struct DeconvSizeFactorsResult {
 // ---------------------------------------------------------------------------
 namespace {
 
-#define SGPU_DSF_CUDA_CHECK(err)                                                \
-    do {                                                                        \
-        cudaError_t _e = (err);                                                 \
-        if (_e != cudaSuccess) {                                                \
-            throw std::runtime_error(                                           \
-                std::string("CUDA error: ") + cudaGetErrorString(_e)            \
-                + " at " __FILE__ ":" + std::to_string(__LINE__));              \
-        }                                                                       \
-    } while (0)
-
-#define SGPU_DSF_CUSOLVER_CHECK(err)                                            \
-    do {                                                                        \
-        cusolverStatus_t _e = (err);                                            \
-        if (_e != CUSOLVER_STATUS_SUCCESS) {                                    \
-            throw std::runtime_error(                                           \
-                "cuSOLVER error " + std::to_string(static_cast<int>(_e))        \
-                + " at " __FILE__ ":" + std::to_string(__LINE__));              \
-        }                                                                       \
-    } while (0)
-
-#define SGPU_DSF_CUBLAS_CHECK(err)                                              \
-    do {                                                                        \
-        cublasStatus_t _e = (err);                                              \
-        if (_e != CUBLAS_STATUS_SUCCESS) {                                      \
-            throw std::runtime_error(                                           \
-                "cuBLAS error " + std::to_string(static_cast<int>(_e))          \
-                + " at " __FILE__ ":" + std::to_string(__LINE__));              \
-        }                                                                       \
-    } while (0)
+// CUDA / cuSOLVER / cuBLAS error checks use the canonical SINGLET_GPU_*_CHECK
+// macros from <singlet/gpu/core/types.h> (included above).
 
 // ---------------------------------------------------------------------------
 // dsf_iota_kernel: fill int array with [0, 1, ..., n-1] on device.
@@ -280,7 +249,7 @@ static void solve_cluster(
 {
     // ---- allocate and zero pool matrix A: n_pools × nc, col-major ----
     core::DeviceMemory<float> d_A(static_cast<size_t>(n_pools) * nc);
-    SGPU_DSF_CUDA_CHECK(cudaMemsetAsync(d_A.get(), 0,
+    SINGLET_GPU_CUDA_CHECK(cudaMemsetAsync(d_A.get(), 0,
         static_cast<size_t>(n_pools) * nc * sizeof(float), stream));
 
     // ---- fill pool matrix ----
@@ -289,7 +258,7 @@ static void solve_cluster(
         const int blocks  = (n_pools + threads - 1) / threads;
         dsf_build_pool_matrix_kernel<<<blocks, threads, 0, stream>>>(
             d_A.get(), d_pool_sizes, n_sizes, nc, n_pools);
-        SGPU_DSF_CUDA_CHECK(cudaGetLastError());
+        SINGLET_GPU_CUDA_CHECK(cudaGetLastError());
     }
 
     // ---- pool sums p = A * lib_sorted (SGEMV) ----
@@ -298,7 +267,7 @@ static void solve_cluster(
     core::DeviceMemory<float> d_p(n_pools);
     {
         const float alpha = 1.0f, beta = 0.0f;
-        SGPU_DSF_CUBLAS_CHECK(cublasSgemv(cublas, CUBLAS_OP_N,
+        SINGLET_GPU_CUBLAS_CHECK(cublasSgemv(cublas, CUBLAS_OP_N,
             n_pools, nc,
             &alpha, d_A.get(), n_pools,
             d_lib_sorted, 1,
@@ -317,14 +286,14 @@ static void solve_cluster(
             d_lib_sorted, d_sum.get(), nc, stream);
 
         float h_sum = 1.0f;
-        SGPU_DSF_CUDA_CHECK(cudaMemcpyAsync(&h_sum, d_sum.get(), sizeof(float),
+        SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(&h_sum, d_sum.get(), sizeof(float),
             cudaMemcpyDeviceToHost, stream));
-        SGPU_DSF_CUDA_CHECK(cudaStreamSynchronize(stream));  // 4-byte scalar sync
+        SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));  // 4-byte scalar sync
 
         float mean_lib = h_sum / static_cast<float>(nc > 0 ? nc : 1);
         if (mean_lib < 1e-10f) mean_lib = 1.0f;
         const float scale_p = 1.0f / mean_lib;
-        SGPU_DSF_CUBLAS_CHECK(cublasSscal(cublas, n_pools, &scale_p, d_p.get(), 1));
+        SINGLET_GPU_CUBLAS_CHECK(cublasSscal(cublas, n_pools, &scale_p, d_p.get(), 1));
     }
 
     // ---- QR solve: A s = p ----
@@ -341,12 +310,12 @@ static void solve_cluster(
 
     // Workspace query for geqrf
     int lwork_qr = 0;
-    SGPU_DSF_CUSOLVER_CHECK(cusolverDnSgeqrf_bufferSize(cusolver,
+    SINGLET_GPU_CUSOLVER_CHECK(cusolverDnSgeqrf_bufferSize(cusolver,
         n_pools, nc, d_A.get(), n_pools, &lwork_qr));
 
     // Workspace query for ormqr (apply Q^T to column vector p: m=n_pools, n=1, k=nc)
     int lwork_ormqr = 0;
-    SGPU_DSF_CUSOLVER_CHECK(cusolverDnSormqr_bufferSize(cusolver,
+    SINGLET_GPU_CUSOLVER_CHECK(cusolverDnSormqr_bufferSize(cusolver,
         CUBLAS_SIDE_LEFT, CUBLAS_OP_T,
         n_pools, 1, nc,
         d_A.get(), n_pools,
@@ -358,7 +327,7 @@ static void solve_cluster(
     core::DeviceMemory<float> d_work(lwork > 0 ? lwork : 1);
 
     // Step 1: geqrf
-    SGPU_DSF_CUSOLVER_CHECK(cusolverDnSgeqrf(cusolver,
+    SINGLET_GPU_CUSOLVER_CHECK(cusolverDnSgeqrf(cusolver,
         n_pools, nc,
         d_A.get(), n_pools,
         d_tau.get(),
@@ -366,7 +335,7 @@ static void solve_cluster(
         d_info.get()));
 
     // Step 2: ormqr — apply Q^T to d_p (vector, nrhs=1, ldc=n_pools)
-    SGPU_DSF_CUSOLVER_CHECK(cusolverDnSormqr(cusolver,
+    SINGLET_GPU_CUSOLVER_CHECK(cusolverDnSormqr(cusolver,
         CUBLAS_SIDE_LEFT, CUBLAS_OP_T,
         n_pools, 1, nc,
         d_A.get(), n_pools,
@@ -387,7 +356,7 @@ static void solve_cluster(
         // SIDE_LEFT: A_triangular * X = alpha * B   →  X = alpha * A^{-1} B
         // A is upper triangular nc×nc in d_A[0:nc,0:nc] (lda=n_pools)
         // B is the nc×1 matrix d_p[0:nc] (ldb=n_pools; only first nc rows used)
-        SGPU_DSF_CUBLAS_CHECK(cublasStrsm(cublas,
+        SINGLET_GPU_CUBLAS_CHECK(cublasStrsm(cublas,
             CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER,
             CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT,
             nc, 1,         // m=nc (rows of triangular system), n=1 (nrhs)
@@ -398,7 +367,7 @@ static void solve_cluster(
     }
 
     // Copy s (first nc elements of d_p) to d_sf_cluster.
-    SGPU_DSF_CUDA_CHECK(cudaMemcpyAsync(d_sf_cluster, d_p.get(),
+    SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(d_sf_cluster, d_p.get(),
         static_cast<size_t>(nc) * sizeof(float),
         cudaMemcpyDeviceToDevice, stream));
 
@@ -407,18 +376,18 @@ static void solve_cluster(
         constexpr float kFloor = 1e-6f;
         core::DeviceMemory<int> d_clip_count(1);
         for (int iter = 0; iter < max_nnls_iters; ++iter) {
-            SGPU_DSF_CUDA_CHECK(cudaMemsetAsync(d_clip_count.get(), 0, sizeof(int), stream));
+            SINGLET_GPU_CUDA_CHECK(cudaMemsetAsync(d_clip_count.get(), 0, sizeof(int), stream));
             const int threads = 256;
             const int blocks  = (nc + threads - 1) / threads;
             dsf_clip_negatives_kernel<<<blocks, threads, 0, stream>>>(
                 d_sf_cluster, d_clip_count.get(), nc, kFloor);
-            SGPU_DSF_CUDA_CHECK(cudaGetLastError());
+            SINGLET_GPU_CUDA_CHECK(cudaGetLastError());
 
             // Scalar copy to check clip count (4 bytes, one per NNLS iter — allowed).
             int h_clip = 0;
-            SGPU_DSF_CUDA_CHECK(cudaMemcpyAsync(&h_clip, d_clip_count.get(), sizeof(int),
+            SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(&h_clip, d_clip_count.get(), sizeof(int),
                 cudaMemcpyDeviceToHost, stream));
-            SGPU_DSF_CUDA_CHECK(cudaStreamSynchronize(stream));
+            SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
             n_clipped += h_clip;
             // v1: simple clip without QR refit. Break after one pass.
             break;
@@ -452,12 +421,12 @@ inline DeconvSizeFactorsResult compute_deconv_size_factors(
     // Borrow handles from the default context and rebind to our stream.
     cusolverDnHandle_t cusolver = core::default_context().solver();
     cublasHandle_t     cublas   = core::default_context().blas();
-    SGPU_DSF_CUSOLVER_CHECK(cusolverDnSetStream(cusolver, stream));
-    SGPU_DSF_CUBLAS_CHECK(cublasSetStream(cublas, stream));
+    SINGLET_GPU_CUSOLVER_CHECK(cusolverDnSetStream(cusolver, stream));
+    SINGLET_GPU_CUBLAS_CHECK(cublasSetStream(cublas, stream));
 
     DeconvSizeFactorsResult result;
     result.size_factors = core::DeviceMemory<float>(n_cells);
-    SGPU_DSF_CUDA_CHECK(cudaMemsetAsync(result.size_factors.get(), 0,
+    SINGLET_GPU_CUDA_CHECK(cudaMemsetAsync(result.size_factors.get(), 0,
         static_cast<size_t>(n_cells) * sizeof(float), stream));
 
     // -------------------------------------------------------------------------
@@ -495,7 +464,7 @@ inline DeconvSizeFactorsResult compute_deconv_size_factors(
         {
             const int threads = 256, blocks = (n_cells + 255) / 256;
             dsf_iota_kernel<<<blocks, threads, 0, stream>>>(d_idx_in.get(), n_cells);
-            SGPU_DSF_CUDA_CHECK(cudaGetLastError());
+            SINGLET_GPU_CUDA_CHECK(cudaGetLastError());
         }
 
         size_t tmp_bytes = 0;
@@ -528,12 +497,12 @@ inline DeconvSizeFactorsResult compute_deconv_size_factors(
     } else {
         // One-time setup: pull sorted indices + labels to host.
         std::vector<int> h_sorted_idx(n_cells);
-        SGPU_DSF_CUDA_CHECK(cudaMemcpyAsync(h_sorted_idx.data(), d_sorted_idx.get(),
+        SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(h_sorted_idx.data(), d_sorted_idx.get(),
             static_cast<size_t>(n_cells) * sizeof(int), cudaMemcpyDeviceToHost, stream));
         std::vector<int32_t> h_labels(n_cells);
-        SGPU_DSF_CUDA_CHECK(cudaMemcpyAsync(h_labels.data(), optional_cluster_labels,
+        SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(h_labels.data(), optional_cluster_labels,
             static_cast<size_t>(n_cells) * sizeof(int32_t), cudaMemcpyDeviceToHost, stream));
-        SGPU_DSF_CUDA_CHECK(cudaStreamSynchronize(stream));
+        SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
         (void)h_sorted_idx; (void)h_labels;  // label-guided split deferred to v2
 
         // v1: contiguous split by sorted order; ignore label affinity.
@@ -552,7 +521,7 @@ inline DeconvSizeFactorsResult compute_deconv_size_factors(
     core::DeviceMemory<int> d_pool_sizes(cfg.pool_sizes.size());
     {
         std::vector<int> ps(cfg.pool_sizes.begin(), cfg.pool_sizes.end());
-        SGPU_DSF_CUDA_CHECK(cudaMemcpyAsync(d_pool_sizes.get(), ps.data(),
+        SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(d_pool_sizes.get(), ps.data(),
             ps.size() * sizeof(int), cudaMemcpyHostToDevice, stream));
     }
     const int n_sizes = static_cast<int>(cfg.pool_sizes.size());
@@ -573,14 +542,14 @@ inline DeconvSizeFactorsResult compute_deconv_size_factors(
             {
                 const int threads = 256, blocks = (nc + 255) / 256;
                 dsf_fill_ones_kernel<<<blocks, threads, 0, stream>>>(d_sf_tmp.get(), nc);
-                SGPU_DSF_CUDA_CHECK(cudaGetLastError());
+                SINGLET_GPU_CUDA_CHECK(cudaGetLastError());
             }
             {
                 const int threads = 256, blocks = (nc + 255) / 256;
                 dsf_scatter_size_factors_kernel<<<blocks, threads, 0, stream>>>(
                     d_sf_tmp.get(), d_sorted_idx.get() + offset,
                     result.size_factors.get(), nc);
-                SGPU_DSF_CUDA_CHECK(cudaGetLastError());
+                SINGLET_GPU_CUDA_CHECK(cudaGetLastError());
             }
             h_cluster_means.push_back(1.0f);
             continue;
@@ -610,9 +579,9 @@ inline DeconvSizeFactorsResult compute_deconv_size_factors(
             core::DeviceMemory<char> d_tmp(tmp_bytes + 1);
             cub::DeviceReduce::Sum(d_tmp.get(), tmp_bytes,
                 d_lib_sorted.get() + offset, d_sum.get(), nc, stream);
-            SGPU_DSF_CUDA_CHECK(cudaMemcpyAsync(&h_mean, d_sum.get(), sizeof(float),
+            SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(&h_mean, d_sum.get(), sizeof(float),
                 cudaMemcpyDeviceToHost, stream));
-            SGPU_DSF_CUDA_CHECK(cudaStreamSynchronize(stream));
+            SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
             h_mean = h_mean / static_cast<float>(nc);
         }
         h_cluster_means.push_back(h_mean > 1e-10f ? h_mean : 1.0f);
@@ -623,7 +592,7 @@ inline DeconvSizeFactorsResult compute_deconv_size_factors(
             dsf_scatter_size_factors_kernel<<<blocks, threads, 0, stream>>>(
                 d_sf_cluster.get(), d_sorted_idx.get() + offset,
                 result.size_factors.get(), nc);
-            SGPU_DSF_CUDA_CHECK(cudaGetLastError());
+            SINGLET_GPU_CUDA_CHECK(cudaGetLastError());
         }
     }
 
@@ -651,7 +620,7 @@ inline DeconvSizeFactorsResult compute_deconv_size_factors(
                 result.size_factors.get(),
                 d_sorted_idx.get() + offset,
                 scale_ci, nc);
-            SGPU_DSF_CUDA_CHECK(cudaGetLastError());
+            SINGLET_GPU_CUDA_CHECK(cudaGetLastError());
         }
     }
 
@@ -669,7 +638,7 @@ inline DeconvSizeFactorsResult compute_deconv_size_factors(
         {
             const int threads = 256, blocks = (n_cells + 255) / 256;
             dsf_iota_kernel<<<blocks, threads, 0, stream>>>(d_sf_idx_in.get(), n_cells);
-            SGPU_DSF_CUDA_CHECK(cudaGetLastError());
+            SINGLET_GPU_CUDA_CHECK(cudaGetLastError());
         }
 
         size_t tmp_bytes = 0;
@@ -686,14 +655,14 @@ inline DeconvSizeFactorsResult compute_deconv_size_factors(
             n_cells, 0, sizeof(float) * 8, stream);
 
         float h_median = 1.0f;
-        SGPU_DSF_CUDA_CHECK(cudaMemcpyAsync(&h_median,
+        SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(&h_median,
             d_sf_sorted.get() + (n_cells / 2), sizeof(float),
             cudaMemcpyDeviceToHost, stream));
-        SGPU_DSF_CUDA_CHECK(cudaStreamSynchronize(stream));
+        SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
         if (h_median < 1e-10f) h_median = 1.0f;
 
         const float inv_median = 1.0f / h_median;
-        SGPU_DSF_CUBLAS_CHECK(cublasSscal(cublas, n_cells,
+        SINGLET_GPU_CUBLAS_CHECK(cublasSscal(cublas, n_cells,
             &inv_median, result.size_factors.get(), 1));
         result.median_sf = h_median;
     }
@@ -702,9 +671,9 @@ inline DeconvSizeFactorsResult compute_deconv_size_factors(
     result.n_clusters_solved   = static_cast<int>(cluster_starts.size());
     result.n_clipped_negatives = total_clipped;
 
-    SGPU_DSF_CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
     return result;
 }
 
 }  // namespace preprocess
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

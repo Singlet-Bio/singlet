@@ -1,8 +1,9 @@
+# SPDX-License-Identifier: MIT
 """
-Cycle 21 correctness tests for singlet_gpu.pp.neighbors().
+Cycle 21 correctness tests for singlet.gpu.preprocess.neighbors().
 
 Tests the GPU-native kNN graph wrapper (cycle 8: graph/knn.h):
-  - ``singlet.gpu.pp.neighbors``
+  - ``singlet.gpu.preprocess.neighbors``
 
 Formal spec: singlet-gpu/state/designs/20-python-kernel-wrappers-2.md
 
@@ -19,19 +20,17 @@ Tests:
   - test_neighbors_vs_scanpy       : connectivities graph Jaccard ≥ 0.95 vs sc.pp.neighbors
 
 Skip strategy:
-  - Module-level skip if singlet.gpu not available.
+  - Module-level skip if singlet_gpu wheel not built.
   - requires_gpu marker for all GPU-exercising tests.
 """
-
 from __future__ import annotations
 
 import numpy as np
 import pytest
 
 singlet_gpu = pytest.importorskip(
-    "singlet.gpu",
-    reason="singlet.gpu not available. Run `pip install -e singlet-gpu/python/` first.",
-    exc_type=ImportError,
+    "singlet_gpu",
+    reason="singlet_gpu wheel not built. Run `pip install -e singlet-gpu/python/` first.",
 )
 
 from conftest import requires_gpu  # noqa: E402
@@ -39,17 +38,16 @@ from conftest import requires_gpu  # noqa: E402
 # ---------------------------------------------------------------------------
 # Tolerance constants
 # ---------------------------------------------------------------------------
-_JACCARD_MIN = 0.95  # connectivities graph edge-set Jaccard vs scanpy
-_N_NEIGHBORS = 15  # match scanpy default
-_N_COMPS = 50  # PCA components for embedding
+_JACCARD_MIN = 0.95    # connectivities graph edge-set Jaccard vs scanpy
+_N_NEIGHBORS = 15      # match scanpy default
+_N_COMPS = 50          # PCA components for embedding
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-
 def _load_gpu_adata(gsm4037629_path):
-    return singlet_gpu.io.read_pz_to_anndata(str(gsm4037629_path))
+    return singlet.gpu.io.read_pz_to_anndata(str(gsm4037629_path))
 
 
 def _gpu_to_cpu_adata(adata_gpu):
@@ -77,9 +75,9 @@ def _gpu_to_cpu_adata(adata_gpu):
 
 def _preprocess_and_pca_gpu(adata_gpu):
     """Normalize → log1p → PCA (GPU path) for neighbors input."""
-    singlet_gpu.preprocess.normalize_total(adata_gpu, inplace=True)
-    singlet_gpu.preprocess.log1p(adata_gpu, inplace=True)
-    singlet_gpu.reduce.pca(adata_gpu, n_comps=_N_COMPS, inplace=True)
+    singlet.gpu.preprocess.normalize_total(adata_gpu, inplace=True)
+    singlet.gpu.preprocess.log1p(adata_gpu, inplace=True)
+    singlet.gpu.reduce.pca(adata_gpu, n_comps=_N_COMPS, inplace=True)
 
 
 def _preprocess_and_pca_cpu(adata_cpu):
@@ -125,7 +123,7 @@ def test_neighbors_basic(gsm4037629_path):
     Procedure:
       1. Load GSM4037629 → GPU AnnData.
       2. Preprocess + PCA (provides X_pca in obsm).
-      3. Call singlet_gpu.pp.neighbors(adata, n_neighbors=15).
+      3. Call singlet.gpu.preprocess.neighbors(adata, n_neighbors=15).
       4. Assert all required keys are present.
       5. Assert inplace=True (default) returns None.
     """
@@ -134,12 +132,20 @@ def test_neighbors_basic(gsm4037629_path):
     adata = _load_gpu_adata(gsm4037629_path)
     _preprocess_and_pca_gpu(adata)
 
-    ret = singlet_gpu.pp.neighbors(adata, n_neighbors=_N_NEIGHBORS)
+    ret = singlet.gpu.preprocess.neighbors(adata, n_neighbors=_N_NEIGHBORS)
 
-    assert ret is None, f"neighbors() inplace must return None (scanpy convention), got {type(ret)}"
-    assert "distances" in adata.obsp, "neighbors(): adata.obsp['distances'] not written"
-    assert "connectivities" in adata.obsp, "neighbors(): adata.obsp['connectivities'] not written"
-    assert "neighbors" in adata.uns, "neighbors(): adata.uns['neighbors'] not written"
+    assert ret is None, (
+        f"neighbors() inplace must return None (scanpy convention), got {type(ret)}"
+    )
+    assert "distances" in adata.obsp, (
+        "neighbors(): adata.obsp['distances'] not written"
+    )
+    assert "connectivities" in adata.obsp, (
+        "neighbors(): adata.obsp['connectivities'] not written"
+    )
+    assert "neighbors" in adata.uns, (
+        "neighbors(): adata.uns['neighbors'] not written"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -161,7 +167,7 @@ def test_neighbors_writes_obsp(gsm4037629_path):
 
     adata = _load_gpu_adata(gsm4037629_path)
     _preprocess_and_pca_gpu(adata)
-    singlet_gpu.pp.neighbors(adata, n_neighbors=_N_NEIGHBORS)
+    singlet.gpu.preprocess.neighbors(adata, n_neighbors=_N_NEIGHBORS)
 
     n_cells = adata.n_obs
 
@@ -193,7 +199,9 @@ def test_neighbors_writes_obsp(gsm4037629_path):
     assert C.shape == (n_cells, n_cells), (
         f"obsp['connectivities'] shape {C.shape} != ({n_cells}, {n_cells})"
     )
-    assert np.all(C.data >= 0.0), "obsp['connectivities'] contains negative values"
+    assert np.all(C.data >= 0.0), (
+        f"obsp['connectivities'] contains negative values"
+    )
     assert np.all(C.data <= 1.0 + 1e-6), (
         f"obsp['connectivities'] contains values > 1.0; max={C.data.max():.4f}"
     )
@@ -202,7 +210,8 @@ def test_neighbors_writes_obsp(gsm4037629_path):
     params = adata.uns.get("neighbors", {}).get("params", {})
     if "n_neighbors" in params:
         assert int(params["n_neighbors"]) == _N_NEIGHBORS, (
-            f"uns['neighbors']['params']['n_neighbors'] = {params['n_neighbors']} != {_N_NEIGHBORS}"
+            f"uns['neighbors']['params']['n_neighbors'] = {params['n_neighbors']} "
+            f"!= {_N_NEIGHBORS}"
         )
 
 
@@ -210,12 +219,11 @@ def test_neighbors_writes_obsp(gsm4037629_path):
 # test_neighbors_vs_scanpy
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
+    strict=True, raises=AssertionError,
     reason="CYCLE-262-FOLLOWUP-CONNECTIVITIES-FUZZY-SIMPLICIAL: pp/neighbors.py "
-    "computes connectivities via per-row Gaussian (placeholder); scanpy uses "
-    "UMAP fuzzy_simplicial_set. Jaccard ~0.03 vs 0.95 threshold. Real "
-    "algorithmic divergence — landing fuzzy_simplicial_set is a separate cycle.",
+           "computes connectivities via per-row Gaussian (placeholder); scanpy uses "
+           "UMAP fuzzy_simplicial_set. Jaccard ~0.03 vs 0.95 threshold. Real "
+           "algorithmic divergence — landing fuzzy_simplicial_set is a separate cycle.",
 )
 @requires_gpu
 def test_neighbors_vs_scanpy(gsm4037629_path):
@@ -224,7 +232,7 @@ def test_neighbors_vs_scanpy(gsm4037629_path):
     Procedure:
       1. Load GSM4037629 twice → adata_gpu, adata_cpu.
       2. Preprocess + PCA both (consistent embedding).
-      3. singlet_gpu.pp.neighbors(adata_gpu, n_neighbors=15).
+      3. singlet.gpu.preprocess.neighbors(adata_gpu, n_neighbors=15).
       4. sc.pp.neighbors(adata_cpu, n_neighbors=15).
       5. Extract non-zero edge sets from obsp['connectivities'] of each.
       6. Compute Jaccard of edge sets (undirected: only i < j pairs counted).
@@ -243,7 +251,7 @@ def test_neighbors_vs_scanpy(gsm4037629_path):
     _preprocess_and_pca_cpu(adata_cpu)
 
     # GPU neighbors.
-    singlet_gpu.pp.neighbors(adata_gpu, n_neighbors=_N_NEIGHBORS)
+    singlet.gpu.preprocess.neighbors(adata_gpu, n_neighbors=_N_NEIGHBORS)
 
     # Scanpy CPU neighbors — must use the same PCA representation.
     sc.pp.neighbors(adata_cpu, n_neighbors=_N_NEIGHBORS, use_rep="X_pca")

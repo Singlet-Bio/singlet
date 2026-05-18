@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.leiden_subclustering()."""
 
 import numpy as np

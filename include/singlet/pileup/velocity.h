@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: velocity.h
 // G-VELOCITY: per-gene spliced/unspliced/ambiguous matrices for RNA velocity.
@@ -17,20 +18,17 @@
 #include <type_traits>
 #include <vector>
 
+#include "sparse_accumulator.h"
+
 namespace singlet {
 
 /// Gene-level sparse matrix in CSC format.
-/// Shared with export.h — defined here to avoid re-declaration.
+/// Canonical layout lives in sparse_accumulator.h as
+/// SparseAccumulator<OutT>::CSCMatrix; GeneCSC is just an alias of it.
 #ifndef SINGLET_GENE_CSC_DEFINED
 #define SINGLET_GENE_CSC_DEFINED
 template <typename OutT>
-struct GeneCSC {
-    std::vector<int32_t> indptr;
-    std::vector<int32_t> indices;
-    std::vector<OutT> data;
-    uint32_t nrows;
-    uint32_t ncols;
-};
+using GeneCSC = typename SparseAccumulator<OutT>::CSCMatrix;
 #endif  // SINGLET_GENE_CSC_DEFINED
 
 /// Collapse intron-interval-level CSC to gene-level CSC by summing counts.

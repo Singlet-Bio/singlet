@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.spectral_clustering()."""
 
 import numpy as np

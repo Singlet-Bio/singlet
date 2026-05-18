@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (first GPU GSEA implementation)
 //
 // gsea/types.h — Shared structs and config for the gsea module.
@@ -8,14 +8,14 @@
 
 #pragma once
 
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/anno/types.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/anno/types.h>
 
 #include <string>
 #include <vector>
 #include <cstdint>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace gsea {
 
 // ---------------------------------------------------------------------------
@@ -57,10 +57,10 @@ struct AUCellConfig {
 };
 
 struct AUCellResult {
-    singlet_gpu::core::DeviceMemory<float> scores; // [n_pathways × n_cells], column-major
+    singlet::gpu::core::DeviceMemory<float> scores; // [n_pathways × n_cells], column-major
     int n_pathways = 0;
     int n_cells    = 0;
 };
 
 } // namespace gsea
-} // namespace singlet_gpu
+} // namespace singlet::gpu

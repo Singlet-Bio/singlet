@@ -1,7 +1,7 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: decoupleR (Badia-i-Mompel et al. 2022)
 //
-// singlet-gpu/enrich/decoupler_ulm.h
+// singlet/gpu/enrich/decoupler_ulm.h
 //
 // ULM (Univariate Linear Model) pathway-scoring method from decoupleR.
 //
@@ -61,13 +61,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/io/pz_device_loader.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/io/pz_device_loader.h>
 
 #include <cuda_runtime.h>
 #include <cusparse.h>
@@ -77,7 +73,7 @@
 #include <stdexcept>
 #include <string>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace enrich {
 
 // ---------------------------------------------------------------------------
@@ -402,7 +398,7 @@ inline UlmResult ulm(
     cudaStream_t              stream = nullptr)
 {
     if (stream == nullptr) {
-        stream = singlet_gpu::core::default_context().stream();
+        stream = singlet::gpu::core::default_context().stream();
     }
 
     const int m   = X.mat.rows;
@@ -506,7 +502,7 @@ inline UlmResult ulm(
             cfg.epsilon);
     }
 
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     UlmResult res;
     res.scores     = std::move(d_scores);
@@ -516,4 +512,4 @@ inline UlmResult ulm(
 }
 
 }  // namespace enrich
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

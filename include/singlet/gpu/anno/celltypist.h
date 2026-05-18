@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: CellTypist (Dominguez Conde et al. 2022)
 // anno/celltypist.h — GPU-native cell-type annotation via pre-trained logistic
 // regression models (Human Cell Atlas reference).
@@ -21,12 +21,8 @@
 // CYCLE-135: initial implementation.
 
 #pragma once
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
 
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
@@ -35,7 +31,7 @@
 #include <stdexcept>
 #include <string>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace anno {
 
 // ---------------------------------------------------------------------------
@@ -207,7 +203,7 @@ inline CelltypistResult celltypist_predict(
     cudaStream_t            stream = nullptr)
 {
     if (stream == nullptr)
-        stream = singlet_gpu::core::default_context().stream();
+        stream = singlet::gpu::core::default_context().stream();
 
     if (n_features <= 0 || n_cells <= 0 || n_classes <= 0)
         throw std::runtime_error(
@@ -233,7 +229,7 @@ inline CelltypistResult celltypist_predict(
     // Output L is (n_classes x n_cells) col-major.
     // cublasSgemm(opA=T, opB=N, m=n_classes, n=n_cells, k=n_features)
     {
-        cublasHandle_t blas = singlet_gpu::core::default_context().blas();
+        cublasHandle_t blas = singlet::gpu::core::default_context().blas();
         cublasSetStream(blas, stream);
         const float alpha = 1.f, beta = 0.f;
         CUBLAS_CHECK(cublasSgemm(
@@ -268,9 +264,9 @@ inline CelltypistResult celltypist_predict(
             n_classes, n_cells);
     }
 
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
     return result;
 }
 
 }  // namespace anno
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

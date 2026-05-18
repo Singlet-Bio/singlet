@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Test for UmiDedup and directional UMI error correction
 #include "singlet/pileup/umi_dedup.h"
 #include <cassert>

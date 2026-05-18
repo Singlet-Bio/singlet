@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // lib1fq/dedup.h — PCR duplicate collapsing (Phase 3)
 //
 // Offline pass: reads a .1fq file, sorts by identity key (BC+UMI+R2_prefix),
@@ -14,7 +15,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace lib1fq {
+namespace singlet::fq {
 
 // ── Identity key for dedup — FNV-1a hash of BC+UMI+R2_prefix ──
 
@@ -291,4 +292,4 @@ private:
     }
 };
 
-} // namespace lib1fq
+} // namespace singlet::fq

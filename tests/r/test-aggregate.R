@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 test_that("aggregate_features_to_gene reconstructs spliced from exon_counts bit-exactly", {
     # Empirical property that justifies dropping spliced.1pz from the NFS
     # copy tree: per-gene aggregation of exon_counts equals spliced.

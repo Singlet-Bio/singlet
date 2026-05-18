@@ -1,5 +1,6 @@
+# SPDX-License-Identifier: MIT
 """
-Cycle 19 correctness tests for singlet_gpu.io (loader.py).
+Cycle 19 correctness tests for singlet.gpu.io (loader.py).
 
 Tests the high-level AnnData I/O wrappers introduced in cycle 19:
   - ``singlet.gpu.io.read_pz_to_anndata``
@@ -8,14 +9,13 @@ Tests the high-level AnnData I/O wrappers introduced in cycle 19:
 Formal spec: singlet-gpu/state/designs/19-python-kernel-wrappers-1.md
 
 Skip strategy:
-  - If ``singlet.gpu`` cannot be imported (wheel not built), the entire
+  - If ``singlet_gpu`` cannot be imported (wheel not built), the entire
     module is skipped via a module-level collect hook.
   - GPU-touching tests are individually skipped via ``requires_gpu``
     when cupy/CUDA is unavailable.
 
 All tests use the ``gsm4037629_path`` session fixture from conftest.py.
 """
-
 from __future__ import annotations
 
 import pathlib
@@ -28,9 +28,11 @@ import pytest
 # Module-level skip when the wheel hasn't been built yet.
 # ---------------------------------------------------------------------------
 singlet_gpu = pytest.importorskip(
-    "singlet.gpu",
-    reason=("singlet.gpu not available. Run `pip install -e singlet-gpu/python/` first."),
-    exc_type=ImportError,
+    "singlet_gpu",
+    reason=(
+        "singlet_gpu wheel not built. "
+        "Run `pip install -e singlet-gpu/python/` first."
+    ),
 )
 
 from conftest import requires_gpu  # noqa: E402 — after importorskip
@@ -61,7 +63,7 @@ def test_read_pz_to_anndata_basic(gsm4037629_path):
     """
     anndata = pytest.importorskip("anndata", reason="anndata not installed")
 
-    adata = singlet_gpu.io.read_pz_to_anndata(str(gsm4037629_path))
+    adata = singlet.gpu.io.read_pz_to_anndata(str(gsm4037629_path))
 
     assert isinstance(adata, anndata.AnnData), (
         f"read_pz_to_anndata must return AnnData, got {type(adata)}"
@@ -102,7 +104,7 @@ def test_anndata_metadata_in_uns(gsm4037629_path):
     """
     pytest.importorskip("anndata", reason="anndata not installed")
 
-    adata = singlet_gpu.io.read_pz_to_anndata(str(gsm4037629_path))
+    adata = singlet.gpu.io.read_pz_to_anndata(str(gsm4037629_path))
 
     assert "singlet" in adata.uns, (
         "adata.uns must contain 'singlet' key with embedded GEO metadata"
@@ -110,10 +112,12 @@ def test_anndata_metadata_in_uns(gsm4037629_path):
     meta = adata.uns["singlet"]
 
     assert meta.get("gsm_id") == _EXPECTED_GSM_ID, (
-        f"uns['singlet']['gsm_id'] = {meta.get('gsm_id')!r}, expected {_EXPECTED_GSM_ID!r}"
+        f"uns['singlet']['gsm_id'] = {meta.get('gsm_id')!r}, "
+        f"expected {_EXPECTED_GSM_ID!r}"
     )
     assert meta.get("gse_id") == _EXPECTED_GSE_ID, (
-        f"uns['singlet']['gse_id'] = {meta.get('gse_id')!r}, expected {_EXPECTED_GSE_ID!r}"
+        f"uns['singlet']['gse_id'] = {meta.get('gse_id')!r}, "
+        f"expected {_EXPECTED_GSE_ID!r}"
     )
 
     protocol = meta.get("protocol", "")
@@ -146,8 +150,10 @@ def test_modality_param(gsm4037629_path):
     pytest.importorskip("anndata", reason="anndata not installed")
 
     # Default (exon) vs explicit exon — must be identical shape.
-    adata_default = singlet_gpu.io.read_pz_to_anndata(str(gsm4037629_path))
-    adata_explicit = singlet_gpu.io.read_pz_to_anndata(str(gsm4037629_path), modality="exon")
+    adata_default = singlet.gpu.io.read_pz_to_anndata(str(gsm4037629_path))
+    adata_explicit = singlet.gpu.io.read_pz_to_anndata(
+        str(gsm4037629_path), modality="exon"
+    )
     assert adata_default.X.shape == adata_explicit.shape, (
         "Default modality and explicit modality='exon' must produce identical shape"
     )
@@ -157,7 +163,9 @@ def test_modality_param(gsm4037629_path):
     if not intron_file.is_file():
         pytest.skip("intron_counts.1pz not present in GSM4037629; skipping intron modality check")
 
-    adata_intron = singlet_gpu.io.read_pz_to_anndata(str(gsm4037629_path), modality="intron")
+    adata_intron = singlet.gpu.io.read_pz_to_anndata(
+        str(gsm4037629_path), modality="intron"
+    )
     # Cell barcodes (obs axis) must be the same set for both exon and intron.
     assert adata_intron.n_obs == adata_default.n_obs, (
         f"intron AnnData has {adata_intron.n_obs} cells, "
@@ -170,8 +178,8 @@ def test_modality_param(gsm4037629_path):
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
     reason="write_anndata_to_pz raises NotImplementedError pending "
-    "_core.from_cupy_csr_to_pz binding (CYCLE-19-FOLLOWUP-CYCLE-18-"
-    "BINDING-EXPOSE)",
+           "_core.from_cupy_csr_to_pz binding (CYCLE-19-FOLLOWUP-CYCLE-18-"
+           "BINDING-EXPOSE)",
     strict=True,
     raises=NotImplementedError,
 )
@@ -194,20 +202,23 @@ def test_write_pz_roundtrip(gsm4037629_path):
 
     pytest.importorskip("anndata", reason="anndata not installed")
 
-    adata_orig = singlet_gpu.io.read_pz_to_anndata(str(gsm4037629_path))
+    adata_orig = singlet.gpu.io.read_pz_to_anndata(str(gsm4037629_path))
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        singlet_gpu.io.write_anndata_to_pz(adata_orig, tmpdir, modality="exon")
+        singlet.gpu.io.write_anndata_to_pz(adata_orig, tmpdir, modality="exon")
 
         # Verify the output file was created.
         out_file = pathlib.Path(tmpdir) / "exon_counts.1pz"
-        assert out_file.is_file(), f"write_anndata_to_pz did not produce {out_file}"
+        assert out_file.is_file(), (
+            f"write_anndata_to_pz did not produce {out_file}"
+        )
 
-        adata_rt = singlet_gpu.io.read_pz_to_anndata(tmpdir, modality="exon")
+        adata_rt = singlet.gpu.io.read_pz_to_anndata(tmpdir, modality="exon")
 
     # Shape must be identical.
     assert adata_rt.X.shape == adata_orig.X.shape, (
-        f"Round-trip AnnData shape {adata_rt.X.shape} != original {adata_orig.X.shape}"
+        f"Round-trip AnnData shape {adata_rt.X.shape} != "
+        f"original {adata_orig.X.shape}"
     )
 
     # Values: bring both to host scipy CSR and compare element-wise.

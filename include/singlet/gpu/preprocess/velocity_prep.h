@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (intron-aware velocity prep — first to exploit singlet's exon+intron output)
 //
 // preprocess/velocity_prep.h — GPU RNA velocity preprocessing.
@@ -48,12 +48,8 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/graph/knn.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/graph/knn.h>
 
 #include <cuda_runtime.h>
 #include <cub/device/device_segmented_reduce.cuh>
@@ -66,7 +62,7 @@
 #include <vector>
 #include <algorithm>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace preprocess {
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -922,4 +918,4 @@ velocity_prep(
 }
 
 }  // namespace preprocess
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

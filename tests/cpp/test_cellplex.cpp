@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_cellplex.cpp — unit tests for G-CELLPLEX demultiplexing
 // Tests: 3 CMOs, 5 cells using Otsu-threshold CLR demux.
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Comprehensive QC summary statistics for AnnData objects.
 
 Provides singlet.qc_summary() — computes per-cell quality metrics and

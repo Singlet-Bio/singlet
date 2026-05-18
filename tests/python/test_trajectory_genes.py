@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.trajectory_genes()."""
 
 import numpy as np

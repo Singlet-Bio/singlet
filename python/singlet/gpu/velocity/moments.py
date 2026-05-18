@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.velocity.moments — GPU-native first/second-order moment smoothing.
 
@@ -36,9 +36,8 @@ if TYPE_CHECKING:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-
 def _get_layer(
-    adata: anndata.AnnData,
+    adata: "anndata.AnnData",
     layer_key: str,
 ) -> object:
     """
@@ -53,7 +52,7 @@ def _get_layer(
 
 
 def _get_connectivities(
-    adata: anndata.AnnData,
+    adata: "anndata.AnnData",
     mode: str,
 ) -> object:
     """
@@ -79,7 +78,7 @@ def _get_connectivities(
     if nbrs_key not in adata.obsp:
         raise KeyError(
             f"Connectivity key '{nbrs_key}' not found in adata.obsp.  "
-            "Run singlet.gpu.pp.neighbors() (or sc.pp.neighbors()) first."
+            "Run singlet.gpu.preprocess.neighbors() (or sc.pp.neighbors()) first."
         )
     return adata.obsp[nbrs_key]
 
@@ -88,9 +87,8 @@ def _get_connectivities(
 # Public API
 # ---------------------------------------------------------------------------
 
-
 def moments(
-    adata: anndata.AnnData,
+    adata: "anndata.AnnData",
     *,
     n_neighbors: int = 30,
     n_pcs: Optional[int] = None,
@@ -99,7 +97,7 @@ def moments(
     layer_spliced: str = "spliced",
     layer_unspliced: str = "unspliced",
     copy: bool = False,
-) -> Optional[anndata.AnnData]:
+) -> Optional["anndata.AnnData"]:
     """
     GPU-native first/second-order moment smoothing for RNA velocity (cycle-15).
 
@@ -119,7 +117,7 @@ def moments(
         - ``adata.layers[layer_spliced]``   — spliced count matrix.
         - ``adata.layers[layer_unspliced]`` — unspliced count matrix.
         - ``adata.obsp['connectivities']`` (or ``'distances'``) —
-          precomputed kNN graph (from ``singlet.gpu.pp.neighbors`` or
+          precomputed kNN graph (from ``singlet.gpu.preprocess.neighbors`` or
           ``sc.pp.neighbors``).
     n_neighbors : int, default 30
         Number of nearest neighbours to use for smoothing.  The kNN
@@ -202,9 +200,9 @@ def moments(
 
     working = copy_module.copy(adata) if copy else adata
 
-    spliced_mat = _get_layer(working, layer_spliced)
+    spliced_mat   = _get_layer(working, layer_spliced)
     unspliced_mat = _get_layer(working, layer_unspliced)
-    connectivity = _get_connectivities(working, mode)
+    connectivity  = _get_connectivities(working, mode)
 
     # C++ kernel: velocity_moments(spliced, unspliced, connectivity, n_neighbors)
     # Returns (Ms, Mu) — smoothed matrices, same shape as inputs.

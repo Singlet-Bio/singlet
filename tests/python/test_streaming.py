@@ -1,5 +1,6 @@
+# SPDX-License-Identifier: MIT
 """
-Cycle 21 correctness tests for singlet_gpu.streaming.run_pipeline().
+Cycle 21 correctness tests for singlet.gpu.streaming.run_pipeline().
 
 Tests the GPU-native streaming pipeline wrapper (cycle 7: streamed_pipeline.h):
   - ``singlet.gpu.streaming.run_pipeline``
@@ -12,14 +13,13 @@ Tests:
   - test_run_pipeline_multi_input     : two .1pz paths concatenated via streaming
 
 Skip strategy:
-  - Module-level skip if singlet.gpu not available.
+  - Module-level skip if singlet_gpu wheel not built.
   - requires_gpu marker for all GPU-exercising tests.
   - GSM4037629 path fixture from conftest.
 
 Reference: end-to-end equivalence vs in-memory (scanpy CPU) preprocessing at
 the streaming chunk boundary — result shape and HVG overlap (Jaccard ≥ 0.95).
 """
-
 from __future__ import annotations
 
 import numpy as np
@@ -29,9 +29,11 @@ import pytest
 # Module-level skip when the wheel hasn't been built yet.
 # ---------------------------------------------------------------------------
 singlet_gpu = pytest.importorskip(
-    "singlet.gpu",
-    reason=("singlet.gpu not available. Run `pip install -e singlet-gpu/python/` first."),
-    exc_type=ImportError,
+    "singlet_gpu",
+    reason=(
+        "singlet_gpu wheel not built. "
+        "Run `pip install -e singlet-gpu/python/` first."
+    ),
 )
 
 from conftest import requires_gpu  # noqa: E402 — after importorskip
@@ -39,17 +41,16 @@ from conftest import requires_gpu  # noqa: E402 — after importorskip
 # ---------------------------------------------------------------------------
 # Tolerance constants
 # ---------------------------------------------------------------------------
-_HVG_JACCARD_MIN = 0.95  # streaming HVG vs scanpy in-memory (cycle 7 spec)
+_HVG_JACCARD_MIN = 0.95   # streaming HVG vs scanpy in-memory (cycle 7 spec)
 _N_TOP_HVG = 2000
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-
 def _load_gpu_adata(gsm4037629_path):
-    """Return a GPU-resident AnnData via singlet_gpu.io.read_pz_to_anndata."""
-    return singlet_gpu.io.read_pz_to_anndata(str(gsm4037629_path))
+    """Return a GPU-resident AnnData via singlet.gpu.io.read_pz_to_anndata."""
+    return singlet.gpu.io.read_pz_to_anndata(str(gsm4037629_path))
 
 
 def _gpu_to_cpu_adata(adata_gpu):
@@ -80,9 +81,9 @@ def _gpu_to_cpu_adata(adata_gpu):
 # ---------------------------------------------------------------------------
 @pytest.mark.skip(
     reason="Streaming PipelineResult adata construction blows host memory "
-    "on real-scale inputs (310797 cells × 20866 genes).  Needs "
-    "CYCLE-21-FOLLOWUP-CYCLE-20-BINDING-EXTEND to expose embeddings "
-    "and gene/cell IDs from the binding without forcing host load."
+           "on real-scale inputs (310797 cells × 20866 genes).  Needs "
+           "CYCLE-21-FOLLOWUP-CYCLE-20-BINDING-EXTEND to expose embeddings "
+           "and gene/cell IDs from the binding without forcing host load."
 )
 @requires_gpu
 def test_run_pipeline_lognorm_only(gsm4037629_path):
@@ -106,7 +107,7 @@ def test_run_pipeline_lognorm_only(gsm4037629_path):
 
     pz_dir = str(gsm4037629_path)
 
-    result = singlet_gpu.streaming.run_pipeline(
+    result = singlet.gpu.streaming.run_pipeline(
         input_paths=[pz_dir],
         chunk_cols=5_000,
         run_lognorm=True,
@@ -123,7 +124,9 @@ def test_run_pipeline_lognorm_only(gsm4037629_path):
     if isinstance(result, anndata.AnnData):
         adata = result
     else:
-        assert hasattr(result, "adata"), "PipelineResult must expose .adata (AnnData) attribute"
+        assert hasattr(result, "adata"), (
+            "PipelineResult must expose .adata (AnnData) attribute"
+        )
         adata = result.adata
 
     assert adata.n_obs > 0, "Resulting AnnData must have at least one cell"
@@ -133,7 +136,6 @@ def test_run_pipeline_lognorm_only(gsm4037629_path):
     X = adata.X
     if hasattr(X, "get"):
         import scipy.sparse as sp
-
         X_host = X.get()
     else:
         X_host = X
@@ -158,8 +160,8 @@ def test_run_pipeline_lognorm_only(gsm4037629_path):
 # ---------------------------------------------------------------------------
 @pytest.mark.skip(
     reason="Streaming PipelineResult adata construction blows host memory "
-    "on real-scale inputs.  Needs CYCLE-21-FOLLOWUP-CYCLE-20-"
-    "BINDING-EXTEND."
+           "on real-scale inputs.  Needs CYCLE-21-FOLLOWUP-CYCLE-20-"
+           "BINDING-EXTEND."
 )
 @requires_gpu
 def test_run_pipeline_lognorm_hvg(gsm4037629_path):
@@ -183,7 +185,7 @@ def test_run_pipeline_lognorm_hvg(gsm4037629_path):
 
     pz_dir = str(gsm4037629_path)
 
-    result = singlet_gpu.streaming.run_pipeline(
+    result = singlet.gpu.streaming.run_pipeline(
         input_paths=[pz_dir],
         chunk_cols=5_000,
         run_lognorm=True,
@@ -203,8 +205,12 @@ def test_run_pipeline_lognorm_hvg(gsm4037629_path):
         "PipelineResult.adata.var must contain 'highly_variable' after run_hvg=True"
     )
 
-    gpu_hvg_set = set(adata_result.var_names[adata_result.var["highly_variable"]])
-    assert len(gpu_hvg_set) > 0, "run_pipeline HVG: no genes marked highly_variable"
+    gpu_hvg_set = set(
+        adata_result.var_names[adata_result.var["highly_variable"]]
+    )
+    assert len(gpu_hvg_set) > 0, (
+        "run_pipeline HVG: no genes marked highly_variable"
+    )
 
     # Scanpy CPU reference for Jaccard comparison.
     adata_cpu = _gpu_to_cpu_adata(_load_gpu_adata(gsm4037629_path))
@@ -233,8 +239,8 @@ def test_run_pipeline_lognorm_hvg(gsm4037629_path):
 # ---------------------------------------------------------------------------
 @pytest.mark.skip(
     reason="Streaming PipelineResult adata construction blows host memory "
-    "on real-scale inputs.  Needs CYCLE-21-FOLLOWUP-CYCLE-20-"
-    "BINDING-EXTEND."
+           "on real-scale inputs.  Needs CYCLE-21-FOLLOWUP-CYCLE-20-"
+           "BINDING-EXTEND."
 )
 @requires_gpu
 def test_run_pipeline_multi_input(gsm4037629_path):
@@ -256,7 +262,7 @@ def test_run_pipeline_multi_input(gsm4037629_path):
     pz_dir = str(gsm4037629_path)
 
     # Single-input run.
-    result_single = singlet_gpu.streaming.run_pipeline(
+    result_single = singlet.gpu.streaming.run_pipeline(
         input_paths=[pz_dir],
         chunk_cols=5_000,
         run_lognorm=True,
@@ -266,7 +272,7 @@ def test_run_pipeline_multi_input(gsm4037629_path):
     )
 
     # Two-input run.
-    result_double = singlet_gpu.streaming.run_pipeline(
+    result_double = singlet.gpu.streaming.run_pipeline(
         input_paths=[pz_dir, pz_dir],
         chunk_cols=5_000,
         run_lognorm=True,
@@ -280,12 +286,8 @@ def test_run_pipeline_multi_input(gsm4037629_path):
 
     import anndata
 
-    adata_single = (
-        result_single if isinstance(result_single, anndata.AnnData) else result_single.adata
-    )
-    adata_double = (
-        result_double if isinstance(result_double, anndata.AnnData) else result_double.adata
-    )
+    adata_single = result_single if isinstance(result_single, anndata.AnnData) else result_single.adata
+    adata_double = result_double if isinstance(result_double, anndata.AnnData) else result_double.adata
 
     n_single = adata_single.n_obs
     n_double = adata_double.n_obs

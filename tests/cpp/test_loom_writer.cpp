@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_loom_writer.cpp
 // Tests for G-LOOM: Loom v3 export (loom_writer.h)
 // Run: ./test_loom_writer

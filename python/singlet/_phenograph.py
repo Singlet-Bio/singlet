@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """PhenoGraph-style clustering using shared nearest neighbor (SNN) graphs.
 
 Provides singlet.phenograph() — builds a kNN graph, computes Jaccard-weighted

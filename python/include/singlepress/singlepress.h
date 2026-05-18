@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 /**
  * @file singlepress.h
  * @brief SinglePress — header-only C++ library for compressed sparse matrix I/O.

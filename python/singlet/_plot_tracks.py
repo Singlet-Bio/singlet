@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tracks plot for marker genes."""
 
 from __future__ import annotations

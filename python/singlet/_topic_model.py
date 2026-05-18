@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Topic modeling for single-cell data.
 
 Provides singlet.topic_model() — Latent Dirichlet Allocation or NMF

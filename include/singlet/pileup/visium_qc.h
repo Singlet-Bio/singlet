@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: visium_qc.h
 // V3: Visium spatial QC metrics.

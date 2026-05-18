@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Authentication for token-priced features."""
 
 from __future__ import annotations

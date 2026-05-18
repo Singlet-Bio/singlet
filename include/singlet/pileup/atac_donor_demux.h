@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: atac_donor_demux.h
 // A4 — ATAC-seq donor demultiplexing via fragment-based SNP genotyping.

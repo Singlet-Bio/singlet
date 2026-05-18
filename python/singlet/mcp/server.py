@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """
 Singlet MCP Server — Model Context Protocol server for the Singlet Atlas.
 

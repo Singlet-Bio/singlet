@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (first GPU FlashDeconv with leverage-score sketching + ADMM)
 //
 // spatial/flash_deconv.h — GPU-native FlashDeconv: atlas-scale spatial deconvolution
@@ -56,14 +56,10 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/memory.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/graph/knn.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/memory.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/graph/knn.h>
 
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
@@ -81,7 +77,7 @@
 #include <cmath>
 #include <vector>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace spatial {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -848,11 +844,11 @@ flash_deconv(
     if (use_spatial) {
         // Build kNN graph on spatial coordinates (n_spots × 2)
         // We need a DeviceDense wrapping the coords.
-        // DeviceDense is factornet::gpu::DenseMatrixGPU<float> with shape n_spots × 2.
+        // core::DeviceDense with shape n_spots × 2.
         // Construct from raw pointer:
         core::DeviceDense coords_mat;
-        // factornet DenseMatrixGPU construction: rows, cols, device pointer
-        // Alias: coords_mat = DenseMatrixGPU wrapping the raw ptr (non-owning view).
+        // core::DeviceDense construction: rows, cols, device pointer
+        // Alias: coords_mat = DeviceDense wrapping the raw ptr (non-owning view).
         // Use the KnnConfig with k=15, L2 metric for spatial graph.
         graph::KnnConfig knn_cfg;
         knn_cfg.k       = 15;
@@ -1157,4 +1153,4 @@ flash_deconv(
 }
 
 }  // namespace spatial
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

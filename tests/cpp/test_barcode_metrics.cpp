@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_barcode_metrics.cpp — unit tests for barcode_metrics.h
 // Tests: TSV format, header row, metric values, cells-only filter, empty metrics,
 // build output, saturation calculation, mito fraction.
@@ -16,19 +17,7 @@
 // ---------------------------------------------------------------------------
 // Test framework
 // ---------------------------------------------------------------------------
-static int n_pass = 0;
-static int n_fail = 0;
-
-#define CHECK(cond, msg)                                                         \
-    do {                                                                         \
-        if (cond) {                                                              \
-            std::cout << "  PASS: " << (msg) << "\n";                           \
-            ++n_pass;                                                            \
-        } else {                                                                 \
-            std::cout << "  FAIL: " << (msg) << " [line " << __LINE__ << "]\n"; \
-            ++n_fail;                                                            \
-        }                                                                        \
-    } while (0)
+#include "test_harness.h"  // CHECK(cond, msg) + n_pass / n_fail
 
 // ---------------------------------------------------------------------------
 // Helpers

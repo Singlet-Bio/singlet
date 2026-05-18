@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """ComBat batch correction for AnnData objects.
 
 Implements the ComBat algorithm (Johnson et al., Biostatistics 2007) for

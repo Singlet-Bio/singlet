@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_nonhost_aligner.cpp — Unit tests for nonhost_aligner.h
 //
 // Tests SpeciesRefIndex, longest_chain(), and NonHostAligner end-to-end.

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # singlet-gpu/r/R/streaming.R
 #
 # Streaming pipeline over multiple .1pz files.

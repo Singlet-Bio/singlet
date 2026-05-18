@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Subsampling utilities for AnnData objects.
 
 Provides singlet.subsample() for random downsampling of cells,

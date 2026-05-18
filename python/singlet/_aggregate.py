@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Pseudobulk aggregation."""
 
 from __future__ import annotations

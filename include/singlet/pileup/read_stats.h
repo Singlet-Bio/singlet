@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: read_stats.h  (N20)
 // Per-cell read statistics: total reads, unique UMIs, duplication rate,

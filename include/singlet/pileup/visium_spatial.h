@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: visium_spatial.h
 // V1: Visium spatial coordinate parser.

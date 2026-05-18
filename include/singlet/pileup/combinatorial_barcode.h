@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // combinatorial_barcode.h — Multi-level combinatorial barcode decoder
 // for split-pool protocols: SHARE-seq, PAIRED-seq, scifi-RNA-seq

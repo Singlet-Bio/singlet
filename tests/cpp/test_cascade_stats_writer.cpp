@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_cascade_stats_writer.cpp
 // Unit tests for cascade_stats_writer.h
 

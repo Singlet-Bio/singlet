@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.preprocessing._qc (QCMetrics, run_qc)."""
 
 import gzip

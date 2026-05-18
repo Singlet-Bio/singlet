@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: mt_event_matrix.h
 // Sparse uint8 per-cell × locus event matrix writer for mt_events.1pz.

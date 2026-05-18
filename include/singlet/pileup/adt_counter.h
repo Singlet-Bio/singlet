@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: adt_counter.h
 // T2: CITE-seq / ADT UMI deduplication and counting.

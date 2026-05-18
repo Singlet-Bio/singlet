@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: adt_matcher.h
 // T1: CITE-seq / ADT antibody barcode tag matching

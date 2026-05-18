@@ -1,27 +1,26 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
-singlet.gpu.enrichment — GPU-native gene-set enrichment analysis.
+singlet.gpu.enrichment — GPU-native gene-set and pathway enrichment analysis.
 
-Exposes:
-    run_gsea   — preranked GSEA via cycle-13 fgsea kernel (decoupleR-compatible).
-    run_aucell — AUCell scoring via cycle-13 aucell kernel (decoupleR-compatible).
-
-Underlying C++ cycle: cycle 13 (gsea/fgsea.h, gsea/aucell.h).
-
-decoupleR parity
-----------------
-Both functions accept ``net`` as a ``pd.DataFrame`` with ``source`` and
-``target`` columns (decoupleR convention).  Results are written to
-``adata.obs`` (GSEA) or ``adata.obsm`` (AUCell) using decoupleR-compatible
-key names.
-
-CYCLE-23-FOLLOWUP-CYCLE-22-BINDING-EXPOSE: ``_core.fgsea`` and
-``_core.aucell`` are expected to have been added by the cycle-22 binding
-extension.  Both wrappers raise ``AttributeError`` with this tag if the
-bindings are missing.
+Public API
+----------
+run_gsea        — preranked GSEA via cycle-13 fgsea kernel (decoupleR-compatible).
+run_aucell      — AUCell scoring via cycle-13 aucell kernel (decoupleR-compatible).
+run_ssgsea      — per-cell single-sample GSEA enrichment (cycle 44).
+run_progeny     — PROGENy weighted-sum pathway activity scoring (cycle 44).
+run_score_genes — per-cell gene-set scoring, Seurat AddModuleScore parity (cycle 129).
 """
 
-from .aucell import run_aucell
 from .gsea import run_gsea
+from .aucell import run_aucell
+from .ssgsea import run_ssgsea
+from .progeny import run_progeny
+from .score_genes import run_score_genes
 
-__all__ = ["run_gsea", "run_aucell"]
+__all__ = [
+    "run_gsea",
+    "run_aucell",
+    "run_ssgsea",
+    "run_progeny",
+    "run_score_genes",
+]

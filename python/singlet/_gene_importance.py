@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Feature importance for cluster identity.
 
 Provides singlet.gene_importance() — train a classifier to predict cluster

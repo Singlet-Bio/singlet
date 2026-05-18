@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Highly variable gene selection using the Cell Ranger method.
 
 Provides singlet.highly_variable_genes_cell_ranger() — identifies genes

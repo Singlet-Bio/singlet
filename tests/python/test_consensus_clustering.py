@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.consensus_clustering()."""
 
 import numpy as np

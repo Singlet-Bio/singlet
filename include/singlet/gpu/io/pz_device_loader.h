@@ -1,10 +1,10 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-// singlet-gpu/io/pz_device_loader.h
+// SPDX-License-Identifier: MIT
+// singlet/gpu/io/pz_device_loader.h
 //
 // Zero-copy .1pz → device CSC loader.
 //
-// Algorithm reference: design doc at singlet-gpu/state/designs/00-pz-device-loader.md
-// Format reference: include/singlet/pz/pz_writer.h (TP1Z v1, VOCSC encoding)
+// Algorithm reference: design doc at singlet/gpu/state/designs/00-pz-device-loader.md
+// Format reference: singlet/include/singlet-pileup/pz_writer.h (TP1Z v1, VOCSC encoding)
 //
 // Pipeline (one call to load_pz):
 //   1. slurp file + validate magic / CRC32 (body-of-file CRC, not per-chunk)
@@ -20,7 +20,7 @@
 //
 // Memory:
 //   - Pinned host staging: 3 × nnz × sizeof(float) + (n+1) × 4 bytes
-//   - Device: same layout inside factornet::gpu::SparseMatrixGPU<float>
+//   - Device: same layout inside singlet::gpu::core::DeviceCSC
 //   - Both allocations released after the async copies are in flight; the caller
 //     must synchronize the stream before accessing the PinnedBuffers if they
 //     need to survive load_pz's scope.  We retain them inside PzDeviceMatrix so
@@ -39,8 +39,8 @@
 #pragma once
 
 // CYCLE-105: removed factornet/gpu/types.cuh dependency — DeviceCSC is now native.
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/memory.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/memory.h>
 
 #include <zstd.h>
 #include <cuda_runtime.h>
@@ -61,7 +61,7 @@
 // .1pz format constants — mirrored bit-exact from pz_writer.h.
 // Do NOT derive these independently. If pz_writer.h changes, update here.
 // ---------------------------------------------------------------------------
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace io {
 namespace pz_fmt {
 
@@ -134,11 +134,11 @@ static_assert(sizeof(PZFooter) == 16, "PZFooter layout must be 16 bytes — mirr
 
 }  // namespace pz_fmt
 }  // namespace io
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu
 
 // ---------------------------------------------------------------------------
 // Internal helpers — in an anonymous namespace so they do not pollute the
-// singlet_gpu ABI. All are header-only.
+// singlet::gpu ABI. All are header-only.
 // ---------------------------------------------------------------------------
 namespace {
 
@@ -271,9 +271,9 @@ inline void bit_planes_decode(const uint8_t* src, size_t n, uint8_t* dst) {
 // GEO KV fields are extracted from the user_kv section.
 inline void parse_metadata_tlv(
     const uint8_t* buf, size_t len,
-    singlet_gpu::core::Metadata& meta)
+    singlet::gpu::core::Metadata& meta)
 {
-    using namespace singlet_gpu::io::pz_fmt;
+    using namespace singlet::gpu::io::pz_fmt;
     std::vector<std::string> rownames, colnames;
     std::map<std::string, std::string> kv;
 
@@ -353,10 +353,10 @@ inline void parse_metadata_tlv(
 // Saturating uint32 → float cast with a one-time stderr warning per call site.
 // Values beyond FP32_EXACT_INT_LIMIT (2^24) lose mantissa bits.
 inline float saturate_cast_f32(uint32_t v, bool& warned) {
-    using namespace singlet_gpu::io::pz_fmt;
+    using namespace singlet::gpu::io::pz_fmt;
     if (v > FP32_EXACT_INT_LIMIT && !warned) {
         std::fprintf(stderr,
-            "[singlet-gpu/pz_device_loader] WARNING: value %u > 2^24 (%u); "
+            "[singlet/gpu/pz_device_loader] WARNING: value %u > 2^24 (%u); "
             "fp32 cast loses integer precision.\n", v, FP32_EXACT_INT_LIMIT);
         warned = true;
     }
@@ -368,7 +368,7 @@ inline float saturate_cast_f32(uint32_t v, bool& warned) {
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace io {
 
 // PzDeviceMatrix — result of load_pz().
@@ -380,8 +380,8 @@ namespace io {
 //
 // SVD path (cycle 5): when load_pz is called with keep_host_pinned=true, the
 // pinned host CSC arrays are additionally exposed via shared_ptr fields below.
-// This avoids re-staging for factornet::svd::*_gpu calls, which take HOST
-// pointers despite their "gpu" suffix (integration-notes.md finding 0a).
+// This avoids re-staging for SVD adapters that take HOST CSC pointers
+// (integration-notes.md finding 0a).
 // Memory cost when host_retained=true: 2× the matrix (device + host pinned).
 struct PzDeviceMatrix {
     core::DeviceCSC   mat;
@@ -427,7 +427,7 @@ struct PzDeviceMatrix {
 // ---------------------------------------------------------------------------
 // keep_host_pinned: when true, the pinned host CSC buffers are retained in
 // result.host_indptr / host_indices / host_values (shared_ptr with cudaFreeHost
-// deleter) so that SVD adapters can pass them directly to factornet without
+// deleter) so that host-pointer SVD adapters can consume them directly without
 // re-staging.  Default false — existing callers (lognorm, hvg) are unaffected.
 inline PzDeviceMatrix load_pz(const std::string& path,
                                cudaStream_t stream = nullptr,
@@ -691,8 +691,8 @@ inline PzDeviceMatrix load_pz(const std::string& path,
     result.pinned_indices  = std::move(pinned_indices);
     result.pinned_values   = std::move(pinned_values);
 
-    // SVD path: expose pinned host pointers via shared_ptr so factornet GPU SVD
-    // functions can consume them without a second H2D staging round-trip.
+    // SVD path: expose pinned host pointers via shared_ptr so host-pointer SVD
+    // adapters can consume them without a second H2D staging round-trip.
     //
     // Ownership model: PinnedBuffer (in result.pinned_*) retains primary ownership
     // and calls cudaFreeHost on destruction.  The shared_ptr fields use a no-op
@@ -728,7 +728,7 @@ inline PzDeviceMatrix load_pz(const std::string& path,
 //
 // Used by:
 //  - out-of-core kernels that cannot fit the full matrix on device
-//  - factornet::nmf::fit_streaming_spz adapter (streaming/chunk_iter.h)
+//  - the streaming NMF fit adapter (streaming/chunk_iter.h)
 //
 // Each call to next() decompresses exactly chunk_cols columns, stages them
 // into pinned memory, fires async copies, and returns a PzDeviceMatrix.
@@ -1018,7 +1018,7 @@ private:
 };
 
 }  // namespace io
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu
 
 // ===========================================================================
 // Cycle 56 — FEATURE 0: new load() API with Rule-31 auto-tune contract.
@@ -1030,11 +1030,11 @@ private:
 // device via detail/uint_to_float_kernel.h.
 // CYCLE-105: replaced factornet::gpu::SparseMatrixGPU<float> with core::DeviceCSC.
 //
-// Design doc: singlet-gpu/state/designs/00-pz-device-loader.md
+// Design doc: singlet/gpu/state/designs/00-pz-device-loader.md
 // ===========================================================================
-#include <singlet-gpu/io/detail/uint_to_float_kernel.h>
+#include <singlet/gpu/io/detail/uint_to_float_kernel.h>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace io {
 
 // ---------------------------------------------------------------------------
@@ -1061,7 +1061,7 @@ struct PzLoadConfig {
 // ---------------------------------------------------------------------------
 // PzLoadResult — the output of load().
 //
-// matrix: factornet::gpu::SparseMatrixGPU<float> constructed in-place.
+// matrix: singlet::gpu::core::DeviceCSC constructed in-place.
 //         col_ptr / row_indices / values are DeviceMemory<T> allocations
 //         populated via cudaMemcpyAsync from pinned host staging.
 //         Caller must sync stream before using matrix on other streams.
@@ -1375,7 +1375,7 @@ inline PzLoadResult load(const std::string& path, const PzLoadConfig& cfg) {
 
     // On-device fused uint→float conversion.
     // WHY not host-side: PCIe savings 2–4× (upload uintN bytes, not float bytes).
-    singlet_gpu::io::detail::launch_uint_to_float(
+    singlet::gpu::io::detail::launch_uint_to_float(
         bufs.pinned_raw_values.get(),
         nnz,
         vt,
@@ -1429,4 +1429,4 @@ inline PzLoadResult load(const std::string& path) {
 }
 
 }  // namespace io (cycle-56 extension)
-}  // namespace singlet_gpu (cycle-56 extension)
+}  // namespace singlet::gpu (cycle-56 extension)

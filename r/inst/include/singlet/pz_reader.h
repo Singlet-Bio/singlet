@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: pz_reader.h
 // Native .1pz (VOCSC) reader — bit-exact inverse of pz_writer.h.

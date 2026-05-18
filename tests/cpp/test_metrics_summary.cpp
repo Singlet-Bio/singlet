@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // G-METRICS + G-PERMITLIST: unit tests for metrics_summary.h and forced/expect cells
 // Run via ctest or standalone:
 //   g++ -std=c++17 -O2 -I../include -o /tmp/test_ms test/test_metrics_summary.cpp && /tmp/test_ms

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Preprocessing recipes (standard workflows)."""
 
 from __future__ import annotations

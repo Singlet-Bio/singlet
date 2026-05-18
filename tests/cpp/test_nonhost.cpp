@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // NONHOST-SYLPH-PORT — Unit tests for MinSketchIndex and NonHostScreener
 // Run via ctest or standalone:
 //   g++ -std=c++17 -O2 -fopenmp -I../include -o /tmp/test_nonhost test/test_nonhost.cpp

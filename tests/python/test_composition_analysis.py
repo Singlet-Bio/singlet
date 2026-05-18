@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.composition_analysis()."""
 
 import numpy as np

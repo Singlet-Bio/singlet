@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Feature scaling (z-score normalization) for AnnData objects.
 
 Provides singlet.scale() — standardizes each gene to zero mean and unit

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: vdj_assembly.h — G-VDJ
 // De novo CDR3 clonotype assembly from V(D)J-enriched reads.

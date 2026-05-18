@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.abundance.milo — GPU-native Milo differential abundance testing.
 
@@ -23,9 +23,11 @@ When an AnnData is provided (``run_from_anndata``):
 from __future__ import annotations
 
 import copy as copy_module
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
+
+from singlet.gpu._coreutil import require_core
 
 if TYPE_CHECKING:
     import anndata
@@ -35,41 +37,27 @@ if TYPE_CHECKING:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-
-def _require_core():
-    import singlet.gpu._core as _core
-
-    if not hasattr(_core, "abundance") or not hasattr(_core.abundance, "milo"):
-        raise AttributeError(
-            "_core.abundance.milo is not available.  "
-            "The C++ extension must be compiled on a CUDA-capable node."
-        )
-    return _core.abundance
-
-
 def _view_to_numpy(view, n, dtype=np.float32):
     """Copy a __cuda_array_interface__ scalar-array view to numpy."""
     try:
         import cupy as cp
-
         arr = cp.ndarray(
-            shape=(n,),
-            dtype=cp.float32,
-            memptr=cp.cuda.MemoryPointer(cp.cuda.UnownedMemory(view["data"][0], n * 4, None), 0),
+            shape=(n,), dtype=cp.float32,
+            memptr=cp.cuda.MemoryPointer(
+                cp.cuda.UnownedMemory(view["data"][0], n * 4, None), 0)
         ).get()
         return arr.astype(dtype)
     except (ImportError, Exception):
         import ctypes
-
         buf = (ctypes.c_float * n)()
-        ctypes.memmove(ctypes.addressof(buf), ctypes.c_void_p(view["data"][0]), n * 4)
+        ctypes.memmove(ctypes.addressof(buf),
+                       ctypes.c_void_p(view["data"][0]), n * 4)
         return np.frombuffer(buf, dtype=np.float32).copy().astype(dtype)
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
-
 
 def run_from_embedding(
     embedding: np.ndarray,
@@ -85,7 +73,7 @@ def run_from_embedding(
     deterministic: bool = True,
     stream=None,
     seed: int = 42,
-) -> Any:
+):
     """
     GPU-native Milo differential-abundance testing (raw embedding input).
 
@@ -123,15 +111,13 @@ def run_from_embedding(
         Use ``.log_fc_view``, ``.p_value_view``, ``.fdr_view``,
         ``.nh_index_cells_view`` to access results.
     """
-    ab = _require_core()
+    ab = require_core("abundance", "milo")
     embedding = np.asarray(embedding, dtype=np.float32)
     condition = np.asarray(condition, dtype=np.int32)
-    donor_id = np.asarray(donor_id, dtype=np.int32)
+    donor_id  = np.asarray(donor_id,  dtype=np.int32)
 
     return ab.milo(
-        embedding,
-        condition,
-        donor_id,
+        embedding, condition, donor_id,
         k=int(k),
         n_nh_target=int(n_nh_target),
         max_irls_iters=int(max_irls_iters),
@@ -145,7 +131,7 @@ def run_from_embedding(
 
 
 def run_from_anndata(
-    adata: anndata.AnnData,
+    adata: "anndata.AnnData",
     condition_key: str,
     donor_key: str,
     *,
@@ -160,7 +146,7 @@ def run_from_anndata(
     stream=None,
     seed: int = 42,
     copy: bool = False,
-) -> Optional[anndata.AnnData]:
+) -> Optional["anndata.AnnData"]:
     """
     GPU-native Milo differential-abundance testing from an AnnData object.
 
@@ -214,12 +200,10 @@ def run_from_anndata(
     condition = cond_series.cat.codes.to_numpy(dtype=np.int32)
 
     don_series = working.obs[donor_key].astype("category")
-    donor_id = don_series.cat.codes.to_numpy(dtype=np.int32)
+    donor_id   = don_series.cat.codes.to_numpy(dtype=np.int32)
 
     result = run_from_embedding(
-        embedding,
-        condition,
-        donor_id,
+        embedding, condition, donor_id,
         k=k,
         n_nh_target=n_nh_target,
         max_irls_iters=max_irls_iters,
@@ -234,14 +218,14 @@ def run_from_anndata(
     n_nh = result.n_nh
 
     working.uns["milo"] = {
-        "log_fc": _view_to_numpy(result.log_fc_view, n_nh),
-        "se": _view_to_numpy(result.se_view, n_nh),
-        "p_value": _view_to_numpy(result.p_value_view, n_nh),
-        "fdr": _view_to_numpy(result.fdr_view, n_nh),
+        "log_fc":         _view_to_numpy(result.log_fc_view,        n_nh),
+        "se":             _view_to_numpy(result.se_view,             n_nh),
+        "p_value":        _view_to_numpy(result.p_value_view,        n_nh),
+        "fdr":            _view_to_numpy(result.fdr_view,            n_nh),
         "nh_index_cells": _view_to_numpy(result.nh_index_cells_view, n_nh, dtype=np.int32),
-        "nh_valid": _view_to_numpy(result.nh_valid_view, n_nh, dtype=np.int32),
+        "nh_valid":       _view_to_numpy(result.nh_valid_view,       n_nh, dtype=np.int32),
         "condition_labels": list(cond_series.cat.categories),
-        "donor_labels": list(don_series.cat.categories),
+        "donor_labels":     list(don_series.cat.categories),
         "params": {
             "k": k,
             "n_nh_target": n_nh_target,

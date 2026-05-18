@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_combinatorial_barcode.cpp — Unit tests for G-SHARESEQ combinatorial barcode decoder
 // Tests SHARE-seq 3-level structure, linker matching, mismatch tolerance, and UMI extraction.
 

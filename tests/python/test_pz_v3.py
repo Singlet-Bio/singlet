@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Comprehensive tests for .1pz format.
 
 Tests:

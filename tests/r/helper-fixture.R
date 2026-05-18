@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # Shared fixture resolver for testthat tests.
 #
 # Tests need a real singlet pipeline output because the whole point of

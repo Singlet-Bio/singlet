@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet preprocessing recipes."""
 
 import numpy as np

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_minimizer_index.cpp — spot-check minimizer_index.h compilation + query
 // Compile: g++ -std=c++17 -O2 -I../include test_minimizer_index.cpp -o test_minimizer_index
 // Run:     ./test_minimizer_index <minimizerIndex.bin> <genome-dir>

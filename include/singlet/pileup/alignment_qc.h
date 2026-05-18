@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: alignment_qc.h
 // SS2 + B2: Alignment QC metrics for Smart-seq2 and Bulk RNA-seq.

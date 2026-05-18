@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet public API surface (imports and exports)."""
 
 
@@ -17,12 +18,11 @@ class TestPublicAPI:
 
     def test_core_io_functions_present(self):
         """Core I/O functions are importable."""
-        from singlet import read_1pz, read_spz, write_1pz, write_spz
+        from singlet import info_1pz, read_1pz, write_1pz
 
         assert callable(read_1pz)
         assert callable(write_1pz)
-        assert callable(read_spz)
-        assert callable(write_spz)
+        assert callable(info_1pz)
 
     def test_catalog_functions_present(self):
         """Catalog browsing functions importable."""

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // lib1fq/compress.h — Codec-agnostic compression for .1fq blocks
 //
 // Wraps zstd (required) and lz4/lz4hc (optional, via HAS_LZ4 define).
@@ -19,7 +20,7 @@
 #include <lz4hc.h>
 #endif
 
-namespace lib1fq {
+namespace singlet::fq {
 namespace compress {
 
 // Compress `src` into `dst` using the specified codec.
@@ -145,4 +146,4 @@ inline size_t decompress_block(Codec codec,
 }
 
 } // namespace compress
-} // namespace lib1fq
+} // namespace singlet::fq

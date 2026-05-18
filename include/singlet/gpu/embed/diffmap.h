@@ -1,7 +1,7 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: Coifman & Lafon 2005 (Diffusion Maps)
 //
-// singlet-gpu/embed/diffmap.h
+// singlet/gpu/embed/diffmap.h
 //
 // Diffusion Map embedding.
 //
@@ -11,7 +11,7 @@
 //    definition of data: Diffusion maps." PNAS 102:7426-7431.
 //   scanpy implementation: scanpy.tl.diffmap
 //
-// Given a kNN graph (KnnResult from singlet_gpu::graph::knn) with n cells and
+// Given a kNN graph (KnnResult from singlet::gpu::graph::knn) with n cells and
 // k neighbors per cell, compute a low-dimensional diffusion-map embedding.
 //
 // Algorithm (6 passes, GPU) — shares passes 1-5 with dpt.h (CYCLE-142):
@@ -34,13 +34,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/graph/knn.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/graph/knn.h>
 
 #include <cuda_runtime.h>
 #include <cusolverDn.h>
@@ -51,7 +47,7 @@
 #include <string>
 
 // Local CUSOLVER_CHECK — throws on cuSOLVER error. core/types.h ships only
-// CUDA_CHECK / CUSPARSE_CHECK / CUBLAS_CHECK; cuSOLVER callers roll their own.
+// SINGLET_GPU_CUDA_CHECK / CUSPARSE_CHECK / CUBLAS_CHECK; cuSOLVER callers roll their own.
 #ifndef CUSOLVER_CHECK
 #  define CUSOLVER_CHECK(call) \
     do { cusolverStatus_t _s = (call); \
@@ -61,7 +57,7 @@
                 + " status=" + std::to_string(_s)); } while (0)
 #endif
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace embed {
 
 // ---------------------------------------------------------------------------
@@ -281,7 +277,7 @@ void diffmap_scale_kernel(
 // diffmap() — public entry point
 //
 // Inputs:
-//   knn    — KnnResult from singlet_gpu::graph::compute_knn.
+//   knn    — KnnResult from singlet::gpu::graph::compute_knn.
 //   cfg    — DiffmapConfig (n_comps, t, eps_lambda, deterministic).
 //   stream — optional CUDA stream (nullptr → default context stream).
 //
@@ -297,7 +293,7 @@ inline DiffmapResult diffmap(
     cudaStream_t            stream = nullptr)
 {
     if (stream == nullptr) {
-        stream = singlet_gpu::core::default_context().stream();
+        stream = singlet::gpu::core::default_context().stream();
     }
 
     const int n = knn.n;
@@ -353,7 +349,7 @@ inline DiffmapResult diffmap(
     // -------------------------------------------------------------------------
     const size_t W_sz = static_cast<size_t>(n) * static_cast<size_t>(n);
     core::DeviceMemory<float> d_W(W_sz);
-    CUDA_CHECK(cudaMemsetAsync(d_W.get(), 0, W_sz * sizeof(float), stream));
+    SINGLET_GPU_CUDA_CHECK(cudaMemsetAsync(d_W.get(), 0, W_sz * sizeof(float), stream));
 
     {
         const int total_edges = n * k;
@@ -386,7 +382,7 @@ inline DiffmapResult diffmap(
     // -------------------------------------------------------------------------
     // Pass 5 — cuSOLVER Ssyevd: eigendecompose T_sym (symmetric).
     // -------------------------------------------------------------------------
-    cusolverDnHandle_t solver_h = singlet_gpu::core::default_context().solver();
+    cusolverDnHandle_t solver_h = singlet::gpu::core::default_context().solver();
     cusolverDnSetStream(solver_h, stream);
 
     core::DeviceMemory<float> d_lambda(static_cast<size_t>(n));
@@ -418,7 +414,7 @@ inline DiffmapResult diffmap(
         d_info.get()));
 
     // Sync and check eigendecomp info (one D2H scalar — Rule 4 one-shot exception).
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
     int h_info = 0;
     cudaMemcpy(&h_info, d_info.get(), sizeof(int), cudaMemcpyDeviceToHost);
     if (h_info != 0) {
@@ -462,7 +458,7 @@ inline DiffmapResult diffmap(
         }
     }
 
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     DiffmapResult res;
     res.embedding   = std::move(d_embed);
@@ -473,4 +469,4 @@ inline DiffmapResult diffmap(
 }
 
 }  // namespace embed
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

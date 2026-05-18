@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.connectivity_score()."""
 
 import numpy as np

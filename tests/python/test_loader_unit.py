@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet._loader (download, load, load_sample) — unit tests with mocks."""
 
 from pathlib import Path

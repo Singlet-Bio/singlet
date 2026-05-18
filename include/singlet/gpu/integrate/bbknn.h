@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (Harmony adapted) + cycle 8 KNN (BBKNN)
 //
 // integrate/bbknn.h — Batch-Balanced kNN graph construction.
@@ -36,13 +36,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/integrate/types.h>
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/graph/knn.h>
+#include <singlet/gpu/integrate/types.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/graph/knn.h>
 
 #include <cuda_runtime.h>
 
@@ -53,7 +49,7 @@
 #include <numeric>
 #include <limits>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace integrate {
 
 // ─── Device helper ────────────────────────────────────────────────────────────
@@ -307,4 +303,4 @@ bbknn(const core::DeviceDense& embedding,
 }
 
 }  // namespace integrate
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

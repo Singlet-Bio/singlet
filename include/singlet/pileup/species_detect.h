@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // singlet-pileup/species_detect.h — N1: Species auto-detection
 //
 // Determines the reference species (organism) from a .1fq file so that
@@ -34,6 +35,7 @@
 #include "../fq/reader.h"
 #include "../fq/species_registry.h"
 #include "bloom_filter.h"
+#include "kmer_util.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -317,23 +319,15 @@ static const uint8_t BASE2BIT[256] = {
 
 static constexpr uint64_t KMER_MASK = (1ULL << (2 * KMER_K)) - 1;
 
-// Reverse complement of a 2-bit-encoded k-mer
+// Reverse complement of a 2-bit-encoded KMER_K-mer.
+// Thin wrapper over the shared singlet::pileup::kmer helpers.
 inline uint64_t revcomp_kmer(uint64_t kmer) {
-    // Complement bits: XOR with all-1s in pairs of 2
-    uint64_t rc = ~kmer;
-    // Reverse the pairs
-    uint64_t out = 0;
-    for (int i = 0; i < KMER_K; ++i) {
-        out = (out << 2) | (rc & 3);
-        rc >>= 2;
-    }
-    return out & KMER_MASK;
+    return ::singlet::pileup::kmer::revcomp_2bit(kmer, KMER_K);
 }
 
 // Canonical k-mer = min(kmer, revcomp)
 inline uint64_t canonical(uint64_t kmer) {
-    uint64_t rc = revcomp_kmer(kmer);
-    return kmer < rc ? kmer : rc;
+    return ::singlet::pileup::kmer::canonical_2bit(kmer, KMER_K);
 }
 
 // Extract and count canonical 21-mers from a byte-numeric sequence
@@ -342,11 +336,6 @@ inline int count_hits_numeric(const uint8_t* seq, uint16_t len,
                                const std::unordered_set<uint64_t>& db) {
     if (len < KMER_K) return 0;
     int hits = 0;
-    // byte-numeric (0-3) not ASCII — need a different encoding table
-    // STAR uses: A=0, C=1, G=2, T=3
-    // canonical 21-mer computation same, just complementing is: 3^bit
-    static const uint8_t COMP_NUM[4] = {3, 2, 1, 0};
-
     uint64_t kmer = 0;
     int valid = 0;
     for (int i = 0; i < len; ++i) {
@@ -354,15 +343,7 @@ inline int count_hits_numeric(const uint8_t* seq, uint16_t len,
         if (b > 3) { valid = 0; kmer = 0; continue; }
         kmer = ((kmer << 2) | b) & KMER_MASK;
         if (++valid >= KMER_K) {
-            // Compute revcomp for numeric encoding
-            uint64_t tmp = kmer;
-            uint64_t rc = 0;
-            for (int j = 0; j < KMER_K; ++j) {
-                rc = (rc << 2) | COMP_NUM[tmp & 3];
-                tmp >>= 2;
-            }
-            rc &= KMER_MASK;
-            uint64_t canon = (kmer < rc) ? kmer : rc;
+            uint64_t canon = ::singlet::pileup::kmer::canonical_2bit(kmer, KMER_K);
             if (db.count(canon)) ++hits;
         }
     }
@@ -395,7 +376,7 @@ inline DetectionResult detect(const std::string& onefq_path, bool verbose = true
     // ── Path 1: Metadata ──────────────────────────────────────────────────────
     // Try .1fq internal metadata first, then sidecar metadata.json
     try {
-        lib1fq::Reader probe;
+        singlet::fq::Reader probe;
         probe.open(onefq_path.c_str());
         const auto& hdr = probe.header();
 
@@ -589,7 +570,7 @@ inline DetectionResult detect(const std::string& onefq_path, bool verbose = true
         for (const auto& dir : bloom_dirs) {
             std::string h_path = dir + "/human_21mer.bloom";
             std::string m_path = dir + "/mouse_21mer.bloom";
-            singlet_pileup::BloomFilter bf_human, bf_mouse;
+            singlet::pileup::BloomFilter bf_human, bf_mouse;
             if (!bf_human.load(h_path) || !bf_mouse.load(m_path))
                 continue; // try next dir or fall through to diagnostic k-mers
 
@@ -598,7 +579,7 @@ inline DetectionResult detect(const std::string& onefq_path, bool verbose = true
 
             int human_hits = 0, mouse_hits = 0, total_kmers = 0;
             try {
-                lib1fq::Reader reader;
+                singlet::fq::Reader reader;
                 reader.open(onefq_path.c_str());
                 const int arc_clip = (reader.header().protocol_id == 22) ? 50 : 0;
                 // Detect cDNA stream: in a correctly-encoded .1fq R1=barcode(short),
@@ -614,7 +595,7 @@ inline DetectionResult detect(const std::string& onefq_path, bool verbose = true
                         "[species-detect] R1(%dbp) > 2\xc3\x97R2(%dbp): "
                         "sampling R1 as cDNA stream for k-mer detection\n",
                         sl0_bloom, sl1_bloom);
-                lib1fq::DecodedBlock blk;
+                singlet::fq::DecodedBlock blk;
                 int reads_done = 0;
 
                 while (reader.read_block(blk) && reads_done < SAMPLE_READS) {
@@ -713,9 +694,9 @@ inline DetectionResult detect(const std::string& onefq_path, bool verbose = true
     };
     static const std::vector<SpeciesDb> s_all_dbs = [] {
         std::vector<SpeciesDb> v;
-        v.reserve(species_kmer_db::ALL_SPECIES_COUNT);
-        for (size_t i = 0; i < species_kmer_db::ALL_SPECIES_COUNT; ++i) {
-            const auto& e = species_kmer_db::ALL_SPECIES[i];
+        v.reserve(::singlet::pileup::species_kmer_db::ALL_SPECIES_COUNT);
+        for (size_t i = 0; i < ::singlet::pileup::species_kmer_db::ALL_SPECIES_COUNT; ++i) {
+            const auto& e = ::singlet::pileup::species_kmer_db::ALL_SPECIES[i];
             SpeciesDb s;
             s.genome_tag = e.genome_tag;
             s.species    = e.species_name;
@@ -731,7 +712,7 @@ inline DetectionResult detect(const std::string& onefq_path, bool verbose = true
     int total_kmers = 0;
 
     try {
-        lib1fq::Reader reader;
+        singlet::fq::Reader reader;
         reader.open(onefq_path.c_str());
         // 10x-arc-gex (protocol_id=22): R2 has a 50bp constant ARC ATAC linker
         // at the 5' end before the cDNA. Skip it to avoid k-mer misses.
@@ -747,7 +728,7 @@ inline DetectionResult detect(const std::string& onefq_path, bool verbose = true
                 "[species-detect] R1(%dbp) > 2\xc3\x97R2(%dbp): "
                 "sampling R1 as cDNA stream for k-mer detection\n",
                 sl0_kmer, sl1_kmer);
-        lib1fq::DecodedBlock blk;
+        singlet::fq::DecodedBlock blk;
         int reads_done = 0;
 
         while (reader.read_block(blk) && reads_done < SAMPLE_READS) {
@@ -853,7 +834,7 @@ inline DetectionResult detect(const std::string& onefq_path, bool verbose = true
 /// Returns empty string if not found.
 inline std::string organism_from_metadata(const std::string& onefq_path) {
     try {
-        lib1fq::Reader probe;
+        singlet::fq::Reader probe;
         probe.open(onefq_path.c_str());
         if (probe.header().meta_size == 0) return "";
         std::string meta = probe.read_metadata();

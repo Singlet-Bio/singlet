@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: barcode_metrics.h
 // G-BARCODE-METRICS — Per-barcode metrics TSV writer (Cell Ranger per_barcode_metrics.csv style).

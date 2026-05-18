@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (DecoupleR-style scoring + CellTypist projection)
 //
 // anno/types.h — Shared structs for the annotation module.
@@ -8,12 +8,12 @@
 
 #pragma once
 
-#include <singlet-gpu/core/types.h>
+#include <singlet/gpu/core/types.h>
 
 #include <string>
 #include <vector>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace anno {
 
 // ---------------------------------------------------------------------------
@@ -49,7 +49,7 @@ struct MarkerScoreConfig {
 };
 
 struct MarkerScoreResult {
-    singlet_gpu::core::DeviceMemory<float> scores; // n_sets × n_cells, column-major
+    singlet::gpu::core::DeviceMemory<float> scores; // n_sets × n_cells, column-major
     int n_sets;
     int n_cells;
 };
@@ -62,17 +62,17 @@ struct MarkerScoreResult {
 // Host-side file I/O only (not a hot path).  After loading, weights and
 // intercepts live on device; class_names remain on host.
 struct CelltypistModel {
-    singlet_gpu::core::DeviceMemory<float> weights;    // n_classes × n_pcs, row-major
-    singlet_gpu::core::DeviceMemory<float> intercepts; // n_classes
+    singlet::gpu::core::DeviceMemory<float> weights;    // n_classes × n_pcs, row-major
+    singlet::gpu::core::DeviceMemory<float> intercepts; // n_classes
     std::vector<std::string>               class_names;
     int n_classes = 0;
     int n_pcs     = 0;
 };
 
 struct RefMapResult {
-    singlet_gpu::core::DeviceMemory<float> probabilities; // n_classes × n_cells, column-major
-    singlet_gpu::core::DeviceMemory<int>   labels;        // n_cells (argmax class index)
+    singlet::gpu::core::DeviceMemory<float> probabilities; // n_classes × n_cells, column-major
+    singlet::gpu::core::DeviceMemory<int>   labels;        // n_cells (argmax class index)
 };
 
 } // namespace anno
-} // namespace singlet_gpu
+} // namespace singlet::gpu

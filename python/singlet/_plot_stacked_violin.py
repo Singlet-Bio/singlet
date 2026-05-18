@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Stacked violin plot visualization."""
 
 from __future__ import annotations

@@ -86,8 +86,8 @@ For datasets larger than device memory, drop in `streaming::PzShardIterator`:
 ```cpp
 #include <singlet-gpu/singlet_gpu.hpp>
 
-auto ctx = singlet_gpu::core::GpuContext{};
-auto iter = singlet_gpu::streaming::PzShardIterator{
+auto ctx = singlet::gpu::core::GpuContext{};
+auto iter = singlet::gpu::streaming::PzShardIterator{
     "/path/to/shards/",
     /*vram_budget_gb=*/40,
 };

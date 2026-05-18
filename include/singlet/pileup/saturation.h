@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: saturation.h
 // N7: Sequencing saturation metrics — CellRanger-compatible definition.

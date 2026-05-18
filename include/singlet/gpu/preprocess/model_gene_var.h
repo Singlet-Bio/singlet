@@ -1,7 +1,7 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (Lun-McCarthy-Marioni 2016 / scran::modelGeneVarByPoisson)
 //
-// singlet-gpu/preprocess/model_gene_var.h
+// singlet/gpu/preprocess/model_gene_var.h
 //
 // Poisson-null HVG selection for log-normalized expression matrices.
 // Direct GPU port of scran::modelGeneVarByPoisson (Bioconductor scran ≥1.4).
@@ -64,13 +64,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/io/pz_device_loader.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/io/pz_device_loader.h>
 
 #include <cuda_runtime.h>
 #include <cub/device/device_radix_sort.cuh>
@@ -83,7 +79,7 @@
 #include <numeric>
 #include <algorithm>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace preprocess {
 
 // ---------------------------------------------------------------------------
@@ -272,7 +268,7 @@ inline ModelGeneVarResult model_gene_var(
     cudaStream_t              stream = nullptr)
 {
     if (stream == nullptr) {
-        stream = singlet_gpu::core::default_context().stream();
+        stream = singlet::gpu::core::default_context().stream();
     }
 
     const int m   = X.mat.rows;  // genes
@@ -449,7 +445,7 @@ inline ModelGeneVarResult model_gene_var(
             m, stream);
 
         // Read n_selected back (one D2H scalar; acceptable per Rule 4)
-        CUDA_CHECK(cudaStreamSynchronize(stream));
+        SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
         cudaMemcpy(&n_eligible, d_n_selected.get(), sizeof(int),
                    cudaMemcpyDeviceToHost);
     } else {
@@ -490,7 +486,7 @@ inline ModelGeneVarResult model_gene_var(
 
     // Function-boundary sync (Rule 9): all workspace DeviceMemory objects go
     // out of scope after this return; sync ensures kernels complete first.
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     return ModelGeneVarResult{
         std::move(d_mean),
@@ -502,4 +498,4 @@ inline ModelGeneVarResult model_gene_var(
 }
 
 } // namespace preprocess
-} // namespace singlet_gpu
+} // namespace singlet::gpu

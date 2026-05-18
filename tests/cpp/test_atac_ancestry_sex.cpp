@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_atac_ancestry_sex.cpp
 // A5: Tests for ATAC ancestry classification + sex/karyotype calling.
 

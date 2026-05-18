@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.streaming — Streaming end-to-end pipeline wrapper.
 
@@ -9,12 +9,12 @@ Underlying C++ cycle: cycle 7 (streaming/streamed_pipeline.h —
 ``singlet::gpu::streaming::StreamedPipeline``).
 
 This module provides a high-level interface for running the full
-singlet GPU processing pipeline over multiple .1pz files without
+singlet-gpu processing pipeline over multiple .1pz files without
 materialising all data simultaneously.  Since the output spans
 multiple inputs and does not map cleanly to a single AnnData, the
 result is a ``PipelineResult`` dataclass.
 """
 
-from singlet.gpu.streaming.pipeline import PipelineResult, run_pipeline
+from .pipeline import run_pipeline, PipelineResult
 
 __all__ = ["run_pipeline", "PipelineResult"]

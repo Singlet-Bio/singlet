@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test/test_molecule_info.cpp
 // Unit tests for G-MOLINFO: Molecule info HDF5 (molecule_info.h)
 // Run: ./test_molecule_info
@@ -22,19 +23,7 @@ namespace fs = std::filesystem;
 
 // ── Counters ─────────────────────────────────────────────────────────────────
 
-static int n_pass = 0;
-static int n_fail = 0;
-
-#define CHECK(cond, msg)                                                          \
-    do {                                                                          \
-        if (cond) {                                                               \
-            std::cout << "  PASS: " << (msg) << "\n";                            \
-            ++n_pass;                                                             \
-        } else {                                                                  \
-            std::cout << "  FAIL: " << (msg) << " [line " << __LINE__ << "]\n";  \
-            ++n_fail;                                                             \
-        }                                                                         \
-    } while (0)
+#include "test_harness.h"  // CHECK(cond, msg) + n_pass / n_fail
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 

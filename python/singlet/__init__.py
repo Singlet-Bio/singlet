@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 singlet — Python client for the Singlet single-cell atlas.
 
@@ -26,12 +27,20 @@ Load data:
     singlet.load_sample("GSM3308814")      Load single sample (column-range read)
 
 Format I/O:
-    singlet.read_1pz("file.1pz")           Read .1pz → AnnData (preferred)
-    singlet.write_1pz(adata, "out.1pz")    Write AnnData → .1pz (preferred)
+    singlet.read_1pz("file.1pz")           Read .1pz → AnnData
+    singlet.write_1pz(adata, "out.1pz")    Write AnnData → .1pz
     singlet.read_kraken2("gse_dir/")       Read kraken2 microbiome matrix
-    singlet.read_spz("file.spz")           Read .spz → AnnData (legacy)
-    singlet.write_spz(adata, "out.spz")    Write AnnData → .spz (legacy)
-    singlet.read_matrix("file")            Auto-detect .spz or .1pz
+    singlet.read_matrix("file")            Auto-detect single-block .1pz
+
+Canonical v2 samples (multi-block .1pz from the pipeline):
+    sample = singlet.SingletSample("sample_dir/")
+    counts = sample.counts.adata()         Spliced+unspliced AnnData
+
+Pipeline (process raw reads → canonical sample):
+    singlet.run_pipeline("SRR12345678", out_dir="results/")
+    singlet.run_pipeline("https://.../SRR12345678", reference="GRCh38")
+    singlet.transcode_v1_to_v2(old_dir, new_dir)  Migrate legacy outputs
+    singlet.validate_sample(sample_dir)            Manifest + structure check
 
 Configuration:
     singlet.set_catalog_dir("/path/to/catalog")  Set local catalog path
@@ -144,11 +153,21 @@ from singlet._io import (
     read_1pz,
     read_kraken2,
     read_matrix,
-    read_spz,
-    spz_info,
     write_1pz,
-    write_spz,
 )
+from singlet.io.sample import (
+    SingletCounts,
+    SingletMt,
+    SingletNonhost,
+    SingletSample,
+    SingletSnp,
+)
+from singlet.pipeline import PipelineError, Run, run as run_pipeline
+from singlet.transcode import transcode_v1_to_v2
+from singlet.manifest import validate_sample
+from singlet.views import gene_counts as view_gene_counts
+from singlet.views import psi as view_psi
+from singlet.views import usa as view_usa
 from singlet._knn_impute import knn_impute
 from singlet._leiden import leiden
 from singlet._loader import download, load, load_dir, load_sample
@@ -262,9 +281,21 @@ __all__ = [
     "info_1pz",
     "read_kraken2",
     "read_matrix",
-    "read_spz",
-    "write_spz",
-    "spz_info",
+    # Canonical v2 readers
+    "SingletSample",
+    "SingletCounts",
+    "SingletSnp",
+    "SingletMt",
+    "SingletNonhost",
+    "view_gene_counts",
+    "view_usa",
+    "view_psi",
+    # Pipeline
+    "run_pipeline",
+    "Run",
+    "PipelineError",
+    "transcode_v1_to_v2",
+    "validate_sample",
     # Conversions
     "to_h5ad",
     "to_zarr",

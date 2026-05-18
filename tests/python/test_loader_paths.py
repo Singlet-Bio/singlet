@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet._loader: _resolve_gse_path, download, load, load_sample."""
 
 from unittest.mock import MagicMock, patch
@@ -396,16 +397,16 @@ class TestLoadSample:
 
     def test_load_unknown_extension_falls_through(self, tmp_path):
         """Unknown extension falls through to read_matrix."""
-        from singlet._io import write_spz
+        from singlet._io import write_1pz
         from singlet._loader import load
 
         mat = sp.random(5, 7, density=0.3, format="csr", dtype=np.float32)
         adata = ad.AnnData(X=mat)
         adata.obs_names = pd.Index([f"C{i}" for i in range(5)])
         adata.var_names = pd.Index([f"G{i}" for i in range(7)])
-        # Write as .spz but give it a weird extension
-        real_path = tmp_path / "data.spz"
-        write_spz(adata, real_path)
+        # Write as .1pz but give it a weird extension
+        real_path = tmp_path / "data.1pz"
+        write_1pz(adata, real_path)
         weird_path = tmp_path / "data.blob"
         weird_path.write_bytes(real_path.read_bytes())
 

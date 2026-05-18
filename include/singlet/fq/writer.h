@@ -1,10 +1,11 @@
+// SPDX-License-Identifier: MIT
 // lib1fq/writer.h — Streaming .1fq file writer
 //
 // Accumulates reads into blocks, compresses, and writes to a file.
 // Call add_read() in a loop, then finish() to finalize.
 //
 // Usage:
-//   lib1fq::Writer w;
+//   singlet::fq::Writer w;
 //   w.open("output.1fq", config);
 //   while (have_reads) {
 //       w.add_read(r2_seq, r2_len, r2_qual, r1_seq, r1_len, r1_qual);
@@ -27,7 +28,7 @@
 #include "packing.h"
 #include "types.h"
 
-namespace lib1fq {
+namespace singlet::fq {
 
 // Flat open-addressing hash map specialized for uint64→uint32.
 // ~10× faster to build and query than std::unordered_map for 3.7M entries
@@ -1041,4 +1042,4 @@ class Writer {
     std::vector<uint8_t> sort_tmp_buf_;        // Reusable temp buffer for permutation
 };
 
-}  // namespace lib1fq
+}  // namespace singlet::fq

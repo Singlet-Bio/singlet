@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: ambient_correction.h
 // N11: SoupX-style ambient RNA contamination estimation and correction.

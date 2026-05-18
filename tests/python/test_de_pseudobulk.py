@@ -1,6 +1,7 @@
+# SPDX-License-Identifier: MIT
 """
-Cycle 23 correctness tests for singlet_gpu.de.pseudobulk_de and
-singlet_gpu.io.donor.load_donor_assignments.
+Cycle 23 correctness tests for singlet.gpu.de.pseudobulk_de and
+singlet.gpu.io.donor.load_donor_assignments.
 
 Tests the GPU-native donor pseudobulk DE wrapper (cycle 17: de/donor_pseudobulk.h):
   - ``singlet.gpu.de.pseudobulk_de``
@@ -12,7 +13,7 @@ API (from spec):
   pseudobulk_de(adata, *, sample_col='donor_id', groupby='cell_type',
                 mode='sum', min_cells_per_pseudobulk=10,
                 apeglm_shrinkage=True, seed=0, copy=False) -> AnnData | None
-  singlet_gpu.io.load_donor_assignments(path) -> pd.Series
+  singlet.gpu.io.load_donor_assignments(path) -> pd.Series
 
 Result location (spec):
   - adata.uns['donor_pseudobulk'] : dict with per-gene per-cluster LFC, pvals,
@@ -28,11 +29,10 @@ Notes:
     a pd.Series indexed by barcode with values donor_id.
 
 Skip strategy:
-  - Module-level skip if singlet.gpu not available.
+  - Module-level skip if singlet_gpu wheel not built.
   - requires_gpu for all GPU-exercising tests.
   - DESeq2 test skips if Rscript subprocess fails or R/DESeq2 absent.
 """
-
 from __future__ import annotations
 
 import json
@@ -45,9 +45,8 @@ import pandas as pd
 import pytest
 
 singlet_gpu = pytest.importorskip(
-    "singlet.gpu",
-    reason="singlet.gpu not available. Run `pip install -e singlet-gpu/python/` first.",
-    exc_type=ImportError,
+    "singlet_gpu",
+    reason="singlet_gpu wheel not built. Run `pip install -e singlet-gpu/python/` first.",
 )
 
 from conftest import requires_gpu  # noqa: E402
@@ -58,7 +57,7 @@ from conftest import requires_gpu  # noqa: E402
 _LFC_SPEARMAN_MIN = 0.97
 _SEED = 0
 _MIN_CELLS = 10
-_N_CELLS = 400  # enough cells per donor × cell_type to pass min_cells filter
+_N_CELLS = 400       # enough cells per donor × cell_type to pass min_cells filter
 _N_GENES = 50
 _N_DONORS = 3
 _N_CELL_TYPES = 3
@@ -68,7 +67,6 @@ _DONOR_ASSIGNMENTS_FILENAME = "donor_assignments.tsv"
 # ---------------------------------------------------------------------------
 # Synthetic data builder
 # ---------------------------------------------------------------------------
-
 
 def _make_pseudobulk_adata(
     n_cells: int = _N_CELLS,
@@ -107,7 +105,6 @@ def _make_pseudobulk_adata(
 
 def _spearman_rho(a: np.ndarray, b: np.ndarray) -> float:
     from scipy.stats import spearmanr
-
     res = spearmanr(a, b)
     return float(res.correlation if hasattr(res, "correlation") else res[0])
 
@@ -117,9 +114,7 @@ def _rscript_available() -> bool:
     try:
         r_check = subprocess.run(
             ["Rscript", "-e", "library(DESeq2); cat('ok')"],
-            capture_output=True,
-            text=True,
-            timeout=30,
+            capture_output=True, text=True, timeout=30,
         )
         return r_check.returncode == 0 and "ok" in r_check.stdout
     except Exception:
@@ -135,7 +130,7 @@ def test_pseudobulk_de_basic():
 
     Procedure:
       1. Build synthetic 400-cell, 50-gene AnnData with 3 donors, 3 cell types.
-      2. Call singlet_gpu.de.pseudobulk_de(adata, sample_col='donor_id',
+      2. Call singlet.gpu.de.pseudobulk_de(adata, sample_col='donor_id',
                                             groupby='cell_type', seed=0).
       3. Assert returns None (inplace convention).
     """
@@ -144,7 +139,7 @@ def test_pseudobulk_de_basic():
 
     adata = _make_pseudobulk_adata()
 
-    ret = singlet_gpu.de.pseudobulk_de(
+    ret = singlet.gpu.de.pseudobulk_de(
         adata,
         sample_col="donor_id",
         groupby="cell_type",
@@ -153,7 +148,9 @@ def test_pseudobulk_de_basic():
         seed=_SEED,
     )
 
-    assert ret is None, f"pseudobulk_de() inplace must return None, got {type(ret)}"
+    assert ret is None, (
+        f"pseudobulk_de() inplace must return None, got {type(ret)}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -179,7 +176,7 @@ def test_pseudobulk_de_writes_uns():
     pytest.importorskip("scipy", reason="scipy not installed")
 
     adata = _make_pseudobulk_adata()
-    singlet_gpu.de.pseudobulk_de(
+    singlet.gpu.de.pseudobulk_de(
         adata,
         sample_col="donor_id",
         groupby="cell_type",
@@ -196,13 +193,13 @@ def test_pseudobulk_de_writes_uns():
 
     required_keys = ["lfc", "pvals", "qvals", "dispersion"]
     for k in required_keys:
-        assert k in pb, f"adata.uns['donor_pseudobulk'] missing required key '{k}'"
+        assert k in pb, (
+            f"adata.uns['donor_pseudobulk'] missing required key '{k}'"
+        )
 
     # pvals in [0, 1]
-    pvals = np.asarray(
-        list(pb["pvals"].values()) if isinstance(pb["pvals"], dict) else pb["pvals"],
-        dtype=np.float64,
-    ).ravel()
+    pvals = np.asarray(list(pb["pvals"].values()) if isinstance(pb["pvals"], dict)
+                       else pb["pvals"], dtype=np.float64).ravel()
     valid_p = pvals[np.isfinite(pvals)]
     if len(valid_p) > 0:
         assert np.all(valid_p >= 0.0), "pvals contains negative values"
@@ -211,10 +208,8 @@ def test_pseudobulk_de_writes_uns():
         )
 
     # qvals in [0, 1]
-    qvals = np.asarray(
-        list(pb["qvals"].values()) if isinstance(pb["qvals"], dict) else pb["qvals"],
-        dtype=np.float64,
-    ).ravel()
+    qvals = np.asarray(list(pb["qvals"].values()) if isinstance(pb["qvals"], dict)
+                       else pb["qvals"], dtype=np.float64).ravel()
     valid_q = qvals[np.isfinite(qvals)]
     if len(valid_q) > 0:
         assert np.all(valid_q >= 0.0), "qvals contains negative values"
@@ -228,7 +223,7 @@ def test_pseudobulk_de_writes_uns():
 # ---------------------------------------------------------------------------
 # CYCLE-256: xfail removed. Root cause was Python wrapper passing
 # (cells × genes) CSC to a kernel that expects (genes × cells); applied .T in
-# python/singlet/gpu/de/pseudobulk.py:258-273. Verified PASS via job 374155.
+# python/singlet_gpu/de/pseudobulk.py:258-273. Verified PASS via job 374155.
 @requires_gpu
 def test_pseudobulk_de_min_cells_filter():
     """pseudobulk_de() excludes (donor, cell_type) groups with fewer than min_cells.
@@ -270,7 +265,7 @@ def test_pseudobulk_de_min_cells_filter():
     )
 
     # Should complete without error even with the sparse group.
-    singlet_gpu.de.pseudobulk_de(
+    singlet.gpu.de.pseudobulk_de(
         adata,
         sample_col="donor_id",
         groupby="cell_type",
@@ -304,13 +299,13 @@ def test_pseudobulk_de_vs_DESeq2(gsm4037629_path):
       1. Load GSM4037629.
       2. Load donor_assignments.tsv → adata.obs['donor_id'].
       3. Assign synthetic cell_type from leiden clusters (fallback: modulo groups).
-      4. Run singlet_gpu.de.pseudobulk_de.
+      4. Run singlet.gpu.de.pseudobulk_de.
       5. Write adata.X, obs['donor_id'], obs['cell_type'] to a temp CSV.
       6. Run Rscript DESeq2 pseudobulk DE on those temp files.
       7. Compare LFC vectors: Spearman ρ ≥ 0.97.
     """
-    import os
     import tempfile
+    import os
 
     pytest.importorskip("anndata", reason="anndata not installed")
 
@@ -324,11 +319,11 @@ def test_pseudobulk_de_vs_DESeq2(gsm4037629_path):
             "Run singlet with --snps --pipeline to generate this file."
         )
 
-    adata = singlet_gpu.io.read_pz_to_anndata(str(gsm4037629_path))
+    adata = singlet.gpu.io.read_pz_to_anndata(str(gsm4037629_path))
 
     # Load donor assignments.
     try:
-        donor_series = singlet_gpu.io.load_donor_assignments(str(donor_tsv))
+        donor_series = singlet.gpu.io.load_donor_assignments(str(donor_tsv))
     except Exception as e:
         pytest.skip(f"load_donor_assignments failed: {e}")
 
@@ -352,7 +347,7 @@ def test_pseudobulk_de_vs_DESeq2(gsm4037629_path):
         pytest.skip(f"Only {n_donors} donor(s) detected; pseudobulk DE requires ≥ 2")
 
     # Run GPU pseudobulk DE.
-    singlet_gpu.de.pseudobulk_de(
+    singlet.gpu.de.pseudobulk_de(
         adata,
         sample_col="donor_id",
         groupby="cell_type",
@@ -376,7 +371,6 @@ def test_pseudobulk_de_vs_DESeq2(gsm4037629_path):
 
     # Write pseudobulk count matrix for DESeq2.
     import scipy.sparse as sp
-
     X_host = adata.X
     if hasattr(X_host, "get"):
         X_host = X_host.get()
@@ -388,6 +382,7 @@ def test_pseudobulk_de_vs_DESeq2(gsm4037629_path):
     with tempfile.TemporaryDirectory() as tmpdir:
         counts_csv = os.path.join(tmpdir, "counts.csv")
         meta_csv = os.path.join(tmpdir, "meta.csv")
+        result_json = os.path.join(tmpdir, "deseq2_lfc.json")
 
         # Write transposed: genes as rows, cells as cols (DESeq2 convention).
         pd.DataFrame(
@@ -397,7 +392,8 @@ def test_pseudobulk_de_vs_DESeq2(gsm4037629_path):
         ).to_csv(counts_csv)
 
         pd.DataFrame(
-            {"donor_id": adata.obs["donor_id"].values, "cell_type": adata.obs["cell_type"].values},
+            {"donor_id": adata.obs["donor_id"].values,
+             "cell_type": adata.obs["cell_type"].values},
             index=list(adata.obs_names),
         ).to_csv(meta_csv)
 
@@ -453,9 +449,7 @@ def test_pseudobulk_de_vs_DESeq2(gsm4037629_path):
         try:
             proc = subprocess.run(
                 ["Rscript", r_file],
-                capture_output=True,
-                text=True,
-                timeout=120,
+                capture_output=True, text=True, timeout=120,
             )
         except subprocess.TimeoutExpired:
             pytest.skip("DESeq2 Rscript timed out (>120s)")
@@ -498,7 +492,7 @@ def test_pseudobulk_de_vs_DESeq2(gsm4037629_path):
 # test_load_donor_assignments_helper
 # ---------------------------------------------------------------------------
 def test_load_donor_assignments_helper(gsm4037629_path):
-    """singlet_gpu.io.load_donor_assignments returns a pd.Series indexed by barcode.
+    """singlet.gpu.io.load_donor_assignments returns a pd.Series indexed by barcode.
 
     This test does NOT require GPU (pure I/O helper).
 
@@ -518,7 +512,7 @@ def test_load_donor_assignments_helper(gsm4037629_path):
             "Run singlet with --snps --pipeline to generate this file."
         )
 
-    result = singlet_gpu.io.load_donor_assignments(str(donor_tsv))
+    result = singlet.gpu.io.load_donor_assignments(str(donor_tsv))
 
     assert isinstance(result, pd.Series), (
         f"load_donor_assignments() must return pd.Series, got {type(result)}"
@@ -546,4 +540,4 @@ def test_load_donor_assignments_helper(gsm4037629_path):
 
     # FileNotFoundError for missing path.
     with pytest.raises((FileNotFoundError, OSError)):
-        singlet_gpu.io.load_donor_assignments("/nonexistent/path/donor_assignments.tsv")
+        singlet.gpu.io.load_donor_assignments("/nonexistent/path/donor_assignments.tsv")

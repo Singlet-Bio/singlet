@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Palantir-inspired pseudotime computation."""
 
 from __future__ import annotations

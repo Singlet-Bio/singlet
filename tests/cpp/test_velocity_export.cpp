@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test/test_velocity_export.cpp
 // Unit tests for G-VELOCITY: spliced/unspliced/ambiguous per-gene matrices.
 //
@@ -15,19 +16,7 @@
 // Only velocity.h — no htslib dependency
 #include "singlet/pileup/velocity.h"
 
-static int n_pass = 0;
-static int n_fail = 0;
-
-#define CHECK(cond, name)                                                        \
-    do {                                                                         \
-        if (cond) {                                                              \
-            std::cout << "  PASS: " << (name) << "\n";                           \
-            ++n_pass;                                                            \
-        } else {                                                                 \
-            std::cout << "  FAIL: " << (name) << " [line " << __LINE__ << "]\n"; \
-            ++n_fail;                                                            \
-        }                                                                        \
-    } while (0)
+#include "test_harness.h"  // CHECK(cond, msg) + n_pass / n_fail
 
 // ── Minimal mock types ─────────────────────────────────────────────────────
 

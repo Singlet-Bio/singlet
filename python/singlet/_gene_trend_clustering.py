@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Gene trend clustering along pseudotime.
 
 Provides singlet.gene_trend_clustering() — bin cells by pseudotime, smooth

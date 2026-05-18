@@ -1,7 +1,7 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (no factornet equivalent for normalize_total)
 //
-// singlet-gpu/preprocess/lognorm.h
+// singlet/gpu/preprocess/lognorm.h
 //
 // Log-normalization (per-cell size factor + log1p) for sparse count matrices.
 //
@@ -50,15 +50,11 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
 
 // CYCLE-106: factornet/gpu/types.cuh replaced by native core/types.h.
-#include <singlet-gpu/core/types.h>
+#include <singlet/gpu/core/types.h>
 
 #include <cuda_runtime.h>
 #include <cooperative_groups.h>
@@ -72,7 +68,7 @@
 
 // TODO(cycle ≥ 7): streaming_log_normalize(PzChunkIterator&, LogNormConfig, cudaStream_t)
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace preprocess {
 
 // ---------------------------------------------------------------------------
@@ -93,8 +89,8 @@ struct LogNormConfig {
 };
 
 struct LogNormResult {
-    singlet_gpu::core::DeviceMemory<float>   size_factors; // s[n]  — device
-    singlet_gpu::core::DeviceMemory<uint8_t> qc_mask;      // 1 = zero-count cell
+    singlet::gpu::core::DeviceMemory<float>   size_factors; // s[n]  — device
+    singlet::gpu::core::DeviceMemory<uint8_t> qc_mask;      // 1 = zero-count cell
     float                                    target_used;  // T actually applied
 };
 
@@ -347,7 +343,7 @@ void compute_size_factors_and_apply_kernel(
 // caller is responsible for synchronizing the stream before reading them.
 // ---------------------------------------------------------------------------
 inline LogNormResult log_normalize(
-    singlet_gpu::core::DeviceCSC& mat,
+    singlet::gpu::core::DeviceCSC& mat,
     const LogNormConfig&          cfg    = {},
     cudaStream_t                  stream = nullptr)
 {
@@ -365,7 +361,7 @@ inline LogNormResult log_normalize(
 
     // --- resolve stream ---
     if (stream == nullptr) {
-        stream = singlet_gpu::core::default_context().stream();
+        stream = singlet::gpu::core::default_context().stream();
     }
 
     const int n_cols = static_cast<int>(mat.cols);
@@ -376,11 +372,11 @@ inline LogNormResult log_normalize(
     }
 
     // --- allocate workspace ---
-    // All three output buffers are allocated via factornet's DeviceMemory<T>,
+    // All three output buffers are allocated via core::DeviceMemory<T>,
     // which is RAII and will not outlive the LogNormResult struct.
-    singlet_gpu::core::DeviceMemory<float>   d_col_sums(n_cols);   // t[n]
-    singlet_gpu::core::DeviceMemory<float>   d_size_factors(n_cols); // s[n]
-    singlet_gpu::core::DeviceMemory<uint8_t> d_qc_mask(n_cols);     // flag[n]
+    singlet::gpu::core::DeviceMemory<float>   d_col_sums(n_cols);   // t[n]
+    singlet::gpu::core::DeviceMemory<float>   d_size_factors(n_cols); // s[n]
+    singlet::gpu::core::DeviceMemory<uint8_t> d_qc_mask(n_cols);     // flag[n]
 
     // --- Pass 1: compute_col_sums ---
     // Grid: one warp per column → ceil(n_cols / warps_per_block) blocks.
@@ -416,7 +412,7 @@ inline LogNormResult log_normalize(
             const int smem_bytes = n_cols * sizeof(double);
 
             // Allocate a tiny device scalar for T output.
-            singlet_gpu::core::DeviceMemory<float> d_T(1);
+            singlet::gpu::core::DeviceMemory<float> d_T(1);
 
             compute_target_small_kernel<<<1, 1, smem_bytes, stream>>>(
                 d_col_sums.get(),
@@ -462,7 +458,7 @@ inline LogNormResult log_normalize(
     // has completed before any workspace DeviceMemory (moved into LogNormResult)
     // can be released by the caller. Prevents BUG-WILCOXON-POST-NORMALIZE-CRASH.
     // Rule 9 compliant — function boundary, not a hot loop.
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     return LogNormResult{
         std::move(d_size_factors),
@@ -472,4 +468,4 @@ inline LogNormResult log_normalize(
 }
 
 } // namespace preprocess
-} // namespace singlet_gpu
+} // namespace singlet::gpu

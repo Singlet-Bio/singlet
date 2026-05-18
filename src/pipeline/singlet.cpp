@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // singlet: .1fq → align → pileup → .1pz
 //
 // Self-contained monorepo binary.  The aligner (STAR, vendored in src/star/)
@@ -207,18 +208,18 @@ static int cmd_download(int argc, char* argv[]) {
     }
 
     // Parse quality mode
-    lib1fq::QualMode qual_mode = lib1fq::QualMode::BINNED4;
-    if (qual_str == "none") qual_mode = lib1fq::QualMode::NONE;
-    else if (qual_str == "full") qual_mode = lib1fq::QualMode::FULL;
-    else if (qual_str == "binned2") qual_mode = lib1fq::QualMode::BINNED2;
+    singlet::fq::QualMode qual_mode = singlet::fq::QualMode::BINNED4;
+    if (qual_str == "none") qual_mode = singlet::fq::QualMode::NONE;
+    else if (qual_str == "full") qual_mode = singlet::fq::QualMode::FULL;
+    else if (qual_str == "binned2") qual_mode = singlet::fq::QualMode::BINNED2;
 
     // Parse codec
-    lib1fq::Codec codec = lib1fq::Codec::ZSTD;
-    if (codec_str == "lz4") codec = lib1fq::Codec::LZ4;
-    else if (codec_str == "none") codec = lib1fq::Codec::NONE;
+    singlet::fq::Codec codec = singlet::fq::Codec::ZSTD;
+    if (codec_str == "lz4") codec = singlet::fq::Codec::LZ4;
+    else if (codec_str == "none") codec = singlet::fq::Codec::NONE;
 
     // Build config
-    lib1fq::EncoderConfig ecfg;
+    singlet::fq::EncoderConfig ecfg;
     ecfg.output_path = output_path;
     ecfg.codec       = codec;
     ecfg.codec_level = codec_level;
@@ -350,7 +351,7 @@ static int cmd_download(int argc, char* argv[]) {
         std::cerr << "[singlet-download] Catalog protocol (metadata): " << catalog_protocol << "\n";
 
     // Encode
-    lib1fq::SraEncoder encoder;
+    singlet::fq::SraEncoder encoder;
     auto stats = encoder.encode(sra_input, ecfg);
 
     if (stats.exit_code != 0) return stats.exit_code;
@@ -377,12 +378,12 @@ static int cmd_download(int argc, char* argv[]) {
 
         // Unconditional absolute floor — <MIN_READS_FOR_PIPELINE reads is never
         // a real single-cell library regardless of what the catalog says.
-        if (actual < singlet_pileup::TinyDatasetGuard::MIN_READS_FOR_PIPELINE) {
+        if (actual < singlet::pileup::TinyDatasetGuard::MIN_READS_FOR_PIPELINE) {
             std::fprintf(stderr,
                 "[singlet] WARNING: Only %zu reads downloaded"
                 " (minimum %zu for meaningful analysis). Aborting.\n",
                 static_cast<size_t>(actual),
-                static_cast<size_t>(singlet_pileup::TinyDatasetGuard::MIN_READS_FOR_PIPELINE));
+                static_cast<size_t>(singlet::pileup::TinyDatasetGuard::MIN_READS_FOR_PIPELINE));
             return 2;
         }
 
@@ -585,16 +586,16 @@ static int cmd_encode(int argc, char* argv[]) {
         output_path = base + ".1fq";
     }
 
-    lib1fq::QualMode qual_mode = lib1fq::QualMode::BINNED4;
-    if (qual_str == "none") qual_mode = lib1fq::QualMode::NONE;
-    else if (qual_str == "full") qual_mode = lib1fq::QualMode::FULL;
-    else if (qual_str == "binned2") qual_mode = lib1fq::QualMode::BINNED2;
+    singlet::fq::QualMode qual_mode = singlet::fq::QualMode::BINNED4;
+    if (qual_str == "none") qual_mode = singlet::fq::QualMode::NONE;
+    else if (qual_str == "full") qual_mode = singlet::fq::QualMode::FULL;
+    else if (qual_str == "binned2") qual_mode = singlet::fq::QualMode::BINNED2;
 
-    lib1fq::Codec codec = lib1fq::Codec::ZSTD;
-    if (codec_str == "lz4") codec = lib1fq::Codec::LZ4;
-    else if (codec_str == "none") codec = lib1fq::Codec::NONE;
+    singlet::fq::Codec codec = singlet::fq::Codec::ZSTD;
+    if (codec_str == "lz4") codec = singlet::fq::Codec::LZ4;
+    else if (codec_str == "none") codec = singlet::fq::Codec::NONE;
 
-    lib1fq::EncoderConfig ecfg;
+    singlet::fq::EncoderConfig ecfg;
     ecfg.output_path = output_path;
     ecfg.codec = codec;
     ecfg.codec_level = codec_level;
@@ -629,7 +630,7 @@ static int cmd_encode(int argc, char* argv[]) {
                   << " reads (" << static_cast<int>(pct) << "%)" << std::flush;
     };
 
-    lib1fq::FastqEncoder encoder;
+    singlet::fq::FastqEncoder encoder;
 
     if (!reads_r3.empty()) {
         // 3-read ATAC mode: R1 genomic + R2 barcode + R3 genomic
@@ -696,7 +697,7 @@ static int cmd_decode(int argc, char* argv[]) {
         std::cerr << "ERROR: no input .1fq file specified\n"; return 1;
     }
 
-    lib1fq::Reader reader;
+    singlet::fq::Reader reader;
     reader.open(input_path.c_str());
     reader.set_verify_crc(verify);
     auto hdr = reader.header();
@@ -760,7 +761,7 @@ static int cmd_decode(int argc, char* argv[]) {
     StopWatch sw;
     const uint32_t total_blocks = reader.block_count();
     const int fd = reader.file_descriptor();
-    const auto codec = static_cast<lib1fq::Codec>(hdr.codec);
+    const auto codec = static_cast<singlet::fq::Codec>(hdr.codec);
     const int decode_threads = std::min(threads, static_cast<int>(total_blocks));
 
     static constexpr char NUM_TO_ASCII[5] = {'A','C','G','T','N'};
@@ -775,7 +776,7 @@ static int cmd_decode(int argc, char* argv[]) {
         FmtBlock fb;
         uint64_t file_off = reader.block_offset(bi);
         uint32_t comp_size = reader.block_comp_size(bi);
-        lib1fq::BlockHeader bh;
+        singlet::fq::BlockHeader bh;
         ::pread(fd, &bh, sizeof(bh), static_cast<off_t>(file_off));
         std::vector<uint8_t> comp_buf(comp_size);
         ::pread(fd, comp_buf.data(), comp_size,
@@ -784,14 +785,14 @@ static int cmd_decode(int argc, char* argv[]) {
         std::vector<uint8_t> raw_buf(est_raw);
         size_t raw_size;
         try {
-            raw_size = lib1fq::compress::decompress_block(
+            raw_size = singlet::fq::compress::decompress_block(
                 codec, comp_buf.data(), comp_size, raw_buf.data(), raw_buf.size());
         } catch (...) {
             raw_buf.resize(est_raw * 4);
-            raw_size = lib1fq::compress::decompress_block(
+            raw_size = singlet::fq::compress::decompress_block(
                 codec, comp_buf.data(), comp_size, raw_buf.data(), raw_buf.size());
         }
-        lib1fq::DecodedBlock blk;
+        singlet::fq::DecodedBlock blk;
         reader.decode_payload(raw_buf.data(), raw_size, bh, blk);
         fb.n_reads = blk.n_reads;
         uint16_t r1_max = blk.r1_lengths.empty() ? 28 : *std::max_element(blk.r1_lengths.begin(), blk.r1_lengths.end());
@@ -860,7 +861,7 @@ static int cmd_decode(int argc, char* argv[]) {
         uint64_t cum = 0;
         for (uint32_t b = 0; b < total_blocks; ++b) {
             block_read_offsets[b] = cum;
-            lib1fq::BlockHeader bh;
+            singlet::fq::BlockHeader bh;
             ::pread(fd, &bh, sizeof(bh), static_cast<off_t>(reader.block_offset(b)));
             cum += bh.n_reads;
         }
@@ -942,38 +943,38 @@ static int cmd_archive(int argc, char* argv[]) {
             output_path = input_path + ".noq.1fq";
     }
 
-    lib1fq::Reader reader;
+    singlet::fq::Reader reader;
     reader.open(input_path.c_str());
-    const lib1fq::Header& hdr = reader.header();
+    const singlet::fq::Header& hdr = reader.header();
 
-    if (hdr.qual_mode == static_cast<uint8_t>(lib1fq::QualMode::NONE)) {
+    if (hdr.qual_mode == static_cast<uint8_t>(singlet::fq::QualMode::NONE)) {
         std::cerr << "[archive] Input already has no quality stored — nothing to strip.\n";
         return 0;
     }
 
     // Build writer config mirroring input, but with qual_mode=NONE
-    lib1fq::WriterConfig wcfg;
-    wcfg.qual_mode      = lib1fq::QualMode::NONE;
-    wcfg.codec          = static_cast<lib1fq::Codec>(hdr.codec);
+    singlet::fq::WriterConfig wcfg;
+    wcfg.qual_mode      = singlet::fq::QualMode::NONE;
+    wcfg.codec          = static_cast<singlet::fq::Codec>(hdr.codec);
     wcfg.codec_level    = codec_level;
     wcfg.n_streams      = hdr.n_streams;
     wcfg.r1_length      = hdr.stream_lengths[0];
     // If original had variable R2 (TRIMMED flag), keep variable (0); else preserve fixed
-    wcfg.r2_length      = (hdr.flags & lib1fq::Flags::TRIMMED)
+    wcfg.r2_length      = (hdr.flags & singlet::fq::Flags::TRIMMED)
                               ? uint16_t(0) : hdr.stream_lengths[1];
     wcfg.protocol_id    = hdr.protocol_id;
-    wcfg.confidence     = static_cast<lib1fq::Confidence>(hdr.confidence);
-    wcfg.assay_type     = static_cast<lib1fq::AssayType>(hdr.assay_type);
-    wcfg.deduped        = (hdr.flags & lib1fq::Flags::DEDUPED) != 0;
+    wcfg.confidence     = static_cast<singlet::fq::Confidence>(hdr.confidence);
+    wcfg.assay_type     = static_cast<singlet::fq::AssayType>(hdr.assay_type);
+    wcfg.deduped        = (hdr.flags & singlet::fq::Flags::DEDUPED) != 0;
     wcfg.polya_trim     = false;  // already trimmed if applicable
     wcfg.sort_by_bc     = false;  // preserve original ordering
     wcfg.block_size     = hdr.block_size > 0 ? hdr.block_size : 100000;
 
-    lib1fq::Writer writer;
+    singlet::fq::Writer writer;
     writer.open(output_path.c_str(), wcfg);
 
     uint64_t n_reads = 0;
-    lib1fq::DecodedBlock blk;
+    singlet::fq::DecodedBlock blk;
     while (reader.read_block(blk)) {
         for (uint32_t i = 0; i < blk.n_reads; ++i) {
             uint32_t dc = (wcfg.deduped && !blk.dup_counts.empty())
@@ -2612,7 +2613,7 @@ int main(int argc, char* argv[]) {
             };
             std::string proto_override = mj_extract_str("protocol");
             if (!proto_override.empty()) {
-                const lib1fq::CandidateSpec* spec = lib1fq::find_protocol_spec(proto_override);
+                const singlet::fq::CandidateSpec* spec = singlet::fq::find_protocol_spec(proto_override);
                 if (spec) {
                     meta_json_proto_id  = spec->protocol_id;
                     meta_json_proto_tag = spec->tag;
@@ -2637,8 +2638,8 @@ int main(int argc, char* argv[]) {
         {
             FILE* fp_probe = std::fopen(onefq_file.c_str(), "rb");
             if (fp_probe) {
-                lib1fq::Header raw_hdr;
-                if (std::fread(&raw_hdr, sizeof(lib1fq::Header), 1, fp_probe) == 1 &&
+                singlet::fq::Header raw_hdr;
+                if (std::fread(&raw_hdr, sizeof(singlet::fq::Header), 1, fp_probe) == 1 &&
                     raw_hdr.valid_magic()) {
                     pid = raw_hdr.protocol_id;
                     // Apply metadata-json protocol override to whitelist resolution
@@ -2652,7 +2653,7 @@ int main(int argc, char* argv[]) {
 
         if (header_ok) {
             std::string wl_name, proto_tag;
-            for (const auto& spec : lib1fq::known_protocols()) {
+            for (const auto& spec : singlet::fq::known_protocols()) {
                 if (spec.protocol_id == pid) {
                     wl_name = spec.whitelist_file;
                     proto_tag = spec.tag;
@@ -2835,19 +2836,19 @@ int main(int argc, char* argv[]) {
     double decode_time = 0.0;             // §3.2 per-stage: .1fq decode wall time
     uint64_t decode_reads_out = 0;        // §3.2 per-stage: reads decoded from .1fq
     if (onefq_mode) {
-        lib1fq::Reader early_assay_probe;
+        singlet::fq::Reader early_assay_probe;
         try {
             early_assay_probe.open(onefq_file.c_str());
             auto eahdr = early_assay_probe.header();
-            is_atac_mode = (eahdr.assay_type == static_cast<uint8_t>(lib1fq::AssayType::SC_ATAC) ||
-                            eahdr.assay_type == static_cast<uint8_t>(lib1fq::AssayType::SC_MULTIOME_ATAC));
-            is_smart_seq2_mode = (eahdr.assay_type == static_cast<uint8_t>(lib1fq::AssayType::SC_RNA_PLATE));
-            is_bulk_rna_mode  = (eahdr.assay_type == static_cast<uint8_t>(lib1fq::AssayType::BULK_RNA));
-            is_cite_seq_mode  = (eahdr.assay_type == static_cast<uint8_t>(lib1fq::AssayType::CITE_SEQ_GEX) ||
-                                 eahdr.assay_type == static_cast<uint8_t>(lib1fq::AssayType::CITE_SEQ_ADT));
-            is_visium_mode    = (eahdr.assay_type == static_cast<uint8_t>(lib1fq::AssayType::SPATIAL_RNA));
+            is_atac_mode = (eahdr.assay_type == static_cast<uint8_t>(singlet::fq::AssayType::SC_ATAC) ||
+                            eahdr.assay_type == static_cast<uint8_t>(singlet::fq::AssayType::SC_MULTIOME_ATAC));
+            is_smart_seq2_mode = (eahdr.assay_type == static_cast<uint8_t>(singlet::fq::AssayType::SC_RNA_PLATE));
+            is_bulk_rna_mode  = (eahdr.assay_type == static_cast<uint8_t>(singlet::fq::AssayType::BULK_RNA));
+            is_cite_seq_mode  = (eahdr.assay_type == static_cast<uint8_t>(singlet::fq::AssayType::CITE_SEQ_GEX) ||
+                                 eahdr.assay_type == static_cast<uint8_t>(singlet::fq::AssayType::CITE_SEQ_ADT));
+            is_visium_mode    = (eahdr.assay_type == static_cast<uint8_t>(singlet::fq::AssayType::SPATIAL_RNA));
             // B-G2-3: feature-barcode-only = ADT/HTO stream, no GEX
-            is_feature_barcode_only = (eahdr.assay_type == static_cast<uint8_t>(lib1fq::AssayType::CITE_SEQ_ADT));
+            is_feature_barcode_only = (eahdr.assay_type == static_cast<uint8_t>(singlet::fq::AssayType::CITE_SEQ_ADT));
             if (is_atac_mode)
                 std::cerr << "[singlet] ATAC assay detected (assay_type=" << (int)eahdr.assay_type << ")\n";
             if (is_cite_seq_mode)
@@ -3214,9 +3215,9 @@ int main(int argc, char* argv[]) {
     bool use_complex_concat  = false;
     std::string combined_wl_file;   // path to Cartesian product whitelist
 
-    // ── Phase 0.5b: .1fq streaming setup (FIFOs + lib1fq reader) ──
+    // ── Phase 0.5b: .1fq streaming setup (FIFOs + singlet::fq reader) ──
     // If --1fq is given, create two named FIFOs and fork a demuxer child
-    // that reads the .1fq file via lib1fq::Reader, decodes blocks to
+    // that reads the .1fq file via singlet::fq::Reader, decodes blocks to
     // byte-numeric, converts to FASTQ text, and writes to R1/R2 FIFOs.
     // STAR reads from the FIFOs exactly like the SRA path.
     if (onefq_mode) {
@@ -3224,7 +3225,7 @@ int main(int argc, char* argv[]) {
 
         // Read .1fq header + metadata to auto-configure STAR params
         {
-            lib1fq::Reader probe;
+            singlet::fq::Reader probe;
             try {
                 probe.open(onefq_file.c_str());
             } catch (const std::exception& e) {
@@ -3368,7 +3369,7 @@ int main(int argc, char* argv[]) {
             if (meta_json_proto_id != 255 && meta_json_proto_id != hdr.protocol_id) {
                 // Determine old tag for log message
                 std::string old_tag;
-                for (const auto& sp : lib1fq::known_protocols())
+                for (const auto& sp : singlet::fq::known_protocols())
                     if (sp.protocol_id == hdr.protocol_id) { old_tag = sp.tag; break; }
                 if (old_tag.empty()) old_tag = std::to_string((int)hdr.protocol_id);
                 std::cerr << "[singlet] Protocol override: .1fq header protocol_id="
@@ -3395,7 +3396,7 @@ int main(int argc, char* argv[]) {
             if (detected_bc_len == 0 && detected_umi_len == 0
                 && hdr.protocol_id != 255
                 && detected_soloType != "CB_UMI_Complex") {
-                for (const auto& spec : lib1fq::known_protocols()) {
+                for (const auto& spec : singlet::fq::known_protocols()) {
                     if (spec.protocol_id == hdr.protocol_id
                         && spec.bc_len > 0 && spec.umi_len > 0) {
                         detected_bc_len  = spec.bc_len;
@@ -3421,7 +3422,7 @@ int main(int argc, char* argv[]) {
             // N10: Always look up adapter3p by protocol_id (runs even when metadata
             // provided CB/UMI so N2 was skipped).
             if (detected_adapter3p.empty() && hdr.protocol_id != 255) {
-                for (const auto& spec : lib1fq::known_protocols()) {
+                for (const auto& spec : singlet::fq::known_protocols()) {
                     if (spec.protocol_id == hdr.protocol_id && !spec.adapter3p.empty()) {
                         detected_adapter3p = spec.adapter3p;
                         std::cerr << "[singlet] N10: adapter3p auto-selected for "
@@ -3508,7 +3509,7 @@ int main(int argc, char* argv[]) {
             // Map to terminal autodetect_species_fail per DROPLET_PRODUCTION_CONTRACT §5.
             // Skip ATAC mode (short R2 barcodes are expected there).
             if (!is_atac_mode &&
-                hdr.confidence <= static_cast<uint8_t>(lib1fq::Confidence::LOW) &&
+                hdr.confidence <= static_cast<uint8_t>(singlet::fq::Confidence::LOW) &&
                 detected_r2_len > 0 && detected_r2_len < 50) {
                 std::cerr << "[singlet] AUTOFIX-SPECIES-VAL-R2-SHORT:"
                           << " confidence=LOW, R2=" << detected_r2_len
@@ -3535,18 +3536,18 @@ int main(int argc, char* argv[]) {
             onefq_protocol_id = hdr.protocol_id;
 
             // ── Absolute minimum read count — abort before STAR to avoid fast-crash waste ──
-            if (onefq_n_reads < singlet_pileup::TinyDatasetGuard::MIN_READS_FOR_PIPELINE) {
+            if (onefq_n_reads < singlet::pileup::TinyDatasetGuard::MIN_READS_FOR_PIPELINE) {
                 std::fprintf(stderr,
                     "[singlet] WARNING: Only %llu reads in .1fq file"
                     " (minimum %zu for meaningful analysis). Aborting.\n",
                     (unsigned long long)onefq_n_reads,
-                    static_cast<size_t>(singlet_pileup::TinyDatasetGuard::MIN_READS_FOR_PIPELINE));
+                    static_cast<size_t>(singlet::pileup::TinyDatasetGuard::MIN_READS_FOR_PIPELINE));
                 return 2;
             }
 
             // G-TINY: warn on very small datasets before alignment
             {
-                using singlet_pileup::TinyDatasetGuard;
+                using singlet::pileup::TinyDatasetGuard;
                 std::string tiny_warn = TinyDatasetGuard::warning_message(onefq_n_reads);
                 if (!tiny_warn.empty())
                     std::cerr << "[singlet] WARNING: " << tiny_warn << "\n";
@@ -3676,7 +3677,7 @@ int main(int argc, char* argv[]) {
             setvbuf(r1_fp, r1_wbuf, _IOFBF, sizeof(r1_wbuf));
             setvbuf(r2_fp, r2_wbuf, _IOFBF, sizeof(r2_wbuf));
 
-            lib1fq::Reader reader;
+            singlet::fq::Reader reader;
             try {
                 reader.open(onefq_file.c_str());
             } catch (const std::exception& e) {
@@ -3696,7 +3697,7 @@ int main(int argc, char* argv[]) {
 
             const uint32_t total_blocks = reader.block_count();
             const int fd = reader.file_descriptor();
-            const auto codec = static_cast<lib1fq::Codec>(hdr.codec);
+            const auto codec = static_cast<singlet::fq::Codec>(hdr.codec);
             const int decode_threads = std::min(static_cast<int>(star_threads), static_cast<int>(total_blocks));
 
             static constexpr char NUM_TO_ASCII[5] = {'A','C','G','T','N'};
@@ -3717,7 +3718,7 @@ int main(int argc, char* argv[]) {
             std::vector<uint8_t> atac_bc_dict_bytes;
             uint16_t atac_bc_len = 0;
             bool has_i2_stream = is_atac_mode &&
-                                 (reader.header().reserved[0] & lib1fq::ExtraStreams::HAS_I2) != 0;
+                                 (reader.header().reserved[0] & singlet::fq::ExtraStreams::HAS_I2) != 0;
             if (has_i2_stream) {
                 atac_bc_len = reader.header().stream_lengths[2];
                 std::cerr << "[1fq-decode] ATAC: I2 barcode stream " << atac_bc_len << "bp\n";
@@ -3738,7 +3739,7 @@ int main(int argc, char* argv[]) {
                 uint64_t file_off = reader.block_offset(bi);
                 uint32_t comp_size = reader.block_comp_size(bi);
 
-                lib1fq::BlockHeader bh;
+                singlet::fq::BlockHeader bh;
                 ::pread(fd, &bh, sizeof(bh), static_cast<off_t>(file_off));
 
                 std::vector<uint8_t> comp_buf(comp_size);
@@ -3749,17 +3750,17 @@ int main(int argc, char* argv[]) {
                 std::vector<uint8_t> raw_buf(est_raw);
                 size_t raw_size;
                 try {
-                    raw_size = lib1fq::compress::decompress_block(
+                    raw_size = singlet::fq::compress::decompress_block(
                         codec, comp_buf.data(), comp_size,
                         raw_buf.data(), raw_buf.size());
                 } catch (...) {
                     raw_buf.resize(est_raw * 4);
-                    raw_size = lib1fq::compress::decompress_block(
+                    raw_size = singlet::fq::compress::decompress_block(
                         codec, comp_buf.data(), comp_size,
                         raw_buf.data(), raw_buf.size());
                 }
 
-                lib1fq::DecodedBlock blk;
+                singlet::fq::DecodedBlock blk;
                 reader.decode_payload(raw_buf.data(), raw_size, bh, blk);
 
                 fb.n_reads = blk.n_reads;
@@ -3953,7 +3954,7 @@ int main(int argc, char* argv[]) {
                 uint64_t cum = 0;
                 for (uint32_t b = 0; b < total_blocks; ++b) {
                     block_read_offsets[b] = cum;
-                    lib1fq::BlockHeader bh;
+                    singlet::fq::BlockHeader bh;
                     ::pread(fd, &bh, sizeof(bh),
                             static_cast<off_t>(reader.block_offset(b)));
                     // Include dup expansion in offset calculation
@@ -4033,7 +4034,7 @@ int main(int argc, char* argv[]) {
             // and the first 25 R2 sequences for prefix detection.
             // No FASTQ files are written.  Peak memory: ~50 MB per block (one at a time).
             StopWatch pass1_sw;
-            lib1fq::Reader reader;
+            singlet::fq::Reader reader;
             try {
                 reader.open(onefq_file.c_str());
             } catch (const std::exception& e) {
@@ -4046,9 +4047,9 @@ int main(int argc, char* argv[]) {
             const bool     has_bc_dict_p1 = reader.has_bc_dict();
             const uint32_t total_blocks_p1 = reader.block_count();
             const int      fd_p1    = reader.file_descriptor();
-            const auto     codec_p1 = static_cast<lib1fq::Codec>(hdr_p1.codec);
+            const auto     codec_p1 = static_cast<singlet::fq::Codec>(hdr_p1.codec);
             bool has_i2_p1 = is_atac_mode &&
-                             (hdr_p1.reserved[0] & lib1fq::ExtraStreams::HAS_I2) != 0;
+                             (hdr_p1.reserved[0] & singlet::fq::ExtraStreams::HAS_I2) != 0;
 
             // FIFO mode: set detected_bc_len from I2 stream length so Phase 0.9
             // unpacks barcodes with the correct length (not the default 12bp).
@@ -4070,7 +4071,7 @@ int main(int argc, char* argv[]) {
             for (uint32_t bi = 0; bi < total_blocks_p1; ++bi) {
                 uint64_t file_off_p1  = reader.block_offset(bi);
                 uint32_t comp_size_p1 = reader.block_comp_size(bi);
-                lib1fq::BlockHeader bh_p1;
+                singlet::fq::BlockHeader bh_p1;
                 ::pread(fd_p1, &bh_p1, sizeof(bh_p1), static_cast<off_t>(file_off_p1));
                 std::vector<uint8_t> comp_buf_p1(comp_size_p1);
                 ::pread(fd_p1, comp_buf_p1.data(), comp_size_p1,
@@ -4079,16 +4080,16 @@ int main(int argc, char* argv[]) {
                 std::vector<uint8_t> raw_buf_p1(est_raw_p1);
                 size_t raw_size_p1;
                 try {
-                    raw_size_p1 = lib1fq::compress::decompress_block(
+                    raw_size_p1 = singlet::fq::compress::decompress_block(
                         codec_p1, comp_buf_p1.data(), comp_size_p1,
                         raw_buf_p1.data(), raw_buf_p1.size());
                 } catch (...) {
                     raw_buf_p1.resize(est_raw_p1 * 4);
-                    raw_size_p1 = lib1fq::compress::decompress_block(
+                    raw_size_p1 = singlet::fq::compress::decompress_block(
                         codec_p1, comp_buf_p1.data(), comp_size_p1,
                         raw_buf_p1.data(), raw_buf_p1.size());
                 }
-                lib1fq::DecodedBlock blk_p1;
+                singlet::fq::DecodedBlock blk_p1;
                 reader.decode_payload(raw_buf_p1.data(), raw_size_p1, bh_p1, blk_p1);
 
                 const bool has_dups_p1 = !blk_p1.dup_counts.empty();
@@ -4961,11 +4962,11 @@ int main(int argc, char* argv[]) {
                 }
             }
             std::string proto_tag;
-            for (const auto& sp : lib1fq::known_protocols())
+            for (const auto& sp : singlet::fq::known_protocols())
                 if (sp.protocol_id == onefq_protocol_id) { proto_tag = sp.tag; break; }
             if (!meta_json_proto_tag.empty()) proto_tag = meta_json_proto_tag;
             if (!bin_dir.empty() && !proto_tag.empty())
-                all_seg_wl = lib1fq::resolve_per_seg_whitelists(bin_dir, proto_tag, n_segs);
+                all_seg_wl = singlet::fq::resolve_per_seg_whitelists(bin_dir, proto_tag, n_segs);
             // Fallback: replicate a single available WL across all segments
             if (all_seg_wl.empty()) {
                 const std::string& eff = (!barcode_file.empty()
@@ -5047,7 +5048,7 @@ int main(int argc, char* argv[]) {
                         uint64_t reads_scanned = 0;
                         bool prescan_ok = false;
                         try {
-                            lib1fq::Reader ps_reader;
+                            singlet::fq::Reader ps_reader;
                             ps_reader.open(onefq_file.c_str());
                             ps_reader.set_verify_crc(false);
 
@@ -5069,7 +5070,7 @@ int main(int argc, char* argv[]) {
                                              "full-R1 .1fq and enable pre-scan\n";
                                 prescan_ok = true;  // not an error; no reads_scanned
                             } else {
-                            lib1fq::DecodedBlock blk;
+                            singlet::fq::DecodedBlock blk;
                             std::string bc_buf(static_cast<size_t>(concat_bc_total), 'N');
                             while (ps_reader.read_block(blk) &&
                                    reads_scanned < PRESCAN_LIMIT) {
@@ -5221,7 +5222,7 @@ int main(int argc, char* argv[]) {
             setvbuf(r1_fp, r1_wbuf.data(), _IOFBF, r1_wbuf.size());
             setvbuf(r2_fp, r2_wbuf.data(), _IOFBF, r2_wbuf.size());
 
-            lib1fq::Reader reader;
+            singlet::fq::Reader reader;
             try {
                 reader.open(thr_onefq.c_str());
             } catch (const std::exception& e) {
@@ -5233,7 +5234,7 @@ int main(int argc, char* argv[]) {
             auto hdr2 = reader.header();
             const uint32_t total_blocks = reader.block_count();
             const int      fd2   = reader.file_descriptor();
-            const auto     codec = static_cast<lib1fq::Codec>(hdr2.codec);
+            const auto     codec = static_cast<singlet::fq::Codec>(hdr2.codec);
             const int      n_thr = std::min(thr_threads, static_cast<int>(total_blocks));
             const bool  has_bc_dict2 = reader.has_bc_dict();
             const uint32_t bc_dict_n2 = reader.bc_dict_size();
@@ -5253,7 +5254,7 @@ int main(int argc, char* argv[]) {
                              "disabling concat rewrite; re-download to fix\n";
             }
             bool has_i2_stream2 = thr_atac &&
-                                  (hdr2.reserved[0] & lib1fq::ExtraStreams::HAS_I2) != 0;
+                                  (hdr2.reserved[0] & singlet::fq::ExtraStreams::HAS_I2) != 0;
             std::vector<uint8_t> atac_bc_dict2;
             uint16_t atac_bc_len2 = 0;
             if (has_i2_stream2) {
@@ -5271,7 +5272,7 @@ int main(int argc, char* argv[]) {
                 uint64_t cum = 0;
                 for (uint32_t b = 0; b < total_blocks; ++b) {
                     block_read_offsets[b] = cum;
-                    lib1fq::BlockHeader bh;
+                    singlet::fq::BlockHeader bh;
                     ::pread(fd2, &bh, sizeof(bh), static_cast<off_t>(reader.block_offset(b)));
                     cum += bh.n_reads;
                 }
@@ -5292,7 +5293,7 @@ int main(int argc, char* argv[]) {
                 FmtBlock2 fb;
                 uint64_t file_off  = reader.block_offset(bi);
                 uint32_t comp_size = reader.block_comp_size(bi);
-                lib1fq::BlockHeader bh;
+                singlet::fq::BlockHeader bh;
                 ::pread(fd2, &bh, sizeof(bh), static_cast<off_t>(file_off));
                 std::vector<uint8_t> comp_buf(comp_size);
                 ::pread(fd2, comp_buf.data(), comp_size,
@@ -5301,16 +5302,16 @@ int main(int argc, char* argv[]) {
                 std::vector<uint8_t> raw_buf(est_raw);
                 size_t raw_size;
                 try {
-                    raw_size = lib1fq::compress::decompress_block(
+                    raw_size = singlet::fq::compress::decompress_block(
                         codec, comp_buf.data(), comp_size,
                         raw_buf.data(), raw_buf.size());
                 } catch (...) {
                     raw_buf.resize(est_raw * 4);
-                    raw_size = lib1fq::compress::decompress_block(
+                    raw_size = singlet::fq::compress::decompress_block(
                         codec, comp_buf.data(), comp_size,
                         raw_buf.data(), raw_buf.size());
                 }
-                lib1fq::DecodedBlock blk;
+                singlet::fq::DecodedBlock blk;
                 reader.decode_payload(raw_buf.data(), raw_size, bh, blk);
 
                 fb.n_reads = blk.n_reads;
@@ -5847,7 +5848,7 @@ int main(int argc, char* argv[]) {
             // onefq_protocol_id is set from hdr.protocol_id (with any metadata override)
             // before the if(onefq_mode) block closes.
             std::string complex_protocol_tag;
-            for (const auto& sp : lib1fq::known_protocols()) {
+            for (const auto& sp : singlet::fq::known_protocols()) {
                 if (sp.protocol_id == onefq_protocol_id) {
                     complex_protocol_tag = sp.tag;
                     break;
@@ -6034,7 +6035,7 @@ int main(int argc, char* argv[]) {
                         const std::size_t n_segs3 = detected_cb_positions.size();
                         std::vector<std::string> resolved_wls;
                         if (!star_bin_dir.empty() && !complex_protocol_tag.empty()) {
-                            resolved_wls = lib1fq::resolve_per_seg_whitelists(
+                            resolved_wls = singlet::fq::resolve_per_seg_whitelists(
                                 star_bin_dir, complex_protocol_tag, n_segs3);
                         }
                         // If resolve_per_seg_whitelists returned nothing, try the single
@@ -6319,7 +6320,7 @@ int main(int argc, char* argv[]) {
                 // Skip complex memory tier when concat mode is active:
                 // CB_samTagOut with combined WL uses ~5 GB, not 200-400 GB.
                 if (!use_complex && !use_complex_concat && !complex_protocol_tag.empty()) {
-                    for (const auto& sp : lib1fq::known_protocols()) {
+                    for (const auto& sp : singlet::fq::known_protocols()) {
                         if (sp.tag == complex_protocol_tag &&
                             !sp.per_seg_whitelist_files.empty()) {
                             use_complex = true;
@@ -6345,9 +6346,9 @@ int main(int argc, char* argv[]) {
                 //   complex (CB_UMI_Complex)   compression=1  (BD Rhapsody; combinatorial
                 //                                              match tables + uncompressed
                 //                                              BAM OOMs at 30M on 192G)
-                const bool is_mega = (onefq_n_reads > singlet_pileup::mega_sort::MEGA_READ_THRESHOLD);
-                const bool is_ultra = (onefq_n_reads >= singlet_pileup::mega_sort::ULTRA_READ_THRESHOLD);
-                const int bam_comp_level = singlet_pileup::mega_sort::compression_level(
+                const bool is_mega = (onefq_n_reads > singlet::pileup::mega_sort::MEGA_READ_THRESHOLD);
+                const bool is_ultra = (onefq_n_reads >= singlet::pileup::mega_sort::ULTRA_READ_THRESHOLD);
+                const int bam_comp_level = singlet::pileup::mega_sort::compression_level(
                     onefq_n_reads, use_complex);
                 // compression_level() returns only 0 or 1. Use string literals with
                 // static storage duration — NOT a local std::string whose .c_str() would
@@ -6362,7 +6363,7 @@ int main(int argc, char* argv[]) {
                 if (is_ultra)
                     std::cerr << "[singlet] ULTRA: --outBAMcompression=" << bam_comp_level
                               << " (n_reads=" << onefq_n_reads
-                              << " >= " << singlet_pileup::mega_sort::ULTRA_READ_THRESHOLD
+                              << " >= " << singlet::pileup::mega_sort::ULTRA_READ_THRESHOLD
                               << "; memory lever is limitBAMsortRAM+bins, not compression)\n";
                 else if (is_mega)
                     std::cerr << "[singlet] MEGA: --outBAMcompression=" << bam_comp_level
@@ -6381,7 +6382,7 @@ int main(int argc, char* argv[]) {
                     // B-G3-4: try deterministic tier-table lookup first.
                     // slurm_tier_bamsort_ram() maps known SLURM allocation sizes
                     // (64/128/192/384 GB) to pinned limitBAMsortRAM values (25/50/75/150 GB).
-                    uint64_t tier_bam = singlet_pileup::mega_sort::slurm_tier_bamsort_ram(
+                    uint64_t tier_bam = singlet::pileup::mega_sort::slurm_tier_bamsort_ram(
                         available_ram_bytes);
                     if (tier_bam > 0) {
                         bam_sort_ram = tier_bam;
@@ -6415,7 +6416,7 @@ int main(int argc, char* argv[]) {
                     }
                     // G-TINY: cap limitBAMsortRAM based on actual read count for small datasets
                     if (onefq_n_reads > 0) {
-                        uint64_t tiny_ram = singlet_pileup::TinyDatasetGuard::recommended_bam_sort_ram(onefq_n_reads);
+                        uint64_t tiny_ram = singlet::pileup::TinyDatasetGuard::recommended_bam_sort_ram(onefq_n_reads);
                         if (tiny_ram < bam_sort_ram) {
                             bam_sort_ram = tiny_ram;
                             std::cerr << "[singlet] G-TINY: " << onefq_n_reads
@@ -6431,14 +6432,14 @@ int main(int argc, char* argv[]) {
                     // Previously this was inside the `else` branch only — causing OOM
                     // on 647M-read samples at 384G tier (FAILURE-9).
                     {
-                        uint64_t max_bam_sort = singlet_pileup::mega_sort::ram_cap_bytes(
+                        uint64_t max_bam_sort = singlet::pileup::mega_sort::ram_cap_bytes(
                             onefq_n_reads, available_ram_bytes, use_complex);
-                        auto tier = singlet_pileup::mega_sort::tier_for(onefq_n_reads, use_complex);
+                        auto tier = singlet::pileup::mega_sort::tier_for(onefq_n_reads, use_complex);
                         if (max_bam_sort > 0 && bam_sort_ram > max_bam_sort) {
                             uint64_t auto_computed = bam_sort_ram;
                             bam_sort_ram = max_bam_sort;
                             std::cerr << "[singlet] limitBAMsortRAM ["
-                                      << singlet_pileup::mega_sort::tier_name(tier) << "]: "
+                                      << singlet::pileup::mega_sort::tier_name(tier) << "]: "
                                       << (auto_computed >> 30) << " GiB → capped at "
                                       << (bam_sort_ram >> 30) << " GiB (node allocation: "
                                       << alloc_gib << " GiB)\n";
@@ -6452,9 +6453,9 @@ int main(int argc, char* argv[]) {
                     // STAR's default (50) and well inside its tested range.
                     if (is_ultra) {
                         bam_sort_bins_s = std::to_string(
-                            singlet_pileup::mega_sort::ULTRA_SORT_BINS);
+                            singlet::pileup::mega_sort::ULTRA_SORT_BINS);
                         std::cerr << "[singlet] ULTRA: outBAMsortingBinsN="
-                                  << singlet_pileup::mega_sort::ULTRA_SORT_BINS
+                                  << singlet::pileup::mega_sort::ULTRA_SORT_BINS
                                   << " (reduces per-bin merge memory, limitBAMsortRAM="
                                   << (bam_sort_ram >> 30) << "GiB)\n";
                     }
@@ -7675,7 +7676,7 @@ int main(int argc, char* argv[]) {
     // After GEX export, do a second pass through the .1fq to match ADT tags.
     // For CITE_SEQ_ADT assay: R2 = antibody tag read; uses current reader (R1+R2).
     // For CITE_SEQ_GEX assay with 3-stream bundle: feature stream decoding
-    // requires future lib1fq reader extension (tracked in ROADMAP.md T4-EXT).
+    // requires future singlet::fq reader extension (tracked in ROADMAP.md T4-EXT).
     if (is_cite_seq_mode && !feature_ref_path.empty() && onefq_mode) {
         std::cerr << "[singlet] CITE-seq: processing ADT/HTO reads from " << feature_ref_path << "\n";
         StopWatch adt_sw;
@@ -7719,7 +7720,7 @@ int main(int argc, char* argv[]) {
             };
 
             {
-                lib1fq::Reader adt_reader;
+                singlet::fq::Reader adt_reader;
                 adt_reader.open(onefq_file.c_str());
                 const auto& adt_hdr = adt_reader.header();
                 uint16_t bc_len = adt_reader.bc_length();
@@ -7749,7 +7750,7 @@ int main(int argc, char* argv[]) {
                 for (size_t ci = 0; ci < n_cells; ++ci)
                     bc_to_idx[gex_barcodes[ci]] = static_cast<uint32_t>(ci);
 
-                lib1fq::DecodedBlock adt_blk;
+                singlet::fq::DecodedBlock adt_blk;
                 while (adt_reader.read_block(adt_blk)) {
                     for (uint32_t i = 0; i < adt_blk.n_reads; ++i) {
                         // Get barcode string

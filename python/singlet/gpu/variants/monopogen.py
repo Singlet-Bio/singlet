@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.variants.monopogen — GPU-native Monopogen somatic SNV calling.
 
@@ -20,7 +20,11 @@ Reference: Dou et al. (Monopogen, Nature Biotechnology 2023).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING, Optional, List, Dict
+
+import numpy as np
+
+from singlet.gpu._coreutil import require_core
 
 if TYPE_CHECKING:
     pass
@@ -29,7 +33,6 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
-
 
 def call(
     snp_ad,
@@ -142,12 +145,7 @@ def call(
             snp_ad, snp_dp, chromosome=snp_chromosomes, ld_panels=ld_panels
         )
     """
-    import singlet.gpu._core as _core
-
-    if not hasattr(_core, "call_variants"):
-        raise ImportError(
-            "_core.call_variants is not available.  Install with: pip install singlet[gpu]"
-        )
+    _core = require_core("call_variants")
 
     # Default ld_panels to empty list (no-LD mode).
     if ld_panels is None:

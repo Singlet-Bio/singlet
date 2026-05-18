@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // minimizer_index.h — MinimizerSAIndex loader + query interface
 //
 // Binary format: minimizerIndex.bin

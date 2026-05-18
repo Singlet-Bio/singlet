@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Cluster stability analysis via bootstrap subsampling.
 
 Provides singlet.cluster_stability() — assess clustering robustness by

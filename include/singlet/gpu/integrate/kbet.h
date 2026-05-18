@@ -1,6 +1,6 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: Buttner et al. 2019 kBET batch-effect test
-// singlet-gpu/integrate/kbet.h
+// singlet/gpu/integrate/kbet.h
 //
 // kBET — k-nearest neighbor Batch Effect Test.
 // Buttner M, Miao Z, Wolf FA, et al. (2019) Nat Methods 16:43-49.
@@ -33,13 +33,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/graph/knn.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/graph/knn.h>
 
 #include <cub/device/device_reduce.cuh>
 
@@ -50,7 +46,7 @@
 #include <string>
 #include <vector>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace integrate {
 
 // ---------------------------------------------------------------------------
@@ -174,7 +170,7 @@ void kbet_reject_kernel(
 // kbet() — public entry point
 // ---------------------------------------------------------------------------
 //
-// knn:       KnnResult from singlet_gpu::graph::compute_knn(...).
+// knn:       KnnResult from singlet::gpu::graph::compute_knn(...).
 //            Uses knn.neighbors [n*k], knn.n, knn.k.  Distances unused.
 // d_batch:   device int[n_cells] with values in [0, n_batches).
 // n_batches: number of distinct batches.  Must be >= 2.
@@ -196,7 +192,7 @@ inline KbetResult kbet(
     cudaStream_t            stream = nullptr)
 {
     if (stream == nullptr) {
-        stream = singlet_gpu::core::default_context().stream();
+        stream = singlet::gpu::core::default_context().stream();
     }
 
     const int n = knn.n;
@@ -240,10 +236,10 @@ inline KbetResult kbet(
             0, n_batches,
             n, stream);
     }
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     std::vector<int> h_global_cnt(static_cast<size_t>(n_batches));
-    CUDA_CHECK(cudaMemcpy(h_global_cnt.data(), d_global_cnt.get(),
+    SINGLET_GPU_CUDA_CHECK(cudaMemcpy(h_global_cnt.data(), d_global_cnt.get(),
                           static_cast<size_t>(n_batches) * sizeof(int),
                           cudaMemcpyDeviceToHost));
 
@@ -260,7 +256,7 @@ inline KbetResult kbet(
     }
 
     core::DeviceMemory<float> d_n_exp(static_cast<size_t>(n_batches));
-    CUDA_CHECK(cudaMemcpy(d_n_exp.get(), h_n_exp.data(),
+    SINGLET_GPU_CUDA_CHECK(cudaMemcpy(d_n_exp.get(), h_n_exp.data(),
                           static_cast<size_t>(n_batches) * sizeof(float),
                           cudaMemcpyHostToDevice));
 
@@ -278,7 +274,7 @@ inline KbetResult kbet(
         d_chi2.get(), d_pvalue.get(),
         n, k, n_batches);
 
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     // -------------------------------------------------------------------------
     // Step 4: reject flag per cell (p-value < 0.05), then sum for reject_rate.
@@ -290,7 +286,7 @@ inline KbetResult kbet(
         kbet_reject_kernel<<<blocks, threads, 0, stream>>>(
             d_pvalue.get(), d_reject.get(), n);
     }
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     // -------------------------------------------------------------------------
     // Step 5: cub::DeviceReduce::Sum for mean_chi2 and reject_rate (two D2H).
@@ -304,10 +300,10 @@ inline KbetResult kbet(
         cub::DeviceReduce::Sum(d_tmp.get(), tmp_bytes,
             d_chi2.get(), d_sum.get(), n, stream);
     }
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     float h_chi2_sum = 0.f;
-    CUDA_CHECK(cudaMemcpy(&h_chi2_sum, d_sum.get(), sizeof(float),
+    SINGLET_GPU_CUDA_CHECK(cudaMemcpy(&h_chi2_sum, d_sum.get(), sizeof(float),
                           cudaMemcpyDeviceToHost));
 
     core::DeviceMemory<float> d_reject_sum(1);
@@ -319,10 +315,10 @@ inline KbetResult kbet(
         cub::DeviceReduce::Sum(d_tmp.get(), tmp_bytes,
             d_reject.get(), d_reject_sum.get(), n, stream);
     }
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     float h_reject_sum = 0.f;
-    CUDA_CHECK(cudaMemcpy(&h_reject_sum, d_reject_sum.get(), sizeof(float),
+    SINGLET_GPU_CUDA_CHECK(cudaMemcpy(&h_reject_sum, d_reject_sum.get(), sizeof(float),
                           cudaMemcpyDeviceToHost));
 
     KbetResult res;
@@ -336,4 +332,4 @@ inline KbetResult kbet(
 }
 
 }  // namespace integrate
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

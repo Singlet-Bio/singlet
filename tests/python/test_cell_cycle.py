@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.score_cell_cycle()."""
 
 import numpy as np

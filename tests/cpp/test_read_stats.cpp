@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Tests for singlet/pileup/read_stats.h
 #include "singlet/pileup/read_stats.h"
 #include <cassert>

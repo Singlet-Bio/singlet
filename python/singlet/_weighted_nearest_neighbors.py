@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Weighted Nearest Neighbors (WNN) multi-modal integration.
 
 Implements Seurat v4-style weighted nearest neighbors for integrating multiple

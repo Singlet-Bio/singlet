@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // cascade_router.h — Track B cascade: single-pass per-read router
 // Part of droplet-hardening Track B prototype (T-L2-1).
 //

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.subsample_balanced()."""
 
 import numpy as np

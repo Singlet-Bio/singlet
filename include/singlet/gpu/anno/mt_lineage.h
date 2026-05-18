@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (first GPU MT lineage tracing — exploits singlet mt_alleles.1pz directly)
 //
 // anno/mt_lineage.h — GPU-native mitochondrial heteroplasmy clone calling.
@@ -50,11 +50,7 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
+#include <singlet/gpu/core/types.h>
 
 #include <cuda_runtime.h>
 #include <cub/device/device_reduce.cuh>
@@ -70,7 +66,7 @@
 #include <numeric>
 #include <random>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace anno {
 
 // ─── Public configuration and result types ───────────────────────────────────
@@ -1004,4 +1000,4 @@ call_clones(
 }
 
 } // namespace anno
-} // namespace singlet_gpu
+} // namespace singlet::gpu

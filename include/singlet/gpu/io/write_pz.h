@@ -1,14 +1,14 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-// singlet-gpu/io/write_pz.h
+// SPDX-License-Identifier: MIT
+// singlet/gpu/io/write_pz.h
 //
 // Minimal host-only .1pz writer for test utilities.
 //
-// Produces TP1Z v1 files bit-exact with include/singlet/pz/pz_writer.h.
+// Produces TP1Z v1 files bit-exact with singlet/include/singlet-pileup/pz_writer.h.
 // This is NOT a production kernel — it is a test helper used only in
 // streaming_pipeline_correctness.cpp and other test fixtures that need to
 // create synthetic .1pz files on disk for round-trip verification.
 //
-// API (within singlet_gpu::io):
+// API (within singlet::gpu::io):
 //
 //   write_pz(path, n_rows, n_cols, nnz,
 //            values, indptr, indices,
@@ -30,7 +30,7 @@
 
 #pragma once
 
-#include <singlet-gpu/io/pz_device_loader.h>  // pz_fmt constants + structs
+#include <singlet/gpu/io/pz_device_loader.h>  // pz_fmt constants + structs
 
 #include <zstd.h>
 
@@ -45,7 +45,7 @@
 #include <thread>
 #include <vector>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace io {
 
 // ---------------------------------------------------------------------------
@@ -414,4 +414,4 @@ inline void write_pz(
 }
 
 }  // namespace io
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

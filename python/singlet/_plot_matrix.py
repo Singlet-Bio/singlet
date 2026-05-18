@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Matrix plot for ranked genes per group."""
 
 from __future__ import annotations

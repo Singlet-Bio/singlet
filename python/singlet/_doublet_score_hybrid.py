@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Hybrid doublet detection combining multiple signals.
 
 Provides singlet.doublet_score_hybrid() — combines simulated doublet kNN

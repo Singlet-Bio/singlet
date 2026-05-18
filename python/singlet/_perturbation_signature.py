@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Perturbation response signature.
 
 Provides singlet.perturbation_signature() — compute per-gene effect size

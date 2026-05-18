@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Gene activity/pathway scoring for AnnData objects.
 
 Provides singlet.gene_activity_score() — compute pathway activity scores

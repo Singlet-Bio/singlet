@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Diffusion maps for trajectory inference."""
 
 from __future__ import annotations

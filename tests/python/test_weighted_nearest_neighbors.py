@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.weighted_nearest_neighbors()."""
 
 import numpy as np

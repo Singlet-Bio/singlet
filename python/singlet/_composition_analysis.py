@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Cell composition analysis across conditions.
 
 Provides singlet.composition_analysis() — test whether cell type proportions

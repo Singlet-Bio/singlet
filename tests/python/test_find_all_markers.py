@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.find_all_markers()."""
 
 import numpy as np

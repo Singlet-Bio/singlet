@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 test_that("as_sce builds a SingleCellExperiment with the right assays", {
     dir <- skip_if_no_fixture()
     skip_if_not_installed("SingleCellExperiment")

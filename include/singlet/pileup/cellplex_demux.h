@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: cellplex_demux.h
 // G-CELLPLEX: 10x CellPlex / Cell Multiplexing Oligo (CMO) demultiplexing.

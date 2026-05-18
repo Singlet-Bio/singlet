@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """python -m singlet — print atlas summary and usage hints."""
 
 import singlet

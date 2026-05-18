@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Cycle 20 — collected binding tests grouped by function family.
 
@@ -16,31 +17,34 @@ Organisation:
   - Family F: signature inspection  (keyword-only arg presence on key functions)
 
 Skip strategy: same as test_core.py — module-level importorskip for
-singlet.gpu; requires_gpu marker for device tests; importorskip("cupy") inside
+singlet_gpu; requires_gpu marker for device tests; importorskip("cupy") inside
 tests that build cupy arrays.
 """
-
 from __future__ import annotations
 
 import inspect
 
+import numpy as np
 import pytest
 
 # ---------------------------------------------------------------------------
 # Module-level skip when wheel is not built.
 # ---------------------------------------------------------------------------
 singlet_gpu = pytest.importorskip(
-    "singlet.gpu",
-    reason=("singlet.gpu not available. Run `pip install -e singlet-gpu/python/` first."),
-    exc_type=ImportError,
+    "singlet_gpu",
+    reason=(
+        "singlet_gpu wheel not built. "
+        "Run `pip install -e singlet-gpu/python/` first."
+    ),
 )
 
 from conftest import requires_gpu  # noqa: E402
 
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-_CORE = singlet_gpu._core
+_CORE = singlet.gpu._core
 
 _EXON_FILE = "exon_counts.1pz"
 
@@ -66,7 +70,9 @@ def test_cupy_ingest_function_exists(func_name):
     assert hasattr(_CORE, func_name), (
         f"_core.{func_name} not found — _bind_cupy_ingest.hpp not wired into module"
     )
-    assert callable(getattr(_CORE, func_name)), f"_core.{func_name} is present but not callable"
+    assert callable(getattr(_CORE, func_name)), (
+        f"_core.{func_name} is present but not callable"
+    )
 
 
 def test_from_cupy_csr_signature():
@@ -112,7 +118,9 @@ def test_preprocess_function_exists(func_name):
     assert hasattr(_CORE, func_name), (
         f"_core.{func_name} not found — bind_kernels(m) not called in PYBIND11_MODULE"
     )
-    assert callable(getattr(_CORE, func_name)), f"_core.{func_name} is present but not callable"
+    assert callable(getattr(_CORE, func_name)), (
+        f"_core.{func_name} is present but not callable"
+    )
 
 
 def test_normalize_total_has_target_sum_kwarg():
@@ -154,7 +162,9 @@ def test_log1p_has_base_kwarg():
         pytest.skip("pybind11 signature not introspectable in this build")
 
     params = sig.parameters
-    assert "base" in params, f"log1p missing 'base' kwarg; found: {list(params.keys())}"
+    assert "base" in params, (
+        f"log1p missing 'base' kwarg; found: {list(params.keys())}"
+    )
 
 
 def test_highly_variable_genes_kwargs():
@@ -191,7 +201,9 @@ def test_svd_function_exists(func_name):
     assert hasattr(_CORE, func_name), (
         f"_core.{func_name} not found — bind_kernels() SVD section missing"
     )
-    assert callable(getattr(_CORE, func_name)), f"_core.{func_name} is present but not callable"
+    assert callable(getattr(_CORE, func_name)), (
+        f"_core.{func_name} is present but not callable"
+    )
 
 
 @pytest.mark.parametrize("func_name", _SVD_FUNCTIONS)
@@ -203,8 +215,12 @@ def test_svd_function_accepts_k_arg(func_name):
         pytest.skip(f"pybind11 signature not introspectable for {func_name}")
 
     params = sig.parameters
-    assert "mat" in params, f"{func_name}: missing 'mat' positional arg; got {list(params.keys())}"
-    assert "k" in params, f"{func_name}: missing 'k' positional arg; got {list(params.keys())}"
+    assert "mat" in params, (
+        f"{func_name}: missing 'mat' positional arg; got {list(params.keys())}"
+    )
+    assert "k" in params, (
+        f"{func_name}: missing 'k' positional arg; got {list(params.keys())}"
+    )
 
 
 @pytest.mark.parametrize("func_name", _SVD_FUNCTIONS)
@@ -217,7 +233,8 @@ def test_svd_function_has_seed_kwarg(func_name):
 
     params = sig.parameters
     assert "seed" in params, (
-        f"{func_name}: missing 'seed' kwarg (reproducibility contract); got {list(params.keys())}"
+        f"{func_name}: missing 'seed' kwarg (reproducibility contract); "
+        f"got {list(params.keys())}"
     )
 
 
@@ -239,7 +256,9 @@ def test_nmf_function_exists(func_name):
     assert hasattr(_CORE, func_name), (
         f"_core.{func_name} not found — bind_kernels() NMF section missing"
     )
-    assert callable(getattr(_CORE, func_name)), f"_core.{func_name} is present but not callable"
+    assert callable(getattr(_CORE, func_name)), (
+        f"_core.{func_name} is present but not callable"
+    )
 
 
 def test_nmf_has_rank_and_kwargs():
@@ -252,7 +271,9 @@ def test_nmf_has_rank_and_kwargs():
 
     params = sig.parameters
     for p in ("mat", "rank", "loss", "solver_mode", "init_mode", "max_iter", "tol", "seed"):
-        assert p in params, f"nmf missing parameter '{p}'; found: {list(params.keys())}"
+        assert p in params, (
+            f"nmf missing parameter '{p}'; found: {list(params.keys())}"
+        )
 
 
 def test_nmf_chunked_has_loader_and_rank():
@@ -263,8 +284,12 @@ def test_nmf_chunked_has_loader_and_rank():
         pytest.skip("pybind11 signature not introspectable for nmf_chunked")
 
     params = sig.parameters
-    assert "loader" in params, f"nmf_chunked missing 'loader' param; found: {list(params.keys())}"
-    assert "rank" in params, f"nmf_chunked missing 'rank' param; found: {list(params.keys())}"
+    assert "loader" in params, (
+        f"nmf_chunked missing 'loader' param; found: {list(params.keys())}"
+    )
+    assert "rank" in params, (
+        f"nmf_chunked missing 'rank' param; found: {list(params.keys())}"
+    )
 
 
 @pytest.mark.skipif(
@@ -323,10 +348,13 @@ _RESULT_CLASSES = [
 def test_result_class_exists(class_name):
     """Each result class is present and is a type in _core."""
     assert hasattr(_CORE, class_name), (
-        f"_core.{class_name} not found — result class binding missing from cycle 20 extension"
+        f"_core.{class_name} not found — result class binding missing from "
+        "cycle 20 extension"
     )
     cls = getattr(_CORE, class_name)
-    assert isinstance(cls, type), f"_core.{class_name} is not a type, got {type(cls)}"
+    assert isinstance(cls, type), (
+        f"_core.{class_name} is not a type, got {type(cls)}"
+    )
 
 
 def test_normalize_result_has_target_used():
@@ -337,7 +365,8 @@ def test_normalize_result_has_target_used():
     # Accept either a property/slot or a pybind11 getset descriptor.
     attrs = dir(NR)
     assert "target_used" in attrs, (
-        "NormalizeResult must expose 'target_used' attribute (design: float target_used)"
+        "NormalizeResult must expose 'target_used' attribute "
+        "(design: float target_used)"
     )
 
 
@@ -346,7 +375,8 @@ def test_normalize_result_has_size_factors_view():
     NR = _CORE.NormalizeResult
     attrs = dir(NR)
     assert "size_factors_view" in attrs, (
-        "NormalizeResult must expose 'size_factors_view' attribute (design: cupy_view<float>)"
+        "NormalizeResult must expose 'size_factors_view' attribute "
+        "(design: cupy_view<float>)"
     )
 
 
@@ -389,7 +419,6 @@ def test_hvg_result_attributes():
 # Family F — signature completeness cross-check
 # ===========================================================================
 
-
 def test_all_cycle20_bindings_present():
     """Consolidated existence check: all post-Rule-32 cycle 20 entry points are in _core.
 
@@ -428,7 +457,9 @@ def test_all_result_classes_present():
     for name in _RESULT_CLASSES:
         if not hasattr(_CORE, name) or not isinstance(getattr(_CORE, name), type):
             missing.append(name)
-    assert not missing, f"Result classes missing or not types in _core: {missing}"
+    assert not missing, (
+        f"Result classes missing or not types in _core: {missing}"
+    )
 
 
 # ===========================================================================
@@ -463,17 +494,17 @@ def test_all_result_classes_present():
 # use ``requires_gpu`` + ``pytest.importorskip("cupy")``.
 # ===========================================================================
 
-
 def _skip_if_not_present(name: str, kind: str = "binding") -> None:
     """Skip the calling test cleanly when the named attribute is absent."""
     if not hasattr(_CORE, name):
-        pytest.skip(f"_core.{name} not present — {kind} not yet wired (wheel pending GPU build)")
+        pytest.skip(
+            f"_core.{name} not present — {kind} not yet wired (wheel pending GPU build)"
+        )
 
 
 # ---------------------------------------------------------------------------
 # TestCycle7BindingsStreaming
 # ---------------------------------------------------------------------------
-
 
 class TestCycle7BindingsStreaming:
     """Cycle 7 — streaming_pipeline_run and StreamingPipelineResult."""
@@ -497,13 +528,14 @@ class TestCycle7BindingsStreaming:
         """Grouped: all cycle 7 names are present in _core."""
         names = ["streaming_pipeline_run", "StreamingPipelineResult"]
         missing = [n for n in names if not hasattr(_CORE, n)]
-        assert not missing, f"Cycle 7 — missing from _core: {missing}"
+        assert not missing, (
+            f"Cycle 7 — missing from _core: {missing}"
+        )
 
 
 # ---------------------------------------------------------------------------
 # TestCycle8BindingsKnn
 # ---------------------------------------------------------------------------
-
 
 class TestCycle8BindingsKnn:
     """Cycle 8 — knn_graph, knn_graph_from_indices, and KnnResult."""
@@ -511,7 +543,9 @@ class TestCycle8BindingsKnn:
     def test_binding_knn_graph_exists(self):
         """_core.knn_graph is present and callable."""
         _skip_if_not_present("knn_graph")
-        assert callable(getattr(_CORE, "knn_graph")), "_core.knn_graph is present but not callable"
+        assert callable(getattr(_CORE, "knn_graph")), (
+            "_core.knn_graph is present but not callable"
+        )
 
     def test_binding_knn_graph_from_indices_exists(self):
         """_core.knn_graph_from_indices is present and callable."""
@@ -524,19 +558,22 @@ class TestCycle8BindingsKnn:
         """_core.KnnResult is present and is a type."""
         _skip_if_not_present("KnnResult", kind="result class")
         cls = getattr(_CORE, "KnnResult")
-        assert isinstance(cls, type), f"_core.KnnResult is not a type, got {type(cls)}"
+        assert isinstance(cls, type), (
+            f"_core.KnnResult is not a type, got {type(cls)}"
+        )
 
     def test_cycle8_all_present(self):
         """Grouped: all cycle 8 names are present in _core."""
         names = ["knn_graph", "knn_graph_from_indices", "KnnResult"]
         missing = [n for n in names if not hasattr(_CORE, n)]
-        assert not missing, f"Cycle 8 — missing from _core: {missing}"
+        assert not missing, (
+            f"Cycle 8 — missing from _core: {missing}"
+        )
 
 
 # ---------------------------------------------------------------------------
 # TestCycle9BindingsLeiden
 # ---------------------------------------------------------------------------
-
 
 class TestCycle9BindingsLeiden:
     """Cycle 9 — leiden_partition and LeidenResult."""
@@ -552,19 +589,22 @@ class TestCycle9BindingsLeiden:
         """_core.LeidenResult is present and is a type."""
         _skip_if_not_present("LeidenResult", kind="result class")
         cls = getattr(_CORE, "LeidenResult")
-        assert isinstance(cls, type), f"_core.LeidenResult is not a type, got {type(cls)}"
+        assert isinstance(cls, type), (
+            f"_core.LeidenResult is not a type, got {type(cls)}"
+        )
 
     def test_cycle9_all_present(self):
         """Grouped: all cycle 9 names are present in _core."""
         names = ["leiden_partition", "LeidenResult"]
         missing = [n for n in names if not hasattr(_CORE, n)]
-        assert not missing, f"Cycle 9 — missing from _core: {missing}"
+        assert not missing, (
+            f"Cycle 9 — missing from _core: {missing}"
+        )
 
 
 # ---------------------------------------------------------------------------
 # TestCycle10BindingsUmap
 # ---------------------------------------------------------------------------
-
 
 class TestCycle10BindingsUmap:
     """Cycle 10 — umap_embed and UmapResult."""
@@ -580,19 +620,22 @@ class TestCycle10BindingsUmap:
         """_core.UmapResult is present and is a type."""
         _skip_if_not_present("UmapResult", kind="result class")
         cls = getattr(_CORE, "UmapResult")
-        assert isinstance(cls, type), f"_core.UmapResult is not a type, got {type(cls)}"
+        assert isinstance(cls, type), (
+            f"_core.UmapResult is not a type, got {type(cls)}"
+        )
 
     def test_cycle10_all_present(self):
         """Grouped: all cycle 10 names are present in _core."""
         names = ["umap_embed", "UmapResult"]
         missing = [n for n in names if not hasattr(_CORE, n)]
-        assert not missing, f"Cycle 10 — missing from _core: {missing}"
+        assert not missing, (
+            f"Cycle 10 — missing from _core: {missing}"
+        )
 
 
 # ---------------------------------------------------------------------------
 # TestCycle11BindingsDe
 # ---------------------------------------------------------------------------
-
 
 class TestCycle11BindingsDe:
     """Cycle 11 — wilcoxon_de, ttest_de, WilcoxonResult, TtestResult."""
@@ -607,31 +650,38 @@ class TestCycle11BindingsDe:
     def test_binding_ttest_de_exists(self):
         """_core.ttest_de is present and callable."""
         _skip_if_not_present("ttest_de")
-        assert callable(getattr(_CORE, "ttest_de")), "_core.ttest_de is present but not callable"
+        assert callable(getattr(_CORE, "ttest_de")), (
+            "_core.ttest_de is present but not callable"
+        )
 
     def test_result_class_WilcoxonResult_exists(self):
         """_core.WilcoxonResult is present and is a type."""
         _skip_if_not_present("WilcoxonResult", kind="result class")
         cls = getattr(_CORE, "WilcoxonResult")
-        assert isinstance(cls, type), f"_core.WilcoxonResult is not a type, got {type(cls)}"
+        assert isinstance(cls, type), (
+            f"_core.WilcoxonResult is not a type, got {type(cls)}"
+        )
 
     def test_result_class_TtestResult_exists(self):
         """_core.TtestResult is present and is a type."""
         _skip_if_not_present("TtestResult", kind="result class")
         cls = getattr(_CORE, "TtestResult")
-        assert isinstance(cls, type), f"_core.TtestResult is not a type, got {type(cls)}"
+        assert isinstance(cls, type), (
+            f"_core.TtestResult is not a type, got {type(cls)}"
+        )
 
     def test_cycle11_all_present(self):
         """Grouped: all cycle 11 names are present in _core."""
         names = ["wilcoxon_de", "ttest_de", "WilcoxonResult", "TtestResult"]
         missing = [n for n in names if not hasattr(_CORE, n)]
-        assert not missing, f"Cycle 11 — missing from _core: {missing}"
+        assert not missing, (
+            f"Cycle 11 — missing from _core: {missing}"
+        )
 
 
 # ---------------------------------------------------------------------------
 # TestCycle12BindingsAnno
 # ---------------------------------------------------------------------------
-
 
 class TestCycle12BindingsAnno:
     """Cycle 12 — marker_score, celltypist_project, load_celltypist_model,
@@ -662,38 +712,41 @@ class TestCycle12BindingsAnno:
         """_core.MarkerScoreResult is present and is a type."""
         _skip_if_not_present("MarkerScoreResult", kind="result class")
         cls = getattr(_CORE, "MarkerScoreResult")
-        assert isinstance(cls, type), f"_core.MarkerScoreResult is not a type, got {type(cls)}"
+        assert isinstance(cls, type), (
+            f"_core.MarkerScoreResult is not a type, got {type(cls)}"
+        )
 
     def test_result_class_RefMapResult_exists(self):
         """_core.RefMapResult is present and is a type."""
         _skip_if_not_present("RefMapResult", kind="result class")
         cls = getattr(_CORE, "RefMapResult")
-        assert isinstance(cls, type), f"_core.RefMapResult is not a type, got {type(cls)}"
+        assert isinstance(cls, type), (
+            f"_core.RefMapResult is not a type, got {type(cls)}"
+        )
 
     def test_result_class_CelltypistModel_exists(self):
         """_core.CelltypistModel is present and is a type."""
         _skip_if_not_present("CelltypistModel", kind="result class")
         cls = getattr(_CORE, "CelltypistModel")
-        assert isinstance(cls, type), f"_core.CelltypistModel is not a type, got {type(cls)}"
+        assert isinstance(cls, type), (
+            f"_core.CelltypistModel is not a type, got {type(cls)}"
+        )
 
     def test_cycle12_all_present(self):
         """Grouped: all cycle 12 names are present in _core."""
         names = [
-            "marker_score",
-            "celltypist_project",
-            "load_celltypist_model",
-            "MarkerScoreResult",
-            "RefMapResult",
-            "CelltypistModel",
+            "marker_score", "celltypist_project", "load_celltypist_model",
+            "MarkerScoreResult", "RefMapResult", "CelltypistModel",
         ]
         missing = [n for n in names if not hasattr(_CORE, n)]
-        assert not missing, f"Cycle 12 — missing from _core: {missing}"
+        assert not missing, (
+            f"Cycle 12 — missing from _core: {missing}"
+        )
 
 
 # ---------------------------------------------------------------------------
 # TestCycle13BindingsGsea
 # ---------------------------------------------------------------------------
-
 
 class TestCycle13BindingsGsea:
     """Cycle 13 — fgsea, aucell, FgseaResult, AUCellResult."""
@@ -701,36 +754,45 @@ class TestCycle13BindingsGsea:
     def test_binding_fgsea_exists(self):
         """_core.fgsea is present and callable."""
         _skip_if_not_present("fgsea")
-        assert callable(getattr(_CORE, "fgsea")), "_core.fgsea is present but not callable"
+        assert callable(getattr(_CORE, "fgsea")), (
+            "_core.fgsea is present but not callable"
+        )
 
     def test_binding_aucell_exists(self):
         """_core.aucell is present and callable."""
         _skip_if_not_present("aucell")
-        assert callable(getattr(_CORE, "aucell")), "_core.aucell is present but not callable"
+        assert callable(getattr(_CORE, "aucell")), (
+            "_core.aucell is present but not callable"
+        )
 
     def test_result_class_FgseaResult_exists(self):
         """_core.FgseaResult is present and is a type."""
         _skip_if_not_present("FgseaResult", kind="result class")
         cls = getattr(_CORE, "FgseaResult")
-        assert isinstance(cls, type), f"_core.FgseaResult is not a type, got {type(cls)}"
+        assert isinstance(cls, type), (
+            f"_core.FgseaResult is not a type, got {type(cls)}"
+        )
 
     def test_result_class_AUCellResult_exists(self):
         """_core.AUCellResult is present and is a type."""
         _skip_if_not_present("AUCellResult", kind="result class")
         cls = getattr(_CORE, "AUCellResult")
-        assert isinstance(cls, type), f"_core.AUCellResult is not a type, got {type(cls)}"
+        assert isinstance(cls, type), (
+            f"_core.AUCellResult is not a type, got {type(cls)}"
+        )
 
     def test_cycle13_all_present(self):
         """Grouped: all cycle 13 names are present in _core."""
         names = ["fgsea", "aucell", "FgseaResult", "AUCellResult"]
         missing = [n for n in names if not hasattr(_CORE, n)]
-        assert not missing, f"Cycle 13 — missing from _core: {missing}"
+        assert not missing, (
+            f"Cycle 13 — missing from _core: {missing}"
+        )
 
 
 # ---------------------------------------------------------------------------
 # TestCycle14BindingsIntegrate
 # ---------------------------------------------------------------------------
-
 
 class TestCycle14BindingsIntegrate:
     """Cycle 14 — harmony, bbknn, HarmonyResult.
@@ -739,31 +801,38 @@ class TestCycle14BindingsIntegrate:
     def test_binding_harmony_exists(self):
         """_core.harmony is present and callable."""
         _skip_if_not_present("harmony")
-        assert callable(getattr(_CORE, "harmony")), "_core.harmony is present but not callable"
+        assert callable(getattr(_CORE, "harmony")), (
+            "_core.harmony is present but not callable"
+        )
 
     def test_binding_bbknn_exists(self):
         """_core.bbknn is present and callable."""
         _skip_if_not_present("bbknn")
-        assert callable(getattr(_CORE, "bbknn")), "_core.bbknn is present but not callable"
+        assert callable(getattr(_CORE, "bbknn")), (
+            "_core.bbknn is present but not callable"
+        )
 
     def test_result_class_HarmonyResult_exists(self):
         """_core.HarmonyResult is present and is a type."""
         _skip_if_not_present("HarmonyResult", kind="result class")
         cls = getattr(_CORE, "HarmonyResult")
-        assert isinstance(cls, type), f"_core.HarmonyResult is not a type, got {type(cls)}"
+        assert isinstance(cls, type), (
+            f"_core.HarmonyResult is not a type, got {type(cls)}"
+        )
 
     def test_cycle14_all_present(self):
         """Grouped: all cycle 14 names are present in _core.
         KnnResult (cycle 8) is reused by bbknn — checked in TestCycle8BindingsKnn."""
         names = ["harmony", "bbknn", "HarmonyResult"]
         missing = [n for n in names if not hasattr(_CORE, n)]
-        assert not missing, f"Cycle 14 — missing from _core: {missing}"
+        assert not missing, (
+            f"Cycle 14 — missing from _core: {missing}"
+        )
 
 
 # ---------------------------------------------------------------------------
 # TestCycle15BindingsVelocity
 # ---------------------------------------------------------------------------
-
 
 class TestCycle15BindingsVelocity:
     """Cycle 15 — velocity_prep_compute and VelocityPrepResult."""
@@ -779,19 +848,22 @@ class TestCycle15BindingsVelocity:
         """_core.VelocityPrepResult is present and is a type."""
         _skip_if_not_present("VelocityPrepResult", kind="result class")
         cls = getattr(_CORE, "VelocityPrepResult")
-        assert isinstance(cls, type), f"_core.VelocityPrepResult is not a type, got {type(cls)}"
+        assert isinstance(cls, type), (
+            f"_core.VelocityPrepResult is not a type, got {type(cls)}"
+        )
 
     def test_cycle15_all_present(self):
         """Grouped: all cycle 15 names are present in _core."""
         names = ["velocity_prep_compute", "VelocityPrepResult"]
         missing = [n for n in names if not hasattr(_CORE, n)]
-        assert not missing, f"Cycle 15 — missing from _core: {missing}"
+        assert not missing, (
+            f"Cycle 15 — missing from _core: {missing}"
+        )
 
 
 # ---------------------------------------------------------------------------
 # TestCycle16BindingsMtLineage
 # ---------------------------------------------------------------------------
-
 
 class TestCycle16BindingsMtLineage:
     """Cycle 16 — mt_lineage_call_clones and ClonePrediction."""
@@ -807,19 +879,22 @@ class TestCycle16BindingsMtLineage:
         """_core.ClonePrediction is present and is a type."""
         _skip_if_not_present("ClonePrediction", kind="result class")
         cls = getattr(_CORE, "ClonePrediction")
-        assert isinstance(cls, type), f"_core.ClonePrediction is not a type, got {type(cls)}"
+        assert isinstance(cls, type), (
+            f"_core.ClonePrediction is not a type, got {type(cls)}"
+        )
 
     def test_cycle16_all_present(self):
         """Grouped: all cycle 16 names are present in _core."""
         names = ["mt_lineage_call_clones", "ClonePrediction"]
         missing = [n for n in names if not hasattr(_CORE, n)]
-        assert not missing, f"Cycle 16 — missing from _core: {missing}"
+        assert not missing, (
+            f"Cycle 16 — missing from _core: {missing}"
+        )
 
 
 # ---------------------------------------------------------------------------
 # TestCycle17BindingsDonorPseudobulk
 # ---------------------------------------------------------------------------
-
 
 class TestCycle17BindingsDonorPseudobulk:
     """Cycle 17 — donor_pseudobulk_de and DonorPseudobulkResult."""
@@ -835,13 +910,17 @@ class TestCycle17BindingsDonorPseudobulk:
         """_core.DonorPseudobulkResult is present and is a type."""
         _skip_if_not_present("DonorPseudobulkResult", kind="result class")
         cls = getattr(_CORE, "DonorPseudobulkResult")
-        assert isinstance(cls, type), f"_core.DonorPseudobulkResult is not a type, got {type(cls)}"
+        assert isinstance(cls, type), (
+            f"_core.DonorPseudobulkResult is not a type, got {type(cls)}"
+        )
 
     def test_cycle17_all_present(self):
         """Grouped: all cycle 17 names are present in _core."""
         names = ["donor_pseudobulk_de", "DonorPseudobulkResult"]
         missing = [n for n in names if not hasattr(_CORE, n)]
-        assert not missing, f"Cycle 17 — missing from _core: {missing}"
+        assert not missing, (
+            f"Cycle 17 — missing from _core: {missing}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -937,25 +1016,30 @@ def test_all_cycle22_bindings_present():
     """
     missing_funcs = [n for n in _CYCLE22_FUNCTIONS if not hasattr(_CORE, n)]
     missing_classes = [
-        n
-        for n in _CYCLE22_RESULT_CLASSES
+        n for n in _CYCLE22_RESULT_CLASSES
         if not hasattr(_CORE, n) or not isinstance(getattr(_CORE, n), type)
     ]
 
     errors: list[str] = []
     if missing_funcs:
-        errors.append(f"Missing cycle 22 functions ({len(missing_funcs)}): {missing_funcs}")
+        errors.append(
+            f"Missing cycle 22 functions ({len(missing_funcs)}): {missing_funcs}"
+        )
     if missing_classes:
         errors.append(
-            f"Missing/non-type cycle 22 result classes ({len(missing_classes)}): {missing_classes}"
+            f"Missing/non-type cycle 22 result classes ({len(missing_classes)}): "
+            f"{missing_classes}"
         )
 
     if errors:
         # Skip (not fail) when the wheel simply has not been built yet so
         # CI does not block on the absence of a GPU.
-        if not hasattr(_CORE, "streaming_pipeline_run") and not hasattr(_CORE, "knn_graph"):
+        if not hasattr(_CORE, "streaming_pipeline_run") and not hasattr(
+            _CORE, "knn_graph"
+        ):
             pytest.skip(
-                "Cycle 22 bindings not present in wheel — pending GPU build. " + "; ".join(errors)
+                "Cycle 22 bindings not present in wheel — pending GPU build. "
+                + "; ".join(errors)
             )
         pytest.fail("\n".join(errors))
 
@@ -963,7 +1047,6 @@ def test_all_cycle22_bindings_present():
 # ===========================================================================
 # Family G — GPU smoke tests (require_gpu, cupy)
 # ===========================================================================
-
 
 @requires_gpu
 def test_from_cupy_csr_to_cupy_csr_roundtrip():
@@ -990,12 +1073,18 @@ def test_from_cupy_csr_to_cupy_csr_roundtrip():
 
     # Ingest
     dev_csc = _CORE.from_cupy_csr(csr)
-    assert dev_csc.rows == shape[0], f"from_cupy_csr rows {dev_csc.rows} != input rows {shape[0]}"
-    assert dev_csc.cols == shape[1], f"from_cupy_csr cols {dev_csc.cols} != input cols {shape[1]}"
+    assert dev_csc.rows == shape[0], (
+        f"from_cupy_csr rows {dev_csc.rows} != input rows {shape[0]}"
+    )
+    assert dev_csc.cols == shape[1], (
+        f"from_cupy_csr cols {dev_csc.cols} != input cols {shape[1]}"
+    )
 
     # Export back
     export_dict = _CORE.to_cupy_csr(dev_csc)
-    assert isinstance(export_dict, dict), f"to_cupy_csr must return a dict, got {type(export_dict)}"
+    assert isinstance(export_dict, dict), (
+        f"to_cupy_csr must return a dict, got {type(export_dict)}"
+    )
     for key in ("indptr", "indices", "data", "shape"):
         assert key in export_dict, (
             f"to_cupy_csr result dict missing key '{key}'; keys={list(export_dict.keys())}"
@@ -1010,7 +1099,7 @@ def test_from_cupy_csr_to_cupy_csr_roundtrip():
 def test_normalize_total_returns_normalize_result_type(gsm4037629_path):
     """normalize_total called on the loaded GSM4037629 DeviceCsc returns a NormalizeResult."""
     pz_path = gsm4037629_path / _EXON_FILE
-    m = singlet_gpu.io.load_pz(str(pz_path))
+    m = singlet.gpu.io.load_pz(str(pz_path))
 
     # PzDeviceMatrix exposes the underlying DeviceCsc as `.mat` (not `.to_devicecsc()`).
     result = _CORE.normalize_total(m.mat, target_sum=1e4)

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Gene expression violin plots across groups.
 
 Provides singlet.plot_genes_in_groups() — creates violin + strip plots

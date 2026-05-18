@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.mnn_correct()."""
 
 import numpy as np

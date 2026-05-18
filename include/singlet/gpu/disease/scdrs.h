@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (first GPU scDRS-style per-cell disease relevance scoring)
 //
 // disease/scdrs.h — Per-cell disease relevance scoring from GWAS gene sets.
@@ -58,12 +58,8 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
 
 #include <cuda_runtime.h>
 #include <cusparse.h>
@@ -80,7 +76,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace disease {
 
 // ---------------------------------------------------------------------------
@@ -758,7 +754,7 @@ inline void process_disease_chunk(
 // Parameters:
 //   expr        : CSC expression matrix [n_genes × n_cells] (log-normalized).
 //                 Provided by io/pz_device_loader.h; type = core::DeviceCSC
-//                 (= factornet::gpu::SparseMatrixGPU<float>).
+//                 (singlet::gpu::core::DeviceCSC).
 //   gene_names  : gene names aligned with expr rows (length n_genes).
 //   disease_sets: list of DiseaseGeneSet (name + gene→weight map).
 //   cfg         : ScDrsConfig (n_controls, n_bins, seed, disease_chunk).
@@ -867,4 +863,4 @@ inline ScDrsResult score(
 }
 
 }  // namespace disease
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

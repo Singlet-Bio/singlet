@@ -1,12 +1,13 @@
+# SPDX-License-Identifier: MIT
 """
-Cycle 23 / 186 correctness tests for singlet_gpu.enrichment.
+Cycle 23 / 186 correctness tests for singlet.gpu.enrichment.
 
 Tests the GPU-native enrichment wrappers:
   - cycle 13: gsea/{fgsea,aucell}.h
       - ``singlet.gpu.enrichment.run_gsea``
       - ``singlet.gpu.enrichment.run_aucell``
   - cycle 129: enrich/score_genes.h  (cycle 186 Python wrapper)
-      - ``singlet.gpu.enrich.run_score_genes``
+      - ``singlet.gpu.enrichment.run_score_genes``
 
 Formal spec: singlet-gpu/state/designs/22-python-kernel-wrappers-3.md
              singlet-gpu/state/designs/129-score-genes.md (kernel)
@@ -30,11 +31,10 @@ Tolerances (from spec):
   - run_score_genes vs scanpy.tl.score_genes : Spearman ρ ≥ 0.95 (median over sets)
 
 Skip strategy:
-  - Module-level skip if singlet.gpu not available.
+  - Module-level skip if singlet_gpu wheel not built.
   - requires_gpu for all GPU-exercising tests.
   - vs-reference tests additionally skip if reference library is not importable.
 """
-
 from __future__ import annotations
 
 import warnings
@@ -44,29 +44,28 @@ import pandas as pd
 import pytest
 
 singlet_gpu = pytest.importorskip(
-    "singlet.gpu",
-    reason="singlet.gpu not available. Run `pip install -e singlet-gpu/python/` first.",
-    exc_type=ImportError,
+    "singlet_gpu",
+    reason="singlet_gpu wheel not built. Run `pip install -e singlet-gpu/python/` first.",
 )
 
-# Explicitly import enrich subpackage so singlet_gpu.enrich.run_score_genes
-# is resolvable (enrich/ is not auto-imported by singlet/gpu/__init__.py).
+# Explicitly import enrichment subpackage so singlet.gpu.enrichment.run_score_genes
+# is resolvable.
+import singlet.gpu.enrichment  # noqa: E402
 
 from conftest import requires_gpu  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Tolerance constants
 # ---------------------------------------------------------------------------
-_GSEA_SPEARMAN_MIN = 0.95  # Spearman ρ of normalized ES vs decoupler.run_gsea
+_GSEA_SPEARMAN_MIN = 0.95    # Spearman ρ of normalized ES vs decoupler.run_gsea
 _AUCELL_SPEARMAN_MIN = 0.95  # Spearman ρ of AUC scores vs decoupler.run_aucell
 _SEED = 42
 _MIN_N = 5
-_TIMES = 100  # reduced permutations for speed in harness
+_TIMES = 100                 # reduced permutations for speed in harness
 
 # ---------------------------------------------------------------------------
 # Minimal synthetic gene-set net fixture
 # ---------------------------------------------------------------------------
-
 
 def _make_net(var_names: list[str], n_sets: int = 5, set_size: int = 10) -> pd.DataFrame:
     """Build a minimal decoupleR-compatible net DataFrame.
@@ -90,9 +89,8 @@ def _make_net(var_names: list[str], n_sets: int = 5, set_size: int = 10) -> pd.D
 # Helpers
 # ---------------------------------------------------------------------------
 
-
 def _load_gpu_adata(gsm4037629_path):
-    return singlet_gpu.io.read_pz_to_anndata(str(gsm4037629_path))
+    return singlet.gpu.io.read_pz_to_anndata(str(gsm4037629_path))
 
 
 def _gpu_to_cpu_adata(adata_gpu):
@@ -119,15 +117,14 @@ def _gpu_to_cpu_adata(adata_gpu):
 
 def _spearman_rho(a: np.ndarray, b: np.ndarray) -> float:
     from scipy.stats import spearmanr
-
     res = spearmanr(a, b)
     return float(res.correlation if hasattr(res, "correlation") else res[0])
 
 
 def _preprocess_gpu(adata):
     """Normalize + log1p (GPU path) for enrichment input."""
-    singlet_gpu.preprocess.normalize_total(adata, inplace=True)
-    singlet_gpu.preprocess.log1p(adata, inplace=True)
+    singlet.gpu.preprocess.normalize_total(adata, inplace=True)
+    singlet.gpu.preprocess.log1p(adata, inplace=True)
 
 
 def _preprocess_cpu(adata):
@@ -142,10 +139,10 @@ def _preprocess_cpu(adata):
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
     reason="enrichment/gsea.py wrapper assumes the older `_core.fgsea("
-    "matrix, gene_names, gene_sets, times, seed)` API but the binding "
-    "is `(stats, gene_sets, *, min_perm, max_perm, ...)`.  Real "
-    "semantic rewrite needed (~150 LOC).  Filed CYCLE-207-FGSEA-"
-    "WRAPPER-API-REWRITE.",
+           "matrix, gene_names, gene_sets, times, seed)` API but the binding "
+           "is `(stats, gene_sets, *, min_perm, max_perm, ...)`.  Real "
+           "semantic rewrite needed (~150 LOC).  Filed CYCLE-207-FGSEA-"
+           "WRAPPER-API-REWRITE.",
     strict=True,
     raises=TypeError,
 )
@@ -156,7 +153,7 @@ def test_run_gsea_basic(gsm4037629_path):
     Procedure:
       1. Load GSM4037629, normalize + log1p.
       2. Build a synthetic 5-pathway net from var_names.
-      3. Call singlet_gpu.enrichment.run_gsea(adata, net, seed=42).
+      3. Call singlet.gpu.enrichment.run_gsea(adata, net, seed=42).
       4. Assert result is either:
          (a) None (inplace) with adata.obs columns 'gsea_norm_es_PATHWAY_*', OR
          (b) a pd.DataFrame with one row per cell and one column per pathway.
@@ -170,12 +167,16 @@ def test_run_gsea_basic(gsm4037629_path):
 
     net = _make_net(list(adata.var_names), n_sets=5, set_size=_MIN_N)
 
-    result = singlet_gpu.enrichment.run_gsea(adata, net, times=_TIMES, min_n=_MIN_N, seed=_SEED)
+    result = singlet.gpu.enrichment.run_gsea(
+        adata, net, times=_TIMES, min_n=_MIN_N, seed=_SEED
+    )
 
     if result is None:
         # inplace: scores written to adata.obs
         es_cols = [c for c in adata.obs.columns if c.startswith("gsea_norm_es_")]
-        assert len(es_cols) >= 1, "run_gsea(inplace) wrote no 'gsea_norm_es_*' columns to adata.obs"
+        assert len(es_cols) >= 1, (
+            "run_gsea(inplace) wrote no 'gsea_norm_es_*' columns to adata.obs"
+        )
         scores = adata.obs[es_cols[0]].values.astype(np.float64)
     else:
         assert isinstance(result, (pd.DataFrame,)), (
@@ -204,7 +205,7 @@ def test_run_gsea_vs_decoupler(gsm4037629_path):
       1. Load GSM4037629 twice → adata_gpu, adata_cpu.
       2. Preprocess both (normalize + log1p).
       3. Build same synthetic net for both.
-      4. singlet_gpu.enrichment.run_gsea(adata_gpu, net, seed=42).
+      4. singlet.gpu.enrichment.run_gsea(adata_gpu, net, seed=42).
       5. decoupler.run_gsea(adata_cpu, net, source='source', target='target',
                             times=100, min_n=5, seed=42) → result_cpu.
       6. For each pathway, extract scores from both results; compute Spearman ρ.
@@ -213,7 +214,9 @@ def test_run_gsea_vs_decoupler(gsm4037629_path):
     Note: Both are run with the same seed; minor differences are expected due
     to GPU vs CPU floating-point ordering. ρ ≥ 0.95 is the tolerance.
     """
-    dc = pytest.importorskip("decoupler", reason="decoupler not installed — skip vs-reference test")
+    dc = pytest.importorskip(
+        "decoupler", reason="decoupler not installed — skip vs-reference test"
+    )
     pytest.importorskip("scipy.stats", reason="scipy not installed")
     pytest.importorskip("anndata", reason="anndata not installed")
 
@@ -226,20 +229,16 @@ def test_run_gsea_vs_decoupler(gsm4037629_path):
     net = _make_net(list(adata_gpu.var_names), n_sets=5, set_size=_MIN_N)
 
     # GPU run (inplace or returns DataFrame).
-    gpu_result = singlet_gpu.enrichment.run_gsea(
+    gpu_result = singlet.gpu.enrichment.run_gsea(
         adata_gpu, net, times=_TIMES, min_n=_MIN_N, seed=_SEED
     )
 
     # decoupleR reference.
     try:
         dc.run_gsea(
-            adata_cpu,
-            net,
-            source="source",
-            target="target",
-            times=_TIMES,
-            min_n=_MIN_N,
-            seed=_SEED,
+            adata_cpu, net,
+            source="source", target="target",
+            times=_TIMES, min_n=_MIN_N, seed=_SEED,
         )
     except Exception as e:
         pytest.skip(f"decoupler.run_gsea failed: {e}")
@@ -310,9 +309,9 @@ def test_run_gsea_vs_decoupler(gsm4037629_path):
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
     reason="enrichment/aucell.py wrapper has same API mismatch class as fgsea "
-    "(see CYCLE-207).  `_core.aucell()` binding doesn't accept the "
-    "wrapper's positional invocation.  Filed CYCLE-207-FOLLOWUP-"
-    "AUCELL-API.",
+           "(see CYCLE-207).  `_core.aucell()` binding doesn't accept the "
+           "wrapper's positional invocation.  Filed CYCLE-207-FOLLOWUP-"
+           "AUCELL-API.",
     strict=True,
     raises=TypeError,
 )
@@ -323,7 +322,7 @@ def test_run_aucell_basic(gsm4037629_path):
     Procedure:
       1. Load GSM4037629, normalize + log1p.
       2. Build a synthetic 5-pathway net from var_names.
-      3. Call singlet_gpu.enrichment.run_aucell(adata, net, seed=42).
+      3. Call singlet.gpu.enrichment.run_aucell(adata, net, seed=42).
       4. Assert result is either:
          (a) None (inplace) with adata.obsm['X_aucell'] shape (n_cells, n_pathways), OR
          (b) a pd.DataFrame (n_cells × n_pathways).
@@ -337,14 +336,22 @@ def test_run_aucell_basic(gsm4037629_path):
     net = _make_net(list(adata.var_names), n_sets=5, set_size=_MIN_N)
     n_sets = len(net["source"].unique())
 
-    result = singlet_gpu.enrichment.run_aucell(adata, net, min_n=_MIN_N, seed=_SEED)
+    result = singlet.gpu.enrichment.run_aucell(
+        adata, net, min_n=_MIN_N, seed=_SEED
+    )
 
     if result is None:
         # inplace path
-        assert "X_aucell" in adata.obsm, "run_aucell(inplace) did not write adata.obsm['X_aucell']"
+        assert "X_aucell" in adata.obsm, (
+            "run_aucell(inplace) did not write adata.obsm['X_aucell']"
+        )
         auc = np.asarray(adata.obsm["X_aucell"], dtype=np.float64)
-        assert auc.shape[0] == adata.n_obs, f"X_aucell rows {auc.shape[0]} != n_obs {adata.n_obs}"
-        assert auc.shape[1] == n_sets, f"X_aucell cols {auc.shape[1]} != n_sets {n_sets}"
+        assert auc.shape[0] == adata.n_obs, (
+            f"X_aucell rows {auc.shape[0]} != n_obs {adata.n_obs}"
+        )
+        assert auc.shape[1] == n_sets, (
+            f"X_aucell cols {auc.shape[1]} != n_sets {n_sets}"
+        )
     else:
         assert isinstance(result, pd.DataFrame), (
             f"run_aucell() returned unexpected type {type(result)}"
@@ -354,8 +361,12 @@ def test_run_aucell_basic(gsm4037629_path):
         )
         auc = result.values.astype(np.float64)
 
-    assert np.all(auc >= 0.0 - 1e-9), f"AUCell scores contain negative values; min={auc.min():.4e}"
-    assert np.all(auc <= 1.0 + 1e-9), f"AUCell scores contain values > 1.0; max={auc.max():.4e}"
+    assert np.all(auc >= 0.0 - 1e-9), (
+        f"AUCell scores contain negative values; min={auc.min():.4e}"
+    )
+    assert np.all(auc <= 1.0 + 1e-9), (
+        f"AUCell scores contain values > 1.0; max={auc.max():.4e}"
+    )
     assert np.all(np.isfinite(auc)), (
         f"AUCell scores contain non-finite values: {np.sum(~np.isfinite(auc))}"
     )
@@ -372,13 +383,15 @@ def test_run_aucell_vs_decoupler(gsm4037629_path):
       1. Load GSM4037629 twice → adata_gpu, adata_cpu.
       2. Preprocess both (normalize + log1p).
       3. Build same synthetic net for both.
-      4. singlet_gpu.enrichment.run_aucell(adata_gpu, net, seed=42).
+      4. singlet.gpu.enrichment.run_aucell(adata_gpu, net, seed=42).
       5. decoupler.run_aucell(adata_cpu, net, source='source', target='target',
                               min_n=5, seed=42).
       6. For each pathway, extract AUC scores from both; compute Spearman ρ.
       7. Assert median Spearman ρ across pathways ≥ 0.95.
     """
-    dc = pytest.importorskip("decoupler", reason="decoupler not installed — skip vs-reference test")
+    dc = pytest.importorskip(
+        "decoupler", reason="decoupler not installed — skip vs-reference test"
+    )
     pytest.importorskip("scipy.stats", reason="scipy not installed")
     pytest.importorskip("anndata", reason="anndata not installed")
 
@@ -391,17 +404,16 @@ def test_run_aucell_vs_decoupler(gsm4037629_path):
     net = _make_net(list(adata_gpu.var_names), n_sets=5, set_size=_MIN_N)
 
     # GPU run.
-    gpu_result = singlet_gpu.enrichment.run_aucell(adata_gpu, net, min_n=_MIN_N, seed=_SEED)
+    gpu_result = singlet.gpu.enrichment.run_aucell(
+        adata_gpu, net, min_n=_MIN_N, seed=_SEED
+    )
 
     # decoupleR reference.
     try:
         dc.run_aucell(
-            adata_cpu,
-            net,
-            source="source",
-            target="target",
-            min_n=_MIN_N,
-            seed=_SEED,
+            adata_cpu, net,
+            source="source", target="target",
+            min_n=_MIN_N, seed=_SEED,
         )
     except Exception as e:
         pytest.skip(f"decoupler.run_aucell failed: {e}")
@@ -464,7 +476,7 @@ def test_run_aucell_vs_decoupler(gsm4037629_path):
 # score_genes tests (cycle 186 — wrapper for cycle 129 kernel)
 # ===========================================================================
 
-_SCORE_GENES_SPEARMAN_MIN = 0.95  # Spearman ρ vs scanpy.tl.score_genes
+_SCORE_GENES_SPEARMAN_MIN = 0.95   # Spearman ρ vs scanpy.tl.score_genes
 
 
 def _make_gene_lists_dict(
@@ -491,7 +503,7 @@ def test_run_score_genes_basic(gsm4037629_path):
     Procedure:
       1. Load GSM4037629, normalize + log1p (GPU path).
       2. Build 5 gene sets from var_names (dict form).
-      3. Call singlet_gpu.enrich.run_score_genes(adata, gene_lists, copy=False).
+      3. Call singlet.gpu.enrichment.run_score_genes(adata, gene_lists, copy=False).
       4. Assert return is None (inplace).
       5. Assert adata.obs has columns 'score_genes_SET_00' ... 'score_genes_SET_04'.
       6. Assert column values are finite float64.
@@ -503,11 +515,13 @@ def test_run_score_genes_basic(gsm4037629_path):
 
     gene_lists = _make_gene_lists_dict(list(adata.var_names), n_sets=5, set_size=15)
 
-    result = singlet_gpu.enrich.run_score_genes(
+    result = singlet.gpu.enrichment.run_score_genes(
         adata, gene_lists, score_name="score_genes", ctrl_size=50, seed=0
     )
 
-    assert result is None, f"run_score_genes(copy=False) should return None but got {type(result)}"
+    assert result is None, (
+        f"run_score_genes(copy=False) should return None but got {type(result)}"
+    )
 
     expected_cols = [f"score_genes_{k}" for k in gene_lists]
     for col in expected_cols:
@@ -542,7 +556,9 @@ def test_run_score_genes_copy(gsm4037629_path):
 
     gene_lists = _make_gene_lists_dict(list(adata.var_names), n_sets=3, set_size=10)
 
-    returned = singlet_gpu.enrich.run_score_genes(adata, gene_lists, score_name="sg", copy=True)
+    returned = singlet.gpu.enrichment.run_score_genes(
+        adata, gene_lists, score_name="sg", copy=True
+    )
 
     assert returned is not None, "run_score_genes(copy=True) returned None"
     assert returned is not adata, "run_score_genes(copy=True) returned the same object"
@@ -585,15 +601,21 @@ def test_run_score_genes_missing_genes(gsm4037629_path):
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        singlet_gpu.enrich.run_score_genes(adata, gene_lists, score_name="score_genes")
+        singlet.gpu.enrichment.run_score_genes(adata, gene_lists, score_name="score_genes")
 
-    assert len(caught) >= 1, "Expected at least one UserWarning for empty/missing gene set"
+    assert len(caught) >= 1, (
+        "Expected at least one UserWarning for empty/missing gene set"
+    )
 
     good_vals = adata.obs["score_genes_good_set"].values.astype(np.float64)
-    assert np.all(np.isfinite(good_vals)), "score_genes_good_set should be finite"
+    assert np.all(np.isfinite(good_vals)), (
+        "score_genes_good_set should be finite"
+    )
 
     empty_vals = adata.obs["score_genes_empty_set"].values.astype(np.float64)
-    assert np.all(np.isnan(empty_vals)), "score_genes_empty_set should be all NaN (no valid genes)"
+    assert np.all(np.isnan(empty_vals)), (
+        "score_genes_empty_set should be all NaN (no valid genes)"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -601,11 +623,11 @@ def test_run_score_genes_missing_genes(gsm4037629_path):
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
     reason="Real algorithm divergence: GPU score_genes uses LINEAR binning "
-    "(floor((mu-mu_min)/range*n_bins)) while scanpy.tl.score_genes "
-    "uses QUANTILE binning (pd.cut with quantile edges).  With long-"
-    "tail log-norm data, control gene pools differ → uncorrelated "
-    "scores (Spearman ρ 0.10 vs 0.95 threshold).  Filed CYCLE-195-"
-    "FOLLOWUP-SCORE_GENES-QUANTILE-BINNING.",
+           "(floor((mu-mu_min)/range*n_bins)) while scanpy.tl.score_genes "
+           "uses QUANTILE binning (pd.cut with quantile edges).  With long-"
+           "tail log-norm data, control gene pools differ → uncorrelated "
+           "scores (Spearman ρ 0.10 vs 0.95 threshold).  Filed CYCLE-195-"
+           "FOLLOWUP-SCORE_GENES-QUANTILE-BINNING.",
     strict=True,
     raises=AssertionError,
 )
@@ -617,7 +639,7 @@ def test_run_score_genes_vs_scanpy(gsm4037629_path):
       1. Load GSM4037629 twice → adata_gpu, adata_cpu.
       2. Preprocess both (normalize + log1p).
       3. Build same 5 gene sets (dict).
-      4. singlet_gpu.enrich.run_score_genes(adata_gpu, gene_lists, seed=0).
+      4. singlet.gpu.enrichment.run_score_genes(adata_gpu, gene_lists, seed=0).
       5. For each set: scanpy.tl.score_genes(adata_cpu, gene_list, score_name=key).
       6. Extract per-cell scores for each set from both.
       7. Compute Spearman ρ per set; assert median ρ ≥ 0.95.
@@ -638,7 +660,7 @@ def test_run_score_genes_vs_scanpy(gsm4037629_path):
     gene_lists = _make_gene_lists_dict(list(adata_gpu.var_names), n_sets=5, set_size=15)
 
     # GPU run (inplace).
-    singlet_gpu.enrich.run_score_genes(
+    singlet.gpu.enrichment.run_score_genes(
         adata_gpu, gene_lists, score_name="sg", ctrl_size=50, n_bins=25, seed=0
     )
 

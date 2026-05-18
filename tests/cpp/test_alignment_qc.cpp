@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_alignment_qc.cpp — Unit tests for alignment_qc.h (SS2 + B2)
 //
 // Tests:

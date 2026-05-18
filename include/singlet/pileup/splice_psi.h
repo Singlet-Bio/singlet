@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: splice_psi.h
 // G-PSI: Per-cell splice junction PSI (Percent Spliced In).

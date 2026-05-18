@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Harmony batch correction for AnnData objects.
 
 Implements the Harmony algorithm (Korsunsky et al., Nature Methods 2019)

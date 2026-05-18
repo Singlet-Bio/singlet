@@ -1,11 +1,11 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-// singlet-gpu/reduce/nmf/fit.h
+// SPDX-License-Identifier: MIT
+// singlet/gpu/reduce/nmf/fit.h
 //
 // Native sparse NMF via multiplicative update (MU) and coordinate descent (CD).
 // Replaces factornet::nmf::nmf_fit_gpu adapter (CYCLE-105, 2026-04-29).
 //
 // // algorithm derived from factornet/nmf/fit_gpu.cuh
-// // Credit: Zach DeBruine, factornet 2021-2026, GPL-2.0
+// Credit: Zach DeBruine, factornet 2021-2026
 // // MU reference: Lee & Seung 2001, "Algorithms for Non-negative Matrix Factorization"
 // // CD reference: Hsieh & Dhillon 2011, "Fast Coordinate Descent for Non-negative
 //              Sparse Least Squares" (for k < k_cd_cutoff path)
@@ -47,12 +47,12 @@
 
 #pragma once
 
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/core/memory.h>
-#include <singlet-gpu/io/pz_device_loader.h>
-#include <singlet-gpu/reduce/nmf/types.h>
-#include <singlet-gpu/reduce/svd/deflation.h>  // require_host_retained (canonical)
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/core/memory.h>
+#include <singlet/gpu/io/pz_device_loader.h>
+#include <singlet/gpu/reduce/nmf/types.h>
+#include <singlet/gpu/reduce/svd/deflation.h>  // require_host_retained (canonical)
 
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
@@ -163,7 +163,7 @@ __global__ void subtract_identity_k(float* __restrict__ M, int k)
 
 }  // anonymous namespace
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace reduce {
 namespace nmf {
 
@@ -631,4 +631,4 @@ inline NmfResult fit(const io::PzDeviceMatrix& m,
 
 }  // namespace nmf
 }  // namespace reduce
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

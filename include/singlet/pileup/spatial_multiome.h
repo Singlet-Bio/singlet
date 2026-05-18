@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: spatial_multiome.h
 // G-SPATIAL-MULTIOME: Spatial multiome router for Visium HD + spatial RNA/ATAC.

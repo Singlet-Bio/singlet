@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: mirna.h
 // G-MIRNA: miRNA quantification from small RNA-seq data.

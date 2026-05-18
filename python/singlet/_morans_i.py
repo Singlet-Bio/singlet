@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Moran's I spatial autocorrelation for gene expression.
 
 Provides singlet.morans_i() — compute Moran's I statistic for genes on a

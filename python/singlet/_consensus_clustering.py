@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Consensus clustering via multi-resolution Leiden.
 
 Provides singlet.consensus_clustering() — run Leiden at multiple resolutions

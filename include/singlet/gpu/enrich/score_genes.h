@@ -1,7 +1,7 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: scanpy.tl.score_genes (Satija et al. 2015 / Seurat AddModuleScore)
 //
-// singlet-gpu/enrich/score_genes.h
+// singlet/gpu/enrich/score_genes.h
 //
 // Per-cell gene-set scoring with matched control subtraction.
 // Direct GPU port of scanpy.tl.score_genes (Satija et al. 2015 §Methods).
@@ -58,13 +58,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/io/pz_device_loader.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/io/pz_device_loader.h>
 
 #include <cuda_runtime.h>
 #include <cusparse.h>
@@ -79,7 +75,7 @@
 #include <unordered_set>
 #include <vector>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace enrich {
 
 // ---------------------------------------------------------------------------
@@ -272,7 +268,7 @@ inline ScoreGenesResult score_genes(
     cudaStream_t                          stream = nullptr)
 {
     if (stream == nullptr) {
-        stream = singlet_gpu::core::default_context().stream();
+        stream = singlet::gpu::core::default_context().stream();
     }
 
     const int m      = X.mat.rows;  // genes
@@ -339,7 +335,7 @@ inline ScoreGenesResult score_genes(
     // Genes with μ_g outside [μ_min, μ_max] are clamped to bin 0 or n_bins-1.
     // Special case: if all means are equal (μ_max == μ_min), all genes → bin 0.
     // -----------------------------------------------------------------------
-    CUDA_CHECK(cudaStreamSynchronize(stream));  // flush mean kernel before D2H
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));  // flush mean kernel before D2H
 
     std::vector<float> h_mean(m);
     cudaMemcpy(h_mean.data(), d_mean.get(), m * sizeof(float), cudaMemcpyDeviceToHost);
@@ -471,7 +467,7 @@ inline ScoreGenesResult score_genes(
     // -----------------------------------------------------------------------
     core::DeviceMemory<float> d_scores = run_spmm_sg(X, d_W.get(), n_sets, stream);
 
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     ScoreGenesResult res;
     res.scores  = std::move(d_scores);
@@ -481,4 +477,4 @@ inline ScoreGenesResult score_genes(
 }
 
 }  // namespace enrich
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

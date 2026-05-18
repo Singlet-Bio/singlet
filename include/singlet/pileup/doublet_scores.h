@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: doublet_scores.h
 // G-DOUBLET-EXPORT — Per-cell doublet score export (standalone TSV writer).

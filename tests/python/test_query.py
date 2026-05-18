@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet._query: query() and search() with mocked API."""
 
 from unittest.mock import MagicMock, patch
@@ -13,11 +14,11 @@ def set_api_key(monkeypatch):
     monkeypatch.setenv("SINGLET_API_KEY", "sk-test-fake-key")
 
 
-def _make_spz_bytes():
-    """Create a minimal valid .spz file to return from mocked API."""
+def _make_1pz_bytes():
+    """Create a minimal valid .1pz file to return from mocked API."""
     import anndata as ad
     import pandas as pd
-    from singlet._io import write_spz
+    from singlet._io import write_1pz
 
     mat = sp.random(3, 5, density=0.5, format="csr", dtype=np.float64)
     mat.data = np.round(mat.data * 10).astype(np.float64)
@@ -28,8 +29,8 @@ def _make_spz_bytes():
     import tempfile
     from pathlib import Path
 
-    tmp = Path(tempfile.mktemp(suffix=".spz"))
-    write_spz(adata, tmp)
+    tmp = Path(tempfile.mktemp(suffix=".1pz"))
+    write_1pz(adata, tmp)
     data = tmp.read_bytes()
     tmp.unlink()
     return data
@@ -42,9 +43,9 @@ class TestQuery:
         """Sends structured metadata as JSON."""
         from singlet._query import query
 
-        spz_data = _make_spz_bytes()
+        pz_data = _make_1pz_bytes()
         mock_resp = MagicMock()
-        mock_resp.content = spz_data
+        mock_resp.content = pz_data
         mock_resp.raise_for_status = MagicMock()
 
         with patch("requests.post", return_value=mock_resp) as mock_post:
@@ -61,9 +62,9 @@ class TestQuery:
         """List params are comma-joined."""
         from singlet._query import query
 
-        spz_data = _make_spz_bytes()
+        pz_data = _make_1pz_bytes()
         mock_resp = MagicMock()
-        mock_resp.content = spz_data
+        mock_resp.content = pz_data
         mock_resp.raise_for_status = MagicMock()
 
         with patch("requests.post", return_value=mock_resp) as mock_post:
@@ -77,9 +78,9 @@ class TestQuery:
         """None values are not included in params."""
         from singlet._query import query
 
-        spz_data = _make_spz_bytes()
+        pz_data = _make_1pz_bytes()
         mock_resp = MagicMock()
-        mock_resp.content = spz_data
+        mock_resp.content = pz_data
         mock_resp.raise_for_status = MagicMock()
 
         with patch("requests.post", return_value=mock_resp) as mock_post:
@@ -97,9 +98,9 @@ class TestSearch:
         """Sends text query to search endpoint."""
         from singlet._query import search
 
-        spz_data = _make_spz_bytes()
+        pz_data = _make_1pz_bytes()
         mock_resp = MagicMock()
-        mock_resp.content = spz_data
+        mock_resp.content = pz_data
         mock_resp.raise_for_status = MagicMock()
 
         with patch("requests.post", return_value=mock_resp) as mock_post:
@@ -115,9 +116,9 @@ class TestSearch:
         """max_results is passed through."""
         from singlet._query import search
 
-        spz_data = _make_spz_bytes()
+        pz_data = _make_1pz_bytes()
         mock_resp = MagicMock()
-        mock_resp.content = spz_data
+        mock_resp.content = pz_data
         mock_resp.raise_for_status = MagicMock()
 
         with patch("requests.post", return_value=mock_resp) as mock_post:

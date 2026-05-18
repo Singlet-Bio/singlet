@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Cell-level differential expression.
 
 Provides singlet.cell_level_de() — compute local differential expression

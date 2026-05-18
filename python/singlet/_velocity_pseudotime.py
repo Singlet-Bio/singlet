@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """RNA velocity-inspired pseudotime computation.
 
 Provides singlet.velocity_pseudotime() — computes pseudotime based on

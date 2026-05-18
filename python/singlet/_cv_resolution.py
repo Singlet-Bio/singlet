@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Cross-validate clustering resolution."""
 
 from __future__ import annotations

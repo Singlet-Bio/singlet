@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Label transfer via ingestion."""
 
 from __future__ import annotations

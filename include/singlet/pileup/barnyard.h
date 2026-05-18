@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: barnyard.h
 // G-BARNYARD: Per-cell species classification from dual-genome alignment.

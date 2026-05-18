@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: ambient_profile.h
 // G-AMBIENT — Ambient RNA profile export (SoupX / CellBender compatible).

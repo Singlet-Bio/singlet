@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // REF-FETCH-CMD: Reference download and STAR build plan builder
 // Builds shell commands for downloading Ensembl genome/GTF and running

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.gene_activity_score()."""
 
 import numpy as np

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: h5ad_writer.h
 // Export sparse count matrices as Scanpy-compatible AnnData .h5ad files.
@@ -28,6 +29,8 @@
 #include <map>
 #include <string>
 #include <vector>
+
+#include "h5_util.h"
 
 namespace singlet {
 
@@ -77,29 +80,12 @@ static_assert(sizeof(long long)  == 8, "long long must be 8 bytes for indptr int
 static_assert(sizeof(int)        == 4, "int must be 4 bytes for indices int32");
 static_assert(sizeof(float)      == 4, "float must be 4 bytes for data float32");
 
-// Create a variable-length UTF-8 C string HDF5 type (caller must H5Tclose).
-inline hid_t make_vlen_str_type() {
-    hid_t t = H5Tcopy(H5T_C_S1);
-    H5Tset_size(t, H5T_VARIABLE);
-    H5Tset_strpad(t, H5T_STR_NULLTERM);
-    H5Tset_cset(t, H5T_CSET_UTF8);
-    return t;
-}
-
-// Write a scalar VL-string attribute on loc.
-inline bool write_str_attr(hid_t loc, const char* name, const char* value) {
-    hid_t stype = make_vlen_str_type();
-    hid_t space = H5Screate(H5S_SCALAR);
-    hid_t attr  = H5Acreate2(loc, name, stype, space, H5P_DEFAULT, H5P_DEFAULT);
-    bool ok = (attr >= 0);
-    if (ok) {
-        ok = (H5Awrite(attr, stype, &value) >= 0);  // &value: VL strings take const char**
-        H5Aclose(attr);
-    }
-    H5Sclose(space);
-    H5Tclose(stype);
-    return ok;
-}
+// Shared HDF5 boilerplate — canonical definitions live in h5_util.h.
+using ::singlet::pileup::h5::make_vlen_str_type;
+using ::singlet::pileup::h5::write_str_attr;
+using ::singlet::pileup::h5::write_numeric_dataset;
+// h5ad spells its VL-string dataset helper write_vlen_str_dataset.
+using ::singlet::pileup::h5::write_vlen_str_dataset;
 
 // Write a VL-string array attribute on loc (empty array is valid: n==0).
 inline bool write_str_array_attr(hid_t loc, const char* name,
@@ -121,47 +107,6 @@ inline bool write_str_array_attr(hid_t loc, const char* name,
     }
     H5Sclose(space);
     H5Tclose(stype);
-    return ok;
-}
-
-// Write a VL-string 1-D dataset into grp.  Empty vector produces a 0-length dataset.
-inline bool write_vlen_str_dataset(hid_t grp, const char* name,
-                                    const std::vector<std::string>& strings) {
-    hid_t stype = make_vlen_str_type();
-    hsize_t n   = static_cast<hsize_t>(strings.size());
-    hid_t space = H5Screate_simple(1, &n, nullptr);
-    hid_t dset  = H5Dcreate2(grp, name, stype, space, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    bool ok = (dset >= 0);
-    if (ok) {
-        if (n > 0) {
-            std::vector<const char*> ptrs;
-            ptrs.reserve(n);
-            for (const auto& s : strings) ptrs.push_back(s.c_str());
-            ok = (H5Dwrite(dset, stype, H5S_ALL, H5S_ALL, H5P_DEFAULT, ptrs.data()) >= 0);
-        }
-        H5Dclose(dset);
-    }
-    H5Sclose(space);
-    H5Tclose(stype);
-    return ok;
-}
-
-// Write a 1-D numeric dataset into grp.
-// mem_type: HDF5 type of the in-memory buffer (e.g. H5T_NATIVE_INT).
-// file_type: HDF5 type to store in the file (may differ for upcasting).
-inline bool write_numeric_dataset(hid_t grp, const char* name,
-                                   hsize_t count, hid_t file_type,
-                                   hid_t mem_type, const void* buf) {
-    hid_t space = H5Screate_simple(1, &count, nullptr);
-    hid_t dset  = H5Dcreate2(grp, name, file_type, space, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    bool ok = (dset >= 0);
-    if (ok) {
-        if (count > 0 && buf != nullptr) {
-            ok = (H5Dwrite(dset, mem_type, H5S_ALL, H5S_ALL, H5P_DEFAULT, buf) >= 0);
-        }
-        H5Dclose(dset);
-    }
-    H5Sclose(space);
     return ok;
 }
 

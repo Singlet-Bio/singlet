@@ -1,15 +1,15 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-// singlet-gpu/version.h — version constants for the public umbrella.
+// SPDX-License-Identifier: MIT
+// singlet/gpu/version.h — version constants for the public umbrella.
 //
 // Pre-1.0: hardcoded in source. After the first MINOR cut, these are written
 // by CMake at configure time from the project version + git describe. The
-// public umbrella header `singlet_gpu.hpp` only exposes the four functions
+// public umbrella header `singlet::gpu.hpp` only exposes the four functions
 // declared here; never mutate them by hand without bumping
 // `state/release-policy.md` accordingly.
 
 #pragma once
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 
 constexpr int version_major() noexcept { return 0; }
 constexpr int version_minor() noexcept { return 1; }
@@ -25,4 +25,4 @@ constexpr const char* commit_sha() noexcept {
 #endif
 }
 
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

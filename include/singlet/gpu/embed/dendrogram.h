@@ -1,7 +1,7 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: scanpy.tl.dendrogram (hierarchical clustering of cluster centroids)
 //
-// singlet-gpu/embed/dendrogram.h
+// singlet/gpu/embed/dendrogram.h
 //
 // Dendrogram — hierarchical clustering of cluster centroids for visualization
 // of cluster relationships. Mirrors the scanpy.tl.dendrogram → scipy UPGMA
@@ -34,13 +34,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/io/pz_device_loader.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/io/pz_device_loader.h>
 
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
@@ -53,7 +49,7 @@
 #include <string>
 #include <vector>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace embed {
 
 // ---------------------------------------------------------------------------
@@ -362,7 +358,7 @@ inline DendrogramResult dendrogram(
     (void)cfg;  // deterministic flag is documentation-only.
 
     if (stream == nullptr)
-        stream = singlet_gpu::core::default_context().stream();
+        stream = singlet::gpu::core::default_context().stream();
 
     const int m = X.mat.rows;
     const int n = X.mat.cols;
@@ -384,10 +380,10 @@ inline DendrogramResult dendrogram(
     // D2H label[n] — one-shot to compute n_per_cluster (Rule 4 compliant).
     // -------------------------------------------------------------------------
     std::vector<int> h_label(static_cast<size_t>(n));
-    CUDA_CHECK(cudaMemcpyAsync(h_label.data(), d_label,
+    SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(h_label.data(), d_label,
                                static_cast<size_t>(n) * sizeof(int),
                                cudaMemcpyDeviceToHost, stream));
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     std::vector<float> h_n_per_cluster(static_cast<size_t>(k_clusters), 0.f);
     for (int c = 0; c < n; ++c) {
@@ -398,7 +394,7 @@ inline DendrogramResult dendrogram(
 
     // Upload n_per_cluster to device for the divide kernel.
     core::DeviceMemory<float> d_n_per_cluster(static_cast<size_t>(k_clusters));
-    CUDA_CHECK(cudaMemcpyAsync(d_n_per_cluster.get(), h_n_per_cluster.data(),
+    SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(d_n_per_cluster.get(), h_n_per_cluster.data(),
                                static_cast<size_t>(k_clusters) * sizeof(float),
                                cudaMemcpyHostToDevice, stream));
 
@@ -407,7 +403,7 @@ inline DendrogramResult dendrogram(
     // -------------------------------------------------------------------------
     const size_t mu_sz = static_cast<size_t>(m) * static_cast<size_t>(k_clusters);
     core::DeviceMemory<float> d_mu(mu_sz);
-    CUDA_CHECK(cudaMemsetAsync(d_mu.get(), 0, mu_sz * sizeof(float), stream));
+    SINGLET_GPU_CUDA_CHECK(cudaMemsetAsync(d_mu.get(), 0, mu_sz * sizeof(float), stream));
 
     // Atomic scatter: one block per column (cell), threads over nnz in column.
     dgram_centroid_scatter_kernel<<<n, THREADS, 0, stream>>>(
@@ -426,7 +422,7 @@ inline DendrogramResult dendrogram(
 
     // Save centroids before in-place centering/normalization overwrites d_mu.
     core::DeviceMemory<float> d_centroids(mu_sz);
-    CUDA_CHECK(cudaMemcpyAsync(d_centroids.get(), d_mu.get(),
+    SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(d_centroids.get(), d_mu.get(),
                                mu_sz * sizeof(float),
                                cudaMemcpyDeviceToDevice, stream));
 
@@ -470,7 +466,7 @@ inline DendrogramResult dendrogram(
     const size_t k2_sz = static_cast<size_t>(k_clusters) * static_cast<size_t>(k_clusters);
     core::DeviceMemory<float> d_corr(k2_sz);
     {
-        cublasHandle_t blas = singlet_gpu::core::default_context().blas();
+        cublasHandle_t blas = singlet::gpu::core::default_context().blas();
         cublasSetStream(blas, stream);
         const float alpha = 1.f, beta = 0.f;
         CUBLAS_CHECK(cublasSgemm(
@@ -496,13 +492,13 @@ inline DendrogramResult dendrogram(
         dgram_dist_kernel<<<grid, THREADS, 0, stream>>>(d_corr.get(), k_clusters);
     }
 
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     // -------------------------------------------------------------------------
     // Step 3 — D2H distance matrix, then host UPGMA (Rule 4 one-shot).
     // -------------------------------------------------------------------------
     std::vector<float> h_dist(k2_sz);
-    CUDA_CHECK(cudaMemcpy(h_dist.data(), d_corr.get(),
+    SINGLET_GPU_CUDA_CHECK(cudaMemcpy(h_dist.data(), d_corr.get(),
                           k2_sz * sizeof(float), cudaMemcpyDeviceToHost));
 
     // Convert col-major (k × k) to row-major for host_upgma (symmetric — same).
@@ -524,4 +520,4 @@ inline DendrogramResult dendrogram(
 }
 
 }  // namespace embed
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

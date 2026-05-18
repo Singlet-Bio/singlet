@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_spatial_multiome.cpp — unit tests for spatial_multiome.h
 // G-SPATIAL-MULTIOME: Spatial Multiome Router (Visium HD + spatial RNA/ATAC)
 

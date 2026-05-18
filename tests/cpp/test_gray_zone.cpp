@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Unit tests for the gray-zone ambient supplement logic in EmptyDrops cell calling.
 //
 // When the ambient pool is too thin (<300 barcodes or <10000 total UMI), the

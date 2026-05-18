@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """singlet.torch — PyTorch integration for .1pz sparse matrices.
 
 Provides zero-copy DataLoaders and GPU-friendly sparse tensor pipelines.

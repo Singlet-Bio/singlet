@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test/test_donor_demux_perf.cpp
 // Performance and correctness tests for the optimised donor_demux.h.
 // All tests are synthetic — no disk files required.
@@ -24,19 +25,7 @@
 using namespace singlet;
 
 // ─── Minimal test framework ──────────────────────────────────────────────────
-static int n_pass = 0;
-static int n_fail = 0;
-
-#define CHECK(cond, msg)                                                          \
-    do {                                                                          \
-        if (cond) {                                                               \
-            std::cout << "  PASS: " << (msg) << "\n";                            \
-            ++n_pass;                                                             \
-        } else {                                                                  \
-            std::cout << "  FAIL: " << (msg) << " [line " << __LINE__ << "]\n";  \
-            ++n_fail;                                                             \
-        }                                                                         \
-    } while (0)
+#include "test_harness.h"  // CHECK(cond, msg) + n_pass / n_fail
 
 // ─── Synthetic data generator ────────────────────────────────────────────────
 // Generates CoveredSNPData with K known donors and random allele frequencies.

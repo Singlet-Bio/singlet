@@ -1,13 +1,14 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.generative — GPU-native generative models.
 
-Exposes:
-    discrete_diffusion.train   — train D3PM model (cycle 30)
-    discrete_diffusion.sample  — sample from trained model
-    discrete_diffusion.DiscreteDiffusionWrapper
+Public API
+----------
+train                    — train a D3PM discrete-diffusion model (cycle 30).
+sample                   — sample synthetic expression from a trained model.
+DiscreteDiffusionWrapper — trained-model wrapper with save/load.
 """
 
-from . import discrete_diffusion
+from .discrete_diffusion import train, sample, DiscreteDiffusionWrapper
 
-__all__ = ["discrete_diffusion"]
+__all__ = ["train", "sample", "DiscreteDiffusionWrapper"]

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.marker_gene_overlap()."""
 
 import numpy as np

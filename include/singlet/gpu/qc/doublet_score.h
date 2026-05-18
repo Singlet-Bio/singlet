@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (Scrublet-style synthetic doublet scoring on GPU)
 //
 // qc/doublet_score.h — GPU-native doublet detection via synthetic doublet scoring.
@@ -64,10 +64,10 @@
 #include <cub/device/device_scan.cuh>
 #include <cub/device/device_select.cuh>
 
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/graph/knn.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/graph/knn.h>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace qc {
 
 // ─── Public API types ─────────────────────────────────────────────────────────
@@ -444,4 +444,4 @@ doublet_score(const core::DeviceDense&    embedding,
 }
 
 }  // namespace qc
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Splicing ratio computation.
 
 Provides singlet.splicing_ratio() — compute the fraction of spliced

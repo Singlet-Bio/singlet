@@ -1,13 +1,14 @@
+// SPDX-License-Identifier: MIT
 // lib1fq/reader.h — Block-by-block .1fq file reader
 //
 // Reads .1fq files and decodes blocks into byte-numeric sequences
 // ready for STAR's Read1[] buffers.
 //
 // Usage:
-//   lib1fq::Reader r;
+//   singlet::fq::Reader r;
 //   r.open("input.1fq");
 //   auto hdr = r.header();
-//   lib1fq::DecodedBlock blk;
+//   singlet::fq::DecodedBlock blk;
 //   while (r.read_block(blk)) {
 //       for (uint32_t i = 0; i < blk.n_reads; i++) {
 //           // blk.r2_seq(i), blk.r2_len(i) — ready for STAR
@@ -28,7 +29,7 @@
 #include "protocol.h"
 #include "types.h"
 
-namespace lib1fq {
+namespace singlet::fq {
 
 // Decoded block: provides access to read data in byte-numeric format
 struct DecodedBlock {
@@ -823,4 +824,4 @@ class Reader {
     std::vector<uint8_t> raw_buf_;
 };
 
-}  // namespace lib1fq
+}  // namespace singlet::fq

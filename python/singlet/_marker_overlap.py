@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Marker gene overlap analysis."""
 
 from __future__ import annotations

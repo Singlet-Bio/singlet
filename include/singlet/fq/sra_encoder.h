@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // lib1fq/sra_encoder.h — Streaming SRA → .1fq encoder (direct VDB path)
 //
 // Zero-copy VDB cursor → byte-numeric conversion → .1fq blocks.
@@ -31,7 +32,7 @@
 #include "lib1fq.h"
 #include "sra_reader.h"
 
-namespace lib1fq {
+namespace singlet::fq {
 
 // ── Profiling timer ──
 
@@ -2627,4 +2628,4 @@ class SraEncoder {
     }
 };
 
-}  // namespace lib1fq
+}  // namespace singlet::fq

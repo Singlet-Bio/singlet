@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.preprocessing._detect FASTQ-based functions."""
 
 import gzip

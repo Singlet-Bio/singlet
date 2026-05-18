@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.cca() Canonical Correlation Analysis."""
 
 import numpy as np

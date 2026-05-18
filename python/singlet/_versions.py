@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """System information for bug reports (like pandas.show_versions)."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Test for IntervalTree
 #include "singlet/pileup/interval_tree.h"
 #include <cassert>

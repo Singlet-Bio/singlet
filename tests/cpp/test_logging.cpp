@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_logging.cpp — unit tests for pipeline_log.h (G-LOGGING)
 #include <atomic>
 #include <cassert>

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.transfer_labels()."""
 
 import numpy as np

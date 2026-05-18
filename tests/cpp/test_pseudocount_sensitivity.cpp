@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Pseudocount sensitivity analysis for EmptyDrops cell calling.
 // Ablates pseudo in {0.05, 0.1, 0.2, 0.3, 0.5, 1.0} against a synthetic
 // matrix with overlapping cell/ambient gene programs, measuring recall,

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: saturation_curve.h
 // G-SATCURVE: Sequencing saturation downsampling curves.

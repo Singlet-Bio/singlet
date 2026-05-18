@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Rebuild sample_index.parquet and catalog_v1.parquet from Supabase.
 
 Run periodically to keep offline data fresh:

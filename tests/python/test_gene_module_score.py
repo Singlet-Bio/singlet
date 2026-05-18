@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.gene_module_score() module scoring."""
 
 import numpy as np

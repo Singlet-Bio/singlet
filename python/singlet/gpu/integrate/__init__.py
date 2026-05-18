@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.integrate — GPU-native batch integration methods.
 
@@ -14,7 +14,7 @@ extension.  Both wrappers raise ``AttributeError`` with this tag if the
 bindings are missing.
 """
 
-from .bbknn import bbknn
 from .harmony import harmony_integrate
+from .bbknn import bbknn
 
 __all__ = ["harmony_integrate", "bbknn"]

@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-// singlet-gpu/reduce/nmf/init.h
+// SPDX-License-Identifier: MIT
+// singlet/gpu/reduce/nmf/init.h
 //
 // NMF factor initialization helpers.
 // CYCLE-105: updated to use native DenseMatrix (no factornet/Eigen dep).
@@ -12,15 +12,15 @@
 
 #pragma once
 
-#include <singlet-gpu/reduce/nmf/types.h>
-#include <singlet-gpu/reduce/svd/deflation.h>
-#include <singlet-gpu/io/pz_device_loader.h>
+#include <singlet/gpu/reduce/nmf/types.h>
+#include <singlet/gpu/reduce/svd/deflation.h>
+#include <singlet/gpu/io/pz_device_loader.h>
 
 #include <cmath>
 #include <cstdint>
 #include <utility>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace reduce {
 namespace nmf {
 
@@ -86,4 +86,4 @@ init_deflation(const io::PzDeviceMatrix& mat, int k, const NmfConfig& cfg)
 
 }  // namespace nmf
 }  // namespace reduce
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

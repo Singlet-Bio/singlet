@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test/test_spatial_barcodes.cpp — Unit tests for G-SPATIAL-BARCODES
 // Tests: SlideseqDecoder, StereoseqDecoder, VisiumHdDecoder, HdstDecoder,
 //        MerfishDecoder, detect_spatial_platform, make_decoder factory.
@@ -11,18 +12,8 @@
 
 using namespace singlet;
 
-static int g_pass = 0;
-static int g_fail = 0;
-
-#define CHECK(cond, msg)                                               \
-    do {                                                               \
-        if (!(cond)) {                                                 \
-            std::cerr << "FAIL [" << __LINE__ << "]: " << msg << "\n"; \
-            ++g_fail;                                                  \
-        } else {                                                       \
-            ++g_pass;                                                  \
-        }                                                              \
-    } while (0)
+#define SINGLET_TEST_HARNESS_QUIET
+#include "test_harness.h"  // CHECK(cond, msg) + g_pass / g_fail
 
 // ── Slide-seq ─────────────────────────────────────────────────────────────────
 

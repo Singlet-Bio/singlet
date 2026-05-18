@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 #include <algorithm>
 #include <cctype>
@@ -95,21 +96,21 @@ inline std::string peek_protocol_family(const std::string& path) {
     std::fclose(f);
     if (n < 58) return "";
 
-    auto at = static_cast<lib1fq::AssayType>(buf[57]);
+    auto at = static_cast<singlet::fq::AssayType>(buf[57]);
     switch (at) {
-        case lib1fq::AssayType::SC_MULTIOME_GEX:
+        case singlet::fq::AssayType::SC_MULTIOME_GEX:
             return "10x-arc-gex";
-        case lib1fq::AssayType::SC_MULTIOME_ATAC:
+        case singlet::fq::AssayType::SC_MULTIOME_ATAC:
             return "10x-arc-atac";
-        case lib1fq::AssayType::SC_ATAC:
+        case singlet::fq::AssayType::SC_ATAC:
             return "10x-atac";
-        case lib1fq::AssayType::SC_RNA_3PRIME:
+        case singlet::fq::AssayType::SC_RNA_3PRIME:
             return "10x-3p-v3";
-        case lib1fq::AssayType::SC_RNA_5PRIME:
+        case singlet::fq::AssayType::SC_RNA_5PRIME:
             return "10x-5p-v2";
-        case lib1fq::AssayType::SPATIAL_RNA:
+        case singlet::fq::AssayType::SPATIAL_RNA:
             return "10x-visium";
-        case lib1fq::AssayType::BULK_RNA:
+        case singlet::fq::AssayType::BULK_RNA:
             return "bulk-rna";
         default:
             return "";

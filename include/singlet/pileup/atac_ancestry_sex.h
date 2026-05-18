@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: atac_ancestry_sex.h
 // A5 — ATAC-seq ancestry classification + sex/karyotype calling.

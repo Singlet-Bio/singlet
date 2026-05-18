@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: provenance.h
 // Pipeline provenance manifest writer (N8).

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Realistic ambient RNA correction tests with PBMC-like synthetic matrix.
 //
 // Tests:

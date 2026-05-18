@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.scanorama_integrate()."""
 
 import numpy as np

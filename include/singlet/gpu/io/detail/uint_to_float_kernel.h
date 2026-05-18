@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-// singlet-gpu/io/detail/uint_to_float_kernel.h
+// SPDX-License-Identifier: MIT
+// singlet/gpu/io/detail/uint_to_float_kernel.h
 //
 // Fused on-device uint8/uint16/uint32 → fp32 conversion kernels.
 //
@@ -24,28 +24,17 @@
 
 #pragma once
 
+#include <singlet/gpu/core/types.h>
+
 #include <cuda_runtime.h>
 #include <cstdint>
 #include <cstdio>
 #include <stdexcept>
 #include <string>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace io {
 namespace detail {
-
-// ---------------------------------------------------------------------------
-// CUDA error-check helper (local, avoids pulling in all of types.cuh here).
-// ---------------------------------------------------------------------------
-inline void cu_check(cudaError_t err, const char* file, int line) {
-    if (err != cudaSuccess) {
-        char buf[256];
-        std::snprintf(buf, sizeof(buf), "CUDA error at %s:%d: %s",
-                      file, line, cudaGetErrorString(err));
-        throw std::runtime_error(buf);
-    }
-}
-#define PZ_CUDA_CHECK(x) singlet_gpu::io::detail::cu_check((x), __FILE__, __LINE__)
 
 // ---------------------------------------------------------------------------
 // uint8 → float (exact: max 255 < 2^23 mantissa precision)
@@ -123,8 +112,8 @@ inline void launch_uint_to_float(
     if (vt_code == 1) {
         // uint8 staging
         uint8_t* d_staging = nullptr;
-        PZ_CUDA_CHECK(cudaMalloc(&d_staging, nnz * sizeof(uint8_t)));
-        PZ_CUDA_CHECK(cudaMemcpyAsync(d_staging, host_raw_values,
+        SINGLET_GPU_CUDA_CHECK(cudaMalloc(&d_staging, nnz * sizeof(uint8_t)));
+        SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(d_staging, host_raw_values,
                                       nnz * sizeof(uint8_t),
                                       cudaMemcpyHostToDevice, stream));
         uint8_to_float_kernel<<<grid, BLOCK, 0, stream>>>(
@@ -133,41 +122,41 @@ inline void launch_uint_to_float(
         // WHY cudaFreeAsync not available pre-CUDA-11.2; use synchronous
         // free here — acceptable because this is a one-time staging path,
         // not a hot loop.
-        PZ_CUDA_CHECK(cudaStreamSynchronize(stream));
+        SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
         cudaFree(d_staging);
 
     } else if (vt_code == 2) {
         // uint16 staging
         uint16_t* d_staging = nullptr;
-        PZ_CUDA_CHECK(cudaMalloc(&d_staging, nnz * sizeof(uint16_t)));
-        PZ_CUDA_CHECK(cudaMemcpyAsync(d_staging, host_raw_values,
+        SINGLET_GPU_CUDA_CHECK(cudaMalloc(&d_staging, nnz * sizeof(uint16_t)));
+        SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(d_staging, host_raw_values,
                                       nnz * sizeof(uint16_t),
                                       cudaMemcpyHostToDevice, stream));
         uint16_to_float_kernel<<<grid, BLOCK, 0, stream>>>(
             d_staging, dst_device, static_cast<uint32_t>(nnz));
-        PZ_CUDA_CHECK(cudaStreamSynchronize(stream));
+        SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
         cudaFree(d_staging);
 
     } else if (vt_code == 3) {
         // uint32 staging
         uint32_t* d_staging     = nullptr;
         uint32_t* d_overflow    = nullptr;
-        PZ_CUDA_CHECK(cudaMalloc(&d_staging,  nnz * sizeof(uint32_t)));
-        PZ_CUDA_CHECK(cudaMalloc(&d_overflow, sizeof(uint32_t)));
-        PZ_CUDA_CHECK(cudaMemsetAsync(d_overflow, 0, sizeof(uint32_t), stream));
-        PZ_CUDA_CHECK(cudaMemcpyAsync(d_staging, host_raw_values,
+        SINGLET_GPU_CUDA_CHECK(cudaMalloc(&d_staging,  nnz * sizeof(uint32_t)));
+        SINGLET_GPU_CUDA_CHECK(cudaMalloc(&d_overflow, sizeof(uint32_t)));
+        SINGLET_GPU_CUDA_CHECK(cudaMemsetAsync(d_overflow, 0, sizeof(uint32_t), stream));
+        SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(d_staging, host_raw_values,
                                       nnz * sizeof(uint32_t),
                                       cudaMemcpyHostToDevice, stream));
         uint32_to_float_kernel<<<grid, BLOCK, 0, stream>>>(
             d_staging, dst_device, static_cast<uint32_t>(nnz), d_overflow);
         // Scalar overflow check: copy 4 bytes to host for warning.
         uint32_t h_overflow = 0;
-        PZ_CUDA_CHECK(cudaStreamSynchronize(stream));
-        PZ_CUDA_CHECK(cudaMemcpy(&h_overflow, d_overflow, sizeof(uint32_t),
+        SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
+        SINGLET_GPU_CUDA_CHECK(cudaMemcpy(&h_overflow, d_overflow, sizeof(uint32_t),
                                  cudaMemcpyDeviceToHost));
         if (h_overflow > 0) {
             std::fprintf(stderr,
-                "[singlet-gpu/pz_device_loader] WARNING: %u values > 2^24 "
+                "[singlet/gpu/pz_device_loader] WARNING: %u values > 2^24 "
                 "converted to fp32 with precision loss.\n", h_overflow);
         }
         cudaFree(d_staging);
@@ -179,8 +168,7 @@ inline void launch_uint_to_float(
     }
 }
 
-#undef PZ_CUDA_CHECK
 
 }  // namespace detail
 }  // namespace io
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

@@ -26,6 +26,7 @@ Suggests:
     SummarizedExperiment,
     Seurat,
     BiocGenerics,
+    reticulate,
     testthat (>= 3.0.0),
     knitr,
     rmarkdown

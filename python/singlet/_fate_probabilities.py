@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Cell fate probability estimation via absorption probabilities.
 
 Provides singlet.fate_probabilities() — computes the probability of each

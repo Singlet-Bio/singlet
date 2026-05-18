@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # singlet-gpu/r/R/reticulate_bridge.R
 #
 # Optional reticulate bridge to rapids-singlecell Python functions.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: cell_calling.h
 // EmptyDrops-style statistical cell calling (N5).

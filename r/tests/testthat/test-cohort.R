@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 test_that("read_cohort loads multiple sample directories", {
     dir <- skip_if_no_fixture()
     if (!file.exists(file.path(dir, "spliced.1pz"))) {

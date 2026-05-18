@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 test_that("read_singlet_dir loads every .1pz and attaches metadata", {
     dir <- skip_if_no_fixture()
 

@@ -1,7 +1,7 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: decoupleR (Badia-i-Mompel et al. 2022)
 //
-// singlet-gpu/enrich/decoupler_mlm.h
+// singlet/gpu/enrich/decoupler_mlm.h
 //
 // MLM (Multivariate Linear Model) pathway-scoring method from decoupleR.
 //
@@ -53,13 +53,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/io/pz_device_loader.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/io/pz_device_loader.h>
 
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
@@ -71,10 +67,9 @@
 #include <stdexcept>
 #include <string>
 
-// Local CUSOLVER_CHECK — throws on cuSOLVER error. Defined locally because
-// core/types.h ships only CUDA_CHECK / CUSPARSE_CHECK / CUBLAS_CHECK; cuSOLVER
-// callers in singlet-gpu have historically rolled their own (see
-// SGPU_DSF_CUSOLVER_CHECK in preprocess/deconv_size_factors.h).
+// Local CUSOLVER_CHECK — short unprefixed alias used by this header's cuSOLVER
+// call sites. The canonical macro is SINGLET_GPU_CUSOLVER_CHECK in
+// core/types.h; this #ifndef-guarded alias keeps the local call sites terse.
 #ifndef CUSOLVER_CHECK
 #  define CUSOLVER_CHECK(call)                                              \
     do {                                                                    \
@@ -87,7 +82,7 @@
     } while (0)
 #endif
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace enrich {
 
 // ---------------------------------------------------------------------------
@@ -309,7 +304,7 @@ inline MlmResult mlm(
     cudaStream_t              stream = nullptr)
 {
     if (stream == nullptr) {
-        stream = singlet_gpu::core::default_context().stream();
+        stream = singlet::gpu::core::default_context().stream();
     }
 
     const int m   = X.mat.rows;   // genes
@@ -332,8 +327,8 @@ inline MlmResult mlm(
     constexpr int THREADS = 256;
 
     // Acquire handles from default context (single set of handles per process).
-    cublasHandle_t     blas_h   = singlet_gpu::core::default_context().blas();
-    cusolverDnHandle_t solver_h = singlet_gpu::core::default_context().solver();
+    cublasHandle_t     blas_h   = singlet::gpu::core::default_context().blas();
+    cusolverDnHandle_t solver_h = singlet::gpu::core::default_context().solver();
     cublasSetStream(blas_h, stream);
     cusolverDnSetStream(solver_h, stream);
 
@@ -431,7 +426,7 @@ inline MlmResult mlm(
         d_info.get()));
 
     // Synchronize and check Cholesky info (one D2H scalar — Rule 4 allows one-shot).
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
     int h_info = 0;
     cudaMemcpy(&h_info, d_info.get(), sizeof(int), cudaMemcpyDeviceToHost);
     if (h_info != 0) {
@@ -458,7 +453,7 @@ inline MlmResult mlm(
         d_info.get()));    // device info output
 
     // Check Spotrs info (synchronize, one D2H scalar).
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
     cudaMemcpy(&h_info, d_info.get(), sizeof(int), cudaMemcpyDeviceToHost);
     if (h_info != 0) {
         throw std::runtime_error(
@@ -488,7 +483,7 @@ inline MlmResult mlm(
             d_scores.get(), n));      // C: (n×p) col-major, ldC=n
     }
 
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     MlmResult res;
     res.scores     = std::move(d_scores);
@@ -498,4 +493,4 @@ inline MlmResult mlm(
 }
 
 }  // namespace enrich
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.calculate_qc_metrics()."""
 
 import numpy as np

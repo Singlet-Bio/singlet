@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: SoupX ambient RNA correction (Young & Behjati 2020)
 // qc/soupx.h — GPU-native ambient-RNA decontamination for 10X droplet data.
 // Young MD, Behjati S (2020) GigaScience 9:giaa151.
@@ -17,13 +17,9 @@
 // CYCLE-141: initial implementation.
 
 #pragma once
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/io/pz_device_loader.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/io/pz_device_loader.h>
 
 #include <cuda_runtime.h>
 #include <cub/device/device_reduce.cuh>
@@ -36,7 +32,7 @@
 #include <string>
 #include <vector>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace qc {
 
 struct SoupxConfig {
@@ -177,7 +173,7 @@ inline SoupxResult
 soupx(const io::PzDeviceMatrix& X, const SoupxConfig& cfg = {},
       cudaStream_t stream = nullptr)
 {
-    if (stream == nullptr) stream = singlet_gpu::core::default_context().stream();
+    if (stream == nullptr) stream = singlet::gpu::core::default_context().stream();
 
     const int m   = X.mat.rows;
     const int n   = X.mat.cols;
@@ -233,7 +229,7 @@ soupx(const io::PzDeviceMatrix& X, const SoupxConfig& cfg = {},
         cub::DeviceReduce::Sum(d_tmp.get(), tmp_bytes,
                                d_ambient.get(), d_total.get(), m, stream);
     }
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
     float h_total = 0.f;
     cudaMemcpy(&h_total, d_total.get(), sizeof(float), cudaMemcpyDeviceToHost);
     if (h_total <= 0.f)
@@ -245,7 +241,7 @@ soupx(const io::PzDeviceMatrix& X, const SoupxConfig& cfg = {},
         d_ambient.get(), m, 1.f / h_total);
 
     // Pass 3: host-side top-ambient-gene mask construction (one D2H of π).
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
     std::vector<float> h_pi(m);
     cudaMemcpy(h_pi.data(), d_ambient.get(), m * sizeof(float), cudaMemcpyDeviceToHost);
 
@@ -292,7 +288,7 @@ soupx(const io::PzDeviceMatrix& X, const SoupxConfig& cfg = {},
             d_corrected.get(), n, nnz, m);
     }
 
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     SoupxResult res;
     res.corrected   = std::move(d_corrected);
@@ -304,4 +300,4 @@ soupx(const io::PzDeviceMatrix& X, const SoupxConfig& cfg = {},
 }
 
 }  // namespace qc
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

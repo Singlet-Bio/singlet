@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.plot_ranking()."""
 
 import numpy as np

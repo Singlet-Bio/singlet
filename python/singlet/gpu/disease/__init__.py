@@ -1,18 +1,17 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.disease — GPU-native disease relevance scoring.
 
-Submodules
+Public API
 ----------
-scdrs : scDRS polygenic enrichment scoring (cycle 50).
+scdrs              — scDRS polygenic enrichment scoring (cycle 50).
+scdrs_run_from_csc — scDRS from a raw DeviceCsc.
 """
 
-from singlet.gpu.disease import scdrs as scdrs_module
-from singlet.gpu.disease.scdrs import run_from_anndata as scdrs
-from singlet.gpu.disease.scdrs import run_from_csc as scdrs_run_from_csc
+from .scdrs import run_from_csc as scdrs_run_from_csc
+from .scdrs import run_from_anndata as scdrs
 
 __all__ = [
     "scdrs",
     "scdrs_run_from_csc",
-    "scdrs_module",
 ]

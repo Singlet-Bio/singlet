@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.optimal_transport()."""
 
 import numpy as np

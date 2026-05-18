@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Allow running with: python -m singlet.mcp"""
 
 import asyncio

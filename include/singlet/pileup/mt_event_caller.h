@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: mt_event_caller.h
 // Donor-aware mitochondrial event caller (Gate G6, Track A).
@@ -35,6 +36,7 @@
 #include "mt_heteroplasmy.h"
 #include "sparse_accumulator.h"
 #include "pz_writer.h"
+#include "kmer_util.h"
 
 namespace singlet {
 namespace mt {
@@ -335,17 +337,9 @@ static inline const MtCdsRegion* find_mt_cds(
 static inline bool is_mt_frameshift(uint16_t len) { return (len % 3) != 0; }
 
 /// Reverse-complement a string (ACGTN).
+/// Thin wrapper over the shared singlet::pileup::kmer helper.
 static inline std::string mt_revcomp(const std::string& s) {
-    std::string r;
-    r.reserve(s.size());
-    for (int i = static_cast<int>(s.size())-1; i >= 0; --i) {
-        switch (s[i]) {
-            case 'A': r+='T'; break; case 'T': r+='A'; break;
-            case 'C': r+='G'; break; case 'G': r+='C'; break;
-            default:  r+='N'; break;
-        }
-    }
-    return r;
+    return ::singlet::pileup::kmer::revcomp_ascii(s);
 }
 
 /// Vertebrate mitochondrial genetic code stop codons (NCBI table 2).

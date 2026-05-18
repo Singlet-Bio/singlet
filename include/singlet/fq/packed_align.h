@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // lib1fq/packed_align.h — 2-bit packed alignment primitives (Phase 5)
 //
 // Provides 64-bit XOR-based sequence comparison (32 bases per operation),
@@ -12,7 +13,7 @@
 #include <cstdint>
 #include <cstring>
 
-namespace lib1fq {
+namespace singlet::fq {
 namespace packed_align {
 
 // ── 64-bit packed comparison (32 bases per XOR) ──
@@ -201,4 +202,4 @@ inline bool has_n_in_range(const uint8_t* n_bitmap,
 }
 
 } // namespace packed_align
-} // namespace lib1fq
+} // namespace singlet::fq

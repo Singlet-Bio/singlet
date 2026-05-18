@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Louvain community detection."""
 
 from __future__ import annotations

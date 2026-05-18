@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_bulk_atac.cpp — Unit tests for G-BULK-ATAC: bulk_atac.h
 //
 // Tests:

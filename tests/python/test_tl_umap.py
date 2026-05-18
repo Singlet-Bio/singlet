@@ -1,5 +1,6 @@
+# SPDX-License-Identifier: MIT
 """
-Cycle 21 correctness tests for singlet_gpu.tools.umap().
+Cycle 21 correctness tests for singlet.gpu.tools.umap().
 
 Tests the GPU-native UMAP embedding wrapper (cycle 10: embed/umap.h):
   - ``singlet.gpu.tools.umap``
@@ -21,19 +22,17 @@ Tests:
   - test_umap_vs_scanpy_trustworthiness    : trustworthiness ≥ 0.85 vs sc.tl.umap
 
 Skip strategy:
-  - Module-level skip if singlet.gpu not available.
+  - Module-level skip if singlet_gpu wheel not built.
   - requires_gpu marker for all GPU-exercising tests.
 """
-
 from __future__ import annotations
 
 import numpy as np
 import pytest
 
 singlet_gpu = pytest.importorskip(
-    "singlet.gpu",
-    reason="singlet.gpu not available. Run `pip install -e singlet-gpu/python/` first.",
-    exc_type=ImportError,
+    "singlet_gpu",
+    reason="singlet_gpu wheel not built. Run `pip install -e singlet-gpu/python/` first.",
 )
 
 from conftest import requires_gpu  # noqa: E402
@@ -41,19 +40,18 @@ from conftest import requires_gpu  # noqa: E402
 # ---------------------------------------------------------------------------
 # Tolerance constants
 # ---------------------------------------------------------------------------
-_TRUST_MIN = 0.85  # trustworthiness vs scanpy UMAP (spec tolerance)
+_TRUST_MIN = 0.85        # trustworthiness vs scanpy UMAP (spec tolerance)
 _SEED = 0xC0FFEE
 _N_NEIGHBORS = 15
 _N_COMPS = 50
-_TRUST_K = 15  # k for trustworthiness metric
+_TRUST_K = 15            # k for trustworthiness metric
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-
 def _load_gpu_adata(gsm4037629_path):
-    return singlet_gpu.io.read_pz_to_anndata(str(gsm4037629_path))
+    return singlet.gpu.io.read_pz_to_anndata(str(gsm4037629_path))
 
 
 def _gpu_to_cpu_adata(adata_gpu):
@@ -80,10 +78,10 @@ def _gpu_to_cpu_adata(adata_gpu):
 
 def _full_pipeline_gpu(adata_gpu):
     """Preprocess + PCA + neighbors (GPU). Precursor for UMAP."""
-    singlet_gpu.preprocess.normalize_total(adata_gpu, inplace=True)
-    singlet_gpu.preprocess.log1p(adata_gpu, inplace=True)
-    singlet_gpu.reduce.pca(adata_gpu, n_comps=_N_COMPS, inplace=True)
-    singlet_gpu.pp.neighbors(adata_gpu, n_neighbors=_N_NEIGHBORS)
+    singlet.gpu.preprocess.normalize_total(adata_gpu, inplace=True)
+    singlet.gpu.preprocess.log1p(adata_gpu, inplace=True)
+    singlet.gpu.reduce.pca(adata_gpu, n_comps=_N_COMPS, inplace=True)
+    singlet.gpu.preprocess.neighbors(adata_gpu, n_neighbors=_N_NEIGHBORS)
 
 
 def _full_pipeline_cpu(adata_cpu):
@@ -103,7 +101,6 @@ def _trustworthiness(X_high, X_low, k=15):
     """
     try:
         from sklearn.manifold import trustworthiness as sk_trust
-
         return float(sk_trust(X_high, X_low, n_neighbors=k))
     except ImportError:
         pass
@@ -117,7 +114,7 @@ def _trustworthiness(X_high, X_low, k=15):
 
     # For each point i, rank neighbours by distance in high-dim space.
     rank_high = np.argsort(np.argsort(D_high, axis=1), axis=1)
-    nn_low = np.argsort(D_low, axis=1)[:, 1 : k + 1]  # k NN in low-dim (exclude self)
+    nn_low = np.argsort(D_low, axis=1)[:, 1:k + 1]  # k NN in low-dim (exclude self)
 
     t_sum = 0.0
     for i in range(n):
@@ -141,8 +138,7 @@ def _to_numpy(arr):
 # test_umap_basic
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
-    strict=True,
-    raises=RuntimeError,
+    strict=True, raises=RuntimeError,
     reason="INFRA-CUVS-CUGRAPH-INSTALL: umap_embed requires cuML; not installed on GPU nodes (state/blockers.md)",
 )
 @requires_gpu
@@ -151,7 +147,7 @@ def test_umap_basic(gsm4037629_path):
 
     Procedure:
       1. Load GSM4037629, preprocess + PCA + neighbors.
-      2. Call singlet_gpu.tools.umap(adata, init_pos='random', rng=_SEED).
+      2. Call singlet.gpu.tools.umap(adata, init_pos='random', rng=_SEED).
       3. Assert returns None (inplace convention).
       4. Assert adata.obsm['X_umap'] exists.
     """
@@ -160,18 +156,21 @@ def test_umap_basic(gsm4037629_path):
     adata = _load_gpu_adata(gsm4037629_path)
     _full_pipeline_gpu(adata)
 
-    ret = singlet_gpu.tools.umap(adata, init_pos="random", rng=_SEED)
+    ret = singlet.gpu.tools.umap(adata, init_pos="random", rng=_SEED)
 
-    assert ret is None, f"umap() inplace must return None (scanpy convention), got {type(ret)}"
-    assert "X_umap" in adata.obsm, "umap(): adata.obsm['X_umap'] not written"
+    assert ret is None, (
+        f"umap() inplace must return None (scanpy convention), got {type(ret)}"
+    )
+    assert "X_umap" in adata.obsm, (
+        "umap(): adata.obsm['X_umap'] not written"
+    )
 
 
 # ---------------------------------------------------------------------------
 # test_umap_writes_obsm
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
-    strict=True,
-    raises=RuntimeError,
+    strict=True, raises=RuntimeError,
     reason="INFRA-CUVS-CUGRAPH-INSTALL: umap_embed requires cuML; not installed on GPU nodes (state/blockers.md)",
 )
 @requires_gpu
@@ -187,14 +186,16 @@ def test_umap_writes_obsm(gsm4037629_path):
 
     adata = _load_gpu_adata(gsm4037629_path)
     _full_pipeline_gpu(adata)
-    singlet_gpu.tools.umap(adata, n_components=2, init_pos="random", rng=_SEED)
+    singlet.gpu.tools.umap(adata, n_components=2, init_pos="random", rng=_SEED)
 
     assert "X_umap" in adata.obsm, "X_umap not written"
 
     X_umap = _to_numpy(adata.obsm["X_umap"])
 
     assert X_umap.ndim == 2, f"X_umap must be 2-D, got {X_umap.ndim}-D"
-    assert X_umap.shape == (adata.n_obs, 2), f"X_umap shape {X_umap.shape} != ({adata.n_obs}, 2)"
+    assert X_umap.shape == (adata.n_obs, 2), (
+        f"X_umap shape {X_umap.shape} != ({adata.n_obs}, 2)"
+    )
     assert np.all(np.isfinite(X_umap)), "X_umap contains NaN or Inf"
 
     # Each UMAP dimension must have non-zero variance.
@@ -209,8 +210,7 @@ def test_umap_writes_obsm(gsm4037629_path):
 # test_umap_n_components
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
-    strict=True,
-    raises=RuntimeError,
+    strict=True, raises=RuntimeError,
     reason="INFRA-CUVS-CUGRAPH-INSTALL: umap_embed requires cuML; not installed on GPU nodes (state/blockers.md)",
 )
 @requires_gpu
@@ -226,21 +226,23 @@ def test_umap_n_components(gsm4037629_path):
     for n_comp in [2, 3]:
         adata = _load_gpu_adata(gsm4037629_path)
         _full_pipeline_gpu(adata)
-        singlet_gpu.tools.umap(adata, n_components=n_comp, init_pos="random", rng=_SEED)
+        singlet.gpu.tools.umap(adata, n_components=n_comp, init_pos="random", rng=_SEED)
 
         X_umap = _to_numpy(adata.obsm["X_umap"])
         assert X_umap.shape == (adata.n_obs, n_comp), (
-            f"n_components={n_comp}: X_umap shape {X_umap.shape} != ({adata.n_obs}, {n_comp})"
+            f"n_components={n_comp}: X_umap shape {X_umap.shape} != "
+            f"({adata.n_obs}, {n_comp})"
         )
-        assert np.all(np.isfinite(X_umap)), f"n_components={n_comp}: X_umap contains NaN or Inf"
+        assert np.all(np.isfinite(X_umap)), (
+            f"n_components={n_comp}: X_umap contains NaN or Inf"
+        )
 
 
 # ---------------------------------------------------------------------------
 # test_umap_vs_scanpy_trustworthiness
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
-    strict=True,
-    raises=RuntimeError,
+    strict=True, raises=RuntimeError,
     reason="INFRA-CUVS-CUGRAPH-INSTALL: umap_embed requires cuML; not installed on GPU nodes (state/blockers.md)",
 )
 @requires_gpu
@@ -255,7 +257,7 @@ def test_umap_vs_scanpy_trustworthiness(gsm4037629_path):
 
     Procedure:
       1. Load GSM4037629, preprocess + PCA + neighbors.
-      2. singlet_gpu.tools.umap(adata) → X_umap.
+      2. singlet.gpu.tools.umap(adata) → X_umap.
       3. Compute trustworthiness(X_pca[:, :_TRUST_K], X_umap, k=_TRUST_K).
       4. Assert trustworthiness ≥ 0.85.
 
@@ -266,7 +268,7 @@ def test_umap_vs_scanpy_trustworthiness(gsm4037629_path):
 
     adata = _load_gpu_adata(gsm4037629_path)
     _full_pipeline_gpu(adata)
-    singlet_gpu.tools.umap(adata, n_components=2, init_pos="random", rng=_SEED)
+    singlet.gpu.tools.umap(adata, n_components=2, init_pos="random", rng=_SEED)
 
     X_pca = _to_numpy(adata.obsm["X_pca"])
     X_umap = _to_numpy(adata.obsm["X_umap"])

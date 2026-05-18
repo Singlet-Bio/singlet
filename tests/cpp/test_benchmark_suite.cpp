@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_benchmark_suite.cpp — Unit tests for singlet/pileup/benchmark_suite.h
 #include <cassert>
 #include <cstdlib>
@@ -7,22 +8,11 @@
 
 #include "singlet/pileup/benchmark_suite.h"
 
-using namespace singlet_pileup::benchmark;
+using namespace singlet::pileup::benchmark;
 namespace fs = std::filesystem;
 
-static int g_pass = 0;
-static int g_fail = 0;
-
-#define CHECK(cond)                                                     \
-    do {                                                                \
-        if (cond) {                                                     \
-            ++g_pass;                                                   \
-        } else {                                                        \
-            ++g_fail;                                                   \
-            std::cerr << "FAIL: " << #cond                              \
-                      << " at " << __FILE__ << ":" << __LINE__ << "\n"; \
-        }                                                               \
-    } while (0)
+#define SINGLET_TEST_HARNESS_TERSE
+#include "test_harness.h"  // CHECK(cond) + g_pass / g_fail
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 

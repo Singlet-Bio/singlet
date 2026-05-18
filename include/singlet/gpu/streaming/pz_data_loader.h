@@ -1,19 +1,19 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-// integrates: singlet-gpu/io/pz_device_loader.h — PzChunkIterator
-//             singlet-gpu/io/chunk.h             — singlet_gpu::io::Chunk
+// SPDX-License-Identifier: MIT
+// integrates: singlet/gpu/io/pz_device_loader.h — PzChunkIterator
+//             singlet/gpu/io/chunk.h             — singlet::gpu::io::Chunk
 //
 // PzDataLoader — streaming bridge from .1pz files to native chunked NMF.
 //
 // CYCLE-106: factornet::io::DataLoader<float> base class removed; PzDataLoader
 // is now a free-standing class.  The Eigen::SparseMatrix dependency that came
-// with factornet::io::Chunk<float> is replaced by singlet_gpu::io::Chunk (raw
+// with factornet::io::Chunk<float> is replaced by singlet::gpu::io::Chunk (raw
 // host CSC vectors).  chunked_fit(loader, cfg) in reduce/nmf/chunked.h
 // delegates to the PzChunkIterator path using loader.path() — so that overload
 // still compiles unchanged despite the interface change.
 //
 // Non-zero-copy note (the ONLY non-zero-copy path in singlet-gpu):
 //   PzChunkIterator → pinned host CSC (our format).
-//   PzDataLoader::next_forward() → singlet_gpu::io::Chunk (CSC vectors, copied).
+//   PzDataLoader::next_forward() → singlet::gpu::io::Chunk (CSC vectors, copied).
 //   upload_chunk() in streamed_pipeline.h → H2D cudaMemcpyAsync.
 //   Total per-chunk cost for 100k-col × 30k-row × ~1k nnz/col:
 //     - std::vector construction: ~30k nnz * 8 bytes ≈ 240 MB (values+indices)
@@ -32,8 +32,8 @@
 
 #pragma once
 
-#include <singlet-gpu/io/chunk.h>
-#include <singlet-gpu/io/pz_device_loader.h>
+#include <singlet/gpu/io/chunk.h>
+#include <singlet/gpu/io/pz_device_loader.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -42,13 +42,13 @@
 #include <string>
 #include <vector>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace io {
 
 // ---------------------------------------------------------------------------
 // PzDataLoader — free-standing streaming loader over a single .1pz file.
 //
-// Yields native singlet_gpu::io::Chunk panels (host CSC slabs).
+// Yields native singlet::gpu::io::Chunk panels (host CSC slabs).
 // No virtual interface — callers iterate directly via next_forward / next_transpose.
 // ---------------------------------------------------------------------------
 class PzDataLoader {
@@ -93,7 +93,7 @@ public:
     // Extracts columns [col_start, col_start + chunk_width) from pinned host CSC.
     // Cost: proportional to the chunk's nnz (memcpy of indices + values).
     // -----------------------------------------------------------------------
-    bool next_forward(singlet_gpu::io::Chunk& out)
+    bool next_forward(singlet::gpu::io::Chunk& out)
     {
         if (fwd_chunk_idx_ >= n_fwd_chunks_) return false;
 
@@ -136,7 +136,7 @@ public:
     // WHY lazy: chunked NMF accesses transpose chunks sequentially but in a
     // separate outer loop; building on first call is simpler than random access.
     // -----------------------------------------------------------------------
-    bool next_transpose(singlet_gpu::io::Chunk& out)
+    bool next_transpose(singlet::gpu::io::Chunk& out)
     {
         if (trp_chunk_idx_ >= n_trp_chunks_) return false;
 
@@ -235,4 +235,4 @@ private:
 };
 
 }  // namespace io
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.predict_cell_type()."""
 
 import numpy as np

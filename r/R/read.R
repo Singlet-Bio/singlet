@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 #' singlet: Read singlet pipeline outputs into R.
 #'
 #' This package provides R readers for the ``.1pz`` files produced by the

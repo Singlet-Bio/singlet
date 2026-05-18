@@ -8,13 +8,13 @@
 //   ./nmf_smoke /path/to/counts.1pz
 //   ./nmf_smoke /path/to/counts.1pz 20   # rank 20
 
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/memory.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/io/pz_device_loader.h>
-#include <singlet-gpu/reduce/nmf/fit.h>
-#include <singlet-gpu/reduce/nmf/types.h>
-#include <singlet-gpu/version.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/memory.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/io/pz_device_loader.h>
+#include <singlet/gpu/reduce/nmf/fit.h>
+#include <singlet/gpu/reduce/nmf/types.h>
+#include <singlet/gpu/version.h>
 
 #include <cstdio>
 #include <cstdlib>
@@ -22,10 +22,10 @@
 
 int main(int argc, char** argv) {
     std::printf("singlet-gpu %d.%d.%d (commit %s)\n",
-                singlet_gpu::version_major(),
-                singlet_gpu::version_minor(),
-                singlet_gpu::version_patch(),
-                singlet_gpu::commit_sha());
+                singlet::gpu::version_major(),
+                singlet::gpu::version_minor(),
+                singlet::gpu::version_patch(),
+                singlet::gpu::commit_sha());
 
     if (argc < 2) {
         std::printf("Usage: %s <path.1pz> [rank=10]\n", argv[0]);
@@ -37,7 +37,7 @@ int main(int argc, char** argv) {
     const int k = (argc >= 3) ? std::atoi(argv[2]) : 10;
 
     std::printf("Loading %s ...\n", path.c_str());
-    auto mat = singlet_gpu::io::load_pz(path, /*stream=*/nullptr, /*keep_host_pinned=*/true);
+    auto mat = singlet::gpu::io::load_pz(path, /*stream=*/nullptr, /*keep_host_pinned=*/true);
     cudaStreamSynchronize(mat.producer_stream);
 
     std::printf("  %d genes x %d cells, %lld nnz\n",
@@ -46,7 +46,7 @@ int main(int argc, char** argv) {
 
     std::printf("Running NMF at rank k=%d (MU solver) ...\n", k);
 
-    singlet_gpu::reduce::nmf::NmfConfig cfg;
+    singlet::gpu::reduce::nmf::NmfConfig cfg;
     cfg.rank         = k;
     cfg.max_iter     = 50;
     cfg.solver_mode  = 2;   // MU explicitly
@@ -54,7 +54,7 @@ int main(int argc, char** argv) {
     cfg.seed         = 42;
     cfg.verbose      = false;
 
-    auto result = singlet_gpu::reduce::nmf::fit(mat, cfg);
+    auto result = singlet::gpu::reduce::nmf::fit(mat, cfg);
 
     std::printf("NMF done: %d iters, converged=%d\n",
                 result.iterations, result.converged ? 1 : 0);

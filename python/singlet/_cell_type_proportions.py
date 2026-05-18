@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Cell type proportion computation across conditions.
 
 Provides singlet.cell_type_proportions() — computes the fraction of each

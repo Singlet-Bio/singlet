@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (Harmony adapted) + cycle 8 KNN (BBKNN)
 //
 // integrate/types.h — Shared type definitions for the integration module.
@@ -7,16 +7,12 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/graph/knn.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/graph/knn.h>
 #include <cuda_runtime.h>
 #include <cstdint>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace integrate {
 
 // ─── Harmony types ────────────────────────────────────────────────────────────
@@ -47,4 +43,4 @@ struct BbknnConfig {
 };
 
 }  // namespace integrate
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

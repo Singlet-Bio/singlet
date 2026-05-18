@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_summary_json.cpp
 // Unit tests for summary_json.h
 // Tests: PipelineSummary serialization, classify_outcome, json_escape,

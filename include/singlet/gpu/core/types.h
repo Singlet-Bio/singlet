@@ -1,12 +1,12 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-// singlet-gpu/core/types.h
+// SPDX-License-Identifier: MIT
+// singlet/gpu/core/types.h
 //
 // Native GPU type definitions — DeviceCSC, DeviceDense, DeviceMemory.
 // Replaces factornet re-exports as of CYCLE-105 (2026-04-29).
 //
 // Algorithm credit: CSC layout follows factornet::gpu::SparseMatrixGPU<float>
-// conventions (Zach DeBruine, factornet 2021-2026, GPL-2.0).
-// Field names preserved for ABI compatibility with existing call sites.
+// conventions (Zach DeBruine, factornet 2021-2026).
+// Field names are stable across all singlet::gpu call sites.
 
 #pragma once
 
@@ -24,9 +24,8 @@
 // ---------------------------------------------------------------------------
 // SINGLET_GPU_CUDA_CHECK — throw on CUDA error; named to avoid collisions.
 // WHY defined here: several headers (scale.h, lognorm.h, donor_pseudobulk.h)
-// use CUDA_CHECK which was previously supplied by factornet headers (CYCLE-105
-// removed that dependency). Define once in the root types header so all
-// singlet-gpu headers see it without an extra include.
+// call it directly. Define once in the root types header so all singlet-gpu
+// headers see it without an extra include.
 // ---------------------------------------------------------------------------
 #define SINGLET_GPU_CUDA_CHECK(call)                                            \
     do {                                                                        \
@@ -38,12 +37,8 @@
         }                                                                       \
     } while (0)
 
-#ifndef CUDA_CHECK
-#  define CUDA_CHECK(call) SINGLET_GPU_CUDA_CHECK(call)
-#endif
-
 // cuSPARSE status check — throws on any error code other than SUCCESS.
-// Same pattern as CUDA_CHECK; named independently to avoid factornet collision.
+// Same pattern as SINGLET_GPU_CUDA_CHECK.
 #define SINGLET_GPU_CUSPARSE_CHECK(call)                                        \
     do {                                                                        \
         cusparseStatus_t _singlet_st = (call);                                  \
@@ -93,7 +88,25 @@
 #  define CURAND_CHECK(call) SINGLET_GPU_CURAND_CHECK(call)
 #endif
 
-namespace singlet_gpu {
+// cuSOLVER status check — throws on any error code other than SUCCESS.
+// WHY here: part of the canonical singlet::gpu error-check macro set so
+// headers that call cuSOLVER directly (deconv_size_factors.h) get it from
+// the root types header without an extra include.  Guarded with #ifndef so
+// core/sparse_eigensolver.h's local define still wins if it is included first.
+#include <cusolverDn.h>
+#ifndef SINGLET_GPU_CUSOLVER_CHECK
+#  define SINGLET_GPU_CUSOLVER_CHECK(call)                                      \
+    do {                                                                        \
+        cusolverStatus_t _singlet_cs = (call);                                  \
+        if (_singlet_cs != CUSOLVER_STATUS_SUCCESS) {                           \
+            throw std::runtime_error(                                           \
+                std::string("cuSOLVER error in " __FILE__ ": ")                 \
+                + std::to_string(static_cast<int>(_singlet_cs)));               \
+        }                                                                       \
+    } while (0)
+#endif
+
+namespace singlet::gpu {
 namespace core {
 
 // ---------------------------------------------------------------------------
@@ -127,9 +140,9 @@ public:
     DeviceMemory(T* ptr, std::size_t n, bool owns) noexcept
         : ptr_(ptr), n_(n), owns_(owns) {}
 
-    // Non-owning factory — mirrors factornet::gpu::DeviceMemory<T>::wrap() API.
-    // WHY static: lets callers migrate from factornet::gpu::DeviceMemory<T>::wrap(...)
-    // to singlet_gpu::core::DeviceMemory<T>::wrap(...) without changing call shape.
+    // Non-owning factory — wraps an externally-owned device pointer.
+    // WHY static: gives callers a clear, named entry point for building a
+    // non-owning singlet::gpu::core::DeviceMemory<T> view over a borrowed ptr.
     static DeviceMemory<T> wrap(T* ptr, std::size_t n) noexcept {
         return DeviceMemory<T>(ptr, n, /*owns=*/false);
     }
@@ -173,7 +186,6 @@ private:
 // DeviceCSC — CSC sparse matrix on device (genes × cells, fp32).
 //
 // Layout: col_ptr[n+1] (int32), row_indices[nnz] (int32), values[nnz] (float).
-// Field names match factornet::gpu::SparseMatrixGPU<float> for ABI compat.
 // algorithm derived from factornet/gpu/types.cuh
 // ---------------------------------------------------------------------------
 struct DeviceCSC {
@@ -224,7 +236,6 @@ struct DeviceCSC {
 // ---------------------------------------------------------------------------
 // DeviceDense — column-major dense matrix on device (fp32).
 //
-// Field names match factornet::gpu::DenseMatrixGPU<float> for ABI compat.
 // algorithm derived from factornet/gpu/types.cuh
 // ---------------------------------------------------------------------------
 struct DeviceDense {
@@ -262,4 +273,4 @@ struct DeviceDense {
 };
 
 }  // namespace core
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

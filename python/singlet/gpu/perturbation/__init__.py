@@ -1,12 +1,13 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.perturbation — GPU-native perturbation modeling.
 
-Exposes:
-    perturb_graph.fit                  — train CPA (cycle 32)
-    perturb_graph.PerturbGraphModel    — trained model with predict_perturbation()
+Public API
+----------
+fit               — train a CPA perturbation-graph model (cycle 32).
+PerturbGraphModel — trained model with predict_perturbation().
 """
 
-from . import perturb_graph
+from .perturb_graph import fit, PerturbGraphModel
 
-__all__ = ["perturb_graph"]
+__all__ = ["fit", "PerturbGraphModel"]

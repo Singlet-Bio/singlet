@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // nonhost_em.h — EM abundance deconvolution for nonhost species (NONHOST-EM)
 //
 // Converts per-read MinSketch multi-hit scores into species-level relative

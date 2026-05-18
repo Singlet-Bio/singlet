@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (first GPU ssGSEA single-sample KS enrichment)
 //
 // enrich/ssgsea.h — Per-cell single-sample GSEA (ssGSEA / PLAID) GPU implementation.
@@ -54,11 +54,7 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
+#include <singlet/gpu/core/types.h>
 
 #include <cuda_runtime.h>
 #include <cub/block/block_radix_sort.cuh>
@@ -74,7 +70,7 @@
 #include <stdexcept>
 #include <algorithm>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace enrich {
 
 // ---------------------------------------------------------------------------
@@ -98,7 +94,7 @@ struct SsGseaConfig {
 };
 
 struct SsGseaResult {
-    singlet_gpu::core::DeviceMemory<float> scores;  // [n_sets × n_cells], column-major (device)
+    singlet::gpu::core::DeviceMemory<float> scores;  // [n_sets × n_cells], column-major (device)
     int n_sets  = 0;
     int n_cells = 0;
 };
@@ -397,7 +393,7 @@ void ks_enrichment_kernel(
 // Caller synchronizes stream before reading.
 
 inline SsGseaResult ssgsea(
-    const singlet_gpu::core::DeviceCSC& mat,
+    const singlet::gpu::core::DeviceCSC& mat,
     const SsGseaGeneSets&               gene_sets,
     const SsGseaConfig&                 cfg,
     cudaStream_t                        stream)
@@ -413,8 +409,8 @@ inline SsGseaResult ssgsea(
 
     // ---- Upload gene set metadata once (small; ≤ 2 MB for 1000 sets × 50 genes) ---
     const int total_nnz = (int)gene_sets.gene_idx.size();
-    singlet_gpu::core::DeviceMemory<int> d_set_offsets_all((int)gene_sets.set_offsets.size());
-    singlet_gpu::core::DeviceMemory<int> d_gene_idx_all(total_nnz);
+    singlet::gpu::core::DeviceMemory<int> d_set_offsets_all((int)gene_sets.set_offsets.size());
+    singlet::gpu::core::DeviceMemory<int> d_gene_idx_all(total_nnz);
 
     // One-time setup uploads: valid (not in hot loops).
     cudaMemcpyAsync(d_set_offsets_all.get(), gene_sets.set_offsets.data(),
@@ -426,7 +422,7 @@ inline SsGseaResult ssgsea(
     SsGseaResult result;
     result.n_sets  = n_sets;
     result.n_cells = n_cells;
-    result.scores  = singlet_gpu::core::DeviceMemory<float>((size_t)n_sets * n_cells);
+    result.scores  = singlet::gpu::core::DeviceMemory<float>((size_t)n_sets * n_cells);
     // Zero the output; tiles will write into it.
     cudaMemsetAsync(result.scores.get(), 0, (size_t)n_sets * n_cells * sizeof(float), stream);
 
@@ -443,13 +439,13 @@ inline SsGseaResult ssgsea(
     const size_t tile_ints    = (size_t)C * n_genes;
     const size_t score_floats = (size_t)C * SET_CHUNK;
 
-    singlet_gpu::core::DeviceMemory<float>    d_dense(tile_floats);
-    singlet_gpu::core::DeviceMemory<uint32_t> d_sort_keys(tile_ints);
-    singlet_gpu::core::DeviceMemory<int>      d_sort_vals(tile_ints);
-    singlet_gpu::core::DeviceMemory<uint32_t> d_sorted_keys(tile_ints);
-    singlet_gpu::core::DeviceMemory<int>      d_sorted_vals(tile_ints);
-    singlet_gpu::core::DeviceMemory<float>    d_rank_alpha(tile_floats);
-    singlet_gpu::core::DeviceMemory<float>    d_score_chunk(score_floats);
+    singlet::gpu::core::DeviceMemory<float>    d_dense(tile_floats);
+    singlet::gpu::core::DeviceMemory<uint32_t> d_sort_keys(tile_ints);
+    singlet::gpu::core::DeviceMemory<int>      d_sort_vals(tile_ints);
+    singlet::gpu::core::DeviceMemory<uint32_t> d_sorted_keys(tile_ints);
+    singlet::gpu::core::DeviceMemory<int>      d_sorted_vals(tile_ints);
+    singlet::gpu::core::DeviceMemory<float>    d_rank_alpha(tile_floats);
+    singlet::gpu::core::DeviceMemory<float>    d_score_chunk(score_floats);
 
     // ---- Pre-compute segment offsets for DeviceSegmentedRadixSort once (outside tile loop).
     // Segment offsets are fixed: cell c occupies [c*n_genes, (c+1)*n_genes) in the flat arrays.
@@ -461,7 +457,7 @@ inline SsGseaResult ssgsea(
     std::vector<int> seg_offsets_full(C + 1);
     for (int i = 0; i <= C; ++i) seg_offsets_full[i] = i * n_genes;
 
-    singlet_gpu::core::DeviceMemory<int> d_seg_offsets(C + 1);
+    singlet::gpu::core::DeviceMemory<int> d_seg_offsets(C + 1);
     cudaMemcpyAsync(d_seg_offsets.get(), seg_offsets_full.data(),
                     (C + 1) * sizeof(int), cudaMemcpyHostToDevice, stream);
 
@@ -478,7 +474,7 @@ inline SsGseaResult ssgsea(
             d_seg_offsets.get(), d_seg_offsets.get() + 1,
             0, 32, stream);
     }
-    singlet_gpu::core::DeviceMemory<uint8_t> d_cub_temp(temp_storage_bytes + 1);
+    singlet::gpu::core::DeviceMemory<uint8_t> d_cub_temp(temp_storage_bytes + 1);
     d_temp_storage = d_cub_temp.get();
 
     // Shared memory for KS enrichment kernel:
@@ -594,4 +590,4 @@ inline SsGseaResult ssgsea(
 }
 
 } // namespace enrich
-} // namespace singlet_gpu
+} // namespace singlet::gpu

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Download FASTQ files from ENA/SRA with automatic fallback."""
 
 from __future__ import annotations

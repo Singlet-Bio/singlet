@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_atac_bin_counter.cpp — unit tests for atac_bin_counter.h
 
 #include <cassert>

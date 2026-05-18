@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test/test_tpm_fpkm.cpp
 // Unit tests for tpm_fpkm.h (G-TPM feature).
 // Tests effective-length computation, TPM sum invariant, FPKM formula,

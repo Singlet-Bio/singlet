@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Test harness: read AD/DP from MTX format, run donor_demux, write assignments
 // Usage: test_demux <ad.mtx> <dp.mtx> <barcodes.tsv> <n_donors> <output.tsv>
 

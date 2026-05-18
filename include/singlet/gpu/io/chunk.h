@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-// singlet-gpu/io/chunk.h
+// SPDX-License-Identifier: MIT
+// singlet/gpu/io/chunk.h
 //
 // Native host-side CSC slab type for streaming iteration.
 // Replaces factornet::io::Chunk<float> as of CYCLE-106.
@@ -20,7 +20,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace io {
 
 // ---------------------------------------------------------------------------
@@ -45,4 +45,4 @@ struct Chunk {
 };
 
 }  // namespace io
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

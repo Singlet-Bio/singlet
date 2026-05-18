@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: gene_model.h
 // Hierarchical gene model: Gene → Exons + Introns + Splice Junctions

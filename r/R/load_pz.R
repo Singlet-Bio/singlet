@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # singlet-gpu/r/R/load_pz.R
 #
 # read_1pz_sce() — load a singlet .1pz count matrix into a SingleCellExperiment.

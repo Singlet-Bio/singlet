@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (first GPU Monopogen-style somatic SNV calling from scRNA)
 //
 // variants/monopogen.h — Germline genotyping + somatic SNV discovery from scRNA pileup.
@@ -93,13 +93,9 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/core/memory.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/core/memory.h>
 
 #include <cuda_runtime.h>
 #include <cusparse.h>
@@ -116,7 +112,7 @@
 #include <string>
 #include <vector>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace variants {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -685,7 +681,7 @@ inline void run_chromosome_tile(
 
     // ── 1. Per-SNP pileup aggregation ───────────────────────────────────────────
     {
-        // Extract raw device pointers from DeviceCSC (factornet field-access style).
+        // Extract raw device pointers from DeviceCSC via direct field access.
         // WHY: kernels take raw device pointers since device-side code cannot call
         // the host-resident accessor methods on DeviceCSC.
         const int32_t* ad_col_ptr    = snp_ad.col_ptr.get();
@@ -1064,4 +1060,4 @@ inline MonopogenResult call_germline_only(
 }
 
 }  // namespace variants
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Optimal transport for trajectory inference (Waddington-OT style).
 
 Provides singlet.optimal_transport() — compute OT coupling matrix between

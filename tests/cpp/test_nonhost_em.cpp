@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_nonhost_em.cpp — Unit tests for NONHOST-EM deconvolution
 //
 // Tests the em_deconvolve() algorithm with synthesised MultiHit inputs.

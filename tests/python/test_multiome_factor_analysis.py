@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.multiome_factor_analysis."""
 
 from __future__ import annotations

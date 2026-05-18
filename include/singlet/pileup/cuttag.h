@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: cuttag.h
 // G-CUTTAG — CUT&TAG / CUT&RUN chromatin profiling QC.

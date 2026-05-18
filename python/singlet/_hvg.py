@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Highly variable gene selection for AnnData objects.
 
 Provides singlet.highly_variable_genes() — identifies genes with high

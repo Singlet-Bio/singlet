@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // lib1fq/manifest.h — Library bundle manifest
 //
 // A bundle ties multiple .1fq files from the same experiment together,
@@ -19,7 +20,7 @@
 #include <string>
 #include <vector>
 
-namespace lib1fq {
+namespace singlet::fq {
 
 // ── Library entry within a bundle ──
 
@@ -201,4 +202,4 @@ inline BundleManifest make_single_library_bundle(
     return manifest;
 }
 
-} // namespace lib1fq
+} // namespace singlet::fq

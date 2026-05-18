@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: umi_dedup.h
 // UMI deduplication for gene/exon/intron counting.

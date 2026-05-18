@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: original (first GPU Palantir-style diffusion pseudotime + fate inference)
 // reuses: cycle 43 fate/cellrank2.h for absorption
 //
@@ -18,8 +18,8 @@
 //      the row-sum diagonal of the raw (un-normalized) kernel W.
 //      P' is symmetric, enabling efficient eigendecomposition.
 //   5. Spectral decomposition: top-k eigenvectors (ψ_1…ψ_k, λ_1…λ_k)
-//      of P' via factornet lanczos_svd_gpu (k ≈ 20).
-//      WHY lanczos/SVD for an eigenproblem: P' is symmetric PSD; its SVD equals
+//      of P' via singlet::gpu::reduce::svd::deflation (k ≈ 20).
+//      WHY deflation/SVD for an eigenproblem: P' is symmetric PSD; its SVD equals
 //      its eigendecomposition (σᵢ = |λᵢ|), so right singular vectors = eigenvectors
 //      and singular values = eigenvalues. Lanczos SVD is numerically stable and
 //      already integrated.
@@ -34,8 +34,8 @@
 //      cellrank2::compute_absorption_probabilities with the Palantir diffusion
 //      operator (P, row-stochastic) as the transition matrix.
 //
-// Precision: fp32 throughout. Lanczos may use fp64 accumulators internally
-//   (factornet's discretion, k² gram < 400 entries at k=20 — approved).
+// Precision: fp32 throughout. The native deflation SVD may use fp64 accumulators
+//   internally for the convergence residual (k² gram < 400 entries at k=20 — approved).
 //
 // Memory layout (100k cells, k=30 NN, k_eig=20, n_terminals=10):
 //   embedding (device, n×d fp32): caller-owned.
@@ -49,8 +49,8 @@
 //   Total: ~65 MB device + kNN workspace (~1–2 GB at 100k).
 //
 // Streams: 1 (caller-provided). All steps sequential on this stream.
-//   Exceptions: factornet Lanczos creates its own internal GPUContext stream
-//   (CYCLE-5-FOLLOWUP-FACTORNET-STREAM-OVERLOAD is still open).
+//   Exceptions: the native singlet SVD creates its own internal GPUContext stream
+//   (CYCLE-5-FOLLOWUP-SVD-STREAM-OVERLOAD is still open).
 //
 // OOC plan: diffusion operator P cached on device; branch-prob step reuses
 //   cycle-43 GMRES ooc_batch_terminals chunking. For n > 200k, set
@@ -64,9 +64,9 @@
 //      (see cycle-8 known issue; not in our loop, in knn.h). Not our cudaMemcpy.
 //   B. build_diffusion_csr (setup, one-time H2D): kNN row-offsets, col-idx, dist
 //      copied host→device via D2D already on device — NO H2D here.
-//   C. Lanczos adapter: factornet copies host CSR → device (one-time setup).
-//      ONE cudaMemcpy block at Lanczos entry: host indptr/indices/values → device.
-//      This is function-entry setup, always approved.
+//   C. SVD adapter: the native singlet SVD copies host CSR → device (one-time
+//      setup).  ONE cudaMemcpy block at SVD entry: host indptr/indices/values →
+//      device.  This is function-entry setup, always approved.
 //   D. eigenvector copy D2H for pseudotime computation: ONE cudaMemcpy at step 6
 //      start, one-time setup approved. Actually we do the pseudotime KERNEL on
 //      device using the device eigenvector matrix — no D2H needed for pseudotime.
@@ -84,10 +84,6 @@
 
 #pragma once
 
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
 #include <cuda_runtime.h>
 #include <cusparse.h>
 #include <cub/cub.cuh>
@@ -102,20 +98,22 @@
 #include <limits>
 #include <numeric>
 
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/graph/knn.h>
-#include <singlet-gpu/fate/cellrank2.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/graph/knn.h>
+#include <singlet/gpu/fate/cellrank2.h>
 
-// Factornet deflation SVD (used for spectral decomposition of symmetric P').
+// Native singlet deflation SVD (used for spectral decomposition of symmetric P').
 // P' is fed as a synthetic "matrix" via its CSR; deflation right singular vectors
 // are the eigenvectors of the symmetric operator.
-// Switched from lanczos_svd_gpu → deflation_svd_gpu per Rule 32 consolidation.
-#include <factornet/svd/deflation_gpu.cuh>
-// Randomized SVD (used in run_palantir_from_csc for dense count matrix PCA).
-#include <factornet/svd/randomized_gpu.cuh>
+// Switched from lanczos_svd_gpu → deflation per Rule 32 consolidation.
+#include <singlet/gpu/reduce/svd/deflation.h>
+// Native singlet randomized SVD (used in run_palantir_from_csc for dense count
+// matrix PCA).
+#include <singlet/gpu/reduce/svd/randomized.h>
+#include <singlet/gpu/reduce/svd/types.h>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace fate {
 
 // ─── Public configuration ─────────────────────────────────────────────────────
@@ -509,8 +507,8 @@ palantir_compute(
     result.k_eig   = keig;
 
     // ── Step 1: kNN graph ─────────────────────────────────────────────────────
-    // Wrap emb_dev in a DeviceDense view (no copy; factornet DenseMatrixGPU is
-    // a non-owning view when constructed from pointer + dims).
+    // Wrap emb_dev in a core::DeviceDense view (no copy; DeviceDense::wrap is a
+    // non-owning view when constructed from pointer + dims).
     // WHY return_squared=true: we need d² for Gaussian kernel and for sigma_sq.
     graph::KnnConfig knn_cfg;
     knn_cfg.k              = k;
@@ -577,8 +575,8 @@ palantir_compute(
     // P' is symmetric but rows may not sum to 1; that is expected —
     // Palantir uses P' only for eigendecomposition, not as a transition matrix.
 
-    // ── Step 7: Build host CSR of P' for factornet deflation SVD ────────────
-    // deflation_svd_gpu reads host CSR; require_host_retained defined in deflation.h.
+    // ── Step 7: Build host CSR of P' for the native deflation SVD ───────────
+    // The intended native deflation entry point reads host CSR (see Step 8 GAP).
     // We need to materialize a proper CSR: row_ptr[n+1], col_idx[n*k], vals[n*k].
     // P' is symmetric and stored in the dense n×k layout. Convert to CSR.
     // This is a ONE-TIME setup copy — approved.
@@ -615,42 +613,53 @@ palantir_compute(
                nnz_P * sizeof(float), cudaMemcpyDeviceToHost);
     // ← These three are the ONLY cudaMemcpy in palantir.h setup; not in any loop.
 
-    // ── Step 8: Spectral decomposition via factornet deflation SVD ──────────
-    // deflation_svd_gpu returns U, S, V for A = U S Vt.
-    // For symmetric P', U = V (= eigenvectors), S = eigenvalues.
+    // ── Step 8: Spectral decomposition via native singlet deflation SVD ─────
+    // reduce::svd::deflation returns U, d, V for A = U diag(d) Vᵀ.
+    // For symmetric P', U = V (= eigenvectors), d = eigenvalues.
     // We use right singular vectors (.V columns) as eigenvectors.
     // k_svd = k_eig: we request k_eig components.
     //
-    // factornet::svd::deflation_svd_gpu signature (from deflation_gpu.cuh):
-    //   deflation_svd_gpu<float>(host_indptr, host_indices, host_values,
-    //                            n_rows, n_cols, nnz, SvdConfig cfg)
-    //   → SvdResult { U (n_rows × k), d (k), V (n_cols × k), ... }
-    // For square symmetric P' (n_cells × n_cells), n_rows = n_cols = n_cells.
+    // native reduce::svd::deflation signature (from reduce/svd/deflation.h):
+    //   deflation(const io::PzDeviceMatrix& m, const SvdConfig& cfg)
+    //   → SvdResult { U_data (m×k col-major), d (k), V_data (n×k col-major), ... }
+    // SvdResult exposes the V matrix view as .V.col(j)(i) and .d(i).
     //
-    // Rule 32: switched from lanczos_svd_gpu; deflation is the winner backend.
-    // Direct factornet call (not through adapter) — we have raw CSR, not PzDeviceMatrix.
-    ::factornet::SVDConfig<float> svd_cfg;
+    // Rule 32: deflation is the winner backend.
+    //
+    // ⚠ API GAP (TODO CYCLE-105-FOLLOWUP): the native reduce::svd::deflation
+    // entry point only accepts an io::PzDeviceMatrix.  palantir.h holds a raw
+    // host CSR of the synthetic operator P' (built on-the-fly from the kNN
+    // graph), and there is NO native deflation overload that accepts raw host
+    // CSR pointers (factornet::svd::deflation_svd_gpu provided this; it was
+    // deleted).  PzDeviceMatrix is only produced by io::load_pz from a .1pz
+    // file and has no host-CSR constructor, so we cannot legitimately bridge
+    // here.  Needed native entry point:
+    //   reduce::svd::SvdResult deflation_host_csr(
+    //       const int* indptr, const int* indices, const float* values,
+    //       int n_rows, int n_cols, int nnz, const SvdConfig& cfg);
+    // Until that exists, this deferred-scope path throws at runtime.
+    reduce::svd::SvdConfig svd_cfg;
     svd_cfg.k_max = keig;
     svd_cfg.seed  = cfg.seed;
+    (void)svd_cfg; (void)nnz_P;
 
-    auto svd_result = ::factornet::svd::deflation_svd_gpu<float>(
-        h_row_ptr.data(),
-        h_col_idx.data(),
-        h_vals.data(),
-        n_cells,   // n_rows
-        n_cells,   // n_cols
-        nnz_P,
-        svd_cfg);
+    throw std::runtime_error(
+        "palantir_compute: native reduce::svd::deflation has no host-CSR entry "
+        "point; needs reduce::svd::deflation_host_csr (see TODO "
+        "CYCLE-105-FOLLOWUP). Deferred-scope path.");
 
-    // svd_result.V is n_cells × k_eig (right singular vectors, factornet convention).
+    // --- Unreachable below: kept to document the intended result wiring once a
+    //     host-CSR native SVD entry point exists. ---
+    reduce::svd::SvdResult svd_result;
+
+    // svd_result.V is n_cells × k_eig (right singular vectors).
     // Eigenvalues = singular values of symmetric P' = svd_result.d (host fp32).
-    // Note: factornet SVDResult uses .d (not .S) and .V (not .Vt).
     const auto& d_vec = svd_result.d;
     result.eigenvalues.assign(d_vec.data(), d_vec.data() + d_vec.size());
     result.k_eig = (int)result.eigenvalues.size();
 
     // Store eigenvectors on device: k_eig × n_cells.
-    // factornet .V is n_cells × k_actual (column-major Eigen matrix).
+    // svd_result.V_data is n_cells × k_actual (col-major).
     // We need row-major k_actual × n_cells. Transpose via copy.
     const int k_actual = result.k_eig;
     result.eigenvectors_dev = core::DeviceMemory<float>((size_t)k_actual * n_cells);
@@ -658,7 +667,7 @@ palantir_compute(
     std::vector<float> h_eig_t((size_t)k_actual * n_cells);
     for (int r = 0; r < n_cells; ++r)
         for (int c = 0; c < k_actual; ++c)
-            h_eig_t[static_cast<size_t>(c) * n_cells + r] = svd_result.V(r, c);
+            h_eig_t[static_cast<size_t>(c) * n_cells + r] = svd_result.V.col(c)(r);
     cudaMemcpy(result.eigenvectors_dev.get(),
                h_eig_t.data(),
                (size_t)k_actual * n_cells * sizeof(float),
@@ -860,8 +869,8 @@ inline PalantirResult run_palantir(
 // run_palantir_from_csc — compat entry-point used by the real-data test.
 //
 // Takes a raw count CSC (genes × cells), log-normalizes in-place on device,
-// then runs a minimal randomized SVD (via factornet) to get a PCA embedding,
-// and finally calls palantir_compute.
+// then runs a minimal randomized SVD (native singlet kernel) to get a PCA
+// embedding, and finally calls palantir_compute.
 //
 // For the correctness harness (which guards with gpu_available() and file-existence
 // checks), this is the full production path.  The function densifies the log-norm
@@ -897,14 +906,14 @@ inline PalantirResult run_palantir_from_csc(
 
     // Allocate dense embedding buffer.
     float* d_emb_raw = nullptr;
-    CUDA_CHECK(cudaMalloc(&d_emb_raw, emb_elems * sizeof(float)));
-    CUDA_CHECK(cudaMemsetAsync(d_emb_raw, 0, emb_elems * sizeof(float), stream));
+    SINGLET_GPU_CUDA_CHECK(cudaMalloc(&d_emb_raw, emb_elems * sizeof(float)));
+    SINGLET_GPU_CUDA_CHECK(cudaMemsetAsync(d_emb_raw, 0, emb_elems * sizeof(float), stream));
 
     // Dense count buffer (cells × genes).
     const size_t dense_elems = static_cast<size_t>(n_cells) * n_genes;
     float* d_dense = nullptr;
-    CUDA_CHECK(cudaMalloc(&d_dense, dense_elems * sizeof(float)));
-    CUDA_CHECK(cudaMemsetAsync(d_dense, 0, dense_elems * sizeof(float), stream));
+    SINGLET_GPU_CUDA_CHECK(cudaMalloc(&d_dense, dense_elems * sizeof(float)));
+    SINGLET_GPU_CUDA_CHECK(cudaMemsetAsync(d_dense, 0, dense_elems * sizeof(float), stream));
 
     // CSC → dense scatter (cells as cols in CSC → rows in dense).
     // Each thread handles one nonzero: atomicAdd into d_dense[cell * n_genes + gene].
@@ -916,13 +925,13 @@ inline PalantirResult run_palantir_from_csc(
         std::vector<int>   h_col_ptr(n_cells + 1);
         std::vector<int>   h_row_idx(nnz);
         std::vector<float> h_vals(nnz);
-        CUDA_CHECK(cudaMemcpyAsync(h_col_ptr.data(), d_csc.col_ptr.get(),
+        SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(h_col_ptr.data(), d_csc.col_ptr.get(),
             (n_cells + 1) * sizeof(int), cudaMemcpyDeviceToHost, stream));
-        CUDA_CHECK(cudaMemcpyAsync(h_row_idx.data(), d_csc.row_indices.get(),
+        SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(h_row_idx.data(), d_csc.row_indices.get(),
             nnz * sizeof(int), cudaMemcpyDeviceToHost, stream));
-        CUDA_CHECK(cudaMemcpyAsync(h_vals.data(), d_csc.values.get(),
+        SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(h_vals.data(), d_csc.values.get(),
             nnz * sizeof(float), cudaMemcpyDeviceToHost, stream));
-        CUDA_CHECK(cudaStreamSynchronize(stream));
+        SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
 
         std::vector<float> h_dense(dense_elems, 0.0f);
         // log1p-normalize per cell (total count → scale to median 10k → log1p).
@@ -945,28 +954,42 @@ inline PalantirResult run_palantir_from_csc(
                     std::log1p(h_vals[idx] * scale);
             }
         }
-        CUDA_CHECK(cudaMemcpyAsync(d_dense, h_dense.data(),
+        SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(d_dense, h_dense.data(),
             dense_elems * sizeof(float), cudaMemcpyHostToDevice, stream));
-        CUDA_CHECK(cudaStreamSynchronize(stream));
+        SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
     }
 
     // Randomized SVD to get PCA embedding (cells × n_pcs).
     {
         std::vector<float> h_dense_buf(dense_elems);
-        CUDA_CHECK(cudaMemcpy(h_dense_buf.data(), d_dense,
+        SINGLET_GPU_CUDA_CHECK(cudaMemcpy(h_dense_buf.data(), d_dense,
             dense_elems * sizeof(float), cudaMemcpyDeviceToHost));
 
-        // factornet::SVDConfig<float> to get top n_pcs components.
-        ::factornet::SVDConfig<float> svd_cfg;
+        // Native reduce::svd::SvdConfig to get top n_pcs components.
+        reduce::svd::SvdConfig svd_cfg;
         svd_cfg.k_max = n_pcs;
-        svd_cfg.seed  = static_cast<uint32_t>(cfg.seed);
+        svd_cfg.seed  = static_cast<uint64_t>(cfg.seed);
+        (void)svd_cfg;
 
-        // randomized_svd_gpu_dense(h_A, m, n, config) — m = n_cells, n = n_genes.
-        // Creates its own GPUContext internally (factornet::svd namespace).
-        auto svd_res = ::factornet::svd::randomized_svd_gpu_dense(
-            h_dense_buf.data(), n_cells, n_genes, svd_cfg);
+        // ⚠ API GAP (TODO CYCLE-105-FOLLOWUP): the native reduce::svd::randomized
+        // entry point only accepts an io::PzDeviceMatrix.  This path holds a raw
+        // HOST DENSE count matrix (h_dense_buf, n_cells × n_genes); there is NO
+        // native randomized-SVD overload for a host dense pointer
+        // (factornet::svd::randomized_svd_gpu_dense provided this; it was
+        // deleted).  Needed native entry point:
+        //   reduce::svd::SvdResult randomized_host_dense(
+        //       const float* h_A, int m, int n, const SvdConfig& cfg);
+        // Until that exists, this deferred-scope path throws at runtime.
+        throw std::runtime_error(
+            "run_palantir_from_csc: native reduce::svd::randomized has no "
+            "host-dense entry point; needs reduce::svd::randomized_host_dense "
+            "(see TODO CYCLE-105-FOLLOWUP). Deferred-scope path.");
 
-        // svd_res.U is n_cells × n_pcs (left singular vectors, Eigen Matrix).
+        // --- Unreachable below: documents the intended result wiring once a
+        //     host-dense native SVD entry point exists. ---
+        reduce::svd::SvdResult svd_res;
+
+        // svd_res.U is n_cells × n_pcs (left singular vectors, col-major).
         // Embedding = U × diag(d), where d = svd_res.d (singular values).
         // We upload it to d_emb_raw (cells × n_pcs, row-major).
         const int emb_size = n_cells * n_pcs;
@@ -975,10 +998,10 @@ inline PalantirResult run_palantir_from_csc(
         for (int r = 0; r < n_cells; ++r)
             for (int pc = 0; pc < std::min(n_pcs, k_actual); ++pc)
                 h_emb[static_cast<size_t>(r) * n_pcs + pc] =
-                    svd_res.U(r, pc) * svd_res.d(pc);
-        CUDA_CHECK(cudaMemcpyAsync(d_emb_raw, h_emb.data(),
+                    svd_res.U.col(pc)(r) * svd_res.d(pc);
+        SINGLET_GPU_CUDA_CHECK(cudaMemcpyAsync(d_emb_raw, h_emb.data(),
             emb_size * sizeof(float), cudaMemcpyHostToDevice, stream));
-        CUDA_CHECK(cudaStreamSynchronize(stream));
+        SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
     }
 
     cudaFree(d_dense);
@@ -988,7 +1011,7 @@ inline PalantirResult run_palantir_from_csc(
     // auto_start: find cell with smallest l2 norm in embedding (most stem-like proxy).
     if (cfg.auto_start) {
         std::vector<float> h_emb(emb_elems);
-        CUDA_CHECK(cudaMemcpy(h_emb.data(), d_emb_raw,
+        SINGLET_GPU_CUDA_CHECK(cudaMemcpy(h_emb.data(), d_emb_raw,
             emb_elems * sizeof(float), cudaMemcpyDeviceToHost));
         float min_norm = std::numeric_limits<float>::infinity();
         for (int ci = 0; ci < n_cells; ++ci) {
@@ -1012,4 +1035,4 @@ inline PalantirResult run_palantir_from_csc(
 }
 
 }  // namespace fate
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

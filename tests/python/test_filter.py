@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.filter_cells() and singlet.filter_genes()."""
 
 import numpy as np

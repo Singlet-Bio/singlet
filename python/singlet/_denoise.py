@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """SVD-based denoising for AnnData objects.
 
 Provides singlet.denoise() — reconstruct expression matrix using

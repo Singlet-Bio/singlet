@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.cna.numbat — GPU-native Numbat copy-number alteration detection.
 
@@ -16,26 +16,27 @@ Reference: Gao et al. (Numbat, Genome Biology 2024).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, Optional, List, Dict
 
 import numpy as np
 
+from singlet.gpu._coreutil import require_core
+
 if TYPE_CHECKING:
-    pass
+    import anndata
 
 
 # ---------------------------------------------------------------------------
 # HMM state constants (mirrors C++ HMM_LOSS / HMM_NEUTRAL / HMM_GAIN)
 # ---------------------------------------------------------------------------
-STATE_LOSS = 0
+STATE_LOSS    = 0
 STATE_NEUTRAL = 1
-STATE_GAIN = 2
+STATE_GAIN    = 2
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
-
 
 def detect(
     expr,
@@ -160,12 +161,7 @@ def detect(
     >>> print(f"Detected {result['n_clones']} clones across "
     ...       f"{result['n_total_segments']} segments")
     """
-    import singlet.gpu._core as _core
-
-    if not hasattr(_core, "detect_cna"):
-        raise ImportError(
-            "_core.detect_cna is not available.  Install with: pip install singlet[gpu]"
-        )
+    _core = require_core("detect_cna")
 
     full_window = 2 * smooth_half_win + 1
     if full_window > 15:
@@ -174,7 +170,9 @@ def detect(
             "which exceeds MAX_SMOOTH_WINDOW=15."
         )
     if not (0.0 < trans_prob < 0.5):
-        raise ValueError(f"trans_prob={trans_prob} must be in (0, 0.5).")
+        raise ValueError(
+            f"trans_prob={trans_prob} must be in (0, 0.5)."
+        )
 
     # Coerce ref to float32 c-contiguous numpy array if provided.
     if ref is not None:

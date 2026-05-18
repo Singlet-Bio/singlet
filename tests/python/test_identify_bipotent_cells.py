@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.identify_bipotent_cells()."""
 
 import numpy as np

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Spectral clustering for single-cell data.
 
 Provides singlet.spectral_clustering() — partition cells using spectral

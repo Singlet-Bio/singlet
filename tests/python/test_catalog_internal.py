@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for catalog internal paths: _download_parquet, refresh, failure inference."""
 
 from pathlib import Path

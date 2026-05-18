@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 """
 singlet.gpu.tools.markers — GPU-native marker scoring and cell type annotation.
 
@@ -25,9 +25,8 @@ the bindings are added.
 from __future__ import annotations
 
 import copy as copy_module
-from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, Optional, Union
+from typing import TYPE_CHECKING, List, Literal, Optional, Sequence, Union
 
 import numpy as np
 
@@ -39,8 +38,7 @@ if TYPE_CHECKING:
 # RNG helper
 # ---------------------------------------------------------------------------
 
-
-def _resolve_seed(rng: Optional[Union[int, np.random.Generator]]) -> int:
+def _resolve_seed(rng: Optional[Union[int, "np.random.Generator"]]) -> int:
     """Convert scanpy-style ``rng`` to a uint64 seed for C++."""
     if rng is None:
         return 0
@@ -53,8 +51,7 @@ def _resolve_seed(rng: Optional[Union[int, np.random.Generator]]) -> int:
 # Internal: gene index lookup
 # ---------------------------------------------------------------------------
 
-
-def _gene_indices(var_names: Sequence[str], gene_list: Sequence[str]) -> np.ndarray:
+def _gene_indices(var_names: Sequence[str], gene_list: Sequence[str]) -> "np.ndarray":
     """
     Return the integer indices of *gene_list* in *var_names*.
 
@@ -90,9 +87,8 @@ def _gene_indices(var_names: Sequence[str], gene_list: Sequence[str]) -> np.ndar
 # score_genes
 # ---------------------------------------------------------------------------
 
-
 def score_genes(
-    adata: anndata.AnnData,
+    adata: "anndata.AnnData",
     gene_list: Sequence[str],
     *,
     score_name: str = "score",
@@ -101,9 +97,9 @@ def score_genes(
     use_raw: bool = False,
     ctrl_size: int = 50,
     n_bins: int = 25,
-    rng: Optional[Union[int, np.random.Generator]] = None,
+    rng: Optional[Union[int, "np.random.Generator"]] = None,
     copy: bool = False,
-) -> Optional[anndata.AnnData]:
+) -> Optional["anndata.AnnData"]:
     """
     Compute a per-cell marker-gene activity score (GPU-native, cycle-12 kernel).
 
@@ -206,7 +202,9 @@ def score_genes(
 
     gene_indices = _gene_indices(list(working.var_names), list(gene_list))
     if len(gene_indices) == 0:
-        raise ValueError("score_genes: no genes from gene_list found in adata.var_names.")
+        raise ValueError(
+            "score_genes: no genes from gene_list found in adata.var_names."
+        )
 
     # Resolve expression matrix.
     if use_raw and working.raw is not None:
@@ -230,7 +228,6 @@ def score_genes(
     # Convert device array → pandas Series for adata.obs storage.
     try:
         import cupy as cp
-
         if isinstance(scores, cp.ndarray):
             scores = scores.get()
     except ImportError:
@@ -244,9 +241,8 @@ def score_genes(
 # celltypist_predict
 # ---------------------------------------------------------------------------
 
-
 def celltypist_predict(
-    adata: anndata.AnnData,
+    adata: "anndata.AnnData",
     model_path: Union[str, Path],
     *,
     key_added: str = "celltypist",
@@ -256,7 +252,7 @@ def celltypist_predict(
     layer: Optional[str] = None,
     use_raw: bool = False,
     copy: bool = False,
-) -> Optional[anndata.AnnData]:
+) -> Optional["anndata.AnnData"]:
     """
     Reference-based cell type prediction via GPU CellTypist projection.
 
@@ -378,7 +374,9 @@ def celltypist_predict(
             "key in adata.obs containing cluster labels."
         )
     if majority_voting and over_clustering not in adata.obs.columns:
-        raise ValueError(f"over_clustering='{over_clustering}' not found in adata.obs.")
+        raise ValueError(
+            f"over_clustering='{over_clustering}' not found in adata.obs."
+        )
 
     working = copy_module.copy(adata) if copy else adata
 

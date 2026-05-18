@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 #define SINGLET_SPARSE_ACCUMULATOR_DEFINED
 // singlet-pileup: sparse_accumulator.h

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_protocol_confidence_override.cpp
 // Unit tests for AUTOFIX-PROTOCOL-CONFIDENCE-OVERRIDE logic.
 //
@@ -15,19 +16,8 @@
 #include "singlet/fq/protocol.h"
 #include "singlet/fq/types.h"
 
-static int g_pass = 0;
-static int g_fail = 0;
-
-#define CHECK(cond)                                                         \
-    do {                                                                    \
-        if (cond) {                                                         \
-            ++g_pass;                                                       \
-        } else {                                                            \
-            ++g_fail;                                                       \
-            std::cerr << "FAIL: " << #cond                                 \
-                      << " at " << __FILE__ << ":" << __LINE__ << "\n";   \
-        }                                                                   \
-    } while (0)
+#define SINGLET_TEST_HARNESS_TERSE
+#include "test_harness.h"  // CHECK(cond) + g_pass / g_fail
 
 // ── Helper: simulate the override decision ───────────────────────────────────
 // Mirrors the AUTOFIX-PROTOCOL-CONFIDENCE-OVERRIDE logic in sra_encoder.h.
@@ -43,7 +33,7 @@ static OverrideResult apply_override(
     const std::string& metadata_protocol,  // ecfg.metadata_protocol
     const std::string& detected_tag,       // from auto-detection
     uint8_t            detected_id,
-    lib1fq::Confidence confidence)
+    singlet::fq::Confidence confidence)
 {
     // If --protocol was given, committed; do not override.
     if (!cli_protocol.empty()) {
@@ -52,8 +42,8 @@ static OverrideResult apply_override(
 
     // Catalog metadata always wins over VDB auto-detection at any confidence level.
     if (!metadata_protocol.empty()) {
-        const lib1fq::CandidateSpec* spec =
-            lib1fq::find_protocol_spec(metadata_protocol);
+        const singlet::fq::CandidateSpec* spec =
+            singlet::fq::find_protocol_spec(metadata_protocol);
         if (spec && spec->tag != detected_tag) {
             return {spec->tag, spec->protocol_id, true};
         }
@@ -65,17 +55,17 @@ static OverrideResult apply_override(
 
 static void test_confidence_ordering() {
     // Verify enum numeric values used throughout singlet.
-    CHECK(static_cast<uint8_t>(lib1fq::Confidence::NONE)   == 0);
-    CHECK(static_cast<uint8_t>(lib1fq::Confidence::LOW)    == 1);
-    CHECK(static_cast<uint8_t>(lib1fq::Confidence::MEDIUM) == 2);
-    CHECK(static_cast<uint8_t>(lib1fq::Confidence::HIGH)   == 3);
-    CHECK(static_cast<uint8_t>(lib1fq::Confidence::MANUAL) == 4);
-    CHECK(static_cast<uint8_t>(lib1fq::Confidence::FORCE)  == 5);
+    CHECK(static_cast<uint8_t>(singlet::fq::Confidence::NONE)   == 0);
+    CHECK(static_cast<uint8_t>(singlet::fq::Confidence::LOW)    == 1);
+    CHECK(static_cast<uint8_t>(singlet::fq::Confidence::MEDIUM) == 2);
+    CHECK(static_cast<uint8_t>(singlet::fq::Confidence::HIGH)   == 3);
+    CHECK(static_cast<uint8_t>(singlet::fq::Confidence::MANUAL) == 4);
+    CHECK(static_cast<uint8_t>(singlet::fq::Confidence::FORCE)  == 5);
     // Ordering comparisons used by the override condition:
-    CHECK(lib1fq::Confidence::NONE   <  lib1fq::Confidence::LOW);
-    CHECK(lib1fq::Confidence::LOW    <  lib1fq::Confidence::MEDIUM);
-    CHECK(lib1fq::Confidence::MEDIUM <  lib1fq::Confidence::HIGH);
-    CHECK(lib1fq::Confidence::HIGH   <  lib1fq::Confidence::MANUAL);
+    CHECK(singlet::fq::Confidence::NONE   <  singlet::fq::Confidence::LOW);
+    CHECK(singlet::fq::Confidence::LOW    <  singlet::fq::Confidence::MEDIUM);
+    CHECK(singlet::fq::Confidence::MEDIUM <  singlet::fq::Confidence::HIGH);
+    CHECK(singlet::fq::Confidence::HIGH   <  singlet::fq::Confidence::MANUAL);
 }
 
 // ── Witness sample 1: seqwell catalog vs 10x-visium detected (c=1) ──────────
@@ -87,13 +77,13 @@ static void test_override_fires_seqwell_vs_visium_c1() {
         "seqwell",      // metadata.protocol from catalog
         "10x-visium",   // what the detector returned
         24,             // protocol_id for 10x-visium
-        lib1fq::Confidence::LOW  // c=1
+        singlet::fq::Confidence::LOW  // c=1
     );
     CHECK(r.override_fired);
     CHECK(r.tag == "seqwell");
 
     // Verify the spec has the correct CBlen/UMIlen (seqwell: CB=12, UMI=8)
-    const lib1fq::CandidateSpec* spec = lib1fq::find_protocol_spec("seqwell");
+    const singlet::fq::CandidateSpec* spec = singlet::fq::find_protocol_spec("seqwell");
     CHECK(spec != nullptr);
     if (spec) {
         CHECK(spec->bc_len  == 12);
@@ -112,7 +102,7 @@ static void test_override_fires_medium_confidence() {
         "10xv3",       // metadata.protocol
         "10x-visium",  // detected
         24,
-        lib1fq::Confidence::MEDIUM  // c=2 — catalog still wins
+        singlet::fq::Confidence::MEDIUM  // c=2 — catalog still wins
     );
     CHECK(r.override_fired);
     CHECK(r.tag == "10x-3p-v3");  // 10xv3 alias resolves to canonical tag
@@ -127,12 +117,12 @@ static void test_override_fires_10xv2_vs_quartzseq2_c1() {
         "10xv2",       // catalog alias for 10x-3p-v2
         "quartzseq2",  // wrong detection
         18,
-        lib1fq::Confidence::LOW
+        singlet::fq::Confidence::LOW
     );
     CHECK(r.override_fired);
     CHECK(r.tag == "10x-3p-v2");  // alias resolved to canonical tag
 
-    const lib1fq::CandidateSpec* spec = lib1fq::find_protocol_spec("10xv2");
+    const singlet::fq::CandidateSpec* spec = singlet::fq::find_protocol_spec("10xv2");
     CHECK(spec != nullptr);
     if (spec) {
         CHECK(spec->bc_len  == 16);
@@ -148,7 +138,7 @@ static void test_no_metadata_no_override() {
         "",           // no metadata protocol
         "10x-visium",
         24,
-        lib1fq::Confidence::LOW
+        singlet::fq::Confidence::LOW
     );
     CHECK(!r.override_fired);
     CHECK(r.tag == "10x-visium");
@@ -162,7 +152,7 @@ static void test_cli_protocol_wins() {
         "seqwell",     // metadata says otherwise
         "dropseq",     // detector would say dropseq (forced)
         6,
-        lib1fq::Confidence::MANUAL
+        singlet::fq::Confidence::MANUAL
     );
     CHECK(!r.override_fired);  // no override when --protocol was given
 }
@@ -175,7 +165,7 @@ static void test_override_fires_high_confidence() {
         "dropseq",
         "10x-3p-v3",
         1,
-        lib1fq::Confidence::HIGH  // c=3 — catalog still overrides
+        singlet::fq::Confidence::HIGH  // c=3 — catalog still overrides
     );
     CHECK(r.override_fired);
     CHECK(r.tag == "dropseq");
@@ -189,7 +179,7 @@ static void test_none_confidence_fires() {
         "seqwell",
         "UNKNOWN",
         0,
-        lib1fq::Confidence::NONE  // c=0
+        singlet::fq::Confidence::NONE  // c=0
     );
     CHECK(r.override_fired);
     CHECK(r.tag == "seqwell");
@@ -199,14 +189,14 @@ static void test_none_confidence_fires() {
 
 static void test_unknown_metadata_protocol_no_override() {
     // "totally-made-up-protocol" is not in known_protocols()
-    CHECK(lib1fq::find_protocol_spec("totally-made-up-protocol") == nullptr);
+    CHECK(singlet::fq::find_protocol_spec("totally-made-up-protocol") == nullptr);
 
     auto r = apply_override(
         "",
         "totally-made-up-protocol",
         "10x-visium",
         24,
-        lib1fq::Confidence::LOW
+        singlet::fq::Confidence::LOW
     );
     // find_protocol_spec returns nullptr → override does not fire
     CHECK(!r.override_fired);
@@ -221,7 +211,7 @@ static void test_same_tag_no_override() {
         "seqwell",
         "seqwell",   // already correct
         16,
-        lib1fq::Confidence::LOW
+        singlet::fq::Confidence::LOW
     );
     CHECK(!r.override_fired);  // tags match → override did not fire
 }
@@ -237,13 +227,13 @@ static void test_override_fires_dnbelab_vs_quartzseq2_medium() {
         "dnbelab",     // catalog: DNBelab (alias for dnbelab-c4)
         "quartzseq2",  // VDB misdetection at MEDIUM confidence
         18,
-        lib1fq::Confidence::MEDIUM
+        singlet::fq::Confidence::MEDIUM
     );
     CHECK(r.override_fired);
     CHECK(r.tag == "dnbelab-c4");  // alias resolved to canonical tag
 
     // Verify the spec geometry (CB=10+10+10=30 split, r1_len=56)
-    const lib1fq::CandidateSpec* spec = lib1fq::find_protocol_spec("dnbelab");
+    const singlet::fq::CandidateSpec* spec = singlet::fq::find_protocol_spec("dnbelab");
     CHECK(spec != nullptr);
     if (spec) {
         CHECK(spec->bc_len  == 10);  // single segment bc_len in CandidateSpec

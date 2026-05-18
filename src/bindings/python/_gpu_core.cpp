@@ -1,7 +1,7 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-// singlet-gpu/python/src/_singlet_gpu_core.cpp
+// SPDX-License-Identifier: MIT
+// singlet/gpu/python/src/_singlet_gpu_core.cpp
 //
-// pybind11 entry point for the singlet_gpu._core extension module.
+// pybind11 entry point for the singlet::gpu._core extension module.
 //
 // Exposes the minimal public API needed to:
 //   1. Load a .1pz file to GPU device (load_pz → PzDeviceMatrix).
@@ -13,17 +13,17 @@
 //   - This file contains only PYBIND11_MODULE and the module docstring.
 //   - Actual bindings are split across _bind_loader.hpp, _bind_metadata.hpp,
 //     and _cupy_interop.hpp for clarity and manageable diff size per cycle.
-//   - The Python package singlet_gpu/ re-exports from _core via __init__.py.
+//   - The Python package singlet/gpu/ re-exports from _core via __init__.py.
 //
 // Compile flags:
 //   -fvisibility=hidden  (pybind11 requirement — set in python/CMakeLists.txt)
 //   FACTORNET_HAS_GPU=1  (set by singlet-gpu::singlet-gpu INTERFACE target)
 //
-// Build: cmake -S singlet-gpu/ -B build -DSINGLET_GPU_BUILD_PYTHON=ON
+// Build: cmake -S singlet/gpu/ -B build -DSINGLET_GPU_BUILD_PYTHON=ON
 //        cmake --build build -j --target _core
 //
 // Usage after install:
-//   from singlet_gpu._core import DeviceCsc, Metadata, PzDeviceMatrix, load_pz
+//   from singlet::gpu._core import DeviceCsc, Metadata, PzDeviceMatrix, load_pz
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -101,14 +101,14 @@ namespace py = pybind11;
 // ---------------------------------------------------------------------------
 // PYBIND11_MODULE(_core, m)
 //
-// All public API lives at the _core module level.  The singlet_gpu Python
+// All public API lives at the _core module level.  The singlet::gpu Python
 // package re-exports these names in __init__.py so users only need:
-//   import singlet_gpu
-//   m = singlet_gpu.load_pz("counts.1pz")
+//   import singlet::gpu
+//   m = singlet::gpu.load_pz("counts.1pz")
 // ---------------------------------------------------------------------------
 PYBIND11_MODULE(_core, m) {
     m.doc() = R"doc(
-    singlet_gpu._core — GPU-native single-cell analysis, pybind11 extension.
+    singlet::gpu._core — GPU-native single-cell analysis, pybind11 extension.
 
     This module is compiled against singlet-gpu's header-only C++ library and
     exposes zero-copy access to `.1pz` sparse matrices on the GPU device.
@@ -138,8 +138,8 @@ PYBIND11_MODULE(_core, m) {
     --------------------
     ::
 
-        import singlet_gpu, cupy.sparse as csp
-        m = singlet_gpu.load_pz("exon_counts.1pz")
+        import singlet::gpu, cupy.sparse as csp
+        m = singlet::gpu.load_pz("exon_counts.1pz")
         csr = csp.csr_matrix(
             (m.mat.data_view, m.mat.indices_view, m.mat.indptr_view),
             shape=(m.rows, m.cols)
@@ -157,7 +157,7 @@ PYBIND11_MODULE(_core, m) {
     issues a ``cudaMemcpy`` to the host.
     )doc";
 
-    // Module version — mirrors singlet_gpu/version.py.
+    // Module version — mirrors singlet/gpu/version.py.
     m.attr("__version__") = "0.1.0";
 
     // -----------------------------------------------------------------------
@@ -185,7 +185,7 @@ PYBIND11_MODULE(_core, m) {
     // Cycle 20: cupy ingest functions.
     // -----------------------------------------------------------------------
     m.def("from_cupy_csr",
-        &singlet_gpu::python::from_cupy_csr,
+        &singlet::gpu::python::from_cupy_csr,
         py::arg("csr_matrix"),
         R"doc(
         Build a DeviceCsc from a cupy.sparse.csr_matrix (zero-copy).
@@ -208,7 +208,7 @@ PYBIND11_MODULE(_core, m) {
         )doc");
 
     m.def("to_cupy_csr",
-        [](py::object csc_obj) { return singlet_gpu::python::to_cupy_csr(csc_obj); },
+        [](py::object csc_obj) { return singlet::gpu::python::to_cupy_csr(csc_obj); },
         py::arg("device_csc"),
         R"doc(
         Return a Python dict with __cuda_array_interface__ views of a DeviceCsc.
@@ -230,19 +230,19 @@ PYBIND11_MODULE(_core, m) {
     // -----------------------------------------------------------------------
     // Cycle 20: per-kernel function bindings (cycles 1-6).
     // -----------------------------------------------------------------------
-    singlet_gpu::python::bind_kernels(m);
+    singlet::gpu::python::bind_kernels(m);
 
     // -----------------------------------------------------------------------
     // Cycle 22: result classes for cycles 7-17.
     // Must be registered BEFORE bind_kernels_ext so that Python can resolve
     // the result types when the m.def(...)  return-type annotations are built.
     // -----------------------------------------------------------------------
-    singlet_gpu::python::bind_results(m);
+    singlet::gpu::python::bind_results(m);
 
     // -----------------------------------------------------------------------
     // Cycle 22: per-kernel function bindings for cycles 7-17.
     // -----------------------------------------------------------------------
-    singlet_gpu::python::bind_kernels_ext(m);
+    singlet::gpu::python::bind_kernels_ext(m);
 
     // -----------------------------------------------------------------------
     // CYCLE-107: deferred-indefinitely domain bindings — gated.
@@ -251,28 +251,28 @@ PYBIND11_MODULE(_core, m) {
     // SINGLET_GPU_BUILD_DEFERRED is set (default OFF).
     // -----------------------------------------------------------------------
 #ifdef SINGLET_GPU_BUILD_DEFERRED
-    singlet_gpu::python::bind_cna(m);      // Numbat
-    singlet_gpu::python::bind_atac(m);     // chromVAR
-    singlet_gpu::python::bind_grn(m);      // GRaNIE
-    singlet_gpu::python::bind_eqtl(m);     // NEBULA
-    singlet_gpu::python::bind_ase(m);      // DAESC
-    singlet_gpu::python::bind_variants(m); // Monopogen
+    singlet::gpu::python::bind_cna(m);      // Numbat
+    singlet::gpu::python::bind_atac(m);     // chromVAR
+    singlet::gpu::python::bind_grn(m);      // GRaNIE
+    singlet::gpu::python::bind_eqtl(m);     // NEBULA
+    singlet::gpu::python::bind_ase(m);      // DAESC
+    singlet::gpu::python::bind_variants(m); // Monopogen
 
-    singlet_gpu::python::bind_fate_module(m);       // Cospar, CellRank2, Palantir
-    singlet_gpu::python::bind_comm_module(m);       // CellChat
-    singlet_gpu::python::bind_network_module(m);    // hdWGCNA
-    singlet_gpu::python::bind_abundance_module(m);  // Milo
-    singlet_gpu::python::bind_disease_module(m);    // scDRS
+    singlet::gpu::python::bind_fate_module(m);       // Cospar, CellRank2, Palantir
+    singlet::gpu::python::bind_comm_module(m);       // CellChat
+    singlet::gpu::python::bind_network_module(m);    // hdWGCNA
+    singlet::gpu::python::bind_abundance_module(m);  // Milo
+    singlet::gpu::python::bind_disease_module(m);    // scDRS
 
-    singlet_gpu::python::bind_spatial_phaseb(m);    // FlashDeconv, STAGATE, Cell2Fate
-    singlet_gpu::python::bind_generative(m);        // DiscreteDiffusion
-    singlet_gpu::python::bind_perturbation(m);      // PerturbGraph
-    singlet_gpu::python::bind_enrich(m);            // ssGSEA, PROGENy
+    singlet::gpu::python::bind_spatial_phaseb(m);    // FlashDeconv, STAGATE, Cell2Fate
+    singlet::gpu::python::bind_generative(m);        // DiscreteDiffusion
+    singlet::gpu::python::bind_perturbation(m);      // PerturbGraph
+    singlet::gpu::python::bind_enrich(m);            // ssGSEA, PROGENy
 #endif
 
-    singlet_gpu::python::bind_qc_new(m);           // doublet_score (foundational); OmniDoublet gated within
+    singlet::gpu::python::bind_qc_new(m);           // doublet_score (foundational); OmniDoublet gated within
 #ifdef SINGLET_GPU_BUILD_DEFERRED
-    singlet_gpu::python::bind_nmf_new(m);          // csi_gep — deferred-indefinitely scope
+    singlet::gpu::python::bind_nmf_new(m);          // csi_gep — deferred-indefinitely scope
 #endif
 
     // -----------------------------------------------------------------------
@@ -281,14 +281,14 @@ PYBIND11_MODULE(_core, m) {
     // QcResult class registration should precede DenseResult for stable
     // Python help() output ordering).
     // -----------------------------------------------------------------------
-    singlet_gpu::python::bind_qc_metrics(m);   // QcResult, calculate_qc_metrics, filter_cells, filter_genes
-    singlet_gpu::python::bind_preprocess(m);   // DenseResult, scale, regress_out
+    singlet::gpu::python::bind_qc_metrics(m);   // QcResult, calculate_qc_metrics, filter_cells, filter_genes
+    singlet::gpu::python::bind_preprocess(m);   // DenseResult, scale, regress_out
 
     // -----------------------------------------------------------------------
     // Cycle 186: score_genes (enrich/score_genes.h, cycle 129 kernel).
     // Ungated — score_genes.h carries no factornet dependency.
     // -----------------------------------------------------------------------
-    singlet_gpu::python::bind_score_genes(m);  // ScoreGenesResult, score_genes
+    singlet::gpu::python::bind_score_genes(m);  // ScoreGenesResult, score_genes
 
     // -----------------------------------------------------------------------
     // Cycle 20: result classes (cycles 1-6).

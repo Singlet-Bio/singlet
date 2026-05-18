@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_visium_spatial.cpp — unit tests for V1 Visium spatial coordinate parser
 // Tests VisiumSpatialParser: CSV loading, barcode lookup, in_tissue filter,
 // coordinate values, missing barcode fallback, and TSV export.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: cell_cycle.h
 // N19: Cell cycle phase scoring (Tirosh et al. 2016 / Seurat approach).

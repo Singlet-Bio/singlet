@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_nonhost_host_filter.cpp — Unit tests for HostKmerFilter (NONHOST-HOST-SUBTRACT)
 //
 // Tests:

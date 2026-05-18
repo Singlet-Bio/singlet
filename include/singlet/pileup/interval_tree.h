@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: interval_tree.h
 // Static augmented interval tree for fast overlap queries.

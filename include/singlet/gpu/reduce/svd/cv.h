@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-// singlet-gpu/reduce/svd/cv.h
+// SPDX-License-Identifier: MIT
+// singlet/gpu/reduce/svd/cv.h
 //
 // Speckled cross-validation for truncated SVD — random-mask hold-out, sweep k,
 // find optimal rank (Wold 1978 "drop-out" / "Gabriel cross-validation" style).
@@ -43,13 +43,13 @@
 
 #pragma once
 
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/core/memory.h>
-#include <singlet-gpu/io/pz_device_loader.h>
-#include <singlet-gpu/reduce/svd/types.h>
-#include <singlet-gpu/reduce/svd/auto_select.h>   // calls deflation / randomized
-#include <singlet-gpu/reduce/svd/deflation.h>     // require_host_retained
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/core/memory.h>
+#include <singlet/gpu/io/pz_device_loader.h>
+#include <singlet/gpu/reduce/svd/types.h>
+#include <singlet/gpu/reduce/svd/auto_select.h>   // calls deflation / randomized
+#include <singlet/gpu/reduce/svd/deflation.h>     // require_host_retained
 
 #include <cuda_runtime.h>
 #include <cusparse.h>
@@ -157,7 +157,7 @@ __global__ void svd_train_mse_kernel(
 
 }  // anonymous namespace
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace reduce {
 namespace svd {
 
@@ -400,4 +400,4 @@ inline CVSVDResult speckled_cv(
 
 }  // namespace svd
 }  // namespace reduce
-}  // namespace singlet_gpu
+}  // namespace singlet::gpu

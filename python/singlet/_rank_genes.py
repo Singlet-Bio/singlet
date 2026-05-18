@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Rank genes by various criteria."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Tests for singlet.downsample_counts()."""
 
 import numpy as np

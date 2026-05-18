@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Principal Component Analysis for AnnData objects.
 
 Provides singlet.pca() — standard PCA for dimensionality reduction,

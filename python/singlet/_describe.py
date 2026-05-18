@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Quick summary statistics for AnnData objects."""
 
 from __future__ import annotations

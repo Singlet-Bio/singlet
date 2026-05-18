@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Cell cycle scoring."""
 
 from __future__ import annotations

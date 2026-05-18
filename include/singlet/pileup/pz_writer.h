@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: pz_writer.h
 // Native .1pz (VOCSC) writer — format-compatible with singlepress pz_codec.cpp

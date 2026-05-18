@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: tagged_bam.h
 // G-TAGGED-BAM — Streaming Cell Ranger-compatible tagged BAM writer.

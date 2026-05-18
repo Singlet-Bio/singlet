@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // test_txome_aligner.cpp — Unit tests for TxomeAligner v0.1 (T-L2-2)
 // Tests:
 //   1. Build index from tiny in-memory transcriptome

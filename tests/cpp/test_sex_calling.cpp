@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // N14: Unit tests for sex_calling.h
 // Tests sex inference from XIST (chrX) and chrY marker expression.
 //

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 #' Convert a singlet pipeline directory to a SingleCellExperiment.
 #'
 #' Builds a \code{\link[SingleCellExperiment:SingleCellExperiment]{SingleCellExperiment}}

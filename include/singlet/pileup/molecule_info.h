@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #pragma once
 // singlet-pileup: molecule_info.h
 // Cell Ranger-compatible molecule_info.h5 output.

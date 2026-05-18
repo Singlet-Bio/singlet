@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // integrates: DropletUtils::emptyDrops (Lun et al. 2019)
 // qc/empty_drops.h — GPU-native cell/empty-droplet calling for raw 10X data.
 // Lun ATL et al. (2019) Genome Biology 20:63.
@@ -15,13 +15,9 @@
 //        31 (<= 500 LOC).
 
 #pragma once
-#ifndef FACTORNET_HAS_GPU
-#  define FACTORNET_HAS_GPU 1
-#endif
-
-#include <singlet-gpu/core/types.h>
-#include <singlet-gpu/core/handles.h>
-#include <singlet-gpu/io/pz_device_loader.h>
+#include <singlet/gpu/core/types.h>
+#include <singlet/gpu/core/handles.h>
+#include <singlet/gpu/io/pz_device_loader.h>
 
 #include <cuda_runtime.h>
 #include <curand_kernel.h>
@@ -34,7 +30,7 @@
 #include <string>
 #include <vector>
 
-namespace singlet_gpu {
+namespace singlet::gpu {
 namespace qc {
 
 struct EmptyDropsConfig {
@@ -235,7 +231,7 @@ inline EmptyDropsResult
 empty_drops(const io::PzDeviceMatrix& X, const EmptyDropsConfig& cfg = {},
             cudaStream_t stream = nullptr)
 {
-    if (stream == nullptr) stream = singlet_gpu::core::default_context().stream();
+    if (stream == nullptr) stream = singlet::gpu::core::default_context().stream();
 
     const int m   = X.mat.rows;
     const int n   = X.mat.cols;
@@ -292,7 +288,7 @@ empty_drops(const io::PzDeviceMatrix& X, const EmptyDropsConfig& cfg = {},
         cub::DeviceReduce::Sum(d_tmp.get(), tmp_bytes,
                                d_ambient.get(), d_total.get(), m, stream);
     }
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
     float h_total = 0.f;
     cudaMemcpy(&h_total, d_total.get(), sizeof(float), cudaMemcpyDeviceToHost);
     if (h_total <= 0.f)
@@ -305,7 +301,7 @@ empty_drops(const io::PzDeviceMatrix& X, const EmptyDropsConfig& cfg = {},
         d_ambient.get(), d_log_pi.get(), m, 1.f / h_total);
 
     // Build candidate list on host (one D2H at boundary).
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
     std::vector<int32_t> h_t(n);
     cudaMemcpy(h_t.data(), d_t.get(), n * sizeof(int32_t), cudaMemcpyDeviceToHost);
 
@@ -326,7 +322,7 @@ empty_drops(const io::PzDeviceMatrix& X, const EmptyDropsConfig& cfg = {},
     result.fdr          = std::move(d_fdr);
     result.is_cell      = std::move(d_is_cell);
 
-    if (nc == 0) { CUDA_CHECK(cudaStreamSynchronize(stream)); return result; }
+    if (nc == 0) { SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream)); return result; }
 
     core::DeviceMemory<int32_t> d_cand_cols(nc), d_cand_t(nc);
     cudaMemcpyAsync(d_cand_cols.get(), h_cand_cols.data(),
@@ -357,7 +353,7 @@ empty_drops(const io::PzDeviceMatrix& X, const EmptyDropsConfig& cfg = {},
         d_hit.get(), d_cand_cols.get(), result.pvalue.get(), nc, cfg.niters);
 
     // Pass 5: BH FDR (host-side; one D2H + one H2D).
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
     std::vector<int32_t> h_hit(nc);
     cudaMemcpy(h_hit.data(), d_hit.get(), nc * sizeof(int32_t), cudaMemcpyDeviceToHost);
 
@@ -401,9 +397,9 @@ empty_drops(const io::PzDeviceMatrix& X, const EmptyDropsConfig& cfg = {},
             result.fdr.get(), result.is_cell.get(), nc, cfg.fdr_thresh);
     }
 
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    SINGLET_GPU_CUDA_CHECK(cudaStreamSynchronize(stream));
     return result;
 }
 
 } // namespace qc
-} // namespace singlet_gpu
+} // namespace singlet::gpu
