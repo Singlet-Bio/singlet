@@ -42,6 +42,7 @@ __all__ = [
     "SingletSnp",
     "SingletMt",
     "SingletNonhost",
+    "open_sample",
 ]
 
 
@@ -331,3 +332,115 @@ class SingletSample:
 
     def __repr__(self) -> str:
         return f"SingletSample({str(self.path)!r})"
+
+    # ----------------------------------------------------------------
+    # Feature-bundle resolution for derived views.
+    # ----------------------------------------------------------------
+
+    def _resolve_features(self, features=None):
+        """Locate the ``FeaturesBundle`` to use for derived views.
+
+        Resolution order:
+
+        1. The ``features`` argument, if supplied (path or
+           :class:`singlet.refbundle.FeaturesBundle`).
+        2. ``<sample_dir>/reference/`` if present.
+        3. ``$SINGLET_REFERENCE_DIR`` environment variable.
+
+        Raises a clear error if none can be found.
+        """
+        import os as _os
+
+        from singlet.refbundle import FeaturesBundle, load_features
+
+        if features is not None:
+            if isinstance(features, FeaturesBundle):
+                return features
+            return load_features(features)
+
+        sibling = self.path / "reference"
+        if sibling.exists():
+            return load_features(sibling)
+
+        env = _os.environ.get("SINGLET_REFERENCE_DIR")
+        if env:
+            return load_features(env)
+
+        raise FileNotFoundError(
+            "No feature bundle found. Pass `features=` explicitly, place a "
+            "`reference/` directory next to the sample, or set "
+            "$SINGLET_REFERENCE_DIR."
+        )
+
+    # ----------------------------------------------------------------
+    # Derived views — sub-200 ms on a 12K-cell sample.
+    # ----------------------------------------------------------------
+
+    def gene_counts(self, features=None):
+        """Gene × cell UMI counts (sum of exon + intron + junction blocks).
+
+        See :func:`singlet.views.gene_counts`.
+        """
+        from singlet.views import gene_counts as _gene_counts
+
+        return _gene_counts(self, self._resolve_features(features))
+
+    def usa(self, features=None):
+        """Unspliced / spliced / ambiguous decomposition.
+
+        Returns a :class:`singlet.views.usa.UsaTriplet`. By construction
+        ``spliced + unspliced + ambiguous == gene_counts``.
+        """
+        from singlet.views import usa as _usa
+
+        return _usa(self, self._resolve_features(features))
+
+    def psi(self, features=None):
+        """Per-junction percent-spliced-in. See :func:`singlet.views.psi`."""
+        from singlet.views import psi as _psi
+
+        return _psi(self, self._resolve_features(features))
+
+    def mt_vaf(self):
+        """Mitochondrial variant allele frequency = mt.ad / mt.dp."""
+        return self.mt.vaf()
+
+    def donor_vaf(self):
+        """Donor SNP variant allele frequency = snp.ad / snp.dp."""
+        return self.snp.vaf()
+
+
+# --------------------------------------------------------------------------
+# Convenience constructor — accepts a local path or a hosted accession.
+# --------------------------------------------------------------------------
+
+
+def open_sample(accession_or_path, cache_dir=None, base_url=None) -> SingletSample:
+    """Open a sample by local path or remote accession.
+
+    - Existing local path → :class:`SingletSample` directly.
+    - Accession string → :func:`singlet.fetch.fetch` then open.
+
+    Parameters
+    ----------
+    accession_or_path
+        Either a filesystem path to a canonical v2 sample directory, or
+        an accession string (e.g. ``"GSM3308814"``) hosted at
+        ``$SINGLET_DATA_BASE``.
+    cache_dir, base_url
+        Forwarded to :func:`singlet.fetch.fetch` when downloading.
+
+    Returns
+    -------
+    SingletSample
+    """
+    p = Path(accession_or_path)
+    if p.exists() and (p / "summary.json").exists():
+        return SingletSample(p)
+
+    from singlet.fetch import fetch as _fetch
+
+    sample_dir = _fetch(
+        str(accession_or_path), cache_dir=cache_dir, base_url=base_url
+    )
+    return SingletSample(sample_dir)

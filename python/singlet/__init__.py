@@ -161,7 +161,9 @@ from singlet.io.sample import (
     SingletNonhost,
     SingletSample,
     SingletSnp,
+    open_sample as open,
 )
+from singlet.fetch import fetch, default_cache_dir, default_base_url
 from singlet.pipeline import PipelineError, Run, run as run_pipeline
 from singlet.transcode import transcode_v1_to_v2
 from singlet.manifest import validate_sample
@@ -287,6 +289,10 @@ __all__ = [
     "SingletSnp",
     "SingletMt",
     "SingletNonhost",
+    "open",
+    "fetch",
+    "default_cache_dir",
+    "default_base_url",
     "view_gene_counts",
     "view_usa",
     "view_psi",
