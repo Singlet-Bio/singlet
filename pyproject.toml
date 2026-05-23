@@ -36,6 +36,8 @@ dependencies = [
     "anndata>=0.8",
     "requests>=2.25",
     "tqdm>=4.60",
+    "scikit-learn>=1.0",
+    "zstandard>=0.20",
 ]
 
 [project.optional-dependencies]
