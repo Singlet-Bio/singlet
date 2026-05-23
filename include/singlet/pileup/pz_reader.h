@@ -235,7 +235,9 @@ static inline std::vector<uint8_t> slurp_and_validate(const std::string& path) {
     if (hdr.magic != TP1_MAGIC) {
         throw PZReadError(path + ": bad magic");
     }
-    if (hdr.version != TP1_VERSION) {
+    // Accept v1, v3, v4: parser layout is identical across versions; the
+    // bump tracks feature-flag combinations (e.g. v4 = FEAT_BITPLANE_BITMAP).
+    if (hdr.version != 1 && hdr.version != 3 && hdr.version != 4) {
         throw PZReadError(path + ": unsupported version " + std::to_string(hdr.version));
     }
 
@@ -330,9 +332,51 @@ static inline void decode_metadata_block(
 }
 
 // ============================================================================
+// Byte-unsplit decode (scalar fallback; performance can be tuned later).
+//
+// byte_unsplit_16: reconstruct n uint32 values from their low bytes (plane 0)
+//   and high bytes (plane 1) stored contiguously:
+//   src[0..n)  = low bytes (bits 0-7),  src[n..2n) = high bytes (bits 8-15)
+//
+// byte_unsplit_32: reconstruct n uint32 values from four planes:
+//   src[0..n)=p0  src[n..2n)=p1  src[2n..3n)=p2  src[3n..4n)=p3
+// ============================================================================
+static inline void byte_unsplit_16(const uint8_t* src, size_t n, uint32_t* dst) {
+    const uint8_t* p0 = src;
+    const uint8_t* p1 = src + n;
+    for (size_t i = 0; i < n; ++i)
+        dst[i] = static_cast<uint32_t>(p0[i]) | (static_cast<uint32_t>(p1[i]) << 8);
+}
+
+static inline void byte_unsplit_32(const uint8_t* src, size_t n, uint32_t* dst) {
+    const uint8_t* p0 = src;
+    const uint8_t* p1 = src + n;
+    const uint8_t* p2 = src + 2 * n;
+    const uint8_t* p3 = src + 3 * n;
+    for (size_t i = 0; i < n; ++i)
+        dst[i] = static_cast<uint32_t>(p0[i])
+               | (static_cast<uint32_t>(p1[i]) <<  8)
+               | (static_cast<uint32_t>(p2[i]) << 16)
+               | (static_cast<uint32_t>(p3[i]) << 24);
+}
+
+// ============================================================================
 // Decode all VOCSC chunks, filling r.indices / r.data.
 // ``body`` points at the start of the chunk table. ``perm`` and ``cc`` are
 // the already-decoded permutation and column-count arrays.
+//
+// Chunk blob layout depends on feature_flags:
+//
+//   Without FEAT_BITPLANE_BITMAP (feature_flags & 0x02 == 0):
+//     [ng:4][msz:4][zsz:4][crc:4][compressed:zsz]   — 16-byte header
+//     The zstd payload decompresses directly to raw = meta(msz) + gaps(ng*gw).
+//     CRC32 is over the decompressed raw bytes.
+//
+//   With FEAT_BITPLANE_BITMAP (feature_flags & 0x02 != 0):
+//     [ng:4][msz:4][zsz:4][crc:4][packed_sz:4][compressed:zsz] — 20-byte header
+//     The zstd payload decompresses to packed_sz bytes (bitmap-packed
+//     pre-filter), which are then unpacked and un-bit-planed to produce raw.
+//     CRC32 is over the compressed but pre-bitmap-packed bytes.
 // ============================================================================
 static inline void decode_vocsc_section(
     const uint8_t* body, size_t chunk_table_offset,
@@ -350,6 +394,9 @@ static inline void decode_vocsc_section(
     const int gw = (hdr.flags & FLAG_GAP16) ? 2 : 4;
     const uint32_t chunk_cols = hdr.chunk_cols;
     const uint32_t n = hdr.n;
+    const bool has_bp = (hdr.feature_flags & FEAT_BITPLANE_BITMAP) != 0;
+    // Minimum blob header size: 20 bytes (with bitmap) or 16 bytes (without).
+    const uint32_t min_hdr = has_bp ? 20u : 16u;
 
     r.indices.assign(hdr.nnz, 0);
     r.data.assign(hdr.nnz, 0);
@@ -359,62 +406,91 @@ static inline void decode_vocsc_section(
 
     // Scratch buffers reused across chunks
     ZstdDCtx dctx;
-    std::vector<uint8_t> packed;       // bitmap-packed chunk body
-    std::vector<uint8_t> prefilter;    // unpacked chunk body
-    std::vector<uint8_t> low_bytes;    // decoded bit-plane 0
+    std::vector<uint8_t> raw;          // final decoded: meta + byte-split gaps
+    std::vector<uint8_t> packed;       // bitmap-packed chunk body (has_bp path)
+    std::vector<uint8_t> prefilter;    // bitmap-unpacked body (has_bp path)
     std::vector<uint32_t> gaps;
 
     for (size_t c = 0; c < nc; ++c) {
         const uint32_t blob_sz = ctable[c];
-        if (blob_sz < 20) {
-            throw PZReadError("chunk blob smaller than 20-byte header");
+        if (blob_sz < min_hdr) {
+            throw PZReadError("chunk blob smaller than expected header (" +
+                              std::to_string(min_hdr) + " bytes)");
         }
         const uint8_t* blob = body + blob_cursor;
 
-        uint32_t ng32, msz32, zsz, chunk_crc, psz32;
+        uint32_t ng32, msz32, zsz, chunk_crc;
         std::memcpy(&ng32,      blob +  0, 4);
         std::memcpy(&msz32,     blob +  4, 4);
         std::memcpy(&zsz,       blob +  8, 4);
         std::memcpy(&chunk_crc, blob + 12, 4);
-        std::memcpy(&psz32,     blob + 16, 4);
 
-        if (static_cast<size_t>(20) + zsz > blob_sz) {
+        if (static_cast<size_t>(min_hdr) + zsz > blob_sz) {
             throw PZReadError("chunk blob header size mismatch");
         }
 
-        // zstd-decompress blob body → packed
-        packed = zstd_decompress(dctx.ctx, blob + 20, zsz);
-        if (packed.size() != psz32) {
-            throw PZReadError("chunk decompressed size mismatch");
-        }
+        const size_t raw_sz = static_cast<size_t>(msz32) + static_cast<size_t>(ng32) * gw;
 
-        // CRC32 over the packed (post-bitmap-pack) bytes
-        if (CRC32::compute(packed.data(), packed.size()) != chunk_crc) {
-            throw PZReadError("chunk CRC32 mismatch");
-        }
+        if (has_bp) {
+            // 20-byte header: packed_sz at offset 16, compressed at offset 20.
+            uint32_t psz32;
+            std::memcpy(&psz32, blob + 16, 4);
 
-        // Prefilter size: msz + bp_sz + (gw-1)*ng  (matches encoder)
-        const size_t bp_sz = ng32 > 0 ? 8 * ((ng32 + 7) / 8) : 0;
-        const size_t extra_planes_sz = ng32 > 0 ? static_cast<size_t>(gw - 1) * ng32 : 0;
-        const size_t pf_sz = static_cast<size_t>(msz32) + bp_sz + extra_planes_sz;
-        prefilter.assign(pf_sz, 0);
-        bitmap_unpack(packed.data(), packed.size(), prefilter.data(), pf_sz);
+            // Decompress → packed buffer (bitmap-filtered pre-filter bytes).
+            packed = zstd_decompress(dctx.ctx, blob + 20, zsz);
+            if (packed.size() != psz32) {
+                throw PZReadError("chunk decompressed size mismatch");
+            }
 
-        // Rebuild the gap stream
-        gaps.assign(ng32, 0);
-        if (ng32 > 0) {
-            low_bytes.assign(ng32, 0);
-            bit_planes_decode(prefilter.data() + msz32, ng32, low_bytes.data());
-            for (uint32_t i = 0; i < ng32; ++i) gaps[i] = low_bytes[i];
-            if (gw > 1) {
-                const uint8_t* upper = prefilter.data() + msz32 + bp_sz;
-                for (int b = 1; b < gw; ++b) {
-                    const uint8_t* plane = upper + static_cast<size_t>(b - 1) * ng32;
-                    for (uint32_t i = 0; i < ng32; ++i) {
-                        gaps[i] |= static_cast<uint32_t>(plane[i]) << (8 * b);
-                    }
+            // CRC32 is over the packed (post-bitmap-pack, pre-compress) bytes.
+            if (CRC32::compute(packed.data(), packed.size()) != chunk_crc) {
+                throw PZReadError("chunk CRC32 mismatch");
+            }
+
+            // Bitmap-unpack packed → prefilter of size pf_sz.
+            // pf_sz = msz + bp_sz + (gw-1)*ng
+            //   where bp_sz = 8 * ceil(ng/8) (8 bit-planes of ng bytes each).
+            const size_t bp_sz = ng32 > 0 ? 8 * ((static_cast<size_t>(ng32) + 7) / 8) : 0;
+            const size_t pf_sz = static_cast<size_t>(msz32) + bp_sz
+                                 + (ng32 > 0 ? static_cast<size_t>(gw - 1) * ng32 : 0);
+            prefilter.assign(pf_sz, 0);
+            bitmap_unpack(packed.data(), packed.size(), prefilter.data(), pf_sz);
+
+            // Reconstruct raw from prefilter:
+            //   raw[0..msz)          = prefilter[0..msz)      (metadata, unchanged)
+            //   raw[msz..msz+ng)     = bit_planes_decode(prefilter[msz..msz+bp_sz))
+            //   raw[msz+ng..raw_sz)  = prefilter[msz+bp_sz..) (upper byte planes)
+            raw.resize(raw_sz);
+            std::memcpy(raw.data(), prefilter.data(), msz32);
+            if (ng32 > 0) {
+                bit_planes_decode(prefilter.data() + msz32, ng32, raw.data() + msz32);
+                if (gw > 1) {
+                    std::memcpy(raw.data() + msz32 + ng32,
+                                prefilter.data() + msz32 + bp_sz,
+                                static_cast<size_t>(gw - 1) * ng32);
                 }
             }
+        } else {
+            // 16-byte header: compressed payload starts at offset 16.
+            // Decompress directly to raw = meta(msz) + byte-split-gaps(ng*gw).
+            raw = zstd_decompress(dctx.ctx, blob + 16, zsz);
+            if (raw.size() != raw_sz) {
+                throw PZReadError("chunk decompressed size mismatch (no-bp path)");
+            }
+
+            // CRC32 is over the decompressed raw bytes.
+            if (CRC32::compute(raw.data(), raw.size()) != chunk_crc) {
+                throw PZReadError("chunk CRC32 mismatch");
+            }
+        }
+
+        // Reconstruct gap stream from byte-split planes in raw[msz32..].
+        gaps.assign(ng32, 0);
+        if (ng32 > 0) {
+            if (gw == 2)
+                byte_unsplit_16(raw.data() + msz32, ng32, gaps.data());
+            else
+                byte_unsplit_32(raw.data() + msz32, ng32, gaps.data());
         }
 
         // Walk the column TLV stream and consume gaps in order
@@ -422,9 +498,9 @@ static inline void decode_vocsc_section(
         const size_t col_end_raw = col_start + static_cast<size_t>(chunk_cols);
         const size_t col_end = col_end_raw < n ? col_end_raw : static_cast<size_t>(n);
 
-        size_t mp = 0;  // position within prefilter[0..msz32] (varint stream)
+        size_t mp = 0;  // position within raw[0..msz32] (varint stream)
         size_t gp = 0;  // position within gaps[]
-        const uint8_t* meta = prefilter.data();
+        const uint8_t* meta = raw.data();  // raw always holds: meta(msz) + gaps(ng*gw)
 
         // Per-column buffer of (row, value) pairs, re-sorted to original row order
         std::vector<std::pair<uint32_t, uint32_t>> rv;
@@ -441,7 +517,7 @@ static inline void decode_vocsc_section(
                 uint32_t cnt = varint_read(meta, mp);
                 if (mp > msz32) throw PZReadError("column TLV overrun");
 
-                uint32_t prev_row = 0;
+                uint32_t prev_row = 0;  // gap stream resets to 0 for each value group
                 for (uint32_t k = 0; k < cnt; ++k) {
                     if (gp >= ng32) {
                         throw PZReadError("gap stream exhausted mid-column");

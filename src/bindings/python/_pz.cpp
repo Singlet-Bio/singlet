@@ -245,7 +245,7 @@ static py::dict py_info_1pz(const std::string& path)
 
     if (hdr.magic != singlet::pz::TP1_MAGIC)
         throw std::runtime_error("info_1pz: bad magic (not a .1pz file): " + path);
-    if (hdr.version != singlet::pz::TP1_VERSION)
+    if (hdr.version != 1 && hdr.version != 3 && hdr.version != 4)
         throw std::runtime_error("info_1pz: unsupported version " +
                                  std::to_string(hdr.version) + ": " + path);
 
