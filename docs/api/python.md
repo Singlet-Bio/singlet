@@ -32,6 +32,10 @@
 
 ### File I/O
 
+> **Implementation**: `read_1pz`, `write_1pz`, and `info_1pz` use the
+> in-tree pybind11 binding `singlet._pz` on
+> `include/singlet/pileup/pz_{reader,writer}.h` — no external package required.
+
 | Function | Returns |
 |----------|---------|
 | `singlet.read_1pz(path)` | AnnData (preferred format) |

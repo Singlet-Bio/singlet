@@ -294,9 +294,11 @@ def load_sample(
     anndata.AnnData
         Count matrix for just this sample.
     """
-    import singlepress
+    import anndata as ad
+    import scipy.sparse as sp
 
     from singlet._catalog import _get_catalog_dir, _load_sample_index
+    from singlet._pz import read_1pz as _native_read
 
     idx = _load_sample_index()
     rows = idx[idx["gsm_id"] == gsm_id]
@@ -321,16 +323,21 @@ def load_sample(
 
     col_start = int(row["col_offset"])
     col_end = col_start + int(row["col_count"])
-    mat = singlepress.read_1pz_columns(str(counts_path), col_start, col_end)
 
-    import anndata as ad
+    # TODO: native read_1pz_columns slice — currently we read all then slice
+    r = _native_read(str(counts_path))
+    full_mat = sp.csc_matrix(
+        (r["data"], r["indices"], r["indptr"]),
+        shape=(r["m"], r["n"]),
+    )
+    mat = full_mat[:, col_start:col_end]
 
     adata = ad.AnnData(X=mat.T)
 
-    if hasattr(mat, "rownames") and mat.rownames:
+    if r["rownames"]:
         import pandas as pd
 
-        adata.var_names = pd.Index(mat.rownames)
+        adata.var_names = pd.Index(r["rownames"])
 
     adata.obs["gsm_id"] = gsm_id
     adata.obs["gse_id"] = row["gse_id"]

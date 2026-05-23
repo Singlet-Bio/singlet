@@ -67,9 +67,31 @@ def export_to_1pz(
     # Transpose to genes × cells for .1pz container
     mat_gc = mat.T.tocsc()
 
-    import singlepress
+    import numpy as np
 
-    singlepress.write_1pz(str(out), mat_gc)
+    from singlet._pz import write_1pz as _native_write
+
+    data = mat_gc.data
+    if np.issubdtype(data.dtype, np.floating):
+        data = np.round(data).astype(np.int64)
+    elif not np.issubdtype(data.dtype, np.integer):
+        data = data.astype(np.int64)
+    max_val = int(data.max()) if len(data) > 0 else 0
+    if max_val <= 255:
+        data = data.astype(np.uint8)
+    elif max_val <= 65535:
+        data = data.astype(np.uint16)
+    else:
+        data = data.astype(np.uint32)
+
+    _native_write(
+        str(out),
+        mat_gc.indptr.astype(np.int32),
+        mat_gc.indices.astype(np.int32),
+        data,
+        mat_gc.shape[0],
+        mat_gc.shape[1],
+    )
 
     sid = sample_id or out.stem
     logger.info(

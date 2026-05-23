@@ -69,29 +69,20 @@ class TranscodeResult:
 
 
 def _read_legacy_1pz(path: Path):
-    """Read a legacy TP1Z .1pz file. Returns ``(matrix_genes_x_cells,
-    var_names, obs_names)``.
+    """Read a legacy TP1Z .1pz file using the in-tree codec.
 
-    Tries the optional ``singlepress`` accelerator first; falls back to
-    the in-tree Python codec.
+    Returns ``(matrix_genes_x_cells, var_names, obs_names)``.
     """
-    try:  # pragma: no cover — optional fast path
-        import singlepress
+    import scipy.sparse as sp
 
-        mat = singlepress.read_1pz(str(path), num_threads=4)
-        rownames = list(getattr(mat, "rownames", []) or [])
-        colnames = list(getattr(mat, "colnames", []) or [])
-        m = csc_matrix(mat) if not isinstance(mat, csc_matrix) else mat
-        return m, rownames, colnames
-    except (ImportError, AttributeError):
-        from singlepress._pz_codec import pz_read
+    from singlet._pz import read_1pz as _native_read
 
-        result = pz_read(str(path), 4)
-        m = csc_matrix(
-            (result["values"], result["indices"], result["indptr"]),
-            shape=(result["m"], result["n"]),
-        )
-        return m, list(result.get("rownames", []) or []), list(result.get("colnames", []) or [])
+    r = _native_read(str(path))
+    m = csc_matrix(
+        (r["data"], r["indices"], r["indptr"]),
+        shape=(r["m"], r["n"]),
+    )
+    return m, list(r.get("rownames", []) or []), list(r.get("colnames", []) or [])
 
 
 # --------------------------------------------------------------------------

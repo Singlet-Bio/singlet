@@ -4,9 +4,10 @@
 For multi-block canonical v2 sample outputs, see :mod:`singlet.pz_v2`
 and :class:`singlet.io.SingletSample`.
 
-This module is the thin AnnData adapter on top of the singlepress C++
-codec. It handles only legacy single-block ``.1pz`` files (magic
-``TP1Z``); the canonical v2 format (magic ``1PZ02``) is read via
+This module is the thin AnnData adapter on top of the in-tree TP1Z codec at
+`include/singlet/pileup/pz_reader.h` and `include/singlet/pileup/pz_writer.h`
+(binding: `singlet._pz`). It handles only legacy single-block ``.1pz`` files
+(magic ``TP1Z``); the canonical v2 format (magic ``1PZ02``) is read via
 :func:`singlet.pz_v2.read_pz_v2`.
 """
 
@@ -41,7 +42,31 @@ def _detect_format(path: str | Path) -> str:
 
 
 # ============================================================================
-# .1pz format (legacy single-block via singlepress)
+# Internal helper: read .1pz via native codec, return CSC + metadata
+# ============================================================================
+
+
+def _read_pz_native(path: str):
+    """Read a .1pz file using the in-tree codec.
+
+    Returns ``(csc_matrix, rownames, colnames, user_kv)``.
+    The matrix has shape ``(m, n)`` = ``(genes, cells)`` — caller transposes
+    to cells × genes for AnnData.
+    """
+    import scipy.sparse as sp
+
+    from singlet._pz import read_1pz as _native_read
+
+    r = _native_read(path)
+    mat = sp.csc_matrix(
+        (r["data"], r["indices"], r["indptr"]),
+        shape=(r["m"], r["n"]),
+    )
+    return mat, r["rownames"], r["colnames"], r["user_kv"]
+
+
+# ============================================================================
+# .1pz format (legacy single-block via in-tree codec)
 # ============================================================================
 
 
@@ -54,15 +79,14 @@ def read_1pz(path: str | Path) -> "anndata.AnnData":
     Returns
     -------
     anndata.AnnData
-        Sparse count matrix (CSR) with cells in ``obs`` and genes in
+        Sparse count matrix (CSC) with cells in ``obs`` and genes in
         ``var``. (``.1pz`` stores genes × cells; this transposes.)
-        Stored ``rownames``, ``colnames``, ``colsums``, embedded
-        obs/var DataFrames, and ``uns`` are merged into the returned
-        AnnData.
+        ``rownames`` → ``var_names`` (genes), ``colnames`` → ``obs_names``
+        (cells), ``user_kv`` → ``uns``. ``total_counts`` is computed from
+        the matrix.
     """
     import anndata as ad
     import numpy as np
-    import scipy.sparse as sp
 
     if path is None:
         raise TypeError("read_1pz() requires a file path, got None")
@@ -72,47 +96,25 @@ def read_1pz(path: str | Path) -> "anndata.AnnData":
     if not Path(path_str).exists():
         raise FileNotFoundError(f"File not found: {path_str}")
 
-    try:
-        import singlepress
+    mat, rownames, colnames, user_kv = _read_pz_native(path_str)
 
-        mat = singlepress.read_1pz(path_str, num_threads=8)
-    except (ImportError, AttributeError):
-        from singlepress._pz_codec import pz_read
-
-        result = pz_read(path_str, 8)
-        m, n = result["m"], result["n"]
-        mat = sp.csc_matrix(
-            (result["values"], result["indices"], result["indptr"]),
-            shape=(m, n),
-        )
-
+    # mat is genes × cells (m × n); transpose to cells × genes for AnnData
     adata = ad.AnnData(X=mat.T)
 
-    if hasattr(mat, "rownames") and mat.rownames:
+    if rownames:
         import pandas as pd
 
-        adata.var_names = pd.Index(mat.rownames)
-    if hasattr(mat, "colnames") and mat.colnames:
+        adata.var_names = pd.Index(rownames)
+    if colnames:
         import pandas as pd
 
-        adata.obs_names = pd.Index(mat.colnames)
-    if hasattr(mat, "colsums") and mat.colsums is not None:
-        adata.obs["total_counts"] = mat.colsums.astype(np.float64)
+        adata.obs_names = pd.Index(colnames)
 
-    if hasattr(mat, "obs") and mat.obs is not None:
-        obs_df = mat.obs
-        obs_df.index = adata.obs_names
-        for col in obs_df.columns:
-            adata.obs[col] = obs_df[col].values
+    # Compute per-cell total counts from the matrix (column sums of genes×cells)
+    adata.obs["total_counts"] = np.array(mat.sum(axis=0)).ravel().astype(np.float64)
 
-    if hasattr(mat, "var") and mat.var is not None:
-        var_df = mat.var
-        var_df.index = adata.var_names
-        for col in var_df.columns:
-            adata.var[col] = var_df[col].values
-
-    if hasattr(mat, "uns") and mat.uns:
-        adata.uns.update(mat.uns)
+    if user_kv:
+        adata.uns.update(user_kv)
 
     return adata
 
@@ -131,9 +133,27 @@ def write_1pz(
 
     For canonical multi-block sample outputs, use
     :func:`singlet.pz_v2.write_pz_v2`.
+
+    Note
+    ----
+    ``store_transpose=True`` is not supported by the in-tree codec; passing
+    it raises :class:`NotImplementedError`.  ``include_obs`` and
+    ``include_var`` are accepted for API compatibility but the native codec
+    only persists flat ``user_kv``; obs/var DataFrames are not stored.
+    If ``include_uns=True`` (default), scalar-valued ``adata.uns`` entries
+    are serialised as ``user_kv`` strings.
     """
+    import numpy as np
     import scipy.sparse as sp
-    import singlepress
+
+    from singlet._pz import write_1pz as _native_write
+
+    if store_transpose:
+        raise NotImplementedError(
+            "store_transpose=True is not supported by the in-tree TP1Z codec. "
+            "Use the canonical v2 format (singlet.pz_v2.write_pz_v2) for "
+            "transpose storage."
+        )
 
     if adata is None:
         raise TypeError("write_1pz() requires an AnnData object, got None")
@@ -148,33 +168,57 @@ def write_1pz(
     mat = adata.layers[layer] if layer else adata.X
     if not sp.issparse(mat):
         mat = sp.csc_matrix(mat)
-    mat = mat.T.tocsc()  # AnnData is cells × genes → genes × cells on disk
+    # AnnData is cells × genes → genes × cells on disk
+    mat = mat.T.tocsc()
+
+    # Convert data to an integer dtype acceptable by the native codec.
+    # Count matrices are often stored as float32 with integer values.
+    data = mat.data
+    if np.issubdtype(data.dtype, np.floating):
+        data = np.round(data).astype(np.int64)
+    elif not np.issubdtype(data.dtype, np.integer):
+        data = data.astype(np.int64)
+
+    # Choose smallest unsigned width that fits all values
+    max_val = int(data.max()) if len(data) > 0 else 0
+    if max_val <= 255:
+        data = data.astype(np.uint8)
+    elif max_val <= 65535:
+        data = data.astype(np.uint16)
+    else:
+        data = data.astype(np.uint32)
+
+    indptr = mat.indptr.astype(np.int32)
+    indices = mat.indices.astype(np.int32)
+    m, n = mat.shape  # genes × cells
 
     rownames = list(adata.var_names) if len(adata.var_names) > 0 else None
     colnames = list(adata.obs_names) if len(adata.obs_names) > 0 else None
-    obs_df = adata.obs if include_obs and len(adata.obs.columns) > 0 else None
-    var_df = adata.var if include_var and len(adata.var.columns) > 0 else None
 
-    uns_dict = None
+    user_meta = None
     if include_uns and adata.uns:
-        uns_dict = {
+        user_meta = {
             k: str(v)
             for k, v in adata.uns.items()
             if isinstance(v, (str, int, float, bool))
         }
-        if not uns_dict:
-            uns_dict = None
+        if not user_meta:
+            user_meta = None
 
-    return singlepress.write_1pz(
+    _native_write(
         str(path),
-        mat,
+        indptr,
+        indices,
+        data,
+        m,
+        n,
         rownames=rownames,
         colnames=colnames,
-        obs=obs_df,
-        var=var_df,
-        uns=uns_dict,
-        store_transpose=store_transpose,
+        user_meta=user_meta,
     )
+
+    nnz = int(mat.nnz)
+    return {"path": str(path), "m": m, "n": n, "nnz": nnz}
 
 
 def info_1pz(path: str | Path) -> dict:
@@ -182,9 +226,9 @@ def info_1pz(path: str | Path) -> dict:
     path = Path(path).expanduser()
     if not path.exists():
         raise FileNotFoundError(f"File not found: {path}")
-    import singlepress
+    from singlet._pz import info_1pz as _info
 
-    return singlepress.info_1pz(str(path))
+    return _info(str(path))
 
 
 def read_matrix(path: str | Path, **kwargs):
@@ -217,23 +261,12 @@ def read_kraken2(gse_dir: str | Path):
     if not k2_path.exists():
         raise FileNotFoundError(f"No kraken2.1pz in {gse_dir}")
 
-    try:
-        import singlepress
+    mat, rownames, _colnames, user_kv = _read_pz_native(str(k2_path))
 
-        mat = singlepress.read_1pz(str(k2_path), num_threads=8)
-    except (ImportError, AttributeError):
-        import scipy.sparse as sp
-        from singlepress._pz_codec import pz_read
-
-        result = pz_read(str(k2_path), 8)
-        mat = sp.csc_matrix(
-            (result["values"], result["indices"], result["indptr"]),
-            shape=(result["m"], result["n"]),
-        )
-
+    # mat is taxa × cells; transpose to cells × taxa
     adata = ad.AnnData(X=mat.T)
-    if hasattr(mat, "rownames") and mat.rownames:
-        adata.var_names = pd.Index(mat.rownames)
+    if rownames:
+        adata.var_names = pd.Index(rownames)
 
     feat_path = gse_dir / "kraken2_features.parquet"
     if feat_path.exists():
@@ -242,7 +275,7 @@ def read_kraken2(gse_dir: str | Path):
         for col in feat_df.columns:
             adata.var[col] = feat_df[col].values
 
-    if hasattr(mat, "uns") and mat.uns:
-        adata.uns.update(mat.uns)
+    if user_kv:
+        adata.uns.update(user_kv)
 
     return adata

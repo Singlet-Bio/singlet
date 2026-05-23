@@ -2,9 +2,7 @@
 """Tests for _io format detection, read_matrix dispatch, and read_kraken2."""
 
 import struct
-import sys
-from types import ModuleType
-from unittest.mock import MagicMock
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -79,8 +77,25 @@ class TestReadMatrix:
             read_matrix(f)
 
 
+def _write_minimal_1pz(path: Path, taxa: list[str], n_cells: int, data_array) -> None:
+    """Helper: write a small valid .1pz file using the native codec."""
+    from singlet._pz import write_1pz as _native_write
+
+    m = len(taxa)
+    n = n_cells
+    mat = sp.csc_matrix(data_array)
+    _native_write(
+        str(path),
+        mat.indptr.astype(np.int32),
+        mat.indices.astype(np.int32),
+        mat.data.astype(np.uint32),
+        m, n,
+        rownames=taxa,
+    )
+
+
 class TestReadKraken2:
-    """Test read_kraken2 with mocked singlepress."""
+    """Test read_kraken2 using the in-tree codec (no singlepress mocking)."""
 
     def test_missing_file_raises(self, tmp_path):
         """Raises FileNotFoundError if kraken2.1pz missing."""
@@ -89,79 +104,39 @@ class TestReadKraken2:
         with pytest.raises(FileNotFoundError, match="No kraken2.1pz"):
             read_kraken2(tmp_path)
 
-    def test_with_singlepress_module(self, tmp_path, monkeypatch):
-        """Uses singlepress.read_1pz when available."""
+    def test_reads_taxa_and_cells(self, tmp_path):
+        """read_kraken2 returns cells × taxa AnnData with var_names set."""
         from singlet._io import read_kraken2
 
-        # Create dummy kraken2.1pz file
+        taxa = ["taxon_A", "taxon_B"]
+        # genes×cells data: 2 taxa × 3 cells
+        data = sp.csc_matrix(np.array([[1, 0, 2], [3, 4, 0]], dtype=np.uint32))
         k2_path = tmp_path / "kraken2.1pz"
-        k2_path.write_bytes(b"dummy")
-
-        # Mock singlepress module
-        mock_sp = MagicMock()
-        mat = sp.csc_matrix(np.array([[1, 0, 2], [3, 4, 0]], dtype=np.float64))
-        mat.rownames = ["taxon_A", "taxon_B"]
-        mat.uns = {"version": "1.0"}
-        mock_sp.read_1pz.return_value = mat
-        monkeypatch.setitem(sys.modules, "singlepress", mock_sp)
+        _write_minimal_1pz(k2_path, taxa, 3, data)
 
         adata = read_kraken2(tmp_path)
-        # Transpose: 2 taxa × 3 cells → 3 cells × 2 taxa
+        # Should be 3 cells × 2 taxa
         assert adata.shape == (3, 2)
         assert list(adata.var_names) == ["taxon_A", "taxon_B"]
-        assert adata.uns["version"] == "1.0"
 
-    def test_with_features_parquet(self, tmp_path, monkeypatch):
+    def test_with_features_parquet(self, tmp_path):
         """Loads kraken2_features.parquet into var if present."""
+        pytest.importorskip("pyarrow")
         import pandas as pd
+
         from singlet._io import read_kraken2
 
+        taxa = ["tax1", "tax2"]
+        data = sp.csc_matrix(np.array([[5, 0], [0, 3]], dtype=np.uint32))
         k2_path = tmp_path / "kraken2.1pz"
-        k2_path.write_bytes(b"dummy")
+        _write_minimal_1pz(k2_path, taxa, 2, data)
 
-        # Mock singlepress
-        mock_sp = MagicMock()
-        mat = sp.csc_matrix(np.array([[5, 0], [0, 3]], dtype=np.float64))
-        mat.rownames = ["tax1", "tax2"]
-        mat.uns = {}
-        mock_sp.read_1pz.return_value = mat
-        monkeypatch.setitem(sys.modules, "singlepress", mock_sp)
-
-        # Create features parquet
         feat_df = pd.DataFrame(
             {"kingdom": ["Bacteria", "Viruses"], "abundance": [0.8, 0.2]},
             index=["tax1", "tax2"],
         )
-        feat_path = tmp_path / "kraken2_features.parquet"
-        feat_df.to_parquet(feat_path)
+        feat_df.to_parquet(str(tmp_path / "kraken2_features.parquet"))
 
         adata = read_kraken2(tmp_path)
         assert "kingdom" in adata.var.columns
         assert list(adata.var["kingdom"]) == ["Bacteria", "Viruses"]
-
-    def test_fallback_to_pz_codec(self, tmp_path, monkeypatch):
-        """Falls back to singlepress._pz_codec.pz_read on ImportError."""
-        from singlet._io import read_kraken2
-
-        k2_path = tmp_path / "kraken2.1pz"
-        k2_path.write_bytes(b"dummy")
-
-        # Create a mock singlepress that raises AttributeError on read_1pz
-        mock_sp = ModuleType("singlepress")
-        # Don't define read_1pz at all → AttributeError when accessed
-
-        mock_codec = MagicMock()
-        mock_codec.pz_read.return_value = {
-            "values": np.array([1.0, 2.0, 3.0]),
-            "indices": np.array([0, 1, 0]),
-            "indptr": np.array([0, 2, 3]),
-            "m": 2,
-            "n": 2,
-        }
-        mock_sp._pz_codec = mock_codec
-        monkeypatch.setitem(sys.modules, "singlepress", mock_sp)
-        monkeypatch.setitem(sys.modules, "singlepress._pz_codec", mock_codec)
-
-        adata = read_kraken2(tmp_path)
-        # 2 taxa × 2 cells → 2 cells × 2 taxa
-        assert adata.shape == (2, 2)

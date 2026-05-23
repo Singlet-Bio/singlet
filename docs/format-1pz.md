@@ -157,6 +157,29 @@ Rownames are feature identifiers (gene IDs or SNP positions). Colnames are cell 
 
 ---
 
+## Reading and writing in Python
+
+The TP1Z codec is implemented header-only in C++ at
+`include/singlet/pileup/pz_reader.h` and `include/singlet/pileup/pz_writer.h`.
+Python bindings are built into `singlet` itself — no external package
+required.
+
+```python
+from singlet import read_1pz, write_1pz, info_1pz
+
+adata = read_1pz("counts.1pz")          # → AnnData (cells × genes)
+write_1pz(adata, "out.1pz")             # AnnData → .1pz
+info = info_1pz("counts.1pz")           # header-only inspection
+```
+
+For the low-level CSC arrays (no AnnData wrapping):
+
+```python
+from singlet._pz import read_1pz as _read
+r = _read("counts.1pz")
+# r["indptr"], r["indices"], r["data"], r["rownames"], r["colnames"], r["user_kv"]
+```
+
 ## Reading .1pz files
 
 ### Python (singlet)
@@ -164,11 +187,11 @@ Rownames are feature identifiers (gene IDs or SNP positions). Colnames are cell 
 ```python
 import singlet
 
-# Returns scipy.sparse.csc_matrix via AnnData
+# Returns AnnData (cells × genes)
 adata = singlet.read_1pz("exon_counts.1pz")
 
 # Or use the low-level I/O
-from singlet.io import read_1pz
+from singlet._io import read_1pz
 mat = read_1pz("exon_counts.1pz")
 ```
 
