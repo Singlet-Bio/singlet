@@ -93,6 +93,8 @@ struct DetectionResult {
             return ref_base + "/GRCh38-2024-A/star_2.7.11b";
         if (genome_tag == "GRCm39")
             return ref_base + "/GRCm39-2024-A/star_2.7.11b";
+        if (genome_tag == "GRCh38-GRCm39-barnyard")
+            return ref_base + "/GRCh38-GRCm39-barnyard/star_2.7.11b";
         // All other species: ref_base/{genome_tag}/star_2.7.11b
         if (!genome_tag.empty() && genome_tag != "unknown") {
             // Try exact tag first
@@ -102,6 +104,19 @@ struct DetectionResult {
             // Try star/ subdirectory
             candidate = ref_base + "/" + genome_tag + "/star";
             if (stat(candidate.c_str(), &st) == 0) return candidate;
+            // Assembly version upgrades: route older assemblies to newer ones
+            // (same species, compatible gene models)
+            static const std::pair<std::string,std::string> upgrades[] = {
+                {"ARS-UCD1.2", "ARS-UCD1.3"},  // cow v1.2 → v1.3
+            };
+            for (const auto& [old_tag, new_tag] : upgrades) {
+                if (genome_tag == old_tag) {
+                    candidate = ref_base + "/" + new_tag + "/star_2.7.11b";
+                    if (stat(candidate.c_str(), &st) == 0) return candidate;
+                    candidate = ref_base + "/" + new_tag + "/star";
+                    if (stat(candidate.c_str(), &st) == 0) return candidate;
+                }
+            }
         }
         return "";
     }
@@ -144,10 +159,68 @@ inline std::string organism_to_genome_tag(const std::string& organism,
     if (taxon_id == "8364")  return "UCB_Xtro_10.0"; // frog (X. tropicalis)
     if (taxon_id == "9940")  return "ARS-UI_Ramb_v2.0"; // sheep
     if (taxon_id == "4932" || taxon_id == "559292") return "R64-1-1"; // yeast
+    if (taxon_id == "9541")  return "Macaca_fascicularis_6.0"; // crab-eating macaque
+    if (taxon_id == "10141") return "Cavpor3.0";   // guinea pig
+    if (taxon_id == "13616") return "ASM229v1";    // opossum
+    if (taxon_id == "9483")  return "mCalJac1.pat.X"; // marmoset
+    if (taxon_id == "8355")  return "Xla.v10.1";   // Xenopus laevis
+    if (taxon_id == "10036") return "MesAur1.0";    // golden hamster
+    if (taxon_id == "7719" || taxon_id == "51511") return "KH"; // Ciona robusta/intestinalis
+
+    // Tier 1: Ensembl vertebrates (extended)
+    if (taxon_id == "9598")  return "Pan_tro_3.0";       // chimpanzee
+    if (taxon_id == "9545")  return "Mnem_1.0";           // pig-tailed macaque
+    if (taxon_id == "9669")  return "MusPutFur1.0";       // ferret
+    if (taxon_id == "9925")  return "ARS1";               // goat
+    if (taxon_id == "10029") return "CriGri-PICRH-1.0";   // Chinese hamster (CHO)
+    if (taxon_id == "105023") return "Nfu_20140520";      // killifish
+    if (taxon_id == "7994")  return "Astyanax_mexicanus-2.0"; // cave fish
+    if (taxon_id == "79684") return "MicOch1.0";           // prairie vole
+    if (taxon_id == "37347") return "TREESHREW";           // tree shrew
+    if (taxon_id == "52904") return "ASM1334776v1";        // turbot
+    if (taxon_id == "7718")  return "CSAV2.0";             // Ciona savignyi
+    if (taxon_id == "60711") return "ChlSab1.1";           // vervet monkey
+
+    // Tier 2: Plants (NCBI RefSeq)
+    if (taxon_id == "3702")  return "TAIR10.1";            // Arabidopsis thaliana
+    if (taxon_id == "4577")  return "Zm-B73-REFERENCE-NAM-5.0"; // maize
+    if (taxon_id == "4530" || taxon_id == "39947" || taxon_id == "39946") return "IRGSP-1.0"; // rice
+    if (taxon_id == "3847")  return "Glycine_max_v4.0";    // soybean
+    if (taxon_id == "3880")  return "MtrunA17r5.0-ANR";    // Medicago
+    if (taxon_id == "3694")  return "Pop_tri_v4.1";        // poplar
+    if (taxon_id == "4513")  return "MorexV3";             // barley
+    if (taxon_id == "4558")  return "Sorghum_bicolor_NCBIv3"; // sorghum
+
+    // Tier 3: Parasites, invertebrates, fungi, bacteria
+    if (taxon_id == "5833" || taxon_id == "36329") return "ASM276v2"; // P. falciparum
+    if (taxon_id == "6183")  return "SM_V10";              // Schistosoma mansoni
+    if (taxon_id == "44689") return "dicty_2.7";           // Dictyostelium
+    if (taxon_id == "7460")  return "Amel_HAv3.1";         // honeybee
+    if (taxon_id == "45351") return "jaNemVect1.1";        // sea anemone
+    if (taxon_id == "7668")  return "Spur_5.0";            // purple sea urchin
+    if (taxon_id == "6500")  return "AplCal3.0";           // sea slug
+    if (taxon_id == "5811" || taxon_id == "508771") return "TGA4"; // Toxoplasma gondii
+    if (taxon_id == "185431") return "ASM244v1";           // Trypanosoma brucei
+    if (taxon_id == "610511") return "Hsal_v8.6";          // jumping ant
+    if (taxon_id == "7654")  return "Lvar_3.0";            // green sea urchin
+    if (taxon_id == "6085")  return "Hydra_RP_1.0";        // Hydra
+    if (taxon_id == "235443") return "CNA3";               // Cryptococcus
+    if (taxon_id == "562" || taxon_id == "83333") return "ASM584v2"; // E. coli
+    if (taxon_id == "90371" || taxon_id == "99287") return "ASM694v2"; // Salmonella
 
     // Fallback: organism string match (case-insensitive)
     auto lo = organism;
     std::transform(lo.begin(), lo.end(), lo.begin(), ::tolower);
+
+    // Multi-species barnyard detection (organism contains semicolons)
+    // Route human+mouse combinations to the barnyard reference
+    if (lo.find(';') != std::string::npos) {
+        bool has_human = lo.find("homo sapiens") != std::string::npos;
+        bool has_mouse = lo.find("mus musculus") != std::string::npos ||
+                         lo.find("mus;") != std::string::npos;
+        if (has_human && has_mouse) return "GRCh38-GRCm39-barnyard";
+        // For other multi-species: fall through to single-species matching below
+    }
     
     // Human / Mouse
     if (lo.find("homo sapiens") != std::string::npos || lo == "human") return "GRCh38";
@@ -160,13 +233,73 @@ inline std::string organism_to_genome_tag(const std::string& organism,
     if (lo.find("sus scrofa") != std::string::npos || lo == "pig") return "Sscrofa11.1";
     if (lo.find("bos taurus") != std::string::npos || lo == "cow" || lo == "cattle") return "ARS-UCD1.3";
     if (lo.find("canis") != std::string::npos || lo == "dog") return "ROS_Cfam_1.0";
+    // Macaca: specific species before generic fallback
+    if (lo.find("macaca fascicularis") != std::string::npos || lo == "cynomolgus") return "Macaca_fascicularis_6.0";
     if (lo.find("macaca") != std::string::npos || lo == "macaque") return "Mmul_10";
     if (lo.find("felis catus") != std::string::npos || lo == "cat") return "Felis_catus_9.0";
     if (lo.find("oryctolagus") != std::string::npos || lo == "rabbit") return "OryCun2.0";
     if (lo.find("equus caballus") != std::string::npos || lo == "horse") return "EquCab3.0";
+    // Xenopus: specific species before generic fallback
+    if (lo.find("xenopus laevis") != std::string::npos) return "Xla.v10.1";
     if (lo.find("xenopus") != std::string::npos || lo == "frog") return "UCB_Xtro_10.0";
     if (lo.find("ovis aries") != std::string::npos || lo == "sheep") return "ARS-UI_Ramb_v2.0";
-    
+    if (lo.find("callithrix jacchus") != std::string::npos || lo == "marmoset") return "mCalJac1.pat.X";
+    if (lo.find("cavia porcellus") != std::string::npos || lo == "guinea pig") return "Cavpor3.0";
+    if (lo.find("monodelphis domestica") != std::string::npos || lo == "opossum") return "ASM229v1";
+    if (lo.find("mesocricetus auratus") != std::string::npos || lo == "hamster") return "MesAur1.0";
+    if (lo.find("ciona robusta") != std::string::npos || lo.find("ciona intestinalis") != std::string::npos) return "KH";
+
+    // Primates
+    if (lo.find("pan troglodytes") != std::string::npos || lo == "chimpanzee") return "Pan_tro_3.0";
+    if (lo.find("macaca nemestrina") != std::string::npos) return "Mnem_1.0";
+    if (lo.find("chlorocebus") != std::string::npos || lo == "vervet") return "ChlSab1.1";
+
+    // Other mammals
+    if (lo.find("mustela putorius") != std::string::npos || lo == "ferret") return "MusPutFur1.0";
+    if (lo.find("capra hircus") != std::string::npos || lo == "goat") return "ARS1";
+    if (lo.find("cricetulus griseus") != std::string::npos || lo == "cho") return "CriGri-PICRH-1.0";
+    if (lo.find("microtus ochrogaster") != std::string::npos || lo == "vole") return "MicOch1.0";
+    if (lo.find("tupaia belangeri") != std::string::npos || lo == "tree shrew") return "TREESHREW";
+
+    // Fish
+    if (lo.find("nothobranchius furzeri") != std::string::npos || lo == "killifish") return "Nfu_20140520";
+    if (lo.find("astyanax mexicanus") != std::string::npos || lo == "cavefish") return "Astyanax_mexicanus-2.0";
+    if (lo.find("scophthalmus maximus") != std::string::npos || lo == "turbot") return "ASM1334776v1";
+
+    // Invertebrates (extended)
+    if (lo.find("ciona savignyi") != std::string::npos) return "CSAV2.0";
+    if (lo.find("nematostella vectensis") != std::string::npos) return "jaNemVect1.1";
+    if (lo.find("strongylocentrotus purpuratus") != std::string::npos) return "Spur_5.0";
+    if (lo.find("lytechinus variegatus") != std::string::npos) return "Lvar_3.0";
+    if (lo.find("aplysia californica") != std::string::npos) return "AplCal3.0";
+    if (lo.find("hydra vulgaris") != std::string::npos || lo.find("hydra") != std::string::npos) return "Hydra_RP_1.0";
+    if (lo.find("apis mellifera") != std::string::npos || lo == "honeybee") return "Amel_HAv3.1";
+    if (lo.find("harpegnathos saltator") != std::string::npos) return "Hsal_v8.6";
+
+    // Plants
+    if (lo.find("arabidopsis thaliana") != std::string::npos) return "TAIR10.1";
+    if (lo.find("zea mays") != std::string::npos || lo == "maize" || lo == "corn") return "Zm-B73-REFERENCE-NAM-5.0";
+    if (lo.find("oryza sativa") != std::string::npos || lo == "rice") return "IRGSP-1.0";
+    if (lo.find("glycine max") != std::string::npos || lo == "soybean") return "Glycine_max_v4.0";
+    if (lo.find("medicago truncatula") != std::string::npos) return "MtrunA17r5.0-ANR";
+    if (lo.find("populus trichocarpa") != std::string::npos || lo == "poplar") return "Pop_tri_v4.1";
+    if (lo.find("hordeum vulgare") != std::string::npos || lo == "barley") return "MorexV3";
+    if (lo.find("sorghum bicolor") != std::string::npos || lo == "sorghum") return "Sorghum_bicolor_NCBIv3";
+
+    // Parasites & protists
+    if (lo.find("plasmodium falciparum") != std::string::npos) return "ASM276v2";
+    if (lo.find("schistosoma mansoni") != std::string::npos) return "SM_V10";
+    if (lo.find("dictyostelium") != std::string::npos) return "dicty_2.7";
+    if (lo.find("toxoplasma gondii") != std::string::npos) return "TGA4";
+    if (lo.find("trypanosoma brucei") != std::string::npos) return "ASM244v1";
+
+    // Fungi
+    if (lo.find("cryptococcus neoformans") != std::string::npos) return "CNA3";
+
+    // Bacteria
+    if (lo.find("escherichia coli") != std::string::npos || lo.find("e. coli") != std::string::npos) return "ASM584v2";
+    if (lo.find("salmonella") != std::string::npos) return "ASM694v2";
+
     // Invertebrates
     if (lo.find("drosophila") != std::string::npos || lo == "fly") return "BDGP6.46";
     if (lo.find("caenorhabditis") != std::string::npos || lo == "c_elegans" || lo == "worm") return "WBcel235";
@@ -181,6 +314,7 @@ inline std::string organism_to_genome_tag(const std::string& organism,
 inline std::string genome_tag_to_species(const std::string& tag) {
     if (tag == "GRCh38") return "Homo sapiens";
     if (tag == "GRCm39") return "Mus musculus";
+    if (tag == "GRCh38-GRCm39-barnyard") return "Homo sapiens; Mus musculus";
     if (tag == "GRCz11") return "Danio rerio";
     if (tag == "mRatBN7.2") return "Rattus norvegicus";
     if (tag == "GRCg7b") return "Gallus gallus";
@@ -196,6 +330,13 @@ inline std::string genome_tag_to_species(const std::string& tag) {
     if (tag == "UCB_Xtro_10.0") return "Xenopus tropicalis";
     if (tag == "ARS-UI_Ramb_v2.0") return "Ovis aries";
     if (tag == "R64-1-1") return "Saccharomyces cerevisiae";
+    if (tag == "Macaca_fascicularis_6.0") return "Macaca fascicularis";
+    if (tag == "Cavpor3.0") return "Cavia porcellus";
+    if (tag == "ASM229v1") return "Monodelphis domestica";
+    if (tag == "mCalJac1.pat.X") return "Callithrix jacchus";
+    if (tag == "Xla.v10.1") return "Xenopus laevis";
+    if (tag == "MesAur1.0") return "Mesocricetus auratus";
+    if (tag == "KH") return "Ciona robusta";
     return "";
 }
 
@@ -203,6 +344,7 @@ inline std::string genome_tag_to_species(const std::string& tag) {
 inline std::string genome_tag_to_taxon(const std::string& tag) {
     if (tag == "GRCh38") return "9606";
     if (tag == "GRCm39") return "10090";
+    if (tag == "GRCh38-GRCm39-barnyard") return "9606;10090";
     if (tag == "GRCz11") return "7955";
     if (tag == "mRatBN7.2") return "10116";
     if (tag == "GRCg7b") return "9031";
@@ -218,6 +360,13 @@ inline std::string genome_tag_to_taxon(const std::string& tag) {
     if (tag == "UCB_Xtro_10.0") return "8364";
     if (tag == "ARS-UI_Ramb_v2.0") return "9940";
     if (tag == "R64-1-1") return "4932";
+    if (tag == "Macaca_fascicularis_6.0") return "9541";
+    if (tag == "Cavpor3.0") return "10141";
+    if (tag == "ASM229v1") return "13616";
+    if (tag == "mCalJac1.pat.X") return "9483";
+    if (tag == "Xla.v10.1") return "8355";
+    if (tag == "MesAur1.0") return "10036";
+    if (tag == "KH") return "7719";
     return "";
 }
 

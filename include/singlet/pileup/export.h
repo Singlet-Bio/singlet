@@ -2,7 +2,7 @@
 #pragma once
 // singlet-pileup: export.h
 // Shared export logic for writing pileup results to disk.
-// Used by both singlet-pileup CLI and singlify unified pipeline.
+// Used by both the singlet-pileup CLI and the unified singlet pipeline.
 //
 // Exports: COO→CSC conversion, mt heteroplasmy, donor demux, matrix I/O.
 // All operations are parallelized where safe.
@@ -186,7 +186,7 @@ struct ExportConfig {
     // G-METRICS: pileup stats for metrics_summary.csv
     const PileupStats* pileup_stats = nullptr; ///< Non-owning pointer; valid for duration of export_results()
     bool write_raw_matrix = false;             ///< Write raw (unfiltered) barcode matrix alongside filtered
-    // §3.6 required fields passed from singlify.cpp
+    // §3.6 required fields passed from the pipeline driver (src/pipeline/singlet.cpp)
     int         protocol_id   = 0;
     std::string protocol_name;
     std::string species;
@@ -546,14 +546,14 @@ inline ExportStats export_results(const PileupEngine& engine,
 
             // ── EMPTYDROPS-OVERCALL-FALLBACK: CellRanger2 threshold when ambient is unusable ─
             //
-            // singlify's auto-discovery keeps only barcodes with ≥ discovery_threshold reads.
+            // The pipeline's auto-discovery keeps only barcodes with ≥ discovery_threshold reads.
             // After UMI dedup, tested barcodes (UMI ≥ min_umi_test=500) are almost entirely
             // genuine cells — their gene expression genuinely deviates from ambient RNA.
             // A high call rate (>95%) is EXPECTED and CORRECT behavior in this setting.
             //
             // The CR2 fallback (pct99_umi/10) is designed for full-whitelist EmptyDrops where
             // 100% call rate indicates true miscalibration of the ambient profile.  For
-            // singlify's pre-filtered barcode set, applying CR2 is overly aggressive: it
+            // The pipeline's pre-filtered barcode set, applying CR2 is overly aggressive: it
             // uses threshold ~1078 UMI and cuts ~30% of valid cells that STARsolo calls.
             //
             // CR2 fallback ONLY triggers when the ambient pool is genuinely unusable:

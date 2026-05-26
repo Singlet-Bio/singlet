@@ -57,8 +57,8 @@ void usage(int usageType)
     exit(0);
 };
 
-// Entry point callable from singlify (replaces standalone main).
-// Renamed from main() so singlify links this translation unit without
+// Entry point callable from the singlet pipeline (replaces standalone main).
+// Renamed from main() so the singlet binary links this translation unit without
 // duplicate-symbol conflicts.
 int star_main_impl(int argInN, char *argIn[])
 {

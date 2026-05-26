@@ -1,4 +1,4 @@
-# STAR aligner — compiled as object library, linked into singlify
+# STAR aligner — compiled as object library, linked into the singlet pipeline binary
 # Vendored from STAR 2.7.11b (MIT license, see LICENSE.STAR).
 # Optimizations: PGO, LTO, SA boundary prefetch, lazy winBin reset,
 # hash barcode lookup, 14-mer chunk sort, NUMA interleave.
