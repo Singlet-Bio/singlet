@@ -1,0 +1,68 @@
+name: R CMD check
+
+# MVP_ROADMAP.md BLOCKER #6.
+# Runs R CMD check --as-cran on the r/ package across Linux/macOS/Windows and
+# R release+devel. Required for CRAN submission.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "r/**"
+      - "include/singlet/**"
+      - ".github/workflows/R-CMD-check.yml"
+  pull_request:
+    paths:
+      - "r/**"
+      - "include/singlet/**"
+      - ".github/workflows/R-CMD-check.yml"
+  workflow_dispatch:
+
+jobs:
+  R-CMD-check:
+    runs-on: ${{ matrix.config.os }}
+    name: ${{ matrix.config.os }} (${{ matrix.config.r }})
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - { os: ubuntu-latest,  r: "release" }
+          - { os: ubuntu-latest,  r: "devel"   }
+          - { os: macos-latest,   r: "release" }
+          - { os: windows-latest, r: "release" }
+
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: yes
+
+    defaults:
+      run:
+        working-directory: r
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: r-lib/actions/setup-pandoc@v2
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: ${{ matrix.config.r }}
+          http-user-agent: ${{ matrix.config.http-user-agent }}
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          working-directory: r
+          extra-packages: any::rcmdcheck, any::devtools
+          needs: check
+
+      - name: Regenerate NAMESPACE + man pages
+        run: Rscript -e 'devtools::document()'
+
+      - uses: r-lib/actions/check-r-package@v2
+        with:
+          working-directory: r
+          upload-snapshots: true
+          args: 'c("--as-cran", "--no-manual")'

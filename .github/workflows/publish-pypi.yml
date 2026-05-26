@@ -1,0 +1,87 @@
+name: Publish to PyPI
+
+# MVP_ROADMAP.md BLOCKER #4.
+# Triggered by tags v* (e.g. v1.0.0, v1.0.0rc1). For pre-release tags (-rc, -a,
+# -b), publishes to TestPyPI only. For final tags, publishes to PyPI.
+#
+# Required secrets:
+#   PYPI_API_TOKEN       — full PyPI scope-limited token
+#   TEST_PYPI_API_TOKEN  — TestPyPI scope-limited token
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Publish target"
+        required: true
+        default: "testpypi"
+        type: choice
+        options: [testpypi, pypi]
+
+jobs:
+  build-sdist:
+    name: Build sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build deps
+        run: python -m pip install --upgrade pip build twine
+      - name: Build sdist
+        run: python -m build --sdist
+      - name: Check sdist
+        run: twine check dist/*.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+          retention-days: 7
+
+  publish:
+    name: Publish (${{ needs.build-sdist.result == 'success' && 'sdist + wheels' || 'noop' }})
+    needs: [build-sdist]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    environment:
+      # Selects TestPyPI for pre-release tags or manual dispatch with target=testpypi.
+      name: >-
+        ${{ (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi') ||
+            (startsWith(github.ref, 'refs/tags/v') &&
+             !contains(github.ref, '-rc') &&
+             !contains(github.ref, '-a') &&
+             !contains(github.ref, '-b'))
+            && 'pypi' || 'testpypi' }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist-artifacts
+      - name: Collate dist/
+        run: |
+          mkdir -p dist
+          find dist-artifacts -type f \( -name "*.tar.gz" -o -name "*.whl" \) -exec cp {} dist/ \;
+          ls -la dist/
+      - name: Publish to TestPyPI
+        if: ${{ contains(fromJSON('["testpypi"]'), job.environment.name) }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          packages-dir: dist/
+          skip-existing: true
+      - name: Publish to PyPI
+        if: ${{ contains(fromJSON('["pypi"]'), job.environment.name) }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          packages-dir: dist/
+          skip-existing: false
