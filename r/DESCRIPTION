@@ -1,7 +1,7 @@
 Package: singlet
 Type: Package
 Title: Single-Cell Genomics Toolkit
-Version: 2.0.0
+Version: 1.0.0
 Authors@R: c(
     person("Zach", "DeBruine", email = "debruinz@gvsu.edu",
            role = c("aut", "cre")))

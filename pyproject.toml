@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "singlet"
-version = "2.0.0"
+version = "1.0.0"
 description = "Single-cell genomics: load, analyze, and process single-cell data at scale"
 readme = "README.md"
 license = {text = "MIT"}
@@ -13,7 +13,7 @@ authors = [
     {name = "Zach DeBruine", email = "debruinz@gvsu.edu"},
 ]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
@@ -45,7 +45,7 @@ torch = ["torch>=2.0"]
 gpu = ["cupy-cuda12x>=13.0"]
 zarr = ["zarr>=2.12"]
 tiledb = ["tiledbsoma>=1.4"]
-mcp = ["mcp>=0.1", "supabase>=2.0"]
+mcp = ["mcp>=0.1"]
 all = ["singlet[torch,gpu,zarr,tiledb,mcp]"]
 dev = [
     "pytest>=7.0",

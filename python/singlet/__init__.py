@@ -69,7 +69,7 @@ Token-priced (requires API key):
     singlet.search(text)                   Natural-language search → AnnData
 """
 
-__version__ = "2.0.0"
+__version__ = "1.0.0"
 
 from singlet._aggregate import aggregate
 from singlet._ambient_rna_score import ambient_rna_score
