@@ -167,6 +167,23 @@ add_pileup_test(test_ancestry)
 add_pileup_test(test_ase)
 add_pileup_test(test_mtx_writer)
 
+# Ported from singlify (2026-05-26): TE k-mer index, txome gene index, sylph nonhost,
+# 1fq header hardening, cascade stats v2, donor k=1 workaround, feature barcode detect,
+# RAM tier, species short R2, whitelist integrity, WS2/WS4 protocol+crash hardening
+add_pileup_test(test_te_kmer_index)
+add_pileup_test(test_te_kmer_integration)
+add_pileup_test(test_txome_gene_index)
+add_pileup_test(test_nonhost_sylph)
+add_pileup_test(test_1fq_header)
+add_pileup_test(test_cascade_stats)
+add_pileup_test(test_donor_k1_workaround)
+add_pileup_test(test_feature_barcode_detect)
+add_pileup_test(test_ram_tier)
+add_pileup_test(test_species_short_r2)
+add_pileup_test(test_whitelist_integrity)
+add_pileup_test(test_ws2_protocol_hardening)
+add_pileup_test(test_ws4_crash_diagnostics)
+
 # HDF5-dependent tests (h5ad, loom, molecule_info)
 if(HDF5_FOUND)
     macro(add_hdf5_test name)
