@@ -44,7 +44,7 @@ These are the gates from `MVP_ROADMAP.md`. **Drive each to 🟢 before launching
 
 | #  | Blocker | Owner agent | Status |
 |----|---------|-------------|--------|
-| 1  | Port remaining `singlify` work into `singlet`, archive `Singlet-Bio/singlify` | bio-exec + perf-exec | 🔴 |
+| 1  | Port remaining `singlify` work into `singlet`, archive `Singlet-Bio/singlify` | bio-exec + perf-exec | � |
 | 2  | Canonical layout writers (multi-block `counts.1pz`, two-data-layer `mt.1pz`, `cell_meta.parquet`, `summary.json`) + Kraken2/donor default-on + auto-modality detection + client-side derive scripts | bio-exec + perf-exec | 🔴 |
 | 3  | Cell-calling Jaccard ≥ 0.95 vs Cell Ranger on 45/50 panel | validator | 🔴 |
 | 4  | PyPI publishing workflow (`.github/workflows/publish-pypi.yml`) | doc-scribe + ops-scout | � |
