@@ -47,91 +47,100 @@ reference_build:
 files:
   # STAR index (built from GRCh38.p14 primary + GENCODE v44 GTF with STAR 2.7.11b)
   - path: GRCh38-2024-A/star_2.7.11b/Genome
-    sha256: <pending>
+    sha256: 9d97df99c23bc0d84323ece5bac1c72200343eab459a767786c14eff7ecd9d4c
     required: true
     consumer: STAR alignment
   - path: GRCh38-2024-A/star_2.7.11b/SA
-    sha256: <pending>
+    sha256: b6b8f6d68c5f879dbf84ac045deda8a4ccc970ee1de65ea7abcff3afbe3448a0
     required: true
     consumer: STAR alignment
   - path: GRCh38-2024-A/star_2.7.11b/SAindex
-    sha256: <pending>
+    sha256: 7afc61a12592d995f15431b1d0eef0caed6043933563dc53aa4cdd236b26e10a
     required: true
     consumer: STAR alignment
   - path: GRCh38-2024-A/star_2.7.11b/chrName.txt
-    sha256: <pending>
+    sha256: 12d83750559b9ae7d273b4b7ce6077e6f24c43eb65672d1fbcfa2e1593fd3ee8
     required: true
     consumer: STAR alignment
   - path: GRCh38-2024-A/star_2.7.11b/chrLength.txt
-    sha256: <pending>
+    sha256: b297c2398f93cd3d4c8aa1d4e10d6148c9550a1c2175139c29f9aab505422a17
     required: true
     consumer: STAR alignment
   - path: GRCh38-2024-A/star_2.7.11b/chrStart.txt
-    sha256: <pending>
+    sha256: 09e1d0f13d91fd4540be6e87c62f05c57bb54e465ea67bc1e24d347f623ea121
     required: true
     consumer: STAR alignment
   - path: GRCh38-2024-A/star_2.7.11b/genomeParameters.txt
-    sha256: <pending>
+    sha256: d78e6a54f70311c39d5d06cc1271581add67d45022ba160d4ae40895a5a99217
     required: true
     consumer: STAR alignment
   - path: GRCh38-2024-A/star_2.7.11b/sjdbList.fromGTF.out.tab
-    sha256: <pending>
+    sha256: ec43b533d632c468051eb5c652cbecc892ddfe9935f21cdad1ab77cf4ffea269
     required: true
     consumer: STAR alignment
 
   # Genome + annotation sources
   - path: GRCh38-2024-A/fasta/genome.fa
-    sha256: <pending>
+    sha256: fb7421217e7058120cd60a5277445198e8deef2dff1edc46cd1e98b31fe64cbb
     required: true
     consumer: reference rebuild, host bloom filter
   - path: GRCh38-2024-A/genes/genes.gtf
-    sha256: <pending>
+    sha256: a1201e3b0955c92ea789b278e3e6fb967f604da2f6d841d597519168e16c3fc5
     required: true
     consumer: pileup gene model, features.fbin, intron/exon vocabulary
 
-  # Derived per-reference binaries (built once, mmap'd at runtime)
+  # Derived per-reference binaries (post-pilot builds — NOT required for v0.3.0
+  # pilot panel, which exercises the basic .1fq → STAR → pileup → .1pz path.
+  # Each entry's builder must produce a stable artifact + sha256 before being
+  # re-promoted to required: true.)
   - path: GRCh38-2024-A/features.fbin
     sha256: <pending>
-    required: true
+    required: false
+    phase: post-pilot
     consumer: per-sample matrix row indexing (gene/exon/intron/junction)
     builder: scripts/build_features_fbin.py
   - path: GRCh38-2024-A/snp_sites.fbin
     sha256: <pending>
-    required: true
+    required: false
+    phase: post-pilot
     consumer: SNP pileup, donor demultiplexing
     builder: scripts/build_snp_sites_fbin.py
     source_vcf: 1000 Genomes Phase 3 (AF >= 5%), GRCh38-lifted
   - path: GRCh38-2024-A/manifest.json
     sha256: <pending>
-    required: true
-    consumer: reference build provenance
+    required: false
+    phase: post-pilot
+    consumer: reference build provenance (recorded as alias of this YAML)
 
-  # Host bloom filter (built from GRCh38 transcriptome)
+  # Host bloom filter — single canonical copy under nonhost/ is used by both
+  # the nonhost screen and the species filter (see nonhost/host_21mer.bloom
+  # below). The species_filters/ alias is left as a post-pilot symlink target.
   - path: species_filters/human_21mer.bloom
     sha256: <pending>
-    required: true
-    consumer: nonhost screening, species detection
+    required: false
+    phase: post-pilot
+    consumer: nonhost screening, species detection (aliased to nonhost/host_21mer.bloom)
     builder: singlet build-host-filter --genome-fasta genome.fa
     params: {k: 21, w: 11}
 
   # Nonhost screening databases (NCBI RefSeq 223, April 2024)
   - path: nonhost/viral.snhskidx
-    sha256: <pending>
+    sha256: ab42272227d49f974ce2e0ba47fa23aa813b7fb607b6a15999c60c318f2c30ae
     required: true
     consumer: viral RNA detection
     size_gb: 1.4
   - path: nonhost/bacterial.snhskidx
-    sha256: <pending>
+    sha256: b32534e489a07408b6cb22a0c66ce718d1b2da8825de91976b6ce69070dc13ff
     required: true
     consumer: bacterial RNA detection
     size_gb: 6.2
   - path: nonhost/fungal.snhskidx
-    sha256: <pending>
+    sha256: 36e2e9a31b93cb581aa2ff35b12c44d2b4385d410e2e752f55e2912ad45c0dac
     required: true
     consumer: fungal RNA detection
     size_gb: 17.0
   - path: nonhost/host_21mer.bloom
-    sha256: <pending>
+    sha256: 6f7f7895ed26e4d5149838a30e0ad0af39d45a45c6f9a625b45f2938d1980128
     required: true
     consumer: nonhost false-positive suppression
     size_mb: 369
