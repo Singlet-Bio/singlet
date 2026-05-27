@@ -30,7 +30,7 @@ static int g_pass = 0, g_fail = 0;
 // ── Test 1: known_protocols() contains key protocols ──────────────────────────
 static void test_known_protocols_registry() {
     std::fprintf(stderr, "[ws2] known_protocols registry...\n");
-    const auto& protos = lib1fq::known_protocols();
+    const auto& protos = singlet::fq::known_protocols();
     CHECK(!protos.empty(), "known_protocols non-empty");
 
     // Must contain these key protocols
@@ -48,8 +48,8 @@ static void test_known_protocols_registry() {
 // ── Test 2: sci-RNA-seq3 has a non-empty linker ──────────────────────────────
 static void test_sci_rna_seq3_linker() {
     std::fprintf(stderr, "[ws2] sci-RNA-seq3 linker spec...\n");
-    const auto& protos = lib1fq::known_protocols();
-    const lib1fq::CandidateSpec* sci = nullptr;
+    const auto& protos = singlet::fq::known_protocols();
+    const singlet::fq::CandidateSpec* sci = nullptr;
     for (const auto& p : protos) {
         if (p.tag == "sci-rna-seq3") { sci = &p; break; }
     }
@@ -63,8 +63,8 @@ static void test_sci_rna_seq3_linker() {
 // ── Test 3: BD Rhapsody has a non-empty linker ──────────────────────────────
 static void test_bd_rhapsody_linker() {
     std::fprintf(stderr, "[ws2] BD Rhapsody linker spec...\n");
-    const auto& protos = lib1fq::known_protocols();
-    const lib1fq::CandidateSpec* bd = nullptr;
+    const auto& protos = singlet::fq::known_protocols();
+    const singlet::fq::CandidateSpec* bd = nullptr;
     for (const auto& p : protos) {
         if (p.tag == "bd-rhapsody") { bd = &p; break; }
     }
@@ -78,7 +78,7 @@ static void test_bd_rhapsody_linker() {
 // ── Test 4: Protocol IDs are unique ──────────────────────────────────────────
 static void test_protocol_ids_unique() {
     std::fprintf(stderr, "[ws2] Protocol IDs unique...\n");
-    const auto& protos = lib1fq::known_protocols();
+    const auto& protos = singlet::fq::known_protocols();
     std::unordered_set<uint8_t> ids;
     bool all_unique = true;
     for (const auto& p : protos) {
@@ -96,7 +96,7 @@ static void test_protocol_ids_unique() {
 static void test_find_protocol_spec() {
     std::fprintf(stderr, "[ws2] find_protocol_spec lookup...\n");
 
-    auto* v3 = lib1fq::find_protocol_spec("10x-3p-v3");
+    auto* v3 = singlet::fq::find_protocol_spec("10x-3p-v3");
     CHECK(v3 != nullptr, "find 10x-3p-v3");
     if (v3) {
         CHECK(v3->bc_len == 16, "10x-3p-v3 bc_len=16");
@@ -104,7 +104,7 @@ static void test_find_protocol_spec() {
         CHECK(v3->r1_len == 28, "10x-3p-v3 r1_len=28");
     }
 
-    auto* v2 = lib1fq::find_protocol_spec("10x-3p-v2");
+    auto* v2 = singlet::fq::find_protocol_spec("10x-3p-v2");
     CHECK(v2 != nullptr, "find 10x-3p-v2");
     if (v2) {
         CHECK(v2->bc_len == 16, "10x-3p-v2 bc_len=16");
@@ -112,20 +112,20 @@ static void test_find_protocol_spec() {
         CHECK(v2->r1_len == 26, "10x-3p-v2 r1_len=26");
     }
 
-    auto* bd = lib1fq::find_protocol_spec("bd-rhapsody");
+    auto* bd = singlet::fq::find_protocol_spec("bd-rhapsody");
     CHECK(bd != nullptr, "find bd-rhapsody");
 
-    auto* sci = lib1fq::find_protocol_spec("sci-rna-seq3");
+    auto* sci = singlet::fq::find_protocol_spec("sci-rna-seq3");
     CHECK(sci != nullptr, "find sci-rna-seq3");
 
-    auto* nope = lib1fq::find_protocol_spec("nonexistent-protocol-xyz");
+    auto* nope = singlet::fq::find_protocol_spec("nonexistent-protocol-xyz");
     CHECK(nope == nullptr, "nonexistent returns nullptr");
 }
 
 // ── Test 6: Confidence enum ordering ─────────────────────────────────────────
 static void test_confidence_ordering() {
     std::fprintf(stderr, "[ws2] Confidence enum ordering...\n");
-    using lib1fq::Confidence;
+    using singlet::fq::Confidence;
     CHECK(Confidence::NONE < Confidence::LOW, "NONE < LOW");
     CHECK(Confidence::LOW < Confidence::MEDIUM, "LOW < MEDIUM");
     CHECK(Confidence::MEDIUM < Confidence::HIGH, "MEDIUM < HIGH");
@@ -134,7 +134,7 @@ static void test_confidence_ordering() {
 // ── Test 7: BC/UMI geometry constraints for all protocols ────────────────────
 static void test_protocol_geometry_valid() {
     std::fprintf(stderr, "[ws2] Protocol geometry constraints...\n");
-    const auto& protos = lib1fq::known_protocols();
+    const auto& protos = singlet::fq::known_protocols();
     bool all_valid = true;
     for (const auto& p : protos) {
         // BC + UMI must fit within R1 (for non-concat, non-complex protocols with r1_len > 0)
@@ -167,7 +167,7 @@ static void test_protocol_geometry_valid() {
 // ── Test 8: Whitelist file names are reasonable ──────────────────────────────
 static void test_whitelist_file_names() {
     std::fprintf(stderr, "[ws2] Whitelist file names...\n");
-    const auto& protos = lib1fq::known_protocols();
+    const auto& protos = singlet::fq::known_protocols();
     bool all_ok = true;
     for (const auto& p : protos) {
         if (!p.whitelist_file.empty()) {
@@ -212,7 +212,7 @@ static void test_detect_no_whitelists() {
     }
 
     std::vector<std::string> empty_wl_dirs;
-    auto result = lib1fq::detect_protocol(spots, 28, 91, empty_wl_dirs);
+    auto result = singlet::fq::detect_protocol(spots, 28, 91, empty_wl_dirs);
 
     // Without whitelists, won't get HIGH confidence for WL-based protocols
     // but should not crash
@@ -234,16 +234,16 @@ static void test_detect_garbage_reads() {
     }
 
     std::vector<std::string> empty_dirs;
-    auto result = lib1fq::detect_protocol(spots, 5, 50, empty_dirs);
+    auto result = singlet::fq::detect_protocol(spots, 5, 50, empty_dirs);
 
     // With only 5bp R1, no protocol should match well
-    CHECK(result.confidence <= lib1fq::Confidence::LOW, "garbage reads → low/none confidence");
+    CHECK(result.confidence <= singlet::fq::Confidence::LOW, "garbage reads → low/none confidence");
 }
 
 // ── Test 11: Per-segment whitelist files for complex protocols ───────────────
 static void test_per_seg_whitelist_consistency() {
     std::fprintf(stderr, "[ws2] Per-seg whitelist consistency...\n");
-    const auto& protos = lib1fq::known_protocols();
+    const auto& protos = singlet::fq::known_protocols();
     bool ok = true;
     for (const auto& p : protos) {
         if (!p.per_seg_whitelist_files.empty()) {
@@ -262,7 +262,7 @@ static void test_per_seg_whitelist_consistency() {
 // ── Test 12: sci-RNA-seq3 has expected barcode structure ─────────────────────
 static void test_sci_rna_seq3_structure() {
     std::fprintf(stderr, "[ws2] sci-RNA-seq3 barcode structure...\n");
-    auto* sci = lib1fq::find_protocol_spec("sci-rna-seq3");
+    auto* sci = singlet::fq::find_protocol_spec("sci-rna-seq3");
     CHECK(sci != nullptr, "sci-rna-seq3 exists");
     if (sci) {
         // sci-RNA-seq3 uses a multi-barcode structure
@@ -281,11 +281,11 @@ static void test_sci_rna_seq3_structure() {
 // CEL-Seq2 (r1_len=12) at R1=16bp should also be a candidate (+4bp over, rule 2).
 static void test_candidate_admission_under_sequenced() {
     std::fprintf(stderr, "[ws2] Candidate admission: under-sequenced...\n");
-    const auto& protos = lib1fq::known_protocols();
+    const auto& protos = singlet::fq::known_protocols();
 
     // Find Drop-seq and CEL-Seq2 specs
-    const lib1fq::CandidateSpec* dropseq = nullptr;
-    const lib1fq::CandidateSpec* celseq2 = nullptr;
+    const singlet::fq::CandidateSpec* dropseq = nullptr;
+    const singlet::fq::CandidateSpec* celseq2 = nullptr;
     for (const auto& k : protos) {
         if (k.tag == "dropseq") dropseq = &k;
         if (k.tag == "celseq2") celseq2 = &k;
@@ -312,7 +312,7 @@ static void test_candidate_admission_under_sequenced() {
     CHECK(celseq2_admitted, "celseq2 admitted at R1=16 (over-seq +4bp)");
 
     // 10xv2 (r1_len=26, WL) at R1=16: under-seq but HAS whitelist → not admitted
-    const lib1fq::CandidateSpec* v2 = nullptr;
+    const singlet::fq::CandidateSpec* v2 = nullptr;
     for (const auto& k : protos) { if (k.tag == "10x-3p-v2") { v2 = &k; break; } }
     if (v2) {
         bool v2_admitted = (r1 < v2->r1_len && r1 >= v2->bc_offset + v2->bc_len &&
@@ -326,9 +326,9 @@ static void test_candidate_admission_under_sequenced() {
 // With the fix (threshold +9bp), Drop-seq should now be a candidate.
 static void test_candidate_admission_over_seq_gap() {
     std::fprintf(stderr, "[ws2] Candidate admission: over-seq gap closed...\n");
-    const auto& protos = lib1fq::known_protocols();
+    const auto& protos = singlet::fq::known_protocols();
 
-    const lib1fq::CandidateSpec* dropseq = nullptr;
+    const singlet::fq::CandidateSpec* dropseq = nullptr;
     for (const auto& k : protos) { if (k.tag == "dropseq") { dropseq = &k; break; } }
     CHECK(dropseq != nullptr, "dropseq spec found");
     if (!dropseq) return;
@@ -364,10 +364,10 @@ static void test_candidate_admission_over_seq_gap() {
 // At R1=16: Drop-seq uses 20/16=1.0 (capped), CEL-Seq2 uses 12/16=0.75.
 static void test_bc_coverage_scoring() {
     std::fprintf(stderr, "[ws2] bc_coverage scoring signal...\n");
-    const auto& protos = lib1fq::known_protocols();
+    const auto& protos = singlet::fq::known_protocols();
 
-    const lib1fq::CandidateSpec* dropseq = nullptr;
-    const lib1fq::CandidateSpec* celseq2 = nullptr;
+    const singlet::fq::CandidateSpec* dropseq = nullptr;
+    const singlet::fq::CandidateSpec* celseq2 = nullptr;
     for (const auto& k : protos) {
         if (k.tag == "dropseq") dropseq = &k;
         if (k.tag == "celseq2") celseq2 = &k;
@@ -508,7 +508,7 @@ static void test_detect_dropseq_r1_28() {
     }
 
     std::vector<std::string> empty_dirs;  // no whitelist dirs → WL protocols can't match
-    auto result = lib1fq::detect_protocol(spots, 28, 91, empty_dirs);
+    auto result = singlet::fq::detect_protocol(spots, 28, 91, empty_dirs);
 
     // Without whitelists, a non-WL protocol should win
     CHECK(result.score > 0.0, "R1=28 no-WL: positive score");
@@ -547,14 +547,14 @@ static void test_detect_dropseq_r1_16() {
     }
 
     std::vector<std::string> empty_dirs;
-    auto result = lib1fq::detect_protocol(spots, 16, 98, empty_dirs);
+    auto result = singlet::fq::detect_protocol(spots, 16, 98, empty_dirs);
 
     CHECK(result.score > 0.0, "R1=16 no-WL: positive score");
     // Should detect a WL-free protocol (dropseq, celseq2, or marsseq2)
     bool is_wl_free = (result.tag == "dropseq" || result.tag == "seqwell" ||
                        result.tag == "celseq2" || result.tag == "marsseq2");
     CHECK(is_wl_free, "R1=16 no-WL: detected WL-free protocol");
-    CHECK(result.confidence >= lib1fq::Confidence::LOW,
+    CHECK(result.confidence >= singlet::fq::Confidence::LOW,
           "R1=16 no-WL: at least LOW confidence");
 }
 
@@ -586,13 +586,13 @@ static void test_detect_dropseq_exact_r1() {
     }
 
     std::vector<std::string> empty_dirs;
-    auto result = lib1fq::detect_protocol(spots, 20, 100, empty_dirs);
+    auto result = singlet::fq::detect_protocol(spots, 20, 100, empty_dirs);
 
     CHECK(result.score > 0.0, "R1=20 exact: positive score");
     // Should detect dropseq or seqwell (both have r1_len=20)
     bool is_r1_20 = (result.tag == "dropseq" || result.tag == "seqwell");
     CHECK(is_r1_20, "R1=20 exact: detected dropseq/seqwell");
-    CHECK(result.confidence >= lib1fq::Confidence::MEDIUM,
+    CHECK(result.confidence >= singlet::fq::Confidence::MEDIUM,
           "R1=20 exact: at least MEDIUM confidence");
 }
 
@@ -602,10 +602,10 @@ static void test_detect_empty_spots() {
 
     std::vector<TestSpot> spots;  // no spots at all
     std::vector<std::string> empty_dirs;
-    auto result = lib1fq::detect_protocol(spots, 28, 91, empty_dirs);
+    auto result = singlet::fq::detect_protocol(spots, 28, 91, empty_dirs);
 
     // With no probe data, scores are based on geometry only → low confidence
-    CHECK(result.confidence <= lib1fq::Confidence::MEDIUM, "empty spots: at most MEDIUM confidence");
+    CHECK(result.confidence <= singlet::fq::Confidence::MEDIUM, "empty spots: at most MEDIUM confidence");
     // With no data but R1=28 (exact geometry match for v3/arc),
     // score is r1_match(0.25) + geometry_bonus(0.15) = 0.40 for the best non-WL candidate
     CHECK(result.score <= 0.50, "empty spots: score capped without data");
@@ -630,7 +630,7 @@ static void test_detect_concat_mode() {
     }
 
     std::vector<std::string> empty_dirs;
-    auto result = lib1fq::detect_protocol(spots, 0, 150, empty_dirs);
+    auto result = singlet::fq::detect_protocol(spots, 0, 150, empty_dirs);
 
     // Should either detect a concat-mode protocol or UNKNOWN
     CHECK(result.score >= 0.0, "concat mode: non-negative score");
@@ -639,13 +639,13 @@ static void test_detect_concat_mode() {
 // ── Test 23: WL-geometry suppression (non-WL protocols with WL geometry) ────
 static void test_wl_geometry_suppression() {
     std::fprintf(stderr, "[ws2] WL-geometry suppression...\n");
-    const auto& protos = lib1fq::known_protocols();
+    const auto& protos = singlet::fq::known_protocols();
 
     // Find protocols that share geometry
     // 10x-arc-gex has the same geometry as 10xv3 (R1=28, BC=16, UMI=12)
     // arc-gex has a whitelist, so both are WL protocols — no suppression
-    const lib1fq::CandidateSpec* v3 = nullptr;
-    const lib1fq::CandidateSpec* arc = nullptr;
+    const singlet::fq::CandidateSpec* v3 = nullptr;
+    const singlet::fq::CandidateSpec* arc = nullptr;
     for (const auto& k : protos) {
         if (k.tag == "10x-3p-v3") v3 = &k;
         if (k.tag == "10x-arc-gex") arc = &k;
@@ -662,7 +662,7 @@ static void test_wl_geometry_suppression() {
     }
 
     // 10x-visium has r1_len=28 but no whitelist — should be suppressed by v3/arc geometry
-    const lib1fq::CandidateSpec* visium = nullptr;
+    const singlet::fq::CandidateSpec* visium = nullptr;
     for (const auto& k : protos) {
         if (k.tag == "10x-visium") { visium = &k; break; }
     }
@@ -675,7 +675,7 @@ static void test_wl_geometry_suppression() {
 // ── Test 24: 5' protocols have adapter3p, 3' protocols do not ───────────────
 static void test_adapter3p_classification() {
     std::fprintf(stderr, "[ws2] adapter3p classification...\n");
-    const auto& protos = lib1fq::known_protocols();
+    const auto& protos = singlet::fq::known_protocols();
 
     // 3' protocols should NOT have adapter3p (polyA clip is handled by STAR arg)
     for (const auto& p : protos) {
@@ -698,7 +698,7 @@ static void test_adapter3p_classification() {
 // ── Test 25: protocol_id → protocol_name round-trip ─────────────────────────
 static void test_protocol_id_name_roundtrip() {
     std::fprintf(stderr, "[ws2] protocol_id ↔ name round-trip...\n");
-    const auto& protos = lib1fq::known_protocols();
+    const auto& protos = singlet::fq::known_protocols();
 
     // Every protocol with a numeric ID should have a non-empty tag
     for (const auto& p : protos) {
@@ -706,8 +706,8 @@ static void test_protocol_id_name_roundtrip() {
     }
 
     // Key IDs: 1=10x-3p-v3, 2=10x-3p-v2
-    const lib1fq::CandidateSpec* id1 = nullptr;
-    const lib1fq::CandidateSpec* id2 = nullptr;
+    const singlet::fq::CandidateSpec* id1 = nullptr;
+    const singlet::fq::CandidateSpec* id2 = nullptr;
     for (const auto& p : protos) {
         if (p.protocol_id == 1) id1 = &p;
         if (p.protocol_id == 2) id2 = &p;
@@ -728,11 +728,11 @@ static void test_detect_long_reads() {
         s.r2_seq.resize(150, 0);
     }
     std::vector<std::string> empty_dirs;
-    auto result = lib1fq::detect_protocol(spots, 150, 150, empty_dirs);
+    auto result = singlet::fq::detect_protocol(spots, 150, 150, empty_dirs);
 
     // With R1=R2=150, no standard sc protocol geometry matches
     // Should get low confidence
-    CHECK(result.confidence <= lib1fq::Confidence::MEDIUM,
+    CHECK(result.confidence <= singlet::fq::Confidence::MEDIUM,
           "long reads: at most MEDIUM confidence");
 }
 
@@ -749,7 +749,7 @@ static void test_detect_inverted_reads() {
         s.r2_seq.resize(28, 0);
     }
     std::vector<std::string> empty_dirs;
-    auto result = lib1fq::detect_protocol(spots, 91, 28, empty_dirs);
+    auto result = singlet::fq::detect_protocol(spots, 91, 28, empty_dirs);
 
     // R2=28 ≤ 34, R1=91 > 40, R1 > R2*2 → inverted=true
     // barcode_read_len becomes R2=28, matching 10x-3p-v3 geometry
@@ -766,7 +766,7 @@ static void test_detect_inverted_reads() {
 // This supports the late-WL-resolution fix in singlet.cpp.
 static void test_geometry_wl_lookup() {
     std::fprintf(stderr, "[ws2] geometry_wl_lookup: R1→WL resolution...\n");
-    const auto& protos = lib1fq::known_protocols();
+    const auto& protos = singlet::fq::known_protocols();
 
     // R1=28 (BC=16, UMI=12): must find a WL protocol
     {
@@ -834,7 +834,7 @@ static void test_geometry_wl_lookup() {
 // ── Protocol data integrity tests ─────────────────────────────────────────
 
 static void test_protocol_id_unique() {
-    const auto& specs = lib1fq::known_protocols();
+    const auto& specs = singlet::fq::known_protocols();
     std::set<uint8_t> ids;
     bool all_unique = true;
     for (const auto& s : specs) {
@@ -849,7 +849,7 @@ static void test_protocol_id_unique() {
 }
 
 static void test_protocol_tag_unique() {
-    const auto& specs = lib1fq::known_protocols();
+    const auto& specs = singlet::fq::known_protocols();
     std::set<std::string> tags;
     bool all_unique = true;
     for (const auto& s : specs) {
@@ -863,7 +863,7 @@ static void test_protocol_tag_unique() {
 }
 
 static void test_protocol_bc_umi_geometry_valid() {
-    const auto& specs = lib1fq::known_protocols();
+    const auto& specs = singlet::fq::known_protocols();
     int ok = 0;
     for (const auto& s : specs) {
         // Skip ATAC (no barcode in R1)
@@ -892,7 +892,7 @@ static void test_protocol_bc_umi_geometry_valid() {
 static void test_complex_protocols_have_per_seg() {
     // Complex protocols (BD Rhapsody, SPLiT-seq, inDrop, Microwell, SureCell)
     // must have non-empty per_seg_whitelist_files
-    const auto& specs = lib1fq::known_protocols();
+    const auto& specs = singlet::fq::known_protocols();
     const std::set<std::string> complex = {"bd-rhapsody", "splitseq", "indrop",
                                             "microwell-seq", "surecell"};
     int ok = 0;
@@ -911,7 +911,7 @@ static void test_complex_protocols_have_per_seg() {
 
 static void test_no_protocol_id_zero() {
     // protocol_id=0 means "unknown/undetected" — no spec should use it
-    const auto& specs = lib1fq::known_protocols();
+    const auto& specs = singlet::fq::known_protocols();
     bool none_zero = true;
     for (const auto& s : specs) {
         if (s.protocol_id == 0) {
@@ -924,7 +924,7 @@ static void test_no_protocol_id_zero() {
 
 static void test_adapter3p_only_5prime() {
     // Only 5' protocols should have adapter3p set (TSO adapter)
-    const auto& specs = lib1fq::known_protocols();
+    const auto& specs = singlet::fq::known_protocols();
     bool ok = true;
     for (const auto& s : specs) {
         if (!s.adapter3p.empty()) {
@@ -946,52 +946,52 @@ static void test_adapter3p_only_5prime() {
 
 static void test_normalize_tag_cases() {
     // Basic lowercasing
-    CHECK(lib1fq::normalize_tag("DROPSEQ") == "dropseq", "norm_uppercase");
+    CHECK(singlet::fq::normalize_tag("DROPSEQ") == "dropseq", "norm_uppercase");
     // Hyphen removal
-    CHECK(lib1fq::normalize_tag("Drop-seq") == "dropseq", "norm_hyphen");
+    CHECK(singlet::fq::normalize_tag("Drop-seq") == "dropseq", "norm_hyphen");
     // Underscore removal
-    CHECK(lib1fq::normalize_tag("drop_seq") == "dropseq", "norm_underscore");
+    CHECK(singlet::fq::normalize_tag("drop_seq") == "dropseq", "norm_underscore");
     // Mixed case + hyphens + underscores
-    CHECK(lib1fq::normalize_tag("10x-3p-V3") == "10x3pv3", "norm_mixed");
+    CHECK(singlet::fq::normalize_tag("10x-3p-V3") == "10x3pv3", "norm_mixed");
     // Already normalized
-    CHECK(lib1fq::normalize_tag("dropseq") == "dropseq", "norm_identity");
+    CHECK(singlet::fq::normalize_tag("dropseq") == "dropseq", "norm_identity");
     // Empty string
-    CHECK(lib1fq::normalize_tag("") == "", "norm_empty");
+    CHECK(singlet::fq::normalize_tag("") == "", "norm_empty");
     // All hyphens
-    CHECK(lib1fq::normalize_tag("---") == "", "norm_all_hyphens");
+    CHECK(singlet::fq::normalize_tag("---") == "", "norm_all_hyphens");
 }
 
 static void test_alias_resolution() {
     // Direct tag lookup
-    CHECK(lib1fq::find_protocol_spec("10x-3p-v3") != nullptr, "alias_direct_10xv3");
-    CHECK(lib1fq::find_protocol_spec("10x-3p-v3")->protocol_id == 1, "alias_direct_10xv3_id");
+    CHECK(singlet::fq::find_protocol_spec("10x-3p-v3") != nullptr, "alias_direct_10xv3");
+    CHECK(singlet::fq::find_protocol_spec("10x-3p-v3")->protocol_id == 1, "alias_direct_10xv3_id");
 
     // Case-insensitive lookup
-    CHECK(lib1fq::find_protocol_spec("DROPSEQ") != nullptr, "alias_case_dropseq");
-    CHECK(lib1fq::find_protocol_spec("DROPSEQ")->tag == "dropseq", "alias_case_dropseq_tag");
+    CHECK(singlet::fq::find_protocol_spec("DROPSEQ") != nullptr, "alias_case_dropseq");
+    CHECK(singlet::fq::find_protocol_spec("DROPSEQ")->tag == "dropseq", "alias_case_dropseq_tag");
 
     // Common aliases
-    CHECK(lib1fq::find_protocol_spec("10xv3") != nullptr, "alias_10xv3");
-    CHECK(lib1fq::find_protocol_spec("10xv3")->tag == "10x-3p-v3", "alias_10xv3_resolves");
+    CHECK(singlet::fq::find_protocol_spec("10xv3") != nullptr, "alias_10xv3");
+    CHECK(singlet::fq::find_protocol_spec("10xv3")->tag == "10x-3p-v3", "alias_10xv3_resolves");
 
-    CHECK(lib1fq::find_protocol_spec("10xv2") != nullptr, "alias_10xv2");
-    CHECK(lib1fq::find_protocol_spec("10xv2")->tag == "10x-3p-v2", "alias_10xv2_resolves");
+    CHECK(singlet::fq::find_protocol_spec("10xv2") != nullptr, "alias_10xv2");
+    CHECK(singlet::fq::find_protocol_spec("10xv2")->tag == "10x-3p-v2", "alias_10xv2_resolves");
 
     // Parse → splitseq
-    CHECK(lib1fq::find_protocol_spec("parse") != nullptr, "alias_parse");
-    CHECK(lib1fq::find_protocol_spec("parse")->tag == "splitseq", "alias_parse_resolves");
+    CHECK(singlet::fq::find_protocol_spec("parse") != nullptr, "alias_parse");
+    CHECK(singlet::fq::find_protocol_spec("parse")->tag == "splitseq", "alias_parse_resolves");
 
     // CITE-seq aliases
-    CHECK(lib1fq::find_protocol_spec("cite-seq") != nullptr, "alias_citeseq");
-    CHECK(lib1fq::find_protocol_spec("citeseq")->tag == "cite-seq-gex", "alias_citeseq_resolves");
+    CHECK(singlet::fq::find_protocol_spec("cite-seq") != nullptr, "alias_citeseq");
+    CHECK(singlet::fq::find_protocol_spec("citeseq")->tag == "cite-seq-gex", "alias_citeseq_resolves");
 
     // Multiome aliases
-    CHECK(lib1fq::find_protocol_spec("multiome") != nullptr, "alias_multiome");
-    CHECK(lib1fq::find_protocol_spec("multiome")->tag == "10x-arc-gex", "alias_multiome_resolves");
+    CHECK(singlet::fq::find_protocol_spec("multiome") != nullptr, "alias_multiome");
+    CHECK(singlet::fq::find_protocol_spec("multiome")->tag == "10x-arc-gex", "alias_multiome_resolves");
 
     // Nonexistent protocol
-    CHECK(lib1fq::find_protocol_spec("nonexistent") == nullptr, "alias_nonexistent_null");
-    CHECK(lib1fq::find_protocol_spec("") == nullptr, "alias_empty_null");
+    CHECK(singlet::fq::find_protocol_spec("nonexistent") == nullptr, "alias_nonexistent_null");
+    CHECK(singlet::fq::find_protocol_spec("") == nullptr, "alias_empty_null");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

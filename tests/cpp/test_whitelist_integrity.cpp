@@ -95,7 +95,7 @@ static void test_critical_whitelists_exist() {
 // ═══════════════════════════════════════════════════════════════════════════
 static void test_optional_whitelists_report() {
     const std::string wl_dir = WHITELIST_DIR;
-    const auto& protocols = lib1fq::known_protocols();
+    const auto& protocols = singlet::fq::known_protocols();
 
     int missing = 0;
     for (const auto& p : protocols) {
@@ -176,7 +176,7 @@ static void test_arc_gex_whitelist_content() {
 // Test 5: Protocol ID uniqueness
 // ═══════════════════════════════════════════════════════════════════════════
 static void test_protocol_id_uniqueness() {
-    const auto& protocols = lib1fq::known_protocols();
+    const auto& protocols = singlet::fq::known_protocols();
     for (size_t i = 0; i < protocols.size(); ++i) {
         for (size_t j = i + 1; j < protocols.size(); ++j) {
             if (protocols[i].protocol_id == protocols[j].protocol_id) {
@@ -194,7 +194,7 @@ static void test_protocol_id_uniqueness() {
 // Test 6: Protocol tag uniqueness
 // ═══════════════════════════════════════════════════════════════════════════
 static void test_protocol_tag_uniqueness() {
-    const auto& protocols = lib1fq::known_protocols();
+    const auto& protocols = singlet::fq::known_protocols();
     for (size_t i = 0; i < protocols.size(); ++i) {
         for (size_t j = i + 1; j < protocols.size(); ++j) {
             if (protocols[i].tag == protocols[j].tag) {
@@ -210,7 +210,7 @@ static void test_protocol_tag_uniqueness() {
 // Test 7: Protocol barcode geometry consistency
 // ═══════════════════════════════════════════════════════════════════════════
 static void test_barcode_geometry() {
-    const auto& protocols = lib1fq::known_protocols();
+    const auto& protocols = singlet::fq::known_protocols();
     for (const auto& p : protocols) {
         if (p.bc_len == 0 && p.umi_len == 0) continue; // e.g. 10x-atac
 
@@ -293,7 +293,7 @@ static void test_polya_clipping_protocols() {
     // and without being ATAC. The poly-A clip uses:
     //   --clip3pAdapterSeq AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA (30x A)
     // Verify that 3' protocols without explicit adapter3p get poly-A clipping
-    const auto& protocols = lib1fq::known_protocols();
+    const auto& protocols = singlet::fq::known_protocols();
 
     for (const auto& p : protocols) {
         if (p.tag == "10x-atac") continue;  // ATAC doesn't get poly-A

@@ -282,12 +282,12 @@ static void test_download_detail_no_metadata() {
 static void test_tiny_dataset_guard() {
     // MIN_READS_FOR_PIPELINE must be > 0 and reasonable
     CHECK("tdg_min_reads_positive",
-          singlet_pileup::TinyDatasetGuard::MIN_READS_FOR_PIPELINE > 0);
+          singlet::pileup::TinyDatasetGuard::MIN_READS_FOR_PIPELINE > 0);
     CHECK("tdg_min_reads_reasonable",
-          singlet_pileup::TinyDatasetGuard::MIN_READS_FOR_PIPELINE <= 100000);
+          singlet::pileup::TinyDatasetGuard::MIN_READS_FOR_PIPELINE <= 100000);
     // Should be exactly 10000 (current value)
     CHECK("tdg_min_reads_value",
-          singlet_pileup::TinyDatasetGuard::MIN_READS_FOR_PIPELINE == 10000);
+          singlet::pileup::TinyDatasetGuard::MIN_READS_FOR_PIPELINE == 10000);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

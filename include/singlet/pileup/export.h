@@ -1256,6 +1256,11 @@ inline ExportStats export_results(const PileupEngine& engine,
         summary.singlet_version = export_cfg.provenance.singlet_version;
         summary.track            = export_cfg.provenance.cascade_enabled ? "B" : "A";
         summary.cascade_used     = export_cfg.provenance.cascade_enabled;
+        // Schema 1.1 traceability: source-tree git sha + reference-manifest hash from env.
+        if (const char* env_sha = std::getenv("SINGLET_GIT_SHA"))
+            summary.git_sha = env_sha;
+        if (const char* env_rms = std::getenv("SINGLET_REF_MANIFEST_SHA"))
+            summary.reference_manifest_sha256 = env_rms;
         // §3.6 required fields from ExportConfig
         summary.protocol_id     = export_cfg.protocol_id;
         summary.protocol_name   = export_cfg.protocol_name.empty()

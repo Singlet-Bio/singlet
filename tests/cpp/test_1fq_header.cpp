@@ -1,5 +1,5 @@
 // test_1fq_header.cpp
-// Unit tests for .1fq header struct (lib1fq/types.h)
+// Unit tests for .1fq header struct (singlet::fq/types.h)
 // Tests: Header init, magic validation, field layout, stream_lengths semantics.
 
 #include <cstdio>
@@ -15,20 +15,20 @@ static int g_pass = 0, g_fail = 0;
 } while(0)
 
 static void test_header_size() {
-    CHECK(sizeof(lib1fq::Header) == 96, "header_size_96");
-    CHECK(sizeof(lib1fq::BlockHeader) == 12, "block_header_size_12");
-    CHECK(sizeof(lib1fq::Footer) == 16, "footer_size_16");
+    CHECK(sizeof(singlet::fq::Header) == 96, "header_size_96");
+    CHECK(sizeof(singlet::fq::BlockHeader) == 12, "block_header_size_12");
+    CHECK(sizeof(singlet::fq::Footer) == 16, "footer_size_16");
 }
 
 static void test_header_init() {
-    lib1fq::Header h;
+    singlet::fq::Header h;
     h.init();
     CHECK(h.valid_magic(), "init_valid_magic");
-    CHECK(h.version == lib1fq::FORMAT_VERSION, "init_version");
-    CHECK(h.codec == static_cast<uint8_t>(lib1fq::Codec::ZSTD), "init_codec_zstd");
+    CHECK(h.version == singlet::fq::FORMAT_VERSION, "init_version");
+    CHECK(h.codec == static_cast<uint8_t>(singlet::fq::Codec::ZSTD), "init_codec_zstd");
     CHECK(h.codec_level == 6, "init_codec_level");
-    CHECK(h.seq_encoding == static_cast<uint8_t>(lib1fq::SeqEncoding::PACKED_2BIT), "init_seq_enc");
-    CHECK(h.qual_mode == static_cast<uint8_t>(lib1fq::QualMode::BINNED4), "init_qual_mode");
+    CHECK(h.seq_encoding == static_cast<uint8_t>(singlet::fq::SeqEncoding::PACKED_2BIT), "init_seq_enc");
+    CHECK(h.qual_mode == static_cast<uint8_t>(singlet::fq::QualMode::BINNED4), "init_qual_mode");
     CHECK(h.block_size == 100000, "init_block_size");
     // All stream_lengths should be 0 after init (variable)
     for (int i = 0; i < 4; ++i)
@@ -40,7 +40,7 @@ static void test_header_init() {
 }
 
 static void test_header_magic_validation() {
-    lib1fq::Header h;
+    singlet::fq::Header h;
     h.init();
     CHECK(h.valid_magic(), "magic_valid_after_init");
 
@@ -54,7 +54,7 @@ static void test_header_magic_validation() {
 }
 
 static void test_header_field_offsets() {
-    lib1fq::Header h;
+    singlet::fq::Header h;
     h.init();
     // Verify field positions via offsetof-like computation
     const uint8_t* base = reinterpret_cast<const uint8_t*>(&h);
@@ -69,7 +69,7 @@ static void test_header_field_offsets() {
 }
 
 static void test_header_stream_lengths_semantics() {
-    lib1fq::Header h;
+    singlet::fq::Header h;
     h.init();
 
     // stream_lengths[0] = R1, stream_lengths[1] = R2
@@ -95,7 +95,7 @@ static void test_header_protocol_ids() {
     // Known protocol IDs from protocol.h
     CHECK(static_cast<uint8_t>(0) == 0, "proto_unknown_0");
     // Match a few known protocols
-    lib1fq::Header h;
+    singlet::fq::Header h;
     h.init();
     h.protocol_id = 1;  // 10x-3p-v3
     CHECK(h.protocol_id == 1, "proto_10xv3_1");
@@ -106,7 +106,7 @@ static void test_header_protocol_ids() {
 }
 
 static void test_header_binary_roundtrip() {
-    lib1fq::Header h;
+    singlet::fq::Header h;
     h.init();
     h.n_streams = 2;
     h.protocol_id = 1;
@@ -121,7 +121,7 @@ static void test_header_binary_roundtrip() {
     uint8_t buf[96];
     std::memcpy(buf, &h, 96);
 
-    lib1fq::Header h2;
+    singlet::fq::Header h2;
     std::memcpy(&h2, buf, 96);
     CHECK(h2.valid_magic(), "roundtrip_magic");
     CHECK(h2.n_streams == 2, "roundtrip_n_streams");
@@ -134,16 +134,16 @@ static void test_header_binary_roundtrip() {
 }
 
 static void test_footer_layout() {
-    lib1fq::Footer f;
+    singlet::fq::Footer f;
     std::memset(&f, 0, sizeof(f));
-    std::memcpy(f.magic, lib1fq::MAGIC, 4);
+    std::memcpy(f.magic, singlet::fq::MAGIC, 4);
     CHECK(f.magic[0] == '1' && f.magic[1] == 'F' && f.magic[2] == 'Q' && f.magic[3] == '\0',
           "footer_magic_1FQ");
     CHECK(sizeof(f) == 16, "footer_size_16b");
 }
 
 static void test_decoded_block_accessors() {
-    lib1fq::DecodedBlock blk;
+    singlet::fq::DecodedBlock blk;
     blk.n_reads = 3;
 
     // R1: 3 reads with lengths 28, 26, 24
@@ -172,7 +172,7 @@ static void test_decoded_block_accessors() {
 }
 
 static void test_decoded_block_clear() {
-    lib1fq::DecodedBlock blk;
+    singlet::fq::DecodedBlock blk;
     blk.n_reads = 5;
     blk.r1_data.resize(100, 1);
     blk.r2_data.resize(200, 2);
@@ -195,7 +195,7 @@ static void test_decoded_block_clear() {
 }
 
 static void test_decoded_block_quality_guard() {
-    lib1fq::DecodedBlock blk;
+    singlet::fq::DecodedBlock blk;
     blk.n_reads = 2;
     blk.r2_data.resize(100, 2);
     blk.r2_offsets = {0, 50};

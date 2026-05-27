@@ -2898,10 +2898,14 @@ int main(int argc, char* argv[]) {
         {
             std::ofstream sj(out_prefix + "/summary.json");
             if (sj) {
+                const char* env_sha = std::getenv("SINGLET_GIT_SHA");
+                const char* env_rms = std::getenv("SINGLET_REF_MANIFEST_SHA");
                 sj << "{\n"
-                   << "  \"schema_version\": \"1.0\",\n"
+                   << "  \"schema_version\": \"1.1\",\n"
                    << "  \"sample_id\": \"" << fb_sample_id << "\",\n"
                    << "  \"status\": \"feature_barcode_not_gex\",\n"
+                   << "  \"git_sha\": \"" << (env_sha ? env_sha : "") << "\",\n"
+                   << "  \"reference_manifest_sha256\": \"" << (env_rms ? env_rms : "") << "\",\n"
                    << "  \"protocol_id\": 0,\n"
                    << "  \"protocol_name\": \"CITE_SEQ_ADT\",\n"
                    << "  \"species\": \"\",\n"
@@ -4306,10 +4310,14 @@ int main(int argc, char* argv[]) {
                         {
                             std::ofstream sj(out_prefix + "/summary.json");
                             if (sj) {
+                                const char* env_sha = std::getenv("SINGLET_GIT_SHA");
+                                const char* env_rms = std::getenv("SINGLET_REF_MANIFEST_SHA");
                                 sj << "{\n"
-                                   << "  \"schema_version\": \"1.0\",\n"
+                                   << "  \"schema_version\": \"1.1\",\n"
                                    << "  \"sample_id\": \"" << sample_id << "\",\n"
                                    << "  \"status\": \"data_incomplete\",\n"
+                                   << "  \"git_sha\": \"" << (env_sha ? env_sha : "") << "\",\n"
+                                   << "  \"reference_manifest_sha256\": \"" << (env_rms ? env_rms : "") << "\",\n"
                                    << "  \"protocol_id\": 0,\n"
                                    << "  \"protocol_name\": \"\",\n"
                                    << "  \"species\": \"\",\n"
@@ -4335,16 +4343,19 @@ int main(int argc, char* argv[]) {
                         {
                             std::ofstream pj(out_prefix + "/provenance.json");
                             if (pj) {
+                                const char* prov_sha = std::getenv("SINGLET_GIT_SHA");
+                                const char* prov_rms = std::getenv("SINGLET_REF_MANIFEST_SHA");
                                 pj << "{\n"
-                                   << "  \"schema_version\": \"1.0\",\n"
-                                   << "  \"singlet_git_sha\": \"unknown\",\n"
+                                   << "  \"schema_version\": \"1.1\",\n"
+                                   << "  \"singlet_git_sha\": \"" << (prov_sha ? prov_sha : "unknown") << "\",\n"
+                                   << "  \"reference_manifest_sha256\": \"" << (prov_rms ? prov_rms : "") << "\",\n"
                                    << "  \"build_flags\": \"\",\n"
                                    << "  \"command_line\": \"\",\n"
                                    << "  \"env\": {},\n"
                                    << "  \"host\": \"\",\n"
                                    << "  \"input\": \"" << onefq_file << "\",\n"
                                    << "  \"references\": {},\n"
-                                   << "  \"output_schema_version\": \"1.0\"\n"
+                                   << "  \"output_schema_version\": \"1.1\"\n"
                                    << "}\n";
                             }
                         }

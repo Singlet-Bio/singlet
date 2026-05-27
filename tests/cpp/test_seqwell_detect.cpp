@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// test_seqwell_detect.cpp — Unit tests for lib1fq/seqwell_detect.h
+// test_seqwell_detect.cpp — Unit tests for singlet::fq/seqwell_detect.h
 #include <iostream>
 
 #include "singlet/fq/seqwell_detect.h"

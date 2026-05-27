@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// test_indrop_detect.cpp — Unit tests for lib1fq/indrop_detect.h
+// test_indrop_detect.cpp — Unit tests for singlet::fq/indrop_detect.h
 #include <cassert>
 #include <iostream>
 

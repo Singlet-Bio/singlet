@@ -24,7 +24,7 @@ static constexpr uint64_t GiB = 1024ULL * 1024 * 1024;
 
 static void test_tier_exact() {
     std::fprintf(stderr, "[test_ram_tier] Tier exact lookup...\n");
-    using namespace singlet_pileup::mega_sort;
+    using namespace singlet::pileup::mega_sort;
 
     // Standard 64 GB → 25 GB
     CHECK(slurm_tier_bamsort_ram(64 * GiB) == 25 * GiB, "64 GiB → 25 GiB");
@@ -38,7 +38,7 @@ static void test_tier_exact() {
 
 static void test_tier_tolerance() {
     std::fprintf(stderr, "[test_ram_tier] Tier tolerance ±1 GiB...\n");
-    using namespace singlet_pileup::mega_sort;
+    using namespace singlet::pileup::mega_sort;
 
     // 63 GiB should still match 64-GiB tier
     CHECK(slurm_tier_bamsort_ram(63 * GiB) == 25 * GiB, "63 GiB → 25 GiB (low tolerance)");
@@ -59,7 +59,7 @@ static void test_tier_tolerance() {
 
 static void test_tier_unknown() {
     std::fprintf(stderr, "[test_ram_tier] Unknown allocation → 0...\n");
-    using namespace singlet_pileup::mega_sort;
+    using namespace singlet::pileup::mega_sort;
 
     // Unrecognised tier sizes return 0 (caller falls back to SA heuristic)
     CHECK(slurm_tier_bamsort_ram(0) == 0,            "0 GiB → 0");
@@ -71,7 +71,7 @@ static void test_tier_unknown() {
 
 static void test_tier_fraction() {
     std::fprintf(stderr, "[test_ram_tier] Tier values ≈ 39%% of allocation...\n");
-    using namespace singlet_pileup::mega_sort;
+    using namespace singlet::pileup::mega_sort;
 
     // Each tier should be between 35% and 45% of allocation
     auto check_frac = [](uint64_t alloc_gib, uint64_t bamsort_gib, const char* label) {
@@ -88,7 +88,7 @@ static void test_tier_fraction() {
 
 static void test_xl_threshold_consistency() {
     std::fprintf(stderr, "[test_ram_tier] XL_READ_THRESHOLD == MEGA_READ_THRESHOLD...\n");
-    using namespace singlet_pileup::mega_sort;
+    using namespace singlet::pileup::mega_sort;
     CHECK(XL_READ_THRESHOLD == MEGA_READ_THRESHOLD,
           "XL_READ_THRESHOLD == MEGA_READ_THRESHOLD (200M)");
 }

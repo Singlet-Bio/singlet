@@ -1,0 +1,175 @@
+# Singlet Reference Manifest v1
+# This document is the canonical specification of every external reference file
+# the pipeline consumes for the human 10x droplet scRNA-seq pilot and the
+# 56K-sample full reprocessing campaign. Every file listed here must be present
+# under $SINGLET_REF_BASE before a pilot run, and scripts/verify_reference.py
+# must exit 0 against this manifest.
+#
+# Once the v0.3.0-pilot-freeze tag is cut, NO ENTRY in this file may be changed
+# without bumping schema_version and re-tagging.
+
+manifest_version: 1
+schema: singlet-reference-manifest/v1
+created: 2026-05-27
+freeze_target: v0.3.0-pilot-freeze
+campaign: human-10x-droplet-2026
+
+# ─── Genome + annotation (PRIMARY) ───────────────────────────────────────────
+# Rationale:
+#  - GRCh38 + GENCODE v44 = Cell Ranger 2024-A bundle, the de-facto scRNA-seq
+#    atlas standard (CellxGene 156M cells, HCA, Tabula Sapiens v1 all use it).
+#  - GENCODE v44 has ~370K introns — sufficient for the spliced/unspliced
+#    channel (RNA velocity).
+#  - Mito (chrM) and ribosomal (RP[SL]\d, biotype=rRNA) genes are detectable
+#    directly from the GTF; no separate gene list needed.
+#  - 10x ships the bundle with checksums; no custom mkref reproducibility risk.
+#  - Frozen GRCh38 assembly (since 2013); v44 stable since Dec 2023.
+# Rejected alternatives:
+#  - T2T-CHM13: zero scRNA-seq atlas adoption; coordinates incompatible.
+#  - GENCODE v47/v49: not yet in any official 10x bundle as of May 2026.
+#  - Ensembl 113: moving target; downstream tools don't standardize on it.
+#  - RefSeq: too sparse on introns; degrades RNA velocity.
+
+reference_build:
+  name: GRCh38-2024-A
+  assembly: GRCh38.p14 (primary chromosomes only)
+  annotation: GENCODE v44 (basic primary assembly annotation)
+  source_bundle: refdata-gex-GRCh38-2024-A
+  source_url: https://cf.10xgenomics.com/supp/cell-exp/refdata-gex-GRCh38-2024-A.tar.gz
+  vendor: 10x Genomics
+  release_date: 2024-01
+  genome_taxon_id: 9606
+
+# ─── Files required under $SINGLET_REF_BASE/GRCh38-2024-A/ ───────────────────
+# sha256: <pending> entries must be filled in by the operator via
+#   `scripts/verify_reference.py --record $SINGLET_REF_BASE` before tagging.
+
+files:
+  # STAR index (built from GRCh38.p14 primary + GENCODE v44 GTF with STAR 2.7.11b)
+  - path: GRCh38-2024-A/star_2.7.11b/Genome
+    sha256: <pending>
+    required: true
+    consumer: STAR alignment
+  - path: GRCh38-2024-A/star_2.7.11b/SA
+    sha256: <pending>
+    required: true
+    consumer: STAR alignment
+  - path: GRCh38-2024-A/star_2.7.11b/SAindex
+    sha256: <pending>
+    required: true
+    consumer: STAR alignment
+  - path: GRCh38-2024-A/star_2.7.11b/chrName.txt
+    sha256: <pending>
+    required: true
+    consumer: STAR alignment
+  - path: GRCh38-2024-A/star_2.7.11b/chrLength.txt
+    sha256: <pending>
+    required: true
+    consumer: STAR alignment
+  - path: GRCh38-2024-A/star_2.7.11b/chrStart.txt
+    sha256: <pending>
+    required: true
+    consumer: STAR alignment
+  - path: GRCh38-2024-A/star_2.7.11b/genomeParameters.txt
+    sha256: <pending>
+    required: true
+    consumer: STAR alignment
+  - path: GRCh38-2024-A/star_2.7.11b/sjdbList.fromGTF.out.tab
+    sha256: <pending>
+    required: true
+    consumer: STAR alignment
+
+  # Genome + annotation sources
+  - path: GRCh38-2024-A/fasta/genome.fa
+    sha256: <pending>
+    required: true
+    consumer: reference rebuild, host bloom filter
+  - path: GRCh38-2024-A/genes/genes.gtf
+    sha256: <pending>
+    required: true
+    consumer: pileup gene model, features.fbin, intron/exon vocabulary
+
+  # Derived per-reference binaries (built once, mmap'd at runtime)
+  - path: GRCh38-2024-A/features.fbin
+    sha256: <pending>
+    required: true
+    consumer: per-sample matrix row indexing (gene/exon/intron/junction)
+    builder: scripts/build_features_fbin.py
+  - path: GRCh38-2024-A/snp_sites.fbin
+    sha256: <pending>
+    required: true
+    consumer: SNP pileup, donor demultiplexing
+    builder: scripts/build_snp_sites_fbin.py
+    source_vcf: 1000 Genomes Phase 3 (AF >= 5%), GRCh38-lifted
+  - path: GRCh38-2024-A/manifest.json
+    sha256: <pending>
+    required: true
+    consumer: reference build provenance
+
+  # Host bloom filter (built from GRCh38 transcriptome)
+  - path: species_filters/human_21mer.bloom
+    sha256: <pending>
+    required: true
+    consumer: nonhost screening, species detection
+    builder: singlet build-host-filter --genome-fasta genome.fa
+    params: {k: 21, w: 11}
+
+  # Nonhost screening databases (NCBI RefSeq 223, April 2024)
+  - path: nonhost/viral.snhskidx
+    sha256: <pending>
+    required: true
+    consumer: viral RNA detection
+    size_gb: 1.4
+  - path: nonhost/bacterial.snhskidx
+    sha256: <pending>
+    required: true
+    consumer: bacterial RNA detection
+    size_gb: 6.2
+  - path: nonhost/fungal.snhskidx
+    sha256: <pending>
+    required: true
+    consumer: fungal RNA detection
+    size_gb: 17.0
+  - path: nonhost/host_21mer.bloom
+    sha256: <pending>
+    required: true
+    consumer: nonhost false-positive suppression
+    size_mb: 369
+
+  # Optional channels (present but not wired to default output)
+  - path: GRCh38-2024-A/te/te_kmer_index.teki
+    sha256: <pending>
+    required: false
+    consumer: TE quantification (cascade L2, disabled by default)
+    builder: scripts/build_te_kmer_index.sh
+    source: Dfam 3.8 RepeatMasker library
+
+# ─── External catalogs / non-file refs ────────────────────────────────────────
+companion_databases:
+  - name: 1000 Genomes Phase 3 SNPs
+    version: phase3, AF>=0.05
+    role: SNP sites for donor demux (input to snp_sites.fbin build)
+    url: https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/release/20130502/supporting/GRCh38_positions/
+  - name: NCBI RefSeq
+    version: release 223 (2024-04)
+    role: nonhost screening source genomes (input to .snhskidx build)
+  - name: Dfam
+    version: "3.8"
+    role: TE annotation source (optional channel)
+  - name: 10x cell-barcode whitelists
+    version: bundled with singlet python pkg
+    role: barcode correction for 10x v1/v2/v3 + 5'
+
+# ─── Verification protocol ────────────────────────────────────────────────────
+verification:
+  tool: scripts/verify_reference.py
+  policy: strict   # any sha256 mismatch -> exit non-zero
+  cadence: one verification per orchestrator job-submission cycle
+  required_before: v0.3.0-pilot-freeze tag
+
+# ─── Provenance fields recorded in summary.json (schema 1.1+) ─────────────────
+recorded_in_output:
+  - singlet_version
+  - git_sha
+  - reference_manifest_sha256   # sha256 of this YAML file with all sha256 entries populated
+  - reference_build (string)

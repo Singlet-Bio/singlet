@@ -20,7 +20,8 @@ namespace singlet {
 /// Comprehensive pipeline run metrics.
 struct PipelineSummary {
     // Schema required keys (§3.6)
-    std::string schema_version  = "1.0";
+    /// Schema version. 1.1 adds git_sha + reference_manifest_sha256 (both optional/empty for older callers).
+    std::string schema_version  = "1.1";
     std::string track           = "A";  ///< "A" (STAR-only) or "B" (cascade)
 
     // Sample info
@@ -28,6 +29,12 @@ struct PipelineSummary {
     std::string protocol;           ///< legacy/internal; kept for backward compat
     std::string organism;           ///< legacy/internal; kept for backward compat
     std::string singlet_version;
+    /// Pipeline source-tree git sha (set from $SINGLET_GIT_SHA env at export time).
+    /// Empty string when unset — emitted verbatim for traceability.
+    std::string git_sha;
+    /// sha256 of state/reference-manifest-v1.yaml (set from $SINGLET_REF_MANIFEST_SHA).
+    /// Empty string when unset.
+    std::string reference_manifest_sha256;
     // §3.6 canonical names
     int         protocol_id   = 0;
     std::string protocol_name;
@@ -167,6 +174,8 @@ inline bool write_summary_json(const PipelineSummary& s, const std::string& file
     f << "  \"schema_version\": \""       << json_escape(s.schema_version)   << "\",\n";
     f << "  \"sample_id\": \""            << json_escape(s.sample_id)        << "\",\n";
     f << "  \"status\": \""               << json_escape(s.status)           << "\",\n";
+    f << "  \"git_sha\": \""              << json_escape(s.git_sha)          << "\",\n";
+    f << "  \"reference_manifest_sha256\": \"" << json_escape(s.reference_manifest_sha256) << "\",\n";
     f << "  \"protocol_id\": "            << s.protocol_id                   << ",\n";
     f << "  \"protocol_name\": \""        << json_escape(s.protocol_name)    << "\",\n";
     f << "  \"species\": \""              << json_escape(s.species)          << "\",\n";

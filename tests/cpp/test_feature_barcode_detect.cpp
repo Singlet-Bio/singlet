@@ -30,14 +30,14 @@ static int n_pass = 0, n_fail = 0;
     } while(0)
 
 // ─── Helper: write a minimal .1fq with a given assay_type ────────────────────
-static std::string write_synthetic_1fq(const char* path, lib1fq::AssayType assay) {
-    lib1fq::WriterConfig cfg;
+static std::string write_synthetic_1fq(const char* path, singlet::fq::AssayType assay) {
+    singlet::fq::WriterConfig cfg;
     cfg.block_size  = 100;
     cfg.r1_length   = 16;  // barcode+UMI
     cfg.r2_length   = 28;  // tag read (short, typical ADT)
     cfg.assay_type  = assay;
 
-    lib1fq::Writer w;
+    singlet::fq::Writer w;
     w.open(path, cfg);
 
     // Write 10 synthetic reads
@@ -53,19 +53,19 @@ static std::string write_synthetic_1fq(const char* path, lib1fq::AssayType assay
 
 void test_cite_seq_adt_detected_as_feature_barcode_only() {
     const char* tmpfile = "/tmp/test_fb_adt.1fq";
-    write_synthetic_1fq(tmpfile, lib1fq::AssayType::CITE_SEQ_ADT);
+    write_synthetic_1fq(tmpfile, singlet::fq::AssayType::CITE_SEQ_ADT);
 
-    lib1fq::Reader reader;
+    singlet::fq::Reader reader;
     reader.open(tmpfile);
     auto hdr = reader.header();
 
     // The assay_type byte must be CITE_SEQ_ADT (= 9)
-    CHECK(hdr.assay_type == static_cast<uint8_t>(lib1fq::AssayType::CITE_SEQ_ADT),
+    CHECK(hdr.assay_type == static_cast<uint8_t>(singlet::fq::AssayType::CITE_SEQ_ADT),
           "header.assay_type == CITE_SEQ_ADT");
 
     // Reproduce singlet detection logic
     bool is_feature_barcode_only =
-        (hdr.assay_type == static_cast<uint8_t>(lib1fq::AssayType::CITE_SEQ_ADT));
+        (hdr.assay_type == static_cast<uint8_t>(singlet::fq::AssayType::CITE_SEQ_ADT));
     CHECK(is_feature_barcode_only, "is_feature_barcode_only == true for CITE_SEQ_ADT");
 
     // With no GTF (exon_gtf_path empty), the guard fires → feature_barcode_not_gex
@@ -79,17 +79,17 @@ void test_cite_seq_adt_detected_as_feature_barcode_only() {
 
 void test_cite_seq_gex_not_flagged_as_feature_barcode_only() {
     const char* tmpfile = "/tmp/test_fb_gex.1fq";
-    write_synthetic_1fq(tmpfile, lib1fq::AssayType::CITE_SEQ_GEX);
+    write_synthetic_1fq(tmpfile, singlet::fq::AssayType::CITE_SEQ_GEX);
 
-    lib1fq::Reader reader;
+    singlet::fq::Reader reader;
     reader.open(tmpfile);
     auto hdr = reader.header();
 
-    CHECK(hdr.assay_type == static_cast<uint8_t>(lib1fq::AssayType::CITE_SEQ_GEX),
+    CHECK(hdr.assay_type == static_cast<uint8_t>(singlet::fq::AssayType::CITE_SEQ_GEX),
           "header.assay_type == CITE_SEQ_GEX");
 
     bool is_feature_barcode_only =
-        (hdr.assay_type == static_cast<uint8_t>(lib1fq::AssayType::CITE_SEQ_ADT));
+        (hdr.assay_type == static_cast<uint8_t>(singlet::fq::AssayType::CITE_SEQ_ADT));
     CHECK(!is_feature_barcode_only, "CITE_SEQ_GEX is NOT flagged as feature_barcode_only");
 
     std::remove(tmpfile);
@@ -97,14 +97,14 @@ void test_cite_seq_gex_not_flagged_as_feature_barcode_only() {
 
 void test_scrna_3prime_not_flagged() {
     const char* tmpfile = "/tmp/test_fb_scrna.1fq";
-    write_synthetic_1fq(tmpfile, lib1fq::AssayType::SC_RNA_3PRIME);
+    write_synthetic_1fq(tmpfile, singlet::fq::AssayType::SC_RNA_3PRIME);
 
-    lib1fq::Reader reader;
+    singlet::fq::Reader reader;
     reader.open(tmpfile);
     auto hdr = reader.header();
 
     bool is_feature_barcode_only =
-        (hdr.assay_type == static_cast<uint8_t>(lib1fq::AssayType::CITE_SEQ_ADT));
+        (hdr.assay_type == static_cast<uint8_t>(singlet::fq::AssayType::CITE_SEQ_ADT));
     CHECK(!is_feature_barcode_only, "SC_RNA_3PRIME is NOT flagged as feature_barcode_only");
 
     std::remove(tmpfile);
