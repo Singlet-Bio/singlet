@@ -40,3 +40,6 @@ star/pgo_profile/
 pipeline/
 src/star/htslib/htslib/
 .coverage
+
+build-test/
+*.bak-*

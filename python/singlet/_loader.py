@@ -1,15 +1,31 @@
 # SPDX-License-Identifier: MIT
-"""Load datasets from local catalog, Zenodo, or AWS.
+"""Load Singlet datasets as AnnData.
 
-Priority order:
-  1. Local file path (.1pz, .spz, .h5ad, .zarr)
-  2. Local catalog directory (set via SINGLET_CATALOG_DIR or singlet.set_catalog_dir())
-  3. Zenodo download (free, cached at ~/.singlet/data/)
-  4. AWS streaming (token-priced)
+Users work with two things only: ``.singlet`` files and GEO accession strings
+(``GSE…`` / ``GSM…``). Public per-GSE data is hosted at::
+
+    https://data.singlet.bio/data/<GSE>/<GSE>.singlet
+
+(free, no authentication). A ``.singlet`` file opens via
+:class:`singlet.SingletBundle`. The base host is configurable with
+``$SINGLET_DATA_BASE`` (default ``https://data.singlet.bio``).
+
+Resolution priority for :func:`load`:
+  1. A local ``.singlet`` file path (also accepts ``.h5ad`` / ``.zarr`` you exported)
+  2. A local catalog directory (set via SINGLET_CATALOG_DIR or singlet.set_catalog_dir())
+  3. A free, cached download of the public ``.singlet`` bundle for an accession
+
+GSM accessions are resolved to their parent GSE (via the public REST API at
+``https://singlet.bio/api``); the parent bundle is downloaded and the returned
+AnnData is filtered to that GSM's cells.
 """
 
 from __future__ import annotations
 
+import json
+import os
+import urllib.error
+import urllib.request
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
@@ -17,14 +33,60 @@ from typing import TYPE_CHECKING, Optional
 if TYPE_CHECKING:
     import anndata
 
-_ZENODO_BASE = "https://zenodo.org/records/XXXXXX/files"
-_AWS_BASE = "https://data.singlet.bio/v1"
+# Public REST API base (used only to resolve a GSM → its parent GSE).
+_API_BASE_DEFAULT = "https://singlet.bio/api"
+_USER_AGENT = "singlet-loader/1"
+
+
+def _api_base() -> str:
+    """Base URL for the public REST API. Override with ``$SINGLET_API_BASE``."""
+    return os.environ.get("SINGLET_API_BASE", _API_BASE_DEFAULT).rstrip("/")
 
 
 def _cache_dir() -> Path:
-    d = Path.home() / ".singlet" / "data"
+    """Local download cache. Override with ``$SINGLET_CACHE_DIR``.
+
+    Defaults to ``~/.singlet/cache``.
+    """
+    env = os.environ.get("SINGLET_CACHE_DIR")
+    d = Path(env) if env else (Path.home() / ".singlet" / "cache")
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def _bundle_url(accession: str) -> str:
+    """Public R2 URL for a GSE's ``.singlet`` bundle."""
+    base = os.environ.get("SINGLET_DATA_BASE", "https://data.singlet.bio").rstrip("/")
+    return f"{base}/data/{accession}/{accession}.singlet"
+
+
+def _resolve_gsm_to_gse(gsm_id: str) -> Optional[str]:
+    """Look up the parent GSE accession for a GSM via the public REST API.
+
+    Returns the GSE id, or ``None`` if it cannot be resolved.
+    """
+    base = _api_base()
+    # Primary: /api/gsm?q=<GSM> (the /api/gsm/<id> detail endpoint is currently
+    # unreliable). Fallback: /api/search?q=<GSM>.
+    candidates = (
+        f"{base}/gsm?q={gsm_id}&limit=5",
+        f"{base}/search?q={gsm_id}",
+    )
+    for url in candidates:
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                payload = json.load(resp)
+        except Exception:  # noqa: BLE001 — try the next endpoint
+            continue
+        rows = payload.get("data") or payload.get("gsm") or []
+        for row in rows:
+            if row.get("gsm_id") == gsm_id and row.get("gse_id"):
+                return row["gse_id"]
+        # If exactly one row came back, trust it even without an exact id match.
+        if len(rows) == 1 and rows[0].get("gse_id"):
+            return rows[0]["gse_id"]
+    return None
 
 
 def _resolve_gse_path(accession: str) -> Optional[Path]:
@@ -61,80 +123,74 @@ def download(
     accession: str,
     output_dir: Optional[str | Path] = None,
     force: bool = False,
-    source: str = "zenodo",
 ) -> Path:
-    """Download a dataset file.
+    """Download a GSE's public ``.singlet`` bundle from Cloudflare R2.
+
+    Fetches ``https://data.singlet.bio/data/<GSE>/<GSE>.singlet`` (free, no
+    auth) to the local cache. The download is path-cached: an existing,
+    non-empty file is reused unless ``force=True``.
 
     Parameters
     ----------
     accession : str
-        GEO series accession (e.g. "GSE264667").
+        GEO series accession (e.g. "GSE149298").
     output_dir : path, optional
-        Where to save. Defaults to ``~/.singlet/data/``.
+        Where to save. Defaults to ``default_cache_dir()``
+        (``$SINGLET_CACHE_DIR`` or ``~/.singlet/cache``).
     force : bool
         Re-download even if cached.
-    source : str
-        ``"zenodo"`` (free) or ``"aws"`` (token-priced).
 
     Returns
     -------
     Path
-        Path to the downloaded file.
+        Path to the downloaded ``.singlet`` bundle.
     """
-    import requests
-
-    try:
-        from tqdm import tqdm
-    except ImportError:
-        tqdm = None  # type: ignore[assignment]
-
-    if source not in ("zenodo", "aws"):
-        raise ValueError(f"source must be 'zenodo' or 'aws', got {source!r}")
-
     dest_dir = Path(output_dir) if output_dir else _cache_dir()
     dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / f"{accession}.1pz"
+    dest = dest_dir / f"{accession}.singlet"
 
-    if dest.exists() and not force:
+    # On-disk cache: reuse an existing, non-empty bundle.
+    if dest.exists() and dest.stat().st_size > 0 and not force:
         return dest
 
-    if source == "aws":
-        from singlet._auth import _get_headers
+    url = _bundle_url(accession)
+    req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
 
-        url = f"{_AWS_BASE}/{accession}"
-        headers = _get_headers()
-    else:
-        url = f"{_ZENODO_BASE}/{accession}.1pz"
-        headers = {}
-
-    resp = requests.get(url, stream=True, timeout=60, headers=headers)
+    # Write to a temp file first, then atomic rename (interrupted downloads
+    # don't corrupt the cache).
+    tmp_dest = dest.with_suffix(".singlet.part")
     try:
-        resp.raise_for_status()
-    except requests.HTTPError as e:
-        if resp.status_code == 404:
+        try:
+            from tqdm import tqdm
+        except ImportError:
+            tqdm = None  # type: ignore[assignment]
+
+        import shutil
+
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            total = int(resp.headers.get("content-length", 0))
+            if tqdm is not None and total:
+                with (
+                    open(tmp_dest, "wb") as f,
+                    tqdm(total=total, unit="B", unit_scale=True, desc=accession) as pbar,
+                ):
+                    for chunk in iter(lambda: resp.read(1 << 16), b""):
+                        f.write(chunk)
+                        pbar.update(len(chunk))
+            else:
+                with open(tmp_dest, "wb") as f:
+                    shutil.copyfileobj(resp, f, length=1 << 16)
+        tmp_dest.replace(dest)
+    except urllib.error.HTTPError as e:
+        tmp_dest.unlink(missing_ok=True)
+        if e.code == 404:
             raise FileNotFoundError(
-                f"Dataset '{accession}' not found on {source}. "
+                f"Dataset '{accession}' not found at {url}. "
                 f"Check the accession or use singlet.catalog() to browse available datasets."
             ) from None
-        raise RuntimeError(f"Failed to download '{accession}' from {source}: {e}") from e
-
-    # Write to temp file first, then atomic rename (interrupted downloads don't corrupt cache)
-    tmp_dest = dest.with_suffix(".1pz.part")
-    total = int(resp.headers.get("content-length", 0))
-    try:
-        if tqdm is not None:
-            with (
-                open(tmp_dest, "wb") as f,
-                tqdm(total=total, unit="B", unit_scale=True, desc=accession) as pbar,
-            ):
-                for chunk in resp.iter_content(chunk_size=1 << 16):
-                    f.write(chunk)
-                    pbar.update(len(chunk))
-        else:
-            with open(tmp_dest, "wb") as f:
-                for chunk in resp.iter_content(chunk_size=1 << 16):
-                    f.write(chunk)
-        tmp_dest.rename(dest)
+        raise RuntimeError(
+            f"Failed to download '{accession}' from {url}: HTTP {e.code}"
+        ) from e
     except BaseException:
         tmp_dest.unlink(missing_ok=True)
         raise
@@ -143,29 +199,37 @@ def download(
 
 
 def load(
-    source: str | Path,
+    source: str | Path | Sequence[str | Path],
     *,
     genes: Optional[Sequence[str]] = None,
     obs_filter: Optional[dict] = None,
-    backend: str = "zenodo",
+    force: bool = False,
 ) -> anndata.AnnData:
-    """Load a dataset as AnnData.
+    """Load one or more datasets as a single AnnData.
 
-    This is the primary entry point. Pass a GEO accession to load from
-    local catalog (instant), Zenodo (free download), or AWS (token-priced),
-    or a local file path to read directly.
+    This is the primary entry point. Pass a GEO accession to load from the
+    public Singlet data host (free download, cached) or a local ``.singlet``
+    file path to read directly. Pass a list/tuple of accessions and/or
+    ``.singlet`` paths to load them all and concatenate into one AnnData.
+
+    For a ``GSE`` accession, the public ``.singlet`` bundle is downloaded and
+    assembled into one AnnData. For a ``GSM`` accession, the parent GSE bundle
+    is downloaded and the result is filtered to that sample's cells.
 
     Parameters
     ----------
-    source : str or Path
-        GEO accession (e.g. "GSE264667") or path to a local file.
-        Supports ``.1pz``, ``.spz``, ``.h5ad``, and ``.zarr``.
+    source : str, Path, or list/tuple of those
+        A GEO accession (e.g. ``"GSE149298"``, ``"GSM2581270"``), a local
+        ``.singlet`` file path, or a list/tuple mixing any of those. When a
+        list/tuple is given, every item is loaded and concatenated into one
+        AnnData (with a ``source`` column in ``obs`` recording each item's
+        accession/path).
     genes : list of str, optional
         Subset to these gene names (column slice).
     obs_filter : dict, optional
         Filter cells by obs columns, e.g. ``{"organism": "Homo sapiens"}``.
-    backend : str
-        ``"zenodo"`` (default, free) or ``"aws"`` (fast streaming).
+    force : bool
+        Re-download even if the bundle is already cached.
 
     Returns
     -------
@@ -175,10 +239,62 @@ def load(
     Examples
     --------
     >>> import singlet
-    >>> adata = singlet.load("GSE264667")
-    >>> adata = singlet.load("/path/to/counts.1pz")
-    >>> adata = singlet.load("GSE264667", genes=["TP53", "BRCA1"])
+    >>> adata = singlet.load("GSE149298")
+    >>> adata = singlet.load("/path/to/data.singlet")
+    >>> adata = singlet.load("GSE149298", genes=["TP53", "BRCA1"])
+    >>> adata = singlet.load("GSM2581270")  # parent GSE, filtered to this GSM
+    >>> # Load and concatenate several datasets at once:
+    >>> adata = singlet.load(["GSE149298", "GSE264667"])
+    >>> adata = singlet.load(["a.singlet", "b.singlet"])
     """
+    # ---- Multiple sources → load each and concatenate -------------------
+    if isinstance(source, (list, tuple)):
+        items = list(source)
+        if not items:
+            raise ValueError("load() received an empty list of sources")
+        import anndata as ad
+
+        parts = []
+        for item in items:
+            sub = load(item, genes=genes, obs_filter=obs_filter, force=force)
+            sub.obs["source"] = str(item)
+            parts.append(sub)
+        if len(parts) == 1:
+            return parts[0]
+        # anndata.concat's `keys` (used for the index suffix and `dataset`
+        # label) must be unique; disambiguate any repeated sources while the
+        # per-cell `source` column above keeps the true accession/path.
+        keys = []
+        seen: dict[str, int] = {}
+        for item in items:
+            k = str(item)
+            if k in seen:
+                seen[k] += 1
+                keys.append(f"{k}#{seen[k]}")
+            else:
+                seen[k] = 0
+                keys.append(k)
+        combined = ad.concat(
+            parts,
+            join="outer",
+            label="dataset",
+            keys=keys,
+            index_unique="-",
+            merge="first",
+        )
+        return combined
+
+    return _load_one(source, genes=genes, obs_filter=obs_filter, force=force)
+
+
+def _load_one(
+    source: str | Path,
+    *,
+    genes: Optional[Sequence[str]] = None,
+    obs_filter: Optional[dict] = None,
+    force: bool = False,
+) -> anndata.AnnData:
+    """Load a single dataset (accession or local ``.singlet``/file path)."""
     from singlet._io import read_1pz, read_matrix
 
     if source is None:
@@ -194,6 +310,7 @@ def load(
         or "\\" in str(source)
         or path.suffix.lower()
         in (
+            ".singlet",
             ".1pz",
             ".spz",
             ".h5ad",
@@ -201,14 +318,22 @@ def load(
         )
     )
 
+    # Track a GSM accession so we can filter to its cells after loading the
+    # parent GSE bundle.
+    _gsm_filter: Optional[str] = None
+
     if path.exists():
         if path.is_dir():
             raise IsADirectoryError(
                 f"'{path}' is a directory. Use singlet.load_dir() for pipeline output directories, "
-                f"or provide a file path (.1pz, .spz, .h5ad)."
+                f"or provide a .singlet file path (or an accession like 'GSE149298')."
             )
         suffix = path.suffix.lower()
-        if suffix == ".h5ad":
+        if suffix == ".singlet":
+            from singlet.bundle import SingletBundle
+
+            adata = SingletBundle.open(path).to_anndata(verbose=False)
+        elif suffix == ".h5ad":
             import anndata as ad
 
             adata = ad.read_h5ad(path)
@@ -223,13 +348,46 @@ def load(
     elif _is_path:
         raise FileNotFoundError(f"File not found: {path}")
     else:
-        # Treat as GSE accession
-        local_path = _resolve_gse_path(str(source))
-        if local_path is not None:
+        # Treat as a GEO accession.
+        accession = str(source).strip()
+        gse_accession = accession
+
+        if accession.upper().startswith("GSM"):
+            # Resolve the GSM to its parent GSE, then filter after loading.
+            _gsm_filter = accession
+            parent = _resolve_gsm_to_gse(accession)
+            if parent is None:
+                raise FileNotFoundError(
+                    f"Could not resolve parent GSE for sample {accession!r} via the "
+                    f"public API ({_api_base()}). Load the parent series directly with "
+                    f"singlet.load('<GSE>')."
+                )
+            gse_accession = parent
+
+        # Prefer a local catalog hit for the GSE (instant); else fetch the
+        # public R2 bundle.
+        local_path = _resolve_gse_path(gse_accession)
+        if local_path is not None and _gsm_filter is None:
             adata = read_1pz(local_path)
         else:
-            local = download(str(source), source=backend)
-            adata = read_1pz(local)
+            local = download(gse_accession, force=force)
+            from singlet.bundle import SingletBundle
+
+            adata = SingletBundle.open(local).to_anndata(verbose=False)
+
+    # Filter to a single GSM's cells (obs has a 'gsm_id' column; index is
+    # '<GSM>_<barcode>').
+    if _gsm_filter is not None:
+        if "gsm_id" in adata.obs.columns:
+            mask = adata.obs["gsm_id"] == _gsm_filter
+        else:
+            mask = adata.obs_names.str.startswith(f"{_gsm_filter}_")
+        n = int(mask.sum())
+        if n == 0:
+            raise KeyError(
+                f"Sample {_gsm_filter!r} has no cells in its parent GSE bundle."
+            )
+        adata = adata[mask].copy()
 
     # Gene subset
     if genes is not None:

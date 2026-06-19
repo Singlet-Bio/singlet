@@ -1,5 +1,10 @@
 # SPDX-License-Identifier: MIT
-"""PyTorch integration: zero-copy sparse tensors and DataLoaders for .1pz/.spz files."""
+"""PyTorch integration: sparse tensors and DataLoaders for Singlet datasets.
+
+Datasets are built from ``.singlet`` files, GEO accessions, or in-memory
+AnnData. The preferred form is an array (list/tuple) of ``.singlet`` file
+paths — these are concatenated into one training set.
+"""
 
 from __future__ import annotations
 
@@ -195,16 +200,17 @@ class SpzDataset:
         return torch.tensor(row, dtype=torch.float32, device=self._device)
 
 
-class OnePZDataset:
-    """PyTorch Dataset backed by a .1pz file (preferred over SpzDataset).
+class SingletDataset:
+    """PyTorch Dataset backed by a Singlet dataset.
 
-    Loads the entire matrix into memory at construction, then yields
-    one cell per ``__getitem__`` call.
+    Loads the matrix into memory at construction, then yields one cell per
+    ``__getitem__`` call.
 
     Parameters
     ----------
     source : str, Path, or AnnData
-        Path to a .1pz file, GEO accession, or a loaded AnnData object.
+        Path to a ``.singlet`` file, a GEO accession (e.g. ``"GSE149298"``),
+        or a loaded AnnData object.
     genes : list of str, optional
         Subset to these genes.
     normalize : bool
@@ -284,8 +290,11 @@ class DataLoader:
 
     Parameters
     ----------
-    source : str, Path, AnnData, or list
-        GEO accession(s), .1pz/.spz path(s), or AnnData object(s).
+    source : str, Path, AnnData, or list/tuple
+        A GEO accession, a ``.singlet`` file path, an AnnData object, or — the
+        preferred form for training — an array (list/tuple) of ``.singlet`` file
+        paths and/or accessions. Arrays are concatenated into one training set
+        (``torch.utils.data.ConcatDataset``).
     batch_size : int
         Batch size.
     shuffle : bool
@@ -319,12 +328,12 @@ class DataLoader:
 
         if isinstance(source, (list, tuple)):
             datasets = [
-                OnePZDataset(s, genes=genes, normalize=normalize, device=device, sparse=sparse)
+                SingletDataset(s, genes=genes, normalize=normalize, device=device, sparse=sparse)
                 for s in source
             ]
             dataset = ConcatDataset(datasets)
         else:
-            dataset = OnePZDataset(
+            dataset = SingletDataset(
                 source,
                 genes=genes,
                 normalize=normalize,
@@ -344,3 +353,7 @@ class DataLoader:
 
     def __len__(self) -> int:
         return len(self._loader)
+
+
+# Deprecated alias — kept for backward compatibility. Prefer SingletDataset.
+OnePZDataset = SingletDataset

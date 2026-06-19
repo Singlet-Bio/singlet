@@ -20,19 +20,23 @@ Browse catalog (works offline):
     singlet.cell_types()                   Cell type annotations (50% coverage, 42 categories)
     singlet.summary()                      Atlas overview
 
+Find data (natural language):
+    singlet.find("human lung fibroblasts")     Search → list of accessions
+    singlet.find("melanoma T cells", level="gse")
+    singlet.find_load("human pancreas islets") Search + load → AnnData
+
 Load data:
-    singlet.load("GSE264667")              Load from local catalog or Zenodo → AnnData
-    singlet.load("path/to/counts.1pz")     Load local .1pz file
-    singlet.load_dir("/path/to/quant/GSM") Load singlet output directory → AnnData
+    singlet.load("GSE149298")              Load an accession → AnnData (free download)
+    singlet.load("path/to/data.singlet")   Load a local .singlet file → AnnData
+    singlet.load(["GSE149298", "b.singlet"]) Load + concatenate several → one AnnData
+    singlet.load_dir("/path/to/quant/GSM") Load a pipeline output directory → AnnData
     singlet.load_sample("GSM3308814")      Load single sample (column-range read)
 
 Format I/O:
-    singlet.read_1pz("file.1pz")           Read .1pz → AnnData
-    singlet.write_1pz(adata, "out.1pz")    Write AnnData → .1pz
     singlet.read_kraken2("gse_dir/")       Read kraken2 microbiome matrix
-    singlet.read_matrix("file")            Auto-detect single-block .1pz
+    singlet.read_matrix("file")            Auto-detect single-block count matrix
 
-Canonical v2 samples (multi-block .1pz from the pipeline):
+Canonical v2 samples (multi-block, from the pipeline):
     sample = singlet.SingletSample("sample_dir/")
     counts = sample.counts.adata()         Spliced+unspliced AnnData
 
@@ -62,11 +66,6 @@ Preprocessing:
     singlet.highly_variable_genes(adata)        Select top variable genes
     singlet.pca(adata)                          PCA dimensionality reduction
     singlet.harmony(adata, "batch")             Batch correction (Harmony)
-
-Token-priced (requires API key):
-    singlet.login(key)                     Authenticate
-    singlet.query(...)                     Cross-atlas query → AnnData
-    singlet.search(text)                   Natural-language search → AnnData
 """
 
 __version__ = "1.0.0"
@@ -167,6 +166,8 @@ from singlet.fetch import fetch, default_cache_dir, default_base_url
 from singlet.pipeline import PipelineError, Run, run as run_pipeline
 from singlet.transcode import transcode_v1_to_v2
 from singlet.manifest import validate_sample
+from singlet.bundle import SingletBundle, pack_gse
+from singlet.find import find, find_load
 from singlet.views import gene_counts as view_gene_counts
 from singlet.views import psi as view_psi
 from singlet.views import usa as view_usa
@@ -264,15 +265,15 @@ __all__ = [
     "quality_tiers",
     "failure_categories",
     "cell_types",
+    # Find (natural-language search)
+    "find",
+    "find_load",
     # Load
     "load",
     "load_sample",
     "load_dir",
     "download",
-    # Token-priced
-    "login",
-    "query",
-    "search",
+    "SingletBundle",
     # Annotation (free, local)
     "gene_programs",
     "project",

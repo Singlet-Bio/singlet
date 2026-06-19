@@ -29,6 +29,7 @@ from singlet.io.sample import (
     SingletSample,
     SingletSnp,
 )
+from singlet.bundle import SingletBundle, pack_gse
 
 __all__ = [
     "read_1pz",
@@ -51,4 +52,7 @@ __all__ = [
     "SingletSnp",
     "SingletMt",
     "SingletNonhost",
+    # Per-GSE bundle format
+    "SingletBundle",
+    "pack_gse",
 ]

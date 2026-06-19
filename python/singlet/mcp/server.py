@@ -5,6 +5,7 @@ Singlet MCP Server — Model Context Protocol server for the Singlet Atlas.
 
 Exposes these tools to any MCP client (Claude Desktop, Cursor, VS Code Copilot):
   - singlet_stats:      Get corpus-wide statistics (samples, cells, species)
+  - singlet_nl_search:  Natural-language search → interpreted filters + accessions
   - singlet_search:     Search processed single-cell datasets
   - singlet_qc:        Get QC metrics for a sample
   - singlet_load:      Get download/access info for a sample
@@ -28,21 +29,26 @@ Usage:
       "mcpServers": {
         "singlet": {
           "command": "python",
-          "args": ["-m", "singlet.mcp"],
-          "env": {
-            "SUPABASE_URL": "https://vbswbitfyallghbgxkuw.supabase.co",
-            "SUPABASE_ANON_KEY": "<your-anon-key>"
-          }
+          "args": ["-m", "singlet.mcp"]
         }
       }
     }
 
-Requires: pip install mcp supabase
+The live tools (search, qc, load, browse) call the public Singlet REST API at
+https://singlet.bio/api (override with $SINGLET_API_BASE). The aggregate tools
+(stats, protocols, quality, tissues, ...) read the bundled catalog parquet.
+
+Requires: pip install mcp
 """
+
+from __future__ import annotations
 
 import json
 import os
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
 from typing import Any
 
 try:
@@ -55,31 +61,32 @@ except ImportError:
         "See: https://github.com/modelcontextprotocol/python-sdk"
     )
 
-try:
-    from supabase import Client, create_client
-except ImportError:
-    sys.exit("Supabase client not installed. Run: pip install supabase")
-
 
 # ─── Configuration ───────────────────────────────────────────────────────────
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://vbswbitfyallghbgxkuw.supabase.co")
-SUPABASE_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
-
-if not SUPABASE_KEY:
-    # Try service key as fallback
-    SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
-
-if not SUPABASE_KEY:
-    print(
-        "Warning: No SUPABASE_ANON_KEY or SUPABASE_SERVICE_KEY set. Tools will fail at runtime.",
-        file=sys.stderr,
-    )
+API_BASE = os.environ.get("SINGLET_API_BASE", "https://singlet.bio/api").rstrip("/")
+_USER_AGENT = "singlet-mcp/1"
 
 
-def get_client() -> Client:
-    """Create Supabase client (lazy, reused)."""
-    return create_client(SUPABASE_URL, SUPABASE_KEY)
+def _api_get(path: str, params: dict | None = None) -> Any:
+    """GET ``{API_BASE}{path}`` (with optional query params) → parsed JSON.
+
+    ``path`` should start with ``/`` (e.g. ``/search``). Returns the decoded
+    JSON payload, or raises RuntimeError on transport/HTTP failure.
+    """
+    url = f"{API_BASE}{path}"
+    if params:
+        clean = {k: v for k, v in params.items() if v is not None and v != ""}
+        if clean:
+            url = f"{url}?{urllib.parse.urlencode(clean)}"
+    req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.load(resp)
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"API request failed: {url} → HTTP {e.code}") from e
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"API request failed: {url} → {e.reason}") from e
 
 
 # ─── MCP Server Setup ────────────────────────────────────────────────────────
@@ -100,6 +107,36 @@ async def list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {},
                 "required": [],
+            },
+        ),
+        Tool(
+            name="singlet_nl_search",
+            description=(
+                "Natural-language search over the Singlet Atlas. Give a plain-English "
+                "description (e.g. 'human lung fibroblasts', 'exhausted T cells in "
+                "melanoma') and get back the interpreted filters plus matching GEO "
+                "accessions, ready to pass to singlet.load()."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Plain-English description of the data you want.",
+                    },
+                    "level": {
+                        "type": "string",
+                        "enum": ["gsm", "gse"],
+                        "description": "Accession granularity: 'gsm' (samples, default) or 'gse' (series).",
+                        "default": "gsm",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max accessions to return (default 50).",
+                        "default": 50,
+                    },
+                },
+                "required": ["query"],
             },
         ),
         Tool(
@@ -316,6 +353,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     try:
         if name == "singlet_stats":
             result = await _tool_stats()
+        elif name == "singlet_nl_search":
+            result = await _tool_nl_search(arguments)
         elif name == "singlet_search":
             result = await _tool_search(arguments)
         elif name == "singlet_qc":
@@ -377,42 +416,88 @@ async def _tool_stats() -> dict:
     }
 
 
+def _lookup_gsm(gsm_id: str) -> dict | None:
+    """Fetch a single GSM record from the public API, or None if not found.
+
+    Uses ``/api/gsm?q=<GSM>`` (the ``/api/gsm/<id>`` detail endpoint is
+    currently unreliable) and falls back to ``/api/search``.
+    """
+    try:
+        payload = _api_get("/gsm", {"q": gsm_id, "limit": 5})
+        for row in payload.get("data") or []:
+            if row.get("gsm_id") == gsm_id:
+                return row
+    except RuntimeError:
+        pass
+    try:
+        payload = _api_get("/search", {"q": gsm_id})
+        for row in payload.get("gsm") or []:
+            if row.get("gsm_id") == gsm_id:
+                return row
+    except RuntimeError:
+        pass
+    return None
+
+
+async def _tool_nl_search(args: dict) -> dict:
+    """Natural-language search via the public ``/nl-search`` endpoint.
+
+    Returns the interpreted filters (if the endpoint reports them) plus the
+    matching GEO accessions.
+    """
+    query = args.get("query")
+    if not query or not str(query).strip():
+        return {"error": "query is required"}
+    level = args.get("level", "gsm")
+    limit = min(int(args.get("limit", 50)), 500)
+
+    payload = _api_get("/nl-search", {"q": query, "level": level, "limit": limit})
+
+    accessions = payload.get("accessions")
+    if accessions is None:
+        accessions = payload.get("results") or []
+    accessions = [str(a) for a in accessions][:limit]
+
+    return {
+        "query": query,
+        "level": level,
+        "filters": payload.get("filters", payload.get("interpreted", {})),
+        "count": len(accessions),
+        "accessions": accessions,
+        "load_hint": "singlet.load(accessions)  # → one AnnData",
+    }
+
+
 async def _tool_search(args: dict) -> dict:
-    """Search samples with filters."""
-    client = get_client()
+    """Search samples with filters via the public REST API."""
     limit = min(args.get("limit", 20), 100)
 
-    query = client.table("samples").select(
-        "gsm_id, gse_id, organism, protocol, modality, status, "
-        "cells_called, mapping_rate, title, source, characteristics"
-    )
+    # /api/search?q=<text> is the free-text endpoint; /api/gsm supports
+    # structured filters. Prefer /api/gsm when structured filters are present.
+    structured = any(args.get(k) for k in ("organism", "protocol", "status"))
+    samples: list[dict] = []
 
-    if args.get("organism"):
-        query = query.eq("organism", args["organism"])
-    if args.get("protocol"):
-        query = query.eq("protocol", args["protocol"])
-    if args.get("modality"):
-        query = query.eq("modality", args["modality"])
-    if args.get("status"):
-        query = query.eq("status", args["status"])
-    if args.get("query"):
-        q = args["query"].replace("%", "").replace("(", "").replace(")", "")
-        query = query.or_(
-            f"gsm_id.ilike.%{q}%,gse_id.ilike.%{q}%,title.ilike.%{q}%,"
-            f"source.ilike.%{q}%,characteristics->>tissue.ilike.%{q}%,"
-            f"characteristics->>cell type.ilike.%{q}%"
+    if args.get("query") and not structured:
+        payload = _api_get("/search", {"q": args["query"]})
+        rows = payload.get("gsm") or []
+        samples = rows[:limit]
+    else:
+        payload = _api_get(
+            "/gsm",
+            {
+                "q": args.get("query"),
+                "organism": args.get("organism"),
+                "protocol": args.get("protocol"),
+                "status": args.get("status"),
+                "limit": limit,
+            },
         )
+        samples = payload.get("data") or []
 
-    query = query.order("pipeline_date", desc=True).limit(limit)
-    resp = query.execute()
-
-    # Extract tissue/cell_type for display
-    samples = []
-    for s in resp.data or []:
-        chars = s.pop("characteristics", None) or {}
-        s["tissue"] = chars.get("tissue", "")
-        s["cell_type"] = chars.get("cell type", "")
-        samples.append(s)
+    # Optional client-side modality filter (not a first-class API param).
+    if args.get("modality"):
+        m = args["modality"].lower()
+        samples = [s for s in samples if str(s.get("modality", "")).lower() == m]
 
     return {
         "count": len(samples),
@@ -421,129 +506,99 @@ async def _tool_search(args: dict) -> dict:
 
 
 async def _tool_qc(args: dict) -> dict:
-    """Get QC metrics for a sample."""
+    """Get QC metrics for a sample via the public REST API."""
     gsm_id = args["gsm_id"]
-    client = get_client()
-
-    resp = client.table("samples").select("*").eq("gsm_id", gsm_id).execute()
-    if not resp.data:
+    sample = _lookup_gsm(gsm_id)
+    if not sample:
         return {"error": f"Sample {gsm_id} not found in atlas"}
 
-    sample = resp.data[0]
-    chars = sample.get("characteristics") or {}
     return {
-        "gsm_id": sample["gsm_id"],
-        "gse_id": sample["gse_id"],
-        "organism": sample["organism"],
-        "protocol": sample["protocol"],
-        "modality": sample["modality"],
-        "status": sample["status"],
-        "tissue": chars.get("tissue", ""),
-        "cell_type": chars.get("cell type", ""),
+        "gsm_id": sample.get("gsm_id"),
+        "gse_id": sample.get("gse_id"),
+        "organism": sample.get("organism"),
+        "protocol": sample.get("protocol"),
+        "modality": sample.get("modality"),
+        "status": sample.get("status"),
+        "tissue": sample.get("tissue", ""),
+        "cell_type": sample.get("cell_type", ""),
         "qc_metrics": {
             "mapping_rate": sample.get("mapping_rate"),
-            "cells_called": sample.get("cells_called"),
+            "cells_called": sample.get("n_cells", sample.get("cells_called")),
             "median_genes": sample.get("median_genes"),
             "median_umis": sample.get("median_umis"),
             "mt_pct": sample.get("mt_pct"),
-            "doublet_rate": sample.get("doublet_rate"),
-            "ambient_pct": sample.get("ambient_pct"),
-            "saturation": sample.get("saturation"),
+            "qc_flag": sample.get("qc_flag"),
         },
         "processing": {
             "singlet_version": sample.get("singlet_version"),
-            "wall_time_s": sample.get("wall_time_s"),
             "pipeline_date": sample.get("pipeline_date"),
         },
         "title": sample.get("title"),
         "source": sample.get("source"),
-        "characteristics": chars,
         "web_url": f"https://singlet.bio/sample/{gsm_id}",
     }
 
 
 async def _tool_load(args: dict) -> dict:
-    """Get load/access info for a sample."""
+    """Get load/access info for a sample, plus the public R2 bundle URL.
+
+    The public data is hosted per-GSE on Cloudflare R2. This returns the parent
+    GSE, the direct bundle URL, and a ready-to-run code snippet (which calls
+    ``singlet.load()`` to fetch + assemble the data).
+    """
     gsm_id = args["gsm_id"]
-    client = get_client()
-
-    resp = (
-        client.table("samples")
-        .select(
-            "gsm_id, gse_id, organism, protocol, status, pz_path, pz_size_bytes, cells_called, title, characteristics"
-        )
-        .eq("gsm_id", gsm_id)
-        .execute()
-    )
-
-    if not resp.data:
+    sample = _lookup_gsm(gsm_id)
+    if not sample:
         return {"error": f"Sample {gsm_id} not found in atlas"}
 
-    sample = resp.data[0]
-
-    if sample["status"] != "SUCCESS":
-        return {
-            "gsm_id": gsm_id,
-            "status": sample["status"],
-            "error": f"Sample not successfully processed (status: {sample['status']})",
-        }
-
-    size_mb = round(sample["pz_size_bytes"] / 1e6, 1) if sample.get("pz_size_bytes") else None
-    chars = sample.get("characteristics") or {}
+    gse_id = sample.get("gse_id")
+    data_base = os.environ.get("SINGLET_DATA_BASE", "https://data.singlet.bio").rstrip("/")
+    bundle_url = f"{data_base}/data/{gse_id}/{gse_id}.singlet" if gse_id else None
 
     return {
         "gsm_id": gsm_id,
-        "gse_id": sample["gse_id"],
-        "organism": sample["organism"],
-        "protocol": sample["protocol"],
+        "gse_id": gse_id,
+        "organism": sample.get("organism"),
+        "protocol": sample.get("protocol"),
+        "status": sample.get("status"),
         "title": sample.get("title", ""),
-        "tissue": chars.get("tissue", ""),
-        "cell_type": chars.get("cell type", ""),
-        "cells": sample["cells_called"],
-        "file_size_mb": size_mb,
-        "format": ".1pz (SinglePress compressed sparse matrix)",
-        "python_code": f'import singlet\nadata = singlet.load("{gsm_id}")\nprint(adata)',
-        "r_code": f'library(singlet)\nmat <- read_1pz(singlet_path("{gsm_id}"))',
+        "tissue": sample.get("tissue", ""),
+        "cell_type": sample.get("cell_type", ""),
+        "cells": sample.get("n_cells", sample.get("cells_called")),
+        "format": ".singlet bundle (per-GSE ZIP; free, no auth)",
+        "bundle_url": bundle_url,
+        "python_code": (
+            f'import singlet\n'
+            f'# Loads just this sample (downloads the parent {gse_id} bundle, cached):\n'
+            f'adata = singlet.load("{gsm_id}")\n'
+            f'# ...or load the whole series:\n'
+            f'adata = singlet.load("{gse_id}")'
+        ),
         "web_url": f"https://singlet.bio/sample/{gsm_id}",
     }
 
 
 async def _tool_browse(args: dict) -> dict:
-    """Browse samples with pagination."""
-    client = get_client()
+    """Browse samples with pagination via the public REST API."""
     page = args.get("page", 0)
     page_size = min(args.get("page_size", 25), 100)
-    sort_by = args.get("sort_by", "pipeline_date")
 
-    query = client.table("samples").select(
-        "gsm_id, gse_id, organism, protocol, status, cells_called, mapping_rate, source, title, characteristics",
-        count="exact",
+    payload = _api_get(
+        "/gsm",
+        {
+            "page": page,
+            "limit": page_size,
+            "organism": args.get("organism"),
+            "status": args.get("status"),
+            "q": args.get("tissue"),
+        },
     )
-
-    if args.get("organism"):
-        query = query.eq("organism", args["organism"])
-    if args.get("status"):
-        query = query.eq("status", args["status"])
-    if args.get("tissue"):
-        tissue = args["tissue"].replace("%", "").replace("(", "").replace(")", "")
-        query = query.or_(f"source.ilike.%{tissue}%,characteristics->>tissue.ilike.%{tissue}%")
-
-    query = query.order(sort_by, desc=True)
-    query = query.range(page * page_size, (page + 1) * page_size - 1)
-    resp = query.execute()
-
-    # Extract tissue/cell_type from characteristics for display
-    samples = []
-    for s in resp.data or []:
-        chars = s.pop("characteristics", None) or {}
-        s["tissue"] = chars.get("tissue", "")
-        s["cell_type"] = chars.get("cell type", "")
-        samples.append(s)
+    samples = payload.get("data") or []
 
     return {
-        "page": page,
-        "page_size": page_size,
-        "total": resp.count or 0,
+        "page": payload.get("page", page),
+        "page_size": payload.get("page_size", page_size),
+        "total": payload.get("total", 0),
         "samples": samples,
     }
 

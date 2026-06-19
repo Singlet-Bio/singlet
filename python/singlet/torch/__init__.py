@@ -1,17 +1,23 @@
 # SPDX-License-Identifier: MIT
-"""singlet.torch — PyTorch integration for .1pz sparse matrices.
+"""singlet.torch — PyTorch integration for Singlet datasets.
 
-Provides zero-copy DataLoaders and GPU-friendly sparse tensor pipelines.
+Provides DataLoaders and GPU-friendly sparse tensor pipelines over ``.singlet``
+files and GEO accessions.
 
 Classes:
-    OnePZDataset        Map-style dataset with chunk-level access
-    SpzDataset          Legacy .spz dataset
-    DataLoader          Convenience wrapper around torch DataLoader
+    SingletDataset      Map-style dataset over a .singlet file / accession / AnnData
+    DataLoader          Convenience wrapper around torch DataLoader; accepts an
+                        array of .singlet files (preferred) for concatenated training
+    SpzDataset          Legacy dataset (kept for compatibility)
+    OnePZDataset        Deprecated alias of SingletDataset
 
 Functions:
-    to_sparse_csr       Load .spz as CSR tensor
-    to_sparse_coo       Load .spz as COO tensor
-    from_anndata        Convert AnnData to sparse tensor
+    from_anndata        Convert AnnData to a sparse tensor
+
+Example
+-------
+    from singlet.torch import DataLoader
+    loader = DataLoader(["a.singlet", "b.singlet"], batch_size=512, device="cuda")
 """
 
 try:
@@ -24,6 +30,7 @@ except ImportError:
 from singlet.torch._torch import (
     DataLoader,
     OnePZDataset,
+    SingletDataset,
     SpzDataset,
     from_anndata,
     to_sparse_coo,
@@ -35,6 +42,7 @@ __all__ = [
     "to_sparse_coo",
     "from_anndata",
     "SpzDataset",
+    "SingletDataset",
     "OnePZDataset",
     "DataLoader",
 ]

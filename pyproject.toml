@@ -3,10 +3,12 @@ requires = ["setuptools>=64", "pybind11>=2.11"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "singlet"
+# Distribution name on PyPI is "singlet-bio" ("singlet" is taken by an unrelated
+# package); the importable package remains `import singlet`.
+name = "singlet-bio"
 version = "1.0.0"
-description = "Single-cell genomics: load, analyze, and process single-cell data at scale"
-readme = "README.md"
+description = "Open single-cell RNA-seq atlas: find, load, and analyze single-cell data at scale"
+readme = "python/README.md"
 license = {text = "MIT"}
 requires-python = ">=3.9"
 authors = [
@@ -71,7 +73,7 @@ where = ["python"]
 include = ["singlet*"]
 
 [tool.setuptools.package-data]
-singlet = ["data/*.parquet", "data/whitelists/*.txt", "py.typed"]
+singlet = ["data/*.parquet", "data/whitelists/*.txt", "py.typed", "_singlepress*.so"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/python"]

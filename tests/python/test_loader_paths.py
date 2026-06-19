@@ -103,75 +103,66 @@ class TestResolveGsePath:
 
 
 class TestDownload:
-    """Test download() function."""
-
-    def test_invalid_source_raises(self):
-        """Raises ValueError for invalid source."""
-        from singlet._loader import download
-
-        with pytest.raises(ValueError, match="source must be"):
-            download("GSE001", source="invalid")
+    """Test download() function (fetches public R2 .singlet bundles)."""
 
     def test_returns_cached_if_exists(self, tmp_path):
-        """Returns existing file without downloading if not force."""
+        """Returns existing non-empty bundle without downloading if not force."""
         from singlet._loader import download
 
-        dest = tmp_path / "GSE001.1pz"
+        dest = tmp_path / "GSE001.singlet"
         dest.write_bytes(b"cached data")
 
         result = download("GSE001", output_dir=tmp_path)
         assert result == dest
+        assert result.read_bytes() == b"cached data"
 
-    def test_force_redownloads(self, tmp_path, monkeypatch):
+    def test_force_redownloads(self, tmp_path):
         """force=True triggers download even if file exists."""
-        from singlet._loader import download
+        from singlet import _loader
 
-        dest = tmp_path / "GSE001.1pz"
+        dest = tmp_path / "GSE001.singlet"
         dest.write_bytes(b"old data")
 
-        mock_resp = MagicMock()
-        mock_resp.headers = {"content-length": "4"}
-        mock_resp.iter_content.return_value = [b"new!"]
-        mock_resp.raise_for_status = MagicMock()
+        class _FakeResp:
+            headers = {"content-length": "4"}
 
-        with patch("requests.get", return_value=mock_resp):
-            with patch(
-                "tqdm.tqdm",
-                return_value=MagicMock(
-                    __enter__=MagicMock(return_value=MagicMock(update=MagicMock())),
-                    __exit__=MagicMock(return_value=False),
-                ),
-            ):
-                result = download("GSE001", output_dir=tmp_path, force=True)
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def read(self, *a):
+                data, self._done = (b"new!" if not getattr(self, "_done", False) else b""), True
+                return data
+
+        with patch.object(_loader.urllib.request, "urlopen", return_value=_FakeResp()):
+            result = _loader.download("GSE001", output_dir=tmp_path, force=True)
 
         assert result == dest
         assert dest.read_bytes() == b"new!"
 
     def test_404_raises_file_not_found(self, tmp_path):
         """404 response gives clear FileNotFoundError with guidance."""
-        from singlet._loader import download
+        import urllib.error
 
-        mock_resp = MagicMock()
-        mock_resp.status_code = 404
-        mock_resp.raise_for_status.side_effect = requests.HTTPError(response=mock_resp)
+        from singlet import _loader
 
-        with patch("requests.get", return_value=mock_resp):
-            with pytest.raises(FileNotFoundError, match="not found on zenodo"):
-                download("GSE_FAKE", output_dir=tmp_path, force=True)
+        err = urllib.error.HTTPError("url", 404, "Not Found", {}, None)
+        with patch.object(_loader.urllib.request, "urlopen", side_effect=err):
+            with pytest.raises(FileNotFoundError, match="not found"):
+                _loader.download("GSE_FAKE", output_dir=tmp_path, force=True)
 
     def test_500_raises_runtime_error(self, tmp_path):
         """Non-404 HTTP errors give RuntimeError with context."""
-        from singlet._loader import download
+        import urllib.error
 
-        mock_resp = MagicMock()
-        mock_resp.status_code = 500
-        mock_resp.raise_for_status.side_effect = requests.HTTPError(
-            "500 Server Error", response=mock_resp
-        )
+        from singlet import _loader
 
-        with patch("requests.get", return_value=mock_resp):
+        err = urllib.error.HTTPError("url", 500, "Server Error", {}, None)
+        with patch.object(_loader.urllib.request, "urlopen", side_effect=err):
             with pytest.raises(RuntimeError, match="Failed to download"):
-                download("GSE_FAKE", output_dir=tmp_path, force=True)
+                _loader.download("GSE_FAKE", output_dir=tmp_path, force=True)
 
 
 class TestLoad:
@@ -358,26 +349,29 @@ class TestLoadSample:
             load_sample("GSM001")
 
     def test_load_gse_download_fallback(self, tmp_path, monkeypatch):
-        """Falls back to download when GSE not in local catalog."""
+        """Falls back to R2 bundle download when GSE not in local catalog."""
         import singlet._catalog as cat_mod
-        from singlet._io import write_1pz
         from singlet._loader import load
 
-        # No catalog dir → resolve returns None → triggers download
+        # No catalog dir → resolve returns None → triggers download.
         cat_mod._CATALOG_DIR = None
 
-        # Create a .1pz to be "downloaded"
+        # The "downloaded" bundle is opened via SingletBundle → to_anndata.
         mat = sp.random(3, 4, density=0.5, format="csr", dtype=np.float32)
         mat.data = np.round(mat.data * 100).astype(np.float32)
-        adata = ad.AnnData(X=mat)
-        adata.var_names = pd.Index([f"G{i}" for i in range(4)])
-        adata.obs_names = pd.Index([f"C{i}" for i in range(3)])
-        download_path = tmp_path / "GSE999.1pz"
-        write_1pz(adata, download_path)
+        expected = ad.AnnData(X=mat)
+        expected.var_names = pd.Index([f"G{i}" for i in range(4)])
+        expected.obs_names = pd.Index([f"C{i}" for i in range(3)])
 
-        # Mock download to return our file
-        with patch("singlet._loader.download", return_value=download_path):
-            loaded = load("GSE999")
+        bundle_path = tmp_path / "GSE999.singlet"
+        bundle_path.write_bytes(b"fake")
+
+        fake_bundle = MagicMock()
+        fake_bundle.to_anndata.return_value = expected
+
+        with patch("singlet._loader.download", return_value=bundle_path):
+            with patch("singlet.bundle.SingletBundle.open", return_value=fake_bundle):
+                loaded = load("GSE999")
 
         assert loaded.shape == (3, 4)
 

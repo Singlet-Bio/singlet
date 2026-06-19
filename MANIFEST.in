@@ -1,0 +1,20 @@
+include LICENSE
+include README.md
+include python/README.md
+include pyproject.toml
+include setup.py
+
+# C++ sources + headers needed to build the singlet._pz extension from an sdist
+recursive-include src/bindings *.cpp *.h *.hpp
+recursive-include include *.h *.hpp
+
+# Bundled package data
+recursive-include python/singlet/data *.parquet *.txt
+include python/singlet/py.typed
+
+# Keep test/build noise out of the sdist
+prune build
+prune dist
+global-exclude *.pyc
+global-exclude __pycache__
+global-exclude *.so

@@ -21,11 +21,7 @@ A [Model Context Protocol](https://modelcontextprotocol.io/) server that exposes
 ## Quick Start
 
 ```bash
-pip install mcp supabase
-
-# Set credentials
-export SUPABASE_URL="https://vbswbitfyallghbgxkuw.supabase.co"
-export SUPABASE_ANON_KEY="<your-anon-key>"
+pip install mcp
 
 # Run smoke test
 python -m singlet.mcp.smoke_test
@@ -33,6 +29,9 @@ python -m singlet.mcp.smoke_test
 # Start server
 python -m singlet.mcp
 ```
+
+No credentials required. The live tools call the public REST API at
+`https://singlet.bio/api` (override with `SINGLET_API_BASE`).
 
 ## Configure in Claude Desktop
 
@@ -43,11 +42,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
   "mcpServers": {
     "singlet": {
       "command": "python",
-      "args": ["-m", "singlet.mcp"],
-      "env": {
-        "SUPABASE_URL": "https://vbswbitfyallghbgxkuw.supabase.co",
-        "SUPABASE_ANON_KEY": "<your-anon-key>"
-      }
+      "args": ["-m", "singlet.mcp"]
     }
   }
 }
@@ -62,11 +57,7 @@ Add to `.vscode/mcp.json`:
   "servers": {
     "singlet": {
       "command": "python",
-      "args": ["-m", "singlet.mcp"],
-      "env": {
-        "SUPABASE_URL": "https://vbswbitfyallghbgxkuw.supabase.co",
-        "SUPABASE_ANON_KEY": "<your-anon-key>"
-      }
+      "args": ["-m", "singlet.mcp"]
     }
   }
 }
@@ -81,11 +72,7 @@ Add to `~/.cursor/mcp.json`:
   "mcpServers": {
     "singlet": {
       "command": "python",
-      "args": ["-m", "singlet.mcp"],
-      "env": {
-        "SUPABASE_URL": "https://vbswbitfyallghbgxkuw.supabase.co",
-        "SUPABASE_ANON_KEY": "<your-anon-key>"
-      }
+      "args": ["-m", "singlet.mcp"]
     }
   }
 }
@@ -111,13 +98,13 @@ Once configured, you can ask your AI assistant:
                                     │          │
                                ┌────┘          └────┐
                                ▼                    ▼
-                     ┌──────────────────┐  ┌───────────┐
-                     │ Bundled Parquet  │  │  Supabase │
-                     │ (7 tools, <40ms) │  │ (4 tools) │
-                     └──────────────────┘  └───────────┘
+                     ┌──────────────────┐  ┌──────────────────┐
+                     │ Bundled Parquet  │  │ Public REST API  │
+                     │ (7 tools, <40ms) │  │ singlet.bio/api  │
+                     └──────────────────┘  └──────────────────┘
 ```
 
 - **7 tools use bundled parquet** (stats, protocols, quality, tissues, failures, cell_types, species) — instant, offline-capable
-- **4 tools use live Supabase** (search, browse, qc, load) — real-time, full database access
+- **4 tools use the live public REST API** (search, browse, qc, load) — real-time, no auth
 
-Both the MCP server and the website read from the same Supabase database, so data is always consistent.
+Both the MCP server and the website read from the same public API, so data is always consistent.

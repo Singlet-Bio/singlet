@@ -12,86 +12,90 @@ import scipy.sparse as sp
 # ---------------------------------------------------------------------------
 
 
+class _FakeResp:
+    """Minimal urlopen() context-manager / reader stub."""
+
+    def __init__(self, chunks, content_length=None):
+        self._chunks = list(chunks)
+        self.headers = {"content-length": str(content_length or 0)}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def read(self, *a):
+        return self._chunks.pop(0) if self._chunks else b""
+
+
 class TestDownload:
-    def test_invalid_source_raises(self, tmp_path):
-        from singlet._loader import download
-
-        with pytest.raises(ValueError, match="source must be"):
-            download("GSE123456", output_dir=tmp_path, source="ftp")
-
     def test_cached_returns_immediately(self, tmp_path):
         from singlet._loader import download
 
-        cached = tmp_path / "GSE123456.1pz"
+        cached = tmp_path / "GSE123456.singlet"
         cached.write_bytes(b"fake")
         result = download("GSE123456", output_dir=tmp_path)
         assert result == cached
 
     def test_force_re_downloads(self, tmp_path):
-        from singlet._loader import download
+        from singlet import _loader
 
-        cached = tmp_path / "GSE123456.1pz"
+        cached = tmp_path / "GSE123456.singlet"
         cached.write_bytes(b"old data")
 
-        mock_resp = MagicMock()
-        mock_resp.headers = {"content-length": "4"}
-        mock_resp.iter_content.return_value = [b"new!"]
-
-        with patch("requests.get", return_value=mock_resp):
-            result = download("GSE123456", output_dir=tmp_path, force=True)
+        with patch.object(
+            _loader.urllib.request, "urlopen", return_value=_FakeResp([b"new!"])
+        ):
+            result = _loader.download("GSE123456", output_dir=tmp_path, force=True)
 
         assert result == cached
         assert cached.read_bytes() == b"new!"
 
-    @patch("requests.get")
-    def test_zenodo_url_format(self, mock_get, tmp_path):
-        from singlet._loader import download
+    def test_r2_url_format(self, tmp_path):
+        from singlet import _loader
 
-        mock_resp = MagicMock()
-        mock_resp.headers = {"content-length": "0"}
-        mock_resp.iter_content.return_value = []
-        mock_get.return_value = mock_resp
+        captured = {}
 
-        download("GSE999999", output_dir=tmp_path, source="zenodo")
+        def fake_urlopen(req, *a, **k):
+            captured["url"] = req.full_url
+            return _FakeResp([])
 
-        call_args = mock_get.call_args
-        url = call_args[0][0] if call_args[0] else call_args.kwargs.get("url", "")
-        assert "GSE999999.1pz" in url
+        with patch.object(_loader.urllib.request, "urlopen", side_effect=fake_urlopen):
+            _loader.download("GSE999999", output_dir=tmp_path)
 
-    @patch("requests.get")
-    def test_aws_requires_auth_headers(self, mock_get, tmp_path):
-        import singlet._auth as auth
-        from singlet._loader import download
+        assert captured["url"] == (
+            "https://data.singlet.bio/data/GSE999999/GSE999999.singlet"
+        )
 
-        auth._API_KEY = "sk-test"
-        mock_resp = MagicMock()
-        mock_resp.headers = {"content-length": "0"}
-        mock_resp.iter_content.return_value = []
-        mock_get.return_value = mock_resp
+    def test_data_base_override(self, tmp_path, monkeypatch):
+        from singlet import _loader
 
-        download("GSE999999", output_dir=tmp_path, source="aws")
+        monkeypatch.setenv("SINGLET_DATA_BASE", "https://example.test")
+        captured = {}
 
-        call_kwargs = mock_get.call_args.kwargs or {}
-        headers = call_kwargs.get("headers", {})
-        assert "Authorization" in headers
-        auth._API_KEY = None
+        def fake_urlopen(req, *a, **k):
+            captured["url"] = req.full_url
+            return _FakeResp([])
 
-    @patch("requests.get")
-    def test_interrupted_download_no_corrupt_file(self, mock_get, tmp_path):
-        """Interrupted download does not leave a corrupt .1pz file."""
-        from singlet._loader import download
+        with patch.object(_loader.urllib.request, "urlopen", side_effect=fake_urlopen):
+            _loader.download("GSE1", output_dir=tmp_path)
 
-        mock_resp = MagicMock()
-        mock_resp.headers = {"content-length": "100"}
-        mock_resp.iter_content.side_effect = ConnectionError("network dropped")
-        mock_get.return_value = mock_resp
+        assert captured["url"] == "https://example.test/data/GSE1/GSE1.singlet"
 
-        with pytest.raises(ConnectionError):
-            download("GSE_INTERRUPT", output_dir=tmp_path, source="zenodo")
+    def test_interrupted_download_no_corrupt_file(self, tmp_path):
+        """Interrupted download does not leave a corrupt bundle file."""
+        from singlet import _loader
 
-        # The .1pz file should NOT exist (only .part was written and cleaned up)
-        assert not (tmp_path / "GSE_INTERRUPT.1pz").exists()
-        assert not (tmp_path / "GSE_INTERRUPT.1pz.part").exists()
+        def boom(req, *a, **k):
+            raise ConnectionError("network dropped")
+
+        with patch.object(_loader.urllib.request, "urlopen", side_effect=boom):
+            with pytest.raises(ConnectionError):
+                _loader.download("GSE_INTERRUPT", output_dir=tmp_path)
+
+        assert not (tmp_path / "GSE_INTERRUPT.singlet").exists()
+        assert not (tmp_path / "GSE_INTERRUPT.singlet.part").exists()
 
 
 # ---------------------------------------------------------------------------
