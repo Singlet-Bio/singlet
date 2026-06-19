@@ -118,9 +118,9 @@ public:
 
     // Read next spot, returning zero-copy pointers into VDB cache.
     // Pointers are valid until the next call to read_next_spot().
-    // Returns false when all spots consumed.
+    // Returns false when all spots consumed (or row_limit_ reached).
     bool read_next_spot(RawSpot& spot) {
-        if (done()) return false;
+        if (done_range()) return false;
 
         int64_t row = current_row_++;
         uint32_t elem_bits, boff, row_len;
@@ -154,7 +154,7 @@ public:
     // Use when segment layout is already known from probe phase.
     // Caller must split read/qual at known offsets.
     bool read_next_spot_fast(RawSpot& spot) {
-        if (done()) return false;
+        if (done_range()) return false;
 
         int64_t row = current_row_++;
         uint32_t elem_bits, boff, row_len;

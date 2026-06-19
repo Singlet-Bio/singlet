@@ -56,7 +56,8 @@ constexpr uint64_t ULTRA_READ_THRESHOLD = 500'000'000ULL;  // >= this  => 15% + 
 // ── B-G3-3/4: SLURM allocation tier → XL tier read threshold ──────────────
 // Clipper-class HPC memory tiers (SLURM --mem):
 //
-//   Standard  64 GB   n_reads ≤  50M   limitBAMsortRAM = 25 GB  (~39%)
+//   Standard  64 GB   n_reads ≤  50M   limitBAMsortRAM = 12 GB  (~19%)
+//   Barnyard  96 GB   barnyard jobs    limitBAMsortRAM = 20 GB  (~21%)
 //   Large    128 GB   n_reads ≤ 200M   limitBAMsortRAM = 50 GB  (~39%)
 //   XL-192   192 GB   n_reads > 200M   limitBAMsortRAM = 75 GB  (~39%)
 //   XL-384   384 GB   n_reads > 200M   limitBAMsortRAM = 150 GB (~39%)
@@ -77,7 +78,8 @@ inline uint64_t slurm_tier_bamsort_ram(uint64_t slurm_mem_bytes) {
         return slurm_mem_bytes >= (tier_gib - 1) * GiB &&
                slurm_mem_bytes <= (tier_gib + 1) * GiB;
     };
-    if (near(64))  return 25ULL * GiB;   // Standard  64 GB → 25 GB
+    if (near(64))  return 12ULL * GiB;   // Standard  64 GB → 12 GB
+    if (near(96))  return 20ULL * GiB;   // Barnyard  96 GB → 20 GB
     if (near(128)) return 50ULL * GiB;   // Large    128 GB → 50 GB
     if (near(192)) return 75ULL * GiB;   // XL-192   192 GB → 75 GB
     if (near(384)) return 150ULL * GiB;  // XL-384   384 GB → 150 GB

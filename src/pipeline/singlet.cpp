@@ -28,6 +28,7 @@
 #include <cerrno>
 #include <chrono>
 #include <climits>
+#include <csignal>
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
@@ -101,6 +102,309 @@ static bool mkdir_p(const std::string& path) {
     auto pos = path.rfind('/');
     if (pos != std::string::npos && pos > 0) mkdir_p(path.substr(0, pos));
     return mkdir(path.c_str(), 0755) == 0 || errno == EEXIST;
+}
+
+// ════════════════════════════════════════════════════════════
+// pre_gate — Early protocol-inference gate for non-10x fast-reject
+//
+// Called at the START of cmd_download(), only in auto-detect mode
+// (when the user did NOT pass an explicit --protocol flag).
+//
+// Implements a cheapest-first cascade:
+//   Step 1: R1/R2 geometry reject (100 spots via SraReader)
+//   Step 2: 5000-spot whitelist probe via detect_protocol()
+//   Step 3: (optional) BAM-header chemistry via sam-dump --header-only
+//
+// SAFETY: biased hard toward conservatism (false pass >> false reject).
+// Returns:
+//   0  → PASS_10X or UNCERTAIN → let cmd_download() proceed normally
+//   2  → REJECT → non-10x sample detected; cmd_download() exits 2
+//
+// The gate is NEVER active when --protocol was explicitly set.
+// ════════════════════════════════════════════════════════════
+
+static int pre_gate(const std::string& sra_path,
+                    const std::vector<std::string>& whitelist_dirs) {
+
+    // ── In-scope 10x protocol tags (auto-detect PASS targets) ──
+    // Any of these tags returned by detect_protocol() at MEDIUM+ confidence
+    // means PASS_10X. We include all known 10x variants.
+    static const std::unordered_set<std::string> tenx_tags = {
+        "10x-3p-v2", "10x-3p-v3", "10x-3p-v4", "10x-3p-v1",
+        "10x-5p-v2", "10x-5p-v3", "10x-5p-v4",
+        "10x-arc-gex", "10x-visium", "cite-seq-gex",
+    };
+
+    // ── Definitively non-10x tags that warrant REJECT at MEDIUM+ confidence ──
+    // Deliberately conservative: we only reject when the protocol is
+    // UNAMBIGUOUSLY one of these distinct chemistries.
+    static const std::unordered_set<std::string> non10x_reject_tags = {
+        "celseq2",       // R1=12bp CB+UMI — geometrically incompatible with 10x
+        "marsseq2",      // R1=15bp — distinct geometry
+        "indrop",        // R1=~46bp with W1 linker — distinctive linker
+        "dropseq",       // R1=20bp no whitelist — low R1 length
+        "seqwell",       // R1=20bp (same as Drop-seq)
+        "bd-rhapsody",   // R1=60bp with ACTGGCCTGCGA linker — distinctive
+        "sci-rna-seq3",  // R1=34bp with CAGAGC linker — distinctive
+        "splitseq",      // barcode in R2 — unusual layout
+        "dnbelab-c4",    // R1=56bp with ATCCACGTGC linker — distinctive
+        "ddseq",         // R1=68bp
+        "quartzseq2",    // R1=23bp
+        "microwell-seq", // R1=54bp with linker
+        "surecell",      // R1=68bp with linker
+        "strtseq",       // 5' cap protocol
+    };
+
+    using Clock = std::chrono::steady_clock;
+    auto gate_start = Clock::now();
+
+    // ───────────────────────────────────────────────────────
+    // NOTE: Step 1 geometry check was REMOVED after validation revealed
+    // that some SRA deposits have non-standard segment layouts (e.g. 8bp R1)
+    // even when the catalog correctly classifies them as 10x samples.
+    // The geometry check caused false rejects. Step 2 (whitelist probe) is
+    // sufficient and safe for non-10x detection.
+    //
+    // Step 2: 5000-spot whitelist probe via detect_protocol()
+    // Only reject when:
+    //   - detected tag is in non10x_reject_tags AND confidence >= MEDIUM
+    //   OR
+    //   - detected tag is in non10x_reject_tags AND confidence == LOW
+    //     AND wl_match_rate < 0.01 (near-zero whitelist signal)
+    //     AND neither read is in 10x bc-read geometry range
+    // Pass through for NONE/UNKNOWN/uncertain/any-10x tag.
+    // ───────────────────────────────────────────────────────
+
+    // We need to collect probe spots in the same format as detect_protocol() expects.
+    // detect_protocol() is templated on SpotT, which needs r1_seq, r2_seq, r1_len, r2_len.
+    // The SraEncoder::SpotData struct is private, so we define a compatible local struct.
+    struct GateSpot {
+        std::vector<uint8_t> r1_seq, r2_seq;
+        uint16_t r1_len = 0, r2_len = 0;
+    };
+
+    // Helper: ASCII DNA char → numeric (0=A, 1=C, 2=G, 3=T, 4=N)
+    auto ascii_to_num = [](uint8_t c) -> uint8_t {
+        switch (c | 0x20) {
+            case 'a': return 0;
+            case 'c': return 1;
+            case 'g': return 2;
+            case 't': return 3;
+            default:  return 4;
+        }
+    };
+    auto ascii_to_numeric = [&ascii_to_num](const char* src, uint16_t len,
+                                            std::vector<uint8_t>& dst) {
+        dst.resize(len);
+        for (uint16_t i = 0; i < len; ++i)
+            dst[i] = ascii_to_num(static_cast<uint8_t>(src[i]));
+    };
+
+    std::vector<GateSpot> gate_spots;
+    uint16_t gate_r1 = 0, gate_r2 = 0;
+    try {
+        SraReader gate_rdr;
+        gate_rdr.open(sra_path.c_str());
+        gate_rdr.set_row_limit(gate_rdr.first_row() + 5000);
+
+        gate_spots.reserve(5000);
+        SraReader::RawSpot raw;
+        while (gate_rdr.read_next_spot(raw) && gate_spots.size() < 5000) {
+            GateSpot gs;
+            if (raw.n_segments >= 3) {
+                // Multi-segment: pick the TWO LONGEST (same logic as SraEncoder)
+                uint32_t ns = std::min<uint32_t>(raw.n_segments, 16);
+                uint32_t sorted_idx[16];
+                for (uint32_t s = 0; s < ns; ++s) sorted_idx[s] = s;
+                std::sort(sorted_idx, sorted_idx + ns,
+                          [&](uint32_t a, uint32_t b){ return raw.seg_len[a] > raw.seg_len[b]; });
+                uint32_t bio0 = std::min(sorted_idx[0], sorted_idx[1]);
+                uint32_t bio1 = std::max(sorted_idx[0], sorted_idx[1]);
+                gs.r1_len = static_cast<uint16_t>(raw.seg_len[bio0]);
+                gs.r2_len = static_cast<uint16_t>(raw.seg_len[bio1]);
+                ascii_to_numeric(raw.read + raw.seg_start[bio0], gs.r1_len, gs.r1_seq);
+                ascii_to_numeric(raw.read + raw.seg_start[bio1], gs.r2_len, gs.r2_seq);
+            } else if (raw.n_segments >= 2 && raw.seg_len[0] > 0 && raw.seg_len[1] > 0) {
+                gs.r1_len = static_cast<uint16_t>(raw.seg_len[0]);
+                gs.r2_len = static_cast<uint16_t>(raw.seg_len[1]);
+                ascii_to_numeric(raw.read + raw.seg_start[0], gs.r1_len, gs.r1_seq);
+                ascii_to_numeric(raw.read + raw.seg_start[1], gs.r2_len, gs.r2_seq);
+            } else if (raw.n_segments >= 1 && raw.seg_len[0] > 0) {
+                gs.r1_len = static_cast<uint16_t>(raw.seg_len[0]);
+                ascii_to_numeric(raw.read + raw.seg_start[0], gs.r1_len, gs.r1_seq);
+            } else {
+                continue;
+            }
+            gate_spots.push_back(std::move(gs));
+        }
+
+        // Compute modal r1_len and r2_len from probe spots
+        if (!gate_spots.empty()) {
+            gate_r1 = gate_spots[0].r1_len;
+            gate_r2 = gate_spots[0].r2_len;
+            bool r1c = true, r2c = true;
+            uint16_t r1_max = 0;
+            for (const auto& s : gate_spots) {
+                if (s.r1_len != gate_r1) r1c = false;
+                if (s.r2_len != gate_r2) r2c = false;
+                if (s.r1_len > r1_max) r1_max = s.r1_len;
+            }
+            if (!r1c) gate_r1 = r1_max;
+            if (!r2c) gate_r2 = 0;
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "[singlet-gate] WARNING: 5000-spot probe failed: "
+                  << e.what() << " — passing through\n";
+        return 0;
+    }
+
+    if (gate_spots.empty()) {
+        std::cerr << "[singlet-gate] WARNING: no spots read in probe — passing through\n";
+        return 0;
+    }
+
+    auto detected = singlet::fq::detect_protocol(gate_spots, gate_r1, gate_r2, whitelist_dirs);
+
+    bool is_tenx = (tenx_tags.count(detected.tag) > 0);
+    bool is_non10x = (non10x_reject_tags.count(detected.tag) > 0);
+    bool r1_could_be_10x = (gate_r1 >= 20 && gate_r1 <= 34);
+    bool r2_could_be_10x = (gate_r2 >= 20 && gate_r2 <= 34);
+    bool either_read_in_10x_range = r1_could_be_10x || r2_could_be_10x;
+
+    double gate_s = std::chrono::duration<double>(Clock::now() - gate_start).count();
+
+    if (is_tenx && detected.confidence >= singlet::fq::Confidence::MEDIUM) {
+        std::cerr << "[singlet-gate] PASS_10X " << sra_path
+                  << " tag=" << detected.tag
+                  << " confidence=" << static_cast<int>(detected.confidence)
+                  << " wl_match_rate=" << detected.wl_match_rate
+                  << " gate_s=" << gate_s << "\n";
+        return 0;
+    }
+
+    if (is_non10x) {
+        bool reject = false;
+        std::string reason;
+
+        if (detected.confidence >= singlet::fq::Confidence::MEDIUM) {
+            // MEDIUM or HIGH confidence non-10x → REJECT
+            reject = true;
+            reason = "non10x_protocol_detected_medium_conf";
+        } else if (detected.confidence == singlet::fq::Confidence::LOW
+                   && detected.wl_match_rate < 0.01
+                   && !either_read_in_10x_range) {
+            // LOW confidence non-10x + no whitelist signal + geometry not 10x → REJECT
+            reject = true;
+            reason = "non10x_protocol_low_conf_no_wl_no_10x_geometry";
+        }
+
+        if (reject) {
+            std::cerr << "[singlet-gate] REJECT " << sra_path
+                      << " reason=" << reason
+                      << " tag=" << detected.tag
+                      << " confidence=" << static_cast<int>(detected.confidence)
+                      << " wl_match_rate=" << detected.wl_match_rate
+                      << " r1=" << gate_r1 << "bp r2=" << gate_r2 << "bp"
+                      << " gate_s=" << gate_s << "\n";
+            return 2;
+        }
+    }
+
+    // ───────────────────────────────────────────────────────
+    // Step 3: BAM-header chemistry (optional, only if sam-dump is on PATH)
+    // This is a pure bonus — we pass through if sam-dump absent.
+    // ───────────────────────────────────────────────────────
+    // Only run sam-dump on accessions (not .sra file paths) to avoid confusion
+    if (sra_path.find('/') == std::string::npos &&
+        sra_path.find('.') == std::string::npos) {
+        // Looks like an SRR accession
+        char which_buf[512];
+        FILE* wfp = popen("which sam-dump 2>/dev/null", "r");
+        bool sam_dump_avail = false;
+        if (wfp) {
+            if (fgets(which_buf, sizeof(which_buf), wfp))
+                sam_dump_avail = (strlen(which_buf) > 1);
+            pclose(wfp);
+        }
+
+        if (sam_dump_avail) {
+            std::string cmd = "sam-dump --header-only " + sra_path + " 2>/dev/null";
+            FILE* fp = popen(cmd.c_str(), "r");
+            if (fp) {
+                std::string header;
+                char buf[4096];
+                while (fgets(buf, sizeof(buf), fp))
+                    header += buf;
+                pclose(fp);
+
+                // Look for @PG lines with --chemistry field
+                std::string chem;
+                auto pg_pos = header.find("@PG");
+                while (pg_pos != std::string::npos) {
+                    auto chem_pos = header.find("--chemistry", pg_pos);
+                    auto nl_pos = header.find('\n', pg_pos);
+                    if (chem_pos != std::string::npos &&
+                        (nl_pos == std::string::npos || chem_pos < nl_pos)) {
+                        auto space = header.find(' ', chem_pos + 11);
+                        if (space == std::string::npos) space = header.find('\t', chem_pos + 11);
+                        if (space == std::string::npos) space = header.find('\n', chem_pos + 11);
+                        if (space != std::string::npos) {
+                            // Extract chemistry value (e.g. "SC3Pv3")
+                            // Skip '=' or ' ' after '--chemistry'
+                            size_t val_start = chem_pos + 11;
+                            while (val_start < space &&
+                                   (header[val_start] == ' ' || header[val_start] == '='))
+                                ++val_start;
+                            chem = header.substr(val_start, space - val_start);
+                        }
+                    }
+                    if (nl_pos == std::string::npos) break;
+                    pg_pos = header.find("@PG", nl_pos);
+                }
+
+                if (!chem.empty()) {
+                    // Map chemistry strings to pass/reject
+                    bool header_10x = (chem.find("SC3P") != std::string::npos ||
+                                       chem.find("SC5P") != std::string::npos ||
+                                       chem.find("ARC")  != std::string::npos ||
+                                       chem.find("GEM-X") != std::string::npos ||
+                                       chem.find("CITE") != std::string::npos);
+                    // Known definitively non-10x chemistry strings in @PG headers
+                    bool header_non10x = (!header_10x &&
+                                          (chem.find("CelSeq") != std::string::npos ||
+                                           chem.find("InDrop") != std::string::npos ||
+                                           chem.find("DropSeq") != std::string::npos ||
+                                           chem.find("MARS") != std::string::npos));
+
+                    double gate_s2 = std::chrono::duration<double>(Clock::now() - gate_start).count();
+                    if (header_10x) {
+                        std::cerr << "[singlet-gate] PASS_10X " << sra_path
+                                  << " reason=bam_header_chemistry"
+                                  << " chem=" << chem
+                                  << " gate_s=" << gate_s2 << "\n";
+                        return 0;
+                    }
+                    if (header_non10x) {
+                        std::cerr << "[singlet-gate] REJECT " << sra_path
+                                  << " reason=bam_header_non10x_chemistry"
+                                  << " chem=" << chem
+                                  << " gate_s=" << gate_s2 << "\n";
+                        return 2;
+                    }
+                }
+            }
+        }
+    }
+
+    // UNCERTAIN or anything else → pass through to normal full encode
+    double gate_s_final = std::chrono::duration<double>(Clock::now() - gate_start).count();
+    std::cerr << "[singlet-gate] UNCERTAIN " << sra_path
+              << " tag=" << detected.tag
+              << " confidence=" << static_cast<int>(detected.confidence)
+              << " wl_match_rate=" << detected.wl_match_rate
+              << " r1=" << gate_r1 << "bp r2=" << gate_r2 << "bp"
+              << " gate_s=" << gate_s_final << " — passing through\n";
+    return 0;
 }
 
 // ════════════════════════════════════════════════════════════
@@ -256,6 +560,16 @@ static int cmd_download(int argc, char* argv[]) {
                   << " reads (" << static_cast<int>(pct) << "%)" << std::flush;
     };
     ecfg.progress_interval = 500000;
+
+    // ── Pre-gate: early protocol inference to fast-reject non-10x samples ──
+    // Invoked only in auto-detect mode (no explicit --protocol flag).
+    // The gate reads only ~5K spots before the expensive full download+STAR.
+    // SAFETY: UNCERTAIN → pass through; only REJECT on confirmed non-10x.
+    // Exit code 2 maps to .rejected in run_one.sbatch (DL_EXIT!=0 path).
+    if (protocol_tag.empty()) {
+        int gate_result = pre_gate(sra_input, whitelist_dirs);
+        if (gate_result != 0) return gate_result;
+    }
 
     // Read declared read_count and catalog protocol from pre-written metadata JSON (if any).
     // The job script writes the full GEO metadata JSON before calling download;
@@ -3026,6 +3340,34 @@ int main(int argc, char* argv[]) {
         std::cerr << "[cascade] WARNING: --te-db not provided; L2 classify disabled\n";
     }
 
+    // ── STALL WATCHDOG ──
+    // Installs a SIGALRM handler that _exit()s with code 5 (stalled) if no
+    // forward progress is detected within SINGLET_STALL_TIMEOUT seconds (default 1800).
+    // alarm() is reset at each major checkpoint below.  This is the ultimate backstop:
+    // regardless of cause, the pipeline cannot hang indefinitely.
+    //
+    // Named exit codes:
+    //   0 = success
+    //   1 = generic error
+    //   2 = download / data incomplete
+    //   3 = star_fatal (STAR exited non-zero or killed by signal)
+    //   4 = zero_cells (0 cells called; exported stub outputs)
+    //   5 = stalled (SIGALRM watchdog fired — no progress for SINGLET_STALL_TIMEOUT s)
+    {
+        unsigned stall_secs = 1800;
+        if (const char* env_s = std::getenv("SINGLET_STALL_TIMEOUT")) {
+            unsigned v = static_cast<unsigned>(std::atoi(env_s));
+            if (v > 0) stall_secs = v;
+        }
+        struct sigaction sa_alarm{};
+        sa_alarm.sa_handler = [](int) { _exit(5); };
+        sigemptyset(&sa_alarm.sa_mask);
+        sa_alarm.sa_flags = 0;
+        sigaction(SIGALRM, &sa_alarm, nullptr);
+        alarm(stall_secs);
+        std::cerr << "[singlet] Stall watchdog armed: " << stall_secs << "s\n";
+    }
+
     // ── Phase 0: Load pileup references ──
     // Loads barcodes, SNPs, GTF into memory BEFORE starting STAR.
     // This overlaps reference loading with STAR's genome load when using
@@ -5208,11 +5550,42 @@ int main(int argc, char* argv[]) {
              thr_use_concat, thr_concat_segs, thr_concat_umi_start, thr_concat_umi_len]() {
             signal(SIGPIPE, SIG_IGN);  // prevent SIGPIPE if STAR exits before writer finishes
 
-            // Open both FIFOs with O_RDWR (non-blocking — avoids deadlock with STAR opener)
-            int r1_fd = open(thr_r1.c_str(), O_RDWR);
-            int r2_fd = open(thr_r2.c_str(), O_RDWR);
+            // FIX-FIFO-HANG: open write-only so the writer does NOT hold a read reference.
+            // Strategy: open O_RDONLY|O_NONBLOCK dummy first (completes immediately — the
+            // FIFO already has a write-end holder from mkfifo), then open O_WRONLY (blocks
+            // briefly until STAR opens the read end), then close the dummy so STAR is the
+            // SOLE reader.  When STAR dies, its fd is the last read ref → EPIPE on next
+            // fwrite() → write_ok=false → thread exits → join() returns.
+            //
+            // The dummy open is O_NONBLOCK so it never hangs even if no reader arrives.
+            // The O_WRONLY open may block if STAR hasn't opened yet, but STAR opens its
+            // input FIFOs as part of its startup sequence which happens before any reads,
+            // so this is bounded and race-free on the normal path.
+            // Timeout guard: if STAR never starts, the SIGALRM watchdog below will _exit.
+            auto open_fifo_write_only = [](const std::string& path) -> int {
+                // Open a dummy read fd (O_NONBLOCK → immediate) so mkfifo open-counts are
+                // satisfied on both sides simultaneously.
+                int dummy = open(path.c_str(), O_RDONLY | O_NONBLOCK);
+                if (dummy < 0) {
+                    std::cerr << "[1fq-fifo] ERROR: dummy open " << path << ": "
+                              << strerror(errno) << "\n";
+                    return -1;
+                }
+                // Now open write-only (blocks until STAR opens read end, which it does
+                // immediately on startup).
+                int wfd = open(path.c_str(), O_WRONLY);
+                // Close dummy: STAR is now the sole read-reference holder.
+                close(dummy);
+                if (wfd < 0) {
+                    std::cerr << "[1fq-fifo] ERROR: wronly open " << path << ": "
+                              << strerror(errno) << "\n";
+                }
+                return wfd;
+            };
+            int r1_fd = open_fifo_write_only(thr_r1);
+            int r2_fd = open_fifo_write_only(thr_r2);
             if (r1_fd < 0 || r2_fd < 0) {
-                std::cerr << "[1fq-fifo] ERROR: open FIFOs: " << strerror(errno) << "\n";
+                std::cerr << "[1fq-fifo] ERROR: open FIFOs failed\n";
                 if (r1_fd >= 0) close(r1_fd);
                 if (r2_fd >= 0) close(r2_fd);
                 return;
@@ -6709,15 +7082,18 @@ int main(int argc, char* argv[]) {
         if (WIFEXITED(wstatus)) {
             star_exit = WEXITSTATUS(wstatus);
             if (star_exit != 0) {
-                std::cerr << "[singlet] ERROR: STAR exited " << star_exit << "\n";
-                return star_exit;
+                std::cerr << "[singlet] ERROR: STAR exited " << star_exit
+                          << " (parallel path)\n";
+                return 3;  // exit code 3 = star_fatal
             }
             star_time = star_sw.elapsed_s();
             std::cerr << "[singlet] STAR completed in " << star_time << "s\n";
         } else if (WIFSIGNALED(wstatus)) {
-            std::cerr << "[singlet] ERROR: STAR killed by signal " << WTERMSIG(wstatus) << "\n";
-            return 1;
+            std::cerr << "[singlet] ERROR: STAR killed by signal " << WTERMSIG(wstatus)
+                      << " (parallel path)\n";
+            return 3;  // exit code 3 = star_fatal (signal)
         }
+        alarm(1800);  // watchdog: reset after STAR completes (parallel path)
 
         // ── 2b: Index sorted BAM with htslib ──
         std::cerr << "[singlet] Indexing BAM: " << parallel_bam_path << "\n";
@@ -7334,6 +7710,7 @@ int main(int argc, char* argv[]) {
         StopWatch pileup_sw;
         stats = engine_ptr->run_parallel(parallel_bam_path, star_threads);
         pileup_time = pileup_sw.elapsed_s();
+        alarm(1800);  // watchdog: reset after pileup returns (parallel path)
         std::cerr << "[singlet] Pileup: " << stats.total_reads << " reads, " << pileup_time << "s";
         if (stats.total_reads > 0)
             std::cerr << " (" << static_cast<int>(stats.total_reads / pileup_time / 1e6) << "M reads/s)";
@@ -7386,6 +7763,7 @@ int main(int argc, char* argv[]) {
         StopWatch pileup_sw;
         stats = engine_ptr->run(bam_source);
         pileup_time = pileup_sw.elapsed_s();
+        alarm(1800);  // watchdog: reset after pileup returns (streaming path)
         std::cerr << "[singlet] Pileup: " << stats.total_reads << " reads, "
                   << pileup_time << "s";
         if (stats.total_reads > 0)
@@ -7404,21 +7782,27 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        // Wait for STAR
+        // Wait for STAR — streaming path mirrors parallel path: non-zero exit is fatal
         if (star_pid > 0) {
             int wstatus;
             waitpid(star_pid, &wstatus, 0);
             close(pipe_fd[0]);
             if (WIFEXITED(wstatus)) {
                 star_exit = WEXITSTATUS(wstatus);
-                if (star_exit != 0)
-                    std::cerr << "[singlet] WARNING: STAR exited " << star_exit << "\n";
-                else
-                    std::cerr << "[singlet] STAR completed\n";
+                if (star_exit != 0) {
+                    std::cerr << "[singlet] ERROR: STAR exited " << star_exit
+                              << " (streaming path)\n";
+                    // FIX-STAR-FATAL: join writer (EPIPE now propagates since writer is
+                    // write-only, so STAR death unblocks fwrite → write_ok=false → exit).
+                    if (fifo_writer_thread.joinable()) fifo_writer_thread.join();
+                    return 3;  // exit code 3 = star_fatal
+                }
+                std::cerr << "[singlet] STAR completed\n";
             } else if (WIFSIGNALED(wstatus)) {
-                std::cerr << "[singlet] ERROR: STAR killed by signal " << WTERMSIG(wstatus) << "\n";
+                std::cerr << "[singlet] ERROR: STAR killed by signal " << WTERMSIG(wstatus)
+                          << " (streaming path)\n";
                 if (fifo_writer_thread.joinable()) fifo_writer_thread.join();
-                return 1;
+                return 3;  // exit code 3 = star_fatal (signal)
             }
         }
         // Join FIFO writer thread (if FIFO decode mode) after STAR completes
@@ -7428,6 +7812,8 @@ int main(int argc, char* argv[]) {
     // ── BUG-MAPPING-GUARD: Warn on very low mapping rate (wrong genome) ──
     // Parse STAR's Log.final.out for uniquely mapped reads %.
     // This catches wrong-genome runs that silently produce empty output.
+    // star_mapping_rate is also used below to gate nonhost EM screening.
+    double star_mapping_rate = -1.0;  // -1 = not parsed (BAM-input path)
     if (star_pid > 0 || !bam_file.empty()) {
         std::string log_path = out_prefix + "/star_Log.final.out";
         if (FILE* lf = std::fopen(log_path.c_str(), "r")) {
@@ -7437,10 +7823,10 @@ int main(int argc, char* argv[]) {
                     // Format: "   Uniquely mapped reads % |	0.00%" (tab or spaces after |)
                     const char* pipe = std::strrchr(line, '|');
                     if (pipe) {
-                        double rate = std::atof(pipe + 1);
-                        if (rate < 1.0) {
+                        star_mapping_rate = std::atof(pipe + 1);
+                        if (star_mapping_rate < 1.0) {
                             std::cerr << "[singlet] WARNING: Very low mapping rate ("
-                                      << std::fixed << std::setprecision(2) << rate
+                                      << std::fixed << std::setprecision(2) << star_mapping_rate
                                       << "%). Possible wrong reference genome.\n";
                         }
                     }
@@ -7502,6 +7888,7 @@ int main(int argc, char* argv[]) {
     }
 
     // ── Phase 3: Export ──
+    alarm(1800);  // watchdog: reset at export start
     std::cerr << "[singlet] Exporting feature matrices...\n";
 
     singlet::ExportConfig export_cfg;
@@ -8080,5 +8467,19 @@ int main(int argc, char* argv[]) {
 
     std::cerr << "[singlet] Total: " << total_sw.elapsed_s() << "s\n";
     std::cerr << "[singlet] Outputs: " << out_prefix << "\n";
+
+    // Named exit codes (documented in run_one.sbatch comments):
+    //   0 = success
+    //   1 = generic error
+    //   2 = download / data incomplete
+    //   3 = star_fatal (STAR exited non-zero or killed by signal)
+    //   4 = zero_cells (cell calling ran but found 0 cells)
+    //   5 = stalled (SIGALRM watchdog fired)
+    if (export_stats.exit_code != 0) {
+        std::cerr << "[singlet] EXIT " << export_stats.exit_code
+                  << " (zero_cells: cell calling produced 0 cells)\n";
+        return export_stats.exit_code;
+    }
+    alarm(0);  // disarm watchdog — clean exit
     return star_exit;
 }

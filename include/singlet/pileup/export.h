@@ -207,6 +207,8 @@ struct ExportStats {
     double export_time_s = 0;
     int n_csc_threads = 0;
     int n_write_threads = 0;
+    uint64_t n_called_cells = 0;  // called cells (0 when cell calling ran and found none)
+    int exit_code = 0;            // 0=success, 4=zero_cells
 };
 
 /// Export all pileup results to disk.
@@ -752,6 +754,14 @@ inline ExportStats export_results(const PileupEngine& engine,
     // Runs when we have called cells OR when --barcodes was provided (all barcodes
     // are treated as cells in that case, cc_result.cell_indices is empty).
     // Hybrid score: 0.6 × kNN-sim-fraction + 0.4 × UMI-ratio component.
+    //
+    // FIX-ZEROCELL-HANG: when no cells were called AND the whitelist was used as-is
+    // (--barcodes not explicitly provided), exon_csc.ncols can be the full whitelist
+    // size (~3.6M barcodes).  Running detect_doublets on that is O(n^2) kNN → hang.
+    // Guard: skip doublet detection when (a) cc_result is empty (no called cells) AND
+    // (b) ncols > 50000 (whitelist-scale, not user-provided barcodes).
+    // If --barcodes was explicitly given, ncols is the user list (typically ≤50K) → ok.
+    static constexpr uint32_t DOUBLET_MAX_BARCODES = 50000;
     std::vector<DoubletResult> dbl_results;
     std::vector<uint32_t> dbl_cell_indices;
     {
@@ -759,9 +769,16 @@ inline ExportStats export_results(const PileupEngine& engine,
         if (!cc_result.cell_indices.empty()) {
             dbl_cell_indices = cc_result.cell_indices;
         } else if (exon_csc.ncols > 0 && !pileup_cfg.exon_gtf_path.empty()) {
-            // --barcodes provided: every barcode column is a cell
-            dbl_cell_indices.resize(exon_csc.ncols);
-            std::iota(dbl_cell_indices.begin(), dbl_cell_indices.end(), 0u);
+            if (exon_csc.ncols > DOUBLET_MAX_BARCODES) {
+                // Full whitelist with 0 called cells — skip to avoid O(n^2) kNN hang.
+                std::cerr << "[doublet] SKIP: ncols=" << exon_csc.ncols
+                          << " > " << DOUBLET_MAX_BARCODES
+                          << " and no called cells — 0-cell sample, skipping doublet detection\n";
+            } else {
+                // --barcodes provided with a small explicit list: treat all as cells.
+                dbl_cell_indices.resize(exon_csc.ncols);
+                std::iota(dbl_cell_indices.begin(), dbl_cell_indices.end(), 0u);
+            }
         }
         if (!dbl_cell_indices.empty() && exon_csc.ncols > 0) {
             auto t_dbl0 = std::chrono::high_resolution_clock::now();
@@ -1337,7 +1354,12 @@ inline ExportStats export_results(const PileupEngine& engine,
             }
         }
         // Cell metrics (only when cell calling ran)
-        summary.estimated_cells = static_cast<uint64_t>(cc_result.cell_indices.size());
+        result.n_called_cells = static_cast<uint64_t>(cc_result.cell_indices.size());
+        // FIX-ZEROCELL: flag zero-cells outcome when cell calling was configured to run
+        // but produced no cells (0-cell sample or protocol mismatch).
+        if (result.n_called_cells == 0 && export_cfg.run_cell_calling)
+            result.exit_code = 4;  // zero_cells
+        summary.estimated_cells = result.n_called_cells;
         if (!cc_result.cell_indices.empty() && !bc_totals.empty()) {
             // Median UMIs per cell
             std::vector<uint64_t> umis;
