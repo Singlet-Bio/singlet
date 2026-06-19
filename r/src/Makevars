@@ -3,7 +3,6 @@
 # Architecture: src/pz_io.cpp wraps the header-only C++ .1pz codec.
 # Headers are at ../inst/include/singlet/ (subset of the full C++ library).
 
-PKG_CPPFLAGS = -I../inst/include -std=c++17
-PKG_CXXFLAGS = -std=c++17
-PKG_LIBS = -lzstd -lpthread
+PKG_CPPFLAGS = -I../inst/include
+PKG_LIBS = -lzstd
 CXX_STD = CXX17

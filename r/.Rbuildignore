@@ -1,0 +1,11 @@
+^\.gpu-staging$
+^\.git$
+^\.gitignore$
+^.*\.o$
+^.*\.so$
+^src/.*\.o$
+^src/.*\.so$
+^README\.md$
+^NEWS\.md$
+^inst/INSTALL_NOTES\.md$
+^\.Rbuildignore$

@@ -1,0 +1,97 @@
+---
+title: "Getting Started with the Singlet Atlas"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting Started with the Singlet Atlas}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+The `singlet` package gives you programmatic access to the Singlet
+single-cell genomics atlas. You work with two simple things: **GEO
+accessions** (such as `"GSE149298"`) and self-contained **`.singlet`
+bundles**. The package handles downloading, caching, decoding, and
+assembling the data into the single-cell objects you already use.
+
+```{r setup}
+library(singlet)
+```
+
+## Load a study by accession
+
+Pass a GEO Series accession to `load()`. The corresponding `.singlet`
+bundle is downloaded from <https://singlet.bio>, cached locally, and
+assembled into a `SingleCellExperiment`.
+
+```{r load-one}
+sce <- load("GSE149298")
+sce
+```
+
+Subsequent calls reuse the cached bundle instead of re-downloading. The
+cache lives in `tools::R_user_dir("singlet", "cache")` by default; override
+it with the `cache_dir` argument or the `SINGLET_CACHE_DIR` environment
+variable.
+
+## Combine several studies
+
+Give `load()` a vector of accessions (or local bundle paths, or a mix) and
+it returns one combined object aligned on the shared gene axis.
+
+```{r load-many}
+sce <- load(c("GSE149298", "GSE116256"))
+table(sce$gsm_id)
+```
+
+## Search with natural language
+
+`find()` turns a free-text description into matching accessions.
+
+```{r find}
+hits <- find("T cells from pediatric AML", level = "gse")
+hits
+
+# Search and load in a single step
+sce <- find_load("microglia from Alzheimer's brain", limit = 5)
+```
+
+## Convert to Seurat
+
+Ask `load()` for a `Seurat` object directly with `as = "seurat"`.
+
+```{r seurat}
+obj <- load("GSE149298", as = "seurat")
+obj
+
+# Per-sample metadata is carried into the object's cell metadata
+head(obj[[]])
+```
+
+## Working with local bundles
+
+If you already have a `.singlet` file on disk, read it directly with
+`read_singlet()` (or just pass the path to `load()`).
+
+```{r local}
+sce <- read_singlet("/data/GSE149298.singlet")
+```
+
+## Where the data comes from
+
+Each cell carries its source sample in `colData(sce)$gsm_id`, alongside
+tissue, cell type, disease, protocol, and other study metadata when
+available. The parsed bundle manifest and study metadata are attached to
+`metadata(sce)` for full provenance.
+
+```{r provenance}
+SummarizedExperiment::colData(sce)
+names(SummarizedExperiment::metadata(sce))
+```

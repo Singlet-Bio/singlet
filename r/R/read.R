@@ -1,19 +1,28 @@
 # SPDX-License-Identifier: MIT
-#' singlet: Read singlet pipeline outputs into R.
+#' singlet: Access the Singlet single-cell atlas from R
 #'
-#' This package provides R readers for the ``.1pz`` files produced by the
-#' singlet single-cell reprocessing pipeline. All decode work happens in
-#' a header-only C++ reader shared with the Python wrapper; R only
-#' marshals the result into native sparse-matrix classes and single-cell
-#' objects.
+#' Tools for loading, searching, and analyzing the Singlet single-cell
+#' genomics atlas. Studies are distributed as self-contained `.singlet`
+#' bundles addressed by GEO accession; the package downloads, caches, and
+#' assembles them into \code{SingleCellExperiment} or \code{Seurat} objects.
+#' A natural-language search interface maps free-text descriptions to
+#' matching accessions.
 #'
-#' @section Entry points:
+#' @section Main entry points:
 #' \describe{
-#'   \item{\code{\link{read_1pz}}}{Read a single ``.1pz`` file into a ``dgCMatrix``.}
-#'   \item{\code{\link{read_singlet_dir}}}{Read a pipeline output directory into a named list of matrices.}
-#'   \item{\code{\link{as_sce}}}{Convert to a ``SingleCellExperiment``.}
-#'   \item{\code{\link{as_seurat}}}{Convert to a ``Seurat`` object.}
+#'   \item{\code{\link{load}}}{Load one or more studies by accession or
+#'     bundle path into a combined object.}
+#'   \item{\code{\link{find}}}{Search the atlas with natural language and get
+#'     matching accessions.}
+#'   \item{\code{\link{find_load}}}{Search and load in one step.}
+#'   \item{\code{\link{read_singlet}}}{Read a single local `.singlet` bundle.}
 #' }
+#'
+#' @section Low-level readers:
+#' \code{\link{read_1pz}}, \code{\link{read_singlet_dir}},
+#' \code{\link{read_cohort}}, \code{\link{as_sce}}, and
+#' \code{\link{as_seurat}} operate on raw pipeline output directories and the
+#' underlying per-sample matrix codec. Most users will not need them.
 #'
 #' @keywords internal
 #' @aliases singlet-package
@@ -24,7 +33,7 @@
 #'
 #' @param path Path to the \code{.1pz} file.
 #' @return A \code{\link[Matrix:dgCMatrix-class]{dgCMatrix}} with dimensions
-#'   ``features × cells``. The following attributes are attached:
+#'   ``features x cells``. The following attributes are attached:
 #'   \describe{
 #'     \item{\code{user_kv}}{Named character vector of the embedded
 #'       pipeline metadata (gsm_id, gse_id, organism, protocol,
@@ -151,7 +160,7 @@ read_cohort <- function(paths, matrix_name = "spliced", show_progress = FALSE) {
         target <- file.path(pdir, paste0(matrix_name, ".1pz"))
         if (!file.exists(target)) {
             if (show_progress) {
-                message(sprintf("  skip — %s.1pz not present", matrix_name))
+                message(sprintf("  skip - %s.1pz not present", matrix_name))
             }
             next
         }

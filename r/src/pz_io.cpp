@@ -19,6 +19,10 @@
 #include <exception>
 #include <string>
 
+// pz_reader.h pulls in pz_writer.h, whose write_1pz_csc() convenience overload
+// references singlet::SparseAccumulator without including its defining header.
+// Include it first so the translation unit compiles. (We use the reader only.)
+#include "singlet/sparse_accumulator.h"
 #include "singlet/pz_reader.h"
 
 namespace pz = singlet::pz;

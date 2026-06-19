@@ -101,12 +101,12 @@ as_sce <- function(path, primary_assay = "spliced") {
     # Embedded GEO metadata
     user_kv <- attr(dd, "user_kv")
     if (!is.null(user_kv)) {
-        SummarizedExperiment::metadata(sce)$singlet <- as.list(user_kv)
+        S4Vectors::metadata(sce)$singlet <- as.list(user_kv)
     }
-    SummarizedExperiment::metadata(sce)$singlet_primary_assay <- chosen
-    SummarizedExperiment::metadata(sce)$singlet_source_path <- attr(dd, "path")
+    S4Vectors::metadata(sce)$singlet_primary_assay <- chosen
+    S4Vectors::metadata(sce)$singlet_source_path <- attr(dd, "path")
     if (length(derived_assays) > 0L) {
-        SummarizedExperiment::metadata(sce)$singlet_derived_assays <- derived_assays
+        S4Vectors::metadata(sce)$singlet_derived_assays <- derived_assays
     }
 
     sce

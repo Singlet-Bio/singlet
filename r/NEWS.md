@@ -1,5 +1,36 @@
 # singlet (R) — NEWS
 
+## singlet 1.0.0
+
+First CRAN-targeted release. Adds the user-facing atlas API built around
+`.singlet` bundles and GEO accessions.
+
+### New features
+
+- `load(x, as = c("sce", "seurat"), cache_dir = NULL)` — primary entry
+  point. Accepts GEO Series accessions (`"GSE..."`), local `.singlet`
+  bundle paths, or a mix, and returns a combined `SingleCellExperiment`
+  (default) or `Seurat` object. Accessions are downloaded from
+  `https://data.singlet.bio` and cached (honoring `SINGLET_DATA_BASE` and
+  `SINGLET_CACHE_DIR`); existing bundles are reused.
+- `read_singlet(path)` — read one local `.singlet` bundle (ZIP64) into a
+  `SingleCellExperiment`. Sums spliced + unspliced features onto the
+  bundle's canonical gene axis, restricts to called cells, and attaches
+  per-sample study metadata to `colData`.
+- `find(query, level = c("gsm", "gse"), limit = 50L)` — natural-language
+  search returning matching accessions (via the Singlet search API;
+  override base with `SINGLET_API_BASE`).
+- `find_load(query, ...)` — search then load in one step.
+
+### Changes
+
+- NAMESPACE regenerated from roxygen2: fixed the
+  `read_singlify_dir`/`read_singlet_dir` mismatch and dropped the stale
+  `read_1pz_sce` export. The `.1pz` codec is now treated as a low-level
+  detail; `load()`/`read_singlet()` are the documented entry points.
+- DESCRIPTION made CRAN-valid (title, description, maintainer, imports,
+  license).
+
 ## singlet 0.2.0
 
 Initial release of the R wrapper. Reads singlet pipeline output

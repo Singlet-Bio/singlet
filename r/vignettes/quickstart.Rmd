@@ -16,7 +16,7 @@ knitr::opts_chunk$set(
 ```
 
 `singlet` reads the per-sample output directories produced by the
-[singlet single-cell reprocessing pipeline](https://github.com/zdebruine/Singlet-AI)
+[singlet single-cell reprocessing pipeline](https://github.com/Singlet-Bio/singlet)
 — specifically the `.1pz` sparse-matrix files and the per-cell TSV
 sidecars — into native R objects.
 
@@ -30,7 +30,7 @@ Seurat).
 ```{r install}
 # From GitHub
 install.packages("remotes")
-remotes::install_github("zdebruine/Singlet-AI", subdir = "singlet/r")
+remotes::install_github("Singlet-Bio/singlet", subdir = "r")
 ```
 
 You need a C++17 compiler and `libzstd` (>= 1.4) on the build machine.

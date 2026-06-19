@@ -38,10 +38,10 @@ fixture_dir <- function() {
 skip_if_no_fixture <- function() {
     d <- fixture_dir()
     if (is.na(d)) {
-        testthat::skip(
+        testthat::skip(paste0(
             "no singlet pipeline fixture available. Set ",
             "SINGLET_TEST_FIXTURE_DIR to a directory with .1pz files."
-        )
+        ))
     }
     d
 }
