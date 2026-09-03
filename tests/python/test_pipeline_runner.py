@@ -9,18 +9,14 @@ covered without needing the real pipeline.
 from __future__ import annotations
 
 import json
-import os
 import stat
 import subprocess
 import sys
 from pathlib import Path
-from typing import List
 
 import pytest
-
 from singlet.pipeline import PipelineError, Run, run
 from singlet.pipeline import _run as runner
-
 
 # --------------------------------------------------------------------------
 # Pure helpers
