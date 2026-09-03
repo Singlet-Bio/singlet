@@ -197,16 +197,16 @@
 #' @export
 read_singlet <- function(path) {
     path <- path.expand(as.character(path))
-            if (!file.exists(path)) {
-                            stop(sprintf("no such .singlet file: %s", path))
-                        }
-            if (!requireNamespace("SingleCellExperiment", quietly = TRUE)) {
-                            stop("read_singlet requires the SingleCellExperiment package. ",
-                                                  "Install with `BiocManager::install('SingleCellExperiment')`.")
-                        }
-            if (!requireNamespace("SummarizedExperiment", quietly = TRUE)) {
-                            stop("read_singlet requires the SummarizedExperiment package.")
-                        }
+    if (!file.exists(path)) {
+        stop(sprintf("no such .singlet file: %s", path))
+    }
+    if (!requireNamespace("SingleCellExperiment", quietly = TRUE)) {
+        stop("read_singlet requires the SingleCellExperiment package. ",
+             "Install with `BiocManager::install('SingleCellExperiment')`.")
+    }
+    if (!requireNamespace("SummarizedExperiment", quietly = TRUE)) {
+        stop("read_singlet requires the SummarizedExperiment package.")
+    }
 
     extract_dir <- tempfile("singlet_bundle_")
     dir.create(extract_dir)
