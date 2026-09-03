@@ -78,8 +78,7 @@ inline uint64_t slurm_tier_bamsort_ram(uint64_t slurm_mem_bytes) {
         return slurm_mem_bytes >= (tier_gib - 1) * GiB &&
                slurm_mem_bytes <= (tier_gib + 1) * GiB;
     };
-    if (near(64))  return 12ULL * GiB;   // Standard  64 GB → 12 GB
-    if (near(96))  return 20ULL * GiB;   // Barnyard  96 GB → 20 GB
+    if (near(64))  return 25ULL * GiB;   // Standard  64 GB → 25 GB
     if (near(128)) return 50ULL * GiB;   // Large    128 GB → 50 GB
     if (near(192)) return 75ULL * GiB;   // XL-192   192 GB → 75 GB
     if (near(384)) return 150ULL * GiB;  // XL-384   384 GB → 150 GB
