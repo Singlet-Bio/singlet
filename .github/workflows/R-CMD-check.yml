@@ -66,10 +66,17 @@ jobs:
       # PKG_CPPFLAGS/PKG_LIBS) can find zstd.h and libzstd.
       - name: Install zstd (macOS)
         if: runner.os == 'macOS'
+        # Homebrew's prefix isn't on the compiler search path, and R's build
+        # ignores shell CPPFLAGS/LDFLAGS (Makeconf variables win over the
+        # environment). ~/.R/Makevars is the supported way to add flags; its
+        # `+=` lines are merged with whatever pkgbuild/devtools set, so this
+        # works for both `devtools::document()` and `R CMD check`.
         run: |
           brew install zstd
-          echo "CPPFLAGS=-I$(brew --prefix zstd)/include" >> "$GITHUB_ENV"
-          echo "LDFLAGS=-L$(brew --prefix zstd)/lib" >> "$GITHUB_ENV"
+          mkdir -p ~/.R
+          echo "CPPFLAGS += -I$(brew --prefix zstd)/include" >> ~/.R/Makevars
+          echo "LDFLAGS += -L$(brew --prefix zstd)/lib" >> ~/.R/Makevars
+          cat ~/.R/Makevars
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
