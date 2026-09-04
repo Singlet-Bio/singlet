@@ -61,6 +61,15 @@ jobs:
           # delocate then bundle the shared library into the wheel as usual.
           CIBW_BEFORE_ALL_LINUX: "(yum install -y zstd-devel || (yum install -y epel-release && yum install -y libzstd-devel)) 2>/dev/null || (apt-get update && apt-get install -y libzstd-dev)"
           CIBW_BEFORE_ALL_MACOS: "brew install zstd"
+          # `brew install` alone isn't enough on macOS: Homebrew's prefix
+          # (/opt/homebrew on arm64, /usr/local on x86_64) isn't on the
+          # compiler's default search path, so the extension fails with
+          # "zstd.h not found" even though the library is installed. Point
+          # the compiler/linker at it explicitly (distutils/setuptools reads
+          # CPPFLAGS/LDFLAGS from the environment for every extension build).
+          CIBW_ENVIRONMENT_MACOS: >-
+            CPPFLAGS="-I$(brew --prefix zstd)/include"
+            LDFLAGS="-L$(brew --prefix zstd)/lib"
           CIBW_TEST_REQUIRES: pytest
           CIBW_TEST_COMMAND: "python -c 'import singlet; print(singlet.__version__)'"
           MACOSX_DEPLOYMENT_TARGET: "11.0"

@@ -135,7 +135,7 @@ jobs:
             <div class="cards">
               <a class="card" href="python/">
                 <h2>Python client &rarr;</h2>
-                <p>API reference and install docs for the <code>singlet-bio</code> package on PyPI.</p>
+                <p>API reference and install docs for the <code>singlet</code> package on PyPI.</p>
               </a>
               <a class="card" href="r/">
                 <h2>R client &rarr;</h2>
