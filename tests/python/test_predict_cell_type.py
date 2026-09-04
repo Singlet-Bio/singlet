@@ -2,6 +2,7 @@
 """Tests for singlet.predict_cell_type()."""
 
 import numpy as np
+import pandas as pd
 import pytest
 import scipy.sparse as sp
 from singlet._predict_cell_type import predict_cell_type
@@ -128,10 +129,13 @@ class TestPredictCellTypeRejection:
         """High threshold should reject some predictions as Unknown."""
         ref, query = _make_reference_query()
         predict_cell_type(query, ref, "cell_type", threshold=0.99)
-        predicted = query.obs["predicted_cell_type"].values
+        predicted = query.obs["predicted_cell_type"]
         # With very high threshold, some should be Unknown
-        # (unless all predictions are extremely confident)
-        assert predicted.dtype == object  # string dtype
+        # (unless all predictions are extremely confident). The column holds
+        # strings: object dtype on pandas < 3, the dedicated string dtype on
+        # pandas >= 3 -- accept either.
+        assert pd.api.types.is_string_dtype(predicted) or predicted.dtype == object
+        assert all(isinstance(v, str) for v in predicted)
 
     def test_zero_threshold_no_unknown(self):
         """Zero threshold should never produce Unknown."""
