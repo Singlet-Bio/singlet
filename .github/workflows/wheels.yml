@@ -54,6 +54,13 @@ jobs:
           CIBW_SKIP: "pp* *-musllinux_*"
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
           CIBW_MANYLINUX_AARCH64_IMAGE: manylinux2014
+          # The `singlet._pz` extension links against system zstd
+          # (`setup.py`: `libraries=["zstd"]`). Neither the manylinux2014
+          # containers nor the macOS runners ship the zstd headers/library,
+          # so install them before the extension is compiled; auditwheel /
+          # delocate then bundle the shared library into the wheel as usual.
+          CIBW_BEFORE_ALL_LINUX: "(yum install -y zstd-devel || (yum install -y epel-release && yum install -y libzstd-devel)) 2>/dev/null || (apt-get update && apt-get install -y libzstd-dev)"
+          CIBW_BEFORE_ALL_MACOS: "brew install zstd"
           CIBW_TEST_REQUIRES: pytest
           CIBW_TEST_COMMAND: "python -c 'import singlet; print(singlet.__version__)'"
           MACOSX_DEPLOYMENT_TARGET: "11.0"

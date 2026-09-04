@@ -52,6 +52,14 @@ jobs:
           http-user-agent: ${{ matrix.config.http-user-agent }}
           use-public-rspm: true
 
+      # The r/src/pz_io.cpp binding links against system zstd. Ubuntu's
+      # runners get it automatically via setup-r-dependencies' Linux
+      # system-requirements resolution, and Windows via the Rtools/rwinlib
+      # toolchain, but macOS has no equivalent -- install it explicitly.
+      - name: Install zstd (macOS)
+        if: runner.os == 'macOS'
+        run: brew install zstd
+
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           working-directory: r
