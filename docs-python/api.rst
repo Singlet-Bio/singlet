@@ -39,6 +39,7 @@ Natural-language search over the catalog.
 
    singlet.find
    singlet.find_load
+   singlet.set_api_key
 
 Load data
 ---------
@@ -283,6 +284,7 @@ Every public name in ``singlet.__all__``, alphabetically.
     singlet.score_cell_cycle
     singlet.score_genes
     singlet.scrublet
+    singlet.set_api_key
     singlet.set_catalog_dir
     singlet.show_versions
     singlet.silhouette_score
