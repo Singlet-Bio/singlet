@@ -786,14 +786,24 @@ ProtocolCandidate detect_protocol(
         // For 3' scRNA-seq concat reads: polyT/polyA run starts right after
         // barcode+UMI region. Very specific discriminator for detecting
         // correct BC/UMI boundary position.
+        //
+        // The same signal exists in normal (non-concat) mode whenever the barcode
+        // read is sequenced *past* BC+UMI (e.g. Drop-seq BC12+UMI8 run at R1=28):
+        // the bases right after the UMI are the polyT capture primer.  A candidate
+        // whose declared BC+UMI ends exactly where the polyT starts is the one that
+        // actually fits the read; a candidate whose UMI runs into the polyT run
+        // (e.g. a 28bp 10x layout scored without its whitelist) does not.
         double internal_polyT = 0.0;
-        if (concat_mode && cand->bc_len > 0 && cand->umi_len > 0) {
+        const bool oversequenced_bc_read =
+            !concat_mode && !use_r2_for_bc && cand->bc_len > 0 && cand->umi_len > 0 &&
+            barcode_read_len >= cand->bc_offset + cand->bc_len + cand->umi_len + 6;
+        if ((concat_mode || oversequenced_bc_read) && cand->bc_len > 0 && cand->umi_len > 0) {
             uint16_t polyT_start = cand->bc_offset + cand->bc_len + cand->umi_len;
             uint32_t polyT_hits = 0;
             for (uint32_t i = 0; i < n_test; ++i) {
                 const uint8_t* read = bc_seq(i);
                 uint16_t rlen = bc_read_len(i);
-                if (rlen < polyT_start + 8) continue;
+                if (rlen < polyT_start + 6) continue;
                 uint16_t window = std::min<uint16_t>(12, rlen - polyT_start);
                 uint32_t t_count = 0;
                 for (uint16_t j = 0; j < window; ++j) {
@@ -840,6 +850,7 @@ ProtocolCandidate detect_protocol(
             score += 0.30 * umi_norm;
             score += 0.15 * polya_frac;
             score += 0.20 * umi_good;
+            score += 0.15 * internal_polyT;  // polyT right after BC+UMI (over-sequenced R1)
             score += geometry_bonus;
         } else {
             // Non-whitelist concat/inverted mode: structural analysis

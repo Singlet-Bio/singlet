@@ -5,8 +5,8 @@ name: Build binary wheels (cibuildwheel)
 # Triggered by tags v* (the publish-pypi.yml workflow picks up the resulting
 # wheel artifacts). Also runs on push to main as a smoke build (no publish).
 #
-# Wheels include the compiled .1pz extension (`_pz.so`) and the bundled zstd.
-# `auditwheel`/`delocate` is run by cibuildwheel automatically.
+# Wheels include the compiled .1pz extension (`_pz.so`) with zstd linked in
+# statically. `auditwheel`/`delocate` is run by cibuildwheel automatically.
 
 on:
   push:
@@ -52,8 +52,48 @@ jobs:
           # Skip pypy + musllinux for MVP. CPython 3.9–3.13 on manylinux/macOS.
           CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-* cp313-*"
           CIBW_SKIP: "pp* *-musllinux_*"
-          CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
-          CIBW_MANYLINUX_AARCH64_IMAGE: manylinux2014
+          # manylinux_2_28 (glibc >= 2.28: RHEL/Alma 8+, Ubuntu 18.10+,
+          # Debian 10+), not manylinux2014. The CIBW_TEST_COMMAND step below
+          # pip-installs the repaired wheel *plus its runtime dependencies*
+          # inside the build container, and the scientific-Python stack has
+          # moved off manylinux2014: pyarrow 21+ and h5py 3.16+ (pulled in via
+          # anndata) publish manylinux_2_28 wheels only. Inside a manylinux2014
+          # container pip can't use those, so it falls back to their sdists and
+          # tries to compile Arrow / HDF5 from source, which fails. That was a
+          # test-container artifact, not something end users would hit -- but
+          # it also forced an artificial `pyarrow<21` pin on users. 2_28 fixes
+          # both.
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
+          CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
+          # The `singlet._pz` extension links against zstd (`setup.py`:
+          # `libraries=["zstd"]`). Build a static libzstd.a from source (with
+          # -fPIC, since it gets linked into a shared extension module) rather
+          # than depending on whichever distro package/repo the container
+          # happens to have; the extension links it statically, so auditwheel
+          # has no libzstd.so to bundle.
+          CIBW_BEFORE_ALL_LINUX: >-
+            curl -fsSL https://github.com/facebook/zstd/releases/download/v1.5.6/zstd-1.5.6.tar.gz -o /tmp/zstd.tar.gz &&
+            tar -xzf /tmp/zstd.tar.gz -C /tmp &&
+            CFLAGS="-fPIC -O3" make -C /tmp/zstd-1.5.6/lib libzstd.a -j$(nproc)
+          CIBW_ENVIRONMENT_LINUX: >-
+            CPPFLAGS="-I/tmp/zstd-1.5.6/lib"
+            LDFLAGS="-L/tmp/zstd-1.5.6/lib"
+          # Don't `brew install zstd` here: Homebrew's prebuilt zstd bottle is
+          # compiled against a much newer macOS SDK than this workflow's
+          # MACOSX_DEPLOYMENT_TARGET (11.0) -- linking the extension against
+          # it dynamically makes delocate reject the wheel ("bundled dylib
+          # has a minimum macOS deployment target of 14.0, but the wheel
+          # targets 11.0"). Build a static libzstd.a from source instead,
+          # with the same deployment target as the extension, and link that
+          # in -- no dylib for delocate to bundle/reject, and no dependency
+          # on whatever OS version Homebrew's bottle happens to target.
+          CIBW_BEFORE_ALL_MACOS: >-
+            curl -fsSL https://github.com/facebook/zstd/releases/download/v1.5.6/zstd-1.5.6.tar.gz -o /tmp/zstd.tar.gz &&
+            tar -xzf /tmp/zstd.tar.gz -C /tmp &&
+            CFLAGS="-mmacosx-version-min=${MACOSX_DEPLOYMENT_TARGET}" make -C /tmp/zstd-1.5.6/lib libzstd.a -j$(sysctl -n hw.ncpu)
+          CIBW_ENVIRONMENT_MACOS: >-
+            CPPFLAGS="-I/tmp/zstd-1.5.6/lib"
+            LDFLAGS="-L/tmp/zstd-1.5.6/lib"
           CIBW_TEST_REQUIRES: pytest
           CIBW_TEST_COMMAND: "python -c 'import singlet; print(singlet.__version__)'"
           MACOSX_DEPLOYMENT_TARGET: "11.0"

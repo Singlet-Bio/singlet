@@ -323,7 +323,8 @@ def _load_one(
     _gsm_filter: Optional[str] = None
 
     if path.exists():
-        if path.is_dir():
+        # A ``.zarr`` store is a directory; every other directory is a mistake.
+        if path.is_dir() and path.suffix.lower() != ".zarr":
             raise IsADirectoryError(
                 f"'{path}' is a directory. Use singlet.load_dir() for pipeline output directories, "
                 f"or provide a .singlet file path (or an accession like 'GSE149298')."

@@ -4,14 +4,18 @@
 \alias{find}
 \title{Search the Singlet atlas with natural language}
 \usage{
-find(query, level = c("gsm", "gse"), limit = 50L)
+find(query, level = c("gse", "gsm"), limit = 50L)
 }
 \arguments{
 \item{query}{Free-text search string, e.g.
 \code{"T cells from pediatric AML"}.}
 
-\item{level}{Accession granularity to return: \code{"gsm"} (default, one
-accession per sample) or \code{"gse"} (one per Series).}
+\item{level}{Accession granularity to return: \code{"gse"} (default, one
+accession per Series) or \code{"gsm"} (one per sample). \code{"gse"} is
+the default here -- unlike the Python client -- because \code{\link{load}}
+only accepts Series-level (\code{GSE}) accessions; a \code{GSM} accession
+from \code{level = "gsm"} must be resolved to its parent \code{GSE}
+yourself before calling \code{load()}.}
 
 \item{limit}{Maximum number of accessions to return. Default \code{50}.}
 }
@@ -31,7 +35,7 @@ network access.
 }
 \examples{
 \dontrun{
-hits <- find("T cells from pediatric AML", level = "gse")
+hits <- find("T cells from pediatric AML")
 sce <- load(hits[1:3])
 }
 

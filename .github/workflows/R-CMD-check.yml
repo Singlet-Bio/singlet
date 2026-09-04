@@ -52,6 +52,32 @@ jobs:
           http-user-agent: ${{ matrix.config.http-user-agent }}
           use-public-rspm: true
 
+      # The r/src/pz_io.cpp binding links against system zstd. Ubuntu's
+      # runners get it automatically via setup-r-dependencies' Linux
+      # system-requirements resolution, and Windows via the Rtools/rwinlib
+      # toolchain, but macOS has no equivalent -- install it explicitly.
+      #
+      # `brew install` alone isn't sufficient: Homebrew's prefix
+      # (/opt/homebrew on arm64, /usr/local on x86_64) isn't on the
+      # compiler's default search path, and src/Makevars' static
+      # `PKG_LIBS = -lzstd` has no matching `-L`/`-I` for it. Export
+      # CPPFLAGS/LDFLAGS to the rest of the job so R's build (which merges
+      # them into ALL_CPPFLAGS/the link line alongside the package's own
+      # PKG_CPPFLAGS/PKG_LIBS) can find zstd.h and libzstd.
+      - name: Install zstd (macOS)
+        if: runner.os == 'macOS'
+        # Homebrew's prefix isn't on the compiler search path, and R's build
+        # ignores shell CPPFLAGS/LDFLAGS (Makeconf variables win over the
+        # environment). ~/.R/Makevars is the supported way to add flags; its
+        # `+=` lines are merged with whatever pkgbuild/devtools set, so this
+        # works for both `devtools::document()` and `R CMD check`.
+        run: |
+          brew install zstd
+          mkdir -p ~/.R
+          echo "CPPFLAGS += -I$(brew --prefix zstd)/include" >> ~/.R/Makevars
+          echo "LDFLAGS += -L$(brew --prefix zstd)/lib" >> ~/.R/Makevars
+          cat ~/.R/Makevars
+
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           working-directory: r

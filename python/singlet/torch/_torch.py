@@ -16,13 +16,20 @@ if TYPE_CHECKING:
     import torch
 
 
+def _read_pz_anndata(source: str | Path):
+    """Read a ``.1pz`` (or legacy ``.spz``) file with the in-tree codec."""
+    from singlet._io import read_matrix
+
+    return read_matrix(source)
+
+
 def to_sparse_csr(
     source: str | Path,
     *,
     dtype: str = "float32",
     device: str = "cpu",
 ) -> torch.Tensor:
-    """Load a .spz file as a PyTorch sparse CSR tensor (zero-copy).
+    """Load a .1pz file as a PyTorch sparse CSR tensor.
 
     CSR format is optimal for GPU operations through cuSPARSE.
     The returned tensor has shape (cells, genes) — transposed from the
@@ -31,7 +38,7 @@ def to_sparse_csr(
     Parameters
     ----------
     source : str or Path
-        Path to a .spz file.
+        Path to a .1pz file.
     dtype : str
         ``"float32"`` (default) or ``"float64"``.
     device : str
@@ -42,9 +49,7 @@ def to_sparse_csr(
     torch.Tensor
         Sparse CSR tensor, shape (n_cells, n_genes).
     """
-    from singlet._singlepress import sp_to_torch_csr
-
-    return sp_to_torch_csr(str(source), dtype=dtype, device=device)
+    return from_anndata(_read_pz_anndata(source), dtype=dtype, device=device)
 
 
 def to_sparse_coo(
@@ -53,12 +58,12 @@ def to_sparse_coo(
     dtype: str = "float32",
     device: str = "cpu",
 ) -> torch.Tensor:
-    """Load a .spz file as a PyTorch sparse COO tensor.
+    """Load a .1pz file as a PyTorch sparse COO tensor.
 
     Parameters
     ----------
     source : str or Path
-        Path to a .spz file.
+        Path to a .1pz file.
     dtype : str
         ``"float32"`` (default) or ``"float64"``.
     device : str
@@ -69,9 +74,7 @@ def to_sparse_coo(
     torch.Tensor
         Sparse COO tensor, shape (n_cells, n_genes).
     """
-    from singlet._singlepress import sp_to_torch_coo
-
-    return sp_to_torch_coo(str(source), dtype=dtype, device=device)
+    return from_anndata(_read_pz_anndata(source), dtype=dtype, device=device).to_sparse_coo()
 
 
 def from_anndata(

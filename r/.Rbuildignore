@@ -9,3 +9,6 @@
 ^NEWS\.md$
 ^inst/INSTALL_NOTES\.md$
 ^\.Rbuildignore$
+^_pkgdown\.yml$
+^docs$
+^pkgdown$

@@ -36,6 +36,7 @@ Suggests:
     knitr,
     rmarkdown
 VignetteBuilder: knitr
+Additional_repositories: https://bioconductor.org/packages/release/bioc
 SystemRequirements: C++17, libzstd (>= 1.4)
 Biarch: FALSE
 RoxygenNote: 7.3.3

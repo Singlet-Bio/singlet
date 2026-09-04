@@ -196,16 +196,16 @@
 #' @seealso \code{\link{load}}, \code{\link{find}}
 #' @export
 read_singlet <- function(path) {
+    path <- path.expand(as.character(path))
+    if (!file.exists(path)) {
+        stop(sprintf("no such .singlet file: %s", path))
+    }
     if (!requireNamespace("SingleCellExperiment", quietly = TRUE)) {
         stop("read_singlet requires the SingleCellExperiment package. ",
              "Install with `BiocManager::install('SingleCellExperiment')`.")
     }
     if (!requireNamespace("SummarizedExperiment", quietly = TRUE)) {
         stop("read_singlet requires the SummarizedExperiment package.")
-    }
-    path <- path.expand(as.character(path))
-    if (!file.exists(path)) {
-        stop(sprintf("no such .singlet file: %s", path))
     }
 
     extract_dir <- tempfile("singlet_bundle_")

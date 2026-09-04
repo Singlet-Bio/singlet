@@ -4,6 +4,7 @@
 from unittest.mock import patch
 
 import numpy as np
+import pytest
 import scipy.io
 import scipy.sparse as sp
 from singlet.preprocessing._export import export_to_1pz, export_to_spz
@@ -22,7 +23,7 @@ class TestExportTo1pz:
         scipy.io.mmwrite(alevin / "quants_mat.mtx", mat)
         return tmp_path
 
-    @patch("singlepress.write_1pz")
+    @patch("singlet._pz.write_1pz")
     def test_success(self, mock_write, tmp_path):
         qdir = self._create_quant_dir(tmp_path / "quant")
         out_path = tmp_path / "output" / "sample.1pz"
@@ -32,15 +33,15 @@ class TestExportTo1pz:
         # Check the output parent dir was created
         assert out_path.parent.exists()
 
-    @patch("singlepress.write_1pz")
+    @patch("singlet._pz.write_1pz")
     def test_matrix_is_transposed(self, mock_write, tmp_path):
         """Export should write genes × cells (transposed from cells × genes)."""
         qdir = self._create_quant_dir(tmp_path / "quant", shape=(20, 10))
         out_path = tmp_path / "sample.1pz"
         export_to_1pz(qdir, out_path)
-        # write_1pz called with (path, matrix) — matrix should be 10×20
+        # write_1pz called with (path, indptr, indices, data, m, n) — genes × cells
         call_args = mock_write.call_args[0]
-        assert call_args[1].shape == (10, 20)
+        assert (call_args[4], call_args[5]) == (10, 20)
 
     def test_no_matrix_returns_false(self, tmp_path):
         """Returns False if no count matrix found."""
@@ -49,7 +50,7 @@ class TestExportTo1pz:
         result = export_to_1pz(qdir, tmp_path / "out.1pz")
         assert result is False
 
-    @patch("singlepress.write_1pz")
+    @patch("singlet._pz.write_1pz")
     def test_gzipped_matrix(self, mock_write, tmp_path):
         """Finds .mtx.gz variant."""
         import gzip
@@ -96,36 +97,40 @@ class TestExportToSpz:
 
         return tmp_path
 
-    @patch("singlet._singlepress.sp_write_int")
-    def test_integer_export(self, mock_write_int, tmp_path):
-        """Integer matrix uses sp_write_int."""
+    @patch("singlet._pz.write_1pz")
+    def test_integer_export(self, mock_write, tmp_path):
+        """Legacy alias writes the .1pz container (with a DeprecationWarning)."""
         qdir = self._create_quant_dir(tmp_path / "quant")
         out_path = tmp_path / "sample.spz"
-        result = export_to_spz(qdir, out_path, sample_id="test")
+        with pytest.warns(DeprecationWarning):
+            result = export_to_spz(qdir, out_path, sample_id="test")
         assert result is True
-        mock_write_int.assert_called_once()
+        mock_write.assert_called_once()
 
     def test_no_matrix_returns_false(self, tmp_path):
         """Returns False if no count matrix found."""
         qdir = tmp_path / "empty"
         qdir.mkdir()
-        result = export_to_spz(qdir, tmp_path / "out.spz")
+        with pytest.warns(DeprecationWarning):
+            result = export_to_spz(qdir, tmp_path / "out.spz")
         assert result is False
 
-    @patch("singlet._singlepress.sp_write")
+    @patch("singlet._pz.write_1pz")
     def test_float_export(self, mock_write, tmp_path):
-        """Float matrix uses sp_write (not sp_write_int)."""
+        """Float matrix is rounded to integer counts before writing."""
         alevin = tmp_path / "quant" / "af_quant" / "alevin"
         alevin.mkdir(parents=True)
         mat = sp.random(10, 5, density=0.3, format="coo", dtype=np.float64)
         scipy.io.mmwrite(alevin / "quants_mat.mtx", mat)
 
         out_path = tmp_path / "sample.spz"
-        result = export_to_spz(tmp_path / "quant", out_path, sample_id="test")
+        with pytest.warns(DeprecationWarning):
+            result = export_to_spz(tmp_path / "quant", out_path, sample_id="test")
         assert result is True
         mock_write.assert_called_once()
+        assert np.issubdtype(mock_write.call_args[0][3].dtype, np.integer)
 
-    @patch("singlepress.write_1pz")
+    @patch("singlet._pz.write_1pz")
     def test_dense_matrix_1pz(self, mock_write, tmp_path):
         """Dense (array-format) MTX is converted to sparse in export_to_1pz."""
         alevin = tmp_path / "quant" / "af_quant" / "alevin"
@@ -139,7 +144,7 @@ class TestExportToSpz:
         assert result is True
         mock_write.assert_called_once()
 
-    @patch("singlet._singlepress.sp_write")
+    @patch("singlet._pz.write_1pz")
     def test_dense_matrix_spz(self, mock_write, tmp_path):
         """Dense (array-format) MTX is converted to sparse in export_to_spz."""
         alevin = tmp_path / "quant" / "af_quant" / "alevin"
@@ -148,6 +153,7 @@ class TestExportToSpz:
         scipy.io.mmwrite(alevin / "quants_mat.mtx", dense)
 
         out_path = tmp_path / "sample.spz"
-        result = export_to_spz(tmp_path / "quant", out_path)
+        with pytest.warns(DeprecationWarning):
+            result = export_to_spz(tmp_path / "quant", out_path)
         assert result is True
         mock_write.assert_called_once()

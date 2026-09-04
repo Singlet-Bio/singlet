@@ -133,7 +133,9 @@ class TestTrajectoryGenes:
         """Cells with NaN pseudotime are excluded from analysis."""
         adata = _make_trajectory_adata()
         # Set some cells to NaN pseudotime
-        adata.obs["dpt_pseudotime"].iloc[:10] = np.nan
+        # .loc on the frame, not chained .iloc on the column: chained assignment
+        # is a silent no-op under pandas >= 3 (Copy-on-Write).
+        adata.obs.loc[adata.obs.index[:10], "dpt_pseudotime"] = np.nan
         result = trajectory_genes(adata)
         assert len(result) > 0
         # Smoothed layer should have 0 for NaN cells

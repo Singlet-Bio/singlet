@@ -2,6 +2,7 @@
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -322,7 +323,11 @@ int main() {
     std::cout << "========================================\n";
     std::cout << "  MTX Writer Unit Tests\n";
     std::cout << "========================================\n\n";
-    
+
+    // Every test writes into this directory; it does not exist on a fresh CI
+    // runner, and write_mtx() (correctly) refuses to create parent dirs.
+    std::filesystem::create_directories("/tmp/test_mtx_writer");
+
     try {
         test_write_mtx_integer();
         test_write_mtx_float();

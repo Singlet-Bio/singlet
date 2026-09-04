@@ -36,8 +36,11 @@ Thumbs.db
 star/bin/
 star/pgo_profile/
 
-# Pipeline operational state (lives in singlet-agents repo)
-pipeline/
+# Pipeline operational state (lives in singlet-agents repo). Anchored to the
+# repo root so this doesn't also match (and silently swallow new files under)
+# src/pipeline/, data/pipeline/, or python/singlet/pipeline/, which are all
+# real tracked source directories.
+/pipeline/
 src/star/htslib/htslib/
 .coverage
 

@@ -350,7 +350,7 @@ struct EncodedSection {
 // ============================================================================
 // encode_vocsc_section — matches pz_codec.cpp
 // ============================================================================
-static EncodedSection encode_vocsc_section(
+static inline EncodedSection encode_vocsc_section(
     const uint32_t* p_ptr, const uint32_t* i_ptr, const uint32_t* x_ptr,
     uint32_t m, uint32_t n, uint64_t nnz,
     int chunk_cols, int level, int nt)
@@ -541,7 +541,7 @@ static EncodedSection encode_vocsc_section(
 // ============================================================================
 // Metadata serialization
 // ============================================================================
-static void push_strings_tlv(std::vector<uint8_t>& out, uint8_t tag,
+static inline void push_strings_tlv(std::vector<uint8_t>& out, uint8_t tag,
                              const std::vector<std::string>& names) {
     if (names.empty()) return;
     size_t data_sz = 0;
@@ -557,7 +557,7 @@ static void push_strings_tlv(std::vector<uint8_t>& out, uint8_t tag,
 
 /// Serialize a string→string map as META_TAG_USER_KV TLV entry.
 /// Layout: tag(1) + length(4) + [key\0value\0]...
-static void push_kv_tlv(std::vector<uint8_t>& out,
+static inline void push_kv_tlv(std::vector<uint8_t>& out,
                         const std::map<std::string, std::string>& kv) {
     if (kv.empty()) return;
     size_t data_sz = 0;
@@ -647,6 +647,7 @@ bool write_1pz(
     off += fwd.num_chunks * 4;  // chunk table
     for (int c = 0; c < fwd.num_chunks; ++c) off += fwd.blobs[c].size();
     size_t colsums_offset = off; off += colsums_z.size();
+    (void)colsums_offset;
     size_t metadata_offset = off; off += meta_z.size();
     size_t footer_offset = off;
 

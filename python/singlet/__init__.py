@@ -68,7 +68,7 @@ Preprocessing:
     singlet.harmony(adata, "batch")             Batch correction (Harmony)
 """
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
 
 from singlet._aggregate import aggregate
 from singlet._ambient_rna_score import ambient_rna_score

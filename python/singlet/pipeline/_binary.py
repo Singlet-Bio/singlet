@@ -10,7 +10,6 @@ from typing import List, Optional, Sequence, Union
 
 from singlet.pipeline._errors import PipelineError
 
-
 # --------------------------------------------------------------------------
 # Binary discovery
 # --------------------------------------------------------------------------
@@ -81,8 +80,7 @@ def resolve_reference(organism: str, ref_base: Optional[Path]) -> Path:
         base = Path("/mnt/projects/debruinz_project/cellarium/reference")
     if not base.exists():
         raise PipelineError(
-            f"Reference base {base} does not exist. Pass `ref_base=` or set "
-            "$SINGLET_REF_BASE."
+            f"Reference base {base} does not exist. Pass `ref_base=` or set $SINGLET_REF_BASE."
         )
     expected = _ORGANISM_TO_BUILD.get(organism.lower(), organism)
     candidate = base / expected

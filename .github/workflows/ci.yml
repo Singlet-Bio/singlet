@@ -60,7 +60,10 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -e ".[dev]" --quiet
-          pip install hypothesis --quiet
+          # Test-only deps that aren't runtime requirements: test_plot.py imports
+          # matplotlib at collection time (which aborts the whole pytest run under
+          # -x), and the analysis tests exercise scanpy/igraph/leidenalg paths.
+          pip install hypothesis matplotlib scanpy igraph leidenalg --quiet
 
       - name: Run tests
         run: |
@@ -79,9 +82,13 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install dependencies
+        # tests/cpp/CMakeLists.txt requires htslib (pkg-config), zstd, zlib and
+        # OpenMP, and optionally HDF5 (enables the h5ad/loom/molecule_info
+        # tests). Debian/Ubuntu's htslib dev package is `libhts-dev` -- the
+        # previous `libhtslib-dev` name does not exist and failed apt-get.
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y libhtslib-dev libzstd-dev zlib1g-dev libhdf5-dev pkg-config
+          sudo apt-get install -y libhts-dev libzstd-dev zlib1g-dev libhdf5-dev pkg-config
 
       - name: Configure
         run: cmake -B build -DSINGLET_BUILD_TESTS=ON -DSINGLET_BUILD_PIPELINE=OFF

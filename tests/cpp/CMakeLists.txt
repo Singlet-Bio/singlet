@@ -1,12 +1,19 @@
 # C++ unit tests — header-only pileup/pz/fq tests
 # Requires: zstd, zlib, htslib, OpenMP, pthreads
-# Optional: HDF5 (for h5ad/loom/molecule_info tests)
+# Optional: HDF5 >= 1.12 (for h5ad/loom/molecule_info tests; the writers use
+# H5Treclaim, which replaced H5Dvlen_reclaim in 1.12 -- older HDF5 such as
+# Ubuntu 24.04's 1.10.x is skipped rather than failing the build)
 
 include(FindPkgConfig)
 pkg_check_modules(HTSLIB REQUIRED htslib>=1.10)
 find_package(OpenMP REQUIRED)
 find_package(Threads REQUIRED)
-find_package(HDF5 COMPONENTS C)
+find_package(HDF5 1.12 COMPONENTS C)
+if(HDF5_FOUND)
+    message(STATUS "HDF5 ${HDF5_VERSION} found -- building h5ad/loom/molecule_info tests")
+else()
+    message(STATUS "HDF5 >= 1.12 not found -- skipping h5ad/loom/molecule_info tests")
+endif()
 
 enable_testing()
 
@@ -55,7 +62,6 @@ add_pileup_test(test_doublet_scores)
 add_pileup_test(test_saturation_curve)
 add_pileup_test(test_splice_psi)
 add_pileup_test(test_em_rescue)
-add_pileup_test(test_metrics_summary)
 add_pileup_test(test_tpm_fpkm)
 add_pileup_test(test_atac_peaks)
 add_pileup_test(test_protocol_confidence_override)
@@ -181,10 +187,16 @@ add_pileup_test(test_feature_barcode_detect)
 add_pileup_test(test_ram_tier)
 add_pileup_test(test_species_short_r2)
 add_pileup_test(test_whitelist_integrity)
+# The real barcode whitelist files ship with the Python package, not under a
+# repo-root "whitelists/" dir (the compiled-in fallback the test falls back
+# to when this isn't set).
+target_compile_definitions(test_whitelist_integrity PRIVATE
+    WHITELIST_DIR="${CMAKE_SOURCE_DIR}/python/singlet/data/whitelists")
 add_pileup_test(test_ws2_protocol_hardening)
 add_pileup_test(test_ws4_crash_diagnostics)
 
-# HDF5-dependent tests (h5ad, loom, molecule_info)
+# HDF5-dependent tests (h5ad, loom, molecule_info, and anything else that
+# transitively includes export.h -> h5ad_writer.h -> <hdf5.h>)
 if(HDF5_FOUND)
     macro(add_hdf5_test name)
         add_executable(${name} ${name}.cpp)
@@ -198,5 +210,9 @@ if(HDF5_FOUND)
     add_hdf5_test(test_h5ad_writer)
     add_hdf5_test(test_loom_writer)
     add_hdf5_test(test_molecule_info)
+    # Includes singlet/pileup/export.h, which unconditionally includes
+    # h5ad_writer.h -> <hdf5.h>; needs the HDF5 include/link wiring above,
+    # not the plain add_pileup_test() macro.
+    add_hdf5_test(test_metrics_summary)
 endif()
 
