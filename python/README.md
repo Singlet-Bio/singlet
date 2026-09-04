@@ -13,16 +13,16 @@ analysis-ready atlas. You work with two simple things: GEO accession strings
 ## Install
 
 ```bash
-pip install singlet-bio        # the importable package is still `import singlet`
+pip install singlet
 ```
 
 Optional extras:
 
 ```bash
-pip install "singlet-bio[torch]"   # PyTorch DataLoaders
-pip install "singlet-bio[gpu]"     # GPU-accelerated analysis (CUDA 12)
-pip install "singlet-bio[mcp]"     # Model Context Protocol server for AI assistants
-pip install "singlet-bio[all]"     # Everything
+pip install "singlet[torch]"   # PyTorch DataLoaders
+pip install "singlet[gpu]"     # GPU-accelerated analysis (CUDA 12)
+pip install "singlet[mcp]"     # Model Context Protocol server for AI assistants
+pip install "singlet[all]"     # Everything
 ```
 
 ## Quick start
