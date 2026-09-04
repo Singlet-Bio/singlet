@@ -4,9 +4,16 @@ name: Publish to PyPI
 # Triggered by tags v* (e.g. v1.0.0, v1.0.0rc1). For pre-release tags (-rc, -a,
 # -b), publishes to TestPyPI only. For final tags, publishes to PyPI.
 #
-# Required secrets:
-#   PYPI_API_TOKEN       — full PyPI scope-limited token
-#   TEST_PYPI_API_TOKEN  — TestPyPI scope-limited token
+# Authentication: PyPI "Trusted Publishing" (OIDC) -- no long-lived token.
+# On pypi.org (project `singlet`, owner zdebruine) add a trusted publisher:
+#   owner Singlet-Bio, repository singlet, workflow publish-pypi.yml,
+#   environment pypi   (and the same on test.pypi.org with environment testpypi).
+# Then create the `pypi` and `testpypi` environments in the GitHub repo
+# settings (Settings -> Environments); protect `pypi` with a required reviewer
+# if you want a manual approval gate before every release.
+#
+# Wheels: built by wheels.yml via workflow_call so they are artifacts of THIS
+# run (Linux x86_64/aarch64 manylinux_2_28, macOS x86_64/arm64, cp39-cp313).
 
 on:
   push:
@@ -45,22 +52,41 @@ jobs:
           path: dist/*.tar.gz
           retention-days: 7
 
+  build-wheels:
+    name: Build wheels
+    uses: ./.github/workflows/wheels.yml
+
+  target:
+    name: Pick publish target
+    runs-on: ubuntu-latest
+    outputs:
+      name: ${{ steps.pick.outputs.name }}
+    steps:
+      - id: pick
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_TARGET: ${{ inputs.target }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            echo "name=$INPUT_TARGET" >> "$GITHUB_OUTPUT"
+          elif echo "$REF_NAME" | grep -Eq '(rc|a|b|alpha|beta|dev)[0-9]*$'; then
+            # PEP 440 pre-release tag (v2.0.0rc1, v2.0.0b2, ...) -> TestPyPI only
+            echo "name=testpypi" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=pypi" >> "$GITHUB_OUTPUT"
+          fi
+          cat "$GITHUB_OUTPUT"
+
   publish:
-    name: Publish (${{ needs.build-sdist.result == 'success' && 'sdist + wheels' || 'noop' }})
-    needs: [build-sdist]
+    name: Publish sdist + wheels
+    needs: [target, build-sdist, build-wheels]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: read
     environment:
-      # Selects TestPyPI for pre-release tags or manual dispatch with target=testpypi.
-      name: >-
-        ${{ (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi') ||
-            (startsWith(github.ref, 'refs/tags/v') &&
-             !contains(github.ref, '-rc') &&
-             !contains(github.ref, '-a') &&
-             !contains(github.ref, '-b'))
-            && 'pypi' || 'testpypi' }}
+      name: ${{ needs.target.outputs.name }}
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -70,18 +96,24 @@ jobs:
           mkdir -p dist
           find dist-artifacts -type f \( -name "*.tar.gz" -o -name "*.whl" \) -exec cp {} dist/ \;
           ls -la dist/
+      - name: Verify the release contains wheels for every platform
+        run: |
+          set -e
+          ls dist/*.tar.gz
+          for pat in manylinux_2_28_x86_64 manylinux_2_28_aarch64 macosx_.*_x86_64 macosx_.*_arm64; do
+            ls dist/ | grep -Eq "$pat" || { echo "::error::no wheel matching $pat"; exit 1; }
+          done
+          pip install --quiet twine && twine check dist/*
       - name: Publish to TestPyPI
-        if: ${{ contains(fromJSON('["testpypi"]'), job.environment.name) }}
+        if: needs.target.outputs.name == 'testpypi'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
-          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
           packages-dir: dist/
           skip-existing: true
       - name: Publish to PyPI
-        if: ${{ contains(fromJSON('["pypi"]'), job.environment.name) }}
+        if: needs.target.outputs.name == 'pypi'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
           packages-dir: dist/
           skip-existing: false

@@ -2,16 +2,17 @@ name: Build binary wheels (cibuildwheel)
 
 # MVP_ROADMAP.md BLOCKER #5.
 # Builds manylinux + macOS wheels (Linux x86_64/aarch64, macOS x86_64/arm64).
-# Triggered by tags v* (the publish-pypi.yml workflow picks up the resulting
-# wheel artifacts). Also runs on push to main as a smoke build (no publish).
+# Runs on push to main / relevant PRs as a smoke build (no publish), and is
+# *called* by publish-pypi.yml (workflow_call) on release tags so the wheel
+# artifacts land in the publishing run itself -- artifacts are per-run, so a
+# separately-triggered wheels run would not be visible to the publish job.
 #
 # Wheels include the compiled .1pz extension (`_pz.so`) with zstd linked in
 # statically. `auditwheel`/`delocate` is run by cibuildwheel automatically.
 
 on:
+  workflow_call:
   push:
-    tags:
-      - "v*"
     branches:
       - main
   pull_request:
@@ -33,7 +34,10 @@ jobs:
         include:
           - { os: ubuntu-latest, arch: x86_64 }
           - { os: ubuntu-24.04-arm, arch: aarch64 }
-          - { os: macos-13, arch: x86_64 }
+          # GitHub retired the macos-13 (Intel) runner image; jobs requesting it
+          # sit in "Waiting for a runner" forever. macos-15-intel is the
+          # supported Intel label.
+          - { os: macos-15-intel, arch: x86_64 }
           - { os: macos-14, arch: arm64 }
     steps:
       - uses: actions/checkout@v4
