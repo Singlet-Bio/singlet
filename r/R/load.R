@@ -20,6 +20,52 @@
     Sys.getenv("SINGLET_API_BASE", unset = "https://singlet.bio/api")
 }
 
+
+# Package version string for the User-Agent header. The search API recognises
+# the "singlet-r/" prefix and applies the client-library rate limit.
+.singlet_user_agent <- function() {
+    v <- tryCatch(as.character(utils::packageVersion("singlet")),
+                  error = function(e) "0")
+    paste0("singlet-r/", v)
+}
+
+.singlet_key_env <- new.env(parent = emptyenv())
+
+.singlet_api_key <- function() {
+    k <- .singlet_key_env$key
+    if (!is.null(k) && nzchar(k)) return(k)
+    trimws(Sys.getenv("SINGLET_API_KEY", unset = ""))
+}
+
+#' Set the API key used for natural-language search
+#'
+#' Natural-language search (\code{\link{find}}) is AI-interpreted and
+#' rate-limited per client. Heavy use needs an API key created at
+#' \url{https://singlet.bio/account}. The key is sent as a bearer token on
+#' search requests only; downloads and \code{\link{load}} never need one.
+#' When no key has been set with this function, the \code{SINGLET_API_KEY}
+#' environment variable is used.
+#'
+#' @param key Character API key (\code{"sk_live_..."}), or \code{NULL} to
+#'   clear a previously set key.
+#' @return The previously set key (invisibly), or \code{NULL}.
+#' @examples
+#' \dontrun{
+#' set_api_key("sk_live_...")
+#' hits <- find("microglia in the aging mouse brain")
+#' }
+#' @seealso \code{\link{find}}
+#' @export
+set_api_key <- function(key) {
+    old <- .singlet_key_env$key
+    if (is.null(key) || !nzchar(key)) {
+        .singlet_key_env$key <- NULL
+    } else {
+        .singlet_key_env$key <- trimws(as.character(key)[1])
+    }
+    invisible(old)
+}
+
 # Local cache directory for downloaded bundles.
 .singlet_cache_dir <- function(cache_dir = NULL) {
     if (!is.null(cache_dir)) {
@@ -277,14 +323,46 @@ find <- function(query, level = c("gse", "gsm"), limit = 50L) {
 # dependency.
 # ---------------------------------------------------------------------------
 .singlet_http_get <- function(url) {
+    key <- .singlet_api_key()
     if (requireNamespace("curl", quietly = TRUE)) {
-        return(tryCatch(
-            rawToChar(curl::curl_fetch_memory(url)$content),
+        h <- curl::new_handle()
+        headers <- c(
+            "User-Agent" = .singlet_user_agent(),
+            "Accept" = "application/json"
+        )
+        if (nzchar(key)) {
+            headers <- c(headers, "Authorization" = paste("Bearer", key))
+        }
+        do.call(curl::handle_setheaders, c(list(h), as.list(headers)))
+        res <- tryCatch(
+            curl::curl_fetch_memory(url, handle = h),
             error = function(e) {
                 stop(sprintf("search request failed (%s): %s",
                              url, conditionMessage(e)))
             }
-        ))
+        )
+        if (res$status_code == 429L) {
+            stop(paste0(
+                "natural-language search limit reached. Create an API key at ",
+                "https://singlet.bio/account and set SINGLET_API_KEY ",
+                "(or call singlet::set_api_key()) for a higher limit."
+            ))
+        }
+        if (res$status_code %in% c(401L, 403L)) {
+            stop(sprintf(
+                "search request was rejected (HTTP %d); check SINGLET_API_KEY",
+                res$status_code
+            ))
+        }
+        if (res$status_code >= 400L) {
+            stop(sprintf("search request failed (%s): HTTP %d",
+                         url, res$status_code))
+        }
+        return(rawToChar(res$content))
+    }
+    if (nzchar(key)) {
+        warning("SINGLET_API_KEY is set but the 'curl' package is not ",
+                "installed; the key cannot be sent. install.packages(\"curl\")")
     }
     con <- tryCatch(url(url, open = "rb"),
                     error = function(e) {
