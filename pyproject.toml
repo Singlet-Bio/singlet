@@ -40,7 +40,14 @@ dependencies = [
     "tqdm>=4.60",
     "scikit-learn>=1.0",
     "zstandard>=0.20",
-    "pyarrow>=10.0",
+    # Upper-bounded: pyarrow 22+ dropped Python 3.9 wheels, and its manylinux2014
+    # wheels (the base image wheels.yml's cibuildwheel job uses) stop at 21.0.0 --
+    # above that, an unbounded requirement makes pip fall back to a from-source
+    # build inside the manylinux2014 container, which fails there. pyarrow<22
+    # still has prebuilt wheels for every Python version (3.9-3.13) this package
+    # supports. Revisit this bound if the wheel build matrix drops cp39 or moves
+    # off manylinux2014.
+    "pyarrow>=10.0,<22",
 ]
 
 [project.optional-dependencies]
