@@ -59,17 +59,32 @@ jobs:
           # containers nor the macOS runners ship the zstd headers/library,
           # so install them before the extension is compiled; auditwheel /
           # delocate then bundle the shared library into the wheel as usual.
-          CIBW_BEFORE_ALL_LINUX: "(yum install -y zstd-devel || (yum install -y epel-release && yum install -y libzstd-devel)) 2>/dev/null || (apt-get update && apt-get install -y libzstd-dev)"
-          CIBW_BEFORE_ALL_MACOS: "brew install zstd"
-          # `brew install` alone isn't enough on macOS: Homebrew's prefix
-          # (/opt/homebrew on arm64, /usr/local on x86_64) isn't on the
-          # compiler's default search path, so the extension fails with
-          # "zstd.h not found" even though the library is installed. Point
-          # the compiler/linker at it explicitly (distutils/setuptools reads
-          # CPPFLAGS/LDFLAGS from the environment for every extension build).
+          #
+          # Also install HDF5 dev headers: the CIBW_TEST_COMMAND step below
+          # pip-installs the repaired wheel plus its runtime deps inside this
+          # same manylinux2014 container, which transitively pulls in h5py
+          # (via anndata). The cp310 build has been observed falling back to
+          # building h5py from source there (rather than using its published
+          # manylinux2014 wheel) and failing with "Unable to load dependency
+          # HDF5" when no HDF5 dev files are present -- have them available
+          # so that fallback path succeeds instead of hard-failing the job.
+          CIBW_BEFORE_ALL_LINUX: "(yum install -y zstd-devel hdf5-devel || (yum install -y epel-release && yum install -y libzstd-devel hdf5-devel)) 2>/dev/null || (apt-get update && apt-get install -y libzstd-dev libhdf5-dev)"
+          # Don't `brew install zstd` here: Homebrew's prebuilt zstd bottle is
+          # compiled against a much newer macOS SDK than this workflow's
+          # MACOSX_DEPLOYMENT_TARGET (11.0) -- linking the extension against
+          # it dynamically makes delocate reject the wheel ("bundled dylib
+          # has a minimum macOS deployment target of 14.0, but the wheel
+          # targets 11.0"). Build a static libzstd.a from source instead,
+          # with the same deployment target as the extension, and link that
+          # in -- no dylib for delocate to bundle/reject, and no dependency
+          # on whatever OS version Homebrew's bottle happens to target.
+          CIBW_BEFORE_ALL_MACOS: >-
+            curl -fsSL https://github.com/facebook/zstd/releases/download/v1.5.6/zstd-1.5.6.tar.gz -o /tmp/zstd.tar.gz &&
+            tar -xzf /tmp/zstd.tar.gz -C /tmp &&
+            CFLAGS="-mmacosx-version-min=${MACOSX_DEPLOYMENT_TARGET}" make -C /tmp/zstd-1.5.6/lib libzstd.a -j$(sysctl -n hw.ncpu)
           CIBW_ENVIRONMENT_MACOS: >-
-            CPPFLAGS="-I$(brew --prefix zstd)/include"
-            LDFLAGS="-L$(brew --prefix zstd)/lib"
+            CPPFLAGS="-I/tmp/zstd-1.5.6/lib"
+            LDFLAGS="-L/tmp/zstd-1.5.6/lib"
           CIBW_TEST_REQUIRES: pytest
           CIBW_TEST_COMMAND: "python -c 'import singlet; print(singlet.__version__)'"
           MACOSX_DEPLOYMENT_TARGET: "11.0"
