@@ -42,17 +42,11 @@ dependencies = [
     "tqdm>=4.60",
     "scikit-learn>=1.0",
     "zstandard>=0.20",
-    # Upper-bounded: pyarrow 21+ has no manylinux2014 wheel at all (for any
-    # supported Python version) -- only an sdist, which fails to build inside
-    # the manylinux2014 container wheels.yml's cibuildwheel job uses (its CMake
-    # can't find the Arrow C++ dev package needed to compile pyarrow from
-    # source there). pyarrow 20.0.0 is the last release with manylinux2014
-    # wheels, and it covers every Python version (3.9-3.13) this package
-    # supports. (macOS is not a binding constraint here -- real macOS CI
-    # runners resolve much newer pyarrow wheels fine; only manylinux2014
-    # caps this.) Revisit this bound if the wheel build matrix moves off
-    # manylinux2014 (e.g. to manylinux_2_28).
-    "pyarrow>=10.0,<21",
+    # No upper bound. (An earlier `<21` pin existed only because pyarrow 21+
+    # ships manylinux_2_28 wheels rather than manylinux2014 ones, which broke
+    # the wheel *test* container; wheels.yml now builds on manylinux_2_28, so
+    # users are no longer held back from current pyarrow releases.)
+    "pyarrow>=10.0",
 ]
 
 [project.optional-dependencies]
