@@ -45,35 +45,16 @@ class TestWrite1pzUnsFiltering:
         assert loaded.uns["version"] == "1.0"
 
 
-class TestRead1pzFallback:
-    def test_read_1pz_fallback_pz_codec(self, tmp_path):
-        """read_1pz falls back to pz_read when singlepress.read_1pz missing."""
-        from types import ModuleType
-        from unittest.mock import MagicMock, patch
-
-        fake_sp = ModuleType("singlepress")
-        fake_sp._pz_codec = MagicMock()
-        fake_sp._pz_codec.pz_read.return_value = {
-            "m": 3,
-            "n": 4,
-            "values": np.array([1.0, 2.0, 3.0]),
-            "indices": np.array([0, 1, 2]),
-            "indptr": np.array([0, 1, 2, 3, 3]),
-        }
+class TestRead1pzTruncated:
+    def test_read_1pz_truncated_file_raises(self, tmp_path):
+        """A truncated/garbage .1pz raises a clear error instead of crashing."""
+        from singlet._io import read_1pz
 
         fake_file = tmp_path / "fake.1pz"
         fake_file.write_bytes(b"\x00")
 
-        import sys
-
-        with patch.dict(
-            sys.modules,
-            {"singlepress": fake_sp, "singlepress._pz_codec": fake_sp._pz_codec},
-        ):
-            from singlet._io import read_1pz
-
-            adata = read_1pz(str(fake_file))
-            assert adata.shape == (4, 3)
+        with pytest.raises((RuntimeError, ValueError), match="too short|invalid|magic"):
+            read_1pz(str(fake_file))
 
 
 class TestReadWrite1pzValidation:

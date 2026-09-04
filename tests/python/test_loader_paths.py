@@ -20,6 +20,20 @@ def _has_zarr() -> bool:
         return False
 
 
+def _fake_1pz_record(mat, rownames):
+    """Mimic the dict returned by ``singlet._pz.read_1pz`` for a CSC matrix."""
+    mat = sp.csc_matrix(mat)
+    return {
+        "data": mat.data,
+        "indices": mat.indices,
+        "indptr": mat.indptr,
+        "m": mat.shape[0],
+        "n": mat.shape[1],
+        "rownames": list(rownames),
+        "colnames": None,
+    }
+
+
 @pytest.fixture(autouse=True)
 def reset_catalog(monkeypatch):
     """Reset catalog state before each test."""
@@ -408,7 +422,7 @@ class TestLoadSample:
         assert loaded.shape == (5, 7)
 
     def test_load_sample_success(self, tmp_path, monkeypatch):
-        """load_sample reads sample via singlepress.read_1pz_columns."""
+        """load_sample slices the sample's columns out of the study's counts.1pz."""
         from unittest.mock import MagicMock
 
         import singlet._catalog as cat_mod
@@ -428,14 +442,13 @@ class TestLoadSample:
         idx_df.to_parquet(tmp_path / "sample_index.parquet")
         cat_mod.set_catalog_dir(tmp_path)
 
-        # Create mock matrix returned by singlepress
-        mock_mat = sp.random(3, 5, density=0.5, format="csc", dtype=np.float32)
-        mock_mat.rownames = ["G1", "G2", "G3"]
-        mock_mat.colnames = None
-
-        mock_sp = MagicMock()
-        mock_sp.read_1pz_columns.return_value = mock_mat
-        monkeypatch.setitem(__import__("sys").modules, "singlepress", mock_sp)
+        # Mock the in-tree reader: the full study matrix has 15 cell columns and
+        # the sample occupies columns 10..15 (col_offset=10, col_count=5).
+        full = sp.random(3, 15, density=0.5, format="csc", dtype=np.float32)
+        monkeypatch.setattr(
+            "singlet._pz.read_1pz",
+            MagicMock(return_value=_fake_1pz_record(full, ["G1", "G2", "G3"])),
+        )
 
         adata = load_sample("GSM001")
         assert adata.shape == (5, 3)  # transposed: 5 cells × 3 genes
@@ -463,13 +476,11 @@ class TestLoadSample:
         idx_df.to_parquet(tmp_path / "sample_index.parquet")
         cat_mod.set_catalog_dir(tmp_path)
 
-        mock_mat = sp.random(4, 3, density=0.5, format="csc", dtype=np.float32)
-        mock_mat.rownames = ["GeneA", "GeneB", "GeneC", "GeneD"]
-        mock_mat.colnames = None
-
-        mock_sp = MagicMock()
-        mock_sp.read_1pz_columns.return_value = mock_mat
-        monkeypatch.setitem(__import__("sys").modules, "singlepress", mock_sp)
+        full = sp.random(4, 3, density=0.5, format="csc", dtype=np.float32)
+        monkeypatch.setattr(
+            "singlet._pz.read_1pz",
+            MagicMock(return_value=_fake_1pz_record(full, ["GeneA", "GeneB", "GeneC", "GeneD"])),
+        )
 
         adata = load_sample("GSM002", genes=["GeneA", "GeneC"])
         assert adata.shape == (3, 2)  # 3 cells × 2 genes

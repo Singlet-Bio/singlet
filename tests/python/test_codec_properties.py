@@ -10,6 +10,7 @@ import tempfile
 
 import anndata as ad
 import numpy as np
+import pytest
 import scipy.sparse as sp
 import singlet
 from hypothesis import assume, given, settings
@@ -99,15 +100,14 @@ class TestOnePZProperties:
     @given(adata=sparse_adata(max_rows=50, max_cols=20))
     @settings(max_examples=20, deadline=30000)
     def test_transpose_option(self, adata):
-        """write_1pz with store_transpose=True still round-trips."""
+        """store_transpose=True is rejected up front by the in-tree codec (no partial file)."""
         with tempfile.NamedTemporaryFile(suffix=".1pz", delete=False) as f:
             path = f.name
         try:
-            singlet.write_1pz(adata, path, store_transpose=True)
-            loaded = singlet.read_1pz(path)
-            assert loaded.shape == adata.shape
-            diff = abs(adata.X - loaded.X).sum()
-            assert diff == 0.0
+            with pytest.raises(NotImplementedError, match="store_transpose"):
+                singlet.write_1pz(adata, path, store_transpose=True)
+            # Nothing was written: the file is still the empty temp file.
+            assert os.path.getsize(path) == 0
         finally:
             os.unlink(path)
 
