@@ -3,9 +3,11 @@ requires = ["setuptools>=64", "pybind11>=2.11"]
 build-backend = "setuptools.build_meta"
 
 [project]
-# Distribution name on PyPI is "singlet-bio" ("singlet" is taken by an unrelated
-# package); the importable package remains `import singlet`.
-name = "singlet-bio"
+# Distribution name on PyPI is "singlet". The name was previously registered
+# by an unrelated single-cell RNA-seq package (github.com/iosonofabio/singlet);
+# the maintainer (zdebruine) is a co-owner of that PyPI project and publishes
+# this package's releases under the same name going forward.
+name = "singlet"
 version = "1.0.0"
 description = "Open single-cell RNA-seq atlas: find, load, and analyze single-cell data at scale"
 readme = "python/README.md"
@@ -40,14 +42,17 @@ dependencies = [
     "tqdm>=4.60",
     "scikit-learn>=1.0",
     "zstandard>=0.20",
-    # Upper-bounded: pyarrow 22+ dropped Python 3.9 wheels, and its manylinux2014
-    # wheels (the base image wheels.yml's cibuildwheel job uses) stop at 21.0.0 --
-    # above that, an unbounded requirement makes pip fall back to a from-source
-    # build inside the manylinux2014 container, which fails there. pyarrow<22
-    # still has prebuilt wheels for every Python version (3.9-3.13) this package
-    # supports. Revisit this bound if the wheel build matrix drops cp39 or moves
-    # off manylinux2014.
-    "pyarrow>=10.0,<22",
+    # Upper-bounded: pyarrow 21+ has no manylinux2014 wheel at all (for any
+    # supported Python version) -- only an sdist, which fails to build inside
+    # the manylinux2014 container wheels.yml's cibuildwheel job uses (its CMake
+    # can't find the Arrow C++ dev package needed to compile pyarrow from
+    # source there). pyarrow 20.0.0 is the last release with manylinux2014
+    # wheels, and it covers every Python version (3.9-3.13) this package
+    # supports. (macOS is not a binding constraint here -- real macOS CI
+    # runners resolve much newer pyarrow wheels fine; only manylinux2014
+    # caps this.) Revisit this bound if the wheel build matrix moves off
+    # manylinux2014 (e.g. to manylinux_2_28).
+    "pyarrow>=10.0,<21",
 ]
 
 [project.optional-dependencies]
