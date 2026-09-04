@@ -92,7 +92,9 @@ def perturbation_signature(
         raise ValueError(msg)
 
     # --- Extract reference expression ---
-    ref_mask = adata.obs[condition_key] == reference
+    # .to_numpy(): scipy sparse indexing calls ``.nonzero()`` on the mask, which
+    # pandas >= 2.0 removed from Series.
+    ref_mask = (adata.obs[condition_key] == reference).to_numpy()
     X_ref = adata.X[ref_mask]
     if sp.issparse(X_ref):
         X_ref = X_ref.toarray()
@@ -103,7 +105,7 @@ def perturbation_signature(
     uns_dict = {}
 
     for cond in non_ref_conditions:
-        cond_mask = adata.obs[condition_key] == cond
+        cond_mask = (adata.obs[condition_key] == cond).to_numpy()
         X_cond = adata.X[cond_mask]
         if sp.issparse(X_cond):
             X_cond = X_cond.toarray()
