@@ -241,7 +241,9 @@ def _select_variable_genes(adata1, adata2, n_features):
     top_indices = np.argsort(combined_var)[::-1][:n_select]
     top_indices = np.sort(top_indices)
 
-    return adata1.var_names[top_indices].values
+    # A plain object array, not Index.values: under pandas >= 3 that is an
+    # ArrowStringArray, which anndata cannot use as a var index.
+    return np.asarray(adata1.var_names[top_indices], dtype=object)
 
 
 def _compute_variance(mat):
