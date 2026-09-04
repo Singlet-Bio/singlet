@@ -1,0 +1,55 @@
+url: https://singlet-bio.github.io/singlet/r/
+
+template:
+  bootstrap: 5
+  bootswatch: flatly
+
+home:
+  title: singlet — R client for the Singlet single-cell atlas
+  description: >
+    Load, search, and analyze the Singlet single-cell genomics atlas from R.
+
+development:
+  mode: auto
+
+navbar:
+  structure:
+    left: [intro, reference, articles, news]
+    right: [search, github]
+  components:
+    github:
+      icon: fab fa-github fa-lg
+      href: https://github.com/Singlet-Bio/singlet
+      aria-label: GitHub
+
+articles:
+  - title: Articles
+    contents:
+      - quickstart
+      - singlet
+      - interop
+
+reference:
+  - title: Find and load data
+    desc: Search the atlas and load one or more studies into memory in one call.
+    contents:
+      - find_load
+      - find
+      - load
+  - title: Bundle and cohort I/O
+    desc: Lower-level readers for `.singlet` bundles, cohorts, and the underlying sparse-matrix codec.
+    contents:
+      - read_singlet
+      - read_singlet_dir
+      - read_cohort
+      - read_1pz
+      - pz_read_1pz_raw
+      - aggregate_features_to_gene
+  - title: Conversion
+    desc: Convert loaded data to common single-cell container classes.
+    contents:
+      - as_sce
+      - as_seurat
+  - title: Package
+    contents:
+      - singlet-package
