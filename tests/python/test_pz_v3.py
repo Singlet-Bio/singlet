@@ -16,7 +16,12 @@ Tests:
 import numpy as np
 import pytest
 import scipy.sparse as ss
-import singlepress
+
+# These tests exercise the standalone `singlepress` codec package, which is not a
+# dependency of `singlet` and is not installed in CI. Skip the whole module
+# (rather than erroring at collection, which aborts the entire pytest run under
+# -x) when it is absent.
+singlepress = pytest.importorskip("singlepress")
 
 
 @pytest.fixture
