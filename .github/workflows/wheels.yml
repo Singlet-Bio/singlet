@@ -5,8 +5,8 @@ name: Build binary wheels (cibuildwheel)
 # Triggered by tags v* (the publish-pypi.yml workflow picks up the resulting
 # wheel artifacts). Also runs on push to main as a smoke build (no publish).
 #
-# Wheels include the compiled .1pz extension (`_pz.so`) and the bundled zstd.
-# `auditwheel`/`delocate` is run by cibuildwheel automatically.
+# Wheels include the compiled .1pz extension (`_pz.so`) with zstd linked in
+# statically. `auditwheel`/`delocate` is run by cibuildwheel automatically.
 
 on:
   push:
@@ -52,23 +52,32 @@ jobs:
           # Skip pypy + musllinux for MVP. CPython 3.9–3.13 on manylinux/macOS.
           CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-* cp313-*"
           CIBW_SKIP: "pp* *-musllinux_*"
-          CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
-          CIBW_MANYLINUX_AARCH64_IMAGE: manylinux2014
-          # The `singlet._pz` extension links against system zstd
-          # (`setup.py`: `libraries=["zstd"]`). Neither the manylinux2014
-          # containers nor the macOS runners ship the zstd headers/library,
-          # so install them before the extension is compiled; auditwheel /
-          # delocate then bundle the shared library into the wheel as usual.
-          #
-          # Also install HDF5 dev headers: the CIBW_TEST_COMMAND step below
-          # pip-installs the repaired wheel plus its runtime deps inside this
-          # same manylinux2014 container, which transitively pulls in h5py
-          # (via anndata). The cp310 build has been observed falling back to
-          # building h5py from source there (rather than using its published
-          # manylinux2014 wheel) and failing with "Unable to load dependency
-          # HDF5" when no HDF5 dev files are present -- have them available
-          # so that fallback path succeeds instead of hard-failing the job.
-          CIBW_BEFORE_ALL_LINUX: "(yum install -y zstd-devel hdf5-devel || (yum install -y epel-release && yum install -y libzstd-devel hdf5-devel)) 2>/dev/null || (apt-get update && apt-get install -y libzstd-dev libhdf5-dev)"
+          # manylinux_2_28 (glibc >= 2.28: RHEL/Alma 8+, Ubuntu 18.10+,
+          # Debian 10+), not manylinux2014. The CIBW_TEST_COMMAND step below
+          # pip-installs the repaired wheel *plus its runtime dependencies*
+          # inside the build container, and the scientific-Python stack has
+          # moved off manylinux2014: pyarrow 21+ and h5py 3.16+ (pulled in via
+          # anndata) publish manylinux_2_28 wheels only. Inside a manylinux2014
+          # container pip can't use those, so it falls back to their sdists and
+          # tries to compile Arrow / HDF5 from source, which fails. That was a
+          # test-container artifact, not something end users would hit -- but
+          # it also forced an artificial `pyarrow<21` pin on users. 2_28 fixes
+          # both.
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
+          CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
+          # The `singlet._pz` extension links against zstd (`setup.py`:
+          # `libraries=["zstd"]`). Build a static libzstd.a from source (with
+          # -fPIC, since it gets linked into a shared extension module) rather
+          # than depending on whichever distro package/repo the container
+          # happens to have; the extension links it statically, so auditwheel
+          # has no libzstd.so to bundle.
+          CIBW_BEFORE_ALL_LINUX: >-
+            curl -fsSL https://github.com/facebook/zstd/releases/download/v1.5.6/zstd-1.5.6.tar.gz -o /tmp/zstd.tar.gz &&
+            tar -xzf /tmp/zstd.tar.gz -C /tmp &&
+            CFLAGS="-fPIC -O3" make -C /tmp/zstd-1.5.6/lib libzstd.a -j$(nproc)
+          CIBW_ENVIRONMENT_LINUX: >-
+            CPPFLAGS="-I/tmp/zstd-1.5.6/lib"
+            LDFLAGS="-L/tmp/zstd-1.5.6/lib"
           # Don't `brew install zstd` here: Homebrew's prebuilt zstd bottle is
           # compiled against a much newer macOS SDK than this workflow's
           # MACOSX_DEPLOYMENT_TARGET (11.0) -- linking the extension against
