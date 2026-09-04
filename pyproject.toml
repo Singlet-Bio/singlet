@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 # the maintainer (zdebruine) is a co-owner of that PyPI project and publishes
 # this package's releases under the same name going forward.
 name = "singlet"
-version = "1.0.0"
+version = "2.0.0"
 description = "Open single-cell RNA-seq atlas: find, load, and analyze single-cell data at scale"
 readme = "python/README.md"
 license = {text = "MIT"}

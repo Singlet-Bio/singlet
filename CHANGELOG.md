@@ -2,7 +2,7 @@
 
 All notable changes to the singlet project.
 
-## [2.0.0] — Unreleased
+## [2.0.0] — 2026-09-04
 
 ### Breaking Changes
 - **Unified package**: `singlet-bio`, `singlepress`, `singlet-gpu` merged into single `singlet` package
