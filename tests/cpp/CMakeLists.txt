@@ -1,12 +1,19 @@
 # C++ unit tests — header-only pileup/pz/fq tests
 # Requires: zstd, zlib, htslib, OpenMP, pthreads
-# Optional: HDF5 (for h5ad/loom/molecule_info tests)
+# Optional: HDF5 >= 1.12 (for h5ad/loom/molecule_info tests; the writers use
+# H5Treclaim, which replaced H5Dvlen_reclaim in 1.12 -- older HDF5 such as
+# Ubuntu 24.04's 1.10.x is skipped rather than failing the build)
 
 include(FindPkgConfig)
 pkg_check_modules(HTSLIB REQUIRED htslib>=1.10)
 find_package(OpenMP REQUIRED)
 find_package(Threads REQUIRED)
-find_package(HDF5 COMPONENTS C)
+find_package(HDF5 1.12 COMPONENTS C)
+if(HDF5_FOUND)
+    message(STATUS "HDF5 ${HDF5_VERSION} found -- building h5ad/loom/molecule_info tests")
+else()
+    message(STATUS "HDF5 >= 1.12 not found -- skipping h5ad/loom/molecule_info tests")
+endif()
 
 enable_testing()
 
