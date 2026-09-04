@@ -167,7 +167,7 @@ from singlet.pipeline import PipelineError, Run, run as run_pipeline
 from singlet.transcode import transcode_v1_to_v2
 from singlet.manifest import validate_sample
 from singlet.bundle import SingletBundle, pack_gse
-from singlet.find import find, find_load
+from singlet.find import find, find_load, set_api_key
 from singlet.views import gene_counts as view_gene_counts
 from singlet.views import psi as view_psi
 from singlet.views import usa as view_usa
@@ -268,6 +268,7 @@ __all__ = [
     # Find (natural-language search)
     "find",
     "find_load",
+    "set_api_key",
     # Load
     "load",
     "load_sample",

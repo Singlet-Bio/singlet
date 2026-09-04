@@ -9,6 +9,10 @@ AnnData.
 The endpoint is ``GET {API_BASE}/nl-search`` where ``API_BASE`` is
 ``$SINGLET_API_BASE`` (default ``https://singlet.bio/api``). It returns JSON with
 a top-level ``accessions`` array.
+
+Natural-language search is AI-interpreted and rate-limited per client. Heavy
+use needs an API key from https://singlet.bio/account: set ``$SINGLET_API_KEY``
+or call :func:`set_api_key`. Keyword search and downloads never need a key.
 """
 
 from __future__ import annotations
@@ -23,10 +27,50 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import anndata
 
-__all__ = ["find", "find_load"]
+__all__ = ["find", "find_load", "set_api_key"]
 
 _API_BASE_DEFAULT = "https://singlet.bio/api"
-_USER_AGENT = "singlet-find/1"
+
+
+def _user_agent() -> str:
+    # ``singlet-python/<version>``: the search API recognises this prefix and
+    # applies the client-library rate limit instead of the anonymous browser one.
+    try:
+        from importlib.metadata import version
+
+        v = version("singlet")
+    except Exception:  # pragma: no cover - not installed as a distribution
+        v = "0"
+    return f"singlet-python/{v}"
+
+
+_API_KEY: str | None = None
+
+
+def set_api_key(key: str | None) -> None:
+    """Set the API key used for natural-language search (``singlet.find``).
+
+    Keys are created at https://singlet.bio/account. ``None`` clears the key.
+    The ``$SINGLET_API_KEY`` environment variable is used when no key has been
+    set explicitly.
+    """
+    global _API_KEY
+    _API_KEY = key.strip() if isinstance(key, str) and key.strip() else None
+
+
+def _api_key() -> str | None:
+    if _API_KEY:
+        return _API_KEY
+    env = os.environ.get("SINGLET_API_KEY", "").strip()
+    return env or None
+
+
+def _request_headers() -> dict[str, str]:
+    headers = {"User-Agent": _user_agent(), "Accept": "application/json"}
+    key = _api_key()
+    if key:
+        headers["Authorization"] = f"Bearer {key}"
+    return headers
 
 
 class SingletSearchError(RuntimeError):
@@ -77,22 +121,39 @@ def find(query: str, *, level: str = "gsm", limit: int = 50) -> list[str]:
 
     params = {"q": str(query), "level": level, "limit": int(limit)}
     url = f"{_api_base()}/nl-search?{urllib.parse.urlencode(params)}"
-    req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
+    req = urllib.request.Request(url, headers=_request_headers())
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
             payload = json.load(resp)
     except urllib.error.HTTPError as e:
+        detail = ""
+        try:
+            body = json.loads(e.read().decode("utf-8", "replace"))
+            detail = str(body.get("message") or body.get("error") or "")
+        except Exception:
+            pass
+        if e.code == 429:
+            raise SingletSearchError(
+                "Natural-language search limit reached"
+                + (f": {detail}" if detail else "")
+                + ". Create an API key at https://singlet.bio/account and set "
+                "$SINGLET_API_KEY (or call singlet.set_api_key()) for a higher limit."
+            ) from e
+        if e.code in (401, 403):
+            raise SingletSearchError(
+                f"Search request was rejected (HTTP {e.code})"
+                + (f": {detail}" if detail else "")
+                + ". Check $SINGLET_API_KEY / singlet.set_api_key()."
+            ) from e
         raise SingletSearchError(
-            f"Search request failed: {url} → HTTP {e.code}"
+            f"Search request failed: {url} → HTTP {e.code}" + (f" ({detail})" if detail else "")
         ) from e
     except urllib.error.URLError as e:
         raise SingletSearchError(
             f"Could not reach the Singlet search endpoint ({url}): {e.reason}"
         ) from e
     except (ValueError, json.JSONDecodeError) as e:
-        raise SingletSearchError(
-            f"Search endpoint returned an invalid response from {url}"
-        ) from e
+        raise SingletSearchError(f"Search endpoint returned an invalid response from {url}") from e
 
     accessions = payload.get("accessions")
     if accessions is None:
