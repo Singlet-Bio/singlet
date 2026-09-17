@@ -323,6 +323,14 @@ def _get_called_barcodes(out_dir: Path) -> List[str]:
     """Return list of cell barcodes from cell_calls.tsv (is_cell == True)."""
     import pandas as pd
 
+    # The barcode column has been spelled several ways over the pipeline's
+    # history. Accept any of them rather than failing the whole study.
+    def _barcode_column(df):
+        for name in ("barcode", "cb", "cell_barcode", "CB"):
+            if name in df.columns:
+                return name
+        return df.columns[0] if len(df.columns) else None
+
     p = out_dir / "cell_calls.tsv"
     if not p.exists():
         # Fall back: all barcodes from auto_barcodes.tsv
@@ -333,12 +341,15 @@ def _get_called_barcodes(out_dir: Path) -> List[str]:
     df = pd.read_csv(p, sep="\t")
     if len(df) == 0:
         return []
+    col = _barcode_column(df)
+    if col is None:
+        return []
     if "is_cell" in df.columns:
         # Use .loc with explicit bool cast to avoid pandas object-dtype Series
         # being misinterpreted as a column selector on empty DataFrames.
         mask = df["is_cell"].astype(bool)
-        return list(df.loc[mask, "barcode"])
-    return list(df["barcode"])
+        return list(df.loc[mask, col])
+    return list(df[col])
 
 
 def _build_feature_vocab(out_dir: Path) -> dict:
@@ -503,9 +514,23 @@ def pack_gse(
     if gse_rows.empty:
         raise ValueError(f"GSE {gse_id!r} not found in catalog")
 
-    # Find done GSMs (have pileup_stats.json)
+    # Find done GSMs. pileup_stats.json is the cheap positive signal and is
+    # only written once real data exists. Older runs predate it, so fall back to
+    # summary.json — but only when it reports success: a sample can finish with
+    # status "data_incomplete" having written nothing but summary.json, and
+    # treating those as done fails the whole study later on a missing gene table.
     def _is_done(gsm: str) -> bool:
-        return (results_dir / gsm / "out" / "pileup_stats.json").exists()
+        out = results_dir / gsm / "out"
+        if (out / "pileup_stats.json").exists():
+            return True
+        summary_path = out / "summary.json"
+        if not summary_path.exists():
+            return False
+        try:
+            with open(summary_path) as fh:
+                return json.load(fh).get("status") == "success"
+        except (OSError, ValueError):
+            return False
 
     gse_rows["_done"] = gse_rows["gsm_id"].apply(_is_done)
     done_rows = gse_rows[gse_rows["_done"]]
@@ -527,9 +552,23 @@ def pack_gse(
         print(f"[pack_gse] Enriched metadata: {len(gsm_enriched)} GSMs enriched, "
               f"{len(publications)} publications")
 
-    # ---- Build feature_vocab from first GSM ----------------------------
-    first_out = results_dir / gsm_ids[0] / "out"
-    feature_vocab = _build_feature_vocab(first_out)
+    # ---- Build feature_vocab from the first usable GSM -------------------
+    # Not every done GSM writes gene_expression.tsv (a sample can finish the
+    # pileup and still produce no gene table). Trying only gsm_ids[0] meant one
+    # such sample failed the entire study, so walk until one works.
+    feature_vocab = None
+    vocab_errors = []
+    for gsm in gsm_ids:
+        try:
+            feature_vocab = _build_feature_vocab(results_dir / gsm / "out")
+            break
+        except (FileNotFoundError, ValueError, KeyError) as e:
+            vocab_errors.append(f"{gsm}: {e}")
+    if feature_vocab is None:
+        raise ValueError(
+            f"Could not build feature_vocab for {gse_id} from any of "
+            f"{len(gsm_ids)} done GSMs: " + "; ".join(vocab_errors[:5])
+        )
     gene_order = [g["gene_id"] for g in feature_vocab["genes"]]
     feature_vocab_bytes = json.dumps(feature_vocab, indent=2).encode()
     if verbose:
