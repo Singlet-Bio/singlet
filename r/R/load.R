@@ -137,6 +137,33 @@ set_api_key <- function(key) {
 }
 
 
+#' Download a `.singlet` bundle and return its local path
+#'
+#' Fetches a study's bundle into the local cache (or reuses it if already
+#' there) and returns the path, without reading it. Use this when you want
+#' to reach individual modalities with \code{\link{singlet_read}} or
+#' \code{\link{singlet_raw_counts}} rather than load the whole study.
+#'
+#' @param accession A GEO Series accession (\code{"GSE..."}). A sample
+#'   accession (\code{"GSM..."}) resolves to its parent series.
+#' @param cache_dir Directory in which to cache the bundle. Defaults to
+#'   \code{tools::R_user_dir("singlet", "cache")}, overridable with the
+#'   \code{SINGLET_CACHE_DIR} environment variable.
+#' @return The path to the local `.singlet` file.
+#'
+#' @examples
+#' \dontrun{
+#' path <- download("GSE149298")
+#' singlet_modalities(path)
+#' }
+#'
+#' @seealso \code{\link{load}}, \code{\link{singlet_modalities}}
+#' @export
+download <- function(accession, cache_dir = NULL) {
+    .singlet_fetch_bundle(as.character(accession)[[1L]], cache_dir = cache_dir)
+}
+
+
 # ---------------------------------------------------------------------------
 # load — the primary user-facing entry point.
 # ---------------------------------------------------------------------------

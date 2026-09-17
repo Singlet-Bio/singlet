@@ -11,7 +11,9 @@ read_singlet(path)
 }
 \value{
 A \code{SingleCellExperiment} with one column per called cell
-  (named \code{<GSM>_<barcode>}) and one row per gene. \code{colData}
+  (named \code{<GSM>_<barcode>}) and one row per gene. Assays are
+  \code{counts} (exonic + intronic), \code{spliced} (exonic) and
+  \code{unspliced} (intronic). \code{colData}
   carries per-sample metadata; \code{metadata(sce)} carries the bundle's
   parsed \code{manifest} and \code{study_meta}.
 }
@@ -39,5 +41,6 @@ table(sce$gsm_id)
 
 }
 \seealso{
-\code{\link{load}}, \code{\link{find}}
+\code{\link{load}}, \code{\link{find}},
+  \code{\link{singlet_modalities}}, \code{\link{singlet_read}}
 }

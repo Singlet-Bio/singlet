@@ -123,6 +123,12 @@
     colnames(gene_mat) <- all_bcs
     rownames(gene_mat) <- gene_ids
 
+    zero <- Matrix::sparseMatrix(i = integer(0), j = integer(0), x = numeric(0),
+                                 dims = c(length(gene_ids), length(all_bcs)))
+    spliced_g <- if (is.null(exon_g)) zero else exon_g
+    unspliced_g <- if (is.null(intron_g)) zero else intron_g
+    dimnames(spliced_g) <- dimnames(unspliced_g) <- list(gene_ids, all_bcs)
+
     # Restrict to called cells if cell_calls.tsv is present and non-empty.
     cc_path <- file.path(sample_dir, "cell_calls.tsv")
     called <- NULL
@@ -149,6 +155,8 @@
             return(NULL)
         }
         gene_mat <- gene_mat[, keep, drop = FALSE]
+        spliced_g <- spliced_g[, keep, drop = FALSE]
+        unspliced_g <- unspliced_g[, keep, drop = FALSE]
         all_bcs <- keep
     }
 
@@ -157,7 +165,12 @@
     }
 
     gene_mat <- methods::as(gene_mat, "CsparseMatrix")
-    list(matrix = gene_mat, barcodes = all_bcs)
+    list(
+        matrix = gene_mat,
+        spliced = methods::as(spliced_g, "CsparseMatrix"),
+        unspliced = methods::as(unspliced_g, "CsparseMatrix"),
+        barcodes = all_bcs
+    )
 }
 
 
@@ -182,7 +195,9 @@
 #'
 #' @param path Path to a local `.singlet` file.
 #' @return A \code{SingleCellExperiment} with one column per called cell
-#'   (named \code{<GSM>_<barcode>}) and one row per gene. \code{colData}
+#'   (named \code{<GSM>_<barcode>}) and one row per gene. Assays are
+#'   \code{counts} (exonic + intronic), \code{spliced} (exonic) and
+#'   \code{unspliced} (intronic). \code{colData}
 #'   carries per-sample metadata; \code{metadata(sce)} carries the bundle's
 #'   parsed \code{manifest} and \code{study_meta}.
 #'
@@ -193,7 +208,8 @@
 #' table(sce$gsm_id)
 #' }
 #'
-#' @seealso \code{\link{load}}, \code{\link{find}}
+#' @seealso \code{\link{load}}, \code{\link{find}},
+#'   \code{\link{singlet_modalities}}, \code{\link{singlet_read}}
 #' @export
 read_singlet <- function(path) {
     path <- path.expand(as.character(path))
@@ -233,14 +249,21 @@ read_singlet <- function(path) {
     gsm_meta_map <- if (!is.null(study_meta)) study_meta$gsm_meta else NULL
 
     mats <- list()
+    spliced_mats <- list()
+    unspliced_mats <- list()
     coldata_rows <- list()
     for (gsm in gsm_ids) {
         loaded <- .bundle_load_gsm(extract_dir, gsm, gene_ids)
         if (is.null(loaded)) next
         mat <- loaded$matrix
         bcs <- loaded$barcodes
-        colnames(mat) <- paste0(gsm, "_", bcs)
+        cell_names <- paste0(gsm, "_", bcs)
+        colnames(mat) <- cell_names
         mats[[gsm]] <- mat
+        colnames(loaded$spliced) <- cell_names
+        colnames(loaded$unspliced) <- cell_names
+        spliced_mats[[gsm]] <- loaded$spliced
+        unspliced_mats[[gsm]] <- loaded$unspliced
 
         info <- if (!is.null(gsm_meta_map) && gsm %in% names(gsm_meta_map)) {
             gsm_meta_map[[gsm]]
@@ -256,6 +279,8 @@ read_singlet <- function(path) {
 
     X <- do.call(cbind, unname(mats))
     X <- methods::as(X, "CsparseMatrix")
+    spliced <- methods::as(do.call(cbind, unname(spliced_mats)), "CsparseMatrix")
+    unspliced <- methods::as(do.call(cbind, unname(unspliced_mats)), "CsparseMatrix")
     coldata <- do.call(rbind, unname(coldata_rows))
     rownames(coldata) <- colnames(X)
 
@@ -263,7 +288,7 @@ read_singlet <- function(path) {
     rownames(rowdata) <- gene_ids
 
     sce <- SingleCellExperiment::SingleCellExperiment(
-        assays = list(counts = X),
+        assays = list(counts = X, spliced = spliced, unspliced = unspliced),
         colData = S4Vectors::DataFrame(coldata, check.names = FALSE),
         rowData = rowdata
     )

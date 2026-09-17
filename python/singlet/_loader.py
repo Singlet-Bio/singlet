@@ -198,6 +198,54 @@ def download(
     return dest
 
 
+def open_bundle(source: str | Path, *, force: bool = False):
+    """Open a study's ``.singlet`` bundle for modality-level access.
+
+    :func:`load` gives you the assembled gene-count AnnData. ``open_bundle``
+    gives you the file itself, so you can reach every other modality the
+    pipeline produced for each sample — mitochondrial heteroplasmy, donor
+    demultiplexing, non-host species, splice junctions, V(D)J usage and the
+    per-feature (pre-aggregation) count matrices.
+
+    Parameters
+    ----------
+    source : str or Path
+        A GEO series accession (``"GSE178957"``) or a local ``.singlet`` path.
+        Accessions are downloaded to the cache on first use.
+    force : bool
+        Re-download even if the bundle is already cached.
+
+    Returns
+    -------
+    singlet.SingletBundle
+
+    Examples
+    --------
+    >>> import singlet
+    >>> b = singlet.open_bundle("GSE178957")        # doctest: +SKIP
+    >>> b.modalities()                              # doctest: +SKIP
+    >>> b.raw_counts(b.gsm_ids[0])                  # doctest: +SKIP
+    >>> b.mt_variants(b.gsm_ids[0])                 # doctest: +SKIP
+    """
+    from singlet.bundle import SingletBundle
+
+    path = Path(str(source)).expanduser()
+    if path.exists():
+        return SingletBundle.open(path)
+
+    accession = str(source).strip().upper()
+    if accession.startswith("GSM"):
+        parent = _resolve_gsm_to_gse(accession)
+        if parent is None:
+            raise ValueError(f"Could not resolve {accession} to a parent GSE")
+        accession = parent
+    if not accession.startswith("GSE"):
+        raise ValueError(
+            f"open_bundle() expects a GSE/GSM accession or a .singlet path, got {source!r}"
+        )
+    return SingletBundle.open(download(accession, force=force))
+
+
 def load(
     source: str | Path | Sequence[str | Path],
     *,

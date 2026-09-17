@@ -166,14 +166,14 @@ from singlet.fetch import fetch, default_cache_dir, default_base_url
 from singlet.pipeline import PipelineError, Run, run as run_pipeline
 from singlet.transcode import transcode_v1_to_v2
 from singlet.manifest import validate_sample
-from singlet.bundle import SingletBundle, pack_gse
+from singlet.bundle import MODALITIES, SingletBundle, pack_gse
 from singlet.find import find, find_load, set_api_key
 from singlet.views import gene_counts as view_gene_counts
 from singlet.views import psi as view_psi
 from singlet.views import usa as view_usa
 from singlet._knn_impute import knn_impute
 from singlet._leiden import leiden
-from singlet._loader import download, load, load_dir, load_sample
+from singlet._loader import download, load, load_dir, load_sample, open_bundle
 from singlet._louvain import louvain
 from singlet._magic import magic
 from singlet._marker_overlap import marker_gene_overlap
@@ -275,6 +275,8 @@ __all__ = [
     "load_dir",
     "download",
     "SingletBundle",
+    "MODALITIES",
+    "open_bundle",
     # Annotation (free, local)
     "gene_programs",
     "project",
