@@ -96,7 +96,9 @@ def run_qc(
     else:
         mat = sp.csr_matrix(mat)
 
-    n_cells, n_genes = mat.shape
+    # Indexed rather than unpacked: scipy's untyped `shape` property is
+    # inferred as Optional, which pyright refuses to unpack.
+    n_cells, n_genes = mat.shape[0], mat.shape[1]
     genes_per_cell = np.diff(mat.indptr)  # nnz per row ≈ genes per cell
     counts_per_cell = np.array(mat.sum(axis=1)).flatten()
 
