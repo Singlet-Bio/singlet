@@ -230,7 +230,8 @@ from singlet._velocity_pseudotime import velocity_pseudotime
 from singlet._versions import show_versions
 from singlet._weighted_nearest_neighbors import weighted_nearest_neighbors
 from singlet._wishart import wishart_test
-from singlet.bundle import MODALITIES, SingletBundle, pack_gse
+from singlet.bundle import MODALITIES, SingletBundle
+from singlet.bundle import pack_gse as pack_gse  # bundle packing (cluster use); not in __all__
 from singlet.convert import (
     from_h5ad,
     from_mtx,
