@@ -2,17 +2,19 @@
 
 ## Python
 
-Wheels are not published to PyPI yet. Install from GitHub:
+Wheels are not published to PyPI yet. Install from GitHub (after the first
+release: `pip install singlet-bio`). The distribution is named `singlet-bio`
+because `singlet` on PyPI is an unrelated project; you still `import singlet`.
 
 ```bash
 # Core package: find/load studies as AnnData, .1pz I/O, catalog snapshot
-pip install "singlet @ git+https://github.com/Singlet-Bio/singlet"
+pip install "singlet-bio @ git+https://github.com/Singlet-Bio/singlet"
 
 # Optional extras use the same URL
-pip install "singlet[analysis] @ git+https://github.com/Singlet-Bio/singlet"  # matplotlib, scanpy, statsmodels, igraph, leidenalg
-pip install "singlet[torch] @ git+https://github.com/Singlet-Bio/singlet"     # PyTorch DataLoaders
-pip install "singlet[zarr] @ git+https://github.com/Singlet-Bio/singlet"      # Zarr export/import
-pip install "singlet[mcp] @ git+https://github.com/Singlet-Bio/singlet"       # local MCP server (singlet-mcp)
+pip install "singlet-bio[analysis] @ git+https://github.com/Singlet-Bio/singlet"  # matplotlib, scanpy, statsmodels, igraph, leidenalg
+pip install "singlet-bio[torch] @ git+https://github.com/Singlet-Bio/singlet"     # PyTorch DataLoaders
+pip install "singlet-bio[zarr] @ git+https://github.com/Singlet-Bio/singlet"      # Zarr export/import
+pip install "singlet-bio[mcp] @ git+https://github.com/Singlet-Bio/singlet"       # local MCP server (singlet-mcp)
 ```
 
 Installing from source compiles the `.1pz` codec extension, which needs:
@@ -30,7 +32,7 @@ Check the install:
 python -m singlet        # prints the version and live catalog totals
 ```
 
-The GPU module (`singlet.gpu`) is experimental. `singlet[gpu]` installs only
+The GPU module (`singlet.gpu`) is experimental. `singlet-bio[gpu]` installs only
 CuPy; the CUDA extension (`singlet.gpu._core`) must be built from source on a
 CUDA 12 machine and is not produced by `pip install`.
 

@@ -3,11 +3,11 @@ requires = ["setuptools>=64", "pybind11>=2.11"]
 build-backend = "setuptools.build_meta"
 
 [project]
-# Distribution name on PyPI is "singlet". The name was previously registered
-# by an unrelated single-cell RNA-seq package (github.com/iosonofabio/singlet);
-# the maintainer (zdebruine) is a co-owner of that PyPI project and publishes
-# this package's releases under the same name going forward.
-name = "singlet"
+# Distribution name on PyPI is "singlet-bio": "singlet" on PyPI is an
+# unrelated 2017 project (github.com/iosonofabio/singlet, Fabio Zanini).
+# The import name is unchanged: `pip install singlet-bio`, then `import singlet`.
+# Wheels and sdists are named singlet_bio-<version>-*.whl / singlet_bio-<version>.tar.gz.
+name = "singlet-bio"
 version = "2.0.0"
 description = "Open single-cell RNA-seq atlas: find, load, and analyze single-cell data at scale"
 readme = "python/README.md"
@@ -65,17 +65,17 @@ analysis = [
     "igraph>=0.10",
     "leidenalg>=0.9",
 ]
-all = ["singlet[torch,gpu,zarr,tiledb,mcp,analysis]"]
+all = ["singlet-bio[torch,gpu,zarr,tiledb,mcp,analysis]"]
 # Everything the Python test suite imports.
 test = [
     "pytest>=7.0",
     "pytest-cov",
     "coverage>=7.0",
     "hypothesis>=6.0",
-    "singlet[analysis]",
+    "singlet-bio[analysis]",
 ]
 dev = [
-    "singlet[test]",
+    "singlet-bio[test]",
     "ruff",
     "pyright",
     "pybind11>=2.11",

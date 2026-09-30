@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib
+import importlib.metadata
 import io
 import json
 import urllib.error
@@ -162,3 +163,34 @@ class TestOffline:
     def test_falsy(self, monkeypatch, value):
         monkeypatch.setenv("SINGLET_OFFLINE", value)
         assert not find_mod._offline()
+
+
+def _versions(**installed):
+    """importlib.metadata.version stand-in that knows only *installed*."""
+
+    def fake(dist):
+        if dist in installed:
+            return installed[dist]
+        raise importlib.metadata.PackageNotFoundError(dist)
+
+    return fake
+
+
+class TestPackageVersion:
+    """The distribution is "singlet-bio"; "singlet" is the pre-rename name."""
+
+    def test_prefers_the_singlet_bio_distribution(self):
+        fake = _versions(**{"singlet-bio": "9.9.9", "singlet": "1.0.0"})
+        with patch("importlib.metadata.version", side_effect=fake):
+            assert find_mod._package_version() == "9.9.9"
+            assert find_mod._user_agent() == "singlet-python/9.9.9"
+
+    def test_falls_back_to_the_pre_rename_distribution(self):
+        with patch("importlib.metadata.version", side_effect=_versions(singlet="1.2.3")):
+            assert find_mod._package_version() == "1.2.3"
+
+    def test_source_checkout_uses_the_package_version(self):
+        import singlet
+
+        with patch("importlib.metadata.version", side_effect=_versions()):
+            assert find_mod._package_version() == singlet.__version__

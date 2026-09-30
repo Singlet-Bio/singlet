@@ -16,7 +16,7 @@ The singlet GPU module is a header-only C++20/CUDA library with Python (pybind11
 ## Python
 
 ```bash
-pip install singlet[gpu]
+pip install singlet-bio[gpu]
 ```
 
 Requires:
@@ -82,7 +82,7 @@ System Python is often older. Always load a supported Python via lmod/Spack:
 module load python/3.11
 export PATH=/usr/local/cuda/bin:$PATH
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
-pip install singlet[gpu]
+pip install singlet-bio[gpu]
 ```
 
 ## Verifying the install

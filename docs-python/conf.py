@@ -13,9 +13,16 @@ project = "singlet"
 author = "Zach DeBruine"
 copyright = "2026, Zach DeBruine"
 
-try:
-    release = importlib.metadata.version("singlet")
-except importlib.metadata.PackageNotFoundError:
+# The distribution is "singlet-bio" ("singlet" on PyPI is an unrelated
+# project); "singlet" covers installs made before the rename.
+release = None
+for _dist in ("singlet-bio", "singlet"):
+    try:
+        release = importlib.metadata.version(_dist)
+        break
+    except importlib.metadata.PackageNotFoundError:
+        continue
+if release is None:
     # Building from a checkout without installing: read the version the
     # package itself declares rather than a hard-coded (stale) number.
     import re
@@ -51,7 +58,7 @@ autodoc_default_options = {
 autodoc_member_order = "bysource"
 
 # GPU (`singlet.gpu`), PyTorch (`singlet.torch`) and MCP (`singlet.mcp`)
-# are opt-in extras (`pip install singlet[gpu|torch|mcp]`) and are not
+# are opt-in extras (`pip install singlet-bio[gpu|torch|mcp]`) and are not
 # imported by `import singlet` itself, so the docs build's base install
 # doesn't have them. Individual analysis functions in the base package also
 # lazily import third-party algorithm packages (leidenalg, umap-learn,

@@ -133,6 +133,16 @@ class TestAssembly:
         assert len(checksums["path"]) == len(checksums["sha256"])
         assert not any("/" in k for k in adata.uns["manifest"])
 
+    def test_study_meta_keeps_keys_whose_value_is_none(self, adata):
+        gsm_meta = adata.uns["study_meta"]["gsm_meta"][GOOD]
+        assert "mapping_rate" in gsm_meta
+        assert gsm_meta["mapping_rate"] is None
+        assert gsm_meta["organism"] == "Homo sapiens"
+
+    def test_publications_are_json_text_that_decodes_to_the_records(self, adata):
+        pubs = json.loads(adata.uns["study_meta"]["publications"])
+        assert pubs == [{"pmid": "1", "title": "A paper"}]
+
 
 class TestExport:
     def test_h5ad_round_trip(self, adata, tmp_path):

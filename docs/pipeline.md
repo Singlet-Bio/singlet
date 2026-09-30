@@ -8,11 +8,11 @@ The same entry point is available from Python and the command line.
 ## Install
 
 ```bash
-pip install "singlet @ git+https://github.com/Singlet-Bio/singlet"
+pip install "singlet-bio @ git+https://github.com/Singlet-Bio/singlet"
 ```
 
 The Python wrapper invokes the C++ pipeline binary, which is **not** included
-in the Python package (there is no `singlet[pipeline]` extra). Build it once:
+in the Python package (there is no `singlet-bio[pipeline]` extra). Build it once:
 
 ```bash
 cmake -B build -DSINGLET_BUILD_PIPELINE=ON -DCMAKE_BUILD_TYPE=Release

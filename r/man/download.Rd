@@ -12,7 +12,9 @@ singlet_download(accession, cache_dir = NULL)
 \arguments{
 \item{accession}{A GEO Series accession (\code{"GSE..."}). A sample
 accession (\code{"GSM..."}) is resolved to its parent Series through the
-Singlet API, and the whole Series bundle is downloaded.}
+Singlet API, and the whole Series bundle is downloaded. The mapping is
+remembered in the cache directory, so a sample whose Series is already
+cached needs no network in later sessions.}
 
 \item{cache_dir}{Directory in which to cache the bundle. Defaults to
 \code{tools::R_user_dir("singlet", "cache")}, overridable with the
@@ -33,7 +35,9 @@ Bundles are fetched from \code{<base>/data/<GSE>/<GSE>.singlet}, where
 \code{<base>} is the \code{SINGLET_DATA_BASE} environment variable
 (default \code{https://data.singlet.bio}; a value ending in \code{/data}
 is accepted). \code{GSM} accessions are resolved with the API named by
-\code{SINGLET_API_BASE} (default \code{https://singlet.bio/api}).
+\code{SINGLET_API_BASE} (default \code{https://singlet.bio/api}); each
+answer is saved in \code{gsm_parents.tsv} in the cache directory, and when
+the API cannot be reached the cached bundles are searched for the sample.
 }
 \examples{
 \dontrun{

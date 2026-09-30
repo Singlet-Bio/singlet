@@ -7,8 +7,8 @@ catalog of re-processed GEO studies.
 **One repository. Three languages.**
 
 ```bash
-# Python — from GitHub until wheels are published to PyPI
-pip install "singlet @ git+https://github.com/Singlet-Bio/singlet"
+# Python — from GitHub until the first PyPI release (then: pip install singlet-bio)
+pip install "singlet-bio @ git+https://github.com/Singlet-Bio/singlet"
 ```
 ```r
 remotes::install_github("Singlet-Bio/singlet", subdir = "r")  # R
@@ -16,6 +16,10 @@ remotes::install_github("Singlet-Bio/singlet", subdir = "r")  # R
 ```cmake
 find_package(Singlet REQUIRED)         # C++
 ```
+
+The PyPI distribution is named **`singlet-bio`** (`singlet` on PyPI is an
+unrelated project); the import name is still `singlet`. Once the first
+release is published, the install is `pip install singlet-bio`.
 
 Installing the Python package from source compiles a small C++ extension (the
 `.1pz` codec), so you need a **C++17 compiler** and **zstd** headers + library
@@ -105,19 +109,21 @@ singlet/
 
 ## Installation
 
-See [docs/installation.md](docs/installation.md) for full details.
+See [docs/installation.md](docs/installation.md) for full details. The Python
+distribution is `singlet-bio` (after the first PyPI release:
+`pip install singlet-bio`); the import name is `singlet`.
 
 | Install | Command |
 |---------|---------|
-| Python (core) | `pip install "singlet @ git+https://github.com/Singlet-Bio/singlet"` |
-| Python + analysis extras | `pip install "singlet[analysis] @ git+https://github.com/Singlet-Bio/singlet"` |
-| Python + PyTorch | `pip install "singlet[torch] @ git+https://github.com/Singlet-Bio/singlet"` |
-| Python + local MCP server | `pip install "singlet[mcp] @ git+https://github.com/Singlet-Bio/singlet"` |
+| Python (core) | `pip install "singlet-bio @ git+https://github.com/Singlet-Bio/singlet"` |
+| Python + analysis extras | `pip install "singlet-bio[analysis] @ git+https://github.com/Singlet-Bio/singlet"` |
+| Python + PyTorch | `pip install "singlet-bio[torch] @ git+https://github.com/Singlet-Bio/singlet"` |
+| Python + local MCP server | `pip install "singlet-bio[mcp] @ git+https://github.com/Singlet-Bio/singlet"` |
 | R | `remotes::install_github("Singlet-Bio/singlet", subdir = "r")` |
 | C++ (CMake) | `find_package(Singlet COMPONENTS pz fq pileup)` |
 | Pipeline binary | `cmake -B build -DSINGLET_BUILD_PIPELINE=ON` |
 
-The GPU module (`singlet.gpu`) is experimental: `singlet[gpu]` only installs
+The GPU module (`singlet.gpu`) is experimental: `singlet-bio[gpu]` only installs
 CuPy, and the CUDA extension it needs must be built from source on a CUDA 12
 machine.
 
@@ -127,7 +133,7 @@ There are two, and they are different:
 
 - **Hosted:** `https://singlet.bio/mcp` — the live catalog, maintained by the
   site. Point an MCP client at the URL; nothing to install.
-- **Local:** `singlet-mcp` (from `singlet[mcp]`) — 12 tools over the offline
+- **Local:** `singlet-mcp` (from `singlet-bio[mcp]`) — 12 tools over the offline
   catalog snapshot bundled with the package plus live search. The old command
   name `singlet` still starts it but is deprecated, because `singlet` is also
   the pipeline binary's name.

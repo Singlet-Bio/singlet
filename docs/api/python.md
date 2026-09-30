@@ -1,7 +1,8 @@
 # Python API Reference
 
-Install: `pip install "singlet @ git+https://github.com/Singlet-Bio/singlet"`
-(needs a C++17 compiler and zstd; see [installation](../installation.md)).
+Install: `pip install "singlet-bio @ git+https://github.com/Singlet-Bio/singlet"`
+(needs a C++17 compiler and zstd; see [installation](../installation.md)). After
+the first PyPI release: `pip install singlet-bio`. The import name is `singlet`.
 
 ## Package: `singlet`
 
@@ -97,14 +98,14 @@ These targeted hosts that were never brought into service and now raise
 |------|-------------|-------------|
 | `gene_programs`, `project`, `annotate` | models.singlet.bio | `annotate_cell_types`, `predict_cell_type` |
 | `query`, `search`, `login` | api.singlet.bio/v1 | `find` + `load`; `set_api_key` |
-| `fetch()` without `base_url` | data.singlet.bio/v1 | `load`, `download`, `open_bundle` (`fetch(base_url=...)` still works against a mirror) |
+| `fetch()` without a mirror | data.singlet.bio/v1 | `load`, `download`, `open_bundle` (`fetch()` still works against a mirror given as `base_url=` or `$SINGLET_SAMPLE_MIRROR`) |
 | `singlet.atlas.*` | r2.singlet.bio | `catalog`, `info`, `find` |
 
 ---
 
 ## Module: `singlet.torch`
 
-PyTorch integration (`singlet[torch]`).
+PyTorch integration (`singlet-bio[torch]`).
 
 ```python
 from singlet.torch import SingletDataset, DataLoader, to_sparse_csr, from_anndata
@@ -123,7 +124,7 @@ from singlet.torch import SingletDataset, DataLoader, to_sparse_csr, from_anndat
 
 ## Module: `singlet.gpu` (experimental)
 
-`singlet[gpu]` installs CuPy only. The CUDA extension the module needs
+`singlet-bio[gpu]` installs CuPy only. The CUDA extension the module needs
 (`singlet.gpu._core`) is not built by `pip install`; see
 [the GPU install notes](../install.md). The submodules
 (`singlet.gpu.preprocess`, `.reduce`, `.tools`, `.de`, ...) are importable for
@@ -134,7 +135,7 @@ tooling, but their functions require that extension.
 ## Module: `singlet.mcp`
 
 The **local** MCP (Model Context Protocol) server, installed with
-`singlet[mcp]`:
+`singlet-bio[mcp]`:
 
 ```bash
 singlet-mcp            # stdio server (same as: python -m singlet.mcp)
@@ -180,6 +181,7 @@ from singlet.pp import download_fastq, detect_protocol, quantify, run_qc
 | `singlet.show_versions()` | Print version info for bug reports |
 | `python -m singlet` | Version plus live catalog totals (snapshot summary when offline) |
 | `SINGLET_DATA_BASE` | Bundle host: files at `<base>/data/<GSE>/<GSE>.singlet` (default `https://data.singlet.bio`; a trailing `/data` is accepted) |
+| `SINGLET_SAMPLE_MIRROR` | Self-hosted mirror of per-sample directories for `fetch()` / `open()` and `default_base_url()` (no public default; `SINGLET_DATA_BASE` is still read there as a deprecated fallback) |
 | `SINGLET_API_BASE` | REST API base (default `https://singlet.bio/api`) |
 | `SINGLET_CACHE_DIR` | Download cache (default `~/.singlet/cache`) |
 | `SINGLET_API_KEY` | Optional natural-language search key |

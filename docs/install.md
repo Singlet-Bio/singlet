@@ -18,12 +18,12 @@ For everyday use you do not need any of this — loading studies
 with the normal install:
 
 ```bash
-pip install "singlet @ git+https://github.com/Singlet-Bio/singlet"
+pip install "singlet-bio @ git+https://github.com/Singlet-Bio/singlet"
 ```
 
-## What `singlet[gpu]` does today
+## What `singlet-bio[gpu]` does today
 
-`pip install "singlet[gpu] @ git+https://github.com/Singlet-Bio/singlet"`
+`pip install "singlet-bio[gpu] @ git+https://github.com/Singlet-Bio/singlet"`
 installs **CuPy only** (`cupy-cuda12x`). It does not compile the CUDA
 extension, so `import singlet.gpu` warns that `singlet.gpu._core` could not be
 imported and the functions that need it are unavailable. `pip install` does

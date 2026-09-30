@@ -7,8 +7,9 @@
    as one ``.singlet`` bundle per study. Use :func:`singlet.load`,
    :func:`singlet.download` or :func:`singlet.open_bundle` for it, and
    :func:`singlet.find` to search. :func:`fetch` still works against a
-   self-hosted mirror of sample directories when ``base_url`` is passed
-   explicitly; without one it raises :class:`NotImplementedError`.
+   self-hosted mirror of sample directories, named by ``base_url`` or by
+   ``$SINGLET_SAMPLE_MIRROR``; with neither it raises
+   :class:`NotImplementedError`.
 
 Sample directories are served as a flat collection of files under a
 per-accession prefix. The required entry point is ``manifest.json``
@@ -38,6 +39,7 @@ import os
 import shutil
 import urllib.error
 import urllib.request
+import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Iterable, Optional
@@ -48,24 +50,56 @@ __all__ = ["fetch", "default_cache_dir", "default_base_url"]
 _MANIFEST_NAME = "manifest.json"
 _USER_AGENT = "singlet-fetch/1"
 
+# The former public per-sample host. Retired; fetch() refuses it.
+_RETIRED_SAMPLE_BASE = "https://data.singlet.bio/v1"
+# Names a self-hosted mirror of sample directories. Separate from
+# $SINGLET_DATA_BASE, which now names the .singlet bundle host singlet.load() uses.
+_SAMPLE_MIRROR_ENV = "SINGLET_SAMPLE_MIRROR"
+_LEGACY_ENV = "SINGLET_DATA_BASE"
+
 _RETIRED_HOST_MSG = (
     "singlet.fetch() downloaded per-sample directories from https://data.singlet.bio/v1, "
     "which has been retired. Public data is now one .singlet bundle per study: use "
     "singlet.load('GSE…' or 'GSM…') for an AnnData, singlet.download('GSE…') for the file, "
     "or singlet.find('…') to search. To fetch from a self-hosted mirror of sample "
-    "directories, pass base_url= explicitly."
+    "directories, pass base_url= or set $SINGLET_SAMPLE_MIRROR."
 )
 
 
-def default_base_url() -> str:
-    """Base URL of the public bundle host used by :func:`singlet.load`.
+def _sample_mirror() -> tuple[Optional[str], Optional[str]]:
+    """``(mirror_base_url, env_var_it_came_from)``, or ``(None, None)``.
 
-    Bundles live at ``<base>/data/<GSE>/<GSE>.singlet``. Override with
-    ``$SINGLET_DATA_BASE`` (a trailing ``/data`` is accepted and ignored).
+    ``$SINGLET_SAMPLE_MIRROR`` names the mirror. Up to 2.0.0 :func:`fetch`
+    read it from ``$SINGLET_DATA_BASE``; that variable now names the bundle
+    host used by :func:`singlet.load`, but a value set there is still used
+    here when ``$SINGLET_SAMPLE_MIRROR`` is unset, with a ``FutureWarning``.
     """
-    from singlet._loader import _data_base
+    mirror = os.environ.get(_SAMPLE_MIRROR_ENV, "").strip()
+    if mirror:
+        return mirror.rstrip("/"), _SAMPLE_MIRROR_ENV
+    legacy = os.environ.get(_LEGACY_ENV, "").strip()
+    if legacy:
+        warnings.warn(
+            f"singlet.fetch() is reading its sample mirror from ${_LEGACY_ENV}, which now "
+            "names the .singlet bundle host used by singlet.load(). Set "
+            f"${_SAMPLE_MIRROR_ENV} to your sample mirror instead.",
+            FutureWarning,
+            stacklevel=3,
+        )
+        return legacy.rstrip("/"), _LEGACY_ENV
+    return None, None
 
-    return _data_base()
+
+def default_base_url() -> str:
+    """Base URL of the sample mirror :func:`fetch` uses when no ``base_url`` is given.
+
+    ``$SINGLET_SAMPLE_MIRROR`` (or, deprecated, ``$SINGLET_DATA_BASE``); with
+    neither set, the retired public host ``https://data.singlet.bio/v1``,
+    which :func:`fetch` refuses with :class:`NotImplementedError`. The
+    ``.singlet`` bundle host used by :func:`singlet.load` is configured
+    separately, with ``$SINGLET_DATA_BASE``.
+    """
+    return _sample_mirror()[0] or _RETIRED_SAMPLE_BASE
 
 
 def default_cache_dir() -> Path:
@@ -133,10 +167,12 @@ def fetch(
         Override the local cache root (default: ``~/.singlet/data`` or
         ``$SINGLET_CACHE_DIR``).
     base_url
-        Base URL of a self-hosted mirror of sample directories. Required:
-        the former public default (``https://data.singlet.bio/v1``) has been
-        retired, and calling without it raises :class:`NotImplementedError`.
-        For public data use :func:`singlet.load` instead.
+        Base URL of a self-hosted mirror of sample directories. Defaults to
+        ``$SINGLET_SAMPLE_MIRROR`` (or, deprecated, ``$SINGLET_DATA_BASE``).
+        The former public default (``https://data.singlet.bio/v1``) has been
+        retired: with no mirror configured this raises
+        :class:`NotImplementedError`. For public data use
+        :func:`singlet.load` instead.
     files
         Optional list of file paths (relative to the sample root) to fetch.
         Default: every file in the manifest.
@@ -155,7 +191,10 @@ def fetch(
     re-downloaded. Partial transfers go to ``*.part`` files and are renamed
     atomically on success.
     """
+    source = None
     if not base_url:
+        base_url, source = _sample_mirror()
+    if not base_url or base_url.rstrip("/") == _RETIRED_SAMPLE_BASE:
         raise NotImplementedError(_RETIRED_HOST_MSG)
     base = base_url.rstrip("/")
     root = Path(cache_dir) if cache_dir else default_cache_dir()
@@ -163,7 +202,16 @@ def fetch(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     sample_base = f"{base}/{accession}"
-    manifest_path = _fetch_one(sample_base, _MANIFEST_NAME, None, out_dir)
+    try:
+        manifest_path = _fetch_one(sample_base, _MANIFEST_NAME, None, out_dir)
+    except FileNotFoundError as e:
+        if source != _LEGACY_ENV:
+            raise
+        raise FileNotFoundError(
+            f"{e}. The sample mirror was taken from ${_LEGACY_ENV}, which now names "
+            f"the .singlet bundle host; set ${_SAMPLE_MIRROR_ENV} to a mirror of sample "
+            "directories, or use singlet.load() for bundles."
+        ) from e
     with open(manifest_path) as f:
         manifest = json.load(f)
 

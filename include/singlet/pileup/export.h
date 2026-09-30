@@ -902,8 +902,9 @@ inline ExportStats export_results(const PileupEngine& engine,
     // .1pz outputs whose write failed, named relative to out_prefix
     // ("exon_counts.1pz", "donor/snp_ad.1pz"). Appended to from several writer
     // threads, hence the mutex. Any entry marks the run fail_export_matrix in
-    // summary.json, and no 0x0 stub is written in its place further down:
-    // a silent stub is how samples with cells but no data reached bundles.
+    // summary.json (pack_gse then excludes the sample from its bundle), and no
+    // 0x0 stub is written in its place further down: a silent stub is how
+    // samples with cells but no data reached bundles.
     std::mutex failed_writes_mu;
     std::vector<std::string> failed_writes;
     auto record_failed_write = [&](const std::string& name) {
@@ -1281,8 +1282,9 @@ inline ExportStats export_results(const PileupEngine& engine,
         std::cerr << "[export] Provenance: " << export_cfg.out_prefix << "/provenance.json\n";
     }
 
-    // Set in the summary block when cells were called but exon_counts.1pz is
-    // missing; the standardization pass then leaves that stub out.
+    // Set in the summary block when a .1pz run called cells but
+    // exon_counts.1pz is missing; the standardization pass then leaves that
+    // stub out.
     bool skip_exon_stub = false;
 
     // ── Summary JSON ── (always written; VAL2-compatible structured output)
@@ -1469,20 +1471,32 @@ inline ExportStats export_results(const PileupEngine& engine,
         std::string assay = meta_get("modality");
         if (assay.empty()) assay = "scrna";
         summary.status = classify_outcome(summary, assay);
-        // Hollow-sample guard. When cells were called the count matrix must
-        // be on disk; otherwise the 0x0 exon_counts.1pz stub written below
-        // would be packed as a sample that claims cells but holds no data.
-        // A failed .1pz write, or no exon_counts.1pz at all (including
-        // --output-format mtx|h5ad|loom, which writes none by design), is
-        // recorded as fail_export_matrix so packing skips the sample.
+        // Hollow-sample guard. When cells were called in a .1pz run the count
+        // matrix must be on disk; otherwise the 0x0 exon_counts.1pz stub
+        // written below would be packed as a sample that claims cells but
+        // holds no data. A failed .1pz write, or a .1pz run that left no
+        // exon_counts.1pz, is recorded as status=fail_export_matrix plus a
+        // "write_failed:<file>" / "exon_counts_1pz_missing" warning. pack_gse
+        // (python/singlet/bundle.py, _hollow_reason) reads summary.json and
+        // leaves any such sample out of the bundle, listing it under
+        // manifest.json "excluded_samples".
+        //
+        // --output-format mtx|h5ad|loom writes no .1pz by design, so a
+        // missing exon_counts.1pz there is not a failure: the counts are in
+        // the requested format. It gets a "no_1pz_output_format" warning and
+        // keeps the standard 0x0 stub (validate_output requires the file);
+        // pack_gse refuses that stub as hollow because cells were called.
         {
             std::error_code exon_ec;
             const bool exon_1pz_present =
                 std::filesystem::exists(out_prefix + "/exon_counts.1pz", exon_ec);
             if (result.n_called_cells > 0 && !exon_1pz_present) {
-                skip_exon_stub = true;
-                summary.warnings.push_back(use_1pz ? "exon_counts_1pz_missing"
-                                                   : "no_1pz_output_format");
+                if (use_1pz) {
+                    skip_exon_stub = true;
+                    summary.warnings.push_back("exon_counts_1pz_missing");
+                } else {
+                    summary.warnings.push_back("no_1pz_output_format");
+                }
             }
             for (const auto& name : failed_writes)
                 summary.warnings.push_back("write_failed:" + name);
@@ -1554,8 +1568,9 @@ inline ExportStats export_results(const PileupEngine& engine,
         };
         auto write_1pz_stub = [&](const std::string& filename) {
             // Never stand a 0x0 stub in for a matrix that failed to write, or
-            // for exon_counts when cells were called (see the hollow-sample
-            // guard in the summary block): the stub would be packed as data.
+            // for exon_counts when a .1pz run called cells but left no matrix
+            // (see the hollow-sample guard in the summary block): the stub
+            // would look like data to anything that does not read summary.json.
             if (std::find(failed_writes.begin(), failed_writes.end(), filename)
                     != failed_writes.end())
                 return;

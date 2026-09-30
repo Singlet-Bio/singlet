@@ -32,7 +32,9 @@ def query(
 ) -> AnnData:
     """Retired — raises :class:`NotImplementedError`.
 
-    Use ``singlet.load(singlet.find("human lung 10x"))`` instead.
+    Use ``singlet.load(singlet.find("human lung 10x")[:3])`` instead:
+    :func:`singlet.find` returns study accessions, and each one loads a whole
+    study, so slice the result rather than loading every match.
     """
     raise NotImplementedError(retired("singlet.query()"))
 

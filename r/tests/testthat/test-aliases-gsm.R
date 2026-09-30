@@ -98,3 +98,80 @@ test_that("GSM4120733 resolves to GSE138867 against the live API", {
     expect_identical(suppressMessages(singlet:::.gse_of("GSM4120733")),
                      "GSE138867")
 })
+
+# Forget a GSM in the session cache, as a new R session would.
+forget_gsm <- function(gsm) {
+    session <- singlet:::.singlet_gsm_parents
+    rm(list = intersect(gsm, ls(session, all.names = TRUE)), envir = session)
+}
+
+test_that("a resolved GSM is remembered in the cache for later sessions", {
+    cache <- tempfile("singlet_cache_")
+    dir.create(cache)
+    on.exit(unlink(cache, recursive = TRUE), add = TRUE)
+    forget_gsm("GSM900000011")
+    online <- TRUE
+    local_mocked_bindings(
+        .singlet_http_get = function(url, ...) {
+            if (!online) stop("sample lookup failed: offline")
+            '{"sample": {"gsm_id": "GSM900000011", "gse_id": "GSE900011"}}'
+        },
+        .package = "singlet"
+    )
+    expect_identical(
+        suppressMessages(singlet:::.gse_of("GSM900000011", cache = cache)),
+        "GSE900011")
+    expect_true(file.exists(file.path(cache, "gsm_parents.tsv")))
+
+    # A new session with no network still resolves it.
+    forget_gsm("GSM900000011")
+    online <- FALSE
+    expect_message(res <- singlet:::.gse_of("GSM900000011", cache = cache),
+                   "GSE900011")
+    expect_identical(res, "GSE900011")
+})
+
+test_that("a GSM of an already cached study downloads nothing offline", {
+    cache <- tempfile("singlet_cache_")
+    dir.create(cache)
+    on.exit(unlink(cache, recursive = TRUE), add = TRUE)
+    forget_gsm("GSM900000013")
+    writeLines("not really a zip", file.path(cache, "GSE900013.singlet"))
+    writeLines("GSM900000013\tGSE900013", file.path(cache, "gsm_parents.tsv"))
+    local_mocked_bindings(
+        .singlet_http_get = function(url, ...) stop("sample lookup failed: offline"),
+        .package = "singlet"
+    )
+    path <- suppressMessages(
+        singlet:::.singlet_fetch_bundle("GSM900000013", cache_dir = cache))
+    expect_identical(normalizePath(path),
+                     normalizePath(file.path(cache, "GSE900013.singlet")))
+})
+
+test_that("with the API unreachable, a cached bundle holding the GSM answers", {
+    if (!nzchar(Sys.which("zip"))) {
+        skip("the `zip` command is not available")
+    }
+    cache <- tempfile("singlet_cache_")
+    stage <- file.path(cache, "stage")
+    dir.create(file.path(stage, "samples", "GSM900000012"), recursive = TRUE)
+    on.exit(unlink(cache, recursive = TRUE), add = TRUE)
+    writeLines("barcode\tis_cell",
+               file.path(stage, "samples", "GSM900000012", "cell_calls.tsv"))
+    local({
+        old <- setwd(stage)
+        on.exit(setwd(old))
+        utils::zip(file.path(cache, "GSE900012.singlet"), "samples", flags = "-rq")
+    })
+    forget_gsm("GSM900000012")
+    local_mocked_bindings(
+        .singlet_http_get = function(url, ...) stop("sample lookup failed: offline"),
+        .package = "singlet"
+    )
+    expect_identical(
+        suppressMessages(singlet:::.gse_of("GSM900000012", cache = cache)),
+        "GSE900012")
+    # The answer is now in the on-disk index too.
+    expect_identical(readLines(file.path(cache, "gsm_parents.tsv")),
+                     "GSM900000012\tGSE900012")
+})

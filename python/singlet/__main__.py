@@ -60,7 +60,7 @@ def main() -> None:
     print('  adata = singlet.load(["GSE138867", "GSE146974"])  # several studies, one AnnData')
     print('  singlet.info("GSE138867")                       # metadata (snapshot, then live)')
     print()
-    print("Local MCP server:    singlet-mcp   (pip install 'singlet[mcp]')")
+    print("Local MCP server:    singlet-mcp   (pip install 'singlet-bio[mcp]')")
     print("Debug info:          singlet.show_versions()")
     print("Full docs:           https://singlet.bio")
 

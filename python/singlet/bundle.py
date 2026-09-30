@@ -407,6 +407,24 @@ def _pz_header_dims(path: Path) -> Optional[Tuple[int, int, int]]:
     return _pz_dims_from_bytes(head)
 
 
+# summary.json status the pipeline sets when a .1pz output failed to write, and
+# the prefix of the matching per-file warning (include/singlet/pileup/export.h).
+_FAIL_EXPORT_STATUS = "fail_export_matrix"
+_WRITE_FAILED_PREFIX = "write_failed:"
+
+
+def _failed_writes(summary: dict) -> List[str]:
+    """Outputs ``summary.json`` lists as ``write_failed:<file>`` warnings."""
+    warns = summary.get("warnings")
+    if not isinstance(warns, list):
+        return []
+    return [
+        w[len(_WRITE_FAILED_PREFIX) :]
+        for w in warns
+        if isinstance(w, str) and w.startswith(_WRITE_FAILED_PREFIX)
+    ]
+
+
 def _hollow_reason(out_dir: Path) -> Optional[str]:
     """Why a finished sample would pack as a hollow (unusable) sample, or None.
 
@@ -416,11 +434,26 @@ def _hollow_reason(out_dir: Path) -> Optional[str]:
     it failed to produce, and ``n_cells_called`` comes from in-memory cell
     calling, so the two can disagree. Samples that called no cells are not
     hollow — they are honestly empty.
+
+    A sample is also refused, whatever its cell count, when the pipeline
+    recorded that one of its ``.1pz`` outputs failed to write:
+    ``status == "fail_export_matrix"`` or a ``write_failed:<file>`` warning.
+    Packing it would ship, say, exon counts without intron counts, so its
+    totals would not be comparable with the other samples of the study.
     """
     try:
         summary = _load_summary(out_dir)
     except (OSError, ValueError):
         summary = {}
+    if not isinstance(summary, dict):
+        summary = {}
+    failed = _failed_writes(summary)
+    status = summary.get("status")
+    if failed or status == _FAIL_EXPORT_STATUS:
+        parts = [f"status={status}"] if status == _FAIL_EXPORT_STATUS else []
+        if failed:
+            parts.append("failed to write " + ", ".join(failed))
+        return f"summary.json records incomplete count matrices ({'; '.join(parts)})"
     try:
         n_called = int(summary.get("n_cells_called") or 0)
     except (TypeError, ValueError):
@@ -450,16 +483,24 @@ def _hollow_reason(out_dir: Path) -> Optional[str]:
 def _uns_safe(value: Any) -> Any:
     """Return *value* in a form anndata can write to ``.h5ad`` and ``.zarr``.
 
-    Both formats turn dict keys into group names, so a ``/`` in a key is
-    rejected; ``None`` has no encoding; and a list that mixes types or holds
-    dicts cannot become an array. Keys get ``/`` replaced by ``__``, ``None``
-    and empty-list entries are dropped, and lists that are not all strings or
-    all numbers are stored as JSON text.
+    Only what anndata cannot write is changed, so the in-memory layout stays
+    as close to the JSON as possible:
+
+    - a ``/`` in a key is replaced by ``__`` (both formats turn dict keys
+      into group names, and ``/`` is a path separator there);
+    - a list that mixes types or holds dicts (e.g. ``publications``) cannot
+      become an array, so it is stored as JSON text;
+    - an empty list is dropped: it would become a zero-length dataset, which
+      HDF5 cannot create with compression (``to_h5ad`` compresses).
+
+    ``None`` values are kept as ``None`` — anndata writes them natively (it
+    skips them before 0.12 and stores a null from 0.12 on) — so keys such as
+    ``gsm_meta[<GSM>]["mapping_rate"]`` exist even when the value is unknown.
     """
     if isinstance(value, dict):
         out = {}
         for k, v in value.items():
-            if v is None or (isinstance(v, (list, tuple)) and len(v) == 0):
+            if isinstance(v, (list, tuple)) and len(v) == 0:
                 continue
             out[str(k).replace("/", "__")] = _uns_safe(v)
         return out
@@ -627,8 +668,10 @@ def pack_gse(
 
     Hollow samples are never packed: a sample whose ``summary.json`` reports
     called cells while its ``exon_counts.1pz`` is missing, a 0x0 stub or
-    all zeros is left out with a warning and listed in ``manifest.json``
-    under ``excluded_samples`` as ``{"gsm_id", "reason"}`` records. Pass
+    all zeros, or whose ``summary.json`` records a failed matrix write
+    (``status: "fail_export_matrix"`` / a ``write_failed:<file>`` warning),
+    is left out with a warning and listed in ``manifest.json`` under
+    ``excluded_samples`` as ``{"gsm_id", "reason"}`` records. Pass
     ``strict=True`` to raise instead.
 
     Parameters
@@ -716,7 +759,9 @@ def pack_gse(
 
     # ---- Refuse hollow samples ------------------------------------------
     # The .1pz files are copied verbatim, so a 0x0 stub written for a failed
-    # output would otherwise ship as a sample that claims cells but has none.
+    # output would otherwise ship as a sample that claims cells but has none,
+    # and a sample whose intron (or other) matrix failed to write would ship
+    # with counts that are not comparable with its siblings'.
     excluded_samples: List[Dict[str, str]] = []
     for gsm in gsm_ids:
         reason = _hollow_reason(results_dir / gsm / "out")
@@ -1027,12 +1072,16 @@ def _singlet_version() -> str:
 
         return str(__version__)
     except Exception:
-        try:
-            import importlib.metadata
+        import importlib.metadata
 
-            return importlib.metadata.version("singlet")
-        except Exception:
-            return "unknown"
+        # The distribution is "singlet-bio" on PyPI; "singlet" is what
+        # installs from before the rename were called.
+        for dist in ("singlet-bio", "singlet"):
+            try:
+                return importlib.metadata.version(dist)
+            except Exception:
+                continue
+        return "unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -1645,9 +1694,14 @@ class SingletBundle:
             - ``var`` : index = Ensembl gene IDs; ``gene_name`` column.
             - ``uns`` : ``study_meta``, ``manifest`` (both made safe for
               ``write_h5ad``/``write_zarr``: ``manifest["checksums"]`` is
-              stored as parallel ``path``/``sha256`` lists), and — only when
-              some samples had no usable cells — ``skipped_samples``, a
-              DataFrame with ``gsm_id`` and ``reason`` columns.
+              stored as parallel ``path``/``sha256`` lists, lists of records
+              such as ``study_meta["publications"]`` are stored as JSON text —
+              ``json.loads`` gives the list of dicts back — and empty lists
+              are dropped; every other key and value, ``None`` included, is
+              kept as in the bundle, whose raw ``study_meta`` is also
+              :attr:`SingletBundle.study_meta`), and — only when some samples
+              had no usable cells — ``skipped_samples``, a DataFrame with
+              ``gsm_id`` and ``reason`` columns.
 
         Samples whose count matrix is empty (0x0) or has no called cells are
         skipped with a warning. A bundle in which no sample is usable raises

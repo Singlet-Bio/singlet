@@ -26,9 +26,23 @@ def retired(name: str) -> str:
     return _RETIRED_MSG.format(name=name)
 
 
-def login(api_key: Optional[str] = None) -> None:
-    """Retired — raises :class:`NotImplementedError`.
+_LOGIN_MSG = (
+    "singlet.login() has been removed: it stored a key for https://api.singlet.bio/v1, "
+    "an API that was never in service, so the key was never used. To fix your "
+    "script, delete the singlet.login(...) line. singlet.load('GSE…'), "
+    "singlet.download() and singlet.open_bundle() need no key. If the key is for "
+    "natural-language search, call singlet.set_api_key(key) instead — or just set "
+    "$SINGLET_API_KEY, which singlet.find() reads on its own."
+)
 
-    Use :func:`singlet.set_api_key` for the natural-language search key.
+
+def login(api_key: Optional[str] = None) -> None:
+    """Removed — raises :class:`NotImplementedError` explaining what to do.
+
+    ``login()`` used to store a key for the retired ``api.singlet.bio/v1``
+    API without contacting it, so scripts could call it harmlessly. It now
+    raises so those calls surface: delete them (downloads need no key), or
+    replace them with :func:`singlet.set_api_key` for the natural-language
+    search key. The key is never echoed in the message.
     """
-    raise NotImplementedError(retired("singlet.login()"))
+    raise NotImplementedError(_LOGIN_MSG)

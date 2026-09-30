@@ -12,7 +12,10 @@
   parent series is looked up through the Singlet API
   (`<SINGLET_API_BASE>/gsm/<GSM>`), its bundle is downloaded, and `load()`
   keeps only that sample's cells. Several samples of one study are read
-  from a single download. Previously any GSM was an error.
+  from a single download. Previously any GSM was an error. Each lookup is
+  saved in `gsm_parents.tsv` in the bundle cache directory, and when the API
+  cannot be reached the cached bundles are searched for the sample, so a
+  GSM whose study is already cached loads offline in a later session.
 - Samples with no usable cells (a missing or 0 x 0 count matrix, no called
   cells, or an unreadable member) are skipped with one warning instead of
   failing the whole study. They are listed with the reason in

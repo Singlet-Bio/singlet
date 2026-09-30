@@ -43,7 +43,7 @@ with the package.
 This local server is separate from the hosted MCP endpoint at
 https://singlet.bio/mcp, which serves the live catalog and has its own tool set.
 
-Requires: pip install "singlet[mcp]"
+Requires: pip install "singlet-bio[mcp]"
 """
 
 from __future__ import annotations
@@ -131,9 +131,12 @@ async def list_tools() -> list[Tool]:
                     },
                     "level": {
                         "type": "string",
-                        "enum": ["gsm", "gse"],
-                        "description": "Accession granularity: 'gsm' (samples, default) or 'gse' (series).",
-                        "default": "gsm",
+                        "enum": ["gse", "gsm"],
+                        "description": (
+                            "Accession granularity: 'gse' (studies, default, as in "
+                            "singlet.find) or 'gsm' (samples)."
+                        ),
+                        "default": "gse",
                     },
                     "limit": {
                         "type": "integer",
@@ -453,7 +456,8 @@ async def _tool_nl_search(args: dict) -> dict:
     query = args.get("query")
     if not query or not str(query).strip():
         return {"error": "query is required"}
-    level = args.get("level", "gsm")
+    # Same default as singlet.find(): studies.
+    level = args.get("level", "gse")
     limit = min(int(args.get("limit", 50)), 500)
 
     payload = _api_get("/nl-search", {"q": query, "level": level, "limit": limit})
@@ -469,7 +473,8 @@ async def _tool_nl_search(args: dict) -> dict:
         "filters": payload.get("filters", payload.get("interpreted", {})),
         "count": len(accessions),
         "accessions": accessions,
-        "load_hint": "singlet.load(accessions)  # → one AnnData",
+        # Each GSE loads a whole study, so the hint loads the top few.
+        "load_hint": "singlet.load(accessions[:3])  # → one AnnData",
     }
 
 

@@ -3,9 +3,9 @@
 
 :func:`find` turns a plain-English description (e.g. ``"human lung fibroblasts"``)
 into a list of matching GEO accessions by calling the hosted search endpoint.
-It returns study (``GSE``) accessions by default; pass ``level="gsm"`` for
-samples. :func:`find_load` is a convenience that loads the top matches (three
-studies by default) directly into one AnnData.
+It returns study (``GSE``) accessions by default (2.0.0 and earlier returned
+samples); pass ``level="gsm"`` for samples. :func:`find_load` is a convenience
+that loads the top matches (three studies by default) directly into one AnnData.
 
 The endpoint is ``GET {API_BASE}/nl-search`` where ``API_BASE`` is
 ``$SINGLET_API_BASE`` (default ``https://singlet.bio/api``). It returns JSON with
@@ -34,16 +34,32 @@ _API_BASE_DEFAULT = "https://singlet.bio/api"
 _LEVELS = ("gse", "gsm")
 
 
+# Distribution names to read the installed version from: "singlet-bio" on PyPI
+# ("singlet" there is an unrelated project), then "singlet" for installs made
+# before the rename.
+_DIST_NAMES = ("singlet-bio", "singlet")
+
+
+def _package_version() -> str:
+    from importlib.metadata import version
+
+    for dist in _DIST_NAMES:
+        try:
+            return version(dist)
+        except Exception:  # PackageNotFoundError, or unreadable metadata
+            continue
+    try:  # a source checkout has no distribution metadata
+        from singlet import __version__
+
+        return str(__version__)
+    except Exception:  # pragma: no cover
+        return "0"
+
+
 def _user_agent() -> str:
     # ``singlet-python/<version>``: the search API recognises this prefix and
     # applies the client-library rate limit instead of the anonymous browser one.
-    try:
-        from importlib.metadata import version
-
-        v = version("singlet")
-    except Exception:  # pragma: no cover - not installed as a distribution
-        v = "0"
-    return f"singlet-python/{v}"
+    return f"singlet-python/{_package_version()}"
 
 
 _API_KEY: str | None = None
@@ -107,6 +123,12 @@ def find(query: str, *, level: str = "gse", limit: int = 50) -> list[str]:
     level : str
         Accession granularity to return: ``"gse"`` (studies, the default) or
         ``"gsm"`` (individual samples).
+
+        .. note::
+           The default was ``"gsm"`` up to and including 2.0.0 and is now
+           ``"gse"``; no runtime warning is issued. Code that expects sample
+           accessions — for example ``adata.obs["gsm_id"].isin(singlet.find(q))``
+           — must pass ``level="gsm"``.
     limit : int
         Maximum number of accessions to return.
 
@@ -114,7 +136,10 @@ def find(query: str, *, level: str = "gse", limit: int = 50) -> list[str]:
     -------
     list of str
         Matching accession strings (e.g. ``["GSE138867", ...]``). Empty if
-        nothing matched. Feed the result straight into :func:`singlet.load`.
+        nothing matched. Pass a slice to :func:`singlet.load` (e.g.
+        ``singlet.load(singlet.find(q)[:3])``): every study accession
+        downloads the whole study, so loading all *limit* results at once
+        can mean dozens of full studies.
 
     Raises
     ------

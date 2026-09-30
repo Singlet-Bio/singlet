@@ -42,6 +42,11 @@ def _write_sample(results: Path, gsm: str, *, n_called: int, exon: bytes | None)
     return out
 
 
+def _set_summary(out: Path, **fields) -> None:
+    """Overwrite a sample's summary.json with *fields* (plus a reference build)."""
+    (out / "summary.json").write_text(json.dumps({"reference_build": "GRCh38", **fields}))
+
+
 def _catalog(*gsms: str) -> pd.DataFrame:
     return pd.DataFrame(
         {
@@ -89,6 +94,30 @@ class TestHollowScreening:
         assert not any(n.startswith(f"samples/{HOLLOW}/") for n in names)
         assert f"samples/{GOOD}/exon_counts.1pz" in names
         assert HOLLOW not in study_meta["gsm_meta"]
+
+    def test_failed_matrix_write_is_excluded_and_recorded(self, results, tmp_path):
+        # exon_counts.1pz is fine, but intron_counts.1pz failed to write.
+        _set_summary(
+            results / GOOD2 / "out",
+            n_cells_called=1,
+            status="fail_export_matrix",
+            warnings=["write_failed:intron_counts.1pz"],
+        )
+        out = tmp_path / "failed.singlet"
+        with pytest.warns(UserWarning, match=GOOD2):
+            bundle_mod.pack_gse(
+                GSE,
+                results,
+                "unused.parquet",
+                out,
+                verbose=False,
+                _catalog_df=_catalog(GOOD, GOOD2),
+            )
+        manifest = _manifest(out)
+        assert manifest["gsm_ids"] == [GOOD]
+        [excluded] = manifest["excluded_samples"]
+        assert excluded["gsm_id"] == GOOD2
+        assert "intron_counts.1pz" in excluded["reason"]
 
     def test_clean_study_has_empty_excluded_list(self, results, tmp_path):
         out = tmp_path / "clean.singlet"
@@ -183,6 +212,38 @@ class TestHollowReason:
         (out / "summary.json").write_text("{not json")
         assert bundle_mod._hollow_reason(out) is None
 
+    def test_failed_intron_write_is_refused_despite_good_exon_matrix(self, tmp_path):
+        out = _write_sample(tmp_path, GOOD, n_called=5, exon=_pz_bytes(10, 20, 30))
+        _set_summary(
+            out,
+            n_cells_called=5,
+            status="fail_export_matrix",
+            warnings=["write_failed:intron_counts.1pz", "low_mapping_rate"],
+        )
+        reason = bundle_mod._hollow_reason(out)
+        assert "fail_export_matrix" in reason
+        assert "intron_counts.1pz" in reason
+        assert "low_mapping_rate" not in reason
+
+    def test_failed_write_is_refused_even_without_called_cells(self, tmp_path):
+        out = _write_sample(tmp_path, GOOD, n_called=0, exon=_pz_bytes(10, 20, 30))
+        _set_summary(
+            out, n_cells_called=0, status="success", warnings=["write_failed:donor/snp_ad.1pz"]
+        )
+        assert "donor/snp_ad.1pz" in bundle_mod._hollow_reason(out)
+
+    def test_fail_export_status_alone_is_refused(self, tmp_path):
+        out = _write_sample(tmp_path, GOOD, n_called=5, exon=None)
+        _set_summary(out, n_cells_called=5, status="fail_export_matrix", warnings=[])
+        assert "fail_export_matrix" in bundle_mod._hollow_reason(out)
+
+    def test_unrelated_warnings_do_not_refuse(self, tmp_path):
+        out = _write_sample(tmp_path, GOOD, n_called=5, exon=_pz_bytes(10, 20, 30))
+        _set_summary(
+            out, n_cells_called=5, status="success", warnings=["no_1pz_output_format", 3, None]
+        )
+        assert bundle_mod._hollow_reason(out) is None
+
 
 class TestHeaderAndCellCalls:
     def test_header_dims(self, tmp_path):
@@ -247,7 +308,9 @@ class TestUnsSafe:
             }
         )
         assert out["a__b"] == 1
-        assert "none" not in out and "empty" not in out
+        # None is kept (anndata writes it); empty lists cannot be written compressed.
+        assert "none" in out and out["none"] is None
+        assert "empty" not in out
         assert out["strs"] == ["x", "y"]
         assert out["nums"] == [1, 2.5]
         assert json.loads(out["mixed"]) == [1, "x"]

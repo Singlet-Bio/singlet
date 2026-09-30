@@ -23,7 +23,8 @@ object.}
 \item{cache_dir}{Directory in which to cache downloaded bundles. Defaults
 to \code{tools::R_user_dir("singlet", "cache")} (override with the
 \code{SINGLET_CACHE_DIR} environment variable). Existing bundles are
-reused rather than re-downloaded.}
+reused rather than re-downloaded, and \code{GSM} lookups are
+remembered there, so a sample of an already cached study loads offline.}
 }
 \value{
 A combined \code{SingleCellExperiment} (when \code{as = "sce"}) or

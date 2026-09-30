@@ -132,6 +132,63 @@ set_api_key <- function(key) {
 # from one study costs one request.
 .singlet_gsm_parents <- new.env(parent = emptyenv())
 
+# The same mapping, kept on disk next to the bundle cache so a sample whose
+# study is already cached loads without the network in a later session.
+# A tab-separated file of "GSM<TAB>GSE" lines; the last line for a GSM wins.
+.gsm_index_path <- function(cache) {
+    file.path(cache, "gsm_parents.tsv")
+}
+
+.gsm_index_lookup <- function(cache, gsm) {
+    if (is.null(cache)) {
+        return(NULL)
+    }
+    idx <- .gsm_index_path(cache)
+    if (!file.exists(idx)) {
+        return(NULL)
+    }
+    lines <- tryCatch(readLines(idx, warn = FALSE),
+                      error = function(e) character(0))
+    hits <- lines[startsWith(lines, paste0(gsm, "\t"))]
+    if (length(hits) == 0L) {
+        return(NULL)
+    }
+    gse <- trimws(sub("^[^\t]*\t", "", hits[[length(hits)]]))
+    if (grepl("^GSE[0-9]+$", gse)) gse else NULL
+}
+
+# Best effort: a cache directory that cannot be written only costs the
+# offline shortcut, never the load itself.
+.gsm_index_record <- function(cache, gsm, gse) {
+    if (is.null(cache)) {
+        return(invisible(FALSE))
+    }
+    ok <- tryCatch({
+        cat(gsm, "\t", gse, "\n", sep = "", file = .gsm_index_path(cache),
+            append = TRUE)
+        TRUE
+    }, error = function(e) FALSE, warning = function(w) FALSE)
+    invisible(ok)
+}
+
+# Last resort when the API cannot be reached: a cached bundle that holds the
+# sample. Only the zip directory of each bundle is read.
+.gsm_in_cached_bundles <- function(cache, gsm) {
+    if (is.null(cache) || !dir.exists(cache)) {
+        return(NULL)
+    }
+    bundles <- list.files(cache, pattern = "^GSE[0-9]+\\.singlet$",
+                          full.names = TRUE)
+    for (b in bundles) {
+        ids <- tryCatch(suppressWarnings(.bundle_gsm_ids(b)),
+                        error = function(e) character(0))
+        if (gsm %in% ids) {
+            return(sub("\\.singlet$", "", basename(b)))
+        }
+    }
+    NULL
+}
+
 # Parent series from either API response shape:
 #   GET <api>/gsm/<GSM>     {"sample": {"gsm_id", "gse_id", ...},
 #                            "series": {"id", ...}, "siblings": [...]}
@@ -162,12 +219,21 @@ set_api_key <- function(key) {
     NULL
 }
 
-# Resolve a GSM accession to its parent GSE through the public API. The
-# sample-detail endpoint is tried first, then the listing endpoint (the one
-# the Python client uses), so either one being unavailable is survivable.
-.resolve_gsm_parent <- function(gsm) {
+# Resolve a GSM accession to its parent GSE. Lookups made before are reused
+# from the session cache, then from the on-disk index in `cache` (the bundle
+# cache directory; NULL skips everything on disk). Otherwise the public API
+# is asked: the sample-detail endpoint first, then the listing endpoint (the
+# one the Python client uses), so either one being unavailable is
+# survivable. If both fail, a cached bundle that holds the sample answers.
+.resolve_gsm_parent <- function(gsm, cache = NULL) {
     hit <- .singlet_gsm_parents[[gsm]]
     if (!is.null(hit)) {
+        return(hit)
+    }
+    hit <- .gsm_index_lookup(cache, gsm)
+    if (!is.null(hit)) {
+        assign(gsm, hit, envir = .singlet_gsm_parents)
+        message(sprintf("%s belongs to %s; using the %s bundle", gsm, hit, hit))
         return(hit)
     }
     base <- sub("/+$", "", .singlet_api_base())
@@ -193,6 +259,14 @@ set_api_key <- function(key) {
         if (!is.null(gse)) break
     }
     if (is.null(gse)) {
+        gse <- .gsm_in_cached_bundles(cache, gsm)
+        if (!is.null(gse)) {
+            message(sprintf(
+                "sample lookup via %s failed; %s is in the cached %s bundle",
+                base, gsm, gse))
+        }
+    }
+    if (is.null(gse)) {
         detail <- if (length(problems) > 0L) {
             paste0(" (", paste(problems, collapse = "; "), ")")
         } else {
@@ -204,17 +278,19 @@ set_api_key <- function(key) {
         ), call. = FALSE)
     }
     assign(gsm, gse, envir = .singlet_gsm_parents)
+    .gsm_index_record(cache, gsm, gse)
     message(sprintf("%s belongs to %s; using the %s bundle", gsm, gse, gse))
     gse
 }
 
-# Bundles are per Series: a GSE maps to itself, a GSM to its parent.
-.gse_of <- function(accession) {
+# Bundles are per Series: a GSE maps to itself, a GSM to its parent. `cache`
+# is the bundle cache directory, where GSM -> GSE lookups are remembered.
+.gse_of <- function(accession, cache = NULL) {
     if (grepl("^GSE[0-9]+$", accession)) {
         return(accession)
     }
     if (grepl("^GSM[0-9]+$", accession)) {
-        return(.resolve_gsm_parent(accession))
+        return(.resolve_gsm_parent(accession, cache = cache))
     }
     stop(sprintf("not a GEO accession (GSE... or GSM...): %s", accession),
          call. = FALSE)
@@ -225,8 +301,8 @@ set_api_key <- function(key) {
 # Internal: ensure a .singlet bundle for an accession is on disk, return path.
 # ---------------------------------------------------------------------------
 .singlet_fetch_bundle <- function(accession, cache_dir = NULL) {
-    gse <- .gse_of(accession)
     cache <- .singlet_cache_dir(cache_dir)
+    gse <- .gse_of(accession, cache = cache)
     dest <- file.path(cache, paste0(gse, ".singlet"))
     if (file.exists(dest) && file.size(dest) > 0L) {
         return(dest)
@@ -269,7 +345,9 @@ set_api_key <- function(key) {
 #'
 #' @param accession A GEO Series accession (\code{"GSE..."}). A sample
 #'   accession (\code{"GSM..."}) is resolved to its parent Series through the
-#'   Singlet API, and the whole Series bundle is downloaded.
+#'   Singlet API, and the whole Series bundle is downloaded. The mapping is
+#'   remembered in the cache directory, so a sample whose Series is already
+#'   cached needs no network in later sessions.
 #' @param cache_dir Directory in which to cache the bundle. Defaults to
 #'   \code{tools::R_user_dir("singlet", "cache")}, overridable with the
 #'   \code{SINGLET_CACHE_DIR} environment variable.
@@ -280,7 +358,9 @@ set_api_key <- function(key) {
 #' \code{<base>} is the \code{SINGLET_DATA_BASE} environment variable
 #' (default \code{https://data.singlet.bio}; a value ending in \code{/data}
 #' is accepted). \code{GSM} accessions are resolved with the API named by
-#' \code{SINGLET_API_BASE} (default \code{https://singlet.bio/api}).
+#' \code{SINGLET_API_BASE} (default \code{https://singlet.bio/api}); each
+#' answer is saved in \code{gsm_parents.tsv} in the cache directory, and when
+#' the API cannot be reached the cached bundles are searched for the sample.
 #'
 #' @examples
 #' \dontrun{
@@ -332,7 +412,8 @@ singlet_download <- download
 #' @param cache_dir Directory in which to cache downloaded bundles. Defaults
 #'   to \code{tools::R_user_dir("singlet", "cache")} (override with the
 #'   \code{SINGLET_CACHE_DIR} environment variable). Existing bundles are
-#'   reused rather than re-downloaded.
+#'   reused rather than re-downloaded, and \code{GSM} lookups are
+#'   remembered there, so a sample of an already cached study loads offline.
 #' @return A combined \code{SingleCellExperiment} (when \code{as = "sce"}) or
 #'   \code{Seurat} object (when \code{as = "seurat"}) spanning all inputs.
 #'   Samples with no usable cells (for example an empty count matrix left by

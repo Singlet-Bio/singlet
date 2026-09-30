@@ -16,8 +16,12 @@ for scanpy or PyTorch. Browse the catalog at [singlet.bio](https://singlet.bio).
 Wheels are not on PyPI yet; install from GitHub:
 
 ```bash
-pip install "singlet @ git+https://github.com/Singlet-Bio/singlet"
+pip install "singlet-bio @ git+https://github.com/Singlet-Bio/singlet"
 ```
+
+The PyPI distribution is named **`singlet-bio`** (`singlet` on PyPI is an
+unrelated project); the import name is still `singlet`. Once the first
+release is published, the install is `pip install singlet-bio`.
 
 This compiles the package's `.1pz` codec, so you need a **C++17 compiler**
 and **zstd** (headers + library): `apt install build-essential libzstd-dev`
@@ -28,10 +32,10 @@ Windows use WSL.
 Optional extras (same URL, extra in brackets):
 
 ```bash
-pip install "singlet[analysis] @ git+https://github.com/Singlet-Bio/singlet"  # matplotlib, scanpy, statsmodels, igraph, leidenalg
-pip install "singlet[torch] @ git+https://github.com/Singlet-Bio/singlet"     # PyTorch DataLoaders
-pip install "singlet[zarr] @ git+https://github.com/Singlet-Bio/singlet"      # Zarr export/import
-pip install "singlet[mcp] @ git+https://github.com/Singlet-Bio/singlet"       # local MCP server (singlet-mcp)
+pip install "singlet-bio[analysis] @ git+https://github.com/Singlet-Bio/singlet"  # matplotlib, scanpy, statsmodels, igraph, leidenalg
+pip install "singlet-bio[torch] @ git+https://github.com/Singlet-Bio/singlet"     # PyTorch DataLoaders
+pip install "singlet-bio[zarr] @ git+https://github.com/Singlet-Bio/singlet"      # Zarr export/import
+pip install "singlet-bio[mcp] @ git+https://github.com/Singlet-Bio/singlet"       # local MCP server (singlet-mcp)
 ```
 
 ## Quick start
@@ -122,7 +126,7 @@ live lookups.
 
 ```python
 singlet.to_h5ad(adata, "study.h5ad")
-singlet.to_zarr(adata, "study.zarr")    # needs singlet[zarr]
+singlet.to_zarr(adata, "study.zarr")    # needs singlet-bio[zarr]
 singlet.to_mtx(adata, "study_mtx/")     # 10x-style matrix.mtx.gz + barcodes + features
 ```
 
@@ -168,7 +172,7 @@ ds = SingletDataset("GSE138867", normalize=True)
 
 - **Hosted:** `https://singlet.bio/mcp` serves the live catalog to MCP clients;
   nothing to install.
-- **Local:** `singlet-mcp` (install `singlet[mcp]`) runs 12 tools over the
+- **Local:** `singlet-mcp` (install `singlet-bio[mcp]`) runs 12 tools over the
   offline catalog snapshot plus live search, over stdio. The old command name
   `singlet` still works but is deprecated.
 
@@ -177,6 +181,7 @@ ds = SingletDataset("GSE138867", normalize=True)
 | Variable | Meaning |
 |---|---|
 | `SINGLET_DATA_BASE` | Bundle host: files live at `<base>/data/<GSE>/<GSE>.singlet` (default `https://data.singlet.bio`; a trailing `/data` is accepted, so the R client's value works too) |
+| `SINGLET_SAMPLE_MIRROR` | Self-hosted mirror of per-sample directories for `singlet.fetch()` / `singlet.open()` (no public default) |
 | `SINGLET_API_BASE` | REST API base (default `https://singlet.bio/api`) |
 | `SINGLET_CACHE_DIR` | Download cache (default `~/.singlet/cache`) |
 | `SINGLET_API_KEY` | Optional key for natural-language search |
