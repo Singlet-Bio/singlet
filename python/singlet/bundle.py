@@ -81,9 +81,12 @@ import warnings
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
+
+if TYPE_CHECKING:
+    import anndata
 
 __all__ = [
     "pack_gse",
@@ -815,7 +818,6 @@ def pack_gse(
             f"Could not build feature_vocab for {gse_id} from any of "
             f"{len(gsm_ids)} done GSMs: " + "; ".join(vocab_errors[:5])
         )
-    gene_order = [g["gene_id"] for g in feature_vocab["genes"]]
     feature_vocab_bytes = json.dumps(feature_vocab, indent=2).encode()
     if verbose:
         print(f"[pack_gse] feature_vocab: {feature_vocab['n_genes']} genes, "

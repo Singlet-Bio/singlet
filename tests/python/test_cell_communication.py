@@ -164,7 +164,6 @@ class TestCellCommunication:
 
     def test_high_expression_pair_has_high_score(self):
         """L-R pair with high expression should score higher."""
-        rng = np.random.default_rng(42)
         n_cells = 120
         X = np.ones((n_cells, 50), dtype=np.float32)
         # Boost GENE0 in cluster_0 (sender) and GENE1 in cluster_1 (receiver)

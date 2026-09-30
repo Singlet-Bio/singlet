@@ -94,7 +94,6 @@ def test_annotate_unknown_when_no_markers():
 
 
 def test_annotate_min_score_threshold():
-    rng = np.random.default_rng(42)
     # Uniform expression — no enrichment
     adata = AnnData(X=np.ones((60, 30), dtype=np.float32))
     adata.var_names = [f"gene_{i}" for i in range(30)]

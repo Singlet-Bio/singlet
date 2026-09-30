@@ -79,7 +79,7 @@ def test_nmf_basic(adata_multiome):
     adata_multiome.obsm["X_rna"] = np.abs(adata_multiome.obsm["X_rna"])
     adata_multiome.obsm["X_atac"] = np.abs(adata_multiome.obsm["X_atac"])
 
-    result = singlet.multiome_factor_analysis(
+    singlet.multiome_factor_analysis(
         adata_multiome,
         modality_keys=["X_rna", "X_atac"],
         n_factors=5,
@@ -94,7 +94,7 @@ def test_nmf_basic(adata_multiome):
 
 def test_layers_as_modalities(adata_layers):
     """Test using layers as modality keys."""
-    result = singlet.multiome_factor_analysis(
+    singlet.multiome_factor_analysis(
         adata_layers, modality_keys=["spliced", "unspliced"], n_factors=5
     )
 

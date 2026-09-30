@@ -163,7 +163,6 @@ class TestCCA:
         """Works with sparse X matrix."""
         import anndata as ad
 
-        rng = np.random.default_rng(7)
         n_cells, n_genes = 100, 200
 
         X = sp.random(n_cells, n_genes, density=0.3, format="csr", random_state=7)

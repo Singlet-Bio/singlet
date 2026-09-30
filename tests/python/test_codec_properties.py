@@ -178,18 +178,6 @@ class TestCodecEdgeCases:
         assert loaded.shape == (10, 5)
         assert loaded.X.nnz == 0
 
-    def test_empty_matrix_1pz(self, tmp_path):
-        """Zero-nnz matrix round-trips through .1pz."""
-        mat = sp.csc_matrix((10, 5), dtype=np.uint16)
-        adata = ad.AnnData(X=mat)
-        adata.obs_names = [f"c{i}" for i in range(10)]
-        adata.var_names = [f"g{i}" for i in range(5)]
-        path = str(tmp_path / "empty.1pz")
-        singlet.write_1pz(adata, path)
-        loaded = singlet.read_1pz(path)
-        assert loaded.shape == (10, 5)
-        assert loaded.X.nnz == 0
-
     def test_single_element_1pz(self, tmp_path):
         """1x1 matrix with 1 nonzero round-trips."""
         mat = sp.csc_matrix(np.array([[42]], dtype=np.uint16))

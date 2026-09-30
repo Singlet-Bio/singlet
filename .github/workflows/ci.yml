@@ -2,7 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # claude/lint-* branches also get autofix.yml (ruff --fix / ruff format
+    # committed back by github-actions[bot]); CI runs on them so the result
+    # of a clean-up can be checked before a PR is opened.
+    branches: [main, 'claude/lint-*']
     paths:
       - 'python/**'
       - 'include/**'
@@ -32,7 +35,10 @@ jobs:
           python-version: '3.12'
 
       - name: Install tools
-        run: pip install ruff pyright numpy scipy pandas anndata --quiet
+        # ruff and pyright are pinned so lint results do not change under a
+        # branch when a new release adds rules; autofix.yml pins the same ruff.
+        # Bump both files together.
+        run: pip install ruff==0.16.9 pyright==1.1.414 numpy scipy pandas anndata --quiet
 
       - name: Lint check
         run: ruff check python/ tests/python/

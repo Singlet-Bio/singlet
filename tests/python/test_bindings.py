@@ -38,6 +38,7 @@ singlet_gpu = pytest.importorskip(
     ),
 )
 
+import singlet.gpu  # noqa: E402
 from conftest import requires_gpu  # noqa: E402
 
 

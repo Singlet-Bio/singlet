@@ -218,7 +218,6 @@ def pseudobulk_de(
     working = copy_module.copy(adata) if copy else adata
 
     mat = _extract_matrix(working)                           # (cells × genes)
-    gene_names  = list(working.var_names)
     donor_codes = working.obs[sample_col].astype("category").cat.codes.to_numpy(
         dtype=np.int32
     )

@@ -34,7 +34,6 @@ cycle must add those bindings before this module is functional.
 
 from __future__ import annotations
 
-import copy
 from typing import TYPE_CHECKING, Optional, Union
 
 if TYPE_CHECKING:
@@ -191,12 +190,9 @@ def _prepare_adata(
     - ``inplace=False, copy=False``:          no-op semantics — warn; treat as copy.
     """
     if copy or not inplace:
-        return copy_module(adata)
+        # AnnData.copy() is a deep copy (incl. .X); copy.copy() would share .X.
+        return adata.copy()
     return adata
-
-
-# Alias: we shadow the ``copy`` builtin locally — import the module once.
-import copy as copy_module  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

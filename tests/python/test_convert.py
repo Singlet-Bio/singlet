@@ -438,7 +438,7 @@ class TestPzH5adConvenience:
         np.testing.assert_allclose(load, orig, atol=1e-4)
 
 
-class TestPzH5adConvenience:
+class TestPzH5adConvenienceIO:
     """pz_to_h5ad, h5ad_to_pz via singlet.io.convert."""
 
     def test_pz_to_h5ad_via_io(self, int_adata, tmp_path):

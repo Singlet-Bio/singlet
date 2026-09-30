@@ -24,7 +24,10 @@ load_donor_assignments(tsv_path) -> pd.Series
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 def load_donor_assignments(

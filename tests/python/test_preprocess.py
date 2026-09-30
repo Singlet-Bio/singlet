@@ -40,6 +40,7 @@ singlet_gpu = pytest.importorskip(
     ),
 )
 
+import singlet.gpu  # noqa: E402
 from conftest import requires_gpu  # noqa: E402 — after importorskip
 
 # ---------------------------------------------------------------------------
@@ -265,13 +266,6 @@ def test_normalize_total_layer_param(gsm4037629_path):
     )
 
     assert "raw" in adata.layers, "layers['raw'] must exist after normalization"
-
-    # The layer should have been modified (float normalized values).
-    layer_data = adata.layers["raw"]
-    if hasattr(layer_data, "get"):
-        layer_vals = layer_data.get().data
-    else:
-        layer_vals = layer_data.data
 
     # adata.X must NOT have been touched (layer target).
     X_after = adata.X

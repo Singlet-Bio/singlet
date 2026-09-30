@@ -44,6 +44,7 @@ singlet_gpu = pytest.importorskip(
     reason="singlet_gpu wheel not built. Run `pip install -e singlet-gpu/python/` first.",
 )
 
+import singlet.gpu  # noqa: E402
 from conftest import requires_gpu  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -365,7 +366,7 @@ def test_velocity_vs_scvelo_steady_state(gsm4037629_path):
     singlet.gpu.velocity.velocity(adata_gpu, mode="steady_state")
 
     # scvelo reference pipeline.
-    sc = pytest.importorskip("scanpy", reason="scanpy not installed")
+    pytest.importorskip("scanpy", reason="scanpy not installed")
     try:
         scv.pp.filter_and_normalize(adata_cpu, min_shared_counts=20, n_top_genes=2000)
         scv.pp.moments(adata_cpu, n_neighbors=_N_NEIGHBORS, n_pcs=_N_COMPS)

@@ -50,7 +50,7 @@ class TestMagic:
         from singlet._magic import magic
 
         adata = _make_adata(sparse=False)
-        result = magic(adata)
+        magic(adata)
         assert "magic" in adata.layers
         assert adata.layers["magic"].shape == (100, 200)
 

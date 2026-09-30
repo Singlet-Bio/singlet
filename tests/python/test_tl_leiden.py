@@ -34,6 +34,7 @@ singlet_gpu = pytest.importorskip(
     reason="singlet_gpu wheel not built. Run `pip install -e singlet-gpu/python/` first.",
 )
 
+import singlet.gpu  # noqa: E402
 from conftest import requires_gpu  # noqa: E402
 
 # ---------------------------------------------------------------------------

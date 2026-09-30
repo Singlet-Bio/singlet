@@ -40,6 +40,7 @@ singlet_gpu = pytest.importorskip(
     ),
 )
 
+import singlet.gpu  # noqa: E402
 from conftest import requires_gpu  # noqa: E402 — after importorskip
 
 # ---------------------------------------------------------------------------
@@ -362,8 +363,6 @@ def test_lifetime_safety(gsm4037629_path):
 
     m = singlet.gpu.io.load_pz(str(pz_path))
     expected_nnz = m.nnz
-    expected_rows = m.rows
-    expected_cols = m.cols
 
     # cupy >= 14 dtype-strict shim (§J.13 / CYCLE-189).
     class _CaiView:

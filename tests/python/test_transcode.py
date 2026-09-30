@@ -11,8 +11,8 @@ from scipy.sparse import csc_matrix
 
 singlepress = pytest.importorskip("singlepress")
 
-from singlet.pz_v2 import read_pz_v2
-from singlet.transcode import transcode_v1_to_v2
+from singlet.pz_v2 import read_pz_v2  # noqa: E402 -- after importorskip
+from singlet.transcode import transcode_v1_to_v2  # noqa: E402
 
 
 def _write_legacy(path, mat, rownames, colnames):
