@@ -52,11 +52,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import zstandard as zstd
-
-try:
-    from scipy.sparse import csc_matrix
-except ImportError:  # pragma: no cover — scipy is a hard dep of singlet
-    csc_matrix = None  # type: ignore
+from scipy.sparse import csc_matrix
 
 MAGIC = b"1PZ02\x00\x00\x00"
 VERSION = 2
@@ -106,8 +102,6 @@ class BlockSpec:
 
 
 def _to_csc(m) -> "csc_matrix":
-    if csc_matrix is None:
-        raise PzV2Error("scipy.sparse is required for pz_v2")
     if hasattr(m, "tocsc"):
         return m.tocsc()
     raise PzV2Error(f"unsupported matrix type: {type(m).__name__}")
@@ -367,8 +361,6 @@ class Block:
 
     def data(self, layer: Union[int, str] = 0) -> "csc_matrix":
         """CSC matrix view of one data layer."""
-        if csc_matrix is None:
-            raise PzV2Error("scipy.sparse is required")
         return csc_matrix(
             (self.data_array(layer), self.indices(), self.indptr()),
             shape=self.shape,

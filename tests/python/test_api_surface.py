@@ -129,7 +129,7 @@ class TestMain:
         import singlet
 
         result = singlet.show_versions()
-        assert "singlet: 2.0.0" in result
+        assert f"singlet: {singlet.__version__}" in result
         assert "numpy:" in result
         captured = capsys.readouterr()
-        assert "singlet: 2.0.0" in captured.out
+        assert f"singlet: {singlet.__version__}" in captured.out

@@ -12,5 +12,8 @@
     "reportIndexIssue": false,
     "reportOperatorIssue": false,
     "reportCallIssue": false,
-    "reportPrivateImportUsage": false
+    "reportPrivateImportUsage": false,
+    "reportOptionalSubscript": "warning",
+    "reportOptionalMemberAccess": "warning",
+    "reportOptionalIterable": "warning"
 }
