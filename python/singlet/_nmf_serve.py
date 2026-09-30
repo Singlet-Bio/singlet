@@ -1,64 +1,21 @@
 # SPDX-License-Identifier: MIT
-"""NMF model serving — project data onto interpretable biological programs."""
+"""Retired: hosted NMF model serving (``transform``/``annotate``).
+
+Both called ``https://api.singlet.bio/v1/nmf``, which was never brought into
+service, and now raise :class:`NotImplementedError`. :func:`singlet.nmf`
+factorises a matrix locally.
+"""
 
 from __future__ import annotations
 
+from singlet._auth import retired
+
 
 def transform(adata, *, model: str = "human_global_k100"):
-    """Project cells onto NMF factors. **Token-priced feature.**
-
-    Adds ``.obsm["X_nmf"]`` to the AnnData in-place.
-
-    Parameters
-    ----------
-    adata : anndata.AnnData
-        Cells to project.
-    model : str
-        Model name, e.g. ``"human_global_k100"``.
-    """
-    import numpy as np
-    import requests
-
-    from singlet._auth import _API_BASE, _headers
-
-    genes = list(adata.var_names)
-    resp = requests.post(
-        f"{_API_BASE}/nmf/transform",
-        json={"model": model, "genes": genes, "n_cells": adata.n_obs},
-        headers=_headers(),
-        timeout=120,
-    )
-    resp.raise_for_status()
-
-    adata.obsm["X_nmf"] = np.array(resp.json()["loadings"])
+    """Retired — raises :class:`NotImplementedError`. Use :func:`singlet.nmf`."""
+    raise NotImplementedError(retired("NMF model serving (transform)"))
 
 
 def annotate(adata, *, model: str = "human_global_k100") -> dict:
-    """Annotate NMF factors with biological programs. **Token-priced feature.**
-
-    Parameters
-    ----------
-    adata : anndata.AnnData
-        Must have ``.obsm["X_nmf"]`` (call ``transform`` first).
-    model : str
-        Model used for factor annotations.
-
-    Returns
-    -------
-    dict
-        Mapping from factor index to annotation string, e.g.
-        ``{0: "ventricular cardiomyocyte — repolarization", ...}``.
-    """
-    import requests
-
-    from singlet._auth import _API_BASE, _headers
-
-    resp = requests.get(
-        f"{_API_BASE}/nmf/annotations",
-        params={"model": model},
-        headers=_headers(),
-        timeout=30,
-    )
-    resp.raise_for_status()
-
-    return resp.json()["annotations"]
+    """Retired — raises :class:`NotImplementedError`. Use :func:`singlet.nmf`."""
+    raise NotImplementedError(retired("NMF model serving (annotate)"))

@@ -21,8 +21,9 @@ Usage:
     # Start the server (stdio transport):
     python -m singlet.mcp
 
-    # Or use the entry point:
-    singlet
+    # Or use the console script (the old name `singlet` still works but is
+    # deprecated: it clashes with the C++ pipeline binary):
+    singlet-mcp
 
     # Configure in Claude Desktop's claude_desktop_config.json:
     {
@@ -36,9 +37,13 @@ Usage:
 
 The live tools (search, qc, load, browse) call the public Singlet REST API at
 https://singlet.bio/api (override with $SINGLET_API_BASE). The aggregate tools
-(stats, protocols, quality, tissues, ...) read the bundled catalog parquet.
+(stats, protocols, quality, tissues, ...) read the offline catalog snapshot bundled
+with the package.
 
-Requires: pip install mcp
+This local server is separate from the hosted MCP endpoint at
+https://singlet.bio/mcp, which serves the live catalog and has its own tool set.
+
+Requires: pip install "singlet[mcp]"
 """
 
 from __future__ import annotations
@@ -552,8 +557,9 @@ async def _tool_load(args: dict) -> dict:
         return {"error": f"Sample {gsm_id} not found in atlas"}
 
     gse_id = sample.get("gse_id")
-    data_base = os.environ.get("SINGLET_DATA_BASE", "https://data.singlet.bio").rstrip("/")
-    bundle_url = f"{data_base}/data/{gse_id}/{gse_id}.singlet" if gse_id else None
+    from singlet._loader import _bundle_url
+
+    bundle_url = _bundle_url(gse_id) if gse_id else None
 
     return {
         "gsm_id": gsm_id,

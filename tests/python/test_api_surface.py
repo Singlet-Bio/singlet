@@ -34,12 +34,13 @@ class TestPublicAPI:
         assert callable(summary)
 
     def test_annotation_functions_present(self):
-        """Annotation functions importable."""
-        from singlet import annotate, gene_programs, project
+        """Retired annotation names stay importable (they raise NotImplementedError)."""
+        from singlet import annotate, annotate_cell_types, gene_programs, project
 
         assert callable(annotate)
         assert callable(gene_programs)
         assert callable(project)
+        assert callable(annotate_cell_types)
 
     def test_io_subpackage_importable(self):
         """singlet.io subpackage has expected exports."""
@@ -94,27 +95,34 @@ class TestPublicAPI:
 class TestMain:
     def test_python_m_singlet(self):
         """python -m singlet prints atlas summary without error."""
+        import os
         import subprocess
         import sys
 
+        # Offline: exercise the snapshot fallback deterministically.
+        env = {**os.environ, "SINGLET_OFFLINE": "1"}
         result = subprocess.run(
             [sys.executable, "-m", "singlet"],
             capture_output=True,
             text=True,
-            timeout=10,
+            timeout=60,
+            env=env,
         )
         assert result.returncode == 0
         assert "singlet v" in result.stdout
         assert "atlas" in result.stdout
+        assert "offline" in result.stdout
 
-    def test_main_function(self, capsys):
+    def test_main_function(self, capsys, monkeypatch):
         """singlet.__main__.main() prints usage info."""
         from singlet.__main__ import main
 
+        monkeypatch.setenv("SINGLET_OFFLINE", "1")
         main()
         captured = capsys.readouterr()
         assert "singlet v" in captured.out
         assert "Quick start" in captured.out
+        assert "GSE138867" in captured.out
 
     def test_show_versions(self, capsys):
         """singlet.show_versions() prints dependency info."""

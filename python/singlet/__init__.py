@@ -2,10 +2,11 @@
 """
 singlet — Python client for the Singlet single-cell atlas.
 
-Browse catalog (works offline):
+Browse the catalog (offline snapshot bundled with the package; it lags the
+live catalog at https://singlet.bio — ``python -m singlet`` prints live stats):
     singlet.catalog()                      Browse all datasets
     singlet.catalog("lung")                Search by keyword
-    singlet.info("GSE264667")              Dataset metadata
+    singlet.info("GSE138867")              Metadata (snapshot, then the live API)
     singlet.sample_index()                 Full sample index DataFrame
     singlet.species()                      Species breakdown
     singlet.tissues()                      Tissue/source breakdown
@@ -17,20 +18,21 @@ Browse catalog (works offline):
     singlet.top_series(n=10)               Largest series
     singlet.quality_tiers()                Quality tier breakdown (gold/silver/bronze)
     singlet.failure_categories()           Pipeline failure analysis
-    singlet.cell_types()                   Cell type annotations (50% coverage, 42 categories)
-    singlet.summary()                      Atlas overview
+    singlet.cell_types()                   Cell type annotations
+    singlet.summary()                      Snapshot overview
 
-Find data (natural language):
-    singlet.find("human lung fibroblasts")     Search → list of accessions
-    singlet.find("melanoma T cells", level="gse")
-    singlet.find_load("human pancreas islets") Search + load → AnnData
+Find data (natural language, live):
+    singlet.find("human lung fibroblasts")         Search → study (GSE) accessions
+    singlet.find("melanoma T cells", level="gsm")  Search → sample (GSM) accessions
+    singlet.find_load("human pancreas islets")     Search + load the top 3 studies
 
 Load data:
-    singlet.load("GSE149298")              Load an accession → AnnData (free download)
+    singlet.load("GSE138867")              Load a study → AnnData (free download)
+    singlet.load("GSM4120733")             Load one sample (parent study, filtered)
     singlet.load("path/to/data.singlet")   Load a local .singlet file → AnnData
-    singlet.load(["GSE149298", "b.singlet"]) Load + concatenate several → one AnnData
+    singlet.load(["GSE138867", "GSE146974"]) Load + concatenate several → one AnnData
+    singlet.load("GSE138867", genes=["CD3E", "MS4A1"])  Gene symbols or Ensembl ids
     singlet.load_dir("/path/to/quant/GSM") Load a pipeline output directory → AnnData
-    singlet.load_sample("GSM3308814")      Load single sample (column-range read)
 
 Format I/O:
     singlet.read_kraken2("gse_dir/")       Read kraken2 microbiome matrix
@@ -47,12 +49,11 @@ Pipeline (process raw reads → canonical sample):
     singlet.validate_sample(sample_dir)            Manifest + structure check
 
 Configuration:
-    singlet.set_catalog_dir("/path/to/catalog")  Set local catalog path
+    singlet.set_catalog_dir("/path/to/catalog")  Set local catalog path (cluster use)
 
-Cell type annotation (free, local):
-    singlet.gene_programs("Homo sapiens")  Download NMF gene programs (W matrix)
-    singlet.project(adata)                 Project cells → gene program space (H matrix)
-    singlet.annotate(adata)                Annotate cells with types (NMF-based)
+Cell type annotation (local):
+    singlet.annotate_cell_types(adata, markers)    Marker-gene scoring per cluster
+    singlet.predict_cell_type(adata, ref, "label") Label transfer from a reference
 
 Exploration:
     singlet.describe(adata)                Quick summary stats (sparsity, counts, genes)
@@ -65,17 +66,24 @@ Preprocessing:
     singlet.normalize(adata)                    Library-size normalize + log1p
     singlet.highly_variable_genes(adata)        Select top variable genes
     singlet.pca(adata)                          PCA dimensionality reduction
-    singlet.harmony(adata, "batch")             Batch correction (Harmony)
+    singlet.harmony(adata, "gsm_id")            Batch correction across samples (Harmony)
+
+Retired (raise NotImplementedError; their hosts were never in service):
+    gene_programs / project / annotate, query / search / login, fetch without
+    base_url, singlet.atlas.*
 """
 
 __version__ = "2.0.0"
 
 from singlet._aggregate import aggregate
 from singlet._ambient_rna_score import ambient_rna_score
-from singlet._annotate import annotate, gene_programs, project
+# Retired (raise NotImplementedError); kept importable, not in __all__.
+from singlet._annotate import annotate as annotate
+from singlet._annotate import gene_programs as gene_programs
+from singlet._annotate import project as project
 from singlet._annotate_cell_types import annotate_cell_types
 from singlet._augur_prioritize import augur_prioritize
-from singlet._auth import login
+from singlet._auth import login as login  # retired: raises NotImplementedError
 from singlet._batch_evaluation import batch_evaluation
 from singlet._catalog import (
     catalog,
@@ -173,7 +181,8 @@ from singlet.views import psi as view_psi
 from singlet.views import usa as view_usa
 from singlet._knn_impute import knn_impute
 from singlet._leiden import leiden
-from singlet._loader import download, load, load_dir, load_sample, open_bundle
+from singlet._loader import download, load, load_dir, open_bundle
+from singlet._loader import load_sample as load_sample  # cluster use; not in __all__
 from singlet._louvain import louvain
 from singlet._magic import magic
 from singlet._marker_overlap import marker_gene_overlap
@@ -208,7 +217,8 @@ from singlet._predict_cell_type import predict_cell_type
 from singlet._pseudobulk import pseudobulk
 from singlet._qc import calculate_qc_metrics
 from singlet._qc_summary import qc_summary
-from singlet._query import query, search
+from singlet._query import query as query  # retired: raises NotImplementedError
+from singlet._query import search as search  # retired: raises NotImplementedError
 from singlet._rank_genes import rank_genes
 from singlet._recipes import recipe_seurat, recipe_zheng17
 from singlet._regress import regress_out
@@ -270,17 +280,16 @@ __all__ = [
     "find_load",
     "set_api_key",
     # Load
+    # (load_sample stays importable for cluster users with a local processing
+    # tree, but is not part of the documented public API.)
     "load",
-    "load_sample",
     "load_dir",
     "download",
     "SingletBundle",
     "MODALITIES",
     "open_bundle",
-    # Annotation (free, local)
-    "gene_programs",
-    "project",
-    "annotate",
+    # (gene_programs / project / annotate stay importable so old code gets a
+    # clear NotImplementedError, but are no longer advertised.)
     # I/O
     "read_1pz",
     "write_1pz",

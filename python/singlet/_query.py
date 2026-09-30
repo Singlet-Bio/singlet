@@ -1,9 +1,17 @@
 # SPDX-License-Identifier: MIT
-"""Token-priced: cross-atlas query and semantic search."""
+"""Retired: cross-atlas ``query()`` and cell-level ``search()``.
+
+Both streamed cells from ``https://api.singlet.bio/v1``, which was never
+brought into service. They now raise :class:`NotImplementedError` pointing
+at the working replacements: :func:`singlet.find` (natural-language search
+over studies/samples) followed by :func:`singlet.load`.
+"""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Union
+
+from singlet._auth import retired
 
 if TYPE_CHECKING:
     from anndata import AnnData
@@ -11,10 +19,10 @@ if TYPE_CHECKING:
 
 def query(
     *,
-    species: Optional[str | list[str]] = None,
-    tissue: Optional[str | list[str]] = None,
-    disease: Optional[str | list[str]] = None,
-    cell_type: Optional[str | list[str]] = None,
+    species: Optional[Union[str, list]] = None,
+    tissue: Optional[Union[str, list]] = None,
+    disease: Optional[Union[str, list]] = None,
+    cell_type: Optional[Union[str, list]] = None,
     perturbation: Optional[str] = None,
     developmental_stage: Optional[str] = None,
     sex: Optional[str] = None,
@@ -22,123 +30,16 @@ def query(
     min_cells: int = 0,
     max_results: int = 100_000,
 ) -> AnnData:
-    """Query the atlas by structured metadata. **Token-priced feature.**
+    """Retired — raises :class:`NotImplementedError`.
 
-    Streams matching cells from AWS as a single AnnData object with
-    NMF embeddings and standardized annotations.
-
-    Parameters
-    ----------
-    species : str or list, optional
-        Species name(s), e.g. ``"human"`` or ``["human", "mouse"]``.
-    tissue : str or list, optional
-        Tissue name(s), e.g. ``"lung"`` or ``["lung", "liver"]``.
-    disease : str or list, optional
-        Disease name(s), e.g. ``"Crohn's disease"``.
-    cell_type : str or list, optional
-        Cell type(s), e.g. ``"macrophage"``.
-    perturbation : str, optional
-        Perturbation condition, e.g. ``"anti-TNF"``.
-    developmental_stage : str, optional
-        Stage filter, e.g. ``"fetal"``, ``"adult"``.
-    sex : str, optional
-        ``"male"`` or ``"female"``.
-    modality : str, optional
-        Data modality, e.g. ``"RNA-seq"``, ``"ATAC-seq"``.
-    min_cells : int
-        Minimum cells per dataset to include.
-    max_results : int
-        Cap on total cells returned.
-
-    Returns
-    -------
-    anndata.AnnData
-        Merged cells across matching datasets with:
-        - ``.X``: raw counts (sparse)
-        - ``.obs``: cell_type, disease, tissue, species, accession, ...
-        - ``.obsm["X_nmf"]``: NMF embeddings
+    Use ``singlet.load(singlet.find("human lung 10x"))`` instead.
     """
-    import requests
-
-    from singlet._auth import _API_BASE, _headers
-
-    params = {}
-    for field, val in [
-        ("species", species),
-        ("tissue", tissue),
-        ("disease", disease),
-        ("cell_type", cell_type),
-        ("perturbation", perturbation),
-        ("developmental_stage", developmental_stage),
-        ("sex", sex),
-        ("modality", modality),
-    ]:
-        if val is not None:
-            params[field] = val if isinstance(val, str) else ",".join(val)
-
-    params["min_cells"] = str(min_cells)
-    params["max_results"] = str(max_results)
-
-    resp = requests.post(
-        f"{_API_BASE}/query",
-        json=params,
-        headers=_headers(),
-        timeout=120,
-    )
-    resp.raise_for_status()
-
-    import os
-    import tempfile
-
-    from singlet._io import read_1pz
-
-    with tempfile.NamedTemporaryFile(suffix=".1pz", delete=False) as f:
-        f.write(resp.content)
-        tmp_path = f.name
-
-    try:
-        return read_1pz(tmp_path)
-    finally:
-        os.unlink(tmp_path)
+    raise NotImplementedError(retired("singlet.query()"))
 
 
 def search(text: str, max_results: int = 100_000) -> AnnData:
-    """Natural-language search across the atlas. **Token-priced feature.**
+    """Retired — raises :class:`NotImplementedError`.
 
-    Parameters
-    ----------
-    text : str
-        Free-text query, e.g. ``"exhausted T cells in pediatric leukemia"``.
-    max_results : int
-        Cap on total cells returned.
-
-    Returns
-    -------
-    anndata.AnnData
-        Matching cells with metadata and NMF embeddings.
+    Use :func:`singlet.find` (returns accessions) and :func:`singlet.load`.
     """
-    import requests
-
-    from singlet._auth import _API_BASE, _headers
-
-    resp = requests.post(
-        f"{_API_BASE}/search",
-        json={"query": text, "max_results": max_results},
-        headers=_headers(),
-        timeout=120,
-    )
-    resp.raise_for_status()
-
-    import os
-    import tempfile
-
-    from singlet._io import read_1pz
-
-    with tempfile.NamedTemporaryFile(suffix=".1pz", delete=False) as f:
-        f.write(resp.content)
-        tmp_path = f.name
-
-    try:
-        return read_1pz(tmp_path)
-    finally:
-        os.unlink(tmp_path)
+    raise NotImplementedError(retired("singlet.search()"))

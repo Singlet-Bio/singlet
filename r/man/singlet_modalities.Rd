@@ -22,7 +22,8 @@ Which modalities are available for a sample
 }
 \examples{
 \dontrun{
-singlet_modalities("GSE149298.singlet")
+path <- singlet_download("GSE138867")
+singlet_modalities(path)
 }
 
 }

@@ -16,7 +16,14 @@ copyright = "2026, Zach DeBruine"
 try:
     release = importlib.metadata.version("singlet")
 except importlib.metadata.PackageNotFoundError:
-    release = "1.0.0"
+    # Building from a checkout without installing: read the version the
+    # package itself declares rather than a hard-coded (stale) number.
+    import re
+
+    _init = os.path.join(os.path.dirname(__file__), "..", "python", "singlet", "__init__.py")
+    with open(_init, encoding="utf-8") as _fh:
+        _match = re.search(r'^__version__ = "([^"]+)"', _fh.read(), re.MULTILINE)
+    release = _match.group(1) if _match else "unknown"
 version = release
 
 extensions = [

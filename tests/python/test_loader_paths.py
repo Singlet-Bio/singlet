@@ -446,7 +446,7 @@ class TestLoadSample:
         # the sample occupies columns 10..15 (col_offset=10, col_count=5).
         full = sp.random(3, 15, density=0.5, format="csc", dtype=np.float32)
         monkeypatch.setattr(
-            "singlet._pz.read_1pz",
+            "singlet._loader._read_pz_record",
             MagicMock(return_value=_fake_1pz_record(full, ["G1", "G2", "G3"])),
         )
 
@@ -478,7 +478,7 @@ class TestLoadSample:
 
         full = sp.random(4, 3, density=0.5, format="csc", dtype=np.float32)
         monkeypatch.setattr(
-            "singlet._pz.read_1pz",
+            "singlet._loader._read_pz_record",
             MagicMock(return_value=_fake_1pz_record(full, ["GeneA", "GeneB", "GeneC", "GeneD"])),
         )
 

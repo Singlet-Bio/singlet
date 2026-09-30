@@ -54,13 +54,30 @@ torch = ["torch>=2.0"]
 gpu = ["cupy-cuda12x>=13.0"]
 zarr = ["zarr>=2.12"]
 tiledb = ["tiledbsoma>=1.4"]
-mcp = ["mcp>=0.1"]
-all = ["singlet[torch,gpu,zarr,tiledb,mcp]"]
-dev = [
+# The local MCP server is written against the 1.x SDK (mcp.server.Server).
+mcp = ["mcp>=1.0,<2"]
+# Optional algorithm packages some analysis functions use when present
+# (plotting, scanpy interop, GLM-based tests, Leiden on igraph).
+analysis = [
+    "matplotlib>=3.5",
+    "scanpy>=1.9",
+    "statsmodels>=0.13",
+    "igraph>=0.10",
+    "leidenalg>=0.9",
+]
+all = ["singlet[torch,gpu,zarr,tiledb,mcp,analysis]"]
+# Everything the Python test suite imports.
+test = [
     "pytest>=7.0",
     "pytest-cov",
+    "coverage>=7.0",
     "hypothesis>=6.0",
+    "singlet[analysis]",
+]
+dev = [
+    "singlet[test]",
     "ruff",
+    "pyright",
     "pybind11>=2.11",
 ]
 
@@ -72,7 +89,12 @@ Issues = "https://github.com/Singlet-Bio/singlet/issues"
 Changelog = "https://github.com/Singlet-Bio/singlet/blob/main/CHANGELOG.md"
 
 [project.scripts]
-singlet = "singlet.mcp.__main__:main"
+# Local MCP server (offline catalog snapshot + live search). Distinct from the
+# hosted endpoint at https://singlet.bio/mcp.
+singlet-mcp = "singlet.mcp.__main__:main"
+# Deprecated alias for singlet-mcp: "singlet" is also the C++ pipeline binary's
+# name. Still works (prints a notice on stderr); pipeline/_binary.py skips it.
+singlet = "singlet.mcp.__main__:deprecated_main"
 singlet-process = "singlet.pipeline.__main__:main"
 
 [tool.setuptools.packages.find]

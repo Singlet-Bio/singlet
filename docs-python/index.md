@@ -8,8 +8,8 @@ analysis-ready atlas. You work with two simple things: GEO accession strings
 (`GSE…` / `GSM…`) and `.singlet` files. Everything downloads as
 [AnnData](https://anndata.readthedocs.io/), ready for scanpy or PyTorch.
 
-Data is CC0 (public domain); code is MIT. No login, no API keys, no usage
-pricing — public data is free to download.
+Data is CC0 (public domain); code is MIT. Downloads need no login and no API
+key.
 
 ```{include} ../python/README.md
 :start-after: "## Install"
@@ -17,8 +17,8 @@ pricing — public data is free to download.
 ```
 
 See the [full README on GitHub](https://github.com/Singlet-Bio/singlet/blob/main/python/README.md)
-for natural-language search, format conversion, the GPU/PyTorch extras, and
-the pipeline CLI.
+for natural-language search, the offline catalog snapshot, export formats,
+the PyTorch extra and the local MCP server.
 
 ```{toctree}
 :hidden:

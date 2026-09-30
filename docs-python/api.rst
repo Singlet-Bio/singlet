@@ -8,7 +8,10 @@ generated page giving its complete signature and docstring.
 Browse the catalog
 -------------------
 
-Offline lookups against the bundled catalog index — no network access.
+Lookups against the catalog snapshot bundled with the package. They work
+offline but lag the live catalog at https://singlet.bio; :func:`singlet.info`
+falls back to the live REST API for accessions the snapshot does not know,
+and ``python -m singlet`` prints live totals.
 
 .. autosummary::
    :toctree: generated
@@ -31,7 +34,8 @@ Offline lookups against the bundled catalog index — no network access.
 Find data
 ---------
 
-Natural-language search over the catalog.
+Natural-language search over the live catalog. ``find`` returns study
+(``GSE``) accessions by default; ``find_load`` loads the top three.
 
 .. autosummary::
    :toctree: generated
@@ -49,8 +53,10 @@ Load data
    :nosignatures:
 
    singlet.load
+   singlet.download
+   singlet.open_bundle
+   singlet.SingletBundle
    singlet.load_dir
-   singlet.load_sample
    singlet.SingletSample
 
 Format I/O
@@ -92,15 +98,18 @@ Process raw reads (FASTQ / SRA / ENA accessions) into a canonical
 Cell type annotation
 ---------------------
 
-Free, local NMF-based annotation — no external API calls.
+Local annotation from marker genes or a labelled reference — no external
+API calls. (The former NMF gene-program functions ``gene_programs``,
+``project`` and ``annotate`` depended on a model host that is not in service
+and now raise :class:`NotImplementedError`.)
 
 .. autosummary::
    :toctree: generated
    :nosignatures:
 
-   singlet.gene_programs
-   singlet.project
-   singlet.annotate
+   singlet.annotate_cell_types
+   singlet.predict_cell_type
+   singlet.transfer_labels
 
 QC and preprocessing
 ---------------------
@@ -141,7 +150,6 @@ Every public name in ``singlet.__all__``, alphabetically.
 
     singlet.aggregate
     singlet.ambient_rna_score
-    singlet.annotate
     singlet.annotate_cell_types
     singlet.augur_prioritize
     singlet.batch_evaluation
@@ -201,7 +209,6 @@ Every public name in ``singlet.__all__``, alphabetically.
     singlet.gene_correlation_network
     singlet.gene_importance
     singlet.gene_module_score
-    singlet.gene_programs
     singlet.gene_set_enrichment
     singlet.gene_set_variation
     singlet.gene_space_embedding
@@ -222,7 +229,6 @@ Every public name in ``singlet.__all__``, alphabetically.
     singlet.leiden_subclustering
     singlet.load
     singlet.load_dir
-    singlet.load_sample
     singlet.log1p
     singlet.louvain
     singlet.magic
@@ -237,6 +243,7 @@ Every public name in ``singlet.__all__``, alphabetically.
     singlet.normalize
     singlet.obs_df
     singlet.open
+    singlet.open_bundle
     singlet.optimal_transport
     singlet.paga
     singlet.palantir_pseudotime
@@ -256,7 +263,6 @@ Every public name in ``singlet.__all__``, alphabetically.
     singlet.plot_umap
     singlet.plot_violin
     singlet.predict_cell_type
-    singlet.project
     singlet.protocols
     singlet.pseudobulk
     singlet.qc_summary

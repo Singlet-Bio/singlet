@@ -1,5 +1,14 @@
 # SPDX-License-Identifier: MIT
-"""singlet.fetch — Download canonical sample bundles from a remote host.
+"""singlet.fetch — Download canonical sample directories from a mirror.
+
+.. note::
+   The public per-sample host this module was written for
+   (``https://data.singlet.bio/v1``) was retired; public data is published
+   as one ``.singlet`` bundle per study. Use :func:`singlet.load`,
+   :func:`singlet.download` or :func:`singlet.open_bundle` for it, and
+   :func:`singlet.find` to search. :func:`fetch` still works against a
+   self-hosted mirror of sample directories when ``base_url`` is passed
+   explicitly; without one it raises :class:`NotImplementedError`.
 
 Sample directories are served as a flat collection of files under a
 per-accession prefix. The required entry point is ``manifest.json``
@@ -36,14 +45,27 @@ from typing import Iterable, Optional
 __all__ = ["fetch", "default_cache_dir", "default_base_url"]
 
 
-_DEFAULT_BASE_URL = "https://data.singlet.bio/v1"
 _MANIFEST_NAME = "manifest.json"
 _USER_AGENT = "singlet-fetch/1"
 
+_RETIRED_HOST_MSG = (
+    "singlet.fetch() downloaded per-sample directories from https://data.singlet.bio/v1, "
+    "which has been retired. Public data is now one .singlet bundle per study: use "
+    "singlet.load('GSE…' or 'GSM…') for an AnnData, singlet.download('GSE…') for the file, "
+    "or singlet.find('…') to search. To fetch from a self-hosted mirror of sample "
+    "directories, pass base_url= explicitly."
+)
+
 
 def default_base_url() -> str:
-    """Base URL for hosted samples. Override with ``SINGLET_DATA_BASE``."""
-    return os.environ.get("SINGLET_DATA_BASE", _DEFAULT_BASE_URL).rstrip("/")
+    """Base URL of the public bundle host used by :func:`singlet.load`.
+
+    Bundles live at ``<base>/data/<GSE>/<GSE>.singlet``. Override with
+    ``$SINGLET_DATA_BASE`` (a trailing ``/data`` is accepted and ignored).
+    """
+    from singlet._loader import _data_base
+
+    return _data_base()
 
 
 def default_cache_dir() -> Path:
@@ -100,7 +122,7 @@ def fetch(
     files: Optional[Iterable[str]] = None,
     max_workers: int = 8,
 ) -> Path:
-    """Download a hosted sample to the local cache; return its directory.
+    """Download a sample directory from a mirror to the local cache.
 
     Parameters
     ----------
@@ -111,8 +133,10 @@ def fetch(
         Override the local cache root (default: ``~/.singlet/data`` or
         ``$SINGLET_CACHE_DIR``).
     base_url
-        Override the remote base URL (default: ``$SINGLET_DATA_BASE``
-        or ``https://data.singlet.bio/v1``).
+        Base URL of a self-hosted mirror of sample directories. Required:
+        the former public default (``https://data.singlet.bio/v1``) has been
+        retired, and calling without it raises :class:`NotImplementedError`.
+        For public data use :func:`singlet.load` instead.
     files
         Optional list of file paths (relative to the sample root) to fetch.
         Default: every file in the manifest.
@@ -131,7 +155,9 @@ def fetch(
     re-downloaded. Partial transfers go to ``*.part`` files and are renamed
     atomically on success.
     """
-    base = (base_url or default_base_url()).rstrip("/")
+    if not base_url:
+        raise NotImplementedError(_RETIRED_HOST_MSG)
+    base = base_url.rstrip("/")
     root = Path(cache_dir) if cache_dir else default_cache_dir()
     out_dir = root / accession
     out_dir.mkdir(parents=True, exist_ok=True)

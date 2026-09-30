@@ -2,6 +2,27 @@
 
 All notable changes to the singlet project.
 
+## [Unreleased]
+
+### Python — fixes
+- **h5ad / zarr export works for real studies.** `SingletBundle.to_anndata()` (and so `singlet.load()`) no longer copies `manifest.json` into `adata.uns` verbatim: its `checksums` were keyed by archive paths containing `/`, which `write_h5ad`/`write_zarr` reject, so every real study failed to export. `uns["manifest"]["checksums"]` is now parallel `path`/`sha256` lists, and `uns` values are made writable (no `None`, no `/` in keys, mixed lists stored as JSON text).
+- **Empty samples are skipped, hollow studies are explained.** Samples whose count matrix is a 0x0 stub, missing, or has no called cells are skipped with a warning and listed in `adata.uns["skipped_samples"]` (`gsm_id`, `reason`). A study with no usable sample raises an error that says the file is hollow and links to `https://singlet.bio/study/<GSE>`; loading a skipped GSM says why.
+- **Called cells.** Bundle readers accept every barcode-column spelling in `cell_calls.tsv` (`barcode`, `cb`, `cell_barcode`, `CB`) and honour `is_cell` written as bool, 0/1 or text (the string `"False"` no longer counts as a cell).
+- **`load(genes=[...])` accepts gene symbols** as well as Ensembl ids: exact `var["gene_name"]` match first, then case-insensitive; unmatched names are warned about. `var_names` stay Ensembl ids.
+- **`pack_gse` refuses hollow samples.** A sample whose `summary.json` reports called cells while `exon_counts.1pz` is missing, a 0x0 stub (read from the TP1Z header) or all zeros is excluded with a warning and recorded in `manifest.json` under `excluded_samples`; `strict=True` / `--strict` raises instead, and a study that is entirely hollow is never packed.
+- **`manifest.json` records the real `singlet_version`** when packing from a source checkout (it read a `__version__` that `singlet._versions` never defined and fell back to `"unknown"`).
+- **`$SINGLET_DATA_BASE`** means one thing: the base URL such that bundles live at `<base>/data/<GSE>/<GSE>.singlet`. A trailing `/data` (the R client's form) is accepted.
+- **Pipeline binary discovery** looks for `singlet-pipeline` first and skips a `singlet` on `$PATH` that is a Python console script, so the MCP alias can no longer shadow the C++ binary.
+- `load_sample()` raises a clear error when no local catalog is configured, before touching the compiled codec; it is kept for cluster users but removed from the public API listing and docs.
+
+### Python — changes
+- `singlet.find()` returns study (`GSE`) accessions by default (`level="gse"`); `find_load()` loads the top **3** studies by default.
+- `singlet.info()` falls back to the live API (`/api/gse/<GSE>`, `/api/gsm/<GSM>`) for accessions missing from the bundled offline snapshot; `catalog()`/`summary()` are documented as that snapshot. `python -m singlet` prints live totals from `https://singlet.bio/api/stats` (snapshot summary when offline). `SINGLET_OFFLINE=1` disables these live lookups.
+- The local MCP server's console script is now **`singlet-mcp`**; `singlet` remains as a deprecated alias.
+- Extras: `mcp` pinned to `mcp>=1.0,<2`; new `analysis` extra (matplotlib, scanpy, statsmodels, igraph, leidenalg); new `test` extra; `dev` pulls `test`.
+- **Retired** (raise `NotImplementedError` with a pointer to `singlet.load`/`singlet.find`), because their hosts were never in service: `gene_programs`/`project`/`annotate` (models.singlet.bio), `query`/`search`/`login` and hosted NMF serving (api.singlet.bio/v1), `fetch()` without an explicit `base_url` (data.singlet.bio/v1), and `singlet.atlas` (r2.singlet.bio).
+- Docs: install from GitHub (`pip install "singlet @ git+https://github.com/Singlet-Bio/singlet"`, needs a C++17 compiler and zstd) until wheels are published; examples use GSE138867 / GSM4120733; stale counts and non-existent GPU/loom/`singlet[pipeline]` instructions removed.
+
 ## [2.0.0] — 2026-09-04
 
 ### Breaking Changes
@@ -19,7 +40,6 @@ All notable changes to the singlet project.
 - **PyTorch module**: `from singlet.torch import OnePZDataset, DataLoader`
 - **GPU module**: `from singlet.gpu import ...` (requires cupy)
 - **CMake find_package**: `find_package(Singlet COMPONENTS pz fq pileup)` with version file
-- **R GPU support**: `singlet::has_gpu()`, `gpu_pca()`, `gpu_neighbors()`, `gpu_leiden()`
 - **C++ test suite**: 100 unit tests covering all pileup modules (codec, cell calling, ATAC, ADT, species, nonhost, export, spatial, protocol detection, UMI dedup, bloom filter, velocity, saturation, read stats, provenance, minimizer index, cascade stats, pz writer, ancestry, ASE, MTX writer)
 - **GPU library** (merged from the former standalone `singlet-gpu` repo, developed over ~162 cycles; full per-cycle record in `state/gpu/cycle-log.md`):
   - `core/sparse_eigensolver.h` — header-only LOBPCG for top-K exterior eigenvalues of sparse symmetric CSR (cuRAND Philox + cuBLAS + cuSPARSE SpMM + cuSOLVER); replaces the n²-dense path in `embed/diffmap`/`embed/dpt` (n=10k: ~8 MB vs 400 MB; n=1M now feasible)

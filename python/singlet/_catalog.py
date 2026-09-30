@@ -1,9 +1,17 @@
 # SPDX-License-Identifier: MIT
-"""Browse the SingletDB catalog.
+"""Browse the Singlet catalog (offline snapshot).
 
-Loads catalog_v1.parquet and sample_index.parquet from either:
-  1. A local catalog directory (set via SINGLET_CATALOG_DIR or singlet.set_catalog_dir())
-  2. Zenodo download (cached at ~/.singlet/cache/)
+The browse functions here (``catalog``, ``samples``, ``summary``, ...) read an
+**offline snapshot** — ``catalog_v1.parquet`` and ``sample_index.parquet``
+bundled with the package — so they work without a network connection but lag
+the live catalog at https://singlet.bio. For current numbers use
+``python -m singlet`` (live stats) or :func:`singlet.find`; :func:`info` falls
+back to the live REST API for accessions the snapshot does not know.
+
+The snapshot is loaded from, in order:
+  1. A local catalog directory (cluster use: SINGLET_CATALOG_DIR or singlet.set_catalog_dir())
+  2. The copy bundled with the package
+  3. A cached or fresh download from GitHub (``singlet.refresh()``)
 
 Catalog v1.0 schema:
   catalog_v1.parquet:  gse_id, organism, n_samples, n_cells, n_genes, reference,
@@ -22,7 +30,6 @@ import pandas as pd
 
 _CATALOG_URL = "https://raw.githubusercontent.com/Singlet-Bio/singlet/main/python/singlet/data/catalog_v1.parquet"
 _SAMPLE_INDEX_URL = "https://raw.githubusercontent.com/Singlet-Bio/singlet/main/python/singlet/data/sample_index.parquet"
-_R2_BASE = "https://models.singlet.bio"
 
 _CATALOG_CACHE: Optional[pd.DataFrame] = None
 _SAMPLE_INDEX_CACHE: Optional[pd.DataFrame] = None
@@ -154,7 +161,10 @@ def refresh() -> None:
 
 
 def catalog(search: Optional[str] = None) -> pd.DataFrame:
-    """Return the full dataset catalog as a DataFrame.
+    """Return the dataset catalog as a DataFrame.
+
+    This is the offline snapshot bundled with the package, not the live
+    catalog; see https://singlet.bio or :func:`singlet.find` for current data.
 
     Parameters
     ----------
@@ -199,30 +209,92 @@ def sample_index(gse_id: Optional[str] = None) -> pd.DataFrame:
     return df.reset_index(drop=True)  # type: ignore[return-value]
 
 
-def info(accession: str) -> dict:
+def _live_info(accession: str) -> Optional[dict]:
+    """Look *accession* up on the live REST API, or return None.
+
+    Calls ``GET /api/gse/<GSE>`` or ``GET /api/gsm/<GSM>`` (base
+    ``$SINGLET_API_BASE``, default ``https://singlet.bio/api``) and flattens
+    the reply to one record: the ``series`` (GSE) or ``sample`` (GSM) object,
+    with the related objects attached under their own keys and
+    ``source="live"``. None means unknown to the API, unreachable, or
+    ``$SINGLET_OFFLINE`` is set.
+    """
+    import json
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+
+    from singlet.find import _api_base, _offline, _request_headers
+
+    if _offline():
+        return None
+    kind = "gsm" if accession.startswith("GSM") else "gse"
+    url = f"{_api_base()}/{kind}/{urllib.parse.quote(accession)}"
+    req = urllib.request.Request(url, headers=_request_headers())
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            payload = json.load(resp)
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+
+    primary, related = ("sample", ("series",)) if kind == "gsm" else ("series", ("meta", "samples"))
+    record = payload.get(primary)
+    if not isinstance(record, dict):
+        return None
+    out = dict(record)
+    out.setdefault(f"{kind}_id", accession)
+    for key in related:
+        if key in payload:
+            out[key] = payload[key]
+    out["source"] = "live"
+    return out
+
+
+def info(accession: str, *, live: bool = True) -> dict:
     """Return metadata for a single dataset or sample.
+
+    Looks in the offline snapshot bundled with the package first. An
+    accession the snapshot does not know (it lags the live catalog) is then
+    looked up on the live REST API (``https://singlet.bio/api/gse/<GSE>`` or
+    ``/api/gsm/<GSM>``); such records carry ``source="live"`` and the API's
+    field names.
 
     Parameters
     ----------
     accession : str
         GEO series (GSE*) or sample (GSM*) accession.
+    live : bool
+        Fall back to the live API when the snapshot has no match (default).
+        ``$SINGLET_OFFLINE=1`` disables the fallback globally.
 
     Returns
     -------
     dict
         Dataset/sample metadata including organism, n_cells, protocol, etc.
+
+    Raises
+    ------
+    KeyError
+        If neither the snapshot nor the live API knows the accession.
     """
-    if accession.startswith("GSM"):
+    acc = str(accession).strip().upper()
+    if acc.startswith("GSM"):
         df = _load_sample_index()
-        rows = df[df["gsm_id"] == accession]
-        if rows.empty:
-            raise KeyError(f"Accession {accession!r} not found in sample index")
+        rows = df[df["gsm_id"] == acc]
+        where = "sample index snapshot"
+    else:
+        df = _load_catalog()
+        rows = df[df["gse_id"] == acc]
+        where = "catalog snapshot"
+    if not rows.empty:
         return rows.iloc[0].to_dict()
-    df = _load_catalog()
-    rows = df[df["gse_id"] == accession]
-    if rows.empty:
-        raise KeyError(f"Accession {accession!r} not found in catalog")
-    return rows.iloc[0].to_dict()
+    record = _live_info(acc) if live else None
+    if record is not None:
+        return record
+    checked = f"the offline {where}" + (" or the live API" if live else "")
+    raise KeyError(f"Accession {acc!r} not found in {checked}")
 
 
 def species() -> list[str]:
@@ -388,7 +460,11 @@ def datasets(
 
 
 def summary() -> str:
-    """Return a one-line summary of the atlas.
+    """Return a one-line summary of the offline catalog snapshot.
+
+    The counts describe the snapshot bundled with the package, which lags the
+    live catalog; ``python -m singlet`` prints live numbers from
+    https://singlet.bio/api/stats.
 
     Example output:
         singlet atlas: 2,712 samples (1,139 SUCCESS) • 572 series • 17 species • 29 protocols • 3.3M cells

@@ -416,17 +416,20 @@ class SingletSample:
 
 
 def open_sample(accession_or_path, cache_dir=None, base_url=None) -> SingletSample:
-    """Open a sample by local path or remote accession.
+    """Open a sample by local path or by accession on a mirror.
 
     - Existing local path → :class:`SingletSample` directly.
-    - Accession string → :func:`singlet.fetch.fetch` then open.
+    - Accession string → :func:`singlet.fetch.fetch` then open. This needs
+      ``base_url`` pointing at a self-hosted mirror of sample directories;
+      the former public per-sample host was retired, so without one this
+      raises :class:`NotImplementedError`. For public data use
+      :func:`singlet.load` or :func:`singlet.open_bundle`.
 
     Parameters
     ----------
     accession_or_path
         Either a filesystem path to a canonical v2 sample directory, or
-        an accession string (e.g. ``"GSM3308814"``) hosted at
-        ``$SINGLET_DATA_BASE``.
+        an accession string (e.g. ``"GSM3308814"``) served by ``base_url``.
     cache_dir, base_url
         Forwarded to :func:`singlet.fetch.fetch` when downloading.
 

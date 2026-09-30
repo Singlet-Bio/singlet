@@ -319,6 +319,7 @@ class TestCatalogEdgePaths:
 
         idx = pd.DataFrame({"gsm_id": ["GSM001"], "gse_id": ["GSE001"]})
         cat_mod._SAMPLE_INDEX_CACHE = idx
+        monkeypatch.setattr(cat_mod, "_live_info", lambda accession: None)
 
         with pytest.raises(KeyError, match="GSM999"):
             cat_mod.info("GSM999")

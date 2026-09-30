@@ -3,8 +3,9 @@
 
 :func:`find` turns a plain-English description (e.g. ``"human lung fibroblasts"``)
 into a list of matching GEO accessions by calling the hosted search endpoint.
-:func:`find_load` is a convenience that loads the matches directly into one
-AnnData.
+It returns study (``GSE``) accessions by default; pass ``level="gsm"`` for
+samples. :func:`find_load` is a convenience that loads the top matches (three
+studies by default) directly into one AnnData.
 
 The endpoint is ``GET {API_BASE}/nl-search`` where ``API_BASE`` is
 ``$SINGLET_API_BASE`` (default ``https://singlet.bio/api``). It returns JSON with
@@ -30,6 +31,7 @@ if TYPE_CHECKING:
 __all__ = ["find", "find_load", "set_api_key"]
 
 _API_BASE_DEFAULT = "https://singlet.bio/api"
+_LEVELS = ("gse", "gsm")
 
 
 def _user_agent() -> str:
@@ -82,7 +84,16 @@ def _api_base() -> str:
     return os.environ.get("SINGLET_API_BASE", _API_BASE_DEFAULT).rstrip("/")
 
 
-def find(query: str, *, level: str = "gsm", limit: int = 50) -> list[str]:
+def _offline() -> bool:
+    """True when ``$SINGLET_OFFLINE`` asks for no optional network lookups.
+
+    Honoured by the lookups that have an offline fallback (``singlet.info``,
+    ``python -m singlet``); :func:`find` always needs the network.
+    """
+    return os.environ.get("SINGLET_OFFLINE", "").strip().lower() not in ("", "0", "false", "no")
+
+
+def find(query: str, *, level: str = "gse", limit: int = 50) -> list[str]:
     """Find datasets by natural-language description.
 
     Sends *query* to the hosted search endpoint and returns the matching GEO
@@ -94,30 +105,35 @@ def find(query: str, *, level: str = "gsm", limit: int = 50) -> list[str]:
         Plain-English description, e.g. ``"exhausted T cells in melanoma"`` or
         ``"human lung 10x"``.
     level : str
-        Accession granularity to return: ``"gsm"`` (samples, default) or
-        ``"gse"`` (series).
+        Accession granularity to return: ``"gse"`` (studies, the default) or
+        ``"gsm"`` (individual samples).
     limit : int
         Maximum number of accessions to return.
 
     Returns
     -------
     list of str
-        Matching accession strings (e.g. ``["GSM5238385", ...]``). Empty if
+        Matching accession strings (e.g. ``["GSE138867", ...]``). Empty if
         nothing matched. Feed the result straight into :func:`singlet.load`.
 
     Raises
     ------
     SingletSearchError
         If the search endpoint cannot be reached or returns an error.
+    ValueError
+        If *query* is empty or *level* is not ``"gse"`` or ``"gsm"``.
 
     Examples
     --------
     >>> import singlet
-    >>> accs = singlet.find("human lung fibroblasts")            # doctest: +SKIP
-    >>> adata = singlet.load(accs)                               # doctest: +SKIP
+    >>> studies = singlet.find("human lung fibroblasts")         # doctest: +SKIP
+    >>> samples = singlet.find("human lung fibroblasts", level="gsm")  # doctest: +SKIP
+    >>> adata = singlet.load(studies[:2])                        # doctest: +SKIP
     """
     if query is None or not str(query).strip():
         raise ValueError("find() requires a non-empty query string")
+    if level not in _LEVELS:
+        raise ValueError(f"level must be 'gse' (studies) or 'gsm' (samples), got {level!r}")
 
     params = {"q": str(query), "level": level, "limit": int(limit)}
     url = f"{_api_base()}/nl-search?{urllib.parse.urlencode(params)}"
@@ -165,22 +181,25 @@ def find(query: str, *, level: str = "gsm", limit: int = 50) -> list[str]:
 def find_load(
     query: str,
     *,
-    level: str = "gsm",
-    limit: int = 50,
+    level: str = "gse",
+    limit: int = 3,
     **load_kwargs,
 ) -> "anndata.AnnData":
     """Find datasets by natural-language description and load them as AnnData.
 
     Convenience wrapper equivalent to ``singlet.load(singlet.find(query, ...))``.
+    Every match is downloaded in full, so the default is the top three
+    studies; raise ``limit`` deliberately.
 
     Parameters
     ----------
     query : str
         Plain-English description (see :func:`find`).
     level : str
-        ``"gsm"`` (default) or ``"gse"``.
+        ``"gse"`` (studies, the default) or ``"gsm"`` (samples; each sample
+        downloads its whole parent study).
     limit : int
-        Maximum number of accessions to load and concatenate.
+        Maximum number of accessions to load and concatenate. Default 3.
     **load_kwargs
         Forwarded to :func:`singlet.load` (e.g. ``genes=``, ``obs_filter=``).
 

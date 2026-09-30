@@ -9,17 +9,17 @@ help: ## Show available targets
 
 test: test-cpp test-python ## Run all tests (C++ + Python)
 
-test-cpp: ## Build and run 100 C++ unit tests
+test-cpp: ## Build and run the C++ unit tests
 	@cmake -B build-tests -DSINGLET_BUILD_TESTS=ON -DSINGLET_BUILD_PIPELINE=OFF 2>&1 | tail -1
 	@cmake --build build-tests -j$$(nproc) 2>&1 | tail -1
 	@ctest --test-dir build-tests -j$$(nproc) --output-on-failure
 
-test-python: ## Run 608 Python tests
-	@python -m pytest tests/python/ -x -q
+test-python: ## Run the Python tests
+	@python -m pytest tests/python/ -x -q --ignore=tests/python/test_loader.py
 
 coverage: ## Run tests with coverage report
-	@python -m coverage run -m pytest tests/python/ -q --no-header
-	@python -m coverage report
+	@python -m coverage run -m pytest tests/python/ -q --no-header --ignore=tests/python/test_loader.py
+	@python -m coverage report --fail-under=85
 
 lint: ## Lint Python code with ruff
 	@ruff check python/ tests/python/

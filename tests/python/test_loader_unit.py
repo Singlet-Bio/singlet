@@ -2,7 +2,7 @@
 """Tests for singlet._loader (download, load, load_sample) — unit tests with mocks."""
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 import scipy.sparse as sp
@@ -203,6 +203,13 @@ class TestLoad:
 
 
 class TestLoadSample:
+    @pytest.fixture(autouse=True)
+    def _no_catalog(self, monkeypatch):
+        import singlet._catalog as cat_mod
+
+        monkeypatch.setattr(cat_mod, "_CATALOG_DIR", None)
+        monkeypatch.delenv("SINGLET_CATALOG_DIR", raising=False)
+
     @patch("singlet._loader._resolve_gse_path")
     def test_load_sample_missing_raises(self, mock_resolve):
         from singlet._loader import load_sample
@@ -210,6 +217,102 @@ class TestLoadSample:
         mock_resolve.return_value = None
         with pytest.raises((FileNotFoundError, ValueError, RuntimeError, KeyError)):
             load_sample("GSM0000000")
+
+    def test_no_catalog_raises_before_touching_the_codec(self):
+        """Without a local catalog the error is explicit, never an ImportError."""
+        from singlet._loader import load_sample
+
+        with patch("singlet._loader._read_pz_record") as reader:
+            with pytest.raises(RuntimeError, match="SINGLET_CATALOG_DIR") as exc:
+                load_sample("GSM4120733")
+        reader.assert_not_called()
+        assert "singlet.load('GSM4120733')" in str(exc.value)
+
+    def test_not_in_public_api(self):
+        import singlet
+
+        assert "load_sample" not in singlet.__all__
+        assert callable(singlet.load_sample)
+
+
+# ---------------------------------------------------------------------------
+# $SINGLET_DATA_BASE
+# ---------------------------------------------------------------------------
+
+
+class TestDataBase:
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "https://mirror.test",
+            "https://mirror.test/",
+            "https://mirror.test/data",
+            "https://mirror.test/data/",
+        ],
+    )
+    def test_bare_host_and_data_suffix_are_equivalent(self, monkeypatch, value):
+        from singlet._loader import _bundle_url
+
+        monkeypatch.setenv("SINGLET_DATA_BASE", value)
+        assert _bundle_url("GSE138867") == "https://mirror.test/data/GSE138867/GSE138867.singlet"
+
+    def test_default_and_blank(self, monkeypatch):
+        from singlet._loader import _data_base
+
+        monkeypatch.delenv("SINGLET_DATA_BASE", raising=False)
+        assert _data_base() == "https://data.singlet.bio"
+        monkeypatch.setenv("SINGLET_DATA_BASE", "  ")
+        assert _data_base() == "https://data.singlet.bio"
+
+
+# ---------------------------------------------------------------------------
+# load(genes=...) — ids or symbols
+# ---------------------------------------------------------------------------
+
+
+class TestGeneSubset:
+    @pytest.fixture
+    def bundle_like(self):
+        import anndata as ad
+        import pandas as pd
+
+        return ad.AnnData(
+            X=sp.csr_matrix(sp.random(3, 4, density=1.0, format="csr")),
+            var=pd.DataFrame(
+                {"gene_name": ["TP53", "CD3E", "Cd3e", "TP53"]},
+                index=pd.Index(["ENSG1", "ENSG2", "ENSMUSG3", "ENSG4"]),
+            ),
+        )
+
+    def test_ensembl_ids(self, bundle_like):
+        from singlet._loader import _subset_genes
+
+        assert list(_subset_genes(bundle_like, ["ENSG2"]).var_names) == ["ENSG2"]
+
+    def test_exact_symbol_beats_case_insensitive(self, bundle_like):
+        from singlet._loader import _subset_genes
+
+        assert list(_subset_genes(bundle_like, ["Cd3e"]).var_names) == ["ENSMUSG3"]
+
+    def test_case_insensitive_symbol_and_duplicates(self, bundle_like):
+        from singlet._loader import _subset_genes
+
+        assert list(_subset_genes(bundle_like, ["tp53"]).var_names) == ["ENSG1", "ENSG4"]
+
+    def test_single_string_and_unmatched_warning(self, bundle_like):
+        from singlet._loader import _subset_genes
+
+        assert list(_subset_genes(bundle_like, "ensg2").var_names) == ["ENSG2"]
+        with pytest.warns(UserWarning, match="NOPE"):
+            out = _subset_genes(bundle_like, ["CD3E", "NOPE"])
+        assert list(out.var_names) == ["ENSG2"]
+
+    def test_nothing_matched(self, bundle_like):
+        from singlet._loader import _subset_genes
+
+        with pytest.warns(UserWarning, match="None of the 1 requested genes"):
+            out = _subset_genes(bundle_like, ["NOPE"])
+        assert out.n_vars == 0
 
 
 # ---------------------------------------------------------------------------
