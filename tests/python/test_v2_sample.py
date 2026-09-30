@@ -17,13 +17,11 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 from scipy.sparse import csc_matrix
-
 from singlet.io import SingletSample
 from singlet.pz_v2 import BlockSpec, write_pz_v2
-from singlet.refbundle import GeneRecord, write_features
+from singlet.refbundle import write_features
 from singlet.refbundle._features import _GeneIn, biotype_code
 from singlet.views import gene_counts, psi, usa
-
 
 # --------------------------------------------------------------------------
 # Synthetic fixture builders
@@ -84,24 +82,39 @@ def _build_sample(tmp_path: Path) -> Path:
     n_cells = len(bc)
 
     # 4 exon intervals total (3 + 1)
-    exon = csc_matrix(np.array([
-        [1, 0, 2],
-        [0, 3, 0],
-        [4, 0, 0],
-        [0, 0, 5],
-    ], dtype=np.int32))
+    exon = csc_matrix(
+        np.array(
+            [
+                [1, 0, 2],
+                [0, 3, 0],
+                [4, 0, 0],
+                [0, 0, 5],
+            ],
+            dtype=np.int32,
+        )
+    )
     # 3 intron intervals total (2 + 1)
-    intron = csc_matrix(np.array([
-        [0, 1, 0],
-        [2, 0, 0],
-        [0, 0, 3],
-    ], dtype=np.int32))
+    intron = csc_matrix(
+        np.array(
+            [
+                [0, 1, 0],
+                [2, 0, 0],
+                [0, 0, 3],
+            ],
+            dtype=np.int32,
+        )
+    )
     # 3 junction rows total (2 + 1)
-    jct = csc_matrix(np.array([
-        [1, 0, 0],   # EE, gene0
-        [0, 2, 0],   # EI, gene0
-        [0, 0, 4],   # II, gene1
-    ], dtype=np.int32))
+    jct = csc_matrix(
+        np.array(
+            [
+                [1, 0, 0],  # EE, gene0
+                [0, 2, 0],  # EI, gene0
+                [0, 0, 4],  # II, gene1
+            ],
+            dtype=np.int32,
+        )
+    )
 
     write_pz_v2(
         sample / "counts.1pz",
@@ -137,14 +150,26 @@ def _build_sample(tmp_path: Path) -> Path:
     (sample / "summary.json").write_text(json.dumps({"sample_id": "sample0", "n_cells": n_cells}))
 
     # nonhost
-    (sample / "nonhost.json").write_text(json.dumps({
-        "kraken_total_reads": 1234,
-        "species": [
-            {"row": 0, "taxid": 9606, "name": "Homo sapiens", "rank": "species",
-             "kraken_reads": 100, "kraken_kmer_hits": 200,
-             "bracken_reads": 90, "bracken_abundance": 0.5, "lineage": "..."},
-        ],
-    }))
+    (sample / "nonhost.json").write_text(
+        json.dumps(
+            {
+                "kraken_total_reads": 1234,
+                "species": [
+                    {
+                        "row": 0,
+                        "taxid": 9606,
+                        "name": "Homo sapiens",
+                        "rank": "species",
+                        "kraken_reads": 100,
+                        "kraken_kmer_hits": 200,
+                        "bracken_reads": 90,
+                        "bracken_abundance": 0.5,
+                        "lineage": "...",
+                    },
+                ],
+            }
+        )
+    )
     nonhost_mat = csc_matrix(np.array([[1, 2, 3]], dtype=np.int32))
     write_pz_v2(
         sample / "nonhost_species.1pz",
@@ -237,10 +262,13 @@ def test_gene_counts_view(sample_dir, features_path):
     # Cell 0: gene0 = (1+0+4)+(0+2)+(1+0)=8; gene1 = 0 + 0 + 0 = 0
     # Cell 1: gene0 = (0+3+0)+(1+0)+(0+2)=6; gene1 = 0 + 0 + 0 = 0
     # Cell 2: gene0 = (2+0+0)+(0+0)+(0+0)=2; gene1 = 5 + 3 + 4 = 12
-    expected = np.array([
-        [8, 6, 2],
-        [0, 0, 12],
-    ], dtype=np.int32)
+    expected = np.array(
+        [
+            [8, 6, 2],
+            [0, 0, 12],
+        ],
+        dtype=np.int32,
+    )
     np.testing.assert_array_equal(g.toarray(), expected)
 
 
@@ -248,11 +276,7 @@ def test_usa_partition_invariant(sample_dir, features_path):
     s = SingletSample(sample_dir)
     g = gene_counts(s, features_path).toarray()
     triplet = usa(s, features_path)
-    total = (
-        triplet.spliced.toarray()
-        + triplet.unspliced.toarray()
-        + triplet.ambiguous.toarray()
-    )
+    total = triplet.spliced.toarray() + triplet.unspliced.toarray() + triplet.ambiguous.toarray()
     np.testing.assert_array_equal(total, g)
 
 

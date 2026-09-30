@@ -3,7 +3,6 @@
 
 import numpy as np
 import pandas as pd
-import pytest
 import singlet
 from anndata import AnnData
 from scipy import sparse
@@ -17,9 +16,7 @@ def _make_adata(n_cells=120, n_genes=100, seed=42):
     adata.var_names = [f"GENE{i}" for i in range(n_genes)]
     adata.obs_names = [f"cell_{i}" for i in range(n_cells)]
     # Assign 3 cell types
-    adata.obs["leiden"] = pd.Categorical(
-        [f"cluster_{i % 3}" for i in range(n_cells)]
-    )
+    adata.obs["leiden"] = pd.Categorical([f"cluster_{i % 3}" for i in range(n_cells)])
     return adata
 
 
@@ -52,9 +49,7 @@ class TestCellCommunication:
     def test_basic_expression(self):
         adata = _make_adata()
         pairs = _make_lr_pairs()
-        result = singlet.cell_communication(
-            adata, pairs, groupby="leiden", method="expression"
-        )
+        result = singlet.cell_communication(adata, pairs, groupby="leiden", method="expression")
         assert isinstance(result, pd.DataFrame)
         assert len(result) > 0
         assert "score" in result.columns
@@ -62,9 +57,7 @@ class TestCellCommunication:
     def test_stores_in_uns(self):
         adata = _make_adata()
         pairs = _make_lr_pairs()
-        singlet.cell_communication(
-            adata, pairs, groupby="leiden", method="permutation", n_perms=20
-        )
+        singlet.cell_communication(adata, pairs, groupby="leiden", method="permutation", n_perms=20)
         assert "cell_communication" in adata.uns
         stored = adata.uns["cell_communication"]
         assert isinstance(stored, pd.DataFrame)
@@ -87,18 +80,14 @@ class TestCellCommunication:
         """Should have rows for each LR pair × sender × receiver combination."""
         adata = _make_adata()
         pairs = [("GENE0", "GENE1"), ("GENE2", "GENE3")]
-        result = singlet.cell_communication(
-            adata, pairs, groupby="leiden", method="expression"
-        )
+        result = singlet.cell_communication(adata, pairs, groupby="leiden", method="expression")
         # 3 cell types → 9 sender-receiver pairs × 2 LR pairs = 18 rows
         assert len(result) == 18
 
     def test_scores_nonnegative(self):
         adata = _make_adata()
         pairs = _make_lr_pairs()
-        result = singlet.cell_communication(
-            adata, pairs, groupby="leiden", method="expression"
-        )
+        result = singlet.cell_communication(adata, pairs, groupby="leiden", method="expression")
         assert (result["score"] >= 0).all()
 
     def test_pvalues_bounded(self):
@@ -118,9 +107,7 @@ class TestCellCommunication:
             ("GENE0", "GENE1"),  # valid
             ("NONEXIST1", "NONEXIST2"),  # invalid — should be skipped
         ]
-        result = singlet.cell_communication(
-            adata, pairs, groupby="leiden", method="expression"
-        )
+        result = singlet.cell_communication(adata, pairs, groupby="leiden", method="expression")
         # Only valid pair should appear
         assert all(result["ligand"] == "GENE0")
         assert all(result["receptor"] == "GENE1")
@@ -132,9 +119,7 @@ class TestCellCommunication:
         adata = AnnData(X=sparse.csr_matrix(X))
         adata.var_names = [f"GENE{i}" for i in range(n_genes)]
         adata.obs_names = [f"cell_{i}" for i in range(n_cells)]
-        adata.obs["leiden"] = pd.Categorical(
-            [f"ct_{i % 2}" for i in range(n_cells)]
-        )
+        adata.obs["leiden"] = pd.Categorical([f"ct_{i % 2}" for i in range(n_cells)])
         pairs = [("GENE0", "GENE1")]
         result = singlet.cell_communication(
             adata, pairs, groupby="leiden", method="permutation", n_perms=20
@@ -144,13 +129,9 @@ class TestCellCommunication:
 
     def test_custom_groupby(self):
         adata = _make_adata()
-        adata.obs["cell_type"] = pd.Categorical(
-            [f"type_{i % 4}" for i in range(adata.n_obs)]
-        )
+        adata.obs["cell_type"] = pd.Categorical([f"type_{i % 4}" for i in range(adata.n_obs)])
         pairs = [("GENE0", "GENE1")]
-        result = singlet.cell_communication(
-            adata, pairs, groupby="cell_type", method="expression"
-        )
+        result = singlet.cell_communication(adata, pairs, groupby="cell_type", method="expression")
         # 4 cell types → 16 sender-receiver pairs × 1 LR pair
         assert len(result) == 16
 
@@ -170,9 +151,7 @@ class TestCellCommunication:
         adata = AnnData(X=X)
         adata.var_names = [f"GENE{i}" for i in range(50)]
         adata.obs_names = [f"cell_{i}" for i in range(n_cells)]
-        adata.obs["leiden"] = pd.Categorical(
-            [f"cluster_{i % 3}" for i in range(n_cells)]
-        )
+        adata.obs["leiden"] = pd.Categorical([f"cluster_{i % 3}" for i in range(n_cells)])
         # Boost ligand in cluster_0
         mask_0 = adata.obs["leiden"] == "cluster_0"
         adata.X[mask_0.values, 0] = 100.0
@@ -181,9 +160,7 @@ class TestCellCommunication:
         adata.X[mask_1.values, 1] = 100.0
 
         pairs = [("GENE0", "GENE1")]
-        result = singlet.cell_communication(
-            adata, pairs, groupby="leiden", method="expression"
-        )
+        result = singlet.cell_communication(adata, pairs, groupby="leiden", method="expression")
         # Score for sender=cluster_0, receiver=cluster_1 should be highest
         top_row = result.loc[result["score"].idxmax()]
         assert top_row["sender"] == "cluster_0"

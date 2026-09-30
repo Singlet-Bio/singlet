@@ -26,7 +26,7 @@ import mmap
 import struct
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Sequence, Union
+from typing import Iterable, Sequence, Union
 
 MAGIC = b"SLSNP01\0"
 
@@ -79,9 +79,7 @@ def write_snp_panel(
     chrom_table = bytearray(_CHROM_TABLE_SIZE)
     for name, idx in chrom_to_id.items():
         encoded = name.encode("utf-8")[:_CHROM_NAME_LEN]
-        chrom_table[idx * _CHROM_NAME_LEN : idx * _CHROM_NAME_LEN + len(encoded)] = (
-            encoded
-        )
+        chrom_table[idx * _CHROM_NAME_LEN : idx * _CHROM_NAME_LEN + len(encoded)] = encoded
 
     n_sites = len(sites)
     n_chroms = len(chrom_to_id)
@@ -153,9 +151,7 @@ class SnpPanel:
         self.chroms = []
         base = SNP_HEADER_SIZE
         for i in range(self.n_chroms):
-            raw = bytes(
-                self._mm[base + i * _CHROM_NAME_LEN : base + (i + 1) * _CHROM_NAME_LEN]
-            )
+            raw = bytes(self._mm[base + i * _CHROM_NAME_LEN : base + (i + 1) * _CHROM_NAME_LEN])
             self.chroms.append(raw.rstrip(b"\0").decode("utf-8"))
 
     def __len__(self) -> int:

@@ -19,9 +19,9 @@ Underlying C++ cycles:
 """
 
 from .leiden import leiden
-from .umap import umap
+from .markers import celltypist_predict, score_genes
 from .rank_genes_groups import rank_genes_groups
-from .markers import score_genes, celltypist_predict
+from .umap import umap
 
 __all__ = [
     "leiden",

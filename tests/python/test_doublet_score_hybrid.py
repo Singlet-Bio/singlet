@@ -2,7 +2,6 @@
 """Tests for singlet.doublet_score_hybrid()."""
 
 import numpy as np
-import pandas as pd
 import pytest
 import scipy.sparse as sp
 import singlet

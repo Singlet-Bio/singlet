@@ -30,9 +30,7 @@ def _make_simple_adata(n_cells=80, n_genes=100, seed=42):
     adata = AnnData(X=X)
     adata.var_names = [f"GENE{i}" for i in range(n_genes)]
     adata.obs_names = [f"cell_{i}" for i in range(n_cells)]
-    adata.var["highly_variable"] = np.array(
-        [True] * 50 + [False] * 50, dtype=bool
-    )
+    adata.var["highly_variable"] = np.array([True] * 50 + [False] * 50, dtype=bool)
     return adata
 
 
@@ -99,9 +97,7 @@ class TestGeneSetEnrichment:
             "matching": top_markers,
             "random": [f"GENE{i}" for i in range(180, 200)],
         }
-        result = singlet.gene_set_enrichment(
-            adata, gene_sets, groupby="group", n_top_genes=50
-        )
+        result = singlet.gene_set_enrichment(adata, gene_sets, groupby="group", n_top_genes=50)
         matching_rows = result[
             (result["gene_set"] == "matching") & (result["group"] == "cluster_0")
         ]
@@ -111,12 +107,8 @@ class TestGeneSetEnrichment:
     def test_n_top_genes_parameter(self):
         adata = _make_adata_with_de()
         gene_sets = {"set_a": [f"GENE{i}" for i in range(0, 30)]}
-        result_50 = singlet.gene_set_enrichment(
-            adata, gene_sets, groupby="group", n_top_genes=50
-        )
-        result_10 = singlet.gene_set_enrichment(
-            adata, gene_sets, groupby="group", n_top_genes=10
-        )
+        result_50 = singlet.gene_set_enrichment(adata, gene_sets, groupby="group", n_top_genes=50)
+        result_10 = singlet.gene_set_enrichment(adata, gene_sets, groupby="group", n_top_genes=10)
         # Fewer markers should give different overlap sizes
         assert len(result_50) > 0
         assert len(result_10) > 0

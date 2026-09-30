@@ -44,6 +44,7 @@ if TYPE_CHECKING:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _validate_net(net: "pd.DataFrame", source: str, target: str) -> None:
     import pandas as pd
 
@@ -52,8 +53,7 @@ def _validate_net(net: "pd.DataFrame", source: str, target: str) -> None:
     missing = [c for c in (source, target) if c not in net.columns]
     if missing:
         raise KeyError(
-            f"net DataFrame is missing columns: {missing}.  "
-            f"Available columns: {list(net.columns)}"
+            f"net DataFrame is missing columns: {missing}.  Available columns: {list(net.columns)}"
         )
 
 
@@ -97,6 +97,7 @@ def _matrix_from_adata(
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def run_aucell(
     mat: Union["anndata.AnnData", "pd.DataFrame"],
@@ -257,9 +258,7 @@ def run_aucell(
 
         return pd.DataFrame(col_results, index=set_names).T  # samples × sets
 
-    raise TypeError(
-        f"mat must be an AnnData or pd.DataFrame, got {type(mat).__name__!r}."
-    )
+    raise TypeError(f"mat must be an AnnData or pd.DataFrame, got {type(mat).__name__!r}.")
 
 
 __all__ = ["run_aucell"]

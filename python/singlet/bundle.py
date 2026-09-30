@@ -167,72 +167,170 @@ MODALITIES: Dict[str, Modality] = {
     m.name: m
     for m in (
         # ── Counts ────────────────────────────────────────────────────────
-        Modality("exon_counts", "matrix", ("exon_counts.1pz",),
-                 "Per-exon-feature UMI counts (the spliced half of the raw matrix)."),
-        Modality("intron_counts", "matrix", ("intron_counts.1pz",),
-                 "Per-intron-feature UMI counts (the unspliced half of the raw matrix)."),
-        Modality("cell_calls", "table", ("cell_calls.tsv",),
-                 "Barcode, is_cell and the cell-calling statistics per barcode."),
-        Modality("cell_qc", "table", ("cell_qc_metrics.tsv",),
-                 "Per-cell QC metrics (UMIs, genes, mitochondrial fraction, …)."),
+        Modality(
+            "exon_counts",
+            "matrix",
+            ("exon_counts.1pz",),
+            "Per-exon-feature UMI counts (the spliced half of the raw matrix).",
+        ),
+        Modality(
+            "intron_counts",
+            "matrix",
+            ("intron_counts.1pz",),
+            "Per-intron-feature UMI counts (the unspliced half of the raw matrix).",
+        ),
+        Modality(
+            "cell_calls",
+            "table",
+            ("cell_calls.tsv",),
+            "Barcode, is_cell and the cell-calling statistics per barcode.",
+        ),
+        Modality(
+            "cell_qc",
+            "table",
+            ("cell_qc_metrics.tsv",),
+            "Per-cell QC metrics (UMIs, genes, mitochondrial fraction, …).",
+        ),
         # ── Splicing ──────────────────────────────────────────────────────
-        Modality("junctions", "matrix", ("sj_counts.1pz",),
-                 "Per-cell splice-junction counts."),
-        Modality("splice_psi", "matrix", ("splice_psi.1pz",),
-                 "Per-cell percent-spliced-in (PSI) per splice event."),
-        Modality("splice_events", "table", ("splice_events.tsv",),
-                 "Splice-event annotation for the rows of splice_psi."),
+        Modality("junctions", "matrix", ("sj_counts.1pz",), "Per-cell splice-junction counts."),
+        Modality(
+            "splice_psi",
+            "matrix",
+            ("splice_psi.1pz",),
+            "Per-cell percent-spliced-in (PSI) per splice event.",
+        ),
+        Modality(
+            "splice_events",
+            "table",
+            ("splice_events.tsv",),
+            "Splice-event annotation for the rows of splice_psi.",
+        ),
         # ── Mitochondrial genome ──────────────────────────────────────────
-        Modality("mt_heteroplasmy", "matrix", ("mt_heteroplasmy.1pz",),
-                 "Per-cell mitochondrial heteroplasmy (VAF) per chrM variant site."),
-        Modality("mt_variants", "table", ("mt_variants.tsv", "mt/mt_summary.tsv"),
-                 "Called chrM variants with depth, allele counts and annotation."),
-        Modality("mt_events", "matrix", ("mt/mt_events.1pz",),
-                 "Per-cell chrM allele-support matrix used for lineage tracing."),
+        Modality(
+            "mt_heteroplasmy",
+            "matrix",
+            ("mt_heteroplasmy.1pz",),
+            "Per-cell mitochondrial heteroplasmy (VAF) per chrM variant site.",
+        ),
+        Modality(
+            "mt_variants",
+            "table",
+            ("mt_variants.tsv", "mt/mt_summary.tsv"),
+            "Called chrM variants with depth, allele counts and annotation.",
+        ),
+        Modality(
+            "mt_events",
+            "matrix",
+            ("mt/mt_events.1pz",),
+            "Per-cell chrM allele-support matrix used for lineage tracing.",
+        ),
         # ── Donor / genotype ──────────────────────────────────────────────
-        Modality("donor_assignments", "table",
-                 ("donor/donor_assignments.tsv", "donor_assignments.tsv"),
-                 "Genotype-free donor demultiplexing: barcode → donor, with doublet calls."),
-        Modality("donor_snp_ad", "matrix", ("donor/snp_ad.1pz",),
-                 "Per-cell alternate-allele depth over the SNP panel."),
-        Modality("donor_snp_dp", "matrix", ("donor/snp_dp.1pz",),
-                 "Per-cell total read depth over the SNP panel (denominator for snp_ad)."),
-        Modality("ase_counts", "table", ("ase_counts.tsv",),
-                 "Allele-specific expression counts per gene."),
-        Modality("ancestry_call", "json", ("ancestry_call.json",),
-                 "Continental ancestry estimate from the SNP panel."),
-        Modality("sex_call", "json", ("sex_call.json",),
-                 "Genetic sex call from chrX/chrY expression and coverage."),
+        Modality(
+            "donor_assignments",
+            "table",
+            ("donor/donor_assignments.tsv", "donor_assignments.tsv"),
+            "Genotype-free donor demultiplexing: barcode → donor, with doublet calls.",
+        ),
+        Modality(
+            "donor_snp_ad",
+            "matrix",
+            ("donor/snp_ad.1pz",),
+            "Per-cell alternate-allele depth over the SNP panel.",
+        ),
+        Modality(
+            "donor_snp_dp",
+            "matrix",
+            ("donor/snp_dp.1pz",),
+            "Per-cell total read depth over the SNP panel (denominator for snp_ad).",
+        ),
+        Modality(
+            "ase_counts",
+            "table",
+            ("ase_counts.tsv",),
+            "Allele-specific expression counts per gene.",
+        ),
+        Modality(
+            "ancestry_call",
+            "json",
+            ("ancestry_call.json",),
+            "Continental ancestry estimate from the SNP panel.",
+        ),
+        Modality(
+            "sex_call",
+            "json",
+            ("sex_call.json",),
+            "Genetic sex call from chrX/chrY expression and coverage.",
+        ),
         # ── Non-host ──────────────────────────────────────────────────────
-        Modality("nonhost_species", "table",
-                 ("nonhost/nonhost_em_abundance.tsv", "nonhost_em_abundance.tsv"),
-                 "Per-taxon non-host (microbial/viral) abundance after EM re-assignment."),
-        Modality("nonhost_summary", "json",
-                 ("nonhost/nonhost_summary.json", "nonhost_summary.json"),
-                 "Non-host classification summary: reads classified, top taxa, database."),
+        Modality(
+            "nonhost_species",
+            "table",
+            ("nonhost/nonhost_em_abundance.tsv", "nonhost_em_abundance.tsv"),
+            "Per-taxon non-host (microbial/viral) abundance after EM re-assignment.",
+        ),
+        Modality(
+            "nonhost_summary",
+            "json",
+            ("nonhost/nonhost_summary.json", "nonhost_summary.json"),
+            "Non-host classification summary: reads classified, top taxa, database.",
+        ),
         # ── Immune repertoire ─────────────────────────────────────────────
-        Modality("vdj_gene_usage", "matrix", ("vdj_gene_usage.1pz",),
-                 "Per-cell V(D)J segment usage counts."),
+        Modality(
+            "vdj_gene_usage",
+            "matrix",
+            ("vdj_gene_usage.1pz",),
+            "Per-cell V(D)J segment usage counts.",
+        ),
         # ── Per-cell annotations ──────────────────────────────────────────
-        Modality("doublet_scores", "table", ("doublet_scores.tsv",),
-                 "Per-cell doublet score and call."),
-        Modality("cell_cycle_scores", "table", ("cell_cycle_scores.tsv",),
-                 "Per-cell S/G2M scores and phase assignment."),
-        Modality("ambient_contamination", "table", ("ambient_contamination.tsv",),
-                 "Per-cell ambient-RNA contamination fraction."),
-        Modality("ambient_profile", "table", ("ambient_profile.tsv",),
-                 "Ambient-RNA expression profile estimated from empty droplets."),
+        Modality(
+            "doublet_scores", "table", ("doublet_scores.tsv",), "Per-cell doublet score and call."
+        ),
+        Modality(
+            "cell_cycle_scores",
+            "table",
+            ("cell_cycle_scores.tsv",),
+            "Per-cell S/G2M scores and phase assignment.",
+        ),
+        Modality(
+            "ambient_contamination",
+            "table",
+            ("ambient_contamination.tsv",),
+            "Per-cell ambient-RNA contamination fraction.",
+        ),
+        Modality(
+            "ambient_profile",
+            "table",
+            ("ambient_profile.tsv",),
+            "Ambient-RNA expression profile estimated from empty droplets.",
+        ),
         # ── Sample-level QC ───────────────────────────────────────────────
-        Modality("summary", "json", ("summary.json",),
-                 "Sample-level metrics: cells called, mapping rate, medians, reference build."),
-        Modality("pileup_stats", "json", ("pileup_stats.json",),
-                 "Alignment/pileup statistics for the sample."),
-        Modality("provenance", "json", ("provenance.json",),
-                 "Pipeline version, command line, reference checksums."),
-        Modality("saturation_curve", "table", ("saturation_curve.tsv",),
-                 "Sequencing-saturation curve (downsampled read depth vs genes detected)."),
-        Modality("star_log", "text", ("star_Log.final.out",),
-                 "STAR final alignment log for the sample."),
+        Modality(
+            "summary",
+            "json",
+            ("summary.json",),
+            "Sample-level metrics: cells called, mapping rate, medians, reference build.",
+        ),
+        Modality(
+            "pileup_stats",
+            "json",
+            ("pileup_stats.json",),
+            "Alignment/pileup statistics for the sample.",
+        ),
+        Modality(
+            "provenance",
+            "json",
+            ("provenance.json",),
+            "Pipeline version, command line, reference checksums.",
+        ),
+        Modality(
+            "saturation_curve",
+            "table",
+            ("saturation_curve.tsv",),
+            "Sequencing-saturation curve (downsampled read depth vs genes detected).",
+        ),
+        Modality(
+            "star_log", "text", ("star_Log.final.out",), "STAR final alignment log for the sample."
+        ),
     )
 }
 
@@ -578,10 +676,12 @@ def _build_feature_vocab(out_dir: Path) -> dict:
 
     genes = []
     for _, row in gdf.iterrows():
-        genes.append({
-            "gene_id": str(row["gene_id"]),
-            "gene_name": str(row["gene_name"]),
-        })
+        genes.append(
+            {
+                "gene_id": str(row["gene_id"]),
+                "gene_name": str(row["gene_name"]),
+            }
+        )
 
     return {
         "schema_version": SCHEMA_VERSION,
@@ -598,6 +698,7 @@ def _aggregate_gene_counts(out_dir: Path, gene_order: List[str], called_bcs: Lis
     Returns a scipy.sparse.csc_matrix of shape (n_cells, n_genes).
     """
     from scipy.sparse import coo_matrix, csc_matrix
+
     from singlet._io import _read_pz_native
 
     gene_id_to_row = {g: i for i, g in enumerate(gene_order)}
@@ -798,8 +899,10 @@ def pack_gse(
         publications_enriched_path=publications_enriched_path,
     )
     if verbose and (gsm_enriched or publications):
-        print(f"[pack_gse] Enriched metadata: {len(gsm_enriched)} GSMs enriched, "
-              f"{len(publications)} publications")
+        print(
+            f"[pack_gse] Enriched metadata: {len(gsm_enriched)} GSMs enriched, "
+            f"{len(publications)} publications"
+        )
 
     # ---- Build feature_vocab from the first usable GSM -------------------
     # Not every done GSM writes gene_expression.tsv (a sample can finish the
@@ -820,15 +923,23 @@ def pack_gse(
         )
     feature_vocab_bytes = json.dumps(feature_vocab, indent=2).encode()
     if verbose:
-        print(f"[pack_gse] feature_vocab: {feature_vocab['n_genes']} genes, "
-              f"ref={feature_vocab['reference_build']}")
+        print(
+            f"[pack_gse] feature_vocab: {feature_vocab['n_genes']} genes, "
+            f"ref={feature_vocab['reference_build']}"
+        )
 
     # ---- Build study_meta -----------------------------------------------
     # Series-level fields from first GSE row
     first_row = gse_rows.iloc[0]
-    series_title = str(first_row.get("series_title", "")) if pd.notna(first_row.get("series_title")) else ""
+    series_title = (
+        str(first_row.get("series_title", "")) if pd.notna(first_row.get("series_title")) else ""
+    )
     series_summary = str(first_row.get("summary", "")) if pd.notna(first_row.get("summary")) else ""
-    series_overall_design = str(first_row.get("overall_design", "")) if pd.notna(first_row.get("overall_design")) else ""
+    series_overall_design = (
+        str(first_row.get("overall_design", ""))
+        if pd.notna(first_row.get("overall_design"))
+        else ""
+    )
 
     # Per-GSM metadata: catalog base fields + opportunistic enrichment overlay
     per_gsm_meta: Dict[str, dict] = {}
@@ -840,11 +951,19 @@ def pack_gse(
         base: Dict[str, Any] = {
             "gsm_id": gsm,
             "organism": str(row.get("organism", "")) if pd.notna(row.get("organism")) else "",
-            "protocol": str(row.get("protocol_inferred", "")) if pd.notna(row.get("protocol_inferred")) else "",
-            "sample_source": str(row.get("sample_source", "")) if pd.notna(row.get("sample_source")) else "",
-            "sample_characteristics": str(row.get("sample_characteristics", "")) if pd.notna(row.get("sample_characteristics")) else "",
+            "protocol": str(row.get("protocol_inferred", ""))
+            if pd.notna(row.get("protocol_inferred"))
+            else "",
+            "sample_source": str(row.get("sample_source", ""))
+            if pd.notna(row.get("sample_source"))
+            else "",
+            "sample_characteristics": str(row.get("sample_characteristics", ""))
+            if pd.notna(row.get("sample_characteristics"))
+            else "",
             "qc_flag": str(row.get("qc_flag", "")) if pd.notna(row.get("qc_flag")) else "",
-            "processing_status": str(row.get("processing_status", "")) if pd.notna(row.get("processing_status")) else "",
+            "processing_status": str(row.get("processing_status", ""))
+            if pd.notna(row.get("processing_status"))
+            else "",
             "reference_build": summ.get("reference_build", feature_vocab["reference_build"]),
             "protocol_name": summ.get("protocol_name", ""),
             "n_cells": summ.get("n_cells_called", len(called_bcs)),
@@ -904,7 +1023,6 @@ def pack_gse(
         print(f"[pack_gse] Writing bundle → {out_path}")
 
     with zipfile.ZipFile(str(out_path), "w", allowZip64=True) as zf:
-
         # feature_vocab.json  (DEFLATED)
         checksums["feature_vocab.json"] = _sha256_bytes(feature_vocab_bytes)
         zf.writestr(
@@ -947,9 +1065,7 @@ def pack_gse(
                     gsm_files.append(rel.as_posix())
                     zi = zipfile.ZipInfo(arc_name)
                     zi.compress_type = (
-                        zipfile.ZIP_STORED
-                        if fpath.suffix == ".1pz"
-                        else zipfile.ZIP_DEFLATED
+                        zipfile.ZIP_STORED if fpath.suffix == ".1pz" else zipfile.ZIP_DEFLATED
                     )
                     zf.writestr(zi, data)
 
@@ -1037,6 +1153,7 @@ def _load_enriched_meta(
                             # Skip NaN/None
                             try:
                                 import math
+
                                 if val is None or (isinstance(val, float) and math.isnan(val)):
                                     continue
                             except (TypeError, ValueError):
@@ -1056,7 +1173,9 @@ def _load_enriched_meta(
                 pubs_df = pd.read_parquet(pubs_path)
                 if "gse_id" in pubs_df.columns:
                     pubs_df = pubs_df[pubs_df["gse_id"] == gse_id]
-                    publications = pubs_df.drop(columns=["gse_id"], errors="ignore").to_dict(orient="records")
+                    publications = pubs_df.drop(columns=["gse_id"], errors="ignore").to_dict(
+                        orient="records"
+                    )
             except Exception:
                 pass
 
@@ -1214,7 +1333,7 @@ class SingletBundle:
         if gsm is None:
             return names
         prefix = f"samples/{gsm}/"
-        return [n[len(prefix):] for n in names if n.startswith(prefix) and not n.endswith("/")]
+        return [n[len(prefix) :] for n in names if n.startswith(prefix) and not n.endswith("/")]
 
     def _resolve_member(self, gsm: str, name: str) -> Optional[str]:
         """Map a modality name (or a literal member path) to an archive member."""
@@ -1637,8 +1756,7 @@ class SingletBundle:
                 return csc_matrix((n_genes, n_cells), dtype=np.int32)
             rows_v = feat_to_gene[valid]
             indicator = coo_matrix(
-                (np.ones(valid.sum(), dtype=np.float32),
-                 (rows_v, np.arange(valid.sum()))),
+                (np.ones(valid.sum(), dtype=np.float32), (rows_v, np.arange(valid.sum()))),
                 shape=(n_genes, valid.sum()),
             ).tocsr()
             return indicator.dot(mat_cells[valid, :]).astype(np.int32)
@@ -1749,7 +1867,8 @@ class SingletBundle:
                     "protocol": [gsm_info.get("protocol", "")] * n_cells,
                     "protocol_name": [gsm_info.get("protocol_name", "")] * n_cells,
                     "sample_source": [gsm_info.get("sample_source", "")] * n_cells,
-                    "sample_characteristics": [gsm_info.get("sample_characteristics", "")] * n_cells,
+                    "sample_characteristics": [gsm_info.get("sample_characteristics", "")]
+                    * n_cells,
                     "qc_flag": [gsm_info.get("qc_flag", "")] * n_cells,
                     "reference_build": [gsm_info.get("reference_build", "")] * n_cells,
                     "n_cells_sample": [gsm_info.get("n_cells", n_cells)] * n_cells,
@@ -1762,8 +1881,7 @@ class SingletBundle:
                 spliced_mats.append(self._gene_level_part(gsm, "exon", barcodes))
                 unspliced_mats.append(self._gene_level_part(gsm, "intron", barcodes))
             if verbose:
-                print(f"    {gsm}: {n_cells} cells, {mat.shape[1]} genes, "
-                      f"nnz={mat.nnz}")
+                print(f"    {gsm}: {n_cells} cells, {mat.shape[1]} genes, nnz={mat.nnz}")
 
         if not mats:
             gse_id = str(self.manifest.get("gse_id") or self.path.stem)
@@ -1792,8 +1910,10 @@ class SingletBundle:
                 if parts and all(p is not None for p in parts):
                     adata.layers[name] = vstack(parts, format="csr")
                 elif verbose:
-                    print(f"  [SingletBundle.to_anndata] {name} layer unavailable "
-                          f"for some samples — skipped")
+                    print(
+                        f"  [SingletBundle.to_anndata] {name} layer unavailable "
+                        f"for some samples — skipped"
+                    )
         adata.uns["study_meta"] = _uns_safe(self.study_meta)
         adata.uns["manifest"] = _manifest_for_uns(self.manifest)
         adata.uns["singlet_bundle_path"] = str(self.path)
@@ -1862,22 +1982,24 @@ class SingletBundle:
         rows = []
         for gsm in self.gsm_ids:
             info = gsm_meta_map.get(gsm, {})
-            rows.append({
-                "gsm_id": gsm,
-                "gse_id": self.manifest["gse_id"],
-                "organism": info.get("organism", ""),
-                "protocol": info.get("protocol", ""),
-                "protocol_name": info.get("protocol_name", ""),
-                "sample_source": info.get("sample_source", ""),
-                "sample_characteristics": info.get("sample_characteristics", ""),
-                "qc_flag": info.get("qc_flag", ""),
-                "reference_build": info.get("reference_build", ""),
-                "n_cells": info.get("n_cells", None),
-                "median_umi_per_cell": info.get("median_umi_per_cell", None),
-                "median_genes_per_cell": info.get("median_genes_per_cell", None),
-                "mapping_rate": info.get("mapping_rate", None),
-                "series_title": self.study_meta.get("series_title", ""),
-            })
+            rows.append(
+                {
+                    "gsm_id": gsm,
+                    "gse_id": self.manifest["gse_id"],
+                    "organism": info.get("organism", ""),
+                    "protocol": info.get("protocol", ""),
+                    "protocol_name": info.get("protocol_name", ""),
+                    "sample_source": info.get("sample_source", ""),
+                    "sample_characteristics": info.get("sample_characteristics", ""),
+                    "qc_flag": info.get("qc_flag", ""),
+                    "reference_build": info.get("reference_build", ""),
+                    "n_cells": info.get("n_cells", None),
+                    "median_umi_per_cell": info.get("median_umi_per_cell", None),
+                    "median_genes_per_cell": info.get("median_genes_per_cell", None),
+                    "mapping_rate": info.get("mapping_rate", None),
+                    "series_title": self.study_meta.get("series_title", ""),
+                }
+            )
         df = pd.DataFrame(rows)
         df.to_parquet(path, index=False)
         if verbose:
@@ -1928,13 +2050,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         "--metadata-enriched",
         default=None,
         help="Optional path to metadata_enriched.parquet (per-GSM enriched fields); "
-             "merged opportunistically if present.",
+        "merged opportunistically if present.",
     )
     pack_p.add_argument(
         "--publications-enriched",
         default=None,
         help="Optional path to publications_enriched.parquet (per-GSE pubs); "
-             "merged opportunistically if present.",
+        "merged opportunistically if present.",
     )
     pack_p.add_argument(
         "--series-meta",

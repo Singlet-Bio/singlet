@@ -14,10 +14,10 @@ neighbors             — GPU kNN graph construction     (cycle-8 graph/knn kern
 All functions are drop-in replacements for their scanpy.pp counterparts.
 """
 
-from .lognorm import normalize_total, log1p
 from .hvg import highly_variable_genes
-from .scale import scale, regress_out
+from .lognorm import log1p, normalize_total
 from .neighbors import neighbors
+from .scale import regress_out, scale
 
 __all__ = [
     "normalize_total",

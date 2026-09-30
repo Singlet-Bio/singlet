@@ -3,7 +3,6 @@
 
 import numpy as np
 import pytest
-
 import singlet
 
 
@@ -118,9 +117,7 @@ class TestOptimalTransport:
         adata.obs["day"] = [0] * 40 + [3] * 40
         adata.obsm["X_pca"] = rng.standard_normal((n_cells, 10))
 
-        coupling = singlet.optimal_transport(
-            adata, time_key="day", source_time=0, target_time=3
-        )
+        coupling = singlet.optimal_transport(adata, time_key="day", source_time=0, target_time=3)
         assert coupling.shape == (40, 40)
         assert "ot_coupling_0_3" in adata.uns
 

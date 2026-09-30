@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MIT
 """PSI (Percent Spliced In) derivation from canonical counts.1pz."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

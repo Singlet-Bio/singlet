@@ -22,18 +22,18 @@ yet exposed by the cycle-20 binding extension.  The wrapper raises
 from __future__ import annotations
 
 import copy as copy_module
-from typing import TYPE_CHECKING, Iterable, Optional, Sequence, Tuple, Type, Union
+from typing import TYPE_CHECKING, Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
 
 if TYPE_CHECKING:
     import anndata
-    import scipy.sparse
 
 
 # ---------------------------------------------------------------------------
 # RNG helper
 # ---------------------------------------------------------------------------
+
 
 def _resolve_seed(rng: Optional[Union[int, "np.random.Generator"]]) -> int:
     """Convert scanpy-style ``rng`` to a uint64 seed for C++."""
@@ -47,6 +47,7 @@ def _resolve_seed(rng: Optional[Union[int, "np.random.Generator"]]) -> int:
 # ---------------------------------------------------------------------------
 # Internal: extract connectivities
 # ---------------------------------------------------------------------------
+
 
 def _get_connectivities(
     adata: "anndata.AnnData",
@@ -74,8 +75,7 @@ def _get_connectivities(
     if obsp is not None:
         if obsp not in adata.obsp:
             raise KeyError(
-                f"obsp='{obsp}' not found in adata.obsp. "
-                f"Available keys: {list(adata.obsp.keys())}"
+                f"obsp='{obsp}' not found in adata.obsp. Available keys: {list(adata.obsp.keys())}"
             )
         return adata.obsp[obsp]
 
@@ -97,6 +97,7 @@ def _get_connectivities(
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def leiden(
     adata: "anndata.AnnData",
@@ -247,9 +248,7 @@ def leiden(
     if restrict_to is not None:
         restrict_col, restrict_vals = restrict_to
         if restrict_col not in working.obs.columns:
-            raise KeyError(
-                f"restrict_to column '{restrict_col}' not found in adata.obs."
-            )
+            raise KeyError(f"restrict_to column '{restrict_col}' not found in adata.obs.")
         restrict_mask = working.obs[restrict_col].isin(restrict_vals).values
 
     # Map scanpy kwargs → binding kwargs.

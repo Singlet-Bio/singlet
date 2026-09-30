@@ -21,7 +21,7 @@ import shutil
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Optional, Set
+from typing import Set
 
 __all__ = [
     "WHITELIST_DIR",

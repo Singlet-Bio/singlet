@@ -12,9 +12,7 @@ def _make_adata(n_cells=100, n_genes=50, with_umap=True, with_obs=True):
     import pandas as pd
 
     rng = np.random.default_rng(42)
-    X = sp.random(
-        n_cells, n_genes, density=0.3, format="csr", random_state=42
-    )
+    X = sp.random(n_cells, n_genes, density=0.3, format="csr", random_state=42)
     X.data = np.abs(rng.standard_normal(X.nnz).astype(np.float32))
 
     adata = ad.AnnData(X=X)
@@ -22,14 +20,10 @@ def _make_adata(n_cells=100, n_genes=50, with_umap=True, with_obs=True):
     adata.obs_names = [f"cell_{i}" for i in range(n_cells)]
 
     if with_umap:
-        adata.obsm["X_umap"] = rng.standard_normal(
-            (n_cells, 2)
-        ).astype(np.float32)
+        adata.obsm["X_umap"] = rng.standard_normal((n_cells, 2)).astype(np.float32)
 
     if with_obs:
-        adata.obs["cluster"] = pd.Categorical(
-            rng.choice(["A", "B", "C"], n_cells)
-        )
+        adata.obs["cluster"] = pd.Categorical(rng.choice(["A", "B", "C"], n_cells))
         adata.obs["n_counts"] = rng.uniform(1000, 5000, n_cells)
 
     return adata
@@ -83,9 +77,7 @@ class TestPlotEmbedding:
         from singlet._plot_embedding import plot_embedding
 
         adata = _make_adata()
-        fig, axes = plot_embedding(
-            adata, color=["cluster", "n_counts", "GENE0"]
-        )
+        fig, axes = plot_embedding(adata, color=["cluster", "n_counts", "GENE0"])
         assert fig is not None
 
     def test_custom_basis(self):
@@ -96,12 +88,8 @@ class TestPlotEmbedding:
 
         adata = _make_adata()
         rng = np.random.default_rng(0)
-        adata.obsm["X_tsne"] = rng.standard_normal(
-            (100, 2)
-        ).astype(np.float32)
-        fig, axes = plot_embedding(
-            adata, basis="X_tsne", color="cluster"
-        )
+        adata.obsm["X_tsne"] = rng.standard_normal((100, 2)).astype(np.float32)
+        fig, axes = plot_embedding(adata, basis="X_tsne", color="cluster")
         assert fig is not None
 
     def test_missing_basis_raises(self):
@@ -144,8 +132,11 @@ class TestPlotEmbedding:
         fig, axes = plot_embedding(
             adata,
             color=[
-                "cluster", "n_counts", "GENE0",
-                "GENE1", "GENE2",
+                "cluster",
+                "n_counts",
+                "GENE0",
+                "GENE1",
+                "GENE2",
             ],
             ncols=2,
         )

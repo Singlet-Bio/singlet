@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 
 _TP1_MAGIC = b"\x54\x50\x31\x5a"  # "TP1Z" — legacy single-block .1pz
-_PZ_V2_MAGIC_PREFIX = b"1PZ02"     # canonical v2 multi-block .1pz
+_PZ_V2_MAGIC_PREFIX = b"1PZ02"  # canonical v2 multi-block .1pz
 
 
 def _detect_format(path: str | Path) -> str:
@@ -158,9 +158,7 @@ def write_1pz(
     if adata is None:
         raise TypeError("write_1pz() requires an AnnData object, got None")
     if not hasattr(adata, "X") or not hasattr(adata, "obs"):
-        raise TypeError(
-            f"write_1pz() requires an AnnData object, got {type(adata).__name__}"
-        )
+        raise TypeError(f"write_1pz() requires an AnnData object, got {type(adata).__name__}")
 
     path = Path(path).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -198,9 +196,7 @@ def write_1pz(
     user_meta = None
     if include_uns and adata.uns:
         user_meta = {
-            k: str(v)
-            for k, v in adata.uns.items()
-            if isinstance(v, (str, int, float, bool))
+            k: str(v) for k, v in adata.uns.items() if isinstance(v, (str, int, float, bool))
         }
         if not user_meta:
             user_meta = None

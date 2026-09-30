@@ -94,9 +94,7 @@ def test_coexpression_modules_correlation_method():
 def test_coexpression_modules_min_module_size():
     """Small modules are merged to unassigned (0)."""
     adata = _make_adata(n_obs=80, n_vars=200)
-    result = singlet.coexpression_modules(
-        adata, n_modules=10, min_module_size=50, n_top_genes=200
-    )
+    result = singlet.coexpression_modules(adata, n_modules=10, min_module_size=50, n_top_genes=200)
     # With high min_module_size, all surviving modules meet threshold
     for mod_id, genes in result["modules"].items():
         assert len(genes) >= 50

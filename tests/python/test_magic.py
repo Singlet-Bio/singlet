@@ -12,25 +12,17 @@ def _make_adata(n_cells=100, n_genes=200, sparse=True, with_pca=True):
 
     rng = np.random.default_rng(42)
     if sparse:
-        X = sp.random(
-            n_cells, n_genes, density=0.3, format="csr", random_state=42
-        )
-        X.data = np.abs(
-            rng.standard_normal(X.nnz).astype(np.float32)
-        )
+        X = sp.random(n_cells, n_genes, density=0.3, format="csr", random_state=42)
+        X.data = np.abs(rng.standard_normal(X.nnz).astype(np.float32))
     else:
-        X = np.abs(
-            rng.standard_normal((n_cells, n_genes)).astype(np.float32)
-        )
+        X = np.abs(rng.standard_normal((n_cells, n_genes)).astype(np.float32))
 
     adata = ad.AnnData(X=X)
     adata.var_names = [f"GENE{i}" for i in range(n_genes)]
     adata.obs_names = [f"cell_{i}" for i in range(n_cells)]
 
     if with_pca:
-        adata.obsm["X_pca"] = rng.standard_normal(
-            (n_cells, 50)
-        ).astype(np.float32)
+        adata.obsm["X_pca"] = rng.standard_normal((n_cells, 50)).astype(np.float32)
 
     return adata
 
@@ -80,9 +72,7 @@ class TestMagic:
 
         adata = _make_adata()
         rng = np.random.default_rng(0)
-        adata.obsm["X_custom"] = rng.standard_normal(
-            (100, 20)
-        ).astype(np.float32)
+        adata.obsm["X_custom"] = rng.standard_normal((100, 20)).astype(np.float32)
         magic(adata, use_rep="X_custom")
         assert "magic" in adata.layers
 
@@ -98,9 +88,7 @@ class TestMagic:
         from singlet._magic import magic
 
         adata = _make_adata(n_cells=100, n_genes=50, sparse=True)
-        X_orig = (
-            adata.X.toarray() if sp.issparse(adata.X) else adata.X.copy()
-        )
+        X_orig = adata.X.toarray() if sp.issparse(adata.X) else adata.X.copy()
         magic(adata, t=3)
         X_imputed = adata.layers["magic"]
         # Variance per gene should generally be lower after imputation
@@ -128,6 +116,4 @@ class TestMagic:
         adata2 = _make_adata()
         magic(adata1, random_state=42)
         magic(adata2, random_state=42)
-        np.testing.assert_array_equal(
-            adata1.layers["magic"], adata2.layers["magic"]
-        )
+        np.testing.assert_array_equal(adata1.layers["magic"], adata2.layers["magic"])

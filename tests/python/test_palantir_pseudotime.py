@@ -4,9 +4,8 @@
 import numpy as np
 import pandas as pd
 import pytest
-from anndata import AnnData
-
 import singlet
+from anndata import AnnData
 
 
 @pytest.fixture
@@ -100,9 +99,7 @@ class TestPalantirPseudotime:
 
     def test_copy_mode(self, adata_with_pca):
         """Test copy mode doesn't modify original."""
-        result = singlet.palantir_pseudotime(
-            adata_with_pca, root_cell=0, copy=True
-        )
+        result = singlet.palantir_pseudotime(adata_with_pca, root_cell=0, copy=True)
         assert result is not adata_with_pca
         assert "palantir_pseudotime" in result.obs.columns
         assert "palantir_pseudotime" not in adata_with_pca.obs.columns
@@ -120,9 +117,7 @@ class TestPalantirPseudotime:
     def test_missing_representation(self, adata_with_pca):
         """Test error on missing representation."""
         with pytest.raises(KeyError, match="not found"):
-            singlet.palantir_pseudotime(
-                adata_with_pca, root_cell=0, use_rep="X_nonexistent"
-            )
+            singlet.palantir_pseudotime(adata_with_pca, root_cell=0, use_rep="X_nonexistent")
 
     def test_custom_n_components(self, adata_with_pca):
         """Test with different n_components."""

@@ -91,7 +91,9 @@ def test_gene_importance_finds_markers():
 
     top_genes = set(result["gene"].values)
     # Marker genes are gene_0-4, gene_10-14, gene_20-24
-    expected_markers = {f"gene_{i}" for i in list(range(5)) + list(range(10, 15)) + list(range(20, 25))}
+    expected_markers = {
+        f"gene_{i}" for i in list(range(5)) + list(range(10, 15)) + list(range(20, 25))
+    }
     overlap = top_genes & expected_markers
     # At least half of the markers should be in top 30
     assert len(overlap) >= 7

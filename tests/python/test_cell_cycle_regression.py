@@ -2,7 +2,6 @@
 """Tests for singlet.cell_cycle_regression()."""
 
 import numpy as np
-import pytest
 import singlet
 from anndata import AnnData
 

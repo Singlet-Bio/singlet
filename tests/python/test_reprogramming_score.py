@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-
 import singlet
 
 
@@ -33,9 +32,7 @@ def adata_with_types():
     pca[100:150, 0] = rng.normal(0, 0.5, 50)
     pca[100:150, 1] = rng.normal(0, 0.5, 50)
 
-    cell_types = (
-        ["source"] * 50 + ["target"] * 50 + ["intermediate"] * 50
-    )
+    cell_types = ["source"] * 50 + ["target"] * 50 + ["intermediate"] * 50
 
     adata = ad.AnnData(X=X)
     adata.obs["cell_type"] = cell_types
@@ -60,9 +57,7 @@ def test_basic_reprogramming_score(adata_with_types):
 
 def test_source_cells_have_low_score(adata_with_types):
     """Source cells should have low reprogramming score."""
-    singlet.reprogramming_score(
-        adata_with_types, source_type="source", target_type="target"
-    )
+    singlet.reprogramming_score(adata_with_types, source_type="source", target_type="target")
     scores = adata_with_types.obs["reprogramming_score"].values
     source_mean = np.mean(scores[:50])
     target_mean = np.mean(scores[50:100])
@@ -71,9 +66,7 @@ def test_source_cells_have_low_score(adata_with_types):
 
 def test_target_cells_have_high_score(adata_with_types):
     """Target cells should have high reprogramming score."""
-    singlet.reprogramming_score(
-        adata_with_types, source_type="source", target_type="target"
-    )
+    singlet.reprogramming_score(adata_with_types, source_type="source", target_type="target")
     scores = adata_with_types.obs["reprogramming_score"].values
     target_mean = np.mean(scores[50:100])
     assert target_mean > 0.7
@@ -81,9 +74,7 @@ def test_target_cells_have_high_score(adata_with_types):
 
 def test_intermediate_cells_have_middle_score(adata_with_types):
     """Intermediate cells should score between source and target."""
-    singlet.reprogramming_score(
-        adata_with_types, source_type="source", target_type="target"
-    )
+    singlet.reprogramming_score(adata_with_types, source_type="source", target_type="target")
     scores = adata_with_types.obs["reprogramming_score"].values
     source_mean = np.mean(scores[:50])
     intermediate_mean = np.mean(scores[100:150])
@@ -140,29 +131,21 @@ def test_missing_use_rep_raises(adata_with_types):
 def test_invalid_source_type_raises(adata_with_types):
     """Should raise ValueError if source type not in data."""
     with pytest.raises(ValueError, match="Source type"):
-        singlet.reprogramming_score(
-            adata_with_types, source_type="neuron", target_type="target"
-        )
+        singlet.reprogramming_score(adata_with_types, source_type="neuron", target_type="target")
 
 
 def test_invalid_target_type_raises(adata_with_types):
     """Should raise ValueError if target type not in data."""
     with pytest.raises(ValueError, match="Target type"):
-        singlet.reprogramming_score(
-            adata_with_types, source_type="source", target_type="neuron"
-        )
+        singlet.reprogramming_score(adata_with_types, source_type="source", target_type="neuron")
 
 
 def test_score_symmetry(adata_with_types):
     """Swapping source/target should invert scores approximately."""
-    singlet.reprogramming_score(
-        adata_with_types, source_type="source", target_type="target"
-    )
+    singlet.reprogramming_score(adata_with_types, source_type="source", target_type="target")
     forward_scores = adata_with_types.obs["reprogramming_score"].values.copy()
 
-    singlet.reprogramming_score(
-        adata_with_types, source_type="target", target_type="source"
-    )
+    singlet.reprogramming_score(adata_with_types, source_type="target", target_type="source")
     reverse_scores = adata_with_types.obs["reprogramming_score"].values
 
     # Forward + reverse should approximately sum to 1

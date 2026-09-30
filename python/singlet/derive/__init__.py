@@ -26,13 +26,14 @@ All routines read `features.fbin` from the reference bundle referenced by the
 counts file's `reference_id` header field. Reference bundles are fetched (and
 cached) by `singlet.fetch_reference()`.
 """
+
 from __future__ import annotations
 
 from .gene_counts import gene_counts
-from .usa import usa
-from .psi import psi
 from .gene_full import gene_full
 from .pseudobulk import pseudobulk
+from .psi import psi
+from .usa import usa
 
 __all__ = [
     "gene_counts",

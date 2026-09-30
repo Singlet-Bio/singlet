@@ -212,9 +212,7 @@ def download(
                 f"Dataset '{accession}' not found at {url}. "
                 f"Check the accession or use singlet.catalog() to browse available datasets."
             ) from None
-        raise RuntimeError(
-            f"Failed to download '{accession}' from {url}: HTTP {e.code}"
-        ) from e
+        raise RuntimeError(f"Failed to download '{accession}' from {url}: HTTP {e.code}") from e
     except BaseException:
         tmp_dest.unlink(missing_ok=True)
         raise
@@ -529,9 +527,7 @@ def _subset_genes(adata, genes: Sequence[str]):
 
     requested = [genes] if isinstance(genes, str) else [str(g) for g in genes]
     var_names = [str(v) for v in adata.var_names]
-    symbols = (
-        [str(s) for s in adata.var["gene_name"]] if "gene_name" in adata.var.columns else []
-    )
+    symbols = [str(s) for s in adata.var["gene_name"]] if "gene_name" in adata.var.columns else []
 
     def _index(names):
         exact: dict = {}

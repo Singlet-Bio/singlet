@@ -85,9 +85,7 @@ class TestICA:
         adata2 = _make_adata()
         ica(adata1, n_components=10, random_state=123)
         ica(adata2, n_components=10, random_state=123)
-        np.testing.assert_array_equal(
-            adata1.obsm["X_ica"], adata2.obsm["X_ica"]
-        )
+        np.testing.assert_array_equal(adata1.obsm["X_ica"], adata2.obsm["X_ica"])
 
     def test_different_seeds(self):
         """Different random_state produces different results."""

@@ -54,9 +54,7 @@ def test_batch_eval_stored_in_uns():
 def test_batch_eval_with_label_key():
     """Providing label_key computes label_lisi."""
     adata = _make_adata()
-    result = singlet.batch_evaluation(
-        adata, batch_key="batch", label_key="celltype"
-    )
+    result = singlet.batch_evaluation(adata, batch_key="batch", label_key="celltype")
     assert result["label_lisi"] is not None
     assert result["label_lisi"] >= 1.0
 
@@ -152,9 +150,7 @@ def test_batch_eval_custom_rep():
     adata = _make_adata()
     rng = np.random.default_rng(42)
     adata.obsm["X_harmony"] = rng.standard_normal((120, 10)).astype(np.float32)
-    result = singlet.batch_evaluation(
-        adata, batch_key="batch", use_rep="X_harmony"
-    )
+    result = singlet.batch_evaluation(adata, batch_key="batch", use_rep="X_harmony")
     assert "kbet_acceptance_rate" in result
 
 

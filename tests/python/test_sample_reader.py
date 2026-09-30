@@ -15,7 +15,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from singlet.io import (
     SingletCounts,
     SingletMt,
@@ -24,7 +23,6 @@ from singlet.io import (
     SingletSnp,
 )
 from singlet.pz_v2 import PzV2Error
-
 
 # --------------------------------------------------------------------------
 # Fixtures

@@ -87,9 +87,7 @@ class TestGeneSpaceEmbeddingBasic:
     def test_n_components_3(self):
         """Should work with n_components=3."""
         adata = _make_gene_adata()
-        result = gene_space_embedding(
-            adata, n_top_genes=50, n_components=3, method="pca"
-        )
+        result = gene_space_embedding(adata, n_top_genes=50, n_components=3, method="pca")
         assert "dim_0" in result.columns
         assert "dim_1" in result.columns
         assert "dim_2" in result.columns

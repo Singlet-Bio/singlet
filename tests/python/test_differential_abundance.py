@@ -117,9 +117,7 @@ class TestDifferentialAbundanceStatistics:
         """All p-values should be between 0 and 1."""
         adata = _make_da_adata()
         for method in ("simple", "milo"):
-            result = differential_abundance(
-                adata, "cluster", "condition", method=method
-            )
+            result = differential_abundance(adata, "cluster", "condition", method=method)
             assert (result["pvalue"] >= 0).all()
             assert (result["pvalue"] <= 1).all()
 
@@ -127,9 +125,7 @@ class TestDifferentialAbundanceStatistics:
         """Adjusted p-values between 0 and 1, and >= raw p-values."""
         adata = _make_da_adata()
         for method in ("simple", "milo"):
-            result = differential_abundance(
-                adata, "cluster", "condition", method=method
-            )
+            result = differential_abundance(adata, "cluster", "condition", method=method)
             assert (result["padj"] >= 0).all()
             assert (result["padj"] <= 1).all()
             assert (result["padj"] >= result["pvalue"] - 1e-10).all()
@@ -138,9 +134,7 @@ class TestDifferentialAbundanceStatistics:
         """logFC values should all be finite."""
         adata = _make_da_adata()
         for method in ("simple", "milo"):
-            result = differential_abundance(
-                adata, "cluster", "condition", method=method
-            )
+            result = differential_abundance(adata, "cluster", "condition", method=method)
             assert np.all(np.isfinite(result["logFC"].values))
 
 
@@ -152,9 +146,7 @@ class TestDifferentialAbundanceStorage:
         assert "differential_abundance" in adata.uns
         assert "params" in adata.uns["differential_abundance"]
         assert "results" in adata.uns["differential_abundance"]
-        pd.testing.assert_frame_equal(
-            adata.uns["differential_abundance"]["results"], result
-        )
+        pd.testing.assert_frame_equal(adata.uns["differential_abundance"]["results"], result)
 
     def test_stores_params(self):
         """Stored params match inputs."""

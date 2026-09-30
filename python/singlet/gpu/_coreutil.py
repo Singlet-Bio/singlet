@@ -43,9 +43,7 @@ def require_core(*attrs):
     try:
         import singlet.gpu._core as _core
     except ImportError as e:
-        raise ImportError(
-            f"singlet.gpu._core could not be imported ({e}).  {_INSTALL_HINT}"
-        ) from e
+        raise ImportError(f"singlet.gpu._core could not be imported ({e}).  {_INSTALL_HINT}") from e
 
     obj = _core
     parent = _core
@@ -54,8 +52,7 @@ def require_core(*attrs):
         if not hasattr(obj, name):
             path = "_core" + "".join(f".{w}" for w in walked) + f".{name}"
             raise ImportError(
-                f"{path} is not available — the compiled binding is missing.  "
-                f"{_INSTALL_HINT}"
+                f"{path} is not available — the compiled binding is missing.  {_INSTALL_HINT}"
             )
         parent = obj
         obj = getattr(obj, name)

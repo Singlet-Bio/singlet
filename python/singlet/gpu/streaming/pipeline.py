@@ -23,17 +23,16 @@ tag until the binding is added.
 
 from __future__ import annotations
 
-import copy as copy_module
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Sequence, Union
 
 import numpy as np
 
-
 # ---------------------------------------------------------------------------
 # Result dataclass
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class PipelineResult:
@@ -107,14 +106,16 @@ class PipelineResult:
         when run_hvg=True; obs carries `size_factors` when run_lognorm=True.
         """
         import anndata
-        import scipy.sparse as sp
         import numpy as _np
+        import scipy.sparse as sp
+
         n_cells = max(self.n_cells, 1)
         n_genes = max(self.n_genes, 1)
         # Build var with available gene-level stats; only add a column if
         # the buffer's length matches n_genes (defensive against the
         # CYCLE-220-FOLLOWUP-SIZE_FACTORS-LENGTH-style kernel mismatches).
         var = {}
+
         def _fit_or_resize(arr, target_len, dtype):
             a = _np.asarray(arr, dtype=dtype)
             if len(a) == target_len:
@@ -122,6 +123,7 @@ class PipelineResult:
             if 0 < len(a) < target_len:
                 return _np.resize(a, target_len)
             return None  # 0-length or oversized — skip column entirely
+
         if self._gene_means is not None:
             v = _fit_or_resize(self._gene_means, n_genes, _np.float32)
             if v is not None:
@@ -160,6 +162,7 @@ class PipelineResult:
 # RNG helper — identical convention to scanpy (rng parameter)
 # ---------------------------------------------------------------------------
 
+
 def _resolve_seed(rng: Optional[Union[int, np.random.Generator]]) -> int:
     """
     Convert *rng* (int seed or np.random.Generator) to a uint64 for C++.
@@ -180,6 +183,7 @@ def _resolve_seed(rng: Optional[Union[int, np.random.Generator]]) -> int:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def run_pipeline(
     input_paths: Sequence[Union[str, Path]],
@@ -359,8 +363,16 @@ def run_pipeline(
     # C++ kernel — accepted by the wrapper for API parity with future
     # binding extension (see CYCLE-21-FOLLOWUP).  Used vars are passed
     # below; ignored vars are silent.
-    _ = (target_sum, log_base, hvg_flavor, pca_solver, nmf_loss,
-         nmf_max_iter, seed, n_threads)  # quiet unused-variable warnings
+    _ = (
+        target_sum,
+        log_base,
+        hvg_flavor,
+        pca_solver,
+        nmf_loss,
+        nmf_max_iter,
+        seed,
+        n_threads,
+    )  # quiet unused-variable warnings
 
     # cache_normalized + in_memory_pca_threshold are C++ binding params with
     # no Python-API exposure yet; use sensible defaults from the C++ contract.
@@ -399,15 +411,15 @@ def run_pipeline(
     # gene_means / gene_vars from the streaming pipeline (per
     # _bind_results.hpp).  gene_means/gene_vars exist regardless of HVG.
     gene_means = list(raw.gene_means) if hasattr(raw, "gene_means") else None
-    gene_vars  = list(raw.gene_vars)  if hasattr(raw, "gene_vars")  else None
+    gene_vars = list(raw.gene_vars) if hasattr(raw, "gene_vars") else None
 
     return PipelineResult(
-        cell_ids=None,                 # not yet exposed by binding
-        gene_ids=None,                 # not yet exposed by binding
-        X_pca=None,                    # not yet exposed
-        X_nmf_W=None,                  # not yet exposed
-        X_nmf_H=None,                  # not yet exposed
-        hvg_mask=None,                 # derive from hvg_indices below
+        cell_ids=None,  # not yet exposed by binding
+        gene_ids=None,  # not yet exposed by binding
+        X_pca=None,  # not yet exposed
+        X_nmf_W=None,  # not yet exposed
+        X_nmf_H=None,  # not yet exposed
+        hvg_mask=None,  # derive from hvg_indices below
         size_factors=list(raw.size_factors) if run_lognorm else None,
         input_paths=resolved,
         chunk_cols=chunk_cols,

@@ -12,19 +12,20 @@ Reference: Schep et al. (2017) Nature Methods — chromVAR.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from singlet.gpu._coreutil import require_core
 
 if TYPE_CHECKING:
-    import anndata
+    pass
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def compute(
     accessibility,
@@ -162,7 +163,7 @@ def compute(
             arr = np.ascontiguousarray(arr)
         return arr
 
-    peak_gc_np   = _to_f32(peak_gc)
+    peak_gc_np = _to_f32(peak_gc)
     peak_mean_np = _to_f32(peak_mean_access)
 
     return _core.chromvar(

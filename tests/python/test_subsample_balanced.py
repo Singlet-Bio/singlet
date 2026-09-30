@@ -99,9 +99,7 @@ def test_subsample_balanced_different_seeds():
 def test_subsample_balanced_multi_key():
     """Stratified subsampling by multiple keys."""
     adata = _make_adata()
-    result = singlet.subsample_balanced(
-        adata, groupby=["cluster", "batch"], n_per_group=5
-    )
+    result = singlet.subsample_balanced(adata, groupby=["cluster", "batch"], n_per_group=5)
     # Should have subsampled from each (cluster, batch) combination
     assert result.shape[0] <= adata.shape[0]
     assert result.shape[0] > 0
@@ -111,9 +109,7 @@ def test_subsample_balanced_inplace():
     """copy=False should modify in place."""
     adata = _make_adata()
     original_n = adata.shape[0]
-    result = singlet.subsample_balanced(
-        adata, groupby="cluster", n_per_group=10, copy=False
-    )
+    result = singlet.subsample_balanced(adata, groupby="cluster", n_per_group=10, copy=False)
     assert result is None
     assert adata.shape[0] < original_n
 

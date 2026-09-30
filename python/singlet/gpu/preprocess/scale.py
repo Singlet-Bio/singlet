@@ -38,8 +38,7 @@ GPU execution path (regress_out)
 from __future__ import annotations
 
 import copy as copy_module
-import math
-from typing import TYPE_CHECKING, List, Optional, Sequence
+from typing import TYPE_CHECKING, Optional, Sequence
 
 import numpy as np
 
@@ -51,7 +50,7 @@ if TYPE_CHECKING:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-_SCALE_LAYER = "_singlet_gpu_scale_dense"   # internal cache key in adata.layers
+_SCALE_LAYER = "_singlet_gpu_scale_dense"  # internal cache key in adata.layers
 
 
 def _get_matrix(adata: "anndata.AnnData", layer: Optional[str]):
@@ -64,6 +63,7 @@ def _get_matrix(adata: "anndata.AnnData", layer: Optional[str]):
 
 def _csr_to_device_csc(csr_mat):
     import singlet.gpu._core as _core
+
     if not hasattr(_core, "from_cupy_csr"):
         raise AttributeError(
             "_core.from_cupy_csr is not available.  "
@@ -73,17 +73,18 @@ def _csr_to_device_csc(csr_mat):
     return _core.from_cupy_csr(csc_mat)
 
 
-def _ensure_gene_stats(adata: "anndata.AnnData", layer: Optional[str],
-                       stream) -> None:
+def _ensure_gene_stats(adata: "anndata.AnnData", layer: Optional[str], stream) -> None:
     """Run calculate_qc_metrics if mean_counts / var_counts are missing."""
     if "mean_counts" not in adata.var.columns or "var_counts" not in adata.var.columns:
         from singlet.gpu.qc.qc_metrics import calculate_qc_metrics
+
         calculate_qc_metrics(adata, layer=layer, inplace=True, stream=stream)
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def scale(
     adata: "anndata.AnnData",
@@ -149,16 +150,17 @@ def scale(
 
     # Build device mean/std arrays from adata.var.
     mean_np = working.var["mean_counts"].values.astype(np.float32)
-    var_np  = working.var["var_counts"].values.astype(np.float32)
+    var_np = working.var["var_counts"].values.astype(np.float32)
     # std = sqrt(var), guarded against negative values from fp32 rounding.
     std_np = np.sqrt(np.maximum(var_np, 0.0)).astype(np.float32)
 
     d_mean = cp.asarray(mean_np)
-    d_std  = cp.asarray(std_np)
+    d_std = cp.asarray(std_np)
 
     dense_result = _core.scale(
         device_csc,
-        d_mean, d_std,
+        d_mean,
+        d_std,
         max_value=float(max_value),
         zero_center=zero_center,
         unit_variance=True,
@@ -170,9 +172,9 @@ def scale(
 
     # Also write a scaled_data annotation so users know the layer is available.
     working.uns["scale"] = {
-        "max_value":   max_value,
+        "max_value": max_value,
         "zero_center": zero_center,
-        "layer_key":   _SCALE_LAYER,
+        "layer_key": _SCALE_LAYER,
     }
 
     if inplace and not copy:
@@ -275,7 +277,7 @@ def regress_out(
         col = working.obs[key].values
         C_host[:, j] = col.astype(np.float32)
 
-    d_C = cp.asarray(C_host)   # device, col-major [n_cells × p]
+    d_C = cp.asarray(C_host)  # device, col-major [n_cells × p]
 
     # In-place regression: modifies dense_result.dense.data in-place on device.
     _core.regress_out(dense_result, d_C, p=p, stream=stream)

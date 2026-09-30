@@ -4,7 +4,6 @@
 import numpy as np
 import pandas as pd
 import pytest
-import scipy.sparse as sp
 import singlet
 from singlet._fate_probabilities import fate_probabilities
 
@@ -109,9 +108,7 @@ class TestFateProbabilities:
             labels[idx] = "fate_A"
         for idx in range(95, 100):
             labels[idx] = "fate_B"
-        adata.obs["terminal"] = pd.Categorical(
-            labels, categories=["fate_A", "fate_B"]
-        )
+        adata.obs["terminal"] = pd.Categorical(labels, categories=["fate_A", "fate_B"])
         fate_probabilities(adata, "terminal")
         fp = adata.obsm["fate_probabilities"]
         assert fp.shape == (100, 2)

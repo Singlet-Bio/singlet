@@ -16,9 +16,7 @@ from singlet.transcode import transcode_v1_to_v2  # noqa: E402
 
 
 def _write_legacy(path, mat, rownames, colnames):
-    singlepress.write_1pz(
-        str(path), mat, rownames=rownames, colnames=colnames, num_threads=2
-    )
+    singlepress.write_1pz(str(path), mat, rownames=rownames, colnames=colnames, num_threads=2)
 
 
 def test_transcode_gene_counts_only(tmp_path):
@@ -37,9 +35,7 @@ def test_transcode_gene_counts_only(tmp_path):
 
     with read_pz_v2(dst / "counts.1pz") as rd:
         assert rd.cell_barcodes == ["c0", "c1", "c2"]
-        np.testing.assert_array_equal(
-            rd.block("gene_counts").data().toarray(), mat.toarray()
-        )
+        np.testing.assert_array_equal(rd.block("gene_counts").data().toarray(), mat.toarray())
 
     summary = json.loads((dst / "summary.json").read_text())
     assert summary["transcoded_from"] == "v1"
@@ -60,15 +56,9 @@ def test_transcode_usa_triple_maps_to_v2_blocks(tmp_path):
 
     with read_pz_v2(tmp_path / "v2" / "counts.1pz") as rd:
         assert rd.cell_barcodes == ["A", "B"]
-        np.testing.assert_array_equal(
-            rd.block("exon_body").data().toarray(), a.toarray()
-        )
-        np.testing.assert_array_equal(
-            rd.block("intron_body").data().toarray(), b.toarray()
-        )
-        np.testing.assert_array_equal(
-            rd.block("junctions").data().toarray(), c.toarray()
-        )
+        np.testing.assert_array_equal(rd.block("exon_body").data().toarray(), a.toarray())
+        np.testing.assert_array_equal(rd.block("intron_body").data().toarray(), b.toarray())
+        np.testing.assert_array_equal(rd.block("junctions").data().toarray(), c.toarray())
 
 
 def test_transcode_passes_through_summary(tmp_path):

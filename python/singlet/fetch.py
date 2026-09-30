@@ -143,9 +143,7 @@ def _fetch_one(base_url: str, rel: str, expected_sha: Optional[str], out_dir: Pa
         got = _sha256_of(dest)
         if got != expected_sha:
             dest.unlink(missing_ok=True)
-            raise IOError(
-                f"sha256 mismatch for {rel}: expected {expected_sha}, got {got}"
-            )
+            raise IOError(f"sha256 mismatch for {rel}: expected {expected_sha}, got {got}")
     return dest
 
 
@@ -229,8 +227,7 @@ def fetch(
     errors = []
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {
-            pool.submit(_fetch_one, sample_base, rel, sha, out_dir): rel
-            for rel, sha in todo
+            pool.submit(_fetch_one, sample_base, rel, sha, out_dir): rel for rel, sha in todo
         }
         for fut in as_completed(futures):
             rel = futures[fut]

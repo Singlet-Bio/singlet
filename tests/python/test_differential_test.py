@@ -6,7 +6,6 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
-
 import singlet
 
 
@@ -81,9 +80,7 @@ def test_ks_detects_difference(adata_groups):
 
 def test_ks_no_difference(adata_same_dist):
     """KS test should not reject H0 for same distribution."""
-    result = singlet.differential_test(
-        adata_same_dist, groupby="group", method="ks"
-    )
+    result = singlet.differential_test(adata_same_dist, groupby="group", method="ks")
     # p-value should generally be non-significant (> 0.01)
     # Use a lenient threshold since it's random
     assert result["pvalue"].values[0] > 0.001
@@ -91,9 +88,7 @@ def test_ks_no_difference(adata_same_dist):
 
 def test_energy_basic(adata_groups):
     """Test energy method returns expected structure."""
-    result = singlet.differential_test(
-        adata_groups, groupby="group", method="energy"
-    )
+    result = singlet.differential_test(adata_groups, groupby="group", method="energy")
     assert isinstance(result, pd.DataFrame)
     assert len(result) == 3
     assert np.all(result["statistic"].values > 0)
@@ -101,17 +96,13 @@ def test_energy_basic(adata_groups):
 
 def test_energy_detects_difference(adata_groups):
     """Energy test should detect well-separated groups."""
-    result = singlet.differential_test(
-        adata_groups, groupby="group", method="energy"
-    )
+    result = singlet.differential_test(adata_groups, groupby="group", method="energy")
     assert np.all(result["pvalue"].values < 0.05)
 
 
 def test_mmd_basic(adata_groups):
     """Test MMD method returns expected structure."""
-    result = singlet.differential_test(
-        adata_groups, groupby="group", method="mmd"
-    )
+    result = singlet.differential_test(adata_groups, groupby="group", method="mmd")
     assert isinstance(result, pd.DataFrame)
     assert len(result) == 3
     assert np.all(result["statistic"].values >= 0)
@@ -119,9 +110,7 @@ def test_mmd_basic(adata_groups):
 
 def test_mmd_detects_difference(adata_groups):
     """MMD test should detect well-separated groups."""
-    result = singlet.differential_test(
-        adata_groups, groupby="group", method="mmd"
-    )
+    result = singlet.differential_test(adata_groups, groupby="group", method="mmd")
     assert np.all(result["pvalue"].values < 0.05)
 
 
@@ -153,25 +142,19 @@ def test_missing_groupby_raises(adata_groups):
 def test_missing_use_rep_raises(adata_groups):
     """Should raise KeyError if use_rep doesn't exist."""
     with pytest.raises(KeyError, match="not found in adata.obsm"):
-        singlet.differential_test(
-            adata_groups, groupby="group", use_rep="X_fake"
-        )
+        singlet.differential_test(adata_groups, groupby="group", use_rep="X_fake")
 
 
 def test_invalid_method_raises(adata_groups):
     """Should raise ValueError for invalid method."""
     with pytest.raises(ValueError, match="Method must be"):
-        singlet.differential_test(
-            adata_groups, groupby="group", method="invalid"
-        )
+        singlet.differential_test(adata_groups, groupby="group", method="invalid")
 
 
 def test_invalid_group_raises(adata_groups):
     """Should raise ValueError if specified group not found."""
     with pytest.raises(ValueError, match="Group 'Z' not found"):
-        singlet.differential_test(
-            adata_groups, groupby="group", groups=["A", "Z"]
-        )
+        singlet.differential_test(adata_groups, groupby="group", groups=["A", "Z"])
 
 
 def test_result_stored_in_uns(adata_groups):

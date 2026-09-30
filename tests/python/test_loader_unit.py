@@ -44,9 +44,7 @@ class TestDownload:
         cached = tmp_path / "GSE123456.singlet"
         cached.write_bytes(b"old data")
 
-        with patch.object(
-            _loader.urllib.request, "urlopen", return_value=_FakeResp([b"new!"])
-        ):
+        with patch.object(_loader.urllib.request, "urlopen", return_value=_FakeResp([b"new!"])):
             result = _loader.download("GSE123456", output_dir=tmp_path, force=True)
 
         assert result == cached
@@ -64,9 +62,7 @@ class TestDownload:
         with patch.object(_loader.urllib.request, "urlopen", side_effect=fake_urlopen):
             _loader.download("GSE999999", output_dir=tmp_path)
 
-        assert captured["url"] == (
-            "https://data.singlet.bio/data/GSE999999/GSE999999.singlet"
-        )
+        assert captured["url"] == ("https://data.singlet.bio/data/GSE999999/GSE999999.singlet")
 
     def test_data_base_override(self, tmp_path, monkeypatch):
         from singlet import _loader

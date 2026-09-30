@@ -108,9 +108,7 @@ def test_morans_i_spatially_patterned():
     _, indices = nn.kneighbors(pca)
     rows = np.repeat(np.arange(n), 10)
     cols = indices.ravel()
-    adj = sp.csr_matrix(
-        (np.ones(len(rows)), (rows, cols)), shape=(n, n)
-    )
+    adj = sp.csr_matrix((np.ones(len(rows)), (rows, cols)), shape=(n, n))
     adj = adj + adj.T
     adj.data[:] = 1.0
     adata.obsp["connectivities"] = adj

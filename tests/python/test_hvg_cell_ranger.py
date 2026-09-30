@@ -13,18 +13,15 @@ def _make_adata(n_cells=200, n_genes=3000, sparse=True):
     rng = np.random.default_rng(42)
     if sparse:
         X = sp.random(
-            n_cells, n_genes, density=0.3,
-            format="csr", random_state=42,
+            n_cells,
+            n_genes,
+            density=0.3,
+            format="csr",
+            random_state=42,
         )
-        X.data = np.abs(
-            rng.standard_normal(X.nnz).astype(np.float32)
-        ) + 0.01
+        X.data = np.abs(rng.standard_normal(X.nnz).astype(np.float32)) + 0.01
     else:
-        X = np.abs(
-            rng.standard_normal(
-                (n_cells, n_genes)
-            ).astype(np.float32)
-        ) + 0.01
+        X = np.abs(rng.standard_normal((n_cells, n_genes)).astype(np.float32)) + 0.01
 
     adata = ad.AnnData(X=X)
     adata.var_names = [f"GENE{i}" for i in range(n_genes)]
@@ -53,9 +50,7 @@ class TestHighlyVariableGenesCellRanger:
         )
 
         adata = _make_adata()
-        highly_variable_genes_cell_ranger(
-            adata, n_top_genes=500
-        )
+        highly_variable_genes_cell_ranger(adata, n_top_genes=500)
         assert adata.var["highly_variable"].sum() == 500
 
     def test_not_inplace(self):
@@ -64,9 +59,7 @@ class TestHighlyVariableGenesCellRanger:
         )
 
         adata = _make_adata()
-        result = highly_variable_genes_cell_ranger(
-            adata, inplace=False
-        )
+        result = highly_variable_genes_cell_ranger(adata, inplace=False)
         assert isinstance(result, list)
         assert len(result) == 2000
         assert all(isinstance(g, str) for g in result)
@@ -106,9 +99,7 @@ class TestHighlyVariableGenesCellRanger:
         )
 
         adata = _make_adata(n_genes=100)
-        highly_variable_genes_cell_ranger(
-            adata, n_top_genes=200
-        )
+        highly_variable_genes_cell_ranger(adata, n_top_genes=200)
         # Should select all genes when fewer than requested
         assert adata.var["highly_variable"].sum() == 100
 
@@ -129,19 +120,13 @@ class TestHighlyVariableGenesCellRanger:
         highly_variable_genes_cell_ranger(adata)
         assert adata.var["means"].dtype == np.float32
         assert adata.var["dispersions"].dtype == np.float32
-        assert (
-            adata.var["dispersions_norm"].dtype == np.float32
-        )
+        assert adata.var["dispersions_norm"].dtype == np.float32
 
     def test_public_api(self):
         import singlet
 
-        assert hasattr(
-            singlet, "highly_variable_genes_cell_ranger"
-        )
-        assert callable(
-            singlet.highly_variable_genes_cell_ranger
-        )
+        assert hasattr(singlet, "highly_variable_genes_cell_ranger")
+        assert callable(singlet.highly_variable_genes_cell_ranger)
 
     def test_different_from_seurat(self):
         """Cell Ranger (median/MAD) differs from Seurat (mean/std)."""

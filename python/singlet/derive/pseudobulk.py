@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: MIT
 """Pseudobulk aggregation from canonical counts.1pz + cell metadata."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Sequence, Union
 
 if TYPE_CHECKING:
-    from scipy.sparse import csc_matrix
+    pass
 
 
 def pseudobulk(

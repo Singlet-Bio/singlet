@@ -29,9 +29,7 @@ def _make_adata_with_clusters(n=150, m=50, n_clusters=3, seed=42):
     adata = AnnData(X=X)
     adata.var_names = [f"gene_{i}" for i in range(m)]
     adata.obs["leiden"] = (
-        ["0"] * cells_per_cluster
-        + ["1"] * cells_per_cluster
-        + ["2"] * (n - 2 * cells_per_cluster)
+        ["0"] * cells_per_cluster + ["1"] * cells_per_cluster + ["2"] * (n - 2 * cells_per_cluster)
     )
     return adata
 

@@ -6,7 +6,6 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import scipy.sparse as sp
-
 import singlet
 
 
@@ -23,13 +22,9 @@ def adata_multiome():
     adata = ad.AnnData(X=X)
 
     # RNA modality: 100 features
-    adata.obsm["X_rna"] = rng.normal(0, 1, size=(n_cells, 100)).astype(
-        np.float64
-    )
+    adata.obsm["X_rna"] = rng.normal(0, 1, size=(n_cells, 100)).astype(np.float64)
     # ATAC modality: 80 features
-    adata.obsm["X_atac"] = rng.normal(0, 1, size=(n_cells, 80)).astype(
-        np.float64
-    )
+    adata.obsm["X_atac"] = rng.normal(0, 1, size=(n_cells, 80)).astype(np.float64)
 
     return adata
 
@@ -47,12 +42,8 @@ def adata_layers():
     adata = ad.AnnData(X=X)
 
     # Store modalities as layers
-    adata.layers["spliced"] = rng.poisson(
-        3, size=(n_cells, n_genes)
-    ).astype(np.float64)
-    adata.layers["unspliced"] = rng.poisson(
-        1, size=(n_cells, n_genes)
-    ).astype(np.float64)
+    adata.layers["spliced"] = rng.poisson(3, size=(n_cells, n_genes)).astype(np.float64)
+    adata.layers["unspliced"] = rng.poisson(1, size=(n_cells, n_genes)).astype(np.float64)
 
     return adata
 
@@ -137,9 +128,7 @@ def test_sparse_input():
     adata.obsm["X_mod1"] = sp.csr_matrix(dense)
     adata.obsm["X_mod2"] = rng.normal(0, 1, size=(n_cells, 40))
 
-    singlet.multiome_factor_analysis(
-        adata, modality_keys=["X_mod1", "X_mod2"], n_factors=5
-    )
+    singlet.multiome_factor_analysis(adata, modality_keys=["X_mod1", "X_mod2"], n_factors=5)
 
     assert adata.obsm["X_mofa"].shape == (80, 5)
 
@@ -169,17 +158,13 @@ def test_reproducibility(adata_multiome):
         random_state=0,
     )
 
-    np.testing.assert_array_almost_equal(
-        adata_multiome.obsm["X_mofa"], adata_copy.obsm["X_mofa"]
-    )
+    np.testing.assert_array_almost_equal(adata_multiome.obsm["X_mofa"], adata_copy.obsm["X_mofa"])
 
 
 def test_missing_key_raises(adata_multiome):
     """Should raise KeyError if modality key not found."""
     with pytest.raises(KeyError, match="not found"):
-        singlet.multiome_factor_analysis(
-            adata_multiome, modality_keys=["X_rna", "X_nonexistent"]
-        )
+        singlet.multiome_factor_analysis(adata_multiome, modality_keys=["X_rna", "X_nonexistent"])
 
 
 def test_invalid_method_raises(adata_multiome):

@@ -103,10 +103,12 @@ def usa(
     intron = counts.intron_body()
     jct = counts.junctions()
 
-    p_exon = _gene_sum_projector(exon.shape[0], n_genes,
-                                 [(g.exon_lo, g.exon_hi) for g in fb.iter_genes()])
-    p_intron = _gene_sum_projector(intron.shape[0], n_genes,
-                                   [(g.intron_lo, g.intron_hi) for g in fb.iter_genes()])
+    p_exon = _gene_sum_projector(
+        exon.shape[0], n_genes, [(g.exon_lo, g.exon_hi) for g in fb.iter_genes()]
+    )
+    p_intron = _gene_sum_projector(
+        intron.shape[0], n_genes, [(g.intron_lo, g.intron_hi) for g in fb.iter_genes()]
+    )
 
     p_ee = _junction_class_projector(fb, 0)
     p_ei = _junction_class_projector(fb, 1)

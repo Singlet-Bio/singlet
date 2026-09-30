@@ -2,7 +2,6 @@
 """Tests for singlet.identify_bipotent_cells()."""
 
 import numpy as np
-import pandas as pd
 import pytest
 import scipy.sparse as sp
 from singlet._identify_bipotent_cells import identify_bipotent_cells

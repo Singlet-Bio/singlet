@@ -9,6 +9,6 @@ sample                   — sample synthetic expression from a trained model.
 DiscreteDiffusionWrapper — trained-model wrapper with save/load.
 """
 
-from .discrete_diffusion import train, sample, DiscreteDiffusionWrapper
+from .discrete_diffusion import DiscreteDiffusionWrapper, sample, train
 
 __all__ = ["train", "sample", "DiscreteDiffusionWrapper"]

@@ -12,12 +12,12 @@ palantir                         — Palantir diffusion pseudotime (cycle 45).
 palantir_run_from_embedding      — Palantir from a raw embedding.
 """
 
-from .cospar import run_from_csc as cospar_run_from_csc
-from .cospar import run_from_anndata as cospar
 from .cellrank2 import compute_absorption_probabilities
 from .cellrank2 import run_from_anndata as cellrank2
-from .palantir import run_from_embedding as palantir_run_from_embedding
+from .cospar import run_from_anndata as cospar
+from .cospar import run_from_csc as cospar_run_from_csc
 from .palantir import run_from_anndata as palantir
+from .palantir import run_from_embedding as palantir_run_from_embedding
 
 __all__ = [
     "cospar",

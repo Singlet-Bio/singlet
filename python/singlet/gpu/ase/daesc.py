@@ -12,19 +12,20 @@ Reference: Hu et al. (DAESC, Genome Biology 2023); DAESC+ (bioRxiv 2025).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from singlet.gpu._coreutil import require_core
 
 if TYPE_CHECKING:
-    import anndata
+    pass
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def run(
     snp_ad,
@@ -130,10 +131,7 @@ def run(
     _core = require_core("run_daesc")
 
     if (cell_type is not None) != (n_types > 0):
-        raise ValueError(
-            "cell_type and n_types must be provided together: "
-            "pass both or neither."
-        )
+        raise ValueError("cell_type and n_types must be provided together: pass both or neither.")
 
     # Coerce cell_type to int32 numpy array.
     if cell_type is not None:

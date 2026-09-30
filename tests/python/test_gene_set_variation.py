@@ -67,17 +67,13 @@ class TestGeneSetVariation:
     def test_gsva_gaussian_kcdf(self):
         adata = _make_adata()
         gene_sets = {"path1": [f"GENE{i}" for i in range(0, 25)]}
-        result = singlet.gene_set_variation(
-            adata, gene_sets, method="gsva", kcdf="Gaussian"
-        )
+        result = singlet.gene_set_variation(adata, gene_sets, method="gsva", kcdf="Gaussian")
         assert not result.isna().all().all()
 
     def test_gsva_poisson_kcdf(self):
         adata = _make_adata()
         gene_sets = {"path1": [f"GENE{i}" for i in range(0, 25)]}
-        result = singlet.gene_set_variation(
-            adata, gene_sets, method="gsva", kcdf="Poisson"
-        )
+        result = singlet.gene_set_variation(adata, gene_sets, method="gsva", kcdf="Poisson")
         assert not result.isna().all().all()
 
     def test_sparse_input(self):
@@ -118,8 +114,7 @@ class TestGeneSetVariation:
     def test_multiple_gene_sets(self):
         adata = _make_adata(n_cells=50, n_genes=300)
         gene_sets = {
-            f"pathway_{k}": [f"GENE{i}" for i in range(k * 20, k * 20 + 20)]
-            for k in range(10)
+            f"pathway_{k}": [f"GENE{i}" for i in range(k * 20, k * 20 + 20)] for k in range(10)
         }
         result = singlet.gene_set_variation(adata, gene_sets, method="gsva")
         assert result.shape == (50, 10)

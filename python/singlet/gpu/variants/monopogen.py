@@ -20,9 +20,7 @@ Reference: Dou et al. (Monopogen, Nature Biotechnology 2023).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional, List, Dict
-
-import numpy as np
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 from singlet.gpu._coreutil import require_core
 
@@ -33,6 +31,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def call(
     snp_ad,

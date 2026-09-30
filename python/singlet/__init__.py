@@ -77,6 +77,7 @@ __version__ = "2.0.0"
 
 from singlet._aggregate import aggregate
 from singlet._ambient_rna_score import ambient_rna_score
+
 # Retired (raise NotImplementedError); kept importable, not in __all__.
 from singlet._annotate import annotate as annotate
 from singlet._annotate import gene_programs as gene_programs
@@ -162,23 +163,6 @@ from singlet._io import (
     read_matrix,
     write_1pz,
 )
-from singlet.io.sample import (
-    SingletCounts,
-    SingletMt,
-    SingletNonhost,
-    SingletSample,
-    SingletSnp,
-    open_sample as open,
-)
-from singlet.fetch import fetch, default_cache_dir, default_base_url
-from singlet.pipeline import PipelineError, Run, run as run_pipeline
-from singlet.transcode import transcode_v1_to_v2
-from singlet.manifest import validate_sample
-from singlet.bundle import MODALITIES, SingletBundle, pack_gse
-from singlet.find import find, find_load, set_api_key
-from singlet.views import gene_counts as view_gene_counts
-from singlet.views import psi as view_psi
-from singlet.views import usa as view_usa
 from singlet._knn_impute import knn_impute
 from singlet._leiden import leiden
 from singlet._loader import download, load, load_dir, open_bundle
@@ -246,6 +230,7 @@ from singlet._velocity_pseudotime import velocity_pseudotime
 from singlet._versions import show_versions
 from singlet._weighted_nearest_neighbors import weighted_nearest_neighbors
 from singlet._wishart import wishart_test
+from singlet.bundle import MODALITIES, SingletBundle, pack_gse
 from singlet.convert import (
     from_h5ad,
     from_mtx,
@@ -257,6 +242,25 @@ from singlet.convert import (
     to_tiledb,
     to_zarr,
 )
+from singlet.fetch import default_base_url, default_cache_dir, fetch
+from singlet.find import find, find_load, set_api_key
+from singlet.io.sample import (
+    SingletCounts,
+    SingletMt,
+    SingletNonhost,
+    SingletSample,
+    SingletSnp,
+)
+from singlet.io.sample import (
+    open_sample as open,
+)
+from singlet.manifest import validate_sample
+from singlet.pipeline import PipelineError, Run
+from singlet.pipeline import run as run_pipeline
+from singlet.transcode import transcode_v1_to_v2
+from singlet.views import gene_counts as view_gene_counts
+from singlet.views import psi as view_psi
+from singlet.views import usa as view_usa
 
 __all__ = [
     # Browse

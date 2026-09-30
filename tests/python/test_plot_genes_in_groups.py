@@ -23,9 +23,7 @@ def _make_adata(n_cells=120, n_genes=80):
     # Add categorical grouping
     groups = np.array(["A", "B", "C"] * (n_cells // 3) + ["A"] * (n_cells % 3))
     adata.obs["cluster"] = pd.Categorical(groups[:n_cells])
-    adata.obs["batch"] = pd.Categorical(
-        rng.choice(["batch1", "batch2"], size=n_cells)
-    )
+    adata.obs["batch"] = pd.Categorical(rng.choice(["batch1", "batch2"], size=n_cells))
 
     return adata
 
@@ -62,9 +60,7 @@ class TestPlotGenesInGroups:
     def test_custom_figsize(self):
         """Should accept custom figsize."""
         adata = _make_adata()
-        fig, axes = plot_genes_in_groups(
-            adata, ["gene_0"], groupby="cluster", figsize=(10, 4)
-        )
+        fig, axes = plot_genes_in_groups(adata, ["gene_0"], groupby="cluster", figsize=(10, 4))
         w, h = fig.get_size_inches()
         assert abs(w - 10.0) < 0.1
         assert abs(h - 4.0) < 0.1
@@ -73,9 +69,7 @@ class TestPlotGenesInGroups:
         """Should use raw when specified."""
         adata = _make_adata()
         adata.raw = adata.copy()
-        fig, axes = plot_genes_in_groups(
-            adata, ["gene_0"], groupby="cluster", use_raw=True
-        )
+        fig, axes = plot_genes_in_groups(adata, ["gene_0"], groupby="cluster", use_raw=True)
         assert len(axes) == 1
 
     def test_use_raw_none_raises(self):

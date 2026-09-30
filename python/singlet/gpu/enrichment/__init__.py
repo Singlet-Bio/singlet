@@ -11,11 +11,11 @@ run_progeny     — PROGENy weighted-sum pathway activity scoring (cycle 44).
 run_score_genes — per-cell gene-set scoring, Seurat AddModuleScore parity (cycle 129).
 """
 
-from .gsea import run_gsea
 from .aucell import run_aucell
-from .ssgsea import run_ssgsea
+from .gsea import run_gsea
 from .progeny import run_progeny
 from .score_genes import run_score_genes
+from .ssgsea import run_ssgsea
 
 __all__ = [
     "run_gsea",
