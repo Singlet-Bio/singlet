@@ -218,11 +218,14 @@ static void test_classify_outcome_low_genes() {
     check("classify_low_genes", classify_outcome(s) == "align_low_genes");
 }
 
-// ── Test 9: classify_outcome — zero total_reads → success (no-data) ──────────
+// ── Test 9: classify_outcome — zero total_reads → fail_no_reads ──────────────
 static void test_classify_outcome_zero_reads() {
     PipelineSummary s;
-    // all zeroes
-    check("classify_zero_reads_is_success", classify_outcome(s) == "success");
+    // all zeroes: nothing was processed, which must never read as success
+    check("classify_zero_reads_is_failure", classify_outcome(s) == "fail_no_reads");
+    // ...for any assay, including those that skip the cell checks
+    check("classify_zero_reads_atac_is_failure",
+          classify_outcome(s, "atac") == "fail_no_reads");
 }
 
 // ── Test 10: classify_outcome — ATAC skips cell/gene checks ──────────────────

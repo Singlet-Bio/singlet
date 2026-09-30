@@ -25,9 +25,10 @@
 #'
 #' @examples
 #' \dontrun{
-#' ex <- read_1pz("exon_counts.1pz")
+#' path <- singlet_download("GSE138867")
+#' ex <- singlet_read(path, "GSM4120733", "exon_counts")
 #' spliced <- aggregate_features_to_gene(ex)
-#' identical(dim(spliced), dim(read_1pz("spliced.1pz")))
+#' dim(spliced)
 #' }
 #'
 #' @export

@@ -23,20 +23,41 @@ navbar:
       aria-label: GitHub
 
 articles:
-  - title: Articles
+  - title: Using the atlas
+    contents:
+      - singlet
+  - title: Working with raw pipeline outputs
+    desc: >
+      For directories written by running the singlet pipeline yourself, not
+      for data downloaded from the atlas.
     contents:
       - quickstart
-      - singlet
       - interop
 
 reference:
   - title: Find and load data
-    desc: Search the atlas and load one or more studies into memory in one call.
+    desc: >
+      Search the atlas and load one or more studies (or single samples) into
+      memory in one call. `load()`, `find()`, `find_load()` and `download()`
+      are the same functions as their `singlet_` counterparts.
     contents:
-      - find_load
-      - find
+      - singlet_find_load
+      - singlet_find
+      - singlet_load
+      - singlet_download
       - set_api_key
-      - load
+  - title: Modalities
+    desc: >
+      Reach everything else a bundle holds for a sample: splicing,
+      mitochondrial heteroplasmy, donor assignments, non-host reads, QC
+      sidecars and the raw exon/intron matrices.
+    contents:
+      - singlet_modalities
+      - singlet_has
+      - singlet_read
+      - singlet_raw_counts
+      - singlet_files
+      - SINGLET_MODALITIES
   - title: Bundle and cohort I/O
     desc: Lower-level readers for `.singlet` bundles, cohorts, and the underlying sparse-matrix codec.
     contents:
@@ -47,7 +68,7 @@ reference:
       - pz_read_1pz_raw
       - aggregate_features_to_gene
   - title: Conversion
-    desc: Convert loaded data to common single-cell container classes.
+    desc: Convert pipeline output directories to common single-cell container classes.
     contents:
       - as_sce
       - as_seurat

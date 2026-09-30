@@ -1,5 +1,46 @@
 # singlet (R) — NEWS
 
+## singlet 1.1.0
+
+### New features
+
+- `singlet_load()`, `singlet_find()`, `singlet_find_load()` and
+  `singlet_download()`: the same functions as `load()`, `find()`,
+  `find_load()` and `download()` under names that do not mask
+  `base::load()` or `utils::find()`. The documentation now uses them.
+- `load()` and `download()` accept GEO sample accessions (`"GSM..."`). The
+  parent series is looked up through the Singlet API
+  (`<SINGLET_API_BASE>/gsm/<GSM>`), its bundle is downloaded, and `load()`
+  keeps only that sample's cells. Several samples of one study are read
+  from a single download. Previously any GSM was an error.
+- Samples with no usable cells (a missing or 0 x 0 count matrix, no called
+  cells, or an unreadable member) are skipped with one warning instead of
+  failing the whole study. They are listed with the reason in
+  `metadata(sce)$skipped_samples` (`obj@misc$skipped_samples` for Seurat).
+
+### Changes
+
+- `SINGLET_DATA_BASE` now names the host, as in the Python client: bundles
+  are fetched from `<base>/data/<GSE>/<GSE>.singlet`, default
+  `https://data.singlet.bio`. A value ending in `/data` (the old
+  convention) still works.
+- Called cells are read from `cell_calls.tsv` whether its barcode column is
+  named `barcode`, `cb`, `cell_barcode` or `CB`, and `is_cell` is accepted as
+  `TRUE`/`FALSE`, `True`/`False` or `1`/`0`. A sample whose cell calls list
+  no cells is skipped rather than loaded with every barcode.
+  `singlet_raw_counts()` follows the same rules.
+- `read_singlet()` extracts only the count matrices and cell calls it needs
+  instead of the whole archive.
+- When `SingleCellExperiment` (or `Seurat`) is installed but fails to load,
+  the error now includes the underlying `loadNamespace()` message along with
+  the install command.
+- The `SINGLET_MODALITIES` help page moved to `man/modality_registry.Rd`;
+  its old file name differed from `singlet_modalities.Rd` only by case,
+  which breaks checkouts on case-insensitive file systems.
+- Examples use GSE138867 (first sample GSM4120733), GSE146974 and
+  GSE128639. The `quickstart` and `interop` vignettes are now filed under
+  "Working with raw pipeline outputs".
+
 ## singlet 1.0.0
 
 First CRAN-targeted release. Adds the user-facing atlas API built around
@@ -17,9 +58,9 @@ First CRAN-targeted release. Adds the user-facing atlas API built around
   `SingleCellExperiment`. Sums spliced + unspliced features onto the
   bundle's canonical gene axis, restricts to called cells, and attaches
   per-sample study metadata to `colData`.
-- `find(query, level = c("gsm", "gse"), limit = 50L)` — natural-language
-  search returning matching accessions (via the Singlet search API;
-  override base with `SINGLET_API_BASE`).
+- `find(query, level = c("gse", "gsm"), limit = 50L)` — natural-language
+  search returning matching accessions, one per Series by default (via the
+  Singlet search API; override base with `SINGLET_API_BASE`).
 - `find_load(query, ...)` — search then load in one step.
 
 ### Changes

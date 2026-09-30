@@ -2,13 +2,17 @@
 % Please edit documentation in R/load.R
 \name{download}
 \alias{download}
+\alias{singlet_download}
 \title{Download a `.singlet` bundle and return its local path}
 \usage{
 download(accession, cache_dir = NULL)
+
+singlet_download(accession, cache_dir = NULL)
 }
 \arguments{
 \item{accession}{A GEO Series accession (\code{"GSE..."}). A sample
-accession (\code{"GSM..."}) resolves to its parent series.}
+accession (\code{"GSM..."}) is resolved to its parent Series through the
+Singlet API, and the whole Series bundle is downloaded.}
 
 \item{cache_dir}{Directory in which to cache the bundle. Defaults to
 \code{tools::R_user_dir("singlet", "cache")}, overridable with the
@@ -18,15 +22,26 @@ accession (\code{"GSM..."}) resolves to its parent series.}
 The path to the local `.singlet` file.
 }
 \description{
-Fetches a study's bundle into the local cache (or reuses it if already
-there) and returns the path, without reading it. Use this when you want
-to reach individual modalities with \code{\link{singlet_read}} or
-\code{\link{singlet_raw_counts}} rather than load the whole study.
+Fetches a study's bundle from \url{https://data.singlet.bio} into the
+local cache (or reuses it if already there) and returns the path, without
+reading it. Use this when you want to reach individual modalities with
+\code{\link{singlet_read}} or \code{\link{singlet_raw_counts}} rather than
+load the whole study. \code{singlet_download()} is the same function.
+}
+\details{
+Bundles are fetched from \code{<base>/data/<GSE>/<GSE>.singlet}, where
+\code{<base>} is the \code{SINGLET_DATA_BASE} environment variable
+(default \code{https://data.singlet.bio}; a value ending in \code{/data}
+is accepted). \code{GSM} accessions are resolved with the API named by
+\code{SINGLET_API_BASE} (default \code{https://singlet.bio/api}).
 }
 \examples{
 \dontrun{
-path <- download("GSE149298")
+path <- singlet_download("GSE138867")
 singlet_modalities(path)
+
+# A sample accession fetches its parent study's bundle
+identical(singlet_download("GSM4120733"), path)
 }
 
 }

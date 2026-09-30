@@ -73,7 +73,7 @@ struct PipelineSummary {
 
     // Status
     int         exit_code = 0;
-    std::string status;   ///< "success" | "align_low_map" | "align_zero_cells" | "align_low_cells" | "align_low_genes"
+    std::string status;   ///< "success" | "fail_no_reads" | "align_low_map" | "align_zero_cells" | "align_low_cells" | "align_low_genes"; export_results() may override with "fail_export_matrix"
     std::vector<std::string> warnings;
 
     // Donor block (§3.6)
@@ -104,12 +104,14 @@ struct PipelineSummary {
 /// Checks are applied in priority order; first match wins.
 /// @param s         Filled PipelineSummary (exit_code not consulted here — check separately).
 /// @param assay_type  "scrna" (default), "atac", "cite", "multiome", "visium"
-/// @return  "success" | "align_low_map" | "align_zero_cells" | "align_low_cells" | "align_low_genes"
+/// @return  "success" | "fail_no_reads" | "align_low_map" | "align_zero_cells" | "align_low_cells" | "align_low_genes"
 inline std::string classify_outcome(const PipelineSummary& s,
                                     const std::string& assay_type = "scrna") {
-    // No reads at all — treat as empty/no-data success rather than failure
+    // No reads at all: nothing was processed, so this is a failure, never a
+    // success. Reporting "success" here let empty runs through to packing,
+    // where they became samples with no data.
     if (s.total_reads == 0)
-        return "success";
+        return "fail_no_reads";
 
     // Low mapping: common threshold 50% for scRNA/CITE/Multiome, 30% for ATAC
     const double map_floor = (assay_type == "atac") ? 0.30 : 0.50;

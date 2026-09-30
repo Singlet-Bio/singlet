@@ -24,7 +24,7 @@ environment variable is used.
 \examples{
 \dontrun{
 set_api_key("sk_live_...")
-hits <- find("microglia in the aging mouse brain")
+hits <- singlet_find("microglia in the aging mouse brain")
 }
 }
 \seealso{

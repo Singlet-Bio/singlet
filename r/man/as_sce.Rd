@@ -33,7 +33,8 @@ the main assay axis.
 }
 \examples{
 \dontrun{
-sce <- as_sce("quant/scrna/GSE174/GSE174399/GSM5293863")
+# A directory the singlet pipeline wrote for one sample
+sce <- as_sce("pipeline_out/GSE138867/GSM4120733")
 sce
 metadata(sce)$singlet[["gsm_id"]]
 }

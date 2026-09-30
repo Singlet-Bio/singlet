@@ -42,6 +42,7 @@
 #'
 #' @format A named list of lists.
 #' @seealso \code{\link{singlet_modalities}}, \code{\link{singlet_read}}
+#' @rdname modality_registry
 #' @export
 SINGLET_MODALITIES <- list(
     # -- Counts ------------------------------------------------------------
@@ -230,7 +231,8 @@ SINGLET_MODALITIES <- list(
 #'
 #' @examples
 #' \dontrun{
-#' singlet_files("GSE149298.singlet", "GSM4495571")
+#' path <- singlet_download("GSE138867")
+#' singlet_files(path, "GSM4120733")
 #' }
 #'
 #' @seealso \code{\link{singlet_modalities}}, \code{\link{singlet_read}}
@@ -258,7 +260,8 @@ singlet_files <- function(path, gsm = NULL) {
 #'
 #' @examples
 #' \dontrun{
-#' singlet_modalities("GSE149298.singlet")
+#' path <- singlet_download("GSE138867")
+#' singlet_modalities(path)
 #' }
 #'
 #' @seealso \code{\link{SINGLET_MODALITIES}}, \code{\link{singlet_read}}
@@ -289,7 +292,8 @@ singlet_modalities <- function(path, gsm = NULL) {
 #'
 #' @examples
 #' \dontrun{
-#' singlet_has("GSE149298.singlet", "donor_assignments")
+#' path <- singlet_download("GSE138867")
+#' singlet_has(path, "donor_assignments")
 #' }
 #'
 #' @export
@@ -328,9 +332,14 @@ singlet_has <- function(path, name, gsm = NULL) {
 #'
 #' @examples
 #' \dontrun{
-#' het <- singlet_read("GSE149298.singlet", "GSM4495571", "mt_heteroplasmy")
-#' donors <- singlet_read("GSE149298.singlet", "GSM4495571", "donor_assignments")
-#' bugs <- singlet_read("GSE149298.singlet", "GSM4495571", "nonhost_species")
+#' path <- singlet_download("GSE138867")
+#' calls <- singlet_read(path, "GSM4120733", "cell_calls")
+#' qc <- singlet_read(path, "GSM4120733", "summary")
+#'
+#' # Not every bundle has every modality: check first
+#' if (singlet_has(path, "mt_heteroplasmy", "GSM4120733")) {
+#'     het <- singlet_read(path, "GSM4120733", "mt_heteroplasmy")
+#' }
 #' }
 #'
 #' @seealso \code{\link{singlet_modalities}}, \code{\link{singlet_raw_counts}}
@@ -395,31 +404,40 @@ singlet_read <- function(path, gsm, name) {
 #'
 #' @examples
 #' \dontrun{
-#' sce <- singlet_raw_counts("GSE149298.singlet", "GSM4495571")
+#' path <- singlet_download("GSE138867")
+#' sce <- singlet_raw_counts(path, "GSM4120733")
 #' assayNames(sce)
 #' identical(sum(assay(sce, "counts")),
 #'           sum(assay(sce, "spliced")) + sum(assay(sce, "unspliced")))
 #'
 #' # keep the native exon/intron feature axis
-#' feat <- singlet_raw_counts("GSE149298.singlet", "GSM4495571", gene_level = FALSE)
+#' feat <- singlet_raw_counts(path, "GSM4120733", gene_level = FALSE)
 #' table(rowData(feat)$feature_kind)
 #' }
 #'
 #' @seealso \code{\link{read_singlet}}, \code{\link{singlet_read}}
 #' @export
 singlet_raw_counts <- function(path, gsm, gene_level = TRUE, cells = c("called", "all")) {
-    if (!requireNamespace("SingleCellExperiment", quietly = TRUE)) {
-        stop("singlet_raw_counts requires the SingleCellExperiment package. ",
-             "Install with `BiocManager::install('SingleCellExperiment')`.")
-    }
+    .require_sce("singlet_raw_counts()")
     cells <- match.arg(cells)
     path <- .bundle_path(path)
     gsm <- as.character(gsm)
 
-    exon <- if (singlet_has(path, "exon_counts", gsm)) singlet_read(path, gsm, "exon_counts") else NULL
-    intron <- if (singlet_has(path, "intron_counts", gsm)) singlet_read(path, gsm, "intron_counts") else NULL
+    # A 0 x 0 matrix is the stub some pipeline runs left in place of a
+    # count matrix that was never written: it holds no cells, so treat it
+    # as absent (read_singlet() does the same).
+    read_counts <- function(name) {
+        if (!singlet_has(path, name, gsm)) {
+            return(NULL)
+        }
+        m <- singlet_read(path, gsm, name)
+        if (nrow(m) == 0L || ncol(m) == 0L) NULL else m
+    }
+    exon <- read_counts("exon_counts")
+    intron <- read_counts("intron_counts")
     if (is.null(exon) && is.null(intron)) {
-        stop(sprintf("%s has no count matrices in %s", gsm, basename(path)))
+        stop(sprintf("%s has no count matrices in %s (missing or empty)",
+                     gsm, basename(path)))
     }
 
     called <- .bundle_called_barcodes(path, gsm)
@@ -499,35 +517,35 @@ singlet_raw_counts <- function(path, gsm, gene_level = TRUE, cells = c("called",
 }
 
 
-# Barcodes the pipeline called as cells, or NULL when not recorded.
+# Barcodes the pipeline called as cells, or NULL when not recorded. Same
+# rules as read_singlet() (see .called_barcodes_from_table): any known
+# spelling of the barcode column, and an empty call set means the pipeline
+# found no cells.
 .bundle_called_barcodes <- function(path, gsm) {
-    if (!singlet_has(path, "cell_calls", gsm)) {
+    member <- .bundle_resolve(path, gsm, "cell_calls")
+    if (is.null(member)) {
         return(NULL)
     }
-    cc <- tryCatch(singlet_read(path, gsm, "cell_calls"), error = function(e) NULL)
-    if (is.null(cc) || nrow(cc) == 0L) {
+    exdir <- tempfile("singlet_calls_")
+    dir.create(exdir)
+    on.exit(unlink(exdir, recursive = TRUE, force = TRUE), add = TRUE)
+    local_path <- tryCatch(.bundle_extract(path, member, exdir),
+                           error = function(e) NULL)
+    if (is.null(local_path)) {
         return(NULL)
     }
-    col <- intersect(c("barcode", "cb", "cell_barcode"), colnames(cc))
-    if (length(col) == 0L) {
-        return(NULL)
-    }
-    bc <- as.character(cc[[col[[1L]]]])
-    if ("is_cell" %in% colnames(cc)) {
-        is_cell <- as.logical(cc$is_cell)
-        is_cell[is.na(is_cell)] <- FALSE
-        bc <- bc[is_cell]
-    }
-    bc
+    .called_barcodes_from_table(.read_cell_calls(local_path))
 }
 
 .bundle_keep_cells <- function(barcodes, called, cells, gsm, path) {
-    if (cells == "all" || is.null(called) || length(called) == 0L) {
+    if (cells == "all" || is.null(called)) {
         return(barcodes)
     }
     keep <- intersect(barcodes, called)
     if (length(keep) == 0L) {
-        stop(sprintf("%s has no called cells in %s", gsm, basename(path)))
+        stop(sprintf(
+            "%s has no called cells in %s; use gene_level = FALSE, cells = \"all\" to read every barcode",
+            gsm, basename(path)))
     }
     keep
 }
