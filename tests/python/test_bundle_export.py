@@ -48,7 +48,6 @@ def _write_1pz(path, dense, rownames, colnames):
     """Write a features x cells .1pz from a dense features x cells array."""
     import pandas as pd
     from scipy.sparse import csr_matrix
-
     from singlet._io import write_1pz
 
     adata = ad.AnnData(
@@ -210,7 +209,6 @@ class TestHollowBundles:
 
     def test_gsm_filter_reports_skip_reason(self):
         import pandas as pd
-
         from singlet._loader import _skip_reason
 
         adata = ad.AnnData(np.zeros((1, 1)))

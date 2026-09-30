@@ -15,7 +15,6 @@ import zipfile
 
 import numpy as np
 import pytest
-
 from singlet.bundle import MODALITIES, SingletBundle
 
 pytest.importorskip("anndata")
@@ -50,7 +49,6 @@ def _write_1pz(path, dense, rownames, colnames):
     import anndata as ad
     import pandas as pd
     from scipy.sparse import csr_matrix
-
     from singlet._io import write_1pz
 
     adata = ad.AnnData(
@@ -81,13 +79,13 @@ def bundle_path(tmp_path_factory):
         p = f"samples/{GSM}/"
         zf.write(exon, p + "exon_counts.1pz")
         zf.write(intron, p + "intron_counts.1pz")
-        zf.writestr(p + "cell_calls.tsv", "barcode\tn_umi\n" + "".join(f"{b}\t10\n" for b in CALLED))
+        zf.writestr(
+            p + "cell_calls.tsv", "barcode\tn_umi\n" + "".join(f"{b}\t10\n" for b in CALLED)
+        )
         zf.writestr(p + "summary.json", json.dumps({"sample_id": GSM, "status": "DONE"}))
         # Nested layout (newer bundles).
         zf.writestr(p + "donor/donor_assignments.tsv", "barcode\tdonor\nAAACCCA\tdonor0\n")
-        zf.writestr(
-            p + "nonhost/nonhost_em_abundance.tsv", "taxon\treads\nEscherichia coli\t42\n"
-        )
+        zf.writestr(p + "nonhost/nonhost_em_abundance.tsv", "taxon\treads\nEscherichia coli\t42\n")
         # Flat layout (older bundles) for a different modality.
         zf.writestr(p + "mt_variants.tsv", "pos\tref\talt\taf\n3243\tA\tG\t0.12\n")
     return out

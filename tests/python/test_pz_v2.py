@@ -9,7 +9,6 @@ import struct
 import numpy as np
 import pytest
 from scipy.sparse import csc_matrix
-
 from singlet.pz_v2 import (
     MAGIC,
     BlockSpec,
@@ -25,11 +24,24 @@ def _make_csc(rows, cols, dense_pattern, dtype=np.int32):
 
 
 def test_round_trip_single_block(tmp_path):
-    X = _make_csc(3, 4, [
-        1, 0, 2, 0,
-        0, 3, 0, 0,
-        4, 0, 0, 5,
-    ])
+    X = _make_csc(
+        3,
+        4,
+        [
+            1,
+            0,
+            2,
+            0,
+            0,
+            3,
+            0,
+            0,
+            4,
+            0,
+            0,
+            5,
+        ],
+    )
     bc = ["AAA", "CCC", "GGG", "TTT"]
     out = tmp_path / "x.1pz"
     write_pz_v2(out, cell_barcodes=bc, blocks=[BlockSpec("exon_body", X)])
@@ -46,13 +58,27 @@ def test_round_trip_single_block(tmp_path):
 
 def test_round_trip_multi_block(tmp_path):
     A = _make_csc(2, 3, [1, 0, 2, 0, 3, 0])
-    B = _make_csc(5, 3, [
-        0, 0, 0,
-        1, 0, 0,
-        0, 2, 0,
-        0, 0, 3,
-        0, 4, 0,
-    ])
+    B = _make_csc(
+        5,
+        3,
+        [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            2,
+            0,
+            0,
+            0,
+            3,
+            0,
+            4,
+            0,
+        ],
+    )
     out = tmp_path / "x.1pz"
     write_pz_v2(
         out,

@@ -36,6 +36,7 @@ if TYPE_CHECKING:
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def run_from_embedding(
     embedding: np.ndarray,
     start_cell: int,
@@ -177,18 +178,17 @@ def run_from_anndata(
 
     if basis not in working.obsm:
         raise KeyError(
-            f"basis='{basis}' not in adata.obsm.  "
-            f"Available keys: {list(working.obsm.keys())}"
+            f"basis='{basis}' not in adata.obsm.  Available keys: {list(working.obsm.keys())}"
         )
     embedding = np.asarray(working.obsm[basis], dtype=np.float32)
     terminal_indices = (
-        np.asarray(terminal_cells, dtype=np.int32)
-        if terminal_cells is not None
-        else None
+        np.asarray(terminal_cells, dtype=np.int32) if terminal_cells is not None else None
     )
 
     result = run_from_embedding(
-        embedding, start_cell, terminal_indices,
+        embedding,
+        start_cell,
+        terminal_indices,
         k_neighbors=k_neighbors,
         n_pcs=embedding.shape[1],
         k_eig=k_eig,
@@ -203,23 +203,26 @@ def run_from_anndata(
         seed=seed,
     )
 
-    working.obs["palantir_pseudotime"]     = np.asarray(result.pseudotime,   dtype=np.float32)
-    working.obsm["palantir_branch_prob"]   = np.asarray(result.branch_prob,  dtype=np.float32)
+    working.obs["palantir_pseudotime"] = np.asarray(result.pseudotime, dtype=np.float32)
+    working.obsm["palantir_branch_prob"] = np.asarray(result.branch_prob, dtype=np.float32)
 
     # Eigenvectors: copy from device to host for obsm storage.
     n_eig = result.k_eig
-    n_c   = result.n_cells
+    n_c = result.n_cells
     ev_view = result.eigenvectors_view
     try:
         import cupy as cp
+
         ev_host = cp.ndarray(
-            shape=(n_eig * n_c,), dtype=cp.float32,
+            shape=(n_eig * n_c,),
+            dtype=cp.float32,
             memptr=cp.cuda.MemoryPointer(
-                cp.cuda.UnownedMemory(ev_view["data"][0], n_eig * n_c * 4, None),
-                0)
+                cp.cuda.UnownedMemory(ev_view["data"][0], n_eig * n_c * 4, None), 0
+            ),
         ).get()
     except (ImportError, Exception):
         import ctypes
+
         buf = (ctypes.c_float * (n_eig * n_c))()
         ctypes.memmove(
             ctypes.addressof(buf),

@@ -131,9 +131,7 @@ class TestFindErrors:
                 find_mod.find("x")
 
     def test_invalid_json(self):
-        with patch.object(
-            find_mod.urllib.request, "urlopen", return_value=io.BytesIO(b"<html>")
-        ):
+        with patch.object(find_mod.urllib.request, "urlopen", return_value=io.BytesIO(b"<html>")):
             with pytest.raises(find_mod.SingletSearchError, match="invalid response"):
                 find_mod.find("x")
 

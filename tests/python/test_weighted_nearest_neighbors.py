@@ -17,13 +17,9 @@ def _make_multimodal_adata(n_cells=100, n_pcs=20, n_protein=15, seed=42):
     adata.var_names = [f"gene_{i}" for i in range(200)]
 
     # Simulate PCA embeddings
-    adata.obsm["X_pca"] = rng.standard_normal((n_cells, n_pcs)).astype(
-        np.float32
-    )
+    adata.obsm["X_pca"] = rng.standard_normal((n_cells, n_pcs)).astype(np.float32)
     # Simulate protein (ADT) embeddings
-    adata.obsm["X_protein"] = rng.standard_normal((n_cells, n_protein)).astype(
-        np.float32
-    )
+    adata.obsm["X_protein"] = rng.standard_normal((n_cells, n_protein)).astype(np.float32)
     return adata
 
 
@@ -58,9 +54,7 @@ class TestWeightedNearestNeighbors:
 
     def test_single_modality(self):
         adata = _make_multimodal_adata()
-        result = singlet.weighted_nearest_neighbors(
-            adata, modalities=["X_pca"], n_neighbors=10
-        )
+        result = singlet.weighted_nearest_neighbors(adata, modalities=["X_pca"], n_neighbors=10)
         assert result is adata
         weights = adata.obsm["wnn_weights"]
         assert weights.shape == (100, 1)
@@ -68,9 +62,7 @@ class TestWeightedNearestNeighbors:
 
     def test_connectivity_shape(self):
         adata = _make_multimodal_adata(n_cells=50)
-        singlet.weighted_nearest_neighbors(
-            adata, modalities=["X_pca", "X_protein"], n_neighbors=5
-        )
+        singlet.weighted_nearest_neighbors(adata, modalities=["X_pca", "X_protein"], n_neighbors=5)
         conn = adata.obsp["wnn_connectivities"]
         assert conn.shape == (50, 50)
         # Should be non-negative
@@ -79,9 +71,7 @@ class TestWeightedNearestNeighbors:
     def test_n_neighbors_capped(self):
         """n_neighbors larger than n_cells-1 should be capped."""
         adata = _make_multimodal_adata(n_cells=15)
-        singlet.weighted_nearest_neighbors(
-            adata, modalities=["X_pca", "X_protein"], n_neighbors=50
-        )
+        singlet.weighted_nearest_neighbors(adata, modalities=["X_pca", "X_protein"], n_neighbors=50)
         assert "wnn_connectivities" in adata.obsp
 
     def test_invalid_modality_raises(self):
@@ -94,9 +84,7 @@ class TestWeightedNearestNeighbors:
     def test_three_modalities(self):
         adata = _make_multimodal_adata()
         rng = np.random.default_rng(123)
-        adata.obsm["X_atac"] = rng.standard_normal((100, 10)).astype(
-            np.float32
-        )
+        adata.obsm["X_atac"] = rng.standard_normal((100, 10)).astype(np.float32)
         result = singlet.weighted_nearest_neighbors(
             adata,
             modalities=["X_pca", "X_protein", "X_atac"],
@@ -132,19 +120,13 @@ class TestWeightedNearestNeighbors:
         adata.var_names = [f"gene_{i}" for i in range(100)]
 
         # Good modality with clear structure
-        adata.obsm["X_good"] = rng.standard_normal((n_cells, 20)).astype(
-            np.float32
-        )
+        adata.obsm["X_good"] = rng.standard_normal((n_cells, 20)).astype(np.float32)
         # Bad modality: all same value (no structure)
         adata.obsm["X_bad"] = np.ones((n_cells, 10), dtype=np.float32)
         # Add tiny noise to avoid degenerate kNN
-        adata.obsm["X_bad"] += rng.standard_normal((n_cells, 10)).astype(
-            np.float32
-        ) * 1e-6
+        adata.obsm["X_bad"] += rng.standard_normal((n_cells, 10)).astype(np.float32) * 1e-6
 
-        singlet.weighted_nearest_neighbors(
-            adata, modalities=["X_good", "X_bad"], n_neighbors=10
-        )
+        singlet.weighted_nearest_neighbors(adata, modalities=["X_good", "X_bad"], n_neighbors=10)
         weights = adata.obsm["wnn_weights"]
         # Good modality should generally get higher weight
         assert weights[:, 0].mean() > weights[:, 1].mean()

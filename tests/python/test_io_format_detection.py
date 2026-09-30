@@ -89,7 +89,8 @@ def _write_minimal_1pz(path: Path, taxa: list[str], n_cells: int, data_array) ->
         mat.indptr.astype(np.int32),
         mat.indices.astype(np.int32),
         mat.data.astype(np.uint32),
-        m, n,
+        m,
+        n,
         rownames=taxa,
     )
 
@@ -123,7 +124,6 @@ class TestReadKraken2:
         """Loads kraken2_features.parquet into var if present."""
         pytest.importorskip("pyarrow")
         import pandas as pd
-
         from singlet._io import read_kraken2
 
         taxa = ["tax1", "tax2"]

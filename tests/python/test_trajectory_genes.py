@@ -26,9 +26,7 @@ def _make_trajectory_adata(n_cells=150, n_genes=100):
             X[:, g_idx] = pseudotime * 10 + rng.normal(0, 0.5, n_cells)
         elif g_idx < 40:
             # Genes that peak in the middle
-            X[:, g_idx] = (
-                np.sin(pseudotime * np.pi) * 8 + rng.normal(0, 0.5, n_cells)
-            )
+            X[:, g_idx] = np.sin(pseudotime * np.pi) * 8 + rng.normal(0, 0.5, n_cells)
         else:
             # Random genes (no trajectory signal)
             X[:, g_idx] = rng.poisson(3, n_cells).astype(np.float32)

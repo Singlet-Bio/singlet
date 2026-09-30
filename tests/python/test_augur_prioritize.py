@@ -4,10 +4,9 @@
 import numpy as np
 import pandas as pd
 import pytest
+import singlet
 from anndata import AnnData
 from scipy.sparse import csr_matrix
-
-import singlet
 
 
 @pytest.fixture
@@ -24,9 +23,7 @@ def adata_two_conditions():
     # Type A: strongly perturbed (big expression difference)
     # Type B: weakly perturbed
     cell_types = np.array(["TypeA"] * 100 + ["TypeB"] * 100)
-    conditions = np.array(
-        ["ctrl"] * 50 + ["treated"] * 50 + ["ctrl"] * 50 + ["treated"] * 50
-    )
+    conditions = np.array(["ctrl"] * 50 + ["treated"] * 50 + ["ctrl"] * 50 + ["treated"] * 50)
 
     # Add strong signal for TypeA
     X[50:100, :20] += 10  # TypeA treated cells have high expression in first 20 genes
@@ -53,9 +50,7 @@ def adata_sparse(adata_two_conditions):
 class TestAugurPrioritize:
     def test_basic(self, adata_two_conditions):
         """Test basic functionality."""
-        result = singlet.augur_prioritize(
-            adata_two_conditions, condition_key="condition"
-        )
+        result = singlet.augur_prioritize(adata_two_conditions, condition_key="condition")
         assert isinstance(result, pd.DataFrame)
         assert "cell_type" in result.columns
         assert "auc" in result.columns
@@ -81,18 +76,14 @@ class TestAugurPrioritize:
 
     def test_type_a_higher_auc(self, adata_two_conditions):
         """TypeA should have higher AUC than TypeB (more perturbed)."""
-        result = singlet.augur_prioritize(
-            adata_two_conditions, condition_key="condition"
-        )
+        result = singlet.augur_prioritize(adata_two_conditions, condition_key="condition")
         auc_a = result.loc[result["cell_type"] == "TypeA", "auc"].values[0]
         auc_b = result.loc[result["cell_type"] == "TypeB", "auc"].values[0]
         assert auc_a > auc_b
 
     def test_auc_range(self, adata_two_conditions):
         """AUC should be between 0 and 1."""
-        result = singlet.augur_prioritize(
-            adata_two_conditions, condition_key="condition"
-        )
+        result = singlet.augur_prioritize(adata_two_conditions, condition_key="condition")
         assert (result["auc"] >= 0).all()
         assert (result["auc"] <= 1).all()
 
@@ -132,9 +123,7 @@ class TestAugurPrioritize:
     def test_missing_condition_key(self, adata_two_conditions):
         """Test error on missing condition key."""
         with pytest.raises(KeyError, match="not found"):
-            singlet.augur_prioritize(
-                adata_two_conditions, condition_key="nonexistent"
-            )
+            singlet.augur_prioritize(adata_two_conditions, condition_key="nonexistent")
 
     def test_missing_cell_type_key(self, adata_two_conditions):
         """Test error on missing cell type key."""
@@ -151,9 +140,7 @@ class TestAugurPrioritize:
             ["a", "b", "c"], size=adata_two_conditions.n_obs
         )
         with pytest.raises(ValueError, match="exactly 2 unique values"):
-            singlet.augur_prioritize(
-                adata_two_conditions, condition_key="condition"
-            )
+            singlet.augur_prioritize(adata_two_conditions, condition_key="condition")
 
     def test_invalid_classifier(self, adata_two_conditions):
         """Test error on invalid classifier."""
@@ -166,9 +153,7 @@ class TestAugurPrioritize:
 
     def test_sorted_by_auc(self, adata_two_conditions):
         """Test results are sorted by AUC descending."""
-        result = singlet.augur_prioritize(
-            adata_two_conditions, condition_key="condition"
-        )
+        result = singlet.augur_prioritize(adata_two_conditions, condition_key="condition")
         assert result["auc"].is_monotonic_decreasing
 
     def test_reproducibility(self, adata_two_conditions):

@@ -17,7 +17,7 @@ def show_versions() -> str:
     Examples
     --------
     >>> singlet.show_versions()  # doctest: +SKIP
-    singlet: 2.0.0
+    singlet: 2.1.0
     Python: 3.12.0
     Platform: Linux-6.1.0-x86_64
     ...

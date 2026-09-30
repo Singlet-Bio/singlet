@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 # The import name is unchanged: `pip install singlet-bio`, then `import singlet`.
 # Wheels and sdists are named singlet_bio-<version>-*.whl / singlet_bio-<version>.tar.gz.
 name = "singlet-bio"
-version = "2.0.0"
+version = "2.1.0"
 description = "Open single-cell RNA-seq atlas: find, load, and analyze single-cell data at scale"
 readme = "python/README.md"
 license = {text = "MIT"}

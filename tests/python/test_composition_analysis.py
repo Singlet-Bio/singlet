@@ -24,12 +24,8 @@ def _make_composition_adata(n_cells=300, n_genes=50):
     # Control: 50% TypeA, 30% TypeB, 20% TypeC
     # Disease: 30% TypeA, 50% TypeB, 20% TypeC (TypeB enriched)
     half = n_cells // 2
-    control_types = rng.choice(
-        ["TypeA", "TypeB", "TypeC"], size=half, p=[0.5, 0.3, 0.2]
-    )
-    disease_types = rng.choice(
-        ["TypeA", "TypeB", "TypeC"], size=n_cells - half, p=[0.3, 0.5, 0.2]
-    )
+    control_types = rng.choice(["TypeA", "TypeB", "TypeC"], size=half, p=[0.5, 0.3, 0.2])
+    disease_types = rng.choice(["TypeA", "TypeB", "TypeC"], size=n_cells - half, p=[0.3, 0.5, 0.2])
 
     cell_types = np.concatenate([control_types, disease_types])
     conditions = np.array(["control"] * half + ["disease"] * (n_cells - half))
@@ -82,9 +78,7 @@ class TestCompositionAnalysis:
     def test_custom_reference(self):
         """Custom reference condition should work."""
         adata = _make_composition_adata()
-        result = composition_analysis(
-            adata, "cell_type", "condition", reference="disease"
-        )
+        result = composition_analysis(adata, "cell_type", "condition", reference="disease")
 
         ref_rows = result[result["condition"] == "disease"]
         assert (ref_rows["fold_change"] == 1.0).all()
@@ -92,9 +86,7 @@ class TestCompositionAnalysis:
     def test_dirichlet_method(self):
         """Dirichlet method should produce p-values."""
         adata = _make_composition_adata()
-        result = composition_analysis(
-            adata, "cell_type", "condition", method="dirichlet"
-        )
+        result = composition_analysis(adata, "cell_type", "condition", method="dirichlet")
 
         non_ref = result[result["condition"] != "control"]
         assert (non_ref["pvalue"] >= 0).all()
@@ -103,9 +95,7 @@ class TestCompositionAnalysis:
     def test_prop_test_method(self):
         """Proportion z-test method should work."""
         adata = _make_composition_adata()
-        result = composition_analysis(
-            adata, "cell_type", "condition", method="prop_test"
-        )
+        result = composition_analysis(adata, "cell_type", "condition", method="prop_test")
 
         assert len(result) > 0
         non_ref = result[result["condition"] != "control"]
@@ -147,18 +137,12 @@ class TestCompositionAnalysis:
         control_types = rng.choice(["A", "B"], size=half, p=[0.8, 0.2])
         disease_types = rng.choice(["A", "B"], size=half, p=[0.2, 0.8])
 
-        adata.obs["cell_type"] = pd.Categorical(
-            np.concatenate([control_types, disease_types])
-        )
-        adata.obs["condition"] = pd.Categorical(
-            ["control"] * half + ["disease"] * half
-        )
+        adata.obs["cell_type"] = pd.Categorical(np.concatenate([control_types, disease_types]))
+        adata.obs["condition"] = pd.Categorical(["control"] * half + ["disease"] * half)
 
         result = composition_analysis(adata, "cell_type", "condition")
         # TypeB in disease should have fold_change > 1 and significant p-value
-        typeb_disease = result[
-            (result["group"] == "B") & (result["condition"] == "disease")
-        ]
+        typeb_disease = result[(result["group"] == "B") & (result["condition"] == "disease")]
         assert typeb_disease["fold_change"].values[0] > 2.0
         assert typeb_disease["pvalue"].values[0] < 0.05
 
@@ -191,9 +175,7 @@ class TestCompositionAnalysis:
         """Should raise ValueError when reference not in conditions."""
         adata = _make_composition_adata()
         with pytest.raises(ValueError, match="reference"):
-            composition_analysis(
-                adata, "cell_type", "condition", reference="nonexistent"
-            )
+            composition_analysis(adata, "cell_type", "condition", reference="nonexistent")
 
     def test_type_error(self):
         """Should raise TypeError on non-AnnData input."""
@@ -214,9 +196,7 @@ class TestCompositionAnalysis:
         adata.obs_names = [f"c{idx}" for idx in range(n_cells)]
 
         third = n_cells // 3
-        adata.obs["cell_type"] = pd.Categorical(
-            rng.choice(["A", "B"], size=n_cells, p=[0.6, 0.4])
-        )
+        adata.obs["cell_type"] = pd.Categorical(rng.choice(["A", "B"], size=n_cells, p=[0.6, 0.4]))
         adata.obs["condition"] = pd.Categorical(
             ["cond1"] * third + ["cond2"] * third + ["cond3"] * (n_cells - 2 * third)
         )

@@ -12,13 +12,11 @@ Covers:
 from __future__ import annotations
 
 import gzip
-import struct
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
-
 from singlet.refbundle import (
     EXON_REC_SIZE,
     FEATURES_HEADER_SIZE,
@@ -27,15 +25,12 @@ from singlet.refbundle import (
     JUNCTION_REC_SIZE,
     SNP_HEADER_SIZE,
     SNP_REC_SIZE,
-    FeaturesBundle,
-    SnpPanel,
     SnpSite,
     load_features,
     load_snp_panel,
     write_snp_panel,
 )
 from singlet.refbundle._features import _GeneIn, write_features
-
 
 # --------------------------------------------------------------------------
 # Format constants
@@ -231,9 +226,7 @@ class TestSnpRoundTrip:
 
     def test_len(self, tmp_path):
         path = tmp_path / "snps.fbin"
-        write_snp_panel(
-            path, build_id="X", panel_id="P", sites=_snp_fixture()
-        )
+        write_snp_panel(path, build_id="X", panel_id="P", sites=_snp_fixture())
         with load_snp_panel(path) as sp:
             assert len(sp) == 3
             assert list(sp.iter_sites())[1].pos == 67890

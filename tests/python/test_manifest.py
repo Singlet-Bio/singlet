@@ -8,9 +8,7 @@ import json
 import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
-import pytest
 from scipy.sparse import csc_matrix
-
 from singlet.manifest import validate_sample
 from singlet.pz_v2 import BlockSpec, write_pz_v2
 

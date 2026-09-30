@@ -20,7 +20,7 @@ When an AnnData is provided (``run_from_anndata``):
 from __future__ import annotations
 
 import copy as copy_module
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
@@ -28,12 +28,12 @@ from singlet.gpu._coreutil import require_core
 
 if TYPE_CHECKING:
     import anndata
-    import scipy.sparse
 
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _csr_to_arrays(T):
     """Extract indptr / indices / data from a CSR matrix (scipy or cupy)."""
@@ -41,13 +41,13 @@ def _csr_to_arrays(T):
         try:
             import cupyx.scipy.sparse as csp  # cupy >= 14
         except ImportError:
-            import cupy.sparse as csp         # cupy < 14 fallback
+            import cupy.sparse as csp  # cupy < 14 fallback
         if isinstance(T, (csp.csr_matrix, csp.csc_matrix)):
-            T_csr = T.tocsr() if hasattr(T, 'tocsr') else T
+            T_csr = T.tocsr() if hasattr(T, "tocsr") else T
             return (
-                np.asarray(T_csr.indptr,  dtype=np.int32),
+                np.asarray(T_csr.indptr, dtype=np.int32),
                 np.asarray(T_csr.indices, dtype=np.int32),
-                np.asarray(T_csr.data,    dtype=np.float32),
+                np.asarray(T_csr.data, dtype=np.float32),
                 int(T_csr.shape[0]),
             )
     except ImportError:
@@ -55,24 +55,25 @@ def _csr_to_arrays(T):
 
     # scipy sparse
     import scipy.sparse as sp
+
     if sp.issparse(T):
         T_csr = T.tocsr()
         return (
-            np.asarray(T_csr.indptr,  dtype=np.int32),
+            np.asarray(T_csr.indptr, dtype=np.int32),
             np.asarray(T_csr.indices, dtype=np.int32),
-            np.asarray(T_csr.data,    dtype=np.float32),
+            np.asarray(T_csr.data, dtype=np.float32),
             int(T_csr.shape[0]),
         )
 
     raise TypeError(
-        f"transition_matrix must be a scipy.sparse or cupy.sparse matrix, "
-        f"got {type(T).__name__}."
+        f"transition_matrix must be a scipy.sparse or cupy.sparse matrix, got {type(T).__name__}."
     )
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def compute_absorption_probabilities(
     transition_matrix,
@@ -126,7 +127,10 @@ def compute_absorption_probabilities(
     terminal_indices = np.asarray(terminal_indices, dtype=np.int32)
 
     return fate.cellrank2(
-        indptr, indices, data, n_cells,
+        indptr,
+        indices,
+        data,
+        n_cells,
         terminal_indices,
         gmres_m=int(gmres_m),
         gmres_max_restarts=int(gmres_max_restarts),
@@ -199,18 +203,16 @@ def run_from_anndata(
     if terminal_states_key in working.obs.columns:
         col = working.obs[terminal_states_key]
         try:
-            import pandas as pd
             terminal_mask = col.notna() & (col != "nan") & (col != "")
         except Exception:
             terminal_mask = ~np.isnan(col.to_numpy(dtype=float, na_value=np.nan))
         terminal_indices = np.where(terminal_mask.to_numpy())[0].astype(np.int32)
     else:
-        raise KeyError(
-            f"terminal_states_key='{terminal_states_key}' not in adata.obs."
-        )
+        raise KeyError(f"terminal_states_key='{terminal_states_key}' not in adata.obs.")
 
     result = compute_absorption_probabilities(
-        T, terminal_indices,
+        T,
+        terminal_indices,
         gmres_m=gmres_m,
         gmres_max_restarts=gmres_max_restarts,
         convergence_tol=convergence_tol,

@@ -8,8 +8,8 @@ milo                     — Milo kNN-based differential abundance testing (cycl
 milo_run_from_embedding  — Milo from a raw embedding.
 """
 
-from .milo import run_from_embedding as milo_run_from_embedding
 from .milo import run_from_anndata as milo
+from .milo import run_from_embedding as milo_run_from_embedding
 
 __all__ = [
     "milo",

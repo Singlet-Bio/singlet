@@ -2,7 +2,6 @@
 """Tests for singlet._io public helpers and validation paths."""
 
 import numpy as np
-import pandas as pd
 import pytest
 import scipy.sparse as sp
 

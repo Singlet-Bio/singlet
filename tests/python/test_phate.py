@@ -4,10 +4,9 @@
 import numpy as np
 import pandas as pd
 import pytest
+import singlet
 from anndata import AnnData
 from scipy.sparse import csr_matrix
-
-import singlet
 
 
 @pytest.fixture
@@ -29,9 +28,7 @@ def adata_with_pca():
 
     # Project to gene space
     projection = rng.normal(0, 1, size=(3, n_genes))
-    X = (latent @ projection + rng.normal(0, 0.1, size=(n_cells, n_genes))).astype(
-        np.float32
-    )
+    X = (latent @ projection + rng.normal(0, 0.1, size=(n_cells, n_genes))).astype(np.float32)
     X = np.abs(X)  # Make non-negative
 
     obs = pd.DataFrame(index=[f"cell_{i}" for i in range(n_cells)])
@@ -166,6 +163,4 @@ class TestPhate:
         adata2 = adata_with_pca.copy()
         singlet.phate(adata1, random_state=42, t=5)
         singlet.phate(adata2, random_state=42, t=5)
-        np.testing.assert_array_almost_equal(
-            adata1.obsm["X_phate"], adata2.obsm["X_phate"]
-        )
+        np.testing.assert_array_almost_equal(adata1.obsm["X_phate"], adata2.obsm["X_phate"])

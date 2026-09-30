@@ -21,6 +21,7 @@ indptr/indices; numpy.array_equal on values cast to float32).  No
 floating-point tolerances are needed because the data path is lossless
 integer I/O — no math is applied.
 """
+
 from __future__ import annotations
 
 import gc
@@ -34,12 +35,10 @@ import pytest
 # ---------------------------------------------------------------------------
 singlet_gpu = pytest.importorskip(
     "singlet_gpu",
-    reason=(
-        "singlet_gpu wheel not built. "
-        "Run `pip install -e singlet-gpu/python/` first."
-    ),
+    reason=("singlet_gpu wheel not built. Run `pip install -e singlet-gpu/python/` first."),
 )
 
+import singlet.gpu  # noqa: E402
 from conftest import requires_gpu  # noqa: E402 — after importorskip
 
 # ---------------------------------------------------------------------------
@@ -154,10 +153,11 @@ def test_cuda_array_interface_zero_copy(gsm4037629_path):
     No arithmetic is performed; values are just byte-copied.
     """
     import cupy
+
     try:
         import cupyx.scipy.sparse as csp  # cupy >= 14
     except ImportError:
-        import cupy.sparse as csp         # cupy < 14 fallback
+        import cupy.sparse as csp  # cupy < 14 fallback
 
     pz_path = gsm4037629_path / _EXON_FILE
 
@@ -168,7 +168,8 @@ def test_cuda_array_interface_zero_copy(gsm4037629_path):
     # *_view dict in a shim object that exposes __cuda_array_interface__ as an
     # attribute (CYCLE-189 / §J.13 pattern).
     class _CaiView:
-        def __init__(self, d): self.__cuda_array_interface__ = d
+        def __init__(self, d):
+            self.__cuda_array_interface__ = d
 
     # Zero-copy cupy view (CSC layout on device — same as pz_writer CSC output)
     csc_dev = csp.csc_matrix(
@@ -240,20 +241,15 @@ def test_anndata_roundtrip(gsm4037629_path):
 
     # Shape: AnnData is (cells, genes) — transpose of the on-disk (genes, cells) CSC.
     n_cells, n_genes = adata.X.shape
-    assert n_cells > 0 and n_genes > 0, (
-        f"AnnData shape is degenerate: {adata.X.shape}"
-    )
+    assert n_cells > 0 and n_genes > 0, f"AnnData shape is degenerate: {adata.X.shape}"
     # The transposition constraint: the cell dimension is the *smaller* of the
     # two for this sample (20866 cells vs 310797 genes).
     assert n_cells < n_genes, (
-        f"Expected n_cells < n_genes (AnnData transposed from CSC), "
-        f"got shape {adata.X.shape}"
+        f"Expected n_cells < n_genes (AnnData transposed from CSC), got shape {adata.X.shape}"
     )
 
     # GEO metadata embedded in uns['singlet']
-    assert "singlet" in adata.uns, (
-        "adata.uns must contain a 'singlet' key with GEO metadata"
-    )
+    assert "singlet" in adata.uns, "adata.uns must contain a 'singlet' key with GEO metadata"
     singlet_meta = adata.uns["singlet"]
     assert singlet_meta.get("gsm_id") == _EXPECTED_GSM_ID, (
         f"adata.uns['singlet']['gsm_id'] = {singlet_meta.get('gsm_id')!r}, "
@@ -261,12 +257,8 @@ def test_anndata_roundtrip(gsm4037629_path):
     )
 
     # Obs/var names
-    assert len(adata.obs_names) == n_cells, (
-        "obs_names length must match number of cell rows"
-    )
-    assert len(adata.var_names) == n_genes, (
-        "var_names length must match number of gene columns"
-    )
+    assert len(adata.obs_names) == n_cells, "obs_names length must match number of cell rows"
+    assert len(adata.var_names) == n_genes, "var_names length must match number of gene columns"
 
 
 # ---------------------------------------------------------------------------
@@ -297,9 +289,7 @@ def test_to_host_explicit_copy(gsm4037629_path):
     assert host_csr.shape == (m.rows, m.cols), (
         f"to_host() shape {host_csr.shape} != DeviceCsc shape ({m.rows}, {m.cols})"
     )
-    assert host_csr.nnz == m.nnz, (
-        f"to_host() nnz {host_csr.nnz} != DeviceCsc nnz {m.nnz}"
-    )
+    assert host_csr.nnz == m.nnz, f"to_host() nnz {host_csr.nnz} != DeviceCsc nnz {m.nnz}"
 
     # Compare to singlet reference
     try:
@@ -335,10 +325,10 @@ def test_to_host_explicit_copy(gsm4037629_path):
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
     reason="cupy.asarray() of make_view_object's bare CAI dict does NOT "
-           "anchor the source DeviceCsc — see CYCLE-193-FOLLOWUP for the "
-           "C++-side fix (make_view_object should return an object with "
-           "__cuda_array_interface__ as attribute + parent reference, not "
-           "a bare dict).  Test correctly identifies a real lifetime bug.",
+    "anchor the source DeviceCsc — see CYCLE-193-FOLLOWUP for the "
+    "C++-side fix (make_view_object should return an object with "
+    "__cuda_array_interface__ as attribute + parent reference, not "
+    "a bare dict).  Test correctly identifies a real lifetime bug.",
     strict=True,
     raises=AssertionError,
 )
@@ -362,12 +352,12 @@ def test_lifetime_safety(gsm4037629_path):
 
     m = singlet.gpu.io.load_pz(str(pz_path))
     expected_nnz = m.nnz
-    expected_rows = m.rows
-    expected_cols = m.cols
 
     # cupy >= 14 dtype-strict shim (§J.13 / CYCLE-189).
     class _CaiView:
-        def __init__(self, d): self.__cuda_array_interface__ = d
+        def __init__(self, d):
+            self.__cuda_array_interface__ = d
+
     # Build a cupy 1-D array wrapping the device data pointer (zero-copy).
     data_view = cupy.asarray(_CaiView(m.mat.data_view))
 
@@ -404,8 +394,8 @@ def test_lifetime_safety(gsm4037629_path):
 # ---------------------------------------------------------------------------
 @pytest.mark.skip(
     reason="host_indptr / host_indices / host_values not exposed on the "
-           "PzDeviceMatrix Python binding (only .mat / .meta / .rows / .cols / "
-           ".nnz are available).  See CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE."
+    "PzDeviceMatrix Python binding (only .mat / .meta / .rows / .cols / "
+    ".nnz are available).  See CYCLE-19-FOLLOWUP-CYCLE-18-BINDING-EXPOSE."
 )
 @requires_gpu
 def test_load_pz_keep_host_pinned(gsm4037629_path):
@@ -438,8 +428,7 @@ def test_load_pz_keep_host_pinned(gsm4037629_path):
 
     # Element count consistency (pinned buffer length must match device shape)
     assert len(m_pinned.host_indptr) == m_pinned.cols + 1, (
-        f"host_indptr length {len(m_pinned.host_indptr)} "
-        f"!= cols+1 = {m_pinned.cols + 1}"
+        f"host_indptr length {len(m_pinned.host_indptr)} != cols+1 = {m_pinned.cols + 1}"
     )
     assert len(m_pinned.host_indices) == m_pinned.nnz, (
         f"host_indices length {len(m_pinned.host_indices)} != nnz {m_pinned.nnz}"
@@ -493,9 +482,7 @@ def test_binding_from_cupy_csr_exists():
     assert hasattr(singlet.gpu._core, "from_cupy_csr"), (
         "_core.from_cupy_csr not found — cycle 20 binding extension not applied"
     )
-    assert callable(singlet.gpu._core.from_cupy_csr), (
-        "_core.from_cupy_csr is not callable"
-    )
+    assert callable(singlet.gpu._core.from_cupy_csr), "_core.from_cupy_csr is not callable"
 
 
 # ---------------------------------------------------------------------------
@@ -506,9 +493,7 @@ def test_binding_to_cupy_csr_exists():
     assert hasattr(singlet.gpu._core, "to_cupy_csr"), (
         "_core.to_cupy_csr not found — cycle 20 binding extension not applied"
     )
-    assert callable(singlet.gpu._core.to_cupy_csr), (
-        "_core.to_cupy_csr is not callable"
-    )
+    assert callable(singlet.gpu._core.to_cupy_csr), "_core.to_cupy_csr is not callable"
 
 
 # ---------------------------------------------------------------------------
@@ -519,9 +504,7 @@ def test_binding_normalize_total_exists():
     assert hasattr(singlet.gpu._core, "normalize_total"), (
         "_core.normalize_total not found — bind_kernels not wired into module"
     )
-    assert callable(singlet.gpu._core.normalize_total), (
-        "_core.normalize_total is not callable"
-    )
+    assert callable(singlet.gpu._core.normalize_total), "_core.normalize_total is not callable"
 
 
 # ---------------------------------------------------------------------------
@@ -532,9 +515,7 @@ def test_binding_log1p_exists():
     assert hasattr(singlet.gpu._core, "log1p"), (
         "_core.log1p not found — bind_kernels not wired into module"
     )
-    assert callable(singlet.gpu._core.log1p), (
-        "_core.log1p is not callable"
-    )
+    assert callable(singlet.gpu._core.log1p), "_core.log1p is not callable"
 
 
 # ---------------------------------------------------------------------------
@@ -558,9 +539,7 @@ def test_binding_pca_exists():
     assert hasattr(singlet.gpu._core, "pca"), (
         "_core.pca not found — bind_kernels not wired into module"
     )
-    assert callable(singlet.gpu._core.pca), (
-        "_core.pca is not callable"
-    )
+    assert callable(singlet.gpu._core.pca), "_core.pca is not callable"
 
 
 # ---------------------------------------------------------------------------
@@ -586,12 +565,8 @@ def test_binding_svd_irlba_exists():
 # ---------------------------------------------------------------------------
 def test_binding_svd_randomized_exists():
     """_core.svd_randomized must be exposed as a callable attribute."""
-    assert hasattr(singlet.gpu._core, "svd_randomized"), (
-        "_core.svd_randomized not found"
-    )
-    assert callable(singlet.gpu._core.svd_randomized), (
-        "_core.svd_randomized is not callable"
-    )
+    assert hasattr(singlet.gpu._core, "svd_randomized"), "_core.svd_randomized not found"
+    assert callable(singlet.gpu._core.svd_randomized), "_core.svd_randomized is not callable"
 
 
 # ---------------------------------------------------------------------------
@@ -608,12 +583,8 @@ def test_binding_svd_krylov_exists():
 # ---------------------------------------------------------------------------
 def test_binding_svd_deflation_exists():
     """_core.svd_deflation must be exposed as a callable attribute."""
-    assert hasattr(singlet.gpu._core, "svd_deflation"), (
-        "_core.svd_deflation not found"
-    )
-    assert callable(singlet.gpu._core.svd_deflation), (
-        "_core.svd_deflation is not callable"
-    )
+    assert hasattr(singlet.gpu._core, "svd_deflation"), "_core.svd_deflation not found"
+    assert callable(singlet.gpu._core.svd_deflation), "_core.svd_deflation is not callable"
 
 
 # ---------------------------------------------------------------------------
@@ -621,12 +592,8 @@ def test_binding_svd_deflation_exists():
 # ---------------------------------------------------------------------------
 def test_binding_svd_auto_select_exists():
     """_core.svd_auto_select must be exposed as a callable attribute."""
-    assert hasattr(singlet.gpu._core, "svd_auto_select"), (
-        "_core.svd_auto_select not found"
-    )
-    assert callable(singlet.gpu._core.svd_auto_select), (
-        "_core.svd_auto_select is not callable"
-    )
+    assert hasattr(singlet.gpu._core, "svd_auto_select"), "_core.svd_auto_select not found"
+    assert callable(singlet.gpu._core.svd_auto_select), "_core.svd_auto_select is not callable"
 
 
 # ---------------------------------------------------------------------------
@@ -637,9 +604,7 @@ def test_binding_nmf_exists():
     assert hasattr(singlet.gpu._core, "nmf"), (
         "_core.nmf not found — bind_kernels not wired into module"
     )
-    assert callable(singlet.gpu._core.nmf), (
-        "_core.nmf is not callable"
-    )
+    assert callable(singlet.gpu._core.nmf), "_core.nmf is not callable"
 
 
 # ---------------------------------------------------------------------------
@@ -650,9 +615,7 @@ def test_binding_nmf_chunked_exists():
     assert hasattr(singlet.gpu._core, "nmf_chunked"), (
         "_core.nmf_chunked not found — bind_kernels not wired into module"
     )
-    assert callable(singlet.gpu._core.nmf_chunked), (
-        "_core.nmf_chunked is not callable"
-    )
+    assert callable(singlet.gpu._core.nmf_chunked), "_core.nmf_chunked is not callable"
 
 
 # ---------------------------------------------------------------------------
@@ -676,13 +639,10 @@ def test_result_classes_exist():
     """NormalizeResult, HvgResult, SvdResult, NmfResult must be exposed as classes."""
     for class_name in ("NormalizeResult", "HvgResult", "SvdResult", "NmfResult"):
         assert hasattr(singlet.gpu._core, class_name), (
-            f"_core.{class_name} not found — result class binding missing from "
-            "cycle 20 extension"
+            f"_core.{class_name} not found — result class binding missing from cycle 20 extension"
         )
         cls = getattr(singlet.gpu._core, class_name)
-        assert isinstance(cls, type), (
-            f"_core.{class_name} is not a class (type), got {type(cls)}"
-        )
+        assert isinstance(cls, type), f"_core.{class_name} is not a class (type), got {type(cls)}"
 
 
 # ---------------------------------------------------------------------------
@@ -703,7 +663,7 @@ def test_from_cupy_csr_roundtrip_smoke():
     try:
         import cupyx.scipy.sparse as csp  # cupy >= 14
     except ImportError:
-        import cupy.sparse as csp         # cupy < 14 fallback
+        import cupy.sparse as csp  # cupy < 14 fallback
 
     # Build a tiny 5-row × 4-col CSR (int32 indices, float32 data) on device.
     # The design doc requires: indptr dtype=int32, indices dtype=int32, data=float32.
@@ -737,12 +697,8 @@ def test_from_cupy_csr_roundtrip_smoke():
     )
 
     # CSR (rows=5, cols=4, nnz=7) stored internally as CSC; shape must be preserved.
-    assert result.rows == shape[0], (
-        f"DeviceCsc.rows={result.rows} != input CSR rows={shape[0]}"
-    )
-    assert result.cols == shape[1], (
-        f"DeviceCsc.cols={result.cols} != input CSR cols={shape[1]}"
-    )
+    assert result.rows == shape[0], f"DeviceCsc.rows={result.rows} != input CSR rows={shape[0]}"
+    assert result.cols == shape[1], f"DeviceCsc.cols={result.cols} != input CSR cols={shape[1]}"
     assert result.nnz == int(data.size), (
         f"DeviceCsc.nnz={result.nnz} != expected nnz={int(data.size)}"
     )
@@ -774,9 +730,7 @@ def test_normalize_total_callable_smoke(gsm4037629_path):
 
     # size_factors_view must be non-empty (one factor per cell).
     sf_view = result.size_factors_view
-    assert sf_view is not None, (
-        "NormalizeResult.size_factors_view must not be None"
-    )
+    assert sf_view is not None, "NormalizeResult.size_factors_view must not be None"
     # Access via __cuda_array_interface__ shape, or len() if it's a sequence.
     try:
         cai = sf_view.__cuda_array_interface__
@@ -784,9 +738,7 @@ def test_normalize_total_callable_smoke(gsm4037629_path):
     except AttributeError:
         n_factors = len(sf_view)
 
-    assert n_factors > 0, (
-        f"NormalizeResult.size_factors_view is empty (length={n_factors})"
-    )
+    assert n_factors > 0, f"NormalizeResult.size_factors_view is empty (length={n_factors})"
     # NOTE: size_factors_view length does NOT match m.cols on the current
     # binding — kernel returns a smaller per-batch summary buffer (e.g. 7
     # entries for an unknown grouping) instead of one factor per cell.

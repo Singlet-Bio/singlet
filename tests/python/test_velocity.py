@@ -34,6 +34,7 @@ Skip strategy:
   - requires_gpu for all GPU-exercising tests.
   - vs-scvelo tests additionally skip if scvelo is not importable.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -44,20 +45,22 @@ singlet_gpu = pytest.importorskip(
     reason="singlet_gpu wheel not built. Run `pip install -e singlet-gpu/python/` first.",
 )
 
+import singlet.gpu  # noqa: E402
 from conftest import requires_gpu  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Tolerance constants
 # ---------------------------------------------------------------------------
-_MOMENTS_REL_ERR_MAX = 1e-3    # element-wise mean relative error vs scvelo
-_GAMMA_SPEARMAN_MIN = 0.95     # Spearman ρ of gamma vs scvelo steady_state
+_MOMENTS_REL_ERR_MAX = 1e-3  # element-wise mean relative error vs scvelo
+_GAMMA_SPEARMAN_MIN = 0.95  # Spearman ρ of gamma vs scvelo steady_state
 _N_NEIGHBORS = 30
-_N_COMPS = 30                  # PCA comps for velocity embedding
+_N_COMPS = 30  # PCA comps for velocity embedding
 _SEED = 0xC0FFEE
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _load_velocity_adata(gsm4037629_path):
     """Load exon_counts as 'spliced' and intron_counts as 'unspliced' layers."""
@@ -67,6 +70,7 @@ def _load_velocity_adata(gsm4037629_path):
     if "spliced" not in adata.layers:
         try:
             import pathlib
+
             spliced_path = pathlib.Path(gsm4037629_path) / "exon_counts.1pz"
             unspliced_path = pathlib.Path(gsm4037629_path) / "intron_counts.1pz"
             if spliced_path.is_file():
@@ -87,6 +91,7 @@ def _load_velocity_adata(gsm4037629_path):
 def _to_host_dense(x) -> np.ndarray:
     """Transfer any matrix (cupy sparse / dense, scipy sparse, numpy) to dense host."""
     import scipy.sparse as sp
+
     if hasattr(x, "get"):
         x = x.get()
     if sp.issparse(x):
@@ -130,6 +135,7 @@ def _gpu_to_cpu_velocity_adata(adata_gpu):
 
 def _spearman_rho(a: np.ndarray, b: np.ndarray) -> float:
     from scipy.stats import spearmanr
+
     res = spearmanr(a, b)
     return float(res.correlation if hasattr(res, "correlation") else res[0])
 
@@ -138,7 +144,8 @@ def _spearman_rho(a: np.ndarray, b: np.ndarray) -> float:
 # test_moments_writes_layers_Ms_Mu
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
-    strict=True, raises=AttributeError,
+    strict=True,
+    raises=AttributeError,
     reason="CYCLE-23-FOLLOWUP-CYCLE-22-BINDING-EXPOSE: _core.velocity_moments not yet exposed by pybind11 binding (only velocity_prep_compute is). Binding-extend cycle pending.",
 )
 @requires_gpu
@@ -163,9 +170,7 @@ def test_moments_writes_layers_Ms_Mu(gsm4037629_path):
 
     ret = singlet.gpu.velocity.moments(adata, n_neighbors=_N_NEIGHBORS)
 
-    assert ret is None, (
-        f"moments() inplace must return None, got {type(ret)}"
-    )
+    assert ret is None, f"moments() inplace must return None, got {type(ret)}"
     assert "Ms" in adata.layers, "moments(): adata.layers['Ms'] not written"
     assert "Mu" in adata.layers, "moments(): adata.layers['Mu'] not written"
 
@@ -228,9 +233,7 @@ def test_moments_vs_scvelo(gsm4037629_path):
         pytest.skip(f"scvelo.pp.moments failed: {e}")
 
     for layer_name in ("Ms", "Mu"):
-        assert layer_name in adata_gpu.layers, (
-            f"GPU moments did not write layers['{layer_name}']"
-        )
+        assert layer_name in adata_gpu.layers, f"GPU moments did not write layers['{layer_name}']"
         assert layer_name in adata_cpu.layers, (
             f"scvelo moments did not write layers['{layer_name}']"
         )
@@ -254,7 +257,8 @@ def test_moments_vs_scvelo(gsm4037629_path):
 # test_velocity_writes_layers_velocity
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
-    strict=True, raises=AttributeError,
+    strict=True,
+    raises=AttributeError,
     reason="CYCLE-23-FOLLOWUP-CYCLE-22-BINDING-EXPOSE: _core.velocity_moments / _core.velocity_velocity not yet exposed by pybind11 binding. Binding-extend cycle pending.",
 )
 @requires_gpu
@@ -279,12 +283,8 @@ def test_velocity_writes_layers_velocity(gsm4037629_path):
 
     ret = singlet.gpu.velocity.velocity(adata, mode="steady_state")
 
-    assert ret is None, (
-        f"velocity() inplace must return None, got {type(ret)}"
-    )
-    assert "velocity" in adata.layers, (
-        "velocity(): adata.layers['velocity'] not written"
-    )
+    assert ret is None, f"velocity() inplace must return None, got {type(ret)}"
+    assert "velocity" in adata.layers, "velocity(): adata.layers['velocity'] not written"
 
     vel = _to_host_dense(adata.layers["velocity"])
     assert vel.shape == (adata.n_obs, adata.n_vars), (
@@ -296,7 +296,8 @@ def test_velocity_writes_layers_velocity(gsm4037629_path):
 # test_velocity_writes_var_gamma
 # ---------------------------------------------------------------------------
 @pytest.mark.xfail(
-    strict=True, raises=AttributeError,
+    strict=True,
+    raises=AttributeError,
     reason="CYCLE-23-FOLLOWUP-CYCLE-22-BINDING-EXPOSE: _core.velocity_moments / _core.velocity_velocity not yet exposed by pybind11 binding. Binding-extend cycle pending.",
 )
 @requires_gpu
@@ -327,9 +328,7 @@ def test_velocity_writes_var_gamma(gsm4037629_path):
     assert np.all(np.isfinite(gamma)), (
         f"velocity_gamma contains non-finite values: {np.sum(~np.isfinite(gamma))}"
     )
-    assert np.all(gamma >= 0.0), (
-        f"velocity_gamma contains negative values; min={gamma.min():.4e}"
-    )
+    assert np.all(gamma >= 0.0), f"velocity_gamma contains negative values; min={gamma.min():.4e}"
     assert np.std(gamma) > 1e-8, (
         "velocity_gamma has near-zero variance — all genes assigned same gamma"
     )
@@ -365,7 +364,7 @@ def test_velocity_vs_scvelo_steady_state(gsm4037629_path):
     singlet.gpu.velocity.velocity(adata_gpu, mode="steady_state")
 
     # scvelo reference pipeline.
-    sc = pytest.importorskip("scanpy", reason="scanpy not installed")
+    pytest.importorskip("scanpy", reason="scanpy not installed")
     try:
         scv.pp.filter_and_normalize(adata_cpu, min_shared_counts=20, n_top_genes=2000)
         scv.pp.moments(adata_cpu, n_neighbors=_N_NEIGHBORS, n_pcs=_N_COMPS)

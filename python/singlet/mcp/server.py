@@ -579,10 +579,10 @@ async def _tool_load(args: dict) -> dict:
         "format": ".singlet bundle (per-GSE ZIP; free, no auth)",
         "bundle_url": bundle_url,
         "python_code": (
-            f'import singlet\n'
-            f'# Loads just this sample (downloads the parent {gse_id} bundle, cached):\n'
+            f"import singlet\n"
+            f"# Loads just this sample (downloads the parent {gse_id} bundle, cached):\n"
             f'adata = singlet.load("{gsm_id}")\n'
-            f'# ...or load the whole series:\n'
+            f"# ...or load the whole series:\n"
             f'adata = singlet.load("{gse_id}")'
         ),
         "web_url": f"https://singlet.bio/sample/{gsm_id}",

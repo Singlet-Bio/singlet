@@ -134,7 +134,6 @@ class TestGeneModuleScore:
         """Works with sparse X matrix."""
         import anndata as ad
 
-        rng = np.random.default_rng(42)
         n_cells, n_genes = 100, 200
         X_sparse = sp.random(n_cells, n_genes, density=0.3, format="csr", random_state=42)
         adata = ad.AnnData(X=X_sparse)

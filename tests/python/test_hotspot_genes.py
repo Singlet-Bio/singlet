@@ -3,7 +3,6 @@
 
 import numpy as np
 import pytest
-
 import singlet
 
 
@@ -52,9 +51,7 @@ class TestHotspotGenes:
         import pandas as pd
 
         adata = adata_with_hotspots
-        result = singlet.hotspot_genes(
-            adata, n_neighbors=15, method="gi_star"
-        )
+        result = singlet.hotspot_genes(adata, n_neighbors=15, method="gi_star")
 
         assert isinstance(result, pd.DataFrame)
         assert "gene" in result.columns
@@ -69,9 +66,7 @@ class TestHotspotGenes:
         import pandas as pd
 
         adata = adata_with_hotspots
-        result = singlet.hotspot_genes(
-            adata, n_neighbors=15, method="local_morans"
-        )
+        result = singlet.hotspot_genes(adata, n_neighbors=15, method="local_morans")
 
         assert isinstance(result, pd.DataFrame)
         assert len(result) == adata.n_vars
@@ -79,9 +74,7 @@ class TestHotspotGenes:
     def test_hotspot_gene_detection(self, adata_with_hotspots):
         """Test that genes with true hotspots rank higher."""
         adata = adata_with_hotspots
-        result = singlet.hotspot_genes(
-            adata, n_neighbors=15, method="gi_star"
-        )
+        result = singlet.hotspot_genes(adata, n_neighbors=15, method="gi_star")
 
         # Gene_0 and Gene_1 should have high statistics (they have hotspots)
         top_genes = result.head(10)["gene"].tolist()
@@ -90,9 +83,7 @@ class TestHotspotGenes:
     def test_hotspot_cells_counted(self, adata_with_hotspots):
         """Test that hotspot cell counts are reasonable."""
         adata = adata_with_hotspots
-        result = singlet.hotspot_genes(
-            adata, n_neighbors=15, method="gi_star"
-        )
+        result = singlet.hotspot_genes(adata, n_neighbors=15, method="gi_star")
 
         # Hotspot genes should have some hotspot cells
         gene0_row = result[result["gene"] == "Gene_0"]
@@ -120,9 +111,7 @@ class TestHotspotGenes:
         """Test with specific gene subset."""
         adata = adata_with_hotspots
         selected = ["Gene_0", "Gene_1", "Gene_5"]
-        result = singlet.hotspot_genes(
-            adata, n_neighbors=15, genes=selected
-        )
+        result = singlet.hotspot_genes(adata, n_neighbors=15, genes=selected)
 
         assert len(result) == 3
         assert set(result["gene"].tolist()) == set(selected)
@@ -132,9 +121,7 @@ class TestHotspotGenes:
         adata = adata_with_hotspots
         # Mark some genes as HVG
         adata.var["highly_variable"] = False
-        adata.var.loc[["Gene_0", "Gene_1", "Gene_2", "Gene_3"], "highly_variable"] = (
-            True
-        )
+        adata.var.loc[["Gene_0", "Gene_1", "Gene_2", "Gene_3"], "highly_variable"] = True
 
         result = singlet.hotspot_genes(adata, n_neighbors=15)
         assert len(result) == 4
@@ -142,30 +129,22 @@ class TestHotspotGenes:
     def test_invalid_method(self, adata_with_hotspots):
         """Test error on invalid method."""
         with pytest.raises(ValueError, match="method must be one of"):
-            singlet.hotspot_genes(
-                adata_with_hotspots, method="invalid"
-            )
+            singlet.hotspot_genes(adata_with_hotspots, method="invalid")
 
     def test_missing_representation(self, adata_with_hotspots):
         """Test error on missing representation."""
         with pytest.raises(KeyError, match="not found in adata.obsm"):
-            singlet.hotspot_genes(
-                adata_with_hotspots, use_rep="X_nonexistent"
-            )
+            singlet.hotspot_genes(adata_with_hotspots, use_rep="X_nonexistent")
 
     def test_invalid_n_neighbors(self, adata_with_hotspots):
         """Test error on invalid n_neighbors."""
         with pytest.raises(ValueError, match="n_neighbors must be >= 1"):
-            singlet.hotspot_genes(
-                adata_with_hotspots, n_neighbors=0
-            )
+            singlet.hotspot_genes(adata_with_hotspots, n_neighbors=0)
 
     def test_no_genes_found(self, adata_with_hotspots):
         """Test error when specified genes don't exist."""
         with pytest.raises(ValueError, match="None of the specified genes"):
-            singlet.hotspot_genes(
-                adata_with_hotspots, genes=["NonexistentGene"]
-            )
+            singlet.hotspot_genes(adata_with_hotspots, genes=["NonexistentGene"])
 
     def test_sorted_descending(self, adata_with_hotspots):
         """Test that results are sorted by statistic descending."""

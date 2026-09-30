@@ -22,9 +22,7 @@ def _make_adata_with_graph(n=150, m=50, n_groups=3, seed=42):
     k = 10
     rows, cols, vals = [], [], []
     for cell_idx in range(n):
-        neighbors_list = rng.choice(
-            [j for j in range(n) if j != cell_idx], size=k, replace=False
-        )
+        neighbors_list = rng.choice([j for j in range(n) if j != cell_idx], size=k, replace=False)
         for nb in neighbors_list:
             rows.append(cell_idx)
             cols.append(nb)
@@ -138,9 +136,7 @@ def test_connectivity_two_disconnected_clusters():
                 cols.append(nb)
                 vals.append(1.0)
 
-    adata.obsp["connectivities"] = sp.csr_matrix(
-        (vals, (rows, cols)), shape=(n, n)
-    )
+    adata.obsp["connectivities"] = sp.csr_matrix((vals, (rows, cols)), shape=(n, n))
 
     result = singlet.connectivity_score(adata, "group")
     # Off-diagonal should be 0

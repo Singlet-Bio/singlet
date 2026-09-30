@@ -24,13 +24,11 @@ up to 256 distinct contigs, which is more than any common assembly).
 
 from __future__ import annotations
 
-import io
 import mmap
-import os
 import struct
 from dataclasses import dataclass
 from pathlib import Path
-from typing import IO, BinaryIO, Iterable, List, Optional, Sequence, Union
+from typing import Iterable, List, Sequence, Union
 
 # --------------------------------------------------------------------------
 # Format constants
@@ -206,9 +204,7 @@ def write_features(
     chrom_table = bytearray(CHROM_TABLE_SIZE)
     for name, idx in chrom_to_id.items():
         encoded = name.encode("utf-8")[:_CHROM_NAME_LEN]
-        chrom_table[idx * _CHROM_NAME_LEN : idx * _CHROM_NAME_LEN + len(encoded)] = (
-            encoded
-        )
+        chrom_table[idx * _CHROM_NAME_LEN : idx * _CHROM_NAME_LEN + len(encoded)] = encoded
 
     # Flatten exon/intron/junction tables and record per-gene ranges.
     exon_records: List[bytes] = []
@@ -220,19 +216,17 @@ def write_features(
         chrom_u8 = chrom_to_id[g.chrom]
         chrom_pad = bytes([chrom_u8, 0, 0, 0])
         exon_lo = len(exon_records)
-        for (s, e) in g.exons:
+        for s, e in g.exons:
             exon_records.append(struct.pack(_EXON_FMT, gid, chrom_pad, s, e))
         exon_hi = len(exon_records)
 
         intron_lo = len(intron_records)
-        for (s, e, fl_lo, fl_hi) in g.introns:
-            intron_records.append(
-                struct.pack(_INTRON_FMT, gid, chrom_pad, s, e, fl_lo, fl_hi)
-            )
+        for s, e, fl_lo, fl_hi in g.introns:
+            intron_records.append(struct.pack(_INTRON_FMT, gid, chrom_pad, s, e, fl_lo, fl_hi))
         intron_hi = len(intron_records)
 
         junction_lo = len(junction_records)
-        for (dp, ap, df, af, flags, motif) in g.junctions:
+        for dp, ap, df, af, flags, motif in g.junctions:
             junction_records.append(
                 struct.pack(_JUNCTION_FMT, gid, df, af, flags, motif, 0, dp, ap)
             )

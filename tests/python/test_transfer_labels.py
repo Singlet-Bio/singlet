@@ -77,9 +77,7 @@ class TestTransferLabels:
         singlet.transfer_labels(query, ref, "celltype")
         transferred = query.obs["celltype_transferred"].values
         true_labels = query.obs["true_label"].values
-        accuracy = np.mean(
-            [str(t) == str(p) for t, p in zip(true_labels, transferred)]
-        )
+        accuracy = np.mean([str(t) == str(p) for t, p in zip(true_labels, transferred)])
         # Should get >60% on well-separated clusters
         assert accuracy > 0.6
 

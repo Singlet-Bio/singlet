@@ -77,7 +77,6 @@ def gene_counts(
     """
     fb = _resolve_features(features)
     counts = sample.counts
-    n_cells = counts.n_cells
     n_genes = fb.n_genes
 
     exon_ranges = [(g.exon_lo, g.exon_hi) for g in fb.iter_genes()]

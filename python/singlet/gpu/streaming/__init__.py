@@ -15,6 +15,6 @@ multiple inputs and does not map cleanly to a single AnnData, the
 result is a ``PipelineResult`` dataclass.
 """
 
-from .pipeline import run_pipeline, PipelineResult
+from .pipeline import PipelineResult, run_pipeline
 
 __all__ = ["run_pipeline", "PipelineResult"]

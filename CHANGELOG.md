@@ -4,6 +4,16 @@ All notable changes to the singlet project.
 
 ## [Unreleased]
 
+## [2.1.0] — 2026-10-01
+
+The first release published to PyPI, as **`singlet-bio`** (`pip install singlet-bio`, then `import singlet`). It collects the client fixes from PR #2:
+
+- **Distribution renamed to `singlet-bio`**; the import name (`singlet`) and the R package name are unchanged.
+- **`singlet.find()` returns studies (`GSE`) by default**, not samples; pass `level="gsm"` for the 2.0.0 behaviour.
+- **Hollow-sample guards** end to end: loading skips empty or 0x0 samples and explains all-hollow studies, `pack_gse` refuses hollow or failed-write samples, and the pipeline no longer writes 0x0 stubs for called cells.
+- **`singlet-mcp`** is the local MCP server's console script; `singlet` remains as a deprecated alias that no longer shadows the pipeline binary.
+- **Functions whose hosts were never in service raise** a clear `NotImplementedError` pointing at `singlet.load` / `singlet.find`, instead of failing against dead hosts.
+
 ### Packaging
 - **The Python distribution is now `singlet-bio`.** `singlet` on PyPI belongs to an unrelated 2017 project, so this package will be published as `singlet-bio` (this reverses the 2.0.0 "`pip install singlet`" plan). The import name is unchanged (`import singlet`), as is the R package name (`singlet`). Until the first release, install with `pip install "singlet-bio @ git+https://github.com/Singlet-Bio/singlet"`; after it, `pip install singlet-bio`. Extras follow the new name (`singlet-bio[analysis]`, `singlet-bio[mcp]`, ...), and wheels/sdists are named `singlet_bio-*`. Version lookups read the `singlet-bio` distribution first and fall back to `singlet` for installs made before the rename.
 
@@ -33,6 +43,10 @@ All notable changes to the singlet project.
 ### Pipeline (C++)
 - A `.1pz` output that fails to write is recorded in `summary.json` (`status: "fail_export_matrix"`, warning `write_failed:<file>`) and gets no 0x0 stub; `pack_gse` then leaves the sample out. A `.1pz` run that calls cells but leaves no `exon_counts.1pz` is recorded the same way (`exon_counts_1pz_missing`).
 - `--output-format mtx|h5ad|loom` runs are not failures: they write no `.1pz` by design, so they keep their status, get a `no_1pz_output_format` warning and the usual `exon_counts.1pz` stub (which `pack_gse` refuses as hollow when cells were called).
+
+### Development
+- The CI lint job passes: `python/` and `tests/python/` are `ruff check` / `ruff format` clean, and ruff (0.16.9) and pyright (1.1.414) are pinned in `ci.yml` so a new release cannot turn a green branch red. Pushes to `claude/lint-*` branches also run `autofix.yml`, which commits `ruff check --fix` + `ruff format` back to the branch.
+- Real bugs the lint pass turned up: the GPU test modules called `singlet.gpu.*` without importing it; `singlet.gpu.preprocess.lognorm._prepare_adata` called the `copy` module instead of copying; a duplicate test-class name in `test_convert.py` hid three `singlet.convert` tests, which now run.
 
 ## [2.0.0] — 2026-09-04
 

@@ -42,6 +42,7 @@ if TYPE_CHECKING:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _get_layer(
     adata: "anndata.AnnData",
     layer_key: str,
@@ -67,6 +68,7 @@ def _get_layer(
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def velocity(
     adata: "anndata.AnnData",
@@ -175,10 +177,7 @@ def velocity(
     if perc is None:
         perc = [5, 95]
     if len(perc) != 2 or not (0 <= perc[0] < perc[1] <= 100):
-        raise ValueError(
-            f"perc must be [lower, upper] with 0 ≤ lower < upper ≤ 100, "
-            f"got {perc!r}."
-        )
+        raise ValueError(f"perc must be [lower, upper] with 0 ≤ lower < upper ≤ 100, got {perc!r}.")
 
     import singlet.gpu._core as _core
 
@@ -193,8 +192,8 @@ def velocity(
     working = copy_module.copy(adata) if copy else adata
 
     # Prefer smoothed layers (Ms/Mu) produced by moments(); fall back to raw.
-    spliced_mat   = _get_layer(working, "Ms",   fallback_key=layer_spliced)
-    unspliced_mat = _get_layer(working, "Mu",   fallback_key=layer_unspliced)
+    spliced_mat = _get_layer(working, "Ms", fallback_key=layer_spliced)
+    unspliced_mat = _get_layer(working, "Mu", fallback_key=layer_unspliced)
 
     # C++ kernel: velocity_prep_compute(spliced, unspliced,
     #                                    perc_lower, perc_upper, fit_offset)
@@ -212,7 +211,7 @@ def velocity(
 
     working.layers["velocity"] = np.asarray(result.velocity, dtype=np.float32)
     working.var["velocity_gamma"] = np.asarray(result.gamma, dtype=np.float32)
-    working.var["velocity_r2"]    = np.asarray(result.r2,    dtype=np.float32)
+    working.var["velocity_r2"] = np.asarray(result.r2, dtype=np.float32)
     working.uns["velocity_params"] = {
         "mode": "steady_state",
         "fit_offset": fit_offset,

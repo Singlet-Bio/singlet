@@ -8,8 +8,8 @@ cellchat              — CellChat ligand-receptor communication scoring (cycle 
 cellchat_run_from_csc — CellChat from a raw DeviceCsc.
 """
 
-from .cellchat import run_from_csc as cellchat_run_from_csc
 from .cellchat import run_from_anndata as cellchat
+from .cellchat import run_from_csc as cellchat_run_from_csc
 
 __all__ = [
     "cellchat",

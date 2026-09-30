@@ -57,9 +57,7 @@ class TestCellTypeProportions:
 
     def test_normalize_false(self):
         adata = _make_adata_with_types()
-        result = cell_type_proportions(
-            adata, "cell_type", condition_key="sample", normalize=False
-        )
+        result = cell_type_proportions(adata, "cell_type", condition_key="sample", normalize=False)
         # Raw counts
         total = result.sum(axis=1)
         assert total["sample_1"] == 50

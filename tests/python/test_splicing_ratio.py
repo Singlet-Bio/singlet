@@ -2,7 +2,6 @@
 """Tests for singlet.splicing_ratio()."""
 
 import numpy as np
-import pandas as pd
 import pytest
 import scipy.sparse as sp
 import singlet

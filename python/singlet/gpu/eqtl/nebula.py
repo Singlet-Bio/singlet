@@ -12,28 +12,29 @@ Reference: He et al. (NEBULA, Nature Commun Biol 2021).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from singlet.gpu._coreutil import require_core
 
 if TYPE_CHECKING:
-    import anndata
+    pass
 
 
 # ---------------------------------------------------------------------------
 # Constants mirrored from C++ header for documentation
 # ---------------------------------------------------------------------------
-MAX_DONORS          = 200    # eqtl::MAX_DONORS_SHMEM
-MAX_COVARIATES      = 7      # eqtl::MAX_COV (age + sex + PC1-5)
-DEFAULT_CHUNK_SNPS  = 10000  # eqtl::DEFAULT_CHUNK_SNPS
-DEFAULT_CHUNK_GENES = 500    # eqtl::DEFAULT_CHUNK_GENES
+MAX_DONORS = 200  # eqtl::MAX_DONORS_SHMEM
+MAX_COVARIATES = 7  # eqtl::MAX_COV (age + sex + PC1-5)
+DEFAULT_CHUNK_SNPS = 10000  # eqtl::DEFAULT_CHUNK_SNPS
+DEFAULT_CHUNK_GENES = 500  # eqtl::DEFAULT_CHUNK_GENES
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def run(
     counts,
@@ -147,9 +148,7 @@ def run(
             "(shared-memory budget limit).  Downsample donors."
         )
     if n_cov > MAX_COVARIATES:
-        raise ValueError(
-            f"n_cov={n_cov} exceeds MAX_COVARIATES={MAX_COVARIATES}."
-        )
+        raise ValueError(f"n_cov={n_cov} exceeds MAX_COVARIATES={MAX_COVARIATES}.")
 
     # Coerce donor_id to int32 numpy array for consistent C++ path.
     if not isinstance(donor_id, np.ndarray):

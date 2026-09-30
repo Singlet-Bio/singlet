@@ -24,7 +24,10 @@ load_donor_assignments(tsv_path) -> pd.Series
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 def load_donor_assignments(
@@ -147,6 +150,7 @@ def load_donor_assignments(
         prob_col = "prob_max"
         if prob_col not in df.columns:
             import warnings
+
             warnings.warn(
                 f"min_prob filtering requested but column '{prob_col}' not "
                 f"found in {path.name}.  Skipping min_prob filter.",
@@ -161,6 +165,7 @@ def load_donor_assignments(
     if exclude_doublets:
         if doublet_col not in df.columns:
             import warnings
+
             warnings.warn(
                 f"exclude_doublets=True but column '{doublet_col}' not found "
                 f"in {path.name}.  Skipping doublet filter.",

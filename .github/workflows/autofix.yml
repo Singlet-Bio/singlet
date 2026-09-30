@@ -1,0 +1,63 @@
+name: Ruff autofix
+
+# Helper for lint clean-up branches: runs `ruff check --fix` and `ruff format`
+# on every push to a `claude/lint-*` branch and commits the result back to the
+# same branch as github-actions[bot]. Lets contributors without a local ruff
+# install get the mechanical fixes (import sorting, unused imports, formatting)
+# applied by CI; whatever ruff cannot fix is then reported by ci.yml's lint job.
+#
+# The ruff version is pinned to the one ci.yml's lint job installs, so a branch
+# this workflow has fixed passes `ruff check` / `ruff format --check` there.
+#
+# Loop guard: a push made with the default GITHUB_TOKEN does not trigger new
+# workflow runs, and the job is additionally skipped when the head commit was
+# authored by github-actions[bot].
+
+on:
+  push:
+    branches:
+      - "claude/lint-*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: autofix-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ruff-fix:
+    if: github.event.head_commit.author.name != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install ruff
+        run: pip install ruff==0.16.9 --quiet
+
+      - name: ruff check --fix
+        run: ruff check --fix python/ tests/python/ || true
+
+      - name: ruff format
+        run: ruff format python/ tests/python/
+
+      - name: Commit and push fixes
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          if git diff --quiet; then
+            echo "ruff made no changes"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A python/ tests/python/
+          git commit -m "style: ruff --fix and ruff format"
+          git push origin "HEAD:${BRANCH}"

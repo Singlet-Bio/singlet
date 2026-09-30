@@ -43,12 +43,8 @@ def _make_adata_with_clusters(n_cells=200, n_genes=100, n_clusters=3):
     remaining = n_cells - cells_per_cluster * n_clusters
     if remaining > 0:
         labels.extend(["0"] * remaining)
-        X[cells_per_cluster * n_clusters :, :] = rng.exponential(
-            0.1, (remaining, n_genes)
-        )
-        X[cells_per_cluster * n_clusters :, :5] = rng.exponential(
-            3.0, (remaining, 5)
-        )
+        X[cells_per_cluster * n_clusters :, :] = rng.exponential(0.1, (remaining, n_genes))
+        X[cells_per_cluster * n_clusters :, :5] = rng.exponential(3.0, (remaining, 5))
 
     adata = ad.AnnData(X=sp.csr_matrix(X))
     adata.var_names = [f"GENE{idx}" for idx in range(n_genes)]
@@ -139,9 +135,9 @@ class TestFindAllMarkers:
             group_df = result[result["group"] == group]
             scores = group_df["score"].values
             # Check monotonically decreasing
-            assert all(
-                scores[idx] >= scores[idx + 1] for idx in range(len(scores) - 1)
-            ), f"Scores not sorted for group {group}"
+            assert all(scores[idx] >= scores[idx + 1] for idx in range(len(scores) - 1)), (
+                f"Scores not sorted for group {group}"
+            )
 
     def test_log2fc_positive(self):
         """All returned markers should have positive log2fc (upregulated)."""

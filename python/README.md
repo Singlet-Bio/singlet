@@ -92,8 +92,8 @@ unmatched is reported in a warning.
 ```python
 import singlet
 
-singlet.find("exhausted T cells in melanoma")            # study (GSE) accessions
-singlet.find("mouse brain 10x", level="gsm", limit=20)   # sample (GSM) accessions
+singlet.find("exhausted T cells in melanoma")  # study (GSE) accessions
+singlet.find("mouse brain 10x", level="gsm", limit=20)  # sample (GSM) accessions
 
 # find + load in one call (top 3 studies by default; raise limit deliberately)
 adata = singlet.find_load("human kidney organoids", limit=5)
@@ -109,10 +109,10 @@ create a key at https://singlet.bio/account and call `singlet.set_api_key()`
 ```python
 import singlet
 
-singlet.summary()                                   # snapshot overview
+singlet.summary()  # snapshot overview
 singlet.samples(organism="Homo sapiens", status="SUCCESS")
-singlet.tissues()                                   # tissue breakdown
-singlet.info("GSE138867")                           # metadata
+singlet.tissues()  # tissue breakdown
+singlet.info("GSE138867")  # metadata
 ```
 
 These functions read a catalog snapshot bundled with the package, so they
@@ -126,8 +126,8 @@ live lookups.
 
 ```python
 singlet.to_h5ad(adata, "study.h5ad")
-singlet.to_zarr(adata, "study.zarr")    # needs singlet-bio[zarr]
-singlet.to_mtx(adata, "study_mtx/")     # 10x-style matrix.mtx.gz + barcodes + features
+singlet.to_zarr(adata, "study.zarr")  # needs singlet-bio[zarr]
+singlet.to_mtx(adata, "study_mtx/")  # 10x-style matrix.mtx.gz + barcodes + features
 ```
 
 Loom export is not supported from Python.

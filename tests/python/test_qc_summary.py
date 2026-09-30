@@ -95,9 +95,7 @@ class TestQCSummary:
     def test_groupby(self):
         """Groupby produces per-group statistics."""
         adata = _make_qc_adata()
-        adata.obs["cluster"] = np.random.default_rng(42).choice(
-            ["A", "B", "C"], size=adata.n_obs
-        )
+        adata.obs["cluster"] = np.random.default_rng(42).choice(["A", "B", "C"], size=adata.n_obs)
         result = qc_summary(adata, groupby="cluster")
 
         assert "group" in result.columns

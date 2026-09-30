@@ -99,9 +99,7 @@ def test_ambient_score_high_contamination():
 
     # Half cells are "contaminated" (look like ambient)
     for cell_idx in range(40, n):
-        X[cell_idx, :] = ambient_profile * rng.uniform(0.5, 2.0) + rng.poisson(
-            0.1, size=m
-        )
+        X[cell_idx, :] = ambient_profile * rng.uniform(0.5, 2.0) + rng.poisson(0.1, size=m)
 
     adata = AnnData(X=sp.csr_matrix(X))
     adata.var_names = [f"g{i}" for i in range(m)]

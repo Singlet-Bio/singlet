@@ -3,7 +3,6 @@
 
 import numpy as np
 import pytest
-
 import singlet
 
 
@@ -45,9 +44,7 @@ class TestCellLevelDE:
     def test_basic_output(self, adata_two_conditions):
         """Test basic cell-level DE computation."""
         adata = adata_two_conditions
-        result = singlet.cell_level_de(
-            adata, condition_key="treatment", n_top_genes=30
-        )
+        result = singlet.cell_level_de(adata, condition_key="treatment", n_top_genes=30)
 
         # Should return adata
         assert result is adata
@@ -66,9 +63,7 @@ class TestCellLevelDE:
         import scipy.sparse as sp
 
         adata = adata_two_conditions
-        singlet.cell_level_de(
-            adata, condition_key="treatment", n_top_genes=30
-        )
+        singlet.cell_level_de(adata, condition_key="treatment", n_top_genes=30)
 
         lfc = adata.layers["cell_level_lfc"]
         if sp.issparse(lfc):
@@ -102,9 +97,7 @@ class TestCellLevelDE:
     def test_gene_names(self, adata_two_conditions):
         """Test that gene names are valid."""
         adata = adata_two_conditions
-        singlet.cell_level_de(
-            adata, condition_key="treatment", n_top_genes=20
-        )
+        singlet.cell_level_de(adata, condition_key="treatment", n_top_genes=20)
 
         gene_list = adata.uns["cell_level_de_genes"]
         assert all(g in adata.var_names for g in gene_list)
@@ -112,9 +105,7 @@ class TestCellLevelDE:
     def test_n_top_genes_limits(self, adata_two_conditions):
         """Test n_top_genes larger than total genes."""
         adata = adata_two_conditions
-        singlet.cell_level_de(
-            adata, condition_key="treatment", n_top_genes=500
-        )
+        singlet.cell_level_de(adata, condition_key="treatment", n_top_genes=500)
 
         # Should cap at actual number of genes
         assert len(adata.uns["cell_level_de_genes"]) == 150
@@ -122,9 +113,7 @@ class TestCellLevelDE:
     def test_invalid_condition_key(self, adata_two_conditions):
         """Test error on missing condition_key."""
         with pytest.raises(KeyError, match="not found in adata.obs"):
-            singlet.cell_level_de(
-                adata_two_conditions, condition_key="nonexistent"
-            )
+            singlet.cell_level_de(adata_two_conditions, condition_key="nonexistent")
 
     def test_invalid_representation(self, adata_two_conditions):
         """Test error on missing representation."""
@@ -189,18 +178,14 @@ class TestCellLevelDE:
         adata.obsm["X_pca"] = rng.standard_normal((40, 10))
 
         with pytest.raises(ValueError, match="n_top_genes must be >= 1"):
-            singlet.cell_level_de(
-                adata, condition_key="cond", n_top_genes=0
-            )
+            singlet.cell_level_de(adata, condition_key="cond", n_top_genes=0)
 
     def test_sparse_output(self, adata_two_conditions):
         """Test that output layer is sparse."""
         import scipy.sparse as sp
 
         adata = adata_two_conditions
-        singlet.cell_level_de(
-            adata, condition_key="treatment", n_top_genes=20
-        )
+        singlet.cell_level_de(adata, condition_key="treatment", n_top_genes=20)
 
         assert sp.issparse(adata.layers["cell_level_lfc"])
 
@@ -215,9 +200,7 @@ class TestCellLevelDE:
         adata.obs["cond"] = ["A"] * 25 + ["B"] * 25
         adata.obsm["X_pca"] = rng.standard_normal((50, 8))
 
-        result = singlet.cell_level_de(
-            adata, condition_key="cond", n_neighbors=5, n_top_genes=10
-        )
+        result = singlet.cell_level_de(adata, condition_key="cond", n_neighbors=5, n_top_genes=10)
         assert result is adata
         assert "cell_level_lfc" in adata.layers
 
@@ -231,8 +214,6 @@ class TestCellLevelDE:
         adata.obs["group"] = ["ctrl"] * 30 + ["stim"] * 30
         adata.obsm["X_pca"] = rng.standard_normal((60, 10))
 
-        singlet.cell_level_de(
-            adata, condition_key="group", n_top_genes=15
-        )
+        singlet.cell_level_de(adata, condition_key="group", n_top_genes=15)
         assert "cell_level_lfc" in adata.layers
         assert len(adata.uns["cell_level_de_genes"]) == 15

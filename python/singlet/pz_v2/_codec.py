@@ -44,20 +44,15 @@ two entries in ``streams.data`` — both share the same ``indptr`` and
 
 from __future__ import annotations
 
-import io
 import json
 import struct
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, BinaryIO, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import zstandard as zstd
-
-try:
-    from scipy.sparse import csc_matrix
-except ImportError:  # pragma: no cover — scipy is a hard dep of singlet
-    csc_matrix = None  # type: ignore
+from scipy.sparse import csc_matrix
 
 MAGIC = b"1PZ02\x00\x00\x00"
 VERSION = 2
@@ -107,8 +102,6 @@ class BlockSpec:
 
 
 def _to_csc(m) -> "csc_matrix":
-    if csc_matrix is None:
-        raise PzV2Error("scipy.sparse is required for pz_v2")
     if hasattr(m, "tocsc"):
         return m.tocsc()
     raise PzV2Error(f"unsupported matrix type: {type(m).__name__}")
@@ -134,9 +127,7 @@ def _validate_data2_pattern(primary: "csc_matrix", data2_in) -> np.ndarray:
     """Return the data-2 1-D array, validating sparsity pattern match."""
     if isinstance(data2_in, np.ndarray):
         if data2_in.shape != (primary.nnz,):
-            raise PzV2Error(
-                f"data2 length {data2_in.shape} != primary nnz {primary.nnz}"
-            )
+            raise PzV2Error(f"data2 length {data2_in.shape} != primary nnz {primary.nnz}")
         return data2_in
     m2 = _to_csc(data2_in)
     if m2.shape != primary.shape:
@@ -144,12 +135,9 @@ def _validate_data2_pattern(primary: "csc_matrix", data2_in) -> np.ndarray:
     if m2.nnz != primary.nnz:
         raise PzV2Error("data2 nnz mismatch — two-layer CSC requires shared pattern")
     if not (
-        np.array_equal(m2.indptr, primary.indptr)
-        and np.array_equal(m2.indices, primary.indices)
+        np.array_equal(m2.indptr, primary.indptr) and np.array_equal(m2.indices, primary.indices)
     ):
-        raise PzV2Error(
-            "data2 sparsity pattern (indptr/indices) must match primary"
-        )
+        raise PzV2Error("data2 sparsity pattern (indptr/indices) must match primary")
     return np.asarray(m2.data)
 
 
@@ -208,9 +196,7 @@ def write_pz_v2(
     for spec in blocks:
         m = _to_csc(spec.matrix)
         if m.shape[1] != n_cells:
-            raise PzV2Error(
-                f"block {spec.name!r} has {m.shape[1]} cols but cell axis is {n_cells}"
-            )
+            raise PzV2Error(f"block {spec.name!r} has {m.shape[1]} cols but cell axis is {n_cells}")
         indptr = np.ascontiguousarray(m.indptr)
         indices = np.ascontiguousarray(m.indices)
         data = np.ascontiguousarray(m.data)
@@ -220,9 +206,7 @@ def write_pz_v2(
         if not names:
             names = ["ad", "dp"] if spec.data2 is not None else ["counts"]
         if len(names) != (2 if spec.data2 is not None else 1):
-            raise PzV2Error(
-                f"data_names length mismatch for block {spec.name!r}: got {names}"
-            )
+            raise PzV2Error(f"data_names length mismatch for block {spec.name!r}: got {names}")
 
         s_indptr = _add_stream(_zstd_compress(indptr.tobytes()))
         s_indptr["uncompressed_len"] = indptr.nbytes
@@ -373,14 +357,10 @@ class Block:
         try:
             return self.data_names.index(layer)
         except ValueError:
-            raise KeyError(
-                f"unknown data layer {layer!r}; have {self.data_names}"
-            ) from None
+            raise KeyError(f"unknown data layer {layer!r}; have {self.data_names}") from None
 
     def data(self, layer: Union[int, str] = 0) -> "csc_matrix":
         """CSC matrix view of one data layer."""
-        if csc_matrix is None:
-            raise PzV2Error("scipy.sparse is required")
         return csc_matrix(
             (self.data_array(layer), self.indices(), self.indptr()),
             shape=self.shape,
@@ -417,15 +397,11 @@ class PzReader:
         magic = self._file.read(8)
         if magic != MAGIC:
             raise PzV2Error(f"bad magic {magic!r}, expected {MAGIC!r}")
-        (header_len,) = struct.unpack(
-            _HEADER_LEN_FMT, self._file.read(_HEADER_LEN_SIZE)
-        )
+        (header_len,) = struct.unpack(_HEADER_LEN_FMT, self._file.read(_HEADER_LEN_SIZE))
         raw = self._file.read(header_len)
         self._header = json.loads(raw.decode("utf-8"))
         if self._header.get("version") != VERSION:
-            raise PzV2Error(
-                f"unsupported version: {self._header.get('version')}"
-            )
+            raise PzV2Error(f"unsupported version: {self._header.get('version')}")
         self.n_cells = int(self._header["n_cells"])
         self._payload_offset = 8 + _HEADER_LEN_SIZE + header_len
 
@@ -486,9 +462,7 @@ class PzReader:
 
     def block(self, name: str) -> Block:
         if name not in self._blocks:
-            raise KeyError(
-                f"block {name!r} not in file; have {sorted(self._blocks)}"
-            )
+            raise KeyError(f"block {name!r} not in file; have {sorted(self._blocks)}")
         return self._blocks[name]
 
     @property

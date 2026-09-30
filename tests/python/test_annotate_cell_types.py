@@ -29,9 +29,7 @@ def _make_adata_with_clusters(n=150, m=50, n_clusters=3, seed=42):
     adata = AnnData(X=X)
     adata.var_names = [f"gene_{i}" for i in range(m)]
     adata.obs["leiden"] = (
-        ["0"] * cells_per_cluster
-        + ["1"] * cells_per_cluster
-        + ["2"] * (n - 2 * cells_per_cluster)
+        ["0"] * cells_per_cluster + ["1"] * cells_per_cluster + ["2"] * (n - 2 * cells_per_cluster)
     )
     return adata
 
@@ -94,7 +92,6 @@ def test_annotate_unknown_when_no_markers():
 
 
 def test_annotate_min_score_threshold():
-    rng = np.random.default_rng(42)
     # Uniform expression — no enrichment
     adata = AnnData(X=np.ones((60, 30), dtype=np.float32))
     adata.var_names = [f"gene_{i}" for i in range(30)]

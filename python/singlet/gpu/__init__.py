@@ -21,6 +21,7 @@ set_device()       -- Switch the active CUDA device.
 
 from singlet.gpu.version import __version__
 
+
 # CYCLE-110: Import submodules at top level so users can do
 #   import singlet.gpu as sg
 #   sg.qc.calculate_qc_metrics(adata, ...)
@@ -33,34 +34,35 @@ def _import_submodule(name):
     except ImportError:
         return None
 
+
 preprocess = _import_submodule("preprocess")
-reduce     = _import_submodule("reduce")
-qc         = _import_submodule("qc")
-tools      = _import_submodule("tools")
-streaming  = _import_submodule("streaming")
-io         = _import_submodule("io")  # io/ subdir (read_anndata, to_anndata helpers)
+reduce = _import_submodule("reduce")
+qc = _import_submodule("qc")
+tools = _import_submodule("tools")
+streaming = _import_submodule("streaming")
+io = _import_submodule("io")  # io/ subdir (read_anndata, to_anndata helpers)
 # Wrapper modules surfaced to the public namespace so tests / users can call
 # `singlet.gpu.lineage.detect_clones(...)` etc without explicit deep imports.
 # (Each submodule remains optional — _import_submodule returns None on
 # ImportError so the package still imports if a sub-tree is missing deps.)
-enrichment   = _import_submodule("enrichment")
-integrate    = _import_submodule("integrate")
-lineage      = _import_submodule("lineage")
-fate         = _import_submodule("fate")
-de           = _import_submodule("de")
-spatial      = _import_submodule("spatial")
-generative   = _import_submodule("generative")
+enrichment = _import_submodule("enrichment")
+integrate = _import_submodule("integrate")
+lineage = _import_submodule("lineage")
+fate = _import_submodule("fate")
+de = _import_submodule("de")
+spatial = _import_submodule("spatial")
+generative = _import_submodule("generative")
 perturbation = _import_submodule("perturbation")
-abundance    = _import_submodule("abundance")
-ase          = _import_submodule("ase")
-atac         = _import_submodule("atac")
-cna          = _import_submodule("cna")
-comm         = _import_submodule("comm")
-disease      = _import_submodule("disease")
-eqtl         = _import_submodule("eqtl")
-grn          = _import_submodule("grn")
-network      = _import_submodule("network")
-velocity     = _import_submodule("velocity")
+abundance = _import_submodule("abundance")
+ase = _import_submodule("ase")
+atac = _import_submodule("atac")
+cna = _import_submodule("cna")
+comm = _import_submodule("comm")
+disease = _import_submodule("disease")
+eqtl = _import_submodule("eqtl")
+grn = _import_submodule("grn")
+network = _import_submodule("network")
+velocity = _import_submodule("velocity")
 del _import_submodule
 
 # Core C++ extension — compiled by CMake/pybind11.
@@ -71,14 +73,15 @@ try:
         DeviceCsc,
         Metadata,
         PzDeviceMatrix,
-        load_pz,
-        device_count,
         cuda_device_name,
         current_device,
+        device_count,
+        load_pz,
         set_device,
     )
 except ImportError as _e:
     import warnings
+
     warnings.warn(
         f"singlet.gpu._core could not be imported ({_e}). "
         "The C++ extension must be compiled on a CUDA-capable node before use. "
@@ -88,14 +91,14 @@ except ImportError as _e:
     )
     # Provide stub names so that `import singlet.gpu` succeeds for tooling
     # (linters, doc builders) on nodes without CUDA.
-    DeviceCsc = None       # type: ignore[assignment]
-    Metadata = None        # type: ignore[assignment]
+    DeviceCsc = None  # type: ignore[assignment]
+    Metadata = None  # type: ignore[assignment]
     PzDeviceMatrix = None  # type: ignore[assignment]
-    load_pz = None         # type: ignore[assignment]
-    device_count = None    # type: ignore[assignment]
+    load_pz = None  # type: ignore[assignment]
+    device_count = None  # type: ignore[assignment]
     cuda_device_name = None  # type: ignore[assignment]
     current_device = None  # type: ignore[assignment]
-    set_device = None      # type: ignore[assignment]
+    set_device = None  # type: ignore[assignment]
 
 __all__ = [
     "__version__",

@@ -25,15 +25,11 @@ def _make_clustered_adata(n_cells=120, n_dims=20, n_clusters=3, seed=42):
         center[k] = 10.0  # Separate clusters along different dimensions
         pca[start:end] = rng.normal(loc=center, scale=0.5, size=(cells_per_cluster, n_dims))
 
-    adata = ad.AnnData(
-        X=sp.csr_matrix(rng.poisson(2, (n_cells, 100)).astype(np.float32))
-    )
+    adata = ad.AnnData(X=sp.csr_matrix(rng.poisson(2, (n_cells, 100)).astype(np.float32)))
     adata.obs_names = [f"cell_{i}" for i in range(n_cells)]
     adata.var_names = [f"GENE{i}" for i in range(100)]
     adata.obsm["X_pca"] = pca
-    adata.obs["cluster"] = pd.Categorical(
-        [f"C{i // cells_per_cluster}" for i in range(n_cells)]
-    )
+    adata.obs["cluster"] = pd.Categorical([f"C{i // cells_per_cluster}" for i in range(n_cells)])
 
     return adata
 

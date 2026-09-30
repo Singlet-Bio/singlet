@@ -79,7 +79,7 @@ class TestRoundTrip:
             np.array([], dtype=np.int32),
             np.array([], dtype=np.uint32),
             100,  # m
-            50,   # n
+            50,  # n
         )
         assert ok is True
 
@@ -102,7 +102,8 @@ class TestRoundTrip:
             mat.indptr.astype(np.int32),
             mat.indices.astype(np.int32),
             data,
-            50, 30,
+            50,
+            30,
         )
         r = read_1pz(path)
         assert r["m"] == 50 and r["n"] == 30
@@ -306,7 +307,8 @@ class TestLargeMetadata:
             mat.indptr.astype(np.int32),
             mat.indices.astype(np.int32),
             mat.data.astype(np.uint32),
-            m, n,
+            m,
+            n,
             rownames=genes,
             colnames=barcodes,
         )

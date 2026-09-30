@@ -63,14 +63,10 @@ def _safe_vaf(ad: "csc_matrix", dp: "csc_matrix") -> "csc_matrix":
     if ad.shape != dp.shape:
         raise ValueError("ad/dp shape mismatch")
     if ad.nnz != dp.nnz:
-        raise ValueError(
-            "ad/dp nnz mismatch — two-layer CSC requires shared sparsity"
-        )
+        raise ValueError("ad/dp nnz mismatch — two-layer CSC requires shared sparsity")
     defined = dp.data > 0
     ratio = np.zeros_like(ad.data, dtype=np.float32)
-    ratio[defined] = ad.data[defined].astype(np.float32) / dp.data[defined].astype(
-        np.float32
-    )
+    ratio[defined] = ad.data[defined].astype(np.float32) / dp.data[defined].astype(np.float32)
     coo = ad.tocoo(copy=False)
     return coo_matrix(
         (ratio[defined], (coo.row[defined], coo.col[defined])),
@@ -443,7 +439,5 @@ def open_sample(accession_or_path, cache_dir=None, base_url=None) -> SingletSamp
 
     from singlet.fetch import fetch as _fetch
 
-    sample_dir = _fetch(
-        str(accession_or_path), cache_dir=cache_dir, base_url=base_url
-    )
+    sample_dir = _fetch(str(accession_or_path), cache_dir=cache_dir, base_url=base_url)
     return SingletSample(sample_dir)

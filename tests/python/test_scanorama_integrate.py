@@ -54,8 +54,7 @@ def test_scanorama_reduces_batch_effect():
 
     # Original PCA batch difference
     orig_diff = np.abs(
-        adata.obsm["X_pca"][b0_mask].mean(axis=0)
-        - adata.obsm["X_pca"][b1_mask].mean(axis=0)
+        adata.obsm["X_pca"][b0_mask].mean(axis=0) - adata.obsm["X_pca"][b1_mask].mean(axis=0)
     ).mean()
 
     # Corrected batch difference
@@ -101,9 +100,7 @@ def test_scanorama_single_batch():
     singlet.scanorama_integrate(adata, batch_key="batch")
     # Single batch: X_scanorama should equal X_pca (truncated)
     n_comps = min(50, adata.obsm["X_pca"].shape[1])
-    assert np.allclose(
-        adata.obsm["X_scanorama"], adata.obsm["X_pca"][:, :n_comps]
-    )
+    assert np.allclose(adata.obsm["X_scanorama"], adata.obsm["X_pca"][:, :n_comps])
 
 
 def test_scanorama_no_pca_raises():

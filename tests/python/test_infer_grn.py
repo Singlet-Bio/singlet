@@ -43,7 +43,9 @@ def _make_grn_adata(n_cells=100, n_genes=80):
 
     adata = ad.AnnData(X=sp.csr_matrix(X))
     n_tfs_for_names = min(10, n_genes // 4)
-    adata.var_names = [f"TF{idx}" if idx < n_tfs_for_names else f"TARGET{idx}" for idx in range(n_genes)]
+    adata.var_names = [
+        f"TF{idx}" if idx < n_tfs_for_names else f"TARGET{idx}" for idx in range(n_genes)
+    ]
     adata.obs_names = [f"cell_{idx}" for idx in range(n_cells)]
 
     return adata

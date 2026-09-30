@@ -36,9 +36,8 @@ import shutil
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import List, Optional, Union
 
-import numpy as np
 from scipy.sparse import csc_matrix
 
 from singlet.pz_v2 import BlockSpec, write_pz_v2
@@ -73,7 +72,6 @@ def _read_legacy_1pz(path: Path):
 
     Returns ``(matrix_genes_x_cells, var_names, obs_names)``.
     """
-    import scipy.sparse as sp
 
     from singlet._pz import read_1pz as _native_read
 
@@ -157,9 +155,7 @@ def transcode_v1_to_v2(
         if cell_barcodes is None and bcs:
             cell_barcodes = bcs
         elif bcs and bcs != cell_barcodes:
-            result.notes.append(
-                f"barcode mismatch between blocks; using {legacy_name} order"
-            )
+            result.notes.append(f"barcode mismatch between blocks; using {legacy_name} order")
             cell_barcodes = bcs
         blocks.append(BlockSpec(_LEGACY_TO_V2_BLOCK[legacy_name], mat))
 

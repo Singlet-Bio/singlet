@@ -44,9 +44,7 @@ if TYPE_CHECKING:
 # Correction methods
 # ---------------------------------------------------------------------------
 
-_CORR_METHODS = frozenset(
-    ["benjamini-hochberg", "bonferroni", "holm-sidak", "fdr_bh", "fdr_by"]
-)
+_CORR_METHODS = frozenset(["benjamini-hochberg", "bonferroni", "holm-sidak", "fdr_bh", "fdr_by"])
 
 
 def _bh_correct(pvalues: "np.ndarray") -> "np.ndarray":
@@ -72,6 +70,7 @@ def _bh_correct(pvalues: "np.ndarray") -> "np.ndarray":
 # ---------------------------------------------------------------------------
 # Internal: build result dict
 # ---------------------------------------------------------------------------
+
 
 def _build_result_dict(
     raw,
@@ -107,11 +106,11 @@ def _build_result_dict(
     dtype_str = [(g, "U50") for g in groups]
     dtype_f32 = [(g, "f4") for g in groups]
 
-    names_arr    = np.empty(n_genes, dtype=dtype_str)
-    scores_arr   = np.empty(n_genes, dtype=dtype_f32)
-    lfc_arr      = np.empty(n_genes, dtype=dtype_f32)
-    pvals_arr    = np.empty(n_genes, dtype=dtype_f32)
-    pvals_adj    = np.empty(n_genes, dtype=dtype_f32)
+    names_arr = np.empty(n_genes, dtype=dtype_str)
+    scores_arr = np.empty(n_genes, dtype=dtype_f32)
+    lfc_arr = np.empty(n_genes, dtype=dtype_f32)
+    pvals_arr = np.empty(n_genes, dtype=dtype_f32)
+    pvals_adj = np.empty(n_genes, dtype=dtype_f32)
 
     for grp in groups:
         grp_raw = raw[grp]
@@ -119,8 +118,8 @@ def _build_result_dict(
         # (all length n_genes, already sorted by score descending)
         top_names = np.asarray(grp_raw.names)[:n_genes]
         top_scores = np.asarray(grp_raw.scores, dtype=np.float32)[:n_genes]
-        top_lfc    = np.asarray(grp_raw.logfoldchanges, dtype=np.float32)[:n_genes]
-        top_pvals  = np.asarray(grp_raw.pvals, dtype=np.float32)[:n_genes]
+        top_lfc = np.asarray(grp_raw.logfoldchanges, dtype=np.float32)[:n_genes]
+        top_pvals = np.asarray(grp_raw.pvals, dtype=np.float32)[:n_genes]
 
         # Apply FDR correction if the C++ kernel did not do it.
         if hasattr(grp_raw, "pvals_adj"):
@@ -133,11 +132,11 @@ def _build_result_dict(
             else:
                 top_padj = top_pvals.copy()
 
-        names_arr[grp]  = top_names
+        names_arr[grp] = top_names
         scores_arr[grp] = top_scores
-        lfc_arr[grp]    = top_lfc
-        pvals_arr[grp]  = top_pvals
-        pvals_adj[grp]  = top_padj
+        lfc_arr[grp] = top_lfc
+        pvals_arr[grp] = top_pvals
+        pvals_adj[grp] = top_padj
 
     return {
         "params": {
@@ -159,6 +158,7 @@ def _build_result_dict(
 # Internal: extract expression matrix
 # ---------------------------------------------------------------------------
 
+
 def _get_expr_matrix(
     adata: "anndata.AnnData",
     layer: Optional[str],
@@ -177,6 +177,7 @@ def _get_expr_matrix(
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def rank_genes_groups(
     adata: "anndata.AnnData",
@@ -306,8 +307,9 @@ def rank_genes_groups(
     if groupby not in adata.obs.columns:
         raise KeyError(f"groupby='{groupby}' not found in adata.obs.")
 
-    import singlet.gpu._core as _core
     import warnings
+
+    import singlet.gpu._core as _core
 
     # Map 'logreg' to wilcoxon with a warning (not yet implemented).
     effective_method = method
@@ -348,9 +350,11 @@ def rank_genes_groups(
     working = copy_module.copy(adata) if copy else adata
 
     # Resolve groups.
-    all_groups = list(working.obs[groupby].cat.categories
-                      if hasattr(working.obs[groupby], "cat")
-                      else working.obs[groupby].unique())
+    all_groups = list(
+        working.obs[groupby].cat.categories
+        if hasattr(working.obs[groupby], "cat")
+        else working.obs[groupby].unique()
+    )
     if groups == "all":
         test_groups = all_groups
     else:
@@ -358,14 +362,14 @@ def rank_genes_groups(
         for g in test_groups:
             if g not in all_groups:
                 raise ValueError(
-                    f"Group '{g}' not found in adata.obs['{groupby}'].  "
-                    f"Available: {all_groups}"
+                    f"Group '{g}' not found in adata.obs['{groupby}'].  Available: {all_groups}"
                 )
 
     # Resolve gene universe.
     gene_names = list(working.var_names)
     if mask_var is not None:
         import numpy as np_  # avoid shadowing outer np
+
         if isinstance(mask_var, str):
             mask = working.var[mask_var].values.astype(bool)
         else:

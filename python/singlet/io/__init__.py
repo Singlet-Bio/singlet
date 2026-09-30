@@ -11,6 +11,7 @@ from singlet._io import (
     read_matrix,
     write_1pz,
 )
+from singlet.bundle import SingletBundle, pack_gse
 from singlet.io.convert import (
     from_h5ad,
     from_mtx,
@@ -29,7 +30,6 @@ from singlet.io.sample import (
     SingletSample,
     SingletSnp,
 )
-from singlet.bundle import SingletBundle, pack_gse
 
 __all__ = [
     "read_1pz",

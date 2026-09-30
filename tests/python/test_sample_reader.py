@@ -15,7 +15,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from singlet.io import (
     SingletCounts,
     SingletMt,
@@ -23,7 +22,7 @@ from singlet.io import (
     SingletSample,
     SingletSnp,
 )
-
+from singlet.pz_v2 import PzV2Error
 
 # --------------------------------------------------------------------------
 # Fixtures
@@ -142,19 +141,19 @@ class TestSubReaderErrors:
     @pytest.mark.parametrize("method", ["exon_body", "intron_body", "junctions"])
     def test_counts_methods_raise_on_empty(self, sample_dir, method):
         s = SingletSample(sample_dir)
-        with pytest.raises(Exception):
+        with pytest.raises(PzV2Error):
             getattr(s.counts, method)()
 
     @pytest.mark.parametrize("method", ["ad", "dp"])
     def test_snp_methods_raise_on_empty(self, sample_dir, method):
         s = SingletSample(sample_dir)
-        with pytest.raises(Exception):
+        with pytest.raises(PzV2Error):
             getattr(s.snp, method)()
 
     @pytest.mark.parametrize("method", ["ad", "dp"])
     def test_mt_methods_raise_on_empty(self, sample_dir, method):
         s = SingletSample(sample_dir)
-        with pytest.raises(Exception):
+        with pytest.raises(PzV2Error):
             getattr(s.mt, method)()
 
     def test_nonhost_missing_json_returns_none(self, sample_dir):

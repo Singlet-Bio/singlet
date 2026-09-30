@@ -29,9 +29,11 @@ def _make_cca_adata(n_cells=100, n_genes=200, n_batches=2):
         # Each batch has shared structure + batch-specific noise
         loadings = rng.standard_normal((n_cells_per_batch, latent_dim))
         batch_effect = rng.standard_normal((1, n_genes)) * 2.0
-        X_batch = loadings @ shared_factors + batch_effect + rng.standard_normal(
-            (n_cells_per_batch, n_genes)
-        ) * 0.5
+        X_batch = (
+            loadings @ shared_factors
+            + batch_effect
+            + rng.standard_normal((n_cells_per_batch, n_genes)) * 0.5
+        )
         # Make non-negative (like count data)
         X_batch = np.abs(X_batch)
         all_X.append(X_batch)
@@ -124,9 +126,7 @@ class TestCCA:
         cca(adata1, batch_key="batch", random_state=42)
         cca(adata2, batch_key="batch", random_state=42)
 
-        np.testing.assert_allclose(
-            adata1.obsm["X_cca"], adata2.obsm["X_cca"]
-        )
+        np.testing.assert_allclose(adata1.obsm["X_cca"], adata2.obsm["X_cca"])
 
     def test_stores_uns(self):
         """adata.uns['cca'] has params dict."""
@@ -163,16 +163,13 @@ class TestCCA:
         """Works with sparse X matrix."""
         import anndata as ad
 
-        rng = np.random.default_rng(7)
         n_cells, n_genes = 100, 200
 
         X = sp.random(n_cells, n_genes, density=0.3, format="csr", random_state=7)
         adata = ad.AnnData(X=X)
         adata.obs_names = pd.Index([f"cell_{i}" for i in range(n_cells)])
         adata.var_names = pd.Index([f"gene_{i}" for i in range(n_genes)])
-        adata.obs["batch"] = pd.Categorical(
-            ["A"] * (n_cells // 2) + ["B"] * (n_cells // 2)
-        )
+        adata.obs["batch"] = pd.Categorical(["A"] * (n_cells // 2) + ["B"] * (n_cells // 2))
 
         cca(adata, batch_key="batch", n_components=10)
         assert "X_cca" in adata.obsm

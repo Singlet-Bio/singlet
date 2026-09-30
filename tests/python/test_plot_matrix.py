@@ -35,9 +35,7 @@ def test_matrixplot_show_false():
 
 def test_matrixplot_n_genes():
     adata = _make_de_adata()
-    ax = singlet.rank_genes_groups_matrixplot(
-        adata, groupby="group", n_genes=3, show=False
-    )
+    ax = singlet.rank_genes_groups_matrixplot(adata, groupby="group", n_genes=3, show=False)
     assert ax is not None
 
 

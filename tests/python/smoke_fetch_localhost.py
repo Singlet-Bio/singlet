@@ -11,6 +11,7 @@ Runs offline. No credentials required.
 from __future__ import annotations
 
 import http.server
+import json
 import os
 import socketserver
 import tempfile
@@ -18,7 +19,6 @@ import threading
 from pathlib import Path
 
 from singlet.manifest_gen import generate_manifest
-import json
 
 
 def _serve(root: Path):
@@ -64,6 +64,7 @@ def main() -> int:
         try:
             # 3. fetch()
             from singlet import fetch
+
             local = fetch("TEST001", cache_dir=cache_root, base_url=base)
             print(f"[fetch] downloaded to {local}")
             assert (local / "manifest.json").exists()
