@@ -103,6 +103,39 @@ class TestFindBinary:
         with pytest.raises(PipelineError, match="locate the singlet binary"):
             runner._find_binary(tmp_path / "does_not_exist")
 
+    def test_python_console_script_on_path_is_skipped(self, tmp_path, monkeypatch):
+        """The deprecated `singlet` MCP console script must not shadow the binary."""
+        from singlet.pipeline import _binary as binary_mod
+
+        bindir = tmp_path / "bin"
+        bindir.mkdir()
+        _make_fake_binary(
+            bindir / "singlet",
+            "#!/usr/bin/python3\n# -*- coding: utf-8 -*-\nimport sys\n"
+            "from singlet.mcp.__main__ import deprecated_main\n",
+        )
+        monkeypatch.delenv("SINGLET_BINARY", raising=False)
+        monkeypatch.setenv("PATH", str(bindir))
+        monkeypatch.setattr(binary_mod, "__file__", str(tmp_path / "fake_pkg" / "x.py"))
+        with pytest.raises(PipelineError, match="locate the singlet binary"):
+            runner._find_binary()
+
+        # A native-looking singlet-pipeline next to it is picked up first.
+        native = _make_fake_binary(bindir / "singlet-pipeline", "#!/bin/sh\nexit 0\n")
+        assert runner._find_binary() == native.resolve()
+
+    def test_non_python_singlet_on_path_is_used(self, tmp_path, monkeypatch):
+        from singlet.pipeline import _binary as binary_mod
+
+        bindir = tmp_path / "bin"
+        bindir.mkdir()
+        native = _make_fake_binary(bindir / "singlet")
+        monkeypatch.delenv("SINGLET_BINARY", raising=False)
+        monkeypatch.setenv("PATH", str(bindir))
+        monkeypatch.setattr(binary_mod, "__file__", str(tmp_path / "fake_pkg" / "x.py"))
+        assert runner._find_binary() == native.resolve()
+        assert binary_mod._is_python_script(tmp_path / "missing") is False
+
 
 # --------------------------------------------------------------------------
 # Reference resolution

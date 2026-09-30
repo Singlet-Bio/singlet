@@ -13,10 +13,24 @@ project = "singlet"
 author = "Zach DeBruine"
 copyright = "2026, Zach DeBruine"
 
-try:
-    release = importlib.metadata.version("singlet")
-except importlib.metadata.PackageNotFoundError:
-    release = "1.0.0"
+# The distribution is "singlet-bio" ("singlet" on PyPI is an unrelated
+# project); "singlet" covers installs made before the rename.
+release = None
+for _dist in ("singlet-bio", "singlet"):
+    try:
+        release = importlib.metadata.version(_dist)
+        break
+    except importlib.metadata.PackageNotFoundError:
+        continue
+if release is None:
+    # Building from a checkout without installing: read the version the
+    # package itself declares rather than a hard-coded (stale) number.
+    import re
+
+    _init = os.path.join(os.path.dirname(__file__), "..", "python", "singlet", "__init__.py")
+    with open(_init, encoding="utf-8") as _fh:
+        _match = re.search(r'^__version__ = "([^"]+)"', _fh.read(), re.MULTILINE)
+    release = _match.group(1) if _match else "unknown"
 version = release
 
 extensions = [
@@ -44,7 +58,7 @@ autodoc_default_options = {
 autodoc_member_order = "bysource"
 
 # GPU (`singlet.gpu`), PyTorch (`singlet.torch`) and MCP (`singlet.mcp`)
-# are opt-in extras (`pip install singlet[gpu|torch|mcp]`) and are not
+# are opt-in extras (`pip install singlet-bio[gpu|torch|mcp]`) and are not
 # imported by `import singlet` itself, so the docs build's base install
 # doesn't have them. Individual analysis functions in the base package also
 # lazily import third-party algorithm packages (leidenalg, umap-learn,

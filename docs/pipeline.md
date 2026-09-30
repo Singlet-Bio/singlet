@@ -8,13 +8,24 @@ The same entry point is available from Python and the command line.
 ## Install
 
 ```bash
-pip install singlet
+pip install "singlet-bio @ git+https://github.com/Singlet-Bio/singlet"
 ```
 
-The Python wrapper invokes the `singlet` C++ binary. Build it once with
-`cmake --build singlet/build` (or `pip install singlet[pipeline]` once
-the wheel ships a pre-built binary) and either place it on `$PATH`,
-set `$SINGLET_BINARY`, or pass `binary=` to `singlet.pipeline.run`.
+The Python wrapper invokes the C++ pipeline binary, which is **not** included
+in the Python package (there is no `singlet-bio[pipeline]` extra). Build it once:
+
+```bash
+cmake -B build -DSINGLET_BUILD_PIPELINE=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc)
+# Binary: build/src/pipeline/singlet
+```
+
+The wrapper looks for the binary in this order: the `binary=` argument,
+`$SINGLET_BINARY`, `singlet-pipeline` on `$PATH`, then a `singlet` on `$PATH`
+that is not a Python script, then the repository's `build/` directories. The
+Python package installs a deprecated `singlet` command (an alias of the MCP
+server, `singlet-mcp`); the wrapper skips it, so point `$SINGLET_BINARY` at
+the binary or install it on `$PATH` as `singlet-pipeline`.
 
 You will also need a reference bundle. Either set `$SINGLET_REF_BASE`
 to a directory containing `GRCh38-2024-A/` (and `GRCm39-2024-A/` for
@@ -122,6 +133,24 @@ All reader methods are lazy: nothing is decoded until you request a
 specific block, and matrices come back as `scipy.sparse.csc_matrix`
 ready for downstream analysis.
 
+## Packing a study into a `.singlet` bundle
+
+Finished samples of one GEO series are packed into the per-study bundle that
+`singlet.load()` reads:
+
+```bash
+python -m singlet.bundle pack --gse GSE138867 \
+    --results /path/to/results --catalog /path/to/processing_catalog.parquet \
+    --out /path/to/out/GSE138867.singlet
+```
+
+The packer refuses hollow samples: a sample whose `summary.json` reports
+called cells while its `exon_counts.1pz` is missing, a 0×0 stub, or all zeros
+is left out with a warning and recorded in `manifest.json` under
+`excluded_samples` (`{"gsm_id", "reason"}` records). Pass `--strict`
+(`strict=True` in `singlet.pack_gse`) to fail instead. A study whose samples
+are all hollow is never packed.
+
 ## What gets written
 
 For a full reference of every file the pipeline produces, see
@@ -143,6 +172,11 @@ Optional siblings appear when their feature layer is enabled:
 `nonhost.json` + `nonhost_species.1pz`, `guides.1pz`,
 `antibodies.1pz`, `vdj_gene_usage.1pz`, `donor_*`,
 `ambient_profile.npy`, `splice_events.tsv`.
+
+The binary's `--output-format mtx|h5ad|loom` writes those formats *instead
+of* the `.1pz` count matrices, so such runs cannot be packed into `.singlet`
+bundles (the packer would exclude them as hollow). The Python package reads
+and writes `.h5ad`, `.zarr` and MTX; it has no loom support.
 
 ## Errors
 

@@ -33,9 +33,14 @@ matrix, a table, a JSON sidecar or a log file. Use
 }
 \examples{
 \dontrun{
-het <- singlet_read("GSE149298.singlet", "GSM4495571", "mt_heteroplasmy")
-donors <- singlet_read("GSE149298.singlet", "GSM4495571", "donor_assignments")
-bugs <- singlet_read("GSE149298.singlet", "GSM4495571", "nonhost_species")
+path <- singlet_download("GSE138867")
+calls <- singlet_read(path, "GSM4120733", "cell_calls")
+qc <- singlet_read(path, "GSM4120733", "summary")
+
+# Not every bundle has every modality: check first
+if (singlet_has(path, "mt_heteroplasmy", "GSM4120733")) {
+    het <- singlet_read(path, "GSM4120733", "mt_heteroplasmy")
+}
 }
 
 }

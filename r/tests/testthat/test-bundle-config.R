@@ -2,16 +2,49 @@
 # Offline tests for the user-facing API plumbing (no network required).
 
 test_that("accession detection recognizes GSE/GSM and rejects paths", {
-    expect_true(singlet:::.is_accession("GSE149298"))
-    expect_true(singlet:::.is_accession("GSM4495744"))
-    expect_false(singlet:::.is_accession("/data/GSE149298.singlet"))
+    expect_true(singlet:::.is_accession("GSE138867"))
+    expect_true(singlet:::.is_accession("GSM4120733"))
+    expect_false(singlet:::.is_accession("/data/GSE138867.singlet"))
     expect_false(singlet:::.is_accession("not_an_accession"))
     expect_false(singlet:::.is_accession("GSE"))
 })
 
-test_that(".gse_of passes GSE through and rejects GSM", {
-    expect_identical(singlet:::.gse_of("GSE149298"), "GSE149298")
-    expect_error(singlet:::.gse_of("GSM4495744"), "per Series")
+test_that(".gse_of passes GSE through and rejects non-accessions", {
+    expect_identical(singlet:::.gse_of("GSE138867"), "GSE138867")
+    expect_error(singlet:::.gse_of("not_an_accession"), "not a GEO accession")
+})
+
+test_that("accessions are normalised for case and whitespace", {
+    expect_identical(singlet:::.as_accession("GSE138867"), "GSE138867")
+    expect_identical(singlet:::.as_accession(" gsm4120733 "), "GSM4120733")
+    expect_true(is.na(singlet:::.as_accession("/data/GSE138867.singlet")))
+    expect_true(is.na(singlet:::.as_accession("GSE")))
+})
+
+test_that("bundle URLs follow <base>/data/<GSE>/<GSE>.singlet", {
+    old <- Sys.getenv("SINGLET_DATA_BASE", unset = NA)
+    on.exit({
+        if (is.na(old)) Sys.unsetenv("SINGLET_DATA_BASE")
+        else Sys.setenv(SINGLET_DATA_BASE = old)
+    }, add = TRUE)
+
+    Sys.unsetenv("SINGLET_DATA_BASE")
+    expect_identical(
+        singlet:::.singlet_bundle_url("GSE138867"),
+        "https://data.singlet.bio/data/GSE138867/GSE138867.singlet")
+
+    # The host alone (Python convention) and the old ".../data" form agree.
+    for (base in c("https://example.test", "https://example.test/",
+                   "https://example.test/data", "https://example.test/data/")) {
+        Sys.setenv(SINGLET_DATA_BASE = base)
+        expect_identical(singlet:::.singlet_bundle_url("GSE1"),
+                         "https://example.test/data/GSE1/GSE1.singlet",
+                         info = base)
+    }
+})
+
+test_that("download rejects input that is not an accession", {
+    expect_error(download("definitely_not_an_accession"), "not a GEO accession")
 })
 
 test_that("cache dir honors SINGLET_CACHE_DIR and explicit arg", {

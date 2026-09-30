@@ -1,8 +1,8 @@
 ---
-title: "Quickstart: Reading Singlet Pipeline Outputs"
+title: "Reading Raw Singlet Pipeline Outputs"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Quickstart: Reading Singlet Pipeline Outputs}
+  %\VignetteIndexEntry{Reading Raw Singlet Pipeline Outputs}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -14,6 +14,25 @@ knitr::opts_chunk$set(
   eval = FALSE
 )
 ```
+
+> **This vignette is not run.** It is about directories written by running
+> the singlet pipeline yourself, and its paths
+> (`quant/scrna/GSE174/GSE174399/GSM5293863`) point at such a run on the
+> authors' cluster; substitute your own. To use data from the public atlas,
+> start with the *Getting Started* vignette (`vignette("singlet")`) and
+> `singlet_load()`. The `read_1pz()` and `read_singlet_dir()` sections also
+> work on any `samples/<GSM>/` folder unzipped from a downloaded bundle:
+>
+> ```r
+> path <- singlet::singlet_download("GSE138867")
+> exdir <- tempfile()
+> utils::unzip(path, exdir = exdir)
+> dd <- singlet::read_singlet_dir(file.path(exdir, "samples", "GSM4120733"))
+> ```
+>
+> Bundles ship the per-feature `exon_counts` and `intron_counts` matrices
+> but not the per-gene `spliced`/`gene_counts` ones, so `as_sce()` and
+> `as_seurat()` need a full pipeline directory.
 
 `singlet` reads the per-sample output directories produced by the
 [singlet single-cell reprocessing pipeline](https://github.com/Singlet-Bio/singlet)
@@ -28,8 +47,8 @@ Seurat).
 ## Install
 
 ```{r install}
-# From GitHub
-install.packages("remotes")
+install.packages(c("remotes", "BiocManager"))
+BiocManager::install(c("SingleCellExperiment", "SummarizedExperiment", "S4Vectors"))
 remotes::install_github("Singlet-Bio/singlet", subdir = "r")
 ```
 

@@ -1,11 +1,14 @@
 # singlet
 
-A unified single-cell genomics library: process, load, and analyze single-cell data at scale.
+A single-cell genomics toolkit: process, load, and analyze public single-cell
+RNA-seq data. It is the client for the [singlet.bio](https://singlet.bio)
+catalog of re-processed GEO studies.
 
-**One package. Three languages. Zero friction.**
+**One repository. Three languages.**
 
-```python
-pip install singlet                    # Python
+```bash
+# Python — from GitHub until the first PyPI release (then: pip install singlet-bio)
+pip install "singlet-bio @ git+https://github.com/Singlet-Bio/singlet"
 ```
 ```r
 remotes::install_github("Singlet-Bio/singlet", subdir = "r")  # R
@@ -14,76 +17,73 @@ remotes::install_github("Singlet-Bio/singlet", subdir = "r")  # R
 find_package(Singlet REQUIRED)         # C++
 ```
 
+The PyPI distribution is named **`singlet-bio`** (`singlet` on PyPI is an
+unrelated project); the import name is still `singlet`. Once the first
+release is published, the install is `pip install singlet-bio`.
+
+Installing the Python package from source compiles a small C++ extension (the
+`.1pz` codec), so you need a **C++17 compiler** and **zstd** headers + library
+(`apt install build-essential libzstd-dev`, `brew install zstd`, or
+`conda install -c conda-forge zstd`). Linux and macOS are supported; Windows
+users should use WSL.
+
 ## What singlet does
 
 | Layer | Capability |
 |-------|-----------|
-| **Format** | .1pz sparse matrix codec (13x compression, 4000+ MB/s decode) |
-| **Pipeline** | Raw SRA reads → aligned, deduplicated, annotated .1pz files |
-| **Analysis** | GPU-accelerated PCA, NMF, kNN, Leiden, UMAP, DE, integration |
-| **Atlas** | Browse and load 4,600+ processed single-cell samples |
-| **PyTorch** | Zero-copy sparse DataLoaders for ML training |
+| **Catalog** | Search and load re-processed GEO studies from singlet.bio as AnnData — see the site for current numbers |
+| **Format** | `.singlet` per-study bundles and the `.1pz` sparse-matrix codec |
+| **Pipeline** | Raw SRA reads → aligned, deduplicated, annotated count matrices (C++ binary) |
+| **Analysis** | PCA, neighbors, Leiden, UMAP, DE, batch correction — no scanpy required |
+| **PyTorch** | Sparse DataLoaders over `.singlet` files for ML training |
 
 ## Quick Start
 
 ```python
 import singlet
 
-# Browse the atlas
-singlet.catalog()
-singlet.info("GSE264667")
+# Find studies in plain English (live search) → GSE accessions
+singlet.find("human PBMC 10x")
 
-# Load a sample (returns AnnData)
-adata = singlet.load("GSM1234567")
+# Load a study → AnnData (free download from data.singlet.bio, cached)
+adata = singlet.load("GSE138867")
 
-# Explore your data
-singlet.describe(adata)           # quick summary stats
+# Load one sample of it (downloads the parent study, keeps this sample's cells)
+pbmc1 = singlet.load("GSM4120733")
+
+# Load several studies into ONE AnnData (obs["dataset"] records each study)
+adata = singlet.load(["GSE138867", "GSE146974"])
+
+# Subset genes by symbol or Ensembl id (var_names stay Ensembl ids)
+tcells = singlet.load("GSE138867", genes=["CD3E", "CD8A", "MS4A1"])
+
+# Explore
+singlet.describe(adata)                     # quick summary stats
 
 # Preprocessing (no scanpy required)
 singlet.filter_cells(adata, min_genes=200, inplace=True)
 singlet.filter_genes(adata, min_cells=3, inplace=True)
-singlet.normalize(adata)          # library-size + log1p
-singlet.highly_variable_genes(adata)  # feature selection
-singlet.scale(adata)              # z-score normalization
+singlet.normalize(adata)                    # library-size + log1p
+singlet.highly_variable_genes(adata)        # feature selection
 
-# Analysis pipeline (built-in, no scanpy needed)
-singlet.pca(adata)                # dimensionality reduction
-singlet.harmony(adata, "batch")   # batch correction (optional)
-singlet.neighbors(adata)          # kNN graph
-singlet.leiden(adata)             # clustering
-singlet.umap(adata)               # 2D visualization
+# Analysis
+singlet.pca(adata)                          # dimensionality reduction
+singlet.harmony(adata, "dataset")           # batch-correct across the two studies
+singlet.neighbors(adata, use_rep="X_pca_harmony")
+singlet.leiden(adata)                       # clustering
+singlet.umap(adata)                         # 2D embedding
 
-# Differential expression & gene scoring
-singlet.rank_genes_groups(adata, "leiden")  # marker genes (BH-corrected)
-singlet.score_genes(adata, ["MCM5", "PCNA"], score_name="S_score")
-
-# Visualization
+# Differential expression & visualization (plotting needs matplotlib)
+singlet.rank_genes_groups(adata, "leiden")
 singlet.plot_umap(adata, color="leiden")
-singlet.plot_violin(adata, ["n_genes", "total_counts"], groupby="leiden")
 
-# Cell type annotation (free, local — no API key needed)
-singlet.annotate(adata, inplace=True)  # stores in adata.obs
-H = singlet.project(adata)             # NMF gene program loadings
-
-# File I/O
-adata = singlet.read_1pz("counts.1pz")
-singlet.write_1pz(adata, "output.1pz")
-
-# GPU analysis (pip install singlet[gpu])
-from singlet import gpu
-from singlet.gpu import preprocess as sgpp
-sgpp.normalize_total(adata)
-sgpp.log1p(adata)
-gpu.reduce.pca(adata, n_components=50)
-gpu.pp.neighbors(adata)
-gpu.tools.leiden(adata)
-gpu.tools.umap(adata)
-
-# PyTorch training (pip install singlet[torch])
-from singlet.torch import OnePZDataset, DataLoader
-dataset = OnePZDataset("counts.1pz")
-loader = DataLoader(dataset, batch_size=512)
+# Export
+singlet.to_h5ad(adata, "pbmc.h5ad")         # also to_zarr, to_mtx
 ```
+
+Samples whose count matrix is empty are skipped with a warning and listed in
+`adata.uns["skipped_samples"]`. Loom export is not supported from Python; use
+`.h5ad`, `.zarr` or 10x MTX.
 
 ## Repository Layout
 
@@ -93,15 +93,15 @@ singlet/
 │   ├── pz/              .1pz format codec
 │   ├── fq/              .1fq encoded FASTQ codec
 │   ├── pileup/          Streaming BAM pileup engine
-│   └── gpu/             CUDA analysis kernels
+│   └── gpu/             CUDA analysis kernels (experimental)
 ├── python/singlet/      Python package source
 │   ├── io/              Format I/O (.1pz, h5ad, zarr)
 │   ├── preprocessing/   Pipeline QC & preprocessing
 │   ├── torch/           PyTorch integration
-│   └── gpu/             GPU analysis wrappers
-├── r/                   R package (CRAN-ready)
+│   └── gpu/             GPU analysis wrappers (experimental)
+├── r/                   R package
 ├── src/                 Compiled sources (pipeline binary, STAR aligner, GPU kernels)
-├── tests/               Unified test suite (Python + C++ + R)
+├── tests/               Test suites (Python + C++ + R)
 ├── notebooks/           Jupyter tutorial notebooks
 ├── docs/                User documentation
 └── papers/              Scientific manuscripts
@@ -109,31 +109,47 @@ singlet/
 
 ## Installation
 
-See [docs/installation.md](docs/installation.md) for full details.
+See [docs/installation.md](docs/installation.md) for full details. The Python
+distribution is `singlet-bio` (after the first PyPI release:
+`pip install singlet-bio`); the import name is `singlet`.
 
 | Install | Command |
 |---------|---------|
-| Python (core) | `pip install singlet` |
-| Python + GPU | `pip install singlet[gpu]` |
-| Python + PyTorch | `pip install singlet[torch]` |
-| Python (everything) | `pip install singlet[all]` |
+| Python (core) | `pip install "singlet-bio @ git+https://github.com/Singlet-Bio/singlet"` |
+| Python + analysis extras | `pip install "singlet-bio[analysis] @ git+https://github.com/Singlet-Bio/singlet"` |
+| Python + PyTorch | `pip install "singlet-bio[torch] @ git+https://github.com/Singlet-Bio/singlet"` |
+| Python + local MCP server | `pip install "singlet-bio[mcp] @ git+https://github.com/Singlet-Bio/singlet"` |
 | R | `remotes::install_github("Singlet-Bio/singlet", subdir = "r")` |
 | C++ (CMake) | `find_package(Singlet COMPONENTS pz fq pileup)` |
 | Pipeline binary | `cmake -B build -DSINGLET_BUILD_PIPELINE=ON` |
+
+The GPU module (`singlet.gpu`) is experimental: `singlet-bio[gpu]` only installs
+CuPy, and the CUDA extension it needs must be built from source on a CUDA 12
+machine.
+
+## MCP servers
+
+There are two, and they are different:
+
+- **Hosted:** `https://singlet.bio/mcp` — the live catalog, maintained by the
+  site. Point an MCP client at the URL; nothing to install.
+- **Local:** `singlet-mcp` (from `singlet-bio[mcp]`) — 12 tools over the offline
+  catalog snapshot bundled with the package plus live search. The old command
+  name `singlet` still starts it but is deprecated, because `singlet` is also
+  the pipeline binary's name.
 
 ## Notebooks
 
 | Notebook | Topic |
 |----------|-------|
 | [01_load_and_explore](notebooks/01_load_and_explore.ipynb) | Full analysis pipeline |
-| [02_gpu_analysis](notebooks/02_gpu_analysis.ipynb) | GPU-accelerated workflows |
 | [quickstart](notebooks/quickstart.ipynb) | Catalog API |
-| [gene_counting](notebooks/gene_counting.ipynb) | STARsolo equivalence (r=0.9995) |
+| [gene_counting](notebooks/gene_counting.ipynb) | STARsolo equivalence |
 | [1pz_format](notebooks/1pz_format.ipynb) | Format internals |
 | [doublet_detection](notebooks/doublet_detection.ipynb) | UMI-based doublet detection |
 | [rna_velocity](notebooks/rna_velocity.ipynb) | Spliced/unspliced for scVelo |
 | [cell_calling](notebooks/cell_calling.ipynb) | EmptyDrops deviance testing |
-| + 10 more | QC, ancestry, sex, splicing, saturation, etc. |
+| + more | QC, ancestry, sex, splicing, saturation, etc. |
 
 ## Building from Source
 
@@ -144,16 +160,14 @@ export CONDA_PREFIX=/path/to/conda/env  # must have htslib, ncbi-vdb
 export PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$PKG_CONFIG_PATH
 cmake -B build -DSINGLET_BUILD_PIPELINE=ON -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
+# Binary: build/src/pipeline/singlet — set $SINGLET_BINARY to it (or put it on
+# $PATH as singlet-pipeline) for singlet.run_pipeline / singlet-process.
 
-# GPU library (requires CUDA 12+)
-cmake -B build -DSINGLET_BUILD_GPU=ON -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j$(nproc)
-
-# Run C++ tests (100 unit tests — ~72s)
+# C++ tests
 cmake -B build -DSINGLET_BUILD_TESTS=ON
 cmake --build build -j$(nproc) && ctest --test-dir build -j$(nproc)
 
-# Run Python tests (618 tests)
+# Python tests
 pip install -e ".[dev]"
 pytest tests/python/
 
@@ -163,4 +177,5 @@ make lint
 
 ## License
 
-MIT (core library) — GPU kernels are GPL-2.0. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE). Vendored STAR sources under
+`include/singlet/star/` keep their own licenses.

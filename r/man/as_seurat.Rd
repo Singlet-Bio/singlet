@@ -32,7 +32,8 @@ GEO metadata goes into ``obj@misc$singlet``.
 }
 \examples{
 \dontrun{
-obj <- as_seurat("quant/scrna/GSE174/GSE174399/GSM5293863")
+# A directory the singlet pipeline wrote for one sample
+obj <- as_seurat("pipeline_out/GSE138867/GSM4120733")
 obj
 obj@misc$singlet[["gsm_id"]]
 }

@@ -37,13 +37,14 @@ lost. This is the single-sample counterpart to
 }
 \examples{
 \dontrun{
-sce <- singlet_raw_counts("GSE149298.singlet", "GSM4495571")
+path <- singlet_download("GSE138867")
+sce <- singlet_raw_counts(path, "GSM4120733")
 assayNames(sce)
 identical(sum(assay(sce, "counts")),
           sum(assay(sce, "spliced")) + sum(assay(sce, "unspliced")))
 
 # keep the native exon/intron feature axis
-feat <- singlet_raw_counts("GSE149298.singlet", "GSM4495571", gene_level = FALSE)
+feat <- singlet_raw_counts(path, "GSM4120733", gene_level = FALSE)
 table(rowData(feat)$feature_kind)
 }
 

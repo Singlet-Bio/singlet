@@ -7,6 +7,7 @@
 // Exports: COO→CSC conversion, mt heteroplasmy, donor demux, matrix I/O.
 // All operations are parallelized where safe.
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -15,8 +16,10 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <mutex>
 #include <numeric>
 #include <string>
+#include <system_error>
 #include <thread>
 #include <vector>
 
@@ -209,6 +212,7 @@ struct ExportStats {
     int n_write_threads = 0;
     uint64_t n_called_cells = 0;  // called cells (0 when cell calling ran and found none)
     int exit_code = 0;            // 0=success, 4=zero_cells
+    std::vector<std::string> failed_writes;  // .1pz outputs that could not be written
 };
 
 /// Export all pileup results to disk.
@@ -895,13 +899,29 @@ inline ExportStats export_results(const PileupEngine& engine,
         });
     }
 
+    // .1pz outputs whose write failed, named relative to out_prefix
+    // ("exon_counts.1pz", "donor/snp_ad.1pz"). Appended to from several writer
+    // threads, hence the mutex. Any entry marks the run fail_export_matrix in
+    // summary.json (pack_gse then excludes the sample from its bundle), and no
+    // 0x0 stub is written in its place further down: a silent stub is how
+    // samples with cells but no data reached bundles.
+    std::mutex failed_writes_mu;
+    std::vector<std::string> failed_writes;
+    auto record_failed_write = [&](const std::string& name) {
+        std::lock_guard<std::mutex> lock(failed_writes_mu);
+        failed_writes.push_back(name);
+        std::cerr << "[export] ERROR: failed to write "
+                  << out_prefix << "/" << name << "\n";
+    };
+
     // Write helper — uses atomic write-to-tmp-then-rename for crash safety
     auto write_matrix = [&](const std::string& prefix, auto& csc,
                             const std::vector<std::string>& feature_names) {
         if (use_1pz) {
-            atomic_write_1pz(out_prefix + "/" + prefix + ".1pz",
-                csc.nrows, csc.ncols, csc.indptr, csc.indices, csc.data,
-                feature_names, barcodes, 3, 1024, 4, export_cfg.user_meta);
+            if (!atomic_write_1pz(out_prefix + "/" + prefix + ".1pz",
+                    csc.nrows, csc.ncols, csc.indptr, csc.indices, csc.data,
+                    feature_names, barcodes, 3, 1024, 4, export_cfg.user_meta))
+                record_failed_write(prefix + ".1pz");
         } else if (!use_h5ad) {
             write_mtx(out_prefix + "/" + prefix + ".mtx.gz",
                       csc.nrows, csc.ncols, csc.indptr, csc.indices, csc.data);
@@ -1100,11 +1120,12 @@ inline ExportStats export_results(const PileupEngine& engine,
                 auto psi = compute_psi(sj_csc, engine.sj_names());
                 if (!psi.data.empty()) {
                     if (use_1pz) {
-                        pz::write_1pz(out_prefix + "/splice_psi.1pz",
+                        if (!atomic_write_1pz(out_prefix + "/splice_psi.1pz",
                                       psi.nrows, psi.ncols,
                                       psi.indptr, psi.indices, psi.data,
                                       engine.sj_names(), barcodes,
-                                      3, 1024, 4, export_cfg.user_meta);
+                                      3, 1024, 4, export_cfg.user_meta))
+                            record_failed_write("splice_psi.1pz");
                     } else {
                         write_mtx(out_prefix + "/splice_psi.mtx",
                                   psi.nrows, psi.ncols,
@@ -1156,10 +1177,11 @@ inline ExportStats export_results(const PileupEngine& engine,
                     if (v > 1.f) v = 1.f;
                     scaled[i] = static_cast<uint16_t>(v * 10000.f + 0.5f);
                 }
-                pz::write_1pz(out_prefix + "/mt_heteroplasmy.1pz",
-                    mt_het.n_variants, mt_het.n_cells,
-                    mt_het.indptr, mt_het.indices, scaled, het_names, barcodes,
-                    3, 1024, 4, export_cfg.user_meta);
+                if (!atomic_write_1pz(out_prefix + "/mt_heteroplasmy.1pz",
+                        mt_het.n_variants, mt_het.n_cells,
+                        mt_het.indptr, mt_het.indices, scaled, het_names, barcodes,
+                        3, 1024, 4, export_cfg.user_meta))
+                    record_failed_write("mt_heteroplasmy.1pz");
             } else {
                 write_mtx(out_prefix + "/mt_heteroplasmy.mtx",
                           mt_het.n_variants, mt_het.n_cells,
@@ -1172,6 +1194,7 @@ inline ExportStats export_results(const PileupEngine& engine,
 
     for (auto& t : write_threads) t.join();
     result.n_write_threads = static_cast<int>(write_threads.size());
+    result.failed_writes = failed_writes;  // writer threads have all joined
 
     // G6 stats declared here so they are visible to the summary block below
     mt::MtDonorOutputStats g6_stats;
@@ -1258,6 +1281,11 @@ inline ExportStats export_results(const PileupEngine& engine,
                               total_umis);
         std::cerr << "[export] Provenance: " << export_cfg.out_prefix << "/provenance.json\n";
     }
+
+    // Set in the summary block when a .1pz run called cells but
+    // exon_counts.1pz is missing; the standardization pass then leaves that
+    // stub out.
+    bool skip_exon_stub = false;
 
     // ── Summary JSON ── (always written; VAL2-compatible structured output)
     {
@@ -1443,6 +1471,44 @@ inline ExportStats export_results(const PileupEngine& engine,
         std::string assay = meta_get("modality");
         if (assay.empty()) assay = "scrna";
         summary.status = classify_outcome(summary, assay);
+        // Hollow-sample guard. When cells were called in a .1pz run the count
+        // matrix must be on disk; otherwise the 0x0 exon_counts.1pz stub
+        // written below would be packed as a sample that claims cells but
+        // holds no data. A failed .1pz write, or a .1pz run that left no
+        // exon_counts.1pz, is recorded as status=fail_export_matrix plus a
+        // "write_failed:<file>" / "exon_counts_1pz_missing" warning. pack_gse
+        // (python/singlet/bundle.py, _hollow_reason) reads summary.json and
+        // leaves any such sample out of the bundle, listing it under
+        // manifest.json "excluded_samples".
+        //
+        // --output-format mtx|h5ad|loom writes no .1pz by design, so a
+        // missing exon_counts.1pz there is not a failure: the counts are in
+        // the requested format. It gets a "no_1pz_output_format" warning and
+        // keeps the standard 0x0 stub (validate_output requires the file);
+        // pack_gse refuses that stub as hollow because cells were called.
+        {
+            std::error_code exon_ec;
+            const bool exon_1pz_present =
+                std::filesystem::exists(out_prefix + "/exon_counts.1pz", exon_ec);
+            if (result.n_called_cells > 0 && !exon_1pz_present) {
+                if (use_1pz) {
+                    skip_exon_stub = true;
+                    summary.warnings.push_back("exon_counts_1pz_missing");
+                } else {
+                    summary.warnings.push_back("no_1pz_output_format");
+                }
+            }
+            for (const auto& name : failed_writes)
+                summary.warnings.push_back("write_failed:" + name);
+            if (skip_exon_stub || !failed_writes.empty()) {
+                summary.status = "fail_export_matrix";
+                std::cerr << "[export] ERROR: count matrices incomplete ("
+                          << failed_writes.size() << " failed .1pz write(s)"
+                          << (skip_exon_stub ? ", no exon_counts.1pz" : "")
+                          << " with " << result.n_called_cells
+                          << " called cells); summary.json status=fail_export_matrix\n";
+            }
+        }
         if (summary.mapping_rate > 0.0 && summary.mapping_rate < 0.50)
             summary.warnings.push_back("low_mapping_rate");
         if (summary.estimated_cells > 0 && summary.estimated_cells < 10)
@@ -1501,6 +1567,15 @@ inline ExportStats export_results(const PileupEngine& engine,
             }
         };
         auto write_1pz_stub = [&](const std::string& filename) {
+            // Never stand a 0x0 stub in for a matrix that failed to write, or
+            // for exon_counts when a .1pz run called cells but left no matrix
+            // (see the hollow-sample guard in the summary block): the stub
+            // would look like data to anything that does not read summary.json.
+            if (std::find(failed_writes.begin(), failed_writes.end(), filename)
+                    != failed_writes.end())
+                return;
+            if (skip_exon_stub && filename == "exon_counts.1pz")
+                return;
             std::string path = out_prefix + "/" + filename;
             std::error_code ec;
             if (!std::filesystem::exists(path, ec)) {

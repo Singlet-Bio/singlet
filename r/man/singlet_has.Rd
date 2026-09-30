@@ -23,7 +23,8 @@ Is a modality present for a sample?
 }
 \examples{
 \dontrun{
-singlet_has("GSE149298.singlet", "donor_assignments")
+path <- singlet_download("GSE138867")
+singlet_has(path, "donor_assignments")
 }
 
 }

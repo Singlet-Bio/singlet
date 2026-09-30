@@ -24,7 +24,12 @@ Read a single .1pz file into a dgCMatrix.
 }
 \examples{
 \dontrun{
-mat <- read_1pz("quant/scrna/GSE174/GSE174399/GSM5293863/gene_counts.1pz")
+# Pull one matrix out of a downloaded bundle and read it
+path <- singlet_download("GSE138867")
+exdir <- tempfile()
+member <- "samples/GSM4120733/exon_counts.1pz"
+utils::unzip(path, files = member, exdir = exdir)
+mat <- read_1pz(file.path(exdir, member))
 dim(mat)
 attr(mat, "user_kv")[["gsm_id"]]
 }

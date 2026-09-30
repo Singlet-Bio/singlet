@@ -21,8 +21,9 @@ Usage:
     # Start the server (stdio transport):
     python -m singlet.mcp
 
-    # Or use the entry point:
-    singlet
+    # Or use the console script (the old name `singlet` still works but is
+    # deprecated: it clashes with the C++ pipeline binary):
+    singlet-mcp
 
     # Configure in Claude Desktop's claude_desktop_config.json:
     {
@@ -36,9 +37,13 @@ Usage:
 
 The live tools (search, qc, load, browse) call the public Singlet REST API at
 https://singlet.bio/api (override with $SINGLET_API_BASE). The aggregate tools
-(stats, protocols, quality, tissues, ...) read the bundled catalog parquet.
+(stats, protocols, quality, tissues, ...) read the offline catalog snapshot bundled
+with the package.
 
-Requires: pip install mcp
+This local server is separate from the hosted MCP endpoint at
+https://singlet.bio/mcp, which serves the live catalog and has its own tool set.
+
+Requires: pip install "singlet-bio[mcp]"
 """
 
 from __future__ import annotations
@@ -126,9 +131,12 @@ async def list_tools() -> list[Tool]:
                     },
                     "level": {
                         "type": "string",
-                        "enum": ["gsm", "gse"],
-                        "description": "Accession granularity: 'gsm' (samples, default) or 'gse' (series).",
-                        "default": "gsm",
+                        "enum": ["gse", "gsm"],
+                        "description": (
+                            "Accession granularity: 'gse' (studies, default, as in "
+                            "singlet.find) or 'gsm' (samples)."
+                        ),
+                        "default": "gse",
                     },
                     "limit": {
                         "type": "integer",
@@ -448,7 +456,8 @@ async def _tool_nl_search(args: dict) -> dict:
     query = args.get("query")
     if not query or not str(query).strip():
         return {"error": "query is required"}
-    level = args.get("level", "gsm")
+    # Same default as singlet.find(): studies.
+    level = args.get("level", "gse")
     limit = min(int(args.get("limit", 50)), 500)
 
     payload = _api_get("/nl-search", {"q": query, "level": level, "limit": limit})
@@ -464,7 +473,8 @@ async def _tool_nl_search(args: dict) -> dict:
         "filters": payload.get("filters", payload.get("interpreted", {})),
         "count": len(accessions),
         "accessions": accessions,
-        "load_hint": "singlet.load(accessions)  # → one AnnData",
+        # Each GSE loads a whole study, so the hint loads the top few.
+        "load_hint": "singlet.load(accessions[:3])  # → one AnnData",
     }
 
 
@@ -552,8 +562,9 @@ async def _tool_load(args: dict) -> dict:
         return {"error": f"Sample {gsm_id} not found in atlas"}
 
     gse_id = sample.get("gse_id")
-    data_base = os.environ.get("SINGLET_DATA_BASE", "https://data.singlet.bio").rstrip("/")
-    bundle_url = f"{data_base}/data/{gse_id}/{gse_id}.singlet" if gse_id else None
+    from singlet._loader import _bundle_url
+
+    bundle_url = _bundle_url(gse_id) if gse_id else None
 
     return {
         "gsm_id": gsm_id,

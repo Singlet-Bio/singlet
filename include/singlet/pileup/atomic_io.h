@@ -6,9 +6,12 @@
 // If the process crashes mid-write, no corrupt partial files remain.
 
 #include <cstdio>
+#include <exception>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <string>
+#include <utility>
 
 #include "pz_writer.h"
 
@@ -81,15 +84,25 @@ public:
 
 /// Write a .1pz file atomically: write to .tmp, then rename.
 /// Wraps pz::write_1pz with atomic rename.
+/// Never throws: a writer that reports failure or throws (e.g. a zstd
+/// error) is logged and reported as false, so a caller on a writer thread
+/// cannot take the process down with an uncaught exception.
 /// @return true if write + rename succeeded.
 template <typename... Args>
 inline bool atomic_write_1pz(const std::string& path, Args&&... args) {
     const std::string tmp = path + ".tmp";
-    pz::write_1pz(tmp, std::forward<Args>(args)...);
+    bool wrote = false;
+    try {
+        wrote = pz::write_1pz(tmp, std::forward<Args>(args)...);
+    } catch (const std::exception& e) {
+        std::cerr << "[atomic_io] write_1pz failed for " << path
+                  << ": " << e.what() << "\n";
+        wrote = false;
+    }
     // Check that the file was created and has size > 0
     std::error_code ec;
     auto sz = std::filesystem::file_size(tmp, ec);
-    if (ec || sz == 0) {
+    if (!wrote || ec || sz == 0) {
         std::filesystem::remove(tmp, ec);
         return false;
     }

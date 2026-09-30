@@ -1,54 +1,48 @@
 # SPDX-License-Identifier: MIT
-"""Authentication for token-priced features."""
+"""Retired: authentication for the former token-priced API.
+
+``login()`` configured a key for ``https://api.singlet.bio/v1`` (used by
+``query``/``search`` and NMF serving). That API was never brought into
+service, so it now raises :class:`NotImplementedError`. The only key the
+package uses today is the optional natural-language search key — set it with
+:func:`singlet.set_api_key` or ``$SINGLET_API_KEY``.
+"""
 
 from __future__ import annotations
 
-import os
 from typing import Optional
 
-_API_KEY: Optional[str] = None
-_API_BASE = "https://api.singlet.bio/v1"
+_RETIRED_MSG = (
+    "{name} targeted https://api.singlet.bio/v1, which is not in service. "
+    "Downloads need no key: use singlet.load('GSE…') and singlet.find('…'). "
+    "To raise the natural-language search limit, create a key at "
+    "https://singlet.bio/account and call singlet.set_api_key(key) "
+    "(or set $SINGLET_API_KEY)."
+)
+
+
+def retired(name: str) -> str:
+    """Error message for a function that needed the retired v1 API."""
+    return _RETIRED_MSG.format(name=name)
+
+
+_LOGIN_MSG = (
+    "singlet.login() has been removed: it stored a key for https://api.singlet.bio/v1, "
+    "an API that was never in service, so the key was never used. To fix your "
+    "script, delete the singlet.login(...) line. singlet.load('GSE…'), "
+    "singlet.download() and singlet.open_bundle() need no key. If the key is for "
+    "natural-language search, call singlet.set_api_key(key) instead — or just set "
+    "$SINGLET_API_KEY, which singlet.find() reads on its own."
+)
 
 
 def login(api_key: Optional[str] = None) -> None:
-    """Authenticate for token-priced features.
+    """Removed — raises :class:`NotImplementedError` explaining what to do.
 
-    Parameters
-    ----------
-    api_key : str, optional
-        Your SingletDB API key. If not provided, reads from the
-        ``SINGLET_API_KEY`` environment variable.
-
-    Raises
-    ------
-    ValueError
-        If no API key is provided or found in the environment.
+    ``login()`` used to store a key for the retired ``api.singlet.bio/v1``
+    API without contacting it, so scripts could call it harmlessly. It now
+    raises so those calls surface: delete them (downloads need no key), or
+    replace them with :func:`singlet.set_api_key` for the natural-language
+    search key. The key is never echoed in the message.
     """
-    global _API_KEY
-    key = api_key or os.environ.get("SINGLET_API_KEY")
-    if not key:
-        raise ValueError(
-            "No API key provided. Pass api_key= or set SINGLET_API_KEY "
-            "environment variable. Get your key at https://singlet.bio/pricing"
-        )
-    _API_KEY = key
-
-
-def _get_key() -> str:
-    """Return the current API key, or raise."""
-    key = _API_KEY or os.environ.get("SINGLET_API_KEY")
-    if not key:
-        raise RuntimeError(
-            "Token-priced feature requires authentication. "
-            "Call singlet.login('sk-...') or set SINGLET_API_KEY."
-        )
-    return key
-
-
-def _headers() -> dict:
-    return {"Authorization": f"Bearer {_get_key()}", "User-Agent": "singlet-python"}
-
-
-def _get_headers() -> dict:
-    """Return auth headers for AWS streaming."""
-    return _headers()
+    raise NotImplementedError(_LOGIN_MSG)

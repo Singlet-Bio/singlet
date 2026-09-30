@@ -22,7 +22,8 @@ List the files a `.singlet` bundle holds for a sample
 }
 \examples{
 \dontrun{
-singlet_files("GSE149298.singlet", "GSM4495571")
+path <- singlet_download("GSE138867")
+singlet_files(path, "GSM4120733")
 }
 
 }

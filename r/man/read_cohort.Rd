@@ -25,10 +25,12 @@ from each to merge into a single sparse matrix for cross-sample analysis.
 }
 \examples{
 \dontrun{
-# Load all spliced matrices from a GSE
-gse_dir <- "quant/scrna/GSE174/GSE174399"
-sample_dirs <- list.dirs(gse_dir, recursive = FALSE)
-cohort <- read_cohort(sample_dirs, matrix_name = "spliced")
+# Load the exon matrix from every sample of a study
+path <- singlet_download("GSE138867")
+exdir <- tempfile()
+utils::unzip(path, exdir = exdir)
+sample_dirs <- list.dirs(file.path(exdir, "samples"), recursive = FALSE)
+cohort <- read_cohort(sample_dirs, matrix_name = "exon_counts")
 
 # Concatenate column-wise into one big matrix
 library(Matrix)

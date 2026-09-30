@@ -15,6 +15,22 @@ from singlet.pipeline._errors import PipelineError
 # --------------------------------------------------------------------------
 
 
+def _is_python_script(path: Path) -> bool:
+    """True if *path* is a Python launcher script rather than a native binary.
+
+    pip installs this package's console scripts (``singlet``, ``singlet-mcp``)
+    as small ``#!…python`` files. The deprecated ``singlet`` alias for the MCP
+    server therefore shadows the C++ ``singlet`` binary on ``$PATH``; running
+    it with pipeline arguments would start an MCP server instead.
+    """
+    try:
+        with open(path, "rb") as fh:
+            head = fh.read(512)
+    except OSError:
+        return False
+    return head.startswith(b"#!") and b"python" in head.lower()
+
+
 def find_binary(explicit: Optional[Union[str, Path]] = None) -> Path:
     """Resolve the ``singlet`` C++ binary path.
 
@@ -22,8 +38,11 @@ def find_binary(explicit: Optional[Union[str, Path]] = None) -> Path:
 
     1. ``explicit`` argument, if provided.
     2. ``$SINGLET_BINARY`` env var.
-    3. First ``singlet`` on ``$PATH``.
-    4. Repository-local build outputs (legacy + v2).
+    3. First ``singlet-pipeline`` on ``$PATH``.
+    4. First ``singlet`` on ``$PATH`` that is not a Python console script
+       (this package installs a deprecated ``singlet`` alias for its MCP
+       server, which must never be mistaken for the pipeline).
+    5. Repository-local build outputs (legacy + v2).
 
     Raises :class:`PipelineError` if no candidate is executable.
     """
@@ -32,9 +51,10 @@ def find_binary(explicit: Optional[Union[str, Path]] = None) -> Path:
         candidates.append(Path(explicit))
     if "SINGLET_BINARY" in os.environ:
         candidates.append(Path(os.environ["SINGLET_BINARY"]))
-    on_path = shutil.which("singlet")
-    if on_path:
-        candidates.append(Path(on_path))
+    for name in ("singlet-pipeline", "singlet"):
+        on_path = shutil.which(name)
+        if on_path and not _is_python_script(Path(on_path)):
+            candidates.append(Path(on_path))
     pkg_root = Path(__file__).resolve().parents[3]  # …/singlet
     repo_root = pkg_root.parent  # …/Singlet-AI
     candidates.extend(
@@ -49,7 +69,9 @@ def find_binary(explicit: Optional[Union[str, Path]] = None) -> Path:
             return c.resolve()
     raise PipelineError(
         "Could not locate the singlet binary. Build it with "
-        "`cmake --build singlet/build` or set $SINGLET_BINARY."
+        "`cmake -B build -DSINGLET_BUILD_PIPELINE=ON && cmake --build build`, then "
+        "set $SINGLET_BINARY to build/src/pipeline/singlet (or put it on $PATH as "
+        "singlet-pipeline)."
     )
 
 

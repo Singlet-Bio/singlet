@@ -7,12 +7,15 @@ Users work with two things only: ``.singlet`` files and GEO accession strings
     https://data.singlet.bio/data/<GSE>/<GSE>.singlet
 
 (free, no authentication). A ``.singlet`` file opens via
-:class:`singlet.SingletBundle`. The base host is configurable with
-``$SINGLET_DATA_BASE`` (default ``https://data.singlet.bio``).
+:class:`singlet.SingletBundle`. The host is configurable with
+``$SINGLET_DATA_BASE``: the base URL such that files live at
+``<base>/data/<GSE>/<GSE>.singlet`` (default ``https://data.singlet.bio``).
+A value that already ends in ``/data`` (the form the R client documents) is
+accepted too.
 
 Resolution priority for :func:`load`:
   1. A local ``.singlet`` file path (also accepts ``.h5ad`` / ``.zarr`` you exported)
-  2. A local catalog directory (set via SINGLET_CATALOG_DIR or singlet.set_catalog_dir())
+  2. A local catalog directory (cluster use: SINGLET_CATALOG_DIR or singlet.set_catalog_dir())
   3. A free, cached download of the public ``.singlet`` bundle for an accession
 
 GSM accessions are resolved to their parent GSE (via the public REST API at
@@ -35,6 +38,7 @@ if TYPE_CHECKING:
 
 # Public REST API base (used only to resolve a GSM → its parent GSE).
 _API_BASE_DEFAULT = "https://singlet.bio/api"
+_DATA_BASE_DEFAULT = "https://data.singlet.bio"
 _USER_AGENT = "singlet-loader/1"
 
 
@@ -54,10 +58,30 @@ def _cache_dir() -> Path:
     return d
 
 
+def _data_base() -> str:
+    """Bundle host: files live at ``<base>/data/<GSE>/<GSE>.singlet``.
+
+    Override with ``$SINGLET_DATA_BASE``. Both ``https://host`` and
+    ``https://host/data`` are accepted, so the same value works for the
+    Python and R clients.
+    """
+    base = os.environ.get("SINGLET_DATA_BASE", "").strip() or _DATA_BASE_DEFAULT
+    base = base.rstrip("/")
+    if base.endswith("/data"):
+        base = base[: -len("/data")]
+    return base
+
+
 def _bundle_url(accession: str) -> str:
     """Public R2 URL for a GSE's ``.singlet`` bundle."""
-    base = os.environ.get("SINGLET_DATA_BASE", "https://data.singlet.bio").rstrip("/")
-    return f"{base}/data/{accession}/{accession}.singlet"
+    return f"{_data_base()}/data/{accession}/{accession}.singlet"
+
+
+def _read_pz_record(path: str) -> dict:
+    """Decode a ``.1pz`` with the compiled codec (imported only when needed)."""
+    from singlet._pz import read_1pz as _native_read
+
+    return _native_read(path)
 
 
 def _resolve_gsm_to_gse(gsm_id: str) -> Optional[str]:
@@ -133,7 +157,7 @@ def download(
     Parameters
     ----------
     accession : str
-        GEO series accession (e.g. "GSE149298").
+        GEO series accession (e.g. "GSE138867").
     output_dir : path, optional
         Where to save. Defaults to ``default_cache_dir()``
         (``$SINGLET_CACHE_DIR`` or ``~/.singlet/cache``).
@@ -210,7 +234,7 @@ def open_bundle(source: str | Path, *, force: bool = False):
     Parameters
     ----------
     source : str or Path
-        A GEO series accession (``"GSE178957"``) or a local ``.singlet`` path.
+        A GEO series accession (``"GSE138867"``) or a local ``.singlet`` path.
         Accessions are downloaded to the cache on first use.
     force : bool
         Re-download even if the bundle is already cached.
@@ -222,7 +246,7 @@ def open_bundle(source: str | Path, *, force: bool = False):
     Examples
     --------
     >>> import singlet
-    >>> b = singlet.open_bundle("GSE178957")        # doctest: +SKIP
+    >>> b = singlet.open_bundle("GSE138867")        # doctest: +SKIP
     >>> b.modalities()                              # doctest: +SKIP
     >>> b.raw_counts(b.gsm_ids[0])                  # doctest: +SKIP
     >>> b.mt_variants(b.gsm_ids[0])                 # doctest: +SKIP
@@ -267,13 +291,17 @@ def load(
     Parameters
     ----------
     source : str, Path, or list/tuple of those
-        A GEO accession (e.g. ``"GSE149298"``, ``"GSM2581270"``), a local
+        A GEO accession (e.g. ``"GSE138867"``, ``"GSM4120733"``), a local
         ``.singlet`` file path, or a list/tuple mixing any of those. When a
         list/tuple is given, every item is loaded and concatenated into one
         AnnData (with a ``source`` column in ``obs`` recording each item's
         accession/path).
     genes : list of str, optional
-        Subset to these gene names (column slice).
+        Subset to these genes (column slice). Each entry may be a
+        ``var_names`` id (Ensembl gene id for bundles) or a gene symbol from
+        ``var["gene_name"]``; symbols are matched exactly first, then
+        case-insensitively. Unmatched entries are reported in a warning.
+        ``var_names`` stay Ensembl ids.
     obs_filter : dict, optional
         Filter cells by obs columns, e.g. ``{"organism": "Homo sapiens"}``.
     force : bool
@@ -282,18 +310,19 @@ def load(
     Returns
     -------
     anndata.AnnData
-        Count matrix with obs metadata, var gene annotations, and uns study info.
+        Count matrix with obs metadata, var gene annotations, and uns study
+        info. Samples whose count matrix is empty are skipped with a warning
+        and listed in ``adata.uns["skipped_samples"]``.
 
     Examples
     --------
     >>> import singlet
-    >>> adata = singlet.load("GSE149298")
-    >>> adata = singlet.load("/path/to/data.singlet")
-    >>> adata = singlet.load("GSE149298", genes=["TP53", "BRCA1"])
-    >>> adata = singlet.load("GSM2581270")  # parent GSE, filtered to this GSM
-    >>> # Load and concatenate several datasets at once:
-    >>> adata = singlet.load(["GSE149298", "GSE264667"])
-    >>> adata = singlet.load(["a.singlet", "b.singlet"])
+    >>> adata = singlet.load("GSE138867")                       # doctest: +SKIP
+    >>> adata = singlet.load("/path/to/GSE138867.singlet")      # doctest: +SKIP
+    >>> adata = singlet.load("GSE138867", genes=["CD3E", "MS4A1"])  # doctest: +SKIP
+    >>> adata = singlet.load("GSM4120733")  # parent GSE, filtered to this GSM  # doctest: +SKIP
+    >>> # Load and concatenate several studies at once:
+    >>> adata = singlet.load(["GSE138867", "GSE146974"])        # doctest: +SKIP
     """
     # ---- Multiple sources → load each and concatenate -------------------
     if isinstance(source, (list, tuple)):
@@ -330,6 +359,16 @@ def load(
             index_unique="-",
             merge="first",
         )
+        # concat drops .uns; keep the record of samples skipped as empty.
+        import pandas as pd
+
+        skipped = [
+            p.uns["skipped_samples"]
+            for p in parts
+            if isinstance(p.uns.get("skipped_samples"), pd.DataFrame)
+        ]
+        if skipped:
+            combined.uns["skipped_samples"] = pd.concat(skipped, ignore_index=True)
         return combined
 
     return _load_one(source, genes=genes, obs_filter=obs_filter, force=force)
@@ -375,7 +414,7 @@ def _load_one(
         if path.is_dir() and path.suffix.lower() != ".zarr":
             raise IsADirectoryError(
                 f"'{path}' is a directory. Use singlet.load_dir() for pipeline output directories, "
-                f"or provide a .singlet file path (or an accession like 'GSE149298')."
+                f"or provide a .singlet file path (or an accession like 'GSE138867')."
             )
         suffix = path.suffix.lower()
         if suffix == ".singlet":
@@ -433,35 +472,18 @@ def _load_one(
             mask = adata.obs_names.str.startswith(f"{_gsm_filter}_")
         n = int(mask.sum())
         if n == 0:
-            raise KeyError(
-                f"Sample {_gsm_filter!r} has no cells in its parent GSE bundle."
-            )
+            reason = _skip_reason(adata, _gsm_filter)
+            if reason is not None:
+                raise KeyError(
+                    f"Sample {_gsm_filter!r} has no usable cells in its parent GSE "
+                    f"bundle: {reason}. See https://singlet.bio/sample/{_gsm_filter}."
+                )
+            raise KeyError(f"Sample {_gsm_filter!r} has no cells in its parent GSE bundle.")
         adata = adata[mask].copy()
 
     # Gene subset
     if genes is not None:
-        gene_mask = adata.var_names.isin(genes)
-        n_found = gene_mask.sum()
-        if n_found == 0:
-            import warnings
-
-            warnings.warn(
-                f"None of the {len(genes)} requested genes were found in the dataset. "
-                f"First few available: {list(adata.var_names[:5])}",
-                UserWarning,
-                stacklevel=2,
-            )
-        elif n_found < len(genes):
-            import warnings
-
-            missing = sorted(set(genes) - set(adata.var_names))
-            warnings.warn(
-                f"{len(missing)} of {len(genes)} requested genes not found: "
-                f"{missing[:5]}{'...' if len(missing) > 5 else ''}",
-                UserWarning,
-                stacklevel=2,
-            )
-        adata = adata[:, gene_mask].copy()
+        adata = _subset_genes(adata, genes)
 
     # Obs filter
     if obs_filter is not None:
@@ -480,19 +502,98 @@ def _load_one(
     return adata
 
 
+def _skip_reason(adata, gsm_id: str) -> Optional[str]:
+    """Why *gsm_id* was skipped while assembling *adata*, if it was."""
+    import pandas as pd
+
+    skipped = adata.uns.get("skipped_samples")
+    if not isinstance(skipped, pd.DataFrame) or "gsm_id" not in skipped.columns:
+        return None
+    rows = skipped[skipped["gsm_id"] == gsm_id]
+    if rows.empty:
+        return None
+    return str(rows["reason"].iloc[0]) if "reason" in rows.columns else "skipped"
+
+
+def _subset_genes(adata, genes: Sequence[str]):
+    """Column-subset *adata* to *genes*, given as ids or symbols.
+
+    Each requested gene is matched, in order, against ``var_names`` (exact),
+    ``var["gene_name"]`` (exact), then both case-insensitively. A symbol that
+    maps to several ids keeps all of them. The original column order is kept
+    and one warning lists anything left unmatched.
+    """
+    import warnings
+
+    import numpy as np
+
+    requested = [genes] if isinstance(genes, str) else [str(g) for g in genes]
+    var_names = [str(v) for v in adata.var_names]
+    symbols = (
+        [str(s) for s in adata.var["gene_name"]] if "gene_name" in adata.var.columns else []
+    )
+
+    def _index(names):
+        exact: dict = {}
+        folded: dict = {}
+        for i, name in enumerate(names):
+            exact.setdefault(name, []).append(i)
+            folded.setdefault(name.lower(), []).append(i)
+        return exact, folded
+
+    id_exact, id_folded = _index(var_names)
+    sym_exact, sym_folded = _index(symbols)
+
+    keep = np.zeros(len(var_names), dtype=bool)
+    missing = []
+    for gene in requested:
+        hits = (
+            id_exact.get(gene)
+            or sym_exact.get(gene)
+            or id_folded.get(gene.lower())
+            or sym_folded.get(gene.lower())
+        )
+        if hits:
+            keep[hits] = True
+        else:
+            missing.append(gene)
+
+    if not keep.any():
+        example = symbols[:5] if symbols else var_names[:5]
+        warnings.warn(
+            f"None of the {len(requested)} requested genes were found in the dataset "
+            f"(matched against var_names and var['gene_name']). "
+            f"First few available: {example}",
+            UserWarning,
+            stacklevel=3,
+        )
+    elif missing:
+        warnings.warn(
+            f"{len(missing)} of {len(requested)} requested genes not found: "
+            f"{missing[:5]}{'...' if len(missing) > 5 else ''}",
+            UserWarning,
+            stacklevel=3,
+        )
+    return adata[:, keep].copy()
+
+
 def load_sample(
     gsm_id: str,
     *,
     genes: Optional[Sequence[str]] = None,
 ) -> anndata.AnnData:
-    """Load a single GSM sample using column-range reads.
+    """Load a single GSM sample from a local processing tree (cluster use).
 
-    Requires a local catalog directory with sample_index.parquet.
+    Reads the sample's column range out of its study's ``counts.1pz`` in a
+    local catalog directory (``SINGLET_CATALOG_DIR`` or
+    :func:`singlet.set_catalog_dir`). This is for machines that hold the
+    pipeline output itself; everyone else should use
+    ``singlet.load("GSM…")``, which downloads the public bundle.
 
     Parameters
     ----------
     gsm_id : str
-        GEO sample accession (e.g. "GSM3308814").
+        GEO sample accession (e.g. "GSM4120733").
     genes : list of str, optional
         Subset to these gene names.
 
@@ -500,12 +601,29 @@ def load_sample(
     -------
     anndata.AnnData
         Count matrix for just this sample.
+
+    Raises
+    ------
+    RuntimeError
+        If no local catalog directory is configured.
+    KeyError
+        If the sample is not in the local sample index.
     """
     import anndata as ad
     import scipy.sparse as sp
 
     from singlet._catalog import _get_catalog_dir, _load_sample_index
-    from singlet._pz import read_1pz as _native_read
+
+    # Check the catalog before touching the compiled codec, so a machine
+    # without one gets this message rather than an ImportError.
+    cat_dir = _get_catalog_dir()
+    if cat_dir is None:
+        raise RuntimeError(
+            "load_sample requires a local catalog (a directory holding the "
+            "pipeline's processing tree). Set SINGLET_CATALOG_DIR or call "
+            "singlet.set_catalog_dir(). To load a public sample, use "
+            f"singlet.load({gsm_id!r}) instead."
+        )
 
     idx = _load_sample_index()
     rows = idx[idx["gsm_id"] == gsm_id]
@@ -513,13 +631,6 @@ def load_sample(
         raise KeyError(f"Sample {gsm_id!r} not found in sample index")
 
     row = rows.iloc[0]
-    cat_dir = _get_catalog_dir()
-    if cat_dir is None:
-        raise RuntimeError(
-            "load_sample requires a local catalog. "
-            "Set SINGLET_CATALOG_DIR or call singlet.set_catalog_dir()"
-        )
-
     base = cat_dir.parent
     gse_path = row["gse_id"]
     subdir = row.get("species_subdir", "")
@@ -532,7 +643,7 @@ def load_sample(
     col_end = col_start + int(row["col_count"])
 
     # TODO: native read_1pz_columns slice — currently we read all then slice
-    r = _native_read(str(counts_path))
+    r = _read_pz_record(str(counts_path))
     full_mat = sp.csc_matrix(
         (r["data"], r["indices"], r["indptr"]),
         shape=(r["m"], r["n"]),

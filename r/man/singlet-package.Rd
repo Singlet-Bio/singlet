@@ -16,13 +16,19 @@ matching accessions.
 \section{Main entry points}{
 
 \describe{
-  \item{\code{\link{load}}}{Load one or more studies by accession or
-    bundle path into a combined object.}
-  \item{\code{\link{find}}}{Search the atlas with natural language and get
-    matching accessions.}
-  \item{\code{\link{find_load}}}{Search and load in one step.}
+  \item{\code{\link{singlet_load}}}{Load one or more studies (or samples)
+    by accession or bundle path into a combined object.}
+  \item{\code{\link{singlet_find}}}{Search the atlas with natural language
+    and get matching accessions.}
+  \item{\code{\link{singlet_find_load}}}{Search and load in one step.}
+  \item{\code{\link{singlet_download}}}{Download a study's bundle and
+    return its path.}
   \item{\code{\link{read_singlet}}}{Read a single local `.singlet` bundle.}
 }
+\code{load()}, \code{find()}, \code{find_load()} and \code{download()}
+are the same functions under shorter names; \code{load()} and
+\code{find()} mask \code{base::load()} and \code{utils::find()} once the
+package is attached.
 }
 
 \section{Low-level readers}{

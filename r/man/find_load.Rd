@@ -2,9 +2,18 @@
 % Please edit documentation in R/load.R
 \name{find_load}
 \alias{find_load}
+\alias{singlet_find_load}
 \title{Search and load in one step}
 \usage{
 find_load(
+  query,
+  as = c("sce", "seurat"),
+  level = c("gse", "gsm"),
+  limit = 10L,
+  cache_dir = NULL
+)
+
+singlet_find_load(
   query,
   as = c("sce", "seurat"),
   level = c("gse", "gsm"),
@@ -31,10 +40,11 @@ A combined \code{SingleCellExperiment} or \code{Seurat} object, or
 \description{
 Convenience wrapper that runs \code{\link{find}} and immediately passes
 the matching accessions to \code{\link{load}}.
+\code{singlet_find_load()} is the same function.
 }
 \examples{
 \dontrun{
-sce <- find_load("microglia from Alzheimer's brain", limit = 5)
+sce <- singlet_find_load("microglia from Alzheimer's brain", limit = 5)
 }
 
 }

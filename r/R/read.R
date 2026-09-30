@@ -10,13 +10,19 @@
 #'
 #' @section Main entry points:
 #' \describe{
-#'   \item{\code{\link{load}}}{Load one or more studies by accession or
-#'     bundle path into a combined object.}
-#'   \item{\code{\link{find}}}{Search the atlas with natural language and get
-#'     matching accessions.}
-#'   \item{\code{\link{find_load}}}{Search and load in one step.}
+#'   \item{\code{\link{singlet_load}}}{Load one or more studies (or samples)
+#'     by accession or bundle path into a combined object.}
+#'   \item{\code{\link{singlet_find}}}{Search the atlas with natural language
+#'     and get matching accessions.}
+#'   \item{\code{\link{singlet_find_load}}}{Search and load in one step.}
+#'   \item{\code{\link{singlet_download}}}{Download a study's bundle and
+#'     return its path.}
 #'   \item{\code{\link{read_singlet}}}{Read a single local `.singlet` bundle.}
 #' }
+#' \code{load()}, \code{find()}, \code{find_load()} and \code{download()}
+#' are the same functions under shorter names; \code{load()} and
+#' \code{find()} mask \code{base::load()} and \code{utils::find()} once the
+#' package is attached.
 #'
 #' @section Low-level readers:
 #' \code{\link{read_1pz}}, \code{\link{read_singlet_dir}},
@@ -43,7 +49,12 @@
 #'
 #' @examples
 #' \dontrun{
-#' mat <- read_1pz("quant/scrna/GSE174/GSE174399/GSM5293863/gene_counts.1pz")
+#' # Pull one matrix out of a downloaded bundle and read it
+#' path <- singlet_download("GSE138867")
+#' exdir <- tempfile()
+#' member <- "samples/GSM4120733/exon_counts.1pz"
+#' utils::unzip(path, files = member, exdir = exdir)
+#' mat <- read_1pz(file.path(exdir, member))
 #' dim(mat)
 #' attr(mat, "user_kv")[["gsm_id"]]
 #' }
@@ -85,10 +96,14 @@ read_1pz <- function(path) {
 #'
 #' @examples
 #' \dontrun{
-#' dd <- read_singlet_dir("quant/scrna/GSE174/GSE174399/GSM5293863")
+#' # Each sample directory inside a bundle is a pipeline output directory
+#' path <- singlet_download("GSE138867")
+#' exdir <- tempfile()
+#' utils::unzip(path, exdir = exdir)
+#' dd <- read_singlet_dir(file.path(exdir, "samples", "GSM4120733"))
 #' names(dd)
 #' attr(dd, "user_kv")[["gsm_id"]]
-#' dd$gene_counts
+#' dd$exon_counts
 #' }
 #'
 #' @export
@@ -138,10 +153,12 @@ read_singlet_dir <- function(path, include = NULL, exclude = NULL) {
 #'
 #' @examples
 #' \dontrun{
-#' # Load all spliced matrices from a GSE
-#' gse_dir <- "quant/scrna/GSE174/GSE174399"
-#' sample_dirs <- list.dirs(gse_dir, recursive = FALSE)
-#' cohort <- read_cohort(sample_dirs, matrix_name = "spliced")
+#' # Load the exon matrix from every sample of a study
+#' path <- singlet_download("GSE138867")
+#' exdir <- tempfile()
+#' utils::unzip(path, exdir = exdir)
+#' sample_dirs <- list.dirs(file.path(exdir, "samples"), recursive = FALSE)
+#' cohort <- read_cohort(sample_dirs, matrix_name = "exon_counts")
 #'
 #' # Concatenate column-wise into one big matrix
 #' library(Matrix)

@@ -8,7 +8,8 @@ Bundle layout::
 
     <GSE>.singlet          (ZIP64 archive)
     ├── manifest.json      schema_version, gse_id, gsm list, per-file checksums,
-    │                      reference build, created_at, singlet/pipeline versions
+    │                      reference build, created_at, singlet/pipeline versions,
+    │                      excluded_samples (hollow samples left out, with reasons)
     ├── study_meta.json    series title/abstract + per-GSM obs metadata
     │                      (tissue/donor/disease/sex/protocol/n_cells/qc_flag)
     ├── feature_vocab.json gene ↔ Ensembl map + reference build (shared across GSMs)
@@ -74,11 +75,13 @@ import argparse
 import hashlib
 import json
 import os
+import struct
 import sys
+import warnings
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, NamedTuple, Optional, Union
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
 
@@ -116,6 +119,25 @@ _JSON_SIDECARS = [
 _TSV_SIDECARS = [
     "cell_calls.tsv",
 ]
+
+# Legacy single-block .1pz header (include/singlet/pileup/pz_writer.h,
+# ``PZHeader``, little-endian, packed): magic, version, vt_code, flags, then
+# the matrix dims m (features) and n (barcodes) and the non-zero count. Only
+# this leading slice is read, so a matrix can be checked without decoding it.
+_TP1Z_MAGIC = 0x5A315054  # "TP1Z"
+_PZ_HEADER = struct.Struct("<IHBBIIQ")
+
+# A count matrix this small cannot hold a real sample: a named gene axis alone
+# is tens of kilobytes. Used only when the header cannot be read.
+_HOLLOW_MAX_BYTES = 400
+
+# The barcode column of cell_calls.tsv has been spelled several ways over the
+# pipeline's history. Every reader accepts all of them.
+_BARCODE_COLUMNS = ("barcode", "cb", "cell_barcode", "CB")
+_TRUE_STRINGS = frozenset({"true", "t", "1", "1.0", "yes", "y"})
+
+# Study page on the website, named in errors about unusable bundles.
+_STUDY_URL = "https://singlet.bio/study/{gse_id}"
 
 
 # ---------------------------------------------------------------------------
@@ -319,17 +341,205 @@ def _load_pileup_stats(out_dir: Path) -> dict:
         return json.load(f)
 
 
+def _barcode_column(df) -> Optional[str]:
+    """Name of the barcode column of a cell_calls table, or None."""
+    for name in _BARCODE_COLUMNS:
+        if name in df.columns:
+            return name
+    return None
+
+
+def _is_cell_mask(values) -> np.ndarray:
+    """Interpret an ``is_cell`` column written as bool, 0/1 or text.
+
+    ``astype(bool)`` is wrong for text: the string ``"False"`` is truthy.
+    """
+    import pandas as pd
+
+    s = pd.Series(values)
+    if pd.api.types.is_bool_dtype(s):
+        return s.fillna(False).to_numpy(dtype=bool)
+    if pd.api.types.is_numeric_dtype(s):
+        return s.fillna(0).to_numpy(dtype=float) != 0
+    return s.astype(str).str.strip().str.lower().isin(_TRUE_STRINGS).to_numpy(dtype=bool)
+
+
+def _called_from_calls(df, *, first_column_fallback: bool = False) -> Optional[List[str]]:
+    """Called-cell barcodes from a cell_calls table.
+
+    Honours an ``is_cell`` column when present; otherwise every listed barcode
+    counts as called. Returns None when no barcode column can be found (with
+    ``first_column_fallback`` the first column is used instead).
+    """
+    col = _barcode_column(df)
+    if col is None:
+        if not first_column_fallback or len(df.columns) == 0:
+            return None
+        col = df.columns[0]
+    if "is_cell" in df.columns:
+        barcodes = df.loc[_is_cell_mask(df["is_cell"]), col]
+    else:
+        barcodes = df[col]
+    return [str(bc) for bc in barcodes.dropna()]
+
+
+def _pz_dims_from_bytes(head: bytes) -> Optional[Tuple[int, int, int]]:
+    """``(m, n, nnz)`` from the start of a legacy TP1Z ``.1pz``, or None.
+
+    None means the bytes are too short or are not a TP1Z file (e.g. the
+    multi-block ``1PZ02`` format); callers must not read that as "empty".
+    """
+    if len(head) < _PZ_HEADER.size:
+        return None
+    magic, _version, _vt_code, _flags, m, n, nnz = _PZ_HEADER.unpack_from(head, 0)
+    if magic != _TP1Z_MAGIC:
+        return None
+    return m, n, nnz
+
+
+def _pz_header_dims(path: Path) -> Optional[Tuple[int, int, int]]:
+    """``(m, n, nnz)`` read from a ``.1pz`` file's header without decoding it."""
+    try:
+        with open(path, "rb") as fh:
+            head = fh.read(_PZ_HEADER.size)
+    except OSError:
+        return None
+    return _pz_dims_from_bytes(head)
+
+
+# summary.json status the pipeline sets when a .1pz output failed to write, and
+# the prefix of the matching per-file warning (include/singlet/pileup/export.h).
+_FAIL_EXPORT_STATUS = "fail_export_matrix"
+_WRITE_FAILED_PREFIX = "write_failed:"
+
+
+def _failed_writes(summary: dict) -> List[str]:
+    """Outputs ``summary.json`` lists as ``write_failed:<file>`` warnings."""
+    warns = summary.get("warnings")
+    if not isinstance(warns, list):
+        return []
+    return [
+        w[len(_WRITE_FAILED_PREFIX) :]
+        for w in warns
+        if isinstance(w, str) and w.startswith(_WRITE_FAILED_PREFIX)
+    ]
+
+
+def _hollow_reason(out_dir: Path) -> Optional[str]:
+    """Why a finished sample would pack as a hollow (unusable) sample, or None.
+
+    A sample is hollow when ``summary.json`` says cells were called but the
+    count matrix that should hold them is missing, a truncated stub, a 0x0
+    matrix, or all zeros. The pipeline writes 0x0 ``.1pz`` stubs for outputs
+    it failed to produce, and ``n_cells_called`` comes from in-memory cell
+    calling, so the two can disagree. Samples that called no cells are not
+    hollow — they are honestly empty.
+
+    A sample is also refused, whatever its cell count, when the pipeline
+    recorded that one of its ``.1pz`` outputs failed to write:
+    ``status == "fail_export_matrix"`` or a ``write_failed:<file>`` warning.
+    Packing it would ship, say, exon counts without intron counts, so its
+    totals would not be comparable with the other samples of the study.
+    """
+    try:
+        summary = _load_summary(out_dir)
+    except (OSError, ValueError):
+        summary = {}
+    if not isinstance(summary, dict):
+        summary = {}
+    failed = _failed_writes(summary)
+    status = summary.get("status")
+    if failed or status == _FAIL_EXPORT_STATUS:
+        parts = [f"status={status}"] if status == _FAIL_EXPORT_STATUS else []
+        if failed:
+            parts.append("failed to write " + ", ".join(failed))
+        return f"summary.json records incomplete count matrices ({'; '.join(parts)})"
+    try:
+        n_called = int(summary.get("n_cells_called") or 0)
+    except (TypeError, ValueError):
+        n_called = 0
+    if n_called <= 0:
+        return None
+
+    claim = f"summary.json reports {n_called} called cells but exon_counts.1pz"
+    pz = out_dir / "exon_counts.1pz"
+    if not pz.is_file():
+        return f"{claim} is missing"
+    dims = _pz_header_dims(pz)
+    if dims is None:
+        # Not a readable TP1Z header: only a tiny file can be judged.
+        size = pz.stat().st_size
+        if size <= _HOLLOW_MAX_BYTES:
+            return f"{claim} is only {size} bytes"
+        return None
+    m, n, nnz = dims
+    if m == 0 or n == 0:
+        return f"{claim} is a {m}x{n} matrix"
+    if nnz == 0:
+        return f"{claim} has no non-zero entries"
+    return None
+
+
+def _uns_safe(value: Any) -> Any:
+    """Return *value* in a form anndata can write to ``.h5ad`` and ``.zarr``.
+
+    Only what anndata cannot write is changed, so the in-memory layout stays
+    as close to the JSON as possible:
+
+    - a ``/`` in a key is replaced by ``__`` (both formats turn dict keys
+      into group names, and ``/`` is a path separator there);
+    - a list that mixes types or holds dicts (e.g. ``publications``) cannot
+      become an array, so it is stored as JSON text;
+    - an empty list is dropped: it would become a zero-length dataset, which
+      HDF5 cannot create with compression (``to_h5ad`` compresses).
+
+    ``None`` values are kept as ``None`` — anndata writes them natively (it
+    skips them before 0.12 and stores a null from 0.12 on) — so keys such as
+    ``gsm_meta[<GSM>]["mapping_rate"]`` exist even when the value is unknown.
+    """
+    if isinstance(value, dict):
+        out = {}
+        for k, v in value.items():
+            if isinstance(v, (list, tuple)) and len(v) == 0:
+                continue
+            out[str(k).replace("/", "__")] = _uns_safe(v)
+        return out
+    if isinstance(value, np.ndarray):
+        if value.dtype.kind in "biufUS":
+            return value
+        value = value.tolist()
+    if isinstance(value, (list, tuple)):
+        items = list(value)
+        if all(isinstance(v, str) for v in items):
+            return items
+        if all(isinstance(v, (bool, int, float, np.number, np.bool_)) for v in items):
+            return items
+        return json.dumps(items, default=str)
+    if value is None or isinstance(value, (str, bool, int, float, np.number, np.bool_)):
+        return value
+    return str(value)
+
+
+def _manifest_for_uns(manifest: dict) -> dict:
+    """``manifest.json`` in a form that survives ``write_h5ad``/``write_zarr``.
+
+    ``checksums`` is keyed by archive path (``samples/<GSM>/exon_counts.1pz``);
+    those ``/`` keys are what made every real study fail to export. They are
+    stored as parallel ``path`` and ``sha256`` columns instead.
+    """
+    out = dict(manifest)
+    checksums = out.pop("checksums", None)
+    if isinstance(checksums, dict) and checksums:
+        out["checksums"] = {
+            "path": [str(p) for p in checksums],
+            "sha256": [str(h) for h in checksums.values()],
+        }
+    return _uns_safe(out)
+
+
 def _get_called_barcodes(out_dir: Path) -> List[str]:
     """Return list of cell barcodes from cell_calls.tsv (is_cell == True)."""
     import pandas as pd
-
-    # The barcode column has been spelled several ways over the pipeline's
-    # history. Accept any of them rather than failing the whole study.
-    def _barcode_column(df):
-        for name in ("barcode", "cb", "cell_barcode", "CB"):
-            if name in df.columns:
-                return name
-        return df.columns[0] if len(df.columns) else None
 
     p = out_dir / "cell_calls.tsv"
     if not p.exists():
@@ -338,18 +548,12 @@ def _get_called_barcodes(out_dir: Path) -> List[str]:
         if ab.exists():
             return list(pd.read_csv(ab, sep="\t", header=None)[0])
         return []
-    df = pd.read_csv(p, sep="\t")
+    # Read as text so is_cell and numeric-looking barcodes are not coerced.
+    df = pd.read_csv(p, sep="\t", dtype=str)
     if len(df) == 0:
         return []
-    col = _barcode_column(df)
-    if col is None:
-        return []
-    if "is_cell" in df.columns:
-        # Use .loc with explicit bool cast to avoid pandas object-dtype Series
-        # being misinterpreted as a column selector on empty DataFrames.
-        mask = df["is_cell"].astype(bool)
-        return list(df.loc[mask, col])
-    return list(df[col])
+    called = _called_from_calls(df, first_column_fallback=True)
+    return called if called is not None else []
 
 
 def _build_feature_vocab(out_dir: Path) -> dict:
@@ -452,6 +656,7 @@ def pack_gse(
     metadata_enriched_path: Optional[Union[str, Path]] = None,
     publications_enriched_path: Optional[Union[str, Path]] = None,
     series_meta_path: Optional[Union[str, Path]] = None,
+    strict: bool = False,
     _catalog_df=None,
 ) -> Path:
     """Build a per-GSE .singlet bundle from pipeline results.
@@ -460,6 +665,14 @@ def pack_gse(
     ``results_dir/<GSM>/out/pileup_stats.json``), assembles the bundle per
     the .singlet spec (ZIP64), computes SHA-256 checksums, writes
     ``<out_path>``.
+
+    Hollow samples are never packed: a sample whose ``summary.json`` reports
+    called cells while its ``exon_counts.1pz`` is missing, a 0x0 stub or
+    all zeros, or whose ``summary.json`` records a failed matrix write
+    (``status: "fail_export_matrix"`` / a ``write_failed:<file>`` warning),
+    is left out with a warning and listed in ``manifest.json`` under
+    ``excluded_samples`` as ``{"gsm_id", "reason"}`` records. Pass
+    ``strict=True`` to raise instead.
 
     Parameters
     ----------
@@ -484,6 +697,8 @@ def pack_gse(
         Optional path to write a standalone ``series_meta.json`` sidecar
         (GSE metadata + per-GSM list + cells + status) that can be served
         separately from the heavy bundle.  When *None*, no sidecar is written.
+    strict
+        Raise instead of excluding hollow samples.
 
     Returns
     -------
@@ -493,7 +708,8 @@ def pack_gse(
     Raises
     ------
     ValueError
-        If no done GSMs are found for *gse_id*.
+        If no done GSMs are found for *gse_id*, if every done GSM is hollow,
+        or (with ``strict=True``) if any done GSM is hollow.
     """
     import pandas as pd
 
@@ -540,6 +756,36 @@ def pack_gse(
     gsm_ids = list(done_rows["gsm_id"])
     if verbose:
         print(f"[pack_gse] {gse_id}: {len(gsm_ids)} done GSMs: {gsm_ids}")
+
+    # ---- Refuse hollow samples ------------------------------------------
+    # The .1pz files are copied verbatim, so a 0x0 stub written for a failed
+    # output would otherwise ship as a sample that claims cells but has none,
+    # and a sample whose intron (or other) matrix failed to write would ship
+    # with counts that are not comparable with its siblings'.
+    excluded_samples: List[Dict[str, str]] = []
+    for gsm in gsm_ids:
+        reason = _hollow_reason(results_dir / gsm / "out")
+        if reason is not None:
+            excluded_samples.append({"gsm_id": gsm, "reason": reason})
+    if excluded_samples:
+        listing = "; ".join(f"{e['gsm_id']}: {e['reason']}" for e in excluded_samples)
+        if strict:
+            raise ValueError(
+                f"Refusing to pack {gse_id}: {len(excluded_samples)} hollow sample(s): {listing}"
+            )
+        if len(excluded_samples) == len(gsm_ids):
+            raise ValueError(
+                f"Refusing to pack {gse_id}: all {len(gsm_ids)} done GSMs are hollow: {listing}"
+            )
+        warnings.warn(
+            f"[pack_gse] {gse_id}: excluding {len(excluded_samples)} hollow sample(s) "
+            f"from the bundle: {listing}",
+            UserWarning,
+            stacklevel=2,
+        )
+        hollow = {e["gsm_id"] for e in excluded_samples}
+        gsm_ids = [g for g in gsm_ids if g not in hollow]
+        done_rows = done_rows[~done_rows["gsm_id"].isin(hollow)]
 
     # ---- Opportunistically load enriched metadata -----------------------
     gsm_enriched, publications = _load_enriched_meta(
@@ -727,6 +973,7 @@ def pack_gse(
             "created_at": datetime.now(timezone.utc).isoformat(),
             "singlet_version": _singlet_version(),
             "included_files": included_files,
+            "excluded_samples": excluded_samples,
             "checksums": checksums,
         }
         manifest_bytes = json.dumps(manifest, indent=2).encode()
@@ -815,15 +1062,26 @@ def _load_enriched_meta(
 
 
 def _singlet_version() -> str:
+    """Version recorded in ``manifest.json``.
+
+    Read from the package itself so a source checkout (where no distribution
+    metadata exists) still records the real version, not "unknown".
+    """
     try:
-        from singlet._versions import __version__
-        return __version__
+        from singlet import __version__
+
+        return str(__version__)
     except Exception:
-        try:
-            import importlib.metadata
-            return importlib.metadata.version("singlet")
-        except Exception:
-            return "unknown"
+        import importlib.metadata
+
+        # The distribution is "singlet-bio" on PyPI; "singlet" is what
+        # installs from before the rename were called.
+        for dist in ("singlet-bio", "singlet"):
+            try:
+                return importlib.metadata.version(dist)
+            except Exception:
+                continue
+        return "unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -865,6 +1123,8 @@ class SingletBundle:
         self._manifest: Optional[dict] = None
         self._study_meta: Optional[dict] = None
         self._feature_vocab: Optional[dict] = None
+        # Why a sample yielded no cells, recorded by _load_gsm_gene_counts.
+        self._empty_reasons: Dict[str, str] = {}
 
     @classmethod
     def open(cls, path: Union[str, Path]) -> "SingletBundle":
@@ -1127,7 +1387,8 @@ class SingletBundle:
         if gene_level:
             mat, barcodes = self._load_gsm_gene_counts(gsm)
             if mat.shape[0] == 0:
-                raise ValueError(f"{gsm} has no called cells in {self.path.name}")
+                reason = self._empty_reasons.get(gsm, "no called cells")
+                raise ValueError(f"{gsm} has no usable cells in {self.path.name}: {reason}")
             gene_ids = [g["gene_id"] for g in self.feature_vocab["genes"]]
             gene_names = [g["gene_name"] for g in self.feature_vocab["genes"]]
             adata = ad.AnnData(
@@ -1158,20 +1419,45 @@ class SingletBundle:
         adata.uns["reference_build"] = self.feature_vocab.get("reference_build", "")
         return adata
 
+    def _read_cell_calls(self, gsm: str):
+        """``cell_calls.tsv`` for one sample with every column read as text.
+
+        Returns None when the sample has no (parseable) cell_calls table.
+        """
+        import io as _io
+
+        import pandas as pd
+
+        try:
+            with self._zip().open(f"samples/{gsm}/cell_calls.tsv") as fh:
+                data = fh.read()
+        except KeyError:
+            return None
+        if not data.strip():
+            return None
+        try:
+            return pd.read_csv(_io.BytesIO(data), sep="\t", dtype=str)
+        except ValueError:  # pandas ParserError / EmptyDataError
+            return None
+
     def _called_barcodes(self, gsm: str) -> Optional[set]:
         """Barcodes the pipeline called as cells, or None if not recorded."""
-        if not self.has("cell_calls", gsm):
+        calls = self._read_cell_calls(gsm)
+        if calls is None:
             return None
-        calls = self.read("cell_calls", gsm)
-        col = next((c for c in ("barcode", "cb", "cell_barcode") if c in calls.columns), None)
-        if col is None:
-            return None
-        return set(calls[col].astype(str))
+        called = _called_from_calls(calls)
+        return set(called) if called is not None else None
+
+    def _is_empty_pz(self, gsm: str, fname: str) -> bool:
+        """Whether a sample's ``.1pz`` member is a 0-row or 0-column stub."""
+        with self._zip().open(f"samples/{gsm}/{fname}") as fh:
+            dims = _pz_dims_from_bytes(fh.read(_PZ_HEADER.size))
+        return dims is not None and (dims[0] == 0 or dims[1] == 0)
 
     def _gene_level_part(self, gsm: str, kind: str, barcodes: List[str]):
         """Gene-level exon-only or intron-only matrix aligned to ``barcodes``."""
         fname = "exon_counts.1pz" if kind == "exon" else "intron_counts.1pz"
-        if fname not in set(self.list_files(gsm)):
+        if fname not in set(self.list_files(gsm)) or self._is_empty_pz(gsm, fname):
             return None
         from scipy.sparse import coo_matrix
 
@@ -1249,20 +1535,22 @@ class SingletBundle:
         (csc_matrix (n_cells, n_genes), barcodes: list[str])
         """
         import tempfile
-        from singlet._io import _read_pz_native
+
         from scipy.sparse import coo_matrix, csc_matrix
+
+        from singlet._io import _read_pz_native
 
         gene_order = [g["gene_id"] for g in self.feature_vocab["genes"]]
         gene_id_to_row = {g: i for i, g in enumerate(gene_order)}
         n_genes = len(gene_order)
+        self._empty_reasons.pop(gsm, None)
 
-        def _agg_from_arc(fname: str):
-            """Extract .1pz to tmp, read, aggregate by gene."""
-            try:
-                raw = self._extract_pz(gsm, fname)
-            except KeyError:
-                return None, None, None
+        def _empty(reason: str) -> tuple:
+            self._empty_reasons[gsm] = reason
+            return csc_matrix((0, n_genes), dtype=np.int32), []
 
+        def _decode(raw: bytes):
+            """Write .1pz bytes to a temp file and decode them."""
             with tempfile.NamedTemporaryFile(suffix=".1pz", delete=False) as tf:
                 tf.write(raw)
                 tmp_path = tf.name
@@ -1272,28 +1560,39 @@ class SingletBundle:
                 os.unlink(tmp_path)
             return mat, rownames, all_bcs
 
-        exon_mat, exon_rows, all_bcs = _agg_from_arc("exon_counts.1pz")
-        if exon_mat is None:
-            return csc_matrix((0, n_genes), dtype=np.int32), []
+        def _agg_from_arc(fname: str):
+            """Extract and decode a .1pz; (None, None, None) if absent or a 0x0 stub."""
+            try:
+                raw = self._extract_pz(gsm, fname)
+            except KeyError:
+                return None, None, None
+            dims = _pz_dims_from_bytes(raw)
+            if dims is not None and (dims[0] == 0 or dims[1] == 0):
+                return None, None, None
+            return _decode(raw)
 
-        # Determine called cell barcodes from cell_calls.tsv in the bundle.
-        # If cell_calls.tsv is absent, fall back to all barcodes in the .1pz.
-        called_bcs: List[str]
         try:
-            import io as _io
-            import pandas as _pd
-            cc_arc = f"samples/{gsm}/cell_calls.tsv"
-            with self._zip().open(cc_arc) as fh:
-                cc_df = _pd.read_csv(_io.BytesIO(fh.read()), sep="\t")
-            if "is_cell" in cc_df.columns:
-                called_bcs = list(cc_df[cc_df["is_cell"]]["barcode"])
-            else:
-                called_bcs = list(cc_df["barcode"])
+            exon_raw = self._extract_pz(gsm, "exon_counts.1pz")
         except KeyError:
-            # Older bundles without cell_calls.tsv — use all barcodes
-            called_bcs = list(all_bcs)
+            return _empty("exon_counts.1pz is missing")
+        dims = _pz_dims_from_bytes(exon_raw)
+        if dims is not None and (dims[0] == 0 or dims[1] == 0):
+            # The pipeline writes 0x0 stubs for outputs it failed to produce.
+            return _empty(f"count matrix is empty ({dims[0]}x{dims[1]})")
+        exon_mat, exon_rows, all_bcs = _decode(exon_raw)
+        all_bcs = [str(bc) for bc in (all_bcs or [])]
+        if not all_bcs:
+            return _empty("count matrix has 0 cells")
 
-        n_cells = len(called_bcs)
+        # Determine called cell barcodes from cell_calls.tsv in the bundle
+        # (any barcode-column spelling; is_cell honoured when present). If
+        # cell_calls.tsv is absent or has no barcode column, fall back to all
+        # barcodes in the .1pz.
+        calls = self._read_cell_calls(gsm)
+        called = _called_from_calls(calls) if calls is not None else None
+        called_bcs: List[str] = called if called is not None else list(all_bcs)
+        if not called_bcs:
+            return _empty("0 cells called")
 
         # Build column index: map called_bcs → column indices in the .1pz
         bc_to_col = {bc: i for i, bc in enumerate(all_bcs)}
@@ -1304,7 +1603,9 @@ class SingletBundle:
         matched_bcs = [bc for bc in called_bcs if bc in bc_to_col]
         n_cells = len(matched_bcs)
         if n_cells == 0:
-            return csc_matrix((0, n_genes), dtype=np.int32), []
+            return _empty(
+                f"none of the {len(called_bcs)} called barcodes are columns of the count matrix"
+            )
 
         def _agg_pz_mat(mat, rownames, pz_all_bcs):
             """Aggregate feature-level matrix to gene-level, filtered to called cells."""
@@ -1391,7 +1692,20 @@ class SingletBundle:
               ``sample_characteristics``, ``qc_flag``, ``reference_build``,
               ``n_cells_sample``.
             - ``var`` : index = Ensembl gene IDs; ``gene_name`` column.
-            - ``uns`` : ``study_meta``, ``manifest``.
+            - ``uns`` : ``study_meta``, ``manifest`` (both made safe for
+              ``write_h5ad``/``write_zarr``: ``manifest["checksums"]`` is
+              stored as parallel ``path``/``sha256`` lists, lists of records
+              such as ``study_meta["publications"]`` are stored as JSON text —
+              ``json.loads`` gives the list of dicts back — and empty lists
+              are dropped; every other key and value, ``None`` included, is
+              kept as in the bundle, whose raw ``study_meta`` is also
+              :attr:`SingletBundle.study_meta`), and — only when some samples
+              had no usable cells — ``skipped_samples``, a DataFrame with
+              ``gsm_id`` and ``reason`` columns.
+
+        Samples whose count matrix is empty (0x0) or has no called cells are
+        skipped with a warning. A bundle in which no sample is usable raises
+        :class:`RuntimeError`.
         """
         import anndata as ad
         import pandas as pd
@@ -1406,14 +1720,20 @@ class SingletBundle:
         mats = []
         spliced_mats: List[Any] = []
         unspliced_mats: List[Any] = []
+        skipped: List[Dict[str, str]] = []
 
         for gsm in self.gsm_ids:
             if verbose:
                 print(f"  [SingletBundle.to_anndata] Loading {gsm} ...")
             mat, barcodes = self._load_gsm_gene_counts(gsm)
             if mat.shape[0] == 0:
-                if verbose:
-                    print(f"    {gsm}: 0 cells, skipping")
+                reason = self._empty_reasons.get(gsm, "0 cells")
+                skipped.append({"gsm_id": gsm, "reason": reason})
+                warnings.warn(
+                    f"{gsm} skipped: {reason} (in {self.path.name})",
+                    UserWarning,
+                    stacklevel=2,
+                )
                 continue
 
             n_cells = mat.shape[0]
@@ -1444,7 +1764,16 @@ class SingletBundle:
                       f"nnz={mat.nnz}")
 
         if not mats:
-            raise RuntimeError(f"No cell data loaded for bundle {self.path}")
+            gse_id = str(self.manifest.get("gse_id") or self.path.stem)
+            reasons = "; ".join(f"{s['gsm_id']}: {s['reason']}" for s in skipped[:5])
+            more = f" (+{len(skipped) - 5} more)" if len(skipped) > 5 else ""
+            raise RuntimeError(
+                f"{self.path.name} has no usable samples: none of its "
+                f"{len(skipped)} sample(s) has a non-empty count matrix with called "
+                f"cells ({reasons}{more}). This file is hollow — it was published "
+                f"without its count data. See {_STUDY_URL.format(gse_id=gse_id)} "
+                f"for the study's current status."
+            )
 
         X = vstack(mats, format="csr")
         obs = pd.concat(obs_frames, axis=0)
@@ -1463,9 +1792,11 @@ class SingletBundle:
                 elif verbose:
                     print(f"  [SingletBundle.to_anndata] {name} layer unavailable "
                           f"for some samples — skipped")
-        adata.uns["study_meta"] = self.study_meta
-        adata.uns["manifest"] = self.manifest
+        adata.uns["study_meta"] = _uns_safe(self.study_meta)
+        adata.uns["manifest"] = _manifest_for_uns(self.manifest)
         adata.uns["singlet_bundle_path"] = str(self.path)
+        if skipped:
+            adata.uns["skipped_samples"] = pd.DataFrame(skipped, columns=["gsm_id", "reason"])
 
         if verbose:
             print(f"  [SingletBundle.to_anndata] Done: {adata.shape}")
@@ -1608,6 +1939,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         default=None,
         help="Optional path to write a standalone series_meta.json sidecar.",
     )
+    pack_p.add_argument(
+        "--strict",
+        action="store_true",
+        help="Fail instead of excluding hollow samples (cells called but an "
+        "empty, missing or 0x0 exon_counts.1pz).",
+    )
 
     args = parser.parse_args(argv)
 
@@ -1621,6 +1958,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             metadata_enriched_path=args.metadata_enriched,
             publications_enriched_path=args.publications_enriched,
             series_meta_path=args.series_meta,
+            strict=args.strict,
         )
         return 0
 

@@ -85,6 +85,7 @@
 #include "singlet/fq/sra_encoder.h"
 #include "singlet/fq/fastq_encoder.h"
 #include "singlet/star/star_api.h"  // star_main_impl() — bundled aligner
+#include "singlet/version.h"        // singlet::kVersion
 
 // ── Timing helper ──
 struct StopWatch {
@@ -797,7 +798,7 @@ static int cmd_download(int argc, char* argv[]) {
            << "  \"read_count\": " << stats.total_reads << ",\n"
            << "  \"geo_title\": \"" << pre_geo_title << "\",\n"
            << "  \"geo_source_name\": \"" << pre_geo_source << "\",\n"
-           << "  \"singlet_version\": \"0.3.0\",\n"
+           << "  \"singlet_version\": \"" << singlet::kVersion << "\",\n"
            << "  \"pipeline_date\": \"" << date_buf << "\"\n"
            << "}\n";
         mf.close();
@@ -2479,7 +2480,7 @@ static int cmd_genome(int argc, char* argv[]) {
 
 static void usage(const char* prog) {
     std::cerr
-        << "singlet v0.3.0 — .1fq → align → pileup → .1pz\n\n"
+        << "singlet v" << singlet::kVersion << " — .1fq → align → pileup → .1pz\n\n"
         << "Subcommands:\n"
         << "  " << prog << " <file.1fq> [options]        Process .1fq → .1pz (align + pileup)\n"
         << "  " << prog << " download <SRR> [-o]         Stream SRA → .1fq archive\n"
@@ -3290,7 +3291,7 @@ int main(int argc, char* argv[]) {
     }
 
     StopWatch total_sw;
-    std::cerr << "singlet v0.3.0\n";
+    std::cerr << "singlet v" << singlet::kVersion << "\n";
     if (cascade_enabled)
         std::cerr << "  cascade: " << cascade_mode << " | te-classify: " << te_classify_mode << "\n";
 
@@ -7959,7 +7960,7 @@ int main(int argc, char* argv[]) {
     }
 
     // ── N8: Populate provenance manifest ──
-    export_cfg.provenance.singlet_version      = "0.3.0";
+    export_cfg.provenance.singlet_version      = singlet::kVersion;
     export_cfg.provenance.input_file            = onefq_file.empty() ? sra_file : onefq_file;
     export_cfg.provenance.input_reads           = stats.total_reads;
     export_cfg.provenance.genome_dir            = genome_dir;
@@ -8437,7 +8438,8 @@ int main(int argc, char* argv[]) {
         "  \"strand_auto_flipped\": " + (engine_ptr->strand_was_flipped() ? "true" : "false") + ",\n"
         "  \"reverse_strand\": " + (config.reverse_strand ? "true" : "false") + ",\n";
     singlet::write_stats_json(out_prefix + "/pileup_stats.json",
-                              stats, "singlet-0.3.0", total_sw.elapsed_s(), extra_json);
+                              stats, std::string("singlet-") + singlet::kVersion,
+                              total_sw.elapsed_s(), extra_json);
 
     // ── Track B: write cascade_stats.json if enabled (T-L2-8) ───────────────
     if (cascade_enabled && cascade_stats_enabled) {

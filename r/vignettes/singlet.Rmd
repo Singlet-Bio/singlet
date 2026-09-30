@@ -17,23 +17,42 @@ knitr::opts_chunk$set(
 
 The `singlet` package gives you programmatic access to the Singlet
 single-cell genomics atlas. You work with two simple things: **GEO
-accessions** (such as `"GSE149298"`) and self-contained **`.singlet`
-bundles**. The package handles downloading, caching, decoding, and
-assembling the data into the single-cell objects you already use.
+accessions** (such as `"GSE138867"` or `"GSM4120733"`) and self-contained
+**`.singlet` bundles**. The package handles downloading, caching, decoding,
+and assembling the data into the single-cell objects you already use.
+
+The chunks below need network access and download real studies, so they are
+not run when the vignette is built. Every one of them works as written
+against the public atlas.
+
+## Install
+
+```{r install}
+install.packages(c("remotes", "BiocManager"))
+BiocManager::install(c("SingleCellExperiment", "SummarizedExperiment", "S4Vectors"))
+remotes::install_github("Singlet-Bio/singlet", subdir = "r")
+```
 
 ```{r setup}
 library(singlet)
 ```
 
+`load()`, `find()`, `find_load()` and `download()` are also available as
+`singlet_load()`, `singlet_find()`, `singlet_find_load()` and
+`singlet_download()`. The short names mask `base::load()` and
+`utils::find()` once the package is attached, so this vignette uses the
+`singlet_` names.
+
 ## Load a study by accession
 
-Pass a GEO Series accession to `load()`. The corresponding `.singlet`
-bundle is downloaded from <https://singlet.bio>, cached locally, and
+Pass a GEO Series accession to `singlet_load()`. The corresponding `.singlet`
+bundle is downloaded from <https://data.singlet.bio>, cached locally, and
 assembled into a `SingleCellExperiment`.
 
 ```{r load-one}
-sce <- load("GSE149298")
+sce <- singlet_load("GSE138867")
 sce
+table(sce$gsm_id)
 ```
 
 Subsequent calls reuse the cached bundle instead of re-downloading. The
@@ -41,47 +60,97 @@ cache lives in `tools::R_user_dir("singlet", "cache")` by default; override
 it with the `cache_dir` argument or the `SINGLET_CACHE_DIR` environment
 variable.
 
+## Load a single sample
+
+A GEO Sample accession works too. `singlet_load()` looks up the study it
+belongs to, downloads that study's bundle, and keeps only the sample's cells.
+
+```{r load-gsm}
+sce <- singlet_load("GSM4120733")
+unique(sce$gsm_id)
+```
+
 ## Combine several studies
 
-Give `load()` a vector of accessions (or local bundle paths, or a mix) and
-it returns one combined object aligned on the shared gene axis.
+Give `singlet_load()` a vector of accessions (or local bundle paths, or a
+mix) and it returns one combined object aligned on the shared gene axis.
 
 ```{r load-many}
-sce <- load(c("GSE149298", "GSE116256"))
+sce <- singlet_load(c("GSE138867", "GSE146974"))
 table(sce$gsm_id)
+```
+
+Samples with no usable cells (for example an empty count matrix left by a
+failed pipeline run) are skipped with a warning instead of failing the load.
+The metadata records which ones and why:
+
+```{r skipped}
+S4Vectors::metadata(sce)$skipped_samples
 ```
 
 ## Search with natural language
 
-`find()` turns a free-text description into matching accessions.
+`singlet_find()` turns a free-text description into matching accessions.
 
 ```{r find}
-hits <- find("T cells from pediatric AML", level = "gse")
+hits <- singlet_find("T cells from pediatric AML")
 hits
 
+# One accession per sample instead of per study
+singlet_find("human PBMC from smokers", level = "gsm", limit = 10)
+
 # Search and load in a single step
-sce <- find_load("microglia from Alzheimer's brain", limit = 5)
+sce <- singlet_find_load("microglia from Alzheimer's brain", limit = 5)
 ```
 
 ## Convert to Seurat
 
-Ask `load()` for a `Seurat` object directly with `as = "seurat"`.
+Ask for a `Seurat` object directly with `as = "seurat"` (this needs
+`install.packages("Seurat")`).
 
 ```{r seurat}
-obj <- load("GSE149298", as = "seurat")
+obj <- singlet_load("GSE138867", as = "seurat")
 obj
 
 # Per-sample metadata is carried into the object's cell metadata
 head(obj[[]])
 ```
 
+## Other modalities
+
+Bundles hold more than gene counts: splicing, mitochondrial heteroplasmy,
+donor assignments, non-host reads and per-cell QC tables, depending on the
+study and pipeline version. Download the bundle, check what a sample has, and
+read what you need.
+
+```{r modalities}
+path <- singlet_download("GSE128639")
+singlet_modalities(path)
+
+gsm <- "GSM3681518"
+if (singlet_has(path, "mt_heteroplasmy", gsm)) {
+  het <- singlet_read(path, gsm, "mt_heteroplasmy")
+  dim(het)
+}
+if (singlet_has(path, "cell_qc", gsm)) {
+  head(singlet_read(path, gsm, "cell_qc"))
+}
+
+# One sample's raw counts, with spliced and unspliced assays
+if (singlet_has(path, "exon_counts", gsm)) {
+  raw <- singlet_raw_counts(path, gsm)
+  SummarizedExperiment::assayNames(raw)
+}
+```
+
 ## Working with local bundles
 
 If you already have a `.singlet` file on disk, read it directly with
-`read_singlet()` (or just pass the path to `load()`).
+`read_singlet()` (or just pass the path to `singlet_load()`).
 
 ```{r local}
-sce <- read_singlet("/data/GSE149298.singlet")
+path <- singlet_download("GSE138867")
+sce <- read_singlet(path)
 ```
 
 ## Where the data comes from
@@ -93,5 +162,5 @@ available. The parsed bundle manifest and study metadata are attached to
 
 ```{r provenance}
 SummarizedExperiment::colData(sce)
-names(SummarizedExperiment::metadata(sce))
+names(S4Vectors::metadata(sce))
 ```

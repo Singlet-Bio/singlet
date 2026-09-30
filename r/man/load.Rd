@@ -2,13 +2,19 @@
 % Please edit documentation in R/load.R
 \name{load}
 \alias{load}
+\alias{singlet_load}
 \title{Load Singlet data by accession or bundle path}
 \usage{
 load(x, as = c("sce", "seurat"), cache_dir = NULL)
+
+singlet_load(x, as = c("sce", "seurat"), cache_dir = NULL)
 }
 \arguments{
-\item{x}{A character vector of GEO Series accessions (\code{"GSE..."})
-and/or paths to local \code{.singlet} bundles. Length one or more.}
+\item{x}{A character vector of GEO Series accessions (\code{"GSE..."}),
+GEO Sample accessions (\code{"GSM..."}) and/or paths to local
+\code{.singlet} bundles. Length one or more. A sample accession is
+resolved to its parent Series through the Singlet API; that Series'
+bundle is downloaded and only the sample's cells are kept.}
 
 \item{as}{Output class: \code{"sce"} (default) for a
 \code{SingleCellExperiment}, or \code{"seurat"} for a \code{Seurat}
@@ -17,35 +23,54 @@ object.}
 \item{cache_dir}{Directory in which to cache downloaded bundles. Defaults
 to \code{tools::R_user_dir("singlet", "cache")} (override with the
 \code{SINGLET_CACHE_DIR} environment variable). Existing bundles are
-reused rather than re-downloaded.}
+reused rather than re-downloaded, and \code{GSM} lookups are
+remembered there, so a sample of an already cached study loads offline.}
 }
 \value{
 A combined \code{SingleCellExperiment} (when \code{as = "sce"}) or
   \code{Seurat} object (when \code{as = "seurat"}) spanning all inputs.
+  Samples with no usable cells (for example an empty count matrix left by
+  a failed pipeline run) are skipped with a warning and listed, with the
+  reason, in \code{metadata(sce)$skipped_samples}
+  (\code{obj@misc$skipped_samples} for Seurat).
 }
 \description{
 The primary entry point for working with the Singlet atlas from R. Accepts
-one or more inputs that may be GEO accessions (\code{"GSE..."}), local
-\code{.singlet} bundle paths, or a mix of both, and returns a single
-combined object. GEO accessions are downloaded (and cached) from
-\url{https://singlet.bio} on demand; local paths are read directly.
-Multiple inputs are combined column-wise on their shared gene axis.
+one or more inputs that may be GEO accessions (\code{"GSE..."} or
+\code{"GSM..."}), local \code{.singlet} bundle paths, or a mix of these,
+and returns a single combined object. Accessions are downloaded (and
+cached) from \url{https://data.singlet.bio} on demand; local paths are read
+directly. Multiple inputs are combined column-wise on their shared gene
+axis. \code{singlet_load()} is the same function.
 }
 \details{
-Downloads honor two environment variables: \code{SINGLET_DATA_BASE} (the
-base URL for bundles, default \code{https://data.singlet.bio/data}) and
-\code{SINGLET_CACHE_DIR} (the on-disk cache location).
+Downloads honor three environment variables: \code{SINGLET_DATA_BASE}
+(the host serving bundles, default \code{https://data.singlet.bio};
+bundles are fetched from \code{<base>/data/<GSE>/<GSE>.singlet}),
+\code{SINGLET_API_BASE} (used to resolve \code{GSM} accessions, default
+\code{https://singlet.bio/api}) and \code{SINGLET_CACHE_DIR} (the on-disk
+cache location).
+
+\code{load()} masks \code{base::load()} once the package is attached;
+\code{singlet_load()} is the same function under a name that masks
+nothing.
 }
 \examples{
 \dontrun{
 # One study by accession (downloaded + cached automatically)
-sce <- load("GSE149298")
+sce <- singlet_load("GSE138867")
+
+# One sample: resolves to GSE138867 and keeps only GSM4120733's cells
+sce <- singlet_load("GSM4120733")
 
 # Combine several studies into one object
-sce <- load(c("GSE149298", "GSE116256"))
+sce <- singlet_load(c("GSE138867", "GSE146974"))
+
+# Samples that were skipped for having no usable cells, and why
+S4Vectors::metadata(sce)$skipped_samples
 
 # A local bundle, returned as a Seurat object
-obj <- load("/data/GSE149298.singlet", as = "seurat")
+obj <- singlet_load("GSE138867.singlet", as = "seurat")
 }
 
 }

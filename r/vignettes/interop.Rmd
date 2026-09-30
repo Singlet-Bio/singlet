@@ -21,6 +21,13 @@ and RNA velocity via scVelo. The goal is to demonstrate that the
 `singlet` package drops the pipeline outputs into standard ecosystem
 objects without any reshape, rename, or dtype conversion.
 
+> **This vignette is not run.** `sample_dir` below is a directory written
+> by running the singlet pipeline yourself (the path shown is from the
+> authors' cluster). The same downstream steps apply to atlas data: replace
+> `as_sce(sample_dir)` with `singlet::singlet_load("GSE138867")`, whose
+> `counts`, `spliced` and `unspliced` assays are ready for `scran`,
+> Seurat and velocity tools.
+
 ## Setup
 
 ```{r setup}

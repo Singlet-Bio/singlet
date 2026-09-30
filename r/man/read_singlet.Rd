@@ -15,7 +15,9 @@ A \code{SingleCellExperiment} with one column per called cell
   \code{counts} (exonic + intronic), \code{spliced} (exonic) and
   \code{unspliced} (intronic). \code{colData}
   carries per-sample metadata; \code{metadata(sce)} carries the bundle's
-  parsed \code{manifest} and \code{study_meta}.
+  parsed \code{manifest} and \code{study_meta}, and
+  \code{skipped_samples}, a data frame (\code{gsm_id}, \code{reason}) of
+  samples that had no usable cells.
 }
 \description{
 Reads a single local `.singlet` bundle (the per-Series distribution unit
@@ -31,12 +33,20 @@ disease, protocol, and any enriched fields) is attached to
 This is the file-path workhorse used by \code{\link{load}}. Most users
 should call \code{\link{load}} instead, which also accepts GEO accessions
 and downloads bundles on demand.
+
+Samples with no usable cells (a missing or empty count matrix, or no
+called cells) are skipped with a warning instead of failing the whole
+study; they are listed in \code{metadata(sce)$skipped_samples}. The
+barcode column of \code{cell_calls.tsv} may be named \code{barcode},
+\code{cb}, \code{cell_barcode} or \code{CB}.
 }
 \examples{
 \dontrun{
-sce <- read_singlet("GSE149298.singlet")
+path <- singlet_download("GSE138867")
+sce <- read_singlet(path)
 sce
 table(sce$gsm_id)
+S4Vectors::metadata(sce)$skipped_samples
 }
 
 }

@@ -4,8 +4,15 @@ name: Publish to PyPI
 # Triggered by tags v* (e.g. v1.0.0, v1.0.0rc1). For pre-release tags (-rc, -a,
 # -b), publishes to TestPyPI only. For final tags, publishes to PyPI.
 #
+# Distribution name: `singlet-bio` (pyproject.toml [project].name; `singlet`
+# on PyPI is an unrelated project). The import name stays `singlet`. Artifacts
+# are singlet_bio-<version>.tar.gz and singlet_bio-<version>-<tags>.whl; the
+# steps below match them by extension and platform tag only, never by name.
+#
 # Authentication: PyPI "Trusted Publishing" (OIDC) -- no long-lived token.
-# On pypi.org (project `singlet`, owner zdebruine) add a trusted publisher:
+# The `singlet-bio` project does not exist on PyPI until the first upload, so
+# register it as a *pending* trusted publisher at
+# https://pypi.org/manage/account/publishing/ with project name singlet-bio,
 #   owner Singlet-Bio, repository singlet, workflow publish-pypi.yml,
 #   environment pypi   (and the same on test.pypi.org with environment testpypi).
 # Then create the `pypi` and `testpypi` environments in the GitHub repo

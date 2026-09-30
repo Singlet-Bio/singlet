@@ -2,20 +2,21 @@
 % Please edit documentation in R/load.R
 \name{find}
 \alias{find}
+\alias{singlet_find}
 \title{Search the Singlet atlas with natural language}
 \usage{
 find(query, level = c("gse", "gsm"), limit = 50L)
+
+singlet_find(query, level = c("gse", "gsm"), limit = 50L)
 }
 \arguments{
 \item{query}{Free-text search string, e.g.
 \code{"T cells from pediatric AML"}.}
 
 \item{level}{Accession granularity to return: \code{"gse"} (default, one
-accession per Series) or \code{"gsm"} (one per sample). \code{"gse"} is
-the default here -- unlike the Python client -- because \code{\link{load}}
-only accepts Series-level (\code{GSE}) accessions; a \code{GSM} accession
-from \code{level = "gsm"} must be resolved to its parent \code{GSE}
-yourself before calling \code{load()}.}
+accession per Series) or \code{"gsm"} (one per sample). Both kinds can
+be passed straight to \code{\link{load}}: a \code{GSM} accession is
+resolved to its parent Series and only that sample's cells are kept.}
 
 \item{limit}{Maximum number of accessions to return. Default \code{50}.}
 }
@@ -27,16 +28,21 @@ Query the Singlet atlas with a free-text description and receive matching
 GEO accessions. The query is sent to the Singlet search API
 (\url{https://singlet.bio/api}); pair the result with \code{\link{load}}
 (or use \code{\link{find_load}}) to pull the matching data.
+\code{singlet_find()} is the same function.
 }
 \details{
 The API base URL is taken from the \code{SINGLET_API_BASE} environment
 variable when set, otherwise \code{https://singlet.bio/api}. Requires
-network access.
+network access. \code{find()} masks \code{utils::find()} once the package
+is attached; \code{singlet_find()} masks nothing.
 }
 \examples{
 \dontrun{
-hits <- find("T cells from pediatric AML")
-sce <- load(hits[1:3])
+hits <- singlet_find("T cells from pediatric AML")
+sce <- singlet_load(hits[1:3])
+
+# One accession per sample instead of per study
+samples <- singlet_find("human PBMC from smokers", level = "gsm")
 }
 
 }

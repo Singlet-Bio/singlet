@@ -24,10 +24,14 @@ Read every .1pz file in a pipeline output directory.
 }
 \examples{
 \dontrun{
-dd <- read_singlet_dir("quant/scrna/GSE174/GSE174399/GSM5293863")
+# Each sample directory inside a bundle is a pipeline output directory
+path <- singlet_download("GSE138867")
+exdir <- tempfile()
+utils::unzip(path, exdir = exdir)
+dd <- read_singlet_dir(file.path(exdir, "samples", "GSM4120733"))
 names(dd)
 attr(dd, "user_kv")[["gsm_id"]]
-dd$gene_counts
+dd$exon_counts
 }
 
 }

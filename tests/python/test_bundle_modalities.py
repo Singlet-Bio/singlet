@@ -36,6 +36,15 @@ EXON_DENSE = np.array([[1, 2, 0], [3, 0, 0]], dtype=np.int32)  # features x cell
 INTRON_DENSE = np.array([[0, 4, 0], [5, 6, 0]], dtype=np.int32)
 
 
+def _named_layers(adata) -> set:
+    """Layer keys other than ``None``.
+
+    anndata 0.13 exposes ``X`` as ``layers[None]``, so it shows up when the
+    layers are iterated or counted; earlier versions list only named layers.
+    """
+    return {k for k in adata.layers if k is not None}
+
+
 def _write_1pz(path, dense, rownames, colnames):
     """Write a features x cells .1pz from a dense features x cells array."""
     import anndata as ad
@@ -158,7 +167,7 @@ class TestRawCounts:
 
     def test_layers_partition_x(self, bundle):
         adata = bundle.raw_counts(GSM)
-        assert set(adata.layers) == {"spliced", "unspliced"}
+        assert _named_layers(adata) == {"spliced", "unspliced"}
         total = adata.layers["spliced"].sum() + adata.layers["unspliced"].sum()
         assert adata.X.sum() == total
 
@@ -194,9 +203,9 @@ class TestRawCounts:
 class TestToAnnData:
     def test_layers_are_attached(self, bundle):
         adata = bundle.to_anndata(verbose=False)
-        assert set(adata.layers) == {"spliced", "unspliced"}
+        assert _named_layers(adata) == {"spliced", "unspliced"}
         assert adata.X.sum() == adata.layers["spliced"].sum() + adata.layers["unspliced"].sum()
 
     def test_layers_can_be_switched_off(self, bundle):
         adata = bundle.to_anndata(verbose=False, layers=False)
-        assert not adata.layers
+        assert not _named_layers(adata)

@@ -150,11 +150,26 @@ def test_info_gsm_lookup():
     assert info["status"] == "SUCCESS"
 
 
-def test_info_missing_raises():
+def test_info_missing_raises(monkeypatch):
     import singlet
+    import singlet._catalog as cat_mod
 
-    with pytest.raises(KeyError):
+    # Not in the snapshot and (mocked) unknown to the live API.
+    monkeypatch.setattr(cat_mod, "_live_info", lambda accession: None)
+    with pytest.raises(KeyError, match="live API"):
         singlet.info("GSE000000")
+
+
+def test_info_offline_skips_live_lookup(monkeypatch):
+    import singlet
+    import singlet._catalog as cat_mod
+
+    def boom(accession):
+        raise AssertionError("live lookup attempted")
+
+    monkeypatch.setattr(cat_mod, "_live_info", boom)
+    with pytest.raises(KeyError, match="offline catalog snapshot"):
+        singlet.info("GSE000000", live=False)
 
 
 def test_samples_quality_alias():
