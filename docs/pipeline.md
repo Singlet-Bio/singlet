@@ -96,53 +96,6 @@ Accepted `source` forms:
 
 Every run produces a directory matching
 [`CANONICAL_OUTPUT_FORMAT.md`](CANONICAL_OUTPUT_FORMAT.md). Load it
-with the `SingletSample` reader:
-
-```python
-from singlet.io import SingletSample
-from singlet.views import gene_counts, usa, psi
-
-sample = SingletSample(result.output_dir)
-
-# Top-level metadata
-print(sample.summary["n_cells"], sample.summary["mapping_rate"])
-print(sample.cell_meta.head())
-
-# Sparse views (CSC, genes × cells)
-genes = gene_counts(sample)           # spliced + unspliced + ambiguous projected to genes
-trio = usa(sample)                    # UsaTriplet(spliced, unspliced, ambiguous)
-psi_mat = psi(sample)                 # per-junction × cell PSI
-
-# Raw row blocks of counts.1pz
-exon = sample.counts.exon_body()
-intron = sample.counts.intron_body()
-junctions = sample.counts.junctions()
-
-# Variant tracks (two-layer CSC: AD + DP)
-snp_ad = sample.snp.ad()
-snp_dp = sample.snp.dp()
-mt_vaf = sample.mt.vaf()              # AD / DP
-
-# Non-host (Kraken2 + Bracken) — present only when --nonhost was set
-if sample.nonhost is not None:
-    print(sample.nonhost.summary())
-    species_per_cell = sample.nonhost.per_cell()
-```
-
-All reader methods are lazy: nothing is decoded until you request a
-specific block, and matrices come back as `scipy.sparse.csc_matrix`
-ready for downstream analysis.
-
-## Packing a study into a `.singlet` bundle
-
-Finished samples of one GEO series are packed into the per-study bundle that
-`singlet.load()` reads:
-
-```bash
-python -m singlet.bundle pack --gse GSE138867 \
-    --results /path/to/results --catalog /path/to/processing_catalog.parquet \
-    --out /path/to/out/GSE138867.singlet
-```
 
 The packer refuses hollow samples: a sample whose `summary.json` reports
 called cells while its `exon_counts.1pz` is missing, a 0×0 stub, or all zeros

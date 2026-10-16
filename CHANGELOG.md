@@ -20,6 +20,7 @@ moved or deleted before tagging.
   Python and R clients; accessions are validated before they reach a path or a URL; `fetch()` keeps manifest paths
   inside the cache and requires checksums.
 - **Windows:** wheel build, UTF-8 paths, console-safe CLI. R was already built and checked on Windows.
+- **Removed the multi-block `1PZ02` reader and everything built on it**: `singlet.pz_v2`, `SingletSample` (and `SingletCounts`, `SingletSnp`, `SingletMt`, `SingletNonhost`), `singlet.open`, `validate_sample`, `transcode_v1_to_v2`, the `view_*` functions and their tests. No deployed bundle uses that format; the package reads only the single-block `TP1Z` version 1 layout.
 - **The R package's codec headers are generated** from the C++ ones (`scripts/sync_r_headers.py`), checked in CI.
 
 ### Development build 2.1.0 — 2026-10-01

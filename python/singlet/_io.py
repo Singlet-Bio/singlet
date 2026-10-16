@@ -1,14 +1,10 @@
 # SPDX-License-Identifier: MIT
 """.1pz file I/O — single-matrix AnnData round-trip.
 
-For multi-block canonical v2 sample outputs, see :mod:`singlet.pz_v2`
-and :class:`singlet.io.SingletSample`.
-
 This module is the thin AnnData adapter on top of the in-tree TP1Z codec at
 `include/singlet/pileup/pz_reader.h` and `include/singlet/pileup/pz_writer.h`
-(binding: `singlet._pz`). It handles only legacy single-block ``.1pz`` files
-(magic ``TP1Z``); the canonical v2 format (magic ``1PZ02``) is read via
-:func:`singlet.pz_v2.read_pz_v2`.
+(binding: `singlet._pz`). It handles single-block ``.1pz`` files (magic ``TP1Z``,
+version 1), the only layout this package reads or writes.
 """
 
 from __future__ import annotations
@@ -21,21 +17,17 @@ if TYPE_CHECKING:
 
 
 _TP1_MAGIC = b"\x54\x50\x31\x5a"  # "TP1Z" — legacy single-block .1pz
-_PZ_V2_MAGIC_PREFIX = b"1PZ02"  # canonical v2 multi-block .1pz
 
 
 def _detect_format(path: str | Path) -> str:
     """Detect file format from header magic bytes.
 
-    Returns ``"1pz"`` (legacy single-block) or ``"1pz_v2"`` (canonical
-    multi-block). Raises :class:`ValueError` for anything else.
+    Returns ``"1pz"``. Raises :class:`ValueError` for anything else.
     """
     with open(path, "rb") as f:
         header = f.read(8)
     if len(header) < 8:
         raise ValueError(f"File too small to be a valid matrix file: {path}")
-    if header[:5] == _PZ_V2_MAGIC_PREFIX:
-        return "1pz_v2"
     if header[:4] == _TP1_MAGIC:
         return "1pz"
     raise ValueError(f"Unknown file format (bad magic): {path}")
@@ -72,9 +64,6 @@ def _read_pz_native(path: str):
 
 def read_1pz(path: str | Path) -> "anndata.AnnData":
     """Read a single-block ``.1pz`` file into AnnData.
-
-    For canonical v2 multi-block sample outputs use
-    :class:`singlet.io.SingletSample`.
 
     Returns
     -------
@@ -131,9 +120,6 @@ def write_1pz(
 ) -> dict:
     """Write AnnData to a single-block ``.1pz`` file.
 
-    For canonical multi-block sample outputs, use
-    :func:`singlet.pz_v2.write_pz_v2`.
-
     Note
     ----
     ``store_transpose=True`` is not supported by the in-tree codec; passing
@@ -150,9 +136,7 @@ def write_1pz(
 
     if store_transpose:
         raise NotImplementedError(
-            "store_transpose=True is not supported by the in-tree TP1Z codec. "
-            "Use the canonical v2 format (singlet.pz_v2.write_pz_v2) for "
-            "transpose storage."
+            "store_transpose=True is not supported by the in-tree TP1Z codec."
         )
 
     if adata is None:
@@ -231,20 +215,9 @@ def info_1pz(path: str | Path) -> dict:
 
 
 def read_matrix(path: str | Path, **kwargs):
-    """Auto-detect ``.1pz`` format variant and return an AnnData.
-
-    Routes single-block ``.1pz`` files through :func:`read_1pz`. For
-    canonical multi-block files (magic ``1PZ02``) callers should use
-    :class:`singlet.io.SingletSample`; this function raises a
-    :class:`ValueError` so it cannot be silently misused.
-    """
-    fmt = _detect_format(path)
-    if fmt == "1pz":
-        return read_1pz(path)
-    raise ValueError(
-        f"{path} is a canonical multi-block .1pz file (magic 1PZ02); "
-        "open it with singlet.io.SingletSample or singlet.pz_v2.read_pz_v2"
-    )
+    """Return an AnnData from a ``.1pz`` file (checks the magic bytes, then calls :func:`read_1pz`)."""
+    _detect_format(path)
+    return read_1pz(path)
 
 
 def read_kraken2(gse_dir: str | Path):

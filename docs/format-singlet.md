@@ -162,7 +162,7 @@ step using PubMed cross-references.
 
 Each GSM directory stores the raw pipeline `.1pz` outputs verbatim (STORED in
 ZIP). The pipeline v1 format uses `TP1Z` magic; the v2 format uses `1PZ02`.
-Both are supported by `singlet._io._read_pz_native()` and `singlet.pz_v2`.
+Both are read by the in-tree codec (`include/singlet/pileup/pz_reader.h`).
 
 | File | Content |
 |------|---------|

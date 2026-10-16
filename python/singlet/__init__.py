@@ -38,15 +38,9 @@ Format I/O:
     singlet.read_kraken2("gse_dir/")       Read kraken2 microbiome matrix
     singlet.read_matrix("file")            Auto-detect single-block count matrix
 
-Canonical v2 samples (multi-block, from the pipeline):
-    sample = singlet.SingletSample("sample_dir/")
-    counts = sample.counts.adata()         Spliced+unspliced AnnData
-
 Pipeline (process raw reads → canonical sample):
     singlet.run_pipeline("SRR12345678", out_dir="results/")
     singlet.run_pipeline("https://.../SRR12345678", reference="GRCh38")
-    singlet.transcode_v1_to_v2(old_dir, new_dir)  Migrate legacy outputs
-    singlet.validate_sample(sample_dir)            Manifest + structure check
 
 Configuration:
     singlet.set_catalog_dir("/path/to/catalog")  Set local catalog path (cluster use)
@@ -245,23 +239,8 @@ from singlet.convert import (
 )
 from singlet.fetch import default_base_url, default_cache_dir, fetch
 from singlet.find import find, find_load, set_api_key
-from singlet.io.sample import (
-    SingletCounts,
-    SingletMt,
-    SingletNonhost,
-    SingletSample,
-    SingletSnp,
-)
-from singlet.io.sample import (
-    open_sample as open,
-)
-from singlet.manifest import validate_sample
 from singlet.pipeline import PipelineError, Run
 from singlet.pipeline import run as run_pipeline
-from singlet.transcode import transcode_v1_to_v2
-from singlet.views import gene_counts as view_gene_counts
-from singlet.views import psi as view_psi
-from singlet.views import usa as view_usa
 
 __all__ = [
     # Browse
@@ -301,25 +280,13 @@ __all__ = [
     "info_1pz",
     "read_kraken2",
     "read_matrix",
-    # Canonical v2 readers
-    "SingletSample",
-    "SingletCounts",
-    "SingletSnp",
-    "SingletMt",
-    "SingletNonhost",
-    "open",
     "fetch",
     "default_cache_dir",
     "default_base_url",
-    "view_gene_counts",
-    "view_usa",
-    "view_psi",
     # Pipeline
     "run_pipeline",
     "Run",
     "PipelineError",
-    "transcode_v1_to_v2",
-    "validate_sample",
     # Conversions
     "to_h5ad",
     "to_zarr",
