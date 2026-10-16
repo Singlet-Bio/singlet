@@ -148,4 +148,4 @@ jobs:
         run: |
           pip install pip-audit --quiet
           pip install -e "." --quiet
-          pip-audit --local --progress-spinner=off --ignore-vuln GHSA-0000 || true
+          pip-audit --local --progress-spinner=off
