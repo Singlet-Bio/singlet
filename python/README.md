@@ -181,7 +181,7 @@ ds = SingletDataset("GSE138867", normalize=True)
 | Variable | Meaning |
 |---|---|
 | `SINGLET_DATA_BASE` | Bundle host: files live at `<base>/data/<GSE>/<GSE>.singlet` (default `https://data.singlet.bio`; a trailing `/data` is accepted, so the R client's value works too) |
-| `SINGLET_SAMPLE_MIRROR` | Self-hosted mirror of per-sample directories for `singlet.fetch()` / `singlet.open()` (no public default) |
+| `SINGLET_SAMPLE_MIRROR` | Self-hosted mirror of per-sample directories for `singlet.fetch()` (no public default) |
 | `SINGLET_API_BASE` | REST API base (default `https://singlet.bio/api`) |
 | `SINGLET_CACHE_DIR` | Download cache (default `~/.singlet/cache`) |
 | `SINGLET_API_KEY` | Optional key for natural-language search |

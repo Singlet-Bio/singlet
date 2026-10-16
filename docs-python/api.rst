@@ -239,7 +239,6 @@ Every public name in ``singlet.__all__``, alphabetically.
     singlet.nmf
     singlet.normalize
     singlet.obs_df
-    singlet.open
     singlet.open_bundle
     singlet.optimal_transport
     singlet.paga
