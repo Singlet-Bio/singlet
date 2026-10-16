@@ -56,3 +56,25 @@ jobs:
             tests/fuzz/fuzz_pz_reader.cpp -lzstd -o fuzz_pz_reader
           mkdir -p corpus
           ./fuzz_pz_reader corpus -max_total_time=60 -max_len=65536 -timeout=10
+
+  windows:
+    # The same reader tests under MSVC: proves the codec builds and runs on Windows
+    # (narrow-path handling, no POSIX-only calls, temp files under %TEMP%).
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install zstd
+        run: vcpkg install zstd:x64-windows
+
+      - name: Build and run the reader tests
+        shell: cmd
+        run: |
+          for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do call "%%i\VC\Auxiliary\Build\vcvars64.bat"
+          set Z=C:\vcpkg\installed\x64-windows
+          cl /nologo /std:c++17 /EHsc /O2 /utf-8 /I include /I %Z%\include tests\cpp\test_pz_reader.cpp /Fe:test_pz_reader.exe /link /LIBPATH:%Z%\lib zstd.lib || exit /b 1
+          cl /nologo /std:c++17 /EHsc /O2 /utf-8 /I include /I %Z%\include tests\cpp\test_pz_hardening.cpp /Fe:test_pz_hardening.exe /link /LIBPATH:%Z%\lib zstd.lib || exit /b 1
+          copy /Y %Z%\bin\zstd.dll . >nul
+          test_pz_reader.exe || exit /b 1
+          test_pz_hardening.exe || exit /b 1

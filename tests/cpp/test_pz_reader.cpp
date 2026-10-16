@@ -17,6 +17,13 @@
 
 namespace pz = singlet::pz;
 
+// Temp files go to $TMPDIR / $TEMP (or /tmp), so the test also runs where /tmp does not exist.
+static std::string tmp_file(const char* name) {
+    const char* d = std::getenv("TMPDIR");
+    if (!d) d = std::getenv("TEMP");
+    return std::string(d ? d : "/tmp") + "/" + name;
+}
+
 // Tiny CSC builder for test matrices.
 //
 // Input: (rows, cols, list of (row, col, value)) triples.
@@ -82,7 +89,7 @@ static void test_roundtrip_small_uint16() {
         {"pipeline_date", "2026-04-13"},
     };
 
-    std::string path = "/tmp/test_pz_reader_small.1pz";
+    std::string path = tmp_file("test_pz_reader_small.1pz");
     bool ok = pz::write_1pz<uint16_t>(
         path, csc.m, csc.n, csc.indptr, csc.indices, csc.data,
         rownames, colnames, 3, 1024, 1, user_kv);
@@ -195,7 +202,7 @@ static void test_roundtrip_medium_uint16() {
     for (uint32_t j = 0; j < n; ++j) colnames[j] = "C" + std::to_string(j);
     std::map<std::string, std::string> user_kv = {{"dataset", "med_test"}};
 
-    std::string path = "/tmp/test_pz_reader_medium.1pz";
+    std::string path = tmp_file("test_pz_reader_medium.1pz");
     bool ok = pz::write_1pz<uint16_t>(
         path, m, n, csc.indptr, csc.indices, csc.data,
         rownames, colnames, 3, 1024, 1, user_kv);
@@ -269,7 +276,7 @@ static void test_roundtrip_uint8() {
     for (uint32_t i = 0; i < m; ++i) rownames[i] = "G" + std::to_string(i);
     for (uint32_t j = 0; j < n; ++j) colnames[j] = "C" + std::to_string(j);
 
-    std::string path = "/tmp/test_pz_reader_u8.1pz";
+    std::string path = tmp_file("test_pz_reader_u8.1pz");
     bool ok = pz::write_1pz<uint8_t>(
         path, m, n, indptr, indices, data,
         rownames, colnames, 3, 1024, 1, {});
@@ -340,7 +347,7 @@ static void test_roundtrip_uint32() {
     for (uint32_t i = 0; i < m; ++i) rownames[i] = "F" + std::to_string(i);
     for (uint32_t j = 0; j < n; ++j) colnames[j] = "B" + std::to_string(j);
 
-    std::string path = "/tmp/test_pz_reader_u32.1pz";
+    std::string path = tmp_file("test_pz_reader_u32.1pz");
     bool ok = pz::write_1pz<uint32_t>(
         path, m, n, indptr, indices, data,
         rownames, colnames, 3, 1024, 1, {});
@@ -411,7 +418,7 @@ static void test_roundtrip_multi_chunk() {
     for (uint32_t i = 0; i < m; ++i) rownames[i] = "r" + std::to_string(i);
     for (uint32_t j = 0; j < n; ++j) colnames[j] = "c" + std::to_string(j);
 
-    std::string path = "/tmp/test_pz_reader_multi.1pz";
+    std::string path = tmp_file("test_pz_reader_multi.1pz");
     bool ok = pz::write_1pz<uint16_t>(
         path, m, n, indptr, indices, data,
         rownames, colnames, 3, CHUNK_COLS, 1, {});

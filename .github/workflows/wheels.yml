@@ -1,7 +1,8 @@
 name: Build binary wheels (cibuildwheel)
 
 # MVP_ROADMAP.md BLOCKER #5.
-# Builds manylinux + macOS wheels (Linux x86_64/aarch64, macOS x86_64/arm64).
+# Builds manylinux, macOS and Windows wheels (Linux x86_64/aarch64, macOS x86_64/arm64,
+# Windows AMD64).
 # Runs on push to main / relevant PRs as a smoke build (no publish), and is
 # *called* by publish-pypi.yml (workflow_call) on release tags so the wheel
 # artifacts land in the publishing run itself -- artifacts are per-run, so a
@@ -39,6 +40,7 @@ jobs:
           # supported Intel label.
           - { os: macos-15-intel, arch: x86_64 }
           - { os: macos-14, arch: arm64 }
+          - { os: windows-latest, arch: AMD64 }
     steps:
       - uses: actions/checkout@v4
         with:
@@ -98,6 +100,12 @@ jobs:
           CIBW_ENVIRONMENT_MACOS: >-
             CPPFLAGS="-I/tmp/zstd-1.5.6/lib"
             LDFLAGS="-L/tmp/zstd-1.5.6/lib"
+          # Windows: build a static zstd with CMake/MSVC (scripts/build_zstd_windows.cmd)
+          # and point the compiler (CL) and linker (LINK) at it; setup.py links "zstd".
+          CIBW_BEFORE_ALL_WINDOWS: scripts\build_zstd_windows.cmd
+          CIBW_ENVIRONMENT_WINDOWS: >-
+            CL="/IC:/zstd/include"
+            LINK="/LIBPATH:C:/zstd/lib"
           CIBW_TEST_REQUIRES: pytest
           CIBW_TEST_COMMAND: "python -c 'import singlet; print(singlet.__version__)'"
           MACOSX_DEPLOYMENT_TARGET: "11.0"

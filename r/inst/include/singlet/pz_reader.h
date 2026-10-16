@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <limits>
 #include <map>
@@ -700,7 +701,9 @@ inline ReadResult read_1pz_buffer(
 // read_1pz — read a file from disk and decode it.
 // ============================================================================
 inline ReadResult read_1pz(const std::string& path, const ReadLimits& limits = ReadLimits()) {
-    std::ifstream fin(path, std::ios::binary | std::ios::ate);
+    // u8path: on Windows a narrow path is the ANSI code page, so a UTF-8 name with
+    // non-ASCII characters (a user folder like C:\Users\Zoë) would not open.
+    std::ifstream fin(std::filesystem::u8path(path), std::ios::binary | std::ios::ate);
     if (!fin) throw PZReadError("cannot open " + path);
     std::streamoff sz = fin.tellg();
     if (sz < 0) throw PZReadError(path + ": cannot determine file size");

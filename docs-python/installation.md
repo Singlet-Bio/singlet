@@ -12,7 +12,9 @@ This compiles the package's `.1pz` codec extension, so it needs a **C++17
 compiler** and **zstd** (headers + library) on the system — on
 Debian/Ubuntu, `apt install build-essential libzstd-dev`; on macOS,
 `brew install zstd`; with conda, `conda install -c conda-forge zstd`.
-Linux and macOS are supported; on Windows use WSL.
+On Windows, install Visual Studio Build Tools ("Desktop development with C++") and zstd
+(`vcpkg install zstd:x64-windows`), or use the Windows wheels once a release is published.
+The R package builds and is tested on Windows with Rtools.
 
 ## Optional extras
 

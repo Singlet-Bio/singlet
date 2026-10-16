@@ -18,6 +18,7 @@
 #include <singlet/pileup/pz_reader.h>  // also pulls in pz_writer.h
 
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <stdexcept>
 #include <string>
@@ -233,7 +234,7 @@ static bool py_write_1pz(
 // ============================================================================
 static py::dict py_info_1pz(const std::string& path)
 {
-    std::ifstream fin(path, std::ios::binary);
+    std::ifstream fin(std::filesystem::u8path(path), std::ios::binary);
     if (!fin)
         throw std::runtime_error("info_1pz: cannot open " + path);
 

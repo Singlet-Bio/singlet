@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -701,7 +702,7 @@ bool write_1pz(
     ftr.num_chunks = (uint32_t)fwd.num_chunks;
     ftr.magic = TP1_MAGIC;
 
-    std::ofstream fout(path, std::ios::binary);
+    std::ofstream fout(std::filesystem::u8path(path), std::ios::binary);  // u8path: UTF-8 names open on Windows
     if (!fout) {
         std::cerr << "[pz_writer] Cannot open: " << path << "\n";
         return false;

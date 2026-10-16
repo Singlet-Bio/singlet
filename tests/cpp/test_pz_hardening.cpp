@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <map>
 #include <random>
@@ -31,7 +32,7 @@ static std::string tmp_path(const char* name) {
 }
 
 static std::vector<uint8_t> slurp(const std::string& path) {
-    std::ifstream f(path, std::ios::binary | std::ios::ate);
+    std::ifstream f(std::filesystem::u8path(path), std::ios::binary | std::ios::ate);
     std::vector<uint8_t> b(static_cast<size_t>(f.tellg()));
     f.seekg(0);
     f.read(reinterpret_cast<char*>(b.data()), static_cast<std::streamsize>(b.size()));
@@ -45,7 +46,7 @@ static void fix_crc(std::vector<uint8_t>& b) {
 }
 
 // A multi-chunk image with metadata: 60 rows x 2500 cols (3 chunks of 1024).
-static std::vector<uint8_t> make_valid(uint32_t m = 60, uint32_t n = 2500) {
+static std::vector<uint8_t> make_valid(uint32_t m = 60, uint32_t n = 2500, const char* file = "pz_hardening_valid.1pz") {
     std::vector<int32_t> indptr{0}, indices;
     std::vector<uint16_t> data;
     std::mt19937 rng(42);
@@ -62,7 +63,7 @@ static std::vector<uint8_t> make_valid(uint32_t m = 60, uint32_t n = 2500) {
     for (uint32_t i = 0; i < m; ++i) rn.push_back("G" + std::to_string(i));
     for (uint32_t j = 0; j < n; ++j) cn.push_back("C" + std::to_string(j));
     std::map<std::string, std::string> kv{{"gsm_id", "GSM1"}};
-    std::string path = tmp_path("pz_hardening_valid.1pz");
+    std::string path = tmp_path(file);
     bool ok = pz::write_1pz<uint16_t>(path, m, n, indptr, indices, data, rn, cn, 3, 1024, 1, kv);
     CHECK(ok, "write_1pz");
     return slurp(path);
@@ -91,6 +92,20 @@ static void set_hdr(std::vector<uint8_t>& b, const pz::PZHeader& h) {
 int main() {
     const auto good = make_valid();
     CHECK(decodes(good), "baseline image decodes");
+
+    // A UTF-8 path with non-ASCII characters must open: on Windows a narrow path is the ANSI
+    // code page, so reading and writing go through std::filesystem::u8path.
+    {
+        const char* name = "pz_t\xC3\xA9st_\xC3\xBC.1pz";  // "pz_t<e-acute>st_<u-umlaut>.1pz" in UTF-8
+        (void)make_valid(12, 40, name);
+        try {
+            auto r = pz::read_1pz(tmp_path(name));
+            CHECK(r.n == 40 && r.m == 12, "non-ASCII path round-trips");
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "non-ASCII path failed: %s\n", e.what());
+            ++g_fail;
+        }
+    }
 
     // --- version / layout gates: only the layout write_1pz emits is accepted ---
     for (uint16_t v : {0, 2, 3, 4, 5, 0xFFFF}) {

@@ -30,6 +30,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Bio-Informatics",
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
 ]
 keywords = ["single-cell", "RNA-seq", "bioinformatics", "sparse-matrix", "pytorch", "anndata", "GPU"]
 

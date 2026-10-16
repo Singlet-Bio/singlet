@@ -26,8 +26,8 @@ release is published, the install is `pip install singlet-bio`.
 This compiles the package's `.1pz` codec, so you need a **C++17 compiler**
 and **zstd** (headers + library): `apt install build-essential libzstd-dev`
 on Debian/Ubuntu, `brew install zstd` on macOS, or
-`conda install -c conda-forge zstd`. Linux and macOS are supported; on
-Windows use WSL.
+`conda install -c conda-forge zstd`. Linux, macOS and Windows are
+supported (Windows needs Visual Studio Build Tools and zstd to build from source; wheels are built in CI).
 
 Optional extras (same URL, extra in brackets):
 
