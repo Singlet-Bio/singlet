@@ -1,7 +1,7 @@
 Package: singlet
 Type: Package
 Title: Access the Singlet Single-Cell Atlas
-Version: 1.1.0
+Version: 1.0.0
 Authors@R: c(
     person("Zach", "DeBruine", email = "zacharydebruine@gmail.com",
            role = c("aut", "cre")))

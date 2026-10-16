@@ -71,7 +71,7 @@ _RETIRED_HOST_MSG = (
 def _sample_mirror() -> tuple[Optional[str], Optional[str]]:
     """``(mirror_base_url, env_var_it_came_from)``, or ``(None, None)``.
 
-    ``$SINGLET_SAMPLE_MIRROR`` names the mirror. Up to 2.0.0 :func:`fetch`
+    ``$SINGLET_SAMPLE_MIRROR`` names the mirror. In development builds before 1.0.0 :func:`fetch`
     read it from ``$SINGLET_DATA_BASE``; that variable now names the bundle
     host used by :func:`singlet.load`, but a value set there is still used
     here when ``$SINGLET_SAMPLE_MIRROR`` is unset, with a ``FutureWarning``.

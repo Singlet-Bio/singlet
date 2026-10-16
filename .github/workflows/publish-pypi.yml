@@ -78,7 +78,7 @@ jobs:
           if [ "$EVENT" = "workflow_dispatch" ]; then
             echo "name=$INPUT_TARGET" >> "$GITHUB_OUTPUT"
           elif echo "$REF_NAME" | grep -Eq '(rc|a|b|alpha|beta|dev)[0-9]*$'; then
-            # PEP 440 pre-release tag (v2.0.0rc1, v2.0.0b2, ...) -> TestPyPI only
+            # PEP 440 pre-release tag (v1.0.0rc1, v1.0.0b2, ...) -> TestPyPI only
             echo "name=testpypi" >> "$GITHUB_OUTPUT"
           else
             echo "name=pypi" >> "$GITHUB_OUTPUT"

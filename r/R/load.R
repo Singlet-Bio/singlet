@@ -18,7 +18,7 @@
 # Host serving .singlet bundles. Files live at
 # <base>/data/<GSE>/<GSE>.singlet, matching the Python client, where
 # SINGLET_DATA_BASE also names the host. A base that already ends in /data
-# (what this package expected before 1.1.0) is accepted too.
+# (what the development builds before 1.0.0 expected) is accepted too.
 .singlet_data_base <- function() {
     base <- Sys.getenv("SINGLET_DATA_BASE", unset = "")
     if (!nzchar(base)) {
