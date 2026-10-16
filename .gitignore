@@ -46,3 +46,6 @@ src/star/htslib/htslib/
 
 build-test/
 *.bak-*
+
+# rendered notebooks: regenerate with notebooks/build_html.sh
+notebooks/html/
