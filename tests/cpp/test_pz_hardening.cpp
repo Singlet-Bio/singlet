@@ -142,6 +142,22 @@ int main() {
     { auto b = good; auto h = hdr_of(b); h.metadata_z_sz = 0xFFFFFFFFu;               set_hdr(b, h); CHECK(!decodes(b), "metadata size past end rejected"); }
     { auto b = good; auto h = hdr_of(b); h.m += 1; set_hdr(b, h); CHECK(!decodes(b), "m inconsistent with perm block rejected"); }
 
+    // --- the default limits alone stop a tiny file from promising gigabytes (no test-only caps here) ---
+    {
+        auto decodes_default = [](const std::vector<uint8_t>& b) {
+            try { (void)pz::read_1pz_buffer(b.data(), b.size()); return true; }
+            catch (const pz::PZReadError&) { return false; }
+        };
+        auto b = good; auto h = hdr_of(b);
+        h.m = 128; h.n = 16000000; h.nnz = 500000000ull; h.chunk_cols = 1u << 20; h.num_chunks = 16;
+        set_hdr(b, h);
+        CHECK(!decodes_default(b), "tiny file declaring 500M non-zeros is rejected before any big allocation");
+        auto c = good; auto h2 = hdr_of(c);
+        h2.nnz = h2.nnz * 1000 + (1ull << 22);
+        set_hdr(c, h2);
+        CHECK(!decodes_default(c), "nnz far beyond what the file can hold is rejected");
+    }
+
     // --- file-level damage ---
     { auto b = good; b[b.size() - 1] ^= 0xFF; CHECK(!decodes(b), "bad footer magic rejected"); }
     { auto b = good; b[200] ^= 0x01;          CHECK(!decodes(b), "CRC mismatch rejected"); }

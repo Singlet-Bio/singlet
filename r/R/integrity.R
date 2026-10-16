@@ -82,6 +82,9 @@
     if (!"manifest.json" %in% names_in_zip) {
         stop(.singlet_integrity_error("not a .singlet bundle: manifest.json is missing"))
     }
+    if (members$Length[match("manifest.json", members$Name)] > 16 * 1024^2) {
+        stop(.singlet_integrity_error("manifest.json is implausibly large"))
+    }
     manifest <- tryCatch({
         con <- unz(path, "manifest.json")
         on.exit(close(con), add = TRUE)
@@ -103,8 +106,16 @@
             manifest$schema_version, .singlet_supported_schema_major)))
     }
     checksums <- manifest$checksums
-    if (!is.list(checksums) || !length(checksums)) {
-        stop(.singlet_integrity_error("manifest.json lists no checksums"))
+    if (!is.list(checksums) || !length(checksums) || is.null(names(checksums)) || !all(nzchar(names(checksums)))) {
+        stop(.singlet_integrity_error("manifest.json must map each member name to its checksum"))
+    }
+    if (anyDuplicated(names_in_zip)) {
+        stop(.singlet_integrity_error("the archive holds two members with the same name"))
+    }
+    # Every file in the archive must be vouched for by the manifest.
+    unlisted <- setdiff(names_in_zip[!grepl("/$", names_in_zip)], c("manifest.json", names(checksums)))
+    if (length(unlisted)) {
+        stop(.singlet_integrity_error(sprintf("%s is in the archive but not listed in manifest.json", unlisted[[1]])))
     }
     for (n in names_in_zip) {
         if (!.singlet_safe_member_name(n)) {

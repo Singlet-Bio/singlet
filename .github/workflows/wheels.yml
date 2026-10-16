@@ -20,8 +20,10 @@ on:
     paths:
       - "pyproject.toml"
       - "src/bindings/**"
-      - "include/singlet/pz/**"
-      - "include/singlet/fq/**"
+      - "include/singlet/pileup/pz_*.h"
+      - "setup.py"
+      - "MANIFEST.in"
+      - "scripts/build_zstd_windows.cmd"
       - ".github/workflows/wheels.yml"
   workflow_dispatch:
 
@@ -107,7 +109,7 @@ jobs:
             CL="/IC:/zstd/include"
             LINK="/LIBPATH:C:/zstd/lib"
           CIBW_TEST_REQUIRES: pytest
-          CIBW_TEST_COMMAND: "python -c 'import singlet; print(singlet.__version__)'"
+          CIBW_TEST_COMMAND: 'python -c "import singlet; print(singlet.__version__)"'
           MACOSX_DEPLOYMENT_TARGET: "11.0"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

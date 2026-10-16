@@ -245,3 +245,68 @@ def test_gsm_lookup_rejects_url_syntax_before_any_request(monkeypatch):
     monkeypatch.setattr(_loader.urllib.request, "urlopen", boom)
     with pytest.raises(ValueError):
         _loader._resolve_gsm_to_gse("GSM1&limit=999999#x")
+
+
+def _bundle_with(tmp_path, *, extra=None, checksums_as_list=False, duplicate=False):
+    checksums = {name: hashlib.sha256(data).hexdigest() for name, data in MEMBERS.items()}
+    manifest = {"schema_version": "1.0", "checksums": sorted(checksums) if checksums_as_list else checksums}
+    path = tmp_path / "x.singlet"
+    with zipfile.ZipFile(path, "w") as zf:
+        for name, data in MEMBERS.items():
+            zf.writestr(name, data)
+        if extra:
+            zf.writestr(extra, b"not vouched for")
+        if duplicate:
+            import warnings
+
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                zf.writestr("feature_vocab.json", b"{}")
+        zf.writestr("manifest.json", json.dumps(manifest))
+    return path
+
+
+def test_a_member_the_manifest_does_not_list_is_rejected(tmp_path):
+    with pytest.raises(BundleIntegrityError, match="not listed"):
+        verify_bundle(_bundle_with(tmp_path, extra="samples/GSM1/evil.1pz"))
+
+
+def test_two_members_with_one_name_are_rejected(tmp_path):
+    with pytest.raises(BundleIntegrityError, match="same name"):
+        verify_bundle(_bundle_with(tmp_path, duplicate=True))
+
+
+def test_checksums_must_be_a_name_to_hash_map(tmp_path):
+    with pytest.raises(BundleIntegrityError, match="checksums"):
+        verify_bundle(_bundle_with(tmp_path, checksums_as_list=True))
+
+
+def test_a_huge_manifest_is_refused_before_it_is_parsed(tmp_path):
+    path = tmp_path / "big.singlet"
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("manifest.json", '{"schema_version": "1.0", "pad": "' + "x" * (17 << 20) + '"}')
+    with pytest.raises(BundleIntegrityError, match="implausibly large"):
+        verify_bundle(path)
+
+
+def test_a_symlinked_cache_entry_still_works(server, tmp_path, monkeypatch):
+    real = _loader.download("GSE1")
+    cache = tmp_path / "cache"
+    other = tmp_path / "elsewhere" / "GSE1.singlet"
+    other.parent.mkdir()
+    real.replace(other)
+    try:
+        (cache / "GSE1.singlet").symlink_to(other)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks are not available here")
+    hits = server.hits
+    assert _loader.download("GSE1").exists()
+    assert server.hits == hits
+
+
+def test_gsm_ids_with_a_suffix_resolve_but_cannot_be_downloaded_as_bundles():
+    assert normalize_accession("gsm7152960_val") == "GSM7152960_VAL"
+    with pytest.raises(ValueError):
+        _loader.download("GSM7152960")
+    with pytest.raises(ValueError):
+        _loader.download("GSE1_val")

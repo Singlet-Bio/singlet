@@ -1,16 +1,17 @@
 # SPDX-License-Identifier: MIT
 """singlet.whitelists — Barcode whitelist loading with lazy download.
 
-Whitelists are shipped in the package under ``singlet/data/whitelists/``.
-If a whitelist is missing (e.g., in a minimal install), this module can
-fetch it from Teichlab's public CDN (scg_lib_structs).
+The small whitelists are shipped in the package under ``singlet/data/whitelists/``;
+the four large 10x ones (3M-february-2018, 737K-august-2016, 737K-cratac-v1,
+gex_737K-arc-v1) are downloaded on first use from Teichlab's public CDN
+(scg_lib_structs) into ``~/.singlet/whitelists`` and then read from there.
 
 Usage::
 
     from singlet.whitelists import load_whitelist, WHITELIST_DIR
 
     barcodes = load_whitelist("737K-august-2016")  # set of 16-bp barcodes
-    path = WHITELIST_DIR / "737K-august-2016.txt"  # direct file access
+    path = ensure_whitelist("737K-august-2016")  # a Path, downloaded if needed
 """
 
 from __future__ import annotations

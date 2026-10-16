@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -35,7 +36,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
-from singlet._integrity import BundleIntegrityError, normalize_accession, verify_bundle
+from singlet._integrity import BundleIntegrityError, normalize_accession, normalize_gse, verify_bundle
 
 if TYPE_CHECKING:
     import anndata
@@ -196,12 +197,10 @@ def download(
     BundleIntegrityError
         The download was truncated, altered, or uses a newer schema.
     """
-    accession = normalize_accession(accession)
+    accession = normalize_gse(accession)
     dest_dir = Path(output_dir) if output_dir else _cache_dir()
     dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / f"{accession}.singlet"
-    if dest.resolve().parent != dest_dir.resolve():
-        raise ValueError(f"refusing to write outside the cache directory: {dest}")
+    dest = dest_dir / f"{accession}.singlet"  # the accession matched ^GSE[0-9]+$, so this stays in dest_dir
 
     # On-disk cache: reuse a file that is still a complete, readable archive.
     if dest.exists() and not force:
@@ -209,7 +208,10 @@ def download(
             verify_bundle(dest, hashes=False)
             return dest
         except BundleIntegrityError:
-            dest.unlink(missing_ok=True)
+            try:
+                dest.unlink(missing_ok=True)
+            except OSError as e:  # Windows: still open elsewhere
+                raise OSError(f"{dest} is damaged but cannot be replaced while it is open ({e}); close it and retry") from e
 
     url = _bundle_url(accession)
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
@@ -217,7 +219,9 @@ def download(
     # Write to a temp file first, then atomic rename (interrupted or invalid
     # downloads never reach the cache). The name is unique per process so two
     # simultaneous downloads of one study cannot interleave.
-    tmp_dest = dest.with_name(f"{dest.name}.{os.getpid()}.part")
+    fd, tmp_name = tempfile.mkstemp(dir=dest_dir, prefix=f".{dest.name}.", suffix=".part")
+    os.close(fd)
+    tmp_dest = Path(tmp_name)
     try:
         try:
             from tqdm import tqdm
@@ -244,7 +248,10 @@ def download(
                 f"download of {accession} ended after {written:,} of {total:,} bytes; nothing was cached. Try again."
             )
         verify_bundle(tmp_dest, expected_size=total, hashes=verify)
-        tmp_dest.replace(dest)
+        try:
+            tmp_dest.replace(dest)
+        except OSError as e:  # Windows will not replace a file that is open elsewhere
+            raise OSError(f"downloaded {accession} but cannot replace {dest} while it is open ({e}); close it and retry") from e
     except urllib.error.HTTPError as e:
         tmp_dest.unlink(missing_ok=True)
         if e.code == 404:

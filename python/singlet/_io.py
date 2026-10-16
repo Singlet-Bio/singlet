@@ -168,6 +168,9 @@ def write_1pz(
         mat = sp.csc_matrix(mat)
     # AnnData is cells × genes → genes × cells on disk
     mat = mat.T.tocsc()
+    # The reader refuses a column that repeats a row, so merge duplicates and sort before writing.
+    mat.sum_duplicates()
+    mat.sort_indices()
 
     # Convert data to an integer dtype acceptable by the native codec.
     # Count matrices are often stored as float32 with integer values.

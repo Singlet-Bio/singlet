@@ -28,7 +28,9 @@ from typing import Optional
 #: Schema major version this reader understands (``manifest.json`` ``schema_version``).
 SUPPORTED_SCHEMA_MAJOR = 1
 
-_ACCESSION_RE = re.compile(r"^GS[EM][0-9]{1,9}$")
+_ACCESSION_RE = re.compile(r"^GS[EM][0-9]{1,9}(_[A-Za-z0-9]{1,16})?$")  # sample ids can carry a suffix, e.g. GSM7152960_val
+_GSE_RE = re.compile(r"^GSE[0-9]{1,9}$")
+_MAX_MANIFEST_BYTES = 16 << 20
 _CHUNK = 1 << 20
 
 
@@ -46,6 +48,14 @@ def normalize_accession(value: object) -> str:
     acc = str(value).strip().upper()
     if not _ACCESSION_RE.match(acc):
         raise ValueError(f"not a GEO accession (expected GSE… or GSM… followed by digits): {value!r}")
+    return acc
+
+
+def normalize_gse(value: object) -> str:
+    """Upper-case and validate a GEO *series* accession (``GSE…``): the only kind with a bundle."""
+    acc = str(value).strip().upper()
+    if not _GSE_RE.match(acc):
+        raise ValueError(f"not a GEO series accession (expected GSE followed by digits): {value!r}")
     return acc
 
 
@@ -77,6 +87,8 @@ def check_schema(manifest: dict) -> None:
 
 def read_manifest(zf: zipfile.ZipFile) -> dict:
     try:
+        if zf.getinfo("manifest.json").file_size > _MAX_MANIFEST_BYTES:
+            raise BundleIntegrityError("manifest.json is implausibly large")
         with zf.open("manifest.json") as fh:
             manifest = json.load(fh)
     except KeyError as e:
@@ -134,10 +146,18 @@ def verify_bundle(
         checksums = manifest.get("checksums")
         if not isinstance(checksums, dict) or not checksums:
             raise BundleIntegrityError("manifest.json lists no checksums")
-        names = set(zf.namelist())
+        listed = zf.namelist()
+        names = set(listed)
+        if len(names) != len(listed):
+            raise BundleIntegrityError("the archive holds two members with the same name")
         for name in names:
-            if not _safe_member_name(name):
+            if not _safe_member_name(name.rstrip("/")):
                 raise BundleIntegrityError(f"unsafe member name in archive: {name!r}")
+        # Every file in the archive must be vouched for by the manifest: an unlisted member would be read
+        # without any check at all.
+        unlisted = sorted(n for n in names if not n.endswith("/") and n != "manifest.json" and n not in checksums)
+        if unlisted:
+            raise BundleIntegrityError(f"{unlisted[0]} is in the archive but not listed in manifest.json")
         for name, digest in checksums.items():
             if not _safe_member_name(str(name)):
                 raise BundleIntegrityError(f"unsafe member name in manifest: {name!r}")

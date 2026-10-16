@@ -69,8 +69,13 @@ struct ReadLimits {
     uint64_t max_file_bytes = 1ull << 33;   // 8 GiB
     uint64_t max_rows       = 1ull << 22;   // 4,194,304 features
     uint64_t max_cols       = 1ull << 24;   // 16,777,216 cells
-    uint64_t max_nnz        = (1ull << 31) - 1;
+    uint64_t max_nnz        = 1ull << 29;   // 536,870,912 non-zeros (4 GiB of indices + values)
     uint32_t max_chunk_cols = 1u << 20;
+    /// A file cannot hold more non-zeros per byte than this: zstd can shrink a run of
+    /// zeros about 32,000-fold, so a few KB of header could otherwise "promise" gigabytes.
+    uint64_t max_nnz_per_file_byte = 4096;
+    uint64_t max_metadata_bytes    = 256ull << 20;  // decoded names + key/values
+    uint64_t max_kv_entries        = 1ull << 20;
 };
 
 // ============================================================================
@@ -203,7 +208,7 @@ static inline void parse_metadata_tlv(
     std::vector<std::string>& rownames,
     std::vector<std::string>& colnames,
     std::map<std::string, std::string>& user_kv,
-    uint64_t max_rownames, uint64_t max_colnames)
+    uint64_t max_rownames, uint64_t max_colnames, uint64_t max_kv)
 {
     size_t offset = 0;
     while (offset < len) {
@@ -248,6 +253,7 @@ static inline void parse_metadata_tlv(
                 if (p >= end) throw PZReadError("user_kv: unterminated value");
                 std::string value(reinterpret_cast<const char*>(buf + vs), p - vs);
                 ++p;  // skip value NUL
+                if (user_kv.size() >= max_kv) throw PZReadError("metadata TLV: too many key/value entries");
                 user_kv[std::move(key)] = std::move(value);
             }
         }
@@ -303,6 +309,9 @@ static inline PZHeader validate_buffer(
     }
     if (hdr.nnz > static_cast<uint64_t>(hdr.m) * hdr.n) {
         throw PZReadError("nnz exceeds m*n");
+    }
+    if (hdr.nnz > std::max<uint64_t>(1ull << 20, static_cast<uint64_t>(size) * limits.max_nnz_per_file_byte)) {
+        throw PZReadError("nnz is implausibly large for the size of the file");
     }
 
     // Chunk geometry: the chunks must tile the columns exactly.
@@ -398,15 +407,16 @@ static inline void decode_metadata_block(
     const PZHeader& hdr,
     std::vector<std::string>& rownames,
     std::vector<std::string>& colnames,
-    std::map<std::string, std::string>& user_kv)
+    std::map<std::string, std::string>& user_kv,
+    const ReadLimits& limits)
 {
     if (!(hdr.flags & FLAG_HAS_METADATA)) return;
     ZstdDCtx dctx;
     // The TLV expands names; allow generous but bounded growth.
-    const size_t max_out = std::min<size_t>(
-        static_cast<size_t>(hdr.metadata_z_sz) * 4096 + (1u << 20), size_t(1) << 31);
+    const size_t max_out = static_cast<size_t>(std::min<uint64_t>(
+        static_cast<uint64_t>(hdr.metadata_z_sz) * 4096 + (1u << 20), limits.max_metadata_bytes));
     auto raw = zstd_decompress(dctx.ctx, file + hdr.metadata_offset, hdr.metadata_z_sz, max_out);
-    parse_metadata_tlv(raw.data(), raw.size(), rownames, colnames, user_kv, hdr.m, hdr.n);
+    parse_metadata_tlv(raw.data(), raw.size(), rownames, colnames, user_kv, hdr.m, hdr.n, limits.max_kv_entries);
     if (!rownames.empty() && rownames.size() != hdr.m) {
         throw PZReadError("rowname count does not match the number of rows");
     }
@@ -476,6 +486,26 @@ static inline void decode_vocsc_section(
     const uint32_t chunk_cols = hdr.chunk_cols;
     const uint32_t n = hdr.n;
     const uint64_t vmax = (hdr.vt_code == 1) ? 0xFFull : (hdr.vt_code == 2) ? 0xFFFFull : 0xFFFFFFFFull;
+
+    // Walk the blob headers before allocating anything sized by nnz: the chunks must lie inside the
+    // file, agree with their table entries, and their gap counts must add up to exactly nnz.
+    {
+        uint64_t cursor = static_cast<uint64_t>(chunk_table_offset) + nc * 4;
+        uint64_t sum_ng = 0;
+        for (size_t c = 0; c < nc; ++c) {
+            const uint32_t sz = ctable[c];
+            if (sz < kBlobHdr) throw PZReadError("chunk blob smaller than expected header (20 bytes)");
+            if (cursor > body_end || sz > body_end - cursor) throw PZReadError("chunk blob extends past the end of the file");
+            uint32_t ng, zsz;
+            std::memcpy(&ng, body + cursor, 4);
+            std::memcpy(&zsz, body + cursor + 8, 4);
+            if (zsz != sz - kBlobHdr) throw PZReadError("chunk blob header size mismatch");
+            sum_ng += ng;
+            if (sum_ng > hdr.nnz) throw PZReadError("chunk gap counts exceed nnz");
+            cursor += sz;
+        }
+        if (sum_ng != hdr.nnz) throw PZReadError("chunk gap counts do not add up to nnz");
+    }
 
     r.indices.assign(static_cast<size_t>(hdr.nnz), 0);
     r.data.assign(static_cast<size_t>(hdr.nnz), 0);
@@ -671,7 +701,7 @@ inline ReadResult read_1pz_buffer(
         std::vector<uint32_t> perm, cc;
         decode_perm_and_ptr(file, body_offset, hdr, perm, cc);
 
-        decode_metadata_block(file, hdr, r.rownames, r.colnames, r.user_kv);
+        decode_metadata_block(file, hdr, r.rownames, r.colnames, r.user_kv, limits);
 
         // Populate indptr from the decoded column counts.
         r.indptr.assign(static_cast<size_t>(hdr.n) + 1, 0);

@@ -82,3 +82,13 @@ test_that("accessions that are not accessions are refused before any request", {
                      "not a GEO accession", info = bad)
     }
 })
+
+test_that("a file in the archive that the manifest does not list is rejected", {
+    expect_error(singlet:::.singlet_verify_bundle(fx("unlisted_member.singlet")),
+                 "not listed in manifest.json", class = "singlet_integrity_error")
+})
+
+test_that("a manifest whose checksums are a list, not a name -> hash map, is rejected", {
+    expect_error(singlet:::.singlet_verify_bundle(fx("checksums_as_list.singlet")),
+                 "map each member name", class = "singlet_integrity_error")
+})
