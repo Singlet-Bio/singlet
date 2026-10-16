@@ -136,7 +136,8 @@ test_that("a GSM of an already cached study downloads nothing offline", {
     dir.create(cache)
     on.exit(unlink(cache, recursive = TRUE), add = TRUE)
     forget_gsm("GSM900000013")
-    writeLines("not really a zip", file.path(cache, "GSE900013.singlet"))
+    # A cached file is only reused while it is a complete archive, so use a real one.
+    file.copy(testthat::test_path("fixtures", "good.singlet"), file.path(cache, "GSE900013.singlet"))
     writeLines("GSM900000013\tGSE900013", file.path(cache, "gsm_parents.tsv"))
     local_mocked_bindings(
         .singlet_http_get = function(url, ...) stop("sample lookup failed: offline"),
