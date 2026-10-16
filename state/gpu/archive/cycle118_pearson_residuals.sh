@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-118 — Pearson residuals normalization (Lause-Berens-Kobak 2021).
 # Builds only preprocess_pearson_residuals_correctness; runs five gtest cases.
 

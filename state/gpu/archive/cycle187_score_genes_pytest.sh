@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-187: build Python wheel + run 4 score_genes pytest tests from CYCLE-186.
 # Validates singlet_gpu.enrich.run_score_genes wrapper (be0c343) end-to-end.
 # ref: python/tests/test_enrichment.py::test_run_score_genes_*

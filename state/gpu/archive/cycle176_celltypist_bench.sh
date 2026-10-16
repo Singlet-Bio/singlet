@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-176 Phase E — anno/celltypist medium-scale bench vs sklearn CPU.
 #
 # GPU kernel (anno::celltypist_predict): cuBLAS Sgemm (L = W^T . Z) +

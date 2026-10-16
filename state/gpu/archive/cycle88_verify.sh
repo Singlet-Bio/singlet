@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # Cycle 88 verify — build + ctest scry deviance HVG
 # Replaces cycle88_build.sh (job 367571) which failed because nvcc was not on PATH.
 

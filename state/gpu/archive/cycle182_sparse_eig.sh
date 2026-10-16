@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-182: build + run core/sparse_eigensolver correctness ctest.
 # Phase D Step 1 of CYCLE-159.1 (sparse eigensolver rewrite for diffmap+dpt).
 

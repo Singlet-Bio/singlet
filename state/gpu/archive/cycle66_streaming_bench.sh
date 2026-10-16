@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # singlet-gpu/state/cycle66_streaming_bench.sh
 #
 # Cycle 66 — Feature 17 Streaming Phase E: GPU compile + correctness tests.

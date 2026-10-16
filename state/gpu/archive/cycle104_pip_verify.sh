@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # Cycle 104 pybind verify — full _core.so build via python -m pip install -e python/
 # Validates CYCLE-103 wrappers + CYCLE-104 unblock fixes end-to-end.
 

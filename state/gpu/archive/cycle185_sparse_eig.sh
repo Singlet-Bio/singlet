@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-185 iter-3: re-verify core/sparse_eigensolver after relative-residual fix.
 # Root cause: absolute convergence max|R| < tol stalls when spectral_radius * eps_fp32 > tol.
 # Fix: lobpcg_abs_kernel now computes |R[i,k]|/|rho[k]| → scale-independent relative criterion.

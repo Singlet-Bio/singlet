@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # Cycle 106 verify — streaming factornet drop (no factornet dependency in streaming/).
 #
 # Tests:

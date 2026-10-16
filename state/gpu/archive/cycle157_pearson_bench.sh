@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-157 Phase E — preprocess/pearson_residuals medium-scale bench vs scanpy CPU.
 # Scales: 10k + 30k cells × 5k genes, density 5%, synthetic CSC.
 # Node: g003 (V100S sm_70-compatible).

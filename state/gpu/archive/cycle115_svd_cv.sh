@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-115 — Speckled cross-validation for truncated SVD (mirror of NMF CV).
 # Builds only reduce_svd_cv_correctness; runs three gtest cases.
 

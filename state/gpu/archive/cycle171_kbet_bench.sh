@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-171 Phase E — integrate/kbet medium-scale bench vs numpy CPU.
 #
 # GPU kernel: one block per cell; shared-mem int local_count[n_batches];

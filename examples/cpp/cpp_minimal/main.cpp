@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // examples/cpp_minimal/main.cpp — public API smoke test.
 //
 // Compiles only against the umbrella `<singlet/gpu/singlet::gpu.hpp>`. If

@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-132 — decoupleR ORA (Over-Representation Analysis) per-cell hypergeometric scoring.
 # GPU-native ORA: singlet_gpu::enrich::ora().
 # Builds only enrich_decoupler_ora_correctness; runs 5 gtest cases.

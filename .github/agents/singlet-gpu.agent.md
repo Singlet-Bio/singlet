@@ -93,7 +93,7 @@ Plan, design, evaluate, dispatch. Budget: 2–3 reasoning steps per cycle.
 
 22. **Internal GPU linear-algebra**: PCA/SVD (truncated, randomized, deflation), NMF (Frobenius/MSE only, MU + CD solvers). KL/IS/NB-GLM NMF is OUT OF SCOPE.
 23. **Port aggressively from**: scran, scater, DropletUtils, Seurat, scanpy, fgsea, AUCell, Harmony, scvi-tools.
-24. **License**: GPL-2.0-or-later. Every header carries SPDX identifier.
+24. **License**: MIT. Every header carries SPDX identifier.
 
 ---
 

@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-256: gdb --batch wrapper for the host-side bug exposed after
 # CYCLE-253's cusparseSpMV uninit-read fix.
 #

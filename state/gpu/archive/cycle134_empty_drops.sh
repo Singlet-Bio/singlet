@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-134 — emptyDrops (Lun 2019) cell/empty-droplet calling on GPU.
 # GPU-native emptyDrops: singlet_gpu::qc::empty_drops().
 # Builds only qc_empty_drops_correctness; runs 5 gtest cases.

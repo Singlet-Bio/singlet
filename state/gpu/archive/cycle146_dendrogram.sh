@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-146 — Dendrogram (scanpy.tl.dendrogram port).
 # GPU passes: atomic-scatter centroids, per-column center+normalize, cuBLAS Sgemm,
 # element-wise distance; host UPGMA O(k³).

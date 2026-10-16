@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-178 Phase E — anno/symphony medium-scale bench vs manual NumPy CPU.
 #
 # GPU kernel (anno::symphony_predict): 5 sequential device passes —

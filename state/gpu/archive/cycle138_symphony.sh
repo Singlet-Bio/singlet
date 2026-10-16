@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-138 — Symphony (Kang et al. 2021) reference-based cell-type mapping on GPU.
 # Reference PCA projection + soft cluster assignment (inverse-distance weighting)
 # + label transfer via cuBLAS Sgemm + custom standardize/distance/softassign kernels.

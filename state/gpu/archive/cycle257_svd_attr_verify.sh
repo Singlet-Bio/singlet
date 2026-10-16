@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-257: verify the SvdResult.rows/cols Python-side workaround
 # (CYCLE-199 root cause was AttributeError, NOT a kernel segfault — the
 # CYCLE-255 deflation status-check audit unmasked it).

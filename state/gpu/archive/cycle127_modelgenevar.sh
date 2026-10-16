@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-127 — Poisson-null HVG selection (modelGeneVarByPoisson).
 # Lun ATL, McCarthy DJ, Marioni JC (2016) F1000Research 5:2122.
 # Builds only preprocess_model_gene_var_correctness; runs five gtest cases.

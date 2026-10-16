@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-167 Phase E — enrich/decoupler_viper medium-scale bench vs numpy/scipy CPU.
 #
 # GPU kernel: 3 passes — viper_fill_dense_kernel (CSC → dense m×n col-major),

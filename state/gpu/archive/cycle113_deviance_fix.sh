@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # Cycle 113 — deviance HVG correctness fix verify.
 #
 # Root causes fixed in this cycle (hvg.h):

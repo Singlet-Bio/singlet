@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-114 — wire L1/L2/ortho/nonneg regularization into Frobenius MU NMF.
 # Builds only the two NMF correctness binaries; existing 13/13 + new 4 reg tests.
 

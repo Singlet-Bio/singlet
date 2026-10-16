@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-269: broader verify after CYCLE-260-265 wrapper-rot peel.
 # Confirms: test_pp_neighbors (3/3 PASS via xfail), test_reduce delta,
 # test_integrate delta.

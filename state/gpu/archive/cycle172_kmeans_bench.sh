@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-172 Phase E — graph/kmeans medium-scale bench vs sklearn KMeans CPU.
 #
 # GPU kernel: Forgy init (host mt19937 random column copy); Lloyd loop:

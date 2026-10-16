@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-141 — SoupX ambient RNA correction.
 # Young MD, Behjati S (2020) GigaScience 9:giaa151.
 # GPU passes: UMI sum, ambient scatter/normalize, top-π mask, per-cell rho,

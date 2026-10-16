@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-129 — scanpy.tl.score_genes per-cell gene-set scoring.
 # Satija R et al. (2015) Nat Biotechnol 33:495-502 / Seurat AddModuleScore.
 # Builds only enrich_score_genes_correctness; runs 5 gtest cases.

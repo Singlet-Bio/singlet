@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-131 — ComBat batch correction (Johnson et al. 2007, Biostatistics 8:118-127).
 # GPU-native empirical Bayes batch effect removal: singlet_gpu::integrate::combat().
 # Builds only integrate_combat_correctness; runs 5 gtest cases.

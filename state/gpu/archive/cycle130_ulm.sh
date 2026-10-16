@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-130 — decoupleR ULM (Univariate Linear Model) pathway scoring.
 # Badia-i-Mompel P et al. (2022) Bioinformatics Advances 2:vbac016.
 # Builds only enrich_decoupler_ulm_correctness; runs 5 gtest cases.

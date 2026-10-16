@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-128 — decoupleR WSUM + WMEAN pathway-scoring methods.
 # Badia-i-Mompel P et al. (2022) Bioinformatics Advances 2:vbac016.
 # Builds only enrich_decoupler_wsum_correctness; runs 10 gtest cases.

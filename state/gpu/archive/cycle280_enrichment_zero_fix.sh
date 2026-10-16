@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # Cycle 280 — build + verify enrichment/GSEA zero-output bug fixes
 #   CYCLE-122-ENRICHMENT-ZERO-OUTPUT-DIAG
 #

@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-183 iter-2: re-verify core/sparse_eigensolver after largest-eigenvalue fix.
 # Fix: negate M in Rayleigh-Ritz before cusolverDnSsygvd (ARPACK sign-flip trick).
 # CYCLE-182 iter-1 (job 372420): 4/5 FAIL — smallest vs largest convention.

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # examples/cpp/cpp_minimal/CMakeLists.txt
 #
 # Standalone smoke test for the public umbrella header. Built as part of the

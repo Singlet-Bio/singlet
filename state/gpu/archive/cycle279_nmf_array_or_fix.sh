@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-279: fix test_nmf_chunked_smoke ValueError (array truthiness bug).
 # test_reduce.py:406 used `or` on numpy arrays → ValueError.
 # Fix: `H = result.H if result.H is not None else result.loadings`.

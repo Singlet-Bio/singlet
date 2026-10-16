@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-244: cuda-memcheck (compute-sanitizer) wrapper for the
 # pseudobulk min_cells_filter CUDA crash (CYCLE-211).
 #

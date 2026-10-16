@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-163 Phase E — enrich/decoupler_wsum medium-scale bench vs scipy/numpy CPU.
 #
 # GPU kernel: cuSPARSE SpMM (X^T · W) + per-pathway normalisation.

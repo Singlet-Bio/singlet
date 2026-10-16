@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-170 Phase E — integrate/asw medium-scale bench vs numpy/sklearn CPU.
 #
 # GPU kernel: one block per cell; shared-mem float smem_sum[n_labels] and

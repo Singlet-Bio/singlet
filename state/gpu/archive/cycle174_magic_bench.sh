@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-174 Phase E — preprocess/magic medium-scale bench vs scipy SpMM CPU.
 #
 # GPU kernel (preprocess::magic_impute):

@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # singlet-gpu/state/cycle67_nmf_diag.sh
 #
 # Cycle 67 — NMF k=50 regression diagnostic.
@@ -65,7 +65,7 @@ export LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH:-}"
 # ---------------------------------------------------------------------------
 echo "--- Step 1: Writing diagnostic driver ---"
 cat > "${DIAG_SRC}" << 'CPPEOF'
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // singlet-gpu/state/cycle67_nmf_diag_driver.cpp
 //
 // Cycle 67 NMF k=50 regression diagnostic.

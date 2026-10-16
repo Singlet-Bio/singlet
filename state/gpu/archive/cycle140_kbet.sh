@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-140 — kBET (k-nearest neighbor Batch Effect Test).
 # Buttner M, Miao Z, Wolf FA, et al. (2019) Nat Methods 16:43-49.
 # One-block-per-cell CUDA kernel; p-value via CUDA igamcf; cub::DeviceReduce

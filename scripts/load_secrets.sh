@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # scripts/load_secrets.sh — source this file before any Phase G publish step.
 #
 # Usage:

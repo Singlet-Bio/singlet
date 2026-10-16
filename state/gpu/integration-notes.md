@@ -13,7 +13,7 @@
 > **Current state (2026-04-29)**: native kernels in `include/singlet-gpu/core/`
 > (DeviceCSC, DeviceDense, DeviceMemory, GPUContext) and `include/singlet-gpu/
 > reduce/{svd,nmf}/` (deflation/randomized SVD, MU+CD NMF, speckled CV).
-> No external linear-algebra backend. License remains GPL-2.0-or-later;
+> No external linear-algebra backend. License is MIT;
 > algorithm credit to factornet preserved in SPDX + `// derived from factornet/...`
 > comments where directly ported. Multi-modal `FactorGraph` + CSI-GEP +
 > OmniDoublet remain deferred-indefinitely (gated behind
@@ -32,13 +32,13 @@
 
 ## License
 
-singlet-gpu is **GPL-2.0-or-later**, inherited from factornet. Algorithm credit
+singlet-gpu is **MIT** (it was GPL-2.0-or-later while it derived from factornet, relicensed to MIT by the project owner). Algorithm credit
 to Zach DeBruine (factornet, 2021–2026) preserved in SPDX + per-file `derived
 from factornet/...` comments where directly ported. Every singlet-gpu source
 file carries:
 
 ```cpp
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 ```
 
 ---

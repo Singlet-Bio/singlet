@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # singlet-gpu/state/cycle62_nmf_bench.sh
 #
 # Cycle 62 — Feature 5 reduce/nmf NMF adapters Phase E benchmark (retry).

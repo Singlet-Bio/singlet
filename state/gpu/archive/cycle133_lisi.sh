@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-133 — LISI (Local Inverse Simpson's Index) per-cell batch/cluster metric.
 # GPU-native LISI: singlet_gpu::integrate::lisi().
 # Builds only integrate_lisi_correctness; runs 5 gtest cases.

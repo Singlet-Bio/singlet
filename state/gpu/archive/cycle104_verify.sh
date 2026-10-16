@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # Cycle 104 verify — compile the public umbrella header + cpp_minimal smoke test.
 
 #SBATCH --job-name=sg_c104_verify
