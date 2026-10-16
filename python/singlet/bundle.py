@@ -1291,7 +1291,11 @@ class SingletBundle:
     def manifest(self) -> dict:
         """Parsed ``manifest.json``."""
         if self._manifest is None:
-            self._manifest = self._read_json("manifest.json")
+            from singlet._integrity import check_schema
+
+            manifest = self._read_json("manifest.json")
+            check_schema(manifest)
+            self._manifest = manifest
         return self._manifest
 
     @property

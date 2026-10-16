@@ -27,11 +27,15 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
+
+from singlet._integrity import BundleIntegrityError, normalize_accession, verify_bundle
 
 if TYPE_CHECKING:
     import anndata
@@ -89,12 +93,14 @@ def _resolve_gsm_to_gse(gsm_id: str) -> Optional[str]:
 
     Returns the GSE id, or ``None`` if it cannot be resolved.
     """
+    gsm_id = normalize_accession(gsm_id)
     base = _api_base()
+    q = urllib.parse.quote(gsm_id, safe="")
     # Primary: /api/gsm?q=<GSM> (the /api/gsm/<id> detail endpoint is currently
     # unreliable). Fallback: /api/search?q=<GSM>.
     candidates = (
-        f"{base}/gsm?q={gsm_id}&limit=5",
-        f"{base}/search?q={gsm_id}",
+        f"{base}/gsm?q={q}&limit=5",
+        f"{base}/search?q={q}",
     )
     for url in candidates:
         try:
@@ -106,10 +112,11 @@ def _resolve_gsm_to_gse(gsm_id: str) -> Optional[str]:
         rows = payload.get("data") or payload.get("gsm") or []
         for row in rows:
             if row.get("gsm_id") == gsm_id and row.get("gse_id"):
-                return row["gse_id"]
-        # If exactly one row came back, trust it even without an exact id match.
-        if len(rows) == 1 and rows[0].get("gse_id"):
-            return rows[0]["gse_id"]
+                parent = str(row["gse_id"]).strip().upper()
+                if re.match(r"^GSE[0-9]{1,9}$", parent):
+                    return parent
+        # Only an exact id match counts: a search can return a different sample,
+        # and loading the wrong study silently is worse than failing.
     return None
 
 
@@ -147,12 +154,20 @@ def download(
     accession: str,
     output_dir: Optional[str | Path] = None,
     force: bool = False,
+    verify: bool = True,
 ) -> Path:
     """Download a GSE's public ``.singlet`` bundle from Cloudflare R2.
 
     Fetches ``https://data.singlet.bio/data/<GSE>/<GSE>.singlet`` (free, no
-    auth) to the local cache. The download is path-cached: an existing,
-    non-empty file is reused unless ``force=True``.
+    auth) to the local cache. The download is path-cached: an existing file
+    that is still a complete archive is reused unless ``force=True``.
+
+    A download is only moved into the cache after it passes
+    :func:`singlet._integrity.verify_bundle`: the byte count matches what the
+    server announced, the archive is complete, the schema is one this version
+    reads, and (with ``verify=True``, the default) every member matches the
+    SHA-256 in ``manifest.json``. A cached file that no longer passes the
+    structural check is discarded and fetched again.
 
     Parameters
     ----------
@@ -163,47 +178,72 @@ def download(
         (``$SINGLET_CACHE_DIR`` or ``~/.singlet/cache``).
     force : bool
         Re-download even if cached.
+    verify : bool
+        Re-hash every member against the manifest before caching (reads the
+        file once more; leave on unless you are verifying elsewhere).
 
     Returns
     -------
     Path
         Path to the downloaded ``.singlet`` bundle.
+
+    Raises
+    ------
+    ValueError
+        ``accession`` is not a GEO accession.
+    FileNotFoundError
+        The study has no published file.
+    BundleIntegrityError
+        The download was truncated, altered, or uses a newer schema.
     """
+    accession = normalize_accession(accession)
     dest_dir = Path(output_dir) if output_dir else _cache_dir()
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / f"{accession}.singlet"
+    if dest.resolve().parent != dest_dir.resolve():
+        raise ValueError(f"refusing to write outside the cache directory: {dest}")
 
-    # On-disk cache: reuse an existing, non-empty bundle.
-    if dest.exists() and dest.stat().st_size > 0 and not force:
-        return dest
+    # On-disk cache: reuse a file that is still a complete, readable archive.
+    if dest.exists() and not force:
+        try:
+            verify_bundle(dest, hashes=False)
+            return dest
+        except BundleIntegrityError:
+            dest.unlink(missing_ok=True)
 
     url = _bundle_url(accession)
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
 
-    # Write to a temp file first, then atomic rename (interrupted downloads
-    # don't corrupt the cache).
-    tmp_dest = dest.with_suffix(".singlet.part")
+    # Write to a temp file first, then atomic rename (interrupted or invalid
+    # downloads never reach the cache). The name is unique per process so two
+    # simultaneous downloads of one study cannot interleave.
+    tmp_dest = dest.with_name(f"{dest.name}.{os.getpid()}.part")
     try:
         try:
             from tqdm import tqdm
         except ImportError:
             tqdm = None  # type: ignore[assignment]
 
-        import shutil
-
+        written = 0
         with urllib.request.urlopen(req, timeout=120) as resp:
-            total = int(resp.headers.get("content-length", 0))
-            if tqdm is not None and total:
-                with (
-                    open(tmp_dest, "wb") as f,
-                    tqdm(total=total, unit="B", unit_scale=True, desc=accession) as pbar,
-                ):
+            announced = resp.headers.get("content-length")
+            total = int(announced) if announced and announced.isdigit() else None
+            bar = tqdm(total=total, unit="B", unit_scale=True, desc=accession) if tqdm is not None and total else None
+            try:
+                with open(tmp_dest, "wb") as f:
                     for chunk in iter(lambda: resp.read(1 << 16), b""):
                         f.write(chunk)
-                        pbar.update(len(chunk))
-            else:
-                with open(tmp_dest, "wb") as f:
-                    shutil.copyfileobj(resp, f, length=1 << 16)
+                        written += len(chunk)
+                        if bar is not None:
+                            bar.update(len(chunk))
+            finally:
+                if bar is not None:
+                    bar.close()
+        if total is not None and written != total:
+            raise BundleIntegrityError(
+                f"download of {accession} ended after {written:,} of {total:,} bytes; nothing was cached. Try again."
+            )
+        verify_bundle(tmp_dest, expected_size=total, hashes=verify)
         tmp_dest.replace(dest)
     except urllib.error.HTTPError as e:
         tmp_dest.unlink(missing_ok=True)
@@ -255,16 +295,15 @@ def open_bundle(source: str | Path, *, force: bool = False):
     if path.exists():
         return SingletBundle.open(path)
 
-    accession = str(source).strip().upper()
+    try:
+        accession = normalize_accession(source)
+    except ValueError:
+        raise ValueError(f"open_bundle() expects a GSE/GSM accession or a .singlet path, got {source!r}") from None
     if accession.startswith("GSM"):
         parent = _resolve_gsm_to_gse(accession)
         if parent is None:
             raise ValueError(f"Could not resolve {accession} to a parent GSE")
         accession = parent
-    if not accession.startswith("GSE"):
-        raise ValueError(
-            f"open_bundle() expects a GSE/GSM accession or a .singlet path, got {source!r}"
-        )
     return SingletBundle.open(download(accession, force=force))
 
 
@@ -435,10 +474,15 @@ def _load_one(
         raise FileNotFoundError(f"File not found: {path}")
     else:
         # Treat as a GEO accession.
-        accession = str(source).strip()
+        try:
+            accession = normalize_accession(source)
+        except ValueError:
+            raise FileNotFoundError(
+                f"{str(source).strip()!r} is neither a file that exists nor a GEO accession (GSE… or GSM…)."
+            ) from None
         gse_accession = accession
 
-        if accession.upper().startswith("GSM"):
+        if accession.startswith("GSM"):
             # Resolve the GSM to its parent GSE, then filter after loading.
             _gsm_filter = accession
             parent = _resolve_gsm_to_gse(accession)
