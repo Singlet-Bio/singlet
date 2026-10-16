@@ -105,6 +105,12 @@ include = ["singlet*"]
 [tool.setuptools.package-data]
 singlet = ["data/*.parquet", "data/whitelists/*.txt", "py.typed", "_singlepress*.so"]
 
+# The four large 10x whitelists (about 106 MB of 113 MB) are not shipped: singlet.whitelists
+# downloads them from the public Teichlab CDN on first use. The small ones, and 737K-april-2014
+# (not on the CDN), stay bundled.
+[tool.setuptools.exclude-package-data]
+singlet = ["data/whitelists/3M-february-2018.txt", "data/whitelists/737K-august-2016.txt", "data/whitelists/737K-cratac-v1.txt", "data/whitelists/gex_737K-arc-v1.txt"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests/python"]
 addopts = "-v --tb=short"
