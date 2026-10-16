@@ -36,7 +36,12 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
-from singlet._integrity import BundleIntegrityError, normalize_accession, normalize_gse, verify_bundle
+from singlet._integrity import (
+    BundleIntegrityError,
+    normalize_accession,
+    normalize_gse,
+    verify_bundle,
+)
 
 if TYPE_CHECKING:
     import anndata
@@ -200,7 +205,9 @@ def download(
     accession = normalize_gse(accession)
     dest_dir = Path(output_dir) if output_dir else _cache_dir()
     dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / f"{accession}.singlet"  # the accession matched ^GSE[0-9]+$, so this stays in dest_dir
+    dest = (
+        dest_dir / f"{accession}.singlet"
+    )  # the accession matched ^GSE[0-9]+$, so this stays in dest_dir
 
     # On-disk cache: reuse a file that is still a complete, readable archive.
     if dest.exists() and not force:
@@ -211,7 +218,9 @@ def download(
             try:
                 dest.unlink(missing_ok=True)
             except OSError as e:  # Windows: still open elsewhere
-                raise OSError(f"{dest} is damaged but cannot be replaced while it is open ({e}); close it and retry") from e
+                raise OSError(
+                    f"{dest} is damaged but cannot be replaced while it is open ({e}); close it and retry"
+                ) from e
 
     url = _bundle_url(accession)
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
@@ -232,7 +241,11 @@ def download(
         with urllib.request.urlopen(req, timeout=120) as resp:
             announced = resp.headers.get("content-length")
             total = int(announced) if announced and announced.isdigit() else None
-            bar = tqdm(total=total, unit="B", unit_scale=True, desc=accession) if tqdm is not None and total else None
+            bar = (
+                tqdm(total=total, unit="B", unit_scale=True, desc=accession)
+                if tqdm is not None and total
+                else None
+            )
             try:
                 with open(tmp_dest, "wb") as f:
                     for chunk in iter(lambda: resp.read(1 << 16), b""):
@@ -251,7 +264,9 @@ def download(
         try:
             tmp_dest.replace(dest)
         except OSError as e:  # Windows will not replace a file that is open elsewhere
-            raise OSError(f"downloaded {accession} but cannot replace {dest} while it is open ({e}); close it and retry") from e
+            raise OSError(
+                f"downloaded {accession} but cannot replace {dest} while it is open ({e}); close it and retry"
+            ) from e
     except urllib.error.HTTPError as e:
         tmp_dest.unlink(missing_ok=True)
         if e.code == 404:
@@ -305,7 +320,9 @@ def open_bundle(source: str | Path, *, force: bool = False):
     try:
         accession = normalize_accession(source)
     except ValueError:
-        raise ValueError(f"open_bundle() expects a GSE/GSM accession or a .singlet path, got {source!r}") from None
+        raise ValueError(
+            f"open_bundle() expects a GSE/GSM accession or a .singlet path, got {source!r}"
+        ) from None
     if accession.startswith("GSM"):
         parent = _resolve_gsm_to_gse(accession)
         if parent is None:

@@ -166,7 +166,9 @@ def _fetch_one(
 ) -> Path:
     dest = _checked_dest(out_dir, rel)
     if require_sha and not (isinstance(expected_sha, str) and _SHA256_RE.match(expected_sha)):
-        raise ValueError(f"the manifest gives no valid sha256 for {rel}; refusing to download an unverified file")
+        raise ValueError(
+            f"the manifest gives no valid sha256 for {rel}; refusing to download an unverified file"
+        )
     if expected_sha and dest.exists():
         if _sha256_of(dest) == expected_sha.lower():
             return dest
@@ -222,7 +224,9 @@ def fetch(
     atomically on success.
     """
     if not _NAME_RE.match(str(accession)):
-        raise ValueError(f"not a valid sample name (letters, digits, '_', '-', '.'; no path separators): {accession!r}")
+        raise ValueError(
+            f"not a valid sample name (letters, digits, '_', '-', '.'; no path separators): {accession!r}"
+        )
     source = None
     if not base_url:
         base_url, source = _sample_mirror()

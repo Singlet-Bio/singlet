@@ -121,7 +121,9 @@ def _check_downloaded(path: Path, name: str) -> None:
     if problem is None and n == 0:
         problem = "it is empty"
     if problem is not None:
-        path.unlink(missing_ok=True)  # after the file is closed: Windows will not delete an open file
+        path.unlink(
+            missing_ok=True
+        )  # after the file is closed: Windows will not delete an open file
         raise ValueError(f"downloaded whitelist {name!r} is not a barcode list ({problem})")
 
 

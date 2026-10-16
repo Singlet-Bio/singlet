@@ -11,7 +11,6 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 import pytest
-
 from singlet.fetch import fetch
 
 FILE = b"hello"
@@ -65,7 +64,9 @@ def test_a_normal_sample_downloads_and_verifies(tmp_path, mirror_for):
     assert (out / "counts.1pz").read_bytes() == FILE
 
 
-@pytest.mark.parametrize("rel", ["../escaped.txt", "/abs/escaped.txt", "a/../../escaped.txt", "a\\b", "x\x00y", ""])
+@pytest.mark.parametrize(
+    "rel", ["../escaped.txt", "/abs/escaped.txt", "a/../../escaped.txt", "a\\b", "x\x00y", ""]
+)
 def test_manifest_paths_cannot_leave_the_cache_directory(tmp_path, mirror_for, rel):
     m = mirror_for([{"path": rel, "sha256": SHA}])
     cache = tmp_path / "cache"

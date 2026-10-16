@@ -16,7 +16,6 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 import pytest
-
 from singlet import _loader
 from singlet._integrity import BundleIntegrityError, normalize_accession, verify_bundle
 
@@ -37,7 +36,12 @@ def make_bundle(
     checksums = {name: hashlib.sha256(data).hexdigest() for name, data in MEMBERS.items()}
     if tamper_checksum:
         checksums[tamper_checksum] = "0" * 64
-    manifest = {"schema_version": schema, "gse_id": "GSE1", "gsm_ids": ["GSM1"], "checksums": checksums}
+    manifest = {
+        "schema_version": schema,
+        "gse_id": "GSE1",
+        "gsm_ids": ["GSM1"],
+        "checksums": checksums,
+    }
     manifest.update(extra_manifest or {})
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", allowZip64=True) as zf:
@@ -165,7 +169,9 @@ def test_member_names_that_could_escape_a_directory_are_rejected(tmp_path, name)
 
 def test_a_damaged_cached_file_is_replaced_not_trusted(server, tmp_path):
     path = _loader.download("GSE1")
-    path.write_bytes(path.read_bytes()[:100])  # a cache entry cut short by an old bug or a full disk
+    path.write_bytes(
+        path.read_bytes()[:100]
+    )  # a cache entry cut short by an old bug or a full disk
     hits = server.hits
     again = _loader.download("GSE1")
     assert server.hits == hits + 1  # fetched again
@@ -194,7 +200,18 @@ def test_unknown_study_is_a_not_found_error(server, tmp_path):
 
 @pytest.mark.parametrize(
     "bad",
-    ["../../etc/passwd", "GSE1/../../x", "GSE", "GSE12a", "GSE1 ", "GSE1;rm", "", "http://evil/GSE1", "GSE1\n", "GSE1234567890"],
+    [
+        "../../etc/passwd",
+        "GSE1/../../x",
+        "GSE",
+        "GSE12a",
+        "GSE1 ",
+        "GSE1;rm",
+        "",
+        "http://evil/GSE1",
+        "GSE1\n",
+        "GSE1234567890",
+    ],
 )
 def test_accessions_that_are_not_accessions_never_reach_a_path_or_url(bad, server, tmp_path):
     if bad.strip() == "GSE1":
@@ -249,7 +266,10 @@ def test_gsm_lookup_rejects_url_syntax_before_any_request(monkeypatch):
 
 def _bundle_with(tmp_path, *, extra=None, checksums_as_list=False, duplicate=False):
     checksums = {name: hashlib.sha256(data).hexdigest() for name, data in MEMBERS.items()}
-    manifest = {"schema_version": "1.0", "checksums": sorted(checksums) if checksums_as_list else checksums}
+    manifest = {
+        "schema_version": "1.0",
+        "checksums": sorted(checksums) if checksums_as_list else checksums,
+    }
     path = tmp_path / "x.singlet"
     with zipfile.ZipFile(path, "w") as zf:
         for name, data in MEMBERS.items():

@@ -8,7 +8,6 @@ import io
 import urllib.error
 
 import pytest
-
 from singlet import whitelists as wl
 
 
@@ -50,7 +49,9 @@ def test_a_missing_large_whitelist_is_downloaded_once_and_checked(cache, monkeyp
 
 @pytest.mark.parametrize("body", [b"<html>not found</html>\n", b"", b"ACGT\nnot a barcode\n"])
 def test_a_download_that_is_not_a_barcode_list_is_rejected_and_not_cached(cache, monkeypatch, body):
-    monkeypatch.setattr(wl.urllib.request, "urlopen", lambda req, timeout=0: _Resp(gzip.compress(body)))
+    monkeypatch.setattr(
+        wl.urllib.request, "urlopen", lambda req, timeout=0: _Resp(gzip.compress(body))
+    )
     with pytest.raises(ValueError):
         wl.ensure_whitelist("737K-august-2016")
     assert not any(cache.glob("*.txt")) if cache.exists() else True
