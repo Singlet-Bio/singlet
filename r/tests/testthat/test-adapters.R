@@ -8,7 +8,7 @@ test_that("as_sce builds a SingleCellExperiment with the right assays", {
     expect_true("counts" %in% SummarizedExperiment::assayNames(sce))
 
     # Metadata should carry the embedded GEO context
-    md <- SummarizedExperiment::metadata(sce)
+    md <- S4Vectors::metadata(sce)
     expect_true(!is.null(md$singlet))
     expect_true("gsm_id" %in% names(md$singlet))
 })
@@ -30,6 +30,9 @@ test_that("as_sce attaches per-cell sidecars into colData", {
 test_that("as_sce puts per-feature matrices into altExps", {
     dir <- skip_if_no_fixture()
     skip_if_not_installed("SingleCellExperiment")
+    if (!any(file.exists(file.path(dir, c("exon_counts.1pz", "intron_counts.1pz", "sj_counts.1pz"))))) {
+        skip("fixture has no per-feature matrices (only the small committed gene_counts.1pz)")
+    }
     sce <- as_sce(dir)
 
     alts <- SingleCellExperiment::altExpNames(sce)
@@ -44,6 +47,9 @@ test_that("as_seurat builds a Seurat object with velocity assays", {
     dir <- skip_if_no_fixture()
     skip_if_not_installed("Seurat")
 
+    if (!any(file.exists(file.path(dir, c("spliced.1pz", "unspliced.1pz"))))) {
+        skip("fixture has no spliced/unspliced matrices (only the small committed gene_counts.1pz)")
+    }
     obj <- as_seurat(dir)
     expect_s4_class(obj, "Seurat")
 
