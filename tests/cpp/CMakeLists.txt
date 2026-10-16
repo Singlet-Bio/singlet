@@ -44,6 +44,7 @@ endmacro()
 
 # Core codec tests
 add_pileup_test(test_pz_reader)
+add_pileup_test(test_pz_hardening)
 
 # Cell calling / QC
 add_pileup_test(test_cell_calling)

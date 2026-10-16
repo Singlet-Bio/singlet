@@ -1,0 +1,58 @@
+name: .1pz reader hardening
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'include/singlet/pileup/pz_*.h'
+      - 'r/inst/include/**'
+      - 'tests/cpp/test_pz_*.cpp'
+      - 'tests/fuzz/**'
+      - 'scripts/sync_r_headers.py'
+      - '.github/workflows/pz-hardening.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'include/singlet/pileup/pz_*.h'
+      - 'r/inst/include/**'
+      - 'tests/cpp/test_pz_*.cpp'
+      - 'tests/fuzz/**'
+      - 'scripts/sync_r_headers.py'
+      - '.github/workflows/pz-hardening.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  sanitizers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install zstd and clang
+        run: sudo apt-get update && sudo apt-get install -y libzstd-dev clang
+
+      - name: R header copies match the C++ headers
+        run: python3 scripts/sync_r_headers.py --check
+
+      - name: Build reader tests with ASan + UBSan
+        run: |
+          for t in test_pz_reader test_pz_hardening; do
+            clang++ -std=c++17 -O1 -g -fno-omit-frame-pointer \
+              -fsanitize=address,undefined -fno-sanitize-recover=undefined \
+              -Iinclude tests/cpp/$t.cpp -lzstd -o $t
+          done
+
+      - name: Run reader tests
+        run: |
+          ./test_pz_reader
+          ./test_pz_hardening
+
+      - name: Fuzz the reader for 60 seconds
+        run: |
+          clang++ -std=c++17 -O1 -g -fsanitize=fuzzer,address,undefined \
+            -fno-sanitize-recover=undefined -Iinclude \
+            tests/fuzz/fuzz_pz_reader.cpp -lzstd -o fuzz_pz_reader
+          mkdir -p corpus
+          ./fuzz_pz_reader corpus -max_total_time=60 -max_len=65536 -timeout=10
