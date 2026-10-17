@@ -143,11 +143,11 @@ class TestDownload:
 
     def test_returns_cached_if_exists(self, tmp_path):
         """Returns existing non-empty bundle without downloading if not force."""
-        from singlet._loader import download
-
         import hashlib
         import json
         import zipfile
+
+        from singlet._loader import download
 
         dest = tmp_path / "GSE001.singlet"
         member = b"{}"
