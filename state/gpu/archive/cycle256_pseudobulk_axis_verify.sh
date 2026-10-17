@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-256: verify pseudobulk.py axis-swap fix (CYCLE-211 root cause).
 #
 # CYCLE-255 Sonnet diagnosis: _core.donor_pseudobulk_de expects (genes ×

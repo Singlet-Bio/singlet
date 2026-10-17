@@ -26,8 +26,8 @@ release is published, the install is `pip install singlet-bio`.
 This compiles the package's `.1pz` codec, so you need a **C++17 compiler**
 and **zstd** (headers + library): `apt install build-essential libzstd-dev`
 on Debian/Ubuntu, `brew install zstd` on macOS, or
-`conda install -c conda-forge zstd`. Linux and macOS are supported; on
-Windows use WSL.
+`conda install -c conda-forge zstd`. Linux, macOS and Windows are
+supported (Windows needs Visual Studio Build Tools and zstd to build from source; wheels are built in CI).
 
 Optional extras (same URL, extra in brackets):
 
@@ -181,7 +181,7 @@ ds = SingletDataset("GSE138867", normalize=True)
 | Variable | Meaning |
 |---|---|
 | `SINGLET_DATA_BASE` | Bundle host: files live at `<base>/data/<GSE>/<GSE>.singlet` (default `https://data.singlet.bio`; a trailing `/data` is accepted, so the R client's value works too) |
-| `SINGLET_SAMPLE_MIRROR` | Self-hosted mirror of per-sample directories for `singlet.fetch()` / `singlet.open()` (no public default) |
+| `SINGLET_SAMPLE_MIRROR` | Self-hosted mirror of per-sample directories for `singlet.fetch()` (no public default) |
 | `SINGLET_API_BASE` | REST API base (default `https://singlet.bio/api`) |
 | `SINGLET_CACHE_DIR` | Download cache (default `~/.singlet/cache`) |
 | `SINGLET_API_KEY` | Optional key for natural-language search |

@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-136 — decoupleR MLM (Multivariate Linear Model) pathway scoring on GPU.
 # Jointly regresses all pathways on each cell via closed-form OLS:
 #   B = (W^T W)^{-1} W^T X

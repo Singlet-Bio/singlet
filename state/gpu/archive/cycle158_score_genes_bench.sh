@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-158 Phase E — enrich/score_genes medium-scale bench vs scanpy CPU.
 # Scales: 10k + 30k cells x 5k genes, density 5%, 5 sets x 50 genes, synthetic CSC.
 # Node: g050 (H100 sm_90-compatible).

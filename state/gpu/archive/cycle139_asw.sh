@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-139 — Average Silhouette Width (ASW) kNN-approximation metric.
 # Rousseeuw PJ (1987) J Comput Appl Math 20:53-65.
 # One-block-per-cell CUDA kernel with cub::DeviceReduce::Sum for scalar mean.

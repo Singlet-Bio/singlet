@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # Cycle 103 verify — compile cpp_minimal smoke test + _core pybind11 extension.
 
 #SBATCH --job-name=sg_c103_verify

@@ -23,13 +23,6 @@ from singlet.io.convert import (
     to_tiledb,
     to_zarr,
 )
-from singlet.io.sample import (
-    SingletCounts,
-    SingletMt,
-    SingletNonhost,
-    SingletSample,
-    SingletSnp,
-)
 
 __all__ = [
     "read_1pz",
@@ -46,12 +39,6 @@ __all__ = [
     "from_zarr",
     "from_mtx",
     "from_tiledb",
-    # Canonical v2 readers (singlet.io.sample)
-    "SingletSample",
-    "SingletCounts",
-    "SingletSnp",
-    "SingletMt",
-    "SingletNonhost",
     # Per-GSE bundle format
     "SingletBundle",
     "pack_gse",

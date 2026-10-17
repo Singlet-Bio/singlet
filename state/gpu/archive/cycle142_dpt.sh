@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-142 — Diffusion Pseudotime (Haghverdi et al. 2016 Nat Methods 13:845-848).
 # GPU passes: per-cell sigma (selection sort), dense W (Gaussian kernel), symmetrize,
 # row-normalize, cuSOLVER Ssyevd eigendecomp, per-cell DPT distance from root.

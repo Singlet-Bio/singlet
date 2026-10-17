@@ -57,7 +57,6 @@ Load data
    singlet.open_bundle
    singlet.SingletBundle
    singlet.load_dir
-   singlet.SingletSample
 
 Format I/O
 ----------
@@ -92,8 +91,6 @@ Process raw reads (FASTQ / SRA / ENA accessions) into a canonical
    :nosignatures:
 
    singlet.run_pipeline
-   singlet.transcode_v1_to_v2
-   singlet.validate_sample
 
 Cell type annotation
 ---------------------
@@ -242,7 +239,6 @@ Every public name in ``singlet.__all__``, alphabetically.
     singlet.nmf
     singlet.normalize
     singlet.obs_df
-    singlet.open
     singlet.open_bundle
     singlet.optimal_transport
     singlet.paga
@@ -298,7 +294,6 @@ Every public name in ``singlet.__all__``, alphabetically.
     singlet.SingletCounts
     singlet.SingletMt
     singlet.SingletNonhost
-    singlet.SingletSample
     singlet.SingletSnp
     singlet.sparse_pca
     singlet.spatial_neighbors
@@ -319,18 +314,13 @@ Every public name in ``singlet.__all__``, alphabetically.
     singlet.top_series
     singlet.topic_model
     singlet.trajectory_genes
-    singlet.transcode_v1_to_v2
     singlet.transfer_labels
     singlet.tsne
     singlet.umap
-    singlet.validate_sample
     singlet.var_df
     singlet.variance_partition
     singlet.variational_inference
     singlet.velocity_pseudotime
-    singlet.view_gene_counts
-    singlet.view_psi
-    singlet.view_usa
     singlet.weighted_nearest_neighbors
     singlet.wishart_test
     singlet.write_1pz

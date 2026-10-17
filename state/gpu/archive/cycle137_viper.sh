@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-137 — decoupleR VIPER/aREA (analytical Rank-based Enrichment Analysis) on GPU.
 # Per-cell rank transform via CUB DeviceSegmentedRadixSort + normcdfinvf qnorm.
 # cuBLAS Sgemm for NES = T1^T·W; per-regulon L1 normalization.

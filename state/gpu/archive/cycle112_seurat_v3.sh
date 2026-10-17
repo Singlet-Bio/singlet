@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # Cycle 112 — capture HvgTest.Tiny_SeuratV3_Top50 assertion in full (no tail).
 
 #SBATCH --job-name=sg_c112_seurat

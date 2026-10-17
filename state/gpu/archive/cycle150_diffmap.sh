@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-150 — diffusion-map embedding (Coifman & Lafon 2005 port).
 # GPU passes: sigma (median bandwidth), Gaussian W, symmetrize, sym-norm,
 # cuSOLVER Ssyevd eigendecomp, scale eigenvectors by λ^t.

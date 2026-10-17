@@ -18,7 +18,7 @@
 # Host serving .singlet bundles. Files live at
 # <base>/data/<GSE>/<GSE>.singlet, matching the Python client, where
 # SINGLET_DATA_BASE also names the host. A base that already ends in /data
-# (what this package expected before 1.1.0) is accepted too.
+# (what the development builds before 1.0.0 expected) is accepted too.
 .singlet_data_base <- function() {
     base <- Sys.getenv("SINGLET_DATA_BASE", unset = "")
     if (!nzchar(base)) {
@@ -300,15 +300,26 @@ set_api_key <- function(key) {
 # ---------------------------------------------------------------------------
 # Internal: ensure a .singlet bundle for an accession is on disk, return path.
 # ---------------------------------------------------------------------------
-.singlet_fetch_bundle <- function(accession, cache_dir = NULL) {
+.singlet_fetch_bundle <- function(accession, cache_dir = NULL, verify = TRUE) {
     cache <- .singlet_cache_dir(cache_dir)
     gse <- .gse_of(accession, cache = cache)
     dest <- file.path(cache, paste0(gse, ".singlet"))
-    if (file.exists(dest) && file.size(dest) > 0L) {
-        return(dest)
+    # A cached file is reused only while it is still a complete archive; one cut
+    # short by an old bug or a full disk is discarded and fetched again.
+    if (file.exists(dest)) {
+        ok <- tryCatch({
+            .singlet_verify_bundle(dest, hashes = FALSE)
+            TRUE
+        }, singlet_integrity_error = function(e) FALSE)
+        if (ok) {
+            return(dest)
+        }
+        unlink(dest)
     }
     url <- .singlet_bundle_url(gse)
-    tmp <- paste0(dest, ".part")
+    announced <- .singlet_announced_size(url)
+    tmp <- paste0(dest, ".", Sys.getpid(), ".part")
+    on.exit(unlink(tmp), add = TRUE)
     old_to <- getOption("timeout")
     on.exit(options(timeout = old_to), add = TRUE)
     options(timeout = max(600, old_to))
@@ -326,8 +337,18 @@ set_api_key <- function(key) {
         unlink(tmp)
         stop(sprintf("download produced an empty file for %s (%s)", gse, url))
     }
+    # Nothing is cached until the file is the size the server announced, a
+    # complete archive of a schema this version reads, and (verify = TRUE)
+    # every member matches the SHA-256 in manifest.json.
+    tryCatch(
+        .singlet_verify_bundle(tmp, expected_size = announced, hashes = verify),
+        singlet_integrity_error = function(e) {
+            unlink(tmp)
+            stop(sprintf("the download of %s was rejected and not cached: %s", gse, conditionMessage(e)),
+                 call. = FALSE)
+        }
+    )
     if (!file.rename(tmp, dest)) {
-        unlink(tmp)
         stop(sprintf("could not move the downloaded bundle into the cache: %s",
                      dest))
     }

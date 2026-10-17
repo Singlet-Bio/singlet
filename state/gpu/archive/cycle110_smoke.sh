@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # Cycle 110 docs-grounding smoke — confirm what `import singlet_gpu` actually exposes.
 # Output drives the docs ground-truth update.
 

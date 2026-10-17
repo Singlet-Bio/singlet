@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-215: minimal pca repro to disambiguate CYCLE-199 root cause.
 #
 # Goal: call _core.pca on SYNTHETIC cupy sparse data (no lognorm chain, no

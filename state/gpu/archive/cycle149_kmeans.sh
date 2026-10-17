@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-149 — k-means clustering (Lloyd's algorithm port).
 # GPU passes: Forgy init (host mt19937), col-norm kernels, cuBLAS Sgemm,
 # dist+argmin per cell, atomic-scatter centroid update, inertia reduction.

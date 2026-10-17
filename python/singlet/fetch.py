@@ -36,8 +36,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import urllib.error
+import urllib.parse
 import urllib.request
 import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -69,7 +71,7 @@ _RETIRED_HOST_MSG = (
 def _sample_mirror() -> tuple[Optional[str], Optional[str]]:
     """``(mirror_base_url, env_var_it_came_from)``, or ``(None, None)``.
 
-    ``$SINGLET_SAMPLE_MIRROR`` names the mirror. Up to 2.0.0 :func:`fetch`
+    ``$SINGLET_SAMPLE_MIRROR`` names the mirror. In development builds before 1.0.0 :func:`fetch`
     read it from ``$SINGLET_DATA_BASE``; that variable now names the bundle
     host used by :func:`singlet.load`, but a value set there is still used
     here when ``$SINGLET_SAMPLE_MIRROR`` is unset, with a ``FutureWarning``.
@@ -133,15 +135,47 @@ def _http_get(url: str, dest: Path) -> None:
     tmp.replace(dest)
 
 
-def _fetch_one(base_url: str, rel: str, expected_sha: Optional[str], out_dir: Path) -> Path:
-    dest = out_dir / rel
+_SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+
+
+def _checked_dest(out_dir: Path, rel: str) -> Path:
+    """``out_dir / rel`` if it stays inside ``out_dir``; otherwise ValueError.
+
+    ``rel`` comes from a remote manifest, so an absolute path, a ``..`` segment
+    or a backslash must never decide where a file is written.
+    """
+    if (
+        not isinstance(rel, str)
+        or not rel
+        or rel.startswith(("/", "\\"))
+        or "\\" in rel
+        or any(ord(c) < 32 for c in rel)
+        or ".." in rel.split("/")
+    ):
+        raise ValueError(f"refusing unsafe file path from the manifest: {rel!r}")
+    dest = (out_dir / rel).resolve()
+    root = out_dir.resolve()
+    if root != dest and root not in dest.parents:
+        raise ValueError(f"refusing to write outside {root}: {rel!r}")
+    return dest
+
+
+def _fetch_one(
+    base_url: str, rel: str, expected_sha: Optional[str], out_dir: Path, *, require_sha: bool = True
+) -> Path:
+    dest = _checked_dest(out_dir, rel)
+    if require_sha and not (isinstance(expected_sha, str) and _SHA256_RE.match(expected_sha)):
+        raise ValueError(
+            f"the manifest gives no valid sha256 for {rel}; refusing to download an unverified file"
+        )
     if expected_sha and dest.exists():
-        if _sha256_of(dest) == expected_sha:
+        if _sha256_of(dest) == expected_sha.lower():
             return dest
-    _http_get(f"{base_url}/{rel}", dest)
+    _http_get(f"{base_url}/{urllib.parse.quote(rel)}", dest)
     if expected_sha:
         got = _sha256_of(dest)
-        if got != expected_sha:
+        if got != expected_sha.lower():
             dest.unlink(missing_ok=True)
             raise IOError(f"sha256 mismatch for {rel}: expected {expected_sha}, got {got}")
     return dest
@@ -189,6 +223,10 @@ def fetch(
     re-downloaded. Partial transfers go to ``*.part`` files and are renamed
     atomically on success.
     """
+    if not _NAME_RE.match(str(accession)):
+        raise ValueError(
+            f"not a valid sample name (letters, digits, '_', '-', '.'; no path separators): {accession!r}"
+        )
     source = None
     if not base_url:
         base_url, source = _sample_mirror()
@@ -201,7 +239,7 @@ def fetch(
 
     sample_base = f"{base}/{accession}"
     try:
-        manifest_path = _fetch_one(sample_base, _MANIFEST_NAME, None, out_dir)
+        manifest_path = _fetch_one(sample_base, _MANIFEST_NAME, None, out_dir, require_sha=False)
     except FileNotFoundError as e:
         if source != _LEGACY_ENV:
             raise
@@ -218,6 +256,10 @@ def fetch(
         raise ValueError(f"{manifest_path}: 'files' must be a list")
 
     want = set(files) if files is not None else None
+    for entry in listing:
+        if not isinstance(entry, dict) or "path" not in entry:
+            raise ValueError(f"{manifest_path}: every 'files' entry needs a 'path'")
+        _checked_dest(out_dir, entry["path"])  # refuse the whole manifest if any path is unsafe
     todo = [
         (entry["path"], entry.get("sha256"))
         for entry in listing

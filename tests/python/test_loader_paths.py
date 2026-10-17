@@ -115,19 +115,59 @@ class TestResolveGsePath:
         assert _resolve_gse_path("GSE100") is None
 
 
+def _valid_bundle_bytes() -> bytes:
+    """A minimal complete .singlet archive that passes verification."""
+    import hashlib
+    import io
+    import json
+    import zipfile
+
+    member = b"{}"
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("feature_vocab.json", member)
+        zf.writestr(
+            "manifest.json",
+            json.dumps(
+                {
+                    "schema_version": "1.0",
+                    "checksums": {"feature_vocab.json": hashlib.sha256(member).hexdigest()},
+                }
+            ),
+        )
+    return buf.getvalue()
+
+
 class TestDownload:
     """Test download() function (fetches public R2 .singlet bundles)."""
 
     def test_returns_cached_if_exists(self, tmp_path):
         """Returns existing non-empty bundle without downloading if not force."""
+        import hashlib
+        import json
+        import zipfile
+
         from singlet._loader import download
 
         dest = tmp_path / "GSE001.singlet"
-        dest.write_bytes(b"cached data")
+        member = b"{}"
+        with zipfile.ZipFile(dest, "w") as zf:
+            zf.writestr("feature_vocab.json", member)
+            zf.writestr(
+                "manifest.json",
+                json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "checksums": {"feature_vocab.json": hashlib.sha256(member).hexdigest()},
+                    }
+                ),
+            )
+        before = dest.read_bytes()
 
+        # An intact cached bundle is reused without any request (none can be made here).
         result = download("GSE001", output_dir=tmp_path)
         assert result == dest
-        assert result.read_bytes() == b"cached data"
+        assert result.read_bytes() == before
 
     def test_force_redownloads(self, tmp_path):
         """force=True triggers download even if file exists."""
@@ -135,9 +175,10 @@ class TestDownload:
 
         dest = tmp_path / "GSE001.singlet"
         dest.write_bytes(b"old data")
+        new = _valid_bundle_bytes()
 
         class _FakeResp:
-            headers = {"content-length": "4"}
+            headers = {"content-length": str(len(new))}
 
             def __enter__(self):
                 return self
@@ -146,14 +187,14 @@ class TestDownload:
                 return False
 
             def read(self, *a):
-                data, self._done = (b"new!" if not getattr(self, "_done", False) else b""), True
+                data, self._done = (new if not getattr(self, "_done", False) else b""), True
                 return data
 
         with patch.object(_loader.urllib.request, "urlopen", return_value=_FakeResp()):
             result = _loader.download("GSE001", output_dir=tmp_path, force=True)
 
         assert result == dest
-        assert dest.read_bytes() == b"new!"
+        assert dest.read_bytes() == new
 
     def test_404_raises_file_not_found(self, tmp_path):
         """404 response gives clear FileNotFoundError with guidance."""
@@ -164,7 +205,7 @@ class TestDownload:
         err = urllib.error.HTTPError("url", 404, "Not Found", {}, None)
         with patch.object(_loader.urllib.request, "urlopen", side_effect=err):
             with pytest.raises(FileNotFoundError, match="not found"):
-                _loader.download("GSE_FAKE", output_dir=tmp_path, force=True)
+                _loader.download("GSE999", output_dir=tmp_path, force=True)
 
     def test_500_raises_runtime_error(self, tmp_path):
         """Non-404 HTTP errors give RuntimeError with context."""
@@ -175,7 +216,7 @@ class TestDownload:
         err = urllib.error.HTTPError("url", 500, "Server Error", {}, None)
         with patch.object(_loader.urllib.request, "urlopen", side_effect=err):
             with pytest.raises(RuntimeError, match="Failed to download"):
-                _loader.download("GSE_FAKE", output_dir=tmp_path, force=True)
+                _loader.download("GSE999", output_dir=tmp_path, force=True)
 
 
 class TestLoad:

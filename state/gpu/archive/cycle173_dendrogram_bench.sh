@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-173 Phase E — embed/dendrogram medium-scale bench vs scipy/numpy CPU.
 #
 # GPU kernel (embed::dendrogram):

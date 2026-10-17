@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-179 Phase E — qc/empty_drops medium-scale bench vs manual scipy/numpy CPU.
 #
 # GPU kernel (qc::empty_drops): 6 GPU passes —

@@ -1,6 +1,6 @@
 # singlet (R) — NEWS
 
-## singlet 1.1.0
+## singlet 1.0.0
 
 ### New features
 

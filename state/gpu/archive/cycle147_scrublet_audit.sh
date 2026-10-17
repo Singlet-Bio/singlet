@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-147 — Scrublet audit: build + run existing qc/doublet_score.h tests.
 # Cycle 13 vintage; 5 tests in qc_doublet_correctness.cpp.
 

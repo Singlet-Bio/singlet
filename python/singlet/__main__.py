@@ -9,6 +9,7 @@ package is summarised instead, and labelled as such.
 from __future__ import annotations
 
 import json
+import sys
 import urllib.request
 from typing import Optional
 
@@ -44,6 +45,12 @@ def _format_live(stats: dict) -> str:
 
 
 def main() -> None:
+    # A Windows console is often cp1252, which cannot print the arrows below; replace what it cannot show instead of crashing.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="replace")  # type: ignore[union-attr]
+        except (AttributeError, ValueError):
+            pass
     print(f"singlet v{singlet.__version__}")
     stats = _live_stats()
     if stats is not None:

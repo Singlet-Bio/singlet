@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -18,6 +19,12 @@
 #include <vector>
 
 #include <zstd.h>
+
+#if defined(_MSC_VER)
+#define PZ_RESTRICT __restrict
+#else
+#define PZ_RESTRICT __restrict__
+#endif
 
 namespace singlet {
 namespace pz {
@@ -174,8 +181,8 @@ static inline void varint_push(std::vector<uint8_t>& out, uint32_t v) {
 // ============================================================================
 // Byte-split (scalar, 4x unrolled — matches pz_codec.cpp)
 // ============================================================================
-static void byte_split_16(const uint32_t* __restrict__ src, size_t n,
-                           uint8_t* __restrict__ dst) {
+static void byte_split_16(const uint32_t* PZ_RESTRICT src, size_t n,
+                           uint8_t* PZ_RESTRICT dst) {
     uint8_t* p0 = dst;
     uint8_t* p1 = dst + n;
     size_t i = 0;
@@ -192,8 +199,8 @@ static void byte_split_16(const uint32_t* __restrict__ src, size_t n,
     }
 }
 
-static void byte_split_32(const uint32_t* __restrict__ src, size_t n,
-                           uint8_t* __restrict__ dst) {
+static void byte_split_32(const uint32_t* PZ_RESTRICT src, size_t n,
+                           uint8_t* PZ_RESTRICT dst) {
     uint8_t *p0 = dst, *p1 = dst+n, *p2 = dst+2*n, *p3 = dst+3*n;
     size_t i = 0;
     for (; i + 4 <= n; i += 4) {
@@ -212,8 +219,8 @@ static void byte_split_32(const uint32_t* __restrict__ src, size_t n,
 // ============================================================================
 // Bit-plane decomposition (plane 0 transform — matches pz_codec.cpp)
 // ============================================================================
-static void bit_planes_encode(const uint8_t* __restrict__ src, size_t n,
-                               uint8_t* __restrict__ dst) {
+static void bit_planes_encode(const uint8_t* PZ_RESTRICT src, size_t n,
+                               uint8_t* PZ_RESTRICT dst) {
     size_t pb = (n + 7) / 8;
     std::memset(dst, 0, 8 * pb);
     for (size_t i = 0; i < n; ++i) {
@@ -231,8 +238,8 @@ static void bit_planes_encode(const uint8_t* __restrict__ src, size_t n,
 // ============================================================================
 // Bitmap zero-filter — matches pz_codec.cpp
 // ============================================================================
-static size_t bitmap_pack(const uint8_t* __restrict__ src, size_t n,
-                           uint8_t* __restrict__ dst) {
+static size_t bitmap_pack(const uint8_t* PZ_RESTRICT src, size_t n,
+                           uint8_t* PZ_RESTRICT dst) {
     size_t bm_bytes = (n + 7) / 8;
     std::memset(dst, 0, bm_bytes);
     size_t wp = bm_bytes;
@@ -701,7 +708,7 @@ bool write_1pz(
     ftr.num_chunks = (uint32_t)fwd.num_chunks;
     ftr.magic = TP1_MAGIC;
 
-    std::ofstream fout(path, std::ios::binary);
+    std::ofstream fout(std::filesystem::u8path(path), std::ios::binary);  // u8path: UTF-8 names open on Windows
     if (!fout) {
         std::cerr << "[pz_writer] Cannot open: " << path << "\n";
         return false;

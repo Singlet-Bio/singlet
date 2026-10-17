@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-180 Phase E — qc/soupx medium-scale bench vs manual scipy/numpy CPU.
 #
 # GPU kernel (qc::soupx): 5 GPU passes —

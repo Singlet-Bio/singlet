@@ -3,7 +3,7 @@
 
 :func:`find` turns a plain-English description (e.g. ``"human lung fibroblasts"``)
 into a list of matching GEO accessions by calling the hosted search endpoint.
-It returns study (``GSE``) accessions by default (2.0.0 and earlier returned
+It returns study (``GSE``) accessions by default (development builds before 1.0.0 returned
 samples); pass ``level="gsm"`` for samples. :func:`find_load` is a convenience
 that loads the top matches (three studies by default) directly into one AnnData.
 
@@ -125,7 +125,7 @@ def find(query: str, *, level: str = "gse", limit: int = 50) -> list[str]:
         ``"gsm"`` (individual samples).
 
         .. note::
-           The default was ``"gsm"`` up to and including 2.0.0 and is now
+           The default was ``"gsm"`` in development builds before 1.0.0 and is now
            ``"gse"``; no runtime warning is issued. Code that expects sample
            accessions — for example ``adata.obs["gsm_id"].isin(singlet.find(q))``
            — must pass ``level="gsm"``.

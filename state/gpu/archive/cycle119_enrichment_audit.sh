@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-119 — Enrichment frontier audit (post-CYCLE-105 factornet purge).
 # Builds + runs gsea/aucell + gsea/fgsea + enrich/ssgsea + enrich/progeny tests.
 # Goal: certify these 17 tests still pass after the factornet removal, or surface

@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-143 — bbknn audit: build + run existing integrate/bbknn.h tests
 # (created cycle 14, never re-verified after CYCLE-105 factornet purge).
 

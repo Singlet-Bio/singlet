@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-162 Phase E — preprocess/model_gene_var medium-scale bench vs scanpy CPU.
 #
 # GPU kernel: port of scran::modelGeneVarByPoisson (Lun-McCarthy-Marioni 2016).

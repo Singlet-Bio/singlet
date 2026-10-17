@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # singlet-gpu/state/cycle64_leiden_umap_bench.sh
 #
 # Cycle 64 — Features 9 (Leiden) + 10 (UMAP) Phase E:

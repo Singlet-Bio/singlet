@@ -1,22 +1,24 @@
 # SPDX-License-Identifier: MIT
 """singlet.whitelists — Barcode whitelist loading with lazy download.
 
-Whitelists are shipped in the package under ``singlet/data/whitelists/``.
-If a whitelist is missing (e.g., in a minimal install), this module can
-fetch it from Teichlab's public CDN (scg_lib_structs).
+The small whitelists are shipped in the package under ``singlet/data/whitelists/``;
+the four large 10x ones (3M-february-2018, 737K-august-2016, 737K-cratac-v1,
+gex_737K-arc-v1) are downloaded on first use from Teichlab's public CDN
+(scg_lib_structs) into ``~/.singlet/whitelists`` and then read from there.
 
 Usage::
 
     from singlet.whitelists import load_whitelist, WHITELIST_DIR
 
     barcodes = load_whitelist("737K-august-2016")  # set of 16-bp barcodes
-    path = WHITELIST_DIR / "737K-august-2016.txt"  # direct file access
+    path = ensure_whitelist("737K-august-2016")  # a Path, downloaded if needed
 """
 
 from __future__ import annotations
 
 import gzip
 import os
+import re
 import shutil
 import urllib.error
 import urllib.request
@@ -60,13 +62,26 @@ def _resolve_dir() -> Path:
 WHITELIST_DIR = _resolve_dir()
 
 
+_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+
+
+def _check_name(name: str) -> str:
+    """A whitelist name is a bare file stem: no separators, no traversal."""
+    if not isinstance(name, str) or not _NAME_RE.match(name) or ".." in name:
+        raise ValueError(f"not a valid whitelist name: {name!r}")
+    return name
+
+
 def list_available_whitelists() -> list[str]:
-    """List whitelist names available locally (without .txt extension)."""
-    return sorted(p.stem for p in WHITELIST_DIR.glob("*.txt"))
+    """List whitelist names usable here: bundled, already cached, or downloadable on first use."""
+    local = {p.stem for d in (_PKG_DATA, _CACHE_DIR) if d.is_dir() for p in d.glob("*.txt")}
+    downloadable = {n for n, f in _TEICHLAB_MAP.items() if f}
+    return sorted(local | downloadable)
 
 
 def _download_whitelist(name: str, dest: Path) -> None:
     """Download whitelist from Teichlab CDN."""
+    name = _check_name(name)
     cdn_file = _TEICHLAB_MAP.get(name)
     if cdn_file is None:
         raise FileNotFoundError(
@@ -82,11 +97,34 @@ def _download_whitelist(name: str, dest: Path) -> None:
             # Decompress gzip on the fly
             with gzip.open(resp, "rt") as gz, open(tmp, "w") as out:
                 shutil.copyfileobj(gz, out)
+        _check_downloaded(tmp, name)
     except urllib.error.HTTPError as e:
         if tmp.exists():
             tmp.unlink()
         raise FileNotFoundError(f"Failed to download {url}: HTTP {e.code}") from e
     tmp.replace(dest)
+
+
+def _check_downloaded(path: Path, name: str) -> None:
+    """A barcode whitelist is one A/C/G/T/N string per line; anything else is not one (an error page, a truncated gzip)."""
+    n = 0
+    problem = None
+    with open(path) as f:
+        for line in f:
+            s = line.strip()
+            if not s:
+                continue
+            if not re.fullmatch(r"[ACGTN]+(-[0-9]+)?", s):
+                problem = f"line {n + 1}: {s[:40]!r}"
+                break
+            n += 1
+    if problem is None and n == 0:
+        problem = "it is empty"
+    if problem is not None:
+        path.unlink(
+            missing_ok=True
+        )  # after the file is closed: Windows will not delete an open file
+        raise ValueError(f"downloaded whitelist {name!r} is not a barcode list ({problem})")
 
 
 def ensure_whitelist(name: str) -> Path:
@@ -107,6 +145,7 @@ def ensure_whitelist(name: str) -> Path:
     FileNotFoundError
         If the whitelist cannot be found or downloaded.
     """
+    name = _check_name(name)
     # Check package-bundled location first
     bundled = _PKG_DATA / f"{name}.txt"
     if bundled.is_file():

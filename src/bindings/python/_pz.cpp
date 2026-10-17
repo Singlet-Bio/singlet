@@ -18,6 +18,7 @@
 #include <singlet/pileup/pz_reader.h>  // also pulls in pz_writer.h
 
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <stdexcept>
 #include <string>
@@ -233,7 +234,7 @@ static bool py_write_1pz(
 // ============================================================================
 static py::dict py_info_1pz(const std::string& path)
 {
-    std::ifstream fin(path, std::ios::binary);
+    std::ifstream fin(std::filesystem::u8path(path), std::ios::binary);
     if (!fin)
         throw std::runtime_error("info_1pz: cannot open " + path);
 
@@ -245,7 +246,7 @@ static py::dict py_info_1pz(const std::string& path)
 
     if (hdr.magic != singlet::pz::TP1_MAGIC)
         throw std::runtime_error("info_1pz: bad magic (not a .1pz file): " + path);
-    if (hdr.version != 1 && hdr.version != 3 && hdr.version != 4)
+    if (hdr.version != singlet::pz::TP1_VERSION)
         throw std::runtime_error("info_1pz: unsupported version " +
                                  std::to_string(hdr.version) + ": " + path);
 

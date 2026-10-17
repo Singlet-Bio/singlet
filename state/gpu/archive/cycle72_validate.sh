@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # Cycle 72 validation job — BUG-WILCOXON-POST-NORMALIZE-CRASH regression test.
 # Rebuilds de_wilcoxon_correctness from the repo as-is, then runs only Test83.
 #

@@ -10,6 +10,7 @@ that discovery, reading and the raw-counts assembly all behave.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import zipfile
 
@@ -70,7 +71,6 @@ def bundle_path(tmp_path_factory):
 
     out = work / "GSE000001.singlet"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("manifest.json", json.dumps({"gsm_ids": [GSM], "gse_id": "GSE000001"}))
         zf.writestr("study_meta.json", json.dumps({"gse_id": "GSE000001"}))
         zf.writestr(
             "feature_vocab.json",
@@ -88,6 +88,17 @@ def bundle_path(tmp_path_factory):
         zf.writestr(p + "nonhost/nonhost_em_abundance.tsv", "taxon\treads\nEscherichia coli\t42\n")
         # Flat layout (older bundles) for a different modality.
         zf.writestr(p + "mt_variants.tsv", "pos\tref\talt\taf\n3243\tA\tG\t0.12\n")
+    # The manifest vouches for every member (schema 1.0), as the real builder writes it.
+    with zipfile.ZipFile(out) as zf:
+        checksums = {n: hashlib.sha256(zf.read(n)).hexdigest() for n in zf.namelist()}
+    with zipfile.ZipFile(out, "a", zipfile.ZIP_DEFLATED) as zf:
+        manifest = {
+            "schema_version": "1.0",
+            "gsm_ids": [GSM],
+            "gse_id": "GSE000001",
+            "checksums": checksums,
+        }
+        zf.writestr("manifest.json", json.dumps(manifest))
     return out
 
 

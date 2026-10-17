@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-262: verify knn_graph wrapper fix.
 #
 # CYCLE-257 unblocked PCA; CYCLE-262 fixes the next-largest wrapper-rot

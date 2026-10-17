@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # singlet-gpu/state/cycle63_knn_bench.sh
 #
 # Cycle 63 — Feature 6 graph/knn + graph/snn Phase E: compile + correctness + benchmark.

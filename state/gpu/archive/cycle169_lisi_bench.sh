@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-169 Phase E — integrate/lisi medium-scale bench vs numpy/sklearn CPU.
 #
 # GPU kernel: one block per cell; shared-memory histogram of n_labels ints;

@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-153 — Scrublet doublet-score focused fix (qc/doublet_score.h, cycle-13 vintage).
 # Fixes: (1) find_knee_threshold placed threshold beyond doublet bump → zero calls (AUC 0.63)
 #             fixed to valley-minimum + left-edge-of-bump detection.

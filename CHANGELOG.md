@@ -4,9 +4,28 @@ All notable changes to the singlet project.
 
 ## [Unreleased]
 
-## [2.1.0] — 2026-10-01
+## [1.0.0] — first release
 
-The first release published to PyPI, as **`singlet-bio`** (`pip install singlet-bio`, then `import singlet`). It collects the client fixes from PR #2:
+Version numbers were reset to **1.0.0** before the first public release. The builds numbered 2.0.0 and 2.1.0 below were
+development builds that were never published to PyPI or CRAN, and their notes are kept as history. Bundles on
+data.singlet.bio written by those builds record `singlet_version: "2.0.0"` in `manifest.json`; readers do not
+look at that field, so they load as before. The `v1.0.0` git tag from the pilot predates this release and should be
+moved or deleted before tagging.
+
+### Changes since the development builds
+
+- **`.1pz` reader hardened and narrowed.** Only version 1 with the feature flags `write_1pz` emits is read (all
+  deployed bundles use exactly that); every size, offset and index is bounds-checked and allocations are capped.
+- **Downloads are verified before they are cached** (size, archive structure, schema, SHA-256 of every member), in the
+  Python and R clients; accessions are validated before they reach a path or a URL; `fetch()` keeps manifest paths
+  inside the cache and requires checksums.
+- **Windows:** wheel build, UTF-8 paths, console-safe CLI. R was already built and checked on Windows.
+- **Removed the multi-block `1PZ02` reader and everything built on it**: `singlet.pz_v2`, `SingletSample` (and `SingletCounts`, `SingletSnp`, `SingletMt`, `SingletNonhost`), `singlet.open`, `validate_sample`, `transcode_v1_to_v2`, the `view_*` functions and their tests. No deployed bundle uses that format; the package reads only the single-block `TP1Z` version 1 layout.
+- **The R package's codec headers are generated** from the C++ ones (`scripts/sync_r_headers.py`), checked in CI.
+
+### Development build 2.1.0 — 2026-10-01
+
+The first build published to PyPI, as **`singlet-bio`** (`pip install singlet-bio`, then `import singlet`). It collects the client fixes from PR #2:
 
 - **Distribution renamed to `singlet-bio`**; the import name (`singlet`) and the R package name are unchanged.
 - **`singlet.find()` returns studies (`GSE`) by default**, not samples; pass `level="gsm"` for the 2.0.0 behaviour.
@@ -48,7 +67,7 @@ The first release published to PyPI, as **`singlet-bio`** (`pip install singlet-
 - The CI lint job passes: `python/` and `tests/python/` are `ruff check` / `ruff format` clean, and ruff (0.16.9) and pyright (1.1.414) are pinned in `ci.yml` so a new release cannot turn a green branch red. Pushes to `claude/lint-*` branches also run `autofix.yml`, which commits `ruff check --fix` + `ruff format` back to the branch.
 - Real bugs the lint pass turned up: the GPU test modules called `singlet.gpu.*` without importing it; `singlet.gpu.preprocess.lognorm._prepare_adata` called the `copy` module instead of copying; a duplicate test-class name in `test_convert.py` hid three `singlet.convert` tests, which now run.
 
-## [2.0.0] — 2026-09-04
+### Development build 2.0.0 — 2026-09-04
 
 ### Breaking Changes
 - **Unified package**: `singlet-bio`, `singlepress`, `singlet-gpu` merged into single `singlet` package
@@ -118,7 +137,7 @@ The first release published to PyPI, as **`singlet-bio`** (`pip install singlet-
 - Standalone `singlet-bio` repository (archived)
 - Agent configs moved to private `singlet-agents` repo
 
-## [1.0.0] — Unreleased
+### Pilot build 0.x — before the 2.x development builds
 
 ### Features
 - **Bundled catalog**: Package ships with `catalog_v1.parquet` (1,175 series) and `sample_index.parquet` (2,378 samples). No downloads needed to browse the atlas.

@@ -24,8 +24,8 @@ release is published, the install is `pip install singlet-bio`.
 Installing the Python package from source compiles a small C++ extension (the
 `.1pz` codec), so you need a **C++17 compiler** and **zstd** headers + library
 (`apt install build-essential libzstd-dev`, `brew install zstd`, or
-`conda install -c conda-forge zstd`). Linux and macOS are supported; Windows
-users should use WSL.
+`conda install -c conda-forge zstd`). Linux, macOS and Windows are
+supported (Windows needs Visual Studio Build Tools and zstd to build from source; wheels are built in CI).
 
 ## What singlet does
 

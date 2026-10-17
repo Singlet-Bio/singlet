@@ -6,10 +6,17 @@ include setup.py
 
 # C++ sources + headers needed to build the singlet._pz extension from an sdist
 recursive-include src/bindings *.cpp *.h *.hpp
-recursive-include include *.h *.hpp
+# only the .1pz codec headers: the extension includes nothing else (the rest of include/ is the C++ pipeline)
+include include/singlet/pileup/pz_reader.h
+include include/singlet/pileup/pz_writer.h
 
 # Bundled package data
 recursive-include python/singlet/data *.parquet *.txt
+# ...except the large 10x whitelists, which singlet.whitelists downloads on demand
+exclude python/singlet/data/whitelists/3M-february-2018.txt
+exclude python/singlet/data/whitelists/737K-august-2016.txt
+exclude python/singlet/data/whitelists/737K-cratac-v1.txt
+exclude python/singlet/data/whitelists/gex_737K-arc-v1.txt
 include python/singlet/py.typed
 
 # Keep test/build noise out of the sdist

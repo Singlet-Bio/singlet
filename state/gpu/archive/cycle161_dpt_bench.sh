@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-161 Phase E — embed/dpt medium-scale bench vs scanpy CPU.
 # Scale: 10k cells x 50 PCs, dense, k=10, n_eigenvecs=15, synthetic.
 # Algorithm: Haghverdi et al. 2016 DPT (cuSOLVER Ssyevd eigendecomp).

@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-249: cuda-memcheck (compute-sanitizer) wrapper for the
 # pca C++ kernel segfault (CYCLE-199).
 #

@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # singlet-gpu/state/cycle65_qc_scale_bench.sh
 #
 # Cycle 65 — Features 6 (QC metrics) + 7 (Scale + regress_out) Phase E:

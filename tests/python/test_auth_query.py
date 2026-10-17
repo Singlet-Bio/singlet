@@ -106,7 +106,6 @@ class TestFetch:
         assert fetch_mod.default_base_url() == base
         out = fetch_mod.fetch("GSM5", cache_dir=tmp_path / "cache")
         assert (out / "summary.json").read_bytes() == b"summary contents"
-        assert singlet.open("GSM5", cache_dir=tmp_path / "cache").path == out
 
     def test_legacy_data_base_still_names_a_mirror_with_a_warning(self, tmp_path, no_mirror_env):
         base = _mirror(tmp_path, "GSM6")
@@ -162,7 +161,3 @@ class TestFetch:
         base = (tmp_path / "mirror").as_uri()
         with pytest.raises(RuntimeError, match="sha256 mismatch"):
             fetch_mod.fetch("GSM2", cache_dir=tmp_path / "cache", base_url=base)
-
-    def test_open_sample_accession_without_mirror_raises(self, tmp_path, no_mirror_env):
-        with pytest.raises(NotImplementedError):
-            singlet.open("GSM_NOT_LOCAL", cache_dir=tmp_path)

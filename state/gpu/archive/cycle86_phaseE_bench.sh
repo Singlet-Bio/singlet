@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # singlet-gpu/state/cycle86_phaseE_bench.sh
 #
 # Cycle 86 Phase E — ONE job, two benchmarks:

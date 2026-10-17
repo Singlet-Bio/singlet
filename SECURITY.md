@@ -4,8 +4,8 @@
 
 | Version | Supported          |
 |---------|--------------------|
-| 2.x     | ✅ Active          |
-| 1.x     | ❌ End of life     |
+| 1.x     | ✅ Active          |
+| 0.x and the unreleased 2.x development builds | ❌ Not supported |
 
 ## Reporting a Vulnerability
 
@@ -22,10 +22,10 @@ If you discover a security vulnerability in singlet, please report it
 
 This policy covers:
 
-- The `singlet` Python package (`python/singlet/`)
-- The `singlepress` C++ library (`include/`, `src/`)
+- The `singlet-bio` Python package (`python/singlet/`) and the `singlet` R client (`r/`)
+- The C++ library (`include/`, `src/`)
 - The MCP server (`python/singlet/mcp/`)
-- File format parsers (.1pz, .spz)
+- File format parsers (`.1pz`, `.singlet`)
 
 Out of scope:
 
@@ -34,7 +34,14 @@ Out of scope:
 
 ## Security Measures
 
-- Dependencies are audited via `pip-audit` in CI
-- File format parsers are fuzz-tested against malformed inputs
+- Dependencies are audited with `pip-audit` in CI, and a finding fails the build
+- The `.1pz` reader treats its input as untrusted: every size, offset and index is
+  bounds-checked and allocations are capped (`ReadLimits`). `tests/cpp/test_pz_hardening.cpp`
+  feeds it truncated and mutated files, and a libFuzzer target (`tests/fuzz/`) runs under
+  AddressSanitizer and UBSan in CI (`.github/workflows/pz-hardening.yml`)
+- Downloaded `.singlet` bundles are verified before they are cached: byte count,
+  archive structure, schema version and the SHA-256 of every member
+- Accessions are validated before they reach a file name or a URL
 - No secrets are stored in the repository
-- All network calls use HTTPS with certificate verification
+- The default data and API hosts are reached over HTTPS with certificate verification
+  (`SINGLET_DATA_BASE` and `SINGLET_API_BASE` can point elsewhere, for example at a local test server)

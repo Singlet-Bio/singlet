@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-175 Phase E — integrate/combat medium-scale bench vs scanpy.pp.combat CPU.
 #
 # GPU kernel (integrate::combat): 7 device passes, in-place Z-buffer reuse,

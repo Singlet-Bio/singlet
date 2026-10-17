@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # Cycle 103 header check — compile _bind_qc_metrics + _bind_preprocess in isolation
 # (without the pre-existing loss.cuh NMF error that affects full _core build).
 
@@ -99,7 +99,7 @@ cp "$SRC_DIR/python/src/_bind_qc_metrics.hpp" "${STUB_INC}/"
 cp "$SRC_DIR/python/src/_bind_preprocess.hpp" "${STUB_INC}/"
 
 cat > "${STUB_INC}/sg_c103_check_${SLURM_JOB_ID}.cu" << 'CUDA_EOF'
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // CYCLE-103 isolated header compilation check.
 // This file lives in the stub dir, so quoted includes find _bind_loader.hpp
 // stub (in the same dir) before the real one in python/src/.

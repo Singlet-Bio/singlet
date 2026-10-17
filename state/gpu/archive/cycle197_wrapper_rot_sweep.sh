@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-197: wrapper-rot SWEEP per §J.13.
 #
 # Runs ALL python/tests/test_*.py pytest tests in one SLURM job and produces a

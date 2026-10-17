@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 # The import name is unchanged: `pip install singlet-bio`, then `import singlet`.
 # Wheels and sdists are named singlet_bio-<version>-*.whl / singlet_bio-<version>.tar.gz.
 name = "singlet-bio"
-version = "2.1.0"
+version = "1.0.0"
 description = "Open single-cell RNA-seq atlas: find, load, and analyze single-cell data at scale"
 readme = "python/README.md"
 license = {text = "MIT"}
@@ -30,6 +30,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Bio-Informatics",
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
 ]
 keywords = ["single-cell", "RNA-seq", "bioinformatics", "sparse-matrix", "pytorch", "anndata", "GPU"]
 
@@ -103,6 +104,12 @@ include = ["singlet*"]
 
 [tool.setuptools.package-data]
 singlet = ["data/*.parquet", "data/whitelists/*.txt", "py.typed", "_singlepress*.so"]
+
+# The four large 10x whitelists (about 106 MB of 113 MB) are not shipped: singlet.whitelists
+# downloads them from the public Teichlab CDN on first use. The small ones, and 737K-april-2014
+# (not on the CDN), stay bundled.
+[tool.setuptools.exclude-package-data]
+singlet = ["data/whitelists/3M-february-2018.txt", "data/whitelists/737K-august-2016.txt", "data/whitelists/737K-cratac-v1.txt", "data/whitelists/gex_737K-arc-v1.txt"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/python"]

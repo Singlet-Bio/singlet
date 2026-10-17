@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-124 — MAGIC imputation (van Dijk et al. 2018, Cell 174:716-729).
 # Builds only preprocess_magic_correctness; runs five gtest cases.
 

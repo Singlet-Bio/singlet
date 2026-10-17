@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-159 Phase E — embed/diffmap medium-scale bench vs scanpy CPU.
 # Scales: 10k + 30k cells x 50 PCs, dense, k=10, n_comps=5, synthetic.
 # Algorithm: Coifman & Lafon 2005 diffusion map (cuSOLVER Ssyevd eigendecomp).

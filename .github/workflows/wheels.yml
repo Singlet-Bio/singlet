@@ -1,7 +1,8 @@
 name: Build binary wheels (cibuildwheel)
 
 # MVP_ROADMAP.md BLOCKER #5.
-# Builds manylinux + macOS wheels (Linux x86_64/aarch64, macOS x86_64/arm64).
+# Builds manylinux, macOS and Windows wheels (Linux x86_64/aarch64, macOS x86_64/arm64,
+# Windows AMD64).
 # Runs on push to main / relevant PRs as a smoke build (no publish), and is
 # *called* by publish-pypi.yml (workflow_call) on release tags so the wheel
 # artifacts land in the publishing run itself -- artifacts are per-run, so a
@@ -19,8 +20,10 @@ on:
     paths:
       - "pyproject.toml"
       - "src/bindings/**"
-      - "include/singlet/pz/**"
-      - "include/singlet/fq/**"
+      - "include/singlet/pileup/pz_*.h"
+      - "setup.py"
+      - "MANIFEST.in"
+      - "scripts/build_zstd_windows.cmd"
       - ".github/workflows/wheels.yml"
   workflow_dispatch:
 
@@ -39,18 +42,19 @@ jobs:
           # supported Intel label.
           - { os: macos-15-intel, arch: x86_64 }
           - { os: macos-14, arch: arm64 }
+          - { os: windows-latest, arch: AMD64 }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           submodules: recursive
           fetch-depth: 0
 
       - name: Set up QEMU (Linux aarch64 fallback)
         if: matrix.os == 'ubuntu-latest' && matrix.arch == 'aarch64'
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v2.21.3
+        uses: pypa/cibuildwheel@7940a4c0e76eb2030e473a5f864f291f63ee879b # v2.21.3
         env:
           CIBW_ARCHS: ${{ matrix.arch }}
           # Skip pypy + musllinux for MVP. CPython 3.9–3.13 on manylinux/macOS.
@@ -98,11 +102,17 @@ jobs:
           CIBW_ENVIRONMENT_MACOS: >-
             CPPFLAGS="-I/tmp/zstd-1.5.6/lib"
             LDFLAGS="-L/tmp/zstd-1.5.6/lib"
+          # Windows: build a static zstd with CMake/MSVC (scripts/build_zstd_windows.cmd)
+          # and point the compiler (CL) and linker (LINK) at it; setup.py links "zstd".
+          CIBW_BEFORE_ALL_WINDOWS: scripts\build_zstd_windows.cmd
+          CIBW_ENVIRONMENT_WINDOWS: >-
+            CL="/IC:/zstd/include"
+            LINK="/LIBPATH:C:/zstd/lib"
           CIBW_TEST_REQUIRES: pytest
-          CIBW_TEST_COMMAND: "python -c 'import singlet; print(singlet.__version__)'"
+          CIBW_TEST_COMMAND: 'python -c "import singlet; print(singlet.__version__)"'
           MACOSX_DEPLOYMENT_TARGET: "11.0"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: wheels-${{ matrix.os }}-${{ matrix.arch }}
           path: ./wheelhouse/*.whl

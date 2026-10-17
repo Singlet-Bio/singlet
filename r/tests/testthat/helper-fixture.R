@@ -25,6 +25,8 @@ fixture_dir <- function() {
         # GSM3693219 — drop-seq, 3512 cells
         "/mnt/projects/debruinz_project/singlet_pipeline/quant/scrna/GSE129/GSE129096/GSM3693219"
     )
+    # A small committed file (scripts/make_pz_fixture.cpp) so the decode tests also run in CI.
+    candidates <- c(candidates, testthat::test_path("fixtures", "sample"))
     for (p in candidates) {
         if (!dir.exists(p)) next
         if (file.exists(file.path(p, "gene_counts.1pz")) ||

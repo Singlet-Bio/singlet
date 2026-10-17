@@ -1,5 +1,5 @@
 #!/bin/bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: MIT
 # CYCLE-135 — CellTypist cell-type annotation on GPU.
 # GPU-native CellTypist predict: singlet_gpu::anno::celltypist_predict().
 # Dominguez Conde et al. (2022) Science 376:eabl5197.

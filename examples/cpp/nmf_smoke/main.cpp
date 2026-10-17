@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 // examples/nmf_smoke/main.cpp
 //
 // Smoke test: load a .1pz, run nmf::fit at k=10, print loss.
