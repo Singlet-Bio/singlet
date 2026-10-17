@@ -12,6 +12,34 @@ import scipy.sparse as sp
 # ---------------------------------------------------------------------------
 
 
+def _bundle() -> bytes:
+    """A minimal complete .singlet archive that passes verification."""
+    import hashlib
+    import io
+    import json
+    import zipfile
+
+    member = b"{}"
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("feature_vocab.json", member)
+        zf.writestr(
+            "manifest.json",
+            json.dumps(
+                {
+                    "schema_version": "1.0",
+                    "checksums": {"feature_vocab.json": hashlib.sha256(member).hexdigest()},
+                }
+            ),
+        )
+    return buf.getvalue()
+
+
+def _bundle_resp() -> "_FakeResp":
+    data = _bundle()
+    return _FakeResp([data], content_length=len(data))
+
+
 class _FakeResp:
     """Minimal urlopen() context-manager / reader stub."""
 
@@ -34,7 +62,7 @@ class TestDownload:
         from singlet._loader import download
 
         cached = tmp_path / "GSE123456.singlet"
-        cached.write_bytes(b"fake")
+        cached.write_bytes(_bundle())
         result = download("GSE123456", output_dir=tmp_path)
         assert result == cached
 
@@ -44,11 +72,11 @@ class TestDownload:
         cached = tmp_path / "GSE123456.singlet"
         cached.write_bytes(b"old data")
 
-        with patch.object(_loader.urllib.request, "urlopen", return_value=_FakeResp([b"new!"])):
+        with patch.object(_loader.urllib.request, "urlopen", return_value=_bundle_resp()):
             result = _loader.download("GSE123456", output_dir=tmp_path, force=True)
 
         assert result == cached
-        assert cached.read_bytes() == b"new!"
+        assert cached.read_bytes() == _bundle()
 
     def test_r2_url_format(self, tmp_path):
         from singlet import _loader
@@ -57,7 +85,7 @@ class TestDownload:
 
         def fake_urlopen(req, *a, **k):
             captured["url"] = req.full_url
-            return _FakeResp([])
+            return _bundle_resp()
 
         with patch.object(_loader.urllib.request, "urlopen", side_effect=fake_urlopen):
             _loader.download("GSE999999", output_dir=tmp_path)
@@ -72,7 +100,7 @@ class TestDownload:
 
         def fake_urlopen(req, *a, **k):
             captured["url"] = req.full_url
-            return _FakeResp([])
+            return _bundle_resp()
 
         with patch.object(_loader.urllib.request, "urlopen", side_effect=fake_urlopen):
             _loader.download("GSE1", output_dir=tmp_path)
@@ -88,10 +116,10 @@ class TestDownload:
 
         with patch.object(_loader.urllib.request, "urlopen", side_effect=boom):
             with pytest.raises(ConnectionError):
-                _loader.download("GSE_INTERRUPT", output_dir=tmp_path)
+                _loader.download("GSE777", output_dir=tmp_path)
 
-        assert not (tmp_path / "GSE_INTERRUPT.singlet").exists()
-        assert not (tmp_path / "GSE_INTERRUPT.singlet.part").exists()
+        assert not (tmp_path / "GSE777.singlet").exists()
+        assert not (tmp_path / "GSE777.singlet.part").exists()
 
 
 # ---------------------------------------------------------------------------
