@@ -18,6 +18,11 @@ import pytest
 from singlet.pipeline import PipelineError, Run, run
 from singlet.pipeline import _run as runner
 
+# These tests stand in for the pipeline binary with a shell script, which Windows cannot execute.
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32", reason="fake pipeline binaries are shell scripts"
+)
+
 # --------------------------------------------------------------------------
 # Pure helpers
 # --------------------------------------------------------------------------
