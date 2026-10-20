@@ -33,6 +33,17 @@ GSE122083.singlet          ← ZIP64 archive
 
 ---
 
+## Public and full bundles
+
+A bundle is one of two profiles, named in `manifest.json` as `profile`. The **public** bundle (`public-1`) is what
+data.singlet.bio serves. The **full** bundle (`full-1`) also holds the members that carry per-donor germline
+information (donor SNP depth matrices, per-donor genotype VCFs and coverage tables, allele-specific counts, donor
+mitochondrial consensus and variant files); it is kept in private storage for internal tools and controlled-access
+accounts. `singlet._restricted.is_restricted_member` is the rule. Both profiles verify with the same checks: the
+manifest of each lists exactly the members it holds.
+
+---
+
 ## ZIP Compression Policy
 
 | File type | ZIP method | Reason |

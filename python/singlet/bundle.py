@@ -72,6 +72,7 @@ concat rather than loading all in RAM simultaneously.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -84,6 +85,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
+
+from singlet._restricted import (
+    FULL_PROFILE,
+    PUBLIC_PROFILE,
+    is_restricted_member,
+    is_restricted_path,
+    public_ancestry_call,
+)
 
 if TYPE_CHECKING:
     import anndata
@@ -225,6 +234,8 @@ MODALITIES: Dict[str, Modality] = {
             "Per-cell chrM allele-support matrix used for lineage tracing.",
         ),
         # ── Donor / genotype ──────────────────────────────────────────────
+        # donor_snp_ad, donor_snp_dp, ase_counts and mt_events are only in the full (private) bundle;
+        # a public bundle does not hold them (see singlet._restricted).
         Modality(
             "donor_assignments",
             "table",
@@ -761,6 +772,7 @@ def pack_gse(
     publications_enriched_path: Optional[Union[str, Path]] = None,
     series_meta_path: Optional[Union[str, Path]] = None,
     strict: bool = False,
+    private_out_path: Optional[Union[str, Path]] = None,
     _catalog_df=None,
 ) -> Path:
     """Build a per-GSE .singlet bundle from pipeline results.
@@ -803,6 +815,11 @@ def pack_gse(
         separately from the heavy bundle.  When *None*, no sidecar is written.
     strict
         Raise instead of excluding hollow samples.
+    private_out_path
+        Where to write the *complete* bundle, including the members that carry per-donor
+        germline information (see :mod:`singlet._restricted`). The bundle at *out_path* is the public
+        one and never holds them. When *None* those members are not packed anywhere (a warning says
+        how many were left out); pass a path in private storage to keep them.
 
     Returns
     -------
@@ -820,6 +837,11 @@ def pack_gse(
     results_dir = Path(results_dir)
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    if private_out_path is not None:
+        private_out_path = Path(private_out_path)
+        if private_out_path.resolve() == out_path.resolve():
+            raise ValueError("private_out_path must differ from out_path")
+        private_out_path.parent.mkdir(parents=True, exist_ok=True)
 
     # ---- Load catalog ---------------------------------------------------
     if _catalog_df is not None:
@@ -1018,23 +1040,46 @@ def pack_gse(
     # ---- Write ZIP64 bundle --------------------------------------------
     checksums: Dict[str, str] = {}
     included_files: Dict[str, list] = {}
+    # The private bundle holds everything; the public one leaves out is_restricted_member().
+    priv_checksums: Dict[str, str] = {}
+    priv_included: Dict[str, list] = {}
+    n_restricted = 0
 
     if verbose:
         print(f"[pack_gse] Writing bundle → {out_path}")
 
-    with zipfile.ZipFile(str(out_path), "w", allowZip64=True) as zf:
-        # feature_vocab.json  (DEFLATED)
-        checksums["feature_vocab.json"] = _sha256_bytes(feature_vocab_bytes)
-        zf.writestr(
-            zipfile.ZipInfo("feature_vocab.json"),
-            feature_vocab_bytes,
-            compress_type=zipfile.ZIP_DEFLATED,
+    with contextlib.ExitStack() as stack:
+        zf = stack.enter_context(zipfile.ZipFile(str(out_path), "w", allowZip64=True))
+        pz = (
+            stack.enter_context(zipfile.ZipFile(str(private_out_path), "w", allowZip64=True))
+            if private_out_path is not None
+            else None
         )
+
+        def _write_both(
+            arc: str, data: bytes, compress_type: int, *, public: Optional[bytes] = None
+        ) -> None:
+            """Write one in-memory member to the private bundle, and to the public one unless restricted."""
+            if pz is not None:
+                priv_checksums[arc] = _sha256_bytes(data)
+                zi_priv = zipfile.ZipInfo(arc)
+                zi_priv.compress_type = compress_type
+                pz.writestr(zi_priv, data)
+            if not is_restricted_path(arc):
+                pub = data if public is None else public
+                checksums[arc] = _sha256_bytes(pub)
+                zi_pub = zipfile.ZipInfo(arc)
+                zi_pub.compress_type = compress_type
+                zf.writestr(zi_pub, pub)
+
+        # feature_vocab.json  (DEFLATED)
+        _write_both("feature_vocab.json", feature_vocab_bytes, zipfile.ZIP_DEFLATED)
 
         # Per-GSM files
         for gsm in gsm_ids:
             out_dir = results_dir / gsm / "out"
             gsm_files = []
+            gsm_priv_files = []
 
             # Pack the ENTIRE out/ recursively so the bundle carries the full
             # rich pipeline output (donor/SNP/ASE, mt_variants, nonhost/, extended
@@ -1059,27 +1104,35 @@ def pack_gse(
                     }:
                         continue
                     arc_name = f"samples/{gsm}/{rel.as_posix()}"
+                    restricted = is_restricted_member(rel.as_posix())
+                    if restricted:
+                        n_restricted += 1
+                        if pz is None:
+                            continue
                     with open(fpath, "rb") as fh:
                         data = fh.read()
-                    checksums[arc_name] = _sha256_bytes(data)
-                    gsm_files.append(rel.as_posix())
-                    zi = zipfile.ZipInfo(arc_name)
-                    zi.compress_type = (
+                    compress = (
                         zipfile.ZIP_STORED if fpath.suffix == ".1pz" else zipfile.ZIP_DEFLATED
                     )
-                    zf.writestr(zi, data)
+                    # The ancestry call is public as a group and a confidence; its per-population
+                    # likelihoods are not.
+                    public_data = (
+                        public_ancestry_call(data)
+                        if rel.as_posix() == "ancestry_call.json"
+                        else None
+                    )
+                    _write_both(arc_name, data, compress, public=public_data)
+                    gsm_priv_files.append(rel.as_posix())
+                    if not restricted:
+                        gsm_files.append(rel.as_posix())
 
             included_files[gsm] = gsm_files
+            priv_included[gsm] = gsm_priv_files
             if verbose:
                 print(f"  [pack_gse] {gsm}: {len(gsm_files)} files packed")
 
         # study_meta.json (DEFLATED)
-        checksums["study_meta.json"] = _sha256_bytes(study_meta_bytes)
-        zf.writestr(
-            zipfile.ZipInfo("study_meta.json"),
-            study_meta_bytes,
-            compress_type=zipfile.ZIP_DEFLATED,
-        )
+        _write_both("study_meta.json", study_meta_bytes, zipfile.ZIP_DEFLATED)
 
         # manifest.json (DEFLATED) — written last so checksums are complete
         manifest = {
@@ -1094,16 +1147,36 @@ def pack_gse(
             "excluded_samples": excluded_samples,
             "checksums": checksums,
         }
-        manifest_bytes = json.dumps(manifest, indent=2).encode()
+        manifest["profile"] = PUBLIC_PROFILE
         zf.writestr(
             zipfile.ZipInfo("manifest.json"),
-            manifest_bytes,
+            json.dumps(manifest, indent=2).encode(),
             compress_type=zipfile.ZIP_DEFLATED,
         )
+        if pz is not None:
+            full = dict(
+                manifest,
+                included_files=priv_included,
+                checksums=priv_checksums,
+                profile=FULL_PROFILE,
+            )
+            pz.writestr(
+                zipfile.ZipInfo("manifest.json"),
+                json.dumps(full, indent=2).encode(),
+                compress_type=zipfile.ZIP_DEFLATED,
+            )
 
     bundle_size_mb = out_path.stat().st_size / 1e6
     if verbose:
         print(f"[pack_gse] Done: {out_path}  ({bundle_size_mb:.1f} MB)")
+        if private_out_path is not None:
+            print(
+                f"[pack_gse] Private bundle: {private_out_path} ({n_restricted} restricted members; keep it off public storage)"
+            )
+        elif n_restricted:
+            print(
+                f"[pack_gse] WARNING: {n_restricted} restricted members were not packed; pass private_out_path to keep them."
+            )
 
     return out_path
 
@@ -2074,7 +2147,27 @@ def main(argv: Optional[List[str]] = None) -> int:
         "empty, missing or 0x0 exon_counts.1pz).",
     )
 
+    pack_p.add_argument(
+        "--private-out",
+        default=None,
+        help="Also write the complete bundle here (private storage). The --out bundle never holds "
+        "the per-donor germline members; without this option they are not packed at all.",
+    )
+
+    red_p = sub.add_parser(
+        "redact",
+        help="Write the public form of an existing bundle (restricted members removed, manifest rewritten).",
+    )
+    red_p.add_argument("src", help="Existing .singlet file (left untouched)")
+    red_p.add_argument("dst", help="Where to write the public .singlet")
+
     args = parser.parse_args(argv)
+
+    if args.cmd == "redact":
+        from singlet._restricted import redact_bundle
+
+        print(json.dumps(redact_bundle(args.src, args.dst)))
+        return 0
 
     if args.cmd == "pack":
         pack_gse(
@@ -2087,6 +2180,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             publications_enriched_path=args.publications_enriched,
             series_meta_path=args.series_meta,
             strict=args.strict,
+            private_out_path=args.private_out,
         )
         return 0
 
