@@ -23,6 +23,7 @@ Credentials (S3 API of the Cloudflare account): R2_ACCOUNT_ID, R2_ACCESS_KEY_ID,
 of the job. Run it on a compute node with scratch for about three copies of the largest bundle (~30 GB each).
 
   python scripts/restrict_published_bundles.py migrate --gse-list gses.txt --private singlet-restricted --ledger ledger.jsonl [--apply]
+  python scripts/restrict_published_bundles.py migrate --all --shard 0/8 --private singlet-restricted --ledger ledger-0.jsonl --apply
   python scripts/restrict_published_bundles.py restore --gse GSE128639      --private singlet-restricted --ledger ledger.jsonl [--apply]
 """
 
@@ -33,6 +34,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -61,6 +63,7 @@ redact_bundle, restore_bundle, restricted_summary = (
 )
 
 CHUNK = 64 * 1024 * 1024
+_KEY_RE = re.compile(r"^data/(GSE\d+)/\1\.singlet$")
 
 
 def public_key(gse: str) -> str:
@@ -112,6 +115,16 @@ class S3Store:
     def download(self, bucket: str, key: str, path: Path) -> None:
         self.c.download_file(bucket, key, str(path), Config=self.cfg)
 
+    def list_studies(self, bucket: str) -> list:
+        """[(gse, bytes)] for every data/<GSE>/<GSE>.singlet."""
+        out = []
+        for page in self.c.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix="data/"):
+            for o in page.get("Contents", []):
+                m = _KEY_RE.match(o["Key"])
+                if m:
+                    out.append((m.group(1), int(o["Size"])))
+        return out
+
     def upload(self, path: Path, bucket: str, key: str) -> None:
         self.c.upload_file(str(path), bucket, key, Config=self.cfg)
 
@@ -139,6 +152,14 @@ class LocalStore:
 
     def download(self, bucket: str, key: str, path: Path) -> None:
         shutil.copyfile(self._p(bucket, key), path)
+
+    def list_studies(self, bucket: str) -> list:
+        base = self.root / bucket / "data"
+        return [
+            (d.name, (d / f"{d.name}.singlet").stat().st_size)
+            for d in sorted(base.glob("GSE*"))
+            if (d / f"{d.name}.singlet").exists()
+        ]
 
     def upload(self, path: Path, bucket: str, key: str) -> None:
         dst = self._p(bucket, key)
@@ -305,10 +326,21 @@ def cmd_restore(store, gse: str, a, ledger: Path) -> str:
     return "restored"
 
 
-def gses_from(a) -> Iterable[str]:
+def gses_from(a, store) -> Iterable[str]:
+    """The studies to visit: given, listed in a file, or every study in the public bucket (smallest first).
+
+    --shard I/N keeps every N-th study of that order, so N jobs split the work evenly and each run is repeatable.
+    """
     if a.gse:
-        return a.gse
-    return [ln.strip() for ln in Path(a.gse_list).read_text().splitlines() if ln.strip()]
+        gses = list(a.gse)
+    elif a.gse_list:
+        gses = [ln.strip() for ln in Path(a.gse_list).read_text().splitlines() if ln.strip()]
+    else:
+        gses = [g for g, _ in sorted(store.list_studies(a.public), key=lambda t: (t[1], t[0]))]
+    if a.shard:
+        i, n = (int(x) for x in a.shard.split("/"))
+        gses = gses[i::n]
+    return gses
 
 
 def main(argv=None) -> int:
@@ -318,6 +350,8 @@ def main(argv=None) -> int:
     ap.add_argument("command", choices=["migrate", "restore"])
     ap.add_argument("--gse", nargs="*")
     ap.add_argument("--gse-list")
+    ap.add_argument("--all", action="store_true", help="every study in the public bucket")
+    ap.add_argument("--shard", metavar="I/N", help="take every N-th study, starting at I (0-based)")
     ap.add_argument("--limit", type=int, help="stop after this many studies")
     ap.add_argument("--public", default="singlet-data")
     ap.add_argument("--private", required=True, help="private bucket (never the public one)")
@@ -328,15 +362,17 @@ def main(argv=None) -> int:
     ap.add_argument("--apply", action="store_true", help="write; without it only reads and prints")
     ap.add_argument("--local-root", help="use directories under this root instead of R2 (tests)")
     a = ap.parse_args(argv)
-    if not (a.gse or a.gse_list):
-        ap.error("give --gse or --gse-list")
+    if not (a.gse or a.gse_list or a.all):
+        ap.error("give --gse, --gse-list or --all")
+    if a.shard and not re.fullmatch(r"\d+/[1-9]\d*", a.shard):
+        ap.error("--shard is I/N, e.g. 0/8")
     if a.public == a.private:
         ap.error("--private must differ from --public")
 
     store = LocalStore(Path(a.local_root)) if a.local_root else S3Store()
     ledger = Path(a.ledger)
     bad = n = 0
-    for gse in gses_from(a):
+    for gse in gses_from(a, store):
         if a.limit is not None and n >= a.limit:
             break
         msg = (cmd_migrate if a.command == "migrate" else cmd_restore)(store, gse, a, ledger)

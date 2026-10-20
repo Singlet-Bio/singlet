@@ -316,3 +316,34 @@ class TestMigrationScript:
         monkeypatch.setattr(mig.LocalStore, "upload", corrupting)
         assert mig.main(["migrate", *base, "--apply"]) == 1
         assert target.read_bytes() == original
+
+
+class TestMigrationSelection:
+    def test_all_and_shard_cover_every_study_once_smallest_first(self, tmp_path):
+        import importlib.util
+
+        path = Path(__file__).resolve().parents[2] / "scripts" / "restrict_published_bundles.py"
+        spec = importlib.util.spec_from_file_location("restrict_published_bundles", path)
+        mig = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mig)
+
+        root = tmp_path / "r2"
+        sizes = {"GSE5": 50, "GSE1": 10, "GSE3": 30, "GSE2": 20, "GSE4": 40}
+        for gse, n in sizes.items():
+            f = root / "singlet-data" / "data" / gse / f"{gse}.singlet"
+            f.parent.mkdir(parents=True)
+            f.write_bytes(b"x" * n)
+        store = mig.LocalStore(root)
+
+        class A:
+            gse = None
+            gse_list = None
+            public = "singlet-data"
+            shard = None
+
+        assert list(mig.gses_from(A, store)) == ["GSE1", "GSE2", "GSE3", "GSE4", "GSE5"]
+        parts = []
+        for i in range(2):
+            A.shard = f"{i}/2"
+            parts.append(list(mig.gses_from(A, store)))
+        assert sorted(parts[0] + parts[1]) == sorted(sizes) and not set(parts[0]) & set(parts[1])
