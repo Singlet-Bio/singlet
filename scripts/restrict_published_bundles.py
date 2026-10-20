@@ -40,7 +40,25 @@ import time
 from pathlib import Path
 from typing import Iterable, Optional
 
-from singlet._restricted import redact_bundle, restore_bundle, restricted_summary
+
+def _load_restricted():
+    """singlet/_restricted.py is standard library only; load it by path so a node needs no installed package."""
+    import importlib.util
+
+    path = Path(__file__).resolve().parents[1] / "python" / "singlet" / "_restricted.py"
+    spec = importlib.util.spec_from_file_location("singlet_restricted", path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+_r = _load_restricted()
+redact_bundle, restore_bundle, restricted_summary = (
+    _r.redact_bundle,
+    _r.restore_bundle,
+    _r.restricted_summary,
+)
 
 CHUNK = 64 * 1024 * 1024
 
