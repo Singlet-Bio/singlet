@@ -27,18 +27,19 @@ PY=$WORK/venvs/r2tools/bin/python
 PRIVATE=${PRIVATE:-singlet-restricted}
 LEDGER=$WORK/state/restrict-ledger-$MODE-$TASK.jsonl
 
+mkdir -p "$WORK/state"
 # The code under test is pinned to one commit, checked out once (the array tasks share it).
 (
   flock 9
   if [ ! -e "$SRC" ]; then
-    git --git-dir="$WORK/repos/singlet-py.git" fetch -q origin "+refs/heads/*:refs/heads/*"
+    git --git-dir="$WORK/repos/singlet-py.git" fetch -q origin "+refs/heads/feat/restrict-genotype-members:refs/heads/feat/restrict-genotype-members"
     git --git-dir="$WORK/repos/singlet-py.git" worktree add -q --detach "$SRC" "$COMMIT"
   fi
 ) 9>"$WORK/state/restrict.lock"
 
 set -a; . "$HOME/.config/singlet-r2.env"; set +a
 SCRATCH=/tmp/$USER-${SLURM_JOB_ID:-x}-$TASK
-mkdir -p "$SCRATCH" "$WORK/state"
+mkdir -p "$SCRATCH"
 trap 'rm -rf "$SCRATCH"' EXIT
 
 echo "mode=$MODE shard=$TASK/$NSHARD commit=$(git -C "$SRC" rev-parse --short HEAD) scratch=$SCRATCH"
