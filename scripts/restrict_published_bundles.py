@@ -375,9 +375,15 @@ def main(argv=None) -> int:
     for gse in gses_from(a, store):
         if a.limit is not None and n >= a.limit:
             break
-        msg = (cmd_migrate if a.command == "migrate" else cmd_restore)(store, gse, a, ledger)
+        try:
+            msg = (cmd_migrate if a.command == "migrate" else cmd_restore)(store, gse, a, ledger)
+        except (
+            Exception
+        ) as e:  # one bad study must not stop the shard; nothing public was changed for it
+            msg = f"FAILED: {type(e).__name__}: {e}"
+            log(ledger, {"gse": gse, "ok": False, "stage": "error", "error": msg[:300]})
         n += not msg.startswith(("nothing-restricted", "missing"))
-        bad += msg.startswith(("VERIFY", "UPLOAD", "SKIPPED"))
+        bad += msg.startswith(("VERIFY", "UPLOAD", "SKIPPED", "FAILED"))
         print(f"{gse}\t{msg}", flush=True)
     return 1 if bad else 0
 
