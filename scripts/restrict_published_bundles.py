@@ -68,6 +68,12 @@ class S3Store:
         self.cfg = TransferConfig(
             multipart_threshold=CHUNK, multipart_chunksize=CHUNK, max_concurrency=8
         )
+        # Server-side copies move no data through this machine, so use big parts: fewer billed operations.
+        self.cfg_copy = TransferConfig(
+            multipart_threshold=512 * 1024 * 1024,
+            multipart_chunksize=512 * 1024 * 1024,
+            max_concurrency=8,
+        )
 
     def size(self, bucket: str, key: str) -> Optional[int]:
         try:
@@ -87,8 +93,8 @@ class S3Store:
 
     def copy(self, src_bucket: str, src_key: str, dst_bucket: str, dst_key: str) -> None:
         self.c.copy(
-            {"Bucket": src_bucket, "Key": src_key}, dst_bucket, dst_key, Config=self.cfg
-        )  # server side, multipart above 64 MB
+            {"Bucket": src_bucket, "Key": src_key}, dst_bucket, dst_key, Config=self.cfg_copy
+        )  # server side; multipart above 512 MiB
 
     def download(self, bucket: str, key: str, path: Path) -> None:
         self.c.download_file(bucket, key, str(path), Config=self.cfg)
