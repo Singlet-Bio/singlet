@@ -352,7 +352,7 @@ class TestMigrationScript:
 
 
 class TestMigrationSelection:
-    def test_all_and_shard_cover_every_study_once_smallest_first(self, tmp_path):
+    def test_all_and_shard_cover_every_study_once_in_accession_order(self, tmp_path):
         import importlib.util
 
         path = Path(__file__).resolve().parents[2] / "scripts" / "restrict_published_bundles.py"
@@ -361,7 +361,7 @@ class TestMigrationSelection:
         spec.loader.exec_module(mig)
 
         root = tmp_path / "r2"
-        sizes = {"GSE5": 50, "GSE1": 10, "GSE3": 30, "GSE2": 20, "GSE4": 40}
+        sizes = {"GSE5": 10, "GSE10": 20, "GSE3": 30, "GSE2": 50, "GSE4": 40}
         for gse, n in sizes.items():
             f = root / "singlet-data" / "data" / gse / f"{gse}.singlet"
             f.parent.mkdir(parents=True)
@@ -374,7 +374,7 @@ class TestMigrationSelection:
             public = "singlet-data"
             shard = None
 
-        assert list(mig.gses_from(A, store)) == ["GSE1", "GSE2", "GSE3", "GSE4", "GSE5"]
+        assert list(mig.gses_from(A, store)) == ["GSE2", "GSE3", "GSE4", "GSE5", "GSE10"]
         parts = []
         for i in range(2):
             A.shard = f"{i}/2"

@@ -327,7 +327,7 @@ def cmd_restore(store, gse: str, a, ledger: Path) -> str:
 
 
 def gses_from(a, store) -> Iterable[str]:
-    """The studies to visit: given, listed in a file, or every study in the public bucket (smallest first).
+    """The studies to visit: given, listed in a file, or every study in the public bucket (in accession order).
 
     --shard I/N keeps every N-th study of that order, so N jobs split the work evenly and each run is repeatable.
     """
@@ -336,7 +336,8 @@ def gses_from(a, store) -> Iterable[str]:
     elif a.gse_list:
         gses = [ln.strip() for ln in Path(a.gse_list).read_text().splitlines() if ln.strip()]
     else:
-        gses = [g for g, _ in sorted(store.list_studies(a.public), key=lambda t: (t[1], t[0]))]
+        # Accession order, not size: sizes change as studies are split, which would move studies between shards.
+        gses = sorted((g for g, _ in store.list_studies(a.public)), key=lambda g: (len(g), g))
     if a.shard:
         i, n = (int(x) for x in a.shard.split("/"))
         gses = gses[i::n]

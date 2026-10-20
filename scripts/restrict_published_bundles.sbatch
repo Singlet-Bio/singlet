@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run scripts/restrict_published_bundles.py on Clipper. One array task is one shard of the studies, smallest first.
+# Run scripts/restrict_published_bundles.py on Clipper. One array task is one shard of the studies (accession order).
 #
 #   dry    read-only: counts per study (no R2 writes)
 #   pilot  GSE128639 and the two smallest other affected studies, with writes
