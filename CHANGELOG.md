@@ -6,11 +6,13 @@ All notable changes to the singlet project.
 
 - **Per-donor germline members are no longer packed into public bundles** (2026-10-20). `pack_gse` writes the public
   `.singlet` without the donor SNP depth matrices, per-donor genotype VCFs and coverage tables, allele-specific counts
-  and donor mitochondrial consensus/variant files, trims `ancestry_call.json` to the group, confidence and coverage
-  counts, and (with `private_out_path` / `--private-out`) writes the complete bundle for private storage. The rules are
-  in `singlet/_restricted.py`; `python -m singlet.bundle redact SRC DST` makes the public form of an existing bundle,
-  and `scripts/restrict_published_bundles.py` migrates published ones (copy to private storage, verify, then redact).
-  Manifests carry `profile: "public-1"` or `"full-1"`. Sex, the coarse ancestry call, donor labels, doublet scores and
+  and donor mitochondrial consensus/variant files, and trims `ancestry_call.json` to the group, confidence and coverage
+  counts. With `private_out_path` / `--private-out` those members are written to a *restricted sidecar* for private
+  storage; nothing is stored twice, and `SingletBundle.open(public, restricted=sidecar)` reads the two as one bundle.
+  The rules are in `singlet/_restricted.py`. `python -m singlet.bundle redact SRC DST --sidecar S` splits an existing
+  complete bundle, `restore_bundle` puts one back together, and `scripts/restrict_published_bundles.py` migrates
+  published ones (split, verify, upload the sidecar, read it back, then overwrite the public object). Manifests carry
+  `profile: "public-1"` or `"restricted-1"`. Sex, the coarse ancestry call, donor labels, doublet scores and
   mitochondrial heteroplasmy are unchanged.
 
 ## [1.0.0] — first release

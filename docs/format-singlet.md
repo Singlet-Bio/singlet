@@ -33,14 +33,17 @@ GSE122083.singlet          ← ZIP64 archive
 
 ---
 
-## Public and full bundles
+## Public bundle and restricted sidecar
 
-A bundle is one of two profiles, named in `manifest.json` as `profile`. The **public** bundle (`public-1`) is what
-data.singlet.bio serves. The **full** bundle (`full-1`) also holds the members that carry per-donor germline
-information (donor SNP depth matrices, per-donor genotype VCFs and coverage tables, allele-specific counts, donor
-mitochondrial consensus and variant files); it is kept in private storage for internal tools and controlled-access
-accounts. `singlet._restricted.is_restricted_member` is the rule. Both profiles verify with the same checks: the
-manifest of each lists exactly the members it holds.
+A study is two files. The **public** bundle (`profile: "public-1"`) is what data.singlet.bio serves. The **restricted
+sidecar** (`profile: "restricted-1"`) holds the members that carry per-donor germline information (donor SNP depth
+matrices, per-donor genotype VCFs and coverage tables, allele-specific counts, donor mitochondrial consensus and variant
+files) and the untrimmed `ancestry_call.json`, at the same paths; it lives in private storage for internal tools and
+controlled-access accounts. No member is in both (apart from the ancestry call, public in its trimmed form), so together
+they are no larger than one complete bundle. The sidecar's `manifest.json` lists its own members and carries the
+`original_manifest` of the complete bundle, from which `restore_bundle` rebuilds it. `singlet._restricted.is_restricted_member`
+is the rule, `SingletBundle.open(public, restricted=sidecar)` reads the pair. Each file verifies on its own: its manifest
+lists exactly the members it holds.
 
 ---
 

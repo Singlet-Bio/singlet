@@ -87,11 +87,12 @@ from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Tuple, 
 import numpy as np
 
 from singlet._restricted import (
-    FULL_PROFILE,
     PUBLIC_PROFILE,
+    is_ancestry_call,
     is_restricted_member,
     is_restricted_path,
     public_ancestry_call,
+    sidecar_manifest,
 )
 
 if TYPE_CHECKING:
@@ -816,10 +817,11 @@ def pack_gse(
     strict
         Raise instead of excluding hollow samples.
     private_out_path
-        Where to write the *complete* bundle, including the members that carry per-donor
-        germline information (see :mod:`singlet._restricted`). The bundle at *out_path* is the public
-        one and never holds them. When *None* those members are not packed anywhere (a warning says
-        how many were left out); pass a path in private storage to keep them.
+        Where to write the *restricted sidecar*: the members that carry per-donor germline information
+        (see :mod:`singlet._restricted`) plus the untrimmed ancestry call and the manifest of the complete
+        bundle. The bundle at *out_path* is the public one and never holds them; the two files together
+        hold what one complete bundle would, with nothing stored twice. When *None* the restricted members
+        are not packed anywhere (a warning says how many); pass a path in private storage to keep them.
 
     Returns
     -------
@@ -1040,9 +1042,10 @@ def pack_gse(
     # ---- Write ZIP64 bundle --------------------------------------------
     checksums: Dict[str, str] = {}
     included_files: Dict[str, list] = {}
-    # The private bundle holds everything; the public one leaves out is_restricted_member().
-    priv_checksums: Dict[str, str] = {}
-    priv_included: Dict[str, list] = {}
+    # What a complete bundle would list; kept in the sidecar so the original can be rebuilt.
+    full_checksums: Dict[str, str] = {}
+    full_included: Dict[str, list] = {}
+    res_checksums: Dict[str, str] = {}
     n_restricted = 0
 
     if verbose:
@@ -1050,40 +1053,49 @@ def pack_gse(
 
     with contextlib.ExitStack() as stack:
         zf = stack.enter_context(zipfile.ZipFile(str(out_path), "w", allowZip64=True))
-        pz = (
+        zr = (
             stack.enter_context(zipfile.ZipFile(str(private_out_path), "w", allowZip64=True))
             if private_out_path is not None
             else None
         )
 
-        def _write_both(
-            arc: str, data: bytes, compress_type: int, *, public: Optional[bytes] = None
-        ) -> None:
-            """Write one in-memory member to the private bundle, and to the public one unless restricted."""
-            if pz is not None:
-                priv_checksums[arc] = _sha256_bytes(data)
-                zi_priv = zipfile.ZipInfo(arc)
-                zi_priv.compress_type = compress_type
-                pz.writestr(zi_priv, data)
-            if not is_restricted_path(arc):
-                pub = data if public is None else public
-                checksums[arc] = _sha256_bytes(pub)
-                zi_pub = zipfile.ZipInfo(arc)
-                zi_pub.compress_type = compress_type
-                zf.writestr(zi_pub, pub)
+        def _put(arc: str, data: bytes, compress_type: int) -> None:
+            """Write one member: to the public bundle, or if restricted to the sidecar.
+
+            The ancestry call is public as a group and a confidence; the untrimmed call goes to the sidecar.
+            """
+            full_checksums[arc] = _sha256_bytes(data)
+            if is_restricted_path(arc):
+                if zr is not None:
+                    res_checksums[arc] = full_checksums[arc]
+                    zi_res = zipfile.ZipInfo(arc)
+                    zi_res.compress_type = compress_type
+                    zr.writestr(zi_res, data)
+                return
+            pub = public_ancestry_call(data) if is_ancestry_call(arc) else data
+            checksums[arc] = _sha256_bytes(pub)
+            zi_pub = zipfile.ZipInfo(arc)
+            zi_pub.compress_type = compress_type
+            zf.writestr(zi_pub, pub)
+            if pub != data and zr is not None:
+                res_checksums[arc] = full_checksums[arc]
+                zi_res = zipfile.ZipInfo(arc)
+                zi_res.compress_type = compress_type
+                zr.writestr(zi_res, data)
 
         # feature_vocab.json  (DEFLATED)
-        _write_both("feature_vocab.json", feature_vocab_bytes, zipfile.ZIP_DEFLATED)
+        _put("feature_vocab.json", feature_vocab_bytes, zipfile.ZIP_DEFLATED)
 
         # Per-GSM files
         for gsm in gsm_ids:
             out_dir = results_dir / gsm / "out"
             gsm_files = []
-            gsm_priv_files = []
+            gsm_full_files = []
 
             # Pack the ENTIRE out/ recursively so the bundle carries the full
-            # rich pipeline output (donor/SNP/ASE, mt_variants, nonhost/, extended
-            # QC, splice/ambient, STAR outputs) — not just the curated core.
+            # rich pipeline output (nonhost/, extended QC, splice/ambient, STAR
+            # outputs) — not just the curated core. Members that carry per-donor
+            # germline information go to the restricted sidecar instead.
             # .1pz files are STORED (already zstd); everything else DEFLATED.
             # Dotfiles, raw reads (.1fq) and bulky disposable read-dumps are skipped.
             if out_dir.is_dir():
@@ -1107,32 +1119,25 @@ def pack_gse(
                     restricted = is_restricted_member(rel.as_posix())
                     if restricted:
                         n_restricted += 1
-                        if pz is None:
+                        if zr is None:
                             continue
                     with open(fpath, "rb") as fh:
                         data = fh.read()
                     compress = (
                         zipfile.ZIP_STORED if fpath.suffix == ".1pz" else zipfile.ZIP_DEFLATED
                     )
-                    # The ancestry call is public as a group and a confidence; its per-population
-                    # likelihoods are not.
-                    public_data = (
-                        public_ancestry_call(data)
-                        if rel.as_posix() == "ancestry_call.json"
-                        else None
-                    )
-                    _write_both(arc_name, data, compress, public=public_data)
-                    gsm_priv_files.append(rel.as_posix())
+                    _put(arc_name, data, compress)
+                    gsm_full_files.append(rel.as_posix())
                     if not restricted:
                         gsm_files.append(rel.as_posix())
 
             included_files[gsm] = gsm_files
-            priv_included[gsm] = gsm_priv_files
+            full_included[gsm] = gsm_full_files
             if verbose:
                 print(f"  [pack_gse] {gsm}: {len(gsm_files)} files packed")
 
         # study_meta.json (DEFLATED)
-        _write_both("study_meta.json", study_meta_bytes, zipfile.ZIP_DEFLATED)
+        _put("study_meta.json", study_meta_bytes, zipfile.ZIP_DEFLATED)
 
         # manifest.json (DEFLATED) — written last so checksums are complete
         manifest = {
@@ -1146,23 +1151,20 @@ def pack_gse(
             "included_files": included_files,
             "excluded_samples": excluded_samples,
             "checksums": checksums,
+            "profile": PUBLIC_PROFILE,
         }
-        manifest["profile"] = PUBLIC_PROFILE
         zf.writestr(
             zipfile.ZipInfo("manifest.json"),
             json.dumps(manifest, indent=2).encode(),
             compress_type=zipfile.ZIP_DEFLATED,
         )
-        if pz is not None:
-            full = dict(
-                manifest,
-                included_files=priv_included,
-                checksums=priv_checksums,
-                profile=FULL_PROFILE,
-            )
-            pz.writestr(
+        if zr is not None:
+            original = {k: v for k, v in manifest.items() if k != "profile"}
+            original["included_files"] = full_included
+            original["checksums"] = full_checksums
+            zr.writestr(
                 zipfile.ZipInfo("manifest.json"),
-                json.dumps(full, indent=2).encode(),
+                json.dumps(sidecar_manifest(original, res_checksums), indent=2).encode(),
                 compress_type=zipfile.ZIP_DEFLATED,
             )
 
@@ -1171,7 +1173,7 @@ def pack_gse(
         print(f"[pack_gse] Done: {out_path}  ({bundle_size_mb:.1f} MB)")
         if private_out_path is not None:
             print(
-                f"[pack_gse] Private bundle: {private_out_path} ({n_restricted} restricted members; keep it off public storage)"
+                f"[pack_gse] Restricted sidecar: {private_out_path} ({n_restricted} members; keep it off public storage)"
             )
         elif n_restricted:
             print(
@@ -1283,6 +1285,39 @@ def _singlet_version() -> str:
 # ---------------------------------------------------------------------------
 
 
+class _OverlayZip:
+    """The few ``ZipFile`` methods the reader uses, over a public bundle plus its restricted sidecar."""
+
+    def __init__(self, public: Path, restricted: Path) -> None:
+        self._pub = zipfile.ZipFile(str(public), "r")
+        self._res = zipfile.ZipFile(str(restricted), "r")
+        self._res_names = {
+            n for n in self._res.namelist() if n != "manifest.json" and not n.endswith("/")
+        }
+
+    @property
+    def fp(self):
+        return self._pub.fp
+
+    def namelist(self) -> List[str]:
+        names = self._pub.namelist()
+        have = set(names)
+        return names + sorted(n for n in self._res_names if n not in have)
+
+    def _owner(self, name: str) -> zipfile.ZipFile:
+        return self._res if name in self._res_names else self._pub
+
+    def open(self, name, *args, **kwargs):
+        return self._owner(str(name)).open(name, *args, **kwargs)
+
+    def read(self, name, *args, **kwargs) -> bytes:
+        return self._owner(str(name)).read(name, *args, **kwargs)
+
+    def close(self) -> None:
+        self._pub.close()
+        self._res.close()
+
+
 class SingletBundle:
     """Reader for a per-GSE .singlet bundle.
 
@@ -1309,10 +1344,13 @@ class SingletBundle:
     (6974, 38606)
     """
 
-    def __init__(self, path: Union[str, Path]) -> None:
+    def __init__(self, path: Union[str, Path], restricted: Union[str, Path, None] = None) -> None:
         self.path = Path(path)
         if not self.path.exists():
             raise FileNotFoundError(self.path)
+        self.restricted_path = Path(restricted) if restricted is not None else None
+        if self.restricted_path is not None and not self.restricted_path.exists():
+            raise FileNotFoundError(self.restricted_path)
         self._zf: Optional[zipfile.ZipFile] = None
         self._manifest: Optional[dict] = None
         self._study_meta: Optional[dict] = None
@@ -1321,25 +1359,34 @@ class SingletBundle:
         self._empty_reasons: Dict[str, str] = {}
 
     @classmethod
-    def open(cls, path: Union[str, Path]) -> "SingletBundle":
+    def open(
+        cls, path: Union[str, Path], restricted: Union[str, Path, None] = None
+    ) -> "SingletBundle":
         """Open a .singlet bundle for reading.
 
         Parameters
         ----------
         path
             Path to the ``.singlet`` file.
+        restricted
+            Path to the bundle's restricted sidecar, for internal tools and controlled-access users. The
+            members it holds (donor SNP depths, genotype files, allele-specific counts, donor mitochondrial
+            files, the untrimmed ancestry call) then read like any other modality.
 
         Returns
         -------
         SingletBundle
         """
-        return cls(path)
+        return cls(path, restricted)
 
     # ---- Low-level ZIP access ------------------------------------------
 
     def _zip(self) -> zipfile.ZipFile:
         if self._zf is None or not self._zf.fp:
-            self._zf = zipfile.ZipFile(str(self.path), "r")
+            if self.restricted_path is not None:
+                self._zf = _OverlayZip(self.path, self.restricted_path)  # type: ignore[assignment]
+            else:
+                self._zf = zipfile.ZipFile(str(self.path), "r")
         return self._zf
 
     def _read_json(self, arc_name: str) -> dict:
@@ -2150,23 +2197,24 @@ def main(argv: Optional[List[str]] = None) -> int:
     pack_p.add_argument(
         "--private-out",
         default=None,
-        help="Also write the complete bundle here (private storage). The --out bundle never holds "
+        help="Write the restricted sidecar here (private storage). The --out bundle never holds "
         "the per-donor germline members; without this option they are not packed at all.",
     )
 
     red_p = sub.add_parser(
         "redact",
-        help="Write the public form of an existing bundle (restricted members removed, manifest rewritten).",
+        help="Split an existing complete bundle into its public form and a restricted sidecar.",
     )
     red_p.add_argument("src", help="Existing .singlet file (left untouched)")
     red_p.add_argument("dst", help="Where to write the public .singlet")
+    red_p.add_argument("--sidecar", default=None, help="Where to write the restricted sidecar")
 
     args = parser.parse_args(argv)
 
     if args.cmd == "redact":
         from singlet._restricted import redact_bundle
 
-        print(json.dumps(redact_bundle(args.src, args.dst)))
+        print(json.dumps(redact_bundle(args.src, args.dst, sidecar=args.sidecar)))
         return 0
 
     if args.cmd == "pack":

@@ -1,23 +1,29 @@
 #!/usr/bin/env python3
-"""Take the per-donor germline members out of already-published .singlet bundles, keeping a private original.
+"""Split already-published .singlet bundles into a public file and a private restricted sidecar.
 
-Two phases, so nothing public changes until every private copy has been verified:
+Nothing is stored twice: the members that carry per-donor germline information move from the public object to a
+sidecar in a private bucket, so total storage stays what it was (it is higher only while a study is in flight).
+For each study, in this order:
 
-  copy    For each study: copy the public object to the private bucket (key full/<GSE>/<GSE>.singlet), then read both
-          back and compare SHA-256. The public bucket is only read.
-  redact  For each study whose copy is recorded as verified: download the original, write the public form
-          (singlet._restricted.redact_bundle: restricted members out, ancestry call trimmed, manifest rewritten,
-          read back and checked), and overwrite the public object. Skips studies that hold nothing restricted.
+  1. download the public object; refuse it if any member does not match the checksum in its own manifest;
+  2. write the public form and the sidecar locally, then read both back: every member against its checksum, nothing
+     restricted in the public file, and public + sidecar equal to the original member for member;
+  3. upload the sidecar to the private bucket (restricted/<GSE>/<GSE>.restricted.singlet) and read it back: SHA-256
+     of the stored object must equal the local file;
+  4. only then overwrite the public object, and read that back the same way (on a mismatch the original, still in
+     scratch, is put back).
 
-Both phases are dry runs unless --apply is given; a dry run only reads (HEAD and the zip central directory) and prints
-the counts. Progress is appended to a JSONL ledger (--ledger), which is also the record to cite and what a rollback
-reads: `rollback` copies full/<GSE>/<GSE>.singlet back over the public key.
+`restore` rebuilds the complete bundle from the public object plus the sidecar and uploads it over the public key
+(same members, same checksums and the original manifest; not the same bytes as the original zip).
 
-Credentials (S3 API of the Cloudflare account): R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY.
-Run it on a compute node with scratch space for one bundle at a time (the largest is ~30 GB).
+Both commands are dry runs unless --apply is given; a dry run only reads (HEAD and the zip central directory) and prints
+the counts. Each completed study is appended to a JSONL ledger (--ledger), the record to cite.
 
-  python scripts/restrict_published_bundles.py copy   --gse-list gses.txt --public singlet-data --private <bucket> --ledger ledger.jsonl [--apply]
-  python scripts/restrict_published_bundles.py redact --gse-list gses.txt --public singlet-data --private <bucket> --ledger ledger.jsonl [--apply]
+Credentials (S3 API of the Cloudflare account): R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, in the environment
+of the job. Run it on a compute node with scratch for about three copies of the largest bundle (~30 GB each).
+
+  python scripts/restrict_published_bundles.py migrate --gse-list gses.txt --private singlet-restricted --ledger ledger.jsonl [--apply]
+  python scripts/restrict_published_bundles.py restore --gse GSE128639      --private singlet-restricted --ledger ledger.jsonl [--apply]
 """
 
 from __future__ import annotations
@@ -32,9 +38,9 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Dict, Iterable, Optional
+from typing import Iterable, Optional
 
-from singlet._restricted import redact_bundle, restricted_summary
+from singlet._restricted import redact_bundle, restore_bundle, restricted_summary
 
 CHUNK = 64 * 1024 * 1024
 
@@ -43,8 +49,8 @@ def public_key(gse: str) -> str:
     return f"data/{gse}/{gse}.singlet"
 
 
-def private_key(gse: str) -> str:
-    return f"full/{gse}/{gse}.singlet"
+def sidecar_key(gse: str) -> str:
+    return f"restricted/{gse}/{gse}.restricted.singlet"
 
 
 # ── storage ──────────────────────────────────────────────────────────────────
@@ -68,12 +74,6 @@ class S3Store:
         self.cfg = TransferConfig(
             multipart_threshold=CHUNK, multipart_chunksize=CHUNK, max_concurrency=8
         )
-        # Server-side copies move no data through this machine, so use big parts: fewer billed operations.
-        self.cfg_copy = TransferConfig(
-            multipart_threshold=512 * 1024 * 1024,
-            multipart_chunksize=512 * 1024 * 1024,
-            max_concurrency=8,
-        )
 
     def size(self, bucket: str, key: str) -> Optional[int]:
         try:
@@ -90,11 +90,6 @@ class S3Store:
         return self.c.get_object(Bucket=bucket, Key=key, Range=f"bytes={start}-{end}")[
             "Body"
         ].read()
-
-    def copy(self, src_bucket: str, src_key: str, dst_bucket: str, dst_key: str) -> None:
-        self.c.copy(
-            {"Bucket": src_bucket, "Key": src_key}, dst_bucket, dst_key, Config=self.cfg_copy
-        )  # server side; multipart above 512 MiB
 
     def download(self, bucket: str, key: str, path: Path) -> None:
         self.c.download_file(bucket, key, str(path), Config=self.cfg)
@@ -124,11 +119,6 @@ class LocalStore:
             fh.seek(start)
             return fh.read(end - start + 1)
 
-    def copy(self, src_bucket: str, src_key: str, dst_bucket: str, dst_key: str) -> None:
-        dst = self._p(dst_bucket, dst_key)
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(self._p(src_bucket, src_key), dst)
-
     def download(self, bucket: str, key: str, path: Path) -> None:
         shutil.copyfile(self._p(bucket, key), path)
 
@@ -154,17 +144,6 @@ def sha256_file(path: Path) -> str:
 
 
 # ── ledger ───────────────────────────────────────────────────────────────────
-
-
-def read_ledger(path: Path) -> Dict[str, dict]:
-    """Latest record per (gse, phase)."""
-    out: Dict[str, dict] = {}
-    if path.exists():
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                r = json.loads(line)
-                out[f"{r['gse']}:{r['phase']}"] = r
-    return out
 
 
 def log(path: Path, rec: dict) -> None:
@@ -206,11 +185,11 @@ def central_directory_summary(store, bucket: str, key: str, size: int) -> dict:
     return restricted_summary(RangeFile(store, bucket, key, size))
 
 
-# ── phases ───────────────────────────────────────────────────────────────────
+# ── commands ─────────────────────────────────────────────────────────────────
 
 
-def phase_copy(store, gse: str, a, ledger: Path) -> str:
-    pk, vk = public_key(gse), private_key(gse)
+def cmd_migrate(store, gse: str, a, ledger: Path) -> str:
+    pk, sk = public_key(gse), sidecar_key(gse)
     size = store.size(a.public, pk)
     if size is None:
         return "missing"
@@ -218,83 +197,93 @@ def phase_copy(store, gse: str, a, ledger: Path) -> str:
     if summ["members"] == 0:
         return "nothing-restricted"
     if not a.apply:
-        return f"would-copy {size} bytes ({summ['members']} restricted members, {summ['compressed_bytes']} bytes)"
-    if store.size(a.private, vk) == size:
-        status = "already-copied"
-    else:
-        store.copy(a.public, pk, a.private, vk)
-        status = "copied"
-    h_src = sha256_object(store, a.public, pk, size)
-    h_dst = sha256_object(store, a.private, vk, size)
-    if h_src != h_dst or store.size(a.private, vk) != size:
-        log(ledger, {"gse": gse, "phase": "copy", "ok": False, "bytes": size})
-        return "VERIFY-FAILED"
-    log(
-        ledger,
-        {
-            "gse": gse,
-            "phase": "copy",
-            "ok": True,
-            "bytes": size,
-            "sha256": h_src,
-            "restricted_members": summ["members"],
-            "restricted_bytes": summ["compressed_bytes"],
-        },
-    )
-    return status
-
-
-def phase_redact(store, gse: str, a, ledger: Path, led: Dict[str, dict]) -> str:
-    pk = public_key(gse)
-    size = store.size(a.public, pk)
-    if size is None:
-        return "missing"
-    summ = central_directory_summary(store, a.public, pk, size)
-    if summ["members"] == 0:
-        return "nothing-restricted"
-    done = led.get(f"{gse}:copy")
-    if not (done and done.get("ok") and done.get("bytes") == size):
-        return "SKIPPED: no verified private copy of this exact object in the ledger"
-    if not a.apply:
-        return f"would-redact: remove {summ['members']} members, {summ['compressed_bytes']} bytes of {size}"
+        return f"would-split: {summ['members']} members, {summ['compressed_bytes']} of {size} bytes move to the sidecar"
     etag = store.etag(a.public, pk)
     with tempfile.TemporaryDirectory(dir=a.scratch) as td:
-        src, dst = Path(td) / "src.singlet", Path(td) / "public.singlet"
+        src, dst, side = (
+            Path(td) / "src.singlet",
+            Path(td) / "public.singlet",
+            Path(td) / "side.singlet",
+        )
         store.download(a.public, pk, src)
-        if sha256_file(src) != done["sha256"]:
-            return "SKIPPED: public object differs from the copy that was verified"
-        stats = redact_bundle(src, dst)  # reads the result back and checks every member
+        if src.stat().st_size != size:
+            return "SKIPPED: download size differs from the object"
+        h_src = sha256_file(src)
+        stats = redact_bundle(
+            src, dst, sidecar=side
+        )  # refuses a corrupt source; reads both outputs back
+        h_side, h_pub = sha256_file(side), sha256_file(dst)
         if store.etag(a.public, pk) != etag:
-            return "SKIPPED: public object changed while redacting"
-        store.upload(dst, a.public, pk)
-        new_size = store.size(a.public, pk)
-        if new_size != dst.stat().st_size:
-            log(ledger, {"gse": gse, "phase": "redact", "ok": False})
-            return "UPLOAD-SIZE-MISMATCH"
+            return "SKIPPED: public object changed while it was being split"
+
+        store.upload(side, a.private, sk)
+        side_size = side.stat().st_size
+        if (
+            store.size(a.private, sk) != side_size
+            or sha256_object(store, a.private, sk, side_size) != h_side
+        ):
+            log(ledger, {"gse": gse, "ok": False, "stage": "sidecar-upload"})
+            return "VERIFY-FAILED: sidecar in the private bucket does not match; public object untouched"
         log(
             ledger,
             {
                 "gse": gse,
-                "phase": "redact",
+                "stage": "sidecar-verified",
                 "ok": True,
-                "bytes_before": size,
-                "bytes_after": new_size,
-                "removed": stats["removed"],
-                "removed_bytes": stats["removed_bytes"],
-                "sha256_public": sha256_file(dst),
+                "sidecar_bytes": side_size,
+                "sha256_sidecar": h_side,
             },
         )
-    return f"redacted {size} → {new_size} bytes"
+
+        pub_size = dst.stat().st_size
+        store.upload(dst, a.public, pk)
+        if (
+            store.size(a.public, pk) != pub_size
+            or sha256_object(store, a.public, pk, pub_size) != h_pub
+        ):
+            store.upload(
+                src, a.public, pk
+            )  # put the original back; the sidecar is still valid for a retry
+            log(ledger, {"gse": gse, "ok": False, "stage": "public-upload"})
+            return "UPLOAD-FAILED: public object did not read back; original restored"
+        log(
+            ledger,
+            {
+                "gse": gse,
+                "stage": "done",
+                "ok": True,
+                "bytes_before": size,
+                "bytes_public": pub_size,
+                "bytes_sidecar": side_size,
+                "removed": stats["removed"],
+                "removed_bytes": stats["removed_bytes"],
+                "sha256_original": h_src,
+                "sha256_public": h_pub,
+                "sha256_sidecar": h_side,
+            },
+        )
+    return f"split {size} -> public {pub_size} + sidecar {side_size} bytes"
 
 
-def phase_rollback(store, gse: str, a, ledger: Path, led: Dict[str, dict]) -> str:
-    done = led.get(f"{gse}:copy")
-    if not (done and done.get("ok")):
-        return "SKIPPED: no verified private copy"
+def cmd_restore(store, gse: str, a, ledger: Path) -> str:
+    pk, sk = public_key(gse), sidecar_key(gse)
+    if store.size(a.private, sk) is None:
+        return "SKIPPED: no sidecar for this study"
     if not a.apply:
-        return "would-restore the original over the public key"
-    store.copy(a.private, private_key(gse), a.public, public_key(gse))
-    log(ledger, {"gse": gse, "phase": "rollback", "ok": True})
+        return "would-rebuild the complete bundle from the public file and the sidecar"
+    with tempfile.TemporaryDirectory(dir=a.scratch) as td:
+        pub, side, out = (
+            Path(td) / "public.singlet",
+            Path(td) / "side.singlet",
+            Path(td) / "full.singlet",
+        )
+        store.download(a.public, pk, pub)
+        store.download(a.private, sk, side)
+        res = restore_bundle(pub, side, out)
+        store.upload(out, a.public, pk)
+        if store.size(a.public, pk) != out.stat().st_size:
+            return "UPLOAD-FAILED: size mismatch after restore"
+        log(ledger, {"gse": gse, "stage": "restored", "ok": True, "bytes": res["bytes_out"]})
     return "restored"
 
 
@@ -308,14 +297,15 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    ap.add_argument("phase", choices=["copy", "redact", "rollback"])
+    ap.add_argument("command", choices=["migrate", "restore"])
     ap.add_argument("--gse", nargs="*")
     ap.add_argument("--gse-list")
+    ap.add_argument("--limit", type=int, help="stop after this many studies")
     ap.add_argument("--public", default="singlet-data")
     ap.add_argument("--private", required=True, help="private bucket (never the public one)")
     ap.add_argument("--ledger", required=True)
     ap.add_argument(
-        "--scratch", default=None, help="directory with room for one bundle (default: system temp)"
+        "--scratch", default=None, help="directory with room for ~3 copies of the largest bundle"
     )
     ap.add_argument("--apply", action="store_true", help="write; without it only reads and prints")
     ap.add_argument("--local-root", help="use directories under this root instead of R2 (tests)")
@@ -327,15 +317,12 @@ def main(argv=None) -> int:
 
     store = LocalStore(Path(a.local_root)) if a.local_root else S3Store()
     ledger = Path(a.ledger)
-    led = read_ledger(ledger)
-    bad = 0
+    bad = n = 0
     for gse in gses_from(a):
-        if a.phase == "copy":
-            msg = phase_copy(store, gse, a, ledger)
-        elif a.phase == "redact":
-            msg = phase_redact(store, gse, a, ledger, led)
-        else:
-            msg = phase_rollback(store, gse, a, ledger, led)
+        if a.limit is not None and n >= a.limit:
+            break
+        msg = (cmd_migrate if a.command == "migrate" else cmd_restore)(store, gse, a, ledger)
+        n += not msg.startswith(("nothing-restricted", "missing"))
         bad += msg.startswith(("VERIFY", "UPLOAD", "SKIPPED"))
         print(f"{gse}\t{msg}", flush=True)
     return 1 if bad else 0

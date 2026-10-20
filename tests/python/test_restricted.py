@@ -7,6 +7,7 @@ Like test_pack_gse.py this builds synthetic pipeline output and needs no compile
 from __future__ import annotations
 
 import json
+import shutil
 import zipfile
 from pathlib import Path
 
@@ -14,12 +15,13 @@ import pytest
 from singlet import bundle as bundle_mod
 from singlet._integrity import verify_bundle
 from singlet._restricted import (
-    FULL_PROFILE,
     PUBLIC_PROFILE,
+    RESTRICTED_PROFILE,
     is_restricted_member,
     is_restricted_path,
     public_ancestry_call,
     redact_bundle,
+    restore_bundle,
     restricted_summary,
 )
 from test_pack_gse import GOOD, GSE, _catalog, _pz_bytes, _write_sample
@@ -113,36 +115,42 @@ class TestRules:
         assert public_ancestry_call(b"not json") == b"not json"
 
 
+def _full_manifest(path: Path) -> dict:
+    with zipfile.ZipFile(path) as z:
+        return json.loads(z.read("manifest.json"))
+
+
 class TestPack:
-    def test_public_bundle_never_holds_restricted_members(self, results, tmp_path):
-        pub, priv = tmp_path / "pub.singlet", tmp_path / "priv.singlet"
+    def test_restricted_members_go_to_the_sidecar_only(self, results, tmp_path):
+        pub, side = tmp_path / "pub.singlet", tmp_path / "side.singlet"
         bundle_mod.pack_gse(
             GSE,
             results,
             "unused",
             pub,
             verbose=False,
-            private_out_path=priv,
+            private_out_path=side,
             _catalog_df=_catalog(GOOD),
         )
-        pub_names, priv_names = _names(pub), _names(priv)
+        pub_names, side_names = _names(pub), _names(side)
         assert not [n for n in pub_names if is_restricted_path(n)]
         for rel in RESTRICTED:
-            assert f"samples/{GOOD}/{rel}" in priv_names
+            assert f"samples/{GOOD}/{rel}" in side_names
             assert f"samples/{GOOD}/{rel}" not in pub_names
-        for rel in PUBLIC:
-            if (results / GOOD / "out" / rel).exists():
-                assert (
-                    f"samples/{GOOD}/{rel}" in pub_names and f"samples/{GOOD}/{rel}" in priv_names
-                )
-        # both pass the client's integrity check, and say which one they are
+        # nothing is stored twice, except the trimmed vs untrimmed ancestry call and each file's manifest
+        assert pub_names & side_names == {"manifest.json", f"samples/{GOOD}/ancestry_call.json"}
+        # the public bundle verifies as it is; the sidecar verifies too and carries the original manifest
         assert verify_bundle(pub)["profile"] == PUBLIC_PROFILE
-        assert verify_bundle(priv)["profile"] == FULL_PROFILE
+        sman = verify_bundle(side)
+        assert sman["profile"] == RESTRICTED_PROFILE
+        assert set(sman["original_manifest"]["checksums"]) == (pub_names | side_names) - {
+            "manifest.json"
+        }
         with zipfile.ZipFile(pub) as zf:
             assert "log_likelihoods" not in json.loads(
                 zf.read(f"samples/{GOOD}/ancestry_call.json")
             )
-        with zipfile.ZipFile(priv) as zf:
+        with zipfile.ZipFile(side) as zf:
             assert "log_likelihoods" in json.loads(zf.read(f"samples/{GOOD}/ancestry_call.json"))
 
     def test_without_a_private_path_they_are_not_packed_anywhere(self, results, tmp_path):
@@ -151,56 +159,89 @@ class TestPack:
         assert not [n for n in _names(pub) if is_restricted_path(n)]
         assert verify_bundle(pub)["profile"] == PUBLIC_PROFILE
 
-
-class TestRedact:
-    def _legacy(self, results, tmp_path) -> Path:
-        """A bundle as the old packer wrote it: everything in out/ included."""
-        old = tmp_path / "old.singlet"
-        priv = tmp_path / "priv.singlet"
+    def test_internal_readers_see_both_files_as_one_bundle(self, results, tmp_path):
+        pub, side = tmp_path / "pub.singlet", tmp_path / "side.singlet"
         bundle_mod.pack_gse(
             GSE,
             results,
             "unused",
-            tmp_path / "ignored.singlet",
+            pub,
             verbose=False,
-            private_out_path=priv,
+            private_out_path=side,
             _catalog_df=_catalog(GOOD),
         )
-        # the private bundle is the old layout apart from its profile marker
-        with zipfile.ZipFile(priv) as zin, zipfile.ZipFile(old, "w", zipfile.ZIP_STORED) as zout:
+        with bundle_mod.SingletBundle.open(pub) as b:
+            assert not b.has("donor_snp_ad", GOOD) and not b.has("ase_counts", GOOD)
+            assert b.has("exon_counts", GOOD)
+        with bundle_mod.SingletBundle.open(pub, restricted=side) as b:
+            assert b.has("donor_snp_ad", GOOD) and b.has("ase_counts", GOOD)
+            assert "donor/donor0.vcf" in b.list_files(GOOD)
+            assert b.has("exon_counts", GOOD)
+
+
+def _complete(results, tmp_path) -> Path:
+    """A bundle as the old packer wrote it: everything in out/, original manifest (rebuilt from public + sidecar)."""
+    pub, side, full = tmp_path / "p.singlet", tmp_path / "s.singlet", tmp_path / "complete.singlet"
+    bundle_mod.pack_gse(
+        GSE,
+        results,
+        "unused",
+        pub,
+        verbose=False,
+        private_out_path=side,
+        _catalog_df=_catalog(GOOD),
+    )
+    restore_bundle(pub, side, full)
+    for p in (pub, side):
+        p.unlink()
+    return full
+
+
+class TestSplit:
+    def test_restore_reproduces_the_complete_bundle(self, results, tmp_path):
+        full = _complete(results, tmp_path)
+        man = verify_bundle(full)  # all members against the original manifest
+        assert "profile" not in man
+        assert restricted_summary(full)["members"] == len(RESTRICTED)
+
+    def test_split_then_restore_round_trips(self, results, tmp_path):
+        full = _complete(results, tmp_path)
+        before = full.read_bytes()
+        pub, side, back = (
+            tmp_path / "pub.singlet",
+            tmp_path / "side.singlet",
+            tmp_path / "back.singlet",
+        )
+        stats = redact_bundle(full, pub, sidecar=side)
+        assert full.read_bytes() == before  # the source is never modified
+        assert stats["removed"] == len(RESTRICTED) and stats["sidecar_bytes"] > 0
+        assert not [n for n in _names(pub) if is_restricted_path(n)]
+        assert verify_bundle(pub)["profile"] == PUBLIC_PROFILE
+        assert verify_bundle(side)["profile"] == RESTRICTED_PROFILE
+        restore_bundle(pub, side, back)
+        assert verify_bundle(back) == _full_manifest(full)
+        with zipfile.ZipFile(full) as a, zipfile.ZipFile(back) as b:
+            assert {n: a.read(n) for n in a.namelist() if n != "manifest.json"} == {
+                n: b.read(n) for n in b.namelist() if n != "manifest.json"
+            }
+
+    def test_a_corrupt_source_is_refused_and_leaves_nothing_behind(self, results, tmp_path):
+        full = _complete(results, tmp_path)
+        bad = tmp_path / "bad.singlet"
+        with zipfile.ZipFile(full) as zin, zipfile.ZipFile(bad, "w") as zout:
             for info in zin.infolist():
                 data = zin.read(info.filename)
-                if info.filename == "manifest.json":
-                    m = json.loads(data)
-                    m.pop("profile")
-                    data = json.dumps(m).encode()
+                if info.filename.endswith("donor/snp_ad.1pz"):
+                    data = data[:-1] + b"X"
                 zout.writestr(info, data)
-        return old
-
-    def test_redacted_copy_matches_a_public_pack(self, results, tmp_path):
-        old = self._legacy(results, tmp_path)
-        before = old.read_bytes()
-        assert restricted_summary(old)["members"] == len(RESTRICTED)
-        dst = tmp_path / "red.singlet"
-        stats = redact_bundle(old, dst)
-        assert stats["removed"] == len(RESTRICTED) and stats["kept"] > 0
-        assert old.read_bytes() == before  # the source is never modified
-        assert not [n for n in _names(dst) if is_restricted_path(n)]
-        man = verify_bundle(dst)  # checksums of every member verified
-        assert man["profile"] == PUBLIC_PROFILE
-        assert man["gsm_ids"] == [GOOD]
-        assert set(man["included_files"][GOOD]) == {
-            n.split("/", 2)[2] for n in _names(dst) if n.startswith("samples/")
-        }
-        with zipfile.ZipFile(dst) as zf:
-            assert "log_likelihoods" not in json.loads(
-                zf.read(f"samples/{GOOD}/ancestry_call.json")
-            )
+        with pytest.raises(RuntimeError, match="checksum"):
+            redact_bundle(bad, tmp_path / "o.singlet", sidecar=tmp_path / "s.singlet")
+        assert not list(tmp_path.glob("o.singlet*")) and not list(tmp_path.glob("s.singlet*"))
 
     def test_refuses_to_overwrite_its_source(self, results, tmp_path):
-        old = self._legacy(results, tmp_path)
+        full = _complete(results, tmp_path)
         with pytest.raises(ValueError):
-            redact_bundle(old, old)
+            redact_bundle(full, full)
 
 
 class TestMigrationScript:
@@ -216,66 +257,62 @@ class TestMigrationScript:
         spec.loader.exec_module(mod)
         return mod
 
-    def _published(self, results, root: Path) -> Path:
-        priv = root / "tmp.singlet"
-        bundle_mod.pack_gse(
-            GSE,
-            results,
-            "unused",
-            root / "ignored.singlet",
-            verbose=False,
-            private_out_path=priv,
-            _catalog_df=_catalog(GOOD),
-        )
+    def _published(self, results, tmp_path) -> tuple:
+        root = tmp_path / "r2"
         target = root / "singlet-data" / "data" / GSE / f"{GSE}.singlet"
         target.parent.mkdir(parents=True)
-        # legacy layout: the complete bundle, no profile marker
-        with zipfile.ZipFile(priv) as zin, zipfile.ZipFile(target, "w") as zout:
-            for info in zin.infolist():
-                data = zin.read(info.filename)
-                if info.filename == "manifest.json":
-                    m = json.loads(data)
-                    m.pop("profile")
-                    data = json.dumps(m).encode()
-                zout.writestr(info, data)
-        priv.unlink()
-        return target
+        shutil.move(str(_complete(results, tmp_path)), str(target))
+        sidecar = root / "singlet-restricted" / "restricted" / GSE / f"{GSE}.restricted.singlet"
+        base = [
+            "--gse", GSE,
+            "--private", "singlet-restricted",
+            "--ledger", str(tmp_path / "ledger.jsonl"),
+            "--local-root", str(root),
+            "--scratch", str(tmp_path),
+        ]  # fmt: skip
+        return target, sidecar, base
 
-    def test_copy_then_redact_then_rollback(self, results, tmp_path, mig):
-        root = tmp_path / "r2"
-        target = self._published(results, root)
+    def test_migrate_then_restore(self, results, tmp_path, mig):
+        target, sidecar, base = self._published(results, tmp_path)
         original = target.read_bytes()
         ledger = tmp_path / "ledger.jsonl"
-        base = [
-            "--gse",
-            GSE,
-            "--private",
-            "singlet-private",
-            "--ledger",
-            str(ledger),
-            "--local-root",
-            str(root),
-            "--scratch",
-            str(tmp_path),
-        ]
 
-        # a redact run before any verified copy changes nothing
-        assert mig.main(["redact", *base, "--apply"]) == 1
-        assert target.read_bytes() == original
+        # a dry run writes nothing
+        assert mig.main(["migrate", *base]) == 0
+        assert target.read_bytes() == original and not sidecar.exists() and not ledger.exists()
 
-        # dry runs write nothing
-        assert mig.main(["copy", *base]) == 0
-        assert not (root / "singlet-private").exists() and not ledger.exists()
-
-        assert mig.main(["copy", *base, "--apply"]) == 0
-        assert (root / "singlet-private" / "full" / GSE / f"{GSE}.singlet").read_bytes() == original
-        assert target.read_bytes() == original  # public untouched by the copy phase
-
-        assert mig.main(["redact", *base, "--apply"]) == 0
+        assert mig.main(["migrate", *base, "--apply"]) == 0
         assert not [n for n in _names(target) if is_restricted_path(n)]
         assert verify_bundle(target)["profile"] == PUBLIC_PROFILE
-        # idempotent: a second pass finds nothing to do
-        assert mig.main(["redact", *base, "--apply"]) == 0
+        assert verify_bundle(sidecar)["profile"] == RESTRICTED_PROFILE
+        done = [json.loads(line) for line in ledger.read_text().splitlines()][-1]
+        assert done["stage"] == "done" and done["ok"]
 
-        assert mig.main(["rollback", *base, "--apply"]) == 0
+        # idempotent: a second pass finds nothing left to move
+        assert mig.main(["migrate", *base, "--apply"]) == 0
+
+        # public + sidecar read as one bundle
+        with bundle_mod.SingletBundle.open(target, restricted=sidecar) as b:
+            assert b.has("donor_snp_ad", GOOD)
+
+        assert mig.main(["restore", *base, "--apply"]) == 0
+        assert restricted_summary(target)["members"] == len(RESTRICTED)
+        assert verify_bundle(target)
+
+    def test_a_sidecar_that_does_not_read_back_leaves_the_public_object_alone(
+        self, results, tmp_path, mig, monkeypatch
+    ):
+        target, sidecar, base = self._published(results, tmp_path)
+        original = target.read_bytes()
+        real = mig.LocalStore.upload
+
+        def corrupting(self, path, bucket, key):
+            real(self, path, bucket, key)
+            if bucket == "singlet-restricted":
+                with open(self._p(bucket, key), "r+b") as fh:
+                    fh.seek(10)
+                    fh.write(b"\xff\xff")
+
+        monkeypatch.setattr(mig.LocalStore, "upload", corrupting)
+        assert mig.main(["migrate", *base, "--apply"]) == 1
         assert target.read_bytes() == original
