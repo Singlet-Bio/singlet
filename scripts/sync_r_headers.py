@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Keep the R package's copy of the .1pz codec headers identical to the C++ library's.
+"""Keep the R package's copies of the codec headers identical to the C++ library's.
 
 The R package must be self-contained, so the codec headers are staged into
 ``r/inst/include/singlet/``. They are generated, never edited by hand:
@@ -10,6 +10,12 @@ The R package must be self-contained, so the codec headers are staged into
 ``pz_reader.h`` is copied verbatim. ``pz_writer.h`` is copied without the
 ``SINGLET_SPARSE_ACCUMULATOR_DEFINED`` guard, because R does not ship the
 sparse accumulator (the template under the guard is never instantiated there).
+
+The v2 matrix codec is staged verbatim too: ``include/singlet/pz2/pz2.h`` and
+``include/singlet/pz2/detail/*.h`` to ``r/inst/include/singlet/pz2/``, and the
+binding helpers ``src/bindings/common/singlet/pz2_client.h`` to
+``r/inst/include/singlet/pz2_client.h``. A file that no longer exists in the
+source tree is removed from the staged directory (reported by ``--check``).
 """
 import re
 import sys
@@ -35,6 +41,22 @@ def render(name: str) -> str:
     return text
 
 
+PZ2_SRC = ROOT / "include" / "singlet" / "pz2"
+PZ2_DST = DST / "pz2"
+CLIENT_SRC = ROOT / "src" / "bindings" / "common" / "singlet" / "pz2_client.h"
+
+
+def pz2_files() -> dict:
+    """{relative path under r/inst/include/singlet: source path} for the v2 codec headers and the binding helpers."""
+    files = {}
+    if PZ2_SRC.is_dir():
+        for p in sorted(PZ2_SRC.rglob("*.h")):
+            files["pz2/" + p.relative_to(PZ2_SRC).as_posix()] = p
+    if CLIENT_SRC.is_file():
+        files["pz2_client.h"] = CLIENT_SRC
+    return files
+
+
 def main() -> int:
     check = "--check" in sys.argv[1:]
     stale = []
@@ -46,6 +68,23 @@ def main() -> int:
             stale.append(name)
             if not check:
                 path.write_text(want, encoding="utf-8", newline="\n")
+    wanted = pz2_files()
+    for rel, src in wanted.items():
+        want = src.read_text(encoding="utf-8").replace("\r\n", "\n")
+        path = DST / rel
+        have = path.read_text(encoding="utf-8").replace("\r\n", "\n") if path.exists() else None
+        if have != want:
+            stale.append(rel)
+            if not check:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(want, encoding="utf-8", newline="\n")
+    if wanted and PZ2_DST.is_dir():
+        for p in sorted(PZ2_DST.rglob("*.h")):
+            rel = "pz2/" + p.relative_to(PZ2_DST).as_posix()
+            if rel not in wanted:
+                stale.append(rel + " (no longer in include/singlet/pz2)")
+                if not check:
+                    p.unlink()
     if check and stale:
         print("R header copies are stale: " + ", ".join(stale) +
               "\nrun: python scripts/sync_r_headers.py", file=sys.stderr)

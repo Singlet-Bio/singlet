@@ -147,7 +147,7 @@ class TestDownload:
         import json
         import zipfile
 
-        from singlet._loader import download
+        from singlet._loader import _download_legacy as download
 
         dest = tmp_path / "GSE001.singlet"
         member = b"{}"
@@ -191,7 +191,7 @@ class TestDownload:
                 return data
 
         with patch.object(_loader.urllib.request, "urlopen", return_value=_FakeResp()):
-            result = _loader.download("GSE001", output_dir=tmp_path, force=True)
+            result = _loader._download_legacy("GSE001", output_dir=tmp_path, force=True)
 
         assert result == dest
         assert dest.read_bytes() == new
@@ -205,7 +205,7 @@ class TestDownload:
         err = urllib.error.HTTPError("url", 404, "Not Found", {}, None)
         with patch.object(_loader.urllib.request, "urlopen", side_effect=err):
             with pytest.raises(FileNotFoundError, match="not found"):
-                _loader.download("GSE999", output_dir=tmp_path, force=True)
+                _loader._download_legacy("GSE999", output_dir=tmp_path, force=True)
 
     def test_500_raises_runtime_error(self, tmp_path):
         """Non-404 HTTP errors give RuntimeError with context."""
@@ -216,7 +216,7 @@ class TestDownload:
         err = urllib.error.HTTPError("url", 500, "Server Error", {}, None)
         with patch.object(_loader.urllib.request, "urlopen", side_effect=err):
             with pytest.raises(RuntimeError, match="Failed to download"):
-                _loader.download("GSE999", output_dir=tmp_path, force=True)
+                _loader._download_legacy("GSE999", output_dir=tmp_path, force=True)
 
 
 class TestLoad:
@@ -423,9 +423,9 @@ class TestLoadSample:
         fake_bundle = MagicMock()
         fake_bundle.to_anndata.return_value = expected
 
-        with patch("singlet._loader.download", return_value=bundle_path):
+        with patch("singlet._loader._download_legacy", return_value=bundle_path):
             with patch("singlet.bundle.SingletBundle.open", return_value=fake_bundle):
-                loaded = load("GSE999")
+                loaded = load("GSE999", legacy=True)
 
         assert loaded.shape == (3, 4)
 

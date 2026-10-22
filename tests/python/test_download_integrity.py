@@ -108,7 +108,7 @@ def cached_files(tmp_path: Path) -> list[str]:
 
 
 def test_good_download_is_verified_and_cached(server, tmp_path):
-    path = _loader.download("GSE1")
+    path = _loader._download_legacy("GSE1")
     assert path.name == "GSE1.singlet"
     assert cached_files(tmp_path) == ["GSE1.singlet"]
     manifest = verify_bundle(path)
@@ -116,43 +116,43 @@ def test_good_download_is_verified_and_cached(server, tmp_path):
 
 
 def test_lowercase_accession_is_accepted(server, tmp_path):
-    assert _loader.download("gse1").name == "GSE1.singlet"
+    assert _loader._download_legacy("gse1").name == "GSE1.singlet"
 
 
 def test_truncated_download_is_rejected_and_not_cached(server, tmp_path):
     server.mode = "truncate"
     with pytest.raises(BundleIntegrityError, match="ended after"):
-        _loader.download("GSE1")
+        _loader._download_legacy("GSE1")
     assert cached_files(tmp_path) == []  # no bundle and no .part file left behind
 
 
 def test_a_member_that_does_not_match_its_checksum_is_rejected(server, tmp_path):
     server.body = make_bundle(tamper_checksum="samples/GSM1/summary.json")
     with pytest.raises(BundleIntegrityError, match="does not match its checksum"):
-        _loader.download("GSE1")
+        _loader._download_legacy("GSE1")
     assert cached_files(tmp_path) == []
 
 
 def test_verification_can_be_skipped_but_not_the_archive_structure(server, tmp_path):
     server.body = make_bundle(tamper_checksum="samples/GSM1/summary.json")
-    assert _loader.download("GSE1", verify=False).exists()  # hashes skipped on request
+    assert _loader._download_legacy("GSE1", verify=False).exists()  # hashes skipped on request
     (tmp_path / "cache" / "GSE1.singlet").unlink()
     server.body = server.body[: len(server.body) // 2]
     with pytest.raises(BundleIntegrityError):
-        _loader.download("GSE1", verify=False)
+        _loader._download_legacy("GSE1", verify=False)
 
 
 def test_a_newer_schema_is_refused_with_an_upgrade_hint(server, tmp_path):
     server.body = make_bundle(schema="2.0")
     with pytest.raises(BundleIntegrityError, match="Upgrade singlet"):
-        _loader.download("GSE1")
+        _loader._download_legacy("GSE1")
     assert cached_files(tmp_path) == []
 
 
 def test_a_listed_member_missing_from_the_archive_is_rejected(server, tmp_path):
     server.body = make_bundle(drop_member="samples/GSM1/summary.json")
     with pytest.raises(BundleIntegrityError, match="missing from the archive"):
-        _loader.download("GSE1")
+        _loader._download_legacy("GSE1")
 
 
 @pytest.mark.parametrize("name", ["../evil.json", "/etc/passwd", "samples/../../x", "a\\b"])
@@ -168,33 +168,33 @@ def test_member_names_that_could_escape_a_directory_are_rejected(tmp_path, name)
 
 
 def test_a_damaged_cached_file_is_replaced_not_trusted(server, tmp_path):
-    path = _loader.download("GSE1")
+    path = _loader._download_legacy("GSE1")
     path.write_bytes(
         path.read_bytes()[:100]
     )  # a cache entry cut short by an old bug or a full disk
     hits = server.hits
-    again = _loader.download("GSE1")
+    again = _loader._download_legacy("GSE1")
     assert server.hits == hits + 1  # fetched again
     verify_bundle(again)
 
 
 def test_an_intact_cache_entry_is_reused_without_a_request(server, tmp_path):
-    _loader.download("GSE1")
+    _loader._download_legacy("GSE1")
     hits = server.hits
-    _loader.download("GSE1")
+    _loader._download_legacy("GSE1")
     assert server.hits == hits
 
 
 def test_force_refetches(server, tmp_path):
-    _loader.download("GSE1")
+    _loader._download_legacy("GSE1")
     hits = server.hits
-    _loader.download("GSE1", force=True)
+    _loader._download_legacy("GSE1", force=True)
     assert server.hits == hits + 1
 
 
 def test_unknown_study_is_a_not_found_error(server, tmp_path):
     with pytest.raises(FileNotFoundError):
-        _loader.download("GSE2")
+        _loader._download_legacy("GSE2")
     assert cached_files(tmp_path) == []
 
 
@@ -217,7 +217,7 @@ def test_accessions_that_are_not_accessions_never_reach_a_path_or_url(bad, serve
     if bad.strip() == "GSE1":
         pytest.skip("whitespace is trimmed")
     with pytest.raises(ValueError):
-        _loader.download(bad)
+        _loader._download_legacy(bad)
     assert server.hits == 0
     assert cached_files(tmp_path) == []
 
@@ -310,7 +310,7 @@ def test_a_huge_manifest_is_refused_before_it_is_parsed(tmp_path):
 
 
 def test_a_symlinked_cache_entry_still_works(server, tmp_path, monkeypatch):
-    real = _loader.download("GSE1")
+    real = _loader._download_legacy("GSE1")
     cache = tmp_path / "cache"
     other = tmp_path / "elsewhere" / "GSE1.singlet"
     other.parent.mkdir()
@@ -320,13 +320,13 @@ def test_a_symlinked_cache_entry_still_works(server, tmp_path, monkeypatch):
     except (OSError, NotImplementedError):
         pytest.skip("symlinks are not available here")
     hits = server.hits
-    assert _loader.download("GSE1").exists()
+    assert _loader._download_legacy("GSE1").exists()
     assert server.hits == hits
 
 
 def test_gsm_ids_with_a_suffix_resolve_but_cannot_be_downloaded_as_bundles():
     assert normalize_accession("gsm7152960_val") == "GSM7152960_VAL"
     with pytest.raises(ValueError):
-        _loader.download("GSM7152960")
+        _loader._download_legacy("GSM7152960")
     with pytest.raises(ValueError):
-        _loader.download("GSE1_val")
+        _loader._download_legacy("GSE1_val")

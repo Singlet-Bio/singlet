@@ -10,6 +10,153 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// pz2_header_
+Rcpp::List pz2_header_(Rcpp::RawVector buf);
+RcppExport SEXP _singlet_pz2_header_(SEXP bufSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::RawVector >::type buf(bufSEXP);
+    rcpp_result_gen = Rcpp::wrap(pz2_header_(buf));
+    return rcpp_result_gen;
+END_RCPP
+}
+// pz2_chunk_first_cols_
+Rcpp::NumericVector pz2_chunk_first_cols_(Rcpp::RawVector prefix);
+RcppExport SEXP _singlet_pz2_chunk_first_cols_(SEXP prefixSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::RawVector >::type prefix(prefixSEXP);
+    rcpp_result_gen = Rcpp::wrap(pz2_chunk_first_cols_(prefix));
+    return rcpp_result_gen;
+END_RCPP
+}
+// pz2_plan_
+Rcpp::List pz2_plan_(Rcpp::RawVector prefix, double c0, double c1);
+RcppExport SEXP _singlet_pz2_plan_(SEXP prefixSEXP, SEXP c0SEXP, SEXP c1SEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::RawVector >::type prefix(prefixSEXP);
+    Rcpp::traits::input_parameter< double >::type c0(c0SEXP);
+    Rcpp::traits::input_parameter< double >::type c1(c1SEXP);
+    rcpp_result_gen = Rcpp::wrap(pz2_plan_(prefix, c0, c1));
+    return rcpp_result_gen;
+END_RCPP
+}
+// pz2_decode_
+Rcpp::List pz2_decode_(Rcpp::RawVector prefix, Rcpp::NumericVector offs, Rcpp::List bufs, double c0, double c1, std::string mode, SEXP cols, SEXP gene_map, int n_genes, int threads, std::string isa);
+RcppExport SEXP _singlet_pz2_decode_(SEXP prefixSEXP, SEXP offsSEXP, SEXP bufsSEXP, SEXP c0SEXP, SEXP c1SEXP, SEXP modeSEXP, SEXP colsSEXP, SEXP gene_mapSEXP, SEXP n_genesSEXP, SEXP threadsSEXP, SEXP isaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::RawVector >::type prefix(prefixSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type offs(offsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type bufs(bufsSEXP);
+    Rcpp::traits::input_parameter< double >::type c0(c0SEXP);
+    Rcpp::traits::input_parameter< double >::type c1(c1SEXP);
+    Rcpp::traits::input_parameter< std::string >::type mode(modeSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type cols(colsSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type gene_map(gene_mapSEXP);
+    Rcpp::traits::input_parameter< int >::type n_genes(n_genesSEXP);
+    Rcpp::traits::input_parameter< int >::type threads(threadsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type isa(isaSEXP);
+    rcpp_result_gen = Rcpp::wrap(pz2_decode_(prefix, offs, bufs, c0, c1, mode, cols, gene_map, n_genes, threads, isa));
+    return rcpp_result_gen;
+END_RCPP
+}
+// pz2_names_
+Rcpp::List pz2_names_(Rcpp::RawVector member, bool rows);
+RcppExport SEXP _singlet_pz2_names_(SEXP memberSEXP, SEXP rowsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::RawVector >::type member(memberSEXP);
+    Rcpp::traits::input_parameter< bool >::type rows(rowsSEXP);
+    rcpp_result_gen = Rcpp::wrap(pz2_names_(member, rows));
+    return rcpp_result_gen;
+END_RCPP
+}
+// pz2_zstd_
+Rcpp::RawVector pz2_zstd_(Rcpp::RawVector x);
+RcppExport SEXP _singlet_pz2_zstd_(SEXP xSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::RawVector >::type x(xSEXP);
+    rcpp_result_gen = Rcpp::wrap(pz2_zstd_(x));
+    return rcpp_result_gen;
+END_RCPP
+}
+// pz2_isa_report_
+std::string pz2_isa_report_();
+RcppExport SEXP _singlet_pz2_isa_report_() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(pz2_isa_report_());
+    return rcpp_result_gen;
+END_RCPP
+}
+// pz2_sha256_
+std::string pz2_sha256_(Rcpp::RawVector x);
+RcppExport SEXP _singlet_pz2_sha256_(SEXP xSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::RawVector >::type x(xSEXP);
+    rcpp_result_gen = Rcpp::wrap(pz2_sha256_(x));
+    return rcpp_result_gen;
+END_RCPP
+}
+// pz2_pack_info_
+Rcpp::List pz2_pack_info_(Rcpp::RawVector pack);
+RcppExport SEXP _singlet_pz2_pack_info_(SEXP packSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::RawVector >::type pack(packSEXP);
+    rcpp_result_gen = Rcpp::wrap(pz2_pack_info_(pack));
+    return rcpp_result_gen;
+END_RCPP
+}
+// pz2_pack_genes_
+Rcpp::List pz2_pack_genes_(Rcpp::RawVector pack);
+RcppExport SEXP _singlet_pz2_pack_genes_(SEXP packSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::RawVector >::type pack(packSEXP);
+    rcpp_result_gen = Rcpp::wrap(pz2_pack_genes_(pack));
+    return rcpp_result_gen;
+END_RCPP
+}
+// pz2_whitelist_barcodes_
+Rcpp::CharacterVector pz2_whitelist_barcodes_(Rcpp::RawVector pack, SEXP idx);
+RcppExport SEXP _singlet_pz2_whitelist_barcodes_(SEXP packSEXP, SEXP idxSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::RawVector >::type pack(packSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type idx(idxSEXP);
+    rcpp_result_gen = Rcpp::wrap(pz2_whitelist_barcodes_(pack, idx));
+    return rcpp_result_gen;
+END_RCPP
+}
+// pz2_cells_
+Rcpp::List pz2_cells_(Rcpp::RawVector buf, Rcpp::CharacterVector columns, SEXP whitelist);
+RcppExport SEXP _singlet_pz2_cells_(SEXP bufSEXP, SEXP columnsSEXP, SEXP whitelistSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::RawVector >::type buf(bufSEXP);
+    Rcpp::traits::input_parameter< Rcpp::CharacterVector >::type columns(columnsSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type whitelist(whitelistSEXP);
+    rcpp_result_gen = Rcpp::wrap(pz2_cells_(buf, columns, whitelist));
+    return rcpp_result_gen;
+END_RCPP
+}
 // pz_read_1pz_raw
 Rcpp::List pz_read_1pz_raw(std::string path);
 RcppExport SEXP _singlet_pz_read_1pz_raw(SEXP pathSEXP) {
@@ -23,6 +170,18 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_singlet_pz2_header_", (DL_FUNC) &_singlet_pz2_header_, 1},
+    {"_singlet_pz2_chunk_first_cols_", (DL_FUNC) &_singlet_pz2_chunk_first_cols_, 1},
+    {"_singlet_pz2_plan_", (DL_FUNC) &_singlet_pz2_plan_, 3},
+    {"_singlet_pz2_decode_", (DL_FUNC) &_singlet_pz2_decode_, 11},
+    {"_singlet_pz2_names_", (DL_FUNC) &_singlet_pz2_names_, 2},
+    {"_singlet_pz2_zstd_", (DL_FUNC) &_singlet_pz2_zstd_, 1},
+    {"_singlet_pz2_isa_report_", (DL_FUNC) &_singlet_pz2_isa_report_, 0},
+    {"_singlet_pz2_sha256_", (DL_FUNC) &_singlet_pz2_sha256_, 1},
+    {"_singlet_pz2_pack_info_", (DL_FUNC) &_singlet_pz2_pack_info_, 1},
+    {"_singlet_pz2_pack_genes_", (DL_FUNC) &_singlet_pz2_pack_genes_, 1},
+    {"_singlet_pz2_whitelist_barcodes_", (DL_FUNC) &_singlet_pz2_whitelist_barcodes_, 2},
+    {"_singlet_pz2_cells_", (DL_FUNC) &_singlet_pz2_cells_, 3},
     {"_singlet_pz_read_1pz_raw", (DL_FUNC) &_singlet_pz_read_1pz_raw, 1},
     {NULL, NULL, 0}
 };

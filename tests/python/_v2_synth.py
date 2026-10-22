@@ -10,11 +10,10 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import numpy as np
 import scipy.sparse as sp
-
 from singlet import _pz2
 from singlet.v2 import cells as cells_mod
 from singlet.v2 import container as K
@@ -153,7 +152,22 @@ class Synth:
         with open(mpath, "wb") as fh:
             fh.write(M.dumps_manifest(man))
         self.manifest = man
+        self._write_ref()
         return self
+
+    def _write_ref(self):
+        """v2/ref/<id>.pack + index.json as the server lays them out (clients without the wheel packs fetch them from here)."""
+        from singlet.v2 import packs as P
+
+        ref = os.path.join(self.root, "v2", "ref")
+        os.makedirs(ref, exist_ok=True)
+        entries = []
+        for pk in (self.exon_pack, self.intron_pack):
+            data = pk.bytes
+            with open(os.path.join(ref, pk.id.hex() + ".pack"), "wb") as fh:
+                fh.write(data)
+            entries.append(P.index_entry(data, "vocab", {"build": pk.build, "member": pk.member}))
+        P.write_index(entries, os.path.join(ref, "index.json"))
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------

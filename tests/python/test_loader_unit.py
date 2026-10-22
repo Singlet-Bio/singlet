@@ -59,7 +59,7 @@ class _FakeResp:
 
 class TestDownload:
     def test_cached_returns_immediately(self, tmp_path):
-        from singlet._loader import download
+        from singlet._loader import _download_legacy as download
 
         cached = tmp_path / "GSE123456.singlet"
         cached.write_bytes(_bundle())
@@ -73,7 +73,7 @@ class TestDownload:
         cached.write_bytes(b"old data")
 
         with patch.object(_loader.urllib.request, "urlopen", return_value=_bundle_resp()):
-            result = _loader.download("GSE123456", output_dir=tmp_path, force=True)
+            result = _loader._download_legacy("GSE123456", output_dir=tmp_path, force=True)
 
         assert result == cached
         assert cached.read_bytes() == _bundle()
@@ -88,7 +88,7 @@ class TestDownload:
             return _bundle_resp()
 
         with patch.object(_loader.urllib.request, "urlopen", side_effect=fake_urlopen):
-            _loader.download("GSE999999", output_dir=tmp_path)
+            _loader._download_legacy("GSE999999", output_dir=tmp_path)
 
         assert captured["url"] == ("https://data.singlet.bio/data/GSE999999/GSE999999.singlet")
 
@@ -103,7 +103,7 @@ class TestDownload:
             return _bundle_resp()
 
         with patch.object(_loader.urllib.request, "urlopen", side_effect=fake_urlopen):
-            _loader.download("GSE1", output_dir=tmp_path)
+            _loader._download_legacy("GSE1", output_dir=tmp_path)
 
         assert captured["url"] == "https://example.test/data/GSE1/GSE1.singlet"
 
@@ -116,7 +116,7 @@ class TestDownload:
 
         with patch.object(_loader.urllib.request, "urlopen", side_effect=boom):
             with pytest.raises(ConnectionError):
-                _loader.download("GSE777", output_dir=tmp_path)
+                _loader._download_legacy("GSE777", output_dir=tmp_path)
 
         assert not (tmp_path / "GSE777.singlet").exists()
         assert not (tmp_path / "GSE777.singlet.part").exists()
@@ -203,7 +203,7 @@ class TestLoad:
         mock_resolve.return_value = Path("/fake/local.1pz")
         mock_read.return_value = ad.AnnData(X=sp.random(2, 3, format="csr"))
 
-        with patch("singlet._loader.download") as mock_dl:
+        with patch("singlet._loader._download_legacy") as mock_dl:
             _adata = load("GSE000001")
             mock_dl.assert_not_called()
 
@@ -214,10 +214,10 @@ class TestLoad:
         from singlet._loader import load
 
         with patch("singlet._loader._resolve_gse_path", return_value=None):
-            with patch("singlet._loader.download") as mock_dl:
+            with patch("singlet._loader._download_legacy") as mock_dl:
                 mock_dl.side_effect = Exception("No network")
                 with pytest.raises(Exception, match="No network"):
-                    load("GSE999999")
+                    load("GSE999999", legacy=True)
                 mock_dl.assert_called_once()
 
 

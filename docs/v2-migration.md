@@ -75,3 +75,9 @@ Started 2026-10-22. Branch `feat/singlet-v2` (singlet-bio, on top of PR #12) and
   v2_migration) applied. Data Worker `singlet-data-v2` deployed (version 732fe7f6) on route `data.singlet.bio/v2/*`: route wins over
   the R2 custom domain (X-Served-By: data-v2), CORS * and OPTIONS 204 verified, legacy `data/` paths untouched. Website change sets
   CS1-CS5 pass `npm run check` (624 tests); independent review running before the PR is merged.
+- 2026-10-22 ~12:30 EDT: website PR zdebruine/singlet-website#51 (3 commits: data Worker, serving layer, UI) CI green, preview smoke
+  52/52; schema 033 applied; data Worker redeployed (15ee1554). Packs: all 16 + index.json uploaded to R2 v2/ref/ via wrangler and
+  verified byte-identical through https://data.singlet.bio/v2/ref/. singlet-bio branch pushed (88adbf5). Clipper unreachable from the
+  laptop (clipper.gvsu.edu resolves only inside GVSU: needs the GVSU VPN); campaign waits for the bridge.
+- 2026-10-22 ~13:00 EDT: full-atlas /entry sweep on the preview: 8,201/8,202 studies 200 (GSE246714 502 is pre-existing on production:
+  its bundle has no manifest.json). PR #51 merged (ed2f776), deployed in ~195 s; production smoke 52/52.

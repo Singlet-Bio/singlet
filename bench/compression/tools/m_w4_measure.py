@@ -38,6 +38,15 @@ def _rss_peak():
 
 
 def child(args):
+    server_box = []
+    try:
+        _child(args, server_box)
+    finally:
+        for sv in server_box:
+            sv.terminate()
+
+
+def _child(args, server_box):
     sys.path.insert(0, os.path.join(ROOT, "python"))
     sys.path.insert(0, os.path.join(ROOT, "tests", "python"))
     import psutil  # noqa: F401
@@ -54,12 +63,13 @@ def child(args):
     kind = args.child
     server = None
     base = None
-    if kind.endswith("_http") or kind == "v2_cells_http":
+    if kind.endswith("_http"):
         import json as _j
 
         port_file = tempfile.mktemp(prefix="m_w4_port_")
         log_file = tempfile.mktemp(prefix="m_w4_log_")
         server = subprocess.Popen([sys.executable, "-P", os.path.join(HERE, "m_w4_serve.py"), args.v2, port_file, log_file])
+        server_box.append(server)
         for _ in range(200):
             if os.path.exists(port_file) and os.path.getsize(port_file) > 0:
                 break
@@ -96,7 +106,11 @@ def child(args):
         elif kind in ("v2_sample_local", "v2_sample_http"):
             ad = st.to_anndata([GSM])
         elif kind == "v2_cells_http":
-            ad = st.cells("n_umi_exon >= 3000", samples=[GSM], whole_max=1)
+            ad = st.cells("n_umi_exon >= 300", samples=[GSM], whole_max=1)
+        elif kind == "v2_slice1000_http":      # the 1,000 largest cells of one sample, two-phase plan
+            ad = st.cells(None, samples=[GSM], max_cells=1000, whole_max=1)
+        elif kind == "v2_slice1000_whole_http":  # the same slice with the default plan (the sample is fetched whole)
+            ad = st.cells(None, samples=[GSM], max_cells=1000)
         else:
             raise SystemExit("unknown kind " + kind)
     out["wall_s"] = time.perf_counter() - t0
@@ -108,7 +122,7 @@ def child(args):
     out["rss_growth_mb"] = out["peak_rss_mb"] - out["baseline_rss_mb"]
     if ad is not None:
         out["shape"] = list(ad.shape)
-        out["nnz"] = int(ad.X.nnz)
+        out["nnz"] = int(getattr(ad.X, "nnz", 0))
         out["layers"] = sorted(ad.layers.keys())
     if server is not None:
         server.terminate()
@@ -130,7 +144,7 @@ LOCK = os.path.join(ROOT, "bench", "compression", "results", ".timing_lock")
 
 def _lock():
     """results/.timing_lock protocol: mkdir is atomic; wait while another agent holds it (a lock older than 20 min is stale)."""
-    for _ in range(400):
+    for _ in range(3000):
         try:
             os.mkdir(LOCK)
             return
@@ -141,7 +155,7 @@ def _lock():
                     continue
             except OSError:
                 pass
-            time.sleep(15)
+            time.sleep(2)
     raise SystemExit("timing lock busy")
 
 
@@ -200,7 +214,7 @@ if __name__ == "__main__":
     ap.add_argument("--child")
     ap.add_argument("--v2", default=os.path.join(ROOT, "bench", "compression", "results", "m_w4_v2", "native14"))
     ap.add_argument("--bundle", default=os.path.join(ROOT, "bench", "compression", "corpus", "bundles", "GSE145370.singlet"))
-    ap.add_argument("--kinds", default="legacy_sample,legacy_study,v2_sample_local,v2_study_local,v2_sample_http,v2_study_http,v2_cells_http")
+    ap.add_argument("--kinds", default="legacy_sample,legacy_study,v2_sample_local,v2_study_local,v2_sample_http,v2_study_http,v2_cells_http,v2_slice1000_http,v2_slice1000_whole_http")
     ap.add_argument("--reps", type=int, default=3)
     ap.add_argument("--tracemalloc", action="store_true")
     ap.add_argument("--tracemalloc-pass", action="store_true", help="parent: one extra run per kind under tracemalloc")

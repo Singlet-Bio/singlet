@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 
-from singlet.bundle import MODALITIES, SingletBundle, _infer_kind, _union_feature_axis
+from singlet.bundle import MODALITIES, SingletBundle, _infer_kind
 
 from . import client as C
 from . import container as K
