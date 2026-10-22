@@ -15,6 +15,7 @@ Layout::
 The reader works on bytes, a path, a binary file object, or a *range fetcher* ``fetch(offset, length) -> bytes``; with a fetcher
 only the header, the table and the ranges that are asked for are read (one request each).
 """
+
 from __future__ import annotations
 
 import json
@@ -98,14 +99,26 @@ class S2Writer:
         self._names.add(p.name)
         self._members.append(p)
 
-    def add_matrix(self, name: str, body: bytes, digest: bytes, meta: Optional[dict] = None, flags: int = 0) -> None:
+    def add_matrix(
+        self, name: str, body: bytes, digest: bytes, meta: Optional[dict] = None, flags: int = 0
+    ) -> None:
         self._add(_Pending(name, KIND_PZ2, flags, bytes(body), 0, 0, digest, meta or {}))
 
-    def add_cells(self, name: str, body: bytes, digest: bytes, meta: Optional[dict] = None, flags: int = 0) -> None:
+    def add_cells(
+        self, name: str, body: bytes, digest: bytes, meta: Optional[dict] = None, flags: int = 0
+    ) -> None:
         self._add(_Pending(name, KIND_CELLS, flags, bytes(body), 0, 0, digest, meta or {}))
 
-    def add_stored(self, name: str, legacy_bytes: bytes, meta: Optional[dict] = None, flags: int = FLAG_LEGACY,
-                   level: int = util.ZSTD_LEVEL, crc32: Optional[int] = None, digest: Optional[bytes] = None) -> int:
+    def add_stored(
+        self,
+        name: str,
+        legacy_bytes: bytes,
+        meta: Optional[dict] = None,
+        flags: int = FLAG_LEGACY,
+        level: int = util.ZSTD_LEVEL,
+        crc32: Optional[int] = None,
+        digest: Optional[bytes] = None,
+    ) -> int:
         """Store ``legacy_bytes`` as zstd (kind 3), or raw (kind 5) when zstd does not shrink it. Returns the kind used."""
         raw = bytes(legacy_bytes)
         z = util.zstd_compress(raw, level) if raw else b""
@@ -115,11 +128,29 @@ class S2Writer:
             m["zstd_level"] = level
         else:
             kind, body = KIND_RAW, raw
-        self._add(_Pending(name, kind, flags, body, len(raw), util.crc32(raw) if crc32 is None else crc32,
-                           util.d16(raw) if digest is None else digest, m))
+        self._add(
+            _Pending(
+                name,
+                kind,
+                flags,
+                body,
+                len(raw),
+                util.crc32(raw) if crc32 is None else crc32,
+                util.d16(raw) if digest is None else digest,
+                m,
+            )
+        )
         return kind
 
-    def add_derived(self, name: str, out_len: int, crc32: int, digest: bytes, meta: dict, flags: int = FLAG_LEGACY) -> None:
+    def add_derived(
+        self,
+        name: str,
+        out_len: int,
+        crc32: int,
+        digest: bytes,
+        meta: dict,
+        flags: int = FLAG_LEGACY,
+    ) -> None:
         if "recipe" not in meta:
             raise S2Error("derived member needs meta['recipe']")
         self._add(_Pending(name, KIND_DERIVED, flags, None, int(out_len), int(crc32), digest, meta))
@@ -139,7 +170,7 @@ class S2Writer:
             pos = util.align_up(pos + len(p.body))
         # the object ends at the end of the last body (no trailing padding)
         end = HEADER_SIZE + table_len
-        for (o, ln) in offs:
+        for o, ln in offs:
             if ln:
                 end = max(end, o + ln)
         file_len = end
@@ -147,17 +178,33 @@ class S2Writer:
         self.infos = []
         for p, nm, mb, (o, ln) in zip(self._members, names, metas, offs):
             tab += struct.pack("<H", len(nm)) + nm
-            tab += _ENTRY_FIXED.pack(p.kind, p.flags, o, ln, p.out_len, p.crc32, p.digest, len(mb)) + mb
-            self.infos.append(MemberInfo(p.name, p.kind, p.flags, o, ln, p.out_len, p.crc32, p.digest, dict(p.meta)))
+            tab += (
+                _ENTRY_FIXED.pack(p.kind, p.flags, o, ln, p.out_len, p.crc32, p.digest, len(mb))
+                + mb
+            )
+            self.infos.append(
+                MemberInfo(
+                    p.name, p.kind, p.flags, o, ln, p.out_len, p.crc32, p.digest, dict(p.meta)
+                )
+            )
         assert len(tab) == table_len
-        hdr = _HDR.pack(MAGIC, VERSION, 0, len(self._members), HEADER_SIZE, table_len, file_len,
-                        self.sample_id.encode("ascii").ljust(16, b"\0"), b"\0" * 8)
+        hdr = _HDR.pack(
+            MAGIC,
+            VERSION,
+            0,
+            len(self._members),
+            HEADER_SIZE,
+            table_len,
+            file_len,
+            self.sample_id.encode("ascii").ljust(16, b"\0"),
+            b"\0" * 8,
+        )
         out = bytearray(file_len)
         out[:HEADER_SIZE] = hdr
-        out[HEADER_SIZE:HEADER_SIZE + table_len] = tab
+        out[HEADER_SIZE : HEADER_SIZE + table_len] = tab
         for p, (o, ln) in zip(self._members, offs):
             if ln:
-                out[o:o + ln] = p.body
+                out[o : o + ln] = p.body
         return bytes(out)
 
 
@@ -171,7 +218,7 @@ class _BytesSource:
         self.size = len(self.data)
 
     def __call__(self, off: int, length: int) -> bytes:
-        return bytes(self.data[off:off + length])
+        return bytes(self.data[off : off + length])
 
 
 class _FileSource:
@@ -209,7 +256,9 @@ class S2Reader:
         head = self._get(0, prefetch)
         if len(head) < HEADER_SIZE:
             raise S2Error("object shorter than the 64-byte header")
-        (magic, ver, flags, n_members, table_off, table_len, file_len, sid, _res) = _HDR.unpack_from(head, 0)
+        (magic, ver, flags, n_members, table_off, table_len, file_len, sid, _res) = (
+            _HDR.unpack_from(head, 0)
+        )
         if magic != MAGIC:
             raise S2Error("bad magic %r" % magic)
         if ver != VERSION:
@@ -236,13 +285,13 @@ class S2Reader:
                 raise S2Error("member table truncated")
             (nl,) = struct.unpack_from("<H", tab, p)
             p += 2
-            name = tab[p:p + nl].decode("utf-8")
+            name = tab[p : p + nl].decode("utf-8")
             p += nl
             if p + _ENTRY_FIXED.size > len(tab):
                 raise S2Error("member table truncated")
             kind, fl, off, ln, out_len, crc, dg, ml = _ENTRY_FIXED.unpack_from(tab, p)
             p += _ENTRY_FIXED.size
-            meta = json.loads(tab[p:p + ml].decode("utf-8")) if ml else {}
+            meta = json.loads(tab[p : p + ml].decode("utf-8")) if ml else {}
             p += ml
             if kind == KIND_DERIVED:
                 if off or ln:
@@ -275,7 +324,7 @@ class S2Reader:
             raise S2Error("range outside member %r" % name)
         a = mi.off + rel_off
         if a + length <= len(self._head):
-            return bytes(self._head[a:a + length])
+            return bytes(self._head[a : a + length])
         b = self._get(a, length)
         if len(b) != length:
             raise S2Error("short read of member %r" % name)

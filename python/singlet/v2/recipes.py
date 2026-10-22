@@ -27,6 +27,7 @@ Recipe ids (versioned; the implementation of an id never changes, a change of be
   vocab-json-v1                              study-level feature_vocab.json               recipes_extra.py
   stub-v1                                    the 151-byte 0 x 0 .1pz stub                 recipes_extra.py
 """
+
 from __future__ import annotations
 
 import collections
@@ -65,7 +66,15 @@ def _mtx_text_regenerate(rid, params, ctx):
 def _stub_matrix(rid, params, ctx):
     import numpy as np
 
-    return Matrix(np.zeros(1, dtype=np.int64), np.zeros(0, dtype=np.int64), np.zeros(0, dtype=np.uint32), (0, 0), [], [], {})
+    return Matrix(
+        np.zeros(1, dtype=np.int64),
+        np.zeros(0, dtype=np.int64),
+        np.zeros(0, dtype=np.uint32),
+        (0, 0),
+        [],
+        [],
+        {},
+    )
 
 
 RECIPES = {}
@@ -76,18 +85,43 @@ def _reg(rid, doc, regenerate, regenerate_matrix=None):
 
 
 for _r in ("rint", "trunc", "stub"):
-    _reg("psi-v1-" + _r, "splice_psi.1pz from sj_counts.1pz, PSI stored as %s" % ("the constant 0x0 stub" if _r == "stub" else _r + " of the float PSI"),
-         rpsi.regenerate_psi, rpsi.regenerate_matrix_psi)
+    _reg(
+        "psi-v1-" + _r,
+        "splice_psi.1pz from sj_counts.1pz, PSI stored as %s"
+        % ("the constant 0x0 stub" if _r == "stub" else _r + " of the float PSI"),
+        rpsi.regenerate_psi,
+        rpsi.regenerate_matrix_psi,
+    )
 _reg("cellcalls-v1", "cell_calls.tsv from the cells table", rcc.regenerate_cell_calls)
 _reg("tsvcols-v1", "per-cell TSV from typed cells-table columns", rtb.regenerate_tsv)
-_reg("whitelist-sorted-v1", "STARsolo raw/barcodes.tsv = the sorted protocol whitelist", rst.regenerate_whitelist)
-_reg("features-v1", "STARsolo features.tsv from the gene table (vocab, positional or permutation order)", rst.regenerate_features)
+_reg(
+    "whitelist-sorted-v1",
+    "STARsolo raw/barcodes.tsv = the sorted protocol whitelist",
+    rst.regenerate_whitelist,
+)
+_reg(
+    "features-v1",
+    "STARsolo features.tsv from the gene table (vocab, positional or permutation order)",
+    rst.regenerate_features,
+)
 _reg("mtx-text-v1", "STARsolo matrix.mtx text from a decoded CSC", _mtx_text_regenerate)
-_reg("mtx-filter-v1", "STARsolo filtered matrix.mtx / barcodes.tsv from raw + called set", rst.regenerate_filter)
+_reg(
+    "mtx-filter-v1",
+    "STARsolo filtered matrix.mtx / barcodes.tsv from raw + called set",
+    rst.regenerate_filter,
+)
 _reg("ambient-v1", "ambient_profile.tsv from the integer vector ambient_k", rex.regenerate_ambient)
-_reg("geneexpr-v1", "gene_expression.tsv (count, effective length, TPM, FPKM)", rex.regenerate_geneexpr)
-_reg("splice-events-v1", "splice_events.tsv from the sj junction names", rex.regenerate_splice_events)
-_reg("vocab-json-v1", "feature_vocab.json from the vocabulary gene table", rex.regenerate_vocab_json)
+_reg(
+    "geneexpr-v1",
+    "gene_expression.tsv (count, effective length, TPM, FPKM)",
+    rex.regenerate_geneexpr,
+)
+_reg(
+    "splice-events-v1", "splice_events.tsv from the sj junction names", rex.regenerate_splice_events
+)
+_reg(
+    "vocab-json-v1", "feature_vocab.json from the vocabulary gene table", rex.regenerate_vocab_json
+)
 _reg("stub-v1", "the 151-byte 0 x 0 .1pz stub", rex.regenerate_stub, _stub_matrix)
 
 # member name -> planners tried in order
@@ -108,7 +142,7 @@ _PLANNERS = {
 for _m in rtb.PROFILES:
     _PLANNERS[_m] = [rtb.plan_tsv]
 
-LAST_ERRORS = {}   # member -> last exception text of a planner (diagnostics)
+LAST_ERRORS = {}  # member -> last exception text of a planner (diagnostics)
 
 
 def _planners(member):
@@ -125,7 +159,9 @@ def plan(member_name, legacy_bytes, ctx):
     for fn in _planners(member_name):
         try:
             p = fn(member_name, legacy_bytes, ctx)
-        except Exception as e:  # a recipe bug must never break a migration; the member is stored instead
+        except (
+            Exception
+        ) as e:  # a recipe bug must never break a migration; the member is stored instead
             LAST_ERRORS[member_name] = "%s: %s" % (type(e).__name__, e)
             log.debug("planner %s failed on %s: %s", getattr(fn, "__name__", fn), member_name, e)
             continue

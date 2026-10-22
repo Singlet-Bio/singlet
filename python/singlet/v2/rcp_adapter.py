@@ -13,10 +13,10 @@ Anything missing is treated as "no recipe": the member is stored (kind 3). ``loa
 ``singlet.v2.recipes`` if it imports, always followed by the tiny built-in set (``vocab-json-v1`` for the study-level
 ``feature_vocab.json``) so that the migration works end to end without W3's module.
 """
+
 from __future__ import annotations
 
 import importlib
-from typing import Optional
 
 from . import builtin_recipes
 
@@ -33,7 +33,11 @@ class Recipes:
                 continue
             p = fn(member, legacy_bytes, ctx)
             if p is not None:
-                rid, params, needs = p[0], p[1], list(p[2]) if len(p) > 2 and p[2] is not None else []
+                rid, params, needs = (
+                    p[0],
+                    p[1],
+                    list(p[2]) if len(p) > 2 and p[2] is not None else [],
+                )
                 return rid, dict(params or {}), needs
         return None
 
@@ -82,6 +86,7 @@ class Recipes:
                 continue
         # no matrix-level entry point: regenerate the container bytes and decode them
         from .legacy import decode_1pz_bytes
+
         return decode_1pz_bytes(self.regenerate_bytes(recipe_id, params, ctx))
 
     def ids(self) -> list:

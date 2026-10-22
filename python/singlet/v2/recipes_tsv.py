@@ -15,6 +15,7 @@ Format kinds (JSON-able dict, stored in the recipe params):
   {"k": "cat",   "labels": [...]}                              <= 255 distinct strings, stored as u8 codes
   {"k": "str"}                                                 anything else, stored as strings
 """
+
 from __future__ import annotations
 
 import re
@@ -27,7 +28,14 @@ _SCI = re.compile(r"^-?[0-9](?:\.([0-9]+))?e[+-][0-9]{2,3}$")
 _NUM = re.compile(r"^-?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$")
 NA_TOKENS = ("NA", "nan", "NaN", "", "NULL", "null", "None", "-", ".")
 
-_DT = {"u8": np.uint8, "u16": np.uint16, "u32": np.uint32, "i32": np.int32, "f32": np.float32, "f64": np.float64}
+_DT = {
+    "u8": np.uint8,
+    "u16": np.uint16,
+    "u32": np.uint32,
+    "i32": np.int32,
+    "f32": np.float32,
+    "f64": np.float64,
+}
 
 
 def _is_num(s):
@@ -112,9 +120,18 @@ def fit_column(values):
     if n == 0:
         return {"k": "str"}, np.array([], dtype=object)
     # booleans
-    for lab in (("False", "True"), ("FALSE", "TRUE"), ("false", "true"), ("F", "T"), ("N", "Y"), ("no", "yes")):
+    for lab in (
+        ("False", "True"),
+        ("FALSE", "TRUE"),
+        ("false", "true"),
+        ("F", "T"),
+        ("N", "Y"),
+        ("no", "yes"),
+    ):
         if toks <= set(lab):
-            return {"k": "bool", "labels": list(lab)}, np.array([v == lab[1] for v in values], dtype=bool)
+            return {"k": "bool", "labels": list(lab)}, np.array(
+                [v == lab[1] for v in values], dtype=bool
+            )
     non_num = {v for v in toks if not _is_num(v)}
     na_tok = None
     if len(non_num) == 1 and next(iter(non_num)) in NA_TOKENS and len(non_num) < len(toks):

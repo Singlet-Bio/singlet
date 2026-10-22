@@ -1,14 +1,15 @@
 # SPDX-License-Identifier: MIT
 """ambient-v1, geneexpr-v1, splice-events-v1, vocab-json-v1, stub-v1 (owner: W3).
 
-  ambient-v1       ambient_profile.tsv from an integer vector k (UMIs of the ambient pool per exon row):
-                   value = (k + 0.5) * (1 / sum(k + 0.5)) printed %.6g (ambient_correction.h:estimate_ambient)
-  geneexpr-v1      gene_expression.tsv: count (exon + intron gene sums), effective_length (merged exon bp), TPM, FPKM
-                   with the normaliser total_mapped (= pileup_stats.json mapped_reads) as a param (tpm_fpkm.h)
-  splice-events-v1 splice_events.tsv from the junction names of sj_counts.1pz (splice_psi.h:write_splice_events)
-  vocab-json-v1    study-level feature_vocab.json from the gene table of the vocabulary pack
-  stub-v1          the constant 151-byte 0x0 .1pz the pipeline writes for an output it failed to produce
+ambient-v1       ambient_profile.tsv from an integer vector k (UMIs of the ambient pool per exon row):
+                 value = (k + 0.5) * (1 / sum(k + 0.5)) printed %.6g (ambient_correction.h:estimate_ambient)
+geneexpr-v1      gene_expression.tsv: count (exon + intron gene sums), effective_length (merged exon bp), TPM, FPKM
+                 with the normaliser total_mapped (= pileup_stats.json mapped_reads) as a param (tpm_fpkm.h)
+splice-events-v1 splice_events.tsv from the junction names of sj_counts.1pz (splice_psi.h:write_splice_events)
+vocab-json-v1    study-level feature_vocab.json from the gene table of the vocabulary pack
+stub-v1          the constant 151-byte 0x0 .1pz the pipeline writes for an output it failed to produce
 """
+
 from __future__ import annotations
 
 import json
@@ -31,7 +32,10 @@ def render_ambient(names, k) -> bytes:
     h = k + 0.5
     inv = 1.0 / float(np.cumsum(h)[-1]) if len(h) else 0.0
     v = h * inv
-    return ("feature\tambient_fraction\n" + "".join("%s\t%.6g\n" % (n, x) for n, x in zip(names, v.tolist()))).encode("utf-8")
+    return (
+        "feature\tambient_fraction\n"
+        + "".join("%s\t%.6g\n" % (n, x) for n, x in zip(names, v.tolist()))
+    ).encode("utf-8")
 
 
 def infer_ambient_k(vals):
@@ -65,8 +69,16 @@ def plan_ambient(member, legacy_bytes, ctx):
         return None
     if not s.startswith("feature\tambient_fraction\n") or not s.endswith("\n"):
         return None
-    rows = [r.split("\t") for r in s[len("feature\tambient_fraction\n"):-1].split("\n")] if len(s) > 25 else []
-    if len(rows) != len(names) or any(len(r) != 2 for r in rows) or [r[0] for r in rows] != list(names):
+    rows = (
+        [r.split("\t") for r in s[len("feature\tambient_fraction\n") : -1].split("\n")]
+        if len(s) > 25
+        else []
+    )
+    if (
+        len(rows) != len(names)
+        or any(len(r) != 2 for r in rows)
+        or [r[0] for r in rows] != list(names)
+    ):
         return None
     try:
         vals = [float(r[1]) for r in rows]
@@ -106,14 +118,33 @@ def gene_tables(ctx):
     eg = np.array([gix[g] for g in gid], dtype=np.int64)
     G = len(genes)
     pat = re.compile(r":(\d+)-(\d+)$")
-    span = np.array([int(m.group(2)) - int(m.group(1)) for m in (pat.search(n) for n in ex_names)], dtype=np.int64)
+    span = np.array(
+        [int(m.group(2)) - int(m.group(1)) for m in (pat.search(n) for n in ex_names)],
+        dtype=np.int64,
+    )
     ln = np.bincount(eg, weights=np.maximum(span, 0), minlength=G).astype(np.int64)
     cnt = np.zeros(G, dtype=np.float64)
-    cnt += np.bincount(eg, weights=np.bincount(ex.indices.astype(np.int64), weights=ex.data.astype(np.float64), minlength=ex.shape[0]), minlength=G)
+    cnt += np.bincount(
+        eg,
+        weights=np.bincount(
+            ex.indices.astype(np.int64), weights=ex.data.astype(np.float64), minlength=ex.shape[0]
+        ),
+        minlength=G,
+    )
     if it is not None and it.shape[0] > 0:
-        igid, _, _ = rqc.split_row_names(it.rownames if it.rownames is not None else ctx.vocab_names("intron"), True)
+        igid, _, _ = rqc.split_row_names(
+            it.rownames if it.rownames is not None else ctx.vocab_names("intron"), True
+        )
         ig = np.array([gix[g] for g in igid], dtype=np.int64)
-        cnt += np.bincount(ig, weights=np.bincount(it.indices.astype(np.int64), weights=it.data.astype(np.float64), minlength=it.shape[0]), minlength=G)
+        cnt += np.bincount(
+            ig,
+            weights=np.bincount(
+                it.indices.astype(np.int64),
+                weights=it.data.astype(np.float64),
+                minlength=it.shape[0],
+            ),
+            minlength=G,
+        )
     return genes, np.maximum(ln, 1), cnt.astype(np.int64)
 
 
@@ -129,8 +160,12 @@ def render_geneexpr(genes, ln, cnt, total_mapped) -> bytes:
     else:
         fpkm = np.zeros(len(rpk))
     out = [GE_HEADER]
-    out.extend("%s\t%s\t%d\t%d\t%.6f\t%.6f\n" % (g, nm, l, k, t, f)
-               for (g, nm), l, k, t, f in zip(genes, ln.tolist(), cnt.tolist(), tpm.tolist(), fpkm.tolist()))
+    out.extend(
+        "%s\t%s\t%d\t%d\t%.6f\t%.6f\n" % (g, nm, length, k, t, f)
+        for (g, nm), length, k, t, f in zip(
+            genes, ln.tolist(), cnt.tolist(), tpm.tolist(), fpkm.tolist()
+        )
+    )
     return "".join(out).encode("utf-8")
 
 
@@ -170,7 +205,9 @@ def plan_geneexpr(member, legacy_bytes, ctx):
         i = pos[np.argmax(fp[pos])]
         est = cnt[i] * 1e9 / (ln[i] * fp[i])
         base = int(round(est))
-        cands.extend(base + d for d in sorted(range(-int(est * 1e-6) - 3, int(est * 1e-6) + 4), key=abs))
+        cands.extend(
+            base + d for d in sorted(range(-int(est * 1e-6) - 3, int(est * 1e-6) + 4), key=abs)
+        )
     elif (cnt == 0).all() or (fp == 0).all():
         cands.append(0)
     seen = set()
@@ -179,7 +216,11 @@ def plan_geneexpr(member, legacy_bytes, ctx):
             continue
         seen.add(tm)
         if render_geneexpr(genes, ln, cnt, tm) == legacy_bytes:
-            return ("geneexpr-v1", {"total_mapped": int(tm)}, ["pack:genes", "pack:exon", "matrix:exon_counts.1pz", "matrix:intron_counts.1pz"])
+            return (
+                "geneexpr-v1",
+                {"total_mapped": int(tm)},
+                ["pack:genes", "pack:exon", "matrix:exon_counts.1pz", "matrix:intron_counts.1pz"],
+            )
     return None
 
 
@@ -197,7 +238,10 @@ SE_HEADER = "event_id\tevent_type\tn_junctions\tjunction_names\n"
 def render_splice_events(names) -> bytes:
     out = [SE_HEADER]
     for eid, typ, members in rpsi.build_events(names):
-        out.append("%s\t%s\t%d\t%s\n" % (eid, typ, len(members), ",".join(names[j] for j in members.tolist())))
+        out.append(
+            "%s\t%s\t%d\t%s\n"
+            % (eid, typ, len(members), ",".join(names[j] for j in members.tolist()))
+        )
     return "".join(out).encode("utf-8")
 
 
@@ -218,8 +262,15 @@ def regenerate_splice_events(recipe_id, params, ctx) -> bytes:
 # vocab-json-v1
 # ---------------------------------------------------------------------------------------------------
 def render_vocab_json(build, schema, genes) -> bytes:
-    return json.dumps({"schema_version": schema, "reference_build": build, "n_genes": len(genes),
-                       "genes": [{"gene_id": a, "gene_name": b} for a, b in genes]}, indent=2).encode("utf-8")
+    return json.dumps(
+        {
+            "schema_version": schema,
+            "reference_build": build,
+            "n_genes": len(genes),
+            "genes": [{"gene_id": a, "gene_name": b} for a, b in genes],
+        },
+        indent=2,
+    ).encode("utf-8")
 
 
 def plan_vocab_json(member, legacy_bytes, ctx):
@@ -238,7 +289,9 @@ def plan_vocab_json(member, legacy_bytes, ctx):
     params = {"build": build, "schema": schema}
     pk = ctx.pack_for("exon") if hasattr(ctx, "pack_for") else None
     if pk is not None:
-        params["pack"] = pk.id.hex()          # informational: lets the manifest list the pack this file depends on
+        params["pack"] = (
+            pk.id.hex()
+        )  # informational: lets the manifest list the pack this file depends on
     return ("vocab-json-v1", params, ["pack:genes"])
 
 
@@ -247,7 +300,7 @@ def regenerate_vocab_json(recipe_id, params, ctx) -> bytes:
     if "pack" in params and hasattr(ctx, "packs"):
         pk = ctx.packs.get(params["pack"])
         if pk is not None:
-            if "schema" not in params:                               # params written by W2's stand-in recipe
+            if "schema" not in params:  # params written by W2's stand-in recipe
                 return pk.vocab_json()
             genes = pk.gene_table()
     if genes is None:

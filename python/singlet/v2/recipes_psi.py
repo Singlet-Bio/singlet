@@ -18,6 +18,7 @@ bench/compression/notes/w4_bugs.md and e4.md):
     (the stored values are what the legacy files contain; ``singlet.psi()`` computes the true float PSI with
     :func:`compute_psi`, which is the same function.)
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -25,7 +26,9 @@ import numpy as np
 from . import recipes_pzw as pzw
 from .recipes_ctx import Matrix, decode_1pz_bytes
 
-MAX_EXACT_SUM = 1 << 24  # float32 holds integers exactly below this; larger event sums would need ordered float adds
+MAX_EXACT_SUM = (
+    1 << 24
+)  # float32 holds integers exactly below this; larger event sums would need ordered float adds
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -71,7 +74,14 @@ def parse_junction_names(names):
             continue
         a = nm[c + 1 : d]
         b = nm[d + 1 :]
-        if a.isascii() and a.isdigit() and b.isascii() and b.isdigit() and len(a) < 19 and len(b) < 19:
+        if (
+            a.isascii()
+            and a.isdigit()
+            and b.isascii()
+            and b.isdigit()
+            and len(a) < 19
+            and len(b) < 19
+        ):
             s, e = int(a), int(b)
         else:
             s, e = _stoul(a), _stoul(b)
@@ -131,10 +141,20 @@ def compute_psi(sj: Matrix, names=None):
     names = names if names is not None else sj.rownames
     m, n = sj.shape
     if not names or sj.nnz == 0 or n == 0:
-        return np.zeros(n + 1, dtype=np.int64), np.zeros(0, dtype=np.int64), np.zeros(0, dtype=np.float32), 0
+        return (
+            np.zeros(n + 1, dtype=np.int64),
+            np.zeros(0, dtype=np.int64),
+            np.zeros(0, dtype=np.float32),
+            0,
+        )
     je, ids = junction_events(names)
     if not ids:
-        return np.zeros(n + 1, dtype=np.int64), np.zeros(0, dtype=np.int64), np.zeros(0, dtype=np.float32), 0
+        return (
+            np.zeros(n + 1, dtype=np.int64),
+            np.zeros(0, dtype=np.int64),
+            np.zeros(0, dtype=np.float32),
+            0,
+        )
     rows = sj.indices.astype(np.int64)
     ev = je[rows]
     sel = np.flatnonzero(ev >= 0)
@@ -162,7 +182,9 @@ def quantise(psi: np.ndarray, rule: str) -> np.ndarray:
 
 def psi_matrix(sj: Matrix, rule: str) -> Matrix:
     indptr, rows, psi, _ = compute_psi(sj)
-    return Matrix(indptr, rows, quantise(psi, rule), (sj.shape[0], sj.shape[1]), sj.rownames, sj.colnames, {})
+    return Matrix(
+        indptr, rows, quantise(psi, rule), (sj.shape[0], sj.shape[1]), sj.rownames, sj.colnames, {}
+    )
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -202,7 +224,10 @@ def plan_splice_psi(member, legacy_bytes, ctx):
     indptr, rows, psi, maxsum = compute_psi(sj)
     if maxsum >= MAX_EXACT_SUM:
         return None
-    if not (np.array_equal(indptr, leg.indptr.astype(np.int64)) and np.array_equal(rows, leg.indices.astype(np.int64))):
+    if not (
+        np.array_equal(indptr, leg.indptr.astype(np.int64))
+        and np.array_equal(rows, leg.indices.astype(np.int64))
+    ):
         return None
     if leg.rownames != list(sj.rownames) or leg.colnames != list(sj.colnames or []):
         return None
@@ -213,7 +238,11 @@ def plan_splice_psi(member, legacy_bytes, ctx):
             break
     if rule is None:
         return None
-    params = {"level": int(hdr["codec_level"]), "chunk_cols": int(hdr["chunk_cols"]), "writer": None}
+    params = {
+        "level": int(hdr["codec_level"]),
+        "chunk_cols": int(hdr["chunk_cols"]),
+        "writer": None,
+    }
     if leg.user_kv:
         params["user_kv"] = dict(leg.user_kv)
     m = Matrix(indptr, rows, quantise(psi, rule), tuple(sj.shape), sj.rownames, sj.colnames, {})
@@ -232,7 +261,15 @@ def plan_splice_psi(member, legacy_bytes, ctx):
 
 def regenerate_matrix_psi(recipe_id, params, ctx) -> Matrix:
     if recipe_id == "psi-v1-stub":
-        return Matrix(np.zeros(1, dtype=np.int64), np.zeros(0, dtype=np.int64), np.zeros(0, dtype=np.uint32), (0, 0), [], [], {})
+        return Matrix(
+            np.zeros(1, dtype=np.int64),
+            np.zeros(0, dtype=np.int64),
+            np.zeros(0, dtype=np.uint32),
+            (0, 0),
+            [],
+            [],
+            {},
+        )
     rule = recipe_id.rsplit("-", 1)[1]
     sj = ctx.matrix("sj_counts.1pz")
     m = psi_matrix(sj, rule)
@@ -246,6 +283,10 @@ def regenerate_psi(recipe_id, params, ctx) -> bytes:
         return pzw.STUB_1PZ
     wid = params.get("writer")
     if wid is None:
-        raise NotByteExact("no writer reproduced the container bytes of this member; use regenerate_matrix")
+        raise NotByteExact(
+            "no writer reproduced the container bytes of this member; use regenerate_matrix"
+        )
     m = regenerate_matrix_psi(recipe_id, params, ctx)
-    return pzw.write_legacy_1pz(m, wid, params.get("level", 3), params.get("chunk_cols", 1024), 4, params.get("user_kv"))
+    return pzw.write_legacy_1pz(
+        m, wid, params.get("level", 3), params.get("chunk_cols", 1024), 4, params.get("user_kv")
+    )

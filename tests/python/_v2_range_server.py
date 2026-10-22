@@ -64,7 +64,10 @@ def _handler(root: str, rec: Recorder, ignore_range: bool, total_override):
                 return
             size = os.path.getsize(fs)
             st = os.stat(fs)
-            etag = '"%s"' % hashlib.md5(("%d-%d" % (size, int(st.st_mtime * 1000))).encode()).hexdigest()
+            etag = (
+                '"%s"'
+                % hashlib.md5(("%d-%d" % (size, int(st.st_mtime * 1000))).encode()).hexdigest()
+            )
             if self.headers.get("If-None-Match") == etag:
                 self.send_response(304)
                 self.send_header("ETag", etag)
@@ -93,7 +96,10 @@ def _handler(root: str, rec: Recorder, ignore_range: bool, total_override):
                     self.send_header("Content-Range", "bytes %d-%d/%d" % (a, b, tot))
                     self.send_header("ETag", etag)
                     self.send_header("Content-Length", str(len(body)))
-                    self.send_header("Cache-Control", "public, max-age=31536000, immutable" if "/s/" in path else "max-age=300")
+                    self.send_header(
+                        "Cache-Control",
+                        "public, max-age=31536000, immutable" if "/s/" in path else "max-age=300",
+                    )
                     self.end_headers()
                     self.wfile.write(body)
                     rec.add("GET", path, (a, b), 206, len(body))
@@ -113,7 +119,9 @@ def _handler(root: str, rec: Recorder, ignore_range: bool, total_override):
 def serve(root: str, *, ignore_range: bool = False, total_override=None):
     """Yield (base_url, Recorder). ``total_override`` lies about the object size in Content-Range (to test the size check)."""
     rec = Recorder()
-    srv = ThreadingHTTPServer(("127.0.0.1", 0), _handler(os.path.abspath(root), rec, ignore_range, total_override))
+    srv = ThreadingHTTPServer(
+        ("127.0.0.1", 0), _handler(os.path.abspath(root), rec, ignore_range, total_override)
+    )
     th = threading.Thread(target=srv.serve_forever, daemon=True)
     th.start()
     try:
@@ -123,11 +131,16 @@ def serve(root: str, *, ignore_range: bool = False, total_override=None):
         srv.server_close()
 
 
-if __name__ == "__main__":  # python -P tests/python/_v2_range_server.py <root>  : serve until killed, print the base URL (used by the R tests)
+if (
+    __name__ == "__main__"
+):  # python -P tests/python/_v2_range_server.py <root>  : serve until killed, print the base URL (used by the R tests)
     import sys
 
     root = sys.argv[1]
     rec = Recorder()
-    srv = ThreadingHTTPServer(("127.0.0.1", int(sys.argv[2]) if len(sys.argv) > 2 else 0), _handler(os.path.abspath(root), rec, False, None))
+    srv = ThreadingHTTPServer(
+        ("127.0.0.1", int(sys.argv[2]) if len(sys.argv) > 2 else 0),
+        _handler(os.path.abspath(root), rec, False, None),
+    )
     print("http://127.0.0.1:%d" % srv.server_address[1], flush=True)
     srv.serve_forever()

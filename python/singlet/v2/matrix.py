@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MIT
 """In-memory canonical CSC matrix used across the v2 package, and the canonical digest of docs/format-v2.md section 4.6."""
+
 from __future__ import annotations
 
 import hashlib
@@ -35,8 +36,8 @@ class Csc:
     colnames: Optional[list] = None
     kv: dict = field(default_factory=dict)
     value_type: int = VT_U32
-    row_ref: Optional[dict] = None   # {"pack": "<hex8>"} when the names live in a pack
-    col_ref: Optional[dict] = None   # {"cells": True} or {"pack": "<hex8>"}
+    row_ref: Optional[dict] = None  # {"pack": "<hex8>"} when the names live in a pack
+    col_ref: Optional[dict] = None  # {"cells": True} or {"pack": "<hex8>"}
     meta: dict = field(default_factory=dict)
 
     @property
@@ -49,19 +50,25 @@ class Csc:
         """From the dict returned by ``singlet._pz.read_1pz`` (values are uint32, ``vt_code`` 1/2/3)."""
         vt = int(r["vt_code"]) if int(r["vt_code"]) in (1, 2, 3) else VT_U32
         csc = cls(
-            m=int(r["m"]), n=int(r["n"]),
+            m=int(r["m"]),
+            n=int(r["n"]),
             indptr=np.asarray(r["indptr"]).astype(np.int64),
             indices=np.asarray(r["indices"]).astype(np.uint32),
             data=np.asarray(r["data"]).astype(np.uint32),
-            rownames=list(r["rownames"]), colnames=list(r["colnames"]),
-            kv=dict(r.get("user_kv") or {}), value_type=vt,
+            rownames=list(r["rownames"]),
+            colnames=list(r["colnames"]),
+            kv=dict(r.get("user_kv") or {}),
+            value_type=vt,
         )
         csc.meta["legacy_vt_code"] = int(r["vt_code"])
         return csc
 
     def to_scipy(self):
         from scipy.sparse import csc_matrix
-        return csc_matrix((self.data, self.indices.astype(np.int64), self.indptr), shape=(self.m, self.n))
+
+        return csc_matrix(
+            (self.data, self.indices.astype(np.int64), self.indptr), shape=(self.m, self.n)
+        )
 
     # ------------------------------------------------------------------ checks
     def check_canonical(self) -> Optional[str]:
@@ -104,9 +111,13 @@ def canonical_digest(csc: Csc, rownames=None, colnames=None) -> bytes:
     """digest16 of the canonical matrix (section 4.6). Names default to ``csc.rownames`` / ``csc.colnames``."""
     rn = csc.rownames if rownames is None else rownames
     cn = csc.colnames if colnames is None else colnames
-    if (rn is None and not (csc.row_ref or {}).get("none")) or (cn is None and not (csc.col_ref or {}).get("none")):
+    if (rn is None and not (csc.row_ref or {}).get("none")) or (
+        cn is None and not (csc.col_ref or {}).get("none")
+    ):
         raise ValueError("canonical digest needs resolved row and column names")
-    rn = [] if rn is None else rn      # nameless matrices (row_ref / col_ref {"none": True}) hash an empty name list
+    rn = (
+        [] if rn is None else rn
+    )  # nameless matrices (row_ref / col_ref {"none": True}) hash an empty name list
     cn = [] if cn is None else cn
     m, n, nnz = int(csc.m), int(csc.n), csc.nnz
     h = hashlib.sha256()
@@ -123,7 +134,7 @@ def canonical_digest(csc: Csc, rownames=None, colnames=None) -> bytes:
         end = int(indptr[j1])
         nk = end - base
         ncol = j1 - j0
-        cnt = np.diff(indptr[j0:j1 + 1])
+        cnt = np.diff(indptr[j0 : j1 + 1])
         out = np.empty(ncol + 2 * nk, dtype="<u4")
         col_local = np.arange(ncol, dtype=np.int64)
         # start of column j in the output: j + 2 * (indptr[j] - base)
@@ -134,7 +145,7 @@ def canonical_digest(csc: Csc, rownames=None, colnames=None) -> bytes:
             k_local = np.arange(nk, dtype=np.int64)
             ip_of = (indptr[j0:j1] - base)[col_of]
             id_pos = col_of + ip_of + k_local + 1
-            val_pos = col_of + (indptr[j0 + 1:j1 + 1] - base)[col_of] + k_local + 1
+            val_pos = col_of + (indptr[j0 + 1 : j1 + 1] - base)[col_of] + k_local + 1
             out[id_pos] = ids[base:end]
             out[val_pos] = vals[base:end]
         h.update(out.tobytes())

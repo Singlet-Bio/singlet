@@ -5,9 +5,12 @@ does not cover a member: the study-level ``feature_vocab.json`` from the vocabul
 W3's recipes take precedence (the adapter asks them first); the ids here are versioned so that a member derived by a built-in recipe
 stays regenerable after W3's module is replaced.
 """
+
 from __future__ import annotations
 
-RECIPES = {"vocab-json-v1": "feature_vocab.json = json.dumps(gene table, indent=2) of the exon vocabulary pack"}
+RECIPES = {
+    "vocab-json-v1": "feature_vocab.json = json.dumps(gene table, indent=2) of the exon vocabulary pack"
+}
 
 
 def plan(member, legacy_bytes, ctx):

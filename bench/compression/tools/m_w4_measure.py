@@ -66,8 +66,11 @@ def _child(args, server_box):
     if kind.endswith("_http"):
         import json as _j
 
-        port_file = tempfile.mktemp(prefix="m_w4_port_")
-        log_file = tempfile.mktemp(prefix="m_w4_log_")
+        # mkstemp creates the files atomically (mktemp only invents a name that another process could claim first)
+        fd, port_file = tempfile.mkstemp(prefix="m_w4_port_")
+        os.close(fd)
+        fd, log_file = tempfile.mkstemp(prefix="m_w4_log_")
+        os.close(fd)
         server = subprocess.Popen([sys.executable, "-P", os.path.join(HERE, "m_w4_serve.py"), args.v2, port_file, log_file])
         server_box.append(server)
         for _ in range(200):

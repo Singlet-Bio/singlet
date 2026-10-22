@@ -242,7 +242,9 @@ def read_pz2(path: str | Path) -> "anndata.AnnData":
     mem = _pz2.Member(path.read_bytes())
     h = mem.header
     res = mem.decode(mode="canonical", threads=0, dtype="uint32")
-    X = sp.csr_matrix((res["data"], res["indices"], res["indptr"]), shape=(h["n"], h["m"]), copy=False)
+    X = sp.csr_matrix(
+        (res["data"], res["indices"], res["indptr"]), shape=(h["n"], h["m"]), copy=False
+    )
     adata = ad.AnnData(X=X)
     rows = mem.row_names()
     if rows["kind"] == "inline":
@@ -251,7 +253,9 @@ def read_pz2(path: str | Path) -> "anndata.AnnData":
         from singlet.v2.packs import default_store
 
         pk = default_store().get(rows["pack_id"])
-        adata.var_names = pd.Index(pk.names() if rows["kind"] == "pack" else pk.names_at(rows["pack_index"]))
+        adata.var_names = pd.Index(
+            pk.names() if rows["kind"] == "pack" else pk.names_at(rows["pack_index"])
+        )
     cols = mem.col_names()
     if cols["kind"] == "inline":
         adata.obs_names = pd.Index(cols["names"])
@@ -259,7 +263,9 @@ def read_pz2(path: str | Path) -> "anndata.AnnData":
         from singlet.v2.packs import default_store
 
         pk = default_store().get(cols["pack_id"])
-        adata.obs_names = pd.Index(pk.barcodes(cols["pack_index"]) if cols["kind"] == "pack_subset" else pk.all_barcodes())
+        adata.obs_names = pd.Index(
+            pk.barcodes(cols["pack_index"]) if cols["kind"] == "pack_subset" else pk.all_barcodes()
+        )
     kv = mem.kv()
     if kv:
         adata.uns.update(kv)

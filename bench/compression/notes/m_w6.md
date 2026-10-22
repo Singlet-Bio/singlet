@@ -13,8 +13,8 @@ corpus bundle with no stand-ins. Nothing has touched R2, D1 or Clipper.** No `gi
 | catalog rows and SQL for schema 032/033 (exact columns, apply order, 80,000-row days) | done; equal row by row to what the website's own ingest code writes (section 2) |
 | `v2_migrate.sbatch` build step re-checked against `setup.py` (`_pz`, `_pz2`), container self-test in the build | done; Clipper-only parts still unverified (section 5) |
 | `v2_publish.py` (new studies), Anvil patch | done; patch regenerated, `git apply --check` passes, nothing applied |
-| `v2_retire.py` (retire / restore / audit / retire-sql) | done |
-| tests | 92 in `tests/python/test_v2_campaign*.py`, all pass (section 7) |
+| retirement in three steps (A archive, B catalog flip via `v2_campaign.py retire-sql`, C delete behind catalog age checks), restore, audit; new studies posted as `retired` | done (section 6) |
+| tests | 102 in `tests/python/test_v2_campaign*.py`, all pass (section 7) |
 | final submission commands | section 6 |
 
 ## 1. What changed in this pass
@@ -36,6 +36,11 @@ corpus bundle with no stand-ins. Nothing has touched R2, D1 or Clipper.** No `gi
   says the endpoint is manifest based (`POST /api/ingest/v2-study`); that route is kept as the secondary path because no token is available.
 * **Plan** changed with the measured speed: a study is one single-threaded migrate process, so a 30 GB bundle needs hours. Studies of
   at least `--big-gb` (5) go to a separate job on a longer partition (section 4).
+
+* **Retirement order changed** (orchestrator, third pass): the old single `retire` command (copy, verify, delete) is gone. `v2_retire.py archive` copies and
+  verifies and never deletes (its store guard has no delete permission); `v2_campaign.py retire-sql` flips the catalog; `v2_retire.py delete` removes a
+  legacy object only for an archived study whose catalog row has been `retired` >= 5 minutes and `verified` >= 24 hours, judged from an export of D1 that
+  the orchestrator provides (the cluster cannot read D1). Studies that never had a legacy file are posted as `retired` directly. Commands: section 6.
 
 ## 2. Catalog: rows, SQL, order, budget
 
@@ -67,8 +72,9 @@ manifests and ledgers in R2) into files under `DIR/dayNN/`.
   optional member fields (`names`, `columns`, `called_source`, `params`, `needs`; never offsets or the chunk index), and a study that
   cannot be made to fit is skipped and named in `PLAN.txt` (exit code 1).
 * **Atlas estimate**: about 52,000 sample rows -> 52k x 3 + 8.2k x 4 = about 190,000 writes = **3 days** of 80,000; about 200 MB of SQL (about 25 MB
-  as `sql.tar.gz`, which the `catalog-sql` job makes for `clipper.py get`). After the retirement `retire-sql` flips `v2_migration.status`
-  to `retired` (`UPDATE ... WHERE status = 'verified'`, 3 writes per study, 25k in all, one day).
+  as `sql.tar.gz`, which the `catalog-sql` job makes for `clipper.py get`). The retirement (section 6, step B) flips `v2_migration.status` from
+  `verified` to `retired` for the archived studies (`UPDATE ... WHERE status = 'verified'`, 3 writes per study, 25k in all, one day). A study that
+  never had a legacy file (published by `v2_publish.py`) is posted as `retired` with `verify_ok` 1 from the start, so the site never offers a legacy URL for it.
 * `catalog-post` (secondary): `POST /api/ingest/v2-study` with the manifest without `study_files`, slices of at most 400 samples that share
   rev, `n_samples` and `bytes` (`final: false` until the last, which carries `manifest_bytes`, `manifest_sha256` and the migration block),
   User-Agent set, retries on 429/5xx. The body is accepted by the website's real parser (same test).
@@ -117,7 +123,9 @@ i7-1185G7 4C/8T at 3.0 GHz, load 19% before the run, timing lock held; **one run
 
 The same study through `v2_migrate.sbatch` (`RUNTIME=host`, local directories, junctions for `$SRC`): `plan`, `full` (115 s, `workers=4` on a
 6-cpu job), `full` again (`skipped_done` in 0 s), `summarize`, `catalog-sql`, `catalog-post --dry-run`, `refs-index` (14 packs + index uploaded, 3
-already there; again: nothing), `retire-dry`, `retire` (`archive verified by etag`), `audit --expect-none`, `retire-sql` all ran as written.
+already there; again: nothing) ran as written. The retirement modes were rehearsed the same way after the sequence changed (4 studies from the
+stand-in transcoder): `archive-dry`, `archive` in two tasks, `retire-sql`, `delete-dry` / `delete` against an ages file (one study deleted, three
+NOT-YET: verified 3 h, retired 2 min, not in the catalog), `audit`, `restore`, `retire-sql` with the restore list.
 `catalog-sql` on its rows (section 2) applied to SQLite with the real 032 + 033 files gives 14 `v2_sample` rows, one `v2_study`, one
 `v2_migration` with status `verified` and `verify_ok` 1 (and the same after a second application).
 
@@ -213,12 +221,25 @@ $C run "sbatch --partition=debug-cpu --time=00:30:00 --array=0 --export=ALL,MODE
 $C get $W/state/v2/catalog-sql-$C10/sql.tar.gz <local dir>      # about 25 MB; unpack, then per day: the APPLY.txt of dayNN, in order
 #    (MODE=catalog-sql FROM_R2=1 rebuilds the rows from the manifests and ledgers in R2 instead; MODE=catalog-post needs ~/.config/singlet-ingest.env)
 
-# 8. retirement, only after the clients default to v2 (docs/v2-migration.md D12), then the catalog flip
-$C run "sbatch --array=0-7 --export=ALL,MODE=retire-dry,NSHARD=8,COMMIT=$SHA $J"                       # read-only
-$C run "sbatch --array=0-7 --export=ALL,MODE=retire,NSHARD=8,CONFIRM_RETIRE=RETIRE,RUN=retire-$C10,COMMIT=$SHA $J"
+# 8. retirement, only after the clients default to v2 (docs/v2-migration.md D12). Three steps; the site never offers a dead legacy URL:
+#    (A) archive: copy data/<GSE>/<GSE>.singlet to singlet-archive, verify (size + ETag; SHA-256 read-back when multipart), write the archived list.
+#        Deletes nothing; the legacy object is still served.
+$C run "sbatch --array=0-7 --export=ALL,MODE=archive-dry,NSHARD=8,COMMIT=$SHA $J"                      # read-only
+$C run "sbatch --array=0-7 --export=ALL,MODE=archive,NSHARD=8,COMMIT=$SHA $J"                          # -> $W/state/v2/archive-$C10/archived-<task>.jsonl
+#    (B) catalog: SQL from the archived lists; the orchestrator applies it with wrangler from the laptop (verified -> retired, 3 writes per study)
+$C run "sbatch --partition=debug-cpu --time=00:10:00 --array=0 --export=ALL,MODE=retire-sql,COMMIT=$SHA $J"   # RUNS defaults to archive-$C10
+$C get $W/state/v2/retire-sql-$C10/sql.tar.gz <local dir>       # unpack; run the wrangler lines of APPLY.txt; from then on the site stops offering the file
+#    (C) delete from singlet-data, ONLY for archived studies that D1 shows `retired` for >= 5 min AND `verified` for >= 24 h. The cluster cannot read D1,
+#        so export the retired rows on the laptop and put the small file on Clipper:
+#          wrangler d1 execute singlet-catalog --remote --json --command "SELECT gse_id, verified_at, updated_at FROM v2_migration WHERE status = 'retired'" > ages.json
+#          $C put ages.json $W/state/v2/ages.json
+#        (CSV with the header gse_id,verified_at,updated_at works too; a `status` column is allowed, only 'retired' rows count)
+$C run "sbatch --array=0-7 --export=ALL,MODE=delete-dry,NSHARD=8,AGES=$W/state/v2/ages.json,COMMIT=$SHA $J"   # read-only; NOT-YET lines say what is still waiting
+$C run "sbatch --array=0-7 --export=ALL,MODE=delete,NSHARD=8,AGES=$W/state/v2/ages.json,CONFIRM_RETIRE=RETIRE,COMMIT=$SHA $J"
+#        run (C) again later (new export of ages.json) until `audit` says nothing is left; studies that are not ready print NOT-YET and exit 0
 $C run "sbatch --array=0 --export=ALL,MODE=audit,EXPECT_NONE=1,COMMIT=$SHA $J"                         # exit 1 while any data/*.singlet is left
-$C run "sbatch --array=0 --export=ALL,MODE=retire-sql,RUNS=retire-$C10,COMMIT=$SHA $J"                 # sql for v2_migration.status = retired
-#    undo for named studies: MODE=restore GSES="GSE... GSE..." APPLY=1   (then retire-sql again with the restore ledger)
+#    undo for named studies: MODE=restore GSES="GSE... GSE..." APPLY=1 (writes restored-<task>.jsonl into restore-$C10), then step B again with
+#    RUNS='archive-<c10> restore-<c10>' flips those studies back to verified; a restored study is skipped by (C).
 ```
 
 Go / no-go: build prints `_pz and _pz2 import` and the container tests pass; `plan` prints about 8,202 studies and 2.7 TB; dry: every status `dry_ok`
@@ -230,10 +251,10 @@ rate before the job's deadline), `PILOT_N`, `PILOT_MAX_GB` (2), `RESUME`, `EXCLU
 `DEADLINE_MARGIN_SEC` (900), `DAY_BUDGET`, `D1_SCHEMA`, `BIG_GB`, `RATE_CPU`, `RUN`. Results and rows: `$W/state/v2/<run>/`; logs `$W/logs/v2mig-<array>_<task>.out`.
 Pull only small things: `summarize` output, `plan.tsv`, `big.txt`, `sql.tar.gz`, `results-*.jsonl`.
 
-## 7. Tests (`tests/python/test_v2_campaign*.py`, 92)
+## 7. Tests (`tests/python/test_v2_campaign*.py`, 102)
 
 `python -P -m pytest tests/python/test_v2_campaign.py tests/python/test_v2_campaign_catalog.py tests/python/test_v2_campaign_retire.py
-tests/python/test_v2_campaign_publish.py -q` -> 92 passed (about 3 min on the laptop). Stand-in transcoder follows the real CLI and layout (ledger,
+tests/python/test_v2_campaign_publish.py -q` -> 102 passed (about 3 min on the laptop). Stand-in transcoder follows the real CLI and layout (ledger,
 `ref/index.json`, `legacy` block, pack lists); two tests use the real one.
 
 * `test_v2_campaign.py` (38): ETag rule; headers; manifest last; nothing outside `v2/` written; idempotent rerun; resume; every failure mode
@@ -245,9 +266,13 @@ tests/python/test_v2_campaign_publish.py -q` -> 92 passed (about 3 min on the la
   shrunk or skipped; the whole atlas fits 2 to 3 days; rows-dir and `--from-r2` agree; failed studies; restricted member in the v2 object stops the study;
   pack lists; POST slicing, headers, retry, token; **rows equal the website endpoint's output** (TypeScript run through esbuild + node); reference packs
   published once and tampering refused; **the real transcoder and verifier on two samples of the corpus bundle, then SQL into the website's schema files**.
-* `test_v2_campaign_retire.py` (20): dry run changes nothing; confirmation phrase; archive -> verify -> delete order; refusals; completeness gate;
-  racing source; multipart copy by SHA-256; corrupt copy; crash between archive and delete; restore; audit; stable shards; `S3Store.copy`; the whole
-  retire flow through `S3Store`; `retire-sql`.
+* `test_v2_campaign_retire.py` (29): (A) dry run changes nothing, `--list` required, copy + verify + list with no delete call at all, idempotent, refusals (rebuilt
+  bundle, no manifest, missing samples, no verified ledger), completeness gate, a source that changes during the copy is not listed, multipart copy by
+  SHA-256, corrupt copy never listed, stable shards; (B) `retire-sql` flips only archived studies, twice is harmless, a restore flips back; (C) dry run
+  default and `--apply --confirm RETIRE`, both inputs required, waits (NOT-YET) for the catalog, for 24 h verified and for 5 min retired (thresholds
+  inclusive and optional), only archived studies are deleted, re-checks archive / legacy object / v2 objects, ages file formats (CSV, JSON, wrangler JSON,
+  status column, timestamp forms), bare study list, a restore cancels the delete; the three steps in order with the catalog in SQLite; restore; audit;
+  `S3Store.copy`; A and C through `S3Store`.
 * `test_v2_campaign_publish.py` (10): a new study end to end (no `data/` key, `legacy` null, manifest after every object, sidecar to the private bucket
   only when asked, leaked restricted members refused, verify failure, republish uploads nothing, POST and its failure).
 
@@ -274,4 +299,6 @@ tests/python/test_v2_campaign_publish.py -q` -> 92 passed (about 3 min on the la
   `--array=0 --export=ALL,MODE=full,NSHARD=1,RESUME=0,GSES="GSE... GSE...",COMMIT=<new sha>`; unchanged objects are skipped by ETag, changed ones get new keys, the
   manifest is replaced last. For everything use `RESUME=0` on all shards.
 * A study stuck in a bad state: nothing to clean in R2 (no manifest = invisible); rerun its shard.
-* Do not run `retire` before the catalog is applied and the clients default to v2; `audit --expect-none` is the end condition.
+* Do not start step A before the clients default to v2. Step C refuses anything the catalog does not show as retired and old enough; `audit --expect-none`
+  is the end condition. The age rule is the orchestrator's: 5 minutes since the flip to `retired` and 24 hours since `verified`. If a cached answer built
+  *before* the flip can still name the legacy URL for a day, raise `--min-retired-age-minutes` (`MIN_RETIRED_AGE_MINUTES=1445`); nothing else changes.

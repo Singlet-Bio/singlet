@@ -13,6 +13,7 @@ legacy bundle, all by construction:
   member regenerates the legacy bytes from the sample object (stored blob or verified recipe);
 * ``splice_psi`` regenerates the legacy PSI matrix (kept for compatibility, see D8); ``singlet.psi()`` computes the true PSI.
 """
+
 from __future__ import annotations
 
 import io
@@ -38,7 +39,9 @@ def _is_aux(name: str) -> bool:
 class V2Bundle(SingletBundle):
     """Reader for a v2 study with the interface of :class:`SingletBundle`."""
 
-    def __init__(self, study: "C.Study", *, source_path: Optional[Path] = None, single: Optional[str] = None) -> None:  # noqa: D107
+    def __init__(
+        self, study: "C.Study", *, source_path: Optional[Path] = None, single: Optional[str] = None
+    ) -> None:  # noqa: D107
         self.study = study
         self.path = source_path or Path(f"v2/m/{study.gse}.json")
         self.restricted_path = None
@@ -48,13 +51,20 @@ class V2Bundle(SingletBundle):
         self._feature_vocab: Optional[dict] = None
         self._empty_reasons: Dict[str, str] = {}
         self._single = single
-        self._samples: Dict[str, Any] = {}      # gsm -> V2Sample (members table, for regeneration)
+        self._samples: Dict[str, Any] = {}  # gsm -> V2Sample (members table, for regeneration)
         self._ctx: Dict[str, Any] = {}
         self._recipes = None
 
     # ---- opening
     @classmethod
-    def open(cls, source: Union[str, os.PathLike], restricted=None, *, force: bool = False, base: Optional[str] = None) -> "V2Bundle":  # type: ignore[override]
+    def open(
+        cls,
+        source: Union[str, os.PathLike],
+        restricted=None,
+        *,
+        force: bool = False,
+        base: Optional[str] = None,
+    ) -> "V2Bundle":  # type: ignore[override]
         """Open a study by accession (``GSE...``), a ``v2/m/<GSE>.json`` manifest path, or a ``.s2`` sample object."""
         if restricted is not None:
             raise ValueError("restricted sidecars are not part of the v2 format")
@@ -73,7 +83,14 @@ class V2Bundle(SingletBundle):
     def _open_s2(cls, p: Path) -> "V2Bundle":
         rd = K.S2Reader(str(p))
         members = {
-            n: {"kind": mi.kind, "flags": mi.flags, "off": mi.off, "len": mi.len, "digest": mi.digest.hex(), **{k: v for k, v in (mi.meta or {}).items() if k in ("names",)}}
+            n: {
+                "kind": mi.kind,
+                "flags": mi.flags,
+                "off": mi.off,
+                "len": mi.len,
+                "digest": mi.digest.hex(),
+                **{k: v for k, v in (mi.meta or {}).items() if k in ("names",)},
+            }
             for n, mi in rd.members.items()
         }
         exon = rd.members.get(C.EXON)
@@ -82,8 +99,14 @@ class V2Bundle(SingletBundle):
             hdr = C._native().Member(rd.read_member(C.EXON)).header
             pack = hdr["row_names_id"]
         doc = {
-            "format": "singlet-v2", "manifest_version": 1, "gse": "GSE0", "rev": "", "packs": {"exon": pack},
-            "samples": [{"gsm": rd.sample_id, "key": p.name, "bytes": rd.file_len, "members": members}],
+            "format": "singlet-v2",
+            "manifest_version": 1,
+            "gse": "GSE0",
+            "rev": "",
+            "packs": {"exon": pack},
+            "samples": [
+                {"gsm": rd.sample_id, "key": p.name, "bytes": rd.file_len, "members": members}
+            ],
         }
         st = C.Study(doc, C.T.DirTransport(str(p.parent)), {"origin": "s2"}, concurrency=1)
         st.samples[rd.sample_id].raw["_local_path"] = str(p)
@@ -145,7 +168,11 @@ class V2Bundle(SingletBundle):
     # ---- members
     def list_files(self, gsm: Optional[str] = None) -> List[str]:
         def rel(g: str) -> List[str]:
-            return [n for n, m in self._sm(g).members.items() if (m.meta.get("flags", 1) & 1 or m.kind == 4) and not _is_aux(n) and n != C.CELLS]
+            return [
+                n
+                for n, m in self._sm(g).members.items()
+                if (m.meta.get("flags", 1) & 1 or m.kind == 4) and not _is_aux(n) and n != C.CELLS
+            ]
 
         if gsm is not None:
             return rel(gsm)
@@ -172,7 +199,11 @@ class V2Bundle(SingletBundle):
                 self._samples[gsm] = V2Sample(self._single, packs=self.study._resolver.store)
             else:
                 src = self.study.source_for(sm)
-                self._samples[gsm] = V2Sample(lambda off, ln: bytes(src.read(off, ln)), packs=self.study._resolver.store, size=sm.bytes)
+                self._samples[gsm] = V2Sample(
+                    lambda off, ln: bytes(src.read(off, ln)),
+                    packs=self.study._resolver.store,
+                    size=sm.bytes,
+                )
         return self._samples[gsm]
 
     def _context(self, gsm: str):
@@ -188,8 +219,13 @@ class V2Bundle(SingletBundle):
                     files[n] = self.study.study_file(n)
                 except Exception:  # noqa: BLE001
                     pass
-            self._ctx[gsm] = V2Context(self._sample_obj(gsm), self._recipes, gse=self.study.gse, reference_build=self.study.reference_build,
-                                       study_files=files)
+            self._ctx[gsm] = V2Context(
+                self._sample_obj(gsm),
+                self._recipes,
+                gse=self.study.gse,
+                reference_build=self.study.reference_build,
+                study_files=files,
+            )
         return self._ctx[gsm]
 
     def _member_bytes(self, gsm: str, rel: str) -> bytes:
@@ -221,7 +257,9 @@ class V2Bundle(SingletBundle):
             return pd.read_csv(io.BytesIO(data), sep="\t")
         raise ValueError(f"Unknown modality kind {kind!r} for {name!r}")
 
-    def _anndata_from_csc(self, gsm: str, name: str, indptr, indices, data, m: int, n: int, rownames, colnames, kv):
+    def _anndata_from_csc(
+        self, gsm: str, name: str, indptr, indices, data, m: int, n: int, rownames, colnames, kv
+    ):
         import anndata as ad
         import pandas as pd
         import scipy.sparse as sp
@@ -250,7 +288,18 @@ class V2Bundle(SingletBundle):
             rownames = self._row_names(mem, hdr)
             colnames = self._col_names(gsm, mem, hdr)
             kv = mem.kv()
-            return self._anndata_from_csc(gsm, name, res["indptr"], res["indices"], res["data"], hdr["m"], hdr["n"], rownames, colnames, kv)
+            return self._anndata_from_csc(
+                gsm,
+                name,
+                res["indptr"],
+                res["indices"],
+                res["data"],
+                hdr["m"],
+                hdr["n"],
+                rownames,
+                colnames,
+                kv,
+            )
         finally:
             src.close()
 
@@ -279,15 +328,27 @@ class V2Bundle(SingletBundle):
                 src.close()
         pk = self.study._resolver.get(hdr["col_names_id"])
         info = mem.col_names()
-        return pk.barcodes(info["pack_index"]) if info.get("pack_index") is not None else pk.all_barcodes()
+        return (
+            pk.barcodes(info["pack_index"])
+            if info.get("pack_index") is not None
+            else pk.all_barcodes()
+        )
 
     def _read_derived_matrix(self, gsm: str, member: str, name: str):
         csc = self._context(gsm).csc(member)
         if csc is None:
             raise KeyError(f"{member} of {gsm} cannot be regenerated")
         return self._anndata_from_csc(
-            gsm, name, csc.indptr.astype(np.int32), csc.indices.astype(np.int32), csc.data.astype(np.uint32), csc.m, csc.n, csc.rownames,
-            csc.colnames, csc.kv,
+            gsm,
+            name,
+            csc.indptr.astype(np.int32),
+            csc.indices.astype(np.int32),
+            csc.data.astype(np.uint32),
+            csc.m,
+            csc.n,
+            csc.rownames,
+            csc.colnames,
+            csc.kv,
         )
 
     # ---- cells and counts
@@ -330,9 +391,11 @@ class V2Bundle(SingletBundle):
         try:
             adata = self.study.to_anndata([gsm], layers=True)
         except C.NoUsableSamples as e:
-            raise ValueError(f"{gsm} has no usable cells in {self.path.name}: {e.reasons.get(gsm, 'no called cells')}") from None
+            raise ValueError(
+                f"{gsm} has no usable cells in {self.path.name}: {e.reasons.get(gsm, 'no called cells')}"
+            ) from None
         prefix = f"{gsm}_"
-        adata.obs_names = [n[len(prefix):] if n.startswith(prefix) else n for n in adata.obs_names]
+        adata.obs_names = [n[len(prefix) :] if n.startswith(prefix) else n for n in adata.obs_names]
         adata.obs = adata.obs[["gsm_id"]]
         adata.uns = {"reference_build": self.feature_vocab.get("reference_build", "")}
         adata.var = adata.var[["gene_name"]]
@@ -340,7 +403,9 @@ class V2Bundle(SingletBundle):
         return adata
 
     # ---- whole study
-    def to_anndata(self, layer: str = "gene_counts", *, layers: bool = True, verbose: bool = True, **kw):  # type: ignore[override]
+    def to_anndata(
+        self, layer: str = "gene_counts", *, layers: bool = True, verbose: bool = True, **kw
+    ):  # type: ignore[override]
         if layer != "gene_counts":
             raise ValueError("only layer='gene_counts' is supported")
         return self.study.to_anndata(None, layers=layers, verbose=verbose, **kw)
@@ -349,4 +414,6 @@ class V2Bundle(SingletBundle):
         raise NotImplementedError("a v2 study is not a ZIP archive")
 
     def __repr__(self) -> str:
-        return f"V2Bundle({self.study.gse!r}, {len(self.study.gsm_ids)} GSMs, path={str(self.path)!r})"
+        return (
+            f"V2Bundle({self.study.gse!r}, {len(self.study.gsm_ids)} GSMs, path={str(self.path)!r})"
+        )

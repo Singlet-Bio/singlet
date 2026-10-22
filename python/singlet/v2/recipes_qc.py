@@ -13,6 +13,7 @@ The gene symbol and chromosome are parsed from the row names (``<gid>_<symbol>_<
 ``<gid>_<symbol>_intron_<chrom>:<s>-<e>``).  The values printed by the pipeline are float32 values written with
 ``%.4f``; this module returns the float32 arrays.
 """
+
 from __future__ import annotations
 
 import numpy as np

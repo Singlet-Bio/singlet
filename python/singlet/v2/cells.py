@@ -25,12 +25,13 @@ the matrices at write time); optional columns come from recipes (``cells_columns
 Canonical digest: SHA-256 over ``b"CEL2CANON1"`` and, for every column in name order, the name (UTF-8, NUL terminated), the dtype byte
 and the logical values (little-endian; bool as one byte 0/1; strings and barcodes as NUL-terminated UTF-8). digest16 = first 16 bytes.
 """
+
 from __future__ import annotations
 
 import hashlib
 import struct
 from dataclasses import dataclass
-from typing import Callable, Optional, Sequence
+from typing import Any, Callable, Optional, Sequence
 
 import numpy as np
 
@@ -42,8 +43,18 @@ VERSION = 1
 DT_U8, DT_U16, DT_U32, DT_I32, DT_F32, DT_F64, DT_BOOL, DT_STR, DT_BARCODE = range(1, 10)
 _NP = {DT_U8: "<u1", DT_U16: "<u2", DT_U32: "<u4", DT_I32: "<i4", DT_F32: "<f4", DT_F64: "<f8"}
 _INT = {DT_U8, DT_U16, DT_U32, DT_I32}
-_DT_NAMES = {"u8": DT_U8, "u16": DT_U16, "u32": DT_U32, "i32": DT_I32, "f32": DT_F32, "f64": DT_F64, "bool": DT_BOOL,
-             "str": DT_STR, "string": DT_STR, "barcode": DT_BARCODE}
+_DT_NAMES = {
+    "u8": DT_U8,
+    "u16": DT_U16,
+    "u32": DT_U32,
+    "i32": DT_I32,
+    "f32": DT_F32,
+    "f64": DT_F64,
+    "bool": DT_BOOL,
+    "str": DT_STR,
+    "string": DT_STR,
+    "barcode": DT_BARCODE,
+}
 REQUIRED = ("barcode", "called", "n_umi_exon", "n_umi_intron", "n_feat_exon", "n_feat_intron")
 _FIXED = struct.Struct("<BBQQ")
 
@@ -66,7 +77,7 @@ def normalize_dtype(dt) -> int:
         raise CellsError("bad cells dtype %r" % (dt,))
     if d.kind == "b":
         return DT_BOOL
-    if d.kind in "US" or d == object:
+    if d.kind in "USO":  # str, bytes, object
         return DT_STR
     if d.kind == "u" and d.itemsize <= 4:
         return {1: DT_U8, 2: DT_U16, 4: DT_U32}[d.itemsize]
@@ -100,16 +111,19 @@ def _pack_bits(vals: np.ndarray, bits: int) -> bytes:
 def _unpack_bits(buf: bytes, n: int, bits: int) -> np.ndarray:
     if n == 0 or bits == 0:
         return np.zeros(n, dtype=np.uint64)
-    flat = np.unpackbits(np.frombuffer(buf, dtype=np.uint8), bitorder="little")[: n * bits].reshape(n, bits)
-    w = (np.uint64(1) << np.arange(bits, dtype=np.uint64))
+    flat = np.unpackbits(np.frombuffer(buf, dtype=np.uint8), bitorder="little")[: n * bits].reshape(
+        n, bits
+    )
+    w = np.uint64(1) << np.arange(bits, dtype=np.uint64)
     return (flat.astype(np.uint64) * w[None, :]).sum(axis=1, dtype=np.uint64)
 
 
 @dataclass
 class _Col:
     dtype: int
-    values: object                      # ndarray, or list[str]
-    whitelist: Optional[tuple] = None   # (Whitelist, indices) for barcode columns coded against a whitelist pack
+    values: Any  # ndarray, or list[str]
+    # (Whitelist, indices) for barcode columns coded against a whitelist pack
+    whitelist: Optional[tuple] = None
 
 
 class CellsTable:
@@ -187,8 +201,14 @@ class CellsTable:
         called = self._cols["called"].values
         if not called.any():
             return out
-        u = (self._cols["n_umi_exon"].values.astype(np.int64) + self._cols["n_umi_intron"].values.astype(np.int64))[called]
-        g = np.maximum(self._cols["n_feat_exon"].values.astype(np.int64), self._cols["n_feat_intron"].values.astype(np.int64))[called]
+        u = (
+            self._cols["n_umi_exon"].values.astype(np.int64)
+            + self._cols["n_umi_intron"].values.astype(np.int64)
+        )[called]
+        g = np.maximum(
+            self._cols["n_feat_exon"].values.astype(np.int64),
+            self._cols["n_feat_intron"].values.astype(np.int64),
+        )[called]
         out["median_umi"] = float(np.median(u))
         out["median_genes"] = float(np.median(g))
         return out
@@ -205,7 +225,11 @@ class CellsTable:
         bodies = []
         for name, dt, enc, body in enc_list:
             nb = name.encode("utf-8")
-            head += struct.pack("<H", len(nb)) + nb + _FIXED.pack(dt, enc, pos if body else 0, len(body))
+            head += (
+                struct.pack("<H", len(nb))
+                + nb
+                + _FIXED.pack(dt, enc, pos if body else 0, len(body))
+            )
             bodies.append((pos, body))
             if body:
                 pos = util.align_up(pos + len(body))
@@ -214,13 +238,13 @@ class CellsTable:
         out[:head_len] = head
         for o, b in bodies:
             if b:
-                out[o:o + len(b)] = b
+                out[o : o + len(b)] = b
         return bytes(out)
 
     # ------------------------------------------------------------------ decode
     @classmethod
     def decode(cls, buf, store=None) -> "CellsTable":
-        r = CellsReader(lambda off, ln: bytes(buf[off:off + ln]), len(buf), store)
+        r = CellsReader(lambda off, ln: bytes(buf[off : off + ln]), len(buf), store)
         return r.load_all()
 
 
@@ -287,6 +311,7 @@ def _decode_barcodes(body: bytes, n: int, store) -> list:
         idx = _unpack_bits(body[10:], n, bits).astype(np.int64)
         if store is None:
             from .packs import default_store
+
             store = default_store()
         w = store.get(pid.hex())
         if not isinstance(w, Whitelist):
@@ -302,7 +327,9 @@ class CellsReader:
     """Lazy reader over a range fetcher ``fetch(rel_off, length)``: the first request reads the header and the column directory,
     each ``column(name)`` then fetches only that column's body."""
 
-    def __init__(self, fetch: Callable[[int, int], bytes], total_len: int, store=None, prefetch: int = 4096):
+    def __init__(
+        self, fetch: Callable[[int, int], bytes], total_len: int, store=None, prefetch: int = 4096
+    ):
         self._fetch = fetch
         self.total_len = total_len
         self.store = store
@@ -322,7 +349,7 @@ class CellsReader:
         for _ in range(ncols):
             (nl,) = struct.unpack_from("<H", first, p)
             p += 2
-            name = first[p:p + nl].decode("utf-8")
+            name = first[p : p + nl].decode("utf-8")
             p += nl
             dt, enc, off, ln = _FIXED.unpack_from(first, p)
             p += _FIXED.size
@@ -389,7 +416,9 @@ def _u32(a: np.ndarray, what: str) -> np.ndarray:
     return a.astype(np.uint32)
 
 
-def base_table(barcodes: list, exon, intron, called: Optional[np.ndarray], whitelist: Optional[tuple] = None) -> CellsTable:
+def base_table(
+    barcodes: list, exon, intron, called: Optional[np.ndarray], whitelist: Optional[tuple] = None
+) -> CellsTable:
     """Required columns from the (canonical) matrices. ``exon`` defines the rows; ``intron`` may be None or have another column
     list (then it is aligned by barcode, missing = 0). ``called``: bool array (None = all cells called)."""
     n = len(barcodes)

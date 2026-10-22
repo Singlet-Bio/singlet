@@ -23,7 +23,14 @@ import scipy.sparse as sp  # noqa: E402
 
 def _random_csc(m=300, n=80, density=0.08, seed=0, vmax=50):
     rng = np.random.default_rng(seed)
-    a = sp.random(m, n, density=density, format="csc", random_state=seed, data_rvs=lambda k: rng.integers(1, vmax, k))
+    a = sp.random(
+        m,
+        n,
+        density=density,
+        format="csc",
+        random_state=seed,
+        data_rvs=lambda k: rng.integers(1, vmax, k),
+    )
     a.sum_duplicates()
     a.sort_indices()
     return a.astype(np.int32)
@@ -31,7 +38,10 @@ def _random_csc(m=300, n=80, density=0.08, seed=0, vmax=50):
 
 def _expected_genes(a, row_to_gene, n_genes):
     keep = row_to_gene >= 0
-    ind = sp.csr_matrix((np.ones(int(keep.sum()), dtype=np.int64), (row_to_gene[keep], np.flatnonzero(keep))), shape=(n_genes, a.shape[0]))
+    ind = sp.csr_matrix(
+        (np.ones(int(keep.sum()), dtype=np.int64), (row_to_gene[keep], np.flatnonzero(keep))),
+        shape=(n_genes, a.shape[0]),
+    )
     out = (ind @ a.astype(np.int64)).tocsc()
     out.eliminate_zeros()
     out.sort_indices()
@@ -73,14 +83,16 @@ def test_aggregate_genes_bitmap_path_and_empty_columns():
     want = _expected_genes(a, row_to_gene, n_genes)
     assert (got != want).nnz == 0
     for j in range(40):  # gene ids strictly ascending in every column
-        c = ix[ip[j]:ip[j + 1]]
+        c = ix[ip[j] : ip[j + 1]]
         assert (np.diff(c) > 0).all()
 
 
 def test_aggregate_genes_float64_values():
     a = _random_csc(m=100, n=30, seed=5)
     row_to_gene = (np.arange(100) % 10).astype(np.int32)
-    ip, ix, d = _pz2.aggregate_genes(a.indptr, a.indices, a.data.astype(np.float64), row_to_gene, 10, 2)
+    ip, ix, d = _pz2.aggregate_genes(
+        a.indptr, a.indices, a.data.astype(np.float64), row_to_gene, 10, 2
+    )
     assert d.dtype == np.float64
     want = _expected_genes(a, row_to_gene, 10)
     assert np.array_equal(d, want.data.astype(np.float64))
@@ -89,7 +101,9 @@ def test_aggregate_genes_float64_values():
 def test_aggregate_genes_rejects_bad_input():
     a = _random_csc(m=50, n=5, seed=3)
     with pytest.raises(ValueError):
-        _pz2.aggregate_genes(a.indptr, a.indices, a.data, np.zeros(10, dtype=np.int32), 5, 1)  # map shorter than the row ids
+        _pz2.aggregate_genes(
+            a.indptr, a.indices, a.data, np.zeros(10, dtype=np.int32), 5, 1
+        )  # map shorter than the row ids
 
 
 def test_select_columns_matches_scipy():
@@ -100,9 +114,13 @@ def test_select_columns_matches_scipy():
     want = a[:, cols]
     assert (got != want).nnz == 0
     with pytest.raises(ValueError):
-        _pz2.select_columns(a.indptr, a.indices, a.data, np.array([3, 3], dtype=np.uint32))  # not strictly ascending
+        _pz2.select_columns(
+            a.indptr, a.indices, a.data, np.array([3, 3], dtype=np.uint32)
+        )  # not strictly ascending
     with pytest.raises(ValueError):
-        _pz2.select_columns(a.indptr, a.indices, a.data, np.array([64], dtype=np.uint32))  # out of range
+        _pz2.select_columns(
+            a.indptr, a.indices, a.data, np.array([64], dtype=np.uint32)
+        )  # out of range
 
 
 def test_read_header_rejects_garbage():
@@ -132,9 +150,13 @@ def test_pz2_isa_env_var_forces_path(isa):
         "from singlet import _pz2; print(_pz2.selected_isa(), _pz2.best_isa())" % str(pkg_dir)
     )
     env = dict(os.environ, PZ2_ISA=isa)
-    out = subprocess.run([sys.executable, "-P", "-c", code], env=env, capture_output=True, text=True, timeout=120)
+    out = subprocess.run(
+        [sys.executable, "-P", "-c", code], env=env, capture_output=True, text=True, timeout=120
+    )
     assert out.returncode == 0, out.stderr
     sel, best = out.stdout.split()
     order = ["scalar", "avx2", "avx512"]
     assert order.index(sel) <= order.index(best)
-    assert sel == isa or order.index(isa) > order.index(best)  # forced path, or clamped to the best supported
+    assert sel == isa or order.index(isa) > order.index(
+        best
+    )  # forced path, or clamped to the best supported

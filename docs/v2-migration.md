@@ -81,3 +81,10 @@ Started 2026-10-22. Branch `feat/singlet-v2` (singlet-bio, on top of PR #12) and
   laptop (clipper.gvsu.edu resolves only inside GVSU: needs the GVSU VPN); campaign waits for the bridge.
 - 2026-10-22 ~13:00 EDT: full-atlas /entry sweep on the preview: 8,201/8,202 studies 200 (GSE246714 502 is pre-existing on production:
   its bundle has no manifest.json). PR #51 merged (ed2f776), deployed in ~195 s; production smoke 52/52.
+- 2026-10-22 ~13:05 EDT: singlet-cloud mirror PR Singlet-Bio/singlet-cloud#14 merged (f7ff553). singlet-bio PR Singlet-Bio/singlet#13 open
+  (wheel CI: first MSVC/ARM builds of _pz2). Client default: legacy fallback ON during the transition (_LEGACY_FALLBACK_DEFAULT).
+- 2026-10-22 ~13:10 EDT: PRODUCTION PILOT from the laptop: GSE145370 migrated by the real campaign code (187.1 MB -> 31.9 MB, verify ok),
+  14 .s2 objects + ledger uploaded with wrangler, each verified byte-identical via https://data.singlet.bio/v2/, manifest uploaded last,
+  catalog SQL applied (47 row writes). v2_migration verified; /api/gse shows series.v2; /api/bundle index answers from v2; MCP gate
+  open (17 tools). Python client over the network: identical AnnData to the legacy reader (X, spliced, unspliced, obs/var names, obs
+  columns), 4.3 s cold vs 20.1 s legacy local decode (+187 MB download).

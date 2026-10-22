@@ -9,6 +9,7 @@ migration accepts a recipe only when its output equals the legacy member exactly
 Everything here is numpy only.  ``Context`` documents what a recipe may ask for; W2 builds the real one,
 ``DirContext`` (below) builds one from a directory of legacy members and is used by the golden tests.
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -50,7 +51,9 @@ class Matrix:
         n = self.shape[1]
         if self.nnz == 0:
             return np.zeros(n, dtype=np.uint64)
-        c = np.add.reduceat(self.data.astype(np.uint64), self.indptr[:-1].astype(np.int64).clip(max=self.nnz - 1))
+        c = np.add.reduceat(
+            self.data.astype(np.uint64), self.indptr[:-1].astype(np.int64).clip(max=self.nnz - 1)
+        )
         c[np.diff(self.indptr) == 0] = 0
         return c
 
@@ -60,8 +63,16 @@ class Matrix:
             and np.array_equal(self.indptr.astype(np.int64), other.indptr.astype(np.int64))
             and np.array_equal(self.indices.astype(np.int64), other.indices.astype(np.int64))
             and np.array_equal(self.data.astype(np.int64), other.data.astype(np.int64))
-            and (self.rownames is None or other.rownames is None or list(self.rownames) == list(other.rownames))
-            and (self.colnames is None or other.colnames is None or list(self.colnames) == list(other.colnames))
+            and (
+                self.rownames is None
+                or other.rownames is None
+                or list(self.rownames) == list(other.rownames)
+            )
+            and (
+                self.colnames is None
+                or other.colnames is None
+                or list(self.colnames) == list(other.colnames)
+            )
         )
 
 
@@ -112,7 +123,13 @@ class Context:
 
     def whitelist_names(self) -> list:
         """Names of the whitelist packs ``whitelist()`` can serve, in the order recipes should try them."""
-        return ["3M-february-2018", "737K-august-2016", "gex_737K-arc-v1", "737K-april-2014", "737K-cratac-v1"]
+        return [
+            "3M-february-2018",
+            "737K-august-2016",
+            "gex_737K-arc-v1",
+            "737K-april-2014",
+            "737K-cratac-v1",
+        ]
 
     def features_order(self) -> Optional[np.ndarray]:  # pragma: no cover - interface
         """Per-build permutation: STARsolo features.tsv row i is vocabulary gene order[i]."""
@@ -166,7 +183,9 @@ def load_pz():
         return _pz
     here = os.path.dirname(os.path.abspath(__file__))
     pkg = os.path.dirname(here)  # python/singlet
-    cands = sorted(glob.glob(os.path.join(pkg, "_pz*.pyd")) + glob.glob(os.path.join(pkg, "_pz*.so")))
+    cands = sorted(
+        glob.glob(os.path.join(pkg, "_pz*.pyd")) + glob.glob(os.path.join(pkg, "_pz*.so"))
+    )
     if cands:
         spec = importlib.util.spec_from_file_location("singlet._pz", cands[0])
         mod = importlib.util.module_from_spec(spec)
@@ -258,13 +277,23 @@ class DirContext(Context):
     yield the same values, the tests check that wherever packs are available).
     """
 
-    def __init__(self, source, sample_id="", study_id="", reference_build="", protocol_name="", overrides=None,
-                 extra_dirs=()):
+    def __init__(
+        self,
+        source,
+        sample_id="",
+        study_id="",
+        reference_build="",
+        protocol_name="",
+        overrides=None,
+        extra_dirs=(),
+    ):
         srcs = source if isinstance(source, (list, tuple)) else [source]
         srcs = list(srcs) + list(extra_dirs)
         self.sources = [s if hasattr(s, "read") else DirSource(s) for s in srcs]
         first = self.sources[0]
-        self.sample_id = sample_id or os.path.basename(getattr(first, "path", getattr(first, "prefix", "")).rstrip("/\\"))
+        self.sample_id = sample_id or os.path.basename(
+            getattr(first, "path", getattr(first, "prefix", "")).rstrip("/\\")
+        )
         self.study_id = study_id
         self._ov = overrides or {}
         self._mats = {}
@@ -276,7 +305,9 @@ class DirContext(Context):
 
     # -- members ----------------------------------------------------------------------------
     def has(self, member) -> bool:
-        return member in self._ov or any(s.read(member) is not None if s.file(member) is None else True for s in self.sources)
+        return member in self._ov or any(
+            s.read(member) is not None if s.file(member) is None else True for s in self.sources
+        )
 
     def member_bytes(self, member):
         if member in self._ov:
@@ -292,7 +323,7 @@ class DirContext(Context):
             return self._mats[member]
         m = None
         if not member.endswith(".1pz"):
-            return None   # like the migration context: text matrices exist only as auxiliary members (provide_matrix)
+            return None  # like the migration context: text matrices exist only as auxiliary members (provide_matrix)
         for s in self.sources:
             p = s.file(member)
             if p:
@@ -428,5 +459,7 @@ def save_features_order(build, perm):
     os.makedirs(resource_dir(), exist_ok=True)
     p = os.path.join(resource_dir(), "features_order_%s.u32.zst" % build)
     with open(p, "wb") as f:
-        f.write(zstandard.ZstdCompressor(level=19).compress(np.asarray(perm, dtype="<u4").tobytes()))
+        f.write(
+            zstandard.ZstdCompressor(level=19).compress(np.asarray(perm, dtype="<u4").tobytes())
+        )
     return p

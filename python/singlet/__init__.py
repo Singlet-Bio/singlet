@@ -161,7 +161,6 @@ from singlet._knn_impute import knn_impute
 from singlet._leiden import leiden
 from singlet._loader import download, load, load_dir, open_bundle
 from singlet._loader import load_sample as load_sample  # cluster use; not in __all__
-from singlet.v2.client import cells as cells, open_study as open_study  # v2: per-sample objects, cell slicing
 from singlet._louvain import louvain
 from singlet._magic import magic
 from singlet._marker_overlap import marker_gene_overlap
@@ -242,6 +241,8 @@ from singlet.fetch import default_base_url, default_cache_dir, fetch
 from singlet.find import find, find_load, set_api_key
 from singlet.pipeline import PipelineError, Run
 from singlet.pipeline import run as run_pipeline
+from singlet.v2.client import cells as cells  # v2: per-sample objects, cell slicing
+from singlet.v2.client import open_study as open_study
 
 __all__ = [
     # Browse

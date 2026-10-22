@@ -3,4 +3,5 @@
 
 Specification: docs/format-v2.md. Decisions and workstreams: docs/v2-migration.md.
 """
+
 FORMAT = "singlet-v2"

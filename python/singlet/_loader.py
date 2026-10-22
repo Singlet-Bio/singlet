@@ -178,7 +178,11 @@ def _legacy_fallback_enabled() -> bool:
 def _warn_fallback(err: Exception, stacklevel: int = 3) -> None:
     """Say so only when the user asked for the fallback explicitly; the default transition path stays quiet."""
     if os.environ.get("SINGLET_LEGACY_FALLBACK", "").strip():
-        warnings.warn(f"{err}; using the legacy bundle (SINGLET_LEGACY_FALLBACK)", FutureWarning, stacklevel=stacklevel)
+        warnings.warn(
+            f"{err}; using the legacy bundle (SINGLET_LEGACY_FALLBACK)",
+            FutureWarning,
+            stacklevel=stacklevel,
+        )
 
 
 def _no_v2_message(err: Exception) -> str:
@@ -208,7 +212,9 @@ def download(
         from singlet.v2 import client as _v2
 
         try:
-            return _v2.download_study(normalize_gse(accession), output_dir, force=force, verify=verify)
+            return _v2.download_study(
+                normalize_gse(accession), output_dir, force=force, verify=verify
+            )
         except _v2.StudyNotFound as e:
             if legacy is None and _legacy_fallback_enabled():
                 _warn_fallback(e)
@@ -490,7 +496,15 @@ def load(
 
         parts = []
         for item in items:
-            sub = load(item, genes=genes, obs_filter=obs_filter, force=force, legacy=legacy, layers=layers, **v2_options)
+            sub = load(
+                item,
+                genes=genes,
+                obs_filter=obs_filter,
+                force=force,
+                legacy=legacy,
+                layers=layers,
+                **v2_options,
+            )
             sub.obs["source"] = str(item)
             parts.append(sub)
         if len(parts) == 1:
@@ -529,11 +543,19 @@ def load(
         return combined
 
     return _load_one(
-        source, genes=genes, obs_filter=obs_filter, force=force, legacy=legacy, layers=layers, v2_options=v2_options
+        source,
+        genes=genes,
+        obs_filter=obs_filter,
+        force=force,
+        legacy=legacy,
+        layers=layers,
+        v2_options=v2_options,
     )
 
 
-_V2_OPTIONS = frozenset({"samples", "cell_order", "concurrency", "threads", "verify", "whole_max", "base", "verbose"})
+_V2_OPTIONS = frozenset(
+    {"samples", "cell_order", "concurrency", "threads", "verify", "whole_max", "base", "verbose"}
+)
 
 
 def _load_v2(
@@ -622,7 +644,14 @@ def _load_one(
         elif suffix in (".s2", ".json"):  # a v2 sample object or study manifest on disk
             from singlet.v2 import client as v2
 
-            return v2.load(path, genes=genes, obs_filter=obs_filter, layers=layers, force=force, **(v2_options or {}))
+            return v2.load(
+                path,
+                genes=genes,
+                obs_filter=obs_filter,
+                layers=layers,
+                force=force,
+                **(v2_options or {}),
+            )
         elif suffix == ".h5ad":
             import anndata as ad
 
@@ -739,7 +768,9 @@ def _skip_reason(adata, gsm_id: str) -> Optional[str]:
     return str(rows["reason"].iloc[0]) if "reason" in rows.columns else "skipped"
 
 
-def _gene_keep_mask(var_names: Sequence[str], symbols: Sequence[str], genes: Sequence[str], *, stacklevel: int = 3):
+def _gene_keep_mask(
+    var_names: Sequence[str], symbols: Sequence[str], genes: Sequence[str], *, stacklevel: int = 3
+):
     """Boolean mask over the gene axis for the requested ``genes`` (ids or symbols).
 
     Each requested gene is matched, in order, against ``var_names`` (exact),

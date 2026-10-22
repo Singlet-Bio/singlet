@@ -19,6 +19,7 @@ Rows: ``all`` every matrix column in column order; ``called`` the called cells; 
 (``<stem>_rows``).  Orders: ``sorted`` bytewise by barcode, ``colorder`` ascending matrix column, ``cc`` the row order
 of cell_calls.tsv (STAR sorted, EmptyDrops column order, or the explicit ``cc_pos`` of top_n_fallback).
 """
+
 from __future__ import annotations
 
 import json
@@ -32,12 +33,24 @@ from . import recipes_tsv as rt
 
 # -- profiles: column-name prefixes of the cells-table columns and which columns have exact derivations ---------------
 PROFILES = {
-    "cell_qc_metrics.tsv": {"prefix": "qc_", "header": True,
-                            "derive": {"n_umi": ["qc.n_umi"], "n_genes": ["qc.n_genes"], "pct_mt": ["qc.pct_mt"],
-                                       "pct_ribo": ["qc.pct_ribo"], "intronic_pct": ["qc.intronic_pct"],
-                                       "duplication_rate": ["dup_rate"]},
-                            "alias": {"doublet_score": ["dbl_doublet_score"], "cell_cycle_phase": ["cyc_phase"]}},
-    "doublet_scores.tsv": {"prefix": "dbl_", "header": True, "derive": {"total_umis": ["n_umi_exon"]}},
+    "cell_qc_metrics.tsv": {
+        "prefix": "qc_",
+        "header": True,
+        "derive": {
+            "n_umi": ["qc.n_umi"],
+            "n_genes": ["qc.n_genes"],
+            "pct_mt": ["qc.pct_mt"],
+            "pct_ribo": ["qc.pct_ribo"],
+            "intronic_pct": ["qc.intronic_pct"],
+            "duplication_rate": ["dup_rate"],
+        },
+        "alias": {"doublet_score": ["dbl_doublet_score"], "cell_cycle_phase": ["cyc_phase"]},
+    },
+    "doublet_scores.tsv": {
+        "prefix": "dbl_",
+        "header": True,
+        "derive": {"total_umis": ["n_umi_exon"]},
+    },
     "cell_cycle_scores.tsv": {"prefix": "cyc_", "header": True, "derive": {}},
     "ambient_contamination.tsv": {"prefix": "amb_", "header": True, "derive": {"rho": ["amb.rho"]}},
     "auto_barcodes.tsv": {"prefix": "ab_", "header": False, "derive": {}},
@@ -58,7 +71,15 @@ def dtype_name(a):
     a = np.asarray(a)
     if a.dtype == object:
         return "str"
-    return {"uint8": "u8", "uint16": "u16", "uint32": "u32", "int32": "i32", "float32": "f32", "float64": "f64", "bool": "bool"}[a.dtype.name]
+    return {
+        "uint8": "u8",
+        "uint16": "u16",
+        "uint32": "u32",
+        "int32": "i32",
+        "float32": "f32",
+        "float64": "f64",
+        "bool": "bool",
+    }[a.dtype.name]
 
 
 def _cc_info(ctx, cells):
@@ -142,7 +163,9 @@ def _d_dup_rate(ctx, cells, rows):
     dup = np.where(total > unique, total - unique, np.uint32(0)).astype(np.float32)
     tf = total.astype(np.float32)
     with np.errstate(divide="ignore", invalid="ignore"):
-        rate = np.where(total > 0, dup / np.where(total > 0, tf, np.float32(1)), np.float32(0)).astype(np.float32)
+        rate = np.where(
+            total > 0, dup / np.where(total > 0, tf, np.float32(1)), np.float32(0)
+        ).astype(np.float32)
     return ["%.4f" % x for x in rate.astype(np.float64)]
 
 
@@ -159,7 +182,9 @@ def _d_amb_rho(ctx, cells, rows):
     S = float(tot) / float(nb)
     nc = np.asarray(cells["n_umi_exon"]).astype(np.float64)[rows]
     with np.errstate(divide="ignore", invalid="ignore"):
-        rho = np.where(nc > 0, np.maximum(0.001, np.minimum(S / np.where(nc > 0, nc, 1.0), 0.5)), 0.5)
+        rho = np.where(
+            nc > 0, np.maximum(0.001, np.minimum(S / np.where(nc > 0, nc, 1.0), 0.5)), 0.5
+        )
     return ["%.6g" % x for x in rho]
 
 
@@ -168,11 +193,23 @@ DERIVE = {
     "n_umi_exon": (_d_n_umi_exon, ["cells:n_umi_exon"]),
     "qc.n_umi": (_qc_col("n_umi"), ["matrix:exon_counts.1pz", "matrix:intron_counts.1pz"]),
     "qc.n_genes": (_qc_col("n_genes"), ["matrix:exon_counts.1pz", "matrix:intron_counts.1pz"]),
-    "qc.pct_mt": (_qc_col("pct_mt", "%.4f"), ["matrix:exon_counts.1pz", "matrix:intron_counts.1pz"]),
-    "qc.pct_ribo": (_qc_col("pct_ribo", "%.4f"), ["matrix:exon_counts.1pz", "matrix:intron_counts.1pz"]),
-    "qc.intronic_pct": (_qc_col("intronic_pct", "%.4f"), ["matrix:exon_counts.1pz", "matrix:intron_counts.1pz"]),
+    "qc.pct_mt": (
+        _qc_col("pct_mt", "%.4f"),
+        ["matrix:exon_counts.1pz", "matrix:intron_counts.1pz"],
+    ),
+    "qc.pct_ribo": (
+        _qc_col("pct_ribo", "%.4f"),
+        ["matrix:exon_counts.1pz", "matrix:intron_counts.1pz"],
+    ),
+    "qc.intronic_pct": (
+        _qc_col("intronic_pct", "%.4f"),
+        ["matrix:exon_counts.1pz", "matrix:intron_counts.1pz"],
+    ),
     "amb.rho": (_d_amb_rho, ["member:ambient_contamination.json", "cells:n_umi_exon"]),
-    "dup_rate": (_d_dup_rate, ["cells:qc_n_reads", "matrix:exon_counts.1pz", "matrix:intron_counts.1pz"]),
+    "dup_rate": (
+        _d_dup_rate,
+        ["cells:qc_n_reads", "matrix:exon_counts.1pz", "matrix:intron_counts.1pz"],
+    ),
 }
 
 
@@ -314,7 +351,11 @@ def _analyse(member, legacy_bytes, ctx, cells=None, _alias_depth=0):
                     # the other file may print a rounded view of the same value (%.4f of a %.6g score)
                     fit_use = dict(fit_q, dt=dtype_name(a))
                     ok = rt.render_column(fit_use, a) == text
-                elif ofit is not None and ofit["k"] in ("cat", "bool", "int", "str") and fit_q["k"] == ofit["k"]:
+                elif (
+                    ofit is not None
+                    and ofit["k"] in ("cat", "bool", "int", "str")
+                    and fit_q["k"] == ofit["k"]
+                ):
                     fit_use = ofit
                     ok = rt.render_column(ofit, a) == text
                 if ok:

@@ -22,6 +22,7 @@ checks. What it must share is the pz2 *decoder* (``singlet.v2.codec``), pack exp
 everything they produce is compared against the legacy truth read with the compiled legacy reader (or the standard ``zipfile`` module).
 Exit status 0 only if every check passed.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -39,17 +40,22 @@ import zlib
 from typing import Optional
 
 import numpy as np
-
 import zstandard
+
 
 # ----------------------------------------------------------------------------------------------------------- reporting
 class Report:
     def __init__(self):
         self.ok = 0
         self.fail = 0
-        self.items = []      # (status, where, what)
+        self.items = []  # (status, where, what)
         self.by_kind: dict = {}
-        self.container: dict = {"equal": 0, "differs": 0, "unavailable": 0, "not_applicable": 0}   # .1pz container bytes (informational)
+        self.container: dict = {
+            "equal": 0,
+            "differs": 0,
+            "unavailable": 0,
+            "not_applicable": 0,
+        }  # .1pz container bytes (informational)
 
     def check(self, cond: bool, where: str, what: str, kind: str = "") -> bool:
         if cond:
@@ -85,6 +91,7 @@ class _Zip:
 class _Lb:
     def __init__(self, src):
         from .legacy import LegacyBundle
+
         self.b = LegacyBundle.open(src)
 
     def names(self):
@@ -107,6 +114,7 @@ def open_legacy(src: str):
 def read_1pz(data: bytes) -> dict:
     """The legacy compiled reader through a temporary file (the oracle for matrices)."""
     from singlet import _pz
+
     fd, path = tempfile.mkstemp(suffix=".1pz")
     try:
         with os.fdopen(fd, "wb") as fh:
@@ -127,13 +135,15 @@ def parse_s2(data: bytes) -> dict:
     for _ in range(n):
         (nl,) = struct.unpack_from("<H", data, p)
         p += 2
-        name = data[p:p + nl].decode("utf-8")
+        name = data[p : p + nl].decode("utf-8")
         p += nl
         kind, fl, off, ln, out_len, crc, dg, ml = struct.unpack_from("<BBQQQI16sI", data, p)
         p += struct.calcsize("<BBQQQI16sI")
-        meta = json.loads(data[p:p + ml].decode("utf-8")) if ml else {}
+        meta = json.loads(data[p : p + ml].decode("utf-8")) if ml else {}
         p += ml
-        members[name] = dict(kind=kind, flags=fl, off=off, len=ln, out_len=out_len, crc=crc, digest=dg, meta=meta)
+        members[name] = dict(
+            kind=kind, flags=fl, off=off, len=ln, out_len=out_len, crc=crc, digest=dg, meta=meta
+        )
     if p != end:
         raise ValueError("member table length mismatch")
     prev_end = end
@@ -203,7 +213,9 @@ def _called_from_calls(data: bytes):
     for r in rows[1:]:
         if not r or col >= len(r) or not r[col]:
             continue
-        if ic is not None and (ic >= len(r) or r[ic].strip().lower() not in ("true", "t", "1", "1.0", "yes", "y")):
+        if ic is not None and (
+            ic >= len(r) or r[ic].strip().lower() not in ("true", "t", "1", "1.0", "yes", "y")
+        ):
             continue
         out.append(r[col])
     return out
@@ -214,17 +226,22 @@ def _col_sums(indptr, data, n):
     d = np.asarray(data).astype(np.uint64)
     out = np.zeros(n, dtype=np.uint64)
     for j in range(n):
-        out[j] = d[ip[j]:ip[j + 1]].sum(dtype=np.uint64)
+        out[j] = d[ip[j] : ip[j + 1]].sum(dtype=np.uint64)
     return out
 
 
 # ----------------------------------------------------------------------------------------------------------- main check
-def verify(bundle_src: str, v2_dir: str, gse: Optional[str] = None, samples: Optional[list] = None, recipes_spec=None, log=print,
-           quick: bool = False) -> Report:
-    from .cells import CellsTable
-    from .codec import decode_any
+def verify(
+    bundle_src: str,
+    v2_dir: str,
+    gse: Optional[str] = None,
+    samples: Optional[list] = None,
+    recipes_spec=None,
+    log=print,
+    quick: bool = False,
+) -> Report:
     from .context import StudyContext, V2Context
-    from .packs import PackStore, VocabPack, Whitelist, pack_id
+    from .packs import PackStore, pack_id
     from .rcp_adapter import load_recipes
     from .sample import V2Sample
 
@@ -245,7 +262,11 @@ def verify(bundle_src: str, v2_dir: str, gse: Optional[str] = None, samples: Opt
     rep.check(os.path.exists(mpath), "manifest", "%s missing" % mpath)
     man = json.load(open(mpath, encoding="utf-8"))
     rep.check(man.get("format") == "singlet-v2" and man.get("gse") == gse, "manifest", "format/gse")
-    rep.check(man.get("rev") == _rev([s["key"] for s in man["samples"]], man["study_files"]), "manifest", "rev does not match the sample keys + study files")
+    rep.check(
+        man.get("rev") == _rev([s["key"] for s in man["samples"]], man["study_files"]),
+        "manifest",
+        "rev does not match the sample keys + study files",
+    )
 
     # ---- packs: the ones shipped next to the objects
     ref_dir = os.path.join(root, "ref")
@@ -255,8 +276,15 @@ def verify(bundle_src: str, v2_dir: str, gse: Optional[str] = None, samples: Opt
         for e in json.load(open(idx_path))["packs"]:
             fp = os.path.join(ref_dir, e["id"] + ".pack")
             d = open(fp, "rb").read() if os.path.exists(fp) else b""
-            rep.check(bool(d) and hashlib.sha256(d).hexdigest() == e["sha256"] and pack_id(d).hex() == e["id"] and len(d) == e["bytes"],
-                      "pack " + e["id"], "pack file does not match index.json", "packs")
+            rep.check(
+                bool(d)
+                and hashlib.sha256(d).hexdigest() == e["sha256"]
+                and pack_id(d).hex() == e["id"]
+                and len(d) == e["bytes"],
+                "pack " + e["id"],
+                "pack file does not match index.json",
+                "packs",
+            )
     recipes = load_recipes(recipes_spec)
 
     # ---- study files
@@ -266,12 +294,23 @@ def verify(bundle_src: str, v2_dir: str, gse: Optional[str] = None, samples: Opt
             continue
         want = study_leg[name]
         size, crc = leg.info(name)
-        rep.check(ent["size"] == len(want) == size and ent["crc32"] == crc == (zlib.crc32(want) & 0xFFFFFFFF)
-                  and ent["sha256"] == hashlib.sha256(want).hexdigest(), where, "size/crc/sha256 in the manifest", "study files")
+        rep.check(
+            ent["size"] == len(want) == size
+            and ent["crc32"] == crc == (zlib.crc32(want) & 0xFFFFFFFF)
+            and ent["sha256"] == hashlib.sha256(want).hexdigest(),
+            where,
+            "size/crc/sha256 in the manifest",
+            "study files",
+        )
         try:
             if "recipe" in ent:
-                got = bytes(recipes.regenerate_bytes(ent["recipe"], ent.get("params", {}),
-                                                     StudyContext(gse, man.get("reference_build", ""), {}, store)))
+                got = bytes(
+                    recipes.regenerate_bytes(
+                        ent["recipe"],
+                        ent.get("params", {}),
+                        StudyContext(gse, man.get("reference_build", ""), {}, store),
+                    )
+                )
             elif "json" in ent:
                 kw = dict(ent["dumps"])
                 if "separators" in kw:
@@ -279,14 +318,21 @@ def verify(bundle_src: str, v2_dir: str, gse: Optional[str] = None, samples: Opt
                 got = json.dumps(ent["json"], **kw).encode("utf-8")
             else:
                 import base64
-                got = zstandard.ZstdDecompressor().decompress(base64.b64decode(ent["zstd_b64"]), max_output_size=len(want) + 1)
+
+                got = zstandard.ZstdDecompressor().decompress(
+                    base64.b64decode(ent["zstd_b64"]), max_output_size=len(want) + 1
+                )
         except Exception as ex:
             got = None
             rep.check(False, where, "regeneration failed: %s: %s" % (type(ex).__name__, ex))
         if got is not None:
-            rep.check(got == want, where, "regenerated bytes differ from the legacy file", "study files")
+            rep.check(
+                got == want, where, "regenerated bytes differ from the legacy file", "study files"
+            )
     for n in study_leg:
-        rep.check(n in man["study_files"], "study:" + n, "legacy study file missing from the manifest")
+        rep.check(
+            n in man["study_files"], "study:" + n, "legacy study file missing from the manifest"
+        )
 
     # ---- samples
     lsamples = []
@@ -303,8 +349,13 @@ def verify(bundle_src: str, v2_dir: str, gse: Optional[str] = None, samples: Opt
         for g in by_gsm:
             rep.check(g in lsamples, g, "manifest lists a sample the legacy bundle does not have")
     for role, pid in (man.get("packs") or {}).items():
-        for p in ([pid] if isinstance(pid, str) else (pid or [])):
-            rep.check(os.path.exists(os.path.join(ref_dir, p + ".pack")), "manifest packs." + role, "pack %s is not in v2/ref" % p, "packs")
+        for p in [pid] if isinstance(pid, str) else (pid or []):
+            rep.check(
+                os.path.exists(os.path.join(ref_dir, p + ".pack")),
+                "manifest packs." + role,
+                "pack %s is not in v2/ref" % p,
+                "packs",
+            )
     totals = {"legacy": 0, "v2": 0}
     for g in want_samples:
         if g not in by_gsm:
@@ -315,8 +366,18 @@ def verify(bundle_src: str, v2_dir: str, gse: Optional[str] = None, samples: Opt
             continue
         obj = open(opath, "rb").read()
         totals["v2"] += len(obj)
-        rep.check(len(obj) == ent["bytes"] and hashlib.sha256(obj).hexdigest() == ent["sha256"], g, "object size/sha256 differ from the manifest", "objects")
-        rep.check(os.path.basename(ent["key"]) == hashlib.sha256(obj).digest()[:16].hex() + ".s2", g, "object name is not its digest16", "objects")
+        rep.check(
+            len(obj) == ent["bytes"] and hashlib.sha256(obj).hexdigest() == ent["sha256"],
+            g,
+            "object size/sha256 differ from the manifest",
+            "objects",
+        )
+        rep.check(
+            os.path.basename(ent["key"]) == hashlib.sha256(obj).digest()[:16].hex() + ".s2",
+            g,
+            "object name is not its digest16",
+            "objects",
+        )
         try:
             tab = parse_s2(obj)
         except Exception as ex:
@@ -327,15 +388,28 @@ def verify(bundle_src: str, v2_dir: str, gse: Optional[str] = None, samples: Opt
         # manifest member table agrees with the object
         for mn, mm in ent["members"].items():
             t = members.get(mn)
-            rep.check(t is not None and t["kind"] == mm["kind"] and t["off"] == mm["off"] and t["len"] == mm["len"]
-                      and t["digest"].hex() == mm["digest"], "%s/%s" % (g, mn), "manifest member entry != object table", "manifest members")
+            rep.check(
+                t is not None
+                and t["kind"] == mm["kind"]
+                and t["off"] == mm["off"]
+                and t["len"] == mm["len"]
+                and t["digest"].hex() == mm["digest"],
+                "%s/%s" % (g, mn),
+                "manifest member entry != object table",
+                "manifest members",
+            )
         try:
             sample = V2Sample(obj, store)
             ctx = V2Context(sample, recipes, gse, man.get("reference_build", ""), {}, "")
         except Exception as ex:
             rep.check(False, g, "cannot open the object: %s: %s" % (type(ex).__name__, ex))
             continue
-        sp = {rel: full for rel, full in ((n[len("samples/%s/" % g):], n) for n in lnames if n.startswith("samples/%s/" % g))}
+        sp = {
+            rel: full
+            for rel, full in (
+                (n[len("samples/%s/" % g) :], n) for n in lnames if n.startswith("samples/%s/" % g)
+            )
+        }
         mats: dict = {}
         # ---- every legacy member
         for rel, full in sp.items():
@@ -345,7 +419,11 @@ def verify(bundle_src: str, v2_dir: str, gse: Optional[str] = None, samples: Opt
                 want = leg.read(full)
                 size, crc = leg.info(full)
                 totals["legacy"] += size
-                rep.check(len(want) == size and (zlib.crc32(want) & 0xFFFFFFFF) == crc, where, "legacy member fails its own ZIP CRC/size")
+                rep.check(
+                    len(want) == size and (zlib.crc32(want) & 0xFFFFFFFF) == crc,
+                    where,
+                    "legacy member fails its own ZIP CRC/size",
+                )
                 t = members.get(rel)
                 if not rep.check(t is not None, where, "no v2 counterpart"):
                     continue
@@ -359,28 +437,91 @@ def verify(bundle_src: str, v2_dir: str, gse: Optional[str] = None, samples: Opt
                         continue
                     V = sample.matrix(rel)
                     mats[rel] = (L, V)
-                    rep.container["not_applicable"] += 1          # a pz2 member does not keep the legacy container bytes
+                    rep.container["not_applicable"] += (
+                        1  # a pz2 member does not keep the legacy container bytes
+                    )
                     ok = True
-                    ok &= rep.check((L["m"], L["n"]) == (V.m, V.n), where, "shape %s vs %s" % ((L["m"], L["n"]), (V.m, V.n)), "matrices")
-                    ok &= rep.check(np.array_equal(np.asarray(L["indptr"], np.int64), V.indptr), where, "indptr", "matrices")
-                    ok &= rep.check(np.array_equal(np.asarray(L["indices"], np.int64), V.indices.astype(np.int64)), where, "indices", "matrices")
-                    ok &= rep.check(np.array_equal(np.asarray(L["data"], np.int64), V.data.astype(np.int64)), where, "data", "matrices")
-                    ok &= rep.check(list(L["rownames"]) == list(V.rownames), where, "row names", "matrices")
-                    ok &= rep.check(list(L["colnames"]) == list(V.colnames), where, "column names", "matrices")
-                    ok &= rep.check(dict(L["user_kv"]) == dict(V.kv), where, "key/values", "matrices")
+                    ok &= rep.check(
+                        (L["m"], L["n"]) == (V.m, V.n),
+                        where,
+                        "shape %s vs %s" % ((L["m"], L["n"]), (V.m, V.n)),
+                        "matrices",
+                    )
+                    ok &= rep.check(
+                        np.array_equal(np.asarray(L["indptr"], np.int64), V.indptr),
+                        where,
+                        "indptr",
+                        "matrices",
+                    )
+                    ok &= rep.check(
+                        np.array_equal(
+                            np.asarray(L["indices"], np.int64), V.indices.astype(np.int64)
+                        ),
+                        where,
+                        "indices",
+                        "matrices",
+                    )
+                    ok &= rep.check(
+                        np.array_equal(np.asarray(L["data"], np.int64), V.data.astype(np.int64)),
+                        where,
+                        "data",
+                        "matrices",
+                    )
+                    ok &= rep.check(
+                        list(L["rownames"]) == list(V.rownames), where, "row names", "matrices"
+                    )
+                    ok &= rep.check(
+                        list(L["colnames"]) == list(V.colnames), where, "column names", "matrices"
+                    )
+                    ok &= rep.check(
+                        dict(L["user_kv"]) == dict(V.kv), where, "key/values", "matrices"
+                    )
                     if not quick:
-                        d = slow_digest(L["m"], L["n"], L["indptr"], L["indices"], L["data"], int(L["vt_code"]), list(L["rownames"]),
-                                        list(L["colnames"]), dict(L["user_kv"]))
-                        rep.check(d == t["digest"] and d == V.meta["digest"], where, "canonical digest (independent) %s != table %s / header %s" % (
-                            d.hex(), t["digest"].hex(), V.meta["digest"].hex()), "digests")
+                        d = slow_digest(
+                            L["m"],
+                            L["n"],
+                            L["indptr"],
+                            L["indices"],
+                            L["data"],
+                            int(L["vt_code"]),
+                            list(L["rownames"]),
+                            list(L["colnames"]),
+                            dict(L["user_kv"]),
+                        )
+                        rep.check(
+                            d == t["digest"] and d == V.meta["digest"],
+                            where,
+                            "canonical digest (independent) %s != table %s / header %s"
+                            % (d.hex(), t["digest"].hex(), V.meta["digest"].hex()),
+                            "digests",
+                        )
                 elif k in (3, 5):
-                    body = obj[t["off"]:t["off"] + t["len"]]
-                    got = zstandard.ZstdDecompressor().decompress(body, max_output_size=t["out_len"] + 1) if k == 3 else body
-                    rep.check(got == want and len(got) == t["out_len"] and (zlib.crc32(got) & 0xFFFFFFFF) == t["crc"] == crc, where,
-                              "stored bytes differ from the legacy member", "stored")
+                    body = obj[t["off"] : t["off"] + t["len"]]
+                    got = (
+                        zstandard.ZstdDecompressor().decompress(
+                            body, max_output_size=t["out_len"] + 1
+                        )
+                        if k == 3
+                        else body
+                    )
+                    rep.check(
+                        got == want
+                        and len(got) == t["out_len"]
+                        and (zlib.crc32(got) & 0xFFFFFFFF) == t["crc"] == crc,
+                        where,
+                        "stored bytes differ from the legacy member",
+                        "stored",
+                    )
                     if rel.endswith(".1pz"):
-                        rep.container["equal"] += 1                # stored verbatim: the matrix is equal because the bytes are
-                    rep.check(hashlib.sha256(want).digest()[:16] == t["digest"], where, "digest of the stored member", "stored")
+                        rep.container["equal"] += (
+                            1  # stored verbatim: the matrix is equal because the bytes are
+                        )
+                    rep.check(
+                        hashlib.sha256(want).digest()[:16] == t["digest"],
+                        where,
+                        "digest of the stored member",
+                        "stored",
+                    )
                 elif k == 4:
                     meta = t["meta"]
                     try:
@@ -388,41 +529,77 @@ def verify(bundle_src: str, v2_dir: str, gse: Optional[str] = None, samples: Opt
                             out = ctx.regenerate_matrix(rel)
                             L = read_1pz(want)
                             from .context import rmatrix_to_csc
+
                             V = rmatrix_to_csc(out, int(L["vt_code"]))
-                            ok = (V.m, V.n) == (L["m"], L["n"]) and np.array_equal(V.indptr, np.asarray(L["indptr"], np.int64)) \
-                                and np.array_equal(V.indices.astype(np.int64), np.asarray(L["indices"], np.int64)) \
-                                and np.array_equal(V.data.astype(np.int64), np.asarray(L["data"], np.int64)) \
-                                and list(V.rownames or []) == list(L["rownames"]) and list(V.colnames or []) == list(L["colnames"]) \
+                            ok = (
+                                (V.m, V.n) == (L["m"], L["n"])
+                                and np.array_equal(V.indptr, np.asarray(L["indptr"], np.int64))
+                                and np.array_equal(
+                                    V.indices.astype(np.int64), np.asarray(L["indices"], np.int64)
+                                )
+                                and np.array_equal(
+                                    V.data.astype(np.int64), np.asarray(L["data"], np.int64)
+                                )
+                                and list(V.rownames or []) == list(L["rownames"])
+                                and list(V.colnames or []) == list(L["colnames"])
                                 and dict(V.kv) == dict(L["user_kv"])
-                            rep.check(ok, where, "derived matrix differs from the legacy matrix", "derived")
+                            )
+                            rep.check(
+                                ok,
+                                where,
+                                "derived matrix differs from the legacy matrix",
+                                "derived",
+                            )
                             if meta.get("bytes_exact"):
                                 try:
                                     b = bytes(ctx.regenerate(rel))
-                                    rep.container["equal" if b == want and (zlib.crc32(b) & 0xFFFFFFFF) == t["crc"] else "differs"] += 1
-                                except Exception:        # the writer that reproduced the bytes at migration time is not available here
+                                    rep.container[
+                                        "equal"
+                                        if b == want and (zlib.crc32(b) & 0xFFFFFFFF) == t["crc"]
+                                        else "differs"
+                                    ] += 1
+                                except Exception:  # the writer that reproduced the bytes at migration time is not available here
                                     rep.container["unavailable"] += 1
                             else:
                                 rep.container["not_applicable"] += 1
                         else:
                             b = bytes(ctx.regenerate(rel))
-                            rep.check(b == want and len(b) == t["out_len"] == size and (zlib.crc32(b) & 0xFFFFFFFF) == t["crc"] == crc, where,
-                                      "regenerated bytes differ from the legacy member (recipe %s)" % meta.get("recipe"), "derived")
+                            rep.check(
+                                b == want
+                                and len(b) == t["out_len"] == size
+                                and (zlib.crc32(b) & 0xFFFFFFFF) == t["crc"] == crc,
+                                where,
+                                "regenerated bytes differ from the legacy member (recipe %s)"
+                                % meta.get("recipe"),
+                                "derived",
+                            )
                     except Exception as ex:
-                        rep.check(False, where, "regeneration failed (recipe %s): %s: %s" % (meta.get("recipe"), type(ex).__name__, ex))
+                        rep.check(
+                            False,
+                            where,
+                            "regeneration failed (recipe %s): %s: %s"
+                            % (meta.get("recipe"), type(ex).__name__, ex),
+                        )
                 else:
                     rep.check(False, where, "unexpected member kind %d for a legacy member" % k)
-            except Exception as ex:   # a damaged object must be reported, not crash the verifier
-                rep.check(False, where, "exception while checking: %s: %s" % (type(ex).__name__, ex))
+            except Exception as ex:  # a damaged object must be reported, not crash the verifier
+                rep.check(
+                    False, where, "exception while checking: %s: %s" % (type(ex).__name__, ex)
+                )
         # members the legacy bundle does not have, flagged as legacy
         for mn, t in members.items():
             if t["flags"] & 1:
-                rep.check(mn in sp, "%s/%s" % (g, mn), "v2 legacy-flagged member not in the legacy bundle")
+                rep.check(
+                    mn in sp, "%s/%s" % (g, mn), "v2 legacy-flagged member not in the legacy bundle"
+                )
         # ---- cells table
         try:
             if "cells" in members:
                 cells = sample.cells()
                 where = g + "/cells"
-                rep.check(cells.digest() == members["cells"]["digest"], where, "cells digest", "cells")
+                rep.check(
+                    cells.digest() == members["cells"]["digest"], where, "cells digest", "cells"
+                )
                 basis = None
                 for cand in ("exon_counts.1pz", "intron_counts.1pz"):
                     if cand in mats and mats[cand][0]["n"] > 0:
@@ -430,52 +607,126 @@ def verify(bundle_src: str, v2_dir: str, gse: Optional[str] = None, samples: Opt
                         break
                 if basis is not None:
                     bc = list(basis["colnames"])
-                    rep.check(list(cells.barcodes) == bc, where, "barcodes != basis matrix columns", "cells")
+                    rep.check(
+                        list(cells.barcodes) == bc,
+                        where,
+                        "barcodes != basis matrix columns",
+                        "cells",
+                    )
                     for tag in ("exon", "intron"):
                         key = "%s_counts.1pz" % tag
-                        if key in mats and mats[key][0]["n"] == len(bc) and list(mats[key][0]["colnames"]) == bc:
+                        if (
+                            key in mats
+                            and mats[key][0]["n"] == len(bc)
+                            and list(mats[key][0]["colnames"]) == bc
+                        ):
                             Lm = mats[key][0]
-                            rep.check(np.array_equal(cells.column("n_umi_" + tag).astype(np.uint64), _col_sums(Lm["indptr"], Lm["data"], Lm["n"])),
-                                      where, "n_umi_" + tag, "cells")
-                            rep.check(np.array_equal(cells.column("n_feat_" + tag).astype(np.int64), np.diff(np.asarray(Lm["indptr"], np.int64))),
-                                      where, "n_feat_" + tag, "cells")
+                            rep.check(
+                                np.array_equal(
+                                    cells.column("n_umi_" + tag).astype(np.uint64),
+                                    _col_sums(Lm["indptr"], Lm["data"], Lm["n"]),
+                                ),
+                                where,
+                                "n_umi_" + tag,
+                                "cells",
+                            )
+                            rep.check(
+                                np.array_equal(
+                                    cells.column("n_feat_" + tag).astype(np.int64),
+                                    np.diff(np.asarray(Lm["indptr"], np.int64)),
+                                ),
+                                where,
+                                "n_feat_" + tag,
+                                "cells",
+                            )
                         elif key not in mats or mats[key][0]["n"] == 0:
-                            rep.check(not cells.column("n_umi_" + tag).any() and not cells.column("n_feat_" + tag).any(), where, tag + " columns should be 0", "cells")
+                            rep.check(
+                                not cells.column("n_umi_" + tag).any()
+                                and not cells.column("n_feat_" + tag).any(),
+                                where,
+                                tag + " columns should be 0",
+                                "cells",
+                            )
                     ccn = "samples/%s/cell_calls.tsv" % g
                     if ccn in lnames:
                         called = _called_from_calls(leg.read(ccn))
                         if called is not None:
                             cs = set(called)
-                            rep.check([b in cs for b in bc] == cells.column("called").tolist(), where, "called flags", "cells")
+                            rep.check(
+                                [b in cs for b in bc] == cells.column("called").tolist(),
+                                where,
+                                "called flags",
+                                "cells",
+                            )
                         else:
-                            rep.check(bool(cells.column("called").all()), where, "no usable cell_calls: all cells should be called", "cells")
+                            rep.check(
+                                bool(cells.column("called").all()),
+                                where,
+                                "no usable cell_calls: all cells should be called",
+                                "cells",
+                            )
                     else:
-                        rep.check(bool(cells.column("called").all()), where, "no cell_calls.tsv: all cells should be called", "cells")
-                rep.check(ent["n_columns"] == cells.n_rows and ent["n_called"] == int(cells.column("called").sum()), where, "manifest n_columns/n_called", "cells")
+                        rep.check(
+                            bool(cells.column("called").all()),
+                            where,
+                            "no cell_calls.tsv: all cells should be called",
+                            "cells",
+                        )
+                rep.check(
+                    ent["n_columns"] == cells.n_rows
+                    and ent["n_called"] == int(cells.column("called").sum()),
+                    where,
+                    "manifest n_columns/n_called",
+                    "cells",
+                )
             else:
-                rep.check(not any(mats[r][0]["n"] > 0 for r in ("exon_counts.1pz", "intron_counts.1pz") if r in mats), g,
-                          "matrices with columns but no cells table", "cells")
+                rep.check(
+                    not any(
+                        mats[r][0]["n"] > 0
+                        for r in ("exon_counts.1pz", "intron_counts.1pz")
+                        if r in mats
+                    ),
+                    g,
+                    "matrices with columns but no cells table",
+                    "cells",
+                )
         except Exception as ex:
-            rep.check(False, g + "/cells", "exception while checking: %s: %s" % (type(ex).__name__, ex))
+            rep.check(
+                False, g + "/cells", "exception while checking: %s: %s" % (type(ex).__name__, ex)
+            )
     log("verify %s: %d checks passed, %d failed, %.1fs" % (gse, rep.ok, rep.fail, time.time() - t0))
-    log("  samples %d, legacy member bytes %d, v2 object bytes %d" % (len(want_samples), totals["legacy"], totals["v2"]))
+    log(
+        "  samples %d, legacy member bytes %d, v2 object bytes %d"
+        % (len(want_samples), totals["legacy"], totals["v2"])
+    )
     for k, (a, b) in sorted(rep.by_kind.items()):
         log("  %-18s %6d ok %4d failed" % (k, a, b))
-    log("  .1pz container bytes (informational, not a pass criterion): " + ", ".join("%s %d" % kv for kv in rep.container.items()))
+    log(
+        "  .1pz container bytes (informational, not a pass criterion): "
+        + ", ".join("%s %d" % kv for kv in rep.container.items())
+    )
     rep.totals = totals
     return rep
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(prog="python -m singlet.v2.verify", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        prog="python -m singlet.v2.verify",
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     ap.add_argument("--bundle", required=True)
     ap.add_argument("--v2", required=True, help="output directory of singlet.v2.migrate")
     ap.add_argument("--gse")
     ap.add_argument("--samples")
     ap.add_argument("--recipes")
-    ap.add_argument("--quick", action="store_true", help="skip the slow independent digest recomputation")
+    ap.add_argument(
+        "--quick", action="store_true", help="skip the slow independent digest recomputation"
+    )
     a = ap.parse_args(argv)
-    rep = verify(a.bundle, a.v2, a.gse, a.samples.split(",") if a.samples else None, a.recipes, quick=a.quick)
+    rep = verify(
+        a.bundle, a.v2, a.gse, a.samples.split(",") if a.samples else None, a.recipes, quick=a.quick
+    )
     return 1 if rep.fail else 0
 
 

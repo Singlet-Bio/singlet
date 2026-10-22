@@ -3,6 +3,7 @@
 
 Everything here is pure Python + numpy (+ the ``zstandard`` module). No C++ is needed for the container layer.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -46,11 +47,15 @@ def align_up(x: int, a: int = ALIGN) -> int:
 
 def canon_json(obj) -> bytes:
     """Deterministic JSON bytes for meta blobs and manifests (sorted keys, compact)."""
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode(
+        "utf-8"
+    )
 
 
 # --------------------------------------------------------------------------------------------- zstd
-_TLS = threading.local()  # zstandard compressor/decompressor objects are not thread safe: one set per thread
+_TLS = (
+    threading.local()
+)  # zstandard compressor/decompressor objects are not thread safe: one set per thread
 
 
 def zstd_compress(data, level: int = ZSTD_LEVEL) -> bytes:
@@ -59,7 +64,9 @@ def zstd_compress(data, level: int = ZSTD_LEVEL) -> bytes:
         cache = _TLS.comp = {}
     c = cache.get(level)
     if c is None:
-        c = cache[level] = _zstd.ZstdCompressor(level=level, write_content_size=True, write_checksum=False)
+        c = cache[level] = _zstd.ZstdCompressor(
+            level=level, write_content_size=True, write_checksum=False
+        )
     return c.compress(data if isinstance(data, (bytes, bytearray, memoryview)) else bytes(data))
 
 
@@ -82,7 +89,7 @@ def leb128_encode(values) -> bytes:
     nb = np.ones(n, dtype=np.int64)
     t = v >> np.uint64(7)
     while t.any():
-        nb += (t != 0)
+        nb += t != 0
         t = t >> np.uint64(7)
     ends = np.cumsum(nb)
     starts = ends - nb
@@ -128,8 +135,11 @@ def leb128_decode(buf, count: int | None = None) -> np.ndarray:
 # --------------------------------------------------------------------------------------------- name lists
 def join_nul(names: Iterable[str]) -> bytes:
     """NUL-terminated concatenation of UTF-8 names (``a\\0b\\0``)."""
-    return b"".join(s.encode("utf-8") + b"\0" for s in names) if not isinstance(names, list) else (
-        ("\0".join(names) + "\0").encode("utf-8") if names else b"")
+    return (
+        b"".join(s.encode("utf-8") + b"\0" for s in names)
+        if not isinstance(names, list)
+        else (("\0".join(names) + "\0").encode("utf-8") if names else b"")
+    )
 
 
 def split_nul(blob: bytes) -> list[str]:

@@ -40,22 +40,81 @@ MTX = CORPUS / "corpus_w4_mtx"
 EXTRA = CORPUS / "corpus_m_w3"
 FULL = os.environ.get("SINGLET_V2_FULL") == "1"
 
-MTX_SAMPLES = ["GSE171161.GSM5220137", "GSE309702.GSM9277757", "GSE263963.GSM8208009", "GSE311511.GSM9326201"]
+MTX_SAMPLES = [
+    "GSE171161.GSM5220137",
+    "GSE309702.GSM9277757",
+    "GSE263963.GSM8208009",
+    "GSE311511.GSM9326201",
+]
 GSE145370_GSMS = ["GSM43174%02d" % i for i in range(23, 37)]
-W4C_SAMPLES = ["L_a", "L_b", "bn_dropseq", "bn_v2", "bn_v3_a", "bn_v3_b", "h_arc", "h_bd", "h_celseq2", "h_dropseq", "h_indrop",
-               "h_mars", "h_microwell", "h_quartz", "h_split", "h_v2_a", "h_v2_b", "h_v2_c", "h_v3_a", "h_v3_b", "h_v3_c",
-               "h_visium", "m_arc", "m_celseq2", "m_dropseq", "m_mars", "m_v2_a", "m_v2_b", "m_v3_a", "m_v3_b", "m_v3_c",
-               "m_visium", "mq_v2", "mq_v3", "r_v2", "r_v3", "x_stub", "z_v2", "z_v3_a", "z_v3_b"]
+W4C_SAMPLES = [
+    "L_a",
+    "L_b",
+    "bn_dropseq",
+    "bn_v2",
+    "bn_v3_a",
+    "bn_v3_b",
+    "h_arc",
+    "h_bd",
+    "h_celseq2",
+    "h_dropseq",
+    "h_indrop",
+    "h_mars",
+    "h_microwell",
+    "h_quartz",
+    "h_split",
+    "h_v2_a",
+    "h_v2_b",
+    "h_v2_c",
+    "h_v3_a",
+    "h_v3_b",
+    "h_v3_c",
+    "h_visium",
+    "m_arc",
+    "m_celseq2",
+    "m_dropseq",
+    "m_mars",
+    "m_v2_a",
+    "m_v2_b",
+    "m_v3_a",
+    "m_v3_b",
+    "m_v3_c",
+    "m_visium",
+    "mq_v2",
+    "mq_v3",
+    "r_v2",
+    "r_v3",
+    "x_stub",
+    "z_v2",
+    "z_v3_a",
+    "z_v3_b",
+]
 STUB_PSI = {"L_b", "h_v2_c", "h_v3_b", "h_v3_c", "x_stub"}
 
 # members tried by the migration flow, in an order that exercises the dependencies in both directions
 FLOW_MEMBERS = [
-    "splice_psi.1pz", "cell_calls.tsv", "cell_qc_metrics.tsv", "doublet_scores.tsv", "cell_cycle_scores.tsv",
-    "ambient_contamination.tsv", "auto_barcodes.tsv", "donor/donor_assignments.tsv", "mt/mt_summary.tsv",
-    "spatial_coordinates.tsv", "visium_qc.tsv", "star_Solo.out/Gene/raw/barcodes.tsv", "star_Solo.out/Gene/filtered/barcodes.tsv",
-    "star_Solo.out/Gene/raw/features.tsv", "star_Solo.out/Gene/filtered/features.tsv", "star_Solo.out/Gene/filtered/matrix.mtx",
-    "star_Solo.out/Gene/raw/matrix.mtx", "ambient_profile.tsv", "gene_expression.tsv", "splice_events.tsv",
-    "mt_heteroplasmy.1pz", "vdj_gene_usage.1pz",
+    "splice_psi.1pz",
+    "cell_calls.tsv",
+    "cell_qc_metrics.tsv",
+    "doublet_scores.tsv",
+    "cell_cycle_scores.tsv",
+    "ambient_contamination.tsv",
+    "auto_barcodes.tsv",
+    "donor/donor_assignments.tsv",
+    "mt/mt_summary.tsv",
+    "spatial_coordinates.tsv",
+    "visium_qc.tsv",
+    "star_Solo.out/Gene/raw/barcodes.tsv",
+    "star_Solo.out/Gene/filtered/barcodes.tsv",
+    "star_Solo.out/Gene/raw/features.tsv",
+    "star_Solo.out/Gene/filtered/features.tsv",
+    "star_Solo.out/Gene/filtered/matrix.mtx",
+    "star_Solo.out/Gene/raw/matrix.mtx",
+    "ambient_profile.tsv",
+    "gene_expression.tsv",
+    "splice_events.tsv",
+    "mt_heteroplasmy.1pz",
+    "vdj_gene_usage.1pz",
 ]
 
 
@@ -105,8 +164,18 @@ def run_flow(ctx, members=None, record_cells=True):
     out = {}
     for m in members:
         lb = ctx.member_bytes(m)
-        r = Result(member=m, size=len(lb), plan=None, ok=None, bytes_ok=None, matrix_ok=None, t_plan=0.0, t_regen=0.0,
-                   params_bytes=0, cols=sorted(cand[m]))
+        r = Result(
+            member=m,
+            size=len(lb),
+            plan=None,
+            ok=None,
+            bytes_ok=None,
+            matrix_ok=None,
+            t_plan=0.0,
+            t_regen=0.0,
+            params_bytes=0,
+            cols=sorted(cand[m]),
+        )
         t = time.time()
         p = R.plan(m, lb, ctx)
         r["t_plan"] = time.time() - t
@@ -136,7 +205,10 @@ def assert_flow(res, expect_plan=(), expect_none=()):
         if r["plan"] is not None:
             assert r["ok"], "%s: plan %s did not reproduce the member" % (m, r["plan"].recipe_id)
     for m in expect_plan:
-        assert res[m]["plan"] is not None, "%s: expected a recipe (errors: %s)" % (m, R.LAST_ERRORS.get(m))
+        assert res[m]["plan"] is not None, "%s: expected a recipe (errors: %s)" % (
+            m,
+            R.LAST_ERRORS.get(m),
+        )
     for m in expect_none:
         assert res[m]["plan"] is None
 
@@ -145,16 +217,23 @@ def assert_flow(res, expect_plan=(), expect_none=()):
 @pytest.mark.parametrize("gsm", GSE145370_GSMS if FULL else ["GSM4317429", "GSM4317432"])
 def test_gse145370_psi_and_cellcalls(gsm):
     ctx = ctx_gse145370(gsm)
-    res = run_flow(ctx, ["splice_psi.1pz", "cell_calls.tsv", "mt_heteroplasmy.1pz", "vdj_gene_usage.1pz"])
+    res = run_flow(
+        ctx, ["splice_psi.1pz", "cell_calls.tsv", "mt_heteroplasmy.1pz", "vdj_gene_usage.1pz"]
+    )
     assert_flow(res, expect_plan=["splice_psi.1pz", "cell_calls.tsv", "mt_heteroplasmy.1pz"])
     p = res["splice_psi.1pz"]["plan"]
-    assert p.recipe_id == "psi-v1-rint"                       # pipeline 0.3.0 (git 8e1803b) stores nearbyint(PSI)
+    assert p.recipe_id == "psi-v1-rint"  # pipeline 0.3.0 (git 8e1803b) stores nearbyint(PSI)
     assert res["splice_psi.1pz"]["matrix_ok"]
     if p.params["writer"] is not None:
         assert res["splice_psi.1pz"]["bytes_ok"]
     c = res["cell_calls.tsv"]["plan"]
-    assert c.recipe_id == "cellcalls-v1" and c.params == {"method": "star_solo", "listed": "called", "order": "sorted", "pvalue": "zero"}
-    assert res["mt_heteroplasmy.1pz"]["plan"].recipe_id == "stub-v1"          # the 0 x 0 mt stub
+    assert c.recipe_id == "cellcalls-v1" and c.params == {
+        "method": "star_solo",
+        "listed": "called",
+        "order": "sorted",
+        "pvalue": "zero",
+    }
+    assert res["mt_heteroplasmy.1pz"]["plan"].recipe_id == "stub-v1"  # the 0 x 0 mt stub
     assert res["mt_heteroplasmy.1pz"]["matrix_ok"] and res["mt_heteroplasmy.1pz"]["bytes_ok"]
 
 
@@ -163,7 +242,9 @@ def test_gse145370_psi_bytes_need_the_right_zstd():
     ctx = ctx_gse145370("GSM4317429")
     lb = ctx.member_bytes("splice_psi.1pz")
     ws = PW.available_writers()
-    matches = [w for w, wr in ws.items() if wr.write(R.regenerate_matrix("psi-v1-rint", {}, ctx)) == lb]
+    matches = [
+        w for w, wr in ws.items() if wr.write(R.regenerate_matrix("psi-v1-rint", {}, ctx)) == lb
+    ]
     assert len(matches) <= 1
     p = R.plan("splice_psi.1pz", lb, ctx)
     assert p.params["writer"] == (matches[0] if matches else None)
@@ -187,12 +268,16 @@ def test_w4c_psi_and_cellcalls(name):
         assert psi["matrix_ok"]
     cc = res["cell_calls.tsv"]
     if name == "x_stub":
-        assert cc["plan"] is None                            # barcodes of cell_calls.tsv are not matrix columns (empty matrices)
+        assert (
+            cc["plan"] is None
+        )  # barcodes of cell_calls.tsv are not matrix columns (empty matrices)
     else:
         assert cc["plan"] is not None and cc["plan"].recipe_id == "cellcalls-v1"
         method = cc["plan"].params["method"]
         assert method in ("star_solo", "emptydrops", "top_n_fallback")
-        assert (name in ("h_bd", "h_indrop", "h_microwell", "m_dropseq")) == (method == "emptydrops")
+        assert (name in ("h_bd", "h_indrop", "h_microwell", "m_dropseq")) == (
+            method == "emptydrops"
+        )
         assert (method == "top_n_fallback") == (cc["plan"].params["order"] == "explicit")
 
 
@@ -215,35 +300,77 @@ def test_per_cell_tables_non_10x_and_visium(name):
     ctx = ctx_w4c(name)
     if not have(EXTRA / name):
         pytest.skip("corpus_m_w3/%s not present" % name)
-    members = [m for m in FLOW_MEMBERS if m.endswith(".tsv") and m not in ("gene_expression.tsv", "splice_events.tsv", "ambient_profile.tsv")
-               and not m.startswith("star_Solo")]
+    members = [
+        m
+        for m in FLOW_MEMBERS
+        if m.endswith(".tsv")
+        and m not in ("gene_expression.tsv", "splice_events.tsv", "ambient_profile.tsv")
+        and not m.startswith("star_Solo")
+    ]
     res = run_flow(ctx, members + ["cell_calls.tsv"])
-    assert_flow(res, expect_plan=["cell_calls.tsv", "cell_qc_metrics.tsv", "doublet_scores.tsv", "auto_barcodes.tsv"])
+    assert_flow(
+        res,
+        expect_plan=[
+            "cell_calls.tsv",
+            "cell_qc_metrics.tsv",
+            "doublet_scores.tsv",
+            "auto_barcodes.tsv",
+        ],
+    )
 
 
 @pytest.mark.parametrize("name", MTX_SAMPLES if FULL else MTX_SAMPLES[:1])
 def test_gen_b_starsolo_sample(name):
     ctx = ctx_mtx(name)
     res = run_flow(ctx)
-    assert_flow(res, expect_plan=[
-        "splice_psi.1pz", "cell_calls.tsv", "cell_qc_metrics.tsv", "doublet_scores.tsv", "cell_cycle_scores.tsv", "ambient_contamination.tsv",
-        "auto_barcodes.tsv", "star_Solo.out/Gene/raw/barcodes.tsv", "star_Solo.out/Gene/filtered/barcodes.tsv",
-        "star_Solo.out/Gene/raw/features.tsv", "star_Solo.out/Gene/filtered/features.tsv", "star_Solo.out/Gene/raw/matrix.mtx",
-        "star_Solo.out/Gene/filtered/matrix.mtx", "ambient_profile.tsv", "gene_expression.tsv", "splice_events.tsv"])
+    assert_flow(
+        res,
+        expect_plan=[
+            "splice_psi.1pz",
+            "cell_calls.tsv",
+            "cell_qc_metrics.tsv",
+            "doublet_scores.tsv",
+            "cell_cycle_scores.tsv",
+            "ambient_contamination.tsv",
+            "auto_barcodes.tsv",
+            "star_Solo.out/Gene/raw/barcodes.tsv",
+            "star_Solo.out/Gene/filtered/barcodes.tsv",
+            "star_Solo.out/Gene/raw/features.tsv",
+            "star_Solo.out/Gene/filtered/features.tsv",
+            "star_Solo.out/Gene/raw/matrix.mtx",
+            "star_Solo.out/Gene/filtered/matrix.mtx",
+            "ambient_profile.tsv",
+            "gene_expression.tsv",
+            "splice_events.tsv",
+        ],
+    )
     ids = {m: r["plan"].recipe_id for m, r in res.items() if r["plan"] is not None}
-    assert ids["star_Solo.out/Gene/raw/matrix.mtx"] == "mtx-text-v1" and ids["star_Solo.out/Gene/filtered/matrix.mtx"] == "mtx-filter-v1"
-    assert ids["star_Solo.out/Gene/raw/features.tsv"] == "features-v1" and ids["gene_expression.tsv"] == "geneexpr-v1"
+    assert (
+        ids["star_Solo.out/Gene/raw/matrix.mtx"] == "mtx-text-v1"
+        and ids["star_Solo.out/Gene/filtered/matrix.mtx"] == "mtx-filter-v1"
+    )
+    assert (
+        ids["star_Solo.out/Gene/raw/features.tsv"] == "features-v1"
+        and ids["gene_expression.tsv"] == "geneexpr-v1"
+    )
     # the mouse features order comes from the permutation resource, the human one from the positional rule
     f = res["star_Solo.out/Gene/raw/features.tsv"]["plan"].params
     assert f["order"] == ("pos" if ctx.reference_build.startswith("GRCh38") else "perm")
     # the ambient vector is the only extra information of ambient_profile.tsv (2 + N bytes of params/vector, not 22 MB of text)
-    assert ctx.vector("ambient_k") is not None and ctx.vector("ambient_k").size == len(ctx.vocab_names("exon"))
+    assert ctx.vector("ambient_k") is not None and ctx.vector("ambient_k").size == len(
+        ctx.vocab_names("exon")
+    )
 
 
 def test_auxiliary_matrix_is_registered_once():
     """The filtered matrix is planned before the raw one (alphabetical member order): the aux matrix must still exist for both."""
     ctx = ctx_mtx(MTX_SAMPLES[0])
-    members = ["cell_calls.tsv", "star_Solo.out/Gene/raw/barcodes.tsv", "star_Solo.out/Gene/filtered/matrix.mtx", "star_Solo.out/Gene/raw/matrix.mtx"]
+    members = [
+        "cell_calls.tsv",
+        "star_Solo.out/Gene/raw/barcodes.tsv",
+        "star_Solo.out/Gene/filtered/matrix.mtx",
+        "star_Solo.out/Gene/raw/matrix.mtx",
+    ]
     res = run_flow(ctx, members)
     assert_flow(res, expect_plan=members)
     assert ctx.matrix("star_Solo.out/Gene/raw/matrix.mtx#csc") is not None
@@ -253,8 +380,10 @@ def test_auxiliary_matrix_is_registered_once():
 def test_vocab_json_study_level_gen_a():
     if not have(BUNDLE):
         pytest.skip("GSE145370.singlet not present")
-    ctx = CTX.DirContext([CTX.ZipSource(BUNDLE, "samples/GSM4317429/"), CTX.ZipSource(BUNDLE, "")], sample_id="x")
-    ctx.sample_id = ""                                       # study-level context: the vocabulary of the build
+    ctx = CTX.DirContext(
+        [CTX.ZipSource(BUNDLE, "samples/GSM4317429/"), CTX.ZipSource(BUNDLE, "")], sample_id="x"
+    )
+    ctx.sample_id = ""  # study-level context: the vocabulary of the build
     lb = ctx.member_bytes("feature_vocab.json")
     p = R.plan("feature_vocab.json", lb, ctx)
     assert p is not None and p.recipe_id == "vocab-json-v1" and p.params["build"] == "GRCh38-2024-A"
@@ -279,11 +408,30 @@ def test_vocab_json_study_level_gen_b(name):
 def sweep(full=False, tsv=None):
     rows = []
     targets = []
-    for g in (GSE145370_GSMS if full else GSE145370_GSMS[:2]):
-        targets.append(("GSE145370/" + g, lambda g=g: ctx_gse145370(g), ["splice_psi.1pz", "cell_calls.tsv", "mt_heteroplasmy.1pz", "vdj_gene_usage.1pz"]))
-    for n in (W4C_SAMPLES if full else DEFAULT_W4C):
-        targets.append((n, lambda n=n: ctx_w4c(n), None if n in ALL_CELLS else ["splice_psi.1pz", "cell_calls.tsv", "mt_heteroplasmy.1pz", "vdj_gene_usage.1pz"]))
-    for n in (MTX_SAMPLES if full else MTX_SAMPLES[:1]):
+    for g in GSE145370_GSMS if full else GSE145370_GSMS[:2]:
+        targets.append(
+            (
+                "GSE145370/" + g,
+                lambda g=g: ctx_gse145370(g),
+                ["splice_psi.1pz", "cell_calls.tsv", "mt_heteroplasmy.1pz", "vdj_gene_usage.1pz"],
+            )
+        )
+    for n in W4C_SAMPLES if full else DEFAULT_W4C:
+        targets.append(
+            (
+                n,
+                lambda n=n: ctx_w4c(n),
+                None
+                if n in ALL_CELLS
+                else [
+                    "splice_psi.1pz",
+                    "cell_calls.tsv",
+                    "mt_heteroplasmy.1pz",
+                    "vdj_gene_usage.1pz",
+                ],
+            )
+        )
+    for n in MTX_SAMPLES if full else MTX_SAMPLES[:1]:
         targets.append((n, lambda n=n: ctx_mtx(n), None))
     for name, mk, members in targets:
         try:
@@ -292,12 +440,26 @@ def sweep(full=False, tsv=None):
             continue
         res = run_flow(ctx, members)
         for m, r in res.items():
-            rows.append((name, m, r["size"], r["plan"].recipe_id if r["plan"] else "-", r["ok"], r["bytes_ok"], r["params_bytes"],
-                         round(r["t_plan"], 2), round(r["t_regen"], 2), ",".join(r["cols"])))
+            rows.append(
+                (
+                    name,
+                    m,
+                    r["size"],
+                    r["plan"].recipe_id if r["plan"] else "-",
+                    r["ok"],
+                    r["bytes_ok"],
+                    r["params_bytes"],
+                    round(r["t_plan"], 2),
+                    round(r["t_regen"], 2),
+                    ",".join(r["cols"]),
+                )
+            )
             print("\t".join(str(x) for x in rows[-1]), flush=True)
     if tsv:
         with open(tsv, "w") as f:
-            f.write("sample\tmember\tbytes\trecipe\tok\tbytes_ok\tparams_bytes\tt_plan\tt_regen\tcells_columns\n")
+            f.write(
+                "sample\tmember\tbytes\trecipe\tok\tbytes_ok\tparams_bytes\tt_plan\tt_regen\tcells_columns\n"
+            )
             for r in rows:
                 f.write("\t".join(str(x) for x in r) + "\n")
     return rows
@@ -311,7 +473,9 @@ def psi_table(limit=None):
     ws = PW.available_writers()
     print("writers:", {k: v.label for k, v in ws.items()})
     names = [("GSE145370/" + g, lambda g=g: ctx_gse145370(g)) for g in GSE145370_GSMS]
-    names += [(n, lambda n=n: ctx_w4c(n)) for n in W4C_SAMPLES] + [(n, lambda n=n: ctx_mtx(n)) for n in MTX_SAMPLES]
+    names += [(n, lambda n=n: ctx_w4c(n)) for n in W4C_SAMPLES] + [
+        (n, lambda n=n: ctx_mtx(n)) for n in MTX_SAMPLES
+    ]
     for name, mk in names[:limit]:
         try:
             ctx = mk()
@@ -328,24 +492,67 @@ def psi_table(limit=None):
         _, _, psi, _ = RP.compute_psi(sj)
         both = bool(np.array_equal(RP.quantise(psi, "rint"), RP.quantise(psi, "trunc")))
         m = RP.psi_matrix(sj, p.recipe_id.rsplit("-", 1)[1])
-        match = [w for w, wr in ws.items() if wr.write(m, p.params["level"], p.params["chunk_cols"]) == lb]
-        print(name, len(lb), p.recipe_id, "writer", p.params["writer"], "matches", match, "rint==trunc" if both else "")
+        match = [
+            w
+            for w, wr in ws.items()
+            if wr.write(m, p.params["level"], p.params["chunk_cols"]) == lb
+        ]
+        print(
+            name,
+            len(lb),
+            p.recipe_id,
+            "writer",
+            p.params["writer"],
+            "matches",
+            match,
+            "rint==trunc" if both else "",
+        )
 
 
 # ------------------------------------------------------------------------------------------------------------ fetching corpus_m_w3
-FETCH_SAMPLES = {   # corpus_m_w3 dir -> (GSE, GSM, also the large per-cell tables)
-    "GSE309702.GSM9277757": ("GSE309702", "GSM9277757", True), "GSE171161.GSM5220137": ("GSE171161", "GSM5220137", True),
-    "GSE263963.GSM8208009": ("GSE263963", "GSM8208009", True), "GSE311511.GSM9326201": ("GSE311511", "GSM9326201", True),
-    "m_dropseq": ("GSE249398", "GSM7945758", False), "h_microwell": ("GSE134355", "GSM4008717", True),
-    "m_mars": ("GSE222410", "GSM6922987", True), "m_celseq2": ("GSE207275", "GSM6283570", True),
-    "h_visium": ("GSE233208", "GSM7412940", True), "m_visium": ("GSE218360", "GSM6742901", True), "m_v3_a": ("GSE241928", "GSM7745727", True),
+FETCH_SAMPLES = {  # corpus_m_w3 dir -> (GSE, GSM, also the large per-cell tables)
+    "GSE309702.GSM9277757": ("GSE309702", "GSM9277757", True),
+    "GSE171161.GSM5220137": ("GSE171161", "GSM5220137", True),
+    "GSE263963.GSM8208009": ("GSE263963", "GSM8208009", True),
+    "GSE311511.GSM9326201": ("GSE311511", "GSM9326201", True),
+    "m_dropseq": ("GSE249398", "GSM7945758", False),
+    "h_microwell": ("GSE134355", "GSM4008717", True),
+    "m_mars": ("GSE222410", "GSM6922987", True),
+    "m_celseq2": ("GSE207275", "GSM6283570", True),
+    "h_visium": ("GSE233208", "GSM7412940", True),
+    "m_visium": ("GSE218360", "GSM6742901", True),
+    "m_v3_a": ("GSE241928", "GSM7745727", True),
 }
 FETCH_MEMBERS = [
-    "auto_barcodes.tsv", "auto_barcodes_seg1.tsv", "auto_barcodes_seg2.tsv", "cell_cycle_scores.tsv", "cell_qc_metrics.tsv", "doublet_scores.tsv",
-    "ambient_contamination.tsv", "ambient_contamination.json", "metrics_summary.csv", "gene_expression.tsv", "splice_events.tsv", "read_stats.tsv",
-    "saturation_curve.tsv", "pileup_stats.json", "summary.json", "provenance.json", "spatial_coordinates.tsv", "visium_qc.tsv",
-    "nonhost/nonhost_per_cell.tsv", "mt_variants.tsv", "donor_assignments.tsv", "sj_counts.1pz", "splice_psi.1pz", "mt_heteroplasmy.1pz",
-    "star_Log.final.out", "star_Log.progress.out", "star_Solo.out/Barcodes.stats", "star_Solo.out/Gene/Summary.csv", "star_Solo.out/Gene/Features.stats",
+    "auto_barcodes.tsv",
+    "auto_barcodes_seg1.tsv",
+    "auto_barcodes_seg2.tsv",
+    "cell_cycle_scores.tsv",
+    "cell_qc_metrics.tsv",
+    "doublet_scores.tsv",
+    "ambient_contamination.tsv",
+    "ambient_contamination.json",
+    "metrics_summary.csv",
+    "gene_expression.tsv",
+    "splice_events.tsv",
+    "read_stats.tsv",
+    "saturation_curve.tsv",
+    "pileup_stats.json",
+    "summary.json",
+    "provenance.json",
+    "spatial_coordinates.tsv",
+    "visium_qc.tsv",
+    "nonhost/nonhost_per_cell.tsv",
+    "mt_variants.tsv",
+    "donor_assignments.tsv",
+    "sj_counts.1pz",
+    "splice_psi.1pz",
+    "mt_heteroplasmy.1pz",
+    "star_Log.final.out",
+    "star_Log.progress.out",
+    "star_Solo.out/Barcodes.stats",
+    "star_Solo.out/Gene/Summary.csv",
+    "star_Solo.out/Gene/Features.stats",
 ]
 FETCH_BIG = ["donor/donor_assignments.tsv", "mt/mt_summary.tsv"]
 

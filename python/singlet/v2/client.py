@@ -25,6 +25,7 @@ and verified by sha256).
 Environment: ``SINGLET_DATA_BASE`` (default ``https://data.singlet.bio``; a directory or ``file://`` URL with the server layout also
 works), ``SINGLET_CACHE_DIR`` (default ``~/.singlet/cache``), ``SINGLET_V2_VERIFY=1`` (same as ``verify=True``).
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -74,11 +75,13 @@ __all__ = [
 
 MANIFEST_VERSION_MAX = 1
 EXON, INTRON, CELLS = "exon_counts.1pz", "intron_counts.1pz", "cells"
-WHOLE_MAX_BYTES = 48 << 20      # members up to this size (exon+intron+cells) are fetched whole
-COALESCE_GAP = 2 << 20          # merge ranges closer than this (one round trip costs about 6 MB of transfer)
-PART_BYTES = 16 << 20           # a single range larger than 2 parts is split and fetched in parallel
-PREFIX_HINT = 512 << 10         # first read of a member in the two-phase plan
-PARTIAL_GAP = 256 << 10         # in the two-phase plan, ranges closer than this share a request
+WHOLE_MAX_BYTES = 48 << 20  # members up to this size (exon+intron+cells) are fetched whole
+COALESCE_GAP = (
+    2 << 20
+)  # merge ranges closer than this (one round trip costs about 6 MB of transfer)
+PART_BYTES = 16 << 20  # a single range larger than 2 parts is split and fetched in parallel
+PREFIX_HINT = 512 << 10  # first read of a member in the two-phase plan
+PARTIAL_GAP = 256 << 10  # in the two-phase plan, ranges closer than this share a request
 
 
 class V2Error(RuntimeError):
@@ -162,7 +165,11 @@ def _member_ref(name: str, d: dict) -> MemberRef:
         digest=d.get("digest"),
         nnz=(int(d["nnz"]) if d.get("nnz") is not None else None),
         chunk_cols=(int(d["chunk_cols"]) if d.get("chunk_cols") is not None else None),
-        meta={k: v for k, v in d.items() if k not in ("kind", "off", "len", "digest", "nnz", "chunk_cols")},
+        meta={
+            k: v
+            for k, v in d.items()
+            if k not in ("kind", "off", "len", "digest", "nnz", "chunk_cols")
+        },
     )
 
 
@@ -223,7 +230,10 @@ class _PackResolver:
             e = ent[0]
             r = self.transport.get(f"v2/ref/{e['id']}.pack", None, kind="packs")
             data = bytes(r.body)
-            if hashlib.sha256(data).hexdigest() != e.get("sha256") or pack_id(data).hex() != e["id"]:
+            if (
+                hashlib.sha256(data).hexdigest() != e.get("sha256")
+                or pack_id(data).hex() != e["id"]
+            ):
                 raise PackError(f"downloaded pack {e['id']} fails its checksum")
             self.dir.mkdir(parents=True, exist_ok=True)
             path = self.dir / (e["id"] + ".pack")
@@ -245,7 +255,10 @@ class _PackResolver:
             v = self._gene.get(key)
             if v is None:
                 tbl = self.get(pack_hex).gene_table()
-                v = (np.array([g for g, _ in tbl], dtype=object), np.array([n for _, n in tbl], dtype=object))
+                v = (
+                    np.array([g for g, _ in tbl], dtype=object),
+                    np.array([n for _, n in tbl], dtype=object),
+                )
                 self._gene[key] = v
             return v
 
@@ -272,7 +285,9 @@ def _resolver_for(transport: Transport) -> _PackResolver:
 
 
 # ================================================================================================================= fetching
-def _coalesce(ranges: Sequence[Tuple[int, int]], gap: int = COALESCE_GAP) -> List[Tuple[int, int, List[int]]]:
+def _coalesce(
+    ranges: Sequence[Tuple[int, int]], gap: int = COALESCE_GAP
+) -> List[Tuple[int, int, List[int]]]:
     """[(start, end, [indices into ranges])] with ranges closer than ``gap`` merged. ``ranges`` are (off, len); zero length skipped."""
     order = sorted((i for i, (_o, ln) in enumerate(ranges) if ln > 0), key=lambda i: ranges[i][0])
     out: List[list] = []
@@ -291,10 +306,14 @@ class _Source:
 
     local = False
 
-    def read(self, off: int, length: int, *, parallel: bool = False):  # pragma: no cover - interface
+    def read(
+        self, off: int, length: int, *, parallel: bool = False
+    ):  # pragma: no cover - interface
         raise NotImplementedError
 
-    def read_ranges(self, ranges: Sequence[Tuple[int, int]], *, parallel: bool = False, gap: int = COALESCE_GAP) -> List[Any]:
+    def read_ranges(
+        self, ranges: Sequence[Tuple[int, int]], *, parallel: bool = False, gap: int = COALESCE_GAP
+    ) -> List[Any]:
         """Bytes-like for every (off, len) range; near ranges share one request, separate requests run concurrently."""
         res: List[Any] = [b""] * len(ranges)
         co = _coalesce(ranges, gap)
@@ -307,7 +326,7 @@ class _Source:
             mv = memoryview(buf)
             for i in ix:
                 o, ln = ranges[i]
-                res[i] = mv[o - a: o - a + ln]
+                res[i] = mv[o - a : o - a + ln]
         return res
 
     def _executor(self) -> Optional[ThreadPoolExecutor]:
@@ -334,7 +353,7 @@ class _MmapSource(_Source):
     def read(self, off, length, *, parallel=False):
         if off < 0 or off + length > self.size:
             raise V2Error(f"{self.path}: range {off}+{length} outside the {self.size}-byte object")
-        return self._mv[off: off + length]
+        return self._mv[off : off + length]
 
     def close(self):
         try:
@@ -350,7 +369,14 @@ class _MmapSource(_Source):
 
 
 class _RemoteSource(_Source):
-    def __init__(self, transport: Transport, key: str, size: int, part_pool: Optional[ThreadPoolExecutor], part_bytes: int = PART_BYTES):
+    def __init__(
+        self,
+        transport: Transport,
+        key: str,
+        size: int,
+        part_pool: Optional[ThreadPoolExecutor],
+        part_bytes: int = PART_BYTES,
+    ):
         self.transport, self.key, self.size = transport, key, size
         self._pool = part_pool
         self.part_bytes = part_bytes
@@ -364,16 +390,23 @@ class _RemoteSource(_Source):
         if off < 0 or off + length > self.size:
             raise V2Error(f"{self.key}: range {off}+{length} outside the {self.size}-byte object")
         if not parallel or self._pool is None or length < 2 * self.part_bytes:
-            return self.transport.get(self.key, (off, off + length - 1), expect_total=self.size).body
+            return self.transport.get(
+                self.key, (off, off + length - 1), expect_total=self.size
+            ).body
         n_parts = -(-length // self.part_bytes)
         step = -(-length // n_parts)
-        parts = [(off + k * step, min(off + length, off + (k + 1) * step) - 1) for k in range(n_parts)]
-        futs = [self._pool.submit(self.transport.get, self.key, p, expect_total=self.size) for p in parts]
+        parts = [
+            (off + k * step, min(off + length, off + (k + 1) * step) - 1) for k in range(n_parts)
+        ]
+        futs = [
+            self._pool.submit(self.transport.get, self.key, p, expect_total=self.size)
+            for p in parts
+        ]
         out = bytearray(length)
         pos = 0
         for p, f in zip(parts, futs):
             body = f.result().body
-            out[pos: pos + len(body)] = body
+            out[pos : pos + len(body)] = body
             pos += len(body)
         return out
 
@@ -399,7 +432,9 @@ def _validate_manifest(doc: dict, gse: str) -> None:
     if not isinstance(doc, dict) or doc.get("format") != "singlet-v2":
         raise V2Error(f"{gse}: not a singlet-v2 manifest")
     if int(doc.get("manifest_version", 1)) > MANIFEST_VERSION_MAX:
-        raise V2Error(f"{gse}: manifest_version {doc.get('manifest_version')} is newer than this client supports; upgrade singlet-bio")
+        raise V2Error(
+            f"{gse}: manifest_version {doc.get('manifest_version')} is newer than this client supports; upgrade singlet-bio"
+        )
     if not isinstance(doc.get("samples"), list):
         raise V2Error(f"{gse}: manifest has no sample list")
 
@@ -418,8 +453,15 @@ def _transport_for(base: Optional[str]) -> Transport:
         return t
 
 
-def open_study(gse: str, *, base: Optional[str] = None, force: bool = False, transport: Optional[Transport] = None,
-               concurrency: int = 4, verify: Optional[bool] = None) -> "Study":
+def open_study(
+    gse: str,
+    *,
+    base: Optional[str] = None,
+    force: bool = False,
+    transport: Optional[Transport] = None,
+    concurrency: int = 4,
+    verify: Optional[bool] = None,
+) -> "Study":
     """Open the v2 study ``gse``: one GET of ``v2/m/<GSE>.json`` (conditional on the cached ETag), nothing else.
 
     Raises :class:`StudyNotFound` when the study has no v2 manifest."""
@@ -458,7 +500,11 @@ def open_study(gse: str, *, base: Optional[str] = None, force: bool = False, tra
             ) from e
         except TransportError as e:
             if mp.exists():
-                warnings.warn(f"could not revalidate {gse} ({e}); using the cached manifest", RuntimeWarning, stacklevel=2)
+                warnings.warn(
+                    f"could not revalidate {gse} ({e}); using the cached manifest",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
                 doc = json.loads(mp.read_text(encoding="utf-8"))
                 source = {"origin": "cache-offline", "path": str(mp), "etag": etag}
                 r = None
@@ -495,7 +541,15 @@ def open_study(gse: str, *, base: Optional[str] = None, force: bool = False, tra
 class Study:
     """A v2 study: its manifest plus the means to read its samples. Create with :func:`open_study`."""
 
-    def __init__(self, doc: dict, transport: Transport, source: dict, *, concurrency: int = 4, verify: Optional[bool] = None):
+    def __init__(
+        self,
+        doc: dict,
+        transport: Transport,
+        source: dict,
+        *,
+        concurrency: int = 4,
+        verify: Optional[bool] = None,
+    ):
         self.doc = doc
         self.transport = transport
         self.source = source
@@ -533,7 +587,9 @@ class Study:
         def regen(recipe_id: str, params: dict) -> bytes:
             if name == "feature_vocab.json":
                 return self._resolver.get(self.packs["exon"]).vocab_json()
-            raise V2Error(f"{name} is derived by recipe {recipe_id}; use the legacy tools to regenerate it")
+            raise V2Error(
+                f"{name} is derived by recipe {recipe_id}; use the legacy tools to regenerate it"
+            )
 
         return M.study_file_bytes(ent, regen)
 
@@ -567,7 +623,9 @@ class Study:
     def _pool(self) -> ThreadPoolExecutor:
         with self._lock:
             if self._part_pool is None:
-                self._part_pool = ThreadPoolExecutor(self.concurrency, thread_name_prefix="singlet-part")
+                self._part_pool = ThreadPoolExecutor(
+                    self.concurrency, thread_name_prefix="singlet-part"
+                )
             return self._part_pool
 
     def local_object(self, sm: SampleRef) -> Optional[str]:
@@ -575,7 +633,11 @@ class Study:
         if self.transport.is_local():
             p = self.transport.path(sm.key)  # type: ignore[attr-defined]
             return p if os.path.exists(p) else None
-        p = cache_root() / Path(*sm.key.split("/")[1:]) if sm.key.startswith("v2/") else cache_root() / sm.key
+        p = (
+            cache_root() / Path(*sm.key.split("/")[1:])
+            if sm.key.startswith("v2/")
+            else cache_root() / sm.key
+        )
         try:
             if p.exists() and p.stat().st_size == sm.bytes:
                 return str(p)
@@ -590,7 +652,13 @@ class Study:
         return _RemoteSource(self.transport, sm.key, sm.bytes, self._pool())
 
     # ------------------------------------------------------------------ gene maps
-    def _gene_map(self, pack_hex: str, keep_map: Optional[np.ndarray], subset: Optional[np.ndarray] = None, key_extra=None) -> np.ndarray:
+    def _gene_map(
+        self,
+        pack_hex: str,
+        keep_map: Optional[np.ndarray],
+        subset: Optional[np.ndarray] = None,
+        key_extra=None,
+    ) -> np.ndarray:
         """stored-agnostic canonical row -> final gene index (int32, -1 = dropped) for rows described by a pack."""
         k = (pack_hex, id(keep_map) if keep_map is not None else None, key_extra)
         with self._lock:
@@ -600,12 +668,18 @@ class Study:
         rg = self._resolver.row_gene(pack_hex)
         study_ids, _ = self.gene_table()
         pack_ids, _ = self._resolver.gene_table(pack_hex)
-        if len(pack_ids) == len(study_ids) and (pack_ids is study_ids or bool(np.all(pack_ids == study_ids))):
+        if len(pack_ids) == len(study_ids) and (
+            pack_ids is study_ids or bool(np.all(pack_ids == study_ids))
+        ):
             to_study = None
         else:  # a sample on another vocabulary: translate by gene id
             idx = {g: i for i, g in enumerate(study_ids.tolist())}
             to_study = np.array([idx.get(g, -1) for g in pack_ids.tolist()], dtype=np.int32)
-        m = rg if to_study is None else np.where(rg >= 0, to_study[np.maximum(rg, 0)], -1).astype(np.int32)
+        m = (
+            rg
+            if to_study is None
+            else np.where(rg >= 0, to_study[np.maximum(rg, 0)], -1).astype(np.int32)
+        )
         if subset is not None:
             m = m[subset]
         if keep_map is not None:
@@ -622,7 +696,9 @@ class Study:
     def cells(self, where=None, **kw) -> "anndata.AnnData":
         return _study_cells(self, where, **kw)
 
-    def request_plan(self, samples: Optional[Sequence[str]] = None, *, include_manifest: bool = True) -> dict:
+    def request_plan(
+        self, samples: Optional[Sequence[str]] = None, *, include_manifest: bool = True
+    ) -> dict:
         """The requests and bytes a whole-sample ``load`` of these samples issues (no network access)."""
         gsms = list(samples) if samples is not None else self.gsm_ids
         reqs = 1 if include_manifest else 0
@@ -630,7 +706,9 @@ class Study:
         per = []
         for g in gsms:
             sm = self.samples[g]
-            rngs = [(m.off, m.len) for n in (CELLS, EXON, INTRON) if (m := sm.member(n)) is not None]
+            rngs = [
+                (m.off, m.len) for n in (CELLS, EXON, INTRON) if (m := sm.member(n)) is not None
+            ]
             co = _coalesce(rngs)
             nb = sum(b - a for a, b, _ in co)
             per.append({"gsm": g, "requests": len(co), "bytes": nb, "object_bytes": sm.bytes})
@@ -649,7 +727,7 @@ def _open_cells(buf, resolver: _PackResolver):
     from .cells import CellsReader
 
     mv = memoryview(buf)
-    return CellsReader(lambda off, ln: bytes(mv[off: off + ln]), len(mv), resolver.store)
+    return CellsReader(lambda off, ln: bytes(mv[off : off + ln]), len(mv), resolver.store)
 
 
 # ================================================================================================================= per-sample read
@@ -669,7 +747,9 @@ class _Part:
     def csr(self):
         import scipy.sparse as sp
 
-        m = sp.csr_matrix((self.data, self.indices, self.indptr), shape=(self.n_cells, self.n_genes), copy=False)
+        m = sp.csr_matrix(
+            (self.data, self.indices, self.indptr), shape=(self.n_cells, self.n_genes), copy=False
+        )
         m.has_sorted_indices = True
         m.has_canonical_format = True
         return m
@@ -678,15 +758,17 @@ class _Part:
 @dataclass
 class _SampleData:
     gsm: str
-    sel: np.ndarray                     # selected matrix columns, ascending
-    cols: Dict[str, Any]                # cells-table columns restricted to sel (numpy / list)
+    sel: np.ndarray  # selected matrix columns, ascending
+    cols: Dict[str, Any]  # cells-table columns restricted to sel (numpy / list)
     spliced: Optional[_Part]
     unspliced: Optional[_Part]
     n_cells_total: int
     skipped: Optional[str] = None
 
 
-def _runs(sel: np.ndarray, chunk_first_col: np.ndarray, gap_chunks: int = 0) -> List[Tuple[int, int]]:
+def _runs(
+    sel: np.ndarray, chunk_first_col: np.ndarray, gap_chunks: int = 0
+) -> List[Tuple[int, int]]:
     """Column ranges [c0, c1) aligned to chunk boundaries that cover ``sel`` (ascending). Chunks that touch (or are at most
     ``gap_chunks`` chunks apart) share a run."""
     if len(sel) == 0:
@@ -702,7 +784,9 @@ def _runs(sel: np.ndarray, chunk_first_col: np.ndarray, gap_chunks: int = 0) -> 
     return [(int(chunk_first_col[a]), int(chunk_first_col[b + 1])) for a, b in runs]
 
 
-def _open_member(src: _Source, mref: MemberRef, *, whole: Optional[Any] = None, first: Optional[Any] = None):
+def _open_member(
+    src: _Source, mref: MemberRef, *, whole: Optional[Any] = None, first: Optional[Any] = None
+):
     """Open a pz2 member from a whole-member buffer, or from its first bytes (the binding fetches what the prefix lacks)."""
     pz = _native()
     if whole is not None:
@@ -713,12 +797,21 @@ def _open_member(src: _Source, mref: MemberRef, *, whole: Optional[Any] = None, 
     return pz.Member(first, fetch)
 
 
-def _decode_part(member, c_lo: int, c_hi: int, sel: np.ndarray, gene_map: np.ndarray, n_genes: int, threads: int) -> _Part:
+def _decode_part(
+    member, c_lo: int, c_hi: int, sel: np.ndarray, gene_map: np.ndarray, n_genes: int, threads: int
+) -> _Part:
     """Decode columns [c_lo, c_hi), keep ``sel`` (absolute, ascending, inside the range), aggregate to genes."""
     if n_genes == 0:
-        return _Part(np.zeros(len(sel) + 1, dtype=np.int32), np.zeros(0, dtype=np.int32), np.zeros(0, dtype=np.int32), 0)
+        return _Part(
+            np.zeros(len(sel) + 1, dtype=np.int32),
+            np.zeros(0, dtype=np.int32),
+            np.zeros(0, dtype=np.int32),
+            0,
+        )
     rel = (sel - c_lo).astype(np.uint32) if len(sel) != (c_hi - c_lo) else None
-    r = member.decode(c_lo, c_hi, mode="gene", threads=threads, cols=rel, gene_map=gene_map, n_genes=n_genes)
+    r = member.decode(
+        c_lo, c_hi, mode="gene", threads=threads, cols=rel, gene_map=gene_map, n_genes=n_genes
+    )
     return _Part(r["indptr"], r["indices"], r["data"], n_genes)
 
 
@@ -736,7 +829,7 @@ def _concat_parts(parts: List[_Part]) -> _Part:
     for p in parts:
         k = p.n_cells
         z_end = z + int(p.indptr[-1])
-        indptr[c + 1: c + k + 1] = p.indptr[1:] + z
+        indptr[c + 1 : c + k + 1] = p.indptr[1:] + z
         indices[z:z_end] = p.indices
         data[z:z_end] = p.data
         c += k
@@ -749,9 +842,22 @@ def _sample_columns(cells_buf, resolver: _PackResolver, want: Sequence[str]):
     return rd, {n: rd.column(n) for n in want if n in rd.entries}
 
 
-def _read_sample(study: Study, sm: SampleRef, *, sel_fn: Callable[[Any], np.ndarray], want_cols: Sequence[str], keep_map: Optional[np.ndarray],
-                 n_genes: int, threads: int, want_exon: bool = True, want_intron: bool = True, parallel_parts: bool = False,
-                 whole_max: int = WHOLE_MAX_BYTES, verify: bool = False, src: Optional[_Source] = None) -> _SampleData:
+def _read_sample(
+    study: Study,
+    sm: SampleRef,
+    *,
+    sel_fn: Callable[[Any], np.ndarray],
+    want_cols: Sequence[str],
+    keep_map: Optional[np.ndarray],
+    n_genes: int,
+    threads: int,
+    want_exon: bool = True,
+    want_intron: bool = True,
+    parallel_parts: bool = False,
+    whole_max: int = WHOLE_MAX_BYTES,
+    verify: bool = False,
+    src: Optional[_Source] = None,
+) -> _SampleData:
     """Fetch and decode what one sample contributes.
 
     ``sel_fn(cells_reader) -> ascending int array`` of the matrix columns to keep (e.g. the called cells)."""
@@ -762,7 +868,15 @@ def _read_sample(study: Study, sm: SampleRef, *, sel_fn: Callable[[Any], np.ndar
         if cm is None:
             raise V2Error(f"{sm.gsm}: the sample object has no cells table")
         if em is None or em.len == 0:
-            return _SampleData(sm.gsm, np.zeros(0, np.int64), {}, None, None, 0, skipped="exon_counts.1pz is missing")
+            return _SampleData(
+                sm.gsm,
+                np.zeros(0, np.int64),
+                {},
+                None,
+                None,
+                0,
+                skipped="exon_counts.1pz is missing",
+            )
         if not want_intron:
             im = None
         total = cm.len + em.len + (im.len if im else 0)
@@ -771,26 +885,44 @@ def _read_sample(study: Study, sm: SampleRef, *, sel_fn: Callable[[Any], np.ndar
         prefixes: Dict[str, Any] = {}
         if whole:
             names = [CELLS, EXON] + ([INTRON] if im else [])
-            bl = src.read_ranges([(sm.members[n].off, sm.members[n].len) for n in names], parallel=parallel_parts)
+            bl = src.read_ranges(
+                [(sm.members[n].off, sm.members[n].len) for n in names], parallel=parallel_parts
+            )
             bufs = dict(zip(names, bl))
             cbuf = bufs[CELLS]
         else:
             # phase 1: the cells table and the prefix (header, chunk index, tables, rows) of each matrix, concurrently
             names = [CELLS] + [n for n, r in ((EXON, em), (INTRON, im)) if r is not None]
-            bl = src.read_ranges([(sm.members[n].off, min(sm.members[n].len, PREFIX_HINT) if n != CELLS else sm.members[n].len) for n in names],
-                                 parallel=True, gap=PARTIAL_GAP)
+            bl = src.read_ranges(
+                [
+                    (
+                        sm.members[n].off,
+                        min(sm.members[n].len, PREFIX_HINT) if n != CELLS else sm.members[n].len,
+                    )
+                    for n in names
+                ],
+                parallel=True,
+                gap=PARTIAL_GAP,
+            )
             prefixes = dict(zip(names, bl))
             cbuf = prefixes[CELLS]
         rd, cols = _sample_columns(cbuf, study._resolver, want_cols)
         n_rows = rd.n_rows
         if n_rows == 0:
-            return _SampleData(sm.gsm, np.zeros(0, np.int64), {}, None, None, 0, skipped="count matrix has 0 cells")
+            return _SampleData(
+                sm.gsm, np.zeros(0, np.int64), {}, None, None, 0, skipped="count matrix has 0 cells"
+            )
         sel = np.asarray(sel_fn(rd), dtype=np.int64)
         if len(sel) == 0:
             return _SampleData(sm.gsm, sel, {}, None, None, n_rows, skipped="0 cells called")
-        if len(sel) and (sel[0] < 0 or sel[-1] >= n_rows or (len(sel) > 1 and not (np.diff(sel) > 0).all())):
+        if len(sel) and (
+            sel[0] < 0 or sel[-1] >= n_rows or (len(sel) > 1 and not (np.diff(sel) > 0).all())
+        ):
             raise V2Error(f"{sm.gsm}: column selection must be ascending and inside the matrix")
-        cols = {k: (v[sel] if isinstance(v, np.ndarray) else np.asarray(v, dtype=object)[sel]) for k, v in cols.items()}
+        cols = {
+            k: (v[sel] if isinstance(v, np.ndarray) else np.asarray(v, dtype=object)[sel])
+            for k, v in cols.items()
+        }
 
         parts: Dict[str, Optional[_Part]] = {"exon": None, "intron": None}
         opened = []
@@ -814,7 +946,9 @@ def _read_sample(study: Study, sm: SampleRef, *, sel_fn: Callable[[Any], np.ndar
                 pl = [mem.plan(a, b) for a, b in runs]
                 plans[name] = (runs, pl)
                 for k, p in enumerate(pl):
-                    if mem.has(p["byte_off"], p["byte_len"]):  # already inside the prefix read (small members)
+                    if mem.has(
+                        p["byte_off"], p["byte_len"]
+                    ):  # already inside the prefix read (small members)
                         continue
                     want.append((mref.off + p["byte_off"], p["byte_len"]))
                     owners.append((name, k))
@@ -824,11 +958,15 @@ def _read_sample(study: Study, sm: SampleRef, *, sel_fn: Callable[[Any], np.ndar
         for tag, mref, name, mem in opened:
             hdr = mem.header
             if hdr["n"] != n_rows:
-                raise V2Error(f"{sm.gsm}: {name} has {hdr['n']} columns, the cells table has {n_rows}")
+                raise V2Error(
+                    f"{sm.gsm}: {name} has {hdr['n']} columns, the cells table has {n_rows}"
+                )
             if hdr["m"] == 0:
                 continue
             if mref.digest and hdr["digest"] != str(mref.digest).lower():
-                raise V2Error(f"{sm.gsm}: {name} header digest {hdr['digest']} != manifest {mref.digest}")
+                raise V2Error(
+                    f"{sm.gsm}: {name} header digest {hdr['digest']} != manifest {mref.digest}"
+                )
             gmap = _member_gene_map(study, mem, hdr, keep_map)
             if gmap is None:
                 continue
@@ -853,7 +991,9 @@ def _read_sample(study: Study, sm: SampleRef, *, sel_fn: Callable[[Any], np.ndar
             src.close()
 
 
-def _member_gene_map(study: Study, mem, hdr: dict, keep_map: Optional[np.ndarray]) -> Optional[np.ndarray]:
+def _member_gene_map(
+    study: Study, mem, hdr: dict, keep_map: Optional[np.ndarray]
+) -> Optional[np.ndarray]:
     kind = hdr["row_names_kind"]
     m = hdr["m"]
     if kind == "pack":
@@ -865,7 +1005,9 @@ def _member_gene_map(study: Study, mem, hdr: dict, keep_map: Optional[np.ndarray
     if kind == "pack_subset":
         info = mem.row_names()
         idx = np.asarray(info["pack_index"], dtype=np.int64)
-        return study._gene_map(info["pack_id"], keep_map, subset=idx, key_extra=hashlib.md5(idx.tobytes()).hexdigest())
+        return study._gene_map(
+            info["pack_id"], keep_map, subset=idx, key_extra=hashlib.md5(idx.tobytes()).hexdigest()
+        )
     # inline names: map by the gene id before the first underscore (the legacy rule)
     info = mem.row_names()
     names = info["names"]
@@ -884,17 +1026,36 @@ def _verify_matrix(study: Study, sm: SampleRef, name: str, mref: MemberRef, mem,
         return
     r = mem.decode(mode="canonical", threads=0, dtype="native")
     rows = study._resolver.get(hdr["row_names_id"]).names()
-    rd = _open_cells(study.source_for(sm).read(sm.members[CELLS].off, sm.members[CELLS].len), study._resolver)
+    rd = _open_cells(
+        study.source_for(sm).read(sm.members[CELLS].off, sm.members[CELLS].len), study._resolver
+    )
     cols = rd.column("barcode")
-    d = pz.digest(r["indptr"], r["indices"], r["data"], hdr["m"], hdr["n"], value_type=hdr["value_type"], row_names=rows, col_names=cols,
-                  kv=mem.kv())
+    d = pz.digest(
+        r["indptr"],
+        r["indices"],
+        r["data"],
+        hdr["m"],
+        hdr["n"],
+        value_type=hdr["value_type"],
+        row_names=rows,
+        col_names=cols,
+        kv=mem.kv(),
+    )
     want = str(mref.digest).lower() if mref.digest else hdr["digest"]
     if d.hex() != want:
         raise V2Error(f"{sm.gsm}: {name}: canonical digest {d.hex()} != {want}")
 
 
 # ================================================================================================================= study -> AnnData
-_OBS_STUDY_COLS = ("organism", "protocol", "protocol_name", "sample_source", "sample_characteristics", "qc_flag", "reference_build")
+_OBS_STUDY_COLS = (
+    "organism",
+    "protocol",
+    "protocol_name",
+    "sample_source",
+    "sample_characteristics",
+    "qc_flag",
+    "reference_build",
+)
 
 
 def _gene_keep(study: Study, genes: Optional[Sequence[str]]):
@@ -917,11 +1078,15 @@ def _sample_obs_value(meta: dict, key: str, default=""):
     return default if v is None else v
 
 
-def _select_samples(study: Study, samples: Optional[Sequence[str]], obs_filter: Optional[dict]) -> List[str]:
+def _select_samples(
+    study: Study, samples: Optional[Sequence[str]], obs_filter: Optional[dict]
+) -> List[str]:
     gsms = list(study.gsm_ids) if samples is None else [str(s).strip().upper() for s in samples]
     missing = [g for g in gsms if g not in study.samples]
     if missing:
-        raise KeyError(f"sample(s) {missing[:5]} not in {study.gse} (has {len(study.samples)}: {study.gsm_ids[:5]}...)")
+        raise KeyError(
+            f"sample(s) {missing[:5]} not in {study.gse} (has {len(study.samples)}: {study.gsm_ids[:5]}...)"
+        )
     if obs_filter:
         meta = study.study_meta.get("gsm_meta", {})
         keep = []
@@ -977,12 +1142,12 @@ def _vstack_parts(mats: List[_Part], n_genes: int, perms: List[Optional[np.ndarr
         k = p.n_cells
         pn = int(p.indptr[-1])
         if perm is None:
-            indptr[c + 1: c + k + 1] = p.indptr[1:] + z
-            indices[z: z + pn] = p.indices
-            data[z: z + pn] = p.data
+            indptr[c + 1 : c + k + 1] = p.indptr[1:] + z
+            indices[z : z + pn] = p.indices
+            data[z : z + pn] = p.data
         else:
             lens = np.diff(p.indptr)[perm]
-            indptr[c + 1: c + k + 1] = np.cumsum(lens) + z
+            indptr[c + 1 : c + k + 1] = np.cumsum(lens) + z
             # gather rows in the new order
             starts = p.indptr[:-1][perm]
             tot = int(lens.sum())
@@ -990,8 +1155,8 @@ def _vstack_parts(mats: List[_Part], n_genes: int, perms: List[Optional[np.ndarr
                 row_of = np.repeat(np.arange(k), lens)
                 off_in_row = np.arange(tot) - np.repeat(np.cumsum(lens) - lens, lens)
                 src = starts[row_of] + off_in_row
-                indices[z: z + tot] = p.indices[src]
-                data[z: z + tot] = p.data[src]
+                indices[z : z + tot] = p.indices[src]
+                data[z : z + tot] = p.data[src]
         c += k
         z += pn
     m = sp.csr_matrix((data, indices, indptr), shape=(ncell, n_genes), copy=False)
@@ -1000,10 +1165,20 @@ def _vstack_parts(mats: List[_Part], n_genes: int, perms: List[Optional[np.ndarr
     return m
 
 
-def _study_to_anndata(study: Study, samples: Optional[Sequence[str]] = None, *, genes: Optional[Sequence[str]] = None,
-                      obs_filter: Optional[dict] = None, layers: bool = True, cell_order: str = "legacy", concurrency: Optional[int] = None,
-                      threads: Optional[int] = None, verify: Optional[bool] = None, whole_max: int = WHOLE_MAX_BYTES,
-                      verbose: bool = False) -> "anndata.AnnData":
+def _study_to_anndata(
+    study: Study,
+    samples: Optional[Sequence[str]] = None,
+    *,
+    genes: Optional[Sequence[str]] = None,
+    obs_filter: Optional[dict] = None,
+    layers: bool = True,
+    cell_order: str = "legacy",
+    concurrency: Optional[int] = None,
+    threads: Optional[int] = None,
+    verify: Optional[bool] = None,
+    whole_max: int = WHOLE_MAX_BYTES,
+    verbose: bool = False,
+) -> "anndata.AnnData":
     import anndata as ad
     import pandas as pd
 
@@ -1019,9 +1194,16 @@ def _study_to_anndata(study: Study, samples: Optional[Sequence[str]] = None, *, 
     def work(g: str) -> _SampleData:
         sm = study.samples[g]
         return _read_sample(
-            study, sm, sel_fn=lambda rd: np.flatnonzero(np.asarray(rd.column("called"), dtype=bool)),
-            want_cols=("barcode", "called", "cc_pos", "cc_listed", "cc_pvalue"), keep_map=kmap, n_genes=n_genes, threads=dec_threads,
-            parallel_parts=(conc == 1), whole_max=whole_max, verify=do_verify,
+            study,
+            sm,
+            sel_fn=lambda rd: np.flatnonzero(np.asarray(rd.column("called"), dtype=bool)),
+            want_cols=("barcode", "called", "cc_pos", "cc_listed", "cc_pvalue"),
+            keep_map=kmap,
+            n_genes=n_genes,
+            threads=dec_threads,
+            parallel_parts=(conc == 1),
+            whole_max=whole_max,
+            verify=do_verify,
         )
 
     t0 = time.time()
@@ -1031,7 +1213,9 @@ def _study_to_anndata(study: Study, samples: Optional[Sequence[str]] = None, *, 
         with ThreadPoolExecutor(conc, thread_name_prefix="singlet-sample") as ex:
             results = list(ex.map(work, gsms))
     if verbose:
-        print(f"  [singlet.v2] fetched+decoded {len(gsms)} sample(s) in {time.time() - t0:.2f}s ({study.stats.requests} requests, {study.stats.bytes:,} bytes)")
+        print(
+            f"  [singlet.v2] fetched+decoded {len(gsms)} sample(s) in {time.time() - t0:.2f}s ({study.stats.requests} requests, {study.stats.bytes:,} bytes)"
+        )
 
     skipped = []
     ok: List[_SampleData] = []
@@ -1076,12 +1260,25 @@ def _study_to_anndata(study: Study, samples: Optional[Sequence[str]] = None, *, 
         info = gsm_meta.get(r.gsm, {})
         idx = np.char.add(f"{r.gsm}_", bc.astype(str)) if n else np.array([], dtype=str)
         d = {"gsm_id": np.full(n, r.gsm, dtype=object)}
-        for c in ("organism", "protocol", "protocol_name", "sample_source", "sample_characteristics", "qc_flag", "reference_build"):
+        for c in (
+            "organism",
+            "protocol",
+            "protocol_name",
+            "sample_source",
+            "sample_characteristics",
+            "qc_flag",
+            "reference_build",
+        ):
             d[c] = np.full(n, _sample_obs_value(info, c), dtype=object)
-        d["n_cells_sample"] = np.full(n, info.get("n_cells", n) if info.get("n_cells", n) is not None else n, dtype=object)
+        d["n_cells_sample"] = np.full(
+            n, info.get("n_cells", n) if info.get("n_cells", n) is not None else n, dtype=object
+        )
         obs_frames.append(pd.DataFrame(d, index=pd.Index(idx.astype(object))))
     obs = pd.concat(obs_frames, axis=0) if len(obs_frames) > 1 else obs_frames[0]
-    var = pd.DataFrame({"gene_name": var_names.astype(object)}, index=pd.Index(var_ids.astype(object), name="gene_id"))
+    var = pd.DataFrame(
+        {"gene_name": var_names.astype(object)},
+        index=pd.Index(var_ids.astype(object), name="gene_id"),
+    )
     adata = ad.AnnData(X=X, obs=obs, var=var)
     if layers:
         for lname, plist in (("spliced", spl), ("unspliced", uns_)):
@@ -1100,8 +1297,12 @@ def _apply_obs_filter(adata, obs_filter: dict):
     mask = True
     for col, val in obs_filter.items():
         if col not in adata.obs.columns:
-            raise KeyError(f"obs_filter column {col!r} not found. Available: {list(adata.obs.columns)}")
-        mask = mask & (adata.obs[col].isin(val) if isinstance(val, list) else (adata.obs[col] == val))
+            raise KeyError(
+                f"obs_filter column {col!r} not found. Available: {list(adata.obs.columns)}"
+            )
+        mask = mask & (
+            adata.obs[col].isin(val) if isinstance(val, list) else (adata.obs[col] == val)
+        )
     return adata[mask].copy()
 
 
@@ -1118,7 +1319,9 @@ def _attach_uns(adata, study: Study, gsms: List[str], skipped: list) -> None:
         "reference_build": study.reference_build,
         "n_gsms": len(gsms),
         "created_at": study.doc.get("created_at"),
-        "singlet_version": (study.doc.get("pipeline") or {}).get("singlet_version") if isinstance(study.doc.get("pipeline"), dict) else None,
+        "singlet_version": (study.doc.get("pipeline") or {}).get("singlet_version")
+        if isinstance(study.doc.get("pipeline"), dict)
+        else None,
         "format": "singlet-v2",
         "rev": study.rev,
         "profile": "public",
@@ -1159,10 +1362,21 @@ def _eval_where(where, df):
     raise TypeError("where must be a pandas query string, a callable(df) -> mask, or a dict")
 
 
-def _study_cells(study: Study, where=None, *, samples: Optional[Sequence[str]] = None, columns: Optional[Sequence[str]] = None,
-                 genes: Optional[Sequence[str]] = None, layers: bool = False, max_cells: Optional[int] = None, concurrency: Optional[int] = None,
-                 threads: Optional[int] = None, verify: Optional[bool] = None, whole_max: int = WHOLE_MAX_BYTES, called_only: bool = False
-                 ) -> "anndata.AnnData":
+def _study_cells(
+    study: Study,
+    where=None,
+    *,
+    samples: Optional[Sequence[str]] = None,
+    columns: Optional[Sequence[str]] = None,
+    genes: Optional[Sequence[str]] = None,
+    layers: bool = False,
+    max_cells: Optional[int] = None,
+    concurrency: Optional[int] = None,
+    threads: Optional[int] = None,
+    verify: Optional[bool] = None,
+    whole_max: int = WHOLE_MAX_BYTES,
+    called_only: bool = False,
+) -> "anndata.AnnData":
     """Cell-level slice: the cells of ``samples`` that satisfy ``where`` (evaluated on the cells table), as a cells x genes AnnData.
 
     Only the cells tables of the samples and the chunk runs of the matrices that contain the selected cells are fetched when the
@@ -1189,8 +1403,18 @@ def _study_cells(study: Study, where=None, *, samples: Optional[Sequence[str]] =
         return idx
 
     def work(g: str) -> _SampleData:
-        return _read_sample(study, study.samples[g], sel_fn=sel_fn, want_cols=_cells_wanted(columns), keep_map=kmap, n_genes=n_genes,
-                            threads=dec_threads, parallel_parts=(conc == 1), whole_max=whole_max, verify=do_verify)
+        return _read_sample(
+            study,
+            study.samples[g],
+            sel_fn=sel_fn,
+            want_cols=_cells_wanted(columns),
+            keep_map=kmap,
+            n_genes=n_genes,
+            threads=dec_threads,
+            parallel_parts=(conc == 1),
+            whole_max=whole_max,
+            verify=do_verify,
+        )
 
     if conc == 1:
         results = [work(g) for g in gsms]
@@ -1199,7 +1423,13 @@ def _study_cells(study: Study, where=None, *, samples: Optional[Sequence[str]] =
             results = list(ex.map(work, gsms))
     ok = [r for r in results if r.spliced is not None or r.unspliced is not None]
     if not ok:
-        return ad.AnnData(X=np.zeros((0, n_genes), dtype=np.int32), var=pd.DataFrame({"gene_name": var_names.astype(object)}, index=pd.Index(var_ids.astype(object), name="gene_id")))
+        return ad.AnnData(
+            X=np.zeros((0, n_genes), dtype=np.int32),
+            var=pd.DataFrame(
+                {"gene_name": var_names.astype(object)},
+                index=pd.Index(var_ids.astype(object), name="gene_id"),
+            ),
+        )
     xs, spl, uns_ = [], [], []
     for r in ok:
         a, b = r.spliced, r.unspliced
@@ -1220,9 +1450,14 @@ def _study_cells(study: Study, where=None, *, samples: Optional[Sequence[str]] =
             if k == "barcode" or (columns is not None and k not in columns):
                 continue
             d[k] = np.asarray(v)
-        frames.append(pd.DataFrame(d, index=pd.Index(np.char.add(f"{r.gsm}_", bc.astype(str)).astype(object))))
+        frames.append(
+            pd.DataFrame(d, index=pd.Index(np.char.add(f"{r.gsm}_", bc.astype(str)).astype(object)))
+        )
     obs = pd.concat(frames, axis=0) if len(frames) > 1 else frames[0]
-    var = pd.DataFrame({"gene_name": var_names.astype(object)}, index=pd.Index(var_ids.astype(object), name="gene_id"))
+    var = pd.DataFrame(
+        {"gene_name": var_names.astype(object)},
+        index=pd.Index(var_ids.astype(object), name="gene_id"),
+    )
     adata = ad.AnnData(X=X, obs=obs, var=var)
     if layers and all(p is not None for p in spl) and all(p is not None for p in uns_):
         adata.layers["spliced"] = _vstack_parts(spl, n_genes, [None] * len(spl))  # type: ignore[arg-type]
@@ -1240,7 +1475,11 @@ def _cells_frame(rd, columns: Optional[Sequence[str]]):
     """Numeric / boolean columns of an opened cells table as a DataFrame (strings and barcodes excluded)."""
     import pandas as pd
 
-    names = [n for n in rd.names if n != "barcode"] if columns is None else [n for n in columns if n in rd.entries]
+    names = (
+        [n for n in rd.names if n != "barcode"]
+        if columns is None
+        else [n for n in columns if n in rd.entries]
+    )
     cols = {}
     for n in names:
         if rd.entries[n][1] in (8, 9):  # string / barcode
@@ -1250,8 +1489,17 @@ def _cells_frame(rd, columns: Optional[Sequence[str]]):
 
 
 # ================================================================================================================= public functions
-def load(source: str, *, genes: Optional[Sequence[str]] = None, obs_filter: Optional[dict] = None, samples: Optional[Sequence[str]] = None,
-         layers: bool = True, force: bool = False, base: Optional[str] = None, **kw) -> "anndata.AnnData":
+def load(
+    source: str,
+    *,
+    genes: Optional[Sequence[str]] = None,
+    obs_filter: Optional[dict] = None,
+    samples: Optional[Sequence[str]] = None,
+    layers: bool = True,
+    force: bool = False,
+    base: Optional[str] = None,
+    **kw,
+) -> "anndata.AnnData":
     """Load a study (``GSE...``), one sample (``GSM...``, resolved to its parent study), a downloaded ``.s2`` sample object, or a
     manifest ``.json`` path as an AnnData of the called cells at gene level (``X = spliced + unspliced``)."""
     s = str(source).strip()
@@ -1271,14 +1519,24 @@ def load(source: str, *, genes: Optional[Sequence[str]] = None, obs_filter: Opti
 
         parent = _resolve_gsm_to_gse(acc)
         if parent is None:
-            raise FileNotFoundError(f"Could not resolve parent GSE for sample {acc!r} via the public API. Load the parent series directly.")
+            raise FileNotFoundError(
+                f"Could not resolve parent GSE for sample {acc!r} via the public API. Load the parent series directly."
+            )
         gsm_filter, acc = acc, parent
         samples = [gsm_filter] if samples is None else samples
     st = open_study(acc, base=base, force=force)
     return st.to_anndata(samples, genes=genes, obs_filter=obs_filter, layers=layers, **kw)
 
 
-def cells(source: str, where=None, *, samples: Optional[Sequence[str]] = None, base: Optional[str] = None, force: bool = False, **kw):
+def cells(
+    source: str,
+    where=None,
+    *,
+    samples: Optional[Sequence[str]] = None,
+    base: Optional[str] = None,
+    force: bool = False,
+    **kw,
+):
     """Cell-level slice of a study (or of the parent study of a GSM): see :meth:`Study.cells`."""
     from singlet._integrity import normalize_accession
 
@@ -1302,8 +1560,15 @@ def _manifest_root(p: Path) -> Tuple[str, str]:
     return str(p.parent.parent.parent), p.stem
 
 
-def load_s2(path: Union[str, os.PathLike], *, genes: Optional[Sequence[str]] = None, layers: bool = True, threads: Optional[int] = None,
-            verify: bool = False, **kw) -> "anndata.AnnData":
+def load_s2(
+    path: Union[str, os.PathLike],
+    *,
+    genes: Optional[Sequence[str]] = None,
+    layers: bool = True,
+    threads: Optional[int] = None,
+    verify: bool = False,
+    **kw,
+) -> "anndata.AnnData":
     """AnnData of the called cells of a local ``.s2`` sample object (memory mapped, no network, no copies of the file)."""
     import anndata as ad
     import pandas as pd
@@ -1312,7 +1577,12 @@ def load_s2(path: Union[str, os.PathLike], *, genes: Optional[Sequence[str]] = N
 
     path = str(path)
     rd = S2Reader(path)
-    members = {n: MemberRef(n, mi.kind, mi.off, mi.len, mi.digest.hex() if mi.digest else None, None, None, mi.meta) for n, mi in rd.members.items()}
+    members = {
+        n: MemberRef(
+            n, mi.kind, mi.off, mi.len, mi.digest.hex() if mi.digest else None, None, None, mi.meta
+        )
+        for n, mi in rd.members.items()
+    }
     sm = SampleRef(rd.sample_id, "", rd.file_len, None, None, None, members)
     exon = members.get(EXON)
     if exon is None:
@@ -1327,12 +1597,27 @@ def load_s2(path: Union[str, os.PathLike], *, genes: Optional[Sequence[str]] = N
         h = mem.header
         pack_hex = h["row_names_id"]
         del mem
-        doc = {"format": "singlet-v2", "manifest_version": 1, "gse": "GSE0", "rev": "", "packs": {"exon": pack_hex}, "samples": []}
+        doc = {
+            "format": "singlet-v2",
+            "manifest_version": 1,
+            "gse": "GSE0",
+            "rev": "",
+            "packs": {"exon": pack_hex},
+            "samples": [],
+        }
         st = Study(doc, t, {"origin": "s2"}, concurrency=1, verify=verify)
         kmap, n_genes, var_ids, var_names = _gene_keep(st, genes)
-        sd = _read_sample(st, sm, sel_fn=lambda r: np.flatnonzero(np.asarray(r.column("called"), dtype=bool)),
-                          want_cols=("barcode", "called", "cc_pos", "cc_listed", "cc_pvalue"), keep_map=kmap, n_genes=n_genes,
-                          threads=threads if threads is not None else 0, src=src, verify=verify)
+        sd = _read_sample(
+            st,
+            sm,
+            sel_fn=lambda r: np.flatnonzero(np.asarray(r.column("called"), dtype=bool)),
+            want_cols=("barcode", "called", "cc_pos", "cc_listed", "cc_pvalue"),
+            keep_map=kmap,
+            n_genes=n_genes,
+            threads=threads if threads is not None else 0,
+            src=src,
+            verify=verify,
+        )
     finally:
         src.close()
     if sd.skipped:
@@ -1349,8 +1634,14 @@ def load_s2(path: Union[str, os.PathLike], *, genes: Optional[Sequence[str]] = N
     if perm is not None:
         bc = bc[perm]
     n = len(sd.sel)
-    obs = pd.DataFrame({"gsm_id": np.full(n, sm.gsm, dtype=object)}, index=pd.Index(np.char.add(f"{sm.gsm}_", bc.astype(str)).astype(object)))
-    var = pd.DataFrame({"gene_name": var_names.astype(object)}, index=pd.Index(var_ids.astype(object), name="gene_id"))
+    obs = pd.DataFrame(
+        {"gsm_id": np.full(n, sm.gsm, dtype=object)},
+        index=pd.Index(np.char.add(f"{sm.gsm}_", bc.astype(str)).astype(object)),
+    )
+    var = pd.DataFrame(
+        {"gene_name": var_names.astype(object)},
+        index=pd.Index(var_ids.astype(object), name="gene_id"),
+    )
     adata = ad.AnnData(X=X, obs=obs, var=var)
     if layers and a is not None and b is not None:
         adata.layers["spliced"] = _vstack_parts([a], n_genes, [perm])
@@ -1359,8 +1650,16 @@ def load_s2(path: Union[str, os.PathLike], *, genes: Optional[Sequence[str]] = N
     return adata
 
 
-def download_study(gse: str, output_dir: Optional[Union[str, os.PathLike]] = None, *, samples: Optional[Sequence[str]] = None, force: bool = False,
-                   base: Optional[str] = None, concurrency: int = 4, verify: bool = True) -> Path:
+def download_study(
+    gse: str,
+    output_dir: Optional[Union[str, os.PathLike]] = None,
+    *,
+    samples: Optional[Sequence[str]] = None,
+    force: bool = False,
+    base: Optional[str] = None,
+    concurrency: int = 4,
+    verify: bool = True,
+) -> Path:
     """Mirror a study for offline use: the manifest, the sample objects (whole-object sha256 verified) and the packs they need.
 
     The layout is the server's (``<root>/v2/m/<GSE>.json``, ``<root>/v2/s/<GSM>/<d>.s2``); returns the manifest path. ``load``

@@ -17,6 +17,7 @@ Extensions on top of W3's protocol (see bench/compression/notes/m_w2.md section 
   ``ctx.matrix(aux_name)`` / ``ctx.blob(aux_name)`` / ``ctx.vector(name)`` read it back in both phases.
 * ``ctx.legacy_bytes`` is an alias of ``member_bytes``; ``ctx.gsm`` / ``ctx.gse`` alias ``sample_id`` / ``study_id``.
 """
+
 from __future__ import annotations
 
 import json
@@ -25,11 +26,11 @@ from typing import Optional
 import numpy as np
 
 from . import container as C
-from . import util
 from .legacy import decode_1pz_bytes
 from .matrix import Csc
-from .packs import PackStore, VocabPack, Whitelist, default_store
-from .recipes_ctx import Context as RecipeContext, Matrix as RMatrix
+from .packs import PackStore, VocabPack, default_store
+from .recipes_ctx import Context as RecipeContext
+from .recipes_ctx import Matrix as RMatrix
 
 
 class ContextError(RuntimeError):
@@ -38,17 +39,32 @@ class ContextError(RuntimeError):
 
 # ---------------------------------------------------------------------------------------------- conversions
 def csc_to_rmatrix(c: Csc) -> RMatrix:
-    return RMatrix(indptr=c.indptr, indices=c.indices, data=c.data, shape=(c.m, c.n), rownames=c.rownames, colnames=c.colnames,
-                   user_kv=dict(c.kv))
+    return RMatrix(
+        indptr=c.indptr,
+        indices=c.indices,
+        data=c.data,
+        shape=(c.m, c.n),
+        rownames=c.rownames,
+        colnames=c.colnames,
+        user_kv=dict(c.kv),
+    )
 
 
 def rmatrix_to_csc(r, value_type: int = 3) -> Csc:
     if isinstance(r, Csc):
         return r
     m, n = int(r.shape[0]), int(r.shape[1])
-    c = Csc(m=m, n=n, indptr=np.asarray(r.indptr).astype(np.int64), indices=np.asarray(r.indices).astype(np.uint32),
-            data=np.asarray(r.data).astype(np.uint32), rownames=list(r.rownames) if r.rownames is not None else None,
-            colnames=list(r.colnames) if r.colnames is not None else None, kv=dict(r.user_kv or {}), value_type=value_type)
+    c = Csc(
+        m=m,
+        n=n,
+        indptr=np.asarray(r.indptr).astype(np.int64),
+        indices=np.asarray(r.indices).astype(np.uint32),
+        data=np.asarray(r.data).astype(np.uint32),
+        rownames=list(r.rownames) if r.rownames is not None else None,
+        colnames=list(r.colnames) if r.colnames is not None else None,
+        kv=dict(r.user_kv or {}),
+        value_type=value_type,
+    )
     if c.rownames is None:
         c.row_ref = {"none": True}
     if c.colnames is None:
@@ -117,6 +133,7 @@ class _Base(RecipeContext):
         if not self.reference_build:
             return None
         from .recipes_ctx import load_features_order
+
         return load_features_order(self.reference_build)
 
     def vector(self, name: str):
@@ -134,8 +151,16 @@ class _Base(RecipeContext):
 
 # ============================================================================================ migration side
 class LegacyContext(_Base):
-    def __init__(self, bundle, gsm: Optional[str], packs: Optional[PackStore] = None, gse: Optional[str] = None,
-                 reference_build: Optional[str] = None, protocol_name: str = "", study_bytes: Optional[dict] = None):
+    def __init__(
+        self,
+        bundle,
+        gsm: Optional[str],
+        packs: Optional[PackStore] = None,
+        gse: Optional[str] = None,
+        reference_build: Optional[str] = None,
+        protocol_name: str = "",
+        study_bytes: Optional[dict] = None,
+    ):
         super().__init__()
         self.bundle = bundle
         self.sample_id = gsm or ""
@@ -144,11 +169,11 @@ class LegacyContext(_Base):
         self.protocol_name = protocol_name
         self.packs = packs or default_store()
         self._study = study_bytes if study_bytes is not None else {}
-        self._paths = dict(bundle.sample_paths(gsm)) if gsm else {}   # relative name -> full path
+        self._paths = dict(bundle.sample_paths(gsm)) if gsm else {}  # relative name -> full path
         self._bytes: dict[str, bytes] = {}
         self._csc: dict[str, Optional[Csc]] = {}
         self._rm: dict[str, Optional[RMatrix]] = {}
-        self.cells_table = None      # CellsTable being built (candidate columns included)
+        self.cells_table = None  # CellsTable being built (candidate columns included)
         self._cells_dict = None
         self._planning = False
         self.aux_matrices: dict[str, Csc] = {}
@@ -218,13 +243,18 @@ class LegacyContext(_Base):
     def _check_name(self, name: str) -> None:
         if not self._planning:
             raise ContextError("auxiliary members can only be registered inside plan()")
-        if name in self._paths or name in self.aux_matrices or name in self.aux_blobs or name in self.aux_vectors:
+        if (
+            name in self._paths
+            or name in self.aux_matrices
+            or name in self.aux_blobs
+            or name in self.aux_vectors
+        ):
             raise ContextError("auxiliary member name %r is taken" % name)
 
     def provide_matrix(self, aux_name, matrix) -> None:
         self._check_name(aux_name)
         c = rmatrix_to_csc(matrix)
-        if c.nnz and c.value_type == 3:       # smallest value type that holds the data
+        if c.nnz and c.value_type == 3:  # smallest value type that holds the data
             mx = int(c.data.max())
             c.value_type = 1 if mx <= 0xFF else (2 if mx <= 0xFFFF else 3)
         self.aux_matrices[aux_name] = c
@@ -247,8 +277,14 @@ class LegacyContext(_Base):
     def _vocab_pack(self, kind: str) -> Optional[VocabPack]:
         if kind not in self._vp:
             m = self.csc("%s_counts.1pz" % kind) if self.sample_id else None
-            pk = self.packs.find_vocab(kind, m.rownames, self.reference_build) if m is not None and m.rownames else None
-            if pk is None and not self.sample_id and self.reference_build:   # study level: the pack of the build
+            pk = (
+                self.packs.find_vocab(kind, m.rownames, self.reference_build)
+                if m is not None and m.rownames
+                else None
+            )
+            if (
+                pk is None and not self.sample_id and self.reference_build
+            ):  # study level: the pack of the build
                 c = self.packs.vocab_packs(kind, self.reference_build)
                 pk = c[0] if c else None
             self._vp[kind] = pk
@@ -260,15 +296,22 @@ class V2Context(_Base):
     """Context over a finished sample object. ``recipes`` is the adapter (``singlet.v2.rcp_adapter.Recipes``) used to regenerate
     derived members; ``study_files`` maps study-level names to bytes."""
 
-    def __init__(self, sample, recipes, gse: Optional[str] = None, reference_build: Optional[str] = None,
-                 study_files: Optional[dict] = None, protocol_name: str = ""):
+    def __init__(
+        self,
+        sample,
+        recipes,
+        gse: Optional[str] = None,
+        reference_build: Optional[str] = None,
+        study_files: Optional[dict] = None,
+        protocol_name: str = "",
+    ):
         super().__init__()
         self.sample = sample
         self.reader = sample.reader
         self.sample_id = sample.sample_id
         self.study_id = gse or ""
         facts = {}
-        for mi in self.reader.members.values():           # sample facts recorded by the migration
+        for mi in self.reader.members.values():  # sample facts recorded by the migration
             c = (mi.meta or {}).get("ctx")
             if isinstance(c, dict):
                 facts = c
@@ -278,7 +321,7 @@ class V2Context(_Base):
         self.packs = sample.packs
         self.recipes = recipes
         self._study = study_files or {}
-        self._out: dict[str, object] = {}      # member -> regenerated bytes or RMatrix
+        self._out: dict[str, object] = {}  # member -> regenerated bytes or RMatrix
         self._busy: set = set()
         self._cells_dict = None
         self._rm: dict[str, Optional[RMatrix]] = {}
@@ -315,8 +358,11 @@ class V2Context(_Base):
             return self.sample.matrix(member)
         if mi.kind == C.KIND_DERIVED and member.endswith(".1pz"):
             out = self._regenerate(member, want_matrix=True)
-            return rmatrix_to_csc(out, int((mi.meta or {}).get("legacy_vt_code", 3))) if not isinstance(out, (bytes, bytearray)) \
+            return (
+                rmatrix_to_csc(out, int((mi.meta or {}).get("legacy_vt_code", 3)))
+                if not isinstance(out, (bytes, bytearray))
                 else decode_1pz_bytes(out)
+            )
         if member.endswith(".1pz") and mi.kind in (C.KIND_STORED, C.KIND_RAW):
             try:
                 return decode_1pz_bytes(self.reader.legacy_blob(member))
@@ -353,8 +399,13 @@ class V2Context(_Base):
         try:
             meta = mi.meta
             if member.endswith(".1pz"):
-                out = self.recipes.regenerate_member_matrix(meta["recipe"], meta.get("params", {}), self) if want_matrix \
+                out = (
+                    self.recipes.regenerate_member_matrix(
+                        meta["recipe"], meta.get("params", {}), self
+                    )
+                    if want_matrix
                     else self.recipes.regenerate_bytes(meta["recipe"], meta.get("params", {}), self)
+                )
             else:
                 out = self.recipes.regenerate_bytes(meta["recipe"], meta.get("params", {}), self)
         finally:
@@ -390,8 +441,8 @@ def _dump_vector(a: np.ndarray) -> bytes:
 
 def _load_vector(b: bytes) -> np.ndarray:
     n = int.from_bytes(b[:4], "little")
-    h = json.loads(b[4:4 + n].decode())
-    return np.frombuffer(b[4 + n:], dtype=np.dtype(h["dtype"])).reshape(h["shape"]).copy()
+    h = json.loads(b[4 : 4 + n].decode())
+    return np.frombuffer(b[4 + n :], dtype=np.dtype(h["dtype"])).reshape(h["shape"]).copy()
 
 
 # ============================================================================================ study level
@@ -399,7 +450,9 @@ class StudyContext(_Base):
     """Context for study-level files (``manifest.json``, ``feature_vocab.json``, ...): no sample, only packs and the other study
     files. ``files`` maps study file names to bytes (legacy bytes in migration, regenerated bytes in verification)."""
 
-    def __init__(self, gse: str, reference_build: str, files: dict, packs: Optional[PackStore] = None):
+    def __init__(
+        self, gse: str, reference_build: str, files: dict, packs: Optional[PackStore] = None
+    ):
         super().__init__()
         self.study_id = gse
         self.sample_id = ""

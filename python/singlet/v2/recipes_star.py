@@ -9,6 +9,7 @@
 
 Evidence and counts: bench/compression/notes/w4_mtx.md and notes/m_w3.md.
 """
+
 from __future__ import annotations
 
 import re
@@ -72,10 +73,21 @@ def wl_array(wl):
 # ---------------------------------------------------------------------------------------------------
 # whitelist-sorted-v1
 # ---------------------------------------------------------------------------------------------------
-WHITELIST_NAMES = ("3M-february-2018", "737K-august-2016", "gex_737K-arc-v1", "737K-april-2014", "737K-cratac-v1")
+WHITELIST_NAMES = (
+    "3M-february-2018",
+    "737K-august-2016",
+    "gex_737K-arc-v1",
+    "737K-april-2014",
+    "737K-cratac-v1",
+)
 # barcodes per list; used to skip candidates that cannot match (building a 3.7 M entry list costs seconds)
-WHITELIST_SIZES = {"3M-february-2018": 3686400, "737K-august-2016": 737280, "737K-cratac-v1": 737280, "737K-april-2014": 737280,
-                   "gex_737K-arc-v1": 736320}
+WHITELIST_SIZES = {
+    "3M-february-2018": 3686400,
+    "737K-august-2016": 737280,
+    "737K-cratac-v1": 737280,
+    "737K-april-2014": 737280,
+    "gex_737K-arc-v1": 736320,
+}
 
 
 def plan_whitelist(member, legacy_bytes, ctx):
@@ -141,7 +153,9 @@ def _positional_order(ctx, genes, contigs):
     spans = gene_spans(ctx)
     cix = {c: i for i, c in enumerate(contigs)}
     try:
-        key = np.array([(cix[spans[g][0]], spans[g][1], spans[g][2]) for g, _ in genes], dtype=np.int64)
+        key = np.array(
+            [(cix[spans[g][0]], spans[g][1], spans[g][2]) for g, _ in genes], dtype=np.int64
+        )
     except KeyError:
         return None
     return np.lexsort((np.arange(len(genes)), key[:, 2], key[:, 1], key[:, 0]))
@@ -290,7 +304,9 @@ def plan_mtx_text(member, legacy_bytes, ctx):
 
 def regenerate_mtx_text(recipe_id, params, ctx, member=RAW_MTX) -> bytes:
     hdr = params.get("hdr")
-    return rm.render_mtx(ctx.matrix(aux_name(member)), hdr.encode("ascii") if hdr else rm.DEFAULT_HEADER)
+    return rm.render_mtx(
+        ctx.matrix(aux_name(member)), hdr.encode("ascii") if hdr else rm.DEFAULT_HEADER
+    )
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -305,10 +321,14 @@ def _kept_columns(ctx):
     raw = lines_to_array(rb)
     if raw is None:
         return None
-    called_bc = _bc_array([str(b) for b in np.asarray(cells["barcode"])[np.asarray(cells["called"], dtype=bool)]])
+    called_bc = _bc_array(
+        [str(b) for b in np.asarray(cells["barcode"])[np.asarray(cells["called"], dtype=bool)]]
+    )
     if called_bc.size == 0:
         return raw, np.zeros(0, dtype=np.int64)
-    called_bc = called_bc.astype(raw.dtype) if called_bc.dtype.itemsize <= raw.dtype.itemsize else called_bc
+    called_bc = (
+        called_bc.astype(raw.dtype) if called_bc.dtype.itemsize <= raw.dtype.itemsize else called_bc
+    )
     keep = np.flatnonzero(np.isin(raw, called_bc))
     if keep.size != called_bc.size:
         return None  # some called barcode is not in the raw list
@@ -328,7 +348,11 @@ def plan_filter(member, legacy_bytes, ctx):
         if member == FIL_BC:
             if render_filtered_barcodes(ctx) != legacy_bytes:
                 return None
-            return ("mtx-filter-v1", {"what": "barcodes"}, ["member:" + RAW_BC, "cells:barcode", "cells:called"])
+            return (
+                "mtx-filter-v1",
+                {"what": "barcodes"},
+                ["member:" + RAW_BC, "cells:barcode", "cells:called"],
+            )
         r = rm.parse_mtx(legacy_bytes)
         if r is None:
             return None
@@ -343,7 +367,11 @@ def plan_filter(member, legacy_bytes, ctx):
         return None
     if out != legacy_bytes:
         return None
-    return ("mtx-filter-v1", params, ["matrix:" + aux_name(RAW_MTX), "member:" + RAW_BC, "cells:barcode", "cells:called"])
+    return (
+        "mtx-filter-v1",
+        params,
+        ["matrix:" + aux_name(RAW_MTX), "member:" + RAW_BC, "cells:barcode", "cells:called"],
+    )
 
 
 def regenerate_filter(recipe_id, params, ctx) -> bytes:

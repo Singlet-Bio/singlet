@@ -239,15 +239,29 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "gse_id": {"type": "string", "description": "GEO series accession (e.g. 'GSE145370')"},
+                    "gse_id": {
+                        "type": "string",
+                        "description": "GEO series accession (e.g. 'GSE145370')",
+                    },
                     "where": {
                         "type": "string",
                         "description": "Clauses joined by 'and': '<column> <op> <number>' (>=, <=, >, <, ==, !=), "
                         "'<boolean column>' or 'not <boolean column>'.",
                     },
-                    "samples": {"type": "array", "items": {"type": "string"}, "description": "GSM ids (default: all)"},
-                    "max_cells": {"type": "integer", "description": "Cells per sample, largest first (default 1000)", "default": 1000},
-                    "save_to": {"type": "string", "description": "Write the slice to this .h5ad path"},
+                    "samples": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "GSM ids (default: all)",
+                    },
+                    "max_cells": {
+                        "type": "integer",
+                        "description": "Cells per sample, largest first (default 1000)",
+                        "default": 1000,
+                    },
+                    "save_to": {
+                        "type": "string",
+                        "description": "Write the slice to this .h5ad path",
+                    },
                 },
                 "required": ["gse_id"],
             },
@@ -598,7 +612,11 @@ def _v2_sample_info(gse_id: str, gsm_id: str, if_rev: str | None = None) -> dict
     sm = st.samples.get(gsm_id)
     if sm is None:
         return {"error": f"{gsm_id} is not a sample of {gse_id} in the v2 manifest (rev {st.rev})"}
-    members = {n: [m.off, m.len, m.kind] for n, m in sm.members.items() if not n.startswith("vector:") and not n.endswith("#csc")}
+    members = {
+        n: [m.off, m.len, m.kind]
+        for n, m in sm.members.items()
+        if not n.startswith("vector:") and not n.endswith("#csc")
+    }
     need = [sm.members[n] for n in (v2.CELLS, v2.EXON, v2.INTRON) if n in sm.members]
     co = v2._coalesce([(m.off, m.len) for m in need])
     return {
@@ -684,7 +702,9 @@ def _parse_where(text: str | None):
     clauses = []
     for part in re.split(r"\s+and\s+", text.strip(), flags=re.I):
         part = part.strip()
-        m = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)\s*(>=|<=|==|!=|>|<)\s*(-?[0-9]+(?:\.[0-9]+)?)", part)
+        m = re.fullmatch(
+            r"([A-Za-z_][A-Za-z0-9_]*)\s*(>=|<=|==|!=|>|<)\s*(-?[0-9]+(?:\.[0-9]+)?)", part
+        )
         if m:
             clauses.append((m.group(1), ops[m.group(2)], float(m.group(3))))
             continue
@@ -692,13 +712,17 @@ def _parse_where(text: str | None):
         if m:
             clauses.append((m.group(2), None, bool(not m.group(1))))
             continue
-        raise ValueError(f"cannot parse clause {part!r}: use '<column> <op> <number>', '<column>' or 'not <column>'")
+        raise ValueError(
+            f"cannot parse clause {part!r}: use '<column> <op> <number>', '<column>' or 'not <column>'"
+        )
 
     def mask(df):
         keep = np.ones(len(df), dtype=bool)
         for col, op, val in clauses:
             if col not in df.columns:
-                raise ValueError(f"unknown cell-table column {col!r}; available: {list(df.columns)}")
+                raise ValueError(
+                    f"unknown cell-table column {col!r}; available: {list(df.columns)}"
+                )
             v = df[col].to_numpy()
             keep &= (v.astype(bool) == val) if op is None else op(v, val)
         return keep
@@ -740,7 +764,9 @@ async def _tool_slice_cells(args: dict) -> dict:
             return {"error": "save_to must end with .h5ad"}
         adata.write_h5ad(path)
         out["saved"] = path
-    out["load"] = f'singlet.v2.cells("{gse_id}", {args.get("where")!r}, samples={args.get("samples")!r}, max_cells={int(args.get("max_cells", 1000))})'
+    out["load"] = (
+        f'singlet.v2.cells("{gse_id}", {args.get("where")!r}, samples={args.get("samples")!r}, max_cells={int(args.get("max_cells", 1000))})'
+    )
     return out
 
 

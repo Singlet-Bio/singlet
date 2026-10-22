@@ -25,7 +25,7 @@ pub = C.load_script("v2_publish")
 
 PUB, PRIV = "singlet-data", "singlet-restricted"
 
-FAKE_PACKER = '''
+FAKE_PACKER = """
 import contextlib, json, zipfile
 from pathlib import Path
 
@@ -55,7 +55,7 @@ def pack_gse(gse_id, results_dir, catalog_path, out_path, *, verbose=True, metad
     if series_meta_path:
         Path(series_meta_path).write_text("{}")
     return Path(out_path)
-'''
+"""
 
 
 @pytest.fixture
@@ -87,9 +87,27 @@ def env(tmp_path, monkeypatch):
     sys.modules.pop("fake_packer", None)
 
     def run(*extra, gse="GSE700001", apply=True, base=True):
-        argv = [gse, "--results", str(e.results), "--catalog", str(e.catalog), "--packer-module", "fake_packer",
-                "--packer-path", str(tmp_path / "fakepack"), "--local-root", str(e.root), "--scratch", str(tmp_path / "scratch"),
-                "--part-size-mib", "0.001", "--retry-sleep", "0", "--json-out", str(tmp_path / "result.json")]
+        argv = [
+            gse,
+            "--results",
+            str(e.results),
+            "--catalog",
+            str(e.catalog),
+            "--packer-module",
+            "fake_packer",
+            "--packer-path",
+            str(tmp_path / "fakepack"),
+            "--local-root",
+            str(e.root),
+            "--scratch",
+            str(tmp_path / "scratch"),
+            "--part-size-mib",
+            "0.001",
+            "--retry-sleep",
+            "0",
+            "--json-out",
+            str(tmp_path / "result.json"),
+        ]
         argv += C.tool_cmds(e.tool)
         if apply:
             argv.append("--apply")
@@ -101,12 +119,16 @@ def env(tmp_path, monkeypatch):
 
 
 def keys(root, bucket=PUB):
-    return sorted(p.relative_to(root / bucket).as_posix() for p in (root / bucket).rglob("*") if p.is_file())
+    return sorted(
+        p.relative_to(root / bucket).as_posix() for p in (root / bucket).rglob("*") if p.is_file()
+    )
 
 
 def test_dry_run_packs_migrates_verifies_and_writes_nothing(env):
     assert env.run(apply=False) == 0
-    assert env.result()["status"] == "dry_ok" and env.result()["uploads"]["would_upload"] == 4  # 2 samples + 2 packs
+    assert (
+        env.result()["status"] == "dry_ok" and env.result()["uploads"]["would_upload"] == 4
+    )  # 2 samples + 2 packs
     assert keys(env.root) == []
     assert not (env.tmp / "scratch" / "work").exists()  # the temporary legacy bundle is gone
 
@@ -114,17 +136,32 @@ def test_dry_run_packs_migrates_verifies_and_writes_nothing(env):
 def test_publish_writes_v2_objects_manifest_last_and_no_legacy_bundle(env):
     assert env.run() == 0
     r = env.result()
-    assert r["status"] == "ok" and r["n_samples"] == 2 and r.get("legacy_bytes") is None and "legacy_key" not in r
+    assert (
+        r["status"] == "ok"
+        and r["n_samples"] == 2
+        and r.get("legacy_bytes") is None
+        and "legacy_key" not in r
+    )
     ks = keys(env.root)
     assert not [k for k in ks if k.startswith("data/")]  # nothing in the legacy key space
     assert "v2/m/GSE700001.json" in ks and "v2/ledger/GSE700001.jsonl" in ks
-    assert len([k for k in ks if k.startswith("v2/s/")]) == 2 and len([k for k in ks if k.startswith("v2/ref/")]) == 2
+    assert (
+        len([k for k in ks if k.startswith("v2/s/")]) == 2
+        and len([k for k in ks if k.startswith("v2/ref/")]) == 2
+    )
     m = json.loads((env.root / PUB / "v2" / "m" / "GSE700001.json").read_text())
     assert "legacy" not in m or m["legacy"] is None  # a new study has no legacy bundle
-    led = [json.loads(x) for x in (env.root / PUB / "v2" / "ledger" / "GSE700001.jsonl").read_text().splitlines()]
+    led = [
+        json.loads(x)
+        for x in (env.root / PUB / "v2" / "ledger" / "GSE700001.jsonl").read_text().splitlines()
+    ]
     assert [e["event"] for e in led][:2] == ["start", "packed"] and led[-1]["event"] == "committed"
     rows = json.loads(Path(r["rows_file"]).read_text())
-    assert rows["v2_migration"]["status"] == "verified" and rows["v2_migration"]["legacy_key"] is None
+    assert (
+        rows["v2_migration"]["status"] == "retired"
+        and rows["v2_migration"]["verify_ok"] == 1
+        and rows["v2_migration"]["legacy_key"] is None
+    )
     assert len(rows["v2_sample"]) == 2 and rows["v2_study"]["gse_id"] == "GSE700001"
     assert led[-1]["summary"]["stage"] == "done"
 
@@ -146,7 +183,9 @@ def test_the_manifest_is_written_after_every_object(env, monkeypatch):
     assert env.run() == 0
     data = [k for k in order if not k.startswith("v2/ledger/")]
     assert data[-1] == "v2/m/GSE700001.json" and len(data) == 5
-    assert order.index("v2/ledger/GSE700001.jsonl") < order.index("v2/m/GSE700001.json")  # ledger with the objects, then the manifest
+    assert order.index("v2/ledger/GSE700001.jsonl") < order.index(
+        "v2/m/GSE700001.json"
+    )  # ledger with the objects, then the manifest
     assert order[-1] == "v2/ledger/GSE700001.jsonl"  # and the committed record after it
 
 
@@ -155,14 +194,35 @@ def test_restricted_members_go_to_the_private_bucket_only_when_asked(env):
     assert not (env.root / PRIV).exists()
     env2 = env.root.parent / "r2b"
     (env2 / PUB).mkdir(parents=True)
-    argv = ["GSE700002", "--results", str(env.results), "--catalog", str(env.catalog), "--packer-module", "fake_packer",
-            "--packer-path", str(env.tmp / "fakepack"), "--local-root", str(env2), "--scratch", str(env.tmp / "s2"),
-            "--part-size-mib", "0.001", "--retry-sleep", "0", "--apply", "--private", PRIV] + C.tool_cmds(env.tool)
+    argv = [
+        "GSE700002",
+        "--results",
+        str(env.results),
+        "--catalog",
+        str(env.catalog),
+        "--packer-module",
+        "fake_packer",
+        "--packer-path",
+        str(env.tmp / "fakepack"),
+        "--local-root",
+        str(env2),
+        "--scratch",
+        str(env.tmp / "s2"),
+        "--part-size-mib",
+        "0.001",
+        "--retry-sleep",
+        "0",
+        "--apply",
+        "--private",
+        PRIV,
+    ] + C.tool_cmds(env.tool)
     assert pub.main(argv) == 0
     side = env2 / PRIV / "restricted" / "GSE700002" / "GSE700002.restricted.singlet"
     with zipfile.ZipFile(side) as z:
         assert sorted(n for n in z.namelist() if n.startswith("samples/")) == [
-            "samples/GSM70001/donor/snp_ad.1pz", "samples/GSM70002/donor/snp_ad.1pz"]
+            "samples/GSM70001/donor/snp_ad.1pz",
+            "samples/GSM70002/donor/snp_ad.1pz",
+        ]
     assert keys(env2, PRIV) == ["restricted/GSE700002/GSE700002.restricted.singlet"]
     assert not [k for k in keys(env2) if not k.startswith("v2/")]
 
@@ -202,7 +262,11 @@ def test_republishing_uploads_nothing_new(env, monkeypatch):
     assert env.run() == 0
     calls = []
     orig = camp.LocalStore.put_file
-    monkeypatch.setattr(camp.LocalStore, "put_file", lambda self, b, k, *a, **kw: (calls.append(k), orig(self, b, k, *a, **kw))[1])
+    monkeypatch.setattr(
+        camp.LocalStore,
+        "put_file",
+        lambda self, b, k, *a, **kw: (calls.append(k), orig(self, b, k, *a, **kw))[1],
+    )
     assert env.run() == 0
     assert calls == []  # packed bundles are deterministic here: every object is already in R2
     assert env.result()["uploads"]["skipped"] == 4
@@ -214,7 +278,9 @@ class _Ingest(BaseHTTPRequestHandler):
 
     def do_POST(self):
         n = int(self.headers["Content-Length"])
-        _Ingest.log.append((self.path, self.headers.get("X-Ingest-Token"), json.loads(self.rfile.read(n))))
+        _Ingest.log.append(
+            (self.path, self.headers.get("X-Ingest-Token"), json.loads(self.rfile.read(n)))
+        )
         body = b'{"ok":true}'
         self.send_response(_Ingest.status)
         self.send_header("Content-Length", str(len(body)))
@@ -236,7 +302,11 @@ def test_catalog_rows_are_posted_and_a_failed_post_does_not_unpublish(env, monke
         assert env.result()["catalog"] == "posted"
         tables = [p.rsplit("/", 1)[1] for p, _t, _b in _Ingest.log]
         assert tables == ["v2-study"] and all(t == "tok" for _p, t, _b in _Ingest.log)
-        assert _Ingest.log[0][2]["final"] is True and _Ingest.log[0][2]["manifest"]["gse"] == "GSE700001" and "study_files" not in _Ingest.log[0][2]["manifest"]
+        assert (
+            _Ingest.log[0][2]["final"] is True
+            and _Ingest.log[0][2]["manifest"]["gse"] == "GSE700001"
+            and "study_files" not in _Ingest.log[0][2]["manifest"]
+        )
         monkeypatch.setattr(camp.time, "sleep", lambda s: None)
         _Ingest.status, _Ingest.log = 400, []
         assert env.run("--ingest-url", url) == 3  # live, rows not accepted

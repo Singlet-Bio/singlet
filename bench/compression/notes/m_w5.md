@@ -3,6 +3,9 @@
 Worktree: `C:\Users\zacha\Projects\singlet-website-v2`, branch `feat/singlet-v2` (from origin/main 0dcf4914a). Nothing committed, pushed or
 deployed by W5. The orchestrator commits; the proposed commits and PRs are in "Proposed commits and PRs" below (section 6 of this file).
 
+PR #51 (the three PRs above, merged as ed2f776) is on main and deployed; schema 033 is applied; GSE145370 is the first public v2 study. The follow-up work
+(docs copy, CHANGELOG, retirement) is in section 9, in a second worktree.
+
 Status (after the review fixes of 2026-10-22):
 
 | set | state | new tests |
@@ -251,7 +254,7 @@ they must be switched (to the study page or the manifest) before the first legac
 
 ---------------------------------------------------------------------------------------------------------------------------------
 
-## 5. Retirement checklist for the catalog (found while doing CS4; none of it is done)
+## 5. Retirement checklist for the catalog (found while doing CS4; done in section 9, worktree singlet-website-v2b)
 
 1. Studies published only as v2 have no `bundle_manifest`/`bundle_index` rows and `gse_meta.has_bundle` is 0: `DOWNLOADABLE_SQL`, the bit index (`downloadable`), search
    and the headline counts key on those. Decide where `has_bundle` is set for v2 studies (the ingest endpoint could set it; left alone on purpose).
@@ -344,3 +347,98 @@ filter; if not, mirror `restricted.ts` first.
 * Not done: Browse download links, the catalog retirement checklist (section 5), the singlet-cloud mirror, the docs follow-up.
 * The Python-written fixtures pin the 256-byte pz2 header and the CEL2 layout of 2026-10-22; if W1 or W2 change either, regenerate with the two generator scripts and fix
   `parsePz2Header` / `v2-cells.ts`.
+
+---------------------------------------------------------------------------------------------------------------------------------
+
+## 9. Retirement (2026-10-22): the legacy file can be deleted without a dead link or a 404
+
+Worktree `C:\Users\zacha\Projects\singlet-website-v2b`, branch `feat/singlet-v2-retire`. Nothing committed or deployed.
+
+**Base commit deviation (read first).** The brief said branch from `origin/main`. In the shared object store `origin/main` is still 0dcf4914a (nobody fetched), which does not
+contain PR #51, and the only git allowed was `worktree add`, so no fetch. GitHub says the merge commit ed2f776 has parents 7586084c1 (main) and c54fcc578 (the head of
+`feat/singlet-v2`); main moved from 0dcf4914a to 7586084c1 only by two `chore(hpc-dashboard)` snapshots (`public/data/hpc/**`). The worktree is therefore cut from **c54fcc578**: the
+code of ed2f776 minus those three data files. `git branch --unset-upstream` was run and answered "no upstream" (nothing to unset). To rebase: nothing in this change touches `public/data/hpc`.
+
+State of the checks: `npm run check` green (46 files, 687 tests: 662 before, +22 `retired-study`, +3 `browse-links`), `npm run build` green. Not run: a browser, a deployed preview.
+
+### What "retired" means here, and the rule everything follows
+
+A retirement deletes `data/<GSE>/<GSE>.singlet` and flips `v2_migration.status` to `retired` (W6's `retire-sql`). It leaves every catalog row of the legacy file in place
+(`gse.r2_bundle_key`, `gse.r2_bundle_bytes`, `bundle_manifest`, `bundle_index`, `sample_qc`, `gse_meta.has_bundle = 1`). So:
+* **No response may name the legacy URL or key of a retired study.** One predicate, `isLegacyAlive(migration)` (`v2-catalog.ts`: status != 'retired'), decides, and every URL goes through
+  `legacyUrl` / `downloadUrl` in the new `functions/_shared/file-facts.ts` (the legacy URL builder moved to `data-urls.ts`, still re-exported from `study-core.ts`).
+* **The catalog rows are the source of truth after retirement** (search, statistics, sample QC, layer counts); the file is not.
+* **A study that never had a legacy file** (no `gse.r2_bundle_key`) is a v2-only study. Convention for W6: post it with `migration.status = "retired"` and `verify_ok: true` ("retired" =
+  no legacy object exists), otherwise `legacy_available` would say true and `export_manifest` would offer a legacy URL. The API still never emits a legacy URL for a study with a v2 block and no key.
+
+### Emission sites (every place a legacy URL, key or size could leave the site)
+
+| where | before | now |
+|---|---|---|
+| `GET /api/gse/:id`, MCP `get_study` (`study-core.ts`) | `bundle_url` null when retired (PR #51); `bundle_key`, `r2_bundle_key` and the legacy size still sent | `bundle_key`, `r2_bundle_key` null; `bundle_bytes`/`r2_bundle_bytes` = v2 size; reference build, pipeline version, packed-at and sample count fall back to the v2 study when `bundle_manifest` has no row |
+| `GET /api/search` and `/api/nl-search` rows, MCP `search_datasets` | `bundle_key`/`bundle_bytes` of the legacy file; MCP `bundle_url` built from the accession for every row with `has_bundle` | rows carry `v2` (manifest URL, rev, legacy_available); a retired row has `bundle_key` null and `bundle_bytes` = v2 size; MCP `bundle_url` null, plus `format` and `manifest_url`. One batched read per result page (`attachFileFacts`; none when no study is migrated) |
+| `GET /api/gse` list | raw `r2_bundle_key` | `v2` block, key null and v2 size when retired; `has_bundle` filter counts a served v2 study as having a file |
+| MCP `find_matched_controls` | `download_url: bundleUrl(...)` for every candidate | manifest URL and v2 size for a retired candidate, `format` added |
+| saved cohorts (`getCohort`, `/cohorts/:id` page) | page built `data/<GSE>/<GSE>.singlet` for every item and in the TSV | each public item carries `file_url` and `format`; the page uses it |
+| Browse: study card, table row, selection bar (curl lines, "Download N files"), cohort page, study page JSON-LD | `bundleUrl(accession)` | `studyFileUrl(accession, row.v2)`: the single file while it exists, else the manifest (with a tooltip and a comment line in the curl block). The study page also treated a null `bundle_url` as "no file": hasBundle is now `bundle_url || v2` (it hid the pipeline row and the JSON-LD distribution for a retired study) |
+| export manifest (REST, MCP), cohort manifest, `get_download_url`, `list_bundle_files`, `get_partial_download`, `/api/bundle/*` | already v2-aware in PR #51 | unchanged (checked by the fixture test); `n_samples_in_file` and `reference_build` of a manifest row fall back to the v2 study when there is no `bundle_manifest` (tested) |
+| `find_cells` sample selection (`mcp-v2.ts`) | treated a study with a `v2_study` row and **no migration row** as served (a bug against the served rule) | requires a migration row that is verified or retired |
+
+### What reads the legacy file, and what it does now
+
+| reader | after a retirement |
+|---|---|
+| `loadSampleQc` (MCP `get_sample_qc`, `assess_study`, `/api/bundle/:gse/samples`) when `sample_qc` has no rows | a study served from v2 is read from its sample objects: `summary.json` member of each `.s2` (kind 3, zstd, `fzstd`), shaped like the legacy summaries, stored in `sample_qc`, usable flag from the v2 matrix sizes (`v2-summaries.ts`). Studies with QC rows read D1 as before |
+| `index-next` crank | the legacy pending set leaves retired studies out; a second set (`PENDING_V2_SQL`) takes served studies with no QC rows whose legacy file is retired or never existed and indexes them from the sample objects; `remaining` counts both. `POST index-bundle` does the same for a retired study (`source: "v2"`) |
+| `refresh-next` crank | `MANIFEST_PENDING` skips retired studies (no HEAD of a deleted file, no park row); `USABLE_NO_FILE` skips every served study, so a v2-only study is never resolved to `usable = 0` ("no file"); a new phase measures usable flags for served studies from `v2_sample.members_json` (exon + intron matrix bytes > 400 and cells called > 0), counted as `sample_usable_v2`; the cron workflow already loops until every count is 0 |
+| `gse_meta.has_bundle` (`recomputeMeta`) | 1 for a legacy key **or** a served v2 study; reference mismatch uses `v2_study.reference_build` when there is no `bundle_manifest`. A final ingest post of a served study with `has_bundle = 0` queues its meta row (one `UPDATE ... WHERE has_bundle = 0`, zero rows written for a study with a legacy file). Studies with a legacy key keep `has_bundle = 1` after retirement, so search, `DOWNLOADABLE_SQL`, the headline counts, the nightly bit index (`downloadable`) and the sitemap keep them |
+| layer statistics (`/api/stats/layers`) | retired studies still count through their `bundle_index` row (left in place); studies served from v2 with no `bundle_index` row are counted from `v2_sample.members_json` |
+| `/api/bundle/:gse/index?refresh=1` (the reindex workflow) | answers from the v2 catalog for a served study; never touches the deleted file |
+| edge cache | answers about a study with any v2 row live 5 minutes (PR #51); answers cached before its first v2 row live up to 24 h, so keep the legacy file at least 24 h after the study becomes `verified` |
+| all of the above on a database without the v2 tables | the v2-aware SQL is used only after `v2Available(db)`; otherwise the original statements run (test: "a database without the v2 tables") |
+
+### Tests
+
+* `src/test/retired-study.test.ts` (22): the smoke check on fixtures. A D1 stand-in holds a retired study (GSE1, two samples), a verified study whose legacy file is alive (GSE3) and one never moved (GSE2),
+  with the catalog rows a retirement leaves behind; `fetch` serves the v2 objects and records every request. Every endpoint (`/api/gse/:id`, `/api/search` studies and samples, `/api/gse`, `/api/manifest` json/tsv/curl,
+  `/api/bundle` index/entry/forced refresh, `/api/cohort/manifest`, `/sitemap.xml`, saved cohort items) and every MCP tool that names a file (`get_study`, `get_download_url`,
+  `list_bundle_files`, `get_modalities`, `get_sample_qc`, `assess_study`, `compare_studies`, `get_partial_download`, `search_datasets`, `find_matched_controls`, `export_manifest` in six formats) is searched
+  for the legacy URL of the retired study, and no request to a `/data/` URL may be made; the other two studies must still show theirs. Then the second group: summaries from the objects, `index-next` and
+  `index-bundle` v2 passes with no `/data/` request, the refresh crank on a v2-only study, `recomputeMeta`, the database without the v2 tables, `/api/gse?has_bundle`, layer counts.
+* `src/test/browse-links.test.ts` (3): `studyFileUrl`, the search-row mapping, the selection bar's curl lines.
+* `src/test/v2-catalog.test.ts`: the unchanged-rev post now also issues the queue marker for a served study (expectation updated).
+* `scripts/smoke.sh`: `SMOKE_RETIRED="GSE… GSE…"` runs the same check against a deployed site for studies that really are retired: detail has no bundle URL and says `legacy_available: false`, no legacy name anywhere in
+  detail, bundle index, search row and manifest export, the manifest object answers, and the old object is a 404. With it empty nothing runs. Dry-run against production with GSE145370 (verified, not retired):
+  the retired checks FAIL as they should and every other check passes. `bash -n` clean.
+
+### Docs and CHANGELOG
+
+`m_w5_docs_followup.patch` applied as it was (README, Docs.tsx, DocsMcp.tsx: the "17 tools" text, the per-sample layout, the three tools). CHANGELOG.md has a new entry (2026-10-22): the layout, what the API and MCP show, the ETag/`If-Match` recipes,
+and what happens when a single file is retired. It is a draft for the owner: it says the Python and R packages read the layout "from the release that includes the per-sample reader" (singlet-bio cfaeb90 has the reader; I did not check a release),
+and the docs text of the patch still says `singlet.load` reads both layouts the same way: that holds only for a package release that has cfaeb90. Edit both if the release is later than the docs.
+
+### Order of operations for the first real retirement (W6 / orchestrator)
+
+1. **Flip D1 to `retired` before deleting the object**, not after (W6's `retire` deletes first and `retire-sql` flips afterwards; between the two the site would still emit a dead URL until the flip). Flipping early is safe: v2 serves everything
+   and the site stops naming the legacy URL within 5 minutes (edge TTL). Only an old client pinned to `bundle_url` is affected, and the file still exists at that point. Suggested: archive-copy and verify, run the SQL, wait 5 minutes, delete.
+2. Keep the legacy file at least 24 h after the study became `verified` (older cached `/index` and `/entry` answers), and as long as the D12 grace period says.
+3. After the first real retirement run `SMOKE_RETIRED="<GSE>" bash scripts/smoke.sh https://singlet.bio`.
+4. A study that never had a legacy file: post it as `retired` with `verify_ok: true` (see above).
+5. The retire SQL could also set `gse.r2_bundle_bytes` to the v2 size so the file-size filter and sort (`max_file_bytes`, `file_size`, facets) use it: those still read the legacy size from `gse.r2_bundle_bytes` for a retired study (display fields are fixed in the API,
+   the SQL filters are not). Not done on purpose: it needs a write to a table the retirement does not otherwise touch.
+
+### Not done
+
+* The Python and R clients (singlet-bio, W4) read `bundle_url`/`v2` from `/api/gse/:id`; they are not part of this worktree. With `bundle_url` null and `v2.legacy_available: false` they must use the manifest (cfaeb90 does).
+* The size filter/sort and facet `file_size` use `gse.r2_bundle_bytes` (item 5 above). Layer statistics for a v2-only study are one LIKE scan over `v2_sample.members_json` every 12 h (computed and cached, empty today).
+* No browser check of the Browse links. No deploy. The singlet-cloud mirror of this section is not prepared (new files: `data-urls.ts`, `file-facts.ts`, `v2-summaries.ts`; changed: `catalog-refresh.ts`, `search-core.ts`, `ingest/[table].ts`, `bundle-core.ts`, `study-core.ts`, `product.ts`, `layers-core.ts`, `api/gse/index.ts`).
+
+### Proposed commits / PRs for this section
+
+One PR from `feat/singlet-v2-retire` (the changes share `catalog-refresh.ts`, `search-core.ts`, `study-core.ts` and the tests; the only independent piece is the docs/CHANGELOG pair, which can be its own first commit):
+1. `Docs and CHANGELOG for the first v2 study`: `README.md`, `src/pages/Docs.tsx`, `src/pages/DocsMcp.tsx`, `CHANGELOG.md`.
+2. `Retirement: no legacy URL for a retired study, summaries and flags from v2, has_bundle from v2`: everything else listed by `git status` in the worktree (new: `functions/_shared/{data-urls,file-facts,v2-summaries}.ts`,
+   `src/test/{retired-study,browse-links}.test.ts`; changed: `functions/_shared/{bundle-core,bundle-reader,catalog-refresh,layers-core,manifest-core,mcp-tools,mcp-v2,product,search-core,study-core,v2-catalog,v2-serve}.ts`,
+   `functions/api/gse/index.ts`, `functions/api/ingest/{[table],v2-study}.ts`, `functions/mcp.ts`, `scripts/smoke.sh`, `src/components/browse/{SelectionBar,StudyCard,StudyTable,useSelection}.ts(x)`,
+   `src/integrations/api/{client,types}.ts`, `src/pages/{CohortDetail,StudyDetail}.tsx`, `src/test/v2-catalog.test.ts`).
+No schema change, no new binding, no Pages variable.

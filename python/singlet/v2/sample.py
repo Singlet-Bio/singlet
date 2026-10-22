@@ -3,6 +3,7 @@
 
 ``V2Sample(src)`` where ``src`` is bytes, a path or a ``fetch(offset, length)`` callable (see :class:`container.S2Reader`).
 """
+
 from __future__ import annotations
 
 from typing import Optional
@@ -11,8 +12,7 @@ import numpy as np
 
 from . import cells as cells_mod
 from . import container as C
-from . import util
-from .codec import PyCodec2, decode_any, parse_header, CodecError, HEADER_SIZE
+from .codec import HEADER_SIZE, PyCodec2, decode_any, parse_header
 from .matrix import Csc, canonical_digest
 from .packs import PackStore, VocabPack, Whitelist, default_store
 
@@ -44,7 +44,9 @@ class V2Sample:
     def cells(self) -> Optional[cells_mod.CellsTable]:
         if self._cells is None and "cells" in self.reader.members:
             mi = self.reader.members["cells"]
-            rd = cells_mod.CellsReader(lambda off, ln: self.reader.read_range("cells", off, ln), mi.len, self.packs)
+            rd = cells_mod.CellsReader(
+                lambda off, ln: self.reader.read_range("cells", off, ln), mi.len, self.packs
+            )
             self._cells = rd.load_all()
         return self._cells
 
@@ -65,7 +67,12 @@ class V2Sample:
             return self._mat_cache[key]
         hdr = parse_header(self.reader.read_range(name, 0, min(mi.len, 65536)))
         if hdr["codec"] == 2:
-            csc = PyCodec2().read_columns(lambda off, ln: self.reader.read_range(name, off, ln), mi.len, cols if cols is not None else (0, hdr["n"]), hdr)
+            csc = PyCodec2().read_columns(
+                lambda off, ln: self.reader.read_range(name, off, ln),
+                mi.len,
+                cols if cols is not None else (0, hdr["n"]),
+                hdr,
+            )
         else:
             csc = decode_any(self.reader.read_member(name), "canonical", cols)
         if resolve:
@@ -89,7 +96,10 @@ class V2Sample:
             else:
                 csc.rownames = allnames
             if len(csc.rownames) != csc.m:
-                raise V2Error("pack %s has %d names, matrix %r has %d rows" % (rr["pack"], len(csc.rownames), mi.name, csc.m))
+                raise V2Error(
+                    "pack %s has %d names, matrix %r has %d rows"
+                    % (rr["pack"], len(csc.rownames), mi.name, csc.m)
+                )
         elif csc.rownames is None and not rr.get("none"):
             raise V2Error("matrix %r has unresolved row names" % mi.name)
         cr = csc.col_ref or {}

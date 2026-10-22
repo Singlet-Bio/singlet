@@ -28,6 +28,7 @@ Layout recap (little-endian)::
     codec 2 chunk: STREAM(counts: LEB128 per column) STREAM(gaps: LEB128(row - previous_row - 1), previous_row = -1 at a column start)
                    STREAM(values: LEB128, or raw u32 bit patterns for non-integral f32)
 """
+
 from __future__ import annotations
 
 import os
@@ -40,7 +41,7 @@ from typing import Callable, Optional
 import numpy as np
 
 from . import util
-from .matrix import Csc, canonical_digest, VT_F32, VT_U8, VT_U16, VT_U32
+from .matrix import VT_F32, VT_U8, VT_U16, VT_U32, Csc, canonical_digest
 
 MAGIC = b"PZ2M"
 VERSION = 1
@@ -110,7 +111,7 @@ def get_stream(buf, p: int, end: int, max_raw: int):
         raise CodecError("stream raw length exceeds bound")
     if (n == 0) != (zn == 0):
         raise CodecError("stream length fields inconsistent")
-    raw = util.zstd_decompress(bytes(buf[p:p + zn]), max_output_size=n) if n else b""
+    raw = util.zstd_decompress(bytes(buf[p : p + zn]), max_output_size=n) if n else b""
     if len(raw) != n:
         raise CodecError("zstd frame decodes to the wrong length")
     return raw, p + zn
@@ -143,7 +144,9 @@ def _names_kind(ref, is_col: bool):
     raise CodecError("bad name reference %r" % (ref[:2] if isinstance(ref, tuple) else ref,))
 
 
-def _names_part(kind: int, names: Optional[list], idx: Optional[np.ndarray], count: int, level: int) -> bytes:
+def _names_part(
+    kind: int, names: Optional[list], idx: Optional[np.ndarray], count: int, level: int
+) -> bytes:
     if kind == NK_INLINE:
         if names is None or len(names) != count:
             raise CodecError("inline names: expected %d names" % count)
@@ -179,8 +182,20 @@ def _write_header(h: dict) -> bytes:
     b = bytearray(HEADER_SIZE)
     b[0:4] = MAGIC
     struct.pack_into("<HHIIQ", b, 4, VERSION, h["codec"], h["m"], h["n"], h["nnz"])
-    struct.pack_into("<BBBBII", b, 24, h["value_type"], h["row_order"], h["classes_per_octave"], h["flags"], h["chunk_cols"], h["n_chunks"])
-    struct.pack_into("<BBBB", b, 36, h["lanes"], h["prob_bits"], h["value_prob_bits"], h["ctx_kind"])
+    struct.pack_into(
+        "<BBBBII",
+        b,
+        24,
+        h["value_type"],
+        h["row_order"],
+        h["classes_per_octave"],
+        h["flags"],
+        h["chunk_cols"],
+        h["n_chunks"],
+    )
+    struct.pack_into(
+        "<BBBB", b, 36, h["lanes"], h["prob_bits"], h["value_prob_bits"], h["ctx_kind"]
+    )
     b[40:48] = h["row_names_id"]
     b[48:56] = h["col_names_id"]
     b[56:72] = h["digest"]
@@ -219,10 +234,30 @@ def parse_header(buf) -> dict:
             raise CodecError("section %s outside the member" % nm)
     if secs["chunk_index"][1] != (n_chunks + 1) * REC_BYTES:
         raise CodecError("chunk index length does not match n_chunks")
-    return dict(version=ver, codec=codec, m=m, n=n, nnz=nnz, value_type=vt, row_order=row_order, classes_per_octave=cpo, flags=flags,
-                chunk_cols=chunk_cols, n_chunks=n_chunks, lanes=lanes, prob_bits=pb, value_prob_bits=pbv, ctx_kind=ctx,
-                row_names_id=b[40:48], col_names_id=b[48:56], digest=b[56:72], sections=secs, total_len=total,
-                rows_kind=b[192], cols_kind=b[193])
+    return dict(
+        version=ver,
+        codec=codec,
+        m=m,
+        n=n,
+        nnz=nnz,
+        value_type=vt,
+        row_order=row_order,
+        classes_per_octave=cpo,
+        flags=flags,
+        chunk_cols=chunk_cols,
+        n_chunks=n_chunks,
+        lanes=lanes,
+        prob_bits=pb,
+        value_prob_bits=pbv,
+        ctx_kind=ctx,
+        row_names_id=b[40:48],
+        col_names_id=b[48:56],
+        digest=b[56:72],
+        sections=secs,
+        total_len=total,
+        rows_kind=b[192],
+        cols_kind=b[193],
+    )
 
 
 def prefix_len(h: dict) -> int:
@@ -280,7 +315,7 @@ def _f32_integral(bits: np.ndarray):
 
 def _encode_chunk(indptr, indices, vals, raw_f32: bool, c0: int, c1: int, level: int) -> bytes:
     a, b = int(indptr[c0]), int(indptr[c1])
-    counts = np.diff(indptr[c0:c1 + 1])
+    counts = np.diff(indptr[c0 : c1 + 1])
     ids = indices[a:b].astype(np.int64)
     gaps = np.empty(b - a, dtype=np.int64)
     if b > a:
@@ -290,7 +325,9 @@ def _encode_chunk(indptr, indices, vals, raw_f32: bool, c0: int, c1: int, level:
     s_counts = put_stream(util.leb128_encode(counts), level)
     s_gaps = put_stream(util.leb128_encode(gaps), level)
     v = vals[a:b]
-    s_vals = put_stream(np.ascontiguousarray(v, dtype="<u4").tobytes() if raw_f32 else util.leb128_encode(v), level)
+    s_vals = put_stream(
+        np.ascontiguousarray(v, dtype="<u4").tobytes() if raw_f32 else util.leb128_encode(v), level
+    )
     return s_counts + s_gaps + s_vals
 
 
@@ -385,19 +422,48 @@ class PyCodec2(MatrixCodec):
         extra = _names_part(rk, csc.rownames, ridx, m, o.level)
         kv = b""
         if csc.kv:
-            blob = b"".join(k.encode("utf-8") + b"\0" + str(csc.kv[k]).encode("utf-8") + b"\0"
-                            for k in sorted(csc.kv, key=lambda s: s.encode("utf-8")))
+            blob = b"".join(
+                k.encode("utf-8") + b"\0" + str(csc.kv[k]).encode("utf-8") + b"\0"
+                for k in sorted(csc.kv, key=lambda s: s.encode("utf-8"))
+            )
             kv = struct.pack("<I", len(csc.kv)) + put_stream(blob, o.level)
-        parts = {S_CHUNK_INDEX: bytes(idx), S_TABLES: b"", S_ROWS: b"", S_CHUNKS: chunks, S_COLS: cols, S_KV: kv, S_EXTRA: extra}
+        parts = {
+            S_CHUNK_INDEX: bytes(idx),
+            S_TABLES: b"",
+            S_ROWS: b"",
+            S_CHUNKS: chunks,
+            S_COLS: cols,
+            S_KV: kv,
+            S_EXTRA: extra,
+        }
         pos = HEADER_SIZE
         secs = [None] * 7
         for s in (S_CHUNK_INDEX, S_TABLES, S_ROWS, S_CHUNKS, S_COLS, S_KV, S_EXTRA):
             secs[s] = (pos, len(parts[s]))
             pos += len(parts[s])
-        h = dict(codec=CODEC_GENERIC, m=m, n=n, nnz=nnz, value_type=vt, row_order=0, classes_per_octave=4, flags=flags, chunk_cols=cc,
-                 n_chunks=len(bounds), lanes=32, prob_bits=10, value_prob_bits=10, ctx_kind=0, row_names_id=rid if rk in (NK_PACK, NK_SUBSET) else ZERO8,
-                 col_names_id=cid if ck in (NK_PACK, NK_SUBSET, NK_CELLS) else ZERO8, digest=digest, sections=secs, total_len=pos,
-                 rows_kind=rk, cols_kind=ck)
+        h = dict(
+            codec=CODEC_GENERIC,
+            m=m,
+            n=n,
+            nnz=nnz,
+            value_type=vt,
+            row_order=0,
+            classes_per_octave=4,
+            flags=flags,
+            chunk_cols=cc,
+            n_chunks=len(bounds),
+            lanes=32,
+            prob_bits=10,
+            value_prob_bits=10,
+            ctx_kind=0,
+            row_names_id=rid if rk in (NK_PACK, NK_SUBSET) else ZERO8,
+            col_names_id=cid if ck in (NK_PACK, NK_SUBSET, NK_CELLS) else ZERO8,
+            digest=digest,
+            sections=secs,
+            total_len=pos,
+            rows_kind=rk,
+            cols_kind=ck,
+        )
         out = [_write_header(h)]
         for s in (S_CHUNK_INDEX, S_TABLES, S_ROWS, S_CHUNKS, S_COLS, S_KV, S_EXTRA):
             out.append(parts[s])
@@ -412,9 +478,15 @@ class PyCodec2(MatrixCodec):
         h = parse_header(buf)
         if h["codec"] != CODEC_GENERIC:
             raise CodecError("PyCodec2 reads codec 2 only (got %d)" % h["codec"])
-        return _decode_with(lambda off, ln: bytes(buf[off:off + ln]), h, cols)
+        return _decode_with(lambda off, ln: bytes(buf[off : off + ln]), h, cols)
 
-    def read_columns(self, fetch: Callable[[int, int], bytes], member_len: int, cols: tuple, header: Optional[dict] = None) -> Csc:
+    def read_columns(
+        self,
+        fetch: Callable[[int, int], bytes],
+        member_len: int,
+        cols: tuple,
+        header: Optional[dict] = None,
+    ) -> Csc:
         """Random column access over a range fetcher ``fetch(rel_off, length)`` (relative to the member start): one request for the
         header + chunk index (if ``header`` is not given) and one for the run of chunks covering ``cols``."""
         if header is None:
@@ -428,18 +500,30 @@ def _decode_with(fetch, h: dict, cols: Optional[tuple]) -> Csc:
     a, b = (0, n) if cols is None else (int(cols[0]), int(cols[1]))
     if not (0 <= a <= b <= n):
         raise CodecError("column range out of bounds")
-    cc, nch = h["chunk_cols"], h["n_chunks"]
+    nch = h["n_chunks"]
     ioff, ilen = h["sections"]["chunk_index"]
     idx = np.frombuffer(fetch(ioff, ilen), dtype=_IDX_DT)
     if len(idx) != nch + 1:
         raise CodecError("chunk index has the wrong length")
     first = idx["first"].astype(np.int64)
-    if nch and (first[0] != 0 or (np.diff(first) <= 0).any() or int(first[-1]) != n or int(idx["nb"][-1]) != nnz):
+    if nch and (
+        first[0] != 0
+        or (np.diff(first) <= 0).any()
+        or int(first[-1]) != n
+        or int(idx["nb"][-1]) != nnz
+    ):
         raise CodecError("chunk index not monotone / sentinel mismatch")
     coff, clen = h["sections"]["chunks"]
     raw_f32 = vt == VT_F32 and not (h["flags"] & 1)
     if nch == 0 or a == b:
-        csc = Csc(m, b - a, np.zeros(b - a + 1, dtype=np.int64), np.zeros(0, np.uint32), np.zeros(0, np.uint32), value_type=vt)
+        csc = Csc(
+            m,
+            b - a,
+            np.zeros(b - a + 1, dtype=np.int64),
+            np.zeros(0, np.uint32),
+            np.zeros(0, np.uint32),
+            value_type=vt,
+        )
     else:
         c_first = int(np.searchsorted(first, a, side="right")) - 1
         c_last = int(np.searchsorted(first, b - 1, side="right")) - 1
@@ -449,17 +533,32 @@ def _decode_with(fetch, h: dict, cols: Optional[tuple]) -> Csc:
         cl, il, vl = [], [], []
         for c in range(c_first, c_last + 1):
             s = int(idx["off"][c]) - run_off
-            blob = run[s:s + int(idx["len"][c])]
-            ct, ids, vals = _decode_chunk(blob, int(first[c + 1] - first[c]), int(idx["nb"][c + 1]) - int(idx["nb"][c]), raw_f32, m)
-            cl.append(ct); il.append(ids); vl.append(vals)
+            blob = run[s : s + int(idx["len"][c])]
+            ct, ids, vals = _decode_chunk(
+                blob,
+                int(first[c + 1] - first[c]),
+                int(idx["nb"][c + 1]) - int(idx["nb"][c]),
+                raw_f32,
+                m,
+            )
+            cl.append(ct)
+            il.append(ids)
+            vl.append(vals)
         counts, ids, vals = np.concatenate(cl), np.concatenate(il), np.concatenate(vl)
         if vt == VT_F32 and (h["flags"] & 1):
-            vals = vals.astype(np.float32).view(np.uint32)       # integral floats were coded as integers
+            vals = vals.astype(np.float32).view(np.uint32)  # integral floats were coded as integers
         lo = a - int(first[c_first])
         hi = lo + (b - a)
         ipf = np.concatenate([[0], np.cumsum(counts)])
         s0, s1 = int(ipf[lo]), int(ipf[hi])
-        csc = Csc(m, b - a, (ipf[lo:hi + 1] - s0).astype(np.int64), ids[s0:s1], vals[s0:s1], value_type=vt)
+        csc = Csc(
+            m,
+            b - a,
+            (ipf[lo : hi + 1] - s0).astype(np.int64),
+            ids[s0:s1],
+            vals[s0:s1],
+            value_type=vt,
+        )
     # names
     rk, ck = h["rows_kind"], h["cols_kind"]
     if rk == NK_NONE:
@@ -471,7 +570,10 @@ def _decode_with(fetch, h: dict, cols: Optional[tuple]) -> Csc:
         csc.row_ref = {"pack": h["row_names_id"].hex()}
     elif rk == NK_SUBSET:
         off, ln = h["sections"]["extra"]
-        csc.row_ref = {"pack": h["row_names_id"].hex(), "index": _names_decode(rk, fetch(off, ln), 0, ln, m)[1]}
+        csc.row_ref = {
+            "pack": h["row_names_id"].hex(),
+            "index": _names_decode(rk, fetch(off, ln), 0, ln, m)[1],
+        }
     else:
         raise CodecError("rows cannot reference the cells table")
     if ck == NK_NONE:
@@ -496,7 +598,9 @@ def _decode_with(fetch, h: dict, cols: Optional[tuple]) -> Csc:
         parts = raw.split(b"\0")
         if parts[-1] != b"" or len(parts) != 2 * cnt + 1:
             raise CodecError("bad key/value section")
-        csc.kv = {parts[i].decode("utf-8"): parts[i + 1].decode("utf-8") for i in range(0, 2 * cnt, 2)}
+        csc.kv = {
+            parts[i].decode("utf-8"): parts[i + 1].decode("utf-8") for i in range(0, 2 * cnt, 2)
+        }
     csc.meta["digest"] = h["digest"]
     csc.meta["cols"] = (a, b)
     return csc
@@ -532,7 +636,11 @@ class NativeCodec(MatrixCodec):
             return {"kind": "cells"}
         if kind == NK_PACK:
             return {"kind": "pack", "pack_id": pid}
-        return {"kind": "pack_subset", "pack_id": pid, "pack_index": np.asarray(idx, dtype=np.uint32)}
+        return {
+            "kind": "pack_subset",
+            "pack_id": pid,
+            "pack_index": np.asarray(idx, dtype=np.uint32),
+        }
 
     def encode(self, csc: Csc, opts: Optional[EncodeOptions] = None) -> bytes:
         o = opts or EncodeOptions()
@@ -548,10 +656,22 @@ class NativeCodec(MatrixCodec):
             data = data.view(np.float32)
         try:
             blob, _stats = self._mod.encode(
-                csc.indptr.astype(np.int64, copy=False), np.ascontiguousarray(csc.indices, dtype=np.uint32), data, int(csc.m), int(csc.n),
-                codec=self.codec, chunk_cols=int(o.chunk_cols), value_type=self._VT[vt],
-                row_names=self._spec(o.row_names, csc.rownames, False), col_names=self._spec(o.col_names, csc.colnames, True),
-                kv=dict(csc.kv) if csc.kv else None, digest=bytes(digest), compute_digest=False, threads=int(o.threads), zstd_level=int(o.level))
+                csc.indptr.astype(np.int64, copy=False),
+                np.ascontiguousarray(csc.indices, dtype=np.uint32),
+                data,
+                int(csc.m),
+                int(csc.n),
+                codec=self.codec,
+                chunk_cols=int(o.chunk_cols),
+                value_type=self._VT[vt],
+                row_names=self._spec(o.row_names, csc.rownames, False),
+                col_names=self._spec(o.col_names, csc.colnames, True),
+                kv=dict(csc.kv) if csc.kv else None,
+                digest=bytes(digest),
+                compute_digest=False,
+                threads=int(o.threads),
+                zstd_level=int(o.level),
+            )
         except (ValueError, RuntimeError) as e:
             raise CodecError("native encode failed: %s" % e) from e
         return bytes(blob)
@@ -562,7 +682,11 @@ class NativeCodec(MatrixCodec):
         buf = bytes(buf)
         h = parse_header(buf)
         try:
-            d = self._mod.decode(buf, mode="canonical") if cols is None else self._mod.decode_columns(buf, int(cols[0]), int(cols[1]), mode="canonical")
+            d = (
+                self._mod.decode(buf, mode="canonical")
+                if cols is None
+                else self._mod.decode_columns(buf, int(cols[0]), int(cols[1]), mode="canonical")
+            )
             mem = self._mod.Member(buf)
             rn, cn, kv = mem.row_names(), mem.col_names(), mem.kv()
         except (ValueError, RuntimeError) as e:
@@ -570,8 +694,15 @@ class NativeCodec(MatrixCodec):
         a, b = (0, h["n"]) if cols is None else (int(cols[0]), int(cols[1]))
         data = np.asarray(d["data"])
         data = data.view(np.uint32) if data.dtype == np.float32 else data.astype(np.uint32)
-        csc = Csc(h["m"], b - a, np.asarray(d["indptr"]).astype(np.int64), np.asarray(d["indices"]).astype(np.uint32), data,
-                  value_type=h["value_type"], kv=dict(kv))
+        csc = Csc(
+            h["m"],
+            b - a,
+            np.asarray(d["indptr"]).astype(np.int64),
+            np.asarray(d["indices"]).astype(np.uint32),
+            data,
+            value_type=h["value_type"],
+            kv=dict(kv),
+        )
         k = rn["kind"]
         if k == "inline":
             csc.rownames = list(rn["names"]) if rn.get("names") is not None else []
@@ -580,7 +711,10 @@ class NativeCodec(MatrixCodec):
         elif k == "pack":
             csc.row_ref = {"pack": rn["pack_id"]}
         elif k == "pack_subset":
-            csc.row_ref = {"pack": rn["pack_id"], "index": np.asarray(rn["pack_index"], dtype=np.int64)}
+            csc.row_ref = {
+                "pack": rn["pack_id"],
+                "index": np.asarray(rn["pack_index"], dtype=np.int64),
+            }
         k = cn["kind"]
         if k == "inline":
             csc.colnames = (list(cn["names"]) if cn.get("names") is not None else [])[a:b]
@@ -591,7 +725,10 @@ class NativeCodec(MatrixCodec):
         elif k == "pack":
             csc.col_ref = {"pack": cn["pack_id"], "range": (a, b)}
         elif k == "pack_subset":
-            csc.col_ref = {"pack": cn["pack_id"], "index": np.asarray(cn["pack_index"], dtype=np.int64)[a:b]}
+            csc.col_ref = {
+                "pack": cn["pack_id"],
+                "index": np.asarray(cn["pack_index"], dtype=np.int64)[a:b],
+            }
         csc.meta["digest"] = h["digest"]
         csc.meta["cols"] = (a, b)
         csc.meta["codec"] = h["codec"]

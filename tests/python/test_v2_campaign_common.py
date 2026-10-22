@@ -30,7 +30,9 @@ def load_script(name: str):
         mod = importlib.util.module_from_spec(spec)
         sys.modules[key] = mod
         if name == "v2_campaign":
-            sys.modules["v2_campaign"] = mod  # v2_retire / v2_publish `import v2_campaign`: share this module object
+            sys.modules["v2_campaign"] = (
+                mod  # v2_retire / v2_publish `import v2_campaign`: share this module object
+            )
         spec.loader.exec_module(mod)
     finally:
         sys.path.remove(str(SCRIPTS))
@@ -39,7 +41,7 @@ def load_script(name: str):
 
 # ── a stand-in transcoder/verifier ────────────────────────────────────────────────────────────────────────────────────
 
-FAKE_TOOL = r'''
+FAKE_TOOL = r"""
 import hashlib, json, os, struct, sys, zipfile, zlib
 from pathlib import Path
 
@@ -139,7 +141,7 @@ def verify():
         print("quick")
 
 {"migrate": migrate, "verify": verify}[sys.argv[1]]()
-'''
+"""
 
 
 def write_fake_tool(dirpath: Path) -> Path:
@@ -150,29 +152,44 @@ def write_fake_tool(dirpath: Path) -> Path:
 
 def tool_cmds(tool: Path) -> List[str]:
     """['--migrate-cmd', json, '--verify-cmd', json] for the campaign CLI."""
-    return ["--migrate-cmd", json.dumps([sys.executable, str(tool), "migrate"]),
-            "--verify-cmd", json.dumps([sys.executable, str(tool), "verify"])]
+    return [
+        "--migrate-cmd",
+        json.dumps([sys.executable, str(tool), "migrate"]),
+        "--verify-cmd",
+        json.dumps([sys.executable, str(tool), "verify"]),
+    ]
 
 
 # ── synthetic legacy bundles ──────────────────────────────────────────────────────────────────────────────────────────
 
 
-def make_bundle(path: Path, gse: str, gsms: List[str], *, restricted: bool = False, salt: str = "") -> Path:
+def make_bundle(
+    path: Path, gse: str, gsms: List[str], *, restricted: bool = False, salt: str = ""
+) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(path, "w", zipfile.ZIP_STORED) as z:
-        z.writestr("manifest.json", json.dumps({"gse_id": gse, "gsm_ids": gsms, "n_gsms": len(gsms)}))
-        z.writestr("study_meta.json", json.dumps({"gse_id": gse, "series_title": f"title of {gse} it's quoted"}))
+        z.writestr(
+            "manifest.json", json.dumps({"gse_id": gse, "gsm_ids": gsms, "n_gsms": len(gsms)})
+        )
+        z.writestr(
+            "study_meta.json",
+            json.dumps({"gse_id": gse, "series_title": f"title of {gse} it's quoted"}),
+        )
         z.writestr("feature_vocab.json", "{}")
         for g in gsms:
             z.writestr(f"samples/{g}/summary.json", json.dumps({"n_cells_called": 3, "salt": salt}))
-            z.writestr(f"samples/{g}/exon_counts.1pz", hashlib.sha256((g + salt).encode()).digest() * 40)
+            z.writestr(
+                f"samples/{g}/exon_counts.1pz", hashlib.sha256((g + salt).encode()).digest() * 40
+            )
             if restricted:
                 z.writestr(f"samples/{g}/donor/snp_ad.1pz", b"germline" * 20)
     return path
 
 
 def put_legacy(root: Path, gse: str, gsms: List[str], **kw) -> Path:
-    return make_bundle(Path(root) / "singlet-data" / "data" / gse / f"{gse}.singlet", gse, gsms, **kw)
+    return make_bundle(
+        Path(root) / "singlet-data" / "data" / gse / f"{gse}.singlet", gse, gsms, **kw
+    )
 
 
 def seed(root: Path, n: int = 3, restricted: Optional[str] = None) -> List[str]:
@@ -230,8 +247,13 @@ class FakeS3:
         o = self.objs.get((Bucket, Key))
         if o is None:
             raise FakeClientError("404", 404)
-        return {"ContentLength": len(o["data"]), "ETag": f'"{o["etag"]}"', "Metadata": o.get("Metadata", {}),
-                "ContentType": o.get("ContentType"), "CacheControl": o.get("CacheControl")}
+        return {
+            "ContentLength": len(o["data"]),
+            "ETag": f'"{o["etag"]}"',
+            "Metadata": o.get("Metadata", {}),
+            "ContentType": o.get("ContentType"),
+            "CacheControl": o.get("CacheControl"),
+        }
 
     def get_object(self, Bucket, Key, Range=None, IfMatch=None):
         self.calls.append(("get", Bucket, Key, Range))
@@ -249,22 +271,39 @@ class FakeS3:
     def put_object(self, Bucket, Key, Body, ContentType=None, CacheControl=None, Metadata=None):
         self.calls.append(("put_object", Bucket, Key))
         etag = hashlib.md5(Body).hexdigest()
-        self._put(Bucket, Key, bytes(Body), etag, ContentType=ContentType, CacheControl=CacheControl, Metadata=Metadata or {})
+        self._put(
+            Bucket,
+            Key,
+            bytes(Body),
+            etag,
+            ContentType=ContentType,
+            CacheControl=CacheControl,
+            Metadata=Metadata or {},
+        )
         return {"ETag": f'"{etag}"'}
 
     def upload_file(self, path, Bucket, Key, ExtraArgs=None, Config=None):
         data = Path(path).read_bytes()
         chunk = getattr(Config, "multipart_chunksize", 8 << 20)
         thr = getattr(Config, "multipart_threshold", 8 << 20)
-        self.calls.append(("upload_file", Bucket, Key, "multipart" if len(data) >= thr else "single"))
+        self.calls.append(
+            ("upload_file", Bucket, Key, "multipart" if len(data) >= thr else "single")
+        )
         if len(data) >= thr:
             parts = [hashlib.md5(data[i : i + chunk]).digest() for i in range(0, len(data), chunk)]
             etag = hashlib.md5(b"".join(parts)).hexdigest() + f"-{len(parts)}"
         else:
             etag = hashlib.md5(data).hexdigest()
         ex = ExtraArgs or {}
-        self._put(Bucket, Key, data, etag, ContentType=ex.get("ContentType"), CacheControl=ex.get("CacheControl"),
-                  Metadata=ex.get("Metadata", {}))
+        self._put(
+            Bucket,
+            Key,
+            data,
+            etag,
+            ContentType=ex.get("ContentType"),
+            CacheControl=ex.get("CacheControl"),
+            Metadata=ex.get("Metadata", {}),
+        )
 
     def delete_object(self, Bucket, Key):
         self.calls.append(("delete", Bucket, Key))
@@ -283,8 +322,16 @@ class FakeS3:
         if StorageClass and self.reject_storage_class:
             raise FakeClientError("InvalidStorageClass", 400)
         s = self.objs[(CopySource["Bucket"], CopySource["Key"])]
-        self._put(Bucket, Key, s["data"], s["etag"], ContentType=s.get("ContentType"), CacheControl=s.get("CacheControl"),
-                  Metadata=s.get("Metadata", {}), StorageClass=StorageClass)
+        self._put(
+            Bucket,
+            Key,
+            s["data"],
+            s["etag"],
+            ContentType=s.get("ContentType"),
+            CacheControl=s.get("CacheControl"),
+            Metadata=s.get("Metadata", {}),
+            StorageClass=StorageClass,
+        )
         return {"CopyObjectResult": {"ETag": f'"{s["etag"]}"'}}
 
     def create_multipart_upload(self, Bucket, Key, **extra):
@@ -309,10 +356,21 @@ class FakeS3:
         nums = [p["PartNumber"] for p in MultipartUpload["Parts"]]
         assert nums == sorted(nums)
         data = b"".join(u["parts"][n][0] for n in nums)
-        etag = hashlib.md5(b"".join(bytes.fromhex(u["parts"][n][1]) for n in nums)).hexdigest() + f"-{len(nums)}"
+        etag = (
+            hashlib.md5(b"".join(bytes.fromhex(u["parts"][n][1]) for n in nums)).hexdigest()
+            + f"-{len(nums)}"
+        )
         ex = u["extra"]
-        self._put(Bucket, Key, data, etag, ContentType=ex.get("ContentType"), CacheControl=ex.get("CacheControl"),
-                  Metadata=ex.get("Metadata", {}), StorageClass=ex.get("StorageClass"))
+        self._put(
+            Bucket,
+            Key,
+            data,
+            etag,
+            ContentType=ex.get("ContentType"),
+            CacheControl=ex.get("CacheControl"),
+            Metadata=ex.get("Metadata", {}),
+            StorageClass=ex.get("StorageClass"),
+        )
         return {"ETag": f'"{etag}"'}
 
     def abort_multipart_upload(self, Bucket, Key, UploadId):
@@ -327,7 +385,12 @@ class FakeS3:
             def paginate(self, Bucket, Prefix=""):
                 keys = sorted(k for (b, k) in outer.objs if b == Bucket and k.startswith(Prefix))
                 for i in range(0, max(1, len(keys)), 2):  # two keys per page, to exercise paging
-                    yield {"Contents": [{"Key": k, "Size": len(outer.objs[(Bucket, k)]["data"])} for k in keys[i : i + 2]]}
+                    yield {
+                        "Contents": [
+                            {"Key": k, "Size": len(outer.objs[(Bucket, k)]["data"])}
+                            for k in keys[i : i + 2]
+                        ]
+                    }
 
         return P()
 
@@ -349,9 +412,18 @@ def build_env(tmp_path: Path, monkeypatch, camp):
     tool = write_fake_tool(tmp_path)
     counts = tmp_path / "calls.txt"
     monkeypatch.setenv("FAKE_COUNT_FILE", str(counts))
-    for k in ("FAKE_MIGRATE_FAIL", "FAKE_VERIFY_FAIL", "FAKE_BAD_NAME", "FAKE_EXPECT_LEGACY", "FAKE_RESTRICTED_MEMBER", "FAKE_PACK_LIST"):
+    for k in (
+        "FAKE_MIGRATE_FAIL",
+        "FAKE_VERIFY_FAIL",
+        "FAKE_BAD_NAME",
+        "FAKE_EXPECT_LEGACY",
+        "FAKE_RESTRICTED_MEMBER",
+        "FAKE_PACK_LIST",
+    ):
         monkeypatch.delenv(k, raising=False)
-    monkeypatch.setenv("FAKE_PAD", "2500")  # sample objects of ~2.6 kB: three parts at the 1048-byte test part size
+    monkeypatch.setenv(
+        "FAKE_PAD", "2500"
+    )  # sample objects of ~2.6 kB: three parts at the 1048-byte test part size
     store = camp.LocalStore(root)
     monkeypatch.setattr(camp, "make_store", lambda a: store)
 
@@ -359,21 +431,54 @@ def build_env(tmp_path: Path, monkeypatch, camp):
         pass
 
     e = E()
-    e.tmp, e.root, e.tool, e.counts, e.store, e.mp = tmp_path, root, tool, counts, store, monkeypatch
+    e.tmp, e.root, e.tool, e.counts, e.store, e.mp = (
+        tmp_path,
+        root,
+        tool,
+        counts,
+        store,
+        monkeypatch,
+    )
     e.results = tmp_path / "results.jsonl"
     e.rows = tmp_path / "rows"
     e.ledger = tmp_path / "ledger"
 
     def run(*extra, mode="full", workers=1, base=True):
-        args = ["run", "--mode", mode, "--local-root", str(root), "--scratch", str(tmp_path / "scratch"),
-                "--results", str(e.results), "--rows-dir", str(e.rows), "--ledger-dir", str(e.ledger),
-                "--workers", str(workers), "--io-threads", "4", "--retry-sleep", "0", "--part-size-mib", "0.001"]
+        args = [
+            "run",
+            "--mode",
+            mode,
+            "--local-root",
+            str(root),
+            "--scratch",
+            str(tmp_path / "scratch"),
+            "--results",
+            str(e.results),
+            "--rows-dir",
+            str(e.rows),
+            "--ledger-dir",
+            str(e.ledger),
+            "--workers",
+            str(workers),
+            "--io-threads",
+            "4",
+            "--retry-sleep",
+            "0",
+            "--part-size-mib",
+            "0.001",
+        ]
         args += tool_cmds(tool) + list(extra)
         if base and not any(x in extra for x in ("--gse", "--gse-list", "--shard", "--limit")):
             args += ["--shard", "0/1"]
         return camp.main(args)
 
     e.run = run
-    e.rows_of = lambda: {r["gse"]: r for r in (json.loads(ln) for ln in e.results.read_text().splitlines())}
-    e.ncalls = lambda what: sum(1 for ln in (counts.read_text().splitlines() if counts.exists() else []) if ln.startswith(what))
+    e.rows_of = lambda: {
+        r["gse"]: r for r in (json.loads(ln) for ln in e.results.read_text().splitlines())
+    }
+    e.ncalls = lambda what: sum(
+        1
+        for ln in (counts.read_text().splitlines() if counts.exists() else [])
+        if ln.startswith(what)
+    )
     return e

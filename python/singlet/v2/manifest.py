@@ -12,12 +12,12 @@ Study-level legacy files (``manifest.json``, ``study_meta.json``, ``feature_voca
                                                                                      ``json.dumps`` reproduces byte for byte
     {"zstd_b64": "...", "size", "crc32", "sha256"}                                    stored (zstd-19, base64)
 """
+
 from __future__ import annotations
 
 import base64
 import hashlib
 import json
-import zlib
 from typing import Optional
 
 from . import util
@@ -75,7 +75,9 @@ def study_file_bytes(ent: dict, regenerate=None) -> bytes:
     elif "json" in ent:
         data = _dumps(ent["json"], ent["dumps"])
     else:
-        data = util.zstd_decompress(base64.b64decode(ent["zstd_b64"]), max_output_size=ent["size"] or 1)
+        data = util.zstd_decompress(
+            base64.b64decode(ent["zstd_b64"]), max_output_size=ent["size"] or 1
+        )
     if len(data) != ent["size"] or util.crc32(data) != ent["crc32"]:
         raise ValueError("study file fails its size/CRC check")
     return data
@@ -91,8 +93,16 @@ def compute_rev(sample_keys: list, study_files: dict) -> str:
     return h.hexdigest()[:16]
 
 
-def build_manifest(gse: str, samples: list, study_files: dict, reference_build: str, pipeline: dict, packs: dict,
-                   legacy: dict, created_at: str) -> dict:
+def build_manifest(
+    gse: str,
+    samples: list,
+    study_files: dict,
+    reference_build: str,
+    pipeline: dict,
+    packs: dict,
+    legacy: dict,
+    created_at: str,
+) -> dict:
     keys = [s["key"] for s in samples]
     return {
         "format": FORMAT,
@@ -120,6 +130,16 @@ def loads_manifest(data: bytes) -> dict:
     return m
 
 
-def sample_entry(gsm: str, key: str, obj: bytes, n_columns: int, n_called: int, members: dict, stats: dict) -> dict:
-    return {"gsm": gsm, "key": key, "bytes": len(obj), "sha256": hashlib.sha256(obj).hexdigest(), "n_columns": n_columns,
-            "n_called": n_called, "members": members, "stats": stats}
+def sample_entry(
+    gsm: str, key: str, obj: bytes, n_columns: int, n_called: int, members: dict, stats: dict
+) -> dict:
+    return {
+        "gsm": gsm,
+        "key": key,
+        "bytes": len(obj),
+        "sha256": hashlib.sha256(obj).hexdigest(),
+        "n_columns": n_columns,
+        "n_called": n_called,
+        "members": members,
+        "stats": stats,
+    }

@@ -79,8 +79,19 @@ def env(root, tmp_path, monkeypatch):
     monkeypatch.setenv("SINGLET_DATA_BASE", str(root))
     monkeypatch.setenv("SINGLET_CACHE_DIR", str(tmp_path / "cache"))
     client.clear_memory_cache()
-    monkeypatch.setattr(server, "_lookup_gsm", lambda g: {"gsm_id": g, "gse_id": GSE, "organism": "Homo sapiens", "protocol": "10xv3",
-                                                          "status": "SUCCESS", "title": "t", "n_cells": 40})
+    monkeypatch.setattr(
+        server,
+        "_lookup_gsm",
+        lambda g: {
+            "gsm_id": g,
+            "gse_id": GSE,
+            "organism": "Homo sapiens",
+            "protocol": "10xv3",
+            "status": "SUCCESS",
+            "title": "t",
+            "n_cells": 40,
+        },
+    )
     yield
 
 
@@ -88,13 +99,19 @@ def test_results_are_compact_json():
     res = _run(server.call_tool("nonexistent_tool", {}))
     text = res[0].text
     assert json.loads(text) == {"error": "Unknown tool: nonexistent_tool"}
-    assert text == json.dumps(json.loads(text), separators=(",", ":"))  # no indentation, no spaces after separators
+    assert text == json.dumps(
+        json.loads(text), separators=(",", ":")
+    )  # no indentation, no spaces after separators
 
 
 def test_singlet_load_gives_object_ranges_and_packs(env, root):
     out = _run(server._tool_load({"gsm_id": G1}))
     v2 = out["v2"]
-    assert out["load"] == f'singlet.load("{G1}")' and "bundle_url" not in out and "python_code" not in out
+    assert (
+        out["load"] == f'singlet.load("{G1}")'
+        and "bundle_url" not in out
+        and "python_code" not in out
+    )
     assert v2["format"] == "v2" and len(v2["rev"]) == 16
     assert v2["object"].endswith(".s2") and "/v2/s/%s/" % G1 in v2["object"].replace("\\", "/")
     assert set(v2["members"]) >= {"cells", "exon_counts.1pz", "intron_counts.1pz", "summary.json"}
@@ -105,16 +122,25 @@ def test_singlet_load_gives_object_ranges_and_packs(env, root):
     # the advertised range really is what the client reads
     st = client.open_study(GSE)
     sm = st.samples[G1]
-    assert g["bytes"] <= sum(sm.members[n].len for n in ("cells", "exon_counts.1pz", "intron_counts.1pz")) + 128
+    assert (
+        g["bytes"]
+        <= sum(sm.members[n].len for n in ("cells", "exon_counts.1pz", "intron_counts.1pz")) + 128
+    )
     again = _run(server._tool_load({"gsm_id": G1, "if_rev": v2["rev"]}))
     assert again == {"gsm_id": G1, "gse_id": GSE, "unchanged": True, "rev": v2["rev"]}
     assert len(json.dumps(again)) < 100  # the "unchanged" answer is tiny
 
 
 def test_singlet_load_falls_back_to_the_legacy_url_when_not_migrated(env, monkeypatch):
-    monkeypatch.setattr(server, "_lookup_gsm", lambda g: {"gsm_id": g, "gse_id": "GSE1", "organism": "Homo sapiens"})
+    monkeypatch.setattr(
+        server, "_lookup_gsm", lambda g: {"gsm_id": g, "gse_id": "GSE1", "organism": "Homo sapiens"}
+    )
     out = _run(server._tool_load({"gsm_id": "GSM1"}))
-    assert "v2" not in out and out["bundle_url"].endswith("/data/GSE1/GSE1.singlet") and "legacy=True" in out["load"]
+    assert (
+        "v2" not in out
+        and out["bundle_url"].endswith("/data/GSE1/GSE1.singlet")
+        and "legacy=True" in out["load"]
+    )
 
 
 def test_unknown_sample_in_a_migrated_study(env, monkeypatch):
@@ -132,7 +158,13 @@ def test_where_parser_is_not_an_evaluator():
     assert server._parse_where("not called")(df).tolist() == [True, False, False]
     assert server._parse_where("n_umi_exon < 100")(df).tolist() == [True, False, False]
     assert server._parse_where("") is None
-    for bad in ("__import__('os').system('x')", "n_umi_exon >= 5 or called", "n_umi_exon >=", "a.b > 3", "(called)"):
+    for bad in (
+        "__import__('os').system('x')",
+        "n_umi_exon >= 5 or called",
+        "n_umi_exon >=",
+        "a.b > 3",
+        "(called)",
+    ):
         with pytest.raises(ValueError):
             server._parse_where(bad)
     with pytest.raises(ValueError, match="unknown cell-table column"):
@@ -140,13 +172,40 @@ def test_where_parser_is_not_an_evaluator():
 
 
 def test_slice_cells_summary_and_save(env, root, tmp_path):
-    out = _run(server._tool_slice_cells({"gse_id": GSE, "where": "n_umi_exon >= 1 and called", "samples": [G1], "max_cells": 1000}))
-    assert out["n_cells"] == 40 and out["samples"] == {G1: 40} and out["requests"] == 0  # a local directory is memory mapped: no requests
+    out = _run(
+        server._tool_slice_cells(
+            {
+                "gse_id": GSE,
+                "where": "n_umi_exon >= 1 and called",
+                "samples": [G1],
+                "max_cells": 1000,
+            }
+        )
+    )
+    assert (
+        out["n_cells"] == 40 and out["samples"] == {G1: 40} and out["requests"] == 0
+    )  # a local directory is memory mapped: no requests
     assert out["median_n_umi_exon"] > 0 and out["load"].startswith("singlet.v2.cells(")
-    small = _run(server._tool_slice_cells({"gse_id": GSE, "where": "called", "samples": [G1], "max_cells": 7, "save_to": str(tmp_path / "s.h5ad")}))
-    assert small["n_cells"] == 7 and (tmp_path / "s.h5ad").exists() and small["saved"].endswith("s.h5ad")
+    small = _run(
+        server._tool_slice_cells(
+            {
+                "gse_id": GSE,
+                "where": "called",
+                "samples": [G1],
+                "max_cells": 7,
+                "save_to": str(tmp_path / "s.h5ad"),
+            }
+        )
+    )
+    assert (
+        small["n_cells"] == 7
+        and (tmp_path / "s.h5ad").exists()
+        and small["saved"].endswith("s.h5ad")
+    )
     assert "error" in _run(server._tool_slice_cells({"gse_id": GSE, "where": "n_umi_exon >>> 3"}))
-    assert "error" in _run(server._tool_slice_cells({"gse_id": GSE, "save_to": str(tmp_path / "x.txt")}))
+    assert "error" in _run(
+        server._tool_slice_cells({"gse_id": GSE, "save_to": str(tmp_path / "x.txt")})
+    )
     assert "error" in _run(server._tool_slice_cells({}))
 
 
@@ -157,7 +216,11 @@ def test_slice_cells_over_http_counts_requests(root, tmp_path, monkeypatch):
         monkeypatch.setenv("SINGLET_DATA_BASE", base)
         monkeypatch.setenv("SINGLET_CACHE_DIR", str(tmp_path / "c2"))
         client.clear_memory_cache()
-        out = _run(server._tool_slice_cells({"gse_id": GSE, "where": "called", "samples": [G1], "max_cells": 10}))
+        out = _run(
+            server._tool_slice_cells(
+                {"gse_id": GSE, "where": "called", "samples": [G1], "max_cells": 10}
+            )
+        )
         assert out["n_cells"] == 10 and out["requests"] >= 1 and out["bytes"] > 0
         assert out["requests"] == len([r for r in rec.log if "/v2/s/" in r[1]])
 

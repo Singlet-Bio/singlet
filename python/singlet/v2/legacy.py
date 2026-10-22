@@ -12,6 +12,7 @@
 
 Entries are ordered as in the archive. ``entry.crc32`` / ``entry.size`` are the legacy values the ledger records.
 """
+
 from __future__ import annotations
 
 import json
@@ -49,11 +50,11 @@ class LegacyError(RuntimeError):
 @dataclass
 class LegacyEntry:
     path: str
-    size: int            # uncompressed bytes
-    csize: int           # compressed bytes in the archive
-    method: int          # 0 stored, 8 deflate
+    size: int  # uncompressed bytes
+    csize: int  # compressed bytes in the archive
+    method: int  # 0 stored, 8 deflate
     crc32: int
-    header_off: int      # local header offset in the archive (-1 for directory sources)
+    header_off: int  # local header offset in the archive (-1 for directory sources)
     name_len: int = 0
 
 
@@ -91,7 +92,7 @@ class _BytesSource:
     def read(self, off: int, length: int) -> bytes:
         self.n_requests += 1
         self.bytes += min(length, max(0, self.size - off))
-        return self.data[off:off + length]
+        return self.data[off : off + length]
 
     def read_tail(self, length: int) -> bytes:
         return self.read(max(0, self.size - length), length)
@@ -127,7 +128,7 @@ class _HttpSource:
                     break
             except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
                 last = e
-            time.sleep(min(2 ** attempt, 20))
+            time.sleep(min(2**attempt, 20))
         raise LegacyError("cannot read %s (%s): %s" % (self.url, rng, last))
 
     def _learn(self, hdr: dict):
@@ -160,24 +161,34 @@ _LOC64 = b"PK\x06\x07"
 _CEN = b"PK\x01\x02"
 
 
-def parse_central_directory(tail: bytes, tail_start: int, total: int, read_range) -> list[LegacyEntry]:
+def parse_central_directory(
+    tail: bytes, tail_start: int, total: int, read_range
+) -> list[LegacyEntry]:
     """Entries from the archive tail (``tail`` begins at absolute offset ``tail_start``); ``read_range(off, len)`` is used when the
     central directory begins before the tail."""
     i = tail.rfind(_EOCD)
     if i < 0:
         raise LegacyError("no end-of-central-directory record (not a ZIP?)")
-    (_s, disk, cdisk, n_disk, n_total, cd_size, cd_off, clen) = struct.unpack_from("<4sHHHHIIH", tail, i)
+    (_s, disk, cdisk, n_disk, n_total, cd_size, cd_off, clen) = struct.unpack_from(
+        "<4sHHHHIIH", tail, i
+    )
     if n_total == 0xFFFF or cd_size == 0xFFFFFFFF or cd_off == 0xFFFFFFFF:
         j = tail.rfind(_LOC64, 0, i)
         if j < 0:
             raise LegacyError("ZIP64 locator missing")
         (_s2, _d, off64, _nd) = struct.unpack_from("<4sIQI", tail, j)
-        rec = tail[off64 - tail_start: off64 - tail_start + 56] if off64 >= tail_start else read_range(off64, 56)
-        (sig, _sz, _vm, _vn, _dn, _dcd, n_disk64, n_total, cd_size, cd_off) = struct.unpack_from("<4sQHHIIQQQQ", rec, 0)
+        rec = (
+            tail[off64 - tail_start : off64 - tail_start + 56]
+            if off64 >= tail_start
+            else read_range(off64, 56)
+        )
+        (sig, _sz, _vm, _vn, _dn, _dcd, n_disk64, n_total, cd_size, cd_off) = struct.unpack_from(
+            "<4sQHHIIQQQQ", rec, 0
+        )
         if sig != _EOCD64:
             raise LegacyError("bad ZIP64 end record")
     if cd_off >= tail_start:
-        cd = tail[cd_off - tail_start: cd_off - tail_start + cd_size]
+        cd = tail[cd_off - tail_start : cd_off - tail_start + cd_size]
     else:
         cd = read_range(cd_off, cd_size)
     if len(cd) != cd_size:
@@ -185,23 +196,43 @@ def parse_central_directory(tail: bytes, tail_start: int, total: int, read_range
     out = []
     p = 0
     for _ in range(n_total):
-        if cd[p:p + 4] != _CEN:
+        if cd[p : p + 4] != _CEN:
             raise LegacyError("bad central directory entry signature")
-        (_sig, _vm, _vn, flags, method, _t, _d, crc, csize, size, nl, el, cl, _dn, _ia, _ea, hoff) = struct.unpack_from(
-            "<4sHHHHHHIIIHHHHHII", cd, p)
-        name = cd[p + 46: p + 46 + nl].decode("utf-8" if flags & 0x800 else "cp437")
-        extra = cd[p + 46 + nl: p + 46 + nl + el]
+        (
+            _sig,
+            _vm,
+            _vn,
+            flags,
+            method,
+            _t,
+            _d,
+            crc,
+            csize,
+            size,
+            nl,
+            el,
+            cl,
+            _dn,
+            _ia,
+            _ea,
+            hoff,
+        ) = struct.unpack_from("<4sHHHHHHIIIHHHHHII", cd, p)
+        name = cd[p + 46 : p + 46 + nl].decode("utf-8" if flags & 0x800 else "cp437")
+        extra = cd[p + 46 + nl : p + 46 + nl + el]
         q = 0
         while q + 4 <= len(extra):
             hid, hsz = struct.unpack_from("<HH", extra, q)
             if hid == 1:
                 z = q + 4
                 if size == 0xFFFFFFFF:
-                    (size,) = struct.unpack_from("<Q", extra, z); z += 8
+                    (size,) = struct.unpack_from("<Q", extra, z)
+                    z += 8
                 if csize == 0xFFFFFFFF:
-                    (csize,) = struct.unpack_from("<Q", extra, z); z += 8
+                    (csize,) = struct.unpack_from("<Q", extra, z)
+                    z += 8
                 if hoff == 0xFFFFFFFF:
-                    (hoff,) = struct.unpack_from("<Q", extra, z); z += 8
+                    (hoff,) = struct.unpack_from("<Q", extra, z)
+                    z += 8
             q += 4 + hsz
         out.append(LegacyEntry(name, size, csize, method, crc, hoff, nl))
         p += 46 + nl + el + cl
@@ -218,7 +249,7 @@ def entry_bytes(src_read, e: LegacyEntry) -> bytes:
     start = 30 + nl + el
     if start + e.csize > len(buf):
         buf = buf + src_read(e.header_off + len(buf), start + e.csize - len(buf))
-    body = buf[start:start + e.csize]
+    body = buf[start : start + e.csize]
     if len(body) != e.csize:
         raise LegacyError("short read of %s" % e.path)
     if e.method == 0:
@@ -296,7 +327,10 @@ class LegacyBundle:
                 m = re.search(r"(GSM\d+)", os.path.basename(os.path.normpath(d)))
                 gsm = m.group(1) if m else None
             if not gsm:
-                raise LegacyError("cannot tell which sample directory %s holds (no sample.json, no GSM in its name)" % d)
+                raise LegacyError(
+                    "cannot tell which sample directory %s holds (no sample.json, no GSM in its name)"
+                    % d
+                )
             self._sample_hint = gsm
             for f in sorted(names):
                 full = os.path.join(d, f)
@@ -310,7 +344,9 @@ class LegacyBundle:
         for rel, full in ents:
             data = open(full, "rb").read()
             self._dirmap[rel] = full
-            self.entries[rel] = LegacyEntry(rel, len(data), len(data), 0, zlib.crc32(data) & 0xFFFFFFFF, -1)
+            self.entries[rel] = LegacyEntry(
+                rel, len(data), len(data), 0, zlib.crc32(data) & 0xFFFFFFFF, -1
+            )
         self.gse_hint = info.get("gse")
         m = re.search(r"(GSE\d+)", os.path.basename(os.path.normpath(d)))
         if not self.gse_hint and m:
@@ -342,10 +378,15 @@ class LegacyBundle:
     def sample_paths(self, gsm: str) -> list:
         """(relative member name, full path) pairs of one sample, archive order."""
         pre = "samples/%s/" % gsm
-        return [(p[len(pre):], p) for p in self.entries if p.startswith(pre) and not p.endswith("/")]
+        return [
+            (p[len(pre) :], p) for p in self.entries if p.startswith(pre) and not p.endswith("/")
+        ]
 
     def stats(self) -> dict:
-        return {"requests": self.src.n_requests if self.src is not None else 0, "bytes": self.src.bytes if self.src is not None else 0}
+        return {
+            "requests": self.src.n_requests if self.src is not None else 0,
+            "bytes": self.src.bytes if self.src is not None else 0,
+        }
 
 
 # ----------------------------------------------------------------------------------------------------------- legacy .1pz
@@ -355,6 +396,7 @@ def decode_1pz_bytes(data: bytes):
     import tempfile
 
     from .matrix import Csc
+
     try:
         from singlet import _pz
     except ImportError as e:  # pragma: no cover

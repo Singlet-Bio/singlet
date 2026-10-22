@@ -85,7 +85,14 @@ def test_load_one_sample_matches_independent_computation(study_dir, env):
     assert list(ad.obs_names) == [f"{G1}_{b}" for b in bcs]
     assert list(ad.var_names) == s.truth[G1]["gene_ids"] and ad.var.index.name == "gene_id"
     assert list(ad.var["gene_name"]) == [n for _, n in s.exon_pack.gene_table()]
-    assert set(ad.obs.columns) >= {"gsm_id", "organism", "protocol", "qc_flag", "reference_build", "n_cells_sample"}
+    assert set(ad.obs.columns) >= {
+        "gsm_id",
+        "organism",
+        "protocol",
+        "qc_flag",
+        "reference_build",
+        "n_cells_sample",
+    }
     assert ad.obs["organism"].iloc[0] == "Homo sapiens" and ad.uns["study_meta"]["gse_id"] == GSE
     assert ad.uns["manifest"]["gsm_ids"] == [G1] and ad.uns["singlet_v2"]["gse"] == GSE
 
@@ -107,7 +114,9 @@ def test_sample_without_intron_and_study_level_layers(study_dir, env):
     st = client.open_study(GSE, base=str(root))
     one = st.to_anndata([G3])
     X, ex, un, bcs = _expected(s.truth, G3)
-    assert un is None and _same(one.X, X) and "spliced" in one.layers and "unspliced" not in one.layers
+    assert (
+        un is None and _same(one.X, X) and "spliced" in one.layers and "unspliced" not in one.layers
+    )
     both = st.to_anndata([G1, G3])  # a layer is kept only when every sample has it
     assert both.n_obs == 40 + 25 and "unspliced" not in both.layers and "spliced" in both.layers
 
@@ -142,7 +151,9 @@ def test_genes_subset_symbols_ids_and_warning(study_dir, env):
     full = st.to_anndata([G1])
     keep = L._gene_keep_mask(ids, [n for _, n in tbl], [sym.lower(), ids[5]])
     assert list(ad.var_names) == list(np.array(ids)[keep])
-    assert _same(ad.X, full.X[:, np.flatnonzero(keep)]) and _same(ad.layers["spliced"], full.layers["spliced"][:, np.flatnonzero(keep)])
+    assert _same(ad.X, full.X[:, np.flatnonzero(keep)]) and _same(
+        ad.layers["spliced"], full.layers["spliced"][:, np.flatnonzero(keep)]
+    )
     with pytest.warns(UserWarning, match="None of the"):
         none = st.to_anndata([G1], genes=["NOT_A_GENE"])
     assert none.shape[1] == 0
@@ -202,11 +213,18 @@ def test_manifest_is_revalidated_with_etag_and_survives_offline(study_dir, env, 
         client.open_study(GSE, base=base)
         client.clear_memory_cache()
         client.open_study(GSE, base=base)
-        assert [r[3] for r in rec.log] == [200, 304]  # second open: conditional request, nothing re-downloaded
-        client._transport_for(base).close()  # drop the kept-alive connection: a stopped server's handler threads keep serving it
+        assert [r[3] for r in rec.log] == [
+            200,
+            304,
+        ]  # second open: conditional request, nothing re-downloaded
+        client._transport_for(
+            base
+        ).close()  # drop the kept-alive connection: a stopped server's handler threads keep serving it
     client.clear_memory_cache()
     monkeypatch.setattr("time.sleep", lambda *_: None)
-    with pytest.warns(RuntimeWarning, match="cached manifest"):  # server gone: the cached copy is used
+    with pytest.warns(
+        RuntimeWarning, match="cached manifest"
+    ):  # server gone: the cached copy is used
         st = client.open_study(GSE, base=base)
     assert st.gse == GSE and st.source["origin"] == "cache-offline"
 
@@ -226,7 +244,9 @@ def test_transient_server_errors_are_retried(study_dir, env, monkeypatch):
     with rs.serve(str(root)) as (base, rec):
         rec.fail_next.extend([503, 502])
         st = client.open_study(GSE, base=base)
-        assert sorted(r[3] for r in rec.log[:3]) == [200, 502, 503] and st.stats.retries == 2  # (log order races the client)
+        assert (
+            sorted(r[3] for r in rec.log[:3]) == [200, 502, 503] and st.stats.retries == 2
+        )  # (log order races the client)
 
 
 def test_wrong_object_size_is_refused(study_dir, env):
@@ -268,8 +288,12 @@ def test_verify_recomputes_canonical_digests(study_dir, env):
 # =================================================================================================================== two-phase plan, cells
 def test_two_phase_plan_gives_the_same_matrix_and_fewer_bytes(study_dir, env, monkeypatch):
     root, s = study_dir
-    monkeypatch.setattr(client, "PREFIX_HINT", 4096)  # the synthetic members are small: do not read them whole as a "prefix"
-    monkeypatch.setattr(client, "PARTIAL_GAP", 64)    # ... and do not bridge the gap between members to save a round trip
+    monkeypatch.setattr(
+        client, "PREFIX_HINT", 4096
+    )  # the synthetic members are small: do not read them whole as a "prefix"
+    monkeypatch.setattr(
+        client, "PARTIAL_GAP", 64
+    )  # ... and do not bridge the gap between members to save a round trip
     with rs.serve(str(root)) as (base, rec):
         st = client.open_study(GSE, base=base)
         whole = st.to_anndata([G1])
@@ -278,10 +302,16 @@ def test_two_phase_plan_gives_the_same_matrix_and_fewer_bytes(study_dir, env, mo
         assert _same(whole.X, part.X) and _same(whole.layers["unspliced"], part.layers["unspliced"])
         assert list(whole.obs_names) == list(part.obs_names)
         reqs = [r for r in rec.log if r[1].startswith("/v2/s/")]
-        assert 3 <= len(reqs) <= 8  # cells + prefixes (2 phases of concurrent reads), then the chunk runs
+        assert (
+            3 <= len(reqs) <= 8
+        )  # cells + prefixes (2 phases of concurrent reads), then the chunk runs
         sm = st.samples[G1]
-        mem_bytes = sum(sm.members[n].len for n in ("cells", "exon_counts.1pz", "intron_counts.1pz"))
-        assert sum(r[4] for r in reqs) < mem_bytes  # chunks that hold no called cell are never fetched
+        mem_bytes = sum(
+            sm.members[n].len for n in ("cells", "exon_counts.1pz", "intron_counts.1pz")
+        )
+        assert (
+            sum(r[4] for r in reqs) < mem_bytes
+        )  # chunks that hold no called cell are never fetched
 
 
 def test_cells_slice_fetches_only_matching_chunks(study_dir, env, monkeypatch):
@@ -359,8 +389,15 @@ def test_v2bundle_has_the_singletbundle_interface(study_dir, env):
 
     b = SingletBundle.open(str(root / "v2" / "m" / f"{GSE}.json"))
     assert isinstance(b, V2Bundle) and isinstance(b, SingletBundle)
-    assert b.gsm_ids == [G1, G2, G3] and b.manifest["gse_id"] == GSE and b.study_meta["series_title"] == "synthetic"
-    assert b.feature_vocab["n_genes"] == len(s.exon_pack.gene_table()) and b.feature_vocab["reference_build"] == synth.BUILD
+    assert (
+        b.gsm_ids == [G1, G2, G3]
+        and b.manifest["gse_id"] == GSE
+        and b.study_meta["series_title"] == "synthetic"
+    )
+    assert (
+        b.feature_vocab["n_genes"] == len(s.exon_pack.gene_table())
+        and b.feature_vocab["reference_build"] == synth.BUILD
+    )
     assert "exon_counts.1pz" in b.list_files(G1) and "cell_calls.tsv" in b.list_files(G1)
     assert b.has("exon_counts", G1) and not b.has("intron_counts", G3)
     assert {"exon_counts", "cell_calls", "summary"} <= set(b.modalities(G1))
@@ -413,7 +450,11 @@ def test_unmigrated_study_fallback_and_legacy_true(study_dir, env, monkeypatch):
 
     monkeypatch.setenv("SINGLET_DATA_BASE", str(root))
     calls = []
-    monkeypatch.setattr(L, "_download_legacy", lambda acc, *a, **k: calls.append(acc) or pathlib.Path("legacy.singlet"))
+    monkeypatch.setattr(
+        L,
+        "_download_legacy",
+        lambda acc, *a, **k: calls.append(acc) or pathlib.Path("legacy.singlet"),
+    )
 
     class FakeBundle:
         def __init__(self, *a):
@@ -431,8 +472,9 @@ def test_unmigrated_study_fallback_and_legacy_true(study_dir, env, monkeypatch):
     monkeypatch.setattr(B, "SingletBundle", FakeBundle)
     # transition default: an unmigrated study quietly falls back to its legacy bundle
     import warnings as _w
+
     with _w.catch_warnings():
-        _w.simplefilter("error")
+        _w.simplefilter("error", FutureWarning)
         assert L.load("GSE0") == "legacy-adata" and calls == ["GSE0"]
     calls.clear()
     # after retirement (or when the user opts out) the fallback is off

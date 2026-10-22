@@ -16,6 +16,7 @@ string are constants, so the only independent information is *which* barcodes ar
 ``called`` bitmap plus, for emptydrops, ``cc_listed``), the p-values (``cc_pvalue``), and for top_n_fallback the
 row order inside UMI ties (``cc_pos``).  The recipe asks the cells table for exactly the columns it needs.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -35,7 +36,7 @@ def parse_cell_calls(b: bytes):
         return None
     if not s.startswith(CC_HEADER) or (len(s) > len(CC_HEADER) and not s.endswith("\n")):
         return None
-    rows = s[len(CC_HEADER):].split("\n")
+    rows = s[len(CC_HEADER) :].split("\n")
     if rows and rows[-1] == "":
         rows.pop()
     bc, ic, lg, pv, me = [], [], [], [], []
@@ -167,8 +168,16 @@ def render_cell_calls(params, cells) -> bytes:
     rows = np.flatnonzero(listed)
     order = params.get("order", "sorted")
     if order == "sorted":
-        rows = rows[np.argsort(np.array([str(barcode[i]).encode("ascii") for i in rows], dtype=object), kind="stable")] \
-            if len(rows) else rows
+        rows = (
+            rows[
+                np.argsort(
+                    np.array([str(barcode[i]).encode("ascii") for i in rows], dtype=object),
+                    kind="stable",
+                )
+            ]
+            if len(rows)
+            else rows
+        )
     elif order == "explicit":
         rows = rows[np.argsort(np.asarray(cells["cc_pos"])[rows], kind="stable")]
     # colorder: rows already ascending
@@ -181,8 +190,8 @@ def render_cell_calls(params, cells) -> bytes:
     out = [CC_HEADER]
     isc = called[rows]
     out.extend(
-        "%s\t%s\t%s\t%s\t%s\n" % (barcode[i], "TRUE" if c else "FALSE", l, pv, method)
-        for i, c, l, pv in zip(rows.tolist(), isc.tolist(), lg, pvs)
+        "%s\t%s\t%s\t%s\t%s\n" % (barcode[i], "TRUE" if c else "FALSE", lgv, pv, method)
+        for i, c, lgv, pv in zip(rows.tolist(), isc.tolist(), lg, pvs)
     )
     return "".join(out).encode("ascii")
 

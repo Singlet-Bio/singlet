@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import hashlib
 import http.server
-import io
 import json
 import os
 import struct
@@ -18,12 +17,16 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import zstandard
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "python"))
 
 from singlet.v2 import cells as cells_mod  # noqa: E402
-from singlet.v2 import codec, container as C, legacy, manifest as M, packs as P, util  # noqa: E402
+from singlet.v2 import codec, legacy, util  # noqa: E402
+from singlet.v2 import container as C  # noqa: E402
+from singlet.v2 import manifest as M  # noqa: E402
+from singlet.v2 import packs as P  # noqa: E402
 from singlet.v2.matrix import Csc, canonical_digest  # noqa: E402
 
 CORPUS = ROOT / "bench" / "compression" / "corpus"
@@ -44,13 +47,22 @@ def make_csc(m=500, n=300, density=0.05, seed=0, vt=2, names=True, empty_cols=Tr
     if vt == 4:
         data = rs.rand(len(indices)).astype(np.float32).view(np.uint32)
     else:
-        data = np.minimum(rs.geometric(0.3, size=len(indices)).astype(np.int64), hi).astype(np.uint32)
+        data = np.minimum(rs.geometric(0.3, size=len(indices)).astype(np.int64), hi).astype(
+            np.uint32
+        )
         if vt == 3 and len(data):
-            data[:3] = [2**32 - 1, 70000, 1][:min(3, len(data))]
-    return Csc(m, n, indptr, indices, data,
-               ["gene%d_x" % i for i in range(m)] if names else None,
-               ["BC%05d" % j for j in range(n)] if names else None,
-               {"b": "2", "a": "1"}, vt)
+            data[:3] = [2**32 - 1, 70000, 1][: min(3, len(data))]
+    return Csc(
+        m,
+        n,
+        indptr,
+        indices,
+        data,
+        ["gene%d_x" % i for i in range(m)] if names else None,
+        ["BC%05d" % j for j in range(n)] if names else None,
+        {"b": "2", "a": "1"},
+        vt,
+    )
 
 
 def same(a: Csc, b: Csc):
@@ -63,7 +75,10 @@ def same(a: Csc, b: Csc):
 
 
 # ------------------------------------------------------------------------------------------------------------ util
-@pytest.mark.parametrize("vals", [[], [0], [127, 128, 129], [2**32 - 1, 2**63, 2**64 - 1, 5, 0], list(range(0, 100000, 37))])
+@pytest.mark.parametrize(
+    "vals",
+    [[], [0], [127, 128, 129], [2**32 - 1, 2**63, 2**64 - 1, 5, 0], list(range(0, 100000, 37))],
+)
 def test_leb128_roundtrip(vals):
     a = np.array(vals, dtype=np.uint64)
     b = util.leb128_encode(a)
@@ -80,9 +95,9 @@ def test_leb128_roundtrip(vals):
 
 def test_leb128_rejects_bad_streams():
     with pytest.raises(ValueError):
-        util.leb128_decode(b"\x80", 1)          # truncated
+        util.leb128_decode(b"\x80", 1)  # truncated
     with pytest.raises(ValueError):
-        util.leb128_decode(b"\x01\x02", 3)      # wrong count
+        util.leb128_decode(b"\x01\x02", 3)  # wrong count
 
 
 def test_zstd_is_thread_safe():
@@ -107,9 +122,15 @@ def build_object():
     w.add_matrix("m.1pz", b"M" * 1000, b"\x01" * 16, {"x": 1}, C.FLAG_LEGACY)
     w.add_cells("cells", b"C" * 77, b"\x02" * 16)
     assert w.add_stored("a.json", b'{"a": 1}' * 200) == C.KIND_STORED
-    assert w.add_stored("tiny.txt", b"x") == C.KIND_RAW          # zstd would not shrink it
+    assert w.add_stored("tiny.txt", b"x") == C.KIND_RAW  # zstd would not shrink it
     assert w.add_stored("empty.txt", b"") == C.KIND_RAW
-    w.add_derived("d.tsv", 123, 456, b"\x03" * 16, {"recipe": "r-v1", "params": {"k": [1, 2]}, "needs": ["cells:called"]})
+    w.add_derived(
+        "d.tsv",
+        123,
+        456,
+        b"\x03" * 16,
+        {"recipe": "r-v1", "params": {"k": [1, 2]}, "needs": ["cells:called"]},
+    )
     return w, w.build()
 
 
@@ -128,7 +149,13 @@ def test_container_layout_and_reader():
     assert r.legacy_blob("tiny.txt") == b"x"
     assert r.legacy_blob("empty.txt") == b""
     d = r.members["d.tsv"]
-    assert d.kind == C.KIND_DERIVED and d.len == 0 and d.out_len == 123 and d.crc32 == 456 and d.meta["params"] == {"k": [1, 2]}
+    assert (
+        d.kind == C.KIND_DERIVED
+        and d.len == 0
+        and d.out_len == 123
+        and d.crc32 == 456
+        and d.meta["params"] == {"k": [1, 2]}
+    )
     assert r.object_digest() == util.d16(obj)
     # deterministic
     assert build_object()[1] == obj
@@ -143,14 +170,14 @@ def test_container_sources_and_request_counts(tmp_path):
 
     def fetch(off, ln):
         calls.append((off, ln))
-        return obj[off:off + ln]
+        return obj[off : off + ln]
 
     r = C.S2Reader(fetch, prefetch=64)
     n0 = len(calls)
-    assert n0 <= 2                                  # header, then (maybe) the table
+    assert n0 <= 2  # header, then (maybe) the table
     assert r.read_range("m.1pz", 10, 20) == b"M" * 20
-    assert len(calls) == n0 + 1                     # exactly one request per range
-    r2 = C.S2Reader(fetch)                          # default prefetch covers everything here: no extra request for members
+    assert len(calls) == n0 + 1  # exactly one request per range
+    r2 = C.S2Reader(fetch)  # default prefetch covers everything here: no extra request for members
     c = len(calls)
     assert r2.read_member("cells") == b"C" * 77
     assert len(calls) == c + 1 - 1 or len(calls) == c  # served from the first read
@@ -167,9 +194,9 @@ def test_container_rejects_corruption(mut):
     elif mut == "len":
         b[32] ^= 1
     elif mut == "trunc":
-        b = b[:len(b) - 5]
+        b = b[: len(b) - 5]
     elif mut == "table":
-        b[64 + 2 + 5] = 0xFF                         # inside the first name/fields
+        b[64 + 2 + 5] = 0xFF  # inside the first name/fields
     with pytest.raises((C.S2Error, ValueError, UnicodeDecodeError, struct.error)):
         r = C.S2Reader(bytes(b))
         for n in list(r.members):
@@ -185,7 +212,9 @@ def test_stored_member_crc_check():
     r = C.S2Reader(bytes(obj))
     mi = r.members["a"]
     obj[mi.off + 3] ^= 0xFF
-    with pytest.raises(Exception):
+    with pytest.raises(
+        (C.S2Error, zstandard.ZstdError)
+    ):  # a damaged zstd frame, or a CRC/length mismatch
         C.S2Reader(bytes(obj)).legacy_blob("a")
 
 
@@ -195,7 +224,11 @@ def slow_digest(c: Csc) -> bytes:
     h.update(struct.pack("<IIQB", c.m, c.n, c.nnz, c.value_type))
     for j in range(c.n):
         a, b = c.indptr[j], c.indptr[j + 1]
-        h.update(struct.pack("<I", b - a) + c.indices[a:b].astype("<u4").tobytes() + c.data[a:b].astype("<u4").tobytes())
+        h.update(
+            struct.pack("<I", b - a)
+            + c.indices[a:b].astype("<u4").tobytes()
+            + c.data[a:b].astype("<u4").tobytes()
+        )
     for lst in (c.rownames, c.colnames):
         h.update(struct.pack("<I", len(lst)) + b"".join(s.encode() + b"\0" for s in lst))
     for k in sorted(c.kv):
@@ -224,13 +257,26 @@ def test_canonical_digest_sensitivity():
 
 def test_canonical_digest_blocks_and_empty(monkeypatch):
     import singlet.v2.matrix as mm
+
     c = make_csc(m=800, n=400, density=0.1, seed=5)
     d = canonical_digest(c)
-    monkeypatch.setattr(mm, "_DIGEST_BLOCK_NNZ", 1000)     # force many blocks (same stream)
+    monkeypatch.setattr(mm, "_DIGEST_BLOCK_NNZ", 1000)  # force many blocks (same stream)
     assert mm.canonical_digest(c) == d
-    e = Csc(0, 0, np.zeros(1, np.int64), np.zeros(0, np.uint32), np.zeros(0, np.uint32), [], [], {}, 1)
+    e = Csc(
+        0, 0, np.zeros(1, np.int64), np.zeros(0, np.uint32), np.zeros(0, np.uint32), [], [], {}, 1
+    )
     assert canonical_digest(e) == slow_digest(e)
-    z = Csc(5, 4, np.zeros(5, np.int64), np.zeros(0, np.uint32), np.zeros(0, np.uint32), list("abcde"), list("wxyz"), {}, 2)
+    z = Csc(
+        5,
+        4,
+        np.zeros(5, np.int64),
+        np.zeros(0, np.uint32),
+        np.zeros(0, np.uint32),
+        list("abcde"),
+        list("wxyz"),
+        {},
+        2,
+    )
     assert canonical_digest(z) == slow_digest(z)
 
 
@@ -238,7 +284,9 @@ def test_check_canonical_flags_problems():
     c = make_csc()
     assert c.check_canonical() is None
     bad = make_csc()
-    bad.indices[bad.indptr[1]:bad.indptr[1] + 2] = bad.indices[bad.indptr[1]:bad.indptr[1] + 2][::-1]
+    bad.indices[bad.indptr[1] : bad.indptr[1] + 2] = bad.indices[bad.indptr[1] : bad.indptr[1] + 2][
+        ::-1
+    ]
     assert bad.check_canonical() is not None
     big = make_csc(vt=1)
     big.data[0] = 300
@@ -253,7 +301,12 @@ def test_codec2_roundtrip(vt, chunk):
     cod = codec.PyCodec2()
     b = cod.encode(c, codec.EncodeOptions(chunk_cols=chunk, threads=2))
     h = codec.parse_header(b)
-    assert h["codec"] == 2 and h["n_chunks"] == -(-c.n // chunk) and h["digest"] == canonical_digest(c) and h["total_len"] == len(b)
+    assert (
+        h["codec"] == 2
+        and h["n_chunks"] == -(-c.n // chunk)
+        and h["digest"] == canonical_digest(c)
+        and h["total_len"] == len(b)
+    )
     out = cod.decode(b)
     same(c, out)
 
@@ -273,7 +326,7 @@ def test_codec2_column_ranges_and_requests():
 
     def fetch(off, ln):
         calls.append((off, ln))
-        return b[off:off + ln]
+        return b[off : off + ln]
 
     sub = cod.read_columns(fetch, len(b), (700, 900))
     assert (sub.to_scipy() != sp[:, 700:900]).nnz == 0
@@ -285,18 +338,24 @@ def test_codec2_name_references():
     c = make_csc(n=2000, m=50, density=0.2, seed=1)
     cod = codec.PyCodec2()
     full = cod.encode(c, codec.EncodeOptions())
-    refs = cod.encode(c, codec.EncodeOptions(row_names=("pack", bytes([0x11]) * 8), col_names="cells"))
+    refs = cod.encode(
+        c, codec.EncodeOptions(row_names=("pack", bytes([0x11]) * 8), col_names="cells")
+    )
     assert len(refs) < len(full)
     out = cod.decode(refs)
     assert out.rownames is None and out.colnames is None
     assert out.row_ref == {"pack": "11" * 8} and out.col_ref == {"cells": True}
     for idx in (np.arange(2000), np.arange(2000) * 3, np.random.RandomState(0).permutation(2000)):
-        b = cod.encode(c, codec.EncodeOptions(row_names="inline", col_names=("subset", bytes([0x22]) * 8, idx)))
+        b = cod.encode(
+            c, codec.EncodeOptions(row_names="inline", col_names=("subset", bytes([0x22]) * 8, idx))
+        )
         o = cod.decode(b)
         assert o.col_ref["pack"] == "22" * 8 and np.array_equal(o.col_ref["index"], idx)
         o2 = cod.decode(b, cols=(10, 30))
         assert np.array_equal(o2.col_ref["index"], idx[10:30])
-    whole = cod.decode(cod.encode(c, codec.EncodeOptions(col_names=("pack", bytes([0x33]) * 8))), cols=(5, 9))
+    whole = cod.decode(
+        cod.encode(c, codec.EncodeOptions(col_names=("pack", bytes([0x33]) * 8))), cols=(5, 9)
+    )
     assert whole.col_ref == {"pack": "33" * 8, "range": (5, 9)}
     # nameless matrices: the digest hashes zero names; round trip keeps the "none" references
     nn = make_csc(m=30, n=40, seed=4)
@@ -317,25 +376,31 @@ def test_codec2_header_layout_is_the_published_one():
     c = make_csc(m=100, n=50, seed=2)
     b = codec.PyCodec2().encode(c, codec.EncodeOptions(chunk_cols=16))
     assert b[:4] == b"PZ2M" and struct.unpack_from("<HH", b, 4) == (1, 2)
-    assert struct.unpack_from("<II", b, 8) == (100, 50) and struct.unpack_from("<Q", b, 16)[0] == c.nnz
-    assert b[24] == c.value_type and b[25] == 0                        # row_order 0 = canonical
+    assert (
+        struct.unpack_from("<II", b, 8) == (100, 50) and struct.unpack_from("<Q", b, 16)[0] == c.nnz
+    )
+    assert b[24] == c.value_type and b[25] == 0  # row_order 0 = canonical
     assert struct.unpack_from("<II", b, 28) == (16, 4)
     assert struct.unpack_from("<I", b, 252)[0] == (zlib.crc32(b[:252]) & 0xFFFFFFFF)
     secs = [struct.unpack_from("<QQ", b, 72 + 16 * i) for i in range(7)]
-    assert secs[4][0] == 256 and secs[4][1] == 5 * 24                  # chunk index right after the header
+    assert secs[4][0] == 256 and secs[4][1] == 5 * 24  # chunk index right after the header
     assert struct.unpack_from("<Q", b, 184)[0] == len(b) == secs[6][0] + secs[6][1]
-    assert b[192] == 0 and b[193] == 0                                 # names kinds: inline
-    assert secs[5][0] == secs[4][0] + secs[4][1] and secs[0][1] == 0 and secs[3][1] == 0   # order: chunk_index, tables, rows, chunks
+    assert b[192] == 0 and b[193] == 0  # names kinds: inline
+    assert (
+        secs[5][0] == secs[4][0] + secs[4][1] and secs[0][1] == 0 and secs[3][1] == 0
+    )  # order: chunk_index, tables, rows, chunks
 
 
 def test_codec2_f32_integral_and_raw():
     cod = codec.PyCodec2()
     c = make_csc(m=60, n=30, vt=4, seed=3)
-    c.data = np.arange(len(c.data), dtype=np.float32).view(np.uint32)       # exactly integral -> coded as integers (flag bit0)
+    c.data = np.arange(len(c.data), dtype=np.float32).view(
+        np.uint32
+    )  # exactly integral -> coded as integers (flag bit0)
     b = cod.encode(c)
     assert codec.parse_header(b)["flags"] & 1
     same(c, cod.decode(b))
-    c2 = make_csc(m=60, n=30, vt=4, seed=3)                                  # random floats -> raw bit patterns
+    c2 = make_csc(m=60, n=30, vt=4, seed=3)  # random floats -> raw bit patterns
     b2 = cod.encode(c2)
     assert codec.parse_header(b2)["flags"] == 0
     same(c2, cod.decode(b2))
@@ -343,17 +408,59 @@ def test_codec2_f32_integral_and_raw():
 
 def test_codec2_edge_matrices():
     cod = codec.PyCodec2()
-    for c in (Csc(0, 0, np.zeros(1, np.int64), np.zeros(0, np.uint32), np.zeros(0, np.uint32), [], [], {}, 1),
-              Csc(10, 0, np.zeros(1, np.int64), np.zeros(0, np.uint32), np.zeros(0, np.uint32), list("abcdefghij"), [], {"k": "v"}, 2),
-              Csc(3, 4, np.zeros(5, np.int64), np.zeros(0, np.uint32), np.zeros(0, np.uint32), list("abc"), list("wxyz"), {}, 3),
-              Csc(1, 1, np.array([0, 1]), np.array([0], np.uint32), np.array([2**32 - 1], np.uint32), ["r"], ["c"], {}, 3)):
+    for c in (
+        Csc(
+            0,
+            0,
+            np.zeros(1, np.int64),
+            np.zeros(0, np.uint32),
+            np.zeros(0, np.uint32),
+            [],
+            [],
+            {},
+            1,
+        ),
+        Csc(
+            10,
+            0,
+            np.zeros(1, np.int64),
+            np.zeros(0, np.uint32),
+            np.zeros(0, np.uint32),
+            list("abcdefghij"),
+            [],
+            {"k": "v"},
+            2,
+        ),
+        Csc(
+            3,
+            4,
+            np.zeros(5, np.int64),
+            np.zeros(0, np.uint32),
+            np.zeros(0, np.uint32),
+            list("abc"),
+            list("wxyz"),
+            {},
+            3,
+        ),
+        Csc(
+            1,
+            1,
+            np.array([0, 1]),
+            np.array([0], np.uint32),
+            np.array([2**32 - 1], np.uint32),
+            ["r"],
+            ["c"],
+            {},
+            3,
+        ),
+    ):
         same(c, cod.decode(cod.encode(c)))
 
 
 def test_codec2_refuses_noncanonical_and_corrupt():
     cod = codec.PyCodec2()
     c = make_csc()
-    c.indices[c.indptr[1]:c.indptr[1] + 2] = c.indices[c.indptr[1]:c.indptr[1] + 2][::-1]
+    c.indices[c.indptr[1] : c.indptr[1] + 2] = c.indices[c.indptr[1] : c.indptr[1] + 2][::-1]
     with pytest.raises(codec.CodecError):
         cod.encode(c)
     good = cod.encode(make_csc(n=40, seed=2))
@@ -392,7 +499,7 @@ def test_cells_roundtrip_all_dtypes():
     for k in t.names:
         a, b = t.column(k), t2.column(k)
         assert (list(a) == list(b)) if isinstance(a, list) else np.array_equal(a, b)
-    assert cells_mod.CellsTable.decode(t2.encode()).digest() == d       # canonical + stable re-encode
+    assert cells_mod.CellsTable.decode(t2.encode()).digest() == d  # canonical + stable re-encode
 
 
 def test_cells_barcode_modes_and_lazy_reader():
@@ -406,7 +513,7 @@ def test_cells_barcode_modes_and_lazy_reader():
     t.add("barcode", cells_mod.DT_BARCODE, pick, whitelist=(pack, idx))
     t.add("called", "bool", np.ones(n, bool))
     body = t.encode()
-    assert body.count(b"\x01" + pack.id[:8]) == 1                    # whitelist mode, 8-byte pack id
+    assert body.count(b"\x01" + pack.id[:8]) == 1  # whitelist mode, 8-byte pack id
     store = P.PackStore(dirs=[], download=False)
     store._files[pack.id.hex()] = None
     store._obj[pack.id.hex()] = pack
@@ -421,7 +528,7 @@ def test_cells_barcode_modes_and_lazy_reader():
 
     def fetch(off, ln):
         calls.append((off, ln))
-        return body[off:off + ln]
+        return body[off : off + ln]
 
     rd = cells_mod.CellsReader(fetch, len(body), store)
     k = len(calls)
@@ -433,7 +540,10 @@ def test_cells_barcode_modes_and_lazy_reader():
 def test_parse_cell_calls_rules():
     data = b"barcode\tis_cell\tx\nAAA\tTRUE\t1\nCCC\tFALSE\t2\nGGG\tTrue\t3\n"
     assert cells_mod.parse_cell_calls(data) == ["AAA", "GGG"]
-    assert cells_mod.parse_cell_calls(b"cb\nAAA\nCCC\n") == ["AAA", "CCC"]         # no is_cell: every listed barcode counts
+    assert cells_mod.parse_cell_calls(b"cb\nAAA\nCCC\n") == [
+        "AAA",
+        "CCC",
+    ]  # no is_cell: every listed barcode counts
     assert cells_mod.parse_cell_calls(b"") is None
     assert cells_mod.parse_cell_calls(b"foo\tbar\n1\t2\n") is None
 
@@ -442,7 +552,9 @@ def test_parse_cell_calls_rules():
 def test_whitelist_pack_roundtrip_and_lookup():
     rs = np.random.RandomState(3)
     wl = sorted({"".join(rs.choice(list("ACGT"), 16)) for _ in range(20000)})
-    buf = P.build_whitelist(wl[::-1] + wl[:50], {"protocol": "toy", "names": ["toy", "alias"]})     # order/dups do not matter
+    buf = P.build_whitelist(
+        wl[::-1] + wl[:50], {"protocol": "toy", "names": ["toy", "alias"]}
+    )  # order/dups do not matter
     assert buf == P.build_whitelist(wl, {"protocol": "toy", "names": ["toy", "alias"]})
     w = P.Whitelist(buf)
     assert w.all_barcodes() == wl and w.n == len(wl) and w.id == util.d16(buf)
@@ -476,41 +588,57 @@ def test_shipped_pack_index_is_consistent(store):
     idx = json.load(open(P.PKG_DIR + "/index.json"))
     assert idx["format"] == "singlet-v2-packs"
     builds = {e["build"] for e in idx["packs"] if e["kind"] == "vocab"}
-    assert builds == {"GRCh38-2024-A", "GRCm39-2024-A", "GRCz11", "Mmul_10", "mRatBN7.2", "GRCh38-GRCm39-barnyard"}
+    assert builds == {
+        "GRCh38-2024-A",
+        "GRCm39-2024-A",
+        "GRCz11",
+        "Mmul_10",
+        "mRatBN7.2",
+        "GRCh38-GRCm39-barnyard",
+    }
     for e in idx["packs"]:
         d = open(P.PKG_DIR + "/%s.pack" % e["id"], "rb").read()
-        assert len(d) == e["bytes"] and hashlib.sha256(d).hexdigest() == e["sha256"] and util.d16(d).hex() == e["id"]
+        assert (
+            len(d) == e["bytes"]
+            and hashlib.sha256(d).hexdigest() == e["sha256"]
+            and util.d16(d).hex() == e["id"]
+        )
     shipped = sum(e["bytes"] for e in idx["packs"] if e.get("ship"))
-    assert shipped < 2_800_000 + 40_000          # human + mouse vocabularies and the whitelists
+    assert shipped < 2_800_000 + 40_000  # human + mouse vocabularies and the whitelists
 
 
 @pytest.mark.skipif(not BUNDLE.exists(), reason="corpus bundle missing")
 def test_human_pack_matches_legacy_names_and_vocab_json(store):
     from singlet.v2.legacy import LegacyBundle, decode_1pz_bytes
+
     b = LegacyBundle.open(str(BUNDLE))
     ex = decode_1pz_bytes(b.read("samples/GSM4317423/exon_counts.1pz"))
     it = decode_1pz_bytes(b.read("samples/GSM4317423/intron_counts.1pz"))
     pe = store.find_vocab("exon", ex.rownames, "GRCh38-2024-A")
     pi = store.find_vocab("intron", it.rownames, "GRCh38-2024-A")
     assert pe is not None and pi is not None and pe.build == "GRCh38-2024-A"
-    assert pe.names() == ex.rownames and pi.names() == it.rownames       # byte-exact expansion
+    assert pe.names() == ex.rownames and pi.names() == it.rownames  # byte-exact expansion
     assert pe.blob() == util.join_nul(ex.rownames)
     assert pe.vocab_json() == b.read("feature_vocab.json")
     rs = np.random.RandomState(0)
     for pk, ref in ((pe, ex.rownames), (pi, it.rownames)):
         ii = rs.randint(0, len(ref), 500)
-        assert pk.names_at(ii) == [ref[i] for i in ii]                      # lazy lookups by row index
+        assert pk.names_at(ii) == [ref[i] for i in ii]  # lazy lookups by row index
         assert pk.name_at(0) == ref[0] and pk.name_at(len(ref) - 1) == ref[-1]
     g = pe.row_gene()
     assert len(g) == len(ex.rownames) and g[0] == 0 and g.max() == len(pe.gene_table()) - 1
-    assert all(ex.rownames[i].split("_")[0] == pe.gene_table()[g[i]][0] for i in rs.randint(0, len(g), 300))
+    assert all(
+        ex.rownames[i].split("_")[0] == pe.gene_table()[g[i]][0] for i in rs.randint(0, len(g), 300)
+    )
     assert P.expand(pe.id.hex()) == ex.rownames
 
 
 @pytest.mark.skipif(not VOCAB_SRC.exists(), reason="vocab corpus missing")
 def test_all_builds_match_fetched_studies(store):
     import csv
+
     from singlet.v2.packs_build import load_meta_rows
+
     n = 0
     for r in csv.DictReader(open(VOCAB_SRC / "index.tsv"), delimiter="\t"):
         p = VOCAB_SRC / ("%s.%s.%s.meta" % (r["gse"], r["gsm"], r["kind"]))
@@ -533,8 +661,17 @@ def test_barnyard_composite_structure(store):
     assert pk.n() == h.n() + m.n()
     names = pk.names()
     assert names[0].startswith(h.name_at(0).split("_")[0]) and "_GRCh38___chr" in names[0]
-    assert names[h.n()].split("_")[-2:][0] == "GRCm39___" + names[h.n()].split("_GRCm39___")[1].split(":")[0] or "GRCm39___" in names[h.n()]
-    assert pk.names_at([0, h.n() - 1, h.n(), pk.n() - 1]) == [names[0], names[h.n() - 1], names[h.n()], names[-1]]
+    assert (
+        names[h.n()].split("_")[-2:][0]
+        == "GRCm39___" + names[h.n()].split("_GRCm39___")[1].split(":")[0]
+        or "GRCm39___" in names[h.n()]
+    )
+    assert pk.names_at([0, h.n() - 1, h.n(), pk.n() - 1]) == [
+        names[0],
+        names[h.n() - 1],
+        names[h.n()],
+        names[-1],
+    ]
 
 
 def test_packstore_resolution_and_errors(tmp_path, store):
@@ -545,7 +682,7 @@ def test_packstore_resolution_and_errors(tmp_path, store):
     assert s.whitelist_by_name("tiny").id == util.d16(w)
     with pytest.raises(P.PackError):
         s.get("0" * 16)
-    (tmp_path / ("0" * 32 + ".pack")).write_bytes(w)           # file name that does not match its content
+    (tmp_path / ("0" * 32 + ".pack")).write_bytes(w)  # file name that does not match its content
     s.rescan()
     with pytest.raises(P.PackError):
         s.read("0" * 32)
@@ -575,7 +712,12 @@ def test_legacy_zip_reader_matches_zipfile(tmp_path, force64):
     assert list(b.entries) == [i.filename for i in z.infolist()]
     for i in z.infolist():
         e = b.entries[i.filename]
-        assert (e.size, e.csize, e.crc32, e.method) == (i.file_size, i.compress_size, i.CRC, i.compress_type)
+        assert (e.size, e.csize, e.crc32, e.method) == (
+            i.file_size,
+            i.compress_size,
+            i.CRC,
+            i.compress_type,
+        )
         assert b.read(i.filename) == z.read(i.filename)
     assert b.samples() == ["GSM1", "GSM2", "GSM3"] and b.study_paths() == ["manifest.json"]
     assert [r for r, _ in b.sample_paths("GSM2")] == ["exon_counts.1pz", "summary.json"]
@@ -612,6 +754,7 @@ class _RangeHandler(http.server.BaseHTTPRequestHandler):
         rng = self.headers.get("Range", "")
         n = len(self.data)
         import re as _re
+
         m = _re.match(r"bytes=(\d*)-(\d*)", rng)
         a, b = m.group(1), m.group(2)
         if a == "":
@@ -619,7 +762,7 @@ class _RangeHandler(http.server.BaseHTTPRequestHandler):
         else:
             start, end = int(a), min(int(b) if b else n - 1, n - 1)
         type(self).log.append((start, end))
-        body = self.data[start:end + 1]
+        body = self.data[start : end + 1]
         self.send_response(206)
         self.send_header("Content-Range", "bytes %d-%d/%d" % (start, end, n))
         self.send_header("Content-Length", str(len(body)))
@@ -644,7 +787,9 @@ def test_legacy_http_range_reader(tmp_path):
         z = zipfile.ZipFile(p)
         for i in z.infolist():
             assert b.read(i.filename) == z.read(i.filename)
-        assert all(ua.startswith("singlet-v2") for ua in _RangeHandler.seen_ua)       # never the default urllib agent
+        assert all(
+            ua.startswith("singlet-v2") for ua in _RangeHandler.seen_ua
+        )  # never the default urllib agent
         st = b.stats()
         assert st["requests"] <= 2 + len(z.infolist())
     finally:
@@ -671,17 +816,27 @@ def test_legacy_directory_source(tmp_path):
     (d / "manifest.json").write_bytes(b'{"gse_id": "GSE9"}')
     (d / "sample.json").write_text(json.dumps({"gse": "GSE9", "gsm": "GSM77"}))
     b = legacy.LegacyBundle.open(str(d))
-    assert b.samples() == ["GSM77"] and b.study_paths() == ["manifest.json"] and b.gse_hint == "GSE9"
-    assert dict(b.sample_paths("GSM77")).keys() == {"exon_counts.1pz", "star_Solo.out/Gene/raw/matrix.mtx"}
+    assert (
+        b.samples() == ["GSM77"] and b.study_paths() == ["manifest.json"] and b.gse_hint == "GSE9"
+    )
+    assert dict(b.sample_paths("GSM77")).keys() == {
+        "exon_counts.1pz",
+        "star_Solo.out/Gene/raw/matrix.mtx",
+    }
     assert b.read("samples/GSM77/star_Solo.out/Gene/raw/matrix.mtx") == b"mtx"
 
 
 def test_legacy_directory_flattened_member_names(tmp_path):
     d = tmp_path / "GSE9.GSM78"
     d.mkdir()
-    flat = {"donor__donor_assignments.tsv": "donor/donor_assignments.tsv", "mt__mt_summary.tsv": "mt/mt_summary.tsv",
-            "nonhost__abundance.tsv": "nonhost/abundance.tsv", "star_Solo.out__Barcodes.stats": "star_Solo.out/Barcodes.stats",
-            "donor_assignments.tsv": "donor_assignments.tsv", "weird__name.txt": "weird__name.txt"}
+    flat = {
+        "donor__donor_assignments.tsv": "donor/donor_assignments.tsv",
+        "mt__mt_summary.tsv": "mt/mt_summary.tsv",
+        "nonhost__abundance.tsv": "nonhost/abundance.tsv",
+        "star_Solo.out__Barcodes.stats": "star_Solo.out/Barcodes.stats",
+        "donor_assignments.tsv": "donor_assignments.tsv",
+        "weird__name.txt": "weird__name.txt",
+    }
     for f in flat:
         (d / f).write_bytes(b"x")
     b = legacy.LegacyBundle.open(str(d))
@@ -690,20 +845,27 @@ def test_legacy_directory_flattened_member_names(tmp_path):
 
 def test_ctx_whitelist_is_a_numpy_s_array_and_features_order_resolves():
     from singlet.v2.context import StudyContext
+
     ctx = StudyContext("GSE1", "GRCm39-2024-A", {})
     wl = ctx.whitelist("737K-august-2016")
     assert isinstance(wl, np.ndarray) and wl.dtype == np.dtype("S16") and len(wl) == 737280
     assert wl[0] == b"AAACCTGAGAAACCAT" and (wl[1:] > wl[:-1]).all()
     assert ctx.whitelist("737K-cratac-v1") is not None and ctx.whitelist("no-such-list") is None
-    fo = ctx.features_order()                         # python/singlet/v2/recipes_data/features_order_GRCm39-2024-A.u32.zst
+    fo = ctx.features_order()  # python/singlet/v2/recipes_data/features_order_GRCm39-2024-A.u32.zst
     assert fo is not None and len(fo) == 78298 and len(set(fo.tolist())) == len(fo)
     assert StudyContext("GSE1", "GRCz11", {}).features_order() is None
 
 
 # ------------------------------------------------------------------------------------------------------------ manifest
 def test_study_file_entries_roundtrip():
-    cases = [json.dumps({"a": [1, 2], "é": "x"}, indent=2).encode(), json.dumps({"a": 1}).encode(),
-             json.dumps({"b": 1}, separators=(",", ":")).encode(), b"plain text\nnot json\n", b"", b'{"a": 1 }']
+    cases = [
+        json.dumps({"a": [1, 2], "é": "x"}, indent=2).encode(),
+        json.dumps({"a": 1}).encode(),
+        json.dumps({"b": 1}, separators=(",", ":")).encode(),
+        b"plain text\nnot json\n",
+        b"",
+        b'{"a": 1 }',
+    ]
     for data in cases:
         ent = M.study_file_entry(data)
         assert ent["size"] == len(data) and ent["sha256"] == hashlib.sha256(data).hexdigest()
@@ -723,7 +885,9 @@ def test_rev_is_stable_and_sensitive():
     assert r != M.compute_rev(["v2/s/G1/x.s2", "v2/s/G2/z.s2"], sf)
     sf2 = {"a.json": {"sha256": "11"}, "b.json": {"sha256": "23"}}
     assert r != M.compute_rev(["v2/s/G1/x.s2", "v2/s/G2/y.s2"], sf2)
-    m = M.build_manifest("GSE1", [{"key": "v2/s/G1/x.s2"}], sf, "b", {}, {}, {}, "2026-01-01T00:00:00Z")
+    m = M.build_manifest(
+        "GSE1", [{"key": "v2/s/G1/x.s2"}], sf, "b", {}, {}, {}, "2026-01-01T00:00:00Z"
+    )
     assert M.loads_manifest(M.dumps_manifest(m)) == m
 
 
@@ -742,11 +906,11 @@ def test_native_codec_roundtrip_and_cross_decoding(vt):
     for b in (b1, b2, bp):
         h = codec.parse_header(b)
         assert h["digest"] == canonical_digest(c)
-        same(c, nat1.decode(b))                         # the C++ reader reads everything ...
-    same(c, py.decode(b2))                              # ... and the pure-Python reader reads the C++ codec-2 member
+        same(c, nat1.decode(b))  # the C++ reader reads everything ...
+    same(c, py.decode(b2))  # ... and the pure-Python reader reads the C++ codec-2 member
     same(c, py.decode(bp))
     with pytest.raises(codec.CodecError):
-        py.decode(b1)                                   # codec 1 needs the native binding
+        py.decode(b1)  # codec 1 needs the native binding
     for a, z in [(0, 1), (60, 70), (100, 400), (399, 400)]:
         sub = nat1.decode(b1, cols=(a, z))
         assert (sub.to_scipy() != c.to_scipy()[:, a:z]).nnz == 0 and sub.colnames == c.colnames[a:z]
@@ -759,7 +923,10 @@ def test_native_codec_name_references_and_f32():
     c = make_csc(m=80, n=200, density=0.2, seed=2)
     pid = bytes([0x44]) * 8
     idx = np.random.RandomState(0).permutation(200)
-    b = nat.encode(c, codec.EncodeOptions(row_names=("pack", pid), col_names=("subset", bytes([0x55]) * 8, idx)))
+    b = nat.encode(
+        c,
+        codec.EncodeOptions(row_names=("pack", pid), col_names=("subset", bytes([0x55]) * 8, idx)),
+    )
     o = nat.decode(b)
     assert o.rownames is None and o.row_ref == {"pack": "44" * 8}
     assert o.col_ref["pack"] == "55" * 8 and np.array_equal(o.col_ref["index"], idx)
@@ -772,4 +939,4 @@ def test_native_codec_name_references_and_f32():
     o = nat.decode(nat.encode(nn, codec.EncodeOptions(row_names="none", col_names="none")))
     assert o.row_ref == {"none": True} and o.col_ref == {"none": True}
     f = make_csc(m=60, n=30, vt=4, seed=3)
-    same(f, nat.decode(nat.encode(f)))                       # non-integral floats -> codec 2 inside "auto"
+    same(f, nat.decode(nat.encode(f)))  # non-integral floats -> codec 2 inside "auto"

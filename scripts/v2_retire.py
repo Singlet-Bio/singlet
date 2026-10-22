@@ -1,44 +1,54 @@
 #!/usr/bin/env python3
-"""Retire legacy `.singlet` bundles once their v2 migration is verified: archive first, delete from the public bucket last.
+"""Retire legacy `.singlet` bundles in three separate steps, so the site never emits a URL that is dead.
 
-For every study with a v2 manifest, in this order (stopping at the first failed check; nothing is deleted before the
-archive copy is verified):
+  (A) archive    server-side copy `singlet-data/data/<GSE>/<GSE>.singlet` to `singlet-archive/<same key>`; verify (size and ETag, or a
+                 SHA-256 read-back when the copy is multipart); append the study to the ARCHIVED LIST (`--list`, JSON lines).
+                 Never deletes anything. Refuses unless the study's v2 manifest exists, names the object that is live now (same
+                 ETag and size: the bundle was not rebuilt after it was migrated), every sample object in the manifest is present,
+                 and the ledger ends in a committed, verified migration.
+  (B) catalog    `v2_campaign.py retire-sql --list archived-*.jsonl --out DIR` writes the SQL that flips `v2_migration.status` from
+                 `verified` to `retired` for the archived studies; the orchestrator applies it with wrangler. From then on the site
+                 stops offering the legacy file. (Studies that never had a legacy file are posted as `retired` directly.)
+  (C) delete     remove the legacy object from `singlet-data`, only for a study that is in the archived list AND whose catalog row
+                 has been `retired` for at least --min-retired-age-minutes (5) AND `verified` for at least --min-verified-age-hours
+                 (24): cached answers that still name the legacy URL live up to a day. The cluster cannot read D1, so the ages come from
+                 a small CSV or JSON the orchestrator exports (`--ages`): gse_id, verified_at, updated_at of the rows with
+                 status = 'retired'. A study missing from that file is not retired in the catalog yet and is left alone. Before it
+                 deletes, it checks again that the archive copy is there and equal to the list, that the legacy object is still the
+                 one that was archived, and that the v2 manifest and all its sample objects are present.
 
-  1. refuse unless `v2/m/<GSE>.json` exists, its `legacy` block (written by the campaign) names the object that is live now
-     (same ETag and size: the bundle was not rebuilt after it was migrated), every sample object in the manifest exists
-     with the right size, and the study's ledger ends in a committed, verified migration;
-  2. server-side copy `singlet-data/data/<GSE>/<GSE>.singlet` to `singlet-archive/<same key>` (storage class
-     STANDARD_IA = Infrequent Access if the API takes it; objects over 4 GiB are copied in 1 GiB ranges);
-  3. verify the copy: equal size and ETag for a single-request copy, else (multipart copies have a different ETag)
-     SHA-256 of the archived object against the migrated bundle's SHA-256 from the manifest;
-  4. look at the source once more (unchanged since step 1) and delete it from the public bucket.
+`restore` copies an archived bundle back to the public key (verified the same way) and appends it to `--list` as restored, so that
+`retire-sql` can flip the catalog back. `audit` lists every `data/*.singlet` key still in the public bucket and how far the archive is.
+Dry run unless `--apply`; `delete --apply` also needs `--confirm RETIRE`. `archive --all` refuses to start while any study still lacks a
+manifest (`--allow-partial` to override).
 
-`restore` copies archived bundles back to the public key (verified the same way). `audit` lists every `data/*.singlet`
-key still in the public bucket and how far the archive is. Dry run unless `--apply`; `retire --apply` also needs
-`--confirm RETIRE`. A full `retire --all` refuses to start while any study still lacks a manifest (`--allow-partial` to
-override, e.g. for a pilot of a few studies named with --gse).
-
-  python scripts/v2_retire.py retire  --gse GSE111113 GSE145370                  # dry run
-  python scripts/v2_retire.py retire  --all --shard 0/8 --apply --confirm RETIRE --ledger retire-0.jsonl
-  python scripts/v2_retire.py restore --gse GSE111113 --apply
+  python scripts/v2_retire.py archive --all --shard 0/8 --apply --list archived-0.jsonl
+  python scripts/v2_campaign.py retire-sql --list archived-*.jsonl --out sql            # (B): applied by the orchestrator
+  # D1 -> ages.json (laptop): wrangler d1 execute singlet-catalog --remote --json \\
+  #     --command "SELECT gse_id, verified_at, updated_at FROM v2_migration WHERE status = 'retired'" > ages.json
+  python scripts/v2_retire.py delete  --list archived.jsonl --ages ages.json                        # dry run
+  python scripts/v2_retire.py delete  --list archived.jsonl --ages ages.json --apply --confirm RETIRE
+  python scripts/v2_retire.py restore --gse GSE111113 --apply --list restored.jsonl
   python scripts/v2_retire.py audit   [--expect-none]
 
-The archive bucket (`singlet-archive`) is created only if it does not exist (needs a token that may create buckets; else
-create it with `wrangler r2 bucket create singlet-archive --storage-class InfrequentAccess`). Credentials as for
-v2_campaign.py. Archived bundles are meant to be deleted after the grace period in docs/v2-migration.md (D12).
+The archive bucket (`singlet-archive`) is created only if it does not exist (needs a token that may create buckets; else create it
+with `wrangler r2 bucket create singlet-archive --storage-class InfrequentAccess`). Credentials as for v2_campaign.py. Archived
+bundles are meant to be deleted after the grace period in docs/v2-migration.md (D12).
 """
 
 from __future__ import annotations
 
 import argparse
 import concurrent.futures as cf
+import csv
+import datetime as dt
+import io
 import json
 import re
 import sys
 import threading
-import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import v2_campaign as vc  # noqa: E402
@@ -50,6 +60,10 @@ _log_lock = threading.Lock()
 
 class Refused(Exception):
     """A precondition failed; nothing was changed for this study."""
+
+
+class NotYet(Exception):
+    """Expected to change with time or after the catalog step: not an error."""
 
 
 def log(path: Optional[Path], rec: dict) -> None:
@@ -111,7 +125,7 @@ def verify_copy(store, a: argparse.Namespace, src: vc.Head, src_key: str, dst_bu
 
 
 def archive_exists(store, a: argparse.Namespace) -> bool:
-    """Whether the archive bucket exists (asked once per run; a dry run of a first retire finds none)."""
+    """Whether the archive bucket exists (asked once per run; a dry run of a first archive finds none)."""
     if not hasattr(a, "_archive_exists"):
         a._archive_exists = store.bucket_exists(a.archive)
     return a._archive_exists
@@ -121,15 +135,27 @@ def storage_class(a: argparse.Namespace) -> Optional[str]:
     return None if a.storage_class.lower() in ("none", "") else a.storage_class
 
 
-def retire_one(store, a: argparse.Namespace, gse: str, ledger: Optional[Path], pool: cf.Executor, guard) -> str:
+# ── the archived list ─────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+def load_list(paths: Sequence[str]) -> Dict[str, dict]:
+    return vc.load_event_list(paths)
+
+
+# ── (A) archive ───────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+def archive_one(store, a: argparse.Namespace, gse: str, ledger: Optional[Path], pool: cf.Executor, guard) -> str:
     key = vc.legacy_key(gse)
     live = store.head(a.public, key)
     arch = store.head(a.archive, key) if archive_exists(store, a) else None
     if live is None:
-        return "already-retired" if arch is not None else "missing: no legacy object and no archive copy"
+        return "legacy object already gone" + (" (an archive copy exists)" if arch is not None else ", no archive copy: SKIPPED")
     m = preconditions(store, a, gse, live, pool)
     want_sha = (m.get("legacy") or {}).get("sha256")
     method = None
+    etag = arch.etag if arch is not None else None
+    multipart = bool(arch is not None and arch.etag != live.etag)
     if arch is not None and arch.size == live.size:
         try:
             method = verify_copy(store, a, live, key, a.archive, key, want_sha, a.public)
@@ -137,24 +163,119 @@ def retire_one(store, a: argparse.Namespace, gse: str, ledger: Optional[Path], p
             method = None  # a partial or foreign object at the archive key: copied over below
     if method is None:
         if not a.apply:
-            return f"would-retire: copy {live.size} bytes to {a.archive}/{key}, verify, delete from {a.public}"
+            return f"would-archive: copy {live.size} bytes to {a.archive}/{key} and verify (nothing is deleted)"
         etag, multipart = guard.copy(a.public, key, a.archive, key, size=live.size, storage_class=storage_class(a))
         method = verify_copy(store, a, live, key, a.archive, key, want_sha, a.public)
-        log(ledger, {"gse": gse, "stage": "archived", "ok": True, "bytes": live.size, "archive_etag": etag, "multipart": multipart,
-                     "verified_by": method})
     elif not a.apply:
-        return "would-retire (archive copy already present and verified)"
+        return "would-list (archive copy already present and verified)"
     again = store.head(a.public, key)
     if again is None or again.etag != live.etag or again.size != live.size:
-        raise Refused("the legacy object changed while it was being archived; the archive copy is kept, nothing was deleted")
+        raise Refused("the legacy object changed while it was being archived; the study is not listed as archived")
+    dh = store.head(a.archive, key)
+    rec = {"event": "archived", "gse": gse, "key": key, "bytes": live.size, "etag": live.etag, "archive_bucket": a.archive,
+           "archive_etag": dh.etag if dh is not None else etag, "multipart": multipart, "verified_by": method, "sha256": want_sha}
+    if a.list:
+        log(Path(a.list), rec)
+    log(ledger, {"gse": gse, "stage": "archived", "ok": True, **{k: v for k, v in rec.items() if k not in ("event", "gse")}})
+    vc.write_ledger(guard, a.public, gse, vc.read_ledger(store, a.public, gse) + [{"at": vc.iso(), "gse": gse, **rec}])
+    return f"archived {live.size} bytes (verified by {method}); the legacy object is still in {a.public}"
+
+
+# ── (C) delete ────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+def parse_ts(v: Any) -> Optional[dt.datetime]:
+    """A timestamp as D1 or wrangler writes it (`2026-10-22T15:36:41Z`, `2026-10-22 15:36:41`, with an offset), as UTC; None if absent."""
+    s = str(v).strip() if v is not None else ""
+    if not s:
+        return None
+    if re.match(r"\d{4}-\d\d-\d\d \d", s):
+        s = s.replace(" ", "T", 1)
+    try:
+        t = dt.datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return t if t.tzinfo else t.replace(tzinfo=dt.timezone.utc)
+
+
+def load_ages(path: str) -> Dict[str, Tuple[Optional[dt.datetime], Optional[dt.datetime]]]:
+    """{gse_id: (verified_at, updated_at)} for the catalog rows with status 'retired', from the orchestrator's export: a CSV
+    (header gse_id,verified_at,updated_at[,status]), a JSON list of such objects, or `wrangler d1 execute --json` output."""
+    text = Path(path).read_text("utf-8-sig")
+    rows: List[dict] = []
+    try:
+        doc = json.loads(text)
+    except ValueError:
+        doc = None
+    if doc is not None:
+        items = doc if isinstance(doc, list) else [doc]
+        for it in items:
+            if isinstance(it, dict) and "results" in it:  # wrangler: [{"results": [...], "success": true, "meta": {...}}]
+                rows.extend(r for r in it["results"] if isinstance(r, dict))
+            elif isinstance(it, dict):
+                rows.append(it)
+    else:
+        rows = list(csv.DictReader(io.StringIO(text)))
+    out: Dict[str, Tuple[Optional[dt.datetime], Optional[dt.datetime]]] = {}
+    for r in rows:
+        g = str(r.get("gse_id") or "").strip()
+        if not re.fullmatch(r"GSE\d+", g):
+            continue
+        if r.get("status") not in (None, "", "retired"):
+            continue  # an export that carries the status column: only retired rows count
+        out[g] = (parse_ts(r.get("verified_at")), parse_ts(r.get("updated_at")))
+    return out
+
+
+def delete_one(store, a: argparse.Namespace, gse: str, entry: dict, ages: Dict[str, tuple], now: dt.datetime, ledger: Optional[Path],
+               pool: cf.Executor, guard) -> str:
+    if entry.get("event") == "restored":
+        raise NotYet("restored after it was archived: it is a live legacy bundle again")
+    key = vc.legacy_key(gse)
+    # the catalog first: the site must already have stopped offering the file
+    if gse not in ages:
+        raise NotYet("not 'retired' in the catalog yet (not in the ages file): apply the retire SQL first")
+    verified_at, retired_at = ages[gse]
+    if verified_at is None or retired_at is None:
+        raise Refused("the ages file has no verified_at / updated_at for this study")
+    v_age = (now - verified_at).total_seconds() / 3600.0
+    r_age = (now - retired_at).total_seconds() / 60.0
+    if v_age < a.min_verified_age_hours:
+        raise NotYet(f"verified {v_age:.1f} h ago, needs {a.min_verified_age_hours:g} h (from {(verified_at + dt.timedelta(hours=a.min_verified_age_hours)).strftime('%Y-%m-%dT%H:%MZ')})")
+    if r_age < a.min_retired_age_minutes:
+        raise NotYet(f"retired {r_age:.1f} min ago, needs {a.min_retired_age_minutes:g} min")
+    live = store.head(a.public, key)
+    arch = store.head(a.archive, key) if archive_exists(store, a) else None
+    if live is None:
+        return "already-deleted" + ("" if arch is not None else " (WARNING: no archive copy either)")
+    if arch is None:
+        raise Refused("no archive copy")
+    if entry.get("bytes") is not None and arch.size != entry["bytes"]:
+        raise Refused(f"the archive copy has {arch.size} bytes, the list says {entry['bytes']}")
+    if entry.get("archive_etag") and arch.etag != entry["archive_etag"]:
+        raise Refused("the archive copy is not the one in the list (ETag differs)")
+    if entry.get("etag") and (live.etag != entry["etag"] or live.size != entry.get("bytes", live.size)):
+        raise Refused("the legacy object is not the one that was archived (changed since)")
+    if not entry.get("archive_etag"):  # a bare id in the list: verify the copy from scratch
+        m0 = load_manifest(store, a.public, gse)
+        verify_copy(store, a, live, key, a.archive, key, ((m0 or {}).get("legacy") or {}).get("sha256"), a.public)
+    preconditions(store, a, gse, live, pool)  # the manifest still names this object and every v2 sample object is there
+    if not a.apply:
+        return f"would-delete {live.size} bytes (verified {v_age:.1f} h, retired {r_age:.1f} min ago; archive copy in {a.archive})"
+    again = store.head(a.public, key)
+    if again is None or again.etag != live.etag or again.size != live.size:
+        raise Refused("the legacy object changed just now; nothing was deleted")
     guard.delete(a.public, key)
     if store.head(a.public, key) is not None:
         raise Refused("delete did not remove the object")
-    rec = {"gse": gse, "stage": "retired", "ok": True, "bytes": live.size, "etag": live.etag, "verified_by": method,
-           "archive": f"{a.archive}/{key}"}
-    log(ledger, rec)
-    vc.write_ledger(guard, a.public, gse, vc.read_ledger(store, a.public, gse) + [{"at": vc.iso(), "gse": gse, "event": "retired", **rec}])
-    return f"retired {live.size} bytes (archive verified by {method})"
+    rec = {"event": "legacy-deleted", "gse": gse, "key": key, "bytes": live.size, "etag": live.etag, "archive": f"{a.archive}/{key}",
+           "verified_age_h": round(v_age, 2), "retired_age_min": round(r_age, 2)}
+    log(ledger, {"gse": gse, "stage": "deleted", "ok": True, **{k: v for k, v in rec.items() if k not in ("event", "gse")}})
+    vc.write_ledger(guard, a.public, gse, vc.read_ledger(store, a.public, gse) + [{"at": vc.iso(), **rec}])
+    return f"deleted {live.size} bytes (archive copy kept in {a.archive})"
+
+
+# ── restore ───────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 
 def restore_one(store, a: argparse.Namespace, gse: str, ledger: Optional[Path], guard) -> str:
@@ -169,6 +290,8 @@ def restore_one(store, a: argparse.Namespace, gse: str, ledger: Optional[Path], 
         if live.size == arch.size:
             try:
                 verify_copy(store, a, arch, key, a.public, key, want_sha, a.archive)
+                if a.apply and a.list:
+                    log(Path(a.list), {"event": "restored", "gse": gse, "key": key, "bytes": arch.size, "etag": live.etag})
                 return "already-present"
             except Refused:
                 pass
@@ -178,16 +301,20 @@ def restore_one(store, a: argparse.Namespace, gse: str, ledger: Optional[Path], 
         return f"would-restore {arch.size} bytes from {a.archive}/{key}"
     etag, multipart = guard.copy(a.archive, key, a.public, key, size=arch.size, storage_class=None)
     method = verify_copy(store, a, arch, key, a.public, key, want_sha, a.archive)
-    rec = {"gse": gse, "stage": "restored", "ok": True, "bytes": arch.size, "etag": etag, "multipart": multipart, "verified_by": method}
-    log(ledger, rec)
-    vc.write_ledger(guard, a.public, gse, vc.read_ledger(store, a.public, gse) + [{"at": vc.iso(), "gse": gse, "event": "restored", **rec}])
-    return f"restored {arch.size} bytes (verified by {method})"
+    rec = {"event": "restored", "gse": gse, "key": key, "bytes": arch.size, "etag": etag, "multipart": multipart, "verified_by": method}
+    if a.list:
+        log(Path(a.list), rec)
+    log(ledger, {"gse": gse, "stage": "restored", "ok": True, **{k: v for k, v in rec.items() if k not in ("event", "gse")}})
+    vc.write_ledger(guard, a.public, gse, vc.read_ledger(store, a.public, gse) + [{"at": vc.iso(), **rec}])
+    return f"restored {arch.size} bytes (verified by {method}); flip the catalog back with retire-sql if it was marked retired"
+
+
+# ── selecting studies, running ────────────────────────────────────────────────────────────────────────────────────────
 
 
 def studies_to_visit(store, a: argparse.Namespace, source: str) -> List[str]:
-    """Named studies, or all of them in accession order. `source` is "manifests" (retire: the v2 manifests, which stay when the
-    legacy keys go, plus the legacy studies that have none, so --shard I/N keeps meaning the same studies while other shards
-    delete) or a bucket whose data/ keys to list."""
+    """Named studies, or all of them in accession order. `source` is "manifests" (archive: the v2 manifests, which stay for good,
+    plus the legacy studies that have none, so --shard I/N keeps meaning the same studies) or a bucket whose data/ keys to list."""
     if a.gse:
         gses = list(a.gse)
     elif a.gse_list:
@@ -209,17 +336,19 @@ def completeness_gate(store, a: argparse.Namespace) -> None:
     have = {m.group(1) for k, _ in store.list_keys(a.public, "v2/m/") if (m := vc.RE_MANIFEST.match(k))}
     missing = vc.accession_order(legacy - have)
     if missing:
-        raise SystemExit(f"refusing to retire: {len(missing)} of {len(legacy)} legacy studies have no v2 manifest yet "
+        raise SystemExit(f"refusing to archive: {len(missing)} of {len(legacy)} legacy studies have no v2 manifest yet "
                          f"(first: {', '.join(missing[:10])}). Finish the migration, or name studies with --gse, or pass --allow-partial.")
 
 
 def run_over(store, a: argparse.Namespace, fn, gses: Sequence[str]) -> int:
     ledger = Path(a.ledger) if a.ledger else None
-    bad = 0
+    bad = notyet = 0
 
     def one(g: str) -> str:
         try:
             return fn(g)
+        except NotYet as e:
+            return f"NOT-YET: {e}"
         except Refused as e:
             log(ledger, {"gse": g, "ok": False, "stage": "refused", "error": str(e)[:300]})
             return f"REFUSED: {e}"
@@ -230,31 +359,63 @@ def run_over(store, a: argparse.Namespace, fn, gses: Sequence[str]) -> int:
     with cf.ThreadPoolExecutor(max(1, a.workers)) as ex:
         for g, msg in zip(gses, ex.map(one, gses)):
             bad += msg.startswith(("REFUSED", "FAILED", "SKIPPED"))
+            notyet += msg.startswith("NOT-YET")
             print(f"{g}\t{msg}", flush=True)
+    if notyet:
+        print(f"[retire] {notyet} studies not ready yet (see NOT-YET lines); run again later", flush=True)
     return 1 if bad else 0
 
 
-def cmd_retire(store, a: argparse.Namespace) -> int:
-    if a.apply and a.confirm != CONFIRM:
-        print(f"error: --apply needs --confirm {CONFIRM}", file=sys.stderr)
-        return 2
+def cmd_archive(store, a: argparse.Namespace) -> int:
     if not (a.gse or a.gse_list or a.all):
         print("error: give --gse, --gse-list or --all", file=sys.stderr)
+        return 2
+    if a.apply and not a.list:
+        print("error: --apply needs --list FILE (the archived list that the catalog step and the delete step read)", file=sys.stderr)
         return 2
     if a.all and not a.allow_partial:
         completeness_gate(store, a)
     if not archive_exists(store, a):
         if not a.apply:
-            print(f"[retire] archive bucket {a.archive} does not exist; --apply would create it")
+            print(f"[archive] archive bucket {a.archive} does not exist; --apply would create it")
         else:
             store.create_bucket(a.archive)
             a._archive_exists = True
-            print(f"[retire] created bucket {a.archive}")
-    guard = vc.GuardedStore(store, {a.archive: ("data/",), a.public: ("v2/ledger/",)}, allow_delete={a.public: ("data/",)})
+            print(f"[archive] created bucket {a.archive}")
+    # this step can never delete: the guard has no delete permission at all
+    guard = vc.GuardedStore(store, {a.archive: ("data/",), a.public: ("v2/ledger/",)})
     pool = cf.ThreadPoolExecutor(max(1, a.workers))
     ledger = Path(a.ledger) if a.ledger else None
     try:
-        return run_over(store, a, lambda g: retire_one(store, a, g, ledger, pool, guard), studies_to_visit(store, a, "manifests"))
+        return run_over(store, a, lambda g: archive_one(store, a, g, ledger, pool, guard), studies_to_visit(store, a, "manifests"))
+    finally:
+        pool.shutdown()
+
+
+def cmd_delete(store, a: argparse.Namespace) -> int:
+    if not a.list or not a.ages:
+        print("error: delete needs --list (the archived list) and --ages (the catalog export)", file=sys.stderr)
+        return 2
+    if a.apply and a.confirm != CONFIRM:
+        print(f"error: --apply needs --confirm {CONFIRM}", file=sys.stderr)
+        return 2
+    entries = load_list([a.list])
+    ages = load_ages(a.ages)
+    now = parse_ts(a.now) if a.now else dt.datetime.now(dt.timezone.utc)
+    if now is None:
+        print("error: --now is not a timestamp", file=sys.stderr)
+        return 2
+    gses = vc.accession_order(entries)
+    if a.shard:
+        i, n = a.shard
+        gses = gses[i::n]
+    print(f"[delete] {len(gses)} studies in the archived list, {len(ages)} retired rows in the ages file, "
+          f"min verified age {a.min_verified_age_hours:g} h, min retired age {a.min_retired_age_minutes:g} min, now {now.strftime('%Y-%m-%dT%H:%M:%SZ')}")
+    guard = vc.GuardedStore(store, {a.public: ("v2/ledger/",)}, allow_delete={a.public: ("data/",)})
+    pool = cf.ThreadPoolExecutor(max(1, a.workers))
+    ledger = Path(a.ledger) if a.ledger else None
+    try:
+        return run_over(store, a, lambda g: delete_one(store, a, g, entries[g], ages, now, ledger, pool, guard), gses)
     finally:
         pool.shutdown()
 
@@ -284,47 +445,9 @@ def cmd_audit(store, a: argparse.Namespace) -> int:
     return 1 if (a.expect_none and (legacy or odd)) else 0
 
 
-def cmd_retire_sql(a: argparse.Namespace) -> int:
-    """SQL for D1 after a retirement (or a restore): v2_migration.status verified -> retired, from the retire/restore ledgers.
-
-    A study counts as retired when its last ledger line (over all files, by time) is a successful `retired`; `restored` undoes it.
-    `UPDATE ... WHERE status = 'verified'` only ever moves a verified study, so applying a file twice is harmless. Each updated row
-    is about 3 D1 row writes (the status index), well inside a day's budget for the whole atlas."""
-    last: Dict[str, dict] = {}
-    for f in a.ledger:
-        for ln in Path(f).read_text("utf-8").splitlines():
-            try:
-                rec = json.loads(ln)
-            except ValueError:
-                continue
-            if rec.get("stage") in ("retired", "restored") and rec.get("ok") and re.fullmatch(r"GSE\d+", str(rec.get("gse"))):
-                if rec["gse"] not in last or rec.get("at", "") >= last[rec["gse"]].get("at", ""):
-                    last[rec["gse"]] = rec
-    retired = vc.accession_order(g for g, r in last.items() if r["stage"] == "retired")
-    restored = vc.accession_order(g for g, r in last.items() if r["stage"] == "restored")
-    out = Path(a.out)
-    out.mkdir(parents=True, exist_ok=True)
-    for f in out.glob("*.sql"):
-        f.unlink()
-    names: List[str] = []
-    now = "strftime('%Y-%m-%dT%H:%M:%SZ', 'now')"
-    for tag, gses, new, old in (("retired", retired, "retired", "verified"), ("restored", restored, "verified", "retired")):
-        for i in range(0, len(gses), 500):
-            ids = ", ".join(vc.sql_literal(g) for g in gses[i : i + 500])
-            name = f"{tag}_{i // 500:04d}.sql"
-            sql = f"UPDATE v2_migration SET status = '{new}', updated_at = {now} WHERE status = '{old}' AND gse_id IN ({ids});"
-            (out / name).write_text(sql + "\n", encoding="utf-8", newline="\n")
-            names.append(name)
-    lines = [f"wrangler d1 execute {a.database} --remote --file={n}" for n in names]
-    (out / "APPLY.txt").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
-    print(f"{len(retired)} studies to mark retired, {len(restored)} to mark verified again, {len(names)} files in {out} "
-          f"(about {3 * (len(retired) + len(restored))} D1 row writes)")
-    return 0
-
-
 def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", choices=["retire", "restore", "audit", "retire-sql"])
+    ap.add_argument("command", choices=["archive", "delete", "restore", "audit"])
     ap.add_argument("--gse", nargs="*")
     ap.add_argument("--gse-list")
     ap.add_argument("--all", action="store_true")
@@ -333,27 +456,24 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--public", default=vc.PUBLIC_BUCKET)
     ap.add_argument("--archive", default=ARCHIVE_BUCKET)
     ap.add_argument("--storage-class", default="STANDARD_IA", help="STANDARD_IA = R2 Infrequent Access; 'none' for the bucket default")
+    ap.add_argument("--list", help="archive/restore: the JSON-lines list that is appended to; delete: the archived list to read")
+    ap.add_argument("--ages", help="delete: CSV/JSON export of the catalog rows with status 'retired' (gse_id, verified_at, updated_at)")
+    ap.add_argument("--min-verified-age-hours", type=float, default=24.0)
+    ap.add_argument("--min-retired-age-minutes", type=float, default=5.0)
+    ap.add_argument("--now", help="delete: the time to measure ages against (default: now; for tests and rehearsals)")
     ap.add_argument("--ledger", help="local JSONL record of what was done")
-    ap.add_argument("--ledger-files", nargs="*", default=[], help="retire-sql: the ledgers written by retire/restore")
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--apply", action="store_true", help="write; without it only reads and prints")
-    ap.add_argument("--confirm", help=f"retire --apply needs --confirm {CONFIRM}")
-    ap.add_argument("--allow-partial", action="store_true", help="retire --all even though some studies have no v2 manifest")
+    ap.add_argument("--confirm", help=f"delete --apply needs --confirm {CONFIRM}")
+    ap.add_argument("--allow-partial", action="store_true", help="archive --all even though some studies have no v2 manifest")
     ap.add_argument("--force", action="store_true", help="restore over a different object at the public key")
     ap.add_argument("--expect-none", action="store_true", help="audit exits 1 if any legacy bundle remains")
     ap.add_argument("--local-root", help="use directories under this root instead of R2 (tests)")
-    ap.add_argument("--out", help="retire-sql: output directory")
-    ap.add_argument("--database", default="singlet-catalog", help="retire-sql: D1 database name for APPLY.txt")
     a = ap.parse_args(argv)
     if a.public == a.archive:
         ap.error("--archive must differ from --public")
-    if a.command == "retire-sql":
-        if not a.out or not a.ledger_files:
-            ap.error("retire-sql needs --out and one or more --ledger files")
-        a.ledger = a.ledger_files
-        return cmd_retire_sql(a)
     store = vc.LocalStore(Path(a.local_root)) if a.local_root else vc.S3Store()
-    return {"retire": cmd_retire, "restore": cmd_restore, "audit": cmd_audit}[a.command](store, a)
+    return {"archive": cmd_archive, "delete": cmd_delete, "restore": cmd_restore, "audit": cmd_audit}[a.command](store, a)
 
 
 if __name__ == "__main__":

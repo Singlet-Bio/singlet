@@ -16,7 +16,12 @@
 #                     (FROM_R2=1: rebuild the rows from the manifests and ledgers in R2). The orchestrator applies them with wrangler.
 #   MODE=catalog-post POST the manifests to /api/ingest/v2-study (needs ~/.config/singlet-ingest.env: INGEST_TOKEN; secondary route)
 #   MODE=refs-index   publish the reference packs and v2/ref/index.json from python/singlet/v2/packs (APPLY=1 to write). Run before the campaign.
-#   MODE=retire-dry | retire | restore | audit | retire-sql    scripts/v2_retire.py (retire needs CONFIRM_RETIRE=RETIRE)
+#   Retirement, three separate steps (notes/m_w6.md section 6), so the site never offers a dead legacy URL:
+#   MODE=archive-dry | archive   (A) copy data/<GSE>/<GSE>.singlet to singlet-archive, verify, write archived-<task>.jsonl; deletes nothing
+#   MODE=retire-sql              (B) SQL flipping v2_migration.status verified -> retired for the archived studies (the orchestrator applies it)
+#   MODE=delete-dry | delete     (C) delete from singlet-data only for archived studies that D1 shows retired >= 5 min and verified >= 24 h:
+#                                needs AGES=<export of the retired rows>, delete needs CONFIRM_RETIRE=RETIRE
+#   MODE=restore | audit
 #
 # Submit (COMMIT = git rev-parse origin/feat/singlet-v2, pushed; notes/m_w6.md has the full procedure and the numbers):
 #   sbatch --partition=debug-cpu --time=00:30:00 --array=0 --export=ALL,MODE=build,COMMIT=<sha>   scripts/v2_migrate.sbatch
@@ -188,13 +193,12 @@ run_campaign() {  # run_campaign <mode> [extra args]
     ${LOCAL_ROOT:+--local-root "$LOCAL_ROOT"} ${MIGRATE_CMD:+--migrate-cmd "$MIGRATE_CMD"} ${VERIFY_CMD:+--verify-cmd "$VERIFY_CMD"} "$@"
 }
 
-RUNS=${RUNS:-full-$C10}
-rows_args() { local d; for r in $RUNS; do d=$WORK/state/v2/$r/rows; [ -d "$d" ] && printf '%s\n' "$d"; done; }
+rows_args() { local d; for r in ${RUNS:-full-$C10}; do d=$WORK/state/v2/$r/rows; [ -d "$d" ] && printf '%s\n' "$d"; done; }
 
 case "$MODE" in
   build)
     rt "${PY[@]}" -m pytest -q -p no:cacheprovider "$SRC/tests/python/test_v2_campaign.py" "$SRC/tests/python/test_v2_campaign_retire.py" \
-      "$SRC/tests/python/test_v2_campaign_publish.py"
+      "$SRC/tests/python/test_v2_campaign_publish.py" "$SRC/tests/python/test_v2_campaign_catalog.py"
     echo "build ok: $SRC"
     ;;
   plan)
@@ -217,7 +221,7 @@ case "$MODE" in
     run_campaign full --shard "$TASK/$NSHARD" ${extra[@]+"${extra[@]}"} ${GSES:+--gse $GSES}
     ;;
   summarize)
-    args=(); for r in $RUNS; do [ -d "$WORK/state/v2/$r" ] && args+=("$WORK/state/v2/$r"); done
+    args=(); for r in ${RUNS:-full-$C10}; do [ -d "$WORK/state/v2/$r" ] && args+=("$WORK/state/v2/$r"); done
     rt "${PY[@]}" "${CAMP[@]}" summarize "${args[@]}" --workers "${WORKERS:-$(( ${SLURM_CPUS_PER_TASK:-16} - 2 ))}"
     ;;
   catalog-sql)
@@ -225,7 +229,7 @@ case "$MODE" in
     if [ -n "${FROM_R2:-}" ]; then need_creds; rt "${PY[@]}" "${CAMP[@]}" catalog-sql --from-r2 --out "$OUT/sql" --day-budget "${DAY_BUDGET:-80000}" --schema "${D1_SCHEMA:-033}" ${LOCAL_ROOT:+--local-root "$LOCAL_ROOT"}
     else rt "${PY[@]}" "${CAMP[@]}" catalog-sql --rows-dir "${RD[@]}" --out "$OUT/sql" --day-budget "${DAY_BUDGET:-80000}" --schema "${D1_SCHEMA:-033}"; fi
     # one compressed file to bring back to the laptop (the whole atlas is about 200 MB of SQL, about 25 MB packed)
-    tar -C "$OUT" -czf "$OUT/sql.tar.gz" sql && ls -l "$OUT/sql.tar.gz"
+    tar --force-local -C "$OUT" -czf "$OUT/sql.tar.gz" sql && ls -l "$OUT/sql.tar.gz"
     ;;
   catalog-post)
     need_creds
@@ -237,30 +241,48 @@ case "$MODE" in
     need_creds
     rt "${PY[@]}" "${CAMP[@]}" refs-index ${APPLY:+--apply} ${LOCAL_ROOT:+--local-root "$LOCAL_ROOT"}
     ;;
-  retire-dry)
+  archive-dry)  # (A) read-only: what would be copied
     need_creds; need_shard
-    rt "${PY[@]}" "${RET[@]}" retire --all --shard "$TASK/$NSHARD" --ledger "$OUT/retire-$TASK.jsonl" ${ALLOW_PARTIAL:+--allow-partial} ${LOCAL_ROOT:+--local-root "$LOCAL_ROOT"}
+    rt "${PY[@]}" "${RET[@]}" archive --all --shard "$TASK/$NSHARD" --ledger "$OUT/archive-$TASK.jsonl" ${ALLOW_PARTIAL:+--allow-partial} ${LOCAL_ROOT:+--local-root "$LOCAL_ROOT"}
     ;;
-  retire)
+  archive)  # (A) server-side copy to singlet-archive, verified, written to $OUT/archived-<task>.jsonl. Deletes nothing.
     need_creds; need_shard
-    [ "${CONFIRM_RETIRE:-}" = RETIRE ] || { echo "retiring deletes the public bundles after archiving them: set CONFIRM_RETIRE=RETIRE"; exit 2; }
-    rt "${PY[@]}" "${RET[@]}" retire --all --shard "$TASK/$NSHARD" --apply --confirm RETIRE --ledger "$OUT/retire-$TASK.jsonl" ${ALLOW_PARTIAL:+--allow-partial} ${LOCAL_ROOT:+--local-root "$LOCAL_ROOT"}
+    rt "${PY[@]}" "${RET[@]}" archive --all --shard "$TASK/$NSHARD" --apply --list "$OUT/archived-$TASK.jsonl" --ledger "$OUT/archive-$TASK.jsonl" ${ALLOW_PARTIAL:+--allow-partial} ${LOCAL_ROOT:+--local-root "$LOCAL_ROOT"}
     ;;
-  retire-sql)  # D1: v2_migration.status -> retired for every study the retire ledgers of RUNS record as retired
-    args=(); for r in $RUNS; do for f in "$WORK"/state/v2/$r/retire-*.jsonl; do [ -f "$f" ] && args+=("$f"); done; done
-    rt "${PY[@]}" "${RET[@]}" retire-sql --ledger-files "${args[@]}" --out "$OUT/sql"
+  retire-sql)  # (B) SQL flipping v2_migration.status verified -> retired for the archived studies of RUNS (default archive-<c10>)
+    args=(); for r in ${RUNS:-archive-$C10}; do for f in "$WORK"/state/v2/$r/archived-*.jsonl "$WORK"/state/v2/$r/restored-*.jsonl; do [ -f "$f" ] && args+=("$f"); done; done
+    [ ${#args[@]} -gt 0 ] || { echo "no archived-*.jsonl in RUNS=${RUNS:-archive-$C10}"; exit 2; }
+    rt "${PY[@]}" "${CAMP[@]}" retire-sql --list "${args[@]}" --out "$OUT/sql"
+    tar --force-local -C "$OUT" -czf "$OUT/sql.tar.gz" sql && ls -l "$OUT/sql.tar.gz"
+    ;;
+  delete-dry|delete)  # (C) delete the legacy objects of archived studies whose catalog row has been retired long enough (AGES from D1)
+    need_creds; need_shard
+    [ -n "${AGES:-}" ] && [ -f "$AGES" ] || { echo "set AGES=<csv/json exported from D1: gse_id, verified_at, updated_at of the rows with status = 'retired'> (clipper.py put it first)"; exit 2; }
+    if [ -z "${ARCHIVED:-}" ]; then  # the shard lists of the archive run(s), plus any restore lists (a later restore cancels an archive)
+      ARCHIVED=$SCRATCH/archived.jsonl; : > "$ARCHIVED"
+      for r in ${RUNS:-archive-$C10}; do for f in "$WORK"/state/v2/$r/archived-*.jsonl "$WORK"/state/v2/$r/restored-*.jsonl; do [ -f "$f" ] && cat "$f" >> "$ARCHIVED"; done; done
+    fi
+    [ -s "$ARCHIVED" ] || { echo "the archived list is empty"; exit 2; }
+    flags=()
+    if [ "$MODE" = delete ]; then
+      [ "${CONFIRM_RETIRE:-}" = RETIRE ] || { echo "this deletes public bundles: set CONFIRM_RETIRE=RETIRE"; exit 2; }
+      flags=(--apply --confirm RETIRE)
+    fi
+    rt "${PY[@]}" "${RET[@]}" delete --list "$ARCHIVED" --ages "$AGES" --shard "$TASK/$NSHARD" \
+      --min-verified-age-hours "${MIN_VERIFIED_AGE_HOURS:-24}" --min-retired-age-minutes "${MIN_RETIRED_AGE_MINUTES:-5}" \
+      --ledger "$OUT/delete-$TASK.jsonl" ${NOW:+--now "$NOW"} ${flags[@]+"${flags[@]}"} ${LOCAL_ROOT:+--local-root "$LOCAL_ROOT"}
     ;;
   restore)
     need_creds
     [ -n "${GSES:-}" ] || { echo "set GSES=\"GSE... GSE...\""; exit 2; }
-    rt "${PY[@]}" "${RET[@]}" restore --gse $GSES ${APPLY:+--apply} --ledger "$OUT/restore-$TASK.jsonl" ${LOCAL_ROOT:+--local-root "$LOCAL_ROOT"}
+    rt "${PY[@]}" "${RET[@]}" restore --gse $GSES ${APPLY:+--apply} --list "$OUT/restored-$TASK.jsonl" --ledger "$OUT/restore-$TASK.jsonl" ${LOCAL_ROOT:+--local-root "$LOCAL_ROOT"}
     ;;
   audit)
     need_creds
     rt "${PY[@]}" "${RET[@]}" audit ${EXPECT_NONE:+--expect-none} ${LOCAL_ROOT:+--local-root "$LOCAL_ROOT"}
     ;;
   *)
-    echo "MODE must be build, plan, dry, pilot, full, summarize, catalog-sql, catalog-post, refs-index, retire-dry, retire, retire-sql, restore or audit"
+    echo "MODE must be build, plan, dry, pilot, full, summarize, catalog-sql, catalog-post, refs-index, archive-dry, archive, retire-sql, delete-dry, delete, restore or audit"
     exit 2
     ;;
 esac

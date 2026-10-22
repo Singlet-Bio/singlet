@@ -10,7 +10,6 @@ Layers:
 
 from __future__ import annotations
 
-import io
 import json
 import os
 import sys
@@ -24,9 +23,16 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "python"))
 
-from singlet import _pz  # noqa: E402
-from singlet.v2 import cells as cells_mod, container as C, migrate as MG, packs as P, util, verify as V  # noqa: E402
+from singlet.v2 import cells as cells_mod  # noqa: E402
+from singlet.v2 import container as C  # noqa: E402
+from singlet.v2 import migrate as MG  # noqa: E402
+from singlet.v2 import packs as P  # noqa: E402
+from singlet.v2 import util  # noqa: E402
+from singlet.v2 import verify as V  # noqa: E402
 from singlet.v2.sample import V2Sample  # noqa: E402
+
+# the legacy TP1Z writer is a compiled extension: skip the module (rather than fail collection) where it is not built
+_pz = pytest.importorskip("singlet._pz", reason="singlet._pz is not built")
 
 CORPUS = ROOT / "bench" / "compression"
 BUNDLE = CORPUS / "corpus" / "bundles" / "GSE145370.singlet"
@@ -42,9 +48,23 @@ def write_1pz(path, m, n, density, seed, rownames, colnames, vt_dtype=np.uint16,
         cols.append(np.sort(rs.choice(m, size=k, replace=False)).astype(np.int32))
     indptr = np.concatenate([[0], np.cumsum([len(c) for c in cols])]).astype(np.int32)
     indices = np.concatenate(cols).astype(np.int32)
-    data = np.minimum(rs.geometric(0.4, size=len(indices)).astype(np.int64), np.iinfo(vt_dtype).max).astype(vt_dtype)
-    assert _pz.write_1pz(str(path), indptr, indices, data, m, n, rownames=rownames, colnames=colnames, zstd_level=3,
-                         chunk_cols=64, threads=1, user_meta=kv)
+    data = np.minimum(
+        rs.geometric(0.4, size=len(indices)).astype(np.int64), np.iinfo(vt_dtype).max
+    ).astype(vt_dtype)
+    assert _pz.write_1pz(
+        str(path),
+        indptr,
+        indices,
+        data,
+        m,
+        n,
+        rownames=rownames,
+        colnames=colnames,
+        zstd_level=3,
+        chunk_cols=64,
+        threads=1,
+        user_meta=kv,
+    )
     return indptr, indices, data.astype(np.uint32)
 
 
@@ -60,15 +80,37 @@ def make_bundle(tmp_path, gse="GSE9001", gsms=("GSM9001", "GSM9002"), real_barco
     work = tmp_path / "work"
     work.mkdir(exist_ok=True)
     with zipfile.ZipFile(bundle, "w", allowZip64=True) as z:
-        z.writestr("manifest.json", json.dumps({"schema_version": "1.0", "gse_id": gse, "gsm_ids": list(gsms), "reference_build": "toy",
-                                                "created_at": "2026-01-01T00:00:00+00:00"}, indent=2))
-        z.writestr("study_meta.json", json.dumps({"gse_id": gse, "series_title": "toy é"}, indent=2))
-        z.writestr("feature_vocab.json", json.dumps({"schema_version": "1.0", "reference_build": "toy", "n_genes": 0, "genes": []}, indent=2))
+        z.writestr(
+            "manifest.json",
+            json.dumps(
+                {
+                    "schema_version": "1.0",
+                    "gse_id": gse,
+                    "gsm_ids": list(gsms),
+                    "reference_build": "toy",
+                    "created_at": "2026-01-01T00:00:00+00:00",
+                },
+                indent=2,
+            ),
+        )
+        z.writestr(
+            "study_meta.json", json.dumps({"gse_id": gse, "series_title": "toy é"}, indent=2)
+        )
+        z.writestr(
+            "feature_vocab.json",
+            json.dumps(
+                {"schema_version": "1.0", "reference_build": "toy", "n_genes": 0, "genes": []},
+                indent=2,
+            ),
+        )
         for si, g in enumerate(gsms):
             n = 140 + 10 * si
             bcs = whitelist_barcodes(n, si) if real_barcodes else ["CELL%04d" % i for i in range(n)]
             rows_e = ["G%03d_gene%d_chr1:%d-%d" % (i, i, 100 * i, 100 * i + 50) for i in range(240)]
-            rows_i = ["G%03d_gene%d_intron_chr1:%d-%d" % (i, i, 100 * i + 50, 100 * i + 90) for i in range(200)]
+            rows_i = [
+                "G%03d_gene%d_intron_chr1:%d-%d" % (i, i, 100 * i + 50, 100 * i + 90)
+                for i in range(200)
+            ]
             rows_j = ["chr1:%d-%d" % (100 * i, 100 * i + 40 + (i % 3)) for i in range(300)]
             p = work / "m.1pz"
             ip, ix, dt = write_1pz(p, 240, n, 0.08, si, rows_e, bcs)
@@ -81,21 +123,49 @@ def make_bundle(tmp_path, gse="GSE9001", gsms=("GSM9001", "GSM9002"), real_barco
             sj = _pz.read_1pz(str(p))
             psi = (np.asarray(sj["data"]).astype(np.uint32) // 2 + 1).clip(0, 255).astype(np.uint8)
             if si == 1:
-                psi[0] += 1                                            # the recipe will not reproduce this one
-            assert _pz.write_1pz(str(p), np.asarray(sj["indptr"], np.int32), np.asarray(sj["indices"], np.int32), psi, 300, n,
-                                 rownames=rows_j, colnames=bcs, zstd_level=3, chunk_cols=64, threads=1)
+                psi[0] += 1  # the recipe will not reproduce this one
+            assert _pz.write_1pz(
+                str(p),
+                np.asarray(sj["indptr"], np.int32),
+                np.asarray(sj["indices"], np.int32),
+                psi,
+                300,
+                n,
+                rownames=rows_j,
+                colnames=bcs,
+                zstd_level=3,
+                chunk_cols=64,
+                threads=1,
+            )
             z.write(p, "samples/%s/splice_psi.1pz" % g, zipfile.ZIP_STORED)
             # a matrix with different columns (inline column names) and key/values
-            write_1pz(p, 20, 30, 0.3, 99, ["tcr%d (V)" % i for i in range(20)], ["OTHER%d" % i for i in range(30)], kv={"k2": "v2", "k1": "v1"})
+            write_1pz(
+                p,
+                20,
+                30,
+                0.3,
+                99,
+                ["tcr%d (V)" % i for i in range(20)],
+                ["OTHER%d" % i for i in range(30)],
+                kv={"k2": "v2", "k1": "v1"},
+            )
             z.write(p, "samples/%s/vdj_gene_usage.1pz" % g, zipfile.ZIP_STORED)
-            z.writestr("samples/%s/summary.json" % g, json.dumps({"protocol_name": "10xv2", "git_sha": "abc", "reference_build": "toy"}, indent=2))
+            z.writestr(
+                "samples/%s/summary.json" % g,
+                json.dumps(
+                    {"protocol_name": "10xv2", "git_sha": "abc", "reference_build": "toy"}, indent=2
+                ),
+            )
             called = bcs[: n // 3]
             lines = ["barcode\tis_cell\tlog10_umi\tempty_drops_pvalue\tcall_method"]
             for b in called:
                 lines.append("%s\tTRUE\t3.1000\t0.0000e+00\tstar_solo" % b)
             z.writestr("samples/%s/cell_calls.tsv" % g, "\n".join(lines) + "\n")
             if si == 0:
-                z.writestr("samples/%s/ambient_profile.tsv" % g, "".join("g%d\t%.6g\n" % (i, (i % 5 + .5) / 100) for i in range(50)))
+                z.writestr(
+                    "samples/%s/ambient_profile.tsv" % g,
+                    "".join("g%d\t%.6g\n" % (i, (i % 5 + 0.5) / 100) for i in range(50)),
+                )
                 z.writestr("samples/%s/star_Solo.out/Gene/Summary.csv" % g, "a,b\n1,2\n")
             z.writestr("samples/%s/log.txt" % g, ("line %d\n" % si) * 100)
     return bundle
@@ -104,7 +174,13 @@ def make_bundle(tmp_path, gse="GSE9001", gsms=("GSM9001", "GSM9002"), real_barco
 class FakeRecipes:
     """A stand-in for singlet.v2.recipes exercising every path of the migration."""
 
-    RECIPES = {"toy-psi-v1": 1, "toy-cc-v1": 1, "toy-ambient-v1": 1, "toy-cheat-v1": 1, "toy-liar-v1": 1}
+    RECIPES = {
+        "toy-psi-v1": 1,
+        "toy-cc-v1": 1,
+        "toy-ambient-v1": 1,
+        "toy-cheat-v1": 1,
+        "toy-liar-v1": 1,
+    }
 
     # ---- plan / regenerate
     def plan(self, member, legacy_bytes, ctx):
@@ -120,16 +196,29 @@ class FakeRecipes:
             ctx.provide_vector("ambient_k", k)
             return ("toy-ambient-v1", {"n": 50}, ["vector:ambient_k"])
         if member == "log.txt" and ctx.sample_id == "GSM9001":
-            return ("toy-cheat-v1", {}, [])        # reads legacy-only state at regenerate time -> must be demoted by stage 2
+            return (
+                "toy-cheat-v1",
+                {},
+                [],
+            )  # reads legacy-only state at regenerate time -> must be demoted by stage 2
         if member == "star_Solo.out/Gene/Summary.csv":
             return ("toy-liar-v1", {}, [])
         return None
 
     def _psi(self, ctx):
         from singlet.v2.recipes_ctx import Matrix
+
         sj = ctx.matrix("sj_counts.1pz")
         data = (np.asarray(sj.data).astype(np.uint32) // 2 + 1).clip(0, 255)
-        return Matrix(np.asarray(sj.indptr), np.asarray(sj.indices), data, sj.shape, sj.rownames, sj.colnames, {})
+        return Matrix(
+            np.asarray(sj.indptr),
+            np.asarray(sj.indices),
+            data,
+            sj.shape,
+            sj.rownames,
+            sj.colnames,
+            {},
+        )
 
     def regenerate_matrix(self, recipe_id, params, ctx):
         if recipe_id == "toy-psi-v1":
@@ -146,9 +235,13 @@ class FakeRecipes:
             return ("\n".join(lines) + "\n").encode()
         if recipe_id == "toy-ambient-v1":
             k = ctx.vector("ambient_k")
-            return "".join("g%d\t%.6g\n" % (i, (int(v) + .5) / 100) for i, v in enumerate(k)).encode()
+            return "".join(
+                "g%d\t%.6g\n" % (i, (int(v) + 0.5) / 100) for i, v in enumerate(k)
+            ).encode()
         if recipe_id == "toy-cheat-v1":
-            return ctx.bundle.read("samples/GSM9001/log.txt")      # only the migration context has .bundle
+            return ctx.bundle.read(
+                "samples/GSM9001/log.txt"
+            )  # only the migration context has .bundle
         if recipe_id == "toy-liar-v1":
             return b"a,b\n1,3\n"
         raise LookupError(recipe_id)
@@ -156,7 +249,10 @@ class FakeRecipes:
     def cells_columns(self, member, legacy_bytes, ctx):
         if member == "cell_calls.tsv":
             n = len(ctx.cells()["barcode"])
-            return {"cc_log": (np.float32, np.full(n, 3.1, dtype=np.float32)), "cc_unused": ("u8", np.zeros(n, np.uint8))}
+            return {
+                "cc_log": (np.float32, np.full(n, 3.1, dtype=np.float32)),
+                "cc_unused": ("u8", np.zeros(n, np.uint8)),
+            }
         return {}
 
 
@@ -172,15 +268,23 @@ def synth(tmp_path_factory):
 
 
 def ledger_of(out, gse="GSE9001"):
-    return [json.loads(l) for l in open(out / "v2" / "ledger" / (gse + ".jsonl"), encoding="utf-8")]
+    return [
+        json.loads(ln) for ln in open(out / "v2" / "ledger" / (gse + ".jsonl"), encoding="utf-8")
+    ]
 
 
 def by_member(lines, gsm):
-    return {l["v2_name"]: l for l in lines if l.get("gsm") == gsm and l["type"] in ("member", "v2member")}
+    return {
+        rec["v2_name"]: rec
+        for rec in lines
+        if rec.get("gsm") == gsm and rec["type"] in ("member", "v2member")
+    }
 
 
 def test_synthetic_migration_verifies(synth):
-    rep = V.verify(str(synth.bundle), str(synth.out), None, None, FakeRecipes(), log=lambda *a: None)
+    rep = V.verify(
+        str(synth.bundle), str(synth.out), None, None, FakeRecipes(), log=lambda *a: None
+    )
     assert rep.fail == 0, rep.items
     assert rep.ok > 100
     assert rep.by_kind["matrices"][0] >= 2 * 4 * 7 and rep.by_kind["derived"][0] >= 3
@@ -193,21 +297,40 @@ def test_synthetic_members_and_treatments(synth):
     for nm in ("exon_counts.1pz", "intron_counts.1pz", "sj_counts.1pz", "vdj_gene_usage.1pz"):
         assert m1[nm]["v2_kind"] == "pz2" and m1[nm]["verify_mode"] == "canonical"
     # splice_psi: derived in sample 1, stored (as pz2 matrix) in sample 2 where the recipe does not reproduce it
-    assert m1["splice_psi.1pz"]["treatment"] == "recipe" and m1["splice_psi.1pz"]["recipe"] == "toy-psi-v1"
-    assert m2["splice_psi.1pz"]["treatment"] == "matrix" and "rejected" in m2["splice_psi.1pz"]["note"]
+    assert (
+        m1["splice_psi.1pz"]["treatment"] == "recipe"
+        and m1["splice_psi.1pz"]["recipe"] == "toy-psi-v1"
+    )
+    assert (
+        m2["splice_psi.1pz"]["treatment"] == "matrix" and "rejected" in m2["splice_psi.1pz"]["note"]
+    )
     # cell_calls derived from the cells table; cells table has the columns it reads and not the unused one
-    assert m1["cell_calls.tsv"]["recipe"] == "toy-cc-v1" and m2["cell_calls.tsv"]["recipe"] == "toy-cc-v1"
+    assert (
+        m1["cell_calls.tsv"]["recipe"] == "toy-cc-v1"
+        and m2["cell_calls.tsv"]["recipe"] == "toy-cc-v1"
+    )
     s = V2Sample(open(synth.out / synth.res["samples"][0]["key"], "rb").read())
     cells = s.cells()
     assert "cc_log" in cells.names and "cc_unused" not in cells.names
     assert cells.names[:6] == list(cells_mod.REQUIRED)
     # aux vector registered by a verified plan, stored as a non-legacy member
-    assert m1["ambient_profile.tsv"]["recipe"] == "toy-ambient-v1" and "vector:ambient_k" in m1 and not m1["vector:ambient_k"].get("legacy", True)
+    assert (
+        m1["ambient_profile.tsv"]["recipe"] == "toy-ambient-v1"
+        and "vector:ambient_k" in m1
+        and not m1["vector:ambient_k"].get("legacy", True)
+    )
     assert s.reader.members["vector:ambient_k"].flags & C.FLAG_LEGACY == 0
     # the cheating recipe passed stage 1 and was demoted by stage 2; the liar never passed stage 1
     assert m1["log.txt"]["treatment"] in ("stored", "raw") and "stage-2" in m1["log.txt"]["note"]
-    assert m1["star_Solo.out/Gene/Summary.csv"]["treatment"] in ("stored", "raw") and "rejected" in m1["star_Solo.out/Gene/Summary.csv"]["note"]
-    assert any(l["type"] == "sample" and l["stage2_rounds"] >= 2 for l in lines if l.get("gsm") == "GSM9001")
+    assert (
+        m1["star_Solo.out/Gene/Summary.csv"]["treatment"] in ("stored", "raw")
+        and "rejected" in m1["star_Solo.out/Gene/Summary.csv"]["note"]
+    )
+    assert any(
+        rec["type"] == "sample" and rec["stage2_rounds"] >= 2
+        for rec in lines
+        if rec.get("gsm") == "GSM9001"
+    )
     # derived members have no body
     for nm, mi in s.reader.members.items():
         if mi.kind == C.KIND_DERIVED:
@@ -217,17 +340,21 @@ def test_synthetic_members_and_treatments(synth):
 def test_synthetic_names_modes(synth):
     s = V2Sample(open(synth.out / synth.res["samples"][0]["key"], "rb").read())
     ex = s.reader.members["exon_counts.1pz"].meta["names"]
-    assert ex["cols"] == "cells" and ex["rows"] == "inline"          # toy build: no vocabulary pack applies
-    assert s.reader.members["vdj_gene_usage.1pz"].meta["names"]["cols"] == "inline"      # other barcodes
+    assert ex["cols"] == "cells" and ex["rows"] == "inline"  # toy build: no vocabulary pack applies
+    assert (
+        s.reader.members["vdj_gene_usage.1pz"].meta["names"]["cols"] == "inline"
+    )  # other barcodes
     t = s.cells()
-    assert s.reader.members["cells"].meta["whitelist"]                 # real 10x barcodes -> whitelist indices
+    assert s.reader.members["cells"].meta["whitelist"]  # real 10x barcodes -> whitelist indices
     assert t.barcodes == s.matrix("exon_counts.1pz").colnames
     assert s.matrix("vdj_gene_usage.1pz").kv == {"k1": "v1", "k2": "v2"}
     assert 0 < int(t.column("called").sum()) < t.n_rows
     # every matrix of the sample decodes identically with column-range access
     sub = s.matrix("sj_counts.1pz", cols=(10, 70))
     full = s.matrix("sj_counts.1pz")
-    assert (sub.to_scipy() != full.to_scipy()[:, 10:70]).nnz == 0 and sub.colnames == full.colnames[10:70]
+    assert (sub.to_scipy() != full.to_scipy()[:, 10:70]).nnz == 0 and sub.colnames == full.colnames[
+        10:70
+    ]
 
 
 def test_synthetic_manifest_and_outputs(synth):
@@ -239,7 +366,12 @@ def test_synthetic_manifest_and_outputs(synth):
         obj = (synth.out / s["key"]).read_bytes()
         assert len(obj) == s["bytes"] and s["key"].endswith(util.d16(obj).hex() + ".s2")
         ex = s["members"]["exon_counts.1pz"]
-        assert ex["kind"] == 1 and ex["chunk_cols"] in (128, 256, 512, 1024, 2048, 4096) and ex["nnz"] > 0 and ex["chunk_index"][0] + ex["chunk_index"][1] <= len(obj)
+        assert (
+            ex["kind"] == 1
+            and ex["chunk_cols"] in (128, 256, 512, 1024, 2048, 4096)
+            and ex["nnz"] > 0
+            and ex["chunk_index"][0] + ex["chunk_index"][1] <= len(obj)
+        )
         assert s["n_called"] < s["n_columns"] and s["stats"]["median_umi"] > 0
     # packs referenced are shipped next to the objects with an index
     ref = synth.out / "v2" / "ref"
@@ -255,7 +387,9 @@ def test_synthetic_is_deterministic(synth, tmp_path):
     assert wr["rev"] == synth.wr["rev"]
     for s in synth.res["samples"]:
         assert (out2 / s["key"]).read_bytes() == (synth.out / s["key"]).read_bytes()
-    assert (out2 / "v2" / "m" / "GSE9001.json").read_bytes() == (synth.out / "v2" / "m" / "GSE9001.json").read_bytes()
+    assert (out2 / "v2" / "m" / "GSE9001.json").read_bytes() == (
+        synth.out / "v2" / "m" / "GSE9001.json"
+    ).read_bytes()
 
 
 def test_without_recipes_everything_is_stored_and_still_verifies(synth, tmp_path):
@@ -263,13 +397,14 @@ def test_without_recipes_everything_is_stored_and_still_verifies(synth, tmp_path
     res = MG.migrate_bundle(str(synth.bundle), str(tmp_path), None, opts)
     MG.write_outputs(res, opts)
     lines = ledger_of(tmp_path)
-    assert not any(l.get("treatment") == "recipe" for l in lines if l["type"] == "member")
+    assert not any(rec.get("treatment") == "recipe" for rec in lines if rec["type"] == "member")
     rep = V.verify(str(synth.bundle), str(tmp_path), None, None, "none", log=lambda *a: None)
     assert rep.fail == 0, rep.items
 
 
 def _copy_tree(src: Path, dst: Path):
     import shutil
+
     shutil.copytree(src, dst)
 
 
@@ -281,7 +416,15 @@ def _tamper(synth, tmp_path, fn):
 
 
 def _verify_fail(synth, out, **kw):
-    rep = V.verify(str(synth.bundle), str(out), None, None, FakeRecipes(), log=lambda *a: None, quick=kw.get("quick", True))
+    rep = V.verify(
+        str(synth.bundle),
+        str(out),
+        None,
+        None,
+        FakeRecipes(),
+        log=lambda *a: None,
+        quick=kw.get("quick", True),
+    )
     return rep
 
 
@@ -295,7 +438,10 @@ def test_verify_detects_flipped_matrix_byte(synth, tmp_path):
     p.write_bytes(bytes(b))
     rep = _verify_fail(synth, out)
     assert rep.fail > 0
-    assert V.main(["--bundle", str(synth.bundle), "--v2", str(out), "--recipes", "none", "--quick"]) == 1
+    assert (
+        V.main(["--bundle", str(synth.bundle), "--v2", str(out), "--recipes", "none", "--quick"])
+        == 1
+    )
 
 
 def test_verify_detects_changed_stored_member(synth, tmp_path):
@@ -332,7 +478,9 @@ def test_verify_detects_legacy_change(synth, tmp_path):
             if i.filename == "samples/GSM9001/log.txt":
                 data = data.replace(b"line", b"lime")
             zo.writestr(i, data)
-    rep = V.verify(str(b2), str(synth.out), None, None, FakeRecipes(), log=lambda *a: None, quick=True)
+    rep = V.verify(
+        str(b2), str(synth.out), None, None, FakeRecipes(), log=lambda *a: None, quick=True
+    )
     assert rep.fail > 0
 
 
@@ -342,7 +490,12 @@ def test_verify_detects_extra_legacy_member(synth, tmp_path):
         for i in zi.infolist():
             zo.writestr(i, zi.read(i.filename))
         zo.writestr("samples/GSM9001/new.tsv", "x\n")
-    assert V.verify(str(b2), str(synth.out), None, None, FakeRecipes(), log=lambda *a: None, quick=True).fail > 0
+    assert (
+        V.verify(
+            str(b2), str(synth.out), None, None, FakeRecipes(), log=lambda *a: None, quick=True
+        ).fail
+        > 0
+    )
 
 
 def test_unsafe_ids_in_an_untrusted_bundle_are_refused(tmp_path):
@@ -351,12 +504,16 @@ def test_unsafe_ids_in_an_untrusted_bundle_are_refused(tmp_path):
         z.writestr("manifest.json", "{}")
         z.writestr("samples/../../evil/summary.json", "{}")
     with pytest.raises(ValueError):
-        MG.migrate_bundle(str(p), str(tmp_path / "out"), None, MG.Options(recipes="none", log=lambda *a: None))
+        MG.migrate_bundle(
+            str(p), str(tmp_path / "out"), None, MG.Options(recipes="none", log=lambda *a: None)
+        )
     q = tmp_path / "GSE2.singlet"
     with zipfile.ZipFile(q, "w") as z:
         z.writestr("manifest.json", json.dumps({"gse_id": "../x"}))
     with pytest.raises(ValueError):
-        MG.migrate_bundle(str(q), str(tmp_path / "out2"), None, MG.Options(recipes="none", log=lambda *a: None))
+        MG.migrate_bundle(
+            str(q), str(tmp_path / "out2"), None, MG.Options(recipes="none", log=lambda *a: None)
+        )
 
 
 # ------------------------------------------------------------------------------------------------------------ corpus tests
@@ -379,14 +536,23 @@ def test_corpus_bundle_subset(tmp_path):
     # random access: a column range of a pz2 member with names from the vocabulary pack and the cells table
     full = s0.matrix("exon_counts.1pz")
     sub = s0.matrix("exon_counts.1pz", cols=(1000, 1500))
-    assert sub.rownames == full.rownames and sub.colnames == full.colnames[1000:1500] == s0.cells().barcodes[1000:1500]
+    assert (
+        sub.rownames == full.rownames
+        and sub.colnames == full.colnames[1000:1500] == s0.cells().barcodes[1000:1500]
+    )
     assert (sub.to_scipy() != full.to_scipy()[:, 1000:1500]).nnz == 0
-    rep = V.verify(str(BUNDLE), str(tmp_path), None, samples, "none", log=lambda *a: None, quick=not FULL)
+    rep = V.verify(
+        str(BUNDLE), str(tmp_path), None, samples, "none", log=lambda *a: None, quick=not FULL
+    )
     assert rep.fail == 0, rep.items
     assert rep.by_kind["matrices"][0] >= 7 * 6 * len(res["samples"])
 
 
-LOOSE = sorted(p for p in (CORPUS / "corpus_w4_corpus").glob("*") if (p / "exon_counts.1pz").exists()) if (CORPUS / "corpus_w4_corpus").exists() else []
+LOOSE = (
+    sorted(p for p in (CORPUS / "corpus_w4_corpus").glob("*") if (p / "exon_counts.1pz").exists())
+    if (CORPUS / "corpus_w4_corpus").exists()
+    else []
+)
 LOOSE_QUICK = [p for p in LOOSE if p.name in ("h_v3_a", "x_stub", "z_v2", "bn_dropseq", "m_visium")]
 
 
@@ -400,7 +566,11 @@ def test_corpus_w4_samples(d, tmp_path):
     assert rep.fail == 0, rep.items
 
 
-MTX = [p for p in (CORPUS / "corpus_w4_mtx").glob("GSE*.GSM*")] if (CORPUS / "corpus_w4_mtx").exists() else []
+MTX = (
+    [p for p in (CORPUS / "corpus_w4_mtx").glob("GSE*.GSM*")]
+    if (CORPUS / "corpus_w4_mtx").exists()
+    else []
+)
 MTX_QUICK = [p for p in MTX if p.name in ("GSE171161.GSM5220137",)]
 
 
@@ -412,5 +582,5 @@ def test_corpus_mtx_gen_b_members(d, tmp_path):
     MG.write_outputs(res, opts)
     rep = V.verify(str(d), str(tmp_path), None, None, "none", log=lambda *a: None, quick=True)
     assert rep.fail == 0, rep.items
-    names = {l["v2_name"] for l in ledger_of(tmp_path, res["gse"]) if l["type"] == "member"}
+    names = {rec["v2_name"] for rec in ledger_of(tmp_path, res["gse"]) if rec["type"] == "member"}
     assert "star_Solo.out/Gene/raw/matrix.mtx" in names

@@ -13,7 +13,8 @@ This replaces "pack a legacy bundle, upload it to data/<GSE>/<GSE>.singlet" in t
      (existing identical objects are skipped), ledger, manifest LAST, read-back: exactly the steps of scripts/v2_campaign.py
      (this script calls the same code).
   3. Catalog rows (v2_study, v2_sample, v2_migration; schema 032) are written to --rows-dir and, when $INGEST_TOKEN is set and
-     --ingest-url is given, the manifest is POSTed to /api/ingest/v2-study. Without a token run `v2_campaign.py catalog-sql
+     --ingest-url is given, the manifest is POSTed to /api/ingest/v2-study. A new study never had a legacy file, so its migration row is
+     `retired` (verify_ok 1) from the start and the site never offers a legacy URL for it. Without a token run `v2_campaign.py catalog-sql
      --rows-dir DIR` and apply the SQL (the primary route).
 
 Dry run (no R2 writes) unless --apply. The last stdout line is `RESULT {json}`; the exit code is 0 when the study is live and

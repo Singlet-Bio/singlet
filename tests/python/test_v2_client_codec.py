@@ -23,7 +23,14 @@ import scipy.sparse as sp  # noqa: E402
 
 def _csc(m, n, density, seed, vmax=40, dtype=np.uint32):
     rng = np.random.default_rng(seed)
-    a = sp.random(m, n, density=density, format="csc", random_state=seed, data_rvs=lambda k: rng.integers(1, vmax, k)).astype(dtype)
+    a = sp.random(
+        m,
+        n,
+        density=density,
+        format="csc",
+        random_state=seed,
+        data_rvs=lambda k: rng.integers(1, vmax, k),
+    ).astype(dtype)
     a.sum_duplicates()
     a.sort_indices()
     return a
@@ -50,7 +57,10 @@ def _canonical(res, shape):
 
 def _expected_genes(a, row_to_gene, n_genes):
     keep = row_to_gene >= 0
-    ind = sp.csr_matrix((np.ones(int(keep.sum()), dtype=np.int64), (row_to_gene[keep], np.flatnonzero(keep))), shape=(n_genes, a.shape[0]))
+    ind = sp.csr_matrix(
+        (np.ones(int(keep.sum()), dtype=np.int64), (row_to_gene[keep], np.flatnonzero(keep))),
+        shape=(n_genes, a.shape[0]),
+    )
     out = (ind @ a.astype(np.int64)).tocsc()
     out.eliminate_zeros()
     out.sort_indices()
@@ -58,15 +68,25 @@ def _expected_genes(a, row_to_gene, n_genes):
 
 
 @pytest.mark.parametrize("codec", ["rans", "generic", "auto"])
-@pytest.mark.parametrize("shape,density,vmax", [((3000, 500), 0.03, 40), ((700, 90), 0.2, 300), ((50000, 64), 0.002, 5), ((12, 5), 0.5, 3)])
+@pytest.mark.parametrize(
+    "shape,density,vmax",
+    [((3000, 500), 0.03, 40), ((700, 90), 0.2, 300), ((50000, 64), 0.002, 5), ((12, 5), 0.5, 3)],
+)
 def test_roundtrip_all_modes(codec, shape, density, vmax):
     a = _csc(*shape, density, seed=shape[0], vmax=vmax)
     blob, stats = _encode(a, codec=codec, chunk_cols=64)
     mem = _pz2.Member(blob)
     h = mem.header
     assert (h["m"], h["n"], h["nnz"]) == (shape[0], shape[1], a.nnz)
-    want_digest = _pz2.digest(a.indptr, a.indices, a.data, *shape, value_type=h["value_type"], row_names=_names("r", shape[0]),
-                              col_names=_names("c", shape[1]))
+    want_digest = _pz2.digest(
+        a.indptr,
+        a.indices,
+        a.data,
+        *shape,
+        value_type=h["value_type"],
+        row_names=_names("r", shape[0]),
+        col_names=_names("c", shape[1]),
+    )
     assert h["digest"] == want_digest.hex()
     for mode in ("native", "canonical"):
         for threads in (1, 3):
@@ -75,7 +95,14 @@ def test_roundtrip_all_modes(codec, shape, density, vmax):
             assert res["indices"].dtype == np.int32 and res["indptr"].dtype == np.int32
     res = _pz2.decode(blob, mode="canonical", threads=2)  # the one-shot function agrees
     assert (_canonical(res, shape) != a).nnz == 0
-    for c0, c1 in [(0, 1), (3, 70), (63, 65), (0, shape[1]), (shape[1] - 1, shape[1]), (5, 5)]:  # ranges that cut chunks
+    for c0, c1 in [
+        (0, 1),
+        (3, 70),
+        (63, 65),
+        (0, shape[1]),
+        (shape[1] - 1, shape[1]),
+        (5, 5),
+    ]:  # ranges that cut chunks
         if c1 > shape[1]:
             continue
         r = mem.decode(c0, c1, mode="canonical")
@@ -91,7 +118,9 @@ def test_value_widths_and_dtype_conversion(dt, vmax):
     blob, _ = _encode(a, codec="auto")
     mem = _pz2.Member(blob)
     r = mem.decode(mode="canonical")
-    assert np.dtype(r["data"].dtype).itemsize <= np.dtype(dt).itemsize  # stored width: the smallest that fits
+    assert (
+        np.dtype(r["data"].dtype).itemsize <= np.dtype(dt).itemsize
+    )  # stored width: the smallest that fits
     assert np.array_equal(r["data"].astype(np.int64), a.data.astype(np.int64))
     for want in ("int32", "float64", "uint32"):
         r2 = mem.decode(mode="canonical", dtype=want)
@@ -101,7 +130,14 @@ def test_value_widths_and_dtype_conversion(dt, vmax):
 
 def test_float32_matrix_roundtrip():
     rng = np.random.default_rng(3)
-    a = sp.random(400, 60, density=0.1, format="csc", random_state=3, data_rvs=lambda k: rng.random(k).astype(np.float32) + 0.5).astype(np.float32)
+    a = sp.random(
+        400,
+        60,
+        density=0.1,
+        format="csc",
+        random_state=3,
+        data_rvs=lambda k: rng.random(k).astype(np.float32) + 0.5,
+    ).astype(np.float32)
     a.sort_indices()
     blob, _ = _encode(a, codec="auto")
     mem = _pz2.Member(blob)
@@ -131,10 +167,19 @@ def test_gene_mode_matches_scipy_with_selection():
         got = sp.csc_matrix((r["data"], r["indices"], r["indptr"]), shape=(n_genes, len(cols)))
         assert (got != _expected_genes(a[:, cols], gmap, n_genes)).nnz == 0
         assert r["data"].dtype == np.int32 and r["n_rows"] == n_genes and r["n_cols"] == len(cols)
-    r = mem.decode(60, 200, mode="gene", gene_map=gmap, n_genes=n_genes, cols=np.array([0, 10, 139], dtype=np.uint32))
+    r = mem.decode(
+        60,
+        200,
+        mode="gene",
+        gene_map=gmap,
+        n_genes=n_genes,
+        cols=np.array([0, 10, 139], dtype=np.uint32),
+    )
     got = sp.csc_matrix((r["data"], r["indices"], r["indptr"]), shape=(n_genes, 3))
     assert (got != _expected_genes(a[:, [60, 70, 199]], gmap, n_genes)).nnz == 0
-    r = mem.decode(mode="gene", gene_map=gmap, n_genes=n_genes, dtype="float64")  # float sums (the R path)
+    r = mem.decode(
+        mode="gene", gene_map=gmap, n_genes=n_genes, dtype="float64"
+    )  # float sums (the R path)
     assert r["data"].dtype == np.float64
     with pytest.raises(ValueError):
         mem.decode(mode="gene", n_genes=n_genes)  # gene_map missing
@@ -162,7 +207,7 @@ def test_fetch_callable_reads_only_the_ranges_it_needs():
 
     def fetch(off, ln):
         calls.append((off, ln))
-        return blob[off: off + ln]
+        return blob[off : off + ln]
 
     mem = _pz2.Member(fetch=fetch, prefix_hint=4096)
     n_open = len(calls)
@@ -186,7 +231,7 @@ def test_missing_range_without_fetch_raises_needrange():
     with pytest.raises(_pz2.NeedRange) as ei:
         mem.decode(200, 300)
     assert ei.value.off == plan["byte_off"] and ei.value.len == plan["byte_len"]
-    mem.add_range(plan["byte_off"], blob[plan["byte_off"]: plan["byte_off"] + plan["byte_len"]])
+    mem.add_range(plan["byte_off"], blob[plan["byte_off"] : plan["byte_off"] + plan["byte_len"]])
     assert mem.decode(200, 300, mode="canonical")["nnz"] == a[:, 200:300].nnz
     with pytest.raises(_pz2.NeedRange):
         _pz2.Member(blob[:100])  # not even the header
@@ -196,20 +241,37 @@ def test_names_kinds_and_kv():
     a = _csc(300, 40, 0.1, 61)
     m, n = a.shape
     pack_id = bytes(range(1, 9))
-    blob, _ = _encode(a, row_names=_names("g", m), col_names={"kind": "cells", "names": _names("b", n)}, kv={"k1": "v1", "a": "b"})
+    blob, _ = _encode(
+        a,
+        row_names=_names("g", m),
+        col_names={"kind": "cells", "names": _names("b", n)},
+        kv={"k1": "v1", "a": "b"},
+    )
     mem = _pz2.Member(blob)
     assert mem.header["col_names_kind"] == "cells" and mem.header["row_names_kind"] == "inline"
     assert mem.row_names()["names"] == _names("g", m)
     assert mem.col_names()["kind"] == "cells" and mem.col_names()["names"] is None
     assert mem.kv() == {"a": "b", "k1": "v1"}
     idx = np.sort(np.random.default_rng(1).choice(10000, n, replace=False)).astype(np.uint32)
-    blob, _ = _encode(a, row_names={"kind": "pack", "pack_id": pack_id, "names": _names("g", m)},
-                      col_names={"kind": "pack_subset", "pack_id": pack_id, "pack_index": idx, "names": _names("b", n)})
+    blob, _ = _encode(
+        a,
+        row_names={"kind": "pack", "pack_id": pack_id, "names": _names("g", m)},
+        col_names={
+            "kind": "pack_subset",
+            "pack_id": pack_id,
+            "pack_index": idx,
+            "names": _names("b", n),
+        },
+    )
     mem = _pz2.Member(blob)
     h = mem.header
     assert h["row_names_kind"] == "pack" and h["row_names_id"] == pack_id.hex()
     cn = mem.col_names()
-    assert h["col_names_kind"] == "pack_subset" and cn["kind"] == "pack_subset" and np.array_equal(cn["pack_index"], idx)
+    assert (
+        h["col_names_kind"] == "pack_subset"
+        and cn["kind"] == "pack_subset"
+        and np.array_equal(cn["pack_index"], idx)
+    )
 
 
 def test_corrupt_inputs_raise_instead_of_crashing():
@@ -225,8 +287,15 @@ def test_corrupt_inputs_raise_instead_of_crashing():
             _pz2.Member(bytes(b)).decode(mode="canonical")
         except (_pz2.Pz2Error, ValueError):
             detected += 1
-    assert detected >= 20  # a flipped bit in a payload may decode to other counts; the point is that nothing crashes
-    for cut in (10, 255, 300, len(blob) // 2):  # (the last bytes belong to sections decode does not read)
+    assert (
+        detected >= 20
+    )  # a flipped bit in a payload may decode to other counts; the point is that nothing crashes
+    for cut in (
+        10,
+        255,
+        300,
+        len(blob) // 2,
+    ):  # (the last bytes belong to sections decode does not read)
         with pytest.raises((_pz2.Pz2Error, ValueError)):
             _pz2.Member(blob[:cut]).decode(mode="canonical")
 
@@ -256,7 +325,9 @@ def test_threads_do_not_change_output_and_gil_is_released():
     stop.set()
     th.join()
     assert np.array_equal(r["indices"], ref["indices"]) and np.array_equal(r["data"], ref["data"])
-    assert len(ticks) > 0.2 * dt / 0.0005 * 0.05  # the ticker thread kept running: the GIL was released while decoding
+    assert (
+        len(ticks) > 0.2 * dt / 0.0005 * 0.05
+    )  # the ticker thread kept running: the GIL was released while decoding
 
 
 @pytest.mark.parametrize("isa", ["scalar", "avx2", "avx512"])
@@ -279,9 +350,21 @@ def test_pz2_isa_env_var_gives_identical_decodes(isa, tmp_path):
         "[h.update(np.ascontiguousarray(r[k]).tobytes()) for k in ('indptr', 'indices', 'data')]; "
         "print(_pz2.selected_isa(), h.hexdigest())" % (str(pkg_dir), str(f))
     )
-    out = subprocess.run([sys.executable, "-P", "-c", code], env=dict(os.environ, PZ2_ISA=isa), capture_output=True, text=True, timeout=300)
+    out = subprocess.run(
+        [sys.executable, "-P", "-c", code],
+        env=dict(os.environ, PZ2_ISA=isa),
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
     assert out.returncode == 0, out.stderr
     sel, digest = out.stdout.split()
-    ref = subprocess.run([sys.executable, "-P", "-c", code], env=dict(os.environ, PZ2_ISA="scalar"), capture_output=True, text=True, timeout=300)
+    ref = subprocess.run(
+        [sys.executable, "-P", "-c", code],
+        env=dict(os.environ, PZ2_ISA="scalar"),
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
     assert ref.stdout.split()[1] == digest  # identical to the scalar path whatever the CPU selected
     assert sel in ("scalar", "avx2", "avx512")

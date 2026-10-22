@@ -26,7 +26,8 @@ Subcommands
   summarize    aggregate results files (counts, bytes, per-stage throughput, projection to the whole atlas)
   catalog-sql  SQL batch files (wrangler d1 execute --file) for v2_study / v2_sample / v2_migration
   catalog-post POST the same rows to the website's ingest endpoint (X-Ingest-Token)
-  refs-index   rebuild v2/ref/index.json from the packs in v2/ref/
+  refs-index   publish the reference packs and v2/ref/index.json from the package
+  retire-sql   step B of the retirement: SQL flipping v2_migration.status verified -> retired for the studies in the archived list
 
 Credentials (S3 API of the Cloudflare account): R2_ACCOUNT_ID (or R2_ENDPOINT), R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY.
 `--local-root DIR` replaces R2 with directories under DIR (tests, dry rehearsals on a copy).
@@ -1011,7 +1012,8 @@ def build_catalog_rows(manifest: Optional[dict], row: dict, members_mode: str = 
     out: Dict[str, Any] = {}
     gse = row["gse"]
     lg = (manifest or {}).get("legacy") or {}
-    status = migration_status(row)
+    has_legacy = bool(row.get("legacy_key") or lg)
+    status = migration_status(row, has_legacy)
     mig = {
         "gse_id": gse, "status": status,
         "legacy_key": row.get("legacy_key") or lg.get("key"), "legacy_etag": row.get("legacy_etag") or lg.get("etag"),
@@ -1067,11 +1069,13 @@ def treatment_counts(kinds: Dict[str, int]) -> Dict[str, int]:
     return dict(sorted(out.items()))
 
 
-def migration_status(row: dict) -> str:
-    """v2_migration.status for a campaign result row: only a fully verified, committed study is `verified`."""
+def migration_status(row: dict, has_legacy: bool = True) -> str:
+    """v2_migration.status for a campaign result row: only a fully verified, committed study is `verified`. A study that never had a
+    legacy file (published as v2 directly) has nothing to retire later: it is posted as `retired` at once, so the site never offers
+    a legacy URL for it."""
     st = row.get("status")
     if st in ("ok", "skipped_done"):
-        return "verified"
+        return "verified" if has_legacy else "retired"
     return "failed"
 
 
@@ -2054,6 +2058,61 @@ def cmd_catalog_post(a: argparse.Namespace) -> int:
     return 0
 
 
+def load_event_list(paths: Sequence[str]) -> Dict[str, dict]:
+    """{gse: last entry} from archived / restored lists written by v2_retire.py (JSON lines; a bare GSE id per line counts as archived).
+    The last line of a study wins, by its `at` time and then by position; `event` is `archived` (default) or `restored`."""
+    out: Dict[str, dict] = {}
+    for p in paths:
+        for ln in Path(p).read_text("utf-8").splitlines():
+            ln = ln.split("#")[0].strip()
+            if not ln:
+                continue
+            if ln.startswith("{"):
+                try:
+                    rec = json.loads(ln)
+                except ValueError:
+                    continue
+            else:
+                rec = {"gse": ln}
+            g = rec.get("gse")
+            if not isinstance(g, str) or not re.fullmatch(r"GSE\d+", g):
+                continue
+            rec.setdefault("event", "archived")
+            if g not in out or str(rec.get("at", "")) >= str(out[g].get("at", "")):
+                out[g] = rec
+    return out
+
+
+def cmd_retire_sql(a: argparse.Namespace) -> int:
+    """Step (B) of the retirement: SQL that flips v2_migration.status from `verified` to `retired` for the studies in the archived
+    list(s) (written by `v2_retire.py archive`, which has verified the archive copy of each), and back from `retired` to `verified`
+    for studies the list says were restored. `UPDATE ... WHERE status = 'verified'` moves only a verified row, so applying a file twice
+    is harmless; a row is about 3 D1 writes, so the whole atlas (8.2k studies) is one day. The orchestrator applies the files with
+    wrangler; the site stops offering the legacy file from the first row on, and only then may `v2_retire.py delete` remove it."""
+    last = load_event_list(a.list)
+    retired = accession_order(g for g, r in last.items() if r["event"] == "archived")
+    restored = accession_order(g for g, r in last.items() if r["event"] == "restored")
+    out = Path(a.out)
+    out.mkdir(parents=True, exist_ok=True)
+    for f in out.glob("*.sql"):
+        f.unlink()
+    names: List[str] = []
+    for tag, gses, new, old in (("retired", retired, "retired", "verified"), ("verified", restored, "verified", "retired")):
+        for i in range(0, len(gses), a.chunk):
+            ids = ", ".join(sql_literal(g) for g in gses[i : i + a.chunk])
+            name = f"{tag}_{i // a.chunk:04d}.sql"
+            sql = f"UPDATE v2_migration SET status = '{new}', updated_at = {NOW} WHERE status = '{old}' AND gse_id IN ({ids});"
+            (out / name).write_text(sql + chr(10), encoding="utf-8", newline=chr(10))
+            names.append(name)
+    writes = 3 * (len(retired) + len(restored))  # a status change rewrites the row and the status index entry
+    head = (f"# {len(retired)} studies to mark retired, {len(restored)} to mark verified again; about {writes} D1 row writes "
+            f"({'within' if writes <= DAY_BUDGET else 'OVER'} one day's {DAY_BUDGET}). Apply in this order.")
+    (out / "APPLY.txt").write_text(head + chr(10) + chr(10).join(f"wrangler d1 execute {a.database} --remote --file={n}" for n in names) + chr(10),
+                                   encoding="utf-8", newline=chr(10))
+    print(head[2:])
+    return 0
+
+
 def cmd_refs_index(a: argparse.Namespace) -> int:
     """Publish the reference packs and `v2/ref/index.json` from the package's packs directory (python/singlet/v2/packs)."""
     d = Path(a.packs_dir)
@@ -2215,6 +2274,13 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--packs-dir", default=str(REPO / "python" / "singlet" / "v2" / "packs"))
     x.add_argument("--apply", action="store_true")
     x.set_defaults(func=cmd_refs_index)
+
+    t = sub.add_parser("retire-sql", help="step B of the retirement: SQL flipping v2_migration.status verified -> retired for the archived studies")
+    t.add_argument("--list", nargs="+", required=True, help="archived / restored lists written by v2_retire.py")
+    t.add_argument("--out", required=True)
+    t.add_argument("--database", default="singlet-catalog")
+    t.add_argument("--chunk", type=int, default=500, help="studies per statement")
+    t.set_defaults(func=cmd_retire_sql)
     return ap
 
 

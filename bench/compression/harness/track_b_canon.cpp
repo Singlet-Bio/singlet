@@ -23,7 +23,10 @@ int main(int argc, char** argv) {
     decode_open(p, D, F.n, F.chunk_cols);
     std::vector<uint32_t> rk(F.nnz), vl(F.nnz);
     Scratch sc;
-    for (uint32_t c = 0; c * F.chunk_cols < F.n; ++c) decode_chunk_native(D, c, rk.data() + D.ptr[c * F.chunk_cols], vl.data() + D.ptr[c * F.chunk_cols], sc);
+    for (uint32_t c = 0; (uint64_t)c * F.chunk_cols < F.n; ++c) {
+        const size_t c0 = (size_t)c * F.chunk_cols;  // widen before multiplying: unsigned int * unsigned int can wrap
+        decode_chunk_native(D, c, rk.data() + D.ptr[c0], vl.data() + D.ptr[c0], sc);
+    }
     const int NB = 8;
     uint64_t lim[NB] = {1, 4, 16, 24, 64, 256, 1024, ~0ull};
     uint64_t nnz_b[NB] = {0}, cols_b[NB] = {0};

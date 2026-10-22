@@ -11,6 +11,7 @@ Every ranged read is checked: HTTP 206, ``Content-Range: bytes a-b/TOTAL`` equal
 for immutable objects it always does) to the expected object size, body length equal to the range. ``data.singlet.bio`` answers 403
 to the default Python-urllib User-Agent, so every request carries ``User-Agent: singlet-client/2``.
 """
+
 from __future__ import annotations
 
 import http.client
@@ -47,7 +48,7 @@ class IntegrityError(TransportError):
 class Response:
     status: int
     headers: dict
-    body: object = b""   # bytes / bytearray / memoryview
+    body: object = b""  # bytes / bytearray / memoryview
     total: Optional[int] = None  # object size from Content-Range / Content-Length
     etag: Optional[str] = None
 
@@ -96,8 +97,15 @@ class Transport:
     stats: Stats
     base: str
 
-    def get(self, key: str, rng: Optional[tuple] = None, *, expect_total: Optional[int] = None, if_none_match: Optional[str] = None,
-            kind: str = "range") -> Response:  # pragma: no cover - interface
+    def get(
+        self,
+        key: str,
+        rng: Optional[tuple] = None,
+        *,
+        expect_total: Optional[int] = None,
+        if_none_match: Optional[str] = None,
+        kind: str = "range",
+    ) -> Response:  # pragma: no cover - interface
         raise NotImplementedError
 
     def url(self, key: str) -> str:
@@ -158,7 +166,15 @@ class DirTransport(Transport):
 class HttpTransport(Transport):
     """Persistent-connection HTTP client (one connection per thread), with retries and response validation."""
 
-    def __init__(self, base: str, *, timeout: float = 60.0, retries: int = 4, user_agent: str = USER_AGENT, max_redirects: int = 3):
+    def __init__(
+        self,
+        base: str,
+        *,
+        timeout: float = 60.0,
+        retries: int = 4,
+        user_agent: str = USER_AGENT,
+        max_redirects: int = 3,
+    ):
         u = urllib.parse.urlsplit(base)
         self.scheme = u.scheme.lower()
         self.netloc = u.netloc
@@ -209,7 +225,11 @@ class HttpTransport(Transport):
     # ------------------------------------------------------------------ requests
     def get(self, key, rng=None, *, expect_total=None, if_none_match=None, kind="range"):
         path = f"{self.prefix}/{urllib.parse.quote(key.lstrip('/'), safe='/')}"
-        headers = {"User-Agent": self.user_agent, "Accept-Encoding": "identity", "Connection": "keep-alive"}
+        headers = {
+            "User-Agent": self.user_agent,
+            "Accept-Encoding": "identity",
+            "Connection": "keep-alive",
+        }
         if rng is not None:
             headers["Range"] = f"bytes={rng[0]}-{rng[1]}"
         if if_none_match:
@@ -229,10 +249,18 @@ class HttpTransport(Transport):
                 if status in (301, 302, 307, 308) and redirects < self.max_redirects:
                     loc = resp.getheader("Location") or ""
                     resp.read()
-                    nu = urllib.parse.urlsplit(urllib.parse.urljoin(f"{scheme}://{netloc}{path}", loc))
-                    if nu.scheme not in ("http", "https") or (self.scheme == "https" and nu.scheme != "https"):
+                    nu = urllib.parse.urlsplit(
+                        urllib.parse.urljoin(f"{scheme}://{netloc}{path}", loc)
+                    )
+                    if nu.scheme not in ("http", "https") or (
+                        self.scheme == "https" and nu.scheme != "https"
+                    ):
                         raise TransportError(f"refusing redirect to {loc!r}")
-                    scheme, netloc, path = nu.scheme, nu.netloc, nu.path + (("?" + nu.query) if nu.query else "")
+                    scheme, netloc, path = (
+                        nu.scheme,
+                        nu.netloc,
+                        nu.path + (("?" + nu.query) if nu.query else ""),
+                    )
                     redirects += 1
                     continue
                 hdr = {k.lower(): v for k, v in resp.getheaders()}
@@ -249,23 +277,37 @@ class HttpTransport(Transport):
             except (OSError, http.client.HTTPException, socket.timeout) as e:
                 last = e
                 self._drop(netloc, scheme)
-                if reused and stale_ok and isinstance(e, (http.client.RemoteDisconnected, ConnectionResetError, BrokenPipeError, ConnectionAbortedError)):
+                if (
+                    reused
+                    and stale_ok
+                    and isinstance(
+                        e,
+                        (
+                            http.client.RemoteDisconnected,
+                            ConnectionResetError,
+                            BrokenPipeError,
+                            ConnectionAbortedError,
+                        ),
+                    )
+                ):
                     stale_ok = False
                     continue
-                delay = min(8.0, 0.5 * (2 ** attempt)) * (0.75 + 0.5 * random.random())
+                delay = min(8.0, 0.5 * (2**attempt)) * (0.75 + 0.5 * random.random())
             attempt += 1
             if attempt <= self.retries:
                 with self._lock:
                     self.stats.retries += 1
                 time.sleep(delay)
-        raise TransportError(f"GET {self.url(key)} failed after {self.retries + 1} attempts: {last}")
+        raise TransportError(
+            f"GET {self.url(key)} failed after {self.retries + 1} attempts: {last}"
+        )
 
     @staticmethod
     def _retry_after(hdr: Mapping[str, str], attempt: int) -> float:
         ra = hdr.get("retry-after")
         if ra and ra.isdigit():
             return min(30.0, float(ra))
-        return min(8.0, 0.5 * (2 ** attempt)) * (0.75 + 0.5 * random.random())
+        return min(8.0, 0.5 * (2**attempt)) * (0.75 + 0.5 * random.random())
 
     def _finish(self, resp, status, hdr, key, rng, expect_total, kind) -> Response:
         if status == 304:
@@ -277,7 +319,9 @@ class HttpTransport(Transport):
             raise NotFound(f"{self.url(key)}: HTTP 404")
         if status == 403:
             resp.read()
-            raise TransportError(f"{self.url(key)}: HTTP 403 (the data host rejects this client; check the User-Agent and $SINGLET_DATA_BASE)")
+            raise TransportError(
+                f"{self.url(key)}: HTTP 403 (the data host rejects this client; check the User-Agent and $SINGLET_DATA_BASE)"
+            )
         if status == 416:
             resp.read()
             raise IntegrityError(f"{self.url(key)}: HTTP 416, range {rng} is outside the object")
@@ -289,15 +333,21 @@ class HttpTransport(Transport):
             m = _CONTENT_RANGE.match(hdr.get("content-range", ""))
             if not m or rng is None:
                 resp.read()
-                raise IntegrityError(f"{self.url(key)}: missing or unexpected Content-Range {hdr.get('content-range')!r}")
+                raise IntegrityError(
+                    f"{self.url(key)}: missing or unexpected Content-Range {hdr.get('content-range')!r}"
+                )
             a, b = int(m.group(1)), int(m.group(2))
             total = None if m.group(3) == "*" else int(m.group(3))
             if (a, b) != tuple(rng):
                 resp.read()
-                raise IntegrityError(f"{self.url(key)}: asked bytes {rng[0]}-{rng[1]}, server sent {a}-{b}")
+                raise IntegrityError(
+                    f"{self.url(key)}: asked bytes {rng[0]}-{rng[1]}, server sent {a}-{b}"
+                )
             if expect_total is not None and total != expect_total:
                 resp.read()
-                raise IntegrityError(f"{self.url(key)}: object is {total} bytes, expected {expect_total} (stale or replaced object)")
+                raise IntegrityError(
+                    f"{self.url(key)}: object is {total} bytes, expected {expect_total} (stale or replaced object)"
+                )
             want = b - a + 1
         else:  # 200: the whole object
             cl = hdr.get("content-length")
@@ -307,7 +357,9 @@ class HttpTransport(Transport):
                 raise IntegrityError(f"{self.url(key)}: server ignored the Range header")
             if expect_total is not None and total is not None and total != expect_total:
                 resp.read()
-                raise IntegrityError(f"{self.url(key)}: object is {total} bytes, expected {expect_total}")
+                raise IntegrityError(
+                    f"{self.url(key)}: object is {total} bytes, expected {expect_total}"
+                )
             want = total
         body = self._read_body(resp, want)
         if want is not None and len(body) != want:

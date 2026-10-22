@@ -15,6 +15,7 @@ matrix as a pz2 matrix (decision D7) and calls ``regenerate`` with the decoded m
 Both directions work in blocks of about 16 MB of text / 2 M entries, so the peak memory for the largest sample seen
 (126 MB of text, 20 M entries) stays near 300 MB.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -74,7 +75,19 @@ def parse_mtx(b: bytes):
     m, ncol, nnz = dims
     mv = memoryview(b)[e + 1 :]
     if nnz == 0:
-        return (Matrix(np.zeros(ncol + 1, dtype=np.int64), np.zeros(0, dtype=np.int64), np.zeros(0, dtype=np.int64), (m, ncol)), prefix) if len(mv) == 0 else None
+        return (
+            (
+                Matrix(
+                    np.zeros(ncol + 1, dtype=np.int64),
+                    np.zeros(0, dtype=np.int64),
+                    np.zeros(0, dtype=np.int64),
+                    (m, ncol),
+                ),
+                prefix,
+            )
+            if len(mv) == 0
+            else None
+        )
     rows = np.empty(nnz, dtype=np.int32 if m < 2**31 else np.int64)
     cols = np.empty(nnz, dtype=np.int32 if ncol < 2**31 else np.int64)
     vals = np.empty(nnz, dtype=np.int64)
@@ -106,7 +119,6 @@ def parse_mtx(b: bytes):
         return None
     # canonical order: strictly increasing (col, row)
     if nnz > 1:
-        prev = None
         for a in range(0, nnz, RENDER_BLOCK):
             bnd = min(nnz, a + RENDER_BLOCK + 1)
             key = cols[a:bnd].astype(np.int64) * np.int64(m) + rows[a:bnd].astype(np.int64)
@@ -143,7 +155,9 @@ def render_mtx(mat: Matrix, header_prefix: bytes = DEFAULT_HEADER) -> bytes:
     parts = [header_prefix + ("%d %d %d\n" % (m, ncol, nnz)).encode("ascii")]
     for a in range(0, nnz, RENDER_BLOCK):
         b = min(nnz, a + RENDER_BLOCK)
-        cols = np.searchsorted(ip, np.arange(a, b, dtype=np.int64), side="right")   # count of indptr entries <= e == 1-based column
+        cols = np.searchsorted(
+            ip, np.arange(a, b, dtype=np.int64), side="right"
+        )  # count of indptr entries <= e == 1-based column
         rows = np.asarray(mat.indices[a:b], dtype=np.int64) + 1
         vals = np.asarray(mat.data[a:b], dtype=np.int64)
         dr, dc, dv = _digits(rows), _digits(cols), _digits(vals)
@@ -173,4 +187,6 @@ def select_columns(mat: Matrix, keep: np.ndarray) -> Matrix:
         idx = np.arange(tot, dtype=np.int64) + starts
     else:
         idx = np.zeros(0, dtype=np.int64)
-    return Matrix(new_ip, mat.indices[idx], mat.data[idx], (mat.shape[0], len(keep)), None, None, None)
+    return Matrix(
+        new_ip, mat.indices[idx], mat.data[idx], (mat.shape[0], len(keep)), None, None, None
+    )

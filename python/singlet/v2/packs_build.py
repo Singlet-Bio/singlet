@@ -10,6 +10,7 @@ Inputs (not shipped): for every reference build the row-name metadata blocks of 
 Every pack is verified before it is written: the expansion equals the source names byte for byte, and, when the old ``.svp`` bodies are
 given, the new SVP0 body is compared with them. All fetched studies of a build are then compared with the expansion.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -18,14 +19,16 @@ import hashlib
 import json
 import os
 import struct
-import sys
 import time
 
 from . import packs as P
 from . import util
 
 WHITELISTS = [  # (file stem, aliases) - the 10x lists that real samples use
-    "3M-february-2018", "737K-august-2016", "737K-april-2014", "gex_737K-arc-v1",
+    "3M-february-2018",
+    "737K-august-2016",
+    "737K-april-2014",
+    "gex_737K-arc-v1",
 ]
 ALIAS = {"737K-august-2016": ["737K-august-2016", "737K-cratac-v1"]}
 SPECIES_TAG = {"GRCh38-2024-A": "GRCh38___", "GRCm39-2024-A": "GRCm39___"}
@@ -42,7 +45,7 @@ def _parse_tlv(raw: bytes):
             break
         (ln,) = struct.unpack_from("<I", raw, p)
         p += 4
-        body = raw[p:p + ln]
+        body = raw[p : p + ln]
         p += ln
         if tag == 1:
             parts = body.split(b"\0")
@@ -69,7 +72,16 @@ def build_all(vocab_src: str, wl_dir: str, out: str, svp_dir: str | None = None,
         with open(os.path.join(out, e["id"] + ".pack"), "wb") as fh:
             fh.write(buf)
         entries.append(e)
-        log("  %-9s %-24s %-7s %9d B  id %s" % (kind_name, extra.get("build", extra.get("protocol", "")), extra.get("member", ""), len(buf), e["id"]))
+        log(
+            "  %-9s %-24s %-7s %9d B  id %s"
+            % (
+                kind_name,
+                extra.get("build", extra.get("protocol", "")),
+                extra.get("member", ""),
+                len(buf),
+                e["id"],
+            )
+        )
         return e
 
     singles = [b for b in by_build if "barnyard" not in b]
@@ -85,13 +97,30 @@ def build_all(vocab_src: str, wl_dir: str, out: str, svp_dir: str | None = None,
         body = P.encode_struct(S)
         if svp_dir and os.path.exists(os.path.join(svp_dir, build + ".svp")):
             old = open(os.path.join(svp_dir, build + ".svp"), "rb").read()
-            log("  %s: SVP0 body %s the measured w4_vocab pack (%d B)" % (build, "IDENTICAL to" if old == body else "DIFFERS from", len(old)))
+            log(
+                "  %s: SVP0 body %s the measured w4_vocab pack (%d B)"
+                % (build, "IDENTICAL to" if old == body else "DIFFERS from", len(old))
+            )
         exon_pack = P.build_exon_pack(S, {"source": "%s/%s" % (gse, gsm)})
         intron_pack = P.build_intron_pack(exon_pack)
         # verification: pack -> names byte exact, vocab json byte exact
         store = P.PackStore(dirs=[out], download=False)
-        e1 = emit(exon_pack, "vocab", build=build, member="exon", n=len(ex), ship=build in ("GRCh38-2024-A", "GRCm39-2024-A"))
-        e2 = emit(intron_pack, "vocab", build=build, member="intron", n=len(it), ship=build in ("GRCh38-2024-A", "GRCm39-2024-A"))
+        e1 = emit(
+            exon_pack,
+            "vocab",
+            build=build,
+            member="exon",
+            n=len(ex),
+            ship=build in ("GRCh38-2024-A", "GRCm39-2024-A"),
+        )
+        e2 = emit(
+            intron_pack,
+            "vocab",
+            build=build,
+            member="intron",
+            n=len(it),
+            ship=build in ("GRCh38-2024-A", "GRCm39-2024-A"),
+        )
         store.rescan()
         pe, pi = store.get(e1["id"]), store.get(e2["id"])
         assert pe.names() == ex, "exon expansion differs"
@@ -100,6 +129,7 @@ def build_all(vocab_src: str, wl_dir: str, out: str, svp_dir: str | None = None,
         packs_bytes[build] = {"exon": exon_pack, "intron": intron_pack}
         # lazy lookups agree with the full expansion
         import numpy as np
+
         rng = np.random.default_rng(1)
         ii = rng.integers(0, len(ex), 2000)
         assert pe.names_at(ii) == [ex[i] for i in ii]
@@ -117,7 +147,9 @@ def build_all(vocab_src: str, wl_dir: str, out: str, svp_dir: str | None = None,
         parts = {}
         for member, names in (("exon", ex), ("intron", it)):
             comp = [(P.pack_id(packs_bytes[b][member]), SPECIES_TAG[b]) for b in (h, m)]
-            parts[member] = P.build_composite(BARNYARD, member, comp, len(names), hashlib.sha256(util.join_nul(names)).hexdigest())
+            parts[member] = P.build_composite(
+                BARNYARD, member, comp, len(names), hashlib.sha256(util.join_nul(names)).hexdigest()
+            )
         e1 = emit(parts["exon"], "vocab", build=BARNYARD, member="exon", n=len(ex), ship=False)
         e2 = emit(parts["intron"], "vocab", build=BARNYARD, member="intron", n=len(it), ship=False)
         store = P.PackStore(dirs=[out], download=False)
@@ -144,23 +176,32 @@ def build_all(vocab_src: str, wl_dir: str, out: str, svp_dir: str | None = None,
     log("  cross-study: %d/%d (study, matrix) name lists equal a pack" % (n - bad, n))
     # whitelists
     for stem in WHITELISTS:
-        txt = [l.strip() for l in open(os.path.join(wl_dir, stem + ".txt")) if l.strip()]
+        txt = [ln.strip() for ln in open(os.path.join(wl_dir, stem + ".txt")) if ln.strip()]
         names = ALIAS.get(stem, [stem])
         buf = P.build_whitelist(txt, {"protocol": stem, "names": names})
         w = P.Whitelist(buf)
         assert w.all_barcodes() == sorted(set(txt)), "whitelist roundtrip failed"
         emit(buf, "whitelist", protocol=stem, aliases=names, n=w.n, k=w.k, ship=True)
-    entries.sort(key=lambda e: (e["kind"], e.get("build", ""), e.get("member", ""), e.get("protocol", "")))
+    entries.sort(
+        key=lambda e: (e["kind"], e.get("build", ""), e.get("member", ""), e.get("protocol", ""))
+    )
     P.write_index(entries, os.path.join(out, "index.json"))
-    log("wrote %d packs, %d bytes total, index.json" % (len(entries), sum(e["bytes"] for e in entries)))
+    log(
+        "wrote %d packs, %d bytes total, index.json"
+        % (len(entries), sum(e["bytes"] for e in entries))
+    )
     return entries
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("--vocab-src", default="bench/compression/corpus_w4_vocab")
     ap.add_argument("--whitelists", default="python/singlet/data/whitelists")
-    ap.add_argument("--out", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "packs"))
+    ap.add_argument(
+        "--out", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "packs")
+    )
     ap.add_argument("--svp", default="bench/compression/results/w4_vocab_packs")
     a = ap.parse_args(argv)
     build_all(a.vocab_src, a.whitelists, a.out, a.svp)

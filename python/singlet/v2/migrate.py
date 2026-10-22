@@ -13,18 +13,16 @@ Output tree under ``DIR`` (the R2 key space)::
 Verify-or-store (docs/format-v2.md section 1): every component is rebuilt from the finished object alone and compared with the
 legacy content; a recipe that does not reproduce a member on that very sample is replaced by storing the member (kind 3, zstd-19).
 """
+
 from __future__ import annotations
 
 import argparse
 import datetime as _dt
-import hashlib
 import json
 import os
 import re
-import shutil
 import sys
 import time
-import traceback
 from typing import Optional
 
 import numpy as np
@@ -35,26 +33,51 @@ from . import manifest as M
 from . import packs as P
 from . import util
 from .codec import CodecError, EncodeOptions, PyCodec2, get_codec, parse_header
-from .context import LegacyContext, StudyContext, V2Context, cells_to_dict, csc_to_rmatrix, rmatrix_to_csc
+from .context import (
+    LegacyContext,
+    StudyContext,
+    V2Context,
+    rmatrix_to_csc,
+)
 from .legacy import LegacyBundle
 from .matrix import Csc
 from .rcp_adapter import Recipes, load_recipes
 from .sample import V2Sample
 
 ANNDATA_MEMBERS = ("exon_counts.1pz", "intron_counts.1pz", "cell_calls.tsv")
-NEVER_DERIVED = ("exon_counts.1pz", "intron_counts.1pz")      # always pz2: recipes are not asked about them
-KIND_LABEL = {C.KIND_PZ2: "pz2", C.KIND_CELLS: "cells", C.KIND_STORED: "stored", C.KIND_DERIVED: "derived", C.KIND_RAW: "raw"}
+NEVER_DERIVED = (
+    "exon_counts.1pz",
+    "intron_counts.1pz",
+)  # always pz2: recipes are not asked about them
+KIND_LABEL = {
+    C.KIND_PZ2: "pz2",
+    C.KIND_CELLS: "cells",
+    C.KIND_STORED: "stored",
+    C.KIND_DERIVED: "derived",
+    C.KIND_RAW: "raw",
+}
 
 
 class Options:
-    def __init__(self, chunk_cols: int = 0, level: int = util.ZSTD_LEVEL, codec: Optional[str] = None, recipes=None,
-                 created_at: Optional[str] = None, threads: int = 4, log=None, packs: Optional[P.PackStore] = None,
-                 max_stage2_rounds: int = 4):
+    def __init__(
+        self,
+        chunk_cols: int = 0,
+        level: int = util.ZSTD_LEVEL,
+        codec: Optional[str] = None,
+        recipes=None,
+        created_at: Optional[str] = None,
+        threads: int = 4,
+        log=None,
+        packs: Optional[P.PackStore] = None,
+        max_stage2_rounds: int = 4,
+    ):
         self.chunk_cols = chunk_cols
         self.level = level
         self.codec = get_codec(codec)
         self.recipes: Recipes = recipes if isinstance(recipes, Recipes) else load_recipes(recipes)
-        self.created_at = created_at or _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.created_at = created_at or _dt.datetime.now(_dt.timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
         self.threads = threads
         self.log = log or (lambda *a: print(*a, file=sys.stderr, flush=True))
         self.packs = packs or P.default_store()
@@ -91,7 +114,9 @@ def _row_names_for(csc: Csc, rel: str, lctx: LegacyContext, opts: Options):
         pk = lctx._vocab_pack(kind)
         if pk is not None and pk.matches(csc.rownames):
             return ("pack", pk.id[:8]), {"pack": pk.id.hex(), "member": kind}
-    if kind is None and csc.m >= 1000 and csc.rownames:   # auxiliary gene-level matrices: rows = the gene table in vocabulary order
+    if (
+        kind is None and csc.m >= 1000 and csc.rownames
+    ):  # auxiliary gene-level matrices: rows = the gene table in vocabulary order
         pk = lctx._vocab_pack("exon")
         if pk is not None and pk.header.get("n_genes") == csc.m:
             genes = [g for g, _n in pk.gene_table()]
@@ -105,26 +130,44 @@ def _col_names_for(csc: Csc, basis_barcodes: Optional[list], opts: Options):
         return "none", "none"
     if csc.n == 0:
         return "inline", "inline"
-    if basis_barcodes is not None and csc.n == len(basis_barcodes) and csc.colnames == basis_barcodes:
+    if (
+        basis_barcodes is not None
+        and csc.n == len(basis_barcodes)
+        and csc.colnames == basis_barcodes
+    ):
         return "cells", "cells"
     if csc.n >= 10000 and csc.colnames:
         hit = opts.packs.find_whitelist(csc.colnames)
         if hit is not None:
             w, idx = hit
             if len(idx) == w.n and np.array_equal(idx, np.arange(w.n)):
-                return ("pack", w.id[:8]), {"pack": w.id.hex()}          # the whole list: nothing stored
+                return ("pack", w.id[:8]), {"pack": w.id.hex()}  # the whole list: nothing stored
             return ("subset", w.id[:8], idx), {"pack": w.id.hex()}
     return "inline", "inline"
 
 
 # ================================================================================================ per sample
 class _Member:
-    __slots__ = ("rel", "path", "entry", "treat", "note", "csc", "plan", "bytes_exact", "body", "meta", "verified",
-                 "verify_mode", "contrib", "force_py")
+    __slots__ = (
+        "rel",
+        "path",
+        "entry",
+        "treat",
+        "note",
+        "csc",
+        "plan",
+        "bytes_exact",
+        "body",
+        "meta",
+        "verified",
+        "verify_mode",
+        "contrib",
+        "force_py",
+    )
 
     def __init__(self, rel, path, entry):
         self.rel, self.path, self.entry = rel, path, entry
-        self.treat = "stored"          # pz2 | derived | stored
+        self.treat = "stored"  # pz2 | derived | stored
         self.note = ""
         self.csc: Optional[Csc] = None
         self.plan = None
@@ -147,17 +190,27 @@ def _parse_json(b: Optional[bytes]) -> dict:
         return {}
 
 
-def migrate_sample(bundle: LegacyBundle, gsm: str, gse: str, reference_build: str, study_bytes: dict, opts: Options) -> dict:
+def migrate_sample(
+    bundle: LegacyBundle, gsm: str, gse: str, reference_build: str, study_bytes: dict, opts: Options
+) -> dict:
     t0 = time.time()
     log = opts.log
     packs = opts.packs
     recipes = opts.recipes
     paths = bundle.sample_paths(gsm)
-    summary = _parse_json(bundle.read("samples/%s/summary.json" % gsm) if bundle.exists("samples/%s/summary.json" % gsm) else None)
+    summary = _parse_json(
+        bundle.read("samples/%s/summary.json" % gsm)
+        if bundle.exists("samples/%s/summary.json" % gsm)
+        else None
+    )
     protocol = str(summary.get("protocol_name", ""))
     build = reference_build or summary.get("reference_build", "")
-    pipeline = {k: summary.get(k) for k in ("git_sha", "singlet_version") if summary.get(k) is not None}
-    facts = {k: v for k, v in (("reference_build", build), ("protocol_name", protocol)) if v}     # sample facts recipes may ask for
+    pipeline = {
+        k: summary.get(k) for k in ("git_sha", "singlet_version") if summary.get(k) is not None
+    }
+    facts = {
+        k: v for k, v in (("reference_build", build), ("protocol_name", protocol)) if v
+    }  # sample facts recipes may ask for
     lctx = LegacyContext(bundle, gsm, packs, gse, build, protocol, study_bytes)
     mem: dict[str, _Member] = {}
     order = []
@@ -184,7 +237,11 @@ def migrate_sample(bundle: LegacyBundle, gsm: str, gse: str, reference_build: st
     ex, it = mem.get("exon_counts.1pz"), mem.get("intron_counts.1pz")
     ex_c = ex.csc if ex is not None and ex.treat == "pz2" else None
     it_c = it.csc if it is not None and it.treat == "pz2" else None
-    basis = ex_c if ex_c is not None and ex_c.n > 0 else (it_c if it_c is not None and it_c.n > 0 else None)
+    basis = (
+        ex_c
+        if ex_c is not None and ex_c.n > 0
+        else (it_c if it_c is not None and it_c.n > 0 else None)
+    )
     base = None
     basis_barcodes = None
     wl_id = None
@@ -202,13 +259,15 @@ def migrate_sample(bundle: LegacyBundle, gsm: str, gse: str, reference_build: st
             called_src = "all"
         else:
             cs = set(called_list)
-            called = np.fromiter((b in cs for b in basis_barcodes), dtype=bool, count=len(basis_barcodes))
+            called = np.fromiter(
+                (b in cs for b in basis_barcodes), dtype=bool, count=len(basis_barcodes)
+            )
             called_src = "cell_calls.tsv"
         base = cells_mod.base_table(basis_barcodes, ex_c, it_c, called, wl)
         base.meta = {"called_source": called_src, "whitelist": wl_id}
 
     # ---- 3. candidate cells columns from the recipes
-    cand: dict[str, tuple] = {}     # name -> (dtype, values, contributor rel)
+    cand: dict[str, tuple] = {}  # name -> (dtype, values, contributor rel)
     if base is not None:
         full = base.copy()
         lctx.set_cells(full)
@@ -260,24 +319,43 @@ def migrate_sample(bundle: LegacyBundle, gsm: str, gse: str, reference_build: st
     rounds = 0
     while True:
         rounds += 1
-        obj, infos, cells_final = _assemble(gsm, order, mem, base, cand, lctx, opts, basis_barcodes, pipeline, facts)
-        fails, downgrades = _stage2(obj, mem, lctx, opts, gse, build, protocol, study_bytes, packs, basis_barcodes)
+        obj, infos, cells_final = _assemble(
+            gsm, order, mem, base, cand, lctx, opts, basis_barcodes, pipeline, facts
+        )
+        fails, downgrades = _stage2(
+            obj, mem, lctx, opts, gse, build, protocol, study_bytes, packs, basis_barcodes
+        )
         if not fails and not downgrades:
             break
         if rounds >= opts.max_stage2_rounds:
-            raise RuntimeError("sample %s does not converge after %d stage-2 rounds: %r %r" % (gsm, rounds, fails, downgrades))
+            raise RuntimeError(
+                "sample %s does not converge after %d stage-2 rounds: %r %r"
+                % (gsm, rounds, fails, downgrades)
+            )
         for rel in downgrades:
             mem[rel].bytes_exact = False
-            mem[rel].note = "container bytes not reproduced from the object; canonical matrix derivation kept"
+            mem[
+                rel
+            ].note = (
+                "container bytes not reproduced from the object; canonical matrix derivation kept"
+            )
         for rel, why in fails.items():
             m = mem[rel]
             if m.treat == "pz2" and not m.force_py and not isinstance(opts.codec, PyCodec2):
-                log("  [%s] %s: stage-2 check failed (%s); re-encoding with the pure-Python codec" % (gsm, rel, why))
+                log(
+                    "  [%s] %s: stage-2 check failed (%s); re-encoding with the pure-Python codec"
+                    % (gsm, rel, why)
+                )
                 m.force_py, m.body = True, None
                 continue
             m.note = "stage-2 %s: %s" % (m.treat, why)
-            if m.treat == "derived" and m.csc is not None:       # a derived matrix falls back to a pz2 member, not to raw bytes
-                log("  [%s] %s: stage-2 check failed (%s); coding the matrix directly" % (gsm, rel, why))
+            if (
+                m.treat == "derived" and m.csc is not None
+            ):  # a derived matrix falls back to a pz2 member, not to raw bytes
+                log(
+                    "  [%s] %s: stage-2 check failed (%s); coding the matrix directly"
+                    % (gsm, rel, why)
+                )
                 m.treat, m.plan, m.body = "pz2", None, None
             else:
                 log("  [%s] %s: stage-2 check failed (%s); storing the member" % (gsm, rel, why))
@@ -294,9 +372,18 @@ def migrate_sample(bundle: LegacyBundle, gsm: str, gse: str, reference_build: st
     ledger = _ledger(gse, gsm, key, order, mem, infos, obj)
     stats = cells_final.stats() if cells_final is not None else {}
     res = {
-        "gsm": gsm, "key": key, "obj": obj, "entry": M.sample_entry(gsm, key, obj, n_cols, n_called, members, stats),
-        "ledger": ledger, "legacy_bytes": legacy_bytes, "legacy_zip_bytes": sum(mem[r].entry.csize for r in order),
-        "v2_bytes": len(obj), "seconds": time.time() - t0, "rounds": rounds, "pipeline": pipeline, "kinds": _kind_counts(infos),
+        "gsm": gsm,
+        "key": key,
+        "obj": obj,
+        "entry": M.sample_entry(gsm, key, obj, n_cols, n_called, members, stats),
+        "ledger": ledger,
+        "legacy_bytes": legacy_bytes,
+        "legacy_zip_bytes": sum(mem[r].entry.csize for r in order),
+        "v2_bytes": len(obj),
+        "seconds": time.time() - t0,
+        "rounds": rounds,
+        "pipeline": pipeline,
+        "kinds": _kind_counts(infos),
         "pack_ids": _pack_ids(infos),
     }
     return res
@@ -321,7 +408,9 @@ def _kind_counts(infos) -> dict:
     return out
 
 
-def _verify_plan_stage1(recipes: Recipes, rel: str, data: bytes, plan, lctx: LegacyContext, m: _Member):
+def _verify_plan_stage1(
+    recipes: Recipes, rel: str, data: bytes, plan, lctx: LegacyContext, m: _Member
+):
     """Run the recipe against the legacy context. -> (ok, reason, bytes_exact)."""
     rid, params, needs = plan
     try:
@@ -344,7 +433,11 @@ def _verify_plan_stage1(recipes: Recipes, rel: str, data: bytes, plan, lctx: Leg
             return True, "", exact
         out = recipes.regenerate_bytes(rid, params, lctx)
         if bytes(out) != data:
-            return False, "regenerated %d bytes differ from the legacy %d bytes" % (len(out), len(data)), False
+            return (
+                False,
+                "regenerated %d bytes differ from the legacy %d bytes" % (len(out), len(data)),
+                False,
+            )
         return True, "", True
     except Exception as e:
         return False, "%s: %s" % (type(e).__name__, e), False
@@ -368,10 +461,23 @@ def _assemble(gsm, order, mem, base, cand, lctx, opts: Options, basis_barcodes, 
                 cells_final.add(k, cand[k][0], cand[k][1])
         cells_final.meta = dict(base.meta)
         body = cells_final.encode(opts.level)
-        w.add_cells("cells", body, cells_final.digest(),
-                    {"n_rows": cells_final.n_rows, "columns": cells_final.names, "called_source": base.meta.get("called_source"),
-                     "whitelist": base.meta.get("whitelist"), "ctx": facts}, flags=C.FLAG_ANNDATA)
-    legacy_vt = lambda c: int(c.meta.get("legacy_vt_code", c.value_type))
+        w.add_cells(
+            "cells",
+            body,
+            cells_final.digest(),
+            {
+                "n_rows": cells_final.n_rows,
+                "columns": cells_final.names,
+                "called_source": base.meta.get("called_source"),
+                "whitelist": base.meta.get("whitelist"),
+                "ctx": facts,
+            },
+            flags=C.FLAG_ANNDATA,
+        )
+
+    def legacy_vt(c):
+        return int(c.meta.get("legacy_vt_code", c.value_type))
+
     for rel in order:
         m = mem[rel]
         e = m.entry
@@ -381,22 +487,37 @@ def _assemble(gsm, order, mem, base, cand, lctx, opts: Options, basis_barcodes, 
             if m.body is None:
                 row_ref, row_meta = _row_names_for(m.csc, rel, lctx, opts)
                 col_ref, col_meta = _col_names_for(m.csc, basis_barcodes, opts)
-                eo = EncodeOptions(chunk_cols=opts.chunk_cols, row_names=row_ref, col_names=col_ref, level=opts.level, threads=opts.threads)
+                eo = EncodeOptions(
+                    chunk_cols=opts.chunk_cols,
+                    row_names=row_ref,
+                    col_names=col_ref,
+                    level=opts.level,
+                    threads=opts.threads,
+                )
                 try:
                     if m.force_py:
                         raise CodecError("pure-Python codec requested after a failed check")
                     m.body = opts.codec.encode(m.csc, eo)
                 except CodecError as ex:
                     try:
-                        m.body = PyCodec2().encode(m.csc, eo)      # generic codec in pure Python is the universal fallback
+                        m.body = PyCodec2().encode(
+                            m.csc, eo
+                        )  # generic codec in pure Python is the universal fallback
                         m.note = "codec 2 (pure Python): %s" % ex
                     except CodecError as ex2:
                         m.treat, m.note = "stored", "codec refused the matrix: %s" % ex2
                         m.body = None
                 if m.body is not None:
-                    m.meta = {"m": m.csc.m, "n": m.csc.n, "nnz": m.csc.nnz, "legacy_vt_code": legacy_vt(m.csc),
-                              "chunk_cols": parse_header(m.body)["chunk_cols"], "names": {"rows": row_meta, "cols": col_meta},
-                              "legacy_size": e.size, "legacy_crc32": e.crc32}
+                    m.meta = {
+                        "m": m.csc.m,
+                        "n": m.csc.n,
+                        "nnz": m.csc.nnz,
+                        "legacy_vt_code": legacy_vt(m.csc),
+                        "chunk_cols": parse_header(m.body)["chunk_cols"],
+                        "names": {"rows": row_meta, "cols": col_meta},
+                        "legacy_size": e.size,
+                        "legacy_crc32": e.crc32,
+                    }
             if m.treat == "pz2":
                 w.add_matrix(rel, m.body, m.csc.digest(), m.meta, flags)
                 continue
@@ -412,12 +533,16 @@ def _assemble(gsm, order, mem, base, cand, lctx, opts: Options, basis_barcodes, 
             if rel.endswith(".1pz"):
                 leg = lctx.csc(rel)
                 meta["bytes_exact"] = bool(m.bytes_exact)
-                meta["legacy_vt_code"] = int(leg.meta.get("legacy_vt_code", leg.value_type)) if leg is not None else 3
+                meta["legacy_vt_code"] = (
+                    int(leg.meta.get("legacy_vt_code", leg.value_type)) if leg is not None else 3
+                )
                 dg = leg.digest() if leg is not None else util.d16(data)
             else:
                 dg = util.d16(data)
             exact = (not rel.endswith(".1pz")) or m.bytes_exact
-            w.add_derived(rel, len(data) if exact else 0, util.crc32(data) if exact else 0, dg, meta, flags)
+            w.add_derived(
+                rel, len(data) if exact else 0, util.crc32(data) if exact else 0, dg, meta, flags
+            )
         else:
             meta = {"note": m.note} if m.note else {}
             w.add_stored(rel, data, meta, flags, opts.level)
@@ -437,6 +562,7 @@ def _assemble(gsm, order, mem, base, cand, lctx, opts: Options, basis_barcodes, 
                         aux_needed.append(n)
     if aux_needed:
         from .context import _dump_vector
+
         for a in aux_needed:
             if a.startswith("vector:"):
                 w.add_stored(a, _dump_vector(lctx.aux_vectors[a[7:]]), {"aux": True}, 0, opts.level)
@@ -444,13 +570,32 @@ def _assemble(gsm, order, mem, base, cand, lctx, opts: Options, basis_barcodes, 
                 c = lctx.aux_matrices[a]
                 row_ref, row_meta = _row_names_for(c, a, lctx, opts)
                 col_ref, col_meta = _col_names_for(c, basis_barcodes, opts)
-                eo = EncodeOptions(chunk_cols=opts.chunk_cols, row_names=row_ref, col_names=col_ref, level=opts.level, threads=opts.threads)
+                eo = EncodeOptions(
+                    chunk_cols=opts.chunk_cols,
+                    row_names=row_ref,
+                    col_names=col_ref,
+                    level=opts.level,
+                    threads=opts.threads,
+                )
                 try:
                     body = opts.codec.encode(c, eo)
                 except CodecError:
                     body = PyCodec2().encode(c, eo)
-                w.add_matrix(a, body, c.digest(), {"m": c.m, "n": c.n, "nnz": c.nnz, "legacy_vt_code": c.value_type, "aux": True,
-                                                    "chunk_cols": parse_header(body)["chunk_cols"], "names": {"rows": row_meta, "cols": col_meta}}, 0)
+                w.add_matrix(
+                    a,
+                    body,
+                    c.digest(),
+                    {
+                        "m": c.m,
+                        "n": c.n,
+                        "nnz": c.nnz,
+                        "legacy_vt_code": c.value_type,
+                        "aux": True,
+                        "chunk_cols": parse_header(body)["chunk_cols"],
+                        "names": {"rows": row_meta, "cols": col_meta},
+                    },
+                    0,
+                )
             elif a in lctx.aux_blobs:
                 w.add_stored(a, lctx.aux_blobs[a], {"aux": True}, 0, opts.level)
     obj = w.build()
@@ -458,8 +603,18 @@ def _assemble(gsm, order, mem, base, cand, lctx, opts: Options, basis_barcodes, 
 
 
 # ------------------------------------------------------------------------------------------------ stage 2
-def _stage2(obj: bytes, mem: dict, lctx: LegacyContext, opts: Options, gse, build, protocol, study_bytes, packs,
-            base_barcodes) -> tuple:
+def _stage2(
+    obj: bytes,
+    mem: dict,
+    lctx: LegacyContext,
+    opts: Options,
+    gse,
+    build,
+    protocol,
+    study_bytes,
+    packs,
+    base_barcodes,
+) -> tuple:
     """Rebuild everything from the finished object alone and compare with the legacy content.
 
     -> (fails, downgrades): ``fails`` {rel: reason} members that must be stored; ``downgrades`` [rel] derived ``.1pz`` members whose
@@ -490,7 +645,9 @@ def _stage2(obj: bytes, mem: dict, lctx: LegacyContext, opts: Options, gse, buil
             except Exception:
                 ok = False
             if not ok:
-                raise RuntimeError("stored member %s does not round-trip" % rel)   # only a broken zstd can do this
+                raise RuntimeError(
+                    "stored member %s does not round-trip" % rel
+                )  # only a broken zstd can do this
             m.verify_mode = "bytes"
         else:
             try:
@@ -516,7 +673,10 @@ def _stage2(obj: bytes, mem: dict, lctx: LegacyContext, opts: Options, gse, buil
                 else:
                     out = ctx.regenerate(rel)
                     if bytes(out) != data:
-                        fails[rel] = "regenerated %d bytes differ from the legacy %d bytes" % (len(out), len(data))
+                        fails[rel] = "regenerated %d bytes differ from the legacy %d bytes" % (
+                            len(out),
+                            len(data),
+                        )
                     else:
                         m.verify_mode = "bytes"
             except Exception as e:
@@ -529,21 +689,46 @@ def _stage2(obj: bytes, mem: dict, lctx: LegacyContext, opts: Options, gse, buil
 
 # ------------------------------------------------------------------------------------------------ records
 def _manifest_member(info: C.MemberInfo, obj: bytes) -> dict:
-    d = {"kind": info.kind, "flags": info.flags, "off": info.off, "len": info.len, "digest": info.digest.hex()}
+    d = {
+        "kind": info.kind,
+        "flags": info.flags,
+        "off": info.off,
+        "len": info.len,
+        "digest": info.digest.hex(),
+    }
     if info.kind in (C.KIND_STORED, C.KIND_DERIVED, C.KIND_RAW):
         d["out_len"], d["crc32"] = info.out_len, info.crc32
     meta = info.meta or {}
     if info.kind == C.KIND_PZ2:
         from .codec import parse_header
-        h = parse_header(obj[info.off:info.off + 256])
+
+        h = parse_header(obj[info.off : info.off + 256])
         ioff, ilen = h["sections"]["chunk_index"]
-        d.update({"m": h["m"], "n": h["n"], "nnz": h["nnz"], "codec": h["codec"], "chunk_cols": h["chunk_cols"],
-                  "n_chunks": h["n_chunks"], "chunk_index": [info.off + ioff, ilen], "names": meta.get("names")})
+        d.update(
+            {
+                "m": h["m"],
+                "n": h["n"],
+                "nnz": h["nnz"],
+                "codec": h["codec"],
+                "chunk_cols": h["chunk_cols"],
+                "n_chunks": h["n_chunks"],
+                "chunk_index": [info.off + ioff, ilen],
+                "names": meta.get("names"),
+            }
+        )
     elif info.kind == C.KIND_DERIVED:
-        d.update({"recipe": meta.get("recipe"), "params": meta.get("params"), "needs": meta.get("needs")})
+        d.update(
+            {"recipe": meta.get("recipe"), "params": meta.get("params"), "needs": meta.get("needs")}
+        )
     elif info.kind == C.KIND_CELLS:
-        d.update({"columns": meta.get("columns"), "n_rows": meta.get("n_rows"), "whitelist": meta.get("whitelist"),
-                  "called_source": meta.get("called_source")})
+        d.update(
+            {
+                "columns": meta.get("columns"),
+                "n_rows": meta.get("n_rows"),
+                "whitelist": meta.get("whitelist"),
+                "called_source": meta.get("called_source"),
+            }
+        )
     return d
 
 
@@ -554,20 +739,54 @@ def _ledger(gse, gsm, key, order, mem, infos, obj) -> list:
         m = mem[rel]
         i = by[rel]
         e = m.entry
-        treat = {C.KIND_PZ2: "matrix", C.KIND_DERIVED: "recipe", C.KIND_STORED: "stored", C.KIND_RAW: "raw"}[i.kind]
-        lines.append({"type": "member", "gse": gse, "gsm": gsm, "member": e.path, "legacy_size": e.size, "legacy_zip_bytes": e.csize,
-                      "legacy_method": e.method, "legacy_crc32": "%08x" % e.crc32, "v2_object": key, "v2_name": rel,
-                      "v2_kind": KIND_LABEL[i.kind], "treatment": treat, "recipe": (i.meta or {}).get("recipe"),
-                      "v2_bytes": i.len, "verified": bool(m.verified), "verify_mode": m.verify_mode, "note": m.note})
+        treat = {
+            C.KIND_PZ2: "matrix",
+            C.KIND_DERIVED: "recipe",
+            C.KIND_STORED: "stored",
+            C.KIND_RAW: "raw",
+        }[i.kind]
+        lines.append(
+            {
+                "type": "member",
+                "gse": gse,
+                "gsm": gsm,
+                "member": e.path,
+                "legacy_size": e.size,
+                "legacy_zip_bytes": e.csize,
+                "legacy_method": e.method,
+                "legacy_crc32": "%08x" % e.crc32,
+                "v2_object": key,
+                "v2_name": rel,
+                "v2_kind": KIND_LABEL[i.kind],
+                "treatment": treat,
+                "recipe": (i.meta or {}).get("recipe"),
+                "v2_bytes": i.len,
+                "verified": bool(m.verified),
+                "verify_mode": m.verify_mode,
+                "note": m.note,
+            }
+        )
     for i in infos:
         if i.name not in mem:
-            lines.append({"type": "v2member", "gse": gse, "gsm": gsm, "v2_object": key, "v2_name": i.name, "v2_kind": KIND_LABEL[i.kind],
-                          "v2_bytes": i.len, "legacy": False})
+            lines.append(
+                {
+                    "type": "v2member",
+                    "gse": gse,
+                    "gsm": gsm,
+                    "v2_object": key,
+                    "v2_name": i.name,
+                    "v2_kind": KIND_LABEL[i.kind],
+                    "v2_bytes": i.len,
+                    "legacy": False,
+                }
+            )
     return lines
 
 
 # ================================================================================================ study level
-def migrate_study_files(bundle: LegacyBundle, gse: str, reference_build: str, opts: Options, only: Optional[set] = None):
+def migrate_study_files(
+    bundle: LegacyBundle, gse: str, reference_build: str, opts: Options, only: Optional[set] = None
+):
     files = {}
     for p in bundle.study_paths():
         files[p] = bundle.read(p)
@@ -592,14 +811,28 @@ def migrate_study_files(bundle: LegacyBundle, gse: str, reference_build: str, op
         ent = M.study_file_entry(data, plan)
         # stage 2: from the manifest entry alone
         sc2 = StudyContext(gse, reference_build, {}, opts.packs)
-        back = M.study_file_bytes(ent, lambda rid, prm: opts.recipes.regenerate_bytes(rid, prm, sc2))
+        back = M.study_file_bytes(
+            ent, lambda rid, prm: opts.recipes.regenerate_bytes(rid, prm, sc2)
+        )
         assert back == data, "study file %s does not round-trip" % name
         entries[name] = ent
         e = bundle.entries[name]
         treat = "recipe" if "recipe" in ent else ("json" if "json" in ent else "stored")
-        ledger.append({"type": "study_file", "gse": gse, "member": name, "legacy_size": e.size, "legacy_zip_bytes": e.csize,
-                       "legacy_crc32": "%08x" % e.crc32, "treatment": treat, "recipe": ent.get("recipe"), "verified": True,
-                       "verify_mode": "bytes", "note": note})
+        ledger.append(
+            {
+                "type": "study_file",
+                "gse": gse,
+                "member": name,
+                "legacy_size": e.size,
+                "legacy_zip_bytes": e.csize,
+                "legacy_crc32": "%08x" % e.crc32,
+                "treatment": treat,
+                "recipe": ent.get("recipe"),
+                "verified": True,
+                "verify_mode": "bytes",
+                "note": note,
+            }
+        )
     return entries, ledger, files
 
 
@@ -621,7 +854,13 @@ def _gse_of(bundle: LegacyBundle, files: dict, override: Optional[str]) -> str:
     return _safe_id(mf.get("gse_id") or bundle.gse_hint or "GSE0", "study id")
 
 
-def migrate_bundle(src, out_dir: str, gse: Optional[str] = None, opts: Optional[Options] = None, samples: Optional[list] = None) -> dict:
+def migrate_bundle(
+    src,
+    out_dir: str,
+    gse: Optional[str] = None,
+    opts: Optional[Options] = None,
+    samples: Optional[list] = None,
+) -> dict:
     opts = opts or Options()
     log = opts.log
     t0 = time.time()
@@ -629,8 +868,13 @@ def migrate_bundle(src, out_dir: str, gse: Optional[str] = None, opts: Optional[
     study_raw = {p: bundle.read(p) for p in bundle.study_paths()}
     gse = _gse_of(bundle, study_raw, gse)
     mf = _parse_json(study_raw.get("manifest.json"))
-    reference_build = mf.get("reference_build") or _parse_json(study_raw.get("feature_vocab.json")).get("reference_build", "")
-    log("migrate %s: %d members, %d samples, build %s" % (gse, len(bundle.entries), len(bundle.samples()), reference_build))
+    reference_build = mf.get("reference_build") or _parse_json(
+        study_raw.get("feature_vocab.json")
+    ).get("reference_build", "")
+    log(
+        "migrate %s: %d members, %d samples, build %s"
+        % (gse, len(bundle.entries), len(bundle.samples()), reference_build)
+    )
     root = os.path.join(out_dir, "v2")
     for d in ("s", "m", "ledger", "ref"):
         os.makedirs(os.path.join(root, d), exist_ok=True)
@@ -647,25 +891,63 @@ def migrate_bundle(src, out_dir: str, gse: Optional[str] = None, opts: Optional[
             fh.write(r["obj"])
         sample_entries.append(r["entry"])
         ledger.extend(r["ledger"])
-        ledger.append({"type": "sample", "gse": gse, "gsm": gsm, "v2_object": r["key"], "legacy_bytes": r["legacy_bytes"],
-                       "legacy_zip_bytes": r["legacy_zip_bytes"], "v2_bytes": r["v2_bytes"], "seconds": round(r["seconds"], 2),
-                       "kinds": r["kinds"], "stage2_rounds": r["rounds"]})
+        ledger.append(
+            {
+                "type": "sample",
+                "gse": gse,
+                "gsm": gsm,
+                "v2_object": r["key"],
+                "legacy_bytes": r["legacy_bytes"],
+                "legacy_zip_bytes": r["legacy_zip_bytes"],
+                "v2_bytes": r["v2_bytes"],
+                "seconds": round(r["seconds"], 2),
+                "kinds": r["kinds"],
+                "stage2_rounds": r["rounds"],
+            }
+        )
         for k in ("legacy_bytes", "legacy_zip_bytes", "v2_bytes"):
             totals[k] += r[k]
         totals["seconds"] += r["seconds"]
         pipeline = pipeline or r["pipeline"]
         pack_ids |= r["pack_ids"]
-        log("  %s: legacy %d B (zip %d) -> v2 %d B  [%s]  %.1fs" % (gsm, r["legacy_bytes"], r["legacy_zip_bytes"], r["v2_bytes"],
-                                                                    ", ".join("%s %d" % kv for kv in sorted(r["kinds"].items())), r["seconds"]))
+        log(
+            "  %s: legacy %d B (zip %d) -> v2 %d B  [%s]  %.1fs"
+            % (
+                gsm,
+                r["legacy_bytes"],
+                r["legacy_zip_bytes"],
+                r["v2_bytes"],
+                ", ".join("%s %d" % kv for kv in sorted(r["kinds"].items())),
+                r["seconds"],
+            )
+        )
     for ent in sfiles.values():
         for pid in [ent.get("params", {}).get("pack")] if "recipe" in ent else []:
             if pid:
                 pack_ids.add(pid)
-    legacy = {"key": "data/%s/%s.singlet" % (gse, gse), "etag": bundle.etag, "bytes": bundle.size, "migrated_at": opts.created_at,
-              "ledger": "v2/ledger/%s.jsonl" % gse}
-    return {"gse": gse, "root": root, "samples": sample_entries, "study_files": sfiles, "ledger": ledger, "totals": totals,
-            "pipeline": pipeline, "reference_build": reference_build, "legacy": legacy, "pack_ids": pack_ids,
-            "packs": _manifest_packs(sample_entries, opts.packs), "gsms": gsms, "bundle": bundle, "seconds": time.time() - t0}
+    legacy = {
+        "key": "data/%s/%s.singlet" % (gse, gse),
+        "etag": bundle.etag,
+        "bytes": bundle.size,
+        "migrated_at": opts.created_at,
+        "ledger": "v2/ledger/%s.jsonl" % gse,
+    }
+    return {
+        "gse": gse,
+        "root": root,
+        "samples": sample_entries,
+        "study_files": sfiles,
+        "ledger": ledger,
+        "totals": totals,
+        "pipeline": pipeline,
+        "reference_build": reference_build,
+        "legacy": legacy,
+        "pack_ids": pack_ids,
+        "packs": _manifest_packs(sample_entries, opts.packs),
+        "gsms": gsms,
+        "bundle": bundle,
+        "seconds": time.time() - t0,
+    }
 
 
 def _manifest_packs(sample_entries: list, store: P.PackStore) -> dict:
@@ -692,7 +974,9 @@ def write_outputs(res: dict, opts: Options) -> dict:
     store = opts.packs
     ref_ids = set(res["pack_ids"])
     todo = list(ref_ids)
-    while todo:       # close over dependencies: intron packs name their exon pack, composites their parts
+    while (
+        todo
+    ):  # close over dependencies: intron packs name their exon pack, composites their parts
         pk = store.get(todo.pop())
         deps = []
         if isinstance(pk, P.VocabPack):
@@ -711,22 +995,53 @@ def write_outputs(res: dict, opts: Options) -> dict:
         with open(os.path.join(root, "ref", full + ".pack"), "wb") as fh:
             fh.write(data)
         kind, hdr, _ = P.parse(data)
-        entries.append(P.index_entry(data, "whitelist" if kind == P.KIND_WHITELIST else "vocab",
-                                     {k: v for k, v in {"build": hdr.get("build"), "member": hdr.get("member"),
-                                                        "protocol": hdr.get("protocol")}.items() if v}))
+        entries.append(
+            P.index_entry(
+                data,
+                "whitelist" if kind == P.KIND_WHITELIST else "vocab",
+                {
+                    k: v
+                    for k, v in {
+                        "build": hdr.get("build"),
+                        "member": hdr.get("member"),
+                        "protocol": hdr.get("protocol"),
+                    }.items()
+                    if v
+                },
+            )
+        )
     if entries:
         P.write_index(entries, os.path.join(root, "ref", "index.json"))
-    man = M.build_manifest(gse, res["samples"], res["study_files"], res["reference_build"], res["pipeline"],
-                           res["packs"], res["legacy"], opts.created_at)
+    man = M.build_manifest(
+        gse,
+        res["samples"],
+        res["study_files"],
+        res["reference_build"],
+        res["pipeline"],
+        res["packs"],
+        res["legacy"],
+        opts.created_at,
+    )
     mpath = os.path.join(root, "m", gse + ".json")
     with open(mpath, "wb") as fh:
         fh.write(M.dumps_manifest(man))
     lpath = os.path.join(root, "ledger", gse + ".jsonl")
     ledger = list(res["ledger"])
-    ledger.append({"type": "study", "gse": gse, "rev": man["rev"], "samples": len(res["samples"]), "legacy_bytes": res["totals"]["legacy_bytes"],
-                   "legacy_zip_bytes": res["totals"]["legacy_zip_bytes"], "v2_bytes": res["totals"]["v2_bytes"],
-                   "legacy_file_bytes": res["legacy"]["bytes"], "seconds": round(res["seconds"], 2), "created_at": opts.created_at,
-                   "manifest": "v2/m/%s.json" % gse})
+    ledger.append(
+        {
+            "type": "study",
+            "gse": gse,
+            "rev": man["rev"],
+            "samples": len(res["samples"]),
+            "legacy_bytes": res["totals"]["legacy_bytes"],
+            "legacy_zip_bytes": res["totals"]["legacy_zip_bytes"],
+            "v2_bytes": res["totals"]["v2_bytes"],
+            "legacy_file_bytes": res["legacy"]["bytes"],
+            "seconds": round(res["seconds"], 2),
+            "created_at": opts.created_at,
+            "manifest": "v2/m/%s.json" % gse,
+        }
+    )
     with open(lpath, "w", encoding="utf-8", newline="\n") as fh:
         for ln in ledger:
             fh.write(json.dumps(ln, sort_keys=True, ensure_ascii=False) + "\n")
@@ -734,24 +1049,51 @@ def write_outputs(res: dict, opts: Options) -> dict:
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(prog="python -m singlet.v2.migrate", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--bundle", required=True, help="legacy .singlet path, https URL, or an unpacked directory")
+    ap = argparse.ArgumentParser(
+        prog="python -m singlet.v2.migrate",
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    ap.add_argument(
+        "--bundle", required=True, help="legacy .singlet path, https URL, or an unpacked directory"
+    )
     ap.add_argument("--out", required=True, help="output directory (contains v2/...)")
     ap.add_argument("--gse", help="study id (default: from the bundle)")
     ap.add_argument("--samples", help="comma separated GSM ids (default: all)")
-    ap.add_argument("--recipes", help="recipes module name or 'none' (default: singlet.v2.recipes if importable)")
-    ap.add_argument("--chunk-cols", type=int, default=0, help="columns per chunk (0 = pz2 default policy)")
+    ap.add_argument(
+        "--recipes",
+        help="recipes module name or 'none' (default: singlet.v2.recipes if importable)",
+    )
+    ap.add_argument(
+        "--chunk-cols", type=int, default=0, help="columns per chunk (0 = pz2 default policy)"
+    )
     ap.add_argument("--created-at", help="fixed timestamp for reproducible manifests")
-    ap.add_argument("--codec", choices=["py", "native", "rans", "generic"], default=None,
-                    help="matrix codec: native = compiled pz2 with automatic codec 1/2 choice (default when singlet._pz2 imports), py = pure-Python codec 2")
+    ap.add_argument(
+        "--codec",
+        choices=["py", "native", "rans", "generic"],
+        default=None,
+        help="matrix codec: native = compiled pz2 with automatic codec 1/2 choice (default when singlet._pz2 imports), py = pure-Python codec 2",
+    )
     a = ap.parse_args(argv)
-    opts = Options(chunk_cols=a.chunk_cols, codec=a.codec, recipes=a.recipes, created_at=a.created_at)
+    opts = Options(
+        chunk_cols=a.chunk_cols, codec=a.codec, recipes=a.recipes, created_at=a.created_at
+    )
     res = migrate_bundle(a.bundle, a.out, a.gse, opts, a.samples.split(",") if a.samples else None)
     out = write_outputs(res, opts)
     t = res["totals"]
-    print("%s: %d samples, legacy %d B (zip) / %d B (members) -> v2 %d B (%.2fx), rev %s, %.1fs" % (
-        res["gse"], len(res["samples"]), t["legacy_zip_bytes"], t["legacy_bytes"], t["v2_bytes"],
-        (t["legacy_zip_bytes"] / t["v2_bytes"]) if t["v2_bytes"] else 0.0, out["rev"], res["seconds"]))
+    print(
+        "%s: %d samples, legacy %d B (zip) / %d B (members) -> v2 %d B (%.2fx), rev %s, %.1fs"
+        % (
+            res["gse"],
+            len(res["samples"]),
+            t["legacy_zip_bytes"],
+            t["legacy_bytes"],
+            t["v2_bytes"],
+            (t["legacy_zip_bytes"] / t["v2_bytes"]) if t["v2_bytes"] else 0.0,
+            out["rev"],
+            res["seconds"],
+        )
+    )
     print("manifest:", out["manifest"])
     print("ledger:  ", out["ledger"])
     return 0

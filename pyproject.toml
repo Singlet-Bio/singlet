@@ -147,6 +147,8 @@ omit = [
     "python/singlet/gpu/*",
     "python/singlet/mcp/*",
     "python/singlet/torch/*",
+    # build-time generator of the shipped packs (run once per reference build, never at import)
+    "python/singlet/v2/packs_build.py",
 ]
 
 [tool.coverage.report]
