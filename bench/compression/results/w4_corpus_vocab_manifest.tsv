@@ -1,0 +1,15 @@
+build	kind	variant	hash	file
+GRCm39-2024-A	exon	0	e787a39634293c11	corpus_w4_corpus/L_a/exon_counts.1pz
+GRCm39-2024-A	intron	0	d6aa8b3b004215f4	corpus_w4_corpus/L_a/intron_counts.1pz
+GRCh38-2024-A	exon	0	a2f45f650f968885	corpus_w4_corpus/L_b/exon_counts.1pz
+GRCh38-2024-A	exon#1	1	da39a3ee5e6b4b0d	corpus_w4_corpus/x_stub/exon_counts.1pz
+GRCh38-2024-A	intron	0	58af6651be935542	corpus_w4_corpus/L_b/intron_counts.1pz
+GRCh38-2024-A	intron#1	1	da39a3ee5e6b4b0d	corpus_w4_corpus/x_stub/intron_counts.1pz
+GRCh38-GRCm39-barnyard	exon	0	834e3104f653f36d	corpus_w4_corpus/bn_dropseq/exon_counts.1pz
+GRCh38-GRCm39-barnyard	intron	0	8f839a7f254f7028	corpus_w4_corpus/bn_dropseq/intron_counts.1pz
+Mmul_10	exon	0	34bfaf7c14b7ae9c	corpus_w4_corpus/mq_v2/exon_counts.1pz
+Mmul_10	intron	0	7e2c178a1efbb4fe	corpus_w4_corpus/mq_v2/intron_counts.1pz
+mRatBN7.2	exon	0	a4a33a395b79d157	corpus_w4_corpus/r_v2/exon_counts.1pz
+mRatBN7.2	intron	0	18d2a217e361b892	corpus_w4_corpus/r_v2/intron_counts.1pz
+GRCz11	exon	0	28967d9fe02f31b0	corpus_w4_corpus/z_v2/exon_counts.1pz
+GRCz11	intron	0	1691e08dbfa581cc	corpus_w4_corpus/z_v2/intron_counts.1pz

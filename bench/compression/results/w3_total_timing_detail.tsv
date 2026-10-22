@@ -1,0 +1,10 @@
+sample	member	codec	enc_bytes	nnz	hdr	names	names_row	names_col	names_kv	cells_colcnt	cells_tables	cells_chunks	empt_colcnt	empt_tables	empt_chunks	cells_n	cells_nnz	cells_counts	cells_payload	cells_counts_tag	empt_n	empt_nnz	empt_counts	empt_payload	empt_ambient	empt_k	bitmap	dec_ms_min	ph_copy	ph_names	ph_counts	ph_payload	ph_empt	ph_split	ph_merge	payload_ms_canon	payload_ms_native	full_ms_native	native_ok	core_ghz	matrix_ok
+pbmc_v2_typical	exon_counts.1pz	ref_1pz_v1_L3	6483537	2569228	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	642.253	0	0	0	0	0	0	0	-1	-1	-1	-1	0	1
+pbmc_v2_typical	exon_counts.1pz	b_rans16	5334938	2569228	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	271.012	0	0	0	0	0	0	0	36.5798	33.9851	-1	-1	1.7096	1
+pbmc_v2_typical	exon_counts.1pz	w3_total_v1	1939351	2569228	22	38002	9	37989	4	14104	12433	1817194	0	0	0	15185	2569228	57583	1843731	8	0	0	0	0	0	0	0	223.784	1.5496	107.069	24.5577	88.7456	0	0	0	73.9155	26.7941	208.843	1	1.55435	1
+tcell_5p	exon_counts.1pz	ref_1pz_v1_L3	13757617	10529513	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	2247.4	0	0	0	0	0	0	0	-1	-1	-1	-1	0	1
+tcell_5p	exon_counts.1pz	b_rans16	11726800	10529513	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	545.799	0	0	0	0	0	0	0	290.792	117.114	-1	-1	1.33034	1
+tcell_5p	exon_counts.1pz	w3_total_v1	8208424	10529513	22	173162	9	173149	4	49566	13724	7865090	0	0	0	69249	10529513	106847	7928380	8	0	0	0	0	0	0	0	547.497	5.5278	144.647	46.3638	349.018	0	0	0	274.768	129.256	409.008	1	1.22602	1
+brain_sn_v3_deep	exon_counts.1pz	ref_1pz_v1_L3	13318363	6349311	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1458.07	0	0	0	0	0	0	0	-1	-1	-1	-1	0	1
+brain_sn_v3_deep	exon_counts.1pz	b_rans16	11210311	6349311	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	459.586	0	0	0	0	0	0	0	156.152	78.4447	-1	-1	1.25669	1
+brain_sn_v3_deep	exon_counts.1pz	w3_total_v1	6762639	6349311	22	232205	9	232192	4	68300	14449	6311529	0	0	0	84424	6349311	136121	6394278	8	0	0	0	0	0	0	0	438.576	6.6362	189.841	51.2566	187.707	0	0	0	157.306	78.6683	366.556	1	1.30455	1
