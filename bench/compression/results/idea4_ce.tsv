@@ -1,0 +1,4 @@
+org	sample	mode	model	k	theta	cells	nnz_iv	nnz_gene	gene_bits_pois	gene_bits_cal1	gene_bits_cal2	split_bits	const_bits	side_bits	bits_per_nnz_pois	bits_per_nnz_cal1	bits_per_nnz_cal2	net_cal1	net_cal2	note
+human	pbmc_v2_typical	oos	static	1	none	5428	2402405	2224305	1390028.1	12098688.2	12154776.5	5810932.7	10835747.4	0.0	7.5078	7.4549	7.4782	7.4549	7.4782	
+human	pbmc_v2_typical	oos	gxd_tab	1	none	5428	2402405	2224305	nan	12740540.4	12740540.4	5810932.7	10835747.4	0.0	nan	7.7220	7.7220	7.7220	7.7220	per-gene x depth-bucket presence table
+human	pbmc_v2_typical	oracle	static	1	none	5428	2402405	2224305	nan	12023652.7	12011091.8	5810932.7	10835747.4	0.0	nan	7.4236	7.4184	7.4236	7.4184	calibration tables fitted on test file (in-sample)

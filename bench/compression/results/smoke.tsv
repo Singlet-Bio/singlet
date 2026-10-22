@@ -1,0 +1,7 @@
+sample	member	codec	orig_bytes	enc_bytes	ratio_vs_1pz	bits_per_nnz	nnz	m	n	enc_ms	dec_ms_min	dec_Mnnz_s	matrix_ok	file_ok	model_bytes
+pbmc_v2_typical	exon_counts.1pz	ref_1pz_v1_L3	6451648	6483537	1.00494	20.1883	2569228	310797	15185	363.1	226.337	11.3513	1	0	0
+pbmc_v2_typical	exon_counts.1pz	ref_zstd_csc_L3	6451648	8431560	1.30688	26.254	2569228	310797	15185	260.845	98.5632	26.0668	1	0	0
+pbmc_v2_typical	exon_counts.1pz	ref_zstd_csc_L19	6451648	5812564	0.900943	18.099	2569228	310797	15185	20217.6	82.7005	31.0667	1	0	0
+tumor_3p	intron_counts.1pz	ref_1pz_v1_L3	4040778	4040778	1	301.09	107364	272191	25067	155.587	66.1252	1.62365	1	1	0
+tumor_3p	intron_counts.1pz	ref_zstd_csc_L3	4040778	3416326	0.845462	254.56	107364	272191	25067	107.614	49.4094	2.17295	1	1	0
+tumor_3p	intron_counts.1pz	ref_zstd_csc_L19	4040778	2197948	0.543942	163.775	107364	272191	25067	10097.2	58.335	1.84047	1	1	0

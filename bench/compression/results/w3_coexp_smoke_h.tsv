@@ -1,0 +1,2 @@
+kind	file	regime	hubsel	K	genes	note
+hub_list	tumor_3p	i	greedy	0		pool=pbmc_v2_typical,pbmc_v2_shallow,pbmc_v3_lowgenes,tcell_5p,h_pbmc_a,h_pbmc_b,h_b,h_c,h_d

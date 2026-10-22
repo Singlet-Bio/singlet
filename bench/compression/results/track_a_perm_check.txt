@@ -1,0 +1,14 @@
+pbmc_v2_typical        exon    perm re-derived from row counts == stored permutation: IDENTICAL
+pbmc_v2_shallow        exon    perm re-derived from row counts == stored permutation: IDENTICAL
+pbmc_v3_lowgenes       exon    perm re-derived from row counts == stored permutation: IDENTICAL
+brain_sn_v3_deep       exon    perm re-derived from row counts == stored permutation: IDENTICAL
+brain_sn_v3_intronic   exon    perm re-derived from row counts == stored permutation: IDENTICAL
+tcell_5p               exon    perm re-derived from row counts == stored permutation: IDENTICAL
+tumor_3p               exon    perm re-derived from row counts == stored permutation: IDENTICAL
+pbmc_v2_typical        intron  perm re-derived from row counts == stored permutation: IDENTICAL
+pbmc_v2_shallow        intron  perm re-derived from row counts == stored permutation: IDENTICAL
+pbmc_v3_lowgenes       intron  perm re-derived from row counts == stored permutation: IDENTICAL
+brain_sn_v3_deep       intron  perm re-derived from row counts == stored permutation: IDENTICAL
+brain_sn_v3_intronic   intron  perm re-derived from row counts == stored permutation: IDENTICAL
+tcell_5p               intron  perm re-derived from row counts == stored permutation: IDENTICAL
+tumor_3p               intron  perm re-derived from row counts == stored permutation: IDENTICAL

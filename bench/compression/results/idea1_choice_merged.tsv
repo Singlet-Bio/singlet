@@ -1,0 +1,11 @@
+sample	member	hold
+pbmc_v2_shallow	exon	only_h_c
+pbmc_v2_shallow	intron	only_h_c
+pbmc_v2_typical	exon	only_h_c
+pbmc_v2_typical	intron	only_h_c
+pbmc_v3_lowgenes	exon	only_h_c
+pbmc_v3_lowgenes	intron	GSE244263
+tcell_5p	exon	only_h_b
+tcell_5p	intron	only_h_b
+tumor_3p	exon	only_h_pbmc_a
+tumor_3p	intron	only_h_b

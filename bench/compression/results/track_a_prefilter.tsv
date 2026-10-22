@@ -1,0 +1,16 @@
+sample	member	nnz	variant	z3_bytes	z19_bytes	z3_bits_per_nnz	z19_bits_per_nnz
+tumor_3p	intron_counts.1pz	107364	NB no bit planes, bitmap filter	189089	185209	14.0896	13.8005
+tumor_3p	intron_counts.1pz	107364	NF bit planes, no bitmap filter	193834	188668	14.4431	14.0582
+tumor_3p	intron_counts.1pz	107364	NS no byte split (u32 LE gaps)	236369	226592	17.6125	16.884
+tumor_3p	intron_counts.1pz	107364	P production (bit planes + bitmap)	192073	188035	14.3119	14.011
+tumor_3p	intron_counts.1pz	107364	R raw (byte split only)	189473	184706	14.1182	13.763
+pbmc_v2_typical	exon_counts.1pz	2569228	NB no bit planes, bitmap filter	2248525	2220664	7.0014	6.91465
+pbmc_v2_typical	exon_counts.1pz	2569228	NF bit planes, no bitmap filter	2248361	2165576	7.00089	6.74312
+pbmc_v2_typical	exon_counts.1pz	2569228	NS no byte split (u32 LE gaps)	3298541	2701927	10.2709	8.41319
+pbmc_v2_typical	exon_counts.1pz	2569228	P production (bit planes + bitmap)	2186835	2137520	6.80931	6.65576
+pbmc_v2_typical	exon_counts.1pz	2569228	R raw (byte split only)	2262265	2224063	7.04419	6.92523
+pbmc_v3_lowgenes	intron_counts.1pz	1076297	NB no bit planes, bitmap filter	1151679	1115983	8.56031	8.29498
+pbmc_v3_lowgenes	intron_counts.1pz	1076297	NF bit planes, no bitmap filter	1172586	1115458	8.71571	8.29108
+pbmc_v3_lowgenes	intron_counts.1pz	1076297	NS no byte split (u32 LE gaps)	1581190	1367511	11.7528	10.1646
+pbmc_v3_lowgenes	intron_counts.1pz	1076297	P production (bit planes + bitmap)	1149237	1101228	8.54216	8.18531
+pbmc_v3_lowgenes	intron_counts.1pz	1076297	R raw (byte split only)	1139116	1098143	8.46693	8.16238

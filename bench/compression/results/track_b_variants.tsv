@@ -1,0 +1,1 @@
+sample	member	codec	nnz	m	n	total_bytes	payload_bytes	side_bytes	names_bytes	tables_bytes	counts_bytes	payload_bits_nnz	total_bits_nnz	enc_ms	dec_ms_full	full_Mnnz_s	payload_ms_canon	payload_Mnnz_s_canon	payload_ms_native	payload_Mnnz_s_native	cyc_nnz_full	cyc_nnz_canon	cyc_nnz_native	Mnnz_s_native_3GHz	Mnnz_s_canon_3GHz	matrix_ok

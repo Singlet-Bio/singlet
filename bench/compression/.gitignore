@@ -1,0 +1,18 @@
+corpus/
+corpus_*/
+results/*.bin
+results/track_d_dump/
+bin/
+# large analysis artefacts (added at wrap-up; results/ is 3.6 GB)
+results/**/*.bin
+results/**/*.npz
+results/**/*.npy
+results/**/*.raw
+results/**/*.gch
+results/**/*.exe
+results/e1_old/
+results/e1_cache/
+results/w3_coexp_cache/
+results/idea1_raw/
+results/idea1_pch/
+results/.d_work/
