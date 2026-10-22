@@ -370,3 +370,29 @@ def test_shards_keep_meaning_the_same_studies_while_other_shards_delete(r2):
     assert not r2.legacy(r2.gses[0]).exists() and not r2.legacy(r2.gses[2]).exists() and r2.legacy(r2.gses[1]).exists()
     assert r2.go("retire", "--all", "--shard", "1/2", "--apply", "--confirm", "RETIRE") == 0
     assert not any(r2.legacy(g).exists() for g in r2.gses) and all(r2.arch(g).exists() for g in r2.gses)
+
+
+def test_retire_sql_marks_retired_studies_and_undoes_a_restore(r2, tmp_path):
+    import sqlite3
+
+    led1, led2 = tmp_path / "retire-0.jsonl", tmp_path / "restore-0.jsonl"
+    assert r2.go("retire", "--all", "--apply", "--confirm", "RETIRE", "--ledger", str(led1)) == 0
+    out = tmp_path / "sql"
+    assert ret.main(["retire-sql", "--ledger-files", str(led1), "--out", str(out)]) == 0
+    db = sqlite3.connect(":memory:")
+    db.execute("CREATE TABLE v2_migration (gse_id TEXT PRIMARY KEY, status TEXT NOT NULL CHECK (status IN ('pending','running','uploaded','verified','failed','retired')), updated_at TEXT)")
+    db.executemany("INSERT INTO v2_migration VALUES (?, 'verified', 'x')", [(g,) for g in r2.gses])
+    db.execute("INSERT INTO v2_migration VALUES ('GSE999', 'failed', 'x')")  # a study the ledger does not mention is untouched
+    names = [ln.split("--file=")[1] for ln in (out / "APPLY.txt").read_text().splitlines()]
+    for n in names:
+        db.executescript((out / n).read_text())
+        db.executescript((out / n).read_text())  # twice: harmless
+    st = dict(db.execute("SELECT gse_id, status FROM v2_migration"))
+    assert {st[g] for g in r2.gses} == {"retired"} and st["GSE999"] == "failed"
+    # one study is restored later: its status goes back to verified, the others stay retired
+    assert r2.go("restore", "--gse", r2.gses[1], "--apply", "--ledger", str(led2)) == 0
+    assert ret.main(["retire-sql", "--ledger-files", str(led1), str(led2), "--out", str(out)]) == 0
+    for n in [ln.split("--file=")[1] for ln in (out / "APPLY.txt").read_text().splitlines()]:
+        db.executescript((out / n).read_text())
+    st = dict(db.execute("SELECT gse_id, status FROM v2_migration"))
+    assert st[r2.gses[1]] == "verified" and st[r2.gses[0]] == st[r2.gses[2]] == "retired"

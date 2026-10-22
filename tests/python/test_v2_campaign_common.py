@@ -43,8 +43,12 @@ FAKE_TOOL = r'''
 import hashlib, json, os, struct, sys, zipfile, zlib
 from pathlib import Path
 
-def arg(name):
-    return sys.argv[sys.argv.index(name) + 1]
+# A stand-in for `python -m singlet.v2.migrate` / `verify` that follows the real CLI and output layout (m_w2.md section 1):
+#   migrate --bundle B --out DIR [--gse G] [--samples A,B] ...   writes DIR/v2/{s,m,ledger,ref}/...
+#   verify  --bundle B --v2 DIR [--gse G] [--samples ...] [--quick]   exit 1 on a mismatch
+
+def arg(name, default=None):
+    return sys.argv[sys.argv.index(name) + 1] if name in sys.argv else default
 
 def count(what, gse):
     f = os.environ.get("FAKE_COUNT_FILE")
@@ -58,48 +62,69 @@ def s2_object(gsm, body):
     assert len(hdr) == 64
     return hdr + body
 
+def dumps_manifest(m):
+    return (json.dumps(m, indent=1, sort_keys=False, ensure_ascii=False) + "\n").encode("utf-8")
+
 def migrate():
-    bundle, out, gse = arg("--bundle"), Path(arg("--out")), arg("--gse")
+    bundle, out = arg("--bundle"), Path(arg("--out"))
+    z = zipfile.ZipFile(bundle)
+    gse = arg("--gse") or json.loads(z.read("manifest.json"))["gse_id"]
     count("migrate", gse)
     if gse in os.environ.get("FAKE_MIGRATE_FAIL", "").split(","):
         print("fake migrate: refusing", gse, file=sys.stderr)
         sys.exit(3)
-    z = zipfile.ZipFile(bundle)
+    only = arg("--samples")
     gsms = sorted({n.split("/")[1] for n in z.namelist() if n.startswith("samples/")})
+    if only:
+        gsms = [g for g in gsms if g in only.split(",")]
     root = out / "v2"
-    samples = []
+    for d in ("s", "m", "ledger", "ref"):
+        (root / d).mkdir(parents=True, exist_ok=True)
+    samples, ledger = [], []
     pad = int(os.environ.get("FAKE_PAD", "0"))
     for gsm in gsms:
         members = sorted(n for n in z.namelist() if n.startswith(f"samples/{gsm}/"))
-        body = zlib.compress(b"".join(z.read(m) for m in members)) + os.urandom(0) + b"P" * pad
+        body = zlib.compress(b"".join(z.read(m) for m in members)) + b"P" * pad
         obj = s2_object(gsm, body)
         h = hashlib.sha256(obj).hexdigest()
         p = root / "s" / gsm / f"{h[:32]}.s2"
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(obj)
-        mem = {m.split("/", 2)[2]: {"kind": 3, "off": 64, "len": 10} for m in members}
-        mem["exon_counts.1pz"] = {"kind": 1, "off": 128, "len": 99, "digest": "00" * 16}
-        mem["cells"] = {"kind": 2, "off": 256, "len": 40}
-        mem["splice_psi.1pz"] = {"kind": 4, "off": 0, "len": 0}
+        mem = {m.split("/", 2)[2]: {"kind": 3, "flags": 1, "off": 64, "len": 10, "digest": "00" * 16, "out_len": 20, "crc32": 1} for m in members}
+        mem["exon_counts.1pz"] = {"kind": 1, "flags": 3, "off": 128, "len": 99, "digest": "00" * 16, "m": 10, "n": 3, "nnz": 7, "codec": 1,
+                                  "chunk_cols": 256, "n_chunks": 1, "chunk_index": [200, 48], "names": {"rows": {"pack": "a" * 32, "member": "exon"}, "cols": "cells"}}
+        mem["cells"] = {"kind": 2, "flags": 2, "off": 256, "len": 40, "digest": "00" * 16, "columns": ["barcode", "called"], "n_rows": 10,
+                        "whitelist": "b" * 32, "called_source": "cell_calls.tsv"}
+        mem["splice_psi.1pz"] = {"kind": 4, "flags": 1, "off": 0, "len": 0, "digest": "00" * 16, "out_len": 0, "crc32": 0, "recipe": "psi-v1-rint", "params": {}, "needs": []}
+        if os.environ.get("FAKE_RESTRICTED_MEMBER"):
+            mem["donor/snp_ad.1pz"] = {"kind": 3, "flags": 1, "off": 64, "len": 10}
         samples.append({"gsm": gsm, "key": f"v2/s/{gsm}/{h[:32]}.s2", "bytes": len(obj), "sha256": h, "n_columns": 10,
-                        "n_called": 3, "members": mem, "stats": {"median_umi": 1500, "median_genes": 700}})
+                        "n_called": 3, "members": mem, "stats": {"median_umi": 1500.0, "median_genes": 700.0}})
+        ledger.append({"type": "sample", "gse": gse, "gsm": gsm, "v2_object": samples[-1]["key"], "v2_bytes": len(obj), "stage2_rounds": 1})
     pack = b"SPK2" + struct.pack("<HHI", 1, 1, 2) + b"{}" + (gse.encode() * 3)
     ph = hashlib.sha256(pack).hexdigest()[:32]
-    pp = root / "ref" / f"{ph}.pack"
-    pp.parent.mkdir(parents=True, exist_ok=True)
-    pp.write_bytes(pack)
+    (root / "ref" / f"{ph}.pack").write_bytes(pack)
+    wl = b"SPK2" + struct.pack("<HHI", 1, 2, 2) + b"{}" + b"wl"
+    wh = hashlib.sha256(wl).hexdigest()[:32]
+    (root / "ref" / f"{wh}.pack").write_bytes(wl)
+    (root / "ref" / "index.json").write_text(json.dumps({"format": "singlet-v2-packs", "version": 1, "packs": []}))
     if os.environ.get("FAKE_BAD_NAME"):
         (root / "s" / gsms[0]).joinpath("0" * 32 + ".s2").write_bytes(b"x")
+    created = "2026-10-22T00:00:00Z"
     man = {"format": "singlet-v2", "manifest_version": 1, "gse": gse, "rev": hashlib.sha256(gse.encode()).hexdigest()[:16],
-           "created_at": "2026-10-22T00:00:00Z", "reference_build": "GRCh38-2024-A", "packs": {"exon": ph, "intron": ph, "whitelist": None},
-           "study_files": {}, "samples": samples}
-    (root / "m").mkdir(parents=True, exist_ok=True)
-    (root / "m" / f"{gse}.json").write_text(json.dumps(man))
-    (out / "migrate_report.json").write_text(json.dumps({"fallbacks": 1}))
+           "created_at": created, "reference_build": "GRCh38-2024-A", "pipeline": {"singlet_version": "0.3.0"},
+           "packs": {"exon": ph, "intron": ph, "genes": None, "whitelist": [wh, ph] if os.environ.get("FAKE_PACK_LIST") else wh},
+           "study_files": {}, "samples": samples,
+           "legacy": {"key": f"data/{gse}/{gse}.singlet", "etag": None, "bytes": os.path.getsize(bundle), "migrated_at": created,
+                      "ledger": f"v2/ledger/{gse}.jsonl"}}
+    (root / "m" / f"{gse}.json").write_bytes(dumps_manifest(man))
+    ledger.append({"type": "study", "gse": gse, "rev": man["rev"], "samples": len(samples)})
+    (root / "ledger" / f"{gse}.jsonl").write_text("".join(json.dumps(x) + "\n" for x in ledger))
+    print(f"{gse}: {len(samples)} samples")
 
 def verify():
     bundle, out = arg("--bundle"), Path(arg("--v2"))
-    gse = Path(bundle).stem
+    gse = arg("--gse") or Path(bundle).stem
     count("verify", gse)
     if gse in os.environ.get("FAKE_VERIFY_FAIL", "").split(","):
         print("fake verify: MISMATCH", file=sys.stderr)
@@ -108,8 +133,10 @@ def verify():
     assert man["gse"] == gse
     # the campaign verifies the manifest it will publish, so the legacy facts must already be in it
     if os.environ.get("FAKE_EXPECT_LEGACY") and not man.get("legacy", {}).get("etag"):
-        print("fake verify: manifest has no legacy block", file=sys.stderr)
+        print("fake verify: manifest has no legacy etag yet", file=sys.stderr)
         sys.exit(1)
+    if "--quick" in sys.argv:
+        print("quick")
 
 {"migrate": migrate, "verify": verify}[sys.argv[1]]()
 '''
@@ -311,3 +338,42 @@ class TC:
     def __init__(self, part_size: int) -> None:
         self.multipart_threshold = part_size + 1
         self.multipart_chunksize = part_size
+
+
+# ── the campaign environment shared by the test modules ───────────────────────────────────────────────────────────────
+
+
+def build_env(tmp_path: Path, monkeypatch, camp):
+    """A directory-backed R2 under tmp_path/r2, the stand-in transcoder, and `run(...)` for `v2_campaign.py run` against them."""
+    root = tmp_path / "r2"
+    tool = write_fake_tool(tmp_path)
+    counts = tmp_path / "calls.txt"
+    monkeypatch.setenv("FAKE_COUNT_FILE", str(counts))
+    for k in ("FAKE_MIGRATE_FAIL", "FAKE_VERIFY_FAIL", "FAKE_BAD_NAME", "FAKE_EXPECT_LEGACY", "FAKE_RESTRICTED_MEMBER", "FAKE_PACK_LIST"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("FAKE_PAD", "2500")  # sample objects of ~2.6 kB: three parts at the 1048-byte test part size
+    store = camp.LocalStore(root)
+    monkeypatch.setattr(camp, "make_store", lambda a: store)
+
+    class E:
+        pass
+
+    e = E()
+    e.tmp, e.root, e.tool, e.counts, e.store, e.mp = tmp_path, root, tool, counts, store, monkeypatch
+    e.results = tmp_path / "results.jsonl"
+    e.rows = tmp_path / "rows"
+    e.ledger = tmp_path / "ledger"
+
+    def run(*extra, mode="full", workers=1, base=True):
+        args = ["run", "--mode", mode, "--local-root", str(root), "--scratch", str(tmp_path / "scratch"),
+                "--results", str(e.results), "--rows-dir", str(e.rows), "--ledger-dir", str(e.ledger),
+                "--workers", str(workers), "--io-threads", "4", "--retry-sleep", "0", "--part-size-mib", "0.001"]
+        args += tool_cmds(tool) + list(extra)
+        if base and not any(x in extra for x in ("--gse", "--gse-list", "--shard", "--limit")):
+            args += ["--shard", "0/1"]
+        return camp.main(args)
+
+    e.run = run
+    e.rows_of = lambda: {r["gse"]: r for r in (json.loads(ln) for ln in e.results.read_text().splitlines())}
+    e.ncalls = lambda what: sum(1 for ln in (counts.read_text().splitlines() if counts.exists() else []) if ln.startswith(what))
+    return e

@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures as cf
 import json
+import re
 import sys
 import threading
 import time
@@ -283,9 +284,47 @@ def cmd_audit(store, a: argparse.Namespace) -> int:
     return 1 if (a.expect_none and (legacy or odd)) else 0
 
 
+def cmd_retire_sql(a: argparse.Namespace) -> int:
+    """SQL for D1 after a retirement (or a restore): v2_migration.status verified -> retired, from the retire/restore ledgers.
+
+    A study counts as retired when its last ledger line (over all files, by time) is a successful `retired`; `restored` undoes it.
+    `UPDATE ... WHERE status = 'verified'` only ever moves a verified study, so applying a file twice is harmless. Each updated row
+    is about 3 D1 row writes (the status index), well inside a day's budget for the whole atlas."""
+    last: Dict[str, dict] = {}
+    for f in a.ledger:
+        for ln in Path(f).read_text("utf-8").splitlines():
+            try:
+                rec = json.loads(ln)
+            except ValueError:
+                continue
+            if rec.get("stage") in ("retired", "restored") and rec.get("ok") and re.fullmatch(r"GSE\d+", str(rec.get("gse"))):
+                if rec["gse"] not in last or rec.get("at", "") >= last[rec["gse"]].get("at", ""):
+                    last[rec["gse"]] = rec
+    retired = vc.accession_order(g for g, r in last.items() if r["stage"] == "retired")
+    restored = vc.accession_order(g for g, r in last.items() if r["stage"] == "restored")
+    out = Path(a.out)
+    out.mkdir(parents=True, exist_ok=True)
+    for f in out.glob("*.sql"):
+        f.unlink()
+    names: List[str] = []
+    now = "strftime('%Y-%m-%dT%H:%M:%SZ', 'now')"
+    for tag, gses, new, old in (("retired", retired, "retired", "verified"), ("restored", restored, "verified", "retired")):
+        for i in range(0, len(gses), 500):
+            ids = ", ".join(vc.sql_literal(g) for g in gses[i : i + 500])
+            name = f"{tag}_{i // 500:04d}.sql"
+            sql = f"UPDATE v2_migration SET status = '{new}', updated_at = {now} WHERE status = '{old}' AND gse_id IN ({ids});"
+            (out / name).write_text(sql + "\n", encoding="utf-8", newline="\n")
+            names.append(name)
+    lines = [f"wrangler d1 execute {a.database} --remote --file={n}" for n in names]
+    (out / "APPLY.txt").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    print(f"{len(retired)} studies to mark retired, {len(restored)} to mark verified again, {len(names)} files in {out} "
+          f"(about {3 * (len(retired) + len(restored))} D1 row writes)")
+    return 0
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", choices=["retire", "restore", "audit"])
+    ap.add_argument("command", choices=["retire", "restore", "audit", "retire-sql"])
     ap.add_argument("--gse", nargs="*")
     ap.add_argument("--gse-list")
     ap.add_argument("--all", action="store_true")
@@ -295,6 +334,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--archive", default=ARCHIVE_BUCKET)
     ap.add_argument("--storage-class", default="STANDARD_IA", help="STANDARD_IA = R2 Infrequent Access; 'none' for the bucket default")
     ap.add_argument("--ledger", help="local JSONL record of what was done")
+    ap.add_argument("--ledger-files", nargs="*", default=[], help="retire-sql: the ledgers written by retire/restore")
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--apply", action="store_true", help="write; without it only reads and prints")
     ap.add_argument("--confirm", help=f"retire --apply needs --confirm {CONFIRM}")
@@ -302,9 +342,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--force", action="store_true", help="restore over a different object at the public key")
     ap.add_argument("--expect-none", action="store_true", help="audit exits 1 if any legacy bundle remains")
     ap.add_argument("--local-root", help="use directories under this root instead of R2 (tests)")
+    ap.add_argument("--out", help="retire-sql: output directory")
+    ap.add_argument("--database", default="singlet-catalog", help="retire-sql: D1 database name for APPLY.txt")
     a = ap.parse_args(argv)
     if a.public == a.archive:
         ap.error("--archive must differ from --public")
+    if a.command == "retire-sql":
+        if not a.out or not a.ledger_files:
+            ap.error("retire-sql needs --out and one or more --ledger files")
+        a.ledger = a.ledger_files
+        return cmd_retire_sql(a)
     store = vc.LocalStore(Path(a.local_root)) if a.local_root else vc.S3Store()
     return {"retire": cmd_retire, "restore": cmd_restore, "audit": cmd_audit}[a.command](store, a)
 

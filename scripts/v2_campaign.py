@@ -753,7 +753,9 @@ def collect_objects(root: Path, gse: str, part_size: int, pool: cf.Executor | No
                 warnings.append(f"ignored manifest of another study: {key}")
             continue
         if key == REFS_INDEX_KEY:
-            continue  # maintained by `refs-index`, a single writer
+            continue  # the pack index of the whole bucket: `refs-index` publishes it, a single writer
+        if key.startswith("v2/ledger/"):
+            continue  # the transcoder's per-member ledger: its lines go into the R2 ledger (see publish_bundle)
         if RE_SAMPLE.match(key) or RE_PACK.match(key) or RE_CELLS.match(key):
             candidates.append((key, p))
         else:
@@ -788,9 +790,15 @@ def collect_objects(root: Path, gse: str, part_size: int, pool: cf.Executor | No
         referenced.add(k)
 
     pack_keys = []
-    for v in (manifest.get("packs") or {}).values():
-        if isinstance(v, str) and re.fullmatch(r"[0-9a-f]{32}", v):
-            pack_keys.append(f"v2/ref/{v}.pack")
+    for v in (manifest.get("packs") or {}).values():  # an id, a list of ids (several whitelists) or null
+        for x in (v if isinstance(v, list) else [v]):
+            if isinstance(x, str) and re.fullmatch(r"[0-9a-f]{32}", x):
+                pack_keys.append(f"v2/ref/{x}.pack")
+    rm = _restricted_module().is_restricted_member
+    for s in samples:  # the v2 object of a public study must not carry per-donor germline members (the endpoint refuses them too)
+        bad = [n for n in (s.get("members") or {}) if rm(n)]
+        if bad:
+            raise StudyFailure("collect_failed", "collect", f"{s.get('gsm')}: restricted members in the v2 object: {', '.join(bad[:3])}")
     unref = [o.key for o in objs if RE_SAMPLE.match(o.key) and o.key not in referenced]
     if unref:
         warnings.append(f"{len(unref)} sample objects are not in the manifest and will not be uploaded")
@@ -821,119 +829,253 @@ def finalize_manifest(manifest: dict, gse: str, legacy: Optional[dict], raw: Opt
     """The bytes of the manifest as published. With a legacy bundle, `legacy` gets the facts this campaign measured
     (key, ETag, size, sha256, time, ledger); without one (a new study) the transcoder's bytes are kept as they are."""
     if legacy is None:
-        return raw if raw is not None else json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-    m = dict(manifest)
+        if manifest.get("legacy") is None and raw is not None:
+            return raw
+        # a new study: the transcoder describes the temporary bundle it was given as a "legacy" object; there is none
+        return dumps_manifest(dict(manifest, legacy=None))
+    m = dict(manifest)  # key order is kept: the legacy block is updated in place
     lg = dict(m.get("legacy") or {})
     lg.update({"key": legacy["key"], "etag": legacy["etag"], "bytes": legacy["bytes"], "sha256": legacy["sha256"],
-               "migrated_at": legacy["migrated_at"], "ledger": ledger_key(gse)})
+               "ledger": ledger_key(gse)})
+    lg.setdefault("migrated_at", legacy["migrated_at"])
     m["legacy"] = lg
-    return json.dumps(m, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return dumps_manifest(m)
 
 
-# ── catalog rows (D1: v2_study, v2_sample, v2_migration) ──────────────────────────────────────────────────────────────
-
-# ASSUMED until W5 publishes its schema (bench/compression/notes/m_w5.md): names follow docs/format-v2.md section 8 and the
-# ingest endpoint's conventions (gse_id / gsm_id, JSON stored as text). Change this table, nothing else, to follow W5.
-# kind: text | int | real. `pk` is the ON CONFLICT target. `stamp` is set to the run time when present in the table.
-CATALOG_SCHEMA: Dict[str, Dict[str, Any]] = {
-    "v2_study": {
-        "pk": ["gse_id"],
-        "stamp": "updated_at",
-        "cols": {
-            "gse_id": "text", "manifest_key": "text", "rev": "text", "manifest_bytes": "int", "manifest_sha256": "text",
-            "bytes": "int", "n_samples": "int", "n_cells_called": "int", "reference_build": "text",
-            "manifest_version": "int", "packs": "text", "legacy_etag": "text", "legacy_bytes": "int", "created_at": "text",
-        },
-    },
-    "v2_sample": {
-        "pk": ["gsm_id"],
-        "stamp": "updated_at",
-        "cols": {
-            "gsm_id": "text", "gse_id": "text", "key": "text", "bytes": "int", "sha256": "text", "n_columns": "int",
-            "n_called": "int", "n_members": "int", "members": "text", "stats": "text",
-        },
-    },
-    "v2_migration": {
-        "pk": ["gse_id"],
-        "stamp": "updated_at",
-        "cols": {
-            "gse_id": "text", "status": "text", "legacy_key": "text", "legacy_etag": "text", "legacy_bytes": "int",
-            "legacy_sha256": "text", "v2_bytes": "int", "n_samples": "int", "members_by_kind": "text",
-            "verify_ok": "int", "verify_secs": "real", "total_secs": "real", "commit_sha": "text", "migrated_at": "text",
-            "ledger_key": "text", "error": "text",
-        },
-    },
-}
-MAX_TEXT = 60000  # the ingest endpoint refuses strings over 64 KB
+def dumps_manifest(m: dict) -> bytes:
+    """The serialisation of singlet.v2.manifest.dumps_manifest (indent 1, key order kept, UTF-8, trailing newline)."""
+    return (json.dumps(m, indent=1, sort_keys=False, ensure_ascii=False) + "\n").encode("utf-8")
 
 
-def _compact_members(members: dict, mode: str) -> Optional[str]:
-    if mode == "none" or not members:
+# ── catalog rows (D1 schema/032_v2_catalog.sql: v2_study, v2_sample, v2_migration) ───────────────────────────────────────
+#
+# The rows are what the website's ingest endpoint (functions/_shared/v2-catalog.ts, parseSample / ingestStatements) would write
+# from the same manifest, column for column. The SQL path (`catalog-sql`, applied with `wrangler d1 execute` by the orchestrator)
+# is the primary route; `catalog-post` speaks the endpoint's manifest-based contract for when an ingest token exists.
+
+# Mirrors MODALITIES in functions/_shared/modalities.ts and python/singlet/bundle.py (a test compares all three). Order matters:
+# `modalities` is stored as the JSON array of registry names in this order, as the endpoint's resolveModalities does.
+MODALITY_MEMBERS: List[Tuple[str, Tuple[str, ...]]] = [
+    ("exon_counts", ("exon_counts.1pz",)),
+    ("intron_counts", ("intron_counts.1pz",)),
+    ("cell_calls", ("cell_calls.tsv",)),
+    ("cell_qc", ("cell_qc_metrics.tsv",)),
+    ("junctions", ("sj_counts.1pz",)),
+    ("splice_psi", ("splice_psi.1pz",)),
+    ("splice_events", ("splice_events.tsv",)),
+    ("mt_heteroplasmy", ("mt_heteroplasmy.1pz",)),
+    ("mt_variants", ("mt_variants.tsv", "mt/mt_summary.tsv")),
+    ("donor_assignments", ("donor/donor_assignments.tsv", "donor_assignments.tsv")),
+    ("ancestry_call", ("ancestry_call.json",)),
+    ("sex_call", ("sex_call.json",)),
+    ("nonhost_species", ("nonhost/nonhost_em_abundance.tsv", "nonhost_em_abundance.tsv")),
+    ("nonhost_summary", ("nonhost/nonhost_summary.json", "nonhost_summary.json")),
+    ("vdj_gene_usage", ("vdj_gene_usage.1pz",)),
+    ("doublet_scores", ("doublet_scores.tsv",)),
+    ("cell_cycle_scores", ("cell_cycle_scores.tsv",)),
+    ("ambient_contamination", ("ambient_contamination.tsv",)),
+    ("ambient_profile", ("ambient_profile.tsv",)),
+    ("summary", ("summary.json",)),
+    ("pileup_stats", ("pileup_stats.json",)),
+    ("provenance", ("provenance.json",)),
+    ("saturation_curve", ("saturation_curve.tsv",)),
+    ("star_log", ("star_Log.final.out",)),
+]
+
+# Columns in schema order (the endpoint's STUDY_COLUMNS / MIGRATION_COLUMNS and the v2_sample INSERT). `updated_at` is left to the
+# table default on insert and set by SQL on update.
+STUDY_COLS = ("gse_id", "manifest_key", "rev", "bytes", "n_samples", "created_at", "legacy_bytes", "manifest_bytes", "manifest_sha256",
+              "n_cells_called", "reference_build", "packs_json", "pipeline_json")
+SAMPLE_COLS = ("gse_id", "gsm_id", "key", "bytes", "sha256", "n_columns", "n_called", "n_members", "median_umi", "median_genes",
+               "modalities", "members_json", "cell_stats_json", "rev")
+MIGRATION_COLS = ("gse_id", "status", "legacy_key", "legacy_etag", "legacy_bytes", "v2_bytes", "n_samples", "members_by_kind",
+                  "verify_ok", "commit_sha", "migrated_at", "verified_at", "ledger_key", "error")
+MIGRATION_STATUSES = ("pending", "running", "uploaded", "verified", "failed", "retired")
+
+# What the endpoint refuses, so these rows are never produced either.
+MAX_MEMBERS_JSON = 128 * 1024
+MAX_STATS_JSON = 16 * 1024
+MAX_SMALL_JSON = 8 * 1024
+MAX_POST_SAMPLES = 400
+MAX_POST_BODY = 8 * MIB
+# D1 refuses SQL statements over 100 KB; the values are literals in a file, so a sample row must fit with its text.
+MAX_STATEMENT = 95_000
+
+# Row writes D1 bills, indexes included (v2_sample: row + primary key + idx_v2_sample_gsm = 3; the website's notes count the study row
+# as 1 and the migration row as 1 or 2; 2 each here, to be on the safe side). A study costs 3 n + 2 + 2.
+WRITES_PER_ROW = {"v2_sample": 3, "v2_study": 2, "v2_migration": 2}
+DAY_BUDGET = 80_000
+
+
+class CatalogError(ValueError):
+    """The study cannot be described in the catalog as the endpoint would accept it."""
+
+
+def resolve_modalities(members: Iterable[str]) -> List[str]:
+    have = set(members)
+    return [name for name, cands in MODALITY_MEMBERS if any(c in have for c in cands)]
+
+
+def jcompact(obj: Any) -> str:
+    """JSON.stringify: no spaces, non-ASCII left as it is."""
+    return json.dumps(obj, separators=(",", ":"), ensure_ascii=False)
+
+
+def _num(v: Any) -> Optional[float]:
+    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and v == v and abs(v) != float("inf") else None
+
+
+def _count(v: Any, what: str) -> Optional[int]:
+    if v is None:
         return None
-    if mode == "full":
-        out: Any = members
-    else:
-        out = {}
-        for name, mem in members.items():
-            if isinstance(mem, dict):
-                out[name] = [mem.get("kind"), mem.get("off"), mem.get("len")]
-    s = json.dumps(out, sort_keys=True, separators=(",", ":"))
-    return s if len(s) <= MAX_TEXT else None
+    if isinstance(v, bool) or not isinstance(v, int) or v < 0:
+        raise CatalogError(f"{what} must be a non-negative integer, got {v!r}")
+    return v
 
 
-def build_catalog_rows(manifest: Optional[dict], row: dict, members_mode: str = "compact") -> Dict[str, Any]:
-    """{table: row or [rows]} for one study, from the manifest (when there is one) and the result row of the run."""
+def _small_json(v: Any, what: str, limit: int) -> Optional[str]:
+    if v is None:
+        return None
+    if not isinstance(v, dict):
+        raise CatalogError(f"{what} must be an object")
+    s = jcompact(v)
+    if len(s) > limit:
+        raise CatalogError(f"{what} is over {limit} bytes")
+    return s
+
+
+# Fields that can be dropped from a member entry, in order, when a sample row would not fit one SQL statement. Offsets, lengths,
+# digests, the chunk index and the codec facts clients use to plan ranged reads are never dropped.
+_SHRINK_ORDER = ("names", "columns", "called_source", "params", "needs")
+
+
+def shrink_members(members: dict, limit: int) -> Tuple[dict, List[str]]:
+    dropped: List[str] = []
+    cur = {k: dict(v) if isinstance(v, dict) else v for k, v in members.items()}
+    for field in _SHRINK_ORDER:
+        if len(jcompact(cur)) <= limit:
+            break
+        hit = False
+        for v in cur.values():
+            if isinstance(v, dict) and field in v:
+                del v[field]
+                hit = True
+        if hit:
+            dropped.append(field)
+    return cur, dropped
+
+
+def sample_row(gse: str, rev: str, s: dict) -> Tuple[dict, List[str]]:
+    gsm = s.get("gsm")
+    key = s.get("key")
+    m = RE_SAMPLE.match(key or "")
+    if not isinstance(gsm, str) or not re.fullmatch(r"GSM\d+", gsm) or not m or m.group(1) != gsm:
+        raise CatalogError(f"sample {gsm!r}: key must be v2/s/{gsm}/<32 hex>.s2")
+    members = s.get("members")
+    if not isinstance(members, dict):
+        raise CatalogError(f"{gsm}: members must be an object")
+    rm = _restricted_module().is_restricted_member
+    bad = [n for n in members if rm(n)]
+    if bad:
+        raise CatalogError(f"{gsm}: restricted members must not be in a public sample object: {', '.join(bad[:5])}")
+    for name, mem in members.items():
+        if not isinstance(mem, dict) or not all(isinstance(mem.get(k), int) and not isinstance(mem.get(k), bool) and mem.get(k) >= 0
+                                                for k in ("off", "len")) or mem.get("kind") not in (1, 2, 3, 4, 5):
+            raise CatalogError(f"{gsm}: member {name!r} needs integer kind (1-5), off and len")
+    notes: List[str] = []
+    mj = jcompact(members)
+    if len(mj) > MAX_MEMBERS_JSON:
+        raise CatalogError(f"{gsm}: members is over {MAX_MEMBERS_JSON} bytes")
+    stats = s.get("stats")
+    sha = s.get("sha256")
+    row = {
+        "gse_id": gse, "gsm_id": gsm, "key": key, "bytes": _count(s.get("bytes"), f"{gsm}: bytes"),
+        "sha256": sha if isinstance(sha, str) and re.fullmatch(r"[0-9a-f]{64}", sha) else None,
+        "n_columns": _count(s.get("n_columns"), f"{gsm}: n_columns"), "n_called": _count(s.get("n_called"), f"{gsm}: n_called"),
+        "n_members": len(members),
+        "median_umi": _num((stats or {}).get("median_umi")) if isinstance(stats, dict) else None,
+        "median_genes": _num((stats or {}).get("median_genes")) if isinstance(stats, dict) else None,
+        "modalities": jcompact(resolve_modalities(members.keys())),
+        "members_json": mj,
+        "cell_stats_json": _small_json(stats, f"{gsm}: stats", MAX_STATS_JSON),
+        "rev": rev,
+    }
+    return row, notes
+
+
+def build_catalog_rows(manifest: Optional[dict], row: dict, members_mode: str = "full") -> Dict[str, Any]:
+    """{v2_migration, v2_study, v2_sample[]} for one study, from its manifest (None for a failed attempt) and its result row.
+
+    `members_mode` is kept for the command line: only "full" is exact; "none" stores no members_json (smaller files, a client then
+    reads the manifest)."""
     out: Dict[str, Any] = {}
     gse = row["gse"]
+    lg = (manifest or {}).get("legacy") or {}
+    status = migration_status(row)
     mig = {
-        "gse_id": gse, "status": row.get("status"), "legacy_key": row.get("legacy_key"), "legacy_etag": row.get("legacy_etag"),
-        "legacy_bytes": row.get("legacy_bytes"), "legacy_sha256": row.get("legacy_sha256"), "v2_bytes": row.get("v2_bytes"),
-        "n_samples": row.get("n_samples"), "members_by_kind": json.dumps(row.get("members_by_kind") or {}, sort_keys=True),
-        "verify_ok": 1 if (row.get("verify") or {}).get("ok") else 0, "verify_secs": (row.get("verify") or {}).get("secs"),
-        "total_secs": (row.get("timings") or {}).get("total"), "commit_sha": row.get("commit"), "migrated_at": row.get("at"),
-        "ledger_key": ledger_key(gse), "error": (row.get("error") or "")[:2000] or None,
+        "gse_id": gse, "status": status,
+        "legacy_key": row.get("legacy_key") or lg.get("key"), "legacy_etag": row.get("legacy_etag") or lg.get("etag"),
+        "legacy_bytes": row.get("legacy_bytes") if row.get("legacy_bytes") is not None else lg.get("bytes"),
+        "v2_bytes": row.get("v2_bytes"), "n_samples": row.get("n_samples"),
+        "members_by_kind": jcompact(treatment_counts(row.get("members_by_kind") or {})) if row.get("members_by_kind") else None,
+        "verify_ok": (1 if (row.get("verify") or {}).get("ok") else 0) if row.get("verify") else None,
+        "commit_sha": (row.get("commit") or None) and str(row["commit"])[:64],
+        "migrated_at": lg.get("migrated_at") or row.get("at"),
+        "verified_at": row.get("verified_at") if status == "verified" else None,
+        "ledger_key": ledger_key(gse),
+        "error": ((row.get("error") or "")[:2000] or None) if status == "failed" else None,
     }
     out["v2_migration"] = mig
     if manifest is None:
         return out
-    sm = summarize_manifest(manifest)
-    mbytes = row.get("manifest_bytes")
-    out["v2_study"] = {
-        "gse_id": gse, "manifest_key": manifest_key(gse), "rev": manifest.get("rev"), "manifest_bytes": mbytes,
-        "manifest_sha256": row.get("manifest_sha256"), "bytes": row.get("v2_bytes"), "n_samples": sm["n_samples"],
-        "n_cells_called": sm["n_called"], "reference_build": manifest.get("reference_build"),
-        "manifest_version": manifest.get("manifest_version"), "packs": json.dumps(manifest.get("packs") or {}, sort_keys=True),
-        "legacy_etag": (manifest.get("legacy") or {}).get("etag"), "legacy_bytes": (manifest.get("legacy") or {}).get("bytes"),
-        "created_at": manifest.get("created_at"),
-    }
+    rev = manifest.get("rev")
+    if manifest.get("format") != "singlet-v2" or manifest.get("manifest_version") != 1 or not isinstance(rev, str) or not re.fullmatch(r"[0-9a-f]{16}", rev):
+        raise CatalogError(f"{gse}: not a singlet-v2 manifest_version 1 with a 16-hex rev")
     samples = []
+    seen = set()
     for s in manifest.get("samples", []):
-        stats = s.get("stats")
-        samples.append({
-            "gsm_id": s.get("gsm"), "gse_id": gse, "key": s.get("key"), "bytes": s.get("bytes"), "sha256": s.get("sha256"),
-            "n_columns": s.get("n_columns"), "n_called": s.get("n_called"), "n_members": len(s.get("members") or {}),
-            "members": _compact_members(s.get("members") or {}, members_mode),
-            "stats": json.dumps(stats, sort_keys=True, separators=(",", ":")) if stats else None,
-        })
+        r, _notes = sample_row(gse, rev, s)
+        if r["gsm_id"] in seen:
+            raise CatalogError(f"{gse}: {r['gsm_id']} appears twice")
+        seen.add(r["gsm_id"])
+        if members_mode == "none":
+            r["members_json"] = None
+        samples.append(r)
+    if not samples:
+        raise CatalogError(f"{gse}: the manifest lists no samples")
     out["v2_sample"] = samples
+    out["v2_study"] = {
+        "gse_id": gse, "manifest_key": manifest_key(gse), "rev": rev, "bytes": sum(r["bytes"] or 0 for r in samples),
+        "n_samples": len(samples), "created_at": manifest.get("created_at") if isinstance(manifest.get("created_at"), str) else None,
+        "legacy_bytes": _count(lg.get("bytes"), "manifest.legacy.bytes"), "manifest_bytes": row.get("manifest_bytes"),
+        "manifest_sha256": row.get("manifest_sha256"), "n_cells_called": sum(r["n_called"] or 0 for r in samples),
+        "reference_build": manifest.get("reference_build") if isinstance(manifest.get("reference_build"), str) else None,
+        "packs_json": _small_json(manifest.get("packs"), "manifest.packs", MAX_SMALL_JSON),
+        "pipeline_json": _small_json(manifest.get("pipeline"), "manifest.pipeline", MAX_SMALL_JSON),
+    }
     return out
 
 
-def clean_row(table: str, rec: dict) -> dict:
-    """Keep only the schema's columns, with the types the ingest endpoint enforces (ints are ints, text is text)."""
-    cols = CATALOG_SCHEMA[table]["cols"]
-    out = {}
-    for c, kind in cols.items():
-        v = rec.get(c)
-        if v is None:
-            out[c] = None
-        elif kind == "int":
-            out[c] = int(v)
-        elif kind == "real":
-            out[c] = float(v)
-        else:
-            out[c] = v if isinstance(v, str) else json.dumps(v, sort_keys=True)
-    return out
+_TREATMENT = {"pz2": "matrix", "derived": "recipe", "stored": "stored", "raw": "raw", "cells": "cells"}
+
+
+def treatment_counts(kinds: Dict[str, int]) -> Dict[str, int]:
+    """Members per treatment as the catalog names them: matrix / recipe / stored / raw (the cells table is counted as `cells`)."""
+    out: Dict[str, int] = {}
+    for k, n in kinds.items():
+        out[_TREATMENT.get(k, k)] = out.get(_TREATMENT.get(k, k), 0) + int(n)
+    return dict(sorted(out.items()))
+
+
+def migration_status(row: dict) -> str:
+    """v2_migration.status for a campaign result row: only a fully verified, committed study is `verified`."""
+    st = row.get("status")
+    if st in ("ok", "skipped_done"):
+        return "verified"
+    return "failed"
+
+
+# ── SQL ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 
 def sql_literal(v: Any) -> str:
@@ -948,17 +1090,67 @@ def sql_literal(v: Any) -> str:
     return "'" + str(v).replace("\x00", "").replace("'", "''") + "'"
 
 
-def upsert_sql(table: str, rec: dict, stamp_value: Optional[str], stamp: bool = True) -> str:
-    spec = CATALOG_SCHEMA[table]
-    cols = list(rec.keys())
-    vals = [sql_literal(rec[c]) for c in cols]
-    if stamp and spec.get("stamp"):
-        cols.append(spec["stamp"])
-        vals.append(sql_literal(stamp_value))
-    key = spec["pk"]
-    upd = ", ".join(f'"{c}" = excluded."{c}"' for c in cols if c not in key)
-    return (f'INSERT INTO "{table}" ({", ".join(chr(34) + c + chr(34) for c in cols)}) VALUES ({", ".join(vals)}) '
-            f'ON CONFLICT({", ".join(chr(34) + k + chr(34) for k in key)}) DO UPDATE SET {upd};')
+NOW = "strftime('%Y-%m-%dT%H:%M:%SZ', 'now')"
+
+
+def _insert(table: str, cols: Sequence[str], rec: dict) -> str:
+    return f"INSERT INTO {table} ({', '.join(cols)}, updated_at) VALUES ({', '.join(sql_literal(rec.get(c)) for c in cols)}, {NOW})"
+
+
+def sql_sample(rec: dict, schema: str = "033") -> str:
+    """One v2_sample row. 033 (primary key gse_id, rev, gsm_id; what the ingest endpoint writes now): the rows of a rev sit beside the
+    served rev and an existing row is left alone. 032 (primary key gse_id, gsm_id): the row is overwritten."""
+    if schema == "032":
+        sets = ", ".join(f"{c} = excluded.{c}" for c in SAMPLE_COLS if c not in ("gse_id", "gsm_id"))
+        return f"{_insert('v2_sample', SAMPLE_COLS, rec)} ON CONFLICT(gse_id, gsm_id) DO UPDATE SET {sets}, updated_at = {NOW};"
+    return f"{_insert('v2_sample', SAMPLE_COLS, rec)} ON CONFLICT(gse_id, rev, gsm_id) DO NOTHING;"
+
+
+def sql_study(rec: dict) -> List[str]:
+    """The flip: the v2_study row (readers list samples under its rev), then the sample rows of every other rev."""
+    sets = ", ".join(f"{c} = excluded.{c}" for c in STUDY_COLS if c != "gse_id")
+    return [
+        f"{_insert('v2_study', STUDY_COLS, rec)} ON CONFLICT(gse_id) DO UPDATE SET {sets}, updated_at = {NOW};",
+        f"DELETE FROM v2_sample WHERE gse_id = {sql_literal(rec['gse_id'])} AND rev != {sql_literal(rec['rev'])};",
+    ]
+
+
+def sql_migration(rec: dict) -> str:
+    """The migration row, the endpoint's upsert (functions/_shared/v2-catalog.ts): COALESCE keeps what an earlier row knew."""
+    coalesce = ("legacy_key", "legacy_etag", "legacy_bytes", "v2_bytes", "n_samples", "members_by_kind", "commit_sha", "migrated_at",
+                "verified_at", "ledger_key")
+    sets = (["status = excluded.status"] + [f"{c} = COALESCE(excluded.{c}, v2_migration.{c})" for c in coalesce[:6]]
+            + ["verify_ok = excluded.verify_ok"] + [f"{c} = COALESCE(excluded.{c}, v2_migration.{c})" for c in coalesce[6:]]
+            + ["error = excluded.error"])
+    return f"{_insert('v2_migration', MIGRATION_COLS, rec)} ON CONFLICT(gse_id) DO UPDATE SET {', '.join(sets)}, updated_at = {NOW};"
+
+
+def study_statements(rows: Dict[str, Any], schema: str = "033") -> Dict[str, Any]:
+    """The SQL of one study: `sample` (any order, idempotent) and `flip`, the statements that must stay together and come after
+    every sample row: the study row, the removal of older revs, the `verified` migration row. A failed study has only the migration
+    row (it is never sent for a study that has sample rows from an earlier run: see _finish)."""
+    out: Dict[str, Any] = {"sample": [], "flip": []}
+    samples = rows.get("v2_sample")
+    if samples:
+        for r in samples:
+            st = sql_sample(r, schema)
+            if len(st) > MAX_STATEMENT:
+                members, _dropped = shrink_members(json.loads(r["members_json"]), MAX_STATEMENT - (len(st) - len(r["members_json"])) - 2000)
+                r = dict(r, members_json=jcompact(members))
+                st = sql_sample(r, schema)
+                if len(st) > MAX_STATEMENT:
+                    raise CatalogError(f"{r['gsm_id']}: the sample row is {len(st)} bytes as SQL even without optional member fields (D1 limit 100 KB)")
+            out["sample"].append(st)
+        out["flip"].extend(sql_study(rows["v2_study"]))
+    out["flip"].append(sql_migration(rows["v2_migration"]))
+    return out
+
+
+def est_writes(rows: Dict[str, Any]) -> int:
+    n = len(rows.get("v2_sample") or [])
+    if not n:
+        return WRITES_PER_ROW["v2_migration"]  # a failed study: one migration upsert
+    return n * WRITES_PER_ROW["v2_sample"] + WRITES_PER_ROW["v2_study"] + WRITES_PER_ROW["v2_migration"]
 
 
 def load_rows(sources: Sequence[Path]) -> Dict[str, Dict[str, Any]]:
@@ -973,80 +1165,186 @@ def load_rows(sources: Sequence[Path]) -> Dict[str, Dict[str, Any]]:
     return studies
 
 
-def catalog_batches(studies: Dict[str, dict], max_rows: int, max_bytes: int, stamp_value: str, stamp: bool = True
-                    ) -> List[Tuple[str, str, int]]:
-    """[(file name, SQL text, n statements)] in apply order: samples, migration rows, then study rows (the study row is
-    what makes a study appear, so it goes last)."""
-    order = [("v2_sample", 1), ("v2_migration", 5), ("v2_study", 9)]
-    files = []
-    for table, rank in order:
-        stmts = []
-        for gse in accession_order(studies):
-            v = studies[gse].get(table)
-            if v is None:
-                continue
-            for rec in (v if isinstance(v, list) else [v]):
-                stmts.append(upsert_sql(table, clean_row(table, rec), stamp_value, stamp))
-        buf: List[str] = []
-        size = 0
-        n = 0
-        for s in stmts:
-            if buf and (len(buf) >= max_rows or size + len(s) > max_bytes):
-                files.append((f"{rank}{n:04d}_{table}.sql", "\n".join(buf) + "\n", len(buf)))
-                n += 1
-                buf, size = [], 0
-            buf.append(s)
-            size += len(s) + 1
-        if buf:
-            files.append((f"{rank}{n:04d}_{table}.sql", "\n".join(buf) + "\n", len(buf)))
+def rows_from_r2(store, bucket: str, gses: Sequence[str], members_mode: str = "full", log=print) -> Dict[str, dict]:
+    """Rebuild the catalog rows of studies from their manifests and ledgers in R2 (the truth the rows cache)."""
+    studies: Dict[str, dict] = {}
+    for g in accession_order(gses):
+        if store.head(bucket, manifest_key(g)) is None:
+            continue
+        raw = store.get_bytes(bucket, manifest_key(g))
+        m = json.loads(raw)
+        prior = last_committed(read_ledger(store, bucket, g))
+        if prior is None:
+            log(f"{g}: manifest without a committed ledger line: not catalogued")
+            continue
+        md = digest_bytes(raw)
+        prior = dict(prior, gse=g, manifest_bytes=md.size, manifest_sha256=md.sha256, status="ok")
+        try:
+            studies[g] = build_catalog_rows(m, prior, members_mode)
+        except CatalogError as e:
+            log(f"{g}: {e}")
+    return studies
+
+
+def plan_days(studies: Dict[str, dict], day_budget: int = DAY_BUDGET) -> List[List[str]]:
+    """Whole studies in accession order into days of at most `day_budget` estimated row writes (a larger study gets a day alone)."""
+    days: List[List[str]] = []
+    cur: List[str] = []
+    used = 0
+    for g in accession_order(studies):
+        w = est_writes(studies[g])
+        if cur and used + w > day_budget:
+            days.append(cur)
+            cur, used = [], 0
+        cur.append(g)
+        used += w
+    if cur:
+        days.append(cur)
+    return days
+
+
+def _pack_units(units: List[List[str]], max_rows: int, max_bytes: int) -> List[List[str]]:
+    """Files of whole units (a unit is never split across files), at most max_rows statements and max_bytes each."""
+    files: List[List[str]] = []
+    cur: List[str] = []
+    size = 0
+    for u in units:
+        usize = sum(len(s) + 1 for s in u)
+        if cur and (len(cur) + len(u) > max_rows or size + usize > max_bytes):
+            files.append(cur)
+            cur, size = [], 0
+        cur.extend(u)
+        size += usize
+    if cur:
+        files.append(cur)
     return files
 
 
-def post_rows(base_url: str, token: str, table: str, rows: List[dict], timeout: float = 120.0) -> dict:
+def write_sql_files(studies: Dict[str, dict], out: Path, *, day_budget: int, max_rows: int, max_bytes: int, database: str,
+                    schema: str = "033", log=print) -> dict:
+    """SQL files under out/dayNN/, with APPLY.txt per day and PLAN.txt overall.
+
+    A day holds whole studies and at most `day_budget` estimated D1 row writes. Within a day: first every sample row of the day's
+    studies (`1_sample_*.sql`: nobody reads them until a study row names their rev), then `2_flip_*.sql`, where each study's
+    statements stay together in one atomic file: the v2_study row, the removal of the other revs' sample rows, and the v2_migration
+    row, so a study turns `verified` only together with, and after, its own sample and study rows (the order the ingest endpoint
+    uses). Returns the plan summary."""
+    out.mkdir(parents=True, exist_ok=True)
+    for d in out.glob("day*"):
+        if d.is_dir():
+            shutil.rmtree(d)
+    skipped: Dict[str, str] = {}
+    prepared: Dict[str, Dict[str, Any]] = {}
+    for g in accession_order(studies):
+        try:
+            prepared[g] = study_statements(studies[g], schema)
+        except CatalogError as e:
+            skipped[g] = str(e)
+            log(f"{g}: skipped ({e})")
+    kept = {g: studies[g] for g in prepared}
+    days = plan_days(kept, day_budget)
+    summary = {"days": [], "skipped": skipped, "n_studies": len(kept), "est_writes": 0, "n_files": 0, "n_statements": 0, "schema": schema}
+    for di, gses in enumerate(days, 1):
+        dd = out / f"day{di:02d}"
+        dd.mkdir()
+        names: List[str] = []
+        n_stmt = 0
+        phases = (("1_sample", [[s] for g in gses for s in prepared[g]["sample"]]),
+                  ("2_flip", [list(prepared[g]["flip"]) for g in gses]))
+        for prefix, units in phases:
+            for k, buf in enumerate(_pack_units(units, max_rows, max_bytes)):
+                name = f"{prefix}_{k:04d}.sql"
+                (dd / name).write_text("\n".join(buf) + "\n", encoding="utf-8", newline="\n")
+                names.append(name)
+                n_stmt += len(buf)
+        writes = sum(est_writes(kept[g]) for g in gses)
+        samples = sum(len(kept[g].get("v2_sample") or []) for g in gses)
+        (dd / "APPLY.txt").write_text(
+            f"# day {di}: {len(gses)} studies ({gses[0]} .. {gses[-1]}), {samples} sample rows, about {writes} D1 row writes. "
+            f"Apply the files in this order; each file is atomic.\n"
+            + "\n".join(f"wrangler d1 execute {database} --remote --file={dd.name}/{n}" for n in names) + "\n", encoding="utf-8", newline="\n")
+        (dd / "STUDIES.txt").write_text("\n".join(gses) + "\n", encoding="utf-8", newline="\n")
+        summary["days"].append({"day": di, "studies": len(gses), "first": gses[0], "last": gses[-1], "est_writes": writes,
+                                "files": len(names), "statements": n_stmt, "samples": samples})
+        summary["est_writes"] += writes
+        summary["n_files"] += len(names)
+        summary["n_statements"] += n_stmt
+    lines = [f"{summary['n_studies']} studies, {summary['n_files']} files, {summary['n_statements']} statements, about {summary['est_writes']} "
+             f"estimated D1 row writes in {len(days)} day(s) of at most {day_budget} (v2_sample key: {'gse_id, rev, gsm_id (schema 033)' if schema == '033' else 'gse_id, gsm_id (schema 032)'}):"]
+    for d in summary["days"]:
+        lines.append(f"  day{d['day']:02d}: {d['studies']:5d} studies  {d['samples']:6d} samples  ~{d['est_writes']:6d} writes  {d['files']:4d} files  ({d['first']}..{d['last']})")
+    for g, why in skipped.items():
+        lines.append(f"  SKIPPED {g}: {why}")
+    (out / "PLAN.txt").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    (out / "plan.json").write_text(json.dumps(summary, indent=1), encoding="utf-8", newline="\n")
+    return summary
+
+
+# ── POST (the website's manifest-based ingest contract) ──────────────────────────────────────────────────────────────
+
+
+def post_json(url: str, token: str, body: dict, timeout: float = 120.0) -> dict:
     req = urllib.request.Request(
-        f"{base_url.rstrip('/')}/api/ingest/{table}",
-        data=json.dumps({"rows": rows}).encode("utf-8"),
+        url, data=json.dumps(body, separators=(",", ":")).encode("utf-8"),
         headers={"Content-Type": "application/json", "X-Ingest-Token": token,
                  "User-Agent": "singlet-v2-campaign/1.0"},  # the site answers 403 to the default Python user agent
-        method="POST",
-    )
+        method="POST")
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read().decode("utf-8") or "{}")
 
 
-def post_study_rows(base_url: str, token: str, studies: Dict[str, dict], batch: int = 500, max_body: int = 3 * MIB,
-                    log=print) -> Dict[str, int]:
-    """POST rows in apply order (samples, migration, study). Retries 429/5xx; a 4xx stops (the body says why)."""
-    counts: Dict[str, int] = {}
-    for table in ("v2_sample", "v2_migration", "v2_study"):
-        rows = []
-        for gse in accession_order(studies):
-            v = studies[gse].get(table)
-            if v is None:
-                continue
-            rows.extend(clean_row(table, r) for r in (v if isinstance(v, list) else [v]))
-        i = 0
-        while i < len(rows):
-            chunk = rows[i : i + batch]
-            while len(json.dumps(chunk)) > max_body and len(chunk) > 1:
-                chunk = chunk[: len(chunk) // 2]
+def post_payloads(manifest: dict, rows: Dict[str, Any], slice_size: int = MAX_POST_SAMPLES, max_body: int = MAX_POST_BODY - MIB) -> List[dict]:
+    """The bodies for POST /api/ingest/v2-study: the manifest without `study_files`, in slices of at most `slice_size` samples that
+    share rev, n_samples and bytes (`final: false` until the last), the migration block on the last."""
+    base = {k: v for k, v in manifest.items() if k not in ("study_files", "samples")}
+    samples = manifest["samples"]
+    study = rows["v2_study"]
+    mig = rows["v2_migration"]
+    migration = {k: v for k, v in mig.items() if k not in ("gse_id", "members_by_kind") and v is not None}
+    if mig.get("members_by_kind"):
+        migration["members_by_kind"] = json.loads(mig["members_by_kind"])
+    if "verify_ok" in migration:
+        migration["verify_ok"] = bool(migration["verify_ok"])
+    n = slice_size
+    while True:
+        chunks = [samples[i : i + n] for i in range(0, len(samples), n)]
+        bodies = []
+        for i, ch in enumerate(chunks):
+            last = i == len(chunks) - 1
+            man = dict(base, samples=ch, n_samples=len(samples), bytes=study["bytes"], n_cells_called=study["n_cells_called"])
+            body: Dict[str, Any] = {"manifest": man, "final": last}
+            if last:
+                body.update(manifest_bytes=study["manifest_bytes"], manifest_sha256=study["manifest_sha256"], migration=migration)
+            bodies.append(body)
+        if n == 1 or all(len(json.dumps(b)) <= max_body for b in bodies):
+            return bodies
+        n = max(1, n // 2)
+
+
+def post_studies(base_url: str, token: str, items: Dict[str, Tuple[dict, dict]], log=print) -> Dict[str, int]:
+    """POST every study: items = {gse: (manifest, rows)}. Retries 429/5xx; a 4xx stops (the body says why)."""
+    url = f"{base_url.rstrip('/')}/api/ingest/v2-study"
+    counts = {"studies": 0, "posts": 0}
+    for g in accession_order(items):
+        manifest, rows = items[g]
+        for body in post_payloads(manifest, rows):
             for attempt in range(6):
                 try:
-                    post_rows(base_url, token, table, chunk)
+                    post_json(url, token, body)
                     break
                 except urllib.error.HTTPError as e:
-                    body = e.read().decode("utf-8", "replace")[:300]
+                    msg = e.read().decode("utf-8", "replace")[:300]
                     if e.code in (429, 500, 502, 503, 504) and attempt < 5:
                         time.sleep(min(60, 2 ** attempt * 2))
                         continue
-                    raise RuntimeError(f"POST {table} -> HTTP {e.code}: {body}") from None
+                    raise RuntimeError(f"POST {g} -> HTTP {e.code}: {msg}") from None
                 except (urllib.error.URLError, socket.timeout):
                     if attempt == 5:
                         raise
                     time.sleep(min(60, 2 ** attempt * 2))
-            i += len(chunk)
-            counts[table] = counts.get(table, 0) + len(chunk)
-            log(f"posted {table}: {counts[table]}/{len(rows)}")
+            counts["posts"] += 1
+        counts["studies"] += 1
+        log(f"posted {g} ({counts['studies']}/{len(items)})")
     return counts
 
 
@@ -1076,8 +1374,16 @@ class Ctx:
         env = dict(os.environ)
         py = a.pythonpath or str(REPO / "python")
         env["PYTHONPATH"] = py + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
-        for k in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "SINGLET_V2_THREADS"):
-            env[k] = str(a.migrate_threads)
+        # singlet.v2.migrate has no thread option (its native encoder uses 4 threads for a few seconds per sample, everything
+        # else is one Python thread): keep BLAS from multiplying that by the number of workers
+        for k in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+            env[k] = str(a.blas_threads)
+        env["SINGLET_PZW_AUTOBUILD"] = "0"  # W3's recipes build a helper executable on Windows only; never race to do it on the cluster
+        env["SINGLET_V2_RECIPES_CACHE"] = str(self.scratch / "recipes-cache")
+        self.migrate_args = _split_cmd(getattr(a, "migrate_args", None)) or []
+        self.verify_args = _split_cmd(getattr(a, "verify_args", None)) or []
+        if getattr(a, "verify_quick", False):
+            self.verify_args = self.verify_args + ["--quick"]
         for k in ("R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "INGEST_TOKEN"):
             env.pop(k, None)  # the transcoder never needs credentials
         self.env = env
@@ -1222,8 +1528,8 @@ def publish_bundle(ctx: Ctx, gse: str, bundle: Path, work: Path, legacy: Optiona
 
     # 3. transcode
     row["stage"] = "migrate"
-    rc, tail, secs = run_logged(ctx.migrate_cmd + ["--bundle", str(bundle), "--out", str(out), "--gse", gse], cwd=work,
-                                env=ctx.env, timeout=a.migrate_timeout, log_path=study_log)
+    rc, tail, secs = run_logged(ctx.migrate_cmd + ["--bundle", str(bundle), "--out", str(out), "--gse", gse] + ctx.migrate_args,
+                                cwd=work, env=ctx.env, timeout=_tool_timeout(ctx, a.migrate_timeout), log_path=study_log)
     tm["migrate"] = round(secs, 2)
     ev("migrated", rc=rc, secs=round(secs, 2))
     if rc != 0:
@@ -1253,24 +1559,32 @@ def publish_bundle(ctx: Ctx, gse: str, bundle: Path, work: Path, legacy: Optiona
         v2_pack_bytes=sum(o.digest.size for o in plan.objects if RE_PACK.match(o.key)),
         n_objects=len(plan.objects) + 1, warnings=plan.warnings[:10],
     )
-    report = out / "migrate_report.json"
-    if report.is_file() and report.stat().st_size < 200_000:
-        try:
-            row["report"] = json.loads(report.read_text("utf-8"))
-        except ValueError:
-            pass
+    # the transcoder's own ledger (one line per member: treatment, recipe, why a member was stored) joins ours in R2
+    mled = root / "ledger" / f"{gse}.jsonl"
+    n_mled = 0
+    if mled.is_file():
+        for ln in mled.read_text("utf-8").splitlines():
+            try:
+                rec = json.loads(ln)
+            except ValueError:
+                continue
+            if isinstance(rec, dict):
+                events.append({"at": iso(), "event": "migrate:" + str(rec.get("type", "line")), **{k: v for k, v in rec.items() if k not in ("at", "event")}})
+                n_mled += 1
+    row["migrate_ledger_lines"] = n_mled
     ev("collected", n_objects=row["n_objects"], v2_bytes=row["v2_bytes"], members_by_kind=sm["members_by_kind"])
 
     # 5. verify against the legacy bundle (must exit 0)
     row["stage"] = "verify"
-    rc, tail, secs = run_logged(ctx.verify_cmd + ["--bundle", str(bundle), "--v2", str(out)], cwd=work, env=ctx.env,
-                                timeout=a.verify_timeout, log_path=study_log)
+    rc, tail, secs = run_logged(ctx.verify_cmd + ["--bundle", str(bundle), "--v2", str(out)] + ctx.verify_args, cwd=work,
+                                env=ctx.env, timeout=_tool_timeout(ctx, a.verify_timeout), log_path=study_log)
     row["verify"] = {"ok": rc == 0, "rc": rc, "secs": round(secs, 2)}
     tm["verify"] = round(secs, 2)
     ev("verified", rc=rc, secs=round(secs, 2))
     if rc != 0:
         row["verify"]["tail"] = tail[-1500:]
         raise StudyFailure("verify_failed", "verify", f"verify exited {rc}")
+    row["verified_at"] = iso()
 
     # dry: report what would be written and stop (HEAD only)
     if not ctx.apply:
@@ -1423,6 +1737,12 @@ def process_study(ctx: Ctx, gse: str, provider=None) -> dict:
     return row
 
 
+def _tool_timeout(ctx: Ctx, default: float) -> float:
+    """A transcoder or verifier call may not run past the job's deadline (it would be killed with the job and leave nothing)."""
+    dl = getattr(ctx.a, "deadline_epoch", None)
+    return default if not dl else max(60.0, min(default, dl - time.time()))
+
+
 def _sleep_for(ctx: Ctx, attempt: int) -> float:
     return min(30.0, getattr(ctx.a, "retry_sleep", 1.0) * 2 ** attempt)
 
@@ -1453,15 +1773,17 @@ def _finish(ctx: Ctx, row: dict, events: List[dict]) -> None:
                 rows = build_catalog_rows(manifest, dict(row["_prior"], gse=gse), a.members)
             elif row["status"] == "ok":
                 rows = build_catalog_rows(row["_manifest"], _public_row(row), a.members)
-            else:  # a failed attempt: record it, keep what an earlier run left for the study and its samples
+            else:  # a failed attempt: a `failed` migration row, unless an earlier run left rows for a published study (never downgrade it)
                 rows = build_catalog_rows(None, _public_row(row), a.members)
                 old = d / f"{gse}.json"
-                if old.exists():
-                    rows = {**json.loads(old.read_text("utf-8")), **rows}
-            tmp = d / f".{gse}.json.tmp"
-            tmp.write_text(json.dumps(rows, sort_keys=True), encoding="utf-8")
-            os.replace(tmp, d / f"{gse}.json")
-        except Exception as e:  # noqa: BLE001
+                if old.exists() and "v2_sample" in json.loads(old.read_text("utf-8")):
+                    rows = None
+            if rows is not None:
+                tmp = d / f".{gse}.json.tmp"
+                tmp.write_text(json.dumps(rows, sort_keys=True), encoding="utf-8", newline="\n")
+                os.replace(tmp, d / f"{gse}.json")
+        except Exception as e:  # noqa: BLE001  (CatalogError: the study is live in R2 but cannot be described to D1 as it is)
+            row["catalog_error"] = f"{type(e).__name__}: {e}"[:300]
             row.setdefault("warnings", []).append(f"catalog rows not written: {e}")
     row.pop("_manifest", None)
     row.pop("_prior", None)
@@ -1499,7 +1821,7 @@ def select_studies(a: argparse.Namespace, store) -> List[Tuple[str, Optional[int
         explicit += read_list(a.gse_list)
     explicit = accession_order(explicit) if explicit else []
     listing: Dict[str, int] = {}
-    if not explicit or a.mode == "pilot":
+    if not explicit or a.mode == "pilot" or a.listing:  # (an explicit list with a listing gets its sizes: largest first)
         if a.listing:  # a frozen `plan --out` listing: every shard of a campaign slices the same list
             sized = [(ln.split("\t")[0], int(ln.split("\t")[1])) for ln in Path(a.listing).read_text().splitlines()
                      if ln.strip() and not ln.startswith("gse")]
@@ -1554,7 +1876,7 @@ def cmd_run(a: argparse.Namespace) -> int:
     results_fh = open(a.results, "a", encoding="utf-8") if a.results else None
     total_bytes = sum(s or 0 for _, s in studies)
     print(f"[v2_campaign] mode={a.mode} studies={len(studies)} bytes={total_bytes / 1e9:.1f}GB workers={a.workers} "
-          f"io_threads={a.io_threads} migrate_threads={a.migrate_threads} shard={a.shard} resume={a.resume} "
+          f"io_threads={a.io_threads} blas_threads={a.blas_threads} shard={a.shard} resume={a.resume} "
           f"readback={a.readback} commit={ctx.commit}", flush=True)
     counts: Dict[str, int] = {}
     t0 = time.time()
@@ -1585,7 +1907,7 @@ def cmd_run(a: argparse.Namespace) -> int:
 
 
 def project(total_bytes: float, n_studies: int, shards: int, *, rate_dl: float, rate_cpu_core: float, cores: float,
-            eff: float = 0.75, startup_min: float = 6.0, max_study_bytes: float = 0.0) -> dict:
+            eff: float = 0.75, startup_min: float = 8.0, max_study_bytes: float = 0.0) -> dict:
     """Per-task and campaign time. A node moves min(download rate, compute rate) MB/s of legacy bytes."""
     node_rate = min(rate_dl, rate_cpu_core * cores * eff)
     shard_bytes = total_bytes / shards
@@ -1593,7 +1915,7 @@ def project(total_bytes: float, n_studies: int, shards: int, *, rate_dl: float, 
     return {"shards": shards, "studies_per_shard": n_studies / shards, "gb_per_shard": shard_bytes / 1e9, "node_mbs": node_rate,
             "task_hours": task_h, "node_hours_total": task_h * shards,
             "bound": "download" if rate_dl <= rate_cpu_core * cores * eff else "compute",
-            "longest_study_hours": (max_study_bytes / 1e6 / (rate_cpu_core * max(1.0, cores / 2)) / 3600) if max_study_bytes else 0.0}
+            "longest_study_hours": (max_study_bytes / 1e6 / rate_cpu_core / 3600) if max_study_bytes else 0.0}
 
 
 def cmd_plan(a: argparse.Namespace) -> int:
@@ -1605,21 +1927,28 @@ def cmd_plan(a: argparse.Namespace) -> int:
     sized.sort(key=lambda t: (len(t[0]), t[0]))
     total = sum(s for _, s in sized)
     big = [t for t in sized if t[1] >= a.big_gb * 1e9]
+    rest = [t for t in sized if t[1] < a.big_gb * 1e9]
+    rest_total = sum(s for _, s in rest)
     print(f"studies={len(sized)} total={total / 1e12:.3f} TB mean={total / max(1, len(sized)) / 1e6:.1f} MB "
-          f"max={max((s for _, s in sized), default=0) / 1e9:.1f} GB  >= {a.big_gb} GB: {len(big)}")
+          f"max={max((s for _, s in sized), default=0) / 1e9:.1f} GB")
+    big_total = total - rest_total
+    print(f"big (>= {a.big_gb} GB, run on their own): {len(big)} studies, {big_total / 1e12:.3f} TB ({100 * big_total / max(1, total):.0f}% of the bytes); "
+          f"one migrate process is single-threaded: {a.big_gb} GB takes {a.big_gb * 1e3 / a.rate_cpu / 3600:.1f} h and "
+          f"{max((s for _, s in big), default=0) / 1e6 / a.rate_cpu / 3600:.1f} h for the largest, at {a.rate_cpu} MB/s")
     if a.out:
+        shard_of = {g: i % a.shards for i, (g, _s) in enumerate(rest)}
         with open(a.out, "w", encoding="utf-8") as fh:
             fh.write("gse\tbytes\tshard\n")
-            for i, (g, s) in enumerate(sized):
-                fh.write(f"{g}\t{s}\t{i % a.shards}\n")
-        print(f"wrote {a.out} (shard = position in accession order mod {a.shards})")
+            for g, s in sized:
+                fh.write(f"{g}\t{s}\t{shard_of.get(g, 'big')}\n")
+        print(f"wrote {a.out} (shard = position among the non-big studies in accession order mod {a.shards}; big studies: 'big')")
     if a.big_out:
         Path(a.big_out).write_text("".join(f"{g}\t# {s / 1e9:.1f} GB\n" for g, s in big), encoding="utf-8")
+    print(f"non-big studies ({len(rest)}, {rest_total / 1e12:.3f} TB), {a.cores:g}-core jobs, {a.rate_cpu} MB/s per core, download {a.rate_dl} MB/s:")
     print("shards  GB/shard  studies/shard  node MB/s  bound     task h  node-h total")
-    for n in sorted({8, 16, 32, 64, 128, a.shards}):
-        p = project(total, len(sized), n, rate_dl=a.rate_dl, rate_cpu_core=a.rate_cpu, cores=a.cores,
-                    max_study_bytes=max((s for _, s in sized), default=0))
-        print(f"{n:6d}  {p['gb_per_shard']:8.1f}  {p['studies_per_shard']:13.0f}  {p['node_mbs']:9.0f}  {p['bound']:8s}  "
+    for n in sorted({16, 32, 64, 96, 128, a.shards}):
+        p = project(rest_total, len(rest), n, rate_dl=a.rate_dl, rate_cpu_core=a.rate_cpu, cores=a.cores)
+        print(f"{n:6d}  {p['gb_per_shard']:8.1f}  {p['studies_per_shard']:13.0f}  {p['node_mbs']:9.1f}  {p['bound']:8s}  "
               f"{p['task_hours']:6.2f}  {p['node_hours_total']:11.1f}")
     return 0
 
@@ -1666,93 +1995,108 @@ def cmd_summarize(a: argparse.Namespace) -> int:
     return 1 if any(r["status"] in BAD_STATUSES for r in rows.values()) else 0
 
 
-def cmd_catalog_sql(a: argparse.Namespace) -> int:
+def _catalog_sources(a: argparse.Namespace) -> Dict[str, dict]:
+    """Catalog rows from the rows directories of `run`, or rebuilt from the manifests and ledgers in R2 (--from-r2)."""
     if a.from_r2:
         store = make_store(a)
-        studies: Dict[str, dict] = {}
         if a.gse_list:
             gses = read_list(a.gse_list)
         else:  # the manifests that exist: legacy keys disappear when the bundles are retired
-            gses = [RE_MANIFEST.match(k).group(1) for k, _ in store.list_keys(a.public, "v2/m/") if RE_MANIFEST.match(k)]
-        gses = accession_order(gses)
-        for g in gses:
-            if store.head(a.public, manifest_key(g)) is None:
-                continue
-            m = json.loads(store.get_bytes(a.public, manifest_key(g)))
-            prior = last_committed(read_ledger(store, a.public, g)) or {"gse": g, "status": "ok"}
-            md = digest_bytes(store.get_bytes(a.public, manifest_key(g)))
-            prior = dict(prior, manifest_bytes=md.size, manifest_sha256=md.sha256)
-            studies[g] = build_catalog_rows(m, prior, a.members)
-    else:
-        studies = load_rows([Path(p) for p in a.rows_dir])
-    if a.gse_list and not a.from_r2:
-        keep = set(read_list(a.gse_list))
-        studies = {g: v for g, v in studies.items() if g in keep}
-    stamp_value = iso()
-    files = catalog_batches(studies, a.max_rows, a.max_bytes, stamp_value, stamp=not a.no_stamp)
-    out = Path(a.out)
-    out.mkdir(parents=True, exist_ok=True)
-    for f in out.glob("[0-9]*_v2_*.sql"):
-        f.unlink()
-    for name, text, _n in files:
-        (out / name).write_text(text, encoding="utf-8")
-    lines = [f"wrangler d1 execute {a.database} --remote --file={name}" for name, _t, _n in files]
-    (out / "APPLY.txt").write_text(
-        "# Run from the laptop, in this order (each file is atomic; the study rows come last).\n" + "\n".join(lines) + "\n",
-        encoding="utf-8")
-    print(f"{len(studies)} studies -> {len(files)} files, {sum(n for *_x, n in files)} statements in {out}")
-    return 0
-
-
-def cmd_catalog_post(a: argparse.Namespace) -> int:
-    token = os.environ.get(a.token_env, "")
+            gses = [m.group(1) for k, _ in store.list_keys(a.public, "v2/m/") if (m := RE_MANIFEST.match(k))]
+        return rows_from_r2(store, a.public, gses, a.members)
     studies = load_rows([Path(p) for p in a.rows_dir])
     if a.gse_list:
         keep = set(read_list(a.gse_list))
         studies = {g: v for g, v in studies.items() if g in keep}
+    return studies
+
+
+def cmd_catalog_sql(a: argparse.Namespace) -> int:
+    studies = _catalog_sources(a)
+    if not studies:
+        print("no studies: give --rows-dir (written by `run --rows-dir`) or --from-r2", file=sys.stderr)
+        return 2
+    plan = write_sql_files(studies, Path(a.out), day_budget=a.day_budget, max_rows=a.max_rows, max_bytes=a.max_bytes,
+                           database=a.database, schema=a.schema)
+    print((Path(a.out) / "PLAN.txt").read_text(encoding="utf-8"), end="")
+    return 1 if plan["skipped"] else 0
+
+
+def cmd_catalog_post(a: argparse.Namespace) -> int:
+    token = os.environ.get(a.token_env, "")
+    store = make_store(a)
+    gses = read_list(a.gse_list) if a.gse_list else [m.group(1) for k, _ in store.list_keys(a.public, "v2/m/") if (m := RE_MANIFEST.match(k))]
+    items: Dict[str, Tuple[dict, dict]] = {}
+    for g in accession_order(gses):
+        if store.head(a.public, manifest_key(g)) is None:
+            continue
+        raw = store.get_bytes(a.public, manifest_key(g))
+        prior = last_committed(read_ledger(store, a.public, g))
+        if prior is None:
+            print(f"{g}: no committed ledger line, skipped")
+            continue
+        md = digest_bytes(raw)
+        m = json.loads(raw)
+        try:
+            rows = build_catalog_rows(m, dict(prior, gse=g, manifest_bytes=md.size, manifest_sha256=md.sha256, status="ok"), a.members)
+        except CatalogError as e:
+            print(f"{g}: {e}")
+            continue
+        items[g] = (m, rows)
     if a.dry_run:
-        n = {t: sum(len(v[t]) if isinstance(v.get(t), list) else (1 if v.get(t) else 0) for v in studies.values())
-             for t in ("v2_sample", "v2_migration", "v2_study")}
-        print(f"would POST to {a.base_url}/api/ingest/<table>: {n}")
+        n = sum(len(post_payloads(m, r)) for m, r in items.values())
+        print(f"would POST {n} bodies for {len(items)} studies to {a.base_url}/api/ingest/v2-study")
         return 0
     if not token:
         print(f"error: ${a.token_env} is empty (the ingest token)", file=sys.stderr)
         return 2
-    counts = post_study_rows(a.base_url, token, studies, batch=a.batch)
-    print("posted", counts)
+    print("posted", post_studies(a.base_url, token, items))
     return 0
 
 
 def cmd_refs_index(a: argparse.Namespace) -> int:
+    """Publish the reference packs and `v2/ref/index.json` from the package's packs directory (python/singlet/v2/packs)."""
+    d = Path(a.packs_dir)
+    idx_path = d / "index.json"
+    index = json.loads(idx_path.read_text("utf-8"))
+    if index.get("format") != "singlet-v2-packs":
+        print(f"{idx_path}: not a singlet-v2-packs index", file=sys.stderr)
+        return 2
     store = make_store(a)
-    packs = []
-    for key, size in store.list_keys(a.public, "v2/ref/"):
-        m = RE_PACK.match(key)
-        if not m:
+    w = GuardedStore(store, {a.public: ("v2/ref/",)})
+    bad = 0
+    todo: List[Tuple[str, Path]] = []
+    for p in index["packs"]:
+        f = d / f"{p['id']}.pack"
+        if not f.is_file():
+            print(f"missing pack file {f}", file=sys.stderr)
+            bad += 1
             continue
-        head = store.read_range(a.public, key, 0, min(size, 65536) - 1)
-        info: Dict[str, Any] = {"id": m.group(1), "bytes": size}
-        if head[:4] == b"SPK2" and len(head) >= 12:
-            kind = int.from_bytes(head[6:8], "little")
-            hlen = int.from_bytes(head[8:12], "little")
-            info["kind"] = {1: "vocab", 2: "whitelist", 3: "composite"}.get(kind, kind)
-            try:
-                hdr = json.loads(head[12 : 12 + hlen].decode("utf-8"))
-                for k in ("build", "member", "n", "protocol", "sha256_names"):
-                    if k in hdr:
-                        info[k] = hdr[k]
-            except ValueError:
-                pass
-        info["sha256"] = store.sha256_object(a.public, key, size)
-        if info["sha256"][:32] != m.group(1):
-            print(f"warning: {key} is not named by its digest16 ({info['sha256'][:32]})", file=sys.stderr)
-        packs.append(info)
-    packs.sort(key=lambda p: p["id"])
-    body = json.dumps({"format": "singlet-v2", "updated_at": iso(), "packs": packs}, sort_keys=True, indent=1).encode("utf-8")
-    if a.apply:
-        ct, cc = object_headers(REFS_INDEX_KEY)
-        GuardedStore(store, {a.public: ("v2/ref/",)}).put_bytes(a.public, REFS_INDEX_KEY, body, content_type=ct, cache_control=cc)
-    print(f"{len(packs)} packs; index {'written' if a.apply else 'not written (no --apply)'} ({len(body)} bytes)")
+        dg = hash_file(f)
+        if dg.size != p["bytes"] or dg.sha256 != p["sha256"] or dg.sha256[:32] != p["id"]:
+            print(f"{f.name}: size/sha256/id do not match index.json", file=sys.stderr)
+            bad += 1
+            continue
+        todo.append((f"v2/ref/{p['id']}.pack", f))
+    if bad:
+        return 1
+    todo.append((REFS_INDEX_KEY, idx_path))
+    up = sk = 0
+    for key, f in todo:
+        dg = hash_file(f)
+        h = store.head(a.public, key)
+        if h is not None and h.size == dg.size and (h.etag == dg.etag or h.meta.get("sha256") == dg.sha256):
+            sk += 1
+            continue
+        if a.apply:
+            ct, cc = object_headers(key)
+            w.put_file(a.public, key, f, content_type=ct, cache_control=cc, metadata={"sha256": dg.sha256})
+            h = store.head(a.public, key)
+            if h is None or h.size != dg.size:
+                print(f"{key}: not stored correctly", file=sys.stderr)
+                return 1
+        up += 1
+    print(f"{len(index['packs'])} packs + index.json: {up} {'uploaded' if a.apply else 'to upload (no --apply)'}, {sk} already there")
     return 0
 
 
@@ -1795,9 +2139,12 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--order", choices=["size-desc", "accession"], default="size-desc", help="processing order inside the shard")
     r.add_argument("--list-only", action="store_true", help="dry: only HEAD + central directory + restricted check")
     r.add_argument("--allow-restricted", action="store_true", help="migrate bundles that still hold restricted members (NOT for the public bucket)")
-    r.add_argument("--workers", type=int, default=0, help="studies in flight (0 = cores / migrate-threads)")
+    r.add_argument("--workers", type=int, default=0, help="studies in flight (0 = cores - 2: a migrate process is one Python thread)")
     r.add_argument("--io-threads", type=int, default=8)
-    r.add_argument("--migrate-threads", type=int, default=2)
+    r.add_argument("--blas-threads", type=int, default=1, help="OMP/OpenBLAS/MKL threads per transcoder process")
+    r.add_argument("--migrate-args", help="extra arguments for singlet.v2.migrate (JSON list or shell-style string), e.g. --samples GSM1,GSM2")
+    r.add_argument("--verify-args", help="extra arguments for singlet.v2.verify")
+    r.add_argument("--verify-quick", action="store_true", help="pass --quick to verify (skips its slow digest recomputation; NOT for the campaign)")
     r.add_argument("--migrate-cmd", help="default: <python> -m singlet.v2.migrate")
     r.add_argument("--verify-cmd", help="default: <python> -m singlet.v2.verify")
     r.add_argument("--migrate-timeout", type=float, default=3 * 3600)
@@ -1811,9 +2158,9 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--rows-dir", help="write catalog rows per study (<GSE>.json) here")
     r.add_argument("--ledger-dir", help="also keep a local copy of each ledger here")
     r.add_argument("--study-log-dir", help="migrate/verify output per study")
-    r.add_argument("--members", choices=["compact", "full", "none"], default="compact", help="member offsets kept in v2_sample rows")
+    r.add_argument("--members", choices=["full", "none"], default="full", help="none: leave members_json empty in the catalog rows")
     r.add_argument("--deadline-epoch", type=float, help="do not start a study that cannot finish before this time (unix seconds)")
-    r.add_argument("--min-rate-mbs", type=float, default=15.0, help="assumed worst-case MB/s of legacy bytes, for --deadline-epoch")
+    r.add_argument("--min-rate-mbs", type=float, default=0.4, help="assumed worst-case MB/s of legacy bytes per study (download, migrate, verify), for --deadline-epoch")
     r.add_argument("--commit")
     r.add_argument("--task")
     r.add_argument("--part-size-mib", type=float, default=PART_SIZE / MIB, help=argparse.SUPPRESS)
@@ -1824,11 +2171,11 @@ def build_parser() -> argparse.ArgumentParser:
     common(p)
     p.add_argument("--from-tsv", help="a listing (gse<TAB>bytes) instead of listing the bucket")
     p.add_argument("--out", help="write gse/bytes/shard here")
-    p.add_argument("--shards", type=int, default=32)
+    p.add_argument("--shards", type=int, default=64)
     p.add_argument("--rate-dl", type=float, default=150.0, help="MB/s per node from R2")
-    p.add_argument("--rate-cpu", type=float, default=5.0, help="MB/s of legacy bytes per core for migrate + verify")
-    p.add_argument("--cores", type=float, default=8.0)
-    p.add_argument("--big-gb", type=float, default=8.0)
+    p.add_argument("--rate-cpu", type=float, default=1.0, help="MB/s of legacy bytes per core for migrate + verify together (one run of GSE145370 on the laptop: 1.7; W2 on a loaded laptop: 0.5 to 1)")
+    p.add_argument("--cores", type=float, default=16.0)
+    p.add_argument("--big-gb", type=float, default=5.0, help="studies at least this large (one migrate process is single-threaded: about 3 h at the default rate) go to big.txt")
     p.add_argument("--big-out")
     p.set_defaults(func=cmd_plan)
 
@@ -1839,30 +2186,33 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--show", type=int, default=20)
     s.set_defaults(func=cmd_summarize)
 
-    c = sub.add_parser("catalog-sql", help="SQL batch files for wrangler d1 execute")
+    c = sub.add_parser("catalog-sql", help="SQL files for wrangler d1 execute (schema 032), split into days of at most --day-budget row writes")
     common(c)
     c.add_argument("--rows-dir", nargs="*", default=[], help="rows directories written by `run --rows-dir`")
-    c.add_argument("--from-r2", action="store_true", help="rebuild rows from v2/m manifests and ledgers in R2 instead")
+    c.add_argument("--from-r2", action="store_true", help="rebuild the rows from the v2/m manifests and ledgers in R2 instead")
     c.add_argument("--gse-list")
     c.add_argument("--out", required=True)
     c.add_argument("--database", default="singlet-catalog")
-    c.add_argument("--max-rows", type=int, default=1000)
-    c.add_argument("--max-bytes", type=int, default=1_500_000)
-    c.add_argument("--members", choices=["compact", "full", "none"], default="compact")
-    c.add_argument("--no-stamp", action="store_true", help="do not set the updated_at column")
+    c.add_argument("--day-budget", type=int, default=DAY_BUDGET, help="estimated D1 row writes per day (a sample row is 3)")
+    c.add_argument("--max-rows", type=int, default=1000, help="statements per file")
+    c.add_argument("--max-bytes", type=int, default=3_000_000, help="bytes per file")
+    c.add_argument("--members", choices=["full", "none"], default="full", help="none: leave members_json empty (smaller files)")
+    c.add_argument("--schema", choices=["033", "032"], default="033",
+                   help="v2_sample key: 033 = (gse_id, rev, gsm_id), what the ingest code writes; 032 = (gse_id, gsm_id), if 033 was not applied")
     c.set_defaults(func=cmd_catalog_sql)
 
-    q = sub.add_parser("catalog-post", help="POST rows to the ingest endpoint")
-    q.add_argument("--rows-dir", nargs="+", required=True)
+    q = sub.add_parser("catalog-post", help="POST the manifests to /api/ingest/v2-study (needs the ingest token)")
+    common(q)
     q.add_argument("--gse-list")
     q.add_argument("--base-url", default="https://singlet.bio")
     q.add_argument("--token-env", default="INGEST_TOKEN")
-    q.add_argument("--batch", type=int, default=500)
+    q.add_argument("--members", choices=["full", "none"], default="full")
     q.add_argument("--dry-run", action="store_true")
     q.set_defaults(func=cmd_catalog_post)
 
-    x = sub.add_parser("refs-index", help="rebuild v2/ref/index.json from the packs")
+    x = sub.add_parser("refs-index", help="publish the reference packs and v2/ref/index.json from the package's packs directory")
     common(x)
+    x.add_argument("--packs-dir", default=str(REPO / "python" / "singlet" / "v2" / "packs"))
     x.add_argument("--apply", action="store_true")
     x.set_defaults(func=cmd_refs_index)
     return ap
@@ -1873,7 +2223,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     a = ap.parse_args(argv)
     if a.cmd == "run":
         if a.workers <= 0:
-            a.workers = max(1, _cpu_count() // max(1, a.migrate_threads))
+            a.workers = max(1, _cpu_count() - 2)
         if a.mode in ("dry", "full") and not (a.gse or a.gse_list or a.shard or a.limit is not None or os.environ.get("V2_ALL")):
             ap.error(f"{a.mode} mode needs --shard I/N, --gse, --gse-list or --limit (V2_ALL=1 runs every study in one process)")
     return int(a.func(a))

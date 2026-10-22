@@ -4,31 +4,34 @@
 # the extensions (_pz, _pz2) are built once per commit inside a job (see "Build" below); nothing runs on the login node.
 #
 #   MODE=build        build + self-test the pinned commit (no R2 access). Run once, on debug-cpu, before anything else.
-#   MODE=plan         list the legacy studies, write shard assignment / big-study list, project the wall time (R2 reads)
-#                     -> $WORK/state/v2/plan-<c10>/plan.tsv; pass it to dry/full as LISTING=... so every shard slices the same frozen list
-#   MODE=dry          shard I of N: download + migrate + verify, NO R2 writes (add LIST_ONLY=1 for HEAD + restricted check only)
+#   MODE=plan         list the legacy studies; write the frozen listing, the big-study list and a time projection (R2 reads)
+#                     -> $WORK/state/v2/plan-<c10>/{plan.tsv,big.txt}; give plan.tsv to dry/full as LISTING=...
+#   MODE=dry          shard I of N: download + migrate + verify, NO R2 writes (LIST_ONLY=1: HEAD + restricted check only)
 #   MODE=pilot        PILOT_N studies spread over the size range (+ GSES="GSE... GSE..."), with writes and SHA-256 read-back
 #   MODE=full         shard I of N with writes; safe to resubmit (RESUME=1 skips studies already migrated; RESUME=0 redoes them).
-#                     GSES="GSE... GSE..." (with NSHARD=1, array 0) runs just those studies, e.g. after a transcoder fix
-#   MODE=summarize    aggregate the results files of RUNS (counts, bytes, throughput, projection)
-#   MODE=catalog-sql  SQL batch files for wrangler d1 execute from the rows of RUNS  (pull them with clipper.py get/pull)
-#   MODE=catalog-post POST the same rows to the ingest endpoint (needs ~/.config/singlet-ingest.env: INGEST_TOKEN)
-#   MODE=refs-index   rebuild v2/ref/index.json (APPLY=1 to write)
-#   MODE=retire-dry | retire | restore | audit    scripts/v2_retire.py (retire needs CONFIRM_RETIRE=RETIRE)
+#                     GSES="GSE... GSE..." (NSHARD=1, array 0) runs just those studies; GSE_LIST=file likewise;
+#                     EXCLUDE_LIST=big.txt leaves the big studies to their own job (see notes/m_w6.md)
+#   MODE=summarize    aggregate the results files of RUNS (counts, bytes, per-stage throughput, projection)
+#   MODE=catalog-sql  SQL files (schema 032) from the rows of RUNS, in days of at most DAY_BUDGET (80000) estimated row writes
+#                     (FROM_R2=1: rebuild the rows from the manifests and ledgers in R2). The orchestrator applies them with wrangler.
+#   MODE=catalog-post POST the manifests to /api/ingest/v2-study (needs ~/.config/singlet-ingest.env: INGEST_TOKEN; secondary route)
+#   MODE=refs-index   publish the reference packs and v2/ref/index.json from python/singlet/v2/packs (APPLY=1 to write). Run before the campaign.
+#   MODE=retire-dry | retire | restore | audit | retire-sql    scripts/v2_retire.py (retire needs CONFIRM_RETIRE=RETIRE)
 #
-# Submit (COMMIT = git rev-parse origin/feat/singlet-v2, pushed; see notes/m_w6.md for the full procedure):
-#   sbatch --partition=debug-cpu --time=00:30:00 --array=0 --export=ALL,MODE=build,COMMIT=<sha>                 scripts/v2_migrate.sbatch
-#   sbatch --array=0       --export=ALL,MODE=pilot,COMMIT=<sha>                                                  scripts/v2_migrate.sbatch
-#   sbatch --array=0-31%8  --export=ALL,MODE=dry,NSHARD=32,COMMIT=<sha>                                         scripts/v2_migrate.sbatch
-#   sbatch --array=0-31%8  --export=ALL,MODE=full,NSHARD=32,COMMIT=<sha>                                        scripts/v2_migrate.sbatch
+# Submit (COMMIT = git rev-parse origin/feat/singlet-v2, pushed; notes/m_w6.md has the full procedure and the numbers):
+#   sbatch --partition=debug-cpu --time=00:30:00 --array=0 --export=ALL,MODE=build,COMMIT=<sha>   scripts/v2_migrate.sbatch
+#   sbatch --array=0       --export=ALL,MODE=pilot,COMMIT=<sha>                                    scripts/v2_migrate.sbatch
+#   sbatch --array=0-63%12 --export=ALL,MODE=full,NSHARD=64,LISTING=<plan.tsv>,EXCLUDE_LIST=<big.txt>,COMMIT=<sha>   scripts/v2_migrate.sbatch
 #
 # Needs: ~/.config/singlet-r2.env (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY), $WORK/images/python-3.12-bookworm.sif
 # (the clipper runtime image: compiler, Python headers), the bare clone $WORK/repos/singlet-py.git of singlet-bio.
+# A migrate process is one Python thread (its native encoder adds 4 threads for a few seconds per sample): a job runs
+# WORKERS = cpus - 2 studies at once. Memory: about 2 to 4 GB per worker.
 #SBATCH --job-name=v2mig
 #SBATCH --account=debruinz
 #SBATCH --partition=short-cpu
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=48G
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=64G
 #SBATCH --time=03:59:00
 #SBATCH --no-requeue
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%A_%a.out
@@ -43,7 +46,7 @@ REPO=${REPO:-$WORK/repos/singlet-py.git}            # the clipper name of the si
 SRC=$WORK/src/singlet-py/v2mig__$C10                # one worktree + build per commit
 VENV=${VENV:-$WORK/venvs/v2tools}
 SIF=${SIF:-$WORK/images/python-3.12-bookworm.sif}
-ZSTD_VER=1.5.6
+ZSTD_VER=1.5.6                                      # the zstd the legacy writer calibration (ccd0ac25) is known for; 1.5.7 writes other frames
 ZSTD=$WORK/cache/zstd-$ZSTD_VER-static
 TASK=${SLURM_ARRAY_TASK_ID:-0}
 RUN=${RUN:-$MODE-$C10}
@@ -74,7 +77,11 @@ time_left() {  # seconds left in this job: squeue's %L is [D-]HH:MM:SS
   echo "$t" | awk -F'[-:]' '{ n=NF; s=$n+60*$(n-1); if (n>=3) s+=3600*$(n-2); if (n>=4) s+=86400*$(n-3); print s }'
 }
 
-# ---- Build: worktree at the pinned commit, static zstd, venv, extensions (once per commit; array tasks wait on the lock) --
+# ---- Build: worktree at the pinned commit, static zstd, venv, extensions, self-test (once per commit; array tasks wait on the lock) --
+# What the build needs, from setup.py of the commit: Pybind11Extension singlet._pz (src/bindings/python/_pz.cpp) and singlet._pz2
+# (_pz2.cpp, include_dirs include + src/bindings/common), both C++17, libraries=["zstd"], no -march (pz2 picks AVX2/AVX-512 at run
+# time from cpuid, with per-function target attributes), std::thread in the encoder (-pthread), Python headers, pybind11, a C++17
+# compiler (the image's GCC 12), and zstd.h + libzstd.a (built below). Nothing else.
 ensure_build() {
   (
     flock -w 7200 9 || { echo "could not get the build lock"; exit 75; }
@@ -87,6 +94,12 @@ ensure_build() {
       git --git-dir="$REPO" worktree add -q --detach "$SRC" "$COMMIT"
     fi
     [ "$(git -C "$SRC" rev-parse HEAD)" = "$(git --git-dir="$REPO" rev-parse "$COMMIT^{commit}")" ] || { echo "worktree $SRC is not at $COMMIT"; exit 3; }
+    # data files the transcoder reads at run time must be in the commit (they are easy to leave untracked)
+    ls "$SRC"/python/singlet/v2/packs/index.json "$SRC"/python/singlet/v2/packs/*.pack >/dev/null \
+      || { echo "commit $C10 has no python/singlet/v2/packs/*.pack + index.json (git add them)"; exit 8; }
+    ls "$SRC"/python/singlet/v2/recipes_data/* >/dev/null 2>&1 || { echo "commit $C10 has no python/singlet/v2/recipes_data/ (git add it)"; exit 8; }
+    [ -f "$SRC/src/bindings/python/_pz2.cpp" ] && grep -q "singlet._pz2" "$SRC/setup.py" \
+      || { echo "commit $C10 does not build singlet._pz2 (src/bindings/python/_pz2.cpp + setup.py)"; exit 8; }
 
     # zstd 1.5.6: the nodes have no zstd headers. Build the official source tarball once into a static libzstd.a
     # (-fPIC) shared by every commit; the extensions link it statically, so nothing depends on a library path at run time.
@@ -118,24 +131,24 @@ ensure_build() {
       touch "$MARK"
     fi
 
-    # extensions in place: python/singlet/_pz*.so (and _pz2*.so once setup.py lists it)
-    rt bash -c "cd '$SRC' && CPATH='$ZSTD/include' LIBRARY_PATH='$ZSTD/lib' '$VENV/bin/python' setup.py -q build_ext --inplace -j 8"
+    # extensions in place: python/singlet/_pz*.so and _pz2*.so. CPATH/LIBRARY_PATH find the static zstd; -pthread for std::thread.
+    rt bash -c "cd '$SRC' && CPATH='$ZSTD/include' LIBRARY_PATH='$ZSTD/lib' CFLAGS=-pthread LDFLAGS=-pthread '$VENV/bin/python' setup.py -q build_ext --inplace -j 8"
     rt "$VENV/bin/python" - "$SRC" <<'PY'
-import importlib, sys
+import sys
 sys.path.insert(0, sys.argv[1] + "/python")
 import singlet
-from singlet import _pz
-print("[build] singlet", singlet.__version__, "_pz ok")
-try:
-    importlib.import_module("singlet._pz2")
-    print("[build] _pz2 ok (native codec)")
-except ImportError as e:
-    print("[build] WARNING: singlet._pz2 not importable:", e)
+from singlet import _pz, _pz2
+print("[build] singlet", singlet.__version__, "_pz and _pz2 import")
+from singlet.v2 import recipes_pzw
+ids = sorted(recipes_pzw.available_writers())
+print("[build] legacy .1pz writers (calibration ids):", ids, "(ccd0ac25 = zstd 1.5.5/1.5.6)")
+if "ccd0ac25" not in ids:
+    print("[build] WARNING: no writer with calibration ccd0ac25: derived .1pz members will report container bytes as not reproducible (informational, D15)")
 PY
-    if [ "${REQUIRE_PZ2:-1}" = 1 ]; then
-      rt "$VENV/bin/python" -c "import sys; sys.path.insert(0, '$SRC/python'); import singlet._pz2" \
-        || { echo "singlet._pz2 is required (REQUIRE_PZ2=0 allows the pure-Python codec: much slower)"; exit 5; }
-    fi
+
+    # self-test of the container, the transcoder and the verifier on this node, before any task may use the build
+    rt bash -c "cd '$SRC' && PYTHONPATH='$SRC/python' SINGLET_PZW_AUTOBUILD=0 '$VENV/bin/python' -m pytest tests/python/test_v2_container.py -q -p no:cacheprovider"
+    rt bash -c "cd '$SRC' && PYTHONPATH='$SRC/python' '$VENV/bin/python' -m singlet.v2.migrate --help >/dev/null && '$VENV/bin/python' -m singlet.v2.verify --help >/dev/null"
     touch "$SRC/.v2build.ok"
   ) 9>"$WORK/state/v2mig-build.lock"
 }
@@ -155,10 +168,10 @@ need_shard() { [ -n "$NSHARD" ] || { echo "set NSHARD (number of shards = the ar
 echo "mode=$MODE run=$RUN task=$TASK nshard=${NSHARD:-n/a} commit=$(git -C "$SRC" rev-parse --short HEAD 2>/dev/null || echo "$C10") host=$(hostname) scratch=$SCRATCH cpus=${SLURM_CPUS_PER_TASK:-?}"
 printf '%s\n' "mode=$MODE commit=$COMMIT task=$TASK nshard=$NSHARD host=$(hostname) at=$(date -u +%FT%TZ)" >> "$OUT/run-info.txt"
 
-# The transcoder and verifier must exist in this commit before a mode that uses them runs.
+# The transcoder and verifier must run in this commit before a mode that uses them starts.
 need_tools() {
-  rt "${PY[@]}" -m singlet.v2.migrate --help >/dev/null 2>&1 || { echo "singlet.v2.migrate is not runnable in commit $C10 (W2 deliverable)"; exit 7; }
-  rt "${PY[@]}" -m singlet.v2.verify --help >/dev/null 2>&1 || { echo "singlet.v2.verify is not runnable in commit $C10 (W2 deliverable)"; exit 7; }
+  rt "${PY[@]}" -m singlet.v2.migrate --help >/dev/null 2>&1 || { echo "singlet.v2.migrate is not runnable in commit $C10"; exit 7; }
+  rt "${PY[@]}" -m singlet.v2.verify --help >/dev/null 2>&1 || { echo "singlet.v2.verify is not runnable in commit $C10"; exit 7; }
 }
 
 run_campaign() {  # run_campaign <mode> [extra args]
@@ -168,9 +181,10 @@ run_campaign() {  # run_campaign <mode> [extra args]
   rt "${PY[@]}" "${CAMP[@]}" run --mode "$mode" \
     --results "$OUT/results-$TASK.jsonl" --rows-dir "$OUT/rows" --ledger-dir "$OUT/ledger" --study-log-dir "$OUT/study-logs" \
     --scratch "$SCRATCH/work" --scratch-budget-gb "${SCRATCH_BUDGET_GB:-400}" \
-    --workers "${WORKERS:-3}" --migrate-threads "${MIGRATE_THREADS:-2}" --io-threads "${IO_THREADS:-8}" \
+    ${WORKERS:+--workers "$WORKERS"} --io-threads "${IO_THREADS:-8}" --min-rate-mbs "${MIN_RATE_MBS:-0.4}" \
     --commit "$COMMIT" --task "$TASK" --deadline-epoch "$deadline" \
-    ${EXCLUDE_LIST:+--exclude-list "$EXCLUDE_LIST"} ${LISTING:+--listing "$LISTING"} ${KEEP_SCRATCH:+--keep-scratch "$KEEP_SCRATCH"} \
+    ${EXCLUDE_LIST:+--exclude-list "$EXCLUDE_LIST"} ${LISTING:+--listing "$LISTING"} ${GSE_LIST:+--gse-list "$GSE_LIST"} \
+    ${KEEP_SCRATCH:+--keep-scratch "$KEEP_SCRATCH"} ${MIGRATE_TIMEOUT:+--migrate-timeout "$MIGRATE_TIMEOUT"} ${VERIFY_TIMEOUT:+--verify-timeout "$VERIFY_TIMEOUT"} \
     ${LOCAL_ROOT:+--local-root "$LOCAL_ROOT"} ${MIGRATE_CMD:+--migrate-cmd "$MIGRATE_CMD"} ${VERIFY_CMD:+--verify-cmd "$VERIFY_CMD"} "$@"
 }
 
@@ -185,8 +199,8 @@ case "$MODE" in
     ;;
   plan)
     need_creds
-    rt "${PY[@]}" "${CAMP[@]}" plan --shards "${NSHARD:-32}" --out "$OUT/plan.tsv" --big-out "$OUT/big.txt" \
-      --rate-dl "${RATE_DL:-150}" --rate-cpu "${RATE_CPU:-5}" --cores "${SLURM_CPUS_PER_TASK:-8}" ${LOCAL_ROOT:+--local-root "$LOCAL_ROOT"}
+    rt "${PY[@]}" "${CAMP[@]}" plan --shards "${NSHARD:-64}" --out "$OUT/plan.tsv" --big-out "$OUT/big.txt" --big-gb "${BIG_GB:-5}" \
+      --rate-dl "${RATE_DL:-150}" --rate-cpu "${RATE_CPU:-1.0}" --cores "${SLURM_CPUS_PER_TASK:-16}" ${LOCAL_ROOT:+--local-root "$LOCAL_ROOT"}
     ;;
   dry)
     need_creds; need_shard; need_tools
@@ -195,7 +209,7 @@ case "$MODE" in
   pilot)
     need_creds; need_tools
     # dedicated run dir per pilot so its rows never mix with the full run's
-    run_campaign pilot --pilot-n "${PILOT_N:-6}" --pilot-max-gb "${PILOT_MAX_GB:-8}" ${GSES:+--gse $GSES}
+    run_campaign pilot --pilot-n "${PILOT_N:-6}" --pilot-max-gb "${PILOT_MAX_GB:-2}" ${GSES:+--gse $GSES}
     ;;
   full)
     need_creds; need_shard; need_tools
@@ -204,17 +218,20 @@ case "$MODE" in
     ;;
   summarize)
     args=(); for r in $RUNS; do [ -d "$WORK/state/v2/$r" ] && args+=("$WORK/state/v2/$r"); done
-    rt "${PY[@]}" "${CAMP[@]}" summarize "${args[@]}" --workers "${WORKERS:-3}"
+    rt "${PY[@]}" "${CAMP[@]}" summarize "${args[@]}" --workers "${WORKERS:-$(( ${SLURM_CPUS_PER_TASK:-16} - 2 ))}"
     ;;
   catalog-sql)
     mapfile -t RD < <(rows_args)
-    if [ -n "${FROM_R2:-}" ]; then need_creds; rt "${PY[@]}" "${CAMP[@]}" catalog-sql --from-r2 --out "$OUT/sql" ${LOCAL_ROOT:+--local-root "$LOCAL_ROOT"}
-    else rt "${PY[@]}" "${CAMP[@]}" catalog-sql --rows-dir "${RD[@]}" --out "$OUT/sql"; fi
+    if [ -n "${FROM_R2:-}" ]; then need_creds; rt "${PY[@]}" "${CAMP[@]}" catalog-sql --from-r2 --out "$OUT/sql" --day-budget "${DAY_BUDGET:-80000}" --schema "${D1_SCHEMA:-033}" ${LOCAL_ROOT:+--local-root "$LOCAL_ROOT"}
+    else rt "${PY[@]}" "${CAMP[@]}" catalog-sql --rows-dir "${RD[@]}" --out "$OUT/sql" --day-budget "${DAY_BUDGET:-80000}" --schema "${D1_SCHEMA:-033}"; fi
+    # one compressed file to bring back to the laptop (the whole atlas is about 200 MB of SQL, about 25 MB packed)
+    tar -C "$OUT" -czf "$OUT/sql.tar.gz" sql && ls -l "$OUT/sql.tar.gz"
     ;;
   catalog-post)
-    mapfile -t RD < <(rows_args)
+    need_creds
     [ -f "$HOME/.config/singlet-ingest.env" ] && { set -a; . "$HOME/.config/singlet-ingest.env"; set +a; }
-    rt "${PY[@]}" "${CAMP[@]}" catalog-post --rows-dir "${RD[@]}" ${DRY_RUN:+--dry-run}
+    if [ -n "${GSES:-}" ]; then printf '%s\n' $GSES > "$SCRATCH/gses.txt"; fi
+    rt "${PY[@]}" "${CAMP[@]}" catalog-post ${GSES:+--gse-list "$SCRATCH/gses.txt"} ${DRY_RUN:+--dry-run} ${LOCAL_ROOT:+--local-root "$LOCAL_ROOT"}
     ;;
   refs-index)
     need_creds
@@ -229,6 +246,10 @@ case "$MODE" in
     [ "${CONFIRM_RETIRE:-}" = RETIRE ] || { echo "retiring deletes the public bundles after archiving them: set CONFIRM_RETIRE=RETIRE"; exit 2; }
     rt "${PY[@]}" "${RET[@]}" retire --all --shard "$TASK/$NSHARD" --apply --confirm RETIRE --ledger "$OUT/retire-$TASK.jsonl" ${ALLOW_PARTIAL:+--allow-partial} ${LOCAL_ROOT:+--local-root "$LOCAL_ROOT"}
     ;;
+  retire-sql)  # D1: v2_migration.status -> retired for every study the retire ledgers of RUNS record as retired
+    args=(); for r in $RUNS; do for f in "$WORK"/state/v2/$r/retire-*.jsonl; do [ -f "$f" ] && args+=("$f"); done; done
+    rt "${PY[@]}" "${RET[@]}" retire-sql --ledger-files "${args[@]}" --out "$OUT/sql"
+    ;;
   restore)
     need_creds
     [ -n "${GSES:-}" ] || { echo "set GSES=\"GSE... GSE...\""; exit 2; }
@@ -239,7 +260,7 @@ case "$MODE" in
     rt "${PY[@]}" "${RET[@]}" audit ${EXPECT_NONE:+--expect-none} ${LOCAL_ROOT:+--local-root "$LOCAL_ROOT"}
     ;;
   *)
-    echo "MODE must be build, plan, dry, pilot, full, summarize, catalog-sql, catalog-post, refs-index, retire-dry, retire, restore or audit"
+    echo "MODE must be build, plan, dry, pilot, full, summarize, catalog-sql, catalog-post, refs-index, retire-dry, retire, retire-sql, restore or audit"
     exit 2
     ;;
 esac

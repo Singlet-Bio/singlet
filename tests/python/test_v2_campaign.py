@@ -32,38 +32,7 @@ PUB = "singlet-data"
 
 @pytest.fixture
 def env(tmp_path, monkeypatch):
-    root = tmp_path / "r2"
-    tool = C.write_fake_tool(tmp_path)
-    counts = tmp_path / "calls.txt"
-    monkeypatch.setenv("FAKE_COUNT_FILE", str(counts))
-    for k in ("FAKE_MIGRATE_FAIL", "FAKE_VERIFY_FAIL", "FAKE_BAD_NAME", "FAKE_EXPECT_LEGACY"):
-        monkeypatch.delenv(k, raising=False)
-    monkeypatch.setenv("FAKE_PAD", "2500")  # sample objects of ~2.6 kB: three parts at the 1048-byte test part size
-    store = camp.LocalStore(root)
-    monkeypatch.setattr(camp, "make_store", lambda a: store)
-
-    class E:
-        pass
-
-    e = E()
-    e.tmp, e.root, e.tool, e.counts, e.store, e.mp = tmp_path, root, tool, counts, store, monkeypatch
-    e.results = tmp_path / "results.jsonl"
-    e.rows = tmp_path / "rows"
-    e.ledger = tmp_path / "ledger"
-
-    def run(*extra, mode="full", workers=1, base=True):
-        args = ["run", "--mode", mode, "--local-root", str(root), "--scratch", str(tmp_path / "scratch"),
-                "--results", str(e.results), "--rows-dir", str(e.rows), "--ledger-dir", str(e.ledger),
-                "--workers", str(workers), "--io-threads", "4", "--retry-sleep", "0", "--part-size-mib", "0.001"]
-        args += C.tool_cmds(tool) + list(extra)
-        if base and not any(x in extra for x in ("--gse", "--gse-list", "--shard", "--limit")):
-            args += ["--shard", "0/1"]
-        return camp.main(args)
-
-    e.run = run
-    e.rows_of = lambda: {r["gse"]: r for r in (json.loads(ln) for ln in e.results.read_text().splitlines())}
-    e.ncalls = lambda what: sum(1 for ln in (counts.read_text().splitlines() if counts.exists() else []) if ln.startswith(what))
-    return e
+    return C.build_env(tmp_path, monkeypatch, camp)
 
 
 # ── ETag arithmetic ───────────────────────────────────────────────────────────────────────────────────────────────────
@@ -108,10 +77,11 @@ def test_full_run_commits_manifest_last_and_never_touches_legacy(env):
         assert r["n_samples"] == 2 and r["verify"]["ok"] and r["legacy_bytes"] == len(before[g])
         assert r["legacy_sha256"] == hashlib.sha256(before[g]).hexdigest()
         assert r["members_by_kind"]["pz2"] == 2 and r["members_by_kind"]["cells"] == 2 and r["members_by_kind"]["derived"] == 2
-        assert r["uploads"]["uploaded"] == r["uploads"]["objects"] == 3 and r["uploads"]["skipped"] == 0  # 2 samples + 1 pack
-        assert r["report"] == {"fallbacks": 1}
+        assert r["uploads"]["objects"] == 4 and r["uploads"]["uploaded"] + r["uploads"]["skipped"] == 4  # 2 samples + 2 packs, one pack shared by all studies
+        assert r["migrate_ledger_lines"] == 3 and "report" not in r
         m = json.loads((env.root / PUB / "v2" / "m" / f"{g}.json").read_text())
         assert m["legacy"]["etag"] == r["legacy_etag"] and m["legacy"]["bytes"] == r["legacy_bytes"]
+        assert m["legacy"]["migrated_at"] == "2026-10-22T00:00:00Z"  # what the transcoder wrote is kept; the campaign adds the facts it measured
         assert m["legacy"]["sha256"] == r["legacy_sha256"] and m["legacy"]["ledger"] == f"v2/ledger/{g}.jsonl"
         for s in m["samples"]:
             blob = (env.root / PUB / s["key"]).read_bytes()
@@ -120,6 +90,9 @@ def test_full_run_commits_manifest_last_and_never_touches_legacy(env):
         assert [e["event"] for e in led][0] == "start" and led[-1]["event"] == "committed"
         assert led[-1]["summary"]["status"] == "ok"
         assert sum(1 for e in led if e["event"] == "object") == r["uploads"]["objects"]
+        assert [e["event"] for e in led if e["event"].startswith("migrate:")] == ["migrate:sample", "migrate:sample", "migrate:study"]  # the transcoder's ledger
+        assert all(e["type"] in ("sample", "study") for e in led if e["event"].startswith("migrate:"))
+    assert [rows[g]["uploads"]["skipped"] for g in gses] == [0, 1, 1]  # the shared whitelist pack is uploaded once
     # legacy bytes untouched, and every write was under v2/
     for g in gses:
         assert (env.root / PUB / "data" / g / f"{g}.singlet").read_bytes() == before[g]
@@ -153,7 +126,7 @@ def test_rerun_uploads_no_object_twice(env):
     assert env.run() == 0
     rows = env.rows_of()
     for g in gses:
-        assert rows[g]["uploads"]["uploaded"] == 0 and rows[g]["uploads"]["skipped"] == rows[g]["uploads"]["objects"] == 3
+        assert rows[g]["uploads"]["uploaded"] == 0 and rows[g]["uploads"]["skipped"] == rows[g]["uploads"]["objects"] == 4
     puts = [k for op, _b, k in env.store.ops if op == "put"]
     assert sorted(set(puts)) == sorted({f"v2/m/{g}.json" for g in gses} | {f"v2/ledger/{g}.jsonl" for g in gses})
     led = (env.root / PUB / "v2" / "ledger" / f"{gses[0]}.jsonl").read_text().splitlines()
@@ -169,7 +142,7 @@ def test_resume_skips_done_and_redoes_a_changed_legacy_bundle(env):
     assert {r["status"] for r in env.rows_of().values()} == {"skipped_done"}
     assert all(r["v2_bytes"] and r["n_samples"] == 2 for r in env.rows_of().values())
     # the rows file for a skipped study still describes the committed migration
-    assert json.loads((env.rows / f"{gses[0]}.json").read_text())["v2_migration"]["status"] == "ok"
+    assert json.loads((env.rows / f"{gses[0]}.json").read_text())["v2_migration"]["status"] == "verified"
     # the legacy bundle of one study is replaced: only that one is migrated again
     C.put_legacy(env.root, gses[1], ["GSM20001", "GSM20002", "GSM20003"], salt="changed")
     env.results.unlink()
@@ -492,151 +465,7 @@ def test_s3store_corrupted_object_fails_the_study(env):
     assert (PUB, "v2/m/GSE000001.json") not in fake.objs
 
 
-# ── catalog ───────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-
-def _sqlite_with_schema():
-    db = sqlite3.connect(":memory:")
-    for t, spec in camp.CATALOG_SCHEMA.items():
-        sql = {"text": "TEXT", "int": "INTEGER", "real": "REAL"}
-        cols = ", ".join(f'"{c}" {sql[k]}' for c, k in spec["cols"].items())
-        db.execute(f'CREATE TABLE "{t}" ({cols}, "{spec["stamp"]}" TEXT, PRIMARY KEY ({", ".join(chr(34) + p + chr(34) for p in spec["pk"])}))')
-    return db
-
-
-def test_catalog_sql_executes_and_is_idempotent(env):
-    gses = C.seed(env.root, 3)
-    assert env.run() == 0
-    out = env.tmp / "sql"
-    argv = ["catalog-sql", "--rows-dir", str(env.rows), "--out", str(out), "--max-rows", "4"]
-    assert camp.main(argv) == 0
-    files = sorted(p.name for p in out.glob("*.sql"))
-    assert files[0].endswith("v2_sample.sql") and files[-1].endswith("v2_study.sql")  # study rows last
-    assert len([f for f in files if "v2_sample" in f]) == 2  # 6 sample rows, 4 per file
-    assert "wrangler d1 execute singlet-catalog --remote" in (out / "APPLY.txt").read_text()
-    db = _sqlite_with_schema()
-    for f in files:
-        db.executescript((out / f).read_text())
-    assert db.execute("select count(*) from v2_sample").fetchone()[0] == 6
-    assert db.execute("select count(*) from v2_study").fetchone()[0] == 3
-    assert db.execute("select count(*) from v2_migration").fetchone()[0] == 3
-    row = db.execute("select status, legacy_bytes, verify_ok, members_by_kind from v2_migration where gse_id='GSE000001'").fetchone()
-    assert row[0] == "ok" and row[1] > 0 and row[2] == 1 and json.loads(row[3])["pz2"] == 2
-    s = db.execute("select key, members, stats, n_called from v2_sample where gsm_id='GSM10001'").fetchone()
-    assert s[0].startswith("v2/s/GSM10001/") and json.loads(s[1])["exon_counts.1pz"] == [1, 128, 99]
-    assert json.loads(s[2])["median_umi"] == 1500 and s[3] == 3
-    # idempotent: applying again changes nothing
-    for f in files:
-        db.executescript((out / f).read_text())
-    assert db.execute("select count(*) from v2_sample").fetchone()[0] == 6
-    # a failed rerun updates the migration row, keeps the study row
-    env.mp.setenv("FAKE_MIGRATE_FAIL", "GSE000001")
-    assert env.run() == 1
-    assert camp.main(["catalog-sql", "--rows-dir", str(env.rows), "--out", str(out)]) == 0
-    for f in sorted(p.name for p in out.glob("*.sql")):
-        db.executescript((out / f).read_text())
-    assert db.execute("select status from v2_migration where gse_id='GSE000001'").fetchone()[0] == "migrate_failed"
-    assert db.execute("select count(*) from v2_study where gse_id='GSE000001'").fetchone()[0] == 1
-
-
-def test_catalog_sql_from_r2_matches_rows_dir(env):
-    C.seed(env.root, 2)
-    assert env.run() == 0
-    a, b = env.tmp / "a", env.tmp / "b"
-    assert camp.main(["catalog-sql", "--rows-dir", str(env.rows), "--out", str(a), "--no-stamp"]) == 0
-    assert camp.main(["catalog-sql", "--from-r2", "--local-root", str(env.root), "--out", str(b), "--no-stamp"]) == 0
-    dbs = []
-    for d in (a, b):
-        db = sqlite3.connect(":memory:")
-        for t, spec in camp.CATALOG_SCHEMA.items():
-            sql = {"text": "TEXT", "int": "INTEGER", "real": "REAL"}
-            db.execute(f'CREATE TABLE "{t}" ({", ".join(chr(34) + c + chr(34) + " " + sql[k] for c, k in spec["cols"].items())}, '
-                       f'"{spec["stamp"]}" TEXT, PRIMARY KEY ({", ".join(chr(34) + p + chr(34) for p in spec["pk"])}))')
-        for f in sorted(d.glob("*.sql")):
-            db.executescript(f.read_text())
-        dbs.append(db)
-    for q in ("select gsm_id, gse_id, key, bytes, sha256, n_columns, n_called, members from v2_sample order by 1",
-              "select gse_id, manifest_key, rev, bytes, n_samples, legacy_etag, legacy_bytes from v2_study order by 1"):
-        assert dbs[0].execute(q).fetchall() == dbs[1].execute(q).fetchall()
-
-
-def test_sql_quoting():
-    assert camp.sql_literal("it's") == "'it''s'" and camp.sql_literal(None) == "NULL" and camp.sql_literal(float("nan")) == "NULL"
-    assert camp.sql_literal("a\x00b") == "'ab'" and camp.sql_literal(True) == "1" and camp.sql_literal(2.5) == "2.5"
-    st = camp.upsert_sql("v2_study", camp.clean_row("v2_study", {"gse_id": "GSE1", "rev": "x'; DROP TABLE v2_study; --"}), None, False)
-    db = _sqlite_with_schema()
-    db.executescript(st)
-    assert db.execute("select rev from v2_study").fetchone()[0] == "x'; DROP TABLE v2_study; --"
-
-
-class _Ingest(BaseHTTPRequestHandler):
-    log = []
-    fail_first = False
-
-    def do_POST(self):
-        n = int(self.headers["Content-Length"])
-        body = json.loads(self.rfile.read(n))
-        _Ingest.log.append((self.path, self.headers.get("X-Ingest-Token"), self.headers.get("User-Agent"), body))
-        if _Ingest.fail_first:
-            _Ingest.fail_first = False
-            self.send_response(429)
-            self.end_headers()
-            self.wfile.write(b'{"error":"slow down"}')
-            return
-        ok = b'{"ok":true}'
-        self.send_response(200)
-        self.send_header("Content-Length", str(len(ok)))
-        self.end_headers()
-        self.wfile.write(ok)
-
-    def log_message(self, *a):
-        pass
-
-
-def test_catalog_post_orders_tables_and_retries(env, monkeypatch):
-    C.seed(env.root, 2)
-    assert env.run() == 0
-    srv = HTTPServer(("127.0.0.1", 0), _Ingest)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    _Ingest.log = []
-    _Ingest.fail_first = True
-    monkeypatch.setattr(camp.time, "sleep", lambda s: None)
-    monkeypatch.setenv("INGEST_TOKEN", "t0ken")
-    try:
-        assert camp.main(["catalog-post", "--rows-dir", str(env.rows), "--base-url", f"http://127.0.0.1:{srv.server_port}", "--batch", "3"]) == 0
-    finally:
-        srv.shutdown()
-    paths = [p for p, *_ in _Ingest.log]
-    assert paths[0] == "/api/ingest/v2_sample" and paths[1] == "/api/ingest/v2_sample"  # first POST got 429 and was repeated
-    order = [p.rsplit("/", 1)[1] for p in paths]
-    assert order.index("v2_study") > order.index("v2_migration") > order.index("v2_sample")
-    assert all(tok == "t0ken" and "singlet-v2-campaign" in ua for _p, tok, ua, _b in _Ingest.log)
-    rows = [r for p, _t, _u, b in _Ingest.log if p.endswith("v2_sample") for r in b["rows"]]
-    assert len({r["gsm_id"] for r in rows}) == 4 and len(rows) == 4 + 3  # 4 samples; the 429'd batch of 3 was sent again
-    assert all(isinstance(r["bytes"], int) and isinstance(r["members"], str) for r in rows)
-    assert camp.main(["catalog-post", "--rows-dir", str(env.rows), "--dry-run"]) == 0
-
-
-def test_catalog_post_needs_a_token(env, monkeypatch, capsys):
-    C.seed(env.root, 1)
-    assert env.run() == 0
-    monkeypatch.delenv("INGEST_TOKEN", raising=False)
-    assert camp.main(["catalog-post", "--rows-dir", str(env.rows)]) == 2
-
-
-# ── reference index, plan, summarize ─────────────────────────────────────────────────────────────────────────────────
-
-
-def test_refs_index(env):
-    C.seed(env.root, 2)
-    assert env.run() == 0
-    assert camp.main(["refs-index", "--local-root", str(env.root)]) == 0
-    assert not (env.root / PUB / "v2" / "ref" / "index.json").exists()  # no --apply
-    assert camp.main(["refs-index", "--local-root", str(env.root), "--apply"]) == 0
-    idx = json.loads((env.root / PUB / "v2" / "ref" / "index.json").read_text())
-    assert len(idx["packs"]) == 2 and all(p["sha256"][:32] == p["id"] and p["kind"] == "vocab" for p in idx["packs"])
-    assert env.store.head(PUB, "v2/ref/index.json").cache_control == "public, max-age=300"
-    assert camp.main(["refs-index", "--local-root", str(env.root), "--apply"]) == 0  # the index is not listed as a pack
+# ── plan, summarize ──────────────────────────────────────────────────────────────────────────────────────────────────
 
 
 def test_plan_and_summarize(env, capsys):
@@ -657,7 +486,8 @@ def test_projection_is_bound_by_the_slower_side():
     assert p["bound"] == "compute" and p["node_mbs"] == pytest.approx(30.0)
     q = camp.project(2.7e12, 8202, 32, rate_dl=150, rate_cpu_core=50, cores=8)
     assert q["bound"] == "download" and q["node_mbs"] == 150
-    assert q["task_hours"] == pytest.approx(2.7e12 / 32 / 1e6 / 150 / 3600 + 0.1)
+    assert q["task_hours"] == pytest.approx(2.7e12 / 32 / 1e6 / 150 / 3600 + 8 / 60)
+    assert camp.project(1e9, 1, 1, rate_dl=150, rate_cpu_core=1.0, cores=16, max_study_bytes=3.6e9)["longest_study_hours"] == pytest.approx(1.0)
 
 
 def test_frozen_listing_gives_every_shard_the_same_studies(env):
@@ -674,3 +504,25 @@ def test_frozen_listing_gives_every_shard_the_same_studies(env):
     env.results.unlink()
     assert env.run("--list-only", "--shard", "0/1", mode="dry", base=False) == 0
     assert len(env.rows_of()) == 6  # a fresh listing sees them (the sweep after the campaign)
+
+
+def test_plan_sets_big_studies_apart(env, capsys):
+    tsv = env.tmp / "sizes.tsv"
+    tsv.write_text("gse\tbytes\nGSE1\t1000000000\nGSE2\t30000000000\nGSE3\t2000000000\nGSE4\t900000000\nGSE5\t6000000000\n")
+    assert camp.main(["plan", "--from-tsv", str(tsv), "--shards", "2", "--big-gb", "5", "--out", str(env.tmp / "plan.tsv"),
+                      "--big-out", str(env.tmp / "big.txt")]) == 0
+    out = capsys.readouterr().out
+    assert "big (>= 5.0 GB, run on their own): 2 studies" in out and "non-big studies (3" in out
+    lines = [ln.split("\t") for ln in (env.tmp / "plan.tsv").read_text().splitlines()[1:]]
+    assert [(g, sh) for g, _b, sh in lines] == [("GSE1", "0"), ("GSE2", "big"), ("GSE3", "1"), ("GSE4", "0"), ("GSE5", "big")]
+    assert [ln.split("\t")[0] for ln in (env.tmp / "big.txt").read_text().splitlines()] == ["GSE2", "GSE5"]
+    # the shard column is what `run --listing plan.tsv --exclude-list big.txt --shard i/2` selects
+    for i in range(2):
+        a = camp.build_parser().parse_args(["run", "--mode", "dry", "--listing", str(env.tmp / "plan.tsv"), "--exclude-list",
+                                            str(env.tmp / "big.txt"), "--shard", f"{i}/2"])
+        got = [g for g, _ in camp.select_studies(a, None)]
+        assert sorted(got) == sorted(g for g, _b, sh in lines if sh == str(i))
+    # the big-study job: an explicit list plus the listing starts the largest study first
+    a = camp.build_parser().parse_args(["run", "--mode", "full", "--listing", str(env.tmp / "plan.tsv"), "--gse-list", str(env.tmp / "big.txt")])
+    assert [(g, s) for g, s in camp.select_studies(a, None)] == [("GSE2", 30000000000), ("GSE5", 6000000000)]
+

@@ -106,7 +106,7 @@ def keys(root, bucket=PUB):
 
 def test_dry_run_packs_migrates_verifies_and_writes_nothing(env):
     assert env.run(apply=False) == 0
-    assert env.result()["status"] == "dry_ok" and env.result()["uploads"]["would_upload"] == 3  # 2 samples + 1 pack
+    assert env.result()["status"] == "dry_ok" and env.result()["uploads"]["would_upload"] == 4  # 2 samples + 2 packs
     assert keys(env.root) == []
     assert not (env.tmp / "scratch" / "work").exists()  # the temporary legacy bundle is gone
 
@@ -118,13 +118,13 @@ def test_publish_writes_v2_objects_manifest_last_and_no_legacy_bundle(env):
     ks = keys(env.root)
     assert not [k for k in ks if k.startswith("data/")]  # nothing in the legacy key space
     assert "v2/m/GSE700001.json" in ks and "v2/ledger/GSE700001.jsonl" in ks
-    assert len([k for k in ks if k.startswith("v2/s/")]) == 2 and len([k for k in ks if k.startswith("v2/ref/")]) == 1
+    assert len([k for k in ks if k.startswith("v2/s/")]) == 2 and len([k for k in ks if k.startswith("v2/ref/")]) == 2
     m = json.loads((env.root / PUB / "v2" / "m" / "GSE700001.json").read_text())
     assert "legacy" not in m or m["legacy"] is None  # a new study has no legacy bundle
     led = [json.loads(x) for x in (env.root / PUB / "v2" / "ledger" / "GSE700001.jsonl").read_text().splitlines()]
     assert [e["event"] for e in led][:2] == ["start", "packed"] and led[-1]["event"] == "committed"
     rows = json.loads(Path(r["rows_file"]).read_text())
-    assert rows["v2_migration"]["status"] == "ok" and rows["v2_migration"]["legacy_key"] is None
+    assert rows["v2_migration"]["status"] == "verified" and rows["v2_migration"]["legacy_key"] is None
     assert len(rows["v2_sample"]) == 2 and rows["v2_study"]["gse_id"] == "GSE700001"
     assert led[-1]["summary"]["stage"] == "done"
 
@@ -145,7 +145,7 @@ def test_the_manifest_is_written_after_every_object(env, monkeypatch):
     monkeypatch.setattr(camp.LocalStore, "put_bytes", pb)
     assert env.run() == 0
     data = [k for k in order if not k.startswith("v2/ledger/")]
-    assert data[-1] == "v2/m/GSE700001.json" and len(data) == 4
+    assert data[-1] == "v2/m/GSE700001.json" and len(data) == 5
     assert order.index("v2/ledger/GSE700001.jsonl") < order.index("v2/m/GSE700001.json")  # ledger with the objects, then the manifest
     assert order[-1] == "v2/ledger/GSE700001.jsonl"  # and the committed record after it
 
@@ -205,7 +205,7 @@ def test_republishing_uploads_nothing_new(env, monkeypatch):
     monkeypatch.setattr(camp.LocalStore, "put_file", lambda self, b, k, *a, **kw: (calls.append(k), orig(self, b, k, *a, **kw))[1])
     assert env.run() == 0
     assert calls == []  # packed bundles are deterministic here: every object is already in R2
-    assert env.result()["uploads"]["skipped"] == 3
+    assert env.result()["uploads"]["skipped"] == 4
 
 
 class _Ingest(BaseHTTPRequestHandler):
@@ -235,7 +235,8 @@ def test_catalog_rows_are_posted_and_a_failed_post_does_not_unpublish(env, monke
         assert env.run("--ingest-url", url) == 0
         assert env.result()["catalog"] == "posted"
         tables = [p.rsplit("/", 1)[1] for p, _t, _b in _Ingest.log]
-        assert tables == ["v2_sample", "v2_migration", "v2_study"] and all(t == "tok" for _p, t, _b in _Ingest.log)
+        assert tables == ["v2-study"] and all(t == "tok" for _p, t, _b in _Ingest.log)
+        assert _Ingest.log[0][2]["final"] is True and _Ingest.log[0][2]["manifest"]["gse"] == "GSE700001" and "study_files" not in _Ingest.log[0][2]["manifest"]
         monkeypatch.setattr(camp.time, "sleep", lambda s: None)
         _Ingest.status, _Ingest.log = 400, []
         assert env.run("--ingest-url", url) == 3  # live, rows not accepted

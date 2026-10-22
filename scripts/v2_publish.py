@@ -12,8 +12,9 @@ This replaces "pack a legacy bundle, upload it to data/<GSE>/<GSE>.singlet" in t
   2. `python -m singlet.v2.migrate`, manifest validation, `python -m singlet.v2.verify` (must exit 0), upload of every object
      (existing identical objects are skipped), ledger, manifest LAST, read-back: exactly the steps of scripts/v2_campaign.py
      (this script calls the same code).
-  3. Catalog rows (v2_study, v2_sample, v2_migration) are written to --rows-dir and POSTed to the ingest endpoint when
-     $INGEST_TOKEN is set and --ingest-url is given.
+  3. Catalog rows (v2_study, v2_sample, v2_migration; schema 032) are written to --rows-dir and, when $INGEST_TOKEN is set and
+     --ingest-url is given, the manifest is POSTed to /api/ingest/v2-study. Without a token run `v2_campaign.py catalog-sql
+     --rows-dir DIR` and apply the SQL (the primary route).
 
 Dry run (no R2 writes) unless --apply. The last stdout line is `RESULT {json}`; the exit code is 0 when the study is live and
 its catalog rows were accepted (or not requested), 1 when it was not published, 3 when it is live but the catalog POST failed
@@ -88,11 +89,11 @@ def make_provider(a: argparse.Namespace, packer):
 
 def run_args(a: argparse.Namespace, gse: str, scratch: Path) -> List[str]:
     args = ["run", "--mode", "full" if a.apply else "dry", "--gse", gse, "--workers", "1",
-            "--io-threads", str(a.io_threads), "--migrate-threads", str(a.migrate_threads),
+            "--io-threads", str(a.io_threads), "--blas-threads", str(a.blas_threads),
             "--migrate-timeout", str(a.migrate_timeout), "--verify-timeout", str(a.verify_timeout),
             "--scratch", str(scratch), "--rows-dir", str(a.rows_dir), "--ledger-dir", str(a.ledger_dir),
             "--readback", a.readback, "--public", a.public, "--commit", a.commit or os.environ.get("COMMIT", ""),
-            "--members", "compact"]
+            "--members", "full"]
     for opt, val in (("--migrate-cmd", a.migrate_cmd), ("--verify-cmd", a.verify_cmd), ("--pythonpath", a.pythonpath),
                      ("--local-root", a.local_root), ("--part-size-mib", a.part_size_mib), ("--retry-sleep", a.retry_sleep)):
         if val is not None:
@@ -121,7 +122,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--token-env", default="INGEST_TOKEN")
     ap.add_argument("--readback", choices=["none", "sha256"], default="sha256")
     ap.add_argument("--io-threads", type=int, default=4)
-    ap.add_argument("--migrate-threads", type=int, default=4)
+    ap.add_argument("--blas-threads", type=int, default=1)
     ap.add_argument("--migrate-timeout", type=float, default=7200)
     ap.add_argument("--verify-timeout", type=float, default=7200)
     ap.add_argument("--migrate-cmd")
@@ -164,7 +165,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         try:
             if not token:
                 raise RuntimeError(f"${a.token_env} is empty")
-            vc.post_study_rows(a.ingest_url, token, {a.gse: json.loads(rows_file.read_text("utf-8"))})
+            manifest = json.loads(store.get_bytes(a.public, vc.manifest_key(a.gse)))
+            vc.post_studies(a.ingest_url, token, {a.gse: (manifest, json.loads(rows_file.read_text("utf-8")))}, log=lambda *_: None)
             row["catalog"] = "posted"
         except Exception as e:  # noqa: BLE001  the study is live; the rows can be posted again
             row["catalog"] = f"not posted: {e}"[:300]

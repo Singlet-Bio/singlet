@@ -2,300 +2,276 @@
 
 Owner: W6. Paths: `scripts/v2_migrate.sbatch`, `scripts/v2_campaign.py`, `scripts/v2_publish.py`, `scripts/v2_retire.py`,
 `tests/python/test_v2_campaign*.py`, this file, `bench/compression/results/m_w6_patches/`. Started 2026-10-22.
-**Status: code and tests complete against stand-ins; nothing has touched R2, D1 or a cluster. The first real run is the build job
-then the pilot (section 3).** No `git` command was run by W6.
+**Status (second pass, after W1/W2/W3/W5 landed): aligned with the real transcoder and schema 032/033, rehearsed end to end on the real
+corpus bundle with no stand-ins. Nothing has touched R2, D1 or Clipper.** No `git` command was run by W6.
 
 ## 0. Status board
 
 | item | state |
 |---|---|
-| `v2_campaign.py run` (dry / pilot / full, `--shard`, `--gse`, `--gse-list`, `--listing`, `--resume`) | done, 43 tests |
-| `v2_campaign.py plan / summarize / catalog-sql / catalog-post / refs-index` | done, tested (SQL is executed in SQLite; POST against a local HTTP server) |
-| `v2_migrate.sbatch` (Slurm array wrapper, build once per commit, all modes) | done; every mode rehearsed end to end on the laptop (`RUNTIME=host`, local directories, stand-in transcoder); the Clipper-specific parts (apptainer, zstd source build, venv, `squeue`) are **unverified** |
-| `v2_publish.py` (new studies) | done, 10 tests; Anvil patch written and checked with `git apply --check` (nothing applied) |
-| `v2_retire.py` (retire / restore / audit) | done, 19 tests including the boto3 code path against an in-memory S3 |
-| notes / plan | this file |
+| `v2_campaign.py run` against the real `singlet.v2.migrate` / `verify` (flags, output layout, ledger, manifest, pack lists) | done; real run of GSE145370 (section 3) |
+| catalog rows and SQL for schema 032/033 (exact columns, apply order, 80,000-row days) | done; equal row by row to what the website's own ingest code writes (section 2) |
+| `v2_migrate.sbatch` build step re-checked against `setup.py` (`_pz`, `_pz2`), container self-test in the build | done; Clipper-only parts still unverified (section 5) |
+| `v2_publish.py` (new studies), Anvil patch | done; patch regenerated, `git apply --check` passes, nothing applied |
+| `v2_retire.py` (retire / restore / audit / retire-sql) | done |
+| tests | 92 in `tests/python/test_v2_campaign*.py`, all pass (section 7) |
+| final submission commands | section 6 |
 
-Test run: `python -P -m pytest tests/python/test_v2_campaign.py tests/python/test_v2_campaign_retire.py tests/python/test_v2_campaign_publish.py -q`
--> 72 passed (about 4.5 min on the laptop; it starts a Python process per transcode/verify call). No network, no credentials, no
-compiled codec needed.
+## 1. What changed in this pass
 
-## 1. What each piece does
+* **Real transcoder** (`m_w2.md`): `migrate --bundle B --out DIR [--gse] [--samples] [--codec] [--created-at]`, `verify --bundle B --v2 DIR
+  [--samples] [--quick]`. Output under `DIR/v2/{s,m,ledger,ref}/`. The campaign now (a) merges the transcoder's per-member ledger
+  (`v2/ledger/<GSE>.jsonl`, 172 lines for GSE145370: treatment, recipe, verify mode, why a member was stored) into the R2 ledger as
+  `migrate:*` events, (b) ignores its `v2/ref/index.json` (the bucket-wide index is published once by `refs-index`), (c) accepts
+  `packs` values that are an id, a list of ids (several whitelists) or null, (d) keeps the transcoder's manifest serialisation
+  (indent 1, key order) and only updates the `legacy` block it wrote (`etag` and `bytes` from the live object, plus `sha256` and the
+  ledger key), (e) for a **new** study (v2_publish) sets `legacy` to null, because the transcoder describes the temporary bundle as
+  a legacy object, (f) refuses a v2 object whose manifest lists a restricted member (like the website's endpoint).
+* **No thread knob in `migrate`**: `Options.threads = 4` is fixed in `migrate.py` and not reachable from the CLI or the environment,
+  so `SINGLET_V2_THREADS` is not set (it would do nothing). A migrate process is one Python thread with short native-encoder bursts, so
+  a job runs `cpus - 2` studies at once (`--workers 0`), BLAS threads are pinned to 1 (`--blas-threads`), and
+  `SINGLET_PZW_AUTOBUILD=0` stops W3's Windows-only helper build. `--migrate-args` / `--verify-args` pass extra flags (for example
+  `--samples`), `--verify-quick` exists but is not for the campaign.
+* **Schema 032 + 033** (`singlet-website-v2/schema/`): `catalog-post` and `catalog-sql` follow `v2-catalog.ts` (section 2). `m_w5.md` now
+  says the endpoint is manifest based (`POST /api/ingest/v2-study`); that route is kept as the secondary path because no token is available.
+* **Plan** changed with the measured speed: a study is one single-threaded migrate process, so a 30 GB bundle needs hours. Studies of
+  at least `--big-gb` (5) go to a separate job on a longer partition (section 4).
 
-### `scripts/v2_campaign.py run`
+## 2. Catalog: rows, SQL, order, budget
 
-Per study (details in the module docstring): HEAD the live bundle -> ranged read of its zip directory, **refuse if any restricted
-member is still in it** (`blocked_restricted`; the restrict migration must have finished) -> download to node-local scratch with ranged
-GETs pinned to the HEAD ETag (`If-Match`; R2 implements it on GET) -> SHA-256 -> re-HEAD (a bundle replaced meanwhile is
-`legacy_changed`) -> `python -m singlet.v2.migrate --bundle B --out OUT --gse G` -> validate the tree -> add the `legacy` block to the
-manifest -> `python -m singlet.v2.verify --bundle B --v2 OUT` (non-zero = `verify_failed`, **nothing uploaded**) -> upload objects ->
-ledger -> manifest LAST -> read the manifest back -> `committed` ledger line.
+`rows/<GSE>.json` holds `{v2_migration, v2_study, v2_sample[]}` written by `run`; `catalog-sql` turns them (or, with `--from-r2`, the
+manifests and ledgers in R2) into files under `DIR/dayNN/`.
 
-* Never writes outside `v2/` of the public bucket (the store handed to study code is a `GuardedStore`; any other put, copy or delete
-  raises `WriteRefused`; deletes are refused everywhere). Legacy objects are only read.
-* Idempotent: an object that exists with the same size and ETag (or the same `sha256` user metadata) is skipped. Part size is fixed
-  at 8 MiB (the rule R2 documents: ETag of a multipart object = MD5 of the concatenated part MD5s + `-N`; all parts but the last equal;
-  minimum 5 MiB), so the ETag is a function of the bytes. Single-part (<= 8 MiB) uploads are checked against the local MD5, multipart
-  against the composite ETag. On any ETag disagreement the object is read back and compared by SHA-256 (accepted with an `etag_note`
-  in the ledger, so an unexpected R2 ETag rule shows up in the pilot instead of failing the campaign); a SHA mismatch fails the study.
-  `--readback sha256` (default in pilot) re-reads every uploaded object.
-* Headers: `application/octet-stream` for `.s2`/`.pack`/`.cells`, `application/json` for manifests and `v2/ref/index.json`;
-  `Cache-Control: public, max-age=31536000, immutable` for `v2/s/` and `v2/ref/*.pack`, `public, max-age=300` for `v2/m/`,
-  `v2/ref/index.json` and `v2/cells/` (what the data Worker sends), `no-store` for the ledger (the Worker does not serve `v2/ledger/`).
-* Failure handling: every study is isolated (`process_study` never raises). Statuses: `ok`, `skipped_done`, `missing`,
-  `blocked_restricted`, `deferred` (job out of time), `migrate_failed`, `verify_failed`, `collect_failed`, `upload_failed`,
-  `legacy_changed`, `failed`, and for dry runs `dry_ok`, `dry_listed`. The exit code is 1 if any study is in a failure status. A failed
-  study leaves no manifest (so it is invisible), at most some immutable orphan objects, and an `error` event in its ledger.
-* `--resume`: a study is skipped when `v2/m/<GSE>.json` exists whose `legacy.etag`/`legacy.bytes` equal the live object, every sample
-  object is present with its size, and the ledger ends in a committed `ok`. A rebuilt legacy bundle (new ETag) is migrated again.
-* Concurrency: `--workers` studies in flight (default cores / `--migrate-threads`), a shared `--io-threads` pool for hashing, HEADs and
-  uploads, and a scratch byte budget (`--scratch-budget-gb`, 3x the bundle reserved per study). Studies are processed largest first
-  inside a shard. `--deadline-epoch` makes the job stop starting studies that cannot finish (assumes 15 MB/s of legacy bytes).
-* Outputs per task: `results-<task>.jsonl` (one row per study: status, stage, legacy etag/bytes/sha256, v2 bytes, members by kind,
-  verify result, per-stage seconds, upload counts, the transcoder's `migrate_report.json` if any), `rows/<GSE>.json` (catalog rows),
-  `ledger/<GSE>.jsonl` (local copy of the R2 ledger lines of this run), `study-logs/<GSE>.log` (transcoder and verifier output).
+* **Columns** exactly as `schema/032_v2_catalog.sql` / `033` and `parseSample` / `ingestStatements` in `functions/_shared/v2-catalog.ts`:
+  `modalities` is the JSON array of registry names resolved from the member names (the registry is mirrored in `MODALITY_MEMBERS`; a test
+  compares it with `modalities.ts` and with `singlet.bundle.MODALITIES` minus the restricted layers), `median_umi` / `median_genes` come
+  from `stats`, `members_json` is the member dict as the manifest has it (3.2 KB per sample for GSE145370), `members_by_kind` uses the
+  catalog's names (`matrix` / `recipe` / `stored` / `raw`, plus `cells`), `verify_ok` 1, `verified_at` is the time `verify` passed.
+  **Equality check**: a test bundles the website's TypeScript with its own esbuild, feeds the POST body this script builds through the
+  real `parseIngestBody` + `ingestStatements` into SQLite with the real schema files, applies this script's SQL to a second database, and
+  compares every column: 0 differences (14 samples, 2 studies; skipped when node or the worktree are missing).
+* **Key of `v2_sample`**: the website's code now writes the 033 key `(gse_id, rev, gsm_id)` and answers 503 if the table still has the 032
+  key. `catalog-sql` defaults to 033 (`ON CONFLICT(gse_id, rev, gsm_id) DO NOTHING`: re-applying writes nothing). **Apply 033 before
+  these files**; if 033 is not applied the 033 SQL fails with "ON CONFLICT clause does not match" and writes nothing (tested), and
+  `--schema 032` (or `D1_SCHEMA=032`) produces the 032 form (`ON CONFLICT(gse_id, gsm_id) DO UPDATE`).
+* **Order** (the website's own): first every sample row of the day (`1_sample_*.sql`; with the 033 key they sit beside the served rev
+  and nobody reads them), then `2_flip_*.sql`, where each study's three statements stay together in one atomic file: the `v2_study`
+  upsert, `DELETE FROM v2_sample WHERE gse_id = ? AND rev != ?`, and the `v2_migration` upsert with status `verified`. So a study is not
+  served from v2 until its flip, and `verified` is never applied before its own sample and study rows. A study that failed gets only a
+  `failed` migration row; a failed re-run never downgrades a study that was published before (its rows file is left alone).
+* **Budget**: whole studies are packed into `day01`, `day02`, ... of at most `--day-budget` (80,000) estimated row writes, counted as 3 per
+  sample row, 2 for the study row, 2 for the migration row (the website's notes say 1 and 1 to 2; this is on the safe side). Applying a day
+  twice is harmless and cheap (conflicts write nothing). `PLAN.txt` / `plan.json` list studies, samples, writes, files per day; a day
+  directory is self-contained (`APPLY.txt` lists the `wrangler d1 execute singlet-catalog --remote --file=dayNN/...` commands in order).
+  Files hold at most 1000 statements and 3 MB. A sample row whose SQL would exceed D1's 100 KB statement limit is shrunk by dropping
+  optional member fields (`names`, `columns`, `called_source`, `params`, `needs`; never offsets or the chunk index), and a study that
+  cannot be made to fit is skipped and named in `PLAN.txt` (exit code 1).
+* **Atlas estimate**: about 52,000 sample rows -> 52k x 3 + 8.2k x 4 = about 190,000 writes = **3 days** of 80,000; about 200 MB of SQL (about 25 MB
+  as `sql.tar.gz`, which the `catalog-sql` job makes for `clipper.py get`). After the retirement `retire-sql` flips `v2_migration.status`
+  to `retired` (`UPDATE ... WHERE status = 'verified'`, 3 writes per study, 25k in all, one day).
+* `catalog-post` (secondary): `POST /api/ingest/v2-study` with the manifest without `study_files`, slices of at most 400 samples that share
+  rev, `n_samples` and `bytes` (`final: false` until the last, which carries `manifest_bytes`, `manifest_sha256` and the migration block),
+  User-Agent set, retries on 429/5xx. The body is accepted by the website's real parser (same test).
 
-### `scripts/v2_migrate.sbatch`
+Sample of what is applied (GSE145370, real run; the SQL path of the rehearsal in section 3):
 
-Pins `COMMIT` (a pushed commit of `feat/singlet-v2`), adds a detached worktree `$WORK/src/singlet-py/v2mig__<c10>` from the bare clone
-`$WORK/repos/singlet-py.git` (the Clipper name of this repo, as in `restrict_published_bundles.sbatch`), and builds it **once per
-commit** under a `flock` (array tasks wait for the first one; or run `MODE=build` first, which also runs the campaign tests in the
-job). Everything that compiles or runs Python goes through `apptainer exec` on `$WORK/images/python-3.12-bookworm.sif` (`RUNTIME=host`
-to bypass).
-
-zstd (the nodes have no zstd headers): the job downloads the official `zstd-1.5.6.tar.gz` from the GitHub release, checks it against
-the `.sha256` published beside it, builds a **static `libzstd.a` with `-fPIC`** once into `$WORK/cache/zstd-1.5.6-static`, and the
-extensions link it with `CPATH`/`LIBRARY_PATH` (no change to `setup.py`). Why this and not the alternatives: vendoring the source
-would put 1.5 MB of third-party code into a repo W1/W4 own and change their build; a conda/module zstd depends on what the cluster
-offers; a per-commit build wastes minutes per task. The static library is built once per cluster, independent of git, and the
-extension has no runtime dependency on a library path. Cost: needs outbound HTTPS to github.com (allowed from compute nodes) once.
-The venv (`$WORK/venvs/v2tools`, Python 3.12 from the image) gets the package's own `[project].dependencies` read from the commit's
-`pyproject.toml` (numpy, scipy, pandas, anndata, ...: `import singlet` is eager, so anndata **is** needed), plus boto3, pybind11,
-setuptools, pytest. Extensions: `python setup.py build_ext --inplace -j 8` (so `_pz`, and `_pz2` as soon as W4's `setup.py` lists
-it). `REQUIRE_PZ2=1` (default) fails the build if `import singlet._pz2` fails; `REQUIRE_PZ2=0` allows the pure-Python codec (much
-slower: do not use for the campaign). All caches live under `$WORK` (`XDG_CACHE_HOME`, `PIP_CACHE_DIR`), scratch under node-local `/tmp`.
-
-### `scripts/v2_publish.py`
-
-New studies. Same inputs as `pack_gse` (`--results`, `--catalog`, optional enriched metadata). It runs the packer into scratch (a
-legacy-format bundle used only as the verifier's oracle and deleted afterwards; `pack_gse` stays the single definition of what a
-study contains), then the same code path as the campaign (`process_study(provider=...)`): transcode, verify, objects, ledger,
-manifest last. Restricted members: with `--private BUCKET` the packer's sidecar is uploaded to
-`BUCKET/restricted/<GSE>/<GSE>.restricted.singlet` (verified by SHA-256) **before** the manifest; without it they are not kept (as
-today); a public bundle that still contains one is refused. Catalog rows are written and, with `--ingest-url` + `$INGEST_TOKEN`,
-POSTed. Exit 0 live and catalogued, 1 not published, 3 live but the POST failed (rerun `catalog-post`). Last stdout line `RESULT {json}`.
-Why a temporary legacy bundle instead of reading the pipeline directory directly: W2's transcoder takes a bundle; if W2 adds a
-directory source, `provider` can drop the packing step without touching anything else.
-
-Anvil patch (unapplied): `bench/compression/results/m_w6_patches/anvil_v2_publish.patch` (`git apply --check` passes on
-singlet-website-anvil, which was not modified). It changes `publish_study_v3.py` (v2 publish replaces pack + `upload-bundles`;
-`sync-catalog --all` for gse/gsm stays; verification checks `v2/m/<GSE>.json` size and sha256 metadata, optionally the public URL
-with `V2_REQUIRE_PUBLIC=1`), `cf_bundle_v3.py` (`--v2` delegates each study to `v2_publish.py`), and `cf_pack_v3_prepare.sh` (copies
-`v2_publish.py`/`v2_campaign.py` from the pinned commit and fails fast unless `singlet.v2.migrate`, `singlet.v2.verify` and
-`singlet._pz2` import from `pylib_v3`). **Anvil prerequisite**: the `singlet` package of that commit with `singlet.v2` and a compiled
-`_pz2` must be importable from `pylib_v3` (today Anvil has only the standalone `bundle.py`); that is a one-time build on Anvil.
-`R2_PRIVATE_BUCKET` (env) turns the sidecar upload on.
-
-### `scripts/v2_retire.py`
-
-`retire` (dry run unless `--apply --confirm RETIRE`): refuses unless the manifest exists, its `legacy.etag`/`bytes` equal the live
-object, all sample objects exist with the right size and the ledger ends in a committed `ok`; server-side copy to
-`singlet-archive/<same key>` with `StorageClass=STANDARD_IA` (R2 lists STANDARD_IA for CopyObject/CreateMultipartUpload; if a call
-rejects it the copy is retried without, and the bucket default applies; create the bucket with
-`wrangler r2 bucket create singlet-archive --storage-class InfrequentAccess` to be safe), objects over 4 GiB in 1 GiB ranges with
-`UploadPartCopy`; verification: size + ETag when the server kept the source ETag, otherwise SHA-256 of the archived object against the
-SHA-256 the campaign recorded in the manifest; re-HEAD of the source, then delete. The study list comes from the manifests (plus
-legacy studies without one, which are `REFUSED`), so `--shard I/N` keeps meaning the same studies while other shards delete. `retire
---all` refuses to start while any legacy study lacks a manifest (`--allow-partial` overrides). `restore` copies back and verifies
-(`--force` to overwrite a different object). `audit` lists every `data/*.singlet` still in `singlet-data` with manifest/archive flags
-(`--expect-none` for exit 1). After a restore of a multipart-copied object the ETag differs from the one recorded in the manifest, so
-the study needs a new migration before it can be retired again.
-
-### Catalog rows (item 3)
-
-`rows/<GSE>.json` holds `{v2_migration, v2_study, v2_sample[]}` per study. **The table and column names are an assumption**
-(`CATALOG_SCHEMA` at the top of `v2_campaign.py`; names from `docs/format-v2.md` section 8 and the ingest endpoint's `gse_id`/`gsm_id`
-convention; JSON values are stored as text because the endpoint rejects objects). `bench/compression/notes/m_w5.md` did not exist
-when this was written; when W5's schema is final, edit that one table. Two ways to apply, both ordered samples -> migration ->
-study (the study row is what makes a study appear):
-
-* `catalog-post --rows-dir ...` (run it on the cluster, `MODE=catalog-post`): `POST /api/ingest/<table>` with `{"rows": [...]}`,
-  `X-Ingest-Token`, a non-default User-Agent (the site answers 403 to the default one), 500 rows per request, retries on 429/5xx.
-  Needs W5's `TABLES` entries for the three tables and `~/.config/singlet-ingest.env` (`INGEST_TOKEN=...`) on Clipper.
-* `catalog-sql --rows-dir ... --out DIR` (or `--from-r2`, which rebuilds the rows from the manifests and ledgers in R2 and needs no
-  rows directory): files `1NNNN_v2_sample.sql`, `5NNNN_v2_migration.sql`, `9NNNN_v2_study.sql` of idempotent `INSERT ... ON CONFLICT DO
-  UPDATE` (<= 1000 rows and <= 1.5 MB each, no BEGIN/COMMIT: each file is atomic through D1's import) and `APPLY.txt` listing the
-  `wrangler d1 execute singlet-catalog --remote --file=...` commands. About 52k sample rows, so roughly 40 files and 40 to 80 MB: pull
-  them with `clipper.py pull` only if the POST route is not available.
-
-## 2. Contracts with the other workstreams (what the campaign assumes)
-
-**W2 (`python -m singlet.v2.migrate` / `verify`)**
-
-* `migrate --bundle PATH --out DIR --gse ID`: writes the R2 key space under `DIR/v2/` (`v2/s/<GSM>/<32 hex>.s2`, `v2/m/<GSE>.json`,
-  `v2/ref/<32 hex>.pack`, optional `v2/cells/<GSE>.cells`); a layout without the `v2/` prefix (`DIR/m/...`) is also found. Exit 0 on
-  success. Optional `DIR/migrate_report.json` (any JSON, < 200 kB) is copied into the result row. Please honour `SINGLET_V2_THREADS`
-  (the campaign sets it, and `OMP/OPENBLAS/MKL_NUM_THREADS`, to `--migrate-threads`, default 2).
-* `verify --bundle PATH --v2 DIR`: exit non-zero on any mismatch. It is run **after** the campaign adds the `legacy` block to the
-  manifest, so it checks the manifest that will be published; it must accept a `legacy` block (`key`, `etag`, `bytes`, `sha256`,
-  `migrated_at`, `ledger`) and must not require the block to be absent.
-* Checked by the campaign before any upload: object names are `sha256(object)[:32]` (also packs); the header is `SINGLET2` with the
-  GSM id and `file_len` at the offsets of format-v2 section 3; manifest `format == "singlet-v2"`, `gse`, a non-empty `samples[]` with
-  `key`, `bytes`, optional `sha256` all matching the files; `packs` values are 32-hex ids whose pack is in `DIR` or already in R2.
-  Fields used for the catalog: `rev`, `reference_build`, `manifest_version`, `created_at`, `packs`, `samples[].gsm/key/bytes/sha256/
-  n_columns/n_called/members{name:{kind,off,len}}/stats`. Members `kind` may be the integer of format-v2 section 3.
-* The migrated manifest must carry no restricted member; the campaign refuses bundles that still do (it does not look inside v2).
-* Resource: the campaign assumes a migrate+verify of one study fits in about 16 GB (48 GB node job / 3 workers); tell me if the
-  largest study (about 30 GB legacy) needs more.
-
-**W1/W4**: `setup.py build_ext --inplace` in the pinned commit must produce `singlet._pz2` (header-only pz2, `-O2`, no `-march`,
-zstd linked statically from `$WORK/cache/zstd-1.5.6-static`, Python 3.12, pybind11). Until it exists the build job fails by design.
-
-**W5**: tables `v2_study`, `v2_sample`, `v2_migration` and their ingest `TABLES` entries (columns in `CATALOG_SCHEMA`); how a
-v2-only study is recognised in `gse` (today `gse.r2_bundle_key/bytes/n_gsms`, which `upload-bundles` set: the Anvil patch does not
-write them: `V2_GSE_FIELDS` is a marked TODO); the data Worker deployed before `V2_REQUIRE_PUBLIC=1` is used; the format of
-`v2/ref/index.json` (this campaign writes `{"format","updated_at","packs":[{id,kind,build,member,n,bytes,sha256}]}` from the pack
-headers; confirm with W4's pack reader). Note the Worker serves `v2/cells/` with `max-age=300`, format-v2 section 2 says immutable
-per rev.
-
-## 3. Procedure (exact commands)
-
-`C="python $HOME/.claude/skills/clipper/clipper.py"`; `W=/mnt/projects/debruinz_project/debruinz/singlet`. Prerequisites the
-orchestrator provides: the commit pushed to GitHub (`SHA=$(git rev-parse origin/feat/singlet-v2)`); `sync.sh` run so that the bare
-clone `$W/repos/singlet-py.git` and a worktree of the branch exist (`J=$W/src/singlet-py/feat__singlet-v2/scripts/v2_migrate.sbatch`);
-`~/.config/singlet-r2.env` on Clipper with a token that reads/writes `singlet-data` (and creates/writes `singlet-archive` for
-retirement); the restrict migration finished for every study. Before each submission: `$C free`, `$C when $J --partition=...`.
-
-```bash
-# 1. build + self-test the commit (no R2). Fix anything this prints before going on.
-$C run "sbatch --partition=debug-cpu --time=00:30:00 --array=0 --export=ALL,MODE=build,COMMIT=$SHA $J"
-
-# 2. freeze the study list and the shard plan (reads R2: HEADs nothing, lists data/)
-$C run "sbatch --partition=debug-cpu --time=00:30:00 --array=0 --export=ALL,MODE=plan,NSHARD=32,COMMIT=$SHA $J"
-#    -> $W/state/v2/plan-<c10>/plan.tsv  big.txt ; read the log, pull nothing else
-L=$W/state/v2/plan-${SHA:0:10}/plan.tsv
-
-# 3. dry run on one shard: real downloads, transcode and verify, no R2 writes
-$C run "sbatch --array=0 --export=ALL,MODE=dry,NSHARD=32,LISTING=$L,COMMIT=$SHA $J"
-
-# 4. pilot: 6 studies across the size range + the 14-sample corpus study, with writes and SHA-256 read-back
-$C run "sbatch --array=0 --export=ALL,MODE=pilot,PILOT_N=6,GSES=GSE145370,COMMIT=$SHA $J"
-$C run "sbatch --array=0 --export=ALL,MODE=summarize,RUNS=pilot-${SHA:0:10},COMMIT=$SHA $J"   # measured MB/s per stage + projection
-
-# 5. full: first wave small, then widen once the pilot's numbers hold
-$C run "sbatch --array=0-31%4 --export=ALL,MODE=full,NSHARD=32,LISTING=$L,COMMIT=$SHA $J"
-#    watch: squeue; tail -3 $W/logs/v2mig-<jobid>_<n>.out ; MODE=summarize RUNS=full-<c10>
-#    then raise the throttle (scontrol update JobId=<arrayid> ArrayTaskThrottle=16) and resubmit failed shards unchanged
-#    (RESUME=1 is the default: finished studies are skipped, only failures and deferred studies run again)
-
-# 6. sweep for studies that appeared after the listing was frozen, and retries
-$C run "sbatch --array=0-3 --export=ALL,MODE=full,NSHARD=4,COMMIT=$SHA $J"        # no LISTING = fresh listing
-
-# 7. catalog (after W5 deploys the tables); the cluster talks to the site, nothing goes through the laptop
-$C run "sbatch --array=0 --export=ALL,MODE=catalog-post,RUNS='full-${SHA:0:10} pilot-${SHA:0:10}',COMMIT=$SHA $J"
-#    or MODE=catalog-sql (add FROM_R2=1 to rebuild from R2), then pull $W/state/v2/catalog-sql-<c10>/sql and run APPLY.txt
-$C run "sbatch --array=0 --export=ALL,MODE=refs-index,APPLY=1,COMMIT=$SHA $J"
-
-# 8. retirement, only after clients default to v2 (docs/v2-migration.md D12)
-$C run "sbatch --array=0-7 --export=ALL,MODE=retire-dry,NSHARD=8,COMMIT=$SHA $J"                      # read-only
-$C run "sbatch --array=0-7 --export=ALL,MODE=retire,NSHARD=8,CONFIRM_RETIRE=RETIRE,COMMIT=$SHA $J"
-$C run "sbatch --array=0 --export=ALL,MODE=audit,EXPECT_NONE=1,COMMIT=$SHA $J"                        # exit 1 if any data/*.singlet is left
-#    undo for named studies: MODE=restore GSES="GSE... GSE..." APPLY=1
+```
+day01/1_sample_0000.sql  (14 statements, 44.7 KB)
+INSERT INTO v2_sample (gse_id, gsm_id, key, bytes, sha256, n_columns, n_called, n_members, median_umi, median_genes, modalities, members_json,
+  cell_stats_json, rev, updated_at) VALUES ('GSE145370', 'GSM4317423', 'v2/s/GSM4317423/1e71de45f24c1e51985080133bed7ab0.s2', 3184595, '1e71de45...',
+  39217, 2722, 11, 106.0, 60.0, '["exon_counts","intron_counts","cell_calls","junctions","splice_psi","mt_heteroplasmy","vdj_gene_usage","summary",
+  "pileup_stats","provenance"]', '{"cells":{"kind":2,...},"exon_counts.1pz":{"kind":1,...,"codec":1,"chunk_cols":4096,"n_chunks":10,"chunk_index":[182016,264],...}}',
+  '{"median_umi":106.0,"median_genes":60.0}', '31bfd9c808c8f72e', strftime('%Y-%m-%dT%H:%M:%SZ', 'now')) ON CONFLICT(gse_id, rev, gsm_id) DO NOTHING;
+day01/2_flip_0000.sql  (3 statements, 2.7 KB)
+INSERT INTO v2_study (gse_id, manifest_key, rev, bytes, n_samples, created_at, legacy_bytes, manifest_bytes, manifest_sha256, n_cells_called,
+  reference_build, packs_json, pipeline_json, updated_at) VALUES ('GSE145370', 'v2/m/GSE145370.json', '31bfd9c808c8f72e', 31828624, 14,
+  '2026-10-22T15:50:42Z', 187066350, 90457, '09a2aa1e...', 40614, 'GRCh38-2024-A', '{"exon":"a34ebca6...","intron":"fd3fcc82...","genes":null,
+  "whitelist":"c4661819..."}', '{"git_sha":"8e1803ba...","singlet_version":"0.3.0"}', strftime(...)) ON CONFLICT(gse_id) DO UPDATE SET ...;
+DELETE FROM v2_sample WHERE gse_id = 'GSE145370' AND rev != '31bfd9c808c8f72e';
+INSERT INTO v2_migration (gse_id, status, legacy_key, legacy_etag, legacy_bytes, v2_bytes, n_samples, members_by_kind, verify_ok, commit_sha,
+  migrated_at, verified_at, ledger_key, error, updated_at) VALUES ('GSE145370', 'verified', 'data/GSE145370/GSE145370.singlet',
+  '29f661b49cc3bdd631bcea26319fa571', 187066350, 31919081, 14, '{"cells":14,"matrix":56,"recipe":42,"stored":42}', 1, 'abcdef1234567890',
+  '2026-10-22T15:50:42Z', '2026-10-22T15:52:31Z', 'v2/ledger/GSE145370.jsonl', NULL, strftime(...)) ON CONFLICT(gse_id) DO UPDATE SET
+  status = excluded.status, legacy_key = COALESCE(...), ..., verify_ok = excluded.verify_ok, ..., error = excluded.error, updated_at = strftime(...);
 ```
 
-Tunables (env, all optional): `WORKERS` (3), `MIGRATE_THREADS` (2), `IO_THREADS` (8), `SCRATCH_BUDGET_GB` (400), `PILOT_N`, `PILOT_MAX_GB`
-(8), `RESUME`, `EXCLUDE_LIST` (file of GSEs, e.g. `big.txt`, to run the largest studies in their own job with `WORKERS=1
-MIGRATE_THREADS=8`), `KEEP_SCRATCH=failed`, `DEADLINE_MARGIN_SEC` (900), `GSES`, `LISTING`, `LIST_ONLY`.
-Default job: `short-cpu`, 8 CPUs, 48 GB, 3:59:00, `--no-requeue`. Logs: `$W/logs/v2mig-<arrayid>_<task>.out`.
-Results: `$W/state/v2/<mode>-<c10>/`. Pull only small things: `results-*.jsonl`, the `summarize` output, `plan.tsv`, `big.txt`.
+`legacy_etag` is stored without quotes (R2 composite ETags for the real bundles, an MD5 for a single-part object); the same value is in the
+manifest's `legacy.etag` and is what `v2_retire.py` compares with the live object.
 
-Go / no-go after each phase: build ok and `_pz2` imports; plan prints 8,202 studies and about 2.7 TB; dry: every status `dry_ok` or an
-explained `blocked_restricted`; pilot: all `ok`, no `etag_note` in the ledgers (if one appears, R2's ETag rule differs from the
-documented one: the read-back made the run safe, but fix `hash_file` before the full run), `verify.ok` everywhere, `summarize`
-projection within the budget below; first `full` wave: `failed` count 0.
+## 3. Real end-to-end rehearsal (no stand-ins)
+
+`v2_campaign.py run --mode full --local-root <dir> --gse GSE145370 --workers 1 --readback sha256` on `bench/compression/corpus/bundles/GSE145370.singlet`
+(copied into a directory-backed bucket; the real `python -m singlet.v2.migrate` and `verify`, compiled `_pz2`, W3's recipes; Python 3.11, laptop
+i7-1185G7 4C/8T at 3.0 GHz, load 19% before the run, timing lock held; **one run, not a benchmark**; R2 and network are replaced by local disk):
+
+| quantity | value |
+|---|---|
+| legacy bundle | 187,066,350 B, 14 samples, 143 members |
+| v2 sample objects | 31,828,624 B (**5.87x**) + manifest 90,457 B + 3 shared packs 1,147,901 B; study-owned total 31,919,081 B |
+| members | 56 pz2 matrices, 14 cells tables, 42 derived, 42 stored; 154 in the manifest |
+| objects uploaded | 17 (14 samples, 3 packs) + manifest + ledger (172 transcoder lines, 6 of ours); all read back by SHA-256 |
+| `verify` | 1505 checks passed, 0 failed |
+| seconds | download 0.4, hash 0.2, **migrate 81.4**, collect (hash 17 objects, validate) 0.2, **verify 26.8**, upload 0.2, manifest 0.0, **total 109.9** |
+| throughput | migrate 2.3 MB/s, verify 7.0 MB/s, together **1.7 MB/s of legacy bytes per study process** (about one core) |
+| result | status `ok`; legacy sha256 `14fffd79...`, etag recorded in the manifest and the ledger; legacy object untouched |
+
+The same study through `v2_migrate.sbatch` (`RUNTIME=host`, local directories, junctions for `$SRC`): `plan`, `full` (115 s, `workers=4` on a
+6-cpu job), `full` again (`skipped_done` in 0 s), `summarize`, `catalog-sql`, `catalog-post --dry-run`, `refs-index` (14 packs + index uploaded, 3
+already there; again: nothing), `retire-dry`, `retire` (`archive verified by etag`), `audit --expect-none`, `retire-sql` all ran as written.
+`catalog-sql` on its rows (section 2) applied to SQLite with the real 032 + 033 files gives 14 `v2_sample` rows, one `v2_study`, one
+`v2_migration` with status `verified` and `verify_ok` 1 (and the same after a second application).
 
 ## 4. Throughput plan
 
-Inputs: 8,202 legacy bundles, about 2.7 TB live (mean 329 MB; the largest bundles are about 30 GB; sample objects up to 132 MB).
-Work per study: read the bundle once (download), hash it, decode every legacy matrix twice (migrate and verify), encode, decode v2
-once (verify), compress the stored members. Download is ~150 MB/s per node (assumed, to be measured); the compute rate per core is
-the unknown. From the codec benches (`results/w3_total_timing.tsv`: legacy decode 4 to 11 Mnnz/s per core, about 2.5 bytes per
-nonzero) I expect 5 MB/s of legacy bytes per core for migrate+verify together (range 2 to 20, the zstd-19 pass over stored members is
-the other candidate). The `plan`/`summarize` subcommands redo this table from measured numbers.
+Measured: 1.7 MB/s of legacy bytes per core for migrate + verify on a quiet laptop core (W2's loaded-laptop run of the whole corpus: about
+1 MB/s for migrate alone, 0.6 to 0.7 MB/s on the deep 20 to 50 MB samples, 3 MB/s on the STARsolo ones). Cluster cores are probably not
+faster; the table uses 1.0 as the base case. The legacy bundle is read once at 150 MB/s per node (assumed, to be measured), which is never
+the limit here. A migrate process is single threaded, so **a study cannot be split across cores**: a 30 GB bundle needs 8 h at 1 MB/s.
 
-Node = 8 cores at 75% efficiency (6 effective), download 150 MB/s, 32 shards, 6 minutes of start-up per task (reused build):
+Node = 16 cores, `cpus - 2` workers at about 75% efficiency, 8 minutes of start-up per task, all 2.7 TB in non-big studies:
 
-| MB/s per core (migrate+verify) | node MB/s | bound | campaign node-hours | task length (16 / 32 / 64 shards) | wall at `%8`, 32 shards |
-|---|---|---|---|---|---|
-| 2 | 12 | compute | 66 | 4.0 / 2.1 / 1.1 h | 8.2 h |
-| 5 | 30 | compute | 28 | 1.7 / 0.9 / 0.5 h | 3.5 h |
-| 10 | 60 | compute | 16 | 0.9 / 0.5 / 0.3 h | 2.0 h |
-| 20 | 120 | compute | 9.4 | 0.5 / 0.3 / 0.2 h | 1.2 h |
-| 40 | 150 | download | 8.2 | 0.4 / 0.26 / 0.18 h | 1.0 h |
+| MB/s per core | node MB/s | campaign node-hours (core-hours) | task length at 32 / 64 / 96 shards | wall at `%16`, 64 shards |
+|---|---|---|---|---|
+| 0.5 | 6.0 | 134 (2,140) | 4.0 / 2.1 / 1.4 h | 8.3 h |
+| **1.0** | 12.0 | 71 (1,140) | 2.1 / **1.1** / 0.8 h | **4.4 h** |
+| 1.7 (measured, quiet laptop) | 20.4 | 45 (730) | 1.3 / 0.7 / 0.5 h | 2.8 h |
+| 3.0 | 36.0 | 29 (470) | 0.8 / 0.5 / 0.35 h | 1.8 h |
 
-Download-only floor: 2.7e6 MB / 150 MB/s = 5.0 node-hours.
+Recommendation: **64 shards of 16 CPUs / 64 GB on `short-cpu`, array `0-63%16`** (first wave `%4`; widen after the pilot's `summarize`), about
+42 GB and 128 studies per shard, tasks of about 1 h at the base rate (under the 4 h limit even at 0.5 MB/s, and the deadline guard defers a
+study that cannot finish). Total about 1,100 core-hours (range 470 to 2,100), 5 to 10 times what the first estimate of this note said, because
+the first estimate assumed 5 MB/s per core.
 
-Recommendation: **32 shards of about 84 GB and 256 studies each (jobs of 0.3 to 2 h in every row above, under the 4 h limit with
-the deadline guard), array `0-31%8`**, first wave `%4` to read the per-node download rate off `summarize` before widening. That is 32
-jobs of 8 CPUs / 48 GB (256 CPUs when 8 run at once), 9 to 66 node-hours of Clipper in total, a wall time of 1 to 8 hours plus queueing
-(the `short-cpu` partition starts at once when `$C free` shows idle nodes). If the pilot shows < 3 MB/s per core, go to 64 shards; if the
-node download rate is the limit at 8 concurrent nodes (aggregate 1.2 GB/s against the campus link), keep `%4`.
-Tail risk: one 30 GB study is processed by one worker; at 5 MB/s per core and 2 migrate threads that is 50 minutes (2 h at 2 MB/s). Studies
-are started largest first; put anything above `--big-gb` (plan writes `big.txt`) in their own job if the pilot says a single study can
-exceed an hour.
-Resources per job: scratch 3x the bundle per study in flight (3 workers x 30 GB x 3 = 270 GB of the 3.3 TB node disk, budget 400 GB);
-memory 16 GB per worker (to be confirmed with W2's peak RSS on the largest sample).
-R2: about 52k sample objects (3 to 17 parts each at 8 MiB) -> roughly 250k class A operations (about $1), 40k ranged GETs of the bundles
-(class B), egress free; v2 adds about 1.6 TB to `singlet-data` until retirement, then the archive holds 2.7 TB in Infrequent Access
-(about $27/month for the 30-day grace period, as D12). D1: about 68k row writes in total.
+**Big studies** (at least 5 GB, `plan` writes `big.txt` and the share of the bytes they hold): one worker each, so 5 GB = 1.4 h at 1 MB/s and the
+largest (about 30 GB) 8 h. They go in their own array on a longer partition: `--partition=cpu --time=12:00:00 --array=0-7` with `NSHARD=8
+GSE_LIST=<big.txt> SCRATCH_BUDGET_GB=1000 MIGRATE_TIMEOUT=43200 VERIFY_TIMEOUT=43200`; each task then runs 14 big studies in parallel. The main
+array uses `EXCLUDE_LIST=<big.txt>`. If the listing says the big studies hold most of the bytes, or the `cpu` partition starts days late
+(the clipper skill notes it can), split big studies by sample (`migrate --samples` exists) and merge the manifests: a follow-up for W2, not
+needed to start.
+Per node: scratch about 3x the bundle per study in flight (budget 400 GB; 1000 GB for the big job), memory 2 to 4 GB per worker (W2: the
+323 MB STARsolo sample peaks near 2 GB), R2 reads 16 x 1 to 2 MB/s = 16 to 32 MB/s per node, far under the assumed 150 MB/s.
+R2 operations about 250k class A (about $1), egress free; v2 adds about 1.6 TB to `singlet-data` until retirement, then 2.7 TB in Infrequent
+Access in `singlet-archive` (about $27/month, D12).
 
-## 5. What was verified, what was not
+## 5. Build step, re-checked against `setup.py` / W1 / W4
 
-Verified (laptop, stand-ins): all behaviours in section 1 by the tests listed in section 6; the sbatch dispatch for build-less modes
-(dry, full shards, pilot, summarize, catalog-sql, catalog-post --dry-run, refs-index, plan, retire-dry, retire with and without the
-confirmation, audit, restore) run through `bash` with `RUNTIME=host`; `time_left` parsing of `squeue -o %L`; `bash -n` of the sbatch; the
-Anvil patch applies (`git apply --check`) and the patched scripts parse; R2 behaviours checked against Cloudflare's public docs
-(STANDARD_IA on CopyObject/CreateMultipartUpload/PutObject, If-Match on GetObject, UploadPartCopy with range, CreateBucket/HeadBucket,
-multipart rules: >= 5 MiB, equal parts, composite ETag).
+`setup.py` builds two `Pybind11Extension`s: `singlet._pz` (`src/bindings/python/_pz.cpp`) and `singlet._pz2` (`_pz2.cpp`, `include_dirs`
+`include` + `src/bindings/common`, header-only pz2), both `cxx_std=17`, `libraries=["zstd"]`, `/utf-8` only on Windows, **no `-march`** (pz2
+selects AVX2 / AVX-512 at run time from cpuid; the kernels carry per-function target attributes). What the job therefore needs: a C++17 compiler
+(the image's GCC 12), Python headers, pybind11, `zstd.h` and a static `libzstd.a`, and `-pthread` (`std::thread` in the encoder). The sbatch:
 
-**Not verified** (no R2/D1/cluster access by rule): any real R2 call (boto3 is not even installed on the laptop; `S3Store` was exercised
-only against an in-memory fake that follows the S3 semantics above); the botocore options `request_checksum_calculation` and
-`response_checksum_validation=when_required` (set when the installed botocore knows them, as a precaution against CRC32 trailers
-that some S3-compatible stores reject; not mentioned in R2's docs); the apptainer image having a compiler and Python headers; the zstd
-source build with `make libzstd.a MOREFLAGS=-fPIC`; the existence of the `.sha256` asset next to the zstd tarball (a missing one only
-prints a warning with the computed hash); `pip install` of the dependency list on the nodes; the real `short-cpu` start behaviour; real
-throughput of anything. `MODE=build` and the pilot are designed to expose exactly these.
+* builds `libzstd.a` 1.5.6 once (official tarball, checked against the `.sha256` beside it, `make libzstd.a MOREFLAGS=-fPIC`) into
+  `$WORK/cache/zstd-1.5.6-static` and points `CPATH` / `LIBRARY_PATH` at it, so `setup.py` is unchanged and the extensions link zstd statically.
+  1.5.6 is also the zstd W3 found to write the same `.1pz` frames as 1.5.5 (calibration id `ccd0ac25`), so the legacy writer that `singlet._pz`
+  provides reproduces container bytes where the legacy files came from those versions (informational, D15);
+* exports `CFLAGS=-pthread LDFLAGS=-pthread` around `build_ext --inplace -j 8`;
+* fails early, with a message, if the commit lacks `python/singlet/v2/packs/*.pack` + `index.json`, `python/singlet/v2/recipes_data/`, or
+  the `_pz2` source / `setup.py` entry (data files that are easy to leave untracked);
+* imports `singlet._pz` and `singlet._pz2` and prints the `.1pz` writer calibration ids (warns if `ccd0ac25` is missing);
+* **self-test inside the build lock, before the marker that releases the other tasks**: `python -m pytest tests/python/test_v2_container.py -q`
+  (with `SINGLET_PZW_AUTOBUILD=0`) and `--help` of migrate and verify; `MODE=build` additionally runs the campaign tests.
 
-## 6. Tests (`tests/python/test_v2_campaign*.py`)
+Not verifiable from here: that the image has GCC 12, make and Python headers; the zstd download and its `.sha256` asset; `pip install` of the
+dependencies; that `test_v2_container.py` passes with the venv's package versions; that `import singlet` runs under Python 3.12 with the
+current dependency pins. `MODE=build` on `debug-cpu` is the first thing to run.
 
-* `test_v2_campaign.py` (43): ETag rule; headers per key class; full run (manifest is the last data write of each study, only `v2/`
-  written, legacy bytes untouched, ledger/rows/results contents); idempotent rerun (0 objects uploaded); `--resume` and a replaced
-  legacy bundle; one failing study (migrate / verify / upload / transient upload errors / legacy replaced during or after the read /
-  object named wrongly / restricted members / missing study) while the shard continues; dry and list-only write nothing; pilot, shards,
-  exclude and frozen listing; deadline deferral; concurrent workers; the write guard; the boto3 path (`S3Store` on an in-memory S3:
-  ranged `If-Match` download, multipart ETags, ETag-rule difference accepted only after a SHA-256 read-back, corrupted object rejected);
-  catalog SQL executed in SQLite (idempotent, quoting, a failed rerun keeps the study row), POST ordering/retry/token; refs index; plan;
-  summarize; projection arithmetic.
-* `test_v2_campaign_retire.py` (19): dry run changes nothing; confirmation phrase; archive -> verify -> delete order; refusal for a
-  rebuilt bundle, no manifest, missing samples, no verified ledger; completeness gate; source changing during the copy; multipart copy
-  verified by SHA-256; corrupt copy rejected; rerun after a crash between archive and delete; restore (and `--force`); audit; stable
-  shards; `S3Store.copy` (single, storage-class fallback, multipart ranges, abort on failure); the whole retire flow through `S3Store`
-  including bucket creation.
-* `test_v2_campaign_publish.py` (10): dry run; v2 objects without any `data/` key; manifest written after every object and the ledger
-  around it; restricted sidecar to the private bucket only when asked; a packer that leaks restricted members is refused; verify
-  failure; no finished samples; republish uploads nothing; catalog POST and a failed POST (exit 3).
-* `test_v2_campaign_common.py`: helpers only (stand-in transcoder/verifier that writes real `SINGLET2` headers, directory-backed R2,
-  in-memory boto3 S3).
+## 6. Procedure: exact commands
 
-## 7. How to resume / change things
+`C="python $HOME/.claude/skills/clipper/clipper.py"`, `W=/mnt/projects/debruinz_project/debruinz/singlet`, `SHA=<pushed commit of feat/singlet-v2>`,
+`C10=${SHA:0:10}`, `J=$W/src/singlet-py/feat__singlet-v2/scripts/v2_migrate.sbatch` (after `sync.sh` has brought the branch to Clipper).
+Prerequisites (orchestrator): the commit is pushed and **contains** `python/singlet/v2/` (packs, recipes_data, `.py`), `src/bindings/python/_pz2.cpp`,
+`setup.py` with `_pz2` and these scripts; `~/.config/singlet-r2.env` on Clipper with a token for `singlet-data` (and `singlet-archive` for
+the retirement); the restrict migration has finished; schema 032 and 033 applied to D1. Before each submission: `$C free`, `$C when $J`.
 
-* Another table layout from W5: edit `CATALOG_SCHEMA` in `v2_campaign.py`; `catalog-sql --from-r2` rebuilds all rows from R2.
-* A different transcoder CLI or output layout: `Ctx.migrate_cmd/verify_cmd` (or `--migrate-cmd/--verify-cmd` as a JSON list),
-  `find_v2_root`, `collect_objects`.
-* A study stuck in a bad state: nothing to clean up in R2 (no manifest = invisible); rerun the shard.
-* Redo studies that are already `ok` (for instance after a transcoder fix in a newer commit): `--resume` compares only the legacy
-  object, not the code commit, so a new commit does not invalidate finished studies. Run
-  `--array=0 --export=ALL,MODE=full,NSHARD=1,RESUME=0,GSES="GSE... GSE...",COMMIT=<new sha>`; the immutable objects whose bytes did not
-  change are skipped by ETag, changed ones get new keys, and the manifest is replaced last. For the whole atlas use `RESUME=0` with all
-  shards (it re-reads and re-verifies every bundle).
-* Do not run `retire` before `catalog-*` and the client switch; `audit --expect-none` is the end condition.
+```bash
+# 1. build + self-test (no R2). Fix whatever it prints before going on.
+$C run "sbatch --partition=debug-cpu --time=00:30:00 --array=0 --export=ALL,MODE=build,COMMIT=$SHA $J"
+
+# 2. publish the 16 reference packs and v2/ref/index.json (5.4 MB; idempotent)
+$C run "sbatch --partition=debug-cpu --time=00:10:00 --array=0 --export=ALL,MODE=refs-index,APPLY=1,COMMIT=$SHA $J"
+
+# 3. freeze the study list: plan.tsv (all studies, shard column) and big.txt
+$C run "sbatch --partition=debug-cpu --time=00:20:00 --array=0 --export=ALL,MODE=plan,NSHARD=64,COMMIT=$SHA $J"
+L=$W/state/v2/plan-$C10/plan.tsv ; B=$W/state/v2/plan-$C10/big.txt
+
+# 4. dry run of one shard: real downloads, transcode and verify, no R2 writes
+$C run "sbatch --array=0 --export=ALL,MODE=dry,NSHARD=64,LISTING=$L,EXCLUDE_LIST=$B,COMMIT=$SHA $J"
+
+# 5. pilot: 6 studies of at most 2 GB across the size range + the corpus study, with writes and SHA-256 read-back of every object
+$C run "sbatch --array=0 --export=ALL,MODE=pilot,PILOT_N=6,GSES=GSE145370,COMMIT=$SHA $J"
+$C run "sbatch --partition=debug-cpu --time=00:10:00 --array=0 --export=ALL,MODE=summarize,RUNS=pilot-$C10,COMMIT=$SHA $J"   # per-stage MB/s, projection
+
+# 6. full, normal studies (first wave %4, then `scontrol update JobId=<array> ArrayTaskThrottle=16`)
+$C run "sbatch --array=0-63%4 --export=ALL,MODE=full,NSHARD=64,LISTING=$L,EXCLUDE_LIST=$B,COMMIT=$SHA $J"
+#    big studies, own array on the long partition (check `$C when` first; use a shorter --time if it starts sooner)
+$C run "sbatch --partition=cpu --time=12:00:00 --cpus-per-task=16 --mem=96G --array=0-7 --export=ALL,MODE=full,NSHARD=8,GSE_LIST=$B,LISTING=$L,SCRATCH_BUDGET_GB=1000,MIGRATE_TIMEOUT=43200,VERIFY_TIMEOUT=43200,RUN=full-big-$C10,COMMIT=$SHA $J"
+#    resubmit failed or deferred shards with the same command (RESUME=1 is the default); sweep for studies added since the listing was frozen:
+$C run "sbatch --array=0-3 --export=ALL,MODE=full,NSHARD=4,COMMIT=$SHA $J"     # no LISTING: a fresh listing; finished studies are skipped
+
+# 7. catalog SQL (primary route): one tar.gz to bring back; the orchestrator applies it with wrangler from the laptop
+$C run "sbatch --partition=debug-cpu --time=00:30:00 --array=0 --export=ALL,MODE=catalog-sql,RUNS='full-$C10 full-big-$C10 pilot-$C10',COMMIT=$SHA $J"
+$C get $W/state/v2/catalog-sql-$C10/sql.tar.gz <local dir>      # about 25 MB; unpack, then per day: the APPLY.txt of dayNN, in order
+#    (MODE=catalog-sql FROM_R2=1 rebuilds the rows from the manifests and ledgers in R2 instead; MODE=catalog-post needs ~/.config/singlet-ingest.env)
+
+# 8. retirement, only after the clients default to v2 (docs/v2-migration.md D12), then the catalog flip
+$C run "sbatch --array=0-7 --export=ALL,MODE=retire-dry,NSHARD=8,COMMIT=$SHA $J"                       # read-only
+$C run "sbatch --array=0-7 --export=ALL,MODE=retire,NSHARD=8,CONFIRM_RETIRE=RETIRE,RUN=retire-$C10,COMMIT=$SHA $J"
+$C run "sbatch --array=0 --export=ALL,MODE=audit,EXPECT_NONE=1,COMMIT=$SHA $J"                         # exit 1 while any data/*.singlet is left
+$C run "sbatch --array=0 --export=ALL,MODE=retire-sql,RUNS=retire-$C10,COMMIT=$SHA $J"                 # sql for v2_migration.status = retired
+#    undo for named studies: MODE=restore GSES="GSE... GSE..." APPLY=1   (then retire-sql again with the restore ledger)
+```
+
+Go / no-go: build prints `_pz and _pz2 import` and the container tests pass; `plan` prints about 8,202 studies and 2.7 TB; dry: every status `dry_ok`
+or an explained `blocked_restricted`; pilot: all `ok`, `verify.ok` everywhere, no `etag_note` in the ledgers (if one appears, R2's ETag rule differs
+from the documented one; the read-back kept the run safe, but fix `hash_file` before the full run), `summarize` at or above 0.5 MB/s per worker
+(if lower, 96 shards); first full wave: `failed` count 0.
+Tunables (env): `WORKERS` (cpus - 2), `IO_THREADS` (8), `SCRATCH_BUDGET_GB` (400), `MIN_RATE_MBS` (0.4: a study is not started if it cannot finish at this
+rate before the job's deadline), `PILOT_N`, `PILOT_MAX_GB` (2), `RESUME`, `EXCLUDE_LIST`, `GSE_LIST`, `GSES`, `LISTING`, `LIST_ONLY`, `KEEP_SCRATCH=failed`,
+`DEADLINE_MARGIN_SEC` (900), `DAY_BUDGET`, `D1_SCHEMA`, `BIG_GB`, `RATE_CPU`, `RUN`. Results and rows: `$W/state/v2/<run>/`; logs `$W/logs/v2mig-<array>_<task>.out`.
+Pull only small things: `summarize` output, `plan.tsv`, `big.txt`, `sql.tar.gz`, `results-*.jsonl`.
+
+## 7. Tests (`tests/python/test_v2_campaign*.py`, 92)
+
+`python -P -m pytest tests/python/test_v2_campaign.py tests/python/test_v2_campaign_catalog.py tests/python/test_v2_campaign_retire.py
+tests/python/test_v2_campaign_publish.py -q` -> 92 passed (about 3 min on the laptop). Stand-in transcoder follows the real CLI and layout (ledger,
+`ref/index.json`, `legacy` block, pack lists); two tests use the real one.
+
+* `test_v2_campaign.py` (38): ETag rule; headers; manifest last; nothing outside `v2/` written; idempotent rerun; resume; every failure mode
+  (migrate / verify / upload / transient / legacy replaced / bad names / restricted / missing); dry, list-only, pilot, shards, frozen listing, big-study plan,
+  deadline; write guard; `S3Store` against an in-memory S3; plan; summarize; projection.
+* `test_v2_campaign_catalog.py` (24): rows and types; restricted and malformed samples refused; modality registry equal to `modalities.ts` and
+  `bundle.py`; embedded DDL equal to the website's 032 + 033; SQL quoting; apply order (nothing served while samples load; flip groups atomic); re-apply
+  idempotent, new rev replaces the old; 032 variant and the loud failure of the wrong key; day budget keeps whole studies together; oversized rows
+  shrunk or skipped; the whole atlas fits 2 to 3 days; rows-dir and `--from-r2` agree; failed studies; restricted member in the v2 object stops the study;
+  pack lists; POST slicing, headers, retry, token; **rows equal the website endpoint's output** (TypeScript run through esbuild + node); reference packs
+  published once and tampering refused; **the real transcoder and verifier on two samples of the corpus bundle, then SQL into the website's schema files**.
+* `test_v2_campaign_retire.py` (20): dry run changes nothing; confirmation phrase; archive -> verify -> delete order; refusals; completeness gate;
+  racing source; multipart copy by SHA-256; corrupt copy; crash between archive and delete; restore; audit; stable shards; `S3Store.copy`; the whole
+  retire flow through `S3Store`; `retire-sql`.
+* `test_v2_campaign_publish.py` (10): a new study end to end (no `data/` key, `legacy` null, manifest after every object, sidecar to the private bucket
+  only when asked, leaked restricted members refused, verify failure, republish uploads nothing, POST and its failure).
+
+## 8. Open items and dependencies
+
+* **Orchestrator**: commit and push (the commit must carry `python/singlet/v2/packs/`, `recipes_data/`, `src/bindings/python/_pz2.cpp`, `setup.py`); R2 token
+  scope for `singlet-data` and `singlet-archive` (create it with `wrangler r2 bucket create singlet-archive --storage-class InfrequentAccess`); apply
+  033 before any SQL; the restrict migration must be finished; decide the retirement date.
+* **W2**: `migrate` has no thread option and runs samples one after another; a `--samples`-based split plus manifest merge would shorten the
+  big studies (only needed if `big.txt` holds a large share of the bytes). `pyproject.toml` / `MANIFEST.in` package-data for the packs is also open on your side.
+* **W5**: the data Worker's `v2/ledger/` is intentionally not served; `gse.r2_bundle_*` / `gse_meta.has_bundle` for v2-only studies is still W5's
+  open item 1 and decides whether the v2-only studies from `v2_publish.py` appear in search (the Anvil patch leaves a marked TODO).
+* **Not verified**: any real R2 call (boto3 is not installed on the laptop; `S3Store` ran against an in-memory S3 following R2's documented rules: STANDARD_IA
+  on CopyObject/CreateMultipartUpload, If-Match on GET, UploadPartCopy ranges, parts >= 5 MiB and equal, composite ETag; botocore's
+  `request_checksum_calculation=when_required` is set as a precaution and is not in R2's docs), the Clipper image toolchain, the zstd download, queue
+  behaviour, network throughput, the memory peak of the largest study.
+* **Anvil**: needs the `singlet` package of the pinned commit with `singlet.v2` and the compiled `_pz` (the transcoder reads the legacy `.1pz` with it) and
+  `_pz2` importable from `pylib_v3`; the patched `cf_pack_v3_prepare.sh` fails fast without them.
+
+## 9. How to resume / change
+
+* A different table layout: `STUDY_COLS` / `SAMPLE_COLS` / `MIGRATION_COLS` and the `sql_*` functions in `v2_campaign.py`; the equality test shows drift.
+* Redo studies that are already `ok` (a newer transcoder commit): `--resume` compares only the legacy object, so run
+  `--array=0 --export=ALL,MODE=full,NSHARD=1,RESUME=0,GSES="GSE... GSE...",COMMIT=<new sha>`; unchanged objects are skipped by ETag, changed ones get new keys, the
+  manifest is replaced last. For everything use `RESUME=0` on all shards.
+* A study stuck in a bad state: nothing to clean in R2 (no manifest = invisible); rerun its shard.
+* Do not run `retire` before the catalog is applied and the clients default to v2; `audit --expect-none` is the end condition.
