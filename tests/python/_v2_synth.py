@@ -125,9 +125,19 @@ class Synth:
         chunk_cols: int = 64,
         pad_between: int = 0,
         extras: bool = False,
+        junction_table: bool = False,
     ) -> "Synth":
         """``extras`` adds feature-level members: ``sj_counts.1pz`` (inline junction names; GSM9000001 and GSM9000003 have
-        overlapping, different junction sets) and ``vdj_gene_usage.1pz`` (GSM9000001 only)."""
+        overlapping, different junction sets) and ``vdj_gene_usage.1pz`` (GSM9000001 only). ``junction_table`` stores the junction rows
+        as ids into a shared junction table (the 30 junctions both samples have; each sample's others go to ``sj_counts.1pz.local``)."""
+        self.jx = None
+        if extras and junction_table:
+            from singlet.v2 import junctions as J
+
+            shared = self.junction_names(30, 60)
+            seg = J.build_segment(J.parse_names(shared), build=BUILD, id_lo=0, tier="core")
+            ver = J.build_version([seg], build=BUILD, version=1)
+            self.jx = (J.JunctionTable(ver, [seg]), seg, ver)
         gene_tbl = self.exon_pack.gene_table()
         gene_ids = [g for g, _ in gene_tbl]
         specs = [
@@ -208,6 +218,30 @@ class Synth:
                     np.minimum(dens // 8, 40),
                     chunk_cols,
                 )
+                if self.jx is not None:
+                    from singlet.v2 import junctions as J
+
+                    rows = J.sample_rows(self.jx[0], sj_names)
+                    v2 = sj_csc[rows.legacy_perm, :].tocsc()
+                    v2.sort_indices()
+                    sj_blob, _ = _pz2.encode(
+                        v2.indptr.astype(np.int64),
+                        v2.indices.astype(np.uint32),
+                        v2.data.astype(np.uint32),
+                        len(sj_names),
+                        n,
+                        codec="rans",
+                        chunk_cols=chunk_cols,
+                        row_names={
+                            "kind": "pack_subset",
+                            "pack_id": self.jx[0].id[:8],
+                            "pack_index": rows.ids,
+                            "names": [sj_names[k] for k in rows.legacy_perm.tolist()],
+                        },
+                        col_names={"kind": "cells", "names": bcs},
+                    )
+                    w.add_stored("sj_counts.1pz.local", J.encode_local(rows.local), {}, 0)
+                    extra_truth["sj_rows"] = rows
                 w.add_matrix(
                     "sj_counts.1pz",
                     sj_blob,
@@ -346,6 +380,12 @@ class Synth:
             with open(os.path.join(ref, pk.id.hex() + ".pack"), "wb") as fh:
                 fh.write(data)
             entries.append(P.index_entry(data, "vocab", {"build": pk.build, "member": pk.member}))
+        for data, kind in (
+            ((self.jx[1], "junction-segment"), (self.jx[2], "junction-version")) if self.jx else ()
+        ):
+            with open(os.path.join(ref, P.pack_id(data).hex() + ".pack"), "wb") as fh:
+                fh.write(data)
+            entries.append(P.index_entry(data, kind, {"build": BUILD}))
         P.write_index(entries, os.path.join(ref, "index.json"))
 
 

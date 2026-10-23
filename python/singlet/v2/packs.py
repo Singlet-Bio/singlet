@@ -865,7 +865,16 @@ class PackStore:
         if o is None:
             data = self.read(pid)
             kind = parse(data)[0]
-            o = Whitelist(data) if kind == KIND_WHITELIST else VocabPack(data, self)
+            if kind in (4, 5):  # junction segment / version (singlet.v2.junctions)
+                from . import junctions as _J
+
+                o = (
+                    _J.JunctionTable(data, fetch=lambda h: self.read(self._resolve(h)))
+                    if kind == _J.KIND_VERSION
+                    else _J.Segment(data)
+                )
+            else:
+                o = Whitelist(data) if kind == KIND_WHITELIST else VocabPack(data, self)
             self._obj[pid] = o
         return o
 

@@ -350,7 +350,16 @@ class _PackResolver:
             path = self.dir / (e["id"] + ".pack")
             tmp = path.with_suffix(f".part{os.getpid()}")
             tmp.write_bytes(data)
-            os.replace(tmp, path)
+            for attempt in range(
+                5
+            ):  # Windows: a just-written file can be briefly locked (indexer, antivirus)
+                try:
+                    os.replace(tmp, path)
+                    break
+                except PermissionError:
+                    if attempt == 4:
+                        raise
+                    time.sleep(0.05 * (attempt + 1))
             store._files[e["id"]] = str(path)
             return e["id"]
 
@@ -987,7 +996,13 @@ def _sample_columns(cells_buf, resolver: _PackResolver, want: Sequence[str]):
     return rd, {n: rd.column(n) for n in want if n in rd.entries}
 
 
-def _member_row_names(study: "Study", mem, hdr: dict) -> List[str]:
+def pk_names_junctions(table, idx: np.ndarray, local) -> List[str]:
+    from .junctions import decode_local, row_names
+
+    return row_names(table, idx, decode_local(local) if local is not None else None)  # type: ignore[arg-type]
+
+
+def _member_row_names(study: "Study", mem, hdr: dict, local=None) -> List[str]:
     """Row names of a feature-level matrix: inline, a vocabulary pack, or a subset of one."""
     kind = hdr["row_names_kind"]
     if kind == "inline":
@@ -995,7 +1010,18 @@ def _member_row_names(study: "Study", mem, hdr: dict) -> List[str]:
     pk = study._resolver.get(hdr["row_names_id"])
     if kind == "pack":
         return list(pk.names())
-    return list(pk.names_at(mem.row_names()["pack_index"]))
+    idx = np.asarray(mem.row_names()["pack_index"], dtype=np.int64)
+    from .junctions import LOCAL_BASE, JunctionTable
+
+    if isinstance(
+        pk, JunctionTable
+    ):  # rows are junction ids; ids >= LOCAL_BASE are the sample's own junctions
+        if local is None and (idx >= LOCAL_BASE).any():
+            raise V2Error(
+                "junction rows refer to the sample's local junction list, which was not read"
+            )
+        return pk_names_junctions(pk, idx, local)
+    return list(pk.names_at(idx))
 
 
 def _read_sample(
@@ -1157,7 +1183,17 @@ def _read_sample(
             if gene_level:
                 parts[name] = part
             elif part is not None:
-                features[name] = (part, _member_row_names(study, mem, hdr))
+                local = None
+                lref = sm.members.get(
+                    name + ".local"
+                )  # junction rows stored as table ids: the sample's own junctions
+                if hdr["row_names_kind"] == "pack_subset" and lref is not None and lref.len:
+                    local = bytes(src.read(lref.off, lref.len))
+                    if lref.kind == 3:  # stored zstd
+                        from .util import zstd_decompress
+
+                        local = zstd_decompress(local)
+                features[name] = (part, _member_row_names(study, mem, hdr, local))
             if verify:
                 _verify_matrix(study, sm, name, mref, mem, hdr)
             del mem, dec
