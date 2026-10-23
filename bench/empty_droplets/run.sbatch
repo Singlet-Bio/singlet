@@ -6,6 +6,7 @@
 #   MODE=fetch    (array over studies.tsv rows)   fetch the listed samples -> $DATA/<GSE>/<GSM>.npz
 #   MODE=analyze  (array over studies.tsv rows)   analyze every fetched sample of that row -> $OUT/<GSE>/<GSM>.json (+ .npz)
 #   MODE=all      fetch then analyze
+#   MODE=rules                     candidate keep rules: savings, losses, EmptyDrops re-call on reduced data
 #   MODE=aggregate                 tables + figures from every result -> $WORK/state/emptydrop/report
 #   MODE=groundtruth GSES="GSE..."   authors' GEO calls and hashtag counts vs ours (after analyze)
 #
@@ -70,6 +71,9 @@ case "$MODE" in
     if [ "$MODE" != fetch ]; then
       rt "${PY[@]}" "$B/analyze.py" "$DATA/$GSE" --out "$OUT/$GSE" --threads "${SLURM_CPUS_PER_TASK:-8}" ${ANALYZE_ARGS:-}
     fi
+    ;;
+  rules)
+    rt "${PY[@]}" "$B/rules.py" "$DATA" "$OUT" --out "${REPORT:-$WORK/state/emptydrop/report}/rules.json"
     ;;
   aggregate)
     rt "${PY[@]}" "$B/aggregate.py" "$OUT" --out "${REPORT:-$WORK/state/emptydrop/report}"
