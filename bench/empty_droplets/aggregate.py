@@ -216,7 +216,7 @@ def fig_storage(S, out):
 
 def fig_groundtruth(S, out):
     # the pilot's TCR libraries are compared with the GEX call of the same wells: plotted apart, they are a different assay
-    A = [R for R in S if ((R.get("author") or {}).get("author") or {}).get("uncalled_by_bin") and R["gse"] != "GSE145370"]
+    A = [R for R in S if ((R.get("author") or {}).get("author") or {}).get("uncalled_by_bin") and R["gse"] not in ("GSE145370", "GSE213957")]  # GSE213957 deposits QC-passed cells, not a call
     H = [R for R in S if (R.get("author") or {}).get("hashing")]
     if not A and not H:
         return

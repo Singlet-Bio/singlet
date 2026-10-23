@@ -1,7 +1,7 @@
 # Are Singlet's uncalled barcodes empty droplets?
 
 Study for the v2 decision "may v2 drop the matrix entries of uncalled barcodes?" (2026-10-23). Code: `bench/empty_droplets/`.
-Data: 65 samples of 17 studies read from the legacy `.singlet` bundles, 49 of them usable as gene-expression libraries (the rest
+Data: 65 samples of 18 studies read from the legacy `.singlet` bundles, 49 of them usable as gene-expression libraries (the rest
 are hashtag/antibody/guide or TCR libraries processed as RNA, or Parse sub-libraries with a broken call; see "Samples").
 
 ## Verdict
@@ -18,8 +18,11 @@ hundreds and ~18,000 uncalled barcodes per sample (median 3,317, i.e. 57% as man
   (0.10 and 0.000), although the test never looked at introns;
 * they are enriched up to 10-60x in specific low-RNA cell types (microglia-like and oligodendrocyte clusters in brain nuclei,
   plasma cells, neutrophils, cytotoxic T cells);
-* the authors' own Cell Ranger calls include them: in human brain nuclei (GSE157827) the authors called 3.2-4.6x more nuclei than
-  Singlet, a superset of ours;
+* the authors' own calls (Cell Ranger filtered matrices deposited in GEO) include them: in all 11 gene-expression samples with a
+  deposited call the authors called 643-14,048 more cells than Singlet (1.1-6.7x), while 0-64 of Singlet's cells (0-2.3%) are
+  missing from the authors' sets; in human brain nuclei (GSE157827) 3.2-4.6x more nuclei;
+* cell hashing marks them as stained cells: in the hashed PBMC library GSE108313, 14,920 uncalled barcodes carry a single
+  dominant hashtag at >= 5x the empty-droplet level, against 2,950 called cells (71-82% of uncalled barcodes at 150-500 UMIs);
 * every standard caller run on the stored matrix calls more cells than Singlet: EmptyDrops a median 1,911 more per sample
   (range 389-10,972), Cell Ranger 3-style a median 808 more, and 77-92% of those extra calls are cell-like by the profile test.
 
@@ -84,6 +87,11 @@ the usable samples of the study).
 
 ## Evidence
 
+![Barcode-rank curves of six samples: called cells, uncalled barcodes the profile test calls cell-like, and the rest](empty-droplets/fig1_rank_plots.png)
+
+*Figure 1. Barcode-rank curves (stored totals). Orange: uncalled barcodes whose exon profile rejects "ambient only" at FDR 1%.
+They form the shoulder between the called cells and the ambient plateau in every protocol.*
+
 ### 1. Profile test against ambient (Figure 2)
 
 For each sample: ambient profile = Good-Turing proportions of the summed exon counts of uncalled barcodes with at most
@@ -116,6 +124,10 @@ Pooled over the 49 usable samples, fraction of uncalled barcodes rejecting ambie
 | 500-1000 | 31,809 | 88.9% | 78.3% |
 | 1000-2000 | 6,344 | 92.9% | 87.5% |
 
+![Fraction of uncalled barcodes rejecting ambient by depth, per sample, with the test's power on thinned cells](empty-droplets/fig2_profile_test.png)
+
+*Figure 2. Each line is a sample (gray: not usable). Blue: power of the same test on called cells thinned to that depth.*
+
 The fitted cell fraction w of significant barcodes is 0.8-0.9 above ~200 UMIs: these are cells with some ambient, not ambient
 with a trace of cell. Where the transition sits depends on the sample: in the PBMC library GSE108313 the uncalled plateau at
 30-500 UMIs is ambient (median w = 0.01, 1-5% significant) and only barcodes above 500 UMIs are cell-like; in brain nuclei
@@ -128,6 +140,10 @@ around the ambient mean, agrees only at a chance rate that rises slowly with dep
 nuclei the uncalled barcodes agree 73-87% at 100-300 exon UMIs against 10-15% for the null; in the human/mouse lines 55-63% at
 200-500 against 14-19%. Thinned held-out called cells agree less often at the same depth (brain: 31-51% at 100-200 exon
 UMIs), because the hidden barcodes come mostly from a few very distinct clusters (section 5).
+
+![Split-half cluster agreement of uncalled barcodes, ambient nulls and thinned cells](empty-droplets/fig3_split_half.png)
+
+*Figure 3. Split-half agreement by exon depth, usable samples.*
 
 ### 3. Species mixing (Figure 4)
 
@@ -143,8 +159,38 @@ ambient mix rejects (p < 0.001); counted only at >= 30 UMIs.
 | GSE163793/GSM4987148 (3' v3) | 0.12 | 0.3-0.6% | 587 / 671 | 1284 | 7881 |
 | GSE213957/GSM6596913 | 0.97 | 0.3-0.5% | 518 / 581 | 794 | 13527 |
 
+![Single-species fraction of uncalled and called barcodes by depth in the species-mixing samples](empty-droplets/fig4_barnyard.png)
+
+*Figure 4. Species-mixing samples, from 30 UMIs.*
+
 Of the barcodes the profile test calls cell-like, 42-65% are single-species; of those it leaves alone, under 0.5%. Two
 independent tests agree barcode by barcode, and the species test needs no model of ambient expression.
+
+### 3b. Cell hashing (Figure 6, right)
+
+GSE108313 GSM2895282 (Stoeckius et al. 2018, PBMC from 8 donor batches, each stained with its own hashtag, super-loaded): the
+authors deposited hashtag counts for 65,000 barcodes (GSM2895283), covering 61,739 of the 80,597 stored barcodes. Reference for
+an empty droplet: the barcodes with < 10 RNA UMIs (median 203 hashtag counts). A barcode is hashtag-positive at >= 5x that
+(1,015 counts) and a singlet when one hashtag carries >= 60%.
+
+| uncalled, total UMIs | barcodes | hashtag-positive | single hashtag | median hashtag counts |
+|---|---|---|---|---|
+| < 10 | 44,352 | 1.8% | 1.8% | 203 |
+| 10-20 | 11,884 | 4.2% | 4.1% | 222 |
+| 20-30 | 808 | 28% | 27% | 437 |
+| 30-100 | 3,578 | 49-55% | 47-52% | 1,002-1,209 |
+| 100-150 | 5,940 | 65% | 63% | 1,287 |
+| 150-200 | 4,975 | 81% | 78% | 1,621 |
+| 200-300 | 3,534 | 91% | 82% | 2,375 |
+| 300-500 | 1,906 | 95% | 71% | 3,132 |
+| called (>= 1,000) | 2,950 | 25% | 23% | 233-1,374 |
+
+14,920 uncalled barcodes are hashtag singlets: five times as many stained cells sit among the uncalled barcodes as among the
+called ones. The called set is dominated by large, proliferating cells (cell-cycle and ACTA2/COL1A2 clusters) that carry little
+hashtag, i.e. cells that were not stained with the donor hashtags; the PBMCs themselves (100-500 UMIs in the 30M-read pileup)
+were dropped by the CellRanger2.2 threshold. The profile test does not see them (30% hashtag-positive among its cell-like
+barcodes vs 27% among the rest): almost no PBMC type is among the called clusters it compares against, and the ambient pool
+(<= 100 exon UMIs here) is itself mostly PBMC RNA. That is the test's blind spot made visible: its counts are lower bounds.
 
 ### 4. Intronic and mitochondrial fractions
 
@@ -211,15 +257,26 @@ If storage must shrink, the only rule this study supports is:
 > sample (exon and intron counts per feature over the dropped barcodes), plus the EmptyDrops concentration alpha estimated on
 > the full data at the default lower bound.
 
+![Entries kept as a function of the UMI floor, per sample](empty-droplets/fig5_storage.png)
+
+*Figure 5. Share of exon+intron entries kept under "called + uncalled with >= X UMIs" (dots: called only).*
+
+![Bytes saved against cells lost for the candidate rules](empty-droplets/fig7_rules.png)
+
+*Figure 7. Candidate rules: median bytes saved against pooled losses.*
+
 What it saves and loses (49 usable samples; bytes estimated as member bytes x share of that member's non-zeros kept):
 
-| rule | matrix bytes saved, median (p10-p90) | cell-like uncalled lost, pooled (median per sample) | extra EmptyDrops cells lost |
-|---|---|---|---|
-| drop all uncalled | 33% (12-64%) | 100% | 100% |
-| keep >= 100 UMIs | 15% (5-39%) | 36% (18%) | 3.3% |
-| keep >= 50 UMIs | 11% (4-28%) | 26% (9%) | 1.1% |
-| **keep >= 20 UMIs** | **5% (2-13%)** | **12% (2.8%)** | **0%** |
-| keep >= 10 UMIs | 2% (0.2-8%) | 4% (1.9%) | 0% |
+| rule | matrix bytes saved, median (p10-p90) | cell-like uncalled lost, pooled (median per sample) | extra EmptyDrops cells lost | single-species hidden cells lost | authors' extra cells lost |
+|---|---|---|---|---|---|
+| drop all uncalled | 33% (12-64%) | 100% | 100% | 100% (5,212) | 100% (77,000) |
+| keep >= 100 UMIs | 15% (5-39%) | 36% (18%) | 3.3% | 5.6% | 5.2% |
+| keep >= 50 UMIs | 11% (4-28%) | 26% (9%) | 1.1% | 0.9% | n/a |
+| **keep >= 20 UMIs** | **5% (2-13%)** | **12% (2.8%)** | **0.002%** | **0%** | **0.1% (82 of 77,000)** |
+| keep >= 10 UMIs | 2% (0.2-8%) | 4% (1.9%) | 0% | 0% | 0.003% |
+
+(Authors' extra cells: the 11 non-pilot samples above. Under keep >= 20 the hashed PBMC library loses ~300 hashtag singlets
+(2% of 14,920): the singlet rate at 10-20 UMIs is 4.1% against 1.8% below 10.)
 
 The pooled loss at >= 20 comes mostly from BD Rhapsody and inDrop, where a minority of 10-30 UMI barcodes is cell-like; at
 10-20 UMIs the test has 35-67% power, so these barcodes are neither demonstrably empty nor demonstrably cells.
@@ -251,14 +308,43 @@ the atlas for feature-barcode and V(D)J libraries processed as RNA.
 
 PENDING
 
-## Ground truth from the authors' deposits
+## Ground truth from the authors' deposits (Figure 6, left)
 
-PENDING
+![Uncalled barcodes the authors called, by depth; hashtag-positive uncalled barcodes in the hashed PBMC library](empty-droplets/fig6_ground_truth.png)
+
+*Figure 6. Left: share of uncalled barcodes in the authors' own call (green) and cell-like by the profile test (orange dashed),
+non-pilot samples. Right: hashtag-positive fraction of uncalled barcodes (violet) and of called cells (blue) in GSE108313.*
+
+Barcodes of the authors' filtered matrices (Cell Ranger's call in every case here), matched on the 16-mer:
+
+| sample | authors | Singlet | both | authors only | Singlet only | authors-only lost if < 20 UMIs dropped |
+|---|---|---|---|---|---|---|
+| GSE157827/GSM4775561 (nuclei) | 6,243 | 1,936 | 1,936 | 4,307 | 0 | 0 |
+| GSE157827/GSM4775562 | 15,357 | 3,305 | 3,305 | 12,052 | 0 | 0 |
+| GSE157827/GSM4775563 | 6,166 | 1,532 | 1,497 | 4,669 | 35 | 0 |
+| GSE180113/GSM5453390 | 18,461 | 11,074 | 11,074 | 7,387 | 0 | 0 |
+| GSE230559/GSM7226732 | 26,419 | 15,470 | 15,426 | 10,993 | 44 | 36 |
+| GSE230559/GSM7226733 | 24,585 | 15,376 | 15,319 | 9,266 | 57 | 22 |
+| GSE230559/GSM7226734 | 16,530 | 2,483 | 2,482 | 14,048 | 1 | 24 |
+| GSE246624/GSM7873657 | 8,516 | 7,892 | 7,873 | 643 | 19 | 0 |
+| GSE246624/GSM7873658 | 8,690 | 7,929 | 7,926 | 764 | 3 | 0 |
+| GSE256089/GSM8085472 | 16,758 | 11,413 | 11,349 | 5,409 | 64 | 0 |
+| GSE256089/GSM8085474 | 17,912 | 10,541 | 10,480 | 7,432 | 61 | 0 |
+
+(GSE256089 lanes are paired with GSMs by order, which the matching itself confirms: 99.4% of Singlet's cells are in the paired
+lane. GSE213957's deposited metadata lists only the 2,387 cells that passed the authors' QC, so it is not a call.)
+
+Every authors' barcode is among the stored barcodes, the authors' sets contain Singlet's almost entirely, and the authors' extra
+cells sit at a median 300-600 UMIs, above any floor considered here. The pilot's TCR libraries can be compared with the authors'
+gene-expression call of the same GEM wells (10x 5' libraries share cell barcodes): 3,502-15,820 cells against Singlet's
+1,207-4,289, with 97-99.9% of the authors' cells among the stored barcodes. In those amplicon libraries many cells have fewer
+than 20 UMIs (non-T cells get few TCR reads), which is one more reason not to take rules from the pilot.
 
 ## Limitations
 
-* The profile test needs clusters of called cells; a cell type with no called representative cannot be detected (it would look
-  "not ambient" only if far from ambient, which is then counted against the best cluster anyway).
+* The profile test needs clusters of called cells; a cell type with no called representative is invisible to it, and when such
+  cells fill the ambient pool they even look ambient. The hashed PBMC library shows this happening (14,920 hashtag-identified
+  cells, mostly missed by the test). Its counts of cell-like barcodes are lower bounds.
 * Barcodes below ~20 exon UMIs are not testable one by one; what is said about them is collective.
 * Byte savings are estimated from non-zero shares; low-UMI barcodes are mostly 1-counts, which the codec stores cheaply, so the
   true saving of a floor is probably a little smaller than estimated.
@@ -269,4 +355,5 @@ PENDING
 
 All runs on Clipper from this branch (`bench/empty_droplets/run.sbatch`): `MODE=all` over `studies.tsv` (fetch by HTTP range,
 analyse), `MODE=groundtruth`, `MODE=rules`, `MODE=aggregate`; CellBender with `cellbender.sbatch`. Results under
-`$WORK/state/emptydrop/`; the figures and `summary.json` here come from `MODE=aggregate`.
+`$WORK/state/emptydrop/`; the figures, `empty-droplets/samples.csv` (one row per sample) and `empty-droplets/rules.json`
+(per-sample rule evaluation) come from `MODE=aggregate` and `MODE=rules`.
