@@ -429,6 +429,134 @@ print.singlet_study <- function(x, ...) {
 
 
 # ---------------------------------------------------------------------------
+# Modalities (the same vocabulary as python/singlet/v2/client.py MODALITIES)
+# ---------------------------------------------------------------------------
+.v2_modality_members <- list(
+    counts = c("exon_counts.1pz", "intron_counts.1pz"),  # counts assay = spliced + unspliced
+    spliced = "exon_counts.1pz",
+    unspliced = "intron_counts.1pz",
+    splice_junctions = "sj_counts.1pz",                    # altExp: reads per junction
+    psi = "sj_counts.1pz",                                 # altExp: percent spliced in, computed from the junctions
+    mt = "mt_heteroplasmy.1pz",
+    vdj = "vdj_gene_usage.1pz")
+.v2_modality_alias <- c(x = "counts", exon = "spliced", intron = "unspliced", junctions = "splice_junctions",
+                        sj = "splice_junctions", splice_psi = "psi", mt_heteroplasmy = "mt", vdj_gene_usage = "vdj")
+.v2_gene_members <- c("exon_counts.1pz", "intron_counts.1pz")
+.v2_gene_modalities <- c("counts", "spliced", "unspliced")
+
+# Canonical names (vocabulary order) of `modalities`; NULL keeps counts + spliced + unspliced (counts alone without layers).
+.v2_normalize_modalities <- function(modalities, layers = TRUE) {
+    if (is.null(modalities)) return(if (layers) .v2_gene_modalities else "counts")
+    k <- tolower(trimws(as.character(modalities)))
+    k <- ifelse(k %in% names(.v2_modality_alias), unname(.v2_modality_alias[k]), k)
+    bad <- setdiff(k, names(.v2_modality_members))
+    if (length(bad) > 0L) {
+        .v2_stop(sprintf("unknown modality %s; the vocabulary is %s", paste(sQuote(bad, FALSE), collapse = ", "),
+                         paste(names(.v2_modality_members), collapse = ", ")), "singlet_v2_modality_unavailable")
+    }
+    if (length(k) == 0L) .v2_stop("modalities is empty", "singlet_v2_modality_unavailable")
+    intersect(names(.v2_modality_members), k)
+}
+
+# A readable pz2 member with at least one row and column (stubs and empty legacy members are absent).
+.v2_member_has_data <- function(sm, name) {
+    m <- sm$members[[name]]
+    !is.null(m) && identical(as.integer(m$kind), 1L) && m$len > 0 && !identical(m$m, 0L) && !identical(m$n, 0L)
+}
+
+# The modalities one sample carries (counts needs only the exon matrix: older samples have no intron matrix).
+.v2_sample_modalities <- function(sm) {
+    Filter(function(k) {
+        mem <- if (k == "counts") "exon_counts.1pz" else .v2_modality_members[[k]]
+        all(vapply(mem, function(n) .v2_member_has_data(sm, n), NA))
+    }, names(.v2_modality_members))
+}
+
+.v2_check_modalities <- function(study, gsms, mods) {
+    have <- unique(unlist(lapply(gsms, function(g) .v2_sample_modalities(study$samples[[g]]))))
+    have <- intersect(names(.v2_modality_members), have)
+    missing <- setdiff(mods, have)
+    if (length(missing) > 0L) {
+        .v2_stop(sprintf("%s: no requested sample has %s; %s %s", study$gse, paste(missing, collapse = ", "),
+                         if (length(gsms) > 1L) "these samples have" else paste(gsms, "has"), paste(have, collapse = ", ")),
+                 "singlet_v2_modality_unavailable")
+    }
+    invisible(TRUE)
+}
+
+.v2_members_for <- function(mods) unique(unlist(.v2_modality_members[mods], use.names = FALSE))
+
+#' Modalities of a v2 study
+#'
+#' The names \code{load(modalities = )} and \code{singlet_cells(modalities = )} accept that a study's samples carry,
+#' read from the manifest (no sample bytes are fetched).
+#'
+#' @param x A \code{singlet_study} or a GEO Series accession.
+#' @param gsm Optional sample accession: only that sample's modalities.
+#' @return A character vector: a subset of \code{counts}, \code{spliced}, \code{unspliced}, \code{splice_junctions},
+#'   \code{psi}, \code{mt}, \code{vdj}.
+#' @export
+singlet_study_modalities <- function(x, gsm = NULL) {
+    study <- if (inherits(x, "singlet_study")) x else singlet_study(x)
+    gsms <- if (is.null(gsm)) study$gsm_ids else toupper(gsm)
+    have <- unique(unlist(lapply(gsms, function(g) .v2_sample_modalities(study$samples[[g]]))))
+    intersect(names(.v2_modality_members), have)
+}
+
+# Junction events (python/singlet/v2/recipes_psi.py build_events / junction_events): junctions "chrom:start-end" that share a
+# donor (chrom, start) or an acceptor (chrom, end) form an event when there are at least two; each junction belongs to the first
+# of its events in bytewise order of the event id. Returns the 1-based event of every junction (NA: no event).
+.v2_junction_events <- function(names) {
+    n <- length(names)
+    c <- regexpr(":", names, fixed = TRUE)
+    rest <- substring(names, c + 1L)
+    d <- regexpr("-", rest, fixed = TRUE)
+    num <- function(v) {
+        pat <- "^[[:space:]]*[+]?([0-9]+).*$"
+        out <- rep(NA_real_, length(v))
+        hit <- grepl(pat, v)
+        out[hit] <- as.numeric(sub(pat, "\\1", v[hit])) %% 2^32
+        out
+    }
+    st <- num(substr(rest, 1L, d - 1L))
+    en <- num(substring(rest, d + 1L))
+    ok <- c > 0L & d > 0L & !is.na(st) & !is.na(en)
+    chrom <- substr(names, 1L, c - 1L)
+    ids <- character(0)
+    jid <- list()
+    for (kind in c("D", "A")) {
+        pos <- if (kind == "D") st else en
+        key <- ifelse(ok, sprintf("%s:%.0f-%s", chrom, pos, kind), NA_character_)
+        tab <- table(key[ok])
+        ev <- names(tab)[tab >= 2L]
+        jid[[kind]] <- ifelse(key %in% ev, key, NA_character_)
+        ids <- c(ids, ev)
+    }
+    ids <- sort(unique(ids), method = "radix")
+    rD <- match(jid$D, ids)
+    rA <- match(jid$A, ids)
+    out <- pmin(rD, rA, na.rm = TRUE)
+    out[is.na(rD) & is.na(rA)] <- NA_integer_
+    as.integer(out)
+}
+
+# True PSI of a junctions x cells dgCMatrix: each count over the sum of its event's counts in that cell (cells whose event sum
+# is 0 and junctions in no event have no entry).
+.v2_psi <- function(m, names) {
+    je <- .v2_junction_events(names)
+    i <- m@i + 1L
+    j <- rep.int(seq_len(ncol(m)), diff(m@p))
+    ev <- je[i]
+    keep <- !is.na(ev)
+    i <- i[keep]; j <- j[keep]; x <- m@x[keep]; ev <- ev[keep]
+    grp <- match(j * (length(names) + 1) + ev, unique(j * (length(names) + 1) + ev))
+    esum <- rowsum(x, grp, reorder = FALSE)[grp]
+    nz <- esum > 0
+    Matrix::sparseMatrix(i = i[nz], j = j[nz], x = x[nz] / esum[nz], dims = dim(m), dimnames = dimnames(m))
+}
+
+
+# ---------------------------------------------------------------------------
 # Reading samples
 # ---------------------------------------------------------------------------
 .v2_coalesce <- function(off, len, gap) {
@@ -518,24 +646,33 @@ print.singlet_study <- function(x, ...) {
     as.integer(gm)
 }
 
-# One sample: cells table, then the exon and intron matrices decoded to genes for the selected cells.
-# `sel_fn(cells)` returns the selected matrix columns (0-based, ascending). Returns a list, or list(skipped = reason).
+# One sample: cells table, then the wanted matrices (`members`; default the exon matrix and, when present, the intron matrix)
+# for the selected cells: exon and intron decoded to genes, the others (junctions, V(D)J, ...) as feature x cell matrices with
+# their row names. Only those members' bytes are read. `sel_fn(cells)` returns the selected matrix columns (0-based,
+# ascending). Returns a list, or list(skipped = reason).
 .v2_read_sample <- function(study, gsm, axis, keep_map, n_genes, sel_fn, want_cols, threads = 0L, whole_max = 48 * 1024^2,
-                            concurrency = 4L, verify_digest = TRUE) {
+                            concurrency = 4L, verify_digest = TRUE, members = NULL) {
     sm <- study$samples[[gsm]]
     mem <- sm$members
     cm <- mem[["cells"]]
     em <- mem[["exon_counts.1pz"]]
-    im <- mem[["intron_counts.1pz"]]
+    if (is.null(members)) members <- .v2_gene_members
     if (is.null(cm)) .v2_stop(sprintf("%s: the sample object has no cells table", gsm))
-    if (is.null(em) || em$len == 0) return(list(skipped = "exon_counts.1pz is missing"))
+    if ("exon_counts.1pz" %in% members && (is.null(em) || em$len == 0)) return(list(skipped = "exon_counts.1pz is missing"))
+    present <- Filter(function(n) n == "exon_counts.1pz" || .v2_member_has_data(sm, n), members)
+    if (length(present) == 0L) {
+        return(list(skipped = if (length(members) == 1L) paste(members, "is missing") else
+            sprintf("none of %s is present", paste(members, collapse = ", "))))
+    }
     reader <- .v2_reader(study, sm, concurrency)
-    total <- cm$len + em$len + (if (is.null(im)) 0 else im$len)
+    total <- cm$len + sum(vapply(present, function(n) as.numeric(mem[[n]]$len), numeric(1)))
     local_obj <- file.exists(file.path(study$root, "s", sm$gsm, basename(sm$key))) || study$transport$kind == "dir"
     whole <- local_obj || total <= whole_max
-    names_m <- c("cells", "exon_counts.1pz", if (!is.null(im)) "intron_counts.1pz")
+    names_m <- c("cells", present)
     if (whole) {
-        bl <- reader(vapply(names_m, function(n) as.numeric(mem[[n]]$off), numeric(1)), vapply(names_m, function(n) as.numeric(mem[[n]]$len), numeric(1)))
+        # whole members are merged only across alignment padding: another member's body never rides along
+        bl <- reader(vapply(names_m, function(n) as.numeric(mem[[n]]$off), numeric(1)), vapply(names_m, function(n) as.numeric(mem[[n]]$len), numeric(1)),
+                     gap = 63)
         names(bl) <- names_m
         cells_raw <- bl[["cells"]]
     } else {
@@ -555,8 +692,9 @@ print.singlet_study <- function(x, ...) {
     cols <- lapply(cells$columns, function(v) if (is.list(v)) v else v[sel + 1L])
     c_hi <- sel[[length(sel)]] + 1L
     parts <- list(exon = NULL, intron = NULL)
-    for (tag in c("exon", "intron")) {
-        name <- paste0(tag, "_counts.1pz")
+    features <- list()
+    for (name in present) {
+        gene_level <- name %in% .v2_gene_members
         mref <- mem[[name]]
         if (is.null(mref) || mref$len == 0) next
         buf <- bl[[name]]
@@ -566,15 +704,26 @@ print.singlet_study <- function(x, ...) {
         if (verify_digest && !is.null(mref$digest) && !identical(hdr$digest, tolower(mref$digest))) {
             .v2_stop(sprintf("%s: %s header digest %s != manifest %s", gsm, name, hdr$digest, mref$digest))
         }
-        gm <- .v2_member_gene_map(study, hdr, if (whole) buf else NULL, axis, keep_map)
-        if (whole) {
-            res <- pz2_decode_(buf, numeric(0), list(), 0, c_hi, "gene", sel, gm, n_genes, threads, "auto")
-            parts[[tag]] <- .v2_dgc(res)
+        if (!whole && length(buf) < hdr$prefix_len) {  # the first read was shorter than the prefix
+            buf <- reader(mref$off, min(mref$len, hdr$prefix_len), gap = 0)[[1L]]
+        }
+        if (gene_level) {
+            mode <- "gene"
+            gm <- .v2_member_gene_map(study, hdr, buf, axis, keep_map)
+            ng <- n_genes
         } else {
-            prefix_len <- hdr$prefix_len
-            if (length(buf) < prefix_len) {  # the first read was shorter than the prefix
-                buf <- reader(mref$off, min(mref$len, prefix_len), gap = 0)[[1L]]
+            if (!identical(hdr$row_names_kind, "inline")) {
+                .v2_stop(sprintf("%s: %s names its rows from a pack (%s), which the R reader does not resolve yet", gsm, name,
+                                 hdr$row_names_kind))
             }
+            mode <- "canonical"
+            gm <- NULL
+            ng <- 0L
+        }
+        if (whole) {
+            res <- pz2_decode_(buf, numeric(0), list(), 0, c_hi, mode, sel, gm, ng, threads, "auto")
+            part <- .v2_dgc(res)
+        } else {
             first_col <- pz2_chunk_first_cols_(buf)
             runs <- .v2_runs(sel, first_col)
             plans <- lapply(runs, function(r) pz2_plan_(buf, r[[1L]], r[[2L]]))
@@ -582,12 +731,103 @@ print.singlet_study <- function(x, ...) {
             pieces <- lapply(seq_along(runs), function(k) {
                 r <- runs[[k]]
                 s_run <- sel[sel >= r[[1L]] & sel < r[[2L]]]
-                .v2_dgc(pz2_decode_(buf, plans[[k]]$byte_off, list(got[[k]]), r[[1L]], r[[2L]], "gene", s_run - r[[1L]], gm, n_genes, threads, "auto"))
+                .v2_dgc(pz2_decode_(buf, plans[[k]]$byte_off, list(got[[k]]), r[[1L]], r[[2L]], mode, s_run - r[[1L]], gm, ng, threads, "auto"))
             })
-            parts[[tag]] <- if (length(pieces) == 1L) pieces[[1L]] else do.call(cbind, pieces)
+            part <- if (length(pieces) == 1L) pieces[[1L]] else do.call(cbind, pieces)
+        }
+        if (gene_level) {
+            parts[[if (name == "exon_counts.1pz") "exon" else "intron"]] <- part
+        } else {
+            rownames(part) <- pz2_names_(buf, TRUE)$names
+            features[[name]] <- part
         }
     }
-    list(gsm = gsm, sel = sel, cols = cols, exon = parts$exon, intron = parts$intron, n_rows = n_rows)
+    list(gsm = gsm, sel = sel, cols = cols, exon = parts$exon, intron = parts$intron, features = features, n_rows = n_rows)
+}
+
+.v2_sample_empty <- function(r) is.null(r$exon) && is.null(r$intron) && length(r$features) == 0L
+
+# Assays and altExps of the selected modalities from per-sample reads `ok` (each with `ord`, the cell order, and `cn`, the cell
+# names). counts / spliced / unspliced are gene assays; splice_junctions, psi, mt and vdj are altExps (SummarizedExperiment) on
+# the union of the samples' feature names, with empty columns for samples that lack the member.
+.v2_assemble <- function(ok, mods, axis, n_genes, explicit) {
+    loadNamespace("Matrix")
+    ord_cols <- function(m, r) if (identical(r$ord, seq_along(r$ord))) m else m[, r$ord, drop = FALSE]
+    cn <- unlist(lapply(ok, `[[`, "cn"), use.names = FALSE)
+    assays <- list()
+    gene <- function(r, what) {
+        m <- r[[what]]
+        if (is.null(m)) NULL else ord_cols(m, r)
+    }
+    if ("counts" %in% mods) {
+        assays$counts <- do.call(cbind, unname(lapply(ok, function(r) {
+            sp <- gene(r, "exon"); un <- gene(r, "intron")
+            if (is.null(sp) && is.null(un)) .v2_empty_gene_matrix(n_genes, length(r$sel))
+            else if (is.null(un)) sp else if (is.null(sp)) un else sp + un
+        })))
+    }
+    for (a in intersect(c("spliced", "unspliced"), mods)) {
+        what <- if (a == "spliced") "exon" else "intron"
+        lacking <- vapply(ok, function(r) is.null(r[[what]]), NA)
+        if (any(lacking) && explicit) {
+            warning(sprintf("assay %s omitted: %s have no %s", a, paste(vapply(ok[lacking], `[[`, "", "gsm"), collapse = ", "),
+                            .v2_modality_members[[a]]), call. = FALSE)
+            next
+        }
+        # the default request keeps the assay, with empty columns for samples that lack the matrix (as before modalities=)
+        assays[[a]] <- do.call(cbind, unname(lapply(ok, function(r) {
+            m <- gene(r, what)
+            if (is.null(m)) .v2_empty_gene_matrix(n_genes, length(r$sel)) else m
+        })))
+    }
+    gene_mods <- intersect(mods, .v2_gene_modalities)
+    for (k in names(assays)) {
+        a <- methods::as(assays[[k]], "CsparseMatrix")
+        dimnames(a) <- list(axis$gene_id, cn)
+        assays[[k]] <- a
+    }
+    alt <- list()
+    for (k in setdiff(mods, .v2_gene_modalities)) {
+        member <- .v2_modality_members[[k]]
+        mats <- lapply(ok, function(r) {
+            m <- r$features[[member]]
+            if (is.null(m)) return(NULL)
+            if (k == "psi") m <- .v2_psi(m, rownames(m))
+            ord_cols(m, r)
+        })
+        lacking <- vapply(mats, is.null, NA)
+        if (any(lacking)) {
+            warning(sprintf("%s: %s have no %s; their columns of altExp(\"%s\") are empty", k,
+                            paste(vapply(ok[lacking], `[[`, "", "gsm"), collapse = ", "), member, k), call. = FALSE)
+        }
+        feats <- unique(unlist(lapply(mats, rownames), use.names = FALSE))
+        blocks <- lapply(seq_along(ok), function(s) {
+            m <- mats[[s]]
+            n <- length(ok[[s]]$sel)
+            if (is.null(m)) return(Matrix::sparseMatrix(i = integer(0), j = integer(0), x = numeric(0), dims = c(length(feats), n)))
+            t <- methods::as(m, "TsparseMatrix")
+            Matrix::sparseMatrix(i = match(rownames(m), feats)[t@i + 1L], j = t@j + 1L, x = t@x, dims = c(length(feats), n))
+        })
+        X <- methods::as(do.call(cbind, blocks), "CsparseMatrix")
+        dimnames(X) <- list(feats, cn)
+        alt[[k]] <- SummarizedExperiment::SummarizedExperiment(assays = stats::setNames(list(X), k))
+    }
+    rowdata <- S4Vectors::DataFrame(gene_name = if (length(gene_mods)) axis$gene_name else character(0))
+    rownames(rowdata) <- if (length(gene_mods)) axis$gene_id else character(0)
+    list(assays = assays, alt = alt, rowdata = rowdata, cn = cn, gene_mods = gene_mods)
+}
+
+.v2_make_sce <- function(parts, coldata) {
+    assays <- parts$assays
+    if (length(assays) == 0L) {  # no gene modality: an empty gene axis, the data are in altExps
+        assays <- list()
+        sce <- SingleCellExperiment::SingleCellExperiment(assays = assays, colData = S4Vectors::DataFrame(coldata, check.names = FALSE))
+    } else {
+        sce <- SingleCellExperiment::SingleCellExperiment(assays = assays, colData = S4Vectors::DataFrame(coldata, check.names = FALSE),
+                                                          rowData = parts$rowdata)
+    }
+    for (k in names(parts$alt)) SingleCellExperiment::altExp(sce, k) <- parts$alt[[k]]
+    sce
 }
 
 # Order of the selected cells: the legacy reader lists called cells as cell_calls.tsv does (STARsolo: sorted barcodes).
@@ -611,9 +851,12 @@ print.singlet_study <- function(x, ...) {
     list(gene_id = v$gene_id, gene_name = v$gene_name)
 }
 
-.v2_read_study <- function(study, gsms = NULL, cell_order = "legacy", threads = 0L, concurrency = 4L, whole_max = 48 * 1024^2) {
+.v2_read_study <- function(study, gsms = NULL, cell_order = "legacy", threads = 0L, concurrency = 4L, whole_max = 48 * 1024^2,
+                           modalities = NULL) {
     .require_sce("load()")
-    axis <- .v2_axis(study)
+    mods <- .v2_normalize_modalities(modalities)
+    gene_axis <- any(mods %in% .v2_gene_modalities)
+    axis <- if (gene_axis) .v2_axis(study) else list(gene_id = character(0), gene_name = character(0))
     n_genes <- length(axis$gene_id)
     all_gsms <- study$gsm_ids
     skipped <- character(0)
@@ -626,40 +869,36 @@ print.singlet_study <- function(x, ...) {
         targets <- gsms[gsms %in% all_gsms]
     }
     n_asked <- length(targets) + length(skipped)
+    if (!is.null(modalities) && length(targets) > 0L) .v2_check_modalities(study, targets, mods)
+    members <- .v2_members_for(mods)
     study_meta <- .v2_study_file(study, "study_meta.json")
     gsm_meta_map <- if (!is.null(study_meta)) study_meta$gsm_meta else NULL
 
     res <- lapply(targets, function(g) {
         tryCatch(
             .v2_read_sample(study, g, axis, NULL, n_genes, function(cells) which(cells$columns$called) - 1L,
-                            c("barcode", "called", "cc_pos", "cc_listed", "cc_pvalue"), threads, whole_max, concurrency),
+                            c("barcode", "called", "cc_pos", "cc_listed", "cc_pvalue"), threads, whole_max, concurrency,
+                            members = members),
             singlet_v2_integrity = function(e) stop(e),
             error = function(e) list(skipped = paste("unreadable:", conditionMessage(e)))
         )
     })
     names(res) <- targets
-    mats <- list(); spliced <- list(); unspliced <- list(); coldata_rows <- list()
+    ok <- list(); coldata_rows <- list()
     for (g in targets) {
         r <- res[[g]]
+        if (is.null(r$skipped) && .v2_sample_empty(r)) r$skipped <- "count matrix has no usable features"
         if (!is.null(r$skipped)) {
             skipped[[g]] <- r$skipped
             next
         }
-        ord <- .v2_cell_order(r$cols, cell_order)
-        sp <- if (is.null(r$exon)) .v2_empty_gene_matrix(n_genes, length(r$sel)) else r$exon
-        un <- if (is.null(r$intron)) .v2_empty_gene_matrix(n_genes, length(r$sel)) else r$intron
-        if (!identical(ord, seq_along(ord))) {
-            sp <- sp[, ord, drop = FALSE]
-            un <- un[, ord, drop = FALSE]
-        }
-        cell_names <- paste0(g, "_", r$cols$barcode[ord])
-        counts <- sp + un
-        colnames(counts) <- colnames(sp) <- colnames(un) <- cell_names
-        mats[[g]] <- counts; spliced[[g]] <- sp; unspliced[[g]] <- un
+        r$ord <- .v2_cell_order(r$cols, cell_order)
+        r$cn <- paste0(g, "_", r$cols$barcode[r$ord])
+        ok[[g]] <- r
         info <- if (!is.null(gsm_meta_map) && g %in% names(gsm_meta_map)) gsm_meta_map[[g]] else list()
-        coldata_rows[[g]] <- .bundle_obs_frame(g, info, length(cell_names))
+        coldata_rows[[g]] <- .bundle_obs_frame(g, info, length(r$cn))
     }
-    if (length(mats) == 0L) {
+    if (length(ok) == 0L) {
         detail <- if (length(skipped) > 0L) paste0(": ", .describe_skipped(skipped)) else ""
         stop(sprintf("study %s contained no loadable cells%s", study$gse, detail), call. = FALSE)
     }
@@ -667,20 +906,14 @@ print.singlet_study <- function(x, ...) {
         warning(sprintf("%s: skipped %d of %d sample(s) with no usable cells: %s", study$gse, length(skipped), n_asked, .describe_skipped(skipped)),
                 call. = FALSE)
     }
-    X <- methods::as(do.call(cbind, unname(mats)), "CsparseMatrix")
-    SP <- methods::as(do.call(cbind, unname(spliced)), "CsparseMatrix")
-    UN <- methods::as(do.call(cbind, unname(unspliced)), "CsparseMatrix")
+    parts <- .v2_assemble(ok, mods, axis, n_genes, explicit = !is.null(modalities))
     coldata <- do.call(rbind, unname(coldata_rows))
-    rownames(coldata) <- colnames(X)
-    rownames(X) <- rownames(SP) <- rownames(UN) <- axis$gene_id
-    rowdata <- S4Vectors::DataFrame(gene_name = axis$gene_name)
-    rownames(rowdata) <- axis$gene_id
-    sce <- SingleCellExperiment::SingleCellExperiment(
-        assays = list(counts = X, spliced = SP, unspliced = UN),
-        colData = S4Vectors::DataFrame(coldata, check.names = FALSE), rowData = rowdata)
+    rownames(coldata) <- parts$cn
+    sce <- .v2_make_sce(parts, coldata)
     S4Vectors::metadata(sce)$manifest <- list(
-        schema_version = "2.0", gse_id = study$gse, gsm_ids = names(mats), reference_build = study$reference_build, n_gsms = length(mats),
+        schema_version = "2.0", gse_id = study$gse, gsm_ids = names(ok), reference_build = study$reference_build, n_gsms = length(ok),
         created_at = study$doc$created_at, format = "singlet-v2", rev = study$rev)
+    S4Vectors::metadata(sce)$modalities <- mods
     if (!is.null(study_meta)) S4Vectors::metadata(sce)$study_meta <- study_meta
     S4Vectors::metadata(sce)$singlet_bundle_path <- paste0(study$transport$base, "/v2/m/", study$gse, ".json")
     S4Vectors::metadata(sce)$skipped_samples <- data.frame(
@@ -707,6 +940,8 @@ print.singlet_study <- function(x, ...) {
 #' @param samples GSM accessions to restrict the Series to (default all).
 #' @param columns Cell-table columns to keep in \code{colData} (default all numeric ones).
 #' @param layers Also return \code{spliced} and \code{unspliced} assays.
+#' @param modalities Which matrices to fetch (default \code{"counts"}, plus the layers with \code{layers = TRUE}); see
+#'   \code{\link{load}}. Only the chunk runs of those members that hold the selected cells are downloaded.
 #' @param max_cells Keep at most this many cells per sample (the largest libraries first).
 #' @param as \code{"sce"} (default) or \code{"seurat"}.
 #' @param cache_dir Cache directory (see \code{\link{load}}).
@@ -720,7 +955,7 @@ print.singlet_study <- function(x, ...) {
 #' @seealso \code{\link{load}}, \code{\link{singlet_study}}
 #' @export
 singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layers = FALSE, max_cells = NULL,
-                          as = c("sce", "seurat"), cache_dir = NULL) {
+                          as = c("sce", "seurat"), cache_dir = NULL, modalities = NULL) {
     as <- match.arg(as)
     cond <- substitute(where)
     caller <- parent.frame()
@@ -740,7 +975,9 @@ singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layer
     gsms <- if (is.null(samples)) study$gsm_ids else as.character(samples)
     bad <- setdiff(gsms, study$gsm_ids)
     if (length(bad) > 0L) stop(sprintf("sample(s) %s not in %s", paste(bad, collapse = ", "), study$gse), call. = FALSE)
-    axis <- .v2_axis(study)
+    mods <- .v2_normalize_modalities(modalities, layers)
+    if (!is.null(modalities)) .v2_check_modalities(study, gsms, mods)
+    axis <- if (any(mods %in% .v2_gene_modalities)) .v2_axis(study) else list(gene_id = character(0), gene_name = character(0))
     n_genes <- length(axis$gene_id)
     keep_fun <- function(cells) {
         df <- as.data.frame(cells$columns[vapply(cells$columns, function(v) is.numeric(v) || is.logical(v), NA)])
@@ -759,29 +996,20 @@ singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layer
     }
     res <- lapply(gsms, function(g) {
         .v2_read_sample(study, g, axis, NULL, n_genes, keep_fun, c("barcode", "called", "n_umi_exon", "n_umi_intron", "n_feat_exon", "n_feat_intron",
-                                                                  if (!is.null(columns)) columns), 0L)
+                                                                  if (!is.null(columns)) columns), 0L, members = .v2_members_for(mods))
     })
     names(res) <- gsms
-    ok <- Filter(function(r) is.null(r$skipped), res)
+    ok <- Filter(function(r) is.null(r$skipped) && !.v2_sample_empty(r), res)
     if (length(ok) == 0L) {
         return(SingleCellExperiment::SingleCellExperiment(assays = list(counts = .v2_empty_gene_matrix(n_genes, 0L))))
     }
-    mats <- lapply(ok, function(r) {
-        sp <- if (is.null(r$exon)) .v2_empty_gene_matrix(n_genes, length(r$sel)) else r$exon
-        un <- if (is.null(r$intron)) .v2_empty_gene_matrix(n_genes, length(r$sel)) else r$intron
-        list(counts = sp + un, spliced = sp, unspliced = un)
+    ok <- lapply(ok, function(r) {
+        r$ord <- seq_along(r$sel)
+        r$cn <- paste0(r$gsm, "_", r$cols$barcode)
+        r
     })
-    cn <- unlist(lapply(ok, function(r) paste0(r$gsm, "_", r$cols$barcode)), use.names = FALSE)
-    assays <- list(counts = do.call(cbind, unname(lapply(mats, `[[`, "counts"))))
-    if (layers) {
-        assays$spliced <- do.call(cbind, unname(lapply(mats, `[[`, "spliced")))
-        assays$unspliced <- do.call(cbind, unname(lapply(mats, `[[`, "unspliced")))
-    }
-    for (k in seq_along(assays)) {
-        a <- methods::as(assays[[k]], "CsparseMatrix")
-        dimnames(a) <- list(axis$gene_id, cn)
-        assays[[k]] <- a
-    }
+    parts <- .v2_assemble(ok, mods, axis, n_genes, explicit = !is.null(modalities))
+    cn <- parts$cn
     cd <- do.call(rbind, lapply(ok, function(r) {
         keep <- setdiff(names(r$cols), "barcode")
         if (!is.null(columns)) keep <- intersect(keep, columns)
@@ -790,10 +1018,8 @@ singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layer
         d
     }))
     rownames(cd) <- cn
-    rowdata <- S4Vectors::DataFrame(gene_name = axis$gene_name)
-    rownames(rowdata) <- axis$gene_id
-    sce <- SingleCellExperiment::SingleCellExperiment(assays = assays, colData = S4Vectors::DataFrame(cd, check.names = FALSE), rowData = rowdata)
-    S4Vectors::metadata(sce)$singlet_v2 <- list(gse = study$gse, rev = study$rev)
+    sce <- .v2_make_sce(parts, cd)
+    S4Vectors::metadata(sce)$singlet_v2 <- list(gse = study$gse, rev = study$rev, modalities = mods)
     if (as == "seurat") return(.sce_to_seurat(sce))
     sce
 }
@@ -845,27 +1071,45 @@ singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layer
 
 # A v2 study by accession; a study with no v2 manifest stops with a message naming legacy = TRUE
 # (SINGLET_LEGACY_FALLBACK=1 falls back to the legacy bundle instead).
-.v2_load_gse <- function(gse, gsms = NULL, cache_dir = NULL, legacy = NULL) {
+.v2_load_gse <- function(gse, gsms = NULL, cache_dir = NULL, legacy = NULL, modalities = NULL) {
     study <- tryCatch(singlet_study(gse, cache_dir = cache_dir), singlet_v2_not_found = function(e) e)
     if (inherits(study, "condition")) {
         if (is.null(legacy) && .v2_legacy_fallback()) {
             if (nzchar(Sys.getenv("SINGLET_LEGACY_FALLBACK"))) {
                 warning(sprintf("%s; using the legacy bundle (SINGLET_LEGACY_FALLBACK)", conditionMessage(study)), call. = FALSE)
             }
-            return(.read_singlet_bundle(.singlet_fetch_bundle(gse, cache_dir = cache_dir), gsms = gsms))
+            return(.legacy_modalities(.read_singlet_bundle(.singlet_fetch_bundle(gse, cache_dir = cache_dir), gsms = gsms),
+                                      modalities))
         }
         stop(study)
     }
-    .v2_read_study(study, gsms)
+    .v2_read_study(study, gsms, modalities = modalities)
+}
+
+# modalities= on a legacy bundle: it has been downloaded whole already, so only the gene assays are subset (with a warning);
+# the feature-level modalities need the v2 reader and are left out with a warning, never an error.
+.legacy_modalities <- function(sce, modalities) {
+    if (is.null(modalities)) return(sce)
+    mods <- .v2_normalize_modalities(modalities)
+    warning("this study is read from its legacy .singlet bundle, which is downloaded whole; modalities= only subsets the result",
+            call. = FALSE)
+    drop <- setdiff(intersect(SummarizedExperiment::assayNames(sce), .v2_gene_modalities), mods)
+    for (a in drop) SummarizedExperiment::assay(sce, a) <- NULL
+    other <- setdiff(mods, .v2_gene_modalities)
+    if (length(other) > 0L) {
+        warning(sprintf("%s: not read from a legacy bundle (use the v2 study, or read_singlet() members)", paste(other, collapse = ", ")),
+                call. = FALSE)
+    }
+    sce
 }
 
 # A local manifest, .../v2/m/<GSE>.json (its objects are read from the same v2/ tree).
-.v2_load_manifest <- function(path, gsms = NULL) {
+.v2_load_manifest <- function(path, gsms = NULL, modalities = NULL) {
     p <- normalizePath(path, winslash = "/", mustWork = TRUE)
     if (basename(dirname(p)) != "m" || basename(dirname(dirname(p))) != "v2") {
         stop(sprintf("%s is not under a v2/m/ directory", path), call. = FALSE)
     }
     root <- dirname(dirname(dirname(p)))
     gse <- sub("\\.json$", "", basename(p), ignore.case = TRUE)
-    .v2_read_study(singlet_study(gse, base = root, force = TRUE), gsms)
+    .v2_read_study(singlet_study(gse, base = root, force = TRUE), gsms, modalities = modalities)
 }

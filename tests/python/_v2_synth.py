@@ -73,7 +73,10 @@ class Synth:
             indptr[j + 1] = indptr[j] + k
         indices = np.concatenate(cols_idx) if cols_idx else np.zeros(0, np.uint32)
         data = np.concatenate(cols_val) if cols_val else np.zeros(0, np.uint32)
-        names = row_pack.names()
+        inline = isinstance(
+            row_pack, list
+        )  # a list of names: inline row names (junctions, V(D)J segments)
+        names = row_pack if inline else row_pack.names()
         blob, stats = _pz2.encode(
             indptr,
             indices,
@@ -82,7 +85,9 @@ class Synth:
             n,
             codec="rans",
             chunk_cols=chunk_cols,
-            row_names={"kind": "pack", "pack_id": row_pack.id[:8], "names": names},
+            row_names=names
+            if inline
+            else {"kind": "pack", "pack_id": row_pack.id[:8], "names": names},
             col_names={"kind": "cells", "names": barcodes},
         )
         csc = sp.csc_matrix((data.astype(np.int64), indices.astype(np.int64), indptr), shape=(m, n))
@@ -104,9 +109,25 @@ class Synth:
         return out
 
     # ---- build
+    @staticmethod
+    def junction_names(lo: int, hi: int) -> List[str]:
+        """Junctions ``chr1:<start>-<end>`` in groups of three per start (alternative acceptors) and per end (alternative
+        donors), so the PSI recipe finds events."""
+        out = []
+        for i in range(lo, hi):
+            out.append("chr1:%d-%d" % (1000 * (1 + i // 3), 50000 + 100 * (i % 3) + 7 * (i // 9)))
+        return out
+
     def build(
-        self, n_cols: int = 300, n_called: int = 40, chunk_cols: int = 64, pad_between: int = 0
+        self,
+        n_cols: int = 300,
+        n_called: int = 40,
+        chunk_cols: int = 64,
+        pad_between: int = 0,
+        extras: bool = False,
     ) -> "Synth":
+        """``extras`` adds feature-level members: ``sj_counts.1pz`` (inline junction names; GSM9000001 and GSM9000003 have
+        overlapping, different junction sets) and ``vdj_gene_usage.1pz`` (GSM9000001 only)."""
         gene_tbl = self.exon_pack.gene_table()
         gene_ids = [g for g, _ in gene_tbl]
         specs = [
@@ -174,6 +195,46 @@ class Synth:
                     {"m": len(self.intron_names), "n": n},
                     K.FLAG_LEGACY | K.FLAG_ANNDATA,
                 )
+            extra_truth = {}
+            if extras:
+                lo = 0 if gsm != "GSM9000003" else 30
+                sj_names = self.junction_names(lo, lo + 60)
+                sj_blob, sj_csc = self._matrix(
+                    len(sj_names),
+                    n,
+                    seed + 200,
+                    sj_names,
+                    bcs,
+                    np.minimum(dens // 8, 40),
+                    chunk_cols,
+                )
+                w.add_matrix(
+                    "sj_counts.1pz",
+                    sj_blob,
+                    bytes.fromhex(_pz2.read_header(sj_blob)["digest"]),
+                    {"m": len(sj_names), "n": n},
+                    K.FLAG_LEGACY,
+                )
+                extra_truth.update({"sj": sj_csc, "sj_names": sj_names})
+                if gsm == "GSM9000001":
+                    vdj_names = ["TRBV%d" % i for i in range(1, 31)]
+                    vdj_blob, vdj_csc = self._matrix(
+                        len(vdj_names),
+                        n,
+                        seed + 300,
+                        vdj_names,
+                        bcs,
+                        np.minimum(dens // 40, 10),
+                        chunk_cols,
+                    )
+                    w.add_matrix(
+                        "vdj_gene_usage.1pz",
+                        vdj_blob,
+                        bytes.fromhex(_pz2.read_header(vdj_blob)["digest"]),
+                        {"m": len(vdj_names), "n": n},
+                        K.FLAG_LEGACY,
+                    )
+                    extra_truth.update({"vdj": vdj_csc, "vdj_names": vdj_names})
             summary = json.dumps({"n_cells_called": int(called.sum()), "gsm": gsm}).encode()
             w.add_stored("summary.json", summary, {}, K.FLAG_LEGACY)
             w.add_stored(
@@ -228,6 +289,7 @@ class Synth:
                 "umi_exon": umi_e,
                 "object": obj,
                 "key": key,
+                **extra_truth,
             }
         meta = {
             "schema_version": "1.0",
@@ -290,6 +352,7 @@ class Synth:
 # ---------------------------------------------------------------------------------------------------------------------------------
 # command line: build the synthetic study and write the expected gene-level matrices for other languages' tests (the R tests)
 #     python -P tests/python/_v2_synth.py <out_dir>
+# (``--extras`` after <out_dir> adds the sj / vdj members of ``build(extras=True)`` and their truth files)
 # writes <out_dir>/v2/... (the study) and, per sample with called cells, truth_<GSM>.mtx (genes x cells, counts), truth_<GSM>_spliced.mtx,
 # truth_<GSM>_unspliced.mtx (when the sample has an intron matrix), truth_<GSM>_barcodes.txt (cells in sorted-barcode order) and genes.txt.
 if __name__ == "__main__":
@@ -298,8 +361,11 @@ if __name__ == "__main__":
     import scipy.io
 
     out = sys.argv[1]
+    extras = (
+        "--extras" in sys.argv[2:]
+    )  # also the sj / vdj members, and truth_<GSM>_sj.mtx + truth_<GSM>_sj_names.txt
     os.makedirs(out, exist_ok=True)
-    s = Synth(out).build()
+    s = Synth(out).build(extras=extras)
     with open(os.path.join(out, "genes.txt"), "w") as fh:
         fh.write("\n".join("%s\t%s" % (g, n) for g, n in s.exon_pack.gene_table()) + "\n")
     for gsm, t in s.truth.items():
@@ -317,4 +383,8 @@ if __name__ == "__main__":
         scipy.io.mmwrite(os.path.join(out, "truth_%s.mtx" % gsm), ex + un if un is not None else ex)
         with open(os.path.join(out, "truth_%s_barcodes.txt" % gsm), "w") as fh:
             fh.write("\n".join(bcs[order]) + "\n")
+        if extras and "sj" in t:
+            scipy.io.mmwrite(os.path.join(out, "truth_%s_sj.mtx" % gsm), t["sj"][:, cols])
+            with open(os.path.join(out, "truth_%s_sj_names.txt" % gsm), "w") as fh:
+                fh.write("\n".join(t["sj_names"]) + "\n")
     print(out)

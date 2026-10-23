@@ -5,9 +5,21 @@
 \alias{singlet_load}
 \title{Load Singlet data by accession or bundle path}
 \usage{
-load(x, as = c("sce", "seurat"), cache_dir = NULL, legacy = NULL)
+load(
+  x,
+  as = c("sce", "seurat"),
+  cache_dir = NULL,
+  legacy = NULL,
+  modalities = NULL
+)
 
-singlet_load(x, as = c("sce", "seurat"), cache_dir = NULL, legacy = NULL)
+singlet_load(
+  x,
+  as = c("sce", "seurat"),
+  cache_dir = NULL,
+  legacy = NULL,
+  modalities = NULL
+)
 }
 \arguments{
 \item{x}{A character vector of GEO Series accessions (\code{"GSE..."}),
@@ -33,6 +45,19 @@ v2 manifest (\code{.json}, see \code{\link{download}}) as a v2 study.
 When a study has no v2 manifest yet, \code{load()} stops with a message
 naming \code{legacy = TRUE}; setting the environment variable
 \code{SINGLET_LEGACY_FALLBACK=1} makes it fall back automatically.}
+
+\item{modalities}{Which matrices to download (v2 studies: only those
+members' byte ranges are fetched). \code{"counts"} (assay \code{counts} =
+spliced + unspliced; needs the exon and intron matrices),
+\code{"spliced"} (assay, exon matrix only), \code{"unspliced"} (assay,
+intron matrix only), \code{"splice_junctions"} and \code{"psi"}
+(\code{altExp}s on the junctions; junction matrix only, \code{psi} is
+the true percent spliced in), \code{"mt"} and \code{"vdj"}
+(\code{altExp}s). The cell table is always read. \code{NULL} (default)
+returns counts, spliced and unspliced. A modality that no requested sample
+carries stops with a message listing what the study has (see
+\code{\link{singlet_study_modalities}}). A legacy bundle is downloaded
+whole and only subset, with a warning.}
 }
 \value{
 A combined \code{SingleCellExperiment} (when \code{as = "sce"}) or
