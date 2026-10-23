@@ -41,6 +41,8 @@ sys.path.insert(0, str(HERE.parent / "python"))
 
 DATA_BASE = os.environ.get("SINGLET_DATA_BASE", "https://data.singlet.bio")
 RESTRICTED_BUCKET = os.environ.get("SINGLET_RESTRICTED_BUCKET", "singlet-restricted")
+# data.singlet.bio answers 403 to the default Python-urllib User-Agent (as the v2 transport notes)
+UA = {"User-Agent": "singlet-annotate/0.1 (+https://singlet.bio)"}
 
 
 def plan(a) -> int:
@@ -66,12 +68,12 @@ def _download(url: str, dst: Path, retries: int = 4) -> None:
     for i in range(retries):
         try:
             tmp = dst.with_name(dst.name + ".part")
-            with urllib.request.urlopen(url, timeout=120) as r, open(tmp, "wb") as f:
+            with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=120) as r, open(tmp, "wb") as f:
                 shutil.copyfileobj(r, f, 16 << 20)
             tmp.replace(dst)
             return
-        except OSError:
-            if i == retries - 1:
+        except OSError as e:
+            if i == retries - 1 or getattr(e, "code", None) in (403, 404):
                 raise
             time.sleep(10 * (i + 1))
 
@@ -96,7 +98,7 @@ def _sidecar(gse: str, dst: Path) -> bool:
 
 def _has_v2(gse: str) -> bool:
     try:
-        with urllib.request.urlopen(urllib.request.Request(f"{DATA_BASE}/v2/m/{gse}.json", method="HEAD"), timeout=30) as r:
+        with urllib.request.urlopen(urllib.request.Request(f"{DATA_BASE}/v2/m/{gse}.json", method="HEAD", headers=UA), timeout=30) as r:
             return r.status == 200
     except OSError:
         return False
