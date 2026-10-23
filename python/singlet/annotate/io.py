@@ -23,7 +23,7 @@ import re
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 import scipy.sparse as sps
@@ -127,9 +127,11 @@ def read_donor_sites(sidecar: Path, gsm: str) -> Dict[str, "object"]:
     return out
 
 
-def read_legacy(bundle_path: Path, gsm: str, *, sidecar: Optional[Path] = None) -> SampleInput:
+def read_legacy(bundle_path: Union[str, Path], gsm: str, *, sidecar: Optional[Path] = None) -> SampleInput:
     """One sample of a legacy ``.singlet`` bundle on disk."""
     from singlet.bundle import SingletBundle
+
+    bundle_path = Path(bundle_path)
 
     b = SingletBundle(bundle_path)
     try:

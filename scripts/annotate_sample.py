@@ -71,7 +71,13 @@ def main(argv=None) -> int:
                 pass
         t0 = time.time()
         try:
-            s = IO.read_legacy(a.bundle, gsm, sidecar=a.sidecar) if a.bundle else IO.read_v2(a.gse, gsm, sidecar=a.sidecar)
+            try:
+                s = IO.read_legacy(a.bundle, gsm, sidecar=a.sidecar) if a.bundle else IO.read_v2(a.gse, gsm, sidecar=a.sidecar)
+            except ValueError as e:
+                if "no usable cells" in str(e) or "no called cells" in str(e):
+                    print(f"{gsm}: skipped ({e})", flush=True)
+                    continue
+                raise
             if a.max_cells and len(s.col) > a.max_cells:
                 print(f"{gsm}: {len(s.col)} cells > --max-cells, skipped", flush=True)
                 continue
