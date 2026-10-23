@@ -104,7 +104,11 @@ def cmd_run(a):
     ledger.parent.mkdir(parents=True, exist_ok=True)
     scratch = Path(a.scratch) if a.scratch else out / "scratch"
 
+    failed = []
+
     def log(**k):
+        if k.get("status") in ("read_error", "error", "study_error"):
+            failed.append(k)
         with open(ledger, "a", encoding="utf-8") as f:
             f.write(
                 json.dumps({"t": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), **k}) + "\n"
@@ -154,6 +158,9 @@ def cmd_run(a):
         finally:
             if fetched is not None and not a.keep_bundles:
                 fetched.unlink(missing_ok=True)
+    if failed:
+        print(f"{len(failed)} studies or samples failed; see {ledger}", file=sys.stderr)
+        sys.exit(1)
 
 
 def cmd_registry(a):

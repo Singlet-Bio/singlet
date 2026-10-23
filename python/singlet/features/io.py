@@ -15,10 +15,16 @@ from pathlib import Path
 from typing import Iterator, List, Optional, Tuple
 
 DATA_BASE = os.environ.get("SINGLET_DATA_BASE", "https://data.singlet.bio")
+# data.singlet.bio refuses urllib's default User-Agent (HTTP 403)
+HEADERS = {"User-Agent": "singlet-features (+https://singlet.bio)"}
+
+
+def _req(url: str, method: str = "GET") -> urllib.request.Request:
+    return urllib.request.Request(url, method=method, headers=HEADERS)
 
 
 def is_v2(gse: str, base: str = DATA_BASE) -> bool:
-    req = urllib.request.Request(f"{base}/v2/m/{gse}.json", method="HEAD")
+    req = _req(f"{base}/v2/m/{gse}.json", "HEAD")
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
             return r.status == 200
@@ -35,12 +41,12 @@ def fetch_bundle(gse: str, dest_dir: Path, base: str = DATA_BASE) -> Path:
     dest_dir.mkdir(parents=True, exist_ok=True)
     path = dest_dir / f"{gse}.singlet"
     url = legacy_url(gse, base)
-    with urllib.request.urlopen(urllib.request.Request(url, method="HEAD"), timeout=60) as r:
+    with urllib.request.urlopen(_req(url, "HEAD"), timeout=60) as r:
         size = int(r.headers.get("Content-Length") or 0)
     if path.exists() and size and path.stat().st_size == size:
         return path
     tmp = path.with_suffix(".part")
-    with urllib.request.urlopen(url, timeout=600) as r, open(tmp, "wb") as f:
+    with urllib.request.urlopen(_req(url), timeout=600) as r, open(tmp, "wb") as f:
         while True:
             b = r.read(1 << 22)
             if not b:
