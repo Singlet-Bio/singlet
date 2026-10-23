@@ -46,6 +46,9 @@ ONTOLOGY = {
     "UBERON:0000062": {"label": "organ", "parents": []},
     "HANCESTRO:0005": {"label": "European", "parents": []},
     "HANCESTRO:0009": {"label": "East Asian", "parents": []},
+    "MONDO:0004992": {"label": "cancer", "parents": []},
+    "MONDO:0005061": {"label": "lung adenocarcinoma", "parents": ["MONDO:0004992"]},
+    "PATO:0000461": {"label": "normal", "parents": []},
 }
 TISSUE = {
     "GSM9000001": ("UBERON:0002048", "lung"),
@@ -57,24 +60,58 @@ TISSUE = {
 }
 FEATURES = [
     {
-        "name": "hypoxia",
-        "version": "test-hallmark-1",
-        "dtype": "u8",
+        "feature_id": "test/hypoxia",
+        "kind": "score",
         "lo": -1.0,
         "hi": 1.0,
         "thresholds": [0.0, 0.5],
+        "method": "test-ucell",
+        "method_version": "test-hallmark-1",
         "description": "test gene-set score",
+        "licence": "CC0",
     },
     {
-        "name": "malignancy",
-        "version": "test-mal-1",
+        "feature_id": "test/malignancy",
+        "kind": "score",
         "dtype": "u16",
-        "lo": 0.0,
-        "hi": 1.0,
-        "thresholds": [0.8],
+        "method_version": "test-mal-1",
         "description": "test malignancy probability",
     },
+    {"feature_id": "test/cycling", "kind": "flag", "method_version": "test-1"},
+    {
+        "feature_id": "test/phase",
+        "kind": "category",
+        "categories": ["G1", "S", "G2M"],
+        "method_version": "test-1",
+    },
 ]
+# sample-level properties (the ontology session's sample_meta.csv columns)
+PROPS = {
+    "GSM9000001": {
+        "donor_status": "healthy",
+        "perturbation": "control",
+        "sample_kind": "primary",
+        "disease": "PATO:0000461",
+        "disease_label": "normal",
+        "development_stage": "HsapDv:0000154",
+        "development_stage_label": "60-year-old stage",
+    },
+    "GSM9000003": {
+        "donor_status": "diseased",
+        "perturbation": "treated",
+        "sample_kind": "primary",
+        "disease": "MONDO:0004992",
+        "disease_label": "cancer",
+    },
+    "GSM9000011": {
+        "donor_status": "diseased",
+        "perturbation": "treated;genetic",
+        "sample_kind": "organoid",
+        "disease": "MONDO:0005061",
+        "disease_label": "lung adenocarcinoma",
+    },
+    "GSM9000013": {"sample_kind": "cell_line"},
+}
 NO_FEATURES = {"GSM9000013"}  # a sample without a feature file: every value NA
 
 QUERIES = [
@@ -101,9 +138,21 @@ QUERIES = [
     {
         "where": {
             "cell_type": "B cell",
-            "ranges": {"malignancy": [0.8, None], "hypoxia": [None, 0.5]},
+            "ranges": {"malignancy": [0.8, None], "test/hypoxia": [None, 0.5]},
         },
         "return": "count",
+    },
+    {
+        "where": {"categories": {"test/phase": ["S", "G2M"]}, "ranges": {"cycling": [1, 1]}},
+        "return": "count",
+        "by": ["study"],
+    },
+    {"where": {"donor_status": "diseased"}, "return": "count", "by": ["sample"]},
+    {"where": {"disease": "cancer", "perturbation": ["genetic"]}, "return": "count"},
+    {
+        "where": {"sample_kind": ["primary", "unknown"], "cell_type": "T cell"},
+        "return": "count",
+        "by": ["sample"],
     },
     {"where": {"cell_type": "CL:0000625"}, "return": "cells"},
     {"where": {"ranges": {"n_genes": [150, 400], "ancestry_prob": [None, 0.9]}}, "return": "cells"},
@@ -120,6 +169,12 @@ QUERIES = [
     },
     {"where": {}, "return": "cells", "n": 25, "seed": 11, "max_studies": 1, "study_rank": "random"},
     {"where": {"ranges": {"malignancy": [0.8, None]}}, "return": "cells", "n": 10000},
+    {
+        "where": {"donor_status": "diseased", "categories": {"phase": ["G1"]}},
+        "return": "cells",
+        "n": 20,
+        "seed": 4,
+    },
 ]
 PAGED = {"where": {"tissue": "lung"}, "return": "cells", "n": 60, "seed": 5, "max_studies": 2}
 
@@ -165,7 +220,8 @@ def fake_labels(root: str, synth, gsms) -> str:
 
 
 def fake_features(root: str, synth, gsms) -> str:
-    """``<GSM>.features.parquet`` with the two registered features (10 % of hypoxia missing), except for NO_FEATURES."""
+    """``<GSM>.features.test.parquet`` in the agreed interchange (gsm, col, one column per feature; float32 scores, bool flags,
+    uint16 categories; metadata singlet_features_schema, feature_set, method_version), 10 % of hypoxia missing, none for NO_FEATURES."""
     import pyarrow as pa
     import pyarrow.parquet as pq
 
@@ -181,12 +237,21 @@ def fake_features(root: str, synth, gsms) -> str:
         hyp[rng.random(n) < 0.1] = np.nan
         tab = pa.table(
             {
+                "gsm": [gsm] * n,
                 "col": cols.astype(np.int64),
-                "hypoxia": hyp,
-                "malignancy": np.round(rng.beta(2, 2, n), 4),
+                "hypoxia": hyp.astype(np.float32),
+                "malignancy": np.round(rng.beta(2, 2, n), 4).astype(np.float32),
+                "cycling": pa.array((rng.random(n) < 0.3).tolist(), type=pa.bool_()),
+                "phase": rng.integers(0, 3, n).astype(np.uint16),
+            }
+        ).replace_schema_metadata(
+            {
+                b"singlet_features_schema": b"1",
+                b"feature_set": b"test",
+                b"method_version": f"test-run-{k}".encode(),
             }
         )
-        pq.write_table(tab, os.path.join(out, f"{gsm}.features.parquet"))
+        pq.write_table(tab, os.path.join(out, f"{gsm}.features.test.parquet"))
     return out
 
 
@@ -220,7 +285,13 @@ def build(root: str):
     with open(meta, "w") as fh:
         json.dump(
             [
-                {"gsm": g, "organism": "Homo sapiens", "tissue": t, "tissue_label": lab}
+                {
+                    "gsm": g,
+                    "organism": "Homo sapiens",
+                    "tissue": t,
+                    "tissue_label": lab,
+                    **PROPS.get(g, {}),
+                }
                 for g, (t, lab) in TISSUE.items()
             ],
             fh,

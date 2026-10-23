@@ -48,7 +48,8 @@ def main(argv=None) -> int:
         "--annot-version", help="manifest annotation version to use when --labels-dir is not given"
     )
     ap.add_argument(
-        "--sample-meta", help="Parquet/CSV/JSON: gsm, organism, tissue (UBERON id), tissue_label"
+        "--sample-meta",
+        help="Parquet/CSV/JSON (the catalog's sample_meta.csv): gsm, organism, tissue, tissue_label, disease, development_stage, donor_status, perturbation, sample_kind",
     )
     ap.add_argument(
         "--ontology",
@@ -59,11 +60,11 @@ def main(argv=None) -> int:
     ap.add_argument("--previous", help="earlier index version whose sample ordinals are kept")
     ap.add_argument(
         "--features",
-        help='feature registry JSON: {"features": [{name, version, dtype, lo, hi, thresholds}]}',
+        help='feature registry JSON (cell_feature rows): {"features": [{feature_id, kind, method_version, thresholds, ...}]}',
     )
     ap.add_argument(
         "--features-dir",
-        help="per-cell feature values: <dir>/<GSM>.features.parquet or <dir>/<GSE>/<GSM>.features.parquet",
+        help="feature files: <dir>/<GSM>.features.<set>.parquet or <dir>/<GSE>/<GSM>.features.<set>.parquet",
     )
     ap.add_argument(
         "--d1-export", help="also write the per-sample aggregates as CSV (+ suggested schema) here"

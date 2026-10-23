@@ -474,25 +474,51 @@ def hash32(seed: int, a, b) -> np.ndarray:
 SCALE16 = 65534
 NA16 = 65535
 MAX_FEATURES = 64
+FEATURE_KINDS = ("score", "category", "flag")
 _FEATURE_NAME = re.compile(r"^[a-z][a-z0-9_]{0,47}$")
+FEATURES_SCHEMA = (
+    "1"  # the singlet_features_schema of feature files (docs CELL-ARCHITECTURE.md section 3)
+)
 
 
 @dataclass
 class FeatureSpec:
-    """One registered per-cell feature (spec section 4.9): a number per called cell, stored as a linear u8/u16 code over [lo, hi].
+    """One registered per-cell feature (spec section 4.9), as in the catalog's ``cell_feature`` table.
 
-    ``name`` is what queries use (``ranges: {name: [min, max]}``); ``column`` is the physical shard column (``f1``, ``f2``, ...),
-    assigned by the builder in registry order."""
+    ``id`` = ``<feature_set>/<name>`` (or ``name`` without a set) is what queries and exports use; ``column`` is the physical shard
+    column (``f1``, ``f2``, ...), assigned by the builder in registry order. Kinds:
+
+    * ``score``: a number in ``[lo, hi]`` (default [0, 1]) as a linear code, u8 ``floor((x - lo)/(hi - lo)*254 + 0.5)`` (255 = NA) or
+      u16 (65,534 / 65,535);
+    * ``flag``: a boolean stored as a u8 score (true = 254 = 1.0, false = 0, NA = 255);
+    * ``category``: a u16 index into ``categories`` (65,535 = NA)."""
 
     name: str
-    version: str
+    feature_set: str = ""
+    kind: str = "score"
     dtype: str = "u8"
     lo: float = 0.0
     hi: float = 1.0
-    thresholds: Tuple[float, ...] = ()
+    thresholds: Tuple[float, ...] = (0.5, 0.8)
+    categories: Tuple[str, ...] = ()
+    label: str = ""
     description: str = ""
-    producer: str = ""
+    method: str = ""
+    method_version: str = ""
+    source_ref: str = ""
+    licence: str = ""
+    organisms: Tuple[str, ...] = ()
+    ontology_id: str = ""
+    comparable: str = "atlas"
     column: str = ""
+
+    @property
+    def id(self) -> str:
+        return f"{self.feature_set}/{self.name}" if self.feature_set else self.name
+
+    @property
+    def version(self) -> str:
+        return self.method_version
 
     @property
     def scale(self) -> int:
@@ -507,6 +533,12 @@ class FeatureSpec:
         return np.uint8 if self.dtype == "u8" else np.uint16
 
     def encode(self, x) -> np.ndarray:
+        if self.kind == "category":
+            a = np.asarray(x, dtype=np.float64)
+            out = np.full(a.shape, self.na, dtype=self.np_dtype)
+            ok = np.isfinite(a) & (a >= 0) & (a < len(self.categories))
+            out[ok] = a[ok].astype(self.np_dtype)
+            return out
         a = np.asarray(x, dtype=np.float64)
         out = np.full(a.shape, self.na, dtype=self.np_dtype)
         ok = np.isfinite(a)
@@ -517,47 +549,108 @@ class FeatureSpec:
 
     def decode(self, codes) -> np.ndarray:
         c = np.asarray(codes)
+        if self.kind == "category":
+            names = np.array(list(self.categories) + [None], dtype=object)
+            return names[np.where(c == self.na, len(self.categories), c).astype(np.int64)]
         out = (self.lo + c.astype(np.float64) / self.scale * (self.hi - self.lo)).astype(np.float32)
         out[c == self.na] = np.nan
         return out
 
-    def bound(self, v: float, upper: bool) -> int:
+    def bound(self, v: float, upper: bool = False) -> int:
         """Code a range bound compares against (both sides): the code ``v`` itself is stored as, as for scores (``q8_threshold``).
         Out-of-range bounds give codes below 0 or above ``scale``."""
         return int(np.floor((float(v) - self.lo) / (self.hi - self.lo) * self.scale + 0.5))
 
     def to_json(self) -> dict:
         return {
+            "id": self.id,
             "name": self.name,
-            "version": self.version,
+            "feature_set": self.feature_set,
+            "kind": self.kind,
             "dtype": self.dtype,
             "lo": self.lo,
             "hi": self.hi,
             "scale": self.scale,
             "na": self.na,
             "thresholds": list(self.thresholds),
+            "categories": list(self.categories),
+            "label": self.label,
             "description": self.description,
-            "producer": self.producer,
+            "method": self.method,
+            "method_version": self.method_version,
+            "source_ref": self.source_ref,
+            "licence": self.licence,
+            "organisms": list(self.organisms),
+            "ontology_id": self.ontology_id,
+            "comparable": self.comparable,
             "column": self.column,
+        }
+
+    def cell_feature_row(self) -> dict:
+        """The catalog's ``cell_feature`` row for this feature (storage 'shard')."""
+        return {
+            "feature_id": self.id,
+            "feature_set": self.feature_set,
+            "kind": self.kind,
+            "label": self.label or self.name,
+            "description": self.description,
+            "method": self.method,
+            "method_version": self.method_version,
+            "source_ref": self.source_ref,
+            "licence": self.licence,
+            "organisms": json.dumps(list(self.organisms)),
+            "ontology_id": self.ontology_id,
+            "categories": json.dumps(list(self.categories)),
+            "thresholds": json.dumps(list(self.thresholds)),
+            "comparable": self.comparable,
+            "storage": "shard",
         }
 
     @classmethod
     def from_json(cls, d: dict) -> "FeatureSpec":
+        name = str(d.get("name") or "")
+        fset = str(d.get("feature_set") or "")
+        fid = d.get("feature_id") or d.get("id")
+        if fid and not name:
+            fset, _, name = str(fid).rpartition("/")
+        kind = str(d.get("kind", "score"))
+        cats = d.get("categories") or ()
+        if isinstance(cats, str):
+            cats = json.loads(cats or "[]")
+        thr = d.get("thresholds", (0.5, 0.8))
+        if isinstance(thr, str):
+            thr = json.loads(thr or "[]")
+        orgs = d.get("organisms") or ()
+        if isinstance(orgs, str):
+            orgs = json.loads(orgs or "[]")
+        dtype = (
+            "u16" if kind == "category" else ("u8" if kind == "flag" else str(d.get("dtype", "u8")))
+        )
         return cls(
-            name=str(d["name"]),
-            version=str(d.get("version", "1")),
-            dtype=str(d.get("dtype", "u8")),
-            lo=float(d.get("lo", 0.0)),
-            hi=float(d.get("hi", 1.0)),
-            thresholds=tuple(float(x) for x in d.get("thresholds", ())),
+            name=name,
+            feature_set=fset,
+            kind=kind,
+            dtype=dtype,
+            lo=0.0 if kind != "score" else float(d.get("lo", 0.0)),
+            hi=1.0 if kind != "score" else float(d.get("hi", 1.0)),
+            thresholds=tuple(float(x) for x in thr) if kind == "score" else (),
+            categories=tuple(str(x) for x in cats),
+            label=str(d.get("label", "")),
             description=str(d.get("description", "")),
-            producer=str(d.get("producer", "")),
+            method=str(d.get("method", "")),
+            method_version=str(d.get("method_version", d.get("version", ""))),
+            source_ref=str(d.get("source_ref", "")),
+            licence=str(d.get("licence", "")),
+            organisms=tuple(str(x) for x in orgs),
+            ontology_id=str(d.get("ontology_id", "")),
+            comparable=str(d.get("comparable", "atlas")),
             column=str(d.get("column", "")),
         )
 
 
 def load_features(src: Union[None, str, Path, Sequence[dict]]) -> List[FeatureSpec]:
-    """The feature registry (a JSON file ``{"features": [...]}`` or a list of dicts), validated, with shard columns assigned."""
+    """The feature registry (a JSON file ``{"features": [...]}`` / a list of ``cell_feature``-like dicts), validated, with shard
+    columns assigned."""
     if src is None:
         return []
     if isinstance(src, (str, Path)):
@@ -570,29 +663,56 @@ def load_features(src: Union[None, str, Path, Sequence[dict]]) -> List[FeatureSp
         raise IndexError_(f"at most {MAX_FEATURES} features per index version")
     seen = set()
     for i, f in enumerate(specs, start=1):
-        if not _FEATURE_NAME.match(f.name) or f.name in RANGE_FIELDS or f.name in seen:
+        if not _FEATURE_NAME.match(f.name) or (
+            f.feature_set and not _FEATURE_NAME.match(f.feature_set)
+        ):
             raise IndexError_(
-                f"feature name {f.name!r} must be [a-z][a-z0-9_]* (<= 48 chars), unique and not a built-in field"
+                f"feature {f.id!r}: set and name must be [a-z][a-z0-9_]* (<= 48 chars)"
             )
+        if f.id in seen or f.name in RANGE_FIELDS or f.id in RANGE_FIELDS:
+            raise IndexError_(f"feature {f.id!r} is not unique or clashes with a built-in field")
+        if f.kind not in FEATURE_KINDS:
+            raise IndexError_(f"feature {f.id}: kind must be one of {FEATURE_KINDS}")
+        if f.kind == "category" and not (0 < len(f.categories) < NA16):
+            raise IndexError_(f"feature {f.id}: a category feature lists its categories")
         if f.dtype not in ("u8", "u16") or not (
             np.isfinite(f.lo) and np.isfinite(f.hi) and f.hi > f.lo
         ):
-            raise IndexError_(f"feature {f.name}: dtype u8/u16 and finite lo < hi are required")
+            raise IndexError_(f"feature {f.id}: dtype u8/u16 and finite lo < hi are required")
         if len(f.thresholds) > 4:
-            raise IndexError_(f"feature {f.name}: at most 4 thresholds")
-        seen.add(f.name)
+            raise IndexError_(f"feature {f.id}: at most 4 thresholds")
+        if f.comparable not in ("atlas", "sample"):
+            raise IndexError_(f"feature {f.id}: comparable is 'atlas' or 'sample'")
+        seen.add(f.id)
         f.column = f"f{i}"
     return specs
 
 
+def _feature_values(t, f: FeatureSpec) -> np.ndarray:
+    """One feature column of a feature file as floats (category codes, flags as 0/1, NaN = missing)."""
+    c = t.column(f.name)
+    if f.kind == "flag":
+        vals = c.to_pylist()
+        return np.array(
+            [np.nan if v is None else (1.0 if v else 0.0) for v in vals], dtype=np.float64
+        )
+    a = np.asarray(c.to_numpy(zero_copy_only=False), dtype=np.float64)
+    return a
+
+
 def read_feature_sidecar(
     src, specs: Sequence[FeatureSpec], cols: np.ndarray
-) -> Dict[str, np.ndarray]:
-    """``<GSM>.features.parquet`` (``col`` + one float column per registered feature) -> {feature name: codes aligned to ``cols``}.
-    Features missing from the file, and called cells missing from it, are NA; rows for other columns are ignored."""
+) -> Tuple[Dict[str, np.ndarray], str]:
+    """A feature file of one feature set (``<GSM>.features.<set>.parquet``: ``col`` + one column per feature, named by the feature's
+    name) -> ({feature id: codes aligned to ``cols``}, method_version from the file metadata). Features missing from the file, and
+    called cells missing from it, are NA; rows for other columns are ignored."""
     t = _read_table(src)
     if "col" not in t.column_names:
         raise IndexError_("feature file has no 'col' column")
+    md = {k.decode(): v.decode() for k, v in (t.schema.metadata or {}).items()}
+    fs = md.get("feature_set")
+    if fs and specs and specs[0].feature_set and fs != specs[0].feature_set:
+        raise IndexError_(f"feature file is for set {fs!r}, not {specs[0].feature_set!r}")
     c = np.asarray(t.column("col").to_numpy(zero_copy_only=False), dtype=np.int64)
     if len(np.unique(c)) != len(c):
         raise IndexError_("duplicate 'col' values in a feature file")
@@ -602,10 +722,102 @@ def read_feature_sidecar(
     for f in specs:
         v = np.full(len(cols), np.nan)
         if f.name in t.column_names:
-            x = np.asarray(t.column(f.name).to_numpy(zero_copy_only=False), dtype=np.float64)
+            x = _feature_values(t, f)
+            if f.kind == "score" and (
+                np.nanmin(x, initial=f.lo) < f.lo - 1e-6 or np.nanmax(x, initial=f.hi) > f.hi + 1e-6
+            ):
+                raise IndexError_(f"feature {f.id}: values outside [{f.lo}, {f.hi}]")
             v[pos[ok]] = x[ok]
-        out[f.name] = f.encode(v)
-    return out
+        out[f.id] = f.encode(v)
+    return out, md.get("method_version", "")
+
+
+def feature_sidecar_key(gsm: str, feature_set: str, data: bytes) -> str:
+    """``v2/cf/<GSM>/<set>.<d16>.parquet``: one canonical feature file (immutable; referenced from the study manifest)."""
+    return f"v2/cf/{gsm}/{feature_set}.{d16hex(data)}.parquet"
+
+
+def normalize_feature_sidecar(
+    src,
+    *,
+    gsm: str,
+    specs: Sequence[FeatureSpec],
+    n_columns: int,
+    called: Optional[np.ndarray] = None,
+) -> Tuple[bytes, dict]:
+    """A feature job's ``<GSM>.features.<set>.parquet`` -> canonical sidecar bytes + manifest entry ``{key, sha256, bytes, n_rows,
+    feature_set, method_version}``: validated (one GSM, unique ``col`` inside the matrix, exactly the registered columns of the set,
+    value ranges), called columns only, sorted by ``col``, deterministic."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    if not specs or len({f.feature_set for f in specs}) != 1:
+        raise IndexError_("give the registered features of exactly one feature set")
+    fset = specs[0].feature_set
+    t = _read_table(src)
+    md = {k.decode(): v.decode() for k, v in (t.schema.metadata or {}).items()}
+    allowed = {"gsm", "col"} | {f.name for f in specs}
+    extra = [c for c in t.column_names if c not in allowed]
+    if extra:
+        raise IndexError_(f"{gsm}: feature file has unregistered columns {extra[:5]}")
+    if "gsm" in t.column_names and {x for x in t.column("gsm").to_pylist() if x} - {gsm}:
+        raise IndexError_(f"{gsm}: feature file names another sample")
+    col = np.asarray(t.column("col").to_numpy(zero_copy_only=False), dtype=np.int64)
+    if len(col) and (col.min() < 0 or col.max() >= n_columns):
+        raise IndexError_(f"{gsm}: feature column index outside the {n_columns}-column matrix")
+    if len(np.unique(col)) != len(col):
+        raise IndexError_(f"{gsm}: duplicate 'col' values in the feature file")
+    keep = np.ones(len(col), bool) if called is None else np.asarray(called, bool)[col]
+    idx = np.flatnonzero(keep)[np.argsort(col[keep], kind="stable")]
+    cols = {"col": pa.array(col[idx].astype(np.uint32))}
+    for f in specs:
+        if f.name not in t.column_names:
+            continue
+        x = _feature_values(t, f)[idx]
+        if f.kind == "score":
+            if np.nanmin(x, initial=f.lo) < f.lo - 1e-6 or np.nanmax(x, initial=f.hi) > f.hi + 1e-6:
+                raise IndexError_(f"{gsm}: feature {f.id} outside [{f.lo}, {f.hi}]")
+            cols[f.name] = pa.array(x.astype(np.float32))
+        elif f.kind == "flag":
+            cols[f.name] = pa.array([None if np.isnan(v) else bool(v) for v in x], type=pa.bool_())
+        else:
+            if np.any(np.isfinite(x) & ((x < 0) | (x >= len(f.categories)))):
+                raise IndexError_(
+                    f"{gsm}: feature {f.id} has a category code outside its {len(f.categories)} categories"
+                )
+            cols[f.name] = pa.array(np.where(np.isfinite(x), x, NA16).astype(np.uint16))
+    meta = {
+        "singlet_features_schema": FEATURES_SCHEMA,
+        "gsm": gsm,
+        "feature_set": fset,
+        "method_version": md.get("method_version", specs[0].method_version),
+    }
+    table = pa.table(cols).replace_schema_metadata(
+        {k.encode(): str(v).encode() for k, v in meta.items()}
+    )
+    bio = io.BytesIO()
+    pq.write_table(table, bio, compression="zstd", write_statistics=True)
+    out = bio.getvalue()
+    entry = {
+        "key": feature_sidecar_key(gsm, fset, out),
+        "sha256": hashlib.sha256(out).hexdigest(),
+        "bytes": len(out),
+        "n_rows": int(len(idx)),
+        "feature_set": fset,
+        "method_version": meta["method_version"],
+    }
+    return out, entry
+
+
+def attach_features(manifest: dict, entries: Dict[str, dict]) -> dict:
+    """A copy of the study manifest with ``samples[i].features[<set>] = entry`` for each GSM in ``entries`` (one set per call or
+    several: ``entries[gsm]`` is one normalize_feature_sidecar entry). Sample objects are untouched."""
+    m = json.loads(json.dumps(manifest))
+    for s in m.get("samples", []):
+        e = entries.get(s["gsm"])
+        if e is not None:
+            s.setdefault("features", {})[e["feature_set"]] = e
+    return m
 
 
 # ================================================================================================================= ontologies / dictionaries
@@ -971,11 +1183,23 @@ class _SampleIn:
     tissue: Optional[str] = None
     tissue_label: Optional[str] = None
     annot: Optional[dict] = None  # manifest annotation entry used
+    feat_refs: Dict[str, dict] = field(
+        default_factory=dict
+    )  # manifest feature sidecars by feature set
+    props: Dict[str, Any] = field(
+        default_factory=dict
+    )  # sample-level properties from --sample-meta
     # filled by _load_sample
     cols: Optional[np.ndarray] = None
     qc: Dict[str, np.ndarray] = field(default_factory=dict)
     labels: Optional[Dict[str, Any]] = None
-    features: Dict[str, np.ndarray] = field(default_factory=dict)
+    features: Dict[str, np.ndarray] = field(
+        default_factory=dict
+    )  # feature id -> codes aligned to cols
+    feature_versions: Dict[str, str] = field(
+        default_factory=dict
+    )  # feature set -> method_version of the file read
+    label_version: str = ""
     plan_members: Dict[str, dict] = field(default_factory=dict)
     error: Optional[str] = None
 
@@ -1042,7 +1266,7 @@ def _load_sample(
     sidecar_src: Optional[Callable[[_SampleIn], Any]],
     store,
     features: Sequence[FeatureSpec] = (),
-    feature_src: Optional[Callable[[_SampleIn], Any]] = None,
+    feature_src: Optional[Callable[[_SampleIn, str], Any]] = None,
 ) -> _SampleIn:
     from .cells import CellsReader
 
@@ -1077,6 +1301,7 @@ def _load_sample(
             src = sidecar_src(sm)
             if src is not None:
                 lab = read_sidecar(src)
+                sm.label_version = next((x for x in (lab.get("model_version") or []) if x), "")
                 c = np.asarray(lab["col"], dtype=np.int64)
                 pos = np.searchsorted(cols, c)
                 ok = (pos < len(cols)) & (cols[np.minimum(pos, len(cols) - 1)] == c)
@@ -1097,11 +1322,16 @@ def _load_sample(
                         full[k] = q8(arr)
                 sm.labels = full
         if features:
-            fsrc = feature_src(sm) if feature_src is not None else None
-            if fsrc is not None:
-                sm.features = read_feature_sidecar(fsrc, features, cols.astype(np.int64))
-            else:
-                sm.features = {f.name: np.full(len(cols), f.na, f.np_dtype) for f in features}
+            sm.features = {f.id: np.full(len(cols), f.na, f.np_dtype) for f in features}
+            for fset in dict.fromkeys(f.feature_set for f in features):
+                fsrc = feature_src(sm, fset) if feature_src is not None else None
+                if fsrc is None:
+                    continue
+                codes, ver = read_feature_sidecar(
+                    fsrc, [f for f in features if f.feature_set == fset], cols.astype(np.int64)
+                )
+                sm.features.update(codes)
+                sm.feature_versions[fset] = ver
     except Exception as e:  # noqa: BLE001 - one bad sample must not stop an atlas build
         sm.error = f"{type(e).__name__}: {e}"
     return sm
@@ -1155,21 +1385,121 @@ def _qstats(v: np.ndarray, na: Optional[int] = None) -> Tuple[int, int, int, int
     return n, int(xs[0]), q[0], q[1], q[2], int(xs[-1])
 
 
-D1_SCHEMA = """-- Suggested D1 tables for the per-sample aggregates of the cell index (owned and loaded by the catalog, not by the builder).
-CREATE TABLE IF NOT EXISTS cidx_sample (
-  gsm_id TEXT PRIMARY KEY, gse_id TEXT NOT NULL, so INTEGER NOT NULL, index_version TEXT NOT NULL,
-  organism TEXT, tissue TEXT, n_called INTEGER NOT NULL, labeled INTEGER NOT NULL,
-  umi_min INTEGER, umi_q10 INTEGER, umi_q50 INTEGER, umi_q90 INTEGER, umi_max INTEGER,
-  genes_min INTEGER, genes_q10 INTEGER, genes_q50 INTEGER, genes_q90 INTEGER, genes_max INTEGER);
-CREATE TABLE IF NOT EXISTS cidx_sample_celltype (
-  gsm_id TEXT NOT NULL, cell_type TEXT NOT NULL, cell_type_label TEXT, n_cells INTEGER NOT NULL, index_version TEXT NOT NULL,
-  PRIMARY KEY (gsm_id, cell_type));
-CREATE INDEX IF NOT EXISTS cidx_sample_celltype_ct ON cidx_sample_celltype (cell_type, n_cells);
-CREATE TABLE IF NOT EXISTS cidx_sample_feature (
-  gsm_id TEXT NOT NULL, feature TEXT NOT NULL, feature_version TEXT NOT NULL, n_values INTEGER NOT NULL,
-  min REAL, q10 REAL, q50 REAL, q90 REAL, max REAL, threshold REAL, n_ge INTEGER, index_version TEXT NOT NULL,
-  PRIMARY KEY (gsm_id, feature, threshold));
-"""
+SUMMARY_COLUMNS = (
+    "gsm_id",
+    "gse_id",
+    "subject",
+    "item",
+    "n_cells",
+    "n_hi1",
+    "n_hi2",
+    "q50",
+    "q90",
+    "mean",
+    "version",
+)
+LABEL_THRESHOLDS = (0.5, 0.8)
+DONOR_STATUS = {"healthy": 1, "diseased": 2}
+PERTURBATION_BITS = {"treated": 1, "genetic": 2, "control": 4}
+SAMPLE_KINDS = {"primary": 1, "cell_line": 2, "stem_cell": 3, "organoid": 4, "xenograft": 5}
+
+
+def _order_stats(x: np.ndarray) -> Tuple[Any, Any, Any]:
+    """(q50, q90, mean) of the values, quantiles as order statistics (``sorted[floor(q (n - 1))]``); empty -> blanks."""
+    if not len(x):
+        return "", "", ""
+    xs = np.sort(x)
+    n = len(xs)
+    return (
+        round(float(xs[int(np.floor(0.5 * (n - 1)))]), 6),
+        round(float(xs[int(np.floor(0.9 * (n - 1)))]), 6),
+        round(float(xs.mean()), 6),
+    )
+
+
+def _summary_rows(s_: "_SampleIn", fspecs: Sequence[FeatureSpec]) -> List[dict]:
+    """``sample_cell_summary`` rows of one sample (catalog table, schema/035 of the website): per cell type / sex / ancestry term
+    the cells carry (exact ids, no roll-up) and per feature; thresholds on the label score (0.5, 0.8) or the feature's."""
+    rows: List[dict] = []
+    lab = s_.labels or {}
+    base = {"gsm_id": s_.gsm, "gse_id": s_.gse}
+    cut1, cut2 = (q8_threshold(t) for t in LABEL_THRESHOLDS)
+    for subject, key, score_key, ids in (
+        ("cell_type", "cell_type_cl", "cell_type_score", None),
+        ("sex", "sex_chrom", "sex_score", {"female": "PATO:0000383", "male": "PATO:0000384"}),
+        ("ancestry", "ancestry_hancestro", "ancestry_prob", None),
+    ):
+        cat = lab.get(key)
+        if cat is None:
+            continue
+        score = lab.get(score_key)
+        for ci, name in enumerate(cat.cats):
+            item = (ids or {}).get(name) if ids is not None else name
+            if not name or not item:
+                continue
+            m = cat.codes == ci
+            sc = score[m] if score is not None else np.zeros(0, np.uint8)
+            sc = sc[sc != NA8]
+            q50, q90, mean = _order_stats(sc.astype(np.float64) / SCALE8)
+            rows.append(
+                {
+                    **base,
+                    "subject": subject,
+                    "item": item,
+                    "n_cells": int(m.sum()),
+                    "n_hi1": int((sc >= cut1).sum()) if score is not None else "",
+                    "n_hi2": int((sc >= cut2).sum()) if score is not None else "",
+                    "q50": q50,
+                    "q90": q90,
+                    "mean": mean,
+                    "version": s_.label_version,
+                }
+            )
+    for f in fspecs:
+        v = s_.features.get(f.id)
+        if v is None:
+            continue
+        ver = s_.feature_versions.get(f.feature_set) or f.method_version
+        have = v[v != f.na]
+        if f.kind == "category":
+            for ci, cname in enumerate(f.categories):
+                k = int((have == ci).sum())
+                if k:
+                    rows.append(
+                        {
+                            **base,
+                            "subject": "feature",
+                            "item": f"{f.id}={cname}",
+                            "n_cells": k,
+                            "n_hi1": "",
+                            "n_hi2": "",
+                            "q50": "",
+                            "q90": "",
+                            "mean": "",
+                            "version": ver,
+                        }
+                    )
+            continue
+        if not len(have):
+            continue
+        thr = list(f.thresholds) if f.kind == "score" else [0.5]
+        his = [int((have >= f.bound(t)).sum()) for t in thr[:2]] + ["", ""]
+        q50, q90, mean = _order_stats(f.decode(have).astype(np.float64))
+        rows.append(
+            {
+                **base,
+                "subject": "feature",
+                "item": f.id,
+                "n_cells": int(len(have)),
+                "n_hi1": his[0],
+                "n_hi2": his[1],
+                "q50": q50,
+                "q90": q90,
+                "mean": mean,
+                "version": ver,
+            }
+        )
+    return rows
 
 
 @dataclass
@@ -1182,8 +1512,9 @@ class BuildResult:
     d1: Dict[str, List[dict]] = field(default_factory=dict)
 
     def d1_export(self, out_dir: Union[str, Path]) -> List[str]:
-        """Per-sample aggregates as CSV files for the catalog (cidx_sample, cidx_sample_celltype, cidx_sample_feature) plus a
-        suggested schema (cidx_d1_schema.sql). Loading them into D1 is the catalog's job."""
+        """Per-sample aggregates for the catalog (tier 1, docs CELL-ARCHITECTURE.md): ``sample_cell_summary.csv`` (the layout of the
+        catalog table: gsm_id, gse_id, subject, item, n_cells, n_hi1, n_hi2, q50, q90, mean, version), ``cell_feature.csv`` (the
+        feature registry rows) and ``cidx_sample.csv`` (ordinal, QC quantiles and properties per sample). Loading is the catalog's job."""
         import csv
 
         out = Path(out_dir)
@@ -1197,9 +1528,37 @@ class BuildResult:
                 w.writeheader()
                 w.writerows(rows)
             written.append(str(p))
-        (out / "cidx_d1_schema.sql").write_text(D1_SCHEMA, encoding="utf-8")
-        written.append(str(out / "cidx_d1_schema.sql"))
         return written
+
+    def add_extension(
+        self, name: str, entry: Any, objects: Optional[Dict[str, bytes]] = None
+    ) -> str:
+        """Add a top-level directory key (e.g. ``junctions``, built by another module with ``encode_shard``) and its objects, and
+        re-derive the version id from the new content. Returns the new version. Readers ignore keys they do not know."""
+        if name in self.directory and name not in ("junctions",) and not name.startswith("x_"):
+            raise IndexError_(f"directory key {name!r} is taken")
+        old = version_key(self.version)
+        self.objects.pop(old, None)
+        for k, v in (objects or {}).items():
+            self.objects[k] = v
+        d = dict(self.directory)
+        d[name] = entry
+        stamp = self.version.rsplit("-", 1)[0]
+        created = d.pop("created_at", None)
+        d["version"] = None
+        digest = hashlib.sha256(
+            json.dumps(d, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()[:8]
+        d["version"] = f"{stamp}-{digest}"
+        d["created_at"] = created
+        self.directory = d
+        self.version = d["version"]
+        self.objects[version_key(self.version)] = json.dumps(d, separators=(",", ":")).encode()
+        for rows in self.d1.values():
+            for r in rows:
+                if "index_version" in r:
+                    r["index_version"] = self.version
+        return self.version
 
     def write(self, root: Union[str, Path], *, set_current: bool = True) -> List[str]:
         """Write every object under ``root`` in the server layout; returns the keys written."""
@@ -1280,6 +1639,20 @@ def build_index(
                     tissue=mm.get("tissue") or None,
                     tissue_label=mm.get("tissue_label") or None,
                     annot=(sd.get("annotations") or {}).get(av) if av else None,
+                    feat_refs=sd.get("features") or {},
+                    props={
+                        k: mm.get(k)
+                        for k in (
+                            "donor_status",
+                            "perturbation",
+                            "sample_kind",
+                            "disease",
+                            "disease_label",
+                            "development_stage",
+                            "development_stage_label",
+                        )
+                        if mm.get(k)
+                    },
                 )
             )
 
@@ -1298,15 +1671,21 @@ def build_index(
             return data
         return None
 
-    def feature_src(sm: _SampleIn):
-        if not features_dir:
-            return None
-        for fp in (
-            Path(features_dir) / f"{sm.gsm}.features.parquet",
-            Path(features_dir) / sm.gse / f"{sm.gsm}.features.parquet",
-        ):
-            if fp.exists():
-                return str(fp)
+    def feature_src(sm: _SampleIn, fset: str):
+        if features_dir:
+            names = (
+                [f"{sm.gsm}.features.{fset}.parquet"] if fset else [f"{sm.gsm}.features.parquet"]
+            )
+            for nm in names:
+                for fp in (Path(features_dir) / nm, Path(features_dir) / sm.gse / nm):
+                    if fp.exists():
+                        return str(fp)
+        ref = sm.feat_refs.get(fset)
+        if ref and ref.get("key"):
+            data = _get(t, ref["key"])
+            if ref.get("sha256") and hashlib.sha256(data).hexdigest() != ref["sha256"]:
+                raise IndexError_(f"{sm.gsm}: feature sidecar {ref['key']} fails its checksum")
+            return data
         return None
 
     t0 = time.time()
@@ -1354,6 +1733,24 @@ def build_index(
         {s.tissue: s.tissue_label for s in ok if s.tissue and s.tissue_label},
     )
     d_anc = make_dict((x for s in ok for x in lab_list(s, "ancestry_hancestro")), ont)
+    d_disease = make_dict(
+        (s.props.get("disease") for s in ok),
+        ont,
+        {
+            s.props["disease"]: s.props.get("disease_label")
+            for s in ok
+            if s.props.get("disease") and s.props.get("disease_label")
+        },
+    )
+    d_stage = make_dict(
+        (s.props.get("development_stage") for s in ok),
+        ont,
+        {
+            s.props["development_stage"]: s.props.get("development_stage_label")
+            for s in ok
+            if s.props.get("development_stage") and s.props.get("development_stage_label")
+        },
+    )
     orgs = sorted({s.organism for s in ok if s.organism})
     d_org = [{"code": 0, "id": None, "label": "unknown", "anc": []}] + [
         {"code": i, "id": ORGANISM_IDS.get(o, o), "label": o, "anc": []}
@@ -1378,7 +1775,7 @@ def build_index(
     for org in sorted({s.organism for s in ok}, key=lambda o: code["org"].get(o, 0)):
         part = [s for s in ok if s.organism == org]
         colspec = list(SHARD_COLUMNS) + [
-            (f.column, DT_U8 if f.dtype == "u8" else DT_U16, f"feature:{f.name}") for f in fspecs
+            (f.column, DT_U8 if f.dtype == "u8" else DT_U16, f"feature:{f.id}") for f in fspecs
         ]
         parts: Dict[str, List[np.ndarray]] = {k: [] for k, _, _ in colspec}
         for s in part:
@@ -1421,7 +1818,7 @@ def build_index(
                 else np.full(n, NA8, np.uint8)
             )
             for f in fspecs:
-                parts[f.column].append(s.features.get(f.name, np.full(n, f.na, f.np_dtype)))
+                parts[f.column].append(s.features.get(f.id, np.full(n, f.na, f.np_dtype)))
         cols = {
             k: (np.concatenate(v) if v else np.zeros(0, _NP[dt])).astype(_NP[dt])
             for (k, dt, _), v in zip(colspec, parts.values())
@@ -1503,6 +1900,37 @@ def build_index(
         "n_columns": np.array([s.n_columns for s in ok], np.uint32),
         "n_called": np.array([len(s.cols) for s in ok], np.uint32),
         "labeled": np.array([1 if s.labels else 0 for s in ok], np.uint8),
+        # sample-level properties (catalog sample_property / sample_term), filters donor_status, perturbation, sample_kind,
+        # disease, development_stage
+        "donor": np.array(
+            [DONOR_STATUS.get(str(s.props.get("donor_status", "")).lower(), 0) for s in ok],
+            np.uint8,
+        ),
+        "perturb": np.array(
+            [
+                sum(
+                    b_
+                    for k_, b_ in PERTURBATION_BITS.items()
+                    if k_ in re.split(r"[;,|/ ]+", str(s.props.get("perturbation", "")).lower())
+                )
+                for s in ok
+            ],
+            np.uint8,
+        ),
+        "kind": np.array(
+            [SAMPLE_KINDS.get(str(s.props.get("sample_kind", "")).lower(), 0) for s in ok], np.uint8
+        ),
+        "disease": np.array(
+            [{e["id"]: e["code"] for e in d_disease}.get(s.props.get("disease"), 0) for s in ok],
+            np.uint16,
+        ),
+        "dev_stage": np.array(
+            [
+                {e["id"]: e["code"] for e in d_stage}.get(s.props.get("development_stage"), 0)
+                for s in ok
+            ],
+            np.uint16,
+        ),
     }
     # per-sample aggregates (spec 4.5): order statistics of n_umi (exon + intron) and n_genes, and of every feature, plus
     # counts above the registered thresholds; used to prune samples and to rank studies without reading cells
@@ -1517,44 +1945,19 @@ def build_index(
         arr = np.array(rows_, dtype=np.int64).reshape(-1, 5)
         for j, nm in enumerate(stat_names):
             sample_cols[f"{k}_{nm}"] = np.minimum(arr[:, j], 0xFFFFFFFF).astype(np.uint32)
-    feat_rows: List[dict] = []
     for f in fspecs:
-        st_ = [_qstats(s_.features.get(f.name, np.zeros(0, f.np_dtype)), na=f.na) for s_ in ok]
+        st_ = [_qstats(s_.features.get(f.id, np.zeros(0, f.np_dtype)), na=f.na) for s_ in ok]
         arr = np.array(st_, dtype=np.int64).reshape(-1, 6)
         sample_cols[f"{f.column}_n"] = arr[:, 0].astype(np.uint32)
         for j, nm in enumerate(stat_names):
             sample_cols[f"{f.column}_{nm}"] = arr[:, j + 1].astype(f.np_dtype)
         for ti, thr in enumerate(f.thresholds):
-            cut = f.bound(thr, upper=False)
+            cut = f.bound(thr)
             ge = []
             for s_ in ok:
-                v = s_.features.get(f.name, np.zeros(0, f.np_dtype))
+                v = s_.features.get(f.id, np.zeros(0, f.np_dtype))
                 ge.append(int(((v != f.na) & (v >= cut)).sum()))
             sample_cols[f"{f.column}_ge{ti}"] = np.array(ge, np.uint32)
-        for i_, s_ in enumerate(ok):
-            dec = f.decode(arr[i_, 1:6])
-            base_row = {
-                "gsm_id": s_.gsm,
-                "feature": f.name,
-                "feature_version": f.version,
-                "n_values": int(arr[i_, 0]),
-                "min": float(dec[0]) if arr[i_, 0] else "",
-                "q10": float(dec[1]) if arr[i_, 0] else "",
-                "q50": float(dec[2]) if arr[i_, 0] else "",
-                "q90": float(dec[3]) if arr[i_, 0] else "",
-                "max": float(dec[4]) if arr[i_, 0] else "",
-            }
-            if f.thresholds:
-                for ti, thr in enumerate(f.thresholds):
-                    feat_rows.append(
-                        {
-                            **base_row,
-                            "threshold": thr,
-                            "n_ge": int(sample_cols[f"{f.column}_ge{ti}"][i_]),
-                        }
-                    )
-            else:
-                feat_rows.append({**base_row, "threshold": "", "n_ge": ""})
     blob = encode_shard(sample_cols, group_rows)
     samples_key = obj_key(blob, "scx")
     objects[samples_key] = blob
@@ -1636,10 +2039,21 @@ def build_index(
             "tissue": d_tissue,
             "sex": SEX_DICT,
             "ancestry": d_anc,
+            "disease": d_disease,
+            "development_stage": d_stage,
         },
-        "terms": term_labels([d_ct, d_tissue, d_anc], ont),
+        "properties": {
+            "donor_status": DONOR_STATUS,
+            "perturbation": PERTURBATION_BITS,
+            "sample_kind": SAMPLE_KINDS,
+        },
+        "terms": term_labels([d_ct, d_tissue, d_anc, d_disease, d_stage], ont),
         "features": [f.to_json() for f in fspecs],
-        "sample_stats": {"n_umi": "umi", "n_genes": "genes", **{f.name: f.column for f in fspecs}},
+        "sample_stats": {
+            "n_umi": "umi",
+            "n_genes": "genes",
+            **{f.id: f.column for f in fspecs if f.kind != "category"},
+        },
         "samples": {
             "key": samples_key,
             "rows": len(ok),
@@ -1680,9 +2094,12 @@ def build_index(
     }
     org_label = {e["code"]: e["label"] for e in d_org}
     tis_id = {e["code"]: e["id"] for e in d_tissue}
-    ct_entry = {e["code"]: e for e in d_ct}
-    gsm_of_so = {so_of[s_.gsm]: s_.gsm for s_ in ok}
+    inv = {
+        k: {v: k_ for k_, v in m.items()}
+        for k, m in (("donor", DONOR_STATUS), ("kind", SAMPLE_KINDS))
+    }
     d1_samples = []
+    summary_out: List[dict] = []
     for i_, s_ in enumerate(ok):
         r = {
             "gsm_id": s_.gsm,
@@ -1693,26 +2110,17 @@ def build_index(
             "tissue": tis_id.get(int(sample_cols["tissue"][i_])) or "",
             "n_called": int(sample_cols["n_called"][i_]),
             "labeled": int(sample_cols["labeled"][i_]),
+            "donor_status": inv["donor"].get(int(sample_cols["donor"][i_]), ""),
+            "perturbation": ";".join(
+                k for k, b_ in PERTURBATION_BITS.items() if int(sample_cols["perturb"][i_]) & b_
+            ),
+            "sample_kind": inv["kind"].get(int(sample_cols["kind"][i_]), ""),
         }
         for k in ("umi", "genes"):
             for nm in stat_names:
                 r[f"{k}_{nm}"] = int(sample_cols[f"{k}_{nm}"][i_])
         d1_samples.append(r)
-    ct_n: Dict[Tuple[int, int], int] = {}
-    for _o, ct, _sx, _an, so, c in summary_rows:
-        ct_n[(so, ct)] = ct_n.get((so, ct), 0) + c
-    d1_ct = [
-        {
-            "gsm_id": gsm_of_so[so],
-            "cell_type": ct_entry[ct]["id"] or "unknown",
-            "cell_type_label": ct_entry[ct]["label"],
-            "n_cells": n_,
-            "index_version": version,
-        }
-        for (so, ct), n_ in sorted(ct_n.items())
-    ]
-    for r in feat_rows:
-        r["index_version"] = version
+        summary_out.extend(_summary_rows(s_, fspecs))
     return BuildResult(
         version,
         directory,
@@ -1720,15 +2128,31 @@ def build_index(
         stats,
         errors,
         d1={
+            "sample_cell_summary": [{k: r_[k] for k in SUMMARY_COLUMNS} for r_ in summary_out],
+            "cell_feature": [f.cell_feature_row() for f in fspecs],
             "cidx_sample": d1_samples,
-            "cidx_sample_celltype": d1_ct,
-            "cidx_sample_feature": feat_rows,
         },
     )
 
 
 # ================================================================================================================= query engine
-_RANGE_NAME = re.compile(r"^[a-z][a-z0-9_]{0,47}$")
+_RANGE_NAME = re.compile(r"^[a-z][a-z0-9_]{0,47}(/[a-z][a-z0-9_]{0,47})?$")
+WHERE_KEYS = (
+    "organism",
+    "cell_type",
+    "tissue",
+    "sex",
+    "ancestry",
+    "samples",
+    "studies",
+    "donor_status",
+    "perturbation",
+    "sample_kind",
+    "disease",
+    "development_stage",
+    "ranges",
+    "categories",
+)
 STUDY_RANKS = ("cells", "given", "random")
 SAMPLINGS = ("uniform", "chunks")
 
@@ -1744,7 +2168,13 @@ class Query:
     ancestry: Optional[List[str]] = None
     samples: Optional[List[str]] = None
     studies: Optional[List[str]] = None
+    donor_status: Optional[List[str]] = None
+    perturbation: Optional[List[str]] = None
+    sample_kind: Optional[List[str]] = None
+    disease: Optional[List[str]] = None
+    development_stage: Optional[List[str]] = None
     ranges: Dict[str, Tuple[Optional[float], Optional[float]]] = field(default_factory=dict)
+    categories: Dict[str, List[str]] = field(default_factory=dict)
 
     @classmethod
     def from_json(cls, w: dict) -> "Query":
@@ -1753,21 +2183,7 @@ class Query:
                 return None
             return [str(x) for x in (v if isinstance(v, (list, tuple)) else [v])]
 
-        bad = [
-            k
-            for k in w
-            if k
-            not in (
-                "organism",
-                "cell_type",
-                "tissue",
-                "sex",
-                "ancestry",
-                "samples",
-                "studies",
-                "ranges",
-            )
-        ]
+        bad = [k for k in w if k not in WHERE_KEYS]
         if bad:
             raise IndexError_(f"unknown filter(s) {bad}")
         q = cls(
@@ -1778,7 +2194,14 @@ class Query:
             ancestry=lst(w.get("ancestry")),
             samples=lst(w.get("samples")),
             studies=lst(w.get("studies")),
+            donor_status=lst(w.get("donor_status")),
+            perturbation=lst(w.get("perturbation")),
+            sample_kind=lst(w.get("sample_kind")),
+            disease=lst(w.get("disease")),
+            development_stage=lst(w.get("development_stage")),
         )
+        for k, v in (w.get("categories") or {}).items():
+            q.categories[str(k)] = [str(x) for x in (v if isinstance(v, (list, tuple)) else [v])]
         for k, v in (w.get("ranges") or {}).items():
             if not _RANGE_NAME.match(str(k)):
                 raise IndexError_(f"range field {k!r} is not a field name")
@@ -1806,7 +2229,15 @@ class _Plan:
         self.q = q
         dicts = d["dicts"]
         self.terms = d.get("terms") or {}
-        self.features = {f["name"]: FeatureSpec.from_json(f) for f in d.get("features") or []}
+        self.features = {}  # feature id -> spec (also reachable by its bare name when that is unique)
+        specs = [FeatureSpec.from_json(f) for f in d.get("features") or []]
+        by_name: Dict[str, List[FeatureSpec]] = {}
+        for f in specs:
+            self.features[f.id] = f
+            by_name.setdefault(f.name, []).append(f)
+        self._alias = {
+            n: fs[0].id for n, fs in by_name.items() if len(fs) == 1 and n not in self.features
+        }
         self.org_codes = None
         if q.organism:
             self.org_codes = set(
@@ -1837,15 +2268,30 @@ class _Plan:
             if k in RANGE_FIELDS:
                 a, b = _bounds(k, lo, hi)
                 self.ranges.append((k, RANGE_FIELDS[k], a, b))
-            elif k in self.features:
-                f = self.features[k]
+            elif self._feature(k) is not None and self._feature(k).kind != "category":  # type: ignore[union-attr]
+                f = self._feature(k)
+                assert f is not None
                 a = 0 if lo is None else max(0, f.bound(lo, upper=False))
                 b = f.scale if hi is None else min(f.scale, f.bound(hi, upper=True))
-                self.ranges.append((k, (f.column,), a, b))
+                self.ranges.append((f.id, (f.column,), a, b))
             else:
                 raise IndexError_(
                     f"unknown range field {k!r}; use {sorted(RANGE_FIELDS) + sorted(self.features)}"
                 )
+        # category features: {column: allowed codes}
+        self.cats: Dict[str, np.ndarray] = {}
+        for k, vals in q.categories.items():
+            f = self._feature(k)
+            if f is None or f.kind != "category":
+                raise IndexError_(f"{k!r} is not a registered category feature")
+            unknown = [v for v in vals if v not in f.categories]
+            if unknown:
+                raise IndexError_(
+                    f"{f.id}: unknown categories {unknown[:5]} (use {list(f.categories)[:20]})"
+                )
+            m = np.zeros(NA16 + 1, bool)
+            m[[f.categories.index(v) for v in vals]] = True
+            self.cats[f.column] = m
         self.stat_cols = d.get("sample_stats") or {}
         self.st = idx.samples_table()
         self.sample_set: Optional[np.ndarray] = None
@@ -1856,7 +2302,62 @@ class _Plan:
             if q.studies:
                 keep |= np.isin(self.st["gse"], [gse_num(g) for g in q.studies])
             self.sample_set = np.sort(self.st["so"][keep].astype(np.int64))
+        # sample-level properties (tier-1 facts carried in the sample table) restrict the sample set
+        pm = self._property_mask(d)
+        if pm is not None:
+            allowed = np.sort(self.st["so"][pm].astype(np.int64))
+            self.sample_set = (
+                allowed if self.sample_set is None else np.intersect1d(self.sample_set, allowed)
+            )
         self.exclude = np.array(sorted(d.get("exclude") or []), dtype=np.int64)
+
+    def _feature(self, k: str) -> Optional[FeatureSpec]:
+        return self.features.get(k) or self.features.get(self._alias.get(k, ""))
+
+    def _property_mask(self, d: dict) -> Optional[np.ndarray]:
+        q, st = self.q, self.st
+        props = d.get("properties") or {}
+        m = None
+
+        def both(x):
+            nonlocal m
+            m = x if m is None else (m & x)
+
+        if q.donor_status:
+            lut = props.get("donor_status", DONOR_STATUS)
+            codes = [
+                lut[v.lower()] if v.lower() in lut else (0 if v.lower() == "unknown" else -1)
+                for v in q.donor_status
+            ]
+            if -1 in codes:
+                raise IndexError_(f"donor_status is one of {sorted(lut)} or unknown")
+            both(np.isin(st["donor"], codes))
+        if q.perturbation:
+            bits = props.get("perturbation", PERTURBATION_BITS)
+            if any(v.lower() not in bits and v.lower() != "unknown" for v in q.perturbation):
+                raise IndexError_(f"perturbation is one of {sorted(bits)} or unknown")
+            want = sum(bits[v.lower()] for v in q.perturbation if v.lower() in bits)
+            x = (st["perturb"].astype(np.int64) & want) != 0
+            if any(v.lower() == "unknown" for v in q.perturbation):
+                x |= st["perturb"] == 0
+            both(x)
+        if q.sample_kind:
+            lut = props.get("sample_kind", SAMPLE_KINDS)
+            codes = [
+                lut[v.lower()] if v.lower() in lut else (0 if v.lower() == "unknown" else -1)
+                for v in q.sample_kind
+            ]
+            if -1 in codes:
+                raise IndexError_(f"sample_kind is one of {sorted(lut)} or unknown")
+            both(np.isin(st["kind"], codes))
+        for key, col in (("disease", "disease"), ("development_stage", "dev_stage")):
+            wanted = getattr(q, key)
+            if wanted:
+                entries = d["dicts"].get(key) or [
+                    {"code": 0, "id": None, "label": "unknown", "anc": []}
+                ]
+                both(np.isin(st[col], dict_codes(entries, wanted, terms=self.terms)))
+        return m
 
     def _mask(self, entries, wanted, size) -> Optional[np.ndarray]:
         if not wanted:
@@ -1871,7 +2372,7 @@ class _Plan:
         return mask is None or bool(mask[lo : hi + 1].any())
 
     def row_level(self) -> bool:
-        return bool(self.ranges)
+        return bool(self.ranges or self.cats)
 
     def _zone_ok(self, z: Callable[[str], Tuple[int, int]]) -> bool:
         if (
@@ -1886,6 +2387,10 @@ class _Plan:
             lo = sum(z(c)[0] for c in cs)
             hi = sum(z(c)[1] for c in cs)
             if hi < a or lo > b:
+                return False
+        for col, m in self.cats.items():
+            lo, hi = z(col)
+            if not m[lo : hi + 1].any():
                 return False
         if self.sample_set is not None:
             lo, hi = z("sample")
@@ -1913,6 +2418,7 @@ class _Plan:
             need.append("anc")
         for _k, cs, _a, _b in self.ranges:
             need.extend(cs)
+        need.extend(self.cats)
         return list(dict.fromkeys(need))
 
     def rows(self, cols: Dict[str, np.ndarray]) -> np.ndarray:
@@ -1929,6 +2435,8 @@ class _Plan:
         for _k, cs, a, b in self.ranges:
             v = sum(cols[c].astype(np.int64) for c in cs)
             m &= (v >= a) & (v <= b)
+        for col, cm in self.cats.items():
+            m &= cm[cols[col]]
         s = cols["sample"].astype(np.int64)
         if self.sample_set is not None:
             m &= np.isin(s, self.sample_set)
@@ -1952,7 +2460,7 @@ class _Plan:
                 lo = st[f"{pre}_min"].astype(np.int64)
                 hi = st[f"{pre}_max"].astype(np.int64)
                 ok = ~((hi < a) | (lo > b))
-                if k in self.features:
+                if f"{pre}_n" in st:
                     ok &= st[f"{pre}_n"] > 0
                 m &= ok
         return m
@@ -2229,16 +2737,7 @@ class Index:
         study_rank: str = "cells",
         sampling: str = "uniform",
         cursor: Optional[Sequence[int]] = None,
-        fields: Sequence[str] = (
-            "ct",
-            "tissue",
-            "umi_exon",
-            "umi_intron",
-            "feat_exon",
-            "ct_score",
-            "sex",
-            "anc",
-        ),
+        fields: Optional[Sequence[str]] = None,
         max_rows: Optional[int] = None,
     ) -> Tuple["pd.DataFrame", dict]:
         """A seeded sample of at most ``n`` matching cells from at most ``max_studies`` studies (spec section 6.3).
@@ -2273,6 +2772,17 @@ class Index:
             info["over_budget"] = {"rows": e_max, "max_rows": max_rows}
         p.sample_set = sel if p.sample_set is None else np.intersect1d(p.sample_set, sel)
         valid = {c for c, _, _ in SHARD_COLUMNS} | {f.column for f in p.features.values()}
+        if fields is None:
+            fields = [
+                "ct",
+                "tissue",
+                "umi_exon",
+                "umi_intron",
+                "feat_exon",
+                "ct_score",
+                "sex",
+                "anc",
+            ] + [f.column for f in p.features.values()]
         want = list(dict.fromkeys(["sample", "col"] + [f for f in fields if f in valid]))
         acc: Dict[str, List[np.ndarray]] = {k: [] for k in want}
         if len(sel):
@@ -2440,7 +2950,7 @@ class Index:
                 f[v == NA8] = np.nan
                 out[{"ct_score": "cell_type_score", "anc_prob": "ancestry_prob"}.get(k, k)] = f
             elif k in feats:
-                out[feats[k].name] = feats[k].decode(v)
+                out[feats[k].id] = feats[k].decode(v)
             else:
                 out[
                     {
@@ -2508,7 +3018,21 @@ def _post(
 
 def _query_json(**kw) -> dict:
     w: Dict[str, Any] = {}
-    for k in ("organism", "cell_type", "tissue", "sex", "ancestry", "samples", "studies"):
+    for k in (
+        "organism",
+        "cell_type",
+        "tissue",
+        "sex",
+        "ancestry",
+        "samples",
+        "studies",
+        "donor_status",
+        "perturbation",
+        "sample_kind",
+        "disease",
+        "development_stage",
+        "categories",
+    ):
         v = kw.get(k)
         if v is not None:
             w[k] = v
@@ -2555,6 +3079,12 @@ def find_cells(
     max_genes: Optional[int] = None,
     min_cell_type_score: Optional[float] = None,
     ranges: Optional[dict] = None,
+    donor_status: Union[None, str, Sequence[str]] = None,
+    perturbation: Union[None, str, Sequence[str]] = None,
+    sample_kind: Union[None, str, Sequence[str]] = None,
+    disease: Union[None, str, Sequence[str]] = None,
+    development_stage: Union[None, str, Sequence[str]] = None,
+    categories: Optional[Dict[str, Sequence[str]]] = None,
     n: int = MAX_CELLS_PER_REQUEST,
     seed: int = 0,
     max_studies: int = MAX_STUDIES_PER_REQUEST,
@@ -2589,6 +3119,12 @@ def find_cells(
         max_genes=max_genes,
         min_cell_type_score=min_cell_type_score,
         ranges=ranges,
+        donor_status=donor_status,
+        perturbation=perturbation,
+        sample_kind=sample_kind,
+        disease=disease,
+        development_stage=development_stage,
+        categories=categories,
     )
     if not _use_worker(via, base):
         df, _info = Index.open(version, base=base).sample_cells(

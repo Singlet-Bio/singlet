@@ -1,6 +1,7 @@
 # Singlet v2 atlas cell index (`v2/cidx/`) and cross-study gather
 
-Status: DRAFT 2 (2026-10-23): adds per-cell feature columns (4.9), per-sample aggregates and their D1 export (4.5, 4.10), seeded
+Status: DRAFT 3 (2026-10-23), aligned with the cell data architecture agreed with Zach (`CELL-ARCHITECTURE.md`, website docs: tier 1 =
+samples in D1, tier 2 = cells in R2; this index is the tier-2 core). DRAFT 2: adds per-cell feature columns (4.9), per-sample aggregates and their D1 export (4.5, 4.10), seeded
 sampling with study ranking and the per-request caps of 10,000 cells and 10 studies (6.3), and the per-request cost budget with plan
 answers (8.2). Extends `docs/format-v2.md` (section 8 sketched `v2/cidx/` as "a later addition"). Reference
 implementation: `python/singlet/v2/atlas.py` (format, builder, query engine, client), `scripts/v2_cidx_build.py` (builder CLI); the
@@ -143,14 +144,18 @@ sample ordinals hidden from this version (withdrawn or replaced samples between 
 ### 4.5 Sample table and per-sample aggregates
 
 SCX1 with one row per indexed sample, ordered by `so`: `so`, `gsm` and `gse` (the accession numbers), `organism`, `tissue` (codes),
-`n_columns`, `n_called`, `labeled`, and per-sample aggregates of the called cells:
+`n_columns`, `n_called`, `labeled`, sample-level properties from the catalog (`donor` u8: 1 healthy, 2 diseased; `perturb` u8 bits: 1
+treated, 2 genetic, 4 control; `kind` u8: 1 primary, 2 cell_line, 3 stem_cell, 4 organoid, 5 xenograft; `disease` and `dev_stage` u16
+dictionary codes of MONDO/PATO and HsapDv/MmusDv terms; 0 = unknown), and per-sample aggregates of the called cells:
 
 * `umi_min, umi_q10, umi_q50, umi_q90, umi_max` (n_umi = exon + intron) and `genes_*` (n_genes), u32;
 * for every feature `fK`: `fK_n` (cells with a value), `fK_min, fK_q10, fK_q50, fK_q90, fK_max` (codes), and `fK_geJ` (cells at or above
   the feature's J-th registered threshold).
 
 Quantiles are order statistics (`sorted[floor(q (n - 1))]`), so they are stored values and reproducible. It is the ordinal registry
-(the next build reads it to keep ordinals), resolves `samples` / `studies` filters, and prunes samples before any shard is read: a range
+(the next build reads it to keep ordinals), resolves `samples` / `studies` and the sample-property filters (`donor_status`,
+`perturbation`, `sample_kind`, `disease`, `development_stage`; the last two include descendants), and prunes samples before any shard is
+read: a range
 on `n_umi`, `n_genes` or a feature skips every sample whose [min, max] cannot overlap it (and every sample without values of that
 feature). The directory's `sample_stats` maps range fields to these column prefixes.
 
@@ -186,35 +191,63 @@ plan; ~1.3 KB per sample, measured, ~90 MB for the atlas in ~280 blocks), but th
 
 ### 4.9 Per-cell features
 
-A feature is any number per called cell that a pipeline outside the index computes: a gene-set score (single-cell GSEA, e.g. Hallmark),
-a malignancy probability, a perturbation call, a future derived score. The builder takes a registry and one file per sample:
+A feature is a value per called cell that a job outside the index computes (CELL-ARCHITECTURE.md section 3): a gene-set score
+(rank-based single-cell GSEA), a malignancy probability, a perturbation call. Its registry entry is the catalog's `cell_feature` row:
 
 ```json
-{"features": [{"name": "hallmark_hypoxia", "version": "msigdb-2024.1/ucell-1", "dtype": "u8", "lo": -1, "hi": 1,
-               "thresholds": [0.0, 0.5], "description": "...", "producer": "singlet.enrich 0.4"}]}
+{"features": [{"feature_id": "hallmark/hypoxia", "kind": "score", "label": "Hallmark hypoxia", "method": "ucell",
+               "method_version": "ucell-1/msigdb-2024.1", "source_ref": "MSigDB Hallmark", "licence": "CC BY 4.0",
+               "organisms": ["Homo sapiens"], "thresholds": [0.5, 0.8], "comparable": "atlas"},
+              {"feature_id": "cnv/malignant", "kind": "flag", ...}, {"feature_id": "cycle/phase", "kind": "category", "categories": ["G1", "S", "G2M"], ...}]}
 ```
 
-and `<features_dir>/<GSM>.features.parquet` (or `<GSE>/<GSM>...`) with `col` and one float column per feature it provides. Values
-are stored as linear codes over `[lo, hi]` (clipped): u8 = `floor((x - lo) / (hi - lo) * 254 + 0.5)`, 255 = missing; u16 the same with
-65,534 and 65,535. Bounds compare against their own codes as scores do (4.2). Names are `[a-z][a-z0-9_]*` (at most 48 characters),
-unique, not a built-in field; at most 64 features and 4 thresholds each. The builder assigns shard columns `f1, f2, ...` in registry
-order and records the registry (with `column`, `scale`, `na`) in the directory under `features`; a query names a feature exactly like a
-built-in range field (`"ranges": {"hallmark_hypoxia": [0.3, null]}`) and cell answers return it decoded. Versioning: a feature's
-`version` is part of the registry; changing a producer or its parameters is a new version of the feature, and the index is rebuilt
-(features, like labels, are inputs of a version). A sample with no feature file gets NA for every feature. A u8 feature costs about
-1 byte per cell, a u16 about 2.
+Kinds and storage (one shard column each, `f1, f2, ...` in registry order):
+
+* `score`: a number in `[lo, hi]` (default [0, 1]), u8 `floor((x - lo)/(hi - lo) * 254 + 0.5)`, 255 = NA (or `"dtype": "u16"`: 65,534 /
+  65,535 when 1/254 resolution is not enough); range filters by the feature id, bounds compare against their own codes (4.2);
+* `flag`: boolean as a u8 score (true = 1.0 = 254, false = 0, NA = 255): `"ranges": {"cnv/malignant": [1, 1]}`;
+* `category`: u16 index into `categories` (65,535 = NA): `"categories": {"cycle/phase": ["S", "G2M"]}`.
+
+Ids are `<feature_set>/<name>` (both `[a-z][a-z0-9_]*`, at most 48 characters); a query may also use the bare name when it is unique.
+At most 64 features per version and 4 thresholds each (default 0.5, 0.8). `comparable` (`atlas` | `sample`) is carried through: only
+`atlas` features are meant as cross-study filters (the catalog enforces it in search; the index stores both). Cell answers return
+features decoded under their id (category names, flag 0/1).
+
+**Feature files** (the interchange a feature job writes, one per sample and feature set): `<GSM>.features.<set>.parquet` with `gsm`,
+`col` (unique, the cells-table column), one column per feature named by the feature's name (float32 score in range, NaN = not computed;
+bool flag; uint16 category code), metadata `singlet_features_schema = "1"`, `feature_set`, `method_version`; called cells only. The builder
+reads them from `--features-dir` (`<dir>/<GSM>.features.<set>.parquet` or `<dir>/<GSE>/...`) or, once published, from the study
+manifest: `atlas.normalize_feature_sidecar` validates a file (exactly the registered columns, value ranges, unique `col`, no other
+columns: no genes, no genotypes) into a canonical, deterministic Parquet at **`v2/cf/<GSM>/<set>.<d16>.parquet`** (immutable,
+content-addressed, readable by DuckDB), and `atlas.attach_features` references it as `samples[i].features[<set>] = {key, sha256, bytes,
+n_rows, feature_set, method_version}`, never inside the `.s2`. The canonical sidecar is the same schema as the interchange file (Parquet,
+not SCX1): the Worker never reads sidecars, the index carries the columns. A sample without a file gets NA for that set. Changing a
+method or its parameters is a new `method_version`; the index is rebuilt (features, like labels, are inputs of a version).
 
 ### 4.10 Export to the catalog (D1)
 
-`BuildResult.d1_export(dir)` / `scripts/v2_cidx_build.py --d1-export dir` writes the per-sample aggregates as CSV for the catalog,
-which owns the tables and loads them (tier 1: sample filters and pruning in D1 / the bit index; tier 2: this index):
+`BuildResult.d1_export(dir)` / `scripts/v2_cidx_build.py --d1-export dir` writes, in the layouts of the catalog's live tables (website
+schema/035; loading is the catalog's job, `POST /api/ingest/...`):
 
-* `cidx_sample.csv`: gsm_id, gse_id, so, index_version, organism, tissue, n_called, labeled, umi_min..umi_max, genes_min..genes_max;
-* `cidx_sample_celltype.csv`: gsm_id, cell_type (CL id), cell_type_label, n_cells, index_version (cells per CL term per sample, from the
-  summary);
-* `cidx_sample_feature.csv`: gsm_id, feature, feature_version, n_values, min, q10, q50, q90, max (decoded), threshold, n_ge, index_version
-  (one row per registered threshold);
-* `cidx_d1_schema.sql`: the suggested tables.
+* `sample_cell_summary.csv`: `gsm_id, gse_id, subject, item, n_cells, n_hi1, n_hi2, q50, q90, mean, version`, one row per sample and
+  - `subject = cell_type | sex | ancestry`, `item` = the exact CL / PATO (female, male; "ambiguous" calls are not exported) / HANCESTRO
+    id the cells carry (no roll-up: the catalog sums descendants through `ontology_closure`); `n_cells` = cells with that label;
+    `n_hi1`, `n_hi2` = of those, label score >= 0.5 and >= 0.8; `q50, q90, mean` of the label score; `version` = the labels'
+    `model_version`;
+  - `subject = feature`, `item` = the feature id; `n_cells` = cells with a value; `n_hi1`, `n_hi2` at the feature's first two
+    thresholds (flags: `n_hi1` = true cells); `q50, q90, mean` of the decoded values; categories as one row per category with
+    `item = <id>=<category>` and its count; `version` = the file's `method_version`.
+  Quantiles are order statistics of the stored codes, decoded.
+* `cell_feature.csv`: the registry rows (`feature_id, feature_set, kind, label, description, method, method_version, source_ref,
+  licence, organisms, ontology_id, categories, thresholds, comparable, storage = 'shard'`).
+* `cidx_sample.csv`: per sample the ordinal, index version, organism, tissue, cell counts, properties and n_umi / n_genes quantiles.
+
+### 4.11 Extensions of a version
+
+Other atlas-wide aggregates built in the same pass (e.g. per-junction counts by cell type and tissue, from the shared junction table)
+are SCX1 objects under `v2/cidx/obj/` referenced by an extra top-level directory key (`"junctions": {...}`), using the version's
+dictionary codes. `BuildResult.add_extension(name, entry, objects)` adds them and re-derives the version id; readers (Python, the
+Worker) ignore keys they do not know.
 
 ### 4.8 Parquet export
 
@@ -254,7 +287,11 @@ difference between ~1 s and ~10 s of CPU for a broad query; general compression 
 {"version": "current",
  "where": {"organism": "Homo sapiens", "cell_type": ["CL:0000084"], "tissue": "lung", "sex": ["female"], "ancestry": "HANCESTRO:0005",
            "samples": ["GSM..."], "studies": ["GSE..."],
-           "ranges": {"n_umi": [1000, null], "n_genes": [200, 6000], "cell_type_score": [0.5, null], "hallmark_hypoxia": [0.3, null]}},
+           "donor_status": ["diseased"], "perturbation": ["treated"], "sample_kind": ["primary"], "disease": "MONDO:0004992",
+           "development_stage": "HsapDv:0000087",
+           "ranges": {"n_umi": [1000, null], "n_genes": [200, 6000], "cell_type_score": [0.5, null], "hallmark/hypoxia": [0.3, null],
+                      "cnv/malignant": [1, 1]},
+           "categories": {"cycle/phase": ["S", "G2M"]}},
  "return": "count" | "cells", "by": ["cell_type", "tissue"],
  "n": 10000, "seed": 0, "max_studies": 10, "study_rank": "cells" | "given" | "random", "sampling": "uniform" | "chunks",
  "cursor": "...", "fields": ["ct", "umi_exon", "f1", ...], "dry_run": false}
@@ -262,7 +299,10 @@ difference between ~1 s and ~10 s of CPU for a broad query; general compression 
 
 Semantics (identical in `singlet.v2.atlas.Index` and the Worker; the Worker tests check the Worker's answers against golden answers
 computed by the Python engine): values in a list are ORed, fields are ANDed. `cell_type`, `tissue`, `ancestry` take ontology ids or
-labels (case-insensitive, also of ancestors) and include descendants. `sex` takes female / male / ambiguous / unknown. Ranges are
+labels (case-insensitive, also of ancestors) and include descendants; so do `disease` and `development_stage` (sample-level).
+`donor_status` (healthy / diseased / unknown), `perturbation` (treated / genetic / control / unknown; a sample matches when it has any
+of the given kinds) and `sample_kind` (primary / cell_line / stem_cell / organoid / xenograft / unknown) are sample-level properties.
+`sex` takes female / male / ambiguous / unknown. `categories` filters category features by name. Ranges are
 inclusive, `null` = open; range fields: `n_umi`, `n_umi_exon`, `n_umi_intron`, `n_genes`, `n_feat_exon`, `n_feat_intron`,
 `cell_type_score`, `sex_score`, `ancestry_prob`, and every registered feature. Score and feature bounds are applied at the stored
 resolution (4.2) and a missing value never satisfies a range. Unknown filters, fields or terms are errors (400), not silently ignored.

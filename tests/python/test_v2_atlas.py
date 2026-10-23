@@ -77,7 +77,7 @@ def _truth(root, s):
             else np.zeros(len(cols))
         )
         feat = np.diff(t["exon"].indptr)[cols]
-        fp = pathlib.Path(root) / "features" / f"{gsm}.features.parquet"
+        fp = pathlib.Path(root) / "features" / f"{gsm}.features.test.parquet"
         fv = pd.read_parquet(fp).set_index("col") if fp.exists() else None
         for k, c in enumerate(cols):
             r = dict(
@@ -94,8 +94,14 @@ def _truth(root, s):
                 anc_prob=float(lab["ancestry_prob"][k]),
             )
             for name, f in feats.items():
-                v = np.nan if fv is None else float(fv.loc[c, name])
+                x = None if fv is None else fv.loc[c, name]
+                v = np.nan if x is None or (isinstance(x, float) and np.isnan(x)) else float(x)
                 r[name + "_code"] = int(f.encode([v])[0])
+            props = fx.PROPS.get(gsm, {})
+            r["donor"] = props.get("donor_status", "")
+            r["perturb"] = props.get("perturbation", "")
+            r["kind"] = props.get("sample_kind", "")
+            r["disease"] = props.get("disease", "")
             rows.append(r)
     return pd.DataFrame(rows)
 
@@ -146,7 +152,7 @@ def test_codes_thresholds_and_hash():
     # a threshold compares against the code its own value is stored as: a score equal to the threshold always passes
     for v in np.linspace(0, 1, 101):
         assert atlas.q8([v])[0] >= atlas.q8_threshold(v)
-    f = atlas.load_features([{"name": "x", "version": "1", "dtype": "u16", "lo": -2, "hi": 2}])[0]
+    f = atlas.load_features([{"name": "x", "dtype": "u16", "lo": -2, "hi": 2}])[0]
     vals = np.linspace(-2, 2, 977)
     assert (f.encode(vals) >= np.array([f.bound(v, upper=False) for v in vals])).all()
     assert np.allclose(f.decode(f.encode(vals)), vals, atol=4 / 65534)
@@ -166,8 +172,30 @@ def test_feature_registry_validation():
         atlas.load_features([{"name": "a", "version": "1", "lo": 1, "hi": 1}])
     with pytest.raises(atlas.IndexError_):
         atlas.load_features([{"name": "a", "version": "1"}, {"name": "a", "version": "2"}])
+    with pytest.raises(atlas.IndexError_):
+        atlas.load_features([{"feature_id": "s/c", "kind": "category"}])
+    with pytest.raises(atlas.IndexError_):
+        atlas.load_features([{"feature_id": "s/c", "kind": "colour"}])
     specs = atlas.load_features(fx.FEATURES)
-    assert [f.column for f in specs] == ["f1", "f2"]
+    assert [f.column for f in specs] == ["f1", "f2", "f3", "f4"]
+    assert [f.id for f in specs] == [
+        "test/hypoxia",
+        "test/malignancy",
+        "test/cycling",
+        "test/phase",
+    ]
+    assert (
+        specs[2].dtype == "u8"
+        and specs[3].dtype == "u16"
+        and specs[3].decode([2, 65535]).tolist() == ["G2M", None]
+    )
+    row = specs[0].cell_feature_row()
+    assert (
+        row["feature_id"] == "test/hypoxia"
+        and row["storage"] == "shard"
+        and json.loads(row["thresholds"]) == [0.0, 0.5]
+    )
+    assert atlas.load_features([{"feature_id": "a/b"}])[0].thresholds == (0.5, 0.8)
 
 
 def test_estimate_cost_bounds_the_caps():
@@ -259,7 +287,7 @@ def test_build_layout_and_totals(built):
     cur = json.loads((pathlib.Path(root) / "v2/cidx/current.json").read_text())
     assert cur["version"] == d["version"]
     assert len(d["shards"]) > 1
-    assert [f["column"] for f in d["features"]] == ["f1", "f2"]
+    assert [f["column"] for f in d["features"]] == ["f1", "f2", "f3", "f4"]
     _s2, res2, _ = fx.build(str(root))
     assert res2.version == res.version and sorted(res2.objects) == sorted(res.objects)
 
@@ -309,25 +337,98 @@ def test_sample_aggregates_and_d1_export(built, tmp_path):
         assert st["f1_ge1"][i] == int((h >= feats["hypoxia"].bound(0.5, upper=False)).sum())
     files = res.d1_export(tmp_path / "d1")
     assert {pathlib.Path(f).name for f in files} == {
+        "sample_cell_summary.csv",
+        "cell_feature.csv",
         "cidx_sample.csv",
-        "cidx_sample_celltype.csv",
-        "cidx_sample_feature.csv",
-        "cidx_d1_schema.sql",
     }
-    with open(tmp_path / "d1" / "cidx_sample_celltype.csv", encoding="utf-8") as fh:
+    with open(tmp_path / "d1" / "sample_cell_summary.csv", encoding="utf-8") as fh:
         rows = list(csv.DictReader(fh))
-    assert sum(int(r["n_cells"]) for r in rows) == len(t)
-    got = {(r["gsm_id"], r["cell_type"]): int(r["n_cells"]) for r in rows}
-    assert got == t.groupby(["gsm", "ct"]).size().to_dict()
-    with open(tmp_path / "d1" / "cidx_sample_feature.csv", encoding="utf-8") as fh:
-        fr = list(csv.DictReader(fh))
-    nofeat = [r for r in fr if r["gsm_id"] in fx.NO_FEATURES]
-    assert nofeat and all(r["n_values"] == "0" for r in nofeat)
+    assert list(rows[0]) == list(atlas.SUMMARY_COLUMNS)
+    ct = {(r["gsm_id"], r["item"]): int(r["n_cells"]) for r in rows if r["subject"] == "cell_type"}
+    assert ct == t.groupby(["gsm", "ct"]).size().to_dict()
+    sex = {(r["gsm_id"], r["item"]): int(r["n_cells"]) for r in rows if r["subject"] == "sex"}
+    ts = t[t.sex != "ambiguous"]
+    want_sex = (
+        ts.assign(item=ts.sex.map({"female": "PATO:0000383", "male": "PATO:0000384"}))
+        .groupby(["gsm", "item"])
+        .size()
+        .to_dict()
+    )
+    assert sex == want_sex
+    for r in rows:
+        if r["subject"] == "cell_type":
+            sub = t[(t.gsm == r["gsm_id"]) & (t.ct == r["item"])]
+            assert int(r["n_hi1"]) == int((atlas.q8(sub.ct_score) >= atlas.q8_threshold(0.5)).sum())
+            assert r["version"] == "test-1"
+    hyp = [r for r in rows if r["item"] == "test/hypoxia"]
+    assert {r["gsm_id"] for r in hyp} == {g for g in set(t.gsm) if g not in fx.NO_FEATURES}
+    for r in hyp:
+        h = t[t.gsm == r["gsm_id"]].hypoxia_code.to_numpy()
+        h = h[h != 255]
+        assert int(r["n_cells"]) == len(h) and int(r["n_hi2"]) == int(
+            (h >= feats["hypoxia"].bound(0.5)).sum()
+        )
+        assert r["version"].startswith("test-run-")
+    phase = [r for r in rows if r["item"].startswith("test/phase=")]
+    assert phase and all(r["n_hi1"] == "" for r in phase)
+    with open(tmp_path / "d1" / "cell_feature.csv", encoding="utf-8") as fh:
+        reg = list(csv.DictReader(fh))
+    assert [r["feature_id"] for r in reg] == [
+        "test/hypoxia",
+        "test/malignancy",
+        "test/cycling",
+        "test/phase",
+    ]
+    with open(tmp_path / "d1" / "cidx_sample.csv", encoding="utf-8") as fh:
+        samp = {r["gsm_id"]: r for r in csv.DictReader(fh)}
+    assert (
+        samp["GSM9000011"]["perturbation"] == "treated;genetic"
+        and samp["GSM9000013"]["sample_kind"] == "cell_line"
+    )
+
+
+def test_feature_sidecar_normalize_and_manifest(built, tmp_path):
+    root, s, _res, _idx = built
+    specs = atlas.load_features(fx.FEATURES)
+    src = pathlib.Path(root) / "features" / "GSM9000001.features.test.parquet"
+    called = s.truth["GSM9000001"]["called"]
+    data, entry = atlas.normalize_feature_sidecar(
+        str(src), gsm="GSM9000001", specs=specs, n_columns=len(called), called=called
+    )
+    assert entry["key"].startswith("v2/cf/GSM9000001/test.") and entry["key"].endswith(".parquet")
+    assert entry["method_version"] == "test-run-0" and entry["n_rows"] == int(called.sum())
+    codes, ver = atlas.read_feature_sidecar(data, specs, np.flatnonzero(called))
+    codes2, _ = atlas.read_feature_sidecar(str(src), specs, np.flatnonzero(called))
+    assert ver == "test-run-0" and all((codes[k] == codes2[k]).all() for k in codes)
+    m = atlas.attach_features({"samples": [{"gsm": "GSM9000001"}]}, {"GSM9000001": entry})
+    assert m["samples"][0]["features"]["test"]["key"] == entry["key"]
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    bad = tmp_path / "bad.parquet"
+    pq.write_table(pa.table({"col": [0], "hypoxia": [0.1], "gene_ACTB": [1.0]}), bad)
+    with pytest.raises(atlas.IndexError_, match="unregistered"):
+        atlas.normalize_feature_sidecar(
+            str(bad), gsm="GSM9000001", specs=specs, n_columns=len(called)
+        )
+
+
+def test_add_extension_rederives_the_version(built):
+    _root, _s, res, _idx = built
+    import copy
+
+    r = copy.deepcopy(res)
+    blob = atlas.encode_shard({"jid": np.arange(5, dtype=np.uint32)})
+    key = atlas.obj_key(blob, "scx")
+    v = r.add_extension("junctions", {"table_version": "x", "tot": key}, {key: blob})
+    assert v != res.version and r.directory["junctions"]["tot"] == key
+    assert atlas.version_key(v) in r.objects and atlas.version_key(res.version) not in r.objects
+    assert json.loads(r.objects[atlas.version_key(v)])["version"] == v
 
 
 # ----------------------------------------------------------------------------------------------------------------------- queries
 def _code(name, v):
-    return next(f for f in atlas.load_features(fx.FEATURES) if f.name == name).bound(v, upper=False)
+    return next(f for f in atlas.load_features(fx.FEATURES) if f.name == name).bound(v)
 
 
 QUERIES = [
@@ -372,6 +473,20 @@ QUERIES = [
             & (t.malignancy_code <= _code("malignancy", 0.75))
         ],
     ),
+    ({"ranges": {"test/cycling": [1, 1]}}, lambda t: t[t.cycling_code == 254]),
+    ({"categories": {"test/phase": ["S", "G2M"]}}, lambda t: t[t.phase_code.isin([1, 2])]),
+    ({"donor_status": "diseased"}, lambda t: t[t.donor == "diseased"]),
+    (
+        {"donor_status": ["healthy", "unknown"], "cell_type": "B cell"},
+        lambda t: t[(t.donor != "diseased") & (t.ct == "CL:0000236")],
+    ),
+    ({"perturbation": "genetic"}, lambda t: t[t.perturb.str.contains("genetic")]),
+    (
+        {"perturbation": ["treated"], "sample_kind": "organoid"},
+        lambda t: t[t.perturb.str.contains("treated") & (t.kind == "organoid")],
+    ),
+    ({"disease": "cancer"}, lambda t: t[t.disease.isin(["MONDO:0004992", "MONDO:0005061"])]),
+    ({"disease": "normal", "studies": ["GSE900001"]}, lambda t: t[t.disease == "PATO:0000461"]),
 ]
 
 
@@ -490,7 +605,12 @@ def test_find_cells_direct_entry_point(built):
         cell_type="CL:0000625", min_umi=1000, base=str(root)
     )
     f = atlas.find_cells(ranges={"hypoxia": [0.5, None]}, base=str(root), n=100)
-    assert "hypoxia" in _idx.find({"ranges": {"hypoxia": [0.5, None]}}, fields=["f1"]).columns
+    assert "test/hypoxia" in f.columns and (f["test/hypoxia"] >= 0.5 - 1 / 254).all()
+    assert set(f["test/phase"].dropna()) <= {"G1", "S", "G2M"}
+    g = atlas.find_cells(
+        donor_status="diseased", categories={"phase": ["G1"]}, base=str(root), n=100
+    )
+    assert set(g.gsm) <= {"GSM9000003", "GSM9000011"} and (g["test/phase"] == "G1").all()
     assert len(f) == min(100, f.attrs["eligible"])
 
 
