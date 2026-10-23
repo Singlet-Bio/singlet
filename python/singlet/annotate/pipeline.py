@@ -70,7 +70,9 @@ def annotate_sample(
     )
     df["cell_type_cl"] = pd.array(ct.cl, dtype="string")
     df["cell_type_label"] = pd.array(ct.label, dtype="string")
-    df["cell_type_score"] = np.where(ct.node > 0, ct.score, np.nan).astype(np.float32)
+    # guide calls: product of the gating confidences along the path (better calibrated than the last step alone)
+    score = ct.path_score if ct.method == "guide" and ct.path_score is not None else ct.score
+    df["cell_type_score"] = np.where(ct.node > 0, score, np.nan).astype(np.float32)
     summary["timings"]["cell_type_s"] = time.time() - t
     summary["cell_type"] = {k: v for k, v in ct.notes.items() if isinstance(v, (int, float, str))}
     vals, cnt = np.unique(np.asarray(ct.cl, dtype=object).astype(str), return_counts=True)

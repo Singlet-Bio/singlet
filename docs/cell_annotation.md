@@ -12,7 +12,7 @@ Validation run 2026-10-23 on Clipper; every number below comes from the artefact
 | `gsm` | string | sample accession |
 | `col` | int64 | column of the cell in the sample's v2 `cells` table / matrix column order (legacy bundles: its column in `exon_counts.1pz`, the order `v2/migrate.py` gives the cells table) |
 | `cell_type_cl`, `cell_type_label` | string | Cell Ontology id and name (CL 2026-06-08); null when the method abstains |
-| `cell_type_score` | float32 | confidence of the call, in [0, 1] |
+| `cell_type_score` | float32 | confidence of the call, in [0, 1] (guide: product of the gating confidences along the path; a ranking, see 3) |
 | `sex_chrom` | string | `female` (PATO:0000383), `male` (PATO:0000384), `ambiguous` |
 | `sex_score` | float32 | posterior of that label |
 | `ancestry_hancestro` | string | HANCESTRO genetic-ancestry category of the cell's donor; null when not computed |
@@ -152,19 +152,38 @@ The dominant errors are of four kinds, and each points at a fix:
 4. **Species mix-ups in mixed studies.** GSE164291 has 0% calls on its human-labelled sample, whose metadata describes mouse
    oviduct.
 
-**Calibration.** `cell_type_score` is the gating softmax at the last step. It is informative but optimistic:
+**Calibration.** For guide calls, `cell_type_score` is the product of the gating confidences along the cell's path in the guide.
+That product is better calibrated than the last-step confidence (`out/annotate_validation/bench/bench3.json`):
 
 | score | < 0.5 | 0.5-0.7 | 0.7-0.8 | 0.8-0.9 | 0.9-0.95 | >= 0.95 |
 |---|---|---|---|---|---|---|
-| cells | 17,591 | 57,534 | 34,068 | 31,665 | 21,285 | 104,949 |
-| consistent with truth | 0.50 | 0.42 | 0.42 | 0.50 | 0.65 | 0.78 |
+| cells (path product, published) | 76,302 | 72,253 | 28,273 | 25,769 | 18,076 | 46,419 |
+| consistent with truth | 0.47 | 0.51 | 0.58 | 0.68 | 0.80 | 0.80 |
+| consistent, last-step confidence (not used) | 0.50 | 0.42 | 0.42 | 0.50 | 0.65 | 0.78 |
 
-It should be read as a ranking, not as a probability. A per-tissue recalibration fitted on held-out studies is listed as a
-follow-up.
+The published score rises monotonically, but it is optimistic above 0.9. It should be used to rank calls and to set filter
+thresholds, not read as a probability. A per-tissue recalibration fitted on held-out studies is a follow-up.
 
 ### 3.1 Tissue context and smoothing
 
-TISSUE_RESULTS
+Same 16 studies, guide only (`bench3.json`):
+
+| variant | d1 | d2 | d3 | d4 |
+|---|---|---|---|---|
+| guide, tissue from GEO text (default) | 0.842 | 0.747 | 0.428 | 0.320 |
+| guide, CELLxGENE's curated tissue instead (oracle) | 0.848 | 0.731 | 0.413 | 0.320 |
+| guide, no tissue context | 0.808 | 0.599 | 0.336 | 0.270 |
+| guide, no kNN smoothing | 0.831 | 0.717 | 0.406 | 0.291 |
+
+- **Tissue context matters:** without it, lineage accuracy falls from 0.75 to 0.60.
+- **The GEO text already gives as much as the curated tissue.** Curated tissue helps where GEO names nothing (GSE280852, d3
+  0.62 → 0.67). It hurts where the curated term is narrower than the cells (GSE185224, 0.69 → 0.44). So the lower depth-3
+  accuracy on Singlet's counts is not a tissue-context problem. It comes from author labels coarser than or different from the
+  guide's split, and from the specific marker failures listed above.
+- **Smoothing over the sample's own kNN graph** is worth 2-3 points at every depth.
+- **Next steps for depth 3-4:**
+  - curate the guide on the confusions above (bladder smooth muscle, kidney snRNA, thymic progenitors, airway basal/suprabasal);
+  - add a per-sample ambient-RNA correction before scoring.
 
 ## 4. Chromosomal sex: 157 samples with GEO sex metadata
 
