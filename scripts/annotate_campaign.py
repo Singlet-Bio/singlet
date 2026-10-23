@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: MIT
 """Atlas-wide per-cell annotation: one Slurm array task annotates a shard of studies (see annotate_campaign.sbatch).
 
-  plan    write the study list with sizes and a balanced shard number per study
-          python scripts/annotate_campaign.py plan --studies studies.tsv --shards 400 --out plan.tsv
+  plan    write the study list with sizes and a balanced shard number per study (default list: https://singlet.bio/api/manifest,
+          human and mouse studies only)
+          python scripts/annotate_campaign.py plan --shards 400 --out plan.tsv
   run     annotate the studies of one shard
           python scripts/annotate_campaign.py run --plan plan.tsv --shard $SLURM_ARRAY_TASK_ID --out $OUT --af af.parquet \
               --scratch /tmp/$USER-$SLURM_JOB_ID --ledger $OUT/ledger/shard-$SLURM_ARRAY_TASK_ID.jsonl
@@ -45,10 +46,36 @@ RESTRICTED_BUCKET = os.environ.get("SINGLET_RESTRICTED_BUCKET", "singlet-restric
 UA = {"User-Agent": "singlet-annotate/0.1 (+https://singlet.bio)"}
 
 
+MANIFEST_URL = "https://singlet.bio/api/manifest"
+SPECIES_WITH_MODELS = ("human", "homo sapiens", "mouse", "mus musculus")
+
+
+def studies_from_manifest(url: str = MANIFEST_URL):
+    """The catalogue's study list (``/api/manifest``, one TSV row per published study) as gse, bytes, v2, organism,
+    n_cells; only studies with a human or mouse sample (the organisms the models cover)."""
+    import io
+
+    import pandas as pd
+
+    with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=120) as r:
+        m = pd.read_csv(io.BytesIO(r.read()), sep="\t", dtype=str)
+    org = m["organism"].fillna("").str.lower()
+    m = m[org.apply(lambda o: any(k in o for k in SPECIES_WITH_MODELS))]
+    return pd.DataFrame(
+        {
+            "gse": m["gse_id"],
+            "bytes": pd.to_numeric(m["bytes"], errors="coerce").fillna(0).astype("int64"),
+            "v2": m["v2_manifest_url"].fillna("").str.len().gt(0).astype(int),
+            "organism": m["organism"],
+            "n_cells": pd.to_numeric(m["n_cells"], errors="coerce").fillna(0).astype("int64"),
+        }
+    )
+
+
 def plan(a) -> int:
     import pandas as pd
 
-    df = pd.read_csv(a.studies, sep="\t")
+    df = studies_from_manifest() if a.studies is None else pd.read_csv(a.studies, sep="\t")
     df["bytes"] = df["bytes"].fillna(0).astype("int64")
     df["v2"] = df.get("v2", 0)
     df = df.sort_values("bytes", ascending=False).reset_index(drop=True)
@@ -205,7 +232,9 @@ def main(argv=None) -> int:
     )
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("plan")
-    p.add_argument("--studies", type=Path, required=True)
+    p.add_argument(
+        "--studies", type=Path, help="TSV gse, bytes[, v2] (default: the catalogue's /api/manifest)"
+    )
     p.add_argument("--shards", type=int, required=True)
     p.add_argument("--out", type=Path, required=True)
     r = sub.add_parser("run")
