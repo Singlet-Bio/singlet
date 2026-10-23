@@ -25,6 +25,8 @@ case $CHEM in
   10x5p) UMILEN=10; WL=$PB/whitelists/737K-august-2016.txt; STRAND=Reverse; AFCHEM=10xv2-5p; AFORI=rc ;;
 esac
 TIME="/usr/bin/time -v -o $O/time.txt"
+# Singlet's stall watchdog (default 1800 s) can fire during STAR's BAM sort on large inputs
+export SINGLET_STALL_TIMEOUT=7200
 echo "[run] $ID $TOOL species=$SPECIES chem=$CHEM node=$(hostname) $(date -Is)"
 echo "[run] cpu: $(lscpu | sed -n "s/^Model name: *//p")" | tee $O/node.txt
 

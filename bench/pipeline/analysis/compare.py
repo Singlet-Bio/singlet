@@ -172,6 +172,9 @@ def barnyard(a, cells):
 
 
 def main():
+    import faulthandler
+
+    faulthandler.dump_traceback_later(900, repeat=True)  # where is a slow run spending time
     pb, ds = Path(sys.argv[1]), sys.argv[2]
     is_barnyard = "--barnyard" in sys.argv
     is_cite = "--cite" in sys.argv
