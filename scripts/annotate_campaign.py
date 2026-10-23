@@ -69,7 +69,10 @@ def _download(url: str, dst: Path, retries: int = 4) -> None:
         try:
             tmp = dst.with_name(dst.name + ".part")
             with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=120) as r, open(tmp, "wb") as f:
+                want = int(r.headers.get("Content-Length") or -1)
                 shutil.copyfileobj(r, f, 16 << 20)
+            if want >= 0 and tmp.stat().st_size != want:  # a dropped connection can end the stream early without an error
+                raise OSError(f"{url}: got {tmp.stat().st_size} of {want} bytes")
             tmp.replace(dst)
             return
         except OSError as e:
