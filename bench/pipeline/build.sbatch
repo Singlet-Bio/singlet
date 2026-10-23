@@ -21,7 +21,7 @@ build_bin() {  # $1 src  $2 out-binary
   local b=$SCR/build-$(basename $2)
   # x86-64-v3 instead of -march=native so the binary runs on every Clipper CPU node
   rsync -a --exclude .git --exclude build "$1/" $SCR/src-$(basename $2)/
-  grep -rl -- "-march=native" $SCR/src-$(basename $2) --include=CMakeLists.txt | xargs sed -i 's/-march=native/-march=x86-64-v3/'
+  grep -rl --include=CMakeLists.txt -e "-march=native" $SCR/src-$(basename $2) | xargs -r sed -i 's/-march=native/-march=x86-64-v3/'
   # Vendored STAR puts its own (old) htslib headers first; bam_hdr_destroy is the same call there
   sed -i 's/sam_hdr_destroy(old)/bam_hdr_destroy(old)/' $SCR/src-$(basename $2)/src/star/bam_cat.c
   cmake -S $SCR/src-$(basename $2) -B $b -DSINGLET_BUILD_PIPELINE=ON -DCMAKE_BUILD_TYPE=Release > $b.cmake.log 2>&1 || { tail -40 $b.cmake.log; return 1; }
@@ -35,6 +35,7 @@ if [ "$WHAT" = all ]; then
   build_bin $SRC_OLD $BIN_OLD &
   build_bin $SRC_NEW $BIN_NEW &
   wait
+  [ -x $BIN_OLD ] && [ -x $BIN_NEW ] || { echo '[build] binary build FAILED'; exit 1; }
 fi
 # Unit tests (fixed branch)
 T=$SCR/build-tests
