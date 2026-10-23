@@ -191,12 +191,12 @@ def cmd_collect(a):
     print(f"{len(rows)} summary rows in {len(files)} files under {d}")
     print("Not run. To publish (after review):")
     print(
-        '  curl -fsS -X POST https://singlet.bio/api/ingest/cell_feature -H "Authorization: Bearer $INGEST_TOKEN" '
+        '  curl -fsS -X POST https://singlet.bio/api/ingest/cell_feature -H "X-Ingest-Token: $INGEST_TOKEN" '
         f'-H "Content-Type: application/json" --data-binary @{d / "cell_feature.json"}'
     )
     print(
         f"  for f in {d}/sample_cell_summary.*.json; do curl -fsS -X POST https://singlet.bio/api/ingest/sample_cell_summary "
-        '-H "Authorization: Bearer $INGEST_TOKEN" -H "Content-Type: application/json" --data-binary @$f; done'
+        '-H "X-Ingest-Token: $INGEST_TOKEN" -H "Content-Type: application/json" --data-binary @$f; done'
     )
     print(
         "  sidecars: the cell-index builder normalises them (singlet.v2.atlas.normalize_feature_sidecar -> "

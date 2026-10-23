@@ -138,9 +138,9 @@ both packages.
 ## 6. Publishing (not run by the job)
 
 1. Registry, once per method version (53 rows):
-   `curl -fsS -X POST https://singlet.bio/api/ingest/cell_feature -H "Authorization: Bearer $INGEST_TOKEN" -H "Content-Type: application/json" --data-binary @$OUT/ingest/cell_feature.json`
+   `curl -fsS -X POST https://singlet.bio/api/ingest/cell_feature -H "X-Ingest-Token: $INGEST_TOKEN" -H "Content-Type: application/json" --data-binary @$OUT/ingest/cell_feature.json`
 2. Summaries (<= 2000 rows per request):
-   `for f in $OUT/ingest/sample_cell_summary.*.json; do curl -fsS -X POST https://singlet.bio/api/ingest/sample_cell_summary -H "Authorization: Bearer $INGEST_TOKEN" -H "Content-Type: application/json" --data-binary @$f; done`
+   `for f in $OUT/ingest/sample_cell_summary.*.json; do curl -fsS -X POST https://singlet.bio/api/ingest/sample_cell_summary -H "X-Ingest-Token: $INGEST_TOKEN" -H "Content-Type: application/json" --data-binary @$f; done`
    The cell index's `--d1-export` writes the same rows from the shards; load one of the two, not both.
 3. Sidecars: `singlet.v2.atlas.normalize_feature_sidecar` (cell-index branch) validates each file against the registry and the
    sample's cells, returns the canonical bytes and key `v2/cf/<GSM>/<set>.<d16>.parquet`; upload those to `singlet-data`
