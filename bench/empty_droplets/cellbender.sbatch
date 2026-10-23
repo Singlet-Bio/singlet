@@ -39,4 +39,4 @@ apptainer exec --nv --bind "$WORK" --bind /tmp "$CB_SIF" cellbender remove-backg
 cp "$SCRATCH"/cb_cell_barcodes.csv "$OUT/$GSE/$GSM.cellbender_cells.csv" 2>/dev/null || true
 cp "$SCRATCH"/cb.h5 "$OUT/$GSE/$GSM.cellbender.h5"   # kept on Clipper so collect can be rerun after a re-analysis
 apptainer exec --bind "$WORK" --bind /tmp "$SIF" "$VENV/bin/python" -P "$SRC/bench/empty_droplets/cellbender_io.py" collect \
-  "$DATA/$GSE/$GSM.npz" "$SCRATCH/cb.h5" "$OUT/$GSE/$GSM.cellbender.json" --analysis-npz "$OUT/$GSE/$GSM.bc.npz"
+  "$DATA/$GSE/$GSM.npz" "$SCRATCH/cb.h5" "$OUT/$GSE/$GSM.cellbender.json" --analysis-npz "$OUT/$GSE/$GSM.bc.npz"   --cells-csv "$OUT/$GSE/$GSM.cellbender_cells.csv"

@@ -43,29 +43,34 @@ def export(npz, out_dir):
                       "n_ge5": n5, "total_droplets": int(min(total, n5 - 100))}))
 
 
-def collect(npz, h5, out_json, analysis_npz=None):
-    import h5py
-
+def collect(npz, h5, out_json, analysis_npz=None, cells_csv=None):
+    """CellBender's call = the barcodes in its ``*_cell_barcodes.csv`` (cell probability > 0.5); the h5 is only a fallback
+    because its layout changed between CellBender versions."""
     d = load(npz)
     called = d["called"]
     X = (d["exon"] + d["intron"]).tocsc()
     tot = np.asarray(X.sum(axis=0)).ravel()
-    with h5py.File(h5, "r") as f:
-        grp = f["droplet_latent_probabilities"]
-        idx = grp["barcode_indices_for_latents"][()]
-        prob = grp["cell_probability"][()]
-        all_bcs = [b.decode() if isinstance(b, bytes) else str(b) for b in f["matrix/barcodes"][()]]
-    p = np.zeros(len(all_bcs))
-    p[idx] = prob
-    pos = {b: i for i, b in enumerate(all_bcs)}
-    cp = np.array([p[pos[b]] if b in pos else np.nan for b in d["barcodes"]])
-    cb = cp > 0.5
+    if cells_csv and os.path.exists(cells_csv):
+        cbs = {l.strip().split(",")[0] for l in open(cells_csv) if l.strip()}
+    else:
+        import h5py
+
+        with h5py.File(h5, "r") as f:
+            keys = []
+            f.visit(keys.append)
+            pk = next(k for k in keys if k.endswith("cell_probability"))
+            ik = next(k for k in keys if k.endswith("barcode_indices_for_latents"))
+            bk = next(k for k in keys if k.endswith("barcodes") and "matrix" in k)
+            prob = f[pk][()]
+            idx = f[ik][()]
+            allb = [b.decode() if isinstance(b, bytes) else str(b) for b in f[bk][()]]
+        cbs = {allb[i] for i, p in zip(idx, prob) if p > 0.5}
+    cb = np.array([b in cbs for b in d["barcodes"]])
     unc = ~called
     R = {"gsm": d["meta"]["gsm"], "n_cellbender": int(cb.sum()), "n_ours": int(called.sum()),
          "theirs_not_ours": int((cb & unc).sum()), "ours_not_theirs": int((called & ~cb).sum()),
          "theirs_not_ours_umi": q(tot[cb & unc]), "ours_not_theirs_umi": q(tot[called & ~cb]),
-         "jaccard": float((cb & called).sum() / max(1, (cb | called).sum())),
-         "n_scored": int(np.isfinite(cp).sum())}
+         "jaccard": float((cb & called).sum() / max(1, (cb | called).sum()))}
     if analysis_npz and os.path.exists(analysis_npz):
         z = np.load(analysis_npz)
         if "fdr_cell" in z.files:
@@ -88,8 +93,9 @@ if __name__ == "__main__":
     c.add_argument("h5")
     c.add_argument("out_json")
     c.add_argument("--analysis-npz")
+    c.add_argument("--cells-csv")
     a = ap.parse_args()
     if a.cmd == "export":
         export(a.npz, a.out_dir)
     else:
-        collect(a.npz, a.h5, a.out_json, a.analysis_npz)
+        collect(a.npz, a.h5, a.out_json, a.analysis_npz, a.cells_csv)
