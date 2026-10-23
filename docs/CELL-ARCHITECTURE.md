@@ -63,20 +63,28 @@ feature above a threshold reads only samples whose summary says they have some.
   statistic (rank-based, UCell-like: the score depends on the cell's own gene ranks) or a fixed reference null. Scores
   calibrated within a sample (z against the sample's own random sets) are `comparable = 'sample'`: kept for within-study
   use, never offered as an atlas filter.
+- **Stored sidecar**: the validated interchange Parquet itself (no separate binary), content-addressed at
+  `v2/cf/<GSM>/<set>.<digest>.parquet` and referenced from the study manifest as `samples[i].features[<set>]`, never inside
+  the `.s2` (`atlas.normalize_feature_sidecar`, `atlas.attach_features`; singlet-bio `docs/format-v2-cell-index.md` sections
+  4.9-4.10). The Worker never reads sidecars.
 - **In the index**: the cell-index builder reads feature sidecars keyed `(gsm, col)` and writes registered features as
-  extra shard columns (u8 `round(x*254)`, 255 = NA; u16 codes), with its own registry in the index directory; a filter on a
-  feature needs no join. It also exports per-sample aggregates in the `sample_cell_summary` layout for D1.
+  extra shard columns (u8 `round(x*254)`, 255 = NA; u16 codes), so a filter on a feature needs no join. Cell queries name
+  features `<set>/<name>` (`ranges`, `categories`). `--d1-export` writes `sample_cell_summary.csv` and `cell_feature.csv` in
+  the D1 layouts above (categories as `item = <id>=<category>`; sex only for PATO:0000383/0000384). The index sample table
+  also carries the sample properties and disease / developmental stage from `scripts/ontology/export-sample-meta.mjs`.
 
 ## 4. Query path and cost budget
 
 1. Natural language -> `interpret` (vocabulary first, model only for the rest) -> a structured query with sample clauses
    and cell clauses, both in ontology ids and registered feature ids.
 2. Tier 1 (D1 / bit index): candidate samples and exact counts from `sample_cell_summary`. Most questions end here.
-3. Tier 2 (Worker): only for candidate samples, read the needed shard row groups and sidecar columns. Budget per request:
-   bounded bytes read and CPU (the cell-index Worker's `limits.ts`). Over budget, the Worker returns a **plan** (object keys
-   and byte ranges per sample) instead of an answer.
-4. Gather: (sample, col) lists -> byte ranges in `.s2` objects; the client (Python/R) fetches them in parallel. Moving
-   millions of cells is bandwidth-bound (seconds to minutes), not a Worker job.
+3. Tier 2 (Worker, `POST data.singlet.bio/v2/cidx/query`): `where` = organism, cell_type, tissue, sex, ancestry, samples,
+   studies (tier 1's ranked list with `study_rank: "given"`), ranges, categories. Caps set by Zach: at most 10,000 cells from
+   at most 10 studies per request, a seeded uniform sample with a cursor for the next page, worst case $0.01 per request,
+   daily allowances per subject. Over budget: 413 with a **plan** (index shard keys and a runnable Python snippet);
+   `dry_run: true` returns the plan and its cost.
+4. Gather: (sample, col) lists -> byte ranges in `.s2` objects, through the Worker within the same caps or by the client
+   (Python/R) from the plan. Moving millions of cells is bandwidth-bound (seconds to minutes), not a Worker job.
 
 **Custom scripts** run on the client or on Clipper/Anvil against the plan and the same objects, never as arbitrary code in
 a Worker. A script whose output proves useful becomes a registered feature: computed in batch, versioned, written as
