@@ -6,6 +6,7 @@
 #   MODE=fetch    (array over studies.tsv rows)   fetch the listed samples -> $DATA/<GSE>/<GSM>.npz
 #   MODE=analyze  (array over studies.tsv rows)   analyze every fetched sample of that row -> $OUT/<GSE>/<GSM>.json (+ .npz)
 #   MODE=all      fetch then analyze
+#   MODE=aggregate                 tables + figures from every result -> $WORK/state/emptydrop/report
 #   MODE=groundtruth GSES="GSE..."   authors' GEO calls and hashtag counts vs ours (after analyze)
 #
 #   sbatch --partition=debug-cpu --time=00:30:00 --export=ALL,MODE=explore,GSE=GSE163793 run.sbatch
@@ -69,6 +70,9 @@ case "$MODE" in
     if [ "$MODE" != fetch ]; then
       rt "${PY[@]}" "$B/analyze.py" "$DATA/$GSE" --out "$OUT/$GSE" --threads "${SLURM_CPUS_PER_TASK:-8}" ${ANALYZE_ARGS:-}
     fi
+    ;;
+  aggregate)
+    rt "${PY[@]}" "$B/aggregate.py" "$OUT" --out "${REPORT:-$WORK/state/emptydrop/report}"
     ;;
   groundtruth)
     rt "${PY[@]}" "$B/groundtruth.py" ${GSES:?} --data "$DATA" --results "$OUT"
