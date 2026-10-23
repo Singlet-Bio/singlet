@@ -281,7 +281,16 @@ than 20 UMIs (non-T cells get few TCR reads), which is one more reason not to ta
 
 ### 9. CellBender
 
-PENDING
+CellBender 0.3.2 (`remove-background`, 150 epochs, GPU, expected cells = Singlet's count, a tail of >= 5-UMI barcodes left as
+"surely empty") was run on 10 samples' stored barcodes. It is the one caller that cannot work well from Singlet's data: it
+expects the full raw barcode list and warns that this input is not one, and on these truncated inputs it failed on 7 of 10
+samples inside CellBender itself (minibatch assertion "fewer than 4 cells", a 48 GB CUDA allocation in the posterior, a tensor
+shape mismatch). A retry with a lower empty-droplet training fraction and a smaller posterior batch was queued; the runs still
+in progress at the time of writing are not reported.
+
+Finished: the pilot sample GSE145370/GSM4317423 (TCR library): CellBender calls 4,464 cells against Singlet's 2,722, includes
+all but one of Singlet's, and adds 1,743 barcodes at 18-134 UMIs (median 55); 44% of the profile-test cell-like barcodes are
+among them. It agrees in direction with every other caller.
 
 ## Recommendation
 
