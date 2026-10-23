@@ -111,7 +111,8 @@ def author_barcodes(gse, gsm):
         return {norm_bc(b) for b in barcodes_from_bytes(url, get(url))} - {None}, url + " (pairing by GSM order, check)"
     files = listing(geo_dir(gsm, "samples"))
     cand = [f for f in files if re.search(r"barcodes\.tsv(\.gz)?$", f) and "raw" not in f.lower()]
-    cand += [f for f in files if re.search(r"filtered.*\.(tar\.gz|tgz|tar)$", f, re.I)]
+    tars = [f for f in files if re.search(r"\.(tar\.gz|tgz|tar)$", f, re.I)]
+    cand += sorted(tars, key=lambda f: "filtered" not in f.lower())  # filtered-named tars first; any tar is opened and searched
     for f in cand:
         url = geo_dir(gsm, "samples") + f
         try:
