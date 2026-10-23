@@ -182,24 +182,20 @@ def hashing(bcs, called, A):
     have = j >= 0
     hs = np.where(have, hsum[np.maximum(j, 0)], np.nan)
     tf = np.where(have, top[np.maximum(j, 0)], np.nan)
-    # HTO-positive: log10 HTO count above the valley of its bimodal distribution (2-component Gaussian mixture in log space),
-    # among the 65,000 barcodes the authors tabulated
-    from sklearn.mixture import GaussianMixture
-
-    lx = np.log10(hsum + 1).reshape(-1, 1)
-    gm = GaussianMixture(2, random_state=0).fit(lx)
-    hi = int(np.argmax(gm.means_.ravel()))
-    grid = np.linspace(lx.min(), lx.max(), 2000).reshape(-1, 1)
-    post = gm.predict_proba(grid)[:, hi]
-    thr = float(10 ** grid[np.argmax(post > 0.5), 0] - 1)
+    # Reference for empty droplets: barcodes with < 10 RNA UMIs (free antibody only). HTO-positive = hashtag count >= 5x their
+    # median; singlet = HTO-positive with one hashtag carrying >= 60% of the counts (a stained cell from one donor batch).
+    tot0 = A["total"] if A is not None else np.zeros(len(bcs))
+    emp = have & (tot0 < 10)
+    thr = float(5 * np.median(hs[emp])) if emp.any() else float("nan")
     pos = hs >= thr
-    singlet = pos & (tf >= 0.5)
+    singlet = pos & (tf >= 0.6)
     unc = ~called
     tot = A["total"] if A is not None else np.zeros(len(bcs))
     sig = unc & (np.nan_to_num(A["fdr_cell"], nan=1) < 0.01) if A is not None and "fdr_cell" in A.files else np.zeros(len(bcs), bool)
     return {
         "source": url, "tags": tags, "n_tabulated": len(cols), "stored_in_table": int(have.sum()), "n_stored": int(len(bcs)),
-        "hto_threshold": thr, "hto_pos_all_tabulated": int((hsum >= thr).sum()),
+        "hto_threshold": thr, "empty_reference_median": float(np.median(hs[emp])) if emp.any() else None,
+        "hto_pos_all_tabulated": int((hsum >= thr).sum()), "called_hto_singlet": float(np.nanmean(singlet[called & have])),
         "called_hto_pos": float(np.nanmean(pos[called & have])), "uncalled_hto_pos": float(np.nanmean(pos[unc & have])),
         "uncalled_hto_singlet": float(np.nanmean(singlet[unc & have])),
         "n_uncalled_hto_pos": int((pos & unc & have).sum()), "n_uncalled_hto_singlet": int((singlet & unc & have).sum()),
@@ -210,6 +206,7 @@ def hashing(bcs, called, A):
                                       "median_hto_count": (hs[unc], "median"),
                                       "frac_profile_sig": (sig[unc].astype(float), "mean")}, tot[unc]),
         "called_by_bin": bin_table({"frac_hto_pos": (np.where(have, pos, np.nan)[called].astype(float), "mean"),
+                                    "frac_hto_singlet": (np.where(have, singlet, np.nan)[called].astype(float), "mean"),
                                     "median_hto_count": (hs[called], "median")}, tot[called]),
         "hto_count_quantiles": {"called": q(hs[called & have]), "uncalled": q(hs[unc & have])},
     }
