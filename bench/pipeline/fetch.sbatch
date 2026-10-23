@@ -22,7 +22,7 @@ if [ ! -f .extracted ]; then
 fi
 curl -sSL --retry 5 -o "cellranger_$(basename $CRH5)" "$CRH5" || echo "[fetch] no Cell Ranger matrix"
 find $D -name "*.fastq.gz" | sort > all_fastqs.txt
-# GEX reads: drop antibody/protein/VDJ libraries
-grep -viE "antibody|protein_fastqs/.*_(adt|ab)_|vdj|_t_|_b_|tcr|bcr" all_fastqs.txt | grep -E "_R[12]_" > gex_fastqs.txt || true
+# GEX reads: files named *gex* when the tar has several libraries, else everything but antibody
+if grep -qi "gex" all_fastqs.txt; then grep -i "gex_S" all_fastqs.txt; else grep -viE "antibody|_adt_" all_fastqs.txt; fi   | grep -E "_R[12]_" > gex_fastqs.txt || true
 grep -iE "antibody|_adt|_ab_|feature" all_fastqs.txt > adt_fastqs.txt || true
 wc -l all_fastqs.txt gex_fastqs.txt adt_fastqs.txt; du -sh $D
