@@ -1,7 +1,8 @@
 #!/bin/bash
 #SBATCH --job-name=pb-run
 #SBATCH --account=debruinz
-#SBATCH --partition=short-cpu
+#SBATCH --partition=scavenger,short-cpu
+#SBATCH --requeue
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=96G
 #SBATCH --time=03:59:00
@@ -25,6 +26,7 @@ case $CHEM in
 esac
 TIME="/usr/bin/time -v -o $O/time.txt"
 echo "[run] $ID $TOOL species=$SPECIES chem=$CHEM node=$(hostname) $(date -Is)"
+echo "[run] cpu: $(lscpu | sed -n "s/^Model name: *//p")" | tee $O/node.txt
 
 case $TOOL in
 singlet-baseline|singlet-fixed)

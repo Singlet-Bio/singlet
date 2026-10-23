@@ -21,7 +21,9 @@ build_bin() {  # $1 src  $2 out-binary
   local b=$SCR/build-$(basename $2)
   # x86-64-v3 instead of -march=native so the binary runs on every Clipper CPU node
   rsync -a --exclude .git --exclude build "$1/" $SCR/src-$(basename $2)/
-  sed -i 's/-march=native/-march=x86-64-v3/' $SCR/src-$(basename $2)/src/pipeline/CMakeLists.txt
+  grep -rl -- "-march=native" $SCR/src-$(basename $2) --include=CMakeLists.txt | xargs sed -i 's/-march=native/-march=x86-64-v3/'
+  # Vendored STAR puts its own (old) htslib headers first; bam_hdr_destroy is the same call there
+  sed -i 's/sam_hdr_destroy(old)/bam_hdr_destroy(old)/' $SCR/src-$(basename $2)/src/star/bam_cat.c
   cmake -S $SCR/src-$(basename $2) -B $b -DSINGLET_BUILD_PIPELINE=ON -DCMAKE_BUILD_TYPE=Release > $b.cmake.log 2>&1 || { tail -40 $b.cmake.log; return 1; }
   cmake --build $b --target singlet -j $SLURM_CPUS_PER_TASK > $b.build.log 2>&1 || { grep -m20 -B2 -A8 "error" $b.build.log; return 1; }
   cp $b/src/pipeline/singlet $2
@@ -37,7 +39,8 @@ fi
 # Unit tests (fixed branch)
 T=$SCR/build-tests
 cmake -S $SRC_NEW -B $T -DSINGLET_BUILD_TESTS=ON -DSINGLET_BUILD_PIPELINE=OFF > $T.cmake.log 2>&1 || { tail -40 $T.cmake.log; exit 1; }
-for t in test_molecule_labels test_saturation test_cell_qc test_em_rescue test_sparse_accumulator test_read_stats; do
+for t in test_molecule_labels test_saturation test_saturation_curve test_cell_qc test_em_rescue test_sparse_accumulator test_read_stats; do
   cmake --build $T --target $t -j 8 > $T.$t.log 2>&1 || { echo "[tests] BUILD FAIL $t"; grep -m30 -A6 "error" $T.$t.log; continue; }
 done
+$T/tests/cpp/test_molecule_labels | tail -45
 cd $T && ctest -R "test_molecule_labels|test_saturation|test_cell_qc|test_em_rescue|test_sparse_accumulator|test_read_stats" --output-on-failure 2>&1 | tail -80

@@ -1,7 +1,8 @@
 #!/bin/bash
 #SBATCH --job-name=pb-fetch
 #SBATCH --account=debruinz
-#SBATCH --partition=short-cpu
+#SBATCH --partition=scavenger,short-cpu
+#SBATCH --requeue
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=8G
 #SBATCH --time=03:59:00

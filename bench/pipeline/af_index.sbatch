@@ -1,7 +1,8 @@
 #!/bin/bash
 #SBATCH --job-name=pb-afidx
 #SBATCH --account=debruinz
-#SBATCH --partition=short-cpu
+#SBATCH --partition=scavenger,short-cpu
+#SBATCH --requeue
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=96G
 #SBATCH --time=03:59:00
