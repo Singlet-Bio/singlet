@@ -10,3 +10,7 @@ BIN_OLD=$PB/bin/singlet-baseline
 export CONDA_PKGS_DIRS=$WORK/cache/conda_pkgs
 export PATH=$ENV/bin:$PATH
 mkdir -p $PB/{refs,data,runs,results,bin}
+REF=/mnt/projects/debruinz_project/cellarium/reference   # Singlet's campaign references (read-only)
+export ALEVIN_FRY_HOME=$PB/af_home
+# dataset row by id -> ID SPECIES CHEM TAR CRH5 NOTES
+dataset_row() { awk -F'\t' -v id="$1" '$1==id' $(dirname ${BASH_SOURCE[0]})/datasets.tsv; }
