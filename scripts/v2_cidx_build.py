@@ -5,6 +5,9 @@
     python -P scripts/v2_cidx_build.py --base /data/mirror --gse GSE145370 --labels-dir out/labels \\
         --sample-meta sample_meta.parquet --ontology cl-basic.obo --ontology uberon-basic.obo --out /data/cidx
 
+    # with per-cell features (gene-set scores, malignancy, ...) and the per-sample aggregates for the catalog (D1)
+    python -P scripts/v2_cidx_build.py ... --features features.json --features-dir out/features --d1-export out/d1
+
     # the atlas on Clipper/Anvil: every migrated study (one GSE per line), keep the ordinals of the previous version
     python -P scripts/v2_cidx_build.py --base https://data.singlet.bio --gse-file migrated.txt --previous 20261101T0000Z-ab12cd34 \\
         --threads 32 --out $WORK/cidx
@@ -54,6 +57,17 @@ def main(argv=None) -> int:
         help="OBO or JSON ontology (CL, UBERON, HANCESTRO); repeatable",
     )
     ap.add_argument("--previous", help="earlier index version whose sample ordinals are kept")
+    ap.add_argument(
+        "--features",
+        help='feature registry JSON: {"features": [{name, version, dtype, lo, hi, thresholds}]}',
+    )
+    ap.add_argument(
+        "--features-dir",
+        help="per-cell feature values: <dir>/<GSM>.features.parquet or <dir>/<GSE>/<GSM>.features.parquet",
+    )
+    ap.add_argument(
+        "--d1-export", help="also write the per-sample aggregates as CSV (+ suggested schema) here"
+    )
     ap.add_argument("--threads", type=int, default=8)
     ap.add_argument(
         "--parquet",
@@ -84,11 +98,15 @@ def main(argv=None) -> int:
         annot_version=a.annot_version,
         ontology=ont,
         previous=a.previous,
+        features=a.features,
+        features_dir=a.features_dir,
         threads=a.threads,
         parquet=a.parquet,
         log=lambda s: print(s, file=sys.stderr),
     )
     keys = res.write(a.out, set_current=not a.no_current)
+    if a.d1_export:
+        res.d1_export(a.d1_export)
     print(
         json.dumps(
             {

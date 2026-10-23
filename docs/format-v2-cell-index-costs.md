@@ -69,10 +69,10 @@ Bytes per cell (exon + intron, prefixes excluded because clients cache them):
 |---|---|---|---|
 | bytes moved | ~2.5 GB | ~120 GB / ~320 GB | same |
 | R2 reads (Class B, cache misses) | ~1,000 (2-4 per sample, <= 8 MiB each) = $0.0004 | ~2 M (one per member per cell) = $0.72 | ~2 M = $0.72 |
-| Worker requests | 2 (500k cells per keyed request) = $6e-7 | 15-40 (8 GiB per request) = $1e-5 | ~2 M = $0.60 |
+| Worker requests | 100 (10,000 cells per request) = $3e-5 | 100-300 (10,000 cells, <= 4,000 reads and 1 GiB per request) = $9e-5 | ~2 M = $0.60 |
 | Worker CPU (~0.5 ms per MB streamed, assumed) | ~1.3 s = $3e-5 | 60-160 s = $0.001-0.003 | per request ~1 ms: 2,000 s = $0.04 |
 | cache fills (whole sample object, once per data centre) | <= 300 x B | <= 50k x B = $0.018 (second miss only) | <= 50k x B = $0.018 (first miss) |
-| quota object | 2 charges = $3e-6 | ~40 charges | none |
+| quota object | 100 charges = $1.2e-4 | 100-300 charges = $3.5e-4 | none |
 | **total** | **~$0.0005** | **~$0.74** (bytes do not change the price; R2 reads do) | **~$1.38** |
 | wall time for the client (assumed: R2 first byte 40 ms in Cloudflare, client at 32 MB/s per stream as measured from this laptop) | dominated by transfer: ~80 s for 2.5 GB | Worker side 2 M reads / (16 parts x 6) x 40 ms = ~14 min; transfer 120 GB = ~1 h at 32 MB/s | 2 M round trips of 150-275 ms (measured from this laptop) at 16 in flight = ~6-10 h, plus the same transfer |
 
@@ -88,17 +88,50 @@ Takeaways:
 3. **The 48k-nnz chunk cut** (spec 10.2) does not change the read count but cuts sparse bytes, Worker CPU and the user's transfer time
    ~2.7x. It is the single most valuable change for this workload and must precede the migration campaign.
 
-## 3. Bounds per subject
+## 3. Bounds: one request never costs more than $0.01
 
-The daily allowance (Durable Object) and per-request caps make the worst case of one subject predictable:
+### 3.1 Per request
 
-| subject | worst case per UTC day | cost |
+Every request is planned before it runs, and its **worst case** is computed with the prices of section 1: every read misses the cache
+and starts a whole-object cache fill (a second Class B), CPU is 5 ms fixed + 0.25 ms per 1,000 index rows decoded + 1 ms per MB copied
+(both several times what the V8 measurements in `bench/cidx` show), plus the quota object's request and row write. A request whose
+worst case exceeds **$0.01**, or any cap below, is not run: the answer is 413 with a plan the client can run in smaller pieces or
+itself (spec 8.2). Answers report `estimate` (the worst case) and `cost` (from the reads that actually missed).
+
+| request (default caps) | the largest such request | worst case | measured on the pilot (local) |
+|---|---|---|---|
+| summary count / grouped count | ~10 reads, no rows | $0.000008 | $0.0000004 warm, $0.000004 cold |
+| row-scan count | 32 M rows (key) / 8 M (anon), ~620 reads | **$0.0006** | $0.000003 cold (40k rows) |
+| cell sample (`return: "cells"`) | 10,000 cells from 10 studies; all their matching rows decoded (<= 32 M) | **$0.0006** | $0.0000016 cold, estimate $0.000016 |
+| gather | 10,000 cells, 10 studies, 4,000 reads, 1 GiB | **$0.0030** | $0.000014 cold (100 cells, 14 samples), estimate $0.00005 |
+
+The caps, not the estimate alone, keep the bound: the largest request any cap admits costs at most ~$0.003, a third of the budget (tested
+in `src/test/data-v2-cidx.test.ts`, "cost bound"). The estimate is a second line of defence (it refuses any plan whose own worst case is
+over the budget, e.g. when caps are raised by configuration).
+
+What grows with the caps is not money but work per request: a uniform sample of 10,000 cells from 10 studies touches nearly every chunk
+of those studies' samples, i.e. moves roughly their whole called region (up to ~1 GB at today's chunking, ~0.4 GB with 48k-nnz chunks),
+which is what the client waits for. `sampling: "chunks"` takes whole chunks and moves far less (pilot: 0.57 MB instead of 9.2 MB for 1,000
+cells). So **10,000 cells and 10 studies are good defaults**: raising cells to 50,000 would still cost under $0.01 (reads are bounded by
+chunks, not cells) but would make single requests slower; lowering them only adds requests. Fewer than 10 studies per request makes the
+ranking (most eligible cells, or the caller's own order) decide more of the answer.
+
+### 3.2 Per subject and day
+
+The `CidxQuota` Durable Object keeps per-subject daily totals (UTC): cells, bytes, rows scanned, and **worst-case dollars**: every gather
+is charged its estimate before it streams, every row scan the worst case of what it read. Summary counts are not metered (they cost
+$0.0000004 each and are rate-limited).
+
+| subject | daily allowance | worst case per day |
 |---|---|---|
-| API key | 200 GiB sparse gather (~2 M reads at 100 KB) + 5 G rows scanned + 300 requests/min | R2 $0.72 + CPU ~$0.02 + requests ~$0.13 = **~$0.87** |
-| anonymous address | 4 GiB gather (~40k reads) + 200 M rows + 30 requests/min | **~$0.03** |
+| API key | $1.00 worst-case spend, 2 M cells, 200 GiB, 5 G rows scanned; 300 requests/min | $1.00 + summary counts at the rate limit (432k x $0.0000004 = $0.17) = **$1.17** |
+| anonymous address | $0.05, 200,000 cells, 4 GiB, 200 M rows; 30 requests/min | $0.05 + $0.02 = **$0.07** |
 
-Distributed anonymous abuse is bounded per address only; a global anonymous budget (one `CidxQuota` object named `anon:global`) would cap
-it absolutely and is a one-line change if needed.
+Actual cost is usually far below the charged worst case (cache hits, fewer reads than the cap), so these are ceilings. Distributed
+anonymous abuse is bounded per address only; a global anonymous budget (one `CidxQuota` object named `anon:global`) would cap it absolutely
+and is a one-line change if needed. Note also that plain ranged GETs of the public objects (what `via="direct"` clients and every v2
+download use) are outside these endpoints: each costs one Worker request plus one Class B on a miss ($0.66 per million) and is not
+rate-limited today.
 
 ## 4. A plausible month
 
@@ -114,6 +147,8 @@ rebuild and one annotation version:
 | storage (3 index versions + sidecars) | $0.22 |
 | rebuild + sidecar upload | $0.75 |
 | **total, before the $5 plan's inclusions** | **~$12-17** |
+
+With the 10,000-cell cap, the 20 M sparse cells are 2,000 requests of at most $0.003 each (worst case $6, ~$4.50 expected).
 
 Much of this falls inside the Workers Paid inclusions (10 M requests, 30 M CPU-ms, 10 M Class B). The dominant and only
 volume-sensitive term is sparse gathering, at ~$0.45-0.74 per million cells.

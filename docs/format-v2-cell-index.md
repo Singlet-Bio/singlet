@@ -1,6 +1,8 @@
 # Singlet v2 atlas cell index (`v2/cidx/`) and cross-study gather
 
-Status: DRAFT 1 (2026-10-23). Extends `docs/format-v2.md` (section 8 sketched `v2/cidx/` as "a later addition"). Reference
+Status: DRAFT 2 (2026-10-23): adds per-cell feature columns (4.9), per-sample aggregates and their D1 export (4.5, 4.10), seeded
+sampling with study ranking and the per-request caps of 10,000 cells and 10 studies (6.3), and the per-request cost budget with plan
+answers (8.2). Extends `docs/format-v2.md` (section 8 sketched `v2/cidx/` as "a later addition"). Reference
 implementation: `python/singlet/v2/atlas.py` (format, builder, query engine, client), `scripts/v2_cidx_build.py` (builder CLI); the
 Worker side is `workers/data-v2/src/{scx,cidx,gather,limits,routes}.ts` in the website repository. Costs: `docs/format-v2-cell-index-costs.md`.
 Measurements: `bench/cidx/` (scripts and result files named below). All integers little-endian.
@@ -88,13 +90,16 @@ One row per called cell. Physical column order:
 | `sex_score` | u8 | posterior of that call, as `ct_score` |
 | `anc` | u8 | inferred genetic ancestry category (HANCESTRO), dictionary code; 0 = no call |
 | `anc_prob` | u8 | proportion of that ancestry in the donor's estimate, as `ct_score` |
+| `f1`, `f2`, ... | u8 / u16 | registered per-cell features (4.9), in registry order |
 
 QC counts are exact (u32), not quantised: a 1/256-octave log code would save 1.9 B/cell (13 %, measured) but makes every threshold
 approximate; the simpler semantics won. Scores are u8 because the labels themselves are model estimates with far less than 1/254
-resolution. Query fields map onto columns (section 6.1); `n_umi` = `umi_exon + umi_intron`, `n_genes` = `feat_exon`.
+resolution. Score codes are `floor(x*254 + 0.5)`; a range bound compares against the code its own value is stored as, so no cell whose
+true score satisfies the range is dropped (one up to half a step outside may be kept). Query fields map onto columns (section 6.1);
+`n_umi` = `umi_exon + umi_intron`, `n_genes` = `feat_exon`.
 
-New per-cell columns (doublet score, mitochondrial fraction, cell-cycle phase once the `cells` tables carry them) are added as u8/u16
-columns in a later schema version; readers look columns up by name, so adding columns does not break them.
+Other per-cell values (gene-set scores, malignancy, perturbation calls, doublet or mitochondrial fractions) are registered features
+(4.9): extra columns with a registry entry, not schema changes. Readers look columns up by name.
 
 ### 4.3 Partitioning, order, sizes
 
@@ -135,11 +140,19 @@ query may name an ancestor that no cell carries directly ("lymphocyte"). Code 0 
 sample ordinals hidden from this version (withdrawn or replaced samples between full rebuilds, section 10). Size for the atlas: about
 0.3-0.5 MB, parsed once per Worker isolate.
 
-### 4.5 Sample table
+### 4.5 Sample table and per-sample aggregates
 
 SCX1 with one row per indexed sample, ordered by `so`: `so`, `gsm` and `gse` (the accession numbers), `organism`, `tissue` (codes),
-`n_columns`, `n_called`, `labeled`. It is the ordinal registry (the next build reads it to keep ordinals) and resolves `samples` /
-`studies` filters.
+`n_columns`, `n_called`, `labeled`, and per-sample aggregates of the called cells:
+
+* `umi_min, umi_q10, umi_q50, umi_q90, umi_max` (n_umi = exon + intron) and `genes_*` (n_genes), u32;
+* for every feature `fK`: `fK_n` (cells with a value), `fK_min, fK_q10, fK_q50, fK_q90, fK_max` (codes), and `fK_geJ` (cells at or above
+  the feature's J-th registered threshold).
+
+Quantiles are order statistics (`sorted[floor(q (n - 1))]`), so they are stored values and reproducible. It is the ordinal registry
+(the next build reads it to keep ordinals), resolves `samples` / `studies` filters, and prunes samples before any shard is read: a range
+on `n_umi`, `n_genes` or a feature skips every sample whose [min, max] cannot overlap it (and every sample without values of that
+feature). The directory's `sample_stats` maps range fields to these column prefixes.
 
 ### 4.6 Summary
 
@@ -170,6 +183,38 @@ design question "can a compact chunk-index blob avoid the prefix fetch": yes for
 plan; ~1.3 KB per sample, measured, ~90 MB for the atlas in ~280 blocks), but the *decoder* still needs each member's prefix
 (40-70 KB per member on the pilot, dominated by the codec-1 row-key stream). Clients therefore cache prefixes on disk by member digest
 (immutable) and tell the Worker which ones they have (`have_prefix`).
+
+### 4.9 Per-cell features
+
+A feature is any number per called cell that a pipeline outside the index computes: a gene-set score (single-cell GSEA, e.g. Hallmark),
+a malignancy probability, a perturbation call, a future derived score. The builder takes a registry and one file per sample:
+
+```json
+{"features": [{"name": "hallmark_hypoxia", "version": "msigdb-2024.1/ucell-1", "dtype": "u8", "lo": -1, "hi": 1,
+               "thresholds": [0.0, 0.5], "description": "...", "producer": "singlet.enrich 0.4"}]}
+```
+
+and `<features_dir>/<GSM>.features.parquet` (or `<GSE>/<GSM>...`) with `col` and one float column per feature it provides. Values
+are stored as linear codes over `[lo, hi]` (clipped): u8 = `floor((x - lo) / (hi - lo) * 254 + 0.5)`, 255 = missing; u16 the same with
+65,534 and 65,535. Bounds compare against their own codes as scores do (4.2). Names are `[a-z][a-z0-9_]*` (at most 48 characters),
+unique, not a built-in field; at most 64 features and 4 thresholds each. The builder assigns shard columns `f1, f2, ...` in registry
+order and records the registry (with `column`, `scale`, `na`) in the directory under `features`; a query names a feature exactly like a
+built-in range field (`"ranges": {"hallmark_hypoxia": [0.3, null]}`) and cell answers return it decoded. Versioning: a feature's
+`version` is part of the registry; changing a producer or its parameters is a new version of the feature, and the index is rebuilt
+(features, like labels, are inputs of a version). A sample with no feature file gets NA for every feature. A u8 feature costs about
+1 byte per cell, a u16 about 2.
+
+### 4.10 Export to the catalog (D1)
+
+`BuildResult.d1_export(dir)` / `scripts/v2_cidx_build.py --d1-export dir` writes the per-sample aggregates as CSV for the catalog,
+which owns the tables and loads them (tier 1: sample filters and pruning in D1 / the bit index; tier 2: this index):
+
+* `cidx_sample.csv`: gsm_id, gse_id, so, index_version, organism, tissue, n_called, labeled, umi_min..umi_max, genes_min..genes_max;
+* `cidx_sample_celltype.csv`: gsm_id, cell_type (CL id), cell_type_label, n_cells, index_version (cells per CL term per sample, from the
+  summary);
+* `cidx_sample_feature.csv`: gsm_id, feature, feature_version, n_values, min, q10, q50, q90, max (decoded), threshold, n_ge, index_version
+  (one row per registered threshold);
+* `cidx_d1_schema.sql`: the suggested tables.
 
 ### 4.8 Parquet export
 
@@ -209,36 +254,71 @@ difference between ~1 s and ~10 s of CPU for a broad query; general compression 
 {"version": "current",
  "where": {"organism": "Homo sapiens", "cell_type": ["CL:0000084"], "tissue": "lung", "sex": ["female"], "ancestry": "HANCESTRO:0005",
            "samples": ["GSM..."], "studies": ["GSE..."],
-           "ranges": {"n_umi": [1000, null], "n_genes": [200, 6000], "cell_type_score": [0.5, null]}},
- "return": "count" | "cells", "by": ["cell_type", "tissue"], "limit": 100000, "cursor": "...", "fields": ["ct", "umi_exon", ...]}
+           "ranges": {"n_umi": [1000, null], "n_genes": [200, 6000], "cell_type_score": [0.5, null], "hallmark_hypoxia": [0.3, null]}},
+ "return": "count" | "cells", "by": ["cell_type", "tissue"],
+ "n": 10000, "seed": 0, "max_studies": 10, "study_rank": "cells" | "given" | "random", "sampling": "uniform" | "chunks",
+ "cursor": "...", "fields": ["ct", "umi_exon", "f1", ...], "dry_run": false}
 ```
 
 Semantics (identical in `singlet.v2.atlas.Index` and the Worker; the Worker tests check the Worker's answers against golden answers
 computed by the Python engine): values in a list are ORed, fields are ANDed. `cell_type`, `tissue`, `ancestry` take ontology ids or
 labels (case-insensitive, also of ancestors) and include descendants. `sex` takes female / male / ambiguous / unknown. Ranges are
 inclusive, `null` = open; range fields: `n_umi`, `n_umi_exon`, `n_umi_intron`, `n_genes`, `n_feat_exon`, `n_feat_intron`,
-`cell_type_score`, `sex_score`, `ancestry_prob`. Score bounds are applied at the stored resolution (`ceil(lo*254)`, `floor(hi*254)`) and a
-missing score never satisfies a score range. Unknown filters, fields or terms are errors (400), not silently ignored.
+`cell_type_score`, `sex_score`, `ancestry_prob`, and every registered feature. Score and feature bounds are applied at the stored
+resolution (4.2) and a missing value never satisfies a range. Unknown filters, fields or terms are errors (400), not silently ignored.
 
 ### 6.2 Answers
 
 * `return: "count"` without ranges: from the summary (no shard is read): `{"count", "groups": [{"cell_type": "CL:...",
   "cell_type_label": "...", "n_cells": ...}], "source": "summary"}`.
 * `return: "count"` with ranges: a row scan; `"source": "scan"`.
-* `return: "cells"`: `{"n", "cells": {"so": [...], "gsm": [...], "col": [...], "cell_type": [...], "n_umi_exon": [...], ...}, "cursor"}`
-  in index order (partition, shard, row). At most `limit` cells (capped per tier, 6.3); `cursor` resumes exactly where the page ended.
-* Every answer carries `version`, `complete`, `cursor`, `rows_scanned`, `reads`, `bytes_read`, `cache_hits`, `ms`.
+* `return: "cells"`: a seeded sample (6.3): `{"n", "cells": {"so", "gsm", "col", "cell_type", ..., "n_umi_exon", ..., <features>},
+  "eligible", "eligible_max", "remaining", "sampled", "studies": [{"gse", "eligible_max", "selected"}], "n_studies", "cursor"}`, cells sorted
+  by (so, col).
+* Every answer carries `version`, `complete`, `cursor`, `rows_scanned`, `reads`, `bytes_read`, `cache_hits`, `ms`, `cost` (the request's
+  cost from the reads that missed the cache) and, for scans, `estimate` (its worst case, 8.2).
+* `dry_run: true` answers `{plan}` with the worst-case estimate and the shards it would read, and runs nothing.
 
-A cursor encodes `(version, query digest, shard, group, row)`; it is rejected for another query or version. A row scan stops after
-the tier's `maxRowsScanned` rows and returns `complete: false` with a cursor; counts are summed by the client over the continuation
-(`singlet.v2.atlas.count_cells` does this).
+A cursor is opaque and bound to `(version, query, sampling parameters)`; it is rejected for anything else. For counts it encodes a
+position (shard, group, row): a row scan stops after the tier's `maxRowsScanned` rows and returns `complete: false` with a cursor,
+and counts are summed over the continuation (`singlet.v2.atlas.count_cells` does this). For cells it encodes the last sampling key of
+the page (6.3).
 
-### 6.3 Limits
+### 6.3 Cell answers: at most 10 studies, at most 10,000 cells, seeded uniform sample
+
+One request returns at most `n <= 10,000` cells drawn from at most `max_studies <= 10` studies:
+
+1. **Studies.** From the summary (no shard read): every study with cells matching all non-range filters, in samples the per-sample
+   aggregates do not rule out; `eligible_max` is that count (an upper bound when ranges are given). Ranked by `study_rank`: `cells`
+   (default: most eligible cells, then GSE number), `given` (the order of the `studies` filter: the caller's relevance ranking, e.g. from
+   the website's search), or `random` (seeded: `hash32(seed, gse, 0x9E3779B9)`). The first `max_studies` are selected; `studies` lists the
+   top 50 with their counts and whether they were selected.
+2. **Eligible cells.** Every matching cell of the selected studies' samples (postings path; rows decoded = `rows_scanned`).
+3. **Sample.** Each eligible cell gets the key `(hash32(seed, so, col), so, col)`, with `hash32(s, a, b) = mix32(mix32(s ^ a) ^ b)` and
+   `mix32` the lowbias32 integer hash (u32 arithmetic; identical in Python and the Worker, pinned by golden values). The answer is the `n`
+   smallest keys after the cursor: a uniform random sample without replacement of the eligible set, the same for the same seed. The next
+   page (`cursor`) continues in key order, so pages of one seed are disjoint and together enumerate the eligible set in a random order:
+   "deeper sampling" is repeating the request with the cursor, each repeat one request under the rate limits and daily quota. The Worker
+   keeps a bounded heap of `n` keys, so memory does not depend on the eligible count.
+4. **`sampling: "chunks"`.** The key is that of the cell's matrix chunk, `hash32(seed ^ 0x5BD1E995, so, chunk)` (exon chunk index from
+   the plan block), so whole chunks are taken until `n` cells: cells within a chunk are correlated (neighbouring columns, roughly similar
+   depth), but a gather of them reads one chunk per ~chunk-width cells instead of nearly every chunk. Measured on the pilot: 1,000 cells
+   uniform 9.2 MB of chunk reads, chunks 0.57 MB; 10,000 cells 9.3 MB vs 3.6 MB.
+
+Why these thresholds: the dollar bound (8.2) holds with a wide margin at 10,000 cells / 10 studies (worst case ~$0.003); what grows with
+them is the work per request (rows decoded, bytes gathered, client wait). A uniform sample of 10,000 cells spread over 10 studies touches
+nearly every chunk of the selected samples, i.e. moves about the whole called region of those samples (up to ~1 GB with today's chunking),
+which is the practical limit; cutting chunks at 48k non-zeros (10.2) or `sampling: "chunks"` lowers it. A larger `n` per request would not
+raise the cost much but would raise per-request bytes and latency; fewer studies per request makes ranking matter more. Both caps are
+configuration (`CIDX_LIMITS`), not code.
+
+### 6.4 Limits
 
 | | anonymous | API key |
 |---|---|---|
+| cells per answer | 10,000 | 10,000 |
+| studies per answer | 10 | 10 |
 | rows decoded per request (row scans) | 8 M | 32 M |
-| cells per page | 20,000 | 100,000 |
 | row-scan rows per UTC day | 200 M | 5 G |
 | requests per minute (Rate Limiting binding, per location) | 30 | 300 |
 
@@ -250,14 +330,15 @@ All are configurable without code (`CIDX_LIMITS` JSON var; rates in `wrangler.to
 
 ```json
 {"version": "20261101T0000Z-8c65e3ff",
- "cells": [[3072, [5, 17, 220]], ["GSM4317426", [0, 1, 2]]],      // or "query": {"where": {...}, "limit": 50000}
+ "cells": [[3072, [5, 17, 220]], ["GSM4317426", [0, 1, 2]]],      // or "query": {"where": {...}, "n": 10000, "seed": 0, ...}
  "modalities": ["counts"],                                         // the singlet.v2.client vocabulary
- "have_prefix": ["<member digest>", ...], "cells_table": false}
+ "have_prefix": ["<member digest>", ...], "cells_table": false, "dry_run": false}
 ```
 
 `modalities` uses the vocabulary of `singlet.v2.client` (`counts`, `spliced`, `unspliced`, `splice_junctions`, `mt`, `vdj`; aliases
 `exon`, `intron`, `sj`, ...); `psi` is derived, so a client gathers `splice_junctions` and computes it. Only called (indexed) columns can
-be gathered. `cells_table: true` adds each sample's whole `cells` member (barcodes and per-cell tables) to the stream.
+be gathered. `cells_table: true` adds each sample's whole `cells` member (barcodes and per-cell tables) to the stream. A `query` is a
+handle: the cells of the same request to `/v2/cidx/query` with `return: "cells"` (the seeded sample of 6.3), gathered in one step.
 
 ### 7.2 Plan
 
@@ -265,8 +346,10 @@ From the plan blocks only (no sample object is read to plan): for every sample a
 (touching chunks merged), plus the prefix unless its digest is in `have_prefix`. Pieces of one sample object closer than 64 KiB become
 one read (at most 8 MiB). `singlet.v2.atlas.plan_gather` is the reference; the Worker's `planGather` gives the same reads (tested).
 
-Before anything is streamed the Worker checks the per-request caps (cells, samples, planned bytes) and reserves the planned cells and
-bytes against the subject's daily quota.
+Before anything is streamed the Worker checks the per-request caps (cells, studies, samples, planned bytes, planned reads) and the
+worst-case cost (8.2), then reserves the planned cells and bytes against the subject's daily quota. A plan over a cap or the budget is
+answered 413 with a plan the client can run in smaller requests (`singlet.v2.atlas.gather` batches by 10,000 cells and 10 studies);
+`dry_run: true` returns the plan and its estimate as JSON.
 
 ### 7.3 Stream `application/x-singlet-gather`
 
@@ -277,7 +360,8 @@ frames: u32 sample i | u16 member index | u8 kind (1 prefix, 2 run, 3 whole memb
 ```
 
 Frames arrive in completion order. An error frame (JSON `{sample, key, error}`) reports a failed read and the stream continues; the end
-frame's body is the trailer `{ok, errors, reads, bytes_read, bytes_sent, cache_hits, ms}`. A client adds every run to its decoder at
+frame's body is the trailer `{ok, errors, reads, bytes_read, bytes_sent, cache_hits, cost, ms}`; the header carries the worst-case
+`estimate`. A client adds every run to its decoder at
 the given member offset (`singlet._pz2.Member.add_range`) and decodes exactly as for a local file; header digests are checked against
 the plan.
 
@@ -294,27 +378,42 @@ isolate (not the first, unlike plain ranged GETs: a gather touches many samples 
 
 | | anonymous | API key |
 |---|---|---|
-| cells per request | 20,000 | 500,000 |
-| samples per request | 200 | 5,000 |
-| planned bytes per request | 512 MiB | 8 GiB |
-| cells per UTC day | 200,000 | 20 M |
+| cells per request | 10,000 | 10,000 |
+| studies per request | 10 | 10 |
+| samples per request | 2,000 | 2,000 |
+| planned bytes per request | 1 GiB | 1 GiB |
+| planned R2 reads per request | 4,000 | 4,000 |
+| cells per UTC day | 200,000 | 2 M |
 | bytes per UTC day | 4 GiB | 200 GiB |
 
-`singlet.v2.atlas.gather` splits larger requests into batches under the per-request caps (a sample bigger than a batch is split by
-columns) and stitches the result.
+`singlet.v2.atlas.gather` splits larger requests into batches under the per-request caps (study by study; a sample bigger than a batch is
+split by columns) and stitches the result; every batch is a request under the rate limits and daily quota.
 
 ## 8. Subjects, rate limits, quotas
 
 * **Subject**: `key:<api key id>` when `Authorization: Bearer <key>` is a valid singlet.bio API key (checked read-only against D1
   `api_keys` by SHA-256, memoised 60 s per isolate; revoked/expired keys get 401), else `anon:<hash of the client address>`.
-* **Per-request caps** (6.3, 7.5): stateless, always on.
+* **Per-request caps** (6.4, 7.5) and the per-request cost budget (8.2): stateless, always on.
 * **Request rate**: Workers Rate Limiting bindings `CIDX_RL_ANON` / `CIDX_RL_KEY` (per location, approximate).
-* **Daily allowance**: Durable Object `CidxQuota`, one per subject, single-threaded so check-and-add is atomic. Gathers reserve their
-  planned cells and bytes up front (no refund on failure). Row-scan queries check that the day's row budget has room, then add the rows
-  they scanned off the latency path, so a subject overshoots by at most one request's cap. Summary counts are not metered.
+* **Daily allowance**: Durable Object `CidxQuota`, one per subject, single-threaded so check-and-add is atomic: cells, bytes, rows
+  scanned and worst-case dollars (anonymous $0.05/day, API key $1.00/day). Gathers reserve their planned cells, bytes and worst-case
+  cost up front (no refund on failure). Row-scan queries check that the day's row and dollar budgets have room, then add the rows they
+  scanned and their worst case off the latency path, so a subject overshoots by at most one request. Summary counts are not metered.
 * Missing bindings switch their layer off (local tests, first deploy); the per-request caps still bound every request.
 
-What this bounds is in `docs/format-v2-cell-index-costs.md` (worst case per API key per day ~$0.87, per anonymous address ~$0.03).
+### 8.2 Per-request cost budget and plan answers
+
+Every request is bounded so that its Cloudflare cost cannot exceed `maxCostUsd` = **$0.01** even if every read misses the cache and
+starts a cache fill. Before scanning or reading, the Worker computes the worst case of the plan with the list prices and a CPU model
+(`estimateCost`: request + (reads + fills) x Class B + CPU ms (5 fixed, 0.25 per 1,000 rows decoded, 1 per MB copied) + Durable Object
+calls); answers report it as `estimate` and, after the work, `cost` from the reads that actually missed. The caps are chosen so that the
+largest request they admit stays under the budget (worst gather: 4,064 reads + 1 GiB, ~$0.0030; worst row scan: 32 M rows, ~$0.0003;
+tested). If a request's own plan exceeds the budget or a cap (a sample whose selected studies hold more rows than one request may scan, a
+gather over its byte or read cap), the answer is 413 with `plan`: the reason, the estimate, the index objects to read (shard keys and sizes)
+and a ready-to-run Python snippet (`singlet.v2.atlas.Index(...).sample_cells(...)`, or a batched `gather`) for running it client-side
+against the immutable, cacheable index objects, or for narrowing the request. `dry_run` returns the same plan without refusing.
+
+What this bounds per day is in `docs/format-v2-cell-index-costs.md` (worst case per API key per day ~$1.17, per anonymous address ~$0.07).
 
 ## 9. Per-cell label sidecars
 
@@ -405,16 +504,19 @@ Python (`singlet.v2.atlas`):
 
 ```python
 from singlet.v2 import atlas
-cells = atlas.find_cells(organism="Homo sapiens", cell_type="T cell", tissue="UBERON:0002048", min_umi=1000)   # DataFrame
-n     = atlas.count_cells(cell_type="T cell", by=["tissue", "sex"])                                         # DataFrame of counts
-adata = atlas.gather(cells, modalities=["counts"])          # AnnData: X, layers spliced/unspliced, obs gsm/gse/so/col, var genes
-idx   = atlas.Index.open(base="/mirror")                    # the same engine on a local mirror or over ranged GETs
+cells = atlas.find_cells(organism="Homo sapiens", cell_type="T cell", tissue="UBERON:0002048", min_umi=1000,
+                         ranges={"hallmark_hypoxia": [0.3, None]}, n=10_000, seed=0)       # seeded sample, <= 10 studies
+more  = atlas.find_cells(..., cursor=cells.attrs["cursor"])          # the next, disjoint page of the same sample
+n     = atlas.count_cells(cell_type="T cell", by=["tissue", "sex"])  # DataFrame of counts (not sampled)
+adata = atlas.gather(cells, modalities=["counts"])  # AnnData: X, layers spliced/unspliced, obs gsm/gse/so/col, var genes
+idx   = atlas.Index.open(base="/mirror")            # the same engine (sample_cells, count, find) on a mirror or over ranged GETs
 ```
 
 `via="worker"` (default for an http base) uses the endpoints; `via="direct"` plans locally and issues the same coalesced range requests
 (the comparison path of the cost model). `gather` decodes with `singlet._pz2` in parallel threads, aggregates rows to genes with the
 vocabulary packs exactly as `singlet.v2.client` does (bit-exact against `client._read_sample`, tested), caches prefixes on disk by
-member digest, and splits large requests into batches. Its `modalities` mirror the vocabulary that `singlet.v2.client` is adding
+member digest, and splits large requests into batches of at most 10,000 cells and 10 studies. A refusal for budget raises
+`atlas.OverBudget` carrying the Worker's plan. Its `modalities` mirror the vocabulary that `singlet.v2.client` is adding
 (`counts`, `spliced`, `unspliced`, `splice_junctions`, `mt`, `vdj`); when that lands, `atlas` should import it instead of its copy.
 
 R and MCP (follow-up, not in this change):
@@ -439,27 +541,31 @@ R and MCP (follow-up, not in this change):
 
 ## 14. Measured on the pilot (local workerd)
 
-GSE145370 (14 samples, 40,614 called cells, 31 MB of sample objects), fake labels of the annotation schema, index built locally, the data
+GSE145370 (14 samples, 40,614 called cells, 31 MB of sample objects), fake labels of the annotation schema and two fake features
+(u8 and u16; shards 545 KB = 13.4 B/cell with them), index built locally, the data
 Worker running in workerd (Miniflare 4.20260617, `workers/data-v2/scripts/local.mjs`) with a seeded local R2 and Cache API; client on
 the same laptop. Local R2 is a disk, so latencies are a lower bound for request handling, not a prediction of Cloudflare's; bytes, reads
 and request counts are exact. `bench/cidx/results_local_pilot.json`; cold = first call (empty memos and cache), warm = third call.
 
-| query | n | cold ms (client / Worker) | warm ms | reads | bytes read | rows scanned | response bytes |
+| query | n | cold ms (client / Worker) | warm ms | rows scanned | response bytes | worst-case estimate $ | cost $ (cold) |
 |---|---|---|---|---|---|---|---|
-| count, summary (cell type) | 24,379 | 192 / 162 | 16 / 5 | 1 | 544 | 0 | 166 |
-| count by cell type x sex, summary | 40,614 | 12 / 5 | 10 / 5 | 1 | 544 | 0 | 3,067 |
-| count, row scan (cell type + n_umi) | 2,466 | 122 / 110 | 37 / 24 | 1 | 188,940 | 40,614 | 170 |
-| cells, 1,000 (cell type + score) | 1,000 | 91 / 72 | 43 / 32 | 1 | 422,500 | 40,614 | 108,033 |
-| cells, sample set (postings) | 3,495 | 126 / 111 | 47 / 34 | 1 | 422,500 | 40,614 | 379,441 |
-| cells, first page of everything | 20,000 | 193 / 96 | 152 / 45 | 1 | 422,500 | 40,614 | 2,148,842 |
+| count, summary (cell type) | 24,379 | 273 / 170 | 13 / 4 | 0 | 233 | | 0.0000040 |
+| count by cell type x sex, summary | 40,614 | 12 / 6 | 11 / 5 | 0 | 3,134 | | 0.0000004 |
+| count, row scan (cell type + n_umi) | 2,466 | 166 / 120 | 26 / 10 | 40,614 | 249 | | 0.0000031 |
+| count, two feature ranges | 5,911 | 84 / 48 | 47 / 21 | 40,614 | 249 | | 0.0000009 |
+| sample 1,000 cells (cell type + score), uniform | 1,000 | 238 / 214 | 117 / 64 | 40,614 | 126,563 | 0.0000155 | 0.0000016 |
+| sample 1,000 cells, chunks | 1,000 | 129 / 115 | 176 / 138 | 40,614 | 125,957 | 0.0000155 | 0.0000009 |
+| sample 10,000 of 40,614 cells | 10,000 | 378 / 294 | 313 / 215 | 40,614 | 1,257,243 | 0.0000156 | 0.0000009 |
+| dry run of that sample | | 16 | 21 | | 799 | 0.0000156 | |
 
-| gather (`counts`) | samples | planned bytes, no prefixes cached | with prefixes cached | reads | bytes/cell (cached) | cold fetch / total s | warm fetch / total s |
+| gather (`counts`) of a seeded sample | samples | planned bytes (no prefixes cached) | reads | cold fetch / total s | warm fetch / total s | worst-case estimate $ | cost $ (cold) |
 |---|---|---|---|---|---|---|---|
-| 1 cell | 1 | 940,867 | 779,819 | 1 | 779,819 | 0.04 / 1.73 | 0.04 / 0.24 |
-| 100 cells | 14 | 8,550,313 | 7,363,436 | 18 | 73,634 | 0.42 / 1.32 | 0.26 / 1.16 |
-| 1,000 cells | 14 | 9,077,583 | 7,878,123 | 16 | 7,878 | 0.19 / 1.42 | 0.22 / 0.95 |
-| 10,000 cells | 14 | 9,286,993 | 8,081,506 | 15 | 808 | 0.23 / 1.19 | 0.20 / 1.07 |
-| 40,614 cells (2 requests, anonymous cap) | 14 | 9,286,993 | 8,081,506 | 15 | 199 | 0.22 / 1.62 | 0.20 / 1.16 |
+| 1 cell | 1 | 940,867 | 1 | 0.04 / 0.95 | 0.03 / 0.35 | 0.0000023 | 0.0000013 |
+| 100 cells | 14 | 7,756,281 | 21 | 1.11 / 2.50 | 0.30 / 1.25 | 0.0000168 | 0.0000144 |
+| 1,000 cells, uniform | 14 | 9,182,334 | 15 | 0.19 / 1.47 | 0.16 / 1.02 | 0.0000125 | 0.0000007 |
+| 1,000 cells, chunks | 1 | 571,230 | 2 | 0.03 / 0.27 | 0.03 / 0.41 | 0.0000030 | 0.0000006 |
+| 10,000 cells, uniform | 14 | 9,266,046 | 15 | 0.17 / 1.29 | 0.27 / 1.49 | 0.0000125 | 0.0000007 |
+| 10,000 cells, chunks | 6 | 3,628,814 | 12 | 0.66 / 2.16 | 0.12 / 0.82 | 0.0000103 | 0.0000006 |
 
 "total" includes decoding and building the AnnData (parallel decode: 10,000 cells went from 9.4 s single-threaded to 1.6 s with 4
 threads); the 1-cell cold total includes loading the vocabulary packs. Correctness: Worker-streamed and direct gathers are bit-identical
