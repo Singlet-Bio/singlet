@@ -31,11 +31,11 @@ command -v apptainer >/dev/null 2>&1 || { source /etc/profile.d/lmod.sh 2>/dev/n
 echo "$GSE $GSM on $(hostname)"; nvidia-smi -L || true
 apptainer exec --bind "$WORK" --bind /tmp "$SIF" "$VENV/bin/python" -P "$SRC/bench/empty_droplets/cellbender_io.py" export "$DATA/$GSE/$GSM.npz" "$SCRATCH/in" | tee "$SCRATCH/export.json"
 NCALL=$(apptainer exec "$SIF" python3 -c "import json,sys; print(json.load(open('$SCRATCH/export.json'))['n_called'])")
-NBC=$(apptainer exec "$SIF" python3 -c "import json,sys; print(json.load(open('$SCRATCH/export.json'))['n_barcodes'])")
+NTOT=$(apptainer exec "$SIF" python3 -c "import json,sys; print(json.load(open('$SCRATCH/export.json'))['total_droplets'])")
 mkdir -p "$OUT/$GSE"
 cd "$SCRATCH"
 apptainer exec --nv --bind "$WORK" --bind /tmp "$CB_SIF" cellbender remove-background --cuda --input "$SCRATCH/in" \
-  --output "$SCRATCH/cb.h5" --expected-cells "$NCALL" --total-droplets-included "$(( NBC * 95 / 100 ))" --epochs 150 2>&1 | tail -40
+  --output "$SCRATCH/cb.h5" --expected-cells "$NCALL" --total-droplets-included "$NTOT" --epochs 150 2>&1 | tail -40
 cp "$SCRATCH"/cb_cell_barcodes.csv "$OUT/$GSE/$GSM.cellbender_cells.csv" 2>/dev/null || true
 cp "$SCRATCH"/cb.h5 "$OUT/$GSE/$GSM.cellbender.h5"   # kept on Clipper so collect can be rerun after a re-analysis
 apptainer exec --bind "$WORK" --bind /tmp "$SIF" "$VENV/bin/python" -P "$SRC/bench/empty_droplets/cellbender_io.py" collect \

@@ -89,6 +89,15 @@ def author_barcodes(gse, gsm):
         rows = gzip.decompress(get(url)).decode().splitlines()
         bcs = {norm_bc(r.split("\t")[0]) for r in rows[1:]} - {None}
         return bcs, url
+    if gse == "GSE145370":
+        # the atlas holds the TCR libraries (GSM4317423..36, "S1xx_TCR Sample k"); 10x 5' GEX and V(D)J libraries of one GEM
+        # well share cell barcodes, so the authors' GEX call (GSM4317409..22, "S1xx_mRNA Sample k") is the cell set
+        gex = f"GSM{int(gsm[3:]) - 14}"
+        for f in listing(geo_dir(gex, "samples")):
+            if "filtered_feature_bc_matrix" in f:
+                url = geo_dir(gex, "samples") + f
+                return {norm_bc(b) for b in barcodes_from_bytes(f, get(url))} - {None}, url + " (GEX library of the same GEM well)"
+        return None, f"no filtered matrix for {gex}"
     if gse == "GSE256089":
         # GEX GSMs GSM8085472, 74, ... pair with lane files BatchA_Lane1, Lane3, ... (HTO GSMs are the odd ones)
         k = int(gsm[3:]) - 8085472

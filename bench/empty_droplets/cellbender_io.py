@@ -35,7 +35,12 @@ def export(npz, out_dir):
         for b in d["barcodes"]:
             fh.write(f"{b}\n")
     tot = np.asarray(X.sum(axis=0)).ravel()
-    print(json.dumps({"n_barcodes": int(X.shape[1]), "n_called": int(d["called"].sum()), "min_total": int(tot.min())}))
+    # CellBender drops droplets below --low-count-threshold (5) and models the barcodes ranked beyond
+    # --total-droplets-included as surely empty: leave it a tail of low (>= 5 UMI) barcodes
+    n5 = int((tot >= 5).sum())
+    total = max(2 * int(d["called"].sum()), n5 - min(5000, n5 // 3))
+    print(json.dumps({"n_barcodes": int(X.shape[1]), "n_called": int(d["called"].sum()), "min_total": int(tot.min()),
+                      "n_ge5": n5, "total_droplets": int(min(total, n5 - 100))}))
 
 
 def collect(npz, h5, out_json, analysis_npz=None):
