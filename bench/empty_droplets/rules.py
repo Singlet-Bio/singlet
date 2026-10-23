@@ -111,7 +111,8 @@ def main():
         if "species_p" in z.files:
             hf = z["human_frac"]
             if np.quantile(hf[called], 0.05) < 0.2 and np.quantile(hf[called], 0.95) > 0.8:  # a real two-species mixture
-                pure = unc & (z["species_p"] < 0.001) & (np.maximum(hf, 1 - hf) >= 0.9)
+                # >= 30 UMIs: below that a handful of counts (often one molecule counted as exon and intron) passes as "pure"
+                pure = unc & (tot >= 30) & (z["species_p"] < 0.001) & (np.maximum(hf, 1 - hf) >= 0.9)
         edc = None
         for k in ("emptydrops_adaptive_called", "emptydrops_lower100_called"):
             if k in z.files:
