@@ -37,5 +37,6 @@ cd "$SCRATCH"
 apptainer exec --nv --bind "$WORK" --bind /tmp "$CB_SIF" cellbender remove-background --cuda --input "$SCRATCH/in" \
   --output "$SCRATCH/cb.h5" --expected-cells "$NCALL" --total-droplets-included "$NBC" --epochs 150 2>&1 | tail -40
 cp "$SCRATCH"/cb_cell_barcodes.csv "$OUT/$GSE/$GSM.cellbender_cells.csv" 2>/dev/null || true
+cp "$SCRATCH"/cb.h5 "$OUT/$GSE/$GSM.cellbender.h5"   # kept on Clipper so collect can be rerun after a re-analysis
 apptainer exec --bind "$WORK" --bind /tmp "$SIF" "$VENV/bin/python" -P "$SRC/bench/empty_droplets/cellbender_io.py" collect \
   "$DATA/$GSE/$GSM.npz" "$SCRATCH/cb.h5" "$OUT/$GSE/$GSM.cellbender.json" --analysis-npz "$OUT/$GSE/$GSM.bc.npz"
