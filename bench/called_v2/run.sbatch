@@ -4,6 +4,7 @@
 # R2 or D1.
 #
 #   MODE=validate (array over studies.tsv rows of bench/empty_droplets)  -> $OUT/<GSE>/<GSM>.v2.json + .pv.npz
+#   MODE=inspect                                                       outlier breakdown (log)
 #   MODE=aggregate                                                     -> $OUT/../report
 #
 #   sbatch --array=0-17%9 --export=ALL,MODE=validate run.sbatch
@@ -53,8 +54,11 @@ case "$MODE" in
     rt "${PY[@]}" "$B/validate.py" "$DATA/$GSE" --out "$OUT/$GSE" --truth-cache "$CACHE" --edrop-results "$EDROP/$GSE" \
       --threads "${SLURM_CPUS_PER_TASK:-8}" ${VALIDATE_ARGS:-}
     ;;
+  inspect)
+    rt "${PY[@]}" "$B/inspect_outliers.py" --data "$DATA" --results "$OUT" --edrop "$EDROP" --truth-cache "$CACHE"
+    ;;
   aggregate)
     rt "${PY[@]}" "$B/aggregate.py" "$OUT" --out "${REPORT:-$WORK/state/called_v2/report}"
     ;;
-  *) echo "MODE must be validate or aggregate"; exit 2 ;;
+  *) echo "MODE must be validate, inspect or aggregate"; exit 2 ;;
 esac
