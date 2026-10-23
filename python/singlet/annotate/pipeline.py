@@ -33,7 +33,8 @@ def annotate_sample(
     seed: int = 0,
 ) -> Tuple["object", dict]:
     """Label table (see :mod:`singlet.annotate.output`) and a summary dict for one sample. ``af_table``: the 1000 Genomes
-    super-population allele frequencies (DataFrame with chrom, pos, ref, alt, AFR, AMR, EAS, EUR, SAS); without it, or without
+    super-population allele frequencies (:class:`~singlet.annotate.ancestry.AFIndex`, or a DataFrame with chrom, pos, ref, alt,
+    AFR, AMR, EAS, EUR, SAS); without it, or without
     donor SNP depths in ``s``, ancestry stays null."""
     import pandas as pd
 
@@ -69,9 +70,10 @@ def annotate_sample(
     # ---- ancestry (human only; needs restricted donor depths and the allele-frequency table)
     if s.species == "human" and af_table is not None and s.donor_sites:
         t = time.time()
+        idx = af_table if isinstance(af_table, ANC.AFIndex) else ANC.AFIndex(af_table)
         calls = {}
         for d, sites in s.donor_sites.items():
-            ad, dp, F = ANC.align_sites(sites, af_table)
+            ad, dp, F = idx.align(sites)
             calls[d] = ANC.infer_ancestry(ad, dp, F, seed=seed)
         if s.donor is None:
             # one donor in the sample: its call covers every cell; several depth tables but no labels: no mapping

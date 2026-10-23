@@ -152,3 +152,25 @@ def test_align_sites_flips_swapped_alleles():
     ad, dp, F = ANC.align_sites(sites, af)
     assert sorted(zip(ad.tolist(), dp.tolist())) == [(3, 4), (3, 5)]
     assert F.shape == (2, 5)
+
+
+def test_af_index_matches_merge_join():
+    rng = np.random.default_rng(3)
+    m = 500
+    af = pd.DataFrame({"chrom": rng.choice([str(i) for i in range(1, 23)], m), "pos": rng.integers(1, 10**8, m),
+                       "ref": rng.choice(list("AC"), m), "alt": rng.choice(list("GT"), m)})
+    af = af.drop_duplicates(["chrom", "pos"])
+    for p in ANC.POPS:
+        af[p] = rng.uniform(0.05, 0.95, len(af))
+    s = af.sample(200, random_state=0)[["chrom", "pos", "ref", "alt"]].copy()
+    s["chrom"] = "chr" + s["chrom"]
+    flip = rng.random(len(s)) < 0.3
+    s.loc[flip, ["ref", "alt"]] = s.loc[flip, ["alt", "ref"]].to_numpy()
+    s["dp"] = rng.integers(1, 9, len(s))
+    s["ad"] = rng.integers(0, 1, len(s)) * s["dp"]
+    s = pd.concat([s, pd.DataFrame({"chrom": ["chrX"], "pos": [5], "ref": ["A"], "alt": ["G"], "dp": [3], "ad": [1]})])
+    a1 = ANC.align_sites(s, af)
+    a2 = ANC.AFIndex(af).align(s)
+    k1 = sorted(zip(a1[1], a1[0], a1[2][:, 0].round(3)))
+    k2 = sorted(zip(a2[1], a2[0], a2[2][:, 0].round(3)))
+    assert len(k2) == 200 and k1 == k2

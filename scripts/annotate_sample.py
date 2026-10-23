@@ -45,7 +45,9 @@ def main(argv=None) -> int:
     from singlet.annotate.pipeline import annotate_sample, model_version
 
     mv = model_version(a.method)
-    af = pd.read_parquet(a.af) if a.af else None
+    from singlet.annotate.ancestry import AFIndex
+
+    af = AFIndex(pd.read_parquet(a.af)) if a.af else None
     if a.bundle:
         from singlet.bundle import SingletBundle
 

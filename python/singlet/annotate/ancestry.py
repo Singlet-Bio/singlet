@@ -87,11 +87,13 @@ def _negll(theta: np.ndarray, F: np.ndarray, L: np.ndarray):
     return -np.log(site).sum(), g_theta
 
 
-def fit_q(F: np.ndarray, L: np.ndarray) -> np.ndarray:
+def fit_q(F: np.ndarray, L: np.ndarray, start: Optional[np.ndarray] = None) -> np.ndarray:
+    """Maximum-likelihood ``q`` (multi-start unless ``start``, a proportion vector, is given)."""
     from scipy.optimize import minimize
 
     best = None
-    for start in [np.zeros(F.shape[1])] + [np.eye(F.shape[1])[k] * 2.0 for k in range(F.shape[1])]:
+    starts = [np.log(np.clip(start, 1e-6, 1))] if start is not None else [np.zeros(F.shape[1])] + [np.eye(F.shape[1])[k] * 2.0 for k in range(F.shape[1])]
+    for start in starts:
         r = minimize(_negll, start, args=(F, L), jac=True, method="L-BFGS-B", options=dict(maxiter=200))
         if best is None or r.fun < best.fun:
             best = r
@@ -134,9 +136,47 @@ def infer_ancestry(
         same = 0
         for _ in range(n_boot):
             i = rng.integers(0, n_sites, n_sites)
-            same += _group(fit_q(F[i], L[i]), q_min) == grp
+            same += _group(fit_q(F[i], L[i], start=q), q_min) == grp
         stab = same / n_boot
     return AncestryCall(grp, float(q.max()), {p: float(v) for p, v in zip(POPS, q)}, n_sites, stab)
+
+
+class AFIndex:
+    """The allele-frequency table indexed by (chrom, pos) for fast joins: built once per process, reused for every donor."""
+
+    def __init__(self, af_table):
+        chrom = af_table["chrom"].astype(str).str.replace("^chr", "", regex=True).to_numpy()
+        self.key = _site_key(chrom, af_table["pos"].to_numpy(np.int64))
+        order = np.argsort(self.key, kind="stable")
+        self.key = self.key[order]
+        self.ref = af_table["ref"].to_numpy().astype("U1")[order]
+        self.alt = af_table["alt"].to_numpy().astype("U1")[order]
+        self.F = af_table[list(POPS)].to_numpy(np.float32)[order]
+
+    def align(self, sites):
+        """(ad, dp, freqs) of ``sites`` (chrom, pos, ref, alt, ad, dp) joined on position with matching alleles; swapped
+        ref/alt pairs are flipped (ad := dp - ad)."""
+        chrom = sites["chrom"].astype(str).str.replace("^chr", "", regex=True).to_numpy()
+        k = _site_key(chrom, sites["pos"].to_numpy(np.int64))
+        i = np.clip(np.searchsorted(self.key, k), 0, len(self.key) - 1)
+        hit = self.key[i] == k
+        ref = sites["ref"].to_numpy().astype("U1")
+        alt = sites["alt"].to_numpy().astype("U1")
+        same = hit & (self.ref[i] == ref) & (self.alt[i] == alt)
+        swap = hit & (self.ref[i] == alt) & (self.alt[i] == ref)
+        use = same | swap
+        ad = sites["ad"].to_numpy(np.int64)
+        dp = sites["dp"].to_numpy(np.int64)
+        ad = np.where(swap, dp - ad, ad)
+        return ad[use], dp[use], self.F[i[use]].astype(np.float64)
+
+
+_CHROM_CODE = {**{str(i): i for i in range(1, 23)}, "X": 23, "Y": 24, "MT": 25, "M": 25}
+
+
+def _site_key(chrom: np.ndarray, pos: np.ndarray) -> np.ndarray:
+    code = np.array([_CHROM_CODE.get(c, 0) for c in chrom], np.int64)
+    return code * 1_000_000_000 + pos
 
 
 def align_sites(sites, af_table):
