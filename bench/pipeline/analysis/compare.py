@@ -148,8 +148,8 @@ def adt_clusters(adt, cells):
 def species_of(var_names):
     v = pd.Index(var_names)
     mouse = v.str.contains("ENSMUSG") | v.str.startswith("GRCm39") | v.str.startswith("mm10")
-    human = ~mouse
-    return human.values, mouse.values
+    mouse = np.asarray(mouse)
+    return ~mouse, mouse
 
 
 def barnyard(a, cells):
