@@ -177,15 +177,17 @@ def fig_barnyard(S, out):
         return
     fig, ax = plt.subplots(figsize=(5.6, 3.8))
     for i, R in enumerate(B):
-        x, y, _ = bins_series(R["barnyard"]["by_bin_uncalled"], "frac_pure")
+        # from 30 UMIs: below that a few counts (often one molecule counted twice) pass as "pure"
+        x, y, _ = bins_series([r for r in R["barnyard"]["by_bin_uncalled"] if r["lo"] >= 30], "frac_pure")
         ax.plot(x, y, color=ORANGE, alpha=0.6, lw=1, label="uncalled" if i == 0 else None)
         x, y, _ = bins_series(R["barnyard"]["by_bin_called"], "frac_pure")
         ax.plot(x, y, color=BLUE, alpha=0.6, lw=1, label="called" if i == 0 else None)
     ax.set_xscale("log")
     ax.set_ylim(0, 1.02)
     ax.set_xlabel("barcode UMIs")
-    ax.set_ylabel("fraction species-pure (>=90%, p<0.001 vs ambient mix)")
-    ax.set_title("Species mixing: single-species barcodes", fontsize=9)
+    ax.set_ylabel("fraction single-species")
+    ax.set_title("Species mixing: barcodes with >= 90% of UMIs from one genome
+(binomial p < 0.001 against the ambient mix)", fontsize=9)
     ax.legend(fontsize=7)
     fig.tight_layout()
     fig.savefig(os.path.join(out, "fig4_barnyard.png"))
@@ -214,7 +216,8 @@ def fig_storage(S, out):
 
 
 def fig_groundtruth(S, out):
-    A = [R for R in S if ((R.get("author") or {}).get("author") or {}).get("uncalled_by_bin")]
+    # the pilot's TCR libraries are compared with the GEX call of the same wells: plotted apart, they are a different assay
+    A = [R for R in S if ((R.get("author") or {}).get("author") or {}).get("uncalled_by_bin") and R["gse"] != "GSE145370"]
     H = [R for R in S if (R.get("author") or {}).get("hashing")]
     if not A and not H:
         return
@@ -270,6 +273,8 @@ def fig_rules(out):
                    "n_samples": len(saved)}
     fig, ax = plt.subplots(figsize=(6.2, 4))
     for nm, t in tab.items():
+        if "q05" in nm:  # depth-relative variants coincide with the fixed floors here; in the table only
+            continue
         ax.scatter(t["median_bytes_saved"], t["cell_like_lost"], s=36, color=ORANGE, zorder=3)
         ax.scatter(t["median_bytes_saved"], t["emptydrops_extra_lost"], s=36, color=AQUA, marker="s", zorder=3)
         ax.annotate(nm.replace("keep_", ""), (t["median_bytes_saved"], t["cell_like_lost"]), fontsize=7, color=INK2,
