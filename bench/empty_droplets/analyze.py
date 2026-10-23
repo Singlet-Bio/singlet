@@ -210,6 +210,30 @@ def centroids(X: sp.csc_matrix, idx: np.ndarray, labels: np.ndarray, amb: np.nda
 
 
 def null_pvalues(obs_llr, obs_tot, null_llr, null_tot, bins_per_decade=12):
+    """P-value of each observed LLR against nulls in the same log-depth bin: empirical ((1 + #null >= obs)/(1 + n)) while at
+    least 10 nulls exceed the observation, beyond that an exponential tail fitted to the nulls above their 90th percentile
+    (mean excess), so that p-values can go below 1/n and survive BH across tens of thousands of barcodes."""
+    p = _empirical_p(obs_llr, obs_tot, null_llr, null_tot, bins_per_decade)
+    lb = lambda t: np.floor(np.log10(np.maximum(t, 1)) * bins_per_decade).astype(int)
+    ob, nbn = lb(obs_tot), lb(null_tot)
+    for b in np.unique(ob):
+        nl = np.sort(null_llr[nbn == b])
+        if len(nl) < 100:
+            continue
+        sel = np.nonzero(ob == b)[0]
+        ge = len(nl) - np.searchsorted(nl, obs_llr[sel] - 1e-9, side="left")
+        tail = ge < 10
+        if not tail.any():
+            continue
+        u = np.quantile(nl, 0.9)
+        exc = nl[nl > u] - u
+        scale = max(float(exc.mean()) if len(exc) else 1e-3, 1e-3)
+        pt = 0.1 * np.exp(-(obs_llr[sel[tail]] - u) / scale)
+        p[sel[tail]] = np.minimum(p[sel[tail]], pt)
+    return p
+
+
+def _empirical_p(obs_llr, obs_tot, null_llr, null_tot, bins_per_decade=12):
     """Empirical p-value of each observed LLR against nulls in the same log-depth bin (p = (1 + #null >= obs)/(1 + n))."""
     lb = lambda t: np.floor(np.log10(np.maximum(t, 1)) * bins_per_decade).astype(int)
     ob, nbn = lb(obs_tot), lb(null_tot)
