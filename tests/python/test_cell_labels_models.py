@@ -174,3 +174,20 @@ def test_af_index_matches_merge_join():
     k1 = sorted(zip(a1[1], a1[0], a1[2][:, 0].round(3)))
     k2 = sorted(zip(a2[1], a2[0], a2[2][:, 0].round(3)))
     assert len(k2) == 200 and k1 == k2
+
+
+def test_ancestry_refuses_defective_depths_and_corrects_reference_bias():
+    rng = np.random.default_rng(11)
+    m = 6000
+    F = _af(m, rng)
+    g = rng.binomial(2, F[:, ANC.POPS.index("AFR")])
+    dp = rng.integers(10, 40, m)
+    # no alternate reads recorded at all (seen in a real study): no call
+    c = ANC.infer_ancestry(np.zeros(m, int), dp, F, n_boot=0)
+    assert c.group is None and c.reason and "alt read fraction" in c.reason
+    # heterozygous sites read at 0.42 alternate (reference-mapping bias): still the right population
+    p = np.where(g == 1, 0.42, np.clip(g / 2, 0.01, 0.99))
+    ad = rng.binomial(dp, p)
+    assert abs(ANC.het_fraction(ad, dp) - 0.42) < 0.02
+    c = ANC.infer_ancestry(ad, dp, F, n_boot=0)
+    assert c.group == "AFR" and c.prob > 0.9

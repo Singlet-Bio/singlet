@@ -91,7 +91,7 @@ def main(argv=None) -> int:
                         p = pipe.get(gsm, (None, None, None))
                         rows.append(dict(gse=gse, gsm=gsm, donor=donor, n_sites_file=int(len(sites)), match_frac=round(frac, 4), n_sites=c.n_sites,
                                          mean_dp=float(dp.mean()) if len(dp) else None, group=c.group, hancestro=c.hancestro, prob=c.prob,
-                                         q={k: round(v, 4) for k, v in c.q.items()}, stability=c.stability, mid_af=c.mid_af, mean_dp_deep=float(dp[dp >= ANC.MID_AF_DP].mean()) if (dp >= ANC.MID_AF_DP).any() else None, n_deep=int((dp >= ANC.MID_AF_DP).sum()), seconds=round(time.time() - t2, 2),
+                                         q={k: round(v, 4) for k, v in c.q.items()}, stability=c.stability, mid_af=c.mid_af, reason=c.reason, alt_read_frac=round(float(ad.sum() / max(dp.sum(), 1)), 4) if len(dp) else None, het_frac=round(ANC.het_fraction(ad, dp), 3) if len(dp) else None, mean_dp_deep=float(dp[dp >= ANC.MID_AF_DP].mean()) if (dp >= ANC.MID_AF_DP).any() else None, n_deep=int((dp >= ANC.MID_AF_DP).sum()), seconds=round(time.time() - t2, 2),
                                          pipeline_call=p[0], pipeline_conf=p[1], pipeline_n_aims=p[2], self_reported=self_rep.get(gsm)))
                         del sites, ad, dp, F
         except Exception as e:  # noqa: BLE001

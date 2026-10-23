@@ -93,7 +93,7 @@ def annotate_sample(
             prob[sel] = c.prob
         df["ancestry_hancestro"] = pd.array(han, dtype="string")
         df["ancestry_prob"] = prob
-        summary["ancestry"] = {d: dict(group=c.group, hancestro=c.hancestro, prob=c.prob, n_sites=c.n_sites, stability=c.stability,
+        summary["ancestry"] = {d: dict(group=c.group, hancestro=c.hancestro, prob=c.prob, n_sites=c.n_sites, stability=c.stability, reason=c.reason,
                                        q={k: round(v, 4) for k, v in c.q.items()}) for d, c in calls.items()}
         summary["timings"]["ancestry_s"] = time.time() - t
     summary["timings"]["total_s"] = time.time() - t0

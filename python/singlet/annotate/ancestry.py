@@ -44,6 +44,7 @@ Q_MIN = 0.8
 MIN_SITES = 300  # sites with any depth needed before a call is made
 MID_AF_DP = 20  # depth at which a site's allele fraction is informative about pooling
 MAX_MID_AF = 1.0  # set from the validation (docs/cell_annotation.md); above it the donor is treated as a pool: no call
+ALT_READ_RANGE = (0.10, 0.60)  # plausible alternate-read fraction over the panel for one person (observed 0.23-0.31)
 MIN_MATCH_FRAC = 0.5  # a donor whose sites mostly miss the table is on another build or species: no call
 F_CLIP = 1e-3
 
@@ -58,6 +59,7 @@ class AncestryCall:
     n_sites: int
     stability: Optional[float] = None  # fraction of site bootstraps that give the same group
     mid_af: Optional[float] = None  # fraction of deep sites with an allele fraction far from 0, 1/2 and 1 (see infer_ancestry)
+    reason: Optional[str] = None  # why there is no call, when there is none despite enough sites
 
     @property
     def hancestro(self) -> Optional[str]:
@@ -68,13 +70,24 @@ class AncestryCall:
         return HANCESTRO[self.group][1] if self.group else None
 
 
-def _site_terms(ad: np.ndarray, dp: np.ndarray):
-    """Read likelihoods of genotypes 0/1/2 per site, with depth capped at DP_CAP (scaled to the max, then rescaled to sum 1)."""
+def het_fraction(ad: np.ndarray, dp: np.ndarray, min_dp: int = 10) -> float:
+    """Alternate-read fraction expected at a heterozygous site for this donor. RNA reads carry reference-mapping bias (the
+    alternate allele is under-counted by a few points), so it is estimated as the median alternate fraction over deep sites
+    that show both alleles, clipped to [0.35, 0.5]; 0.5 when there are fewer than 200 such sites."""
+    m = (dp >= min_dp) & (ad > 0) & (ad < dp)
+    if m.sum() < 200:
+        return 0.5
+    return float(np.clip(np.median(ad[m] / dp[m]), 0.35, 0.5))
+
+
+def _site_terms(ad: np.ndarray, dp: np.ndarray, h: float = 0.5):
+    """Read likelihoods of genotypes 0/1/2 per site, with depth capped at DP_CAP (scaled to the max, then rescaled to sum 1).
+    ``h``: alternate-read fraction at a heterozygous site."""
     dp = dp.astype(np.float64)
     ad = np.minimum(ad.astype(np.float64), dp)
     scale = np.minimum(1.0, DP_CAP / np.maximum(dp, 1))
     a, r = ad * scale, (dp - ad) * scale
-    ll = np.stack([a * np.log(EPS) + r * np.log1p(-EPS), (a + r) * np.log(0.5), a * np.log1p(-EPS) + r * np.log(EPS)], 1)
+    ll = np.stack([a * np.log(EPS) + r * np.log1p(-EPS), a * np.log(h) + r * np.log1p(-h), a * np.log1p(-EPS) + r * np.log(EPS)], 1)
     ll -= ll.max(1, keepdims=True)
     return np.exp(ll)
 
@@ -141,10 +154,15 @@ def infer_ancestry(
     n_sites = int(ok.sum())
     if n_sites < min_sites:
         return AncestryCall(None, None, {}, n_sites)
+    alt = float(ad[ok].sum() / max(dp[ok].sum(), 1))
+    if not ALT_READ_RANGE[0] <= alt <= ALT_READ_RANGE[1]:
+        # a real person's reads over the panel are ~30% alternate; far outside that the depth table is defective
+        # (a study with ad = 0 everywhere was found in validation): no call rather than a wrong one
+        return AncestryCall(None, None, {}, n_sites, None, None, "alt read fraction %.3f" % alt)
     mid = mid_allele_fraction(ad[ok], dp[ok])
     if mid is not None and mid > MAX_MID_AF:
-        return AncestryCall(None, None, {}, n_sites, None, mid)
-    L = _site_terms(ad[ok], dp[ok])
+        return AncestryCall(None, None, {}, n_sites, None, mid, "mid allele fraction %.3f" % mid)
+    L = _site_terms(ad[ok], dp[ok], het_fraction(ad[ok], dp[ok]))
     F = F[ok]
     q = fit_q(F, L)
     grp = _group(q, q_min)
