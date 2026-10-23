@@ -92,8 +92,8 @@ Twelve samples, 90,433 called cells, laptop (one core, bundles on local disk); `
 | GSE178941 | GSM5401596, GSM5401599 | mouse | 16,753 | 634-928 | 2.6-4.1 |
 
 **Cost.** Scoring (ranks, 53 sets and 848 null sets, cell-cycle) took 24.3 s for 90,433 cells: 2.7 s per 10k cells, about
-2 to 10 s per 10k cells depending on depth. Reading counts took 6.4 s per 10k cells from local bundles. A billion cells is
-about 75 core-hours of scoring; the atlas run is bound by reading counts. Sidecars: 121 bytes per cell for `hallmark` (50 float32 scores, zstd) and 6 for `cell_cycle` (about 127 GB at a billion cells); the
+2 to 10 s per 10k cells depending on depth. Reading counts took 6.4 s per 10k cells from local bundles. On Clipper (job 781594: GSE214960, GSE293707; 51,201 cells) scoring took
+0.88 s and reading 1.9 s per 10k cells. A billion cells is about 25-75 core-hours of scoring; the atlas run is bound by reading counts. Sidecars: 121 bytes per cell for `hallmark` (50 float32 scores, zstd) and 6 for `cell_cycle` (about 127 GB at a billion cells); the
 cell index stores them as u8.
 
 **Which statistic.** Median |Spearman| with log detected genes over the 50 sets (per sample), and AUROC of expected
