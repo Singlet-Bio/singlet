@@ -26,9 +26,9 @@ hundreds and ~18,000 uncalled barcodes per sample (median 3,317, i.e. 57% as man
 * every standard caller run on the stored matrix calls more cells than Singlet: EmptyDrops a median 1,911 more per sample
   (range 389-10,972), Cell Ranger 3-style a median 808 more, and 77-92% of those extra calls are cell-like by the profile test.
 
-The barcodes that are demonstrably empty are the low-UMI ones, and they hold few entries: everything below 20 UMIs is a median
-**5% of the matrix bytes** (p10-p90 2-13%), not the 30-55% that "drop uncalled" would save. The safe rule and its saving are
-in "Recommendation".
+Only the lowest-UMI barcodes look empty by every test (profile, species, hashtags, the authors' calls), and they hold few
+entries: everything below 20 UMIs is a median **5% of the matrix bytes** (p10-p90 2-13%), not the 33% (p10-p90 12-64%) that
+"drop uncalled" would save. The safe rule and its saving are in "Recommendation".
 
 Two facts change the framing of the question:
 
@@ -52,7 +52,8 @@ Two facts change the framing of the question:
   threshold on stored totals mismatches 0-5% of barcodes (median 0.6%).
 * The pileup sometimes counts one molecule once in the exon and once in the intron matrix: among uncalled barcodes with exactly
   2 UMIs, the two sit on one gene in a median 8% of cases (up to 70% in BD Rhapsody, 30-54% in the pilot), and in about half
-  of those as 1 exon + 1 intron count. This inflates apparent overdispersion at low depth, so every expression test here uses exon counts only.
+  of those as 1 exon + 1 intron count. This inflates apparent overdispersion at low depth, so every expression test here uses
+  exon counts only.
 * The pipeline caps input at 30M reads per sample (`input_reads_capped`), so "deep" samples are subsampled; depth differences
   between studies are mostly protocol and library complexity.
 
@@ -129,9 +130,11 @@ Pooled over the 49 usable samples, fraction of uncalled barcodes rejecting ambie
 *Figure 2. Each line is a sample (gray: not usable). Blue: power of the same test on called cells thinned to that depth.*
 
 The fitted cell fraction w of significant barcodes is 0.8-0.9 above ~200 UMIs: these are cells with some ambient, not ambient
-with a trace of cell. Where the transition sits depends on the sample: in the PBMC library GSE108313 the uncalled plateau at
-30-500 UMIs is ambient (median w = 0.01, 1-5% significant) and only barcodes above 500 UMIs are cell-like; in brain nuclei
-GSE157827 everything above ~150 UMIs is (88-100%); in BD Rhapsody liver a minority of 10-30 UMI barcodes is already cell-like.
+with a trace of cell. Where the transition sits depends on the sample: in brain nuclei GSE157827 everything above ~150 UMIs is
+cell-like (88-100%); in BD Rhapsody liver a minority of 10-30 UMI barcodes already is. In the hashed PBMC library GSE108313 the
+test calls the uncalled plateau at 30-500 UMIs ambient (median w = 0.01, 1-5% significant), yet hashtags show most of that
+plateau is stained PBMCs (section 3b): a cell type absent from the called cells is invisible to this test, so its numbers are
+lower bounds.
 
 ### 2. Split-half consistency (Figure 3)
 
@@ -234,21 +237,58 @@ FDR 0.001, retain = knee; "adaptive" lower = clip(0.5 x q05(called), 5, 100)):
 | knee (barcodeRanks) | 30 | 794 | 0.70 | 89% |
 | inflection | 719 | 1 | 0.64 | 82% |
 
-No caller finds Singlet's call too generous except the knee, which sits above it. CellBender: see "CellBender" below.
+No caller finds Singlet's call too generous except the knee, which sits above it. CellBender: section 9.
 
 ### 7. Called barcodes that look empty
 
 The same test applied to called cells (held-out clusters) finds 1.2% of called barcodes indistinguishable from ambient (p > 0.05),
 mostly in the pilot's TCR libraries (6-27% of their called barcodes); median 0.3% per sample. One real exception: inDrop
 GSE266546/GSM8249613, where 163 of 374 called barcodes (~300 UMIs) are ambient-like, i.e. that sample's call is mostly
-ambient; GSE292909 has 1.4-1.7% (cells at ~300 UMIs). A minimum-UMI floor on called cells is not needed for storage (called cells are kept anyway); a per-cell
-"ambient-like" flag would serve users better than a floor.
+ambient; GSE292909 has 1.4-1.7% (cells at ~300 UMIs). A minimum-UMI floor on called cells is not needed for storage (called
+cells are kept anyway); a per-cell "ambient-like" flag would serve users better than a floor.
+
+### 8. The authors' own calls (Figure 6, left)
+
+![Uncalled barcodes the authors called, by depth; hashtag-positive uncalled barcodes in the hashed PBMC library](empty-droplets/fig6_ground_truth.png)
+
+*Figure 6. Left: share of uncalled barcodes in the authors' own call (green) and cell-like by the profile test (orange dashed),
+non-pilot samples. Right: hashtag-positive fraction of uncalled barcodes (violet) and of called cells (blue) in GSE108313.*
+
+Barcodes of the authors' filtered matrices (Cell Ranger's call in every case here), matched on the 16-mer:
+
+| sample | authors | Singlet | both | authors only | Singlet only | authors-only lost if < 20 UMIs dropped |
+|---|---|---|---|---|---|---|
+| GSE157827/GSM4775561 (nuclei) | 6,243 | 1,936 | 1,936 | 4,307 | 0 | 0 |
+| GSE157827/GSM4775562 | 15,357 | 3,305 | 3,305 | 12,052 | 0 | 0 |
+| GSE157827/GSM4775563 | 6,166 | 1,532 | 1,497 | 4,669 | 35 | 0 |
+| GSE180113/GSM5453390 | 18,461 | 11,074 | 11,074 | 7,387 | 0 | 0 |
+| GSE230559/GSM7226732 | 26,419 | 15,470 | 15,426 | 10,993 | 44 | 36 |
+| GSE230559/GSM7226733 | 24,585 | 15,376 | 15,319 | 9,266 | 57 | 22 |
+| GSE230559/GSM7226734 | 16,530 | 2,483 | 2,482 | 14,048 | 1 | 24 |
+| GSE246624/GSM7873657 | 8,516 | 7,892 | 7,873 | 643 | 19 | 0 |
+| GSE246624/GSM7873658 | 8,690 | 7,929 | 7,926 | 764 | 3 | 0 |
+| GSE256089/GSM8085472 | 16,758 | 11,413 | 11,349 | 5,409 | 64 | 0 |
+| GSE256089/GSM8085474 | 17,912 | 10,541 | 10,480 | 7,432 | 61 | 0 |
+
+(GSE256089 lanes are paired with GSMs by order, which the matching itself confirms: 99.4% of Singlet's cells are in the paired
+lane. GSE213957's deposited metadata lists only the 2,387 cells that passed the authors' QC, so it is not a call.)
+
+Every authors' barcode is among the stored barcodes, the authors' sets contain Singlet's almost entirely, and the authors' extra
+cells sit at a median 300-600 UMIs, above any floor considered here. The pilot's TCR libraries can be compared with the authors'
+gene-expression call of the same GEM wells (10x 5' libraries share cell barcodes): 3,502-15,820 cells against Singlet's
+1,207-4,289, with 97-99.9% of the authors' cells among the stored barcodes. In those amplicon libraries many cells have fewer
+than 20 UMIs (non-T cells get few TCR reads), which is one more reason not to take rules from the pilot.
+
+### 9. CellBender
+
+PENDING
 
 ## Recommendation
 
 **Keep the matrix entries of every stored barcode in v2.** The cell call can be redone from stored data only if the uncalled
-barcodes above the ambient plateau keep their profiles, and the plateau's position varies by sample (30-500 UMIs in the
-samples here), so no fixed rule drops much without dropping cells.
+barcodes that hold cells keep their profiles. Those barcodes start anywhere from ~20 to a few hundred UMIs depending on the
+sample, and in the hashed PBMC library they include the very plateau that looks ambient. No fixed rule drops much without
+dropping cells.
 
 If storage must shrink, the only rule this study supports is:
 
@@ -303,42 +343,6 @@ cells, so a default read never fetches them; the cell-index session already prop
 Follow-ups this study points to (not done here): fix the pilot (migrate the mRNA libraries GSM4317409-22, not the TCR ones);
 record the STARsolo filter actually used and consider an EmptyDrops-based `called_v2` flag computed from the stored data; screen
 the atlas for feature-barcode and V(D)J libraries processed as RNA.
-
-## CellBender
-
-PENDING
-
-## Ground truth from the authors' deposits (Figure 6, left)
-
-![Uncalled barcodes the authors called, by depth; hashtag-positive uncalled barcodes in the hashed PBMC library](empty-droplets/fig6_ground_truth.png)
-
-*Figure 6. Left: share of uncalled barcodes in the authors' own call (green) and cell-like by the profile test (orange dashed),
-non-pilot samples. Right: hashtag-positive fraction of uncalled barcodes (violet) and of called cells (blue) in GSE108313.*
-
-Barcodes of the authors' filtered matrices (Cell Ranger's call in every case here), matched on the 16-mer:
-
-| sample | authors | Singlet | both | authors only | Singlet only | authors-only lost if < 20 UMIs dropped |
-|---|---|---|---|---|---|---|
-| GSE157827/GSM4775561 (nuclei) | 6,243 | 1,936 | 1,936 | 4,307 | 0 | 0 |
-| GSE157827/GSM4775562 | 15,357 | 3,305 | 3,305 | 12,052 | 0 | 0 |
-| GSE157827/GSM4775563 | 6,166 | 1,532 | 1,497 | 4,669 | 35 | 0 |
-| GSE180113/GSM5453390 | 18,461 | 11,074 | 11,074 | 7,387 | 0 | 0 |
-| GSE230559/GSM7226732 | 26,419 | 15,470 | 15,426 | 10,993 | 44 | 36 |
-| GSE230559/GSM7226733 | 24,585 | 15,376 | 15,319 | 9,266 | 57 | 22 |
-| GSE230559/GSM7226734 | 16,530 | 2,483 | 2,482 | 14,048 | 1 | 24 |
-| GSE246624/GSM7873657 | 8,516 | 7,892 | 7,873 | 643 | 19 | 0 |
-| GSE246624/GSM7873658 | 8,690 | 7,929 | 7,926 | 764 | 3 | 0 |
-| GSE256089/GSM8085472 | 16,758 | 11,413 | 11,349 | 5,409 | 64 | 0 |
-| GSE256089/GSM8085474 | 17,912 | 10,541 | 10,480 | 7,432 | 61 | 0 |
-
-(GSE256089 lanes are paired with GSMs by order, which the matching itself confirms: 99.4% of Singlet's cells are in the paired
-lane. GSE213957's deposited metadata lists only the 2,387 cells that passed the authors' QC, so it is not a call.)
-
-Every authors' barcode is among the stored barcodes, the authors' sets contain Singlet's almost entirely, and the authors' extra
-cells sit at a median 300-600 UMIs, above any floor considered here. The pilot's TCR libraries can be compared with the authors'
-gene-expression call of the same GEM wells (10x 5' libraries share cell barcodes): 3,502-15,820 cells against Singlet's
-1,207-4,289, with 97-99.9% of the authors' cells among the stored barcodes. In those amplicon libraries many cells have fewer
-than 20 UMIs (non-T cells get few TCR reads), which is one more reason not to take rules from the pilot.
 
 ## Limitations
 
