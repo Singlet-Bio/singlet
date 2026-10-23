@@ -15,7 +15,9 @@ D=$PB/data/$1; N=$2; mkdir -p $D/sub
 [ -f $D/gex_fastqs_full.txt ] || cp $D/gex_fastqs.txt $D/gex_fastqs_full.txt
 for R in R1 R2; do
   f=$(grep "_L001_${R}_" $D/gex_fastqs_full.txt)
+  set +o pipefail   # head closes the pipe early on purpose
   zcat $f | head -n $((4*N)) | pigz -p 6 > $D/sub/sub_S1_L001_${R}_001.fastq.gz
+  set -o pipefail
 done
 ls $D/sub/*.fastq.gz > $D/gex_fastqs.txt
 echo "$1: first $N pairs of L001" > $D/sub/README; cat $D/gex_fastqs.txt
