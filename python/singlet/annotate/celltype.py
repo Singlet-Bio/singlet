@@ -13,7 +13,8 @@
 
 Both are the methods benchmarked in Singlet-Bio/singlet-agents ``engine/docs/phenotype/REPORT.md`` (guide v2: depth 2/3/4
 accuracy 0.890/0.807/0.563 over 15 datasets; with self-training 0.880/0.745/0.570 on 5 held-out datasets), re-implemented here
-in NumPy so the atlas run needs no engine build. ``docs/cell_annotation.md`` has the accuracy on Singlet's own counts.
+in NumPy so the atlas run needs no engine build. On Singlet's own counts (16 studies with CELLxGENE labels,
+``docs/cell_annotation.md``) self-training matched the guide at depth 1-3 at eight times the cost, so ``guide`` is the default.
 """
 
 from __future__ import annotations
@@ -341,7 +342,7 @@ def annotate_cell_types(
     species: str = "human",
     tissue: Optional[str] = None,
     disease: Optional[str] = None,
-    method: str = "selftrain",
+    method: str = "guide",
     k: int = 15,
     min_prob: float = 0.5,
     seed: int = 0,

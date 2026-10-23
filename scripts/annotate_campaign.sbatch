@@ -9,8 +9,9 @@
 # Status:
 #   python scripts/annotate_campaign.py status --out $OUT
 #
-# Sizing (validation run, docs/cell_annotation.md): the time is in reading counts and the per-sample self-training; about
-# 400 CPU-hours for the atlas at 8 threads per task. A shard of ~10 GB of bundles fits a 4 h short-cpu slot.
+# Sizing (docs/cell_annotation.md section 6): about 4.5 CPU-hours per million cells with the default guide method, about
+# 1,200 CPU-hours for the 266.5M human and mouse cells; 400 shards of ~3.4 GB each fit a 4 h short-cpu/short-bigmem slot
+# (the one 29 GB study needs a cpu/bigmem slot). Check `clipper.py free` and target idle partitions.
 #SBATCH --job-name=annotate
 #SBATCH --account=debruinz
 #SBATCH --partition=short-cpu

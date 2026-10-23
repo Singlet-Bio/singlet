@@ -18,7 +18,7 @@ from .io import SampleInput
 ANNOTATE_VERSION = "0.1.0"
 
 
-def model_version(method: str = "selftrain") -> str:
+def model_version(method: str = "guide") -> str:
     return (
         f"singlet-annotate={ANNOTATE_VERSION};celltype={method}/cellguide-v2/{G.cl_version().split('/')[2]};"
         f"sex=xist-chrY-split/2;ancestry=1kgp-supervised-admixture/1/{ANC.HANCESTRO_VERSION.split('/')[-1]}"
@@ -29,7 +29,7 @@ def annotate_sample(
     s: SampleInput,
     *,
     af_table=None,
-    method: str = "selftrain",
+    method: str = "guide",
     seed: int = 0,
 ) -> Tuple["object", dict]:
     """Label table (see :mod:`singlet.annotate.output`) and a summary dict for one sample. ``af_table``: the 1000 Genomes

@@ -40,7 +40,7 @@ def main(argv=None) -> int:
     ap.add_argument(
         "--af", type=Path, help="1000 Genomes super-population allele frequency table (Parquet)"
     )
-    ap.add_argument("--method", default="selftrain", choices=["guide", "selftrain"])
+    ap.add_argument("--method", default="guide", choices=["guide", "selftrain"])
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument(
         "--max-cells",

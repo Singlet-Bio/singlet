@@ -242,7 +242,7 @@ def main(argv=None) -> int:
     r.add_argument("--shard", type=int, required=True)
     r.add_argument("--out", type=Path, required=True)
     r.add_argument("--af", type=Path)
-    r.add_argument("--method", default="selftrain")
+    r.add_argument("--method", default="guide")
     r.add_argument(
         "--scratch", type=Path, default=Path(os.environ.get("TMPDIR", "/tmp")) / "annotate"
     )

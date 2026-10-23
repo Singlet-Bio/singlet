@@ -108,9 +108,9 @@ def assert_public_safe(table) -> None:
             raise PublicOutputError(
                 f"{n} holds a value that is not allowed in public output: {bad[0][:60]!r}"
             )
-    if df["gsm"].isna().any() or df["col"].isna().any():
+    if bool(df["gsm"].isna().any()) or bool(df["col"].isna().any()):
         raise PublicOutputError("gsm and col are required on every row")
-    if df["col"].duplicated().any():
+    if bool(df["col"].duplicated().any()):
         raise PublicOutputError("col must be unique within a sample")
 
 
