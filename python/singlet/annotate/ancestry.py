@@ -42,6 +42,8 @@ DP_CAP = 8
 EPS = 0.02
 Q_MIN = 0.8
 MIN_SITES = 300  # sites with any depth needed before a call is made
+MID_AF_DP = 20  # depth at which a site's allele fraction is informative about pooling
+MAX_MID_AF = 1.0  # set from the validation (docs/cell_annotation.md); above it the donor is treated as a pool: no call
 MIN_MATCH_FRAC = 0.5  # a donor whose sites mostly miss the table is on another build or species: no call
 F_CLIP = 1e-3
 
@@ -55,6 +57,7 @@ class AncestryCall:
     q: Dict[str, float]
     n_sites: int
     stability: Optional[float] = None  # fraction of site bootstraps that give the same group
+    mid_af: Optional[float] = None  # fraction of deep sites with an allele fraction far from 0, 1/2 and 1 (see infer_ancestry)
 
     @property
     def hancestro(self) -> Optional[str]:
@@ -103,6 +106,17 @@ def fit_q(F: np.ndarray, L: np.ndarray, start: Optional[np.ndarray] = None) -> n
     return e / e.sum()
 
 
+def mid_allele_fraction(ad: np.ndarray, dp: np.ndarray, min_dp: int = MID_AF_DP) -> Optional[float]:
+    """Among sites with at least ``min_dp`` reads, the fraction whose alternate-allele fraction lies in (0.15, 0.35) or
+    (0.65, 0.85). One person's genotypes put allele fractions near 0, 1/2 or 1 (allele-specific expression spreads them
+    somewhat); cells pooled from several people put many in between. None when fewer than 100 deep sites."""
+    deep = dp >= min_dp
+    if deep.sum() < 100:
+        return None
+    f = ad[deep] / dp[deep]
+    return float((((f > 0.15) & (f < 0.35)) | ((f > 0.65) & (f < 0.85))).mean())
+
+
 def _group(q: np.ndarray, q_min: float) -> str:
     k = int(np.argmax(q))
     return POPS[k] if q[k] >= q_min else "admixed"
@@ -127,6 +141,9 @@ def infer_ancestry(
     n_sites = int(ok.sum())
     if n_sites < min_sites:
         return AncestryCall(None, None, {}, n_sites)
+    mid = mid_allele_fraction(ad[ok], dp[ok])
+    if mid is not None and mid > MAX_MID_AF:
+        return AncestryCall(None, None, {}, n_sites, None, mid)
     L = _site_terms(ad[ok], dp[ok])
     F = F[ok]
     q = fit_q(F, L)
@@ -139,7 +156,7 @@ def infer_ancestry(
             i = rng.integers(0, n_sites, n_sites)
             same += _group(fit_q(F[i], L[i], start=q), q_min) == grp
         stab = same / n_boot
-    return AncestryCall(grp, float(q.max()), {p: float(v) for p, v in zip(POPS, q)}, n_sites, stab)
+    return AncestryCall(grp, float(q.max()), {p: float(v) for p, v in zip(POPS, q)}, n_sites, stab, mid)
 
 
 class AFIndex:
