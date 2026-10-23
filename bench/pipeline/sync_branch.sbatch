@@ -11,11 +11,10 @@
 set -euo pipefail
 WORK=/mnt/projects/debruinz_project/debruinz/singlet
 REPO=$WORK/repos/singlet-py.git
-git -C $REPO fetch origin +refs/heads/fix/molecule-labels:refs/heads/fix/molecule-labels
+git -C $REPO fetch --update-head-ok origin +refs/heads/fix/molecule-labels:refs/heads/fix/molecule-labels
 NEW=$WORK/src/singlet-py/fix__molecule-labels
 OLD=$WORK/src/singlet-py/pb-baseline
 [ -d $NEW ] || git -C $REPO worktree add $NEW fix/molecule-labels
-git -C $NEW checkout -q --detach && git -C $NEW checkout -q fix/molecule-labels 2>/dev/null || true
 git -C $NEW reset -q --hard refs/heads/fix/molecule-labels
 [ -d $OLD ] || git -C $REPO worktree add --detach $OLD b1335a8
 git -C $NEW log --oneline -1; git -C $OLD log --oneline -1
