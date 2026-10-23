@@ -315,6 +315,9 @@ class CellTypeResult:
     method: str
     guide_node: np.ndarray
     notes: Dict[str, object] = field(default_factory=dict)
+    path_score: Optional[np.ndarray] = (
+        None  # product of the gating confidences along the guide path (guide calls)
+    )
 
     @property
     def cl(self) -> np.ndarray:
@@ -345,6 +348,7 @@ def annotate_cell_types(
     per_node_cap: int = 2000,
     total_cap: int = 30000,
     min_genes: int = MIN_GENES,
+    alpha: float = ALPHA,
 ) -> CellTypeResult:
     """Cell type calls for one sample. ``X``: raw counts, cells x genes (exon + intron at gene level is what Singlet serves).
     ``tissue``/``disease``: free text from the sample metadata (restricts the guide to plausible nodes; unknown words are ignored).
@@ -367,7 +371,7 @@ def annotate_cell_types(
     if n > 50:
         _, idx = neighbours(X, k=min(k, n - 1), seed=seed)
         nb = sc[idx].mean(1)
-        sc = ((1 - ALPHA) * sc + ALPHA * nb).astype(np.float32)
+        sc = ((1 - alpha) * sc + alpha * nb).astype(np.float32)
     t2 = time.time()
     sc = lookahead(g, sc)
     node, conf, marg = gate(g, sc)
@@ -375,9 +379,13 @@ def annotate_cell_types(
     D = conf.shape[1]
     last = np.clip(depth - 1, 0, D - 1)
     gconf = np.where(depth > 0, conf[np.arange(n), last], np.nan).astype(np.float32)
+    pconf = np.where(depth > 0, np.prod(np.where(conf > 0, conf, 1.0), 1), np.nan).astype(
+        np.float32
+    )
     lowq = ngenes < min_genes
     node[lowq] = 0
     gconf[lowq] = np.nan
+    pconf[lowq] = np.nan
     notes.update(
         score_s=t1 - t0,
         neighbours_s=t2 - t1,
@@ -387,7 +395,7 @@ def annotate_cell_types(
     guide_node = node.copy()
     if method == "guide" or idx is None:
         notes["method_used"] = "guide"
-        return CellTypeResult(g, node, gconf, "guide", guide_node, notes)
+        return CellTypeResult(g, node, gconf, "guide", guide_node, notes, pconf)
 
     # ---- self-training on the confident guide calls
     t3 = time.time()

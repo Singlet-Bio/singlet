@@ -12,6 +12,9 @@ Methods
   selftrain_pure     self-training without the back-off to the guide (min_prob = 0): the variant benchmarked in singlet-agents
   guide_exon         guide on exon-only counts (what most author pipelines counted)
   guide_all_cells    guide with no minimum-genes filter (to choose that filter)
+  guide_cxg_tissue   guide given CELLxGENE's curated tissue instead of the GEO text (an oracle: how much tissue context matters)
+  guide_no_tissue    guide with no tissue context at all
+  guide_no_smooth    guide without kNN smoothing
   marker_cluster     singlet.annotate_cell_types (existing tool): marker overlap per Leiden cluster, markers = the guide's
                      depth <= 3 nodes (each with its own and its ancestors' positive markers)
   knn_transfer       singlet.transfer_labels (existing tool): kNN in a reference PCA; reference = truth-labelled cells of
@@ -42,6 +45,9 @@ ALL = [
     "selftrain_pure",
     "guide_exon",
     "guide_all_cells",
+    "guide_cxg_tissue",
+    "guide_no_tissue",
+    "guide_no_smooth",
     "marker_cluster",
     "knn_transfer",
 ]
@@ -262,8 +268,9 @@ def main(argv=None) -> int:
         ngenes = np.diff(s.X.indptr)[x["truth_rows"]]
         for m in methods:
             t0 = time.time()
+            path_score = None
             try:
-                if m in ("guide", "selftrain", "selftrain_pure", "guide_all_cells", "guide_exon"):
+                if m.startswith("guide") or m.startswith("selftrain"):
                     X = x["spl"] if m == "guide_exon" else s.X
                     if X is None:
                         continue
@@ -277,9 +284,16 @@ def main(argv=None) -> int:
                         kw["min_prob"] = 0.0
                     if m == "guide_all_cells":
                         kw["min_genes"] = 0
+                    if m == "guide_cxg_tissue":
+                        kw["tissue"] = x["tissue"] or None
+                    if m == "guide_no_tissue":
+                        kw["tissue"] = kw["disease"] = None
+                    if m == "guide_no_smooth":
+                        kw["alpha"] = 0.0
                     r = CT.annotate_cell_types(X, s.gene_names, **kw)
                     remap = np.array([g.index.get(i, 0) for i in r.guide.ids], np.int32)
                     node, score = remap[r.node], r.score
+                    path_score = r.path_score
                 elif m == "marker_cluster":
                     gt = Guide(s.gene_names, species=s.species, tissue=s.tissue, disease=s.disease)
                     node_t, score = m_marker_cluster(s, gt)
@@ -298,6 +312,10 @@ def main(argv=None) -> int:
                 secs = time.time() - t0
                 tr = x["truth_rows"]
                 rep = EV.report(g, x["truth_cl"], node[tr], score[tr])
+                if path_score is not None:
+                    rep["calibration_path"] = EV.report(g, x["truth_cl"], node[tr], path_score[tr])[
+                        "calibration"
+                    ]
                 acc_by_genes = {}
                 if m in ("guide_all_cells", "selftrain", "guide"):
                     tm = EV.TruthMapper(g)

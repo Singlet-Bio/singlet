@@ -80,20 +80,24 @@ def _characteristics(meta: dict) -> List[tuple]:
     return out
 
 
-def tissue_text(meta: dict) -> str:
-    """Free text naming the sample's tissue: the GEO source name and the tissue-like characteristics (underscores as spaces)."""
+def _organ(text: str) -> bool:
     from .guide import tissue_groups
 
+    return bool(tissue_groups(text) - {"tumor", "embryo"})
+
+
+def tissue_text(meta: dict, series_title: str = "") -> str:
+    """Free text naming the sample's tissue: the GEO source name and the tissue-like characteristics (underscores as
+    spaces). When they name no organ, the diagnosis often does ('esophagus carcinoma'), and failing that the series title
+    ('A single-cell atlas of the human bladder')."""
     parts = [str(meta.get(k) or "") for k in ("sample_source", "tissue") if meta.get(k)]
     parts += [v for k, v in _characteristics(meta) if _TISSUE_KEYS.match(k)]
     text = " ; ".join(p.replace("_", " ") for p in parts if p)
-    if not tissue_groups(text) - {
-        "tumor",
-        "embryo",
-    }:  # no organ named: the diagnosis often names it ('esophagus carcinoma')
-        d = disease_text(meta)
-        if tissue_groups(d) - {"tumor", "embryo"}:
-            text = f"{text} ; {d}" if text else d
+    for extra in (disease_text(meta), series_title):
+        if _organ(text):
+            break
+        if extra and _organ(extra):
+            text = f"{text} ; {extra}" if text else extra
     return text
 
 
@@ -184,6 +188,7 @@ def read_legacy(
                 f"{gsm}: {(col < 0).sum()} called barcodes are not columns of the count matrix"
             )
         meta = dict(b.study_meta.get("gsm_meta", {}).get(gsm, {}))
+        series_title = str(b.study_meta.get("series_title") or "")
         gse = str(b.manifest.get("gse_id") or "")
         donor = None
         if b.has("donor_assignments", gsm):
@@ -200,7 +205,7 @@ def read_legacy(
         col=col,
         barcodes=barcodes,
         species=species_of(meta.get("organism", "")),
-        tissue=tissue_text(meta),
+        tissue=tissue_text(meta, series_title),
         disease=disease_text(meta),
         meta=meta,
         donor=donor,
@@ -223,6 +228,7 @@ def read_v2(
     barcodes = [n.split("_", 1)[1] if n.startswith(f"{gsm}_") else n for n in a.obs_names]
     st = C.open_study(gse, base=base)
     meta = dict(st.study_meta.get("gsm_meta", {}).get(gsm, {}))
+    series_title = str(st.study_meta.get("series_title") or "")
     donor = None
     try:
         vb = V2Bundle(st)
@@ -238,7 +244,7 @@ def read_v2(
         col=col,
         barcodes=barcodes,
         species=species_of(meta.get("organism", "")),
-        tissue=tissue_text(meta),
+        tissue=tissue_text(meta, series_title),
         disease=disease_text(meta),
         meta=meta,
         donor=donor,
