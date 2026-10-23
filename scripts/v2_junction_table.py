@@ -245,18 +245,63 @@ def cmd_census(a):
 
 
 # ======================================================================================================== reduce
-def cmd_reduce(a):
+NBUCKET = 64  # the reduce splits every shard by (build, hash of chromosome) so each merge holds 1/64 of a build
+
+
+def _split_shard(args):
+    """Pass 1: one shard -> parts/<build>/<bucket>/<shard>.parquet."""
     import pandas as pd
+
+    path, parts = args
+    df = pd.read_parquet(path)
+    if not len(df):
+        return 0
+    df["build"] = df["build"].fillna("").replace("", "unknown")
+    bucket = pd.util.hash_array(df["chrom"].to_numpy(dtype=object)) % NBUCKET
+    for (b, k), g in df.groupby([df["build"], bucket], sort=False):
+        d = Path(parts) / str(b) / f"{int(k):03d}"
+        d.mkdir(parents=True, exist_ok=True)
+        g.drop(columns=["build"]).to_parquet(d / (Path(path).stem + ".parquet"), index=False)
+    return len(df)
+
+
+def _merge_bucket(args):
+    """Pass 2: all shards' rows of one (build, bucket) -> census_<build>/part-<bucket>.parquet (one row per junction)."""
+    import pandas as pd
+
+    d, dest = args
+    files = sorted(Path(d).glob("*.parquet"))
+    df = pd.concat([pd.read_parquet(f) for f in files])
+    df = df.groupby(["chrom", "start", "end"], sort=False, as_index=False).sum()
+    Path(dest).parent.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(dest, index=False)
+    return len(df), int(df["umi_called"].sum()), int((df["n_samples"] >= 2).sum())
+
+
+def cmd_reduce(a):
+    from multiprocessing import get_context
 
     out = Path(a.out)
     shards = sorted(out.glob("shard_*.parquet"))
-    log(f"{len(shards)} shards")
-    df = pd.concat([pd.read_parquet(s) for s in shards])
-    df = df.groupby(["build", "chrom", "start", "end"], sort=False, as_index=False).sum()
-    for b, g in df.groupby("build"):
-        name = b or "unknown"
-        g.drop(columns=["build"]).to_parquet(out / f"census_{name}.parquet", index=False)
-        log(f"{name}: {len(g)} junctions, {int(g['umi_called'].sum())} called UMIs")
+    parts = out / "parts"
+    log(f"{len(shards)} shards, {a.workers} workers")
+    with get_context("spawn").Pool(a.workers) as pool:
+        rows = sum(pool.map(_split_shard, [(str(s), str(parts)) for s in shards], chunksize=1))
+        log(f"pass 1: {rows} shard rows split by build and chromosome bucket")
+        jobs = [
+            (str(d), str(out / f"census_{d.parent.name}" / f"part-{d.name}.parquet"))
+            for d in sorted(parts.glob("*/*"))
+            if d.is_dir()
+        ]
+        res = pool.map(_merge_bucket, jobs, chunksize=1)
+    builds: dict = {}
+    for (d, _dest), (n, umi, rec) in zip(jobs, res):
+        b = builds.setdefault(
+            Path(d).parent.name, {"junctions": 0, "umi_called": 0, "in_2_or_more_samples": 0}
+        )
+        b["junctions"] += n
+        b["umi_called"] += umi
+        b["in_2_or_more_samples"] += rec
     recs = []
     for s in sorted(out.glob("shard_*.json")):
         recs += json.loads(s.read_text())
@@ -266,10 +311,13 @@ def cmd_reduce(a):
         "samples": sum(r.get("samples", 0) for r in recs),
         "samples_with_sj": sum(r.get("with_sj", 0) for r in recs),
         "member_errors": sum(len(r.get("errors", [])) for r in recs),
-        "builds": {str(b or "unknown"): int(n) for b, n in df.groupby("build").size().items()},
+        "sj_bytes_read": sum(r.get("sj_bytes", 0) for r in recs),
+        "builds": builds,
     }
     (out / "census_summary.json").write_text(json.dumps(summary, indent=1))
     log(json.dumps(summary))
+    if not a.keep_parts:
+        shutil.rmtree(parts, ignore_errors=True)
 
 
 # ======================================================================================================== build
@@ -310,8 +358,14 @@ def cmd_build(a):
     ann = J.read_gtf(str(gtf), gene_index)
     log(f"GTF: {len(ann.introns)} annotated introns")
 
-    cen = pd.read_parquet(out / f"census_{a.build}.parquet")
-    log(f"census: {len(cen)} junctions")
+    import pyarrow.parquet as pq
+
+    cdir = out / f"census_{a.build}"  # a directory of parts (reduce)
+    n_census = sum(pq.ParquetFile(f).metadata.num_rows for f in sorted(cdir.glob("*.parquet")))
+    # single-sample junctions are local whatever else is true, so only the others are read (an annotated junction seen in one
+    # sample only enters the table from the GTF, without counts)
+    cen = pd.read_parquet(cdir, filters=[("n_samples", ">=", a.rare_min_samples)])
+    log(f"census: {n_census} junctions, {len(cen)} in >= {a.rare_min_samples} samples")
     annotated = pd.DataFrame(
         [(c, s, e) for (c, s, e) in ann.introns], columns=["chrom", "start", "end"]
     )
@@ -319,7 +373,9 @@ def cmd_build(a):
     allj = allj.merge(cen, on=["chrom", "start", "end"], how="left").fillna(0)
     ann_keys = pd.MultiIndex.from_frame(annotated)
     is_ann = pd.MultiIndex.from_frame(allj[["chrom", "start", "end"]]).isin(ann_keys)
-    n_local = int(((allj["n_samples"].to_numpy() < a.rare_min_samples) & ~is_ann).sum())
+    n_local = n_census - len(
+        cen
+    )  # single-sample junctions (a few of them annotated: those are core all the same)
     allj = allj[is_ann | (allj["n_samples"].to_numpy() >= a.rare_min_samples)].reset_index(
         drop=True
     )  # the rest stays local
@@ -383,7 +439,7 @@ def cmd_build(a):
         "build": a.build,
         "version_id": P.pack_id(ver).hex(),
         "junctions": {
-            "census": int(len(cen)),
+            "census": int(n_census),
             "annotated_gtf": int(len(ann.introns)),
             "core": int(core.sum()),
             "core_annotated": int(j.annotated.sum()),
@@ -421,6 +477,8 @@ def main(argv=None):
     s.add_argument("--threads", type=int, default=8)
     s = sub.add_parser("reduce")
     s.add_argument("--out", required=True)
+    s.add_argument("--workers", type=int, default=8)
+    s.add_argument("--keep-parts", action="store_true")
     s = sub.add_parser("build")
     s.add_argument("--out", required=True)
     s.add_argument("--build", required=True, choices=sorted(REFS))
