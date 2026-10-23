@@ -234,3 +234,17 @@ def load_time(p: Path) -> dict:
     if "user_s" in d:
         d["cpu_s"] = d["user_s"] + d.get("sys_s", 0.0)
     return d
+
+
+def cross_worker_exon_hits(run_log: Path) -> int | None:
+    """Atlas engine only: '[parallel-cross-worker] N cross-worker entries -> M exon hits, M UMI
+    unique'. Those M molecules were deduplicated apart from the workers' molecules."""
+    import re
+
+    if not run_log.exists():
+        return None
+    for ln in run_log.read_text(errors="replace").splitlines():
+        m = re.search(r"\[parallel-cross-worker\].*?(\d+) exon hits", ln)
+        if m:
+            return int(m.group(1))
+    return None

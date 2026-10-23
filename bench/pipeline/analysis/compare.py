@@ -181,7 +181,7 @@ def main():
     M: dict = {"dataset": ds}
 
     tools = {}
-    for t in ("singlet-baseline", "singlet-fixed"):
+    for t in ("singlet-baseline", "singlet-fixed", "singlet-baseline-t4", "singlet-fixed-t4"):
         a = loaders.load_singlet(runs / t)
         if a is not None:
             tools[t] = a
@@ -199,7 +199,8 @@ def main():
 
     # runtime / memory
     M["resources"] = {}
-    for t in ("singlet-baseline", "singlet-fixed", "starsolo", "alevinfry"):
+    for t in ("singlet-baseline", "singlet-fixed", "singlet-baseline-t4", "singlet-fixed-t4", "starsolo",
+              "alevinfry"):
         r = loaders.load_time(runs / t / "time.txt")
         enc = loaders.load_time(runs / t / "encode.time.txt")
         if enc:
@@ -207,9 +208,9 @@ def main():
             r["encode_max_rss_gb"] = enc.get("max_rss_gb")
         M["resources"][t] = r
 
-    # ── 1. double count: baseline vs fixed on identical barcodes ──
-    if {"singlet-baseline", "singlet-fixed"} <= set(tools):
-        old, new = tools["singlet-baseline"], tools["singlet-fixed"]
+    # ── 1. double count: atlas engine vs fixed engine on identical barcodes ──
+    def double_count(old_t, new_t):
+        old, new = tools[old_t], tools[new_t]
         common = sorted(set(old.obs_names) & set(new.obs_names))
         cells = [c for c in common if c in set(new.obs_names[new.obs["is_cell"]])] or common
         o, n = subset(old, cells), subset(new, cells)
@@ -222,12 +223,15 @@ def main():
         expressed = gn >= 50
         ps = new.uns.get("pileup_stats", {})
         mol = sum(ps.get(k, 0) for k in ("molecules_spliced", "molecules_unspliced", "molecules_ambiguous"))
-        M["double_count"] = {
+        xw = loaders.cross_worker_exon_hits(runs / old_t / "run.log")
+        res = {
             "n_cells": len(cells),
             "molecules_total": mol,
             "molecules_legacy_double": ps.get("molecules_legacy_double"),
             "legacy_double_frac": ps.get("molecules_legacy_double", 0) / mol if mol else None,
             "cross_gene_intron_reads": ps.get("cross_gene_intron_reads"),
+            "old_cross_worker_exon_molecules": xw,
+            "old_cross_worker_frac": xw / mol if (xw is not None and mol) else None,
             "cell_overcount_median": float(np.median(over)),
             "cell_overcount_p10_p90": [float(np.percentile(over, 10)), float(np.percentile(over, 90))],
             "total_overcount": float(to.sum() / tn.sum() - 1),
@@ -238,11 +242,39 @@ def main():
             "called_cells_old": int(old.obs["is_cell"].sum()),
             "called_cells_new": int(new.obs["is_cell"].sum()),
         }
-        pd.DataFrame({"barcode": cells, "old_total": to, "new_total": tn, "overcount": over}).to_csv(
-            out / "double_count_cells.csv", index=False)
-        top = np.argsort(-gover * expressed)[:50]
-        pd.DataFrame({"gene": np.array(genes)[top], "old": go[top], "new": gn[top], "overcount": gover[top]}).to_csv(
-            out / "double_count_top_genes.csv", index=False)
+        return res, cells, to, tn, over, genes, go, gn, gover, expressed
+
+    # "double_count" = the atlas configuration (4 pileup workers, as the campaign ran);
+    # "_16w" = 16 workers. BAM re-runs use run() (no workers) and only have the plain pair.
+    for tag, (ot, nt) in {"double_count": ("singlet-baseline-t4", "singlet-fixed-t4"),
+                          "double_count_16w": ("singlet-baseline", "singlet-fixed")}.items():
+        if {ot, nt} <= set(tools):
+            res, cells, to, tn, over, genes, go, gn, gover, expressed = double_count(ot, nt)
+            M[tag] = res
+            sfx = "" if tag == "double_count" else "_16w"
+            pd.DataFrame({"barcode": cells, "old_total": to, "new_total": tn, "overcount": over}).to_csv(
+                out / f"double_count_cells{sfx}.csv", index=False)
+            top = np.argsort(-gover * expressed)[:50]
+            pd.DataFrame({"gene": np.array(genes)[top], "old": go[top], "new": gn[top],
+                          "overcount": gover[top]}).to_csv(out / f"double_count_top_genes{sfx}.csv", index=False)
+    if "double_count" not in M and "double_count_16w" in M:
+        M["double_count"] = M.pop("double_count_16w")
+        for f in ("double_count_cells", "double_count_top_genes"):
+            (out / f"{f}_16w.csv").replace(out / f"{f}.csv")
+
+    # Worker-count (in)variance: the same engine with 4 vs 16 pileup workers, same cells/genes
+    inv = {}
+    for eng in ("singlet-baseline", "singlet-fixed"):
+        if {eng, eng + "-t4"} <= set(tools):
+            a, b = tools[eng], tools[eng + "-t4"]
+            cs = sorted(set(a.obs_names) & set(b.obs_names))
+            gs = sorted(set(a.var_names) & set(b.var_names))
+            xa, xb = subset(a, cs, gs)[:, gs].X, subset(b, cs, gs)[:, gs].X
+            d = abs(xa - xb)
+            inv[eng] = {"total_16w_over_4w": float(xa.sum() / max(xb.sum(), 1)),
+                        "entries_differing": int((d > 0).sum()), "abs_diff_total": float(d.sum())}
+    if inv:
+        M["worker_invariance"] = inv
 
     # ── 2. cell calls ──
     called = {t: set(a.obs_names[a.obs["is_cell"]]) for t, a in tools.items()
@@ -270,10 +302,11 @@ def main():
     conc = {}
     pairs = [
         ("singlet-fixed", None, "starsolo_GeneFull", None, "total (exon+intron)"),
-        ("singlet-baseline", None, "starsolo_GeneFull", None, "total (exon+intron)"),
+        ("singlet-baseline-t4", None, "starsolo_GeneFull", None, "total (exon+intron), atlas config"),
+        ("singlet-baseline", None, "starsolo_GeneFull", None, "total (exon+intron), 16 workers"),
         ("alevinfry", None, "starsolo_GeneFull", None, "total (S+U+A)"),
         ("singlet-fixed", "exon", "starsolo_Gene", None, "exonic (S+A)"),
-        ("singlet-baseline", "exon", "starsolo_Gene", None, "exonic"),
+        ("singlet-baseline-t4", "exon", "starsolo_Gene", None, "exonic, atlas config"),
         ("cellranger_published", None, "starsolo_Gene", None, "exonic (CR published)"),
         ("singlet-fixed", "exon", "cellranger_published", None, "exonic vs CR"),
         ("singlet-fixed", "spliced", "starsolo_Velocyto", "spliced", "spliced"),
@@ -308,7 +341,7 @@ def main():
         from sklearn.metrics import adjusted_rand_score as ari
 
         labs = {}
-        for t in ("starsolo_GeneFull", "starsolo_Gene", "singlet-fixed", "singlet-baseline", "alevinfry",
+        for t in ("starsolo_GeneFull", "starsolo_Gene", "singlet-fixed", "singlet-baseline-t4", "alevinfry",
                   "cellranger_published"):
             if t in tools:
                 try:
