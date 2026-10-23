@@ -59,7 +59,7 @@ alevinfry)
   IDX=$PB/refs/$SPECIES/af_idx
   $TIME simpleaf quant --reads1 $R1 --reads2 $R2 --index $IDX/index \
       --t2g-map $IDX/index/t2g_3col.tsv --chemistry $AFCHEM --expected-ori $AFORI \
-      --resolution cr-like --unfiltered-pl --threads $T --output $O/af > $O/run.log 2>&1
+      --resolution cr-like --unfiltered-pl $WL --threads $T --output $O/af > $O/run.log 2>&1
   ;;
 *) echo "unknown tool $TOOL"; exit 2 ;;
 esac
