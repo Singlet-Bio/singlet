@@ -186,8 +186,7 @@ def fig_barnyard(S, out):
     ax.set_ylim(0, 1.02)
     ax.set_xlabel("barcode UMIs")
     ax.set_ylabel("fraction single-species")
-    ax.set_title("Species mixing: barcodes with >= 90% of UMIs from one genome
-(binomial p < 0.001 against the ambient mix)", fontsize=9)
+    ax.set_title("Species mixing: >= 90% of UMIs from one genome, binomial p < 0.001 vs ambient mix", fontsize=8)
     ax.legend(fontsize=7)
     fig.tight_layout()
     fig.savefig(os.path.join(out, "fig4_barnyard.png"))
