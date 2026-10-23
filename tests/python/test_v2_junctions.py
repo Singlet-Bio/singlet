@@ -214,3 +214,58 @@ def test_client_reads_junction_rows_stored_as_table_ids(tmp_path, monkeypatch):
         got = ad.obsm["splice_junctions"][rows][:, pos]
         assert (got != t["sj"][:, cols].T).nnz == 0
     client.clear_memory_cache()
+
+
+def test_migration_with_a_junction_table_regenerates_every_legacy_member(tmp_path):
+    """migrate_bundle with Options(junction_table=...): sj_counts rows become table ids (+ .local, + .legacy_order) and verify
+    still finds every legacy member bit-exact, including splice_psi, which a recipe derives from sj_counts."""
+    pytest.importorskip("singlet._pz2", reason="singlet._pz2 is not built")
+    pytest.importorskip("singlet._pz", reason="singlet._pz is not built")
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+    import test_v2_migrate as TM
+    from singlet import _pz2
+    from singlet.v2 import migrate as MG
+    from singlet.v2 import verify as V
+
+    bundle = TM.make_bundle(tmp_path)
+    # the bundle's junctions are chr1:100i-(100i+40+i%3), i < 300: the table holds the first 200, the rest stay local
+    tdir = tmp_path / "table"
+    tdir.mkdir()
+    names = ["chr1:%d-%d" % (100 * i, 100 * i + 40 + (i % 3)) for i in range(200)]
+    seg = J.build_segment(J.parse_names(names), build="toy", id_lo=0, tier="core")
+    ver = J.build_version([seg], build="toy", version=1)
+    for b in (seg, ver):
+        (tdir / (P.pack_id(b).hex() + ".pack")).write_bytes(b)
+    store = P.PackStore(dirs=[P.PKG_DIR, str(tdir)])
+    table = store.get(P.pack_id(ver).hex())
+    out = tmp_path / "out"
+    opts = MG.Options(
+        recipes=TM.FakeRecipes(),
+        created_at="2026-10-22T00:00:00Z",
+        log=lambda *a: None,
+        packs=store,
+        junction_table=table,
+    )
+    res = MG.migrate_bundle(str(bundle), str(out), None, opts)
+    MG.write_outputs(res, opts)
+    rep = V.verify(str(bundle), str(out), None, None, TM.FakeRecipes(), log=lambda *a: None)
+    assert rep.fail == 0, (
+        [it for it in rep.items if not it[0]][:5] if hasattr(rep, "items") else rep
+    )
+    man = __import__("json").load(open(out / "v2" / "m" / "GSE9001.json"))
+    s0 = man["samples"][0]
+    mem = s0["members"]
+    assert "sj_counts.1pz.local" in mem and "sj_counts.1pz.legacy_order" in mem
+    obj = (out / s0["key"]).read_bytes()
+    m = mem["sj_counts.1pz"]
+    h = _pz2.Member(obj[m["off"] : m["off"] + m["len"]]).header
+    assert h["row_names_kind"] == "pack_subset" and h["digest"] == m["digest"]
+    idx = json_ids = None  # noqa: F841
+    ref = {
+        e["id"]: e["kind"]
+        for e in __import__("json").load(open(out / "v2" / "ref" / "index.json"))["packs"]
+    }
+    assert (
+        ref[P.pack_id(ver).hex()] == "junction-version"
+        and ref[P.pack_id(seg).hex()] == "junction-segment"
+    )

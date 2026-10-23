@@ -418,25 +418,27 @@ prototype uses where no GTF is at hand, not a replacement for the GTF.
   strictly ascending: table ids first, then `LOCAL_BASE + k`. The matrix rows are in that order.
 * The sample's own junctions are the member `sj_counts.1pz.local` (kind 3 or 5): `u16 n_chroms, u32 names_len`, NUL-joined chromosome
   names, then a segment body (12.2) without ids, rows in genomic order. Absent when every junction is in the table.
-* `splice_psi.1pz` (derived, section 9) follows the junction rows; its recipe will have to read the names through the table (not done in the prototype).
-* Clients: `row_names(table, ids, local)` gives the names; the Python client resolves them when reading `splice_junctions` / `psi`
-  (`modalities=`, section 11) and fetches `.local` only when ids at or above `LOCAL_BASE` occur. Integer ids are the natural key for
-  combining samples (no string matching); exposing them next to the names (`uns["obsm_ids"]`) is the next client step. The R reader
-  does not resolve `pack_subset` junction rows yet.
+* The member `sj_counts.1pz.legacy_order` (kind 3 or 5, `encode_perm`: zigzag deltas of `perm`, byte planes, zstd) holds the legacy
+  row order: v2 row `r` is legacy row `perm[r]` (12.5).
+* The logical matrix of the member is the legacy one: `V2Sample.matrix()` (and the bundle API, `V2Bundle.read`) return the rows in the
+  legacy order with the legacy names (`to_legacy`), and the member digest (header and member table) is the canonical digest of that
+  legacy matrix. `matrix(..., order="stored")` gives the stored (table) order.
+* `splice_psi.1pz` (derived, section 9) is unaffected: its recipe reads `sj_counts.1pz` through the context, which sees the legacy matrix.
+* Clients reading data (`modalities=`, section 11) get the table order: `row_names(table, ids, local)` gives the names, and `.local`
+  is fetched only when ids at or above `LOCAL_BASE` occur. Integer ids are the natural key for combining samples (no string
+  matching); exposing them next to the names (`uns["obsm_ids"]`) is the next client step. The R reader does not resolve
+  `pack_subset` junction rows yet.
+* Migration: `migrate.Options(junction_table=<JunctionTable>)` writes `sj_counts.1pz` this way (`_junction_rows`, with the table's
+  packs reachable through `Options.packs`); stage 2 and `verify` check it against the legacy member exactly like any other matrix, and
+  `write_outputs` ships the version and its segments with the study's packs (`index.json` kinds `junction-version`,
+  `junction-segment`).
 
-### 12.5 Row order: legacy permutation or table order
+### 12.5 Row order (decided 2026-10-23: store the permutation)
 
-The legacy row order is the order in which the pipeline first met each junction while reading the BAM: an artefact with no meaning.
-Bit-equivalence with the legacy member (section 1) can be kept two ways:
-
-1. **Store the permutation** (`encode_perm`: zigzag deltas, byte planes, zstd) as a member next to the matrix: measured below at about
-   33 KB per sample, roughly 2.3 GB for the atlas, kept forever because objects are immutable, for an order nobody uses.
-2. **Accept table order** and verify as named matrices: at migration, check that the v2 matrix equals the legacy matrix after mapping
-   rows by name (every `(name, column, value)` triple equal), regenerate a legacy-format member in table order, and keep the legacy
-   bundles in the private archive for the grace period (section 10).
-
-**Recommendation: 2.** It changes decision D15 for `sj_counts` and `splice_psi` from "equal canonical matrix" to "equal as a named
-matrix"; every other member is unaffected. If D15 must stay literal until retirement, 1 works and costs only the permutation member.
+The legacy row order is the order in which the pipeline first met each junction while reading the BAM. Every legacy member must still
+regenerate byte for byte (section 1, D15 unchanged), so the permutation is stored (`.legacy_order`, 12.4): about 33 KB per sample on
+the pilot (458,787 B for 14 samples), roughly 2.3 GB for the atlas. The alternative considered, accepting table order and verifying as
+named matrices, was not taken.
 
 ### 12.6 Atlas aggregates and isoform use
 
@@ -509,7 +511,6 @@ name strings, not decoding, is the slowest step for a client, which is one more 
 
 * Build version 1 on Clipper from the GTF and genome of each build (the laptop has neither) and the atlas census; set the core thresholds
   from the census.
-* Decide 12.5 (D15 for junction members).
 * R reader for `pack_subset` junction rows; MCP `resolve_features` for junction ids (the Worker can decode a segment: zstd in the Worker
   or an SCX1-style variant, see the stream sizes below).
 * Pipeline: record strand, motif and maximum overhang per junction (STAR knows them), and count junction UMIs once per molecule, in line

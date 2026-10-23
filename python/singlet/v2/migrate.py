@@ -70,6 +70,7 @@ class Options:
         log=None,
         packs: Optional[P.PackStore] = None,
         max_stage2_rounds: int = 4,
+        junction_table=None,
     ):
         self.chunk_cols = chunk_cols
         self.level = level
@@ -82,6 +83,8 @@ class Options:
         self.log = log or (lambda *a: print(*a, file=sys.stderr, flush=True))
         self.packs = packs or P.default_store()
         self.max_stage2_rounds = max_stage2_rounds
+        # a junctions.JunctionTable (its packs reachable through ``packs``): junction rows are stored as table ids
+        self.junction_table = junction_table
 
 
 # ================================================================================================ comparisons (migration side)
@@ -123,6 +126,60 @@ def _row_names_for(csc: Csc, rel: str, lctx: LegacyContext, opts: Options):
             if genes == csc.rownames:
                 return ("pack", pk.id[:8]), {"pack": pk.id.hex(), "member": "genes"}
     return "inline", "inline"
+
+
+JUNCTION_MEMBERS = ("sj_counts.1pz",)
+
+
+def _junction_rows(w, rel, m, basis_barcodes, opts: Options, vt_code: int, flags: int):
+    """Write a junction matrix with rows as ids into ``opts.junction_table`` (docs/format-v2.md 12.4), plus the ``.local`` and
+    ``.legacy_order`` members; the member digest stays the legacy matrix's, so every check against the legacy bundle is unchanged.
+    Returns None (and writes nothing) when the codec refuses, so the caller falls back to inline names."""
+    from . import junctions as J
+
+    t = opts.junction_table
+    c = m.csc
+    ip, ix, dt, ids, local, perm = J.from_legacy(c.indptr, c.indices, c.data, c.rownames, t)
+    v2 = Csc(
+        c.m,
+        c.n,
+        ip,
+        ix.astype(np.uint32),
+        dt.astype(c.data.dtype),
+        None,
+        c.colnames,
+        dict(c.kv),
+        c.value_type,
+    )
+    v2.rownames = J.row_names(t, ids, J.decode_local(local) if local else None)
+    col_ref, col_meta = _col_names_for(c, basis_barcodes, opts)
+    eo = EncodeOptions(
+        chunk_cols=opts.chunk_cols,
+        row_names=("subset", t.id[:8], np.asarray(ids, np.uint32)),
+        col_names=col_ref,
+        level=opts.level,
+        threads=opts.threads,
+        digest=c.digest(),  # the logical matrix is the legacy one (rows in legacy order, legacy names)
+    )
+    try:
+        body = opts.codec.encode(v2, eo)
+    except CodecError:
+        return None
+    meta = {
+        "m": c.m,
+        "n": c.n,
+        "nnz": c.nnz,
+        "legacy_vt_code": vt_code,
+        "chunk_cols": parse_header(body)["chunk_cols"],
+        "names": {"rows": {"junctions": t.id.hex(), "build": t.build}, "cols": col_meta},
+        "legacy_size": m.entry.size,
+        "legacy_crc32": m.entry.crc32,
+    }
+    w.add_matrix(rel, body, c.digest(), meta, flags)
+    if local:
+        w.add_stored(rel + J.LOCAL_SUFFIX, local, {"of": rel}, 0, opts.level)
+    w.add_stored(rel + J.LEGACY_ORDER_SUFFIX, perm, {"of": rel}, 0, opts.level)
+    return True
 
 
 def _col_names_for(csc: Csc, basis_barcodes: Optional[list], opts: Options):
@@ -396,6 +453,10 @@ def _pack_ids(infos) -> set:
         for part in (meta.get("names") or {}).values():
             if isinstance(part, dict) and "pack" in part:
                 out.add(part["pack"])
+            if (
+                isinstance(part, dict) and "junctions" in part
+            ):  # a junction table version (its segments follow below)
+                out.add(part["junctions"])
         if meta.get("whitelist"):
             out.add(meta["whitelist"])
     return out
@@ -483,6 +544,15 @@ def _assemble(gsm, order, mem, base, cand, lctx, opts: Options, basis_barcodes, 
         e = m.entry
         flags = C.FLAG_LEGACY | (C.FLAG_ANNDATA if rel in ANNDATA_MEMBERS else 0)
         data = None
+        if (
+            m.treat == "pz2"
+            and rel in JUNCTION_MEMBERS
+            and opts.junction_table is not None
+            and m.csc.rownames
+        ):
+            extra = _junction_rows(w, rel, m, basis_barcodes, opts, legacy_vt(m.csc), flags)
+            if extra is not None:
+                continue
         if m.treat == "pz2":
             if m.body is None:
                 row_ref, row_meta = _row_names_for(m.csc, rel, lctx, opts)
@@ -979,7 +1049,9 @@ def write_outputs(res: dict, opts: Options) -> dict:
     ):  # close over dependencies: intron packs name their exon pack, composites their parts
         pk = store.get(todo.pop())
         deps = []
-        if isinstance(pk, P.VocabPack):
+        if getattr(pk, "header", {}).get("segments"):  # junction table version -> its segments
+            deps = [e["id"] for e in pk.header["segments"]]
+        elif isinstance(pk, P.VocabPack):
             if pk.kind == P.KIND_COMPOSITE:
                 deps = [c.id.hex() for c, _t in pk._components()]
             elif pk.header.get("coder") == "SVPD":
@@ -998,7 +1070,9 @@ def write_outputs(res: dict, opts: Options) -> dict:
         entries.append(
             P.index_entry(
                 data,
-                "whitelist" if kind == P.KIND_WHITELIST else "vocab",
+                {P.KIND_WHITELIST: "whitelist", 4: "junction-segment", 5: "junction-version"}.get(
+                    kind, "vocab"
+                ),
                 {
                     k: v
                     for k, v in {

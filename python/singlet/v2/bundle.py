@@ -285,7 +285,24 @@ class V2Bundle(SingletBundle):
             mem = pz.Member(src.read(mref.off, mref.len))
             hdr = mem.header
             res = mem.decode(mode="canonical", threads=0, dtype="uint32")
-            rownames = self._row_names(mem, hdr)
+            if hdr["row_names_kind"] == "pack_subset" and self._is_junction_table(hdr):
+                # junction rows stored as table ids: the bundle API returns the legacy order and names (format-v2 12.4)
+                from . import junctions as J
+
+                local = self._small_member(gsm, member + J.LOCAL_SUFFIX)
+                perm = self._small_member(gsm, member + J.LEGACY_ORDER_SUFFIX)
+                ip, ix, dt, rownames = J.to_legacy(
+                    res["indptr"],
+                    res["indices"],
+                    res["data"],
+                    mem.row_names()["pack_index"],
+                    self.study._resolver.get(hdr["row_names_id"]),
+                    local,
+                    perm,
+                )
+                res = dict(res, indptr=ip.astype(np.int32), indices=ix.astype(np.int32), data=dt)
+            else:
+                rownames = self._row_names(mem, hdr)
             colnames = self._col_names(gsm, mem, hdr)
             kv = mem.kv()
             return self._anndata_from_csc(
@@ -302,6 +319,28 @@ class V2Bundle(SingletBundle):
             )
         finally:
             src.close()
+
+    def _is_junction_table(self, hdr) -> bool:
+        from .junctions import JunctionTable
+
+        return isinstance(self.study._resolver.get(hdr["row_names_id"]), JunctionTable)
+
+    def _small_member(self, gsm: str, name: str) -> Optional[bytes]:
+        """Bytes of a small stored member (kind 3 decompressed, kind 5 as is), None when absent."""
+        sm = self._sm(gsm)
+        mref = sm.members.get(name)
+        if mref is None or not mref.len:
+            return None
+        src = self.study.source_for(sm)
+        try:
+            raw = bytes(src.read(mref.off, mref.len))
+        finally:
+            src.close()
+        if mref.kind == K.KIND_STORED:
+            from .util import zstd_decompress
+
+            raw = zstd_decompress(raw)
+        return raw
 
     def _row_names(self, mem, hdr) -> list:
         kind = hdr["row_names_kind"]

@@ -40,7 +40,8 @@ from . import util
 
 KIND_SEGMENT, KIND_VERSION = 4, 5
 LOCAL_BASE = 1 << 31
-LOCAL_SUFFIX = ".local"  # member "<matrix>.local" (kind 5, raw) holds the sample's own junctions of that matrix
+LOCAL_SUFFIX = ".local"  # member "<matrix>.local" (kind 3 or 5) holds the sample's own junctions of that matrix
+LEGACY_ORDER_SUFFIX = ".legacy_order"  # member "<matrix>.legacy_order": v2 row r holds legacy row perm[r] (encode_perm)
 CODER = "JX1"
 COORDS = "0-based [start, end): start = first intron base, end = first exon base after the intron"
 
@@ -672,3 +673,41 @@ def row_names(table: JunctionTable, ids: np.ndarray, local: Optional[Junctions])
         for i, k in zip(np.flatnonzero(~t).tolist(), (ids[~t] - LOCAL_BASE).tolist()):
             out[i] = ln[k]
     return out
+
+
+# ============================================================================================ legacy order (bit-exact regeneration)
+def permute_rows(indptr, indices, data, row_map) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """CSC with row ``i`` renamed ``row_map[i]``; row ids sorted again inside every column (same indptr)."""
+    indptr = np.asarray(indptr, np.int64)
+    new = np.asarray(row_map, np.int64)[np.asarray(indices, np.int64)]
+    col = np.repeat(np.arange(len(indptr) - 1, dtype=np.int64), np.diff(indptr))
+    o = np.lexsort((new, col))
+    return indptr, new[o], np.asarray(data)[o]
+
+
+def to_legacy(indptr, indices, data, ids, table: JunctionTable, local_blob=None, perm_blob=None):
+    """A junction matrix stored in table order -> (indptr, indices, data, row names) in the legacy order, when the
+    ``.legacy_order`` member is given (else the table order and its names)."""
+    local = decode_local(local_blob) if local_blob else None
+    names = row_names(table, np.asarray(ids, np.int64), local)
+    if perm_blob is None:
+        return np.asarray(indptr, np.int64), np.asarray(indices), np.asarray(data), names
+    perm = decode_perm(perm_blob)
+    if len(perm) != len(names) or not np.array_equal(np.sort(perm), np.arange(len(perm))):
+        raise JunctionError("the legacy order is not a permutation of the matrix rows")
+    ip, ix, dt = permute_rows(indptr, indices, data, perm)
+    legacy_names: List[str] = [""] * len(names)
+    for r, k in enumerate(perm.tolist()):
+        legacy_names[k] = names[r]
+    return ip, ix, dt, legacy_names
+
+
+def from_legacy(indptr, indices, data, names: Sequence[str], table: JunctionTable):
+    """A legacy junction matrix (rows in the pipeline's order) -> (indptr, indices, data) in table order, the row ids
+    (pack_subset index), the ``.local`` member body (or None) and the ``.legacy_order`` member body."""
+    rows = sample_rows(table, names)
+    inv = np.empty(len(rows.legacy_perm), np.int64)
+    inv[rows.legacy_perm] = np.arange(len(rows.legacy_perm))
+    ip, ix, dt = permute_rows(indptr, indices, data, inv)
+    local = encode_local(rows.local) if len(rows.local) else None
+    return ip, ix, dt, rows.ids, local, encode_perm(rows.legacy_perm)
