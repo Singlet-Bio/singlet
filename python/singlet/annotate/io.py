@@ -61,14 +61,35 @@ def species_of(organism: str) -> Optional[str]:
     return None
 
 
+_TISSUE_KEYS = re.compile(r"^\s*(tissue|tissue type|organ|organ part|source|source name|anatomical site|site|body site|region|brain region)\s*$", re.I)
+
+
+def _characteristics(meta: dict) -> List[tuple]:
+    out = []
+    for part in re.split(r"\s*;;\s*", str(meta.get("sample_characteristics") or "")):
+        k, sep, v = part.partition(":")
+        if sep:
+            out.append((k.strip(), v.strip()))
+    return out
+
+
 def tissue_text(meta: dict) -> str:
-    return " ; ".join(str(meta.get(k) or "") for k in ("sample_source", "tissue") if meta.get(k))
+    """Free text naming the sample's tissue: the GEO source name and the tissue-like characteristics (underscores as spaces)."""
+    from .guide import tissue_groups
+
+    parts = [str(meta.get(k) or "") for k in ("sample_source", "tissue") if meta.get(k)]
+    parts += [v for k, v in _characteristics(meta) if _TISSUE_KEYS.match(k)]
+    text = " ; ".join(p.replace("_", " ") for p in parts if p)
+    if not tissue_groups(text) - {"tumor", "embryo"}:  # no organ named: the diagnosis often names it ('esophagus carcinoma')
+        d = disease_text(meta)
+        if tissue_groups(d) - {"tumor", "embryo"}:
+            text = f"{text} ; {d}" if text else d
+    return text
 
 
 def disease_text(meta: dict) -> str:
-    ch = str(meta.get("sample_characteristics") or "")
-    hits = [p for p in re.split(r"\s*;;\s*", ch) if re.match(r"\s*(disease|diagnosis|condition|tumou?r|cancer|status)\b", p, re.I)]
-    return " ; ".join(hits)
+    hits = [f"{k}: {v}" for k, v in _characteristics(meta) if re.match(r"(disease|diagnosis|condition|tumou?r|cancer|subject status|status)\b", k, re.I)]
+    return " ; ".join(hits).replace("_", " ")
 
 
 def _donor_labels(df, barcodes: List[str]) -> Optional[np.ndarray]:

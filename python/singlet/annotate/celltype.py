@@ -294,6 +294,7 @@ def annotate_cell_types(
     seed: int = 0,
     per_node_cap: int = 2000,
     total_cap: int = 30000,
+    min_genes: int = MIN_GENES,
 ) -> CellTypeResult:
     """Cell type calls for one sample. ``X``: raw counts, cells x genes (exon + intron at gene level is what Singlet serves).
     ``tissue``/``disease``: free text from the sample metadata (restricts the guide to plausible nodes; unknown words are ignored).
@@ -324,7 +325,7 @@ def annotate_cell_types(
     D = conf.shape[1]
     last = np.clip(depth - 1, 0, D - 1)
     gconf = np.where(depth > 0, conf[np.arange(n), last], np.nan).astype(np.float32)
-    lowq = ngenes < MIN_GENES
+    lowq = ngenes < min_genes
     node[lowq] = 0
     gconf[lowq] = np.nan
     notes.update(score_s=t1 - t0, neighbours_s=t2 - t1, gate_s=time.time() - t2, n_low_quality=int(lowq.sum()))

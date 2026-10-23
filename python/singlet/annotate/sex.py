@@ -1,19 +1,22 @@
 # SPDX-License-Identifier: MIT
 """Chromosomal sex per cell from expression, pooled per donor.
 
-Evidence per cell: UMIs of XIST (``x``), summed UMIs of non-PAR chrY genes (``y``) and the cell's total UMIs (``n``). Two Poisson
-components with rates per UMI: female cells express XIST at ``a_f`` and chrY at a leak rate ``e_y``; male cells express chrY at
-``b_m`` and XIST at a leak rate ``e_x``. The four rates are fitted per sample by EM, shrunk towards atlas defaults (so a sample of
-one sex keeps sensible rates for the other), with a male fraction ``pi`` per group. Groups are the donors of the sample when
-genotype demultiplexing found more than one (``donor/donor_assignments.tsv``), otherwise the whole sample.
+Evidence per cell: UMIs of XIST (``x``) and summed UMIs of non-PAR chrY genes (``y``). Only these sex-informative UMIs are used,
+and only through their split: in a female cell almost all of them are XIST (fraction ``Q_FEMALE``), in a male cell almost none
+(``Q_MALE``, the floor set by ambient RNA and mapping noise). The absolute rates are not used, because they vary several-fold
+between protocols, cells and nuclei and sequencing depths; and the absence of XIST is not taken as evidence of a Y (shallow cells
+detect neither). A cell's log-likelihood ratio male:female is then ``(y - x) * log(Q_FEMALE / Q_MALE)``, clipped to +-``LLR_CAP``.
 
-A cell's posterior is ``sigmoid(LLR + logit(pi_group))`` with the per-cell log-likelihood ratio clipped to +-``LLR_CAP`` (counts
-are overdispersed, so no single cell is allowed to be certain on its own). In a single-sex group every cell, including the many
-with no XIST or chrY UMI at all, inherits the group's sex unless its own evidence is strongly contrary (a doublet with another
-donor, a mislabelled barcode). Labels are ``female`` (PATO:0000383), ``male`` (PATO:0000384) or ``ambiguous`` (posterior between
-``1 - MIN_POST`` and ``MIN_POST``, or strong XIST and chrY in the same cell). ``score`` is the posterior of the label given.
+Cells are pooled per group: the donors of the sample when genotype demultiplexing found more than one
+(``donor/donor_assignments.tsv``), otherwise the whole sample. The group's male fraction ``pi`` is fitted by EM over its
+informative cells (Jeffreys prior), and each cell's posterior is ``sigmoid(LLR + logit(pi))``. In a single-sex group every cell,
+including the many with no XIST or chrY UMI at all, inherits the group's sex unless its own evidence is strongly contrary (a
+doublet with another donor, a mislabelled barcode); in a mixed group (pooled donors without demultiplexing) uninformative cells
+stay ambiguous.
 
-Loss of chrY in ageing blood cells does not flip a male donor's cells: such cells have neither XIST nor chrY, so the group prior
+Labels: ``female`` (PATO:0000383), ``male`` (PATO:0000384), ``ambiguous`` (posterior between ``1 - MIN_POST`` and ``MIN_POST``,
+or substantial XIST and chrY in the same cell). ``score`` is the posterior of the label given (0.5 for 'both present').
+Loss of chrY in ageing blood cells does not flip a male donor's cells: such cells have neither XIST nor chrY, so the group
 decides them.
 """
 
@@ -27,19 +30,18 @@ import scipy.sparse as sps
 
 PATO = {"female": "PATO:0000383", "male": "PATO:0000384"}
 
-# Non-PAR chrY genes broadly expressed outside the testis. Mouse: Xist is the X evidence too.
+# Non-PAR chrY genes broadly expressed outside the testis. XIST is the X evidence in both species.
 CHRY = {
     "human": ("RPS4Y1", "DDX3Y", "UTY", "KDM5D", "EIF1AY", "ZFY", "USP9Y", "TXLNGY", "NLGN4Y", "PRKY"),
     "mouse": ("Ddx3y", "Eif2s3y", "Uty", "Kdm5d"),
 }
 XIST = {"human": ("XIST",), "mouse": ("Xist",)}
 
-# Atlas defaults (rates per UMI, gene-level exon + intron counts) and their prior weight in UMIs.
-DEFAULTS = {"a_f": 2e-3, "e_y": 2e-6, "b_m": 6e-4, "e_x": 4e-6}
-PRIOR_UMIS = 2e5
+Q_FEMALE = 0.97  # fraction of sex-informative UMIs that are XIST in a female cell
+Q_MALE = 0.03  # ... in a male cell
 LLR_CAP = 6.0
 MIN_POST = 0.9
-EM_ITERS = 30
+EM_ITERS = 50
 
 
 @dataclass
@@ -47,8 +49,7 @@ class SexResult:
     label: np.ndarray  # per cell: 'female' | 'male' | 'ambiguous'
     score: np.ndarray  # posterior of the label (float32)
     p_male: np.ndarray  # per-cell posterior P(male)
-    groups: Dict[str, dict] = field(default_factory=dict)  # per group: call, pi_male, n_cells, n_informative
-    rates: Dict[str, float] = field(default_factory=dict)
+    groups: Dict[str, dict] = field(default_factory=dict)  # per group: call, pi_male, n_cells, n_informative, xist_umis, chry_umis
 
 
 def _genes_index(gene_names: Sequence[str], wanted: Sequence[str]) -> np.ndarray:
@@ -57,78 +58,59 @@ def _genes_index(gene_names: Sequence[str], wanted: Sequence[str]) -> np.ndarray
 
 
 def sex_evidence(X, gene_names: Sequence[str], species: str = "human"):
-    """(x, y, n) per cell: XIST UMIs, chrY UMIs, total UMIs."""
+    """(x, y) per cell: XIST UMIs and chrY UMIs."""
     X = sps.csr_matrix(X)
-    n = np.asarray(X.sum(1)).ravel().astype(np.float64)
     xi = _genes_index(gene_names, XIST[species])
     yi = _genes_index(gene_names, CHRY[species])
     x = np.asarray(X[:, xi].sum(1)).ravel().astype(np.float64) if len(xi) else np.zeros(X.shape[0])
     y = np.asarray(X[:, yi].sum(1)).ravel().astype(np.float64) if len(yi) else np.zeros(X.shape[0])
-    return x, y, n
-
-
-def _llr(x, y, n, r):
-    a_f, e_y, b_m, e_x = r["a_f"], r["e_y"], r["b_m"], r["e_x"]
-    v = y * np.log(b_m / e_y) - n * (b_m - e_y) + x * np.log(e_x / a_f) - n * (e_x - a_f)
-    return np.clip(v, -LLR_CAP, LLR_CAP)
+    return x, y
 
 
 def _sigmoid(z):
     return 1.0 / (1.0 + np.exp(-z))
 
 
-def call_sex(
-    X,
-    gene_names: Sequence[str],
-    *,
-    species: str = "human",
-    groups: Optional[Sequence[Optional[str]]] = None,
-) -> SexResult:
-    """Per-cell sex. ``groups``: donor label per cell (None / '' for cells not assigned to a donor, which then use the pooled
-    prior of the sample); None = one group for the whole sample."""
+def _fit_pi(llr: np.ndarray) -> float:
+    """Male fraction of a group from its informative cells' LLRs (EM, Jeffreys prior)."""
+    if len(llr) == 0:
+        return 0.5
+    pi = 0.5
+    for _ in range(EM_ITERS):
+        p = _sigmoid(llr + np.log(pi / (1 - pi)))
+        new = (p.sum() + 0.5) / (len(llr) + 1.0)
+        new = float(np.clip(new, 1e-4, 1 - 1e-4))
+        if abs(new - pi) < 1e-7:
+            pi = new
+            break
+        pi = new
+    return pi
+
+
+def call_sex(X, gene_names: Sequence[str], *, species: str = "human", groups: Optional[Sequence[Optional[str]]] = None) -> SexResult:
+    """Per-cell sex. ``groups``: donor label per cell ('' or None for cells not assigned to a donor, which use the pooled
+    fraction of the whole sample); None = the whole sample is one group."""
     if species not in CHRY:
         raise ValueError(f"no sex genes for species {species!r}")
-    x, y, n = sex_evidence(X, gene_names, species)
-    m = len(n)
-    g = np.array(["sample"] * m, dtype=object) if groups is None else np.array([s if s else "" for s in groups], dtype=object)
-    labels = sorted({s for s in g if s})
-    gi = {s: i for i, s in enumerate(labels)}
-    gidx = np.array([gi.get(s, -1) for s in g], np.int64)
-    rates = dict(DEFAULTS)
-    pi = np.full(len(labels), 0.5)
-    pi_all = 0.5
-    def group_prior():
-        return np.where(gidx >= 0, pi[np.maximum(gidx, 0)], pi_all) if len(labels) else np.full(m, pi_all)
-
-    for _ in range(EM_ITERS):
-        prior = group_prior()
-        p = _sigmoid(_llr(x, y, n, rates) + np.log(prior / (1 - prior)))
-        w0 = PRIOR_UMIS
-        f, mm = 1 - p, p
-        rates["a_f"] = (f @ x + w0 * DEFAULTS["a_f"]) / (f @ n + w0)
-        rates["e_y"] = (f @ y + w0 * DEFAULTS["e_y"]) / (f @ n + w0)
-        rates["b_m"] = (mm @ y + w0 * DEFAULTS["b_m"]) / (mm @ n + w0)
-        rates["e_x"] = (mm @ x + w0 * DEFAULTS["e_x"]) / (mm @ n + w0)
-        # identifiability: the signal rate stays well above the leak rate of the same gene set
-        rates["e_x"] = min(rates["e_x"], rates["a_f"] / 20)
-        rates["e_y"] = min(rates["e_y"], rates["b_m"] / 20)
-        for s, i in gi.items():
-            sel = gidx == i
-            pi[i] = np.clip((p[sel].sum() + 0.5) / (sel.sum() + 1), 1e-3, 1 - 1e-3)
-        pi_all = float(np.clip((p.sum() + 0.5) / (m + 1), 1e-3, 1 - 1e-3))
-    llr = _llr(x, y, n, rates)
-    prior = group_prior()
+    x, y = sex_evidence(X, gene_names, species)
+    m = len(x)
+    llr = np.clip((y - x) * np.log(Q_FEMALE / Q_MALE), -LLR_CAP, LLR_CAP)
+    inf = (x + y) > 0
+    g = np.array(["sample"] * m, dtype=object) if groups is None else np.array([s or "" for s in groups], dtype=object)
+    pi_all = _fit_pi(llr[inf])
+    prior = np.full(m, pi_all)
+    out_groups: Dict[str, dict] = {}
+    for s in sorted({v for v in g if v}):
+        sel = g == s
+        pi = _fit_pi(llr[sel & inf])
+        prior[sel] = pi
+        call = "male" if pi >= MIN_POST else ("female" if pi <= 1 - MIN_POST else "ambiguous")
+        out_groups[s] = dict(call=call, pi_male=pi, n_cells=int(sel.sum()), n_informative=int((sel & inf).sum()),
+                             xist_umis=int(x[sel].sum()), chry_umis=int(y[sel].sum()))
     p = _sigmoid(llr + np.log(prior / (1 - prior)))
     label = np.where(p >= MIN_POST, "male", np.where(p <= 1 - MIN_POST, "female", "ambiguous")).astype(object)
-    both = (x >= 3) & (y >= 3) & (x >= 0.3 * rates["a_f"] * n) & (y >= 0.3 * rates["b_m"] * n)
+    both = (x >= 2) & (y >= 2) & (np.minimum(x, y) >= 0.25 * np.maximum(x, y))
     label[both] = "ambiguous"
     score = np.where(label == "male", p, np.where(label == "female", 1 - p, np.maximum(p, 1 - p))).astype(np.float32)
     score[both] = 0.5
-    out_groups: Dict[str, dict] = {}
-    informative = (x > 0) | (y > 0)
-    for s, i in gi.items():
-        sel = gidx == i
-        piv = float(pi[i])
-        call = "male" if piv >= MIN_POST else ("female" if piv <= 1 - MIN_POST else "ambiguous")
-        out_groups[s] = dict(call=call, pi_male=piv, n_cells=int(sel.sum()), n_informative=int((informative & sel).sum()))
-    return SexResult(label=label, score=score, p_male=p.astype(np.float32), groups=out_groups, rates={k: float(v) for k, v in rates.items()})
+    return SexResult(label=label, score=score, p_male=p.astype(np.float32), groups=out_groups)

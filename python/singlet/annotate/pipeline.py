@@ -21,7 +21,7 @@ ANNOTATE_VERSION = "0.1.0"
 def model_version(method: str = "selftrain") -> str:
     return (
         f"singlet-annotate={ANNOTATE_VERSION};celltype={method}/cellguide-v2/{G.cl_version().split('/')[2]};"
-        f"sex=xist-chrY-em/1;ancestry=1kgp-supervised-admixture/1/{ANC.HANCESTRO_VERSION.split('/')[-1]}"
+        f"sex=xist-chrY-split/2;ancestry=1kgp-supervised-admixture/1/{ANC.HANCESTRO_VERSION.split('/')[-1]}"
     )
 
 
@@ -63,7 +63,7 @@ def annotate_sample(
     sx = SX.call_sex(s.X, s.gene_names, species=s.species, groups=None if s.donor is None else list(s.donor))
     df["sex_chrom"] = pd.array(sx.label, dtype="string")
     df["sex_score"] = sx.score.astype(np.float32)
-    summary["sex"] = dict(groups=sx.groups, rates=sx.rates)
+    summary["sex"] = dict(groups=sx.groups)
     summary["timings"]["sex_s"] = time.time() - t
 
     # ---- ancestry (human only; needs restricted donor depths and the allele-frequency table)

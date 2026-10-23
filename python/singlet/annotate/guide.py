@@ -147,7 +147,7 @@ def _node_groups(node: dict) -> Optional[Set[str]]:
 def allowed_nodes(nodes: Sequence[dict], tissue: Optional[str], disease: Optional[str] = None) -> Set[str]:
     """Ids of the nodes allowed in a sample of ``tissue`` (free text) with ``disease`` (free text, only 'tumour' words count)."""
     sg = tissue_groups(tissue) | ({"tumor"} if "tumor" in tissue_groups(disease) else set())
-    if not sg:
+    if not sg - {"tumor", "embryo"}:  # no organ named ('tumour', 'fetal' alone): every node stays possible
         return {n["id"] for n in nodes}
     byid = {n["id"]: n for n in nodes}
     ok: Set[str] = set()
