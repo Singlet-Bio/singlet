@@ -74,6 +74,9 @@ def annotate_sample(
         calls = {}
         for d, sites in s.donor_sites.items():
             ad, dp, F = idx.align(sites)
+            if len(ad) < ANC.MIN_MATCH_FRAC * len(sites):  # another genome build or species: no call rather than a wrong one
+                calls[d] = ANC.AncestryCall(None, None, {}, int(len(ad)))
+                continue
             calls[d] = ANC.infer_ancestry(ad, dp, F, seed=seed)
         if s.donor is None:
             # one donor in the sample: its call covers every cell; several depth tables but no labels: no mapping

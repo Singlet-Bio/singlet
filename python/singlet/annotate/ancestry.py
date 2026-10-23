@@ -42,6 +42,7 @@ DP_CAP = 8
 EPS = 0.02
 Q_MIN = 0.8
 MIN_SITES = 300  # sites with any depth needed before a call is made
+MIN_MATCH_FRAC = 0.5  # a donor whose sites mostly miss the table is on another build or species: no call
 F_CLIP = 1e-3
 
 

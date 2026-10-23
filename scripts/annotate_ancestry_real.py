@@ -83,9 +83,13 @@ def main(argv=None) -> int:
                                             dtype={"chrom": str, "ref": str, "alt": str})
                         t2 = time.time()
                         ad, dp, F = idx.align(sites)
-                        c = ANC.infer_ancestry(ad, dp, F, n_boot=a.n_boot)
+                        frac = len(ad) / max(len(sites), 1)
+                        if frac < ANC.MIN_MATCH_FRAC:
+                            c = ANC.AncestryCall(None, None, {}, int(len(ad)))
+                        else:
+                            c = ANC.infer_ancestry(ad, dp, F, n_boot=a.n_boot)
                         p = pipe.get(gsm, (None, None, None))
-                        rows.append(dict(gse=gse, gsm=gsm, donor=donor, n_sites_file=int(len(sites)), n_sites=c.n_sites,
+                        rows.append(dict(gse=gse, gsm=gsm, donor=donor, n_sites_file=int(len(sites)), match_frac=round(frac, 4), n_sites=c.n_sites,
                                          mean_dp=float(dp.mean()) if len(dp) else None, group=c.group, hancestro=c.hancestro, prob=c.prob,
                                          q={k: round(v, 4) for k, v in c.q.items()}, stability=c.stability, seconds=round(time.time() - t2, 2),
                                          pipeline_call=p[0], pipeline_conf=p[1], pipeline_n_aims=p[2], self_reported=self_rep.get(gsm)))
