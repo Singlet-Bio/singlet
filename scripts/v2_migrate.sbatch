@@ -153,7 +153,7 @@ PY
 
     # self-test of the container, the transcoder and the verifier on this node, before any task may use the build
     rt bash -c "cd '$SRC' && PYTHONPATH='$SRC/python' SINGLET_PZW_AUTOBUILD=0 '$VENV/bin/python' -m pytest tests/python/test_v2_container.py -q -p no:cacheprovider"
-    rt bash -c "cd '$SRC' && PYTHONPATH='$SRC/python' '$VENV/bin/python' -m singlet.v2.migrate --help >/dev/null && '$VENV/bin/python' -m singlet.v2.verify --help >/dev/null"
+    rt bash -c "cd '$SRC' && export PYTHONPATH='$SRC/python' && '$VENV/bin/python' -m singlet.v2.migrate --help >/dev/null && '$VENV/bin/python' -m singlet.v2.verify --help >/dev/null"
     touch "$SRC/.v2build.ok"
   ) 9>"$WORK/state/v2mig-build.lock"
 }

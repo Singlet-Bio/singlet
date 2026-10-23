@@ -101,6 +101,11 @@ def iso(t: Optional[float] = None) -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t))
 
 
+def write_lf(path: Path, text: str) -> None:
+    """UTF-8 with LF line ends on every OS (``Path.write_text`` has no ``newline`` before Python 3.10)."""
+    path.write_bytes(text.encode("utf-8"))
+
+
 def object_headers(key: str) -> Tuple[str, str]:
     """(Content-Type, Cache-Control) for a v2 key."""
     if key == REFS_INDEX_KEY or RE_MANIFEST.match(key):
@@ -1258,16 +1263,17 @@ def write_sql_files(studies: Dict[str, dict], out: Path, *, day_budget: int, max
         for prefix, units in phases:
             for k, buf in enumerate(_pack_units(units, max_rows, max_bytes)):
                 name = f"{prefix}_{k:04d}.sql"
-                (dd / name).write_text("\n".join(buf) + "\n", encoding="utf-8", newline="\n")
+                write_lf(dd / name, "\n".join(buf) + "\n")
                 names.append(name)
                 n_stmt += len(buf)
         writes = sum(est_writes(kept[g]) for g in gses)
         samples = sum(len(kept[g].get("v2_sample") or []) for g in gses)
-        (dd / "APPLY.txt").write_text(
+        write_lf(
+            dd / "APPLY.txt",
             f"# day {di}: {len(gses)} studies ({gses[0]} .. {gses[-1]}), {samples} sample rows, about {writes} D1 row writes. "
             f"Apply the files in this order; each file is atomic.\n"
-            + "\n".join(f"wrangler d1 execute {database} --remote --file={dd.name}/{n}" for n in names) + "\n", encoding="utf-8", newline="\n")
-        (dd / "STUDIES.txt").write_text("\n".join(gses) + "\n", encoding="utf-8", newline="\n")
+            + "\n".join(f"wrangler d1 execute {database} --remote --file={dd.name}/{n}" for n in names) + "\n")
+        write_lf(dd / "STUDIES.txt", "\n".join(gses) + "\n")
         summary["days"].append({"day": di, "studies": len(gses), "first": gses[0], "last": gses[-1], "est_writes": writes,
                                 "files": len(names), "statements": n_stmt, "samples": samples})
         summary["est_writes"] += writes
@@ -1279,8 +1285,8 @@ def write_sql_files(studies: Dict[str, dict], out: Path, *, day_budget: int, max
         lines.append(f"  day{d['day']:02d}: {d['studies']:5d} studies  {d['samples']:6d} samples  ~{d['est_writes']:6d} writes  {d['files']:4d} files  ({d['first']}..{d['last']})")
     for g, why in skipped.items():
         lines.append(f"  SKIPPED {g}: {why}")
-    (out / "PLAN.txt").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
-    (out / "plan.json").write_text(json.dumps(summary, indent=1), encoding="utf-8", newline="\n")
+    write_lf(out / "PLAN.txt", "\n".join(lines) + "\n")
+    write_lf(out / "plan.json", json.dumps(summary, indent=1))
     return summary
 
 
@@ -1784,7 +1790,7 @@ def _finish(ctx: Ctx, row: dict, events: List[dict]) -> None:
                     rows = None
             if rows is not None:
                 tmp = d / f".{gse}.json.tmp"
-                tmp.write_text(json.dumps(rows, sort_keys=True), encoding="utf-8", newline="\n")
+                write_lf(tmp, json.dumps(rows, sort_keys=True))
                 os.replace(tmp, d / f"{gse}.json")
         except Exception as e:  # noqa: BLE001  (CatalogError: the study is live in R2 but cannot be described to D1 as it is)
             row["catalog_error"] = f"{type(e).__name__}: {e}"[:300]
@@ -2102,13 +2108,12 @@ def cmd_retire_sql(a: argparse.Namespace) -> int:
             ids = ", ".join(sql_literal(g) for g in gses[i : i + a.chunk])
             name = f"{tag}_{i // a.chunk:04d}.sql"
             sql = f"UPDATE v2_migration SET status = '{new}', updated_at = {NOW} WHERE status = '{old}' AND gse_id IN ({ids});"
-            (out / name).write_text(sql + chr(10), encoding="utf-8", newline=chr(10))
+            write_lf(out / name, sql + chr(10))
             names.append(name)
     writes = 3 * (len(retired) + len(restored))  # a status change rewrites the row and the status index entry
     head = (f"# {len(retired)} studies to mark retired, {len(restored)} to mark verified again; about {writes} D1 row writes "
             f"({'within' if writes <= DAY_BUDGET else 'OVER'} one day's {DAY_BUDGET}). Apply in this order.")
-    (out / "APPLY.txt").write_text(head + chr(10) + chr(10).join(f"wrangler d1 execute {a.database} --remote --file={n}" for n in names) + chr(10),
-                                   encoding="utf-8", newline=chr(10))
+    write_lf(out / "APPLY.txt", head + chr(10) + chr(10).join(f"wrangler d1 execute {a.database} --remote --file={n}" for n in names) + chr(10))
     print(head[2:])
     return 0
 

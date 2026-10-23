@@ -77,6 +77,8 @@ def test_full_run_commits_manifest_last_and_never_touches_legacy(env):
     assert env.run() == 0
     rows = env.rows_of()
     assert [rows[g]["status"] for g in gses] == ["ok"] * 3
+    # the rows writer records its errors instead of raising them: show them here
+    assert {g: rows[g].get("catalog_error") for g in gses} == dict.fromkeys(gses)
     for g in gses:
         r = rows[g]
         assert r["n_samples"] == 2 and r["verify"]["ok"] and r["legacy_bytes"] == len(before[g])

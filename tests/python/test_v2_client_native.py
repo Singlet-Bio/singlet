@@ -151,7 +151,7 @@ def test_pz2_isa_env_var_forces_path(isa):
     )
     env = dict(os.environ, PZ2_ISA=isa)
     out = subprocess.run(
-        [sys.executable, "-P", "-c", code], env=env, capture_output=True, text=True, timeout=120
+        [sys.executable, "-c", code], env=env, capture_output=True, text=True, timeout=120
     )
     assert out.returncode == 0, out.stderr
     sel, best = out.stdout.split()
