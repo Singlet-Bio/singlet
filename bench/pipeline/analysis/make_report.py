@@ -23,13 +23,15 @@ INK, INK2, GRID, SURF = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
 TOOL_COLOR = {  # fixed slot per tool (never by rank)
     "singlet-fixed": "#2a78d6",
     "singlet-baseline": "#eb6834",
+    "singlet-baseline-t4": "#eb6834",
     "starsolo": "#1baf7a",
     "alevinfry": "#eda100",
     "cellranger_published": "#e87ba4",
 }
 LABEL_COLOR = {"spliced": "#2a78d6", "unspliced": "#eb6834", "ambiguous": "#1baf7a"}
 NICE = {
-    "singlet-fixed": "Singlet (fixed)", "singlet-baseline": "Singlet (atlas engine)",
+    "singlet-fixed": "Singlet (fixed)", "singlet-baseline": "Singlet (atlas engine, 16 workers)",
+    "singlet-baseline-t4": "Singlet (atlas engine)", "singlet-fixed-t4": "Singlet (fixed, 4 workers)",
     "starsolo_GeneFull": "STARsolo GeneFull", "starsolo_Gene": "STARsolo Gene",
     "starsolo_Velocyto": "STARsolo Velocyto", "starsolo": "STARsolo", "alevinfry": "alevin-fry (USA)",
     "cellranger_published": "Cell Ranger (10x published)",
@@ -89,15 +91,27 @@ def main():
             continue
         rows.append({
             "dataset": DS_NICE.get(d, d), "cells": dc["n_cells"],
-            "molecules counted twice": fmt_pct(dc.get("legacy_double_frac")),
             "per-cell overcount, median": fmt_pct(dc["cell_overcount_median"]),
             "per-cell overcount, p10-p90": f"{fmt_pct(dc['cell_overcount_p10_p90'][0])} to {fmt_pct(dc['cell_overcount_p10_p90'][1])}",
             "total overcount": fmt_pct(dc["total_overcount"]),
+            "total overcount, 16 workers": fmt_pct(M[d].get("double_count_16w", {}).get("total_overcount")),
+            "exon / intron matrix ratio old:new": f"{fmt(dc['exon_old_vs_new_ratio'], 3)} / {fmt(dc['intron_old_vs_new_ratio'], 3)}",
+            "same-gene exon+intron doubles": fmt_pct(dc.get("legacy_double_frac")),
+            "cross-worker multi-mapper molecules": fmt_pct(dc.get("old_cross_worker_frac")),
             "gene overcount, median (>=50 UMI)": fmt_pct(dc["gene_overcount_median_expressed"]),
             "gene overcount, p99": fmt_pct(dc["gene_overcount_p99_expressed"]),
             "cells called old / new": f"{dc['called_cells_old']} / {dc['called_cells_new']}",
         })
     T["double_count"] = pd.DataFrame(rows)
+
+    rows = []
+    for d in ds:
+        for eng, v in M[d].get("worker_invariance", {}).items():
+            rows.append({"dataset": DS_NICE[d], "engine": NICE.get(eng, eng),
+                         "total UMIs, 16 / 4 workers": fmt(v["total_16w_over_4w"], 4),
+                         "matrix entries that differ": v["entries_differing"],
+                         "sum of |differences|": int(v["abs_diff_total"])})
+    T["worker_invariance"] = pd.DataFrame(rows)
 
     # Figure 1: per-cell overcount distributions
     fig, ax = plt.subplots(figsize=(7.2, 3.2), dpi=160)
@@ -130,7 +144,7 @@ def main():
     T["suf"] = pd.DataFrame(rows)
 
     # Figure 2: S/U/A stacked bars
-    tools_suf = ["singlet-baseline", "singlet-fixed", "starsolo_Velocyto", "alevinfry"]
+    tools_suf = ["singlet-baseline-t4", "singlet-fixed", "starsolo_Velocyto", "alevinfry"]
     if ds:
         fig, axes = plt.subplots(1, len(ds), figsize=(1.6 * len(ds) + 1, 3.2), dpi=160, sharey=True)
         axes = np.atleast_1d(axes)
@@ -144,7 +158,7 @@ def main():
                 bottom = 0
                 for k in ("spliced", "unspliced", "ambiguous"):
                     v = ss[t].get(k) or 0
-                    if t == "singlet-baseline" and k == "spliced":
+                    if t.startswith("singlet-baseline") and k == "spliced":
                         v = 1 - (ss[t].get("unspliced") or 0)
                     ax.bar(x, 100 * v, bottom=100 * bottom, width=0.7, color=LABEL_COLOR[k],
                            edgecolor=SURF, linewidth=2)
@@ -188,7 +202,7 @@ def main():
             if "starsolo_GeneFull" not in ct:
                 continue
             ref = ct["starsolo_GeneFull"]
-            for t in ("singlet-baseline", "singlet-fixed", "alevinfry"):
+            for t in ("singlet-baseline-t4", "singlet-fixed", "alevinfry"):
                 if t in ct:
                     ax.scatter(ref, ct[t], s=3, alpha=0.6, color=TOOL_COLOR[t], linewidths=0, label=NICE[t])
             lim = [max(ref.min(), 1), ref.max() * 1.2]
@@ -215,13 +229,16 @@ def main():
             k = f"{a}|{b}" if a < b else f"{b}|{a}"
             return fmt(ov[k]["jaccard"], 3) if k in ov else "-"
         rows.append({"dataset": DS_NICE[d],
-                     "Singlet (fixed)": cc.get("singlet-fixed", "-"), "Singlet (atlas)": cc.get("singlet-baseline", "-"),
+                     "Singlet (fixed)": cc.get("singlet-fixed", "-"), "Singlet (atlas)": cc.get("singlet-baseline-t4", "-"),
                      "STARsolo EmptyDrops_CR": cc.get("starsolo_GeneFull", "-"),
+                     "knee CR2.2 on STARsolo GeneFull": cc.get("starsolo_GeneFull__knee_cr22", "-"),
+                     "knee CR2.2 on Singlet (fixed)": cc.get("singlet-fixed__knee_cr22", "-"),
                      "Cell Ranger (published)": cc.get("cellranger_published", "-"),
                      "J(Singlet fixed, STARsolo)": j("singlet-fixed", "starsolo_GeneFull"),
                      "J(Singlet fixed, Cell Ranger)": j("singlet-fixed", "cellranger_published"),
                      "J(STARsolo, Cell Ranger)": j("cellranger_published", "starsolo_GeneFull"),
-                     "J(Singlet atlas, fixed)": j("singlet-baseline", "singlet-fixed")})
+                     "J(knee CR2.2, Cell Ranger)": j("cellranger_published", "starsolo_GeneFull__knee_cr22"),
+                     "J(Singlet atlas, fixed)": j("singlet-baseline-t4", "singlet-fixed")})
     T["cell_calls"] = pd.DataFrame(rows)
 
     # ── Table 5: clustering / markers / ground truth ──
@@ -230,7 +247,7 @@ def main():
         a = M[d].get("ari", {})
         mk = next((v for k, v in M[d].items() if k.startswith("marker_jaccard_vs_")), {})
         adt = M[d].get("ari_vs_adt", {})
-        for t in ("singlet-fixed", "singlet-baseline", "alevinfry", "starsolo_Gene", "cellranger_published"):
+        for t in ("singlet-fixed", "singlet-baseline-t4", "alevinfry", "starsolo_Gene", "cellranger_published"):
             k = f"{t}|starsolo_GeneFull" if t < "starsolo_GeneFull" else f"starsolo_GeneFull|{t}"
             if k not in a and t not in adt:
                 continue

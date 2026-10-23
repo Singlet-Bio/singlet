@@ -279,6 +279,17 @@ def main():
     # ── 2. cell calls ──
     called = {t: set(a.obs_names[a.obs["is_cell"]]) for t, a in tools.items()
               if "is_cell" in a.obs and a.obs["is_cell"].any()}
+    # STARsolo's default --soloCellFilter CellRanger2.2 3000 0.99 10 (the knee filter behind the
+    # atlas bundles' `called` flag): cells = UMI >= (99th pct of the top 3000 barcodes) / 10
+    def knee_cr22(a, n_exp=3000, q=0.99, ratio=10):
+        t = totals(a)
+        top = np.sort(t)[::-1][:n_exp]
+        thr = np.percentile(top, 100 * q) / ratio if len(top) else np.inf
+        return set(a.obs_names[t >= max(thr, 1)])
+
+    for t in ("starsolo_GeneFull", "singlet-fixed", "singlet-baseline-t4"):
+        if t in tools:
+            called[f"{t}__knee_cr22"] = knee_cr22(tools[t])
     M["cell_calls"] = {t: len(s) for t, s in called.items()}
     jac = {}
     for t1 in called:
@@ -290,7 +301,7 @@ def main():
     M["cell_call_overlap"] = jac
 
     # reference cell set for count concordance: cells called by STARsolo AND Singlet-fixed
-    ref_cells = called.get("starsolo_GeneFull") or called.get("starsolo_Gene") or set()
+    ref_cells = set(called.get("starsolo_GeneFull") or called.get("starsolo_Gene") or set())
     if "singlet-fixed" in called:
         ref_cells = ref_cells & called["singlet-fixed"] if ref_cells else called["singlet-fixed"]
     for t, a in tools.items():
