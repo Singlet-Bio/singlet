@@ -63,22 +63,19 @@ def load(path):
     }
     for k in ("exon_nnz_features", "intron_nnz_features", "sj_nnz", "vdj_nnz"):
         d[k] = z[k] if k in z.files else None
+    d["symbols"] = z["symbols"].astype(str) if "symbols" in z.files else genes
+    d["chroms"] = z["chroms"].astype(str) if "chroms" in z.files else np.full(len(genes), "")
     return d
 
 
-def gene_sets(genes):
-    """Masks for mitochondrial, hemoglobin genes, and species (barnyard references prefix genes with the genome)."""
+def gene_sets(genes, symbols, chroms):
+    """Masks for mitochondrial (chrM), hemoglobin genes, and species (Ensembl human ENSG vs mouse ENSMUSG ids)."""
     up = np.char.upper(genes.astype(str))
-    sym = np.array([g.split("-", 1)[1] if g.upper().startswith(("GRCH38-", "GRCM39-", "HG38-", "MM10-")) else g for g in genes])
-    symu = np.char.upper(sym.astype(str))
-    mt = np.char.startswith(symu, "MT-") | np.isin(symu, ["MT-CO1", "MT-ND1"])
+    symu = np.char.upper(symbols.astype(str))
+    mt = np.isin(chroms, ["chrM", "MT", "M", "chrMT"]) | np.char.startswith(symu, "MT-")
     hb = np.isin(symu, ["HBB", "HBA1", "HBA2", "HBD", "HBG1", "HBG2", "HBA-A1", "HBA-A2", "HBB-BS", "HBB-BT", "HBB-B1", "HBB-B2"])
-    human = np.char.startswith(up, ("GRCH38-",)) | np.char.startswith(up, ("HG38-",))
-    mouse = np.char.startswith(up, ("GRCM39-",)) | np.char.startswith(up, ("MM10-",))
-    if not human.any() and not mouse.any():
-        # Ensembl ids as gene keys
-        human = np.char.startswith(up, "ENSG")
-        mouse = np.char.startswith(up, "ENSMUSG")
+    human = np.char.startswith(up, "ENSG")
+    mouse = np.char.startswith(up, "ENSMUSG")
     return mt, hb, human, mouse
 
 
@@ -256,7 +253,7 @@ def q(v, qs=(0, 0.01, 0.05, 0.25, 0.5, 0.75, 0.95, 0.99, 1)):
 
 
 # ----------------------------------------------------------------------------------------------------------- one sample
-def analyze_sample(path, out_dir, niters=10000, seed=1, amb_quantile=0.5, do_callers=True):
+def analyze_sample(path, out_dir, niters=10000, seed=1, test_matrix="exon", do_callers=True):
     t0 = time.time()
     d = load(path)
     meta = d["meta"]
@@ -271,7 +268,7 @@ def analyze_sample(path, out_dir, niters=10000, seed=1, amb_quantile=0.5, do_cal
     itot = np.asarray(I.sum(axis=0)).ravel()
     n = len(tot)
     unc = ~called
-    mt, hb, human, mouse = gene_sets(d["genes"])
+    mt, hb, human, mouse = gene_sets(d["genes"], d["symbols"], d["chroms"])
     mt_frac = np.asarray(X[mt].sum(axis=0)).ravel() / np.maximum(tot, 1)
     hb_frac = np.asarray(X[hb].sum(axis=0)).ravel() / np.maximum(tot, 1)
     intr_frac = itot / np.maximum(tot, 1)
@@ -316,20 +313,30 @@ def analyze_sample(path, out_dir, niters=10000, seed=1, amb_quantile=0.5, do_cal
     st["keep_called_plus_umi_ge"] = keep
     R["storage"] = st
 
-    # ---------------------------------------------------------------- ambient profile and DM alpha
+    # ---------------------------------------------------------------- test matrix, ambient profile and DM alpha
+    # The profile test uses exon counts only: the pileup counts one molecule once as exon and once as intron when its reads
+    # cover both, which shows up as 2-UMI barcodes whose two counts sit on one gene (``dup2_single_gene`` below) and would
+    # masquerade as overdispersion. Bins in the tables stay on total (exon + intron) UMIs, the measure of the cells table.
+    M = (E if test_matrix == "exon" else X).tocsc()
+    mtot = np.asarray(M.sum(axis=0)).ravel().astype(np.int64)
+    two = unc & (tot == 2)
+    R["dup2_single_gene"] = float((ngenes[two] == 1).mean()) if two.any() else None
+    R["dup2_exon1_intron1_same_gene"] = float(((ngenes == 1) & (etot == 1) & (itot == 1))[two].mean()) if two.any() else None
     unc_idx = np.nonzero(unc)[0]
-    thr_amb = float(np.quantile(tot[unc], amb_quantile)) if unc.any() else 0
-    amb_mask = unc & (tot <= thr_amb) & (tot > 0)
-    asum = np.asarray(X[:, amb_mask].sum(axis=1)).ravel().astype(np.int64)
+    q05 = float(np.quantile(mtot[called], 0.05)) if called.any() else 100.0
+    thr_amb = float(np.clip(0.5 * q05, 2, 100))
+    amb_mask = unc & (mtot <= thr_amb)
+    alpha_mask = amb_mask & (mtot >= 2)
+    asum = np.asarray(M[:, amb_mask].sum(axis=1)).ravel().astype(np.int64)
     amb = C.good_turing_proportions(asum)
-    alpha = C.dm_alpha_mle(X[:, amb_mask], amb) if amb_mask.sum() >= 20 else float("nan")
-    R["ambient"] = {"rule": f"uncalled with total <= q{amb_quantile} of uncalled", "umi_max": thr_amb,
-                    "n_barcodes": int(amb_mask.sum()), "umi": int(asum.sum()), "alpha": alpha,
+    alpha = C.dm_alpha_mle(M[:, alpha_mask], amb) if alpha_mask.sum() >= 50 else 1e4
+    R["ambient"] = {"matrix": test_matrix, "rule": "uncalled with test-matrix total <= clip(0.5 x q05(called), 2, 100)",
+                    "umi_max": thr_amb, "n_barcodes": int(amb_mask.sum()), "n_alpha_barcodes": int(alpha_mask.sum()),
+                    "umi": int(asum.sum()), "alpha": alpha,
                     "intronic_frac": float(I[:, amb_mask].sum() / max(1, X[:, amb_mask].sum())),
                     "mt_frac": float(asum[mt].sum() / max(1, asum.sum())), "hb_frac": float(asum[hb].sum() / max(1, asum.sum())),
-                    "top_genes": [str(d["genes"][i]) for i in np.argsort(-asum)[:25]]}
-    # ambient of the cells: the summed profile of called cells, to show how different ambient is from the average cell
-    csum = np.asarray(X[:, called].sum(axis=1)).ravel().astype(np.float64)
+                    "top_genes": [str(d["symbols"][i]) for i in np.argsort(-asum)[:25]]}
+    csum = np.asarray(M[:, called].sum(axis=1)).ravel().astype(np.float64)
     R["ambient"]["corr_logcpm_with_called_sum"] = float(np.corrcoef(np.log1p(asum / max(1, asum.sum()) * 1e6),
                                                                     np.log1p(csum / max(1, csum.sum()) * 1e6))[0, 1])
 
@@ -344,55 +351,58 @@ def analyze_sample(path, out_dir, niters=10000, seed=1, amb_quantile=0.5, do_cal
     if labels is None:
         labels = np.zeros(len(called_idx), int)
     half = rng.random(len(called_idx)) < 0.5
-    Q_all, ks = centroids(X, called_idx, labels, amb)
-    QA, ksA = centroids(X, called_idx[half], labels[half], amb)
-    QB, ksB = centroids(X, called_idx[~half], labels[~half], amb)
+    Q_all, ks = centroids(M, called_idx, labels, amb)
+    QA, _ = centroids(M, called_idx[half], labels[half], amb)
+    QB, _ = centroids(M, called_idx[~half], labels[~half], amb)
     R["clusters"] = {"n": len(ks), "sizes": {str(k): int((labels == k).sum()) for k in ks}}
-    # marker genes per cluster (top 8 by log fold over the other cells), for interpretation
-    mk = {}
+    mk = {}  # marker genes per cluster (top 8 by log fold over the other clusters), for interpretation
     for j, k in enumerate(ks):
         others = Q_all[:, [i for i in range(len(ks)) if i != j]].mean(axis=1) if len(ks) > 1 else amb
         lfc = np.log2((Q_all[:, j] + 1e-6) / (others + 1e-6))
         lfc[Q_all[:, j] < 1e-4] = -np.inf
-        mk[str(k)] = [str(d["genes"][i]) for i in np.argsort(-lfc)[:8]]
+        mk[str(k)] = [str(d["symbols"][i]) for i in np.argsort(-lfc)[:8]]
     R["clusters"]["markers"] = mk
 
     out_bc = {"total": tot, "exon_total": etot, "intron_total": itot, "called": called, "mt_frac": mt_frac.astype(np.float32),
               "hb_frac": hb_frac.astype(np.float32), "n_genes": ngenes.astype(np.int32)}
+    bpd = 12
+
+    def depth_nulls(tt_all, per_bin=2000, cap=40000):
+        """Totals for null draws: every observed total repeated so that each log-depth bin gets >= per_bin draws."""
+        lb = np.floor(np.log10(np.maximum(tt_all, 1)) * bpd).astype(int)
+        out = []
+        for b in np.unique(lb):
+            tt = tt_all[lb == b]
+            reps = int(min(50, max(1, math.ceil(per_bin / len(tt)))))
+            out.append(np.repeat(tt, reps) if len(tt) * reps <= cap else rng.choice(tt, cap))
+        return np.concatenate(out) if out else np.zeros(0, np.int64)
+
+    def full(v, fill=np.nan, dtype=float):
+        o = np.full(n, fill, dtype=dtype)
+        o[unc_idx] = v
+        return o
 
     if Q_all.shape[1] >= 1 and amb_mask.sum() >= 20:
         # ---------------------------------------------------------- LLR for uncalled (centroids from all called cells)
-        llr_u, k_u, a_u = mixture_llr(X[:, unc_idx], amb, Q_all)
-        # nulls: DM draws at the uncalled totals; reps so that each depth bin gets >= 2000 nulls (capped)
-        bpd = 12
-        lb = np.floor(np.log10(np.maximum(tot[unc_idx], 1)) * bpd).astype(int)
-        null_tot = []
-        for b in np.unique(lb):
-            tt = tot[unc_idx][lb == b]
-            reps = int(min(50, max(1, math.ceil(2000 / len(tt)))))
-            null_tot.append(np.repeat(tt, reps) if len(tt) * reps <= 40000 else rng.choice(tt, 40000))
-        null_tot = np.concatenate(null_tot)
-        N0 = dm_null_matrix(amb, alpha, null_tot, seed=seed + 11)
-        llr_0, _, _ = mixture_llr(N0, amb, Q_all)
-        p_u = null_pvalues(llr_u, tot[unc_idx], llr_0, null_tot, bpd)
+        mu = mtot[unc_idx]
+        llr_u, k_u, a_u = mixture_llr(M[:, unc_idx], amb, Q_all)
+        null_tot = depth_nulls(mu)
+        llr_0, _, _ = mixture_llr(dm_null_matrix(amb, alpha, null_tot, seed=seed + 11), amb, Q_all)
+        p_u = null_pvalues(llr_u, mu, llr_0, null_tot, bpd)
         fdr_u = C.bh(np.nan_to_num(p_u, nan=1.0))
-        ll = np.full(n, np.nan)
-        ll[unc_idx] = llr_u
-        pp = np.full(n, np.nan)
-        pp[unc_idx] = p_u
-        ff = np.full(n, np.nan)
-        ff[unc_idx] = fdr_u
-        aa = np.full(n, np.nan)
-        aa[unc_idx] = a_u
-        kk = np.full(n, -1)
-        kk[unc_idx] = np.array(ks)[k_u]
-        out_bc.update({"llr": ll.astype(np.float32), "p_cell": pp, "fdr_cell": ff, "alpha_cell": aa.astype(np.float32),
+        # sensitivity: a null 4x more overdispersed than the fitted one
+        llr_0c, _, _ = mixture_llr(dm_null_matrix(amb, alpha / 4, null_tot, seed=seed + 13), amb, Q_all)
+        p_uc = null_pvalues(llr_u, mu, llr_0c, null_tot, bpd)
+        fdr_uc = C.bh(np.nan_to_num(p_uc, nan=1.0))
+        kk = full(np.array(ks)[k_u], -1, int)
+        out_bc.update({"llr": full(llr_u).astype(np.float32), "p_cell": full(p_u), "fdr_cell": full(fdr_u),
+                       "fdr_cell_alpha_div4": full(fdr_uc), "alpha_cell": full(a_u).astype(np.float32),
                        "best_cluster": kk.astype(np.int16)})
-        sig = np.zeros(n, bool)
-        sig[unc_idx] = fdr_u < 0.01
+        sig = full(fdr_u < 0.01, False, bool)
         R["profile_test"] = {
             "n_uncalled_tested": int(len(unc_idx)), "n_null": int(len(null_tot)),
             "n_sig_fdr01": int(sig.sum()), "n_sig_fdr05": int((fdr_u < 0.05).sum()),
+            "n_sig_fdr01_alpha_div4": int((fdr_uc < 0.01).sum()),
             "n_nominal_p01": int((p_u < 0.01).sum()), "expected_nominal_p01": 0.01 * len(unc_idx),
             "umi_of_sig": q(tot[sig]), "nnz_share_of_sig": {k: float(v[sig].sum() / max(1, v[unc].sum())) for k, v in nnz.items()},
             "alpha_of_sig": q(a_u[fdr_u < 0.01]),
@@ -400,11 +410,55 @@ def analyze_sample(path, out_dir, niters=10000, seed=1, amb_quantile=0.5, do_cal
             "cluster_of_called": {str(k): int((labels == k).sum()) for k in ks},
             "by_bin": bin_table({"frac_nominal_p01": ((p_u < 0.01).astype(float), "mean"),
                                  "frac_sig_fdr01": ((fdr_u < 0.01).astype(float), "mean"),
+                                 "frac_sig_fdr01_alpha_div4": ((fdr_uc < 0.01).astype(float), "mean"),
                                  "median_alpha": (a_u.astype(float), "median"),
                                  "mean_alpha": (a_u.astype(float), "mean"),
-                                 "median_llr": (llr_u, "median")}, tot[unc_idx]),
-            "null_by_bin": bin_table({"null_median_llr": (llr_0, "median")}, null_tot),
+                                 "median_llr": (llr_u, "median"),
+                                 "median_test_umi": (mu.astype(float), "median")}, tot[unc_idx]),
+            "null_by_bin_test_umi": bin_table({"null_median_llr": (llr_0, "median")}, null_tot),
         }
+
+        # ---------------------------------------------------------- split-half cluster consistency (robust to the null model)
+        # Each barcode's counts are split 50/50 at random and the best cluster is fitted on each half. A barcode carrying one
+        # cell type's RNA picks the same cluster twice; ambient (however overdispersed around the ambient mean) does so only
+        # at the chance rate, measured on DM null draws at the same depths. Thinned held-out cells give the ceiling.
+        def split_agree(Y, Qc):
+            Y = Y.tocsc().astype(np.int64)
+            y1 = rng.binomial(Y.data, 0.5)
+            Y1 = sp.csc_matrix((y1, Y.indices, Y.indptr), shape=Y.shape)
+            Y2 = sp.csc_matrix((Y.data - y1, Y.indices, Y.indptr), shape=Y.shape)
+            _, k1, _ = mixture_llr(Y1, amb, Qc)
+            _, k2, _ = mixture_llr(Y2, amb, Qc)
+            return k1 == k2
+
+        sh = {"min_test_umi": 6, "bins": "uncalled by total UMI; nulls by test-matrix UMI"}
+        sel = mu >= 6
+        if sel.any():
+            ag = split_agree(M[:, unc_idx[sel]], Q_all)
+            nt6 = depth_nulls(mu[sel], per_bin=500, cap=10000)
+            ag0 = split_agree(dm_null_matrix(amb, alpha, nt6, seed=seed + 17), Q_all)
+            ag0c = split_agree(dm_null_matrix(amb, alpha / 4, nt6, seed=seed + 19), Q_all)
+            sh["uncalled"] = bin_table({"agree": (ag.astype(float), "mean")}, tot[unc_idx[sel]])
+            sh["uncalled_test_umi"] = bin_table({"agree": (ag.astype(float), "mean")}, mu[sel])
+            sh["null_test_umi"] = bin_table({"agree": (ag0.astype(float), "mean")}, nt6)
+            sh["null_alpha_div4_test_umi"] = bin_table({"agree": (ag0c.astype(float), "mean")}, nt6)
+            sh["uncalled_overall"] = float(ag.mean())
+            sh["null_overall"] = float(ag0.mean())
+            sh["null_alpha_div4_overall"] = float(ag0c.mean())
+            ag_full = np.zeros(n, np.int8) - 1
+            ag_full[unc_idx[sel]] = ag
+            out_bc["split_agree"] = ag_full
+        cells_sh = []
+        for dpt in THIN_DEPTHS:
+            ti = called_idx[~half]
+            ti = ti[mtot[ti] > dpt * 1.5]
+            if len(ti) < 20 or QA.shape[1] == 0:
+                continue
+            ti = rng.choice(ti, min(1500, len(ti)), replace=False)
+            cells_sh.append({"depth": dpt, "n": int(len(ti)), "agree": float(split_agree(thin(M[:, ti], dpt, rng), QA).mean())})
+        sh["thinned_cells_heldout"] = cells_sh
+        R["split_half"] = sh
+
         # ---------------------------------------------------------- power: thinned called cells, held-out centroids
         pw = []
         if QA.shape[1] and QB.shape[1]:
@@ -412,45 +466,35 @@ def analyze_sample(path, out_dir, niters=10000, seed=1, amb_quantile=0.5, do_cal
                 rows = []
                 for (Qc, test_sel) in ((QA, ~half), (QB, half)):
                     ti = called_idx[test_sel]
-                    ti = ti[tot[ti] > dpt * 1.5]
+                    ti = ti[mtot[ti] > dpt * 1.5]
                     if len(ti) > 1500:
                         ti = rng.choice(ti, 1500, replace=False)
                     if len(ti) == 0:
                         continue
-                    Yt = thin(X[:, ti], dpt, rng)
+                    Yt = thin(M[:, ti], dpt, rng)
                     tt = np.asarray(Yt.sum(axis=0)).ravel()
                     l1, _, a1 = mixture_llr(Yt, amb, Qc)
                     n0t = np.maximum(1, rng.poisson(dpt, 3000))
-                    N0t = dm_null_matrix(amb, alpha, n0t, seed=seed + 101 + dpt)
-                    l0, _, _ = mixture_llr(N0t, amb, Qc)
-                    p1 = null_pvalues(l1, tt, l0, n0t, 6)
-                    rows.append((p1, a1))
+                    l0, _, _ = mixture_llr(dm_null_matrix(amb, alpha, n0t, seed=seed + 101 + dpt), amb, Qc)
+                    rows.append((null_pvalues(l1, tt, l0, n0t, 6), a1))
                 if rows:
                     p1 = np.concatenate([r[0] for r in rows])
                     a1 = np.concatenate([r[1] for r in rows])
                     pw.append({"depth": dpt, "n": int(len(p1)), "power_p01": float(np.nanmean(p1 < 0.01)),
                                "power_p001": float(np.nanmean(p1 < 0.001)), "median_alpha": float(np.median(a1))})
         R["power_thinned_called"] = pw
+
         # ---------------------------------------------------------- called cells that look like ambient (held-out centroids)
         lc = np.full(len(called_idx), np.nan)
-        for (Qc, sel) in ((QA, ~half), (QB, half)):
-            if Qc.shape[1] == 0 or sel.sum() == 0:
+        for (Qc, sel_c) in ((QA, ~half), (QB, half)):
+            if Qc.shape[1] == 0 or sel_c.sum() == 0:
                 continue
-            ci = called_idx[sel]
-            l1, _, _ = mixture_llr(X[:, ci], amb, Qc)
-            lc[sel] = l1
-        ct = tot[called_idx]
-        lbc = np.floor(np.log10(np.maximum(ct, 1)) * bpd).astype(int)
-        nt = []
-        for b in np.unique(lbc):
-            tt = ct[lbc == b]
-            reps = int(min(20, max(1, math.ceil(1000 / len(tt)))))
-            nt.append(np.repeat(tt, reps) if len(tt) * reps <= 20000 else rng.choice(tt, 20000))
-        nt = np.concatenate(nt)
-        nt = nt[nt <= 20000]
+            l1, _, _ = mixture_llr(M[:, called_idx[sel_c]], amb, Qc)
+            lc[sel_c] = l1
+        ct = mtot[called_idx]
+        nt = depth_nulls(ct[ct <= 20000], per_bin=1000, cap=20000)
         if len(nt):
-            N0c = dm_null_matrix(amb, alpha, nt, seed=seed + 23)
-            l0c, _, _ = mixture_llr(N0c, amb, QA if QA.shape[1] else Q_all)
+            l0c, _, _ = mixture_llr(dm_null_matrix(amb, alpha, nt, seed=seed + 23), amb, QA if QA.shape[1] else Q_all)
             pc = null_pvalues(np.nan_to_num(lc, nan=0.0), ct, l0c, nt, bpd)
             pc[ct > 20000] = 0.0
             look_empty = pc > 0.05
@@ -458,29 +502,24 @@ def analyze_sample(path, out_dir, niters=10000, seed=1, amb_quantile=0.5, do_cal
             pcf[called_idx] = pc
             out_bc["p_cell_called"] = pcf
             R["called_look_empty"] = {"n": int(look_empty.sum()), "frac": float(look_empty.mean()),
-                                      "umi": q(ct[look_empty]),
-                                      "by_bin": bin_table({"frac_p_gt_05": (look_empty.astype(float), "mean")}, ct)}
+                                      "umi": q(tot[called_idx][look_empty]),
+                                      "by_bin": bin_table({"frac_p_gt_05": (look_empty.astype(float), "mean")}, tot[called_idx])}
+
         # ---------------------------------------------------------- correlations (requested view)
         top = np.argsort(-(asum + csum / max(1, csum.sum()) * max(1, asum.sum())))[:2000]
-        corr_amb = logcpm_corr(X[:, unc_idx], asum.astype(float), top)
-        bestq = Q_all[:, k_u]  # per barcode its best centroid: compute correlation in chunks per cluster
+        corr_amb = logcpm_corr(M[:, unc_idx], asum.astype(float), top)
         corr_cell = np.full(len(unc_idx), np.nan)
         for j in range(Q_all.shape[1]):
-            sel = k_u == j
-            if sel.any():
-                corr_cell[sel] = logcpm_corr(X[:, unc_idx[sel]], Q_all[:, j], top)
-        del bestq
-        cc_called = logcpm_corr(X[:, called_idx], asum.astype(float), top)
+            s_j = k_u == j
+            if s_j.any():
+                corr_cell[s_j] = logcpm_corr(M[:, unc_idx[s_j]], Q_all[:, j], top)
+        cc_called = logcpm_corr(M[:, called_idx], asum.astype(float), top)
         R["correlation"] = {"genes": "top 2000 by ambient+cell abundance",
                             "by_bin_uncalled": bin_table({"corr_ambient": (corr_amb, "median"), "corr_best_centroid": (corr_cell, "median"),
                                                           "frac_closer_to_cell": ((corr_cell > corr_amb).astype(float), "mean")}, tot[unc_idx]),
                             "called_corr_ambient": q(cc_called)}
-        ca = np.full(n, np.nan)
-        ca[unc_idx] = corr_amb
-        cc = np.full(n, np.nan)
-        cc[unc_idx] = corr_cell
-        out_bc["corr_ambient"] = ca.astype(np.float32)
-        out_bc["corr_cell"] = cc.astype(np.float32)
+        out_bc["corr_ambient"] = full(corr_amb).astype(np.float32)
+        out_bc["corr_cell"] = full(corr_cell).astype(np.float32)
 
     # ---------------------------------------------------------------- QC fractions by category
     groups = {"called": called, "uncalled": unc, "ambient_pool": amb_mask}
@@ -530,15 +569,18 @@ def analyze_sample(path, out_dir, niters=10000, seed=1, amb_quantile=0.5, do_cal
     # ---------------------------------------------------------------- independent callers
     if do_callers:
         cal = {}
-        knee, infl = C.barcode_ranks(tot, lower=min(100, max(5, int(thr_amb))))
+        knee, infl = C.barcode_ranks(tot, lower=int(np.clip(0.5 * np.quantile(tot[called], 0.05), 5, 100)) if called.any() else 100)
         cal["knee"] = {"threshold": knee, "called": tot >= knee if np.isfinite(knee) else np.zeros(n, bool)}
         cal["inflection"] = {"threshold": infl, "called": tot >= infl if np.isfinite(infl) else np.zeros(n, bool)}
         om, thr = C.ordmag(tot)
         cal["ordmag_cr2"] = {"threshold": thr, "called": om}
-        lower_adapt = int(max(5, min(100, thr_amb)))
-        for name, lower in (("emptydrops_lower100", 100), ("emptydrops_adaptive", lower_adapt)):
-            retain = knee if np.isfinite(knee) and knee > lower else None
-            ed = C.emptydrops(X, lower=lower, niters=niters, retain=retain, seed=seed + 3)
+        lower_adapt = int(np.clip(0.5 * np.quantile(tot[called], 0.05), 5, 100)) if called.any() else 100
+        lower_adapt_exon = int(np.clip(0.5 * np.quantile(etot[called], 0.05), 5, 100)) if called.any() else 100
+        for name, Ymat, lower in (("emptydrops_lower100", X, 100), ("emptydrops_adaptive", X, lower_adapt),
+                                  ("emptydrops_adaptive_exon", E, lower_adapt_exon)):
+            kn = knee if Ymat is X else C.barcode_ranks(etot, lower=lower)[0]
+            retain = kn if np.isfinite(kn) and kn > lower else None
+            ed = C.emptydrops(Ymat, lower=lower, niters=niters, retain=retain, seed=seed + 3)
             if "error" in ed:
                 cal[name] = {"error": ed["error"], "lower": lower}
                 continue
@@ -589,6 +631,7 @@ def main(argv=None):
     ap.add_argument("--niters", type=int, default=10000)
     ap.add_argument("--gsm", nargs="*")
     ap.add_argument("--no-callers", action="store_true")
+    ap.add_argument("--test-matrix", choices=["exon", "sum"], default="exon")
     ap.add_argument("--redo", action="store_true")
     a = ap.parse_args(argv)
     nb.set_num_threads(max(1, a.threads))
@@ -601,7 +644,7 @@ def main(argv=None):
             print(g, "done already")
             continue
         try:
-            R = analyze_sample(f, a.out, niters=a.niters, do_callers=not a.no_callers)
+            R = analyze_sample(f, a.out, niters=a.niters, test_matrix=a.test_matrix, do_callers=not a.no_callers)
             pt = R.get("profile_test", {})
             print(f"{g} ok n={R['n_barcodes']} called={R['n_called']} sig={pt.get('n_sig_fdr01')} t={R['seconds']}s", flush=True)
         except Exception:

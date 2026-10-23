@@ -220,7 +220,17 @@ def fetch_sample(zf: zipfile.ZipFile, gse: str, gsm: str, out_dir: str, pz, stud
     genes = sorted({gene_key(n) for (_, rn, _, _) in mats.values() for n in rn})
     gi = {g: i for i, g in enumerate(genes)}
     n_bc = len(cols)
-    arrays = {"genes": np.array(genes), "barcodes": np.array(cols)}
+    # feature names are <gene id>_<symbol>[_intron]_<genome>___<chrom>:<start>-<end>: keep symbol and chromosome per gene
+    sym, chrom = {}, {}
+    for (_, rn, _, _) in mats.values():
+        for nme in rn:
+            g = gene_key(nme)
+            if g not in sym:
+                parts = nme.split("_")
+                sym[g] = parts[1] if len(parts) > 1 else g
+                chrom[g] = nme.rsplit("___", 1)[1].split(":", 1)[0] if "___" in nme else ""
+    arrays = {"genes": np.array(genes), "barcodes": np.array(cols), "symbols": np.array([sym[g] for g in genes]),
+              "chroms": np.array([chrom[g] for g in genes])}
     for kind in ("exon", "intron"):
         if kind in mats:
             m, rn, cn, nb = mats[kind]
