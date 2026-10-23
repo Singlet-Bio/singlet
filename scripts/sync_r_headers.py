@@ -67,7 +67,7 @@ def main() -> int:
         if have != want:
             stale.append(name)
             if not check:
-                path.write_text(want, encoding="utf-8", newline="\n")
+                path.write_bytes(want.encode("utf-8"))  # LF on every OS (write_text has no newline= before 3.10)
     wanted = pz2_files()
     for rel, src in wanted.items():
         want = src.read_text(encoding="utf-8").replace("\r\n", "\n")
@@ -77,7 +77,7 @@ def main() -> int:
             stale.append(rel)
             if not check:
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(want, encoding="utf-8", newline="\n")
+                path.write_bytes(want.encode("utf-8"))  # LF on every OS (write_text has no newline= before 3.10)
     if wanted and PZ2_DST.is_dir():
         for p in sorted(PZ2_DST.rglob("*.h")):
             rel = "pz2/" + p.relative_to(PZ2_DST).as_posix()
