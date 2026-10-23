@@ -35,10 +35,10 @@ singlet-baseline|singlet-fixed)
   /usr/bin/time -v -o $O/encode.time.txt $BIN encode --reads $SCR/R1.fastq.gz $SCR/R2.fastq.gz \
       -o $SCR/$ID.1fq > $O/encode.log 2>&1
   rm -f $SCR/R1.fastq.gz $SCR/R2.fastq.gz
-  # Production flags (cellarium/full_campaign/recover_one.sbatch) + mtx output and raw matrix
+  # Campaign flags (provenance.json of kept results: --pipeline, directional UMI) + mtx and raw matrix
   cd $SCR
   $TIME $BIN $SCR/$ID.1fq --ref-base $REF --genome-dir $GENOME --exons $GTF \
-      --out-prefix $O/ --threads $T --output-format mtx --raw-matrix > $O/run.log 2>&1
+      --out-prefix $O/ --threads $T --pipeline --output-format mtx --raw-matrix > $O/run.log 2>&1
   ;;
 starsolo)
   # Cell Ranger 4+ emulation per the STARsolo docs; Gene, GeneFull and Velocyto from one pass
