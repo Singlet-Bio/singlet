@@ -1,7 +1,8 @@
 #!/bin/bash
 #SBATCH --job-name=pb-build
 #SBATCH --account=debruinz
-#SBATCH --partition=short-cpu
+#SBATCH --partition=scavenger,short-cpu
+#SBATCH --requeue
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=48G
 #SBATCH --time=03:00:00
@@ -13,6 +14,7 @@ source /mnt/projects/debruinz_project/debruinz/singlet/src/singlet-py/fix__molec
 export CONDA_PREFIX=$ENV CMAKE_PREFIX_PATH=$ENV PKG_CONFIG_PATH=$ENV/lib/pkgconfig:$ENV/share/pkgconfig
 export CC=$ENV/bin/x86_64-conda-linux-gnu-gcc CXX=$ENV/bin/x86_64-conda-linux-gnu-g++
 export LD_LIBRARY_PATH=$ENV/lib:${LD_LIBRARY_PATH:-}
+export CMAKE_POLICY_VERSION_MINIMUM=3.5   # cmake 4 refuses very old cmake_minimum_required
 SCR=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
 WHAT=${1:-all}   # all | tests
 build_bin() {  # $1 src  $2 out-binary
