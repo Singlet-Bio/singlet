@@ -22,8 +22,10 @@ build_bin() {  # $1 src  $2 out-binary
   # x86-64-v3 instead of -march=native so the binary runs on every Clipper CPU node
   rsync -a --exclude .git --exclude build "$1/" $SCR/src-$(basename $2)/
   grep -rl --include=CMakeLists.txt -e "-march=native" $SCR/src-$(basename $2) | xargs -r sed -i 's/-march=native/-march=x86-64-v3/'
-  # Vendored STAR puts its own (old) htslib headers first; bam_hdr_destroy is the same call there
-  sed -i 's/sam_hdr_destroy(old)/bam_hdr_destroy(old)/' $SCR/src-$(basename $2)/src/star/bam_cat.c
+  # Vendored STAR puts its own (old) htslib headers first, which lack sam_hdr_destroy();
+  # declare the symbol the linked htslib (>=1.10) exports. Build-copy only.
+  sed -i '/^#include "htslib\/htslib\/sam.h"/a extern "C" void sam_hdr_destroy(bam_hdr_t *h);' $SCR/src-$(basename $2)/src/star/bam_cat.c
+  grep -n "sam_hdr_destroy" $SCR/src-$(basename $2)/src/star/bam_cat.c
   cmake -S $SCR/src-$(basename $2) -B $b -DSINGLET_BUILD_PIPELINE=ON -DCMAKE_BUILD_TYPE=Release > $b.cmake.log 2>&1 || { tail -40 $b.cmake.log; return 1; }
   cmake --build $b --target singlet -j $SLURM_CPUS_PER_TASK > $b.build.log 2>&1 || { grep -m20 -B2 -A8 "error" $b.build.log; return 1; }
   cp $b/src/pipeline/singlet $2
