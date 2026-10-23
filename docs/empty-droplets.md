@@ -237,7 +237,8 @@ FDR 0.001, retain = knee; "adaptive" lower = clip(0.5 x q05(called), 5, 100)):
 | knee (barcodeRanks) | 30 | 794 | 0.70 | 89% |
 | inflection | 719 | 1 | 0.64 | 82% |
 
-No caller finds Singlet's call too generous except the knee, which sits above it. CellBender: section 9.
+No caller finds Singlet's call too generous except the knee, which sits above it. CellBender (section 9) adds 1,176-6,603
+cells per sample where it runs.
 
 ### 7. Called barcodes that look empty
 
@@ -282,15 +283,22 @@ than 20 UMIs (non-T cells get few TCR reads), which is one more reason not to ta
 ### 9. CellBender
 
 CellBender 0.3.2 (`remove-background`, 150 epochs, GPU, expected cells = Singlet's count, a tail of >= 5-UMI barcodes left as
-"surely empty") was run on 10 samples' stored barcodes. It is the one caller that cannot work well from Singlet's data: it
-expects the full raw barcode list and warns that this input is not one, and on these truncated inputs it failed on 7 of 10
-samples inside CellBender itself (minibatch assertion "fewer than 4 cells", a 48 GB CUDA allocation in the posterior, a tensor
-shape mismatch). A retry with a lower empty-droplet training fraction and a smaller posterior batch was queued; the runs still
-in progress at the time of writing are not reported.
+"surely empty") was run on 10 samples' stored barcodes. It is the one caller that does not work well from Singlet's data: it
+expects the full raw barcode list and warns that this input is not one. On 5 samples it failed inside CellBender, also on a
+retry with a lower empty-droplet training fraction and a smaller posterior batch (minibatch assertion "fewer than 4 cells", a
+48 GB CUDA allocation in the posterior, a tensor shape mismatch); one retry (GSE163793/GSM4987142) was still running at the time
+of writing. The five that finished:
 
-Finished: the pilot sample GSE145370/GSM4317423 (TCR library): CellBender calls 4,464 cells against Singlet's 2,722, includes
-all but one of Singlet's, and adds 1,743 barcodes at 18-134 UMIs (median 55); 44% of the profile-test cell-like barcodes are
-among them. It agrees in direction with every other caller.
+| sample | CellBender | Singlet | CellBender only (median UMIs) | Singlet only | Jaccard | profile-test cell-like barcodes CellBender calls |
+|---|---|---|---|---|---|---|
+| GSE145370/GSM4317423 (TCR library) | 4,464 | 2,722 | 1,743 (55) | 1 | 0.61 | 44% |
+| GSE145370/GSM4317429 (TCR library) | 4,742 | 3,820 | 1,176 (28) | 254 | 0.71 | 63% |
+| GSE163793/GSM4987146 (human + mouse lines) | 10,374 | 3,771 | 6,603 (93) | 0 | 0.36 | 60% |
+| GSE213957/GSM6596913 (HEK + 3T3) | 16,336 | 13,527 | 2,809 (182) | 0 | 0.83 | 82% |
+| GSE274381/GSM8448139 (Seq-Well PBMC) | 10,580 | 6,078 | 4,502 (197) | 0 | 0.57 | 98% |
+
+CellBender agrees in direction with every other caller: it keeps all of Singlet's cells in the gene-expression samples and adds
+1,176-6,603 more, mostly the barcodes the profile test calls cell-like.
 
 ## Recommendation
 
