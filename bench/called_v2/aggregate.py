@@ -79,7 +79,8 @@ def main():
                 table[("comparator", name, "", "", "", "")][(R["gse"], R["gsm"])] = c
         table[("prototype", "", "", "", "", "")][(R["gse"], R["gsm"])] = R["prototype"]
 
-    auth_samples = {(R["gse"], R["gsm"]) for R in Rs if usable(R) and R.get("author")}
+    # GSE213957's deposited metadata lists only the cells that passed the authors' QC: not a call
+    auth_samples = {(R["gse"], R["gsm"]) for R in Rs if usable(R) and R.get("author") and R["gse"] != "GSE213957"}
     studies = sorted({g for g, _ in auth_samples})
     S["author_samples"] = sorted(f"{g}/{s}" for g, s in auth_samples)
 
