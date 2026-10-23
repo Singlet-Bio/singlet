@@ -351,7 +351,7 @@ def test_pz2_isa_env_var_gives_identical_decodes(isa, tmp_path):
         "print(_pz2.selected_isa(), h.hexdigest())" % (str(pkg_dir), str(f))
     )
     out = subprocess.run(
-        [sys.executable, "-P", "-c", code],
+        [sys.executable, "-c", code],
         env=dict(os.environ, PZ2_ISA=isa),
         capture_output=True,
         text=True,
@@ -360,7 +360,7 @@ def test_pz2_isa_env_var_gives_identical_decodes(isa, tmp_path):
     assert out.returncode == 0, out.stderr
     sel, digest = out.stdout.split()
     ref = subprocess.run(
-        [sys.executable, "-P", "-c", code],
+        [sys.executable, "-c", code],
         env=dict(os.environ, PZ2_ISA="scalar"),
         capture_output=True,
         text=True,
