@@ -91,7 +91,7 @@ def get_json(url: str):
 def cmd_list(a):
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
-    rows, page = [], 1
+    rows, page = [], 0  # the API's pages are 0-based
     while True:
         doc = get_json(f"{API}?has_bundle=1&page_size=500&page={page}&sort=id&asc=1")
         items = doc.get("data") or []
@@ -100,8 +100,15 @@ def cmd_list(a):
             for it in items
         ]
         if len(items) < 500:
+            total = int(doc.get("total") or 0)
             break
         page += 1
+    seen = set()
+    rows = [r for r in rows if not (r[0] in seen or seen.add(r[0]))]
+    if total and len(rows) != total:
+        log(
+            f"WARNING: the API reports {total} studies, {len(rows)} listed (the catalog may be changing)"
+        )
     (out / "studies.tsv").write_text("".join(f"{g}\t{n}\t{k}\n" for g, n, k in rows))
     log(f"{len(rows)} studies, {sum(n for _, n, _k in rows)} samples -> {out / 'studies.tsv'}")
 
