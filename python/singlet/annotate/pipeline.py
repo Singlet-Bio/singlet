@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import time
-from typing import Optional, Tuple
+from typing import Tuple
 
 import numpy as np
 
@@ -42,15 +42,32 @@ def annotate_sample(
     mv = model_version(method)
     df = O.empty_table(s.gsm, s.col, mv)
     n = len(s.col)
-    summary: dict = dict(gsm=s.gsm, gse=s.gse, n_cells=n, species=s.species, source=s.source, model_version=mv,
-                         barcode_digest=s.barcode_digest, tissue=s.tissue, timings={})
+    summary: dict = dict(
+        gsm=s.gsm,
+        gse=s.gse,
+        n_cells=n,
+        species=s.species,
+        source=s.source,
+        model_version=mv,
+        barcode_digest=s.barcode_digest,
+        tissue=s.tissue,
+        timings={},
+    )
     if n == 0 or s.species is None:
         summary["skipped"] = "no cells" if n == 0 else "organism has no model"
         return df, summary
 
     # ---- cell type
     t = time.time()
-    ct = CT.annotate_cell_types(s.X, s.gene_names, species=s.species, tissue=s.tissue, disease=s.disease, method=method, seed=seed)
+    ct = CT.annotate_cell_types(
+        s.X,
+        s.gene_names,
+        species=s.species,
+        tissue=s.tissue,
+        disease=s.disease,
+        method=method,
+        seed=seed,
+    )
     df["cell_type_cl"] = pd.array(ct.cl, dtype="string")
     df["cell_type_label"] = pd.array(ct.label, dtype="string")
     df["cell_type_score"] = np.where(ct.node > 0, ct.score, np.nan).astype(np.float32)
@@ -61,7 +78,9 @@ def annotate_sample(
 
     # ---- sex (pooled per donor when demultiplexed)
     t = time.time()
-    sx = SX.call_sex(s.X, s.gene_names, species=s.species, groups=None if s.donor is None else list(s.donor))
+    sx = SX.call_sex(
+        s.X, s.gene_names, species=s.species, groups=None if s.donor is None else list(s.donor)
+    )
     df["sex_chrom"] = pd.array(sx.label, dtype="string")
     df["sex_score"] = sx.score.astype(np.float32)
     summary["sex"] = dict(groups=sx.groups)
@@ -74,7 +93,9 @@ def annotate_sample(
         calls = {}
         for d, sites in s.donor_sites.items():
             ad, dp, F = idx.align(sites)
-            if len(ad) < ANC.MIN_MATCH_FRAC * len(sites):  # another genome build or species: no call rather than a wrong one
+            if len(ad) < ANC.MIN_MATCH_FRAC * len(
+                sites
+            ):  # another genome build or species: no call rather than a wrong one
                 calls[d] = ANC.AncestryCall(None, None, {}, int(len(ad)))
                 continue
             calls[d] = ANC.infer_ancestry(ad, dp, F, seed=seed)
@@ -93,8 +114,18 @@ def annotate_sample(
             prob[sel] = c.prob
         df["ancestry_hancestro"] = pd.array(han, dtype="string")
         df["ancestry_prob"] = prob
-        summary["ancestry"] = {d: dict(group=c.group, hancestro=c.hancestro, prob=c.prob, n_sites=c.n_sites, stability=c.stability, reason=c.reason,
-                                       q={k: round(v, 4) for k, v in c.q.items()}) for d, c in calls.items()}
+        summary["ancestry"] = {
+            d: dict(
+                group=c.group,
+                hancestro=c.hancestro,
+                prob=c.prob,
+                n_sites=c.n_sites,
+                stability=c.stability,
+                reason=c.reason,
+                q={k: round(v, 4) for k, v in c.q.items()},
+            )
+            for d, c in calls.items()
+        }
         summary["timings"]["ancestry_s"] = time.time() - t
     summary["timings"]["total_s"] = time.time() - t0
     O.assert_public_safe(df)

@@ -84,7 +84,9 @@ def node_scores(guide: Guide, X: sps.csr_matrix, chunk: int = 20000) -> np.ndarr
     return out
 
 
-def neighbours(X: sps.csr_matrix, n_hvg: int = 2000, n_pcs: int = 30, k: int = 15, seed: int = 0) -> Tuple[np.ndarray, np.ndarray]:
+def neighbours(
+    X: sps.csr_matrix, n_hvg: int = 2000, n_pcs: int = 30, k: int = 15, seed: int = 0
+) -> Tuple[np.ndarray, np.ndarray]:
     """PCA of log1p CP10k over the most dispersed genes (z-scored, clipped at 10) and exact kNN. Returns (pcs, knn index)."""
     from sklearn.decomposition import TruncatedSVD
     from sklearn.neighbors import NearestNeighbors
@@ -107,13 +109,24 @@ def neighbours(X: sps.csr_matrix, n_hvg: int = 2000, n_pcs: int = 30, k: int = 1
     Y /= np.sqrt(np.maximum(var[hv], 1e-12)).astype(np.float32)
     np.clip(Y, -10, 10, out=Y)
     n_pcs = max(1, min(n_pcs, Y.shape[0] - 1, Y.shape[1] - 1))
-    pcs = TruncatedSVD(n_pcs, random_state=seed, algorithm="randomized", n_iter=4).fit_transform(Y).astype(np.float32)
+    pcs = (
+        TruncatedSVD(n_pcs, random_state=seed, algorithm="randomized", n_iter=4)
+        .fit_transform(Y)
+        .astype(np.float32)
+    )
     k = min(k, X.shape[0])
-    idx = NearestNeighbors(n_neighbors=k).fit(pcs).kneighbors(pcs, return_distance=False).astype(np.int32)
+    idx = (
+        NearestNeighbors(n_neighbors=k)
+        .fit(pcs)
+        .kneighbors(pcs, return_distance=False)
+        .astype(np.int32)
+    )
     return pcs, idx
 
 
-def overcluster(knn_idx: np.ndarray, resolution: float = 5.0, seed: int = 0) -> Optional[np.ndarray]:
+def overcluster(
+    knn_idx: np.ndarray, resolution: float = 5.0, seed: int = 0
+) -> Optional[np.ndarray]:
     """Leiden communities on the kNN graph at high resolution (for majority voting); None when leidenalg is not installed."""
     try:
         import igraph as ig
@@ -122,13 +135,19 @@ def overcluster(knn_idx: np.ndarray, resolution: float = 5.0, seed: int = 0) -> 
         return None
     n, k = knn_idx.shape
     src = np.repeat(np.arange(n), k)
-    g = ig.Graph(n=n, edges=list(zip(src.tolist(), knn_idx.ravel().tolist())), directed=False).simplify()
-    part = leidenalg.find_partition(g, leidenalg.RBConfigurationVertexPartition, resolution_parameter=resolution, seed=seed)
+    g = ig.Graph(
+        n=n, edges=list(zip(src.tolist(), knn_idx.ravel().tolist())), directed=False
+    ).simplify()
+    part = leidenalg.find_partition(
+        g, leidenalg.RBConfigurationVertexPartition, resolution_parameter=resolution, seed=seed
+    )
     return np.asarray(part.membership, np.int32)
 
 
 # --------------------------------------------------------------------------------------------------------------- gating
-def lookahead(guide: Guide, scores: np.ndarray, beta: float = BETA, max_depth: int = 2) -> np.ndarray:
+def lookahead(
+    guide: Guide, scores: np.ndarray, beta: float = BETA, max_depth: int = 2
+) -> np.ndarray:
     """``eff[j] = max(s[j], beta * max over children eff[c])`` bottom-up for nodes at depth 1..max_depth, so a heterogeneous parent
     (e.g. haematopoietic cells, which include PTPRC-negative erythroid cells) wins when one of its children clearly does."""
     eff = scores.copy()
@@ -139,7 +158,13 @@ def lookahead(guide: Guide, scores: np.ndarray, beta: float = BETA, max_depth: i
     return eff
 
 
-def gate(guide: Guide, scores: np.ndarray, min_score: float = MIN_SCORE, min_margin: float = MIN_MARGIN, temperature: float = TEMPERATURE):
+def gate(
+    guide: Guide,
+    scores: np.ndarray,
+    min_score: float = MIN_SCORE,
+    min_margin: float = MIN_MARGIN,
+    temperature: float = TEMPERATURE,
+):
     """Walk every cell from the root. Returns (node per cell, per-step softmax confidence, per-step margin), steps = depth."""
     n = scores.shape[0]
     D = int(guide.depth.max()) + 1
@@ -194,7 +219,15 @@ def _standardise(Xl: sps.csr_matrix):
     return mean.astype(np.float32), sd.astype(np.float32), var
 
 
-def fit_lr(X: sps.csr_matrix, y: np.ndarray, n_classes: int, C: float = 1.0, max_genes: int = 6000, clip: float = 10.0, max_iter: int = 100):
+def fit_lr(
+    X: sps.csr_matrix,
+    y: np.ndarray,
+    n_classes: int,
+    C: float = 1.0,
+    max_genes: int = 6000,
+    clip: float = 10.0,
+    max_iter: int = 100,
+):
     """One-vs-rest L2 logistic regression on standardised log1p CP10k (CellTypist's model family), dense L-BFGS.
     Returns a model dict (gene columns, mean, sd, coef, intercept)."""
     from scipy.optimize import minimize
@@ -222,13 +255,30 @@ def fit_lr(X: sps.csr_matrix, y: np.ndarray, n_classes: int, C: float = 1.0, max
         loss = (np.logaddexp(0, S) - Y * S).sum() / n
         R = ((expit(S) - Y) / n).astype(np.float32)
         gW = (Z.T @ R).astype(np.float64) + lam * W
-        return loss + 0.5 * lam * (W * W).sum(), np.concatenate([gW.ravel(), R.sum(0).astype(np.float64)])
+        return loss + 0.5 * lam * (W * W).sum(), np.concatenate(
+            [gW.ravel(), R.sum(0).astype(np.float64)]
+        )
 
     p0 = np.zeros(g * K + K)
     pri = np.clip(np.bincount(y, minlength=K) / n, 1e-6, 1 - 1e-6)
     p0[g * K :] = np.log(pri / (1 - pri))
-    r = minimize(f, p0, jac=True, method="L-BFGS-B", options=dict(maxiter=max_iter, maxfun=int(max_iter * 1.5) + 10, gtol=1e-5, ftol=1e-10, maxcor=10))
-    return dict(cols=keep, mean=mean[keep], sd=sd[keep], coef=r.x[: g * K].reshape(g, K).astype(np.float32), intercept=r.x[g * K :].astype(np.float32), clip=clip)
+    r = minimize(
+        f,
+        p0,
+        jac=True,
+        method="L-BFGS-B",
+        options=dict(
+            maxiter=max_iter, maxfun=int(max_iter * 1.5) + 10, gtol=1e-5, ftol=1e-10, maxcor=10
+        ),
+    )
+    return dict(
+        cols=keep,
+        mean=mean[keep],
+        sd=sd[keep],
+        coef=r.x[: g * K].reshape(g, K).astype(np.float32),
+        intercept=r.x[g * K :].astype(np.float32),
+        clip=clip,
+    )
 
 
 def predict_lr(model: dict, X: sps.csr_matrix, block: int = 8192) -> np.ndarray:
@@ -328,7 +378,12 @@ def annotate_cell_types(
     lowq = ngenes < min_genes
     node[lowq] = 0
     gconf[lowq] = np.nan
-    notes.update(score_s=t1 - t0, neighbours_s=t2 - t1, gate_s=time.time() - t2, n_low_quality=int(lowq.sum()))
+    notes.update(
+        score_s=t1 - t0,
+        neighbours_s=t2 - t1,
+        gate_s=time.time() - t2,
+        n_low_quality=int(lowq.sum()),
+    )
     guide_node = node.copy()
     if method == "guide" or idx is None:
         notes["method_used"] = "guide"
@@ -353,7 +408,9 @@ def annotate_cell_types(
     cap = per_node_cap
     while sum(min(len(v), cap) for v in picks.values()) > total_cap and cap > 50:
         cap = int(cap * 0.8)
-    sel = np.concatenate([rng.choice(v, cap, replace=False) if len(v) > cap else v for v in picks.values()])
+    sel = np.concatenate(
+        [rng.choice(v, cap, replace=False) if len(v) > cap else v for v in picks.values()]
+    )
     classes = np.array(sorted(picks), np.int32)
     cpos = {c: i for i, c in enumerate(classes)}
     y = np.array([cpos[int(node[i])] for i in sel], np.int64)
@@ -381,8 +438,13 @@ def annotate_cell_types(
             final[i] = lca(g, a, b)
     final[lowq] = 0
     sc_out[final == 0] = np.nan
-    notes.update(method_used="selftrain", selftrain_s=time.time() - t3, n_train_cells=int(len(sel)), n_train_nodes=len(picks),
-                 frac_weak=float(weak.mean()))
+    notes.update(
+        method_used="selftrain",
+        selftrain_s=time.time() - t3,
+        n_train_cells=int(len(sel)),
+        n_train_nodes=len(picks),
+        frac_weak=float(weak.mean()),
+    )
     return CellTypeResult(g, final.astype(np.int32), sc_out, "selftrain", guide_node, notes)
 
 

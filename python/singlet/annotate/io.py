@@ -41,8 +41,12 @@ class SampleInput:
     tissue: str  # free text used for the guide's tissue context
     disease: str
     meta: dict = field(default_factory=dict)
-    donor: Optional[np.ndarray] = None  # donor label per cell ('' = unassigned / doublet), None = no demultiplexing
-    donor_sites: Dict[str, "object"] = field(default_factory=dict)  # donor label -> DataFrame(chrom,pos,ref,alt,ad,dp); restricted
+    donor: Optional[np.ndarray] = (
+        None  # donor label per cell ('' = unassigned / doublet), None = no demultiplexing
+    )
+    donor_sites: Dict[str, "object"] = field(
+        default_factory=dict
+    )  # donor label -> DataFrame(chrom,pos,ref,alt,ad,dp); restricted
     source: str = ""
 
     @property
@@ -61,7 +65,10 @@ def species_of(organism: str) -> Optional[str]:
     return None
 
 
-_TISSUE_KEYS = re.compile(r"^\s*(tissue|tissue type|organ|organ part|source|source name|anatomical site|site|body site|region|brain region)\s*$", re.I)
+_TISSUE_KEYS = re.compile(
+    r"^\s*(tissue|tissue type|organ|organ part|source|source name|anatomical site|site|body site|region|brain region)\s*$",
+    re.I,
+)
 
 
 def _characteristics(meta: dict) -> List[tuple]:
@@ -80,7 +87,10 @@ def tissue_text(meta: dict) -> str:
     parts = [str(meta.get(k) or "") for k in ("sample_source", "tissue") if meta.get(k)]
     parts += [v for k, v in _characteristics(meta) if _TISSUE_KEYS.match(k)]
     text = " ; ".join(p.replace("_", " ") for p in parts if p)
-    if not tissue_groups(text) - {"tumor", "embryo"}:  # no organ named: the diagnosis often names it ('esophagus carcinoma')
+    if not tissue_groups(text) - {
+        "tumor",
+        "embryo",
+    }:  # no organ named: the diagnosis often names it ('esophagus carcinoma')
         d = disease_text(meta)
         if tissue_groups(d) - {"tumor", "embryo"}:
             text = f"{text} ; {d}" if text else d
@@ -88,7 +98,13 @@ def tissue_text(meta: dict) -> str:
 
 
 def disease_text(meta: dict) -> str:
-    hits = [f"{k}: {v}" for k, v in _characteristics(meta) if re.match(r"(disease|diagnosis|condition|tumou?r|cancer|subject status|status)\b", k, re.I)]
+    hits = [
+        f"{k}: {v}"
+        for k, v in _characteristics(meta)
+        if re.match(
+            r"(disease|diagnosis|condition|tumou?r|cancer|subject status|status)\b", k, re.I
+        )
+    ]
     return " ; ".join(hits).replace("_", " ")
 
 
@@ -97,7 +113,11 @@ def _donor_labels(df, barcodes: List[str]) -> Optional[np.ndarray]:
     if df is None or len(df) == 0:
         return None
     bc_col = "cell" if "cell" in df.columns else df.columns[0]
-    lab_col = "cell_status" if "cell_status" in df.columns else ("donor_id" if "donor_id" in df.columns else df.columns[1])
+    lab_col = (
+        "cell_status"
+        if "cell_status" in df.columns
+        else ("donor_id" if "donor_id" in df.columns else df.columns[1])
+    )
     m = dict(zip(df[bc_col].astype(str), df[lab_col].astype(str)))
     lab = np.array([m.get(b, "") for b in barcodes], dtype=object)
     lab[~np.char.startswith(lab.astype(str), "donor")] = ""
@@ -121,13 +141,26 @@ def read_donor_sites(sidecar: Path, gsm: str) -> Dict[str, "object"]:
             m = _COV.search(name)
             if not m:
                 continue
-            df = pd.read_csv(io.BytesIO(z.read(name)), sep="\t", usecols=["chrom", "pos", "ref", "alt", "dp", "ad"],
-                             dtype={"chrom": str, "pos": np.int64, "ref": str, "alt": str, "dp": np.int64, "ad": np.int64})
+            df = pd.read_csv(
+                io.BytesIO(z.read(name)),
+                sep="\t",
+                usecols=["chrom", "pos", "ref", "alt", "dp", "ad"],
+                dtype={
+                    "chrom": str,
+                    "pos": np.int64,
+                    "ref": str,
+                    "alt": str,
+                    "dp": np.int64,
+                    "ad": np.int64,
+                },
+            )
             out[m.group(1)] = df
     return out
 
 
-def read_legacy(bundle_path: Union[str, Path], gsm: str, *, sidecar: Optional[Path] = None) -> SampleInput:
+def read_legacy(
+    bundle_path: Union[str, Path], gsm: str, *, sidecar: Optional[Path] = None
+) -> SampleInput:
     """One sample of a legacy ``.singlet`` bundle on disk."""
     from singlet.bundle import SingletBundle
 
@@ -147,7 +180,9 @@ def read_legacy(bundle_path: Union[str, Path], gsm: str, *, sidecar: Optional[Pa
         pos = {bc: i for i, bc in enumerate(basis)}
         col = np.array([pos.get(bc, -1) for bc in barcodes], np.int64)
         if (col < 0).any():
-            raise ValueError(f"{gsm}: {(col < 0).sum()} called barcodes are not columns of the count matrix")
+            raise ValueError(
+                f"{gsm}: {(col < 0).sum()} called barcodes are not columns of the count matrix"
+            )
         meta = dict(b.study_meta.get("gsm_meta", {}).get(gsm, {}))
         gse = str(b.manifest.get("gse_id") or "")
         donor = None
@@ -157,14 +192,28 @@ def read_legacy(bundle_path: Union[str, Path], gsm: str, *, sidecar: Optional[Pa
         genes = [str(g) for g in a.var["gene_name"]]
     finally:
         b.close()
-    s = SampleInput(gsm=gsm, gse=gse, X=X, gene_names=genes, col=col, barcodes=barcodes, species=species_of(meta.get("organism", "")),
-                    tissue=tissue_text(meta), disease=disease_text(meta), meta=meta, donor=donor, source=f"legacy:{bundle_path.name}")
+    s = SampleInput(
+        gsm=gsm,
+        gse=gse,
+        X=X,
+        gene_names=genes,
+        col=col,
+        barcodes=barcodes,
+        species=species_of(meta.get("organism", "")),
+        tissue=tissue_text(meta),
+        disease=disease_text(meta),
+        meta=meta,
+        donor=donor,
+        source=f"legacy:{bundle_path.name}",
+    )
     if sidecar is not None:
         s.donor_sites = read_donor_sites(sidecar, gsm)
     return s
 
 
-def read_v2(gse: str, gsm: str, *, base: Optional[str] = None, sidecar: Optional[Path] = None) -> SampleInput:
+def read_v2(
+    gse: str, gsm: str, *, base: Optional[str] = None, sidecar: Optional[Path] = None
+) -> SampleInput:
     """One sample of a v2 study (data.singlet.bio by default)."""
     from singlet.v2 import client as C
     from singlet.v2.bundle import V2Bundle
@@ -181,9 +230,20 @@ def read_v2(gse: str, gsm: str, *, base: Optional[str] = None, sidecar: Optional
             donor = _donor_labels(vb.read("donor_assignments", gsm), barcodes)
     except (KeyError, ValueError):
         donor = None
-    s = SampleInput(gsm=gsm, gse=gse, X=sps.csr_matrix(a.X), gene_names=[str(g) for g in a.var["gene_name"]], col=col, barcodes=barcodes,
-                    species=species_of(meta.get("organism", "")), tissue=tissue_text(meta), disease=disease_text(meta), meta=meta, donor=donor,
-                    source=f"v2:{st.rev}")
+    s = SampleInput(
+        gsm=gsm,
+        gse=gse,
+        X=sps.csr_matrix(a.X),
+        gene_names=[str(g) for g in a.var["gene_name"]],
+        col=col,
+        barcodes=barcodes,
+        species=species_of(meta.get("organism", "")),
+        tissue=tissue_text(meta),
+        disease=disease_text(meta),
+        meta=meta,
+        donor=donor,
+        source=f"v2:{st.rev}",
+    )
     if sidecar is not None:
         s.donor_sites = read_donor_sites(sidecar, gsm)
     return s

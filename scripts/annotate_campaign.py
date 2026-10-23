@@ -60,7 +60,9 @@ def plan(a) -> int:
         load[i] += max(int(b), 50 << 20)
     df["shard"] = shard
     df.to_csv(a.out, sep="\t", index=False)
-    print(f"{len(df)} studies, {df['bytes'].sum() / 1e12:.2f} TB, {a.shards} shards, max shard {max(load) / 1e9:.1f} GB")
+    print(
+        f"{len(df)} studies, {df['bytes'].sum() / 1e12:.2f} TB, {a.shards} shards, max shard {max(load) / 1e9:.1f} GB"
+    )
     return 0
 
 
@@ -68,10 +70,15 @@ def _download(url: str, dst: Path, retries: int = 4) -> None:
     for i in range(retries):
         try:
             tmp = dst.with_name(dst.name + ".part")
-            with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=120) as r, open(tmp, "wb") as f:
+            with (
+                urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=120) as r,
+                open(tmp, "wb") as f,
+            ):
                 want = int(r.headers.get("Content-Length") or -1)
                 shutil.copyfileobj(r, f, 16 << 20)
-            if want >= 0 and tmp.stat().st_size != want:  # a dropped connection can end the stream early without an error
+            if (
+                want >= 0 and tmp.stat().st_size != want
+            ):  # a dropped connection can end the stream early without an error
                 raise OSError(f"{url}: got {tmp.stat().st_size} of {want} bytes")
             tmp.replace(dst)
             return
@@ -83,13 +90,19 @@ def _download(url: str, dst: Path, retries: int = 4) -> None:
 
 def _sidecar(gse: str, dst: Path) -> bool:
     """Download the restricted sidecar of ``gse`` when credentials are present; False when there is none."""
-    if not all(os.environ.get(k) for k in ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY")):
+    if not all(
+        os.environ.get(k) for k in ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY")
+    ):
         return False
     import boto3
 
-    c = boto3.client("s3", endpoint_url=f"https://{os.environ['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com",
-                     aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"], aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
-                     region_name="auto")
+    c = boto3.client(
+        "s3",
+        endpoint_url=f"https://{os.environ['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com",
+        aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
+        aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
+        region_name="auto",
+    )
     key = f"restricted/{gse}/{gse}.restricted.singlet"
     try:
         c.head_object(Bucket=RESTRICTED_BUCKET, Key=key)
@@ -101,7 +114,10 @@ def _sidecar(gse: str, dst: Path) -> bool:
 
 def _has_v2(gse: str) -> bool:
     try:
-        with urllib.request.urlopen(urllib.request.Request(f"{DATA_BASE}/v2/m/{gse}.json", method="HEAD", headers=UA), timeout=30) as r:
+        with urllib.request.urlopen(
+            urllib.request.Request(f"{DATA_BASE}/v2/m/{gse}.json", method="HEAD", headers=UA),
+            timeout=30,
+        ) as r:
             return r.status == 200
     except OSError:
         return False
@@ -123,7 +139,16 @@ def run(a) -> int:
         work = a.scratch / gse
         work.mkdir(parents=True, exist_ok=True)
         try:
-            cmd = [sys.executable, str(HERE / "annotate_sample.py"), "--gse", gse, "--out", str(a.out), "--method", a.method]
+            cmd = [
+                sys.executable,
+                str(HERE / "annotate_sample.py"),
+                "--gse",
+                gse,
+                "--out",
+                str(a.out),
+                "--method",
+                a.method,
+            ]
             if a.af:
                 cmd += ["--af", str(a.af)]
             v2 = bool(row.get("v2", 0)) or _has_v2(gse)
@@ -138,14 +163,18 @@ def run(a) -> int:
                 rec["sidecar"] = True
             p = subprocess.run(cmd, capture_output=True, text=True)
             (a.out / gse).mkdir(parents=True, exist_ok=True)
-            (a.out / gse / "annotate.log").write_text(p.stdout[-200_000:] + "\n--- stderr ---\n" + p.stderr[-50_000:])
+            (a.out / gse / "annotate.log").write_text(
+                p.stdout[-200_000:] + "\n--- stderr ---\n" + p.stderr[-50_000:]
+            )
             rec["status"] = "ok" if p.returncode == 0 else f"exit {p.returncode}"
             rec["n_written"] = len(list((a.out / gse).glob("*.labels.parquet")))
             rec["n_errors"] = len(list((a.out / gse).glob("*.error.txt")))
         except Exception as e:  # noqa: BLE001
             rec["status"] = f"error {type(e).__name__}: {e}"
         finally:
-            shutil.rmtree(work, ignore_errors=True)  # the bundle and the restricted sidecar never outlive the study
+            shutil.rmtree(
+                work, ignore_errors=True
+            )  # the bundle and the restricted sidecar never outlive the study
         rec["seconds"] = round(time.time() - t0, 1)
         bad += rec["status"] != "ok"
         with open(a.ledger, "a") as f:
@@ -160,8 +189,10 @@ def status(a) -> int:
         recs += [json.loads(x) for x in p.read_text().splitlines() if x.strip()]
     last = {r["gse"]: r for r in recs}
     ok = sum(r["status"] == "ok" for r in last.values())
-    print(f"{len(last)} studies attempted, {ok} ok, {len(last) - ok} not ok; "
-          f"{sum(r.get('n_written', 0) for r in last.values())} sample files; {sum(r['seconds'] for r in last.values()) / 3600:.1f} task-hours")
+    print(
+        f"{len(last)} studies attempted, {ok} ok, {len(last) - ok} not ok; "
+        f"{sum(r.get('n_written', 0) for r in last.values())} sample files; {sum(r['seconds'] for r in last.values()) / 3600:.1f} task-hours"
+    )
     for r in list(last.values()):
         if r["status"] != "ok":
             print(" ", r["gse"], r["status"][:120])
@@ -169,7 +200,9 @@ def status(a) -> int:
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("plan")
     p.add_argument("--studies", type=Path, required=True)
@@ -181,7 +214,9 @@ def main(argv=None) -> int:
     r.add_argument("--out", type=Path, required=True)
     r.add_argument("--af", type=Path)
     r.add_argument("--method", default="selftrain")
-    r.add_argument("--scratch", type=Path, default=Path(os.environ.get("TMPDIR", "/tmp")) / "annotate")
+    r.add_argument(
+        "--scratch", type=Path, default=Path(os.environ.get("TMPDIR", "/tmp")) / "annotate"
+    )
     r.add_argument("--ledger", type=Path, required=True)
     s = sub.add_parser("status")
     s.add_argument("--out", type=Path, required=True)

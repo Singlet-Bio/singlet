@@ -44,8 +44,13 @@ Q_MIN = 0.8
 MIN_SITES = 300  # sites with any depth needed before a call is made
 MID_AF_DP = 20  # depth at which a site's allele fraction is informative about pooling
 MAX_MID_AF = 1.0  # set from the validation (docs/cell_annotation.md); above it the donor is treated as a pool: no call
-ALT_READ_RANGE = (0.10, 0.60)  # plausible alternate-read fraction over the panel for one person (observed 0.23-0.31)
-MIN_MATCH_FRAC = 0.5  # a donor whose sites mostly miss the table is on another build or species: no call
+ALT_READ_RANGE = (
+    0.10,
+    0.60,
+)  # plausible alternate-read fraction over the panel for one person (observed 0.23-0.31)
+MIN_MATCH_FRAC = (
+    0.5  # a donor whose sites mostly miss the table is on another build or species: no call
+)
 F_CLIP = 1e-3
 
 
@@ -54,11 +59,15 @@ class AncestryCall:
     """One donor's result. ``group`` is a key of :data:`HANCESTRO` or None (not enough data)."""
 
     group: Optional[str]
-    prob: Optional[float]  # proportion of the called super-population (for 'admixed': the largest proportion)
+    prob: Optional[
+        float
+    ]  # proportion of the called super-population (for 'admixed': the largest proportion)
     q: Dict[str, float]
     n_sites: int
     stability: Optional[float] = None  # fraction of site bootstraps that give the same group
-    mid_af: Optional[float] = None  # fraction of deep sites with an allele fraction far from 0, 1/2 and 1 (see infer_ancestry)
+    mid_af: Optional[float] = (
+        None  # fraction of deep sites with an allele fraction far from 0, 1/2 and 1 (see infer_ancestry)
+    )
     reason: Optional[str] = None  # why there is no call, when there is none despite enough sites
 
     @property
@@ -87,7 +96,14 @@ def _site_terms(ad: np.ndarray, dp: np.ndarray, h: float = 0.5):
     ad = np.minimum(ad.astype(np.float64), dp)
     scale = np.minimum(1.0, DP_CAP / np.maximum(dp, 1))
     a, r = ad * scale, (dp - ad) * scale
-    ll = np.stack([a * np.log(EPS) + r * np.log1p(-EPS), a * np.log(h) + r * np.log1p(-h), a * np.log1p(-EPS) + r * np.log(EPS)], 1)
+    ll = np.stack(
+        [
+            a * np.log(EPS) + r * np.log1p(-EPS),
+            a * np.log(h) + r * np.log1p(-h),
+            a * np.log1p(-EPS) + r * np.log(EPS),
+        ],
+        1,
+    )
     ll -= ll.max(1, keepdims=True)
     return np.exp(ll)
 
@@ -109,9 +125,15 @@ def fit_q(F: np.ndarray, L: np.ndarray, start: Optional[np.ndarray] = None) -> n
     from scipy.optimize import minimize
 
     best = None
-    starts = [np.log(np.clip(start, 1e-6, 1))] if start is not None else [np.zeros(F.shape[1])] + [np.eye(F.shape[1])[k] * 2.0 for k in range(F.shape[1])]
+    starts = (
+        [np.log(np.clip(start, 1e-6, 1))]
+        if start is not None
+        else [np.zeros(F.shape[1])] + [np.eye(F.shape[1])[k] * 2.0 for k in range(F.shape[1])]
+    )
     for start in starts:
-        r = minimize(_negll, start, args=(F, L), jac=True, method="L-BFGS-B", options=dict(maxiter=200))
+        r = minimize(
+            _negll, start, args=(F, L), jac=True, method="L-BFGS-B", options=dict(maxiter=200)
+        )
         if best is None or r.fun < best.fun:
             best = r
     assert best is not None
@@ -174,7 +196,9 @@ def infer_ancestry(
             i = rng.integers(0, n_sites, n_sites)
             same += _group(fit_q(F[i], L[i], start=q), q_min) == grp
         stab = same / n_boot
-    return AncestryCall(grp, float(q.max()), {p: float(v) for p, v in zip(POPS, q)}, n_sites, stab, mid)
+    return AncestryCall(
+        grp, float(q.max()), {p: float(v) for p, v in zip(POPS, q)}, n_sites, stab, mid
+    )
 
 
 class AFIndex:

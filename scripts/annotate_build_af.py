@@ -44,7 +44,9 @@ def panel_keys(p: Path) -> set:
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("--vcf", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--panel", type=Path)
@@ -65,7 +67,13 @@ def main(argv=None) -> int:
             n += 1
             c, pos, _, ref, alt, _, _, info = line.split("\t", 8)[:8]
             c = c.removeprefix("chr")
-            if c not in _AUTOSOMES or len(ref) != 1 or len(alt) != 1 or ref not in "ACGT" or alt not in "ACGT":
+            if (
+                c not in _AUTOSOMES
+                or len(ref) != 1
+                or len(alt) != 1
+                or ref not in "ACGT"
+                or alt not in "ACGT"
+            ):
                 continue
             p = int(pos)
             if keep is not None and (c, p, ref, alt) not in keep and (c, p, alt, ref) not in keep:

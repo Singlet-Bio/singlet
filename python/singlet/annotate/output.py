@@ -59,7 +59,10 @@ def _arrow_schema():
     import pyarrow as pa
 
     m = {"string": pa.string(), "int64": pa.int64(), "float32": pa.float32()}
-    return pa.schema([(n, m[t]) for n, t in COLUMNS], metadata={b"singlet_cell_labels_schema": SCHEMA_VERSION.encode()})
+    return pa.schema(
+        [(n, m[t]) for n, t in COLUMNS],
+        metadata={b"singlet_cell_labels_schema": SCHEMA_VERSION.encode()},
+    )
 
 
 def assert_public_safe(table) -> None:
@@ -92,13 +95,19 @@ def assert_public_safe(table) -> None:
         "sex_chrom": lambda x: x in SEX_LABELS,
         "ancestry_hancestro": lambda x: bool(_HANCESTRO.match(x)),
         "cell_type_label": lambda x: len(x) <= 200 and not _GENOTYPE_LIKE.search(x),
-        "model_version": lambda x: len(x) <= 400 and bool(re.match(r"^[A-Za-z0-9_.;=:/+ \-()]+$", x)) and not _GENOTYPE_LIKE.search(x),
+        "model_version": lambda x: (
+            len(x) <= 400
+            and bool(re.match(r"^[A-Za-z0-9_.;=:/+ \-()]+$", x))
+            and not _GENOTYPE_LIKE.search(x)
+        ),
     }
     for n, ok in checks.items():
         vals = df[n].dropna().astype(str).unique()
         bad = [v for v in vals if not ok(v)]
         if bad:
-            raise PublicOutputError(f"{n} holds a value that is not allowed in public output: {bad[0][:60]!r}")
+            raise PublicOutputError(
+                f"{n} holds a value that is not allowed in public output: {bad[0][:60]!r}"
+            )
     if df["gsm"].isna().any() or df["col"].isna().any():
         raise PublicOutputError("gsm and col are required on every row")
     if df["col"].duplicated().any():

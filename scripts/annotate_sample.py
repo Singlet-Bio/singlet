@@ -26,20 +26,32 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("--gse", required=True)
     ap.add_argument("--gsm", action="append", help="only these samples (repeatable)")
-    ap.add_argument("--bundle", type=Path, help="legacy .singlet bundle on disk (default: read the v2 study)")
-    ap.add_argument("--sidecar", type=Path, help="restricted sidecar of the bundle (enables ancestry)")
-    ap.add_argument("--af", type=Path, help="1000 Genomes super-population allele frequency table (Parquet)")
+    ap.add_argument(
+        "--bundle", type=Path, help="legacy .singlet bundle on disk (default: read the v2 study)"
+    )
+    ap.add_argument(
+        "--sidecar", type=Path, help="restricted sidecar of the bundle (enables ancestry)"
+    )
+    ap.add_argument(
+        "--af", type=Path, help="1000 Genomes super-population allele frequency table (Parquet)"
+    )
     ap.add_argument("--method", default="selftrain", choices=["guide", "selftrain"])
     ap.add_argument("--out", type=Path, required=True)
-    ap.add_argument("--max-cells", type=int, default=0, help="skip samples with more called cells than this (0 = no limit)")
+    ap.add_argument(
+        "--max-cells",
+        type=int,
+        default=0,
+        help="skip samples with more called cells than this (0 = no limit)",
+    )
     ap.add_argument("--force", action="store_true")
     a = ap.parse_args(argv)
 
     import pandas as pd
-
     from singlet.annotate import io as IO
     from singlet.annotate import output as O
     from singlet.annotate.pipeline import annotate_sample, model_version
@@ -74,7 +86,11 @@ def main(argv=None) -> int:
         t0 = time.time()
         try:
             try:
-                s = IO.read_legacy(a.bundle, gsm, sidecar=a.sidecar) if a.bundle else IO.read_v2(a.gse, gsm, sidecar=a.sidecar)
+                s = (
+                    IO.read_legacy(a.bundle, gsm, sidecar=a.sidecar)
+                    if a.bundle
+                    else IO.read_v2(a.gse, gsm, sidecar=a.sidecar)
+                )
             except ValueError as e:
                 if "no usable cells" in str(e) or "no called cells" in str(e):
                     print(f"{gsm}: skipped ({e})", flush=True)
@@ -89,8 +105,11 @@ def main(argv=None) -> int:
             O.write_labels(df, lab)
             summ.write_text(json.dumps(summary, indent=1, default=str))
             ct = df["cell_type_cl"].notna().mean() if len(df) else 0
-            print(f"{gsm}: {len(df)} cells, {ct:.0%} typed, sex {summary.get('sex', {}).get('groups')}, "
-                  f"ancestry {'yes' if 'ancestry' in summary else 'no'}, {time.time() - t0:.1f}s", flush=True)
+            print(
+                f"{gsm}: {len(df)} cells, {ct:.0%} typed, sex {summary.get('sex', {}).get('groups')}, "
+                f"ancestry {'yes' if 'ancestry' in summary else 'no'}, {time.time() - t0:.1f}s",
+                flush=True,
+            )
         except Exception as e:  # one bad sample must not stop the study
             failed += 1
             print(f"{gsm}: FAILED {type(e).__name__}: {e}", flush=True)

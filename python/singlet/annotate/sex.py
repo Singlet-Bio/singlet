@@ -32,7 +32,18 @@ PATO = {"female": "PATO:0000383", "male": "PATO:0000384"}
 
 # Non-PAR chrY genes broadly expressed outside the testis. XIST is the X evidence in both species.
 CHRY = {
-    "human": ("RPS4Y1", "DDX3Y", "UTY", "KDM5D", "EIF1AY", "ZFY", "USP9Y", "TXLNGY", "NLGN4Y", "PRKY"),
+    "human": (
+        "RPS4Y1",
+        "DDX3Y",
+        "UTY",
+        "KDM5D",
+        "EIF1AY",
+        "ZFY",
+        "USP9Y",
+        "TXLNGY",
+        "NLGN4Y",
+        "PRKY",
+    ),
     "mouse": ("Ddx3y", "Eif2s3y", "Uty", "Kdm5d"),
 }
 XIST = {"human": ("XIST",), "mouse": ("Xist",)}
@@ -49,7 +60,9 @@ class SexResult:
     label: np.ndarray  # per cell: 'female' | 'male' | 'ambiguous'
     score: np.ndarray  # posterior of the label (float32)
     p_male: np.ndarray  # per-cell posterior P(male)
-    groups: Dict[str, dict] = field(default_factory=dict)  # per group: call, pi_male, n_cells, n_informative, xist_umis, chry_umis
+    groups: Dict[str, dict] = field(
+        default_factory=dict
+    )  # per group: call, pi_male, n_cells, n_informative, xist_umis, chry_umis
 
 
 def _genes_index(gene_names: Sequence[str], wanted: Sequence[str]) -> np.ndarray:
@@ -87,7 +100,13 @@ def _fit_pi(llr: np.ndarray) -> float:
     return pi
 
 
-def call_sex(X, gene_names: Sequence[str], *, species: str = "human", groups: Optional[Sequence[Optional[str]]] = None) -> SexResult:
+def call_sex(
+    X,
+    gene_names: Sequence[str],
+    *,
+    species: str = "human",
+    groups: Optional[Sequence[Optional[str]]] = None,
+) -> SexResult:
     """Per-cell sex. ``groups``: donor label per cell ('' or None for cells not assigned to a donor, which use the pooled
     fraction of the whole sample); None = the whole sample is one group."""
     if species not in CHRY:
@@ -96,7 +115,11 @@ def call_sex(X, gene_names: Sequence[str], *, species: str = "human", groups: Op
     m = len(x)
     llr = np.clip((y - x) * np.log(Q_FEMALE / Q_MALE), -LLR_CAP, LLR_CAP)
     inf = (x + y) > 0
-    g = np.array(["sample"] * m, dtype=object) if groups is None else np.array([s or "" for s in groups], dtype=object)
+    g = (
+        np.array(["sample"] * m, dtype=object)
+        if groups is None
+        else np.array([s or "" for s in groups], dtype=object)
+    )
     pi_all = _fit_pi(llr[inf])
     prior = np.full(m, pi_all)
     out_groups: Dict[str, dict] = {}
@@ -105,12 +128,22 @@ def call_sex(X, gene_names: Sequence[str], *, species: str = "human", groups: Op
         pi = _fit_pi(llr[sel & inf])
         prior[sel] = pi
         call = "male" if pi >= MIN_POST else ("female" if pi <= 1 - MIN_POST else "ambiguous")
-        out_groups[s] = dict(call=call, pi_male=pi, n_cells=int(sel.sum()), n_informative=int((sel & inf).sum()),
-                             xist_umis=int(x[sel].sum()), chry_umis=int(y[sel].sum()))
+        out_groups[s] = dict(
+            call=call,
+            pi_male=pi,
+            n_cells=int(sel.sum()),
+            n_informative=int((sel & inf).sum()),
+            xist_umis=int(x[sel].sum()),
+            chry_umis=int(y[sel].sum()),
+        )
     p = _sigmoid(llr + np.log(prior / (1 - prior)))
-    label = np.where(p >= MIN_POST, "male", np.where(p <= 1 - MIN_POST, "female", "ambiguous")).astype(object)
+    label = np.where(
+        p >= MIN_POST, "male", np.where(p <= 1 - MIN_POST, "female", "ambiguous")
+    ).astype(object)
     both = (x >= 2) & (y >= 2) & (np.minimum(x, y) >= 0.25 * np.maximum(x, y))
     label[both] = "ambiguous"
-    score = np.where(label == "male", p, np.where(label == "female", 1 - p, np.maximum(p, 1 - p))).astype(np.float32)
+    score = np.where(
+        label == "male", p, np.where(label == "female", 1 - p, np.maximum(p, 1 - p))
+    ).astype(np.float32)
     score[both] = 0.5
     return SexResult(label=label, score=score, p_male=p.astype(np.float32), groups=out_groups)

@@ -78,48 +78,212 @@ def human_to_mouse(sym: str) -> List[str]:
 TISSUE_GROUPS: Dict[str, List[str]] = {
     "blood": ["blood", "cord blood", "pbmc", "peripheral blood"],
     "marrow": ["bone marrow", "marrow", "fetal liver", "yolk sac"],
-    "lymphoid_organ": ["spleen", "lymph node", "tonsil", "thymus", "peyer", "appendix", "marginal zone"],
-    "lung": ["lung", "bronch", "trachea", "nose", "nasal", "airway", "pleura", "alveol", "respiratory"],
-    "kidney": ["kidney", "renal", "nephron", "glomerul", "ureter", "cortex of kidney", "medulla of kidney", "papilla"],
+    "lymphoid_organ": [
+        "spleen",
+        "lymph node",
+        "tonsil",
+        "thymus",
+        "peyer",
+        "appendix",
+        "marginal zone",
+    ],
+    "lung": [
+        "lung",
+        "bronch",
+        "trachea",
+        "nose",
+        "nasal",
+        "airway",
+        "pleura",
+        "alveol",
+        "respiratory",
+    ],
+    "kidney": [
+        "kidney",
+        "renal",
+        "nephron",
+        "glomerul",
+        "ureter",
+        "cortex of kidney",
+        "medulla of kidney",
+        "papilla",
+    ],
     "bladder": ["bladder", "urethra", "urothel"],
     "liver": ["liver", "hepat", "bile duct", "gallbladder", "biliary"],
     "pancreas": ["pancrea", "islet"],
-    "gut": ["colon", "intestin", "gut", "ileum", "jejunum", "duodenum", "rectum", "cecum", "caecum", "colorectal", "bowel",
-            "mucosa of"],
+    "gut": [
+        "colon",
+        "intestin",
+        "gut",
+        "ileum",
+        "jejunum",
+        "duodenum",
+        "rectum",
+        "cecum",
+        "caecum",
+        "colorectal",
+        "bowel",
+        "mucosa of",
+    ],
     "stomach": ["stomach", "gastric"],
     "esophagus": ["esophag", "oesophag"],
     "oral": ["tongue", "oral", "gingiva", "salivary", "parotid", "submandibular", "sublingual"],
-    "skin": ["skin", "scalp", "epiderm", "dermis", "hair follicle", "palm", "sole", "axilla", "foreskin", "wound"],
-    "brain": ["brain", "cortex", "cortical", "hippocamp", "hypothalam", "cerebell", "striatum", "white matter", "grey matter",
-              "gray matter", "gyrus", "nucleus", "thalam", "midbrain", "brainstem", "pons", "medulla oblongata", "amygdala",
-              "olfactory bulb", "ventricle wall", "subventricular", "ventricular zone", "forebrain", "substantia nigra",
-              "tegmental", "locus coeruleus", "raphe", "habenula", "choroid plexus", "meninges", "pituitary", "neocortex",
-              "isocortex", "putamen", "caudate", "accumbens", "claustrum", "subiculum", "ganglionic eminence", "neural tube",
-              "subpallium", "subplate", "median eminence", "zona incerta", "ca1", "ca2", "ca3"],
+    "skin": [
+        "skin",
+        "scalp",
+        "epiderm",
+        "dermis",
+        "hair follicle",
+        "palm",
+        "sole",
+        "axilla",
+        "foreskin",
+        "wound",
+    ],
+    "brain": [
+        "brain",
+        "cortex",
+        "cortical",
+        "hippocamp",
+        "hypothalam",
+        "cerebell",
+        "striatum",
+        "white matter",
+        "grey matter",
+        "gray matter",
+        "gyrus",
+        "nucleus",
+        "thalam",
+        "midbrain",
+        "brainstem",
+        "pons",
+        "medulla oblongata",
+        "amygdala",
+        "olfactory bulb",
+        "ventricle wall",
+        "subventricular",
+        "ventricular zone",
+        "forebrain",
+        "substantia nigra",
+        "tegmental",
+        "locus coeruleus",
+        "raphe",
+        "habenula",
+        "choroid plexus",
+        "meninges",
+        "pituitary",
+        "neocortex",
+        "isocortex",
+        "putamen",
+        "caudate",
+        "accumbens",
+        "claustrum",
+        "subiculum",
+        "ganglionic eminence",
+        "neural tube",
+        "subpallium",
+        "subplate",
+        "median eminence",
+        "zona incerta",
+        "ca1",
+        "ca2",
+        "ca3",
+    ],
     "spinal_cord": ["spinal cord"],
-    "eye": ["retina", "eye", "fovea", "macula", "cornea", "limbus", "lens", "choroid", "uvea", "optic", "conjunctiva", "rpe"],
-    "pns": ["ganglion", "ganglia", "nerve", "enteric nervous", "myenteric", "submucosal plexus", "neural crest"],
-    "heart": ["heart", "cardiac", "atrium", "atrial", "ventricle", "myocard", "pericard", "aortic valve", "valve"],
+    "eye": [
+        "retina",
+        "eye",
+        "fovea",
+        "macula",
+        "cornea",
+        "limbus",
+        "lens",
+        "choroid",
+        "uvea",
+        "optic",
+        "conjunctiva",
+        "rpe",
+    ],
+    "pns": [
+        "ganglion",
+        "ganglia",
+        "nerve",
+        "enteric nervous",
+        "myenteric",
+        "submucosal plexus",
+        "neural crest",
+    ],
+    "heart": [
+        "heart",
+        "cardiac",
+        "atrium",
+        "atrial",
+        "ventricle",
+        "myocard",
+        "pericard",
+        "aortic valve",
+        "valve",
+    ],
     "muscle": ["skeletal muscle", "muscle", "diaphragm", "myotendinous", "limb", "somite"],
     "adipose": ["adipose", "fat", "omentum"],
     "breast": ["breast", "mammary"],
     "prostate": ["prostat"],
     "testis": ["testis", "testes", "seminiferous", "epididym"],
-    "female_reproductive": ["uterus", "uterine", "endometri", "ovary", "ovarian", "cervix", "ectocervix", "endocervix",
-                            "fallopian", "oviduct", "vagina", "decidua", "myometri", "follicle"],
+    "female_reproductive": [
+        "uterus",
+        "uterine",
+        "endometri",
+        "ovary",
+        "ovarian",
+        "cervix",
+        "ectocervix",
+        "endocervix",
+        "fallopian",
+        "oviduct",
+        "vagina",
+        "decidua",
+        "myometri",
+        "follicle",
+    ],
     "placenta": ["placenta", "trophoblast", "chorion", "decidua"],
     "thyroid": ["thyroid"],
     "adrenal": ["adrenal"],
-    "bone_joint": ["bone", "cartilage", "synovi", "joint", "tendon", "ligament", "growth plate", "calvaria", "periosteum",
-                   "enthesis", "rib"],
+    "bone_joint": [
+        "bone",
+        "cartilage",
+        "synovi",
+        "joint",
+        "tendon",
+        "ligament",
+        "growth plate",
+        "calvaria",
+        "periosteum",
+        "enthesis",
+        "rib",
+    ],
     "vessel": ["aorta", "artery", "arterial", "vein", "vessel", "atherosclerotic", "vascular"],
     "serosa": ["peritone", "pleural cavity", "ascites", "mesentery", "serosa", "mesotheli"],
     "embryo": ["embryo", "fetal", "foetal", "developing", "organoid"],
-    "tumor": ["tumor", "tumour", "carcinoma", "cancer", "melanoma", "glioma", "lymphoma", "leukemia", "sarcoma", "neoplas"],
+    "tumor": [
+        "tumor",
+        "tumour",
+        "carcinoma",
+        "cancer",
+        "melanoma",
+        "glioma",
+        "lymphoma",
+        "leukemia",
+        "sarcoma",
+        "neoplas",
+    ],
 }
 # keywords match at a word start ('renal' not in 'adrenal', 'oral' not in 'temporal')
-_PAT = [(g, re.compile("|".join(r"\b" + re.escape(k) for k in ks))) for g, ks in TISSUE_GROUPS.items()]
-_BRAIN_STRONG = re.compile(r"brain|cerebr|hippocamp|hypothalam|cerebell|striatum|thalam|neocortex|isocortex|gyrus|forebrain|midbrain")
+_PAT = [
+    (g, re.compile("|".join(r"\b" + re.escape(k) for k in ks))) for g, ks in TISSUE_GROUPS.items()
+]
+_BRAIN_STRONG = re.compile(
+    r"brain|cerebr|hippocamp|hypothalam|cerebell|striatum|thalam|neocortex|isocortex|gyrus|forebrain|midbrain"
+)
 
 
 def tissue_groups(text: Optional[str]) -> Set[str]:
@@ -144,10 +308,15 @@ def _node_groups(node: dict) -> Optional[Set[str]]:
     return out or None
 
 
-def allowed_nodes(nodes: Sequence[dict], tissue: Optional[str], disease: Optional[str] = None) -> Set[str]:
+def allowed_nodes(
+    nodes: Sequence[dict], tissue: Optional[str], disease: Optional[str] = None
+) -> Set[str]:
     """Ids of the nodes allowed in a sample of ``tissue`` (free text) with ``disease`` (free text, only 'tumour' words count)."""
     sg = tissue_groups(tissue) | ({"tumor"} if "tumor" in tissue_groups(disease) else set())
-    if not sg - {"tumor", "embryo"}:  # no organ named ('tumour', 'fetal' alone): every node stays possible
+    if not sg - {
+        "tumor",
+        "embryo",
+    }:  # no organ named ('tumour', 'fetal' alone): every node stays possible
         return {n["id"] for n in nodes}
     byid = {n["id"]: n for n in nodes}
     ok: Set[str] = set()
@@ -201,11 +370,15 @@ class Guide:
             ids = {n["id"] for n in kept}
             if len(kept) == k:
                 break
-        self.nodes: List[dict] = [dict(id="root", name="cell", cl="CL:0000000", parent=None, level=-1)] + kept
+        self.nodes: List[dict] = [
+            dict(id="root", name="cell", cl="CL:0000000", parent=None, level=-1)
+        ] + kept
         self.ids: List[str] = [n["id"] for n in self.nodes]
         self.index: Dict[str, int] = {i: j for j, i in enumerate(self.ids)}
         n_nodes = len(self.nodes)
-        self.parent = np.array([-1] + [self.index[n["parent"]] if n["parent"] != "root" else 0 for n in kept], np.int32)
+        self.parent = np.array(
+            [-1] + [self.index[n["parent"]] if n["parent"] != "root" else 0 for n in kept], np.int32
+        )
         self.children: List[List[int]] = [[] for _ in self.nodes]
         for j in range(1, n_nodes):
             self.children[self.parent[j]].append(j)
@@ -230,7 +403,9 @@ class Guide:
             if j == 0:
                 continue
             pj = int(self.parent[j])
-            anc_pos[j] = anc_pos[pj] | ({g.upper() for g in self._markers(self.nodes[pj])[0]} if pj > 0 else set())
+            anc_pos[j] = anc_pos[pj] | (
+                {g.upper() for g in self._markers(self.nodes[pj])[0]} if pj > 0 else set()
+            )
         self.n_markers_found = np.zeros(n_nodes, np.int32)
         for j, n in enumerate(self.nodes[1:], start=1):
             pos, neg = self._markers(n)
@@ -254,7 +429,9 @@ class Guide:
                     cols_n.append(j)
             self.n_markers_found[j] = found
         self.Wpos = _colnorm(sps.csc_matrix((w_p, (rows_p, cols_p)), shape=(G, n_nodes)))
-        self.Wneg = _colnorm(sps.csc_matrix((np.ones(len(rows_n)), (rows_n, cols_n)), shape=(G, n_nodes)))
+        self.Wneg = _colnorm(
+            sps.csc_matrix((np.ones(len(rows_n)), (rows_n, cols_n)), shape=(G, n_nodes))
+        )
         self.cl = np.array([n.get("cl") or "" for n in self.nodes], dtype=object)
         self.names = np.array([n.get("name") or n["id"] for n in self.nodes], dtype=object)
 

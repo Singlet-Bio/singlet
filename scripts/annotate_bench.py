@@ -36,14 +36,21 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 
-ALL = ["guide", "selftrain", "selftrain_pure", "guide_exon", "guide_all_cells", "marker_cluster", "knn_transfer"]
+ALL = [
+    "guide",
+    "selftrain",
+    "selftrain_pure",
+    "guide_exon",
+    "guide_all_cells",
+    "marker_cluster",
+    "knn_transfer",
+]
 GENE_BINS = [(0, 100), (100, 200), (200, 500), (500, 1000), (1000, 10**9)]
 
 
 def _load(bundle: Path, gsm: str):
     """(SampleInput, spliced CSR aligned to it)."""
     import scipy.sparse as sps
-
     from singlet.annotate import io as IO
     from singlet.bundle import SingletBundle
 
@@ -70,15 +77,19 @@ def _marker_dict(g, depth=3):
 def m_marker_cluster(s, g):
     import anndata as ad
     import pandas as pd
-
     from singlet._annotate_cell_types import annotate_cell_types
     from singlet.annotate import celltype as CT
 
     X = CT.lognorm(s.X)
     _, idx = CT.neighbours(s.X, k=15)
     cl = CT.overcluster(idx, 1.0)
-    a = ad.AnnData(X=X, obs=pd.DataFrame({"leiden": cl.astype(str) if cl is not None else np.zeros(X.shape[0]).astype(str)}),
-                   var=pd.DataFrame(index=pd.Index(s.gene_names).astype(str)))
+    a = ad.AnnData(
+        X=X,
+        obs=pd.DataFrame(
+            {"leiden": cl.astype(str) if cl is not None else np.zeros(X.shape[0]).astype(str)}
+        ),
+        var=pd.DataFrame(index=pd.Index(s.gene_names).astype(str)),
+    )
     a.var_names_make_unique()
     md = _marker_dict(g)
     if s.species == "mouse":
@@ -100,9 +111,8 @@ class Reference:
         import anndata as ad
         import pandas as pd
         import scipy.sparse as sps
-        from sklearn.decomposition import TruncatedSVD
-
         from singlet.annotate import celltype as CT
+        from sklearn.decomposition import TruncatedSVD
 
         parts, labs = [], []
         pool = [x for x in self.samples if x["gse"] != exclude_gse and x["species"] == species]
@@ -128,8 +138,11 @@ class Reference:
         hv = np.sort(np.argsort(-var)[:2000])
         Rd = R[:, hv].toarray() - mu[hv]
         svd = TruncatedSVD(30, random_state=0).fit(Rd)
-        ref = ad.AnnData(X=sps.csr_matrix(R[:, hv]), obs=pd.DataFrame({"cl": np.concatenate(labs)}),
-                         var=pd.DataFrame(index=pd.Index(np.array(common)[hv])))
+        ref = ad.AnnData(
+            X=sps.csr_matrix(R[:, hv]),
+            obs=pd.DataFrame({"cl": np.concatenate(labs)}),
+            var=pd.DataFrame(index=pd.Index(np.array(common)[hv])),
+        )
         ref.obsm["X_pca"] = svd.transform(Rd)
         ref.varm["PCs"] = svd.components_.T
         ref.uns["pca"] = {"mean": mu[hv]}
@@ -139,7 +152,6 @@ class Reference:
 def m_knn_transfer(s, g, ref):
     import anndata as ad
     import pandas as pd
-
     from singlet._transfer_labels import transfer_labels
     from singlet.annotate import celltype as CT
     from singlet.annotate.evaluate import TruthMapper
@@ -154,19 +166,30 @@ def m_knn_transfer(s, g, ref):
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("--truth", type=Path, required=True)
     ap.add_argument("--bundles", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--methods", default=",".join(ALL))
-    ap.add_argument("--studies", default="", help="comma-separated GSE ids (default: every kept study of the manifest)")
-    ap.add_argument("--max-cells", type=int, default=30000, help="skip samples with more called cells")
+    ap.add_argument(
+        "--studies",
+        default="",
+        help="comma-separated GSE ids (default: every kept study of the manifest)",
+    )
+    ap.add_argument(
+        "--max-cells", type=int, default=30000, help="skip samples with more called cells"
+    )
     ap.add_argument("--ref-cap", type=int, default=30000)
-    ap.add_argument("--threads", type=int, default=int(os.environ.get("SLURM_CPUS_PER_TASK", os.cpu_count() or 1)))
+    ap.add_argument(
+        "--threads",
+        type=int,
+        default=int(os.environ.get("SLURM_CPUS_PER_TASK", os.cpu_count() or 1)),
+    )
     a = ap.parse_args(argv)
 
     import pandas as pd
-
     from singlet.annotate import celltype as CT
     from singlet.annotate import evaluate as EV
     from singlet.annotate.guide import Guide
@@ -201,16 +224,41 @@ def main(argv=None) -> int:
             keep = t["barcode"].astype(str).map(pos)
             ok = keep.notna().to_numpy()
             rows = keep[ok].astype(int).to_numpy()
-            samples.append(dict(gse=gse, gsm=gsm, s=s, spl=spl, species=s.species, genes=s.gene_names, X=s.X, truth_rows=rows,
-                                truth_cl=t["cl_id"].astype(str).to_numpy()[ok], tissue=st.get("tissue", "")))
-            print(f"{gse}/{gsm}: {len(s.col)} cells, {len(rows)} with truth, tissue text {s.tissue!r}", flush=True)
+            samples.append(
+                dict(
+                    gse=gse,
+                    gsm=gsm,
+                    s=s,
+                    spl=spl,
+                    species=s.species,
+                    genes=s.gene_names,
+                    X=s.X,
+                    truth_rows=rows,
+                    truth_cl=t["cl_id"].astype(str).to_numpy()[ok],
+                    tissue=st.get("tissue", ""),
+                )
+            )
+            print(
+                f"{gse}/{gsm}: {len(s.col)} cells, {len(rows)} with truth, tissue text {s.tissue!r}",
+                flush=True,
+            )
     ref = Reference(samples, a.ref_cap)
 
     results = []
     for x in samples:
         s = x["s"]
-        g = Guide(s.gene_names, species=s.species)  # full guide: predictions of every method are scored on it
-        rec = dict(gse=x["gse"], gsm=x["gsm"], species=s.species, tissue=s.tissue, n_cells=len(s.col), n_truth=len(x["truth_rows"]), methods={})
+        g = Guide(
+            s.gene_names, species=s.species
+        )  # full guide: predictions of every method are scored on it
+        rec = dict(
+            gse=x["gse"],
+            gsm=x["gsm"],
+            species=s.species,
+            tissue=s.tissue,
+            n_cells=len(s.col),
+            n_truth=len(x["truth_rows"]),
+            methods={},
+        )
         ngenes = np.diff(s.X.indptr)[x["truth_rows"]]
         for m in methods:
             t0 = time.time()
@@ -219,7 +267,12 @@ def main(argv=None) -> int:
                     X = x["spl"] if m == "guide_exon" else s.X
                     if X is None:
                         continue
-                    kw = dict(species=s.species, tissue=s.tissue, disease=s.disease, method="guide" if m.startswith("guide") else "selftrain")
+                    kw = dict(
+                        species=s.species,
+                        tissue=s.tissue,
+                        disease=s.disease,
+                        method="guide" if m.startswith("guide") else "selftrain",
+                    )
                     if m == "selftrain_pure":
                         kw["min_prob"] = 0.0
                     if m == "guide_all_cells":
@@ -236,7 +289,9 @@ def main(argv=None) -> int:
                     rf = ref.build(x["gse"], s.species, s.gene_names)
                     if rf is None:
                         continue
-                    t0 = time.time()  # the reference build is shared work, not charged to the sample
+                    t0 = (
+                        time.time()
+                    )  # the reference build is shared work, not charged to the sample
                     node, score = m_knn_transfer(s, g, rf)
                 else:
                     raise ValueError(m)
@@ -251,20 +306,40 @@ def main(argv=None) -> int:
                     for lo, hi in GENE_BINS:
                         sel = (ngenes >= lo) & (ngenes < hi) & (cat != "untestable")
                         if sel.sum() >= 20:
-                            d3 = g.ancestor_at_depth(tn[sel], 3) == g.ancestor_at_depth(node[tr][sel], 3)
-                            acc_by_genes[f"{lo}-{hi}"] = dict(n=int(sel.sum()), consistent=float(np.isin(cat[sel], ["exact", "coarse", "finer"]).mean()),
-                                                              d3_match=float(d3.mean()), unassigned=float((cat[sel] == "unassigned").mean()))
-                rep.update(seconds=secs, s_per_million=secs * a.threads / max(len(s.col), 1) * 1e6, threads=a.threads,
-                           coverage=float((node > 0).mean()), acc_by_genes=acc_by_genes)
+                            d3 = g.ancestor_at_depth(tn[sel], 3) == g.ancestor_at_depth(
+                                node[tr][sel], 3
+                            )
+                            acc_by_genes[f"{lo}-{hi}"] = dict(
+                                n=int(sel.sum()),
+                                consistent=float(
+                                    np.isin(cat[sel], ["exact", "coarse", "finer"]).mean()
+                                ),
+                                d3_match=float(d3.mean()),
+                                unassigned=float((cat[sel] == "unassigned").mean()),
+                            )
+                rep.update(
+                    seconds=secs,
+                    s_per_million=secs * a.threads / max(len(s.col), 1) * 1e6,
+                    threads=a.threads,
+                    coverage=float((node > 0).mean()),
+                    acc_by_genes=acc_by_genes,
+                )
                 rec["methods"][m] = rep
                 bd = " ".join(f"d{d}:{v['accuracy']:.2f}" for d, v in rep["by_depth"].items())
-                print(f"{x['gse']}/{x['gsm']} {m:16s} {bd} wrong {rep['fractions']['wrong']:.2f} unassigned {rep['fractions']['unassigned']:.2f} "
-                      f"{secs:.1f}s", flush=True)
+                print(
+                    f"{x['gse']}/{x['gsm']} {m:16s} {bd} wrong {rep['fractions']['wrong']:.2f} unassigned {rep['fractions']['unassigned']:.2f} "
+                    f"{secs:.1f}s",
+                    flush=True,
+                )
             except Exception as e:  # noqa: BLE001
                 rec["methods"][m] = dict(error=f"{type(e).__name__}: {e}")
                 print(f"{x['gse']}/{x['gsm']} {m}: ERROR {e}", flush=True)
         results.append(rec)
-        a.out.write_text(json.dumps(dict(results=results, methods=methods, threads=a.threads), indent=1, default=float))
+        a.out.write_text(
+            json.dumps(
+                dict(results=results, methods=methods, threads=a.threads), indent=1, default=float
+            )
+        )
     return 0
 
 

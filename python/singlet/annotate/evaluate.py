@@ -50,7 +50,11 @@ class TruthMapper:
         elif owner:
             j = max(owner.values(), key=lambda k: (g.depth[k], -k))
         else:
-            desc = [k for k in range(1, len(g.nodes)) if any(cl_id in self.o.ancestors(c) for c in self.sets[k])]
+            desc = [
+                k
+                for k in range(1, len(g.nodes))
+                if any(cl_id in self.o.ancestors(c) for c in self.sets[k])
+            ]
             j = _lca(g, desc) if desc else 0
         self.cache[cl_id] = int(j)
         return int(j)
@@ -85,23 +89,42 @@ def classify(g: Guide, truth: np.ndarray, pred: np.ndarray) -> np.ndarray:
     return cat
 
 
-def report(g: Guide, truth_cl: Sequence[str], pred_nodes: np.ndarray, score: Optional[np.ndarray] = None, max_depth: int = 4) -> dict:
+def report(
+    g: Guide,
+    truth_cl: Sequence[str],
+    pred_nodes: np.ndarray,
+    score: Optional[np.ndarray] = None,
+    max_depth: int = 4,
+) -> dict:
     """Metrics for one method on one sample/study. ``pred_nodes`` index ``g``; ``score`` (optional) gives calibration bins."""
     tm = TruthMapper(g)
     tn = np.array([tm(t) for t in truth_cl], np.int32)
     pn = np.asarray(pred_nodes, np.int32)
     cat = classify(g, tn, pn)
     ok = cat != "untestable"
-    frac = {k: float(np.mean(cat[ok] == k)) for k in ("exact", "coarse", "finer", "wrong", "unassigned")}
+    frac = {
+        k: float(np.mean(cat[ok] == k)) for k in ("exact", "coarse", "finer", "wrong", "unassigned")
+    }
     by_depth = {}
     for d in range(1, max_depth + 1):
         td, pd_ = g.ancestor_at_depth(tn[ok], d), g.ancestor_at_depth(pn[ok], d)
         keep = g.depth[td] == d
         if keep.sum() < 20:
             continue
-        by_depth[d] = dict(n=int(keep.sum()), accuracy=float(np.mean(td[keep] == pd_[keep])), n_classes=int(len(np.unique(td[keep]))))
-    out = dict(n_cells=int(len(pn)), n_testable=int(ok.sum()), fractions=frac, consistent=frac["exact"] + frac["coarse"] + frac["finer"],
-               by_depth=by_depth, mean_pred_depth=float(np.mean(g.depth[pn])), mean_truth_depth=float(np.mean(g.depth[tn[ok]])) if ok.any() else None)
+        by_depth[d] = dict(
+            n=int(keep.sum()),
+            accuracy=float(np.mean(td[keep] == pd_[keep])),
+            n_classes=int(len(np.unique(td[keep]))),
+        )
+    out = dict(
+        n_cells=int(len(pn)),
+        n_testable=int(ok.sum()),
+        fractions=frac,
+        consistent=frac["exact"] + frac["coarse"] + frac["finer"],
+        by_depth=by_depth,
+        mean_pred_depth=float(np.mean(g.depth[pn])),
+        mean_truth_depth=float(np.mean(g.depth[tn[ok]])) if ok.any() else None,
+    )
     if score is not None:
         s = np.asarray(score, np.float64)[ok]
         right = np.isin(cat[ok], ["exact", "coarse", "finer"])
@@ -109,7 +132,9 @@ def report(g: Guide, truth_cl: Sequence[str], pred_nodes: np.ndarray, score: Opt
         for lo, hi in ((0, 0.5), (0.5, 0.7), (0.7, 0.8), (0.8, 0.9), (0.9, 0.95), (0.95, 1.01)):
             m = (s >= lo) & (s < hi)
             if m.sum():
-                bins.append(dict(lo=lo, hi=min(hi, 1.0), n=int(m.sum()), consistent=float(right[m].mean())))
+                bins.append(
+                    dict(lo=lo, hi=min(hi, 1.0), n=int(m.sum()), consistent=float(right[m].mean()))
+                )
         out["calibration"] = bins
     wrong = np.flatnonzero(cat == "wrong")
     pairs: Dict[str, int] = {}

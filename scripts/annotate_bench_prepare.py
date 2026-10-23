@@ -26,7 +26,10 @@ UA = {"User-Agent": "singlet-annotate/0.1 (+https://singlet.bio)"}
 
 def _get(url: str, dst: Path) -> None:
     tmp = dst.with_name(dst.name + ".part")
-    with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=300) as r, open(tmp, "wb") as f:
+    with (
+        urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=300) as r,
+        open(tmp, "wb") as f,
+    ):
         want = int(r.headers.get("Content-Length") or -1)
         while True:
             b = r.read(16 << 20)
@@ -39,7 +42,12 @@ def _get(url: str, dst: Path) -> None:
 
 
 def _h5ad_url(collection_id: str, dataset_id: str) -> str:
-    with urllib.request.urlopen(urllib.request.Request(f"{CXG}/collections/{collection_id}/datasets/{dataset_id}", headers=UA), timeout=60) as r:
+    with urllib.request.urlopen(
+        urllib.request.Request(
+            f"{CXG}/collections/{collection_id}/datasets/{dataset_id}", headers=UA
+        ),
+        timeout=60,
+    ) as r:
         d = json.load(r)
     for a in d.get("assets", []):
         if a.get("filetype") == "H5AD":
@@ -48,7 +56,9 @@ def _h5ad_url(collection_id: str, dataset_id: str) -> str:
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("--studies", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args(argv)
@@ -67,11 +77,35 @@ def main(argv=None) -> int:
             if not p.exists():
                 h5 = a.out / "dl" / f"{ds}.h5ad"
                 _get(_h5ad_url(st["collection_id"], ds), h5)
-                subprocess.run([sys.executable, str(HERE / "annotate_truth_cxg.py"), "--gse", gse, "--bundle", str(bundle), "--h5ad", str(h5),
-                                "--save-obs", str(p), "--out", str(a.out / "truth" / "_scratch")], check=False)
+                subprocess.run(
+                    [
+                        sys.executable,
+                        str(HERE / "annotate_truth_cxg.py"),
+                        "--gse",
+                        gse,
+                        "--bundle",
+                        str(bundle),
+                        "--h5ad",
+                        str(h5),
+                        "--save-obs",
+                        str(p),
+                        "--out",
+                        str(a.out / "truth" / "_scratch"),
+                    ],
+                    check=False,
+                )
                 h5.unlink(missing_ok=True)
             obs.append(p)
-        cmd = [sys.executable, str(HERE / "annotate_truth_cxg.py"), "--gse", gse, "--bundle", str(bundle), "--out", str(a.out / "truth" / gse)]
+        cmd = [
+            sys.executable,
+            str(HERE / "annotate_truth_cxg.py"),
+            "--gse",
+            gse,
+            "--bundle",
+            str(bundle),
+            "--out",
+            str(a.out / "truth" / gse),
+        ]
         for p in obs:
             cmd += ["--obs", str(p)]
         r = subprocess.run(cmd, capture_output=True, text=True)

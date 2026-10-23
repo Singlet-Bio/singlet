@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 import pytest
 import scipy.sparse as sps
-
 from singlet.annotate import ancestry as ANC
 from singlet.annotate import celltype as CT
 from singlet.annotate import evaluate as EV
@@ -65,9 +64,19 @@ def test_cell_types_separate_t_and_b(method):
     in_t = np.array([t in r.guide.path(int(j)) for j in r.node])
     in_b = np.array([b in r.guide.path(int(j)) for j in r.node])
     # T-like calls include innate-like T nodes (MAIT) that sit beside t_cell in the guide; B and T must not mix
-    assert (~in_b[:h]).mean() > 0.95 and in_b[h:].mean() > 0.9 and in_t[:h].mean() > 0.8 and (~in_t[h:]).mean() > 0.95
-    assert np.isfinite(r.score[r.node > 0]).all() and ((r.score[r.node > 0] >= 0) & (r.score[r.node > 0] <= 1)).all()
-    rep = EV.report(r.guide, ["CL:0000084"] * h + ["CL:0000236"] * (len(r.node) - h), r.node, r.score)
+    assert (
+        (~in_b[:h]).mean() > 0.95
+        and in_b[h:].mean() > 0.9
+        and in_t[:h].mean() > 0.8
+        and (~in_t[h:]).mean() > 0.95
+    )
+    assert (
+        np.isfinite(r.score[r.node > 0]).all()
+        and ((r.score[r.node > 0] >= 0) & (r.score[r.node > 0] <= 1)).all()
+    )
+    rep = EV.report(
+        r.guide, ["CL:0000084"] * h + ["CL:0000236"] * (len(r.node) - h), r.node, r.score
+    )
     assert rep["by_depth"][2]["accuracy"] > 0.9
 
 
@@ -146,9 +155,25 @@ def test_ancestry_admixed_and_low_data():
 
 
 def test_align_sites_flips_swapped_alleles():
-    af = pd.DataFrame({"chrom": ["1", "1"], "pos": [100, 200], "ref": ["A", "C"], "alt": ["G", "T"],
-                       **{p: [0.1, 0.2] for p in ANC.POPS}})
-    sites = pd.DataFrame({"chrom": ["chr1", "chr1"], "pos": [100, 200], "ref": ["A", "T"], "alt": ["G", "C"], "ad": [3, 1], "dp": [5, 4]})
+    af = pd.DataFrame(
+        {
+            "chrom": ["1", "1"],
+            "pos": [100, 200],
+            "ref": ["A", "C"],
+            "alt": ["G", "T"],
+            **{p: [0.1, 0.2] for p in ANC.POPS},
+        }
+    )
+    sites = pd.DataFrame(
+        {
+            "chrom": ["chr1", "chr1"],
+            "pos": [100, 200],
+            "ref": ["A", "T"],
+            "alt": ["G", "C"],
+            "ad": [3, 1],
+            "dp": [5, 4],
+        }
+    )
     ad, dp, F = ANC.align_sites(sites, af)
     assert sorted(zip(ad.tolist(), dp.tolist())) == [(3, 4), (3, 5)]
     assert F.shape == (2, 5)
@@ -157,8 +182,14 @@ def test_align_sites_flips_swapped_alleles():
 def test_af_index_matches_merge_join():
     rng = np.random.default_rng(3)
     m = 500
-    af = pd.DataFrame({"chrom": rng.choice([str(i) for i in range(1, 23)], m), "pos": rng.integers(1, 10**8, m),
-                       "ref": rng.choice(list("AC"), m), "alt": rng.choice(list("GT"), m)})
+    af = pd.DataFrame(
+        {
+            "chrom": rng.choice([str(i) for i in range(1, 23)], m),
+            "pos": rng.integers(1, 10**8, m),
+            "ref": rng.choice(list("AC"), m),
+            "alt": rng.choice(list("GT"), m),
+        }
+    )
     af = af.drop_duplicates(["chrom", "pos"])
     for p in ANC.POPS:
         af[p] = rng.uniform(0.05, 0.95, len(af))
@@ -168,7 +199,14 @@ def test_af_index_matches_merge_join():
     s.loc[flip, ["ref", "alt"]] = s.loc[flip, ["alt", "ref"]].to_numpy()
     s["dp"] = rng.integers(1, 9, len(s))
     s["ad"] = rng.integers(0, 1, len(s)) * s["dp"]
-    s = pd.concat([s, pd.DataFrame({"chrom": ["chrX"], "pos": [5], "ref": ["A"], "alt": ["G"], "dp": [3], "ad": [1]})])
+    s = pd.concat(
+        [
+            s,
+            pd.DataFrame(
+                {"chrom": ["chrX"], "pos": [5], "ref": ["A"], "alt": ["G"], "dp": [3], "ad": [1]}
+            ),
+        ]
+    )
     a1 = ANC.align_sites(s, af)
     a2 = ANC.AFIndex(af).align(s)
     k1 = sorted(zip(a1[1], a1[0], a1[2][:, 0].round(3)))

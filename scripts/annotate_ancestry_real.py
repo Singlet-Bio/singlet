@@ -17,7 +17,6 @@ from __future__ import annotations
 import argparse
 import io
 import json
-import os
 import re
 import shutil
 import sys
@@ -32,7 +31,9 @@ _COV = re.compile(r"^samples/(GSM\d+)/donor/(donor\d+)_coverage\.tsv$")
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("--gse-list", type=Path, required=True)
     ap.add_argument("--af", type=Path, required=True)
     ap.add_argument("--scratch", type=Path, required=True)
@@ -42,12 +43,14 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
 
     import pandas as pd
-
     from singlet.annotate import ancestry as ANC
 
     t0 = time.time()
     idx = ANC.AFIndex(pd.read_parquet(a.af))
-    print(f"AF index: {len(idx.key):,} sites in {time.time() - t0:.0f}s (bucket {RESTRICTED_BUCKET})", flush=True)
+    print(
+        f"AF index: {len(idx.key):,} sites in {time.time() - t0:.0f}s (bucket {RESTRICTED_BUCKET})",
+        flush=True,
+    )
     self_rep = {}
     if a.labels:
         for row in json.loads(a.labels.read_text()):
@@ -73,26 +76,63 @@ def main(argv=None) -> int:
                     for n in names:
                         if n.endswith("/ancestry_call.json"):
                             j = json.loads(z.read(n))
-                            pipe[n.split("/")[1]] = (j.get("ancestry"), j.get("confidence"), j.get("n_informative_aims"))
+                            pipe[n.split("/")[1]] = (
+                                j.get("ancestry"),
+                                j.get("confidence"),
+                                j.get("n_informative_aims"),
+                            )
                     for n in names:
                         m = _COV.match(n)
                         if not m:
                             continue
                         gsm, donor = m.groups()
-                        sites = pd.read_csv(io.BytesIO(z.read(n)), sep="\t", usecols=["chrom", "pos", "ref", "alt", "dp", "ad"],
-                                            dtype={"chrom": str, "ref": str, "alt": str})
+                        sites = pd.read_csv(
+                            io.BytesIO(z.read(n)),
+                            sep="\t",
+                            usecols=["chrom", "pos", "ref", "alt", "dp", "ad"],
+                            dtype={"chrom": str, "ref": str, "alt": str},
+                        )
                         t2 = time.time()
                         ad, dp, F = idx.align(sites)
                         frac = len(ad) / max(len(sites), 1)
                         if frac < ANC.MIN_MATCH_FRAC:
-                            c = ANC.AncestryCall(None, None, {}, int(len(ad)), None, ANC.mid_allele_fraction(ad, dp))
+                            c = ANC.AncestryCall(
+                                None, None, {}, int(len(ad)), None, ANC.mid_allele_fraction(ad, dp)
+                            )
                         else:
                             c = ANC.infer_ancestry(ad, dp, F, n_boot=a.n_boot)
                         p = pipe.get(gsm, (None, None, None))
-                        rows.append(dict(gse=gse, gsm=gsm, donor=donor, n_sites_file=int(len(sites)), match_frac=round(frac, 4), n_sites=c.n_sites,
-                                         mean_dp=float(dp.mean()) if len(dp) else None, group=c.group, hancestro=c.hancestro, prob=c.prob,
-                                         q={k: round(v, 4) for k, v in c.q.items()}, stability=c.stability, mid_af=c.mid_af, reason=c.reason, alt_read_frac=round(float(ad.sum() / max(dp.sum(), 1)), 4) if len(dp) else None, het_frac=round(ANC.het_fraction(ad, dp), 3) if len(dp) else None, mean_dp_deep=float(dp[dp >= ANC.MID_AF_DP].mean()) if (dp >= ANC.MID_AF_DP).any() else None, n_deep=int((dp >= ANC.MID_AF_DP).sum()), seconds=round(time.time() - t2, 2),
-                                         pipeline_call=p[0], pipeline_conf=p[1], pipeline_n_aims=p[2], self_reported=self_rep.get(gsm)))
+                        rows.append(
+                            dict(
+                                gse=gse,
+                                gsm=gsm,
+                                donor=donor,
+                                n_sites_file=int(len(sites)),
+                                match_frac=round(frac, 4),
+                                n_sites=c.n_sites,
+                                mean_dp=float(dp.mean()) if len(dp) else None,
+                                group=c.group,
+                                hancestro=c.hancestro,
+                                prob=c.prob,
+                                q={k: round(v, 4) for k, v in c.q.items()},
+                                stability=c.stability,
+                                mid_af=c.mid_af,
+                                reason=c.reason,
+                                alt_read_frac=round(float(ad.sum() / max(dp.sum(), 1)), 4)
+                                if len(dp)
+                                else None,
+                                het_frac=round(ANC.het_fraction(ad, dp), 3) if len(dp) else None,
+                                mean_dp_deep=float(dp[dp >= ANC.MID_AF_DP].mean())
+                                if (dp >= ANC.MID_AF_DP).any()
+                                else None,
+                                n_deep=int((dp >= ANC.MID_AF_DP).sum()),
+                                seconds=round(time.time() - t2, 2),
+                                pipeline_call=p[0],
+                                pipeline_conf=p[1],
+                                pipeline_n_aims=p[2],
+                                self_reported=self_rep.get(gsm),
+                            )
+                        )
                         del sites, ad, dp, F
         except Exception as e:  # noqa: BLE001
             rows.append(dict(gse=gse, error=f"{type(e).__name__}: {e}"))

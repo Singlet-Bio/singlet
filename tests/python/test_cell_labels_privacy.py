@@ -14,7 +14,6 @@ import numpy as np
 import pandas as pd
 import pytest
 import scipy.sparse as sps
-
 from singlet.annotate import output as O
 from singlet.annotate import pipeline as P
 from singlet.annotate.ancestry import POPS
@@ -107,10 +106,21 @@ def test_pipeline_output_carries_no_genotype_from_restricted_input(tmp_path):
     n = 80
     X = rng.poisson(0.5, (n, len(genes))).astype(np.float32)
     X[:, 0] += rng.poisson(4, n)
-    s = SampleInput(gsm="GSM9", gse="GSE9", X=sps.csr_matrix(X), gene_names=genes, col=np.arange(n), barcodes=[f"AC{i}" for i in range(n)],
-                    species="human", tissue="blood", disease="")
+    s = SampleInput(
+        gsm="GSM9",
+        gse="GSE9",
+        X=sps.csr_matrix(X),
+        gene_names=genes,
+        col=np.arange(n),
+        barcodes=[f"AC{i}" for i in range(n)],
+        species="human",
+        tissue="blood",
+        disease="",
+    )
     m = 2000
-    af = pd.DataFrame({"chrom": ["1"] * m, "pos": np.arange(m) + 10_000, "ref": ["A"] * m, "alt": ["G"] * m})
+    af = pd.DataFrame(
+        {"chrom": ["1"] * m, "pos": np.arange(m) + 10_000, "ref": ["A"] * m, "alt": ["G"] * m}
+    )
     F = rng.uniform(0.05, 0.95, (m, 5))
     F[:, POPS.index("EAS")] = rng.uniform(0.0, 0.1, m)
     for k, p in enumerate(POPS):
@@ -119,7 +129,11 @@ def test_pipeline_output_carries_no_genotype_from_restricted_input(tmp_path):
     g = rng.binomial(2, f)
     dp = rng.integers(1, 6, m)
     ad = rng.binomial(dp, np.clip(g / 2, 0.02, 0.98))
-    s.donor_sites = {"donor0": pd.DataFrame({"chrom": "chr1", "pos": af["pos"], "ref": "A", "alt": "G", "dp": dp, "ad": ad})}
+    s.donor_sites = {
+        "donor0": pd.DataFrame(
+            {"chrom": "chr1", "pos": af["pos"], "ref": "A", "alt": "G", "dp": dp, "ad": ad}
+        )
+    }
     df, summary = P.annotate_sample(s, af_table=af, method="guide")
     assert df["ancestry_hancestro"].notna().all()
     out = O.write_labels(df, tmp_path / "GSM9.parquet")
