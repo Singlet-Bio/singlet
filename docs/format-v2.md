@@ -445,9 +445,13 @@ the index directory (`"junctions": {"table_version": <pack id>, "ct": [keys per 
 cell-type / tissue dictionary codes as that index version:
 
 * `jx_ct`: one row per (junction id, cell type, tissue) with any count, columns `jid` u32, `ct` u16, `tissue` u16, `n_cells` u32,
-  `n_umi` u32, `n_samples` u32; sorted by `(jid, ct, tissue)` so zone maps on `jid` (genomic order within a segment) prune by region.
-* `jx_tot`: one row per junction id: `n_studies`, `n_samples`, `n_cells`, `n_umi`, and `n_umi_ambient` (UMIs in uncalled barcodes of
-  the same samples, the empty-droplet noise model; it can be kept as this aggregate even if uncalled barcodes are pruned from matrices).
+  `n_samples` u32, `n_umi_lo` u32, `n_umi_hi` u32; sorted by `(jid, ct, tissue)` so zone maps on `jid` (genomic order within a segment)
+  prune by region.
+* `jx_tot`: one row per junction id: `n_studies`, `n_samples`, `n_cells` (u32), `n_umi_lo` / `n_umi_hi` and `n_umi_ambient_lo` /
+  `n_umi_ambient_hi` (UMIs in uncalled barcodes of the same samples, the empty-droplet noise model; it survives as this aggregate, or
+  from a per-sample ambient profile, if uncalled barcodes are pruned from matrices).
+* SCX1 values and zone maps are u32 (cell index 4.1), so atlas-wide UMI sums, which can pass 2^32 for highly expressed junctions over
+  ~297 M cells, are split into low and high words. Row groups of 65,536 rows and objects of about 2^21 rows, like the cell shards.
 
 Uses:
 
@@ -460,8 +464,11 @@ Uses:
   motif (GT/AG, GC/AG, AT/AC on either strand), is not explained by ambient RNA (`n_umi_ambient / n_umi` below the study's ambient
   fraction, a binomial test against it), and, where the pipeline records it, a minimum overhang. Each criterion is a column, so the
   thresholds stay a query choice, not baked into the table.
-* Proposed (sent to the cell-index session, not built yet): the cell-index builder makes both objects in the same pass as its shards (cells -> labels -> the junction matrix columns of called
-  cells); the extra input is each sample's junction member.
+* Building (agreed with the cell-index session, not built yet): the builder lives in `junctions.py`; it encodes the objects with
+  `atlas.encode_shard`, names them `obj_key(blob, "scx")` (`v2/cidx/obj/<d16>.scx`, already served by the data Worker) and attaches them
+  with `BuildResult.add_extension("junctions", {...}, objects)`, which re-derives the index version id from the new directory content.
+  Cell-type / tissue codes come from that build's `directory["dicts"]`; the per-cell codes are read from the shards (or a builder hook
+  handing over each sample's `(cols, ct codes)`), and the junction counts from each sample's junction member, called columns only.
 
 ### 12.7 Measurements (pilot GSE145370, 14 samples)
 
