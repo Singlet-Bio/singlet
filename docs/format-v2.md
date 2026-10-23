@@ -28,6 +28,8 @@ All integers are little-endian. "digest16" = first 16 bytes of SHA-256. Text is 
 | `v2/ref/<packid>.pack` | side-information pack (section 6); `<packid>` = hex of digest16 of the pack file | immutable |
 | `v2/ref/index.json` | list of packs: id, kind, build/protocol, bytes, sha256 | mutable, `max-age=300` |
 | `v2/cells/<GSE>.cells` | optional study-level concatenation of per-sample cell tables for search (section 8) | immutable per rev |
+| `v2/cidx/...` | atlas-wide cell index: `current.json` pointer, versioned directories, content-addressed shards and plan blocks (`docs/format-v2-cell-index.md`) | immutable except `current.json` (`max-age=60`) |
+| `v2/a/<GSM>/<d16>.parquet` | per-cell label sidecar (cell type, chromosomal sex, inferred ancestry), referenced from the manifest (`docs/format-v2-cell-index.md` section 9) | immutable |
 
 Legacy objects `data/<GSE>/<GSE>.singlet` are retired by the migration (section 10).
 
@@ -276,8 +278,9 @@ sha256 from `v2/ref/index.json`.
   protocol, QC, cell counts, depth quantiles) run in D1 as today.
 * **Cells:** per-sample `cells` tables carry per-cell statistics; a cell query first selects samples in D1, then reads the cells tables of
   those samples (small, edge-cached) and returns `(gsm, columns)`; slicing then fetches only the chunk runs covering those columns.
-* An atlas-wide cell index (columnar shards of quantised per-cell stats, `v2/cidx/`) is a later addition when cross-atlas cell queries
-  need sub-second latency; the cells tables are its source of truth.
+* **Atlas cell index** (`v2/cidx/`, specified in `docs/format-v2-cell-index.md`): SCX1 columnar shards of per-cell counts and labels,
+  a summary for counts, and plan blocks with each sample's chunk index, served with `POST /v2/cidx/query` and `POST /v2/cidx/gather` by
+  the data Worker; the cells tables and label sidecars are its source of truth.
 
 ## 9. Legacy member mapping (migration)
 
