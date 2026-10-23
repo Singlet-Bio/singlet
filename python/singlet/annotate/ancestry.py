@@ -43,7 +43,9 @@ EPS = 0.02
 Q_MIN = 0.8
 MIN_SITES = 300  # sites with any depth needed before a call is made
 MID_AF_DP = 20  # depth at which a site's allele fraction is informative about pooling
-MAX_MID_AF = 1.0  # set from the validation (docs/cell_annotation.md); above it the donor is treated as a pool: no call
+MAX_MID_AF = 0.15  # single donors measured 0.04-0.08 (docs/cell_annotation.md); above it the donor is treated as a pool
+SCREEN_SITES = 20_000  # multi-start screening on at most this many sites
+BOOT_SITES = 20_000  # bootstrap replicates of at most this many sites
 ALT_READ_RANGE = (
     0.10,
     0.60,
@@ -120,24 +122,35 @@ def _negll(theta: np.ndarray, F: np.ndarray, L: np.ndarray):
     return -np.log(site).sum(), g_theta
 
 
-def fit_q(F: np.ndarray, L: np.ndarray, start: Optional[np.ndarray] = None) -> np.ndarray:
-    """Maximum-likelihood ``q`` (multi-start unless ``start``, a proportion vector, is given)."""
+def fit_q(
+    F: np.ndarray, L: np.ndarray, start: Optional[np.ndarray] = None, seed: int = 0
+) -> np.ndarray:
+    """Maximum-likelihood ``q``. Without ``start`` (a proportion vector) six starts (uniform and near each vertex) are
+    screened; above ``SCREEN_SITES`` sites the screening runs on a random subsample and only the best start is refined on
+    every site (the validation found the same optimum at a fraction of the cost)."""
     from scipy.optimize import minimize
 
-    best = None
-    starts = (
-        [np.log(np.clip(start, 1e-6, 1))]
-        if start is not None
-        else [np.zeros(F.shape[1])] + [np.eye(F.shape[1])[k] * 2.0 for k in range(F.shape[1])]
-    )
-    for start in starts:
-        r = minimize(
-            _negll, start, args=(F, L), jac=True, method="L-BFGS-B", options=dict(maxiter=200)
+    def run(x0, Fs, Ls):
+        return minimize(
+            _negll, x0, args=(Fs, Ls), jac=True, method="L-BFGS-B", options=dict(maxiter=200)
         )
-        if best is None or r.fun < best.fun:
-            best = r
-    assert best is not None
-    e = np.exp(best.x - best.x.max())
+
+    if start is not None:
+        x0 = np.log(np.clip(start, 1e-6, 1))
+    else:
+        K = F.shape[1]
+        starts = [np.zeros(K)] + [np.eye(K)[k] * 2.0 for k in range(K)]
+        if len(F) > SCREEN_SITES:
+            i = np.random.default_rng(seed).choice(len(F), SCREEN_SITES, replace=False)
+            Fs, Ls = F[i], L[i]
+        else:
+            Fs, Ls = F, L
+        x0 = min((run(s0, Fs, Ls) for s0 in starts), key=lambda r: r.fun).x
+        if len(F) <= SCREEN_SITES:
+            e = np.exp(x0 - x0.max())
+            return e / e.sum()
+    r = run(x0, F, L)
+    e = np.exp(r.x - r.x.max())
     return e / e.sum()
 
 
@@ -192,8 +205,9 @@ def infer_ancestry(
     if n_boot:
         rng = np.random.default_rng(seed)
         same = 0
+        m = min(n_sites, BOOT_SITES)  # stability saturates long before this many sites
         for _ in range(n_boot):
-            i = rng.integers(0, n_sites, n_sites)
+            i = rng.integers(0, n_sites, m)
             same += _group(fit_q(F[i], L[i], start=q), q_min) == grp
         stab = same / n_boot
     return AncestryCall(
