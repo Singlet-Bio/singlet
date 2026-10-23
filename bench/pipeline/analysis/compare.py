@@ -36,8 +36,8 @@ def totals(a, layer=None):
 
 
 def subset(a, cells, genes=None):
-    b = a[a.obs_names.isin(cells)]
-    b = b[[c for c in cells if c in set(b.obs_names)]]
+    idx = a.obs_names.get_indexer(pd.Index(cells))  # rows in the order of `cells`
+    b = a[idx[idx >= 0]]
     if genes is not None:
         b = b[:, b.var_names.isin(genes)]
     return b
@@ -215,7 +215,8 @@ def main():
     def double_count(old_t, new_t):
         old, new = tools[old_t], tools[new_t]
         common = sorted(set(old.obs_names) & set(new.obs_names))
-        cells = [c for c in common if c in set(new.obs_names[new.obs["is_cell"]])] or common
+        called_new = set(new.obs_names[new.obs["is_cell"]])
+        cells = [c for c in common if c in called_new] or common
         o, n = subset(old, cells), subset(new, cells)
         genes = sorted(set(o.var_names) & set(n.var_names))
         o, n = o[:, genes], n[:, genes]
