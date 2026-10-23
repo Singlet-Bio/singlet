@@ -72,6 +72,12 @@ case "$MODE" in
       rt "${PY[@]}" "$B/analyze.py" "$DATA/$GSE" --out "$OUT/$GSE" --threads "${SLURM_CPUS_PER_TASK:-8}" ${ANALYZE_ARGS:-}
     fi
     ;;
+  cbcollect)  # (re)collect every finished CellBender run from its cell barcode list
+    for c in "$OUT"/GSE*/GSM*.cellbender_cells.csv; do
+      g=$(basename "$(dirname "$c")"); m=$(basename "$c" .cellbender_cells.csv)
+      rt "${PY[@]}" "$B/cellbender_io.py" collect "$DATA/$g/$m.npz" "$OUT/$g/$m.cellbender.h5" "$OUT/$g/$m.cellbender.json"         --analysis-npz "$OUT/$g/$m.bc.npz" --cells-csv "$c" || true
+    done
+    ;;
   rules)
     rt "${PY[@]}" "$B/rules.py" "$DATA" "$OUT" --out "${REPORT:-$WORK/state/emptydrop/report}/rules.json"
     ;;
