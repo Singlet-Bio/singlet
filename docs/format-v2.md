@@ -28,6 +28,8 @@ All integers are little-endian. "digest16" = first 16 bytes of SHA-256. Text is 
 | `v2/ref/<packid>.pack` | side-information pack (section 6); `<packid>` = hex of digest16 of the pack file | immutable |
 | `v2/ref/index.json` | list of packs: id, kind, build/protocol, bytes, sha256 | mutable, `max-age=300` |
 | `v2/cells/<GSE>.cells` | optional study-level concatenation of per-sample cell tables for search (section 8) | immutable per rev |
+| `v2/cidx/...` | atlas-wide cell index: `current.json` pointer, versioned directories, content-addressed shards and plan blocks (`docs/format-v2-cell-index.md`) | immutable except `current.json` (`max-age=60`) |
+| `v2/a/<GSM>/<d16>.parquet` | per-cell label sidecar (cell type, chromosomal sex, inferred ancestry), referenced from the manifest (`docs/format-v2-cell-index.md` section 9) | immutable |
 
 Legacy objects `data/<GSE>/<GSE>.singlet` are retired by the migration (section 10).
 
@@ -231,7 +233,11 @@ column bodies (64-aligned)
 Required columns: `barcode` (dtype 9: whitelist indices when the sample has a whitelist pack, else strings), `called` (bitmap),
 `n_umi_exon`, `n_umi_intron`, `n_feat_exon`, `n_feat_intron` (u32; computed from the matrices at write time, also enables search).
 Optional columns carry any per-cell table of the legacy bundle (cell_calls p-values and method, doublet scores, cell-cycle scores, ambient
-contamination, cell QC metrics) so those TSV members can be derived by recipe. Content digest = SHA-256 over `"CEL2CANON1"` + for each
+contamination, cell QC metrics) so those TSV members can be derived by recipe. The migration also writes `called_v2` (bitmap) and `called_v2_fdr` (f32; NaN =
+not tested): the stored call plus the uncalled barcodes EmptyDrops separates from ambient RNA (`singlet.v2.cellcall`, design and
+validation in docs/called-v2.md); the cells member's metadata and its manifest entry carry the call's parameters as `called_v2`
+(method, version, ambient bound, alpha, pool size, FDR, seed, `validated`). `called` stays the stored call and the default
+selection. Content digest = SHA-256 over `"CEL2CANON1"` + for each
 column in name order: name, dtype, raw little-endian values.
 
 ## 6. Packs
@@ -276,8 +282,9 @@ sha256 from `v2/ref/index.json`.
   protocol, QC, cell counts, depth quantiles) run in D1 as today.
 * **Cells:** per-sample `cells` tables carry per-cell statistics; a cell query first selects samples in D1, then reads the cells tables of
   those samples (small, edge-cached) and returns `(gsm, columns)`; slicing then fetches only the chunk runs covering those columns.
-* An atlas-wide cell index (columnar shards of quantised per-cell stats, `v2/cidx/`) is a later addition when cross-atlas cell queries
-  need sub-second latency; the cells tables are its source of truth.
+* **Atlas cell index** (`v2/cidx/`, specified in `docs/format-v2-cell-index.md`): SCX1 columnar shards of per-cell counts and labels,
+  a summary for counts, and plan blocks with each sample's chunk index, served with `POST /v2/cidx/query` and `POST /v2/cidx/gather` by
+  the data Worker; the cells tables and label sidecars are its source of truth.
 
 ## 9. Legacy member mapping (migration)
 
@@ -306,3 +313,212 @@ Per study: read the live legacy bundle, decode every member, build v2, re-decode
 upload sample objects and the manifest, verify the uploaded bytes (size + MD5/ETag or SHA-256 re-read), write the ledger
 (`v2/ledger/<GSE>.jsonl` and D1 `v2_migration`). After every study is migrated and clients default to v2, legacy bundles are copied to a
 private archive bucket and removed from the public bucket; the archive is deleted after the grace period recorded in `docs/v2-migration.md`.
+
+## 11. Reading only some modalities (clients)
+
+Every member has its own byte range, so a client that wants some modalities downloads only those members. The Python, R and MCP
+clients share one vocabulary (`MODALITIES` in `python/singlet/v2/client.py`, `.v2_modality_members` in `r/R/v2.R`,
+`functions/_shared/v2-load-modalities.ts` in the website):
+
+| name | members fetched | Python (AnnData) | R (SingleCellExperiment) |
+|---|---|---|---|
+| `counts` | `exon_counts.1pz` + `intron_counts.1pz` | `X` = spliced + unspliced (summed by the client) | assay `counts` |
+| `spliced` | `exon_counts.1pz` | `layers["spliced"]` | assay `spliced` |
+| `unspliced` | `intron_counts.1pz` | `layers["unspliced"]` | assay `unspliced` |
+| `splice_junctions` | `sj_counts.1pz` | `obsm["splice_junctions"]` (cells x junctions CSR) | `altExp("splice_junctions")` |
+| `psi` | `sj_counts.1pz` | `obsm["psi"]` (float32, true PSI computed from the junctions) | `altExp("psi")` |
+| `mt` | `mt_heteroplasmy.1pz` | `obsm["mt"]` | `altExp("mt")` |
+| `vdj` | `vdj_gene_usage.1pz` | `obsm["vdj"]` | `altExp("vdj")` |
+
+* Storage stays exon + intron: there is no summed counts member. `counts` needs both matrices; `spliced` or `unspliced` alone fetch one.
+* The `cells` table is always read (barcodes, called flag, the statistics `where=` filters on).
+* The default is `counts` + `spliced` + `unspliced` (`counts` alone with `layers=False`), i.e. what clients read before this option.
+  Without `counts`, `X` is `None` (R: no `counts` assay); without any gene-level modality the gene axis is empty and the data are in
+  `obsm` / `altExp`. Feature names of an `obsm` modality are in `uns["obsm_features"][name]`; `singlet.v2.client.modality_anndata(adata,
+  name)` makes it its own AnnData. Samples are combined on the union of their feature names (first-seen order).
+* Aliases: `x`, `exon`, `intron`, `junctions`, `sj`, `splice_psi`, `mt_heteroplasmy`, `vdj_gene_usage`.
+* Availability comes from the manifest, before any sample byte is read: a modality is present when its member is a pz2 matrix with
+  rows and columns (a `stub-v1` recipe, as for `mt_heteroplasmy.1pz` in the pilot, is absent). An explicit request for a modality that
+  no requested sample carries stops with an error listing what the samples have; a sample that lacks a requested feature modality
+  contributes empty rows (with a warning), and one that has none of the requested matrices is skipped like an empty sample.
+* Whole members are coalesced only across alignment padding (gap < 64 bytes), so another member's body is never downloaded along with
+  a selection; large samples keep the two-phase plan (cells table + prefixes, then only the chunk runs of the selected members that
+  hold the wanted cells), so `where=` / `obs_filter` compose with `modalities`.
+* A legacy `.singlet` bundle is a single download: with `modalities` the result is subset after the download, with a warning.
+* MCP: `get_partial_download`, `list_bundle_files`, `get_download_url`, `get_modalities` and `slice_cells` take `modalities` and answer
+  with the byte ranges of only those members (plus `cells`).
+
+Measured on the pilot (GSE145370 / GSM4317423, a 3,186,387-byte object, 2,722 called cells; bytes on the wire for one sample, manifest
+and packs excluded): default 1,077,906; `counts` 1,077,906; `spliced` 723,670; `unspliced` 533,172; `splice_junctions` 2,136,697 (the
+junction matrix is the largest member); `vdj` 325,127.
+
+## 12. Shared splice-junction table
+
+Status: DRAFT (2026-10-23), prototype `python/singlet/v2/junctions.py`, benchmark `bench/junctions/bench_table.py`
+(results `bench/junctions/results_GSE145370.json`). Not used by the migration yet.
+
+Today every sample stores its junction names inline in `sj_counts.1pz` (`chr7:26402-31059`, ...), which is 38% of the junction bytes of
+the pilot (7.2 of 18.8 MB) and gives clients only strings to match junctions across samples. Instead, every junction the atlas uses gets
+one integer id per reference build, a sample stores its junction rows as ids, and the table is a first-class atlas resource: the same id
+in every sample, study and aggregate.
+
+### 12.1 Ids and coordinates
+
+* A junction is `(chrom, start, end)` in the pipeline's convention: `start` = 0-based position of the first intron base, `end` = 0-based
+  position of the first exon base after the intron (the intron is `[start, end)`), so `f"{chrom}:{start}-{end}"` is the pipeline's name
+  byte for byte. Strand is an attribute, not part of the key (the pipeline counts junctions unstranded).
+* Ids are `u32` below `LOCAL_BASE = 2^31`, assigned per build and **never renumbered**: a table version only appends segments, so an id
+  means the same junction in every later version (`build_version(..., previous=)` refuses anything else).
+* Ids `LOCAL_BASE + k` inside a sample mean row `k` of that sample's own junction list (12.4). A junction that is local in samples
+  written before it entered the table is matched later by coordinates (`JunctionTable.find`), never by rewriting objects.
+
+### 12.2 Objects
+
+Both are SPK2 packs (section 6), stored as `v2/ref/<id>.pack` and listed in `v2/ref/index.json` (`kind` `junction-segment` /
+`junction-version`, plus `build`).
+
+* **Segment** (pack kind 4, header `build`, `coder` = `JX1`, `coords`, `id_lo`, `n`, `tier`, `chroms`): ids `[id_lo, id_lo + n)`, rows in
+  genomic order (chromosome name in byte order, start, end), so a segment's id order is its genomic order. Body: `u32 n`, then six
+  streams, each `u8 width, u32 n, u32 clen` + zstd-19 of the `width` low little-endian byte planes of the values (`width` = bytes of the
+  largest value):
+
+  | stream | values |
+  |---|---|
+  | `chrom_runs` | pairs (chromosome index into `chroms`, row count) |
+  | `start_delta` | start minus the previous row's start, modulo 2^32 (across chromosome boundaries too: one wrapping uint32 cumulative sum restores every start) |
+  | `length` | end - start |
+  | `attr` | u8: bits 0-1 strand (0 unknown, 1 +, 2 -), bits 2-4 motif (STAR codes: 0 non-canonical, 1 GT/AG, 2 CT/AC, 3 GC/AG, 4 CT/GC, 5 AT/AC, 6 GT/AT), bit 5 annotated (an intron of an annotated transcript), bit 6 donor on an annotated intron start, bit 7 acceptor on an annotated intron end |
+  | `gene` | zigzag of the uint32 difference of (gene index + 1) into the build's exon-pack gene table; 0 = none |
+  | `n_tx` | annotated transcripts using the junction, saturating at 255 |
+
+  Decoding is numpy only (zstd, `frombuffer`, shifts, one `cumsum`); after it, id -> coordinates is an array index (O(1)), coordinates ->
+  id is a binary search on (chrom, start) plus a vectorised scan of the few rows sharing that start.
+* **Version** (pack kind 5, header `build`, `version`, `n`, `segments` = `[{id, id_lo, n, tier, bytes}]` contiguous from id 0, empty
+  body): what samples reference. A client needs the segments that hold the ids it meets; `JunctionTable(version, segments, fetch=)`
+  fetches a missing segment by its pack id (sha256-checked, like every pack) the first time an id in its range is looked up.
+* **Tiers.** `core` segments ship with the Python and R packages (like the vocabulary packs); `rare` segments are fetched from R2 on
+  demand and cached. Transcript-level detail (which transcripts use a junction) would be a separate optional pack (not specified yet),
+  not in the core.
+
+### 12.3 Building a table version
+
+Inputs per build: the GTF of the reference (annotated introns = consecutive exons of each transcript; gene, transcript count, strand;
+`read_gtf`), the genome FASTA (motif and, for unannotated junctions, strand; `motif_from_genome`), and a **junction census** of the atlas:
+for every sample, its junction names and per-junction UMIs and cells in called cells (from the legacy `sj_counts.1pz`, whose names sit
+in one range at the end of the member, so the census reads little more than that range plus the matrix once on Clipper).
+STAR's `SJ.out.tab`, where a bundle keeps it, cross-checks motif, strand and annotation.
+
+Tier rules (thresholds are parameters of the build and recorded in the version header):
+
+* `core` = every annotated junction of the build, plus unannotated junctions that pass the noise filter (12.6) in at least 3 studies;
+* `rare` = other junctions seen in at least 2 samples;
+* everything else stays local to its sample.
+
+Version 1 is cut from the census before the campaign migrates any sample. Later versions append segments (new annotated junctions from a
+newer annotation of the same build, junctions that became recurrent); they never change an existing id. The exon-pack proxy
+(`annotation_from_exon_pack`: junction ends on merged-exon boundaries) sets only the donor/acceptor bits and the gene; it is what the
+prototype uses where no GTF is at hand, not a replacement for the GTF.
+
+### 12.4 Junction rows of a sample
+
+* `sj_counts.1pz` keeps its pz2 layout; its row names become `pack_subset` with the version's pack id and `pack_index` = the row ids,
+  strictly ascending: table ids first, then `LOCAL_BASE + k`. The matrix rows are in that order.
+* The sample's own junctions are the member `sj_counts.1pz.local` (kind 3 or 5): `u16 n_chroms, u32 names_len`, NUL-joined chromosome
+  names, then a segment body (12.2) without ids, rows in genomic order. Absent when every junction is in the table.
+* The member `sj_counts.1pz.legacy_order` (kind 3 or 5, `encode_perm`: zigzag deltas of `perm`, byte planes, zstd) holds the legacy
+  row order: v2 row `r` is legacy row `perm[r]` (12.5).
+* The logical matrix of the member is the legacy one: `V2Sample.matrix()` (and the bundle API, `V2Bundle.read`) return the rows in the
+  legacy order with the legacy names (`to_legacy`), and the member digest (header and member table) is the canonical digest of that
+  legacy matrix. `matrix(..., order="stored")` gives the stored (table) order.
+* `splice_psi.1pz` (derived, section 9) is unaffected: its recipe reads `sj_counts.1pz` through the context, which sees the legacy matrix.
+* Clients reading data (`modalities=`, section 11) get the table order: `row_names(table, ids, local)` gives the names, and `.local`
+  is fetched only when ids at or above `LOCAL_BASE` occur. Integer ids are the natural key for combining samples (no string
+  matching); exposing them next to the names (`uns["obsm_ids"]`) is the next client step. The R reader does not resolve
+  `pack_subset` junction rows yet.
+* Migration: `migrate.Options(junction_table=<JunctionTable>)` writes `sj_counts.1pz` this way (`_junction_rows`, with the table's
+  packs reachable through `Options.packs`); stage 2 and `verify` check it against the legacy member exactly like any other matrix, and
+  `write_outputs` ships the version and its segments with the study's packs (`index.json` kinds `junction-version`,
+  `junction-segment`).
+
+### 12.5 Row order (decided 2026-10-23: store the permutation)
+
+The legacy row order is the order in which the pipeline first met each junction while reading the BAM. Every legacy member must still
+regenerate byte for byte (section 1, D15 unchanged), so the permutation is stored (`.legacy_order`, 12.4): about 33 KB per sample on
+the pilot (458,787 B for 14 samples), roughly 2.3 GB for the atlas. The alternative considered, accepting table order and verifying as
+named matrices, was not taken.
+
+### 12.6 Atlas aggregates and isoform use
+
+Per-junction aggregates live next to the cell index (`docs/format-v2-cell-index.md`), as SCX1 objects in `v2/cidx/obj/` referenced from
+the index directory (`"junctions": {"table_version": <pack id>, "ct": [keys per organism partition], "tot": key}`), with the same
+cell-type / tissue dictionary codes as that index version:
+
+* `jx_ct`: one row per (junction id, cell type, tissue) with any count, columns `jid` u32, `ct` u16, `tissue` u16, `n_cells` u32,
+  `n_samples` u32, `n_umi_lo` u32, `n_umi_hi` u32; sorted by `(jid, ct, tissue)` so zone maps on `jid` (genomic order within a segment)
+  prune by region.
+* `jx_tot`: one row per junction id: `n_studies`, `n_samples`, `n_cells` (u32), `n_umi_lo` / `n_umi_hi` and `n_umi_ambient_lo` /
+  `n_umi_ambient_hi` (UMIs in uncalled barcodes of the same samples, the empty-droplet noise model; it survives as this aggregate, or
+  from a per-sample ambient profile, if uncalled barcodes are pruned from matrices).
+* SCX1 values and zone maps are u32 (cell index 4.1), so atlas-wide UMI sums, which can pass 2^32 for highly expressed junctions over
+  ~297 M cells, are split into low and high words. Row groups of 65,536 rows and objects of about 2^21 rows, like the cell shards.
+
+Uses:
+
+* **PSI and exon inclusion per cell type / tissue.** Junction events are the junctions sharing a donor or an acceptor (`recipes_psi`).
+  Pooled PSI of junction `j` in group `g` = `n_umi(j, g) / sum over the event of n_umi(k, g)`, with a beta-binomial interval from the
+  counts; exon inclusion for a cassette exon = inclusion junctions against the skipping junction. Pooling over hundreds of millions of
+  cells gives the counts per group that single cells (mostly 0 or 1 read per junction) cannot.
+* **Novel junction discovery with noise control.** An unannotated junction is reported when it is recurrent (`n_studies` >= 3, from
+  independent studies so one library's artefact cannot pass), has read support (`n_umi` and `n_cells` above build thresholds), a canonical
+  motif (GT/AG, GC/AG, AT/AC on either strand), is not explained by ambient RNA (`n_umi_ambient / n_umi` below the study's ambient
+  fraction, a binomial test against it), and, where the pipeline records it, a minimum overhang. Each criterion is a column, so the
+  thresholds stay a query choice, not baked into the table.
+* Building (agreed with the cell-index session, not built yet): the builder lives in `junctions.py`; it encodes the objects with
+  `atlas.encode_shard`, names them `obj_key(blob, "scx")` (`v2/cidx/obj/<d16>.scx`, already served by the data Worker) and attaches them
+  with `BuildResult.add_extension("junctions", {...}, objects)`, which re-derives the index version id from the new directory content.
+  Cell-type / tissue codes come from that build's `directory["dicts"]`; the per-cell codes are read from the shards (or a builder hook
+  handing over each sample's `(cols, ct codes)`), and the junction counts from each sample's junction member, called columns only.
+
+### 12.7 Measurements (pilot GSE145370, 14 samples)
+
+Read-only on the 14 pilot samples (`bench/junctions/results_GSE145370.json`). Tiers for one study: core = both ends on annotated exon
+boundaries (exon-pack proxy) or seen in >= 3 samples; rare = seen in exactly 2 samples; local = one sample only.
+
+| quantity | value |
+|---|---|
+| distinct junctions in the study | 400,127 (core 182,290, rare 23,220, local 194,617) |
+| core segment | 762,999 B = 4.19 B per junction (the same names as zstd-19 text: 1,416,877 B, 7.8 B per junction) |
+| core streams | start_delta 290,970, length 327,449, gene 111,998, attr 31,857, chrom_runs 147, n_tx 34 B |
+| same columns as SCX1-style bit packing (no zstd) | 1,754,902 B (2.3x larger), so segments use zstd planes |
+| rare segment | 113,755 B for 23,220 junctions |
+| junction members, 14 samples, before | 18,844,624 B, of which inline names 7,216,062 B |
+| after: matrix with table ids | 11,980,962 B (the id list costs about 25 KB per sample) |
+| after: local junction lists | 820,338 B (194,617 junctions) |
+| legacy permutation (12.5 option 1) | 458,787 B (about 33 KB per sample) |
+| total after | 12,801,300 B without the permutation (-32%), 13,260,087 B with it (-30%) |
+
+Every sample's legacy matrix and names were reproduced exactly from the new member, the table, the local list and the permutation.
+
+Speed (wall time, median). The laptop was fully loaded by other jobs during the run: a reference `cumsum` of 1 M uint32 took
+7.6 ms in the same run (about 1 ms idle), so expect roughly 5-8x less on an idle machine; to be confirmed on an idle node.
+
+| operation | measured (loaded) |
+|---|---|
+| decode the whole core segment (182,290 junctions) | 39 ms |
+| decode a 1.09 M-junction core (scaling test) | 170 ms |
+| id -> coordinates, 1 M random ids over two segments | 275 ms |
+| coordinates -> id, 100 k junctions | 322 ms |
+| names of 100 k ids (Python strings) | 317 ms |
+
+Decoding scales linearly (about 0.15 us per junction loaded), so a core of a few hundred thousand annotated plus recurrent junctions
+meets the 100 ms target with room to spare even under load; a core over ~1 M junctions does only on an idle machine. Building Python
+name strings, not decoding, is the slowest step for a client, which is one more reason to key samples by integer id (12.4).
+
+### 12.8 Open items
+
+* Build version 1 on Clipper from the GTF and genome of each build (the laptop has neither) and the atlas census; set the core thresholds
+  from the census.
+* R reader for `pack_subset` junction rows; MCP `resolve_features` for junction ids (the Worker can decode a segment: zstd in the Worker
+  or an SCX1-style variant, see the stream sizes below).
+* Pipeline: record strand, motif and maximum overhang per junction (STAR knows them), and count junction UMIs once per molecule, in line
+  with the exon/intron fix under way.

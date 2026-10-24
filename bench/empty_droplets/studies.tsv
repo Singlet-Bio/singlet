@@ -1,0 +1,19 @@
+# GSE<TAB>samples (all | first:N | comma-separated GSMs)<TAB>why
+GSE145370	all	pilot: 10x v2, shallow (pileup counts far below STAR's)
+GSE163793	GSM4987142,GSM4987144,GSM4987146,GSM4987148,GSM4987478	barnyard: Jurkat/TALL104 + EL4/IVA12 1:1:1:1, 10x v2/v3 + Drop-seq
+GSE213957	GSM6596913,GSM6596917,GSM6596921,GSM6596920	barnyard reference: HEK293 + mouse fibroblast mixtures, 10x v3
+GSE108313	all	cell hashing (Stoeckius 2018): cell lines + PBMC
+GSE246624	first:3	PBMC, with and without sample multiplexing
+GSE157827	first:3	human brain single-nucleus (AD)
+GSE230451	first:2	mouse hippocampus single-nucleus
+GSE216784	first:4	10x Multiome GEX: fresh cells and frozen nuclei
+GSE274381	all	Seq-Well PBMC
+GSE216584	first:3	BD Rhapsody liver
+GSE233574	first:3	Parse/SPLiT-seq organoids (no droplets)
+GSE266546	first:3	Drop-seq/inDrop gut biopsies
+GSE256089	first:3	10x 5' PBMC, HTO-tagged
+GSE137539	first:3	mouse neutrophils (low-RNA cells), barnyard reference
+GSE180113	all	10x 3' monocyte-derived macrophages, one sample
+GSE230559	first:3	AML bone marrow / blood (cancer), some HTO
+GSE292909	first:2	10x 3' pooled cell line village, perturbations
+GSE179165	first:2	mouse gut immune cells, 10x 3'

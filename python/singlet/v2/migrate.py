@@ -27,11 +27,11 @@ from typing import Optional
 
 import numpy as np
 
+from . import cellcall, util
 from . import cells as cells_mod
 from . import container as C
 from . import manifest as M
 from . import packs as P
-from . import util
 from .codec import CodecError, EncodeOptions, PyCodec2, get_codec, parse_header
 from .context import (
     LegacyContext,
@@ -70,6 +70,8 @@ class Options:
         log=None,
         packs: Optional[P.PackStore] = None,
         max_stage2_rounds: int = 4,
+        junction_table=None,
+        cell_call_v2: Optional[bool] = None,
     ):
         self.chunk_cols = chunk_cols
         self.level = level
@@ -82,6 +84,10 @@ class Options:
         self.log = log or (lambda *a: print(*a, file=sys.stderr, flush=True))
         self.packs = packs or P.default_store()
         self.max_stage2_rounds = max_stage2_rounds
+        # a junctions.JunctionTable (its packs reachable through ``packs``): junction rows are stored as table ids
+        self.junction_table = junction_table
+        # called_v2 (docs/called-v2.md): True = required (fails without numba), None = when numba is installed, False = never
+        self.cell_call_v2 = cell_call_v2
 
 
 # ================================================================================================ comparisons (migration side)
@@ -123,6 +129,60 @@ def _row_names_for(csc: Csc, rel: str, lctx: LegacyContext, opts: Options):
             if genes == csc.rownames:
                 return ("pack", pk.id[:8]), {"pack": pk.id.hex(), "member": "genes"}
     return "inline", "inline"
+
+
+JUNCTION_MEMBERS = ("sj_counts.1pz",)
+
+
+def _junction_rows(w, rel, m, basis_barcodes, opts: Options, vt_code: int, flags: int):
+    """Write a junction matrix with rows as ids into ``opts.junction_table`` (docs/format-v2.md 12.4), plus the ``.local`` and
+    ``.legacy_order`` members; the member digest stays the legacy matrix's, so every check against the legacy bundle is unchanged.
+    Returns None (and writes nothing) when the codec refuses, so the caller falls back to inline names."""
+    from . import junctions as J
+
+    t = opts.junction_table
+    c = m.csc
+    ip, ix, dt, ids, local, perm = J.from_legacy(c.indptr, c.indices, c.data, c.rownames, t)
+    v2 = Csc(
+        c.m,
+        c.n,
+        ip,
+        ix.astype(np.uint32),
+        dt.astype(c.data.dtype),
+        None,
+        c.colnames,
+        dict(c.kv),
+        c.value_type,
+    )
+    v2.rownames = J.row_names(t, ids, J.decode_local(local) if local else None)
+    col_ref, col_meta = _col_names_for(c, basis_barcodes, opts)
+    eo = EncodeOptions(
+        chunk_cols=opts.chunk_cols,
+        row_names=("subset", t.id[:8], np.asarray(ids, np.uint32)),
+        col_names=col_ref,
+        level=opts.level,
+        threads=opts.threads,
+        digest=c.digest(),  # the logical matrix is the legacy one (rows in legacy order, legacy names)
+    )
+    try:
+        body = opts.codec.encode(v2, eo)
+    except CodecError:
+        return None
+    meta = {
+        "m": c.m,
+        "n": c.n,
+        "nnz": c.nnz,
+        "legacy_vt_code": vt_code,
+        "chunk_cols": parse_header(body)["chunk_cols"],
+        "names": {"rows": {"junctions": t.id.hex(), "build": t.build}, "cols": col_meta},
+        "legacy_size": m.entry.size,
+        "legacy_crc32": m.entry.crc32,
+    }
+    w.add_matrix(rel, body, c.digest(), meta, flags)
+    if local:
+        w.add_stored(rel + J.LOCAL_SUFFIX, local, {"of": rel}, 0, opts.level)
+    w.add_stored(rel + J.LEGACY_ORDER_SUFFIX, perm, {"of": rel}, 0, opts.level)
+    return True
 
 
 def _col_names_for(csc: Csc, basis_barcodes: Optional[list], opts: Options):
@@ -265,6 +325,8 @@ def migrate_sample(
             called_src = "cell_calls.tsv"
         base = cells_mod.base_table(basis_barcodes, ex_c, it_c, called, wl)
         base.meta = {"called_source": called_src, "whitelist": wl_id}
+        if called is not None:
+            _add_called_v2(base, basis_barcodes, ex_c, it_c, protocol, opts, gsm)
 
     # ---- 3. candidate cells columns from the recipes
     cand: dict[str, tuple] = {}  # name -> (dtype, values, contributor rel)
@@ -389,6 +451,35 @@ def migrate_sample(
     return res
 
 
+def _add_called_v2(base, barcodes, exon, intron, protocol, opts: Options, gsm: str) -> None:
+    """Optional cells columns ``called_v2`` (bool) and ``called_v2_fdr`` (f32, NaN = not tested) plus the call's parameters in
+    ``base.meta["called_v2"]`` (docs/called-v2.md)."""
+    if opts.cell_call_v2 is False:
+        return
+    if opts.cell_call_v2 is None and not cellcall.available():
+        opts.log("  [%s] called_v2 skipped: numba is not installed" % gsm)
+        return
+    t0 = time.time()
+    X = cellcall.gene_counts(exon, intron, barcodes)
+    cv2, fdr, params = cellcall.call(
+        X, base.called, protocol
+    )  # params go into the object: nothing run-dependent
+    base.add("called_v2", cells_mod.DT_BOOL, cv2)
+    base.add("called_v2_fdr", cells_mod.DT_F32, fdr)
+    base.meta["called_v2"] = params
+    opts.log(
+        "  [%s] called_v2: %d (+%d), lower %s, alpha %s, %.1fs"
+        % (
+            gsm,
+            params["n_called_v2"],
+            params.get("n_added", 0),
+            params.get("lower"),
+            params.get("alpha"),
+            time.time() - t0,
+        )
+    )
+
+
 def _pack_ids(infos) -> set:
     out = set()
     for i in infos:
@@ -396,6 +487,10 @@ def _pack_ids(infos) -> set:
         for part in (meta.get("names") or {}).values():
             if isinstance(part, dict) and "pack" in part:
                 out.add(part["pack"])
+            if (
+                isinstance(part, dict) and "junctions" in part
+            ):  # a junction table version (its segments follow below)
+                out.add(part["junctions"])
         if meta.get("whitelist"):
             out.add(meta["whitelist"])
     return out
@@ -455,7 +550,7 @@ def _assemble(gsm, order, mem, base, cand, lctx, opts: Options, basis_barcodes, 
                 for n in m.plan[2]:
                     if isinstance(n, str) and n.startswith("cells:"):
                         needed.add(n[6:])
-        cells_final = base.copy(only=[k for k in cand if k in needed])
+        cells_final = base.copy(only=[k for k in cand if k in needed] + list(cellcall.COLUMNS))
         for k in cand:
             if k in needed and not cells_final.has(k):
                 cells_final.add(k, cand[k][0], cand[k][1])
@@ -470,6 +565,7 @@ def _assemble(gsm, order, mem, base, cand, lctx, opts: Options, basis_barcodes, 
                 "columns": cells_final.names,
                 "called_source": base.meta.get("called_source"),
                 "whitelist": base.meta.get("whitelist"),
+                **({"called_v2": base.meta["called_v2"]} if "called_v2" in base.meta else {}),
                 "ctx": facts,
             },
             flags=C.FLAG_ANNDATA,
@@ -483,6 +579,15 @@ def _assemble(gsm, order, mem, base, cand, lctx, opts: Options, basis_barcodes, 
         e = m.entry
         flags = C.FLAG_LEGACY | (C.FLAG_ANNDATA if rel in ANNDATA_MEMBERS else 0)
         data = None
+        if (
+            m.treat == "pz2"
+            and rel in JUNCTION_MEMBERS
+            and opts.junction_table is not None
+            and m.csc.rownames
+        ):
+            extra = _junction_rows(w, rel, m, basis_barcodes, opts, legacy_vt(m.csc), flags)
+            if extra is not None:
+                continue
         if m.treat == "pz2":
             if m.body is None:
                 row_ref, row_meta = _row_names_for(m.csc, rel, lctx, opts)
@@ -729,6 +834,8 @@ def _manifest_member(info: C.MemberInfo, obj: bytes) -> dict:
                 "called_source": meta.get("called_source"),
             }
         )
+        if meta.get("called_v2") is not None:
+            d["called_v2"] = meta["called_v2"]
     return d
 
 
@@ -979,7 +1086,9 @@ def write_outputs(res: dict, opts: Options) -> dict:
     ):  # close over dependencies: intron packs name their exon pack, composites their parts
         pk = store.get(todo.pop())
         deps = []
-        if isinstance(pk, P.VocabPack):
+        if getattr(pk, "header", {}).get("segments"):  # junction table version -> its segments
+            deps = [e["id"] for e in pk.header["segments"]]
+        elif isinstance(pk, P.VocabPack):
             if pk.kind == P.KIND_COMPOSITE:
                 deps = [c.id.hex() for c, _t in pk._components()]
             elif pk.header.get("coder") == "SVPD":
@@ -998,7 +1107,9 @@ def write_outputs(res: dict, opts: Options) -> dict:
         entries.append(
             P.index_entry(
                 data,
-                "whitelist" if kind == P.KIND_WHITELIST else "vocab",
+                {P.KIND_WHITELIST: "whitelist", 4: "junction-segment", 5: "junction-version"}.get(
+                    kind, "vocab"
+                ),
                 {
                     k: v
                     for k, v in {
@@ -1074,9 +1185,18 @@ def main(argv=None) -> int:
         default=None,
         help="matrix codec: native = compiled pz2 with automatic codec 1/2 choice (default when singlet._pz2 imports), py = pure-Python codec 2",
     )
+    ap.add_argument(
+        "--no-cell-call-v2",
+        action="store_true",
+        help="do not compute called_v2 (default: computed; needs numba, pip install 'singlet-bio[migrate]')",
+    )
     a = ap.parse_args(argv)
     opts = Options(
-        chunk_cols=a.chunk_cols, codec=a.codec, recipes=a.recipes, created_at=a.created_at
+        chunk_cols=a.chunk_cols,
+        codec=a.codec,
+        recipes=a.recipes,
+        created_at=a.created_at,
+        cell_call_v2=False if a.no_cell_call_v2 else True,
     )
     res = migrate_bundle(a.bundle, a.out, a.gse, opts, a.samples.split(",") if a.samples else None)
     out = write_outputs(res, opts)
