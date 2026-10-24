@@ -3274,13 +3274,11 @@ inline bool rerun_if_wrong_strand(std::unique_ptr<PileupEngine>& engine, PileupC
     cfg.auto_strand = false;
     std::cerr << "[singlet-pileup] Strand safety net: " << static_cast<int>(before * 100)
               << "% wrong-strand reads -> re-running " << (cfg.reverse_strand ? "reverse" : "forward")
-              << "-strand
-";
+              << "-strand\n";
     auto next = std::make_unique<PileupEngine>(cfg);
     if (!next->load_references()) {
         std::cerr << "[singlet-pileup] WARNING: could not reload references for the strand retry; "
-                     "keeping the first pass
-";
+                     "keeping the first pass\n";
         return false;
     }
     next->keep_strand_probe(*engine);
@@ -3290,8 +3288,7 @@ inline bool rerun_if_wrong_strand(std::unique_ptr<PileupEngine>& engine, PileupC
     base.reverse_strand = cfg.reverse_strand;
     base.auto_strand = false;
     std::cerr << "[singlet-pileup] Strand retry: " << static_cast<int>(wrong_strand_frac(stats) * 100)
-              << "% wrong-strand reads
-";
+              << "% wrong-strand reads\n";
     return true;
 }
 
