@@ -327,8 +327,9 @@ public:
             if (e.packed == umi_packed) {
                 e.count++;
                 e.flags |= flags;
-                if (e.exon_idx == UINT32_MAX) e.exon_idx = exon_idx;
-                if (e.intron_idx == UINT32_MAX) e.intron_idx = intron_idx;
+                // smallest index, not first seen: read order (STAR threads) must not matter
+                e.exon_idx = std::min(e.exon_idx, exon_idx);
+                e.intron_idx = std::min(e.intron_idx, intron_idx);
                 return;
             }
         }
@@ -382,7 +383,9 @@ public:
 
             sorted.assign(entries.begin(), entries.end());
             std::sort(sorted.begin(), sorted.end(),
-                [](const MolEntry& a, const MolEntry& b) { return a.count > b.count; });
+                [](const MolEntry& a, const MolEntry& b) {
+                    return a.count != b.count ? a.count > b.count : a.packed < b.packed;
+                });
             const int n = static_cast<int>(sorted.size());
             parent.resize(n);
             std::iota(parent.begin(), parent.end(), 0);
@@ -402,11 +405,11 @@ public:
             comp_flags.assign(n, 0);
             comp_exon.assign(n, UINT32_MAX);
             comp_intron.assign(n, UINT32_MAX);
-            for (int i = 0; i < n; ++i) {   // descending count: root's features win
+            for (int i = 0; i < n; ++i) {   // smallest feature index over the merged UMIs
                 int r = find(i);
                 comp_flags[r] |= sorted[i].flags;
-                if (comp_exon[r] == UINT32_MAX) comp_exon[r] = sorted[i].exon_idx;
-                if (comp_intron[r] == UINT32_MAX) comp_intron[r] = sorted[i].intron_idx;
+                comp_exon[r] = std::min(comp_exon[r], sorted[i].exon_idx);
+                comp_intron[r] = std::min(comp_intron[r], sorted[i].intron_idx);
             }
             for (int i = 0; i < n; ++i)
                 if (find(i) == i) emit(bc, gene, comp_flags[i], comp_exon[i], comp_intron[i]);

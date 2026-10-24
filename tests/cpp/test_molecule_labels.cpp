@@ -76,6 +76,28 @@ void test_store() {
     auto pc = s.per_cell_molecule_stats(10);
     CHECK(pc[0].total_reads == 11, "saturation: 11 reads");
     CHECK(pc[0].unique_umis == 5, "saturation: 5 molecules");
+
+    // Read order must not change the output: STAR emits reads in a thread-count-dependent
+    // order, and a molecule's exon/intron feature used to be the first one seen.
+    struct Rec { uint64_t umi; uint32_t ex, in; uint8_t f; };
+    std::vector<Rec> recs = {
+        {pk("AAAAAAAAAA"), 12, UINT32_MAX, kE}, {pk("AAAAAAAAAA"), 10, UINT32_MAX, kE},
+        {pk("AAAAAAAAAC"), 11, UINT32_MAX, kE}, {pk("CCCCCCCCCC"), UINT32_MAX, 25, kI},
+        {pk("CCCCCCCCCC"), UINT32_MAX, 21, kI}, {pk("GGGGGGGGGG"), 13, 22, kSpan},
+        {pk("GGGGGGGGTG"), 14, UINT32_MAX, kE}, {pk("TTTTTTTTTT"), 15, UINT32_MAX, kE},
+        {pk("TTTTTTTTTA"), 16, UINT32_MAX, kE},
+    };
+    auto run = [&](bool reversed) {
+        DirectionalUmiStore st;
+        for (size_t i = 0; i < recs.size(); ++i) {
+            const auto& r = recs[reversed ? recs.size() - 1 - i : i];
+            st.record_read(0, 0, r.umi, r.ex, r.in, r.f);
+        }
+        CountingAcc e, n;
+        st.finalize_molecules(e, n, [](uint32_t, uint32_t) {}, 10, true);
+        return std::make_pair(e.n, n.n);
+    };
+    CHECK(run(false) == run(true), "read order does not change exon/intron features");
 }
 
 // ── Synthetic BAM ─────────────────────────────────────────────────────────
