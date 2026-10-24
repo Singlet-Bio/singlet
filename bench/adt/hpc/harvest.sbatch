@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --job-name=adt-harvest
 #SBATCH --account=debruinz
-#SBATCH --partition=short-bigmem
+#SBATCH --partition=debug-bigmem
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=8G
-#SBATCH --time=03:00:00
+#SBATCH --time=00:30:00
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
 # Authors' feature references from GEO (small text files only) -> $WORK/state/adt/panels_geo/
 set -euo pipefail

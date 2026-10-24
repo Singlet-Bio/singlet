@@ -113,7 +113,16 @@ def main():
             rec["status"] = "not text"
             rows.append(rec)
             continue
-        data, size = fetch(url_for(f))
+        cached = os.path.join(a.out, "raw", f)
+        if os.path.exists(cached):
+            data = open(cached, "rb").read()
+            size = len(data)
+        else:
+            data, size = fetch(url_for(f))
+            if data:
+                os.makedirs(os.path.dirname(cached), exist_ok=True)
+                with open(cached, "wb") as fh:
+                    fh.write(data)
         rec["bytes"] = size
         if data is None:
             rec["status"] = "too large"
@@ -134,7 +143,8 @@ def main():
                     ["id", "name", "read", "pattern", "sequence", "feature_type"]].to_csv(
                     os.path.join(a.out, "files", re.sub(r"\.(gz)$", "", f) + ".csv"), index=False)
                 for q, n in zip(p.sequence, p.name):
-                    cat[q].append((n, f.split("_")[0], ",".join(sorted(gses))))
+                    if isinstance(n, str) and n and n.lower() != "nan":
+                        cat[q].append((n, f.split("_")[0], ",".join(sorted(gses))))
         rows.append(rec)
         if i % 50 == 0:
             print(f"{i}/{len(cand)}", flush=True)
@@ -142,7 +152,7 @@ def main():
     out = []
     for q, lst in sorted(cat.items()):
         names = collections.Counter(n for n, _, _ in lst)
-        out.append({"sequence": q, "name": names.most_common(1)[0][0], "aliases": "|".join(sorted(names)),
+        out.append({"sequence": q, "name": names.most_common(1)[0][0], "aliases": "|".join(sorted(map(str, names))),
                     "n_files": len(lst), "studies": ",".join(sorted({g for _, _, g in lst}))})
     pd.DataFrame(out).to_csv(os.path.join(a.out, "geo_catalog.tsv"), sep="\t", index=False)
     print(pd.DataFrame(rows).status.value_counts().to_dict(), len(out), "sequences")
