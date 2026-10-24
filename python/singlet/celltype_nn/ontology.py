@@ -8,12 +8,14 @@ every output term that is ``a`` or a descendant of it, so probabilities roll up 
 Credit of an output term ``v`` against a target term ``t`` (what the loss and the evaluation share):
 
     1                     v is t or a descendant of t (finer than the author is never penalised)
-    IC(v) / IC(t)         v is a strict ancestor of t (coarser: partial credit, less the more general it is)
+    beta * IC(v) / IC(t)  v is a strict ancestor of t (coarser: partial credit, less the more general it is)
     0                     anything else (another branch)
 
 ``IC`` is structural information content over the output space: ``log |V| - log |{v in V: a is v or an ancestor of v}|``, so the
-root has 0 and a leaf of the space has the maximum. The training loss is ``-log(sum_v p_v * credit(v, t))``: the expected
-credit, which is maximised by moving mass to the deepest term the evidence supports.
+root has 0 and a leaf of the space has the maximum. The training loss is ``-log(sum_v p_v * credit(v, t))``. With ``beta = 0`` it
+is the likelihood of the label's subtree (a proper scoring rule); ``beta`` > 0 rewards a coarser answer a little more than a
+wrong one. ``beta`` must stay small: with ``beta = 1`` the loss is minimised by hedging to general terms (a 'T cell' answer
+earns 0.45 for any T cell subtype in an 822-term space), which the first training run did (section 4 of docs/celltype_nn.md).
 """
 
 from __future__ import annotations
@@ -54,8 +56,12 @@ class TermSpace:
         return self.o.ancestors(t)
 
     # --------------------------------------------------------------------------------------------------- credit and loss
-    def credit(self, t: str) -> np.ndarray:
-        """Credit of every output term against target ``t`` (any CL id)."""
+    def credit(self, t: str, beta: float = 1.0) -> np.ndarray:
+        """Credit of every output term against target ``t`` (any CL id); ancestors earn ``beta * IC(v) / IC(t)``."""
+        if beta != 1.0:
+            c = self.credit(t).copy()
+            c[c < 1] *= beta
+            return c
         hit = self._credit.get(t)
         if hit is not None:
             return hit
@@ -78,9 +84,9 @@ class TermSpace:
         n = sum(1 for v in self.terms if t in self.o.ancestors(v))
         return float(np.log(len(self.terms)) - np.log(max(n, 1)))
 
-    def credit_matrix(self, targets: Sequence[str]) -> np.ndarray:
+    def credit_matrix(self, targets: Sequence[str], beta: float = 1.0) -> np.ndarray:
         """Unique targets x output terms."""
-        return np.stack([self.credit(t) for t in targets]) if len(targets) else np.zeros((0, len(self)), np.float32)
+        return np.stack([self.credit(t, beta) for t in targets]) if len(targets) else np.zeros((0, len(self)), np.float32)
 
     # ------------------------------------------------------------------------------------------------ roll-up and calls
     def rollup(self, p: np.ndarray) -> np.ndarray:

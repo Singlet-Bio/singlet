@@ -48,13 +48,14 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--data", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
-    ap.add_argument("--epochs", type=int, default=12)
+    ap.add_argument("--epochs", type=int, default=8)
     ap.add_argument("--batch", type=int, default=1024)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--weight-decay", type=float, default=0.05)
     ap.add_argument("--hidden", default="1024,512")
     ap.add_argument("--dropout", type=float, default=0.2)
     ap.add_argument("--ensemble-weight", type=float, default=0.5)
+    ap.add_argument("--coarse-credit", type=float, default=0.25, help="beta: credit of an ancestor of the target = beta * IC ratio")
     ap.add_argument("--no-ensemble", action="store_true")
     ap.add_argument("--no-augment", action="store_true")
     ap.add_argument("--workers", type=int, default=8)
@@ -90,8 +91,18 @@ def main(argv=None) -> int:
     # target ids: author and refinement terms index one credit table
     tlist = sorted(set(author[ok].tolist()) | {r for r in refine if isinstance(r, str)})
     tix = {x: i for i, x in enumerate(tlist)}
-    credit = torch.from_numpy(sp.credit_matrix(tlist)).to(dev)
+    credit = torch.from_numpy(sp.credit_matrix(tlist, a.coarse_credit)).to(dev)
     closure = (credit >= 0.999).float()
+    # for the roll-up call metric: closure term a is consistent with target t when a is t, an ancestor or a descendant of it
+    Rup = torch.from_numpy(sp.R).to(dev)
+    key_c = torch.from_numpy(sp.ic_closure + 1e-6 * sp.depth_closure).to(dev)
+    cons = np.zeros((len(tlist), len(sp.closure)), np.float32)
+    for i, t in enumerate(tlist):
+        at = sp.ancestors(t)
+        for j, c in enumerate(sp.closure):
+            if c in at or t in sp.ancestors(c):
+                cons[i, j] = 1
+    cons = torch.from_numpy(cons).to(dev)
     a_idx = torch.tensor([tix.get(x, -1) if isinstance(x, str) else -1 for x in author], device=dev)
     r_idx = torch.tensor([tix.get(x, -1) if isinstance(x, str) else -1 for x in refine], device=dev)
     split = obs["split"].to_numpy()
@@ -134,7 +145,13 @@ def main(argv=None) -> int:
         cr = credit[a_idx[rows]]
         am = p.argmax(1)
         c_am = cr.gather(1, am[:, None]).ravel()
+        P = p @ Rup
+        k = torch.where(P >= 0.5, key_c[None, :] + 1e-3 * P, torch.full_like(P, -1e9)).argmax(1)
+        call_ok = cons[a_idx[rows]].gather(1, k[:, None]).ravel()
+        depth_call = torch.from_numpy(sp.depth_closure).to(dev)[k]
         return dict(
+            call_consistent=float(call_ok.mean()),
+            call_mean_depth=float(depth_call.mean()),
             loss=float(M.credit_loss(logits / T, cr)),
             closure_nll=float(M.credit_loss(logits / T, closure[a_idx[rows]])),
             expected_credit=float((p * cr).sum(1).mean()),
@@ -142,7 +159,7 @@ def main(argv=None) -> int:
             argmax_wrong=float((c_am <= 0).float().mean()),
         )
 
-    hist = []
+    hist, best = [], None
     for ep in range(a.epochs):
         train_b.epoch = ep
         tl, nb, te = 0.0, 0, time.time()
@@ -169,6 +186,12 @@ def main(argv=None) -> int:
         h = dict(epoch=ep, train_loss=tl / max(nb, 1), val=metrics(lv, rv), val_aug=metrics(la, ra), seconds=time.time() - te)
         hist.append(h)
         print(json.dumps(h), flush=True)
+        # keep the epoch with the best validation closure likelihood (held-out collections, augmented and not)
+        score = h["val"]["closure_nll"] + h["val_aug"]["closure_nll"]
+        if best is None or score < best[0]:
+            best = (score, ep, {k: v.detach().clone() for k, v in net.state_dict().items()})
+    net.load_state_dict(best[2])
+    print(f"best epoch {best[1]}", flush=True)
 
     # calibration: one temperature on validation logits, half clean and half augmented. The partial credit of coarser terms
     # is not a proper scoring rule (it rewards sharpening), so the temperature is fitted on the closure likelihood
@@ -179,7 +202,7 @@ def main(argv=None) -> int:
     R = torch.cat([rv, ra])
     T = M.fit_temperature(L, closure[a_idx[R]])
     net.temperature.fill_(T)
-    final = dict(temperature=T, val=metrics(lv, rv, T), val_aug=metrics(la, ra, T))
+    final = dict(temperature=T, best_epoch=best[1], val=metrics(lv, rv, T), val_aug=metrics(la, ra, T))
     print("calibrated", json.dumps(final), flush=True)
     M.save(
         net.cpu(),
