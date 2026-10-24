@@ -589,6 +589,7 @@ def test_load_genes_warns_all_missing(tmp_path):
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         result = singlet.load(str(path), genes=["FAKE1", "FAKE2"])
-        assert len(w) == 1
-        assert "None of the" in str(w[0].message)
+        # anndata under pandas 3 adds its own deprecation warnings; count only ours
+        ours = [x for x in w if "None of the" in str(x.message)]
+        assert len(ours) == 1
     assert result.shape[1] == 0
