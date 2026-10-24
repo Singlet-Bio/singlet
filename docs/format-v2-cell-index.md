@@ -457,7 +457,7 @@ What this bounds per day is in `docs/format-v2-cell-index-costs.md` (worst case 
 
 ## 9. Per-cell label sidecars
 
-**Interim interchange** (written by the annotation pipeline, `python/singlet/annotate/output.py` on its branch): one Parquet per
+**Interim interchange** (written by the annotation pipeline, `python/singlet/celllabels/output.py` on its branch): one Parquet per
 sample, `<GSM>.labels.parquet`, columns `gsm, col, cell_type_cl, cell_type_label, cell_type_score, sex_chrom, sex_score,
 ancestry_hancestro, ancestry_prob, model_version`, one row per called cell.
 

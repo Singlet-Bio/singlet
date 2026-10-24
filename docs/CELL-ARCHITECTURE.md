@@ -53,10 +53,10 @@ feature above a threshold reads only samples whose summary says they have some.
   (cell type, tissue, sample, col), ~2M rows per shard with row-group zone maps.
 - **Feature sidecars** (the interchange a feature job writes, one per sample and feature set; mirrors the labels file):
   `<GSM>.features.<feature set>.parquet` with columns `gsm` (string), `col` (int64, unique, the v2 cells-table column;
-  legacy studies: the column position in `exon_counts.1pz`, as `singlet.annotate.io.read_v2/read_legacy` give it), then one
+  legacy studies: the column position in `exon_counts.1pz`, as `singlet.celllabels.io.read_v2/read_legacy` give it), then one
   column per feature: float32 in [0, 1] for `score` (NaN = not computed), uint16 for `category`, bool for `flag`. Parquet
   metadata `singlet_features_schema = "1"`, `feature_set`, `method_version`. Rows for called cells only. The writer runs a
-  guard like `singlet.annotate.output.assert_public_safe`: exact columns as registered, value ranges, unique `col`, no
+  guard like `singlet.celllabels.output.assert_public_safe`: exact columns as registered, value ranges, unique `col`, no
   gene or genotype strings. Each feature has a `cell_feature` row (method, gene-set source and release, licence,
   `comparable`).
 - **Cross-study comparability**: only `comparable = 'atlas'` features are cross-study filters. That needs a cell-intrinsic
@@ -111,5 +111,5 @@ sidecars, summarised into `sample_cell_summary`.
 | Natural language -> cell query (`interpret` -> `POST /v2/cidx/query` `where`) | ontology-filters session; not started |
 | `--sample-meta` export of sample terms and properties for the index builder | ontology-filters session (`scripts/ontology/export-sample-meta.mjs`) |
 | Cell-index shards, feature columns and index registry, per-sample aggregate export, Worker query/gather, per-request budget and plan answers | cell-index session (Singlet-Bio/singlet#15, zdebruine/singlet-website#55) |
-| Per-cell labels (cell type, sex, ancestry) | cell-annotation session (singlet-bio `singlet.annotate`) |
+| Per-cell labels (cell type, sex, ancestry) | cell-annotation session (singlet-bio `singlet.celllabels`) |
 | Feature sidecar computation (gene-set scores, malignancy, perturbation calls) | no owner yet; prior art: singlet-agents `feat/cell-phenotype` `phenotype/states.py` (70 programs, within-sample z, 5-9 s per 10k cells) |
