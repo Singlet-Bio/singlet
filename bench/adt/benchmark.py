@@ -119,7 +119,7 @@ def run_kite(r1, r2, panel_df, cr_bcs, work, threads):
     os.makedirs(d, exist_ok=True)
     ft = os.path.join(d, "features.tsv")
     panel_df[["sequence", "name"]].to_csv(ft, sep="\t", header=False, index=False)
-    subprocess.run(["kb", "ref", "-i", f"{d}/idx", "-g", f"{d}/t2g.txt", "-f1", f"{d}/fa.fa", "--workflow", "kite:10xFB",
+    subprocess.run(["kb", "ref", "-i", f"{d}/idx", "-g", f"{d}/t2g.txt", "-f1", f"{d}/fa.fa", "--workflow", "kite",
                     ft], check=True, capture_output=True)
     fq = [x for pair in zip(r1, r2) for x in pair]
     subprocess.run(["kb", "count", "-i", f"{d}/idx", "-g", f"{d}/t2g.txt", "-x", "10xv3", "--workflow", "kite:10xFB",
@@ -137,6 +137,50 @@ def run_kite(r1, r2, panel_df, cr_bcs, work, threads):
         cols.append(X[i].toarray().ravel() if i is not None else np.zeros(X.shape[1]))
     M = sparse.csc_matrix(np.array(cols).T)
     return M, names, time.time() - t0
+
+
+def run_alevin_fry(r1, r2, panel_df, cr_bcs, work, threads, wl_path, tr_path):
+    """salmon --features index + alevin-fry (cr-like UMI resolution). 3' v3 TotalSeq-B: the unfiltered permit list is
+    the feature-side barcode list, and the resulting barcodes are translated to GEX barcodes afterwards."""
+    from singlet.adt import count as C
+    from singlet.adt import seq as S
+
+    t0 = time.time()
+    d = os.path.join(work, "afry")
+    os.makedirs(d, exist_ok=True)
+    ft = os.path.join(d, "features.tsv")
+    panel_df[["name", "sequence"]].to_csv(ft, sep="	", header=False, index=False)
+    t2g = os.path.join(d, "t2g.tsv")
+    pd.DataFrame({"a": panel_df["name"], "b": panel_df["name"]}).to_csv(t2g, sep="	", header=False, index=False)
+    subprocess.run(["salmon", "index", "-t", ft, "-i", f"{d}/idx", "--features", "-k7"], check=True, capture_output=True)
+    subprocess.run(["salmon", "alevin", "-l", "ISR", "-i", f"{d}/idx", "-1"] + r1 + ["-2"] + r2 +
+                   ["--read-geometry", "2[11-25]", "--bc-geometry", "1[1-16]", "--umi-geometry", "1[17-28]",
+                    "-o", f"{d}/map", "-p", str(threads), "--sketch"], check=True, capture_output=True)
+    # unfiltered permit list: feature-side barcodes of the translation table (one orientation; both tried below)
+    fb_codes, gex_codes = C.load_translation(tr_path)
+    pl = os.path.join(d, "fb_whitelist.txt")
+    with open(pl, "w") as f:
+        f.write("\n".join(S.decode(fb_codes, 16)) + "\n")
+    subprocess.run(["alevin-fry", "generate-permit-list", "-d", "fw", "-i", f"{d}/map", "-o", f"{d}/quant",
+                    "--unfiltered-pl", pl, "--min-reads", "1"], check=True, capture_output=True)
+    subprocess.run(["alevin-fry", "collate", "-i", f"{d}/quant", "-r", f"{d}/map", "-t", str(threads)], check=True,
+                   capture_output=True)
+    subprocess.run(["alevin-fry", "quant", "-i", f"{d}/quant", "-o", f"{d}/res", "-t", str(threads), "-m", t2g,
+                    "-r", "cr-like"], check=True, capture_output=True)
+    from scipy.io import mmread
+
+    X = sparse.csr_matrix(mmread(f"{d}/res/alevin/quants_mat.mtx"))  # cells x features
+    rows = [x.strip() for x in open(f"{d}/res/alevin/quants_mat_rows.txt")]
+    cols = [x.strip() for x in open(f"{d}/res/alevin/quants_mat_cols.txt")]
+    rc, _ = S.encode_strings(rows, 16)
+    tr, _ = C.translate(rc, (fb_codes, gex_codes))
+    idx = {b: i for i, b in enumerate(S.decode(tr, 16))}
+    M = np.zeros((len(cols), len(cr_bcs)))
+    for j, b in enumerate(cr_bcs):
+        i = idx.get(b.split("-")[0])
+        if i is not None:
+            M[:, j] = X[i].toarray().ravel()
+    return sparse.csc_matrix(M), cols, time.time() - t0
 
 
 def run_harness(r1, r2, panel_df, cr_bcs, work, max_off, src):
@@ -180,7 +224,7 @@ def main():
     ap.add_argument("--work", required=True)
     ap.add_argument("--src", default=os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     ap.add_argument("--threads", type=int, default=8)
-    ap.add_argument("--methods", default="singlet,singlet_discovered,kite,harness5,harness10")
+    ap.add_argument("--methods", default="singlet,singlet_discovered,kite,alevin_fry,harness5,harness10")
     a = ap.parse_args()
     from singlet.adt.chemistry import WL_BASE
 
@@ -217,6 +261,15 @@ def main():
             res.append(score("kite", Mk, names, cr, list(crf["name"]), secs))
         except subprocess.CalledProcessError as e:
             res.append({"method": "kite", "error": (e.stderr or b"").decode()[-2000:]})
+        print(json.dumps(res[-1])[:600], flush=True)
+    if "alevin_fry" in meth and shutil.which("alevin-fry"):
+        try:
+            Ma, names, secs = run_alevin_fry(r1, r2, panel_df, bcs, a.work, a.threads,
+                                             fetch(wl, os.path.join(a.work, os.path.basename(wl))),
+                                             fetch(tr, os.path.join(a.work, os.path.basename(tr))))
+            res.append(score("alevin_fry", Ma, names, cr, list(crf["name"]), secs))
+        except subprocess.CalledProcessError as e:
+            res.append({"method": "alevin_fry", "error": (e.stderr or b"").decode()[-2000:]})
         print(json.dumps(res[-1])[:600], flush=True)
     for mo in (5, 10):
         if f"harness{mo}" in meth:
