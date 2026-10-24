@@ -17,5 +17,5 @@ git -C $WORK/repos/singlet-py.git fetch -q origin "+refs/heads/$BRANCH:refs/head
 [ -d "$SRC" ] || git -C $WORK/repos/singlet-py.git worktree add -f --detach "$SRC" "$BRANCH"
 git -C "$SRC" checkout -q --detach "$BRANCH"
 git -C "$SRC" reset -q --hard "$BRANCH"
-ls "$SRC"/python/singlet/_pz.*.so >/dev/null 2>&1 || (cd "$SRC" && in_runtime python setup.py -q build_ext --inplace)
+ls "$SRC"/python/singlet/_pz.*.so >/dev/null 2>&1 || (cd "$SRC" && in_runtime env PYTHONPATH=$WORK/venvs/annotate-extra python -c "import setuptools, runpy, sys; sys.argv=['setup.py','-q','build_ext','--inplace']; runpy.run_path('setup.py', run_name='__main__')")
 git -C "$SRC" log --oneline -1
