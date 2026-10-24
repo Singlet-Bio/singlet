@@ -85,6 +85,35 @@ def merge_sample(libs, gex_barcodes_n):
     return M, df, {"libraries": prov, "duplicate_features_dropped": dropped}
 
 
+def hto_sidecar(M, pan, hrows, gx, out):
+    import pyarrow.parquet as pq
+
+    from singlet.adt import hto as H
+    from singlet.adt import normalize as N
+
+    totals = np.asarray(M.sum(axis=0)).ravel()
+    called = np.asarray(gx.called, dtype=bool)
+    cells = np.flatnonzero(called)
+    emp = np.flatnonzero(N.empty_droplets(totals, called))
+    X = M[hrows].tocsc()
+    amb = np.asarray(X[:, emp].sum(axis=1)).ravel()
+    call, lt, _ = H.hashed_drops(X[:, cells].toarray(), amb)
+    t, names = H.feature_sidecar(gx.gsm, cells, call, lt, list(pan.name.iloc[hrows]))
+    import io
+
+    bio = io.BytesIO()
+    pq.write_table(t, bio)
+    data = bio.getvalue()
+    d16 = hashlib.sha256(data).digest()[:16].hex()
+    key = f"v2/cf/{gx.gsm}/hto.{d16}.parquet"
+    path = os.path.join(out, "objects", key)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "wb") as f:
+        f.write(data)
+    return {"key": key, "path": path, "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest(),
+            "kind": "feature_sidecar", "singlets": int((call >= 0).sum()), "doublets": int((call == -2).sum())}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", required=True)
@@ -136,6 +165,12 @@ def main():
             with open(path + ".manifest.json", "w") as f:
                 json.dump({"gse": gse, "gsm": gex_gsm, "modalities": {"adt": frag}}, f, indent=1)
             plan.append({"gse": gse, "gsm": gex_gsm, "key": key, "path": path, "bytes": len(buf), "sha256": frag["sha256"]})
+            # per-cell hashtag calls on the merged matrix -> feature sidecar v2/cf/<GSM>/hto.<d16>.parquet
+            hrows = np.flatnonzero(pan.kind.values == "hashtag")
+            if len(hrows) >= 2:
+                hp = hto_sidecar(M, pan, hrows, gx, a.out)
+                if hp:
+                    plan.append({"gse": gse, "gsm": gex_gsm, **hp})
             samples.append({"gse": gse, "gex_gsm": gex_gsm, "libraries": ",".join(grp.gsm), "n_columns": M.shape[1],
                             "n_features": M.shape[0], "nnz": int(M.nnz), "object_bytes": len(buf),
                             "adt_rows": int((pan.kind != "hashtag").sum()), "hto_rows": int((pan.kind == "hashtag").sum())})
