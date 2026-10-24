@@ -74,7 +74,8 @@ echo "mode=$MODE run=$RUN task=$TASK commit=$C10 host=$(hostname) cpus=${SLURM_C
 
 case "$MODE" in
   list)   PY list --out "$OUT" ;;
-  census) PY census --out "$OUT" --shard "$TASK" --shards "${NSHARD:?set NSHARD}" --threads "${THREADS:-${SLURM_CPUS_PER_TASK:-8}}" ;;
+  census) PY census --out "$OUT" --shard "$TASK" --shards "${NSHARD:?set NSHARD}" --threads "${THREADS:-${SLURM_CPUS_PER_TASK:-8}}" \
+            ${STUDIES:+--studies "$STUDIES"} ${SHARDNAME:+--name "$SHARDNAME"} ;;
   reduce) PY reduce --out "$OUT" ;;
   table)  PY build --out "$OUT" --build "${BUILD:?set BUILD}" --refs "$REFS" --census-tag "$RUN" ;;
   *) echo "unknown MODE $MODE"; exit 2 ;;

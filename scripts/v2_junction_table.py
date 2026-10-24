@@ -11,9 +11,11 @@ Read-only against the public data host: legacy bundles are read by HTTP range (o
     v2_junction_table.py build   --out DIR --build GRCh38-2024-A # GTF + genome + census -> packs (core, rare, version) + report
 
 Per junction the census keeps: studies, samples, UMIs and cells in called cells, UMIs in uncalled barcodes (the ambient noise model).
-Tier rules (recorded in the version header): every annotated junction is core; an unannotated junction is core when it is seen in at
-least ``--core-min-studies`` studies with ``--core-min-umi`` UMIs in called cells, a canonical motif and at most ``--max-ambient-frac``
-of its UMIs in uncalled barcodes; other junctions seen in at least ``--rare-min-samples`` samples are rare; the rest stay local.
+Tier rules (recorded in the version header; thresholds from census_stats.py on the v1 census): every annotated junction is core;
+an unannotated junction is core with >= ``--min-studies`` studies, >= ``--core-min-umi`` UMIs in called cells, a canonical motif and
+at most ``--max-ambient-frac`` of its UMIs in uncalled barcodes, and rare (one segment per chromosome) with >= ``--rare-min-umi`` UMIs
+and the same other conditions; everything else stays local in its sample. Reference chromosome names are renamed to the pipeline's
+(``chr1`` -> ``1``) when they differ only by the UCSC prefix.
 """
 
 from __future__ import annotations
@@ -208,7 +210,9 @@ def cmd_census(a):
 
     out = Path(a.out)
     studies = [
-        ln.split("\t") for ln in (out / "studies.tsv").read_text().splitlines() if ln.strip()
+        ln.split("\t")
+        for ln in Path(a.studies or out / "studies.tsv").read_text().splitlines()
+        if ln.strip()
     ]
     mine = studies[a.shard :: a.shards]
     log(f"shard {a.shard}/{a.shards}: {len(mine)} studies")
@@ -239,8 +243,11 @@ def cmd_census(a):
         )
     else:
         df = pd.DataFrame(columns=COLS)
-    df[COLS].to_parquet(out / f"shard_{a.shard:04d}.parquet", index=False)
-    (out / f"shard_{a.shard:04d}.json").write_text(json.dumps(recs))
+    stem = (
+        f"shard_{a.name}" if a.name else f"shard_{a.shard:04d}"
+    )  # --name: a retry, merged like any shard
+    df[COLS].to_parquet(out / f"{stem}.parquet", index=False)
+    (out / f"{stem}.json").write_text(json.dumps(recs))
     log(f"shard {a.shard}: {len(df)} junction rows")
 
 
@@ -362,35 +369,45 @@ def cmd_build(a):
 
     cdir = out / f"census_{a.build}"  # a directory of parts (reduce)
     n_census = sum(pq.ParquetFile(f).metadata.num_rows for f in sorted(cdir.glob("*.parquet")))
-    # single-sample junctions are local whatever else is true, so only the others are read (an annotated junction seen in one
-    # sample only enters the table from the GTF, without counts)
-    cen = pd.read_parquet(cdir, filters=[("n_samples", ">=", a.rare_min_samples)])
-    log(f"census: {n_census} junctions, {len(cen)} in >= {a.rare_min_samples} samples")
+    # only recurrent, supported junctions can enter the table; everything else stays local in its sample
+    cen = pd.read_parquet(
+        cdir,
+        filters=[("n_studies", ">=", a.min_studies), ("umi_called", ">=", a.rare_min_umi)],
+    )
+    log(
+        f"census: {n_census} junctions, {len(cen)} in >= {a.min_studies} studies with >= {a.rare_min_umi} UMIs"
+    )
+
+    # chromosome names: the table keeps the pipeline's names (they are part of the junction names); the GTF and genome are
+    # renamed to them when they differ only by the UCSC "chr" prefix (GENCODE mouse vs the pipeline's Ensembl-style names)
+    rename = _chrom_rename(set(cen["chrom"].astype(str)), {c for c, _s, _e in ann.introns})
+    if rename:
+        log(
+            f"renaming {len(rename)} reference chromosomes to the census names, e.g. {list(rename.items())[:3]}"
+        )
+        ann = J.Annotation(
+            {(rename.get(c, c), s0, e0): v for (c, s0, e0), v in ann.introns.items()},
+            {(rename.get(c, c), s0) for c, s0 in ann.donors},
+            {(rename.get(c, c), e0) for c, e0 in ann.acceptors},
+            {(rename.get(c, c), s0, e0): v for (c, s0, e0), v in ann.strand.items()},
+        )
     annotated = pd.DataFrame(
-        [(c, s, e) for (c, s, e) in ann.introns], columns=["chrom", "start", "end"]
+        [(c, s0, e0) for (c, s0, e0) in ann.introns], columns=["chrom", "start", "end"]
     )
     allj = pd.concat([cen[["chrom", "start", "end"]], annotated]).drop_duplicates(ignore_index=True)
     allj = allj.merge(cen, on=["chrom", "start", "end"], how="left").fillna(0)
-    ann_keys = pd.MultiIndex.from_frame(annotated)
-    is_ann = pd.MultiIndex.from_frame(allj[["chrom", "start", "end"]]).isin(ann_keys)
-    n_local = n_census - len(
-        cen
-    )  # single-sample junctions (a few of them annotated: those are core all the same)
-    allj = allj[is_ann | (allj["n_samples"].to_numpy() >= a.rare_min_samples)].reset_index(
-        drop=True
-    )  # the rest stays local
-    log(
-        f"candidates: {len(allj)} (annotated or in >= {a.rare_min_samples} samples); {n_local} single-sample junctions stay local"
-    )
     j = J.Junctions(
-        sorted(set(allj["chrom"])),
+        sorted(set(allj["chrom"].astype(str))),
         np.zeros(len(allj), np.uint16),
         allj["start"].to_numpy(np.uint32),
         allj["end"].to_numpy(np.uint32),
     )
     cidx = {c: i for i, c in enumerate(j.chroms)}
-    j.chrom = allj["chrom"].map(cidx).to_numpy(np.uint16)
-    genome = J.read_fasta(str(fa), set(j.chroms))
+    j.chrom = allj["chrom"].astype(str).map(cidx).to_numpy(np.uint16)
+    inv = {v: k for k, v in rename.items()}
+    genome_ref = J.read_fasta(str(fa), {inv.get(c, c) for c in j.chroms})
+    genome = {rename.get(c, c): sq for c, sq in genome_ref.items()}
+    del genome_ref
     log(f"genome: {len(genome)} of {len(j.chroms)} junction chromosomes")
     j = J.annotate(j, ann, genome)
     del genome
@@ -398,69 +415,115 @@ def cmd_build(a):
     umi = allj["umi_called"].to_numpy(np.float64)
     amb = allj["umi_uncalled"].to_numpy(np.float64)
     frac_amb = np.where(umi + amb > 0, amb / np.maximum(umi + amb, 1), 0.0)
-    noise_ok = (
-        (allj["n_studies"].to_numpy() >= a.core_min_studies)
-        & (umi >= a.core_min_umi)
+    supported = (
+        (allj["n_studies"].to_numpy() >= a.min_studies)
         & (j.motif > 0)
         & (frac_amb <= a.max_ambient_frac)
     )
-    core = j.annotated | noise_ok
-    rare = ~core & (allj["n_samples"].to_numpy() >= a.rare_min_samples)
+    core = j.annotated | (supported & (umi >= a.core_min_umi))
+    rare = ~core & supported & (umi >= a.rare_min_umi)
     rules = {
-        "core": "annotated, or n_studies >= %d and umi_called >= %d and canonical motif and ambient fraction <= %g"
-        % (a.core_min_studies, a.core_min_umi, a.max_ambient_frac),
-        "rare": "other junctions with n_samples >= %d" % a.rare_min_samples,
-        "local": "everything else (stays in its sample object)",
+        "core": "annotated (GTF), or unannotated with n_studies >= %d, umi_called >= %d, a canonical motif and ambient fraction <= %g"
+        % (a.min_studies, a.core_min_umi, a.max_ambient_frac),
+        "rare": "unannotated with n_studies >= %d, %d <= umi_called < %d, a canonical motif and ambient fraction <= %g; one segment per chromosome"
+        % (a.min_studies, a.rare_min_umi, a.core_min_umi, a.max_ambient_frac),
+        "local": "everything else: stays in its sample object as integer coordinates",
     }
     pdir = out / "packs" / a.build
-    pdir.mkdir(parents=True, exist_ok=True)
-    seg_core = J.build_segment(j.take(np.flatnonzero(core)), build=a.build, id_lo=0, tier="core")
-    seg_rare = J.build_segment(
-        j.take(np.flatnonzero(rare)), build=a.build, id_lo=int(core.sum()), tier="rare"
-    )
+    if pdir.exists():
+        shutil.rmtree(pdir)
+    pdir.mkdir(parents=True)
+    segs = [J.build_segment(j.take(np.flatnonzero(core)), build=a.build, id_lo=0, tier="core")]
+    nxt = int(core.sum())
+    jr = j.take(np.flatnonzero(rare))
+    jr = jr.take(jr.genomic_order())
+    for c in sorted(
+        set(jr.chrom.tolist()), key=lambda i: jr.chroms[i]
+    ):  # one rare segment per chromosome
+        rows = np.flatnonzero(jr.chrom == c)
+        segs.append(
+            J.build_segment(
+                jr.take(rows), build=a.build, id_lo=nxt, tier="rare", extra={"chrom": jr.chroms[c]}
+            )
+        )
+        nxt += len(rows)
     ver = J.build_version(
-        [seg_core, seg_rare],
+        segs,
         build=a.build,
         version=1,
         extra={"rules": rules, "sources": sources, "census": a.census_tag},
     )
     entries = []
-    for data, kind in (
-        (seg_core, "junction-segment"),
-        (seg_rare, "junction-segment"),
-        (ver, "junction-version"),
-    ):
+    for data in segs + [ver]:
+        kind = "junction-version" if data is ver else "junction-segment"
         (pdir / (P.pack_id(data).hex() + ".pack")).write_bytes(data)
         entries.append(P.index_entry(data, kind, {"build": a.build}))
     P.write_index(entries, str(pdir / "index.json"))
+    times = []
+    for _ in range(7):
+        t0 = time.perf_counter()
+        J.Segment(segs[0]).j  # noqa: B018 - decode the whole core
+        times.append(time.perf_counter() - t0)
+    ref = np.arange(1_000_000, dtype=np.uint32)
     t0 = time.perf_counter()
-    J.Segment(seg_core).j  # noqa: B018 - decode once for the report
+    for _ in range(20):
+        np.cumsum(ref, dtype=np.uint32)
+    ref_ms = 1000 * (time.perf_counter() - t0) / 20
+    tot = max(float(cen["umi_called"].sum()), 1.0)
     report = {
         "build": a.build,
         "version_id": P.pack_id(ver).hex(),
+        "chrom_rename": dict(list(rename.items())[:5]) if rename else {},
         "junctions": {
             "census": int(n_census),
+            "recurrent_supported_candidates": int(len(cen)),
             "annotated_gtf": int(len(ann.introns)),
+            "annotated_seen": int((j.annotated & (allj["n_samples"].to_numpy() > 0)).sum()),
             "core": int(core.sum()),
             "core_annotated": int(j.annotated.sum()),
             "core_unannotated": int((core & ~j.annotated).sum()),
             "rare": int(rare.sum()),
-            "local_only": int((~core & ~rare).sum()) + n_local,
-            "annotated_seen": int((j.annotated & (allj["n_samples"].to_numpy() > 0)).sum()),
+            "rare_segments": len(segs) - 1,
+            "local": int(n_census - (core & (allj["n_samples"].to_numpy() > 0)).sum() - rare.sum()),
         },
-        "called_umi_share": {
-            "core": float(umi[core].sum() / max(umi.sum(), 1)),
-            "rare": float(umi[rare].sum() / max(umi.sum(), 1)),
-            "local": float(umi[~core & ~rare].sum() / max(umi.sum(), 1)),
+        "called_umi_share_of_candidates": {
+            "core": float(umi[core].sum() / tot),
+            "core_annotated": float(umi[j.annotated].sum() / tot),
+            "rare": float(umi[rare].sum() / tot),
         },
-        "bytes": {"core": len(seg_core), "rare": len(seg_rare), "version": len(ver)},
-        "decode_core_ms": round(1000 * (time.perf_counter() - t0), 1),
+        "bytes": {
+            "core": len(segs[0]),
+            "rare_total": int(sum(len(x) for x in segs[1:])),
+            "rare_largest_segment": int(max((len(x) for x in segs[1:]), default=0)),
+            "version": len(ver),
+        },
+        "decode_core_ms_median_of_7": round(1000 * float(np.median(times)), 1),
+        "reference_cumsum_1M_u32_ms": round(ref_ms, 2),
         "rules": rules,
         "sources": sources,
         "packs_dir": str(pdir),
+        "packs": [
+            {"id": e["id"], "kind": e["kind"], "bytes": e["bytes"], "sha256": e["sha256"]}
+            for e in entries
+        ],
     }
     (out / f"report_{a.build}.json").write_text(json.dumps(report, indent=1))
-    log(json.dumps(report))
+    log(json.dumps(report)[:3000])
+
+
+def _chrom_rename(census: set, reference: set) -> dict:
+    """reference name -> census name when the two differ only by the UCSC "chr" prefix (and chrM / MT); empty if they agree."""
+    if len(census & reference) >= 0.5 * max(
+        len(census & {c[3:] if c.startswith("chr") else c for c in reference}), 1
+    ):
+        return {}
+    out = {}
+    for c in reference:
+        k = c[3:] if c.startswith("chr") else c
+        k = "MT" if k == "M" else k
+        if k in census:
+            out[c] = k
+    return out
 
 
 def main(argv=None):
@@ -475,6 +538,8 @@ def main(argv=None):
     s.add_argument("--shard", type=int, required=True)
     s.add_argument("--shards", type=int, required=True)
     s.add_argument("--threads", type=int, default=8)
+    s.add_argument("--studies", help="study list to use instead of <out>/studies.tsv (a retry)")
+    s.add_argument("--name", help="write shard_<name>.parquet instead of the shard number")
     s = sub.add_parser("reduce")
     s.add_argument("--out", required=True)
     s.add_argument("--workers", type=int, default=8)
@@ -483,10 +548,10 @@ def main(argv=None):
     s.add_argument("--out", required=True)
     s.add_argument("--build", required=True, choices=sorted(REFS))
     s.add_argument("--refs", required=True, help="directory for downloaded references")
-    s.add_argument("--core-min-studies", type=int, default=3)
-    s.add_argument("--core-min-umi", type=int, default=10)
+    s.add_argument("--min-studies", type=int, default=3)
+    s.add_argument("--core-min-umi", type=int, default=1000)
+    s.add_argument("--rare-min-umi", type=int, default=100)
     s.add_argument("--max-ambient-frac", type=float, default=0.5)
-    s.add_argument("--rare-min-samples", type=int, default=2)
     s.add_argument("--census-tag", default="")
     s.add_argument("--gtf", help="local GTF instead of the download (with --genome)")
     s.add_argument("--genome", help="local genome FASTA instead of the download")

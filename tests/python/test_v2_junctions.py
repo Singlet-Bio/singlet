@@ -269,3 +269,41 @@ def test_migration_with_a_junction_table_regenerates_every_legacy_member(tmp_pat
         ref[P.pack_id(ver).hex()] == "junction-version"
         and ref[P.pack_id(seg).hex()] == "junction-segment"
     )
+
+
+def test_legacy_http_reader_retries_a_cut_response(monkeypatch):
+    """A response cut short by the network (http.client.IncompleteRead) is retried, not fatal (the census lost 16 studies to it)."""
+    import http.client
+
+    from singlet.v2 import legacy as L
+
+    calls = []
+
+    class Resp:
+        status = 206
+
+        def __init__(self, ok):
+            self.ok = ok
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            if not self.ok:
+                raise http.client.IncompleteRead(b"ab", 3)
+            return b"abcde"
+
+        def getheaders(self):
+            return [("Content-Range", "bytes 0-4/10")]
+
+    def fake_urlopen(req, timeout=None):
+        calls.append(1)
+        return Resp(len(calls) > 1)
+
+    monkeypatch.setattr(L.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(L.time, "sleep", lambda s: None)
+    src = L._HttpSource("https://example.invalid/x.singlet")
+    assert src.read(0, 5) == b"abcde" and len(calls) == 2
