@@ -1,0 +1,608 @@
+test	sample	item	n_compared	n_equal	exact	max_ulp	note
+block_recompute	bundle	exon_counts.colsums raw u64 array	14	14	True	0	decompressed colsums == per-column sum of the decoded matrix
+block_recompute	bundle	exon_counts.colsums zstd frame bytes (python-zstandard 0.25 = zstd 1.5.7, level 3 + checksum)	14	14	True		frame bytes depend on the zstd build
+block_recompute	bundle	exon_counts.colsums zstd frame bytes (zstd 1.5.5 static, production pz::zstd_compress)	14	14	True		
+block_recompute	bundle	exon_counts.perm raw block	14	14	True	0	perm_z == counting sort of per-row nnz, desc, ties by row id
+block_recompute	bundle	exon_counts.ptr raw block	14	14	True	0	ptr_z == per-column nnz (np.diff(indptr))
+block_recompute	bundle	intron_counts.colsums raw u64 array	14	14	True	0	decompressed colsums == per-column sum of the decoded matrix
+block_recompute	bundle	intron_counts.colsums zstd frame bytes (python-zstandard 0.25 = zstd 1.5.7, level 3 + checksum)	14	14	True		frame bytes depend on the zstd build
+block_recompute	bundle	intron_counts.colsums zstd frame bytes (zstd 1.5.5 static, production pz::zstd_compress)	14	14	True		
+block_recompute	bundle	intron_counts.perm raw block	14	14	True	0	perm_z == counting sort of per-row nnz, desc, ties by row id
+block_recompute	bundle	intron_counts.ptr raw block	14	14	True	0	ptr_z == per-column nnz (np.diff(indptr))
+block_recompute	bundle	sj_counts.colsums raw u64 array	14	14	True	0	decompressed colsums == per-column sum of the decoded matrix
+block_recompute	bundle	sj_counts.colsums zstd frame bytes (python-zstandard 0.25 = zstd 1.5.7, level 3 + checksum)	14	9	False		frame bytes depend on the zstd build
+block_recompute	bundle	sj_counts.colsums zstd frame bytes (zstd 1.5.5 static, production pz::zstd_compress)	14	14	True		
+block_recompute	bundle	sj_counts.perm raw block	14	14	True	0	perm_z == counting sort of per-row nnz, desc, ties by row id
+block_recompute	bundle	sj_counts.ptr raw block	14	14	True	0	ptr_z == per-column nnz (np.diff(indptr))
+block_recompute	bundle	splice_psi.colsums raw u64 array	14	14	True	0	decompressed colsums == per-column sum of the decoded matrix
+block_recompute	bundle	splice_psi.colsums zstd frame bytes (python-zstandard 0.25 = zstd 1.5.7, level 3 + checksum)	14	14	True		frame bytes depend on the zstd build
+block_recompute	bundle	splice_psi.colsums zstd frame bytes (zstd 1.5.5 static, production pz::zstd_compress)	14	14	True		
+block_recompute	bundle	splice_psi.perm raw block	14	14	True	0	perm_z == counting sort of per-row nnz, desc, ties by row id
+block_recompute	bundle	splice_psi.ptr raw block	14	14	True	0	ptr_z == per-column nnz (np.diff(indptr))
+block_recompute	bundle	vdj_gene_usage.colsums raw u64 array	14	14	True	0	decompressed colsums == per-column sum of the decoded matrix
+block_recompute	bundle	vdj_gene_usage.colsums zstd frame bytes (python-zstandard 0.25 = zstd 1.5.7, level 3 + checksum)	14	14	True		frame bytes depend on the zstd build
+block_recompute	bundle	vdj_gene_usage.colsums zstd frame bytes (zstd 1.5.5 static, production pz::zstd_compress)	14	14	True		
+block_recompute	bundle	vdj_gene_usage.perm raw block	14	14	True	0	perm_z == counting sort of per-row nnz, desc, ties by row id
+block_recompute	bundle	vdj_gene_usage.ptr raw block	14	14	True	0	ptr_z == per-column nnz (np.diff(indptr))
+splice_psi	GSM4317423	structure (indptr, indices) of splice_psi == sj entries whose junction belongs to an event	622696	622696	True		events=24756
+splice_psi	GSM4317423	stored values == trunc(float32 PSI) as pz_writer.h:615 static_cast<uint32_t> would store (stored distinct values: [0, 1])	622696	612976	False		9720 entries differ
+splice_psi	GSM4317423	stored values == rint(float32 PSI) (round half to even)	622696	622696	True		0 entries differ
+splice_psi	GSM4317423	float32 PSI: numpy recomputation vs production compute_psi() bit patterns	622696	622696	True	0	
+splice_psi	GSM4317423	splice_psi.1pz file bytes: production compute_psi() + write_1pz (float->uint32 truncation, zstd 1.5.5) vs bundle member	2454880	0	False		re-encoded 2459247 B vs stored 2454880 B
+splice_psi	GSM4317423	splice_psi.1pz file bytes: production compute_psi() + nearbyint() + write_1pz (zstd 1.5.5) vs bundle member	2454880	2454880	True		re-encoded 2454880 B vs stored 2454880 B
+splice_psi	GSM4317424	structure (indptr, indices) of splice_psi == sj entries whose junction belongs to an event	237212	237212	True		events=12741
+splice_psi	GSM4317424	stored values == trunc(float32 PSI) as pz_writer.h:615 static_cast<uint32_t> would store (stored distinct values: [0, 1])	237212	234155	False		3057 entries differ
+splice_psi	GSM4317424	stored values == rint(float32 PSI) (round half to even)	237212	237212	True		0 entries differ
+splice_psi	GSM4317424	float32 PSI: numpy recomputation vs production compute_psi() bit patterns	237212	237212	True	0	
+splice_psi	GSM4317424	splice_psi.1pz file bytes: production compute_psi() + write_1pz (float->uint32 truncation, zstd 1.5.5) vs bundle member	1464522	0	False		re-encoded 1466405 B vs stored 1464522 B
+splice_psi	GSM4317424	splice_psi.1pz file bytes: production compute_psi() + nearbyint() + write_1pz (zstd 1.5.5) vs bundle member	1464522	1464522	True		re-encoded 1464522 B vs stored 1464522 B
+splice_psi	GSM4317425	structure (indptr, indices) of splice_psi == sj entries whose junction belongs to an event	261695	261695	True		events=15243
+splice_psi	GSM4317425	stored values == trunc(float32 PSI) as pz_writer.h:615 static_cast<uint32_t> would store (stored distinct values: [0, 1])	261695	258823	False		2872 entries differ
+splice_psi	GSM4317425	stored values == rint(float32 PSI) (round half to even)	261695	261695	True		0 entries differ
+splice_psi	GSM4317425	float32 PSI: numpy recomputation vs production compute_psi() bit patterns	261695	261695	True	0	
+splice_psi	GSM4317425	splice_psi.1pz file bytes: production compute_psi() + write_1pz (float->uint32 truncation, zstd 1.5.5) vs bundle member	1657020	0	False		re-encoded 1658787 B vs stored 1657020 B
+splice_psi	GSM4317425	splice_psi.1pz file bytes: production compute_psi() + nearbyint() + write_1pz (zstd 1.5.5) vs bundle member	1657020	1657020	True		re-encoded 1657020 B vs stored 1657020 B
+splice_psi	GSM4317426	structure (indptr, indices) of splice_psi == sj entries whose junction belongs to an event	565078	565078	True		events=28154
+splice_psi	GSM4317426	stored values == trunc(float32 PSI) as pz_writer.h:615 static_cast<uint32_t> would store (stored distinct values: [0, 1])	565078	561310	False		3768 entries differ
+splice_psi	GSM4317426	stored values == rint(float32 PSI) (round half to even)	565078	565078	True		0 entries differ
+splice_psi	GSM4317426	float32 PSI: numpy recomputation vs production compute_psi() bit patterns	565078	565078	True	0	
+splice_psi	GSM4317426	splice_psi.1pz file bytes: production compute_psi() + write_1pz (float->uint32 truncation, zstd 1.5.5) vs bundle member	2768640	0	False		re-encoded 2770299 B vs stored 2768640 B
+splice_psi	GSM4317426	splice_psi.1pz file bytes: production compute_psi() + nearbyint() + write_1pz (zstd 1.5.5) vs bundle member	2768640	2768640	True		re-encoded 2768640 B vs stored 2768640 B
+splice_psi	GSM4317427	structure (indptr, indices) of splice_psi == sj entries whose junction belongs to an event	434517	434517	True		events=18618
+splice_psi	GSM4317427	stored values == trunc(float32 PSI) as pz_writer.h:615 static_cast<uint32_t> would store (stored distinct values: [0, 1])	434517	429542	False		4975 entries differ
+splice_psi	GSM4317427	stored values == rint(float32 PSI) (round half to even)	434517	434517	True		0 entries differ
+splice_psi	GSM4317427	float32 PSI: numpy recomputation vs production compute_psi() bit patterns	434517	434517	True	0	
+splice_psi	GSM4317427	splice_psi.1pz file bytes: production compute_psi() + write_1pz (float->uint32 truncation, zstd 1.5.5) vs bundle member	2057477	0	False		re-encoded 2059608 B vs stored 2057477 B
+splice_psi	GSM4317427	splice_psi.1pz file bytes: production compute_psi() + nearbyint() + write_1pz (zstd 1.5.5) vs bundle member	2057477	2057477	True		re-encoded 2057477 B vs stored 2057477 B
+splice_psi	GSM4317428	structure (indptr, indices) of splice_psi == sj entries whose junction belongs to an event	104102	104102	True		events=7440
+splice_psi	GSM4317428	stored values == trunc(float32 PSI) as pz_writer.h:615 static_cast<uint32_t> would store (stored distinct values: [0, 1])	104102	102467	False		1635 entries differ
+splice_psi	GSM4317428	stored values == rint(float32 PSI) (round half to even)	104102	104102	True		0 entries differ
+splice_psi	GSM4317428	float32 PSI: numpy recomputation vs production compute_psi() bit patterns	104102	104102	True	0	
+splice_psi	GSM4317428	splice_psi.1pz file bytes: production compute_psi() + write_1pz (float->uint32 truncation, zstd 1.5.5) vs bundle member	1021175	0	False		re-encoded 1021897 B vs stored 1021175 B
+splice_psi	GSM4317428	splice_psi.1pz file bytes: production compute_psi() + nearbyint() + write_1pz (zstd 1.5.5) vs bundle member	1021175	1021175	True		re-encoded 1021175 B vs stored 1021175 B
+splice_psi	GSM4317429	structure (indptr, indices) of splice_psi == sj entries whose junction belongs to an event	372571	372571	True		events=14317
+splice_psi	GSM4317429	stored values == trunc(float32 PSI) as pz_writer.h:615 static_cast<uint32_t> would store (stored distinct values: [0, 1])	372571	361427	False		11144 entries differ
+splice_psi	GSM4317429	stored values == rint(float32 PSI) (round half to even)	372571	372571	True		0 entries differ
+splice_psi	GSM4317429	float32 PSI: numpy recomputation vs production compute_psi() bit patterns	372571	372571	True	0	
+splice_psi	GSM4317429	splice_psi.1pz file bytes: production compute_psi() + write_1pz (float->uint32 truncation, zstd 1.5.5) vs bundle member	1636166	0	False		re-encoded 1640422 B vs stored 1636166 B
+splice_psi	GSM4317429	splice_psi.1pz file bytes: production compute_psi() + nearbyint() + write_1pz (zstd 1.5.5) vs bundle member	1636166	1636166	True		re-encoded 1636166 B vs stored 1636166 B
+splice_psi	GSM4317430	structure (indptr, indices) of splice_psi == sj entries whose junction belongs to an event	228176	228176	True		events=13270
+splice_psi	GSM4317430	stored values == trunc(float32 PSI) as pz_writer.h:615 static_cast<uint32_t> would store (stored distinct values: [0, 1])	228176	224776	False		3400 entries differ
+splice_psi	GSM4317430	stored values == rint(float32 PSI) (round half to even)	228176	228176	True		0 entries differ
+splice_psi	GSM4317430	float32 PSI: numpy recomputation vs production compute_psi() bit patterns	228176	228176	True	0	
+splice_psi	GSM4317430	splice_psi.1pz file bytes: production compute_psi() + write_1pz (float->uint32 truncation, zstd 1.5.5) vs bundle member	1379959	0	False		re-encoded 1381644 B vs stored 1379959 B
+splice_psi	GSM4317430	splice_psi.1pz file bytes: production compute_psi() + nearbyint() + write_1pz (zstd 1.5.5) vs bundle member	1379959	1379959	True		re-encoded 1379959 B vs stored 1379959 B
+splice_psi	GSM4317431	structure (indptr, indices) of splice_psi == sj entries whose junction belongs to an event	174114	174114	True		events=11983
+splice_psi	GSM4317431	stored values == trunc(float32 PSI) as pz_writer.h:615 static_cast<uint32_t> would store (stored distinct values: [0, 1])	174114	171737	False		2377 entries differ
+splice_psi	GSM4317431	stored values == rint(float32 PSI) (round half to even)	174114	174114	True		0 entries differ
+splice_psi	GSM4317431	float32 PSI: numpy recomputation vs production compute_psi() bit patterns	174114	174114	True	0	
+splice_psi	GSM4317431	splice_psi.1pz file bytes: production compute_psi() + write_1pz (float->uint32 truncation, zstd 1.5.5) vs bundle member	1210107	0	False		re-encoded 1211197 B vs stored 1210107 B
+splice_psi	GSM4317431	splice_psi.1pz file bytes: production compute_psi() + nearbyint() + write_1pz (zstd 1.5.5) vs bundle member	1210107	1210107	True		re-encoded 1210107 B vs stored 1210107 B
+splice_psi	GSM4317432	structure (indptr, indices) of splice_psi == sj entries whose junction belongs to an event	558048	558048	True		events=24604
+splice_psi	GSM4317432	stored values == trunc(float32 PSI) as pz_writer.h:615 static_cast<uint32_t> would store (stored distinct values: [0, 1])	558048	555528	False		2520 entries differ
+splice_psi	GSM4317432	stored values == rint(float32 PSI) (round half to even)	558048	558048	True		0 entries differ
+splice_psi	GSM4317432	float32 PSI: numpy recomputation vs production compute_psi() bit patterns	558048	558048	True	0	
+splice_psi	GSM4317432	splice_psi.1pz file bytes: production compute_psi() + write_1pz (float->uint32 truncation, zstd 1.5.5) vs bundle member	2285481	0	False		re-encoded 2287023 B vs stored 2285481 B
+splice_psi	GSM4317432	splice_psi.1pz file bytes: production compute_psi() + nearbyint() + write_1pz (zstd 1.5.5) vs bundle member	2285481	2285481	True		re-encoded 2285481 B vs stored 2285481 B
+splice_psi	GSM4317433	structure (indptr, indices) of splice_psi == sj entries whose junction belongs to an event	361961	361961	True		events=22910
+splice_psi	GSM4317433	stored values == trunc(float32 PSI) as pz_writer.h:615 static_cast<uint32_t> would store (stored distinct values: [0, 1])	361961	359978	False		1983 entries differ
+splice_psi	GSM4317433	stored values == rint(float32 PSI) (round half to even)	361961	361961	True		0 entries differ
+splice_psi	GSM4317433	float32 PSI: numpy recomputation vs production compute_psi() bit patterns	361961	361961	True	0	
+splice_psi	GSM4317433	splice_psi.1pz file bytes: production compute_psi() + write_1pz (float->uint32 truncation, zstd 1.5.5) vs bundle member	2120395	0	False		re-encoded 2122214 B vs stored 2120395 B
+splice_psi	GSM4317433	splice_psi.1pz file bytes: production compute_psi() + nearbyint() + write_1pz (zstd 1.5.5) vs bundle member	2120395	2120395	True		re-encoded 2120395 B vs stored 2120395 B
+splice_psi	GSM4317434	structure (indptr, indices) of splice_psi == sj entries whose junction belongs to an event	253603	253603	True		events=15865
+splice_psi	GSM4317434	stored values == trunc(float32 PSI) as pz_writer.h:615 static_cast<uint32_t> would store (stored distinct values: [0, 1])	253603	251885	False		1718 entries differ
+splice_psi	GSM4317434	stored values == rint(float32 PSI) (round half to even)	253603	253603	True		0 entries differ
+splice_psi	GSM4317434	float32 PSI: numpy recomputation vs production compute_psi() bit patterns	253603	253603	True	0	
+splice_psi	GSM4317434	splice_psi.1pz file bytes: production compute_psi() + write_1pz (float->uint32 truncation, zstd 1.5.5) vs bundle member	1587258	0	False		re-encoded 1589023 B vs stored 1587258 B
+splice_psi	GSM4317434	splice_psi.1pz file bytes: production compute_psi() + nearbyint() + write_1pz (zstd 1.5.5) vs bundle member	1587258	1587258	True		re-encoded 1587258 B vs stored 1587258 B
+splice_psi	GSM4317435	structure (indptr, indices) of splice_psi == sj entries whose junction belongs to an event	255978	255978	True		events=15149
+splice_psi	GSM4317435	stored values == trunc(float32 PSI) as pz_writer.h:615 static_cast<uint32_t> would store (stored distinct values: [0, 1])	255978	252556	False		3422 entries differ
+splice_psi	GSM4317435	stored values == rint(float32 PSI) (round half to even)	255978	255978	True		0 entries differ
+splice_psi	GSM4317435	float32 PSI: numpy recomputation vs production compute_psi() bit patterns	255978	255978	True	0	
+splice_psi	GSM4317435	splice_psi.1pz file bytes: production compute_psi() + write_1pz (float->uint32 truncation, zstd 1.5.5) vs bundle member	1564904	0	False		re-encoded 1567136 B vs stored 1564904 B
+splice_psi	GSM4317435	splice_psi.1pz file bytes: production compute_psi() + nearbyint() + write_1pz (zstd 1.5.5) vs bundle member	1564904	1564904	True		re-encoded 1564904 B vs stored 1564904 B
+splice_psi	GSM4317436	structure (indptr, indices) of splice_psi == sj entries whose junction belongs to an event	234844	234844	True		events=13227
+splice_psi	GSM4317436	stored values == trunc(float32 PSI) as pz_writer.h:615 static_cast<uint32_t> would store (stored distinct values: [0, 1])	234844	230488	False		4356 entries differ
+splice_psi	GSM4317436	stored values == rint(float32 PSI) (round half to even)	234844	234844	True		0 entries differ
+splice_psi	GSM4317436	float32 PSI: numpy recomputation vs production compute_psi() bit patterns	234844	234844	True	0	
+splice_psi	GSM4317436	splice_psi.1pz file bytes: production compute_psi() + write_1pz (float->uint32 truncation, zstd 1.5.5) vs bundle member	1367406	0	False		re-encoded 1369365 B vs stored 1367406 B
+splice_psi	GSM4317436	splice_psi.1pz file bytes: production compute_psi() + nearbyint() + write_1pz (zstd 1.5.5) vs bundle member	1367406	1367406	True		re-encoded 1367406 B vs stored 1367406 B
+cell_calls	GSM4317423	log10_umi column == %.4f of log10(exon colsum)	2722	2722	True		python math.log10
+cell_calls	GSM4317423	log10_umi column using numpy float64 log10	2722	2722	True		
+cell_calls	GSM4317423	whole file regenerated from (called barcode set in stored order, exon colsums, constants)	1	1	True		methods=['star_solo'] pvalues=['0.0000e+00'] all_TRUE=True sorted_rows=True
+cell_calls	GSM4317423	whole file regenerated with rows in bytewise-sorted barcode order	1	1	True		
+cell_calls_flag_info	GSM4317423	called set vs best single UMI threshold: exceptions	39217	38958	False		n_called=2722 threshold_umi=44 bitmap=4903B flag|depth=169B exceptions_list=285B
+cell_calls	GSM4317424	log10_umi column == %.4f of log10(exon colsum)	1727	1727	True		python math.log10
+cell_calls	GSM4317424	log10_umi column using numpy float64 log10	1727	1727	True		
+cell_calls	GSM4317424	whole file regenerated from (called barcode set in stored order, exon colsums, constants)	1	1	True		methods=['star_solo'] pvalues=['0.0000e+00'] all_TRUE=True sorted_rows=True
+cell_calls	GSM4317424	whole file regenerated with rows in bytewise-sorted barcode order	1	1	True		
+cell_calls_flag_info	GSM4317424	called set vs best single UMI threshold: exceptions	27803	27618	False		n_called=1727 threshold_umi=37 bitmap=3476B flag|depth=121B exceptions_list=204B
+cell_calls	GSM4317425	log10_umi column == %.4f of log10(exon colsum)	1207	1207	True		python math.log10
+cell_calls	GSM4317425	log10_umi column using numpy float64 log10	1207	1207	True		
+cell_calls	GSM4317425	whole file regenerated from (called barcode set in stored order, exon colsums, constants)	1	1	True		methods=['star_solo'] pvalues=['0.0000e+00'] all_TRUE=True sorted_rows=True
+cell_calls	GSM4317425	whole file regenerated with rows in bytewise-sorted barcode order	1	1	True		
+cell_calls_flag_info	GSM4317425	called set vs best single UMI threshold: exceptions	31645	31563	False		n_called=1207 threshold_umi=51 bitmap=3956B flag|depth=86B exceptions_list=106B
+cell_calls	GSM4317426	log10_umi column == %.4f of log10(exon colsum)	2928	2928	True		python math.log10
+cell_calls	GSM4317426	log10_umi column using numpy float64 log10	2928	2928	True		
+cell_calls	GSM4317426	whole file regenerated from (called barcode set in stored order, exon colsums, constants)	1	1	True		methods=['star_solo'] pvalues=['0.0000e+00'] all_TRUE=True sorted_rows=True
+cell_calls	GSM4317426	whole file regenerated with rows in bytewise-sorted barcode order	1	1	True		
+cell_calls_flag_info	GSM4317426	called set vs best single UMI threshold: exceptions	63995	63817	False		n_called=2928 threshold_umi=64 bitmap=8000B flag|depth=126B exceptions_list=224B
+cell_calls	GSM4317427	log10_umi column == %.4f of log10(exon colsum)	3576	3576	True		python math.log10
+cell_calls	GSM4317427	log10_umi column using numpy float64 log10	3576	3576	True		
+cell_calls	GSM4317427	whole file regenerated from (called barcode set in stored order, exon colsums, constants)	1	1	True		methods=['star_solo'] pvalues=['0.0000e+00'] all_TRUE=True sorted_rows=True
+cell_calls	GSM4317427	whole file regenerated with rows in bytewise-sorted barcode order	1	1	True		
+cell_calls_flag_info	GSM4317427	called set vs best single UMI threshold: exceptions	41934	41494	False		n_called=3576 threshold_umi=28 bitmap=5242B flag|depth=269B exceptions_list=444B
+cell_calls	GSM4317428	log10_umi column == %.4f of log10(exon colsum)	2473	2473	True		python math.log10
+cell_calls	GSM4317428	log10_umi column using numpy float64 log10	2473	2473	True		
+cell_calls	GSM4317428	whole file regenerated from (called barcode set in stored order, exon colsums, constants)	1	1	True		methods=['star_solo'] pvalues=['0.0000e+00'] all_TRUE=True sorted_rows=True
+cell_calls	GSM4317428	whole file regenerated with rows in bytewise-sorted barcode order	1	1	True		
+cell_calls_flag_info	GSM4317428	called set vs best single UMI threshold: exceptions	20985	20188	False		n_called=2473 threshold_umi=51 bitmap=2624B flag|depth=348B exceptions_list=617B
+cell_calls	GSM4317429	log10_umi column == %.4f of log10(exon colsum)	3820	3820	True		python math.log10
+cell_calls	GSM4317429	log10_umi column using numpy float64 log10	3820	3820	True		
+cell_calls	GSM4317429	whole file regenerated from (called barcode set in stored order, exon colsums, constants)	1	1	True		methods=['star_solo'] pvalues=['0.0000e+00'] all_TRUE=True sorted_rows=True
+cell_calls	GSM4317429	whole file regenerated with rows in bytewise-sorted barcode order	1	1	True		
+cell_calls_flag_info	GSM4317429	called set vs best single UMI threshold: exceptions	25067	24582	False		n_called=3820 threshold_umi=21 bitmap=3134B flag|depth=283B exceptions_list=436B
+cell_calls	GSM4317430	log10_umi column == %.4f of log10(exon colsum)	3732	3732	True		python math.log10
+cell_calls	GSM4317430	log10_umi column using numpy float64 log10	3732	3732	True		
+cell_calls	GSM4317430	whole file regenerated from (called barcode set in stored order, exon colsums, constants)	1	1	True		methods=['star_solo'] pvalues=['0.0000e+00'] all_TRUE=True sorted_rows=True
+cell_calls	GSM4317430	whole file regenerated with rows in bytewise-sorted barcode order	1	1	True		
+cell_calls_flag_info	GSM4317430	called set vs best single UMI threshold: exceptions	19556	19320	False		n_called=3732 threshold_umi=20 bitmap=2445B flag|depth=160B exceptions_list=234B
+cell_calls	GSM4317431	log10_umi column == %.4f of log10(exon colsum)	3371	3371	True		python math.log10
+cell_calls	GSM4317431	log10_umi column using numpy float64 log10	3371	3371	True		
+cell_calls	GSM4317431	whole file regenerated from (called barcode set in stored order, exon colsums, constants)	1	1	True		methods=['star_solo'] pvalues=['0.0000e+00'] all_TRUE=True sorted_rows=True
+cell_calls	GSM4317431	whole file regenerated with rows in bytewise-sorted barcode order	1	1	True		
+cell_calls_flag_info	GSM4317431	called set vs best single UMI threshold: exceptions	18257	18058	False		n_called=3371 threshold_umi=16 bitmap=2283B flag|depth=111B exceptions_list=201B
+cell_calls	GSM4317432	log10_umi column == %.4f of log10(exon colsum)	4289	4289	True		python math.log10
+cell_calls	GSM4317432	log10_umi column using numpy float64 log10	4289	4289	True		
+cell_calls	GSM4317432	whole file regenerated from (called barcode set in stored order, exon colsums, constants)	1	1	True		methods=['star_solo'] pvalues=['0.0000e+00'] all_TRUE=True sorted_rows=True
+cell_calls	GSM4317432	whole file regenerated with rows in bytewise-sorted barcode order	1	1	True		
+cell_calls_flag_info	GSM4317432	called set vs best single UMI threshold: exceptions	32388	32043	False		n_called=4289 threshold_umi=35 bitmap=4049B flag|depth=246B exceptions_list=348B
+cell_calls	GSM4317433	log10_umi column == %.4f of log10(exon colsum)	2028	2028	True		python math.log10
+cell_calls	GSM4317433	log10_umi column using numpy float64 log10	2028	2028	True		
+cell_calls	GSM4317433	whole file regenerated from (called barcode set in stored order, exon colsums, constants)	1	1	True		methods=['star_solo'] pvalues=['0.0000e+00'] all_TRUE=True sorted_rows=True
+cell_calls	GSM4317433	whole file regenerated with rows in bytewise-sorted barcode order	1	1	True		
+cell_calls_flag_info	GSM4317433	called set vs best single UMI threshold: exceptions	40263	40160	False		n_called=2028 threshold_umi=64 bitmap=5033B flag|depth=79B exceptions_list=133B
+cell_calls	GSM4317434	log10_umi column == %.4f of log10(exon colsum)	2106	2106	True		python math.log10
+cell_calls	GSM4317434	log10_umi column using numpy float64 log10	2106	2106	True		
+cell_calls	GSM4317434	whole file regenerated from (called barcode set in stored order, exon colsums, constants)	1	1	True		methods=['star_solo'] pvalues=['0.0000e+00'] all_TRUE=True sorted_rows=True
+cell_calls	GSM4317434	whole file regenerated with rows in bytewise-sorted barcode order	1	1	True		
+cell_calls_flag_info	GSM4317434	called set vs best single UMI threshold: exceptions	23834	23750	False		n_called=2106 threshold_umi=35 bitmap=2980B flag|depth=65B exceptions_list=104B
+cell_calls	GSM4317435	log10_umi column == %.4f of log10(exon colsum)	2977	2977	True		python math.log10
+cell_calls	GSM4317435	log10_umi column using numpy float64 log10	2977	2977	True		
+cell_calls	GSM4317435	whole file regenerated from (called barcode set in stored order, exon colsums, constants)	1	1	True		methods=['star_solo'] pvalues=['0.0000e+00'] all_TRUE=True sorted_rows=True
+cell_calls	GSM4317435	whole file regenerated with rows in bytewise-sorted barcode order	1	1	True		
+cell_calls_flag_info	GSM4317435	called set vs best single UMI threshold: exceptions	23006	22753	False		n_called=2977 threshold_umi=29 bitmap=2876B flag|depth=153B exceptions_list=255B
+cell_calls	GSM4317436	log10_umi column == %.4f of log10(exon colsum)	3658	3658	True		python math.log10
+cell_calls	GSM4317436	log10_umi column using numpy float64 log10	3658	3658	True		
+cell_calls	GSM4317436	whole file regenerated from (called barcode set in stored order, exon colsums, constants)	1	1	True		methods=['star_solo'] pvalues=['0.0000e+00'] all_TRUE=True sorted_rows=True
+cell_calls	GSM4317436	whole file regenerated with rows in bytewise-sorted barcode order	1	1	True		
+cell_calls_flag_info	GSM4317436	called set vs best single UMI threshold: exceptions	19876	19610	False		n_called=3658 threshold_umi=21 bitmap=2485B flag|depth=174B exceptions_list=258B
+cell_calls	pbmc_v2_typical	log10_umi column == %.4f of log10(exon colsum)	5428	5428	True		python math.log10
+cell_calls	pbmc_v2_typical	log10_umi column using numpy float64 log10	5428	5428	True		
+cell_calls	pbmc_v2_typical	whole file regenerated from (called barcode set in stored order, exon colsums, constants)	1	1	True		methods=['star_solo'] pvalues=['0.0000e+00'] all_TRUE=True sorted_rows=True
+cell_calls	pbmc_v2_typical	whole file regenerated with rows in bytewise-sorted barcode order	1	1	True		
+cell_calls_flag_info	pbmc_v2_typical	called set vs best single UMI threshold: exceptions	15185	15174	False		n_called=5428 threshold_umi=270 bitmap=1899B flag|depth=54B exceptions_list=20B
+cell_calls	pbmc_v2_shallow	log10_umi column == %.4f of log10(exon colsum)	41725	41725	True		python math.log10
+cell_calls	pbmc_v2_shallow	log10_umi column using numpy float64 log10	41725	41725	True		
+cell_calls	pbmc_v2_shallow	whole file regenerated from (called barcode set in stored order, exon colsums, constants)	1	1	True		methods=['star_solo'] pvalues=['0.0000e+00'] all_TRUE=True sorted_rows=True
+cell_calls	pbmc_v2_shallow	whole file regenerated with rows in bytewise-sorted barcode order	1	1	True		
+cell_calls_flag_info	pbmc_v2_shallow	called set vs best single UMI threshold: exceptions	96446	94887	False		n_called=41725 threshold_umi=57 bitmap=12056B flag|depth=3284B exceptions_list=1444B
+cell_calls	pbmc_v3_lowgenes	log10_umi column == %.4f of log10(exon colsum)	11124	11124	True		python math.log10
+cell_calls	pbmc_v3_lowgenes	log10_umi column using numpy float64 log10	11124	11124	True		
+cell_calls	pbmc_v3_lowgenes	whole file regenerated from (called barcode set in stored order, exon colsums, constants)	1	1	True		methods=['star_solo'] pvalues=['0.0000e+00'] all_TRUE=True sorted_rows=True
+cell_calls	pbmc_v3_lowgenes	whole file regenerated with rows in bytewise-sorted barcode order	1	1	True		
+cell_calls_flag_info	pbmc_v3_lowgenes	called set vs best single UMI threshold: exceptions	71061	70957	False		n_called=11124 threshold_umi=146 bitmap=8883B flag|depth=169B exceptions_list=145B
+cell_calls	brain_sn_v3_deep	log10_umi column == %.4f of log10(exon colsum)	3288	3288	True		python math.log10
+cell_calls	brain_sn_v3_deep	log10_umi column using numpy float64 log10	3288	3288	True		
+cell_calls	brain_sn_v3_deep	whole file regenerated from (called barcode set in stored order, exon colsums, constants)	1	1	True		methods=['star_solo'] pvalues=['0.0000e+00'] all_TRUE=True sorted_rows=True
+cell_calls	brain_sn_v3_deep	whole file regenerated with rows in bytewise-sorted barcode order	1	1	True		
+cell_calls_flag_info	brain_sn_v3_deep	called set vs best single UMI threshold: exceptions	84424	84356	False		n_called=3288 threshold_umi=461 bitmap=10553B flag|depth=102B exceptions_list=103B
+cell_calls	brain_sn_v3_intronic	log10_umi column == %.4f of log10(exon colsum)	8743	8743	True		python math.log10
+cell_calls	brain_sn_v3_intronic	log10_umi column using numpy float64 log10	8743	8743	True		
+cell_calls	brain_sn_v3_intronic	whole file regenerated from (called barcode set in stored order, exon colsums, constants)	1	1	True		methods=['star_solo'] pvalues=['0.0000e+00'] all_TRUE=True sorted_rows=True
+cell_calls	brain_sn_v3_intronic	whole file regenerated with rows in bytewise-sorted barcode order	1	1	True		
+cell_calls_flag_info	brain_sn_v3_intronic	called set vs best single UMI threshold: exceptions	78894	78212	False		n_called=8743 threshold_umi=51 bitmap=9862B flag|depth=342B exceptions_list=711B
+cell_calls	tcell_5p	log10_umi column == %.4f of log10(exon colsum)	12363	12363	True		python math.log10
+cell_calls	tcell_5p	log10_umi column using numpy float64 log10	12363	12363	True		
+cell_calls	tcell_5p	whole file regenerated from (called barcode set in stored order, exon colsums, constants)	1	1	True		methods=['star_solo'] pvalues=['0.0000e+00'] all_TRUE=True sorted_rows=True
+cell_calls	tcell_5p	whole file regenerated with rows in bytewise-sorted barcode order	1	1	True		
+cell_calls_flag_info	tcell_5p	called set vs best single UMI threshold: exceptions	69249	67962	False		n_called=12363 threshold_umi=587 bitmap=8657B flag|depth=571B exceptions_list=1160B
+cell_calls	tumor_3p	log10_umi column == %.4f of log10(exon colsum)	3820	3820	True		python math.log10
+cell_calls	tumor_3p	log10_umi column using numpy float64 log10	3820	3820	True		
+cell_calls	tumor_3p	whole file regenerated from (called barcode set in stored order, exon colsums, constants)	1	1	True		methods=['star_solo'] pvalues=['0.0000e+00'] all_TRUE=True sorted_rows=True
+cell_calls	tumor_3p	whole file regenerated with rows in bytewise-sorted barcode order	1	1	True		
+cell_calls_flag_info	tumor_3p	called set vs best single UMI threshold: exceptions	25067	24582	False		n_called=3820 threshold_umi=21 bitmap=3134B flag|depth=283B exceptions_list=436B
+summary.json	GSM4317423	n_cells_called	1	1	True		stored=2722 recomputed=2722
+summary.json	GSM4317423	estimated_cells	1	1	True		stored=2722 recomputed=2722
+summary.json	GSM4317423	median_umi_per_cell	1	1	True		stored=70 recomputed=70
+summary.json	GSM4317423	median_umis_per_cell	1	1	True		stored=70 recomputed=70
+summary.json	GSM4317423	median_genes_per_cell	1	1	True		stored=58 recomputed=58
+summary.json	GSM4317423	total_genes_detected	1	1	True		stored=13558 recomputed=13558
+summary.json	GSM4317423	fraction_reads_in_cells	1	1	True		stored=0.562135 recomputed=0.562135
+summary.json	GSM4317423	mean_reads_per_cell	1	1	True		stored=10142.4 recomputed=10142.4
+summary.json	GSM4317423	exonic_fraction	1	1	True		stored=0.0169979 recomputed=0.0169979
+summary.json	GSM4317423	intronic_fraction	1	1	True		stored=0.00871458 recomputed=0.00871458
+summary.json	GSM4317423	intergenic_fraction	1	1	True		stored=0.974288 recomputed=0.974288
+summary.json	GSM4317423	mapping_rate	1	1	True		stored=0.699471 recomputed=0.699471
+summary.json	GSM4317423	uniquely_mapped_pct	1	1	True		stored=69.9471 recomputed=69.9471
+summary.json	GSM4317423	n_input_reads	1	1	True		stored=30000000 recomputed=30000000
+summary.json	GSM4317423	total_reads	1	1	True		stored=30000000 recomputed=30000000
+summary.json	GSM4317423	n_uniquely_mapped	1	1	True		stored=20984121 recomputed=20984121
+summary.json	GSM4317423	mapped_reads	1	1	True		stored=20984121 recomputed=20984121
+pileup_stats.json	GSM4317423	exon_hits == matrix quantity	1	1	True		stored=469272 recomputed=469272
+pileup_stats.json	GSM4317423	intron_hits == matrix quantity	1	1	True		stored=240589 recomputed=240589
+pileup_stats.json	GSM4317423	sj_hits == matrix quantity	1	1	True		stored=1291616 recomputed=1291616
+pileup_stats.json	GSM4317423	umi_unique == matrix quantity	1	1	True		stored=469272 recomputed=469272
+pileup_stats.json	GSM4317423	n_barcodes == matrix quantity	1	1	True		stored=39217 recomputed=39217
+provenance.json	GSM4317423	output.exon_features == matrix quantity	1	1	True		stored=310797 recomputed=310797
+provenance.json	GSM4317423	output.cells == matrix quantity	1	1	True		stored=2722 recomputed=2722
+provenance.json	GSM4317423	output.total_umis == matrix quantity	1	1	True		stored=469272 recomputed=469272
+summary.json	GSM4317424	n_cells_called	1	1	True		stored=1727 recomputed=1727
+summary.json	GSM4317424	estimated_cells	1	1	True		stored=1727 recomputed=1727
+summary.json	GSM4317424	median_umi_per_cell	1	1	True		stored=61 recomputed=61
+summary.json	GSM4317424	median_umis_per_cell	1	1	True		stored=61 recomputed=61
+summary.json	GSM4317424	median_genes_per_cell	1	1	True		stored=49 recomputed=49
+summary.json	GSM4317424	total_genes_detected	1	1	True		stored=10624 recomputed=10624
+summary.json	GSM4317424	fraction_reads_in_cells	1	1	True		stored=0.606167 recomputed=0.606167
+summary.json	GSM4317424	mean_reads_per_cell	1	1	True		stored=14395.7 recomputed=14395.7
+summary.json	GSM4317424	exonic_fraction	1	1	True		stored=0.00972225 recomputed=0.00972225
+summary.json	GSM4317424	intronic_fraction	1	1	True		stored=0.00408106 recomputed=0.00408106
+summary.json	GSM4317424	intergenic_fraction	1	1	True		stored=0.986197 recomputed=0.986197
+summary.json	GSM4317424	mapping_rate	1	1	True		stored=0.742248 recomputed=0.742248
+summary.json	GSM4317424	uniquely_mapped_pct	1	1	True		stored=74.2248 recomputed=74.2248
+summary.json	GSM4317424	n_input_reads	1	1	True		stored=29478656 recomputed=29478656
+summary.json	GSM4317424	total_reads	1	1	True		stored=29478656 recomputed=29478656
+summary.json	GSM4317424	n_uniquely_mapped	1	1	True		stored=21880471 recomputed=21880471
+summary.json	GSM4317424	mapped_reads	1	1	True		stored=21880471 recomputed=21880471
+pileup_stats.json	GSM4317424	exon_hits == matrix quantity	1	1	True		stored=241709 recomputed=241709
+pileup_stats.json	GSM4317424	intron_hits == matrix quantity	1	1	True		stored=101461 recomputed=101461
+pileup_stats.json	GSM4317424	sj_hits == matrix quantity	1	1	True		stored=660315 recomputed=660315
+pileup_stats.json	GSM4317424	umi_unique == matrix quantity	1	1	True		stored=241709 recomputed=241709
+pileup_stats.json	GSM4317424	n_barcodes == matrix quantity	1	1	True		stored=27803 recomputed=27803
+provenance.json	GSM4317424	output.exon_features == matrix quantity	1	1	True		stored=310797 recomputed=310797
+provenance.json	GSM4317424	output.cells == matrix quantity	1	1	True		stored=1727 recomputed=1727
+provenance.json	GSM4317424	output.total_umis == matrix quantity	1	1	True		stored=241709 recomputed=241709
+summary.json	GSM4317425	n_cells_called	1	1	True		stored=1207 recomputed=1207
+summary.json	GSM4317425	estimated_cells	1	1	True		stored=1207 recomputed=1207
+summary.json	GSM4317425	median_umi_per_cell	1	1	True		stored=82 recomputed=82
+summary.json	GSM4317425	median_umis_per_cell	1	1	True		stored=82 recomputed=82
+summary.json	GSM4317425	median_genes_per_cell	1	1	True		stored=62 recomputed=62
+summary.json	GSM4317425	total_genes_detected	1	1	True		stored=10575 recomputed=10575
+summary.json	GSM4317425	fraction_reads_in_cells	1	1	True		stored=0.502435 recomputed=0.502435
+summary.json	GSM4317425	mean_reads_per_cell	1	1	True		stored=22978.5 recomputed=22978.5
+summary.json	GSM4317425	exonic_fraction	1	1	True		stored=0.0101806 recomputed=0.0101806
+summary.json	GSM4317425	intronic_fraction	1	1	True		stored=0.00549704 recomputed=0.00549704
+summary.json	GSM4317425	intergenic_fraction	1	1	True		stored=0.984322 recomputed=0.984322
+summary.json	GSM4317425	mapping_rate	1	1	True		stored=0.758379 recomputed=0.758379
+summary.json	GSM4317425	uniquely_mapped_pct	1	1	True		stored=75.8379 recomputed=75.8379
+summary.json	GSM4317425	n_input_reads	1	1	True		stored=30000000 recomputed=30000000
+summary.json	GSM4317425	total_reads	1	1	True		stored=30000000 recomputed=30000000
+summary.json	GSM4317425	n_uniquely_mapped	1	1	True		stored=22751359 recomputed=22751359
+summary.json	GSM4317425	mapped_reads	1	1	True		stored=22751359 recomputed=22751359
+pileup_stats.json	GSM4317425	exon_hits == matrix quantity	1	1	True		stored=282359 recomputed=282359
+pileup_stats.json	GSM4317425	intron_hits == matrix quantity	1	1	True		stored=152461 recomputed=152461
+pileup_stats.json	GSM4317425	sj_hits == matrix quantity	1	1	True		stored=716084 recomputed=716084
+pileup_stats.json	GSM4317425	umi_unique == matrix quantity	1	1	True		stored=282359 recomputed=282359
+pileup_stats.json	GSM4317425	n_barcodes == matrix quantity	1	1	True		stored=31645 recomputed=31645
+provenance.json	GSM4317425	output.exon_features == matrix quantity	1	1	True		stored=310797 recomputed=310797
+provenance.json	GSM4317425	output.cells == matrix quantity	1	1	True		stored=1207 recomputed=1207
+provenance.json	GSM4317425	output.total_umis == matrix quantity	1	1	True		stored=282359 recomputed=282359
+summary.json	GSM4317426	n_cells_called	1	1	True		stored=2928 recomputed=2928
+summary.json	GSM4317426	estimated_cells	1	1	True		stored=2928 recomputed=2928
+summary.json	GSM4317426	median_umi_per_cell	1	1	True		stored=108 recomputed=108
+summary.json	GSM4317426	median_umis_per_cell	1	1	True		stored=108 recomputed=108
+summary.json	GSM4317426	median_genes_per_cell	1	1	True		stored=96 recomputed=96
+summary.json	GSM4317426	total_genes_detected	1	1	True		stored=16398 recomputed=16398
+summary.json	GSM4317426	fraction_reads_in_cells	1	1	True		stored=0.641491 recomputed=0.641491
+summary.json	GSM4317426	mean_reads_per_cell	1	1	True		stored=8845.45 recomputed=8845.45
+summary.json	GSM4317426	exonic_fraction	1	1	True		stored=0.025366 recomputed=0.025366
+summary.json	GSM4317426	intronic_fraction	1	1	True		stored=0.0265226 recomputed=0.0265226
+summary.json	GSM4317426	intergenic_fraction	1	1	True		stored=0.948111 recomputed=0.948111
+summary.json	GSM4317426	mapping_rate	1	1	True		stored=0.728801 recomputed=0.728801
+summary.json	GSM4317426	uniquely_mapped_pct	1	1	True		stored=72.8801 recomputed=72.8801
+summary.json	GSM4317426	n_input_reads	1	1	True		stored=30000000 recomputed=30000000
+summary.json	GSM4317426	total_reads	1	1	True		stored=30000000 recomputed=30000000
+summary.json	GSM4317426	n_uniquely_mapped	1	1	True		stored=21864034 recomputed=21864034
+summary.json	GSM4317426	mapped_reads	1	1	True		stored=21864034 recomputed=21864034
+pileup_stats.json	GSM4317426	exon_hits == matrix quantity	1	1	True		stored=656965 recomputed=656965
+pileup_stats.json	GSM4317426	intron_hits == matrix quantity	1	1	True		stored=686922 recomputed=686922
+pileup_stats.json	GSM4317426	sj_hits == matrix quantity	1	1	True		stored=1267522 recomputed=1267522
+pileup_stats.json	GSM4317426	umi_unique == matrix quantity	1	1	True		stored=656965 recomputed=656965
+pileup_stats.json	GSM4317426	n_barcodes == matrix quantity	1	1	True		stored=63995 recomputed=63995
+provenance.json	GSM4317426	output.exon_features == matrix quantity	1	1	True		stored=310797 recomputed=310797
+provenance.json	GSM4317426	output.cells == matrix quantity	1	1	True		stored=2928 recomputed=2928
+provenance.json	GSM4317426	output.total_umis == matrix quantity	1	1	True		stored=656965 recomputed=656965
+summary.json	GSM4317427	n_cells_called	1	1	True		stored=3576 recomputed=3576
+summary.json	GSM4317427	estimated_cells	1	1	True		stored=3576 recomputed=3576
+summary.json	GSM4317427	median_umi_per_cell	1	1	True		stored=42 recomputed=42
+summary.json	GSM4317427	median_umis_per_cell	1	1	True		stored=42 recomputed=42
+summary.json	GSM4317427	median_genes_per_cell	1	1	True		stored=37 recomputed=37
+summary.json	GSM4317427	total_genes_detected	1	1	True		stored=12009 recomputed=12009
+summary.json	GSM4317427	fraction_reads_in_cells	1	1	True		stored=0.551494 recomputed=0.551494
+summary.json	GSM4317427	mean_reads_per_cell	1	1	True		stored=6796.92 recomputed=6796.92
+summary.json	GSM4317427	exonic_fraction	1	1	True		stored=0.0150259 recomputed=0.0150259
+summary.json	GSM4317427	intronic_fraction	1	1	True		stored=0.00778699 recomputed=0.00778699
+summary.json	GSM4317427	intergenic_fraction	1	1	True		stored=0.977187 recomputed=0.977187
+summary.json	GSM4317427	mapping_rate	1	1	True		stored=0.746042 recomputed=0.746042
+summary.json	GSM4317427	uniquely_mapped_pct	1	1	True		stored=74.6042 recomputed=74.6042
+summary.json	GSM4317427	n_input_reads	1	1	True		stored=30000000 recomputed=30000000
+summary.json	GSM4317427	total_reads	1	1	True		stored=30000000 recomputed=30000000
+summary.json	GSM4317427	n_uniquely_mapped	1	1	True		stored=22381254 recomputed=22381254
+summary.json	GSM4317427	mapped_reads	1	1	True		stored=22381254 recomputed=22381254
+pileup_stats.json	GSM4317427	exon_hits == matrix quantity	1	1	True		stored=365217 recomputed=365217
+pileup_stats.json	GSM4317427	intron_hits == matrix quantity	1	1	True		stored=189269 recomputed=189269
+pileup_stats.json	GSM4317427	sj_hits == matrix quantity	1	1	True		stored=996855 recomputed=996855
+pileup_stats.json	GSM4317427	umi_unique == matrix quantity	1	1	True		stored=365217 recomputed=365217
+pileup_stats.json	GSM4317427	n_barcodes == matrix quantity	1	1	True		stored=41934 recomputed=41934
+provenance.json	GSM4317427	output.exon_features == matrix quantity	1	1	True		stored=310797 recomputed=310797
+provenance.json	GSM4317427	output.cells == matrix quantity	1	1	True		stored=3576 recomputed=3576
+provenance.json	GSM4317427	output.total_umis == matrix quantity	1	1	True		stored=365217 recomputed=365217
+summary.json	GSM4317428	n_cells_called	1	1	True		stored=2473 recomputed=2473
+summary.json	GSM4317428	estimated_cells	1	1	True		stored=2473 recomputed=2473
+summary.json	GSM4317428	median_umi_per_cell	1	1	True		stored=80 recomputed=80
+summary.json	GSM4317428	median_umis_per_cell	1	1	True		stored=80 recomputed=80
+summary.json	GSM4317428	median_genes_per_cell	1	1	True		stored=50 recomputed=50
+summary.json	GSM4317428	total_genes_detected	1	1	True		stored=11868 recomputed=11868
+summary.json	GSM4317428	fraction_reads_in_cells	1	1	True		stored=0.64994 recomputed=0.64994
+summary.json	GSM4317428	mean_reads_per_cell	1	1	True		stored=11721.8 recomputed=11721.8
+summary.json	GSM4317428	exonic_fraction	1	1	True		stored=0.0129003 recomputed=0.0129003
+summary.json	GSM4317428	intronic_fraction	1	1	True		stored=0.00372338 recomputed=0.00372338
+summary.json	GSM4317428	intergenic_fraction	1	1	True		stored=0.983376 recomputed=0.983376
+summary.json	GSM4317428	mapping_rate	1	1	True		stored=0.664213 recomputed=0.664213
+summary.json	GSM4317428	uniquely_mapped_pct	1	1	True		stored=66.4213 recomputed=66.4213
+summary.json	GSM4317428	n_input_reads	1	1	True		stored=28793967 recomputed=28793967
+summary.json	GSM4317428	total_reads	1	1	True		stored=28793967 recomputed=28793967
+summary.json	GSM4317428	n_uniquely_mapped	1	1	True		stored=19125320 recomputed=19125320
+summary.json	GSM4317428	mapped_reads	1	1	True		stored=19125320 recomputed=19125320
+pileup_stats.json	GSM4317428	exon_hits == matrix quantity	1	1	True		stored=373953 recomputed=373953
+pileup_stats.json	GSM4317428	intron_hits == matrix quantity	1	1	True		stored=107933 recomputed=107933
+pileup_stats.json	GSM4317428	sj_hits == matrix quantity	1	1	True		stored=354897 recomputed=354897
+pileup_stats.json	GSM4317428	umi_unique == matrix quantity	1	1	True		stored=373953 recomputed=373953
+pileup_stats.json	GSM4317428	n_barcodes == matrix quantity	1	1	True		stored=20985 recomputed=20985
+provenance.json	GSM4317428	output.exon_features == matrix quantity	1	1	True		stored=310797 recomputed=310797
+provenance.json	GSM4317428	output.cells == matrix quantity	1	1	True		stored=2473 recomputed=2473
+provenance.json	GSM4317428	output.total_umis == matrix quantity	1	1	True		stored=373953 recomputed=373953
+summary.json	GSM4317429	n_cells_called	1	1	True		stored=3820 recomputed=3820
+summary.json	GSM4317429	estimated_cells	1	1	True		stored=3820 recomputed=3820
+summary.json	GSM4317429	median_umi_per_cell	1	1	True		stored=33 recomputed=33
+summary.json	GSM4317429	median_umis_per_cell	1	1	True		stored=33 recomputed=33
+summary.json	GSM4317429	median_genes_per_cell	1	1	True		stored=29 recomputed=29
+summary.json	GSM4317429	total_genes_detected	1	1	True		stored=11117 recomputed=11117
+summary.json	GSM4317429	fraction_reads_in_cells	1	1	True		stored=0.597722 recomputed=0.597722
+summary.json	GSM4317429	mean_reads_per_cell	1	1	True		stored=6336.52 recomputed=6336.52
+summary.json	GSM4317429	exonic_fraction	1	1	True		stored=0.0112822 recomputed=0.0112822
+summary.json	GSM4317429	intronic_fraction	1	1	True		stored=0.00491376 recomputed=0.00491376
+summary.json	GSM4317429	intergenic_fraction	1	1	True		stored=0.983804 recomputed=0.983804
+summary.json	GSM4317429	mapping_rate	1	1	True		stored=0.717031 recomputed=0.717031
+summary.json	GSM4317429	uniquely_mapped_pct	1	1	True		stored=71.7031 recomputed=71.7031
+summary.json	GSM4317429	n_input_reads	1	1	True		stored=30000000 recomputed=30000000
+summary.json	GSM4317429	total_reads	1	1	True		stored=30000000 recomputed=30000000
+summary.json	GSM4317429	n_uniquely_mapped	1	1	True		stored=21510922 recomputed=21510922
+summary.json	GSM4317429	mapped_reads	1	1	True		stored=21510922 recomputed=21510922
+pileup_stats.json	GSM4317429	exon_hits == matrix quantity	1	1	True		stored=273090 recomputed=273090
+pileup_stats.json	GSM4317429	intron_hits == matrix quantity	1	1	True		stored=118940 recomputed=118940
+pileup_stats.json	GSM4317429	sj_hits == matrix quantity	1	1	True		stored=916599 recomputed=916599
+pileup_stats.json	GSM4317429	umi_unique == matrix quantity	1	1	True		stored=273090 recomputed=273090
+pileup_stats.json	GSM4317429	n_barcodes == matrix quantity	1	1	True		stored=25067 recomputed=25067
+provenance.json	GSM4317429	output.exon_features == matrix quantity	1	1	True		stored=310797 recomputed=310797
+provenance.json	GSM4317429	output.cells == matrix quantity	1	1	True		stored=3820 recomputed=3820
+provenance.json	GSM4317429	output.total_umis == matrix quantity	1	1	True		stored=273090 recomputed=273090
+summary.json	GSM4317430	n_cells_called	1	1	True		stored=3732 recomputed=3732
+summary.json	GSM4317430	estimated_cells	1	1	True		stored=3732 recomputed=3732
+summary.json	GSM4317430	median_umi_per_cell	1	1	True		stored=36 recomputed=36
+summary.json	GSM4317430	median_umis_per_cell	1	1	True		stored=36 recomputed=36
+summary.json	GSM4317430	median_genes_per_cell	1	1	True		stored=32 recomputed=32
+summary.json	GSM4317430	total_genes_detected	1	1	True		stored=11206 recomputed=11206
+summary.json	GSM4317430	fraction_reads_in_cells	1	1	True		stored=0.816081 recomputed=0.816081
+summary.json	GSM4317430	mean_reads_per_cell	1	1	True		stored=6743.05 recomputed=6743.05
+summary.json	GSM4317430	exonic_fraction	1	1	True		stored=0.0084121 recomputed=0.0084121
+summary.json	GSM4317430	intronic_fraction	1	1	True		stored=0.00443416 recomputed=0.00443416
+summary.json	GSM4317430	intergenic_fraction	1	1	True		stored=0.987154 recomputed=0.987154
+summary.json	GSM4317430	mapping_rate	1	1	True		stored=0.75105 recomputed=0.75105
+summary.json	GSM4317430	uniquely_mapped_pct	1	1	True		stored=75.105 recomputed=75.105
+summary.json	GSM4317430	n_input_reads	1	1	True		stored=28082582 recomputed=28082582
+summary.json	GSM4317430	total_reads	1	1	True		stored=28082582 recomputed=28082582
+summary.json	GSM4317430	n_uniquely_mapped	1	1	True		stored=21091411 recomputed=21091411
+summary.json	GSM4317430	mapped_reads	1	1	True		stored=21091411 recomputed=21091411
+pileup_stats.json	GSM4317430	exon_hits == matrix quantity	1	1	True		stored=211691 recomputed=211691
+pileup_stats.json	GSM4317430	intron_hits == matrix quantity	1	1	True		stored=111586 recomputed=111586
+pileup_stats.json	GSM4317430	sj_hits == matrix quantity	1	1	True		stored=558355 recomputed=558355
+pileup_stats.json	GSM4317430	umi_unique == matrix quantity	1	1	True		stored=211691 recomputed=211691
+pileup_stats.json	GSM4317430	n_barcodes == matrix quantity	1	1	True		stored=19556 recomputed=19556
+provenance.json	GSM4317430	output.exon_features == matrix quantity	1	1	True		stored=310797 recomputed=310797
+provenance.json	GSM4317430	output.cells == matrix quantity	1	1	True		stored=3732 recomputed=3732
+provenance.json	GSM4317430	output.total_umis == matrix quantity	1	1	True		stored=211691 recomputed=211691
+summary.json	GSM4317431	n_cells_called	1	1	True		stored=3371 recomputed=3371
+summary.json	GSM4317431	estimated_cells	1	1	True		stored=3371 recomputed=3371
+summary.json	GSM4317431	median_umi_per_cell	1	1	True		stored=35 recomputed=35
+summary.json	GSM4317431	median_umis_per_cell	1	1	True		stored=35 recomputed=35
+summary.json	GSM4317431	median_genes_per_cell	1	1	True		stored=30 recomputed=30
+summary.json	GSM4317431	total_genes_detected	1	1	True		stored=10513 recomputed=10513
+summary.json	GSM4317431	fraction_reads_in_cells	1	1	True		stored=0.856846 recomputed=0.856846
+summary.json	GSM4317431	mean_reads_per_cell	1	1	True		stored=8050.77 recomputed=8050.77
+summary.json	GSM4317431	exonic_fraction	1	1	True		stored=0.00634298 recomputed=0.00634298
+summary.json	GSM4317431	intronic_fraction	1	1	True		stored=0.00322291 recomputed=0.00322291
+summary.json	GSM4317431	intergenic_fraction	1	1	True		stored=0.990434 recomputed=0.990434
+summary.json	GSM4317431	mapping_rate	1	1	True		stored=0.754771 recomputed=0.754771
+summary.json	GSM4317431	uniquely_mapped_pct	1	1	True		stored=75.4771 recomputed=75.4771
+summary.json	GSM4317431	n_input_reads	1	1	True		stored=29832753 recomputed=29832753
+summary.json	GSM4317431	total_reads	1	1	True		stored=29832753 recomputed=29832753
+summary.json	GSM4317431	n_uniquely_mapped	1	1	True		stored=22516887 recomputed=22516887
+summary.json	GSM4317431	mapped_reads	1	1	True		stored=22516887 recomputed=22516887
+pileup_stats.json	GSM4317431	exon_hits == matrix quantity	1	1	True		stored=172143 recomputed=172143
+pileup_stats.json	GSM4317431	intron_hits == matrix quantity	1	1	True		stored=87467 recomputed=87467
+pileup_stats.json	GSM4317431	sj_hits == matrix quantity	1	1	True		stored=475560 recomputed=475560
+pileup_stats.json	GSM4317431	umi_unique == matrix quantity	1	1	True		stored=172143 recomputed=172143
+pileup_stats.json	GSM4317431	n_barcodes == matrix quantity	1	1	True		stored=18257 recomputed=18257
+provenance.json	GSM4317431	output.exon_features == matrix quantity	1	1	True		stored=310797 recomputed=310797
+provenance.json	GSM4317431	output.cells == matrix quantity	1	1	True		stored=3371 recomputed=3371
+provenance.json	GSM4317431	output.total_umis == matrix quantity	1	1	True		stored=172143 recomputed=172143
+summary.json	GSM4317432	n_cells_called	1	1	True		stored=4289 recomputed=4289
+summary.json	GSM4317432	estimated_cells	1	1	True		stored=4289 recomputed=4289
+summary.json	GSM4317432	median_umi_per_cell	1	1	True		stored=60 recomputed=60
+summary.json	GSM4317432	median_umis_per_cell	1	1	True		stored=60 recomputed=60
+summary.json	GSM4317432	median_genes_per_cell	1	1	True		stored=51 recomputed=51
+summary.json	GSM4317432	total_genes_detected	1	1	True		stored=13325 recomputed=13325
+summary.json	GSM4317432	fraction_reads_in_cells	1	1	True		stored=0.706107 recomputed=0.706107
+summary.json	GSM4317432	mean_reads_per_cell	1	1	True		stored=7561.83 recomputed=7561.83
+summary.json	GSM4317432	exonic_fraction	1	1	True		stored=0.0144414 recomputed=0.0144414
+summary.json	GSM4317432	intronic_fraction	1	1	True		stored=0.00990173 recomputed=0.00990173
+summary.json	GSM4317432	intergenic_fraction	1	1	True		stored=0.975657 recomputed=0.975657
+summary.json	GSM4317432	mapping_rate	1	1	True		stored=0.813013 recomputed=0.813013
+summary.json	GSM4317432	uniquely_mapped_pct	1	1	True		stored=81.3013 recomputed=81.3013
+summary.json	GSM4317432	n_input_reads	1	1	True		stored=30000000 recomputed=30000000
+summary.json	GSM4317432	total_reads	1	1	True		stored=30000000 recomputed=30000000
+summary.json	GSM4317432	n_uniquely_mapped	1	1	True		stored=24390404 recomputed=24390404
+summary.json	GSM4317432	mapped_reads	1	1	True		stored=24390404 recomputed=24390404
+pileup_stats.json	GSM4317432	exon_hits == matrix quantity	1	1	True		stored=468374 recomputed=468374
+pileup_stats.json	GSM4317432	intron_hits == matrix quantity	1	1	True		stored=321140 recomputed=321140
+pileup_stats.json	GSM4317432	sj_hits == matrix quantity	1	1	True		stored=1101051 recomputed=1101051
+pileup_stats.json	GSM4317432	umi_unique == matrix quantity	1	1	True		stored=468374 recomputed=468374
+pileup_stats.json	GSM4317432	n_barcodes == matrix quantity	1	1	True		stored=32388 recomputed=32388
+provenance.json	GSM4317432	output.exon_features == matrix quantity	1	1	True		stored=310797 recomputed=310797
+provenance.json	GSM4317432	output.cells == matrix quantity	1	1	True		stored=4289 recomputed=4289
+provenance.json	GSM4317432	output.total_umis == matrix quantity	1	1	True		stored=468374 recomputed=468374
+summary.json	GSM4317433	n_cells_called	1	1	True		stored=2028 recomputed=2028
+summary.json	GSM4317433	estimated_cells	1	1	True		stored=2028 recomputed=2028
+summary.json	GSM4317433	median_umi_per_cell	1	1	True		stored=114 recomputed=114
+summary.json	GSM4317433	median_umis_per_cell	1	1	True		stored=114 recomputed=114
+summary.json	GSM4317433	median_genes_per_cell	1	1	True		stored=100 recomputed=100
+summary.json	GSM4317433	total_genes_detected	1	1	True		stored=14932 recomputed=14932
+summary.json	GSM4317433	fraction_reads_in_cells	1	1	True		stored=0.76891 recomputed=0.76891
+summary.json	GSM4317433	mean_reads_per_cell	1	1	True		stored=13339 recomputed=13339
+summary.json	GSM4317433	exonic_fraction	1	1	True		stored=0.0147457 recomputed=0.0147457
+summary.json	GSM4317433	intronic_fraction	1	1	True		stored=0.0148806 recomputed=0.0148806
+summary.json	GSM4317433	intergenic_fraction	1	1	True		stored=0.970374 recomputed=0.970374
+summary.json	GSM4317433	mapping_rate	1	1	True		stored=0.797431 recomputed=0.797431
+summary.json	GSM4317433	uniquely_mapped_pct	1	1	True		stored=79.7431 recomputed=79.7431
+summary.json	GSM4317433	n_input_reads	1	1	True		stored=30000000 recomputed=30000000
+summary.json	GSM4317433	total_reads	1	1	True		stored=30000000 recomputed=30000000
+summary.json	GSM4317433	n_uniquely_mapped	1	1	True		stored=23922931 recomputed=23922931
+summary.json	GSM4317433	mapped_reads	1	1	True		stored=23922931 recomputed=23922931
+pileup_stats.json	GSM4317433	exon_hits == matrix quantity	1	1	True		stored=398893 recomputed=398893
+pileup_stats.json	GSM4317433	intron_hits == matrix quantity	1	1	True		stored=402542 recomputed=402542
+pileup_stats.json	GSM4317433	sj_hits == matrix quantity	1	1	True		stored=892912 recomputed=892912
+pileup_stats.json	GSM4317433	umi_unique == matrix quantity	1	1	True		stored=398893 recomputed=398893
+pileup_stats.json	GSM4317433	n_barcodes == matrix quantity	1	1	True		stored=40263 recomputed=40263
+provenance.json	GSM4317433	output.exon_features == matrix quantity	1	1	True		stored=310797 recomputed=310797
+provenance.json	GSM4317433	output.cells == matrix quantity	1	1	True		stored=2028 recomputed=2028
+provenance.json	GSM4317433	output.total_umis == matrix quantity	1	1	True		stored=398893 recomputed=398893
+summary.json	GSM4317434	n_cells_called	1	1	True		stored=2106 recomputed=2106
+summary.json	GSM4317434	estimated_cells	1	1	True		stored=2106 recomputed=2106
+summary.json	GSM4317434	median_umi_per_cell	1	1	True		stored=83 recomputed=83
+summary.json	GSM4317434	median_umis_per_cell	1	1	True		stored=83 recomputed=83
+summary.json	GSM4317434	median_genes_per_cell	1	1	True		stored=71 recomputed=71
+summary.json	GSM4317434	total_genes_detected	1	1	True		stored=12152 recomputed=12152
+summary.json	GSM4317434	fraction_reads_in_cells	1	1	True		stored=0.854012 recomputed=0.854012
+summary.json	GSM4317434	mean_reads_per_cell	1	1	True		stored=14171.4 recomputed=14171.4
+summary.json	GSM4317434	exonic_fraction	1	1	True		stored=0.00880837 recomputed=0.00880837
+summary.json	GSM4317434	intronic_fraction	1	1	True		stored=0.00457512 recomputed=0.00457512
+summary.json	GSM4317434	intergenic_fraction	1	1	True		stored=0.986617 recomputed=0.986617
+summary.json	GSM4317434	mapping_rate	1	1	True		stored=0.781588 recomputed=0.781588
+summary.json	GSM4317434	uniquely_mapped_pct	1	1	True		stored=78.1588 recomputed=78.1588
+summary.json	GSM4317434	n_input_reads	1	1	True		stored=30000000 recomputed=30000000
+summary.json	GSM4317434	total_reads	1	1	True		stored=30000000 recomputed=30000000
+summary.json	GSM4317434	n_uniquely_mapped	1	1	True		stored=23447641 recomputed=23447641
+summary.json	GSM4317434	mapped_reads	1	1	True		stored=23447641 recomputed=23447641
+pileup_stats.json	GSM4317434	exon_hits == matrix quantity	1	1	True		stored=262885 recomputed=262885
+pileup_stats.json	GSM4317434	intron_hits == matrix quantity	1	1	True		stored=136544 recomputed=136544
+pileup_stats.json	GSM4317434	sj_hits == matrix quantity	1	1	True		stored=692806 recomputed=692806
+pileup_stats.json	GSM4317434	umi_unique == matrix quantity	1	1	True		stored=262885 recomputed=262885
+pileup_stats.json	GSM4317434	n_barcodes == matrix quantity	1	1	True		stored=23834 recomputed=23834
+provenance.json	GSM4317434	output.exon_features == matrix quantity	1	1	True		stored=310797 recomputed=310797
+provenance.json	GSM4317434	output.cells == matrix quantity	1	1	True		stored=2106 recomputed=2106
+provenance.json	GSM4317434	output.total_umis == matrix quantity	1	1	True		stored=262885 recomputed=262885
+summary.json	GSM4317435	n_cells_called	1	1	True		stored=2977 recomputed=2977
+summary.json	GSM4317435	estimated_cells	1	1	True		stored=2977 recomputed=2977
+summary.json	GSM4317435	median_umi_per_cell	1	1	True		stored=49 recomputed=49
+summary.json	GSM4317435	median_umis_per_cell	1	1	True		stored=49 recomputed=49
+summary.json	GSM4317435	median_genes_per_cell	1	1	True		stored=42 recomputed=42
+summary.json	GSM4317435	total_genes_detected	1	1	True		stored=11789 recomputed=11789
+summary.json	GSM4317435	fraction_reads_in_cells	1	1	True		stored=0.749103 recomputed=0.749103
+summary.json	GSM4317435	mean_reads_per_cell	1	1	True		stored=9196.39 recomputed=9196.39
+summary.json	GSM4317435	exonic_fraction	1	1	True		stored=0.00934755 recomputed=0.00934755
+summary.json	GSM4317435	intronic_fraction	1	1	True		stored=0.00497066 recomputed=0.00497066
+summary.json	GSM4317435	intergenic_fraction	1	1	True		stored=0.985682 recomputed=0.985682
+summary.json	GSM4317435	mapping_rate	1	1	True		stored=0.731651 recomputed=0.731651
+summary.json	GSM4317435	uniquely_mapped_pct	1	1	True		stored=73.1651 recomputed=73.1651
+summary.json	GSM4317435	n_input_reads	1	1	True		stored=30000000 recomputed=30000000
+summary.json	GSM4317435	total_reads	1	1	True		stored=30000000 recomputed=30000000
+summary.json	GSM4317435	n_uniquely_mapped	1	1	True		stored=21949533 recomputed=21949533
+summary.json	GSM4317435	mapped_reads	1	1	True		stored=21949533 recomputed=21949533
+pileup_stats.json	GSM4317435	exon_hits == matrix quantity	1	1	True		stored=255914 recomputed=255914
+pileup_stats.json	GSM4317435	intron_hits == matrix quantity	1	1	True		stored=136085 recomputed=136085
+pileup_stats.json	GSM4317435	sj_hits == matrix quantity	1	1	True		stored=695485 recomputed=695485
+pileup_stats.json	GSM4317435	umi_unique == matrix quantity	1	1	True		stored=255914 recomputed=255914
+pileup_stats.json	GSM4317435	n_barcodes == matrix quantity	1	1	True		stored=23006 recomputed=23006
+provenance.json	GSM4317435	output.exon_features == matrix quantity	1	1	True		stored=310797 recomputed=310797
+provenance.json	GSM4317435	output.cells == matrix quantity	1	1	True		stored=2977 recomputed=2977
+provenance.json	GSM4317435	output.total_umis == matrix quantity	1	1	True		stored=255914 recomputed=255914
+summary.json	GSM4317436	n_cells_called	1	1	True		stored=3658 recomputed=3658
+summary.json	GSM4317436	estimated_cells	1	1	True		stored=3658 recomputed=3658
+summary.json	GSM4317436	median_umi_per_cell	1	1	True		stored=37 recomputed=37
+summary.json	GSM4317436	median_umis_per_cell	1	1	True		stored=37 recomputed=37
+summary.json	GSM4317436	median_genes_per_cell	1	1	True		stored=31 recomputed=31
+summary.json	GSM4317436	total_genes_detected	1	1	True		stored=10833 recomputed=10833
+summary.json	GSM4317436	fraction_reads_in_cells	1	1	True		stored=0.764133 recomputed=0.764133
+summary.json	GSM4317436	mean_reads_per_cell	1	1	True		stored=7036.32 recomputed=7036.32
+summary.json	GSM4317436	exonic_fraction	1	1	True		stored=0.0087446 recomputed=0.0087446
+summary.json	GSM4317436	intronic_fraction	1	1	True		stored=0.00385262 recomputed=0.00385262
+summary.json	GSM4317436	intergenic_fraction	1	1	True		stored=0.987403 recomputed=0.987403
+summary.json	GSM4317436	mapping_rate	1	1	True		stored=0.740073 recomputed=0.740073
+summary.json	GSM4317436	uniquely_mapped_pct	1	1	True		stored=74.0073 recomputed=74.0073
+summary.json	GSM4317436	n_input_reads	1	1	True		stored=30000000 recomputed=30000000
+summary.json	GSM4317436	total_reads	1	1	True		stored=30000000 recomputed=30000000
+summary.json	GSM4317436	n_uniquely_mapped	1	1	True		stored=22202196 recomputed=22202196
+summary.json	GSM4317436	mapped_reads	1	1	True		stored=22202196 recomputed=22202196
+pileup_stats.json	GSM4317436	exon_hits == matrix quantity	1	1	True		stored=225076 recomputed=225076
+pileup_stats.json	GSM4317436	intron_hits == matrix quantity	1	1	True		stored=99162 recomputed=99162
+pileup_stats.json	GSM4317436	sj_hits == matrix quantity	1	1	True		stored=594399 recomputed=594399
+pileup_stats.json	GSM4317436	umi_unique == matrix quantity	1	1	True		stored=225076 recomputed=225076
+pileup_stats.json	GSM4317436	n_barcodes == matrix quantity	1	1	True		stored=19876 recomputed=19876
+provenance.json	GSM4317436	output.exon_features == matrix quantity	1	1	True		stored=310797 recomputed=310797
+provenance.json	GSM4317436	output.cells == matrix quantity	1	1	True		stored=3658 recomputed=3658
+provenance.json	GSM4317436	output.total_umis == matrix quantity	1	1	True		stored=225076 recomputed=225076
+summary.json	pbmc_v2_typical	n_cells_called	1	1	True		stored=5428 recomputed=5428
+summary.json	pbmc_v2_typical	median_umi_per_cell	1	1	True		stored=716 recomputed=716
+summary.json	pbmc_v2_typical	median_genes_per_cell	1	1	True		stored=382 recomputed=382
+summary.json	pbmc_v2_typical	total_genes_detected	1	1	True		stored=17062 recomputed=17062
+summary.json	pbmc_v2_typical	fraction_reads_in_cells	1	1	True		stored=0.950646 recomputed=0.950646
+summary.json	pbmc_v2_shallow	n_cells_called	1	1	True		stored=41725 recomputed=41725
+summary.json	pbmc_v2_shallow	median_umi_per_cell	1	1	True		stored=76 recomputed=76
+summary.json	pbmc_v2_shallow	median_genes_per_cell	1	1	True		stored=67 recomputed=67
+summary.json	pbmc_v2_shallow	total_genes_detected	1	1	True		stored=16282 recomputed=16282
+summary.json	pbmc_v2_shallow	fraction_reads_in_cells	1	1	True		stored=0.622045 recomputed=0.622045
+summary.json	pbmc_v3_lowgenes	n_cells_called	1	1	True		stored=11124 recomputed=11124
+summary.json	pbmc_v3_lowgenes	median_umi_per_cell	1	1	True		stored=305 recomputed=305
+summary.json	pbmc_v3_lowgenes	median_genes_per_cell	1	1	True		stored=96 recomputed=96
+summary.json	pbmc_v3_lowgenes	total_genes_detected	1	1	True		stored=2642 recomputed=2642
+summary.json	pbmc_v3_lowgenes	fraction_reads_in_cells	1	1	True		stored=0.95203 recomputed=0.95203
+summary.json	brain_sn_v3_deep	n_cells_called	1	1	True		stored=3288 recomputed=3288
+summary.json	brain_sn_v3_deep	median_umi_per_cell	1	1	True		stored=1045 recomputed=1045
+summary.json	brain_sn_v3_deep	median_genes_per_cell	1	1	True		stored=773 recomputed=773
+summary.json	brain_sn_v3_deep	total_genes_detected	1	1	True		stored=30177 recomputed=30177
+summary.json	brain_sn_v3_deep	fraction_reads_in_cells	1	1	True		stored=0.47549 recomputed=0.47549
+summary.json	brain_sn_v3_intronic	n_cells_called	1	1	True		stored=8743 recomputed=8743
+summary.json	brain_sn_v3_intronic	median_umi_per_cell	1	1	True		stored=117 recomputed=117
+summary.json	brain_sn_v3_intronic	median_genes_per_cell	1	1	True		stored=86 recomputed=86
+summary.json	brain_sn_v3_intronic	total_genes_detected	1	1	True		stored=26563 recomputed=26563
+summary.json	brain_sn_v3_intronic	fraction_reads_in_cells	1	1	True		stored=0.600598 recomputed=0.600598
+summary.json	tcell_5p	n_cells_called	1	1	True		stored=12363 recomputed=12363
+summary.json	tcell_5p	median_umi_per_cell	1	1	True		stored=1149 recomputed=1149
+summary.json	tcell_5p	median_genes_per_cell	1	1	True		stored=608 recomputed=608
+summary.json	tcell_5p	total_genes_detected	1	1	True		stored=18201 recomputed=18201
+summary.json	tcell_5p	fraction_reads_in_cells	1	1	True		stored=0.917568 recomputed=0.917568
+summary.json	tumor_3p	n_cells_called	1	1	True		stored=3820 recomputed=3820
+summary.json	tumor_3p	median_umi_per_cell	1	1	True		stored=33 recomputed=33
+summary.json	tumor_3p	median_genes_per_cell	1	1	True		stored=29 recomputed=29
+summary.json	tumor_3p	total_genes_detected	1	1	True		stored=11117 recomputed=11117
+summary.json	tumor_3p	fraction_reads_in_cells	1	1	True		stored=0.597722 recomputed=0.597722
+names	bundle	splice_psi rownames == sj_counts rownames (same sample)	14	14	True		
+names	bundle	colnames identical in exon/intron/sj/psi/vdj of a sample	14	14	True		
+names	bundle	distinct exon rowname lists across samples	14	1	True		1 = identical
+names	bundle	distinct vdj rowname lists across samples	14	1	True		1 = identical
+manifest	bundle	manifest.json sha256 == sha256(member bytes)	140	140	True		
+study_meta	bundle	gsm_meta fields (n_cells, median_umi, median_genes, mapping_rate, build, protocol) == summary.json	84	84	True		
+vdj_vs_exon	GSM4317423	vdj entry == exon-count sum over rows of the same gene symbol	188151	29747	False		frac_eq_exon=0.1581 frac_eq_exon+intron=0.1557 vdj_total=494636 exon_total_same_genes=70849
+vdj_vs_exon	GSM4317429	vdj entry == exon-count sum over rows of the same gene symbol	246600	41016	False		frac_eq_exon=0.1663 frac_eq_exon+intron=0.1639 vdj_total=714667 exon_total_same_genes=75105

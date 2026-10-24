@@ -1,0 +1,22 @@
+matrix members in bundle: 84 files, 186,408,205 bytes
+junction union 400127 names, raw 9604966, xz 1611800; subset coding of the 14 samples: 570859 bytes
+
+| member | today | rownames | colnames | perm | colsums+ptr | chunks | other | -> row counts instead of perm |
+|---|---|---|---|---|---|---|---|---|
+| exon_counts.1pz | 67,060,711 | 46,585,574 | 2,087,590 | 11,887,565 | 487,260 | 5,875,320 | 137,402 | 579,831 |
+| intron_counts.1pz | 58,705,745 | 41,335,182 | 2,087,590 | 10,374,316 | 445,764 | 4,349,759 | 113,134 | 516,417 |
+| sj_counts.1pz | 31,810,097 | 12,022,110 | 2,087,590 | 3,867,583 | 611,128 | 13,172,766 | 48,920 | 555,130 |
+| splice_psi.1pz | 24,575,390 | 12,022,110 | 2,087,590 | 3,813,046 | 497,822 | 6,105,902 | 48,920 | 338,713 |
+| vdj_gene_usage.1pz | 4,254,148 | 18,060 | 2,087,590 | 11,674 | 362,218 | 1,749,172 | 25,434 | 6,134 |
+
+| step | change in bundle bytes | cumulative bundle (matrix members) | model bytes needed |
+|---|---|---|---|
+| today (sum of the 70 matrix members) | +186,408,205 | 186,408,205 |  |
+| 1. exon+intron row names -> vocabulary id (model: 3.57 MB human exon+intron lists, once) | -87,920,532 | 98,487,673 | 3,569,124 |
+| 2. splice_psi row names -> 'same as sj_counts' (verified identical) | -12,022,110 | 86,465,563 |  |
+| 3. sj row names -> study junction vocabulary + per-sample subset | -11,451,251 | 75,014,312 | 1,611,800 |
+| 4. barcodes: store once per sample (5 members share them), as whitelist index | -9,368,381 | 65,645,931 | 3,283 |
+| 5. permutation -> per-row nnz counts (decoder re-derives it) | -27,957,959 | 37,687,972 |  |
+| 6. drop colsums and ptr blocks (derivable) | -2,404,192 | 35,283,780 |  |
+
+remaining = 18.9% of today (5.28x smaller), of which count chunks 31,252,919 (88.6% of remaining)

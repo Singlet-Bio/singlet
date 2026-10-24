@@ -1,0 +1,38 @@
+id	gse	gsm	note
+h_v3_a	GSE180661	GSM5467179	human 10xv3 772 cells median UMI 4554
+h_v3_b	GSE256497	GSM8101887	human 10xv3 3486 cells
+h_v3_c	GSE244515	GSM7818508	human 10xv3 9539 cells median UMI 1162
+h_v2_a	GSE167297	GSM5101015	human 10xv2 606 cells median UMI 4571
+h_v2_b	GSE135893	GSM4037324	human 10xv2 2666 cells
+h_v2_c	GSE247531	GSM7892469	human 10xv2 7494 cells
+h_arc	GSE301953	GSM9092649	human 10x multiome GEX 3414 cells
+h_visium	GSE233208	GSM7412940	human visium 4049 spots median UMI 100
+h_bd	GSE224676	GSM7029373	human BD Rhapsody 3367 cells
+h_dropseq	GSE197215	GSM5911106	human Drop-seq 408 cells median UMI 125
+h_celseq2	GSE155488	GSM4875776	human CEL-Seq2 500 cells
+h_mars	GSE294051	GSM9678297	human MARS-seq2 500 cells
+h_split	GSE185553	GSM5618241	human SPLiT-seq 424 cells median UMI 130
+h_microwell	GSE134355	GSM4008717	human Microwell-seq 1049 cells
+h_indrop	GSE266546	GSM8249687	human inDrop 1167 cells
+h_quartz	GSE166782	GSM5082427	human Quartz-Seq2 500 cells
+m_v3_a	GSE241928	GSM7745727	mouse 10xv3 1314 cells median UMI 5071
+m_v3_b	GSE197404	GSM6956535	mouse 10xv3 4454 cells
+m_v3_c	GSE213511	GSM6588436	mouse 10xv3 9559 cells
+m_v2_a	GSE228945	GSM7143129	mouse 10xv2 774 cells median UMI 12361
+m_v2_b	GSE156633	GSM4735384	mouse 10xv2 6989 cells
+m_arc	GSE344367	GSM9991277	mouse 10x multiome GEX 8268 cells
+m_visium	GSE218360	GSM6742901	mouse visium 3802 spots
+m_dropseq	GSE249398	GSM7945758	mouse Drop-seq 194 cells
+m_mars	GSE222410	GSM6922987	mouse MARS-seq2 500 cells
+m_celseq2	GSE207275	GSM6283570	mouse CEL-Seq2 500 cells
+bn_v3_a	GSE152058	GSM4601703	barnyard 10xv3 8940 cells median UMI 310
+bn_v3_b	GSE224478	GSM7024956	barnyard 10xv3 3768 cells
+bn_v2	GSE155121	GSM4729683	barnyard 10xv2 7406 cells
+bn_dropseq	GSE291815	GSM8842816	barnyard Drop-seq 500 cells
+z_v3_a	GSE264312	GSM8215882	zebrafish GRCz11 10xv3 834 cells
+z_v3_b	GSE284729	GSM8691391	zebrafish GRCz11 10xv3 5415 cells
+z_v2	GSE106121	GSM3032173	zebrafish GRCz11 10xv2 2748 cells
+mq_v2	GSE245419	GSM7842435	macaque Mmul_10 10xv2 3606 cells
+mq_v3	GSE280441	GSM8597920	macaque Mmul_10 10xv3 10554 cells
+r_v2	GSE216665	GSM6685520	rat mRatBN7.2 10xv2 4457 cells
+r_v3	GSE165104	GSM5026247	rat mRatBN7.2 10xv3 10147 cells median UMI 94

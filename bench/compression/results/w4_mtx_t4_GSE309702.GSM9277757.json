@@ -1,0 +1,172 @@
+{
+ "sample": "GSE309702.GSM9277757",
+ "G": 78298,
+ "NB": 3686400,
+ "mtx_nnz": 363690,
+ "mtx_total_umi": 374306,
+ "exon_1pz": {
+  "m": 386028,
+  "n": 50119,
+  "nnz": 323193,
+  "cols_not_in_raw_whitelist": 0,
+  "gene_barcode_nnz": 321089,
+  "total": 331453,
+  "vt_code": 1
+ },
+ "intron_1pz": {
+  "m": 307730,
+  "n": 50119,
+  "nnz": 75554,
+  "cols_not_in_raw_whitelist": 0,
+  "gene_barcode_nnz": 75113,
+  "total": 76403,
+  "vt_code": 1
+ },
+ "mtx_nonzero_columns": 88799,
+ "pz_columns_union": 50119,
+ "mtx_cols_in_pz": 49403,
+ "pz_cols_in_mtx_nonzero": 49403,
+ "mtx_nnz_in_pz_columns": 301629,
+ "mtx_umi_in_pz_columns": 311968,
+ "vs_exon+intron": {
+  "mtx_nnz": 363690,
+  "pz_nnz": 372640,
+  "both": 290548,
+  "mtx_only": 73142,
+  "pz_only": 82092,
+  "frac_mtx_nnz_also_in_pz": 0.7988891638483324,
+  "frac_pz_nnz_also_in_mtx": 0.779701588664663,
+  "frac_equal_among_both": 0.9912441317785702,
+  "diff_mtx_minus_pz_clipped_hist": {
+   "-5": 1,
+   "-4": 11,
+   "-3": 15,
+   "-2": 431,
+   "-1": 1422,
+   "0": 288004,
+   "1": 624,
+   "2": 35,
+   "3": 4,
+   "5": 1
+  },
+  "mean_diff": -0.005740875862163911,
+  "umi_mtx_total": 374306,
+  "umi_pz_total": 407856,
+  "umi_mtx_on_both": 300770,
+  "umi_pz_on_both": 302438,
+  "cond_cost_on_pz_support": {
+   "support_entries": 372640,
+   "plugin_bits_total": 264179.73321086133,
+   "plugin_bytes": 33022.46665135767,
+   "heldout_odd_barcodes_bits": 132675.10639133322,
+   "heldout_entries": 186940,
+   "heldout_bits_per_entry": 0.7097202652794117,
+   "plugin_bits_per_mtx_nonzero": 0.7263871242290448
+  },
+  "mtx_only_standalone": {
+   "colnnz": {
+    "raw": 48969,
+    "zstd19": 9388,
+    "xz": 9976
+   },
+   "gaps": {
+    "raw": 194073,
+    "zstd19": 150562,
+    "xz": 147088
+   },
+   "vals": {
+    "raw": 73142,
+    "zstd19": 896,
+    "xz": 1128
+   },
+   "o0_gaps_bytes": 111874.2146110367,
+   "o0_vals_bytes": 441.5034780071243,
+   "o0_colnnz_bytes": 8174.181488127365,
+   "total_zstd19": 160846,
+   "total_xz": 158192,
+   "total_o0": 120489.89957717119
+  }
+ },
+ "vs_exon": {
+  "mtx_nnz": 363690,
+  "pz_nnz": 321089,
+  "both": 290545,
+  "mtx_only": 73145,
+  "pz_only": 30544,
+  "frac_mtx_nnz_also_in_pz": 0.7988809150650279,
+  "frac_pz_nnz_also_in_mtx": 0.9048737265991672,
+  "frac_equal_among_both": 0.9953053743826258,
+  "diff_mtx_minus_pz_clipped_hist": {
+   "-2": 10,
+   "-1": 689,
+   "0": 289181,
+   "1": 625,
+   "2": 35,
+   "3": 4,
+   "5": 1
+  },
+  "mean_diff": 1.0325422912113443e-05,
+  "umi_mtx_total": 374306,
+  "umi_pz_total": 331453,
+  "umi_mtx_on_both": 300767,
+  "umi_pz_on_both": 300764,
+  "cond_cost_on_pz_support": {
+   "support_entries": 321089,
+   "plugin_bits_total": 154959.96999009224,
+   "plugin_bytes": 19369.99624876153,
+   "heldout_odd_barcodes_bits": 78027.60918513397,
+   "heldout_entries": 161036,
+   "heldout_bits_per_entry": 0.48453519203863715,
+   "plugin_bits_per_mtx_nonzero": 0.4260770711047657
+  },
+  "mtx_only_standalone": {
+   "colnnz": {
+    "raw": 48971,
+    "zstd19": 9383,
+    "xz": 9976
+   },
+   "gaps": {
+    "raw": 194081,
+    "zstd19": 150575,
+    "xz": 147096
+   },
+   "vals": {
+    "raw": 73145,
+    "zstd19": 897,
+    "xz": 1128
+   },
+   "o0_gaps_bytes": 111879.48393921749,
+   "o0_vals_bytes": 441.5063406413009,
+   "o0_colnnz_bytes": 8174.50272461491,
+   "total_zstd19": 160855,
+   "total_xz": 158200,
+   "total_o0": 120495.4930044737
+  }
+ },
+ "standalone_mtx_csc": {
+  "colnnz": {
+   "raw": 88815,
+   "zstd19": 34593,
+   "xz": 35296
+  },
+  "gaps": {
+   "raw": 813862,
+   "zstd19": 741830,
+   "xz": 700888
+  },
+  "vals": {
+   "raw": 363690,
+   "zstd19": 11157,
+   "xz": 12440
+  },
+  "o0_gaps_bytes": 634265.350573866,
+  "o0_vals_bytes": 7726.711976943622,
+  "o0_colnnz_bytes": 33668.95737165817,
+  "total_zstd19": 787580,
+  "total_xz": 748624,
+  "total_o0": 675661.0199224679
+ },
+ "mtx_text_bytes": 5652657,
+ "mtx_text_deflate9": 1500975,
+ "mtx_text_zstd19": 1121088
+}

@@ -1,0 +1,309 @@
+sample	member	field	scheme	bytes	raw_bytes	enc_ms	dec_ms_min	model_bytes
+brain_sn_v3_deep	exon_counts.1pz	rownames	zstd3	4217993	17737417	384.176	87.2901	0
+brain_sn_v3_deep	exon_counts.1pz	rownames	zstd19	2757805	17737417	30094.5	66.8397	0
+brain_sn_v3_deep	exon_counts.1pz	rownames	zstd22w27ldm	2754940	17737417	39311.5	66.7311	0
+brain_sn_v3_deep	exon_counts.1pz	rownames	xz9e	2507694	17737417	39886.8	933.446	0
+brain_sn_v3_deep	exon_counts.1pz	rownames	brotli11w24	2546166	17737417	143554	183.313	0
+brain_sn_v3_deep	exon_counts.1pz	rownames	bzip2	4025436	17737417	5445.29	2018.86	0
+brain_sn_v3_deep	exon_counts.1pz	meta_block_today(rows+cols)	zstd3	4655893	17737417	0	0	0
+brain_sn_v3_deep	exon_counts.1pz	rownames	vocab_id(8B)+model	8	17737417	0	0	2507694
+brain_sn_v3_intronic	exon_counts.1pz	rownames	zstd3	4217993	17737417	384.176	87.2901	0
+brain_sn_v3_intronic	exon_counts.1pz	rownames	zstd19	2757805	17737417	30094.5	66.8397	0
+brain_sn_v3_intronic	exon_counts.1pz	rownames	zstd22w27ldm	2754940	17737417	39311.5	66.7311	0
+brain_sn_v3_intronic	exon_counts.1pz	rownames	xz9e	2507694	17737417	39886.8	933.446	0
+brain_sn_v3_intronic	exon_counts.1pz	rownames	brotli11w24	2546166	17737417	143554	183.313	0
+brain_sn_v3_intronic	exon_counts.1pz	rownames	bzip2	4025436	17737417	5445.29	2018.86	0
+brain_sn_v3_intronic	exon_counts.1pz	meta_block_today(rows+cols)	zstd3	4655893	17737417	0	0	0
+brain_sn_v3_intronic	exon_counts.1pz	rownames	vocab_id(8B)+model	8	17737417	0	0	2507694
+pbmc_v2_shallow	exon_counts.1pz	rownames	zstd3	3334309	14846254	318.645	64.9901	0
+pbmc_v2_shallow	exon_counts.1pz	rownames	zstd19	2069662	14846254	25231.2	43.7705	0
+pbmc_v2_shallow	exon_counts.1pz	rownames	zstd22w27ldm	2069152	14846254	29599.8	43.9669	0
+pbmc_v2_shallow	exon_counts.1pz	rownames	xz9e	1890658	14846254	18433	228.964	0
+pbmc_v2_shallow	exon_counts.1pz	rownames	brotli11w24	1934494	14846254	46592.8	71.7749	0
+pbmc_v2_shallow	exon_counts.1pz	rownames	bzip2	3154923	14846254	2285.55	812.013	0
+pbmc_v2_shallow	exon_counts.1pz	meta_block_today(rows+cols)	zstd3	3806061	14846254	0	0	0
+pbmc_v2_shallow	exon_counts.1pz	rownames	vocab_id(8B)+model	8	14846254	0	0	1890658
+pbmc_v2_typical	exon_counts.1pz	rownames	zstd3	3334309	14846254	318.645	64.9901	0
+pbmc_v2_typical	exon_counts.1pz	rownames	zstd19	2069662	14846254	25231.2	43.7705	0
+pbmc_v2_typical	exon_counts.1pz	rownames	zstd22w27ldm	2069152	14846254	29599.8	43.9669	0
+pbmc_v2_typical	exon_counts.1pz	rownames	xz9e	1890658	14846254	18433	228.964	0
+pbmc_v2_typical	exon_counts.1pz	rownames	brotli11w24	1934494	14846254	46592.8	71.7749	0
+pbmc_v2_typical	exon_counts.1pz	rownames	bzip2	3154923	14846254	2285.55	812.013	0
+pbmc_v2_typical	exon_counts.1pz	meta_block_today(rows+cols)	zstd3	3806061	14846254	0	0	0
+pbmc_v2_typical	exon_counts.1pz	rownames	vocab_id(8B)+model	8	14846254	0	0	1890658
+pbmc_v3_lowgenes	exon_counts.1pz	rownames	zstd3	3334309	14846254	318.645	64.9901	0
+pbmc_v3_lowgenes	exon_counts.1pz	rownames	zstd19	2069662	14846254	25231.2	43.7705	0
+pbmc_v3_lowgenes	exon_counts.1pz	rownames	zstd22w27ldm	2069152	14846254	29599.8	43.9669	0
+pbmc_v3_lowgenes	exon_counts.1pz	rownames	xz9e	1890658	14846254	18433	228.964	0
+pbmc_v3_lowgenes	exon_counts.1pz	rownames	brotli11w24	1934494	14846254	46592.8	71.7749	0
+pbmc_v3_lowgenes	exon_counts.1pz	rownames	bzip2	3154923	14846254	2285.55	812.013	0
+pbmc_v3_lowgenes	exon_counts.1pz	meta_block_today(rows+cols)	zstd3	3806061	14846254	0	0	0
+pbmc_v3_lowgenes	exon_counts.1pz	rownames	vocab_id(8B)+model	8	14846254	0	0	1890658
+tcell_5p	exon_counts.1pz	rownames	zstd3	3334309	14846254	318.645	64.9901	0
+tcell_5p	exon_counts.1pz	rownames	zstd19	2069662	14846254	25231.2	43.7705	0
+tcell_5p	exon_counts.1pz	rownames	zstd22w27ldm	2069152	14846254	29599.8	43.9669	0
+tcell_5p	exon_counts.1pz	rownames	xz9e	1890658	14846254	18433	228.964	0
+tcell_5p	exon_counts.1pz	rownames	brotli11w24	1934494	14846254	46592.8	71.7749	0
+tcell_5p	exon_counts.1pz	rownames	bzip2	3154923	14846254	2285.55	812.013	0
+tcell_5p	exon_counts.1pz	meta_block_today(rows+cols)	zstd3	3806061	14846254	0	0	0
+tcell_5p	exon_counts.1pz	rownames	vocab_id(8B)+model	8	14846254	0	0	1890658
+tumor_3p	exon_counts.1pz	rownames	zstd3	3334309	14846254	318.645	64.9901	0
+tumor_3p	exon_counts.1pz	rownames	zstd19	2069662	14846254	25231.2	43.7705	0
+tumor_3p	exon_counts.1pz	rownames	zstd22w27ldm	2069152	14846254	29599.8	43.9669	0
+tumor_3p	exon_counts.1pz	rownames	xz9e	1890658	14846254	18433	228.964	0
+tumor_3p	exon_counts.1pz	rownames	brotli11w24	1934494	14846254	46592.8	71.7749	0
+tumor_3p	exon_counts.1pz	rownames	bzip2	3154923	14846254	2285.55	812.013	0
+tumor_3p	exon_counts.1pz	meta_block_today(rows+cols)	zstd3	3806061	14846254	0	0	0
+tumor_3p	exon_counts.1pz	rownames	vocab_id(8B)+model	8	14846254	0	0	1890658
+brain_sn_v3_deep	intron_counts.1pz	rownames	zstd3	3388989	16309735	204.95	46.6338	0
+brain_sn_v3_deep	intron_counts.1pz	rownames	zstd19	2130759	16309735	26082.4	38.4926	0
+brain_sn_v3_deep	intron_counts.1pz	rownames	zstd22w27ldm	2129511	16309735	27063.5	45.9977	0
+brain_sn_v3_deep	intron_counts.1pz	rownames	xz9e	1963150	16309735	24979.3	355.724	0
+brain_sn_v3_deep	intron_counts.1pz	rownames	brotli11w24	2028720	16309735	81696.7	154.612	0
+brain_sn_v3_deep	intron_counts.1pz	rownames	bzip2	3133005	16309735	7189.7	2641.19	0
+brain_sn_v3_deep	intron_counts.1pz	meta_block_today(rows+cols)	zstd3	3827047	16309735	0	0	0
+brain_sn_v3_deep	intron_counts.1pz	rownames	vocab_id(8B)+model	8	16309735	0	0	1963150
+brain_sn_v3_intronic	intron_counts.1pz	rownames	zstd3	3388989	16309735	204.95	46.6338	0
+brain_sn_v3_intronic	intron_counts.1pz	rownames	zstd19	2130759	16309735	26082.4	38.4926	0
+brain_sn_v3_intronic	intron_counts.1pz	rownames	zstd22w27ldm	2129511	16309735	27063.5	45.9977	0
+brain_sn_v3_intronic	intron_counts.1pz	rownames	xz9e	1963150	16309735	24979.3	355.724	0
+brain_sn_v3_intronic	intron_counts.1pz	rownames	brotli11w24	2028720	16309735	81696.7	154.612	0
+brain_sn_v3_intronic	intron_counts.1pz	rownames	bzip2	3133005	16309735	7189.7	2641.19	0
+brain_sn_v3_intronic	intron_counts.1pz	meta_block_today(rows+cols)	zstd3	3827047	16309735	0	0	0
+brain_sn_v3_intronic	intron_counts.1pz	rownames	vocab_id(8B)+model	8	16309735	0	0	1963150
+pbmc_v2_shallow	intron_counts.1pz	rownames	zstd3	2959050	14820791	346.071	34.3972	0
+pbmc_v2_shallow	intron_counts.1pz	rownames	zstd19	1822747	14820791	26179.1	46.6401	0
+pbmc_v2_shallow	intron_counts.1pz	rownames	zstd22w27ldm	1821158	14820791	34799.5	45.6266	0
+pbmc_v2_shallow	intron_counts.1pz	rownames	xz9e	1678366	14820791	33333.7	882.941	0
+pbmc_v2_shallow	intron_counts.1pz	rownames	brotli11w24	1753396	14820791	140350	109.969	0
+pbmc_v2_shallow	intron_counts.1pz	rownames	bzip2	2749160	14820791	4517.92	1344.88	0
+pbmc_v2_shallow	intron_counts.1pz	meta_block_today(rows+cols)	zstd3	3429010	14820791	0	0	0
+pbmc_v2_shallow	intron_counts.1pz	rownames	vocab_id(8B)+model	8	14820791	0	0	1678366
+pbmc_v2_typical	intron_counts.1pz	rownames	zstd3	2959050	14820791	346.071	34.3972	0
+pbmc_v2_typical	intron_counts.1pz	rownames	zstd19	1822747	14820791	26179.1	46.6401	0
+pbmc_v2_typical	intron_counts.1pz	rownames	zstd22w27ldm	1821158	14820791	34799.5	45.6266	0
+pbmc_v2_typical	intron_counts.1pz	rownames	xz9e	1678366	14820791	33333.7	882.941	0
+pbmc_v2_typical	intron_counts.1pz	rownames	brotli11w24	1753396	14820791	140350	109.969	0
+pbmc_v2_typical	intron_counts.1pz	rownames	bzip2	2749160	14820791	4517.92	1344.88	0
+pbmc_v2_typical	intron_counts.1pz	meta_block_today(rows+cols)	zstd3	3429010	14820791	0	0	0
+pbmc_v2_typical	intron_counts.1pz	rownames	vocab_id(8B)+model	8	14820791	0	0	1678366
+pbmc_v3_lowgenes	intron_counts.1pz	rownames	zstd3	2959050	14820791	346.071	34.3972	0
+pbmc_v3_lowgenes	intron_counts.1pz	rownames	zstd19	1822747	14820791	26179.1	46.6401	0
+pbmc_v3_lowgenes	intron_counts.1pz	rownames	zstd22w27ldm	1821158	14820791	34799.5	45.6266	0
+pbmc_v3_lowgenes	intron_counts.1pz	rownames	xz9e	1678366	14820791	33333.7	882.941	0
+pbmc_v3_lowgenes	intron_counts.1pz	rownames	brotli11w24	1753396	14820791	140350	109.969	0
+pbmc_v3_lowgenes	intron_counts.1pz	rownames	bzip2	2749160	14820791	4517.92	1344.88	0
+pbmc_v3_lowgenes	intron_counts.1pz	meta_block_today(rows+cols)	zstd3	3429010	14820791	0	0	0
+pbmc_v3_lowgenes	intron_counts.1pz	rownames	vocab_id(8B)+model	8	14820791	0	0	1678366
+tcell_5p	intron_counts.1pz	rownames	zstd3	2959050	14820791	346.071	34.3972	0
+tcell_5p	intron_counts.1pz	rownames	zstd19	1822747	14820791	26179.1	46.6401	0
+tcell_5p	intron_counts.1pz	rownames	zstd22w27ldm	1821158	14820791	34799.5	45.6266	0
+tcell_5p	intron_counts.1pz	rownames	xz9e	1678366	14820791	33333.7	882.941	0
+tcell_5p	intron_counts.1pz	rownames	brotli11w24	1753396	14820791	140350	109.969	0
+tcell_5p	intron_counts.1pz	rownames	bzip2	2749160	14820791	4517.92	1344.88	0
+tcell_5p	intron_counts.1pz	meta_block_today(rows+cols)	zstd3	3429010	14820791	0	0	0
+tcell_5p	intron_counts.1pz	rownames	vocab_id(8B)+model	8	14820791	0	0	1678366
+tumor_3p	intron_counts.1pz	rownames	zstd3	2959050	14820791	346.071	34.3972	0
+tumor_3p	intron_counts.1pz	rownames	zstd19	1822747	14820791	26179.1	46.6401	0
+tumor_3p	intron_counts.1pz	rownames	zstd22w27ldm	1821158	14820791	34799.5	45.6266	0
+tumor_3p	intron_counts.1pz	rownames	xz9e	1678366	14820791	33333.7	882.941	0
+tumor_3p	intron_counts.1pz	rownames	brotli11w24	1753396	14820791	140350	109.969	0
+tumor_3p	intron_counts.1pz	rownames	bzip2	2749160	14820791	4517.92	1344.88	0
+tumor_3p	intron_counts.1pz	meta_block_today(rows+cols)	zstd3	3429010	14820791	0	0	0
+tumor_3p	intron_counts.1pz	rownames	vocab_id(8B)+model	8	14820791	0	0	1678366
+brain_sn_v3_deep	exon_counts.1pz	colnames	zstd3	435800	1435208	42.9365	6.5591	0
+brain_sn_v3_deep	exon_counts.1pz	colnames	zstd19	362699	1435208	2877.37	6.0017	0
+brain_sn_v3_deep	exon_counts.1pz	colnames	zstd22w27ldm	362699	1435208	2853.78	5.2417	0
+brain_sn_v3_deep	exon_counts.1pz	colnames	xz9e	369931	1435208	3261.54	83.0301	0
+brain_sn_v3_deep	exon_counts.1pz	colnames	brotli11w24	401224	1435208	14917.8	38.0816	0
+brain_sn_v3_deep	exon_counts.1pz	colnames	bzip2	325784	1435208	533.068	216.261	0
+brain_sn_v3_deep	exon_counts.1pz	colnames	pack2bit_file_order	337696	1435208	0	0	0
+brain_sn_v3_deep	exon_counts.1pz	colnames	pack2bit+zstd19	337154	1435208	0	0	0
+brain_sn_v3_deep	exon_counts.1pz	colnames	whitelist_index(3M-february-2018)	232166	1435208	0	0	6465
+brain_sn_v3_deep	exon_counts.1pz	colnames	whitelist_entropy_bound	230201	1435208	0	0	0
+brain_sn_v3_deep	exon_counts.1pz	colnames	sorted_set_bound(order canonicalised)	72546	1435208	0	0	0
+brain_sn_v3_deep	exon_counts.1pz	colnames	sorted_rice_delta+order_perm	364135	1435208	0	0	0
+brain_sn_v3_deep	exon_counts.1pz	colnames	  of which sorted_rice_delta stream	184721	1435208	0	0	0
+brain_sn_v3_deep	exon_counts.1pz	colnames	  of which order permutation	179401	1435208	0	0	0
+brain_sn_v3_intronic	exon_counts.1pz	colnames	zstd3	406688	1341198	29.0759	7.0817	0
+brain_sn_v3_intronic	exon_counts.1pz	colnames	zstd19	337690	1341198	2372.33	5.5749	0
+brain_sn_v3_intronic	exon_counts.1pz	colnames	zstd22w27ldm	337690	1341198	2394.97	5.521	0
+brain_sn_v3_intronic	exon_counts.1pz	colnames	xz9e	345329	1341198	2860.33	62.4707	0
+brain_sn_v3_intronic	exon_counts.1pz	colnames	brotli11w24	375404	1341198	14616.6	33.1652	0
+brain_sn_v3_intronic	exon_counts.1pz	colnames	bzip2	304619	1341198	498.409	199.311	0
+brain_sn_v3_intronic	exon_counts.1pz	colnames	pack2bit_file_order	315576	1341198	0	0	0
+brain_sn_v3_intronic	exon_counts.1pz	colnames	pack2bit+zstd19	315027	1341198	0	0	0
+brain_sn_v3_intronic	exon_counts.1pz	colnames	whitelist_index(3M-february-2018)	216959	1341198	0	0	6465
+brain_sn_v3_intronic	exon_counts.1pz	colnames	whitelist_entropy_bound	215123	1341198	0	0	0
+brain_sn_v3_intronic	exon_counts.1pz	colnames	sorted_set_bound(order canonicalised)	68768	1341198	0	0	0
+brain_sn_v3_intronic	exon_counts.1pz	colnames	sorted_rice_delta+order_perm	341324	1341198	0	0	0
+brain_sn_v3_intronic	exon_counts.1pz	colnames	  of which sorted_rice_delta stream	173661	1341198	0	0	0
+brain_sn_v3_intronic	exon_counts.1pz	colnames	  of which order permutation	167650	1341198	0	0	0
+pbmc_v2_shallow	exon_counts.1pz	colnames	zstd3	469211	1639582	44.6913	8.7198	0
+pbmc_v2_shallow	exon_counts.1pz	colnames	zstd19	391438	1639582	3322.36	7.4071	0
+pbmc_v2_shallow	exon_counts.1pz	colnames	zstd22w27ldm	391438	1639582	3553.79	5.2072	0
+pbmc_v2_shallow	exon_counts.1pz	colnames	xz9e	395059	1639582	5888.34	91.8455	0
+pbmc_v2_shallow	exon_counts.1pz	colnames	brotli11w24	416631	1639582	18804.8	27.8063	0
+pbmc_v2_shallow	exon_counts.1pz	colnames	bzip2	318389	1639582	653.394	215.833	0
+pbmc_v2_shallow	exon_counts.1pz	colnames	pack2bit_file_order	385784	1639582	0	0	0
+pbmc_v2_shallow	exon_counts.1pz	colnames	pack2bit+zstd19	378911	1639582	0	0	0
+pbmc_v2_shallow	exon_counts.1pz	colnames	whitelist_index(737K-august-2016)	241115	1639582	0	0	3283
+pbmc_v2_shallow	exon_counts.1pz	colnames	whitelist_entropy_bound	234989	1639582	0	0	0
+pbmc_v2_shallow	exon_counts.1pz	colnames	sorted_set_bound(order canonicalised)	51578	1639582	0	0	0
+pbmc_v2_shallow	exon_counts.1pz	colnames	sorted_rice_delta+order_perm	413886	1639582	0	0	0
+pbmc_v2_shallow	exon_counts.1pz	colnames	  of which sorted_rice_delta stream	208925	1639582	0	0	0
+pbmc_v2_shallow	exon_counts.1pz	colnames	  of which order permutation	204948	1639582	0	0	0
+pbmc_v2_typical	exon_counts.1pz	colnames	zstd3	77823	258145	6.7044	1.6136	0
+pbmc_v2_typical	exon_counts.1pz	colnames	zstd19	65131	258145	496.082	0.8992	0
+pbmc_v2_typical	exon_counts.1pz	colnames	zstd22w27ldm	65131	258145	630.53	0.8555	0
+pbmc_v2_typical	exon_counts.1pz	colnames	xz9e	64117	258145	459.799	13.4577	0
+pbmc_v2_typical	exon_counts.1pz	colnames	brotli11w24	72344	258145	1568.32	5.728	0
+pbmc_v2_typical	exon_counts.1pz	colnames	bzip2	55895	258145	75.7819	25.6298	0
+pbmc_v2_typical	exon_counts.1pz	colnames	pack2bit_file_order	60740	258145	0	0	0
+pbmc_v2_typical	exon_counts.1pz	colnames	pack2bit+zstd19	60128	258145	0	0	0
+pbmc_v2_typical	exon_counts.1pz	colnames	whitelist_index(737K-august-2016)	37963	258145	0	0	3283
+pbmc_v2_typical	exon_counts.1pz	colnames	whitelist_entropy_bound	36998	258145	0	0	0
+pbmc_v2_typical	exon_counts.1pz	colnames	sorted_set_bound(order canonicalised)	13342	258145	0	0	0
+pbmc_v2_typical	exon_counts.1pz	colnames	sorted_rice_delta+order_perm	64616	258145	0	0	0
+pbmc_v2_typical	exon_counts.1pz	colnames	  of which sorted_rice_delta stream	38029	258145	0	0	0
+pbmc_v2_typical	exon_counts.1pz	colnames	  of which order permutation	26574	258145	0	0	0
+pbmc_v3_lowgenes	exon_counts.1pz	colnames	zstd3	367552	1208037	29.3177	6.304	0
+pbmc_v3_lowgenes	exon_counts.1pz	colnames	zstd19	305574	1208037	2281.38	4.1221	0
+pbmc_v3_lowgenes	exon_counts.1pz	colnames	zstd22w27ldm	305574	1208037	4274.57	6.2157	0
+pbmc_v3_lowgenes	exon_counts.1pz	colnames	xz9e	313237	1208037	2897.57	55.4113	0
+pbmc_v3_lowgenes	exon_counts.1pz	colnames	brotli11w24	337035	1208037	10894.1	30.4258	0
+pbmc_v3_lowgenes	exon_counts.1pz	colnames	bzip2	276447	1208037	400.794	167.798	0
+pbmc_v3_lowgenes	exon_counts.1pz	colnames	pack2bit_file_order	284244	1208037	0	0	0
+pbmc_v3_lowgenes	exon_counts.1pz	colnames	pack2bit+zstd19	284266	1208037	0	0	0
+pbmc_v3_lowgenes	exon_counts.1pz	colnames	whitelist_index(3M-february-2018)	195418	1208037	0	0	6465
+pbmc_v3_lowgenes	exon_counts.1pz	colnames	whitelist_entropy_bound	193764	1208037	0	0	0
+pbmc_v3_lowgenes	exon_counts.1pz	colnames	sorted_set_bound(order canonicalised)	63294	1208037	0	0	0
+pbmc_v3_lowgenes	exon_counts.1pz	colnames	sorted_rice_delta+order_perm	309013	1208037	0	0	0
+pbmc_v3_lowgenes	exon_counts.1pz	colnames	  of which sorted_rice_delta stream	157995	1208037	0	0	0
+pbmc_v3_lowgenes	exon_counts.1pz	colnames	  of which order permutation	151005	1208037	0	0	0
+tcell_5p	exon_counts.1pz	colnames	zstd3	337896	1177233	25.6449	5.4246	0
+tcell_5p	exon_counts.1pz	colnames	zstd19	284575	1177233	2222.04	5.2704	0
+tcell_5p	exon_counts.1pz	colnames	zstd22w27ldm	284575	1177233	2276.3	4.8509	0
+tcell_5p	exon_counts.1pz	colnames	xz9e	285976	1177233	2899.05	79.6448	0
+tcell_5p	exon_counts.1pz	colnames	brotli11w24	301382	1177233	12812.4	19.3646	0
+tcell_5p	exon_counts.1pz	colnames	bzip2	233910	1177233	465.693	149.047	0
+tcell_5p	exon_counts.1pz	colnames	pack2bit_file_order	276996	1177233	0	0	0
+tcell_5p	exon_counts.1pz	colnames	pack2bit+zstd19	273784	1177233	0	0	0
+tcell_5p	exon_counts.1pz	colnames	whitelist_index(737K-august-2016)	173123	1177233	0	0	3283
+tcell_5p	exon_counts.1pz	colnames	whitelist_entropy_bound	168724	1177233	0	0	0
+tcell_5p	exon_counts.1pz	colnames	sorted_set_bound(order canonicalised)	41419	1177233	0	0	0
+tcell_5p	exon_counts.1pz	colnames	sorted_rice_delta+order_perm	301699	1177233	0	0	0
+tcell_5p	exon_counts.1pz	colnames	  of which sorted_rice_delta stream	154531	1177233	0	0	0
+tcell_5p	exon_counts.1pz	colnames	  of which order permutation	147155	1177233	0	0	0
+tumor_3p	exon_counts.1pz	colnames	zstd3	122588	426139	23.7311	2.3135	0
+tumor_3p	exon_counts.1pz	colnames	zstd19	105157	426139	810.636	1.6284	0
+tumor_3p	exon_counts.1pz	colnames	zstd22w27ldm	105157	426139	738.641	1.4627	0
+tumor_3p	exon_counts.1pz	colnames	xz9e	104669	426139	766.963	22.2874	0
+tumor_3p	exon_counts.1pz	colnames	brotli11w24	113357	426139	4335.31	10.8459	0
+tumor_3p	exon_counts.1pz	colnames	bzip2	88209	426139	244.071	64.4735	0
+tumor_3p	exon_counts.1pz	colnames	pack2bit_file_order	100268	426139	0	0	0
+tumor_3p	exon_counts.1pz	colnames	pack2bit+zstd19	99274	426139	0	0	0
+tumor_3p	exon_counts.1pz	colnames	whitelist_index(737K-august-2016)	62668	426139	0	0	3283
+tumor_3p	exon_counts.1pz	colnames	whitelist_entropy_bound	61076	426139	0	0	0
+tumor_3p	exon_counts.1pz	colnames	sorted_set_bound(order canonicalised)	19728	426139	0	0	0
+tumor_3p	exon_counts.1pz	colnames	sorted_rice_delta+order_perm	107347	426139	0	0	0
+tumor_3p	exon_counts.1pz	colnames	  of which sorted_rice_delta stream	60333	426139	0	0	0
+tumor_3p	exon_counts.1pz	colnames	  of which order permutation	47001	426139	0	0	0
+brain_sn_v3_deep	intron_counts.1pz	colnames	zstd3	435800	1435208	38.3098	7.7758	0
+brain_sn_v3_deep	intron_counts.1pz	colnames	zstd19	362699	1435208	2593.3	4.5781	0
+brain_sn_v3_deep	intron_counts.1pz	colnames	zstd22w27ldm	362699	1435208	2721.83	4.3741	0
+brain_sn_v3_deep	intron_counts.1pz	colnames	xz9e	369931	1435208	3656.84	61.0325	0
+brain_sn_v3_deep	intron_counts.1pz	colnames	brotli11w24	401224	1435208	14119.2	35.5854	0
+brain_sn_v3_deep	intron_counts.1pz	colnames	bzip2	325784	1435208	550.813	232.117	0
+brain_sn_v3_deep	intron_counts.1pz	colnames	pack2bit_file_order	337696	1435208	0	0	0
+brain_sn_v3_deep	intron_counts.1pz	colnames	pack2bit+zstd19	337154	1435208	0	0	0
+brain_sn_v3_deep	intron_counts.1pz	colnames	whitelist_index(3M-february-2018)	232166	1435208	0	0	6465
+brain_sn_v3_deep	intron_counts.1pz	colnames	whitelist_entropy_bound	230201	1435208	0	0	0
+brain_sn_v3_deep	intron_counts.1pz	colnames	sorted_set_bound(order canonicalised)	72546	1435208	0	0	0
+brain_sn_v3_deep	intron_counts.1pz	colnames	sorted_rice_delta+order_perm	364135	1435208	0	0	0
+brain_sn_v3_deep	intron_counts.1pz	colnames	  of which sorted_rice_delta stream	184721	1435208	0	0	0
+brain_sn_v3_deep	intron_counts.1pz	colnames	  of which order permutation	179401	1435208	0	0	0
+brain_sn_v3_intronic	intron_counts.1pz	colnames	zstd3	406688	1341198	30.5988	6.2738	0
+brain_sn_v3_intronic	intron_counts.1pz	colnames	zstd19	337690	1341198	2615.75	6.3943	0
+brain_sn_v3_intronic	intron_counts.1pz	colnames	zstd22w27ldm	337690	1341198	3057.66	4.6194	0
+brain_sn_v3_intronic	intron_counts.1pz	colnames	xz9e	345329	1341198	4547.88	57.6591	0
+brain_sn_v3_intronic	intron_counts.1pz	colnames	brotli11w24	375404	1341198	14531.4	36.8709	0
+brain_sn_v3_intronic	intron_counts.1pz	colnames	bzip2	304619	1341198	464.605	206.417	0
+brain_sn_v3_intronic	intron_counts.1pz	colnames	pack2bit_file_order	315576	1341198	0	0	0
+brain_sn_v3_intronic	intron_counts.1pz	colnames	pack2bit+zstd19	315027	1341198	0	0	0
+brain_sn_v3_intronic	intron_counts.1pz	colnames	whitelist_index(3M-february-2018)	216959	1341198	0	0	6465
+brain_sn_v3_intronic	intron_counts.1pz	colnames	whitelist_entropy_bound	215123	1341198	0	0	0
+brain_sn_v3_intronic	intron_counts.1pz	colnames	sorted_set_bound(order canonicalised)	68768	1341198	0	0	0
+brain_sn_v3_intronic	intron_counts.1pz	colnames	sorted_rice_delta+order_perm	341324	1341198	0	0	0
+brain_sn_v3_intronic	intron_counts.1pz	colnames	  of which sorted_rice_delta stream	173661	1341198	0	0	0
+brain_sn_v3_intronic	intron_counts.1pz	colnames	  of which order permutation	167650	1341198	0	0	0
+pbmc_v2_shallow	intron_counts.1pz	colnames	zstd3	469211	1639582	31.6581	7.0001	0
+pbmc_v2_shallow	intron_counts.1pz	colnames	zstd19	391438	1639582	5491.29	6.5512	0
+pbmc_v2_shallow	intron_counts.1pz	colnames	zstd22w27ldm	391438	1639582	5463.6	6.7378	0
+pbmc_v2_shallow	intron_counts.1pz	colnames	xz9e	395059	1639582	3893.42	65.4855	0
+pbmc_v2_shallow	intron_counts.1pz	colnames	brotli11w24	416631	1639582	23551.2	27.4145	0
+pbmc_v2_shallow	intron_counts.1pz	colnames	bzip2	318389	1639582	590.661	231.613	0
+pbmc_v2_shallow	intron_counts.1pz	colnames	pack2bit_file_order	385784	1639582	0	0	0
+pbmc_v2_shallow	intron_counts.1pz	colnames	pack2bit+zstd19	378911	1639582	0	0	0
+pbmc_v2_shallow	intron_counts.1pz	colnames	whitelist_index(737K-august-2016)	241115	1639582	0	0	3283
+pbmc_v2_shallow	intron_counts.1pz	colnames	whitelist_entropy_bound	234989	1639582	0	0	0
+pbmc_v2_shallow	intron_counts.1pz	colnames	sorted_set_bound(order canonicalised)	51578	1639582	0	0	0
+pbmc_v2_shallow	intron_counts.1pz	colnames	sorted_rice_delta+order_perm	413886	1639582	0	0	0
+pbmc_v2_shallow	intron_counts.1pz	colnames	  of which sorted_rice_delta stream	208925	1639582	0	0	0
+pbmc_v2_shallow	intron_counts.1pz	colnames	  of which order permutation	204948	1639582	0	0	0
+pbmc_v2_typical	intron_counts.1pz	colnames	zstd3	77823	258145	7.8863	1.4141	0
+pbmc_v2_typical	intron_counts.1pz	colnames	zstd19	65131	258145	453.465	0.8641	0
+pbmc_v2_typical	intron_counts.1pz	colnames	zstd22w27ldm	65131	258145	415.208	1.1316	0
+pbmc_v2_typical	intron_counts.1pz	colnames	xz9e	64117	258145	457.69	10.9104	0
+pbmc_v2_typical	intron_counts.1pz	colnames	brotli11w24	72344	258145	1800.14	7.8259	0
+pbmc_v2_typical	intron_counts.1pz	colnames	bzip2	55895	258145	143.848	29.7644	0
+pbmc_v2_typical	intron_counts.1pz	colnames	pack2bit_file_order	60740	258145	0	0	0
+pbmc_v2_typical	intron_counts.1pz	colnames	pack2bit+zstd19	60128	258145	0	0	0
+pbmc_v2_typical	intron_counts.1pz	colnames	whitelist_index(737K-august-2016)	37963	258145	0	0	3283
+pbmc_v2_typical	intron_counts.1pz	colnames	whitelist_entropy_bound	36998	258145	0	0	0
+pbmc_v2_typical	intron_counts.1pz	colnames	sorted_set_bound(order canonicalised)	13342	258145	0	0	0
+pbmc_v2_typical	intron_counts.1pz	colnames	sorted_rice_delta+order_perm	64616	258145	0	0	0
+pbmc_v2_typical	intron_counts.1pz	colnames	  of which sorted_rice_delta stream	38029	258145	0	0	0
+pbmc_v2_typical	intron_counts.1pz	colnames	  of which order permutation	26574	258145	0	0	0
+pbmc_v3_lowgenes	intron_counts.1pz	colnames	zstd3	367552	1208037	55.2666	6.2522	0
+pbmc_v3_lowgenes	intron_counts.1pz	colnames	zstd19	305574	1208037	2341.7	5.4702	0
+pbmc_v3_lowgenes	intron_counts.1pz	colnames	zstd22w27ldm	305574	1208037	2677	3.9373	0
+pbmc_v3_lowgenes	intron_counts.1pz	colnames	xz9e	313237	1208037	2767.21	55.4021	0
+pbmc_v3_lowgenes	intron_counts.1pz	colnames	brotli11w24	337035	1208037	11407.2	36.8074	0
+pbmc_v3_lowgenes	intron_counts.1pz	colnames	bzip2	276447	1208037	439.437	210.229	0
+pbmc_v3_lowgenes	intron_counts.1pz	colnames	pack2bit_file_order	284244	1208037	0	0	0
+pbmc_v3_lowgenes	intron_counts.1pz	colnames	pack2bit+zstd19	284266	1208037	0	0	0
+pbmc_v3_lowgenes	intron_counts.1pz	colnames	whitelist_index(3M-february-2018)	195418	1208037	0	0	6465
+pbmc_v3_lowgenes	intron_counts.1pz	colnames	whitelist_entropy_bound	193764	1208037	0	0	0
+pbmc_v3_lowgenes	intron_counts.1pz	colnames	sorted_set_bound(order canonicalised)	63294	1208037	0	0	0
+pbmc_v3_lowgenes	intron_counts.1pz	colnames	sorted_rice_delta+order_perm	309013	1208037	0	0	0
+pbmc_v3_lowgenes	intron_counts.1pz	colnames	  of which sorted_rice_delta stream	157995	1208037	0	0	0
+pbmc_v3_lowgenes	intron_counts.1pz	colnames	  of which order permutation	151005	1208037	0	0	0
+tcell_5p	intron_counts.1pz	colnames	zstd3	337896	1177233	24.6726	6.0812	0
+tcell_5p	intron_counts.1pz	colnames	zstd19	284575	1177233	2185.86	4.6761	0
+tcell_5p	intron_counts.1pz	colnames	zstd22w27ldm	284575	1177233	2065.54	5.1072	0
+tcell_5p	intron_counts.1pz	colnames	xz9e	285976	1177233	2506.19	46.865	0
+tcell_5p	intron_counts.1pz	colnames	brotli11w24	301382	1177233	13655.1	20.3443	0
+tcell_5p	intron_counts.1pz	colnames	bzip2	233910	1177233	407.571	162.688	0
+tcell_5p	intron_counts.1pz	colnames	pack2bit_file_order	276996	1177233	0	0	0
+tcell_5p	intron_counts.1pz	colnames	pack2bit+zstd19	273784	1177233	0	0	0
+tcell_5p	intron_counts.1pz	colnames	whitelist_index(737K-august-2016)	173123	1177233	0	0	3283
+tcell_5p	intron_counts.1pz	colnames	whitelist_entropy_bound	168724	1177233	0	0	0
+tcell_5p	intron_counts.1pz	colnames	sorted_set_bound(order canonicalised)	41419	1177233	0	0	0
+tcell_5p	intron_counts.1pz	colnames	sorted_rice_delta+order_perm	301699	1177233	0	0	0
+tcell_5p	intron_counts.1pz	colnames	  of which sorted_rice_delta stream	154531	1177233	0	0	0
+tcell_5p	intron_counts.1pz	colnames	  of which order permutation	147155	1177233	0	0	0
+tumor_3p	intron_counts.1pz	colnames	zstd3	122588	426139	9.7641	2.0398	0
+tumor_3p	intron_counts.1pz	colnames	zstd19	105157	426139	772.915	1.454	0
+tumor_3p	intron_counts.1pz	colnames	zstd22w27ldm	105157	426139	1071.84	1.6446	0
+tumor_3p	intron_counts.1pz	colnames	xz9e	104669	426139	1258.21	22.7212	0
+tumor_3p	intron_counts.1pz	colnames	brotli11w24	113357	426139	7543.08	9.1166	0
+tumor_3p	intron_counts.1pz	colnames	bzip2	88209	426139	162.22	50.1356	0
+tumor_3p	intron_counts.1pz	colnames	pack2bit_file_order	100268	426139	0	0	0
+tumor_3p	intron_counts.1pz	colnames	pack2bit+zstd19	99274	426139	0	0	0
+tumor_3p	intron_counts.1pz	colnames	whitelist_index(737K-august-2016)	62668	426139	0	0	3283
+tumor_3p	intron_counts.1pz	colnames	whitelist_entropy_bound	61076	426139	0	0	0
+tumor_3p	intron_counts.1pz	colnames	sorted_set_bound(order canonicalised)	19728	426139	0	0	0
+tumor_3p	intron_counts.1pz	colnames	sorted_rice_delta+order_perm	107347	426139	0	0	0
+tumor_3p	intron_counts.1pz	colnames	  of which sorted_rice_delta stream	60333	426139	0	0	0
+tumor_3p	intron_counts.1pz	colnames	  of which order permutation	47001	426139	0	0	0

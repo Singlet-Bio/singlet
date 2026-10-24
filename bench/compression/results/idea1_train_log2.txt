@@ -1,0 +1,6 @@
+C:\Users\zacha\Projects\singlet-bio\bench\compression\results\idea1_models\human_exon_s1_GSE142444.bin 622758 train 80s
+C:\Users\zacha\Projects\singlet-bio\bench\compression\results\idea1_models\human_exon_s1_GSE244263.bin 622758 train 75s
+C:\Users\zacha\Projects\singlet-bio\bench\compression\results\idea1_models\human_exon_s2_GSE244263.bin 5284713 train 291s
+C:\Users\zacha\Projects\singlet-bio\bench\compression\results\idea1_models\human_exon_s3_GSE244263.bin 5292873 train 100s
+C:\Users\zacha\Projects\singlet-bio\bench\compression\results\idea1_models\human_exon_s3r_GSE244263.bin 630982 train 83s
+C:\Users\zacha\Projects\singlet-bio\bench\compression\results\idea1_models\human_exon_s1_GSE152522.bin 622758 train 61s

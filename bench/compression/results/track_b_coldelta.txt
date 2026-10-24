@@ -1,0 +1,5 @@
+== pbmc_v2_typical: 5340 cells with k>=200, head nnz 1937088 (0.75 of all nnz)
+  [stored order        ] bucket model 3.318 | + prev-column bit 3.317 | per-rank oracle 3.292 | + prev bit 3.286  bits/head nnz
+  [by depth            ] bucket model 3.318 | + prev-column bit 3.316 | per-rank oracle 3.292 | + prev bit 3.286  bits/head nnz
+  [NN chain (PCA-32)   ] bucket model 3.318 | + prev-column bit 3.306 | per-rank oracle 3.292 | + prev bit 3.269  bits/head nnz
+  [random              ] bucket model 3.318 | + prev-column bit 3.318 | per-rank oracle 3.292 | + prev bit 3.286  bits/head nnz

@@ -1,0 +1,725 @@
+{
+ "base": "http://127.0.0.1:8799",
+ "queries": [
+  {
+   "name": "count, summary (cell type)",
+   "query": {
+    "where": {
+     "cell_type": "T cell"
+    },
+    "return": "count"
+   },
+   "runs": [
+    {
+     "ms_client": 272.6,
+     "ms_worker": 170,
+     "reads": 6,
+     "bytes_read": 8065,
+     "cache_hits": 1,
+     "rows_scanned": 0,
+     "response_bytes": 240,
+     "n": 24379,
+     "eligible": null,
+     "estimate_usd": null,
+     "cost_usd": 4e-06
+    },
+    {
+     "ms_client": 11.5,
+     "ms_worker": 5,
+     "reads": 1,
+     "bytes_read": 544,
+     "cache_hits": 1,
+     "rows_scanned": 0,
+     "response_bytes": 233,
+     "n": 24379,
+     "eligible": null,
+     "estimate_usd": null,
+     "cost_usd": 4e-07
+    },
+    {
+     "ms_client": 13.0,
+     "ms_worker": 4,
+     "reads": 1,
+     "bytes_read": 544,
+     "cache_hits": 1,
+     "rows_scanned": 0,
+     "response_bytes": 233,
+     "n": 24379,
+     "eligible": null,
+     "estimate_usd": null,
+     "cost_usd": 4e-07
+    }
+   ]
+  },
+  {
+   "name": "count by cell type x sex, summary",
+   "query": {
+    "where": {
+     "organism": "Homo sapiens"
+    },
+    "return": "count",
+    "by": [
+     "cell_type",
+     "sex"
+    ]
+   },
+   "runs": [
+    {
+     "ms_client": 12.1,
+     "ms_worker": 6,
+     "reads": 1,
+     "bytes_read": 544,
+     "cache_hits": 1,
+     "rows_scanned": 0,
+     "response_bytes": 3134,
+     "n": 40614,
+     "eligible": null,
+     "estimate_usd": null,
+     "cost_usd": 4e-07
+    },
+    {
+     "ms_client": 10.7,
+     "ms_worker": 5,
+     "reads": 1,
+     "bytes_read": 544,
+     "cache_hits": 1,
+     "rows_scanned": 0,
+     "response_bytes": 3134,
+     "n": 40614,
+     "eligible": null,
+     "estimate_usd": null,
+     "cost_usd": 4e-07
+    },
+    {
+     "ms_client": 10.5,
+     "ms_worker": 5,
+     "reads": 1,
+     "bytes_read": 544,
+     "cache_hits": 1,
+     "rows_scanned": 0,
+     "response_bytes": 3134,
+     "n": 40614,
+     "eligible": null,
+     "estimate_usd": null,
+     "cost_usd": 4e-07
+    }
+   ]
+  },
+  {
+   "name": "count, row scan (cell type + n_umi)",
+   "query": {
+    "where": {
+     "cell_type": "CL:0000625",
+     "ranges": {
+      "n_umi": [
+       150,
+       null
+      ]
+     }
+    },
+    "return": "count"
+   },
+   "runs": [
+    {
+     "ms_client": 166.3,
+     "ms_worker": 120,
+     "reads": 3,
+     "bytes_read": 189964,
+     "cache_hits": 0,
+     "rows_scanned": 40614,
+     "response_bytes": 265,
+     "n": 2466,
+     "eligible": null,
+     "estimate_usd": null,
+     "cost_usd": 3.0630700000000004e-06
+    },
+    {
+     "ms_client": 55.4,
+     "ms_worker": 45,
+     "reads": 1,
+     "bytes_read": 188940,
+     "cache_hits": 1,
+     "rows_scanned": 40614,
+     "response_bytes": 249,
+     "n": 2466,
+     "eligible": null,
+     "estimate_usd": null,
+     "cost_usd": 9.0307e-07
+    },
+    {
+     "ms_client": 26.2,
+     "ms_worker": 10,
+     "reads": 1,
+     "bytes_read": 188940,
+     "cache_hits": 1,
+     "rows_scanned": 40614,
+     "response_bytes": 249,
+     "n": 2466,
+     "eligible": null,
+     "estimate_usd": null,
+     "cost_usd": 9.0307e-07
+    }
+   ]
+  },
+  {
+   "name": "count, feature range",
+   "query": {
+    "where": {
+     "ranges": {
+      "hypoxia": [
+       0.5,
+       null
+      ],
+      "malignancy": [
+       null,
+       0.3
+      ]
+     }
+    },
+    "return": "count"
+   },
+   "runs": [
+    {
+     "ms_client": 84.3,
+     "ms_worker": 48,
+     "reads": 1,
+     "bytes_read": 544156,
+     "cache_hits": 1,
+     "rows_scanned": 40614,
+     "response_bytes": 249,
+     "n": 5911,
+     "eligible": null,
+     "estimate_usd": null,
+     "cost_usd": 9.0307e-07
+    },
+    {
+     "ms_client": 104.4,
+     "ms_worker": 27,
+     "reads": 1,
+     "bytes_read": 544156,
+     "cache_hits": 1,
+     "rows_scanned": 40614,
+     "response_bytes": 249,
+     "n": 5911,
+     "eligible": null,
+     "estimate_usd": null,
+     "cost_usd": 9.0307e-07
+    },
+    {
+     "ms_client": 47.4,
+     "ms_worker": 21,
+     "reads": 1,
+     "bytes_read": 544156,
+     "cache_hits": 1,
+     "rows_scanned": 40614,
+     "response_bytes": 249,
+     "n": 5911,
+     "eligible": null,
+     "estimate_usd": null,
+     "cost_usd": 9.0307e-07
+    }
+   ]
+  },
+  {
+   "name": "sample 1,000 cells (cell type + score), uniform",
+   "query": {
+    "where": {
+     "cell_type": "CL:0000084",
+     "ranges": {
+      "cell_type_score": [
+       0.5,
+       null
+      ]
+     }
+    },
+    "return": "cells",
+    "n": 1000,
+    "seed": 1
+   },
+   "runs": [
+    {
+     "ms_client": 237.9,
+     "ms_worker": 214,
+     "reads": 3,
+     "bytes_read": 562983,
+     "cache_hits": 2,
+     "rows_scanned": 40614,
+     "response_bytes": 126579,
+     "n": 1000,
+     "eligible": 21751,
+     "estimate_usd": 1.5501895e-05,
+     "cost_usd": 1.6230700000000002e-06
+    },
+    {
+     "ms_client": 160.1,
+     "ms_worker": 119,
+     "reads": 2,
+     "bytes_read": 544892,
+     "cache_hits": 2,
+     "rows_scanned": 40614,
+     "response_bytes": 126564,
+     "n": 1000,
+     "eligible": 21751,
+     "estimate_usd": 1.5501895e-05,
+     "cost_usd": 9.0307e-07
+    },
+    {
+     "ms_client": 117.3,
+     "ms_worker": 64,
+     "reads": 2,
+     "bytes_read": 544892,
+     "cache_hits": 2,
+     "rows_scanned": 40614,
+     "response_bytes": 126563,
+     "n": 1000,
+     "eligible": 21751,
+     "estimate_usd": 1.5501895e-05,
+     "cost_usd": 9.0307e-07
+    }
+   ]
+  },
+  {
+   "name": "sample 1,000 cells, chunks",
+   "query": {
+    "where": {
+     "cell_type": "CL:0000084",
+     "ranges": {
+      "cell_type_score": [
+       0.5,
+       null
+      ]
+     }
+    },
+    "return": "cells",
+    "n": 1000,
+    "seed": 1,
+    "sampling": "chunks"
+   },
+   "runs": [
+    {
+     "ms_client": 129.2,
+     "ms_worker": 115,
+     "reads": 2,
+     "bytes_read": 544892,
+     "cache_hits": 2,
+     "rows_scanned": 40614,
+     "response_bytes": 125957,
+     "n": 1000,
+     "eligible": 21751,
+     "estimate_usd": 1.5501895e-05,
+     "cost_usd": 9.0307e-07
+    },
+    {
+     "ms_client": 151.7,
+     "ms_worker": 116,
+     "reads": 2,
+     "bytes_read": 544892,
+     "cache_hits": 2,
+     "rows_scanned": 40614,
+     "response_bytes": 125957,
+     "n": 1000,
+     "eligible": 21751,
+     "estimate_usd": 1.5501895e-05,
+     "cost_usd": 9.0307e-07
+    },
+    {
+     "ms_client": 176.2,
+     "ms_worker": 138,
+     "reads": 2,
+     "bytes_read": 544892,
+     "cache_hits": 2,
+     "rows_scanned": 40614,
+     "response_bytes": 125957,
+     "n": 1000,
+     "eligible": 21751,
+     "estimate_usd": 1.5501895e-05,
+     "cost_usd": 9.0307e-07
+    }
+   ]
+  },
+  {
+   "name": "sample 10,000 of 40,614 cells",
+   "query": {
+    "where": {},
+    "return": "cells",
+    "n": 10000,
+    "seed": 2
+   },
+   "runs": [
+    {
+     "ms_client": 377.8,
+     "ms_worker": 294,
+     "reads": 2,
+     "bytes_read": 544892,
+     "cache_hits": 2,
+     "rows_scanned": 40614,
+     "response_bytes": 1257243,
+     "n": 10000,
+     "eligible": 40614,
+     "estimate_usd": 1.558307e-05,
+     "cost_usd": 9.0307e-07
+    },
+    {
+     "ms_client": 334.4,
+     "ms_worker": 252,
+     "reads": 2,
+     "bytes_read": 544892,
+     "cache_hits": 2,
+     "rows_scanned": 40614,
+     "response_bytes": 1257243,
+     "n": 10000,
+     "eligible": 40614,
+     "estimate_usd": 1.558307e-05,
+     "cost_usd": 9.0307e-07
+    },
+    {
+     "ms_client": 312.7,
+     "ms_worker": 215,
+     "reads": 2,
+     "bytes_read": 544892,
+     "cache_hits": 2,
+     "rows_scanned": 40614,
+     "response_bytes": 1257243,
+     "n": 10000,
+     "eligible": 40614,
+     "estimate_usd": 1.558307e-05,
+     "cost_usd": 9.0307e-07
+    }
+   ]
+  },
+  {
+   "name": "dry run of a sample",
+   "query": {
+    "where": {},
+    "return": "cells",
+    "n": 10000,
+    "dry_run": true
+   },
+   "runs": [
+    {
+     "ms_client": 15.7,
+     "ms_worker": null,
+     "reads": null,
+     "bytes_read": null,
+     "cache_hits": null,
+     "rows_scanned": null,
+     "response_bytes": 799,
+     "n": null,
+     "eligible": null,
+     "estimate_usd": 1.558307e-05,
+     "cost_usd": null
+    },
+    {
+     "ms_client": 12.6,
+     "ms_worker": null,
+     "reads": null,
+     "bytes_read": null,
+     "cache_hits": null,
+     "rows_scanned": null,
+     "response_bytes": 799,
+     "n": null,
+     "eligible": null,
+     "estimate_usd": 1.558307e-05,
+     "cost_usd": null
+    },
+    {
+     "ms_client": 20.9,
+     "ms_worker": null,
+     "reads": null,
+     "bytes_read": null,
+     "cache_hits": null,
+     "rows_scanned": null,
+     "response_bytes": 799,
+     "n": null,
+     "eligible": null,
+     "estimate_usd": 1.558307e-05,
+     "cost_usd": null
+    }
+   ]
+  }
+ ],
+ "gathers": [
+  {
+   "name": "1 cell",
+   "cells": 1,
+   "samples": 1,
+   "sampling": "uniform",
+   "plan_no_prefix_cache": {
+    "bytes": 940867,
+    "reads": 1,
+    "payload": 895036
+   },
+   "estimate_usd": 2.28881734e-06,
+   "runs": [
+    {
+     "s_total": 0.947,
+     "s_fetch": 0.035,
+     "worker_ms": 26,
+     "reads": 1,
+     "bytes_read": 940867,
+     "bytes_sent": 895818,
+     "cache_hits": 0,
+     "cost_usd": 1.28791636e-06,
+     "prefix_cached": false
+    },
+    {
+     "s_total": 0.457,
+     "s_fetch": 0.079,
+     "worker_ms": 49,
+     "reads": 2,
+     "bytes_read": 779819,
+     "bytes_sent": 780570,
+     "cache_hits": 0,
+     "cost_usd": 2.0056113999999998e-06,
+     "prefix_cached": true
+    },
+    {
+     "s_total": 0.346,
+     "s_fetch": 0.025,
+     "worker_ms": 19,
+     "reads": 2,
+     "bytes_read": 779819,
+     "bytes_sent": 780570,
+     "cache_hits": 2,
+     "cost_usd": 5.656114e-07,
+     "prefix_cached": true
+    }
+   ]
+  },
+  {
+   "name": "100 cells",
+   "cells": 100,
+   "samples": 14,
+   "sampling": "uniform",
+   "plan_no_prefix_cache": {
+    "bytes": 7756281,
+    "reads": 21,
+    "payload": 7495795
+   },
+   "estimate_usd": 1.682512562e-05,
+   "runs": [
+    {
+     "s_total": 2.503,
+     "s_fetch": 1.109,
+     "worker_ms": 1096,
+     "reads": 21,
+     "bytes_read": 7756281,
+     "bytes_sent": 7503216,
+     "cache_hits": 2,
+     "cost_usd": 1.4380064319999999e-05,
+     "prefix_cached": false
+    },
+    {
+     "s_total": 6.992,
+     "s_fetch": 0.692,
+     "worker_ms": 677,
+     "reads": 24,
+     "bytes_read": 6579835,
+     "bytes_sent": 6286900,
+     "cache_hits": 16,
+     "cost_usd": 6.435738e-06,
+     "prefix_cached": true
+    },
+    {
+     "s_total": 1.253,
+     "s_fetch": 0.299,
+     "worker_ms": 287,
+     "reads": 24,
+     "bytes_read": 6579835,
+     "bytes_sent": 6286900,
+     "cache_hits": 24,
+     "cost_usd": 6.757379999999999e-07,
+     "prefix_cached": true
+    }
+   ]
+  },
+  {
+   "name": "1,000 cells, uniform",
+   "cells": 1000,
+   "samples": 14,
+   "sampling": "uniform",
+   "plan_no_prefix_cache": {
+    "bytes": 9182334,
+    "reads": 15,
+    "payload": 8819022
+   },
+   "estimate_usd": 1.253364668e-05,
+   "runs": [
+    {
+     "s_total": 1.474,
+     "s_fetch": 0.187,
+     "worker_ms": 178,
+     "reads": 15,
+     "bytes_read": 9182334,
+     "bytes_sent": 8826370,
+     "cache_hits": 15,
+     "cost_usd": 7.265274e-07,
+     "prefix_cached": false
+    },
+    {
+     "s_total": 3.727,
+     "s_fetch": 0.227,
+     "worker_ms": 204,
+     "reads": 21,
+     "bytes_read": 7946107,
+     "bytes_sent": 7610048,
+     "cache_hits": 21,
+     "cost_usd": 7.022009599999999e-07,
+     "prefix_cached": true
+    },
+    {
+     "s_total": 1.023,
+     "s_fetch": 0.158,
+     "worker_ms": 146,
+     "reads": 21,
+     "bytes_read": 7946107,
+     "bytes_sent": 7610048,
+     "cache_hits": 21,
+     "cost_usd": 7.022009599999999e-07,
+     "prefix_cached": true
+    }
+   ]
+  },
+  {
+   "name": "1,000 cells, chunks",
+   "cells": 1000,
+   "samples": 1,
+   "sampling": "chunks",
+   "plan_no_prefix_cache": {
+    "bytes": 571230,
+    "reads": 2,
+    "payload": 571230
+   },
+   "estimate_usd": 3.0014246e-06,
+   "runs": [
+    {
+     "s_total": 0.271,
+     "s_fetch": 0.034,
+     "worker_ms": 26,
+     "reads": 2,
+     "bytes_read": 571230,
+     "bytes_sent": 572017,
+     "cache_hits": 2,
+     "cost_usd": 5.6144034e-07,
+     "prefix_cached": false
+    },
+    {
+     "s_total": 0.533,
+     "s_fetch": 0.032,
+     "worker_ms": 15,
+     "reads": 2,
+     "bytes_read": 470104,
+     "bytes_sent": 470861,
+     "cache_hits": 2,
+     "cost_usd": 5.5941722e-07,
+     "prefix_cached": true
+    },
+    {
+     "s_total": 0.405,
+     "s_fetch": 0.027,
+     "worker_ms": 19,
+     "reads": 2,
+     "bytes_read": 470104,
+     "bytes_sent": 470861,
+     "cache_hits": 2,
+     "cost_usd": 5.5941722e-07,
+     "prefix_cached": true
+    }
+   ]
+  },
+  {
+   "name": "10,000 cells, uniform",
+   "cells": 10000,
+   "samples": 14,
+   "sampling": "uniform",
+   "plan_no_prefix_cache": {
+    "bytes": 9266046,
+    "reads": 15,
+    "payload": 8902734
+   },
+   "estimate_usd": 1.253532092e-05,
+   "runs": [
+    {
+     "s_total": 1.289,
+     "s_fetch": 0.171,
+     "worker_ms": 155,
+     "reads": 15,
+     "bytes_read": 9266046,
+     "bytes_sent": 8910099,
+     "cache_hits": 15,
+     "cost_usd": 7.282019800000001e-07,
+     "prefix_cached": false
+    },
+    {
+     "s_total": 4.651,
+     "s_fetch": 0.197,
+     "worker_ms": 175,
+     "reads": 21,
+     "bytes_read": 8029819,
+     "bytes_sent": 7693774,
+     "cache_hits": 21,
+     "cost_usd": 7.038754799999999e-07,
+     "prefix_cached": true
+    },
+    {
+     "s_total": 1.492,
+     "s_fetch": 0.272,
+     "worker_ms": 243,
+     "reads": 21,
+     "bytes_read": 8029819,
+     "bytes_sent": 7693774,
+     "cache_hits": 21,
+     "cost_usd": 7.038754799999999e-07,
+     "prefix_cached": true
+    }
+   ]
+  },
+  {
+   "name": "10,000 cells, chunks",
+   "cells": 10000,
+   "samples": 6,
+   "sampling": "chunks",
+   "plan_no_prefix_cache": {
+    "bytes": 3628814,
+    "reads": 12,
+    "payload": 3500575
+   },
+   "estimate_usd": 1.0262576280000002e-05,
+   "runs": [
+    {
+     "s_total": 2.156,
+     "s_fetch": 0.66,
+     "worker_ms": 243,
+     "reads": 12,
+     "bytes_read": 3628814,
+     "bytes_sent": 3503997,
+     "cache_hits": 12,
+     "cost_usd": 6.2007994e-07,
+     "prefix_cached": false
+    },
+    {
+     "s_total": 2.463,
+     "s_fetch": 0.146,
+     "worker_ms": 125,
+     "reads": 13,
+     "bytes_read": 2988320,
+     "bytes_sent": 2928535,
+     "cache_hits": 13,
+     "cost_usd": 6.085707e-07,
+     "prefix_cached": true
+    },
+    {
+     "s_total": 0.823,
+     "s_fetch": 0.119,
+     "worker_ms": 90,
+     "reads": 13,
+     "bytes_read": 2988320,
+     "bytes_sent": 2928535,
+     "cache_hits": 13,
+     "cost_usd": 6.085707e-07,
+     "prefix_cached": true
+    }
+   ]
+  }
+ ]
+}

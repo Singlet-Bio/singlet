@@ -1,0 +1,2 @@
+sample	member	codec	orig_bytes	enc_bytes	nnz	m	n	total_bits_nnz	payload_bytes	payload_bits_nnz	side_bytes	names_bytes	ptr_bytes	colsums_bytes	other_bytes	row_mode	bc_mode	row_names_bytes	col_names_bytes	enc_ms	dec_ms	matrix_ok
+x_stub	exon_counts.1pz	ERROR	0	0	0	0	0	0	0	0	0	0	0	0	0	-1	-1	0	0	0	0	0

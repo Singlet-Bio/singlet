@@ -1,0 +1,177 @@
+{
+ "sample": "GSE171161.GSM5220137",
+ "G": 78298,
+ "NB": 737280,
+ "mtx_nnz": 588237,
+ "mtx_total_umi": 1246896,
+ "exon_1pz": {
+  "m": 386028,
+  "n": 7044,
+  "nnz": 576120,
+  "cols_not_in_raw_whitelist": 0,
+  "gene_barcode_nnz": 531093,
+  "total": 1168570,
+  "vt_code": 2
+ },
+ "intron_1pz": {
+  "m": 307730,
+  "n": 7044,
+  "nnz": 130589,
+  "cols_not_in_raw_whitelist": 0,
+  "gene_barcode_nnz": 124856,
+  "total": 145450,
+  "vt_code": 1
+ },
+ "mtx_nonzero_columns": 49769,
+ "pz_columns_union": 7044,
+ "mtx_cols_in_pz": 6942,
+ "pz_cols_in_mtx_nonzero": 6942,
+ "mtx_nnz_in_pz_columns": 534749,
+ "mtx_umi_in_pz_columns": 1193115,
+ "vs_exon+intron": {
+  "mtx_nnz": 588237,
+  "pz_nnz": 629179,
+  "both": 520174,
+  "mtx_only": 68063,
+  "pz_only": 109005,
+  "frac_mtx_nnz_also_in_pz": 0.8842932355496169,
+  "frac_pz_nnz_also_in_mtx": 0.826750416018335,
+  "frac_equal_among_both": 0.922093376447112,
+  "diff_mtx_minus_pz_clipped_hist": {
+   "-5": 212,
+   "-4": 364,
+   "-3": 874,
+   "-2": 4763,
+   "-1": 21566,
+   "0": 479649,
+   "1": 8017,
+   "2": 2354,
+   "3": 1026,
+   "4": 506,
+   "5": 843
+  },
+  "mean_diff": -0.022321377077670165,
+  "umi_mtx_total": 1246896,
+  "umi_pz_total": 1314020,
+  "umi_mtx_on_both": 1170142,
+  "umi_pz_on_both": 1181753,
+  "cond_cost_on_pz_support": {
+   "support_entries": 629179,
+   "plugin_bits_total": 649288.3221315099,
+   "plugin_bytes": 81161.04026643874,
+   "heldout_odd_barcodes_bits": 329622.5068543852,
+   "heldout_entries": 323345,
+   "heldout_bits_per_entry": 1.0194142691378718,
+   "plugin_bits_per_mtx_nonzero": 1.1037869466414216
+  },
+  "mtx_only_standalone": {
+   "colnnz": {
+    "raw": 44223,
+    "zstd19": 7089,
+    "xz": 7276
+   },
+   "gaps": {
+    "raw": 175246,
+    "zstd19": 132002,
+    "xz": 128900
+   },
+   "vals": {
+    "raw": 68063,
+    "zstd19": 3953,
+    "xz": 4360
+   },
+   "o0_gaps_bytes": 100215.4731052605,
+   "o0_vals_bytes": 3524.712307956288,
+   "o0_colnnz_bytes": 5782.374419865387,
+   "total_zstd19": 143044,
+   "total_xz": 140536,
+   "total_o0": 109522.55983308218
+  }
+ },
+ "vs_exon": {
+  "mtx_nnz": 588237,
+  "pz_nnz": 531093,
+  "both": 520097,
+  "mtx_only": 68140,
+  "pz_only": 10996,
+  "frac_mtx_nnz_also_in_pz": 0.8841623359292258,
+  "frac_pz_nnz_also_in_mtx": 0.9792955282784748,
+  "frac_equal_among_both": 0.9538874479183691,
+  "diff_mtx_minus_pz_clipped_hist": {
+   "-5": 26,
+   "-4": 35,
+   "-3": 159,
+   "-2": 819,
+   "-1": 10015,
+   "0": 496114,
+   "1": 8160,
+   "2": 2379,
+   "3": 1036,
+   "4": 511,
+   "5": 843
+  },
+  "mean_diff": 0.02465309355754792,
+  "umi_mtx_total": 1246896,
+  "umi_pz_total": 1168570,
+  "umi_mtx_on_both": 1170039,
+  "umi_pz_on_both": 1157217,
+  "cond_cost_on_pz_support": {
+   "support_entries": 531093,
+   "plugin_bits_total": 257113.14363388848,
+   "plugin_bytes": 32139.14295423606,
+   "heldout_odd_barcodes_bits": 128735.58374557165,
+   "heldout_entries": 273324,
+   "heldout_bits_per_entry": 0.4709999258959025,
+   "plugin_bits_per_mtx_nonzero": 0.4370910766134882
+  },
+  "mtx_only_standalone": {
+   "colnnz": {
+    "raw": 44223,
+    "zstd19": 7092,
+    "xz": 7296
+   },
+   "gaps": {
+    "raw": 175382,
+    "zstd19": 132121,
+    "xz": 129016
+   },
+   "vals": {
+    "raw": 68140,
+    "zstd19": 3978,
+    "xz": 4364
+   },
+   "o0_gaps_bytes": 100345.88107033589,
+   "o0_vals_bytes": 3534.121423572879,
+   "o0_colnnz_bytes": 5783.348638055688,
+   "total_zstd19": 143191,
+   "total_xz": 140676,
+   "total_o0": 109663.35113196446
+  }
+ },
+ "standalone_mtx_csc": {
+  "colnnz": {
+   "raw": 50382,
+   "zstd19": 11456,
+   "xz": 11632
+  },
+  "gaps": {
+   "raw": 787334,
+   "zstd19": 655989,
+   "xz": 634924
+  },
+  "vals": {
+   "raw": 588441,
+   "zstd19": 133305,
+   "xz": 135236
+  },
+  "o0_gaps_bytes": 628723.6543684232,
+  "o0_vals_bytes": 117571.88311858382,
+  "o0_colnnz_bytes": 9390.22427434586,
+  "total_zstd19": 800750,
+  "total_xz": 781792,
+  "total_o0": 755685.7617613529
+ },
+ "mtx_text_bytes": 8667836,
+ "mtx_text_deflate9": 2099824,
+ "mtx_text_zstd19": 1555971
+}

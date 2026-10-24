@@ -1,0 +1,11 @@
+{
+ "exon_raw": 12870974,
+ "intron_raw": 12977738,
+ "names_zstd19_each": 3303565,
+ "names_xz9e_each": 3071684,
+ "vocab_json_raw": 2675886,
+ "vocab_json_deflate9": 263621,
+ "vocab_json_zstd19": 217295,
+ "vocab_json_xz9e": 179672,
+ "build": "GRCz11"
+}

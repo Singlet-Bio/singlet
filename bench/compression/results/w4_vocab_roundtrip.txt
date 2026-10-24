@@ -1,0 +1,38 @@
+GRCh38-2024-A            id=763c016e885bf31e pack=1144091 B  exon_ok=True intron_ok=True vocab_json_ok=True
+GRCm39-2024-A            id=af34fe120c531f0f pack=1529232 B  exon_ok=True intron_ok=True vocab_json_ok=True
+GRCz11                   id=c85845872421e365 pack=967625 B  exon_ok=True intron_ok=True vocab_json_ok=True
+Mmul_10                  id=b094b8aadd4baee8 pack=878852 B  exon_ok=True intron_ok=True vocab_json_ok=True
+mRatBN7.2                id=84931210a6154627 pack=874975 B  exon_ok=True intron_ok=True vocab_json_ok=True
+GRCh38-GRCm39-barnyard   id=bb334a606590dc31 pack=66 B  exon_ok=True intron_ok=True vocab_json_ok=True
+
+cross-study check: names of every fetched (study, sample, kind) equal the pack expansion of its build:
+  GSE145370/GSM4317423 exon   GRCh38-2024-A            OK
+  GSE145370/GSM4317423 intron GRCh38-2024-A            OK
+  GSE180661/GSM5467087 exon   GRCh38-2024-A            OK
+  GSE180661/GSM5467087 intron GRCh38-2024-A            OK
+  GSE135893/GSM4037297 exon   GRCh38-2024-A            OK
+  GSE135893/GSM4037297 intron GRCh38-2024-A            OK
+  GSE301953/GSM9092635 exon   GRCh38-2024-A            OK
+  GSE301953/GSM9092635 intron GRCh38-2024-A            OK
+  GSE185553/GSM5618237 exon   GRCh38-2024-A            OK
+  GSE185553/GSM5618237 intron GRCh38-2024-A            OK
+  GSE285936/GSM8713119 exon   GRCm39-2024-A            OK
+  GSE285936/GSM8713119 intron GRCm39-2024-A            OK
+  GSE241928/GSM7745727 exon   GRCm39-2024-A            OK
+  GSE241928/GSM7745727 intron GRCm39-2024-A            OK
+  GSE156633/GSM4735376 exon   GRCm39-2024-A            OK
+  GSE156633/GSM4735376 intron GRCm39-2024-A            OK
+  GSE222410/GSM6922987 exon   GRCm39-2024-A            OK
+  GSE222410/GSM6922987 intron GRCm39-2024-A            OK
+  GSE144944/GSM4301250 exon   GRCz11                   OK
+  GSE144944/GSM4301250 intron GRCz11                   OK
+  GSE264312/GSM8215879 exon   GRCz11                   OK
+  GSE264312/GSM8215879 intron GRCz11                   OK
+  GSE245419/GSM7842410 exon   Mmul_10                  OK
+  GSE245419/GSM7842410 intron Mmul_10                  OK
+  GSE280441/GSM8597917 exon   Mmul_10                  OK
+  GSE280441/GSM8597917 intron Mmul_10                  OK
+  GSE216665/GSM6685496 exon   mRatBN7.2                OK
+  GSE216665/GSM6685496 intron mRatBN7.2                OK
+  GSE165104/GSM5026230 exon   mRatBN7.2                OK
+  GSE165104/GSM5026230 intron mRatBN7.2                OK

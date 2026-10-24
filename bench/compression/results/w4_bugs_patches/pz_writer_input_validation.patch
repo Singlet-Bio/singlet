@@ -1,0 +1,54 @@
+--- a/include/singlet/pileup/pz_writer.h
++++ b/include/singlet/pileup/pz_writer.h
+@@ -8,14 +8,17 @@
+ 
+ #include <algorithm>
+ #include <cstdint>
++#include <cmath>
+ #include <cstring>
+ #include <filesystem>
+ #include <fstream>
+ #include <iostream>
+ #include <map>
+ #include <numeric>
++#include <stdexcept>
+ #include <string>
+ #include <thread>
++#include <type_traits>
+ #include <vector>
+ 
+ #include <zstd.h>
+@@ -306,7 +309,7 @@
+             uint32_t v = mat.x[s+k];
+             if (v > max_val) max_val = v;
+         }
+-        if (val_rows.size() <= max_val) val_rows.resize(max_val + 1);
++        if (val_rows.size() <= max_val) val_rows.resize(static_cast<size_t>(max_val) + 1);
+ 
+         for (uint32_t k = 0; k < cnt; ++k) {
+             uint32_t v = mat.x[s+k];
+@@ -606,6 +609,24 @@
+     uint32_t m = n_features;
+     uint32_t n = n_barcodes;
+ 
++    // Validate the CSC before anything is sized or indexed from it: a malformed matrix used to index out of bounds
++    // (rnnz[i_ptr[k]], val_rows[v]) and a fractional float was silently truncated by the cast below (the PSI bug).
++    if (indptr.size() != static_cast<size_t>(n) + 1 || indptr.front() != 0 ||
++        static_cast<uint64_t>(indptr.back()) != nnz || indices.size() != nnz)
++        throw std::invalid_argument("write_1pz: indptr/indices/data sizes are inconsistent");
++    for (uint32_t j = 0; j < n; ++j)
++        if (indptr[j] > indptr[j + 1]) throw std::invalid_argument("write_1pz: indptr is not monotone");
++    for (uint64_t k = 0; k < nnz; ++k) {
++        if (indices[k] < 0 || static_cast<uint32_t>(indices[k]) >= m)
++            throw std::invalid_argument("write_1pz: row index out of range");
++        if constexpr (std::is_floating_point_v<ValT>) {
++            if (!(data[k] >= 0) || data[k] >= 4294967296.0 || data[k] != std::floor(data[k]))
++                throw std::invalid_argument("write_1pz: float values must be non-negative integers; scale fractions to integers first");
++        } else if constexpr (std::is_signed_v<ValT>) {
++            if (data[k] < 0) throw std::invalid_argument("write_1pz: negative value");
++        }
++    }
++
+     // Cast int32 → uint32 for indptr/indices/data
+     std::vector<uint32_t> u_indptr(indptr.begin(), indptr.end());
+     std::vector<uint32_t> u_indices(indices.begin(), indices.end());

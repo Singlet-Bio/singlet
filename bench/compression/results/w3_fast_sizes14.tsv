@@ -1,0 +1,15 @@
+sample	member	nnz	payload_bits_nnz	side_bits_nnz
+brain_sn_v3_deep	exon	6349311	8.056	0.204
+brain_sn_v3_intronic	exon	1380834	9.381	0.591
+pbmc_v2_shallow	exon	5304754	7.051	0.127
+pbmc_v2_typical	exon	2569228	5.749	0.246
+pbmc_v3_lowgenes	exon	1759828	5.559	0.071
+tcell_5p	exon	10529513	6.028	0.096
+tumor_3p	exon	245117	9.73	1.617
+brain_sn_v3_deep	intron	6678099	7.262	0.188
+brain_sn_v3_intronic	intron	8144777	7.507	0.148
+pbmc_v2_shallow	intron	1170031	11.998	0.607
+pbmc_v2_typical	intron	1202661	8.172	0.588
+pbmc_v3_lowgenes	intron	1076297	7.06	0.205
+tcell_5p	intron	1098311	9.743	0.653
+tumor_3p	intron	107364	11.872	3.04
