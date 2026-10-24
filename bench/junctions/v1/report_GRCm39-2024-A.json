@@ -1,12 +1,12 @@
 {
  "build": "GRCm39-2024-A",
- "version_id": "62c85b20624ad8ed44aea786ae584d46",
+ "version_id": "baf28dcad2fb3a547ca96b000c03bff3",
  "chrom_rename": {
   "chr6": "6",
-  "chr11": "11",
-  "chr14": "14",
-  "chr3": "3",
-  "chr16": "16"
+  "chr10": "10",
+  "chr1": "1",
+  "chr5": "5",
+  "chrY": "Y"
  },
  "junctions": {
   "census": 331156630,
@@ -29,13 +29,13 @@
   "core": 1555371,
   "rare_total": 1416760,
   "rare_largest_segment": 106684,
-  "version": 5031
+  "version": 5051
  },
- "decode_core_ms_median_of_7": 13.5,
+ "decode_core_ms_median_of_7": 12.6,
  "reference_cumsum_1M_u32_ms": 1.66,
  "rules": {
   "core": "annotated (GTF), or unannotated with n_studies >= 3, umi_called >= 1000, a canonical motif and ambient fraction <= 0.5",
-  "rare": "unannotated with n_studies >= 3, 100 <= umi_called < 1000, a canonical motif and ambient fraction <= 0.5; one segment per chromosome",
+  "rare": "unannotated with n_studies >= 3, 100 <= umi_called < 1000, a canonical motif and ambient fraction <= 0.5; one segment, or one per chromosome above 1 MiB",
   "local": "everything else: stays in its sample object as integer coordinates"
  },
  "sources": {
@@ -321,10 +321,10 @@
    "sha256": "5cf3ead72f2a2fd9de3fc6bc1cbfb50952f3e4a48eb817a76ae4a7098f98263a"
   },
   {
-   "id": "62c85b20624ad8ed44aea786ae584d46",
+   "id": "baf28dcad2fb3a547ca96b000c03bff3",
    "kind": "junction-version",
-   "bytes": 5031,
-   "sha256": "62c85b20624ad8ed44aea786ae584d46baac602d4b4e8ff0a398315bed3de4db"
+   "bytes": 5051,
+   "sha256": "baf28dcad2fb3a547ca96b000c03bff33e97d89fcaf49cd1ca574e2d72e4369b"
   }
  ]
 }
