@@ -307,3 +307,149 @@ def test_legacy_http_reader_retries_a_cut_response(monkeypatch):
     monkeypatch.setattr(L.time, "sleep", lambda s: None)
     src = L._HttpSource("https://example.invalid/x.singlet")
     assert src.read(0, 5) == b"abcde" and len(calls) == 2
+
+
+# ---------------------------------------------------------------------------------------------------------- migration wiring
+def _toy_table(tdir, version=1, n=200):
+    names = ["chr1:%d-%d" % (100 * i, 100 * i + 40 + (i % 3)) for i in range(n)]
+    seg = J.build_segment(J.parse_names(names), build="toy", id_lo=0, tier="core")
+    ver = J.build_version([seg], build="toy", version=version)
+    for b in (seg, ver):
+        (tdir / (P.pack_id(b).hex() + ".pack")).write_bytes(b)
+    return seg, ver
+
+
+def test_published_table_picks_the_newest_version_of_the_build(tmp_path):
+    seg, v1 = _toy_table(tmp_path, version=1)
+    v2 = J.build_version([seg], build="toy", version=2, previous=v1)
+    (tmp_path / (P.pack_id(v2).hex() + ".pack")).write_bytes(v2)
+    other = J.build_version(
+        [J.build_segment(J.parse_names(["chr2:1-50"]), build="other", id_lo=0, tier="core")],
+        build="other",
+        version=9,
+    )
+    (tmp_path / (P.pack_id(other).hex() + ".pack")).write_bytes(other)
+    store = P.PackStore(dirs=[str(tmp_path)])
+    index = [
+        P.index_entry(b, "junction-version", {"build": bl})
+        for b, bl in ((v1, "toy"), (v2, "toy"), (other, "other"))
+    ]
+    t = J.published_table("toy", store, index)
+    assert t.id == P.pack_id(v2) and t.header["version"] == 2
+    assert (
+        J.published_table("GRCh38-2024-A", store, index) is None
+    )  # nothing published for that build: inline names
+    dup = J.build_version([seg], build="toy", version=2, extra={"note": "a second v2"})
+    (tmp_path / (P.pack_id(dup).hex() + ".pack")).write_bytes(dup)
+    store.rescan()
+    with pytest.raises(J.JunctionError, match="ambiguous"):
+        J.published_table(
+            "toy", store, index + [P.index_entry(dup, "junction-version", {"build": "toy"})]
+        )
+
+
+def test_migrate_with_auto_records_the_table_and_verifies(tmp_path, monkeypatch):
+    """--junction-table auto: the table published for the study's build is used, recorded in the manifest (packs.junctions)
+    and shipped with the study's packs; verify passes on every legacy member."""
+    pytest.importorskip("singlet._pz2", reason="singlet._pz2 is not built")
+    pytest.importorskip("singlet._pz", reason="singlet._pz is not built")
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+    import json
+
+    import test_v2_migrate as TM
+    from singlet.v2 import migrate as MG
+    from singlet.v2 import verify as V
+
+    bundle = TM.make_bundle(tmp_path)  # reference build "toy"
+    tdir = tmp_path / "ref"
+    tdir.mkdir()
+    seg, ver = _toy_table(tdir)
+    store = P.PackStore(dirs=[P.PKG_DIR, str(tdir)])
+    monkeypatch.setattr(
+        J,
+        "fetch_index",
+        lambda remote=None: [P.index_entry(ver, "junction-version", {"build": "toy"})],
+    )
+    logs = []
+    out = tmp_path / "out"
+    opts = MG.Options(
+        recipes=TM.FakeRecipes(),
+        created_at="2026-10-22T00:00:00Z",
+        log=logs.append,
+        packs=store,
+        junction_table="auto",
+    )
+    res = MG.migrate_bundle(str(bundle), str(out), None, opts)
+    MG.write_outputs(res, opts)
+    assert any("junction table for toy: version 1" in str(x) for x in logs)
+    man = json.load(open(out / "v2" / "m" / "GSE9001.json"))
+    assert man["packs"]["junctions"] == P.pack_id(ver).hex()
+    assert all("sj_counts.1pz.legacy_order" in s["members"] for s in man["samples"])
+    shipped = {
+        e["id"]: e["kind"] for e in json.load(open(out / "v2" / "ref" / "index.json"))["packs"]
+    }
+    assert (
+        shipped[P.pack_id(ver).hex()] == "junction-version"
+        and shipped[P.pack_id(seg).hex()] == "junction-segment"
+    )
+    rep = V.verify(str(bundle), str(out), None, None, TM.FakeRecipes(), log=lambda *a: None)
+    assert rep.fail == 0
+
+
+def test_migrate_without_a_published_table_keeps_inline_names(tmp_path, monkeypatch):
+    pytest.importorskip("singlet._pz2", reason="singlet._pz2 is not built")
+    pytest.importorskip("singlet._pz", reason="singlet._pz is not built")
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+    import json
+
+    import test_v2_migrate as TM
+    from singlet.v2 import migrate as MG
+
+    bundle = TM.make_bundle(tmp_path)
+    monkeypatch.setattr(J, "fetch_index", lambda remote=None: [])
+    out = tmp_path / "out"
+    opts = MG.Options(
+        recipes=TM.FakeRecipes(),
+        created_at="2026-10-22T00:00:00Z",
+        log=lambda *a: None,
+        junction_table="auto",
+    )
+    res = MG.migrate_bundle(str(bundle), str(out), None, opts)
+    MG.write_outputs(res, opts)
+    man = json.load(open(out / "v2" / "m" / "GSE9001.json"))
+    assert "junctions" not in man["packs"] and not any(
+        "sj_counts.1pz.local" in s["members"] for s in man["samples"]
+    )
+    # a table for another build is refused, not silently applied
+    other = J.JunctionTable(
+        J.build_version(
+            [J.build_segment(J.parse_names(["chr1:1-50"]), build="b2", id_lo=0, tier="core")],
+            build="b2",
+            version=1,
+        )
+    )
+    with pytest.raises(ValueError, match="is for b2"):
+        MG.migrate_bundle(
+            str(bundle),
+            str(tmp_path / "o2"),
+            None,
+            MG.Options(recipes=TM.FakeRecipes(), log=lambda *a: None, junction_table=other),
+        )
+
+
+def test_migrate_cli_and_campaign_default(tmp_path):
+    """The CLI flag parses (none / auto / a pack path); the campaign passes --junction-table auto unless told otherwise."""
+    from singlet.v2 import migrate as MG
+
+    assert (
+        MG._junction_arg("none") is None
+        and MG._junction_arg("auto") == "auto"
+        and callable(MG._junction_arg("abcd" * 8))
+    )
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "scripts"))
+    import v2_campaign as camp
+
+    a = camp.build_parser().parse_args(["run", "--mode", "dry"])
+    assert a.junction_table == "auto"
+    b = camp.build_parser().parse_args(["run", "--mode", "dry", "--junction-table", "none"])
+    assert b.junction_table == "none"

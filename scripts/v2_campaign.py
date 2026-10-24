@@ -1391,6 +1391,9 @@ class Ctx:
         env["SINGLET_PZW_AUTOBUILD"] = "0"  # W3's recipes build a helper executable on Windows only; never race to do it on the cluster
         env["SINGLET_V2_RECIPES_CACHE"] = str(self.scratch / "recipes-cache")
         self.migrate_args = _split_cmd(getattr(a, "migrate_args", None)) or []
+        jt = getattr(a, "junction_table", None)
+        if jt and "--junction-table" not in self.migrate_args:  # junction rows as table ids (docs/format-v2.md 12)
+            self.migrate_args = self.migrate_args + ["--junction-table", jt]
         self.verify_args = _split_cmd(getattr(a, "verify_args", None)) or []
         if getattr(a, "verify_quick", False):
             self.verify_args = self.verify_args + ["--quick"]
@@ -2207,6 +2210,9 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--io-threads", type=int, default=8)
     r.add_argument("--blas-threads", type=int, default=1, help="OMP/OpenBLAS/MKL threads per transcoder process")
     r.add_argument("--migrate-args", help="extra arguments for singlet.v2.migrate (JSON list or shell-style string), e.g. --samples GSM1,GSM2")
+    r.add_argument("--junction-table", default="auto",
+                   help="singlet.v2.migrate --junction-table: auto (default) = the newest junction table published for the study's "
+                        "reference build in v2/ref/index.json; none = inline junction names")
     r.add_argument("--verify-args", help="extra arguments for singlet.v2.verify")
     r.add_argument("--verify-quick", action="store_true", help="pass --quick to verify (skips its slow digest recomputation; NOT for the campaign)")
     r.add_argument("--migrate-cmd", help="default: <python> -m singlet.v2.migrate")
