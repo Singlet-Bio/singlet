@@ -212,7 +212,8 @@ def run(a) -> int:
 
 def status(a) -> int:
     recs = []
-    for p in sorted((a.out / "ledger").glob("*.jsonl")):
+    # oldest ledger first, so a retry (written later) is the record that counts for its study
+    for p in sorted((a.out / "ledger").glob("*.jsonl"), key=lambda q: q.stat().st_mtime):
         recs += [json.loads(x) for x in p.read_text().splitlines() if x.strip()]
     last = {r["gse"]: r for r in recs}
     ok = sum(r["status"] == "ok" for r in last.values())
