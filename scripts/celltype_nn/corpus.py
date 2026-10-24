@@ -231,6 +231,35 @@ def cmd_fetch(a) -> int:
     return 0
 
 
+def cmd_leakcheck(a) -> int:
+    """For every dataset of the excluded (benchmark) collections: how many of its cells are Census primary data. Census marks
+    exactly one copy of a cell primary, so a dataset that is fully primary has no copy of its cells in the training corpus
+    (which takes primary cells only); a non-primary dataset would mean its cells' primary copy lives in another collection."""
+    import cellxgene_census
+
+    excl = _excluded_collections(a.exclude_studies)
+    meta = json.loads((a.out / "plan.json").read_text())
+    rows = []
+    with cellxgene_census.open_soma(census_version=meta["census_version"]) as census:
+        ds = census["census_info"]["datasets"].read().concat().to_pandas()
+        ds = ds[ds["collection_id"].isin(excl)]
+        for org in ORGANISMS:
+            for d in ds["dataset_id"]:
+                o = (
+                    census["census_data"][org]
+                    .obs.read(value_filter=f"dataset_id == '{d}'", column_names=["is_primary_data"])
+                    .concat()
+                    .to_pandas()
+                )
+                if len(o):
+                    rows.append(dict(dataset_id=d, organism=ORGANISMS[org], cells=len(o), primary=int(o["is_primary_data"].sum())))
+    (a.out / "leakcheck.json").write_text(json.dumps(rows, indent=1))
+    for r in rows:
+        print(r, flush=True)
+    print("datasets not fully primary:", [r["dataset_id"] for r in rows if r["primary"] < r["cells"]], flush=True)
+    return 0
+
+
 BIOMART = "https://www.ensembl.org/biomart/martservice"
 _Q = (
     '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE Query><Query virtualSchemaName="default" formatter="TSV" header="1" '
@@ -285,8 +314,11 @@ def main(argv=None) -> int:
     f.add_argument("--chunk", type=int, required=True)
     o = sub.add_parser("orthologs")
     o.add_argument("--out", type=Path, required=True)
+    lc = sub.add_parser("leakcheck")
+    lc.add_argument("--out", type=Path, required=True)
+    lc.add_argument("--exclude-studies", type=Path, required=True)
     a = ap.parse_args(argv)
-    return {"plan": cmd_plan, "fetch": cmd_fetch, "orthologs": cmd_orthologs}[a.cmd](a)
+    return {"plan": cmd_plan, "fetch": cmd_fetch, "orthologs": cmd_orthologs, "leakcheck": cmd_leakcheck}[a.cmd](a)
 
 
 if __name__ == "__main__":
