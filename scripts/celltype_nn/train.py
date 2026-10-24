@@ -91,6 +91,7 @@ def main(argv=None) -> int:
     tlist = sorted(set(author[ok].tolist()) | {r for r in refine if isinstance(r, str)})
     tix = {x: i for i, x in enumerate(tlist)}
     credit = torch.from_numpy(sp.credit_matrix(tlist)).to(dev)
+    closure = (credit >= 0.999).float()
     a_idx = torch.tensor([tix.get(x, -1) if isinstance(x, str) else -1 for x in author], device=dev)
     r_idx = torch.tensor([tix.get(x, -1) if isinstance(x, str) else -1 for x in refine], device=dev)
     split = obs["split"].to_numpy()
@@ -110,7 +111,7 @@ def main(argv=None) -> int:
 
     def loader(b: Batches):
         return torch.utils.data.DataLoader(
-            [[r] for r in b.order()], batch_size=1, shuffle=False, num_workers=a.workers, collate_fn=b, persistent_workers=False,
+            b.order(), batch_size=1, shuffle=False, num_workers=a.workers, collate_fn=b, persistent_workers=False,
             prefetch_factor=4 if a.workers else None,
         )
 
@@ -135,6 +136,7 @@ def main(argv=None) -> int:
         c_am = cr.gather(1, am[:, None]).ravel()
         return dict(
             loss=float(M.credit_loss(logits / T, cr)),
+            closure_nll=float(M.credit_loss(logits / T, closure[a_idx[rows]])),
             expected_credit=float((p * cr).sum(1).mean()),
             argmax_full_credit=float((c_am >= 0.999).float().mean()),
             argmax_wrong=float((c_am <= 0).float().mean()),
@@ -168,12 +170,14 @@ def main(argv=None) -> int:
         hist.append(h)
         print(json.dumps(h), flush=True)
 
-    # calibration: one temperature on validation logits, half clean and half augmented
+    # calibration: one temperature on validation logits, half clean and half augmented. The partial credit of coarser terms
+    # is not a proper scoring rule (it rewards sharpening), so the temperature is fitted on the closure likelihood
+    # -log P(author term or a descendant), which is proper for labels of any depth.
     lv, rv = evaluate(va, augment=False)
     la, ra = evaluate(va, augment=True)
     L = torch.cat([lv, la])
     R = torch.cat([rv, ra])
-    T = M.fit_temperature(L, credit[a_idx[R]])
+    T = M.fit_temperature(L, closure[a_idx[R]])
     net.temperature.fill_(T)
     final = dict(temperature=T, val=metrics(lv, rv, T), val_aug=metrics(la, ra, T))
     print("calibrated", json.dumps(final), flush=True)

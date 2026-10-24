@@ -53,7 +53,9 @@ def credit_loss(logits: torch.Tensor, credit: torch.Tensor, weight: Optional[tor
 
 
 def fit_temperature(logits: torch.Tensor, credit: torch.Tensor, iters: int = 200) -> float:
-    """Temperature minimising the credit loss on held-out cells (one scalar; logits are not refitted)."""
+    """Temperature minimising ``credit_loss`` on held-out cells (one scalar; logits are not refitted). Pass the closure
+    indicator (1 on the target term and its descendants, 0 elsewhere): the loss is then the likelihood of the label's subtree,
+    a proper scoring rule; partial credit for coarser terms is not, and would sharpen the softmax."""
     t = torch.zeros((), requires_grad=True, device=logits.device)
     opt = torch.optim.LBFGS([t], lr=0.1, max_iter=iters)
 

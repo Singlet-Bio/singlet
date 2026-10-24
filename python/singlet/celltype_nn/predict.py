@@ -24,6 +24,7 @@ import numpy as np
 import scipy.sparse as sps
 
 from .features import GeneVocab
+from .output import COLUMNS
 from .ontology import TermSpace
 
 TOP_K = 5
@@ -96,6 +97,7 @@ class CellTypePredictor:
         }
         for i in range(s["topk"].shape[1]):
             d[f"top{i + 1}_cl"] = s["topk"][:, i]
+        for i in range(s["topk"].shape[1]):
             d[f"top{i + 1}_prob"] = s["topk_prob"][:, i]
         d["model_version"] = np.full(len(col), self.version, dtype=object)
-        return pd.DataFrame(d)
+        return pd.DataFrame(d)[[c for c, _ in COLUMNS]]
