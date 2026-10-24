@@ -50,6 +50,11 @@ WANTS = {
 
 
 @pytest.fixture(scope="module")
+def _layers(adata):
+    """Layer names, without the phantom None key anndata 0.13.4 reports for a fresh AnnData."""
+    return [k for k in adata.layers if k is not None]
+
+
 def study_dir(tmp_path_factory):
     root = tmp_path_factory.mktemp("v2mod")
     try:
@@ -239,13 +244,13 @@ def test_gene_modalities_values(study_dir, env):
     cols = _order(s.truth, G1)
     ex, un = t["exon_g"][:, cols].T, t["intron_g"][:, cols].T
     a = st.to_anndata([G1], modalities="spliced")
-    assert a.X is None and list(a.layers) == ["spliced"] and _same(a.layers["spliced"], ex)
+    assert a.X is None and _layers(a) == ["spliced"] and _same(a.layers["spliced"], ex)
     b = st.to_anndata([G1], modalities="unspliced")
-    assert b.X is None and list(b.layers) == ["unspliced"] and _same(b.layers["unspliced"], un)
+    assert b.X is None and _layers(b) == ["unspliced"] and _same(b.layers["unspliced"], un)
     c = st.to_anndata([G1], modalities="counts")
     assert _same(c.X, ex + un) and not c.layers
     d = st.to_anndata([G1], modalities=["counts", "spliced"])
-    assert _same(d.X, ex + un) and list(d.layers) == ["spliced"]
+    assert _same(d.X, ex + un) and _layers(d) == ["spliced"]
     assert list(a.obs_names) == list(c.obs_names) and a.var_names.equals(c.var_names)
     # genes= composes with modalities
     g = s.exon_pack.gene_table()[5][0]
@@ -313,7 +318,7 @@ def test_load_s2_and_loader_pass_modalities(study_dir, env, monkeypatch):
         client.load_s2(path, modalities="mt")
     monkeypatch.setenv("SINGLET_DATA_BASE", str(root))
     b = L.load(GSE, samples=[G1], modalities=["spliced"])
-    assert b.X is None and list(b.layers) == ["spliced"]
+    assert b.X is None and _layers(b) == ["spliced"]
     c = L.load([GSE, GSE], samples=[G1], modalities="counts")
     assert c.n_obs == 80 and not c.layers
 
@@ -357,14 +362,14 @@ def test_legacy_fallback_subsets_after_download_and_warns(study_dir, env, monkey
     monkeypatch.setattr(B, "SingletBundle", FakeBundle)
     with pytest.warns(UserWarning, match="downloaded whole"):
         out = L.load("GSE0", modalities=["spliced", "splice_junctions", "vdj"])
-    assert out.X is None and list(out.layers) == ["spliced"]
+    assert out.X is None and _layers(out) == ["spliced"]
     assert list(out.uns["obsm_features"]["splice_junctions"]) == list(junc.var_names)
     sj = out.obsm["splice_junctions"].toarray()
     assert sj.tolist() == [[3, 0], [0, 0], [0, 5]] and "vdj" not in out.obsm
     with warnings.catch_warnings():
         warnings.simplefilter("error")  # no modalities: the legacy result is untouched, no warning
         same = L.load("GSE0", legacy=True)
-    assert set(same.layers) == {"spliced", "unspliced"} and same.X is not None
+    assert set(_layers(same)) == {"spliced", "unspliced"} and same.X is not None
 
 
 # =================================================================================================================== live pilot
