@@ -1,0 +1,116 @@
+{
+ "called_cells": 40614,
+ "samples": [
+  {
+   "gsm": "GSM4317423",
+   "n_columns": 39217,
+   "called": 2722,
+   "chunk_cols": 4096
+  },
+  {
+   "gsm": "GSM4317424",
+   "n_columns": 27803,
+   "called": 1727,
+   "chunk_cols": 4096
+  },
+  {
+   "gsm": "GSM4317425",
+   "n_columns": 31645,
+   "called": 1207,
+   "chunk_cols": 4096
+  },
+  {
+   "gsm": "GSM4317426",
+   "n_columns": 63995,
+   "called": 2928,
+   "chunk_cols": 4096
+  },
+  {
+   "gsm": "GSM4317427",
+   "n_columns": 41934,
+   "called": 3576,
+   "chunk_cols": 4096
+  },
+  {
+   "gsm": "GSM4317428",
+   "n_columns": 20985,
+   "called": 2473,
+   "chunk_cols": 4096
+  },
+  {
+   "gsm": "GSM4317429",
+   "n_columns": 25067,
+   "called": 3820,
+   "chunk_cols": 4096
+  },
+  {
+   "gsm": "GSM4317430",
+   "n_columns": 19556,
+   "called": 3732,
+   "chunk_cols": 4096
+  },
+  {
+   "gsm": "GSM4317431",
+   "n_columns": 18257,
+   "called": 3371,
+   "chunk_cols": 4096
+  },
+  {
+   "gsm": "GSM4317432",
+   "n_columns": 32388,
+   "called": 4289,
+   "chunk_cols": 4096
+  },
+  {
+   "gsm": "GSM4317433",
+   "n_columns": 40263,
+   "called": 2028,
+   "chunk_cols": 4096
+  },
+  {
+   "gsm": "GSM4317434",
+   "n_columns": 23834,
+   "called": 2106,
+   "chunk_cols": 4096
+  },
+  {
+   "gsm": "GSM4317435",
+   "n_columns": 23006,
+   "called": 2977,
+   "chunk_cols": 4096
+  },
+  {
+   "gsm": "GSM4317436",
+   "n_columns": 19876,
+   "called": 3658,
+   "chunk_cols": 4096
+  }
+ ],
+ "results": {
+  "current": {
+   "bytes_one_random_cell": 322781,
+   "bytes_1000_random_cells": 7603232,
+   "bytes_per_cell_at_1000": 7603
+  },
+  "nnz<= 96000": {
+   "bytes_one_random_cell": 202347,
+   "bytes_1000_random_cells": 7918967,
+   "bytes_per_cell_at_1000": 7919
+  },
+  "nnz<= 48000": {
+   "bytes_one_random_cell": 118715,
+   "bytes_1000_random_cells": 7892992,
+   "bytes_per_cell_at_1000": 7893
+  },
+  "nnz<= 24000": {
+   "bytes_one_random_cell": 61398,
+   "bytes_1000_random_cells": 7721785,
+   "bytes_per_cell_at_1000": 7722
+  },
+  "nnz<= 12000": {
+   "bytes_one_random_cell": 30862,
+   "bytes_1000_random_cells": 7069785,
+   "bytes_per_cell_at_1000": 7070
+  }
+ }
+}
