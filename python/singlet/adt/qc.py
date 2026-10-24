@@ -12,7 +12,7 @@ reported with the data):
 | ``cell_empty_ratio`` | median ADT UMIs of called cells / median of empty droplets: the pairing check (an ADT library that does not hold these cells has ratio ~1) | < 3 | < 10 |
 | ``frac_cells_with_adt`` | called cells with at least ``MIN_CELL_UMI`` ADT UMIs | < 0.50 | < 0.80 |
 | ``median_umi_cells`` | median ADT UMIs per called cell | < 20 | < 100 |
-| ``rna_concordance`` | median Spearman, over informative antibody-gene pairs, of CLR(ADT) vs log RNA in called cells; canonical markers listed separately | < 0.05 (when >= 2 pairs) | < 0.15 |
+| ``rna_concordance`` | median Spearman, over informative antibody-gene pairs, of CLR(ADT) vs log RNA in called cells; canonical markers listed separately | < 0.05 (>= 3 pairs; with 2 pairs at most a warning) | < 0.15 |
 | ``panel_unexplained`` | share of feature-like reads on abundant sequences that are not in the panel | > 0.20 | > 0.05 |
 | ``panel_identity`` | panels identified from the reads: share of panel reads on catalog barcodes whose reactivity excludes the organism or that a published panel used for another antibody | > 0.10 | > 0.02 |
 | ``saturation`` | 1 - molecules / usable reads | - | < 0.20 |
@@ -62,7 +62,8 @@ CANONICAL = {"CD3": "CD3E", "CD4": "CD4", "CD8": "CD8A", "CD8a": "CD8A", "CD14":
 CANONICAL_MARKERS = ("CD3E", "CD4", "CD8A", "MS4A1", "CD14", "CD19", "NCAM1", "FCGR3A")
 UNINFORMATIVE_GENES = ("PTPRC",)  # isoform / allotype antibodies of a ubiquitous gene
 RNA_DETECTED = (0.05, 0.90)
-MIN_PAIRS = 2
+MIN_PAIRS = 2  # pairs to report the rule at all
+MIN_PAIRS_FAIL = 3  # pairs for the rule to fail a library
 
 
 def _rule(metric, value):
@@ -248,6 +249,8 @@ def library_qc(M, panel: pd.DataFrame, called: np.ndarray, stats: dict, ambient:
         if k in ("frac_cells_with_adt", "median_umi_cells", "rna_concordance") and len(ab_rows) == 0:
             v = None  # hashtag-only library: judged by the hashtag rules
         rules[k] = _rule(k, v)
+        if k == "rna_concordance" and rules[k] == "fail" and out.get("rna_pairs", 0) < MIN_PAIRS_FAIL:
+            rules[k] = "warn"
     out["rules"] = rules
     out["verdict"] = "fail" if "fail" in rules.values() else ("warn" if "warn" in rules.values() else "pass")
     out["failed"] = [k for k, v in rules.items() if v == "fail"]
