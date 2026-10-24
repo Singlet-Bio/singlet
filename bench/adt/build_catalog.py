@@ -9,6 +9,10 @@ Sources (public copies of vendor lists; BioLegend's own site is behind a bot cha
 * ``hubmap_{A,B,C}``: hubmapconsortium/citeseq-pipeline ``adt_barcode/adt_{A,B,C}.tsv``.
 * ``jax_b_universal``: TheJacksonLaboratory/nf-tenx ``assets/totalseq-b_universal.csv``.
 * ``cellgeni_c_universal_v1`` / ``cellgeni_hto``: cellgeni/cellranger_cite_hash feature references.
+* ``tenx_pbmc_1k_protein_v3``: the feature reference of 10x's 2018 dataset pbmc_1k_protein_v3 (from its Cell Ranger 3.0 h5).
+  It is **not** used to name anything: it assigns 15 of BioLegend's barcodes 0001-0023 to other antibodies (its CD3 is
+  BioLegend's A0001 mouse CD4, its CD14 is A0004 mouse PD-1), so those sequences are marked ``reused`` with the other name.
+  A panel identified from the reads that leans on reused sequences needs a study reference.
 
 TotalSeq barcode numbers share one sequence across the A, B and C formats (the format is the capture handle, not the
 barcode), so the catalog is keyed by the 15-nt sequence. Every spelling of a sequence's target is kept in ``aliases``;
@@ -87,6 +91,17 @@ def norm_spec(s):
     return re.sub(r"[^a-z0-9]+", "", s)
 
 
+def load_reuse(src):
+    """Sequences a published panel used for another antibody: {sequence: 'source: name'}."""
+    out = {}
+    p = os.path.join(src, "tenx_pbmc_1k_protein_v3.csv")
+    if os.path.exists(p):
+        d = pd.read_csv(p, dtype=str)
+        for r in d.itertuples(index=False):
+            out[r.sequence] = f"10x pbmc_1k_protein_v3 (2018): {r.name}"
+    return out
+
+
 def main(src, out):
     d = load(src)
     d = d.fillna("")
@@ -110,9 +125,11 @@ def main(src, out):
                       aliases="|".join(sorted(set(html.unescape(v) for v in x.specificity) - {"", "nan"})),
                       sources="|".join(sorted(set(x.source)))))
     cat = pd.DataFrame(g)
+    reuse = load_reuse(src)
+    cat["reused"] = [reuse.get(q, "") for q in cat.sequence]
     os.makedirs(os.path.dirname(out), exist_ok=True)
     cat.to_csv(out, sep="\t", index=False)
-    print(f"{len(cat)} sequences; kinds {cat.kind.value_counts().to_dict()}")
+    print(f"{len(cat)} sequences; kinds {cat.kind.value_counts().to_dict()}; reused {(cat.reused != '').sum()}")
 
 
 if __name__ == "__main__":

@@ -76,6 +76,8 @@ def parse(data, name):
                         if c2 == c:
                             continue
                         w = df[c2].dropna().astype(str)
+                        if w.nunique() <= 1 or w.str.fullmatch(r"(?i)R[12]|antibody capture|custom|5P.*|\^.*").mean() > 0.5:
+                            continue  # read / feature_type / pattern columns
                         if len(w) and not w.str.fullmatch(SEQ.pattern).any() and w.str.match(r"^[A-Za-z]").mean() > 0.5:
                             names = c2
                             break

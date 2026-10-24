@@ -152,3 +152,17 @@ def test_discover_names_catalog_barcodes_and_flags_unknown():
     pan2 = P.discover(feats + [unknown.encode()] * 400, cat)
     assert pan2.status == "incomplete" and pan2.notes["unexplained_top"][0][0] == unknown
     assert pan2.notes["low_complexity_share"] > 0
+
+
+def test_discover_flags_reused_and_cross_species_barcodes():
+    cat = P.load_catalog()
+    reused = cat[cat.reused != ""].sequence.iloc[:3].tolist()
+    feats = [q.encode() for q in reused for _ in range(300)]
+    pan = P.discover(feats, cat, organism="Homo sapiens")
+    assert pan.status == "ambiguous"
+    assert pan.notes["reused_share"] > 0.9
+    mouse_only = cat[(cat.reactivity == "Mouse") & (cat.reused == "") & (cat.kind == "antibody")].sequence.iloc[:2]
+    pan = P.discover([q.encode() for q in mouse_only for _ in range(300)], cat, organism="Homo sapiens")
+    assert pan.status == "ambiguous" and pan.notes["reactivity_mismatch_share"] > 0.9
+    pan = P.discover([q.encode() for q in mouse_only for _ in range(300)], cat, organism="Mus musculus")
+    assert pan.status == "ok"

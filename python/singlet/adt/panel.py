@@ -111,8 +111,17 @@ def detect_offset(r2_seqs: Sequence[bytes], catalog_seqs: Sequence[str], offsets
     return out
 
 
+SPECIES = {"homo sapiens": "human", "mus musculus": "mouse", "rattus norvegicus": "rat"}
+IDENTITY_MAX = 0.10  # reads on catalog barcodes whose reactivity excludes the organism, or that were reused
+
+
 def discover(feature_seqs: Sequence[bytes], cat: pd.DataFrame, organism: str = "") -> Panel:
-    """Identify the panel from feature-barcode windows (already at the chosen offset) of reads in called cells."""
+    """Identify the panel from feature-barcode windows (already at the chosen offset) of reads in called cells.
+
+    Identity checks (``notes``): ``reactivity_mismatch_share``, the share of panel reads on barcodes whose catalog
+    reactivity excludes the sample's organism (a mouse-only antibody in a human sample means the sequence names something
+    else in this panel), and ``reused_share``, the share on sequences a published panel used for another antibody
+    (``reused`` column). Either above ``IDENTITY_MAX`` makes the status ``ambiguous``: the names need a study reference."""
     L = int(cat.sequence.str.len().max())
     w = [s for s in feature_seqs if len(s) == L]
     n = len(w)
@@ -141,8 +150,21 @@ def discover(feature_seqs: Sequence[bytes], cat: pd.DataFrame, organism: str = "
     notes = {"reads": n, "matched_share": matched / max(n, 1), "unexplained_share": share["other"],
              "low_complexity_share": share["low_complexity"], "shifted_share": share["shifted"],
              "unexplained_top": other[:20], "n_catalog_hits": int(keep.sum())}
+    sp = SPECIES.get(str(organism).split("|")[0].strip().lower(), "")
+    sup = feats.reads_discovery.astype(float)
+    tot = max(sup.sum(), 1.0)
+    react = feats.reactivity.fillna("").str.lower() if "reactivity" in feats else pd.Series("", index=feats.index)
+    mism = (react != "") & ~react.str.contains(sp) & (feats.kind != "isotype") if sp else pd.Series(False, index=feats.index)
+    reused = feats.reused.fillna("") != "" if "reused" in feats else pd.Series(False, index=feats.index)
+    notes["reactivity_mismatch_share"] = float(sup[mism].sum() / tot)
+    notes["reactivity_mismatch"] = [f"{n} ({b}, {r})" for n, b, r in zip(feats.specificity[mism], feats.barcode_id[mism],
+                                                                        react[mism])][:20]
+    notes["reused_share"] = float(sup[reused].sum() / tot)
+    notes["reused"] = list(feats.reused[reused])[:20]
     if not keep.any():
         status = "unresolved"
+    elif notes["reactivity_mismatch_share"] > IDENTITY_MAX or notes["reused_share"] > IDENTITY_MAX:
+        status = "ambiguous"
     elif share["other"] > UNEXPLAINED_MAX:
         status = "incomplete"
     else:
@@ -151,7 +173,8 @@ def discover(feature_seqs: Sequence[bytes], cat: pd.DataFrame, organism: str = "
         "id": [b or s for b, s in zip(feats.barcode_id, feats.sequence)],
         "name": feats.specificity.values, "sequence": feats.sequence.values, "kind": feats.kind.values,
         "barcode_id": feats.barcode_id.values, "ensembl": feats.ensembl.values, "clone": feats.clone.values,
-        "reactivity": feats.reactivity.values, "reads_discovery": feats.reads_discovery.values})
+        "reactivity": feats.reactivity.values, "reads_discovery": feats.reads_discovery.values,
+        "reused": feats.reused.values if "reused" in feats else ""})
     out["source"] = "catalog"
     _dedupe_names(out)
     return Panel(out.reset_index(drop=True), "catalog", -1, status, notes)

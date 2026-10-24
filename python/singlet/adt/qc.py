@@ -14,6 +14,7 @@ reported with the data):
 | ``median_umi_cells`` | median ADT UMIs per called cell | < 20 | < 100 |
 | ``rna_concordance`` | median Spearman, over antibodies whose gene is measured, of CLR(ADT) vs log RNA in called cells; canonical markers listed separately | < 0.05 (when >= 3 pairs) | < 0.15 |
 | ``panel_unexplained`` | share of feature-like reads on abundant sequences that are not in the panel | > 0.20 | > 0.05 |
+| ``panel_identity`` | panels identified from the reads: share of panel reads on catalog barcodes whose reactivity excludes the organism or that a published panel used for another antibody | > 0.10 | > 0.02 |
 | ``saturation`` | 1 - molecules / usable reads | - | < 0.20 |
 | ``isotype_share_median`` | median per-cell share of isotype-control UMIs | - | > 0.10 |
 | ``hto_singlet_share`` | hashtag libraries: called cells assigned to one hashtag | < 0.30 | < 0.50 |
@@ -39,6 +40,7 @@ THRESHOLDS = {
     "median_umi_cells": ("<", 20, 100),
     "rna_concordance": ("<", 0.05, 0.15),
     "panel_unexplained": (">", 0.20, 0.05),
+    "panel_identity": (">", 0.10, 0.02),
     "saturation": ("<", None, 0.20),
     "isotype_share_median": (">", None, 0.10),
     "hto_singlet_share": ("<", 0.30, 0.50),
@@ -196,6 +198,10 @@ def library_qc(M, panel: pd.DataFrame, called: np.ndarray, stats: dict, ambient:
         out["enrichment_vs_empty_median"] = float(np.median((mc / np.maximum(me, 1e-9))[ab_rows])) if len(ab_rows) else None
     if discovery:
         out["panel_unexplained"] = discovery.get("unexplained_share")
+        if (panel.get("source", pd.Series(["study"])) == "catalog").any():
+            out["panel_identity"] = max(discovery.get("reactivity_mismatch_share", 0.0), discovery.get("reused_share", 0.0))
+            out["panel_identity_detail"] = {"reactivity_mismatch": discovery.get("reactivity_mismatch", []),
+                                            "reused": discovery.get("reused", [])}
     # RNA concordance
     conc = None
     if exon is not None and genes and len(ab_rows) and len(cells) > 20:

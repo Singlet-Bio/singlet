@@ -206,7 +206,7 @@ def process(row, a, out_dir, status):
                                                                disc.features.reads_discovery))).fillna(0).astype(int)
         status["panel_source"] = "study"
     else:
-        disc = P.discover(feats, cat)
+        disc = P.discover(feats, cat, organism=row.get("organism", ""))
         if disc is None or disc.status == "unresolved":
             status["status"] = "panel_unresolved"
             status["panel_reason"] = "no catalog barcode with support in called cells"
@@ -316,7 +316,7 @@ def load_catalogs(geo_dir):
         return cat
     extra = pd.DataFrame({"sequence": g.sequence, "barcode_id": "", "formats": "", "specificity": g.name,
                           "clone": "", "reactivity": "", "ensembl": "", "kind": [P.kind_of(n) for n in g.name],
-                          "aliases": g.aliases, "sources": "geo:" + g.studies})
+                          "aliases": g.aliases, "sources": "geo:" + g.studies, "reused": ""})
     return pd.concat([cat, extra], ignore_index=True)
 
 
