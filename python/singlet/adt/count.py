@@ -340,70 +340,59 @@ class LibraryCounts:
     unmatched: List[Tuple[str, int]]  # most frequent unmatched feature sequences (in valid barcodes) and reads
 
 
-def count_library(r1_paths, r2_paths, *, cb_len: int, umi_len: int, offset: int, panel_sequences: Sequence[str],
-                  whitelist_codes: np.ndarray, gex_barcodes: Sequence[str], translation=None,
-                  max_reads: Optional[int] = None, pairs=None) -> LibraryCounts:
-    """Count one library. ``gex_barcodes``: the GEX sample's column barcodes in ``col`` order (16 nt, ``-1`` suffix ok)."""
-    from scipy import sparse
-
-    fx = FeatureIndex(list(panel_sequences))
-    L = fx.L
-    r1_len = cb_len + umi_len
-    if pairs is None:
-        pairs = iter_pairs(r1_paths, r2_paths)
-    keys, reads, st = collapse_reads(pairs, r1_len, offset, L, max_reads=max_reads)
-    mat = keys.view(np.uint8).reshape(len(keys), r1_len + L)
-    st["unique_keys"] = int(len(keys))
-
-    # features
-    fidx, fcorr = fx.assign(mat[:, r1_len:])
-    st["reads_feature_exact"] = int(reads[(fidx >= 0) & ~fcorr].sum())
-    st["reads_feature_corrected"] = int(reads[(fidx >= 0) & fcorr].sum())
-    st["reads_feature_ambiguous"] = int(reads[fidx == -2].sum())
-    st["reads_feature_unmatched"] = int(reads[fidx == -1].sum())
-
-    # barcodes (on unique observed barcodes)
-    cbm = np.ascontiguousarray(mat[:, :cb_len])
-    cb_keys = cbm.view(f"S{cb_len}").ravel()
-    ucb, cb_inv = np.unique(cb_keys, return_inverse=True)
-    cb_inv = cb_inv.ravel()
-    cb_reads = np.bincount(cb_inv, weights=reads, minlength=len(ucb))
+def _barcode_map(ucb: np.ndarray, cb_reads: np.ndarray, cb_len: int, whitelist_codes, translation):
+    """Corrected code, validity and translation flag per unique raw barcode (``ucb`` sorted ``S<cb_len>``)."""
     ucb_mat = ucb.view(np.uint8).reshape(len(ucb), cb_len)
     cb_code, cb_valid, n_corr = correct_barcodes(ucb_mat, cb_reads, whitelist_codes)
-    translated = None
+    translated = np.zeros(len(ucb), bool)
     if translation is not None:
         cb_code_t, translated = translate(cb_code, translation)
         cb_code = np.where(cb_valid, cb_code_t, cb_code)
-    st["barcodes_observed"] = int(len(ucb))
-    st["barcodes_corrected"] = n_corr
-    rv = cb_valid[cb_inv]
-    st["reads_valid_barcode"] = int(reads[rv].sum())
-    st["reads_valid_barcode_feature"] = int(reads[rv & (fidx >= 0)].sum())
-    if translated is not None:
-        st["reads_translated"] = int(reads[rv & translated[cb_inv]].sum())
+    return cb_code, cb_valid, translated, n_corr
 
-    # unmatched feature sequences on valid barcodes (panel completeness / discovery)
+
+def _add(st, k, v):
+    st[k] = st.get(k, 0) + int(v)
+
+
+def _process(keys, reads, bmap, fx, cb_len, umi_len, n_features, st, unm):
+    """Features, barcodes and UMIs of a set of collapsed keys whose barcodes are all in ``bmap``.
+
+    Returns the surviving molecules (corrected barcode code, feature, reads); adds read statistics to ``st`` and
+    unmatched feature sequences on valid barcodes to ``unm`` (sequence -> reads)."""
+    ucb, cb_code, cb_valid, translated = bmap
+    L = fx.L
+    r1_len = cb_len + umi_len
+    mat = keys.view(np.uint8).reshape(len(keys), r1_len + L)
+    fidx, fcorr = fx.assign(mat[:, r1_len:])
+    _add(st, "reads_feature_exact", reads[(fidx >= 0) & ~fcorr].sum())
+    _add(st, "reads_feature_corrected", reads[(fidx >= 0) & fcorr].sum())
+    _add(st, "reads_feature_ambiguous", reads[fidx == -2].sum())
+    _add(st, "reads_feature_unmatched", reads[fidx == -1].sum())
+    cbk = np.ascontiguousarray(mat[:, :cb_len]).view(f"S{cb_len}").ravel()
+    bi = np.searchsorted(ucb, cbk)
+    rv = cb_valid[bi]
+    _add(st, "reads_valid_barcode", reads[rv].sum())
+    _add(st, "reads_valid_barcode_feature", reads[rv & (fidx >= 0)].sum())
+    _add(st, "reads_translated", reads[rv & translated[bi]].sum())
     um = rv & (fidx == -1)
-    unmatched = []
     if um.any():
         fs = np.ascontiguousarray(mat[um, r1_len:]).view(f"S{L}").ravel()
         u, inv = np.unique(fs, return_inverse=True)
         c = np.bincount(inv.ravel(), weights=reads[um]).astype(np.int64)
-        top = np.argsort(-c)[:N_UNMATCHED_KEEP]
-        unmatched = [(u[i].decode(), int(c[i])) for i in top]
-
-    # molecules: (barcode, feature, umi) on valid barcodes and features, UMI without N
+        for i in np.argsort(-c)[:N_UNMATCHED_KEEP * 5]:
+            unm[u[i]] = unm.get(u[i], 0) + int(c[i])
     keep = rv & (fidx >= 0)
     umi_codes, umi_bad = S.encode(mat[keep, cb_len:r1_len])
-    bc = cb_code[cb_inv[keep]]
+    bc = cb_code[bi[keep]]
     ft = fidx[keep]
     rd = reads[keep]
     ok = umi_bad == 0
-    st["reads_umi_n"] = int(rd[~ok].sum())
+    _add(st, "reads_umi_n", rd[~ok].sum())
     bc, ft, rd, umi_codes = bc[ok], ft[ok], rd[ok], umi_codes[ok]
     # several observed (CB, UMI, feature) can land on one corrected key: sum them. Packed key:
     # dense barcode index (30 bits) | feature (10 bits) | UMI (24 bits = 12 nt)
-    if umi_len > 12 or len(panel_sequences) >= 1024:
+    if umi_len > 12 or n_features >= 1024:
         raise ValueError("UMI > 12 nt or >= 1024 features do not fit the packed molecule key")
     ubc, bci = np.unique(bc, return_inverse=True)
     key = (bci.ravel().astype(np.uint64) << np.uint64(34)) | (ft.astype(np.uint64) << np.uint64(24)) | umi_codes
@@ -413,11 +402,138 @@ def count_library(r1_paths, r2_paths, *, cb_len: int, umi_len: int, offset: int,
     tgt = correct_umis(gu >> np.uint64(24), gu & umi_mask, greads, umi_len)
     mol = np.unique(tgt)  # surviving molecules
     mol_reads = np.bincount(tgt, weights=greads, minlength=len(gu))[mol].astype(np.int64)
-    m_bc = ubc[(gu[mol] >> np.uint64(34)).astype(np.int64)]
-    m_ft = ((gu[mol] >> np.uint64(24)) & np.uint64(1023)).astype(np.int64)
-    st["umis_before_correction"] = int(len(gu))
-    st["molecules"] = int(len(mol))
-    st["reads_usable"] = int(greads.sum())
+    _add(st, "umis_before_correction", len(gu))
+    _add(st, "molecules", len(mol))
+    _add(st, "reads_usable", greads.sum())
+    return (ubc[(gu[mol] >> np.uint64(34)).astype(np.int64)],
+            ((gu[mol] >> np.uint64(24)) & np.uint64(1023)).astype(np.int64), mol_reads)
+
+
+def _barcode_counts(pairs, r1_len, end, cb_len, max_reads=None):
+    """Pass 1 of the sharded mode: reads per raw cell barcode (same read filter as :func:`collapse_reads`)."""
+    uniq, cnts, buf = [], [], []
+    n = 0
+
+    def flush():
+        if buf:
+            u, c = np.unique(np.array(buf, dtype=f"S{cb_len}"), return_counts=True)
+            uniq.append(u)
+            cnts.append(c.astype(np.int64))
+            buf.clear()
+
+    for s1, s2 in pairs:
+        n += 1
+        if len(s1) >= r1_len and len(s2) >= end:
+            buf.append(s1[:cb_len])
+            if len(buf) >= CHUNK:
+                flush()
+                if len(uniq) > 8:
+                    _merge(uniq, cnts)
+        if max_reads is not None and n >= max_reads:
+            break
+    flush()
+    _merge(uniq, cnts)
+    return (uniq[0], cnts[0]) if uniq else (np.zeros(0, f"S{cb_len}"), np.zeros(0, np.int64))
+
+
+def count_library(r1_paths, r2_paths, *, cb_len: int, umi_len: int, offset: int, panel_sequences: Sequence[str],
+                  whitelist_codes: np.ndarray, gex_barcodes: Sequence[str], translation=None,
+                  max_reads: Optional[int] = None, pairs=None, shards: int = 0, tmpdir: Optional[str] = None,
+                  pairs_factory=None) -> LibraryCounts:
+    """Count one library. ``gex_barcodes``: the GEX sample's column barcodes in ``col`` order (16 nt, ``-1`` suffix ok).
+
+    ``shards > 0`` bounds memory for large libraries: pass 1 counts reads per raw barcode and corrects every barcode
+    (the same prior as the single pass), pass 2 writes the collapsed keys to ``shards`` files by corrected barcode under
+    ``tmpdir`` and processes each alone. UMI correction never crosses barcodes, so the result is identical.
+    ``pairs_factory`` (a callable returning a fresh pair iterator) is needed for the two passes."""
+    from scipy import sparse
+
+    fx = FeatureIndex(list(panel_sequences))
+    L = fx.L
+    r1_len = cb_len + umi_len
+    end = offset + L
+    nf = len(panel_sequences)
+    if pairs_factory is None:
+        if pairs is not None:
+            if shards:
+                raise ValueError("sharded counting reads the pairs twice: pass pairs_factory")
+            pairs_factory = (lambda p=pairs: p)
+        else:
+            pairs_factory = (lambda: iter_pairs(r1_paths, r2_paths))
+    st: dict = {}
+    unm: dict = {}
+    if not shards:
+        keys, reads, st0 = collapse_reads(pairs_factory(), r1_len, offset, L, max_reads=max_reads)
+        st.update(st0)
+        st["unique_keys"] = int(len(keys))
+        cbk = np.ascontiguousarray(keys.view(np.uint8).reshape(len(keys), r1_len + L)[:, :cb_len])
+        ucb, inv = np.unique(cbk.view(f"S{cb_len}").ravel(), return_inverse=True)
+        cb_reads = np.bincount(inv.ravel(), weights=reads, minlength=len(ucb))
+        del cbk, inv
+        cb_code, cb_valid, translated, n_corr = _barcode_map(ucb, cb_reads, cb_len, whitelist_codes, translation)
+        parts = [_process(keys, reads, (ucb, cb_code, cb_valid, translated), fx, cb_len, umi_len, nf, st, unm)]
+    else:
+        import tempfile
+
+        ucb, cb_reads = _barcode_counts(pairs_factory(), r1_len, end, cb_len, max_reads)
+        cb_code, cb_valid, translated, n_corr = _barcode_map(ucb, cb_reads, cb_len, whitelist_codes, translation)
+        bmap = (ucb, cb_code, cb_valid, translated)
+        # shard by corrected barcode; invalid barcodes get their own shard (they still count in the read statistics)
+        shard_of = np.where(cb_valid, (cb_code % np.uint64(shards)).astype(np.int64), shards)
+        d = tempfile.mkdtemp(prefix="adt-shards-", dir=tmpdir)
+        pieces = {k: [] for k in range(shards + 1)}
+        n = n_short = 0
+        buf: List[bytes] = []
+
+        def spill():
+            if not buf:
+                return
+            u, c = np.unique(np.array(buf, dtype=f"S{r1_len + L}"), return_counts=True)
+            cbk = np.ascontiguousarray(u.view(np.uint8).reshape(len(u), r1_len + L)[:, :cb_len])
+            sh = shard_of[np.searchsorted(ucb, cbk.view(f"S{cb_len}").ravel())]
+            for k in np.unique(sh):
+                m = sh == k
+                f = os.path.join(d, f"{k}_{len(pieces[k])}.npz")
+                np.savez(f, keys=u[m], reads=c[m].astype(np.int64))
+                pieces[k].append(f)
+            buf.clear()
+
+        for s1, s2 in pairs_factory():
+            n += 1
+            if len(s1) < r1_len or len(s2) < end:
+                n_short += 1
+            else:
+                buf.append(s1[:r1_len] + s2[offset:end])
+                if len(buf) >= CHUNK:
+                    spill()
+            if max_reads is not None and n >= max_reads:
+                break
+        spill()
+        st.update({"reads": n, "reads_short": n_short, "shards": shards})
+        parts = []
+        uk = 0
+        for k in range(shards + 1):
+            if not pieces[k]:
+                continue
+            us, cs = [], []
+            for f in pieces[k]:
+                with np.load(f) as z:
+                    us.append(z["keys"])
+                    cs.append(z["reads"])
+                os.remove(f)
+            _merge(us, cs)
+            uk += len(us[0])
+            parts.append(_process(us[0], cs[0], bmap, fx, cb_len, umi_len, nf, st, unm))
+        os.rmdir(d)
+        st["unique_keys"] = uk
+    st["barcodes_observed"] = int(len(ucb))
+    st["barcodes_corrected"] = n_corr
+    if translation is None:
+        st.pop("reads_translated", None)
+    m_bc = np.concatenate([p[0] for p in parts]) if parts else np.zeros(0, np.uint64)
+    m_ft = np.concatenate([p[1] for p in parts]) if parts else np.zeros(0, np.int64)
+    mol_reads = np.concatenate([p[2] for p in parts]) if parts else np.zeros(0, np.int64)
+    unmatched = sorted(((q.decode(), c) for q, c in unm.items()), key=lambda x: -x[1])[:N_UNMATCHED_KEEP]
 
     # GEX columns
     gb = [b.split("-")[0] for b in gex_barcodes]
@@ -430,14 +546,14 @@ def count_library(r1_paths, r2_paths, *, cb_len: int, umi_len: int, offset: int,
     inside = col >= 0
     n_cols = len(gb)
     M = sparse.coo_matrix((np.ones(inside.sum(), np.uint32), (m_ft[inside], col[inside])),
-                          shape=(len(panel_sequences), n_cols)).tocsc()
+                          shape=(nf, n_cols)).tocsc()
     M.sum_duplicates()
     M.data = M.data.astype(np.uint32)
     st["molecules_in_gex_columns"] = int(inside.sum())
     st["reads_in_gex_columns"] = int(mol_reads[inside].sum())
-    st["saturation"] = float(1 - len(mol) / max(1, greads.sum()))
+    st["saturation"] = float(1 - st.get("molecules", 0) / max(1, st.get("reads_usable", 0)))
     st["saturation_gex_columns"] = float(1 - inside.sum() / max(1, mol_reads[inside].sum()))
-    ambient = np.bincount(m_ft[~inside], minlength=len(panel_sequences)).astype(np.int64)
+    ambient = np.bincount(m_ft[~inside], minlength=nf).astype(np.int64)
     ob, oc = np.unique(m_bc[~inside], return_counts=True)
     outside_totals = np.sort(oc)[::-1].astype(np.int64)
     st["outside_barcodes"] = int(len(ob))

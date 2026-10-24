@@ -131,3 +131,31 @@ def test_mixed_length_panel():
     idx, corr = fx.assign(S.as_bytes_matrix(q, 15))
     assert idx.tolist() == [0, 1, 1, 2, -1]
     assert corr.tolist() == [False, False, True, True, False]
+
+
+def test_sharded_equals_single_pass(tmp_path):
+    wl = sorted(set(rand_seq(800, 16)))
+    wl_codes = np.sort(S.encode_strings(wl, 16)[0])
+    cells = wl[:60]
+    panel = rand_seq(6, 15)
+    pairs = []
+    for cb in cells:
+        for fs in panel:
+            for _ in range(int(RNG.integers(0, 6))):
+                umi = rand_seq(1, 12)[0]
+                for r in range(int(RNG.integers(1, 4))):
+                    c1 = mutate(cb) if r and RNG.random() < 0.1 else cb
+                    u1 = mutate(umi) if r and RNG.random() < 0.1 else umi
+                    pairs.append(((c1 + u1).encode(), ("A" * 10 + fs + "TT").encode()))
+    # unmatched feature reads and a barcode with N
+    pairs += [((c + "ACGTACGTACGT").encode(), b"A" * 10 + b"GGGGGGGGGGGGGGG") for c in cells[:5]]
+    pairs += [(("N" + c[1:] + "ACGTACGTACGT").encode(), ("A" * 10 + panel[0]).encode()) for c in cells[:5]]
+    kw = dict(cb_len=16, umi_len=12, offset=10, panel_sequences=panel, whitelist_codes=wl_codes,
+              gex_barcodes=cells[:40] + wl[500:520])
+    a = C.count_library(None, None, pairs=iter(list(pairs)), **kw)
+    b = C.count_library(None, None, pairs_factory=lambda: iter(list(pairs)), shards=7, tmpdir=str(tmp_path), **kw)
+    assert (a.matrix.toarray() == b.matrix.toarray()).all()
+    assert (a.ambient == b.ambient).all()
+    for k in ("reads", "reads_valid_barcode", "reads_feature_exact", "molecules", "reads_usable", "barcodes_corrected"):
+        assert a.stats[k] == b.stats[k], k
+    assert dict(a.unmatched) == dict(b.unmatched)
