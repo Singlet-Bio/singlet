@@ -567,8 +567,9 @@ def test_load_genes_warns_on_missing(tmp_path):
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         result = singlet.load(str(path), genes=["TP53", "TYPO_GENE"])
-        assert len(w) == 1
-        assert "TYPO_GENE" in str(w[0].message)
+        # anndata under pandas 3 adds its own deprecation warnings; count only ours
+        ours = [x for x in w if "TYPO_GENE" in str(x.message)]
+        assert len(ours) == 1
     assert result.shape == (3, 1)  # only TP53 found
 
 
