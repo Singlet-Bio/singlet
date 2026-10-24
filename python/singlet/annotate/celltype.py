@@ -51,6 +51,8 @@ def lognorm(X: sps.csr_matrix, target_sum: float = 1e4) -> sps.csr_matrix:
 def row_ranks(X: sps.csr_matrix) -> np.ndarray:
     """Average-tie descending rank (1 = highest) of every stored value within its row, aligned with ``X.data``."""
     n = X.shape[0]
+    if X.nnz == 0:  # a block of cells with no counts at all (seen in real samples)
+        return np.zeros(0, np.float32)
     nnz = np.diff(X.indptr)
     row = np.repeat(np.arange(n, dtype=np.int64), nnz)
     order = np.lexsort((-X.data, row))

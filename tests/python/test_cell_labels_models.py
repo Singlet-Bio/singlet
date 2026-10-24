@@ -229,3 +229,14 @@ def test_ancestry_refuses_defective_depths_and_corrects_reference_bias():
     assert abs(ANC.het_fraction(ad, dp) - 0.42) < 0.02
     c = ANC.infer_ancestry(ad, dp, F, n_boot=0)
     assert c.group == "AFR" and c.prob > 0.9
+
+
+CT_CHUNK_PAD = 30
+
+
+def test_cell_types_survive_a_block_of_empty_cells():
+    X, genes, _ = _two_lineages(400)
+    X = np.vstack([X, np.zeros((CT_CHUNK_PAD, X.shape[1]), np.float32)])
+    r = CT.annotate_cell_types(X, genes, species="human", method="guide")
+    assert (r.node[-CT_CHUNK_PAD:] == 0).all()
+    assert CT.row_ranks(sps.csr_matrix((5, 3), dtype=np.float32)).shape == (0,)
