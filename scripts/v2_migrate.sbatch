@@ -130,9 +130,9 @@ ensure_build() {
     # venv inside the image's Python 3.12, with the package's own runtime dependencies (import singlet is eager), boto3, build tools
     [ -x "$VENV/bin/python" ] || rt python -m venv "$VENV"
     mapfile -t DEPS < <(rt "$VENV/bin/python" -c 'import sys, tomllib; print("\n".join(tomllib.load(open(sys.argv[1], "rb"))["project"]["dependencies"]))' "$SRC/pyproject.toml")
-    MARK=$VENV/.deps-$(printf '%s\n' "${DEPS[@]}" boto3 pybind11 setuptools wheel pytest | sha1sum | cut -c1-12)
+    MARK=$VENV/.deps-$(printf '%s\n' "${DEPS[@]}" numba boto3 pybind11 setuptools wheel pytest | sha1sum | cut -c1-12)
     if [ ! -e "$MARK" ]; then
-      rt "$VENV/bin/pip" install -q "${DEPS[@]}" boto3 pybind11 'setuptools>=64' wheel pytest
+      rt "$VENV/bin/pip" install -q "${DEPS[@]}" 'numba>=0.57' boto3 pybind11 'setuptools>=64' wheel pytest
       touch "$MARK"
     fi
 

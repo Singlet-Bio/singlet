@@ -27,11 +27,11 @@ from typing import Optional
 
 import numpy as np
 
+from . import cellcall, util
 from . import cells as cells_mod
 from . import container as C
 from . import manifest as M
 from . import packs as P
-from . import util
 from .codec import CodecError, EncodeOptions, PyCodec2, get_codec, parse_header
 from .context import (
     LegacyContext,
@@ -71,6 +71,7 @@ class Options:
         packs: Optional[P.PackStore] = None,
         max_stage2_rounds: int = 4,
         junction_table=None,
+        cell_call_v2: Optional[bool] = None,
     ):
         self.chunk_cols = chunk_cols
         self.level = level
@@ -85,6 +86,8 @@ class Options:
         self.max_stage2_rounds = max_stage2_rounds
         # a junctions.JunctionTable (its packs reachable through ``packs``): junction rows are stored as table ids
         self.junction_table = junction_table
+        # called_v2 (docs/called-v2.md): True = required (fails without numba), None = when numba is installed, False = never
+        self.cell_call_v2 = cell_call_v2
 
 
 # ================================================================================================ comparisons (migration side)
@@ -322,6 +325,8 @@ def migrate_sample(
             called_src = "cell_calls.tsv"
         base = cells_mod.base_table(basis_barcodes, ex_c, it_c, called, wl)
         base.meta = {"called_source": called_src, "whitelist": wl_id}
+        if called is not None:
+            _add_called_v2(base, basis_barcodes, ex_c, it_c, protocol, opts, gsm)
 
     # ---- 3. candidate cells columns from the recipes
     cand: dict[str, tuple] = {}  # name -> (dtype, values, contributor rel)
@@ -446,6 +451,35 @@ def migrate_sample(
     return res
 
 
+def _add_called_v2(base, barcodes, exon, intron, protocol, opts: Options, gsm: str) -> None:
+    """Optional cells columns ``called_v2`` (bool) and ``called_v2_fdr`` (f32, NaN = not tested) plus the call's parameters in
+    ``base.meta["called_v2"]`` (docs/called-v2.md)."""
+    if opts.cell_call_v2 is False:
+        return
+    if opts.cell_call_v2 is None and not cellcall.available():
+        opts.log("  [%s] called_v2 skipped: numba is not installed" % gsm)
+        return
+    t0 = time.time()
+    X = cellcall.gene_counts(exon, intron, barcodes)
+    cv2, fdr, params = cellcall.call(
+        X, base.called, protocol
+    )  # params go into the object: nothing run-dependent
+    base.add("called_v2", cells_mod.DT_BOOL, cv2)
+    base.add("called_v2_fdr", cells_mod.DT_F32, fdr)
+    base.meta["called_v2"] = params
+    opts.log(
+        "  [%s] called_v2: %d (+%d), lower %s, alpha %s, %.1fs"
+        % (
+            gsm,
+            params["n_called_v2"],
+            params.get("n_added", 0),
+            params.get("lower"),
+            params.get("alpha"),
+            time.time() - t0,
+        )
+    )
+
+
 def _pack_ids(infos) -> set:
     out = set()
     for i in infos:
@@ -516,7 +550,7 @@ def _assemble(gsm, order, mem, base, cand, lctx, opts: Options, basis_barcodes, 
                 for n in m.plan[2]:
                     if isinstance(n, str) and n.startswith("cells:"):
                         needed.add(n[6:])
-        cells_final = base.copy(only=[k for k in cand if k in needed])
+        cells_final = base.copy(only=[k for k in cand if k in needed] + list(cellcall.COLUMNS))
         for k in cand:
             if k in needed and not cells_final.has(k):
                 cells_final.add(k, cand[k][0], cand[k][1])
@@ -531,6 +565,7 @@ def _assemble(gsm, order, mem, base, cand, lctx, opts: Options, basis_barcodes, 
                 "columns": cells_final.names,
                 "called_source": base.meta.get("called_source"),
                 "whitelist": base.meta.get("whitelist"),
+                **({"called_v2": base.meta["called_v2"]} if "called_v2" in base.meta else {}),
                 "ctx": facts,
             },
             flags=C.FLAG_ANNDATA,
@@ -799,6 +834,8 @@ def _manifest_member(info: C.MemberInfo, obj: bytes) -> dict:
                 "called_source": meta.get("called_source"),
             }
         )
+        if meta.get("called_v2") is not None:
+            d["called_v2"] = meta["called_v2"]
     return d
 
 
@@ -1148,9 +1185,18 @@ def main(argv=None) -> int:
         default=None,
         help="matrix codec: native = compiled pz2 with automatic codec 1/2 choice (default when singlet._pz2 imports), py = pure-Python codec 2",
     )
+    ap.add_argument(
+        "--no-cell-call-v2",
+        action="store_true",
+        help="do not compute called_v2 (default: computed; needs numba, pip install 'singlet-bio[migrate]')",
+    )
     a = ap.parse_args(argv)
     opts = Options(
-        chunk_cols=a.chunk_cols, codec=a.codec, recipes=a.recipes, created_at=a.created_at
+        chunk_cols=a.chunk_cols,
+        codec=a.codec,
+        recipes=a.recipes,
+        created_at=a.created_at,
+        cell_call_v2=False if a.no_cell_call_v2 else True,
     )
     res = migrate_bundle(a.bundle, a.out, a.gse, opts, a.samples.split(",") if a.samples else None)
     out = write_outputs(res, opts)
