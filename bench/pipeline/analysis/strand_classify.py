@@ -4,20 +4,27 @@
                               [<bam_probe.tsv> ...]
 
 wf = wrong_strand / (wrong_strand + exon_hits) from each sample's pileup_stats.json (the atlas
-engine's counters). It understates a wrong orientation: reads touching exons of both strands
-(most chrM reads) count as hits. Classes (flagged = wf > 0.5):
+engine's counters): the share of strand-informative exonic reads on the strand the atlas did
+NOT count. It understates a wrong orientation (reads touching exons of both strands, most chrM
+reads, count as hits). The atlas JSON's reverse_strand is the caller's flag, not what the engine
+counted: the old parallel probe flipped only its own copy. So wf > 0.5 means "counted on the
+minority strand", whether a 5' library was not flipped or a 3' library was flipped wrongly.
 
-  reversed      wf >= 0.6: a stranded library counted on the wrong strand; the fixed engine
-                flips it (probe or safety net). Re-run.
-  near_even     0.5 < wf < 0.6: about as many reads on each strand: unstranded (full-length,
-                tagmented) or noise-dominated. The fixed engine's probe will not flip these
-                (no-call band 0.4-0.6) but its safety net flips at > 50% nuclear antisense.
-                Re-run only after checking the protocol (see the per-protocol table).
-  borderline    0.35 < wf <= 0.5 with a large chrM share: may be reversed under the chrM
-                dilution. Listed, not re-run.
+The library's own strandedness does not depend on which way it was counted: |1 - 2 wf| (0 for
+an unstranded library, 1 for a perfectly stranded one). Classes (flagged = wf > 0.5):
+
+  misoriented         wf >= 0.7: a stranded library counted on its minority strand. The fixed
+                      engine counts it the other way. Re-run (count_gain ~ wf / (1 - wf)).
+  likely_misoriented  0.6 <= wf < 0.7: partly stranded, counted on the minority strand. Re-run.
+  antisense_heavy     0.5 < wf < 0.6: about as many reads on each strand (unstranded protocol,
+                      or antisense/noise-dominated). Not a strand error; re-counting gains < 1.5x.
+                      The fixed probe leaves these as configured (no-call band 0.4-0.6); its
+                      safety net counts the majority strand. Optional re-run.
+  borderline          0.35 < wf <= 0.5 with chrM > 15% of mapped reads: may be misoriented
+                      under the chrM dilution. Listed for checking, not re-run.
 
 GEO text (overall design, data processing, extract protocol, description, library/kit/chemistry
-fields) is searched for 5' / V(D)J wording as independent evidence for 10x samples.
+fields) is searched for 5' / V(D)J wording: weak, independent evidence for 10x samples.
 """
 import json
 import re
@@ -50,11 +57,17 @@ d["chrm_share"] = d.chrm_reads / d.mapped
 d["reverse_strand"] = d.reverse_strand.astype(str).str.lower() == "true"
 
 
+d["strandedness"] = (1 - 2 * d.wf).abs()
+d["count_gain"] = d.wf / (1 - d.wf)
+
+
 def klass(r):
+    if r.wf >= 0.7:
+        return "misoriented"
     if r.wf >= 0.6:
-        return "reversed"
+        return "likely_misoriented"
     if r.wf > 0.5:
-        return "near_even"
+        return "antisense_heavy"
     if r.wf > 0.35 and (r.chrm_share or 0) > 0.15:
         return "borderline"
     return "ok"
@@ -63,9 +76,11 @@ def klass(r):
 d["class"] = d.apply(klass, axis=1)
 
 # ── GEO text: 5' wording ─────────────────────────────────────────────────────
-FIVE = re.compile(r"5\s*['’′`]|5\s*-?\s*prime|five[\s-]prime|\bv\s*\(\s*d\s*\)\s*j\b|\bvdj\b|5p\s*(gex|kit|v\d)",
-                  re.I)
-THREE = re.compile(r"3\s*['’′`]|3\s*-?\s*prime|three[\s-]prime", re.I)
+# "5'" alone also matches oligo sequences written 5'-...-3'; require a kit-like word after it
+FIVE = re.compile(r"5\s*['’′`]\s*(?:gene|gex|kit|v\d|librar|chem|sequenc|end|capture|immune)|5\s*-?\s*prime|"
+                  r"five[\s-]prime|\bv\s*\(\s*d\s*\)\s*j\b|\bvdj\b", re.I)
+THREE = re.compile(r"3\s*['’′`]\s*(?:gene|gex|kit|v\d|librar|chem|sequenc|end|capture)|3\s*-?\s*prime|"
+                   r"three[\s-]prime", re.I)
 want = set(d.gsm[d["class"] != "ok"])
 ctrl = d[(d["class"] == "ok") & d.protocol.isin(["10xv2", "10xv3", "10xv1", "10x-visium"])]
 want |= set(ctrl.sample(n=min(3000, len(ctrl)), random_state=0).gsm)
@@ -102,18 +117,21 @@ def per_protocol(x):
     m = x[x.geo_5p.notna()]
     return pd.Series({
         "samples": n, "wf_median": x.wf.median(), "flagged_gt50": len(f), "flagged_pct": 100 * len(f) / n,
-        "reversed_ge60": int((x["class"] == "reversed").sum()), "gt90": int((x.wf > 0.9).sum()),
-        "near_even_50_60": int((x["class"] == "near_even").sum()),
+        "misoriented_ge70": int((x["class"] == "misoriented").sum()),
+        "likely_60_70": int((x["class"] == "likely_misoriented").sum()), "gt90": int((x.wf > 0.9).sum()),
+        "antisense_heavy_50_60": int((x["class"] == "antisense_heavy").sum()),
         "borderline": int((x["class"] == "borderline").sum()),
         "reverse_strand_applied_in_flagged": int(f.reverse_strand.sum()),
         "flagged_wf_median": f.wf.median() if len(f) else float("nan"),
+        "flagged_strandedness_median": f.strandedness.median() if len(f) else float("nan"),
+        "ok_strandedness_median": x[x.wf <= 0.5].strandedness.median(),
         "flagged_studies": f.gse.nunique() if "gse" in f else float("nan"),
         "geo_5p_pct_flagged": 100 * m[m.wf > 0.5].geo_5p.mean() if (m.wf > 0.5).any() else float("nan"),
         "geo_5p_pct_ok": 100 * m[m.wf <= 0.5].geo_5p.mean() if (m.wf <= 0.5).any() else float("nan"),
     })
 
 
-tab = d.groupby("protocol").apply(per_protocol).sort_values("flagged_gt50", ascending=False)
+tab = d.groupby("protocol")[list(d.columns)].apply(per_protocol).sort_values("flagged_gt50", ascending=False)
 tab.loc["ALL"] = per_protocol(d)
 tab.to_csv(out / "per_protocol.csv")
 
@@ -130,10 +148,12 @@ tot = d.groupby("gse").gsm.size().rename("study_samples")
 st = st.merge(tot, left_on="gse", right_index=True, how="left").sort_values("samples", ascending=False)
 st.to_csv(out / "flagged_studies.csv", index=False)
 
-cols = ["gsm", "gse", "protocol", "class", "wf", "exon_hits", "wrong_strand", "chrm_share", "reverse_strand",
+cols = ["gsm", "gse", "protocol", "class", "wf", "strandedness", "count_gain", "exon_hits", "wrong_strand",
+        "chrm_share", "reverse_strand",
         "geo_5p", "geo_3p"] + [c for c in ("bam_antisense_frac", "top50_share_anti") if c in d]
-rerun = d[d["class"].isin(["reversed", "near_even"])].sort_values(["protocol", "wf"], ascending=[True, False])
+rerun = d[d["class"].isin(["misoriented", "likely_misoriented"])].sort_values(["protocol", "wf"], ascending=[True, False])
 rerun[cols].to_csv(out / "rerun_samples.csv", index=False)
+d[d["class"] == "antisense_heavy"][cols].to_csv(out / "antisense_heavy_samples.csv", index=False)
 d[d["class"] == "borderline"][cols].to_csv(out / "borderline_samples.csv", index=False)
 d[cols].to_csv(out / "all_samples_strand.csv", index=False)
 

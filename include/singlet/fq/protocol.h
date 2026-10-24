@@ -407,21 +407,25 @@ inline bool hamming1_match(const uint8_t* bc, uint16_t len,
 // ── 10x 3' vs 5' from the reads ──
 // A 10x 3' and 5' kit of one generation share R1 geometry and whitelist, so the
 // barcode read alone cannot tell them apart (detect_protocol picks 3', the lower
-// id). The template-switch oligo can: a 5' R1 sequenced past BC+UMI shows the TSO
-// tail (TTTCTTATATGGG) where a 3' R1 shows poly(dT), and a short 5' insert reads
-// through into the TSO's reverse complement in R2, where a 3' insert reads into
-// poly(A).
+// id). Two read features can (measured on 10x PBMC 3' v2/v3, mouse nuclei 3' v2
+// and PBMC 5' v1, 300k reads each; per 1000 R2 reads):
+//   - the 3' kits' template-switch oligo (SMART, ...CAGAGTACATGGG) appears in R2
+//     of 3' libraries (41-164) and never in 5' (0): the 5' TSO is different;
+//   - a 3' R2 reads towards the poly(A) tail, a 5' R2 (antisense) away from it:
+//     poly(A)15 / poly(T)15 = 23-32 / 1.4-30 in 3', 15 / 32 in 5'.
+// A 5' R1 sequenced past BC+UMI also shows the 5' TSO tail (TTTCTTATATGGG) where
+// a 3' R1 shows poly(dT); that decides alone when present.
 struct FivePrimeEvidence {
     uint32_t n = 0;          // spots examined
-    uint32_t r1_tso = 0;     // R1: TSO tail right after BC+UMI
+    uint32_t r1_tso = 0;     // R1: 5' TSO tail right after BC+UMI
     uint32_t r1_polyt = 0;   // R1: poly(dT) right after BC+UMI
-    uint32_t r2_tso = 0;     // R2: TSO reverse complement anywhere
+    uint32_t r2_smart = 0;   // R2: 3' kit TSO (CAGAGTACATGGG) anywhere
     uint32_t r2_polya = 0;   // R2: 15-base poly(A) run anywhere
-    double frac(uint32_t k) const { return n ? static_cast<double>(k) / n : 0.0; }
-    // R1 evidence when the barcode read was sequenced past the TSO, else R2.
+    uint32_t r2_polyt = 0;   // R2: 15-base poly(T) run anywhere
     bool is_5prime() const {
         if (r1_tso + r1_polyt >= 50) return r1_tso > 4 * r1_polyt;
-        return frac(r2_tso) >= 0.002 && r2_tso > 4 * r2_polya;
+        // no 3' TSO (< 0.2%), and poly(T) outnumbers poly(A) in R2
+        return n >= 500 && 500ull * r2_smart < n && r2_polyt >= 10 && r2_polyt > r2_polya;
     }
 };
 
@@ -429,9 +433,8 @@ template<typename SpotT>
 FivePrimeEvidence five_prime_evidence(const std::vector<SpotT>& spots, uint16_t bc_umi_len,
                                       uint32_t max_spots = 20000) {
     // 2-bit codes: A=0 C=1 G=2 T=3
-    static const uint8_t kTsoTail[13] = {3,3,3,1,3,3,0,3,0,3,2,2,2};      // TTTCTTATATGGG
-    static const uint8_t kTsoTailRc[13] = {1,1,1,0,3,0,3,0,0,2,0,0,0};    // CCCATATAAGAAA
-    static const uint8_t kSmartTailRc[13] = {1,1,1,0,3,2,3,0,1,3,1,3,2};  // CCCATGTACTCTG
+    static const uint8_t kTsoTail[13] = {3,3,3,1,3,3,0,3,0,3,2,2,2};  // TTTCTTATATGGG (5' kits)
+    static const uint8_t kSmart[13] = {1,0,2,0,2,3,0,1,0,3,2,2,2};    // CAGAGTACATGGG (3' kits)
     auto mism = [](const auto& seq, size_t at, const uint8_t* pat) {
         int m = 0;
         for (int k = 0; k < 13; ++k) m += (seq[at + k] != pat[k]);
@@ -450,17 +453,18 @@ FivePrimeEvidence five_prime_evidence(const std::vector<SpotT>& spots, uint16_t 
                 if (t >= 11) ++ev.r1_polyt;
             }
         }
-        bool tso = false, polya = false;
-        int arun = 0;
+        bool smart = false, polya = false, polyt = false;
+        int arun = 0, trun = 0;
         for (uint16_t j = 0; j < s.r2_len; ++j) {
             arun = (s.r2_seq[j] == 0) ? arun + 1 : 0;
+            trun = (s.r2_seq[j] == 3) ? trun + 1 : 0;
             if (arun >= 15) polya = true;
-            if (!tso && j + 13 <= s.r2_len &&
-                (mism(s.r2_seq, j, kTsoTailRc) == 0 || mism(s.r2_seq, j, kSmartTailRc) == 0))
-                tso = true;
+            if (trun >= 15) polyt = true;
+            if (!smart && j + 13 <= s.r2_len && mism(s.r2_seq, j, kSmart) == 0) smart = true;
         }
-        ev.r2_tso += tso;
+        ev.r2_smart += smart;
         ev.r2_polya += polya;
+        ev.r2_polyt += polyt;
     }
     return ev;
 }
@@ -1060,9 +1064,9 @@ ProtocolCandidate detect_protocol(
         if (const CandidateSpec* fp = find_protocol_spec(five)) {
             auto ev = five_prime_evidence(probe_spots,
                 static_cast<uint16_t>(best.umi_offset + best.umi_length));
-            std::cerr << "[protocol_detect] 3'/5' check: R1 TSO " << ev.r1_tso << " / polyT "
-                      << ev.r1_polyt << ", R2 TSO-rc " << ev.r2_tso << " / polyA "
-                      << ev.r2_polya << " of " << ev.n << " spots\n";
+            std::cerr << "[protocol_detect] 3'/5' check: R1 5'-TSO " << ev.r1_tso << " / polyT "
+                      << ev.r1_polyt << "; R2 3'-TSO " << ev.r2_smart << ", polyA " << ev.r2_polya
+                      << ", polyT " << ev.r2_polyt << " of " << ev.n << " spots\n";
             if (ev.is_5prime()) {
                 std::cerr << "[protocol_detect] " << best.tag << " -> " << five
                           << " (template-switch oligo in the reads)\n";

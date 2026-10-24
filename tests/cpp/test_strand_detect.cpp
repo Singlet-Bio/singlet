@@ -49,20 +49,26 @@ std::string random_seq(std::mt19937& rng, int n) {
     return s;
 }
 
-// r1_extra: bases sequenced past BC+UMI (26); tail: what short inserts read into
-std::vector<Spot> spots(bool five, int r1_extra, double short_frac, uint32_t seed) {
+// r1_extra: bases sequenced past BC+UMI (26). R2 features at the rates measured on
+// 10x data (per read): 3' has the 3'-kit TSO (4%), poly(A) 3% and poly(T) 0.2%;
+// 5' has no 3'-kit TSO, poly(A) 1.5% and poly(T) 3%.
+std::vector<Spot> spots(bool five, int r1_extra, uint32_t seed) {
     std::mt19937 rng(seed);
+    std::uniform_real_distribution<double> u01(0.0, 1.0);
     std::vector<Spot> out;
     for (int i = 0; i < 4000; ++i) {
         Spot sp;
         std::string r1 = random_seq(rng, 26);
         if (r1_extra > 0)
             r1 += (five ? std::string("TTTCTTATATGGG") : std::string(13, 'T')) + random_seq(rng, r1_extra - 13);
-        std::string r2 = random_seq(rng, 90);
-        if ((rng() % 10000) < short_frac * 10000) {
-            std::string tail = five ? "CCCATATAAGAAA" : std::string(20, 'A');
-            r2 = random_seq(rng, 40) + tail + random_seq(rng, 90 - 40 - static_cast<int>(tail.size()));
-        }
+        std::string ins;
+        double x = u01(rng);
+        double p_smart = five ? 0.0 : 0.04, p_a = five ? 0.015 : 0.03, p_t = five ? 0.03 : 0.002;
+        if (x < p_smart) ins = "AAGCAGTGGTATCAACGCAGAGTACATGGG";
+        else if (x < p_smart + p_a) ins = std::string(20, 'A');
+        else if (x < p_smart + p_a + p_t) ins = std::string(20, 'T');
+        std::string r2 = random_seq(rng, 30) + ins;
+        r2 += random_seq(rng, 90 - static_cast<int>(r2.size()));
         sp.r1_seq = enc(r1); sp.r2_seq = enc(r2);
         sp.r1_len = static_cast<uint16_t>(r1.size()); sp.r2_len = static_cast<uint16_t>(r2.size());
         out.push_back(std::move(sp));
@@ -73,11 +79,13 @@ std::vector<Spot> spots(bool five, int r1_extra, double short_frac, uint32_t see
 void test_five_prime_evidence() {
     std::cout << "\n=== Part 0: 10x 3'/5' read evidence ===\n";
     using singlet::fq::five_prime_evidence;
-    CHECK(five_prime_evidence(spots(true, 0, 0.02, 1), 26).is_5prime(), "26 bp R1, 5': TSO-rc in R2 -> 5'");
-    CHECK(!five_prime_evidence(spots(false, 0, 0.02, 2), 26).is_5prime(), "26 bp R1, 3': poly(A) in R2 -> 3'");
-    CHECK(five_prime_evidence(spots(true, 30, 0.0, 3), 26).is_5prime(), "long R1, 5': TSO after BC+UMI -> 5'");
-    CHECK(!five_prime_evidence(spots(false, 30, 0.0, 4), 26).is_5prime(), "long R1, 3': poly(dT) after BC+UMI -> 3'");
-    CHECK(!five_prime_evidence(spots(true, 0, 0.0, 5), 26).is_5prime(), "no evidence -> stays 3'");
+    CHECK(five_prime_evidence(spots(true, 0, 1), 26).is_5prime(), "26 bp R1, 5': no 3' TSO, polyT > polyA -> 5'");
+    CHECK(!five_prime_evidence(spots(false, 0, 2), 26).is_5prime(), "26 bp R1, 3': 3' TSO and polyA in R2 -> 3'");
+    CHECK(five_prime_evidence(spots(true, 30, 3), 26).is_5prime(), "long R1, 5': TSO after BC+UMI -> 5'");
+    CHECK(!five_prime_evidence(spots(false, 30, 4), 26).is_5prime(), "long R1, 3': poly(dT) after BC+UMI -> 3'");
+    auto few = spots(true, 0, 5);
+    few.resize(300);
+    CHECK(!five_prime_evidence(few, 26).is_5prime(), "too few spots -> stays 3'");
 }
 
 // ── Synthetic BAMs ────────────────────────────────────────────────────────
