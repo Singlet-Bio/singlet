@@ -143,7 +143,7 @@ def discover(feature_seqs: Sequence[bytes], cat: pd.DataFrame, organism: str = "
              "unexplained_top": other[:20], "n_catalog_hits": int(keep.sum())}
     if not keep.any():
         status = "unresolved"
-    elif unexplained > UNEXPLAINED_MAX:
+    elif share["other"] > UNEXPLAINED_MAX:
         status = "incomplete"
     else:
         status = "ok"

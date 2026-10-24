@@ -139,3 +139,16 @@ def test_classify_unmatched():
     assert P.classify_unmatched("TCAACTCTTTAGCGG", pan) == "shifted"
     assert P.classify_unmatched("GGTCAACTCTTTAGC", pan) == "shifted"
     assert P.classify_unmatched("ACGTTGCAACGTAGC", pan) == "other"
+
+
+def test_discover_names_catalog_barcodes_and_flags_unknown():
+    cat = P.load_catalog()
+    a, b = cat.sequence.iloc[10], cat.sequence.iloc[20]
+    unknown = "ACGTTGCAACGTAGC"
+    assert unknown not in set(cat.sequence)
+    feats = [a.encode()] * 900 + [b.encode()] * 500 + [b"G" * 15] * 50
+    pan = P.discover(feats, cat)
+    assert pan.status == "ok" and set(pan.features.sequence) == {a, b}
+    pan2 = P.discover(feats + [unknown.encode()] * 400, cat)
+    assert pan2.status == "incomplete" and pan2.notes["unexplained_top"][0][0] == unknown
+    assert pan2.notes["low_complexity_share"] > 0
