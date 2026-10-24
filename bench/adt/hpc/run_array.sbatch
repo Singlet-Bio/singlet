@@ -19,5 +19,5 @@ SCRATCH=/tmp/$USER-adt-$SLURM_JOB_ID; mkdir -p $SCRATCH; trap 'rm -rf $SCRATCH' 
 export PATH=$ENV/bin:$PATH LD_LIBRARY_PATH=$ENV/lib PYTHONPATH=$SRC/python HOME=$WORK/cache/condahome
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 /usr/bin/time -v python -P $SRC/bench/adt/run_library.py --inventory $INV --gsm @$LIST --index $SLURM_ARRAY_TASK_ID \
-  --out $WORK/data/adt --scratch $SCRATCH --cache $WORK/cache/adt --threads $SLURM_CPUS_PER_TASK 2>&1 \
+  --out $WORK/data/adt --scratch $SCRATCH --cache $WORK/cache/adt --geo-panels $WORK/state/adt/panels_geo --threads $SLURM_CPUS_PER_TASK 2>&1 \
   | grep -vE "^\s*$|Page size|Exit status: 0"

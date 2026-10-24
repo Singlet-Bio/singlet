@@ -142,9 +142,11 @@ def process(row, a, out_dir, status):
         head.append(p)
         if i + 1 >= HEAD_READS:
             break
-    cat = P.load_catalog()
+    cat = load_catalogs(a.geo_panels)
     refs = [os.path.join(a.panels, f"{x}.csv") for x in (row["gsm"], row["gse"])]
     study_ref = next((r for r in refs if os.path.exists(r)), None)
+    if study_ref is None and a.geo_panels:
+        study_ref = harvested_reference(a.geo_panels, row)
     ref = P.annotate_from_catalog(P.read_feature_reference(study_ref), cat) if study_ref else None
     status["panel_file"] = os.path.basename(study_ref) if study_ref else None
     seqs_for_offset = list(ref.sequence) if ref is not None else list(cat.sequence)
@@ -230,6 +232,38 @@ def process(row, a, out_dir, status):
     status["status"] = "ok"
 
 
+def load_catalogs(geo_dir):
+    """Vendor catalog, plus the sequences named in harvested GEO references that the vendor list lacks
+    (``source`` = ``geo``)."""
+    from singlet.adt import panel as P
+
+    cat = P.load_catalog()
+    p = os.path.join(geo_dir, "geo_catalog.tsv") if geo_dir else None
+    if not p or not os.path.exists(p):
+        return cat
+    g = pd.read_csv(p, sep="	", dtype=str, keep_default_na=False)
+    g = g[g.sequence.str.len() == 15]
+    g = g[~g.sequence.isin(set(cat.sequence))]
+    if not len(g):
+        return cat
+    extra = pd.DataFrame({"sequence": g.sequence, "barcode_id": "", "formats": "", "specificity": g.name,
+                          "clone": "", "reactivity": "", "ensembl": "", "kind": [P.kind_of(n) for n in g.name],
+                          "aliases": g.aliases, "sources": "geo:" + g.studies})
+    return pd.concat([cat, extra], ignore_index=True)
+
+
+def harvested_reference(geo_dir, row):
+    """The library's own reference among the harvested GEO files: a file of this GSM, else the largest file of the GSE."""
+    import glob
+
+    d = os.path.join(geo_dir, "files")
+    for pat in (f"{row['gsm']}_*.csv", f"{row['gse']}_*.csv"):
+        hits = sorted(glob.glob(os.path.join(d, pat)), key=lambda f: -os.path.getsize(f))
+        if hits:
+            return hits[0]
+    return None
+
+
 def resolve_chemistry(gx, r1_len, atlas_chem, cache, status):
     """10x barcode family from the GEX barcodes (share found in each whitelist) and UMI length from the ADT R1 length
     (26 = 16+10, 28 = 16+12; longer R1 falls back to the atlas protocol)."""
@@ -290,6 +324,7 @@ def main():
     ap.add_argument("--scratch", required=True)
     ap.add_argument("--cache", required=True, help="shared dir for whitelists")
     ap.add_argument("--panels", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "panels"))
+    ap.add_argument("--geo-panels", default=None, help="harvest_panels.py output dir (optional)")
     ap.add_argument("--threads", type=int, default=8)
     ap.add_argument("--force", action="store_true")
     a = ap.parse_args()
