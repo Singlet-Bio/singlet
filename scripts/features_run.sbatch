@@ -1,12 +1,12 @@
 #!/bin/bash
 # Per-cell feature sidecars on Clipper: one array task = every n-th study of a list (scripts/features_run.py run --shard).
 #
-# Code: SRC = a checkout of this branch. Until singlet.celllabels (the label readers) and singlet.features share a branch, set
-# LABELS_SRC to a synced worktree of the annotation branch with its compiled readers (python setup.py build_ext --inplace),
-# e.g. $WORK/src/singlet-py/claude__v2-cell-annotation-6e50dc; the job overlays singlet/features onto a copy of it in scratch.
+# Code: SRC = a synced worktree of this branch with the compiled readers built in place (python setup.py build_ext
+# --inplace). LABELS_SRC (optional) = a worktree that has the compiled readers when SRC does not: the job copies its
+# python/singlet to scratch and puts this branch's singlet/features and singlet/celllabels on top.
 # Without SRC, the job clones BRANCH (default claude/v2-cell-features) from GitHub into scratch.
 # Submit (ASK ZACH FIRST for an atlas-wide run), e.g. 200 shards, 60 at a time:
-#   sbatch --array=0-199%60 --export=ALL,OUT=$OUT,LIST=$OUT/studies.txt,SHARDS=200,LABELS_SRC=... scripts/features_run.sbatch
+#   sbatch --array=0-199%60 --export=ALL,OUT=$OUT,LIST=$OUT/studies.txt,SHARDS=200,SRC=$SRC scripts/features_run.sbatch
 # Afterwards (a job): features_run.py registry --out $OUT; features_run.py collect --out $OUT
 #
 # Sizing (pilot, docs/cell_features.md): scoring takes 2-10 s per 10k cells on one core; reading counts takes longer.
@@ -30,8 +30,9 @@ if [ -z "${SRC:-}" ]; then
 fi
 PY=$SRC/python
 if [ -n "${LABELS_SRC:-}" ]; then
-  PY=$SCRATCH/py; mkdir -p "$PY"; cp -r "$LABELS_SRC/python/singlet" "$PY/"; rm -rf "$PY/singlet/features"
-  cp -r "$SRC/python/singlet/features" "$PY/singlet/"
+  PY=$SCRATCH/py; mkdir -p "$PY"; cp -r "$LABELS_SRC/python/singlet" "$PY/"
+  rm -rf "$PY/singlet/features" "$PY/singlet/celllabels"
+  cp -r "$SRC/python/singlet/features" "$SRC/python/singlet/celllabels" "$PY/singlet/"
 fi
 export PYTHONPATH=$PY SINGLET_CACHE_DIR=$SCRATCH/cache OPENBLAS_NUM_THREADS=$SLURM_CPUS_PER_TASK PYTHONWARNINGS=ignore
 mkdir -p "$OUT"

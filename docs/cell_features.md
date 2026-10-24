@@ -132,8 +132,8 @@ Clipper, a study list sharded over an array (one line per study: `GSE`, `GSE GSM
 
     sbatch --array=0-199%60 --export=ALL,OUT=$OUT,LIST=$OUT/studies.txt,SHARDS=200,SRC=$SRC scripts/features_run.sbatch
 
-`singlet.celllabels.io` comes from the annotation branch (`claude/v2-cell-annotation-6e50dc`) until it is merged; `SRC` must have
-both packages.
+`SRC` must have the compiled readers (`python setup.py build_ext --inplace`); `LABELS_SRC` can point at a worktree that
+has them instead.
 
 ## 6. Publishing (not run by the job)
 
