@@ -69,32 +69,34 @@ def first_len(path):
 
 
 def download_run(run, scratch, threads, log):
-    """FASTQ files of one run in scratch: ENA fastq.gz over HTTPS when it has >= 2 files, else fasterq-dump."""
+    """FASTQ files of one run in scratch. NCBI SRA first (``prefetch`` + ``fasterq-dump --include-technical``: ~200 MB/s
+    from Clipper in the pilot); ENA fastq.gz over HTTPS (~1 MB/s from Clipper, resumable) only when SRA fails."""
     d = os.path.join(scratch, run)
     os.makedirs(d, exist_ok=True)
-    meta = ena_runs(run)
-    urls = []
-    if meta and meta[0].get("fastq_ftp"):
-        urls = [u for u in meta[0]["fastq_ftp"].split(";") if u]
-    files = []
-    ok = len(urls) >= 2
-    if ok:
-        for u in urls:
-            dest = os.path.join(d, os.path.basename(u))
-            if not curl_resume("https://" + u, dest, log):
-                ok = False
-                break
-            files.append(dest)
-        log["source"] = "ena"
-    if not ok:
-        for f in os.listdir(d):
-            os.remove(os.path.join(d, f))
-        files = []
+    try:
         sh(["prefetch", "--max-size", "u", "-O", d, run])
         sh(["fasterq-dump", "--split-files", "--include-technical", "-e", str(threads), "-t", d, "-O", d,
             os.path.join(d, run)])
+        shutil.rmtree(os.path.join(d, run), ignore_errors=True)  # the .sra, no longer needed
         files = sorted(os.path.join(d, f) for f in os.listdir(d) if f.endswith(".fastq"))
-        log["source"] = "sra" if not urls else "sra (ena failed)"
+        if files:
+            log["source"] = "sra"
+            log["bytes"] = int(sum(os.path.getsize(f) for f in files))
+            return files
+    except subprocess.CalledProcessError as e:
+        log["sra_error"] = (e.stderr or "")[-500:]
+    for f in os.listdir(d):
+        p = os.path.join(d, f)
+        shutil.rmtree(p) if os.path.isdir(p) else os.remove(p)
+    meta = ena_runs(run)
+    urls = [u for u in (meta[0].get("fastq_ftp") or "").split(";") if u] if meta else []
+    files = []
+    for u in urls:
+        dest = os.path.join(d, os.path.basename(u))
+        if not curl_resume("https://" + u, dest, log):
+            return []
+        files.append(dest)
+    log["source"] = "ena"
     log["bytes"] = int(sum(os.path.getsize(f) for f in files))
     return files
 
