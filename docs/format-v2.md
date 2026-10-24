@@ -576,5 +576,5 @@ catalog already uses for the list of modality names.
 `modalities=` (section 11): `adt` -> `adt_counts.1pz` (+ `adt_panel.json`), Python `obsm["adt"]`, R `altExp("adt")`; `hto` ->
 `hto_counts.1pz`, `obsm["hto"]` / `altExp("hto")`. Aliases `protein`, `cite`, `antibody` -> `adt`; `hashtag` -> `hto`. Availability
 follows the section 11 rule (a pz2 member with rows and columns). The vocabulary changes together in `client.py` (`MODALITIES`,
-`_MODALITY_ALIASES`), `r/R/v2.R` (`.v2_modality_members`, `.v2_modality_alias`) and the website's `v2-load-modalities.ts`; whichever
-of PR #14 / this branch lands second adds `adt` / `hto` there. `uns["adt_panel"]` holds the parsed `adt_panel.json`.
+`_MODALITY_ALIASES`), `r/R/v2.R` (`.v2_modality_members`, `.v2_modality_alias`) and the website's `v2-load-modalities.ts`; PR #14 landed
+first, so this branch adds `adt` / `hto` to the Python and R vocabularies; the website's list is a proposal for its owner. `uns["adt_panel"]` holds the parsed `adt_panel.json`.

@@ -166,3 +166,12 @@ def test_discover_flags_reused_and_cross_species_barcodes():
     assert pan.status == "ambiguous" and pan.notes["reactivity_mismatch_share"] > 0.9
     pan = P.discover([q.encode() for q in mouse_only for _ in range(300)], cat, organism="Mus musculus")
     assert pan.status == "ok"
+
+
+def test_modalities_vocabulary_has_adt_and_hto():
+    from singlet.v2 import client
+
+    assert client.MODALITIES["adt"].members == (ST.MEMBERS[0],) and client.MODALITIES["adt"].slot == "obsm"
+    assert client.MODALITIES["hto"].members == (ST.MEMBERS[1],)
+    for alias, name in (("protein", "adt"), ("cite", "adt"), ("hashtag", "hto")):
+        assert client._MODALITY_ALIASES[alias] == name
