@@ -2703,7 +2703,7 @@ int main(int argc, char* argv[]) {
         else if (arg == "--umi-dedup-directional") config.umi_dedup_directional = true;
         else if (arg == "--no-umi-dedup-directional") { config.umi_dedup_directional = false; no_dir_dedup_explicit = true; }
         else if (arg == "--no-umi-dedup") config.umi_dedup = false;
-        else if (arg == "--reverse-strand") config.reverse_strand = true;
+        else if (arg == "--reverse-strand") { config.reverse_strand = true; config.auto_strand = false; }
         else if (arg == "--guide-ref" && i+1 < argc) config.guide_ref_path = argv[++i]; // N18: CRISPR guide CSV
         else if (arg == "--feature-ref" && i+1 < argc) feature_ref_path = argv[++i]; // T4: CITE-seq ADT/HTO reference CSV
         else if (arg == "--cell-calling") cell_calling_flag = 1;
@@ -7066,6 +7066,7 @@ int main(int argc, char* argv[]) {
 
     singlet::PileupStats stats;
     double pileup_time = 0.0;
+    bool strand_retried = false;  // strand safety net re-ran the pileup
     double star_time = 0.0;
     int star_exit = 0;
 
@@ -7717,33 +7718,15 @@ int main(int argc, char* argv[]) {
             std::cerr << " (" << static_cast<int>(stats.total_reads / pileup_time / 1e6) << "M reads/s)";
         std::cerr << "\n";
 
-        // Auto-correct strand: if >50% of exonic reads are wrong-strand and the engine
-        // didn't already auto-flip during the pass, re-run the pileup on the same BAM
-        // with config.reverse_strand=true. This corrects 5' protocol misclassification
-        // (e.g. 10x-5p-v2 detected as 10xv3) without requiring a STAR re-alignment.
-        // The retry fires at most once (config.reverse_strand guards re-entry).
-        if (!config.exon_gtf_path.empty() && stats.exon_hits > 0 && stats.wrong_strand > 0 &&
-            !engine_ptr->strand_was_flipped() && !config.reverse_strand) {
-            double ws_frac = static_cast<double>(stats.wrong_strand) /
-                             (stats.exon_hits + stats.wrong_strand);
-            if (ws_frac > 0.50) {
-                std::cerr << "[singlet] Auto-correcting strand: "
-                          << static_cast<int>(ws_frac * 100)
-                          << "% wrong-strand reads detected → re-running pileup with reversed strand\n";
-                config.reverse_strand = true;
-                engine_ptr = std::make_unique<singlet::PileupEngine>(config);
-                if (!engine_ptr->load_references()) {
-                    std::cerr << "[singlet] WARNING: Could not reload references for strand retry; "
-                              << "keeping initial pileup result\n";
-                    config.reverse_strand = false; // revert so exported JSON reflects truth
-                } else {
-                    StopWatch retry_sw;
-                    stats = engine_ptr->run_parallel(parallel_bam_path, star_threads);
-                    pileup_time += retry_sw.elapsed_s();
-                    std::cerr << "[singlet] Strand-retry pileup: "
-                              << stats.total_reads << " reads, "
-                              << retry_sw.elapsed_s() << "s\n";
-                }
+        // Strand safety net: re-run on the same BAM with the other orientation if
+        // the pass counted mostly wrong-strand reads (the pre-probe missed, e.g. a
+        // 5' library labelled 3'). No STAR re-alignment needed.
+        {
+            StopWatch retry_sw;
+            if (singlet::rerun_if_wrong_strand(engine_ptr, config, stats, [&](singlet::PileupEngine& e) {
+                    return e.run_parallel(parallel_bam_path, star_threads); })) {
+                pileup_time += retry_sw.elapsed_s();
+                strand_retried = true;
             }
         }
 
@@ -7771,15 +7754,14 @@ int main(int argc, char* argv[]) {
             std::cerr << " (" << static_cast<int>(stats.total_reads / pileup_time / 1e6) << "M reads/s)";
         std::cerr << "\n";
 
-        // Diagnostic: warn if wrong_strand fraction is high (possible 5' protocol)
-        if (stats.exon_hits > 0 && stats.wrong_strand > 0 &&
-            !engine_ptr->strand_was_flipped()) {
-            double ws_frac = static_cast<double>(stats.wrong_strand) /
-                             (stats.exon_hits + stats.wrong_strand);
-            if (ws_frac > 0.35 && !config.reverse_strand) {
-                std::cerr << "[singlet] WARNING: " << static_cast<int>(ws_frac * 100)
-                          << "% wrong-strand reads detected. This sample may use a 5' capture "
-                          << "protocol. Re-run with --reverse-strand for correct gene counting.\n";
+        // Strand safety net: only a BAM file can be read twice (a STAR pipe cannot;
+        // there the in-line probe decides alone).
+        if (!bam_file.empty() && bam_file != "-") {
+            StopWatch retry_sw;
+            if (singlet::rerun_if_wrong_strand(engine_ptr, config, stats, [&](singlet::PileupEngine& e) {
+                    return e.run(bam_source); })) {
+                pileup_time += retry_sw.elapsed_s();
+                strand_retried = true;
             }
         }
 
@@ -8412,16 +8394,13 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // Add wrong-strand warning for parallel path (not emitted inside the parallel branch above)
-    if (parallel_pileup == 1 && stats.exon_hits > 0 && stats.wrong_strand > 0 &&
-        !engine_ptr->strand_was_flipped()) {
-        double ws_frac = static_cast<double>(stats.wrong_strand) /
-                         (stats.exon_hits + stats.wrong_strand);
-        if (ws_frac > 0.35 && !config.reverse_strand) {
-            std::cerr << "[singlet] WARNING: " << static_cast<int>(ws_frac * 100)
-                      << "% wrong-strand reads detected. This sample may use a 5' capture "
-                      << "protocol. Re-run with --reverse-strand for correct gene counting.\n";
-        }
+    // The orientation the matrices were counted with (probe flip or safety-net retry).
+    config.reverse_strand = engine_ptr->reverse_strand();
+    if (singlet::wrong_strand_frac(stats) > 0.35) {
+        std::cerr << "[singlet] WARNING: " << static_cast<int>(singlet::wrong_strand_frac(stats) * 100)
+                  << "% wrong-strand exonic reads after strand detection (reverse_strand="
+                  << (config.reverse_strand ? "true" : "false")
+                  << "). The library may be unstranded or its cDNA read misassigned.\n";
     }
 
     // ── Write stats ──
@@ -8436,6 +8415,10 @@ int main(int argc, char* argv[]) {
         "  \"pileup_threads\": " + std::to_string(parallel_pileup == 1 ? star_threads : pileup_threads) + ",\n"
         "  \"n_barcodes\": " + std::to_string(engine_ptr->barcodes().size()) + ",\n"
         "  \"strand_auto_flipped\": " + (engine_ptr->strand_was_flipped() ? "true" : "false") + ",\n"
+        "  \"strand_probed\": " + (engine_ptr->strand_was_probed() ? "true" : "false") + ",\n"
+        "  \"strand_probe_informative\": " + std::to_string(engine_ptr->strand_probe().informative()) + ",\n"
+        "  \"strand_probe_antisense_frac\": " + std::to_string(engine_ptr->strand_probe().antisense_frac()) + ",\n"
+        "  \"strand_retried\": " + (strand_retried ? "true" : "false") + ",\n"
         "  \"reverse_strand\": " + (config.reverse_strand ? "true" : "false") + ",\n";
     singlet::write_stats_json(out_prefix + "/pileup_stats.json",
                               stats, std::string("singlet-") + singlet::kVersion,

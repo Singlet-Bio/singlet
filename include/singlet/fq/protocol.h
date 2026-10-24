@@ -404,6 +404,67 @@ inline bool hamming1_match(const uint8_t* bc, uint16_t len,
     return false;
 }
 
+// ── 10x 3' vs 5' from the reads ──
+// A 10x 3' and 5' kit of one generation share R1 geometry and whitelist, so the
+// barcode read alone cannot tell them apart (detect_protocol picks 3', the lower
+// id). The template-switch oligo can: a 5' R1 sequenced past BC+UMI shows the TSO
+// tail (TTTCTTATATGGG) where a 3' R1 shows poly(dT), and a short 5' insert reads
+// through into the TSO's reverse complement in R2, where a 3' insert reads into
+// poly(A).
+struct FivePrimeEvidence {
+    uint32_t n = 0;          // spots examined
+    uint32_t r1_tso = 0;     // R1: TSO tail right after BC+UMI
+    uint32_t r1_polyt = 0;   // R1: poly(dT) right after BC+UMI
+    uint32_t r2_tso = 0;     // R2: TSO reverse complement anywhere
+    uint32_t r2_polya = 0;   // R2: 15-base poly(A) run anywhere
+    double frac(uint32_t k) const { return n ? static_cast<double>(k) / n : 0.0; }
+    // R1 evidence when the barcode read was sequenced past the TSO, else R2.
+    bool is_5prime() const {
+        if (r1_tso + r1_polyt >= 50) return r1_tso > 4 * r1_polyt;
+        return frac(r2_tso) >= 0.002 && r2_tso > 4 * r2_polya;
+    }
+};
+
+template<typename SpotT>
+FivePrimeEvidence five_prime_evidence(const std::vector<SpotT>& spots, uint16_t bc_umi_len,
+                                      uint32_t max_spots = 20000) {
+    // 2-bit codes: A=0 C=1 G=2 T=3
+    static const uint8_t kTsoTail[13] = {3,3,3,1,3,3,0,3,0,3,2,2,2};      // TTTCTTATATGGG
+    static const uint8_t kTsoTailRc[13] = {1,1,1,0,3,0,3,0,0,2,0,0,0};    // CCCATATAAGAAA
+    static const uint8_t kSmartTailRc[13] = {1,1,1,0,3,2,3,0,1,3,1,3,2};  // CCCATGTACTCTG
+    auto mism = [](const auto& seq, size_t at, const uint8_t* pat) {
+        int m = 0;
+        for (int k = 0; k < 13; ++k) m += (seq[at + k] != pat[k]);
+        return m;
+    };
+    FivePrimeEvidence ev;
+    for (const auto& s : spots) {
+        if (ev.n >= max_spots) break;
+        ++ev.n;
+        if (s.r1_len >= bc_umi_len + 13) {
+            if (mism(s.r1_seq, bc_umi_len, kTsoTail) <= 2) {
+                ++ev.r1_tso;
+            } else {
+                int t = 0;
+                for (int k = 0; k < 13; ++k) t += (s.r1_seq[bc_umi_len + k] == 3);
+                if (t >= 11) ++ev.r1_polyt;
+            }
+        }
+        bool tso = false, polya = false;
+        int arun = 0;
+        for (uint16_t j = 0; j < s.r2_len; ++j) {
+            arun = (s.r2_seq[j] == 0) ? arun + 1 : 0;
+            if (arun >= 15) polya = true;
+            if (!tso && j + 13 <= s.r2_len &&
+                (mism(s.r2_seq, j, kTsoTailRc) == 0 || mism(s.r2_seq, j, kSmartTailRc) == 0))
+                tso = true;
+        }
+        ev.r2_tso += tso;
+        ev.r2_polya += polya;
+    }
+    return ev;
+}
+
 // ── Protocol auto-detection from probe reads ──
 // Template parameter SpotT must have: r1_seq (indexable uint8_t),
 // r1_len (uint16_t), r2_seq (indexable uint8_t), r2_len (uint16_t)
@@ -992,6 +1053,25 @@ ProtocolCandidate detect_protocol(
     // (R1>40bp, R2≤34bp, R1>2×R2) is unambiguous — barcode reads are never
     // >34bp in droplet protocols.  A whitelist file that is absent or gives a
     // low match rate should not prevent the swap: AUTOFIX-E2E-A2-READ-SWAP.
+    // 10x 3' and 5' of one generation are indistinguishable above; switch to the
+    // 5' sibling when the TSO shows in the reads (see five_prime_evidence).
+    if (!inverted && !concat_mode && best.tag.rfind("10x-3p-v", 0) == 0) {
+        std::string five = "10x-5p-" + best.tag.substr(7);
+        if (const CandidateSpec* fp = find_protocol_spec(five)) {
+            auto ev = five_prime_evidence(probe_spots,
+                static_cast<uint16_t>(best.umi_offset + best.umi_length));
+            std::cerr << "[protocol_detect] 3'/5' check: R1 TSO " << ev.r1_tso << " / polyT "
+                      << ev.r1_polyt << ", R2 TSO-rc " << ev.r2_tso << " / polyA "
+                      << ev.r2_polya << " of " << ev.n << " spots\n";
+            if (ev.is_5prime()) {
+                std::cerr << "[protocol_detect] " << best.tag << " -> " << five
+                          << " (template-switch oligo in the reads)\n";
+                best.tag = fp->tag;
+                best.protocol_id = fp->protocol_id;
+            }
+        }
+    }
+
     if (inverted)
         best.reads_swapped = true;
 
