@@ -16,6 +16,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+import matplotlib.ticker  # noqa: E402,F401
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
@@ -38,6 +39,8 @@ NICE = {
 }
 DS_ORDER = ["pbmc1k_v3", "pbmc1k_v2", "pbmc5p_v1", "pbmc1k_cite_v3", "neuron1k_v3", "nuclei2k_v2", "hgmm1k_v3"]
 DS_NICE = {
+    "bam_GSM7090362": "Visium GSM7090362", "bam_GSM7412962": "Visium GSM7412962",
+    "bam_GSM7596594": "Visium GSM7596594", "bam_GSM7983360": "Visium GSM7983360",
     "pbmc1k_v3": "PBMC 3' v3", "pbmc1k_v2": "PBMC 3' v2", "pbmc5p_v1": "PBMC 5' v1",
     "pbmc1k_cite_v3": "PBMC CITE 3' v3", "neuron1k_v3": "Mouse neurons 3' v3",
     "nuclei2k_v2": "Mouse brain nuclei 3' v2", "hgmm1k_v3": "Human+mouse barnyard 3' v3",
@@ -120,7 +123,7 @@ def main():
         f = pb / "results" / d / "double_count_cells.csv"
         if f.exists():
             data.append(100 * pd.read_csv(f)["overcount"].values)
-            labels.append(DS_NICE.get(d, d.replace("bam_", "")))
+            labels.append(DS_NICE.get(d, "Visium " + d.replace("bam_", "")))
     if data:
         bp = ax.boxplot(data, vert=True, widths=0.5, patch_artist=True, showfliers=False,
                         medianprops={"color": INK, "lw": 1.2}, whiskerprops={"color": INK2, "lw": 0.8},
@@ -128,7 +131,7 @@ def main():
         for b in bp["boxes"]:
             b.set(facecolor=TOOL_COLOR["singlet-baseline"], edgecolor=SURF, lw=2, alpha=0.9)
         ax.set_xticks(range(1, len(labels) + 1), labels, rotation=30, ha="right")
-        ax.set_ylabel("per-cell overcount of exon + intron (%)")
+        ax.set_ylabel("overcount per cell (%)")
         ax.set_title("Atlas engine vs fixed engine, same reads, same cells", fontsize=9, color=INK, loc="left")
         style(ax)
         fig.tight_layout()
@@ -209,6 +212,8 @@ def main():
             ax.plot(lim, lim, color=INK2, lw=0.8, ls="--")
             ax.set_xscale("log")
             ax.set_yscale("log")
+            for axis in (ax.xaxis, ax.yaxis):
+                axis.set_minor_formatter(matplotlib.ticker.NullFormatter())
             ax.set_title(DS_NICE[d], fontsize=7, color=INK)
             ax.set_xlabel("STARsolo GeneFull UMIs/cell", fontsize=7)
             style(ax)
