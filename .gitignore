@@ -55,3 +55,7 @@ notebooks/html/
 *.o
 *.so
 *.dylib
+
+# per-column cost arrays and crash dumps from the compression study (regenerable, not source)
+bench/compression/results/colcost/*.f32
+*.stackdump
