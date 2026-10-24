@@ -54,6 +54,8 @@ def main(argv=None) -> int:
     ap.add_argument("--weight-decay", type=float, default=0.05)
     ap.add_argument("--hidden", default="1024,512")
     ap.add_argument("--dropout", type=float, default=0.2)
+    ap.add_argument("--input-dropout", type=float, default=0.1)
+    ap.add_argument("--transform", default="log", choices=["log", "logz", "rank"])
     ap.add_argument("--ensemble-weight", type=float, default=0.5)
     ap.add_argument("--coarse-credit", type=float, default=0.25, help="beta: credit of an ancestor of the target = beta * IC ratio")
     ap.add_argument("--no-ensemble", action="store_true")
@@ -114,7 +116,8 @@ def main(argv=None) -> int:
     ir = np.load(a.data / "intron_ratio.npy") if (a.data / "intron_ratio.npy").exists() else None
     aug = None if a.no_augment else Augmenter(len(vocab), ir, AugmentConfig(), dev, seed=a.seed)
     hidden = tuple(int(h) for h in a.hidden.split(","))
-    net = M.CellTypeNet(len(vocab), len(sp), hidden=hidden, dropout=a.dropout).to(dev)
+    net = M.CellTypeNet(len(vocab), len(sp), hidden=hidden, dropout=a.dropout, input_dropout=a.input_dropout,
+                        transform=a.transform).to(dev)
     opt = torch.optim.AdamW(net.parameters(), lr=a.lr, weight_decay=a.weight_decay)
     train_b = Batches(X, tr, a.batch, a.seed)
     steps = a.epochs * len(train_b.order())
@@ -135,7 +138,7 @@ def main(argv=None) -> int:
                 c = c.to(dev, non_blocking=True)
                 if augment and aug is not None:
                     c = aug(c)
-                logits.append(net(transform(c)))
+                logits.append(net(transform(c, a.transform)))
                 rows.append(r)
         net.train()
         return torch.cat(logits), torch.cat(rows).to(dev)
@@ -168,7 +171,7 @@ def main(argv=None) -> int:
             rows = rows.to(dev)
             if aug is not None:
                 c = aug(c)
-            logits = net(transform(c))
+            logits = net(transform(c, a.transform))
             loss = M.credit_loss(logits, credit[a_idx[rows]])
             rr = r_idx[rows]
             has = rr >= 0

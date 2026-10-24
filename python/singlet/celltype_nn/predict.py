@@ -60,7 +60,7 @@ class CellTypePredictor:
         with torch.no_grad():
             for s in range(0, V.shape[0], batch):
                 c = torch.from_numpy(V[s : s + batch].toarray())
-                out[s : s + batch] = self.net.proba(transform(c)).numpy()
+                out[s : s + batch] = self.net.proba(transform(c, self.net.transform)).numpy()
         return out
 
     def summarise(self, P: np.ndarray, threshold: float = 0.5, k: int = TOP_K) -> dict:

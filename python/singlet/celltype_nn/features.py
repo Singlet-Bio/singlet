@@ -71,12 +71,36 @@ def read_orthologs(path: Path) -> Dict[str, str]:
     return out
 
 
-def transform(counts: np.ndarray) -> np.ndarray:
-    """log1p(1e4 * c / total) per row; works on numpy arrays and torch tensors."""
-    tot = counts.sum(1, keepdims=True) if isinstance(counts, np.ndarray) else counts.sum(1, keepdim=True)
-    scale = 1e4 / (tot + 1e-6) if isinstance(counts, np.ndarray) else 1e4 / tot.clamp_min(1e-6)
-    x = counts * scale
-    return np.log1p(x) if isinstance(counts, np.ndarray) else x.log1p()
+TRANSFORMS = ("log", "logz", "rank")
+
+
+def transform(counts, kind: str = "log"):
+    """Per-cell input transform of vocabulary counts (numpy array or torch tensor, cells x genes).
+
+    ``log``   log1p(1e4 * c / total)
+    ``logz``  the same, z-scored across the cell's genes (removes the cell's overall scale and spread)
+    ``rank``  each detected gene's rank among the cell's detected genes, scaled to (0, 1]; undetected genes 0 (depends only on
+              the order of the cell's own counts; ties broken by gene position, so it is deterministic)
+    """
+    import torch
+
+    t = torch.as_tensor(counts, dtype=torch.float32)
+    if kind == "rank":
+        n = (t > 0).sum(1, keepdim=True).clamp_min(1)
+        # rank among detected genes: number of genes with a smaller value (zeros sort first), offset by the zeros
+        order = torch.argsort(t, dim=1, stable=True)
+        r = torch.empty_like(t)
+        r.scatter_(1, order, torch.arange(t.shape[1], dtype=t.dtype, device=t.device).expand_as(t).contiguous())
+        z = t.shape[1] - n
+        out = torch.where(t > 0, (r - z + 1) / n, torch.zeros_like(t))
+    else:
+        tot = t.sum(1, keepdim=True).clamp_min(1e-6)
+        out = (t * (1e4 / tot)).log1p()
+        if kind == "logz":
+            out = (out - out.mean(1, keepdim=True)) / out.std(1, keepdim=True).clamp_min(1e-6)
+        elif kind != "log":
+            raise ValueError(f"unknown transform {kind!r}")
+    return out.numpy() if isinstance(counts, np.ndarray) else out
 
 
 @dataclass

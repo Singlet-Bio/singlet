@@ -152,3 +152,15 @@ def test_credit_loss_prefers_deepest_supported_term(space):
     # a coarser author label: the finer prediction costs nothing
     crT = torch.from_numpy(space.credit(T_CELL))[None]
     assert float(credit_loss(deep, crT)) < 1e-3
+
+
+def test_transforms_are_depth_invariant_where_claimed():
+    from singlet.celltype_nn.features import transform
+
+    x = np.array([[0, 3, 1, 0, 5]], np.float32)
+    r = transform(x, "rank")
+    assert r.tolist() == [[0, pytest.approx(2 / 3), pytest.approx(1 / 3), 0, 1]]
+    assert np.allclose(transform(x * 7, "rank"), r)  # only the order of the cell's counts matters
+    assert np.allclose(transform(x * 7, "log"), transform(x, "log"))  # scaled to the cell's total
+    z = transform(x, "logz")
+    assert abs(z.mean()) < 1e-5

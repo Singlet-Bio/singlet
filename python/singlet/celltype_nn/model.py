@@ -18,7 +18,7 @@ import torch.nn.functional as F
 
 
 class CellTypeNet(nn.Module):
-    def __init__(self, n_genes: int, n_terms: int, hidden=(1024, 512), dropout: float = 0.2, input_dropout: float = 0.1):
+    def __init__(self, n_genes: int, n_terms: int, hidden=(1024, 512), dropout: float = 0.2, input_dropout: float = 0.1, transform: str = "log"):
         super().__init__()
         layers, d = [nn.Dropout(input_dropout)], n_genes
         for h in hidden:
@@ -27,7 +27,9 @@ class CellTypeNet(nn.Module):
         self.body = nn.Sequential(*layers)
         self.head = nn.Linear(d, n_terms)
         self.register_buffer("temperature", torch.ones(()))
-        self.config = dict(n_genes=n_genes, n_terms=n_terms, hidden=list(hidden), dropout=dropout, input_dropout=input_dropout)
+        self.transform = transform
+        self.config = dict(n_genes=n_genes, n_terms=n_terms, hidden=list(hidden), dropout=dropout, input_dropout=input_dropout,
+                           transform=transform)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Logits (uncalibrated)."""
