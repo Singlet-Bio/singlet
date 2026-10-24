@@ -48,6 +48,18 @@ def ena_runs(run_acc):
     return []
 
 
+def curl_resume(url, dest, log, attempts=8):
+    """Download with resume: EBI's FTP-over-HTTPS often resets long transfers (curl exit 56)."""
+    for i in range(attempts):
+        r = subprocess.run(["curl", "-sSfL", "-C", "-", "--retry", "5", "--retry-all-errors", "--retry-delay", "15",
+                            "--connect-timeout", "60", "-o", dest, url], capture_output=True, text=True)
+        if r.returncode == 0:
+            return True
+        log.setdefault("curl_errors", []).append(r.returncode)
+        time.sleep(min(60, 10 * (i + 1)))
+    return False
+
+
 def first_len(path):
     from singlet.adt.count import _open
 
@@ -65,19 +77,24 @@ def download_run(run, scratch, threads, log):
     if meta and meta[0].get("fastq_ftp"):
         urls = [u for u in meta[0]["fastq_ftp"].split(";") if u]
     files = []
-    if len(urls) >= 2:
+    ok = len(urls) >= 2
+    if ok:
         for u in urls:
             dest = os.path.join(d, os.path.basename(u))
-            sh(["curl", "-sSfL", "--retry", "8", "--retry-delay", "20", "--connect-timeout", "60", "-o", dest,
-                "https://" + u])
+            if not curl_resume("https://" + u, dest, log):
+                ok = False
+                break
             files.append(dest)
         log["source"] = "ena"
-    else:
+    if not ok:
+        for f in os.listdir(d):
+            os.remove(os.path.join(d, f))
+        files = []
         sh(["prefetch", "--max-size", "u", "-O", d, run])
         sh(["fasterq-dump", "--split-files", "--include-technical", "-e", str(threads), "-t", d, "-O", d,
             os.path.join(d, run)])
         files = sorted(os.path.join(d, f) for f in os.listdir(d) if f.endswith(".fastq"))
-        log["source"] = "sra"
+        log["source"] = "sra" if not urls else "sra (ena failed)"
     log["bytes"] = int(sum(os.path.getsize(f) for f in files))
     return files
 
@@ -136,7 +153,9 @@ def process(row, a, out_dir, status):
         r2s.append(r2)
     status["runs"] = runlog
     if not r1s:
-        status["status"] = "no_reads"
+        # reads were there, but no run has two files of >= 26 nt (R1 too short for a 16-nt barcode + UMI)
+        short = any(lg.get("lens") for lg in runlog)
+        status["status"] = "reads_too_short" if short else "no_reads"
         return
     if not gex_gsm:
         gex_gsm, prot, rep = pair_by_barcodes(row["gse"], cands, r1s, r2s, a)
@@ -149,6 +168,9 @@ def process(row, a, out_dir, status):
     gx = G.read_legacy(row["gse"], gex_gsm)
     status["gex"] = {"gsm": gex_gsm, "n_columns": len(gx.barcodes), "n_called": int(gx.called.sum()),
                      "seconds": round(time.time() - t0, 1)}
+    if not gx.barcodes or not gx.called.any():
+        status["status"] = "gex_empty"  # the atlas GEX sample has no columns or no called cells
+        return
 
     # chemistry from the data: UMI length from the R1 length, whitelist from the GEX barcodes
     r1_len = first_len(r1s[0])

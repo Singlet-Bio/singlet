@@ -160,7 +160,7 @@ def discover(feature_seqs: Sequence[bytes], cat: pd.DataFrame, organism: str = "
     notes["reactivity_mismatch"] = [f"{n} ({b}, {r})" for n, b, r in zip(feats.specificity[mism], feats.barcode_id[mism],
                                                                         react[mism])][:20]
     notes["reused_share"] = float(sup[reused].sum() / tot)
-    notes["reused"] = list(feats.reused[reused])[:20]
+    notes["reused"] = list(feats.reused[reused])[:20] if "reused" in feats else []
     if not keep.any():
         status = "unresolved"
     elif notes["reactivity_mismatch_share"] > IDENTITY_MAX or notes["reused_share"] > IDENTITY_MAX:
