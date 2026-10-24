@@ -231,7 +231,11 @@ column bodies (64-aligned)
 Required columns: `barcode` (dtype 9: whitelist indices when the sample has a whitelist pack, else strings), `called` (bitmap),
 `n_umi_exon`, `n_umi_intron`, `n_feat_exon`, `n_feat_intron` (u32; computed from the matrices at write time, also enables search).
 Optional columns carry any per-cell table of the legacy bundle (cell_calls p-values and method, doublet scores, cell-cycle scores, ambient
-contamination, cell QC metrics) so those TSV members can be derived by recipe. Content digest = SHA-256 over `"CEL2CANON1"` + for each
+contamination, cell QC metrics) so those TSV members can be derived by recipe. The migration also writes `called_v2` (bitmap) and `called_v2_fdr` (f32; NaN =
+not tested): the stored call plus the uncalled barcodes EmptyDrops separates from ambient RNA (`singlet.v2.cellcall`, design and
+validation in docs/called-v2.md); the cells member's metadata and its manifest entry carry the call's parameters as `called_v2`
+(method, version, ambient bound, alpha, pool size, FDR, seed, `validated`). `called` stays the stored call and the default
+selection. Content digest = SHA-256 over `"CEL2CANON1"` + for each
 column in name order: name, dtype, raw little-endian values.
 
 ## 6. Packs

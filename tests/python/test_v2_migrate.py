@@ -357,6 +357,33 @@ def test_synthetic_names_modes(synth):
     ]
 
 
+def test_called_v2_columns_and_parameters(synth, tmp_path):
+    from singlet.v2 import cellcall
+
+    man = json.load(open(synth.wr["manifest"], encoding="utf-8"))
+    for s in man["samples"]:
+        cells = V2Sample((synth.out / s["key"]).read_bytes()).cells()
+        meta = s["members"]["cells"]
+        if not cellcall.available():  # library default: computed only where numba is installed
+            assert "called_v2" not in cells.names and "called_v2" not in meta
+            continue
+        assert {"called_v2", "called_v2_fdr"} <= set(cells.names)
+        cv2, called = np.asarray(cells.column("called_v2")), np.asarray(cells.column("called"))
+        assert (cv2[called]).all()
+        p = meta["called_v2"]
+        assert p["method"] in ("singlet-emptydrops", "stored-call") and p["n_called_v2"] == int(
+            cv2.sum()
+        )
+    # switched off: no columns, no parameters
+    opts = MG.Options(
+        recipes="none", created_at="2026-10-22T00:00:00Z", log=lambda *a: None, cell_call_v2=False
+    )
+    res = MG.migrate_bundle(str(synth.bundle), str(tmp_path / "off"), None, opts)
+    for s in res["samples"]:
+        cells = V2Sample((tmp_path / "off" / s["key"]).read_bytes()).cells()
+        assert "called_v2" not in cells.names and "called_v2" not in s["entry"]["members"]["cells"]
+
+
 def test_synthetic_manifest_and_outputs(synth):
     man = json.load(open(synth.wr["manifest"], encoding="utf-8"))
     assert man["format"] == "singlet-v2" and man["gse"] == "GSE9001" and len(man["samples"]) == 2
