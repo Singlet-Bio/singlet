@@ -7,7 +7,7 @@ Truth comes from ``scripts/annotate_truth_cxg.py`` (CELLxGENE cells matched to S
 counts (``X`` = exon + intron at gene level, the matrix the atlas serves), and only the cells that have a truth label are scored.
 
 Methods
-  guide              cell guide, gating with kNN smoothing (singlet.annotate.celltype, method='guide')
+  guide              cell guide, gating with kNN smoothing (singlet.celllabels.celltype, method='guide')
   selftrain          guide + per-sample logistic regression on its confident calls (the default)
   selftrain_pure     self-training without the back-off to the guide (min_prob = 0): the variant benchmarked in singlet-agents
   guide_exon         guide on exon-only counts (what most author pipelines counted)
@@ -57,7 +57,7 @@ GENE_BINS = [(0, 100), (100, 200), (200, 500), (500, 1000), (1000, 10**9)]
 def _load(bundle: Path, gsm: str):
     """(SampleInput, spliced CSR aligned to it)."""
     import scipy.sparse as sps
-    from singlet.annotate import io as IO
+    from singlet.celllabels import io as IO
     from singlet.bundle import SingletBundle
 
     s = IO.read_legacy(bundle, gsm)
@@ -84,7 +84,7 @@ def m_marker_cluster(s, g):
     import anndata as ad
     import pandas as pd
     from singlet._annotate_cell_types import annotate_cell_types
-    from singlet.annotate import celltype as CT
+    from singlet.celllabels import celltype as CT
 
     X = CT.lognorm(s.X)
     _, idx = CT.neighbours(s.X, k=15)
@@ -99,7 +99,7 @@ def m_marker_cluster(s, g):
     a.var_names_make_unique()
     md = _marker_dict(g)
     if s.species == "mouse":
-        from singlet.annotate.guide import human_to_mouse
+        from singlet.celllabels.guide import human_to_mouse
 
         md = {k: [m for h in v for m in human_to_mouse(h)[:1]] for k, v in md.items()}
     annotate_cell_types(a, md, groupby="leiden", min_score=0.1)
@@ -117,7 +117,7 @@ class Reference:
         import anndata as ad
         import pandas as pd
         import scipy.sparse as sps
-        from singlet.annotate import celltype as CT
+        from singlet.celllabels import celltype as CT
         from sklearn.decomposition import TruncatedSVD
 
         parts, labs = [], []
@@ -159,8 +159,8 @@ def m_knn_transfer(s, g, ref):
     import anndata as ad
     import pandas as pd
     from singlet._transfer_labels import transfer_labels
-    from singlet.annotate import celltype as CT
-    from singlet.annotate.evaluate import TruthMapper
+    from singlet.celllabels import celltype as CT
+    from singlet.celllabels.evaluate import TruthMapper
 
     gi = {x: i for i, x in enumerate(s.gene_names)}
     cols = np.array([gi[x] for x in ref.var_names])
@@ -196,9 +196,9 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
 
     import pandas as pd
-    from singlet.annotate import celltype as CT
-    from singlet.annotate import evaluate as EV
-    from singlet.annotate.guide import Guide
+    from singlet.celllabels import celltype as CT
+    from singlet.celllabels import evaluate as EV
+    from singlet.celllabels.guide import Guide
 
     methods = [m for m in a.methods.split(",") if m]
     man = json.loads((a.truth / "manifest.json").read_text())

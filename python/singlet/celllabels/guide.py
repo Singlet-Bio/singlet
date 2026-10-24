@@ -10,7 +10,7 @@ human-mouse orthologs of the marker genes.
 
 A compiled :class:`Guide` holds the tree (parent index per node, children, depth) and gene x node weight matrices restricted to
 the genes of the sample: positive markers and negative markers, each column normalised to sum 1. Scoring every node of every
-cell is then one sparse product (see :mod:`singlet.annotate.celltype`).
+cell is then one sparse product (see :mod:`singlet.celllabels.celltype`).
 """
 
 from __future__ import annotations

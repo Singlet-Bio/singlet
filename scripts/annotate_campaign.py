@@ -19,7 +19,7 @@ downloaded to node-local scratch, annotated, and deleted. When R2 credentials ar
 ``R2_ACCESS_KEY_ID``, ``R2_SECRET_ACCESS_KEY``) the study's restricted sidecar (``singlet-restricted`` bucket,
 ``restricted/<GSE>/<GSE>.restricted.singlet``) is downloaded to scratch too, read for the per-donor SNP depths, and deleted with
 the bundle; nothing from it is written anywhere (the label files carry only labels, checked by
-``singlet.annotate.output.assert_public_safe``). This script never writes to R2 or D1: the cell index ingests ``$OUT``.
+``singlet.celllabels.output.assert_public_safe``). This script never writes to R2 or D1: the cell index ingests ``$OUT``.
 
 A study whose samples all have outputs at the current model version is skipped, so a failed or pre-empted task can simply be
 re-run. Each finished study appends one JSON line to the shard's ledger.

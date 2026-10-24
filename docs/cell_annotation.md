@@ -1,11 +1,11 @@
 # Per-cell labels: cell type, chromosomal sex, genetic ancestry
 
-Package `python/singlet/annotate/`, scripts `scripts/annotate_*.py`. One label file per sample, ingested by the atlas cell index.
+Package `python/singlet/celllabels/`, scripts `scripts/annotate_*.py`. One label file per sample, ingested by the atlas cell index.
 Validation run 2026-10-23 on Clipper; every number below comes from the artefacts named in its section.
 
 ## 1. What is written
 
-`<OUT>/<GSE>/<GSM>.labels.parquet`, one row per called cell (schema version 1, `singlet.annotate.output`):
+`<OUT>/<GSE>/<GSM>.labels.parquet`, one row per called cell (schema version 1, `singlet.celllabels.output`):
 
 | column | type | content |
 |---|---|---|
@@ -84,7 +84,7 @@ Studies were drawn from the 78 GEO series linked from a CELLxGENE collection. Th
 (GSE149689, GSE166895, GSE202109, GSE192742, GSE115469, GSE132042). The result is 16 studies and 66 samples (13 human, 3 mouse),
 332,755 called cells, of which 291,331 have a truth label. Truth was built independently on the laptop and again on Clipper from
 public downloads (`scripts/annotate_bench_prepare.py`), with identical results. Every sample is annotated from Singlet's own counts
-(exon + intron at gene level, as served), and scored with the singlet-agents ontology rules (`singlet.annotate.evaluate`).
+(exon + intron at gene level, as served), and scored with the singlet-agents ontology rules (`singlet.celllabels.evaluate`).
 Accuracy at guide depth d compares depth-d ancestors over cells whose truth reaches depth d (1 compartment, 2 lineage,
 3 cell type, 4 subtype), so stopping early counts as wrong at deeper levels. Means are over studies.
 

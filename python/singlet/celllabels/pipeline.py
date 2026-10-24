@@ -32,8 +32,8 @@ def annotate_sample(
     method: str = "guide",
     seed: int = 0,
 ) -> Tuple["object", dict]:
-    """Label table (see :mod:`singlet.annotate.output`) and a summary dict for one sample. ``af_table``: the 1000 Genomes
-    super-population allele frequencies (:class:`~singlet.annotate.ancestry.AFIndex`, or a DataFrame with chrom, pos, ref, alt,
+    """Label table (see :mod:`singlet.celllabels.output`) and a summary dict for one sample. ``af_table``: the 1000 Genomes
+    super-population allele frequencies (:class:`~singlet.celllabels.ancestry.AFIndex`, or a DataFrame with chrom, pos, ref, alt,
     AFR, AMR, EAS, EUR, SAS); without it, or without
     donor SNP depths in ``s``, ancestry stays null."""
     import pandas as pd

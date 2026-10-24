@@ -3,14 +3,14 @@
 
 ::
 
-    from singlet.annotate import read_v2, annotate_sample, write_labels
+    from singlet.celllabels import read_v2, annotate_sample, write_labels
     s = read_v2("GSE145370", "GSM4317426")
     table, summary = annotate_sample(s)
     write_labels(table, "GSM4317426.labels.parquet")
 
-Modules: :mod:`~singlet.annotate.celltype` (marker guide + per-sample self-training), :mod:`~singlet.annotate.sex`,
-:mod:`~singlet.annotate.ancestry` (from restricted donor SNP depths; only labels leave it), :mod:`~singlet.annotate.output`
-(the interchange schema and the public-output guard), :mod:`~singlet.annotate.io` (v2 and legacy readers).
+Modules: :mod:`~singlet.celllabels.celltype` (marker guide + per-sample self-training), :mod:`~singlet.celllabels.sex`,
+:mod:`~singlet.celllabels.ancestry` (from restricted donor SNP depths; only labels leave it), :mod:`~singlet.celllabels.output`
+(the interchange schema and the public-output guard), :mod:`~singlet.celllabels.io` (v2 and legacy readers).
 ``docs/cell_annotation.md`` documents the methods and their validation.
 """
 

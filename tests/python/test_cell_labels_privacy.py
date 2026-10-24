@@ -14,11 +14,11 @@ import numpy as np
 import pandas as pd
 import pytest
 import scipy.sparse as sps
-from singlet.annotate import output as O
-from singlet.annotate import pipeline as P
-from singlet.annotate.ancestry import POPS
-from singlet.annotate.guide import DATA
-from singlet.annotate.io import SampleInput
+from singlet.celllabels import output as O
+from singlet.celllabels import pipeline as P
+from singlet.celllabels.ancestry import POPS
+from singlet.celllabels.guide import DATA
+from singlet.celllabels.io import SampleInput
 
 
 def _table(n=5, **over):

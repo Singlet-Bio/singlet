@@ -12,7 +12,7 @@ Two sources:
 
 The restricted sidecar (``restricted/<GSE>/<GSE>.restricted.singlet`` in the private bucket) is only opened when a path to it is
 given, and only ``donor/donor<k>_coverage.tsv`` is read from it: depth and allele counts per SNP, used in memory by
-:mod:`singlet.annotate.ancestry` and dropped.
+:mod:`singlet.celllabels.ancestry` and dropped.
 """
 
 from __future__ import annotations

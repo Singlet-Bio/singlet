@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""singlet.annotate models on synthetic data: guide compilation, gating, sex pooling per donor, ancestry recovery."""
+"""singlet.celllabels models on synthetic data: guide compilation, gating, sex pooling per donor, ancestry recovery."""
 
 from __future__ import annotations
 
@@ -7,11 +7,11 @@ import numpy as np
 import pandas as pd
 import pytest
 import scipy.sparse as sps
-from singlet.annotate import ancestry as ANC
-from singlet.annotate import celltype as CT
-from singlet.annotate import evaluate as EV
-from singlet.annotate import guide as G
-from singlet.annotate import sex as SX
+from singlet.celllabels import ancestry as ANC
+from singlet.celllabels import celltype as CT
+from singlet.celllabels import evaluate as EV
+from singlet.celllabels import guide as G
+from singlet.celllabels import sex as SX
 
 
 def test_guide_compiles_for_both_species():

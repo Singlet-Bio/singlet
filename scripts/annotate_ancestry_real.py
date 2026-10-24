@@ -43,7 +43,7 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
 
     import pandas as pd
-    from singlet.annotate import ancestry as ANC
+    from singlet.celllabels import ancestry as ANC
 
     t0 = time.time()
     idx = ANC.AFIndex(pd.read_parquet(a.af))

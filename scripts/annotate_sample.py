@@ -8,7 +8,7 @@
   python scripts/annotate_sample.py --gse GSE164241 --bundle /tmp/GSE164241.singlet \
       --sidecar /tmp/GSE164241.restricted.singlet --af $WORK/data/annotate/1kgp_superpop_af.parquet --out out/
 
-Outputs ``<out>/<GSE>/<GSM>.labels.parquet`` (public schema, checked by ``singlet.annotate.output.assert_public_safe``) and
+Outputs ``<out>/<GSE>/<GSM>.labels.parquet`` (public schema, checked by ``singlet.celllabels.output.assert_public_safe``) and
 ``<out>/<GSE>/<GSM>.summary.json`` (internal QC: counts, donor-level calls, timings). A sample whose outputs exist with the current
 model version is skipped unless ``--force``. Exit status 0 when every sample was written or skipped for a stated reason.
 """
@@ -52,12 +52,12 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
 
     import pandas as pd
-    from singlet.annotate import io as IO
-    from singlet.annotate import output as O
-    from singlet.annotate.pipeline import annotate_sample, model_version
+    from singlet.celllabels import io as IO
+    from singlet.celllabels import output as O
+    from singlet.celllabels.pipeline import annotate_sample, model_version
 
     mv = model_version(a.method)
-    from singlet.annotate.ancestry import AFIndex
+    from singlet.celllabels.ancestry import AFIndex
 
     af = AFIndex(pd.read_parquet(a.af)) if a.af else None
     if a.bundle:

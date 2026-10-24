@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""Out-of-sample validation of ``singlet.annotate.ancestry.infer_ancestry`` on simulated donors from public 1000 Genomes genotypes.
+"""Out-of-sample validation of ``singlet.celllabels.ancestry.infer_ancestry`` on simulated donors from public 1000 Genomes genotypes.
 
 The pipeline's real allele depths are restricted, so donors are simulated from 1KGP phase 3 (GRCh38) genotypes:
 
@@ -193,7 +193,7 @@ _W: dict = {}
 
 
 def _init_worker(out: str, chroms, seed):
-    from singlet.annotate import ancestry
+    from singlet.celllabels import ancestry
 
     d = np.load(Path(out) / "run_inputs.npz")
     _W.update(
@@ -343,7 +343,7 @@ def _acc(true, call):
 
 
 def cmd_report(a):
-    from singlet.annotate import ancestry
+    from singlet.celllabels import ancestry
 
     out = Path(a.out)
     d = np.load(out / "run.npz", allow_pickle=False)

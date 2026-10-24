@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""Build the 1000 Genomes super-population allele-frequency table that singlet.annotate.ancestry uses.
+"""Build the 1000 Genomes super-population allele-frequency table that singlet.celllabels.ancestry uses.
 
 Source: the 1000 Genomes phase 3 call set on GRCh38 (``20190312_biallelic_SNV_and_INDEL``), whose sites VCF carries AFR_AF,
 AMR_AF, EAS_AF, EUR_AF and SAS_AF in INFO. These are population summaries (no individual genotypes). Kept: biallelic SNVs on
