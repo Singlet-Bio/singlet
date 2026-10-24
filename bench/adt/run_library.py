@@ -29,7 +29,7 @@ import pandas as pd
 
 HEAD_READS = 500_000
 SHARD_ABOVE = 60_000_000  # reads; above this, count in shards (pilot: ~0.3 GB per million reads in one pass)
-SHARD_READS = 40_000_000
+SHARD_READS = 15_000_000
 
 
 def sh(cmd, **kw):
@@ -169,7 +169,7 @@ def process(row, a, out_dir, status):
             return
         chem = CH.for_protocol(prot)
         status["atlas_protocol"] = prot
-    gx = G.read_legacy(row["gse"], gex_gsm)
+    gx = G.read_legacy(row["gse"], gex_gsm, with_counts=False)  # exon counts are loaded for QC, after counting
     status["gex"] = {"gsm": gex_gsm, "n_columns": len(gx.barcodes), "n_called": int(gx.called.sum()),
                      "seconds": round(time.time() - t0, 1)}
     if not gx.barcodes or not gx.called.any():
@@ -262,8 +262,10 @@ def process(row, a, out_dir, status):
     panel.to_csv(os.path.join(out_dir, "panel.tsv"), sep="\t", index=False)
     pd.DataFrame(lc.unmatched, columns=["sequence", "reads"]).to_csv(os.path.join(out_dir, "unmatched.tsv"), sep="\t",
                                                                      index=False)
-    # QC
+    # QC (the GEX exon matrix is read only now, so it never sits in memory next to the counting)
+    del head, sel
     t3 = time.time()
+    gx = G.read_legacy(row["gse"], gex_gsm)
     res = Q.library_qc(lc.matrix, panel, gx.called, lc.stats, lc.ambient, gx.exon, gx.genes,
                        disc.notes if disc else None)
     lib = res["library"]
