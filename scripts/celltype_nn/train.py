@@ -75,7 +75,7 @@ def main(argv=None) -> int:
     X = sps.load_npz(a.data / "corpus_counts.npz").tocsr().astype(np.float32)
     obs = pd.read_parquet(a.data / "corpus_obs.parquet")
     cells = pd.read_parquet(a.data / "space_cells.parquet")
-    assert (cells["soma_joinid"].to_numpy() == obs["soma_joinid"].to_numpy()).all()
+    assert (cells["cell_id"].to_numpy() == obs["cell_id"].to_numpy()).all()
     terms = json.loads((a.data / "terms.json").read_text())
     vocab = GeneVocab.from_dict(json.loads((a.data / "vocab.json").read_text()))
     sp = TermSpace(terms["terms"])
@@ -84,8 +84,8 @@ def main(argv=None) -> int:
     tp = a.data / "targets_ensemble.parquet"
     if tp.exists() and not a.no_ensemble:
         t = pd.read_parquet(tp)
-        pos = pd.Series(np.arange(len(obs)), index=obs["soma_joinid"].to_numpy())
-        refine[pos.loc[t["soma_joinid"].to_numpy()].to_numpy()] = t["refine_term"].to_numpy(object)
+        pos = pd.Series(np.arange(len(obs)), index=obs["cell_id"].to_numpy())
+        refine[pos.loc[t["cell_id"].to_numpy()].to_numpy()] = t["refine_term"].to_numpy(object)
     ok = pd.notna(author)
     # target ids: author and refinement terms index one credit table
     tlist = sorted(set(author[ok].tolist()) | {r for r in refine if isinstance(r, str)})

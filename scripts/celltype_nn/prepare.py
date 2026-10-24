@@ -105,7 +105,9 @@ def main(argv=None) -> int:
         A = ad.read_h5ad(p)
         sp = plan.loc[plan["chunk"] == int(p.stem), "organism"].iloc[0]
         take = rng.permutation(A.n_obs)[:per_chunk]
-        obs = plan.set_index(plan["soma_joinid"].astype(str)).loc[A.obs_names[take]]
+        pc = plan[plan["chunk"] == int(p.stem)].reset_index(drop=True)
+        assert (pc["soma_joinid"].astype(str).to_numpy() == A.obs_names.to_numpy()).all(), p
+        obs = pc.iloc[take]
         if sp == "human":
             if first_h is None:
                 first_h = A.var[["feature_id", "feature_name"]].copy()
@@ -155,13 +157,16 @@ def main(argv=None) -> int:
         A = ad.read_h5ad(p)
         sp = plan.loc[plan["chunk"] == int(p.stem), "organism"].iloc[0]
         parts.append(vocab.project(A.X, A.var["feature_id"].astype(str).to_numpy(), sp))
-        o = plan.set_index(plan["soma_joinid"].astype(str)).loc[A.obs_names].reset_index(drop=True)
+        o = plan[plan["chunk"] == int(p.stem)].reset_index(drop=True)
+        assert (o["soma_joinid"].astype(str).to_numpy() == A.obs_names.to_numpy()).all(), p
         o["total_counts"] = np.asarray(A.X.sum(1)).ravel()
         obs_parts.append(o)
         print(f"  {p.name}: {A.n_obs} cells", flush=True)
     X = sps.vstack(parts).tocsr()
     obs = pd.concat(obs_parts, ignore_index=True)
     obs["vocab_counts"] = np.asarray(X.sum(1)).ravel()
+    # soma_joinid is per organism in Census: the cell id carries both
+    obs["cell_id"] = obs["organism"] + ":" + obs["soma_joinid"].astype(str)
     sps.save_npz(a.data / "corpus_counts.npz", X, compressed=False)
     obs.to_parquet(a.data / "corpus_obs.parquet", index=False)
     print(f"corpus {X.shape}, nnz {X.nnz}, {time.time() - t0:.0f}s", flush=True)

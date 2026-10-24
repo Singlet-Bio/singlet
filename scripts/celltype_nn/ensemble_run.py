@@ -49,7 +49,7 @@ def cmd_space(a) -> int:
     pick = (rng.random(len(obs)) < a.random_frac) | np.isin(author, list(has_finer))
     obs["author_term"] = author
     obs["ensemble"] = pick
-    obs[["soma_joinid", "author_term", "ensemble"]].to_parquet(a.data / "space_cells.parquet", index=False)
+    obs[["cell_id", "chunk", "author_term", "ensemble"]].to_parquet(a.data / "space_cells.parquet", index=False)
     (a.data / "terms.json").write_text(
         json.dumps(dict(terms=terms, fold=fold, cl_version=sp.o.version, min_cells=a.min_cells), indent=0)
     )
@@ -97,17 +97,20 @@ def cmd_run(a) -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     t0 = time.time()
     cells = pd.read_parquet(a.data / "space_cells.parquet")
-    plan = pd.read_parquet(a.data / "plan.parquet")
+    obs = pd.read_parquet(a.data / "corpus_obs.parquet")
     A = ad.read_h5ad(a.data / "chunks" / f"{a.chunk:04d}.h5ad")
-    sub = cells.set_index(cells["soma_joinid"].astype(str)).loc[A.obs_names]
+    inchunk = (obs["chunk"] == a.chunk).to_numpy()
+    sub = cells[inchunk].reset_index(drop=True)
+    o = obs[inchunk].reset_index(drop=True)
+    assert (o["soma_joinid"].astype(str).to_numpy() == A.obs_names.to_numpy()).all()
     take = np.flatnonzero(sub["ensemble"].to_numpy())
-    meta = plan.set_index(plan["soma_joinid"].astype(str)).loc[A.obs_names[take]].reset_index(drop=True)
+    meta = o.iloc[take].reset_index(drop=True)
     species = meta["organism"].iloc[0]
     X = sps.csr_matrix(A.X[take], dtype=np.float32)
     gene_ids = A.var["feature_id"].astype(str).to_numpy()
     symbols = A.var["feature_name"].astype(str).to_numpy()
     n = len(take)
-    res = pd.DataFrame({"soma_joinid": meta["soma_joinid"].to_numpy()})
+    res = pd.DataFrame({"cell_id": meta["cell_id"].to_numpy()})
     print(f"chunk {a.chunk} ({species}): {n} of {A.n_obs} cells in the ensemble subset", flush=True)
 
     # guide, per (dataset, donor); groups under 50 cells are pooled per dataset
@@ -168,8 +171,8 @@ def cmd_targets(a) -> int:
     terms = json.loads((a.data / "terms.json").read_text())
     sp = TermSpace(terms["terms"])
     ens = pd.concat([pd.read_parquet(p) for p in sorted((a.data / "ensemble").glob("*.parquet"))], ignore_index=True)
-    ens = ens.merge(cells[["soma_joinid", "author_term"]], on="soma_joinid", how="left")
-    ens = ens.merge(obs[["soma_joinid", "split", "organism", "tissue_general"]], on="soma_joinid", how="left")
+    ens = ens.merge(cells[["cell_id", "author_term"]], on="cell_id", how="left")
+    ens = ens.merge(obs[["cell_id", "split", "organism", "tissue_general"]], on="cell_id", how="left")
     tr = (ens["split"] == "train").to_numpy() & ens["author_term"].notna().to_numpy()
     # crosswalk each CellTypist model from training cells, then pool models into one member: the most specific mapped call
     xws = {}
@@ -204,7 +207,7 @@ def cmd_targets(a) -> int:
     stats["refined_cells"] = int(pd.notna(ens["refine_term"]).sum())
     stats["ensemble_cells"] = n
     (a.data / "ensemble_stats.json").write_text(json.dumps(stats, indent=1))
-    ens[["soma_joinid", "author_term", "refine_term", "guide_cl", "guide_score", "celltypist_cl", "celltypist_score", "singler_cl",
+    ens[["cell_id", "author_term", "refine_term", "guide_cl", "guide_score", "celltypist_cl", "celltypist_score", "singler_cl",
          "singler_score"]].to_parquet(a.data / "targets_ensemble.parquet", index=False)
     print(json.dumps(stats, indent=1), flush=True)
     return 0
