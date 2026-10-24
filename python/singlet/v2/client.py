@@ -89,6 +89,7 @@ PART_BYTES = 16 << 20  # a single range larger than 2 parts is split and fetched
 PREFIX_HINT = 512 << 10  # first read of a member in the two-phase plan
 PARTIAL_GAP = 256 << 10  # in the two-phase plan, ranges closer than this share a request
 SJ, MT, VDJ = "sj_counts.1pz", "mt_heteroplasmy.1pz", "vdj_gene_usage.1pz"
+ADT, HTO = "adt_counts.1pz", "hto_counts.1pz"  # antibody / hashtag UMIs (docs/format-v2.md section 13)
 
 
 # ================================================================================================================= modalities
@@ -118,6 +119,8 @@ MODALITIES: Dict[str, ModalitySpec] = {
         ),
         ModalitySpec("mt", (MT,), "obsm", 'obsm["mt"]: chrM heteroplasmy per variant site'),
         ModalitySpec("vdj", (VDJ,), "obsm", 'obsm["vdj"]: V(D)J segment usage counts'),
+        ModalitySpec("adt", (ADT,), "obsm", 'obsm["adt"]: antibody UMIs (CITE-seq / TotalSeq), raw counts'),
+        ModalitySpec("hto", (HTO,), "obsm", 'obsm["hto"]: hashtag UMIs, raw counts'),
     )
 }
 DEFAULT_MODALITIES = ("counts", "spliced", "unspliced")
@@ -130,6 +133,13 @@ _MODALITY_ALIASES = {
     "splice_psi": "psi",
     "mt_heteroplasmy": "mt",
     "vdj_gene_usage": "vdj",
+    "protein": "adt",
+    "cite": "adt",
+    "antibody": "adt",
+    "adt_counts": "adt",
+    "hashtag": "hto",
+    "hashtags": "hto",
+    "hto_counts": "hto",
 }
 GENE_MEMBERS = (EXON, INTRON)
 
@@ -1886,7 +1896,8 @@ def load(
 
     ``modalities`` (a name or a list, see :data:`MODALITIES`) fetches only the members those modalities need: ``"counts"``
     (X; exon + intron), ``"spliced"`` (exon only), ``"unspliced"`` (intron only), ``"splice_junctions"`` / ``"psi"`` (the
-    junction matrix only), ``"mt"``, ``"vdj"``. The per-cell ``cells`` table is always read. Default: counts + both layers."""
+    junction matrix only), ``"mt"``, ``"vdj"``, ``"adt"`` (antibodies), ``"hto"`` (hashtags). The per-cell ``cells`` table is
+    always read. Default: counts + both layers."""
     kw["modalities"] = modalities
     s = str(source).strip()
     p = Path(s).expanduser()

@@ -1,0 +1,5 @@
+# source: https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7101nnn/GSM7101912/suppl/GSM7101912_MPP2_feature_reference.csv.gz
+# curated 2026-10-23 for the ADT pilot; names as the authors give them
+id,name,read,pattern,sequence,feature_type
+Hashtag4,Hashtag4,R2,5PNNNNNNNNNN(BC),AAAGCATTCTTCACG,Antibody Capture
+Hashtag5,Hashtag5,R2,5PNNNNNNNNNN(BC),CTTTGTCTTTGTGAG,Antibody Capture

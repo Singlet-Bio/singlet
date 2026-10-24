@@ -1,0 +1,8 @@
+# source: https://ftp.ncbi.nlm.nih.gov/geo/series/GSE248nnn/GSE248289/suppl/GSE248289_ADT_barcode_sequences.txt.gz
+# curated 2026-10-23 for the ADT pilot; names as the authors give them
+id,name,read,pattern,sequence,feature_type
+B0157,CD45.2,R2,5PNNNNNNNNNN(BC),CACCGTCATTCAACC,Antibody Capture
+B0015,Ly-6G,R2,5PNNNNNNNNNN(BC),ACATTGACGCAACTA,Antibody Capture
+B0178,CD45.1,R2,5PNNNNNNNNNN(BC),CCTATGGACTTGGAC,Antibody Capture
+B0560,CD68,R2,5PNNNNNNNNNN(BC),CTTTCTTTCACGGGA,Antibody Capture
+B0895,Mac-2 (Galectin-3),R2,5PNNNNNNNNNN(BC),GATGCAATTAGCCGG,Antibody Capture
