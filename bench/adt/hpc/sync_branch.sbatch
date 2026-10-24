@@ -16,6 +16,6 @@ git -C $WORK/repos/singlet-py.git fetch -q origin "+refs/heads/$BRANCH:refs/head
 git -C $SRC checkout -q --detach "$BRANCH"
 git -C $SRC log --oneline -1
 mkdir -p $WORK/state/adt/lists $WORK/data/adt $WORK/cache/adt
-cp $SRC/bench/adt/inventory/adt_hto_inventory.tsv $WORK/state/adt/ 2>/dev/null || true
+cp $SRC/bench/adt/inventory/adt_hto_inventory.tsv $SRC/bench/adt/inventory/gex_candidates.tsv $WORK/state/adt/ 2>/dev/null || true
 cp $SRC/bench/adt/inventory/lists/*.txt $WORK/state/adt/lists/ 2>/dev/null || true
 ls -la $WORK/state/adt $WORK/state/adt/lists

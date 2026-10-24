@@ -103,17 +103,23 @@ def process(row, a, out_dir, status):
 
     t0 = time.time()
     gex_gsm = row["gex_gsm"] if isinstance(row["gex_gsm"], str) else ""
+    chem = None
+    cands = []
     if not gex_gsm or not row["gex_in_atlas"]:
-        status["status"] = "no_gex_sample"
-        return
-    chem = CH.for_protocol(row["gex_protocol"])
-    status["atlas_protocol"] = row["gex_protocol"]
-    if not chem.supported:
-        status["status"] = "unsupported_chemistry"
-        return
-    gx = G.read_legacy(row["gse"], gex_gsm)
-    status["gex"] = {"gsm": gex_gsm, "n_columns": len(gx.barcodes), "n_called": int(gx.called.sum()),
-                     "seconds": round(time.time() - t0, 1)}
+        # no sibling by title: pair by cell barcodes with the study's 10x GEX samples, if it has any
+        cands = gex_candidates(a, row["gse"])
+        if not cands:
+            status["status"] = "no_gex_sample"
+            return
+        gex_gsm = ""
+        status["paired_by"] = "barcodes"
+    else:
+        chem = CH.for_protocol(row["gex_protocol"])
+        status["atlas_protocol"] = row["gex_protocol"]
+        status["paired_by"] = "title"
+        if not chem.supported:
+            status["status"] = "unsupported_chemistry"
+            return
 
     # reads
     r1s, r2s, runlog = [], [], []
@@ -132,6 +138,17 @@ def process(row, a, out_dir, status):
     if not r1s:
         status["status"] = "no_reads"
         return
+    if not gex_gsm:
+        gex_gsm, prot, rep = pair_by_barcodes(row["gse"], cands, r1s, r2s, a)
+        status["pairing"] = rep
+        if not gex_gsm:
+            status["status"] = "no_gex_match"
+            return
+        chem = CH.for_protocol(prot)
+        status["atlas_protocol"] = prot
+    gx = G.read_legacy(row["gse"], gex_gsm)
+    status["gex"] = {"gsm": gex_gsm, "n_columns": len(gx.barcodes), "n_called": int(gx.called.sum()),
+                     "seconds": round(time.time() - t0, 1)}
 
     # chemistry from the data: UMI length from the R1 length, whitelist from the GEX barcodes
     r1_len = first_len(r1s[0])
@@ -232,6 +249,57 @@ def process(row, a, out_dir, status):
     status["status"] = "ok"
 
 
+def gex_candidates(a, gse):
+    """The study's 10x GEX samples in the atlas that are not flagged as feature libraries: [(gsm, protocol)]."""
+    p = a.gex_candidates or os.path.join(os.path.dirname(a.inventory), "gex_candidates.tsv")
+    if not os.path.exists(p):
+        return []
+    c = pd.read_csv(p, sep="\t", dtype=str)
+    c = c[c.gse == gse]
+    return list(zip(c.gsm, c.protocol))
+
+
+PAIR_MIN = 0.30  # share of sampled reads whose barcode is a called cell of the candidate
+PAIR_MARGIN = 3.0  # ... and at least this many times the runner-up
+
+
+def pair_by_barcodes(gse, cands, r1s, r2s, a, n_reads=200_000):
+    """The GEX sample whose called cells hold the library's reads: share of sampled reads (raw barcode, or translated
+    for 3' v3 feature barcodes) on each candidate's called barcodes (``cell_calls.tsv`` only, one small range each)."""
+    from singlet.adt import count as C
+    from singlet.adt import seq as S
+    from singlet.v2 import cells as cells_mod
+    from singlet.v2.legacy import LegacyBundle
+
+    cbs = []
+    for i, (x, _) in enumerate(C.iter_pairs(r1s, r2s)):
+        if b"N" not in x[:16] and len(x) >= 26:
+            cbs.append(x[:16].decode())
+        if i + 1 >= n_reads:
+            break
+    raw = S.encode_strings(cbs, 16)[0]
+    tabs = [C.load_translation(C_fetch("translation_3M-february-2018.txt.gz", a.cache), reverse=r) for r in (0, 1)]
+    views = [raw] + [C.translate(raw, t)[0] for t in tabs]
+    b = LegacyBundle.open(f"https://data.singlet.bio/data/{gse}/{gse}.singlet")
+    scores = []
+    for gsm, prot in cands:
+        m = f"samples/{gsm}/cell_calls.tsv"
+        if not b.exists(m):
+            continue
+        called = cells_mod.parse_cell_calls(b.read(m)) or []
+        if not called:
+            continue
+        cc = np.sort(S.encode_strings([x.split("-")[0] for x in called], 16)[0])
+        sc = max(float((S.lookup(cc, v) >= 0).mean()) for v in views)
+        scores.append((sc, gsm, prot))
+    scores.sort(reverse=True)
+    rep = {"candidates": len(cands), "top": [(round(s, 4), g) for s, g, _ in scores[:5]]}
+    if scores and scores[0][0] >= PAIR_MIN and (len(scores) == 1 or scores[0][0] >= PAIR_MARGIN * max(scores[1][0], 1e-3)):
+        rep["chosen"] = scores[0][1]
+        return scores[0][1], scores[0][2], rep
+    return "", "", rep
+
+
 def load_catalogs(geo_dir):
     """Vendor catalog, plus the sequences named in harvested GEO references that the vendor list lacks
     (``source`` = ``geo``)."""
@@ -241,7 +309,7 @@ def load_catalogs(geo_dir):
     p = os.path.join(geo_dir, "geo_catalog.tsv") if geo_dir else None
     if not p or not os.path.exists(p):
         return cat
-    g = pd.read_csv(p, sep="	", dtype=str, keep_default_na=False)
+    g = pd.read_csv(p, sep="\t", dtype=str, keep_default_na=False)
     g = g[g.sequence.str.len() == 15]
     g = g[~g.sequence.isin(set(cat.sequence))]
     if not len(g):
@@ -325,6 +393,7 @@ def main():
     ap.add_argument("--cache", required=True, help="shared dir for whitelists")
     ap.add_argument("--panels", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "panels"))
     ap.add_argument("--geo-panels", default=None, help="harvest_panels.py output dir (optional)")
+    ap.add_argument("--gex-candidates", default=None, help="gex_candidates.tsv (default: next to the inventory)")
     ap.add_argument("--threads", type=int, default=8)
     ap.add_argument("--force", action="store_true")
     a = ap.parse_args()
