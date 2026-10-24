@@ -31,10 +31,12 @@ echo "[run] $ID $TOOL species=$SPECIES chem=$CHEM node=$(hostname) $(date -Is)"
 echo "[run] cpu: $(lscpu | sed -n "s/^Model name: *//p")" | tee $O/node.txt
 
 case $TOOL in
-singlet-baseline|singlet-fixed|singlet-baseline-t4|singlet-fixed-t4)
+singlet-baseline|singlet-fixed|singlet-baseline-t4|singlet-fixed-t4|singlet-fixed-rev)
   # -t4: the campaign's 4 pileup workers (production ran --threads 4). The atlas engine's
   # counts depend on the worker count (cross-worker multi-mappers), so both are measured.
   BIN=$PB/bin/${TOOL%-t4}; [ "$TOOL" != "${TOOL%-t4}" ] && T=4
+  # -rev: force reverse-strand counting (separates strand detection from counting)
+  EXTRA=""; [ "$TOOL" = singlet-fixed-rev ] && { BIN=$PB/bin/singlet-fixed; EXTRA=--reverse-strand; }
   # .1fq encoding is part of Singlet's cost: timed separately (encode.time.txt)
   cat $(grep "_R1_" $D/gex_fastqs.txt) > $SCR/R1.fastq.gz
   cat $(grep "_R2_" $D/gex_fastqs.txt) > $SCR/R2.fastq.gz
@@ -44,7 +46,7 @@ singlet-baseline|singlet-fixed|singlet-baseline-t4|singlet-fixed-t4)
   # Campaign flags (provenance.json of kept results: --pipeline, directional UMI) + mtx and raw matrix
   cd $SCR
   $TIME $BIN $SCR/$ID.1fq --ref-base $REF --genome-dir $GENOME --exons $GTF \
-      --out-prefix $O/ --threads $T --pipeline --output-format mtx --raw-matrix > $O/run.log 2>&1
+      --out-prefix $O/ --threads $T --pipeline --output-format mtx --raw-matrix $EXTRA > $O/run.log 2>&1
   ;;
 starsolo)
   # Cell Ranger 4+ emulation per the STARsolo docs; Gene, GeneFull and Velocyto from one pass
@@ -57,7 +59,9 @@ starsolo)
       --soloUMIdedup 1MM_CR --clipAdapterType CellRanger4 --outFilterScoreMin 30 \
       --outSAMtype None --outTmpDir $SCR/startmp > $O/run.log 2>&1
   ;;
-alevinfry)
+alevinfry|alevinfry-fw)
+  # -fw: opposite expected orientation (checks the 5' orientation choice)
+  [ "$TOOL" = alevinfry-fw ] && AFORI=fw
   IDX=$PB/refs/$SPECIES/af_idx
   $TIME simpleaf quant --reads1 $R1 --reads2 $R2 --index $IDX/index \
       --t2g-map $IDX/index/t2g_3col.tsv --chemistry $AFCHEM --expected-ori $AFORI \

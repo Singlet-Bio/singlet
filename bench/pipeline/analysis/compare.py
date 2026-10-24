@@ -184,14 +184,15 @@ def main():
     M: dict = {"dataset": ds}
 
     tools = {}
-    for t in ("singlet-baseline", "singlet-fixed", "singlet-baseline-t4", "singlet-fixed-t4"):
+    for t in ("singlet-baseline", "singlet-fixed", "singlet-baseline-t4", "singlet-fixed-t4", "singlet-fixed-rev"):
         a = loaders.load_singlet(runs / t)
         if a is not None:
             tools[t] = a
     tools.update(loaders.load_starsolo(runs / "starsolo"))
-    af = loaders.load_alevinfry(runs / "alevinfry")
-    if af is not None:
-        tools["alevinfry"] = af
+    for t in ("alevinfry", "alevinfry-fw"):
+        af = loaders.load_alevinfry(runs / t)
+        if af is not None:
+            tools[t] = af
     crh5 = next(iter((pb / "data" / ds).glob("cellranger_*.h5")), None)
     adt = None
     if crh5 is not None:
@@ -330,6 +331,10 @@ def main():
         ("singlet-fixed", "spliced", "alevinfry", "spliced", "spliced"),
         ("singlet-fixed", "unspliced", "alevinfry", "unspliced", "unspliced"),
         ("singlet-fixed", None, "alevinfry", None, "total"),
+        ("alevinfry-fw", None, "starsolo_GeneFull", None, "total (S+U+A), expected-ori fw"),
+        ("singlet-fixed-rev", None, "starsolo_GeneFull", None, "total, forced --reverse-strand"),
+        ("singlet-fixed-rev", "exon", "starsolo_Gene", None, "exonic, forced --reverse-strand"),
+        ("singlet-fixed-rev", "unspliced", "starsolo_Velocyto", "unspliced", "unspliced, forced --reverse-strand"),
     ]
     for ta, la, tb, lb, what in pairs:
         if ta in tools and tb in tools and shared:

@@ -8,6 +8,13 @@ import sys
 from pathlib import Path
 
 res, out = Path(sys.argv[1]), Path(sys.argv[2])
+def proto(p):
+    try:
+        return json.loads(p.read_text()).get("protocol_name")
+    except Exception:  # noqa: BLE001
+        return None
+
+
 rows = []
 for d in res.iterdir():
     p = d / "out" / "pileup_stats.json"
@@ -31,6 +38,8 @@ for d in res.iterdir():
         "exon_hits": s.get("exon_hits"), "intron_hits": s.get("intron_hits"),
         "umi_unique": s.get("umi_unique"), "pipeline": pv.get("pipeline"),
         "directional": pv.get("umi_dedup_directional"), "version": s.get("version"),
+        "wrong_strand": s.get("wrong_strand"), "reverse_strand": s.get("reverse_strand"),
+        "strand_probe_ran": s.get("strand_auto_flipped"), "protocol": proto(d / "out" / "summary.json"),
     })
 import csv  # noqa: E402
 
