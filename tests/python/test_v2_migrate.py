@@ -381,7 +381,7 @@ def test_called_v2_columns_and_parameters(synth, tmp_path):
     res = MG.migrate_bundle(str(synth.bundle), str(tmp_path / "off"), None, opts)
     for s in res["samples"]:
         cells = V2Sample((tmp_path / "off" / s["key"]).read_bytes()).cells()
-        assert "called_v2" not in cells.names and "called_v2" not in s["entry"]["members"]["cells"]
+        assert "called_v2" not in cells.names and "called_v2" not in s["members"]["cells"]
 
 
 def test_synthetic_manifest_and_outputs(synth):
