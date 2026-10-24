@@ -8396,9 +8396,10 @@ int main(int argc, char* argv[]) {
 
     // The orientation the matrices were counted with (probe flip or safety-net retry).
     config.reverse_strand = engine_ptr->reverse_strand();
-    if (singlet::wrong_strand_frac(stats) > 0.35) {
-        std::cerr << "[singlet] WARNING: " << static_cast<int>(singlet::wrong_strand_frac(stats) * 100)
-                  << "% wrong-strand exonic reads after strand detection (reverse_strand="
+    const double counted_anti = singlet::counted_antisense_frac(stats, config.reverse_strand);
+    if (counted_anti > 0.35) {
+        std::cerr << "[singlet] WARNING: " << static_cast<int>(counted_anti * 100)
+                  << "% of nuclear exonic reads antisense after strand detection (reverse_strand="
                   << (config.reverse_strand ? "true" : "false")
                   << "). The library may be unstranded or its cDNA read misassigned.\n";
     }
@@ -8419,6 +8420,9 @@ int main(int argc, char* argv[]) {
         "  \"strand_probe_informative\": " + std::to_string(engine_ptr->strand_probe().informative()) + ",\n"
         "  \"strand_probe_antisense_frac\": " + std::to_string(engine_ptr->strand_probe().antisense_frac()) + ",\n"
         "  \"strand_retried\": " + (strand_retried ? "true" : "false") + ",\n"
+        "  \"strand_sense\": " + std::to_string(stats.strand_sense) + ",\n"
+        "  \"strand_antisense\": " + std::to_string(stats.strand_antisense) + ",\n"
+        "  \"counted_antisense_frac\": " + std::to_string(counted_anti) + ",\n"
         "  \"reverse_strand\": " + (config.reverse_strand ? "true" : "false") + ",\n";
     singlet::write_stats_json(out_prefix + "/pileup_stats.json",
                               stats, std::string("singlet-") + singlet::kVersion,

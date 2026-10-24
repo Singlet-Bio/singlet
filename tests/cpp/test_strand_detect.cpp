@@ -203,7 +203,7 @@ void test_5prime(const std::string& dir, Path path, const char* tag) {
     CHECK(r.flipped, std::string(tag) + ": probe flipped to reverse");
     CHECK(r.reverse, std::string(tag) + ": counted reverse-strand");
     CHECK(!r.retried, std::string(tag) + ": no safety-net retry needed");
-    CHECK(singlet::wrong_strand_frac(r.st) < 0.1, std::string(tag) + ": <10% wrong-strand after the flip");
+    CHECK(singlet::counted_antisense_frac(r.st, r.reverse) < 0.1, std::string(tag) + ": <10% wrong-strand after the flip");
     CHECK(r.st.exon_hits >= 3500, std::string(tag) + ": nuclear reads counted");
 }
 
@@ -212,7 +212,7 @@ void test_3prime(const std::string& dir, Path path, const char* tag) {
     auto r = run_pass(dir, "three.bam", path, base_config(dir));
     CHECK(r.probed && r.probe_af < 0.1, std::string(tag) + ": probe decided, sense");
     CHECK(!r.flipped && !r.reverse && !r.retried, std::string(tag) + ": stays forward");
-    CHECK(singlet::wrong_strand_frac(r.st) < 0.1, std::string(tag) + ": <10% wrong-strand");
+    CHECK(singlet::counted_antisense_frac(r.st, r.reverse) < 0.1, std::string(tag) + ": <10% wrong-strand");
 }
 
 void test_protocol_says_reverse(const std::string& dir) {
@@ -221,7 +221,7 @@ void test_protocol_says_reverse(const std::string& dir) {
     cfg.reverse_strand = true;
     auto r = run_pass(dir, "three.bam", Path::Parallel, cfg);
     CHECK(r.flipped && !r.reverse, "probe clears a wrong protocol-derived reverse_strand");
-    CHECK(singlet::wrong_strand_frac(r.st) < 0.1, "<10% wrong-strand");
+    CHECK(singlet::counted_antisense_frac(r.st, r.reverse) < 0.1, "<10% wrong-strand");
 }
 
 void test_user_forced(const std::string& dir) {
@@ -230,7 +230,8 @@ void test_user_forced(const std::string& dir) {
     cfg.auto_strand = false;  // as --reverse-strand does; here forced forward on 5' data
     auto r = run_pass(dir, "five.bam", Path::Parallel, cfg);
     CHECK(!r.probed && !r.flipped && !r.retried && !r.reverse, "no probe, no retry: orientation kept");
-    CHECK(singlet::wrong_strand_frac(r.st) > 0.9, "5' data counted forward is >90% wrong-strand");
+    CHECK(singlet::counted_antisense_frac(r.st, r.reverse) > 0.9, "5' data counted forward: >90% antisense");
+    CHECK(singlet::wrong_strand_frac(r.st) < 0.5, "... which chrM reads hide from wrong_strand / exon_hits");
 }
 
 void test_safety_net(const std::string& dir, Path path, const char* tag) {
@@ -241,7 +242,7 @@ void test_safety_net(const std::string& dir, Path path, const char* tag) {
     CHECK(r.probed && !r.flipped, std::string(tag) + ": probe ran but did not flip");
     CHECK(r.retried, std::string(tag) + ": safety net fired (probe ran, flip not applied)");
     CHECK(r.reverse, std::string(tag) + ": retry counted reverse-strand");
-    CHECK(singlet::wrong_strand_frac(r.st) < 0.5, std::string(tag) + ": retry has <50% wrong-strand");
+    CHECK(singlet::counted_antisense_frac(r.st, r.reverse) < 0.5, std::string(tag) + ": retry has <50% wrong-strand");
 }
 
 void test_inline(const std::string& dir) {
@@ -249,7 +250,7 @@ void test_inline(const std::string& dir) {
     auto r = run_pass(dir, "five_stream.bam", Path::Run, base_config(dir));
     CHECK(r.probed && r.flipped && r.reverse, "in-line probe flipped to reverse");
     CHECK(r.probe_af > 0.9, "in-line probe ignores chrM reads");
-    CHECK(singlet::wrong_strand_frac(r.st) < 0.5, "most reads counted after the flip");
+    CHECK(singlet::counted_antisense_frac(r.st, r.reverse) < 0.5, "most reads counted after the flip");
     CHECK(!r.retried, "no retry needed");
 }
 

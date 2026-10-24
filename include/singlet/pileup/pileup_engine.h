@@ -108,6 +108,10 @@ struct PileupStats {
     uint64_t multimapper_reads = 0;
     uint64_t multigene_reads = 0;
     uint64_t wrong_strand = 0;
+    // Nuclear primary reads on exons of one strand only, relative to the forward
+    // (10x 3') orientation whatever orientation was counted (see StrandEvidence).
+    uint64_t strand_sense = 0;
+    uint64_t strand_antisense = 0;
     uint64_t vdj_hits = 0;
     // G-RRNA: rRNA contamination sampling
     uint64_t rrna_reads = 0;          ///< reads identified as rRNA (sampled subset)
@@ -145,10 +149,19 @@ constexpr double kStrandProbeForward = 0.4;         // antisense share below thi
 constexpr double kStrandRetryFrac = 0.5;            // safety net: wrong-strand share above this
 constexpr uint64_t kStrandRetryMinReads = 1000;
 
-/// Wrong-strand share of the strand-informative exonic reads of a finished pass.
+/// Wrong-strand share of the exonic reads of a finished pass (wrong_strand over
+/// wrong_strand + exon_hits). Reads touching exons of both strands, as most chrM
+/// reads do, count as hits, so it understates a wrong orientation.
 inline double wrong_strand_frac(const PileupStats& s) {
     uint64_t n = s.exon_hits + s.wrong_strand;
     return n ? static_cast<double>(s.wrong_strand) / n : 0.0;
+}
+
+/// Share of the nuclear strand-informative reads of a finished pass that are
+/// antisense to the orientation it counted with (reverse = reverse_strand).
+inline double counted_antisense_frac(const PileupStats& s, bool reverse) {
+    uint64_t n = s.strand_sense + s.strand_antisense;
+    return n ? static_cast<double>(reverse ? s.strand_sense : s.strand_antisense) / n : 0.0;
 }
 
 /// mitochondrial contig names (genes on both strands; useless for the strand probe)
@@ -486,7 +499,6 @@ public:
         // ── Strand probe ──
         // An indexed BAM file is sampled across nuclear chromosomes before the
         // pass; a stream (STAR pipe, unsorted or unindexed BAM) is probed in-line.
-        StrandEvidence inline_ev;
         bool inline_probe = false;
         if (config_.stranded && config_.auto_strand && has_gene_model_ && !strand_probed_)
             inline_probe = !probe_strand_file(bam_path, hdr);
@@ -749,7 +761,7 @@ public:
                 bool vote_sense = false, vote_anti = false;
                 for (const auto& [bstart, bend] : aligned_blocks_) {
                     gene_model_.query_exons(tid, bstart, bend, block_overlaps_);
-                    if (inline_probe) strand_vote(block_overlaps_, read_reverse, vote_sense, vote_anti);
+                    strand_vote(block_overlaps_, read_reverse, vote_sense, vote_anti);
                     size_t n_before = exon_overlaps.size();
                     for (uint32_t idx : block_overlaps_) {
                         bool wrong_strand = false;
@@ -776,15 +788,15 @@ public:
                     stats.wrong_strand++;
                 }
 
+                if (vote_sense != vote_anti && !mito_tid_[tid] && !(b->core.flag & BAM_FSECONDARY))
+                    (vote_sense ? stats.strand_sense : stats.strand_antisense)++;
                 // Streaming strand probe: decide after kStrandInlineProbeReads
                 // informative nuclear reads. Reads before the decision keep the
                 // starting orientation (<0.1% of a typical run).
-                if (inline_probe && !is_mito_contig(tid_to_chrom_[tid])) {
-                    if (vote_sense != vote_anti) (vote_sense ? inline_ev.sense : inline_ev.antisense)++;
-                    if (inline_ev.informative() >= kStrandInlineProbeReads) {
-                        inline_probe = false;
-                        apply_strand_probe(inline_ev, "first nuclear exonic reads");
-                    }
+                if (inline_probe && stats.strand_sense + stats.strand_antisense >= kStrandInlineProbeReads) {
+                    inline_probe = false;
+                    apply_strand_probe({stats.strand_sense, stats.strand_antisense},
+                                       "first nuclear exonic reads");
                 }
 
                 // Determine exon gene (any-overlap, single-gene requirement)
@@ -1404,6 +1416,8 @@ public:
             stats.multimapper_reads += ws.multimapper_reads;
             stats.multigene_reads += ws.multigene_reads;
             stats.wrong_strand += ws.wrong_strand;
+            stats.strand_sense += ws.strand_sense;
+            stats.strand_antisense += ws.strand_antisense;
             stats.vdj_hits += ws.vdj_hits;
             stats.rrna_reads += ws.rrna_reads;
             stats.rrna_reads_sampled += ws.rrna_reads_sampled;
@@ -1823,6 +1837,7 @@ private:
     std::unordered_map<std::string, int32_t> chrom_to_tid_;
     std::vector<std::string> tid_to_chrom_;  // Reverse map: tid → chrom name
     int32_t chrm_tid_ = -1;
+    std::vector<char> mito_tid_;  // per tid: mitochondrial contig (excluded from strand evidence)
 
     // Accumulators
     SparseAccumulator<uint8_t> snp_ad_;
@@ -2007,10 +2022,12 @@ private:
     void build_chrom_map(sam_hdr_t* hdr) {
         int n = sam_hdr_nref(hdr);
         tid_to_chrom_.resize(n);
+        mito_tid_.assign(n, 0);
         for (int i = 0; i < n; ++i) {
             std::string name = sam_hdr_tid2name(hdr, i);
             chrom_to_tid_[name] = i;
             tid_to_chrom_[i] = name;
+            mito_tid_[i] = is_mito_contig(name);
             if (name == "chrM" || name == "MT") {
                 chrm_tid_ = i;
             }
@@ -3000,9 +3017,11 @@ private:
             wc.exon_overlaps.clear();
             bool read_reverse = (b->core.flag & BAM_FREVERSE) != 0;
             bool had_strand_reject = false;
+            bool vote_sense = false, vote_anti = false;
 
             for (const auto& [bstart, bend] : wc.aligned_blocks) {
                 gene_model_.query_exons(tid, bstart, bend, wc.block_overlaps);
+                strand_vote(wc.block_overlaps, read_reverse, vote_sense, vote_anti);
                 size_t n_before = wc.exon_overlaps.size();
                 for (uint32_t idx : wc.block_overlaps) {
                     bool wrong_strand = false;
@@ -3023,6 +3042,8 @@ private:
             }
 
             if (wc.exon_overlaps.empty() && had_strand_reject) wc.stats.wrong_strand++;
+            if (vote_sense != vote_anti && !mito_tid_[tid] && !(b->core.flag & BAM_FSECONDARY))
+                (vote_sense ? wc.stats.strand_sense : wc.stats.strand_antisense)++;
 
             uint32_t exon_gene = UINT32_MAX;
             uint32_t first_exon_idx = UINT32_MAX;
@@ -3254,9 +3275,9 @@ public:
     }
 };
 
-/// Post-pileup strand safety net. If a finished pass counted more wrong-strand
-/// than right-strand exonic reads (wrong_strand_frac > kStrandRetryFrac), the
-/// probe missed: rebuild the engine from `base` with the opposite orientation of
+/// Post-pileup strand safety net. If most nuclear strand-informative reads of a
+/// finished pass are antisense to the orientation it counted with
+/// (counted_antisense_frac > kStrandRetryFrac), the probe missed: rebuild the engine from `base` with the opposite orientation of
 /// the pass, auto-strand off, and run it again with `run(PileupEngine&)`. The input
 /// must be re-readable (a BAM file, not a pipe). Returns true if the pass was
 /// re-run; `engine`, `stats` and base.reverse_strand then describe the retry. Off
@@ -3266,14 +3287,14 @@ template <class RunFn>
 inline bool rerun_if_wrong_strand(std::unique_ptr<PileupEngine>& engine, PileupConfig& base,
                                   PileupStats& stats, RunFn&& run) {
     if (!engine || !base.stranded || !base.auto_strand || base.exon_gtf_path.empty()) return false;
-    if (stats.exon_hits + stats.wrong_strand < kStrandRetryMinReads) return false;
-    double before = wrong_strand_frac(stats);
+    if (stats.strand_sense + stats.strand_antisense < kStrandRetryMinReads) return false;
+    double before = counted_antisense_frac(stats, engine->reverse_strand());
     if (before <= kStrandRetryFrac) return false;
     PileupConfig cfg = base;
     cfg.reverse_strand = !engine->reverse_strand();
     cfg.auto_strand = false;
     std::cerr << "[singlet-pileup] Strand safety net: " << static_cast<int>(before * 100)
-              << "% wrong-strand reads -> re-running " << (cfg.reverse_strand ? "reverse" : "forward")
+              << "% of nuclear reads antisense to the counted strand -> re-running " << (cfg.reverse_strand ? "reverse" : "forward")
               << "-strand\n";
     auto next = std::make_unique<PileupEngine>(cfg);
     if (!next->load_references()) {
@@ -3287,8 +3308,9 @@ inline bool rerun_if_wrong_strand(std::unique_ptr<PileupEngine>& engine, PileupC
     stats = run(*engine);
     base.reverse_strand = cfg.reverse_strand;
     base.auto_strand = false;
-    std::cerr << "[singlet-pileup] Strand retry: " << static_cast<int>(wrong_strand_frac(stats) * 100)
-              << "% wrong-strand reads\n";
+    std::cerr << "[singlet-pileup] Strand retry: "
+              << static_cast<int>(counted_antisense_frac(stats, cfg.reverse_strand) * 100)
+              << "% of nuclear reads antisense to the counted strand\n";
     return true;
 }
 
