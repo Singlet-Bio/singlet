@@ -1,0 +1,16 @@
+column size classes (<=):  1:821 cols/0.0% nnz 4:4219 cols/0.5% nnz 16:2988 cols/0.9% nnz 24:332 cols/0.3% nnz 64:631 cols/1.0% nnz 256:1377 cols/9.1% nnz 1024:4775 cols/86.2% nnz 18446744073709551615:42 cols/2.0% nnz
+canon V0      : 729.47 ms (283.9 ns/nnz) OK
+canon V0      : 695.57 ms (270.7 ns/nnz) OK
+canon V0      : 577.06 ms (224.6 ns/nnz) OK
+canon vecsort : 223.23 ms (86.9 ns/nnz) OK
+canon vecsort : 41.06 ms (16.0 ns/nnz) OK
+canon vecsort : 206.57 ms (80.4 ns/nnz) OK
+canon sort    : 1639.62 ms (638.2 ns/nnz) OK
+canon sort    : 1715.21 ms (667.6 ns/nnz) OK
+canon sort    : 1705.74 ms (663.9 ns/nnz) OK
+canon bm_u16  : 99.70 ms (38.8 ns/nnz) OK
+canon bm_u16  : 109.23 ms (42.5 ns/nnz) OK
+canon bm_u16  : 129.94 ms (50.6 ns/nnz) OK
+canon bm_ident: 80.14 ms (31.2 ns/nnz)  [probe]
+canon bm_ident: 85.98 ms (33.5 ns/nnz)  [probe]
+canon bm_ident: 72.83 ms (28.3 ns/nnz)  [probe]

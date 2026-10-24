@@ -3,52 +3,63 @@
 \name{download}
 \alias{download}
 \alias{singlet_download}
-\title{Download a `.singlet` bundle and return its local path}
+\title{Download a study for offline use and return its local path}
 \usage{
-download(accession, cache_dir = NULL)
+download(accession, cache_dir = NULL, legacy = NULL)
 
-singlet_download(accession, cache_dir = NULL)
+singlet_download(accession, cache_dir = NULL, legacy = NULL)
 }
 \arguments{
 \item{accession}{A GEO Series accession (\code{"GSE..."}). A sample
 accession (\code{"GSM..."}) is resolved to its parent Series through the
-Singlet API, and the whole Series bundle is downloaded. The mapping is
+Singlet API, and the whole Series is downloaded. The mapping is
 remembered in the cache directory, so a sample whose Series is already
 cached needs no network in later sessions.}
 
-\item{cache_dir}{Directory in which to cache the bundle. Defaults to
+\item{cache_dir}{Directory in which to cache the data. Defaults to
 \code{tools::R_user_dir("singlet", "cache")}, overridable with the
 \code{SINGLET_CACHE_DIR} environment variable.}
+
+\item{legacy}{\code{TRUE} downloads the legacy \code{.singlet} bundle
+(deprecated, being retired). The default \code{NULL} downloads v2 and,
+only when the environment variable \code{SINGLET_LEGACY_FALLBACK=1} is
+set and the study has no v2 manifest yet, falls back to the legacy bundle.}
 }
 \value{
-The path to the local `.singlet` file.
+The path to the local manifest (\code{.../v2/m/<GSE>.json}) or, with
+  \code{legacy = TRUE}, to the local \code{.singlet} file.
 }
 \description{
-Fetches a study's bundle from \url{https://data.singlet.bio} into the
-local cache (or reuses it if already there) and returns the path, without
-reading it. Use this when you want to reach individual modalities with
-\code{\link{singlet_read}} or \code{\link{singlet_raw_counts}} rather than
-load the whole study. \code{singlet_download()} is the same function.
+Mirrors a study's v2 objects (the manifest, one \code{.s2} object per
+sample, and the vocabulary packs they use) from \url{https://data.singlet.bio}
+into the local cache, verifying each object against the manifest's sha256, and
+returns the path of the manifest. \code{\link{load}} then reads the local
+copies without the network. \code{singlet_download()} is the same function.
 }
 \details{
-Bundles are fetched from \code{<base>/data/<GSE>/<GSE>.singlet}, where
-\code{<base>} is the \code{SINGLET_DATA_BASE} environment variable
-(default \code{https://data.singlet.bio}; a value ending in \code{/data}
-is accepted). \code{GSM} accessions are resolved with the API named by
+With \code{legacy = TRUE} the legacy \code{.singlet} bundle is downloaded
+instead (and its path returned); use this when you want to reach individual
+modalities with \code{\link{singlet_read}} or \code{\link{singlet_raw_counts}}.
+
+
+Objects are fetched from \code{<base>/v2/...}, where \code{<base>} is the
+\code{SINGLET_DATA_BASE} environment variable (default
+\code{https://data.singlet.bio}; a value ending in \code{/data} is
+accepted). \code{GSM} accessions are resolved with the API named by
 \code{SINGLET_API_BASE} (default \code{https://singlet.bio/api}); each
-answer is saved in \code{gsm_parents.tsv} in the cache directory, and when
-the API cannot be reached the cached bundles are searched for the sample.
+answer is saved in \code{gsm_parents.tsv} in the cache directory.
 }
 \examples{
 \dontrun{
 path <- singlet_download("GSE138867")
-singlet_modalities(path)
+sce <- singlet_load(path)           # reads the local copies
 
-# A sample accession fetches its parent study's bundle
-identical(singlet_download("GSM4120733"), path)
+# The legacy bundle, for modality-level access
+b <- singlet_download("GSE138867", legacy = TRUE)
+singlet_modalities(b)
 }
 
 }
 \seealso{
-\code{\link{load}}, \code{\link{singlet_modalities}}
+\code{\link{load}}, \code{\link{singlet_study}}, \code{\link{singlet_modalities}}
 }

@@ -1,0 +1,21 @@
+gse_id	byte_identical	n_entries	json_chars	zip64	cd_in_tail	requests	note
+GSE305266	True	4468	397923	True	False	2	
+GSE163530	True	7653	640696	True	False	2	
+GSE293805	True	9721	882913	True	False	2	
+GSE102090	True	13	1004	False	True	1	
+GSE102596	True	13	1003	False	True	1	
+GSE103518	True	13	1009	False	True	1	
+GSE342939	True	3550	316289	True	False	2	
+GSE308682	True	23	1838	False	True	1	
+GSE256398	True	283	23702	False	True	1	
+GSE271379	True	53	4356	False	True	1	
+GSE292828	True	333	27856	False	True	1	
+GSE208113	True	623	48349	False	True	1	
+GSE168492	True	43	3403	False	True	1	
+GSE233628	True	33	2492	False	True	1	
+GSE253903	True	123	10220	False	True	1	
+GSE314416	True	313	25831	False	True	1	
+GSE281646	True	43	3485	False	True	1	
+GSE295046	True	43	3511	False	True	1	
+GSE248508	True	23	1826	False	True	1	
+GSE174332	True	663	56002	False	True	1	

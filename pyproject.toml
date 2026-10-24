@@ -57,6 +57,8 @@ zarr = ["zarr>=2.12"]
 tiledb = ["tiledbsoma>=1.4"]
 # The local MCP server is written against the 1.x SDK (mcp.server.Server).
 mcp = ["mcp>=1.0,<2"]
+# The v2 migration computes called_v2 (python/singlet/v2/cellcall.py), whose Monte Carlo loop is compiled with numba.
+migrate = ["numba>=0.57"]
 # Optional algorithm packages some analysis functions use when present
 # (plotting, scanpy interop, GLM-based tests, Leiden on igraph).
 analysis = [
@@ -103,7 +105,7 @@ where = ["python"]
 include = ["singlet*"]
 
 [tool.setuptools.package-data]
-singlet = ["data/*.parquet", "data/whitelists/*.txt", "py.typed", "_singlepress*.so"]
+singlet = ["celllabels/data/*.gz", "data/*.parquet", "data/whitelists/*.txt", "py.typed", "features/data/*.json", "features/data/*.parquet", "_singlepress*.so", "v2/packs/*.pack", "v2/packs/index.json", "v2/recipes_data/*.zst"]
 
 # The four large 10x whitelists (about 106 MB of 113 MB) are not shipped: singlet.whitelists
 # downloads them from the public Teichlab CDN on first use. The small ones, and 737K-april-2014
@@ -147,6 +149,8 @@ omit = [
     "python/singlet/gpu/*",
     "python/singlet/mcp/*",
     "python/singlet/torch/*",
+    # build-time generator of the shipped packs (run once per reference build, never at import)
+    "python/singlet/v2/packs_build.py",
 ]
 
 [tool.coverage.report]

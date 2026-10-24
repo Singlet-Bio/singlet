@@ -1,0 +1,11 @@
+{
+ "exon_raw": 14846254,
+ "intron_raw": 14820791,
+ "names_zstd19_each": 3835481,
+ "names_xz9e_each": 3569148,
+ "vocab_json_raw": 3094668,
+ "vocab_json_deflate9": 275628,
+ "vocab_json_zstd19": 210727,
+ "vocab_json_xz9e": 163476,
+ "build": "GRCh38-2024-A"
+}

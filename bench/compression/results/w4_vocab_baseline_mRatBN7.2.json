@@ -1,0 +1,11 @@
+{
+ "exon_raw": 11280859,
+ "intron_raw": 11339984,
+ "names_zstd19_each": 2935935,
+ "names_xz9e_each": 2741092,
+ "vocab_json_raw": 2525134,
+ "vocab_json_deflate9": 229357,
+ "vocab_json_zstd19": 182636,
+ "vocab_json_xz9e": 143680,
+ "build": "mRatBN7.2"
+}

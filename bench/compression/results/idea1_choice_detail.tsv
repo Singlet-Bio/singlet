@@ -1,0 +1,15 @@
+sample	member	best	best_py_bits	pooled_py_bits
+brain_sn_v3_deep	exon	only_m_brain_a	9.382	9.449
+brain_sn_v3_deep	intron	only_m_brain_a	8.1	8.253
+brain_sn_v3_intronic	exon	only_m_brain_d	10.404	10.812
+brain_sn_v3_intronic	intron	GSE285936	7.665	7.665
+pbmc_v2_shallow	exon	only_h_c	7.864	8.654
+pbmc_v2_shallow	intron	only_h_c	12.556	12.718
+pbmc_v2_typical	exon	only_h_c	6.357	7.511
+pbmc_v2_typical	intron	only_h_c	8.678	8.846
+pbmc_v3_lowgenes	exon	only_h_c	11.756	12.371
+pbmc_v3_lowgenes	intron	GSE244263	12.864	12.864
+tcell_5p	exon	only_h_b	6.578	7.342
+tcell_5p	intron	only_h_b	10.475	10.978
+tumor_3p	exon	only_h_pbmc_a	14.649	14.762
+tumor_3p	intron	only_h_b	16.072	16.125

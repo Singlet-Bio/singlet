@@ -1,0 +1,11 @@
+{
+ "exon_raw": 11132844,
+ "intron_raw": 11003222,
+ "names_zstd19_each": 2924446,
+ "names_xz9e_each": 2738440,
+ "vocab_json_raw": 2972330,
+ "vocab_json_deflate9": 230695,
+ "vocab_json_zstd19": 168014,
+ "vocab_json_xz9e": 128944,
+ "build": "Mmul_10"
+}

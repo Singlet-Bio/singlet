@@ -1,0 +1,12 @@
+test	member	n_train	last_added	presence_bits_per_nnz	frac_features_seen
+pbmc_v2_typical	exon	1	h_pbmc_a	6.87665865519201	0.39574384566131593
+pbmc_v2_typical	exon	2	h_c	5.347907156270828	0.4670476227248011
+pbmc_v2_typical	exon	3	h_b	5.788731375400025	0.5110023584526234
+pbmc_v2_typical	exon	4	tcell_5p	6.184878333503312	0.5334639652248896
+pbmc_v2_typical	exon	5	pbmc_v3_lowgenes	6.182820374897598	0.5376017143022616
+pbmc_v2_typical	exon	6	tumor_3p	6.18565319198266	0.5445419357329704
+pbmc_v2_typical	exon	7	pbmc_v2_shallow	5.816526575231491	0.5490690064575913
+brain_sn_v3_deep	exon	1	m_brain_a	8.92076182138081	0.2755862269058203
+brain_sn_v3_deep	exon	2	m_brain_c	8.750581880473149	0.3504590340597055
+brain_sn_v3_deep	exon	3	m_brain_d	8.873132339398941	0.4089884671578227
+brain_sn_v3_deep	exon	4	brain_sn_v3_intronic	8.968305847741728	0.4314479778668905

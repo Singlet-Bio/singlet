@@ -1,0 +1,8 @@
+file	n	called	calls_bytes	tsv_bytes	bitmap_raw_bytes	ok
+corpus/brain_sn_v3_deep/exon_counts.1pz	84424	3288	195	164457	10553	1
+corpus/brain_sn_v3_intronic/exon_counts.1pz	78894	8743	385	437207	9862	1
+corpus/pbmc_v2_shallow/exon_counts.1pz	96446	41725	1123	2086307	12056	1
+corpus/pbmc_v2_typical/exon_counts.1pz	15185	5428	172	271457	1899	1
+corpus/pbmc_v3_lowgenes/exon_counts.1pz	71061	11124	224	556257	8883	1
+corpus/tcell_5p/exon_counts.1pz	69249	12363	645	618207	8657	1
+corpus/tumor_3p/exon_counts.1pz	25067	3820	316	191057	3134	1

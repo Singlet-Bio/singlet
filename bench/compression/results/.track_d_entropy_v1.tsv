@@ -1,0 +1,1009 @@
+sample	member	subset	quantity	bits	bits_per_nnz	bytes	nnz	note
+brain_sn_v3_deep	exon	all	w_H0_gap_pooled	5.59875e+07	8.81788	6.99843e+06	6349311	order-0 of all gap symbols, one table
+brain_sn_v3_deep	exon	all	w_H0_gap_pooled_mdl	5.66233e+07	8.91802	7.07791e+06	6349311	+0.5 log2(n) per used symbol
+brain_sn_v3_deep	exon	all	w_H0_gap_by_valclass	5.58036e+07	8.78892	6.97545e+06	6349311	separate tables for value==1 groups and value>1 groups
+brain_sn_v3_deep	exon	all	w_H0_gap_by_valclass_mdl	5.65338e+07	8.90392	7.06672e+06	6349311	
+brain_sn_v3_deep	exon	all	w_H0_meta	2.25359e+06	0.354934	281698	6349311	order-0: groups-per-column + value + run-count symbols (separate tables)
+brain_sn_v3_deep	exon	all	w_H0_total	5.80571e+07	9.14385	7.25714e+06	6349311	by-valclass gaps + meta
+brain_sn_v3_deep	exon	all	w_H0_total_mdl	5.87873e+07	9.25885	7.34842e+06	6349311	with MDL param cost on gaps
+brain_sn_v3_deep	exon	cells	w_H0_gap_pooled	2.36895e+07	7.21486	2.96119e+06	3283431	order-0 of all gap symbols, one table
+brain_sn_v3_deep	exon	cells	w_H0_gap_pooled_mdl	2.38441e+07	7.26196	2.98052e+06	3283431	+0.5 log2(n) per used symbol
+brain_sn_v3_deep	exon	cells	w_H0_gap_by_valclass	2.36717e+07	7.20943	2.95896e+06	3283431	separate tables for value==1 groups and value>1 groups
+brain_sn_v3_deep	exon	cells	w_H0_gap_by_valclass_mdl	2.38788e+07	7.27251	2.98485e+06	3283431	
+brain_sn_v3_deep	exon	cells	w_H0_meta	307686	0.0937088	38460.8	3283431	order-0: groups-per-column + value + run-count symbols (separate tables)
+brain_sn_v3_deep	exon	cells	w_H0_total	2.39794e+07	7.30314	2.99742e+06	3283431	by-valclass gaps + meta
+brain_sn_v3_deep	exon	cells	w_H0_total_mdl	2.41865e+07	7.36622	3.02331e+06	3283431	with MDL param cost on gaps
+brain_sn_v3_deep	exon	empties	w_H0_gap_pooled	3.14633e+07	10.2624	3.93291e+06	3065880	order-0 of all gap symbols, one table
+brain_sn_v3_deep	exon	empties	w_H0_gap_pooled_mdl	3.20656e+07	10.4589	4.0082e+06	3065880	+0.5 log2(n) per used symbol
+brain_sn_v3_deep	exon	empties	w_H0_gap_by_valclass	3.10794e+07	10.1372	3.88493e+06	3065880	separate tables for value==1 groups and value>1 groups
+brain_sn_v3_deep	exon	empties	w_H0_gap_by_valclass_mdl	3.17384e+07	10.3521	3.9673e+06	3065880	
+brain_sn_v3_deep	exon	empties	w_H0_meta	1.89602e+06	0.618427	237003	3065880	order-0: groups-per-column + value + run-count symbols (separate tables)
+brain_sn_v3_deep	exon	empties	w_H0_total	3.29754e+07	10.7556	4.12193e+06	3065880	by-valclass gaps + meta
+brain_sn_v3_deep	exon	empties	w_H0_total_mdl	3.36345e+07	10.9706	4.20431e+06	3065880	with MDL param cost on gaps
+brain_sn_v3_deep	exon	all	comb_presence_m	7.5661e+07	11.9164	9.45763e+06	6349311	sum_j log2 C(m, nnz_j), m=all rows
+brain_sn_v3_deep	exon	all	comb_presence_meff	6.74294e+07	10.62	8.42867e+06	6349311	sum_j log2 C(m_eff, nnz_j), m_eff=157383 rows with >=1 nnz
+brain_sn_v3_deep	exon	all	comb_composition	7.07421e+06	1.11417	884276	6349311	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+brain_sn_v3_deep	exon	all	side_H0_nnzj	540618	0.085146	67577.3	6349311	order-0 of per-column nnz
+brain_sn_v3_deep	exon	all	side_H0_kj	594849	0.0936872	74356.2	6349311	order-0 of per-column UMI total
+brain_sn_v3_deep	exon	all	side_H0_kj_mdl	612008	0.0963897	76501	6349311	with MDL param cost
+brain_sn_v3_deep	exon	cells	comb_presence_m	3.21427e+07	9.78935	4.01783e+06	3283431	sum_j log2 C(m, nnz_j), m=all rows
+brain_sn_v3_deep	exon	cells	comb_presence_meff	2.78802e+07	8.49118	3.48503e+06	3283431	sum_j log2 C(m_eff, nnz_j), m_eff=157383 rows with >=1 nnz
+brain_sn_v3_deep	exon	cells	comb_composition	3.30905e+06	1.0078	413631	3283431	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+brain_sn_v3_deep	exon	cells	side_H0_nnzj	33749.6	0.0102787	4218.69	3283431	order-0 of per-column nnz
+brain_sn_v3_deep	exon	cells	side_H0_kj	34280.2	0.0104403	4285.02	3283431	order-0 of per-column UMI total
+brain_sn_v3_deep	exon	cells	side_H0_kj_mdl	43982.9	0.0133954	5497.86	3283431	with MDL param cost
+brain_sn_v3_deep	exon	empties	comb_presence_m	4.35184e+07	14.1944	5.4398e+06	3065880	sum_j log2 C(m, nnz_j), m=all rows
+brain_sn_v3_deep	exon	empties	comb_presence_meff	3.95492e+07	12.8998	4.94365e+06	3065880	sum_j log2 C(m_eff, nnz_j), m_eff=157383 rows with >=1 nnz
+brain_sn_v3_deep	exon	empties	comb_composition	3.76516e+06	1.22809	470645	3065880	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+brain_sn_v3_deep	exon	empties	side_H0_nnzj	487676	0.159066	60959.5	3065880	order-0 of per-column nnz
+brain_sn_v3_deep	exon	empties	side_H0_kj	540691	0.176358	67586.4	3065880	order-0 of per-column UMI total
+brain_sn_v3_deep	exon	empties	side_H0_kj_mdl	544548	0.177616	68068.5	3065880	with MDL param cost
+brain_sn_v3_deep	exon	cells	pres_feat_plugin	2.02961e+07	6.18136	2.53701e+06	3283431	sum_f N h(p_f), in-sample
+brain_sn_v3_deep	exon	cells	pres_featdepth_plugin	1.90112e+07	5.79004	2.3764e+06	3283431	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+brain_sn_v3_deep	exon	cells	val_H0_plugin	2.00711e+06	0.611283	250888	3283431	order-0 of values (capped 4096)
+brain_sn_v3_deep	exon	cells	pres_feat_cv	2.0759e+07	6.32235	2.59487e+06	3283431	alpha=[30, 30]
+brain_sn_v3_deep	exon	cells	pres_featdepth_cv	2.02531e+07	6.16829	2.53164e+06	3283431	alpha=[100000.0, 100000.0]
+brain_sn_v3_deep	exon	cells	val_global_cv	2.02914e+06	0.617993	253642	3283431	order-0 value table, alphabet 1..12+
+brain_sn_v3_deep	exon	cells	val_ratectx_cv	1.65654e+06	0.504516	207068	3283431	value table by context log2(k_j*q_f)
+brain_sn_v3_deep	exon	cells	M1_feat_cv_total	2.27881e+07	6.94034	2.84852e+06	3283431	per-feature presence + order-0 values, CV
+brain_sn_v3_deep	exon	cells	M2_featdepth_cv_total	2.19097e+07	6.6728	2.73871e+06	3283431	per-feature x depth presence + rate-context values, CV
+brain_sn_v3_deep	exon	empties	pres_feat_plugin	2.93797e+07	9.58279	3.67246e+06	3065880	sum_f N h(p_f), in-sample
+brain_sn_v3_deep	exon	empties	pres_featdepth_plugin	2.7352e+07	8.92143	3.419e+06	3065880	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+brain_sn_v3_deep	exon	empties	val_H0_plugin	1.83531e+06	0.598625	229414	3065880	order-0 of values (capped 4096)
+brain_sn_v3_deep	exon	empties	pres_feat_cv	2.97948e+07	9.71819	3.72435e+06	3065880	alpha=[1000, 1000]
+brain_sn_v3_deep	exon	empties	pres_featdepth_cv	2.89538e+07	9.44389	3.61923e+06	3065880	alpha=[100000.0, 100000.0]
+brain_sn_v3_deep	exon	empties	val_global_cv	1.886e+06	0.615159	235750	3065880	order-0 value table, alphabet 1..12+
+brain_sn_v3_deep	exon	empties	val_ratectx_cv	1.08749e+06	0.354706	135936	3065880	value table by context log2(k_j*q_f)
+brain_sn_v3_deep	exon	empties	M1_feat_cv_total	3.16808e+07	10.3334	3.9601e+06	3065880	per-feature presence + order-0 values, CV
+brain_sn_v3_deep	exon	empties	M2_featdepth_cv_total	3.00413e+07	9.79859	3.75516e+06	3065880	per-feature x depth presence + rate-context values, CV
+brain_sn_v3_deep	exon	all	pres_feat_plugin	5.97548e+07	9.41123	7.46935e+06	6349311	sum_f N h(p_f), in-sample
+brain_sn_v3_deep	exon	all	pres_featdepth_plugin	4.64494e+07	7.31566	5.80617e+06	6349311	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+brain_sn_v3_deep	exon	all	val_H0_plugin	3.94536e+06	0.621384	493170	6349311	order-0 of values (capped 4096)
+brain_sn_v3_deep	exon	all	pres_feat_cv	6.02492e+07	9.48909	7.53114e+06	6349311	alpha=[1000, 1000]
+brain_sn_v3_deep	exon	all	pres_featdepth_cv	4.88365e+07	7.69162	6.10456e+06	6349311	alpha=[10000.0, 10000.0]
+brain_sn_v3_deep	exon	all	val_global_cv	4.01042e+06	0.63163	501302	6349311	order-0 value table, alphabet 1..12+
+brain_sn_v3_deep	exon	all	val_ratectx_cv	2.6783e+06	0.421825	334787	6349311	value table by context log2(k_j*q_f)
+brain_sn_v3_deep	exon	all	M1_feat_cv_total	6.42596e+07	10.1207	8.03245e+06	6349311	per-feature presence + order-0 values, CV
+brain_sn_v3_deep	exon	all	M2_featdepth_cv_total	5.15148e+07	8.11344	6.43935e+06	6349311	per-feature x depth presence + rate-context values, CV
+brain_sn_v3_deep	exon	empties	amb_loo_bits	2.93839e+07	9.58417	3.67299e+06	3065880	leave-one-droplet-out multinomial, prior=cells profile delta=0.1 gamma=2.85e+05
+brain_sn_v3_deep	exon	empties	amb_plugin_bits	2.90871e+07	9.48737	3.63589e+06	3065880	same smoothing, in-sample p (optimistic)
+brain_sn_v3_deep	exon	empties	amb_plugin_unsmoothed_bits	2.9069e+07	9.48146	3.63363e+06	3065880	in-sample p, no prior (most optimistic)
+brain_sn_v3_deep	exon	empties	amb_entropy_mc_bits	2.94993e+07	9.6218	3.68741e+06	3065880	sum_j H(Mult(k_j,p*)) Monte Carlo R=3, sd=2254 bits; exact only if droplets are exchangeable multinomial draws
+brain_sn_v3_deep	exon	empties	amb_entropy_mc_mle_bits	2.87136e+07	9.36554	3.5892e+06	3065880	sum_j H(Mult(k_j, p_hat)) with the unsmoothed in-sample MLE profile (R=3, sd=6815); lower-bound flavour
+brain_sn_v3_deep	exon	empties	amb_side_H0_kj	533452	0.173996	66681.5	3065880	order-0 of k_j over 80220 nonzero empties (+916 all-zero columns not counted)
+brain_sn_v3_deep	intron	all	w_H0_gap_pooled	5.39737e+07	8.08219	6.74671e+06	6678099	order-0 of all gap symbols, one table
+brain_sn_v3_deep	intron	all	w_H0_gap_pooled_mdl	5.46014e+07	8.17619	6.82517e+06	6678099	+0.5 log2(n) per used symbol
+brain_sn_v3_deep	intron	all	w_H0_gap_by_valclass	5.38722e+07	8.06699	6.73402e+06	6678099	separate tables for value==1 groups and value>1 groups
+brain_sn_v3_deep	intron	all	w_H0_gap_by_valclass_mdl	5.46153e+07	8.17827	6.82691e+06	6678099	
+brain_sn_v3_deep	intron	all	w_H0_meta	1.70563e+06	0.255406	213204	6678099	order-0: groups-per-column + value + run-count symbols (separate tables)
+brain_sn_v3_deep	intron	all	w_H0_total	5.55778e+07	8.3224	6.94723e+06	6678099	by-valclass gaps + meta
+brain_sn_v3_deep	intron	all	w_H0_total_mdl	5.63209e+07	8.43368	7.04012e+06	6678099	with MDL param cost on gaps
+brain_sn_v3_deep	intron	cells	w_H0_gap_pooled	3.2495e+07	6.91992	4.06188e+06	4695868	order-0 of all gap symbols, one table
+brain_sn_v3_deep	intron	cells	w_H0_gap_pooled_mdl	3.26597e+07	6.95498	4.08246e+06	4695868	+0.5 log2(n) per used symbol
+brain_sn_v3_deep	intron	cells	w_H0_gap_by_valclass	3.24673e+07	6.91401	4.05841e+06	4695868	separate tables for value==1 groups and value>1 groups
+brain_sn_v3_deep	intron	cells	w_H0_gap_by_valclass_mdl	3.26959e+07	6.96271	4.08699e+06	4695868	
+brain_sn_v3_deep	intron	cells	w_H0_meta	419789	0.0893953	52473.6	4695868	order-0: groups-per-column + value + run-count symbols (separate tables)
+brain_sn_v3_deep	intron	cells	w_H0_total	3.28871e+07	7.00341	4.11088e+06	4695868	by-valclass gaps + meta
+brain_sn_v3_deep	intron	cells	w_H0_total_mdl	3.31157e+07	7.0521	4.13947e+06	4695868	with MDL param cost on gaps
+brain_sn_v3_deep	intron	empties	w_H0_gap_pooled	2.05211e+07	10.3525	2.56514e+06	1982231	order-0 of all gap symbols, one table
+brain_sn_v3_deep	intron	empties	w_H0_gap_pooled_mdl	2.1095e+07	10.6421	2.63688e+06	1982231	+0.5 log2(n) per used symbol
+brain_sn_v3_deep	intron	empties	w_H0_gap_by_valclass	2.03248e+07	10.2535	2.5406e+06	1982231	separate tables for value==1 groups and value>1 groups
+brain_sn_v3_deep	intron	empties	w_H0_gap_by_valclass_mdl	2.09504e+07	10.5691	2.6188e+06	1982231	
+brain_sn_v3_deep	intron	empties	w_H0_meta	1.19973e+06	0.60524	149966	1982231	order-0: groups-per-column + value + run-count symbols (separate tables)
+brain_sn_v3_deep	intron	empties	w_H0_total	2.15245e+07	10.8587	2.69057e+06	1982231	by-valclass gaps + meta
+brain_sn_v3_deep	intron	empties	w_H0_total_mdl	2.21501e+07	11.1743	2.76877e+06	1982231	with MDL param cost on gaps
+brain_sn_v3_deep	intron	all	comb_presence_m	6.90023e+07	10.3326	8.62528e+06	6678099	sum_j log2 C(m, nnz_j), m=all rows
+brain_sn_v3_deep	intron	all	comb_presence_meff	6.2276e+07	9.32541	7.7845e+06	6678099	sum_j log2 C(m_eff, nnz_j), m_eff=153451 rows with >=1 nnz
+brain_sn_v3_deep	intron	all	comb_composition	6.07102e+06	0.909094	758877	6678099	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+brain_sn_v3_deep	intron	all	side_H0_nnzj	482640	0.072272	60329.9	6678099	order-0 of per-column nnz
+brain_sn_v3_deep	intron	all	side_H0_kj	506916	0.0759072	63364.5	6678099	order-0 of per-column UMI total
+brain_sn_v3_deep	intron	all	side_H0_kj_mdl	528076	0.0790758	66009.5	6678099	with MDL param cost
+brain_sn_v3_deep	intron	cells	comb_presence_m	4.19932e+07	8.94259	5.24916e+06	4695868	sum_j log2 C(m, nnz_j), m=all rows
+brain_sn_v3_deep	intron	cells	comb_presence_meff	3.72577e+07	7.93414	4.65721e+06	4695868	sum_j log2 C(m_eff, nnz_j), m_eff=153451 rows with >=1 nnz
+brain_sn_v3_deep	intron	cells	comb_composition	5.07085e+06	1.07985	633856	4695868	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+brain_sn_v3_deep	intron	cells	side_H0_nnzj	35245	0.00750553	4405.62	4695868	order-0 of per-column nnz
+brain_sn_v3_deep	intron	cells	side_H0_kj	35961.5	0.00765813	4495.19	4695868	order-0 of per-column UMI total
+brain_sn_v3_deep	intron	cells	side_H0_kj_mdl	48830.4	0.0103986	6103.8	4695868	with MDL param cost
+brain_sn_v3_deep	intron	empties	comb_presence_m	2.7009e+07	13.6256	3.37613e+06	1982231	sum_j log2 C(m, nnz_j), m=all rows
+brain_sn_v3_deep	intron	empties	comb_presence_meff	2.50184e+07	12.6213	3.12729e+06	1982231	sum_j log2 C(m_eff, nnz_j), m_eff=153451 rows with >=1 nnz
+brain_sn_v3_deep	intron	empties	comb_composition	1.00017e+06	0.504566	125021	1982231	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+brain_sn_v3_deep	intron	empties	side_H0_nnzj	429005	0.216425	53625.6	1982231	order-0 of per-column nnz
+brain_sn_v3_deep	intron	empties	side_H0_kj	452373	0.228214	56546.6	1982231	order-0 of per-column UMI total
+brain_sn_v3_deep	intron	empties	side_H0_kj_mdl	458276	0.231192	57284.5	1982231	with MDL param cost
+brain_sn_v3_deep	intron	cells	pres_feat_plugin	2.66924e+07	5.68423	3.33655e+06	4695868	sum_f N h(p_f), in-sample
+brain_sn_v3_deep	intron	cells	pres_featdepth_plugin	2.4956e+07	5.31447	3.1195e+06	4695868	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+brain_sn_v3_deep	intron	cells	val_H0_plugin	4.37365e+06	0.931382	546706	4695868	order-0 of values (capped 4096)
+brain_sn_v3_deep	intron	cells	pres_feat_cv	2.71053e+07	5.77216	3.38817e+06	4695868	alpha=[30, 30]
+brain_sn_v3_deep	intron	cells	pres_featdepth_cv	2.61089e+07	5.55996	3.26361e+06	4695868	alpha=[10000.0, 10000.0]
+brain_sn_v3_deep	intron	cells	val_global_cv	4.38425e+06	0.933639	548031	4695868	order-0 value table, alphabet 1..12+
+brain_sn_v3_deep	intron	cells	val_ratectx_cv	3.26537e+06	0.695371	408171	4695868	value table by context log2(k_j*q_f)
+brain_sn_v3_deep	intron	cells	M1_feat_cv_total	3.14896e+07	6.7058	3.9362e+06	4695868	per-feature presence + order-0 values, CV
+brain_sn_v3_deep	intron	cells	M2_featdepth_cv_total	2.93742e+07	6.25533	3.67178e+06	4695868	per-feature x depth presence + rate-context values, CV
+brain_sn_v3_deep	intron	empties	pres_feat_plugin	2.07352e+07	10.4606	2.5919e+06	1982231	sum_f N h(p_f), in-sample
+brain_sn_v3_deep	intron	empties	pres_featdepth_plugin	1.72608e+07	8.70776	2.1576e+06	1982231	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+brain_sn_v3_deep	intron	empties	val_H0_plugin	1.07767e+06	0.543663	134708	1982231	order-0 of values (capped 4096)
+brain_sn_v3_deep	intron	empties	pres_feat_cv	2.11225e+07	10.6559	2.64031e+06	1982231	alpha=[3000, 3000]
+brain_sn_v3_deep	intron	empties	pres_featdepth_cv	1.90492e+07	9.60999	2.38115e+06	1982231	alpha=[100000.0, 100000.0]
+brain_sn_v3_deep	intron	empties	val_global_cv	1.07885e+06	0.54426	134856	1982231	order-0 value table, alphabet 1..12+
+brain_sn_v3_deep	intron	empties	val_ratectx_cv	706291	0.356311	88286.4	1982231	value table by context log2(k_j*q_f)
+brain_sn_v3_deep	intron	empties	M1_feat_cv_total	2.22013e+07	11.2002	2.77516e+06	1982231	per-feature presence + order-0 values, CV
+brain_sn_v3_deep	intron	empties	M2_featdepth_cv_total	1.97555e+07	9.9663	2.46944e+06	1982231	per-feature x depth presence + rate-context values, CV
+brain_sn_v3_deep	intron	all	pres_feat_plugin	6.47664e+07	9.69832	8.0958e+06	6678099	sum_f N h(p_f), in-sample
+brain_sn_v3_deep	intron	all	pres_featdepth_plugin	4.24108e+07	6.35073	5.30135e+06	6678099	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+brain_sn_v3_deep	intron	all	val_H0_plugin	5.50718e+06	0.824663	688398	6678099	order-0 of values (capped 4096)
+brain_sn_v3_deep	intron	all	pres_feat_cv	6.52127e+07	9.76516	8.15158e+06	6678099	alpha=[1000, 1000]
+brain_sn_v3_deep	intron	all	pres_featdepth_cv	4.47925e+07	6.70737	5.59906e+06	6678099	alpha=[10000.0, 10000.0]
+brain_sn_v3_deep	intron	all	val_global_cv	5.51888e+06	0.826414	689859	6678099	order-0 value table, alphabet 1..12+
+brain_sn_v3_deep	intron	all	val_ratectx_cv	4.04195e+06	0.605254	505244	6678099	value table by context log2(k_j*q_f)
+brain_sn_v3_deep	intron	all	M1_feat_cv_total	7.07316e+07	10.5916	8.84144e+06	6678099	per-feature presence + order-0 values, CV
+brain_sn_v3_deep	intron	all	M2_featdepth_cv_total	4.88345e+07	7.31263	6.10431e+06	6678099	per-feature x depth presence + rate-context values, CV
+brain_sn_v3_deep	intron	empties	amb_loo_bits	1.89598e+07	9.56488	2.36998e+06	1982231	leave-one-droplet-out multinomial, prior=cells profile delta=0.1 gamma=4.58e+05
+brain_sn_v3_deep	intron	empties	amb_plugin_bits	1.87055e+07	9.43658	2.33819e+06	1982231	same smoothing, in-sample p (optimistic)
+brain_sn_v3_deep	intron	empties	amb_plugin_unsmoothed_bits	1.86791e+07	9.42327	2.33489e+06	1982231	in-sample p, no prior (most optimistic)
+brain_sn_v3_deep	intron	empties	amb_entropy_mc_bits	1.93449e+07	9.75915	2.41811e+06	1982231	sum_j H(Mult(k_j,p*)) Monte Carlo R=3, sd=10872 bits; exact only if droplets are exchangeable multinomial draws
+brain_sn_v3_deep	intron	empties	amb_entropy_mc_mle_bits	1.8871e+07	9.52007	2.35887e+06	1982231	sum_j H(Mult(k_j, p_hat)) with the unsmoothed in-sample MLE profile (R=3, sd=364); lower-bound flavour
+brain_sn_v3_deep	intron	empties	amb_side_H0_kj	445037	0.224513	55629.6	1982231	order-0 of k_j over 80205 nonzero empties (+931 all-zero columns not counted)
+brain_sn_v3_intronic	exon	all	w_H0_gap_pooled	1.35214e+07	9.79219	1.69017e+06	1380834	order-0 of all gap symbols, one table
+brain_sn_v3_intronic	exon	all	w_H0_gap_pooled_mdl	1.38586e+07	10.0364	1.73233e+06	1380834	+0.5 log2(n) per used symbol
+brain_sn_v3_intronic	exon	all	w_H0_gap_by_valclass	1.32397e+07	9.58818	1.65496e+06	1380834	separate tables for value==1 groups and value>1 groups
+brain_sn_v3_intronic	exon	all	w_H0_gap_by_valclass_mdl	1.36033e+07	9.85151	1.70041e+06	1380834	
+brain_sn_v3_intronic	exon	all	w_H0_meta	1.23221e+06	0.892364	154026	1380834	order-0: groups-per-column + value + run-count symbols (separate tables)
+brain_sn_v3_intronic	exon	all	w_H0_total	1.44719e+07	10.4805	1.80899e+06	1380834	by-valclass gaps + meta
+brain_sn_v3_intronic	exon	all	w_H0_total_mdl	1.48355e+07	10.7439	1.85444e+06	1380834	with MDL param cost on gaps
+brain_sn_v3_intronic	exon	cells	w_H0_gap_pooled	7.97518e+06	9.23858	996898	863248	order-0 of all gap symbols, one table
+brain_sn_v3_intronic	exon	cells	w_H0_gap_pooled_mdl	8.14944e+06	9.44044	1.01868e+06	863248	+0.5 log2(n) per used symbol
+brain_sn_v3_intronic	exon	cells	w_H0_gap_by_valclass	7.92093e+06	9.17573	990116	863248	separate tables for value==1 groups and value>1 groups
+brain_sn_v3_intronic	exon	cells	w_H0_gap_by_valclass_mdl	8.11653e+06	9.40232	1.01457e+06	863248	
+brain_sn_v3_intronic	exon	cells	w_H0_meta	304559	0.352806	38069.9	863248	order-0: groups-per-column + value + run-count symbols (separate tables)
+brain_sn_v3_intronic	exon	cells	w_H0_total	8.22549e+06	9.52853	1.02819e+06	863248	by-valclass gaps + meta
+brain_sn_v3_intronic	exon	cells	w_H0_total_mdl	8.42109e+06	9.75513	1.05264e+06	863248	with MDL param cost on gaps
+brain_sn_v3_intronic	exon	empties	w_H0_gap_pooled	5.35746e+06	10.3509	669682	517586	order-0 of all gap symbols, one table
+brain_sn_v3_intronic	exon	empties	w_H0_gap_pooled_mdl	5.64769e+06	10.9116	705962	517586	+0.5 log2(n) per used symbol
+brain_sn_v3_intronic	exon	empties	w_H0_gap_by_valclass	5.12854e+06	9.90857	641067	517586	separate tables for value==1 groups and value>1 groups
+brain_sn_v3_intronic	exon	empties	w_H0_gap_by_valclass_mdl	5.42259e+06	10.4767	677824	517586	
+brain_sn_v3_intronic	exon	empties	w_H0_meta	850804	1.64379	106351	517586	order-0: groups-per-column + value + run-count symbols (separate tables)
+brain_sn_v3_intronic	exon	empties	w_H0_total	5.97934e+06	11.5524	747417	517586	by-valclass gaps + meta
+brain_sn_v3_intronic	exon	empties	w_H0_total_mdl	6.2734e+06	12.1205	784175	517586	with MDL param cost on gaps
+brain_sn_v3_intronic	exon	all	comb_presence_m	1.98582e+07	14.3813	2.48228e+06	1380834	sum_j log2 C(m, nnz_j), m=all rows
+brain_sn_v3_intronic	exon	all	comb_presence_meff	1.66601e+07	12.0652	2.08251e+06	1380834	sum_j log2 C(m_eff, nnz_j), m_eff=77551 rows with >=1 nnz
+brain_sn_v3_intronic	exon	all	comb_composition	1.48522e+06	1.0756	185653	1380834	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+brain_sn_v3_intronic	exon	all	side_H0_nnzj	371735	0.26921	46466.8	1380834	order-0 of per-column nnz
+brain_sn_v3_intronic	exon	all	side_H0_kj	415195	0.300684	51899.4	1380834	order-0 of per-column UMI total
+brain_sn_v3_intronic	exon	all	side_H0_kj_mdl	419107	0.303518	52388.4	1380834	with MDL param cost
+brain_sn_v3_intronic	exon	cells	comb_presence_m	1.13371e+07	13.1331	1.41714e+06	863248	sum_j log2 C(m, nnz_j), m=all rows
+brain_sn_v3_intronic	exon	cells	comb_presence_meff	9.3374e+06	10.8166	1.16718e+06	863248	sum_j log2 C(m_eff, nnz_j), m_eff=77551 rows with >=1 nnz
+brain_sn_v3_intronic	exon	cells	comb_composition	970514	1.12426	121314	863248	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+brain_sn_v3_intronic	exon	cells	side_H0_nnzj	65336.5	0.0756868	8167.06	863248	order-0 of per-column nnz
+brain_sn_v3_intronic	exon	cells	side_H0_kj	69293.1	0.0802702	8661.64	863248	order-0 of per-column UMI total
+brain_sn_v3_intronic	exon	cells	side_H0_kj_mdl	72298.1	0.0837513	9037.27	863248	with MDL param cost
+brain_sn_v3_intronic	exon	empties	comb_presence_m	8.52115e+06	16.4633	1.06514e+06	517586	sum_j log2 C(m, nnz_j), m=all rows
+brain_sn_v3_intronic	exon	empties	comb_presence_meff	7.32265e+06	14.1477	915331	517586	sum_j log2 C(m_eff, nnz_j), m_eff=77551 rows with >=1 nnz
+brain_sn_v3_intronic	exon	empties	comb_composition	514710	0.994443	64338.7	517586	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+brain_sn_v3_intronic	exon	empties	side_H0_nnzj	269737	0.521143	33717.1	517586	order-0 of per-column nnz
+brain_sn_v3_intronic	exon	empties	side_H0_kj	308566	0.596163	38570.7	517586	order-0 of per-column UMI total
+brain_sn_v3_intronic	exon	empties	side_H0_kj_mdl	309185	0.59736	38648.2	517586	with MDL param cost
+brain_sn_v3_intronic	exon	cells	pres_feat_plugin	7.19501e+06	8.33481	899376	863248	sum_f N h(p_f), in-sample
+brain_sn_v3_intronic	exon	cells	pres_featdepth_plugin	6.82822e+06	7.90991	853527	863248	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+brain_sn_v3_intronic	exon	cells	val_H0_plugin	403039	0.466886	50379.8	863248	order-0 of values (capped 4096)
+brain_sn_v3_intronic	exon	cells	pres_feat_cv	7.46958e+06	8.65288	933698	863248	alpha=[300, 300]
+brain_sn_v3_intronic	exon	cells	pres_featdepth_cv	7.60122e+06	8.80537	950153	863248	alpha=[100000.0, 100000.0]
+brain_sn_v3_intronic	exon	cells	val_global_cv	417583	0.483735	52197.9	863248	order-0 value table, alphabet 1..12+
+brain_sn_v3_intronic	exon	cells	val_ratectx_cv	311669	0.361042	38958.6	863248	value table by context log2(k_j*q_f)
+brain_sn_v3_intronic	exon	cells	M1_feat_cv_total	7.88717e+06	9.13662	985896	863248	per-feature presence + order-0 values, CV
+brain_sn_v3_intronic	exon	cells	M2_featdepth_cv_total	7.91289e+06	9.16642	989111	863248	per-feature x depth presence + rate-context values, CV
+brain_sn_v3_intronic	exon	empties	pres_feat_plugin	5.02599e+06	9.71044	628248	517586	sum_f N h(p_f), in-sample
+brain_sn_v3_intronic	exon	empties	pres_featdepth_plugin	4.69778e+06	9.07633	587223	517586	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+brain_sn_v3_intronic	exon	empties	val_H0_plugin	554805	1.07191	69350.6	517586	order-0 of values (capped 4096)
+brain_sn_v3_intronic	exon	empties	pres_feat_cv	5.2249e+06	10.0948	653113	517586	alpha=[3000, 3000]
+brain_sn_v3_intronic	exon	empties	pres_featdepth_cv	5.34289e+06	10.3227	667861	517586	alpha=[100000.0, 100000.0]
+brain_sn_v3_intronic	exon	empties	val_global_cv	555196	1.07267	69399.6	517586	order-0 value table, alphabet 1..12+
+brain_sn_v3_intronic	exon	empties	val_ratectx_cv	296422	0.5727	37052.7	517586	value table by context log2(k_j*q_f)
+brain_sn_v3_intronic	exon	empties	M1_feat_cv_total	5.7801e+06	11.1674	722512	517586	per-feature presence + order-0 values, CV
+brain_sn_v3_intronic	exon	empties	M2_featdepth_cv_total	5.63931e+06	10.8954	704914	517586	per-feature x depth presence + rate-context values, CV
+brain_sn_v3_intronic	exon	all	pres_feat_plugin	1.40114e+07	10.147	1.75142e+06	1380834	sum_f N h(p_f), in-sample
+brain_sn_v3_intronic	exon	all	pres_featdepth_plugin	1.15649e+07	8.37531	1.44561e+06	1380834	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+brain_sn_v3_intronic	exon	all	val_H0_plugin	1.00873e+06	0.730519	126091	1380834	order-0 of values (capped 4096)
+brain_sn_v3_intronic	exon	all	pres_feat_cv	1.43183e+07	10.3693	1.78978e+06	1380834	alpha=[1000, 1000]
+brain_sn_v3_intronic	exon	all	pres_featdepth_cv	1.27945e+07	9.26581	1.59932e+06	1380834	alpha=[10000.0, 10000.0]
+brain_sn_v3_intronic	exon	all	val_global_cv	1.02163e+06	0.739863	127704	1380834	order-0 value table, alphabet 1..12+
+brain_sn_v3_intronic	exon	all	val_ratectx_cv	528249	0.382558	66031.1	1380834	value table by context log2(k_j*q_f)
+brain_sn_v3_intronic	exon	all	M1_feat_cv_total	1.53399e+07	11.1091	1.91749e+06	1380834	per-feature presence + order-0 values, CV
+brain_sn_v3_intronic	exon	all	M2_featdepth_cv_total	1.33228e+07	9.64836	1.66535e+06	1380834	per-feature x depth presence + rate-context values, CV
+brain_sn_v3_intronic	exon	empties	amb_loo_bits	5.05316e+06	9.76293	631644	517586	leave-one-droplet-out multinomial, prior=cells profile delta=0.1 gamma=1.6e+05
+brain_sn_v3_intronic	exon	empties	amb_plugin_bits	4.94735e+06	9.55851	618419	517586	same smoothing, in-sample p (optimistic)
+brain_sn_v3_intronic	exon	empties	amb_plugin_unsmoothed_bits	4.92196e+06	9.50945	615245	517586	in-sample p, no prior (most optimistic)
+brain_sn_v3_intronic	exon	empties	amb_entropy_mc_bits	5.3807e+06	10.3958	672588	517586	sum_j H(Mult(k_j,p*)) Monte Carlo R=3, sd=2372 bits; exact only if droplets are exchangeable multinomial draws
+brain_sn_v3_intronic	exon	empties	amb_entropy_mc_mle_bits	4.93784e+06	9.54014	617231	517586	sum_j H(Mult(k_j, p_hat)) with the unsmoothed in-sample MLE profile (R=3, sd=5964); lower-bound flavour
+brain_sn_v3_intronic	exon	empties	amb_side_H0_kj	292642	0.565399	36580.3	517586	order-0 of k_j over 67576 nonzero empties (+2575 all-zero columns not counted)
+brain_sn_v3_intronic	intron	all	w_H0_gap_pooled	6.78549e+07	8.33109	8.48186e+06	8144777	order-0 of all gap symbols, one table
+brain_sn_v3_intronic	intron	all	w_H0_gap_pooled_mdl	6.83729e+07	8.39469	8.54661e+06	8144777	+0.5 log2(n) per used symbol
+brain_sn_v3_intronic	intron	all	w_H0_gap_by_valclass	6.77948e+07	8.32371	8.47434e+06	8144777	separate tables for value==1 groups and value>1 groups
+brain_sn_v3_intronic	intron	all	w_H0_gap_by_valclass_mdl	6.84332e+07	8.4021	8.55415e+06	8144777	
+brain_sn_v3_intronic	intron	all	w_H0_meta	1.38848e+06	0.170475	173560	8144777	order-0: groups-per-column + value + run-count symbols (separate tables)
+brain_sn_v3_intronic	intron	all	w_H0_total	6.91832e+07	8.49418	8.6479e+06	8144777	by-valclass gaps + meta
+brain_sn_v3_intronic	intron	all	w_H0_total_mdl	6.98217e+07	8.57257	8.72771e+06	8144777	with MDL param cost on gaps
+brain_sn_v3_intronic	intron	cells	w_H0_gap_pooled	4.61366e+07	7.29484	5.76707e+06	6324550	order-0 of all gap symbols, one table
+brain_sn_v3_intronic	intron	cells	w_H0_gap_pooled_mdl	4.63643e+07	7.33085	5.79554e+06	6324550	+0.5 log2(n) per used symbol
+brain_sn_v3_intronic	intron	cells	w_H0_gap_by_valclass	4.611e+07	7.29063	5.76375e+06	6324550	separate tables for value==1 groups and value>1 groups
+brain_sn_v3_intronic	intron	cells	w_H0_gap_by_valclass_mdl	4.64232e+07	7.34016	5.8029e+06	6324550	
+brain_sn_v3_intronic	intron	cells	w_H0_meta	657469	0.103955	82183.7	6324550	order-0: groups-per-column + value + run-count symbols (separate tables)
+brain_sn_v3_intronic	intron	cells	w_H0_total	4.67674e+07	7.39459	5.84593e+06	6324550	by-valclass gaps + meta
+brain_sn_v3_intronic	intron	cells	w_H0_total_mdl	4.70807e+07	7.44411	5.88508e+06	6324550	with MDL param cost on gaps
+brain_sn_v3_intronic	intron	empties	w_H0_gap_pooled	2.03647e+07	11.188	2.54559e+06	1820227	order-0 of all gap symbols, one table
+brain_sn_v3_intronic	intron	empties	w_H0_gap_pooled_mdl	2.08211e+07	11.4388	2.60264e+06	1820227	+0.5 log2(n) per used symbol
+brain_sn_v3_intronic	intron	empties	w_H0_gap_by_valclass	2.03418e+07	11.1754	2.54273e+06	1820227	separate tables for value==1 groups and value>1 groups
+brain_sn_v3_intronic	intron	empties	w_H0_gap_by_valclass_mdl	2.08431e+07	11.4508	2.60539e+06	1820227	
+brain_sn_v3_intronic	intron	empties	w_H0_meta	570965	0.313678	71370.6	1820227	order-0: groups-per-column + value + run-count symbols (separate tables)
+brain_sn_v3_intronic	intron	empties	w_H0_total	2.09128e+07	11.4891	2.6141e+06	1820227	by-valclass gaps + meta
+brain_sn_v3_intronic	intron	empties	w_H0_total_mdl	2.14141e+07	11.7645	2.67676e+06	1820227	with MDL param cost on gaps
+brain_sn_v3_intronic	intron	all	comb_presence_m	8.90302e+07	10.931	1.11288e+07	8144777	sum_j log2 C(m, nnz_j), m=all rows
+brain_sn_v3_intronic	intron	all	comb_presence_meff	7.87456e+07	9.66823	9.8432e+06	8144777	sum_j log2 C(m_eff, nnz_j), m_eff=128466 rows with >=1 nnz
+brain_sn_v3_intronic	intron	all	comb_composition	5.29508e+06	0.65012	661886	8144777	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+brain_sn_v3_intronic	intron	all	side_H0_nnzj	497446	0.0610755	62180.7	8144777	order-0 of per-column nnz
+brain_sn_v3_intronic	intron	all	side_H0_kj	501727	0.0616011	62715.9	8144777	order-0 of per-column UMI total
+brain_sn_v3_intronic	intron	all	side_H0_kj_mdl	518621	0.0636753	64827.7	8144777	with MDL param cost
+brain_sn_v3_intronic	intron	cells	comb_presence_m	6.3081e+07	9.97399	7.88512e+06	6324550	sum_j log2 C(m, nnz_j), m=all rows
+brain_sn_v3_intronic	intron	cells	comb_presence_meff	5.50908e+07	8.71062	6.88635e+06	6324550	sum_j log2 C(m_eff, nnz_j), m_eff=128466 rows with >=1 nnz
+brain_sn_v3_intronic	intron	cells	comb_composition	5.08144e+06	0.803446	635179	6324550	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+brain_sn_v3_intronic	intron	cells	side_H0_nnzj	89173.6	0.0140996	11146.7	6324550	order-0 of per-column nnz
+brain_sn_v3_intronic	intron	cells	side_H0_kj	91960.8	0.0145403	11495.1	6324550	order-0 of per-column UMI total
+brain_sn_v3_intronic	intron	cells	side_H0_kj_mdl	104754	0.016563	13094.2	6324550	with MDL param cost
+brain_sn_v3_intronic	intron	empties	comb_presence_m	2.59492e+07	14.256	3.24365e+06	1820227	sum_j log2 C(m, nnz_j), m=all rows
+brain_sn_v3_intronic	intron	empties	comb_presence_meff	2.36548e+07	12.9955	2.95685e+06	1820227	sum_j log2 C(m_eff, nnz_j), m_eff=128466 rows with >=1 nnz
+brain_sn_v3_intronic	intron	empties	comb_composition	213649	0.117375	26706.1	1820227	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+brain_sn_v3_intronic	intron	empties	side_H0_nnzj	371336	0.204005	46417	1820227	order-0 of per-column nnz
+brain_sn_v3_intronic	intron	empties	side_H0_kj	372753	0.204784	46594.1	1820227	order-0 of per-column UMI total
+brain_sn_v3_intronic	intron	empties	side_H0_kj_mdl	376254	0.206707	47031.7	1820227	with MDL param cost
+brain_sn_v3_intronic	intron	cells	pres_feat_plugin	3.87384e+07	6.12508	4.8423e+06	6324550	sum_f N h(p_f), in-sample
+brain_sn_v3_intronic	intron	cells	pres_featdepth_plugin	3.68366e+07	5.82439	4.60458e+06	6324550	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+brain_sn_v3_intronic	intron	cells	val_H0_plugin	4.63227e+06	0.732426	579033	6324550	order-0 of values (capped 4096)
+brain_sn_v3_intronic	intron	cells	pres_feat_cv	3.91216e+07	6.18567	4.8902e+06	6324550	alpha=[30, 30]
+brain_sn_v3_intronic	intron	cells	pres_featdepth_cv	3.80586e+07	6.01759	4.75732e+06	6324550	alpha=[3000, 3000]
+brain_sn_v3_intronic	intron	cells	val_global_cv	4.63486e+06	0.732836	579357	6324550	order-0 value table, alphabet 1..12+
+brain_sn_v3_intronic	intron	cells	val_ratectx_cv	3.55671e+06	0.562365	444588	6324550	value table by context log2(k_j*q_f)
+brain_sn_v3_intronic	intron	cells	M1_feat_cv_total	4.37565e+07	6.91851	5.46956e+06	6324550	per-feature presence + order-0 values, CV
+brain_sn_v3_intronic	intron	cells	M2_featdepth_cv_total	4.16153e+07	6.57996	5.20191e+06	6324550	per-feature x depth presence + rate-context values, CV
+brain_sn_v3_intronic	intron	empties	pres_feat_plugin	1.97763e+07	10.8648	2.47204e+06	1820227	sum_f N h(p_f), in-sample
+brain_sn_v3_intronic	intron	empties	pres_featdepth_plugin	1.81883e+07	9.99232	2.27354e+06	1820227	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+brain_sn_v3_intronic	intron	empties	val_H0_plugin	281621	0.154717	35202.6	1820227	order-0 of values (capped 4096)
+brain_sn_v3_intronic	intron	empties	pres_feat_cv	2.00776e+07	11.0303	2.5097e+06	1820227	alpha=[1000, 1000]
+brain_sn_v3_intronic	intron	empties	pres_featdepth_cv	1.94105e+07	10.6638	2.42631e+06	1820227	alpha=[100000.0, 100000.0]
+brain_sn_v3_intronic	intron	empties	val_global_cv	281649	0.154733	35206.2	1820227	order-0 value table, alphabet 1..12+
+brain_sn_v3_intronic	intron	empties	val_ratectx_cv	239882	0.131787	29985.2	1820227	value table by context log2(k_j*q_f)
+brain_sn_v3_intronic	intron	empties	M1_feat_cv_total	2.03593e+07	11.185	2.54491e+06	1820227	per-feature presence + order-0 values, CV
+brain_sn_v3_intronic	intron	empties	M2_featdepth_cv_total	1.96504e+07	10.7956	2.45629e+06	1820227	per-feature x depth presence + rate-context values, CV
+brain_sn_v3_intronic	intron	all	pres_feat_plugin	7.34902e+07	9.02298	9.18627e+06	8144777	sum_f N h(p_f), in-sample
+brain_sn_v3_intronic	intron	all	pres_featdepth_plugin	5.51565e+07	6.77201	6.89456e+06	8144777	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+brain_sn_v3_intronic	intron	all	val_H0_plugin	5.07371e+06	0.622941	634214	8144777	order-0 of values (capped 4096)
+brain_sn_v3_intronic	intron	all	pres_feat_cv	7.38808e+07	9.07094	9.2351e+06	8144777	alpha=[300, 300]
+brain_sn_v3_intronic	intron	all	pres_featdepth_cv	5.72167e+07	7.02495	7.15209e+06	8144777	alpha=[3000, 3000]
+brain_sn_v3_intronic	intron	all	val_global_cv	5.0763e+06	0.623258	634537	8144777	order-0 value table, alphabet 1..12+
+brain_sn_v3_intronic	intron	all	val_ratectx_cv	3.72669e+06	0.457556	465836	8144777	value table by context log2(k_j*q_f)
+brain_sn_v3_intronic	intron	all	M1_feat_cv_total	7.89571e+07	9.6942	9.86964e+06	8144777	per-feature presence + order-0 values, CV
+brain_sn_v3_intronic	intron	all	M2_featdepth_cv_total	6.09434e+07	7.48251	7.61792e+06	8144777	per-feature x depth presence + rate-context values, CV
+brain_sn_v3_intronic	intron	empties	amb_loo_bits	1.89086e+07	10.388	2.36357e+06	1820227	leave-one-droplet-out multinomial, prior=cells profile delta=0.1 gamma=3.73e+05
+brain_sn_v3_intronic	intron	empties	amb_plugin_bits	1.87207e+07	10.2848	2.34008e+06	1820227	same smoothing, in-sample p (optimistic)
+brain_sn_v3_intronic	intron	empties	amb_plugin_unsmoothed_bits	1.8703e+07	10.2751	2.33787e+06	1820227	in-sample p, no prior (most optimistic)
+brain_sn_v3_intronic	intron	empties	amb_entropy_mc_bits	1.86271e+07	10.2334	2.32839e+06	1820227	sum_j H(Mult(k_j,p*)) Monte Carlo R=3, sd=2962 bits; exact only if droplets are exchangeable multinomial draws
+brain_sn_v3_intronic	intron	empties	amb_entropy_mc_mle_bits	1.86666e+07	10.2551	2.33333e+06	1820227	sum_j H(Mult(k_j, p_hat)) with the unsmoothed in-sample MLE profile (R=3, sd=1207); lower-bound flavour
+brain_sn_v3_intronic	intron	empties	amb_side_H0_kj	366377	0.201281	45797.2	1820227	order-0 of k_j over 69341 nonzero empties (+810 all-zero columns not counted)
+pbmc_v2_shallow	exon	all	w_H0_gap_pooled	4.10811e+07	7.74421	5.13514e+06	5304754	order-0 of all gap symbols, one table
+pbmc_v2_shallow	exon	all	w_H0_gap_pooled_mdl	4.14539e+07	7.81448	5.18174e+06	5304754	+0.5 log2(n) per used symbol
+pbmc_v2_shallow	exon	all	w_H0_gap_by_valclass	4.09822e+07	7.72557	5.12278e+06	5304754	separate tables for value==1 groups and value>1 groups
+pbmc_v2_shallow	exon	all	w_H0_gap_by_valclass_mdl	4.13787e+07	7.8003	5.17234e+06	5304754	
+pbmc_v2_shallow	exon	all	w_H0_meta	1.85776e+06	0.350207	232220	5304754	order-0: groups-per-column + value + run-count symbols (separate tables)
+pbmc_v2_shallow	exon	all	w_H0_total	4.284e+07	8.07578	5.355e+06	5304754	by-valclass gaps + meta
+pbmc_v2_shallow	exon	all	w_H0_total_mdl	4.32365e+07	8.15051	5.40456e+06	5304754	with MDL param cost on gaps
+pbmc_v2_shallow	exon	cells	w_H0_gap_pooled	2.40782e+07	7.48232	3.00977e+06	3218012	order-0 of all gap symbols, one table
+pbmc_v2_shallow	exon	cells	w_H0_gap_pooled_mdl	2.43604e+07	7.57002	3.04505e+06	3218012	+0.5 log2(n) per used symbol
+pbmc_v2_shallow	exon	cells	w_H0_gap_by_valclass	2.40116e+07	7.46163	3.00145e+06	3218012	separate tables for value==1 groups and value>1 groups
+pbmc_v2_shallow	exon	cells	w_H0_gap_by_valclass_mdl	2.43132e+07	7.55534	3.03915e+06	3218012	
+pbmc_v2_shallow	exon	cells	w_H0_meta	992246	0.308341	124031	3218012	order-0: groups-per-column + value + run-count symbols (separate tables)
+pbmc_v2_shallow	exon	cells	w_H0_total	2.50039e+07	7.76997	3.12548e+06	3218012	by-valclass gaps + meta
+pbmc_v2_shallow	exon	cells	w_H0_total_mdl	2.53054e+07	7.86368	3.16318e+06	3218012	with MDL param cost on gaps
+pbmc_v2_shallow	exon	empties	w_H0_gap_pooled	1.69447e+07	8.12019	2.11809e+06	2086742	order-0 of all gap symbols, one table
+pbmc_v2_shallow	exon	empties	w_H0_gap_pooled_mdl	1.72229e+07	8.25347	2.15286e+06	2086742	+0.5 log2(n) per used symbol
+pbmc_v2_shallow	exon	empties	w_H0_gap_by_valclass	1.69131e+07	8.10502	2.11414e+06	2086742	separate tables for value==1 groups and value>1 groups
+pbmc_v2_shallow	exon	empties	w_H0_gap_by_valclass_mdl	1.72027e+07	8.24382	2.15034e+06	2086742	
+pbmc_v2_shallow	exon	empties	w_H0_meta	736160	0.352779	92019.9	2086742	order-0: groups-per-column + value + run-count symbols (separate tables)
+pbmc_v2_shallow	exon	empties	w_H0_total	1.76492e+07	8.4578	2.20616e+06	2086742	by-valclass gaps + meta
+pbmc_v2_shallow	exon	empties	w_H0_total_mdl	1.79389e+07	8.5966	2.24236e+06	2086742	with MDL param cost on gaps
+pbmc_v2_shallow	exon	all	comb_presence_m	7.25287e+07	13.6724	9.06609e+06	5304754	sum_j log2 C(m, nnz_j), m=all rows
+pbmc_v2_shallow	exon	all	comb_presence_meff	6.01573e+07	11.3403	7.51967e+06	5304754	sum_j log2 C(m_eff, nnz_j), m_eff=61749 rows with >=1 nnz
+pbmc_v2_shallow	exon	all	comb_composition	2.25711e+06	0.425488	282139	5304754	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+pbmc_v2_shallow	exon	all	side_H0_nnzj	627782	0.118343	78472.8	5304754	order-0 of per-column nnz
+pbmc_v2_shallow	exon	all	side_H0_kj	648296	0.12221	81037	5304754	order-0 of per-column UMI total
+pbmc_v2_shallow	exon	all	side_H0_kj_mdl	651517	0.122818	81439.6	5304754	with MDL param cost
+pbmc_v2_shallow	exon	cells	comb_presence_m	4.27381e+07	13.2809	5.34227e+06	3218012	sum_j log2 C(m, nnz_j), m=all rows
+pbmc_v2_shallow	exon	cells	comb_presence_meff	3.52327e+07	10.9486	4.40409e+06	3218012	sum_j log2 C(m_eff, nnz_j), m_eff=61749 rows with >=1 nnz
+pbmc_v2_shallow	exon	cells	comb_composition	1.6986e+06	0.527841	212325	3218012	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+pbmc_v2_shallow	exon	cells	side_H0_nnzj	258515	0.0803337	32314.3	3218012	order-0 of per-column nnz
+pbmc_v2_shallow	exon	cells	side_H0_kj	267706	0.0831899	33463.3	3218012	order-0 of per-column UMI total
+pbmc_v2_shallow	exon	cells	side_H0_kj_mdl	270285	0.0839912	33785.6	3218012	with MDL param cost
+pbmc_v2_shallow	exon	empties	comb_presence_m	2.97906e+07	14.2761	3.72382e+06	2086742	sum_j log2 C(m, nnz_j), m=all rows
+pbmc_v2_shallow	exon	empties	comb_presence_meff	2.49246e+07	11.9443	3.11557e+06	2086742	sum_j log2 C(m_eff, nnz_j), m_eff=61749 rows with >=1 nnz
+pbmc_v2_shallow	exon	empties	comb_composition	558508	0.267646	69813.5	2086742	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+pbmc_v2_shallow	exon	empties	side_H0_nnzj	284948	0.136552	35618.5	2086742	order-0 of per-column nnz
+pbmc_v2_shallow	exon	empties	side_H0_kj	290615	0.139267	36326.9	2086742	order-0 of per-column UMI total
+pbmc_v2_shallow	exon	empties	side_H0_kj_mdl	291095	0.139497	36386.9	2086742	with MDL param cost
+pbmc_v2_shallow	exon	cells	pres_feat_plugin	2.01705e+07	6.26799	2.52131e+06	3218012	sum_f N h(p_f), in-sample
+pbmc_v2_shallow	exon	cells	pres_featdepth_plugin	1.98014e+07	6.15331	2.47518e+06	3218012	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+pbmc_v2_shallow	exon	cells	val_H0_plugin	1.80617e+06	0.56127	225772	3218012	order-0 of values (capped 4096)
+pbmc_v2_shallow	exon	cells	pres_feat_cv	2.03851e+07	6.3347	2.54814e+06	3218012	alpha=[300, 300]
+pbmc_v2_shallow	exon	cells	pres_featdepth_cv	2.03323e+07	6.31829	2.54154e+06	3218012	alpha=[100000.0, 100000.0]
+pbmc_v2_shallow	exon	cells	val_global_cv	1.80636e+06	0.561329	225795	3218012	order-0 value table, alphabet 1..12+
+pbmc_v2_shallow	exon	cells	val_ratectx_cv	1.39536e+06	0.433611	174420	3218012	value table by context log2(k_j*q_f)
+pbmc_v2_shallow	exon	cells	M1_feat_cv_total	2.21915e+07	6.89603	2.77394e+06	3218012	per-feature presence + order-0 values, CV
+pbmc_v2_shallow	exon	cells	M2_featdepth_cv_total	2.17277e+07	6.7519	2.71596e+06	3218012	per-feature x depth presence + rate-context values, CV
+pbmc_v2_shallow	exon	empties	pres_feat_plugin	1.48318e+07	7.10761	1.85397e+06	2086742	sum_f N h(p_f), in-sample
+pbmc_v2_shallow	exon	empties	pres_featdepth_plugin	1.4666e+07	7.02817	1.83325e+06	2086742	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+pbmc_v2_shallow	exon	empties	val_H0_plugin	694427	0.332781	86803.4	2086742	order-0 of values (capped 4096)
+pbmc_v2_shallow	exon	empties	pres_feat_cv	1.50139e+07	7.1949	1.87674e+06	2086742	alpha=[300, 300]
+pbmc_v2_shallow	exon	empties	pres_featdepth_cv	1.50954e+07	7.23394	1.88692e+06	2086742	alpha=[100000.0, 100000.0]
+pbmc_v2_shallow	exon	empties	val_global_cv	694454	0.332793	86806.7	2086742	order-0 value table, alphabet 1..12+
+pbmc_v2_shallow	exon	empties	val_ratectx_cv	577834	0.276907	72229.2	2086742	value table by context log2(k_j*q_f)
+pbmc_v2_shallow	exon	empties	M1_feat_cv_total	1.57084e+07	7.5277	1.96355e+06	2086742	per-feature presence + order-0 values, CV
+pbmc_v2_shallow	exon	empties	M2_featdepth_cv_total	1.56732e+07	7.51085	1.95915e+06	2086742	per-feature x depth presence + rate-context values, CV
+pbmc_v2_shallow	exon	all	pres_feat_plugin	3.55886e+07	6.70882	4.44858e+06	5304754	sum_f N h(p_f), in-sample
+pbmc_v2_shallow	exon	all	pres_featdepth_plugin	3.45506e+07	6.51314	4.31883e+06	5304754	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+pbmc_v2_shallow	exon	all	val_H0_plugin	2.53031e+06	0.476989	316288	5304754	order-0 of values (capped 4096)
+pbmc_v2_shallow	exon	all	pres_feat_cv	3.58252e+07	6.75341	4.47815e+06	5304754	alpha=[300, 300]
+pbmc_v2_shallow	exon	all	pres_featdepth_cv	3.52348e+07	6.64212	4.40435e+06	5304754	alpha=[100000.0, 100000.0]
+pbmc_v2_shallow	exon	all	val_global_cv	2.53049e+06	0.477023	316311	5304754	order-0 value table, alphabet 1..12+
+pbmc_v2_shallow	exon	all	val_ratectx_cv	1.92648e+06	0.36316	240809	5304754	value table by context log2(k_j*q_f)
+pbmc_v2_shallow	exon	all	M1_feat_cv_total	3.83557e+07	7.23043	4.79446e+06	5304754	per-feature presence + order-0 values, CV
+pbmc_v2_shallow	exon	all	M2_featdepth_cv_total	3.71613e+07	7.00528	4.64516e+06	5304754	per-feature x depth presence + rate-context values, CV
+pbmc_v2_shallow	exon	empties	amb_loo_bits	1.51393e+07	7.25497	1.89241e+06	2086742	leave-one-droplet-out multinomial, prior=cells profile delta=0.1 gamma=1.33e+06
+pbmc_v2_shallow	exon	empties	amb_plugin_bits	1.50641e+07	7.21897	1.88302e+06	2086742	same smoothing, in-sample p (optimistic)
+pbmc_v2_shallow	exon	empties	amb_plugin_unsmoothed_bits	1.50373e+07	7.2061	1.87966e+06	2086742	in-sample p, no prior (most optimistic)
+pbmc_v2_shallow	exon	empties	amb_entropy_mc_bits	1.51613e+07	7.26554	1.89516e+06	2086742	sum_j H(Mult(k_j,p*)) Monte Carlo R=3, sd=4941 bits; exact only if droplets are exchangeable multinomial draws
+pbmc_v2_shallow	exon	empties	amb_entropy_mc_mle_bits	1.50241e+07	7.19978	1.87801e+06	2086742	sum_j H(Mult(k_j, p_hat)) with the unsmoothed in-sample MLE profile (R=3, sd=1640); lower-bound flavour
+pbmc_v2_shallow	exon	empties	amb_side_H0_kj	290416	0.139172	36302	2086742	order-0 of k_j over 54706 nonzero empties (+15 all-zero columns not counted)
+pbmc_v2_shallow	intron	all	w_H0_gap_pooled	1.40997e+07	12.0507	1.76246e+06	1170031	order-0 of all gap symbols, one table
+pbmc_v2_shallow	intron	all	w_H0_gap_pooled_mdl	1.45036e+07	12.3959	1.81295e+06	1170031	+0.5 log2(n) per used symbol
+pbmc_v2_shallow	intron	all	w_H0_gap_by_valclass	1.4091e+07	12.0433	1.76137e+06	1170031	separate tables for value==1 groups and value>1 groups
+pbmc_v2_shallow	intron	all	w_H0_gap_by_valclass_mdl	1.45075e+07	12.3992	1.81343e+06	1170031	
+pbmc_v2_shallow	intron	all	w_H0_meta	533726	0.456164	66715.8	1170031	order-0: groups-per-column + value + run-count symbols (separate tables)
+pbmc_v2_shallow	intron	all	w_H0_total	1.46247e+07	12.4994	1.82809e+06	1170031	by-valclass gaps + meta
+pbmc_v2_shallow	intron	all	w_H0_total_mdl	1.50412e+07	12.8554	1.88015e+06	1170031	with MDL param cost on gaps
+pbmc_v2_shallow	intron	cells	w_H0_gap_pooled	8.84178e+06	11.6862	1.10522e+06	756599	order-0 of all gap symbols, one table
+pbmc_v2_shallow	intron	cells	w_H0_gap_pooled_mdl	9.14406e+06	12.0857	1.14301e+06	756599	+0.5 log2(n) per used symbol
+pbmc_v2_shallow	intron	cells	w_H0_gap_by_valclass	8.83488e+06	11.6771	1.10436e+06	756599	separate tables for value==1 groups and value>1 groups
+pbmc_v2_shallow	intron	cells	w_H0_gap_by_valclass_mdl	9.14596e+06	12.0883	1.14324e+06	756599	
+pbmc_v2_shallow	intron	cells	w_H0_meta	260995	0.344959	32624.4	756599	order-0: groups-per-column + value + run-count symbols (separate tables)
+pbmc_v2_shallow	intron	cells	w_H0_total	9.09587e+06	12.0221	1.13698e+06	756599	by-valclass gaps + meta
+pbmc_v2_shallow	intron	cells	w_H0_total_mdl	9.40695e+06	12.4332	1.17587e+06	756599	with MDL param cost on gaps
+pbmc_v2_shallow	intron	empties	w_H0_gap_pooled	5.20127e+06	12.5807	650158	413432	order-0 of all gap symbols, one table
+pbmc_v2_shallow	intron	empties	w_H0_gap_pooled_mdl	5.50811e+06	13.3229	688514	413432	+0.5 log2(n) per used symbol
+pbmc_v2_shallow	intron	empties	w_H0_gap_by_valclass	5.19757e+06	12.5718	649697	413432	separate tables for value==1 groups and value>1 groups
+pbmc_v2_shallow	intron	empties	w_H0_gap_by_valclass_mdl	5.50782e+06	13.3222	688478	413432	
+pbmc_v2_shallow	intron	empties	w_H0_meta	233816	0.56555	29227.1	413432	order-0: groups-per-column + value + run-count symbols (separate tables)
+pbmc_v2_shallow	intron	empties	w_H0_total	5.43139e+06	13.1373	678924	413432	by-valclass gaps + meta
+pbmc_v2_shallow	intron	empties	w_H0_total_mdl	5.74164e+06	13.8877	717705	413432	with MDL param cost on gaps
+pbmc_v2_shallow	intron	all	comb_presence_m	1.79203e+07	15.3161	2.24003e+06	1170031	sum_j log2 C(m, nnz_j), m=all rows
+pbmc_v2_shallow	intron	all	comb_presence_meff	1.57445e+07	13.4565	1.96806e+06	1170031	sum_j log2 C(m_eff, nnz_j), m_eff=75011 rows with >=1 nnz
+pbmc_v2_shallow	intron	all	comb_composition	19896.8	0.0170054	2487.1	1170031	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+pbmc_v2_shallow	intron	all	side_H0_nnzj	462395	0.395199	57799.3	1170031	order-0 of per-column nnz
+pbmc_v2_shallow	intron	all	side_H0_kj	463029	0.395741	57878.6	1170031	order-0 of per-column UMI total
+pbmc_v2_shallow	intron	all	side_H0_kj_mdl	464213	0.396753	58026.6	1170031	with MDL param cost
+pbmc_v2_shallow	intron	cells	comb_presence_m	1.1289e+07	14.9207	1.41113e+06	756599	sum_j log2 C(m, nnz_j), m=all rows
+pbmc_v2_shallow	intron	cells	comb_presence_meff	9.88203e+06	13.0611	1.23525e+06	756599	sum_j log2 C(m_eff, nnz_j), m_eff=75011 rows with >=1 nnz
+pbmc_v2_shallow	intron	cells	comb_composition	16448.6	0.0217402	2056.07	756599	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+pbmc_v2_shallow	intron	cells	side_H0_nnzj	211090	0.278999	26386.3	756599	order-0 of per-column nnz
+pbmc_v2_shallow	intron	cells	side_H0_kj	211446	0.279469	26430.7	756599	order-0 of per-column UMI total
+pbmc_v2_shallow	intron	cells	side_H0_kj_mdl	212536	0.280909	26567	756599	with MDL param cost
+pbmc_v2_shallow	intron	empties	comb_presence_m	6.63126e+06	16.0395	828907	413432	sum_j log2 C(m, nnz_j), m=all rows
+pbmc_v2_shallow	intron	empties	comb_presence_meff	5.86248e+06	14.18	732810	413432	sum_j log2 C(m_eff, nnz_j), m_eff=75011 rows with >=1 nnz
+pbmc_v2_shallow	intron	empties	comb_composition	3448.21	0.00834046	431.027	413432	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+pbmc_v2_shallow	intron	empties	side_H0_nnzj	213298	0.51592	26662.2	413432	order-0 of per-column nnz
+pbmc_v2_shallow	intron	empties	side_H0_kj	213586	0.516617	26698.2	413432	order-0 of per-column UMI total
+pbmc_v2_shallow	intron	empties	side_H0_kj_mdl	213846	0.517245	26730.7	413432	with MDL param cost
+pbmc_v2_shallow	intron	cells	pres_feat_plugin	8.56817e+06	11.3246	1.07102e+06	756599	sum_f N h(p_f), in-sample
+pbmc_v2_shallow	intron	cells	pres_featdepth_plugin	8.2228e+06	10.8681	1.02785e+06	756599	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+pbmc_v2_shallow	intron	cells	val_H0_plugin	32755.3	0.0432928	4094.41	756599	order-0 of values (capped 4096)
+pbmc_v2_shallow	intron	cells	pres_feat_cv	8.81049e+06	11.6449	1.10131e+06	756599	alpha=[1000, 1000]
+pbmc_v2_shallow	intron	cells	pres_featdepth_cv	9.00646e+06	11.9039	1.12581e+06	756599	alpha=[100000.0, 100000.0]
+pbmc_v2_shallow	intron	cells	val_global_cv	32774.3	0.0433179	4096.79	756599	order-0 value table, alphabet 1..12+
+pbmc_v2_shallow	intron	cells	val_ratectx_cv	88344.9	0.116766	11043.1	756599	value table by context log2(k_j*q_f)
+pbmc_v2_shallow	intron	cells	M1_feat_cv_total	8.84327e+06	11.6882	1.10541e+06	756599	per-feature presence + order-0 values, CV
+pbmc_v2_shallow	intron	cells	M2_featdepth_cv_total	9.09481e+06	12.0206	1.13685e+06	756599	per-feature x depth presence + rate-context values, CV
+pbmc_v2_shallow	intron	empties	pres_feat_plugin	5.16805e+06	12.5004	646006	413432	sum_f N h(p_f), in-sample
+pbmc_v2_shallow	intron	empties	pres_featdepth_plugin	4.9791e+06	12.0433	622387	413432	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+pbmc_v2_shallow	intron	empties	val_H0_plugin	10928.1	0.0264325	1366.01	413432	order-0 of values (capped 4096)
+pbmc_v2_shallow	intron	empties	pres_feat_cv	5.37571e+06	13.0026	671964	413432	alpha=[3000, 3000]
+pbmc_v2_shallow	intron	empties	pres_featdepth_cv	5.655e+06	13.6782	706875	413432	alpha=[100000.0, 100000.0]
+pbmc_v2_shallow	intron	empties	val_global_cv	10942.4	0.0264672	1367.8	413432	order-0 value table, alphabet 1..12+
+pbmc_v2_shallow	intron	empties	val_ratectx_cv	65781.2	0.15911	8222.65	413432	value table by context log2(k_j*q_f)
+pbmc_v2_shallow	intron	empties	M1_feat_cv_total	5.38665e+06	13.0291	673332	413432	per-feature presence + order-0 values, CV
+pbmc_v2_shallow	intron	empties	M2_featdepth_cv_total	5.72078e+06	13.8373	715098	413432	per-feature x depth presence + rate-context values, CV
+pbmc_v2_shallow	intron	all	pres_feat_plugin	1.39624e+07	11.9334	1.74531e+06	1170031	sum_f N h(p_f), in-sample
+pbmc_v2_shallow	intron	all	pres_featdepth_plugin	1.33151e+07	11.3801	1.66439e+06	1170031	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+pbmc_v2_shallow	intron	all	val_H0_plugin	43904.7	0.0375244	5488.09	1170031	order-0 of values (capped 4096)
+pbmc_v2_shallow	intron	all	pres_feat_cv	1.42283e+07	12.1607	1.77854e+06	1170031	alpha=[3000, 3000]
+pbmc_v2_shallow	intron	all	pres_featdepth_cv	1.42569e+07	12.185	1.78211e+06	1170031	alpha=[100000.0, 100000.0]
+pbmc_v2_shallow	intron	all	val_global_cv	43921.8	0.037539	5490.22	1170031	order-0 value table, alphabet 1..12+
+pbmc_v2_shallow	intron	all	val_ratectx_cv	69227	0.0591668	8653.37	1170031	value table by context log2(k_j*q_f)
+pbmc_v2_shallow	intron	all	M1_feat_cv_total	1.42723e+07	12.1982	1.78403e+06	1170031	per-feature presence + order-0 values, CV
+pbmc_v2_shallow	intron	all	M2_featdepth_cv_total	1.43261e+07	12.2442	1.79076e+06	1170031	per-feature x depth presence + rate-context values, CV
+pbmc_v2_shallow	intron	empties	amb_loo_bits	5.06764e+06	12.2575	633456	413432	leave-one-droplet-out multinomial, prior=cells profile delta=0.1 gamma=8.29e+05
+pbmc_v2_shallow	intron	empties	amb_plugin_bits	5.01138e+06	12.1214	626422	413432	same smoothing, in-sample p (optimistic)
+pbmc_v2_shallow	intron	empties	amb_plugin_unsmoothed_bits	4.95653e+06	11.9887	619566	413432	in-sample p, no prior (most optimistic)
+pbmc_v2_shallow	intron	empties	amb_entropy_mc_bits	5.08872e+06	12.3085	636091	413432	sum_j H(Mult(k_j,p*)) Monte Carlo R=3, sd=2140 bits; exact only if droplets are exchangeable multinomial draws
+pbmc_v2_shallow	intron	empties	amb_entropy_mc_mle_bits	4.95488e+06	11.9847	619359	413432	sum_j H(Mult(k_j, p_hat)) with the unsmoothed in-sample MLE profile (R=3, sd=758); lower-bound flavour
+pbmc_v2_shallow	intron	empties	amb_side_H0_kj	207931	0.502939	25991.4	413432	order-0 of k_j over 53981 nonzero empties (+740 all-zero columns not counted)
+pbmc_v2_typical	exon	all	w_H0_gap_pooled	1.66536e+07	6.48194	2.0817e+06	2569228	order-0 of all gap symbols, one table
+pbmc_v2_typical	exon	all	w_H0_gap_pooled_mdl	1.67918e+07	6.53572	2.09897e+06	2569228	+0.5 log2(n) per used symbol
+pbmc_v2_typical	exon	all	w_H0_gap_by_valclass	1.65717e+07	6.45008	2.07147e+06	2569228	separate tables for value==1 groups and value>1 groups
+pbmc_v2_typical	exon	all	w_H0_gap_by_valclass_mdl	1.67443e+07	6.51725	2.09304e+06	2569228	
+pbmc_v2_typical	exon	all	w_H0_meta	902057	0.351101	112757	2569228	order-0: groups-per-column + value + run-count symbols (separate tables)
+pbmc_v2_typical	exon	all	w_H0_total	1.74738e+07	6.80119	2.18422e+06	2569228	by-valclass gaps + meta
+pbmc_v2_typical	exon	all	w_H0_total_mdl	1.76464e+07	6.86835	2.20579e+06	2569228	with MDL param cost on gaps
+pbmc_v2_typical	exon	cells	w_H0_gap_pooled	1.53197e+07	6.37683	1.91497e+06	2402405	order-0 of all gap symbols, one table
+pbmc_v2_typical	exon	cells	w_H0_gap_pooled_mdl	1.54365e+07	6.42543	1.92956e+06	2402405	+0.5 log2(n) per used symbol
+pbmc_v2_typical	exon	cells	w_H0_gap_by_valclass	1.52482e+07	6.34704	1.90602e+06	2402405	separate tables for value==1 groups and value>1 groups
+pbmc_v2_typical	exon	cells	w_H0_gap_by_valclass_mdl	1.53979e+07	6.40935	1.92473e+06	2402405	
+pbmc_v2_typical	exon	cells	w_H0_meta	718956	0.299265	89869.5	2402405	order-0: groups-per-column + value + run-count symbols (separate tables)
+pbmc_v2_typical	exon	cells	w_H0_total	1.59671e+07	6.64631	1.99589e+06	2402405	by-valclass gaps + meta
+pbmc_v2_typical	exon	cells	w_H0_total_mdl	1.61168e+07	6.70862	2.0146e+06	2402405	with MDL param cost on gaps
+pbmc_v2_typical	exon	empties	w_H0_gap_pooled	1.29849e+06	7.78366	162312	166823	order-0 of all gap symbols, one table
+pbmc_v2_typical	exon	empties	w_H0_gap_pooled_mdl	1.36579e+06	8.18709	170724	166823	+0.5 log2(n) per used symbol
+pbmc_v2_typical	exon	empties	w_H0_gap_by_valclass	1.28738e+06	7.71703	160922	166823	separate tables for value==1 groups and value>1 groups
+pbmc_v2_typical	exon	empties	w_H0_gap_by_valclass_mdl	1.36026e+06	8.1539	170032	166823	
+pbmc_v2_typical	exon	empties	w_H0_meta	145627	0.872942	18203.4	166823	order-0: groups-per-column + value + run-count symbols (separate tables)
+pbmc_v2_typical	exon	empties	w_H0_total	1.43301e+06	8.58997	179126	166823	by-valclass gaps + meta
+pbmc_v2_typical	exon	empties	w_H0_total_mdl	1.50588e+06	9.02684	188236	166823	with MDL param cost on gaps
+pbmc_v2_typical	exon	all	comb_presence_m	2.8207e+07	10.9788	3.52587e+06	2569228	sum_j log2 C(m, nnz_j), m=all rows
+pbmc_v2_typical	exon	all	comb_presence_meff	2.18239e+07	8.49434	2.72799e+06	2569228	sum_j log2 C(m_eff, nnz_j), m_eff=55737 rows with >=1 nnz
+pbmc_v2_typical	exon	all	comb_composition	4.48157e+06	1.74432	560196	2569228	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+pbmc_v2_typical	exon	all	side_H0_nnzj	110141	0.0428692	13767.6	2569228	order-0 of per-column nnz
+pbmc_v2_typical	exon	all	side_H0_kj	119452	0.0464933	14931.5	2569228	order-0 of per-column UMI total
+pbmc_v2_typical	exon	all	side_H0_kj_mdl	131418	0.0511509	16427.3	2569228	with MDL param cost
+pbmc_v2_typical	exon	cells	comb_presence_m	2.58959e+07	10.7791	3.23698e+06	2402405	sum_j log2 C(m, nnz_j), m=all rows
+pbmc_v2_typical	exon	cells	comb_presence_meff	1.99265e+07	8.29441	2.49082e+06	2402405	sum_j log2 C(m_eff, nnz_j), m_eff=55737 rows with >=1 nnz
+pbmc_v2_typical	exon	cells	comb_composition	4.32353e+06	1.79967	540441	2402405	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+pbmc_v2_typical	exon	cells	side_H0_nnzj	49643.9	0.0206643	6205.49	2402405	order-0 of per-column nnz
+pbmc_v2_typical	exon	cells	side_H0_kj	54959.3	0.0228768	6869.91	2402405	order-0 of per-column UMI total
+pbmc_v2_typical	exon	cells	side_H0_kj_mdl	63984.8	0.0266337	7998.1	2402405	with MDL param cost
+pbmc_v2_typical	exon	empties	comb_presence_m	2.31112e+06	13.8537	288890	166823	sum_j log2 C(m, nnz_j), m=all rows
+pbmc_v2_typical	exon	empties	comb_presence_meff	1.89737e+06	11.3735	237171	166823	sum_j log2 C(m_eff, nnz_j), m_eff=55737 rows with >=1 nnz
+pbmc_v2_typical	exon	empties	comb_composition	158041	0.947358	19755.1	166823	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+pbmc_v2_typical	exon	empties	side_H0_nnzj	46371.5	0.277968	5796.44	166823	order-0 of per-column nnz
+pbmc_v2_typical	exon	empties	side_H0_kj	50239.1	0.301152	6279.88	166823	order-0 of per-column UMI total
+pbmc_v2_typical	exon	empties	side_H0_kj_mdl	52048	0.311995	6506	166823	with MDL param cost
+pbmc_v2_typical	exon	cells	pres_feat_plugin	1.09427e+07	4.55491	1.36784e+06	2402405	sum_f N h(p_f), in-sample
+pbmc_v2_typical	exon	cells	pres_featdepth_plugin	1.04889e+07	4.36598	1.31111e+06	2402405	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+pbmc_v2_typical	exon	cells	val_H0_plugin	3.70141e+06	1.54071	462677	2402405	order-0 of values (capped 4096)
+pbmc_v2_typical	exon	cells	pres_feat_cv	1.116e+07	4.64534	1.395e+06	2402405	alpha=[30, 30]
+pbmc_v2_typical	exon	cells	pres_featdepth_cv	1.09911e+07	4.57503	1.37388e+06	2402405	alpha=[10000.0, 10000.0]
+pbmc_v2_typical	exon	cells	val_global_cv	3.72177e+06	1.54918	465221	2402405	order-0 value table, alphabet 1..12+
+pbmc_v2_typical	exon	cells	val_ratectx_cv	2.57978e+06	1.07383	322473	2402405	value table by context log2(k_j*q_f)
+pbmc_v2_typical	exon	cells	M1_feat_cv_total	1.48818e+07	6.19453	1.86022e+06	2402405	per-feature presence + order-0 values, CV
+pbmc_v2_typical	exon	cells	M2_featdepth_cv_total	1.35709e+07	5.64886	1.69636e+06	2402405	per-feature x depth presence + rate-context values, CV
+pbmc_v2_typical	exon	empties	pres_feat_plugin	1.32877e+06	7.96517	166097	166823	sum_f N h(p_f), in-sample
+pbmc_v2_typical	exon	empties	pres_featdepth_plugin	962251	5.7681	120281	166823	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+pbmc_v2_typical	exon	empties	val_H0_plugin	171412	1.02751	21426.5	166823	order-0 of values (capped 4096)
+pbmc_v2_typical	exon	empties	pres_feat_cv	1.41715e+06	8.49493	177144	166823	alpha=[300, 300]
+pbmc_v2_typical	exon	empties	pres_featdepth_cv	1.21301e+06	7.27122	151626	166823	alpha=[1000, 1000]
+pbmc_v2_typical	exon	empties	val_global_cv	171677	1.02909	21459.6	166823	order-0 value table, alphabet 1..12+
+pbmc_v2_typical	exon	empties	val_ratectx_cv	131780	0.78994	16472.5	166823	value table by context log2(k_j*q_f)
+pbmc_v2_typical	exon	empties	M1_feat_cv_total	1.58883e+06	9.52403	198603	166823	per-feature presence + order-0 values, CV
+pbmc_v2_typical	exon	empties	M2_featdepth_cv_total	1.34479e+06	8.06116	168098	166823	per-feature x depth presence + rate-context values, CV
+pbmc_v2_typical	exon	all	pres_feat_plugin	1.56587e+07	6.09469	1.95733e+06	2569228	sum_f N h(p_f), in-sample
+pbmc_v2_typical	exon	all	pres_featdepth_plugin	1.14689e+07	4.46394	1.43361e+06	2569228	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+pbmc_v2_typical	exon	all	val_H0_plugin	3.87973e+06	1.51008	484967	2569228	order-0 of values (capped 4096)
+pbmc_v2_typical	exon	all	pres_feat_cv	1.5876e+07	6.17929	1.9845e+06	2569228	alpha=[100, 100]
+pbmc_v2_typical	exon	all	pres_featdepth_cv	1.2205e+07	4.75045	1.52562e+06	2569228	alpha=[1000, 1000]
+pbmc_v2_typical	exon	all	val_global_cv	3.90028e+06	1.51807	487535	2569228	order-0 value table, alphabet 1..12+
+pbmc_v2_typical	exon	all	val_ratectx_cv	2.67424e+06	1.04087	334280	2569228	value table by context log2(k_j*q_f)
+pbmc_v2_typical	exon	all	M1_feat_cv_total	1.97763e+07	7.69737	2.47204e+06	2569228	per-feature presence + order-0 values, CV
+pbmc_v2_typical	exon	all	M2_featdepth_cv_total	1.48792e+07	5.79133	1.8599e+06	2569228	per-feature x depth presence + rate-context values, CV
+pbmc_v2_typical	exon	empties	amb_loo_bits	1.23875e+06	7.42551	154843	166823	leave-one-droplet-out multinomial, prior=cells profile delta=0.1 gamma=1.39e+05
+pbmc_v2_typical	exon	empties	amb_plugin_bits	1.2053e+06	7.22501	150662	166823	same smoothing, in-sample p (optimistic)
+pbmc_v2_typical	exon	empties	amb_plugin_unsmoothed_bits	1.18776e+06	7.11991	148471	166823	in-sample p, no prior (most optimistic)
+pbmc_v2_typical	exon	empties	amb_entropy_mc_bits	1.25077e+06	7.49762	156347	166823	sum_j H(Mult(k_j,p*)) Monte Carlo R=3, sd=508 bits; exact only if droplets are exchangeable multinomial draws
+pbmc_v2_typical	exon	empties	amb_entropy_mc_mle_bits	1.16042e+06	6.95601	145053	166823	sum_j H(Mult(k_j, p_hat)) with the unsmoothed in-sample MLE profile (R=3, sd=35); lower-bound flavour
+pbmc_v2_typical	exon	empties	amb_side_H0_kj	49163.1	0.294702	6145.38	166823	order-0 of k_j over 9614 nonzero empties (+143 all-zero columns not counted)
+pbmc_v2_typical	intron	all	w_H0_gap_pooled	1.05267e+07	8.75282	1.31584e+06	1202661	order-0 of all gap symbols, one table
+pbmc_v2_typical	intron	all	w_H0_gap_pooled_mdl	1.06819e+07	8.88191	1.33524e+06	1202661	+0.5 log2(n) per used symbol
+pbmc_v2_typical	intron	all	w_H0_gap_by_valclass	1.05067e+07	8.73623	1.31334e+06	1202661	separate tables for value==1 groups and value>1 groups
+pbmc_v2_typical	intron	all	w_H0_gap_by_valclass_mdl	1.06986e+07	8.8958	1.33733e+06	1202661	
+pbmc_v2_typical	intron	all	w_H0_meta	183136	0.152276	22892	1202661	order-0: groups-per-column + value + run-count symbols (separate tables)
+pbmc_v2_typical	intron	all	w_H0_total	1.06899e+07	8.88851	1.33623e+06	1202661	by-valclass gaps + meta
+pbmc_v2_typical	intron	all	w_H0_total_mdl	1.08818e+07	9.04807	1.36022e+06	1202661	with MDL param cost on gaps
+pbmc_v2_typical	intron	cells	w_H0_gap_pooled	9.949e+06	8.64851	1.24362e+06	1150372	order-0 of all gap symbols, one table
+pbmc_v2_typical	intron	cells	w_H0_gap_pooled_mdl	1.00823e+07	8.76436	1.26028e+06	1150372	+0.5 log2(n) per used symbol
+pbmc_v2_typical	intron	cells	w_H0_gap_by_valclass	9.92913e+06	8.63124	1.24114e+06	1150372	separate tables for value==1 groups and value>1 groups
+pbmc_v2_typical	intron	cells	w_H0_gap_by_valclass_mdl	1.00965e+07	8.77677	1.26207e+06	1150372	
+pbmc_v2_typical	intron	cells	w_H0_meta	135143	0.117477	16892.8	1150372	order-0: groups-per-column + value + run-count symbols (separate tables)
+pbmc_v2_typical	intron	cells	w_H0_total	1.00643e+07	8.74871	1.25803e+06	1150372	by-valclass gaps + meta
+pbmc_v2_typical	intron	cells	w_H0_total_mdl	1.02317e+07	8.89425	1.27896e+06	1150372	with MDL param cost on gaps
+pbmc_v2_typical	intron	empties	w_H0_gap_pooled	547411	10.469	68426.4	52289	order-0 of all gap symbols, one table
+pbmc_v2_typical	intron	empties	w_H0_gap_pooled_mdl	609834	11.6628	76229.2	52289	+0.5 log2(n) per used symbol
+pbmc_v2_typical	intron	empties	w_H0_gap_by_valclass	544661	10.4164	68082.7	52289	separate tables for value==1 groups and value>1 groups
+pbmc_v2_typical	intron	empties	w_H0_gap_by_valclass_mdl	608911	11.6451	76113.8	52289	
+pbmc_v2_typical	intron	empties	w_H0_meta	30938.8	0.591688	3867.35	52289	order-0: groups-per-column + value + run-count symbols (separate tables)
+pbmc_v2_typical	intron	empties	w_H0_total	575600	11.0081	71950	52289	by-valclass gaps + meta
+pbmc_v2_typical	intron	empties	w_H0_total_mdl	639849	12.2368	79981.2	52289	with MDL param cost on gaps
+pbmc_v2_typical	intron	all	comb_presence_m	1.40142e+07	11.6527	1.75178e+06	1202661	sum_j log2 C(m, nnz_j), m=all rows
+pbmc_v2_typical	intron	all	comb_presence_meff	1.17357e+07	9.7581	1.46696e+06	1202661	sum_j log2 C(m_eff, nnz_j), m_eff=73303 rows with >=1 nnz
+pbmc_v2_typical	intron	all	comb_composition	326619	0.27158	40827.4	1202661	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+pbmc_v2_typical	intron	all	side_H0_nnzj	82993.2	0.0690079	10374.1	1202661	order-0 of per-column nnz
+pbmc_v2_typical	intron	all	side_H0_kj	83597.4	0.0695103	10449.7	1202661	order-0 of per-column UMI total
+pbmc_v2_typical	intron	all	side_H0_kj_mdl	87903.4	0.0730907	10987.9	1202661	with MDL param cost
+pbmc_v2_typical	intron	cells	comb_presence_m	1.32952e+07	11.5573	1.6619e+06	1150372	sum_j log2 C(m, nnz_j), m=all rows
+pbmc_v2_typical	intron	cells	comb_presence_meff	1.11157e+07	9.66266	1.38946e+06	1150372	sum_j log2 C(m_eff, nnz_j), m_eff=73303 rows with >=1 nnz
+pbmc_v2_typical	intron	cells	comb_composition	319468	0.277708	39933.5	1150372	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+pbmc_v2_typical	intron	cells	side_H0_nnzj	46473.7	0.0403988	5809.21	1150372	order-0 of per-column nnz
+pbmc_v2_typical	intron	cells	side_H0_kj	46972.7	0.0408326	5871.59	1150372	order-0 of per-column UMI total
+pbmc_v2_typical	intron	cells	side_H0_kj_mdl	50688.4	0.0440626	6336.05	1150372	with MDL param cost
+pbmc_v2_typical	intron	empties	comb_presence_m	719029	13.7511	89878.6	52289	sum_j log2 C(m, nnz_j), m=all rows
+pbmc_v2_typical	intron	empties	comb_presence_meff	620033	11.8578	77504.1	52289	sum_j log2 C(m_eff, nnz_j), m_eff=73303 rows with >=1 nnz
+pbmc_v2_typical	intron	empties	comb_composition	7150.88	0.136757	893.861	52289	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+pbmc_v2_typical	intron	empties	side_H0_nnzj	23489	0.449215	2936.12	52289	order-0 of per-column nnz
+pbmc_v2_typical	intron	empties	side_H0_kj	23609.6	0.451521	2951.2	52289	order-0 of per-column UMI total
+pbmc_v2_typical	intron	empties	side_H0_kj_mdl	24649.9	0.471416	3081.24	52289	with MDL param cost
+pbmc_v2_typical	intron	cells	pres_feat_plugin	9.03011e+06	7.84973	1.12876e+06	1150372	sum_f N h(p_f), in-sample
+pbmc_v2_typical	intron	cells	pres_featdepth_plugin	8.62463e+06	7.49725	1.07808e+06	1150372	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+pbmc_v2_typical	intron	cells	val_H0_plugin	327364	0.284572	40920.5	1150372	order-0 of values (capped 4096)
+pbmc_v2_typical	intron	cells	pres_feat_cv	9.2884e+06	8.07426	1.16105e+06	1150372	alpha=[100, 100]
+pbmc_v2_typical	intron	cells	pres_featdepth_cv	9.301e+06	8.08521	1.16263e+06	1150372	alpha=[100000.0, 100000.0]
+pbmc_v2_typical	intron	cells	val_global_cv	327455	0.284651	40931.9	1150372	order-0 value table, alphabet 1..12+
+pbmc_v2_typical	intron	cells	val_ratectx_cv	301559	0.262141	37694.9	1150372	value table by context log2(k_j*q_f)
+pbmc_v2_typical	intron	cells	M1_feat_cv_total	9.61585e+06	8.35891	1.20198e+06	1150372	per-feature presence + order-0 values, CV
+pbmc_v2_typical	intron	cells	M2_featdepth_cv_total	9.60256e+06	8.34735	1.20032e+06	1150372	per-feature x depth presence + rate-context values, CV
+pbmc_v2_typical	intron	empties	pres_feat_plugin	650948	12.449	81368.5	52289	sum_f N h(p_f), in-sample
+pbmc_v2_typical	intron	empties	pres_featdepth_plugin	415106	7.93868	51888.2	52289	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+pbmc_v2_typical	intron	empties	val_H0_plugin	9232.18	0.176561	1154.02	52289	order-0 of values (capped 4096)
+pbmc_v2_typical	intron	empties	pres_feat_cv	754429	14.4281	94303.6	52289	alpha=[3000, 3000]
+pbmc_v2_typical	intron	empties	pres_featdepth_cv	762040	14.5736	95254.9	52289	alpha=[100000.0, 100000.0]
+pbmc_v2_typical	intron	empties	val_global_cv	9248.77	0.176878	1156.1	52289	order-0 value table, alphabet 1..12+
+pbmc_v2_typical	intron	empties	val_ratectx_cv	11698.5	0.223727	1462.31	52289	value table by context log2(k_j*q_f)
+pbmc_v2_typical	intron	empties	M1_feat_cv_total	763678	14.6049	95459.7	52289	per-feature presence + order-0 values, CV
+pbmc_v2_typical	intron	empties	M2_featdepth_cv_total	773738	14.7973	96717.3	52289	per-feature x depth presence + rate-context values, CV
+pbmc_v2_typical	intron	all	pres_feat_plugin	1.11729e+07	9.29013	1.39661e+06	1202661	sum_f N h(p_f), in-sample
+pbmc_v2_typical	intron	all	pres_featdepth_plugin	9.09671e+06	7.56382	1.13709e+06	1202661	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+pbmc_v2_typical	intron	all	val_H0_plugin	336994	0.280207	42124.2	1202661	order-0 of values (capped 4096)
+pbmc_v2_typical	intron	all	pres_feat_cv	1.14312e+07	9.50493	1.4289e+06	1202661	alpha=[300, 300]
+pbmc_v2_typical	intron	all	pres_featdepth_cv	9.89236e+06	8.22539	1.23654e+06	1202661	alpha=[100000.0, 100000.0]
+pbmc_v2_typical	intron	all	val_global_cv	337080	0.280278	42135	1202661	order-0 value table, alphabet 1..12+
+pbmc_v2_typical	intron	all	val_ratectx_cv	285029	0.236999	35628.7	1202661	value table by context log2(k_j*q_f)
+pbmc_v2_typical	intron	all	M1_feat_cv_total	1.17683e+07	9.78521	1.47104e+06	1202661	per-feature presence + order-0 values, CV
+pbmc_v2_typical	intron	all	M2_featdepth_cv_total	1.01774e+07	8.46239	1.27217e+06	1202661	per-feature x depth presence + rate-context values, CV
+pbmc_v2_typical	intron	empties	amb_loo_bits	533459	10.2021	66682.4	52289	leave-one-droplet-out multinomial, prior=cells profile delta=0.1 gamma=1.08e+05
+pbmc_v2_typical	intron	empties	amb_plugin_bits	504666	9.65147	63083.2	52289	same smoothing, in-sample p (optimistic)
+pbmc_v2_typical	intron	empties	amb_plugin_unsmoothed_bits	485185	9.27891	60648.1	52289	in-sample p, no prior (most optimistic)
+pbmc_v2_typical	intron	empties	amb_entropy_mc_bits	524257	10.0261	65532.1	52289	sum_j H(Mult(k_j,p*)) Monte Carlo R=3, sd=264 bits; exact only if droplets are exchangeable multinomial draws
+pbmc_v2_typical	intron	empties	amb_entropy_mc_mle_bits	484294	9.26188	60536.8	52289	sum_j H(Mult(k_j, p_hat)) with the unsmoothed in-sample MLE profile (R=3, sd=163); lower-bound flavour
+pbmc_v2_typical	intron	empties	amb_side_H0_kj	14070.1	0.269084	1758.77	52289	order-0 of k_j over 4023 nonzero empties (+5734 all-zero columns not counted)
+pbmc_v3_lowgenes	exon	all	w_H0_gap_pooled	1.02561e+07	5.8279	1.28201e+06	1759828	order-0 of all gap symbols, one table
+pbmc_v3_lowgenes	exon	all	w_H0_gap_pooled_mdl	1.03066e+07	5.85661	1.28833e+06	1759828	+0.5 log2(n) per used symbol
+pbmc_v3_lowgenes	exon	all	w_H0_gap_by_valclass	1.02385e+07	5.81788	1.27981e+06	1759828	separate tables for value==1 groups and value>1 groups
+pbmc_v3_lowgenes	exon	all	w_H0_gap_by_valclass_mdl	1.03143e+07	5.86095	1.28928e+06	1759828	
+pbmc_v3_lowgenes	exon	all	w_H0_meta	1.61174e+06	0.915849	201467	1759828	order-0: groups-per-column + value + run-count symbols (separate tables)
+pbmc_v3_lowgenes	exon	all	w_H0_total	1.18502e+07	6.73373	1.48128e+06	1759828	by-valclass gaps + meta
+pbmc_v3_lowgenes	exon	all	w_H0_total_mdl	1.1926e+07	6.77679	1.49075e+06	1759828	with MDL param cost on gaps
+pbmc_v3_lowgenes	exon	cells	w_H0_gap_pooled	9.16802e+06	5.69592	1.146e+06	1609577	order-0 of all gap symbols, one table
+pbmc_v3_lowgenes	exon	cells	w_H0_gap_pooled_mdl	9.21397e+06	5.72447	1.15175e+06	1609577	+0.5 log2(n) per used symbol
+pbmc_v3_lowgenes	exon	cells	w_H0_gap_by_valclass	9.15365e+06	5.68699	1.14421e+06	1609577	separate tables for value==1 groups and value>1 groups
+pbmc_v3_lowgenes	exon	cells	w_H0_gap_by_valclass_mdl	9.22273e+06	5.72991	1.15284e+06	1609577	
+pbmc_v3_lowgenes	exon	cells	w_H0_meta	1.22458e+06	0.760809	153073	1609577	order-0: groups-per-column + value + run-count symbols (separate tables)
+pbmc_v3_lowgenes	exon	cells	w_H0_total	1.03782e+07	6.4478	1.29728e+06	1609577	by-valclass gaps + meta
+pbmc_v3_lowgenes	exon	cells	w_H0_total_mdl	1.04473e+07	6.49072	1.30591e+06	1609577	with MDL param cost on gaps
+pbmc_v3_lowgenes	exon	empties	w_H0_gap_pooled	1.05968e+06	7.05274	132460	150251	order-0 of all gap symbols, one table
+pbmc_v3_lowgenes	exon	empties	w_H0_gap_pooled_mdl	1.08807e+06	7.24165	136008	150251	+0.5 log2(n) per used symbol
+pbmc_v3_lowgenes	exon	empties	w_H0_gap_by_valclass	1.05386e+06	7.01398	131732	150251	separate tables for value==1 groups and value>1 groups
+pbmc_v3_lowgenes	exon	empties	w_H0_gap_by_valclass_mdl	1.08873e+06	7.24607	136091	150251	
+pbmc_v3_lowgenes	exon	empties	w_H0_meta	250240	1.66548	31280	150251	order-0: groups-per-column + value + run-count symbols (separate tables)
+pbmc_v3_lowgenes	exon	empties	w_H0_total	1.3041e+06	8.67946	163012	150251	by-valclass gaps + meta
+pbmc_v3_lowgenes	exon	empties	w_H0_total_mdl	1.33897e+06	8.91155	167371	150251	with MDL param cost on gaps
+pbmc_v3_lowgenes	exon	all	comb_presence_m	2.22495e+07	12.643	2.78119e+06	1759828	sum_j log2 C(m, nnz_j), m=all rows
+pbmc_v3_lowgenes	exon	all	comb_presence_meff	1.3418e+07	7.62461	1.67725e+06	1759828	sum_j log2 C(m_eff, nnz_j), m_eff=9667 rows with >=1 nnz
+pbmc_v3_lowgenes	exon	all	comb_composition	3.88002e+06	2.20477	485002	1759828	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+pbmc_v3_lowgenes	exon	all	side_H0_nnzj	262134	0.148954	32766.7	1759828	order-0 of per-column nnz
+pbmc_v3_lowgenes	exon	all	side_H0_kj	289935	0.164752	36241.9	1759828	order-0 of per-column UMI total
+pbmc_v3_lowgenes	exon	all	side_H0_kj_mdl	298655	0.169707	37331.8	1759828	with MDL param cost
+pbmc_v3_lowgenes	exon	cells	comb_presence_m	1.9885e+07	12.3542	2.48562e+06	1609577	sum_j log2 C(m, nnz_j), m=all rows
+pbmc_v3_lowgenes	exon	cells	comb_presence_meff	1.18061e+07	7.33489	1.47576e+06	1609577	sum_j log2 C(m_eff, nnz_j), m_eff=9667 rows with >=1 nnz
+pbmc_v3_lowgenes	exon	cells	comb_composition	3.76767e+06	2.34078	470959	1609577	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+pbmc_v3_lowgenes	exon	cells	side_H0_nnzj	84329.5	0.0523923	10541.2	1609577	order-0 of per-column nnz
+pbmc_v3_lowgenes	exon	cells	side_H0_kj	101312	0.0629433	12664	1609577	order-0 of per-column UMI total
+pbmc_v3_lowgenes	exon	cells	side_H0_kj_mdl	107650	0.0668808	13456.2	1609577	with MDL param cost
+pbmc_v3_lowgenes	exon	empties	comb_presence_m	2.36456e+06	15.7374	295570	150251	sum_j log2 C(m, nnz_j), m=all rows
+pbmc_v3_lowgenes	exon	empties	comb_presence_meff	1.61194e+06	10.7283	201492	150251	sum_j log2 C(m_eff, nnz_j), m_eff=9667 rows with >=1 nnz
+pbmc_v3_lowgenes	exon	empties	comb_composition	112344	0.74771	14043	150251	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+pbmc_v3_lowgenes	exon	empties	side_H0_nnzj	135307	0.90054	16913.4	150251	order-0 of per-column nnz
+pbmc_v3_lowgenes	exon	empties	side_H0_kj	144464	0.961482	18057.9	150251	order-0 of per-column UMI total
+pbmc_v3_lowgenes	exon	empties	side_H0_kj_mdl	145741	0.969985	18217.7	150251	with MDL param cost
+pbmc_v3_lowgenes	exon	cells	pres_feat_plugin	6.35058e+06	3.9455	793823	1609577	sum_f N h(p_f), in-sample
+pbmc_v3_lowgenes	exon	cells	pres_featdepth_plugin	6.02212e+06	3.74143	752765	1609577	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+pbmc_v3_lowgenes	exon	cells	val_H0_plugin	2.96619e+06	1.84284	370774	1609577	order-0 of values (capped 4096)
+pbmc_v3_lowgenes	exon	cells	pres_feat_cv	6.39528e+06	3.97327	799411	1609577	alpha=[10, 10]
+pbmc_v3_lowgenes	exon	cells	pres_featdepth_cv	6.1296e+06	3.80821	766200	1609577	alpha=[1000, 1000]
+pbmc_v3_lowgenes	exon	cells	val_global_cv	3.02943e+06	1.88213	378678	1609577	order-0 value table, alphabet 1..12+
+pbmc_v3_lowgenes	exon	cells	val_ratectx_cv	2.24636e+06	1.39562	280795	1609577	value table by context log2(k_j*q_f)
+pbmc_v3_lowgenes	exon	cells	M1_feat_cv_total	9.42471e+06	5.8554	1.17809e+06	1609577	per-feature presence + order-0 values, CV
+pbmc_v3_lowgenes	exon	cells	M2_featdepth_cv_total	8.37596e+06	5.20382	1.04699e+06	1609577	per-feature x depth presence + rate-context values, CV
+pbmc_v3_lowgenes	exon	empties	pres_feat_plugin	1.33941e+06	8.91448	167426	150251	sum_f N h(p_f), in-sample
+pbmc_v3_lowgenes	exon	empties	pres_featdepth_plugin	987152	6.57002	123394	150251	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+pbmc_v3_lowgenes	exon	empties	val_H0_plugin	137939	0.918057	17242.4	150251	order-0 of values (capped 4096)
+pbmc_v3_lowgenes	exon	empties	pres_feat_cv	1.36908e+06	9.11196	171135	150251	alpha=[1000, 300]
+pbmc_v3_lowgenes	exon	empties	pres_featdepth_cv	1.06915e+06	7.11578	133644	150251	alpha=[10000.0, 3000]
+pbmc_v3_lowgenes	exon	empties	val_global_cv	138404	0.92115	17300.5	150251	order-0 value table, alphabet 1..12+
+pbmc_v3_lowgenes	exon	empties	val_ratectx_cv	106385	0.708049	13298.1	150251	value table by context log2(k_j*q_f)
+pbmc_v3_lowgenes	exon	empties	M1_feat_cv_total	1.50748e+06	10.0331	188436	150251	per-feature presence + order-0 values, CV
+pbmc_v3_lowgenes	exon	empties	M2_featdepth_cv_total	1.17554e+06	7.82383	146942	150251	per-feature x depth presence + rate-context values, CV
+pbmc_v3_lowgenes	exon	all	pres_feat_plugin	1.17783e+07	6.69285	1.47228e+06	1759828	sum_f N h(p_f), in-sample
+pbmc_v3_lowgenes	exon	all	pres_featdepth_plugin	7.0246e+06	3.99164	878075	1759828	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+pbmc_v3_lowgenes	exon	all	val_H0_plugin	3.12054e+06	1.77321	390068	1759828	order-0 of values (capped 4096)
+pbmc_v3_lowgenes	exon	all	pres_feat_cv	1.18234e+07	6.7185	1.47792e+06	1759828	alpha=[100, 100]
+pbmc_v3_lowgenes	exon	all	pres_featdepth_cv	7.18795e+06	4.08446	898494	1759828	alpha=[300, 300]
+pbmc_v3_lowgenes	exon	all	val_global_cv	3.18382e+06	1.80917	397978	1759828	order-0 value table, alphabet 1..12+
+pbmc_v3_lowgenes	exon	all	val_ratectx_cv	2.3472e+06	1.33377	293400	1759828	value table by context log2(k_j*q_f)
+pbmc_v3_lowgenes	exon	all	M1_feat_cv_total	1.50072e+07	8.52766	1.8759e+06	1759828	per-feature presence + order-0 values, CV
+pbmc_v3_lowgenes	exon	all	M2_featdepth_cv_total	9.53516e+06	5.41823	1.19189e+06	1759828	per-feature x depth presence + rate-context values, CV
+pbmc_v3_lowgenes	exon	empties	amb_loo_bits	1.06364e+06	7.07911	132955	150251	leave-one-droplet-out multinomial, prior=cells profile delta=0.01 gamma=1.23e+05
+pbmc_v3_lowgenes	exon	empties	amb_plugin_bits	1.05432e+06	7.01705	131790	150251	same smoothing, in-sample p (optimistic)
+pbmc_v3_lowgenes	exon	empties	amb_plugin_unsmoothed_bits	1.05128e+06	6.99683	131410	150251	in-sample p, no prior (most optimistic)
+pbmc_v3_lowgenes	exon	empties	amb_entropy_mc_bits	1.0094e+06	6.7181	126175	150251	sum_j H(Mult(k_j,p*)) Monte Carlo R=3, sd=367 bits; exact only if droplets are exchangeable multinomial draws
+pbmc_v3_lowgenes	exon	empties	amb_entropy_mc_mle_bits	1.02915e+06	6.84953	128644	150251	sum_j H(Mult(k_j, p_hat)) with the unsmoothed in-sample MLE profile (R=3, sd=761); lower-bound flavour
+pbmc_v3_lowgenes	exon	empties	amb_side_H0_kj	100634	0.669774	12579.3	150251	order-0 of k_j over 47667 nonzero empties (+12270 all-zero columns not counted)
+pbmc_v3_lowgenes	intron	all	w_H0_gap_pooled	7.87339e+06	7.31526	984174	1076297	order-0 of all gap symbols, one table
+pbmc_v3_lowgenes	intron	all	w_H0_gap_pooled_mdl	7.95097e+06	7.38734	993871	1076297	+0.5 log2(n) per used symbol
+pbmc_v3_lowgenes	intron	all	w_H0_gap_by_valclass	7.85567e+06	7.2988	981959	1076297	separate tables for value==1 groups and value>1 groups
+pbmc_v3_lowgenes	intron	all	w_H0_gap_by_valclass_mdl	7.96455e+06	7.39995	995569	1076297	
+pbmc_v3_lowgenes	intron	all	w_H0_meta	645641	0.599873	80705.1	1076297	order-0: groups-per-column + value + run-count symbols (separate tables)
+pbmc_v3_lowgenes	intron	all	w_H0_total	8.50131e+06	7.89867	1.06266e+06	1076297	by-valclass gaps + meta
+pbmc_v3_lowgenes	intron	all	w_H0_total_mdl	8.61019e+06	7.99983	1.07627e+06	1076297	with MDL param cost on gaps
+pbmc_v3_lowgenes	intron	cells	w_H0_gap_pooled	7.12909e+06	7.18085	891136	992792	order-0 of all gap symbols, one table
+pbmc_v3_lowgenes	intron	cells	w_H0_gap_pooled_mdl	7.20108e+06	7.25336	900135	992792	+0.5 log2(n) per used symbol
+pbmc_v3_lowgenes	intron	cells	w_H0_gap_by_valclass	7.11075e+06	7.16238	888844	992792	separate tables for value==1 groups and value>1 groups
+pbmc_v3_lowgenes	intron	cells	w_H0_gap_by_valclass_mdl	7.21125e+06	7.26361	901406	992792	
+pbmc_v3_lowgenes	intron	cells	w_H0_meta	442582	0.445795	55322.8	992792	order-0: groups-per-column + value + run-count symbols (separate tables)
+pbmc_v3_lowgenes	intron	cells	w_H0_total	7.55333e+06	7.60817	944166	992792	by-valclass gaps + meta
+pbmc_v3_lowgenes	intron	cells	w_H0_total_mdl	7.65383e+06	7.7094	956729	992792	with MDL param cost on gaps
+pbmc_v3_lowgenes	intron	empties	w_H0_gap_pooled	723508	8.66425	90438.5	83505	order-0 of all gap symbols, one table
+pbmc_v3_lowgenes	intron	empties	w_H0_gap_pooled_mdl	757221	9.06797	94652.6	83505	+0.5 log2(n) per used symbol
+pbmc_v3_lowgenes	intron	empties	w_H0_gap_by_valclass	719440	8.61553	89930	83505	separate tables for value==1 groups and value>1 groups
+pbmc_v3_lowgenes	intron	empties	w_H0_gap_by_valclass_mdl	764952	9.16055	95619	83505	
+pbmc_v3_lowgenes	intron	empties	w_H0_meta	135678	1.62479	16959.8	83505	order-0: groups-per-column + value + run-count symbols (separate tables)
+pbmc_v3_lowgenes	intron	empties	w_H0_total	855118	10.2403	106890	83505	by-valclass gaps + meta
+pbmc_v3_lowgenes	intron	empties	w_H0_total_mdl	900630	10.7853	112579	83505	with MDL param cost on gaps
+pbmc_v3_lowgenes	intron	all	comb_presence_m	1.36567e+07	12.6886	1.70709e+06	1076297	sum_j log2 C(m, nnz_j), m=all rows
+pbmc_v3_lowgenes	intron	all	comb_presence_meff	9.32103e+06	8.66028	1.16513e+06	1076297	sum_j log2 C(m_eff, nnz_j), m_eff=16750 rows with >=1 nnz
+pbmc_v3_lowgenes	intron	all	comb_composition	1.32902e+06	1.23481	166127	1076297	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+pbmc_v3_lowgenes	intron	all	side_H0_nnzj	208016	0.19327	26002.1	1076297	order-0 of per-column nnz
+pbmc_v3_lowgenes	intron	all	side_H0_kj	222906	0.207104	27863.2	1076297	order-0 of per-column UMI total
+pbmc_v3_lowgenes	intron	all	side_H0_kj_mdl	228394	0.212203	28549.2	1076297	with MDL param cost
+pbmc_v3_lowgenes	intron	cells	comb_presence_m	1.24384e+07	12.5287	1.5548e+06	992792	sum_j log2 C(m, nnz_j), m=all rows
+pbmc_v3_lowgenes	intron	cells	comb_presence_meff	8.43882e+06	8.50008	1.05485e+06	992792	sum_j log2 C(m_eff, nnz_j), m_eff=16750 rows with >=1 nnz
+pbmc_v3_lowgenes	intron	cells	comb_composition	1.26577e+06	1.27496	158222	992792	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+pbmc_v3_lowgenes	intron	cells	side_H0_nnzj	85352.8	0.0859725	10669.1	992792	order-0 of per-column nnz
+pbmc_v3_lowgenes	intron	cells	side_H0_kj	91699.2	0.092365	11462.4	992792	order-0 of per-column UMI total
+pbmc_v3_lowgenes	intron	cells	side_H0_kj_mdl	96262.6	0.0969615	12032.8	992792	with MDL param cost
+pbmc_v3_lowgenes	intron	empties	comb_presence_m	1.21831e+06	14.5897	152289	83505	sum_j log2 C(m, nnz_j), m=all rows
+pbmc_v3_lowgenes	intron	empties	comb_presence_meff	882219	10.5649	110277	83505	sum_j log2 C(m_eff, nnz_j), m_eff=16750 rows with >=1 nnz
+pbmc_v3_lowgenes	intron	empties	comb_composition	63242.4	0.757349	7905.3	83505	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+pbmc_v3_lowgenes	intron	empties	side_H0_nnzj	83569.8	1.00078	10446.2	83505	order-0 of per-column nnz
+pbmc_v3_lowgenes	intron	empties	side_H0_kj	91957.7	1.10122	11494.7	83505	order-0 of per-column UMI total
+pbmc_v3_lowgenes	intron	empties	side_H0_kj_mdl	93711.5	1.12223	11713.9	83505	with MDL param cost
+pbmc_v3_lowgenes	intron	cells	pres_feat_plugin	5.85698e+06	5.8995	732122	992792	sum_f N h(p_f), in-sample
+pbmc_v3_lowgenes	intron	cells	pres_featdepth_plugin	5.24984e+06	5.28796	656230	992792	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+pbmc_v3_lowgenes	intron	cells	val_H0_plugin	1.31178e+06	1.3213	163973	992792	order-0 of values (capped 4096)
+pbmc_v3_lowgenes	intron	cells	pres_feat_cv	5.93862e+06	5.98174	742328	992792	alpha=[30, 100]
+pbmc_v3_lowgenes	intron	cells	pres_featdepth_cv	5.4783e+06	5.51807	684787	992792	alpha=[1000, 1000]
+pbmc_v3_lowgenes	intron	cells	val_global_cv	1.31264e+06	1.32217	164080	992792	order-0 value table, alphabet 1..12+
+pbmc_v3_lowgenes	intron	cells	val_ratectx_cv	1.19924e+06	1.20795	149905	992792	value table by context log2(k_j*q_f)
+pbmc_v3_lowgenes	intron	cells	M1_feat_cv_total	7.25126e+06	7.30391	906408	992792	per-feature presence + order-0 values, CV
+pbmc_v3_lowgenes	intron	cells	M2_featdepth_cv_total	6.67754e+06	6.72602	834693	992792	per-feature x depth presence + rate-context values, CV
+pbmc_v3_lowgenes	intron	empties	pres_feat_plugin	984952	11.7951	123119	83505	sum_f N h(p_f), in-sample
+pbmc_v3_lowgenes	intron	empties	pres_featdepth_plugin	639015	7.65241	79876.8	83505	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+pbmc_v3_lowgenes	intron	empties	val_H0_plugin	84178.1	1.00806	10522.3	83505	order-0 of values (capped 4096)
+pbmc_v3_lowgenes	intron	empties	pres_feat_cv	1.01793e+06	12.1901	127242	83505	alpha=[1000, 1000]
+pbmc_v3_lowgenes	intron	empties	pres_featdepth_cv	734496	8.79583	91812	83505	alpha=[100000.0, 100000.0]
+pbmc_v3_lowgenes	intron	empties	val_global_cv	84232.3	1.00871	10529	83505	order-0 value table, alphabet 1..12+
+pbmc_v3_lowgenes	intron	empties	val_ratectx_cv	80766.3	0.967203	10095.8	83505	value table by context log2(k_j*q_f)
+pbmc_v3_lowgenes	intron	empties	M1_feat_cv_total	1.10217e+06	13.1988	137771	83505	per-feature presence + order-0 values, CV
+pbmc_v3_lowgenes	intron	empties	M2_featdepth_cv_total	815262	9.76303	101908	83505	per-feature x depth presence + rate-context values, CV
+pbmc_v3_lowgenes	intron	all	pres_feat_plugin	9.17509e+06	8.52469	1.14689e+06	1076297	sum_f N h(p_f), in-sample
+pbmc_v3_lowgenes	intron	all	pres_featdepth_plugin	5.92472e+06	5.50472	740590	1076297	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+pbmc_v3_lowgenes	intron	all	val_H0_plugin	1.398e+06	1.29889	174749	1076297	order-0 of values (capped 4096)
+pbmc_v3_lowgenes	intron	all	pres_feat_cv	9.25622e+06	8.60006	1.15703e+06	1076297	alpha=[300, 300]
+pbmc_v3_lowgenes	intron	all	pres_featdepth_cv	6.21069e+06	5.77042	776336	1076297	alpha=[1000, 1000]
+pbmc_v3_lowgenes	intron	all	val_global_cv	1.39886e+06	1.2997	174857	1076297	order-0 value table, alphabet 1..12+
+pbmc_v3_lowgenes	intron	all	val_ratectx_cv	1.27056e+06	1.1805	158821	1076297	value table by context log2(k_j*q_f)
+pbmc_v3_lowgenes	intron	all	M1_feat_cv_total	1.06551e+07	9.89976	1.33188e+06	1076297	per-feature presence + order-0 values, CV
+pbmc_v3_lowgenes	intron	all	M2_featdepth_cv_total	7.48125e+06	6.95092	935157	1076297	per-feature x depth presence + rate-context values, CV
+pbmc_v3_lowgenes	intron	empties	amb_loo_bits	771441	9.23826	96430.1	83505	leave-one-droplet-out multinomial, prior=cells profile delta=0.1 gamma=6.56e+04
+pbmc_v3_lowgenes	intron	empties	amb_plugin_bits	757761	9.07444	94720.1	83505	same smoothing, in-sample p (optimistic)
+pbmc_v3_lowgenes	intron	empties	amb_plugin_unsmoothed_bits	753311	9.02114	94163.8	83505	in-sample p, no prior (most optimistic)
+pbmc_v3_lowgenes	intron	empties	amb_entropy_mc_bits	739590	8.85684	92448.8	83505	sum_j H(Mult(k_j,p*)) Monte Carlo R=3, sd=741 bits; exact only if droplets are exchangeable multinomial draws
+pbmc_v3_lowgenes	intron	empties	amb_entropy_mc_mle_bits	727103	8.7073	90887.9	83505	sum_j H(Mult(k_j, p_hat)) with the unsmoothed in-sample MLE profile (R=3, sd=447); lower-bound flavour
+pbmc_v3_lowgenes	intron	empties	amb_side_H0_kj	37166.1	0.445076	4645.76	83505	order-0 of k_j over 19734 nonzero empties (+40203 all-zero columns not counted)
+tcell_5p	exon	all	w_H0_gap_pooled	7.17228e+07	6.8116	8.96535e+06	10529513	order-0 of all gap symbols, one table
+tcell_5p	exon	all	w_H0_gap_pooled_mdl	7.21158e+07	6.84892	9.01447e+06	10529513	+0.5 log2(n) per used symbol
+tcell_5p	exon	all	w_H0_gap_by_valclass	7.15769e+07	6.79774	8.94711e+06	10529513	separate tables for value==1 groups and value>1 groups
+tcell_5p	exon	all	w_H0_gap_by_valclass_mdl	7.20777e+07	6.8453	9.00971e+06	10529513	
+tcell_5p	exon	all	w_H0_meta	2.68668e+06	0.255157	335834	10529513	order-0: groups-per-column + value + run-count symbols (separate tables)
+tcell_5p	exon	all	w_H0_total	7.42636e+07	7.0529	9.28294e+06	10529513	by-valclass gaps + meta
+tcell_5p	exon	all	w_H0_total_mdl	7.47644e+07	7.10046	9.34555e+06	10529513	with MDL param cost on gaps
+tcell_5p	exon	cells	w_H0_gap_pooled	6.19246e+07	6.56878	7.74057e+06	9427097	order-0 of all gap symbols, one table
+tcell_5p	exon	cells	w_H0_gap_pooled_mdl	6.21753e+07	6.59538	7.77192e+06	9427097	+0.5 log2(n) per used symbol
+tcell_5p	exon	cells	w_H0_gap_by_valclass	6.18235e+07	6.55807	7.72794e+06	9427097	separate tables for value==1 groups and value>1 groups
+tcell_5p	exon	cells	w_H0_gap_by_valclass_mdl	6.21714e+07	6.59497	7.77142e+06	9427097	
+tcell_5p	exon	cells	w_H0_meta	1.98015e+06	0.210049	247519	9427097	order-0: groups-per-column + value + run-count symbols (separate tables)
+tcell_5p	exon	cells	w_H0_total	6.38037e+07	6.76812	7.97546e+06	9427097	by-valclass gaps + meta
+tcell_5p	exon	cells	w_H0_total_mdl	6.41515e+07	6.80501	8.01894e+06	9427097	with MDL param cost on gaps
+tcell_5p	exon	empties	w_H0_gap_pooled	9.5246e+06	8.63975	1.19057e+06	1102416	order-0 of all gap symbols, one table
+tcell_5p	exon	empties	w_H0_gap_pooled_mdl	9.81945e+06	8.90721	1.22743e+06	1102416	+0.5 log2(n) per used symbol
+tcell_5p	exon	empties	w_H0_gap_by_valclass	9.48016e+06	8.59944	1.18502e+06	1102416	separate tables for value==1 groups and value>1 groups
+tcell_5p	exon	empties	w_H0_gap_by_valclass_mdl	9.80192e+06	8.89131	1.22524e+06	1102416	
+tcell_5p	exon	empties	w_H0_meta	522379	0.473849	65297.4	1102416	order-0: groups-per-column + value + run-count symbols (separate tables)
+tcell_5p	exon	empties	w_H0_total	1.00025e+07	9.07329	1.25032e+06	1102416	by-valclass gaps + meta
+tcell_5p	exon	empties	w_H0_total_mdl	1.03243e+07	9.36515	1.29054e+06	1102416	with MDL param cost on gaps
+tcell_5p	exon	all	comb_presence_m	1.08605e+08	10.3144	1.35757e+07	10529513	sum_j log2 C(m, nnz_j), m=all rows
+tcell_5p	exon	all	comb_presence_meff	9.32898e+07	8.85984	1.16612e+07	10529513	sum_j log2 C(m_eff, nnz_j), m_eff=113660 rows with >=1 nnz
+tcell_5p	exon	all	comb_composition	1.63771e+07	1.55535	2.04713e+06	10529513	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+tcell_5p	exon	all	side_H0_nnzj	392490	0.0372752	49061.2	10529513	order-0 of per-column nnz
+tcell_5p	exon	all	side_H0_kj	406185	0.0385759	50773.2	10529513	order-0 of per-column UMI total
+tcell_5p	exon	all	side_H0_kj_mdl	428415	0.0406871	53551.9	10529513	with MDL param cost
+tcell_5p	exon	cells	comb_presence_m	9.43395e+07	10.0073	1.17924e+07	9427097	sum_j log2 C(m, nnz_j), m=all rows
+tcell_5p	exon	cells	comb_presence_meff	8.06251e+07	8.55249	1.00781e+07	9427097	sum_j log2 C(m_eff, nnz_j), m_eff=113660 rows with >=1 nnz
+tcell_5p	exon	cells	comb_composition	1.54479e+07	1.63867	1.93099e+06	9427097	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+tcell_5p	exon	cells	side_H0_nnzj	122067	0.0129486	15258.4	9427097	order-0 of per-column nnz
+tcell_5p	exon	cells	side_H0_kj	132903	0.0140979	16612.8	9427097	order-0 of per-column UMI total
+tcell_5p	exon	cells	side_H0_kj_mdl	149677	0.0158774	18709.7	9427097	with MDL param cost
+tcell_5p	exon	empties	comb_presence_m	1.42657e+07	12.9404	1.78322e+06	1102416	sum_j log2 C(m, nnz_j), m=all rows
+tcell_5p	exon	empties	comb_presence_meff	1.26646e+07	11.4881	1.58308e+06	1102416	sum_j log2 C(m_eff, nnz_j), m_eff=113660 rows with >=1 nnz
+tcell_5p	exon	empties	comb_composition	929150	0.842831	116144	1102416	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+tcell_5p	exon	empties	side_H0_nnzj	227378	0.206254	28422.2	1102416	order-0 of per-column nnz
+tcell_5p	exon	empties	side_H0_kj	229902	0.208544	28737.8	1102416	order-0 of per-column UMI total
+tcell_5p	exon	empties	side_H0_kj_mdl	236386	0.214426	29548.3	1102416	with MDL param cost
+tcell_5p	exon	cells	pres_feat_plugin	4.59256e+07	4.87166	5.7407e+06	9427097	sum_f N h(p_f), in-sample
+tcell_5p	exon	cells	pres_featdepth_plugin	4.45859e+07	4.72954	5.57323e+06	9427097	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+tcell_5p	exon	cells	val_H0_plugin	1.2657e+07	1.34262	1.58212e+06	9427097	order-0 of values (capped 4096)
+tcell_5p	exon	cells	pres_feat_cv	4.62918e+07	4.9105	5.78647e+06	9427097	alpha=[30, 30]
+tcell_5p	exon	cells	pres_featdepth_cv	4.55295e+07	4.82964	5.69119e+06	9427097	alpha=[10000.0, 10000.0]
+tcell_5p	exon	cells	val_global_cv	1.27236e+07	1.34969	1.59045e+06	9427097	order-0 value table, alphabet 1..12+
+tcell_5p	exon	cells	val_ratectx_cv	8.81956e+06	0.935554	1.10244e+06	9427097	value table by context log2(k_j*q_f)
+tcell_5p	exon	cells	M1_feat_cv_total	5.90154e+07	6.26018	7.37692e+06	9427097	per-feature presence + order-0 values, CV
+tcell_5p	exon	cells	M2_featdepth_cv_total	5.43491e+07	5.7652	6.79363e+06	9427097	per-feature x depth presence + rate-context values, CV
+tcell_5p	exon	empties	pres_feat_plugin	1.06817e+07	9.68936	1.33521e+06	1102416	sum_f N h(p_f), in-sample
+tcell_5p	exon	empties	pres_featdepth_plugin	7.67985e+06	6.96638	959982	1102416	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+tcell_5p	exon	empties	val_H0_plugin	873857	0.792674	109232	1102416	order-0 of values (capped 4096)
+tcell_5p	exon	empties	pres_feat_cv	1.09077e+07	9.89436	1.36346e+06	1102416	alpha=[1000, 1000]
+tcell_5p	exon	empties	pres_featdepth_cv	8.53627e+06	7.74324	1.06703e+06	1102416	alpha=[100000.0, 100000.0]
+tcell_5p	exon	empties	val_global_cv	876186	0.794787	109523	1102416	order-0 value table, alphabet 1..12+
+tcell_5p	exon	empties	val_ratectx_cv	601287	0.545426	75160.9	1102416	value table by context log2(k_j*q_f)
+tcell_5p	exon	empties	M1_feat_cv_total	1.17839e+07	10.6891	1.47299e+06	1102416	per-feature presence + order-0 values, CV
+tcell_5p	exon	empties	M2_featdepth_cv_total	9.13755e+06	8.28866	1.14219e+06	1102416	per-feature x depth presence + rate-context values, CV
+tcell_5p	exon	all	pres_feat_plugin	7.73923e+07	7.35004	9.67404e+06	10529513	sum_f N h(p_f), in-sample
+tcell_5p	exon	all	pres_featdepth_plugin	5.23976e+07	4.97626	6.5497e+06	10529513	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+tcell_5p	exon	all	val_H0_plugin	1.35832e+07	1.29001	1.6979e+06	10529513	order-0 of values (capped 4096)
+tcell_5p	exon	all	pres_feat_cv	7.77587e+07	7.38483	9.71984e+06	10529513	alpha=[300, 300]
+tcell_5p	exon	all	pres_featdepth_cv	5.39934e+07	5.12782	6.74918e+06	10529513	alpha=[3000, 3000]
+tcell_5p	exon	all	val_global_cv	1.36518e+07	1.29653	1.70648e+06	10529513	order-0 value table, alphabet 1..12+
+tcell_5p	exon	all	val_ratectx_cv	9.32206e+06	0.885327	1.16526e+06	10529513	value table by context log2(k_j*q_f)
+tcell_5p	exon	all	M1_feat_cv_total	9.14105e+07	8.68137	1.14263e+07	10529513	per-feature presence + order-0 values, CV
+tcell_5p	exon	all	M2_featdepth_cv_total	6.33155e+07	6.01315	7.91444e+06	10529513	per-feature x depth presence + rate-context values, CV
+tcell_5p	exon	empties	amb_loo_bits	8.62831e+06	7.82673	1.07854e+06	1102416	leave-one-droplet-out multinomial, prior=cells profile delta=0.1 gamma=8.66e+05
+tcell_5p	exon	empties	amb_plugin_bits	8.52599e+06	7.73391	1.06575e+06	1102416	same smoothing, in-sample p (optimistic)
+tcell_5p	exon	empties	amb_plugin_unsmoothed_bits	8.50042e+06	7.71072	1.06255e+06	1102416	in-sample p, no prior (most optimistic)
+tcell_5p	exon	empties	amb_entropy_mc_bits	8.33106e+06	7.55709	1.04138e+06	1102416	sum_j H(Mult(k_j,p*)) Monte Carlo R=3, sd=3149 bits; exact only if droplets are exchangeable multinomial draws
+tcell_5p	exon	empties	amb_entropy_mc_mle_bits	8.29997e+06	7.52889	1.0375e+06	1102416	sum_j H(Mult(k_j, p_hat)) with the unsmoothed in-sample MLE profile (R=3, sd=1431); lower-bound flavour
+tcell_5p	exon	empties	amb_side_H0_kj	228248	0.207044	28531	1102416	order-0 of k_j over 56718 nonzero empties (+168 all-zero columns not counted)
+tcell_5p	intron	all	w_H0_gap_pooled	1.1241e+07	10.2348	1.40513e+06	1098311	order-0 of all gap symbols, one table
+tcell_5p	intron	all	w_H0_gap_pooled_mdl	1.15178e+07	10.4868	1.43972e+06	1098311	+0.5 log2(n) per used symbol
+tcell_5p	intron	all	w_H0_gap_by_valclass	1.12119e+07	10.2084	1.40149e+06	1098311	separate tables for value==1 groups and value>1 groups
+tcell_5p	intron	all	w_H0_gap_by_valclass_mdl	1.1515e+07	10.4843	1.43938e+06	1098311	
+tcell_5p	intron	all	w_H0_meta	385897	0.351355	48237.2	1098311	order-0: groups-per-column + value + run-count symbols (separate tables)
+tcell_5p	intron	all	w_H0_total	1.15978e+07	10.5597	1.44973e+06	1098311	by-valclass gaps + meta
+tcell_5p	intron	all	w_H0_total_mdl	1.19009e+07	10.8357	1.48761e+06	1098311	with MDL param cost on gaps
+tcell_5p	intron	cells	w_H0_gap_pooled	9.81084e+06	10.031	1.22636e+06	978048	order-0 of all gap symbols, one table
+tcell_5p	intron	cells	w_H0_gap_pooled_mdl	1.00197e+07	10.2446	1.25246e+06	978048	+0.5 log2(n) per used symbol
+tcell_5p	intron	cells	w_H0_gap_by_valclass	9.78365e+06	10.0032	1.22296e+06	978048	separate tables for value==1 groups and value>1 groups
+tcell_5p	intron	cells	w_H0_gap_by_valclass_mdl	1.00162e+07	10.241	1.25202e+06	978048	
+tcell_5p	intron	cells	w_H0_meta	213239	0.218026	26654.9	978048	order-0: groups-per-column + value + run-count symbols (separate tables)
+tcell_5p	intron	cells	w_H0_total	9.99689e+06	10.2213	1.24961e+06	978048	by-valclass gaps + meta
+tcell_5p	intron	cells	w_H0_total_mdl	1.02294e+07	10.459	1.27868e+06	978048	with MDL param cost on gaps
+tcell_5p	intron	empties	w_H0_gap_pooled	1.38102e+06	11.4833	172627	120263	order-0 of all gap symbols, one table
+tcell_5p	intron	empties	w_H0_gap_pooled_mdl	1.54124e+06	12.8156	192655	120263	+0.5 log2(n) per used symbol
+tcell_5p	intron	empties	w_H0_gap_by_valclass	1.3771e+06	11.4507	172137	120263	separate tables for value==1 groups and value>1 groups
+tcell_5p	intron	empties	w_H0_gap_by_valclass_mdl	1.54087e+06	12.8125	192608	120263	
+tcell_5p	intron	empties	w_H0_meta	117334	0.975642	14666.7	120263	order-0: groups-per-column + value + run-count symbols (separate tables)
+tcell_5p	intron	empties	w_H0_total	1.49443e+06	12.4263	186804	120263	by-valclass gaps + meta
+tcell_5p	intron	empties	w_H0_total_mdl	1.6582e+06	13.7881	207275	120263	with MDL param cost on gaps
+tcell_5p	intron	all	comb_presence_m	1.44395e+07	13.147	1.80494e+06	1098311	sum_j log2 C(m, nnz_j), m=all rows
+tcell_5p	intron	all	comb_presence_meff	1.26344e+07	11.5034	1.57929e+06	1098311	sum_j log2 C(m_eff, nnz_j), m_eff=87149 rows with >=1 nnz
+tcell_5p	intron	all	comb_composition	215309	0.196037	26913.7	1098311	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+tcell_5p	intron	all	side_H0_nnzj	227238	0.206898	28404.8	1098311	order-0 of per-column nnz
+tcell_5p	intron	all	side_H0_kj	228564	0.208105	28570.5	1098311	order-0 of per-column UMI total
+tcell_5p	intron	all	side_H0_kj_mdl	231169	0.210477	28896.1	1098311	with MDL param cost
+tcell_5p	intron	cells	comb_presence_m	1.26817e+07	12.9663	1.58521e+06	978048	sum_j log2 C(m, nnz_j), m=all rows
+tcell_5p	intron	cells	comb_presence_meff	1.10742e+07	11.3227	1.38427e+06	978048	sum_j log2 C(m_eff, nnz_j), m_eff=87149 rows with >=1 nnz
+tcell_5p	intron	cells	comb_composition	203966	0.208544	25495.7	978048	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+tcell_5p	intron	cells	side_H0_nnzj	86449	0.0883893	10806.1	978048	order-0 of per-column nnz
+tcell_5p	intron	cells	side_H0_kj	87370.7	0.0893317	10921.3	978048	order-0 of per-column UMI total
+tcell_5p	intron	cells	side_H0_kj_mdl	89498.1	0.0915069	11187.3	978048	with MDL param cost
+tcell_5p	intron	empties	comb_presence_m	1.75783e+06	14.6166	219729	120263	sum_j log2 C(m, nnz_j), m=all rows
+tcell_5p	intron	empties	comb_presence_meff	1.5602e+06	12.9732	195025	120263	sum_j log2 C(m_eff, nnz_j), m_eff=87149 rows with >=1 nnz
+tcell_5p	intron	empties	comb_composition	11343.7	0.094324	1417.96	120263	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+tcell_5p	intron	empties	side_H0_nnzj	100176	0.832971	12522	120263	order-0 of per-column nnz
+tcell_5p	intron	empties	side_H0_kj	100546	0.83605	12568.2	120263	order-0 of per-column UMI total
+tcell_5p	intron	empties	side_H0_kj_mdl	101896	0.847279	12737	120263	with MDL param cost
+tcell_5p	intron	cells	pres_feat_plugin	9.02163e+06	9.22412	1.1277e+06	978048	sum_f N h(p_f), in-sample
+tcell_5p	intron	cells	pres_featdepth_plugin	8.65041e+06	8.84456	1.0813e+06	978048	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+tcell_5p	intron	cells	val_H0_plugin	219451	0.224376	27431.3	978048	order-0 of values (capped 4096)
+tcell_5p	intron	cells	pres_feat_cv	9.31301e+06	9.52204	1.16413e+06	978048	alpha=[300, 300]
+tcell_5p	intron	cells	pres_featdepth_cv	9.52308e+06	9.73682	1.19038e+06	978048	alpha=[100000.0, 100000.0]
+tcell_5p	intron	cells	val_global_cv	219502	0.224428	27437.7	978048	order-0 value table, alphabet 1..12+
+tcell_5p	intron	cells	val_ratectx_cv	233176	0.23841	29147	978048	value table by context log2(k_j*q_f)
+tcell_5p	intron	cells	M1_feat_cv_total	9.53251e+06	9.74646	1.19156e+06	978048	per-feature presence + order-0 values, CV
+tcell_5p	intron	cells	M2_featdepth_cv_total	9.75626e+06	9.97523	1.21953e+06	978048	per-feature x depth presence + rate-context values, CV
+tcell_5p	intron	empties	pres_feat_plugin	1.70963e+06	14.2157	213704	120263	sum_f N h(p_f), in-sample
+tcell_5p	intron	empties	pres_featdepth_plugin	1.18888e+06	9.8857	148611	120263	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+tcell_5p	intron	empties	val_H0_plugin	16076.7	0.133679	2009.59	120263	order-0 of values (capped 4096)
+tcell_5p	intron	empties	pres_feat_cv	1.88648e+06	15.6863	235810	120263	alpha=[3000, 3000]
+tcell_5p	intron	empties	pres_featdepth_cv	1.82659e+06	15.1883	228324	120263	alpha=[100000.0, 100000.0]
+tcell_5p	intron	empties	val_global_cv	16097.8	0.133855	2012.22	120263	order-0 value table, alphabet 1..12+
+tcell_5p	intron	empties	val_ratectx_cv	26577.1	0.220992	3322.14	120263	value table by context log2(k_j*q_f)
+tcell_5p	intron	empties	M1_feat_cv_total	1.90258e+06	15.8202	237823	120263	per-feature presence + order-0 values, CV
+tcell_5p	intron	empties	M2_featdepth_cv_total	1.85317e+06	15.4093	231646	120263	per-feature x depth presence + rate-context values, CV
+tcell_5p	intron	all	pres_feat_plugin	1.27354e+07	11.5955	1.59193e+06	1098311	sum_f N h(p_f), in-sample
+tcell_5p	intron	all	pres_featdepth_plugin	9.95745e+06	9.06615	1.24468e+06	1098311	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+tcell_5p	intron	all	val_H0_plugin	236158	0.215019	29519.8	1098311	order-0 of values (capped 4096)
+tcell_5p	intron	all	pres_feat_cv	1.30321e+07	11.8656	1.62901e+06	1098311	alpha=[3000, 3000]
+tcell_5p	intron	all	pres_featdepth_cv	1.10484e+07	10.0594	1.38105e+06	1098311	alpha=[100000.0, 100000.0]
+tcell_5p	intron	all	val_global_cv	236201	0.215058	29525.1	1098311	order-0 value table, alphabet 1..12+
+tcell_5p	intron	all	val_ratectx_cv	177336	0.161462	22167	1098311	value table by context log2(k_j*q_f)
+tcell_5p	intron	all	M1_feat_cv_total	1.32683e+07	12.0806	1.65853e+06	1098311	per-feature presence + order-0 values, CV
+tcell_5p	intron	all	M2_featdepth_cv_total	1.12257e+07	10.2209	1.40322e+06	1098311	per-feature x depth presence + rate-context values, CV
+tcell_5p	intron	empties	amb_loo_bits	1.35003e+06	11.2257	168754	120263	leave-one-droplet-out multinomial, prior=cells profile delta=0.1 gamma=2.45e+05
+tcell_5p	intron	empties	amb_plugin_bits	1.30051e+06	10.8139	162563	120263	same smoothing, in-sample p (optimistic)
+tcell_5p	intron	empties	amb_plugin_unsmoothed_bits	1.26595e+06	10.5265	158244	120263	in-sample p, no prior (most optimistic)
+tcell_5p	intron	empties	amb_entropy_mc_bits	1.3124e+06	10.9128	164050	120263	sum_j H(Mult(k_j,p*)) Monte Carlo R=3, sd=1489 bits; exact only if droplets are exchangeable multinomial draws
+tcell_5p	intron	empties	amb_entropy_mc_mle_bits	1.26518e+06	10.5201	158148	120263	sum_j H(Mult(k_j, p_hat)) with the unsmoothed in-sample MLE profile (R=3, sd=639); lower-bound flavour
+tcell_5p	intron	empties	amb_side_H0_kj	44563	0.370546	5570.38	120263	order-0 of k_j over 24231 nonzero empties (+32655 all-zero columns not counted)
+tumor_3p	exon	all	w_H0_gap_pooled	2.36469e+06	9.64717	295586	245117	order-0 of all gap symbols, one table
+tumor_3p	exon	all	w_H0_gap_pooled_mdl	2.50679e+06	10.2269	313349	245117	+0.5 log2(n) per used symbol
+tumor_3p	exon	all	w_H0_gap_by_valclass	2.35258e+06	9.59779	294073	245117	separate tables for value==1 groups and value>1 groups
+tumor_3p	exon	all	w_H0_gap_by_valclass_mdl	2.50051e+06	10.2013	312564	245117	
+tumor_3p	exon	all	w_H0_meta	206405	0.842067	25800.6	245117	order-0: groups-per-column + value + run-count symbols (separate tables)
+tumor_3p	exon	all	w_H0_total	2.55899e+06	10.4399	319873	245117	by-valclass gaps + meta
+tumor_3p	exon	all	w_H0_total_mdl	2.70692e+06	11.0434	338365	245117	with MDL param cost on gaps
+tumor_3p	exon	cells	w_H0_gap_pooled	1.32108e+06	9.27465	165135	142440	order-0 of all gap symbols, one table
+tumor_3p	exon	cells	w_H0_gap_pooled_mdl	1.40016e+06	9.82981	175020	142440	+0.5 log2(n) per used symbol
+tumor_3p	exon	cells	w_H0_gap_by_valclass	1.31412e+06	9.22575	164265	142440	separate tables for value==1 groups and value>1 groups
+tumor_3p	exon	cells	w_H0_gap_by_valclass_mdl	1.39787e+06	9.81375	174734	142440	
+tumor_3p	exon	cells	w_H0_meta	70568.2	0.495424	8821.02	142440	order-0: groups-per-column + value + run-count symbols (separate tables)
+tumor_3p	exon	cells	w_H0_total	1.38468e+06	9.72118	173086	142440	by-valclass gaps + meta
+tumor_3p	exon	cells	w_H0_total_mdl	1.46844e+06	10.3092	183555	142440	with MDL param cost on gaps
+tumor_3p	exon	empties	w_H0_gap_pooled	1.02588e+06	9.99133	128235	102677	order-0 of all gap symbols, one table
+tumor_3p	exon	empties	w_H0_gap_pooled_mdl	1.13851e+06	11.0883	142314	102677	+0.5 log2(n) per used symbol
+tumor_3p	exon	empties	w_H0_gap_by_valclass	1.01949e+06	9.92912	127437	102677	separate tables for value==1 groups and value>1 groups
+tumor_3p	exon	empties	w_H0_gap_by_valclass_mdl	1.13377e+06	11.0421	141721	102677	
+tumor_3p	exon	empties	w_H0_meta	118427	1.15339	14803.3	102677	order-0: groups-per-column + value + run-count symbols (separate tables)
+tumor_3p	exon	empties	w_H0_total	1.13792e+06	11.0825	142240	102677	by-valclass gaps + meta
+tumor_3p	exon	empties	w_H0_total_mdl	1.2522e+06	12.1955	156524	102677	with MDL param cost on gaps
+tumor_3p	exon	all	comb_presence_m	3.66354e+06	14.9461	457943	245117	sum_j log2 C(m, nnz_j), m=all rows
+tumor_3p	exon	all	comb_presence_meff	2.92015e+06	11.9133	365019	245117	sum_j log2 C(m_eff, nnz_j), m_eff=37993 rows with >=1 nnz
+tumor_3p	exon	all	comb_composition	89238.2	0.364064	11154.8	245117	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+tumor_3p	exon	all	side_H0_nnzj	113769	0.46414	14221.1	245117	order-0 of per-column nnz
+tumor_3p	exon	all	side_H0_kj	116605	0.475713	14575.7	245117	order-0 of per-column UMI total
+tumor_3p	exon	all	side_H0_kj_mdl	118060	0.481646	14757.4	245117	with MDL param cost
+tumor_3p	exon	cells	comb_presence_m	2.00894e+06	14.1037	251117	142440	sum_j log2 C(m, nnz_j), m=all rows
+tumor_3p	exon	cells	comb_presence_meff	1.5769e+06	11.0706	197112	142440	sum_j log2 C(m_eff, nnz_j), m_eff=37993 rows with >=1 nnz
+tumor_3p	exon	cells	comb_composition	70688.4	0.496268	8836.05	142440	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+tumor_3p	exon	cells	side_H0_nnzj	22122.3	0.155309	2765.28	142440	order-0 of per-column nnz
+tumor_3p	exon	cells	side_H0_kj	22563.5	0.158407	2820.43	142440	order-0 of per-column UMI total
+tumor_3p	exon	cells	side_H0_kj_mdl	23640.4	0.165967	2955.04	142440	with MDL param cost
+tumor_3p	exon	empties	comb_presence_m	1.65461e+06	16.1147	206826	102677	sum_j log2 C(m, nnz_j), m=all rows
+tumor_3p	exon	empties	comb_presence_meff	1.34325e+06	13.0823	167907	102677	sum_j log2 C(m_eff, nnz_j), m_eff=37993 rows with >=1 nnz
+tumor_3p	exon	empties	comb_composition	18549.8	0.180662	2318.72	102677	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+tumor_3p	exon	empties	side_H0_nnzj	78418.2	0.763737	9802.28	102677	order-0 of per-column nnz
+tumor_3p	exon	empties	side_H0_kj	80166.5	0.780764	10020.8	102677	order-0 of per-column UMI total
+tumor_3p	exon	empties	side_H0_kj_mdl	80418	0.783214	10052.3	102677	with MDL param cost
+tumor_3p	exon	cells	pres_feat_plugin	1.20117e+06	8.43283	150147	142440	sum_f N h(p_f), in-sample
+tumor_3p	exon	cells	pres_featdepth_plugin	1.0788e+06	7.57372	134850	142440	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+tumor_3p	exon	cells	val_H0_plugin	69010.9	0.484491	8626.36	142440	order-0 of values (capped 4096)
+tumor_3p	exon	cells	pres_feat_cv	1.34567e+06	9.44728	168209	142440	alpha=[300, 300]
+tumor_3p	exon	cells	pres_featdepth_cv	1.4852e+06	10.4268	185650	142440	alpha=[100000.0, 100000.0]
+tumor_3p	exon	cells	val_global_cv	69175.9	0.485649	8646.98	142440	order-0 value table, alphabet 1..12+
+tumor_3p	exon	cells	val_ratectx_cv	93391.9	0.655658	11674	142440	value table by context log2(k_j*q_f)
+tumor_3p	exon	cells	M1_feat_cv_total	1.41485e+06	9.93293	176856	142440	per-feature presence + order-0 values, CV
+tumor_3p	exon	cells	M2_featdepth_cv_total	1.57859e+06	11.0825	197324	142440	per-feature x depth presence + rate-context values, CV
+tumor_3p	exon	empties	pres_feat_plugin	1.06502e+06	10.3725	133127	102677	sum_f N h(p_f), in-sample
+tumor_3p	exon	empties	pres_featdepth_plugin	922353	8.98305	115294	102677	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+tumor_3p	exon	empties	val_H0_plugin	32834.3	0.319782	4104.29	102677	order-0 of values (capped 4096)
+tumor_3p	exon	empties	pres_feat_cv	1.17463e+06	11.44	146829	102677	alpha=[3000, 3000]
+tumor_3p	exon	empties	pres_featdepth_cv	1.25444e+06	12.2174	156805	102677	alpha=[100000.0, 100000.0]
+tumor_3p	exon	empties	val_global_cv	32870.3	0.320133	4108.79	102677	order-0 value table, alphabet 1..12+
+tumor_3p	exon	empties	val_ratectx_cv	38637.5	0.376302	4829.69	102677	value table by context log2(k_j*q_f)
+tumor_3p	exon	empties	M1_feat_cv_total	1.2075e+06	11.7602	150937	102677	per-feature presence + order-0 values, CV
+tumor_3p	exon	empties	M2_featdepth_cv_total	1.29308e+06	12.5937	161635	102677	per-feature x depth presence + rate-context values, CV
+tumor_3p	exon	all	pres_feat_plugin	2.48251e+06	10.1279	310314	245117	sum_f N h(p_f), in-sample
+tumor_3p	exon	all	pres_featdepth_plugin	2.01727e+06	8.22983	252159	245117	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+tumor_3p	exon	all	val_H0_plugin	102512	0.418218	12814	245117	order-0 of values (capped 4096)
+tumor_3p	exon	all	pres_feat_cv	2.65975e+06	10.8509	332468	245117	alpha=[3000, 3000]
+tumor_3p	exon	all	pres_featdepth_cv	2.64485e+06	10.7901	330606	245117	alpha=[100000.0, 100000.0]
+tumor_3p	exon	all	val_global_cv	102683	0.418915	12835.4	245117	order-0 value table, alphabet 1..12+
+tumor_3p	exon	all	val_ratectx_cv	88186.8	0.359774	11023.3	245117	value table by context log2(k_j*q_f)
+tumor_3p	exon	all	M1_feat_cv_total	2.76243e+06	11.2698	345304	245117	per-feature presence + order-0 values, CV
+tumor_3p	exon	all	M2_featdepth_cv_total	2.73303e+06	11.1499	341629	245117	per-feature x depth presence + rate-context values, CV
+tumor_3p	exon	empties	amb_loo_bits	1.03847e+06	10.114	129809	102677	leave-one-droplet-out multinomial, prior=cells profile delta=0.1 gamma=6.59e+04
+tumor_3p	exon	empties	amb_plugin_bits	983861	9.5821	122983	102677	same smoothing, in-sample p (optimistic)
+tumor_3p	exon	empties	amb_plugin_unsmoothed_bits	963745	9.38618	120468	102677	in-sample p, no prior (most optimistic)
+tumor_3p	exon	empties	amb_entropy_mc_bits	1.07573e+06	10.4768	134466	102677	sum_j H(Mult(k_j,p*)) Monte Carlo R=3, sd=848 bits; exact only if droplets are exchangeable multinomial draws
+tumor_3p	exon	empties	amb_entropy_mc_mle_bits	957311	9.32352	119664	102677	sum_j H(Mult(k_j, p_hat)) with the unsmoothed in-sample MLE profile (R=3, sd=1131); lower-bound flavour
+tumor_3p	exon	empties	amb_side_H0_kj	62986.1	0.61344	7873.27	102677	order-0 of k_j over 15971 nonzero empties (+5276 all-zero columns not counted)
+tumor_3p	intron	all	w_H0_gap_pooled	1.17709e+06	10.9635	147136	107364	order-0 of all gap symbols, one table
+tumor_3p	intron	all	w_H0_gap_pooled_mdl	1.28631e+06	11.9808	160788	107364	+0.5 log2(n) per used symbol
+tumor_3p	intron	all	w_H0_gap_by_valclass	1.16837e+06	10.8823	146046	107364	separate tables for value==1 groups and value>1 groups
+tumor_3p	intron	all	w_H0_gap_by_valclass_mdl	1.2814e+06	11.9351	160174	107364	
+tumor_3p	intron	all	w_H0_meta	130435	1.21489	16304.4	107364	order-0: groups-per-column + value + run-count symbols (separate tables)
+tumor_3p	intron	all	w_H0_total	1.2988e+06	12.0972	162350	107364	by-valclass gaps + meta
+tumor_3p	intron	all	w_H0_total_mdl	1.41183e+06	13.1499	176479	107364	with MDL param cost on gaps
+tumor_3p	intron	cells	w_H0_gap_pooled	637965	10.5419	79745.7	60517	order-0 of all gap symbols, one table
+tumor_3p	intron	cells	w_H0_gap_pooled_mdl	700378	11.5732	87547.2	60517	+0.5 log2(n) per used symbol
+tumor_3p	intron	cells	w_H0_gap_by_valclass	633480	10.4678	79185	60517	separate tables for value==1 groups and value>1 groups
+tumor_3p	intron	cells	w_H0_gap_by_valclass_mdl	698204	11.5373	87275.5	60517	
+tumor_3p	intron	cells	w_H0_meta	40083.6	0.662352	5010.45	60517	order-0: groups-per-column + value + run-count symbols (separate tables)
+tumor_3p	intron	cells	w_H0_total	673564	11.1302	84195.4	60517	by-valclass gaps + meta
+tumor_3p	intron	cells	w_H0_total_mdl	738288	12.1997	92286	60517	with MDL param cost on gaps
+tumor_3p	intron	empties	w_H0_gap_pooled	524556	11.1972	65569.5	46847	order-0 of all gap symbols, one table
+tumor_3p	intron	empties	w_H0_gap_pooled_mdl	608395	12.9868	76049.4	46847	+0.5 log2(n) per used symbol
+tumor_3p	intron	empties	w_H0_gap_by_valclass	519484	11.0889	64935.5	46847	separate tables for value==1 groups and value>1 groups
+tumor_3p	intron	empties	w_H0_gap_by_valclass_mdl	604385	12.9013	75548.1	46847	
+tumor_3p	intron	empties	w_H0_meta	82321.7	1.75725	10290.2	46847	order-0: groups-per-column + value + run-count symbols (separate tables)
+tumor_3p	intron	empties	w_H0_total	601805	12.8462	75225.7	46847	by-valclass gaps + meta
+tumor_3p	intron	empties	w_H0_total_mdl	686707	14.6585	85838.4	46847	with MDL param cost on gaps
+tumor_3p	intron	all	comb_presence_m	1.67791e+06	15.6283	209739	107364	sum_j log2 C(m, nnz_j), m=all rows
+tumor_3p	intron	all	comb_presence_meff	1.33123e+06	12.3992	166403	107364	sum_j log2 C(m_eff, nnz_j), m_eff=29037 rows with >=1 nnz
+tumor_3p	intron	all	comb_composition	23121.4	0.215355	2890.17	107364	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+tumor_3p	intron	all	side_H0_nnzj	88166.7	0.821194	11020.8	107364	order-0 of per-column nnz
+tumor_3p	intron	all	side_H0_kj	90797.5	0.845697	11349.7	107364	order-0 of per-column UMI total
+tumor_3p	intron	all	side_H0_kj_mdl	91659.6	0.853728	11457.5	107364	with MDL param cost
+tumor_3p	intron	cells	comb_presence_m	898497	14.847	112312	60517	sum_j log2 C(m, nnz_j), m=all rows
+tumor_3p	intron	cells	comb_presence_meff	703066	11.6177	87883.2	60517	sum_j log2 C(m_eff, nnz_j), m_eff=29037 rows with >=1 nnz
+tumor_3p	intron	cells	comb_composition	16015.6	0.264647	2001.95	60517	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+tumor_3p	intron	cells	side_H0_nnzj	19703.7	0.32559	2462.96	60517	order-0 of per-column nnz
+tumor_3p	intron	cells	side_H0_kj	20326	0.335873	2540.75	60517	order-0 of per-column UMI total
+tumor_3p	intron	cells	side_H0_kj_mdl	21028.1	0.347474	2628.51	60517	with MDL param cost
+tumor_3p	intron	empties	comb_presence_m	779418	16.6375	97427.3	46847	sum_j log2 C(m, nnz_j), m=all rows
+tumor_3p	intron	empties	comb_presence_meff	628160	13.4088	78520	46847	sum_j log2 C(m_eff, nnz_j), m_eff=29037 rows with >=1 nnz
+tumor_3p	intron	empties	comb_composition	7105.77	0.15168	888.221	46847	sum_j log2 C(k_j-1, nnz_j-1): ways to split k_j UMIs over nnz_j features (uniform)
+tumor_3p	intron	empties	side_H0_nnzj	60206.7	1.28518	7525.84	46847	order-0 of per-column nnz
+tumor_3p	intron	empties	side_H0_kj	62418.3	1.33239	7802.29	46847	order-0 of per-column UMI total
+tumor_3p	intron	empties	side_H0_kj_mdl	62626.7	1.33684	7828.34	46847	with MDL param cost
+tumor_3p	intron	cells	pres_feat_plugin	622994	10.2945	77874.3	60517	sum_f N h(p_f), in-sample
+tumor_3p	intron	cells	pres_featdepth_plugin	524811	8.67212	65601.4	60517	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+tumor_3p	intron	cells	val_H0_plugin	19301.5	0.318944	2412.69	60517	order-0 of values (capped 4096)
+tumor_3p	intron	cells	pres_feat_cv	730454	12.0702	91306.8	60517	alpha=[1000, 1000]
+tumor_3p	intron	cells	pres_featdepth_cv	855808	14.1416	106976	60517	alpha=[100000.0, 100000.0]
+tumor_3p	intron	cells	val_global_cv	19472.4	0.321767	2434.05	60517	order-0 value table, alphabet 1..12+
+tumor_3p	intron	cells	val_ratectx_cv	32036.8	0.529385	4004.6	60517	value table by context log2(k_j*q_f)
+tumor_3p	intron	cells	M1_feat_cv_total	749926	12.392	93740.8	60517	per-feature presence + order-0 values, CV
+tumor_3p	intron	cells	M2_featdepth_cv_total	887845	14.671	110981	60517	per-feature x depth presence + rate-context values, CV
+tumor_3p	intron	empties	pres_feat_plugin	575455	12.2837	71931.9	46847	sum_f N h(p_f), in-sample
+tumor_3p	intron	empties	pres_featdepth_plugin	487673	10.4099	60959.1	46847	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+tumor_3p	intron	empties	val_H0_plugin	16421.4	0.350534	2052.68	46847	order-0 of values (capped 4096)
+tumor_3p	intron	empties	pres_feat_cv	661445	14.1193	82680.7	46847	alpha=[3000, 3000]
+tumor_3p	intron	empties	pres_featdepth_cv	759717	16.217	94964.6	46847	alpha=[100000.0, 100000.0]
+tumor_3p	intron	empties	val_global_cv	16486.2	0.351917	2060.78	46847	order-0 value table, alphabet 1..12+
+tumor_3p	intron	empties	val_ratectx_cv	32439.2	0.69245	4054.9	46847	value table by context log2(k_j*q_f)
+tumor_3p	intron	empties	M1_feat_cv_total	677931	14.4712	84741.4	46847	per-feature presence + order-0 values, CV
+tumor_3p	intron	empties	M2_featdepth_cv_total	792156	16.9094	99019.5	46847	per-feature x depth presence + rate-context values, CV
+tumor_3p	intron	all	pres_feat_plugin	1.2981e+06	12.0906	162262	107364	sum_f N h(p_f), in-sample
+tumor_3p	intron	all	pres_featdepth_plugin	1.03878e+06	9.67527	129847	107364	sum_{f,b} N_b h(p_fb), 16 depth buckets, in-sample
+tumor_3p	intron	all	val_H0_plugin	35826.9	0.333696	4478.36	107364	order-0 of values (capped 4096)
+tumor_3p	intron	all	pres_feat_cv	1.43413e+06	13.3577	179266	107364	alpha=[3000, 3000]
+tumor_3p	intron	all	pres_featdepth_cv	1.54218e+06	14.364	192772	107364	alpha=[100000.0, 100000.0]
+tumor_3p	intron	all	val_global_cv	35996	0.335271	4499.5	107364	order-0 value table, alphabet 1..12+
+tumor_3p	intron	all	val_ratectx_cv	44324.5	0.412843	5540.56	107364	value table by context log2(k_j*q_f)
+tumor_3p	intron	all	M1_feat_cv_total	1.47013e+06	13.6929	183766	107364	per-feature presence + order-0 values, CV
+tumor_3p	intron	all	M2_featdepth_cv_total	1.5865e+06	14.7769	198313	107364	per-feature x depth presence + rate-context values, CV
+tumor_3p	intron	empties	amb_loo_bits	578327	12.345	72290.9	46847	leave-one-droplet-out multinomial, prior=cells profile delta=0.1 gamma=3.12e+04
+tumor_3p	intron	empties	amb_plugin_bits	532172	11.3598	66521.5	46847	same smoothing, in-sample p (optimistic)
+tumor_3p	intron	empties	amb_plugin_unsmoothed_bits	516766	11.0309	64595.7	46847	in-sample p, no prior (most optimistic)
+tumor_3p	intron	empties	amb_entropy_mc_bits	592112	12.6393	74014	46847	sum_j H(Mult(k_j,p*)) Monte Carlo R=3, sd=1246 bits; exact only if droplets are exchangeable multinomial draws
+tumor_3p	intron	empties	amb_entropy_mc_mle_bits	508884	10.8627	63610.5	46847	sum_j H(Mult(k_j, p_hat)) with the unsmoothed in-sample MLE profile (R=3, sd=649); lower-bound flavour
+tumor_3p	intron	empties	amb_side_H0_kj	41891.9	0.894229	5236.49	46847	order-0 of k_j over 12918 nonzero empties (+8329 all-zero columns not counted)

@@ -1,0 +1,6 @@
+chunk_cols   128: native 35.75 ms  294.6 Mnnz/s (core 2.24 GHz)
+chunk_cols   256: native 35.45 ms  297.0 Mnnz/s (core 2.32 GHz)
+chunk_cols   512: native 32.05 ms  328.6 Mnnz/s (core 2.39 GHz)
+chunk_cols  1024: native 36.13 ms  291.5 Mnnz/s (core 2.35 GHz)
+chunk_cols  4096: native 40.70 ms  258.7 Mnnz/s (core 2.07 GHz)
+# Thu Oct 22 11:15:22 EDT 2026 end: load=10%

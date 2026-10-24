@@ -1,0 +1,12 @@
+# Thu Oct 22 10:22:48 EDT 2026 load before: 100
+round	file	w3_fast_class_order_ms	w3_fast_Mnnz_s	w3_fast_core_GHz	pz2_native_ms	pz2_Mnnz_s	pz2_core_GHz
+1	tcell_5p	119.8	87.9	1.30	121.90	86.4	0.87
+1	pbmc_v2_typical	30.8	83.3	1.13	25.53	100.6	0.91
+1	brain_sn_v3_deep	74.1	85.6	1.31	75.46	84.1	0.80
+2	tcell_5p	115.6	91.1	1.35	106.44	98.9	0.86
+2	pbmc_v2_typical	28.8	89.1	1.42	29.41	87.4	0.85
+2	brain_sn_v3_deep	77.3	82.2	1.31	65.12	97.5	0.83
+3	tcell_5p	114.1	92.2	1.22	106.32	99.0	0.92
+3	pbmc_v2_typical	29.3	87.8	1.40	28.65	89.7	1.00
+3	brain_sn_v3_deep	75.0	84.7	1.31	77.11	82.3	1.01
+# Thu Oct 22 10:24:54 EDT 2026 load after: 100

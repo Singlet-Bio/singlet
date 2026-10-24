@@ -1,0 +1,81 @@
+id	member	protocol	species	n	len_hist	alphabet_sample	n_distinct	acgt16	first_bc	in_3M-february-2018	in_737K-august-2016	in_any	frac_increasing
+L_a	exon_counts.1pz	10xv3	mouse	67271	"{""16"": 67271}"	ACGT	67271	1	GTAGTACTCAGTGTGT	67271	1018	67271	0.4994
+L_a	intron_counts.1pz	10xv3	mouse	67271	"{""16"": 67271}"	ACGT	67271	1	GTAGTACTCAGTGTGT	67271	1018	67271	0.4994
+L_b	exon_counts.1pz	10xv3	human	70726	"{""16"": 70726}"	ACGT	70726	1	TAACCAGAGGGATCGT	70726	1069	70726	0.4988
+L_b	intron_counts.1pz	10xv3	human	70726	"{""16"": 70726}"	ACGT	70726	1	TAACCAGAGGGATCGT	70726	1069	70726	0.4988
+bn_dropseq	exon_counts.1pz	dropseq	human	25840	"{""12"": 25840}"	ACGT	25840	0	TCTCGGAAGAGC	0	0	0	
+bn_dropseq	intron_counts.1pz	dropseq	human	25840	"{""12"": 25840}"	ACGT	25840	0	TCTCGGAAGAGC	0	0	0	
+bn_v2	exon_counts.1pz	10xv2	human	83275	"{""16"": 83275}"	ACGT	83275	1	ACGGGTCGTAGAGGAA	6215	83275	83275	0.5006
+bn_v2	intron_counts.1pz	10xv2	human	83275	"{""16"": 83275}"	ACGT	83275	1	ACGGGTCGTAGAGGAA	6215	83275	83275	0.5006
+bn_v3_a	exon_counts.1pz	10xv3	human	85824	"{""16"": 85824}"	ACGT	85824	1	AGTGACTTCCTCACGT	85824	1311	85824	0.5005
+bn_v3_a	intron_counts.1pz	10xv3	human	85824	"{""16"": 85824}"	ACGT	85824	1	AGTGACTTCCTCACGT	85824	1311	85824	0.5005
+bn_v3_b	exon_counts.1pz	10xv3	human	75366	"{""16"": 75366}"	ACGT	75366	1	AACACACTCCACCCTA	75366	1187	75366	0.5004
+bn_v3_b	intron_counts.1pz	10xv3	human	75366	"{""16"": 75366}"	ACGT	75366	1	AACACACTCCACCCTA	75366	1187	75366	0.5004
+h_arc	exon_counts.1pz	10x-arc-gex	human	46324	"{""16"": 46324}"	ACGT	46324	1	AGCTACTAGTTATCCT	269	53	321	0.4983
+h_arc	intron_counts.1pz	10x-arc-gex	human	46324	"{""16"": 46324}"	ACGT	46324	1	AGCTACTAGTTATCCT	269	53	321	0.4983
+h_bd	exon_counts.1pz	bd-rhapsody	human	60922	"{""27"": 60922}"	ACGT	60922	0	GCTGCCAATTGTGAAGAAGTAGAAGCA	0	0	0	
+h_bd	intron_counts.1pz	bd-rhapsody	human	60922	"{""27"": 60922}"	ACGT	60922	0	GCTGCCAATTGTGAAGAAGTAGAAGCA	0	0	0	
+h_celseq2	exon_counts.1pz	celseq2	human	4096	"{""6"": 4096}"	ACGT	4096	0	AAGCAG	0	0	0	
+h_celseq2	intron_counts.1pz	celseq2	human	4096	"{""6"": 4096}"	ACGT	4096	0	AAGCAG	0	0	0	
+h_dropseq	exon_counts.1pz	dropseq	human	435682	"{""16"": 435682}"	ACGT	435682	1	AAAAAAAAAAAAAAAA	328	57	382	0.4999
+h_dropseq	intron_counts.1pz	dropseq	human	435682	"{""16"": 435682}"	ACGT	435682	1	AAAAAAAAAAAAAAAA	328	57	382	0.4999
+h_indrop	exon_counts.1pz	indrop	human	95760	"{""18"": 95760}"	ACGT	95760	0	TGAGGTCTGATAGTTCCA	0	0	0	
+h_indrop	intron_counts.1pz	indrop	human	95760	"{""18"": 95760}"	ACGT	95760	0	TGAGGTCTGATAGTTCCA	0	0	0	
+h_mars	exon_counts.1pz	marsseq2	human	16383	"{""7"": 16383}"	ACGT	16383	0	AAAAAAA	0	0	0	
+h_mars	intron_counts.1pz	marsseq2	human	16383	"{""7"": 16383}"	ACGT	16383	0	AAAAAAA	0	0	0	
+h_microwell	exon_counts.1pz	microwell-seq	human	117485	"{""18"": 117485}"	ACGT	117485	0	CCTAGAGGACATTTCATA	0	0	0	
+h_microwell	intron_counts.1pz	microwell-seq	human	117485	"{""18"": 117485}"	ACGT	117485	0	CCTAGAGGACATTTCATA	0	0	0	
+h_quartz	exon_counts.1pz	quartzseq2	human	692824	"{""15"": 692824}"	ACGT	692824	0	TGGTACCCGAATGGG	0	0	0	
+h_quartz	intron_counts.1pz	quartzseq2	human	692824	"{""15"": 692824}"	ACGT	692824	0	TGGTACCCGAATGGG	0	0	0	
+h_split	exon_counts.1pz	splitseq	human	85694	"{""24"": 85694}"	ACGT	85694	0	AGGCTAACCATCGGCGATACAAGT	0	0	0	
+h_split	intron_counts.1pz	splitseq	human	85694	"{""24"": 85694}"	ACGT	85694	0	AGGCTAACCATCGGCGATACAAGT	0	0	0	
+h_v2_a	exon_counts.1pz	10xv2	human	87935	"{""16"": 87935}"	ACGT	87935	1	TCTTCGGAGTTGCAGG	6757	87935	87935	0.4985
+h_v2_a	intron_counts.1pz	10xv2	human	87935	"{""16"": 87935}"	ACGT	87935	1	TCTTCGGAGTTGCAGG	6757	87935	87935	0.4985
+h_v2_b	exon_counts.1pz	10xv2	human	76221	"{""16"": 76221}"	ACGT	76221	1	ACTGCTCCAGCTCCGA	5804	76221	76221	0.4987
+h_v2_b	intron_counts.1pz	10xv2	human	76221	"{""16"": 76221}"	ACGT	76221	1	ACTGCTCCAGCTCCGA	5804	76221	76221	0.4987
+h_v2_c	exon_counts.1pz	10xv2	human	24807	"{""16"": 24807}"	ACGT	24807	1	GGGATGACACGGCCAT	1932	24807	24807	0.4998
+h_v2_c	intron_counts.1pz	10xv2	human	24807	"{""16"": 24807}"	ACGT	24807	1	GGGATGACACGGCCAT	1932	24807	24807	0.4998
+h_v3_a	exon_counts.1pz	10xv3	human	98824	"{""16"": 98824}"	ACGT	98824	1	AAGAACAAGAAATTCG	98824	1430	98824	0.5002
+h_v3_a	intron_counts.1pz	10xv3	human	98824	"{""16"": 98824}"	ACGT	98824	1	AAGAACAAGAAATTCG	98824	1430	98824	0.5002
+h_v3_b	exon_counts.1pz	10xv3	human	77618	"{""16"": 77618}"	ACGT	77618	1	GCAACATAGGAGGGTG	77618	1168	77618	0.4985
+h_v3_b	intron_counts.1pz	10xv3	human	77618	"{""16"": 77618}"	ACGT	77618	1	GCAACATAGGAGGGTG	77618	1168	77618	0.4985
+h_v3_c	exon_counts.1pz	10xv3	human	77373	"{""16"": 77373}"	ACGT	77373	1	CTACCCAAGGTTCACT	77373	1187	77373	0.4974
+h_v3_c	intron_counts.1pz	10xv3	human	77373	"{""16"": 77373}"	ACGT	77373	1	CTACCCAAGGTTCACT	77373	1187	77373	0.4974
+h_visium	exon_counts.1pz	10x-visium	human	4991	"{""16"": 4991}"	ACGT	4991	1	AGAGAAACACCAGAAA	7	0	7	0.5042
+h_visium	intron_counts.1pz	10x-visium	human	4991	"{""16"": 4991}"	ACGT	4991	1	AGAGAAACACCAGAAA	7	0	7	0.5042
+m_arc	exon_counts.1pz	10x-arc-gex	mouse	96281	"{""16"": 96281}"	ACGT	96281	1	GCTGGATGTTCCTCCT	572	125	687	0.4989
+m_arc	intron_counts.1pz	10x-arc-gex	mouse	96281	"{""16"": 96281}"	ACGT	96281	1	GCTGGATGTTCCTCCT	572	125	687	0.4989
+m_celseq2	exon_counts.1pz	celseq2	mouse	4096	"{""6"": 4096}"	ACGT	4096	0	TTTTTT	0	0	0	
+m_celseq2	intron_counts.1pz	celseq2	mouse	4096	"{""6"": 4096}"	ACGT	4096	0	TTTTTT	0	0	0	
+m_dropseq	exon_counts.1pz	dropseq	mouse	241982	"{""12"": 241982}"	ACGT	241982	0	GTTAACATTTCC	0	0	0	
+m_dropseq	intron_counts.1pz	dropseq	mouse	241982	"{""12"": 241982}"	ACGT	241982	0	GTTAACATTTCC	0	0	0	
+m_mars	exon_counts.1pz	marsseq2	mouse	9411	"{""7"": 9411}"	ACGT	9411	0	AAGCAGT	0	0	0	
+m_mars	intron_counts.1pz	marsseq2	mouse	9411	"{""7"": 9411}"	ACGT	9411	0	AAGCAGT	0	0	0	
+m_v2_a	exon_counts.1pz	10xv2	mouse	81247	"{""16"": 81247}"	ACGT	81247	1	GGAACTTAGAATTCCC	6239	81247	81247	0.4992
+m_v2_a	intron_counts.1pz	10xv2	mouse	81247	"{""16"": 81247}"	ACGT	81247	1	GGAACTTAGAATTCCC	6239	81247	81247	0.4992
+m_v2_b	exon_counts.1pz	10xv2	mouse	95392	"{""16"": 95392}"	ACGT	95392	1	AGCGGTCTCAAGAAGT	7274	95392	95392	0.4997
+m_v2_b	intron_counts.1pz	10xv2	mouse	95392	"{""16"": 95392}"	ACGT	95392	1	AGCGGTCTCAAGAAGT	7274	95392	95392	0.4997
+m_v3_a	exon_counts.1pz	10xv3	mouse	73747	"{""16"": 73747}"	ACGT	73747	1	CTCCTTTCAGGCGATA	73747	1113	73747	0.5017
+m_v3_a	intron_counts.1pz	10xv3	mouse	73747	"{""16"": 73747}"	ACGT	73747	1	CTCCTTTCAGGCGATA	73747	1113	73747	0.5017
+m_v3_b	exon_counts.1pz	10xv3	mouse	79736	"{""16"": 79736}"	ACGT	79736	1	GGTCTGGCATGTGCTA	79736	1244	79736	0.4984
+m_v3_b	intron_counts.1pz	10xv3	mouse	79736	"{""16"": 79736}"	ACGT	79736	1	GGTCTGGCATGTGCTA	79736	1244	79736	0.4984
+m_v3_c	exon_counts.1pz	10xv3	mouse	78712	"{""16"": 78712}"	ACGT	78712	1	ATCACAGTCCGCTTAC	78712	1269	78712	0.5008
+m_v3_c	intron_counts.1pz	10xv3	mouse	78712	"{""16"": 78712}"	ACGT	78712	1	ATCACAGTCCGCTTAC	78712	1269	78712	0.5008
+m_visium	exon_counts.1pz	10x-visium	mouse	4991	"{""16"": 4991}"	ACGT	4991	1	GCGAGGCCCGAGCAGA	7	0	7	0.494
+m_visium	intron_counts.1pz	10x-visium	mouse	4991	"{""16"": 4991}"	ACGT	4991	1	GCGAGGCCCGAGCAGA	7	0	7	0.494
+mq_v2	exon_counts.1pz	10xv2	mouse	74351	"{""16"": 74351}"	ACGT	74351	1	GTCACGGAGCCGGTAA	5645	74351	74351	0.4992
+mq_v2	intron_counts.1pz	10xv2	mouse	74351	"{""16"": 74351}"	ACGT	74351	1	GTCACGGAGCCGGTAA	5645	74351	74351	0.4992
+mq_v3	exon_counts.1pz	10xv3	mouse	81323	"{""16"": 81323}"	ACGT	81323	1	CAGTTCCAGAAACCCG	81323	1259	81323	0.4997
+mq_v3	intron_counts.1pz	10xv3	mouse	81323	"{""16"": 81323}"	ACGT	81323	1	CAGTTCCAGAAACCCG	81323	1259	81323	0.4997
+r_v2	exon_counts.1pz	10xv2		93227	"{""16"": 93227}"	ACGT	93227	1	TGCCAAAAGTACGCGA	7219	93227	93227	0.5015
+r_v2	intron_counts.1pz	10xv2		93227	"{""16"": 93227}"	ACGT	93227	1	TGCCAAAAGTACGCGA	7219	93227	93227	0.5015
+r_v3	exon_counts.1pz	10xv3		74304	"{""16"": 74304}"	ACGT	74304	1	AGGGCCTGTACCGCGT	74304	1099	74304	0.501
+r_v3	intron_counts.1pz	10xv3		74304	"{""16"": 74304}"	ACGT	74304	1	AGGGCCTGTACCGCGT	74304	1099	74304	0.501
+x_stub	exon_counts.1pz	10xv3	human	0	{}		0	0		0	0	0	
+x_stub	intron_counts.1pz	10xv3	human	0	{}		0	0		0	0	0	
+z_v2	exon_counts.1pz	10xv2		87347	"{""16"": 87347}"	ACGT	87347	1	GTTCATTTCTTTCCTC	6622	87347	87347	0.4994
+z_v2	intron_counts.1pz	10xv2		87347	"{""16"": 87347}"	ACGT	87347	1	GTTCATTTCTTTCCTC	6622	87347	87347	0.4994
+z_v3_a	exon_counts.1pz	10xv3		98959	"{""16"": 98959}"	ACGT	98959	1	TCCCATGTCGATCCCT	98959	1527	98959	0.5017
+z_v3_a	intron_counts.1pz	10xv3		98959	"{""16"": 98959}"	ACGT	98959	1	TCCCATGTCGATCCCT	98959	1527	98959	0.5017
+z_v3_b	exon_counts.1pz	10xv3		88399	"{""16"": 88399}"	ACGT	88399	1	TCAGCCTGTGTCATCA	88399	1296	88399	0.5014
+z_v3_b	intron_counts.1pz	10xv3		88399	"{""16"": 88399}"	ACGT	88399	1	TCAGCCTGTGTCATCA	88399	1296	88399	0.5014

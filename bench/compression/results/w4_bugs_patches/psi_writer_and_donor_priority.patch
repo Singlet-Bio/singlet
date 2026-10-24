@@ -1,0 +1,59 @@
+--- a/include/singlet/pileup/splice_psi.h
++++ b/include/singlet/pileup/splice_psi.h
+@@ -102,8 +102,9 @@
+ }
+ 
+ /// Compute per-cell PSI matrix from sj_csc.
+-/// Each junction is assigned to the first event it belongs to (donor events
+-/// take priority over acceptor events due to sorting order).
++/// Each junction is assigned to the first event it belongs to, donor events before
++/// acceptor events (explicitly: sorting event ids as strings does not do this,
++/// "chr1:100007033-A" < "chr1:99993741-D" bytewise).
+ /// CSCType must expose: indptr, indices, data (vectors), nrows, ncols.
+ template <typename CSCType>
+ PSIResult compute_psi(const CSCType& sj_csc,
+@@ -124,11 +125,14 @@
+ 
+     // Map each junction to its first (priority) event index (-1 = no event).
+     std::vector<int32_t> junction_event(sj_csc.nrows, -1);
+-    for (int32_t e = 0; e < static_cast<int32_t>(n_events); ++e) {
+-        for (uint32_t jidx : result.events[e].junction_indices) {
+-            if (jidx < static_cast<uint32_t>(junction_event.size()) &&
+-                junction_event[jidx] == -1) {
+-                junction_event[jidx] = e;
++    for (int pass = 0; pass < 2; ++pass) {  // pass 0: donor events, pass 1: acceptor events
++        for (int32_t e = 0; e < static_cast<int32_t>(n_events); ++e) {
++            if ((result.events[e].event_type == "alt_donor") != (pass == 0)) continue;
++            for (uint32_t jidx : result.events[e].junction_indices) {
++                if (jidx < static_cast<uint32_t>(junction_event.size()) &&
++                    junction_event[jidx] == -1) {
++                    junction_event[jidx] = e;
++                }
+             }
+         }
+     }
+--- a/include/singlet/pileup/export.h
++++ b/include/singlet/pileup/export.h
+@@ -1120,11 +1120,20 @@
+                 auto psi = compute_psi(sj_csc, engine.sj_names());
+                 if (!psi.data.empty()) {
+                     if (use_1pz) {
++                        // PSI is a fraction in (0, 1]; write_1pz stores integers (static_cast<uint32_t>), so passing
++                        // psi.data directly keeps only PSI == 1.0. Store basis points (round(PSI * 10000), 0..10000)
++                        // in uint16, as mt_heteroplasmy.1pz does, and say so in the member's key/values.
++                        std::vector<uint16_t> psi_bp(psi.data.size());
++                        for (size_t i = 0; i < psi.data.size(); ++i)
++                            psi_bp[i] = static_cast<uint16_t>(std::lround(psi.data[i] * 10000.0f));
++                        auto psi_meta = export_cfg.user_meta;
++                        psi_meta["value_scale"] = "10000";   // PSI = stored / value_scale
++                        psi_meta["value_kind"]  = "psi";
+                         if (!atomic_write_1pz(out_prefix + "/splice_psi.1pz",
+                                       psi.nrows, psi.ncols,
+-                                      psi.indptr, psi.indices, psi.data,
++                                      psi.indptr, psi.indices, psi_bp,
+                                       engine.sj_names(), barcodes,
+-                                      3, 1024, 4, export_cfg.user_meta))
++                                      3, 1024, 4, psi_meta))
+                             record_failed_write("splice_psi.1pz");
+                     } else {
+                         write_mtx(out_prefix + "/splice_psi.mtx",

@@ -1,0 +1,3 @@
+sample	member	lanes	cpo	pb	ctx	chunk_cols	isa	threads	nnz	payload_bits_nnz	side_bits_nnz	total_bytes	cls_ms	cls_Mnnz_s	cls_est3GHz	canon_ms	canon_Mnnz_s	canon_est3GHz	core_ghz	open_ms
+tcell_5p	exon_counts.1pz	 		10	11	128	avx512	1	10529513	6.07495	0.0957894	11794138	100.197	105.089	239.101	208.729	50.4459	114.776	1.31855	2.4049
+tcell_5p	exon_counts.1pz	 		10	11	256	avx512	1	10529513	6.04366	0.0957894	11752952	125.262	84.0598	195.803	264.981	39.7368	92.5599	1.28793	3.0497

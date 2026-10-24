@@ -1,0 +1,56 @@
+== pbmc_v2_shallow/exon_counts.1pz m=310797 n=96446 nnz=5304754
+  joint-flag cost = H(cls,flag|ctx)-H(cls|ctx) = 0.288 bits/nnz (cells 9597)
+  flag separate [own rank bucket x k]: 0.289 bits/nnz (cells 468)
+  flag separate [own rank bucket]: 0.301 bits/nnz (cells 60)
+  flag separate [none]: 0.395 bits/nnz (cells 2)
+  flag separate [own x k x prev flag]: 0.289 bits/nnz (cells 784)
+  residual [own/2 x dk]: 0.072 bits/nnz (cells 288)
+  residual [own x kb]: 0.070 bits/nnz (cells 846)
+  residual [none]: 0.082 bits/nnz (cells 19)
+  residual [dk]: 0.080 bits/nnz (cells 48)
+  single-symbol value class [own x kb]: 0.359 bits/nnz (cells 1095)
+  single-symbol value class [own/2 x dk]: 0.365 bits/nnz (cells 342)
+  Rice code on (v-1), best k per own-rank bucket: 1.104 bits/nnz
+  group-by-value (VOCSC-style) index 6.831 + headers ~0.248 bits/nnz (239401 groups) ; vs joint index+flag 6.810 + residual
+== brain_sn_v3_deep/exon_counts.1pz m=386028 n=84424 nnz=6349311
+  joint-flag cost = H(cls,flag|ctx)-H(cls|ctx) = 0.242 bits/nnz (cells 17418)
+  flag separate [own rank bucket x k]: 0.244 bits/nnz (cells 660)
+  flag separate [own rank bucket]: 0.292 bits/nnz (cells 66)
+  flag separate [none]: 0.402 bits/nnz (cells 2)
+  flag separate [own x k x prev flag]: 0.243 bits/nnz (cells 1211)
+  residual [own/2 x dk]: 0.175 bits/nnz (cells 610)
+  residual [own x kb]: 0.161 bits/nnz (cells 2206)
+  residual [none]: 0.220 bits/nnz (cells 34)
+  residual [dk]: 0.205 bits/nnz (cells 112)
+  single-symbol value class [own x kb]: 0.405 bits/nnz (cells 2494)
+  single-symbol value class [own/2 x dk]: 0.434 bits/nnz (cells 659)
+  Rice code on (v-1), best k per own-rank bucket: 1.212 bits/nnz
+  group-by-value (VOCSC-style) index 7.811 + headers ~0.178 bits/nnz (269206 groups) ; vs joint index+flag 7.736 + residual
+== tcell_5p/exon_counts.1pz m=310797 n=69249 nnz=10529513
+  joint-flag cost = H(cls,flag|ctx)-H(cls|ctx) = 0.434 bits/nnz (cells 14381)
+  flag separate [own rank bucket x k]: 0.435 bits/nnz (cells 659)
+  flag separate [own rank bucket]: 0.485 bits/nnz (cells 64)
+  flag separate [none]: 0.736 bits/nnz (cells 2)
+  flag separate [own x k x prev flag]: 0.434 bits/nnz (cells 1141)
+  residual [own/2 x dk]: 0.469 bits/nnz (cells 644)
+  residual [own x kb]: 0.457 bits/nnz (cells 2427)
+  residual [none]: 0.555 bits/nnz (cells 29)
+  residual [dk]: 0.554 bits/nnz (cells 72)
+  single-symbol value class [own x kb]: 0.891 bits/nnz (cells 2684)
+  single-symbol value class [own/2 x dk]: 0.915 bits/nnz (cells 685)
+  Rice code on (v-1), best k per own-rank bucket: 1.501 bits/nnz
+  group-by-value (VOCSC-style) index 6.034 + headers ~0.139 bits/nnz (278564 groups) ; vs joint index+flag 5.468 + residual
+== tumor_3p/exon_counts.1pz m=310797 n=25067 nnz=245117
+  joint-flag cost = H(cls,flag|ctx)-H(cls|ctx) = 0.215 bits/nnz (cells 9802)
+  flag separate [own rank bucket x k]: 0.230 bits/nnz (cells 449)
+  flag separate [own rank bucket]: 0.243 bits/nnz (cells 58)
+  flag separate [none]: 0.316 bits/nnz (cells 2)
+  flag separate [own x k x prev flag]: 0.229 bits/nnz (cells 775)
+  residual [own/2 x dk]: 0.094 bits/nnz (cells 266)
+  residual [own x kb]: 0.088 bits/nnz (cells 825)
+  residual [none]: 0.102 bits/nnz (cells 18)
+  residual [dk]: 0.102 bits/nnz (cells 44)
+  single-symbol value class [own x kb]: 0.318 bits/nnz (cells 1043)
+  single-symbol value class [own/2 x dk]: 0.330 bits/nnz (cells 307)
+  Rice code on (v-1), best k per own-rank bucket: 1.114 bits/nnz
+  group-by-value (VOCSC-style) index 8.830 + headers ~0.605 bits/nnz (29118 groups) ; vs joint index+flag 8.887 + residual

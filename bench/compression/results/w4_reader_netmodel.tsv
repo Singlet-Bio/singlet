@@ -1,0 +1,17 @@
+scenario	link	path	seconds	effective_MBps_of_needed_bytes
+A: one sample, 9.6 MB needed of a 187 MB bundle (4 ranges: exon+intron adjacent, calls, vocab, manifest)	100 Mbit/s	today: whole bundle, 1 stream + verify all	17.548	10.66
+A: one sample, 9.6 MB needed of a 187 MB bundle (4 ranges: exon+intron adjacent, calls, vocab, manifest)	100 Mbit/s	index: member ranges, 1 connection	2.177	4.41
+A: one sample, 9.6 MB needed of a 187 MB bundle (4 ranges: exon+intron adjacent, calls, vocab, manifest)	100 Mbit/s	index + par8 (observed 18 MB/s agg)	1.416	6.78
+A: one sample, 9.6 MB needed of a 187 MB bundle (4 ranges: exon+intron adjacent, calls, vocab, manifest)	100 Mbit/s	index + par8 (ideal scaling)	1.416	6.78
+A: one sample, 9.6 MB needed of a 187 MB bundle (4 ranges: exon+intron adjacent, calls, vocab, manifest)	1 Gbit/s	today: whole bundle, 1 stream + verify all	7.680	24.35
+A: one sample, 9.6 MB needed of a 187 MB bundle (4 ranges: exon+intron adjacent, calls, vocab, manifest)	1 Gbit/s	index: member ranges, 1 connection	1.704	5.63
+A: one sample, 9.6 MB needed of a 187 MB bundle (4 ranges: exon+intron adjacent, calls, vocab, manifest)	1 Gbit/s	index + par8 (observed 18 MB/s agg)	1.156	8.31
+A: one sample, 9.6 MB needed of a 187 MB bundle (4 ranges: exon+intron adjacent, calls, vocab, manifest)	1 Gbit/s	index + par8 (ideal scaling)	0.771	12.44
+B: whole 500 MB study, gene-level (54% = 270 MB needed)	100 Mbit/s	today: whole bundle, 1 stream + verify all	46.159	10.83
+B: whole 500 MB study, gene-level (54% = 270 MB needed)	100 Mbit/s	index: member ranges, 1 connection	33.183	8.14
+B: whole 500 MB study, gene-level (54% = 270 MB needed)	100 Mbit/s	index + par8 (observed 18 MB/s agg)	24.679	10.94
+B: whole 500 MB study, gene-level (54% = 270 MB needed)	100 Mbit/s	index + par8 (ideal scaling)	24.679	10.94
+B: whole 500 MB study, gene-level (54% = 270 MB needed)	1 Gbit/s	today: whole bundle, 1 stream + verify all	19.715	25.36
+B: whole 500 MB study, gene-level (54% = 270 MB needed)	1 Gbit/s	index: member ranges, 1 connection	18.919	14.27
+B: whole 500 MB study, gene-level (54% = 270 MB needed)	1 Gbit/s	index + par8 (observed 18 MB/s agg)	16.957	15.92
+B: whole 500 MB study, gene-level (54% = 270 MB needed)	1 Gbit/s	index + par8 (ideal scaling)	4.299	62.81

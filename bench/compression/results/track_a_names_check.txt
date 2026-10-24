@@ -1,0 +1,62 @@
+== corpus rownames by file
+pbmc_v2_typical        exon_counts.1pz    build=GRCh38-2024-A  m=310797 rownames_hash=212c9919323a colnames n=15185 hash=0fa735672913
+pbmc_v2_typical        intron_counts.1pz  build=GRCh38-2024-A  m=272191 rownames_hash=e1e8af1e3e6d colnames n=15185 hash=0fa735672913
+pbmc_v2_shallow        exon_counts.1pz    build=GRCh38-2024-A  m=310797 rownames_hash=212c9919323a colnames n=96446 hash=a6f7b19c1ca6
+pbmc_v2_shallow        intron_counts.1pz  build=GRCh38-2024-A  m=272191 rownames_hash=e1e8af1e3e6d colnames n=96446 hash=a6f7b19c1ca6
+pbmc_v3_lowgenes       exon_counts.1pz    build=GRCh38-2024-A  m=310797 rownames_hash=212c9919323a colnames n=71061 hash=1b8bf5604ba4
+pbmc_v3_lowgenes       intron_counts.1pz  build=GRCh38-2024-A  m=272191 rownames_hash=e1e8af1e3e6d colnames n=71061 hash=1b8bf5604ba4
+brain_sn_v3_deep       exon_counts.1pz    build=GRCm39-2024-A  m=386028 rownames_hash=cfe7955cdb5e colnames n=84424 hash=ff62f059c3ae
+brain_sn_v3_deep       intron_counts.1pz  build=GRCm39-2024-A  m=307730 rownames_hash=5d3fdaee0b30 colnames n=84424 hash=ff62f059c3ae
+brain_sn_v3_intronic   exon_counts.1pz    build=GRCm39-2024-A  m=386028 rownames_hash=cfe7955cdb5e colnames n=78894 hash=45f66c22053e
+brain_sn_v3_intronic   intron_counts.1pz  build=GRCm39-2024-A  m=307730 rownames_hash=5d3fdaee0b30 colnames n=78894 hash=45f66c22053e
+tcell_5p               exon_counts.1pz    build=GRCh38-2024-A  m=310797 rownames_hash=212c9919323a colnames n=69249 hash=42a9b494d77b
+tcell_5p               intron_counts.1pz  build=GRCh38-2024-A  m=272191 rownames_hash=e1e8af1e3e6d colnames n=69249 hash=42a9b494d77b
+tumor_3p               exon_counts.1pz    build=GRCh38-2024-A  m=310797 rownames_hash=212c9919323a colnames n=25067 hash=e2af141857ba
+tumor_3p               intron_counts.1pz  build=GRCh38-2024-A  m=272191 rownames_hash=e1e8af1e3e6d colnames n=25067 hash=e2af141857ba
+
+== groups with identical rownames
+('exon_counts.1pz', '212c9919323a') ['pbmc_v2_typical', 'pbmc_v2_shallow', 'pbmc_v3_lowgenes', 'tcell_5p', 'tumor_3p']
+('intron_counts.1pz', 'e1e8af1e3e6d') ['pbmc_v2_typical', 'pbmc_v2_shallow', 'pbmc_v3_lowgenes', 'tcell_5p', 'tumor_3p']
+('exon_counts.1pz', 'cfe7955cdb5e') ['brain_sn_v3_deep', 'brain_sn_v3_intronic']
+('intron_counts.1pz', '5d3fdaee0b30') ['brain_sn_v3_deep', 'brain_sn_v3_intronic']
+
+== barcodes: whitelist membership and ordering
+pbmc_v2_typical        whitelist=737K-august-2016   members=1.0000  frac(consecutive increasing)=0.503  wl_size=737280
+   exon colnames == intron colnames (order too): True ; same set: True
+pbmc_v2_shallow        whitelist=737K-august-2016   members=1.0000  frac(consecutive increasing)=0.501  wl_size=737280
+   exon colnames == intron colnames (order too): True ; same set: True
+pbmc_v3_lowgenes       whitelist=3M-february-2018   members=1.0000  frac(consecutive increasing)=0.501  wl_size=3686400
+   exon colnames == intron colnames (order too): True ; same set: True
+brain_sn_v3_deep       whitelist=3M-february-2018   members=1.0000  frac(consecutive increasing)=0.497  wl_size=3686400
+   exon colnames == intron colnames (order too): True ; same set: True
+brain_sn_v3_intronic   whitelist=3M-february-2018   members=1.0000  frac(consecutive increasing)=0.499  wl_size=3686400
+   exon colnames == intron colnames (order too): True ; same set: True
+tcell_5p               whitelist=737K-august-2016   members=1.0000  frac(consecutive increasing)=0.499  wl_size=737280
+   exon colnames == intron colnames (order too): True ; same set: True
+tumor_3p               whitelist=737K-august-2016   members=1.0000  frac(consecutive increasing)=0.500  wl_size=737280
+   exon colnames == intron colnames (order too): True ; same set: True
+
+== bundle: extract and compare member rownames / colnames
+exon_counts.1pz        distinct rowname lists over 14 samples: 1  [(310797, '212c9919323a')]
+intron_counts.1pz      distinct rowname lists over 14 samples: 1  [(272191, 'e1e8af1e3e6d')]
+mt_heteroplasmy.1pz    distinct rowname lists over 14 samples: 1  [(0, 'e3b0c44298fc')]
+sj_counts.1pz          distinct rowname lists over 14 samples: 14  [(67308, 'c7de8330cd43'), (79508, '84630ebba429'), (86564, '27152c677614'), (87912, '6d82e612d058')]
+splice_psi.1pz         distinct rowname lists over 14 samples: 14  [(67308, 'c7de8330cd43'), (79508, '84630ebba429'), (86564, '27152c677614'), (87912, '6d82e612d058')]
+vdj_gene_usage.1pz     distinct rowname lists over 14 samples: 1  [(411, 'c84d1d3b1bd2')]
+per-sample: colnames identical across member types (same order)?
+  GSM4317423 n=39217 distinct colname lists across 5 members: 1
+  GSM4317424 n=27803 distinct colname lists across 5 members: 1
+  GSM4317425 n=31645 distinct colname lists across 5 members: 1
+  GSM4317426 n=63995 distinct colname lists across 5 members: 1
+  GSM4317427 n=41934 distinct colname lists across 5 members: 1
+  GSM4317428 n=20985 distinct colname lists across 5 members: 1
+  GSM4317429 n=25067 distinct colname lists across 5 members: 1
+  GSM4317430 n=19556 distinct colname lists across 5 members: 1
+  GSM4317431 n=18257 distinct colname lists across 5 members: 1
+  GSM4317432 n=32388 distinct colname lists across 5 members: 1
+  GSM4317433 n=40263 distinct colname lists across 5 members: 1
+  GSM4317434 n=23834 distinct colname lists across 5 members: 1
+  GSM4317435 n=23006 distinct colname lists across 5 members: 1
+  GSM4317436 n=19876 distinct colname lists across 5 members: 1
+bundle exon rownames == corpus tumor_3p: True
+feature_vocab.json: build=GRCh38-2024-A n_genes=38606 (gene list, not the interval list)

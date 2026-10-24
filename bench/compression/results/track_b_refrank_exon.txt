@@ -1,0 +1,12 @@
+loaded corpus\pbmc_v2_shallow\exon_counts.1pz 5304754
+loaded corpus\pbmc_v2_typical\exon_counts.1pz 2569228
+loaded corpus\pbmc_v3_lowgenes\exon_counts.1pz 1759828
+loaded corpus\tcell_5p\exon_counts.1pz 10529513
+loaded corpus\tumor_3p\exon_counts.1pz 245117
+| file | nnz | own-order gap bits/nnz | side bits/nnz | own + side | leave-one-out reference order | delta vs own+side | reference order by pooled counts (others) |
+|---|---|---|---|---|---|---|---|
+| pbmc_v2_shallow/exon | 5304754 | 6.521 | 0.127 | 6.649 | 7.937 | +1.288 | pooled 4 studies |
+| pbmc_v2_typical/exon | 2569228 | 4.567 | 0.246 | 4.812 | 6.154 | +1.342 | pooled 4 studies |
+| pbmc_v3_lowgenes/exon | 1759828 | 3.994 | 0.071 | 4.065 | 8.767 | +4.702 | pooled 4 studies |
+| tcell_5p/exon | 10529513 | 5.034 | 0.096 | 5.130 | 8.183 | +3.053 | pooled 4 studies |
+| tumor_3p/exon | 245117 | 8.672 | 1.617 | 10.289 | 12.861 | +2.571 | pooled 4 studies |

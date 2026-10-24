@@ -1,0 +1,1 @@
+selected=avx512 best=avx512 compiled=scalar,avx2,avx512 PZ2_ISA=(unset)

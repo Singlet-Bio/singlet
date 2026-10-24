@@ -14,6 +14,18 @@ ext_modules = [
         # ANSI code page unless told otherwise.
         extra_compile_args=["/utf-8"] if sys.platform == "win32" else [],
     ),
+    # The v2 matrix codec (include/singlet/pz2/, header-only; the SIMD paths are chosen at run time, so no -march flag)
+    # and its client helpers (src/bindings/common/singlet/pz2_client.h).
+    Pybind11Extension(
+        "singlet._pz2",
+        ["src/bindings/python/_pz2.cpp"],
+        include_dirs=["include", "src/bindings/common"],
+        libraries=["zstd"],
+        cxx_std=17,
+        # the encoder and the multi-threaded decode use std::thread: glibc < 2.34 (manylinux_2_28) needs -pthread
+        extra_compile_args=["/utf-8"] if sys.platform == "win32" else ["-pthread"],
+        extra_link_args=[] if sys.platform == "win32" else ["-pthread"],
+    ),
 ]
 
 setup(ext_modules=ext_modules, cmdclass={"build_ext": build_ext})
