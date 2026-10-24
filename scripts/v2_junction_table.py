@@ -312,6 +312,10 @@ def cmd_reduce(a):
     recs = []
     for s in sorted(out.glob("shard_*.json")):
         recs += json.loads(s.read_text())
+    last = {}
+    for r in recs:  # a study rerun in a retry shard counts once, with its latest result
+        last[r["gse"]] = r
+    recs = list(last.values())
     summary = {
         "studies": len(recs),
         "studies_failed": sum(1 for r in recs if "error" in r),
@@ -469,7 +473,15 @@ def cmd_build(a):
     for _ in range(20):
         np.cumsum(ref, dtype=np.uint32)
     ref_ms = 1000 * (time.perf_counter() - t0) / 20
-    tot = max(float(cen["umi_called"].sum()), 1.0)
+    summ = out / "census_summary.json"
+    build_umi = (
+        json.loads(summ.read_text())["builds"].get(a.build, {}).get("umi_called")
+        if summ.exists()
+        else None
+    )
+    tot = max(
+        float(build_umi or cen["umi_called"].sum()), 1.0
+    )  # all called junction UMIs of the build
     report = {
         "build": a.build,
         "version_id": P.pack_id(ver).hex(),
@@ -486,7 +498,7 @@ def cmd_build(a):
             "rare_segments": len(segs) - 1,
             "local": int(n_census - (core & (allj["n_samples"].to_numpy() > 0)).sum() - rare.sum()),
         },
-        "called_umi_share_of_candidates": {
+        "called_umi_share": {
             "core": float(umi[core].sum() / tot),
             "core_annotated": float(umi[j.annotated].sum() / tot),
             "rare": float(umi[rare].sum() / tot),
@@ -512,18 +524,18 @@ def cmd_build(a):
 
 
 def _chrom_rename(census: set, reference: set) -> dict:
-    """reference name -> census name when the two differ only by the UCSC "chr" prefix (and chrM / MT); empty if they agree."""
-    if len(census & reference) >= 0.5 * max(
-        len(census & {c[3:] if c.startswith("chr") else c for c in reference}), 1
-    ):
-        return {}
-    out = {}
-    for c in reference:
+    """reference name -> census name for the "chr"-prefixed reference names whose unprefixed form (chrM -> MT) is what the census
+    uses, when that matches more names than the reference names do as they are. Unplaced scaffolds (JH584295.1, ...) are named the
+    same in both conventions, so only the prefixed names decide."""
+
+    def strip(c: str) -> str:
         k = c[3:] if c.startswith("chr") else c
-        k = "MT" if k == "M" else k
-        if k in census:
-            out[c] = k
-    return out
+        return "MT" if k == "M" else k
+
+    prefixed = {c for c in reference if c.startswith("chr")}
+    direct = len(census & prefixed)
+    stripped = {c: strip(c) for c in prefixed if strip(c) in census}
+    return stripped if len(stripped) > direct else {}
 
 
 def main(argv=None):
