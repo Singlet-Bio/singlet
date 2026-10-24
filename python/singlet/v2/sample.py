@@ -57,12 +57,17 @@ class V2Sample:
             raise V2Error("member %r is not a matrix" % name)
         return parse_header(self.reader.read_range(name, 0, min(mi.len, HEADER_SIZE)))
 
-    def matrix(self, name: str, cols: Optional[tuple] = None, resolve: bool = True) -> Csc:
-        """Canonical CSC of a pz2 member (all columns, or ``cols=(a, b)`` for columns ``a <= j < b`` using ranged reads only)."""
+    def matrix(
+        self, name: str, cols: Optional[tuple] = None, resolve: bool = True, order: str = "legacy"
+    ) -> Csc:
+        """Canonical CSC of a pz2 member (all columns, or ``cols=(a, b)`` for columns ``a <= j < b`` using ranged reads only).
+
+        Junction rows stored as table ids (docs/format-v2.md 12.4) come back in the legacy row order with the legacy names
+        (``order="legacy"``, the logical matrix whose digest the member records), or as stored (``order="stored"``)."""
         mi = self.reader.members[name]
         if mi.kind != C.KIND_PZ2:
             raise V2Error("member %r is not a matrix (kind %d)" % (name, mi.kind))
-        key = name if cols is None else None
+        key = (name, order) if cols is None else None
         if key and key in self._mat_cache:
             return self._mat_cache[key]
         hdr = parse_header(self.reader.read_range(name, 0, min(mi.len, 65536)))
@@ -76,29 +81,36 @@ class V2Sample:
         else:
             csc = decode_any(self.reader.read_member(name), "canonical", cols)
         if resolve:
-            self._resolve(csc, mi, cols)
+            self._resolve(csc, mi, cols, order)
         if key:
             self._mat_cache[key] = csc
         return csc
 
-    def _resolve(self, csc: Csc, mi: C.MemberInfo, cols: Optional[tuple]) -> None:
+    def _resolve(
+        self, csc: Csc, mi: C.MemberInfo, cols: Optional[tuple], order: str = "legacy"
+    ) -> None:
         names = (mi.meta or {}).get("names", {})
         rr = csc.row_ref or {}
         if csc.rownames is None and "pack" in rr:
             ref = names.get("rows")
             pk = self.packs.get(rr["pack"])
-            if not isinstance(pk, VocabPack):
+            from . import junctions as J
+
+            if isinstance(pk, J.JunctionTable):
+                self._resolve_junctions(csc, mi, pk, rr, order)
+            elif not isinstance(pk, VocabPack):
                 raise V2Error("row names point at a whitelist")
-            member = ref.get("member") if isinstance(ref, dict) else None
-            allnames = [g for g, _n in pk.gene_table()] if member == "genes" else pk.names()
-            if "index" in rr:
-                csc.rownames = [allnames[i] for i in rr["index"]]
             else:
-                csc.rownames = allnames
-            if len(csc.rownames) != csc.m:
+                member = ref.get("member") if isinstance(ref, dict) else None
+                allnames = [g for g, _n in pk.gene_table()] if member == "genes" else pk.names()
+                if "index" in rr:
+                    csc.rownames = [allnames[i] for i in rr["index"]]
+                else:
+                    csc.rownames = allnames
+            if len(csc.rownames or []) != csc.m:
                 raise V2Error(
                     "pack %s has %d names, matrix %r has %d rows"
-                    % (rr["pack"], len(csc.rownames), mi.name, csc.m)
+                    % (rr["pack"], len(csc.rownames or []), mi.name, csc.m)
                 )
         elif csc.rownames is None and not rr.get("none"):
             raise V2Error("matrix %r has unresolved row names" % mi.name)
@@ -117,6 +129,29 @@ class V2Sample:
                 csc.colnames = pk.barcodes(cr["index"] if "index" in cr else np.arange(a, b))
             else:
                 raise V2Error("matrix %r has unresolved column names" % mi.name)
+
+    def _resolve_junctions(self, csc: Csc, mi: C.MemberInfo, table, rr: dict, order: str) -> None:
+        from . import junctions as J
+
+        if "index" not in rr:
+            raise V2Error("junction rows of %r carry no ids" % mi.name)
+        local = (
+            self.reader.legacy_blob(mi.name + J.LOCAL_SUFFIX)
+            if mi.name + J.LOCAL_SUFFIX in self.reader.members
+            else None
+        )
+        perm = None
+        if order == "legacy" and mi.name + J.LEGACY_ORDER_SUFFIX in self.reader.members:
+            perm = self.reader.legacy_blob(mi.name + J.LEGACY_ORDER_SUFFIX)
+        ip, ix, dt, rn = J.to_legacy(
+            csc.indptr, csc.indices, csc.data, rr["index"], table, local, perm
+        )
+        csc.indptr, csc.indices, csc.data = (
+            ip,
+            ix.astype(csc.indices.dtype),
+            dt.astype(csc.data.dtype),
+        )
+        csc.rownames = rn
 
     def verify_matrix_digest(self, name: str) -> bool:
         csc = self.matrix(name)

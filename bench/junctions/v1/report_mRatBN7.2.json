@@ -1,0 +1,66 @@
+{
+ "build": "mRatBN7.2",
+ "version_id": "5779d75f8a3a09af16c9a73a837b3384",
+ "chrom_rename": {},
+ "junctions": {
+  "census": 1994551,
+  "recurrent_supported_candidates": 58119,
+  "annotated_gtf": 232624,
+  "annotated_seen": 53917,
+  "core": 233161,
+  "core_annotated": 232624,
+  "core_unannotated": 537,
+  "rare": 3246,
+  "rare_segments": 1,
+  "local": 1936851
+ },
+ "called_umi_share": {
+  "core": 0.9595694512519063,
+  "core_annotated": 0.9290899359885324,
+  "rare": 0.005043418908841874
+ },
+ "bytes": {
+  "core": 941521,
+  "rare_total": 16707,
+  "rare_largest_segment": 16707,
+  "version": 1072
+ },
+ "decode_core_ms_median_of_7": 7.8,
+ "reference_cumsum_1M_u32_ms": 1.66,
+ "rules": {
+  "core": "annotated (GTF), or unannotated with n_studies >= 3, umi_called >= 1000, a canonical motif and ambient fraction <= 0.5",
+  "rare": "unannotated with n_studies >= 3, 100 <= umi_called < 1000, a canonical motif and ambient fraction <= 0.5; one segment, or one per chromosome above 1 MiB",
+  "local": "everything else: stays in its sample object as integer coordinates"
+ },
+ "sources": {
+  "gtf": {
+   "url": "https://ftp.ensembl.org/pub/release-111/gtf/rattus_norvegicus/Rattus_norvegicus.mRatBN7.2.111.gtf.gz",
+   "sha256": "dec0eb49ceeecbf0e993f74ef7a1464aa57c5cdad038f853295d4c45647d32ec"
+  },
+  "genome": {
+   "url": "https://ftp.ensembl.org/pub/release-111/fasta/rattus_norvegicus/dna/Rattus_norvegicus.mRatBN7.2.dna.toplevel.fa.gz",
+   "sha256": "9e0cd229e1f0bc3c93e104c394a17ded4d30ef8acf30e6e4f6692a04c8160920"
+  }
+ },
+ "packs_dir": "/mnt/projects/debruinz_project/debruinz/singlet/state/jxtab/v1-bf3a10b2e1/packs/mRatBN7.2",
+ "packs": [
+  {
+   "id": "fce908131568f2eb69ea42445d0d78e5",
+   "kind": "junction-segment",
+   "bytes": 941521,
+   "sha256": "fce908131568f2eb69ea42445d0d78e5629d44d1f7a2825bf5586a8f6ca35b22"
+  },
+  {
+   "id": "6b6d3af3ade842df918ed724d3d72bd7",
+   "kind": "junction-segment",
+   "bytes": 16707,
+   "sha256": "6b6d3af3ade842df918ed724d3d72bd75dcc32396ba32b94b28b29d976bf88bc"
+  },
+  {
+   "id": "5779d75f8a3a09af16c9a73a837b3384",
+   "kind": "junction-version",
+   "bytes": 1072,
+   "sha256": "5779d75f8a3a09af16c9a73a837b33846fcc5d2eaec602065f5ab6408bcd5e2a"
+  }
+ ]
+}
