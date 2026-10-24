@@ -25,7 +25,8 @@ if [ "$WHAT" = all ]; then
   sed -i '/^#include "htslib\/htslib\/sam.h"/a extern "C" void sam_hdr_destroy(bam_hdr_t *h);' $S/src/star/bam_cat.c
   cmake -S $S -B $B -DSINGLET_BUILD_PIPELINE=ON -DCMAKE_BUILD_TYPE=Release > $B.cmake.log 2>&1 || { tail -40 $B.cmake.log; exit 1; }
   cmake --build $B --target singlet -j $SLURM_CPUS_PER_TASK > $B.build.log 2>&1 || { grep -m20 -B2 -A8 "error" $B.build.log; exit 1; }
-  cp $B/src/pipeline/singlet $BIN_STRAND
+  # rename, not overwrite: running jobs keep their inode
+  cp $B/src/pipeline/singlet $BIN_STRAND.new && mv -f $BIN_STRAND.new $BIN_STRAND
   echo "[build] $BIN_STRAND: $($BIN_STRAND --version 2>&1 | head -1)"
 fi
 T=$SCR/build-tests
