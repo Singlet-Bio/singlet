@@ -72,8 +72,11 @@ class Options:
         max_stage2_rounds: int = 4,
         junction_table=None,
         cell_call_v2: Optional[bool] = None,
+        chunk_nnz_max: int = 0,
     ):
         self.chunk_cols = chunk_cols
+        # 0 = pz2 default budget (codec.DEFAULT_CHUNK_NNZ_MAX), -1 = none
+        self.chunk_nnz_max = chunk_nnz_max
         self.level = level
         self.codec = get_codec(codec)
         self.recipes: Recipes = recipes if isinstance(recipes, Recipes) else load_recipes(recipes)
@@ -158,6 +161,7 @@ def _junction_rows(w, rel, m, basis_barcodes, opts: Options, vt_code: int, flags
     col_ref, col_meta = _col_names_for(c, basis_barcodes, opts)
     eo = EncodeOptions(
         chunk_cols=opts.chunk_cols,
+        chunk_nnz_max=opts.chunk_nnz_max,
         row_names=("subset", t.id[:8], np.asarray(ids, np.uint32)),
         col_names=col_ref,
         level=opts.level,
@@ -594,6 +598,7 @@ def _assemble(gsm, order, mem, base, cand, lctx, opts: Options, basis_barcodes, 
                 col_ref, col_meta = _col_names_for(m.csc, basis_barcodes, opts)
                 eo = EncodeOptions(
                     chunk_cols=opts.chunk_cols,
+                    chunk_nnz_max=opts.chunk_nnz_max,
                     row_names=row_ref,
                     col_names=col_ref,
                     level=opts.level,
@@ -677,6 +682,7 @@ def _assemble(gsm, order, mem, base, cand, lctx, opts: Options, basis_barcodes, 
                 col_ref, col_meta = _col_names_for(c, basis_barcodes, opts)
                 eo = EncodeOptions(
                     chunk_cols=opts.chunk_cols,
+                    chunk_nnz_max=opts.chunk_nnz_max,
                     row_names=row_ref,
                     col_names=col_ref,
                     level=opts.level,
@@ -1176,7 +1182,16 @@ def main(argv=None) -> int:
         help="recipes module name or 'none' (default: singlet.v2.recipes if importable)",
     )
     ap.add_argument(
-        "--chunk-cols", type=int, default=0, help="columns per chunk (0 = pz2 default policy)"
+        "--chunk-cols",
+        type=int,
+        default=0,
+        help="maximum columns per chunk (0 = pz2 default policy)",
+    )
+    ap.add_argument(
+        "--chunk-nnz-max",
+        type=int,
+        default=0,
+        help="end a chunk before the column that would take it past this many non-zeros (0 = pz2 default, -1 = none)",
     )
     ap.add_argument("--created-at", help="fixed timestamp for reproducible manifests")
     ap.add_argument(
@@ -1193,6 +1208,7 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     opts = Options(
         chunk_cols=a.chunk_cols,
+        chunk_nnz_max=a.chunk_nnz_max,
         codec=a.codec,
         recipes=a.recipes,
         created_at=a.created_at,

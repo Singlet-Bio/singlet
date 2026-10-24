@@ -252,12 +252,21 @@ struct Codec1Out {
 };
 
 /// Cut columns into chunks of at most `chunk_cols` columns and kMaxChunkN/2 non-zeros.
-inline std::vector<uint32_t> plan_chunks(const std::vector<uint64_t>& ptr, uint32_t n, uint32_t chunk_cols, uint64_t max_nnz) {
+/// Chunk starts (n_chunks + 1, sentinel n): at most `chunk_cols` columns per chunk, and a chunk ends before the column that would
+/// take it past `nnz_budget` non-zeros (at least one column per chunk); `max_nnz` is the hard limit of the coder.
+inline std::vector<uint32_t> plan_chunks(const std::vector<uint64_t>& ptr, uint32_t n, uint32_t chunk_cols, uint64_t max_nnz,
+                                         uint64_t nnz_budget = UINT64_MAX) {
     std::vector<uint32_t> starts;
     uint32_t j = 0;
     while (j < n) {
         starts.push_back(j);
         uint32_t e = uint32_t(std::min<uint64_t>(n, uint64_t(j) + chunk_cols));
+        if (nnz_budget != UINT64_MAX && ptr[e] - ptr[j] > nnz_budget) {
+            // the last column end k in (j, e] with ptr[k] - ptr[j] <= budget, but at least j + 1
+            const uint64_t lim = ptr[j] + nnz_budget;
+            auto it = std::upper_bound(ptr.begin() + j + 1, ptr.begin() + e + 1, lim);
+            e = std::max<uint32_t>(j + 1, uint32_t((it - ptr.begin()) - 1));
+        }
         // shrink until the chunk fits (a single column always fits: it has < 2^21 elements)
         while (e - j > 1 && ptr[e] - ptr[j] > max_nnz) e = j + std::max<uint32_t>(1, (e - j) / 2);
         j = e;
@@ -267,7 +276,7 @@ inline std::vector<uint32_t> plan_chunks(const std::vector<uint64_t>& ptr, uint3
 }
 
 inline Codec1Out encode_codec1(const CSC& in, const std::vector<uint64_t>& ptr, const uint32_t* val32, uint32_t chunk_cols,
-                               const Codec1Params& prm) {
+                               const Codec1Params& prm, uint64_t nnz_budget = UINT64_MAX) {
     const uint32_t m = in.m, n = in.n;
     Codec1Out out;
     // row classes
@@ -300,7 +309,7 @@ inline Codec1Out encode_codec1(const CSC& in, const std::vector<uint64_t>& ptr, 
     const Cfg cfg = Cfg::make(kind, prm.pb, prm.pbv);
 
     // chunk plan
-    out.first_col = plan_chunks(R.ptr, n, chunk_cols, kMaxChunkN / 2);
+    out.first_col = plan_chunks(R.ptr, n, chunk_cols, kMaxChunkN / 2, nnz_budget);
     const size_t nch = out.first_col.size() - 1;
 
     // pass 1: histograms (per thread, merged)

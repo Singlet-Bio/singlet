@@ -715,7 +715,7 @@ static void fill_csc(CscArgs& A, py::object indptr_o, py::object indices_o, py::
 }
 
 static py::tuple py_encode(py::object indptr, py::object indices, py::object data, uint32_t m, uint32_t n, const std::string& codec, uint32_t chunk_cols,
-                           int classes_per_octave, int lanes, int prob_bits, int value_prob_bits, int ctx_kind, const std::string& value_type,
+                           int64_t chunk_nnz_max, int classes_per_octave, int lanes, int prob_bits, int value_prob_bits, int ctx_kind, const std::string& value_type,
                            py::object row_names, py::object col_names, py::object kv, py::object digest, bool compute_digest, int threads, int zstd_level) {
     CscArgs A;
     fill_csc(A, indptr, indices, data, m, n);
@@ -726,6 +726,8 @@ static py::tuple py_encode(py::object indptr, py::object indices, py::object dat
     else if (c == "generic" || c == "2") opt.codec = pz::CodecId::Generic;
     else throw py::value_error("codec must be auto, rans or generic");
     opt.chunk_cols = chunk_cols;
+    // 0 = library default, -1 = no budget (fixed-width chunks)
+    opt.chunk_nnz_max = chunk_nnz_max < 0 ? UINT32_MAX : uint32_t(std::min<int64_t>(chunk_nnz_max, int64_t(UINT32_MAX) - 1));
     opt.classes_per_octave = uint8_t(classes_per_octave);
     opt.lanes = uint8_t(lanes);
     opt.prob_bits = uint8_t(prob_bits);
@@ -937,10 +939,12 @@ PYBIND11_MODULE(_pz2, mod) {
     mod.def("select_columns", &py_select_columns, py::arg("indptr"), py::arg("indices"), py::arg("data"), py::arg("cols"),
             "Keep the strictly ascending columns `cols` of a CSC; returns new (indptr, indices, data).");
     mod.def("encode", &py_encode, py::arg("indptr"), py::arg("indices"), py::arg("data"), py::arg("m"), py::arg("n"), py::kw_only(), py::arg("codec") = "auto",
-            py::arg("chunk_cols") = 0, py::arg("classes_per_octave") = 4, py::arg("lanes") = 32, py::arg("prob_bits") = 10, py::arg("value_prob_bits") = 10,
+            py::arg("chunk_cols") = 0, py::arg("chunk_nnz_max") = 0, py::arg("classes_per_octave") = 4, py::arg("lanes") = 32, py::arg("prob_bits") = 10, py::arg("value_prob_bits") = 10,
             py::arg("ctx_kind") = -1, py::arg("value_type") = "auto", py::arg("row_names") = py::none(), py::arg("col_names") = py::none(),
             py::arg("kv") = py::none(), py::arg("digest") = py::none(), py::arg("compute_digest") = true, py::arg("threads") = 1, py::arg("zstd_level") = 19,
             "Encode a canonical CSC (row ids strictly ascending per column) into a pz2 member; returns (bytes, stats).\n"
+            "chunk_cols: maximum columns per chunk (0 = default policy); chunk_nnz_max: a chunk ends before the column that would take it\n"
+            "past this many non-zeros (0 = library default 49152, -1 = no budget).\n"
             "names: list[str] (inline) or {'kind': 'inline'|'pack'|'pack_subset'|'cells', 'pack_id': bytes8|hex, 'pack_index': array, 'names': list[str]}.");
     mod.def("digest", &py_digest, py::arg("indptr"), py::arg("indices"), py::arg("data"), py::arg("m"), py::arg("n"), py::arg("value_type") = "auto",
             py::arg("row_names") = py::none(), py::arg("col_names") = py::none(), py::arg("kv") = py::none(),
