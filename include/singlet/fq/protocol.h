@@ -1058,7 +1058,7 @@ ProtocolCandidate detect_protocol(
     // >34bp in droplet protocols.  A whitelist file that is absent or gives a
     // low match rate should not prevent the swap: AUTOFIX-E2E-A2-READ-SWAP.
     // 10x 3' and 5' of one generation are indistinguishable above; switch to the
-    // 5' sibling when the TSO shows in the reads (see five_prime_evidence).
+    // 5' sibling when the cDNA read looks 5' (see five_prime_evidence).
     if (!inverted && !concat_mode && best.tag.rfind("10x-3p-v", 0) == 0) {
         std::string five = "10x-5p-" + best.tag.substr(7);
         if (const CandidateSpec* fp = find_protocol_spec(five)) {
@@ -1069,7 +1069,7 @@ ProtocolCandidate detect_protocol(
                       << ", polyT " << ev.r2_polyt << " of " << ev.n << " spots\n";
             if (ev.is_5prime()) {
                 std::cerr << "[protocol_detect] " << best.tag << " -> " << five
-                          << " (template-switch oligo in the reads)\n";
+                          << " (cDNA read looks 5': no 3'-kit TSO, poly(T) > poly(A))\n";
                 best.tag = fp->tag;
                 best.protocol_id = fp->protocol_id;
             }
