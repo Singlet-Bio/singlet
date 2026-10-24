@@ -1,0 +1,250 @@
+{
+ "build": "GRCm39-2024-A",
+ "census_rows_in_2plus_samples": 65960511,
+ "census_top_chroms": {
+  "11": 5230102,
+  "2": 5106951,
+  "7": 4325811,
+  "1": 4185393,
+  "4": 4037326,
+  "5": 3996285,
+  "6": 3551705,
+  "9": 3487235,
+  "10": 3308034,
+  "17": 3178045,
+  "8": 3153633,
+  "3": 2972703
+ },
+ "gtf_top_chroms": {
+  "chr2": 23376,
+  "chr7": 22470,
+  "chr11": 20525,
+  "chr5": 18402,
+  "chr1": 18337,
+  "chr4": 17061,
+  "chr9": 16768,
+  "chr6": 14732,
+  "chr17": 14007,
+  "chr8": 13972,
+  "chr10": 13633,
+  "chr3": 13083
+ },
+ "offset_match_top200k": [
+  {
+   "hits": 163948,
+   "chrom": "add_chr",
+   "d_start": 0,
+   "d_end": 0
+  },
+  {
+   "hits": 84,
+   "chrom": "add_chr",
+   "d_start": 1,
+   "d_end": 0
+  },
+  {
+   "hits": 36,
+   "chrom": "add_chr",
+   "d_start": 0,
+   "d_end": -1
+  },
+  {
+   "hits": 26,
+   "chrom": "strip_chr",
+   "d_start": 0,
+   "d_end": 0
+  },
+  {
+   "hits": 26,
+   "chrom": "as_is",
+   "d_start": 0,
+   "d_end": 0
+  }
+ ],
+ "annotated_rows": 279186,
+ "annotated_umi_share": 0.979684849710868,
+ "novel_grid": [
+  {
+   "min_studies": 3,
+   "min_umi": 10,
+   "novel": 6972785,
+   "umi_share_ann_plus_novel": 0.9968759890070682
+  },
+  {
+   "min_studies": 3,
+   "min_umi": 30,
+   "novel": 2427080,
+   "umi_share_ann_plus_novel": 0.9956357276149886
+  },
+  {
+   "min_studies": 3,
+   "min_umi": 100,
+   "novel": 790699,
+   "umi_share_ann_plus_novel": 0.9941963178575227
+  },
+  {
+   "min_studies": 3,
+   "min_umi": 300,
+   "novel": 282951,
+   "umi_share_ann_plus_novel": 0.9927597748075114
+  },
+  {
+   "min_studies": 3,
+   "min_umi": 1000,
+   "novel": 87874,
+   "umi_share_ann_plus_novel": 0.9910257044794196
+  },
+  {
+   "min_studies": 5,
+   "min_umi": 10,
+   "novel": 6920288,
+   "umi_share_ann_plus_novel": 0.996803593958895
+  },
+  {
+   "min_studies": 5,
+   "min_umi": 30,
+   "novel": 2414088,
+   "umi_share_ann_plus_novel": 0.9955736055530026
+  },
+  {
+   "min_studies": 5,
+   "min_umi": 100,
+   "novel": 787066,
+   "umi_share_ann_plus_novel": 0.9941421841516178
+  },
+  {
+   "min_studies": 5,
+   "min_umi": 300,
+   "novel": 281621,
+   "umi_share_ann_plus_novel": 0.9927120978298302
+  },
+  {
+   "min_studies": 5,
+   "min_umi": 1000,
+   "novel": 87385,
+   "umi_share_ann_plus_novel": 0.9909855511867104
+  },
+  {
+   "min_studies": 10,
+   "min_umi": 10,
+   "novel": 6734620,
+   "umi_share_ann_plus_novel": 0.9967132609352682
+  },
+  {
+   "min_studies": 10,
+   "min_umi": 30,
+   "novel": 2395206,
+   "umi_share_ann_plus_novel": 0.9955204315615396
+  },
+  {
+   "min_studies": 10,
+   "min_umi": 100,
+   "novel": 783478,
+   "umi_share_ann_plus_novel": 0.9941017824660479
+  },
+  {
+   "min_studies": 10,
+   "min_umi": 300,
+   "novel": 280694,
+   "umi_share_ann_plus_novel": 0.9926788402789283
+  },
+  {
+   "min_studies": 10,
+   "min_umi": 1000,
+   "novel": 87120,
+   "umi_share_ann_plus_novel": 0.9909579797499937
+  },
+  {
+   "min_studies": 20,
+   "min_umi": 10,
+   "novel": 4125264,
+   "umi_share_ann_plus_novel": 0.9960671626626237
+  },
+  {
+   "min_studies": 20,
+   "min_umi": 30,
+   "novel": 2351604,
+   "umi_share_ann_plus_novel": 0.9954363141673924
+  },
+  {
+   "min_studies": 20,
+   "min_umi": 100,
+   "novel": 776659,
+   "umi_share_ann_plus_novel": 0.9940469743020369
+  },
+  {
+   "min_studies": 20,
+   "min_umi": 300,
+   "novel": 279197,
+   "umi_share_ann_plus_novel": 0.9926383385255929
+  },
+  {
+   "min_studies": 20,
+   "min_umi": 1000,
+   "novel": 86807,
+   "umi_share_ann_plus_novel": 0.9909275678270616
+  },
+  {
+   "min_studies": 50,
+   "min_umi": 10,
+   "novel": 1607280,
+   "umi_share_ann_plus_novel": 0.994819081960316
+  },
+  {
+   "min_studies": 50,
+   "min_umi": 30,
+   "novel": 1606502,
+   "umi_share_ann_plus_novel": 0.9948187045111275
+  },
+  {
+   "min_studies": 50,
+   "min_umi": 100,
+   "novel": 753298,
+   "umi_share_ann_plus_novel": 0.9939080222322415
+  },
+  {
+   "min_studies": 50,
+   "min_umi": 300,
+   "novel": 274263,
+   "umi_share_ann_plus_novel": 0.9925481591738027
+  },
+  {
+   "min_studies": 50,
+   "min_umi": 1000,
+   "novel": 85711,
+   "umi_share_ann_plus_novel": 0.9908699119510476
+  },
+  {
+   "min_studies": 100,
+   "min_umi": 10,
+   "novel": 761140,
+   "umi_share_ann_plus_novel": 0.9937157381602575
+  },
+  {
+   "min_studies": 100,
+   "min_umi": 30,
+   "novel": 761140,
+   "umi_share_ann_plus_novel": 0.9937157381602575
+  },
+  {
+   "min_studies": 100,
+   "min_umi": 100,
+   "novel": 681031,
+   "umi_share_ann_plus_novel": 0.9935938539990723
+  },
+  {
+   "min_studies": 100,
+   "min_umi": 300,
+   "novel": 266076,
+   "umi_share_ann_plus_novel": 0.9923883039590641
+  },
+  {
+   "min_studies": 100,
+   "min_umi": 1000,
+   "novel": 84120,
+   "umi_share_ann_plus_novel": 0.9907652747886833
+  }
+ ],
+ "unannotated_in_2plus_studies": 63299898,
+ "unannotated_in_2plus_samples_1_study": 2381427
+}

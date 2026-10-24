@@ -1,0 +1,426 @@
+{
+ "build": "Mmul_10",
+ "version_id": "807bf7a29d72004e7ff54c15f506de05",
+ "chrom_rename": {},
+ "junctions": {
+  "census": 3704158,
+  "recurrent_supported_candidates": 81901,
+  "annotated_gtf": 229661,
+  "annotated_seen": 72388,
+  "core": 230861,
+  "core_annotated": 229661,
+  "core_unannotated": 1200,
+  "rare": 7859,
+  "rare_segments": 61,
+  "local": 3622711
+ },
+ "called_umi_share": {
+  "core": 0.9578719053162856,
+  "core_annotated": 0.9321768255423679,
+  "rare": 0.007451642107658174
+ },
+ "bytes": {
+  "core": 962921,
+  "rare_total": 61018,
+  "rare_largest_segment": 4797,
+  "version": 6431
+ },
+ "decode_core_ms_median_of_7": 7.6,
+ "reference_cumsum_1M_u32_ms": 1.65,
+ "rules": {
+  "core": "annotated (GTF), or unannotated with n_studies >= 3, umi_called >= 1000, a canonical motif and ambient fraction <= 0.5",
+  "rare": "unannotated with n_studies >= 3, 100 <= umi_called < 1000, a canonical motif and ambient fraction <= 0.5; one segment per chromosome",
+  "local": "everything else: stays in its sample object as integer coordinates"
+ },
+ "sources": {
+  "gtf": {
+   "url": "https://ftp.ensembl.org/pub/release-111/gtf/macaca_mulatta/Macaca_mulatta.Mmul_10.111.gtf.gz",
+   "sha256": "73d9d78bab366519e6ff92d9f04796b0d280c45507a2e261eacd89353809675d"
+  },
+  "genome": {
+   "url": "https://ftp.ensembl.org/pub/release-111/fasta/macaca_mulatta/dna/Macaca_mulatta.Mmul_10.dna.toplevel.fa.gz",
+   "sha256": "679dd90651c50366858152b62989c26d587340711e60622458815d19b272fd3a"
+  }
+ },
+ "packs_dir": "/mnt/projects/debruinz_project/debruinz/singlet/state/jxtab/v1-bf3a10b2e1/packs/Mmul_10",
+ "packs": [
+  {
+   "id": "15404902f4af437a70bd8102629b8f5c",
+   "kind": "junction-segment",
+   "bytes": 962921,
+   "sha256": "15404902f4af437a70bd8102629b8f5c3dbef75921096a0b466b54665f3a2424"
+  },
+  {
+   "id": "861b2cfda2a36250060147bf2b4a6a38",
+   "kind": "junction-segment",
+   "bytes": 4797,
+   "sha256": "861b2cfda2a36250060147bf2b4a6a38f62a5bfbe669ed953573c1a3aa3e1a06"
+  },
+  {
+   "id": "a528f1a47abacd2dd2677c12e3110b99",
+   "kind": "junction-segment",
+   "bytes": 2296,
+   "sha256": "a528f1a47abacd2dd2677c12e3110b9906b07637f13be38b4836a7e7d4fe2c45"
+  },
+  {
+   "id": "8aad6139381b2cdf12b32f366a3b6964",
+   "kind": "junction-segment",
+   "bytes": 2569,
+   "sha256": "8aad6139381b2cdf12b32f366a3b69644a5a14d569c292947c944dfffadffe50"
+  },
+  {
+   "id": "b5e53b7aa58b2c44bd8be0ad97882bf5",
+   "kind": "junction-segment",
+   "bytes": 1612,
+   "sha256": "b5e53b7aa58b2c44bd8be0ad97882bf5783206c6f200d0c264398630be15ab72"
+  },
+  {
+   "id": "c0e744621837fdd74f6c3ac28b343627",
+   "kind": "junction-segment",
+   "bytes": 1634,
+   "sha256": "c0e744621837fdd74f6c3ac28b343627b3990e623a4fadf1dfb00f14085a7990"
+  },
+  {
+   "id": "3b42b2e395abc5e3ddd2ba36b4c61282",
+   "kind": "junction-segment",
+   "bytes": 2402,
+   "sha256": "3b42b2e395abc5e3ddd2ba36b4c612827272716b0a01017b77bcf2cd27cf56c7"
+  },
+  {
+   "id": "98036a120ef65dbbcec7a841c7ad1f14",
+   "kind": "junction-segment",
+   "bytes": 1581,
+   "sha256": "98036a120ef65dbbcec7a841c7ad1f1486540382f61130f07a7c742f9e055eda"
+  },
+  {
+   "id": "bec5806e2885a4e1ac339aea534fead6",
+   "kind": "junction-segment",
+   "bytes": 2365,
+   "sha256": "bec5806e2885a4e1ac339aea534fead67d668c8b220385bf445e6fe89dd352e4"
+  },
+  {
+   "id": "153cb94a06e98054d8c1db0118ecea30",
+   "kind": "junction-segment",
+   "bytes": 1162,
+   "sha256": "153cb94a06e98054d8c1db0118ecea30135d73b734a95adf50f12911ffee5ab2"
+  },
+  {
+   "id": "3d0e90fdfc2f7e6b0fc17f74cd1bee17",
+   "kind": "junction-segment",
+   "bytes": 878,
+   "sha256": "3d0e90fdfc2f7e6b0fc17f74cd1bee176720d4d453ff13ee2cf95f0862317624"
+  },
+  {
+   "id": "969df702190e2714c769948f4f415484",
+   "kind": "junction-segment",
+   "bytes": 3149,
+   "sha256": "969df702190e2714c769948f4f415484c8073283f934f7469b9fb760e115faef"
+  },
+  {
+   "id": "baefe2ebc7bea346795257072395ab9d",
+   "kind": "junction-segment",
+   "bytes": 2845,
+   "sha256": "baefe2ebc7bea346795257072395ab9dccd3e00a33525eafb950749fba38e34f"
+  },
+  {
+   "id": "5721c9ddd04b381029a4c5239d3b3675",
+   "kind": "junction-segment",
+   "bytes": 1748,
+   "sha256": "5721c9ddd04b381029a4c5239d3b3675bfebe25c9aec6c1b88f0173bee0da676"
+  },
+  {
+   "id": "a97be2530e494b4183403af496707d5c",
+   "kind": "junction-segment",
+   "bytes": 2831,
+   "sha256": "a97be2530e494b4183403af496707d5caf39e6870e5c911d1922c372fbd7483b"
+  },
+  {
+   "id": "6a434300fcd4afd070d58d77f6751ae2",
+   "kind": "junction-segment",
+   "bytes": 2891,
+   "sha256": "6a434300fcd4afd070d58d77f6751ae2272af2658a69fe7429c111c78ccd0475"
+  },
+  {
+   "id": "cc7febbcf3ce9007be2d8b34e981b4b8",
+   "kind": "junction-segment",
+   "bytes": 1695,
+   "sha256": "cc7febbcf3ce9007be2d8b34e981b4b8f754ec0c5f8f6d998794505476140757"
+  },
+  {
+   "id": "b33669f81d4672f4184a5104d801d18d",
+   "kind": "junction-segment",
+   "bytes": 1947,
+   "sha256": "b33669f81d4672f4184a5104d801d18d43ebb9fbf3d1d174a5ac34a27ba77bc9"
+  },
+  {
+   "id": "7507fe7a365d3e6c8c512718c167488d",
+   "kind": "junction-segment",
+   "bytes": 3058,
+   "sha256": "7507fe7a365d3e6c8c512718c167488dfe62a8d277c1f258059d9c63add1d483"
+  },
+  {
+   "id": "0c0ebc9b8ca4c61903fe2afe4a8398a4",
+   "kind": "junction-segment",
+   "bytes": 1553,
+   "sha256": "0c0ebc9b8ca4c61903fe2afe4a8398a4c6a7b346d7294e6f48b7abf169972403"
+  },
+  {
+   "id": "8de32f43bae133b7be9ccbb59ab04f96",
+   "kind": "junction-segment",
+   "bytes": 1807,
+   "sha256": "8de32f43bae133b7be9ccbb59ab04f964f608ca6f177ff0e9cce7b42fe2dfd39"
+  },
+  {
+   "id": "c9720cb674cd50dff7a27671995441dd",
+   "kind": "junction-segment",
+   "bytes": 670,
+   "sha256": "c9720cb674cd50dff7a27671995441ddd6a284caf11f1a31fc4f8e26f3289d9d"
+  },
+  {
+   "id": "16934ae7f3bdd7bbe88a8518eb1c2050",
+   "kind": "junction-segment",
+   "bytes": 352,
+   "sha256": "16934ae7f3bdd7bbe88a8518eb1c20505835e8a204619d4977b7d032981399fd"
+  },
+  {
+   "id": "01f9c0bc1d181c0d4cacc8a1ce609877",
+   "kind": "junction-segment",
+   "bytes": 352,
+   "sha256": "01f9c0bc1d181c0d4cacc8a1ce60987786ab1a1bca22de54d9ca4ee35c5c21d5"
+  },
+  {
+   "id": "500f2244eaad466dd3f632164982ad77",
+   "kind": "junction-segment",
+   "bytes": 353,
+   "sha256": "500f2244eaad466dd3f632164982ad7799fa6bce7ce8d9b000646a67a7d2edbf"
+  },
+  {
+   "id": "b53a44d7f7c1ad1a93ee6ce141b514ce",
+   "kind": "junction-segment",
+   "bytes": 353,
+   "sha256": "b53a44d7f7c1ad1a93ee6ce141b514cec0c755c0bf70e1ecd4e9c82c299bf7cc"
+  },
+  {
+   "id": "bcfa15eb208d1fc3ec10acc403827d25",
+   "kind": "junction-segment",
+   "bytes": 374,
+   "sha256": "bcfa15eb208d1fc3ec10acc403827d25633ab1d5f4849332e63f06830b79102e"
+  },
+  {
+   "id": "247a0bb4b088ba68c8938a83b0f1ff31",
+   "kind": "junction-segment",
+   "bytes": 353,
+   "sha256": "247a0bb4b088ba68c8938a83b0f1ff31a6b9f696fb385c9d72f7338290653204"
+  },
+  {
+   "id": "e01e077001a3a2738134dfdb67100af2",
+   "kind": "junction-segment",
+   "bytes": 353,
+   "sha256": "e01e077001a3a2738134dfdb67100af2d0484f727a6096c4189793a0a0ade931"
+  },
+  {
+   "id": "0e63325a3cb824c393fad1acbd8e5193",
+   "kind": "junction-segment",
+   "bytes": 360,
+   "sha256": "0e63325a3cb824c393fad1acbd8e51934a4a45470a7eed722a1761960157bdf1"
+  },
+  {
+   "id": "cfa4599fbfa4136820bfb8e0cecbf1c0",
+   "kind": "junction-segment",
+   "bytes": 360,
+   "sha256": "cfa4599fbfa4136820bfb8e0cecbf1c089ecb7815bd4b57c9532d355aba7eb56"
+  },
+  {
+   "id": "f4545aa623618da58c10182e5cdd6634",
+   "kind": "junction-segment",
+   "bytes": 353,
+   "sha256": "f4545aa623618da58c10182e5cdd6634e8440930270993f51afc0082b4036c5f"
+  },
+  {
+   "id": "d998cba22ead140f751c59b64f13f775",
+   "kind": "junction-segment",
+   "bytes": 353,
+   "sha256": "d998cba22ead140f751c59b64f13f775b0bfe77dfbfa7018444f8e00eb317200"
+  },
+  {
+   "id": "c7cbf481c670a23dfbbd8b69159a0916",
+   "kind": "junction-segment",
+   "bytes": 374,
+   "sha256": "c7cbf481c670a23dfbbd8b69159a091660ff9e40125dc16d5345bb2e99c14d61"
+  },
+  {
+   "id": "87288c6f0bb8fa9abe0523becd93386b",
+   "kind": "junction-segment",
+   "bytes": 360,
+   "sha256": "87288c6f0bb8fa9abe0523becd93386bed8ea7c2a49ac510a85a6bbd7f3b892e"
+  },
+  {
+   "id": "0adf0f18251e539721f68a7eb1a73d77",
+   "kind": "junction-segment",
+   "bytes": 367,
+   "sha256": "0adf0f18251e539721f68a7eb1a73d7725e7e6c0b833fb033fbf3069a7a21916"
+  },
+  {
+   "id": "267b2dd7ec9afc45ed4705a4c7d1fde8",
+   "kind": "junction-segment",
+   "bytes": 353,
+   "sha256": "267b2dd7ec9afc45ed4705a4c7d1fde8b6b30b39d14cb214e2f7c7ff3ae3fcad"
+  },
+  {
+   "id": "7eaac2c77433b8455fad42d014e8d82b",
+   "kind": "junction-segment",
+   "bytes": 353,
+   "sha256": "7eaac2c77433b8455fad42d014e8d82b62fac45a2e373524835d7fcc94d8335f"
+  },
+  {
+   "id": "435891f7b815b69f760d6188597bdca3",
+   "kind": "junction-segment",
+   "bytes": 352,
+   "sha256": "435891f7b815b69f760d6188597bdca35707a28bb4f6a6b4a3724ee302ce9dcc"
+  },
+  {
+   "id": "05ecb52c8aa4a02c5c468a37f4b9ebec",
+   "kind": "junction-segment",
+   "bytes": 353,
+   "sha256": "05ecb52c8aa4a02c5c468a37f4b9ebec31401eaa9ce8c58c664b2babe32aefa1"
+  },
+  {
+   "id": "757f5db8aebe1e17f103c5de002c4545",
+   "kind": "junction-segment",
+   "bytes": 367,
+   "sha256": "757f5db8aebe1e17f103c5de002c4545318a43eb4fab4f104c8e49e710182219"
+  },
+  {
+   "id": "a9f051f399c399a8ac9fcc348e8165dd",
+   "kind": "junction-segment",
+   "bytes": 353,
+   "sha256": "a9f051f399c399a8ac9fcc348e8165dde823365e47d4083bff96f64808fee072"
+  },
+  {
+   "id": "89f99ea5239fbcd3395f757da1517c53",
+   "kind": "junction-segment",
+   "bytes": 381,
+   "sha256": "89f99ea5239fbcd3395f757da1517c53c8ef6ddbc077a965d530616abbd0dabd"
+  },
+  {
+   "id": "ce5dff8f3c243cf524be40c4fb3c22db",
+   "kind": "junction-segment",
+   "bytes": 353,
+   "sha256": "ce5dff8f3c243cf524be40c4fb3c22dbf92b901407d32ea9d87c802041daa101"
+  },
+  {
+   "id": "17ef6c6d7eb53553a7611f94ca7d8628",
+   "kind": "junction-segment",
+   "bytes": 353,
+   "sha256": "17ef6c6d7eb53553a7611f94ca7d862838c79fed98514b53bd0cb9d3411a4b30"
+  },
+  {
+   "id": "183d4b46696a49df5f8da5d35d2508f5",
+   "kind": "junction-segment",
+   "bytes": 360,
+   "sha256": "183d4b46696a49df5f8da5d35d2508f5a86c55859ab32e11417753651b1b8d5a"
+  },
+  {
+   "id": "7eea53394bcbbc4d53ca259c5ef05512",
+   "kind": "junction-segment",
+   "bytes": 374,
+   "sha256": "7eea53394bcbbc4d53ca259c5ef05512894fc2f94ef1b70abe4db9d93bc214f7"
+  },
+  {
+   "id": "7d7f30f915a85b82e0908bb660054386",
+   "kind": "junction-segment",
+   "bytes": 353,
+   "sha256": "7d7f30f915a85b82e0908bb6600543861872127bf088d9fa0357ed31291f7647"
+  },
+  {
+   "id": "3f821b612bc77ab600c528fb19b83662",
+   "kind": "junction-segment",
+   "bytes": 353,
+   "sha256": "3f821b612bc77ab600c528fb19b83662ec5e2f420889103ef914f014d7a3b5be"
+  },
+  {
+   "id": "c053800834b500da30f27a4d40b330b4",
+   "kind": "junction-segment",
+   "bytes": 353,
+   "sha256": "c053800834b500da30f27a4d40b330b41d5f62a6b01995f871a8ed933021d6ce"
+  },
+  {
+   "id": "f8ccaf29f553bc334d8645528484661b",
+   "kind": "junction-segment",
+   "bytes": 353,
+   "sha256": "f8ccaf29f553bc334d8645528484661bd9adf30c9e3f74f5b47bbb4486eface3"
+  },
+  {
+   "id": "e04409309c3a18d139ae057099796df3",
+   "kind": "junction-segment",
+   "bytes": 353,
+   "sha256": "e04409309c3a18d139ae057099796df30b033ebe0875472952802f50faa364fe"
+  },
+  {
+   "id": "7ce9e2243db396fe4c3676c4f58b643b",
+   "kind": "junction-segment",
+   "bytes": 367,
+   "sha256": "7ce9e2243db396fe4c3676c4f58b643b00b52cf24e7a8e70bf0a2959202097e4"
+  },
+  {
+   "id": "a0bd0aff32c6a77180403e62134fda42",
+   "kind": "junction-segment",
+   "bytes": 360,
+   "sha256": "a0bd0aff32c6a77180403e62134fda42176816b0f5de9adcc8dfbee2a44bb620"
+  },
+  {
+   "id": "c46341e563ca032a52cf9c014dcba581",
+   "kind": "junction-segment",
+   "bytes": 354,
+   "sha256": "c46341e563ca032a52cf9c014dcba581717b7cee608552e1d281733d59de5525"
+  },
+  {
+   "id": "d892accc39a9722966ac49a1db0bdb96",
+   "kind": "junction-segment",
+   "bytes": 382,
+   "sha256": "d892accc39a9722966ac49a1db0bdb968ec1e8d3b92e827ef70d32e093a767bb"
+  },
+  {
+   "id": "0647f7d9919d0f3133df9a308b7eb903",
+   "kind": "junction-segment",
+   "bytes": 353,
+   "sha256": "0647f7d9919d0f3133df9a308b7eb9030328cb0c336e2c7ed1a1eedc13add1d1"
+  },
+  {
+   "id": "c4ade41c92891704554e268b6e22bca7",
+   "kind": "junction-segment",
+   "bytes": 353,
+   "sha256": "c4ade41c92891704554e268b6e22bca718bd6bd166eb958095ac4c76c94a114e"
+  },
+  {
+   "id": "3b0addfffe9138011ef57ce16da5d197",
+   "kind": "junction-segment",
+   "bytes": 360,
+   "sha256": "3b0addfffe9138011ef57ce16da5d1971e1fb02972d49df2b4789a3b40bcf160"
+  },
+  {
+   "id": "0c0dd7c1cb6e9ce3c6a4bfdde9e6e632",
+   "kind": "junction-segment",
+   "bytes": 358,
+   "sha256": "0c0dd7c1cb6e9ce3c6a4bfdde9e6e632efc01d3d4edd95e79045e60f0a6abbcd"
+  },
+  {
+   "id": "fb6c6ac0ced76ccb286ad0cd9610a0fb",
+   "kind": "junction-segment",
+   "bytes": 1539,
+   "sha256": "fb6c6ac0ced76ccb286ad0cd9610a0fb9b2947136a38583db7fd82f706bac399"
+  },
+  {
+   "id": "94820cfe070156ea2d0c636251c42104",
+   "kind": "junction-segment",
+   "bytes": 368,
+   "sha256": "94820cfe070156ea2d0c636251c42104da430ee8f63aa60a4eb78080f3632b0f"
+  },
+  {
+   "id": "807bf7a29d72004e7ff54c15f506de05",
+   "kind": "junction-version",
+   "bytes": 6431,
+   "sha256": "807bf7a29d72004e7ff54c15f506de0531b2bc73ab84097e89829861a8182d31"
+  }
+ ]
+}
