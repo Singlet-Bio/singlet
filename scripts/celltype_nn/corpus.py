@@ -292,7 +292,10 @@ def cmd_dedup(a) -> int:
     flagged = per[(per["frac"] >= a.min_frac) & (per["hits"] >= 20)]
     drop = plan[plan["dataset_id"].isin(flagged.index) & plan["hit"]]
     drop[["organism", "soma_joinid", "dataset_id"]].to_parquet(a.out / "leak_exclude.parquet", index=False)
-    rep = dict(bench_cells=len(K), median_dataset_match_frac=base, flagged=flagged.sort_values("frac", ascending=False).reset_index().to_dict("records"),
+    top = per.sort_values("frac", ascending=False).head(15).reset_index()
+    titles = dict(zip(ds["dataset_id"], ds["dataset_title"]))
+    top["title"] = top["dataset_id"].map(titles)
+    rep = dict(bench_cells=len(K), median_dataset_match_frac=base, top=top.to_dict("records"), flagged=flagged.sort_values("frac", ascending=False).reset_index().to_dict("records"),
                excluded_cells=len(drop))
     (a.out / "leak_dedup.json").write_text(json.dumps(rep, indent=1, default=float))
     print(json.dumps(rep, indent=1, default=float), flush=True)
