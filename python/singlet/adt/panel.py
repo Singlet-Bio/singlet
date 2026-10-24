@@ -133,10 +133,14 @@ def discover(feature_seqs: Sequence[bytes], cat: pd.DataFrame, organism: str = "
     um_c = cnt[unm]
     um_s = u[unm]
     order = np.argsort(-um_c)
-    abundant = [(um_s[i].decode(), int(um_c[i])) for i in order[:50] if um_c[i] >= ABUNDANT_SHARE * n]
-    unexplained = sum(c for _, c in abundant) / max(n, 1)
-    notes = {"reads": n, "matched_share": matched / max(n, 1), "unexplained_share": unexplained,
-             "unexplained_top": abundant[:20], "n_catalog_hits": int(keep.sum())}
+    abundant = [(um_s[i].decode(), int(um_c[i])) for i in order[:200] if um_c[i] >= ABUNDANT_SHARE * n]
+    panel_seqs = list(cat.sequence[keep]) if keep.any() else []
+    kinds = {q: classify_unmatched(q, panel_seqs) for q, _ in abundant}
+    other = [(q, c) for q, c in abundant if kinds[q] == "other"]
+    share = {k: sum(c for q, c in abundant if kinds[q] == k) / max(n, 1) for k in ("low_complexity", "shifted", "other")}
+    notes = {"reads": n, "matched_share": matched / max(n, 1), "unexplained_share": share["other"],
+             "low_complexity_share": share["low_complexity"], "shifted_share": share["shifted"],
+             "unexplained_top": other[:20], "n_catalog_hits": int(keep.sum())}
     if not keep.any():
         status = "unresolved"
     elif unexplained > UNEXPLAINED_MAX:
@@ -151,6 +155,19 @@ def discover(feature_seqs: Sequence[bytes], cat: pd.DataFrame, organism: str = "
     out["source"] = "catalog"
     _dedupe_names(out)
     return Panel(out.reset_index(drop=True), "catalog", -1, status, notes)
+
+
+def classify_unmatched(q: str, panel_seqs: Sequence[str]) -> str:
+    """``low_complexity`` (one base >= 80%, e.g. NovaSeq poly-G of empty clusters, poly-A), ``shifted`` (a panel barcode
+    read one base early or late: the 10-nt handle had an indel; Cell Ranger's fixed pattern drops these too) or ``other``
+    (an unknown feature barcode: evidence the panel is incomplete)."""
+    if max(q.count(b) for b in "ACGTN") >= 0.8 * len(q):
+        return "low_complexity"
+    for p in panel_seqs:
+        L = min(len(p), len(q))
+        if q[1:L] == p[:L - 1] or q[:L - 1] == p[1:L]:
+            return "shifted"
+    return "other"
 
 
 def _dedupe_names(df: pd.DataFrame):

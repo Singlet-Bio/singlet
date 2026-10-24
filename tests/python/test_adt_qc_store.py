@@ -131,3 +131,11 @@ def test_hto_feature_sidecar():
     assert m[2] == 0 and 0 < m[1] < m[0] < 1
     assert names == ["negative", "doublet", "H1", "H2"]
     assert t.schema.metadata[b"singlet_features_schema"] == b"1"
+
+
+def test_classify_unmatched():
+    pan = ["GTCAACTCTTTAGCG"]
+    assert P.classify_unmatched("GGGGGGGGGGGGGGG", pan) == "low_complexity"
+    assert P.classify_unmatched("TCAACTCTTTAGCGG", pan) == "shifted"
+    assert P.classify_unmatched("GGTCAACTCTTTAGC", pan) == "shifted"
+    assert P.classify_unmatched("ACGTTGCAACGTAGC", pan) == "other"

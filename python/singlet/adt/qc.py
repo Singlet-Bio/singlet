@@ -70,15 +70,23 @@ def _rule(metric, value):
 
 
 def gene_lookup(genes: List[str]):
-    """Index of each gene by Ensembl id (version stripped) and by symbol; rows may be 'ENSG..', 'SYMBOL' or 'ENSG..|SYM'."""
+    """Rows of each gene by Ensembl id (version stripped) and by symbol.
+
+    Row names may be genes (``ENSG..``, ``SYMBOL``, ``ENSG..|SYMBOL``) or the legacy exon rows
+    ``ENSG..._SYMBOL_chr:start-end``; a gene's rows are summed for concordance. -> (by_id, by_sym): name -> list of rows."""
     by_id, by_sym = {}, {}
     for i, g in enumerate(genes):
-        for part in str(g).replace("|", "\t").split("\t"):
+        g = str(g)
+        if g.startswith(("ENSG", "ENSMUSG")) and g.count("_") >= 2:
+            parts = g.split("_")[:2]  # exon row: id, symbol
+        else:
+            parts = g.split("|")
+        for part in parts:
             p = part.strip()
             if p.startswith(("ENSG", "ENSMUSG")):
-                by_id.setdefault(p.split(".")[0], i)
+                by_id.setdefault(p.split(".")[0], []).append(i)
             elif p:
-                by_sym.setdefault(p.upper(), i)
+                by_sym.setdefault(p.upper(), []).append(i)
     return by_id, by_sym
 
 
@@ -109,17 +117,19 @@ def rna_concordance(adt_clr: np.ndarray, panel: pd.DataFrame, exon, genes: List[
                 gi = by_id[e.split(".")[0]]
                 break
         if gi is None:
-            nm = str(r.name).replace("Hu.", "").replace("Ms.", "").split(" (")[0].strip()
+            nm = str(r.name).replace("Hu.", "").replace("Ms.", "").replace("Mm.", "").split(" (")[0].strip()
+            nm = nm.split("_")[0]  # 'CD4_RPA.T4' -> 'CD4'
             sym = CANONICAL.get(nm, CANONICAL.get(nm.upper(), nm))
             gi = by_sym.get(sym.upper())
         if gi is None:
             continue
-        g = np.asarray(E[gi].todense()).ravel().astype(float)
+        g = np.asarray(E[gi].sum(axis=0)).ravel().astype(float)
         if (g > 0).mean() < min_frac:
             continue
         lg = np.log1p(g / lib * 1e4)
         a = adt_clr[i]
-        rows.append({"feature": r.name, "gene_row": genes[gi], "rho": _spearman(a, lg),
+        gname = "_".join(str(genes[gi[0]]).split("_")[:2])
+        rows.append({"feature": r.name, "gene_row": gname, "rho": _spearman(a, lg),
                      "rho_null": _spearman(rng.permutation(a), lg), "frac_rna_detected": float((g > 0).mean())})
     return pd.DataFrame(rows)
 
@@ -160,6 +170,11 @@ def library_qc(M, panel: pd.DataFrame, called: np.ndarray, stats: dict, ambient:
     out["median_umi_empty"] = float(np.median(et)) if len(et) else float("nan")
     out["cell_empty_ratio"] = float(out["median_umi_cells"] / max(out["median_umi_empty"], 1.0)) if len(et) else float("nan")
     out["frac_cells_with_adt"] = float((ct >= MIN_CELL_UMI).mean()) if len(ct) else 0.0
+    # uncalled columns as rich in ADT as a typical called cell: cells the GEX calling may have missed (reported only)
+    if len(ct):
+        rich = (~called) & (totals >= max(np.median(ct), MIN_CELL_UMI))
+        out["n_uncalled_adt_rich"] = int(rich.sum())
+        out["frac_umis_uncalled_adt_rich"] = float(totals[rich].sum() / max(totals.sum(), 1))
     out["ambient_umis"] = int(np.asarray(ambient).sum())
 
     Xc = X[:, cells].toarray().astype(float) if len(cells) else np.zeros((X.shape[0], 0))
