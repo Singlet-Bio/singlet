@@ -1,0 +1,545 @@
+file	gses	status	bytes	n_features	lengths
+GSE128639_MNC_ADT_Barcodes.csv.gz	GSE128639	parsed	569	25	15
+GSE128639_MNC_HTO_Barcodes.csv.gz	GSE128639	parsed	259	10	15
+GSM4453842_day14_hto_barcodes.tsv.gz	GSE135399	no barcode column	79489	0	
+GSM4649254_HTO_barcodes.tsv.gz	GSE153697	no barcode column	3412744	0	
+GSM4916245_HFD-hto_barcodes.tsv.gz	GSE161872	no barcode column	495235	0	
+GSM4916247_LEAN-hto_barcodes.tsv.gz	GSE161872	no barcode column	246037	0	
+GSM4988082_WT.ADT.barcodes.tsv.gz	GSE163837	no barcode column	148167	0	
+GSM4988083_GFP.ADT.barcodes.tsv.gz	GSE163837	no barcode column	148233	0	
+GSE164485_HTO_barcode_info.csv.gz	GSE164485	parsed	630	54	15
+GSM5076109_HTO-ref.csv.gz	GSE166601	parsed	133	3	12
+GSM5092463_HTO_barcodes.tsv.gz	GSE167078	no barcode column	7796	0	
+GSM5198191_rep1_HTO_barcodes.tsv.gz	GSE169374	no barcode column	75414	0	
+GSM5198193_rep2_HTO_barcodes.tsv.gz	GSE169374	no barcode column	186719	0	
+GSM5198194_rep2_ADT_barcodes.tsv.gz	GSE169374	no barcode column	186565	0	
+GSE171391_feature_reference.csv.gz	GSE171391	parsed	166	2	15
+GSM5380591_ACE2PB_HASHTAG_barcodes.tsv.gz	GSE178123	no barcode column	4035	0	
+GSM5380591_ACE2PB_Hashtag_ssSeq_Barcode.csv.gz	GSE178123	parsed	167	7	15
+GSM5380592_ACE2NB_HASHTAG_barcodes.tsv.gz	GSE178123	no barcode column	76951	0	
+GSM5380592_ACE2NB_Hastag_ssSeq_Barcode.csv.gz	GSE178123	parsed	166	7	15
+GSE185013_Cascio_feature_reference.csv.gz	GSE185013	parsed	340	9	15
+GSE185161_sc_SiEs12_cd45jaml_feature_barcodes.csv.gz	GSE185161	parsed	216	3	15
+GSM5653440_HTO_barcodes.tsv.gz	GSE186498	no barcode column	20081	0	
+GSE188987_Library10_YJ_2_v3_feature_ref.csv.gz	GSE188987	parsed	221	4	15
+GSE188987_Library9_YJ_1_v3_feature_ref.csv.gz	GSE188987	parsed	221	4	15
+GSM5708984_02_runHTOseqcount.tar.gz	GSE189887	not text	0	0	
+GSE198281_Proliferative_RBD-specific_CD4pos_T_cells_correlate_with_neutralizing_antibody_levels_after_natural_SARS-CoV-2_infection_and_are_induced_following_vaccination_Seuobj.RData.gz	GSE198281	not text	0	0	
+GSM5987779_UR_AKI_Pool1_cd45-_feature_ref.csv.gz	GSE199321	parsed	212	4	15
+GSM5987780_UR_AKI_Pool1_cd45+_feature_ref.csv.gz	GSE199321	parsed	212	4	15
+GSM5987781_UR_AKI_Pool2_cd45-_feature_ref.csv.gz	GSE199321	parsed	212	4	15
+GSM5987782_UR_AKI_Pool2_cd45+_feature_ref.csv.gz	GSE199321	parsed	212	4	15
+GSM5987783_UR_AKI_Pool3_feature_ref.csv.gz	GSE199321	parsed	206	4	15
+GSM5987784_UR_AKI_Pool4_feature_ref.csv.gz	GSE199321	parsed	191	3	15
+GSM5987785_UR_AKI_Pool5_feature_ref.csv.gz	GSE199321	parsed	206	4	15
+GSM5987786_UR_AKI_Pool6_feature_ref.csv.gz	GSE199321	parsed	206	4	15
+GSM6241529_2020-42-set1_HTO_barcodes.tsv.gz	GSE206089	no barcode column	3413106	0	
+GSM6241531_2020-42-set2_HTO_barcodes.tsv.gz	GSE206089	no barcode column	3412685	0	
+GSM6254251_HTO_barcodes.tsv.gz	GSE206449	no barcode column	495146	0	
+GSM6327102_E2_Il10neg_hto_barcodes.tsv.gz	GSE207968	no barcode column	73753	0	
+GSM6327103_E2_Il10pos_hto_barcodes.tsv.gz	GSE207968	no barcode column	49039	0	
+GSE210453_hto_barcodes.tsv.gz	GSE210453	no barcode column	317648	0	
+GSM6705649_GR20016-HTO_barcodes.tsv.gz	GSE217143	no barcode column	1234524	0	
+GSM6705649_GR20018-HTO_barcodes.tsv.gz	GSE217143	no barcode column	1234399	0	
+GSM6720646_SC2100112-HTO_barcodes.tsv.gz	GSE217499	no barcode column	1319869	0	
+GSM6720648_SC2100113-HTO_barcodes.tsv.gz	GSE217499	no barcode column	1320356	0	
+GSM6722210_GR20020-HTO_barcodes.tsv.gz	GSE217595	no barcode column	1234660	0	
+GSM6722210_GR20022-HTO_barcodes.tsv.gz	GSE217595	no barcode column	1234166	0	
+GSM6722213_GR20024-HTO_barcodes.tsv.gz	GSE217595	no barcode column	1241709	0	
+GSM6746001_Mono_3h_HTO_barcodes.tsv.gz	GSE218483	no barcode column	28794	0	
+GSM6746003_Mono_9h_HTO_barcodes.tsv.gz	GSE218483	no barcode column	28523	0	
+GSM6746005_Mono_24h_HTO_barcodes.tsv.gz	GSE218483	no barcode column	40161	0	
+GSM6746007_Mono_48h_HTO_barcodes.tsv.gz	GSE218483	no barcode column	30312	0	
+GSE219098_feature_reference_csv_files.tar.gz	GSE219098	not text	0	0	
+GSE222403_feature_ref.csv.gz	GSE222403	parsed	454	25	15
+GSM6921242_Lib1_Hashtag_barcodes.tsv.gz	GSE222951	no barcode column	14821	0	
+GSM6921243_Lib2_Hashtag_barcodes.tsv.gz	GSE222951	no barcode column	19020	0	
+GSE223309_2108_Cancer_cells_IGO_11324_13_sparse_counts_barcodes.csv.gz	GSE223309	too large	11576010	0	
+GSE223309_2109_Labeled_stromal_cells_IGO_11324_9_sparse_counts_barcodes.csv.gz	GSE223309	too large	10968652	0	
+GSE223309_2110_Unlabeled_stromal_cells_IGO_11324_10_sparse_counts_barcodes.csv.gz	GSE223309	too large	8752061	0	
+GSE223309_3188_SG-602_d27_inh_neg_IGO_12437_195_sparse_counts_barcodes.csv.gz	GSE223309	too large	7132360	0	
+GSE223309_3189_SG-602_d27_inh_tumor_IGO_12437_196_sparse_counts_barcodes.csv.gz	GSE223309	too large	6570738	0	
+GSE223309_3190_SG-602_d27_inh_mCh_IGO_12437_197_sparse_counts_barcodes.csv.gz	GSE223309	too large	5376623	0	
+GSE223627_liver_Day5and12_features_barcodes.csv.gz	GSE223627	parsed	185	2	15
+GSE225765_feature_ref.csv.gz	GSE225765	parsed	211	6	12
+GSM7101910_HSC_feature_reference.csv.gz	GSE227505	parsed	171	2	15
+GSM7101911_MPP1_feature_reference.csv.gz	GSE227505	parsed	172	2	15
+GSM7101912_MPP2_feature_reference.csv.gz	GSE227505	parsed	172	2	15
+GSM7101913_HSC_no3_feature_reference.csv.gz	GSE227505	parsed	178	2	15
+GSM7101914_MPP1_no3_feature_reference.csv.gz	GSE227505	parsed	179	2	15
+GSM7101915_MPP2_no3_feature_reference.csv.gz	GSE227505	parsed	179	2	15
+GSE230559_CITEseq_panels.xlsx	GSE230559	not text	0	0	
+GSE233046_20211122_HTO_taglist.csv.gz	GSE233046	parsed	105	2	15
+GSE233046_20211216_HTO_taglist.csv.gz	GSE233046	parsed	132	4	15
+GSE233046_20220208_HTO_taglist.csv.gz	GSE233046	parsed	189	8	15
+GSE233046_20220401_HTO_taglist.csv.gz	GSE233046	parsed	199	8	15
+GSE233046_20220819_HTO_taglist.csv.gz	GSE233046	parsed	151	4	15
+GSE233046_20221005_HTO_taglist.csv.gz	GSE233046	parsed	227	11	15
+GSE233046_20230310_HTO_taglist.csv.gz	GSE233046	parsed	195	8	15
+GSE234261_antibodies_barcodes.csv.gz	GSE234261	parsed	1023	63	15
+GSE236099_feature_reference_all.csv.gz	GSE236099	parsed	342	10	15
+GSE240441_HTO_barcodes.tsv.gz	GSE240441	no barcode column	64873	0	
+GSE240441_HTO_feature_reference.csv.gz	GSE240441	parsed	229	3	15
+GSE242494_Conditions_HTOs_HTObarcode-sequences.txt.gz	GSE242494	no barcode column	406	0	
+GSE244653_README_HTO_antibodies.txt	GSE244653	parsed	112	2	15
+GSE245108_CD271_1_antibody_features.csv.gz	GSE245108	parsed	4119	281	15
+GSE245108_CD271_2_antibody_features.csv.gz	GSE245108	parsed	4119	281	15
+GSE245108_CD271_3_antibody_features.csv.gz	GSE245108	parsed	4119	281	15
+GSE245108_CD271_4_antibody_features.csv.gz	GSE245108	parsed	4119	281	15
+GSE245108_CD34_1_antibody_features.csv.gz	GSE245108	parsed	4107	281	15
+GSE245108_CD34_2_antibody_features.csv.gz	GSE245108	parsed	4111	281	15
+GSE245108_CD34_3_antibody_features.csv.gz	GSE245108	parsed	4111	281	15
+GSE245108_CD34_4_antibody_features.csv.gz	GSE245108	parsed	4111	281	15
+GSE245108_TNC_12_antibody_features.csv.gz	GSE245108	parsed	4155	285	15
+GSE245108_TNC_34_antibody_features.csv.gz	GSE245108	parsed	4156	285	15
+GSE247057_TotalSeqC_mouse_hash_feature_ref.csv.gz	GSE247057	parsed	319	10	15
+GSE247058_TotalSeqC_mouse_hash_feature_ref.csv.gz	GSE247058	parsed	319	10	15
+GSE248289_ADT_barcode_sequences.txt.gz	GSE248289	parsed	218	5	15
+GSE248640_feature_reference.csv.gz	GSE248640	parsed	174	2	15
+GSE249212_feature_reference.csv.gz	GSE249212	parsed	281	10	15
+GSM7990241_cd451_feature_reference.csv.gz	GSE251931	parsed	3585	197	15,16
+GSM7990242_cd452_feature_reference.csv.gz	GSE251931	parsed	3585	197	15,16
+GSE253902_Samples_ADT_barcodesequences.txt.gz	GSE253902	parsed	3567	283	15
+GSE254191_feature_ref.csv.gz	GSE254191	parsed	213	6	15
+GSE260799_antibody_index_H55F7CCX2_2.csv.gz	GSE260799	parsed	168	8	15
+GSE260799_antibody_index_HY2Y2CCXY_7.csv.gz	GSE260799	parsed	143	6	15
+GSE260800_antibody_index_H55F7CCX2_1.csv.gz	GSE260800	parsed	168	8	15
+GSE261003_adt_feature_reference.csv.gz	GSE261003	parsed	2439	174	15
+GSE261708_feature_reference.csv.gz	GSE261708	parsed	209	4	15
+GSE262686_Feature_reference.csv.gz	GSE262686	parsed	463	21	15
+GSM8174730_polyclonal_HTO_barcodes.tsv.gz	GSE262740	no barcode column	41448	0	
+GSM8174733_pMEL_HTO_barcodes.tsv.gz	GSE262740	no barcode column	45166	0	
+GSE263041_feature_ref_day14.csv.gz	GSE263041	parsed	218	5	15
+GSE263042_feature_ref_day24.csv.gz	GSE263042	parsed	218	5	15
+GSM8189159_MOCK_aggregate_barcodes.csv.gz	GSE263282	no barcode column	246	0	
+GSM8189161_BTLA_PB_aggregate_barcodes.csv.gz	GSE263282	no barcode column	246	0	
+GSE263707_ALL2128_Day28_Multiplexing_feature_refs.csv.gz	GSE263707	parsed	242	4	15
+GSE263707_ALL4364_Day28_Multiplexing_feature_refs.csv.gz	GSE263707	parsed	242	4	15
+GSE263707_ALL4364_Day3_Multiplexing_feature_refs.csv.gz	GSE263707	parsed	241	4	15
+GSE263707_JH331_Day28_Multiplexing_feature_refs.csv.gz	GSE263707	parsed	239	4	15
+GSE263707_JH331_Day3_Multiplexing_feature_refs.csv.gz	GSE263707	parsed	240	4	15
+GSE263707_NH011_Day28_Multiplexing_feature_refs.csv.gz	GSE263707	parsed	241	4	15
+GSE263707_NH011_Day3_Multiplexing_feature_refs.csv.gz	GSE263707	parsed	240	4	15
+GSE264681_Arrayed_NALM6_D1_feature_reference_CARBC.csv.gz	GSE264681	parsed	551	37	8
+GSE264681_Arrayed_NALM6_D2_feature_reference_CARBC.csv.gz	GSE264681	parsed	551	37	8
+GSE264681_CD4_Spike-In_feature_reference_CARBC.csv.gz	GSE264681	parsed	547	37	8
+GSE264681_In_Vivo_A375_feature_reference_CITEseq_CARBC.csv.gz	GSE264681	parsed	841	54	8,15
+GSE264681_Pooled_A375_feature_reference_CARBC.csv.gz	GSE264681	parsed	546	37	8
+GSE264681_Pooled_NALM6_feature_reference_CARBC.csv.gz	GSE264681	parsed	547	37	8
+GSE264681_Resting_feature_reference_CARBC.csv.gz	GSE264681	parsed	542	37	8
+GSM8239645_Chrm_CD45_feature_reference.csv.gz	GSE266027	parsed	199	2	15
+GSM8239647_WT_CD45_feature_reference.csv.gz	GSE266027	parsed	198	2	15
+GSM8239649_Chrm_fib_feature_reference.csv.gz	GSE266028	parsed	216	2	15
+GSM8239652_WT_fib_feature_reference.csv.gz	GSE266028	parsed	207	2	15
+GSE266232_Feature-reference_D14-W1.csv.gz	GSE266232	no barcode column	2090942	0	
+GSE266232_Feature-reference_D14-W2.csv.gz	GSE266232	no barcode column	2090943	0	
+GSE266232_Feature-reference_D27-LK-W1.csv.gz	GSE266232	no barcode column	2090945	0	
+GSE266232_Feature-reference_D27-LK-W2.csv.gz	GSE266232	no barcode column	2090945	0	
+GSE266232_Feature-reference_D27-LSK-W1.csv.gz	GSE266232	no barcode column	2090946	0	
+GSE266232_Feature-reference_D27-LSK-W2.csv.gz	GSE266232	no barcode column	2090946	0	
+GSE266232_Feature-reference_D7-rep1.csv.gz	GSE266232	no barcode column	2090840	0	
+GSE266232_Feature-reference_D7-rep2.csv.gz	GSE266232	no barcode column	2090840	0	
+GSE266482_feature_reference.csv.gz	GSE266482	parsed	215	4	15
+GSM8259926_feature_ref_CART_1.csv.gz	GSE267097	parsed	184	2	15
+GSM8259928_feature_ref_CART_2.csv.gz	GSE267097	parsed	233	5	15
+GSM8259930_feature_ref_CART_3.csv.gz	GSE267097	parsed	232	5	15
+GSM8259932_feature_ref_Library_0.csv.gz	GSE267097	parsed	207	3	15
+GSM8259934_feature_ref_Library_1.csv.gz	GSE267097	parsed	215	4	15
+GSM8259936_feature_ref_Library_10.csv.gz	GSE267097	parsed	253	6	15
+GSM8259938_feature_ref_Library_11.csv.gz	GSE267097	parsed	188	2	15
+GSM8259940_feature_ref_Library_14.csv.gz	GSE267097	parsed	203	3	15
+GSM8259942_feature_ref_Library_2.csv.gz	GSE267097	parsed	206	3	15
+GSM8259944_feature_ref_Library_6.csv.gz	GSE267097	parsed	236	5	15
+GSM8259946_feature_ref_Library_8.csv.gz	GSE267097	parsed	215	4	15
+GSM8259948_feature_ref_Library_9.csv.gz	GSE267097	parsed	215	4	15
+GSM8267099_tag-list.csv.gz	GSE267467	parsed	224	10	15
+GSE267740_ANCA_feature_reference.csv.gz	GSE267740	parsed	4140	281	15
+GSE267740_CropSeq_feature_reference.csv.gz	GSE267740	no barcode column	5113	0	
+GSE268364_20220822_HTO_taglist.csv.gz	GSE268364	parsed	208	8	15
+GSE268364_20230723_HTO_taglist.csv.gz	GSE268364	parsed	294	12	15
+GSE269123_feature-ref1.csv.gz	GSE269123	parsed	338	12	15
+GSE269123_feature-ref2.csv.gz	GSE269123	parsed	379	14	15
+GSE269140_feature_reference.csv.gz	GSE269140	parsed	1349	54	15
+GSE269205_0118_1344_1595_1652_feature_reference.csv.gz	GSE269205	parsed	330	11	15
+GSE269205_1338_1579_feature_reference.csv.gz	GSE269205	parsed	249	6	15
+GSM8317780_EpCam_G2_CITE.feature_reference.csv.gz	GSE269507	parsed	184	2	15
+GSM8317782_EpCam_G3_CITE.feature_reference.csv.gz	GSE269507	parsed	184	2	15
+GSM8317784_Stroma_G2_CITE.feature_reference.csv.gz	GSE269507	parsed	185	2	15
+GSM8317786_Stroma_G3_CITE.feature_reference.csv.gz	GSE269507	parsed	185	2	15
+GSM8317788_LPMCs_G2_CITE.feature_reference.csv.gz	GSE269507	parsed	184	2	15
+GSM8317790_LPMCs_G3_CITE.feature_reference.csv.gz	GSE269507	parsed	184	2	15
+GSE270957_EXP2_feature_reference.csv.gz	GSE270957	parsed	269	4	15
+GSE270957_EXP3_feature_reference.csv.gz	GSE270957	parsed	221	2	15
+GSE271304_feature_reference.csv.gz	GSE271304	parsed	2200	150	15
+GSE271406_HD_feature_reference.csv.gz	GSE271406	parsed	348	31	15
+GSE271406_PDAML_feature_reference.csv.gz	GSE271406	parsed	788	46	15
+GSM8376303_HD1_ADT_barcodes.tsv.gz	GSE271406	no barcode column	47802	0	
+GSM8376304_HD2_ADT_barcodes.tsv.gz	GSE271406	no barcode column	70792	0	
+GSM8376305_HD3_ADT_barcodes.tsv.gz	GSE271406	no barcode column	70927	0	
+GSE271408_5-Hashtag_barcodes.xlsx	GSE271408	not text	0	0	
+GSM8424055_2021-42-set3_HTO_barcodes.tsv.gz	GSE273210	no barcode column	3413522	0	
+GSE274583_Library1_feature_reference.csv.gz	GSE274583	parsed	318	11	15
+GSE274583_Library2_feature_reference.csv.gz	GSE274583	parsed	328	11	15
+GSE274583_Library3_feature_reference.csv.gz	GSE274583	parsed	337	11	15
+GSE274583_Library4_feature_reference1.csv.gz	GSE274583	parsed	339	11	15
+GSE274583_Library4_feature_reference2.csv.gz	GSE274583	parsed	340	11	15
+GSE274583_Library4_feature_reference3.csv.gz	GSE274583	parsed	339	11	15
+GSE274751_feature_reference.csv.gz	GSE274751	no barcode column	2727	0	
+GSE276982_feature_ref.csv.gz	GSE276982	parsed	226	8	15
+GSE278154_feature_Reference_Primary.T12.csv.gz	GSE278154	parsed	241	4	15
+GSE278154_feature_Reference_Recurrent.T12.csv.gz	GSE278154	parsed	241	4	15
+GSE278154_feature_Reference_T1.PDX.DMSOtreated.csv.gz	GSE278154	parsed	245	4	15
+GSE278154_feature_Reference_T1.PDX.TMZtreated.csv.gz	GSE278154	parsed	226	3	15
+GSE278154_feature_Reference_T1.PDX.passage10.csv.gz	GSE278154	parsed	244	4	15
+GSE279779_feature_reference.csv.gz	GSE279779	parsed	259	4	15
+GSM8580012_D5_HTO_barcodes.tsv.gz	GSE279779	no barcode column	43085	0	
+GSE281346_Library_barcodes.csv.gz	GSE281346	parsed	400	5	10
+GSE281346_Sample_hashing_barcodes.csv.gz	GSE281346	parsed	312	16	8
+GSE282416_feature_reference.csv.gz	GSE282416	parsed	203	4	15
+GSE282755_Feature-reference_D30-rep1.csv.gz	GSE282755	no barcode column	1072488	0	
+GSE282755_Feature-reference_D6-rep1.csv.gz	GSE282755	no barcode column	1072358	0	
+GSE282756_Feature-reference_Flt3-neg-rep1.csv.gz	GSE282756	no barcode column	7875	0	
+GSE282756_Feature-reference_Flt3-pos-rep1.csv.gz	GSE282756	no barcode column	7853	0	
+GSE282756_totalseq_demultiplexing.txt.gz	GSE282756	no barcode column	269	0	
+GSE283144_feature_reference.csv.gz	GSE283144	parsed	1136	70	15
+GSM8666577_H358Cas12adTagV124h_EpiGenFactor_HTO_barcodes.tsv.gz	GSE283574	no barcode column	30001	0	
+GSM8666583_H358Cas12adTagV148h_EpiGenFactor_HTO_barcodes.tsv.gz	GSE283574	no barcode column	33198	0	
+GSE286039_RG138_feature_reference.csv.gz	GSE286039	parsed	2532	139	15
+GSE286039_dNEFNPIM2_feature_reference.csv.gz	GSE286039	parsed	2550	140	15
+GSE286039_s888_JRCSF_TW10_CTL_feature_reference.csv.gz	GSE286039	parsed	2508	137	15
+GSE286039_s888_JRCSF_TW10_feature_reference.csv.gz	GSE286039	parsed	2504	137	15
+GSE286039_s888_JRCSF_WT_CTL_feature_reference.csv.gz	GSE286039	parsed	2506	137	15
+GSE286039_s888_JRCSF_WT_feature_reference.csv.gz	GSE286039	parsed	2502	137	15
+GSE286039_sTW10_3_29_22_feature_reference.csv.gz	GSE286039	parsed	2502	137	15
+GSE286039_sWT_3_29_22_feature_reference.csv.gz	GSE286039	parsed	2500	137	15
+GSE286045_Exp01_feature_reference.csv.gz	GSE286045	parsed	1016	45	15
+GSE286045_Exp02_feature_reference.csv.gz	GSE286045	parsed	1031	46	15
+GSE286045_Exp03_feature_reference.csv.gz	GSE286045	parsed	1065	48	15
+GSE286045_Exp04_feature_reference.csv.gz	GSE286045	parsed	1069	48	15
+GSE286045_Exp05_feature_reference.csv.gz	GSE286045	parsed	1035	46	15
+GSE286045_Exp06_feature_reference.csv.gz	GSE286045	parsed	1067	48	15
+GSE286045_Exp07_feature_reference.csv.gz	GSE286045	parsed	1048	47	15
+GSE286045_Exp09_feature_reference.csv.gz	GSE286045	parsed	1062	48	15
+GSE286045_Exp10_feature_reference.csv.gz	GSE286045	parsed	1062	48	15
+GSE286925_feature_reference.csv.gz	GSE286925	parsed	1665	102	15
+GSE287277_feature_reference.csv.gz	GSE287277	parsed	226	5	15
+GSE289241_feature_reference.csv.gz	GSE289241	parsed	304	5	15
+GSE289369_feature_ref.csv.gz	GSE289369	parsed	169	2	15
+GSE289606_feature_reference.csv.gz	GSE289606	parsed	192	3	15
+GSE289680_feature_reference.csv.gz	GSE289680	parsed	357	10	15
+GSE291126_feature_reference.csv.gz	GSE291126	parsed	393	18	15
+GSE292621_Antibody_Barcode_List_GSM-AAD647-edited_feature_reference.csv.gz	GSE292621	parsed	787	41	15
+GSE294268_hashtag_list.csv.gz	GSE294268	no barcode column	1049	0	
+GSE294399_WBC_020823_feature_reference.csv.gz	GSE294399	parsed	583	29	15
+GSE294399_WBC_021023_feature_reference.csv.gz	GSE294399	parsed	583	29	15
+GSE294399_WBC_0212_feature_reference.csv.gz	GSE294399	parsed	255	6	15
+GSE294399_WBC_032423_feature_reference.csv.gz	GSE294399	parsed	312	10	15
+GSE294399_WBC_050523_feature_reference.csv.gz	GSE294399	parsed	611	29	15
+GSE294399_WBC_062123_feature_reference.csv.gz	GSE294399	parsed	594	29	15
+GSE294399_WBC_0709_feature_reference.csv.gz	GSE294399	parsed	226	5	15
+GSE294399_WBC_0716B_feature_reference.csv.gz	GSE294399	parsed	193	2	15
+GSE294399_WBC_1102_feature_reference.csv.gz	GSE294399	no barcode column	214	0	
+GSE294399_WBC_1119_feature_reference.csv.gz	GSE294399	no barcode column	213	0	
+GSE294399_WBC_120922A_feature_reference.csv.gz	GSE294399	parsed	636	33	15
+GSE294399_WBC_120922C_feature_reference.csv.gz	GSE294399	parsed	636	33	15
+GSE294399_WBC_120922X_feature_reference.csv.gz	GSE294399	parsed	636	33	15
+GSE294399_WBC_1214_feature_reference.csv.gz	GSE294399	parsed	252	6	15
+GSE294399_WBC_1217_feature_reference.csv.gz	GSE294399	parsed	249	6	15
+GSE295033_K_10X_mGUT035_feature_reference.csv.gz	GSE295033	no barcode column	209	0	
+GSE295033_K_10X_mGUT036_ADT_feature_reference.csv.gz	GSE295033	no barcode column	179	0	
+GSE295107_feature_reference.csv.gz	GSE295107	parsed	244	6	15
+GSE296669_feature_reference.csv.gz	GSE296669	parsed	3134	168	15
+GSE297075_feature_reference.csv.gz	GSE297075	parsed	290	11	11,15
+GSE297642_feature_reference.csv.gz	GSE297642	parsed	275	3	15
+GSE297665_GAL002_feature_reference.csv.gz	GSE297665	parsed	221	6	15
+GSE297665_GAL004_feature_reference.csv.gz	GSE297665	parsed	277	10	15
+GSE297665_GAL005_feature_reference.csv.gz	GSE297665	parsed	277	10	15
+GSE297665_H1_feature_reference.csv.gz	GSE297665	parsed	283	11	15
+GSE297665_H2_feature_reference.csv.gz	GSE297665	parsed	283	11	15
+GSM9005867_Sample_1001_HTO_barcodes.tsv.gz	GSE298047	no barcode column	68271	0	
+GSM9005870_Sample_1002_HTO_barcodes.tsv.gz	GSE298047	no barcode column	72859	0	
+GSM9005873_Sample_1003_HTO_barcodes.tsv.gz	GSE298047	no barcode column	114949	0	
+GSM9005876_Sample_1004_HTO_barcodes.tsv.gz	GSE298047	no barcode column	95603	0	
+GSM9005879_Sample_1005_HTO_barcodes.tsv.gz	GSE298047	no barcode column	27814	0	
+GSM9005882_Sample_1006_HTO_barcodes.tsv.gz	GSE298047	no barcode column	88196	0	
+GSM9005885_Sample_1007_HTO_barcodes.tsv.gz	GSE298047	no barcode column	68334	0	
+GSM9005888_Sample_1008_HTO_barcodes.tsv.gz	GSE298047	no barcode column	102986	0	
+GSM9005891_Sample_1010_HTO_barcodes.tsv.gz	GSE298047	no barcode column	99008	0	
+GSM9005894_Sample_1011_HTO_barcodes.tsv.gz	GSE298047	no barcode column	85679	0	
+GSM9005897_Sample_1012_HTO_barcodes.tsv.gz	GSE298047	no barcode column	81706	0	
+GSM9005900_Sample_1013_HTO_barcodes.tsv.gz	GSE298047	no barcode column	88585	0	
+GSM9005903_Sample_1014_HTO_barcodes.tsv.gz	GSE298047	no barcode column	86990	0	
+GSM9005906_Sample_1015_HTO_barcodes.tsv.gz	GSE298047	no barcode column	99741	0	
+GSM9005909_Sample_1016_HTO_barcodes.tsv.gz	GSE298047	no barcode column	80166	0	
+GSM9005912_Sample_1022_HTO_barcodes.tsv.gz	GSE298047	no barcode column	56202	0	
+GSE298237_CITEseq-barcodes.CSV.gz	GSE298237	parsed	253	6	15
+GSE298237_Dextramer-barcodes.CSV.gz	GSE298237	parsed	421	13	15
+GSE298237_Hashtag-barcodes.CSV.gz	GSE298237	parsed	240	8	15
+GSE298512_feature_reference.csv.gz	GSE298512	parsed	1063	53	15
+GSE299152_feature_reference.csv.gz	GSE299152	parsed	282	9	15
+GSE299265_feature_reference.csv.gz	GSE299265	parsed	181	3	15
+GSE299416_barcodes.csv.gz	GSE299416	parsed	325	11	14,15
+GSE300568_feature_reference.csv.gz	GSE300568	parsed	700	26	15
+GSE300681_feature_reference.csv.gz	GSE300681	parsed	198	6	8
+GSE302014_feature_reference.csv.gz	GSE302014	parsed	2386	159	15
+GSE303007_feature_reference.csv.gz	GSE303007	parsed	166	2	15
+GSE303732_KG208_KG215_totalseq_feature_reference.csv.gz	GSE303732	parsed	190	2	15
+GSE303732_KG236_totalseq_feature_reference.csv.gz	GSE303732	parsed	210	4	15
+GSM9134873_KG208_post_qc_hto_barcodes.tsv.gz	GSE303732	no barcode column	32664	0	
+GSM9134875_KG215_post_qc_hto_barcodes.tsv.gz	GSE303732	no barcode column	56115	0	
+GSM9134877_KG236_post_qc_hto_barcodes.tsv.gz	GSE303732	no barcode column	38331	0	
+GSE303868_feature_reference.csv.gz	GSE303868	parsed	2589	146	15
+GSM9152110_Control_HTO_barcodes.tsv.gz	GSE304525	no barcode column	126970	0	
+GSM9152111_NKX2-6-AS1_KD_HTO_barcodes.tsv.gz	GSE304525	no barcode column	145323	0	
+GSE304894_feature_ref.csv.gz	GSE304894	parsed	404	18	15
+GSE305197_feature_reference.csv.gz	GSE305197	parsed	289	7	15
+GSM9183616_dna1_hto_barcodes.tsv.gz	GSE305729	no barcode column	1078653	0	
+GSM9183617_dna2_hto_barcodes.tsv.gz	GSE305729	no barcode column	885160	0	
+GSM9183618_protein1_hto_barcodes.tsv.gz	GSE305729	no barcode column	846275	0	
+GSM9183619_protein2_hto_barcodes.tsv.gz	GSE305729	no barcode column	685081	0	
+GSE306178_SW031_feature_reference.csv.gz	GSE306178	parsed	302744	140	15
+GSE306178_SW032_feature_reference.csv.gz	GSE306178	parsed	302744	140	15
+GSE306178_SW033_feature_reference.csv.gz	GSE306178	parsed	302744	140	15
+GSE306178_SW034_feature_reference.csv.gz	GSE306178	parsed	302744	140	15
+GSE306178_SW037_feature_reference.csv.gz	GSE306178	parsed	303093	147	15
+GSE306441_feature_reference.csv.gz	GSE306441	parsed	774	40	15
+GSE306620_feature_reference.csv.gz	GSE306620	parsed	1163	57	15
+GSE306891_feature_reference.csv.gz	GSE306891	parsed	193	3	15
+GSM9213276_20240415_A_HTO_barcodes.txt.gz	GSE306977	no barcode column	2254282	0	
+GSM9213277_20240415_B_HTO_barcodes.txt.gz	GSE306977	no barcode column	1696017	0	
+GSM9213278_20240415_C_HTO_barcodes.txt.gz	GSE306977	no barcode column	1766926	0	
+GSM9213293_20240416_A_HTO_barcodes.txt.gz	GSE306977	no barcode column	1924273	0	
+GSM9213294_20240416_B_HTO_barcodes.txt.gz	GSE306977	no barcode column	2203424	0	
+GSM9213295_20240416_C_HTO_barcodes.txt.gz	GSE306977	no barcode column	1992777	0	
+GSM9213299_20240424_A_HTO_barcodes.txt.gz	GSE306977	no barcode column	2967810	0	
+GSM9213300_20240424_B_HTO_barcodes.txt.gz	GSE306977	no barcode column	2348926	0	
+GSM9213301_20240424_C_HTO_barcodes.txt.gz	GSE306977	no barcode column	2058468	0	
+GSM9213305_20240425_A_HTO_barcodes.txt.gz	GSE306977	no barcode column	2642236	0	
+GSM9213306_20240425_B_HTO_barcodes.txt.gz	GSE306977	no barcode column	1901608	0	
+GSM9213307_20240425_C_HTO_barcodes.txt.gz	GSE306977	no barcode column	1178646	0	
+GSM9213313_20240429_1_HTO_barcodes.txt.gz	GSE306977	no barcode column	3585136	0	
+GSM9213314_20240429_2_HTO_barcodes.txt.gz	GSE306977	no barcode column	1758970	0	
+GSM9213315_20240430_3_HTO_barcodes.txt.gz	GSE306977	no barcode column	2779045	0	
+GSM9213316_20240430_4_HTO_barcodes.txt.gz	GSE306977	no barcode column	2487040	0	
+GSM9213317_20240430_5_HTO_barcodes.txt.gz	GSE306977	no barcode column	1648920	0	
+GSE309120_EA-1017_R18_mRNA_HTO_barcodes.tsv.gz	GSE309120	no barcode column	228908	0	
+GSE309625_AntiBodyReference.csv.gz	GSE309625	parsed	2075	137	15
+GSE310442_barcodes.csv.gz	GSE310442	parsed	273	8	15
+GSE311572_Perturb-CITE_feature_reference.csv.gz	GSE311572	parsed	2991	148	14,15
+GSE313731_feature_reference.csv.gz	GSE313731	no barcode column	320	0	
+GSE313731_hto_adt_feature_barcodes.csv.gz	GSE313731	no barcode column	327	0	
+GSE313894_TotalSeq_B_Human_Universal_Cocktail_V1_399904_Antibody_reference_UMI_counting_CellRanger_addHTO.csv.gz	GSE313894	parsed	2257	146	15
+GSM9377265_Donor9_10_11_totalPBMC_sample1_ADT_barcodes.tsv.gz	GSE313894	no barcode column	81082	0	
+GSM9377266_Donor9_10_11_totalPBMC_sample2_ADT_barcodes.tsv.gz	GSE313894	no barcode column	79359	0	
+GSM9377267_Donor9_10_11_CD4_sample1_ADT_barcodes.tsv.gz	GSE313894	no barcode column	82930	0	
+GSM9377268_Donor9_10_11_CD4_sample2_ADT_barcodes.tsv.gz	GSE313894	no barcode column	84186	0	
+GSM9377269_Donor9_10_11_CD4_PMAiIL2_sample1_ADT_barcodes.tsv.gz	GSE313894	no barcode column	91918	0	
+GSM9377270_Donor9_10_11_CD4_PMAiIL2_sample2_ADT_barcodes.tsv.gz	GSE313894	no barcode column	92635	0	
+GSE314416_TotalSeqC_feature_ref.csv.gz	GSE314416	parsed	3681	140	15
+GSE314596_TotalSeqA_Amgen.feature_ref.csv.gz	GSE314596	parsed	4049	279	15
+GSM9426208_LM088_1_feature_reference.csv.gz	GSE315362	parsed	370	14	15
+GSM9426209_LM088_2_feature_reference.csv.gz	GSE315362	parsed	370	14	15
+GSM9426210_LM088_3_feature_reference.csv.gz	GSE315362	parsed	370	14	15
+GSM9426211_LM088_4_feature_reference.csv.gz	GSE315362	parsed	370	14	15
+GSM9426212_LM088_5_feature_reference.csv.gz	GSE315362	parsed	370	14	15
+GSM9426213_LM088_6_feature_reference.csv.gz	GSE315362	parsed	370	14	15
+GSM9426214_LM088_7_feature_reference.csv.gz	GSE315362	parsed	370	14	15
+GSM9426215_LM088_8_feature_reference.csv.gz	GSE315362	parsed	370	14	15
+GSM9426216_LM088_9_feature_reference.csv.gz	GSE315362	parsed	370	14	15
+GSE316782_Xi_CITESeq_feature_reference.csv.gz	GSE316782	parsed	2721	141	15
+GSE318250_feature_reference.csv.gz	GSE318250	parsed	542	16	15
+GSE319406_feature_reference.csv.gz	GSE319406	parsed	182	3	15
+GSE320155_feature_reference.csv.gz	GSE320155	parsed	361	13	15
+GSE321688_feature_reference.csv.gz	GSE321688	parsed	358	12	15
+GSE326909_TO119_feature_reference.csv.gz	GSE326909	parsed	214	4	15
+GSE326909_TO120_feature_reference.csv.gz	GSE326909	parsed	211	4	15
+GSE326909_TO171_feature_reference.csv.gz	GSE326909	parsed	213	4	15
+GSE326909_TO173_feature_reference.csv.gz	GSE326909	parsed	208	4	15
+GSE326909_TO216_feature_reference.csv.gz	GSE326909	parsed	213	4	15
+GSE326909_TO217_feature_reference.csv.gz	GSE326909	parsed	211	4	15
+GSE327194_hPSC_IL7low_adt_feature_reference.csv.gz	GSE327194	parsed	572	27	15
+GSE327314_feature_reference.csv.gz	GSE327314	parsed	321	8	15
+GSE327417_feature_reference.csv.gz	GSE327417	parsed	358	12	15
+GSE328669_feature_reference.csv.gz	GSE328669	parsed	4712	300	15
+GSE330627_EF1a_feature_reference.csv.gz	GSE330627	parsed	750	42	15
+GSE330627_E_feature_reference.csv.gz	GSE330627	no barcode column	435	0	
+GSE330627_F_feature_reference.csv.gz	GSE330627	no barcode column	437	0	
+GSE330627_G_feature_reference.csv.gz	GSE330627	no barcode column	440	0	
+GSE330627_L_feature_reference.csv.gz	GSE330627	no barcode column	509	0	
+GSE330627_MND_feature_reference.csv.gz	GSE330627	parsed	721	42	15
+GSE332623_TotalseqB_NEA1_ADT1_barcodes.tsv.gz	GSE332623	no barcode column	165833	0	
+GSE332623_TotalseqB_NEA1_ADT1_features.tsv.gz	GSE332623	no barcode column	319903	0	
+GSE332623_TotalseqB_NEA1_ADT1_matrix.mtx.gz	GSE332623	not text	0	0	
+GSE332623_TotalseqB_NEA1_ADT2_barcodes.tsv.gz	GSE332623	no barcode column	154711	0	
+GSE332623_TotalseqB_NEA1_ADT2_features.tsv.gz	GSE332623	no barcode column	319903	0	
+GSE332623_TotalseqB_NEA1_ADT2_matrix.mtx.gz	GSE332623	not text	0	0	
+GSE332623_TotalseqB_NEA1_ADT3_barcodes.tsv.gz	GSE332623	no barcode column	141222	0	
+GSE332623_TotalseqB_NEA1_ADT3_features.tsv.gz	GSE332623	no barcode column	319903	0	
+GSE332623_TotalseqB_NEA1_ADT3_matrix.mtx.gz	GSE332623	not text	0	0	
+GSE332623_TotalseqB_NEA1_ADT4_barcodes.tsv.gz	GSE332623	no barcode column	150012	0	
+GSE332623_TotalseqB_NEA1_ADT4_features.tsv.gz	GSE332623	no barcode column	319903	0	
+GSE332623_TotalseqB_NEA1_ADT4_matrix.mtx.gz	GSE332623	not text	0	0	
+GSE332623_TotalseqB_NEA2_ADT1_barcodes.tsv.gz	GSE332623	no barcode column	178369	0	
+GSE332623_TotalseqB_NEA2_ADT1_features.tsv.gz	GSE332623	no barcode column	319903	0	
+GSE332623_TotalseqB_NEA2_ADT1_matrix.mtx.gz	GSE332623	not text	0	0	
+GSE332623_TotalseqB_NEA2_ADT2_barcodes.tsv.gz	GSE332623	no barcode column	186503	0	
+GSE332623_TotalseqB_NEA2_ADT2_features.tsv.gz	GSE332623	no barcode column	319903	0	
+GSE332623_TotalseqB_NEA2_ADT2_matrix.mtx.gz	GSE332623	not text	0	0	
+GSE332623_TotalseqB_NEA2_ADT3_barcodes.tsv.gz	GSE332623	no barcode column	202526	0	
+GSE332623_TotalseqB_NEA2_ADT3_features.tsv.gz	GSE332623	no barcode column	319903	0	
+GSE332623_TotalseqB_NEA2_ADT3_matrix.mtx.gz	GSE332623	not text	0	0	
+GSE332623_TotalseqB_NEA3_ADT1_barcodes.tsv.gz	GSE332623	no barcode column	79417	0	
+GSE332623_TotalseqB_NEA3_ADT1_features.tsv.gz	GSE332623	no barcode column	319903	0	
+GSE332623_TotalseqB_NEA3_ADT1_matrix.mtx.gz	GSE332623	not text	0	0	
+GSE332623_TotalseqB_NEA3_ADT2_barcodes.tsv.gz	GSE332623	no barcode column	88698	0	
+GSE332623_TotalseqB_NEA3_ADT2_features.tsv.gz	GSE332623	no barcode column	319903	0	
+GSE332623_TotalseqB_NEA3_ADT2_matrix.mtx.gz	GSE332623	not text	0	0	
+GSE332623_TotalseqB_NEA3_ADT3_barcodes.tsv.gz	GSE332623	no barcode column	87822	0	
+GSE332623_TotalseqB_NEA3_ADT3_features.tsv.gz	GSE332623	no barcode column	319903	0	
+GSE332623_TotalseqB_NEA3_ADT3_matrix.mtx.gz	GSE332623	not text	0	0	
+GSE332623_TotalseqB_NEA3_ADT4_barcodes.tsv.gz	GSE332623	no barcode column	87049	0	
+GSE332623_TotalseqB_NEA3_ADT4_features.tsv.gz	GSE332623	no barcode column	319903	0	
+GSE332623_TotalseqB_NEA3_ADT4_matrix.mtx.gz	GSE332623	not text	0	0	
+GSE332623_TotalseqB_NEA4_ADT1_barcodes.tsv.gz	GSE332623	no barcode column	94638	0	
+GSE332623_TotalseqB_NEA4_ADT1_features.tsv.gz	GSE332623	no barcode column	319903	0	
+GSE332623_TotalseqB_NEA4_ADT1_matrix.mtx.gz	GSE332623	not text	0	0	
+GSE332623_TotalseqB_NEA4_ADT2_barcodes.tsv.gz	GSE332623	no barcode column	109080	0	
+GSE332623_TotalseqB_NEA4_ADT2_features.tsv.gz	GSE332623	no barcode column	319903	0	
+GSE332623_TotalseqB_NEA4_ADT2_matrix.mtx.gz	GSE332623	not text	0	0	
+GSE332623_TotalseqB_NEA4_ADT3_barcodes.tsv.gz	GSE332623	no barcode column	101107	0	
+GSE332623_TotalseqB_NEA4_ADT3_features.tsv.gz	GSE332623	no barcode column	319903	0	
+GSE332623_TotalseqB_NEA4_ADT3_matrix.mtx.gz	GSE332623	not text	0	0	
+GSE332623_TotalseqB_NEA4_ADT4_barcodes.tsv.gz	GSE332623	no barcode column	95148	0	
+GSE332623_TotalseqB_NEA4_ADT4_features.tsv.gz	GSE332623	no barcode column	319903	0	
+GSE332623_TotalseqB_NEA4_ADT4_matrix.mtx.gz	GSE332623	not text	0	0	
+GSE332623_TotalseqB_NEA5_ADT1_barcodes.tsv.gz	GSE332623	no barcode column	115918	0	
+GSE332623_TotalseqB_NEA5_ADT1_features.tsv.gz	GSE332623	no barcode column	319903	0	
+GSE332623_TotalseqB_NEA5_ADT1_matrix.mtx.gz	GSE332623	not text	0	0	
+GSE332623_TotalseqB_NEA5_ADT2_barcodes.tsv.gz	GSE332623	no barcode column	112830	0	
+GSE332623_TotalseqB_NEA5_ADT2_features.tsv.gz	GSE332623	no barcode column	319903	0	
+GSE332623_TotalseqB_NEA5_ADT2_matrix.mtx.gz	GSE332623	not text	0	0	
+GSE332623_TotalseqB_NEA5_ADT3_barcodes.tsv.gz	GSE332623	no barcode column	114172	0	
+GSE332623_TotalseqB_NEA5_ADT3_features.tsv.gz	GSE332623	no barcode column	319903	0	
+GSE332623_TotalseqB_NEA5_ADT3_matrix.mtx.gz	GSE332623	not text	0	0	
+GSE332623_TotalseqB_NEA5_ADT4_barcodes.tsv.gz	GSE332623	no barcode column	116952	0	
+GSE332623_TotalseqB_NEA5_ADT4_features.tsv.gz	GSE332623	no barcode column	319903	0	
+GSE332623_TotalseqB_NEA5_ADT4_matrix.mtx.gz	GSE332623	not text	0	0	
+GSE332623_TotalseqB_NEA6_ADT1_barcodes.tsv.gz	GSE332623	no barcode column	107984	0	
+GSE332623_TotalseqB_NEA6_ADT1_features.tsv.gz	GSE332623	no barcode column	319903	0	
+GSE332623_TotalseqB_NEA6_ADT1_matrix.mtx.gz	GSE332623	not text	0	0	
+GSE332623_TotalseqB_NEA6_ADT2_barcodes.tsv.gz	GSE332623	no barcode column	105940	0	
+GSE332623_TotalseqB_NEA6_ADT2_features.tsv.gz	GSE332623	no barcode column	319903	0	
+GSE332623_TotalseqB_NEA6_ADT2_matrix.mtx.gz	GSE332623	not text	0	0	
+GSE332623_TotalseqB_NEA6_ADT3_barcodes.tsv.gz	GSE332623	no barcode column	111159	0	
+GSE332623_TotalseqB_NEA6_ADT3_features.tsv.gz	GSE332623	no barcode column	319903	0	
+GSE332623_TotalseqB_NEA6_ADT3_matrix.mtx.gz	GSE332623	not text	0	0	
+GSE332623_TotalseqB_NEA6_ADT4_barcodes.tsv.gz	GSE332623	no barcode column	99800	0	
+GSE332623_TotalseqB_NEA6_ADT4_features.tsv.gz	GSE332623	no barcode column	319903	0	
+GSE332623_TotalseqB_NEA6_ADT4_matrix.mtx.gz	GSE332623	not text	0	0	
+GSE332623_TotalseqB_NEA7_ADT1_barcodes.tsv.gz	GSE332623	no barcode column	201899	0	
+GSE332623_TotalseqB_NEA7_ADT1_features.tsv.gz	GSE332623	no barcode column	319903	0	
+GSE332623_TotalseqB_NEA7_ADT1_matrix.mtx.gz	GSE332623	not text	0	0	
+GSE332623_TotalseqB_NEA7_ADT2_barcodes.tsv.gz	GSE332623	no barcode column	189220	0	
+GSE332623_TotalseqB_NEA7_ADT2_features.tsv.gz	GSE332623	no barcode column	319903	0	
+GSE332623_TotalseqB_NEA7_ADT2_matrix.mtx.gz	GSE332623	not text	0	0	
+GSE332623_TotalseqB_NEA7_ADT3_barcodes.tsv.gz	GSE332623	no barcode column	168245	0	
+GSE332623_TotalseqB_NEA7_ADT3_features.tsv.gz	GSE332623	no barcode column	319903	0	
+GSE332623_TotalseqB_NEA7_ADT3_matrix.mtx.gz	GSE332623	not text	0	0	
+GSE332623_TotalseqB_NEA7_ADT4_barcodes.tsv.gz	GSE332623	no barcode column	194228	0	
+GSE332623_TotalseqB_NEA7_ADT4_features.tsv.gz	GSE332623	no barcode column	319903	0	
+GSE332623_TotalseqB_NEA7_ADT4_matrix.mtx.gz	GSE332623	not text	0	0	
+GSE332623_feature_reference.csv.gz	GSE332623	parsed	2104	140	15
+GSE335494_feature_reference.csv.gz	GSE335494	parsed	1126	63	15
+GSE338951_BM6_1_feature_reference.csv.gz	GSE338951	parsed	1290	73	15
+GSE338951_BM6_2_feature_reference.csv.gz	GSE338951	parsed	1290	73	15
+GSE338951_BM6_3_feature_reference.csv.gz	GSE338951	parsed	1290	73	15
+GSE338951_Library1_feature_reference.csv.gz	GSE338951	no barcode column	5673	0	
+GSE338951_Library2_feature_reference.csv.gz	GSE338951	no barcode column	5673	0	
+GSE338951_Library3_feature_reference.csv.gz	GSE338951	no barcode column	5673	0	
+GSE338951_LibraryMF1_feature_reference.csv.gz	GSE338951	no barcode column	5535	0	
+GSE338951_LibraryMF2_feature_reference.csv.gz	GSE338951	no barcode column	5535	0	
+GSM9885495_SP35_feature_reference.csv.gz	GSE338951	parsed	181	3	15
+GSM9885497_SP128_feature_reference.csv.gz	GSE338951	parsed	182	3	15
+GSM9885499_SP204N_feature_reference.csv.gz	GSE338951	parsed	183	3	15
+GSM5613759_2019-11-04-count-3_feature_reference.csv.gz	GSE185381	parsed	1515	92	15
+GSM6289763_replicate1_HTO_barcodes.tsv.gz	GSE207485	too large	20921369	0	
+GSM6289766_replicate2_HTO_barcodes.tsv.gz	GSE207485	too large	20921369	0	
+GSM6957517_HTO_barcodes.tsv.gz	GSE223488	no barcode column	78403	0	
+GSM6957520_HTO_barcodes.tsv.gz	GSE223489	no barcode column	44459	0	
+GSM6957523_HTO_barcodes.tsv.gz	GSE223490	no barcode column	62978	0	
+GSM6957526_HTO_barcodes.tsv.gz	GSE223491	no barcode column	43427	0	
+GSM6957529_HTO_barcodes.tsv.gz	GSE223492	no barcode column	44645	0	
+GSM6957560_HTO_barcodes.tsv.gz	GSE223494	no barcode column	53039	0	
+GSE244164_feature_reference.csv.gz	GSE244164	parsed	2062	140	15
+GSE246491_UTA_CustomPanel_516_genes.fasta.gz	GSE246491	not text	0	0	
+GSM8580010_D3_HTO_barcodes.tsv.gz	GSE279779	no barcode column	44044	0	
+GSE298194_feature_reference.csv.gz	GSE298194	parsed	269	4	15
+GSM9009714_hto_barcodes.tsv.gz	GSE298194	too large	7691281	0	
+GSE317605_feature_reference.csv.xlsx	GSE317605	not text	0	0	
+GSM9475081_10-02_ADT_barcodes.tsv.gz	GSE317605	no barcode column	1509	0	
+GSM9475082_10-03_rep1_ADT_barcodes.tsv.gz	GSE317605	no barcode column	260	0	
+GSM9475083_10-03_rep2_ADT_barcodes.tsv.gz	GSE317605	no barcode column	17626	0	
+GSM9475086_10-06_rep2_ADT_barcodes.tsv.gz	GSE317605	no barcode column	5959	0	
+GSM9475087_11-02_ADT_barcodes.tsv.gz	GSE317605	no barcode column	2156	0	
+GSM9475088_11-03_ADT_barcodes.tsv.gz	GSE317605	no barcode column	2663	0	
+GSM9475089_11-05_ADT_barcodes.tsv.gz	GSE317605	no barcode column	7241	0	
+GSM9475090_11-06_rep1_ADT_barcodes.tsv.gz	GSE317605	no barcode column	1392	0	
+GSM9475091_11-06_rep2_ADT_barcodes.tsv.gz	GSE317605	no barcode column	1901	0	
+GSM9475092_12-01_ADT_barcodes.tsv.gz	GSE317605	no barcode column	6412	0	
+GSM9475093_12-02_ADT_barcodes.tsv.gz	GSE317605	no barcode column	2453	0	
+GSM9475094_12-04_ADT_barcodes.tsv.gz	GSE317605	no barcode column	2878	0	
+GSM9475096_13-02_ADT_barcodes.tsv.gz	GSE317605	no barcode column	6375	0	
+GSM9475098_13-04_ADT_barcodes.tsv.gz	GSE317605	no barcode column	6238	0	
+GSM9475099_13-05_ADT_barcodes.tsv.gz	GSE317605	no barcode column	7064	0	
+GSM9475102_14-02_ADT_barcodes.tsv.gz	GSE317605	no barcode column	7714	0	
+GSM9475109_14-03_ADT_barcodes.tsv.gz	GSE317605	no barcode column	2603	0	
+GSM9475116_14-04_rep2_ADT_barcodes.tsv.gz	GSE317605	no barcode column	8144	0	
+GSM9475117_15-02_ADT_barcodes.tsv.gz	GSE317605	no barcode column	9273	0	
+GSM9475118_15-03_ADT_barcodes.tsv.gz	GSE317605	no barcode column	4510	0	
+GSM9475119_15-04_rep1_ADT_barcodes.tsv.gz	GSE317605	no barcode column	4097	0	
+GSM9475120_15-04_rep2_ADT_barcodes.tsv.gz	GSE317605	no barcode column	11010	0	
+GSM9475121_15-05_ADT_barcodes.tsv.gz	GSE317605	no barcode column	4813	0	
+GSM9475123_16-03_ADT_barcodes.tsv.gz	GSE317605	no barcode column	8460	0	
+GSM9475124_16-04_rep1_ADT_barcodes.tsv.gz	GSE317605	no barcode column	3505	0	
+GSM9475125_16-04_rep2_ADT_barcodes.tsv.gz	GSE317605	no barcode column	9250	0	
+GSM9475126_16-05_ADT_barcodes.tsv.gz	GSE317605	no barcode column	3433	0	
+GSM9475128_17-02_ADT_barcodes.tsv.gz	GSE317605	no barcode column	13731	0	
+GSM9475130_17-04_rep1_ADT_barcodes.tsv.gz	GSE317605	no barcode column	768	0	
+GSM9475131_17-04_rep2_ADT_barcodes.tsv.gz	GSE317605	no barcode column	4195	0	
+GSM9475134_18-03_ADT_barcodes.tsv.gz	GSE317605	no barcode column	2788	0	
+GSM9475135_19-02_ADT_barcodes.tsv.gz	GSE317605	no barcode column	4162	0	
+GSM9475136_19-03_rep1_ADT_barcodes.tsv.gz	GSE317605	no barcode column	2245	0	
+GSM9475137_19-03_rep2_ADT_barcodes.tsv.gz	GSE317605	no barcode column	7240	0	
+GSM9475138_19-04_ADT_barcodes.tsv.gz	GSE317605	no barcode column	8775	0	
+GSM9475139_19-05_rep1_ADT_barcodes.tsv.gz	GSE317605	no barcode column	4675	0	
+GSM9475140_19-05_rep2_ADT_barcodes.tsv.gz	GSE317605	no barcode column	12980	0	
+GSM9475141_20-02_rep1_ADT_barcodes.tsv.gz	GSE317605	no barcode column	5311	0	
+GSM9475142_20-02_rep2_ADT_barcodes.tsv.gz	GSE317605	no barcode column	13313	0	
+GSM9475144_20-05_ADT_barcodes.tsv.gz	GSE317605	no barcode column	4619	0	
+GSM9475145_21-02_ADT_barcodes.tsv.gz	GSE317605	no barcode column	4672	0	
+GSM9475146_21-04_ADT_barcodes.tsv.gz	GSE317605	no barcode column	9860	0	
+GSM9475147_22-02_rep1_ADT_barcodes.tsv.gz	GSE317605	no barcode column	5499	0	
+GSM9475148_22-02_rep2_ADT_barcodes.tsv.gz	GSE317605	no barcode column	10727	0	
+GSM9475151_22-05_ADT_barcodes.tsv.gz	GSE317605	no barcode column	4302	0	
+GSM9475152_23-02_rep1_ADT_barcodes.tsv.gz	GSE317605	no barcode column	6691	0	
+GSM9475153_23-02_rep2_ADT_barcodes.tsv.gz	GSE317605	no barcode column	10229	0	
+GSM9475155_23-04_ADT_barcodes.tsv.gz	GSE317605	no barcode column	5587	0	
+GSM9475156_23-05_ADT_barcodes.tsv.gz	GSE317605	no barcode column	9788	0	
+GSM9475157_24-02_ADT_barcodes.tsv.gz	GSE317605	no barcode column	9679	0	
+GSM9475158_24-03_ADT_barcodes.tsv.gz	GSE317605	no barcode column	3671	0	
+GSM9475159_24-04_ADT_barcodes.tsv.gz	GSE317605	no barcode column	3293	0	
+GSM9475161_24-05_rep2_ADT_barcodes.tsv.gz	GSE317605	no barcode column	6935	0	
+GSM9475164_25-05_ADT_barcodes.tsv.gz	GSE317605	no barcode column	3838	0	
+GSM9475165_25-06_rep1_ADT_barcodes.tsv.gz	GSE317605	no barcode column	2675	0	
+GSM9475166_25-06_rep2_ADT_barcodes.tsv.gz	GSE317605	no barcode column	11368	0	
+GSM9475167_26-01_ADT_barcodes.tsv.gz	GSE317605	no barcode column	11504	0	
+GSM9475168_26-02_ADT_barcodes.tsv.gz	GSE317605	no barcode column	6226	0	
+GSM9475170_26-04_rep1_ADT_barcodes.tsv.gz	GSE317605	no barcode column	2288	0	
+GSM9475171_26-04_rep2_ADT_barcodes.tsv.gz	GSE317605	no barcode column	5511	0	
+GSM9475172_27-01_ADT_barcodes.tsv.gz	GSE317605	no barcode column	6015	0	
+GSM9475173_27-02_ADT_barcodes.tsv.gz	GSE317605	no barcode column	5043	0	
+GSM9475175_27-05_rep1_ADT_barcodes.tsv.gz	GSE317605	no barcode column	1087	0	
+GSM9475176_27-05_rep2_ADT_barcodes.tsv.gz	GSE317605	no barcode column	11604	0	
+GSE322793_feature_reference.csv.gz	GSE322793	parsed	490	24	15
+GSE332708_feature_reference.csv.gz	GSE332708	parsed	908	52	15
+GSM9885489_LibrarySPN11_plus_SP31_feature_reference.csv.gz	GSE338951	no barcode column	192	0	
