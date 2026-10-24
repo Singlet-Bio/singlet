@@ -17,7 +17,7 @@ reported with the data):
 | ``panel_identity`` | panels identified from the reads: share of panel reads on catalog barcodes whose reactivity excludes the organism or that a published panel used for another antibody | > 0.10 | > 0.02 |
 | ``saturation`` | 1 - molecules / usable reads | - | < 0.20 |
 | ``isotype_share_median`` | median per-cell share of isotype-control UMIs | - | > 0.10 |
-| ``hto_singlet_share`` | hashtag libraries: called cells assigned to one hashtag | < 0.30 | < 0.50 |
+| ``hto_singlet_share`` | hashtag pools (hashtags >= 5% of the UMIs in cells): called cells assigned to one hashtag | < 0.30 | < 0.50 |
 
 Informative pairs: the gene is detected in 5-90% of called cells, and the antibody does not map to PTPRC (CD45, CD45RA/RB/RO,
 CD45.1/.2 recognise isoforms or allotypes of a gene every leukocyte expresses, so their RNA cannot follow them).
@@ -34,6 +34,7 @@ import numpy as np
 import pandas as pd
 
 MIN_CELL_UMI = 10
+HTO_MIN_SHARE = 0.05
 THRESHOLDS = {
     "frac_valid_barcode": ("<", 0.50, 0.75),
     "frac_feature": ("<", 0.20, 0.50),
@@ -230,7 +231,11 @@ def library_qc(M, panel: pd.DataFrame, called: np.ndarray, stats: dict, ambient:
                 out["rna_concordance_rule"] = f"not assessable (< {MIN_PAIRS} informative pairs)"
     # HTO
     hto_calls = None
-    if len(hto_rows) >= 2 and len(cells):
+    # hashtags are judged only when the library is a hashtag pool: hashtags carry >= HTO_MIN_SHARE of the UMIs in cells
+    # (a few catalog hashtags at background level in an antibody library are reported, not demultiplexed)
+    hshare = float(Xc[hto_rows].sum() / max(Xc.sum(), 1)) if len(hto_rows) and len(cells) else 0.0
+    out["hto_umi_share"] = hshare
+    if len(hto_rows) >= 2 and len(cells) and hshare >= HTO_MIN_SHARE:
         amb = Xe[hto_rows].sum(axis=1) if len(empties) else np.asarray(ambient)[hto_rows]
         call, lt, ls = H.hashed_drops(Xc[hto_rows], amb)
         hto_calls = (call, lt, ls)
@@ -244,7 +249,7 @@ def library_qc(M, panel: pd.DataFrame, called: np.ndarray, stats: dict, ambient:
         v = out.get(k)
         if k == "rna_concordance" and out.get("rna_pairs", 0) < MIN_PAIRS:
             v = None
-        if k == "hto_singlet_share" and len(hto_rows) < 2:
+        if k == "hto_singlet_share" and hto_calls is None:
             v = None
         if k in ("frac_cells_with_adt", "median_umi_cells", "rna_concordance") and len(ab_rows) == 0:
             v = None  # hashtag-only library: judged by the hashtag rules

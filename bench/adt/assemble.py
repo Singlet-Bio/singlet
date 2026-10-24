@@ -27,6 +27,8 @@ import sys
 import numpy as np
 import pandas as pd
 
+from singlet.adt.qc import HTO_MIN_SHARE
+
 QC_COLS = ["verdict", "failed", "warned", "n_called", "n_features", "n_antibodies", "n_isotypes", "n_hashtags", "reads",
            "frac_valid_barcode", "frac_feature", "frac_usable_in_cells", "saturation", "median_umi_cells",
            "median_umi_empty", "cell_empty_ratio", "frac_cells_with_adt", "isotype_share_median", "panel_detected",
@@ -167,7 +169,9 @@ def main():
             plan.append({"gse": gse, "gsm": gex_gsm, "key": key, "path": path, "bytes": len(buf), "sha256": frag["sha256"]})
             # per-cell hashtag calls on the merged matrix -> feature sidecar v2/cf/<GSM>/hto.<d16>.parquet
             hrows = np.flatnonzero(pan.kind.values == "hashtag")
-            if len(hrows) >= 2:
+            called_cols = np.flatnonzero(np.asarray(gx.called, dtype=bool))
+            hshare = float(M[hrows][:, called_cols].sum() / max(M[:, called_cols].sum(), 1)) if len(hrows) else 0.0
+            if len(hrows) >= 2 and hshare >= HTO_MIN_SHARE:  # a hashtag pool, not background hashtags
                 hp = hto_sidecar(M, pan, hrows, gx, a.out)
                 if hp:
                     plan.append({"gse": gse, "gsm": gex_gsm, **hp})
