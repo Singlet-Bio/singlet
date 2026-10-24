@@ -165,12 +165,13 @@ release. Making `called_v2` the default for reads (`gather`, cell index, `n_call
 cell counts by a median +65% per sample (range +386 to +18,868 cells), and users should see that announced. The cell index
 would need a `called_v2` bit to filter on.
 
-## Decisions for Zach
+## Decisions (Zach, 2026-10-23)
 
-1. Approve `called_v2` as specified (parameters above), computed in the migration and stored in the cells table. The
-   alternative is a later all-barcode sidecar.
-2. Keep `called` as the default selection for now, or switch to `called_v2`.
-3. inDrop and Drop-seq: store with `validated: false` (proposed), or skip.
+1. Approved: `called_v2` as specified, computed in the migration and stored in the cells table (`called_v2`, `called_v2_fdr`).
+   Implementation: `python/singlet/v2/cellcall.py` and `migrate.py` on branch `claude/called-v2-migration` (PR into
+   `feat/singlet-v2`).
+2. `called` stays the default selection for now.
+3. inDrop and Drop-seq: stored with `validated: false` (as proposed; not separately decided).
 
 ## Limitations
 
