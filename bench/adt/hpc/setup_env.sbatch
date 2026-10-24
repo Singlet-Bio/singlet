@@ -23,9 +23,10 @@ if [ -d $SRC ]; then git -C $SRC checkout -q --detach "$BRANCH"; git -C $SRC res
 else git -C $WORK/repos/singlet-py.git worktree add --detach $SRC "$BRANCH"; fi
 git -C $SRC log --oneline -1
 
-if [ ! -x $ENV/bin/python ]; then rm -rf $ENV.tmp; mamba create -y -p $ENV.tmp -c conda-forge -c bioconda --strict-channel-priority \
+# conda envs cannot be moved (prefixes are compiled in): build in place, mark success with .ok
+if [ ! -f $ENV/.ok ]; then rm -rf $ENV $ENV.tmp; mamba create -y -p $ENV -c conda-forge -c bioconda --strict-channel-priority \
   python=3.12 sra-tools pigz numpy scipy pandas pyarrow anndata h5py matplotlib zstandard requests \
-  dnaio isa-l pybind11 setuptools kallisto bustools alevin-fry salmon simpleaf gxx_linux-64 cmake make zlib zstd && mv $ENV.tmp $ENV; fi
+  dnaio isa-l pybind11 setuptools kallisto bustools alevin-fry salmon simpleaf gxx_linux-64 cmake make zlib zstd && touch $ENV/.ok; fi
 $ENV/bin/pip install -q kb-python==0.29.1 || $ENV/bin/pip install -q kb-python
 $ENV/bin/python -c "import numpy, scipy, pandas, anndata, dnaio, h5py; print('py ok', numpy.__version__, dnaio.__version__)"
 $ENV/bin/fasterq-dump --version | head -2; $ENV/bin/kallisto version; $ENV/bin/bustools version; $ENV/bin/alevin-fry --version
