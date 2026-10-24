@@ -106,7 +106,7 @@ def main(argv=None) -> int:
             summ.write_text(json.dumps(summary, indent=1, default=str))
             ct = df["cell_type_cl"].notna().mean() if len(df) else 0
             print(
-                f"{gsm}: {len(df)} cells, {ct:.0%} typed, sex {summary.get('sex', {}).get('groups')}, "
+                f"{gsm}: {len(df)} cells, {ct:.0%} typed, sex {'yes' if 'sex' in summary else 'no'}, "
                 f"ancestry {'yes' if 'ancestry' in summary else 'no'}, {time.time() - t0:.1f}s",
                 flush=True,
             )

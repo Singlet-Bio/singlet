@@ -124,13 +124,28 @@ def scan_bytes_for_genotypes(data: bytes) -> list:
 
 def scan_labels_file(path: Union[str, Path]) -> list:
     """Genotype-like strings in a written label file: every decoded string value, the column names and the file metadata."""
+    import pyarrow as pa
     import pyarrow.parquet as pq
+
+    # every text-like Arrow type: newer pandas/pyarrow write pandas "string" columns as large_string (or string_view)
+    is_view = getattr(pa.types, "is_string_view", lambda _t: False)
+
+    def text_like(ty) -> bool:
+        if pa.types.is_dictionary(ty):
+            return True
+        return (
+            pa.types.is_string(ty)
+            or pa.types.is_large_string(ty)
+            or is_view(ty)
+            or pa.types.is_binary(ty)
+            or pa.types.is_large_binary(ty)
+        )
 
     t = pq.read_table(path)
     parts = list(t.column_names) + [f"{k!r}={v!r}" for k, v in (t.schema.metadata or {}).items()]
     for name in t.column_names:
         col = t.column(name)
-        if col.type == "string" or str(col.type).startswith("dictionary"):
+        if text_like(col.type):
             parts += [str(x) for x in col.to_pylist() if x is not None]
     return scan_bytes_for_genotypes("\n".join(parts).encode())
 
