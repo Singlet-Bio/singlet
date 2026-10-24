@@ -165,7 +165,7 @@ Members of the **GEX** sample (the antibody library has no sample object of its 
 Several libraries of one GEX sample (ADT + HTO, or several sequencing libraries) merge into one member per kind (`assemble.py`).
 Attachment, since objects are immutable: **at migration** as extra members of the GEX `.s2` (preferred: the campaign is on hold), or
 **after** as a content-addressed sidecar `v2/x/<GSM>/adt.<d16>.s2` with the same members, referenced from the manifest as
-`samples[i].modalities.adt = {key, bytes, sha256, members}`. Excluded libraries are listed as `samples[i].modalities_excluded.adt =
+`samples[i].extra_objects.adt = {key, bytes, sha256, members}`. Excluded libraries are listed as `samples[i].excluded_modalities.adt =
 {reason, failed}`.
 
 `modalities=` vocabulary (proposed to the v2-modalities session): `adt` -> `adt_counts.1pz` (`obsm["adt"]`, `altExp("adt")`), `hto` ->

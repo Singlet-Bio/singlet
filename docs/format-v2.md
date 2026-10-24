@@ -335,18 +335,24 @@ Rules:
 * Per-cell hashtag calls (singlet hashtag / doublet / negative) are cell metadata. They go to a feature sidecar
   `<GSM>.features.hto.parquet` (`docs/CELL-ARCHITECTURE.md` section 3), not into these members.
 * Only libraries whose QC passes are attached (`docs/adt-modality.md`, QC section); a failing library is listed in the manifest as
-  `samples[i].modalities_excluded.adt = {reason, failed rules}` so the counts stay explainable.
+  `samples[i].excluded_modalities.adt = {reason, failed rules}` so the counts stay explainable.
 
-Attachment (objects are immutable):
+Attachment (objects are immutable). Reviewed with the v2-modalities session (2026-10-24): the client reads every member of a sample
+from one object (`client._read_sample` takes ranges from `sm.members`), so option 1 needs only the vocabulary entries, while option 2
+needs a second source per sample in Python (`_read_sample`), R (`.v2_read_sample`), the MCP selection code and the website ingest
+validator (`functions/_shared/v2-catalog.ts` `parseSample`). The manifest key is `extra_objects`, not `modalities`, which the website
+catalog already uses for the list of modality names.
 
 1. **At migration** (preferred while the campaign is on hold): `v2/migrate.py` adds the three members to the GEX sample object it
    writes. They then enter the object digest and the manifest's `members`.
 2. **After migration**: a sidecar object `v2/x/<GSM>/adt.<d16hex>.s2` (an ordinary `.s2` container holding only these members,
    content-addressed like sample objects), referenced from the manifest as
-   `samples[i].modalities.adt = {"key": ..., "bytes": ..., "sha256": ..., "members": {name: {kind, off, len, digest, ...}}}`. Readers
+   `samples[i].extra_objects.adt = {"key": ..., "bytes": ..., "sha256": ..., "members": {name: {kind, off, len, digest, ...}}}`. Readers
    treat members listed there exactly like members of the sample object. Re-processing writes a new sidecar and changes the manifest,
    never a sample object.
 
 `modalities=` (section 11): `adt` -> `adt_counts.1pz` (+ `adt_panel.json`), Python `obsm["adt"]`, R `altExp("adt")`; `hto` ->
 `hto_counts.1pz`, `obsm["hto"]` / `altExp("hto")`. Aliases `protein`, `cite`, `antibody` -> `adt`; `hashtag` -> `hto`. Availability
-follows the section 11 rule (a pz2 member with rows and columns).
+follows the section 11 rule (a pz2 member with rows and columns). The vocabulary changes together in `client.py` (`MODALITIES`,
+`_MODALITY_ALIASES`), `r/R/v2.R` (`.v2_modality_members`, `.v2_modality_alias`) and the website's `v2-load-modalities.ts`; whichever
+of PR #14 / this branch lands second adds `adt` / `hto` there. `uns["adt_panel"]` holds the parsed `adt_panel.json`.

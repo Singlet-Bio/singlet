@@ -14,7 +14,7 @@ Members of one sample:
   version), the ambient profile and the library QC verdict.
 
 The same members go either into the GEX sample object at migration (preferred while the campaign has not run) or into a
-sidecar object ``v2/x/<GSM>/adt.<d16>.s2`` referenced by the study manifest (``samples[i].modalities.adt``), so readers
+sidecar object ``v2/x/<GSM>/adt.<d16>.s2`` referenced by the study manifest (``samples[i].extra_objects.adt``), so readers
 find them the same way.
 """
 

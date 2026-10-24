@@ -9,7 +9,7 @@ For each GEX sample with at least one processed library:
   in two libraries (e.g. hashtags amplified in both an ADT and an HTO library) is taken from the library where it has
   the most UMIs, and the choice is recorded;
 * ``v2/x/<GSM>/adt.<d16>.s2`` (sidecar object with ``adt_counts.1pz``, ``hto_counts.1pz``, ``adt_panel.json``) is
-  written under ``<out>/objects/`` together with its manifest fragment ``samples[i].modalities.adt``;
+  written under ``<out>/objects/`` together with its manifest fragment ``samples[i].extra_objects.adt``;
 * failing libraries are listed in ``excluded.tsv`` with every failed rule.
 
 Outputs (small, safe to pull back): ``libraries.tsv`` (one row per library: status, verdict, QC metrics),
