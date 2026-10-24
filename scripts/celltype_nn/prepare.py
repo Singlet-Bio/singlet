@@ -131,7 +131,7 @@ def main(argv=None) -> int:
     markers = set()
     for n in load_nodes():
         for k in ("pos", "neg"):
-            markers |= set(((n.get("markers") or {}).get(k) or {}).keys())
+            markers |= {str(g) for g in ((n.get("markers") or {}).get(k) or [])}
     mk = np.isin(np.char.upper(sym_h.astype(str)), [m.upper() for m in markers])
     ok = np.isin(genes_h, list(singlet_h))
     ok &= ~np.array([bool(_DROP.match(s)) or s.upper() in SEX_GENES for s in sym_h])
