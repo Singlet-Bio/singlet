@@ -131,7 +131,7 @@ def _merge(uniq, cnts):
 
 # ----------------------------------------------------------------------------------------------------------- features
 @dataclass
-class FeatureIndex:
+class _FixedIndex:
     sequences: List[str]
     exact: np.ndarray = field(init=False)  # sorted codes
     exact_idx: np.ndarray = field(init=False)
@@ -184,6 +184,43 @@ class FeatureIndex:
             out[rows] = pick
             corr[rows[one]] = True
         return out, corr
+
+
+class FeatureIndex:
+    """Panel index over one or several barcode lengths (e.g. 15-nt TotalSeq barcodes with a 14-nt control).
+
+    The read window is as long as the longest barcode; a barcode of length L is matched on the first L bases. Exact
+    matches win (longest length first), then Hamming-1; a window claimed by two features is ambiguous."""
+
+    def __init__(self, sequences: Sequence[str]):
+        self.sequences = list(sequences)
+        if len(set(self.sequences)) != len(self.sequences):
+            raise ValueError("duplicate panel sequences")
+        lens = sorted({len(x) for x in self.sequences}, reverse=True)
+        self.L = lens[0]
+        self.groups = []
+        for L in lens:
+            idx = [i for i, x in enumerate(self.sequences) if len(x) == L]
+            self.groups.append((L, np.array(idx, dtype=np.int64), _FixedIndex([self.sequences[i] for i in idx])))
+
+    def assign(self, mat: np.ndarray):
+        n = len(mat)
+        if len(self.groups) == 1:
+            return self.groups[0][2].assign(mat[:, :self.L])
+        exact = np.full(n, -1, np.int64)
+        near = np.full(n, -1, np.int64)
+        for L, idx, fx in self.groups:
+            a, corr = fx.assign(np.ascontiguousarray(mat[:, :L]))
+            g = np.where(a >= 0, idx[np.maximum(a, 0)], a)
+            ex = (a >= 0) & ~corr
+            take = ex & (exact == -1)
+            exact[take] = g[take]
+            nr = ((a >= 0) & corr) | (a == -2)
+            both = nr & (near != -1)
+            near[nr & (near == -1)] = g[nr & (near == -1)]
+            near[both] = -2
+        out = np.where(exact >= 0, exact, near)
+        return out, (exact < 0) & (near >= 0)
 
 
 # ----------------------------------------------------------------------------------------------------------- barcodes

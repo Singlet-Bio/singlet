@@ -76,7 +76,7 @@ def kind_of(name: str) -> str:
     n = name.lower()
     if "hashtag" in n or n.startswith("hto") or "hto" in n.split("_"):
         return "hashtag"
-    if "isotype" in n or "igg" in n and "ctrl" in n:
+    if "isotype" in n or ("igg" in n and "ctrl" in n) or "negctr" in n or "neg_ctr" in n or "negative control" in n:
         return "isotype"
     return "antibody"
 
@@ -95,25 +95,29 @@ def annotate_from_catalog(ref: pd.DataFrame, cat: Optional[pd.DataFrame] = None)
 
 
 def detect_offset(r2_seqs: Sequence[bytes], catalog_seqs: Sequence[str], offsets=OFFSETS) -> Dict[int, float]:
-    """Fraction of reads whose R2[off:off+15] is exactly a catalog barcode, per offset."""
-    codes = np.sort(S.encode_strings(list(catalog_seqs), BC_LEN)[0])
+    """Fraction of reads whose R2[off:off+L] is exactly a panel / catalog barcode, per offset (L = the most common
+    barcode length; barcodes of other lengths are left out of this test)."""
+    lens = pd.Series([len(x) for x in catalog_seqs]).value_counts()
+    L = int(lens.index[0])
+    codes = np.sort(S.encode_strings([x for x in catalog_seqs if len(x) == L], L)[0])
     out = {}
     for off in offsets:
-        w = [s[off:off + BC_LEN] for s in r2_seqs if len(s) >= off + BC_LEN]
+        w = [s[off:off + L] for s in r2_seqs if len(s) >= off + L]
         if not w:
             out[off] = 0.0
             continue
-        c, bad = S.encode(S.as_bytes_matrix(w, BC_LEN))
+        c, bad = S.encode(S.as_bytes_matrix(w, L))
         out[off] = float(((bad == 0) & (S.lookup(codes, c) >= 0)).sum() / len(r2_seqs))
     return out
 
 
 def discover(feature_seqs: Sequence[bytes], cat: pd.DataFrame, organism: str = "") -> Panel:
     """Identify the panel from feature-barcode windows (already at the chosen offset) of reads in called cells."""
-    w = [s for s in feature_seqs if len(s) == BC_LEN]
+    L = int(cat.sequence.str.len().max())
+    w = [s for s in feature_seqs if len(s) == L]
     n = len(w)
-    u, cnt = np.unique(np.array(w, dtype=f"S{BC_LEN}"), return_counts=True)
-    mat = u.view(np.uint8).reshape(len(u), BC_LEN)
+    u, cnt = np.unique(np.array(w, dtype=f"S{L}"), return_counts=True)
+    mat = u.view(np.uint8).reshape(len(u), L)
     from .count import FeatureIndex
 
     fx = FeatureIndex(list(cat.sequence))

@@ -143,10 +143,12 @@ def process(row, a, out_dir, status):
         if i + 1 >= HEAD_READS:
             break
     cat = P.load_catalog()
-    study_ref = os.path.join(a.panels, f"{row['gse']}.csv")
-    ref = P.annotate_from_catalog(P.read_feature_reference(study_ref), cat) if os.path.exists(study_ref) else None
+    refs = [os.path.join(a.panels, f"{x}.csv") for x in (row["gsm"], row["gse"])]
+    study_ref = next((r for r in refs if os.path.exists(r)), None)
+    ref = P.annotate_from_catalog(P.read_feature_reference(study_ref), cat) if study_ref else None
+    status["panel_file"] = os.path.basename(study_ref) if study_ref else None
     seqs_for_offset = list(ref.sequence) if ref is not None else list(cat.sequence)
-    bc_len = len(seqs_for_offset[0])
+    bc_len = max(len(x) for x in seqs_for_offset)
     offs = P.detect_offset([b for _, b in head], seqs_for_offset)
     off = max(offs, key=offs.get)
     status["offsets"] = {k: round(v, 4) for k, v in offs.items() if v >= 0.005}
@@ -172,11 +174,20 @@ def process(row, a, out_dir, status):
                                             chem.cb_len)[0])
     incell = S.lookup(called_codes, tcb) >= 0
     feats = [y[off:off + bc_len] for (x, y), ok in zip(sel, incell) if ok]
-    disc = P.discover(feats, cat) if bc_len == P.BC_LEN else None
     if ref is not None:
+        # the study's reference names the features; discovery against it measures completeness, and against the
+        # catalog says what the unexplained sequences are
+        as_cat = pd.DataFrame({"sequence": ref.sequence, "specificity": ref.name, "kind": ref.kind,
+                               "barcode_id": ref.barcode_id, "ensembl": ref.ensembl, "clone": "", "reactivity": ""})
+        disc = P.discover(feats, as_cat)
+        cat_codes = set(cat.sequence)
+        disc.notes["unexplained_in_catalog"] = [(q, n, q in cat_codes) for q, n in disc.notes["unexplained_top"]]
         panel = ref.assign(source="study")
+        panel["reads_discovery"] = panel.sequence.map(dict(zip(disc.features.sequence,
+                                                               disc.features.reads_discovery))).fillna(0).astype(int)
         status["panel_source"] = "study"
     else:
+        disc = P.discover(feats, cat)
         if disc is None or disc.status == "unresolved":
             status["status"] = "panel_unresolved"
             status["panel_reason"] = "no catalog barcode with support in called cells"
@@ -204,7 +215,7 @@ def process(row, a, out_dir, status):
     # QC
     t3 = time.time()
     res = Q.library_qc(lc.matrix, panel, gx.called, lc.stats, lc.ambient, gx.exon, gx.genes,
-                       disc.notes if (disc and ref is None) else None)
+                       disc.notes if disc else None)
     lib = res["library"]
     lib["barcode_overlap_head"] = status["barcode_overlap_head"]
     with open(os.path.join(out_dir, "qc.json"), "w") as f:

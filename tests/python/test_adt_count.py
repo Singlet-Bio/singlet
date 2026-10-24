@@ -122,3 +122,12 @@ def test_short_reads_are_skipped():
 def test_empty_inputs(n):
     t = C.correct_umis(np.zeros(n, np.uint64), np.zeros(n, np.uint64), np.ones(n, np.int64), 10)
     assert len(t) == n
+
+
+def test_mixed_length_panel():
+    panel = ["ACGTACGTACGTACG", "TTTTTTTTTTTTTT", "GGGGGGGGGGGGGGG"]  # one 14-nt control
+    fx = C.FeatureIndex(panel)
+    q = ["ACGTACGTACGTACG", "TTTTTTTTTTTTTTA", "TTTTTTTTTTTTTAC", "GGGGGGGGGGGGGGC", "CCCCCCCCCCCCCCC"]
+    idx, corr = fx.assign(S.as_bytes_matrix(q, 15))
+    assert idx.tolist() == [0, 1, 1, 2, -1]
+    assert corr.tolist() == [False, False, True, True, False]
