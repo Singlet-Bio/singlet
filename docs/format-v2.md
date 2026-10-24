@@ -438,7 +438,13 @@ prototype uses where no GTF is at hand, not a replacement for the GTF.
 * Migration: `migrate.Options(junction_table=<JunctionTable>)` writes `sj_counts.1pz` this way (`_junction_rows`, with the table's
   packs reachable through `Options.packs`); stage 2 and `verify` check it against the legacy member exactly like any other matrix, and
   `write_outputs` ships the version and its segments with the study's packs (`index.json` kinds `junction-version`,
-  `junction-segment`).
+  `junction-segment`). The manifest records the version in `packs.junctions` (absent when the junction rows are inline).
+* Choosing the table: `python -m singlet.v2.migrate --junction-table auto` (`Options(junction_table="auto")`) takes, per study,
+  the newest `junction-version` published for the study's reference build in `v2/ref/index.json` (`junctions.published_table`;
+  packs downloaded from the data host and sha256-checked); a build with no published table keeps inline names. A version pack id
+  or `.pack` path pins one version; `none` (the CLI default) writes inline names. `scripts/v2_campaign.py run` passes
+  `--junction-table auto` unless told otherwise (`--junction-table none`). Version 1 is published for GRCh38-2024-A, GRCm39-2024-A,
+  GRCz11, Mmul_10 and mRatBN7.2 (`bench/junctions/v1/`); the GRCh38-GRCm39 barnyard reference has none yet.
 
 ### 12.5 Row order (decided 2026-10-23: store the permutation)
 

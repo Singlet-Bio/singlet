@@ -711,3 +711,47 @@ def from_legacy(indptr, indices, data, names: Sequence[str], table: JunctionTabl
     ip, ix, dt = permute_rows(indptr, indices, data, inv)
     local = encode_local(rows.local) if len(rows.local) else None
     return ip, ix, dt, rows.ids, local, encode_perm(rows.legacy_perm)
+
+
+# ============================================================================================ published versions
+def published_versions(index_entries: Sequence[dict], build: str) -> List[dict]:
+    """The ``junction-version`` entries of a pack index (``v2/ref/index.json`` ``packs``) for one reference build."""
+    return [
+        e for e in index_entries if e.get("kind") == "junction-version" and e.get("build") == build
+    ]
+
+
+def published_table(
+    build: str, store, index_entries: Optional[Sequence[dict]] = None
+) -> Optional[JunctionTable]:
+    """The newest published junction table version for ``build`` (highest header ``version``), or None if the index has none.
+
+    ``store`` is a ``packs.PackStore`` that can supply the version and its segments (``download=True`` fetches them from the
+    data host, sha256-checked against its index). ``index_entries`` defaults to the remote ``v2/ref/index.json``."""
+    if index_entries is None:
+        index_entries = fetch_index()
+    cands = published_versions(index_entries, build)
+    if not cands:
+        return None
+    tables = [store.get(e["id"]) for e in cands]
+    tables = [t for t in tables if isinstance(t, JunctionTable)]
+    if not tables:
+        return None
+    top = max(int(t.header.get("version", 0)) for t in tables)
+    best = [t for t in tables if int(t.header.get("version", 0)) == top]
+    if len(best) > 1:
+        raise JunctionError(
+            f"{len(best)} junction table versions {top} are published for {build}: the index is ambiguous"
+        )
+    return best[0]
+
+
+def fetch_index(remote: Optional[str] = None) -> List[dict]:
+    """``packs`` of the remote ``v2/ref/index.json`` (the data host's, or ``remote``)."""
+    import json
+    import urllib.request
+
+    url = (remote or P.REMOTE) + "index.json"
+    req = urllib.request.Request(url, headers={"User-Agent": P.USER_AGENT})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return list(json.loads(r.read().decode("utf-8"))["packs"])

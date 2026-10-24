@@ -84,8 +84,13 @@ class Options:
         self.log = log or (lambda *a: print(*a, file=sys.stderr, flush=True))
         self.packs = packs or P.default_store()
         self.max_stage2_rounds = max_stage2_rounds
-        # a junctions.JunctionTable (its packs reachable through ``packs``): junction rows are stored as table ids
-        self.junction_table = junction_table
+        # junction rows stored as table ids (docs/format-v2.md 12.4): a junctions.JunctionTable (its packs reachable through
+        # ``packs``), "auto" (the newest table published for the study's reference build in v2/ref/index.json; inline names
+        # when there is none), a callable(build) -> table or None, or None (inline names). Resolved per study by migrate_bundle.
+        self.junction_spec = junction_table
+        self.junction_table = (
+            junction_table if not (junction_table == "auto" or callable(junction_table)) else None
+        )
         # called_v2 (docs/called-v2.md): True = required (fails without numba), None = when numba is installed, False = never
         self.cell_call_v2 = cell_call_v2
 
@@ -982,6 +987,7 @@ def migrate_bundle(
         "migrate %s: %d members, %d samples, build %s"
         % (gse, len(bundle.entries), len(bundle.samples()), reference_build)
     )
+    opts.junction_table = _resolve_junction_table(opts, reference_build)
     root = os.path.join(out_dir, "v2")
     for d in ("s", "m", "ledger", "ref"):
         os.makedirs(os.path.join(root, d), exist_ok=True)
@@ -1048,6 +1054,7 @@ def migrate_bundle(
         "totals": totals,
         "pipeline": pipeline,
         "reference_build": reference_build,
+        "junction_table": opts.junction_table.id.hex() if opts.junction_table is not None else None,
         "legacy": legacy,
         "pack_ids": pack_ids,
         "packs": _manifest_packs(sample_entries, opts.packs),
@@ -1058,21 +1065,54 @@ def migrate_bundle(
 
 
 def _manifest_packs(sample_entries: list, store: P.PackStore) -> dict:
-    """{"exon": id, "intron": id, "genes": id, "whitelist": id | [ids] | None} for the manifest."""
+    """{"exon": id, "intron": id, "genes": id, "whitelist": id | [ids] | None} for the manifest, plus "junctions": the junction
+    table version the junction rows use, when any sample stores them as table ids."""
     got = {"exon": set(), "intron": set(), "genes": set(), "whitelist": set()}
+    jx = set()
     for e in sample_entries:
         for n, mm in e["members"].items():
             nm = mm.get("names") if isinstance(mm.get("names"), dict) else {}
             r = nm.get("rows")
             if isinstance(r, dict) and r.get("member") in got:
                 got[r["member"]].add(r["pack"])
+            if isinstance(r, dict) and r.get("junctions"):
+                jx.add(r["junctions"])
             if n == "cells" and mm.get("whitelist"):
                 got["whitelist"].add(mm["whitelist"])
     out = {}
     for k, v in got.items():
         v = sorted(v)
         out[k] = None if not v else (v[0] if len(v) == 1 else v)
+    if jx:
+        out["junctions"] = sorted(jx)[0] if len(jx) == 1 else sorted(jx)
     return out
+
+
+def _resolve_junction_table(opts: "Options", build: str):
+    """The junction table for one study (Options.junction_spec); None means inline junction names."""
+    spec = opts.junction_spec
+    if spec is None:
+        return None
+    if spec == "auto":
+        from . import junctions as J
+
+        opts.packs.download = True  # the version and its segments come from the data host (sha256-checked), then the cache
+        t = J.published_table(build, opts.packs)
+        opts.log(
+            "junction table for %s: %s"
+            % (
+                build,
+                "version %s (%s)" % (t.header.get("version"), t.id.hex())
+                if t
+                else "none published, inline names",
+            )
+        )
+        return t
+    if callable(spec):
+        return spec(build)
+    if getattr(spec, "build", build) != build:
+        raise ValueError("the junction table is for %s, the study is %s" % (spec.build, build))
+    return spec
 
 
 def write_outputs(res: dict, opts: Options) -> dict:
@@ -1159,6 +1199,31 @@ def write_outputs(res: dict, opts: Options) -> dict:
     return {"manifest": mpath, "ledger": lpath, "rev": man["rev"], "ref_packs": len(entries)}
 
 
+def _junction_arg(v: str):
+    """--junction-table: 'none' / 'auto' / a version pack id (found in the pack store) / a .pack path (its directory is added)."""
+    if v in (None, "", "none"):
+        return None
+    if v == "auto":
+        return "auto"
+
+    def load(build):
+        st = P.default_store()
+        st.download = True
+        if os.path.exists(v):
+            st.add_dir(os.path.dirname(os.path.abspath(v)))
+            t = st.get(os.path.basename(v)[:32])
+        else:
+            t = st.get(v)
+        if getattr(t, "build", None) != build:
+            raise SystemExit(
+                "--junction-table %s is for build %s, the study is %s"
+                % (v, getattr(t, "build", "?"), build)
+            )
+        return t
+
+    return load
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
         prog="python -m singlet.v2.migrate",
@@ -1186,6 +1251,13 @@ def main(argv=None) -> int:
         help="matrix codec: native = compiled pz2 with automatic codec 1/2 choice (default when singlet._pz2 imports), py = pure-Python codec 2",
     )
     ap.add_argument(
+        "--junction-table",
+        default="none",
+        help="junction rows as ids into a shared junction table (docs/format-v2.md 12): 'auto' = the newest version published "
+        "for the study's reference build in v2/ref/index.json (downloaded and sha256-checked; inline names when there is none), "
+        "a version pack id or .pack path, or 'none' (inline names, the default)",
+    )
+    ap.add_argument(
         "--no-cell-call-v2",
         action="store_true",
         help="do not compute called_v2 (default: computed; needs numba, pip install 'singlet-bio[migrate]')",
@@ -1197,6 +1269,7 @@ def main(argv=None) -> int:
         recipes=a.recipes,
         created_at=a.created_at,
         cell_call_v2=False if a.no_cell_call_v2 else True,
+        junction_table=_junction_arg(a.junction_table),
     )
     res = migrate_bundle(a.bundle, a.out, a.gse, opts, a.samples.split(",") if a.samples else None)
     out = write_outputs(res, opts)
