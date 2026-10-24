@@ -12,13 +12,16 @@
 #   singlet      `singlet download SRR` streams SRA straight to .1fq (the campaign's path), 1 run
 #   prefetch8    8 runs fetched in parallel with prefetch (aggregate bandwidth)
 #   prefetch16   16 runs in parallel
+#   prefetch4 <runs> <tag>  4 runs; several such jobs on different nodes test aggregate bandwidth
+#   s3_1 | s3_16  .sra files straight from NCBI's public AWS bucket (sra-pub-run-odp) with curl, 1 or 16 runs
 #   ena          ENA fastq.gz of 1 run over HTTPS (both files, curl)
 #   ena_head     first 25% of the same run's fastq.gz (curl | head): what a cap costs to fetch
+#   prefetch_local  prefetch the .sra (whole file), then `singlet download <local .sra>`: the proposed path
 set -eu
 W=/mnt/projects/debruinz_project/debruinz/singlet; ENV=$W/envs/pbench; export PATH=$ENV/bin:$PATH
 export HOME=$W/cache/condahome
 MODE=$1; RUNS=(${2//,/ })
-O=$W/data/atlas-rerun/dlbench/$MODE; rm -rf $O; mkdir -p $O
+O=$W/data/atlas-rerun/dlbench/$MODE${3:+_$3}; rm -rf $O; mkdir -p $O
 SCR=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
 cd $SCR
 t0=$(date +%s.%N)
@@ -27,9 +30,20 @@ case $MODE in
     r=${RUNS[0]}
     /usr/bin/time -v -o $O/time.txt $W/pipeline-benchmark/bin/singlet-fixed download $r -o $SCR/$r.1fq > $O/log.txt 2>&1 || echo "exit $?" >> $O/log.txt
     ;;
-  prefetch8|prefetch16)
+  prefetch_local)
+    r=${RUNS[0]}
+    /usr/bin/time -v -o $O/prefetch.time.txt prefetch --max-size u -O $SCR/sra $r > $O/prefetch.log 2>&1
+    /usr/bin/time -v -o $O/time.txt $W/pipeline-benchmark/bin/singlet-fixed download $SCR/sra/$r/$r.sra -o $SCR/$r.1fq       > $O/log.txt 2>&1 || echo "exit $?" >> $O/log.txt
+    grep -E "Total:|Throughput|VDB read" $O/log.txt || true
+    ;;
+  prefetch2|prefetch4|prefetch8|prefetch16)
     n=${MODE#prefetch}
     for r in "${RUNS[@]:0:$n}"; do prefetch --max-size u -O $SCR/sra $r > /dev/null 2>&1 & done; wait
+    ;;
+  s3_1|s3_16)
+    n=${MODE#s3_}
+    for r in "${RUNS[@]:0:$n}"; do curl -s -o $SCR/$r.sra "https://sra-pub-run-odp.s3.amazonaws.com/sra/$r/$r" & done; wait
+    ls -la $SCR | head -20 > $O/files.txt
     ;;
   ena|ena_head)
     r=${RUNS[0]}
