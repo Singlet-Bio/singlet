@@ -9,3 +9,9 @@ CENSUS=$WORK/venvs/ctnn-census
 TORCH=$WORK/venvs/ctnn-torch
 export PYTHONPATH=$SRC/python OPENBLAS_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1} SINGLET_CACHE_DIR=/tmp/$USER-ctnn-cache
 echo "celltype_nn @ $(git -C $SRC rev-parse --short HEAD)"
+# the same runtime with the node's GPUs (apptainer --nv)
+in_runtime_gpu() {
+  if [ -z "${SLURM_JOB_ID:-}" ]; then echo "in_runtime_gpu: refusing to run outside a Slurm job" >&2; return 2; fi
+  apptainer exec --nv --bind "$WORK,/tmp" --env "PATH=$SINGLET_VENV/bin:/usr/local/bin:/usr/bin:/bin" \
+    --env "OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}" --env "HDF5_USE_FILE_LOCKING=FALSE" --env "WORK=$WORK" "$SINGLET_IMG" "$@"
+}
