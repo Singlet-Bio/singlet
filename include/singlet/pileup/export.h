@@ -167,6 +167,44 @@ auto collapse_to_gene_counts(const CSCType& exon_csc,
     return out;
 }
 
+/// Gene-level a - b (b may be null) as uint32 counts; a and b are genes × cells.
+/// Used for the spliced layer: exon_counts holds spliced + ambiguous molecules,
+/// so spliced = collapse_exon_to_gene(exon) - ambiguous.
+template <typename ACSC, typename BCSC>
+GeneCSC<uint32_t> gene_csc_minus(const ACSC& a, const BCSC* b) {
+    GeneCSC<uint32_t> out;
+    out.nrows = a.nrows;
+    out.ncols = a.ncols;
+    out.indptr.assign(static_cast<size_t>(a.ncols) + 1, 0);
+    std::vector<int64_t> acc(a.nrows, 0);
+    std::vector<uint32_t> active;
+    const bool has_b = b && b->ncols == a.ncols && !b->data.empty();
+    for (uint32_t j = 0; j < a.ncols; ++j) {
+        for (int32_t k = a.indptr[j]; k < a.indptr[j + 1]; ++k) {
+            uint32_t g = static_cast<uint32_t>(a.indices[k]);
+            if (acc[g] == 0) active.push_back(g);
+            acc[g] += static_cast<int64_t>(a.data[k]);
+        }
+        if (has_b)
+            for (int32_t k = b->indptr[j]; k < b->indptr[j + 1]; ++k) {
+                uint32_t g = static_cast<uint32_t>(b->indices[k]);
+                if (acc[g] == 0) active.push_back(g);
+                acc[g] -= static_cast<int64_t>(b->data[k]);
+            }
+        std::sort(active.begin(), active.end());
+        for (uint32_t g : active) {
+            if (acc[g] > 0) {
+                out.indices.push_back(static_cast<int32_t>(g));
+                out.data.push_back(static_cast<uint32_t>(acc[g]));
+            }
+            acc[g] = 0;
+        }
+        active.clear();
+        out.indptr[j + 1] = static_cast<int32_t>(out.indices.size());
+    }
+    return out;
+}
+
 /// Configuration for export_results().
 struct ExportConfig {
     std::string out_prefix;            ///< Output directory path
@@ -244,7 +282,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     auto csc_t0 = std::chrono::high_resolution_clock::now();
 
     SparseAccumulator<uint8_t>::CSCMatrix snp_ad_csc, snp_dp_csc;
-    SparseAccumulator<uint16_t>::CSCMatrix exon_csc, intron_csc, sj_csc, mt_csc, guide_csc;
+    SparseAccumulator<uint16_t>::CSCMatrix exon_csc, intron_csc, sj_csc, mt_csc, guide_csc, amb_csc;
 
     std::vector<std::thread> csc_threads;
     bool need_snp_csc = !pileup_cfg.snp_path.empty() ||
@@ -257,8 +295,10 @@ inline ExportStats export_results(const PileupEngine& engine,
         csc_threads.emplace_back([&]() { mt_csc = engine.mt_alleles().to_csc(); });
     if (!pileup_cfg.exon_gtf_path.empty()) {
         csc_threads.emplace_back([&]() { exon_csc = engine.exons().to_csc(); });
-        if (pileup_cfg.count_introns && engine.gene_model().n_introns() > 0)
+        if (pileup_cfg.count_introns && engine.gene_model().n_introns() > 0) {
             csc_threads.emplace_back([&]() { intron_csc = engine.introns().to_csc(); });
+            csc_threads.emplace_back([&]() { amb_csc = engine.ambiguous().to_csc(); });
+        }
         if (pileup_cfg.count_sj && !engine.sj_names().empty())
             csc_threads.emplace_back([&]() { sj_csc = engine.splice_junctions().to_csc(); });
     }
@@ -271,6 +311,13 @@ inline ExportStats export_results(const PileupEngine& engine,
         csc_threads.emplace_back([&]() { vdj_csc = engine.vdj_counts().to_csc(); });
 
     for (auto& t : csc_threads) t.join();
+    // Ambiguous molecules per gene: always genes × barcodes, possibly all zero
+    if (amb_csc.ncols != exon_csc.ncols && exon_csc.ncols > 0) {
+        amb_csc = {};
+        amb_csc.nrows = engine.gene_model().n_genes();
+        amb_csc.ncols = exon_csc.ncols;
+        amb_csc.indptr.assign(static_cast<size_t>(exon_csc.ncols) + 1, 0);
+    }
 
     auto csc_t1 = std::chrono::high_resolution_clock::now();
     result.csc_time_s = std::chrono::duration<double>(csc_t1 - csc_t0).count();
@@ -387,7 +434,7 @@ inline ExportStats export_results(const PileupEngine& engine,
     // ── Phase 1.6: Sequencing saturation (N7, directional dedup path only) ──
     // Uses the DirectionalUmiStore groups built during run() — no extra BAM pass.
     std::vector<CellSaturation> sat_cells;
-    if (pileup_cfg.umi_dedup_directional && !engine.dir_exon_store().empty()) {
+    if (pileup_cfg.umi_dedup_directional && !engine.dir_exon_store().molecules_empty()) {
         sat_cells = singlet::compute_saturation(
             engine.dir_exon_store(), pileup_cfg.umi_len);
         if (!sat_cells.empty()) {
@@ -996,8 +1043,11 @@ inline ExportStats export_results(const PileupEngine& engine,
                     h5cfg.cell_barcodes = &barcodes;
                     h5cfg.metadata      = export_cfg.user_meta;
                     if (has_int) {
-                        auto spliced_csc   = collapse_exon_to_gene(exon_csc, engine.gene_model());
+                        // Velocyto layers: each molecule in exactly one of them; X = their sum
+                        auto spliced_csc   = gene_csc_minus(
+                            collapse_exon_to_gene(exon_csc, engine.gene_model()), &amb_csc);
                         auto unspliced_csc = collapse_intron_to_gene(intron_csc, engine.gene_model());
+                        auto ambiguous_csc = gene_csc_minus(amb_csc, static_cast<decltype(&amb_csc)>(nullptr));
                         h5cfg.layers.push_back({"spliced",
                             spliced_csc.indptr.data(), spliced_csc.indices.data(),
                             spliced_csc.data.data(),
@@ -1006,11 +1056,15 @@ inline ExportStats export_results(const PileupEngine& engine,
                             unspliced_csc.indptr.data(), unspliced_csc.indices.data(),
                             unspliced_csc.data.data(),
                             static_cast<uint64_t>(unspliced_csc.data.size())});
+                        h5cfg.layers.push_back({"ambiguous",
+                            ambiguous_csc.indptr.data(), ambiguous_csc.indices.data(),
+                            ambiguous_csc.data.data(),
+                            static_cast<uint64_t>(ambiguous_csc.data.size())});
                         bool ok = singlet::write_h5ad(h5cfg);
                         std::cerr << "[h5ad] " << (ok ? "wrote" : "FAILED") << " "
                                   << h5cfg.filepath << " n_genes=" << h5cfg.n_genes
                                   << " n_cells=" << h5cfg.n_cells
-                                  << " nnz=" << h5cfg.nnz << " layers=2\n";
+                                  << " nnz=" << h5cfg.nnz << " layers=3\n";
                     } else {
                         bool ok = singlet::write_h5ad(h5cfg);
                         std::cerr << "[h5ad] " << (ok ? "wrote" : "FAILED") << " "
@@ -1034,9 +1088,16 @@ inline ExportStats export_results(const PileupEngine& engine,
                     lcfg.gene_ids      = &gene_ids;
                     lcfg.cell_barcodes = &barcodes;
                     if (has_int) {
-                        auto spl  = collapse_exon_to_gene(exon_csc, engine.gene_model());
+                        auto spl  = gene_csc_minus(
+                            collapse_exon_to_gene(exon_csc, engine.gene_model()), &amb_csc);
                         auto uspl = collapse_intron_to_gene(intron_csc, engine.gene_model());
-                        LoomWriteConfig::Layer spl_layer, uspl_layer;
+                        auto amb  = gene_csc_minus(amb_csc, static_cast<decltype(&amb_csc)>(nullptr));
+                        LoomWriteConfig::Layer spl_layer, uspl_layer, amb_layer;
+                        amb_layer.name    = "ambiguous";
+                        amb_layer.indptr  = amb.indptr.data();
+                        amb_layer.indices = amb.indices.data();
+                        amb_layer.data    = amb.data.data();
+                        amb_layer.nnz     = amb.data.size();
                         spl_layer.name    = "spliced";
                         spl_layer.indptr  = spl.indptr.data();
                         spl_layer.indices = spl.indices.data();
@@ -1049,10 +1110,11 @@ inline ExportStats export_results(const PileupEngine& engine,
                         uspl_layer.nnz     = uspl.data.size();
                         lcfg.layers.push_back(spl_layer);
                         lcfg.layers.push_back(uspl_layer);
+                        lcfg.layers.push_back(amb_layer);
                         bool ok = singlet::write_loom(lcfg);
                         std::cerr << "[loom] " << (ok ? "wrote" : "FAILED") << " "
                                   << lcfg.filepath << " n_genes=" << lcfg.n_genes
-                                  << " n_cells=" << lcfg.n_cells << " layers=2\n";
+                                  << " n_cells=" << lcfg.n_cells << " layers=3\n";
                     } else {
                         bool ok = singlet::write_loom(lcfg);
                         std::cerr << "[loom] " << (ok ? "wrote" : "FAILED") << " "
@@ -1109,8 +1171,19 @@ inline ExportStats export_results(const PileupEngine& engine,
             write_threads.emplace_back([&]() {
                 write_matrix("exon_counts_corrected", exon_corrected_csc, engine.exon_names());
             });
-        if (pileup_cfg.count_introns && engine.gene_model().n_introns() > 0)
+        if (pileup_cfg.count_introns && engine.gene_model().n_introns() > 0) {
             write_threads.emplace_back([&]() { write_matrix("intron_counts", intron_csc, engine.intron_names()); });
+            // Ambiguous molecules (reads in both exons and introns) per gene. They are
+            // already inside exon_counts; spliced = gene(exon_counts) - ambiguous_counts.
+            write_threads.emplace_back([&]() {
+                std::vector<std::string> names;
+                const auto& ids = engine.gene_ids();
+                const auto& gnames = engine.gene_names();
+                names.reserve(ids.size());
+                for (size_t i = 0; i < ids.size(); ++i) names.push_back(ids[i] + "_" + gnames[i]);
+                write_matrix("ambiguous_counts", amb_csc, names);
+            });
+        }
         if (pileup_cfg.count_sj && !engine.sj_names().empty())
             write_threads.emplace_back([&]() { write_matrix("sj_counts", sj_csc, engine.sj_names()); });
 
@@ -1596,6 +1669,7 @@ inline ExportStats export_results(const PileupEngine& engine,
         write_1pz_stub("splice_psi.1pz");
         write_1pz_stub("vdj_gene_usage.1pz");
         write_1pz_stub("intron_counts.1pz");
+        write_1pz_stub("ambiguous_counts.1pz");
         write_1pz_stub("exon_counts.1pz");
 
         // TSV stubs (header-only)
@@ -1703,6 +1777,11 @@ inline void write_stats_json(const std::string& path,
        << "  \"wrong_strand\": " << stats.wrong_strand << ",\n"
        << "  \"rrna_reads_sampled\": " << stats.rrna_reads_sampled << ",\n"
        << "  \"rrna_reads\": " << stats.rrna_reads << ",\n"
+       << "  \"molecules_spliced\": " << stats.molecules_spliced << ",\n"
+       << "  \"molecules_unspliced\": " << stats.molecules_unspliced << ",\n"
+       << "  \"molecules_ambiguous\": " << stats.molecules_ambiguous << ",\n"
+       << "  \"molecules_legacy_double\": " << stats.molecules_legacy_double << ",\n"
+       << "  \"cross_gene_intron_reads\": " << stats.cross_gene_intron_reads << ",\n"
        << "  \"pileup_time_s\": " << stats.wall_time_s << ",\n"
        << "  \"wall_time_s\": " << wall_time_s << "\n"
        << "}\n";
