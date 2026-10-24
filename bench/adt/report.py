@@ -127,7 +127,7 @@ def fig_example(gsm, libs, data, out, plt):
     M, feats, amb, outside, meta = C.load_npz(os.path.join(d, "counts.npz"))
     pan = pd.read_csv(os.path.join(d, "panel.tsv"), sep="\t", dtype=str, keep_default_na=False)
     gx = G.read_legacy(r.gse, meta["gex_gsm"], with_counts=False)
-    tot = np.asarray(M.sum(axis=0)).ravel()
+    tot = np.asarray(M.sum(axis=0)).ravel().astype(float)  # unsigned sums would wrap under negation
     fig, ax = plt.subplots(1, 3, figsize=(11, 3.3))
     o = np.argsort(-tot)
     ax[0].loglog(np.arange(1, len(o) + 1), np.maximum(tot[o], 0.8), color=INK2, lw=1)
@@ -145,14 +145,16 @@ def fig_example(gsm, libs, data, out, plt):
     D = N.dsb(X, E, iso if len(iso) else None)
     names = list(pan.name)
 
+    import re
+
     def pick(*cands):
         for c in cands:
             for i, n in enumerate(names):
-                if n.replace("Hu.", "").split(" ")[0].upper() == c:
+                if re.split(r"[ _.(]", n.replace("Hu.", "").replace("Ms.", ""))[0].upper() == c:
                     return i
         return None
 
-    pairs = [(pick("CD4"), pick("CD8", "CD8A")), (pick("CD3"), pick("CD19", "CD20"))]
+    pairs = [(pick("CD4"), pick("CD8", "CD8A")), (pick("CD45RA"), pick("CD62L", "CD197"))]
     for k, (i, j) in enumerate(pairs):
         a = ax[k + 1]
         if i is None or j is None:

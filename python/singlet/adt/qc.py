@@ -12,12 +12,15 @@ reported with the data):
 | ``cell_empty_ratio`` | median ADT UMIs of called cells / median of empty droplets: the pairing check (an ADT library that does not hold these cells has ratio ~1) | < 3 | < 10 |
 | ``frac_cells_with_adt`` | called cells with at least ``MIN_CELL_UMI`` ADT UMIs | < 0.50 | < 0.80 |
 | ``median_umi_cells`` | median ADT UMIs per called cell | < 20 | < 100 |
-| ``rna_concordance`` | median Spearman, over antibodies whose gene is measured, of CLR(ADT) vs log RNA in called cells; canonical markers listed separately | < 0.05 (when >= 3 pairs) | < 0.15 |
+| ``rna_concordance`` | median Spearman, over informative antibody-gene pairs, of CLR(ADT) vs log RNA in called cells; canonical markers listed separately | < 0.05 (when >= 2 pairs) | < 0.15 |
 | ``panel_unexplained`` | share of feature-like reads on abundant sequences that are not in the panel | > 0.20 | > 0.05 |
 | ``panel_identity`` | panels identified from the reads: share of panel reads on catalog barcodes whose reactivity excludes the organism or that a published panel used for another antibody | > 0.10 | > 0.02 |
 | ``saturation`` | 1 - molecules / usable reads | - | < 0.20 |
 | ``isotype_share_median`` | median per-cell share of isotype-control UMIs | - | > 0.10 |
 | ``hto_singlet_share`` | hashtag libraries: called cells assigned to one hashtag | < 0.30 | < 0.50 |
+
+Informative pairs: the gene is detected in 5-90% of called cells, and the antibody does not map to PTPRC (CD45, CD45RA/RB/RO,
+CD45.1/.2 recognise isoforms or allotypes of a gene every leukocyte expresses, so their RNA cannot follow them).
 
 Panel-level ``panel_detected``: antibodies whose mean in cells is at least twice their ambient-scaled mean in empty
 droplets (reported, not a rule: a tissue may simply lack an antigen).
@@ -57,6 +60,9 @@ CANONICAL = {"CD3": "CD3E", "CD4": "CD4", "CD8": "CD8A", "CD8a": "CD8A", "CD14":
              "CD26": "DPP4", "CD39": "ENTPD1", "CD57": "B3GAT1", "CD71": "TFRC", "CD95": "FAS", "CD103": "ITGAE",
              "CD137": "TNFRSF9", "CD152": "CTLA4", "CD223": "LAG3", "TIGIT": "TIGIT", "CD366": "HAVCR2"}
 CANONICAL_MARKERS = ("CD3E", "CD4", "CD8A", "MS4A1", "CD14", "CD19", "NCAM1", "FCGR3A")
+UNINFORMATIVE_GENES = ("PTPRC",)  # isoform / allotype antibodies of a ubiquitous gene
+RNA_DETECTED = (0.05, 0.90)
+MIN_PAIRS = 2
 
 
 def _rule(metric, value):
@@ -208,14 +214,19 @@ def library_qc(M, panel: pd.DataFrame, called: np.ndarray, stats: dict, ambient:
         clr = N.clr(Xc)
         conc = rna_concordance(clr, panel, exon, genes, cells)
         if len(conc):
-            out["rna_concordance"] = float(np.nanmedian(conc.rho))
-            out["rna_concordance_null"] = float(np.nanmedian(conc.rho_null))
-            out["rna_pairs"] = int(conc.rho.notna().sum())
+            gene = conc.gene_row.astype(str).str.split(r"[_|]", regex=True).str[-1].str.upper()
+            conc["informative"] = (~gene.isin(UNINFORMATIVE_GENES) & conc.frac_rna_detected.between(*RNA_DETECTED)
+                                   & conc.rho.notna())
+            inf = conc[conc.informative]
+            out["rna_concordance"] = float(np.median(inf.rho)) if len(inf) else None
+            out["rna_concordance_null"] = float(np.nanmedian(inf.rho_null)) if len(inf) else None
+            out["rna_pairs"] = int(len(inf))
+            out["rna_pairs_all"] = int(conc.rho.notna().sum())
             canon = conc[conc.gene_row.str.upper().isin(CANONICAL_MARKERS) |
                          conc.gene_row.str.contains("|".join(CANONICAL_MARKERS), regex=True)]
             out["rna_canonical"] = {r.feature: round(r.rho, 3) for r in canon.itertuples() if not np.isnan(r.rho)}
-            if out["rna_pairs"] < 3:
-                out["rna_concordance_rule"] = "not assessable (< 3 pairs)"
+            if out["rna_pairs"] < MIN_PAIRS:
+                out["rna_concordance_rule"] = f"not assessable (< {MIN_PAIRS} informative pairs)"
     # HTO
     hto_calls = None
     if len(hto_rows) >= 2 and len(cells):
@@ -230,7 +241,7 @@ def library_qc(M, panel: pd.DataFrame, called: np.ndarray, stats: dict, ambient:
     rules = {}
     for k in THRESHOLDS:
         v = out.get(k)
-        if k == "rna_concordance" and out.get("rna_pairs", 0) < 3:
+        if k == "rna_concordance" and out.get("rna_pairs", 0) < MIN_PAIRS:
             v = None
         if k == "hto_singlet_share" and len(hto_rows) < 2:
             v = None

@@ -31,12 +31,17 @@ def encode(mat: np.ndarray):
     """(n, L) byte matrix -> (codes uint64, n_invalid uint8 per row). Rows with N get code 0 and n_invalid > 0."""
     if mat.shape[1] > 32:
         raise ValueError("sequences longer than 32 nt do not fit a 64-bit code")
-    v = _LUT[mat]
-    bad = (v > 3).sum(axis=1).astype(np.uint8)
-    v = np.where(v > 3, 0, v).astype(np.uint64)
-    L = mat.shape[1]
-    shifts = (2 * np.arange(L - 1, -1, -1)).astype(np.uint64)
-    codes = (v << shifts).sum(axis=1, dtype=np.uint64) if L else np.zeros(len(mat), np.uint64)
+    # column by column: memory O(n), not O(n * L * 8) (a 90 M x 28 uint64 matrix would be 20 GB)
+    n, L = mat.shape
+    codes = np.zeros(n, dtype=np.uint64)
+    bad = np.zeros(n, dtype=np.uint8)
+    for i in range(L):
+        v = _LUT[mat[:, i]]
+        b = v > 3
+        bad += b
+        v[b] = 0
+        codes <<= np.uint64(2)
+        codes |= v.astype(np.uint64)
     return codes, bad
 
 
