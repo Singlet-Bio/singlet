@@ -46,6 +46,27 @@ endmacro()
 add_pileup_test(test_pz_reader)
 add_pileup_test(test_pz_hardening)
 
+# pz2 (v2 matrix codec). Header-only C++17, runtime ISA dispatch: deliberately built WITHOUT -march flags.
+# test_pz2_roundtrip also reads the legacy corpora under bench/compression (skips when they are absent).
+macro(add_pz2_test name)
+    add_executable(${name} ${name}.cpp)
+    target_include_directories(${name} PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/tests/cpp)
+    target_link_libraries(${name} PRIVATE ${ZSTD_LIBRARY} Threads::Threads)
+    target_compile_definitions(${name} PRIVATE PZ2_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+    target_compile_options(${name} PRIVATE -O2 -Wall -Wextra -Wno-unused-parameter -Wno-sign-compare)
+    add_test(NAME ${name} COMMAND ${name})
+endmacro()
+add_pz2_test(test_pz2_api)
+add_pz2_test(test_pz2_edge)
+add_pz2_test(test_pz2_roundtrip)
+# The corpus round trip decodes every matrix on every supported ISA in both modes: about an hour for the full corpus. Set
+# PZ2_TEST_MAX_MB=8 (environment) for a quick run; it skips quietly when bench/compression/corpus* are absent.
+set_tests_properties(test_pz2_roundtrip PROPERTIES TIMEOUT 14400)
+add_executable(test_pz2_multi_tu test_pz2_multi_tu.cpp test_pz2_multi_tu_b.cpp)   # two TUs include the header-only codec
+target_include_directories(test_pz2_multi_tu PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(test_pz2_multi_tu PRIVATE ${ZSTD_LIBRARY} Threads::Threads)
+add_test(NAME test_pz2_multi_tu COMMAND test_pz2_multi_tu)
+
 # Cell calling / QC
 add_pileup_test(test_cell_calling)
 add_pileup_test(test_barcode_rank)

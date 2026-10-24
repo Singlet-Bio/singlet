@@ -1,0 +1,10 @@
+== GRCh38-2024-A
+pack=1144091 B genes=38606 exons=310797 introns=272191 | decode(zstd+varint) 19.83 ms  index 2.76 ms  eager exon 38.10 ms (123 ns/name, 14846254 B)  eager intron 28.13 ms (103 ns/name, 14820791 B) | cold total exon+intron 88.81 ms | lazy exon 723 ns/name  lazy intron 635 ns/name | roundtrip exon=1 intron=1 lazy=1 (sink 525449780)
+== GRCm39-2024-A
+pack=1529232 B genes=78298 exons=386028 introns=307730 | decode(zstd+varint) 18.21 ms  index 3.27 ms  eager exon 30.48 ms (79 ns/name, 17737417 B)  eager intron 26.20 ms (85 ns/name, 16309735 B) | cold total exon+intron 78.17 ms | lazy exon 663 ns/name  lazy intron 529 ns/name | roundtrip exon=1 intron=1 lazy=1 (sink 508298230)
+== GRCz11
+pack=967625 B genes=32520 exons=272316 introns=239796 | decode(zstd+varint) 10.18 ms  index 1.47 ms  eager exon 17.41 ms (64 ns/name, 12870974 B)  eager intron 16.54 ms (69 ns/name, 12977738 B) | cold total exon+intron 45.59 ms | lazy exon 485 ns/name  lazy intron 447 ns/name | roundtrip exon=1 intron=1 lazy=1 (sink 521115570)
+== Mmul_10
+pack=878852 B genes=35432 exons=244671 introns=209239 | decode(zstd+varint) 8.03 ms  index 1.13 ms  eager exon 14.33 ms (59 ns/name, 11132844 B)  eager intron 14.93 ms (71 ns/name, 11003222 B) | cold total exon+intron 38.42 ms | lazy exon 374 ns/name  lazy intron 371 ns/name | roundtrip exon=1 intron=1 lazy=1 (sink 503794045)
+== mRatBN7.2
+pack=874975 B genes=30562 exons=243603 introns=213041 | decode(zstd+varint) 8.98 ms  index 1.34 ms  eager exon 15.41 ms (63 ns/name, 11280859 B)  eager intron 12.38 ms (58 ns/name, 11339984 B) | cold total exon+intron 38.11 ms | lazy exon 247 ns/name  lazy intron 226 ns/name | roundtrip exon=1 intron=1 lazy=1 (sink 511383150)

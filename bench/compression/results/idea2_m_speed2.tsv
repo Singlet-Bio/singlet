@@ -1,0 +1,2 @@
+sample	member	codec	orig_bytes	enc_bytes	ratio_vs_1pz	bits_per_nnz	nnz	m	n	enc_ms	dec_ms_min	dec_Mnnz_s	matrix_ok	file_ok	model_bytes
+pbmc_v2_typical	exon_counts.1pz	idea2_static	6451648	5270670	0.816949	16.4117	2569228	310797	15185	38914.7	26067.9	0.0985592	1	-1	0

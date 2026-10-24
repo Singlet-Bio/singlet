@@ -1,0 +1,766 @@
+id	claim	item	n_compared	n_equal	note
+h_v3_a	colsums	exon_counts	1	1	
+h_v3_a	colsums_frame_bytes_zstd155	exon_counts	1	1	
+h_v3_a	ptr	exon_counts	1	1	
+h_v3_a	perm	exon_counts	1	1	
+h_v3_a	rowcounts	exon_counts	1	1	bytes=116934
+h_v3_a	colsums	intron_counts	1	1	
+h_v3_a	colsums_frame_bytes_zstd155	intron_counts	1	1	
+h_v3_a	ptr	intron_counts	1	1	
+h_v3_a	perm	intron_counts	1	1	
+h_v3_a	rowcounts	intron_counts	1	1	bytes=125676
+h_v3_a	colsums	sj_counts	1	1	
+h_v3_a	colsums_frame_bytes_zstd155	sj_counts	1	1	
+h_v3_a	ptr	sj_counts	1	1	
+h_v3_a	perm	sj_counts	1	1	
+h_v3_a	rowcounts	sj_counts	1	1	bytes=58595
+h_v3_a	colsums	splice_psi	1	1	
+h_v3_a	colsums_frame_bytes_zstd155	splice_psi	1	1	
+h_v3_a	ptr	splice_psi	1	1	
+h_v3_a	perm	splice_psi	1	1	
+h_v3_a	rowcounts	splice_psi	1	1	bytes=36219
+h_v3_a	psi_structure	splice_psi	1	1	events=21306 nnz=891489
+h_v3_a	psi_values_rint	splice_psi	1	1	n_rint_diff=0
+h_v3_a	psi_values_trunc	splice_psi	1	0	n_trunc_diff=4452
+h_v3_a	cell_calls_file_regen	cell_calls.tsv	1	1	rows=772 all_TRUE=True methods=['star_solo'] pvals=['0.0000e+00']
+h_v3_a	cell_calls_log10	cell_calls.tsv	772	772	
+h_v3_a	cell_calls_info	called_set	1	1	"{""n_columns"": 98824, ""n_called"": 772, ""bitmap_bytes"": 12353, ""threshold_umi"": 3217, ""threshold_exceptions"": 6, ""flag_given_depth_bytes"": 76, ""threshold_exceptions_list_bytes"": 15}"
+h_v3_a	summary_field	n_cells_called	1	1	stored=772 expected=772
+h_v3_a	summary_field	estimated_cells	1	1	stored=772 expected=772
+h_v3_a	summary_field	median_umi_per_cell	1	1	stored=4554 expected=4554
+h_v3_a	summary_field	median_umis_per_cell	1	1	stored=4554 expected=4554
+h_v3_a	summary_field	median_genes_per_cell	1	1	stored=1853 expected=1853
+h_v3_a	summary_field	total_genes_detected	1	1	stored=21619 expected=21619
+h_v3_a	summary_field	fraction_reads_in_cells	1	1	stored=0.743284 expected=0.743284
+h_v3_a	summary_field	mean_reads_per_cell	1	1	stored=45043.6 expected=45043.6
+h_v3_a	summary_field	exonic_fraction	1	1	stored=0.273214 expected=0.273214
+h_v3_a	summary_field	intronic_fraction	1	1	stored=0.141749 expected=0.141749
+h_v3_a	summary_field	intergenic_fraction	1	1	stored=0.585036 expected=0.585036
+h_v3_a	summary_field	mapping_rate	1	1	stored=0.882491 expected=0.882491
+h_v3_a	summary_field	uniquely_mapped_pct	1	1	stored=88.2491 expected=88.2491
+h_v3_a	summary_field	n_input_reads	1	1	stored=30000000 expected=30000000
+h_v3_a	summary_field	total_reads	1	1	stored=30000000 expected=30000000
+h_v3_a	summary_field	n_uniquely_mapped	1	1	stored=26474736 expected=26474736
+h_v3_a	summary_field	mapped_reads	1	1	stored=26474736 expected=26474736
+h_v3_a	pileup_stats_field	exon_hits	1	1	stored=9500659 matrix=9500659
+h_v3_a	pileup_stats_field	intron_hits	1	1	stored=4929140 matrix=4929140
+h_v3_a	pileup_stats_field	sj_hits	1	1	stored=2639201 matrix=2639201
+h_v3_a	pileup_stats_field	umi_unique	1	1	stored=9500659 matrix=9500659
+h_v3_a	pileup_stats_field	n_barcodes	1	1	stored=98824 matrix=98824
+h_v3_a	provenance_field	output.exon_features	1	1	stored=310797 matrix=310797
+h_v3_a	provenance_field	output.cells	1	1	stored=772 matrix=772
+h_v3_a	provenance_field	output.total_umis	1	1	stored=9500659 matrix=9500659
+h_celseq2	colsums	exon_counts	1	1	
+h_celseq2	colsums_frame_bytes_zstd155	exon_counts	1	1	
+h_celseq2	ptr	exon_counts	1	1	
+h_celseq2	perm	exon_counts	1	1	
+h_celseq2	rowcounts	exon_counts	1	1	bytes=26550
+h_celseq2	colsums	intron_counts	1	1	
+h_celseq2	colsums_frame_bytes_zstd155	intron_counts	1	1	
+h_celseq2	ptr	intron_counts	1	1	
+h_celseq2	perm	intron_counts	1	1	
+h_celseq2	rowcounts	intron_counts	1	1	bytes=51887
+h_celseq2	colsums	sj_counts	1	1	
+h_celseq2	colsums_frame_bytes_zstd155	sj_counts	1	1	
+h_celseq2	ptr	sj_counts	1	1	
+h_celseq2	perm	sj_counts	1	1	
+h_celseq2	rowcounts	sj_counts	1	1	bytes=15671
+h_celseq2	colsums	splice_psi	1	1	
+h_celseq2	colsums_frame_bytes_zstd155	splice_psi	1	1	
+h_celseq2	ptr	splice_psi	1	1	
+h_celseq2	perm	splice_psi	1	1	
+h_celseq2	rowcounts	splice_psi	1	1	bytes=10948
+h_celseq2	psi_structure	splice_psi	1	1	events=5599 nnz=131832
+h_celseq2	psi_values_rint	splice_psi	1	1	n_rint_diff=0
+h_celseq2	psi_values_trunc	splice_psi	1	0	n_trunc_diff=1430
+h_celseq2	cell_calls_file_regen	cell_calls.tsv	1	1	rows=500 all_TRUE=True methods=['top_n_fallback'] pvals=['0.0000e+00']
+h_celseq2	cell_calls_log10	cell_calls.tsv	500	500	
+h_celseq2	cell_calls_info	called_set	1	1	"{""n_columns"": 4096, ""n_called"": 500, ""bitmap_bytes"": 512, ""threshold_umi"": 826, ""threshold_exceptions"": 1, ""flag_given_depth_bytes"": 63, ""threshold_exceptions_list_bytes"": 5}"
+h_celseq2	summary_field	n_cells_called	1	1	stored=500 expected=500
+h_celseq2	summary_field	estimated_cells	1	1	stored=500 expected=500
+h_celseq2	summary_field	median_umi_per_cell	1	1	stored=1046 expected=1046
+h_celseq2	summary_field	median_umis_per_cell	1	1	stored=1046 expected=1046
+h_celseq2	summary_field	median_genes_per_cell	1	1	stored=583 expected=583
+h_celseq2	summary_field	total_genes_detected	1	1	stored=5682 expected=5682
+h_celseq2	summary_field	fraction_reads_in_cells	1	1	stored=0.326307 expected=0.326307
+h_celseq2	summary_field	mean_reads_per_cell	1	1	stored=70027.6 expected=70027.6
+h_celseq2	summary_field	exonic_fraction	1	1	stored=0.0523273 expected=0.0523273
+h_celseq2	summary_field	intronic_fraction	1	1	stored=0.0868199 expected=0.0868199
+h_celseq2	summary_field	intergenic_fraction	1	1	stored=0.860853 expected=0.860853
+h_celseq2	summary_field	mapping_rate	1	1	stored=0.907733 expected=0.907733
+h_celseq2	summary_field	uniquely_mapped_pct	1	1	stored=90.7733 expected=90.7733
+h_celseq2	summary_field	n_input_reads	1	1	stored=30000000 expected=30000000
+h_celseq2	summary_field	total_reads	1	1	stored=30000000 expected=30000000
+h_celseq2	summary_field	n_uniquely_mapped	1	1	stored=27231988 expected=27231988
+h_celseq2	summary_field	mapped_reads	1	1	stored=27231988 expected=27231988
+h_celseq2	pileup_stats_field	exon_hits	1	1	stored=1832179 matrix=1832179
+h_celseq2	pileup_stats_field	intron_hits	1	1	stored=3039898 matrix=3039898
+h_celseq2	pileup_stats_field	sj_hits	1	1	stored=312696 matrix=312696
+h_celseq2	pileup_stats_field	umi_unique	1	1	stored=1832179 matrix=1832179
+h_celseq2	pileup_stats_field	n_barcodes	1	1	stored=4096 matrix=4096
+h_celseq2	provenance_field	output.exon_features	1	1	stored=310797 matrix=310797
+h_celseq2	provenance_field	output.cells	1	1	stored=500 matrix=500
+h_celseq2	provenance_field	output.total_umis	1	1	stored=1832179 matrix=1832179
+m_v2_a	colsums	exon_counts	1	1	
+m_v2_a	colsums_frame_bytes_zstd155	exon_counts	1	1	
+m_v2_a	ptr	exon_counts	1	1	
+m_v2_a	perm	exon_counts	1	1	
+m_v2_a	rowcounts	exon_counts	1	1	bytes=90921
+m_v2_a	colsums	intron_counts	1	1	
+m_v2_a	colsums_frame_bytes_zstd155	intron_counts	1	0	
+m_v2_a	ptr	intron_counts	1	1	
+m_v2_a	perm	intron_counts	1	1	
+m_v2_a	rowcounts	intron_counts	1	1	bytes=76882
+m_v2_a	colsums	sj_counts	1	1	
+m_v2_a	colsums_frame_bytes_zstd155	sj_counts	1	1	
+m_v2_a	ptr	sj_counts	1	1	
+m_v2_a	perm	sj_counts	1	1	
+m_v2_a	rowcounts	sj_counts	1	1	bytes=36800
+m_v2_a	colsums	splice_psi	1	1	
+m_v2_a	colsums_frame_bytes_zstd155	splice_psi	1	1	
+m_v2_a	ptr	splice_psi	1	1	
+m_v2_a	perm	splice_psi	1	1	
+m_v2_a	rowcounts	splice_psi	1	1	bytes=26914
+m_v2_a	psi_structure	splice_psi	1	1	events=17837 nnz=1789590
+m_v2_a	psi_values_rint	splice_psi	1	0	n_rint_diff=11433
+m_v2_a	psi_values_trunc	splice_psi	1	1	n_trunc_diff=0
+m_v2_a	cell_calls_file_regen	cell_calls.tsv	1	1	rows=774 all_TRUE=True methods=['star_solo'] pvals=['0.0000e+00']
+m_v2_a	cell_calls_log10	cell_calls.tsv	774	774	
+m_v2_a	cell_calls_info	called_set	1	1	"{""n_columns"": 81247, ""n_called"": 774, ""bitmap_bytes"": 10156, ""threshold_umi"": 3303, ""threshold_exceptions"": 4, ""flag_given_depth_bytes"": 36, ""threshold_exceptions_list_bytes"": 11}"
+m_v2_a	summary_field	n_cells_called	1	1	stored=774 expected=774
+m_v2_a	summary_field	estimated_cells	1	1	stored=774 expected=774
+m_v2_a	summary_field	median_umi_per_cell	1	1	stored=12361 expected=12361
+m_v2_a	summary_field	median_umis_per_cell	1	1	stored=12361 expected=12361
+m_v2_a	summary_field	median_genes_per_cell	1	1	stored=2425 expected=2425
+m_v2_a	summary_field	total_genes_detected	1	1	stored=26825 expected=26825
+m_v2_a	summary_field	fraction_reads_in_cells	1	1	stored=0.829668 expected=0.829668
+m_v2_a	summary_field	mean_reads_per_cell	1	1	stored=44261.1 expected=44261.1
+m_v2_a	summary_field	exonic_fraction	1	1	stored=0.583861 expected=0.583861
+m_v2_a	summary_field	intronic_fraction	1	1	stored=0.0542803 expected=0.0542803
+m_v2_a	summary_field	intergenic_fraction	1	1	stored=0.361859 expected=0.361859
+m_v2_a	summary_field	mapping_rate	1	1	stored=0.797844 expected=0.797844
+m_v2_a	summary_field	uniquely_mapped_pct	1	1	stored=79.7844 expected=79.7844
+m_v2_a	summary_field	n_input_reads	1	1	stored=30000000 expected=30000000
+m_v2_a	summary_field	total_reads	1	1	stored=30000000 expected=30000000
+m_v2_a	summary_field	n_uniquely_mapped	1	1	stored=23935307 expected=23935307
+m_v2_a	summary_field	mapped_reads	1	1	stored=23935307 expected=23935307
+m_v2_a	pileup_stats_field	exon_hits	1	0	stored=20001949 matrix=12999859
+m_v2_a	pileup_stats_field	intron_hits	1	0	stored=1859541 matrix=1294336
+m_v2_a	pileup_stats_field	sj_hits	1	1	stored=10765796 matrix=10765796
+m_v2_a	pileup_stats_field	umi_unique	1	0	stored=14294195 matrix=12999859
+m_v2_a	pileup_stats_field	n_barcodes	1	1	stored=81247 matrix=81247
+m_v2_a	provenance_field	output.exon_features	1	1	stored=386028 matrix=386028
+m_v2_a	provenance_field	output.cells	1	1	stored=774 matrix=774
+m_v2_a	provenance_field	output.total_umis	1	1	stored=12999859 matrix=12999859
+h_visium	colsums	exon_counts	1	1	
+h_visium	colsums_frame_bytes_zstd155	exon_counts	1	1	
+h_visium	ptr	exon_counts	1	1	
+h_visium	perm	exon_counts	1	1	
+h_visium	rowcounts	exon_counts	1	1	bytes=26523
+h_visium	colsums	intron_counts	1	1	
+h_visium	colsums_frame_bytes_zstd155	intron_counts	1	1	
+h_visium	ptr	intron_counts	1	1	
+h_visium	perm	intron_counts	1	1	
+h_visium	rowcounts	intron_counts	1	1	bytes=47238
+h_visium	colsums	sj_counts	1	1	
+h_visium	colsums_frame_bytes_zstd155	sj_counts	1	1	
+h_visium	ptr	sj_counts	1	1	
+h_visium	perm	sj_counts	1	1	
+h_visium	rowcounts	sj_counts	1	1	bytes=25793
+h_visium	colsums	splice_psi	1	1	
+h_visium	colsums_frame_bytes_zstd155	splice_psi	1	1	
+h_visium	ptr	splice_psi	1	1	
+h_visium	perm	splice_psi	1	1	
+h_visium	rowcounts	splice_psi	1	1	bytes=13024
+h_visium	psi_structure	splice_psi	1	1	events=9034 nnz=282600
+h_visium	psi_values_rint	splice_psi	1	0	n_rint_diff=191
+h_visium	psi_values_trunc	splice_psi	1	1	n_trunc_diff=0
+h_visium	cell_calls_file_regen	cell_calls.tsv	1	1	rows=4049 all_TRUE=True methods=['star_solo'] pvals=['0.0000e+00']
+h_visium	cell_calls_log10	cell_calls.tsv	4049	4049	
+h_visium	cell_calls_info	called_set	1	1	"{""n_columns"": 4991, ""n_called"": 4049, ""bitmap_bytes"": 624, ""threshold_umi"": 42, ""threshold_exceptions"": 239, ""flag_given_depth_bytes"": 117, ""threshold_exceptions_list_bytes"": 177}"
+h_visium	summary_field	n_cells_called	1	1	stored=4049 expected=4049
+h_visium	summary_field	estimated_cells	1	1	stored=4049 expected=4049
+h_visium	summary_field	median_umi_per_cell	1	1	stored=100 expected=100
+h_visium	summary_field	median_umis_per_cell	1	1	stored=100 expected=100
+h_visium	summary_field	median_genes_per_cell	1	1	stored=63 expected=63
+h_visium	summary_field	total_genes_detected	1	1	stored=14055 expected=14055
+h_visium	summary_field	fraction_reads_in_cells	1	1	stored=0.949581 expected=0.949581
+h_visium	summary_field	mean_reads_per_cell	1	1	stored=20651 expected=20651
+h_visium	summary_field	exonic_fraction	1	1	stored=0.0114529 expected=0.0114529
+h_visium	summary_field	intronic_fraction	1	1	stored=0.0154494 expected=0.0154494
+h_visium	summary_field	intergenic_fraction	1	1	stored=0.973098 expected=0.973098
+h_visium	summary_field	mapping_rate	1	1	stored=0.616692 expected=0.616692
+h_visium	summary_field	uniquely_mapped_pct	1	1	stored=61.6692 expected=61.6692
+h_visium	summary_field	n_input_reads	1	1	stored=30000000 expected=30000000
+h_visium	summary_field	total_reads	1	1	stored=30000000 expected=30000000
+h_visium	summary_field	n_uniquely_mapped	1	1	stored=18500764 expected=18500764
+h_visium	summary_field	mapped_reads	1	1	stored=18500764 expected=18500764
+h_visium	pileup_stats_field	exon_hits	1	0	stored=957646 matrix=475474
+h_visium	pileup_stats_field	intron_hits	1	0	stored=1291809 matrix=655574
+h_visium	pileup_stats_field	sj_hits	1	1	stored=720458 matrix=720458
+h_visium	pileup_stats_field	umi_unique	1	0	stored=1131048 matrix=475474
+h_visium	pileup_stats_field	n_barcodes	1	1	stored=4991 matrix=4991
+h_visium	provenance_field	output.exon_features	1	1	stored=310797 matrix=310797
+h_visium	provenance_field	output.cells	1	1	stored=4049 matrix=4049
+h_visium	provenance_field	output.total_umis	1	1	stored=475474 matrix=475474
+h_split	colsums	exon_counts	1	1	
+h_split	colsums_frame_bytes_zstd155	exon_counts	1	1	
+h_split	ptr	exon_counts	1	1	
+h_split	perm	exon_counts	1	1	
+h_split	rowcounts	exon_counts	1	1	bytes=36651
+h_split	colsums	intron_counts	1	1	
+h_split	colsums_frame_bytes_zstd155	intron_counts	1	1	
+h_split	ptr	intron_counts	1	1	
+h_split	perm	intron_counts	1	1	
+h_split	rowcounts	intron_counts	1	1	bytes=71085
+h_split	colsums	sj_counts	1	1	
+h_split	colsums_frame_bytes_zstd155	sj_counts	1	1	
+h_split	ptr	sj_counts	1	1	
+h_split	perm	sj_counts	1	1	
+h_split	rowcounts	sj_counts	1	1	bytes=24593
+h_split	colsums	splice_psi	1	1	
+h_split	colsums_frame_bytes_zstd155	splice_psi	1	1	
+h_split	ptr	splice_psi	1	1	
+h_split	perm	splice_psi	1	1	
+h_split	rowcounts	splice_psi	1	1	bytes=8339
+h_split	psi_structure	splice_psi	1	1	events=4994 nnz=32259
+h_split	psi_values_rint	splice_psi	1	1	n_rint_diff=0
+h_split	psi_values_trunc	splice_psi	1	1	n_trunc_diff=0
+h_split	cell_calls_file_regen	cell_calls.tsv	1	1	rows=424 all_TRUE=True methods=['top_n_fallback'] pvals=['0.0000e+00']
+h_split	cell_calls_log10	cell_calls.tsv	424	424	
+h_split	cell_calls_info	called_set	1	1	"{""n_columns"": 85694, ""n_called"": 424, ""bitmap_bytes"": 10712, ""threshold_umi"": 100, ""threshold_exceptions"": 0, ""flag_given_depth_bytes"": 43, ""threshold_exceptions_list_bytes"": 3}"
+h_split	summary_field	n_cells_called	1	1	stored=424 expected=424
+h_split	summary_field	estimated_cells	1	1	stored=424 expected=424
+h_split	summary_field	median_umi_per_cell	1	1	stored=130 expected=130
+h_split	summary_field	median_umis_per_cell	1	1	stored=130 expected=130
+h_split	summary_field	median_genes_per_cell	1	1	stored=48 expected=48
+h_split	summary_field	total_genes_detected	1	1	stored=8596 expected=8596
+h_split	summary_field	fraction_reads_in_cells	1	1	stored=0.178245 expected=0.178245
+h_split	summary_field	mean_reads_per_cell	1	1	stored=94507 expected=94507
+h_split	summary_field	exonic_fraction	1	1	stored=0.00808545 expected=0.00808545
+h_split	summary_field	intronic_fraction	1	1	stored=0.0161377 expected=0.0161377
+h_split	summary_field	intergenic_fraction	1	1	stored=0.975777 expected=0.975777
+h_split	summary_field	mapping_rate	1	1	stored=0.611455 expected=0.611455
+h_split	summary_field	uniquely_mapped_pct	1	1	stored=61.1455 expected=61.1455
+h_split	summary_field	n_input_reads	1	1	stored=30000000 expected=30000000
+h_split	summary_field	total_reads	1	1	stored=30000000 expected=30000000
+h_split	summary_field	n_uniquely_mapped	1	1	stored=18343664 expected=18343664
+h_split	summary_field	mapped_reads	1	1	stored=18343664 expected=18343664
+h_split	pileup_stats_field	exon_hits	1	1	stored=323992 matrix=323992
+h_split	pileup_stats_field	intron_hits	1	1	stored=646652 matrix=646652
+h_split	pileup_stats_field	sj_hits	1	1	stored=215837 matrix=215837
+h_split	pileup_stats_field	umi_unique	1	1	stored=323992 matrix=323992
+h_split	pileup_stats_field	n_barcodes	1	1	stored=85694 matrix=85694
+h_split	provenance_field	output.exon_features	1	1	stored=310797 matrix=310797
+h_split	provenance_field	output.cells	1	1	stored=424 matrix=424
+h_split	provenance_field	output.total_umis	1	1	stored=323992 matrix=323992
+h_mars	colsums	exon_counts	1	1	
+h_mars	colsums_frame_bytes_zstd155	exon_counts	1	1	
+h_mars	ptr	exon_counts	1	1	
+h_mars	perm	exon_counts	1	1	
+h_mars	rowcounts	exon_counts	1	1	bytes=111891
+h_mars	colsums	intron_counts	1	1	
+h_mars	colsums_frame_bytes_zstd155	intron_counts	1	0	
+h_mars	ptr	intron_counts	1	1	
+h_mars	perm	intron_counts	1	1	
+h_mars	rowcounts	intron_counts	1	1	bytes=186003
+h_mars	colsums	sj_counts	1	1	
+h_mars	colsums_frame_bytes_zstd155	sj_counts	1	1	
+h_mars	ptr	sj_counts	1	1	
+h_mars	perm	sj_counts	1	1	
+h_mars	rowcounts	sj_counts	1	1	bytes=971
+h_mars	colsums	splice_psi	1	1	
+h_mars	colsums_frame_bytes_zstd155	splice_psi	1	1	
+h_mars	ptr	splice_psi	1	1	
+h_mars	perm	splice_psi	1	1	
+h_mars	rowcounts	splice_psi	1	1	bytes=1106
+h_mars	psi_structure	splice_psi	1	1	events=724 nnz=3054
+h_mars	psi_values_rint	splice_psi	1	0	n_rint_diff=52
+h_mars	psi_values_trunc	splice_psi	1	1	n_trunc_diff=0
+h_mars	cell_calls_file_regen	cell_calls.tsv	1	1	rows=500 all_TRUE=True methods=['top_n_fallback'] pvals=['0.0000e+00']
+h_mars	cell_calls_log10	cell_calls.tsv	500	500	
+h_mars	cell_calls_info	called_set	1	1	"{""n_columns"": 16383, ""n_called"": 500, ""bitmap_bytes"": 2048, ""threshold_umi"": 141, ""threshold_exceptions"": 1, ""flag_given_depth_bytes"": 74, ""threshold_exceptions_list_bytes"": 5}"
+h_mars	summary_field	n_cells_called	1	1	stored=500 expected=500
+h_mars	summary_field	estimated_cells	1	1	stored=500 expected=500
+h_mars	summary_field	median_umi_per_cell	1	1	stored=176 expected=176
+h_mars	summary_field	median_umis_per_cell	1	1	stored=176 expected=176
+h_mars	summary_field	median_genes_per_cell	1	1	stored=174 expected=174
+h_mars	summary_field	total_genes_detected	1	1	stored=25731 expected=25731
+h_mars	summary_field	fraction_reads_in_cells	1	1	stored=0.12718 expected=0.12718
+h_mars	summary_field	mean_reads_per_cell	1	1	stored=64985.5 expected=64985.5
+h_mars	summary_field	exonic_fraction	1	1	stored=0.022959 expected=0.022959
+h_mars	summary_field	intronic_fraction	1	1	stored=0.211401 expected=0.211401
+h_mars	summary_field	intergenic_fraction	1	1	stored=0.76564 expected=0.76564
+h_mars	summary_field	mapping_rate	1	1	stored=0.86649 expected=0.86649
+h_mars	summary_field	uniquely_mapped_pct	1	1	stored=86.649 expected=86.649
+h_mars	summary_field	n_input_reads	1	1	stored=30000000 expected=30000000
+h_mars	summary_field	total_reads	1	1	stored=30000000 expected=30000000
+h_mars	summary_field	n_uniquely_mapped	1	1	stored=25994708 expected=25994708
+h_mars	summary_field	mapped_reads	1	1	stored=25994708 expected=25994708
+h_mars	pileup_stats_field	exon_hits	1	1	stored=746000 matrix=746000
+h_mars	pileup_stats_field	intron_hits	1	1	stored=6869005 matrix=6869005
+h_mars	pileup_stats_field	sj_hits	1	1	stored=18460 matrix=18460
+h_mars	pileup_stats_field	umi_unique	1	1	stored=746000 matrix=746000
+h_mars	pileup_stats_field	n_barcodes	1	1	stored=16383 matrix=16383
+h_mars	provenance_field	output.exon_features	1	1	stored=310797 matrix=310797
+h_mars	provenance_field	output.cells	1	1	stored=500 matrix=500
+h_mars	provenance_field	output.total_umis	1	1	stored=746000 matrix=746000
+h_dropseq	colsums	exon_counts	1	1	
+h_dropseq	colsums_frame_bytes_zstd155	exon_counts	1	1	
+h_dropseq	ptr	exon_counts	1	1	
+h_dropseq	perm	exon_counts	1	1	
+h_dropseq	rowcounts	exon_counts	1	1	bytes=63896
+h_dropseq	colsums	intron_counts	1	1	
+h_dropseq	colsums_frame_bytes_zstd155	intron_counts	1	1	
+h_dropseq	ptr	intron_counts	1	1	
+h_dropseq	perm	intron_counts	1	1	
+h_dropseq	rowcounts	intron_counts	1	1	bytes=39811
+h_dropseq	colsums	sj_counts	1	1	
+h_dropseq	colsums_frame_bytes_zstd155	sj_counts	1	1	
+h_dropseq	ptr	sj_counts	1	1	
+h_dropseq	perm	sj_counts	1	1	
+h_dropseq	rowcounts	sj_counts	1	1	bytes=38624
+h_dropseq	colsums	splice_psi	1	1	
+h_dropseq	colsums_frame_bytes_zstd155	splice_psi	1	1	
+h_dropseq	ptr	splice_psi	1	1	
+h_dropseq	perm	splice_psi	1	1	
+h_dropseq	rowcounts	splice_psi	1	1	bytes=23296
+h_dropseq	psi_structure	splice_psi	1	1	events=13974 nnz=1891467
+h_dropseq	psi_values_rint	splice_psi	1	0	n_rint_diff=27
+h_dropseq	psi_values_trunc	splice_psi	1	1	n_trunc_diff=0
+h_dropseq	cell_calls_file_regen	cell_calls.tsv	1	1	rows=408 all_TRUE=True methods=['top_n_fallback'] pvals=['0.0000e+00']
+h_dropseq	cell_calls_log10	cell_calls.tsv	408	408	
+h_dropseq	cell_calls_info	called_set	1	1	"{""n_columns"": 435682, ""n_called"": 408, ""bitmap_bytes"": 54461, ""threshold_umi"": 100, ""threshold_exceptions"": 0, ""flag_given_depth_bytes"": 62, ""threshold_exceptions_list_bytes"": 3}"
+h_dropseq	summary_field	n_cells_called	1	1	stored=408 expected=408
+h_dropseq	summary_field	estimated_cells	1	1	stored=408 expected=408
+h_dropseq	summary_field	median_umi_per_cell	1	1	stored=125 expected=125
+h_dropseq	summary_field	median_umis_per_cell	1	1	stored=125 expected=125
+h_dropseq	summary_field	median_genes_per_cell	1	1	stored=100 expected=100
+h_dropseq	summary_field	total_genes_detected	1	1	stored=5751 expected=5751
+h_dropseq	summary_field	fraction_reads_in_cells	1	1	stored=0.0180783 expected=0.0180783
+h_dropseq	summary_field	mean_reads_per_cell	1	1	stored=30579.7 expected=30579.7
+h_dropseq	summary_field	exonic_fraction	1	1	stored=0.519701 expected=0.519701
+h_dropseq	summary_field	intronic_fraction	1	1	stored=0.025121 expected=0.025121
+h_dropseq	summary_field	intergenic_fraction	1	1	stored=0.455178 expected=0.455178
+h_dropseq	summary_field	mapping_rate	1	1	stored=0.289761 expected=0.289761
+h_dropseq	summary_field	uniquely_mapped_pct	1	1	stored=28.9761 expected=28.9761
+h_dropseq	summary_field	n_input_reads	1	1	stored=30000000 expected=30000000
+h_dropseq	summary_field	total_reads	1	1	stored=30000000 expected=30000000
+h_dropseq	summary_field	n_uniquely_mapped	1	1	stored=8692831 expected=8692831
+h_dropseq	summary_field	mapped_reads	1	1	stored=8692831 expected=8692831
+h_dropseq	pileup_stats_field	exon_hits	1	0	stored=6484062 matrix=3207001
+h_dropseq	pileup_stats_field	intron_hits	1	0	stored=313423 matrix=214187
+h_dropseq	pileup_stats_field	sj_hits	1	1	stored=2603482 matrix=2603482
+h_dropseq	pileup_stats_field	umi_unique	1	0	stored=3421188 matrix=3207001
+h_dropseq	pileup_stats_field	n_barcodes	1	1	stored=435682 matrix=435682
+h_dropseq	provenance_field	output.exon_features	1	1	stored=310797 matrix=310797
+h_dropseq	provenance_field	output.cells	1	1	stored=408 matrix=408
+h_dropseq	provenance_field	output.total_umis	1	1	stored=3207001 matrix=3207001
+h_v2_a	colsums	exon_counts	1	1	
+h_v2_a	colsums_frame_bytes_zstd155	exon_counts	1	1	
+h_v2_a	ptr	exon_counts	1	1	
+h_v2_a	perm	exon_counts	1	1	
+h_v2_a	rowcounts	exon_counts	1	1	bytes=76169
+h_v2_a	colsums	intron_counts	1	1	
+h_v2_a	colsums_frame_bytes_zstd155	intron_counts	1	1	
+h_v2_a	ptr	intron_counts	1	1	
+h_v2_a	perm	intron_counts	1	1	
+h_v2_a	rowcounts	intron_counts	1	1	bytes=81152
+h_v2_a	colsums	sj_counts	1	1	
+h_v2_a	colsums_frame_bytes_zstd155	sj_counts	1	1	
+h_v2_a	ptr	sj_counts	1	1	
+h_v2_a	perm	sj_counts	1	1	
+h_v2_a	rowcounts	sj_counts	1	1	bytes=21534
+h_v2_a	colsums	splice_psi	1	1	
+h_v2_a	colsums_frame_bytes_zstd155	splice_psi	1	1	
+h_v2_a	ptr	splice_psi	1	1	
+h_v2_a	perm	splice_psi	1	1	
+h_v2_a	rowcounts	splice_psi	1	1	bytes=13550
+h_v2_a	psi_structure	splice_psi	1	1	events=7499 nnz=807919
+h_v2_a	psi_values_rint	splice_psi	1	1	n_rint_diff=0
+h_v2_a	psi_values_trunc	splice_psi	1	0	n_trunc_diff=4840
+h_v2_a	cell_calls_file_regen	cell_calls.tsv	1	1	rows=606 all_TRUE=True methods=['star_solo'] pvals=['0.0000e+00']
+h_v2_a	cell_calls_log10	cell_calls.tsv	606	606	
+h_v2_a	cell_calls_info	called_set	1	1	"{""n_columns"": 87935, ""n_called"": 606, ""bitmap_bytes"": 10992, ""threshold_umi"": 2314, ""threshold_exceptions"": 4, ""flag_given_depth_bytes"": 50, ""threshold_exceptions_list_bytes"": 11}"
+h_v2_a	summary_field	n_cells_called	1	1	stored=606 expected=606
+h_v2_a	summary_field	estimated_cells	1	1	stored=606 expected=606
+h_v2_a	summary_field	median_umi_per_cell	1	1	stored=4571 expected=4571
+h_v2_a	summary_field	median_umis_per_cell	1	1	stored=4571 expected=4571
+h_v2_a	summary_field	median_genes_per_cell	1	1	stored=1457 expected=1457
+h_v2_a	summary_field	total_genes_detected	1	1	stored=19411 expected=19411
+h_v2_a	summary_field	fraction_reads_in_cells	1	1	stored=0.585154 expected=0.585154
+h_v2_a	summary_field	mean_reads_per_cell	1	1	stored=40673.1 expected=40673.1
+h_v2_a	summary_field	exonic_fraction	1	1	stored=0.332546 expected=0.332546
+h_v2_a	summary_field	intronic_fraction	1	1	stored=0.0480818 expected=0.0480818
+h_v2_a	summary_field	intergenic_fraction	1	1	stored=0.619372 expected=0.619372
+h_v2_a	summary_field	mapping_rate	1	1	stored=0.891775 expected=0.891775
+h_v2_a	summary_field	uniquely_mapped_pct	1	1	stored=89.1775 expected=89.1775
+h_v2_a	summary_field	n_input_reads	1	1	stored=21791414 expected=21791414
+h_v2_a	summary_field	total_reads	1	1	stored=21791414 expected=21791414
+h_v2_a	summary_field	n_uniquely_mapped	1	1	stored=19433028 expected=19433028
+h_v2_a	summary_field	mapped_reads	1	1	stored=19433028 expected=19433028
+h_v2_a	pileup_stats_field	exon_hits	1	1	stored=8196548 matrix=8196548
+h_v2_a	pileup_stats_field	intron_hits	1	1	stored=1185115 matrix=1185115
+h_v2_a	pileup_stats_field	sj_hits	1	1	stored=2841565 matrix=2841565
+h_v2_a	pileup_stats_field	umi_unique	1	1	stored=8196548 matrix=8196548
+h_v2_a	pileup_stats_field	n_barcodes	1	1	stored=87935 matrix=87935
+h_v2_a	provenance_field	output.exon_features	1	1	stored=310797 matrix=310797
+h_v2_a	provenance_field	output.cells	1	1	stored=606 matrix=606
+h_v2_a	provenance_field	output.total_umis	1	1	stored=8196548 matrix=8196548
+m_visium	colsums	exon_counts	1	1	
+m_visium	colsums_frame_bytes_zstd155	exon_counts	1	1	
+m_visium	ptr	exon_counts	1	1	
+m_visium	perm	exon_counts	1	1	
+m_visium	rowcounts	exon_counts	1	1	bytes=85701
+m_visium	colsums	intron_counts	1	1	
+m_visium	colsums_frame_bytes_zstd155	intron_counts	1	1	
+m_visium	ptr	intron_counts	1	1	
+m_visium	perm	intron_counts	1	1	
+m_visium	rowcounts	intron_counts	1	1	bytes=49391
+m_visium	colsums	sj_counts	1	1	
+m_visium	colsums_frame_bytes_zstd155	sj_counts	1	0	
+m_visium	ptr	sj_counts	1	1	
+m_visium	perm	sj_counts	1	1	
+m_visium	rowcounts	sj_counts	1	1	bytes=30691
+m_visium	colsums	splice_psi	1	1	
+m_visium	colsums_frame_bytes_zstd155	splice_psi	1	1	
+m_visium	ptr	splice_psi	1	1	
+m_visium	perm	splice_psi	1	1	
+m_visium	rowcounts	splice_psi	1	1	bytes=12751
+m_visium	psi_structure	splice_psi	1	1	events=6799 nnz=675198
+m_visium	psi_values_rint	splice_psi	1	0	n_rint_diff=2068
+m_visium	psi_values_trunc	splice_psi	1	1	n_trunc_diff=0
+m_visium	cell_calls_file_regen	cell_calls.tsv	1	1	rows=3802 all_TRUE=True methods=['star_solo'] pvals=['0.0000e+00']
+m_visium	cell_calls_log10	cell_calls.tsv	3802	3802	
+m_visium	cell_calls_info	called_set	1	1	"{""n_columns"": 4991, ""n_called"": 3802, ""bitmap_bytes"": 624, ""threshold_umi"": 487, ""threshold_exceptions"": 6, ""flag_given_depth_bytes"": 39, ""threshold_exceptions_list_bytes"": 12}"
+m_visium	summary_field	n_cells_called	1	1	stored=3802 expected=3802
+m_visium	summary_field	estimated_cells	1	1	stored=3802 expected=3802
+m_visium	summary_field	median_umi_per_cell	1	1	stored=1328 expected=1328
+m_visium	summary_field	median_umis_per_cell	1	1	stored=1328 expected=1328
+m_visium	summary_field	median_genes_per_cell	1	1	stored=747 expected=747
+m_visium	summary_field	total_genes_detected	1	1	stored=24566 expected=24566
+m_visium	summary_field	fraction_reads_in_cells	1	1	stored=0.947384 expected=0.947384
+m_visium	summary_field	mean_reads_per_cell	1	1	stored=9879.59 expected=9879.59
+m_visium	summary_field	exonic_fraction	1	1	stored=0.545569 expected=0.545569
+m_visium	summary_field	intronic_fraction	1	1	stored=0.0354733 expected=0.0354733
+m_visium	summary_field	intergenic_fraction	1	1	stored=0.418958 expected=0.418958
+m_visium	summary_field	mapping_rate	1	1	stored=0.76851 expected=0.76851
+m_visium	summary_field	uniquely_mapped_pct	1	1	stored=76.851 expected=76.851
+m_visium	summary_field	n_input_reads	1	1	stored=30000000 expected=30000000
+m_visium	summary_field	total_reads	1	1	stored=30000000 expected=30000000
+m_visium	summary_field	n_uniquely_mapped	1	1	stored=23055304 expected=23055304
+m_visium	summary_field	mapped_reads	1	1	stored=23055304 expected=23055304
+m_visium	pileup_stats_field	exon_hits	1	0	stored=20492761 matrix=6011591
+m_visium	pileup_stats_field	intron_hits	1	0	stored=1332455 matrix=428295
+m_visium	pileup_stats_field	sj_hits	1	1	stored=1947230 matrix=1947230
+m_visium	pileup_stats_field	umi_unique	1	0	stored=6439886 matrix=6011591
+m_visium	pileup_stats_field	n_barcodes	1	1	stored=4991 matrix=4991
+m_visium	provenance_field	output.exon_features	1	1	stored=386028 matrix=386028
+m_visium	provenance_field	output.cells	1	1	stored=3802 matrix=3802
+m_visium	provenance_field	output.total_umis	1	1	stored=6011591 matrix=6011591
+h_arc	colsums	exon_counts	1	1	
+h_arc	colsums_frame_bytes_zstd155	exon_counts	1	1	
+h_arc	ptr	exon_counts	1	1	
+h_arc	perm	exon_counts	1	1	
+h_arc	rowcounts	exon_counts	1	1	bytes=92667
+h_arc	colsums	intron_counts	1	1	
+h_arc	colsums_frame_bytes_zstd155	intron_counts	1	0	
+h_arc	ptr	intron_counts	1	1	
+h_arc	perm	intron_counts	1	1	
+h_arc	rowcounts	intron_counts	1	1	bytes=127365
+h_arc	colsums	sj_counts	1	1	
+h_arc	colsums_frame_bytes_zstd155	sj_counts	1	1	
+h_arc	ptr	sj_counts	1	1	
+h_arc	perm	sj_counts	1	1	
+h_arc	rowcounts	sj_counts	1	1	bytes=18267
+h_arc	colsums	splice_psi	1	1	
+h_arc	colsums_frame_bytes_zstd155	splice_psi	1	1	
+h_arc	ptr	splice_psi	1	1	
+h_arc	perm	splice_psi	1	1	
+h_arc	rowcounts	splice_psi	1	1	bytes=8611
+h_arc	psi_structure	splice_psi	1	1	events=5030 nnz=38336
+h_arc	psi_values_rint	splice_psi	1	0	n_rint_diff=40
+h_arc	psi_values_trunc	splice_psi	1	1	n_trunc_diff=0
+h_arc	cell_calls_file_regen	cell_calls.tsv	1	1	rows=3414 all_TRUE=True methods=['star_solo'] pvals=['0.0000e+00']
+h_arc	cell_calls_log10	cell_calls.tsv	3414	3414	
+h_arc	cell_calls_info	called_set	1	1	"{""n_columns"": 46324, ""n_called"": 3414, ""bitmap_bytes"": 5791, ""threshold_umi"": 175, ""threshold_exceptions"": 42, ""flag_given_depth_bytes"": 52, ""threshold_exceptions_list_bytes"": 64}"
+h_arc	summary_field	n_cells_called	1	1	stored=3414 expected=3414
+h_arc	summary_field	estimated_cells	1	1	stored=3414 expected=3414
+h_arc	summary_field	median_umi_per_cell	1	1	stored=374 expected=374
+h_arc	summary_field	median_umis_per_cell	1	1	stored=374 expected=374
+h_arc	summary_field	median_genes_per_cell	1	1	stored=308 expected=308
+h_arc	summary_field	total_genes_detected	1	1	stored=22784 expected=22784
+h_arc	summary_field	fraction_reads_in_cells	1	1	stored=0.875992 expected=0.875992
+h_arc	summary_field	mean_reads_per_cell	1	1	stored=8413.62 expected=8413.62
+h_arc	summary_field	exonic_fraction	1	1	stored=0.0620122 expected=0.0620122
+h_arc	summary_field	intronic_fraction	1	1	stored=0.190223 expected=0.190223
+h_arc	summary_field	intergenic_fraction	1	1	stored=0.747764 expected=0.747764
+h_arc	summary_field	mapping_rate	1	1	stored=0.810743 expected=0.810743
+h_arc	summary_field	uniquely_mapped_pct	1	1	stored=81.0743 expected=81.0743
+h_arc	summary_field	n_input_reads	1	1	stored=30000000 expected=30000000
+h_arc	summary_field	total_reads	1	1	stored=30000000 expected=30000000
+h_arc	summary_field	n_uniquely_mapped	1	1	stored=24322293 expected=24322293
+h_arc	summary_field	mapped_reads	1	1	stored=24322293 expected=24322293
+h_arc	pileup_stats_field	exon_hits	1	1	stored=1781244 matrix=1781244
+h_arc	pileup_stats_field	intron_hits	1	1	stored=5463995 matrix=5463995
+h_arc	pileup_stats_field	sj_hits	1	1	stored=254972 matrix=254972
+h_arc	pileup_stats_field	umi_unique	1	1	stored=1781244 matrix=1781244
+h_arc	pileup_stats_field	n_barcodes	1	1	stored=46324 matrix=46324
+h_arc	provenance_field	output.exon_features	1	1	stored=310797 matrix=310797
+h_arc	provenance_field	output.cells	1	1	stored=3414 matrix=3414
+h_arc	provenance_field	output.total_umis	1	1	stored=1781244 matrix=1781244
+bn_dropseq	colsums	exon_counts	1	1	
+bn_dropseq	colsums_frame_bytes_zstd155	exon_counts	1	1	
+bn_dropseq	ptr	exon_counts	1	1	
+bn_dropseq	perm	exon_counts	1	1	
+bn_dropseq	rowcounts	exon_counts	1	1	bytes=65032
+bn_dropseq	colsums	intron_counts	1	1	
+bn_dropseq	colsums_frame_bytes_zstd155	intron_counts	1	0	
+bn_dropseq	ptr	intron_counts	1	1	
+bn_dropseq	perm	intron_counts	1	1	
+bn_dropseq	rowcounts	intron_counts	1	1	bytes=67119
+bn_dropseq	colsums	sj_counts	1	1	
+bn_dropseq	colsums_frame_bytes_zstd155	sj_counts	1	1	
+bn_dropseq	ptr	sj_counts	1	1	
+bn_dropseq	perm	sj_counts	1	1	
+bn_dropseq	rowcounts	sj_counts	1	1	bytes=20335
+bn_dropseq	colsums	splice_psi	1	1	
+bn_dropseq	colsums_frame_bytes_zstd155	splice_psi	1	1	
+bn_dropseq	ptr	splice_psi	1	1	
+bn_dropseq	perm	splice_psi	1	1	
+bn_dropseq	rowcounts	splice_psi	1	1	bytes=13358
+bn_dropseq	psi_structure	splice_psi	1	1	events=8840 nnz=500581
+bn_dropseq	psi_values_rint	splice_psi	1	0	n_rint_diff=4703
+bn_dropseq	psi_values_trunc	splice_psi	1	1	n_trunc_diff=0
+bn_dropseq	cell_calls_file_regen	cell_calls.tsv	1	1	rows=500 all_TRUE=True methods=['top_n_fallback'] pvals=['0.0000e+00']
+bn_dropseq	cell_calls_log10	cell_calls.tsv	500	500	
+bn_dropseq	cell_calls_info	called_set	1	1	"{""n_columns"": 25840, ""n_called"": 500, ""bitmap_bytes"": 3230, ""threshold_umi"": 4997, ""threshold_exceptions"": 1, ""flag_given_depth_bytes"": 89, ""threshold_exceptions_list_bytes"": 6}"
+bn_dropseq	summary_field	n_cells_called	1	1	stored=500 expected=500
+bn_dropseq	summary_field	estimated_cells	1	1	stored=500 expected=500
+bn_dropseq	summary_field	median_umi_per_cell	1	1	stored=5967 expected=5967
+bn_dropseq	summary_field	median_umis_per_cell	1	1	stored=5967 expected=5967
+bn_dropseq	summary_field	median_genes_per_cell	1	1	stored=2130 expected=2130
+bn_dropseq	summary_field	total_genes_detected	1	1	stored=15999 expected=15999
+bn_dropseq	summary_field	fraction_reads_in_cells	1	1	stored=0.331472 expected=0.331472
+bn_dropseq	summary_field	mean_reads_per_cell	1	1	stored=44324.6 expected=44324.6
+bn_dropseq	summary_field	exonic_fraction	1	1	stored=0.4351 expected=0.4351
+bn_dropseq	summary_field	intronic_fraction	1	1	stored=0.123365 expected=0.123365
+bn_dropseq	summary_field	intergenic_fraction	1	1	stored=0.441535 expected=0.441535
+bn_dropseq	summary_field	mapping_rate	1	1	stored=0.461338 expected=0.461338
+bn_dropseq	summary_field	uniquely_mapped_pct	1	1	stored=46.1338 expected=46.1338
+bn_dropseq	summary_field	n_input_reads	1	1	stored=30000000 expected=30000000
+bn_dropseq	summary_field	total_reads	1	1	stored=30000000 expected=30000000
+bn_dropseq	summary_field	n_uniquely_mapped	1	1	stored=13840133 expected=13840133
+bn_dropseq	summary_field	mapped_reads	1	1	stored=13840133 expected=13840133
+bn_dropseq	pileup_stats_field	exon_hits	1	1	stored=9642827 matrix=9642827
+bn_dropseq	pileup_stats_field	intron_hits	1	1	stored=2734050 matrix=2734050
+bn_dropseq	pileup_stats_field	sj_hits	1	1	stored=3137002 matrix=3137002
+bn_dropseq	pileup_stats_field	umi_unique	1	1	stored=9642827 matrix=9642827
+bn_dropseq	pileup_stats_field	n_barcodes	1	1	stored=25840 matrix=25840
+bn_dropseq	provenance_field	output.exon_features	1	1	stored=696825 matrix=696825
+bn_dropseq	provenance_field	output.cells	1	1	stored=500 matrix=500
+bn_dropseq	provenance_field	output.total_umis	1	1	stored=9642827 matrix=9642827
+z_v3_a	colsums	exon_counts	1	1	
+z_v3_a	colsums_frame_bytes_zstd155	exon_counts	1	1	
+z_v3_a	ptr	exon_counts	1	1	
+z_v3_a	perm	exon_counts	1	1	
+z_v3_a	rowcounts	exon_counts	1	1	bytes=98306
+z_v3_a	colsums	intron_counts	1	1	
+z_v3_a	colsums_frame_bytes_zstd155	intron_counts	1	0	
+z_v3_a	ptr	intron_counts	1	1	
+z_v3_a	perm	intron_counts	1	1	
+z_v3_a	rowcounts	intron_counts	1	1	bytes=97206
+z_v3_a	colsums	sj_counts	1	1	
+z_v3_a	colsums_frame_bytes_zstd155	sj_counts	1	1	
+z_v3_a	ptr	sj_counts	1	1	
+z_v3_a	perm	sj_counts	1	1	
+z_v3_a	rowcounts	sj_counts	1	1	bytes=54885
+z_v3_a	colsums	splice_psi	1	1	
+z_v3_a	colsums_frame_bytes_zstd155	splice_psi	1	1	
+z_v3_a	ptr	splice_psi	1	1	
+z_v3_a	perm	splice_psi	1	1	
+z_v3_a	rowcounts	splice_psi	1	1	bytes=21355
+z_v3_a	psi_structure	splice_psi	1	1	events=11721 nnz=503495
+z_v3_a	psi_values_rint	splice_psi	1	0	n_rint_diff=834
+z_v3_a	psi_values_trunc	splice_psi	1	1	n_trunc_diff=0
+z_v3_a	cell_calls_file_regen	cell_calls.tsv	1	1	rows=834 all_TRUE=True methods=['star_solo'] pvals=['0.0000e+00']
+z_v3_a	cell_calls_log10	cell_calls.tsv	834	834	
+z_v3_a	cell_calls_info	called_set	1	1	"{""n_columns"": 98959, ""n_called"": 834, ""bitmap_bytes"": 12370, ""threshold_umi"": 823, ""threshold_exceptions"": 11, ""flag_given_depth_bytes"": 33, ""threshold_exceptions_list_bytes"": 24}"
+z_v3_a	summary_field	n_cells_called	1	1	stored=834 expected=834
+z_v3_a	summary_field	estimated_cells	1	1	stored=834 expected=834
+z_v3_a	summary_field	median_umi_per_cell	1	1	stored=3062 expected=3062
+z_v3_a	summary_field	median_umis_per_cell	1	1	stored=3062 expected=3062
+z_v3_a	summary_field	median_genes_per_cell	1	1	stored=1314 expected=1314
+z_v3_a	summary_field	total_genes_detected	1	1	stored=19617 expected=19617
+z_v3_a	summary_field	fraction_reads_in_cells	1	1	stored=0.543694 expected=0.543694
+z_v3_a	summary_field	mean_reads_per_cell	1	1	stored=51222.9 expected=51222.9
+z_v3_a	summary_field	exonic_fraction	1	1	stored=0.259959 expected=0.259959
+z_v3_a	summary_field	intronic_fraction	1	1	stored=0.137754 expected=0.137754
+z_v3_a	summary_field	intergenic_fraction	1	1	stored=0.602286 expected=0.602286
+z_v3_a	summary_field	mapping_rate	1	1	stored=0.72954 expected=0.72954
+z_v3_a	summary_field	uniquely_mapped_pct	1	1	stored=72.954 expected=72.954
+z_v3_a	summary_field	n_input_reads	1	1	stored=30000000 expected=30000000
+z_v3_a	summary_field	total_reads	1	1	stored=30000000 expected=30000000
+z_v3_a	summary_field	n_uniquely_mapped	1	1	stored=21886206 expected=21886206
+z_v3_a	summary_field	mapped_reads	1	1	stored=21886206 expected=21886206
+z_v3_a	pileup_stats_field	exon_hits	1	0	stored=11105429 matrix=5117595
+z_v3_a	pileup_stats_field	intron_hits	1	0	stored=5884843 matrix=2974471
+z_v3_a	pileup_stats_field	sj_hits	1	1	stored=1850131 matrix=1850131
+z_v3_a	pileup_stats_field	umi_unique	1	0	stored=8092066 matrix=5117595
+z_v3_a	pileup_stats_field	n_barcodes	1	1	stored=98959 matrix=98959
+z_v3_a	provenance_field	output.exon_features	1	1	stored=272316 matrix=272316
+z_v3_a	provenance_field	output.cells	1	1	stored=834 matrix=834
+z_v3_a	provenance_field	output.total_umis	1	1	stored=5117595 matrix=5117595
+r_v3	colsums	exon_counts	1	1	
+r_v3	colsums_frame_bytes_zstd155	exon_counts	1	1	
+r_v3	ptr	exon_counts	1	1	
+r_v3	perm	exon_counts	1	1	
+r_v3	rowcounts	exon_counts	1	1	bytes=66896
+r_v3	colsums	intron_counts	1	1	
+r_v3	colsums_frame_bytes_zstd155	intron_counts	1	0	
+r_v3	ptr	intron_counts	1	1	
+r_v3	perm	intron_counts	1	1	
+r_v3	rowcounts	intron_counts	1	1	bytes=42648
+r_v3	colsums	sj_counts	1	1	
+r_v3	colsums_frame_bytes_zstd155	sj_counts	1	0	
+r_v3	ptr	sj_counts	1	1	
+r_v3	perm	sj_counts	1	1	
+r_v3	rowcounts	sj_counts	1	1	bytes=12039
+r_v3	colsums	splice_psi	1	1	
+r_v3	colsums_frame_bytes_zstd155	splice_psi	1	1	
+r_v3	ptr	splice_psi	1	1	
+r_v3	perm	splice_psi	1	1	
+r_v3	rowcounts	splice_psi	1	1	bytes=2830
+r_v3	psi_structure	splice_psi	1	1	events=1217 nnz=72493
+r_v3	psi_values_rint	splice_psi	1	0	n_rint_diff=14
+r_v3	psi_values_trunc	splice_psi	1	1	n_trunc_diff=0
+r_v3	cell_calls_file_regen	cell_calls.tsv	1	1	rows=10147 all_TRUE=True methods=['star_solo'] pvals=['0.0000e+00']
+r_v3	cell_calls_log10	cell_calls.tsv	10147	10147	
+r_v3	cell_calls_info	called_set	1	1	"{""n_columns"": 74304, ""n_called"": 10147, ""bitmap_bytes"": 9288, ""threshold_umi"": 63, ""threshold_exceptions"": 400, ""flag_given_depth_bytes"": 311, ""threshold_exceptions_list_bytes"": 452}"
+r_v3	summary_field	n_cells_called	1	1	stored=10147 expected=10147
+r_v3	summary_field	estimated_cells	1	1	stored=10147 expected=10147
+r_v3	summary_field	median_umi_per_cell	1	1	stored=94 expected=94
+r_v3	summary_field	median_umis_per_cell	1	1	stored=94 expected=94
+r_v3	summary_field	median_genes_per_cell	1	1	stored=77 expected=77
+r_v3	summary_field	total_genes_detected	1	1	stored=16059 expected=16059
+r_v3	summary_field	fraction_reads_in_cells	1	1	stored=0.469956 expected=0.469956
+r_v3	summary_field	mean_reads_per_cell	1	1	stored=1040.28 expected=1040.28
+r_v3	summary_field	exonic_fraction	1	1	stored=0.265437 expected=0.265437
+r_v3	summary_field	intronic_fraction	1	1	stored=0.0326639 expected=0.0326639
+r_v3	summary_field	intergenic_fraction	1	1	stored=0.701899 expected=0.701899
+r_v3	summary_field	mapping_rate	1	1	stored=0.236872 expected=0.236872
+r_v3	summary_field	uniquely_mapped_pct	1	1	stored=23.6872 expected=23.6872
+r_v3	summary_field	n_input_reads	1	1	stored=16391174 expected=16391174
+r_v3	summary_field	total_reads	1	1	stored=16391174 expected=16391174
+r_v3	summary_field	n_uniquely_mapped	1	1	stored=3882614 expected=3882614
+r_v3	summary_field	mapped_reads	1	1	stored=3882614 expected=3882614
+r_v3	pileup_stats_field	exon_hits	1	0	stored=2801866 matrix=2759737
+r_v3	pileup_stats_field	intron_hits	1	0	stored=344790 matrix=341906
+r_v3	pileup_stats_field	sj_hits	1	1	stored=364230 matrix=364230
+r_v3	pileup_stats_field	umi_unique	1	0	stored=3101643 matrix=2759737
+r_v3	pileup_stats_field	n_barcodes	1	1	stored=74304 matrix=74304
+r_v3	provenance_field	output.exon_features	1	1	stored=243603 matrix=243603
+r_v3	provenance_field	output.cells	1	1	stored=10147 matrix=10147
+r_v3	provenance_field	output.total_umis	1	1	stored=2759737 matrix=2759737
+h_bd	colsums	exon_counts	1	1	
+h_bd	colsums_frame_bytes_zstd155	exon_counts	1	0	
+h_bd	ptr	exon_counts	1	1	
+h_bd	perm	exon_counts	1	1	
+h_bd	rowcounts	exon_counts	1	1	bytes=114277
+h_bd	colsums	intron_counts	1	1	
+h_bd	colsums_frame_bytes_zstd155	intron_counts	1	0	
+h_bd	ptr	intron_counts	1	1	
+h_bd	perm	intron_counts	1	1	
+h_bd	rowcounts	intron_counts	1	1	bytes=81652
+h_bd	colsums	sj_counts	1	1	
+h_bd	colsums_frame_bytes_zstd155	sj_counts	1	0	
+h_bd	ptr	sj_counts	1	1	
+h_bd	perm	sj_counts	1	1	
+h_bd	rowcounts	sj_counts	1	1	bytes=84960
+h_bd	colsums	splice_psi	1	1	
+h_bd	colsums_frame_bytes_zstd155	splice_psi	1	0	
+h_bd	ptr	splice_psi	1	1	
+h_bd	perm	splice_psi	1	1	
+h_bd	rowcounts	splice_psi	1	1	bytes=52968
+h_bd	psi_structure	splice_psi	1	1	events=35503 nnz=1099500
+h_bd	psi_values_rint	splice_psi	1	0	n_rint_diff=1219
+h_bd	psi_values_trunc	splice_psi	1	1	n_trunc_diff=0
+h_bd	cell_calls_file_regen	cell_calls.tsv	1	0	rows=4541 all_TRUE=False methods=['emptydrops'] pvals=['1.0000e+00', '1.0019e-01', '1.0111e-02', '1.0155e-03', '1.0218e-01', '1.0243e-02', '1.0252e-01', '1.0262e-01', '1.0375e-02', '1.0397e-01', '1.0406e-01', '1.0453e-01', '1.0503e-02', '1.0563e-01', '1.0610e-01', '1.0791e-01', '1.0950e-01', '1.1038e-02', '1.1170e-02', '1.1196e-01', '1.1301e-02', '1.1432e-02', '1.1528e-03', '1.1563e-02', '1.1684e-02', '1.1775e-01', '1.1815e-02', '1.2058e-01', '1.2079e-02', '1.2092e-01', '1.2113e-01', '1.2135e-01', '1.2243e-01', '1.2302e-01', '1.2348e-01', '1.2370e-01', '1.2613e-02', '1.2640e-01', '1.2648e-01', '1.2728e-01', '1.2739e-02', '1.2746e-01', '1.2830e-01', '1.2866e-02', '1.2888e-01', '1.2903e-03', '1.2922e-01', '1.2931e-01', '1.2996e-02', '1.3038e-01', '1.3114e-02', '1.3183e-01', '1.3242e-01', '1.3259e-01', '1.3280e-01', '1.3326e-01', '1.3360e-01', '1.3374e-02', '1.3541e-01', '1.3599e-01', '1.3620e-01', '1.3634e-02', '1.3654e-01', '1.3763e-02', '1.3893e-02', '1.3983e-01', '1.4022e-02', '1.4078e-01', '1.4281e-02', '1.4314e-03', '1.4333e-01', '1.4406e-02', '1.4551e-01', '1.4802e-02', '1.4856e-01', '1.5064e-02', '1.5086e-01', '1.5267e-01', '1.5275e-01', '1.5326e-02', '1.5357e-01', '1.5402e-01', '1.5410e-01', '1.5455e-02', '1.5492e-01', '1.5660e-01', '1.5668e-01', '1.5682e-03', '1.5744e-04', '1.5762e-01', '1.5983e-02', '1.6041e-01', '1.6245e-02', '1.6298e-01', '1.6373e-02', '1.6527e-01', '1.6571e-01', '1.6702e-01', '1.6768e-02', '1.6891e-02', '1.7027e-03', '1.7029e-01', '1.7110e-01', '1.7240e-01', '1.7468e-01', '1.7525e-01', '1.7545e-02', '1.7655e-01', '1.7673e-02', '1.7773e-01', '1.7934e-02', '1.8061e-02', '1.8074e-01', '1.8143e-01', '1.8272e-01', '1.8383e-03', '1.8414e-01', '1.8532e-01', '1.8587e-02', '1.8600e-01', '1.8705e-01', '1.8709e-02', '1.8719e-01', '1.8739e-01', '1.8746e-01', '1.8778e-01', '1.8919e-01', '1.8963e-02', '1.8975e-01', '1.9006e-01', '1.9085e-02', '1.9245e-01', '1.9325e-01', '1.9344e-02', '1.9406e-01', '1.9412e-01', '1.9553e-01', '1.9597e-01', '1.9736e-02', '1.9766e-03', '1.9774e-01', '1.9862e-02', '1.9989e-02', '2.0116e-02', '2.0122e-01', '2.0275e-01', '2.0306e-01', '2.0501e-02', '2.0532e-01', '2.0684e-01', '2.0715e-01', '2.0734e-01', '2.0759e-02', '2.0874e-01', '2.0893e-01', '2.1011e-02', '2.1125e-03', '2.1137e-02', '2.1191e-01', '2.1204e-01', '2.1210e-01', '2.1263e-02', '2.1302e-01', '2.1308e-01', '2.1448e-01', '2.1527e-01', '2.1647e-02', '2.1703e-01', '2.1721e-01', '2.1898e-02', '2.2011e-02', '2.2018e-01', '2.2194e-01', '2.2261e-02', '2.2374e-02', '2.2485e-03', '2.2576e-01', '2.2618e-01', '2.2630e-02', '2.2733e-01', '2.2848e-01', '2.2854e-01', '2.3005e-01', '2.3011e-01', '2.3041e-01', '2.3156e-01', '2.3270e-01', '2.3275e-02', '2.3276e-01', '2.3306e-01', '2.3393e-02', '2.3445e-01', '2.3499e-01', '2.3854e-01', '2.3883e-03', '2.3908e-01', '2.3911e-02', '2.4143e-01', '2.4161e-01', '2.4239e-01', '2.4293e-01', '2.4430e-02', '2.4554e-02', '2.4678e-02', '2.4795e-02', '2.4804e-01', '2.4919e-02', '2.5002e-01', '2.5031e-01', '2.5097e-01', '2.5272e-03', '2.5331e-01', '2.5396e-01', '2.5414e-01', '2.5436e-02', '2.5556e-01', '2.5560e-02', '2.5598e-01', '2.5663e-01', '2.5684e-02', '2.5716e-01', '2.5973e-01', '2.6051e-01', '2.6284e-01', '2.6301e-01', '2.6390e-01', '2.6419e-01', '2.6460e-01', '2.6594e-02', '2.6608e-01', '2.6625e-01', '2.6660e-03', '2.6717e-02', '2.6989e-01', '2.7006e-01', '2.7071e-01', '2.7183e-01', '2.7224e-01', '2.7225e-02', '2.7229e-01', '2.7293e-01', '2.7334e-01', '2.7339e-01', '2.7391e-01', '2.7456e-01', '2.7473e-01', '2.7479e-02', '2.7632e-01', '2.7661e-01', '2.7689e-01', '2.7766e-01', '2.7976e-03', '2.8033e-01', '2.8073e-01', '2.8149e-01', '2.8237e-01', '2.8256e-02', '2.8384e-01', '2.8623e-02', '2.8746e-02', '2.8913e-01', '2.8991e-02', '2.9143e-01', '2.9207e-01', '2.9223e-01', '2.9227e-01', '2.9348e-03', '2.9374e-02', '2.9487e-02', '3.0001e-02', '3.0159e-01', '3.0163e-01', '3.0180e-04', '3.0253e-02', '3.0393e-01', '3.0433e-01', '3.0437e-01', '3.0452e-01', '3.0635e-02', '3.0689e-03', '3.1109e-01', '3.1220e-01', '3.1865e-01', '3.1880e-01', '3.1930e-02', '3.2074e-03', '3.2156e-01', '3.2409e-01', '3.2412e-01', '3.2937e-01', '3.2964e-01', '3.3263e-01', '3.3344e-02', '3.3427e-03', '3.3492e-01', '3.3595e-02', '3.3696e-01', '3.3716e-02', '3.3966e-02', '3.4087e-02', '3.4172e-01', '3.4197e-02', '3.4625e-01', '3.4663e-01', '3.4799e-03', '3.4891e-01', '3.5154e-01', '3.5334e-01', '3.5348e-01', '3.5357e-02', '3.5457e-01', '3.5727e-02', '3.5966e-02', '3.5968e-01', '3.6088e-01', '3.6124e-03', '3.6362e-01', '3.6530e-01', '3.7087e-01', '3.7232e-02', '3.7478e-01', '3.7479e-03', '3.7481e-02', '3.7527e-01', '3.7565e-01', '3.7719e-02', '3.7720e-01', '3.7838e-02', '3.8136e-01', '3.8150e-01', '3.8216e-02', '3.8352e-01', '3.8684e-01', '3.8701e-02', '3.8808e-02', '3.8815e-01', '3.8856e-03', '3.8934e-01', '3.9159e-01', '3.9231e-01', '3.9739e-01', '3.9916e-01', '3.9965e-01', '4.0090e-02', '4.0170e-03', '4.0319e-01', '4.0414e-01', '4.0556e-01', '4.0675e-01', '4.0758e-01', '4.0972e-02', '4.0982e-01', '4.1241e-01', '4.1504e-03', '4.1934e-01', '4.1959e-01', '4.2123e-02', '4.2288e-01', '4.2453e-01', '4.2465e-01', '4.2513e-01', '4.2584e-01', '4.2757e-02', '4.2809e-03', '4.2842e-01', '4.2866e-01', '4.3262e-02', '4.3311e-01', '4.3347e-01', '4.3593e-01', '4.3722e-01', '4.3886e-01', '4.3895e-02', '4.4012e-02', '4.4177e-03', '4.4588e-01', '4.4644e-02', '4.4705e-01', '4.4867e-04', '4.4892e-01', '4.5433e-03', '4.5663e-02', '4.5697e-01', '4.5779e-02', '4.5919e-01', '4.6024e-01', '4.6339e-01', '4.6443e-01', '4.6467e-01', '4.6540e-02', '4.6618e-01', '4.6656e-02', '4.6753e-03', '4.7119e-01', '4.7158e-02', '4.7223e-01', '4.7646e-02', '4.7665e-01', '4.7890e-02', '4.7967e-01', '4.8114e-03', '4.8409e-01', '4.8513e-01', '4.8617e-01', '4.8907e-01', '4.8952e-01', '4.9035e-02', '4.9056e-01', '4.9150e-02', '4.9217e-01', '4.9274e-01', '4.9393e-02', '4.9636e-02', '4.9761e-01', '4.9879e-02', '5.0341e-01', '5.0363e-01', '5.0365e-02', '5.0465e-02', '5.0547e-01', '5.0662e-01', '5.0801e-03', '5.0974e-01', '5.1092e-02', '5.1216e-01', '5.1330e-01', '5.1335e-02', '5.1398e-01', '5.1524e-01', '5.1577e-02', '5.1616e-01', '5.1660e-01', '5.1676e-02', '5.1867e-01', '5.1923e-01', '5.2107e-01', '5.2143e-03', '5.2151e-01', '5.2184e-01', '5.2402e-01', '5.2609e-01', '5.2653e-01', '5.2684e-01', '5.2687e-02', '5.2856e-01', '5.2928e-02', '5.3041e-02', '5.3154e-02', '5.3253e-02', '5.3316e-01', '5.3350e-02', '5.3381e-01', '5.3483e-03', '5.3587e-01', '5.4173e-01', '5.4359e-02', '5.4456e-02', '5.4568e-02', '5.4609e-01', '5.4616e-01', '5.4809e-01', '5.4830e-01', '5.4838e-03', '5.5192e-02', '5.5559e-02', '5.5599e-01', '5.5799e-02', '5.5896e-01', '5.6066e-01', '5.6191e-03', '5.6397e-01', '5.6533e-02', '5.6567e-01', '5.7185e-01', '5.7260e-01', '5.7267e-02', '5.7418e-01', '5.7461e-01', '5.7475e-03', '5.7506e-02', '5.7699e-01', '5.7707e-01', '5.7716e-01', '5.7988e-01', '5.8031e-01', '5.8127e-02', '5.8234e-01', '5.8323e-01', '5.8493e-02', '5.8604e-02', '5.8641e-01', '5.8660e-01', '5.8808e-03', '5.8955e-01', '5.9102e-04', '5.9352e-02', '5.9444e-01', '5.9590e-02', '5.9933e-01', '5.9955e-02', '6.0158e-03', '6.0228e-01', '6.0403e-01', '6.0457e-01', '6.0558e-02', '6.0865e-01', '6.1147e-01', '6.1488e-03', '6.1498e-01', '6.1688e-01', '6.1878e-01', '6.1954e-01', '6.2056e-01', '6.2200e-01', '6.2304e-02', '6.2435e-01', '6.2522e-01', '6.2541e-02', '6.2644e-01', '6.2798e-03', '6.2904e-02', '6.3141e-02', '6.3255e-01', '6.3273e-01', '6.3679e-01', '6.3869e-01', '6.4092e-01', '6.4139e-02', '6.4144e-03', '6.4629e-02', '6.4865e-02', '6.4896e-01', '6.5101e-02', '6.5130e-01', '6.5467e-01', '6.5469e-03', '6.5590e-02', '6.5698e-02', '6.5917e-01', '6.5957e-01', '6.5964e-01', '6.6027e-01', '6.6060e-02', '6.6442e-01', '6.6676e-02', '6.6813e-03', '6.7165e-01', '6.7443e-01', '6.7631e-01', '6.8051e-02', '6.8095e-03', '6.8125e-01', '6.8142e-01', '6.8159e-01', '6.8324e-01', '6.8539e-02', '6.8773e-02', '6.9056e-01', '6.9118e-01', '6.9180e-01', '6.9333e-01', '6.9452e-01', '7.0148e-01', '7.0256e-01', '7.0521e-01', '7.0780e-02', '7.0797e-03', '7.0866e-01', '7.1482e-01', '7.1816e-01', '7.2103e-01', '7.2115e-03', '7.2406e-02', '7.2512e-02', '7.2809e-01', '7.3251e-02', '7.3353e-04', '7.3410e-03', '7.3504e-01', '7.3802e-01', '7.4010e-01', '7.4025e-01', '7.4369e-02', '7.4475e-02', '7.4696e-01', '7.4707e-02', '7.4725e-03', '7.4727e-01', '7.4731e-01', '7.4825e-01', '7.4863e-01', '7.4924e-01', '7.5548e-01', '7.5619e-01', '7.5702e-01', '7.5920e-01', '7.5980e-01', '7.6015e-03', '7.6029e-01', '7.6076e-02', '7.6156e-01', '7.6235e-01', '7.6385e-01', '7.6434e-02', '7.6456e-01', '7.6875e-01', '7.6918e-02', '7.6984e-01', '7.7780e-02', '7.7885e-02', '7.8620e-02', '7.8706e-03', '7.8841e-01', '7.9103e-02', '7.9294e-01', '7.9333e-02', '7.9356e-01', '7.9392e-01', '7.9518e-01', '7.9690e-02', '8.0004e-01', '8.0085e-01', '8.0124e-01', '8.0384e-01', '8.0421e-01', '8.0468e-01', '8.0527e-01', '8.0574e-01', '8.1054e-02', '8.1103e-01', '8.1275e-03', '8.1410e-02', '8.1466e-01', '8.1513e-02', '8.1616e-02', '8.1770e-01', '8.1918e-01', '8.2177e-01', '8.3105e-02', '8.3208e-01', '8.3208e-02', '8.3458e-01', '8.3638e-01', '8.3707e-01', '8.3854e-01', '8.4224e-01', '8.5198e-02', '8.5313e-03', '8.5353e-01', '8.5499e-01', '8.5512e-01', '8.5625e-01', '8.5737e-01', '8.5929e-02', '8.6017e-01', '8.6175e-01', '8.6220e-01', '8.6255e-01', '8.6356e-01', '8.6535e-02', '8.6547e-01', '8.6590e-03', '8.6904e-01', '8.6983e-01', '8.7006e-01', '8.7029e-01', '8.7141e-01', '8.7206e-04', '8.7209e-01', '8.7516e-02', '8.7554e-01', '8.7744e-02', '8.7916e-03', '8.8033e-01', '8.8078e-01', '8.8096e-02', '8.8256e-01', '8.8449e-02', '8.8457e-01', '8.8676e-02', '8.8713e-01', '8.8724e-01', '8.8969e-01', '8.9047e-01', '8.9153e-02', '8.9203e-01', '8.9216e-03', '8.9281e-01', '8.9514e-01', '8.9669e-01', '8.9836e-01', '8.9847e-01', '8.9991e-01', '9.0246e-01', '9.0512e-01', '9.0579e-01', '9.0678e-01', '9.0756e-01', '9.0789e-01', '9.1263e-02', '9.1264e-01', '9.1529e-01', '9.1892e-03', '9.1894e-01', '9.2170e-01', '9.2247e-01', '9.2291e-01', '9.2345e-01', '9.2367e-02', '9.2621e-01', '9.2731e-01', '9.3017e-01', '9.3171e-01', '9.3313e-01', '9.3335e-01', '9.3665e-01', '9.4082e-01', '9.4170e-01', '9.4576e-01', '9.4752e-01', '9.4827e-01', '9.4950e-02', '9.5300e-02', '9.5399e-02', '9.5596e-01', '9.5638e-01', '9.5749e-02', '9.5780e-01', '9.5823e-01', '9.5918e-03', '9.6140e-01', '9.6524e-01', '9.6533e-01', '9.6573e-02', '9.6741e-01', '9.6904e-01', '9.7182e-03', '9.7429e-01', '9.7449e-01', '9.7470e-01', '9.7677e-01', '9.7730e-01', '9.8035e-01', '9.8207e-01', '9.8322e-01', '9.8441e-01', '9.8473e-03', '9.8669e-01', '9.8678e-01', '9.8698e-01', '9.8734e-01', '9.8784e-01', '9.8800e-02', '9.8837e-01', '9.8988e-01', '9.9019e-01', '9.9037e-01', '9.9274e-02', '9.9497e-02', '9.9515e-01', '9.9567e-01', '9.9641e-01', '9.9792e-03', '9.9844e-02', '9.9846e-01', '9.9862e-01']
+h_bd	cell_calls_log10	cell_calls.tsv	4541	4541	
+h_bd	cell_calls_info	called_set	1	1	"{""n_columns"": 60922, ""n_called"": 4541, ""bitmap_bytes"": 7616, ""threshold_umi"": 500, ""threshold_exceptions"": 0, ""flag_given_depth_bytes"": 63, ""threshold_exceptions_list_bytes"": 3}"
+h_bd	summary_field	n_cells_called	1	0	stored=3367 expected=4541
+h_bd	summary_field	estimated_cells	1	0	stored=3367 expected=4541
+h_bd	summary_field	median_umi_per_cell	1	0	stored=1013 expected=952
+h_bd	summary_field	median_umis_per_cell	1	0	stored=1013 expected=952
+h_bd	summary_field	median_genes_per_cell	1	0	stored=667 expected=616
+h_bd	summary_field	total_genes_detected	1	0	stored=20437 expected=20881
+h_bd	summary_field	fraction_reads_in_cells	1	0	stored=0.585659 expected=0.742459
+h_bd	summary_field	mean_reads_per_cell	1	0	stored=9058.19 expected=6716.35
+h_bd	summary_field	exonic_fraction	1	1	stored=0.234386 expected=0.234386
+h_bd	summary_field	intronic_fraction	1	1	stored=0.0285975 expected=0.0285975
+h_bd	summary_field	intergenic_fraction	1	1	stored=0.737016 expected=0.737016
+h_bd	summary_field	mapping_rate	1	1	stored=0.741331 expected=0.741331
+h_bd	summary_field	uniquely_mapped_pct	1	1	stored=74.1331 expected=74.1331
+h_bd	summary_field	n_input_reads	1	1	stored=30000000 expected=30000000
+h_bd	summary_field	total_reads	1	1	stored=30000000 expected=30000000
+h_bd	summary_field	n_uniquely_mapped	1	1	stored=22239931 expected=22239931
+h_bd	summary_field	mapped_reads	1	1	stored=22239931 expected=22239931
+h_bd	pileup_stats_field	exon_hits	1	1	stored=7148527 matrix=7148527
+h_bd	pileup_stats_field	intron_hits	1	1	stored=872192 matrix=872192
+h_bd	pileup_stats_field	sj_hits	1	1	stored=2367813 matrix=2367813
+h_bd	pileup_stats_field	umi_unique	1	1	stored=7148527 matrix=7148527
+h_bd	pileup_stats_field	n_barcodes	1	1	stored=60922 matrix=60922
+h_bd	provenance_field	output.exon_features	1	1	stored=310797 matrix=310797
+h_bd	provenance_field	output.cells	1	0	stored=3367 matrix=4541
+h_bd	provenance_field	output.total_umis	1	1	stored=7148527 matrix=7148527
+h_indrop	colsums	exon_counts	1	1	
+h_indrop	colsums_frame_bytes_zstd155	exon_counts	1	1	
+h_indrop	ptr	exon_counts	1	1	
+h_indrop	perm	exon_counts	1	1	
+h_indrop	rowcounts	exon_counts	1	1	bytes=49737
+h_indrop	colsums	intron_counts	1	1	
+h_indrop	colsums_frame_bytes_zstd155	intron_counts	1	0	
+h_indrop	ptr	intron_counts	1	1	
+h_indrop	perm	intron_counts	1	1	
+h_indrop	rowcounts	intron_counts	1	1	bytes=60051
+h_indrop	colsums	sj_counts	1	1	
+h_indrop	colsums_frame_bytes_zstd155	sj_counts	1	1	
+h_indrop	ptr	sj_counts	1	1	
+h_indrop	perm	sj_counts	1	1	
+h_indrop	rowcounts	sj_counts	1	1	bytes=14813
+h_indrop	colsums	splice_psi	1	1	
+h_indrop	colsums_frame_bytes_zstd155	splice_psi	1	1	
+h_indrop	ptr	splice_psi	1	1	
+h_indrop	perm	splice_psi	1	1	
+h_indrop	rowcounts	splice_psi	1	1	bytes=9460
+h_indrop	psi_structure	splice_psi	1	1	events=6276 nnz=368189
+h_indrop	psi_values_rint	splice_psi	1	0	n_rint_diff=289
+h_indrop	psi_values_trunc	splice_psi	1	1	n_trunc_diff=0
+h_indrop	cell_calls_file_regen	cell_calls.tsv	1	0	rows=1572 all_TRUE=False methods=['emptydrops'] pvals=['1.0000e+00', '1.0401e-01', '1.0614e-01', '1.1050e-03', '1.1609e-01', '1.2381e-02', '1.2409e-03', '1.2942e-01', '1.3764e-03', '1.4118e-02', '1.4148e-04', '1.4644e-02', '1.4900e-02', '1.5127e-03', '1.5557e-02', '1.6080e-02', '1.6473e-03', '1.7123e-02', '1.9782e-02', '2.0299e-02', '2.0549e-02', '2.0574e-03', '2.1731e-02', '2.1926e-03', '2.1969e-01', '2.2042e-01', '2.3276e-03', '2.3870e-01', '2.3977e-02', '2.4624e-03', '2.5421e-02', '2.5721e-01', '2.5970e-03', '2.7261e-02', '2.7919e-04', '2.8035e-02', '2.8808e-02', '2.9334e-01', '3.0044e-03', '3.0062e-01', '3.1722e-01', '3.2084e-01', '3.2613e-01', '3.2763e-02', '3.3133e-02', '3.4278e-01', '3.4702e-01', '3.5589e-01', '3.5886e-02', '3.8138e-03', '3.9657e-01', '4.1413e-02', '4.1804e-04', '4.1907e-02', '4.2532e-02', '4.2868e-01', '4.6271e-03', '4.6456e-02', '4.6549e-02', '4.6589e-01', '4.6744e-01', '4.7590e-03', '4.8414e-01', '4.8426e-01', '4.8881e-02', '4.8908e-03', '5.2502e-01', '5.4295e-03', '5.5591e-04', '5.5818e-02', '5.6046e-01', '5.6955e-02', '5.7575e-01', '5.7592e-01', '5.9692e-01', '6.0818e-01', '6.5658e-02', '6.5693e-01', '6.6303e-01', '6.6397e-03', '6.7281e-01', '6.7833e-02', '6.8321e-01', '6.8711e-01', '6.9428e-04', '7.0401e-03', '7.1693e-03', '7.2251e-01', '7.2983e-03', '7.3031e-01', '7.3283e-02', '7.5186e-02', '7.5621e-03', '7.6321e-01', '7.6513e-01', '7.7934e-01', '7.8567e-01', '7.9376e-01', '8.0172e-01', '8.0839e-01', '8.0953e-03', '8.2191e-02', '8.3020e-04', '8.3600e-01', '8.4239e-01', '8.6477e-01', '8.9780e-01', '9.0320e-03', '9.1896e-01', '9.3631e-02', '9.3858e-01', '9.5631e-03', '9.6131e-01', '9.6771e-04', '9.7974e-01', '9.9575e-01']
+h_indrop	cell_calls_log10	cell_calls.tsv	1572	1572	
+h_indrop	cell_calls_info	called_set	1	1	"{""n_columns"": 95760, ""n_called"": 1572, ""bitmap_bytes"": 11970, ""threshold_umi"": 500, ""threshold_exceptions"": 0, ""flag_given_depth_bytes"": 58, ""threshold_exceptions_list_bytes"": 3}"
+h_indrop	summary_field	n_cells_called	1	0	stored=1167 expected=1572
+h_indrop	summary_field	estimated_cells	1	0	stored=1167 expected=1572
+h_indrop	summary_field	median_umi_per_cell	1	0	stored=810 expected=759
+h_indrop	summary_field	median_umis_per_cell	1	0	stored=810 expected=759
+h_indrop	summary_field	median_genes_per_cell	1	0	stored=316 expected=261
+h_indrop	summary_field	total_genes_detected	1	0	stored=14018 expected=14116
+h_indrop	summary_field	fraction_reads_in_cells	1	0	stored=0.200138 expected=0.254151
+h_indrop	summary_field	mean_reads_per_cell	1	0	stored=24456.5 expected=18155.7
+h_indrop	summary_field	exonic_fraction	1	1	stored=0.201118 expected=0.201118
+h_indrop	summary_field	intronic_fraction	1	1	stored=0.0219197 expected=0.0219197
+h_indrop	summary_field	intergenic_fraction	1	1	stored=0.776962 expected=0.776962
+h_indrop	summary_field	mapping_rate	1	1	stored=0.86887 expected=0.86887
+h_indrop	summary_field	uniquely_mapped_pct	1	1	stored=86.887 expected=86.887
+h_indrop	summary_field	n_input_reads	1	1	stored=30000000 expected=30000000
+h_indrop	summary_field	total_reads	1	1	stored=30000000 expected=30000000
+h_indrop	summary_field	n_uniquely_mapped	1	1	stored=26066096 expected=26066096
+h_indrop	summary_field	mapped_reads	1	1	stored=26066096 expected=26066096
+h_indrop	pileup_stats_field	exon_hits	1	1	stored=5740069 matrix=5740069
+h_indrop	pileup_stats_field	intron_hits	1	1	stored=625605 matrix=625605
+h_indrop	pileup_stats_field	sj_hits	1	1	stored=787666 matrix=787666
+h_indrop	pileup_stats_field	umi_unique	1	1	stored=5740069 matrix=5740069
+h_indrop	pileup_stats_field	n_barcodes	1	1	stored=95760 matrix=95760
+h_indrop	provenance_field	output.exon_features	1	1	stored=310797 matrix=310797
+h_indrop	provenance_field	output.cells	1	0	stored=1167 matrix=1572
+h_indrop	provenance_field	output.total_umis	1	1	stored=5740069 matrix=5740069

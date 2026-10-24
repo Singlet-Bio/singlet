@@ -1,0 +1,15 @@
+build	member	names_hash	variant	n_samples	rows	example	first_name	last_name	samples
+GRCm39-2024-A	exon_counts.1pz	e787a39634293c11	0	11	386028	L_a	ENSMUSG00000000001_Gnai3_3:108014595-108016632	ENSMUSG00002076992_Gm54807_X:52395053-52395360	L_a,m_arc,m_celseq2,m_dropseq,m_mars,m_v2_a,m_v2_b,m_v3_a,m_v3_b,m_v3_c,m_visium
+GRCm39-2024-A	intron_counts.1pz	d6aa8b3b004215f4	0	11	307730	L_a	ENSMUSG00000000001_Gnai3_intron_3:108016632-108016718	ENSMUSG00002076083_Klhl17_intron_4:156318981-156319112	L_a,m_arc,m_celseq2,m_dropseq,m_mars,m_v2_a,m_v2_b,m_v3_a,m_v3_b,m_v3_c,m_visium
+GRCh38-2024-A	exon_counts.1pz	a2f45f650f968885	0	17	310797	L_b	ENSG00000000003_TSPAN6_chrX:100627107-100629986	ENSG00000292309_ENSG00000292309_chr7:128224032-128224431	L_b,h_arc,h_bd,h_celseq2,h_dropseq,h_indrop,h_mars,h_microwell,h_quartz,h_split,h_v2_a,h_v2_b,h_v2_c,h_v3_a,h_v3_b,h_v3_c,h_visium
+GRCh38-2024-A	exon_counts.1pz	da39a3ee5e6b4b0d	1	1	0	x_stub			x_stub
+GRCh38-2024-A	intron_counts.1pz	58af6651be935542	0	17	272191	L_b	ENSG00000000003_TSPAN6_intron_chrX:100629986-100630758	ENSG00000292309_ENSG00000292309_intron_chr7:128207075-128224032	L_b,h_arc,h_bd,h_celseq2,h_dropseq,h_indrop,h_mars,h_microwell,h_quartz,h_split,h_v2_a,h_v2_b,h_v2_c,h_v3_a,h_v3_b,h_v3_c,h_visium
+GRCh38-2024-A	intron_counts.1pz	da39a3ee5e6b4b0d	1	1	0	x_stub			x_stub
+GRCh38-GRCm39-barnyard	exon_counts.1pz	834e3104f653f36d	0	4	696825	bn_dropseq	ENSG00000000003_TSPAN6_GRCh38___chrX:100627107-100629986	ENSMUSG00002076992_Gm54807_GRCm39___X:52395053-52395360	bn_dropseq,bn_v2,bn_v3_a,bn_v3_b
+GRCh38-GRCm39-barnyard	intron_counts.1pz	8f839a7f254f7028	0	4	579921	bn_dropseq	ENSG00000000003_TSPAN6_intron_GRCh38___chrX:100629986-100630758	ENSMUSG00002076083_Klhl17_intron_GRCm39___4:156318981-156319112	bn_dropseq,bn_v2,bn_v3_a,bn_v3_b
+Mmul_10	exon_counts.1pz	34bfaf7c14b7ae9c	0	2	244671	mq_v2	ENSMMUG00000000001_CCNF_20:2458439-2458524	ENSMMUG00000065388__MT:12256-12327	mq_v2,mq_v3
+Mmul_10	intron_counts.1pz	7e2c178a1efbb4fe	0	2	209239	mq_v2	ENSMMUG00000000001_CCNF_intron_20:2458524-2459237	ENSMMUG00000065350__intron_9:133694454-133694582	mq_v2,mq_v3
+mRatBN7.2	exon_counts.1pz	a4a33a395b79d157	0	2	243603	r_v2	ENSRNOG00000000001_Arsj_2:214774653-214775874	ENSRNOG00000071219__4:157695170-157695191	r_v2,r_v3
+mRatBN7.2	intron_counts.1pz	18d2a217e361b892	0	2	213041	r_v2	ENSRNOG00000000001_Arsj_intron_2:214775874-214852253	ENSRNOG00000071219__intron_4:157687341-157695170	r_v2,r_v3
+GRCz11	exon_counts.1pz	28967d9fe02f31b0	0	3	272316	z_v2	ENSDARG00000000001_slc35a5_9:34112066-34113129	ENSDARG00000117827_CR388164.3_17:24804275-24804756	z_v2,z_v3_a,z_v3_b
+GRCz11	intron_counts.1pz	1691e08dbfa581cc	0	3	239796	z_v2	ENSDARG00000000001_slc35a5_intron_9:34113129-34114715	ENSDARG00000117827_CR388164.3_intron_17:24804085-24804275	z_v2,z_v3_a,z_v3_b

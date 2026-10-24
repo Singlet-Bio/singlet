@@ -1,0 +1,6 @@
+sample	member	hold
+pbmc_v2_typical	exon	only_h_c
+pbmc_v2_shallow	exon	only_h_c
+pbmc_v3_lowgenes	exon	only_h_c
+tcell_5p	exon	only_h_b
+tumor_3p	exon	only_h_pbmc_a

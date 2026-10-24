@@ -1,0 +1,9 @@
+== pbmc_v2_typical/exon_counts.1pz m=310797 n=15185 nnz=2569228
+  CSR (cells ordered by depth): gap index [pos x rownnz] 4.546 + row counts 0.185 bits/nnz (cells 8291)
+  CSC (rows by freq): gap index [pos x k] 4.567 + col counts 0.043 bits/nnz (cells 8498)
+== brain_sn_v3_deep/exon_counts.1pz m=386028 n=84424 nnz=6349311
+  CSR (cells ordered by depth): gap index [pos x rownnz] 7.465 + row counts 0.189 bits/nnz (cells 14025)
+  CSC (rows by freq): gap index [pos x k] 7.494 + col counts 0.086 bits/nnz (cells 11680)
+== pbmc_v2_shallow/exon_counts.1pz m=310797 n=96446 nnz=5304754
+  CSR (cells ordered by depth): gap index [pos x rownnz] 6.545 + row counts 0.099 bits/nnz (cells 13546)
+  CSC (rows by freq): gap index [pos x k] 6.521 + col counts 0.119 bits/nnz (cells 7072)

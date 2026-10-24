@@ -1,0 +1,18 @@
+stage	seconds	share
+vocab: gene_order list + dict (per sample)	1.0103	0.0168
+zip extract (read STORED member + crc32)	0.7708	0.0128
+cell_calls.tsv: zip read + pd.read_csv + called list	0.3058	0.0051
+tmpfile write+unlink	0.4115	0.0069
+native read_1pz (decode+binding copies+names->str)	16.7109	0.2783
+scipy csc_matrix construct	0.0132	0.0002
+barcode dict + column index	0.1734	0.0029
+agg: column subset mat[:, cell_idx]	0.4330	0.0072
+agg: feature name -> gene (python split/dict loops)	9.2063	0.1533
+agg: indicator @ matrix, astype int32	2.1114	0.0352
+X = exon_gene + intron_gene; .T.tocsc()	0.0924	0.0015
+layers: list_files + header check	0.0104	0.0002
+layers: AnnData(mat.T.tocsr()) + pd.Index(names) + is_unique	12.5313	0.2087
+layers: feature name -> gene (python split/dict loops)	13.3080	0.2216
+layers: projector, X[idx] @ projector, astype, tocsr	1.9545	0.0325
+TOTAL	60.0515	1.0000
+bundle: vstack CSR (not in TOTAL)	0.2865	0.0048

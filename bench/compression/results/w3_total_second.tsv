@@ -1,0 +1,15 @@
+file	in_bytes	zstd19	ratio_zstd19	xz9e	ratio_xz9e
+results/w3_total_streams/brain_sn_v3_deep__exon_counts.1pz__w3_total_v1.bin	6762639	6762351	0.999957	6762476	0.999976
+results/w3_total_streams/brain_sn_v3_deep__intron_counts.1pz__w3_total_v1.bin	6431491	6430921	0.999911	6431220	0.999958
+results/w3_total_streams/brain_sn_v3_intronic__exon_counts.1pz__w3_total_v1.bin	1909787	1909844	1.00003	1909600	0.999902
+results/w3_total_streams/brain_sn_v3_intronic__intron_counts.1pz__w3_total_v1.bin	7988031	7987502	0.999934	7987928	0.999987
+results/w3_total_streams/pbmc_v2_shallow__exon_counts.1pz__w3_total_v1.bin	4979147	4979270	1.00002	4978340	0.999838
+results/w3_total_streams/pbmc_v2_shallow__intron_counts.1pz__w3_total_v1.bin	2065880	2065937	1.00003	2065792	0.999957
+results/w3_total_streams/pbmc_v2_typical__exon_counts.1pz__w3_total_v1.bin	1939351	1938984	0.999811	1939496	1.00007
+results/w3_total_streams/pbmc_v2_typical__intron_counts.1pz__w3_total_v1.bin	1335913	1335058	0.99936	1335688	0.999832
+results/w3_total_streams/pbmc_v3_lowgenes__exon_counts.1pz__w3_total_v1.bin	1430173	1430215	1.00003	1430168	0.999997
+results/w3_total_streams/pbmc_v3_lowgenes__intron_counts.1pz__w3_total_v1.bin	1164742	1164778	1.00003	1164832	1.00008
+results/w3_total_streams/tcell_5p__exon_counts.1pz__w3_total_v1.bin	8208424	8201384	0.999142	8205692	0.999667
+results/w3_total_streams/tcell_5p__intron_counts.1pz__w3_total_v1.bin	1582545	1581168	0.99913	1581972	0.999638
+results/w3_total_streams/tumor_3p__exon_counts.1pz__w3_total_v1.bin	392898	392916	1.00005	392972	1.00019
+results/w3_total_streams/tumor_3p__intron_counts.1pz__w3_total_v1.bin	247389	247404	1.00006	247312	0.999689

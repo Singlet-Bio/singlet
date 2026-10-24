@@ -27,7 +27,14 @@ Every public GEO single-cell sample processed by the singlet pipeline is availab
 adata = singlet.load("GSM5238385")
 print(adata)
 # AnnData object with n_obs × n_vars = 8234 × 33538
+
+# Download only what you need: the exon matrix alone, or the splice junctions alone
+spliced = singlet.load("GSM5238385", modalities=["spliced"])      # layers["spliced"], X is None
+sj = singlet.load("GSM5238385", modalities=["splice_junctions"])  # obsm["splice_junctions"]
 ```
+
+`modalities` takes `counts`, `spliced`, `unspliced`, `splice_junctions`, `psi`, `mt` and `vdj`
+(see `docs/format-v2.md`, section 11); R's `load()` and `singlet_cells()` take the same names.
 
 ## GPU-Accelerated Analysis
 

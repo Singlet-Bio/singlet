@@ -1,0 +1,4 @@
+sample	member	codec	orig_bytes	enc_bytes	ratio_vs_1pz	bits_per_nnz	nnz	m	n	enc_ms	dec_ms_min	dec_Mnnz_s	matrix_ok	file_ok	model_bytes
+pbmc_v2_typical	exon_counts.1pz	ref_1pz_v1_L3	6451648	6483537	1.00494	20.1883	2569228	310797	15185	1014.79	662.434	3.87846	1	-1	0
+brain_sn_v3_deep	exon_counts.1pz	ref_1pz_v1_L3	13268199	13318363	1.00378	16.7809	6349311	386028	84424	2362.5	1173.46	5.41075	1	-1	0
+tcell_5p	exon_counts.1pz	ref_1pz_v1_L3	13757617	13757617	1	10.4526	10529513	310797	69249	2891.42	1549.46	6.79561	1	-1	0

@@ -1,0 +1,108 @@
+metric	GRCh38-2024-A	GRCm39-2024-A	GRCh38-GRCm39-barnyard	GRCz11	Mmul_10	mRatBN7.2
+build	GRCh38-2024-A	GRCm39-2024-A	GRCh38-GRCm39-barnyard	GRCz11	Mmul_10	mRatBN7.2
+exon_rows	310797	386028	696825	272316	244671	243603
+intron_rows	272191	307730	579921	239796	209239	213041
+vocab_genes	38606	78298	116904	32520	35432	30562
+species_tags			GRCh38___,GRCm39___			
+genes_in_exon_rows	38606	78298		32520	35432	30562
+gene_order_equals_vocab	1	1		1	1	1
+symbol_equals_vocab_name	38606	56415		32415	24114	26195
+vocab_name_equals_symbol_or_id_if_empty	38606	78298		32520	35432	30562
+sym_empty	0	21883		105	11318	4367
+sym_is_id	12962	0		0	0	0
+sym_explicit	25644	56415		32415	24114	26195
+sym_has_underscore	0	0		33	4232	80
+id_prefixes	ENSG	ENSMUSG		ENSDARG	ENSMMUG	ENSRNOG
+id_digit_widths	11	11		11	11	11
+ids_sorted_lex	1	1		1	1	1
+ids_strictly_increasing_numeric	1	1		1	1	1
+id_delta_mean	7.571713508612874	26.52708277456352		3.6232971493588364	1.845474302164771	2.330355682078466
+exons_per_gene_mean	8.050484380666218	4.93024087460727		8.37380073800738	6.905368028900429	7.970780708068844
+exons_per_gene_max	368	345		288	349	353
+single_exon_genes	4647	25081		4700	11900	6765
+exon_end_lt_start	0	0		0	0	0
+exon_zero_length	0	0		0	0	0
+exon_overlaps_prev	0	0		0	0	0
+exon_touches_prev	0	0		0	0	0
+chromosomes	39	38		300	329	48
+chrom_names_with_underscore	0	0		0	0	0
+chrom_prefix_chr	1	0		0	0	0
+gene_same_chrom_as_prev_frac	0.35046365849867894	0.256392245012644		0.1022140221402214	0.13411605328516596	0.11785877887572803
+gene_pairs_increasing_pos_same_chrom_frac	0.1958503859503704	0.12568647985900022		0.048339483394833946	0.07453714156694513	0.0607944506249591
+intron_rows_derived	272191	307730		239796	209239	213041
+intron_rows_actual	272191	307730		239796	209239	213041
+intron_equals_gaps_exact	1	1		1	1	1
+intron_only_in_actual	0	0		0	0	0
+intron_only_in_derived	0	0		0	0	0
+intron_order_differs	0	0		0	0	0
+intron_rows_eq_exon_rows_minus_genes	1	1		1	1	1
+sample	GSE145370/GSM4317423	GSE285936/GSM8713119	GSE126310/GSM3596081	GSE144944/GSM4301250	GSE245419/GSM7842410	GSE216665/GSM6685496
+part_GRCh38____exon_rows			310797			
+part_GRCh38____intron_rows			272191			
+part_GRCm39____exon_rows			386028			
+part_GRCm39____intron_rows			307730			
+parts_contiguous_in_order			1			
+GRCh38___:genes_in_exon_rows			38606			
+GRCh38___:gene_order_equals_vocab			1			
+GRCh38___:symbol_equals_vocab_name			38606			
+GRCh38___:vocab_name_equals_symbol_or_id_if_empty			38606			
+GRCh38___:sym_empty			0			
+GRCh38___:sym_is_id			12962			
+GRCh38___:sym_explicit			25644			
+GRCh38___:sym_has_underscore			0			
+GRCh38___:id_prefixes			ENSG			
+GRCh38___:id_digit_widths			11			
+GRCh38___:ids_sorted_lex			1			
+GRCh38___:ids_strictly_increasing_numeric			1			
+GRCh38___:id_delta_mean			7.571713508612874			
+GRCh38___:exons_per_gene_mean			8.050484380666218			
+GRCh38___:exons_per_gene_max			368			
+GRCh38___:single_exon_genes			4647			
+GRCh38___:exon_end_lt_start			0			
+GRCh38___:exon_zero_length			0			
+GRCh38___:exon_overlaps_prev			0			
+GRCh38___:exon_touches_prev			0			
+GRCh38___:chromosomes			39			
+GRCh38___:chrom_names_with_underscore			0			
+GRCh38___:chrom_prefix_chr			1			
+GRCh38___:gene_same_chrom_as_prev_frac			0.35046365849867894			
+GRCh38___:gene_pairs_increasing_pos_same_chrom_frac			0.1958503859503704			
+GRCh38___:intron_rows_derived			272191			
+GRCh38___:intron_rows_actual			272191			
+GRCh38___:intron_equals_gaps_exact			1			
+GRCh38___:intron_only_in_actual			0			
+GRCh38___:intron_only_in_derived			0			
+GRCh38___:intron_order_differs			0			
+GRCh38___:intron_rows_eq_exon_rows_minus_genes			1			
+GRCm39___:genes_in_exon_rows			78298			
+GRCm39___:gene_order_equals_vocab			1			
+GRCm39___:symbol_equals_vocab_name			56415			
+GRCm39___:vocab_name_equals_symbol_or_id_if_empty			78298			
+GRCm39___:sym_empty			21883			
+GRCm39___:sym_is_id			0			
+GRCm39___:sym_explicit			56415			
+GRCm39___:sym_has_underscore			0			
+GRCm39___:id_prefixes			ENSMUSG			
+GRCm39___:id_digit_widths			11			
+GRCm39___:ids_sorted_lex			1			
+GRCm39___:ids_strictly_increasing_numeric			1			
+GRCm39___:id_delta_mean			26.52708277456352			
+GRCm39___:exons_per_gene_mean			4.93024087460727			
+GRCm39___:exons_per_gene_max			345			
+GRCm39___:single_exon_genes			25081			
+GRCm39___:exon_end_lt_start			0			
+GRCm39___:exon_zero_length			0			
+GRCm39___:exon_overlaps_prev			0			
+GRCm39___:exon_touches_prev			0			
+GRCm39___:chromosomes			38			
+GRCm39___:chrom_names_with_underscore			0			
+GRCm39___:chrom_prefix_chr			0			
+GRCm39___:gene_same_chrom_as_prev_frac			0.256392245012644			
+GRCm39___:gene_pairs_increasing_pos_same_chrom_frac			0.12568647985900022			
+GRCm39___:intron_rows_derived			307730			
+GRCm39___:intron_rows_actual			307730			
+GRCm39___:intron_equals_gaps_exact			1			
+GRCm39___:intron_only_in_actual			0			
+GRCm39___:intron_only_in_derived			0			
+GRCm39___:intron_order_differs			0			
+GRCm39___:intron_rows_eq_exon_rows_minus_genes			1			

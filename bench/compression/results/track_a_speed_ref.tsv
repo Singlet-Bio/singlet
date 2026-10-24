@@ -1,0 +1,15 @@
+sample	member	mode	name	nnz	bytes	dec_cycles_per_nnz	dec_Mnnz_s_at_3GHz	dec_wall_ms_min	dec_cycles_total
+tumor_3p	exon_counts.1pz	ref	read_1pz_buffer	245117	4704028	4206.68	0.713151	414.662	1.03113e+09
+tumor_3p	intron_counts.1pz	ref	read_1pz_buffer	107364	4040778	7213.66	0.415878	268.825	7.74488e+08
+pbmc_v2_typical	exon_counts.1pz	ref	read_1pz_buffer	2569228	6451648	901.975	3.32603	914.184	2.31738e+09
+pbmc_v2_typical	intron_counts.1pz	ref	read_1pz_buffer	1202661	5156912	1224.74	2.4495	544.952	1.47295e+09
+pbmc_v3_lowgenes	exon_counts.1pz	ref	read_1pz_buffer	1759828	6180180	997.873	3.00639	709.696	1.75608e+09
+pbmc_v3_lowgenes	intron_counts.1pz	ref	read_1pz_buffer	1076297	5263802	1339.07	2.24036	602.909	1.44124e+09
+pbmc_v2_shallow	exon_counts.1pz	ref	read_1pz_buffer	5304754	10539256	646.268	4.64204	1299.66	3.42829e+09
+pbmc_v2_shallow	intron_counts.1pz	ref	read_1pz_buffer	1170031	6306035	1234.64	2.42987	518.924	1.44456e+09
+tcell_5p	exon_counts.1pz	ref	read_1pz_buffer	10529513	13757617	692.263	4.33361	2710.64	7.28919e+09
+tcell_5p	intron_counts.1pz	ref	read_1pz_buffer	1098311	5676401	1365.97	2.19624	1759.42	1.50026e+09
+brain_sn_v3_deep	exon_counts.1pz	ref	read_1pz_buffer	6349311	13268199	771.772	3.88716	1969.15	4.90022e+09
+brain_sn_v3_deep	intron_counts.1pz	ref	read_1pz_buffer	6678099	11685933	778.037	3.85586	2141.73	5.19581e+09
+brain_sn_v3_intronic	exon_counts.1pz	ref	read_1pz_buffer	1380834	7759162	1348.26	2.22509	862.004	1.86172e+09
+brain_sn_v3_intronic	intron_counts.1pz	ref	read_1pz_buffer	8144777	13300669	701.685	4.27542	2322.61	5.71507e+09
