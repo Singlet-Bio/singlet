@@ -149,9 +149,9 @@ def run_alevin_fry(r1, r2, panel_df, cr_bcs, work, threads, wl_path, tr_path):
     d = os.path.join(work, "afry")
     os.makedirs(d, exist_ok=True)
     ft = os.path.join(d, "features.tsv")
-    panel_df[["name", "sequence"]].to_csv(ft, sep="	", header=False, index=False)
+    panel_df[["name", "sequence"]].to_csv(ft, sep="\t", header=False, index=False)
     t2g = os.path.join(d, "t2g.tsv")
-    pd.DataFrame({"a": panel_df["name"], "b": panel_df["name"]}).to_csv(t2g, sep="	", header=False, index=False)
+    pd.DataFrame({"a": panel_df["name"], "b": panel_df["name"]}).to_csv(t2g, sep="\t", header=False, index=False)
     subprocess.run(["salmon", "index", "-t", ft, "-i", f"{d}/idx", "--features", "-k7"], check=True, capture_output=True)
     subprocess.run(["salmon", "alevin", "-l", "ISR", "-i", f"{d}/idx", "-1"] + r1 + ["-2"] + r2 +
                    ["--read-geometry", "2[11-25]", "--bc-geometry", "1[1-16]", "--umi-geometry", "1[17-28]",
