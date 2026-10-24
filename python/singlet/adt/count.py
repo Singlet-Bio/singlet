@@ -229,15 +229,20 @@ def load_barcode_list(path: str) -> List[str]:
         return [ln.split()[0] for ln in f if ln.strip()]
 
 
-def load_translation(path: str) -> Tuple[np.ndarray, np.ndarray]:
-    """Cell Ranger translation table ``<gex barcode>\\t<feature barcode>`` -> (sorted feature codes, gex codes)."""
+def load_translation(path: str, reverse: bool = False) -> Tuple[np.ndarray, np.ndarray]:
+    """Cell Ranger translation table (two barcode columns) -> (sorted feature-side codes, matching GEX codes).
+
+    Column 1 is taken as the GEX barcode and column 2 as the feature-side barcode; ``reverse`` swaps them (the
+    orientation is checked on the data by :func:`best_translation`)."""
     gex, fb = [], []
     with (gzip.open(path, "rt") if path.endswith(".gz") else open(path)) as f:
         for ln in f:
             p = ln.split()
-            if len(p) >= 2:
+            if len(p) >= 2 and not p[0].startswith("#"):
                 gex.append(p[0])
                 fb.append(p[1])
+    if reverse:
+        gex, fb = fb, gex
     g, _ = S.encode_strings(gex, 16)
     b, _ = S.encode_strings(fb, 16)
     o = np.argsort(b)
