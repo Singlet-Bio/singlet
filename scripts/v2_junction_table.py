@@ -9,11 +9,12 @@ Read-only against the public data host: legacy bundles are read by HTTP range (o
     v2_junction_table.py census  --out DIR --shard I --shards N  # per-junction counts of one shard of studies -> shard_I.parquet
     v2_junction_table.py reduce  --out DIR                       # all shards -> census_<build>.parquet (one row per junction)
     v2_junction_table.py build   --out DIR --build GRCh38-2024-A # GTF + genome + census -> packs (core, rare, version) + report
+    v2_junction_table.py publish --out DIR [--apply]             # upload packs/*/ to R2 v2/ref/ and merge them into v2/ref/index.json
 
 Per junction the census keeps: studies, samples, UMIs and cells in called cells, UMIs in uncalled barcodes (the ambient noise model).
 Tier rules (recorded in the version header; thresholds from census_stats.py on the v1 census): every annotated junction is core;
 an unannotated junction is core with >= ``--min-studies`` studies, >= ``--core-min-umi`` UMIs in called cells, a canonical motif and
-at most ``--max-ambient-frac`` of its UMIs in uncalled barcodes, and rare (one segment per chromosome) with >= ``--rare-min-umi`` UMIs
+at most ``--max-ambient-frac`` of its UMIs in uncalled barcodes, and rare (one segment, or one per chromosome above 1 MiB) with >= ``--rare-min-umi`` UMIs
 and the same other conditions; everything else stays local in its sample. Reference chromosome names are renamed to the pipeline's
 (``chr1`` -> ``1``) when they differ only by the UCSC prefix.
 """
@@ -429,7 +430,7 @@ def cmd_build(a):
     rules = {
         "core": "annotated (GTF), or unannotated with n_studies >= %d, umi_called >= %d, a canonical motif and ambient fraction <= %g"
         % (a.min_studies, a.core_min_umi, a.max_ambient_frac),
-        "rare": "unannotated with n_studies >= %d, %d <= umi_called < %d, a canonical motif and ambient fraction <= %g; one segment per chromosome"
+        "rare": "unannotated with n_studies >= %d, %d <= umi_called < %d, a canonical motif and ambient fraction <= %g; one segment, or one per chromosome above 1 MiB"
         % (a.min_studies, a.rare_min_umi, a.core_min_umi, a.max_ambient_frac),
         "local": "everything else: stays in its sample object as integer coordinates",
     }
@@ -441,16 +442,22 @@ def cmd_build(a):
     nxt = int(core.sum())
     jr = j.take(np.flatnonzero(rare))
     jr = jr.take(jr.genomic_order())
-    for c in sorted(
-        set(jr.chrom.tolist()), key=lambda i: jr.chroms[i]
-    ):  # one rare segment per chromosome
-        rows = np.flatnonzero(jr.chrom == c)
-        segs.append(
-            J.build_segment(
-                jr.take(rows), build=a.build, id_lo=nxt, tier="rare", extra={"chrom": jr.chroms[c]}
+    whole = J.build_segment(jr, build=a.build, id_lo=nxt, tier="rare") if len(jr) else None
+    if whole is not None and len(whole) <= a.rare_split_bytes:  # small rare tier: one segment
+        segs.append(whole)
+    else:  # one rare segment per chromosome, so an on-demand fetch is one chromosome's
+        for c in sorted(set(jr.chrom.tolist()), key=lambda i: jr.chroms[i]):
+            rows = np.flatnonzero(jr.chrom == c)
+            segs.append(
+                J.build_segment(
+                    jr.take(rows),
+                    build=a.build,
+                    id_lo=nxt,
+                    tier="rare",
+                    extra={"chrom": jr.chroms[c]},
+                )
             )
-        )
-        nxt += len(rows)
+            nxt += len(rows)
     ver = J.build_version(
         segs,
         build=a.build,
@@ -538,6 +545,180 @@ def _chrom_rename(census: set, reference: set) -> dict:
     return stripped if len(stripped) > direct else {}
 
 
+# ======================================================================================================== publish
+PACK_HEADERS = ("application/octet-stream", "public, max-age=31536000, immutable")
+INDEX_HEADERS = ("application/json", "public, max-age=300")
+INDEX_KEY = "v2/ref/index.json"
+
+
+def _s3():
+    """boto3 client for R2 from R2_ACCOUNT_ID / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY (as scripts/v2_campaign.py does)."""
+    import boto3
+    from botocore.config import Config
+
+    kw = dict(
+        signature_version="s3v4",
+        retries={"max_attempts": 10, "mode": "adaptive"},
+        s3={"addressing_style": "path"},
+    )
+    for opt in ("request_checksum_calculation", "response_checksum_validation"):
+        try:  # botocore >= 1.36 adds CRC32 trailers by default; R2 wants them only when required
+            Config(**{opt: "when_required"})
+            kw[opt] = "when_required"
+        except TypeError:
+            pass
+    endpoint = (
+        os.environ.get("R2_ENDPOINT")
+        or f"https://{os.environ['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com"
+    )
+    return boto3.client(
+        "s3",
+        endpoint_url=endpoint,
+        aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
+        aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
+        region_name="auto",
+        config=Config(**kw),
+    )
+
+
+def _index_text(doc: dict) -> str:
+    """The exact serialisation of packs.write_index (so an index written by it round-trips byte for byte)."""
+    return json.dumps(doc, indent=1, sort_keys=False) + "\n"
+
+
+def _public_get(key: str) -> bytes:
+    req = urllib.request.Request(
+        f"{DATA}/{key}", headers={"User-Agent": UA, "Cache-Control": "no-cache"}
+    )
+    with urllib.request.urlopen(req, timeout=120) as r:
+        return r.read()
+
+
+def cmd_publish(a):
+    """Upload every pack of <out>/packs/<build>/ to <bucket>/v2/ref/<id>.pack (skipping keys already there with the same sha256),
+    read each one back, then merge the entries into v2/ref/index.json (existing entries unchanged) and verify through the public
+    host. Without --apply only the plan is printed."""
+    out = Path(a.out)
+    todo = []
+    for idx in sorted((out / "packs").glob("*/index.json")):
+        for e in json.loads(idx.read_text())["packs"]:
+            f = idx.parent / f"{e['id']}.pack"
+            data = f.read_bytes()
+            sha = hashlib.sha256(data).hexdigest()
+            if len(data) != e["bytes"] or sha != e["sha256"] or P.pack_id(data).hex() != e["id"]:
+                raise SystemExit(f"{f}: size / sha256 / id do not match {idx}")
+            todo.append((e, data))
+    log(
+        f"{len(todo)} packs, {sum(len(d) for _e, d in todo)} bytes, from {len(list((out / 'packs').glob('*/index.json')))} builds"
+    )
+    s3 = _s3()
+    bucket = a.bucket
+    live = s3.get_object(Bucket=bucket, Key=INDEX_KEY)["Body"].read()
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    (out / f"index.json.previous-{stamp}").write_bytes(live)
+    old = json.loads(live)
+    if old.get("format") != "singlet-v2-packs":
+        raise SystemExit("the live v2/ref/index.json is not a singlet-v2-packs index")
+    if _index_text(old).encode() != live:
+        raise SystemExit(
+            "the live index.json does not round-trip through the writer: refusing to rewrite it"
+        )
+    have = {e["id"] for e in old["packs"]}
+    new_entries = [e for e, _d in todo if e["id"] not in have]
+    log(
+        f"live index: {len(old['packs'])} entries (saved to index.json.previous-{stamp}); {len(new_entries)} new entries"
+    )
+    up = skip = 0
+    for e, data in todo:
+        key = f"v2/ref/{e['id']}.pack"
+        try:
+            h = s3.head_object(Bucket=bucket, Key=key)
+            same = (
+                h["ContentLength"] == len(data)
+                and (h.get("Metadata") or {}).get("sha256") == e["sha256"]
+            )
+        except Exception:  # noqa: BLE001 - not there
+            same = False
+        if same:
+            skip += 1
+            continue
+        if not a.apply:
+            up += 1
+            continue
+        s3.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=data,
+            ContentType=PACK_HEADERS[0],
+            CacheControl=PACK_HEADERS[1],
+            Metadata={"sha256": e["sha256"]},
+        )
+        back = s3.get_object(Bucket=bucket, Key=key)
+        body = back["Body"].read()
+        if (
+            len(body) != len(data)
+            or hashlib.sha256(body).hexdigest() != e["sha256"]
+            or back.get("CacheControl") != PACK_HEADERS[1]
+        ):
+            raise SystemExit(f"{key}: read-back does not match (size, sha256 or Cache-Control)")
+        up += 1
+    log(
+        f"packs: {up} {'uploaded and read back' if a.apply else 'to upload'}, {skip} already there with the same sha256"
+    )
+    doc = dict(old)
+    doc["packs"] = list(old["packs"]) + new_entries
+    text = _index_text(doc).encode()
+    rec = {
+        "packs_total": len(todo),
+        "packs_uploaded": up,
+        "packs_skipped": skip,
+        "bytes": sum(len(d) for _e, d in todo),
+        "index_entries_before": len(old["packs"]),
+        "index_entries_after": len(doc["packs"]),
+        "previous_index": f"index.json.previous-{stamp}",
+        "apply": bool(a.apply),
+    }
+    if a.apply:
+        s3.put_object(
+            Bucket=bucket,
+            Key=INDEX_KEY,
+            Body=text,
+            ContentType=INDEX_HEADERS[0],
+            CacheControl=INDEX_HEADERS[1],
+            Metadata={"sha256": hashlib.sha256(text).hexdigest()},
+        )
+        # verification through the public host
+        pub = _public_get(INDEX_KEY)
+        pdoc = json.loads(pub)
+        # byte-identical old entries: everything before the closing of the old packs list is unchanged in the new file
+        cut = live.rfind(b"\n ]")
+        old_ok = (
+            pdoc["packs"][: len(old["packs"])] == old["packs"]
+            and cut > 0
+            and pub[:cut] == live[:cut]
+        )
+        new_ok = {x["id"] for x in new_entries} <= {x["id"] for x in pdoc["packs"]}
+        packs_ok = 0
+        for e, _d in todo:
+            body = _public_get(f"v2/ref/{e['id']}.pack")
+            packs_ok += hashlib.sha256(body).hexdigest() == e["sha256"]
+        rec.update(
+            {
+                "public_index_sha256": hashlib.sha256(pub).hexdigest(),
+                "public_index_matches_written": pub == text,
+                "old_entries_unchanged": bool(old_ok),
+                "new_entries_present": bool(new_ok),
+                "packs_verified_via_public_host": packs_ok,
+            }
+        )
+        if not (old_ok and new_ok and packs_ok == len(todo)):
+            log("VERIFICATION FAILED: " + json.dumps(rec))
+            (out / f"publish-{stamp}.json").write_text(json.dumps(rec, indent=1))
+            raise SystemExit(1)
+    (out / f"publish-{stamp}.json").write_text(json.dumps(rec, indent=1))
+    log(json.dumps(rec))
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -564,11 +745,27 @@ def main(argv=None):
     s.add_argument("--core-min-umi", type=int, default=1000)
     s.add_argument("--rare-min-umi", type=int, default=100)
     s.add_argument("--max-ambient-frac", type=float, default=0.5)
+    s.add_argument(
+        "--rare-split-bytes",
+        type=int,
+        default=1 << 20,
+        help="split the rare tier by chromosome above this size",
+    )
     s.add_argument("--census-tag", default="")
     s.add_argument("--gtf", help="local GTF instead of the download (with --genome)")
     s.add_argument("--genome", help="local genome FASTA instead of the download")
+    s = sub.add_parser("publish")
+    s.add_argument("--out", required=True)
+    s.add_argument("--bucket", default="singlet-data")
+    s.add_argument("--apply", action="store_true", help="write to R2 (without it: plan only)")
     a = p.parse_args(argv)
-    {"list": cmd_list, "census": cmd_census, "reduce": cmd_reduce, "build": cmd_build}[a.cmd](a)
+    {
+        "list": cmd_list,
+        "census": cmd_census,
+        "reduce": cmd_reduce,
+        "build": cmd_build,
+        "publish": cmd_publish,
+    }[a.cmd](a)
 
 
 if __name__ == "__main__":

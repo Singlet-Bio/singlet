@@ -1,13 +1,14 @@
 #!/bin/bash
 # Junction table version 1 on Clipper (docs/format-v2.md section 12; scripts/v2_junction_table.py). Read-only against the public
-# data host and the reference FTP sites; writes only under $WORK/state/jxtab/$RUN. Uploading the packs to R2 is a separate,
-# reviewed step and is not done here.
+# data host and the reference FTP sites; writes only under $WORK/state/jxtab/$RUN, except MODE=publish APPLY=1, the reviewed
+# upload of the packs to R2.
 #
 #   MODE=build    worktree at the pinned commit (jxtab__<c10>), venv, extensions, self-test. Once per commit, on debug-cpu.
 #   MODE=list     studies with a legacy bundle (singlet.bio/api/gse) -> studies.tsv
 #   MODE=census   array task I of NSHARD: per-junction counts of that shard of studies -> shard_I.parquet + shard_I.json
 #   MODE=reduce   shards -> census_<build>.parquet + census_summary.json
 #   MODE=table    BUILD=<reference build>: GTF + genome + census -> packs/<build>/ + report_<build>.json
+#   MODE=publish  plan (or, with APPLY=1, do) the upload of packs/*/ to singlet-data v2/ref/ and the merge into v2/ref/index.json
 #
 #   sbatch --partition=debug-cpu --time=00:30:00 --export=ALL,MODE=build,COMMIT=<sha> scripts/v2_junction_table.sbatch
 #   sbatch --partition=debug-cpu --time=00:10:00 --export=ALL,MODE=list,COMMIT=<sha>  scripts/v2_junction_table.sbatch
@@ -61,7 +62,7 @@ if [ "$MODE" = build ]; then
     fi
     [ -x "$VENV/bin/python" ] || rt python -m venv "$VENV"
     mapfile -t DEPS < <(rt "$VENV/bin/python" -c 'import sys, tomllib; print("\n".join(tomllib.load(open(sys.argv[1], "rb"))["project"]["dependencies"]))' "$SRC/pyproject.toml")
-    rt "$VENV/bin/pip" install -q "${DEPS[@]}" pandas pyarrow pybind11 'setuptools>=64' wheel pytest
+    rt "$VENV/bin/pip" install -q "${DEPS[@]}" pandas pyarrow boto3 pybind11 'setuptools>=64' wheel pytest
     rt bash -c "cd '$SRC' && CPATH='$ZSTD/include' LIBRARY_PATH='$ZSTD/lib' CFLAGS=-pthread LDFLAGS=-pthread '$VENV/bin/python' setup.py -q build_ext --inplace -j 8"
     rt bash -c "cd '$SRC' && PYTHONPATH='$SRC/python' '$VENV/bin/python' -m pytest tests/python/test_v2_junctions.py -q -p no:cacheprovider"
     touch "$SRC/.jxbuild.ok"
@@ -78,5 +79,8 @@ case "$MODE" in
             ${STUDIES:+--studies "$STUDIES"} ${SHARDNAME:+--name "$SHARDNAME"} ;;
   reduce) PY reduce --out "$OUT" ;;
   table)  PY build --out "$OUT" --build "${BUILD:?set BUILD}" --refs "$REFS" --census-tag "$RUN" ;;
+  publish)  # uploads to R2 only with APPLY=1 (credentials from ~/.config/singlet-r2.env, never printed)
+          set -a; . "$HOME/.config/singlet-r2.env"; set +a; : "${R2_ACCESS_KEY_ID:?}" "${R2_SECRET_ACCESS_KEY:?}"
+          PY publish --out "$OUT" ${APPLY:+--apply} ;;
   *) echo "unknown MODE $MODE"; exit 2 ;;
 esac
