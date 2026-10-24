@@ -466,6 +466,18 @@ singlet_download <- download
 #'   When a study has no v2 manifest yet, \code{load()} stops with a message
 #'   naming \code{legacy = TRUE}; setting the environment variable
 #'   \code{SINGLET_LEGACY_FALLBACK=1} makes it fall back automatically.
+#' @param modalities Which matrices to download (v2 studies: only those
+#'   members' byte ranges are fetched). \code{"counts"} (assay \code{counts} =
+#'   spliced + unspliced; needs the exon and intron matrices),
+#'   \code{"spliced"} (assay, exon matrix only), \code{"unspliced"} (assay,
+#'   intron matrix only), \code{"splice_junctions"} and \code{"psi"}
+#'   (\code{altExp}s on the junctions; junction matrix only, \code{psi} is
+#'   the true percent spliced in), \code{"mt"} and \code{"vdj"}
+#'   (\code{altExp}s). The cell table is always read. \code{NULL} (default)
+#'   returns counts, spliced and unspliced. A modality that no requested sample
+#'   carries stops with a message listing what the study has (see
+#'   \code{\link{singlet_study_modalities}}). A legacy bundle is downloaded
+#'   whole and only subset, with a warning.
 #' @param cache_dir Directory in which to cache downloaded bundles. Defaults
 #'   to \code{tools::R_user_dir("singlet", "cache")} (override with the
 #'   \code{SINGLET_CACHE_DIR} environment variable). Existing bundles are
@@ -511,7 +523,7 @@ singlet_download <- download
 #' @seealso \code{\link{read_singlet}}, \code{\link{find}},
 #'   \code{\link{find_load}}
 #' @export
-load <- function(x, as = c("sce", "seurat"), cache_dir = NULL, legacy = NULL) {
+load <- function(x, as = c("sce", "seurat"), cache_dir = NULL, legacy = NULL, modalities = NULL) {
     as <- match.arg(as)
     x <- as.character(x)
     if (length(x) == 0L) {
@@ -564,11 +576,11 @@ load <- function(x, as = c("sce", "seurat"), cache_dir = NULL, legacy = NULL) {
         gsms <- if (anyNA(gsms)) NULL else unique(gsms)
         t1 <- sel[[1L]]
         if (!is.null(t1$gse)) {
-            .v2_load_gse(t1$gse, gsms, cache_dir = cache_dir, legacy = legacy)
+            .v2_load_gse(t1$gse, gsms, cache_dir = cache_dir, legacy = legacy, modalities = modalities)
         } else if (!is.null(t1$manifest)) {
-            .v2_load_manifest(t1$manifest, gsms)
+            .v2_load_manifest(t1$manifest, gsms, modalities = modalities)
         } else {
-            .read_singlet_bundle(t1$path, gsms = gsms)
+            .legacy_modalities(.read_singlet_bundle(t1$path, gsms = gsms), modalities)
         }
     })
     sce <- if (length(sces) == 1L) sces[[1]] else .combine_sces(sces)

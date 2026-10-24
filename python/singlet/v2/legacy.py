@@ -15,6 +15,7 @@ Entries are ordered as in the archive. ``entry.crc32`` / ``entry.size`` are the 
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import re
@@ -126,8 +127,13 @@ class _HttpSource:
                 last = e
                 if e.code in (403, 404, 416) and attempt >= 1:
                     break
-            except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
-                last = e
+            except (
+                urllib.error.URLError,
+                TimeoutError,
+                ConnectionError,
+                http.client.HTTPException,
+            ) as e:
+                last = e  # HTTPException covers IncompleteRead: a response cut short by the network is retried
             time.sleep(min(2**attempt, 20))
         raise LegacyError("cannot read %s (%s): %s" % (self.url, rng, last))
 

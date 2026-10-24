@@ -423,6 +423,7 @@ def load(
     force: bool = False,
     legacy: Optional[bool] = None,
     layers: bool = True,
+    modalities: Optional[str | Sequence[str]] = None,
     **v2_options,
 ) -> anndata.AnnData:
     """Load one or more datasets as a single AnnData.
@@ -463,6 +464,21 @@ def load(
     layers : bool
         Attach ``spliced`` / ``unspliced`` layers next to ``X = spliced + unspliced``
         (v2 reader; the legacy reader always does).
+    modalities : str or list of str, optional
+        Fetch only what these modalities need (v2 reader: only those members'
+        byte ranges are downloaded). ``"counts"`` (``X`` = spliced + unspliced;
+        needs the exon and intron matrices), ``"spliced"`` (``layers["spliced"]``,
+        exon matrix only), ``"unspliced"`` (``layers["unspliced"]``, intron matrix
+        only), ``"splice_junctions"`` and ``"psi"`` (``obsm``, junction matrix
+        only; ``psi`` is the true float PSI), ``"mt"`` and ``"vdj"`` (``obsm``).
+        Feature names of an ``obsm`` modality are in
+        ``uns["obsm_features"][name]``; :func:`singlet.v2.client.modality_anndata`
+        turns one into its own AnnData. Without ``"counts"``, ``X`` is ``None``.
+        The default keeps ``counts`` + ``spliced`` + ``unspliced`` (``counts``
+        alone with ``layers=False``). A modality no requested sample carries
+        raises :class:`singlet.v2.client.ModalityUnavailable` listing what the
+        study has. A legacy bundle is always downloaded whole; the result is
+        then subset (with a warning).
     **v2_options
         ``samples`` (restrict a study to some GSMs), ``cell_order`` (``"legacy"``,
         ``"barcode"`` or ``"column"``), ``concurrency`` (parallel samples and
@@ -503,6 +519,7 @@ def load(
                 force=force,
                 legacy=legacy,
                 layers=layers,
+                modalities=modalities,
                 **v2_options,
             )
             sub.obs["source"] = str(item)
@@ -549,6 +566,7 @@ def load(
         force=force,
         legacy=legacy,
         layers=layers,
+        modalities=modalities,
         v2_options=v2_options,
     )
 
@@ -567,6 +585,7 @@ def _load_v2(
     force: bool,
     layers: bool,
     options: dict,
+    modalities=None,
 ) -> anndata.AnnData:
     """Gene-level AnnData of a v2 study (or of one sample of it) through :mod:`singlet.v2.client`."""
     from singlet.v2 import client as v2
@@ -581,7 +600,14 @@ def _load_v2(
         samples = [gsm]
     study = v2.open_study(accession, base=base, force=force)
     try:
-        return study.to_anndata(samples, genes=genes, obs_filter=obs_filter, layers=layers, **opts)
+        return study.to_anndata(
+            samples,
+            genes=genes,
+            obs_filter=obs_filter,
+            layers=layers,
+            modalities=modalities,
+            **opts,
+        )
     except v2.NoUsableSamples as e:
         if gsm is not None:
             raise KeyError(
@@ -599,6 +625,7 @@ def _load_one(
     force: bool = False,
     legacy: Optional[bool] = None,
     layers: bool = True,
+    modalities: Optional[str | Sequence[str]] = None,
     v2_options: Optional[dict] = None,
 ) -> anndata.AnnData:
     """Load a single dataset (accession or local ``.singlet``/file path)."""
@@ -640,7 +667,8 @@ def _load_one(
         if suffix == ".singlet":
             from singlet.bundle import SingletBundle
 
-            adata = SingletBundle.open(path).to_anndata(verbose=False)
+            bundle = SingletBundle.open(path)
+            adata = _legacy_modalities(bundle.to_anndata(verbose=False), bundle, modalities)
         elif suffix in (".s2", ".json"):  # a v2 sample object or study manifest on disk
             from singlet.v2 import client as v2
 
@@ -649,6 +677,7 @@ def _load_one(
                 genes=genes,
                 obs_filter=obs_filter,
                 layers=layers,
+                modalities=modalities,
                 force=force,
                 **(v2_options or {}),
             )
@@ -706,6 +735,7 @@ def _load_one(
                         force=force,
                         layers=layers,
                         options=v2_options or {},
+                        modalities=modalities,
                     )
                 except v2.StudyNotFound as e:
                     if not (legacy is None and _legacy_fallback_enabled()):
@@ -714,7 +744,8 @@ def _load_one(
             local = _download_legacy(gse_accession, force=force)
             from singlet.bundle import SingletBundle
 
-            adata = SingletBundle.open(local).to_anndata(verbose=False)
+            bundle = SingletBundle.open(local)
+            adata = _legacy_modalities(bundle.to_anndata(verbose=False), bundle, modalities)
 
     # Filter to a single GSM's cells (obs has a 'gsm_id' column; index is
     # '<GSM>_<barcode>').
@@ -753,6 +784,98 @@ def _load_one(
         adata = adata[mask].copy()
 
     return adata
+
+
+_LEGACY_MODALITY = {
+    "splice_junctions": "junctions",
+    "psi": "junctions",
+    "mt": "mt_heteroplasmy",
+    "vdj": "vdj_gene_usage",
+}
+
+
+def _legacy_modalities(adata, bundle, modalities):
+    """``modalities=`` on a legacy bundle: the whole bundle was downloaded already, so this only shapes the result like the
+    v2 reader does (X / layers / obsm). A modality the bundle cannot supply is warned about and left out, never fatal."""
+    if modalities is None:
+        return adata
+    from singlet.v2 import client as v2
+
+    mods = v2.normalize_modalities(modalities)
+    warnings.warn(
+        "this study is read from its legacy .singlet bundle, which is downloaded whole; modalities= only subsets the "
+        "result (the v2 reader fetches only the members asked for)",
+        UserWarning,
+        stacklevel=4,
+    )
+    for lname in ("spliced", "unspliced"):
+        if lname not in mods and lname in adata.layers:
+            del adata.layers[lname]
+    if "counts" not in mods:
+        adata.X = None
+    if not any(v2.MODALITIES[k].slot != "obsm" for k in mods):
+        adata = adata[:, []].copy()
+    names_out = {}
+    for k in mods:
+        if v2.MODALITIES[k].slot != "obsm":
+            continue
+        try:
+            mat, names = _legacy_feature_block(adata, bundle, _LEGACY_MODALITY[k], psi=(k == "psi"))
+        except Exception as e:  # noqa: BLE001 - a legacy bundle may lack or mangle a member
+            warnings.warn(
+                f"{k} is not available from the legacy bundle: {e}", UserWarning, stacklevel=4
+            )
+            continue
+        adata.obsm[k] = mat
+        names_out[k] = names
+    if names_out:
+        adata.uns["obsm_features"] = names_out
+    return adata
+
+
+def _legacy_feature_block(adata, bundle, legacy_name: str, *, psi: bool):
+    """cells x features CSR aligned to ``adata.obs_names`` (``<GSM>_<barcode>``) from ``bundle.read(legacy_name, gsm)``."""
+    import numpy as np
+    import scipy.sparse as sp
+
+    gsms = (
+        list(dict.fromkeys(adata.obs["gsm_id"].astype(str)))
+        if "gsm_id" in adata.obs.columns
+        else list(bundle.gsm_ids)
+    )
+    row_of = {n: i for i, n in enumerate(adata.obs_names)}
+    union: dict = {}
+    rows, cols, vals = [], [], []
+    for g in gsms:
+        if legacy_name not in bundle.modalities(g):
+            continue
+        sub = bundle.read(legacy_name, g)
+        m = sp.csr_matrix(sub.X)
+        m.sort_indices()
+        names = [str(x) for x in sub.var_names]
+        if psi:
+            from singlet.v2.client import _Part, _psi_part
+
+            part, _ = _psi_part(
+                _Part(m.indptr, m.indices.astype(np.int32), m.data, len(names)), names
+            )
+            m = part.csr()
+        remap = np.fromiter(
+            (union.setdefault(n, len(union)) for n in names), dtype=np.int64, count=len(names)
+        )
+        target = np.array([row_of.get(f"{g}_{b}", -1) for b in sub.obs_names], dtype=np.int64)
+        coo = m.tocoo()
+        keep = target[coo.row] >= 0
+        rows.append(target[coo.row[keep]])
+        cols.append(remap[coo.col[keep]])
+        vals.append(coo.data[keep])
+    if not rows:
+        raise KeyError(f"no sample carries {legacy_name!r}")
+    mat = sp.csr_matrix(
+        (np.concatenate(vals), (np.concatenate(rows), np.concatenate(cols))),
+        shape=(adata.n_obs, len(union)),
+    )
+    return mat, np.array(list(union), dtype=object)
 
 
 def _skip_reason(adata, gsm_id: str) -> Optional[str]:

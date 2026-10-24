@@ -10,8 +10,9 @@
     adata = load("/data/GSM4317426.s2")             # a downloaded sample object, read from disk (mmap, zero copy)
 
 What is fetched.  A sample is one immutable object ``v2/s/<GSM>/<d>.s2``.  The manifest gives the byte range of every member, so
-``load`` issues HTTP Range requests for the members it needs (``cells``, ``exon_counts.1pz``, ``intron_counts.1pz``), coalesced into
-one request per sample when they are close together, and never reads the member table.  Large samples switch to a two-phase plan
+``load`` issues HTTP Range requests for the members it needs (``cells``, ``exon_counts.1pz``, ``intron_counts.1pz`` by default; with
+``modalities=`` only the members of those modalities, see :data:`MODALITIES` and docs/format-v2.md section 11), coalesced into one
+request per sample when they are adjacent, and never reads the member table.  Large samples switch to a two-phase plan
 (cells table first, then only the chunk runs that cover the wanted cells).  Every ranged response is checked (HTTP 206,
 ``Content-Range`` start/end/total against the manifest size), a pz2 header must carry the digest the manifest lists, and with
 ``verify=True`` the canonical matrix digest is recomputed after decoding.
@@ -71,6 +72,10 @@ __all__ = [
     "load_s2",
     "download_study",
     "clear_memory_cache",
+    "MODALITIES",
+    "DEFAULT_MODALITIES",
+    "ModalityUnavailable",
+    "modality_anndata",
 ]
 
 MANIFEST_VERSION_MAX = 1
@@ -79,9 +84,54 @@ WHOLE_MAX_BYTES = 48 << 20  # members up to this size (exon+intron+cells) are fe
 COALESCE_GAP = (
     2 << 20
 )  # merge ranges closer than this (one round trip costs about 6 MB of transfer)
+MEMBER_GAP = 63  # whole members are merged only across alignment padding: another member's body never rides along
 PART_BYTES = 16 << 20  # a single range larger than 2 parts is split and fetched in parallel
 PREFIX_HINT = 512 << 10  # first read of a member in the two-phase plan
 PARTIAL_GAP = 256 << 10  # in the two-phase plan, ranges closer than this share a request
+SJ, MT, VDJ = "sj_counts.1pz", "mt_heteroplasmy.1pz", "vdj_gene_usage.1pz"
+
+
+# ================================================================================================================= modalities
+@dataclass(frozen=True)
+class ModalitySpec:
+    """One name of the ``modalities=`` vocabulary: the sample-object members it needs and where it lands in the AnnData."""
+
+    name: str
+    members: Tuple[str, ...]
+    slot: str  # "X", "layers" or "obsm"
+    description: str
+
+
+MODALITIES: Dict[str, ModalitySpec] = {
+    m.name: m
+    for m in (
+        ModalitySpec(
+            "counts", (EXON, INTRON), "X", "X = spliced + unspliced, genes (needs both members)"
+        ),
+        ModalitySpec("spliced", (EXON,), "layers", 'layers["spliced"]: exon UMIs per gene'),
+        ModalitySpec("unspliced", (INTRON,), "layers", 'layers["unspliced"]: intron UMIs per gene'),
+        ModalitySpec(
+            "splice_junctions", (SJ,), "obsm", 'obsm["splice_junctions"]: reads per junction'
+        ),
+        ModalitySpec(
+            "psi", (SJ,), "obsm", 'obsm["psi"]: float32 percent spliced in, computed from junctions'
+        ),
+        ModalitySpec("mt", (MT,), "obsm", 'obsm["mt"]: chrM heteroplasmy per variant site'),
+        ModalitySpec("vdj", (VDJ,), "obsm", 'obsm["vdj"]: V(D)J segment usage counts'),
+    )
+}
+DEFAULT_MODALITIES = ("counts", "spliced", "unspliced")
+_MODALITY_ALIASES = {
+    "x": "counts",
+    "exon": "spliced",
+    "intron": "unspliced",
+    "junctions": "splice_junctions",
+    "sj": "splice_junctions",
+    "splice_psi": "psi",
+    "mt_heteroplasmy": "mt",
+    "vdj_gene_usage": "vdj",
+}
+GENE_MEMBERS = (EXON, INTRON)
 
 
 class V2Error(RuntimeError):
@@ -99,6 +149,67 @@ class NoUsableSamples(V2Error, RuntimeError):
         super().__init__(message)
         self.skipped = list(skipped)
         self.reasons = {s["gsm_id"]: s["reason"] for s in self.skipped}
+
+
+class ModalityUnavailable(V2Error, ValueError):
+    """A requested modality is not in the vocabulary, or none of the requested samples carries it."""
+
+
+def normalize_modalities(
+    modalities: Union[None, str, Sequence[str]], *, layers: bool = True
+) -> Tuple[str, ...]:
+    """The canonical modality names asked for (vocabulary order). ``None`` keeps the default: counts plus the spliced and
+    unspliced layers (``layers=True``), or counts alone."""
+    if modalities is None:
+        return DEFAULT_MODALITIES if layers else ("counts",)
+    items = [modalities] if isinstance(modalities, str) else list(modalities)
+    out = set()
+    for it in items:
+        k = str(it).strip().lower()
+        k = _MODALITY_ALIASES.get(k, k)
+        if k not in MODALITIES:
+            raise ModalityUnavailable(
+                f"unknown modality {it!r}; the vocabulary is {list(MODALITIES)}"
+            )
+        out.add(k)
+    if not out:
+        raise ModalityUnavailable(f"modalities is empty; choose from {list(MODALITIES)}")
+    return tuple(k for k in MODALITIES if k in out)
+
+
+def _member_has_data(sm: "SampleRef", name: str) -> bool:
+    """A readable pz2 member with at least one row and column (stubs and empty legacy members are absent)."""
+    m = sm.members.get(name)
+    if m is None or m.kind != 1 or m.len == 0:
+        return False
+    return m.meta.get("m", 1) != 0 and m.meta.get("n", 1) != 0
+
+
+def _sample_modalities(sm: "SampleRef") -> List[str]:
+    """The modalities one sample carries. ``counts`` needs only the exon matrix: older samples have no intron matrix and X is
+    then the exon counts."""
+    return [
+        k
+        for k, spec in MODALITIES.items()
+        if all(_member_has_data(sm, n) for n in (spec.members if k != "counts" else (EXON,)))
+    ]
+
+
+def _check_modalities(study: "Study", gsms: Sequence[str], mods: Sequence[str]) -> None:
+    """Refuse a modality that no requested sample carries (no network: the manifest lists every member)."""
+    have = set()
+    for g in gsms:
+        have.update(_sample_modalities(study.samples[g]))
+    missing = [m for m in mods if m not in have]
+    if missing:
+        raise ModalityUnavailable(
+            f"{study.gse}: no requested sample has {missing}; "
+            f"{'these samples have' if len(gsms) > 1 else gsms[0] + ' has'} {sorted(have, key=list(MODALITIES).index)}"
+        )
+
+
+def _members_for(mods: Sequence[str]) -> Tuple[str, ...]:
+    return tuple(dict.fromkeys(n for k in mods for n in MODALITIES[k].members))
 
 
 # ================================================================================================================= configuration
@@ -239,7 +350,16 @@ class _PackResolver:
             path = self.dir / (e["id"] + ".pack")
             tmp = path.with_suffix(f".part{os.getpid()}")
             tmp.write_bytes(data)
-            os.replace(tmp, path)
+            for attempt in range(
+                5
+            ):  # Windows: a just-written file can be briefly locked (indexer, antivirus)
+                try:
+                    os.replace(tmp, path)
+                    break
+                except PermissionError:
+                    if attempt == 4:
+                        raise
+                    time.sleep(0.05 * (attempt + 1))
             store._files[e["id"]] = str(path)
             return e["id"]
 
@@ -696,20 +816,35 @@ class Study:
     def cells(self, where=None, **kw) -> "anndata.AnnData":
         return _study_cells(self, where, **kw)
 
+    def modalities(self, gsm: Optional[str] = None) -> List[str]:
+        """The ``modalities=`` names one sample (or, with no ``gsm``, any sample of the study) carries, from the manifest."""
+        gsms = [gsm.strip().upper()] if gsm else self.gsm_ids
+        have = set()
+        for g in gsms:
+            have.update(_sample_modalities(self.samples[g]))
+        return [k for k in MODALITIES if k in have]
+
     def request_plan(
-        self, samples: Optional[Sequence[str]] = None, *, include_manifest: bool = True
+        self,
+        samples: Optional[Sequence[str]] = None,
+        *,
+        include_manifest: bool = True,
+        modalities: Union[None, str, Sequence[str]] = None,
     ) -> dict:
         """The requests and bytes a whole-sample ``load`` of these samples issues (no network access)."""
         gsms = list(samples) if samples is not None else self.gsm_ids
+        names = (CELLS,) + _members_for(normalize_modalities(modalities))
         reqs = 1 if include_manifest else 0
         total = 0
         per = []
         for g in gsms:
             sm = self.samples[g]
             rngs = [
-                (m.off, m.len) for n in (CELLS, EXON, INTRON) if (m := sm.member(n)) is not None
+                (m.off, m.len)
+                for n in names
+                if (m := sm.member(n)) is not None and (n == CELLS or _member_has_data(sm, n))
             ]
-            co = _coalesce(rngs)
+            co = _coalesce(rngs, MEMBER_GAP)
             nb = sum(b - a for a, b, _ in co)
             per.append({"gsm": g, "requests": len(co), "bytes": nb, "object_bytes": sm.bytes})
             reqs += len(co)
@@ -764,6 +899,13 @@ class _SampleData:
     unspliced: Optional[_Part]
     n_cells_total: int
     skipped: Optional[str] = None
+    features: Dict[str, Tuple[_Part, List[str]]] = field(
+        default_factory=dict
+    )  # feature-level member -> (cells x stored rows, row names)
+
+    @property
+    def empty(self) -> bool:
+        return self.spliced is None and self.unspliced is None and not self.features
 
 
 def _runs(
@@ -815,6 +957,18 @@ def _decode_part(
     return _Part(r["indptr"], r["indices"], r["data"], n_genes)
 
 
+def _decode_feature_part(
+    member, c_lo: int, c_hi: int, sel: np.ndarray, n_rows: int, threads: int
+) -> _Part:
+    """Decode columns [c_lo, c_hi) of a feature-level matrix (junctions, V(D)J segments, ...) in the legacy row order, keep
+    ``sel``; values become int32 (counts) or float32."""
+    rel = (sel - c_lo).astype(np.uint32) if len(sel) != (c_hi - c_lo) else None
+    r = member.decode(c_lo, c_hi, mode="canonical", threads=threads, cols=rel)
+    data = r["data"]
+    data = data.astype(np.float32 if data.dtype.kind == "f" else np.int32, copy=False)
+    return _Part(r["indptr"], r["indices"], data, n_rows)
+
+
 def _concat_parts(parts: List[_Part]) -> _Part:
     if len(parts) == 1:
         return parts[0]
@@ -823,7 +977,7 @@ def _concat_parts(parts: List[_Part]) -> _Part:
     ncell = sum(p.n_cells for p in parts)
     indptr = np.empty(ncell + 1, dtype=np.int64 if nnz >= 2**31 else np.int32)
     indices = np.empty(nnz, dtype=np.int32)
-    data = np.empty(nnz, dtype=np.int32)
+    data = np.empty(nnz, dtype=parts[0].data.dtype)
     indptr[0] = 0
     c = z = 0
     for p in parts:
@@ -842,6 +996,34 @@ def _sample_columns(cells_buf, resolver: _PackResolver, want: Sequence[str]):
     return rd, {n: rd.column(n) for n in want if n in rd.entries}
 
 
+def pk_names_junctions(table, idx: np.ndarray, local) -> List[str]:
+    from .junctions import decode_local, row_names
+
+    return row_names(table, idx, decode_local(local) if local is not None else None)  # type: ignore[arg-type]
+
+
+def _member_row_names(study: "Study", mem, hdr: dict, local=None) -> List[str]:
+    """Row names of a feature-level matrix: inline, a vocabulary pack, or a subset of one."""
+    kind = hdr["row_names_kind"]
+    if kind == "inline":
+        return list(mem.row_names()["names"])
+    pk = study._resolver.get(hdr["row_names_id"])
+    if kind == "pack":
+        return list(pk.names())
+    idx = np.asarray(mem.row_names()["pack_index"], dtype=np.int64)
+    from .junctions import LOCAL_BASE, JunctionTable
+
+    if isinstance(
+        pk, JunctionTable
+    ):  # rows are junction ids; ids >= LOCAL_BASE are the sample's own junctions
+        if local is None and (idx >= LOCAL_BASE).any():
+            raise V2Error(
+                "junction rows refer to the sample's local junction list, which was not read"
+            )
+        return pk_names_junctions(pk, idx, local)
+    return list(pk.names_at(idx))
+
+
 def _read_sample(
     study: Study,
     sm: SampleRef,
@@ -853,6 +1035,7 @@ def _read_sample(
     threads: int,
     want_exon: bool = True,
     want_intron: bool = True,
+    members: Optional[Sequence[str]] = None,
     parallel_parts: bool = False,
     whole_max: int = WHOLE_MAX_BYTES,
     verify: bool = False,
@@ -860,39 +1043,48 @@ def _read_sample(
 ) -> _SampleData:
     """Fetch and decode what one sample contributes.
 
-    ``sel_fn(cells_reader) -> ascending int array`` of the matrix columns to keep (e.g. the called cells)."""
+    ``sel_fn(cells_reader) -> ascending int array`` of the matrix columns to keep (e.g. the called cells). ``members`` names
+    the matrix members to fetch (default: the exon matrix, plus the intron matrix with ``want_intron``); only those members'
+    byte ranges (or, for large samples, their chunk runs that cover the selected cells) are read. A sample that has none of
+    them is skipped; a requested member it lacks is simply absent from the result."""
     own_src = src is None
     src = src or study.source_for(sm)
+    if members is None:
+        members = ([EXON] if want_exon else []) + ([INTRON] if want_intron else [])
+    wanted = list(dict.fromkeys(members))
     try:
-        cm, em, im = sm.member(CELLS), sm.member(EXON), sm.member(INTRON)
+        cm = sm.member(CELLS)
         if cm is None:
             raise V2Error(f"{sm.gsm}: the sample object has no cells table")
-        if em is None or em.len == 0:
-            return _SampleData(
-                sm.gsm,
-                np.zeros(0, np.int64),
-                {},
-                None,
-                None,
-                0,
-                skipped="exon_counts.1pz is missing",
+
+        def skip(reason: str, n: int = 0, sel: Optional[np.ndarray] = None) -> _SampleData:
+            empty = np.zeros(0, np.int64) if sel is None else sel
+            return _SampleData(sm.gsm, empty, {}, None, None, n, skipped=reason)
+
+        em = sm.member(EXON)
+        if EXON in wanted and (em is None or em.len == 0):
+            return skip(f"{EXON} is missing")
+        present = [n for n in wanted if n == EXON or _member_has_data(sm, n)]
+        if not present:
+            return skip(
+                f"{wanted[0]} is missing" if len(wanted) == 1 else f"none of {wanted} is present"
             )
-        if not want_intron:
-            im = None
-        total = cm.len + em.len + (im.len if im else 0)
+        refs = {n: sm.members[n] for n in present}
+        total = cm.len + sum(r.len for r in refs.values())
         whole = src.local or total <= whole_max
         bufs: Dict[str, Any] = {}
         prefixes: Dict[str, Any] = {}
+        names = [CELLS] + present
         if whole:
-            names = [CELLS, EXON] + ([INTRON] if im else [])
             bl = src.read_ranges(
-                [(sm.members[n].off, sm.members[n].len) for n in names], parallel=parallel_parts
+                [(sm.members[n].off, sm.members[n].len) for n in names],
+                parallel=parallel_parts,
+                gap=MEMBER_GAP,
             )
             bufs = dict(zip(names, bl))
             cbuf = bufs[CELLS]
         else:
             # phase 1: the cells table and the prefix (header, chunk index, tables, rows) of each matrix, concurrently
-            names = [CELLS] + [n for n, r in ((EXON, em), (INTRON, im)) if r is not None]
             bl = src.read_ranges(
                 [
                     (
@@ -909,12 +1101,10 @@ def _read_sample(
         rd, cols = _sample_columns(cbuf, study._resolver, want_cols)
         n_rows = rd.n_rows
         if n_rows == 0:
-            return _SampleData(
-                sm.gsm, np.zeros(0, np.int64), {}, None, None, 0, skipped="count matrix has 0 cells"
-            )
+            return skip("count matrix has 0 cells")
         sel = np.asarray(sel_fn(rd), dtype=np.int64)
         if len(sel) == 0:
-            return _SampleData(sm.gsm, sel, {}, None, None, n_rows, skipped="0 cells called")
+            return skip("0 cells called", n_rows, sel)
         if len(sel) and (
             sel[0] < 0 or sel[-1] >= n_rows or (len(sel) > 1 and not (np.diff(sel) > 0).all())
         ):
@@ -924,23 +1114,24 @@ def _read_sample(
             for k, v in cols.items()
         }
 
-        parts: Dict[str, Optional[_Part]] = {"exon": None, "intron": None}
+        parts: Dict[str, Optional[_Part]] = {EXON: None, INTRON: None}
+        features: Dict[str, Tuple[_Part, List[str]]] = {}
         opened = []
-        for tag, mref, name in (("exon", em, EXON), ("intron", im, INTRON)):
-            if mref is None or mref.len == 0:
+        for name, mref in refs.items():
+            if mref.len == 0:
                 continue
             if whole:
                 mem = _open_member(src, mref, whole=bufs[name])
             else:
                 mem = _open_member(src, mref, first=prefixes[name])
-            opened.append((tag, mref, name, mem))
+            opened.append((mref, name, mem))
         # phase 2 (partial plans): the chunk runs that cover the wanted cells, all matrices at once
-        run_bufs: Dict[str, Any] = {}
+        run_bufs: Dict[Tuple[str, int], Any] = {}
         plans: Dict[str, Any] = {}
         if not whole:
             want: List[Tuple[int, int]] = []
             owners: List[Tuple[str, int]] = []
-            for tag, mref, name, mem in opened:
+            for mref, name, mem in opened:
                 first_col = mem.chunk_index()[:, 2].astype(np.int64)
                 runs = _runs(sel, first_col)
                 pl = [mem.plan(a, b) for a, b in runs]
@@ -955,7 +1146,7 @@ def _read_sample(
             got = src.read_ranges(want, parallel=True, gap=PARTIAL_GAP) if want else []
             for (name, k), buf in zip(owners, got):
                 run_bufs[(name, k)] = buf
-        for tag, mref, name, mem in opened:
+        for mref, name, mem in opened:
             hdr = mem.header
             if hdr["n"] != n_rows:
                 raise V2Error(
@@ -967,25 +1158,46 @@ def _read_sample(
                 raise V2Error(
                     f"{sm.gsm}: {name} header digest {hdr['digest']} != manifest {mref.digest}"
                 )
-            gmap = _member_gene_map(study, mem, hdr, keep_map)
-            if gmap is None:
+            gene_level = name in GENE_MEMBERS
+            gmap = _member_gene_map(study, mem, hdr, keep_map) if gene_level else None
+            if gene_level and gmap is None:
                 continue
-            c_hi = int(sel[-1]) + 1
+            m_rows = int(hdr["m"])
+
+            def dec(a: int, b: int, s: np.ndarray, mem=mem, gmap=gmap, m_rows=m_rows) -> _Part:
+                if gmap is not None:
+                    return _decode_part(mem, a, b, s, gmap, n_genes, threads)
+                return _decode_feature_part(mem, a, b, s, m_rows, threads)
+
+            part: Optional[_Part]
             if whole:
-                parts[tag] = _decode_part(mem, 0, c_hi, sel, gmap, n_genes, threads)
+                part = dec(0, int(sel[-1]) + 1, sel)
             else:
                 runs, pl = plans[name]
                 pieces = []
                 for k, ((a, b), p) in enumerate(zip(runs, pl)):
                     if (name, k) in run_bufs:
                         mem.add_range(p["byte_off"], run_bufs[(name, k)])
-                    s_run = sel[(sel >= a) & (sel < b)]
-                    pieces.append(_decode_part(mem, a, b, s_run, gmap, n_genes, threads))
-                parts[tag] = _concat_parts(pieces) if pieces else None
+                    pieces.append(dec(a, b, sel[(sel >= a) & (sel < b)]))
+                part = _concat_parts(pieces) if pieces else None
+            if gene_level:
+                parts[name] = part
+            elif part is not None:
+                local = None
+                lref = sm.members.get(
+                    name + ".local"
+                )  # junction rows stored as table ids: the sample's own junctions
+                if hdr["row_names_kind"] == "pack_subset" and lref is not None and lref.len:
+                    local = bytes(src.read(lref.off, lref.len))
+                    if lref.kind == 3:  # stored zstd
+                        from .util import zstd_decompress
+
+                        local = zstd_decompress(local)
+                features[name] = (part, _member_row_names(study, mem, hdr, local))
             if verify:
                 _verify_matrix(study, sm, name, mref, mem, hdr)
-            del mem
-        return _SampleData(sm.gsm, sel, cols, parts["exon"], parts["intron"], n_rows)
+            del mem, dec
+        return _SampleData(sm.gsm, sel, cols, parts[EXON], parts[INTRON], n_rows, features=features)
     finally:
         if own_src:
             src.close()
@@ -1073,6 +1285,14 @@ def _gene_keep(study: Study, genes: Optional[Sequence[str]]):
     return kmap, int(keep.sum()), ids[keep], names[keep]
 
 
+def _gene_axis(study: Study, genes: Optional[Sequence[str]], mods: Sequence[str]):
+    """``_gene_keep`` when a gene-level modality is asked for; otherwise no gene axis (no pack is needed)."""
+    if any(MODALITIES[k].slot != "obsm" for k in mods):
+        return _gene_keep(study, genes)
+    empty = np.array([], dtype=object)
+    return None, 0, empty, empty
+
+
 def _sample_obs_value(meta: dict, key: str, default=""):
     v = meta.get(key, default)
     return default if v is None else v
@@ -1135,7 +1355,7 @@ def _vstack_parts(mats: List[_Part], n_genes: int, perms: List[Optional[np.ndarr
     ncell = sum(p.n_cells for p in mats)
     indptr = np.empty(ncell + 1, dtype=np.int64 if nnz >= 2**31 else np.int32)
     indices = np.empty(nnz, dtype=np.int32)
-    data = np.empty(nnz, dtype=np.int32)
+    data = np.empty(nnz, dtype=mats[0].data.dtype if mats else np.int32)
     indptr[0] = 0
     c = z = 0
     for p, perm in zip(mats, perms):
@@ -1165,6 +1385,168 @@ def _vstack_parts(mats: List[_Part], n_genes: int, perms: List[Optional[np.ndarr
     return m
 
 
+def _empty_part(n_cells: int, n_cols: int, dtype=np.int32) -> _Part:
+    return _Part(
+        np.zeros(n_cells + 1, dtype=np.int32), np.zeros(0, np.int32), np.zeros(0, dtype), n_cols
+    )
+
+
+def _psi_part(part: _Part, names: List[str]) -> Tuple[_Part, List[str]]:
+    """True PSI (float32) of a cells x junctions part, per cell, over the junction events of ``names`` (recipes_psi)."""
+    from .recipes_ctx import Matrix
+    from .recipes_psi import compute_psi
+
+    m = Matrix(
+        part.indptr.astype(np.int64),
+        part.indices.astype(np.int64),
+        part.data,
+        (part.n_genes, part.n_cells),
+        list(names),
+        None,
+        None,
+    )
+    indptr, rows, psi, _ = compute_psi(m)
+    return _Part(indptr, rows.astype(np.int32), psi.astype(np.float32), part.n_genes), names
+
+
+def _feature_matrix(
+    ok: List[_SampleData],
+    perms: List[Optional[np.ndarray]],
+    member: str,
+    transform: Optional[Callable[[_Part, List[str]], Tuple[_Part, List[str]]]] = None,
+):
+    """cells x features CSR of one feature-level member over the samples, on the union of their feature names (first-seen
+    order), the names, and the samples that lack the member (their rows are empty)."""
+    import scipy.sparse as sp
+
+    union: Dict[str, int] = {}
+    staged: List[Optional[Tuple[_Part, np.ndarray]]] = []
+    missing = []
+    for r in ok:
+        fp = r.features.get(member)
+        if fp is None:
+            missing.append(r.gsm)
+            staged.append(None)
+            continue
+        part, names = transform(*fp) if transform is not None else fp
+        remap = np.fromiter(
+            (union.setdefault(n, len(union)) for n in names), dtype=np.int64, count=len(names)
+        )
+        staged.append((part, remap))
+    n_feat = len(union)
+    dtype = next((x[0].data.dtype for x in staged if x is not None), np.dtype(np.int32))
+    blocks = []
+    for r, x, perm in zip(ok, staged, perms):
+        if x is None:
+            blocks.append(sp.csr_matrix((len(r.sel), n_feat), dtype=dtype))
+            continue
+        part, remap = x
+        m = sp.csr_matrix(
+            (part.data, remap[part.indices.astype(np.int64)], part.indptr),
+            shape=(part.n_cells, n_feat),
+        )
+        m.sum_duplicates()  # sorts the column indices again after the remap
+        blocks.append(m[perm] if perm is not None else m)
+    X = sp.vstack(blocks, format="csr") if len(blocks) > 1 else blocks[0].tocsr()
+    return X, np.array(list(union), dtype=object), missing
+
+
+def _build_anndata(
+    ok: List[_SampleData],
+    perms: List[Optional[np.ndarray]],
+    mods: Sequence[str],
+    obs,
+    n_genes: int,
+    var_ids: np.ndarray,
+    var_names: np.ndarray,
+    *,
+    explicit: bool,
+    verbose: bool = False,
+):
+    """One AnnData from the per-sample reads: ``counts`` -> X, ``spliced`` / ``unspliced`` -> layers, the feature-level
+    modalities -> obsm (cells x features CSR; feature names in ``uns["obsm_features"][name]``). Without ``counts`` X is None;
+    without any gene-level modality var is empty."""
+    import anndata as ad
+    import pandas as pd
+
+    gene_mods = [k for k in mods if MODALITIES[k].slot != "obsm"]
+    X = None
+    if "counts" in mods:
+        xs: List[_Part] = []
+        for r in ok:
+            a, b = r.spliced, r.unspliced
+            if a is not None and b is not None:
+                xm = a.csr() + b.csr()
+                xs.append(
+                    _Part(xm.indptr, xm.indices, xm.data.astype(np.int32, copy=False), n_genes)
+                )
+            elif a is not None or b is not None:
+                xs.append(a if a is not None else b)  # type: ignore[arg-type]
+            else:
+                xs.append(_empty_part(len(r.sel), n_genes))
+        X = _vstack_parts(xs, n_genes, perms)
+        xs.clear()
+    if gene_mods:
+        var = pd.DataFrame(
+            {"gene_name": var_names.astype(object)},
+            index=pd.Index(var_ids.astype(object), name="gene_id"),
+        )
+    else:
+        var = pd.DataFrame(index=pd.Index([], dtype=object, name="gene_id"))
+    adata = ad.AnnData(X=X, obs=obs, var=var)
+    for lname in ("spliced", "unspliced"):
+        if lname not in mods:
+            continue
+        plist = [getattr(r, lname) for r in ok]
+        if all(p is not None for p in plist):
+            adata.layers[lname] = _vstack_parts(plist, n_genes, perms)  # type: ignore[arg-type]
+            continue
+        lacking = [r.gsm for r, p in zip(ok, plist) if p is None]
+        if explicit:
+            warnings.warn(
+                f"layer {lname!r} omitted: {lacking} have no {MODALITIES[lname].members[0]}",
+                UserWarning,
+                stacklevel=4,
+            )
+        elif verbose:
+            print(f"  [singlet.v2] {lname} layer unavailable for some samples; skipped")
+    names_out: Dict[str, np.ndarray] = {}
+    for k in mods:
+        spec = MODALITIES[k]
+        if spec.slot != "obsm":
+            continue
+        mat, names, missing = _feature_matrix(
+            ok, perms, spec.members[0], _psi_part if k == "psi" else None
+        )
+        if missing:
+            warnings.warn(
+                f"{k}: {missing} have no {spec.members[0]}; their rows of obsm[{k!r}] are empty",
+                UserWarning,
+                stacklevel=4,
+            )
+        adata.obsm[k] = mat
+        names_out[k] = names
+    if names_out:
+        adata.uns["obsm_features"] = names_out
+    return adata
+
+
+def modality_anndata(adata, name: str):
+    """A feature-level modality of a v2 AnnData (``obsm[name]``, e.g. ``"splice_junctions"``) as its own AnnData: the same
+    cells (obs), the modality's features as var."""
+    import anndata as ad
+    import pandas as pd
+
+    k = _MODALITY_ALIASES.get(name, name)
+    if k not in adata.obsm:
+        raise KeyError(f"{name!r} is not in obsm; this AnnData has {list(adata.obsm.keys())}")
+    names = (adata.uns.get("obsm_features") or {}).get(k)
+    var = None if names is None else pd.DataFrame(index=pd.Index([str(x) for x in names]))
+    out = ad.AnnData(X=adata.obsm[k], obs=adata.obs.copy(), var=var)
+    out.uns["modality"] = k
+    return out
+
+
 def _study_to_anndata(
     study: Study,
     samples: Optional[Sequence[str]] = None,
@@ -1172,6 +1554,7 @@ def _study_to_anndata(
     genes: Optional[Sequence[str]] = None,
     obs_filter: Optional[dict] = None,
     layers: bool = True,
+    modalities: Union[None, str, Sequence[str]] = None,
     cell_order: str = "legacy",
     concurrency: Optional[int] = None,
     threads: Optional[int] = None,
@@ -1179,13 +1562,18 @@ def _study_to_anndata(
     whole_max: int = WHOLE_MAX_BYTES,
     verbose: bool = False,
 ) -> "anndata.AnnData":
-    import anndata as ad
     import pandas as pd
 
+    mods = normalize_modalities(modalities, layers=layers)
     gsms = _select_samples(study, samples, obs_filter)
     if not gsms:
         raise KeyError(f"no sample of {study.gse} matches the request")
-    kmap, n_genes, var_ids, var_names = _gene_keep(study, genes)
+    if (
+        modalities is not None
+    ):  # the default degrades as before (no intron matrix: no unspliced layer)
+        _check_modalities(study, gsms, mods)
+    members = _members_for(mods)
+    kmap, n_genes, var_ids, var_names = _gene_axis(study, genes, mods)
     conc = max(1, min(concurrency or study.concurrency, len(gsms)))
     ncpu = os.cpu_count() or 4
     dec_threads = threads if threads is not None else max(1, ncpu // conc)
@@ -1201,6 +1589,7 @@ def _study_to_anndata(
             keep_map=kmap,
             n_genes=n_genes,
             threads=dec_threads,
+            members=members,
             parallel_parts=(conc == 1),
             whole_max=whole_max,
             verify=do_verify,
@@ -1220,7 +1609,7 @@ def _study_to_anndata(
     skipped = []
     ok: List[_SampleData] = []
     for r in results:
-        if r.skipped or r.spliced is None and r.unspliced is None:
+        if r.skipped or r.empty:
             reason = r.skipped or "count matrix has no usable features"
             skipped.append({"gsm_id": r.gsm, "reason": reason})
             warnings.warn(f"{r.gsm} skipped: {reason} (in {study.gse})", UserWarning, stacklevel=3)
@@ -1235,21 +1624,6 @@ def _study_to_anndata(
         )
 
     perms = [_cell_order(r.cols, r.sel, cell_order) for r in ok]
-    xs: List[_Part] = []
-    spl: List[Optional[_Part]] = []
-    uns_: List[Optional[_Part]] = []
-    for r in ok:
-        a, b = r.spliced, r.unspliced
-        spl.append(a)
-        uns_.append(b)
-        if a is not None and b is not None:
-            xm = a.csr() + b.csr()
-            xs.append(_Part(xm.indptr, xm.indices, xm.data.astype(np.int32, copy=False), n_genes))
-        else:
-            xs.append(a if a is not None else b)  # type: ignore[arg-type]
-    X = _vstack_parts(xs, n_genes, perms)
-    xs.clear()
-
     gsm_meta = study.study_meta.get("gsm_meta", {})
     obs_frames = []
     for r, perm in zip(ok, perms):
@@ -1275,19 +1649,19 @@ def _study_to_anndata(
         )
         obs_frames.append(pd.DataFrame(d, index=pd.Index(idx.astype(object))))
     obs = pd.concat(obs_frames, axis=0) if len(obs_frames) > 1 else obs_frames[0]
-    var = pd.DataFrame(
-        {"gene_name": var_names.astype(object)},
-        index=pd.Index(var_ids.astype(object), name="gene_id"),
+    adata = _build_anndata(
+        ok,
+        perms,
+        mods,
+        obs,
+        n_genes,
+        var_ids,
+        var_names,
+        explicit=modalities is not None,
+        verbose=verbose,
     )
-    adata = ad.AnnData(X=X, obs=obs, var=var)
-    if layers:
-        for lname, plist in (("spliced", spl), ("unspliced", uns_)):
-            if all(p is not None for p in plist):
-                adata.layers[lname] = _vstack_parts(plist, n_genes, perms)  # type: ignore[arg-type]
-            elif verbose:
-                print(f"  [singlet.v2] {lname} layer unavailable for some samples; skipped")
-    spl.clear(), uns_.clear()
     _attach_uns(adata, study, [r.gsm for r in ok], skipped)
+    adata.uns["singlet_v2"]["modalities"] = list(mods)
     if obs_filter:
         adata = _apply_obs_filter(adata, obs_filter)
     return adata
@@ -1370,6 +1744,7 @@ def _study_cells(
     columns: Optional[Sequence[str]] = None,
     genes: Optional[Sequence[str]] = None,
     layers: bool = False,
+    modalities: Union[None, str, Sequence[str]] = None,
     max_cells: Optional[int] = None,
     concurrency: Optional[int] = None,
     threads: Optional[int] = None,
@@ -1382,12 +1757,20 @@ def _study_cells(
     Only the cells tables of the samples and the chunk runs of the matrices that contain the selected cells are fetched when the
     samples are large (small samples are fetched whole in one request). ``where`` is a pandas query over the cells-table columns
     (``called``, ``n_umi_exon``, ``n_umi_intron``, ``n_feat_exon``, ``n_feat_intron``, ...), a callable on that DataFrame, or a dict
-    ``{column: value | (lo, hi) | [values]}``. ``max_cells`` keeps the first cells per sample in matrix-column order (largest first)."""
+    ``{column: value | (lo, hi) | [values]}``. ``max_cells`` keeps the first cells per sample in matrix-column order (largest first).
+    ``modalities`` picks the matrices (default ``counts``, plus the spliced/unspliced layers with ``layers=True``); only the chunk
+    runs of those members are fetched."""
     import anndata as ad
     import pandas as pd
 
+    mods = normalize_modalities(modalities, layers=layers)
     gsms = _select_samples(study, samples, None)
-    kmap, n_genes, var_ids, var_names = _gene_keep(study, genes)
+    if (
+        modalities is not None
+    ):  # the default degrades as before (no intron matrix: no unspliced layer)
+        _check_modalities(study, gsms, mods)
+    members = _members_for(mods)
+    kmap, n_genes, var_ids, var_names = _gene_axis(study, genes, mods)
     conc = max(1, min(concurrency or study.concurrency, len(gsms)))
     dec_threads = threads if threads is not None else max(1, (os.cpu_count() or 4) // conc)
     do_verify = study.verify if verify is None else verify
@@ -1411,6 +1794,7 @@ def _study_cells(
             keep_map=kmap,
             n_genes=n_genes,
             threads=dec_threads,
+            members=members,
             parallel_parts=(conc == 1),
             whole_max=whole_max,
             verify=do_verify,
@@ -1421,7 +1805,7 @@ def _study_cells(
     else:
         with ThreadPoolExecutor(conc, thread_name_prefix="singlet-sample") as ex:
             results = list(ex.map(work, gsms))
-    ok = [r for r in results if r.spliced is not None or r.unspliced is not None]
+    ok = [r for r in results if not r.skipped and not r.empty]
     if not ok:
         return ad.AnnData(
             X=np.zeros((0, n_genes), dtype=np.int32),
@@ -1430,17 +1814,6 @@ def _study_cells(
                 index=pd.Index(var_ids.astype(object), name="gene_id"),
             ),
         )
-    xs, spl, uns_ = [], [], []
-    for r in ok:
-        a, b = r.spliced, r.unspliced
-        spl.append(a)
-        uns_.append(b)
-        if a is not None and b is not None:
-            xm = a.csr() + b.csr()
-            xs.append(_Part(xm.indptr, xm.indices, xm.data.astype(np.int32, copy=False), n_genes))
-        else:
-            xs.append(a if a is not None else b)  # type: ignore[arg-type]
-    X = _vstack_parts(xs, n_genes, [None] * len(xs))
     frames = []
     for r in ok:
         n = len(r.sel)
@@ -1454,15 +1827,22 @@ def _study_cells(
             pd.DataFrame(d, index=pd.Index(np.char.add(f"{r.gsm}_", bc.astype(str)).astype(object)))
         )
     obs = pd.concat(frames, axis=0) if len(frames) > 1 else frames[0]
-    var = pd.DataFrame(
-        {"gene_name": var_names.astype(object)},
-        index=pd.Index(var_ids.astype(object), name="gene_id"),
+    adata = _build_anndata(
+        ok,
+        [None] * len(ok),
+        mods,
+        obs,
+        n_genes,
+        var_ids,
+        var_names,
+        explicit=modalities is not None,
     )
-    adata = ad.AnnData(X=X, obs=obs, var=var)
-    if layers and all(p is not None for p in spl) and all(p is not None for p in uns_):
-        adata.layers["spliced"] = _vstack_parts(spl, n_genes, [None] * len(spl))  # type: ignore[arg-type]
-        adata.layers["unspliced"] = _vstack_parts(uns_, n_genes, [None] * len(uns_))  # type: ignore[arg-type]
-    adata.uns["singlet_v2"] = {"gse": study.gse, "rev": study.rev, "base": study.transport.base}
+    adata.uns["singlet_v2"] = {
+        "gse": study.gse,
+        "rev": study.rev,
+        "base": study.transport.base,
+        "modalities": list(mods),
+    }
     return adata
 
 
@@ -1496,12 +1876,18 @@ def load(
     obs_filter: Optional[dict] = None,
     samples: Optional[Sequence[str]] = None,
     layers: bool = True,
+    modalities: Union[None, str, Sequence[str]] = None,
     force: bool = False,
     base: Optional[str] = None,
     **kw,
 ) -> "anndata.AnnData":
     """Load a study (``GSE...``), one sample (``GSM...``, resolved to its parent study), a downloaded ``.s2`` sample object, or a
-    manifest ``.json`` path as an AnnData of the called cells at gene level (``X = spliced + unspliced``)."""
+    manifest ``.json`` path as an AnnData of the called cells at gene level (``X = spliced + unspliced``).
+
+    ``modalities`` (a name or a list, see :data:`MODALITIES`) fetches only the members those modalities need: ``"counts"``
+    (X; exon + intron), ``"spliced"`` (exon only), ``"unspliced"`` (intron only), ``"splice_junctions"`` / ``"psi"`` (the
+    junction matrix only), ``"mt"``, ``"vdj"``. The per-cell ``cells`` table is always read. Default: counts + both layers."""
+    kw["modalities"] = modalities
     s = str(source).strip()
     p = Path(s).expanduser()
     if p.suffix.lower() == ".s2" and p.exists():
@@ -1565,12 +1951,12 @@ def load_s2(
     *,
     genes: Optional[Sequence[str]] = None,
     layers: bool = True,
+    modalities: Union[None, str, Sequence[str]] = None,
     threads: Optional[int] = None,
     verify: bool = False,
     **kw,
 ) -> "anndata.AnnData":
     """AnnData of the called cells of a local ``.s2`` sample object (memory mapped, no network, no copies of the file)."""
-    import anndata as ad
     import pandas as pd
 
     from .container import S2Reader
@@ -1584,29 +1970,30 @@ def load_s2(
         for n, mi in rd.members.items()
     }
     sm = SampleRef(rd.sample_id, "", rd.file_len, None, None, None, members)
+    mods = normalize_modalities(modalities, layers=layers)
+    have = _sample_modalities(sm)
+    missing = [m for m in mods if m not in have] if modalities is not None else []
+    if missing:
+        raise ModalityUnavailable(f"{path} has no {missing}; it has {have}")
     exon = members.get(EXON)
-    if exon is None:
-        raise V2Error(f"{path} has no {EXON}")
     t = T.DirTransport(os.path.dirname(os.path.abspath(path)) or ".")
     # a throwaway Study that only supplies packs and the gene axis
-    pack_hex = None
     pz = _native()
     src = _MmapSource(path, rd.file_len)
     try:
-        mem = pz.Member(src.read(exon.off, exon.len))
-        h = mem.header
-        pack_hex = h["row_names_id"]
-        del mem
+        packs = {}
+        if exon is not None and exon.len:
+            packs["exon"] = pz.Member(src.read(exon.off, exon.len)).header["row_names_id"]
         doc = {
             "format": "singlet-v2",
             "manifest_version": 1,
             "gse": "GSE0",
             "rev": "",
-            "packs": {"exon": pack_hex},
+            "packs": packs,
             "samples": [],
         }
         st = Study(doc, t, {"origin": "s2"}, concurrency=1, verify=verify)
-        kmap, n_genes, var_ids, var_names = _gene_keep(st, genes)
+        kmap, n_genes, var_ids, var_names = _gene_axis(st, genes, mods)
         sd = _read_sample(
             st,
             sm,
@@ -1615,6 +2002,7 @@ def load_s2(
             keep_map=kmap,
             n_genes=n_genes,
             threads=threads if threads is not None else 0,
+            members=_members_for(mods),
             src=src,
             verify=verify,
         )
@@ -1623,13 +2011,6 @@ def load_s2(
     if sd.skipped:
         raise ValueError(f"{sm.gsm} has no usable cells: {sd.skipped}")
     perm = _cell_order(sd.cols, sd.sel, kw.get("cell_order", "legacy"))
-    a, b = sd.spliced, sd.unspliced
-    if a is not None and b is not None:
-        xm = a.csr() + b.csr()
-        xp = _Part(xm.indptr, xm.indices, xm.data.astype(np.int32, copy=False), n_genes)
-    else:
-        xp = a if a is not None else b
-    X = _vstack_parts([xp], n_genes, [perm])  # type: ignore[list-item]
     bc = np.asarray(sd.cols["barcode"], dtype=object)
     if perm is not None:
         bc = bc[perm]
@@ -1638,15 +2019,10 @@ def load_s2(
         {"gsm_id": np.full(n, sm.gsm, dtype=object)},
         index=pd.Index(np.char.add(f"{sm.gsm}_", bc.astype(str)).astype(object)),
     )
-    var = pd.DataFrame(
-        {"gene_name": var_names.astype(object)},
-        index=pd.Index(var_ids.astype(object), name="gene_id"),
+    adata = _build_anndata(
+        [sd], [perm], mods, obs, n_genes, var_ids, var_names, explicit=modalities is not None
     )
-    adata = ad.AnnData(X=X, obs=obs, var=var)
-    if layers and a is not None and b is not None:
-        adata.layers["spliced"] = _vstack_parts([a], n_genes, [perm])
-        adata.layers["unspliced"] = _vstack_parts([b], n_genes, [perm])
-    adata.uns["singlet_v2"] = {"sample_object": path}
+    adata.uns["singlet_v2"] = {"sample_object": path, "modalities": list(mods)}
     return adata
 
 

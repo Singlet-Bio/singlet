@@ -1,0 +1,66 @@
+{
+ "build": "GRCz11",
+ "version_id": "3f8285ee27671ba7d7d9c8d3a230d221",
+ "chrom_rename": {},
+ "junctions": {
+  "census": 3360032,
+  "recurrent_supported_candidates": 55821,
+  "annotated_gtf": 255011,
+  "annotated_seen": 51357,
+  "core": 255282,
+  "core_annotated": 255011,
+  "core_unannotated": 271,
+  "rare": 2528,
+  "rare_segments": 1,
+  "local": 3305876
+ },
+ "called_umi_share": {
+  "core": 0.9648138226011647,
+  "core_annotated": 0.9584486294925176,
+  "rare": 0.0023877298336518844
+ },
+ "bytes": {
+  "core": 1003378,
+  "rare_total": 13687,
+  "rare_largest_segment": 13687,
+  "version": 1048
+ },
+ "decode_core_ms_median_of_7": 8.0,
+ "reference_cumsum_1M_u32_ms": 1.7,
+ "rules": {
+  "core": "annotated (GTF), or unannotated with n_studies >= 3, umi_called >= 1000, a canonical motif and ambient fraction <= 0.5",
+  "rare": "unannotated with n_studies >= 3, 100 <= umi_called < 1000, a canonical motif and ambient fraction <= 0.5; one segment, or one per chromosome above 1 MiB",
+  "local": "everything else: stays in its sample object as integer coordinates"
+ },
+ "sources": {
+  "gtf": {
+   "url": "https://ftp.ensembl.org/pub/release-111/gtf/danio_rerio/Danio_rerio.GRCz11.111.gtf.gz",
+   "sha256": "5b75b6d0e6bdf53f67e7b3ccefedc93bd99e6fbd6d41d5138baa769a83925479"
+  },
+  "genome": {
+   "url": "https://ftp.ensembl.org/pub/release-111/fasta/danio_rerio/dna/Danio_rerio.GRCz11.dna.primary_assembly.fa.gz",
+   "sha256": "12898fc1e12af49918738a5fb4b2c55d9e8aaf53b2cd2074c63f43ec17b1fbad"
+  }
+ },
+ "packs_dir": "/mnt/projects/debruinz_project/debruinz/singlet/state/jxtab/v1-bf3a10b2e1/packs/GRCz11",
+ "packs": [
+  {
+   "id": "696676c95663bb554915f9673f506da4",
+   "kind": "junction-segment",
+   "bytes": 1003378,
+   "sha256": "696676c95663bb554915f9673f506da4d999f73bc8a306a07dad92134633611e"
+  },
+  {
+   "id": "a164b17632d43b224d2f6eb5d9095fce",
+   "kind": "junction-segment",
+   "bytes": 13687,
+   "sha256": "a164b17632d43b224d2f6eb5d9095fce60ed56c6d043a4188a83bde0e844b597"
+  },
+  {
+   "id": "3f8285ee27671ba7d7d9c8d3a230d221",
+   "kind": "junction-version",
+   "bytes": 1048,
+   "sha256": "3f8285ee27671ba7d7d9c8d3a230d2219c077a5177a0dd14fac8e12332649bd8"
+  }
+ ]
+}
