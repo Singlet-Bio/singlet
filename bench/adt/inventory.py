@@ -131,7 +131,7 @@ def main():
 
     sus = pd.read_csv(os.path.join(a.screen, "libtype_suspects.tsv"), sep="\t")
     sus = sus[sus.lib_class.isin(CLASSES) & sus.confidence.isin(["high", "medium"])].copy()
-    geo = pd.read_parquet(os.path.join(a.screen, "geo_samples.parquet")).set_index("gsm_id")
+    geo = pd.read_parquet(os.path.join(a.screen, "geo_samples.parquet")).drop_duplicates("gsm_id").set_index("gsm_id")
     qc = pd.read_parquet(os.path.join(a.screen, "d1_qc.parquet")).drop_duplicates("gsm_id").set_index("gsm_id")
 
     series = {g: read_series(a.soft, g) for g in sorted(sus.gse_id.unique())}

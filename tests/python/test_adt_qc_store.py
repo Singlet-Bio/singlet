@@ -109,7 +109,7 @@ def test_members_roundtrip():
     M, panel, called, E, genes, _, bcs = synth(n_cells=50, n_empty=100)
     res = Q.library_qc(M, panel, called, STATS, np.zeros(len(panel)), E, genes)
     mem = ST.build_members(M, panel, bcs, res["library"], np.arange(len(panel)), {"offset": 10})
-    assert set(mem) == {"adt_counts", "hto_counts", "adt_panel.json"}
+    assert set(mem) == {"adt_counts.1pz", "hto_counts.1pz", "adt_panel.json"}
     buf = ST.build_sidecar("GSM0000001", mem)
     back = ST.read_sidecar(buf)
     A, names = back["adt"]

@@ -3,11 +3,11 @@
 
 Members of one sample:
 
-* ``adt_counts`` (kind 1, pz2): antibodies and isotype controls x the GEX sample's columns, u32 UMIs; rows ``Inline``
+* ``adt_counts.1pz`` (kind 1, pz2): antibodies and isotype controls x the GEX sample's columns, u32 UMIs; rows ``Inline``
   (the antibody names of ``adt_panel.json``, in order), columns ``Cells`` (the barcodes of the sample's ``cells`` table:
   column ``j`` is ``col`` ``j``). Columns with no ADT molecule are empty columns, so every column of the cells table has
   one, called or not (the uncalled ones are the empty droplets DSB needs).
-* ``hto_counts`` (kind 1, pz2): hashtags, same layout. Present only when the library has hashtags.
+* ``hto_counts.1pz`` (kind 1, pz2): hashtags, same layout. Present only when the library has hashtags.
 * ``adt_panel.json`` (kind 3, stored): ``{"schema": "singlet-adt-panel/1", "features": [...], "library": {...}}``, one
   entry per matrix row (``matrix``, ``row``, ``name``, ``sequence``, ``kind``, ``barcode_id``, ``ensembl``,
   ``catalog_specificity``, ``clone``, ``source``) plus the counting facts (chemistry, R2 offset, translation, method
@@ -27,7 +27,7 @@ import numpy as np
 
 PANEL_SCHEMA = "singlet-adt-panel/1"
 METHOD_VERSION = "singlet-adt-count/1 (cellranger-fb-logic; cb 1mm posterior 0.975; umi 1hd cellranger)"
-MEMBERS = ("adt_counts", "hto_counts", "adt_panel.json")
+MEMBERS = ("adt_counts.1pz", "hto_counts.1pz", "adt_panel.json")
 
 
 def _csc_member(M, rownames: List[str], colnames: List[str]):
@@ -57,11 +57,11 @@ def build_members(M, panel, gex_barcodes: Sequence[str], library: Dict, ambient:
         raise ValueError("panel names must be unique")
     out = {}
     feats = []
-    for mname, rows in (("adt_counts", ab), ("hto_counts", ht)):
+    for mname, rows in (("adt_counts.1pz", ab), ("hto_counts.1pz", ht)):
         if len(rows) == 0:
             continue
         body, dg = _csc_member(M[rows], [names[i] for i in rows], list(gex_barcodes))
-        out[mname] = ("pz2", body, dg, {"modality": "adt" if mname == "adt_counts" else "hto",
+        out[mname] = ("pz2", body, dg, {"modality": "adt" if mname == "adt_counts.1pz" else "hto",
                                          "panel": "adt_panel.json"})
         for r, i in enumerate(rows):
             p = panel.iloc[i]
@@ -101,7 +101,7 @@ def read_sidecar(buf: bytes):
 
     r = S2Reader(buf)
     out = {}
-    for name, key in (("adt_counts", "adt"), ("hto_counts", "hto")):
+    for name, key in (("adt_counts.1pz", "adt"), ("hto_counts.1pz", "hto")):
         if name in r.members:
             csc = decode_any(r.read_member(name))
             out[key] = (csc.to_scipy(), list(csc.rownames or []))

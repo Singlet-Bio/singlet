@@ -9,7 +9,7 @@
 * :mod:`singlet.adt.qc`: library and cell QC, pass/fail thresholds.
 * :mod:`singlet.adt.normalize`: derived layers (DSB with empty droplets, CLR); raw counts stay the stored truth.
 * :mod:`singlet.adt.hto`: hashtag demultiplexing calls.
-* :mod:`singlet.adt.store`: the v2 members (``adt_counts`` / ``hto_counts`` pz2 matrices aligned to the GEX ``cells`` table,
+* :mod:`singlet.adt.store`: the v2 members (``adt_counts.1pz`` / ``hto_counts.1pz`` pz2 matrices aligned to the GEX ``cells`` table,
   ``adt_panel.json``).
 
 Design and QC report: ``docs/adt-modality.md``.

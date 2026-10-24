@@ -107,7 +107,7 @@ def process(row, a, out_dir, status):
         status["status"] = "no_gex_sample"
         return
     chem = CH.for_protocol(row["gex_protocol"])
-    status["chemistry"] = chem.name
+    status["atlas_protocol"] = row["gex_protocol"]
     if not chem.supported:
         status["status"] = "unsupported_chemistry"
         return
@@ -121,7 +121,7 @@ def process(row, a, out_dir, status):
         lg = {"run": run}
         t1 = time.time()
         files = download_run(run, a.scratch, a.threads, lg)
-        r1, r2, lens = assign_reads(files, chem.cb_len + chem.umi_len)
+        r1, r2, lens = assign_reads(files, 26)
         lg.update({"lens": {os.path.basename(k): v for k, v in lens.items()}, "seconds": round(time.time() - t1, 1)})
         runlog.append(lg)
         if r1 is None:
@@ -133,6 +133,9 @@ def process(row, a, out_dir, status):
         status["status"] = "no_reads"
         return
 
+    # chemistry from the data: UMI length from the R1 length, whitelist from the GEX barcodes
+    r1_len = first_len(r1s[0])
+    chem = resolve_chemistry(gx, r1_len, chem, a.cache, status)
     # library geometry from the first reads
     head = []
     for i, p in enumerate(C.iter_pairs(r1s, r2s)):
@@ -155,9 +158,7 @@ def process(row, a, out_dir, status):
     table = None
     tr = {"direct": float((S.lookup(gcodes, top_cb) >= 0).mean()), "use": False}
     if chem.translation:
-        tab = C.load_translation(C_fetch(chem.translation, a.cache))
-        tr = C.choose_translation(top_cb, gcodes, tab)
-        table = tab if tr["use"] else None
+        table, tr = C.best_translation(top_cb, gcodes, C_fetch(chem.translation, a.cache))
     status["translation"] = tr
     status["barcode_overlap_head"] = max(tr.get("direct", 0), tr.get("translated", 0))
     if offs[off] < P.MIN_OFFSET_FRACTION and ref is None:
@@ -216,6 +217,36 @@ def process(row, a, out_dir, status):
     status["verdict"] = lib["verdict"]
     status["failed"] = lib["failed"]
     status["status"] = "ok"
+
+
+def resolve_chemistry(gx, r1_len, atlas_chem, cache, status):
+    """10x barcode family from the GEX barcodes (share found in each whitelist) and UMI length from the ADT R1 length
+    (26 = 16+10, 28 = 16+12; longer R1 falls back to the atlas protocol)."""
+    from singlet.adt import chemistry as CH
+    from singlet.adt import count as C
+    from singlet.adt import seq as S
+
+    gb = [b.split("-")[0] for b in gx.barcodes]
+    rng = np.random.default_rng(0)
+    probe = [gb[i] for i in rng.choice(len(gb), min(len(gb), 5000), replace=False)]
+    pc, bad = S.encode_strings(probe, 16)
+    share = {}
+    for name in ("737K-august-2016.txt.gz", "3M-february-2018.txt.gz"):
+        wl = np.sort(S.encode_strings(C.load_barcode_list(C_fetch(name, cache)), 16)[0])
+        share[name] = float((S.lookup(wl, pc[bad == 0]) >= 0).mean())
+    best = max(share, key=share.get)
+    if r1_len in (26, 27):
+        umi = 10
+    elif 28 <= r1_len <= 31:
+        umi = 12
+    else:
+        umi = atlas_chem.umi_len or (12 if best.startswith("3M") else 10)
+    base = CH.CHEMISTRIES["10xv3" if best.startswith("3M") else "10xv2"]
+    chem = CH.Chemistry(base.name if umi == base.umi_len else f"{base.name}-umi{umi}", 16, umi, best,
+                        base.translation)
+    status["chemistry"] = {"name": chem.name, "r1_len": r1_len, "umi_len": umi, "whitelist": best,
+                           "gex_barcodes_in_whitelist": share, "atlas": atlas_chem.name}
+    return chem
 
 
 def _save_unmatched_head(sel, off, bc_len, out_dir):

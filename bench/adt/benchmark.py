@@ -85,7 +85,6 @@ def run_singlet(r1, r2, panel_df, wl_url, tr_url, cr_bcs, work, discovered=False
     t0 = time.time()
     wl_path = fetch(wl_url, os.path.join(work, os.path.basename(wl_url)))
     tr_path = fetch(tr_url, os.path.join(work, os.path.basename(tr_url)))
-    table = C.load_translation(tr_path)
     # decide offset / translation / panel from the first 500k reads
     head = []
     for i, (a, b) in enumerate(C.iter_pairs(r1, r2)):
@@ -97,7 +96,7 @@ def run_singlet(r1, r2, panel_df, wl_url, tr_url, cr_bcs, work, discovered=False
     off = max(offs, key=offs.get)
     gex_codes = np.sort(S.encode_strings([b.split("-")[0] for b in cr_bcs], 16)[0])
     top_cb, _ = S.encode_strings([a[:16].decode() for a, _ in head[:200_000] if b"N" not in a[:16]], 16)
-    ch = C.choose_translation(top_cb, gex_codes, table)
+    table, ch = C.best_translation(top_cb, gex_codes, tr_path)
     notes = {"offsets": {k: round(v, 4) for k, v in offs.items() if v > 0.01}, "offset": off, "translation": ch}
     if discovered:
         tcb = C.translate(top_cb, table)[0] if ch["use"] else top_cb

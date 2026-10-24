@@ -403,11 +403,28 @@ def count_library(r1_paths, r2_paths, *, cb_len: int, umi_len: int, offset: int,
 
 
 def choose_translation(sample_cb: np.ndarray, gex_codes_sorted: np.ndarray, table) -> dict:
-    """Fraction of the most frequent barcodes found among the GEX columns as they are and after translation."""
+    """Share of sampled read barcodes that are GEX columns as they are and after translation (``table`` from
+    :func:`load_translation`). ``use`` when translation at least doubles the overlap and reaches 0.2."""
     direct = float((S.lookup(gex_codes_sorted, sample_cb) >= 0).mean()) if len(sample_cb) else 0.0
     t, hit = translate(sample_cb, table)
     trans = float((S.lookup(gex_codes_sorted, t) >= 0).mean()) if len(sample_cb) else 0.0
     return {"direct": direct, "translated": trans, "use": trans > max(2 * direct, 0.2)}
+
+
+def best_translation(sample_cb, gex_codes_sorted, path):
+    """Both orientations of a translation file; -> (table or None, report)."""
+    rep = {}
+    best = None
+    for rev in (False, True):
+        tab = load_translation(path, reverse=rev)
+        ch = choose_translation(sample_cb, gex_codes_sorted, tab)
+        rep["reverse" if rev else "forward"] = ch
+        if ch["use"] and (best is None or ch["translated"] > best[1]["translated"]):
+            best = (tab, ch)
+    rep["use"] = best is not None
+    rep["direct"] = rep["forward"]["direct"]
+    rep["translated"] = max(rep["forward"]["translated"], rep["reverse"]["translated"])
+    return (best[0] if best else None), rep
 
 
 def save_npz(path: str, lc: LibraryCounts, extra: Optional[dict] = None):
