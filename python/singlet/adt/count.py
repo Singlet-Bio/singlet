@@ -1,0 +1,427 @@
+# SPDX-License-Identifier: MIT
+"""Count antibody / hashtag UMIs per (cell barcode, feature) with Cell Ranger's feature-barcoding logic.
+
+Steps (``count_library``):
+
+1. **Collapse reads.** R1 gives the cell barcode (CB) and UMI, R2 the feature barcode at a fixed offset (measured per
+   library). Reads collapse to unique ``(CB, UMI, feature sequence)`` keys with a read count (a sort, not a hash table,
+   so memory is about 2x the unique keys).
+2. **Feature barcodes.** Exact match to the panel, else a unique Hamming-1 neighbour of one panel sequence (one N is
+   tried as each base). Ambiguous and unmatched sequences are counted, and the most frequent unmatched ones are kept
+   for the panel-completeness check.
+3. **Cell barcodes.** Exact whitelist match, else the Hamming-1 whitelist neighbours weighted by how often each was
+   seen exactly (pseudocount 0.5); the best is taken when its posterior is >= 0.975 (Cell Ranger and STARsolo
+   ``1MM_multi`` use the same rule, Cell Ranger also weights by base quality, which is not kept here). On 3' v3
+   TotalSeq-B libraries the corrected feature-side barcode is translated to its GEX barcode.
+4. **UMIs.** Within one (CB, feature), a UMI moves to its Hamming-1 neighbour with the most reads when that has more
+   reads, or as many and is lexicographically larger (one step, exactly Cell Ranger's ``correct_umis``); UMIs with N are
+   dropped.
+5. **Matrix.** Molecules whose CB is a column of the paired GEX sample (the v2 ``cells`` table, in ``col`` order) give
+   the features x columns matrix. Molecules on other whitelist barcodes are kept as the per-feature *ambient* profile and
+   a per-barcode total histogram (empty droplets for DSB and for the QC background).
+
+Read-level statistics follow Cell Ranger's antibody metrics: valid barcodes, reads with a recognised feature,
+fraction in GEX columns and in called cells, sequencing saturation ``1 - molecules / reads``.
+"""
+
+from __future__ import annotations
+
+import gzip
+import json
+import os
+from collections import Counter
+from dataclasses import dataclass, field
+from typing import Iterable, List, Optional, Sequence, Tuple
+
+import numpy as np
+
+from . import seq as S
+
+POSTERIOR_MIN = 0.975
+PSEUDOCOUNT = 0.5
+CHUNK = 4_000_000
+N_UNMATCHED_KEEP = 200
+
+
+# ----------------------------------------------------------------------------------------------------------- reading
+def _open(path):
+    if path.endswith(".gz"):
+        try:
+            from isal import igzip  # fastest when present
+
+            return igzip.open(path, "rb")
+        except ImportError:
+            return gzip.open(path, "rb")
+    return open(path, "rb")
+
+
+def iter_pairs(r1_paths: Sequence[str], r2_paths: Sequence[str]) -> Iterable[Tuple[bytes, bytes]]:
+    """(R1 sequence, R2 sequence) byte strings of every read pair, file pair by file pair."""
+    for p1, p2 in zip(r1_paths, r2_paths):
+        try:
+            import dnaio
+
+            with dnaio.open(p1, file2=p2, mode="r") as rd:
+                for a, b in rd:
+                    yield a.sequence.encode(), b.sequence.encode()
+        except ImportError:  # pragma: no cover - plain parser, slow
+            with _open(p1) as f1, _open(p2) as f2:
+                while True:
+                    h = f1.readline()
+                    if not h:
+                        break
+                    s1 = f1.readline().rstrip()
+                    f1.readline(), f1.readline()
+                    f2.readline()
+                    s2 = f2.readline().rstrip()
+                    f2.readline(), f2.readline()
+                    yield s1, s2
+
+
+def collapse_reads(pairs: Iterable[Tuple[bytes, bytes]], r1_len: int, offset: int, feat_len: int,
+                   max_reads: Optional[int] = None):
+    """Unique ``R1[:r1_len] + R2[offset:offset+feat_len]`` keys and their read counts.
+
+    Returns (keys ``S<r1_len+feat_len>``, counts int64, stats dict). Pairs with a short R1 or R2 are counted and skipped."""
+    width = r1_len + feat_len
+    end = offset + feat_len
+    uniq: List[np.ndarray] = []
+    cnts: List[np.ndarray] = []
+    buf: List[bytes] = []
+    n = n_short = 0
+
+    def flush():
+        if not buf:
+            return
+        a = np.array(buf, dtype=f"S{width}")
+        u, c = np.unique(a, return_counts=True)
+        uniq.append(u)
+        cnts.append(c.astype(np.int64))
+        buf.clear()
+
+    for s1, s2 in pairs:
+        n += 1
+        if len(s1) < r1_len or len(s2) < end:
+            n_short += 1
+        else:
+            buf.append(s1[:r1_len] + s2[offset:end])
+            if len(buf) >= CHUNK:
+                flush()
+                if len(uniq) > 8:
+                    _merge(uniq, cnts)
+        if max_reads is not None and n >= max_reads:
+            break
+    flush()
+    _merge(uniq, cnts)
+    keys = uniq[0] if uniq else np.zeros(0, dtype=f"S{width}")
+    counts = cnts[0] if cnts else np.zeros(0, np.int64)
+    return keys, counts, {"reads": n, "reads_short": n_short}
+
+
+def _merge(uniq, cnts):
+    if len(uniq) <= 1:
+        return
+    a = np.concatenate(uniq)
+    c = np.concatenate(cnts)
+    u, inv = np.unique(a, return_inverse=True)
+    s = np.bincount(inv.ravel(), weights=c, minlength=len(u)).astype(np.int64)
+    uniq[:] = [u]
+    cnts[:] = [s]
+
+
+# ----------------------------------------------------------------------------------------------------------- features
+@dataclass
+class FeatureIndex:
+    sequences: List[str]
+    exact: np.ndarray = field(init=False)  # sorted codes
+    exact_idx: np.ndarray = field(init=False)
+    h1: np.ndarray = field(init=False)  # sorted neighbour codes
+    h1_idx: np.ndarray = field(init=False)  # feature index, -2 = ambiguous
+
+    def __post_init__(self):
+        L = len(self.sequences[0])
+        if any(len(s) != L for s in self.sequences):
+            raise ValueError("panel sequences must have one length")
+        self.L = L
+        codes, bad = S.encode_strings(self.sequences, L)
+        if bad.any():
+            raise ValueError("panel sequences must be ACGT")
+        if len(np.unique(codes)) != len(codes):
+            raise ValueError("duplicate panel sequences")
+        o = np.argsort(codes)
+        self.exact, self.exact_idx = codes[o], o.astype(np.int64)
+        nb = S.neighbours(codes, L)
+        owner = np.repeat(np.arange(len(codes)), nb.shape[1])
+        nb = nb.ravel()
+        keep = S.lookup(self.exact, nb) < 0  # an exact panel sequence is never a neighbour
+        nb, owner = nb[keep], owner[keep]
+        u, first, cnt = np.unique(nb, return_index=True, return_counts=True)
+        idx = owner[first].astype(np.int64)
+        # a neighbour shared by two features is ambiguous; shared by the same feature twice cannot happen (distinct subs)
+        idx[cnt > 1] = -2
+        self.h1, self.h1_idx = u, idx
+
+    def assign(self, mat: np.ndarray):
+        """Feature index per row of a (n, L) byte matrix: >= 0 matched, -1 unmatched, -2 ambiguous; and a 'corrected' flag."""
+        codes, bad = S.encode(mat)
+        out = np.full(len(codes), -1, dtype=np.int64)
+        corr = np.zeros(len(codes), dtype=bool)
+        ok = bad == 0
+        e = S.lookup(self.exact, codes[ok])
+        sub = np.where(e >= 0, self.exact_idx[np.maximum(e, 0)], -1)
+        h = S.lookup(self.h1, codes[ok])
+        hv = np.where(h >= 0, self.h1_idx[np.maximum(h, 0)], -1)
+        res = np.where(sub >= 0, sub, hv)
+        out[ok] = res
+        corr[np.flatnonzero(ok)[(sub < 0) & (hv >= 0)]] = True
+        rows, fills = S.n_fill(mat)
+        if len(rows):
+            e = S.lookup(self.exact, fills.ravel()).reshape(fills.shape)
+            hitn = (e >= 0).sum(axis=1)
+            one = hitn == 1
+            pick = np.where(one, self.exact_idx[np.maximum(e, 0)][np.arange(len(rows)), (e >= 0).argmax(axis=1)], -1)
+            pick[hitn > 1] = -2
+            out[rows] = pick
+            corr[rows[one]] = True
+        return out, corr
+
+
+# ----------------------------------------------------------------------------------------------------------- barcodes
+def load_barcode_list(path: str) -> List[str]:
+    with (gzip.open(path, "rt") if path.endswith(".gz") else open(path)) as f:
+        return [ln.split()[0] for ln in f if ln.strip()]
+
+
+def load_translation(path: str) -> Tuple[np.ndarray, np.ndarray]:
+    """Cell Ranger translation table ``<gex barcode>\\t<feature barcode>`` -> (sorted feature codes, gex codes)."""
+    gex, fb = [], []
+    with (gzip.open(path, "rt") if path.endswith(".gz") else open(path)) as f:
+        for ln in f:
+            p = ln.split()
+            if len(p) >= 2:
+                gex.append(p[0])
+                fb.append(p[1])
+    g, _ = S.encode_strings(gex, 16)
+    b, _ = S.encode_strings(fb, 16)
+    o = np.argsort(b)
+    return b[o], g[o]
+
+
+def correct_barcodes(mat: np.ndarray, reads: np.ndarray, whitelist: np.ndarray):
+    """Correct unique cell barcodes against a sorted whitelist of codes.
+
+    ``mat``: (n, L) bytes of the unique observed barcodes; ``reads``: reads per observed barcode.
+    Returns (corrected code per row, valid bool, n corrected)."""
+    L = mat.shape[1]
+    codes, bad = S.encode(mat)
+    exact = (bad == 0) & (S.lookup(whitelist, codes) >= 0)
+    # prior: reads per whitelist barcode among exact matches
+    wl_hit = S.lookup(whitelist, codes[exact])
+    prior = np.zeros(len(whitelist), dtype=np.float64)
+    np.add.at(prior, wl_hit, reads[exact])
+    out = np.where(exact, codes, 0).astype(np.uint64)
+    valid = exact.copy()
+    # one mismatch (no N)
+    cand = np.flatnonzero((bad == 0) & ~exact)
+    if len(cand):
+        nb = S.neighbours(codes[cand], L)
+        idx = S.lookup(whitelist, nb.ravel()).reshape(nb.shape)
+        w = np.where(idx >= 0, prior[np.maximum(idx, 0)] + PSEUDOCOUNT, 0.0)
+        tot = w.sum(axis=1)
+        best = w.argmax(axis=1)
+        pb = np.where(tot > 0, w[np.arange(len(cand)), best] / np.where(tot > 0, tot, 1), 0)
+        ok = pb >= POSTERIOR_MIN
+        out[cand[ok]] = nb[np.arange(len(cand)), best][ok]
+        valid[cand[ok]] = True
+    # one N
+    rows, fills = S.n_fill(mat)
+    if len(rows):
+        idx = S.lookup(whitelist, fills.ravel()).reshape(fills.shape)
+        w = np.where(idx >= 0, prior[np.maximum(idx, 0)] + PSEUDOCOUNT, 0.0)
+        tot = w.sum(axis=1)
+        best = w.argmax(axis=1)
+        pb = np.where(tot > 0, w[np.arange(len(rows)), best] / np.where(tot > 0, tot, 1), 0)
+        ok = pb >= POSTERIOR_MIN
+        out[rows[ok]] = fills[np.arange(len(rows)), best][ok]
+        valid[rows[ok]] = True
+    return out, valid, int(valid.sum() - exact.sum())
+
+
+def translate(codes: np.ndarray, table: Tuple[np.ndarray, np.ndarray]):
+    fb, gex = table
+    i = S.lookup(fb, codes)
+    return np.where(i >= 0, gex[np.maximum(i, 0)], codes), i >= 0
+
+
+# ----------------------------------------------------------------------------------------------------------- UMIs
+def correct_umis(group: np.ndarray, umi: np.ndarray, reads: np.ndarray, umi_len: int) -> np.ndarray:
+    """Cell Ranger UMI correction within groups. Inputs are per unique (group, umi) (no duplicates).
+
+    Returns the index of the record each record merges into (itself when not corrected)."""
+    n = len(group)
+    if n == 0:
+        return np.zeros(0, np.int64)
+    group = np.asarray(group, dtype=np.uint64)
+    umi = np.asarray(umi, dtype=np.uint64)
+    key = (group << np.uint64(2 * umi_len)) | umi
+    o = np.argsort(key, kind="stable")
+    ks = key[o]
+    best_reads = reads.astype(np.int64).copy()
+    best_key = key.copy()
+    target = np.arange(n, dtype=np.int64)
+    nb = S.neighbours(umi, umi_len)
+    gshift = group << np.uint64(2 * umi_len)
+    for j in range(nb.shape[1]):
+        q = gshift | nb[:, j]
+        i = S.lookup(ks, q)
+        hit = i >= 0
+        t = np.where(hit, o[np.maximum(i, 0)], -1)
+        r = np.where(hit, reads[np.maximum(t, 0)], -1)
+        # Cell Ranger (tx_annotation mark_dups.rs correct_umis): move to the neighbour with more reads; on equal reads
+        # to the lexicographically larger UMI (codes sort like the strings). One step, no chains.
+        tk = np.where(hit, key[np.maximum(t, 0)], np.uint64(0))
+        better = hit & ((r > best_reads) | ((r == best_reads) & (tk > best_key)))
+        target[better] = t[better]
+        best_reads[better] = r[better]
+        best_key[better] = tk[better]
+    return target
+
+
+# ----------------------------------------------------------------------------------------------------------- library
+@dataclass
+class LibraryCounts:
+    features: List[str]
+    matrix: "object"  # scipy.sparse.csc_matrix, features x GEX columns, uint32
+    ambient: np.ndarray  # UMIs per feature on whitelist barcodes outside the GEX columns
+    outside_totals: np.ndarray  # UMI totals of each whitelist barcode outside the GEX columns (descending)
+    stats: dict
+    unmatched: List[Tuple[str, int]]  # most frequent unmatched feature sequences (in valid barcodes) and reads
+
+
+def count_library(r1_paths, r2_paths, *, cb_len: int, umi_len: int, offset: int, panel_sequences: Sequence[str],
+                  whitelist_codes: np.ndarray, gex_barcodes: Sequence[str], translation=None,
+                  max_reads: Optional[int] = None, pairs=None) -> LibraryCounts:
+    """Count one library. ``gex_barcodes``: the GEX sample's column barcodes in ``col`` order (16 nt, ``-1`` suffix ok)."""
+    from scipy import sparse
+
+    fx = FeatureIndex(list(panel_sequences))
+    L = fx.L
+    r1_len = cb_len + umi_len
+    if pairs is None:
+        pairs = iter_pairs(r1_paths, r2_paths)
+    keys, reads, st = collapse_reads(pairs, r1_len, offset, L, max_reads=max_reads)
+    mat = keys.view(np.uint8).reshape(len(keys), r1_len + L)
+    st["unique_keys"] = int(len(keys))
+
+    # features
+    fidx, fcorr = fx.assign(mat[:, r1_len:])
+    st["reads_feature_exact"] = int(reads[(fidx >= 0) & ~fcorr].sum())
+    st["reads_feature_corrected"] = int(reads[(fidx >= 0) & fcorr].sum())
+    st["reads_feature_ambiguous"] = int(reads[fidx == -2].sum())
+    st["reads_feature_unmatched"] = int(reads[fidx == -1].sum())
+
+    # barcodes (on unique observed barcodes)
+    cbm = np.ascontiguousarray(mat[:, :cb_len])
+    cb_keys = cbm.view(f"S{cb_len}").ravel()
+    ucb, cb_inv = np.unique(cb_keys, return_inverse=True)
+    cb_inv = cb_inv.ravel()
+    cb_reads = np.bincount(cb_inv, weights=reads, minlength=len(ucb))
+    ucb_mat = ucb.view(np.uint8).reshape(len(ucb), cb_len)
+    cb_code, cb_valid, n_corr = correct_barcodes(ucb_mat, cb_reads, whitelist_codes)
+    translated = None
+    if translation is not None:
+        cb_code_t, translated = translate(cb_code, translation)
+        cb_code = np.where(cb_valid, cb_code_t, cb_code)
+    st["barcodes_observed"] = int(len(ucb))
+    st["barcodes_corrected"] = n_corr
+    rv = cb_valid[cb_inv]
+    st["reads_valid_barcode"] = int(reads[rv].sum())
+    st["reads_valid_barcode_feature"] = int(reads[rv & (fidx >= 0)].sum())
+    if translated is not None:
+        st["reads_translated"] = int(reads[rv & translated[cb_inv]].sum())
+
+    # unmatched feature sequences on valid barcodes (panel completeness / discovery)
+    um = rv & (fidx == -1)
+    unmatched = []
+    if um.any():
+        fs = np.ascontiguousarray(mat[um, r1_len:]).view(f"S{L}").ravel()
+        u, inv = np.unique(fs, return_inverse=True)
+        c = np.bincount(inv.ravel(), weights=reads[um]).astype(np.int64)
+        top = np.argsort(-c)[:N_UNMATCHED_KEEP]
+        unmatched = [(u[i].decode(), int(c[i])) for i in top]
+
+    # molecules: (barcode, feature, umi) on valid barcodes and features, UMI without N
+    keep = rv & (fidx >= 0)
+    umi_codes, umi_bad = S.encode(mat[keep, cb_len:r1_len])
+    bc = cb_code[cb_inv[keep]]
+    ft = fidx[keep]
+    rd = reads[keep]
+    ok = umi_bad == 0
+    st["reads_umi_n"] = int(rd[~ok].sum())
+    bc, ft, rd, umi_codes = bc[ok], ft[ok], rd[ok], umi_codes[ok]
+    # several observed (CB, UMI, feature) can land on one corrected key: sum them. Packed key:
+    # dense barcode index (30 bits) | feature (10 bits) | UMI (24 bits = 12 nt)
+    if umi_len > 12 or len(panel_sequences) >= 1024:
+        raise ValueError("UMI > 12 nt or >= 1024 features do not fit the packed molecule key")
+    ubc, bci = np.unique(bc, return_inverse=True)
+    key = (bci.ravel().astype(np.uint64) << np.uint64(34)) | (ft.astype(np.uint64) << np.uint64(24)) | umi_codes
+    gu, ginv = np.unique(key, return_inverse=True)
+    greads = np.bincount(ginv.ravel(), weights=rd, minlength=len(gu)).astype(np.int64)
+    umi_mask = np.uint64((1 << (2 * umi_len)) - 1)
+    tgt = correct_umis(gu >> np.uint64(24), gu & umi_mask, greads, umi_len)
+    mol = np.unique(tgt)  # surviving molecules
+    mol_reads = np.bincount(tgt, weights=greads, minlength=len(gu))[mol].astype(np.int64)
+    m_bc = ubc[(gu[mol] >> np.uint64(34)).astype(np.int64)]
+    m_ft = ((gu[mol] >> np.uint64(24)) & np.uint64(1023)).astype(np.int64)
+    st["umis_before_correction"] = int(len(gu))
+    st["molecules"] = int(len(mol))
+    st["reads_usable"] = int(greads.sum())
+
+    # GEX columns
+    gb = [b.split("-")[0] for b in gex_barcodes]
+    gcode, gbad = S.encode_strings(gb, cb_len)
+    if gbad.any():
+        raise ValueError("GEX barcodes with non-ACGT characters")
+    go = np.argsort(gcode)
+    col = S.lookup(gcode[go], m_bc)
+    col = np.where(col >= 0, go[np.maximum(col, 0)], -1)
+    inside = col >= 0
+    n_cols = len(gb)
+    M = sparse.coo_matrix((np.ones(inside.sum(), np.uint32), (m_ft[inside], col[inside])),
+                          shape=(len(panel_sequences), n_cols)).tocsc()
+    M.sum_duplicates()
+    M.data = M.data.astype(np.uint32)
+    st["molecules_in_gex_columns"] = int(inside.sum())
+    st["reads_in_gex_columns"] = int(mol_reads[inside].sum())
+    st["saturation"] = float(1 - len(mol) / max(1, greads.sum()))
+    st["saturation_gex_columns"] = float(1 - inside.sum() / max(1, mol_reads[inside].sum()))
+    ambient = np.bincount(m_ft[~inside], minlength=len(panel_sequences)).astype(np.int64)
+    ob, oc = np.unique(m_bc[~inside], return_counts=True)
+    outside_totals = np.sort(oc)[::-1].astype(np.int64)
+    st["outside_barcodes"] = int(len(ob))
+    return LibraryCounts(list(panel_sequences), M, ambient, outside_totals, st, unmatched)
+
+
+def choose_translation(sample_cb: np.ndarray, gex_codes_sorted: np.ndarray, table) -> dict:
+    """Fraction of the most frequent barcodes found among the GEX columns as they are and after translation."""
+    direct = float((S.lookup(gex_codes_sorted, sample_cb) >= 0).mean()) if len(sample_cb) else 0.0
+    t, hit = translate(sample_cb, table)
+    trans = float((S.lookup(gex_codes_sorted, t) >= 0).mean()) if len(sample_cb) else 0.0
+    return {"direct": direct, "translated": trans, "use": trans > max(2 * direct, 0.2)}
+
+
+def save_npz(path: str, lc: LibraryCounts, extra: Optional[dict] = None):
+    M = lc.matrix
+    meta = dict(stats=lc.stats, unmatched=lc.unmatched, **(extra or {}))
+    np.savez_compressed(path, indptr=M.indptr, indices=M.indices, data=M.data, shape=np.array(M.shape),
+                        features=np.array(lc.features), ambient=lc.ambient, outside_totals=lc.outside_totals,
+                        meta=np.array(json.dumps(meta)))
+
+
+def load_npz(path: str):
+    from scipy import sparse
+
+    z = np.load(path, allow_pickle=False)
+    M = sparse.csc_matrix((z["data"], z["indices"], z["indptr"]), shape=tuple(z["shape"]))
+    meta = json.loads(str(z["meta"]))
+    return M, list(z["features"]), z["ambient"], z["outside_totals"], meta

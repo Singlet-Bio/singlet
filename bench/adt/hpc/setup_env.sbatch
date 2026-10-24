@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --job-name=adt-env
 #SBATCH --account=debruinz
-#SBATCH --partition=short-cpu
+#SBATCH --partition=debug-bigmem
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
-#SBATCH --time=03:00:00
+#SBATCH --time=00:30:00
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
 # Conda env for the ADT modality: SRA/ENA download, counting, the method benchmark (kallisto|bustools kite,
 # alevin-fry) and a C++ compiler for the adt_counter.h harness. Also fetches this branch into its own worktree.
@@ -23,9 +23,9 @@ if [ -d $SRC ]; then git -C $SRC checkout -q --detach "$BRANCH"; git -C $SRC res
 else git -C $WORK/repos/singlet-py.git worktree add --detach $SRC "$BRANCH"; fi
 git -C $SRC log --oneline -1
 
-[ -d $ENV ] || mamba create -y -p $ENV -c conda-forge -c bioconda --strict-channel-priority \
+if [ ! -x $ENV/bin/python ]; then rm -rf $ENV.tmp; mamba create -y -p $ENV.tmp -c conda-forge -c bioconda --strict-channel-priority \
   python=3.12 sra-tools pigz numpy scipy pandas pyarrow anndata h5py matplotlib zstandard requests \
-  dnaio isa-l pybind11 setuptools kallisto bustools alevin-fry salmon simpleaf gxx_linux-64 cmake make zlib zstd
+  dnaio isa-l pybind11 setuptools kallisto bustools alevin-fry salmon simpleaf gxx_linux-64 cmake make zlib zstd && mv $ENV.tmp $ENV; fi
 $ENV/bin/pip install -q kb-python==0.29.1 || $ENV/bin/pip install -q kb-python
 $ENV/bin/python -c "import numpy, scipy, pandas, anndata, dnaio, h5py; print('py ok', numpy.__version__, dnaio.__version__)"
 $ENV/bin/fasterq-dump --version | head -2; $ENV/bin/kallisto version; $ENV/bin/bustools version; $ENV/bin/alevin-fry --version

@@ -1,0 +1,122 @@
+# SPDX-License-Identifier: MIT
+"""singlet.adt QC, normalisation, hashtag calls and v2 members on a synthetic sample."""
+
+import json
+
+import numpy as np
+import pandas as pd
+import pytest
+from scipy import sparse
+
+from singlet.adt import hto as H
+from singlet.adt import normalize as N
+from singlet.adt import panel as P
+from singlet.adt import qc as Q
+from singlet.adt import store as ST
+
+RNG = np.random.default_rng(3)
+
+
+def synth(n_cells=400, n_empty=1500, hashtags=4):
+    """CD3/CD19/CD14 + an isotype + hashtags; RNA with matching CD3E/CD19/CD14."""
+    types = RNG.integers(0, 3, n_cells)  # T, B, mono
+    ab = ["CD3", "CD19", "CD14", "Mouse IgG1 Isotype"]
+    k = len(ab) + hashtags
+    X = np.zeros((k, n_cells + n_empty), dtype=np.int64)
+    ambient = np.array([30, 20, 25, 5] + [10] * hashtags, float)
+    X[:, n_cells:] = RNG.poisson(ambient[:, None] / ambient.sum() * 8, size=(k, n_empty))
+    for j, t in enumerate(types):
+        X[:len(ab), j] = RNG.poisson(ambient[:len(ab)] / 10)
+        X[t, j] += RNG.poisson(300)
+        if hashtags:
+            X[len(ab):, j] = RNG.poisson(3, hashtags)
+            X[len(ab) + j % hashtags, j] += RNG.poisson(200)
+    genes = ["ENSG00000198851|CD3E", "ENSG00000177455|CD19", "ENSG00000170458|CD14", "ENSG00000000001|OTHER"]
+    E = np.zeros((4, n_cells + n_empty), dtype=np.int64)
+    E[3] = RNG.poisson(50, n_cells + n_empty)
+    for j, t in enumerate(types):
+        E[t, j] = RNG.poisson(5)
+    names = ab + [f"Hashtag {i + 1}" for i in range(hashtags)]
+    panel = pd.DataFrame({"name": names, "sequence": [f"{'ACGT'[i % 4] * 14}{'ACGT'[i // 4]}" for i in range(k)],
+                          "kind": ["antibody"] * 3 + ["isotype"] + ["hashtag"] * hashtags,
+                          "ensembl": ["ENSG00000198851", "ENSG00000177455", "ENSG00000170458", ""] + [""] * hashtags,
+                          "barcode_id": [f"A{i:04d}" for i in range(k)]})
+    called = np.zeros(n_cells + n_empty, bool)
+    called[:n_cells] = True
+    bcs = ["".join(RNG.choice(list("ACGT"), 16)) + "-1" for _ in range(n_cells + n_empty)]
+    return sparse.csc_matrix(X.astype(np.uint32)), panel, called, sparse.csc_matrix(E.astype(np.uint32)), genes, \
+        types, bcs
+
+
+STATS = {"reads": 1_000_000, "reads_valid_barcode": 900_000, "reads_feature_exact": 800_000,
+         "reads_feature_corrected": 20_000, "saturation": 0.6, "molecules": 300_000, "reads_usable": 780_000}
+
+
+def test_library_qc_passes_and_concords():
+    M, panel, called, E, genes, types, _ = synth()
+    res = Q.library_qc(M, panel, called, STATS, np.zeros(len(panel)), E, genes)
+    lib = res["library"]
+    assert lib["cell_empty_ratio"] > 10
+    assert lib["rna_concordance"] > 0.5 and abs(lib["rna_concordance_null"]) < 0.2
+    assert lib["isotype_share_median"] < 0.1
+    assert lib["hto_singlet_share"] > 0.9
+    assert lib["verdict"] in ("pass", "warn") and not lib["failed"]
+    df = Q.cell_table(M, panel, res["cells"], res["hto"])
+    assert len(df) == called.sum() and set(df.columns) >= {"col", "adt_total", "hto_call", "isotype_share"}
+    # hashtag calls are the designed hashtag
+    assert (df.hto_call.values == np.arange(len(df)) % 4).mean() > 0.9
+
+
+def test_unpaired_library_fails_pairing_check():
+    M, panel, called, E, genes, _, _ = synth(hashtags=0)
+    shuffled = RNG.permutation(len(called))  # ADT columns that do not belong to these cells
+    res = Q.library_qc(M[:, shuffled], panel, called, STATS, np.zeros(len(panel)), E, genes)
+    lib = res["library"]
+    assert lib["rules"]["cell_empty_ratio"] == "fail"
+    assert lib["verdict"] == "fail"
+
+
+def test_clr_and_dsb_shapes_and_signal():
+    M, panel, called, *_ = synth(hashtags=0)
+    X = M.toarray()
+    c = N.clr(X[:, called])
+    assert c.shape == (4, called.sum()) and np.isfinite(c).all()
+    emp = N.empty_droplets(X.sum(0), called)
+    d = N.dsb(X[:, called], X[:, emp], isotype_rows=np.array([3]))
+    assert d.shape == c.shape
+    # positive population is far above background, negatives near 0
+    assert np.median(d[0][X[0, called] > 100]) > 5
+    assert abs(np.median(d[0][X[0, called] < 50])) < 2
+
+
+def test_hashed_drops_doublets():
+    amb = np.array([10, 10, 10.0])
+    cells = np.array([[200, 3, 2], [180, 190, 2], [1, 2, 3]]).T  # singlet, doublet, negative (columns)
+    cells = np.hstack([cells] + [np.array([[150 + i, 2, 3]]).T for i in range(30)])
+    call, lt, ls = H.hashed_drops(cells, amb)
+    assert call[0] == 0 and call[1] == -2 and call[2] == -1
+
+
+def test_catalog_loads_and_has_hashtags_and_isotypes():
+    cat = P.load_catalog()
+    assert len(cat) > 600 and cat.sequence.str.len().eq(15).all()
+    assert (cat.kind == "hashtag").sum() >= 30 and (cat.kind == "isotype").sum() >= 5
+    assert cat.sequence.is_unique
+
+
+def test_members_roundtrip():
+    pytest.importorskip("zstandard")
+    M, panel, called, E, genes, _, bcs = synth(n_cells=50, n_empty=100)
+    res = Q.library_qc(M, panel, called, STATS, np.zeros(len(panel)), E, genes)
+    mem = ST.build_members(M, panel, bcs, res["library"], np.arange(len(panel)), {"offset": 10})
+    assert set(mem) == {"adt_counts", "hto_counts", "adt_panel.json"}
+    buf = ST.build_sidecar("GSM0000001", mem)
+    back = ST.read_sidecar(buf)
+    A, names = back["adt"]
+    assert names == list(panel.name[:4])
+    assert (A.toarray() == M[:4].toarray()).all()
+    Hm, hn = back["hto"]
+    assert (Hm.toarray() == M[4:].toarray()).all()
+    doc = back["panel"]
+    assert doc["schema"] == ST.PANEL_SCHEMA and len(doc["features"]) == len(panel)
+    assert json.dumps(doc)  # plain JSON
