@@ -8,7 +8,7 @@
 #SBATCH --time=03:59:00
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
 # Run ONE tool on ONE dataset from the same FASTQs and the same reference.
-#   sbatch run_tool.sbatch <dataset_id> <singlet-baseline|singlet-fixed[-t4]|starsolo|alevinfry>
+#   sbatch run_tool.sbatch <dataset_id> <singlet-baseline|singlet-fixed[-t4]|singlet-strandfix|starsolo|alevinfry>
 # Output: $PB/runs/<dataset>/<tool>/ plus time.txt (GNU time -v: wall clock, max RSS).
 # Every tool gets 16 threads; runtimes are comparable within this table only.
 set -euo pipefail
@@ -31,7 +31,7 @@ echo "[run] $ID $TOOL species=$SPECIES chem=$CHEM node=$(hostname) $(date -Is)"
 echo "[run] cpu: $(lscpu | sed -n "s/^Model name: *//p")" | tee $O/node.txt
 
 case $TOOL in
-singlet-baseline|singlet-fixed|singlet-baseline-t4|singlet-fixed-t4|singlet-fixed-rev)
+singlet-baseline|singlet-fixed|singlet-baseline-t4|singlet-fixed-t4|singlet-fixed-rev|singlet-strandfix)
   # -t4: the campaign's 4 pileup workers (production ran --threads 4). The atlas engine's
   # counts depend on the worker count (cross-worker multi-mappers), so both are measured.
   BIN=$PB/bin/${TOOL%-t4}; [ "$TOOL" != "${TOOL%-t4}" ] && T=4
