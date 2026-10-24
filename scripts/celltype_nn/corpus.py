@@ -260,6 +260,45 @@ def cmd_leakcheck(a) -> int:
     return 0
 
 
+def cmd_dedup(a) -> int:
+    """Find copies of benchmark cells in the corpus and list them for exclusion.
+
+    Census has no barcodes, but a copy of a cell keeps its raw counts, so (raw_sum, nnz) identifies it. For each corpus dataset,
+    the fraction of its sampled cells whose (organism, raw_sum, nnz) occurs among the cells of the benchmark collections is
+    compared with chance: a dataset above ``--min-frac`` holds copies, and its matching cells are written to
+    ``leak_exclude.parquet`` (prepare.py marks them ``split = 'excluded'``)."""
+    import cellxgene_census
+    import pandas as pd
+
+    excl = _excluded_collections(a.exclude_studies)
+    meta = json.loads((a.out / "plan.json").read_text())
+    plan = pd.read_parquet(a.out / "plan.parquet", columns=["organism", "soma_joinid", "dataset_id", "collection_id", "raw_sum", "nnz"])
+    keys = []
+    with cellxgene_census.open_soma(census_version=meta["census_version"]) as census:
+        ds = census["census_info"]["datasets"].read().concat().to_pandas()
+        bench_ds = ds.loc[ds["collection_id"].isin(excl), "dataset_id"].tolist()
+        flt = "dataset_id in [" + ",".join(f"'{d}'" for d in bench_ds) + "]"
+        for org, sp in ORGANISMS.items():
+            o = census["census_data"][org].obs.read(value_filter=flt, column_names=["raw_sum", "nnz"]).concat().to_pandas()
+            o["organism"] = sp
+            keys.append(o)
+    K = pd.concat(keys, ignore_index=True)
+    kset = set(zip(K["organism"], K["raw_sum"].round(3), K["nnz"]))
+    hit = np.array([(o, round(r, 3), n) in kset for o, r, n in zip(plan["organism"], plan["raw_sum"], plan["nnz"])])
+    plan["hit"] = hit
+    per = plan.groupby("dataset_id").agg(n=("hit", "size"), hits=("hit", "sum"))
+    per["frac"] = per["hits"] / per["n"]
+    base = float(np.median(per["frac"]))
+    flagged = per[(per["frac"] >= a.min_frac) & (per["hits"] >= 20)]
+    drop = plan[plan["dataset_id"].isin(flagged.index) & plan["hit"]]
+    drop[["organism", "soma_joinid", "dataset_id"]].to_parquet(a.out / "leak_exclude.parquet", index=False)
+    rep = dict(bench_cells=len(K), median_dataset_match_frac=base, flagged=flagged.sort_values("frac", ascending=False).reset_index().to_dict("records"),
+               excluded_cells=len(drop))
+    (a.out / "leak_dedup.json").write_text(json.dumps(rep, indent=1, default=float))
+    print(json.dumps(rep, indent=1, default=float), flush=True)
+    return 0
+
+
 BIOMART = "https://www.ensembl.org/biomart/martservice"
 _Q = (
     '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE Query><Query virtualSchemaName="default" formatter="TSV" header="1" '
@@ -317,8 +356,12 @@ def main(argv=None) -> int:
     lc = sub.add_parser("leakcheck")
     lc.add_argument("--out", type=Path, required=True)
     lc.add_argument("--exclude-studies", type=Path, required=True)
+    dd = sub.add_parser("dedup")
+    dd.add_argument("--out", type=Path, required=True)
+    dd.add_argument("--exclude-studies", type=Path, required=True)
+    dd.add_argument("--min-frac", type=float, default=0.2)
     a = ap.parse_args(argv)
-    return {"plan": cmd_plan, "fetch": cmd_fetch, "orthologs": cmd_orthologs, "leakcheck": cmd_leakcheck}[a.cmd](a)
+    return {"plan": cmd_plan, "fetch": cmd_fetch, "orthologs": cmd_orthologs, "leakcheck": cmd_leakcheck, "dedup": cmd_dedup}[a.cmd](a)
 
 
 if __name__ == "__main__":

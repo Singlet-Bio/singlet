@@ -46,7 +46,7 @@ def cmd_space(a) -> int:
     author = obs["cell_type_ontology_term_id"].map(lambda t: fold.get(t) or sp.map_to_space(t)).to_numpy(object)
     has_finer = {t for t in terms if any(t != v and t in sp.ancestors(v) for v in terms)}
     rng = np.random.default_rng(0)
-    pick = (rng.random(len(obs)) < a.random_frac) | np.isin(author, list(has_finer))
+    pick = ((rng.random(len(obs)) < a.random_frac) | np.isin(author, list(has_finer))) & (obs["split"].to_numpy() != "excluded")
     obs["author_term"] = author
     obs["ensemble"] = pick
     obs[["cell_id", "chunk", "author_term", "ensemble"]].to_parquet(a.data / "space_cells.parquet", index=False)

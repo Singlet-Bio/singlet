@@ -167,6 +167,13 @@ def main(argv=None) -> int:
     obs["vocab_counts"] = np.asarray(X.sum(1)).ravel()
     # soma_joinid is per organism in Census: the cell id carries both
     obs["cell_id"] = obs["organism"] + ":" + obs["soma_joinid"].astype(str)
+    # copies of benchmark cells found by corpus.py dedup never train or validate
+    leak = a.data / "leak_exclude.parquet"
+    if leak.exists():
+        L = pd.read_parquet(leak)
+        bad = obs["cell_id"].isin(set(L["organism"] + ":" + L["soma_joinid"].astype(str)))
+        obs.loc[bad, "split"] = "excluded"
+        print(f"excluded {int(bad.sum())} copies of benchmark cells", flush=True)
     sps.save_npz(a.data / "corpus_counts.npz", X, compressed=False)
     obs.to_parquet(a.data / "corpus_obs.parquet", index=False)
     print(f"corpus {X.shape}, nnz {X.nnz}, {time.time() - t0:.0f}s", flush=True)
