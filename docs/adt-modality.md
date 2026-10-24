@@ -150,7 +150,91 @@ Hashtag calls (`singlet.adt.hto`): `DropletUtils::hashedDrops` rule. Counts are 
 droplets. Confident singlet when log2(top/second) >= 2; doublet when log2(second/ambient level) is > median + 3 MAD and >= 2. They are
 published as a feature sidecar `<GSM>.features.hto.parquet` (`hto/call` category, `hto/margin` score), not in the matrices.
 
-<!-- PILOT -->
+## 5. Pilot: 12 studies, 32 libraries (2026-10-24)
+
+Twelve studies chosen for diversity: TotalSeq-A (3' v3), TotalSeq-B (3' v3, barcode translation), TotalSeq-C (5'), human and mouse,
+ADT, HTO and ADT+hashtag pools, ENA and SRA downloads, the authors' own references and read-identified panels, and the original
+2017 CITE-seq study (GSE100866). All runs on Clipper (`bench/adt/hpc/run_array.sbatch`, 4 CPU / 48 GB, short partitions).
+
+| study | library | class | organism | chemistry | panel | features | called cells | median ADT UMIs | cells/empty | protein-RNA rho | HTO singlets | result | rules failed / warned |
+|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---|---|
+| GSE100866 | GSM2695379 | ADT | Homo  |  |  |  |  |  |  |  |  | **reads_too_short** | R1 25 nt |
+| GSE100866 | GSM2695381 | ADT | Homo  |  |  |  |  |  |  |  |  | **reads_too_short** | R1 25 nt |
+| GSE131957 | GSM3832736 | ADT | Mus m | 10xv2 |  |  |  |  |  |  |  | **panel_unresolved** | custom tags (not TotalSeq), no study reference |
+| GSE131957 | GSM3832738 | ADT | Mus m | 10xv2 |  |  |  |  |  |  |  | **panel_unresolved** | custom tags (not TotalSeq), no study reference |
+| GSE131957 | GSM3832740 | ADT | Mus m | 10xv2 |  |  |  |  |  |  |  | **panel_unresolved** | custom tags (not TotalSeq), no study reference |
+| GSE131957 | GSM3832742 | ADT | Mus m | 10xv2 |  |  |  |  |  |  |  | **panel_unresolved** | custom tags (not TotalSeq), no study reference |
+| GSE193708 | GSM5819062 | ADT | Homo  | 10xv3 | catalog | 2 | 3661 | 48 | 12.0 |  |  | **warn** | frac_feature, frac_usable_in_cells, median_umi_cells |
+| GSE201704 | GSM6069856 | ADT | Homo  | 10xv2 | catalog | 50 | 24117 | 266 | 3.5 | 0.06 | 0.07 | **warn** | frac_usable_in_cells, cell_empty_ratio, rna_concordance, saturation, hto_singlet_share |
+| GSE207006 | GSM6267870 | ADT | Homo  |  |  |  |  |  |  |  |  | **gex_empty** | atlas GEX sample has no columns |
+| GSE207006 | GSM6267872 | ADT | Homo  |  |  |  |  |  |  |  |  | **gex_empty** | atlas GEX sample has no columns |
+| GSE207968 | GSM6327102 | HTO | Mus m | 10xv3 | catalog | 4 | 11903 | 254 | 63.5 |  | 0.87 | **warn** | frac_valid_barcode, panel_unexplained, saturation |
+| GSE207968 | GSM6327103 | HTO | Mus m | 10xv3 | catalog | 4 | 8322 | 358 | 119.3 |  | 0.93 | **warn** | frac_valid_barcode, saturation |
+| GSE212998 | GSM6568253 | ADT | Homo  | 10xv2 | catalog | 7 | 4513 | 596 | 37.2 | 0.20 | 0.94 | **pass** |  |
+| GSE212998 | GSM6568254 | ADT | Homo  | 10xv2 | catalog | 7 | 4480 | 543 | 36.2 |  | 0.94 | **pass** |  |
+| GSE227505 | GSM7101910 | ADT | Mus m | 10xv2 | study | 2 | 2402 | 1730 | 247.1 |  | 0.87 | **pass** |  |
+| GSE227505 | GSM7101911 | ADT | Mus m | 10xv2 | study | 2 | 3938 | 1716 | 286.0 |  | 0.83 | **pass** |  |
+| GSE227505 | GSM7101912 | ADT | Mus m | 10xv2 | study | 2 | 4224 | 1288 | 184.0 |  | 0.77 | **pass** |  |
+| GSE227505 | GSM7101913 | ADT | Mus m | 10xv2 | study | 2 | 3541 | 787 | 262.3 |  | 0.95 | **pass** |  |
+| GSE227505 | GSM7101914 | ADT | Mus m | 10xv2 | study | 2 | 4251 | 700 | 175.0 |  | 0.93 | **pass** |  |
+| GSE227505 | GSM7101915 | ADT | Mus m | 10xv2 | study | 2 | 2048 | 621 | 310.5 |  | 0.80 | **pass** |  |
+| GSE229791 | GSM7177811 | ADT | Homo  |  |  |  |  |  |  |  |  | **gex_empty** | atlas GEX sample has no columns |
+| GSE229791 | GSM7177812 | ADT | Homo  |  |  |  |  |  |  |  |  | **gex_empty** | atlas GEX sample has no columns |
+| GSE229791 | GSM7177813 | HTO | Homo  |  |  |  |  |  |  |  |  | **gex_empty** | atlas GEX sample has no columns |
+| GSE229791 | GSM7177814 | HTO | Homo  |  |  |  |  |  |  |  |  | **gex_empty** | atlas GEX sample has no columns |
+| GSE248289 | GSM7910996 | ADT | Mus m | 10xv3 | study | 5 | 3438 | 90 | 9.0 | 0.08 |  | **warn** | frac_usable_in_cells, cell_empty_ratio, median_umi_cells, rna_concordance |
+| GSE248289 | GSM7910998 | ADT | Mus m | 10xv3 | study | 5 | 1737 | 18 | 3.6 | -0.11 |  | **fail** | frac_usable_in_cells, median_umi_cells, cell_empty_ratio |
+| GSE248289 | GSM7911000 | ADT | Mus m | 10xv3 | study | 5 | 2707 | 112 | 8.6 | 0.01 |  | **warn** | frac_usable_in_cells, cell_empty_ratio, rna_concordance |
+| GSE272481 | GSM8403310 | HTO | Homo  | 10xv3 |  |  |  |  |  |  |  | **panel_unresolved** | custom tags (not TotalSeq), no study reference |
+| GSE272481 | GSM8403312 | HTO | Homo  | 10xv3 |  |  |  |  |  |  |  | **panel_unresolved** | custom tags (not TotalSeq), no study reference |
+| GSE299416 | GSM9038872 | ADT | Homo  | 10xv2 | study | 11 | 8603 | 200 | 22.2 | 0.29 | 0.72 | **pass** |  |
+| GSE299416 | GSM9038873 | ADT | Homo  | 10xv2 | study | 11 | 6697 | 343 | 57.2 | 0.31 | 0.90 | **pass** |  |
+| GSE299416 | GSM9038874 | ADT | Homo  | 10xv2 | study | 11 | 6453 | 311 | 62.2 | 0.32 | 0.89 | **pass** |  |
+
+
+**18 of 32 libraries counted: 11 pass, 6 warn, 1 fail. 14 were not counted, each for a stated reason:**
+
+* **6 panel unresolved** (GSE131957, GSE272481): their reads carry 6-12 nt custom tags followed by poly-A (e.g. `CCAACA·AAAAAAAA`,
+  `AGCTTACTATCC·AA`), not TotalSeq barcodes, and no reference was deposited. Counting them needs the authors' tag list.
+* **6 GEX sample empty** (GSE207006, GSE229791): the paired GEX samples exist in the atlas but their matrices have no columns. The
+  antibody data cannot be aligned until those GEX libraries are reprocessed (a pipeline issue; listed in the shared hand-over note `adt-modality.md`).
+* **2 reads too short** (GSE100866): R1 is 25 nt, one short of a 16-nt barcode plus a 10-nt UMI.
+
+Findings:
+
+* **GSE227505's six "CITE" libraries are hashtag-only** (the authors' references list two hashtags each, and the counts agree): the
+  screen classed them ADT from their titles. They are stored as `hto_counts.1pz`; 77-95% of called cells get one hashtag.
+* **GSE248289** (TotalSeq-B, mouse, 2-3 M reads per library) is shallow: 18-112 ADT UMIs per called cell and cells/empty ratios of
+  3.6-9. Of the ADT molecules in GEX columns, 95% fall on columns the GEX calling left uncalled, so its cell calls look
+  conservative (`n_uncalled_adt_rich`; listed in the shared hand-over note for the cell-calling work). One library fails, two warn.
+* **GSE201704** (5', 50 antibodies, 24,117 cells): the antibodies are counted (median 266 UMIs per cell), but the six hashtags
+  separate cells poorly (median 37 hashtag UMIs per cell, 7% confident singlets, ambient proportions close to the cells'). The
+  hashtag calls are withheld (`hto_failed`) while the antibody counts publish with a warning.
+* Protein and RNA agree where the RNA can judge: CD8 vs CD8A 0.54-0.59, CD62L vs SELL 0.53-0.55, HLA-DR 0.20; PTPRC-mapped antibodies
+  (CD45 isoforms and allotypes) sit at 0 by construction and are left out of the rule (figure below).
+* SRA and ENA downloads of the same runs give identical matrices (GSM6568254: 5,303,536 UMIs both ways; GSM7101911: 9,244,299);
+  the two-pass sharded counter gives the single-pass matrix exactly (GSM6069856, 131.8 M reads, 21,640,898 UMIs).
+
+![Library QC](figures/adt/adt_qc_libraries.png)
+
+![Protein vs RNA](figures/adt/adt_rna_concordance.png)
+
+![Example library](figures/adt/adt_example.png)
+
+### Compute and storage
+
+* **Download** is the cost: ENA delivered ~1 MB/s per stream to Clipper (2-3 MB files took minutes, a 2 GB library 50 min), NCBI SRA
+  (`prefetch` + `fasterq-dump`) ~240 MB/s. The driver now uses SRA first; GSM6568254 went from 53 to 4.3 min wall.
+* **Counting**: ~4.5 s per million reads; with SRA, ~12 s of wall time per million reads per 4-CPU task end to end. Peak memory of
+  the counting process: 4-6 GB at 20 M reads, 9.4 GB at 132 M reads with 9 shards (one pass needed ~96 GB there); the job's cgroup
+  figure (~48 GB) is mostly the page cache of the FASTQs written to `/tmp`.
+* **Pilot total**: 422 M reads, 236 GB downloaded (SRA expands ~4x to FASTQ in node-local `/tmp`, deleted after each library),
+  ~15 task-hours for the first pass (most of it slow ENA downloads).
+* **Storage**: 17 GEX-sample ADT/HTO objects, 3.39 MB in all (31-1,769 KB each; the 50-antibody 82,344-column library is the largest);
+  per-library working files (`counts.npz`, QC, cells table) stay on Clipper under `$WORK/data/adt/`.
+
+![Benchmark](figures/adt/adt_benchmark.png)
+
 
 ## 6. Storage as a v2 modality (`singlet.adt.store`, `docs/format-v2.md` section 13)
 
