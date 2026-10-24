@@ -120,3 +120,14 @@ def test_members_roundtrip():
     doc = back["panel"]
     assert doc["schema"] == ST.PANEL_SCHEMA and len(doc["features"]) == len(panel)
     assert json.dumps(doc)  # plain JSON
+
+
+def test_hto_feature_sidecar():
+    pytest.importorskip("pyarrow")
+    call = np.array([0, 1, -1, -2])
+    t, names = H.feature_sidecar("GSM1", np.array([3, 5, 8, 9]), call, np.array([3.0, 1.0, 0.2, 0.1]), ["H1", "H2"])
+    assert t.column("hto/call").to_pylist() == [2, 3, 0, 1]
+    m = t.column("hto/margin").to_pylist()
+    assert m[2] == 0 and 0 < m[1] < m[0] < 1
+    assert names == ["negative", "doublet", "H1", "H2"]
+    assert t.schema.metadata[b"singlet_features_schema"] == b"1"

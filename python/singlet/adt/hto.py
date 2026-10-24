@@ -55,3 +55,28 @@ def hashed_drops(cells: np.ndarray, ambient: np.ndarray):
     call[confident] = o[0][confident]
     call[doublet] = -2
     return call, lfc_top, lfc_second
+
+
+SIDECAR_SCHEMA = "1"
+FEATURE_SET = "hto"
+METHOD_VERSION = "singlet-adt-hto/1 (hashedDrops rule; confident 2, doublet 2 + 3 MAD)"
+
+
+def feature_sidecar(gsm: str, cols, call, lfc_top, hashtag_names):
+    """Per-cell hashtag calls as a feature sidecar (``docs/CELL-ARCHITECTURE.md`` section 3), called cells only.
+
+    Columns: ``gsm``, ``col`` (int64), ``hto/call`` (uint16 category: 0 negative, 1 doublet, 2 + k hashtag k of
+    ``hashtag_names``), ``hto/margin`` (float32 in [0, 1]: ``1 - 2**-lfc_top`` = (top - second) / top on the
+    ambient-scaled counts; 0 for negatives). Returns (pyarrow table, category names)."""
+    import pyarrow as pa
+
+    call = np.asarray(call)
+    cat = np.where(call == -1, 0, np.where(call == -2, 1, call + 2)).astype(np.uint16)
+    margin = np.clip(1 - np.power(2.0, -np.asarray(lfc_top, dtype=float)), 0, 1).astype(np.float32)
+    margin[call == -1] = 0
+    names = ["negative", "doublet"] + list(hashtag_names)
+    t = pa.table({"gsm": pa.array([gsm] * len(cat), pa.string()), "col": pa.array(np.asarray(cols, np.int64)),
+                  "hto/call": pa.array(cat), "hto/margin": pa.array(margin)})
+    md = {b"singlet_features_schema": SIDECAR_SCHEMA.encode(), b"feature_set": FEATURE_SET.encode(),
+          b"method_version": METHOD_VERSION.encode(), b"categories": "|".join(names).encode()}
+    return t.replace_schema_metadata(md), names
