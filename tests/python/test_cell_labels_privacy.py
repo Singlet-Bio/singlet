@@ -41,7 +41,7 @@ def test_valid_table_passes(tmp_path):
     p = O.write_labels(df, tmp_path / "x.parquet")
     back = pd.read_parquet(p)
     assert list(back.columns) == [c for c, _ in O.COLUMNS]
-    assert not O.scan_bytes_for_genotypes(p.read_bytes())
+    assert not O.scan_labels_file(p)
 
 
 def test_all_null_table_passes():
@@ -71,6 +71,18 @@ def test_genotype_like_values_are_rejected(column, value):
     df[column] = pd.array([value] * len(df), dtype="string")
     with pytest.raises(O.PublicOutputError):
         O.assert_public_safe(df)
+
+
+def test_file_scan_reads_decoded_values(tmp_path):
+    """The file-level scan looks at decoded strings, so a genotype smuggled into a written file is found."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    df = _table()
+    df["cell_type_label"] = pd.array(["rs1426654"] * len(df), dtype="string")
+    p = tmp_path / "bad.parquet"
+    pq.write_table(pa.Table.from_pandas(df, preserve_index=False), p, compression="zstd")
+    assert O.scan_labels_file(p)
 
 
 @pytest.mark.parametrize("extra", ["snp_dp", "genotype", "barcode", "donor", "ad"])
@@ -137,8 +149,7 @@ def test_pipeline_output_carries_no_genotype_from_restricted_input(tmp_path):
     df, summary = P.annotate_sample(s, af_table=af, method="guide")
     assert df["ancestry_hancestro"].notna().all()
     out = O.write_labels(df, tmp_path / "GSM9.parquet")
-    raw = out.read_bytes()
-    assert not O.scan_bytes_for_genotypes(raw)
+    assert not O.scan_labels_file(out)
     back = pd.read_parquet(out)
     assert list(back.columns) == [c for c, _ in O.COLUMNS]
     # the summary (kept internal) must not hold per-site data either

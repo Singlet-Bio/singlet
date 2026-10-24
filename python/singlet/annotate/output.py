@@ -115,9 +115,24 @@ def assert_public_safe(table) -> None:
 
 
 def scan_bytes_for_genotypes(data: bytes) -> list:
-    """Genotype-like strings found in raw bytes (for scanning written files and logs)."""
+    """Genotype-like strings found in text bytes (logs, JSON). Do not use it on compressed files: in the atlas run, random byte
+    runs in zstd pages matched (``C>C``, ``0/1``) in 446 of 1,012 label files whose decoded content was clean; use
+    :func:`scan_labels_file`."""
     txt = data.decode("utf-8", errors="ignore")
     return [m.group(0) for m in _GENOTYPE_LIKE.finditer(txt)][:20]
+
+
+def scan_labels_file(path: Union[str, Path]) -> list:
+    """Genotype-like strings in a written label file: every decoded string value, the column names and the file metadata."""
+    import pyarrow.parquet as pq
+
+    t = pq.read_table(path)
+    parts = list(t.column_names) + [f"{k!r}={v!r}" for k, v in (t.schema.metadata or {}).items()]
+    for name in t.column_names:
+        col = t.column(name)
+        if col.type == "string" or str(col.type).startswith("dictionary"):
+            parts += [str(x) for x in col.to_pylist() if x is not None]
+    return scan_bytes_for_genotypes("\n".join(parts).encode())
 
 
 def write_labels(df, path: Union[str, Path]) -> Path:
