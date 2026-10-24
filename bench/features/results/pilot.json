@@ -1,0 +1,2658 @@
+[
+ {
+  "gsm": "GSM4317426",
+  "gse": "GSE145370",
+  "n_cells": 2928,
+  "timings": {
+   "read_s": 1.243,
+   "rank_s": 0.115,
+   "hallmark_s": 2.156,
+   "cell_cycle_s": 0.04,
+   "total_score_s": 2.395
+  },
+  "median_genes": 184.0,
+  "characteristics": "subject status: esophagus squamous cell carcinoma patient ;; Sex: Male ;; age: 81 ;; pathological stage: IIA ;; tissue type: tumors",
+  "groups": {
+   "B": {
+    "n": 27,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.157,
+    "interferon_gamma_response": 0.212,
+    "inflammatory_response": 0.006,
+    "tnfa_signaling_via_nfkb": 0.014,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.069,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.048
+   },
+   "NK": {
+    "n": 153,
+    "hypoxia": 0.011,
+    "interferon_alpha_response": 0.123,
+    "interferon_gamma_response": 0.129,
+    "inflammatory_response": 0.016,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.004,
+    "g2m_checkpoint": 0.056,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.007,
+    "allograft_rejection": 0.056
+   },
+   "T": {
+    "n": 125,
+    "hypoxia": 0.033,
+    "interferon_alpha_response": 0.094,
+    "interferon_gamma_response": 0.141,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.004,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.102,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.093
+   },
+   "endothelial": {
+    "n": 84,
+    "hypoxia": 0.01,
+    "interferon_alpha_response": 0.08,
+    "interferon_gamma_response": 0.131,
+    "inflammatory_response": 0.005,
+    "tnfa_signaling_via_nfkb": 0.007,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.031,
+    "g2m_checkpoint": 0.085,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.044
+   },
+   "epithelial": {
+    "n": 30,
+    "hypoxia": 0.037,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.004,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.001,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.068,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.001,
+    "heme_metabolism": 0.013,
+    "allograft_rejection": 0.0
+   },
+   "myeloid": {
+    "n": 53,
+    "hypoxia": 0.069,
+    "interferon_alpha_response": 0.109,
+    "interferon_gamma_response": 0.21,
+    "inflammatory_response": 0.109,
+    "tnfa_signaling_via_nfkb": 0.106,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.065,
+    "epithelial_mesenchymal_transition": 0.035,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.127
+   },
+   "plasma": {
+    "n": 227,
+    "hypoxia": 0.051,
+    "interferon_alpha_response": 0.062,
+    "interferon_gamma_response": 0.106,
+    "inflammatory_response": 0.007,
+    "tnfa_signaling_via_nfkb": 0.068,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.073,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.003,
+    "allograft_rejection": 0.028
+   },
+   "unassigned": {
+    "n": 2209,
+    "hypoxia": 0.031,
+    "interferon_alpha_response": 0.078,
+    "interferon_gamma_response": 0.118,
+    "inflammatory_response": 0.01,
+    "tnfa_signaling_via_nfkb": 0.015,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.07,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.036
+   }
+  },
+  "depth_spearman": {
+   "raw_auc_median_abs": 0.432,
+   "adjusted_median_abs": 0.059,
+   "adjusted_per_feature": {
+    "hypoxia": 0.032,
+    "interferon_alpha_response": 0.122,
+    "interferon_gamma_response": 0.18,
+    "inflammatory_response": 0.01,
+    "tnfa_signaling_via_nfkb": -0.007,
+    "oxidative_phosphorylation": -0.123,
+    "glycolysis": 0.023,
+    "e2f_targets": 0.162,
+    "g2m_checkpoint": 0.251,
+    "epithelial_mesenchymal_transition": -0.027,
+    "myc_targets_v1": -0.034,
+    "heme_metabolism": 0.015,
+    "allograft_rejection": 0.101
+   }
+  },
+  "cell_cycle": {
+   "G1": {
+    "share": 0.7869,
+    "mki67_or_top2a_detected": 0.066
+   },
+   "S": {
+    "share": 0.0885,
+    "mki67_or_top2a_detected": 0.205
+   },
+   "G2M": {
+    "share": 0.0929,
+    "mki67_or_top2a_detected": 0.592
+   },
+   "NA": 0.0318
+  },
+  "share_at_thresholds": {
+   "hypoxia": [
+    0.0283,
+    0.001
+   ],
+   "interferon_alpha_response": [
+    0.1209,
+    0.0232
+   ],
+   "interferon_gamma_response": [
+    0.1636,
+    0.0324
+   ],
+   "inflammatory_response": [
+    0.0362,
+    0.0038
+   ],
+   "tnfa_signaling_via_nfkb": [
+    0.0659,
+    0.012
+   ],
+   "oxidative_phosphorylation": [
+    0.0,
+    0.0
+   ],
+   "glycolysis": [
+    0.0092,
+    0.001
+   ],
+   "e2f_targets": [
+    0.0605,
+    0.0123
+   ],
+   "g2m_checkpoint": [
+    0.1206,
+    0.0297
+   ],
+   "epithelial_mesenchymal_transition": [
+    0.0082,
+    0.0003
+   ],
+   "myc_targets_v1": [
+    0.0031,
+    0.0003
+   ],
+   "heme_metabolism": [
+    0.0126,
+    0.0014
+   ],
+   "allograft_rejection": [
+    0.0359,
+    0.0055
+   ]
+  }
+ },
+ {
+  "gsm": "GSM4120733",
+  "gse": "GSE138867",
+  "n_cells": 8121,
+  "timings": {
+   "read_s": 8.055,
+   "rank_s": 2.259,
+   "hallmark_s": 1.486,
+   "cell_cycle_s": 0.091,
+   "total_score_s": 4.011
+  },
+  "median_genes": 794.0,
+  "characteristics": "tissue: Blood ;; smoker: yes",
+  "groups": {
+   "B": {
+    "n": 611,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.04,
+    "interferon_gamma_response": 0.067,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.048,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.29,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.19
+   },
+   "NK": {
+    "n": 420,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.068,
+    "interferon_gamma_response": 0.036,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.14,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.025,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.274,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.248
+   },
+   "T": {
+    "n": 4787,
+    "hypoxia": 0.016,
+    "interferon_alpha_response": 0.001,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.036,
+    "oxidative_phosphorylation": 0.205,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.058,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.388,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.104
+   },
+   "erythroid": {
+    "n": 216,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.048,
+    "oxidative_phosphorylation": 0.189,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.045,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.377,
+    "heme_metabolism": 0.022,
+    "allograft_rejection": 0.048
+   },
+   "myeloid": {
+    "n": 357,
+    "hypoxia": 0.115,
+    "interferon_alpha_response": 0.071,
+    "interferon_gamma_response": 0.155,
+    "inflammatory_response": 0.185,
+    "tnfa_signaling_via_nfkb": 0.412,
+    "oxidative_phosphorylation": 0.281,
+    "glycolysis": 0.045,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.115,
+    "myc_targets_v1": 0.21,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.163
+   },
+   "plasma": {
+    "n": 27,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.046,
+    "interferon_gamma_response": 0.054,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.142,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.037,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.357,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.102
+   },
+   "unassigned": {
+    "n": 1674,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.007,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.145,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.039,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.356,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.102
+   }
+  },
+  "depth_spearman": {
+   "raw_auc_median_abs": 0.5105,
+   "adjusted_median_abs": 0.1005,
+   "adjusted_per_feature": {
+    "hypoxia": 0.284,
+    "interferon_alpha_response": 0.066,
+    "interferon_gamma_response": 0.059,
+    "inflammatory_response": 0.17,
+    "tnfa_signaling_via_nfkb": 0.246,
+    "oxidative_phosphorylation": 0.302,
+    "glycolysis": 0.19,
+    "e2f_targets": 0.103,
+    "g2m_checkpoint": 0.17,
+    "epithelial_mesenchymal_transition": 0.109,
+    "myc_targets_v1": 0.258,
+    "heme_metabolism": 0.054,
+    "allograft_rejection": 0.034
+   }
+  },
+  "cell_cycle": {
+   "G1": {
+    "share": 0.9612,
+    "mki67_or_top2a_detected": 0.003
+   },
+   "S": {
+    "share": 0.0126,
+    "mki67_or_top2a_detected": 0.02
+   },
+   "G2M": {
+    "share": 0.0097,
+    "mki67_or_top2a_detected": 0.025
+   },
+   "NA": 0.0165
+  },
+  "share_at_thresholds": {
+   "hypoxia": [
+    0.0076,
+    0.0
+   ],
+   "interferon_alpha_response": [
+    0.0201,
+    0.0042
+   ],
+   "interferon_gamma_response": [
+    0.0176,
+    0.0027
+   ],
+   "inflammatory_response": [
+    0.0127,
+    0.003
+   ],
+   "tnfa_signaling_via_nfkb": [
+    0.0562,
+    0.0169
+   ],
+   "oxidative_phosphorylation": [
+    0.2317,
+    0.0422
+   ],
+   "glycolysis": [
+    0.0069,
+    0.0004
+   ],
+   "e2f_targets": [
+    0.0062,
+    0.0004
+   ],
+   "g2m_checkpoint": [
+    0.0316,
+    0.0025
+   ],
+   "epithelial_mesenchymal_transition": [
+    0.0032,
+    0.0
+   ],
+   "myc_targets_v1": [
+    0.6526,
+    0.1799
+   ],
+   "heme_metabolism": [
+    0.0044,
+    0.0006
+   ],
+   "allograft_rejection": [
+    0.0782,
+    0.0059
+   ]
+  }
+ },
+ {
+  "gsm": "GSM4120734",
+  "gse": "GSE138867",
+  "n_cells": 6618,
+  "timings": {
+   "read_s": 9.071,
+   "rank_s": 1.82,
+   "hallmark_s": 1.149,
+   "cell_cycle_s": 0.068,
+   "total_score_s": 3.185
+  },
+  "median_genes": 865.0,
+  "characteristics": "tissue: Blood ;; smoker: no",
+  "groups": {
+   "B": {
+    "n": 316,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.006,
+    "interferon_gamma_response": 0.059,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.052,
+    "oxidative_phosphorylation": 0.037,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.029,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.337,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.159
+   },
+   "NK": {
+    "n": 554,
+    "hypoxia": 0.035,
+    "interferon_alpha_response": 0.055,
+    "interferon_gamma_response": 0.054,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.194,
+    "oxidative_phosphorylation": 0.113,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.033,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.284,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.222
+   },
+   "T": {
+    "n": 3458,
+    "hypoxia": 0.015,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.076,
+    "oxidative_phosphorylation": 0.181,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.089,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.38,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.086
+   },
+   "endothelial": {
+    "n": 33,
+    "hypoxia": 0.015,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.059,
+    "oxidative_phosphorylation": 0.157,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.007,
+    "g2m_checkpoint": 0.102,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.364,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.042
+   },
+   "myeloid": {
+    "n": 1086,
+    "hypoxia": 0.154,
+    "interferon_alpha_response": 0.012,
+    "interferon_gamma_response": 0.149,
+    "inflammatory_response": 0.262,
+    "tnfa_signaling_via_nfkb": 0.566,
+    "oxidative_phosphorylation": 0.313,
+    "glycolysis": 0.054,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.144,
+    "myc_targets_v1": 0.228,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.191
+   },
+   "unassigned": {
+    "n": 1130,
+    "hypoxia": 0.012,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.111,
+    "oxidative_phosphorylation": 0.157,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.076,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.352,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.087
+   }
+  },
+  "depth_spearman": {
+   "raw_auc_median_abs": 0.4575,
+   "adjusted_median_abs": 0.14100000000000001,
+   "adjusted_per_feature": {
+    "hypoxia": 0.222,
+    "interferon_alpha_response": 0.085,
+    "interferon_gamma_response": 0.179,
+    "inflammatory_response": 0.21,
+    "tnfa_signaling_via_nfkb": 0.247,
+    "oxidative_phosphorylation": 0.293,
+    "glycolysis": 0.18,
+    "e2f_targets": 0.035,
+    "g2m_checkpoint": 0.055,
+    "epithelial_mesenchymal_transition": 0.154,
+    "myc_targets_v1": 0.18,
+    "heme_metabolism": 0.074,
+    "allograft_rejection": 0.13
+   }
+  },
+  "cell_cycle": {
+   "G1": {
+    "share": 0.9755,
+    "mki67_or_top2a_detected": 0.003
+   },
+   "S": {
+    "share": 0.0113,
+    "mki67_or_top2a_detected": 0.053
+   },
+   "G2M": {
+    "share": 0.011,
+    "mki67_or_top2a_detected": 0.055
+   },
+   "NA": 0.0021
+  },
+  "share_at_thresholds": {
+   "hypoxia": [
+    0.0209,
+    0.0006
+   ],
+   "interferon_alpha_response": [
+    0.0109,
+    0.0014
+   ],
+   "interferon_gamma_response": [
+    0.0283,
+    0.0041
+   ],
+   "inflammatory_response": [
+    0.0678,
+    0.0116
+   ],
+   "tnfa_signaling_via_nfkb": [
+    0.2315,
+    0.1145
+   ],
+   "oxidative_phosphorylation": [
+    0.2442,
+    0.0521
+   ],
+   "glycolysis": [
+    0.0082,
+    0.0006
+   ],
+   "e2f_targets": [
+    0.0051,
+    0.0015
+   ],
+   "g2m_checkpoint": [
+    0.0422,
+    0.003
+   ],
+   "epithelial_mesenchymal_transition": [
+    0.0119,
+    0.0003
+   ],
+   "myc_targets_v1": [
+    0.6133,
+    0.1497
+   ],
+   "heme_metabolism": [
+    0.0035,
+    0.0
+   ],
+   "allograft_rejection": [
+    0.0777,
+    0.0038
+   ]
+  }
+ },
+ {
+  "gsm": "GSM8898802",
+  "gse": "GSE294109",
+  "n_cells": 2435,
+  "timings": {
+   "read_s": 3.715,
+   "rank_s": 0.242,
+   "hallmark_s": 0.413,
+   "cell_cycle_s": 0.012,
+   "total_score_s": 0.732
+  },
+  "median_genes": 322.0,
+  "characteristics": "",
+  "groups": {
+   "NK": {
+    "n": 125,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.039,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.025
+   },
+   "T": {
+    "n": 151,
+    "hypoxia": 0.02,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.01,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.028,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.017,
+    "epithelial_mesenchymal_transition": 0.011,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.055
+   },
+   "ccRCC_tumour": {
+    "n": 35,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.029,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.0
+   },
+   "endothelial": {
+    "n": 375,
+    "hypoxia": 0.017,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.065,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.0
+   },
+   "epithelial": {
+    "n": 21,
+    "hypoxia": 0.074,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.012,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.268,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.0
+   },
+   "myeloid": {
+    "n": 218,
+    "hypoxia": 0.016,
+    "interferon_alpha_response": 0.014,
+    "interferon_gamma_response": 0.028,
+    "inflammatory_response": 0.082,
+    "tnfa_signaling_via_nfkb": 0.08,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.055,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.0
+   },
+   "plasma": {
+    "n": 26,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.002,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.015,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.011,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.0
+   },
+   "unassigned": {
+    "n": 1472,
+    "hypoxia": 0.004,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.025,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.028,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.0
+   }
+  },
+  "depth_spearman": {
+   "raw_auc_median_abs": 0.521,
+   "adjusted_median_abs": 0.088,
+   "adjusted_per_feature": {
+    "hypoxia": 0.083,
+    "interferon_alpha_response": 0.066,
+    "interferon_gamma_response": 0.163,
+    "inflammatory_response": 0.145,
+    "tnfa_signaling_via_nfkb": 0.165,
+    "oxidative_phosphorylation": -0.082,
+    "glycolysis": 0.039,
+    "e2f_targets": 0.028,
+    "g2m_checkpoint": 0.05,
+    "epithelial_mesenchymal_transition": 0.123,
+    "myc_targets_v1": -0.006,
+    "heme_metabolism": 0.089,
+    "allograft_rejection": 0.051
+   }
+  },
+  "cell_cycle": {
+   "G1": {
+    "share": 0.9273,
+    "mki67_or_top2a_detected": 0.01
+   },
+   "S": {
+    "share": 0.0312,
+    "mki67_or_top2a_detected": 0.105
+   },
+   "G2M": {
+    "share": 0.0402,
+    "mki67_or_top2a_detected": 0.408
+   },
+   "NA": 0.0012
+  },
+  "share_at_thresholds": {
+   "hypoxia": [
+    0.0226,
+    0.0033
+   ],
+   "interferon_alpha_response": [
+    0.0185,
+    0.0016
+   ],
+   "interferon_gamma_response": [
+    0.0296,
+    0.0037
+   ],
+   "inflammatory_response": [
+    0.0308,
+    0.0086
+   ],
+   "tnfa_signaling_via_nfkb": [
+    0.0965,
+    0.0275
+   ],
+   "oxidative_phosphorylation": [
+    0.0,
+    0.0
+   ],
+   "glycolysis": [
+    0.0025,
+    0.0
+   ],
+   "e2f_targets": [
+    0.0259,
+    0.0078
+   ],
+   "g2m_checkpoint": [
+    0.0263,
+    0.0082
+   ],
+   "epithelial_mesenchymal_transition": [
+    0.0768,
+    0.0234
+   ],
+   "myc_targets_v1": [
+    0.0,
+    0.0
+   ],
+   "heme_metabolism": [
+    0.0037,
+    0.0
+   ],
+   "allograft_rejection": [
+    0.0193,
+    0.0012
+   ]
+  }
+ },
+ {
+  "gsm": "GSM8898804",
+  "gse": "GSE294109",
+  "n_cells": 2377,
+  "timings": {
+   "read_s": 3.504,
+   "rank_s": 0.195,
+   "hallmark_s": 0.342,
+   "cell_cycle_s": 0.012,
+   "total_score_s": 0.634
+  },
+  "median_genes": 315.0,
+  "characteristics": "",
+  "groups": {
+   "NK": {
+    "n": 93,
+    "hypoxia": 0.016,
+    "interferon_alpha_response": 0.011,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.011,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.013,
+    "epithelial_mesenchymal_transition": 0.021,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.055
+   },
+   "T": {
+    "n": 89,
+    "hypoxia": 0.006,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.063,
+    "epithelial_mesenchymal_transition": 0.024,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.023
+   },
+   "ccRCC_tumour": {
+    "n": 30,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.002,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.07,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.0
+   },
+   "endothelial": {
+    "n": 403,
+    "hypoxia": 0.022,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.151,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.0
+   },
+   "epithelial": {
+    "n": 35,
+    "hypoxia": 0.054,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.016,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.299,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.0
+   },
+   "myeloid": {
+    "n": 238,
+    "hypoxia": 0.009,
+    "interferon_alpha_response": 0.011,
+    "interferon_gamma_response": 0.038,
+    "inflammatory_response": 0.08,
+    "tnfa_signaling_via_nfkb": 0.107,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.092,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.0
+   },
+   "plasma": {
+    "n": 47,
+    "hypoxia": 0.014,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.034,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.001,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.0
+   },
+   "unassigned": {
+    "n": 1427,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.013,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.04,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.0
+   }
+  },
+  "depth_spearman": {
+   "raw_auc_median_abs": 0.507,
+   "adjusted_median_abs": 0.0775,
+   "adjusted_per_feature": {
+    "hypoxia": 0.086,
+    "interferon_alpha_response": -0.009,
+    "interferon_gamma_response": 0.093,
+    "inflammatory_response": 0.038,
+    "tnfa_signaling_via_nfkb": 0.164,
+    "oxidative_phosphorylation": -0.062,
+    "glycolysis": -0.001,
+    "e2f_targets": 0.047,
+    "g2m_checkpoint": 0.116,
+    "epithelial_mesenchymal_transition": 0.192,
+    "myc_targets_v1": 0.075,
+    "heme_metabolism": 0.045,
+    "allograft_rejection": 0.012
+   }
+  },
+  "cell_cycle": {
+   "G1": {
+    "share": 0.9327,
+    "mki67_or_top2a_detected": 0.012
+   },
+   "S": {
+    "share": 0.029,
+    "mki67_or_top2a_detected": 0.159
+   },
+   "G2M": {
+    "share": 0.0374,
+    "mki67_or_top2a_detected": 0.517
+   },
+   "NA": 0.0008
+  },
+  "share_at_thresholds": {
+   "hypoxia": [
+    0.0252,
+    0.0013
+   ],
+   "interferon_alpha_response": [
+    0.0101,
+    0.0013
+   ],
+   "interferon_gamma_response": [
+    0.0189,
+    0.0038
+   ],
+   "inflammatory_response": [
+    0.04,
+    0.0101
+   ],
+   "tnfa_signaling_via_nfkb": [
+    0.1031,
+    0.0278
+   ],
+   "oxidative_phosphorylation": [
+    0.0004,
+    0.0
+   ],
+   "glycolysis": [
+    0.0013,
+    0.0
+   ],
+   "e2f_targets": [
+    0.0265,
+    0.0067
+   ],
+   "g2m_checkpoint": [
+    0.0286,
+    0.0072
+   ],
+   "epithelial_mesenchymal_transition": [
+    0.1506,
+    0.0639
+   ],
+   "myc_targets_v1": [
+    0.0017,
+    0.0
+   ],
+   "heme_metabolism": [
+    0.0038,
+    0.0
+   ],
+   "allograft_rejection": [
+    0.013,
+    0.0004
+   ]
+  }
+ },
+ {
+  "gsm": "GSM8888963",
+  "gse": "GSE293707",
+  "n_cells": 16230,
+  "timings": {
+   "read_s": 4.211,
+   "rank_s": 0.571,
+   "hallmark_s": 0.939,
+   "cell_cycle_s": 0.029,
+   "total_score_s": 1.687
+  },
+  "median_genes": 178.0,
+  "characteristics": "tissue: blood cells ;; disease state: Healthy",
+  "groups": {
+   "B": {
+    "n": 233,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.043,
+    "interferon_gamma_response": 0.027,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.145,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.136
+   },
+   "NK": {
+    "n": 4676,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.062,
+    "interferon_gamma_response": 0.019,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.099,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.133
+   },
+   "T": {
+    "n": 1412,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.015,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.158,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.142
+   },
+   "endothelial": {
+    "n": 146,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.046,
+    "interferon_gamma_response": 0.049,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.009,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.089,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.13
+   },
+   "erythroid": {
+    "n": 271,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.029,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.003,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.16,
+    "heme_metabolism": 0.026,
+    "allograft_rejection": 0.078
+   },
+   "myeloid": {
+    "n": 2116,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.002,
+    "interferon_gamma_response": 0.021,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.019,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.008,
+    "myc_targets_v1": 0.06,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.114
+   },
+   "plasma": {
+    "n": 113,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.012,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.045,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.18,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.104
+   },
+   "unassigned": {
+    "n": 7249,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.024,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.139,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.106
+   }
+  },
+  "depth_spearman": {
+   "raw_auc_median_abs": 0.3935,
+   "adjusted_median_abs": 0.0685,
+   "adjusted_per_feature": {
+    "hypoxia": 0.004,
+    "interferon_alpha_response": -0.084,
+    "interferon_gamma_response": 0.023,
+    "inflammatory_response": 0.101,
+    "tnfa_signaling_via_nfkb": 0.031,
+    "oxidative_phosphorylation": 0.043,
+    "glycolysis": 0.039,
+    "e2f_targets": -0.032,
+    "g2m_checkpoint": 0.065,
+    "epithelial_mesenchymal_transition": 0.056,
+    "myc_targets_v1": 0.003,
+    "heme_metabolism": 0.089,
+    "allograft_rejection": 0.076
+   }
+  },
+  "cell_cycle": {
+   "G1": {
+    "share": 0.9257,
+    "mki67_or_top2a_detected": 0.001
+   },
+   "S": {
+    "share": 0.0344,
+    "mki67_or_top2a_detected": 0.018
+   },
+   "G2M": {
+    "share": 0.027,
+    "mki67_or_top2a_detected": 0.039
+   },
+   "NA": 0.0129
+  },
+  "share_at_thresholds": {
+   "hypoxia": [
+    0.0002,
+    0.0
+   ],
+   "interferon_alpha_response": [
+    0.025,
+    0.002
+   ],
+   "interferon_gamma_response": [
+    0.0144,
+    0.001
+   ],
+   "inflammatory_response": [
+    0.0044,
+    0.0004
+   ],
+   "tnfa_signaling_via_nfkb": [
+    0.002,
+    0.0004
+   ],
+   "oxidative_phosphorylation": [
+    0.023,
+    0.003
+   ],
+   "glycolysis": [
+    0.0043,
+    0.0003
+   ],
+   "e2f_targets": [
+    0.0049,
+    0.0014
+   ],
+   "g2m_checkpoint": [
+    0.0105,
+    0.0015
+   ],
+   "epithelial_mesenchymal_transition": [
+    0.0058,
+    0.0006
+   ],
+   "myc_targets_v1": [
+    0.1156,
+    0.012
+   ],
+   "heme_metabolism": [
+    0.0084,
+    0.0004
+   ],
+   "allograft_rejection": [
+    0.0873,
+    0.0065
+   ]
+  }
+ },
+ {
+  "gsm": "GSM8888964",
+  "gse": "GSE293707",
+  "n_cells": 14449,
+  "timings": {
+   "read_s": 3.49,
+   "rank_s": 0.38,
+   "hallmark_s": 0.86,
+   "cell_cycle_s": 0.027,
+   "total_score_s": 1.426
+  },
+  "median_genes": 125.0,
+  "characteristics": "tissue: blood cells ;; disease state: COVID-19",
+  "groups": {
+   "B": {
+    "n": 97,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.081,
+    "interferon_gamma_response": 0.081,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.046,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.145
+   },
+   "NK": {
+    "n": 2064,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.097,
+    "interferon_gamma_response": 0.072,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.006,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.053,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.115
+   },
+   "T": {
+    "n": 672,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.08,
+    "interferon_gamma_response": 0.033,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.07,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.136
+   },
+   "endothelial": {
+    "n": 73,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.127,
+    "interferon_gamma_response": 0.173,
+    "inflammatory_response": 0.108,
+    "tnfa_signaling_via_nfkb": 0.1,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.005,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.02,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.2
+   },
+   "erythroid": {
+    "n": 60,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.072,
+    "interferon_gamma_response": 0.037,
+    "inflammatory_response": 0.006,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.013,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.063,
+    "heme_metabolism": 0.077,
+    "allograft_rejection": 0.096
+   },
+   "myeloid": {
+    "n": 2785,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.096,
+    "interferon_gamma_response": 0.138,
+    "inflammatory_response": 0.133,
+    "tnfa_signaling_via_nfkb": 0.121,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.003,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.084,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.135
+   },
+   "plasma": {
+    "n": 821,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.062,
+    "interferon_gamma_response": 0.047,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.059,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.009,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.111,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.038
+   },
+   "unassigned": {
+    "n": 7867,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.09,
+    "interferon_gamma_response": 0.082,
+    "inflammatory_response": 0.01,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.033,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.106
+   }
+  },
+  "depth_spearman": {
+   "raw_auc_median_abs": 0.3475,
+   "adjusted_median_abs": 0.0645,
+   "adjusted_per_feature": {
+    "hypoxia": -0.0,
+    "interferon_alpha_response": 0.055,
+    "interferon_gamma_response": 0.089,
+    "inflammatory_response": 0.061,
+    "tnfa_signaling_via_nfkb": 0.04,
+    "oxidative_phosphorylation": 0.07,
+    "glycolysis": 0.078,
+    "e2f_targets": 0.09,
+    "g2m_checkpoint": 0.133,
+    "epithelial_mesenchymal_transition": 0.036,
+    "myc_targets_v1": 0.101,
+    "heme_metabolism": 0.051,
+    "allograft_rejection": 0.093
+   }
+  },
+  "cell_cycle": {
+   "G1": {
+    "share": 0.6467,
+    "mki67_or_top2a_detected": 0.003
+   },
+   "S": {
+    "share": 0.0351,
+    "mki67_or_top2a_detected": 0.065
+   },
+   "G2M": {
+    "share": 0.0244,
+    "mki67_or_top2a_detected": 0.159
+   },
+   "NA": 0.2938
+  },
+  "share_at_thresholds": {
+   "hypoxia": [
+    0.0051,
+    0.0003
+   ],
+   "interferon_alpha_response": [
+    0.0808,
+    0.0155
+   ],
+   "interferon_gamma_response": [
+    0.1022,
+    0.0305
+   ],
+   "inflammatory_response": [
+    0.0786,
+    0.0255
+   ],
+   "tnfa_signaling_via_nfkb": [
+    0.0779,
+    0.032
+   ],
+   "oxidative_phosphorylation": [
+    0.0156,
+    0.0026
+   ],
+   "glycolysis": [
+    0.0101,
+    0.0008
+   ],
+   "e2f_targets": [
+    0.0205,
+    0.0075
+   ],
+   "g2m_checkpoint": [
+    0.0242,
+    0.0068
+   ],
+   "epithelial_mesenchymal_transition": [
+    0.0282,
+    0.0034
+   ],
+   "myc_targets_v1": [
+    0.0403,
+    0.0109
+   ],
+   "heme_metabolism": [
+    0.0093,
+    0.0004
+   ],
+   "allograft_rejection": [
+    0.0835,
+    0.0132
+   ]
+  }
+ },
+ {
+  "gsm": "GSM8888965",
+  "gse": "GSE293707",
+  "n_cells": 4371,
+  "timings": {
+   "read_s": 3.024,
+   "rank_s": 0.402,
+   "hallmark_s": 0.492,
+   "cell_cycle_s": 0.021,
+   "total_score_s": 1.004
+  },
+  "median_genes": 391.0,
+  "characteristics": "tissue: blood cells ;; disease state: COVID-19",
+  "groups": {
+   "B": {
+    "n": 47,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.069,
+    "interferon_gamma_response": 0.077,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.172,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.141
+   },
+   "NK": {
+    "n": 685,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.147,
+    "interferon_gamma_response": 0.122,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.004,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.096,
+    "heme_metabolism": 0.019,
+    "allograft_rejection": 0.205
+   },
+   "T": {
+    "n": 235,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.029,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.031,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.227,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.142
+   },
+   "erythroid": {
+    "n": 747,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.032,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.004,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.208,
+    "heme_metabolism": 0.03,
+    "allograft_rejection": 0.087
+   },
+   "myeloid": {
+    "n": 1069,
+    "hypoxia": 0.034,
+    "interferon_alpha_response": 0.013,
+    "interferon_gamma_response": 0.075,
+    "inflammatory_response": 0.15,
+    "tnfa_signaling_via_nfkb": 0.111,
+    "oxidative_phosphorylation": 0.073,
+    "glycolysis": 0.055,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.146,
+    "myc_targets_v1": 0.064,
+    "heme_metabolism": 0.06,
+    "allograft_rejection": 0.155
+   },
+   "plasma": {
+    "n": 99,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.023,
+    "interferon_gamma_response": 0.001,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.23,
+    "glycolysis": 0.122,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.057,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.34,
+    "heme_metabolism": 0.004,
+    "allograft_rejection": 0.0
+   },
+   "unassigned": {
+    "n": 1473,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.035,
+    "interferon_gamma_response": 0.023,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.02,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.154,
+    "heme_metabolism": 0.017,
+    "allograft_rejection": 0.133
+   }
+  },
+  "depth_spearman": {
+   "raw_auc_median_abs": 0.571,
+   "adjusted_median_abs": 0.1265,
+   "adjusted_per_feature": {
+    "hypoxia": 0.13,
+    "interferon_alpha_response": -0.004,
+    "interferon_gamma_response": 0.108,
+    "inflammatory_response": 0.195,
+    "tnfa_signaling_via_nfkb": 0.172,
+    "oxidative_phosphorylation": 0.133,
+    "glycolysis": 0.178,
+    "e2f_targets": 0.028,
+    "g2m_checkpoint": 0.152,
+    "epithelial_mesenchymal_transition": 0.159,
+    "myc_targets_v1": 0.025,
+    "heme_metabolism": 0.1,
+    "allograft_rejection": 0.079
+   }
+  },
+  "cell_cycle": {
+   "G1": {
+    "share": 0.9124,
+    "mki67_or_top2a_detected": 0.004
+   },
+   "S": {
+    "share": 0.0265,
+    "mki67_or_top2a_detected": 0.224
+   },
+   "G2M": {
+    "share": 0.0206,
+    "mki67_or_top2a_detected": 0.322
+   },
+   "NA": 0.0405
+  },
+  "share_at_thresholds": {
+   "hypoxia": [
+    0.0043,
+    0.0
+   ],
+   "interferon_alpha_response": [
+    0.0728,
+    0.0149
+   ],
+   "interferon_gamma_response": [
+    0.0837,
+    0.0217
+   ],
+   "inflammatory_response": [
+    0.0853,
+    0.0332
+   ],
+   "tnfa_signaling_via_nfkb": [
+    0.0792,
+    0.048
+   ],
+   "oxidative_phosphorylation": [
+    0.0652,
+    0.0176
+   ],
+   "glycolysis": [
+    0.0197,
+    0.0011
+   ],
+   "e2f_targets": [
+    0.0206,
+    0.0144
+   ],
+   "g2m_checkpoint": [
+    0.0284,
+    0.0126
+   ],
+   "epithelial_mesenchymal_transition": [
+    0.0467,
+    0.0062
+   ],
+   "myc_targets_v1": [
+    0.1553,
+    0.0332
+   ],
+   "heme_metabolism": [
+    0.0275,
+    0.0039
+   ],
+   "allograft_rejection": [
+    0.1318,
+    0.0165
+   ]
+  }
+ },
+ {
+  "gsm": "GSM8888966",
+  "gse": "GSE293707",
+  "n_cells": 9738,
+  "timings": {
+   "read_s": 3.051,
+   "rank_s": 0.325,
+   "hallmark_s": 0.627,
+   "cell_cycle_s": 0.015,
+   "total_score_s": 1.089
+  },
+  "median_genes": 153.0,
+  "characteristics": "tissue: blood cells ;; disease state: COVID-19",
+  "groups": {
+   "B": {
+    "n": 108,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.047,
+    "interferon_gamma_response": 0.048,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.104,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.105
+   },
+   "NK": {
+    "n": 1173,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.05,
+    "interferon_gamma_response": 0.037,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.007,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.01,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.093,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.122
+   },
+   "T": {
+    "n": 297,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.029,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.015,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.022,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.122,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.155
+   },
+   "endothelial": {
+    "n": 99,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.073,
+    "inflammatory_response": 0.075,
+    "tnfa_signaling_via_nfkb": 0.127,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.049,
+    "myc_targets_v1": 0.021,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.14
+   },
+   "erythroid": {
+    "n": 395,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.019,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.063,
+    "heme_metabolism": 0.07,
+    "allograft_rejection": 0.079
+   },
+   "myeloid": {
+    "n": 3043,
+    "hypoxia": 0.002,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.062,
+    "inflammatory_response": 0.18,
+    "tnfa_signaling_via_nfkb": 0.191,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.021,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.121,
+    "myc_targets_v1": 0.008,
+    "heme_metabolism": 0.004,
+    "allograft_rejection": 0.14
+   },
+   "plasma": {
+    "n": 214,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.018,
+    "interferon_gamma_response": 0.005,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.096,
+    "glycolysis": 0.023,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.031,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.165,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.026
+   },
+   "unassigned": {
+    "n": 4406,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.009,
+    "interferon_gamma_response": 0.025,
+    "inflammatory_response": 0.008,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.006,
+    "myc_targets_v1": 0.054,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.114
+   }
+  },
+  "depth_spearman": {
+   "raw_auc_median_abs": 0.396,
+   "adjusted_median_abs": 0.1055,
+   "adjusted_per_feature": {
+    "hypoxia": 0.045,
+    "interferon_alpha_response": 0.009,
+    "interferon_gamma_response": 0.117,
+    "inflammatory_response": 0.153,
+    "tnfa_signaling_via_nfkb": 0.149,
+    "oxidative_phosphorylation": 0.131,
+    "glycolysis": 0.127,
+    "e2f_targets": 0.087,
+    "g2m_checkpoint": 0.137,
+    "epithelial_mesenchymal_transition": 0.121,
+    "myc_targets_v1": 0.106,
+    "heme_metabolism": 0.075,
+    "allograft_rejection": 0.138
+   }
+  },
+  "cell_cycle": {
+   "G1": {
+    "share": 0.8116,
+    "mki67_or_top2a_detected": 0.004
+   },
+   "S": {
+    "share": 0.0449,
+    "mki67_or_top2a_detected": 0.098
+   },
+   "G2M": {
+    "share": 0.034,
+    "mki67_or_top2a_detected": 0.227
+   },
+   "NA": 0.1096
+  },
+  "share_at_thresholds": {
+   "hypoxia": [
+    0.0069,
+    0.0003
+   ],
+   "interferon_alpha_response": [
+    0.0182,
+    0.0013
+   ],
+   "interferon_gamma_response": [
+    0.0489,
+    0.0079
+   ],
+   "inflammatory_response": [
+    0.1509,
+    0.0541
+   ],
+   "tnfa_signaling_via_nfkb": [
+    0.1799,
+    0.0851
+   ],
+   "oxidative_phosphorylation": [
+    0.0279,
+    0.0054
+   ],
+   "glycolysis": [
+    0.017,
+    0.0009
+   ],
+   "e2f_targets": [
+    0.0322,
+    0.0165
+   ],
+   "g2m_checkpoint": [
+    0.0344,
+    0.0109
+   ],
+   "epithelial_mesenchymal_transition": [
+    0.0727,
+    0.0111
+   ],
+   "myc_targets_v1": [
+    0.0692,
+    0.0211
+   ],
+   "heme_metabolism": [
+    0.0151,
+    0.0012
+   ],
+   "allograft_rejection": [
+    0.1192,
+    0.0185
+   ]
+  }
+ },
+ {
+  "gsm": "GSM6619183",
+  "gse": "GSE214960",
+  "n_cells": 6413,
+  "timings": {
+   "read_s": 5.468,
+   "rank_s": 1.186,
+   "hallmark_s": 1.618,
+   "cell_cycle_s": 0.094,
+   "total_score_s": 3.013
+  },
+  "median_genes": 788.0,
+  "characteristics": "",
+  "groups": {
+   "NK": {
+    "n": 848,
+    "hypoxia": 0.004,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.035,
+    "inflammatory_response": 0.099,
+    "tnfa_signaling_via_nfkb": 0.184,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.049,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.226
+   },
+   "T": {
+    "n": 2508,
+    "hypoxia": 0.121,
+    "interferon_alpha_response": 0.008,
+    "interferon_gamma_response": 0.074,
+    "inflammatory_response": 0.188,
+    "tnfa_signaling_via_nfkb": 0.375,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.021,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.034,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.257
+   },
+   "myeloid": {
+    "n": 30,
+    "hypoxia": 0.327,
+    "interferon_alpha_response": 0.021,
+    "interferon_gamma_response": 0.073,
+    "inflammatory_response": 0.23,
+    "tnfa_signaling_via_nfkb": 0.418,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.168,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.22,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.042,
+    "allograft_rejection": 0.189
+   },
+   "unassigned": {
+    "n": 3023,
+    "hypoxia": 0.029,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.046,
+    "inflammatory_response": 0.117,
+    "tnfa_signaling_via_nfkb": 0.237,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.043,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.25
+   }
+  },
+  "depth_spearman": {
+   "raw_auc_median_abs": 0.558,
+   "adjusted_median_abs": 0.058499999999999996,
+   "adjusted_per_feature": {
+    "hypoxia": 0.093,
+    "interferon_alpha_response": 0.06,
+    "interferon_gamma_response": 0.069,
+    "inflammatory_response": 0.068,
+    "tnfa_signaling_via_nfkb": -0.033,
+    "oxidative_phosphorylation": 0.23,
+    "glycolysis": 0.206,
+    "e2f_targets": 0.262,
+    "g2m_checkpoint": 0.172,
+    "epithelial_mesenchymal_transition": 0.028,
+    "myc_targets_v1": 0.195,
+    "heme_metabolism": -0.042,
+    "allograft_rejection": 0.226
+   }
+  },
+  "cell_cycle": {
+   "G1": {
+    "share": 0.969,
+    "mki67_or_top2a_detected": 0.081
+   },
+   "S": {
+    "share": 0.0215,
+    "mki67_or_top2a_detected": 0.797
+   },
+   "G2M": {
+    "share": 0.0095,
+    "mki67_or_top2a_detected": 0.951
+   },
+   "NA": 0.0
+  },
+  "share_at_thresholds": {
+   "hypoxia": [
+    0.0839,
+    0.0114
+   ],
+   "interferon_alpha_response": [
+    0.0292,
+    0.0097
+   ],
+   "interferon_gamma_response": [
+    0.0688,
+    0.0173
+   ],
+   "inflammatory_response": [
+    0.1665,
+    0.0279
+   ],
+   "tnfa_signaling_via_nfkb": [
+    0.4765,
+    0.213
+   ],
+   "oxidative_phosphorylation": [
+    0.0009,
+    0.0
+   ],
+   "glycolysis": [
+    0.0232,
+    0.0014
+   ],
+   "e2f_targets": [
+    0.0217,
+    0.0089
+   ],
+   "g2m_checkpoint": [
+    0.0094,
+    0.0022
+   ],
+   "epithelial_mesenchymal_transition": [
+    0.0084,
+    0.0
+   ],
+   "myc_targets_v1": [
+    0.0585,
+    0.01
+   ],
+   "heme_metabolism": [
+    0.0037,
+    0.0005
+   ],
+   "allograft_rejection": [
+    0.3533,
+    0.0432
+   ]
+  }
+ },
+ {
+  "gsm": "GSM5401596",
+  "gse": "GSE178941",
+  "n_cells": 5423,
+  "timings": {
+   "read_s": 6.829,
+   "rank_s": 1.196,
+   "hallmark_s": 0.798,
+   "cell_cycle_s": 0.077,
+   "total_score_s": 2.197
+  },
+  "median_genes": 928.0,
+  "characteristics": "",
+  "groups": {
+   "B": {
+    "n": 832,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.055,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.294,
+    "g2m_checkpoint": 0.226,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.342,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.0
+   },
+   "NK": {
+    "n": 468,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.06,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.0
+   },
+   "T": {
+    "n": 145,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.053,
+    "interferon_gamma_response": 0.04,
+    "inflammatory_response": 0.013,
+    "tnfa_signaling_via_nfkb": 0.019,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.2
+   },
+   "endothelial": {
+    "n": 110,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.047,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.032,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.0
+   },
+   "epithelial": {
+    "n": 21,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.089,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.014,
+    "allograft_rejection": 0.0
+   },
+   "myeloid": {
+    "n": 909,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.062,
+    "interferon_gamma_response": 0.05,
+    "inflammatory_response": 0.018,
+    "tnfa_signaling_via_nfkb": 0.079,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.028,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.067
+   },
+   "plasma": {
+    "n": 63,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.014,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.015,
+    "allograft_rejection": 0.02
+   },
+   "unassigned": {
+    "n": 2868,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.009,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.008
+   }
+  },
+  "depth_spearman": {
+   "raw_auc_median_abs": 0.356,
+   "adjusted_median_abs": 0.1795,
+   "adjusted_per_feature": {
+    "hypoxia": -0.199,
+    "interferon_alpha_response": -0.124,
+    "interferon_gamma_response": -0.171,
+    "inflammatory_response": -0.302,
+    "tnfa_signaling_via_nfkb": -0.295,
+    "oxidative_phosphorylation": 0.437,
+    "glycolysis": 0.18,
+    "e2f_targets": 0.525,
+    "g2m_checkpoint": 0.455,
+    "epithelial_mesenchymal_transition": -0.075,
+    "myc_targets_v1": 0.49,
+    "heme_metabolism": -0.162,
+    "allograft_rejection": -0.374
+   }
+  },
+  "cell_cycle": {
+   "G1": {
+    "share": 0.7186,
+    "mki67_or_top2a_detected": 0.216
+   },
+   "S": {
+    "share": 0.1169,
+    "mki67_or_top2a_detected": 0.781
+   },
+   "G2M": {
+    "share": 0.1643,
+    "mki67_or_top2a_detected": 0.957
+   },
+   "NA": 0.0002
+  },
+  "share_at_thresholds": {
+   "hypoxia": [
+    0.0042,
+    0.0004
+   ],
+   "interferon_alpha_response": [
+    0.0662,
+    0.0135
+   ],
+   "interferon_gamma_response": [
+    0.0767,
+    0.0251
+   ],
+   "inflammatory_response": [
+    0.0159,
+    0.0018
+   ],
+   "tnfa_signaling_via_nfkb": [
+    0.0703,
+    0.014
+   ],
+   "oxidative_phosphorylation": [
+    0.0356,
+    0.002
+   ],
+   "glycolysis": [
+    0.0063,
+    0.0
+   ],
+   "e2f_targets": [
+    0.166,
+    0.0577
+   ],
+   "g2m_checkpoint": [
+    0.1333,
+    0.0489
+   ],
+   "epithelial_mesenchymal_transition": [
+    0.0048,
+    0.0
+   ],
+   "myc_targets_v1": [
+    0.1719,
+    0.0691
+   ],
+   "heme_metabolism": [
+    0.0146,
+    0.0024
+   ],
+   "allograft_rejection": [
+    0.0472,
+    0.0039
+   ]
+  }
+ },
+ {
+  "gsm": "GSM5401599",
+  "gse": "GSE178941",
+  "n_cells": 11330,
+  "timings": {
+   "read_s": 6.332,
+   "rank_s": 1.595,
+   "hallmark_s": 1.052,
+   "cell_cycle_s": 0.096,
+   "total_score_s": 2.898
+  },
+  "median_genes": 634.0,
+  "characteristics": "",
+  "groups": {
+   "B": {
+    "n": 2722,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.102,
+    "g2m_checkpoint": 0.053,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.213,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.0
+   },
+   "NK": {
+    "n": 662,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.138,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.004
+   },
+   "T": {
+    "n": 396,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.127
+   },
+   "endothelial": {
+    "n": 252,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.073,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.198,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.0
+   },
+   "epithelial": {
+    "n": 23,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.064,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.127,
+    "g2m_checkpoint": 0.027,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.286,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.0
+   },
+   "myeloid": {
+    "n": 816,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.028,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.033,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.0
+   },
+   "plasma": {
+    "n": 270,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.0,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.0,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.003
+   },
+   "unassigned": {
+    "n": 6184,
+    "hypoxia": 0.0,
+    "interferon_alpha_response": 0.0,
+    "interferon_gamma_response": 0.0,
+    "inflammatory_response": 0.0,
+    "tnfa_signaling_via_nfkb": 0.0,
+    "oxidative_phosphorylation": 0.0,
+    "glycolysis": 0.0,
+    "e2f_targets": 0.022,
+    "g2m_checkpoint": 0.0,
+    "epithelial_mesenchymal_transition": 0.0,
+    "myc_targets_v1": 0.109,
+    "heme_metabolism": 0.0,
+    "allograft_rejection": 0.0
+   }
+  },
+  "depth_spearman": {
+   "raw_auc_median_abs": 0.543,
+   "adjusted_median_abs": 0.1675,
+   "adjusted_per_feature": {
+    "hypoxia": -0.182,
+    "interferon_alpha_response": -0.083,
+    "interferon_gamma_response": -0.174,
+    "inflammatory_response": -0.251,
+    "tnfa_signaling_via_nfkb": -0.269,
+    "oxidative_phosphorylation": 0.424,
+    "glycolysis": 0.183,
+    "e2f_targets": 0.49,
+    "g2m_checkpoint": 0.386,
+    "epithelial_mesenchymal_transition": -0.14,
+    "myc_targets_v1": 0.489,
+    "heme_metabolism": -0.134,
+    "allograft_rejection": -0.355
+   }
+  },
+  "cell_cycle": {
+   "G1": {
+    "share": 0.7835,
+    "mki67_or_top2a_detected": 0.325
+   },
+   "S": {
+    "share": 0.0884,
+    "mki67_or_top2a_detected": 0.563
+   },
+   "G2M": {
+    "share": 0.1279,
+    "mki67_or_top2a_detected": 0.871
+   },
+   "NA": 0.0002
+  },
+  "share_at_thresholds": {
+   "hypoxia": [
+    0.0005,
+    0.0
+   ],
+   "interferon_alpha_response": [
+    0.0038,
+    0.0003
+   ],
+   "interferon_gamma_response": [
+    0.0049,
+    0.0004
+   ],
+   "inflammatory_response": [
+    0.0021,
+    0.0
+   ],
+   "tnfa_signaling_via_nfkb": [
+    0.0036,
+    0.0003
+   ],
+   "oxidative_phosphorylation": [
+    0.0292,
+    0.0015
+   ],
+   "glycolysis": [
+    0.0079,
+    0.0003
+   ],
+   "e2f_targets": [
+    0.1251,
+    0.0256
+   ],
+   "g2m_checkpoint": [
+    0.0872,
+    0.0164
+   ],
+   "epithelial_mesenchymal_transition": [
+    0.0012,
+    0.0001
+   ],
+   "myc_targets_v1": [
+    0.2575,
+    0.0794
+   ],
+   "heme_metabolism": [
+    0.0037,
+    0.0003
+   ],
+   "allograft_rejection": [
+    0.0177,
+    0.0012
+   ]
+  }
+ }
+]

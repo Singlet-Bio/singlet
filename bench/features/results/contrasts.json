@@ -1,0 +1,107 @@
+{
+ "score": {
+  "depth_abs_spearman": {
+   "GSE293707/GSM8888964": 0.065,
+   "GSE138867/GSM4120733": 0.1,
+   "GSE178941/GSM5401596": 0.18,
+   "GSE294109/GSM8898802": 0.088,
+   "GSE293707/GSM8888965": 0.126
+  },
+  "auroc": {
+   "heme: erythroid vs other (PBMC)": 0.598,
+   "heme: erythroid vs other (COVID)": 0.498,
+   "e2f: S+G2M vs G1": 0.908,
+   "emt: endothelial vs immune": 0.6,
+   "ifna: NK covid(65) vs healthy(63)": 0.679,
+   "ifna: NK covid(64) vs healthy(63)": 0.573,
+   "ifna: myeloid covid(64) vs healthy(63)": 0.688,
+   "ifng: myeloid vs T (PBMC)": 0.863,
+   "oxphos: myeloid vs T (PBMC)": 0.635,
+   "inflam: myeloid vs T (PBMC)": 0.885
+  }
+ },
+ "z": {
+  "depth_abs_spearman": {
+   "GSE293707/GSM8888964": 0.066,
+   "GSE138867/GSM4120733": 0.113,
+   "GSE178941/GSM5401596": 0.233,
+   "GSE294109/GSM8898802": 0.08,
+   "GSE293707/GSM8888965": 0.109
+  },
+  "auroc": {
+   "heme: erythroid vs other (PBMC)": 0.849,
+   "heme: erythroid vs other (COVID)": 0.617,
+   "e2f: S+G2M vs G1": 0.929,
+   "emt: endothelial vs immune": 0.6,
+   "ifna: NK covid(65) vs healthy(63)": 0.676,
+   "ifna: NK covid(64) vs healthy(63)": 0.579,
+   "ifna: myeloid covid(64) vs healthy(63)": 0.674,
+   "ifng: myeloid vs T (PBMC)": 0.887,
+   "oxphos: myeloid vs T (PBMC)": 0.635,
+   "inflam: myeloid vs T (PBMC)": 0.893
+  }
+ },
+ "log2_fold_over_null": {
+  "depth_abs_spearman": {
+   "GSE293707/GSM8888964": 0.077,
+   "GSE138867/GSM4120733": 0.149,
+   "GSE178941/GSM5401596": 0.198,
+   "GSE294109/GSM8898802": 0.092,
+   "GSE293707/GSM8888965": 0.116
+  },
+  "auroc": {
+   "heme: erythroid vs other (PBMC)": 0.852,
+   "heme: erythroid vs other (COVID)": 0.622,
+   "e2f: S+G2M vs G1": 0.928,
+   "emt: endothelial vs immune": 0.603,
+   "ifna: NK covid(65) vs healthy(63)": 0.608,
+   "ifna: NK covid(64) vs healthy(63)": 0.597,
+   "ifna: myeloid covid(64) vs healthy(63)": 0.686,
+   "ifng: myeloid vs T (PBMC)": 0.883,
+   "oxphos: myeloid vs T (PBMC)": 0.652,
+   "inflam: myeloid vs T (PBMC)": 0.891
+  }
+ },
+ "adjusted": {
+  "depth_abs_spearman": {
+   "GSE293707/GSM8888964": 0.127,
+   "GSE138867/GSM4120733": 0.113,
+   "GSE178941/GSM5401596": 0.179,
+   "GSE294109/GSM8898802": 0.12,
+   "GSE293707/GSM8888965": 0.166
+  },
+  "auroc": {
+   "heme: erythroid vs other (PBMC)": 0.806,
+   "heme: erythroid vs other (COVID)": 0.601,
+   "e2f: S+G2M vs G1": 0.909,
+   "emt: endothelial vs immune": 0.597,
+   "ifna: NK covid(65) vs healthy(63)": 0.735,
+   "ifna: NK covid(64) vs healthy(63)": 0.562,
+   "ifna: myeloid covid(64) vs healthy(63)": 0.654,
+   "ifng: myeloid vs T (PBMC)": 0.862,
+   "oxphos: myeloid vs T (PBMC)": 0.645,
+   "inflam: myeloid vs T (PBMC)": 0.885
+  }
+ },
+ "raw_auc": {
+  "depth_abs_spearman": {
+   "GSE293707/GSM8888964": 0.348,
+   "GSE138867/GSM4120733": 0.511,
+   "GSE178941/GSM5401596": 0.356,
+   "GSE294109/GSM8898802": 0.521,
+   "GSE293707/GSM8888965": 0.571
+  },
+  "auroc": {
+   "heme: erythroid vs other (PBMC)": 0.433,
+   "heme: erythroid vs other (COVID)": 0.505,
+   "e2f: S+G2M vs G1": 0.928,
+   "emt: endothelial vs immune": 0.59,
+   "ifna: NK covid(65) vs healthy(63)": 0.887,
+   "ifna: NK covid(64) vs healthy(63)": 0.471,
+   "ifna: myeloid covid(64) vs healthy(63)": 0.497,
+   "ifng: myeloid vs T (PBMC)": 0.792,
+   "oxphos: myeloid vs T (PBMC)": 0.618,
+   "inflam: myeloid vs T (PBMC)": 0.842
+  }
+ }
+}

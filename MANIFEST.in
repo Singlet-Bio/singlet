@@ -15,6 +15,7 @@ recursive-include include/singlet/pz2 *.h
 # Bundled package data
 recursive-include python/singlet/data *.parquet *.txt
 recursive-include python/singlet/celllabels/data *.gz
+recursive-include python/singlet/features/data *.json *.parquet
 # ...except the large 10x whitelists, which singlet.whitelists downloads on demand
 exclude python/singlet/data/whitelists/3M-february-2018.txt
 exclude python/singlet/data/whitelists/737K-august-2016.txt
