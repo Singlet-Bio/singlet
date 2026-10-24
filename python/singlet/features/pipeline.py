@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 """Score one sample: every registered feature set, as sidecar tables and summary rows.
 
-Input is a :class:`singlet.annotate.io.SampleInput` (or any object with ``gsm``, ``gse``, ``X`` called cells x genes raw counts,
+Input is a :class:`singlet.celllabels.io.SampleInput` (or any object with ``gsm``, ``gse``, ``X`` called cells x genes raw counts,
 ``gene_names``, ``col``, ``species`` and optionally ``gene_ids``). Cells with fewer than ``MIN_GENES_DETECTED`` detected genes and
 samples of other organisms get NaN / no category.
 """

@@ -122,7 +122,7 @@ def select(lab, phase, g):
 
 
 def main(argv=None):
-    from singlet.annotate import io as A
+    from singlet.celllabels import io as A
     from singlet.features import pipeline as P
 
     bundles = Path((argv or sys.argv[1:])[0])

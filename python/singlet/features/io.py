@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: MIT
-"""Where a feature job's cells come from. Counts and ``col`` are read with :mod:`singlet.annotate.io` (the same reader as the
+"""Where a feature job's cells come from. Counts and ``col`` are read with :mod:`singlet.celllabels.io` (the same reader as the
 labels, so labels and features line up on ``col``):
 
-* a v2 study on data.singlet.bio: :func:`singlet.annotate.io.read_v2`;
-* a legacy ``.singlet`` bundle on disk: :func:`singlet.annotate.io.read_legacy` (``col`` = position among the columns of
+* a v2 study on data.singlet.bio: :func:`singlet.celllabels.io.read_v2`;
+* a legacy ``.singlet`` bundle on disk: :func:`singlet.celllabels.io.read_legacy` (``col`` = position among the columns of
   ``exon_counts.1pz``, the order the v2 migration gives the cells table).
 """
 
@@ -79,7 +79,7 @@ def iter_samples(
     gse: str, gsms: Optional[List[str]] = None, *, bundle: Optional[Path] = None, v2: bool = False
 ) -> Iterator[Tuple[str, object]]:
     """Yield (gsm, SampleInput or the exception raised while reading it)."""
-    from singlet.annotate import io as A
+    from singlet.celllabels import io as A
 
     if v2:
         todo = v2_gsms(gse) if gsms is None else gsms

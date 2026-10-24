@@ -163,7 +163,7 @@ def main(argv=None):
     )
     a = ap.parse_args(argv)
     from features_run import run_sample
-    from singlet.annotate import io as A
+    from singlet.celllabels import io as A
     from singlet.features import pipeline as P
 
     out = Path(a.out)
