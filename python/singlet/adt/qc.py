@@ -17,7 +17,7 @@ reported with the data):
 | ``panel_identity`` | panels identified from the reads: share of panel reads on catalog barcodes whose reactivity excludes the organism or that a published panel used for another antibody | > 0.10 | > 0.02 |
 | ``saturation`` | 1 - molecules / usable reads | - | < 0.20 |
 | ``isotype_share_median`` | median per-cell share of isotype-control UMIs | - | > 0.10 |
-| ``hto_singlet_share`` | hashtag pools (hashtags >= 5% of the UMIs in cells): called cells assigned to one hashtag | < 0.30 | < 0.50 |
+| ``hto_singlet_share`` | hashtag pools (hashtags >= 5% of the UMIs in cells): called cells assigned to one hashtag; in a library that also has antibodies a failure withholds only the hashtag calls (``hto_calls_publishable``) | < 0.30 | < 0.50 |
 
 Informative pairs: the gene is detected in 5-90% of called cells, and the antibody does not map to PTPRC (CD45, CD45RA/RB/RO,
 CD45.1/.2 recognise isoforms or allotypes of a gene every leukocyte expresses, so their RNA cannot follow them).
@@ -256,6 +256,11 @@ def library_qc(M, panel: pd.DataFrame, called: np.ndarray, stats: dict, ambient:
         rules[k] = _rule(k, v)
         if k == "rna_concordance" and rules[k] == "fail" and out.get("rna_pairs", 0) < MIN_PAIRS_FAIL:
             rules[k] = "warn"
+    # a failed hashtag demultiplexing withholds the hashtag calls, not the antibody counts of a mixed library
+    out["hto_calls_publishable"] = hto_calls is not None and rules.get("hto_singlet_share") != "fail"
+    if rules.get("hto_singlet_share") == "fail" and len(ab_rows):
+        rules["hto_singlet_share"] = "warn"
+        out["hto_failed"] = True
     out["rules"] = rules
     out["verdict"] = "fail" if "fail" in rules.values() else ("warn" if "warn" in rules.values() else "pass")
     out["failed"] = [k for k, v in rules.items() if v == "fail"]

@@ -171,7 +171,9 @@ def main():
             hrows = np.flatnonzero(pan.kind.values == "hashtag")
             called_cols = np.flatnonzero(np.asarray(gx.called, dtype=bool))
             hshare = float(M[hrows][:, called_cols].sum() / max(M[:, called_cols].sum(), 1)) if len(hrows) else 0.0
-            if len(hrows) >= 2 and hshare >= HTO_MIN_SHARE:  # a hashtag pool, not background hashtags
+            calls_ok = not any(json.load(open(os.path.join(a.data, gse, g, "qc.json"))).get("hto_failed")
+                               for g in grp.gsm)
+            if len(hrows) >= 2 and hshare >= HTO_MIN_SHARE and calls_ok:  # a hashtag pool whose calls passed QC
                 hp = hto_sidecar(M, pan, hrows, gx, a.out)
                 if hp:
                     plan.append({"gse": gse, "gsm": gex_gsm, **hp})
