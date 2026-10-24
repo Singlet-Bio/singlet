@@ -70,15 +70,28 @@ class EncodeOptions:
     ``row_names`` / ``col_names``: ``"inline"`` (names stored in the member), ``"none"`` (the matrix has no names),
     ``("pack", id8)`` (names equal the pack's list), ``("subset", id8, indices)`` (names are ``pack[indices[i]]``; the index list is
     stored) or, for columns only, ``"cells"``. The Csc always carries the real names (except ``"none"``) so the digest can be computed;
-    with a reference they are *not* stored. ``chunk_cols`` 0 = W1's default policy.
+    with a reference they are *not* stored. ``chunk_cols`` is the maximum columns per chunk (0 = W1's default policy);
+    ``chunk_nnz_max`` ends a chunk before the column that would take it past that many non-zeros (0 = the library default
+    ``DEFAULT_CHUNK_NNZ_MAX``, -1 = no budget: fixed-width chunks, the behaviour before).
     """
 
     chunk_cols: int = 0
+    chunk_nnz_max: int = 0
     row_names: object = "inline"
     col_names: object = "inline"
     level: int = util.ZSTD_LEVEL
     threads: int = 4
     digest: Optional[bytes] = None
+
+
+DEFAULT_CHUNK_NNZ_MAX = 49152  # pz2.h kDefaultChunkNnzMax
+
+
+def chunk_budget(chunk_nnz_max: int) -> Optional[int]:
+    """The per-chunk non-zero budget for an ``EncodeOptions.chunk_nnz_max`` value (None = no budget)."""
+    if chunk_nnz_max < 0:
+        return None
+    return int(chunk_nnz_max) or DEFAULT_CHUNK_NNZ_MAX
 
 
 def default_chunk_cols(n: int, nnz: int) -> int:
@@ -288,12 +301,21 @@ class MatrixCodec:
 
 
 # ----------------------------------------------------------------------------------------------------------- codec 2
-def _plan_chunks(indptr: np.ndarray, n: int, chunk_cols: int) -> list:
+def _plan_chunks(
+    indptr: np.ndarray, n: int, chunk_cols: int, nnz_budget: Optional[int] = None
+) -> list:
+    """Chunk starts (+ sentinel ``n``), as pz2.h ``plan_chunks``: at most ``chunk_cols`` columns, and a chunk ends before the column
+    that would take it past ``nnz_budget`` non-zeros (at least one column per chunk)."""
     starts = []
     j = 0
     while j < n:
         starts.append(j)
         e = min(n, j + chunk_cols)
+        if nnz_budget is not None and int(indptr[e] - indptr[j]) > nnz_budget:
+            k = int(
+                np.searchsorted(indptr[j + 1 : e + 1], int(indptr[j]) + nnz_budget, side="right")
+            )  # columns that fit
+            e = j + max(1, k)
         while e - j > 1 and int(indptr[e] - indptr[j]) > MAX_CHUNK_NNZ:
             e = j + max(1, (e - j) // 2)
         j = e
@@ -400,7 +422,7 @@ class PyCodec2(MatrixCodec):
                 raw_f32 = True
         indptr = csc.indptr.astype(np.int64, copy=False)
         cc = int(o.chunk_cols) if o.chunk_cols else default_chunk_cols(n, nnz)
-        first = _plan_chunks(indptr, n, max(cc, 1))
+        first = _plan_chunks(indptr, n, max(cc, 1), chunk_budget(int(o.chunk_nnz_max)))
         bounds = list(zip(first[:-1], first[1:]))
 
         def work(bd):
@@ -663,6 +685,7 @@ class NativeCodec(MatrixCodec):
                 int(csc.n),
                 codec=self.codec,
                 chunk_cols=int(o.chunk_cols),
+                chunk_nnz_max=int(o.chunk_nnz_max),
                 value_type=self._VT[vt],
                 row_names=self._spec(o.row_names, csc.rownames, False),
                 col_names=self._spec(o.col_names, csc.colnames, True),

@@ -12,7 +12,8 @@ singlet_cells(
   layers = FALSE,
   max_cells = NULL,
   as = c("sce", "seurat"),
-  cache_dir = NULL
+  cache_dir = NULL,
+  modalities = NULL
 )
 }
 \arguments{
@@ -33,6 +34,9 @@ the cell-table data frame returning a logical vector; or \code{NULL} for every c
 \item{as}{\code{"sce"} (default) or \code{"seurat"}.}
 
 \item{cache_dir}{Cache directory (see \code{\link{load}}).}
+
+\item{modalities}{Which matrices to fetch (default \code{"counts"}, plus the layers with \code{layers = TRUE}); see
+\code{\link{load}}. Only the chunk runs of those members that hold the selected cells are downloaded.}
 }
 \value{
 A \code{SingleCellExperiment} (or \code{Seurat}) with one column per selected cell named

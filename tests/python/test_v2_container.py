@@ -311,6 +311,38 @@ def test_codec2_roundtrip(vt, chunk):
     same(c, out)
 
 
+def _chunk_first(b):
+    h = codec.parse_header(b)
+    off, ln = h["sections"]["chunk_index"]
+    return np.frombuffer(b[off : off + ln], dtype=codec._IDX_DT)["first"].astype(np.int64)
+
+
+@pytest.mark.parametrize("budget", [1, 40, 300, 0, -1])
+def test_codec2_chunk_nnz_budget(budget):
+    c = make_csc(m=400, n=500, density=0.03, seed=5)
+    ip = c.indptr.astype(np.int64)
+    lim = None if budget < 0 else (budget or codec.DEFAULT_CHUNK_NNZ_MAX)
+    b = codec.PyCodec2().encode(c, codec.EncodeOptions(chunk_cols=64, chunk_nnz_max=budget))
+    same(c, codec.PyCodec2().decode(b))
+    first = _chunk_first(b)
+    for j0, j1 in zip(first[:-1], first[1:]):
+        z = int(ip[j1] - ip[j0])
+        assert j1 - j0 <= 64 and (j1 - j0 == 1 or lim is None or z <= lim)
+        if (
+            lim is not None and j1 < c.n and j1 - j0 < 64
+        ):  # greedy: the next column would not have fitted
+            assert z + int(ip[j1 + 1] - ip[j1]) > lim
+    if lim is None:
+        assert (np.diff(first)[:-1] == 64).all()
+    try:
+        nat = codec.NativeCodec("generic")
+    except ImportError:
+        return
+    # the native writer plans the same chunks (pz2.h plan_chunks)
+    nb = nat.encode(c, codec.EncodeOptions(chunk_cols=64, chunk_nnz_max=budget))
+    assert (_chunk_first(nb) == first).all()
+
+
 def test_codec2_column_ranges_and_requests():
     c = make_csc(m=400, n=2500, density=0.02, seed=9)
     cod = codec.PyCodec2()
