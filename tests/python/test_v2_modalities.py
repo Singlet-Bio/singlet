@@ -49,12 +49,12 @@ WANTS = {
 }
 
 
-@pytest.fixture(scope="module")
 def _layers(adata):
     """Layer names, without the phantom None key anndata 0.13.4 reports for a fresh AnnData."""
     return [k for k in adata.layers if k is not None]
 
 
+@pytest.fixture(scope="module")
 def study_dir(tmp_path_factory):
     root = tmp_path_factory.mktemp("v2mod")
     try:
@@ -248,7 +248,7 @@ def test_gene_modalities_values(study_dir, env):
     b = st.to_anndata([G1], modalities="unspliced")
     assert b.X is None and _layers(b) == ["unspliced"] and _same(b.layers["unspliced"], un)
     c = st.to_anndata([G1], modalities="counts")
-    assert _same(c.X, ex + un) and not c.layers
+    assert _same(c.X, ex + un) and not _layers(c)
     d = st.to_anndata([G1], modalities=["counts", "spliced"])
     assert _same(d.X, ex + un) and _layers(d) == ["spliced"]
     assert list(a.obs_names) == list(c.obs_names) and a.var_names.equals(c.var_names)
@@ -320,7 +320,7 @@ def test_load_s2_and_loader_pass_modalities(study_dir, env, monkeypatch):
     b = L.load(GSE, samples=[G1], modalities=["spliced"])
     assert b.X is None and _layers(b) == ["spliced"]
     c = L.load([GSE, GSE], samples=[G1], modalities="counts")
-    assert c.n_obs == 80 and not c.layers
+    assert c.n_obs == 80 and not _layers(c)
 
 
 def test_legacy_fallback_subsets_after_download_and_warns(study_dir, env, monkeypatch):
