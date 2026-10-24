@@ -172,12 +172,12 @@ def draw_null_sets(
     """``k`` random sets for one gene set: each member gene of the reference replaced by a random reference gene of the same
     abundance bin, never a member. Members missing from the reference are skipped. Deterministic for a given seed and reference."""
     rng = np.random.default_rng(seed)
-    ref_ids = np.asarray(ref_ids, dtype=object)
-    pos = {g: i for i, g in enumerate(ref_ids)}
+    ids = np.asarray(ref_ids, dtype=object)
+    pos = {g: i for i, g in enumerate(ids)}
     idx = np.array([pos[g] for g in members if g in pos], np.int64)
     if not len(idx):
         return [[] for _ in range(k)]
-    member = np.zeros(len(ref_ids), bool)
+    member = np.zeros(len(ids), bool)
     member[idx] = True
     by_bin = {b: np.flatnonzero((ref_bins == b) & ~member) for b in np.unique(ref_bins[idx])}
     out = []
@@ -185,6 +185,6 @@ def draw_null_sets(
         pick = []
         for b in ref_bins[idx]:
             pool = by_bin[b]
-            pick.append(ref_ids[pool[rng.integers(len(pool))]] if len(pool) else None)
+            pick.append(ids[pool[rng.integers(len(pool))]] if len(pool) else None)
         out.append([p for p in dict.fromkeys(pick) if p is not None])
     return out
