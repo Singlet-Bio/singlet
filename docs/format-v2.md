@@ -306,3 +306,41 @@ Per study: read the live legacy bundle, decode every member, build v2, re-decode
 upload sample objects and the manifest, verify the uploaded bytes (size + MD5/ETag or SHA-256 re-read), write the ledger
 (`v2/ledger/<GSE>.jsonl` and D1 `v2_migration`). After every study is migrated and clients default to v2, legacy bundles are copied to a
 private archive bucket and removed from the public bucket; the archive is deleted after the grace period recorded in `docs/v2-migration.md`.
+
+## 11. Reading only some modalities (clients)
+
+Every member has its own byte range, so a client that wants some modalities downloads only those members. The Python, R and MCP
+clients share one vocabulary (`MODALITIES` in `python/singlet/v2/client.py`, `.v2_modality_members` in `r/R/v2.R`,
+`functions/_shared/v2-load-modalities.ts` in the website):
+
+| name | members fetched | Python (AnnData) | R (SingleCellExperiment) |
+|---|---|---|---|
+| `counts` | `exon_counts.1pz` + `intron_counts.1pz` | `X` = spliced + unspliced (summed by the client) | assay `counts` |
+| `spliced` | `exon_counts.1pz` | `layers["spliced"]` | assay `spliced` |
+| `unspliced` | `intron_counts.1pz` | `layers["unspliced"]` | assay `unspliced` |
+| `splice_junctions` | `sj_counts.1pz` | `obsm["splice_junctions"]` (cells x junctions CSR) | `altExp("splice_junctions")` |
+| `psi` | `sj_counts.1pz` | `obsm["psi"]` (float32, true PSI computed from the junctions) | `altExp("psi")` |
+| `mt` | `mt_heteroplasmy.1pz` | `obsm["mt"]` | `altExp("mt")` |
+| `vdj` | `vdj_gene_usage.1pz` | `obsm["vdj"]` | `altExp("vdj")` |
+
+* Storage stays exon + intron: there is no summed counts member. `counts` needs both matrices; `spliced` or `unspliced` alone fetch one.
+* The `cells` table is always read (barcodes, called flag, the statistics `where=` filters on).
+* The default is `counts` + `spliced` + `unspliced` (`counts` alone with `layers=False`), i.e. what clients read before this option.
+  Without `counts`, `X` is `None` (R: no `counts` assay); without any gene-level modality the gene axis is empty and the data are in
+  `obsm` / `altExp`. Feature names of an `obsm` modality are in `uns["obsm_features"][name]`; `singlet.v2.client.modality_anndata(adata,
+  name)` makes it its own AnnData. Samples are combined on the union of their feature names (first-seen order).
+* Aliases: `x`, `exon`, `intron`, `junctions`, `sj`, `splice_psi`, `mt_heteroplasmy`, `vdj_gene_usage`.
+* Availability comes from the manifest, before any sample byte is read: a modality is present when its member is a pz2 matrix with
+  rows and columns (a `stub-v1` recipe, as for `mt_heteroplasmy.1pz` in the pilot, is absent). An explicit request for a modality that
+  no requested sample carries stops with an error listing what the samples have; a sample that lacks a requested feature modality
+  contributes empty rows (with a warning), and one that has none of the requested matrices is skipped like an empty sample.
+* Whole members are coalesced only across alignment padding (gap < 64 bytes), so another member's body is never downloaded along with
+  a selection; large samples keep the two-phase plan (cells table + prefixes, then only the chunk runs of the selected members that
+  hold the wanted cells), so `where=` / `obs_filter` compose with `modalities`.
+* A legacy `.singlet` bundle is a single download: with `modalities` the result is subset after the download, with a warning.
+* MCP: `get_partial_download`, `list_bundle_files`, `get_download_url`, `get_modalities` and `slice_cells` take `modalities` and answer
+  with the byte ranges of only those members (plus `cells`).
+
+Measured on the pilot (GSE145370 / GSM4317423, a 3,186,387-byte object, 2,722 called cells; bytes on the wire for one sample, manifest
+and packs excluded): default 1,077,906; `counts` 1,077,906; `spliced` 723,670; `unspliced` 533,172; `splice_junctions` 2,136,697 (the
+junction matrix is the largest member); `vdj` 325,127.
