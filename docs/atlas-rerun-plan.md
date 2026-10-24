@@ -286,7 +286,43 @@ time after each step's gate.
 The v2 lossless migration of the untouched legacy bundles is only needed for studies the re-run cannot reach (missing SRA
 data, failed screens). That is a much smaller campaign.
 
-## 8. Decisions needed
+## 8. Is every modality at state-of-the-art?
+
+No, not yet. Gene expression is benchmarked and, after the fixes, matches the reference tools. Most other per-cell modalities
+have never been compared with an established tool. Status per modality, with the evidence:
+
+| modality / step | reference tool(s) | status | evidence |
+|---|---|---|---|
+| gene counts, exonic | STARsolo `Gene`, Cell Ranger | **equivalent** after #22: per-cell ratio 0.97–1.02, per-cell gene r 0.96–0.99 | `pipeline-validation.md` §4.3 |
+| gene counts, exon + intron | STARsolo `GeneFull`, alevin-fry USA | **equivalent within tool spread**: +2% to +10% vs GeneFull, alevin-fry −3% to +18% | same |
+| vs scBaseCount | scBaseCount (STARsolo, all reads) | **equivalent at equal depth**: within its own thinning noise (0.01–0.04). The published atlas is not equivalent (truncated depth); the re-run fixes that | `scbasecount-comparison.md` §3 |
+| spliced / unspliced / ambiguous | STARsolo Velocyto, alevin-fry | unspliced **agrees** (ratio 0.96–1.08). Spliced vs ambiguous **differs by definition**: collapsed gene model vs per-transcript | `pipeline-validation.md` §4.4 |
+| strand / chemistry detection | scRecounter per-sample tests | **worse today** (17% wrong strand). #25 fixes it; it is validated in #25 but not on the whole atlas yet | `strand-detection.md` (#25) |
+| cell calling | EmptyDrops_CR, Cell Ranger | **worse today** (knee; 73% of the authors' cells). `called_v2` (EmptyDrops on stored counts) is validated on 42 samples and must be in the re-run | `called-v2.md`, `empty-droplets.md` |
+| library type (GEX vs ADT / HTO / V(D)J …) | none in scBaseCount | **better than scBaseCount** once applied: the screen exists, scBaseCount ships ~1.6k non-GEX SRX as GEX | `library-type-screen.md` |
+| ADT / HTO counts | Cell Ranger feature barcoding | **equivalent**: UMI ratio 1.0002, r 0.999995 on pbmc_1k_protein_v3 | PR #29 |
+| splice junctions, PSI | STARsolo `SJ`, leafcutter / BRIE-style PSI | **not benchmarked**. The legacy PSI member had a 0/1 bug; true PSI is computed client-side | `v2-migration.md` D8 |
+| mtDNA heteroplasmy / variants | mgatk, MQuad | **not benchmarked** | — |
+| donor demultiplexing (genotype-free) | vireo, souporcell | **not benchmarked** | — |
+| doublets | scDblFinder, barnyard truth | **not benchmarked**. The barnyard mixed-species rate (0.1%) reflects conservative calls, not doublet detection | `pipeline-validation.md` §4.7 |
+| ambient RNA | SoupX, CellBender | **not benchmarked** (only the empty-droplet study's CellBender comparison of calls) | `empty-droplets.md` §9 |
+| V(D)J usage from GEX reads | none (V(D)J libraries use Cell Ranger vdj) | **no reference**; a by-product, not a V(D)J assay | — |
+| non-host (viral / microbial) | Kraken2 / sylph | **not benchmarked** | — |
+| sex, ancestry, cell cycle | XIST/RPS4Y1 rules, Seurat CellCycleScoring | **not benchmarked** | — |
+
+So today Singlet can claim, with evidence:
+- gene-expression counts equivalent to STARsolo / Cell Ranger and, at equal depth, to scBaseCount;
+- ADT equivalent to Cell Ranger;
+- a library-type screen scBaseCount lacks.
+
+After the re-run, with #25 and `called_v2`, it can also claim strand handling and cell calls on a par with scBaseCount.
+
+**Not yet claimable:** splice junctions/PSI, mtDNA, donor demux, doublets, ambient and non-host. Each needs a benchmark like
+`pipeline-validation.md`'s on data with a known answer before it is advertised. Mixed-genotype pools, mito-variant lineage
+datasets and spike-in viral samples all exist publicly. These benchmarks do not block the GEX re-run, since the re-run
+regenerates these modalities anyway, but they should finish before the modalities are marketed.
+
+## 9. Decisions needed
 
 <!-- DECISIONS -->
 
