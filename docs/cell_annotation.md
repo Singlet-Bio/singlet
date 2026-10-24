@@ -315,7 +315,7 @@ wall time on Clipper, plus download time (about 1.5 TB in total). It fits `short
 The default is now the guide. With self-training (`--method selftrain`) the campaign would cost about 4,400 CPU-hours for the
 small depth-4 gain measured in section 3.
 
-Submission (not launched; it needs Zach's go-ahead):
+Submission (the commands used for the atlas run, section 6.1):
 
 ```
 python scripts/annotate_campaign.py plan --shards 400 --out $OUT/plan.tsv            # inside a job
@@ -326,6 +326,51 @@ python scripts/annotate_campaign.py status --out $OUT
 Each task downloads its studies' bundles (and, with R2 read credentials, the restricted sidecars) to node-local scratch and
 deletes them after each study. It writes only label and summary files, and it never writes to R2 or D1. A study whose files
 exist at the current `model_version` is skipped, so failed tasks can simply be resubmitted.
+
+### 6.1 The atlas run (2026-10-23/24, `$WORK/out/annotate/atlas-v0.1.0` on Clipper)
+
+Launched with Zach's go-ahead.
+
+**Schedule.**
+- Shards: 400 from the live catalogue, 1,982 human and mouse studies, 1.49 TB.
+- Partitions: shard 0 (GSE293805, 29 GB) ran on `bigmem`; the rest on `short-bigmem`, `short-cpu` (4 CPUs) and `bigmem`.
+- Concurrency: about 12 tasks at a time, because the CPU nodes were nearly full and the per-user node limit applied.
+- Wall time: about 9 hours.
+
+**Two problems found mid-run, both fixed and pushed:**
+- A block of cells with no counts at all crashed the rank signal. It cost 4 samples in 2 studies, which succeeded on retry.
+- The file-level genotype scan, run on compressed bytes, raised false alarms. It now reads decoded values; the
+  `assert_public_safe` content guard was never affected.
+
+**Result.** All 1,982 studies are annotated: 36,638 sample label files covering 193.1M cells. Every file passes
+`assert_public_safe`, the decoded-value genotype scan, and a row count equal to its summary
+(`scripts/annotate_validation_summary.py`, `run_summary.json`).
+
+| | cells | share |
+|---|---|---|
+| cell type called | 156.6M | 81.1% (human 78.6%, mouse 86.4%) |
+| sex: male / female / ambiguous | 101.1M / 67.9M / 24.2M | 52.3% / 35.2% / 12.5% |
+| ancestry called | 2.1M | 1.1% |
+
+**Ancestry coverage is small** because only human studies whose restricted sidecar holds donor coverage tables can be called.
+Those sidecars held 743 donors:
+
+| group | donors |
+|---|---|
+| European | 325 |
+| East Asian | 95 |
+| admixed | 73 |
+| African | 34 |
+| Latin American | 15 |
+| South Asian | 3 |
+| no call (defective tables, too few sites, other build) | 198 |
+
+Median covered sites per donor: 221k.
+
+**Measured cost:** 1,010 s of wall clock per million cells per 8-thread task (read 700, cell type 297, sex 7, ancestry 4).
+That is 2.2 CPU-hours per million cells, about 430 CPU-hours for the atlas.
+
+**Hand-over.** The cell index ingests these files (`singlet.v2.atlas.normalize_sidecar`). Nothing was written to R2 or D1.
 
 ## 7. Findings for other owners
 
