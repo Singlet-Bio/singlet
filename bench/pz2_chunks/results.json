@@ -1,0 +1,856 @@
+{
+ "samples": [
+  {
+   "sample": "brain_sn_v3_deep",
+   "n_columns": 84424,
+   "n_called": 3288,
+   "budgets": {
+    "none": {
+     "bytes": 12731878,
+     "chunks": 330,
+     "enc_s": 2.549,
+     "dec_s": 0.14,
+     "one_cell": 982885,
+     "pick_1pct": 6911864,
+     "pick_10pct": 7330382,
+     "all_called": 7330382,
+     "chunk_cols": {
+      "exon": 512,
+      "intron": 512
+     }
+    },
+    "98304": {
+     "bytes": 12746057,
+     "chunks": 403,
+     "enc_s": 3.61,
+     "dec_s": 0.233,
+     "one_cell": 163588,
+     "pick_1pct": 3648987,
+     "pick_10pct": 7250355,
+     "all_called": 7318436,
+     "chunk_cols": {
+      "exon": 512,
+      "intron": 512
+     }
+    },
+    "49152": {
+     "bytes": 12764393,
+     "chunks": 498,
+     "enc_s": 2.298,
+     "dec_s": 0.129,
+     "one_cell": 81494,
+     "pick_1pct": 1991166,
+     "pick_10pct": 6660778,
+     "all_called": 7329417,
+     "chunk_cols": {
+      "exon": 512,
+      "intron": 512
+     }
+    },
+    "24576": {
+     "bytes": 12805254,
+     "chunks": 709,
+     "enc_s": 2.51,
+     "dec_s": 0.138,
+     "one_cell": 40431,
+     "pick_1pct": 1149347,
+     "pick_10pct": 5571605,
+     "all_called": 7301596,
+     "chunk_cols": {
+      "exon": 512,
+      "intron": 512
+     }
+    },
+    "12288": {
+     "bytes": 12898950,
+     "chunks": 1198,
+     "enc_s": 2.761,
+     "dec_s": 0.128,
+     "one_cell": 19914,
+     "pick_1pct": 613743,
+     "pick_10pct": 4132164,
+     "all_called": 7340042,
+     "chunk_cols": {
+      "exon": 512,
+      "intron": 512
+     }
+    }
+   }
+  },
+  {
+   "sample": "brain_sn_v3_intronic",
+   "n_columns": 78894,
+   "n_called": 8743,
+   "budgets": {
+    "none": {
+     "bytes": 9464940,
+     "chunks": 194,
+     "enc_s": 2.005,
+     "dec_s": 0.077,
+     "one_cell": 520439,
+     "pick_1pct": 6564325,
+     "pick_10pct": 6735055,
+     "all_called": 6788655,
+     "chunk_cols": {
+      "exon": 2048,
+      "intron": 512
+     }
+    },
+    "98304": {
+     "bytes": 9474881,
+     "chunks": 247,
+     "enc_s": 1.956,
+     "dec_s": 0.101,
+     "one_cell": 191039,
+     "pick_1pct": 4986039,
+     "pick_10pct": 6709116,
+     "all_called": 6803488,
+     "chunk_cols": {
+      "exon": 2048,
+      "intron": 512
+     }
+    },
+    "49152": {
+     "bytes": 9489944,
+     "chunks": 325,
+     "enc_s": 2.613,
+     "dec_s": 0.112,
+     "one_cell": 97130,
+     "pick_1pct": 3761458,
+     "pick_10pct": 6596372,
+     "all_called": 6837034,
+     "chunk_cols": {
+      "exon": 2048,
+      "intron": 512
+     }
+    },
+    "24576": {
+     "bytes": 9520815,
+     "chunks": 487,
+     "enc_s": 2.1,
+     "dec_s": 0.088,
+     "one_cell": 48576,
+     "pick_1pct": 2595239,
+     "pick_10pct": 6132563,
+     "all_called": 6811306,
+     "chunk_cols": {
+      "exon": 2048,
+      "intron": 512
+     }
+    },
+    "12288": {
+     "bytes": 9585571,
+     "chunks": 828,
+     "enc_s": 2.038,
+     "dec_s": 0.076,
+     "one_cell": 24287,
+     "pick_1pct": 1587485,
+     "pick_10pct": 5339351,
+     "all_called": 6823451,
+     "chunk_cols": {
+      "exon": 2048,
+      "intron": 512
+     }
+    }
+   }
+  },
+  {
+   "sample": "pbmc_v2_shallow",
+   "n_columns": 96446,
+   "n_called": 41725,
+   "budgets": {
+    "none": {
+     "bytes": 6564721,
+     "chunks": 119,
+     "enc_s": 1.294,
+     "dec_s": 0.061,
+     "one_cell": 173887,
+     "pick_1pct": 4549856,
+     "pick_10pct": 4861957,
+     "all_called": 5076569,
+     "chunk_cols": {
+      "exon": 1024,
+      "intron": 4096
+     }
+    },
+    "98304": {
+     "bytes": 6565309,
+     "chunks": 122,
+     "enc_s": 1.396,
+     "dec_s": 0.067,
+     "one_cell": 160948,
+     "pick_1pct": 4565583,
+     "pick_10pct": 4874282,
+     "all_called": 5088476,
+     "chunk_cols": {
+      "exon": 1024,
+      "intron": 4096
+     }
+    },
+    "49152": {
+     "bytes": 6570289,
+     "chunks": 150,
+     "enc_s": 1.891,
+     "dec_s": 0.08,
+     "one_cell": 112622,
+     "pick_1pct": 4583158,
+     "pick_10pct": 4891554,
+     "all_called": 5104971,
+     "chunk_cols": {
+      "exon": 1024,
+      "intron": 4096
+     }
+    },
+    "24576": {
+     "bytes": 6591007,
+     "chunks": 267,
+     "enc_s": 1.55,
+     "dec_s": 0.058,
+     "one_cell": 57138,
+     "pick_1pct": 4248418,
+     "pick_10pct": 4882634,
+     "all_called": 5057821,
+     "chunk_cols": {
+      "exon": 1024,
+      "intron": 4096
+     }
+    },
+    "12288": {
+     "bytes": 6637194,
+     "chunks": 530,
+     "enc_s": 1.841,
+     "dec_s": 0.084,
+     "one_cell": 28706,
+     "pick_1pct": 3661614,
+     "pick_10pct": 4763335,
+     "all_called": 5037759,
+     "chunk_cols": {
+      "exon": 1024,
+      "intron": 4096
+     }
+    }
+   }
+  },
+  {
+   "sample": "pbmc_v2_typical",
+   "n_columns": 15185,
+   "n_called": 5428,
+   "budgets": {
+    "none": {
+     "bytes": 3204494,
+     "chunks": 90,
+     "enc_s": 1.898,
+     "dec_s": 0.082,
+     "one_cell": 187709,
+     "pick_1pct": 2785408,
+     "pick_10pct": 2875958,
+     "all_called": 2932101,
+     "chunk_cols": {
+      "exon": 256,
+      "intron": 512
+     }
+    },
+    "98304": {
+     "bytes": 3205963,
+     "chunks": 98,
+     "enc_s": 2.285,
+     "dec_s": 0.082,
+     "one_cell": 147332,
+     "pick_1pct": 2480071,
+     "pick_10pct": 2907155,
+     "all_called": 2907155,
+     "chunk_cols": {
+      "exon": 256,
+      "intron": 512
+     }
+    },
+    "49152": {
+     "bytes": 3212095,
+     "chunks": 131,
+     "enc_s": 2.118,
+     "dec_s": 0.087,
+     "one_cell": 84681,
+     "pick_1pct": 2079659,
+     "pick_10pct": 2883858,
+     "all_called": 2941185,
+     "chunk_cols": {
+      "exon": 256,
+      "intron": 512
+     }
+    },
+    "24576": {
+     "bytes": 3225569,
+     "chunks": 205,
+     "enc_s": 1.647,
+     "dec_s": 0.051,
+     "one_cell": 42760,
+     "pick_1pct": 1541651,
+     "pick_10pct": 2862111,
+     "all_called": 2941037,
+     "chunk_cols": {
+      "exon": 256,
+      "intron": 512
+     }
+    },
+    "12288": {
+     "bytes": 3254110,
+     "chunks": 359,
+     "enc_s": 1.69,
+     "dec_s": 0.052,
+     "one_cell": 21416,
+     "pick_1pct": 925195,
+     "pick_10pct": 2716310,
+     "all_called": 2948273,
+     "chunk_cols": {
+      "exon": 256,
+      "intron": 512
+     }
+    }
+   }
+  },
+  {
+   "sample": "pbmc_v3_lowgenes",
+   "n_columns": 71061,
+   "n_called": 11124,
+   "budgets": {
+    "none": {
+     "bytes": 2206843,
+     "chunks": 53,
+     "enc_s": 1.558,
+     "dec_s": 0.044,
+     "one_cell": 506589,
+     "pick_1pct": 2014975,
+     "pick_10pct": 2014975,
+     "all_called": 2014975,
+     "chunk_cols": {
+      "exon": 2048,
+      "intron": 4096
+     }
+    },
+    "98304": {
+     "bytes": 2210092,
+     "chunks": 71,
+     "enc_s": 1.651,
+     "dec_s": 0.043,
+     "one_cell": 152625,
+     "pick_1pct": 2014942,
+     "pick_10pct": 2014942,
+     "all_called": 2033568,
+     "chunk_cols": {
+      "exon": 2048,
+      "intron": 4096
+     }
+    },
+    "49152": {
+     "bytes": 2215031,
+     "chunks": 99,
+     "enc_s": 1.612,
+     "dec_s": 0.046,
+     "one_cell": 77352,
+     "pick_1pct": 1987946,
+     "pick_10pct": 2019335,
+     "all_called": 2039080,
+     "chunk_cols": {
+      "exon": 2048,
+      "intron": 4096
+     }
+    },
+    "24576": {
+     "bytes": 2224742,
+     "chunks": 155,
+     "enc_s": 1.081,
+     "dec_s": 0.027,
+     "one_cell": 38841,
+     "pick_1pct": 1633856,
+     "pick_10pct": 2020805,
+     "all_called": 2041497,
+     "chunk_cols": {
+      "exon": 2048,
+      "intron": 4096
+     }
+    },
+    "12288": {
+     "bytes": 2244450,
+     "chunks": 268,
+     "enc_s": 1.108,
+     "dec_s": 0.027,
+     "one_cell": 19527,
+     "pick_1pct": 1235259,
+     "pick_10pct": 2039196,
+     "all_called": 2050855,
+     "chunk_cols": {
+      "exon": 2048,
+      "intron": 4096
+     }
+    }
+   }
+  },
+  {
+   "sample": "tcell_5p",
+   "n_columns": 69249,
+   "n_called": 12363,
+   "budgets": {
+    "none": {
+     "bytes": 9460120,
+     "chunks": 288,
+     "enc_s": 2.197,
+     "dec_s": 0.1,
+     "one_cell": 512885,
+     "pick_1pct": 8407570,
+     "pick_10pct": 8617510,
+     "all_called": 8644606,
+     "chunk_cols": {
+      "exon": 256,
+      "intron": 4096
+     }
+    },
+    "98304": {
+     "bytes": 9470661,
+     "chunks": 344,
+     "enc_s": 2.934,
+     "dec_s": 0.145,
+     "one_cell": 188574,
+     "pick_1pct": 6898383,
+     "pick_10pct": 8622448,
+     "all_called": 8652921,
+     "chunk_cols": {
+      "exon": 256,
+      "intron": 4096
+     }
+    },
+    "49152": {
+     "bytes": 9491852,
+     "chunks": 458,
+     "enc_s": 3.017,
+     "dec_s": 0.172,
+     "one_cell": 94641,
+     "pick_1pct": 4878002,
+     "pick_10pct": 8559072,
+     "all_called": 8678213,
+     "chunk_cols": {
+      "exon": 256,
+      "intron": 4096
+     }
+    },
+    "24576": {
+     "bytes": 9535503,
+     "chunks": 692,
+     "enc_s": 3.301,
+     "dec_s": 0.193,
+     "one_cell": 47337,
+     "pick_1pct": 3168672,
+     "pick_10pct": 8264212,
+     "all_called": 8714643,
+     "chunk_cols": {
+      "exon": 256,
+      "intron": 4096
+     }
+    },
+    "12288": {
+     "bytes": 9624664,
+     "chunks": 1171,
+     "enc_s": 2.641,
+     "dec_s": 0.104,
+     "one_cell": 23665,
+     "pick_1pct": 2001458,
+     "pick_10pct": 7049443,
+     "all_called": 8781771,
+     "chunk_cols": {
+      "exon": 256,
+      "intron": 4096
+     }
+    }
+   }
+  },
+  {
+   "sample": "tumor_3p",
+   "n_columns": 25067,
+   "n_called": 3820,
+   "budgets": {
+    "none": {
+     "bytes": 521776,
+     "chunks": 14,
+     "enc_s": 0.725,
+     "dec_s": 0.013,
+     "one_cell": 148892,
+     "pick_1pct": 430792,
+     "pick_10pct": 430792,
+     "all_called": 430792,
+     "chunk_cols": {
+      "exon": 4096,
+      "intron": 4096
+     }
+    },
+    "98304": {
+     "bytes": 521791,
+     "chunks": 14,
+     "enc_s": 0.664,
+     "dec_s": 0.013,
+     "one_cell": 135379,
+     "pick_1pct": 427123,
+     "pick_10pct": 427123,
+     "all_called": 427123,
+     "chunk_cols": {
+      "exon": 4096,
+      "intron": 4096
+     }
+    },
+    "49152": {
+     "bytes": 521968,
+     "chunks": 15,
+     "enc_s": 0.786,
+     "dec_s": 0.015,
+     "one_cell": 103206,
+     "pick_1pct": 419296,
+     "pick_10pct": 434309,
+     "all_called": 434309,
+     "chunk_cols": {
+      "exon": 4096,
+      "intron": 4096
+     }
+    },
+    "24576": {
+     "bytes": 522833,
+     "chunks": 20,
+     "enc_s": 0.687,
+     "dec_s": 0.014,
+     "one_cell": 60655,
+     "pick_1pct": 433405,
+     "pick_10pct": 433405,
+     "all_called": 433405,
+     "chunk_cols": {
+      "exon": 4096,
+      "intron": 4096
+     }
+    },
+    "12288": {
+     "bytes": 525199,
+     "chunks": 33,
+     "enc_s": 0.689,
+     "dec_s": 0.014,
+     "one_cell": 31191,
+     "pick_1pct": 385420,
+     "pick_10pct": 439171,
+     "all_called": 439171,
+     "chunk_cols": {
+      "exon": 4096,
+      "intron": 4096
+     }
+    }
+   }
+  },
+  {
+   "sample": "GSE145370/GSM4317423",
+   "n_columns": 39217,
+   "n_called": 2722,
+   "budgets": {
+    "none": {
+     "bytes": 898856,
+     "chunks": 20,
+     "enc_s": 1.103,
+     "dec_s": 0.02,
+     "one_cell": 273748,
+     "pick_1pct": 703768,
+     "pick_10pct": 755455,
+     "all_called": 755455,
+     "chunk_cols": {
+      "exon": 4096,
+      "intron": 4096
+     }
+    },
+    "98304": {
+     "bytes": 899058,
+     "chunks": 21,
+     "enc_s": 1.371,
+     "dec_s": 0.033,
+     "one_cell": 210770,
+     "pick_1pct": 698562,
+     "pick_10pct": 754616,
+     "all_called": 754616,
+     "chunk_cols": {
+      "exon": 4096,
+      "intron": 4096
+     }
+    },
+    "49152": {
+     "bytes": 899968,
+     "chunks": 26,
+     "enc_s": 1.623,
+     "dec_s": 0.027,
+     "one_cell": 121524,
+     "pick_1pct": 714994,
+     "pick_10pct": 744492,
+     "all_called": 744492,
+     "chunk_cols": {
+      "exon": 4096,
+      "intron": 4096
+     }
+    },
+    "24576": {
+     "bytes": 901981,
+     "chunks": 37,
+     "enc_s": 1.314,
+     "dec_s": 0.026,
+     "one_cell": 61082,
+     "pick_1pct": 604598,
+     "pick_10pct": 755876,
+     "all_called": 755876,
+     "chunk_cols": {
+      "exon": 4096,
+      "intron": 4096
+     }
+    },
+    "12288": {
+     "bytes": 906447,
+     "chunks": 62,
+     "enc_s": 1.092,
+     "dec_s": 0.022,
+     "one_cell": 30687,
+     "pick_1pct": 467124,
+     "pick_10pct": 717985,
+     "all_called": 734763,
+     "chunk_cols": {
+      "exon": 4096,
+      "intron": 4096
+     }
+    }
+   }
+  },
+  {
+   "sample": "GSE145370/GSM4317424",
+   "n_columns": 27803,
+   "n_called": 1727,
+   "budgets": {
+    "none": {
+     "bytes": 432193,
+     "chunks": 14,
+     "enc_s": 0.843,
+     "dec_s": 0.014,
+     "one_cell": 199663,
+     "pick_1pct": 324910,
+     "pick_10pct": 324910,
+     "all_called": 324910,
+     "chunk_cols": {
+      "exon": 4096,
+      "intron": 4096
+     }
+    },
+    "98304": {
+     "bytes": 432309,
+     "chunks": 15,
+     "enc_s": 0.663,
+     "dec_s": 0.011,
+     "one_cell": 167475,
+     "pick_1pct": 313837,
+     "pick_10pct": 313837,
+     "all_called": 313837,
+     "chunk_cols": {
+      "exon": 4096,
+      "intron": 4096
+     }
+    },
+    "49152": {
+     "bytes": 432499,
+     "chunks": 16,
+     "enc_s": 0.922,
+     "dec_s": 0.02,
+     "one_cell": 110582,
+     "pick_1pct": 323580,
+     "pick_10pct": 323580,
+     "all_called": 323580,
+     "chunk_cols": {
+      "exon": 4096,
+      "intron": 4096
+     }
+    },
+    "24576": {
+     "bytes": 433573,
+     "chunks": 22,
+     "enc_s": 1.073,
+     "dec_s": 0.019,
+     "one_cell": 58273,
+     "pick_1pct": 254351,
+     "pick_10pct": 331609,
+     "all_called": 331609,
+     "chunk_cols": {
+      "exon": 4096,
+      "intron": 4096
+     }
+    },
+    "12288": {
+     "bytes": 435544,
+     "chunks": 33,
+     "enc_s": 0.804,
+     "dec_s": 0.016,
+     "one_cell": 29376,
+     "pick_1pct": 199542,
+     "pick_10pct": 316294,
+     "all_called": 316294,
+     "chunk_cols": {
+      "exon": 4096,
+      "intron": 4096
+     }
+    }
+   }
+  },
+  {
+   "sample": "GSE145370/GSM4317425",
+   "n_columns": 31645,
+   "n_called": 1207,
+   "budgets": {
+    "none": {
+     "bytes": 565699,
+     "chunks": 16,
+     "enc_s": 1.425,
+     "dec_s": 0.022,
+     "one_cell": 266740,
+     "pick_1pct": 412281,
+     "pick_10pct": 412281,
+     "all_called": 412281,
+     "chunk_cols": {
+      "exon": 4096,
+      "intron": 4096
+     }
+    },
+    "98304": {
+     "bytes": 565895,
+     "chunks": 17,
+     "enc_s": 0.956,
+     "dec_s": 0.018,
+     "one_cell": 214692,
+     "pick_1pct": 385587,
+     "pick_10pct": 419209,
+     "all_called": 419209,
+     "chunk_cols": {
+      "exon": 4096,
+      "intron": 4096
+     }
+    },
+    "49152": {
+     "bytes": 566363,
+     "chunks": 20,
+     "enc_s": 0.742,
+     "dec_s": 0.015,
+     "one_cell": 118746,
+     "pick_1pct": 397795,
+     "pick_10pct": 397795,
+     "all_called": 423356,
+     "chunk_cols": {
+      "exon": 4096,
+      "intron": 4096
+     }
+    },
+    "24576": {
+     "bytes": 567456,
+     "chunks": 26,
+     "enc_s": 0.834,
+     "dec_s": 0.018,
+     "one_cell": 60108,
+     "pick_1pct": 336334,
+     "pick_10pct": 392355,
+     "all_called": 417954,
+     "chunk_cols": {
+      "exon": 4096,
+      "intron": 4096
+     }
+    },
+    "12288": {
+     "bytes": 569881,
+     "chunks": 39,
+     "enc_s": 0.667,
+     "dec_s": 0.013,
+     "one_cell": 30192,
+     "pick_1pct": 229133,
+     "pick_10pct": 394051,
+     "all_called": 411780,
+     "chunk_cols": {
+      "exon": 4096,
+      "intron": 4096
+     }
+    }
+   }
+  }
+ ],
+ "totals": {
+  "none": {
+   "bytes": 46051520,
+   "chunks": 1138,
+   "enc_s": 15.597,
+   "dec_s": 0.573,
+   "one_cell": 3773437,
+   "pick_1pct": 33105749,
+   "pick_10pct": 34359275,
+   "all_called": 34710726,
+   "bytes_vs_none": 1.0,
+   "one_cell_vs_none": 1.0,
+   "pick_1pct_vs_none": 1.0,
+   "pick_10pct_vs_none": 1.0,
+   "all_called_vs_none": 1.0,
+   "dec_s_vs_none": 1.0
+  },
+  "98304": {
+   "bytes": 46092016,
+   "chunks": 1352,
+   "enc_s": 17.486,
+   "dec_s": 0.746,
+   "one_cell": 1732422,
+   "pick_1pct": 26419114,
+   "pick_10pct": 34293083,
+   "all_called": 34718829,
+   "bytes_vs_none": 1.0009,
+   "one_cell_vs_none": 0.4591,
+   "pick_1pct_vs_none": 0.798,
+   "pick_10pct_vs_none": 0.9981,
+   "all_called_vs_none": 1.0002,
+   "dec_s_vs_none": 1.3019
+  },
+  "49152": {
+   "bytes": 46164402,
+   "chunks": 1738,
+   "enc_s": 17.622,
+   "dec_s": 0.703,
+   "one_cell": 1001978,
+   "pick_1pct": 21137054,
+   "pick_10pct": 33511145,
+   "all_called": 34855637,
+   "bytes_vs_none": 1.0025,
+   "one_cell_vs_none": 0.2655,
+   "pick_1pct_vs_none": 0.6385,
+   "pick_10pct_vs_none": 0.9753,
+   "all_called_vs_none": 1.0042,
+   "dec_s_vs_none": 1.2269
+  },
+  "24576": {
+   "bytes": 46328733,
+   "chunks": 2620,
+   "enc_s": 16.097,
+   "dec_s": 0.632,
+   "one_cell": 515201,
+   "pick_1pct": 15965871,
+   "pick_10pct": 31647175,
+   "all_called": 34806744,
+   "bytes_vs_none": 1.006,
+   "one_cell_vs_none": 0.1365,
+   "pick_1pct_vs_none": 0.4823,
+   "pick_10pct_vs_none": 0.9211,
+   "all_called_vs_none": 1.0028,
+   "dec_s_vs_none": 1.103
+  },
+  "12288": {
+   "bytes": 46682010,
+   "chunks": 4521,
+   "enc_s": 15.331,
+   "dec_s": 0.536,
+   "one_cell": 258961,
+   "pick_1pct": 11305973,
+   "pick_10pct": 27907300,
+   "all_called": 34884159,
+   "bytes_vs_none": 1.0137,
+   "one_cell_vs_none": 0.0686,
+   "pick_1pct_vs_none": 0.3415,
+   "pick_10pct_vs_none": 0.8122,
+   "all_called_vs_none": 1.005,
+   "dec_s_vs_none": 0.9354
+  }
+ }
+}

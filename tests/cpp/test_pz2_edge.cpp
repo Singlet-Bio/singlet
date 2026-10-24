@@ -271,6 +271,34 @@ int main() {
         for (int cpo : {0, 1, 2, 8}) { EncodeOptions o = r1; o.classes_per_octave = uint8_t(cpo); roundtrip(M, o, "cpo" + std::to_string(cpo), nullptr, false); }
         for (uint32_t cc : {1u, 2u, 3u, 7u, 100u, 399u, 400u, 401u, 100000u}) { EncodeOptions o = r1; o.chunk_cols = cc; roundtrip(M, o, "chunk_cols" + std::to_string(cc), nullptr, false); }
         EncodeOptions o2; o2.codec = CodecId::Generic; o2.chunk_cols = 77; roundtrip(M, o2, "codec2 chunk77", nullptr, false);
+        // per-chunk non-zero budget: round trip, and the geometry it promises (<= chunk_cols columns; <= budget non-zeros unless the
+        // chunk is one column; a chunk ends only where the next column would not fit, or at chunk_cols, or at the end)
+        for (CodecId codec : {CodecId::Rans, CodecId::Generic})
+            for (uint32_t bud : {1u, 60u, 700u, 5000u, 0u, 0xFFFFFFFFu}) {
+                EncodeOptions o = r1; o.codec = codec; o.chunk_cols = 64; o.chunk_nnz_max = bud;
+                const std::string nm = std::string(codec == CodecId::Rans ? "rans" : "generic") + " chunk_nnz_max" + std::to_string(bud);
+                roundtrip(M, o, nm, nullptr, false);
+                o.row_names.kind = NamesKind::None; o.col_names.kind = NamesKind::None; o.compute_digest = false;
+                auto b = encode_matrix(M.csc(), o);
+                ByteSource src(b);
+                auto mx = Matrix::open(src);
+                const ChunkIndex& ci = mx.chunk_index();
+                const uint64_t lim = bud == 0xFFFFFFFFu ? UINT64_MAX : (bud ? bud : kDefaultChunkNnzMax);
+                bool ok = true;
+                for (size_t k = 0; k < ci.n_chunks(); ++k) {
+                    const uint32_t nc = ci.cols_in_chunk(k), j0 = ci.rec[k].first_col, j1 = j0 + nc;
+                    const uint64_t z = ci.nnz_in_chunk(k);
+                    if (nc > 64 || (nc > 1 && z > lim)) ok = false;
+                    // greedy: the next column would not have fitted (unless the chunk is at its column cap or the end)
+                    if (j1 < M.n && nc < 64 && lim != UINT64_MAX && z + (M.ptr[j1 + 1] - M.ptr[j1]) <= lim) ok = false;
+                }
+                CHECK(ok, nm + ": chunk geometry");
+                if (bud == 0xFFFFFFFFu) {
+                    bool fixed = true;
+                    for (size_t k = 0; k + 1 < ci.n_chunks(); ++k) fixed = fixed && ci.cols_in_chunk(k) == 64;
+                    CHECK(fixed, nm + ": no budget gives fixed-width chunks");
+                }
+            }
     }
     {   // encoder output does not depend on the thread count
         Mat M = random_mat(8000, 1500, 30, 22, 20);
