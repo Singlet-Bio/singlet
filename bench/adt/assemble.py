@@ -69,7 +69,7 @@ def merge_sample(libs, gex_barcodes_n):
         tot = np.asarray(M.sum(axis=1)).ravel()
         for i, p in pan.iterrows():
             rows.append({**p.to_dict(), "_lib": qc["gsm"], "_umis": int(tot[i]), "_ambient": int(ambient[i]),
-                         "_mi": len(mats), "_row": i})
+                         "mi_": len(mats), "row_": i})
         mats.append(M.tocsr())
         prov.append({"gsm": qc["gsm"], "lib_class": qc["lib_class"], "offset": meta.get("offset"),
                      "chemistry": meta.get("chemistry"), "translation": meta.get("translation"),
@@ -77,11 +77,11 @@ def merge_sample(libs, gex_barcodes_n):
     df = pd.DataFrame(rows)
     df = df.sort_values("_umis", ascending=False).drop_duplicates("sequence", keep="first")
     dropped = len(rows) - len(df)
-    df = df.sort_values(["_mi", "_row"]).reset_index(drop=True)
+    df = df.sort_values(["mi_", "row_"]).reset_index(drop=True)
     if df["name"].duplicated().any():
         dup = df["name"].duplicated(keep=False)
         df.loc[dup, "name"] = df.loc[dup, "name"] + " (" + df.loc[dup, "_lib"] + ")"
-    M = sparse.vstack([mats[r._mi][int(r._row)] for r in df.itertuples()]).tocsc()
+    M = sparse.vstack([mats[r.mi_][int(r.row_)] for r in df.itertuples()]).tocsc()
     return M, df, {"libraries": prov, "duplicate_features_dropped": dropped}
 
 
