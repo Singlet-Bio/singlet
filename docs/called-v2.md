@@ -198,7 +198,16 @@ The port follows the reference down to floating-point order wherever a discrete 
 
 One step is not reproduced bit for bit: `np.polyfit` in the Good-Turing smoothing (LAPACK `gelsd`). The ambient
 profile can therefore differ in the last bit, and alpha by up to the minimiser's `xatol` (1e-4 in log alpha) when
-the likelihood is flat. That can move a Monte Carlo count by one. `tests/cpp/test_called_v2.cpp` checks the port
+the likelihood is flat. That can move a Monte Carlo count by one. A second residual: `retain = 10 ** log10(knee total)`. numpy's
+`log10` uses SVML on AVX-512 machines, the port uses glibc, and the two can land one ulp apart. When they
+straddle the total, uncalled barcodes with exactly the knee total are retained by one side and tested by the
+other. On the five validation samples the retain values were bit-identical on 4. On `nuclei2k_v2` they straddled
+3814, but no uncalled barcode had that total.
+
+Validation (Clipper, `bench/prod_atlas/`): on pbmc1k_v3, pbmc5p_v1, nuclei2k_v2, neuron1k_v3 and hgmm1k_v3 the
+binary's `called_v2` equals `cellcall.call` on its stored counts at 4 and 8 threads. That held in both the
+pinned venv (numpy 2.2 / scipy 1.15 / numba 0.64) and a newer env (numpy 2.5 / scipy 1.18 / numba 0.68). Over
+10,349 tested barcodes there were 0 differences, and FDRs agreed to the printed 6 digits. `tests/cpp/test_called_v2.cpp` checks the port
 against `cellcall.py` output (`bench/called_v2/make_cpp_fixture.py`). It requires identical `called_v2` sets and
 FDRs equal except for Monte Carlo ties. `bench/called_v2/equiv_cpp.py` runs the same comparison on real pipeline
 outputs.
