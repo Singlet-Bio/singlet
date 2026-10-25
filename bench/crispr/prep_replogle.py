@@ -4,8 +4,8 @@
     python -P prep_replogle.py DATA_DIR GENOME.fa.gz GTF.gz [--gemgroup 41]
 
 The published h5ad names each cell's guide pair ``sgID_AB = A|B`` with ids ``GENE_<strand>_<coord>.23-<transcript>``
-(hCRISPRi-v2 style: strand and genomic coordinate of a 23-nt protospacer + PAM). Table S1 has no sequences, so the
-protospacers are cut from GRCh38 here. Which offset the coordinate marks is decided from the reads: every candidate
+(hCRISPRi-v2 style: strand and hg19 coordinate of a 23-nt protospacer + PAM). Table S1 has no sequences, so the
+protospacers are cut from hg19 here (the library was designed on hg19; GRCh38 coordinates match no read). Which offset the coordinate marks is decided from the reads: every candidate
 convention is scored by the share of observed protospacer windows (20 nt before the two scaffold anchors) it explains.
 
 Writes ``DATA_DIR/guides.tsv`` (id, sequence, target_gene, target_gene_id, kind, position A/B) and
