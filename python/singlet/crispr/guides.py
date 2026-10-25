@@ -59,9 +59,9 @@ def rc(s: bytes) -> bytes:
 def parse_pattern(pattern: str, length: int) -> Geometry:
     """Cell Ranger pattern -> Geometry. ``(BC)CONST`` -> anchor; ``^N*(BC)`` / ``5PN*(BC)`` -> offset."""
     p = pattern.strip()
-    m = re.fullmatch(r"\(BC\)([ACGTN]+)", p)
+    m = re.fullmatch(r"\(BC\)([ACGTN|]+)", p)
     if m:
-        return Geometry(length, anchor=m.group(1)[:ANCHOR_LEN])
+        return Geometry(length, anchor="|".join(x[:ANCHOR_LEN] for x in m.group(1).split("|")))
     m = re.fullmatch(r"(?:\^|5P)?(N*)\(BC\)([ACGTN]*)", p)
     if m:
         return Geometry(length, offset=len(m.group(1)))

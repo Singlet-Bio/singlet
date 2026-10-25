@@ -31,5 +31,14 @@ case $DS in
       --reference $D/crispr_analysis/crispr_analysis/protospacer_calls_per_cell.csv --ref-format cellranger \
       --gex $D/count_sample_feature_bc_matrix.h5 --guides $D/count_feature_reference.csv --out $O/metrics.json | head -80
     ;;
+  replogle_k562_gg41)
+    # published cells of gem group 41 are the columns (the h5ad holds no empty droplets); molecules on other whitelist
+    # barcodes are the ambient profile. Dual guides: protospacer A before GTTTCAGAGC, B before GTTTAAGAGC.
+    WL=$WORK/cache/adt/3M-february-2018.txt.gz; TR=$WORK/cache/adt/translation_3M-february-2018.txt.gz
+    cut -d, -f1 $D/reference_gg41.csv | tail -n +2 > $O/columns.txt
+    $TIME python -P $SRC/bench/crispr/run_crispr.py --fastq-dir $D/fastqs --guide-table $D/guides.tsv       --pattern "(BC)GTTTCAGAGC|GTTTAAGAGC" --whitelist $WL --translation $TR --cells $O/columns.txt       --out $O/singlet --shards 16 --tmp $SCRATCH 2> $O/singlet.time | tail -5
+    grep -E "Elapsed|Maximum resident" $O/singlet.time
+    python -P $SRC/bench/crispr/compare_crispr.py --run $O/singlet --reference $D/K562_essential_raw_singlecell_01.h5ad       --ref-format replogle --gemgroup 41 --guides $D/guides.tsv --columns $O/columns.txt --out $O/metrics.json | head -60
+    ;;
   *) echo "unknown DS $DS"; exit 2;;
 esac
