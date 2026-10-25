@@ -24,7 +24,7 @@
 #   aws_s3                 curl the .sra from the sra-pub-run-odp bucket (bytes only; scored by sha256 against prefetch's file)
 #   ena_https              curl the run's FASTQ files from ENA over HTTPS
 set -u
-source /mnt/projects/debruinz_project/debruinz/singlet/bench-public/src/singlet/bench/public/harness/common.sh
+source ${BP_SRC:-/mnt/projects/debruinz_project/debruinz/singlet/bench-public/src/singlet}/bench/public/harness/perf_common.sh
 source $SRC/bench/public/harness/download/runs.sh
 REP=$1; MODES=$2; DIGEST=${3:-$([ "$REP" = 1 ] && echo 1 || echo 0)}
 verify_bin

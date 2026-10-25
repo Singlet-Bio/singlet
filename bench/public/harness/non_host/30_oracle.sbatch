@@ -11,7 +11,7 @@
 # counts when >= 60 nt align at >= 90 % identity; molecules = distinct (cell, UMI). This is the truth for the infected-vs-
 # mock benchmark: a read-level alignment, not an independent cell annotation.
 set -eu
-source /mnt/projects/debruinz_project/debruinz/singlet/bench-public/src/singlet/bench/public/harness/common.sh
+source ${BP_SRC:-/mnt/projects/debruinz_project/debruinz/singlet/bench-public/src/singlet}/bench/public/harness/perf_common.sh
 L=$1; OLD=$WORK/modality-bench/sj_nonhost
 S=$BP/nonhost/$L/singlet; O=$BP/nonhost/$L/oracle; rm -rf $O; mkdir -p $O
 echo "[bp] $L minimap2 $($WORK/envs/kraken2/bin/minimap2 --version) node=$(hostname)" | tee $O/node.txt

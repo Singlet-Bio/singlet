@@ -12,7 +12,7 @@
 # order-independent digests of every decoded file (fq_digest.py) in $BP/download/reference/reference.tsv, and the sha256 and
 # size of the .sra in sra.tsv. Every download tool is later scored against these.
 set -eu
-source /mnt/projects/debruinz_project/debruinz/singlet/bench-public/src/singlet/bench/public/harness/common.sh
+source ${BP_SRC:-/mnt/projects/debruinz_project/debruinz/singlet/bench-public/src/singlet}/bench/public/harness/perf_common.sh
 source $SRC/bench/public/harness/download/runs.sh
 export PATH=$ENVDIR/bin:$PATH
 R=$BP/download/reference; mkdir -p $R/sra

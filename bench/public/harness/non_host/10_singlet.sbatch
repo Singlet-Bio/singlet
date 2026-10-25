@@ -12,7 +12,7 @@
 # Output: $BP/nonhost/LABEL/singlet/ (nonhost/nonhost_per_cell.tsv, nonhost_summary.json, nonhost_em_abundance.tsv,
 # star_Unmapped.out.mate1/2 for the Kraken2 and minimap2 runs), time.txt and mem.json of the full run.
 set -eu
-source /mnt/projects/debruinz_project/debruinz/singlet/bench-public/src/singlet/bench/public/harness/common.sh
+source ${BP_SRC:-/mnt/projects/debruinz_project/debruinz/singlet/bench-public/src/singlet}/bench/public/harness/perf_common.sh
 L=$1; verify_bin
 OLD=$WORK/modality-bench/sj_nonhost
 O=$BP/nonhost/$L/singlet; rm -rf $O; mkdir -p $O/nonhost $BP/nonhost/cells

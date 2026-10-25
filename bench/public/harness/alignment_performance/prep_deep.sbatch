@@ -12,7 +12,7 @@
 # identified by length, runs are concatenated in accession order and written as R1.fastq.gz / R2.fastq.gz under
 # $BP/data/gsm5815984/. These FASTQs are the shared input of every tool in the timing.
 set -eu
-source /mnt/projects/debruinz_project/debruinz/singlet/bench-public/src/singlet/bench/public/harness/common.sh
+source ${BP_SRC:-/mnt/projects/debruinz_project/debruinz/singlet/bench-public/src/singlet}/bench/public/harness/perf_common.sh
 export PATH=$ENVDIR/bin:$PATH HOME=$WORK/cache/condahome
 SRRS="SRR17615087 SRR17615088"
 OUT=$BP/data/gsm5815984; mkdir -p $OUT

@@ -27,12 +27,12 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import _common as C  # noqa: E402
+import _perf as C  # noqa: E402
 
 CAPABILITY = "non-host"
 # Commit of the harness and metric code that produced the published numbers (the code URLs below point at it).
 CODE_COMMIT = "0000000000000000000000000000000000000000"
-DPI2, MOCK, PBMC = "gse166766_hbec_dpi2", "gse166766_hbec_mock", "pbmc1k_v3"
+DPI2, MOCK, PBMC = "ravindra2021_dpi2", "ravindra2021_mock", "pbmc1k_v3"  # cohort ids (GSE166766)
 TOOL_S, TOOL_KP, TOOL_KV, TOOL_O = "singlet", "kraken2-pluspf", "kraken2-viral", "minimap2-oracle"
 KRAKEN = (TOOL_KP, TOOL_KV)
 COL = {TOOL_S: "singlet", TOOL_KP: "kraken2_pluspf", TOOL_KV: "kraken2_viral", TOOL_O: "oracle"}

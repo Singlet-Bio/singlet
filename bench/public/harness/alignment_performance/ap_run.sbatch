@@ -23,7 +23,7 @@
 #   alevinfry      simpleaf quant, spliced+unspliced index, cr-like resolution
 # Output: $BP/perf/DATASET/TOOL_rREP/{time.txt,mem.json,node.txt,...}. Cell Ranger is not installed on Clipper and is not run.
 set -eu
-source /mnt/projects/debruinz_project/debruinz/singlet/bench-public/src/singlet/bench/public/harness/common.sh
+source ${BP_SRC:-/mnt/projects/debruinz_project/debruinz/singlet/bench-public/src/singlet}/bench/public/harness/perf_common.sh
 DS=$1; REP=$2; TOOLS=${3:-"singlet singlet-core starsolo starsolo-bam alevinfry"}
 verify_bin
 export PATH=$ENVDIR/bin:$PATH ALEVIN_FRY_HOME=$PB/af_home

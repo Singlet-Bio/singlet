@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "capabilities"))
 import non_host as NH  # noqa: E402
 
 DATASETS = [NH.DPI2, NH.MOCK, NH.PBMC]
+RUN_DIR = {NH.DPI2: "gse166766_hbec_dpi2", NH.MOCK: "gse166766_hbec_mock", NH.PBMC: "pbmc1k_v3"}  # run directory names (10_singlet.sbatch LABEL)
 KR = {NH.TOOL_KP: "kraken2_pluspf08", NH.TOOL_KV: "kraken2_viral"}
 
 
@@ -55,8 +56,8 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     sp_rows, meta_rows, res_rows = [], [], []
     for ds in DATASETS:
-        d = bp / "nonhost" / ds
-        cells = [x.split("\t")[0].strip() for x in (bp / "nonhost" / "cells" / f"{ds}.txt").read_text().split("\n") if x.strip()]
+        d = bp / "nonhost" / RUN_DIR[ds]
+        cells = [x.split("\t")[0].strip() for x in (bp / "nonhost" / "cells" / f"{RUN_DIR[ds]}.txt").read_text().split("\n") if x.strip()]
         base = pd.DataFrame({"barcode": cells}).set_index("barcode")
         # ---- Singlet
         sd = d / "singlet" / "nonhost"

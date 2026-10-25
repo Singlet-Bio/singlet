@@ -3,8 +3,8 @@
 WORK=/mnt/projects/debruinz_project/debruinz/singlet
 PB=$WORK/pipeline-benchmark                    # data, references, binaries of the earlier pipeline benchmark
 BP=$WORK/bench-public                          # everything produced by the public benchmark
-SRC=$BP/src/singlet                            # checkout of this branch (sync_src.sbatch)
-ART=$BP/artifacts                              # $ART/<capability>/: the small tables the notebook downloads
+SRC=${BP_SRC:-$BP/src/singlet}                  # checkout of this branch (sync_src.sbatch); BP_SRC overrides
+ART=$WORK/bpub/artifacts                        # $ART/<capability>/: the small tables the notebook downloads (CONTRACT.md section 5)
 REFBASE=/mnt/projects/debruinz_project/cellarium/reference
 ENVDIR=$WORK/envs/pbench                       # STAR 2.7.11b, alevin-fry, simpleaf, salmon, samtools, sra-tools, python+pandas
 PY=$ENVDIR/bin/python

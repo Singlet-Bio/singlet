@@ -10,7 +10,7 @@
 # Kraken2 at its defaults (--confidence 0.0, k=35, l=31) on the reads STAR could not map to the host, i.e. the reads
 # Singlet screens, from the Singlet run of 10_singlet.sbatch. Per-cell attribution from the barcode mate.
 set -eu
-source /mnt/projects/debruinz_project/debruinz/singlet/bench-public/src/singlet/bench/public/harness/common.sh
+source ${BP_SRC:-/mnt/projects/debruinz_project/debruinz/singlet/bench-public/src/singlet}/bench/public/harness/perf_common.sh
 L=$1; D=$2
 case $D in
   pluspf08) DB=$BP/db/k2_pluspf08 ;;

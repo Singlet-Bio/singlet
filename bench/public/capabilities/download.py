@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import _common as C  # noqa: E402
+import _perf as C  # noqa: E402
 
 CAPABILITY = "download"
 CODE_COMMIT = "0000000000000000000000000000000000000000"

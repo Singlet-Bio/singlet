@@ -24,7 +24,7 @@
 # Note: the PR #22 / #34 binaries clip 11 bp from PBMC R2 reads (the 5' prefix false positive fixed in the campaign binary),
 # so those rows map 80 bp reads and the campaign rows map 91 bp reads: compare rows within a group, not across it.
 set -eu
-source /mnt/projects/debruinz_project/debruinz/singlet/bench-public/src/singlet/bench/public/harness/common.sh
+source ${BP_SRC:-/mnt/projects/debruinz_project/debruinz/singlet/bench-public/src/singlet}/bench/public/harness/perf_common.sh
 KIND=$1; REP=$2; verify_bin
 DS=pbmc1k_v3; REF=$REFBASE/GRCh38-2024-A; GENOME=$REF/star_2.7.11b; GTF=$REF/genes/genes.gtf
 O0=$BP/perf_opt/$KIND; mkdir -p $O0
