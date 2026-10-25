@@ -5,6 +5,34 @@ stored `called` flag misses many real cells. Code: `bench/called_v2/`. The proto
 `validate.py` and `aggregate.py`, with per-sample results in `called-v2/samples.csv`, `called-v2/tables.md` and
 `called-v2/outliers.jsonl`. Nothing in `python/singlet/v2/` or the pipeline was changed.
 
+## Fix: version 2.1 (2026-10-25)
+
+`called_v2` 2.0 over-called (docs/called-v2-truth.md, on branch `plan/atlas-rerun`). The `retain` knee was fitted on every
+total above `lower`; DropletUtils' `barcodeRanks` first restricts the fit to its curve bounds (`.find_curve_bounds`). With
+the plateau `lower` (5-100) the ambient shoulder sat inside the fit, the knee could land just above `lower` (Kang lane 8,
+hgmm1k_v3 115, neuron1k_v3 76), and every tested barcode was then called without a test. Version 2.1 changes two things,
+nothing else (plateau `lower`, test floor 50, FDR 0.001, 10,000 paths, seed 20261023, union with `called` are unchanged):
+
+1. **Knee within DropletUtils' curve bounds.** On the (log10 rank, log10 total) points with total > `lower`,
+   `d1n = diff(y) / diff(x)`; `skip` = number of points with rank <= 50; `right = skip + argmin(d1n[skip:])` (the steepest
+   drop), `left = skip + argmax(d1n[skip:right+1])`. The same smoothing spline is fitted on `left..right` only (fewer than 6
+   points: the total at `left`).
+2. **Tail p-values at the Monte Carlo floor.** With 10,000 paths the smallest p is 1/10,001, so BH at FDR 0.001 passes none
+   of them when fewer than about n_tested / 10 sit there (small 10x samples). A tested barcode below every simulated path at
+   its total gets `p = min(Phi((lp - mean) / sd), 1/10,001)`, mean and sd (ddof 0) over the 10,000 simulated
+   log-probabilities at that total. All other p-values are unchanged.
+
+The parameters record `version: "2.1"`. Recommended calls (truth-check script): Kang lane 16,573 (was 17,004), hgmm1k_v3
+1,026 (1,919), neuron1k_v3 1,355 (2,758), nuclei2k_v2 2,376 (2,175), pbmc1k_v3 1,190 and pbmc5p_v1 8,399 (unchanged). On the
+42-sample validation the Jaccard against the authors is unchanged (0.882 vs 0.883). **The hashtag recall below (93%)
+depended on the bug**: in GSE108313/GSM2895282 the unbounded knee was 112 and 15,832 barcodes were auto-retained. At FDR
+0.001 the honest singlet recall is **81%** (19,212 cells, 11,302 singlets added), 87% at FDR 0.01.
+
+Status: the C++ port (`include/singlet/pileup/called_v2.h`, `knee_bounded`, tail p in `call`) carries 2.1 on
+`prod/atlas-rerun`. **`python/singlet/v2/cellcall.py` must receive the identical change** (owned by the v2 team; branch
+`fix/called-v2-knee-bounds`). Until it lands, the reference the C++ fixture is generated from is the patched copy
+`bench/called_v2_truth/cellcall_ref.py`.
+
 ## Proposal
 
 `called_v2` = the stored `called` set, plus every uncalled barcode that EmptyDrops (Lun et al. 2019) finds different from
@@ -83,7 +111,11 @@ The empty-droplet study found 14,920 uncalled barcodes carrying a single dominan
 | stored `called` | 2,950 | 548 | 3.8% | |
 | Cell Ranger 3-like on stored data | 3,615 | 848 | 5.8% | 300 / 143 / 169 |
 | EmptyDrops, `lower` = 100 (DropletUtils default) | 6,835 | 3,148 | 22% | 2,600 / 580 / 624 |
-| **`called_v2`** (`lower` = 17 here) | **21,818** | **13,600** | **93%** | **13,052 / 1,148 / 4,481** |
+| `called_v2` 2.0 (`lower` = 17 here; unbounded knee 112, see "Fix: version 2.1") | 21,818 | 13,600 | 93% | 13,052 / 1,148 / 4,481 |
+| **`called_v2` 2.1** (bounded knee 3,223) | **19,212** | | **81%** | **11,302 singlets** |
+
+The 2.0 row is kept for the record: 2,606 of its additions came from the knee bug (67% hashtag singlets, 31% negative), so its
+93% is not a property of the method. The paragraph below describes the 2.0 additions.
 
 69% of the added barcodes are confirmed stained single cells, and 6% are hashtag multiplets (super-loading makes doublets).
 The 24% that are "negative" have a median hashtag count of 707, 3.5x the empty-droplet level (203) but under the
@@ -175,7 +207,8 @@ would need a `called_v2` bit to filter on.
 
 ## In the pipeline (C++ port, prod/atlas-rerun)
 
-`include/singlet/pileup/called_v2.h` is a port of `cellcall.call()` with the same parameters. It is the pipeline's
+`include/singlet/pileup/called_v2.h` is a port of `cellcall.call()` with the same parameters (version 2.1 since
+2026-10-25: bounded knee and tail p-values, see the top of this note). It is the pipeline's
 default cell caller (`--cell-caller called_v2`; `star_solo` and `emptydrops` keep the old callers):
 
 * The knee set `called` is STARsolo's `CellRanger2.2 3000 0.99 10` rule (`SoloFeature_cellFiltering.cpp`), computed

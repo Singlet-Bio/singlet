@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT
 // tests/cpp/test_called_v2.cpp
 //
-// The C++ port of called_v2 (include/singlet/pileup/called_v2.h) against the Python reference
-// (python/singlet/v2/cellcall.py). called_v2_fixture.h holds cellcall.call's output on a synthetic droplet sample that
-// synth() below regenerates bit for bit, plus reference values of the pieces (scipy gammaln, numba's RNG, scipy's
+// The C++ port of called_v2 (include/singlet/pileup/called_v2.h) against the Python reference (cellcall.call, VERSION
+// 2.1: bench/called_v2_truth/cellcall_ref.py until python/singlet/v2/cellcall.py carries the same change).
+// called_v2_fixture.h holds the reference output on two synthetic droplet samples that synth() below regenerates bit for
+// bit (the second one exercises the 2.1 tail p-values), a barcode-rank curve on which the unbounded knee falls in the
+// ambient shoulder (the 2.1 curve bounds), plus reference values of the pieces (scipy gammaln, numba's RNG, scipy's
 // UnivariateSpline knots, numpy's quantile, the Good-Turing proportions). Regenerate it with
-// `python -P bench/called_v2/make_cpp_fixture.py` whenever cellcall.py changes.
+// `python -P bench/called_v2/make_cpp_fixture.py` whenever the reference changes.
 
 #include <cmath>
 #include <cstdint>
@@ -34,9 +36,9 @@ struct SplitMix {
 };
 
 /// Same generator as bench/called_v2/make_cpp_fixture.py::synth (keep in step).
-GeneCounts synth() {
+GeneCounts synth(uint64_t seed, uint64_t n_cells, uint64_t n_low, uint64_t n_amb, uint64_t n_fat) {
     const int G = cv2fix::kG;
-    SplitMix r(cv2fix::kSeed);
+    SplitMix r(seed);
     std::vector<uint64_t> amb(G);
     for (int g = 0; g < G; ++g) {
         uint64_t a = r.next() % 50;
@@ -72,7 +74,6 @@ GeneCounts synth() {
         }
         return lo;
     };
-    const uint64_t n_cells = cv2fix::kCells, n_low = cv2fix::kLow, n_fat = 150, n_amb = cv2fix::kAmb;
     const uint64_t total = n_cells + n_low + n_fat + n_amb;
     GeneCounts X;
     X.nrows = G;
@@ -114,6 +115,36 @@ uint64_t bits(double v) {
     uint64_t b;
     std::memcpy(&b, &v, 8);
     return b;
+}
+
+/// Call-level p-values against the reference. On these synthetic samples the ambient pool is nearly multinomial, so the
+/// likelihood of alpha is flat and the last-bit Good-Turing difference (np.polyfit) moves alpha within fminbound's xatol
+/// (~1e-4 relative, see the alpha note in main). That shifts the null: Monte Carlo counts can move by a count or two, and
+/// the tail-extrapolated p (0 < p < 1 / (niters + 1)) by a few percent (z moves by ~1e-2). With alpha bit-equal the bounds
+/// are one count on <= 2% of barcodes and 1e-9 relative, otherwise five counts on <= 20% and 15% relative. The tail
+/// formula itself is checked exactly against numpy below (kernel check, with the reference prop / alpha).
+bool pv_agree(const Result& R, const int* tested, const double* ref, int64_t n, bool alpha_equal) {
+    const double floor_p = 1.0 / static_cast<double>(Params().niters + 1);
+    const double tail_tol = alpha_equal ? 1e-9 : 0.15;
+    const int64_t mc_tol = alpha_equal ? n / 50 : n / 5;
+    const double mc_abs = (alpha_equal ? 1.5 : 5.5) * floor_p;
+    int mc_diff = 0, bad = 0;
+    double tail_rel = 0, mc_max = 0;
+    for (int64_t i = 0; i < n; ++i) {
+        double got = R.pvalue[tested[i]], want = ref[i];
+        if (want > 0 && want < floor_p) {
+            double rel = std::fabs(got / want - 1);
+            tail_rel = std::max(tail_rel, rel);
+            bad += !(rel < tail_tol);
+        } else if (got != want) {
+            ++mc_diff;
+            mc_max = std::max(mc_max, std::fabs(got - want));
+            if (!(std::fabs(got - want) < mc_abs)) ++bad;
+        }
+    }
+    std::printf("    p: %d Monte Carlo p-values differ (max |diff| %.3g), tail max rel diff %.3g (alpha %s)\n", mc_diff,
+                mc_max, tail_rel, alpha_equal ? "bit-equal" : "within xatol");
+    return bad == 0 && mc_diff <= mc_tol;
 }
 
 }  // namespace
@@ -159,7 +190,7 @@ int main() {
     }
 
     // ── the call ──
-    GeneCounts X = synth();
+    GeneCounts X = synth(cv2fix::kSeed, cv2fix::kCells, cv2fix::kLow, cv2fix::kAmb, 150);
     int64_t sum = 0;
     for (auto v : X.data) sum += v;
     CHECK(sum == cv2fix::kSum, "synthetic sample regenerated (same total count as the Python generator)");
@@ -195,12 +226,101 @@ int main() {
         for (int64_t i = 0; i < cv2fix::kNTested; ++i) {
             int j = cv2fix::kTested[i];
             set_diff += (R.called_v2[j] != cv2fix::kCalledV2Tested[i]);
-            fdr_diff += (R.fdr[j] != cv2fix::kFdr[i]);
-            fdr_max = std::max(fdr_max, static_cast<double>(std::fabs(R.fdr[j] - cv2fix::kFdr[i])));
+            // tail-extrapolated FDRs move by a few percent with alpha (see pv_agree); count larger differences
+            double a = R.fdr[j], b = cv2fix::kFdr[i];
+            fdr_diff += !(a == b || std::fabs(a - b) <= 0.15 * std::max(std::fabs(a), std::fabs(b)));
+            fdr_max = std::max(fdr_max, std::fabs(a - b));
         }
         std::printf("    FDR: %d of %lld differ, max |diff| %.3g\n", fdr_diff, (long long)cv2fix::kNTested, fdr_max);
         CHECK(set_diff == 0, "called_v2 identical on every tested barcode" + t);
         CHECK(fdr_diff <= cv2fix::kNTested / 50 && fdr_max <= 2e-3, "FDR equal up to Monte Carlo ties" + t);
+        CHECK(pv_agree(R, cv2fix::kTested, cv2fix::kPv, cv2fix::kNTested, bits(R.alpha) == bits(cv2fix::kAlpha)),
+              "p-values equal up to Monte Carlo ties" + t);
+    }
+
+    // -- 2.1 curve bounds: the unbounded knee lands in the ambient shoulder (10-100 UMIs), the bounded one among cells --
+    {
+        std::vector<int64_t> tot;
+        for (size_t i = 0; i < sizeof(cv2fix::kKneeVal) / sizeof(int64_t); ++i)
+            tot.insert(tot.end(), static_cast<size_t>(cv2fix::kKneeCnt[i]), cv2fix::kKneeVal[i]);
+        double ku = knee(tot, cv2fix::kKneeLower), kb = knee_bounded(tot, cv2fix::kKneeLower);
+        std::printf("    knee unbounded %.17g (Python %.17g), bounded %.17g (Python %.17g)\n", ku, cv2fix::kKneeUnbounded,
+                    kb, cv2fix::kKneeBounded);
+        CHECK(ku == cv2fix::kKneeUnbounded && ku <= 100, "unbounded knee (2.0) == cellcall.knee, in the ambient shoulder");
+        CHECK(kb == cv2fix::kKneeBounded && kb > 1000, "bounded knee (2.1) == knee_bounded, among the cells");
+        CHECK(std::isnan(knee_bounded(std::vector<int64_t>(tot.begin(), tot.begin() + 5), 0)),
+              "bounded knee NaN with < 10 totals");
+    }
+
+    // -- 2.1 tail p-values: low-RNA cells below every simulated path, fewer than n_tested / 10 of them --
+    {
+        GeneCounts Xt = synth(cv2fix::kTSeed, cv2fix::kTCells, cv2fix::kTLow, cv2fix::kTAmb, cv2fix::kTFat);
+        int64_t tsum = 0;
+        for (auto v : Xt.data) tsum += v;
+        CHECK(tsum == cv2fix::kTSum, "tail sample regenerated");
+        std::vector<int64_t> et(Xt.ncols, 0);
+        for (uint32_t j = 0; j < Xt.ncols; ++j)
+            for (int64_t p = Xt.indptr[j]; p < Xt.indptr[j + 1]; ++p) et[j] += Xt.data[p];
+        auto ct = cellranger22(et);
+        int64_t nct = 0;
+        for (auto c : ct) nct += c;
+        CHECK(nct == cv2fix::kTNCalled, "tail sample: CellRanger2.2 set size");
+        for (int threads : {1, 4}) {
+            Result R = call(Xt, ct, "", Params(), threads);
+            std::string t = " (threads=" + std::to_string(threads) + ")";
+            CHECK(R.lower == cv2fix::kTLower && bits(R.retain_total) == bits(cv2fix::kTRetain),
+                  "tail sample: lower and bounded retain" + t);
+            CHECK(R.n_tested == cv2fix::kTNTested && R.n_called_v2 == cv2fix::kTNCalledV2, "tail sample: counts" + t);
+            int set_diff = 0, n_tail = 0;
+            const double floor_p = 1.0 / static_cast<double>(Params().niters + 1);
+            for (int64_t i = 0; i < cv2fix::kTNTested; ++i) {
+                int j = cv2fix::kTTested[i];
+                set_diff += (R.called_v2[j] != cv2fix::kTCalledV2Tested[i]);
+                n_tail += (R.pvalue[j] > 0 && R.pvalue[j] < floor_p);
+            }
+            std::printf("    tail sample: %d tail-extrapolated p-values, called_v2 %lld\n", n_tail,
+                        (long long)R.n_called_v2);
+            CHECK(set_diff == 0, "tail sample: called_v2 identical on every tested barcode" + t);
+            CHECK(n_tail > 50 && n_tail < cv2fix::kTNTested / 10, "tail sample: the floor binds and is extrapolated" + t);
+            CHECK(pv_agree(R, cv2fix::kTTested, cv2fix::kTPv, cv2fix::kTNTested, bits(R.alpha) == bits(cv2fix::kTAlpha)),
+                  "tail sample: p-values" + t);
+        }
+
+        // kernel check with the reference's prop / alpha: DM log-probabilities, Monte Carlo counts (RNG-exact) and the
+        // null mean / sd numpy takes over the 10,000 sorted paths, then the tail p-value formula
+        std::vector<double> prop(cv2fix::kTProp, cv2fix::kTProp + cv2fix::kG);
+        std::vector<uint32_t> cols(cv2fix::kKCols, cv2fix::kKCols + cv2fix::kKN);
+        ColumnView S = take_columns(Xt, cols);
+        std::vector<double> lp = dm_logprob(S, prop, cv2fix::kTAlpha);
+        double lp_rel = 0;
+        for (int i = 0; i < cv2fix::kKN; ++i) lp_rel = std::max(lp_rel, std::fabs(lp[i] / cv2fix::kKLp[i] - 1));
+        CHECK(lp_rel < 1e-13, "kernel: DM log-probability == cellcall.dm_logprob");
+        std::vector<double> lpy(cv2fix::kKLp, cv2fix::kKLp + cv2fix::kKN);
+        for (int threads : {1, 3}) {
+            std::vector<double> mu, sd;
+            Params P;
+            auto nle = mc_counts(prop, cv2fix::kTAlpha, S.totals, lpy, P.niters, P.seed, threads, &mu, &sd);
+            int nle_diff = 0, n_floor = 0;
+            double mu_rel = 0, sd_rel = 0, p_rel = 0;
+            const double floor_p = 1.0 / static_cast<double>(P.niters + 1);
+            for (int i = 0; i < cv2fix::kKN; ++i) {
+                nle_diff += nle[i] != cv2fix::kKNle[i];
+                mu_rel = std::max(mu_rel, std::fabs(mu[i] / cv2fix::kKMu[i] - 1));
+                sd_rel = std::max(sd_rel, std::fabs(sd[i] / cv2fix::kKSd[i] - 1));
+                if (cv2fix::kKNle[i] == 0) {
+                    ++n_floor;
+                    double z = (lpy[i] - mu[i]) / std::max(sd[i], 1e-12);
+                    double zp = (lpy[i] - cv2fix::kKMu[i]) / std::max(cv2fix::kKSd[i], 1e-12);
+                    double pc = std::min(ndtr(z), floor_p), pp = std::min(ndtr(zp), floor_p);
+                    p_rel = std::max(p_rel, std::fabs(pc / pp - 1));
+                }
+            }
+            std::printf("    kernel (threads=%d): %d of %d counts differ, %d at the floor, null mean rel %.2g, sd rel %.2g, "
+                        "tail p rel %.2g\n", threads, nle_diff, cv2fix::kKN, n_floor, mu_rel, sd_rel, p_rel);
+            std::string t = " (threads=" + std::to_string(threads) + ")";
+            CHECK(nle_diff == 0, "kernel: Monte Carlo counts == numba kernel" + t);
+            CHECK(n_floor >= 5 && mu_rel < 1e-12 && sd_rel < 1e-9 && p_rel < 1e-8, "kernel: null mean / sd / tail p" + t);
+        }
     }
 
     // combinatorial protocols keep the stored call

@@ -2,16 +2,20 @@
 #pragma once
 // singlet-pileup: called_v2.h
 // `called_v2`: the EmptyDrops cell call of docs/called-v2.md, ported from the reference implementation
-// python/singlet/v2/cellcall.py (call(), METHOD "singlet-emptydrops", VERSION "2.0") so that the pipeline writes the
-// same call the v2 migration computes from stored counts.
+// python/singlet/v2/cellcall.py (call(), METHOD "singlet-emptydrops") so that the pipeline writes the same call the v2
+// migration computes from stored counts. VERSION "2.1" (docs/called-v2-truth.md) fits the retain knee between
+// DropletUtils' curve bounds (knee_bounded) and extrapolates the null tail for barcodes below every simulated path; until
+// the v2 team lands the identical change in cellcall.py the reference is bench/called_v2_truth/cellcall_ref.py.
 //
 //   * counts: exon + intron per gene (gene = feature name before the first '_'), genes sorted by that key;
 //   * lower: the "plateau" rule; ambient pool: uncalled barcodes with 0 < total <= lower;
-//   * tested: uncalled barcodes with total > max(lower, 50); barcodes at or above the barcodeRanks knee get p = 0;
+//   * tested: uncalled barcodes with total > max(lower, 50); barcodes at or above the barcodeRanks knee (fitted between
+//     DropletUtils' curve bounds) get p = 0;
 //   * ambient profile: Simple Good-Turing proportions; Dirichlet-multinomial alpha by maximum likelihood (Brent's
 //     bounded minimiser, as scipy's minimize_scalar(method="bounded"));
 //   * Monte Carlo: 10,000 Polya-urn paths, path i seeded with seed + i on an MT19937 drawing exactly as numba's
 //     np.random does (random(), randint()), so the simulated log-probabilities are the Python ones;
+//   * below every simulated path: p = min(Phi((lp - mean) / sd), 1 / (niters + 1)) over the paths at that total;
 //   * Benjamini-Hochberg over the tested barcodes; called_v2 = called OR FDR <= 0.001.
 //
 // Floating-point order follows numpy where it can matter (pairwise sums in 8192-element blocks, quantile lerp, the
@@ -48,7 +52,7 @@ namespace singlet {
 namespace calledv2 {
 
 inline constexpr const char* kMethod = "singlet-emptydrops";
-inline constexpr const char* kVersion = "2.0";
+inline constexpr const char* kVersion = "2.1";
 inline constexpr int64_t kMaxSimulatedTotal = 50000;
 
 struct Params {
@@ -1001,15 +1005,14 @@ inline std::vector<double> bh(const std::vector<double>& p) {
     return out;
 }
 
-/// DropletUtils barcodeRanks knee (cellcall.knee); NaN when undefined.
-inline double knee(const std::vector<int64_t>& totals, int64_t lower, int exclude_from = 50) {
-    const double nan = std::numeric_limits<double>::quiet_NaN();
+namespace detail {
+/// Descending unique totals > lower and their average (1-based) ranks among all totals > 0; false if < 10 totals > 0.
+inline bool rank_curve(const std::vector<int64_t>& totals, int64_t lower, std::vector<double>& u, std::vector<double>& rr) {
     std::vector<int64_t> t;
     for (auto v : totals)
         if (v > 0) t.push_back(v);
-    if (t.size() < 10) return nan;
+    if (t.size() < 10) return false;
     std::sort(t.begin(), t.end(), std::greater<int64_t>());
-    std::vector<double> u, rr;  // descending unique totals and their average ranks
     for (size_t i = 0; i < t.size();) {
         size_t j = i;
         while (j < t.size() && t[j] == t[i]) ++j;
@@ -1019,12 +1022,12 @@ inline double knee(const std::vector<int64_t>& totals, int64_t lower, int exclud
         }
         i = j;
     }
-    if (static_cast<int>(u.size()) <= exclude_from + 5) return nan;
-    std::vector<double> xs, ys;
-    for (size_t i = exclude_from; i < u.size(); ++i) {
-        xs.push_back(std::log10(rr[i]));
-        ys.push_back(std::log10(u[i]));
-    }
+    return true;
+}
+
+/// Total at the maximum curvature of the smoothing spline through (xs, ys) = (log10 rank, log10 total); NaN when undefined.
+inline double spline_knee(const std::vector<double>& xs, const std::vector<double>& ys) {
+    const double nan = std::numeric_limits<double>::quiet_NaN();
     // np.var (ddof 0)
     double mean = detail::np_sum(ys) / static_cast<double>(ys.size());
     std::vector<double> dev(ys.size());
@@ -1053,6 +1056,65 @@ inline double knee(const std::vector<int64_t>& totals, int64_t lower, int exclud
         }
     }
     return std::pow(10.0, ys[best]);
+}
+}  // namespace detail
+
+/// DropletUtils barcodeRanks knee without curve bounds (cellcall.knee, VERSION 2.0): the spline is fitted on every total
+/// > lower after the top `exclude_from` unique totals. Kept for reference; call() uses knee_bounded() since 2.1.
+inline double knee(const std::vector<int64_t>& totals, int64_t lower, int exclude_from = 50) {
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    std::vector<double> u, rr;
+    if (!detail::rank_curve(totals, lower, u, rr)) return nan;
+    if (static_cast<int>(u.size()) <= exclude_from + 5) return nan;
+    std::vector<double> xs, ys;
+    for (size_t i = exclude_from; i < u.size(); ++i) {
+        xs.push_back(std::log10(rr[i]));
+        ys.push_back(std::log10(u[i]));
+    }
+    return detail::spline_knee(xs, ys);
+}
+
+/// The knee called_v2 uses as `retain` (VERSION 2.1; cellcall.knee_bounded, bench/called_v2_truth/common.py): the same
+/// spline, fitted only between DropletUtils' curve bounds (barcodeRanks / .find_curve_bounds). On the (log10 rank,
+/// log10 total) points with total > lower, d1n = diff(y) / diff(x); skip = number of points with log10 rank <=
+/// log10(exclude_from); right = skip + argmin(d1n[skip:]) (the steepest drop), left = skip + argmax(d1n[skip:right+1]).
+/// Without the bounds a plateau `lower` of 5-100 puts the ambient shoulder inside the fit and the knee can land just above
+/// `lower`, which auto-calls every tested barcode (docs/called-v2-truth.md).
+inline double knee_bounded(const std::vector<int64_t>& totals, int64_t lower, int exclude_from = 50) {
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    std::vector<double> u, rr;
+    if (!detail::rank_curve(totals, lower, u, rr)) return nan;
+    const size_t m = u.size();
+    if (m < 10) return nan;
+    std::vector<double> x(m), y(m);
+    for (size_t i = 0; i < m; ++i) {
+        x[i] = std::log10(rr[i]);
+        y[i] = std::log10(u[i]);
+    }
+    std::vector<double> d1n(m - 1);
+    for (size_t i = 0; i + 1 < m; ++i) d1n[i] = (y[i + 1] - y[i]) / (x[i + 1] - x[i]);
+    const double xcut = std::log10(static_cast<double>(exclude_from));
+    size_t nle = 0;
+    for (double v : x) nle += v <= xcut ? 1 : 0;
+    const size_t skip = std::min(d1n.size() - 1, nle);
+    size_t right = skip;  // np.argmin / np.argmax: first occurrence
+    for (size_t i = skip; i < d1n.size(); ++i)
+        if (d1n[i] < d1n[right]) right = i;
+    size_t left = skip;
+    for (size_t i = skip; i <= right; ++i)
+        if (d1n[i] > d1n[left]) left = i;
+    std::vector<double> xs(x.begin() + left, x.begin() + right + 1), ys(y.begin() + left, y.begin() + right + 1);
+    if (xs.size() < 6) return std::pow(10.0, ys[0]);
+    return detail::spline_knee(xs, ys);
+}
+
+/// scipy.special.ndtr (cephes): standard normal CDF.
+inline double ndtr(double a) {
+    const double s = 0.70710678118654752440;  // NPY_SQRT1_2
+    double x = a * s, z = std::fabs(x);
+    if (z < s) return 0.5 + 0.5 * std::erf(x);
+    double y = 0.5 * std::erfc(z);
+    return x > 0 ? 1.0 - y : y;
 }
 
 /// cellcall.plateau_lower
@@ -1109,8 +1171,13 @@ inline int64_t plateau_lower(const std::vector<int64_t>& tot, const std::vector<
 
 /// Monte Carlo counts: for every simulated tested barcode b (with total tt[b] and log-probability lp[b]) the number of
 /// Polya-urn paths whose log-probability at that total is <= lp[b] (searchsorted(sorted sims, lp, "right")).
+/// With null_mean / null_sd, also the mean and (ddof 0) standard deviation of the niters simulated log-probabilities at
+/// tt[b] (sims.mean(axis=0), sims.std(axis=0)), for the tail p-values of VERSION 2.1. They are accumulated as exact
+/// fixed-point sums (2^-40 resolution) of the deviations from path 0, so they do not depend on the thread count; they agree
+/// with numpy's to about 1e-12 relative (numpy sums the sorted paths in order, which a streaming kernel cannot reproduce).
 inline std::vector<int64_t> mc_counts(const std::vector<double>& prop, double alpha, const std::vector<int64_t>& tt,
-                                      const std::vector<double>& lp, int64_t niters, int64_t seed, int threads) {
+                                      const std::vector<double>& lp, int64_t niters, int64_t seed, int threads,
+                                      std::vector<double>* null_mean = nullptr, std::vector<double>* null_sd = nullptr) {
     const size_t nb = tt.size();
     std::vector<int64_t> ut(tt);
     std::sort(ut.begin(), ut.end());
@@ -1141,43 +1208,70 @@ inline std::vector<int64_t> mc_counts(const std::vector<double>& prop, double al
     const int64_t K = static_cast<int64_t>(prop.size());
     const int64_t tmax = T ? ut[T - 1] : 0;
     if (threads < 1) threads = 1;
+    const bool moments = null_mean != nullptr || null_sd != nullptr;
+    // one Polya-urn path; at(k, v) is called with its log-probability v at each unique total ut[k]
+    auto run_path = [&](int64_t it, std::vector<int32_t>& counts, std::vector<int64_t>& draws, auto&& at) {
+        detail::NumbaRng rng(static_cast<uint32_t>(seed + it));
+        std::fill(counts.begin(), counts.end(), 0);
+        double lpv = 0.0;
+        size_t k = 0;
+        for (int64_t n = 0; n < tmax; ++n) {
+            int64_t g;
+            if (rng.random() < alpha / (alpha + static_cast<double>(n))) {
+                int64_t i = rng.randint(K);
+                g = rng.random() < prob[i] ? i : alias[i];
+            } else {
+                g = draws[rng.randint(n)];
+            }
+            int32_t c = counts[g];
+            double cd = static_cast<double>(c);
+            double ap = alpha * prop[g];
+            double term = std::log(static_cast<double>(n + 1)) - std::log(static_cast<double>(n) + alpha);
+            term = term + std::log(cd + ap);
+            term = term - std::log(static_cast<double>(static_cast<int64_t>(c) + 1));
+            lpv += term;
+            counts[g] = c + 1;
+            draws[n] = g;
+            while (k < T && ut[k] == n + 1) {
+                at(k, lpv);
+                ++k;
+            }
+        }
+    };
+    // moments: deviations from path 0, quantised to 2^-40 and summed exactly (order-free, hence thread-free)
+    const double kScale = 1099511627776.0;  // 2^40
+    std::vector<double> shift(moments ? T : 0, 0.0);
+    if (moments && niters > 0) {
+        std::vector<int32_t> counts(K);
+        std::vector<int64_t> draws(tmax);
+        run_path(0, counts, draws, [&](size_t k, double v) { shift[k] = v; });
+    }
+    std::vector<std::vector<__int128>> s1(moments ? threads : 0), s2(moments ? threads : 0);
     std::vector<std::vector<int64_t>> diffs(threads, std::vector<int64_t>(nb + 1, 0));
     auto worker = [&](int tid) {
         std::vector<int32_t> counts(K);
         std::vector<int64_t> draws(tmax);
         auto& diff = diffs[tid];
+        if (moments) {
+            s1[tid].assign(T, 0);
+            s2[tid].assign(T, 0);
+        }
         for (int64_t it = tid; it < niters; it += threads) {
-            detail::NumbaRng rng(static_cast<uint32_t>(seed + it));
-            std::fill(counts.begin(), counts.end(), 0);
-            double lpv = 0.0;
-            size_t k = 0;
-            for (int64_t n = 0; n < tmax; ++n) {
-                int64_t g;
-                if (rng.random() < alpha / (alpha + static_cast<double>(n))) {
-                    int64_t i = rng.randint(K);
-                    g = rng.random() < prob[i] ? i : alias[i];
-                } else {
-                    g = draws[rng.randint(n)];
+            run_path(it, counts, draws, [&](size_t k, double lpv) {
+                // paths with log-probability v count for every observed lp >= v
+                const double* lo = obs.data() + col_start[k];
+                const double* hi = obs.data() + col_start[k + 1];
+                size_t pos = std::lower_bound(lo, hi, lpv) - obs.data();
+                diff[pos] += 1;
+                diff[col_start[k + 1]] -= 1;
+                if (moments) {
+                    double d = (lpv - shift[k]) * kScale;
+                    d = std::min(std::max(d, -9.0e15), 9.0e15);  // |deviation| < ~8000 nats: never binding
+                    int64_t qd = std::llround(d);
+                    s1[tid][k] += qd;
+                    s2[tid][k] += static_cast<__int128>(qd) * qd;
                 }
-                int32_t c = counts[g];
-                double cd = static_cast<double>(c);
-                double ap = alpha * prop[g];
-                double term = std::log(static_cast<double>(n + 1)) - std::log(static_cast<double>(n) + alpha);
-                term = term + std::log(cd + ap);
-                term = term - std::log(static_cast<double>(static_cast<int64_t>(c) + 1));
-                lpv += term;
-                counts[g] = c + 1;
-                draws[n] = g;
-                while (k < T && ut[k] == n + 1) {
-                    // paths with log-probability v count for every observed lp >= v
-                    const double* lo = obs.data() + col_start[k];
-                    const double* hi = obs.data() + col_start[k + 1];
-                    size_t pos = std::lower_bound(lo, hi, lpv) - obs.data();
-                    diff[pos] += 1;
-                    diff[col_start[k + 1]] -= 1;
-                    ++k;
-                }
-            }
+            });
         }
     };
     if (threads == 1) {
@@ -1192,6 +1286,27 @@ inline std::vector<int64_t> mc_counts(const std::vector<double>& prop, double al
     for (size_t i = 0; i < nb; ++i) {
         for (int t = 0; t < threads; ++t) run += diffs[t][i];
         n_le[order[i]] = run;
+    }
+    if (moments) {
+        std::vector<double> mean(T), sd(T);
+        const double nd = static_cast<double>(niters);
+        for (size_t k = 0; k < T; ++k) {
+            __int128 a = 0, b = 0;
+            for (int t = 0; t < threads; ++t) {
+                a += s1[t][k];
+                b += s2[t][k];
+            }
+            double m1 = static_cast<double>(a) / kScale / nd;
+            double m2 = static_cast<double>(b) / kScale / kScale / nd;
+            mean[k] = shift[k] + m1;
+            sd[k] = std::sqrt(std::max(m2 - m1 * m1, 0.0));
+        }
+        if (null_mean) null_mean->resize(nb);
+        if (null_sd) null_sd->resize(nb);
+        for (size_t b = 0; b < nb; ++b) {
+            if (null_mean) (*null_mean)[b] = mean[col_of[b]];
+            if (null_sd) (*null_sd)[b] = sd[col_of[b]];
+        }
     }
     return n_le;
 }
@@ -1231,7 +1346,7 @@ inline Result call(const GeneCounts& X, const std::vector<uint8_t>& called, cons
         if (tot[j] > 0 && tot[j] <= lower) amb.push_back(static_cast<uint32_t>(j));
         if (tot[j] > std::max(lower, P.test_min)) ti.push_back(static_cast<uint32_t>(j));
     }
-    double kn = P.retain == "knee" ? knee(tot, lower) : nan;
+    double kn = P.retain == "knee" ? knee_bounded(tot, lower) : nan;  // 2.1: curve-bounded knee
     bool has_retain = std::isfinite(kn) && kn > static_cast<double>(lower);
     R.retain_total = has_retain ? kn : nan;
     R.n_ambient = static_cast<int64_t>(amb.size());
@@ -1267,9 +1382,17 @@ inline Result call(const GeneCounts& X, const std::vector<uint8_t>& called, cons
     if (!simcols.empty()) {
         ColumnView S = take_columns(X, simcols);
         std::vector<double> lp = dm_logprob(S, prop, alpha);
-        std::vector<int64_t> n_le = mc_counts(prop, alpha, S.totals, lp, P.niters, P.seed, threads);
+        std::vector<double> mu, sd;
+        std::vector<int64_t> n_le = mc_counts(prop, alpha, S.totals, lp, P.niters, P.seed, threads, &mu, &sd);
+        const double floor_p = 1.0 / static_cast<double>(P.niters + 1);
         for (size_t s = 0; s < simcols.size(); ++s) {
             pv[simpos[s]] = static_cast<double>(n_le[s] + 1) / static_cast<double>(P.niters + 1);
+            if (n_le[s] == 0) {
+                // 2.1: below every simulated path, extrapolate the null tail (normal at that total), capped at the floor,
+                // so that BH can pass more than n_tested * fdr / floor barcodes in small samples
+                double z = (lp[s] - mu[s]) / std::max(sd[s], 1e-12);
+                pv[simpos[s]] = std::min(ndtr(z), floor_p);
+            }
             R.log_prob[simcols[s]] = lp[s];
         }
     }
