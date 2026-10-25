@@ -31,6 +31,28 @@ def _wilson(k: int, n: int):
     return [c - h, c + h]
 
 
+_SELF = [  # self-reported group (substring, lower case) -> super-populations consistent with it
+    (("hispanic", "latin"), {"AMR", "EUR"}),
+    (("white", "caucasian", "caucacian", "european"), {"EUR", "AMR"}),
+    (("black", "african"), {"AFR"}),
+    (("chinese", "japanese", "korean", "east asian"), {"EAS"}),
+    (("asian",), {"EAS", "SAS"}),
+]
+
+
+def _consistent(reported, call):
+    """True / False when the self-report maps to a group, None when it does not (unknown, mixed, ...) or no named call."""
+    if not isinstance(call, str) or call not in SUPERS:
+        return None
+    rep = str(reported).lower()
+    if "not hispanic" in rep:
+        return None
+    for keys, ok in _SELF:
+        if any(k in rep for k in keys):
+            return call in ok
+    return None
+
+
 def compute(artifact_dir: Path) -> dict:
     import pandas as pd
 
@@ -43,10 +65,13 @@ def compute(artifact_dir: Path) -> dict:
     metrics, figures = [], []
 
     lp0 = artifact_dir / "lcl_ancestry_calls.tsv"
-    real_refs = []  # metrics on real single-cell pools that corroborate the derived (thinned bulk) results
+    sp0 = artifact_dir / "selfreport_calls.tsv"
+    real_refs = []  # metrics on real data that corroborate the derived (thinned bulk) results
     if lp0.exists():
         lc0 = pd.read_csv(lp0, sep="\t")
         real_refs = [f"donor_accuracy@{d}" for d in sorted(set(lc0["dataset"])) if d == "osorio2019_lcl_mix"]
+    if sp0.exists():
+        real_refs.append("selfreport_consistency@atlas_selfreport")
 
     def add(mid, name, unit, category, dataset, vals, cis=None, notes=None, rule=None, corroborated_by=None):
         m = {"id": mid, "name": name, "unit": unit, "category": category, "dataset": dataset, "direction": "higher",
@@ -136,6 +161,27 @@ def compute(artifact_dir: Path) -> dict:
                 notes="Singlet 1.0.0 demultiplexes the pool (--n-donors 2); each tool then calls ancestry on each donor's reads",
                 corroborated_by=None if ds == "osorio2019_lcl_mix" else real_refs)
 
+    # ---- real atlas donors with self-reported race / ethnicity in GEO (Singlet only: no reads or BAMs for other tools)
+    if sp0.exists():
+        sr = pd.read_csv(sp0, sep="\t")
+        named = sr[sr["call"].isin(SUPERS)]
+        ok = [_consistent(rep, call) for rep, call in zip(named["self_reported"], named["call"])]
+        known = [o for o in ok if o is not None]
+        metrics.append({
+            "id": "selfreport_consistency", "name": "Named ancestry calls consistent with the donor's self-reported group",
+            "unit": "fraction", "category": "agreement", "dataset": "atlas_selfreport", "direction": "higher",
+            "singlet": {"value": r(np.mean(known)) if known else None},
+            "rule": {"type": "threshold", "value": 0.9,
+                     "rationale": "self-report is a social category, not genetic ancestry, so a minority of donors may "
+                                  "legitimately differ; 0.9 is a judgement bar, stated before scoring"},
+            "notes": f"{len(sr)} donors with self-report, {len(named)} named calls, {len(sr) - len(named)} admixed or no call. "
+                     "Consistent: white/caucasian/european -> EUR or AMR; hispanic/latino -> AMR or EUR; black/african "
+                     "american -> AFR; asian -> EAS or SAS; chinese/japanese/korean -> EAS."})
+        figures.append({"id": "selfreport_table", "title": "Atlas donors with self-reported ancestry", "kind": "table",
+                        "columns": ["self-reported", "Singlet call", "q", "covered sites", "consistent"],
+                        "rows": [[a, b if isinstance(b, str) else "no call", r(c, 2), int(d) if d == d else None, _consistent(a, b)]
+                                 for a, b, c, d in zip(sr["self_reported"], sr["call"], sr["q_max"], sr["n_sites"])]})
+
     sx_path = artifact_dir / "sex_bulk_calls.tsv"
     if sx_path.exists():
         sx = pd.read_csv(sx_path, sep="\t")
@@ -168,6 +214,12 @@ def compute(artifact_dir: Path) -> dict:
                   "gsm": ["GSM3596322"], "srr": ["SRR8551678"]}, "title": "Real 1:1 pool of GM12878 (CEU) and GM18502 (YRI)",
                   "truth": "1000 Genomes super-populations of the two pooled individuals (EUR, AFR)"}}
         datasets += [v for k, v in lcl_ds.items() if k in set(lc0["dataset"]) and k not in have]
+    if sp0.exists():
+        sr0 = pd.read_csv(sp0, sep="	")
+        datasets.append({"id": "atlas_selfreport", "data_kind": "real",
+                         "title": f"Atlas donors with self-reported race or ethnicity in GEO ({len(sr0)} donors)",
+                         "accessions": {"gse": ";".join(sorted(set(sr0["gse"]))), "gsm": sorted(set(sr0["gsm"]))},
+                         "truth": "self-reported race or ethnicity in GEO sample characteristics (a social category, not genotype)"})
     head = [m for m in metrics if m["id"].startswith("accuracy.")]
     deep = head[-1] if head else None
     conclusion = prov.get("conclusion") or (
@@ -183,7 +235,7 @@ def compute(artifact_dir: Path) -> dict:
         "generated_at": prov.get("generated_at") or now_iso(), "owner": "bench-public",
         "singlet": prov["singlet"], "tools": prov["tools"], "datasets": datasets,
         "metrics": metrics, "resources": prov["resources"], "figures": figures,
-        "artifacts": artifact_entries(artifact_dir, CAP, {"ancestry_calls.tsv": "derived", "sex_bulk_calls.tsv": "derived", "lcl_ancestry_calls.tsv": "derived",
+        "artifacts": artifact_entries(artifact_dir, CAP, {"ancestry_calls.tsv": "derived", "sex_bulk_calls.tsv": "derived", "lcl_ancestry_calls.tsv": "derived", "selfreport_calls.tsv": "derived",
                                                           "provenance.json": "derived"}),
         "code": [
             {"path": "python/singlet/celllabels/ancestry.py", "role": "implementation",

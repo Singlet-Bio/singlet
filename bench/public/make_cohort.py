@@ -272,6 +272,11 @@ add(id="osorio2019_lcl_mix", group="sex-ancestry", tier="core", title="Osorio 20
     licence="GEO public data (cite paper)", capabilities="genetic-ancestry,donor-demux,donor-snps,mtdna,chromosomal-sex",
     tools="singlet,vireo,souporcell,somalier,peddy,cellsnp-lite,mgatk",
     why="a two-donor pool of known 1000 Genomes individuals: demultiplexing, then ancestry per donor, end to end")
+add(id="atlas_selfreport", group="sex-ancestry", tier="core", title="Atlas donors with self-reported race or ethnicity in GEO (docs/cell_annotation.md 5.2)",
+    species="human", reference=G, chemistry="mixed 10x", source="geo", gse="see selfreport_calls.tsv (2 studies)",
+    truth="self-reported race or ethnicity in GEO characteristics", licence="GEO public data; Singlet outputs CC0",
+    capabilities="genetic-ancestry", tools="singlet",
+    why="real single-cell donors scored end to end from the atlas's own donor depth tables; corroborates the thinned MAGE results")
 add(id="mage150", group="sex-ancestry", tier="core", data_kind="derived", title="MAGE bulk RNA-seq of 1000 Genomes LCLs: 150 individuals, 26 populations (first 8M read pairs each)",
     species="human", reference=G, chemistry="bulk-rna-pe150", source="sra", other="PRJNA851328 (runs: bench/public/sexancestry/mage_subset.tsv)",
     n_cells="", read_pairs_m=3480, read_pairs_used_m=1200, fastq_gb=362,
