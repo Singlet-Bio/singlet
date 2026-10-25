@@ -173,6 +173,36 @@ would need a `called_v2` bit to filter on.
 2. `called` stays the default selection for now.
 3. inDrop and Drop-seq: stored with `validated: false` (as proposed; not separately decided).
 
+## In the pipeline (C++ port, prod/atlas-rerun)
+
+`include/singlet/pileup/called_v2.h` is a port of `cellcall.call()` with the same parameters. It is the pipeline's
+default cell caller (`--cell-caller called_v2`; `star_solo` and `emptydrops` keep the old callers):
+
+* The knee set `called` is STARsolo's `CellRanger2.2 3000 0.99 10` rule (`SoloFeature_cellFiltering.cpp`), computed
+  on the pileup's exon counts after strand detection. STARsolo's own filtered barcodes are no longer used: STARsolo
+  counts with `--soloStrand Forward`, so for 5' libraries its knee came from wrong-strand counts. Strand is only known
+  after the pileup probe (#25), so passing `--soloStrand Reverse` would not cover undeclared 5' libraries.
+* `called_v2` runs on exon + intron counts per gene, keyed and sorted as in `cellcall.gene_counts`.
+* `cell_calls.tsv` has one row per barcode: `is_cell` (= `called`, what the migration reads), `called`, `called_v2`,
+  `umi_exon`, `umi_total`, `fdr`, `pvalue`, `log_prob`. The parameters (lower, retain, alpha, pool, counts) are in
+  `pileup_stats.json` under `provenance.cell_call`. Downstream per-cell outputs use the `called_v2` set.
+
+The port follows the reference down to floating-point order wherever a discrete decision depends on it:
+
+* the Monte Carlo is the same numbers: MT19937 seeded per path (`seed + i`), drawing as numba's `random()` and
+  `randint()`;
+* cephes `lgam` matches `scipy.special.gammaln` bit for bit;
+* the FITPACK `curfit` port reproduces `UnivariateSpline`'s knots and coefficients, including the `nest`
+  reset. It matched in 300 of 300 random barcode-rank curves;
+* numpy's pairwise sums, `quantile` and `histogram` edges, and scipy's bounded Brent minimiser are reproduced.
+
+One step is not reproduced bit for bit: `np.polyfit` in the Good-Turing smoothing (LAPACK `gelsd`). The ambient
+profile can therefore differ in the last bit, and alpha by up to the minimiser's `xatol` (1e-4 in log alpha) when
+the likelihood is flat. That can move a Monte Carlo count by one. `tests/cpp/test_called_v2.cpp` checks the port
+against `cellcall.py` output (`bench/called_v2/make_cpp_fixture.py`). It requires identical `called_v2` sets and
+FDRs equal except for Monte Carlo ties. `bench/called_v2/equiv_cpp.py` runs the same comparison on real pipeline
+outputs.
+
 ## Limitations
 
 * The authors' calls are Cell Ranger, itself OrdMag + EmptyDrops on full-depth counts (Singlet caps input at 30M reads), so
