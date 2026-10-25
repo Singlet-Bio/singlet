@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=80G
 #SBATCH --time=02:00:00
-#SBATCH --array=0-14%6
+#SBATCH --array=15-20%6
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%A_%a.out
 # Production harness (compiled from $PROD headers, default config) and DecontX, per (library, gene view).
 set -euo pipefail; sleep $((SLURM_ARRAY_TASK_ID*7))

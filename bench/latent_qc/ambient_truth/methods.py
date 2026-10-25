@@ -85,9 +85,11 @@ def mixture(ds, W, tau=10.0, iters=3, kappa=0.0, block=400):
     n = ds.C.shape[1]
     Xt = ds.C.T.tocsr().astype(np.float32)  # cells x genes
     Nc = ds.N.astype(np.float64)
-    a = ds.a.astype(np.float32)
+    keep = np.where(np.asarray(Xt.sum(0)).ravel() > 0)[0]  # genes absent from every cell carry only ambient mass: drop (exact)
+    Xt = Xt[:, keep].tocsr()
+    a = ds.a[keep].astype(np.float32)
     S = (W @ Xt).tocsr()  # neighbours' summed counts
-    mouse = ds.gene_mouse
+    mouse = ds.gene_mouse[keep]
     rho = np.zeros(n)
     mu = 0.01
     for t in range(iters + 1):
