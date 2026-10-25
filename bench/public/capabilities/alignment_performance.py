@@ -24,6 +24,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _perf as C  # noqa: E402
+from _common import contract as _perf_contract  # noqa: E402
 
 CAPABILITY = "alignment-performance"
 CODE_COMMIT = "0000000000000000000000000000000000000000"
@@ -237,12 +238,6 @@ def compute(artifact_dir: Path) -> dict:
         resources.append({"tool": tool, "dataset": ds, "wall_s": round(float(g.wall_s.median()), 1), "max_rss_gb": round(float(g.max_rss_gb.astype(float).median()), 2),
                           "threads": 16, "cpu_h": round(float(g.cpu_h.median()), 3), "node": f"{g.host.iloc[0]} ({g.cpu.iloc[0]})",
                           "notes": f"median of {len(g)} repetitions; 128 GB limit"})
-    for (kind, name), g in opt.groupby(["kind", "name"]):
-        resources.append({"tool": "singlet", "dataset": "pbmc1k_v3", "wall_s": round(float(g.wall_s.median()), 1),
-                          "max_rss_gb": round(float(g.max_rss_gb.replace("", np.nan).astype(float).median()), 2), "threads": 16 if name.startswith("t16") else (8 if name.startswith("t8") else 4),
-                          "cpu_h": round(float(g.cpu_s.median()) / 3600.0, 3), "node": f"{g.host.iloc[0]} ({g.cpu.iloc[0]})",
-                          "notes": f"optimization experiment {kind}/{name}: " + ("4 samples concurrently" if g.copies.iloc[0] == 4 else "one sample")})
-
     prov = json.loads((art / "provenance.json").read_text(encoding="utf-8"))
     commit = prov["bench_commit"]
 
@@ -268,6 +263,32 @@ def compute(artifact_dir: Path) -> dict:
                       "clipper_command": "sbatch bench/public/harness/alignment_performance/ap_run.sbatch <dataset> <rep>"},
         "caveats": prov["caveats"],
     }
+    for d_ in doc["datasets"]:
+        d_.setdefault("data_kind", "real")
+    R = lambda tool, out, sup, note: {"tool": tool, "output": out, "supported": sup, "note": note}
+    doc["reach"] = [
+        R("singlet", "gene counts (exon, exon+intron)", "yes", ""), R("starsolo", "gene counts (exon, exon+intron)", "yes", "Gene, GeneFull"),
+        R("alevinfry", "gene counts (exon, exon+intron)", "yes", "spliced + unspliced + ambiguous (USA) mode"),
+        R("singlet", "unspliced / spliced layers", "yes", ""), R("starsolo", "unspliced / spliced layers", "yes", "Velocyto"),
+        R("alevinfry", "unspliced / spliced layers", "yes", "USA mode"),
+        R("singlet", "junction counts and PSI", "yes", ""), R("starsolo", "junction counts and PSI", "partial", "SJ counts per cell; PSI computed afterwards"),
+        R("alevinfry", "junction counts and PSI", "no", "no genome alignment"),
+        R("singlet", "SNP-based donor demultiplexing", "yes", ""), R("starsolo", "SNP-based donor demultiplexing", "partial", "needs the BAM and a separate tool"),
+        R("alevinfry", "SNP-based donor demultiplexing", "no", "no BAM"),
+        R("singlet", "mtDNA heteroplasmy", "yes", ""), R("starsolo", "mtDNA heteroplasmy", "partial", "needs the BAM and a separate tool"),
+        R("alevinfry", "mtDNA heteroplasmy", "no", "no BAM"),
+        R("singlet", "non-host (viral, microbial) reads", "yes", ""), R("starsolo", "non-host (viral, microbial) reads", "partial", "unmapped reads can be extracted for a separate classifier"),
+        R("alevinfry", "non-host (viral, microbial) reads", "no", "unmapped reads are not kept"),
+        R("singlet", "sorted BAM with cell and UMI tags", "yes", ""), R("starsolo", "sorted BAM with cell and UMI tags", "yes", "starsolo-bam"),
+        R("alevinfry", "sorted BAM with cell and UMI tags", "no", "")]
+    # quality against CPU cost, on the one quality metric every genome-aligning tool shares today; the exact-vs-pseudo quality scores are added when available
+    try:
+        c_ = _perf_contract()
+        for ds_ in ("pbmc1k_v3",):
+            if any(m_["id"] == "uniquely_mapped_pct" and m_["dataset"] == ds_ for m_ in doc["metrics"]):
+                doc["figures"].append(c_.pareto_figure(doc, "uniquely_mapped_pct", ds_, "cpu_h"))
+    except StopIteration:
+        pass
     return doc
 
 

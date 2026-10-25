@@ -274,6 +274,8 @@ def compute(artifact_dir: Path) -> dict:
                       "clipper_command": "sbatch bench/public/harness/collect_and_compute.sbatch non-host"},
         "caveats": prov["caveats"],
     }
+    for d_ in doc["datasets"]:
+        d_.setdefault("data_kind", "real")
     return doc
 
 
