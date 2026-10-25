@@ -1,3 +1,4 @@
+#include "StarProfile.h"
 #include "IncludeDefine.h"
 #include "Parameters.h"
 #include "Transcript.h"
@@ -11,6 +12,7 @@
 
 void ReadAlign::stitchPieces(char **R, uint Lread) {
 
+    PROF_T0(tWin);
     //zero-out winBin
 #ifdef SA_LAZY_WINBIN
     // Lazy reset: only clear the bin ranges actually written during the previous read.
@@ -298,6 +300,8 @@ std::time(&timeStart);
         return;
     #endif
     //generate transcript for each window, choose the best
+    PROF_ADD(PROF_windows, tWin);
+    PROF_T0(tStitch);
     trBest =trInit; //initialize next/best
     uint iW1=0;//index of non-empty windows
     uint trNtotal=0; //total number of recorded transcripts
@@ -370,6 +374,7 @@ std::time(&timeStart);
     };
 
     nW=iW1;//only count windows that had alignments
+    PROF_ADD(PROF_stitch, tStitch);
 
 //     {//debug
 //         std::time(&timeFinish);

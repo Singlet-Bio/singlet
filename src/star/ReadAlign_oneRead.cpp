@@ -1,3 +1,4 @@
+#include "StarProfile.h"
 #include "ReadAlign.h"
 #include "readLoad.h"
 #include "readBarcodeLoad.h"
@@ -5,15 +6,14 @@
 #include "ErrorWarning.h"
 #include "GlobalVariables.h"
 
-#ifdef OPT_DEDUP_R2
-#include <cstring>
-#endif
+#include "SeqCache.h"
 
 int ReadAlign::oneRead() {//process one read: load, map, write
 
     //load read name, sequence, quality from the streams into internal arrays
     int readStatus[P.readNends];
 
+    PROF_T0(tLoad);
     for (uint32 im=0; im<P.readNends; im++) {
         readStatus[im] = readLoad(*(readInStream[im]), P, readLength[im], readLengthOriginal[im], readNameMates[im], Read0[im], Read1[im], Qual0[im], clipMates[im], iReadAll, readFilesIndex, readFilter, readNameExtra[im]);
         if (readStatus[im] != readStatus[0]) {//check if the end of file was reached or not for all files
@@ -24,6 +24,7 @@ int ReadAlign::oneRead() {//process one read: load, map, write
         };
     };
 
+    PROF_ADD(PROF_readLoad, tLoad);
     if (readStatus[0]==-1) {//finished with the stream
         return -1;
     };    
@@ -81,89 +82,74 @@ int ReadAlign::oneRead() {//process one read: load, map, write
     //max number of mismatches allowed for this read
     outFilterMismatchNmaxTotal=min(P.outFilterMismatchNmax, (uint) (P.outFilterMismatchNoverReadLmax*(readLength[0]+readLength[1])));
 
-    #ifdef OPT_DEDUP_R2
-    ///// R2 sequence dedup via consecutive comparison /////
-    // 14-mer sort groups identical R2 sequences; consecutive memcmp catches dupes.
-    // Cache footprint: ~384KB/thread (prev seq + Transcript array).
-    bool dedupIsDuplicate = false;
-    if (dedupCacheValid
-        && readLength[0] == dedupPrevSeqLen
-        && dedupCachedNTr <= DEDUP_MAX_MULTI
-        && std::memcmp(Read1[0], dedupPrevSeq, readLength[0]) == 0) {
-        dedupIsDuplicate = true;
-    }
+    //map the read, or take its alignment from the sequence cache (SeqCache.h)
+    PROF_T0(tMap);
+    bool fromCache = false;
+    uint64 seqHash = 0;
+    bool cacheable = g_seqCache != nullptr && seqCacheable();
+    if (cacheable) {
+        seqHash = SeqCache::hashSeq(Read1[0], Lread);
+        if (g_seqCache->lookup(seqHash, Read1[0], Lread, seqCacheBlob))
+            fromCache = !g_seqCache->verify;
+    } else if (g_seqCache != nullptr) {
+        g_seqCache->nUncacheable++;
+    };
 
-    if (dedupIsDuplicate) {
-        dedupReadsSkipped++;
-        nW = dedupCachedNW;
-        nTr = dedupCachedNTr;
-        chimRecord = dedupCachedChimRecord;
-        peOv.yes = false; // STARsolo: readNmates==1
+    if (fromCache) {
+        seqCacheRestore(seqCacheBlob);
+        mappedFilter();
+        alignsGenOut.alBest = trBest; //as transformGenome() does when there is no transformation
+    } else {
+        if (P.pGe.gType==101) {//SpliceGraph
+            mapOneReadSpliceGraph();
+        } else {//all other cases - standard alignment algorithm
+            mapOneRead();
+        };
 
-        for (uint64 i = 0; i < nTr; i++) {
-            trArray[i] = dedupCachedTr[i];
-            trArray[i].readLengthOriginal = readLengthOriginal;
-            trArray[i].readLengthPairOriginal = readLengthPairOriginal;
-            trArray[i].readLength = readLength;
-            trArray[i].readNmates = readNmates;
-            trArray[i].readName = readName;
-            trArray[i].iRead = iRead;
-            trMult[i] = &trArray[i];
-        }
+        peOverlapMergeMap();
 
-        if (nTr > 0) {
-            trBest = trMult[0];
-        } else {
-            trInit->reset();
-            trInit->readLengthOriginal = readLengthOriginal;
-            trInit->readLengthPairOriginal = readLengthPairOriginal;
-            trInit->readLength = readLength;
-            trInit->readNmates = readNmates;
-            trInit->readName = readName;
-            trInit->iRead = iRead;
-            trInit->Lread = Lread;
-            trBest = trInit;
-        }
+        multMapSelect();
 
         mappedFilter();
 
-    } else {
-    #endif
+        transformGenome();//for now genome transformation happens after multimapper selection, and mapping filter
 
-    //map the read
-    if (P.pGe.gType==101) {//SpliceGraph
-        mapOneReadSpliceGraph();
-    } else {//all other cases - standard alignment algorithm
-        mapOneRead();
+        if (!peOv.yes) {//if the alignment was not mates merged - otherwise the chimeric detection was already done
+            chimericDetection();
+        };
+
+        if (cacheable) {
+            bool hit = !seqCacheBlob.empty(); //lookup() filled the blob: verify mode
+            if (seqCacheEncode(seqCacheEncoded)) {
+                if (hit) {
+                    g_seqCache->nVerified++;
+                    if (seqCacheEncoded != seqCacheBlob) {
+                        if (g_seqCache->nVerifyFail++ < 20) {
+                            ostringstream o;
+                            o << "SEQCACHE verify mismatch: read " << readName << " iRead " << iReadAll << "\n  cached:";
+                            for (auto c : seqCacheBlob) o << ' ' << (int) c;
+                            o << "\n  mapped:";
+                            for (auto c : seqCacheEncoded) o << ' ' << (int) c;
+                            P.inOut->logMain << o.str() << "\n" << flush;
+                        };
+                    };
+                } else {
+                    g_seqCache->insert(seqHash, Read1[0], Lread, seqCacheEncoded.data(), seqCacheEncoded.size());
+                };
+            } else {
+                g_seqCache->nUncacheable++;
+            };
+        };
     };
-
-    peOverlapMergeMap();
-    
-    multMapSelect();
-    
-    mappedFilter();  
-    
-    transformGenome();//for now genome transformation happens after multimapper selection, and mapping filter
-
-    if (!peOv.yes) {//if the alignment was not mates merged - otherwise the chimeric detection was already done
-        chimericDetection();
-    };
-
-    #ifdef OPT_DEDUP_R2
-        // Cache alignment result for next consecutive comparison
-        dedupCachedNTr = nTr;
-        dedupCachedNW = nW;
-        dedupCachedChimRecord = chimRecord;
-        if (nTr <= DEDUP_MAX_MULTI) {
-            for (uint64 i = 0; i < nTr; i++) {
-                dedupCachedTr[i] = *trMult[i];
-            }
-        }
-        std::memcpy(dedupPrevSeq, Read1[0], readLength[0]);
-        dedupPrevSeqLen = readLength[0];
-        dedupCacheValid = true;
-    } // end else (!dedupIsDuplicate)
-    #endif
+    seqCacheBlob.clear();
+    PROF_ADD(PROF_map, tMap);
+#ifdef STAR_PROFILE
+    {
+        int oc = fromCache ? 5 : unmapType==-1 ? (nTr==1 ? 0 : 1) : unmapType==3 ? 2 : unmapType==1 ? 3 : 4;
+        g_profOutcome[oc][0] += __rdtsc() - tMap;
+        g_profOutcome[oc][1]++;
+    }
+#endif
 
     if (P.pCh.out.bam && chimRecord) {//chimeric alignment was recorded in main BAM files, and it contains the representative portion, so non-chimeric aligmnent is not output
         return 0;
@@ -177,7 +163,9 @@ int ReadAlign::oneRead() {//process one read: load, map, write
     #endif
 
     //write out alignments
+    PROF_T0(tOut);
     outputAlignments();
+    PROF_ADD(PROF_output, tOut);
 
     {
     #ifdef DEBUG_OutputLastRead
