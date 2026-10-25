@@ -186,3 +186,17 @@ def test_reference_with_repeated_sequences_and_missing_ids(tmp_path):
     ref = P.annotate_from_catalog(P.read_feature_reference(str(p)), cat)
     assert ref.sequence.is_unique and ref.name.is_unique
     assert ref.name.iloc[0] == h1.specificity and "Control 2-HTO" in ref.aliases.iloc[0]
+
+
+def test_mixture_calls_singlets_and_doublets():
+    rng = np.random.default_rng(1)
+    k, n = 6, 3000
+    X = rng.poisson(rng.gamma(2, 5, size=(1, n)) * np.ones((k, 1)) * 0.6)  # cell-varying background
+    true = rng.integers(0, k, n)
+    X[true, np.arange(n)] += rng.poisson(150, n)
+    d = rng.choice(n, 150, replace=False)
+    X[(true[d] + 1) % k, d] += rng.poisson(150, len(d))
+    call, score, post = H.mixture_calls(X)
+    s = np.setdiff1d(np.arange(n), d)
+    assert (call[s] == true[s]).mean() > 0.97 and (call[d] == -2).mean() > 0.9
+    assert post.shape == X.shape and ((score >= 0) & (score <= 1)).all()

@@ -94,6 +94,17 @@ def run_singlet(hto: pd.DataFrame, empties: pd.DataFrame | None, rna=None, workd
     return _finish(hto, labels, lfc_top, time.perf_counter() - t0)
 
 
+def run_singlet_mixture(hto: pd.DataFrame, empties=None, rna=None, workdir=None) -> pd.DataFrame:
+    """singlet's per-hashtag mixture-of-regressions caller (``singlet.adt.hto.mixture_calls``); cells only."""
+    from singlet.adt.hto import mixture_calls
+
+    t0 = time.perf_counter()
+    call, score, _ = mixture_calls(hto.to_numpy(dtype=float))
+    names = list(hto.index)
+    labels = [NEGATIVE if c == -1 else DOUBLET if c == -2 else names[int(c)] for c in call]
+    return _finish(hto, labels, score, time.perf_counter() - t0)
+
+
 # ---------------------------------------------------------------------------------------------------------------------
 # Seurat (HTODemux, MULTIseqDemux) via Rscript
 # ---------------------------------------------------------------------------------------------------------------------
@@ -255,6 +266,7 @@ def run_demuxem(hto, empties, rna, workdir=None, threads=4):
 
 METHODS = {
     "singlet": run_singlet,
+    "singlet_mixture": run_singlet_mixture,
     "htodemux": run_htodemux,
     "multiseqdemux": run_multiseqdemux,
     "hashsolo": run_hashsolo,

@@ -106,3 +106,75 @@ def feature_sidecar(gsm: str, cols, call, lfc_top, hashtag_names):
     md = {b"singlet_features_schema": SIDECAR_SCHEMA.encode(), b"feature_set": FEATURE_SET.encode(),
           b"method_version": METHOD_VERSION.encode(), b"categories": "|".join(names).encode()}
     return t.replace_schema_metadata(md), names
+
+
+# ----------------------------------------------------------------------------------------------------------- mixture
+MIX_POSITIVE = 0.5  # posterior for a hashtag to be positive in a cell (fixed a priori, not tuned on benchmarks)
+MIX_ITERS = 200
+
+
+def _mixture_one(y, z):
+    """Two-component mixture of linear regressions of y on z (EM). Returns the posterior of the higher component."""
+    n = len(y)
+    Z = np.column_stack([np.ones(n), z])
+    # init: split y at its 1-D 2-means boundary
+    c = np.quantile(y, [0.25, 0.95])
+    for _ in range(50):
+        lab = np.abs(y[:, None] - c[None, :]).argmin(axis=1)
+        new = np.array([y[lab == k].mean() if (lab == k).any() else c[k] for k in (0, 1)])
+        if np.allclose(new, c):
+            break
+        c = new
+    r = (lab == int(np.argmax(c))).astype(float)
+    r = np.clip(r, 0.02, 0.98)
+    ll_old = -np.inf
+    for _ in range(MIX_ITERS):
+        params = []
+        for w in (1 - r, r):
+            W = w + 1e-9
+            beta = np.linalg.lstsq(Z * np.sqrt(W)[:, None], y * np.sqrt(W), rcond=None)[0]
+            res = y - Z @ beta
+            var = max(float((W * res ** 2).sum() / W.sum()), 1e-4)
+            params.append((beta, var, float(w.mean())))
+        dens = []
+        for beta, var, pi in params:
+            mu = Z @ beta
+            dens.append(np.log(max(pi, 1e-9)) - 0.5 * np.log(2 * np.pi * var) - 0.5 * (y - mu) ** 2 / var)
+        dens = np.vstack(dens)
+        m = dens.max(axis=0)
+        ll = float((m + np.log(np.exp(dens - m).sum(axis=0))).sum())
+        r = np.exp(dens[1] - m) / np.exp(dens - m).sum(axis=0)
+        if abs(ll - ll_old) < 1e-6 * max(1.0, abs(ll)):
+            break
+        ll_old = ll
+    # the positive component is the one with the higher mean at the median covariate
+    zm = np.median(z)
+    mu0 = params[0][0][0] + params[0][0][1] * zm
+    mu1 = params[1][0][0] + params[1][0][1] * zm
+    return r if mu1 >= mu0 else 1 - r
+
+
+def mixture_calls(cells: np.ndarray, positive: float = MIX_POSITIVE):
+    """Hashtag calls from per-hashtag mixtures (cells only, no empty droplets needed).
+
+    For each hashtag, log1p counts are modelled as a two-component mixture of regressions on the cell's log1p count of all
+    the other hashtags (a proxy for the cell's nonspecific binding, as demuxmix uses detected genes). A hashtag is positive
+    in a cell when its posterior >= ``positive``. One positive hashtag: singlet; two or more: doublet; none: negative.
+    Returns (call: hashtag index / -1 negative / -2 doublet, score: posterior of the call, posteriors hashtags x cells)."""
+    X = np.asarray(cells, dtype=float)
+    k, n = X.shape
+    tot = X.sum(axis=0)
+    post = np.zeros_like(X)
+    for j in range(k):
+        y = np.log1p(X[j])
+        z = np.log1p(tot - X[j])
+        post[j] = _mixture_one(y, z) if n >= 20 and y.std() > 0 else 0.0
+    pos = post >= positive
+    npos = pos.sum(axis=0)
+    call = np.full(n, -1, dtype=np.int64)
+    one = npos == 1
+    call[one] = post[:, one].argmax(axis=0)
+    call[npos >= 2] = -2
+    srt = np.sort(post, axis=0)
+    score = np.where(one, srt[-1] * (1 - srt[-2]), np.where(npos >= 2, srt[-2], 1 - srt[-1]))
+    return call, score, post
