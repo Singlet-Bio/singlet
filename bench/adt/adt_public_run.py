@@ -177,7 +177,7 @@ def tool_singlet(a):
     table = None
     if trf:
         table, _ = C.best_translation(top, gcodes, wl(a, trf))
-    wlc = table[0] if table is not None else np.sort(S.encode_strings(C.load_barcode_list(wl(a, wlf)), 16)[0])
+    wlc = table[0] if table is not None else C.load_barcode_codes(wl(a, wlf))
     lc = C.count_library(r1, r2, cb_len=16, umi_len=cfg["umi"], offset=off, panel_sequences=list(panel.sequence),
                          whitelist_codes=wlc, gex_barcodes=bcs, translation=table, shards=shards_for(r1),
                          tmpdir=a.scratch)

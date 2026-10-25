@@ -242,3 +242,20 @@ def test_fastq_reader_equals_pairs(tmp_path):
     # blocks smaller than the file
     blk = list(C.key_blocks_from_fastq([str(r1)], [str(r2)], 28, 10, 15, block=7))
     assert sum(k for _, k, _ in blk) == len(pairs)
+
+
+def test_barcode_code_caches(tmp_path):
+    import gzip
+
+    wl = sorted(set(rand_seq(200, 16)))
+    p = tmp_path / "wl.txt.gz"
+    with gzip.open(p, "wt") as f:
+        f.write("\n".join(wl) + "\n")
+    a = C.load_barcode_codes(str(p))
+    assert (tmp_path / "wl.txt.gz.codes.npy").exists()
+    assert (C.load_barcode_codes(str(p)) == a).all() and S.decode(a, 16) == wl
+    t = tmp_path / "tr.txt"
+    t.write_text("".join(f"{x}\t{y}\n" for x, y in zip(wl, wl[::-1])))
+    f1 = C.load_translation(str(t))
+    f2 = C.load_translation(str(t))  # from the cache
+    assert (f1[0] == f2[0]).all() and (f1[1] == f2[1]).all()

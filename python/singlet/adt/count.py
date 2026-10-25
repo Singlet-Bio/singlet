@@ -128,33 +128,44 @@ class _SeqLines:
         self.proc = None
         if path.endswith(".gz") and shutil.which("pigz"):
             self.proc = subprocess.Popen(
-                ["pigz", "-dc", "-p", "2", path], stdout=subprocess.PIPE, bufsize=1 << 20
+                ["pigz", "-dc", "-p", "4", path], stdout=subprocess.PIPE, bufsize=1 << 20
             )
             self.fh = self.proc.stdout
         else:
             self.fh = _open(path)
-        self.buf = np.zeros(0, np.uint8)
+        self.parts: List[
+            np.ndarray
+        ] = []  # unread bytes, as chunks (joined only when a block is cut)
+        self.lines = 0  # newlines in self.parts
         self.eof = False
 
     def take(self, n: int):
-        """Up to ``n`` records: (concatenated bytes as uint8, sequence-line starts, sequence-line lengths)."""
-        while not self.eof:
-            nl = np.flatnonzero(self.buf == 10)
-            if len(nl) >= 4 * n:
-                break
+        """Up to ``n`` records: (concatenated bytes as uint8, sequence-line starts, sequence-line lengths).
+
+        Newlines are counted per new chunk and the chunks are joined once per block, so a block costs O(its bytes)."""
+        while not self.eof and self.lines < 4 * n:
             chunk = self.fh.read(BLOCK_BYTES)
             if not chunk:
                 self.eof = True
-                if len(self.buf) and self.buf[-1] != 10:
-                    self.buf = np.concatenate([self.buf, np.array([10], np.uint8)])
+                if self.parts and self.parts[-1][-1] != 10:
+                    self.parts.append(np.array([10], np.uint8))
+                    self.lines += 1
                 break
-            self.buf = np.concatenate([self.buf, np.frombuffer(chunk, np.uint8)])
-        nl = np.flatnonzero(self.buf == 10)
+            a = np.frombuffer(chunk, np.uint8)
+            self.parts.append(a)
+            self.lines += int(np.count_nonzero(a == 10))
+        if not self.parts:
+            return np.zeros(0, np.uint8), np.zeros(0, np.int64), np.zeros(0, np.int64)
+        buf = self.parts[0] if len(self.parts) == 1 else np.concatenate(self.parts)
+        nl = np.flatnonzero(buf == 10)
         k = min(n, len(nl) // 4)
         if k == 0:
-            return self.buf[:0], np.zeros(0, np.int64), np.zeros(0, np.int64)
+            self.parts, self.lines = [buf], len(nl)
+            return buf[:0], np.zeros(0, np.int64), np.zeros(0, np.int64)
         cut = nl[4 * k - 1] + 1
-        data, self.buf = self.buf[:cut], self.buf[cut:]
+        data, rest = buf[:cut], buf[cut:]
+        self.parts = [rest] if len(rest) else []
+        self.lines = len(nl) - 4 * k
         starts = nl[0 : 4 * k : 4] + 1
         ends = nl[1 : 4 * k : 4]
         if len(ends) and data[ends - 1].max(initial=0) == 13:  # CRLF files
@@ -379,11 +390,40 @@ def load_barcode_list(path: str) -> List[str]:
         return [ln.split()[0] for ln in f if ln.strip()]
 
 
+def load_barcode_codes(path: str) -> np.ndarray:
+    """Sorted 2-bit codes of a 16-nt barcode list, cached next to the list as ``<path>.codes.npy``."""
+    cache = path + ".codes.npy"
+    try:
+        if os.path.getmtime(cache) >= os.path.getmtime(path):
+            return np.load(cache)
+    except OSError:
+        pass
+    codes = np.sort(S.encode_strings(load_barcode_list(path), 16)[0])
+    _save_atomic(cache, codes)
+    return codes
+
+
+def _save_atomic(path, arr):
+    tmp = f"{path}.{os.getpid()}.tmp.npy"
+    try:
+        np.save(tmp, arr)
+        os.replace(tmp, path)
+    except OSError:  # read-only cache dir: recompute next time
+        pass
+
+
 def load_translation(path: str, reverse: bool = False) -> Tuple[np.ndarray, np.ndarray]:
     """Cell Ranger translation table (two barcode columns) -> (sorted feature-side codes, matching GEX codes).
 
     Column 1 is taken as the GEX barcode and column 2 as the feature-side barcode; ``reverse`` swaps them (the
     orientation is checked on the data by :func:`best_translation`)."""
+    cache = f"{path}.{'rev' if reverse else 'fwd'}.npy"
+    try:
+        if os.path.getmtime(cache) >= os.path.getmtime(path):
+            t = np.load(cache)
+            return t[0], t[1]
+    except OSError:
+        pass
     gex, fb = [], []
     with gzip.open(path, "rt") if path.endswith(".gz") else open(path) as f:
         for ln in f:
@@ -396,6 +436,7 @@ def load_translation(path: str, reverse: bool = False) -> Tuple[np.ndarray, np.n
     g, _ = S.encode_strings(gex, 16)
     b, _ = S.encode_strings(fb, 16)
     o = np.argsort(b)
+    _save_atomic(cache, np.vstack([b[o], g[o]]))
     return b[o], g[o]
 
 
