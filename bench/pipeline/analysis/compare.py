@@ -179,12 +179,15 @@ def main():
     is_barnyard = "--barnyard" in sys.argv
     is_cite = "--cite" in sys.argv
     runs = pb / "runs" / ds
-    out = pb / "results" / ds
+    # --out-suffix X writes results/<dataset>X (a side study must not overwrite the benchmark's)
+    sfx = sys.argv[sys.argv.index("--out-suffix") + 1] if "--out-suffix" in sys.argv else ""
+    out = pb / "results" / (ds + sfx)
     out.mkdir(parents=True, exist_ok=True)
     M: dict = {"dataset": ds}
 
     tools = {}
-    for t in ("singlet-baseline", "singlet-fixed", "singlet-baseline-t4", "singlet-fixed-t4", "singlet-fixed-rev"):
+    for t in ("singlet-baseline", "singlet-fixed", "singlet-baseline-t4", "singlet-fixed-t4", "singlet-fixed-rev",
+              "singlet-strandfix"):
         a = loaders.load_singlet(runs / t)
         if a is not None:
             tools[t] = a
@@ -335,6 +338,9 @@ def main():
         ("singlet-fixed-rev", None, "starsolo_GeneFull", None, "total, forced --reverse-strand"),
         ("singlet-fixed-rev", "exon", "starsolo_Gene", None, "exonic, forced --reverse-strand"),
         ("singlet-fixed-rev", "unspliced", "starsolo_Velocyto", "unspliced", "unspliced, forced --reverse-strand"),
+        ("singlet-strandfix", None, "starsolo_GeneFull", None, "total, strand auto-detection fixed"),
+        ("singlet-strandfix", "exon", "starsolo_Gene", None, "exonic, strand auto-detection fixed"),
+        ("singlet-strandfix", "unspliced", "starsolo_Velocyto", "unspliced", "unspliced, strand auto-detection fixed"),
     ]
     for ta, la, tb, lb, what in pairs:
         if ta in tools and tb in tools and shared:
@@ -362,7 +368,7 @@ def main():
 
         labs = {}
         for t in ("starsolo_GeneFull", "starsolo_Gene", "singlet-fixed", "singlet-baseline-t4", "alevinfry",
-                  "cellranger_published"):
+                  "cellranger_published", "singlet-strandfix"):
             if t in tools:
                 try:
                     labs[t] = cluster(tools[t], shared)
