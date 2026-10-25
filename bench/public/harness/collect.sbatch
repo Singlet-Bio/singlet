@@ -14,11 +14,10 @@
 #  4. index.json. Pull $BP/results/ back to bench/public/results/ (JSON only; artifacts stay until the R2 upload).
 set -euo pipefail
 source /mnt/projects/debruinz_project/debruinz/singlet/src/singlet-py/claude__bench-public-cohort-485cf7/bench/public/harness/common.sh
-source $WORK/src/singlet-agents/feat__cell-phenotype/hpc/clipper/in_runtime.sh
 export PYTHONPATH=$SRC/python
-in_runtime python $SRC/bench/public/harness/provenance.py $BP/runs $BP/work/resources.json
+rt python $SRC/bench/public/harness/provenance.py $BP/runs $BP/work/resources.json
 mkdir -p $BP/results-incoming
-in_runtime python - <<EOF
+rt python - <<EOF
 import importlib.util, json, shutil, subprocess, sys
 from pathlib import Path
 src = Path("$SRC"); bp = Path("$BP")

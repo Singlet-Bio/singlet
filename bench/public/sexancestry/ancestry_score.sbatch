@@ -10,10 +10,9 @@
 set -euo pipefail
 source /mnt/projects/debruinz_project/debruinz/singlet/src/singlet-py/claude__bench-public-cohort-485cf7/bench/public/harness/common.sh
 BPE=$WORK/envs/bpub; A=$BP/artifacts/genetic-ancestry; mkdir -p $A
-source $WORK/src/singlet-agents/feat__cell-phenotype/hpc/clipper/in_runtime.sh
 export PYTHONPATH=$SRC/python
-in_runtime python -u $SRC/bench/public/sexancestry/ancestry_score.py --mage $BP/work/ancestry/mage \
+rt python -u $SRC/bench/public/sexancestry/ancestry_score.py --mage $BP/work/ancestry/mage \
   --af $BP/work/ancestry/af_leaveout.parquet --excluded $BP/work/ancestry/excluded.txt \
   --somalier-dir $WORK/tools/bpub/somalier --gtf $REF/GRCh38-2024-A/genes/genes.gtf \
   --artifacts $A --bcftools $BPE/bin/bcftools --bench-commit $(git -C $SRC rev-parse HEAD) --peddy-python $BPE/bin/python
-in_runtime python $SRC/bench/public/run_capability.py genetic-ancestry $A --out $BP/results/genetic-ancestry.json
+rt python $SRC/bench/public/run_capability.py genetic-ancestry $A --out $BP/results/genetic-ancestry.json

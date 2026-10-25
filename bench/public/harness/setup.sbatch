@@ -20,8 +20,9 @@ git -C $BARE fetch -q --update-head-ok origin +refs/heads/$BR:refs/heads/$BR
 [ -d $SRC ] || git -C $BARE worktree add -q $SRC $BR
 git -C $SRC reset -q --hard refs/heads/$BR; git -C $SRC log --oneline -1
 source $SRC/bench/public/harness/common.sh
-source $WORK/src/singlet-agents/feat__cell-phenotype/hpc/clipper/in_runtime.sh
-in_runtime bash -c "cd $SRC && python setup.py build_ext --inplace -j 8 > $BP/work/build_ext.log 2>&1 && echo readers built"
+# the pinned venv has no setuptools; a side --target dir provides it for the in-place build of Singlet's readers
+BLD=$WORK/venvs/bpub-build; [ -d $BLD/setuptools ] || rt python -m pip install -q --target $BLD setuptools
+PYTHONPATH=$BLD rt bash -c "cd $SRC && python setup.py build_ext --inplace -j 8 > $BP/work/build_ext.log 2>&1" && echo readers built
 
 mkdir -p $BP/whitelists && cp -n $SRC/python/singlet/data/whitelists/*.txt $BP/whitelists/
 [ -s $BP/whitelists/3M-3pgex-may-2023.txt ] || curl -sSL --retry 5 \

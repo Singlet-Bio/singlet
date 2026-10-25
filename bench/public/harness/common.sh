@@ -40,5 +40,12 @@ chem_settings() {
   esac
 }
 
+# Singlet runtime (image + pinned venv), like singlet-agents hpc/clipper/in_runtime.sh but also binding the read-only
+# reference tree. Use only inside Slurm jobs.
+rt() {
+  [ -n "${SLURM_JOB_ID:-}" ] || { echo "rt: refusing to run outside a Slurm job" >&2; return 2; }
+  apptainer exec --bind "$WORK,/tmp,$REF" --env "PATH=$WORK/venvs/singlet/bin:/usr/local/bin:/usr/bin:/bin"     --env "OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}" --env "HDF5_USE_FILE_LOCKING=FALSE" --env "WORK=$WORK"     --env "PYTHONPATH=${PYTHONPATH:-}" $WORK/images/python-3.12-bookworm.sif "$@"
+}
+
 # GNU time wrapper: every run writes time.txt (wall clock, max RSS) next to its outputs
 timed() { local out=$1; shift; /usr/bin/time -v -o "$out" "$@"; }

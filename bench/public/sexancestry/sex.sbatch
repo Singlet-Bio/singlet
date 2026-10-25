@@ -13,7 +13,6 @@
 # submit_sex.sh chains the three.
 set -euo pipefail
 source /mnt/projects/debruinz_project/debruinz/singlet/src/singlet-py/claude__bench-public-cohort-485cf7/bench/public/harness/common.sh
-source $WORK/src/singlet-agents/feat__cell-phenotype/hpc/clipper/in_runtime.sh
 W=$BP/work/sex; A=$BP/artifacts/chromosomal-sex; mkdir -p $W $A
 LABELS=$WORK/data/annotate/sex_labels.json
 export PYTHONPATH=$SRC/python OPENBLAS_NUM_THREADS=$SLURM_CPUS_PER_TASK SINGLET_CACHE_DIR=/tmp/$USER-$SLURM_JOB_ID-cache
@@ -21,16 +20,16 @@ case $1 in
 extract)
   GSE=$(sed -n "${SLURM_ARRAY_TASK_ID}p" $W/studies.txt)
   SCR=/tmp/$USER-sex-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
-  in_runtime python -u $SRC/bench/public/sexancestry/sex_extract.py --gse $GSE --sex-labels $LABELS --out $W --scratch $SCR
+  rt python -u $SRC/bench/public/sexancestry/sex_extract.py --gse $GSE --sex-labels $LABELS --out $W --scratch $SCR
   ;;
 cellxy)
   export R_LIBS=$WORK/envs/rlib-benchpublic
   /usr/bin/time -v -o $W/cellxy.time.txt $WORK/envs/ambient/bin/Rscript $SRC/bench/public/sexancestry/cellxy.R $W
   ;;
 collect)
-  in_runtime python -u $SRC/bench/public/sexancestry/sex_collect.py --work $W --labels $LABELS --artifacts $A \
+  rt python -u $SRC/bench/public/sexancestry/sex_collect.py --work $W --labels $LABELS --artifacts $A \
     --singlet-binary $BP/singlet_binary.json --bench-commit $(git -C $SRC rev-parse HEAD)
-  in_runtime python $SRC/bench/public/run_capability.py chromosomal-sex $A --out $BP/results/chromosomal-sex.json
+  rt python $SRC/bench/public/run_capability.py chromosomal-sex $A --out $BP/results/chromosomal-sex.json
   ;;
 *) echo "usage: sex.sbatch extract|cellxy|collect"; exit 2 ;;
 esac
