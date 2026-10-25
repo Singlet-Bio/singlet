@@ -109,12 +109,16 @@ def compute(artifact_dir: Path) -> dict:
             return None
         return float(np.mean([int(d[d.srr == r].spots.max()) == int(spots[r]) if (d.srr == r).any() else False for r in runs]))
 
-    def seq_match(mode) -> float | None:
+    def seq_match(mode, kind=None) -> float | None:
+        """Fraction of runs whose decoded files all match a reference file by sequence digest. kind: "R1"/"R2" restricts the
+        Singlet files (.R1.fq barcode read, .R2.fq cDNA read) that are scored."""
         d = scored(mode)
         if not len(d):
             return None
         if mode == "aws_s3":  # a file: identical iff the sha256 equals the prefetched archive
             return float(np.mean([(d[d.srr == r].seq_digest.astype(str) == sra.sha256[r]).any() for r in runs]))
+        if kind:
+            d = d[d.file.astype(str).str.contains(f".{kind}.", regex=False)]
         ok = []
         for r in runs:
             rr = set(ref[ref.srr == r].seq_digest.astype(str))
@@ -122,26 +126,27 @@ def compute(artifact_dir: Path) -> dict:
             ok.append(len(dd) > 0 and all(x in rr for x in dd))
         return float(np.mean(ok))
 
-    sm = {m: spot_match(m) for m in TOOL}
+    sm = {m: (None if m == "aws_s3" else spot_match(m)) for m in TOOL}
     cm = {m: seq_match(m) for m in TOOL}
-    cm["singlet_orch_io"] = cm.get("singlet_lossless")  # the lossless configuration of the same code path is scored for identity
+    cdna = seq_match("singlet_lossless", "R2")
+    bar = seq_match("singlet_lossless", "R1")
     comps_spot = [(TOOL[m], sm[m]) for m in TOOL if TOOL[m] != "singlet" and sm[m] is not None]
-    comps_seq = [(TOOL[m], cm[m]) for m in TOOL if TOOL[m] != "singlet" and cm[m] is not None]
+    comps_seq = [(TOOL[m], cm[m]) for m in TOOL if TOOL[m] != "singlet" and cm[m] is not None and m not in ("singlet_prefetch_local", "singlet_remote")]
     metrics.append(_metric("spot_count_match", "Runs whose decoded spot count equals the archive's", "fraction", "coverage", "higher",
                            sm["singlet_orch_io"], comps_spot,
                            {"type": "threshold", "value": 1.0, "rationale": "every spot of every run must be delivered"},
                            "Singlet's default path (the orchestrator's I/O stage)."))
-    metrics.append(_metric("read_checksum_match", "Runs whose decoded reads are identical to the archive's", "fraction", "accuracy", "higher",
-                           cm["singlet_orch_io"], comps_seq,
-                           {"type": "threshold", "value": 1.0, "rationale": "decoded reads must be bit-identical to NCBI's decode of the archive"},
-                           "Scored for Singlet with --no-trim --quality full: its default path trims poly(A)/adapters and drops base qualities by design."))
-    dflt = scored("singlet_orch_io")
-    if len(dflt):
-        r2 = dflt.seq_digest.astype(str)
-        ident = float(np.mean([x in set(ref.seq_digest.astype(str)) for x in r2]))
-        metrics.append(_metric("default_path_files_identical", "Singlet default path: decoded files identical to the archive's", "fraction",
-                               "accuracy", "none", ident, [], {"type": "informational"},
-                               "R1 (barcode and UMI) is unchanged; R2 differs where the default path trims poly(A) and adapters."))
+    metrics.append(_metric("cdna_read_checksum_match", "Runs whose decoded cDNA reads are identical to the archive's", "fraction", "accuracy", "higher",
+                           cdna, comps_seq,
+                           {"type": "threshold", "value": 1.0, "rationale": "decoded cDNA reads (sequence digest) must equal NCBI's decode of the archive"},
+                           "Scored for Singlet's cDNA read (R2) with --no-trim --quality full. Competitor values score every file of their output."))
+    d_def = seq_match("singlet_orch_io", "R2")
+    metrics.append(_metric("cdna_identical_default_path", "Singlet default path: runs with cDNA reads identical to the archive's", "fraction",
+                           "accuracy", "none", d_def, [], {"type": "informational"},
+                           "The default path trims poly(A) and adapters and drops base qualities by design, so the cDNA read differs from the archive."))
+    metrics.append(_metric("barcode_read_identical", "Singlet lossless: runs with barcode reads identical to the archive's", "fraction",
+                           "accuracy", "none", bar, [], {"type": "informational"},
+                           "The .1fq stores barcodes corrected to the whitelist (and may drop bases of the barcode read), so R1 differs from the archive even in the lossless configuration; R1 is not part of the completeness claim."))
 
     resources = []
     for m, tool in TOOL.items():
