@@ -3567,15 +3567,6 @@ public:
     }
 };
 
-/// Post-pileup strand safety net. If most nuclear strand-informative reads of a
-/// finished pass are antisense to the orientation it counted with
-/// (counted_antisense_frac > kStrandRetryFrac), the probe missed: rebuild the engine from `base` with the opposite orientation of
-/// the pass, auto-strand off, and run it again with `run(PileupEngine&)`. The input
-/// must be re-readable (a BAM file, not a pipe). Returns true if the pass was
-/// re-run; `engine`, `stats` and base.reverse_strand then describe the retry. Off
-/// when base.auto_strand is false (orientation forced by the user, or already retried). The
-/// old engine is kept if the new one cannot load its references.
-template <class RunFn>
 /// Gene-level layers of a finished pass, one line per (barcode, gene) with any count:
 /// barcode, gene_id, exon (spliced + ambiguous), intron (unspliced), ambiguous. Barcodes with
 /// fewer than `min_umi` molecules in total are left out. Used by the SINGLET_INTRON_SWEEP
@@ -3628,6 +3619,15 @@ inline bool write_gene_layers_tsv(const PileupEngine& e, const std::string& path
     return true;
 }
 
+/// Post-pileup strand safety net. If most nuclear strand-informative reads of a
+/// finished pass are antisense to the orientation it counted with
+/// (counted_antisense_frac > kStrandRetryFrac), the probe missed: rebuild the engine from `base` with the opposite orientation of
+/// the pass, auto-strand off, and run it again with `run(PileupEngine&)`. The input
+/// must be re-readable (a BAM file, not a pipe). Returns true if the pass was
+/// re-run; `engine`, `stats` and base.reverse_strand then describe the retry. Off
+/// when base.auto_strand is false (orientation forced by the user, or already retried). The
+/// old engine is kept if the new one cannot load its references.
+template <class RunFn>
 inline bool rerun_if_wrong_strand(std::unique_ptr<PileupEngine>& engine, PileupConfig& base,
                                   PileupStats& stats, RunFn&& run) {
     if (!engine || !base.stranded || !base.auto_strand || base.exon_gtf_path.empty()) return false;
