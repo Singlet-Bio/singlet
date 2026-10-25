@@ -60,19 +60,13 @@ def compute(artifact_dir: Path) -> dict:
              "rule": {"type": "match_or_beat", "against": against}}
         if key is not None and with_ci and studies is None:
             sub = {t: per[t] for t in [me] + against}
-            ci, diff = bootstrap_studies(sub, key, me)
+            ci, _ = bootstrap_studies(sub, key, me)
             if ci:
                 m["singlet"]["ci"] = [r(x) for x in ci[me]]
                 for c in m["competitors"]:
                     c["ci"] = [r(x) for x in ci[c["tool"]]]
-                vals = [values[t] for t in against if values[t] is not None]
-                if vals:
-                    best = max(against, key=lambda t: values[t] if direction == "higher" else -values[t])
-                    lo, hi = diff[best]  # CI of (best - singlet) as computed by bootstrap_studies(ref=singlet)
-                    half = (hi - lo) / 2
-                    m["rule"]["tolerance"] = {"abs": r(half)}
-                    m["rule"]["rationale"] = (f"{r(half)} = half-width of the 95% bootstrap CI (16 studies resampled) of the "
-                                              f"difference between Singlet and {best}")
+                # strict rule: no tolerance. The 95% CIs (bootstrap over the 16 studies) are published with every value, but the
+                # study-to-study spread is wide enough (half-widths up to 0.16) that a tolerance from it would pass almost anything
         if notes:
             m["notes"] = notes
         metrics.append(m)
