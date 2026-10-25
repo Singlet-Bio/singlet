@@ -90,6 +90,8 @@ def main(argv=None) -> int:
     ap.add_argument("--max-cells", type=int, default=30000)
     ap.add_argument("--threads", type=int, default=int(os.environ.get("SLURM_CPUS_PER_TASK", os.cpu_count() or 1)))
     ap.add_argument("--save-probs", type=Path, default=None, help="write per-cell NN outputs for the scored cells here")
+    ap.add_argument("--save-calls", type=Path, default=None,
+                    help="write every method's per-cell call as <dir>/<method>/<GSE>/<GSM>.parquet (the compete/score.py input)")
     ap.add_argument("--thresholds", default="0.3+0.4+0.6+0.7+0.8", help="extra roll-up thresholds for the network's call")
     a = ap.parse_args(argv)
 
@@ -198,6 +200,19 @@ def main(argv=None) -> int:
             if "vote" in methods:
                 calls["vote"] = vote([calls[k] for k in ("guide", "celltypist", "singler") if k in calls], onto)
                 scores["vote"] = np.ones(len(s.col), np.float32)
+            if a.save_calls is not None:
+                for m in calls:
+                    d = a.save_calls / m.replace("@", "_t") / gse
+                    d.mkdir(parents=True, exist_ok=True)
+                    sc = np.asarray(scores[m], np.float32)
+                    prob = sc if m.startswith("nn") else np.full(len(sc), np.nan, np.float32)
+                    pd.DataFrame({"barcode": s.barcodes, "pred_cl": np.asarray(calls[m], dtype=object), "score": sc, "prob": prob}).to_parquet(
+                        d / f"{gsm}.parquet", index=False)
+                    secs = extra.get("nn" if m.startswith("nn") else m, {}).get("seconds")
+                    if secs is not None:
+                        with open(a.save_calls / m.replace("@", "_t") / "timings.jsonl", "a") as f:
+                            f.write(json.dumps(dict(gse=gse, gsm=gsm, n_cells=len(s.col), seconds=secs, threads=a.threads, device="cpu")) + "
+")
             for m in methods:
                 if m not in calls:
                     continue
