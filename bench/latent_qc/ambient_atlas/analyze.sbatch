@@ -15,5 +15,7 @@ case "$1" in
   mouse) AA_ORG=mouse rt python $AA/analyze_a.py $O/rec $T $O/res_mouse $NUC ;;
   prior) rt python $AA/prior_test.py $O/rec $T $O/res_prior 20 ;;
   targeted) rt python $AA/targeted.py $O/rec $T $O/res_human/targeted.csv ;;
+  rhomouse) mkdir -p $O/res_rho_mouse; rt python $AA/rho_summary.py $O/rho $O/res_mouse/sample_summary.csv $O/res_rho_mouse ;;
+  poolsens) rt python $AA/pool_sens.py $O/rec $T $O/res_human/pool_sens.csv ;;
   rho)   mkdir -p $O/res_rho; rt python $AA/rho_summary.py $O/rho $O/res_human/sample_summary.csv $O/res_rho ;;
 esac
