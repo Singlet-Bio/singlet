@@ -37,11 +37,17 @@ for a in sorted({0, L-16}):
 print(best[0])")
 fi
 echo "barcode read format: $BCFMT"
-X=""; [ -n "${TRANSLATE:-}" ] && { zcat -f $TRANSLATE | grep -v '^#' > $SCR/tr.tsv; X="--barcode-translate $SCR/tr.tsv"; }
+# Multiome: Chromap's --barcode-translate refused the ARC pair table ("Barcode does not exist in the translation table"),
+# so ATAC barcodes are translated to GEX barcodes after Chromap with the same pairs.
+X=""
 /usr/bin/time -v -o $O/time.txt $ENV/bin/chromap --preset atac -t 16 -x $W/cache/chromap/GRCh38-2024-A.index -r $G/fasta/genome.fa \
   -1 $R1 -2 $R3 -b $R2 --barcode-whitelist $SCR/wl.txt --read-format r1:0:-1,bc:${BCFMT#bc:},r2:0:-1 $X -o $SCR/fragments.tsv > $O/chromap.log 2>&1
 echo "chromap exit=$? wall=$(grep 'Elapsed (wall' $O/time.txt | sed 's/.*: //') rss_kb=$(grep 'Maximum resident' $O/time.txt | sed 's/.*: //')"
 tail -15 $O/chromap.log
+if [ -n "${TRANSLATE:-}" ]; then
+  zcat -f $TRANSLATE | grep -v '^#' > $SCR/tr.tsv
+  awk -F'	' -v OFS='	' 'NR==FNR{m[$1]=$2; next} ($4 in m){$4=m[$4]; print}' $SCR/tr.tsv $SCR/fragments.tsv > $SCR/f2.tsv && mv $SCR/f2.tsv $SCR/fragments.tsv
+fi
 sort -k1,1 -k2,2n -S 20G -T $SCR $SCR/fragments.tsv | $ENV/bin/bgzip -@ 8 > $O/fragments.tsv.gz && $ENV/bin/tabix -p bed $O/fragments.tsv.gz
 /usr/bin/time -v -o $O/time_comp.txt $ENV/bin/python $W/src/singlet-py/claude__atac-spatial-benchmark-2ba7df__scripts/bench/atac_spatial/competitors_atac.py \
   $O/fragments.tsv.gz $G/genes/genes.gtf $O/comp > $O/comp.log 2>&1; echo "comparators exit=$?"; tail -5 $O/comp.log
