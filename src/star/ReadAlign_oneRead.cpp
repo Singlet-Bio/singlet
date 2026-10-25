@@ -124,8 +124,14 @@ int ReadAlign::oneRead() {//process one read: load, map, write
                 if (hit) {
                     g_seqCache->nVerified++;
                     if (seqCacheEncoded != seqCacheBlob) {
-                        if (g_seqCache->nVerifyFail++ < 20)
-                            P.inOut->logMain << "SEQCACHE verify mismatch: read " << readName << " iRead " << iReadAll << "\n" << flush;
+                        if (g_seqCache->nVerifyFail++ < 20) {
+                            ostringstream o;
+                            o << "SEQCACHE verify mismatch: read " << readName << " iRead " << iReadAll << "\n  cached:";
+                            for (auto c : seqCacheBlob) o << ' ' << (int) c;
+                            o << "\n  mapped:";
+                            for (auto c : seqCacheEncoded) o << ' ' << (int) c;
+                            P.inOut->logMain << o.str() << "\n" << flush;
+                        };
                     };
                 } else {
                     g_seqCache->insert(seqHash, Read1[0], Lread, seqCacheEncoded.data(), seqCacheEncoded.size());
