@@ -276,7 +276,7 @@ def _cell(v):
     if v is None:
         return ""
     if isinstance(v, float):
-        return "%.6g" % v
+        return "%.3f" % v if abs(v) >= 1e5 else "%.6g" % v  # epoch times keep their seconds
     return str(v).replace("\t", " ").replace("\n", " ")
 
 

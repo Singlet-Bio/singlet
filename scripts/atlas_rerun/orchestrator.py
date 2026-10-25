@@ -692,12 +692,15 @@ def summarize(samples, cluster=None, window_h=24.0):
         td = _f(s.get("t_done"))
         if st == "done" and td:
             done_all += 1
-            first_t = min(first_t or td, _f(s.get("t_submitted")) or td)
             if t - td < window_h * 3600:
                 done_recent += 1
-            cs, ew = _f(s.get("compute_s")), _f(s.get("est_wall_s"))
-            if cs and ew:
-                ratios.append(cs / (ew / C.PACK))
+            cs, ru = _f(s.get("compute_s")), _f(s.get("reads_used")) or _f(s.get("reads_available"))
+            thr = int(_f(s.get("threads")) or 4)
+            if cs and ru:  # measured compute wall vs the model at this depth and thread count, unpacked
+                ratios.append(cs / C.compute_wall_s(ru, threads=thr, packed=False))
+        ts = _f(s.get("t_submitted"))
+        if ts:
+            first_t = min(first_t or ts, ts)
         tdl = _f(s.get("t_downloaded"))
         if tdl and t - tdl < window_h * 3600:
             bytes_recent += _f(s.get("sra_bytes")) or 0
@@ -706,10 +709,13 @@ def summarize(samples, cluster=None, window_h=24.0):
     for w, c in sorted(by_wave.items()):
         out["waves"][w] = dict(c)
     out["failures"] = dict(reasons.most_common())
-    rate = done_recent / window_h
+    # the window is 24 h, or the time since the first submission while the campaign is younger than that
+    win = max(0.25, min(window_h, (t - first_t) / 3600.0)) if first_t else window_h
+    rate = done_recent / win
     remaining = sum(c["n"] - c.get("done", 0) - c.get("parked", 0) for c in by_wave.values())
     out["throughput"] = {"samples_per_h_24h": round(rate, 2), "tb_per_day_24h": round(bytes_recent / 1e12 *
-                                                                                     (24.0 / window_h), 3),
+                                                                                     (24.0 / win), 3),
+                         "window_h": round(win, 2),
                          "done_total": done_all, "remaining": remaining,
                          "eta_days_at_24h_rate": round(remaining / rate / 24, 1) if rate > 0 else None,
                          "remaining_est_core_h": round(est_rem_core_h, 0),
@@ -728,9 +734,10 @@ def print_status(st_list, out=sys.stdout):
     w("\n")
     for st in st_list:
         tp = st["throughput"]
-        w("%s: %.2f samples/h (24 h), %.2f TB/day downloaded, %d done, %d remaining, ETA %s days at the 24 h rate; "
-          "model core-h left %.0f; compute time / model %s\n" % (
-              st["cluster"], tp["samples_per_h_24h"], tp["tb_per_day_24h"], tp["done_total"], tp["remaining"],
+        w("%s: %.2f samples/h, %.2f TB/day downloaded (last %s h); %d done, %d remaining, ETA %s days at that rate; "
+          "model core-h left %.0f; compute time / model (median) %s\n" % (
+              st["cluster"], tp["samples_per_h_24h"], tp["tb_per_day_24h"], tp.get("window_h"), tp["done_total"],
+              tp["remaining"],
               tp["eta_days_at_24h_rate"], tp["remaining_est_core_h"], tp["compute_vs_model_median"]))
         if st.get("su"):
             su = st["su"]
