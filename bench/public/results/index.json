@@ -1,8 +1,13 @@
 {
   "schema": "singlet.benchmark.index",
-  "schema_version": "1.0.0",
-  "generated_at": "2026-10-25T14:28:28+00:00",
-  "singlet": [],
+  "schema_version": "1.1.0",
+  "generated_at": "2026-10-25T15:53:16+00:00",
+  "singlet": [
+    {
+      "commit": "bf1f5741144eb845eddec94f0417931c4533e98e",
+      "version": "1.0.0"
+    }
+  ],
   "overall": "incomplete",
   "n_capabilities": 22,
   "n_pass": 0,
@@ -229,12 +234,18 @@
     },
     {
       "capability": "chromosomal-sex",
-      "title": null,
-      "file": null,
+      "title": "Chromosomal sex per cell",
+      "file": "chromosomal-sex.json",
+      "sha256": "f72f6aaf16728f17f8960cb6b041e143f7d7d5da5b0e7de321f8b612f8a6a1e5",
       "owner": "bench-public",
-      "status": "missing",
-      "n_metrics": 0,
-      "n_pass": 0,
+      "doc_status": "draft",
+      "valid": true,
+      "generated_at": "2026-10-25T15:52:47+00:00",
+      "conclusion": "On 171 samples with sex in their GEO metadata (472,363 cells), Singlet labels 97.0% of cells with their sample's recorded sex, against 68.0% for cellXY, 50.6% for xist-chrY-rule.",
+      "n_caveats": 3,
+      "status": "incomplete",
+      "n_metrics": 5,
+      "n_pass": 5,
       "n_fail": 0,
       "n_na": 0
     },
