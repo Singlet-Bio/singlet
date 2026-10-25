@@ -24,10 +24,12 @@ source $SRC/bench/public/harness/common.sh
 BLD=$WORK/venvs/bpub-build; [ -d $BLD/setuptools ] || rt python -m pip install -q --target $BLD setuptools
 PYTHONPATH=$BLD rt bash -c "cd $SRC && python setup.py build_ext --inplace -j 8 > $BP/work/build_ext.log 2>&1" && echo readers built
 
-mkdir -p $BP/whitelists && cp -n $SRC/python/singlet/data/whitelists/*.txt $BP/whitelists/
-[ -s $BP/whitelists/3M-3pgex-may-2023.txt ] || curl -sSL --retry 5 \
-  https://raw.githubusercontent.com/10XGenomics/cellranger/main/lib/python/cellranger/barcodes/3M-3pgex-may-2023.txt.gz \
-  | gunzip -c > $BP/whitelists/3M-3pgex-may-2023.txt
+mkdir -p $BP/whitelists && cp --update=none $SRC/python/singlet/data/whitelists/*.txt $BP/whitelists/
+# GEM-X 3' v4 permit list (Cell Ranger's 3M-3pgex-may-2023) from simpleaf's chemistry registry, checked by its sha256
+[ -s $BP/whitelists/3M-3pgex-may-2023.txt ] || curl -sSL --retry 5 -o $BP/whitelists/3M-3pgex-may-2023.txt \
+  https://umd.box.com/shared/static/4a2q2lxngogaq4vkniptpu2gts5a38fb.txt
+echo "0bfa4a0bea1d636e7ec1908aabb94307c53778185c12fc164da32dd085848131  $BP/whitelists/3M-3pgex-may-2023.txt" | sha256sum -c - \
+  || echo "WARNING: v4 permit list checksum differs from simpleaf's registry"
 wc -l $BP/whitelists/3M-3pgex-may-2023.txt
 
 RLIB=$WORK/envs/rlib-benchpublic; mkdir -p $RLIB
