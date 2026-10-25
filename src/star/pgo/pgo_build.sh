@@ -27,7 +27,7 @@ n=$(find "$B" -name '*.gcda' | wc -l)
 echo "pgo: training run wrote $n profile files"
 [ "$n" -gt 0 ] || { echo "pgo: no profile written"; exit 1; }
 
-cmake -S "$SRC" -B "$B" "-DSINGLET_STAR_EXTRA_FLAGS=$FLAGS -fprofile-use -fprofile-partial-training -Wno-missing-profile" \
+cmake -S "$SRC" -B "$B" "-DSINGLET_STAR_EXTRA_FLAGS=$FLAGS -fprofile-use -fprofile-partial-training -Wno-missing-profile -Wno-error=coverage-mismatch" \
   "-DCMAKE_EXE_LINKER_FLAGS=" > "$B.cmake-use.log" 2>&1
 cmake --build "$B" --target singlet -j "$JOBS" > "$B.build-use.log" 2>&1
 echo "pgo: built $B/src/pipeline/singlet"
