@@ -52,7 +52,7 @@ def called(run):
     out = []
     for r in rows[1:]:
         f = r.split("\t")
-        if ic is not None and f[ic] in ("1", "True", "true"):
+        if ic is not None and f[ic].strip().upper() in ("1", "TRUE"):
             out.append(f[0])
     return out
 
