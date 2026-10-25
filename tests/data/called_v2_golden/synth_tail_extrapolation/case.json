@@ -26,8 +26,8 @@
   "called_v2": "exact",
   "lower": "exact",
   "pvalue_monte_carlo": "exact (pvalue >= 1/(niters+1): (n_le + 1) / (niters + 1))",
-  "pvalue_tail_log_rel": 1e-06,
-  "fdr_log_rel": 1e-06,
+  "pvalue_tail_log_rel": 1e-05,
+  "fdr_log_rel": 1e-05,
   "alpha_rel": 1e-06,
   "retain_total_rel": 1e-09
  }

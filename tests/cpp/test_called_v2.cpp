@@ -250,17 +250,19 @@ void golden_case(const std::string& dir, const std::string& name) {
           "golden " + name + ": inputs read");
     const double floor_p = 1.0 / static_cast<double>(Params().niters + 1);
     const double alpha_ref = json_num(ex, "alpha");
-    // README "Comparing": called_v2, lower, tested set, n_* exact; Monte Carlo and zero p exact; tail p and FDR on the log
-    // scale to 1e-6; alpha 1e-6 relative; retain_total 1e-9 relative. Two passes:
-    //   free   - the call as the pipeline runs it. Everything as the README, except tail p / FDR to 1e-5 on the log scale:
-    //            the Good-Turing np.polyfit (LAPACK gelsd) is not reproduced bit for bit, which moves alpha by up to ~7e-7
-    //            relative (inside the README's 1e-6) and a tail p at z ~ -30 by |z| x that (real_pbmc1k_v3: 2.2e-6).
-    //   pinned - alpha fixed to the reference value (Params::alpha_override): the README tolerances in full.
+    // Tolerances come from case.json (README "Comparing"), shared with tests/python/test_v2_cellcall.py: called_v2, lower,
+    // tested set, n_* exact; Monte Carlo and zero p exact; tail p and FDR on the log scale (1e-5: alpha comes from
+    // np.polyfit / LAPACK, which C++ cannot reproduce bit for bit); alpha relative; retain_total 1e-9 relative. Two passes:
+    //   free   - the call as the pipeline runs it, at the case.json tolerances.
+    //   pinned - alpha fixed to the reference value (Params::alpha_override): tail p and FDR to 1e-6, which shows the only
+    //            difference left is alpha's.
+    const double tail_tol = json_num(cj, "pvalue_tail_log_rel"), fdr_tol = json_num(cj, "fdr_log_rel"),
+                 alpha_tol = json_num(cj, "alpha_rel");
     for (int pass = 0; pass < 2; ++pass)
         for (int threads : {1, 4}) {
             Params P;
             if (pass == 1) P.alpha_override = alpha_ref;
-            const double log_tol = pass == 1 ? 1e-6 : 1e-5;
+            const double ptol = pass == 1 ? 1e-6 : tail_tol, qtol = pass == 1 ? 1e-6 : fdr_tol;
             Result R = call(X, called, json_str(cj, "protocol"), P, threads);
             const std::string t =
                 "golden " + name + (pass ? " pinned alpha" : " free") + " (threads=" + std::to_string(threads) + "): ";
@@ -271,7 +273,7 @@ void golden_case(const std::string& dir, const std::string& name) {
             if (pass == 0) {
                 std::printf("    %salpha C++ %.17g, reference %.17g (rel %.2g)\n", t.c_str(), R.alpha, alpha_ref,
                             R.alpha / alpha_ref - 1);
-                CHECK(rel_ok(R.alpha, alpha_ref, 1e-6), t + "alpha (1e-6)");
+                CHECK(rel_ok(R.alpha, alpha_ref, alpha_tol), t + "alpha (case.json alpha_rel)");
             }
             CHECK(R.n_tail == json_num(ex, "n_tail") && R.n_called_v2 == json_num(ex, "n_called_v2") &&
                       R.n_added == json_num(ex, "n_added"),
@@ -284,21 +286,21 @@ void golden_case(const std::string& dir, const std::string& name) {
                 set_diff += (R.called_v2[r.col] != r.cv2);
                 const double p = R.pvalue[r.col];
                 if (r.p > 0 && r.p < floor_p) {
-                    tail_bad += !log_ok(p, r.p, log_tol);
+                    tail_bad += !log_ok(p, r.p, ptol);
                     if (p > 0)
                         tail_worst = std::max(tail_worst, std::fabs(std::log(p) - std::log(r.p)) /
                                                               std::max(1.0, std::fabs(std::log(r.p))));
                 } else {
                     mc_diff += !(p == r.p);  // Monte Carlo (n_le + 1) / (niters + 1), or 0 at or above retain
                 }
-                fdr_bad += !log_ok(R.fdr[r.col], r.q, log_tol);
+                fdr_bad += !log_ok(R.fdr[r.col], r.q, qtol);
             }
             std::printf("    %s%d called_v2, %d Monte Carlo p, %d tail p (worst log rel %.2g), %d FDR differ\n",
                         t.c_str(), set_diff, mc_diff, tail_bad, tail_worst, fdr_bad);
             CHECK(ntested == static_cast<int64_t>(rows.size()) && set_diff == 0, t + "tested set and called_v2 (exact)");
             CHECK(mc_diff == 0, t + "Monte Carlo and retained p-values (exact)");
             CHECK(tail_bad == 0 && fdr_bad == 0,
-                  t + "tail p and FDR (log scale, " + (pass == 1 ? "1e-6" : "1e-5") + ")");
+                  t + "tail p and FDR (log scale, " + (pass == 1 ? std::string("1e-6") : std::string("case.json")) + ")");
         }
 }
 
