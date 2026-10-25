@@ -6,11 +6,11 @@
  "conclusion": "On 16 held-out studies with curated cell types (291,331 cells), with every tool trained on the same CELLxGENE reference, Singlet labels 74.4% of cells with the right lineage against 67.1% for CellTypist, 72.9% for scANVI, 62.7% for Seurat, 70.8% for SingleR. Its calibrated call cuts wrong calls to 25.1%.",
  "methods": "**Data.** cxg16: 16 GEO studies (66 samples, 13 human and 3 mouse) that CELLxGENE curators annotated with Cell Ontology terms. Author labels are moved onto Singlet's called cells by barcode, and only cells that both sides kept are scored (291,331 cells). Every tool reads Singlet's counts of these cells: exon plus intron, projected on one 6,000-gene vocabulary. **Reference.** Every tool learns from the same CELLxGENE Census 2025-11-08 training corpus. The corpus is a stratified sample of 2.6M primary droplet cells, and the 16 studies' collections are excluded. CellTypist and Singlet's network train on all of it; Seurat, SingleR and scANVI use a stratified subsample of at most 200 cells per term (145k human, 62k mouse cells), the scale they are designed for. Labels are the corpus's curated CL terms, so no tool needs a crosswalk. **Metrics.** Accuracy at depth d compares the depth-d ancestors of call and truth on the guide's tree (1 compartment, 2 lineage, 3 type, 4 subtype); a call that stops above depth d counts as wrong there. 'Wrong' is a call on another branch. Each study pools its samples, and values are means over studies with bootstrap CIs over studies. Calibration: ECE of each tool's probability against 'the truth lies in the call's subtree'. Abstention: area under each tool's risk-coverage curve. Robustness: depth-2 accuracy on studies whose tissue is thin in the reference. Runtime: CPU time per million cells to label a query once the reference is prepared. Singlet gives two labels per cell. The most probable term is compared with every competitor's label; the calibrated call, which backs off to the parent term when unsure, is scored for wrong calls and calibration.",
  "status": "draft",
- "generated_at": "2026-10-25T15:50:44+00:00",
+ "generated_at": "2026-10-25T15:55:38+00:00",
  "owner": "ensemble-classifier",
  "singlet": {
   "version": "1.0.0",
-  "commit": "002a335a057d55b88c66e5238b6a153b325a7030",
+  "commit": "19caf8cdef44512d237df2b69ea7168aeaa11232",
   "branch": "claude/celltype-nn"
  },
  "tools": [
@@ -1375,6 +1375,148 @@
      "0.88/0.80/0.62 (0.32)"
     ]
    ]
+  },
+  {
+   "id": "pareto_accuracy_depth2_cxg16",
+   "kind": "pareto",
+   "title": "Accuracy at Cell Ontology depth 2 (lineage) against CPU-hours (cxg16)",
+   "x": {
+    "label": "cpu_h",
+    "unit": "CPU-hours",
+    "scale": "log"
+   },
+   "y": {
+    "label": "Accuracy at Cell Ontology depth 2 (lineage)",
+    "unit": "fraction"
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      0.101
+     ],
+     "y": [
+      0.7436
+     ],
+     "frontier": true
+    },
+    {
+     "name": "CellTypist",
+     "tool": "CellTypist",
+     "x": [
+      0.18
+     ],
+     "y": [
+      0.671
+     ],
+     "frontier": false
+    },
+    {
+     "name": "scANVI",
+     "tool": "scANVI",
+     "x": [
+      13.327
+     ],
+     "y": [
+      0.7292
+     ],
+     "frontier": false
+    },
+    {
+     "name": "Seurat",
+     "tool": "Seurat",
+     "x": [
+      1.75
+     ],
+     "y": [
+      0.6275
+     ],
+     "frontier": false
+    },
+    {
+     "name": "SingleR",
+     "tool": "SingleR",
+     "x": [
+      49.287
+     ],
+     "y": [
+      0.7076
+     ],
+     "frontier": false
+    }
+   ]
+  },
+  {
+   "id": "pareto_call_wrong_rate_cxg16",
+   "kind": "pareto",
+   "title": "Wrong calls in the published label (Singlet: the calibrated call; competitors: their label) against CPU-hours (cxg16)",
+   "x": {
+    "label": "cpu_h",
+    "unit": "CPU-hours",
+    "scale": "log"
+   },
+   "y": {
+    "label": "Wrong calls in the published label (Singlet: the calibrated call; competitors: their label)",
+    "unit": "fraction"
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      0.101
+     ],
+     "y": [
+      0.2506
+     ],
+     "frontier": true
+    },
+    {
+     "name": "CellTypist",
+     "tool": "CellTypist",
+     "x": [
+      0.18
+     ],
+     "y": [
+      0.3967
+     ],
+     "frontier": false
+    },
+    {
+     "name": "scANVI",
+     "tool": "scANVI",
+     "x": [
+      13.327
+     ],
+     "y": [
+      0.38
+     ],
+     "frontier": false
+    },
+    {
+     "name": "Seurat",
+     "tool": "Seurat",
+     "x": [
+      1.75
+     ],
+     "y": [
+      0.3687
+     ],
+     "frontier": false
+    },
+    {
+     "name": "SingleR",
+     "tool": "SingleR",
+     "x": [
+      49.287
+     ],
+     "y": [
+      0.3801
+     ],
+     "frontier": false
+    }
+   ]
   }
  ],
  "artifacts": [
@@ -1398,7 +1540,7 @@
    "name": "provenance.json",
    "url": "https://data.singlet.bio/benchmarking/1.0.0/cell-type/provenance.json",
    "kind": "derived",
-   "sha256": "6a0f1bc659a3a85a504edd31886a71983fb62ea697459d97231c430942a9f518",
+   "sha256": "c3d7737e9735c7358c736a0574453caa6a310da9dfa972b14c34655e0982342b",
    "bytes": 11499,
    "format": "json"
   }
@@ -1407,47 +1549,47 @@
   {
    "path": "python/singlet/celltype_nn/predict.py",
    "role": "implementation",
-   "url": "https://github.com/Singlet-Bio/singlet/blob/002a335a057d55b88c66e5238b6a153b325a7030/python/singlet/celltype_nn/predict.py"
+   "url": "https://github.com/Singlet-Bio/singlet/blob/19caf8cdef44512d237df2b69ea7168aeaa11232/python/singlet/celltype_nn/predict.py"
   },
   {
    "path": "python/singlet/celltype_nn/model.py",
    "role": "implementation",
-   "url": "https://github.com/Singlet-Bio/singlet/blob/002a335a057d55b88c66e5238b6a153b325a7030/python/singlet/celltype_nn/model.py"
+   "url": "https://github.com/Singlet-Bio/singlet/blob/19caf8cdef44512d237df2b69ea7168aeaa11232/python/singlet/celltype_nn/model.py"
   },
   {
    "path": "scripts/celltype_nn/train.py",
    "role": "implementation",
-   "url": "https://github.com/Singlet-Bio/singlet/blob/002a335a057d55b88c66e5238b6a153b325a7030/scripts/celltype_nn/train.py"
+   "url": "https://github.com/Singlet-Bio/singlet/blob/19caf8cdef44512d237df2b69ea7168aeaa11232/scripts/celltype_nn/train.py"
   },
   {
    "path": "python/singlet/celllabels/celltype.py",
    "role": "implementation",
-   "url": "https://github.com/Singlet-Bio/singlet/blob/002a335a057d55b88c66e5238b6a153b325a7030/python/singlet/celllabels/celltype.py"
+   "url": "https://github.com/Singlet-Bio/singlet/blob/19caf8cdef44512d237df2b69ea7168aeaa11232/python/singlet/celllabels/celltype.py"
   },
   {
    "path": "scripts/celltype_nn/compete/run_py.py",
    "role": "harness",
-   "url": "https://github.com/Singlet-Bio/singlet/blob/002a335a057d55b88c66e5238b6a153b325a7030/scripts/celltype_nn/compete/run_py.py"
+   "url": "https://github.com/Singlet-Bio/singlet/blob/19caf8cdef44512d237df2b69ea7168aeaa11232/scripts/celltype_nn/compete/run_py.py"
   },
   {
    "path": "scripts/celltype_nn/compete/run_r.R",
    "role": "harness",
-   "url": "https://github.com/Singlet-Bio/singlet/blob/002a335a057d55b88c66e5238b6a153b325a7030/scripts/celltype_nn/compete/run_r.R"
+   "url": "https://github.com/Singlet-Bio/singlet/blob/19caf8cdef44512d237df2b69ea7168aeaa11232/scripts/celltype_nn/compete/run_r.R"
   },
   {
    "path": "scripts/celltype_nn/compete/export.py",
    "role": "harness",
-   "url": "https://github.com/Singlet-Bio/singlet/blob/002a335a057d55b88c66e5238b6a153b325a7030/scripts/celltype_nn/compete/export.py"
+   "url": "https://github.com/Singlet-Bio/singlet/blob/19caf8cdef44512d237df2b69ea7168aeaa11232/scripts/celltype_nn/compete/export.py"
   },
   {
    "path": "python/singlet/celltype_nn/benchmark.py",
    "role": "metric",
-   "url": "https://github.com/Singlet-Bio/singlet/blob/002a335a057d55b88c66e5238b6a153b325a7030/python/singlet/celltype_nn/benchmark.py"
+   "url": "https://github.com/Singlet-Bio/singlet/blob/19caf8cdef44512d237df2b69ea7168aeaa11232/python/singlet/celltype_nn/benchmark.py"
   },
   {
    "path": "bench/public/capabilities/cell_type.py",
    "role": "metric",
-   "url": "https://github.com/Singlet-Bio/singlet/blob/002a335a057d55b88c66e5238b6a153b325a7030/bench/public/capabilities/cell_type.py"
+   "url": "https://github.com/Singlet-Bio/singlet/blob/19caf8cdef44512d237df2b69ea7168aeaa11232/bench/public/capabilities/cell_type.py"
   }
  ],
  "reproduce": {
@@ -1462,5 +1604,168 @@
   "Azimuth's own pretrained references cover 3 of the 16 studies' tissues; Seurat reference mapping with the shared Census reference stands for the Azimuth method on all 16.",
   "Thymic CD34+ progenitors (GSE144870) are the network's largest loss; on the authors' own matrix of these cells it scores 0.98 at depth 2, so the loss comes from reprocessing.",
   "Ding 2020 (7 protocols) and the 10x / mouse cohort sets listed for cell-type await the harness's Singlet counts."
+ ],
+ "reach": [
+  {
+   "tool": "singlet",
+   "output": "Cell Ontology label per cell",
+   "supported": "yes"
+  },
+  {
+   "tool": "CellTypist",
+   "output": "Cell Ontology label per cell",
+   "supported": "yes"
+  },
+  {
+   "tool": "scANVI",
+   "output": "Cell Ontology label per cell",
+   "supported": "yes"
+  },
+  {
+   "tool": "Seurat",
+   "output": "Cell Ontology label per cell",
+   "supported": "yes"
+  },
+  {
+   "tool": "SingleR",
+   "output": "Cell Ontology label per cell",
+   "supported": "yes"
+  },
+  {
+   "tool": "singlet",
+   "output": "calibrated probability of the label",
+   "supported": "yes"
+  },
+  {
+   "tool": "CellTypist",
+   "output": "calibrated probability of the label",
+   "supported": "partial",
+   "note": "logistic-regression probability, ECE 0.36 on cxg16"
+  },
+  {
+   "tool": "scANVI",
+   "output": "calibrated probability of the label",
+   "supported": "partial",
+   "note": "soft prediction, ECE 0.51 on cxg16"
+  },
+  {
+   "tool": "Seurat",
+   "output": "calibrated probability of the label",
+   "supported": "partial",
+   "note": "prediction.score.max, ECE 0.14 on cxg16"
+  },
+  {
+   "tool": "SingleR",
+   "output": "calibrated probability of the label",
+   "supported": "no"
+  },
+  {
+   "tool": "singlet",
+   "output": "backs off to a parent term when unsure",
+   "supported": "yes"
+  },
+  {
+   "tool": "CellTypist",
+   "output": "backs off to a parent term when unsure",
+   "supported": "no"
+  },
+  {
+   "tool": "scANVI",
+   "output": "backs off to a parent term when unsure",
+   "supported": "no"
+  },
+  {
+   "tool": "Seurat",
+   "output": "backs off to a parent term when unsure",
+   "supported": "no"
+  },
+  {
+   "tool": "SingleR",
+   "output": "backs off to a parent term when unsure",
+   "supported": "partial",
+   "note": "pruned.labels: abstains (no label), never names the parent"
+  },
+  {
+   "tool": "singlet",
+   "output": "probability over every Cell Ontology term, rolled up the ontology",
+   "supported": "yes"
+  },
+  {
+   "tool": "CellTypist",
+   "output": "probability over every Cell Ontology term, rolled up the ontology",
+   "supported": "partial",
+   "note": "flat probabilities over its labels, no ontology roll-up"
+  },
+  {
+   "tool": "scANVI",
+   "output": "probability over every Cell Ontology term, rolled up the ontology",
+   "supported": "partial",
+   "note": "flat probabilities over its labels, no ontology roll-up"
+  },
+  {
+   "tool": "Seurat",
+   "output": "probability over every Cell Ontology term, rolled up the ontology",
+   "supported": "partial",
+   "note": "flat prediction scores over its labels"
+  },
+  {
+   "tool": "SingleR",
+   "output": "probability over every Cell Ontology term, rolled up the ontology",
+   "supported": "no"
+  },
+  {
+   "tool": "singlet",
+   "output": "labels a new sample without retraining or a reference at query time",
+   "supported": "yes"
+  },
+  {
+   "tool": "CellTypist",
+   "output": "labels a new sample without retraining or a reference at query time",
+   "supported": "yes"
+  },
+  {
+   "tool": "scANVI",
+   "output": "labels a new sample without retraining or a reference at query time",
+   "supported": "no",
+   "note": "scArches query training per sample"
+  },
+  {
+   "tool": "Seurat",
+   "output": "labels a new sample without retraining or a reference at query time",
+   "supported": "no",
+   "note": "anchors computed against the reference per sample"
+  },
+  {
+   "tool": "SingleR",
+   "output": "labels a new sample without retraining or a reference at query time",
+   "supported": "no",
+   "note": "correlates every cell with the reference"
+  },
+  {
+   "tool": "singlet",
+   "output": "runs on CPU at atlas scale (under 1 CPU-hour per million cells)",
+   "supported": "yes"
+  },
+  {
+   "tool": "CellTypist",
+   "output": "runs on CPU at atlas scale (under 1 CPU-hour per million cells)",
+   "supported": "yes"
+  },
+  {
+   "tool": "scANVI",
+   "output": "runs on CPU at atlas scale (under 1 CPU-hour per million cells)",
+   "supported": "no",
+   "note": "needs a GPU in practice; about 5 GPU-hours per million cells here (query training per sample)"
+  },
+  {
+   "tool": "Seurat",
+   "output": "runs on CPU at atlas scale (under 1 CPU-hour per million cells)",
+   "supported": "no"
+  },
+  {
+   "tool": "SingleR",
+   "output": "runs on CPU at atlas scale (under 1 CPU-hour per million cells)",
+   "supported": "no"
+  }
  ]
 }
