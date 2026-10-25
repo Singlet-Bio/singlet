@@ -53,7 +53,7 @@ def called(run):
     for r in rows[1:]:
         f = r.split("\t")
         if ic is not None and f[ic].strip().upper() in ("1", "TRUE"):
-            out.append(f[0])
+            out.append(f[0][:-2] if f[0].endswith("-1") else f[0])
     return out
 
 
@@ -61,7 +61,7 @@ def gene_matrix(run):
     d = os.path.join(run, "filtered_feature_bc_matrix")
     x = sp.csc_matrix(scipy.io.mmread(os.path.join(d, "matrix.mtx.gz")))
     feats = [l.split("\t")[0] for l in lines(os.path.join(d, "features.tsv.gz"))]
-    bcs = lines(os.path.join(d, "barcodes.tsv.gz"))
+    bcs = [b[:-2] if b.endswith("-1") else b for b in lines(os.path.join(d, "barcodes.tsv.gz"))]
     return x, feats, bcs
 
 
