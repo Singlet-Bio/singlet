@@ -51,12 +51,26 @@ def read_tar(path, kind):
         with tarfile.open(path) as t:
             t.extractall(d, filter="data")
     mx = [os.path.join(r, "matrix.mtx") for r, _, fs in os.walk(d) if "matrix.mtx" in fs]
-    assert len(mx) == 1, mx
-    r = os.path.dirname(mx[0])
-    X = scipy.io.mmread(mx[0]).tocsc()
-    genes = pd.read_csv(os.path.join(r, "genes.tsv"), sep="\t", header=None)
-    bc = pd.read_csv(os.path.join(r, "barcodes.tsv"), sep="\t", header=None)[0].astype(str).values
-    return X, genes[0].astype(str).values, None, bc
+    parts = []
+    for m in sorted(mx):  # 2.1.0 tarballs hold one matrix per genome (hg19, mm10) over the same barcodes
+        r = os.path.dirname(m)
+        X = scipy.io.mmread(m).tocsc()
+        genes = pd.read_csv(os.path.join(r, "genes.tsv"), sep="\t", header=None)
+        bc = pd.read_csv(os.path.join(r, "barcodes.tsv"), sep="\t", header=None)[0].astype(str).values
+        print("tar part", r, X.shape)
+        parts.append((X, genes[0].astype(str).values, bc))
+    allbc = parts[0][2]
+    if not all(len(p[2]) == len(allbc) and (p[2] == allbc).all() for p in parts):
+        allbc = np.array(sorted(set().union(*[set(p[2]) for p in parts])))
+        pos = pd.Series(np.arange(len(allbc)), index=allbc)
+        fixed = []
+        for X, g, bc in parts:
+            P = sp.csc_matrix((np.ones(len(bc)), (np.arange(len(bc)), pos.reindex(bc).values)), shape=(len(bc), len(allbc)))
+            fixed.append((X @ P, g, allbc))
+        parts = fixed
+        print("barcode sets differ across genomes; unioned to", len(allbc))
+    X = sp.vstack([p[0] for p in parts]).tocsc()
+    return X, np.concatenate([p[1] for p in parts]), None, allbc
 
 
 def norm_bc(b):
