@@ -22,7 +22,7 @@ sys.path.insert(0, str(HERE)); sys.path.insert(0, str(HERE.parent.parent / "capa
 import pools as P  # noqa: E402
 import genotypes as G  # noqa: E402
 import demux_eval as DE  # noqa: E402
-from _common import contingency, hungarian  # noqa: E402
+from _gcommon import contingency, hungarian  # noqa: E402
 
 
 def truth_genotypes(runs: Path, truth_dir: Path, pool: str):

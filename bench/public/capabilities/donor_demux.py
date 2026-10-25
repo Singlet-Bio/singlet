@@ -20,7 +20,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE)); sys.path.insert(0, str(HERE.parent)); sys.path.insert(0, str(HERE.parent / "genotype" / "lib"))
 import contract  # noqa: E402
 import demux_eval as DE  # noqa: E402
-from _common import (SINGLET_BINARY, SINGLET_BINARY_SHA256, SINGLET_COMMIT, REPO, ari, artifact_entry, boot, code_url,  # noqa: E402
+from _gcommon import (SINGLET_BINARY, SINGLET_BINARY_SHA256, SINGLET_COMMIT, REPO, ari, artifact_entry, boot, code_url,  # noqa: E402
                      now, r6, wilson)
 
 CAP = "donor-demux"

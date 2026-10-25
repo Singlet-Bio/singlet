@@ -152,7 +152,7 @@ The notebook (`bench/public/notebook/singlet_benchmarks.ipynb`) regenerates ever
 3. It checks the result with `contract.diff(published, recomputed)` and re-draws the figures.
 
 Artifact URLs: until the release bucket exists, artifacts live on Clipper under
-`$WORK/bench-public/artifacts/<capability>/` and URLs are written as
+`$WORK/bpub/artifacts/<capability>/` and URLs are written as
 `https://data.singlet.bio/benchmarking/1.0.0/<capability>/<file>`. Uploading them is a separate, approved R2 write.
 The notebook also accepts a local directory (`ARTIFACT_ROOT`).
 

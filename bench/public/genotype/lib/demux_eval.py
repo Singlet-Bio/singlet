@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "capabilities"))
-from _common import ari, contingency, hungarian  # noqa: E402
+from _gcommon import ari, contingency, hungarian  # noqa: E402
 
 UNASSIGNED = {"unassigned", "doublet", "NA", "nan", "None", ""}
 

@@ -1,0 +1,253 @@
+{
+  "schema": "singlet.benchmark.index",
+  "schema_version": "1.0.0",
+  "generated_at": "2026-10-25T14:28:28+00:00",
+  "singlet": [],
+  "overall": "incomplete",
+  "n_capabilities": 22,
+  "n_pass": 0,
+  "capabilities": [
+    {
+      "capability": "gex-counts",
+      "title": null,
+      "file": null,
+      "owner": "pipeline-benchmark",
+      "status": "missing",
+      "n_metrics": 0,
+      "n_pass": 0,
+      "n_fail": 0,
+      "n_na": 0
+    },
+    {
+      "capability": "spliced-unspliced",
+      "title": null,
+      "file": null,
+      "owner": "pipeline-benchmark",
+      "status": "missing",
+      "n_metrics": 0,
+      "n_pass": 0,
+      "n_fail": 0,
+      "n_na": 0
+    },
+    {
+      "capability": "junctions-psi",
+      "title": null,
+      "file": null,
+      "owner": "pipeline-benchmark",
+      "status": "missing",
+      "n_metrics": 0,
+      "n_pass": 0,
+      "n_fail": 0,
+      "n_na": 0
+    },
+    {
+      "capability": "cell-calling",
+      "title": null,
+      "file": null,
+      "owner": "pipeline-benchmark",
+      "status": "missing",
+      "n_metrics": 0,
+      "n_pass": 0,
+      "n_fail": 0,
+      "n_na": 0
+    },
+    {
+      "capability": "ambient-rna",
+      "title": null,
+      "file": null,
+      "owner": "pipeline-benchmark",
+      "status": "missing",
+      "n_metrics": 0,
+      "n_pass": 0,
+      "n_fail": 0,
+      "n_na": 0
+    },
+    {
+      "capability": "doublets",
+      "title": null,
+      "file": null,
+      "owner": "pipeline-benchmark",
+      "status": "missing",
+      "n_metrics": 0,
+      "n_pass": 0,
+      "n_fail": 0,
+      "n_na": 0
+    },
+    {
+      "capability": "donor-demux",
+      "title": null,
+      "file": null,
+      "owner": "pipeline-benchmark",
+      "status": "missing",
+      "n_metrics": 0,
+      "n_pass": 0,
+      "n_fail": 0,
+      "n_na": 0
+    },
+    {
+      "capability": "donor-snps",
+      "title": null,
+      "file": null,
+      "owner": "pipeline-benchmark",
+      "status": "missing",
+      "n_metrics": 0,
+      "n_pass": 0,
+      "n_fail": 0,
+      "n_na": 0
+    },
+    {
+      "capability": "mtdna",
+      "title": null,
+      "file": null,
+      "owner": "pipeline-benchmark",
+      "status": "missing",
+      "n_metrics": 0,
+      "n_pass": 0,
+      "n_fail": 0,
+      "n_na": 0
+    },
+    {
+      "capability": "non-host",
+      "title": null,
+      "file": null,
+      "owner": "pipeline-benchmark",
+      "status": "missing",
+      "n_metrics": 0,
+      "n_pass": 0,
+      "n_fail": 0,
+      "n_na": 0
+    },
+    {
+      "capability": "alignment-performance",
+      "title": null,
+      "file": null,
+      "owner": "pipeline-benchmark",
+      "status": "missing",
+      "n_metrics": 0,
+      "n_pass": 0,
+      "n_fail": 0,
+      "n_na": 0
+    },
+    {
+      "capability": "download",
+      "title": null,
+      "file": null,
+      "owner": "pipeline-benchmark",
+      "status": "missing",
+      "n_metrics": 0,
+      "n_pass": 0,
+      "n_fail": 0,
+      "n_na": 0
+    },
+    {
+      "capability": "adt",
+      "title": null,
+      "file": null,
+      "owner": "adt-modality",
+      "status": "missing",
+      "n_metrics": 0,
+      "n_pass": 0,
+      "n_fail": 0,
+      "n_na": 0
+    },
+    {
+      "capability": "hto",
+      "title": null,
+      "file": null,
+      "owner": "adt-modality",
+      "status": "missing",
+      "n_metrics": 0,
+      "n_pass": 0,
+      "n_fail": 0,
+      "n_na": 0
+    },
+    {
+      "capability": "cell-type",
+      "title": null,
+      "file": null,
+      "owner": "ensemble-classifier",
+      "status": "missing",
+      "n_metrics": 0,
+      "n_pass": 0,
+      "n_fail": 0,
+      "n_na": 0
+    },
+    {
+      "capability": "vdj",
+      "title": null,
+      "file": null,
+      "owner": "vdj-crispr",
+      "status": "missing",
+      "n_metrics": 0,
+      "n_pass": 0,
+      "n_fail": 0,
+      "n_na": 0
+    },
+    {
+      "capability": "crispr-guides",
+      "title": null,
+      "file": null,
+      "owner": "vdj-crispr",
+      "status": "missing",
+      "n_metrics": 0,
+      "n_pass": 0,
+      "n_fail": 0,
+      "n_na": 0
+    },
+    {
+      "capability": "atac",
+      "title": null,
+      "file": null,
+      "owner": "atac-multiome-spatial",
+      "status": "missing",
+      "n_metrics": 0,
+      "n_pass": 0,
+      "n_fail": 0,
+      "n_na": 0
+    },
+    {
+      "capability": "multiome",
+      "title": null,
+      "file": null,
+      "owner": "atac-multiome-spatial",
+      "status": "missing",
+      "n_metrics": 0,
+      "n_pass": 0,
+      "n_fail": 0,
+      "n_na": 0
+    },
+    {
+      "capability": "spatial",
+      "title": null,
+      "file": null,
+      "owner": "atac-multiome-spatial",
+      "status": "missing",
+      "n_metrics": 0,
+      "n_pass": 0,
+      "n_fail": 0,
+      "n_na": 0
+    },
+    {
+      "capability": "chromosomal-sex",
+      "title": null,
+      "file": null,
+      "owner": "bench-public",
+      "status": "missing",
+      "n_metrics": 0,
+      "n_pass": 0,
+      "n_fail": 0,
+      "n_na": 0
+    },
+    {
+      "capability": "genetic-ancestry",
+      "title": null,
+      "file": null,
+      "owner": "bench-public",
+      "status": "missing",
+      "n_metrics": 0,
+      "n_pass": 0,
+      "n_fail": 0,
+      "n_na": 0
+    }
+  ]
+}

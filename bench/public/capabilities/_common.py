@@ -1,91 +1,74 @@
-"""Helpers shared by the genotype-pool capability modules (donor-demux, donor-snps, mtdna). Standard library + numpy +
-pandas only; no genotype, per-site allele count or donor SNP is read or written here."""
+"""Shared helpers for the capability compute modules (``bench/public/capabilities/<id>.py``).
+
+Every module exposes ``compute(artifact_dir: Path) -> dict``. The harness calls it to write ``results/<id>.json``, and the
+notebook calls it on downloaded artifacts. The provenance (commit, tool versions, resources) comes from a
+``provenance.json`` artifact, so the same call gives the same document wherever it runs.
+"""
 from __future__ import annotations
 
 import datetime as _dt
 import hashlib
+import importlib.util
 import json
-import math
 from pathlib import Path
 
 import numpy as np
 
-REPO = "https://github.com/Singlet-Bio/singlet"
-SINGLET_COMMIT = "02aa9b938b54e0f92bba00c44c07b883a8660aa2"   # source of the benchmarked binary (prod/campaign)
-SINGLET_BINARY = "singlet-campaign"
-SINGLET_BINARY_SHA256 = "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c"
+HERE = Path(__file__).resolve().parent
+PUB = HERE.parent
+REPO_URL = "https://github.com/Singlet-Bio/singlet"
+ARTIFACT_BASE = "https://data.singlet.bio/benchmarking/1.0.0"
 
 
-def sha256(path: str | Path) -> str:
+def contract():
+    spec = importlib.util.spec_from_file_location("bench_public_contract", PUB / "contract.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def code_url(path: str, commit: str) -> str:
+    return f"{REPO_URL}/blob/{commit}/{path}"
+
+
+def sha256(path: Path) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 20), b""):
-            h.update(chunk)
+        for b in iter(lambda: fh.read(1 << 20), b""):
+            h.update(b)
     return h.hexdigest()
 
 
-def code_url(path: str, commit: str, tree: bool = False) -> str:
-    return f"{REPO}/{'tree' if tree else 'blob'}/{commit}/{path}"
+def artifact_entries(artifact_dir: Path, capability: str, kinds: dict[str, str]) -> list[dict]:
+    """Artifact list for the files named in ``kinds`` ({file name: kind}) that exist in ``artifact_dir``."""
+    out = []
+    for name, kind in kinds.items():
+        p = artifact_dir / name
+        if p.exists():
+            out.append({"name": name, "url": f"{ARTIFACT_BASE}/{capability}/{name}", "kind": kind,
+                        "sha256": sha256(p), "bytes": p.stat().st_size, "format": p.suffix.lstrip(".")})
+    return out
 
 
-def contingency(a, b):
-    a_codes, a_idx = np.unique(np.asarray(a, dtype=object).astype(str), return_inverse=True)
-    b_codes, b_idx = np.unique(np.asarray(b, dtype=object).astype(str), return_inverse=True)
-    m = np.zeros((len(a_codes), len(b_codes)), dtype=np.int64)
-    np.add.at(m, (a_idx, b_idx), 1)
-    return m
-
-
-def ari(a, b) -> float:
-    """Adjusted Rand index of two labelings (Hubert & Arabie)."""
-    m = contingency(a, b)
-    n = m.sum()
-    if n < 2:
-        return float("nan")
-    c2 = lambda x: x * (x - 1) / 2.0
-    sum_ij = c2(m).sum()
-    sa, sb = c2(m.sum(1)).sum(), c2(m.sum(0)).sum()
-    exp = sa * sb / c2(n)
-    mx = 0.5 * (sa + sb)
-    return 1.0 if mx == exp else float((sum_ij - exp) / (mx - exp))
-
-
-def hungarian(m: np.ndarray):
-    """Maximise matched count of a contingency table (rows truth, cols prediction): returns [(row, col)]."""
-    from scipy.optimize import linear_sum_assignment
-    r, c = linear_sum_assignment(-m)
-    return list(zip(r.tolist(), c.tolist()))
-
-
-def wilson(k: int, n: int, z: float = 1.96):
-    if n == 0:
-        return [float("nan"), float("nan")]
-    p = k / n
-    d = 1 + z * z / n
-    c = (p + z * z / (2 * n)) / d
-    h = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d
-    return [max(0.0, c - h), min(1.0, c + h)]
-
-
-def boot(values_fn, n_items: int, B: int = 300, seed: int = 7):
-    """Percentile 95% CI of values_fn(idx) over resampled item indices."""
+def bootstrap_ci(groups: np.ndarray, num: np.ndarray, den: np.ndarray, n_boot: int = 2000, seed: int = 0):
+    """95% CI of sum(num)/sum(den), resampling clusters (``groups``: one label per row) with replacement."""
+    keys, inv = np.unique(groups, return_inverse=True)
+    gn = np.bincount(inv, weights=num, minlength=len(keys))
+    gd = np.bincount(inv, weights=den, minlength=len(keys))
     rng = np.random.default_rng(seed)
-    vals = [values_fn(rng.integers(0, n_items, n_items)) for _ in range(B)]
-    vals = [v for v in vals if v == v]
-    return [float(np.percentile(vals, 2.5)), float(np.percentile(vals, 97.5))] if vals else [float("nan")] * 2
+    idx = rng.integers(0, len(keys), size=(n_boot, len(keys)))
+    est = gn[idx].sum(1) / np.maximum(gd[idx].sum(1), 1e-12)
+    return [float(np.quantile(est, 0.025)), float(np.quantile(est, 0.975))]
 
 
-def now() -> str:
+def now_iso() -> str:
     return _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0).isoformat()
 
 
-def r6(x):
-    return None if x is None or (isinstance(x, float) and not math.isfinite(x)) else round(float(x), 6)
+def load_provenance(artifact_dir: Path) -> dict:
+    return json.loads((artifact_dir / "provenance.json").read_text(encoding="utf-8"))
 
 
-def artifact_entry(path: Path, name: str, kind: str, base_url: str, dataset: str | None = None, fmt: str | None = None):
-    e = {"name": name, "url": f"{base_url}/{name}", "kind": kind, "sha256": sha256(path), "bytes": path.stat().st_size,
-         "format": fmt or ("tsv" if ".tsv" in name else "json" if name.endswith(".json") else "csv")}
-    if dataset:
-        e["dataset"] = dataset
-    return e
+def r(x, nd: int = 4):
+    """Round for publication (the validator and diff compare these rounded numbers)."""
+    return None if x is None or (isinstance(x, float) and not np.isfinite(x)) else round(float(x), nd)
