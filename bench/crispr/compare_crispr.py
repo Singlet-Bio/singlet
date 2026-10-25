@@ -263,8 +263,14 @@ def main(argv=None):
         m["multiple_all_called"] = float((L["class"] == "multiple").mean())
         if expr is not None:
             K = L.loc[kd_cells].reset_index()
-            K["kind"] = K["guide_ids"].map(lambda s: gk.get(s, "multiple") if "|" not in s else "multiple")
-            K["target"] = K["guide_ids"].map(lambda s: gt.get(s, ""))
+            if level == "target":
+                tl = K["target"].fillna("").astype(str)
+                ntk = tl.map(lambda x: len([y for y in x.split("|") if y]))
+                K = K.assign(guide_ids=tl, target=tl, **{"class": np.where(ntk == 1, "single", np.where(ntk == 0, "unassigned", "multiple"))})
+                K["kind"] = np.where(tl.isin(["non-targeting"]), "non-targeting", np.where(tl == "unidentified", "unidentified", "targeting"))
+            else:
+                K["kind"] = K["guide_ids"].map(lambda s: gk.get(s, "multiple") if "|" not in s else "multiple")
+                K["target"] = K["guide_ids"].map(lambda s: gt.get(s, ""))
             exprK = {t: v for t, v in expr.items()}
             df, kd = knockdown_stats(K, exprK)
             m.update({f"kd_{k}": v for k, v in kd.items()})
