@@ -251,7 +251,10 @@ def main(argv=None):
         L = lab.set_index("barcode")
         Lc = L.loc[cells].reset_index()
         if level == "target":
-            Lc = Lc.assign(guide_ids=Lc["target"])
+            # a dual-guide vector puts two guides of one gene in a cell: compare target sets, single = one target
+            nt_ = Lc["target"].map(lambda x: len([y for y in str(x).split("|") if y]))
+            Lc = Lc.assign(guide_ids=Lc["target"], **{"class": np.where(nt_ == 0, "unassigned",
+                                                                         np.where(nt_ == 1, "single", "multiple"))})
         m = AS.agreement(Lc, R)
         m["assigned_all_called"] = float((L["class"] != "unassigned").mean())
         m["multiple_all_called"] = float((L["class"] == "multiple").mean())
