@@ -52,8 +52,10 @@ with gzip.open(f"{out}/737K-arc-v1-atac-gex.tsv.gz", "wt") as fo:
 # The bundled 737K-cratac-v1.txt is byte-identical to 737K-august-2016.txt (3' v2 GEX); this rebuilds the real list.
 sc = {}
 for f in sorted(glob.glob(f"{data}/cratac_sc/*_singlecell.csv") + glob.glob(f"{data}/atac_pbmc_5k_nextgem/*_singlecell.csv")):
-    d = pd.read_csv(f, usecols=["barcode", "is__cell_barcode"])
-    d = d[d.barcode != "NO_BARCODE"].copy()
+    d = pd.read_csv(f)
+    flags = [c for c in d.columns if c.startswith("is_") and c.endswith("cell_barcode")]  # barnyard: one per genome
+    d["is__cell_barcode"] = d[flags].max(axis=1)
+    d = d.loc[d.barcode != "NO_BARCODE", ["barcode", "is__cell_barcode"]].copy()
     d["barcode"] = d.barcode.str.replace("-1", "", regex=False)
     sc[os.path.basename(f).replace("_singlecell.csv", "")] = d
 if sc:
