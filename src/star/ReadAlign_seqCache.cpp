@@ -31,12 +31,15 @@ template <class F> void forEachScalar(Transcript &t, F f) {
     f(t.nMatch); f(t.nMM); f(t.mappedLength); f(t.extendL);
     f(t.nGap); f(t.lGap); f(t.nDel); f(t.nIns); f(t.lDel); f(t.lIns); f(t.nUnique); f(t.nAnchor);
     f(t.intronMotifs[0]); f(t.intronMotifs[1]); f(t.intronMotifs[2]);
-    f(t.maxScore); f(t.iFrag); f(t.haploType); f(t.sjMotifStrand); f(t.sjYes); f(t.primaryFlag);
+    f(t.maxScore); f(t.iFrag); f(t.sjMotifStrand); f(t.sjYes); f(t.primaryFlag);
+    //not stored: haploType (set only by genome transformation, off here: uninitialised otherwise)
 }
 template <class F> void forEachRow(Transcript &t, uint64 iex, F f) {
     for (int k=0; k<EX_SIZE; k++) f(t.exons[iex][k]);
-    f(t.shiftSJ[iex][0]); f(t.shiftSJ[iex][1]);
-    f(t.canonSJ[iex]); f(t.sjAnnot[iex]); f(t.sjStr[iex]);
+    if (iex+1 < t.nExons) {//junction iex joins exons iex and iex+1; the last exon has none (its slots are left uninitialised by stitching)
+        f(t.shiftSJ[iex][0]); f(t.shiftSJ[iex][1]);
+        f(t.canonSJ[iex]); f(t.sjAnnot[iex]); f(t.sjStr[iex]);
+    };
 }
 struct Put {
     std::vector<uint8> &b;
