@@ -128,7 +128,11 @@ def main(argv=None) -> int:
                     "chrY gene counts, which the 1.0 double-count fix changes by a few percent; re-run on 1.0 counts after "
                     "the atlas re-run."],
         "singlet_binary_seen": sb,
+        "left_out": sorted(p.name.replace(".error.txt", "") for p in (a.work / "cells").glob("*.error.txt")),
     }
+    if prov["left_out"]:
+        prov["caveats"].append(f"{len(prov['left_out'])} labelled samples were left out because their served atlas bundle has an "
+                               f"empty count matrix (a known atlas defect, re-run pending): {', '.join(prov['left_out'])}.")
     (a.artifacts / "provenance.json").write_text(json.dumps(prov, indent=1))
     print(f"{len(st)} samples, {n:,} cells -> {a.artifacts}")
     return 0
