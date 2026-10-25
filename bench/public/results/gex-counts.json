@@ -5,7 +5,7 @@
   "title": "Gene counts per cell",
   "methods": "**Data.** The cohort's 10x datasets, each from its FASTQs on its own 2024-A reference (GRCh38, GRCm39 or the human+mouse barnyard): PBMC 3' v3 and v2, mouse neurons and nuclei, the barnyard, PBMC with antibodies, and 5' PBMC (first 60 M read pairs). The same FASTQs and GTF feed Singlet, STARsolo and alevin-fry.\n\n**Cells and genes.** Cells are the barcodes STARsolo EmptyDrops_CR calls, so the cell set does not depend on Singlet. A family is compared on the cells all its tools have and the genes all of them annotate (Ensembl ids).\n\n**Families.** Exonic UMI: Singlet exon_counts (spliced + ambiguous), STARsolo Gene, and the Cell Ranger matrix 10x published. Exon+intron UMI: Singlet exon+intron, STARsolo GeneFull, alevin-fry USA (S+U+A).\n\n**Measures, for every pair of tools.** The distance of the median per-cell UMI ratio from 1 (|ln ratio|); the median over cells of the Pearson r of log1p counts over genes; the Spearman rho of pseudobulk gene counts.\n\n**Gate.** Singlet's mean value against its competitors must be as good as the competitors' value against each other, within the half-width of the paired bootstrap 95% CI of the difference. Singlet is gated as a member of the cloud of existing tools, not as better than each. Per-reference values are in each metric's notes. With one competitor (5' Cell Ranger) the threshold comes from the other datasets.\n\n**Real truth.** pbmc1k_cite_v3 has antibody counts for the same cells: Spearman across cells between each protein and its coding gene, per tool.\n\n**Not compared.** scBaseCount: the 10x demo datasets are not in SRA, and the Kang lane is 3' v1, a chemistry scBaseCount does not process, so no equal-depth comparison exists.",
   "status": "final",
-  "generated_at": "2026-10-25T15:52:03+00:00",
+  "generated_at": "2026-10-25T16:09:10+00:00",
   "owner": "pipeline-benchmark",
   "singlet": {
     "version": "1.0.0",
@@ -1883,10 +1883,10 @@
       "dataset": "pbmc1k_cite_v3",
       "direction": "higher",
       "singlet": {
-        "value": 0.402493,
+        "value": 0.421483,
         "ci": [
-          0.385894,
-          0.418255
+          0.402813,
+          0.440215
         ]
       },
       "competitors": [
@@ -1900,10 +1900,10 @@
         },
         {
           "tool": "alevin-fry-usa",
-          "value": 0.397415,
+          "value": 0.414905,
           "ci": [
-            0.378134,
-            0.413374
+            0.393431,
+            0.4326
           ]
         }
       ],
@@ -1911,11 +1911,11 @@
         "type": "match_or_beat",
         "against": "best",
         "tolerance": {
-          "abs": 0.007052
+          "abs": 0.004491
         },
-        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (cells resampled) of Singlet minus STARsolo GeneFull: 0.0071"
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (cells resampled) of Singlet minus STARsolo GeneFull: 0.0045"
       },
-      "notes": "truth = antibody UMI (CLR) of the same cells; mean over 12 protein-gene pairs (CD3E, CD4, CD8A, CD14, FCGR3A, NCAM1, CD19, IL2RA, PDCD1, IL7R, TIGIT where in the panel); RNA = log1p(UMI per 10,000)",
+      "notes": "truth = antibody UMI (CLR) of the same cells; mean Spearman over the 11 protein-gene pairs every tool can score (CD14, CD19, CD3E, CD4, CD8A, FCGR3A, IL2RA, IL7R, NCAM1, PDCD1, TIGIT); pairs a tool cannot score (zero UMI for the gene, e.g. FUT4 in STARsolo) are excluded for all tools: FUT4; RNA = log1p(UMI per 10,000)",
       "pass": "fail"
     },
     {
@@ -1950,7 +1950,7 @@
         },
         "rationale": "tolerance = half-width of the paired bootstrap 95% CI (cells resampled) of Singlet minus STARsolo Gene: 0.0020"
       },
-      "notes": "truth = antibody UMI (CLR) of the same cells; mean over 12 protein-gene pairs (CD3E, CD4, CD8A, CD14, FCGR3A, NCAM1, CD19, IL2RA, PDCD1, IL7R, TIGIT where in the panel); RNA = log1p(UMI per 10,000)",
+      "notes": "truth = antibody UMI (CLR) of the same cells; mean Spearman over the 12 protein-gene pairs every tool can score (CD14, CD19, CD3E, CD4, CD8A, FCGR3A, FUT4, IL2RA, IL7R, NCAM1, PDCD1, TIGIT); pairs a tool cannot score (zero UMI for the gene, e.g. FUT4 in STARsolo) are excluded for all tools; RNA = log1p(UMI per 10,000)",
       "pass": "pass"
     }
   ],

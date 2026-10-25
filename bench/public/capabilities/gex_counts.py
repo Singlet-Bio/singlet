@@ -123,31 +123,31 @@ def adt_metrics(artifact_dir: Path) -> list[dict]:
     out = []
     for fam, singlet, comps, label in (("total", "singlet_total", ["starsolo_genefull", "alevinfry_total"], "exon+intron"),
                                        ("exonic", "singlet_exon", ["starsolo_gene"], "exonic")):
-        vals, boots = {}, {}
         n = len(df)
         idx = C.boot_indices(n, offset=900 + len(comps), B=200)
+        pairs: dict = {}  # tool -> {gene symbol: (rho, bootstrap rhos)}; a pair a tool cannot score is simply absent for it
         for t in [singlet] + comps:
-            cols = [c for c in df.columns if c.startswith(f"rna:{t}:")]
-            if not cols:
-                break
             tot = df[f"tot:{t}"].to_numpy(float)
-            per_pair, per_boot = [], []
-            for c in cols:
+            pairs[t] = {}
+            for c in [c for c in df.columns if c.startswith(f"rna:{t}:")]:
                 sym = c.split(":")[2]
                 prot = next((x for x in clr.columns if C_ADT_GENE.get(x.split("_")[0].lower()) == sym), None)
                 if prot is None:
                     continue
                 x = clr[prot].to_numpy(float)
                 y = np.log1p(df[c].to_numpy(float) / np.maximum(tot, 1) * 1e4)
-                per_pair.append(C.spearman(x, y))
-                per_boot.append([C.spearman(x[i], y[i]) for i in idx])
-            if not per_pair:
-                break
-            vals[t] = float(np.nanmean(per_pair))
-            boots[t] = np.nanmean(np.array(per_boot), axis=0)
-            vals[f"{t}#n"] = len(per_pair)
-        if singlet not in vals or any(t not in vals for t in comps):
+                rho = C.spearman(x, y)  # NaN when the gene has no UMI at all in this tool
+                bs = np.array([C.spearman(x[i], y[i]) for i in idx])
+                if np.isfinite(rho) and np.isfinite(bs).all():
+                    pairs[t][sym] = (rho, bs)
+        # score every tool on the pairs ALL tools can score, so no tool's mean is helped or hurt by a pair only others have
+        common = sorted(set.intersection(*(set(pairs[t]) for t in pairs)))
+        excluded = sorted(set().union(*(set(pairs[t]) for t in pairs)) - set(common))
+        if not common:
             continue
+        vals = {t: float(np.mean([pairs[t][g][0] for g in common])) for t in pairs}
+        boots = {t: np.mean([pairs[t][g][1] for g in common], axis=0) for t in pairs}
+        vals[singlet + "#n"] = len(common)
         best = max(comps, key=lambda t: vals[t])
         hw = C.half_width(C.ci95(boots[singlet] - boots[best]))
         rule = C.match_rule(hw, f"tolerance = half-width of the paired bootstrap 95% CI (cells resampled) of Singlet minus {LABEL[best]}: {hw:.4f}")
@@ -155,8 +155,9 @@ def adt_metrics(artifact_dir: Path) -> list[dict]:
             f"adt_rna_spearman.{fam}", f"Protein (CITE-seq) vs coding-gene RNA, Spearman across cells, {label} UMI", "rho", "accuracy",
             "pbmc1k_cite_v3", "higher", vals[singlet], C.ci95(boots[singlet]),
             [{"tool": DECL[t], "value": vals[t], "ci": C.ci95(boots[t])} for t in comps], rule,
-            notes=f"truth = antibody UMI (CLR) of the same cells; mean over {vals[singlet + '#n']} protein-gene pairs "
-                  "(CD3E, CD4, CD8A, CD14, FCGR3A, NCAM1, CD19, IL2RA, PDCD1, IL7R, TIGIT where in the panel); RNA = log1p(UMI per 10,000)"))
+            notes=f"truth = antibody UMI (CLR) of the same cells; mean Spearman over the {len(common)} protein-gene pairs every tool can score "
+                  f"({', '.join(common)}); pairs a tool cannot score (zero UMI for the gene, e.g. FUT4 in STARsolo) are excluded for all tools"
+                  + (f": {', '.join(excluded)}" if excluded else "") + "; RNA = log1p(UMI per 10,000)"))
     return out
 
 
