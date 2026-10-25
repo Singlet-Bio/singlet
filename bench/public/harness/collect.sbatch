@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=bp-collect
+#SBATCH --job-name=bpub-collect
 #SBATCH --account=debruinz
 #SBATCH --partition=short-cpu
 #SBATCH --cpus-per-task=8

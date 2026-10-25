@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=bp-run
+#SBATCH --job-name=bpub-run
 #SBATCH --account=debruinz
 #SBATCH --partition=short-cpu,scavenger
 #SBATCH --requeue

@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=bp-sex
+#SBATCH --job-name=bpub-sex
 #SBATCH --account=debruinz
 #SBATCH --partition=short-cpu,short-bigmem
 #SBATCH --cpus-per-task=8

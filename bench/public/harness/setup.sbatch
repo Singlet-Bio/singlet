@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=bp-setup
+#SBATCH --job-name=bpub-setup
 #SBATCH --account=debruinz
 #SBATCH --partition=short-cpu
 #SBATCH --cpus-per-task=8
