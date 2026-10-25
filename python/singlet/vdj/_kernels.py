@@ -158,8 +158,11 @@ def _find(sorted_arr, x):
 
 @njit(cache=True)
 def _codon_at(codes, a, L, st, which):
-    """Codon check around an anchor: Cys (TGT/TGC) for ``which`` 0, Phe/Trp (TTT/TTC/TGG) for 1. Returns the start
-    among st, st-1, st+1 that holds it (an indel or a V allele can move the diagonal by one), or -1."""
+    """Codon check around an anchor, among st, st-1, st+1 (an indel or a V allele can move the diagonal by one).
+
+    ``which`` 0: Cys104 (TGT/TGC). ``which`` 1: Phe/Trp118 followed by the Gly of the J motif F/W-G-X-G
+    (TTY/TGG + GG): without the Gly a poly-T run (``...CTGTTTTTTGG``) accepts the codon one base early. Returns the
+    codon start or -1."""
     for d in (0, -1, 1):
         q = st + d
         if q < 0 or q + 3 > L:
@@ -169,9 +172,45 @@ def _codon_at(codes, a, L, st, which):
             if c0 == 3 and c1 == 2 and (c2 == 3 or c2 == 1):
                 return q
         else:
-            if c0 == 3 and ((c1 == 3 and (c2 == 3 or c2 == 1)) or (c1 == 2 and c2 == 2)):
+            if q + 5 > L:
+                continue
+            if (c0 == 3 and ((c1 == 3 and (c2 == 3 or c2 == 1)) or (c1 == 2 and c2 == 2))
+                    and codes[a + q + 3] == 2 and codes[a + q + 4] == 2):
                 return q
     return -1
+
+
+@njit(cache=True)
+def _vote(ek_lo, ek_hi, eu, ec, js, stamp, bestc, bestb, tie, touched, step):
+    """Per-UMI consensus over candidate k-mers ``js`` (indices into the unique k-mer table, -1 = absent): each UMI
+    votes for the candidate its reads hold most often (ties do not vote). Returns votes per candidate."""
+    nt = 0
+    for b in range(len(js)):
+        j = js[b]
+        if j < 0:
+            continue
+        for e in range(ek_lo[j], ek_hi[j]):
+            u = eu[e]
+            c = ec[e]
+            if stamp[u] != step:
+                stamp[u] = step
+                bestc[u] = c
+                bestb[u] = b
+                tie[u] = False
+                touched[nt] = u
+                nt += 1
+            elif c > bestc[u]:
+                bestc[u] = c
+                bestb[u] = b
+                tie[u] = False
+            elif c == bestc[u] and bestb[u] != b:
+                tie[u] = True
+    votes = np.zeros(len(js), np.int32)
+    for i in range(nt):
+        u = touched[i]
+        if not tie[u]:
+            votes[bestb[u]] += 1
+    return votes
 
 
 @njit(cache=True, nogil=True)
@@ -182,9 +221,17 @@ def assemble_group(codes, off, ridx, umi, cys, fw, ka, min_seed_umis, seed_frac,
     ``ridx``: read indices into ``off``; ``umi``: local UMI id per read (< 2**24); ``cys`` / ``fw``: read position of the
     Cys104 / Phe-Trp118 codon start or -1.
 
+    Support is a per-UMI consensus: at a seed or a branch every UMI votes for the alternative its reads hold most often.
+    Counting UMIs that merely contain a k-mer would not do: at the depth of a V(D)J library (~100 reads per UMI) almost
+    every UMI holds some read with any given one-base error, so error branches would look as supported as the truth.
+
     Returns (paths (p, max_len) uint8, lengths (p,), seed UMI support (p,), cand per read (int32: -1 none, -2 several))."""
     mask = np.uint64((1 << (2 * ka)) - 1)
     nr = len(ridx)
+    n_umi = 1
+    for t in range(nr):
+        if umi[t] + 1 > n_umi:
+            n_umi = umi[t] + 1
     tot = 0
     for t in range(nr):
         r = ridx[t]
@@ -208,30 +255,46 @@ def assemble_group(codes, off, ridx, umi, cys, fw, ka, min_seed_umis, seed_frac,
                 keys[m] = (cur << np.uint64(24)) | np.uint64(umi[t])
                 m += 1
     ks = np.sort(keys[:m])
-    # distinct UMIs per k-mer
+    # (k-mer, UMI) entries with read counts, grouped by k-mer
+    eu = np.empty(m, np.int32)
+    ec = np.empty(m, np.int32)
     uk = np.empty(m, np.uint64)
-    su = np.empty(m, np.int32)
+    ek_lo = np.empty(m, np.int64)
+    ne = 0
     nu = 0
     prev = np.uint64(0xFFFFFFFFFFFFFFFF)
     prevk = np.uint64(0xFFFFFFFFFFFFFFFF)
     for i in range(m):
         if ks[i] == prev:
+            ec[ne - 1] += 1
             continue
         prev = ks[i]
         km = ks[i] >> np.uint64(24)
         if km != prevk:
             uk[nu] = km
-            su[nu] = 0
+            ek_lo[nu] = ne
             nu += 1
             prevk = km
-        su[nu - 1] += 1
+        eu[ne] = np.int32(ks[i] & np.uint64(0xFFFFFF))
+        ec[ne] = 1
+        ne += 1
     uk = uk[:nu]
-    su = su[:nu]
+    ek_lo = ek_lo[:nu]
+    ek_hi = np.empty(nu, np.int64)
+    for j in range(nu):
+        ek_hi[j] = ek_lo[j + 1] if j + 1 < nu else ne
+    stamp = np.full(n_umi, -1, np.int64)
+    bestc = np.zeros(n_umi, np.int32)
+    bestb = np.zeros(n_umi, np.int32)
+    tie = np.zeros(n_umi, np.bool_)
+    touched = np.empty(n_umi, np.int32)
+    step = 0
 
     # seeds (k-mer starting at Cys104) and terminals (k-mer ending at the end of the Phe/Trp118 codon)
     seeds = np.empty(nr, np.uint64)
     ns = 0
     term = np.empty(nr, np.uint64)
+    term_u = np.empty(nr, np.int32)
     nt = 0
     for t in range(nr):
         r = ridx[t]
@@ -261,14 +324,56 @@ def assemble_group(codes, off, ridx, umi, cys, fw, ka, min_seed_umis, seed_frac,
                 ns += 1
             else:
                 term[nt] = cur
+                term_u[nt] = umi[t]
                 nt += 1
     seeds = np.unique(seeds[:ns])
-    term = np.unique(term[:nt])
-    ssup = np.zeros(len(seeds), np.int32)
+    # terminals need UMI support: one read whose error puts TTYGG a base early would otherwise end the true junction
+    # there (that k-mer is part of the true path)
+    # there (that k-mer is part of the true path). Each UMI votes for the terminal most of its reads give.
+    tk_ = np.empty(nt, np.uint64)
+    for i in range(nt):
+        tk_[i] = (np.uint64(term_u[i]) << np.uint64(40)) | term[i]  # (UMI, k-mer): ka <= 20 fits 40 bits
+    tk_ = np.sort(tk_)
+    tu = np.unique(term[:nt])
+    tc = np.zeros(len(tu), np.int32)
+    ntu = len(tu)
+    i = 0
+    while i < nt:
+        u = tk_[i] >> np.uint64(40)
+        best_k = np.uint64(0)
+        best_n = 0
+        tie_ = False
+        e = i
+        while e < nt and (tk_[e] >> np.uint64(40)) == u:
+            f = e
+            while f < nt and tk_[f] == tk_[e]:
+                f += 1
+            if f - e > best_n:
+                best_n = f - e
+                best_k = tk_[e] & np.uint64((1 << 40) - 1)
+                tie_ = False
+            elif f - e == best_n:
+                tie_ = True
+            e = f
+        if not tie_:
+            tc[_find(tu, best_k)] += 1
+        i = e
+    tmax = 0
+    for i in range(ntu):
+        tmax = max(tmax, tc[i])
+    tthr = max(2 if tmax >= 4 else 1, int(np.ceil(0.05 * tmax)))
+    term = np.empty(ntu, np.uint64)
+    nt = 0
+    for i in range(ntu):
+        if tc[i] >= tthr:
+            term[nt] = tu[i]
+            nt += 1
+    term = term[:nt]
+    js = np.full(len(seeds), -1, np.int64)
     for i in range(len(seeds)):
-        j = _find(uk, seeds[i])
-        if j >= 0:
-            ssup[i] = su[j]
+        js[i] = _find(uk, seeds[i])
+    ssup = _vote(ek_lo, ek_hi, eu, ec, js, stamp, bestc, bestb, tie, touched, step)
+    step += 1
     order = np.argsort(-ssup)
     seed_min = min_seed_umis
     if len(ssup):
@@ -284,6 +389,7 @@ def assemble_group(codes, off, ridx, umi, cys, fw, ka, min_seed_umis, seed_frac,
     stl = np.zeros(MS, np.int32)
     stk_k = np.zeros(MS, np.uint64)
     cur_path = np.zeros(max_len, np.uint8)
+    j4 = np.full(4, -1, np.int64)
     if len(term) > 0:
         for oi in range(len(order)):
             si = order[oi]
@@ -326,24 +432,35 @@ def assemble_group(codes, off, ridx, umi, cys, fw, ka, min_seed_umis, seed_frac,
                         break
                     if pl >= max_len:
                         break
-                    bs = np.zeros(4, np.int32)
                     for b in range(4):
-                        nk = ((cur << np.uint64(2)) | np.uint64(b)) & mask
-                        j = _find(uk, nk)
-                        if j >= 0:
-                            bs[b] = su[j]
+                        j4[b] = _find(uk, ((cur << np.uint64(2)) | np.uint64(b)) & mask)
+                    bs = _vote(ek_lo, ek_hi, eu, ec, j4, stamp, bestc, bestb, tie, touched, step)
+                    step += 1
                     bb = np.argmax(bs)
                     if bs[bb] == 0:
-                        break
-                    thr = max(min_branch_umis, branch_frac * bs[bb])
-                    for b in range(4):
-                        if b != bb and bs[b] >= thr and sp < MS:
-                            for i in range(pl):
-                                stk[sp, i] = cur_path[i]
-                            stk[sp, pl] = b
-                            stl[sp] = pl + 1
-                            stk_k[sp] = ((cur << np.uint64(2)) | np.uint64(b)) & mask
-                            sp += 1
+                        # every UMI ties (or none reaches here): follow the k-mer held by most reads
+                        best_r = 0
+                        bb = -1
+                        for b in range(4):
+                            if j4[b] >= 0:
+                                rr = 0
+                                for e in range(ek_lo[j4[b]], ek_hi[j4[b]]):
+                                    rr += ec[e]
+                                if rr > best_r:
+                                    best_r = rr
+                                    bb = b
+                        if bb < 0:
+                            break
+                    else:
+                        thr = max(min_branch_umis, branch_frac * bs[bb])
+                        for b in range(4):
+                            if b != bb and bs[b] >= thr and sp < MS:
+                                for i in range(pl):
+                                    stk[sp, i] = cur_path[i]
+                                stk[sp, pl] = b
+                                stl[sp] = pl + 1
+                                stk_k[sp] = ((cur << np.uint64(2)) | np.uint64(b)) & mask
+                                sp += 1
                     cur_path[pl] = bb
                     pl += 1
                     cur = ((cur << np.uint64(2)) | np.uint64(bb)) & mask

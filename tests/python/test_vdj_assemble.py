@@ -56,6 +56,7 @@ def recombine(segs, ch):
     # in-frame N region
     base = len(vt) - v.anchor + (j.anchor - jt0)
     n = int(RNG.integers(2, 9))
+    n = max(n, 24 - base)  # real IMGT junctions are >= 7 aa; the assembler needs >= 19 nt (its k)
     n += (-(base + n)) % 3
     while True:
         nreg = rand(n)
@@ -70,7 +71,7 @@ def rc(s):
     return R.revcomp(s)
 
 
-def simulate(segs, n_cells=40, mols=(3, 8), pairs_per_mol=(4, 12), r2_len=150):
+def simulate(segs, n_cells=40, mols=(3, 8), pairs_per_mol=(4, 12), r2_len=150, err=0.3):
     cbs = S.decode(RNG.integers(0, 4 ** 16, n_cells * 2, dtype=np.uint64), 16)[:n_cells]
     r1, r2, truth = [], [], {}
     for cb in cbs:
@@ -83,7 +84,7 @@ def simulate(segs, n_cells=40, mols=(3, 8), pairs_per_mol=(4, 12), r2_len=150):
                     f = int(RNG.integers(r2_len, len(tx) + 1))
                     s2 = rc(tx[f - r2_len:f])
                     s1 = cb + umi + "TTTCTTATATGGG" + tx[:111]
-                    if RNG.random() < 0.3:  # a sequencing error
+                    while RNG.random() < err:  # sequencing errors
                         p = int(RNG.integers(0, len(s2)))
                         s2 = s2[:p] + RNG.choice([b for b in "ACGT" if b != s2[p]]) + s2[p + 1:]
                     r1.append(s1.encode())
@@ -111,4 +112,18 @@ def test_assembly_recovers_junctions(r2_len):
     assert genes >= 0.9 * len(truth)
     assert kept.productive.mean() > 0.95
     # one kept contig per chain per cell (no error branches)
+    assert kept.groupby(["barcode", "chain"]).size().max() == 1
+
+
+def test_deep_library_with_errors_keeps_true_junctions():
+    """At V(D)J depth (~100 reads per UMI) every one-base error appears in most UMIs: support must be a per-UMI vote."""
+    segs = make_segments()
+    ref = A.Reference(segs)
+    r1, r2, truth, cbs = simulate(segs, n_cells=15, mols=(4, 8), pairs_per_mol=(80, 120), err=0.6)
+    wl, _ = S.encode_strings(cbs, 16)
+    res = A.run_library([], [], ref=ref, cb_len=16, umi_len=10, whitelist_codes=np.sort(wl), chunks=[(r1, r2)],
+                        params=A.Params(threads=2), log=lambda *a: None)
+    kept = res.contigs[res.contigs.kept]
+    found = {(b[:-2], c): n for b, c, n in kept[["barcode", "chain", "cdr3_nt"]].itertuples(index=False)}
+    assert sum(found.get(k) == t[0] for k, t in truth.items()) == len(truth)
     assert kept.groupby(["barcode", "chain"]).size().max() == 1
