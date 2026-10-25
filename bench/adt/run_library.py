@@ -257,8 +257,7 @@ def process(row, a, out_dir, status):
     status["shards"] = shards
     lc = C.count_library(r1s, r2s, cb_len=chem.cb_len, umi_len=chem.umi_len, offset=off,
                          panel_sequences=list(panel.sequence), whitelist_codes=wl, gex_barcodes=gx.barcodes,
-                         translation=table, shards=shards, tmpdir=a.scratch,
-                         pairs_factory=lambda: C.iter_pairs(r1s, r2s))
+                         translation=table, shards=shards, tmpdir=a.scratch)
     status["count_seconds"] = round(time.time() - t2, 1)
     os.makedirs(out_dir, exist_ok=True)
     C.save_npz(os.path.join(out_dir, "counts.npz"), lc, {"gsm": row["gsm"], "gex_gsm": gex_gsm, "offset": off,

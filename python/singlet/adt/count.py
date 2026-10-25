@@ -77,6 +77,160 @@ def iter_pairs(r1_paths: Sequence[str], r2_paths: Sequence[str]) -> Iterable[Tup
                     yield s1, s2
 
 
+BLOCK_BYTES = 64 << 20  # decompressed bytes read per refill in the FASTQ reader
+
+
+def key_blocks_from_pairs(
+    pairs,
+    r1_len: int,
+    offset: int,
+    feat_len: int,
+    max_reads: Optional[int] = None,
+    block: int = CHUNK,
+):
+    """``(keys (k, r1_len + feat_len) uint8, records, short)`` per block, from (R1, R2) byte-string pairs."""
+    end = offset + feat_len
+    buf: List[bytes] = []
+    n = n_short = total = 0
+    for s1, s2 in pairs:
+        n += 1
+        total += 1
+        if len(s1) < r1_len or len(s2) < end:
+            n_short += 1
+        else:
+            buf.append(s1[:r1_len] + s2[offset:end])
+        if len(buf) >= block:
+            yield (
+                np.array(buf, dtype=f"S{r1_len + feat_len}").view(np.uint8).reshape(len(buf), -1),
+                n,
+                n_short,
+            )
+            buf, n, n_short = [], 0, 0
+        if max_reads is not None and total >= max_reads:
+            break
+    a = (
+        np.array(buf, dtype=f"S{r1_len + feat_len}")
+        if buf
+        else np.zeros(0, f"S{r1_len + feat_len}")
+    )
+    yield a.view(np.uint8).reshape(len(buf), r1_len + feat_len), n, n_short
+
+
+class _SeqLines:
+    """Sequence lines of a FASTQ(.gz) file, read in blocks of records with numpy (no per-read Python).
+
+    Decompression runs in a ``pigz -dc`` subprocess when pigz is on the PATH (else Python's gzip)."""
+
+    def __init__(self, path: str):
+        import shutil
+        import subprocess
+
+        self.proc = None
+        if path.endswith(".gz") and shutil.which("pigz"):
+            self.proc = subprocess.Popen(
+                ["pigz", "-dc", "-p", "2", path], stdout=subprocess.PIPE, bufsize=1 << 20
+            )
+            self.fh = self.proc.stdout
+        else:
+            self.fh = _open(path)
+        self.buf = np.zeros(0, np.uint8)
+        self.eof = False
+
+    def take(self, n: int):
+        """Up to ``n`` records: (concatenated bytes as uint8, sequence-line starts, sequence-line lengths)."""
+        while not self.eof:
+            nl = np.flatnonzero(self.buf == 10)
+            if len(nl) >= 4 * n:
+                break
+            chunk = self.fh.read(BLOCK_BYTES)
+            if not chunk:
+                self.eof = True
+                if len(self.buf) and self.buf[-1] != 10:
+                    self.buf = np.concatenate([self.buf, np.array([10], np.uint8)])
+                break
+            self.buf = np.concatenate([self.buf, np.frombuffer(chunk, np.uint8)])
+        nl = np.flatnonzero(self.buf == 10)
+        k = min(n, len(nl) // 4)
+        if k == 0:
+            return self.buf[:0], np.zeros(0, np.int64), np.zeros(0, np.int64)
+        cut = nl[4 * k - 1] + 1
+        data, self.buf = self.buf[:cut], self.buf[cut:]
+        starts = nl[0 : 4 * k : 4] + 1
+        ends = nl[1 : 4 * k : 4]
+        if len(ends) and data[ends - 1].max(initial=0) == 13:  # CRLF files
+            ends = ends - (data[ends - 1] == 13)
+        return data, starts.astype(np.int64), (ends - starts).astype(np.int64)
+
+    def close(self):
+        try:
+            self.fh.close()
+        finally:
+            if self.proc is not None:
+                self.proc.wait()
+
+
+def _windows(data, starts, lens, s0: int, w: int):
+    """(k, w) uint8 window ``[s0, s0 + w)`` of each line; rows of lines shorter than ``s0 + w`` are garbage (masked)."""
+    idx = starts[:, None] + (s0 + np.arange(w))[None, :]
+    np.minimum(idx, len(data) - 1, out=idx)
+    return data[idx], lens >= s0 + w
+
+
+def key_blocks_from_fastq(
+    r1_paths,
+    r2_paths,
+    r1_len: int,
+    offset: int,
+    feat_len: int,
+    max_reads: Optional[int] = None,
+    block: int = CHUNK,
+):
+    """The same blocks as :func:`key_blocks_from_pairs`, read straight from FASTQ files with numpy (~20x faster)."""
+    total = 0
+    for p1, p2 in zip(r1_paths, r2_paths):
+        a, b = _SeqLines(p1), _SeqLines(p2)
+        try:
+            while True:
+                want = block if max_reads is None else min(block, max_reads - total)
+                if want <= 0:
+                    return
+                d1, s1, l1 = a.take(want)
+                d2, s2, l2 = b.take(want)
+                if len(s1) != len(s2):
+                    raise ValueError(f"{p1} and {p2} have different numbers of reads")
+                if len(s1) == 0:
+                    break
+                w1, ok1 = _windows(d1, s1, l1, 0, r1_len)
+                w2, ok2 = _windows(d2, s2, l2, offset, feat_len)
+                ok = ok1 & ok2
+                total += len(s1)
+                yield np.ascontiguousarray(np.hstack([w1[ok], w2[ok]])), len(s1), int((~ok).sum())
+        finally:
+            a.close()
+            b.close()
+
+
+def _collapse_blocks(blocks, width: int):
+    uniq: List[np.ndarray] = []
+    cnts: List[np.ndarray] = []
+    n = n_short = 0
+    for mat, k, short in blocks:
+        n += k
+        n_short += short
+        if len(mat):
+            u, c = np.unique(
+                np.ascontiguousarray(mat).view(f"S{width}").ravel(), return_counts=True
+            )
+            uniq.append(u)
+            cnts.append(c.astype(np.int64))
+            if len(uniq) > 8:
+                _merge(uniq, cnts)
+    _merge(uniq, cnts)
+    keys = uniq[0] if uniq else np.zeros(0, dtype=f"S{width}")
+    counts = cnts[0] if cnts else np.zeros(0, np.int64)
+    return keys, counts, {"reads": n, "reads_short": n_short}
+
+
 def collapse_reads(
     pairs: Iterable[Tuple[bytes, bytes]],
     r1_len: int,
@@ -87,39 +241,9 @@ def collapse_reads(
     """Unique ``R1[:r1_len] + R2[offset:offset+feat_len]`` keys and their read counts.
 
     Returns (keys ``S<r1_len+feat_len>``, counts int64, stats dict). Pairs with a short R1 or R2 are counted and skipped."""
-    width = r1_len + feat_len
-    end = offset + feat_len
-    uniq: List[np.ndarray] = []
-    cnts: List[np.ndarray] = []
-    buf: List[bytes] = []
-    n = n_short = 0
-
-    def flush():
-        if not buf:
-            return
-        a = np.array(buf, dtype=f"S{width}")
-        u, c = np.unique(a, return_counts=True)
-        uniq.append(u)
-        cnts.append(c.astype(np.int64))
-        buf.clear()
-
-    for s1, s2 in pairs:
-        n += 1
-        if len(s1) < r1_len or len(s2) < end:
-            n_short += 1
-        else:
-            buf.append(s1[:r1_len] + s2[offset:end])
-            if len(buf) >= CHUNK:
-                flush()
-                if len(uniq) > 8:
-                    _merge(uniq, cnts)
-        if max_reads is not None and n >= max_reads:
-            break
-    flush()
-    _merge(uniq, cnts)
-    keys = uniq[0] if uniq else np.zeros(0, dtype=f"S{width}")
-    counts = cnts[0] if cnts else np.zeros(0, np.int64)
-    return keys, counts, {"reads": n, "reads_short": n_short}
+    return _collapse_blocks(
+        key_blocks_from_pairs(pairs, r1_len, offset, feat_len, max_reads), r1_len + feat_len
+    )
 
 
 def _merge(uniq, cnts):
@@ -131,6 +255,22 @@ def _merge(uniq, cnts):
     s = np.bincount(inv.ravel(), weights=c, minlength=len(u)).astype(np.int64)
     uniq[:] = [u]
     cnts[:] = [s]
+
+
+def _barcode_counts(blocks, cb_len):
+    """Pass 1 of the sharded mode: reads per raw cell barcode (the same reads as the collapse keeps)."""
+    uniq, cnts = [], []
+    for mat, _, _ in blocks:
+        if len(mat):
+            u, c = np.unique(
+                np.ascontiguousarray(mat[:, :cb_len]).view(f"S{cb_len}").ravel(), return_counts=True
+            )
+            uniq.append(u)
+            cnts.append(c.astype(np.int64))
+            if len(uniq) > 8:
+                _merge(uniq, cnts)
+    _merge(uniq, cnts)
+    return (uniq[0], cnts[0]) if uniq else (np.zeros(0, f"S{cb_len}"), np.zeros(0, np.int64))
 
 
 # ----------------------------------------------------------------------------------------------------------- features
@@ -430,42 +570,6 @@ def _process(keys, reads, bmap, fx, cb_len, umi_len, n_features, st, unm):
     )
 
 
-def _barcode_counts(pairs, r1_len, end, cb_len, max_reads=None):
-    """Pass 1 of the sharded mode: reads per raw cell barcode (same read filter as :func:`collapse_reads`)."""
-    uniq, cnts, buf = [], [], []
-    n = 0
-
-    def flush():
-        if buf:
-            u, c = np.unique(np.array(buf, dtype=f"S{cb_len}"), return_counts=True)
-            uniq.append(u)
-            cnts.append(c.astype(np.int64))
-            buf.clear()
-
-    for s1, s2 in pairs:
-        n += 1
-        if len(s1) >= r1_len and len(s2) >= end:
-            buf.append(s1[:cb_len])
-            if len(buf) >= CHUNK:
-                flush()
-                if len(uniq) > 8:
-                    _merge(uniq, cnts)
-        if max_reads is not None and n >= max_reads:
-            break
-    flush()
-    _merge(uniq, cnts)
-    return (uniq[0], cnts[0]) if uniq else (np.zeros(0, f"S{cb_len}"), np.zeros(0, np.int64))
-
-
-def _constant(pairs, r1_paths=None, r2_paths=None):
-    """A pair-iterator factory: the given iterator (single pass only), or a fresh read of the FASTQ files."""
-
-    def factory():
-        return pairs if pairs is not None else iter_pairs(r1_paths, r2_paths)
-
-    return factory
-
-
 def count_library(
     r1_paths,
     r2_paths,
@@ -494,20 +598,21 @@ def count_library(
     fx = FeatureIndex(list(panel_sequences))
     L = fx.L
     r1_len = cb_len + umi_len
-    end = offset + L
     nf = len(panel_sequences)
-    if pairs_factory is not None:
-        factory = pairs_factory
-    elif pairs is not None:
-        if shards:
-            raise ValueError("sharded counting reads the pairs twice: pass pairs_factory")
-        factory = _constant(pairs)
-    else:
-        factory = _constant(None, r1_paths, r2_paths)
+    if pairs is not None and shards and pairs_factory is None:
+        raise ValueError("sharded counting reads the pairs twice: pass pairs_factory")
+
+    def blocks():
+        if pairs_factory is not None:
+            return key_blocks_from_pairs(pairs_factory(), r1_len, offset, L, max_reads)
+        if pairs is not None:
+            return key_blocks_from_pairs(pairs, r1_len, offset, L, max_reads)
+        return key_blocks_from_fastq(r1_paths, r2_paths, r1_len, offset, L, max_reads)
+
     st: dict = {}
     unm: dict = {}
     if not shards:
-        keys, reads, st0 = collapse_reads(factory(), r1_len, offset, L, max_reads=max_reads)
+        keys, reads, st0 = _collapse_blocks(blocks(), r1_len + L)
         st.update(st0)
         st["unique_keys"] = int(len(keys))
         cbk = np.ascontiguousarray(keys.view(np.uint8).reshape(len(keys), r1_len + L)[:, :cb_len])
@@ -525,7 +630,7 @@ def count_library(
     else:
         import tempfile
 
-        ucb, cb_reads = _barcode_counts(factory(), r1_len, end, cb_len, max_reads)
+        ucb, cb_reads = _barcode_counts(blocks(), cb_len)
         cb_code, cb_valid, translated, n_corr = _barcode_map(
             ucb, cb_reads, cb_len, whitelist_codes, translation
         )
@@ -535,32 +640,21 @@ def count_library(
         d = tempfile.mkdtemp(prefix="adt-shards-", dir=tmpdir)
         pieces = {k: [] for k in range(shards + 1)}
         n = n_short = 0
-        buf: List[bytes] = []
-
-        def spill():
-            if not buf:
-                return
-            u, c = np.unique(np.array(buf, dtype=f"S{r1_len + L}"), return_counts=True)
+        for mat, nk, short in blocks():
+            n += nk
+            n_short += short
+            if not len(mat):
+                continue
+            u, c = np.unique(
+                np.ascontiguousarray(mat).view(f"S{r1_len + L}").ravel(), return_counts=True
+            )
             cbk = np.ascontiguousarray(u.view(np.uint8).reshape(len(u), r1_len + L)[:, :cb_len])
             sh = shard_of[np.searchsorted(ucb, cbk.view(f"S{cb_len}").ravel())]
             for k in np.unique(sh):
-                m = sh == k
+                sel = sh == k
                 f = os.path.join(d, f"{k}_{len(pieces[k])}.npz")
-                np.savez(f, keys=u[m], reads=c[m].astype(np.int64))
+                np.savez(f, keys=u[sel], reads=c[sel].astype(np.int64))
                 pieces[k].append(f)
-            buf.clear()
-
-        for s1, s2 in factory():
-            n += 1
-            if len(s1) < r1_len or len(s2) < end:
-                n_short += 1
-            else:
-                buf.append(s1[:r1_len] + s2[offset:end])
-                if len(buf) >= CHUNK:
-                    spill()
-            if max_reads is not None and n >= max_reads:
-                break
-        spill()
         st.update({"reads": n, "reads_short": n_short, "shards": shards})
         parts = []
         uk = 0

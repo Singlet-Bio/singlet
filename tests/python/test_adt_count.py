@@ -199,3 +199,46 @@ def test_sharded_equals_single_pass(tmp_path):
     ):
         assert a.stats[k] == b.stats[k], k
     assert dict(a.unmatched) == dict(b.unmatched)
+
+
+def _write_fastq(path, seqs):
+    import gzip
+
+    with gzip.open(path, "wt") as f:
+        for i, s in enumerate(seqs):
+            f.write(f"@r{i}\n{s}\n+\n{'F' * len(s)}\n")
+
+
+def test_fastq_reader_equals_pairs(tmp_path):
+    wl = sorted(set(rand_seq(600, 16)))
+    wl_codes = np.sort(S.encode_strings(wl, 16)[0])
+    panel = rand_seq(5, 15)
+    pairs = []
+    for cb in wl[:40]:
+        for fs in panel:
+            for _ in range(int(RNG.integers(0, 5))):
+                umi = rand_seq(1, 12)[0]
+                pairs.append((cb + umi, "A" * 10 + fs + "TTT"))
+    pairs.append(("ACGT", "A" * 30))  # short R1
+    pairs.append((wl[0] + "A" * 12, "A" * 12))  # short R2
+    r1, r2 = tmp_path / "R1.fastq.gz", tmp_path / "R2.fastq.gz"
+    _write_fastq(r1, [a for a, _ in pairs])
+    _write_fastq(r2, [b for _, b in pairs])
+    kw = dict(
+        cb_len=16,
+        umi_len=12,
+        offset=10,
+        panel_sequences=panel,
+        whitelist_codes=wl_codes,
+        gex_barcodes=wl[:30],
+    )
+    a = C.count_library(None, None, pairs=iter([(x.encode(), y.encode()) for x, y in pairs]), **kw)
+    b = C.count_library([str(r1)], [str(r2)], **kw)
+    c = C.count_library([str(r1)], [str(r2)], shards=3, tmpdir=str(tmp_path), **kw)
+    for other in (b, c):
+        assert (a.matrix.toarray() == other.matrix.toarray()).all()
+        assert a.stats["reads"] == other.stats["reads"] == len(pairs)
+        assert a.stats["reads_short"] == other.stats["reads_short"] == 2
+    # blocks smaller than the file
+    blk = list(C.key_blocks_from_fastq([str(r1)], [str(r2)], 28, 10, 15, block=7))
+    assert sum(k for _, k, _ in blk) == len(pairs)

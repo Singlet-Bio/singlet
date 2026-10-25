@@ -179,9 +179,15 @@ def tool_singlet(a):
         table, _ = C.best_translation(top, gcodes, wl(a, trf))
     wlc = table[0] if table is not None else np.sort(S.encode_strings(C.load_barcode_list(wl(a, wlf)), 16)[0])
     lc = C.count_library(r1, r2, cb_len=16, umi_len=cfg["umi"], offset=off, panel_sequences=list(panel.sequence),
-                         whitelist_codes=wlc, gex_barcodes=bcs, translation=table,
-                         pairs_factory=lambda: C.iter_pairs(r1, r2))
+                         whitelist_codes=wlc, gex_barcodes=bcs, translation=table, shards=shards_for(r1),
+                         tmpdir=a.scratch)
     save_matrix(a, lc.matrix, list(panel.feature), bcs)
+
+
+def shards_for(r1_paths, gb_per_shard=0.5):
+    """Shards for the counter: one per ~0.5 GB of gzipped R1 (~15 M reads), none for small libraries."""
+    gb = sum(os.path.getsize(p) for p in r1_paths) / 1e9
+    return 0 if gb < 1.0 else int(np.ceil(gb / gb_per_shard))
 
 
 def save_matrix(a, M, features, bcs):
@@ -321,7 +327,7 @@ def tool_alevinfry(a):
 
 
 TOOLS = {"singlet": tool_singlet, "kite": tool_kite, "citeseqcount": tool_citeseqcount, "alevinfry": tool_alevinfry}
-VERSIONS = {"kite": ["kb", "--version"], "citeseqcount": ["CITE-seq-Count", "--version"],
+VERSIONS = {"kite": [sys.executable, "-c", "import kb_python; print('kb_python', kb_python.__version__)"], "citeseqcount": ["CITE-seq-Count", "--version"],
             "alevinfry": [os.path.join(os.environ.get("AFRY_BIN", ""), "alevin-fry"), "--version"]}
 
 
