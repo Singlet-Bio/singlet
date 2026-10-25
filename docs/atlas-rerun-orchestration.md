@@ -133,10 +133,13 @@ Compute classes are chosen from the planned depth: the first class whose predict
 
 | class | threads | partition, limit | memory | samples (full plan) |
 |---|---|---|---|---|
-| s4 | 4 | short-cpu, 4 h | 80 GB | 64,641 |
-| m8 | 8 | short-cpu, 4 h | 96 GB | 4,473 |
-| l8 | 8 | cpu, 2 days | 112 GB | 756 |
-| xl16 (> 1.3B pairs) | 16 | cpu, 5 days | 160 GB | 688 |
+| s4 | 4 | short-cpu, 4 h | 96 GB | 42,462 |
+| m8 | 8 | short-cpu, 4 h | 112 GB | 16,541 |
+| l8 | 8 | cpu, 2 days | 128 GB | 10,867 |
+| xl16 (> 1.3B pairs) | 16 | cpu, 5 days | 192 GB | 688 |
+
+The sample counts are for the full plan with `wall_scale` = 2.0 (§7). With the bare model (`wall_scale` = 1) they
+are 64,641 / 4,473 / 756 / 688.
 
 Retry escalation:
 * after a timeout, the retry uses the next class;
@@ -324,12 +327,12 @@ before anything over ~1,000 SU.
 | GSM6250705 | 1 | 61.5M | 9 s | 70 s | 38 s | – | 732 s | 1,087 s | 0.67 | 55 GB |
 | GSM7036403 | 1 | 111.6M | 21 s | 134 s | 102 s | – | 2,196 s | 1,727 s | **1.27** | 58 GB |
 | GSM6470208 (5′ v2) | 2 | 121.8M | 28 s | 158 s | 94 s | 670 s | 4,570 s | 1,858 s | **2.46** | 66 GB |
-| GSM7656149 (ENA: 0 reads) | 1 | 263.4M | 454 s (failed, fallback) | 711 s | 310 s | – | see PR | 3,669 s | | |
+| GSM7656149 (ENA: 0 reads) | 1 | 263.4M | 454 s (failed, fallback) | 711 s | 310 s | – | 5,097 s | 3,669 s | **1.39** | 76 GB |
 | GSM7623467 | 1 | – | parked in 4 s: `download`'s gate saw split-seq (R1 = R2 = 151 bp, 0% whitelist) | | | | | | | |
 
 **What worked end to end.**
-* Plan → controller → chained arrays → events → ledger → hand-off: `handoff/GSE223815.json`, `GSE206325`,
-  `GSE224972` and `GSE200743`… were written when their samples finished.
+* Plan → controller → chained arrays → events → ledger → hand-off: 7 done, 1 parked, and all 6 studies have a
+  `handoff/<GSE>.json`. `rebuild` from `events.jsonl` reproduced the ledger.
 * Per-run screening and pooling of 4-run and 2-run samples, with runs_used provenance in `pileup_stats.json`.
 * Parking with a reason, without a retry.
 * Requeue after a failure.
@@ -354,8 +357,9 @@ before anything over ~1,000 SU.
 
 **Timing against the model.**
 * Small samples run faster than the model (0.4–0.7×): the fixed 300 s is overstated.
-* At 112–122M pairs the compute stage took **1.3–2.5× the model**. STAR's disk-backed BAM sort took 18 and 46 min,
-  against 10.5 and 14 min of mapping. The nodes were shared with other jobs' I/O on `/tmp`, and the 5′ sample has a
+* At 112–263M pairs the compute stage took **1.3–2.5× the model** (1.27, 2.46, 1.39). STAR's disk-backed BAM sort
+  took 18 and 46 min at 112M and 122M pairs, against 10.5 and 14 min of mapping. At 263M pairs, mapping took 47 min
+  against ~31 min modelled, and the sort 16.5 min. The nodes were shared with other jobs' I/O on `/tmp`, and the 5′ sample has a
   larger BAM (22 GB estimated).
 * The PBMC benchmark (66M pairs, an idle node) did not show this. Until the 50-sample validation measures it on more
   samples, `wall_scale` = 2.0 in `config.json`. Class choice and `dryrun` use it.
@@ -363,7 +367,7 @@ before anything over ~1,000 SU.
   sample would double as well (the `est_su` column is unscaled).
 
 **Memory.**
-* Compute peaked at 50–66 GB RSS. sacct reports the 80 GB cgroup limit, because the page cache is counted.
+* Compute peaked at 50–66 GB RSS up to 122M pairs and at 76 GB at 263M pairs (80 GB jobs). The classes now ask for 96/112/128/192 GB. sacct reports the cgroup limit, because the page cache is counted.
 * I/O peaked at 3.4 GB for a plain run. Pooling (`encode` of 122M pairs) and the bad head stream reached the 16 GB
   limit.
 
