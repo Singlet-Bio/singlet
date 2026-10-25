@@ -35,7 +35,7 @@ wc -l $BP/whitelists/3M-3pgex-may-2023.txt
 RLIB=$WORK/envs/rlib-benchpublic; mkdir -p $RLIB
 R_LIBS=$RLIB $WORK/envs/ambient/bin/Rscript -e '
   r <- "https://cloud.r-project.org"; lib <- Sys.getenv("R_LIBS")
-  for (p in c("remotes", "BiocManager")) if (!requireNamespace(p, quietly = TRUE)) install.packages(p, lib = lib, repos = r)
+  for (p in c("remotes", "BiocManager", "caret")) if (!requireNamespace(p, quietly = TRUE)) install.packages(p, lib = lib, repos = r)
   for (p in c("AnnotationDbi", "org.Hs.eg.db", "org.Mm.eg.db")) if (!requireNamespace(p, quietly = TRUE))
     BiocManager::install(p, lib = lib, update = FALSE, ask = FALSE)
   if (!requireNamespace("cellXY", quietly = TRUE)) remotes::install_github("phipsonlab/cellXY", lib = lib, upgrade = "never")

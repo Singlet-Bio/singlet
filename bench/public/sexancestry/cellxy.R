@@ -3,7 +3,7 @@
 #   Rscript cellxy.R <work>/sex          (every <work>/sex/mtx/<GSM>/ without a <work>/sex/cellxy/<GSM>.tsv)
 # Writes cellxy/<GSM>.tsv: col, pred_qc (classifySex default, qc = TRUE), pred_noqc (qc = FALSE), plus seconds per sample.
 # cellXY: phipsonlab/cellXY (GitHub; it is not in Bioconductor), installed by setup_r.sbatch.
-suppressPackageStartupMessages({ library(Matrix); library(cellXY) })
+suppressPackageStartupMessages({ library(Matrix); library(caret); library(cellXY) })   # caret: the models are caret train objects
 args <- commandArgs(trailingOnly = TRUE)
 work <- args[1]
 dir.create(file.path(work, "cellxy"), showWarnings = FALSE)
