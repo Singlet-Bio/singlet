@@ -125,9 +125,9 @@ def main():
             pcs = pcs[pcs.confirmed.astype(bool)]
         elif len(pcs):
             pcs = pcs[pcs.species_taxon_id.astype(int).isin(confirmed)]
-        pcs = pcs[pcs.barcode.isin(base.index)]
+        pcs = pcs[pcs.barcode.isin(base.index).astype(bool)]
         base["singlet_called_umi"] = pcs.groupby("barcode").n_umis.sum().reindex(base.index).fillna(0).astype(int)
-        s2 = pcs[pcs.species_name.map(NH.is_sars2)]
+        s2 = pcs[pcs.species_name.map(NH.is_sars2).astype(bool)]
         base["singlet_sars2_umi"] = s2.groupby("barcode").n_umis.sum().reindex(base.index).fillna(0).astype(int)
         # ---- Kraken2
         for tool, sub in KR.items():
@@ -142,7 +142,7 @@ def main():
             kp = kp[kp.barcode.isin(base.index)]
             col = NH.COL[tool]
             base[f"{col}_called_umi"] = kp[kp.taxid.isin(called)].groupby("barcode").umis.sum().reindex(base.index).fillna(0).astype(int)
-            base[f"{col}_sars2_umi"] = kp[kp["name"].map(NH.is_sars2)].groupby("barcode").umis.sum().reindex(base.index).fillna(0).astype(int)
+            base[f"{col}_sars2_umi"] = kp[kp["name"].map(NH.is_sars2).astype(bool)].groupby("barcode").umis.sum().reindex(base.index).fillna(0).astype(int)
             kt = gnu(kd / "run" / "time.txt")
             res_rows.append({"tool": tool, "dataset": ds, "wall_s": kt.get("wall", 0), "max_rss_gb": rss(kd / "run" / "mem.json"), "threads": 16,
                              "cpu_s": kt.get("cpu", 0), "node": read_nodes(kd / "node.txt"),
