@@ -16,6 +16,7 @@ decoded output equals the archive's, and the order-independent digest of the dec
 """
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -158,20 +159,33 @@ def compute(artifact_dir: Path) -> dict:
            "series": [{"name": "aggregate", "x": [TOOL[m] for m in TOOL], "y": [round(val(TOOL[m], "agg_mb_s") or 0, 2) for m in TOOL]},
                       {"name": "per stream", "x": [TOOL[m] for m in TOOL], "y": [round(val(TOOL[m], "stream_mb_s") or 0, 2) for m in TOOL]}]}
 
+    prov = json.loads((art / "provenance.json").read_text(encoding="utf-8"))
+    commit = prov["bench_commit"]
+
+    def g(tool, col):
+        return val(tool, col)
+
+    def f(x):
+        return "n/a" if x is None else f"{x:,.0f}"
+
+    conclusion = (f"Four concurrent streams of four 10x runs (132 M read pairs): Singlet's orchestrator I/O stage reaches {f(g('singlet', 'agg_mb_s'))} MB/s "
+                  f"effective ({f(g('singlet', 'agg_reads_s'))} read pairs/s) including two read screens, against {f(g('singlet-remote', 'agg_mb_s'))} MB/s for the remote "
+                  f"singlet download, {f(g('fasterq-dump', 'agg_mb_s'))} for fasterq-dump, {f(g('prefetch+fasterq-dump', 'agg_mb_s'))} for prefetch plus fasterq-dump, "
+                  f"{f(g('aws-s3', 'agg_mb_s'))} for AWS S3 (file only) and {f(g('ena-https', 'agg_mb_s'))} for ENA. Completeness is scored against NCBI's decode.")
     doc = {
         "schema": "singlet.benchmark.capability", "schema_version": "1.0.0", "capability": CAPABILITY,
-        "title": "SRA download orchestration", "conclusion": "", "methods": "", "status": "final", "generated_at": "",
-        "owner": "pipeline-benchmark", "singlet": C.SINGLET, "tools": [], "datasets": [],
-        "metrics": metrics, "resources": resources, "figures": [fig],
+        "title": "SRA download orchestration", "conclusion": conclusion, "methods": prov["methods"], "status": prov.get("status", "final"),
+        "generated_at": prov["generated_at"], "owner": "pipeline-benchmark", "singlet": prov["singlet"], "tools": prov["tools"],
+        "datasets": prov["datasets"], "metrics": metrics, "resources": resources, "figures": [fig],
         "artifacts": C.artifact_entries(art, CAPABILITY, {"reference": "truth", "sra_files": "truth", "streams": "derived", "digests": "derived",
-                                                          "memory": "derived"}),
-        "code": C.code_entries(CODE_COMMIT, [
+                                                          "memory": "derived", "provenance": "derived"}),
+        "code": C.code_entries(commit, [
             ("bench/public/capabilities/download.py", "metric"), ("bench/public/harness/download/dl_bench.sbatch", "harness"),
             ("bench/public/harness/download/dl_reference.sbatch", "harness"), ("bench/public/harness/download/fq_digest.py", "metric"),
             ("bench/public/harness/download/collect.py", "harness")]),
         "reproduce": {"module": "bench/public/capabilities/download.py", "function": "compute", "laptop_minutes": 1,
-                      "clipper_command": "sbatch bench/public/harness/download/dl_bench.sbatch 1 \"<modes>\""},
-        "caveats": [],
+                      "clipper_command": "sbatch bench/public/harness/download/dl_bench.sbatch <rep> \"<modes>\""},
+        "caveats": prov["caveats"],
     }
     return doc
 
