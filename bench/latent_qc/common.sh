@@ -24,7 +24,7 @@ command -v apptainer >/dev/null 2>&1 || { source /etc/profile.d/lmod.sh 2>/dev/n
 lqc_sync() {
   (
     flock -w 3600 9
-    git --git-dir="$REPO" fetch -q origin "+refs/heads/$STUDY_BRANCH:refs/heads/$STUDY_BRANCH" "+refs/heads/prod/modality-fixes:refs/lqc/prod"
+    git --git-dir="$REPO" fetch -q --refmap= origin "+refs/heads/$STUDY_BRANCH:refs/heads/$STUDY_BRANCH" "+refs/heads/prod/modality-fixes:refs/lqc/prod"
     for pair in "$SRC:refs/heads/$STUDY_BRANCH" "$PROD:refs/lqc/prod"; do
       d=${pair%%:*}; ref=${pair#*:}; tip=$(git --git-dir="$REPO" rev-parse "$ref")
       [ -e "$d/.git" ] || git --git-dir="$REPO" worktree add -q --detach "$d" "$tip"
