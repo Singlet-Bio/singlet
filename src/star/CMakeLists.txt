@@ -44,6 +44,14 @@ target_compile_options(singlet_star PRIVATE
     $<$<BOOL:${SINGLET_ENABLE_PGO_USE}>:-fprofile-use=${CMAKE_SOURCE_DIR}/data/pgo_profile>
 )
 
+# Experiment hook: extra flags for the STAR objects only (e.g. "-DSA_LAZY_WINBIN -DSA_HUGEPAGES"),
+# so variants rebuild STAR without touching the rest of the pipeline.
+set(SINGLET_STAR_EXTRA_FLAGS "" CACHE STRING "Extra compile flags for the bundled STAR objects")
+if(SINGLET_STAR_EXTRA_FLAGS)
+    separate_arguments(_star_extra UNIX_COMMAND "${SINGLET_STAR_EXTRA_FLAGS}")
+    target_compile_options(singlet_star PRIVATE ${_star_extra})
+endif()
+
 # STAR's Makefile injects these via -D flags; reproduce them here.
 string(TIMESTAMP _STAR_BUILD_DATE "%Y-%m-%dT%H:%M:%S")
 target_compile_definitions(singlet_star PRIVATE
