@@ -257,8 +257,7 @@ static void test_reverse_read1_uses_leftmost_mate() {
     assert(ex.unique_fragments() == 1);
     assert(ex.fragments()[0].start == 1004);
     assert(ex.fragments()[0].end == 1295);
-    std::printf("  test_reverse_read1_uses_leftmost_mate: PASS
-");
+    std::printf("  test_reverse_read1_uses_leftmost_mate: PASS\n");
 }
 
 // Duplicates are counted in read_pairs (fragments.tsv.gz column 5).
@@ -280,8 +279,7 @@ static void test_duplicate_count() {
     assert(ex.unique_fragments() == 2);
     assert(ex.fragments()[0].barcode_idx == 0 && ex.fragments()[0].read_pairs == 3);
     assert(ex.fragments()[1].barcode_idx == 1 && ex.fragments()[1].read_pairs == 1);
-    std::printf("  test_duplicate_count: PASS
-");
+    std::printf("  test_duplicate_count: PASS\n");
 }
 
 // Whitelist correction: reverse-complement 24 bp Multiome layout, exact and Hamming-1 reads, GEX translation.
@@ -313,8 +311,7 @@ static void test_corrector_layout_and_correction() {
     assert(cor.resolve(raw(far)) == -1);
     assert(cor.output_barcode(0) == "GGGGGGGGGGGGGGGG");
     assert(cor.output_barcode(2) == w2);               // unpaired entry falls back to the ATAC barcode
-    std::printf("  test_corrector_layout_and_correction: PASS
-");
+    std::printf("  test_corrector_layout_and_correction: PASS\n");
 }
 
 // The extractor resolves barcodes through the corrector when one is set.
@@ -330,8 +327,7 @@ static void test_extractor_with_corrector() {
     ex.process_record(b, nullptr);
     free_record(b);
     assert(ex.unique_fragments() == 1 && ex.fragments()[0].barcode_idx == 0);
-    std::printf("  test_extractor_with_corrector: PASS
-");
+    std::printf("  test_extractor_with_corrector: PASS\n");
 }
 
 int main() {
