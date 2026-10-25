@@ -83,10 +83,12 @@ are NaN, and `called_v2` = `called`. So the full `called_v2` set = `called` OR (
 * Monte Carlo p-values (`pvalue >= 1/(niters+1)`): exact, i.e. the same n_le. The C++ port draws with numba's MT19937
   streams, so the simulated paths are the same.
 * p-values of 0 (retained) and FDRs of 0: exact.
-* Tail p-values and all FDRs, on the log scale: `|ln got - ln expected| <= 1e-6 * max(1, |ln expected|)`
+* Tail p-values and all FDRs, on the log scale: `|ln got - ln expected| <= 1e-5 * max(1, |ln expected|)`
   (`tolerance.pvalue_tail_log_rel`, `tolerance.fdr_log_rel`). A tail p of 1e-150 has z near -26 and changes by |z| times
   any change in z, so tiny differences in `alpha` or in the summation order of the mean and sd give relative differences of
-  up to 1e-4 between machines while ln p agrees to 1e-7.
+  up to 1e-4 between machines. `alpha` comes from numpy's `polyfit` (LAPACK) and cannot be bit-identical in C++; its 1e-6
+  tolerance propagates to ~2e-6 in ln p (2.2e-6 measured on `real_pbmc1k_v3`), hence 1e-5. Everything else above stays
+  exact.
 * `alpha`: relative 1e-6 (bounded scalar minimisation, `xatol` 1e-4 in log alpha; Linux/numpy 2.5 and Windows/numpy 2.2
   agree to 1e-7). `retain_total`: relative 1e-9 (it is 10^log10(total) of one of the observed totals).
 
