@@ -1,0 +1,35 @@
+{
+ "shared": 22903,
+ "with_sbc_obs": 22794,
+ "empty_bundle": 3726,
+ "wrong_strand_gt50": 1278,
+ "good_gex": 10582,
+ "cells_singlet_sum_good": 47901845.0,
+ "cells_sbc_sum_good": 80041319.0,
+ "cell_ratio_median": 0.6681689185235349,
+ "cell_ratio_p10_p90": [
+  0.24152303634808808,
+  0.9477666787622845
+ ],
+ "share_singlet_fewer_cells": 0.9725004725004724,
+ "umi_ratio_median": 0.3219626957332816,
+ "umi_ratio_p10_p90": [
+  0.09738492221500458,
+  1.0091933190923494
+ ],
+ "depth_frac_median_good": 0.1348971873914429,
+ "umi_ratio_vs_depth_spearman": 0.43912380670366147,
+ "umi_ratio_median_full_depth": 0.8665107025696661,
+ "n_full_depth": 408,
+ "cell_ratio_median_full_depth": 0.861514099709445,
+ "median_umi_singlet": 1700.0,
+ "median_umi_sbc": 4874.0,
+ "median_genes_singlet": 807.5,
+ "median_genes_sbc": 1978.0,
+ "3_prime_gex_n": 8415,
+ "3_prime_gex_cell_ratio_median": 0.6716947648624667,
+ "3_prime_gex_umi_ratio_median": 0.28996886422092866,
+ "5_prime_gex_n": 2130,
+ "5_prime_gex_cell_ratio_median": 0.6539004596640932,
+ "5_prime_gex_umi_ratio_median": 0.4718590740710389
+}

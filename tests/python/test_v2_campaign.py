@@ -68,6 +68,38 @@ def test_headers_per_key_class():
     assert camp.object_headers("v2/ledger/GSE1.jsonl")[1] == "no-store"
 
 
+def test_local_store_survives_concurrent_writes_of_one_key(tmp_path):
+    """Workers upload a shared pack to the same key at once: no writer may clobber another's temporary file."""
+    import threading
+
+    store = camp.LocalStore(tmp_path)
+    data = b"x" * 200_000
+    errors = []
+
+    def put():
+        try:
+            for _ in range(20):
+                store.put_bytes(
+                    "b",
+                    "v2/ref/p.pack",
+                    data,
+                    content_type="application/octet-stream",
+                    cache_control="c",
+                )
+                assert store.head("b", "v2/ref/p.pack") is not None
+        except Exception as e:  # noqa: BLE001
+            errors.append(e)
+
+    threads = [threading.Thread(target=put) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == []
+    assert store.get_bytes("b", "v2/ref/p.pack") == data
+    assert [k for k, _ in store.list_keys("b", "v2/")] == ["v2/ref/p.pack"]
+
+
 # ── the happy path ────────────────────────────────────────────────────────────────────────────────────────────────────
 
 
