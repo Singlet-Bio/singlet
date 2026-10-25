@@ -64,6 +64,8 @@ class Params:
     min_hits: int = 2  # exact 15-mer hits for a segment call on a read
     min_barcode_umis: int = 2  # barcodes with fewer V(D)J UMIs are not assembled
     min_umi_reads: int = 2  # mates of a molecule, at least
+    min_contig_reads: int = 3  # mates of a kept contig
+    contig_read_frac: float = 0.05  # mates per UMI of a kept contig, against the library's read-weighted median
     umi_read_frac: float = 0.05  # and at least this share of the library's median mates per molecule
     threads: int = 8
 
@@ -289,6 +291,21 @@ def run_library(r1_paths: Sequence[str], r2_paths: Sequence[str], *, ref: Refere
     st["umis_low_support"] = int((mm_ < umi_thr).sum())
     keep_m = good[mol]
     sel, bci, mol = sel[keep_m], bci[keep_m], mol[keep_m]
+    # one chain per molecule (the majority of its mates): mates of another chain are chimeras or index hops, and as
+    # a contig of their own they carry other cells' junctions (pbmc2 TCR: 2 reads each against ~3,800 for real ones)
+    chain_m = mm[sel, 9].astype(np.int64)
+    ok_c = chain_m >= 0
+    mk = mol[ok_c].astype(np.int64) * 8 + chain_m[ok_c]
+    uk_, cnt_ = np.unique(mk, return_counts=True)
+    best_chain = np.full(len(gu), -1, np.int64)
+    o_ = np.lexsort((-cnt_, uk_ // 8))
+    sm_ = (uk_ // 8)[o_]
+    head = np.ones(len(o_), bool)
+    head[1:] = sm_[1:] != sm_[:-1]
+    best_chain[sm_[head]] = (uk_ % 8)[o_][head]
+    same = best_chain[mol] == chain_m
+    st["mates_other_chain"] = int((~same & ok_c).sum())
+    sel, bci, mol = sel[same], bci[same], mol[same]
     tm["barcodes_umis"] = time.time() - t1
 
     # barcodes worth assembling
@@ -476,7 +493,13 @@ def _annotate(ref: Reference, groups, sel, mm, cell_of, mol, ubc, cb_len, params
     df = pd.DataFrame(rows)
     df["barcode"] = [b + "-1" for b in S.decode(ubc[df["bcix"].to_numpy()], cb_len)]
     top = df.groupby(["bcix", "chain"])["umis"].transform("max")
-    df["high_confidence"] = (df["junction_umis"] >= params.min_junction_umis) & (df["umis"] >= params.min_umis)
+    # read support of a contig: mates per UMI against the library's typical depth (read-weighted median)
+    rpu = df["reads"] / df["umis"].clip(lower=1)
+    srt = np.sort(rpu.to_numpy())
+    w = np.cumsum(srt * df["umis"].to_numpy()[np.argsort(rpu.to_numpy())])
+    med = float(srt[np.searchsorted(w, w[-1] / 2)]) if len(srt) and w[-1] > 0 else 0.0
+    df["high_confidence"] = ((df["junction_umis"] >= params.min_junction_umis) & (df["umis"] >= params.min_umis)
+                             & (df["reads"] >= params.min_contig_reads) & (rpu >= params.contig_read_frac * med))
     df["kept"] = df["high_confidence"] & (df["umis"] >= params.min_frac * top)
     df = df.sort_values(["bcix", "chain", "umis"], ascending=[True, True, False]).reset_index(drop=True)
     df["contig_id"] = df["barcode"] + "_contig_" + (df.groupby("bcix").cumcount() + 1).astype(str)

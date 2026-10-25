@@ -23,8 +23,9 @@ METHODS=${METHODS:-"singlet trust4"}
 TIME="/usr/bin/time -v"
 if [[ " $METHODS " == *" singlet "* ]]; then
   $TIME python -P $SRC/bench/vdj/run_vdj.py --fastq-dir $D/fastqs --whitelist $WL --ref $WORK/state/vdjc/ref/vdj_human.tsv.gz \
-    --out $O/singlet --threads $T ${MAX_READS:+--max-reads $MAX_READS} 2> $O/singlet.time | tail -20
-  grep -E "Elapsed|Maximum resident" $O/singlet.time
+    --out $O/singlet${TAG:-} --threads $T ${MAX_READS:+--max-reads $MAX_READS} ${PARAMS:+$PARAMS} 2> $O/singlet${TAG:-}.time | tail -20
+  grep -E "Elapsed|Maximum resident" $O/singlet${TAG:-}.time
+  [ -n "${TAG:-}" ] && exit 0  # a parameter variant: no comparison
 fi
 if [[ " $METHODS " == *" trust4 "* ]]; then
   cat $(find $D/fastqs -name "*_R1_*.fastq.gz" | sort) > $SCRATCH/R1.fq.gz

@@ -32,6 +32,7 @@ def main(argv=None):
     ap.add_argument("--threads", type=int, default=16)
     ap.add_argument("--max-reads", type=int, default=None)
     ap.add_argument("--umi-len", type=int, default=None)
+    ap.add_argument("--param", action="append", default=[], help="assembler parameter override, e.g. umi_read_frac=0.02")
     a = ap.parse_args(argv)
 
     from singlet.adt import count as AC
@@ -55,13 +56,18 @@ def main(argv=None):
     wl_codes, bad = S.encode_strings(wl, 16)
     wl_codes = np.sort(wl_codes[bad == 0])
     ref = A.Reference.load(a.ref or a.species)
+    params = A.Params(threads=a.threads)
+    for kv in a.param:
+        k, v = kv.split("=", 1)
+        setattr(params, k, type(getattr(params, k))(v))
     res = A.run_library(r1, r2, ref=ref, cb_len=16, umi_len=umi_len, whitelist_codes=wl_codes,
-                        params=A.Params(threads=a.threads), max_reads=a.max_reads,
+                        params=params, max_reads=a.max_reads,
                         log=lambda *x: print(*x, flush=True))
     res.contigs.to_csv(os.path.join(a.out, "contigs.csv"), index=False)
     cells = CL.assign_clonotypes(CL.cell_table(res.contigs))
     cells.to_csv(os.path.join(a.out, "cells.csv"), index=False)
     run = {"fastqs": [os.path.basename(p) for p in r1], "r1_len": r1_len, "umi_len": umi_len, "stats": res.stats,
+           "params": vars(params),
            "timings_s": res.timings, "wall_s": time.time() - t0, "threads": a.threads,
            "peak_rss_gb": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6}
     with open(os.path.join(a.out, "run.json"), "w") as f:
