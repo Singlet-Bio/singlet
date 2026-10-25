@@ -1052,10 +1052,7 @@ inline double knee(const std::vector<int64_t>& totals, int64_t lower, int exclud
             any = true;
         }
     }
-    // cellcall.knee returns 10 ** log10(u), which is u give or take one ulp, and whether the barcodes with exactly that
-    // total are retained (tt >= retain) then depends on numpy's log10 (SVML on AVX-512 machines) and pow. The total
-    // itself is what the knee means (DropletUtils: retain = knee total, ">="), so the port returns it exactly.
-    return u[exclude_from + best];
+    return std::pow(10.0, ys[best]);
 }
 
 /// cellcall.plateau_lower

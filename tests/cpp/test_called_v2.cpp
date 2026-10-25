@@ -181,9 +181,7 @@ int main() {
         Result R = call(X, called, "", Params(), threads);
         std::string t = " (threads=" + std::to_string(threads) + ")";
         CHECK(R.lower == cv2fix::kLower, "plateau lower" + t);
-        // the port returns the knee total exactly; Python returns 10 ** log10(total), the same up to one ulp
-        CHECK(R.retain_total == std::round(cv2fix::kRetain) && std::fabs(R.retain_total - cv2fix::kRetain) < 1e-9,
-              "knee retain total" + t);
+        CHECK(bits(R.retain_total) == bits(cv2fix::kRetain), "knee retain total" + t);
         // np.polyfit (LAPACK gelsd) in the Good-Turing step is not reproduced bit for bit, so the ambient profile can
         // differ in the last bit; on this nearly multinomial (flat-likelihood) ambient pool that moves alpha slightly
         // and can move a Monte Carlo count by one. The call itself must not change.
