@@ -63,6 +63,12 @@ singlet)
   EXTRA=""
   [[ ${C[capabilities]} == *donor-demux* || ${C[capabilities]} == *genetic-ancestry* ]] && \
     EXTRA="--snps $REF/pileup_indices/genome1K.phase3.SNP_AF5e2.chr1toX.hg38.sorted.chrprefix.vcf.gz --tagged-bam --bam-sort-mode disk"
+  # pools with a known number of donors (the unknown-K test is the donor-demux owner's, with its own runs)
+  case $ID in
+    lcl_gse230239|osorio2019_lcl_mix) EXTRA="$EXTRA --n-donors 2" ;;
+    kang2018_ctrl) EXTRA="$EXTRA --n-donors 8" ;;
+    stoeckius2018_hashing) EXTRA="$EXTRA --n-donors 8" ;;
+  esac
   cd $SCR
   timed $O/time.txt $SINGLET_BIN $SCR/$ID.1fq --ref-base $REF --genome-dir $GENOME --exons $GTF \
     --out-prefix $O/ --threads $T --pipeline --output-format mtx --raw-matrix $EXTRA > $O/run.log 2>&1
