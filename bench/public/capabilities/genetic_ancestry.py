@@ -75,7 +75,7 @@ def compute(artifact_dir: Path) -> dict:
                 cov[t] = named.mean()
                 cis_pub[t], cis_top[t] = _wilson(int(pub_ok.sum()), n), _wilson(int(top_ok.sum()), n)
                 fig_series[t].append(r(acc_pub[t]))
-            tag = f"{L}M"
+            tag = f"{L}m"
             add(f"accuracy.{tag}", f"Individuals whose published label is their 1000 Genomes super-population ({L}M read pairs)",
                 "fraction", "accuracy", ds, acc_pub, cis_pub,
                 notes=f"{n} individuals; Singlet's label is 'admixed' below q = 0.8, which counts as wrong here; 95% Wilson CI")
@@ -111,11 +111,13 @@ def compute(artifact_dir: Path) -> dict:
             vals = {}
             for t in tools:
                 x = d[d["tool"] == t]
-                if ds == "osorio2019_lcl_mix":  # no per-cell truth: the two donors must carry EUR and AFR
+                if not len(x):
+                    vals[t] = None  # tool not run on this dataset
+                elif ds == "osorio2019_lcl_mix":  # no per-cell truth: the two donors must carry EUR and AFR
                     want = {"EUR", "AFR"}
-                    vals[t] = len(want & set(x["call"].dropna())) / 2 if len(x) == 2 else 0.0
+                    vals[t] = len(want & set(x["call"].dropna())) / 2
                 else:
-                    vals[t] = float((x["call"] == x["super_population"]).mean()) if len(x) else None
+                    vals[t] = float((x["call"] == x["super_population"]).mean())
             if vals.get("singlet") is None:
                 continue
             add("donor_accuracy", "Pool donors given their individual's super-population (single-cell, end to end)",
