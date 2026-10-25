@@ -64,7 +64,7 @@ geo|sra)
         N=$(( CAP * 1000000 / ${#RUNS[@]} ))
         fastq-dump -X $N --split-files --gzip -O $r $r
       else
-        prefetch -q -O $SCR $r && fasterq-dump -q -e 8 -t $SCR -O $r $SCR/$r && pigz -p 8 $r/*.fastq; rm -rf $SCR/$r
+        prefetch -q --max-size 500G -O $SCR $r && fasterq-dump -q -e 8 --include-technical -S -t $SCR -O $r $SCR/$r && pigz -p 8 $r/*.fastq; rm -rf $SCR/$r
       fi
       # SRA names reads <run>_1/_2/_3; map to 10x-style names so classify() and the runners treat them alike
       for f in $r/${r}_*.fastq.gz; do i=$(basename $f .fastq.gz); i=${i##*_}; mv $f $r/${r}_S1_L001_R${i}_001.fastq.gz; done

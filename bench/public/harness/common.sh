@@ -20,8 +20,9 @@ mkdir -p $BP/{data,runs,artifacts,results,work} $WORK/logs
 cohort_row() {
   declare -gA C=()
   local hdr row i
-  IFS=$'\t' read -r -a hdr < <(grep -v '^#' $COHORT | head -1)
-  IFS=$'\t' read -r -a row < <(grep -v '^#' $COHORT | awk -F'\t' -v id="$1" '$1==id')
+  # one field per line: `read -a` with IFS=tab would collapse empty fields and shift every later column
+  mapfile -t hdr < <(grep -v '^#' $COHORT | head -1 | awk -F'\t' '{for (i = 1; i <= NF; i++) print $i}')
+  mapfile -t row < <(grep -v '^#' $COHORT | awk -F'\t' -v id="$1" '$1==id {for (i = 1; i <= NF; i++) print $i}')
   [ ${#row[@]} -gt 0 ] || { echo "no cohort row $1" >&2; return 1; }
   for i in "${!hdr[@]}"; do C[${hdr[$i]}]="${row[$i]:-}"; done
 }
