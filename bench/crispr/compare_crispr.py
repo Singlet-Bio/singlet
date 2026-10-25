@@ -168,6 +168,8 @@ def main(argv=None):
     ap.add_argument("--cr-h5", default=None, help="Cell Ranger matrix with the CRISPR features: counting concordance")
     ap.add_argument("--columns", default=None, help="columns of counts.npz (one barcode per line)")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--artifacts", default=None, help="also write the capability artifacts to this directory")
+    ap.add_argument("--dataset", default=None, help="cohort dataset id (artifact file prefix)")
     a = ap.parse_args(argv)
     from singlet.crispr import assign as AS
     from singlet.crispr import guides as G
@@ -226,14 +228,6 @@ def main(argv=None):
         labs["cellranger_thresholds_on_singlet_counts"] = lab
     if a.cr_h5 and counts is not None:
         counting_res = counting_concordance(a.cr_h5, counts, list(base["barcode"]))
-    cells = sorted(set(ref["barcode"]) & set(base["barcode"]))
-    res = {"reference": os.path.basename(a.reference), "level": level, "cells_compared": len(cells),
-           "reference_cells": int(len(ref)), "run_called_cells": int(len(base))}
-    if counting_res is not None:
-        res["counting_vs_cellranger"] = counting_res
-    R = ref.set_index("barcode").loc[cells].reset_index()
-    if level == "target":
-        R = R.assign(guide_ids=R["target"])
     # expression for knockdown (caller-independent)
     expr, kd_cells = None, None
     if a.gex:
@@ -250,6 +244,76 @@ def main(argv=None):
         sub = adata[[obs_of[c] for c in kd_cells]].to_memory()
         genes = list(sub.var["gene_name"]) if "gene_name" in sub.var else list(sub.var_names)
         expr = _cp10k_targets(sub.X, genes, [t for t in set(lib.target_gene) if t])
+    ref = ref.drop(columns=[c for c in ("_obs_name",) if c in ref])
+    if a.artifacts:
+        write_artifacts(a.artifacts, a.dataset, labs, ref, level, expr, kd_cells, lib, counting_res)
+    res = evaluate(labs, ref, level, expr, kd_cells, gt, gk)
+    res["reference"] = os.path.basename(a.reference)
+    if counting_res is not None:
+        res["counting_vs_cellranger"] = counting_res
+    with open(a.out, "w") as f:
+        json.dump(res, f, indent=1, default=float)
+    print(json.dumps(res, indent=1, default=float))
+
+
+LABEL_COLUMNS = ["barcode", "guide_ids", "n_guides", "class", "target"]
+
+
+def write_artifacts(out, dataset, labs, ref, level, expr, kd_cells, lib, counting_res):
+    """Small tables the capability module recomputes every metric from (bench/public CONTRACT.md section 5)."""
+    os.makedirs(out, exist_ok=True)
+    for c, lab in labs.items():
+        lab[LABEL_COLUMNS].to_csv(os.path.join(out, f"{dataset}.calls.{c}.csv.gz"), index=False)
+    ref[[c for c in LABEL_COLUMNS if c in ref]].to_csv(os.path.join(out, f"{dataset}.reference.csv.gz"), index=False)
+    lib.to_frame()[["id", "target_gene", "kind"]].to_csv(os.path.join(out, f"{dataset}.guides.csv.gz"), index=False)
+    if expr is not None:
+        rows = []
+        for t, v in expr.items():
+            nz = np.flatnonzero(v)
+            rows.append(pd.DataFrame({"barcode": np.asarray(kd_cells)[nz], "gene": t, "cp10k": np.round(v[nz], 4)}))
+        pd.concat(rows, ignore_index=True).to_csv(os.path.join(out, f"{dataset}.target_expr.csv.gz"), index=False)
+        with open(os.path.join(out, f"{dataset}.expr_cells.txt"), "w") as f:
+            f.write("\n".join(kd_cells) + "\n")
+    with open(os.path.join(out, f"{dataset}.meta.json"), "w") as f:
+        json.dump({"level": level, "counting_vs_cellranger": counting_res,
+                   "expr_targets": sorted(expr) if expr is not None else []}, f, indent=1, default=float)
+
+
+def read_artifacts(d, dataset):
+    """Inverse of :func:`write_artifacts` -> (labs, ref, level, expr, kd_cells, gt, gk, meta)."""
+    import glob
+
+    labs = {}
+    for p in sorted(glob.glob(os.path.join(d, f"{dataset}.calls.*.csv.gz"))):
+        labs[os.path.basename(p).split(".calls.")[1][:-len(".csv.gz")]] = pd.read_csv(p, keep_default_na=False)
+    ref = pd.read_csv(os.path.join(d, f"{dataset}.reference.csv.gz"), keep_default_na=False)
+    g = pd.read_csv(os.path.join(d, f"{dataset}.guides.csv.gz"), keep_default_na=False)
+    gt, gk = dict(zip(g["id"], g["target_gene"])), dict(zip(g["id"], g["kind"]))
+    meta = json.load(open(os.path.join(d, f"{dataset}.meta.json")))
+    expr, kd_cells = None, None
+    pc = os.path.join(d, f"{dataset}.expr_cells.txt")
+    if os.path.exists(pc):
+        kd_cells = [x.strip() for x in open(pc) if x.strip()]
+        pos = {c: i for i, c in enumerate(kd_cells)}
+        e = pd.read_csv(os.path.join(d, f"{dataset}.target_expr.csv.gz"))
+        expr = {t: np.zeros(len(kd_cells)) for t in meta.get("expr_targets", [])}
+        for t, sub in e.groupby("gene"):
+            v = expr.setdefault(t, np.zeros(len(kd_cells)))
+            v[sub["barcode"].map(pos).to_numpy()] = sub["cp10k"].to_numpy()
+    return labs, ref, meta["level"], expr, kd_cells, gt, gk, meta
+
+
+def evaluate(labs, ref, level, expr, kd_cells, gt, gk):
+    """Every CRISPR metric from labels, the reference and target expression (the harness and the capability module)."""
+    from singlet.crispr import assign as AS
+
+    base = labs["singlet"]
+    cells = sorted(set(ref["barcode"]) & set(base["barcode"]))
+    res = {"level": level, "cells_compared": len(cells), "reference_cells": int(len(ref)),
+           "run_called_cells": int(len(base))}
+    R = ref.set_index("barcode").loc[cells].reset_index()
+    if level == "target":
+        R = R.assign(guide_ids=R["target"])
     for c, lab in labs.items():
         L = lab.set_index("barcode")
         Lc = L.loc[cells].reset_index()
@@ -266,38 +330,36 @@ def main(argv=None):
             if level == "target":
                 tl = K["target"].fillna("").astype(str)
                 ntk = tl.map(lambda x: len([y for y in x.split("|") if y]))
-                K = K.assign(guide_ids=tl, target=tl, **{"class": np.where(ntk == 1, "single", np.where(ntk == 0, "unassigned", "multiple"))})
-                K["kind"] = np.where(tl.isin(["non-targeting"]), "non-targeting", np.where(tl == "unidentified", "unidentified", "targeting"))
+                K = K.assign(guide_ids=tl, target=tl,
+                             **{"class": np.where(ntk == 1, "single", np.where(ntk == 0, "unassigned", "multiple"))})
+                K["kind"] = np.where(tl.isin(["non-targeting"]), "non-targeting",
+                                     np.where(tl == "unidentified", "unidentified", "targeting"))
             else:
                 K["kind"] = K["guide_ids"].map(lambda s: gk.get(s, "multiple") if "|" not in s else "multiple")
                 K["target"] = K["guide_ids"].map(lambda s: gt.get(s, ""))
-            exprK = {t: v for t, v in expr.items()}
-            df, kd = knockdown_stats(K, exprK)
+            df, kd = knockdown_stats(K, expr)
             m.update({f"kd_{k}": v for k, v in kd.items()})
-            df.to_csv(os.path.join(a.run, f"knockdown_{c}.csv"), index=False)
         res[c] = m
-    # discordant cells: Singlet single vs reference unassigned / other caller
-    if expr is not None:
+    # cells only one caller assigns: is their perturbation real?
+    if expr is not None and level == "guide":
         S = labs["singlet"].set_index("barcode").loc[kd_cells]
         for other in [k for k in labs if k != "singlet"]:
             O = labs[other].set_index("barcode").loc[kd_cells]
             for name, a_, b_ in (("singlet_only", S, O), (f"{other}_only", O, S)):
                 sel = (a_["class"] == "single") & (b_["class"] == "unassigned")
-                K = a_[sel].reset_index()
-                if len(K) < 5:
-                    res.setdefault("discordant", {})[f"{name}_vs_{other}"] = {"cells": int(len(K))}
+                if sel.sum() < 5:
+                    res.setdefault("discordant", {})[f"{name}_vs_{other}"] = {"cells": int(sel.sum())}
                     continue
                 Kall = a_.reset_index().copy()
-                Kall.loc[~(sel.to_numpy() | ((a_["class"] == "single") & (a_["guide_ids"].map(lambda s: gk.get(s)) == "non-targeting")).to_numpy()), "class"] = "x"
+                ctrl = (a_["class"] == "single") & (a_["guide_ids"].map(lambda s: gk.get(s)) == "non-targeting")
+                Kall.loc[~(sel.to_numpy() | ctrl.to_numpy()), "class"] = "x"
                 Kall["kind"] = Kall["guide_ids"].map(lambda s: gk.get(s, "multiple"))
                 Kall["target"] = Kall["guide_ids"].map(lambda s: gt.get(s, ""))
                 _, kd = knockdown_stats(Kall, expr, min_cells=3)
                 res.setdefault("discordant", {})[f"{name}_vs_{other}"] = {"cells": int(sel.sum()), **kd}
     if expr is not None and "cellranger_published" in labs:
         res["multiplet_check"] = multiplet_check(labs["singlet"], labs["cellranger_published"], expr, gt, gk, kd_cells)
-    with open(a.out, "w") as f:
-        json.dump(res, f, indent=1, default=float)
-    print(json.dumps(res, indent=1, default=float))
+    return res
 
 
 if __name__ == "__main__":
