@@ -9,9 +9,16 @@
 // UnivariateSpline knots, numpy's quantile, the Good-Turing proportions). Regenerate it with
 // `python -P bench/called_v2/make_cpp_fixture.py` whenever the reference changes.
 
+#include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <string>
 #include <vector>
 
 #include "called_v2_fixture.h"
@@ -145,6 +152,166 @@ bool pv_agree(const Result& R, const int* tested, const double* ref, int64_t n, 
     std::printf("    p: %d Monte Carlo p-values differ (max |diff| %.3g), tail max rel diff %.3g (alpha %s)\n", mc_diff,
                 mc_max, tail_rel, alpha_equal ? "bit-equal" : "within xatol");
     return bad == 0 && mc_diff <= mc_tol;
+}
+
+// ── shared golden vectors (tests/data/called_v2_golden/, format singlet-called-v2-golden/1; README there) ──
+
+std::string slurp(const std::string& path) {
+    std::ifstream f(path, std::ios::binary);
+    std::stringstream ss;
+    ss << f.rdbuf();
+    return ss.str();
+}
+
+/// The number after "key": inside the JSON object text `obj` (NaN for null or absent). Enough for case.json.
+double json_num(const std::string& obj, const std::string& key) {
+    auto p = obj.find("\"" + key + "\"");
+    if (p == std::string::npos) return std::nan("");
+    p = obj.find(':', p);
+    while (p + 1 < obj.size() && std::isspace(static_cast<unsigned char>(obj[p + 1]))) ++p;
+    if (obj.compare(p + 1, 4, "null") == 0) return std::nan("");
+    return std::strtod(obj.c_str() + p + 1, nullptr);
+}
+
+std::string json_str(const std::string& obj, const std::string& key) {
+    auto p = obj.find("\"" + key + "\"");
+    if (p == std::string::npos) return "";
+    p = obj.find('"', obj.find(':', p));
+    return obj.substr(p + 1, obj.find('"', p + 1) - p - 1);
+}
+
+bool rel_ok(double got, double want, double tol) {
+    if (std::isnan(want)) return std::isnan(got);
+    if (want == 0) return got == 0;
+    return std::fabs(got / want - 1) <= tol;
+}
+
+void golden_case(const std::string& dir, const std::string& name) {
+    const std::string cj = slurp(dir + "/case.json");
+    const auto ep = cj.find("\"expected\"");
+    const std::string ex = cj.substr(ep, cj.find('}', ep) - ep);
+    const std::string opts = cj.substr(cj.find("\"options\""), cj.find('}', cj.find("\"options\"")) - cj.find("\"options\""));
+    if (opts.find(':', 10) != std::string::npos && opts.find('"', 10) != std::string::npos) {
+        CHECK(false, "golden " + name + ": parameter overrides are not supported by this reader");
+        return;
+    }
+    // counts.mtx: genes x barcodes, 1-based, sorted by column then row
+    GeneCounts X;
+    {
+        std::ifstream f(dir + "/counts.mtx");
+        std::string line;
+        while (std::getline(f, line) && !line.empty() && line[0] == '%') {}
+        long long m, n, nnz;
+        std::istringstream(line) >> m >> n >> nnz;
+        X.nrows = static_cast<uint32_t>(m);
+        X.ncols = static_cast<uint32_t>(n);
+        X.indptr.assign(n + 1, 0);
+        long long i, j, v;
+        while (f >> i >> j >> v) {
+            X.indices.push_back(static_cast<int32_t>(i - 1));
+            X.data.push_back(v);
+            ++X.indptr[j];
+        }
+        for (long long c = 0; c < n; ++c) X.indptr[c + 1] += X.indptr[c];
+    }
+    std::vector<uint8_t> called;
+    {
+        std::ifstream f(dir + "/called.txt");
+        int v;
+        while (f >> v) called.push_back(static_cast<uint8_t>(v));
+    }
+    struct Row {
+        int col;
+        double p, q;
+        int cv2;
+    };
+    std::vector<Row> rows;
+    {
+        std::ifstream f(dir + "/expected.tsv");
+        std::string line;
+        std::getline(f, line);
+        while (std::getline(f, line)) {
+            if (line.empty()) continue;
+            std::istringstream ss(line);
+            Row r;
+            long long tot;
+            ss >> r.col >> tot >> r.p >> r.q >> r.cv2;
+            rows.push_back(r);
+        }
+    }
+    CHECK(called.size() == X.ncols && X.indices.size() == static_cast<size_t>(X.indptr.back()),
+          "golden " + name + ": inputs read");
+    const double floor_p = 1.0 / static_cast<double>(Params().niters + 1);
+    const double alpha_ref = json_num(ex, "alpha");
+    // Two passes. "free": the call as the pipeline runs it; everything discrete must be exact, alpha agrees to
+    // fminbound's xatol (1e-4 in log alpha: the Good-Turing np.polyfit is not bit-exact, and on a flat likelihood a
+    // last-bit change moves the minimiser within its tolerance, which then shifts Monte Carlo counts and tail p).
+    // "pinned": alpha fixed to the reference value; then the README tolerances must hold for p-values and FDRs.
+    for (int pass = 0; pass < 2; ++pass)
+        for (int threads : {1, 4}) {
+            Params P;
+            if (pass == 1) P.alpha_override = alpha_ref;
+            Result R = call(X, called, json_str(cj, "protocol"), P, threads);
+            const std::string t =
+                "golden " + name + (pass ? " pinned alpha" : " free") + " (threads=" + std::to_string(threads) + "): ";
+            CHECK(R.lower == static_cast<int64_t>(json_num(ex, "lower")) && R.n_ambient == json_num(ex, "n_ambient") &&
+                      R.ambient_umi == json_num(ex, "ambient_umi") && R.n_tested == json_num(ex, "n_tested") &&
+                      rel_ok(R.retain_total, json_num(ex, "retain_total"), 1e-9),
+                  t + "lower, ambient pool, tested (exact), retain_total (1e-9)");
+            if (pass == 0) {
+                std::printf("    %salpha C++ %.17g, reference %.17g (rel %.2g)\n", t.c_str(), R.alpha, alpha_ref,
+                            R.alpha / alpha_ref - 1);
+                CHECK(rel_ok(R.alpha, alpha_ref, 1e-4), t + "alpha (fminbound xatol)");
+            }
+            CHECK(R.n_tail == json_num(ex, "n_tail") && R.n_called_v2 == json_num(ex, "n_called_v2") &&
+                      R.n_added == json_num(ex, "n_added"),
+                  t + "n_tail, n_called_v2, n_added (exact)");
+            int64_t ntested = 0;
+            for (size_t j = 0; j < X.ncols; ++j) ntested += !std::isnan(R.pvalue[j]);
+            int set_diff = 0, mc_diff = 0, tail_bad = 0, fdr_bad = 0;
+            double tail_rel = 0;
+            for (const Row& r : rows) {
+                set_diff += (R.called_v2[r.col] != r.cv2);
+                const double p = R.pvalue[r.col];
+                if (r.p > 0 && r.p < floor_p) {
+                    tail_bad += !rel_ok(p, r.p, 1e-6);
+                    tail_rel = std::max(tail_rel, std::fabs(p / r.p - 1));
+                } else if (!(p == r.p)) {
+                    ++mc_diff;
+                    if (pass == 1)
+                        std::printf("      col %d: p C++ %.17g, reference %.17g (%+.3f counts)\n", r.col, p, r.p,
+                                    (p - r.p) / floor_p);
+                }
+                fdr_bad += !rel_ok(R.fdr[r.col], r.q, 1e-6) && !(std::fabs(R.fdr[r.col] - r.q) < 1e-7);
+            }
+            std::printf("    %s%d called_v2, %d Monte Carlo p, %d tail p (max rel %.2g), %d FDR differ\n", t.c_str(),
+                        set_diff, mc_diff, tail_bad, tail_rel, fdr_bad);
+            CHECK(ntested == static_cast<int64_t>(rows.size()) && set_diff == 0, t + "tested set and called_v2 (exact)");
+            if (pass == 1) {
+                CHECK(mc_diff == 0 && tail_bad == 0, t + "p-values (Monte Carlo exact, tail 1e-6)");
+                CHECK(fdr_bad == 0, t + "FDR (1e-6)");
+            }
+        }
+}
+
+/// Every case under tests/data/called_v2_golden/ (skipped, with a note, when the directory is absent).
+void golden_vectors() {
+#ifdef CV2_GOLDEN_DIR
+    const std::string root = CV2_GOLDEN_DIR;
+#else
+    const std::string root = "tests/data/called_v2_golden";
+#endif
+    namespace fs = std::filesystem;
+    if (!fs::is_directory(root)) {
+        std::printf("    golden vectors: %s absent, skipped\n", root.c_str());
+        return;
+    }
+    std::vector<std::string> cases;
+    for (const auto& e : fs::directory_iterator(root))
+        if (e.is_directory() && fs::exists(e.path() / "case.json")) cases.push_back(e.path().filename().string());
+    std::sort(cases.begin(), cases.end());
+    CHECK(!cases.empty(), "golden vectors present");
+    for (const auto& c : cases) golden_case(root + "/" + c, c);
 }
 
 }  // namespace
@@ -322,6 +489,9 @@ int main() {
             CHECK(n_floor >= 5 && mu_rel < 1e-12 && sd_rel < 1e-9 && p_rel < 1e-8, "kernel: null mean / sd / tail p" + t);
         }
     }
+
+    // ── the golden vectors shared with python/singlet/v2/cellcall.py ──
+    golden_vectors();
 
     // combinatorial protocols keep the stored call
     {

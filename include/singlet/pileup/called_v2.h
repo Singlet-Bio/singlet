@@ -62,6 +62,9 @@ struct Params {
     std::string retain = "knee";         ///< "knee" or "none"
     int64_t niters = 10000;
     int64_t seed = 20261023;
+    /// tests only: use this alpha instead of the MLE (NaN = fit it). The golden-vector test pins the reference alpha to check
+    /// the rest of the call exactly, because alpha itself agrees only to fminbound's xatol (np.polyfit is not bit-exact).
+    double alpha_override = std::numeric_limits<double>::quiet_NaN();
 };
 
 /// genes x barcodes counts, CSC, row indices ascending within each column.
@@ -86,6 +89,7 @@ struct Result {
     int64_t lower = -1;
     double retain_total = std::numeric_limits<double>::quiet_NaN();  ///< NaN = None
     int64_t n_ambient = 0, ambient_umi = 0, n_tested = 0;
+    int64_t n_tail = 0;  ///< tested barcodes whose p came from the tail extrapolation (2.1)
     double alpha = std::numeric_limits<double>::quiet_NaN();
     int64_t n_called = 0, n_called_v2 = 0, n_added = 0;
     std::string error;
@@ -601,11 +605,15 @@ inline Spline curfit(const std::vector<double>& x, const std::vector<double>& y,
             }
         }
         (void)stop_nest;
-        if (restart_interp) {  // FITPACK relocates the knots as for interpolation; not reached for the knee
-            out.ier = -1;
-            out.t.assign(t.begin(), t.begin() + n);
-            out.c.assign(c.begin(), c.begin() + n);
-            return out;
+        if (restart_interp) {
+            // fpcurf "if(n.eq.nmax) go to 10": place the interior knots as for interpolation (k odd: t(k2..) =
+            // x(k/2+2..)) and run the main loop again with them; the least-squares fit then interpolates (fp ~ 0 < s),
+            // so part 2 smooths on these knots. Reached by short fits (the curve-bounded knee on a few points).
+            n = nmax;
+            const int mk1 = m - k1, k3 = k / 2;
+            int ti = k2, xj = k3 + 2;
+            for (int ll = 1; ll <= mk1; ++ll) t[(ti++) - 1] = x[(xj++) - 1];
+            continue;
         }
     }
     if (!to_part2) {  // ran out of trials
@@ -1039,7 +1047,7 @@ inline double spline_knee(const std::vector<double>& xs, const std::vector<doubl
     double s = static_cast<double>(xs.size()) * var * 0.002;
     if (!(s > 0)) return nan;
     detail::Spline spl = detail::curfit(xs, ys, s);
-    if (spl.ier == -1 || spl.t.size() < 8) return nan;
+    if (spl.t.size() < 8) return nan;  // ier = -1 (interpolating spline) is a valid FITPACK result, as in scipy
     detail::Spline d1s = detail::splder(spl), d2s = detail::splder(d1s);
     std::vector<double> d1 = detail::splev(d1s, xs), d2 = detail::splev(d2s, xs);
     size_t best = 0;
@@ -1113,7 +1121,8 @@ inline double ndtr(double a) {
     const double s = 0.70710678118654752440;  // NPY_SQRT1_2
     double x = a * s, z = std::fabs(x);
     if (z < s) return 0.5 + 0.5 * std::erf(x);
-    double y = 0.5 * std::erfc(z);
+    // cephes erfc underflows to 0 once z * z > MAXLOG (libm would return subnormals there)
+    double y = z * z > 7.09782712893383996843e2 ? 0.0 : 0.5 * std::erfc(z);
     return x > 0 ? 1.0 - y : y;
 }
 
@@ -1361,7 +1370,7 @@ inline Result call(const GeneCounts& X, const std::vector<uint8_t>& called, cons
     std::vector<int64_t> asum(X.nrows, 0);
     for (size_t p = 0; p < A.indices.size(); ++p) asum[A.indices[p]] += A.data[p];
     std::vector<double> prop = good_turing_proportions(asum);
-    double alpha = dm_alpha_mle(A, prop);
+    double alpha = std::isnan(P.alpha_override) ? dm_alpha_mle(A, prop) : P.alpha_override;
     R.alpha = alpha;
     const size_t nt = ti.size();
     std::vector<double> pv(nt, 1.0 / static_cast<double>(P.niters + 1));
@@ -1392,6 +1401,7 @@ inline Result call(const GeneCounts& X, const std::vector<uint8_t>& called, cons
                 // so that BH can pass more than n_tested * fdr / floor barcodes in small samples
                 double z = (lp[s] - mu[s]) / std::max(sd[s], 1e-12);
                 pv[simpos[s]] = std::min(ndtr(z), floor_p);
+                ++R.n_tail;
             }
             R.log_prob[simcols[s]] = lp[s];
         }
@@ -1549,6 +1559,7 @@ inline std::string params_json(const Result& R, const std::string& indent = "  "
       << indent << "  \"ambient_umi\": " << R.ambient_umi << ",\n"
       << indent << "  \"n_tested\": " << R.n_tested << ",\n"
       << indent << "  \"alpha\": " << num(R.alpha) << ",\n"
+      << indent << "  \"n_tail\": " << R.n_tail << ",\n"
       << indent << "  \"n_called\": " << R.n_called << ",\n"
       << indent << "  \"n_called_v2\": " << R.n_called_v2 << ",\n"
       << indent << "  \"n_added\": " << R.n_added << ",\n"

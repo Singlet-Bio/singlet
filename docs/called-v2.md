@@ -28,6 +28,15 @@ The parameters record `version: "2.1"`. Recommended calls (truth-check script): 
 depended on the bug**: in GSE108313/GSM2895282 the unbounded knee was 112 and 15,832 barcodes were auto-retained. At FDR
 0.001 the honest singlet recall is **81%** (19,212 cells, 11,302 singlets added), 87% at FDR 0.01.
 
+C++ check (Clipper, `bench/called_v2_truth/verify_cpp.sbatch`): the port run on the stored counts of the six truth-check
+runs (`cv2_stored`) gives exactly the script's recommended barcode sets on all six (Kang 16,573, hgmm1k_v3 1,026,
+neuron1k_v3 1,355, nuclei2k_v2 2,376, pbmc1k_v3 1,190, pbmc5p_v1 8,399), with every Monte Carlo p-value equal.
+`tests/cpp/test_called_v2.cpp` also reads the shared golden vectors (`tests/data/called_v2_golden/`, once present):
+discrete results exact, alpha to fminbound's `xatol` (the Good-Turing `np.polyfit` is not bit-exact, and on a flat
+likelihood that moves alpha by up to ~3e-5 relative, which moves Monte Carlo counts and tail p-values but not the call),
+and with alpha pinned to the reference value every Monte Carlo p exact and tail p to 1e-6. The vectors found one port gap,
+fixed here: FITPACK's restart with interpolation knots (`n == nmax`), which short curve-bounded fits reach.
+
 Status: the C++ port (`include/singlet/pileup/called_v2.h`, `knee_bounded`, tail p in `call`) carries 2.1 on
 `prod/atlas-rerun`. **`python/singlet/v2/cellcall.py` must receive the identical change** (owned by the v2 team; branch
 `fix/called-v2-knee-bounds`). Until it lands, the reference the C++ fixture is generated from is the patched copy
