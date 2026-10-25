@@ -12,10 +12,7 @@
 set -euo pipefail
 WORK=/mnt/projects/debruinz_project/debruinz/singlet
 ENV=$WORK/envs/vdjcrispr
-BRANCH=claude/vdj-crispr-benchmark-721d3a
-SRC=$WORK/src/singlet-py/${BRANCH//\//__}
-git -C $WORK/repos/singlet-py.git fetch -q origin "+refs/heads/$BRANCH:refs/heads/$BRANCH"
-git -C $SRC checkout -q --detach "$BRANCH"; git -C $SRC log --oneline -1
+source $WORK/jobs/vdjc/src.sh
 export PATH=$ENV/bin:$PATH PYTHONPATH=$SRC/python HOME=$WORK/cache/condahome NUMBA_CACHE_DIR=$WORK/cache/numba-vdjc
 D=$WORK/data/vdjc/$DS
 O=$WORK/state/vdjc/runs/$DS; mkdir -p $O
@@ -32,7 +29,7 @@ fi
 if [[ " $METHODS " == *" trust4 "* ]]; then
   cat $(ls $D/fastqs/*/*_R1_*.fastq.gz | sort) > $SCRATCH/R1.fq.gz
   cat $(ls $D/fastqs/*/*_R2_*.fastq.gz | sort) > $SCRATCH/R2.fq.gz
-  r1len=$(zcat $SCRATCH/R1.fq.gz | head -2 | tail -1 | tr -d '\n' | wc -c)
+  r1len=$( (zcat $SCRATCH/R1.fq.gz 2>/dev/null || true) | head -2 | tail -1 | tr -d '\n' | wc -c)
   R4=$WORK/data/vdjc/trust4
   mkdir -p $O/trust4
   if [ "$r1len" -gt 60 ]; then  # R1 carries insert after barcode, UMI and TSO: use both mates
