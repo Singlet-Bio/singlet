@@ -223,28 +223,41 @@ def write_tsv(path, cols):
             f.write("\t".join(str(cols[k][i]) if not isinstance(cols[k][i], float) else f"{cols[k][i]:.6g}" for k in keys) + "\n")
 
 
+def _parse_time(p):
+    wall = cpu = rss = 0.0
+    for ln in open(p):
+        ln = ln.strip()
+        if ln.startswith("Elapsed (wall clock)"):
+            t = [float(x) for x in ln.split("): ")[1].split(":")]
+            wall = t[-1] + 60 * t[-2] + (3600 * t[-3] if len(t) == 3 else 0)
+        elif ln.startswith("User time") or ln.startswith("System time"):
+            cpu += float(ln.split(": ")[1])
+        elif ln.startswith("Maximum resident"):
+            rss = float(ln.split(": ")[1]) / 1048576
+    return wall, cpu / 3600, rss
+
+
 def timings(runs, ds):
+    """Per tool: wall_s, cpu_h, max_rss_gb. Singlet is reported with and without its .1fq encode step (encode_* keys)."""
     out = {}
-    for tool, extra in (("alevinfry", ["time.txt"]), ("starsolo", ["time.txt"]), ("singlet", ["encode.time.txt", "time.txt"])):
-        wall = cpu = 0.0; rss = 0.0; ok = True
-        for fn in extra:
-            p = os.path.join(runs, ds, tool, fn)
-            if not os.path.exists(p):
-                ok = False; continue
-            for ln in open(p):
-                ln = ln.strip()
-                if ln.startswith("Elapsed (wall clock)"):
-                    t = ln.split("): ")[1].split(":")
-                    t = [float(x) for x in t]
-                    wall += t[-1] + 60 * t[-2] + (3600 * t[-3] if len(t) == 3 else 0)
-                elif ln.startswith("User time"):
-                    cpu += float(ln.split(": ")[1])
-                elif ln.startswith("System time"):
-                    cpu += float(ln.split(": ")[1])
-                elif ln.startswith("Maximum resident"):
-                    rss = max(rss, float(ln.split(": ")[1]) / 1048576)
-        if ok:
-            out[tool] = {"wall_s": wall, "cpu_h": cpu / 3600, "max_rss_gb": rss}
+    for tool in ("alevinfry", "starsolo", "singlet"):
+        p = os.path.join(runs, ds, tool, "time.txt")
+        if not os.path.exists(p):
+            continue
+        w, c, r = _parse_time(p)
+        d = {"wall_s": w, "cpu_h": c, "max_rss_gb": r}
+        if tool == "singlet":
+            pe = os.path.join(runs, ds, tool, "encode.time.txt")
+            if os.path.exists(pe):
+                we, ce, re_ = _parse_time(pe)
+                d.update({"encode_wall_s": we, "encode_cpu_h": ce, "encode_rss_gb": re_,
+                          "wall_s_with_encode": w + we, "cpu_h_with_encode": c + ce, "max_rss_gb": max(r, re_)})
+        if tool == "alevinfry":
+            pq = os.path.join(runs, ds, tool, "time_quant_em.txt")
+            if os.path.exists(pq):
+                wq, cq, _ = _parse_time(pq)
+                d.update({"em_quant_wall_s": wq, "em_quant_cpu_h": cq})
+        out[tool] = d
     return out
 
 
@@ -295,7 +308,7 @@ def main():
         h5 = cr_path(a.data, ds)
         cr = L.load_cr_h5(h5)
         tools = tool_set(a.runs, ds, a.layout)
-        r = {"timing": timings(a.runs, ds), "read_accounting": read_accounting(a.runs, ds)}
+        r = {"timing": timings(a.runs, ds), "timing_t4": timings(a.runs, ds + "_t4") if os.path.isdir(os.path.join(a.runs, ds + "_t4")) else {}, "read_accounting": read_accounting(a.runs, ds)}
         if ds.startswith("hgmm"):
             r["barnyard"] = barnyard(ds, tools, cr, chrom, a.out)
             tot = np.asarray(cr.X.sum(1)).ravel()

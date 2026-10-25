@@ -6,10 +6,10 @@
 #SBATCH --mem=120G
 #SBATCH --time=03:59:00
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
-# Exact vs pseudo-alignment: run alevin-fry (splici / USA), STARsolo and Singlet on ONE real dataset,
+# Exact vs pseudo-alignment: run alevin-fry (splici / USA), STARsolo and Singlet on ONE real dataset (threads = --cpus-per-task),
 # one after the other on the SAME node with the SAME 16 threads, reading the SAME FASTQs and the SAME reference.
 #   sbatch run_dataset.sbatch <hgmm1k_v3|pbmc1k_cite_v3|pbmc1k_v3>
-# Output: $OUT/<dataset>/<tool>/ with GNU time -v in time.txt (wall, user+sys CPU, max RSS).
+# Output: $OUT/<dataset>[_t<threads> when not 16]/<tool>/ with GNU time -v in time.txt. Use --cpus-per-task=4 for the 4-thread run.
 set -euo pipefail
 ID=$1; T=$SLURM_CPUS_PER_TASK
 WORK=/mnt/projects/debruinz_project/debruinz/singlet
@@ -26,7 +26,7 @@ case $ID in
   *) echo "unknown dataset $ID"; exit 2 ;;
 esac
 UMILEN=12; WL=$PB/whitelists/3M-february-2018.txt; STRAND=Forward; AFCHEM=10xv3; AFORI=fw
-D=$PB/data/$ID; O=$OUT/$ID; mkdir -p $O
+D=$PB/data/$ID; O=$OUT/$ID; [ "$T" -ne 16 ] && O=$OUT/${ID}_t$T; mkdir -p $O
 SCR=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
 R1=$(grep "_R1_" $D/gex_fastqs.txt | paste -sd,); R2=$(grep "_R2_" $D/gex_fastqs.txt | paste -sd,)
 GENOME=$REF/$SPECIES/star_2.7.11b; GTF=$REF/$SPECIES/genes/genes.gtf
