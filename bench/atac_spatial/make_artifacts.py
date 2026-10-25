@@ -81,7 +81,7 @@ if a.what == "atac":
     if c is not None:
         j = j.join(c, how="outer")
     if a.gex:
-        cc = pd.read_csv(f"{a.gex}/cell_calls.tsv", sep="	", dtype={"barcode": str})
+        cc = pd.read_csv(f"{a.gex}/cell_calls.tsv", sep="\t", dtype={"barcode": str})
         col = "called_v2" if "called_v2" in cc else "called"
         j["singlet_gex_called"] = pd.Series(cc[col].astype(int).values, index=strip(cc.barcode)).reindex(j.index).fillna(0).astype(int)
     for col in ("tenx_is_cell", "singlet_is_cell"):
