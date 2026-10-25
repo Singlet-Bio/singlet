@@ -123,8 +123,8 @@ R.to_csv(f"{OUT}/per_dataset.csv", index=False)
 R["synthetic"] = R.dataset.isin(SYNTH)
 summ = (R[~R.synthetic].groupby("method")[["auroc", "auprc", "recall_at_rate"]].agg(["mean", "median", "count"]).round(3))
 summ.to_csv(f"{OUT}/summary_real.csv")
-wide = R.pivot_table(index="dataset", columns="method", values="auroc").round(3)
-wide_p = R.pivot_table(index="dataset", columns="method", values="auprc").round(3)
+wide = R[~R.synthetic].pivot_table(index="dataset", columns="method", values="auroc").round(3)
+wide_p = R[~R.synthetic].pivot_table(index="dataset", columns="method", values="auprc").round(3)
 wide.to_csv(f"{OUT}/auroc_wide.csv")
 wide_p.to_csv(f"{OUT}/auprc_wide.csv")
 # per-dataset wins of each method against production
@@ -142,40 +142,66 @@ pd.DataFrame(win).round(4).to_csv(f"{OUT}/vs_prod.csv", index=False)
 cost = R.dropna(subset=["seconds"]).assign(sec_per_10k=lambda x: x.seconds / x.cells * 1e4).groupby("method").sec_per_10k.median()
 cost.round(2).to_csv(f"{OUT}/cost_sec_per_10k_cells.csv")
 
-# ---- homotypic blind spot
-hom = []
-if "kang21_homsim" in feats:
-    F, y, d = feats["kang21_homsim"]
-    typ = d["x_dbl_type"]
-    for m, s in F.items():
+# ---- homotypic blind spot, on real labels only: genotype / hashtag doublets of the PBMC pools split by what the atlas network
+# sees. "one lineage" = >= 0.9 of the network's mass on one lineage (T, NK, B, monocyte, ...): an expression method sees one cell.
+hom_rows, comp = [], []
+PBMC = [n for n in feats if n not in SYNTH and (n.startswith("pbmc") or n == "kang21")]
+pool = {}
+for n in PBMC:
+    p = f"{SCORES}/{n}/lineage_prob.npy"
+    if not os.path.exists(p):
+        continue
+    F, y, d = feats[n]
+    L = np.load(p)
+    srt = np.sort(L, 1)
+    cls = np.where(srt[:, -1] >= 0.9, "one_lineage", np.where(srt[:, -2] >= 0.2, "two_lineages", "unclear"))
+    sing = (y == 0) & (srt[:, -1] >= 0.9)
+    frac = np.bincount(L[sing].argmax(1), minlength=L.shape[1]) / max(sing.sum(), 1)
+    comp.append(dict(dataset=n, doublets=int(y.sum()), one_lineage=float(np.mean(cls[y == 1] == "one_lineage")),
+                     two_lineages=float(np.mean(cls[y == 1] == "two_lineages")),
+                     singlets_one_lineage=float(np.mean(cls[y == 0] == "one_lineage")),
+                     expected_same_lineage_pairs=float((frac ** 2).sum())))
+    allF = dict(F)
+    for k in ("x_vireo_geno", "x_prod_geno"):
+        if k in d:
+            allF[k[2:]] = d[k]
+    for m, sc in allF.items():
         if m == "genes":
             continue
-        k = int((typ > 0).sum())
-        top = np.zeros(len(s), bool)
-        top[np.argsort(-s, kind="stable")[:k]] = True
-        hom.append(dict(method=m, recall_heterotypic=top[typ == 2].mean(), recall_homotypic=top[typ == 1].mean(),
-                        auroc_het_vs_singlet=roc_auc_score(np.r_[np.zeros((typ == 0).sum()), np.ones((typ == 2).sum())],
-                                                           np.r_[s[typ == 0], s[typ == 2]]),
-                        auroc_hom_vs_singlet=roc_auc_score(np.r_[np.zeros((typ == 0).sum()), np.ones((typ == 1).sum())],
-                                                           np.r_[s[typ == 0], s[typ == 1]])))
-pd.DataFrame(hom).round(3).to_csv(f"{OUT}/homotypic_sim.csv", index=False)
-# real genotype doublets in Kang lane 2.1, split by whether the atlas network calls them one confident type
-hk = []
-if "kang21" in feats:
-    F, y, d = feats["kang21"]
-    am = np.load(f"{SCORES}/kang21/ct_maxprob.npy") if os.path.exists(f"{SCORES}/kang21/ct_maxprob.npy") else None
-    if am is not None:
-        conf = (1 - am) >= 0.8
         k = int(y.sum())
-        allF = dict(F, vireo_geno=d["x_vireo_geno"], prod_geno=d["x_prod_geno"])
-        for m, s in allF.items():
-            if m == "genes":
-                continue
-            top = np.zeros(len(s), bool)
-            top[np.argsort(-s, kind="stable")[:k]] = True
-            hk.append(dict(method=m, doublets_one_confident_type=int((y & conf).sum()), recall_one_type=top[(y == 1) & conf].mean(),
-                           doublets_mixed=int((y & ~conf).sum()), recall_mixed=top[(y == 1) & ~conf].mean()))
-pd.DataFrame(hk).round(3).to_csv(f"{OUT}/kang_homotypic_proxy.csv", index=False)
+        top = np.zeros(len(sc), bool)
+        top[np.argsort(-sc, kind="stable")[:k]] = True
+        for c in ("one_lineage", "two_lineages"):
+            sel = (y == 1) & (cls == c)
+            a_ = pool.setdefault((m, c), [0, 0, 0])
+            a_[0] += int(top[sel].sum()); a_[1] += int(sel.sum()); a_[2] += 1
+for (m, c), (tp, nn_, nd) in pool.items():
+    hom_rows.append(dict(method=m, cls=c, datasets=nd, doublets=nn_, recall_at_truth_rate=tp / max(nn_, 1)))
+hom = pd.DataFrame(hom_rows)
+if len(hom):
+    hom = hom.pivot_table(index="method", columns="cls", values="recall_at_truth_rate").round(3).reset_index()
+    hom.columns.name = None
+hom.to_csv(f"{OUT}/homotypic_real.csv", index=False)
+comp = pd.DataFrame(comp).round(3)
+comp.to_csv(f"{OUT}/homotypic_composition.csv", index=False)
+
+# ---- per-study means (the Kang lanes are six datasets of one study) and paired tests against production
+from scipy.stats import wilcoxon
+
+Rr = R[~R.synthetic].assign(study=lambda x: x.dataset.map(lambda n: STUDY.get(n, n)))
+per_study = Rr.groupby(["method", "study"])[["auroc", "auprc"]].mean().groupby("method").mean().round(3)
+per_study.columns = ["auroc_mean_over_studies", "auprc_mean_over_studies"]
+tests = []
+for m in Rr.method.unique():
+    j = Rr[Rr.method == m].set_index("dataset")[["auprc", "auroc"]].join(base[["auprc", "auroc"]], rsuffix="_p", how="inner")
+    if len(j) >= 5 and m != "prod":
+        dd = (j.auprc - j.auprc_p).values
+        tests.append(dict(method=m, n=len(j), auprc_delta_median=np.median(dd), better=int((dd > 0).sum()),
+                          wilcoxon_p=wilcoxon(dd).pvalue if np.any(dd != 0) else 1.0))
+tests = pd.DataFrame(tests).round(4)
+per_study.to_csv(f"{OUT}/per_study_means.csv")
+tests.to_csv(f"{OUT}/paired_vs_prod.csv", index=False)
+
 
 def md(df, index=True):
     try:
@@ -191,6 +217,7 @@ with open(f"{OUT}/results.md", "w") as f:
     f.write("## AUROC\n\n" + md(wide) + "\n\n## AUPRC\n\n" + md(wide_p) + "\n\n")
     f.write("## vs production (real datasets)\n\n" + md(pd.DataFrame(win).round(4), False) + "\n\n")
     f.write("## cost, median seconds per 10k cells\n\n" + md(cost.round(2)) + "\n\n")
-    f.write("## homotypic simulation (Kang singlets + 5% homotypic + 5% heterotypic)\n\n" + md(pd.DataFrame(hom).round(3), False))
-    f.write("\n\n## Kang 2.1 genotype doublets: one confident atlas type vs mixed\n\n" + md(pd.DataFrame(hk).round(3), False) + "\n")
+    NL = chr(10)
+    f.write("## per-study means" + NL * 2 + md(per_study) + NL * 2 + "## paired AUPRC vs production" + NL * 2 + md(tests, False) + NL * 2)
+    f.write("## real doublets by atlas lineage (PBMC pools)" + NL * 2 + md(comp, False) + NL * 2 + md(hom, False) + NL)
 print(open(f"{OUT}/results.md").read())

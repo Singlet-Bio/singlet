@@ -13,4 +13,6 @@ git --git-dir=$W/repos/singlet-py.git fetch -q origin +refs/heads/study/latent-q
 git --git-dir=$W/repos/singlet-py.git show refs/heads/study/latent-qc:bench/latent_qc/common.sh > /tmp/lqc_common_$SLURM_JOB_ID.sh
 source /tmp/lqc_common_$SLURM_JOB_ID.sh; lqc_sync
 B=$SRC/bench/latent_qc/doublets; export PYTHONPATH=$B
+L=""; for n in kang21 pbmc-1A-dm pbmc-1B-dm pbmc-1C-dm pbmc-2ctrl-dm pbmc-2stim-dm pbmc-ch; do [ -f $LQC/dbl/scores/$n/lineage_prob.npy ] || L="$L $n"; done
+[ -z "$L" ] || rtt env PYTHONPATH=$B:$TORCH:$WORK/src/singlet-py/claude__celltype-nn/python python $B/ct_lineage.py $L
 rt env PYTHONPATH=$B python $B/evaluate.py $LQC/dbl/eval
