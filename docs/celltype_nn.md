@@ -96,7 +96,7 @@ tissue groups (`tissue_context`). In training that context comes from Census `ti
 same GEO text the guide reads, through the same matcher. It is withheld for 30% of training cells, so the model also works
 without it.
 
-**Network.** An MLP, 6,000 (+30) → 2,048 → 1,024 → 822 CL terms. LayerNorm, GELU, dropout 0.4, input dropout 0.3; AdamW
+**Network.** An MLP, 6,000 (+30) → 2,048 → 822 CL terms (one hidden layer). LayerNorm, GELU, dropout 0.4, input dropout 0.3; AdamW
 (lr 1e-3, weight decay 0.1), one-cycle schedule, 8 epochs. The epoch with the best validation closure likelihood is kept
 (clean plus augmented validation cells). Training takes about 7 minutes on one H100 for 2.6M cells.
 
@@ -148,7 +148,8 @@ Members against author labels on corpus training cells, CL level:
 
 Hyperparameters were chosen on the validation collections only. The sweep covered:
 - dropout and weight decay;
-- width, 1,024-512 against 2,048-1,024;
+- width: two layers of 1,024 and 512 against one layer of 2,048. The sweep runs meant to have 2,048 and 1,024 got a single
+  2,048 layer, because `sbatch --export` splits values at commas; that single layer is the configuration measured and kept;
 - transform: log, z-scored log, rank;
 - learning rate.
 

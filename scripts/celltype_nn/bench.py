@@ -90,6 +90,7 @@ def main(argv=None) -> int:
     ap.add_argument("--max-cells", type=int, default=30000)
     ap.add_argument("--threads", type=int, default=int(os.environ.get("SLURM_CPUS_PER_TASK", os.cpu_count() or 1)))
     ap.add_argument("--save-probs", type=Path, default=None, help="write per-cell NN outputs for the scored cells here")
+    ap.add_argument("--thresholds", default="0.3+0.4+0.6+0.7+0.8", help="extra roll-up thresholds for the network's call")
     a = ap.parse_args(argv)
 
     import pandas as pd
@@ -103,6 +104,9 @@ def main(argv=None) -> int:
     from ensemble_run import load_singler
 
     methods = [m for m in re.split(r"[,+]", a.methods) if m]  # "+" too: sbatch --export splits values on commas
+    a.thresholds = [float(t) for t in re.split(r"[,+]", a.thresholds) if t]
+    if "nn" in methods:
+        methods += [f"nn@{t:g}" for t in a.thresholds]
     onto = ontology()
     pred = CellTypePredictor.load(a.model)
     xws = json.loads((a.data / "celltypist_crosswalk.json").read_text()) if (a.data / "celltypist_crosswalk.json").exists() else {}
@@ -150,6 +154,9 @@ def main(argv=None) -> int:
                 summ = pred.summarise(P)
                 calls["nn"], scores["nn"] = summ["call"], summ["call_prob"]
                 calls["nn_argmax"], scores["nn_argmax"] = summ["argmax"], summ["argmax_prob"]
+                for tau in a.thresholds:
+                    st = pred.summarise(P, threshold=tau)
+                    calls[f"nn@{tau:g}"], scores[f"nn@{tau:g}"] = st["call"], st["call_prob"]
                 extra["nn"] = dict(seconds=secs, s_per_million=secs * a.threads / len(s.col) * 1e6,
                                    s_per_million_with_read=(secs + t_read) * a.threads / len(s.col) * 1e6)
                 if a.save_probs is not None:
@@ -199,7 +206,7 @@ def main(argv=None) -> int:
                 rep = EV.report(g, truth, node[tr], np.asarray(scores[m], np.float32)[tr])
                 rep["cl"] = cl_consistency(onto, cl[tr], truth)
                 rep["coverage"] = float(np.mean([isinstance(c, str) for c in cl]))
-                if m.startswith("nn"):
+                if m.startswith("nn") and "@" not in m:
                     rep["calibration_subtree"] = calibration(np.asarray(scores[m], np.float64)[tr], subtree_correct(onto, cl[tr], truth))
                 rep.update(extra.get(m, {}))
                 rec["methods"][m] = rep
