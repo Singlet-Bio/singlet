@@ -348,7 +348,9 @@ def main():
     ver = ""
     if a.tool in VERSIONS:
         try:
-            ver = sh(VERSIONS[a.tool]).stdout.strip().splitlines()[-1]
+            v = subprocess.run(VERSIONS[a.tool], capture_output=True, text=True)
+            ver = [x for x in (v.stdout + "
+" + v.stderr).splitlines() if x.strip()][-1].strip()
         except Exception:
             ver = "unknown"
     rec = {"tool": a.tool, "dataset": a.dataset, "wall_s": round(wall, 1),
