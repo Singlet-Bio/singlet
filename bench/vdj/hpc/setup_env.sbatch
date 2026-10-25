@@ -27,7 +27,11 @@ if [ ! -f $ENV/.ok ]; then rm -rf $ENV; mamba create -y -p $ENV -c conda-forge -
 export PATH=$ENV/bin:$PATH PYTHONPATH=$SRC/python NUMBA_CACHE_DIR=$WORK/cache/numba-vdjc
 python -c "import numba, dnaio, sklearn, scanpy; print('py ok', numba.__version__, dnaio.__version__)"
 run-trust4 2>&1 | head -3 || true
-ls $ENV/share/trust4* 2>/dev/null | head
+# TRUST4's own references (IMGT-derived), for the comparison runs only
+mkdir -p $WORK/data/vdjc/trust4
+for f in human_IMGT+C.fa hg38_bcrtcr.fa mouse/GRCm38_bcrtcr.fa mouse/mouse_IMGT+C.fa; do
+  [ -s $WORK/data/vdjc/trust4/$(basename $f) ] || curl -fsSL -o $WORK/data/vdjc/trust4/$(basename $f)     https://raw.githubusercontent.com/liulab-dfci/TRUST4/master/$f || echo "missing $f"; done
+ls -la $WORK/data/vdjc/trust4
 R=$WORK/data/references/junctions
 mkdir -p $WORK/state/vdjc/ref
 python -P -m singlet.vdj.reference $R/GRCh38-2024-A/GRCh38.primary_assembly.genome.fa.gz \
