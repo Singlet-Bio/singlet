@@ -27,8 +27,8 @@ if [[ " $METHODS " == *" singlet "* ]]; then
   grep -E "Elapsed|Maximum resident" $O/singlet.time
 fi
 if [[ " $METHODS " == *" trust4 "* ]]; then
-  cat $(ls $D/fastqs/*/*_R1_*.fastq.gz | sort) > $SCRATCH/R1.fq.gz
-  cat $(ls $D/fastqs/*/*_R2_*.fastq.gz | sort) > $SCRATCH/R2.fq.gz
+  cat $(find $D/fastqs -name "*_R1_*.fastq.gz" | sort) > $SCRATCH/R1.fq.gz
+  cat $(find $D/fastqs -name "*_R2_*.fastq.gz" | sort) > $SCRATCH/R2.fq.gz
   r1len=$( (zcat $SCRATCH/R1.fq.gz 2>/dev/null || true) | head -2 | tail -1 | tr -d '\n' | wc -c)
   R4=$WORK/data/vdjc/trust4
   mkdir -p $O/trust4
