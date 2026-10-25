@@ -34,7 +34,7 @@ for _i in range(64):
     CODON[_b[_i // 16] + _b[(_i // 4) % 4] + _b[_i % 4]] = _aa[_i]
 J_MOTIF = re.compile(r"[FW]G.G")
 # a V segment named like one but annotated otherwise (GENCODE v44: TRBV11-2 is "lncRNA", TRBV21-1 a pseudogene) is kept
-# when its own sequence is an open V (start codon frame without a stop before an in-frame Cys104), as IMGT's ORFs are
+# when its own sequence is an open V (a frame with at most one stop before an in-frame Cys104), as IMGT's ORFs are
 V_NAME = re.compile(r"^(TR[ABGD]|IG[HKL])V\d")
 
 
@@ -143,12 +143,13 @@ def _j_anchor(seq: str):
 
 
 def _open_v_frame(seq: str) -> int:
-    """Frame of an unannotated V: the frame with a Cys104 anchor and no stop before it, preferring one that starts
-    with ATG; -1 when there is none (a real pseudogene)."""
+    """Frame of an unannotated V: the frame with a Cys104 anchor and at most one stop before it (the reference allele
+    can carry a stop that donors' functional alleles lack: GRCh38 TRAV35), preferring one that starts with ATG; -1
+    when there is none (a real pseudogene)."""
     best = -1
     for fr in range(3):
         anc = _v_anchor(seq, fr)
-        if anc < 0 or "*" in translate(seq[fr:anc + 3]):
+        if anc < 0 or translate(seq[fr:anc + 3]).count("*") > 1:
             continue
         if seq[fr:fr + 3] == "ATG":
             return fr
