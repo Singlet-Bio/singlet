@@ -99,7 +99,7 @@ Reads were taken as every k-th pair across all runs.
 
 | sample | read pairs used | cells | median UMIs/cell | saturation |
 |---|---|---|---|---|
-| GSM5815984 (adrenal, 2 runs) | 31M | 9,527 | 1,814 | 3% |
+| GSM5815984 (testis, GSE193672, 2 runs) | 31M | 9,527 | 1,814 | 3% |
 | | 61M | 9,675 | 3,471 | 7% |
 | | 122M | 9,772 | 6,461 | 13% |
 | | 245M | 9,926 | 11,327 | 23% |
