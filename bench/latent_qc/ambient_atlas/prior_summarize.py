@@ -29,9 +29,15 @@ for nn in sorted(g.n.unique()):
         common = a.index.intersection(b.index)
         for metric, sign in (("kl", 1), ("tv", 1), ("spearman", -1)):
             d = (b[metric][common] - a[metric][common]) * sign  # negative = prior-shrunk empirical is better
-            st = a.gse[common]
-            studies = st.unique()
-            bs = [np.mean(np.concatenate([d[st == s].values for s in rng.choice(studies, len(studies))])) for _ in range(400)]
+            st = a.gse[common].values
+            dv = d.values
+            u, inv = np.unique(st, return_inverse=True)
+            sums = np.bincount(inv, weights=dv, minlength=len(u))
+            cnts = np.bincount(inv, minlength=len(u)).astype(float)
+            bs = []
+            for _ in range(400):
+                pk = rng.integers(0, len(u), len(u))
+                bs.append(sums[pk].sum() / cnts[pk].sum())
             rows.append(dict(n=nn, contrast=f"{nm} vs emp_alone", metric=metric, n_samples=len(common), mean_delta_prior_minus_alone=d.mean() * sign,
                              ci_lo=np.percentile(bs, 2.5) * sign if sign > 0 else np.percentile(bs, 97.5) * sign,
                              ci_hi=np.percentile(bs, 97.5) * sign if sign > 0 else np.percentile(bs, 2.5) * sign,
