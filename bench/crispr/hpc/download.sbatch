@@ -38,5 +38,7 @@ for run in SRR19331011 SRR19331013 SRR19331010 SRR19331014; do
     rm -rf $T
   fi
 done
+# guide library: Cell Table S1 (sgRNA content of the three libraries)
+get https://ars.els-cdn.com/content/image/1-s2.0-S0092867422005979-mmc2.xlsx $o/replogle2022_tableS1.xlsx
 get https://ndownloader.figshare.com/files/35773219 $o/K562_essential_raw_singlecell_01.h5ad
 du -sh $D/*

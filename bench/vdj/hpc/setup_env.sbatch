@@ -23,8 +23,9 @@ else git -C $WORK/repos/singlet-py.git worktree add --detach $SRC "$BRANCH"; fi
 git -C $SRC log --oneline -1
 if [ ! -f $ENV/.ok ]; then rm -rf $ENV; mamba create -y -p $ENV -c conda-forge -c bioconda --strict-channel-priority \
   python=3.12 numpy scipy pandas pyarrow anndata h5py scikit-learn numba matplotlib zstandard requests dnaio isa-l \
-  sra-tools pigz trust4 scanpy pytest && touch $ENV/.ok; fi
+  sra-tools pigz trust4 scanpy pytest openpyxl && touch $ENV/.ok; fi
 export PATH=$ENV/bin:$PATH PYTHONPATH=$SRC/python NUMBA_CACHE_DIR=$WORK/cache/numba-vdjc
+$ENV/bin/python -c "import openpyxl" 2>/dev/null || $ENV/bin/pip install -q openpyxl
 python -c "import numba, dnaio, sklearn, scanpy; print('py ok', numba.__version__, dnaio.__version__)"
 run-trust4 2>&1 | head -3 || true
 # TRUST4's own references (IMGT-derived), for the comparison runs only

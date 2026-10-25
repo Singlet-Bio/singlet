@@ -29,6 +29,8 @@ SCAFFOLDS = {
     "cr_default": "GTTTAAGAGCTAAGCTGGAAACAGCATAGCAAGTT",
     "replogle_cs1": "GTTTCAGAGCTATGCTGGAAACAGCATAGCAAGTT",
 }
+# dual-guide vectors (Replogle 2022): protospacer A before a GTTTCAGAGC scaffold, B before GTTTAAGAGC
+DUAL_ANCHORS = ("GTTTCAGAGC|GTTTAAGAGC",)
 ANCHOR_LEN = 12
 
 
@@ -37,7 +39,8 @@ class Geometry:
     """Where the protospacer is in R2: ``anchor`` (constant sequence right after it, sense) or a fixed ``offset``."""
 
     length: int
-    anchor: Optional[str] = None  # protospacer = R2[pos - length : pos] where R2[pos:] starts with anchor
+    anchor: Optional[str] = None  # protospacer = R2[pos - length : pos] where R2[pos:] starts with anchor; several
+    # anchors separated by "|" (dual-guide vectors: each protospacer has its own scaffold variant)
     offset: Optional[int] = None  # protospacer = R2[offset : offset + length]
     reverse: bool = False  # R2 is antisense (reverse-complement it first)
 
@@ -71,11 +74,11 @@ def parse_pattern(pattern: str, length: int) -> Geometry:
 def extract(r2: bytes, g: Geometry) -> Optional[bytes]:
     s = rc(r2) if g.reverse else r2
     if g.anchor is not None:
-        a = g.anchor.encode()
-        i = s.find(a)
-        if i < g.length:
-            return None
-        return s[i - g.length:i]
+        for a in g.anchor.split("|"):
+            i = s.find(a.encode())
+            if i >= g.length:
+                return s[i - g.length:i]
+        return None
     o = g.offset or 0
     w = s[o:o + g.length]
     return w if len(w) == g.length else None
@@ -89,8 +92,8 @@ def detect_geometry(r2_sample: Sequence[bytes], length: int = 20, guides: Option
     cands: List[Tuple[float, float, Geometry]] = []
     for rev in (False, True):
         seqs = [rc(s) for s in r2_sample] if rev else list(r2_sample)
-        for name, sc in SCAFFOLDS.items():
-            g = Geometry(length, anchor=sc[:ANCHOR_LEN], reverse=rev)
+        for sc in [v[:ANCHOR_LEN] for v in SCAFFOLDS.values()] + list(DUAL_ANCHORS):
+            g = Geometry(length, anchor=sc, reverse=rev)
             ws = [extract(s, g) for s in seqs]
             found = sum(w is not None for w in ws) / n
             hit = sum(w in gset for w in ws if w is not None) / n if gset else found
