@@ -15,4 +15,4 @@ OUT=$WORK/state/adt/hto_zenodo
 export PATH=$WORK/envs/adt-bench/bin:$PATH LD_LIBRARY_PATH=$WORK/envs/adt-bench/lib:$WORK/envs/adt/lib
 export PYTHONPATH=$SRC/python HOME=$WORK/cache/condahome OMP_NUM_THREADS=4
 [ -f $OUT/published/batch1_published_calls.csv ] || Rscript $SRC/bench/adt/export_rds_calls.R $Z $OUT/published
-python -P $SRC/bench/adt/hto_zenodo.py --zenodo $Z --published $OUT/published --out $OUT ${METHODS:+--methods $METHODS}
+python -P $SRC/bench/adt/hto_zenodo.py --zenodo $Z --published $OUT/published --out $OUT ${METHODS:+--methods $METHODS} ${VARIANTS:+--variants}
