@@ -164,3 +164,12 @@ def test_transforms_are_depth_invariant_where_claimed():
     assert np.allclose(transform(x * 7, "log"), transform(x, "log"))  # scaled to the cell's total
     z = transform(x, "logz")
     assert abs(z.mean()) < 1e-5
+
+
+def test_pool_celltypist_without_models_gives_no_calls():
+    from singlet.celltype_nn.ensemble import pool_celltypist, vote
+
+    c = pool_celltypist({}, {}, n=3)
+    assert len(c.cl) == 3 and all(x is None for x in c.cl)
+    v = vote([np.array([CD8, None, B_CELL], object), c.cl, np.array([CD8, CD4, None], object)])
+    assert v[0] == CD8 and v[1] == CD4 and v[2] == B_CELL

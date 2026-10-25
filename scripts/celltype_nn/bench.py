@@ -174,7 +174,7 @@ def main(argv=None) -> int:
             if "celltypist" in methods or "vote" in methods:
                 t0 = time.time()
                 raw = run_celltypist(s.X, s.gene_names, s.species, s.tissue, a.celltypist_models)
-                pooled = pool_celltypist(raw, xws, onto)
+                pooled = pool_celltypist(raw, xws, onto, n=len(s.col))
                 calls["celltypist"], scores["celltypist"] = pooled.cl, pooled.score
                 extra["celltypist"] = dict(seconds=time.time() - t0, models=sorted(raw))
             if "singler" in methods or "vote" in methods:

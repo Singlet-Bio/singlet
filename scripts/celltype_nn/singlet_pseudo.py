@@ -132,7 +132,7 @@ def cmd_run(a) -> int:
                 take = np.sort(rng.permutation(s.X.shape[0])[: a.cells])
                 X = s.X[take]
                 g = run_guide(X, s.gene_names, s.species, s.tissue, s.disease)
-                ct = pool_celltypist(run_celltypist(X, s.gene_names, s.species, s.tissue, a.celltypist_models), xws, onto)
+                ct = pool_celltypist(run_celltypist(X, s.gene_names, s.species, s.tissue, a.celltypist_models), xws, onto, n=X.shape[0])
                 if s.species not in refs:
                     refs[s.species] = load_singler(a.data, s.species)
                 V = vocab.project(X, s.gene_ids, s.species)

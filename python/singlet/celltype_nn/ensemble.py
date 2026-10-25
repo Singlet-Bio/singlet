@@ -149,11 +149,16 @@ def apply_crosswalk(calls: MemberCalls, xw: Dict[str, str]) -> MemberCalls:
     return MemberCalls(cl, calls.score, calls.raw)
 
 
-def pool_celltypist(calls: Dict[str, MemberCalls], crosswalks: Dict[str, Dict[str, str]], onto: Optional[Ontology] = None) -> MemberCalls:
+def pool_celltypist(
+    calls: Dict[str, MemberCalls], crosswalks: Dict[str, Dict[str, str]], onto: Optional[Ontology] = None, n: Optional[int] = None
+) -> MemberCalls:
     """One CellTypist call per cell from several models: the mapped calls, keeping a more specific one (a descendant of the
     current call) when its model's confidence is at least 0.5. The immune model comes first, tissue models refine it."""
     o = onto or ontology()
-    n = len(next(iter(calls.values())).score) if calls else 0
+    if calls:
+        n = len(next(iter(calls.values())).score)
+    elif n is None:
+        raise ValueError("pool_celltypist: no model ran; pass n (cells) to get an all-None call")
     cl = np.full(n, None, object)
     sc = np.zeros(n, np.float32)
     for m in sorted(calls, key=lambda x: (x != "Immune_All_Low.pkl", x)):

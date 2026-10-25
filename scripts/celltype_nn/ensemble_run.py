@@ -184,7 +184,7 @@ def cmd_targets(a) -> int:
     (a.data / "celltypist_crosswalk.json").write_text(json.dumps(xws, indent=1, sort_keys=True))
     n = len(ens)
     raw = {c[3:]: MemberCalls(None, ens[f"ct_score:{c[3:]}"].to_numpy(np.float32), ens[c].to_numpy(object)) for c in ct_cols}
-    pooled = pool_celltypist(raw, xws, sp.o)
+    pooled = pool_celltypist(raw, xws, sp.o, n=len(ens))
     ct, ct_s = pooled.cl, pooled.score
     ens["celltypist_cl"], ens["celltypist_score"] = ct, ct_s
     # refinements of the author term
