@@ -5,7 +5,7 @@
   "title": "Gene counts per cell",
   "methods": "**Data.** The cohort's 10x datasets, each from its FASTQs on its own 2024-A reference (GRCh38, GRCm39 or the human+mouse barnyard): PBMC 3' v3 and v2, mouse neurons and nuclei, the barnyard, PBMC with antibodies, and 5' PBMC (first 60 M read pairs). The same FASTQs and GTF feed Singlet, STARsolo and alevin-fry.\n\n**Cells and genes.** Cells are the barcodes STARsolo EmptyDrops_CR calls, so the cell set does not depend on Singlet. A family is compared on the cells all its tools have and the genes all of them annotate (Ensembl ids).\n\n**Families.** Exonic UMI: Singlet exon_counts (spliced + ambiguous), STARsolo Gene, and the Cell Ranger matrix 10x published. Exon+intron UMI: Singlet exon+intron, STARsolo GeneFull, alevin-fry USA (S+U+A).\n\n**Measures, for every pair of tools.** The distance of the median per-cell UMI ratio from 1 (|ln ratio|); the median over cells of the Pearson r of log1p counts over genes; the Spearman rho of pseudobulk gene counts.\n\n**Gate.** Singlet's mean value against its competitors must be as good as the competitors' value against each other, within the half-width of the paired bootstrap 95% CI of the difference. Singlet is gated as a member of the cloud of existing tools, not as better than each. Per-reference values are in each metric's notes. With one competitor (5' Cell Ranger) the threshold comes from the other datasets.\n\n**Real truth.** pbmc1k_cite_v3 has antibody counts for the same cells: Spearman across cells between each protein and its coding gene, per tool.\n\n**Not compared.** scBaseCount: the 10x demo datasets are not in SRA, and the Kang lane is 3' v1, a chemistry scBaseCount does not process, so no equal-depth comparison exists.",
   "status": "final",
-  "generated_at": "2026-10-25T15:28:24+00:00",
+  "generated_at": "2026-10-25T15:52:03+00:00",
   "owner": "pipeline-benchmark",
   "singlet": {
     "version": "1.0.0",
@@ -50,7 +50,7 @@
       "name": "cellranger-published",
       "version": "2.1.0 / 3.0.0 (as published by 10x)",
       "role": "competitor",
-      "url": "https://www.10xgenomics.com/support/software/cell-ranger",
+      "url": "https://cf.10xgenomics.com/samples/",
       "params": "Cell Ranger is not run. Comparator = the filtered matrix 10x publishes with each dataset (10x reference of the time, not 2024-A): pbmc1k_v3: Cell Ranger 3.0.0 https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v3/pbmc_1k_v3_filtered_feature_bc_matrix.h5; pbmc1k_v2: Cell Ranger 3.0.0 https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v2/pbmc_1k_v2_filtered_feature_bc_matrix.h5; neuron1k_v3: Cell Ranger 3.0.0 https://cf.10xgenomics.com/samples/cell-exp/3.0.0/neuron_1k_v3/neuron_1k_v3_filtered_feature_bc_matrix.h5; hgmm1k_v3: Cell Ranger 3.0.0 https://cf.10xgenomics.com/samples/cell-exp/3.0.0/hgmm_1k_v3/hgmm_1k_v3_filtered_feature_bc_matrix.h5; pbmc1k_cite_v3: Cell Ranger 3.0.0 https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_protein_v3/pbmc_1k_protein_v3_filtered_feature_bc_matrix.h5; nuclei2k_v2: Cell Ranger 2.1.0 https://cf.10xgenomics.com/samples/cell-exp/2.1.0/nuclei_2k/nuclei_2k_filtered_gene_bc_matrices.tar.gz; pbmc5p_v1: Cell Ranger 3.0.0 https://cf.10xgenomics.com/samples/cell-vdj/3.0.0/vdj_v1_hs_pbmc2_5gex_protein/vdj_v1_hs_pbmc2_5gex_protein_filtered_feature_bc_matrix.h5"
     }
   ],
@@ -62,6 +62,7 @@
         "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v3/pbmc_1k_v3_fastqs.tar"
       },
       "truth": "none for counts. Agreement between independent tools run on the same FASTQs and reference. Cell set: barcodes called by STARsolo EmptyDrops_CR.",
+      "data_kind": "real",
       "n_cells": 1230
     },
     {
@@ -71,6 +72,7 @@
         "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v2/pbmc_1k_v2_fastqs.tar"
       },
       "truth": "none for counts. Agreement between independent tools run on the same FASTQs and reference. Cell set: barcodes called by STARsolo EmptyDrops_CR.",
+      "data_kind": "real",
       "n_cells": 1000
     },
     {
@@ -80,6 +82,7 @@
         "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/neuron_1k_v3/neuron_1k_v3_fastqs.tar"
       },
       "truth": "none for counts. Agreement between independent tools run on the same FASTQs and reference. Cell set: barcodes called by STARsolo EmptyDrops_CR.",
+      "data_kind": "real",
       "n_cells": 1258
     },
     {
@@ -89,6 +92,7 @@
         "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/hgmm_1k_v3/hgmm_1k_v3_fastqs.tar"
       },
       "truth": "none for counts. Agreement between independent tools run on the same FASTQs and reference. Cell set: barcodes called by STARsolo EmptyDrops_CR.",
+      "data_kind": "real",
       "n_cells": 1049,
       "notes": "human + mouse reference; genes matched by Ensembl id"
     },
@@ -99,6 +103,7 @@
         "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_protein_v3/pbmc_1k_protein_v3_fastqs.tar"
       },
       "truth": "none for counts. Agreement between independent tools run on the same FASTQs and reference. Cell set: barcodes called by STARsolo EmptyDrops_CR.",
+      "data_kind": "real",
       "n_cells": 714
     },
     {
@@ -108,6 +113,7 @@
         "url": "https://cf.10xgenomics.com/samples/cell-exp/2.1.0/nuclei_2k/nuclei_2k_fastqs.tar"
       },
       "truth": "none for counts. Agreement between independent tools run on the same FASTQs and reference. Cell set: barcodes called by STARsolo EmptyDrops_CR.",
+      "data_kind": "real",
       "n_cells": 2202
     },
     {
@@ -117,6 +123,7 @@
         "url": "https://cf.10xgenomics.com/samples/cell-vdj/3.0.0/vdj_v1_hs_pbmc2_5gex_protein/vdj_v1_hs_pbmc2_5gex_protein_fastqs.tar"
       },
       "truth": "none for counts. Agreement between independent tools run on the same FASTQs and reference. Cell set: barcodes called by STARsolo EmptyDrops_CR.",
+      "data_kind": "real",
       "n_cells": 7453,
       "notes": "first 60 M read pairs; the published Cell Ranger matrix (full 448 M pairs) is not compared"
     }
@@ -5083,7 +5090,7 @@
     "The gate averages Singlet's distance to its competitors. It is looser than requiring Singlet to be at least as close to each competitor separately; the per-reference values are in the notes of each metric. Tool settings were fixed before any metric was computed and no Singlet parameter was tuned on these data.",
     "Singlet's exon+intron definition counts reads that STARsolo GeneFull discards (reads overlapping two gene bodies), so totals above 1 against GeneFull are expected.",
     "Wall time and memory in resources are from a shared cluster at differing thread counts (Singlet 8, STARsolo and alevin-fry 16) and are not a speed comparison.",
-    "Cohort datasets assigned to gex-counts that this document does not cover (no run for them in this benchmark yet): pbmc5k_v4_d1, pbmc10k_5p_v2, mouse_brain_nuclei5k_v31, pbmc_multiome10k, pbmc10k_cite_v3, macosko2015_dropseq_mix, tenx_crispr_a375_10k, norman2019_gem1, visium_mouse_brain_ant, ding2020_pbmc1_smartseq2, ding2020_pbmc1_dropseq, ding2020_pbmc1_indrops, ding2020_pbmc1_seqwell, ding2020_pbmc1_celseq2, ding2020_pbmc1_10xv3, segerstolpe2016_pancreas, heart1k_v3, tabula_muris_kidney_facs."
+    "Cohort datasets assigned to gex-counts that this document does not cover (no run for them in this benchmark yet): pbmc5k_v4_d1, pbmc10k_5p_v2, mouse_brain_nuclei5k_v31, pbmc_multiome10k, pbmc10k_cite_v3, macosko2015_dropseq_mix, tenx_crispr_a375_10k, norman2019_gem1, tenx_crispr_a549_5k, visium_mouse_brain_ant, ding2020_pbmc1_smartseq2, ding2020_pbmc1_dropseq, ding2020_pbmc1_indrops, ding2020_pbmc1_seqwell, ding2020_pbmc1_celseq2, ding2020_pbmc1_10xv3, segerstolpe2016_pancreas, heart1k_v3, tabula_muris_kidney_facs, gsm5815984."
   ],
   "conclusion": "On 7 datasets (3' v2 and v3, 5', nuclei, mouse, barnyard), Singlet's exonic UMI per cell is 0.98-1.02 of STARsolo Gene's (median ratio; gene correlation 0.962-0.994). Exon+intron counts are 1.02-1.10 of STARsolo GeneFull's (r 0.948-0.987) and 0.92-1.03 of alevin-fry USA's. 36 of 44 gating metrics pass: Singlet sits inside the spread of the competitors, except 8 metrics (see metrics)."
 }

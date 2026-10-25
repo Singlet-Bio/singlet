@@ -47,7 +47,7 @@ def tools(have_cb: bool) -> list[dict]:
         C.tool("cellbender", "0.3.2", "competitor", CB_CMD, "https://github.com/broadinstitute/CellBender",
                "Fleming et al. Unsupervised removal of systematic background noise from droplet-based single-cell experiments using CellBender. Nat Methods 2023"),
         C.tool("cellranger-published", "2.1.0 / 3.0.0 (as published by 10x)", "truth",
-               C.cellranger_params() + " (only the barcodes are used here)", "https://www.10xgenomics.com/support/software/cell-ranger"),
+               C.cellranger_params() + " (only the barcodes are used here)", "https://cf.10xgenomics.com/samples/"),
         C.tool("demuxlet-table", "GSE96583", "truth", "the authors' table GSE96583_batch2.total.tsne.df.tsv.gz, rows of the control lane (all demuxlet singlet, doublet and ambiguous calls)",
                "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE96583", "Kang et al. Multiplexed droplet single-cell RNA-sequencing using natural genetic variation. Nat Biotechnol 2018"),
     ]

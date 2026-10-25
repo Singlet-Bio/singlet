@@ -192,7 +192,8 @@ def dataset_entries(ids: list[str], truth: dict[str, str], n_cells: dict[str, in
             acc["srr"] = [x for x in row["srr"].replace(";", ",").split(",") if x]
         if row.get("url") or url:
             acc["url"] = row.get("url") or url
-        e = {"id": d, "title": row.get("title") or title, "accessions": acc, "truth": truth[d]}
+        e = {"id": d, "title": row.get("title") or title, "accessions": acc, "truth": truth[d],
+             "data_kind": row.get("data_kind") or "real"}  # all datasets here are real reads, as deposited (read caps only)
         if n_cells and d in n_cells:
             e["n_cells"] = int(n_cells[d])
         if notes and d in notes:

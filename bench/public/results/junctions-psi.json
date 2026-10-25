@@ -5,7 +5,7 @@
   "title": "Splice junctions and PSI",
   "methods": "**Data.** The cohort's 10x datasets from FASTQs on their 2024-A references. Cells: barcodes STARsolo EmptyDrops_CR calls.\n\n**Reference and competitor.** STARsolo is the only tool that counts junctions per cell with UMIs. It runs twice on the same reads: at STAR/STARsolo defaults (reference) and in the manual's Cell Ranger 4+ emulation (competitor). Singlet is compared with the reference; the Cell Ranger-emulation run is compared with the same reference. Singlet must be at least as close as that. The emulation's MultiGeneUMI_CR filter zeroes high-count junctions in overlapping genes, so it is not the natural reference for junctions.\n\n**Filtered set.** STAR passes junctions through its outSJfilter* rules. A tool's filtered set is the junctions that pass them (STARsolo: its SJ feature list; Singlet: star_sj_pass in sj_features.tsv, from Singlet's own STAR alignment) and have at least one UMI in the STARsolo-called cells. Singlet also counts junctions outside that set; they are not scored.\n\n**Metrics.** (1) Jaccard of the filtered sets. (2) Pearson r of log10(1 + UMI) summed over cells, over the union of the filtered sets. (3) Median over cells of the Pearson r of log1p junction UMI over junctions non-zero in either tool (reference junction list). (4) Pearson r across cells of the per-cell total junction UMI. (5) Cassette-exon PSI, pseudobulk, at least 20 UMI in every tool. (6) The same PSI per cell and event with at least 5 UMI. Cassette exons are annotated triples of consecutive exons (inclusion 1, inclusion 2, skipping) in the GTF; PSI = inclusion / (inclusion + skipping), inclusion = the mean of the two inclusion junctions.\n\n**Rule.** match_or_beat the Cell Ranger-emulation run; tolerance = half-width of the paired bootstrap 95% CI of the difference (junctions, events or cells resampled together). All settings were fixed before the metrics were computed.",
   "status": "final",
-  "generated_at": "2026-10-25T15:29:34+00:00",
+  "generated_at": "2026-10-25T15:54:31+00:00",
   "owner": "pipeline-benchmark",
   "singlet": {
     "version": "1.0.0",
@@ -47,6 +47,7 @@
         "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v3/pbmc_1k_v3_fastqs.tar"
       },
       "truth": "none. The reference is STARsolo SJ at STAR/STARsolo defaults (UMI counts per junction and cell) on the same reads; cassette exons are the annotated triples of the GENCODE GTF. Cells: STARsolo EmptyDrops_CR.",
+      "data_kind": "real",
       "n_cells": 1230
     },
     {
@@ -56,6 +57,7 @@
         "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v2/pbmc_1k_v2_fastqs.tar"
       },
       "truth": "none. The reference is STARsolo SJ at STAR/STARsolo defaults (UMI counts per junction and cell) on the same reads; cassette exons are the annotated triples of the GENCODE GTF. Cells: STARsolo EmptyDrops_CR.",
+      "data_kind": "real",
       "n_cells": 1000
     },
     {
@@ -65,6 +67,7 @@
         "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/neuron_1k_v3/neuron_1k_v3_fastqs.tar"
       },
       "truth": "none. The reference is STARsolo SJ at STAR/STARsolo defaults (UMI counts per junction and cell) on the same reads; cassette exons are the annotated triples of the GENCODE GTF. Cells: STARsolo EmptyDrops_CR.",
+      "data_kind": "real",
       "n_cells": 1258
     },
     {
@@ -74,6 +77,7 @@
         "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/hgmm_1k_v3/hgmm_1k_v3_fastqs.tar"
       },
       "truth": "none. The reference is STARsolo SJ at STAR/STARsolo defaults (UMI counts per junction and cell) on the same reads; cassette exons are the annotated triples of the GENCODE GTF. Cells: STARsolo EmptyDrops_CR.",
+      "data_kind": "real",
       "n_cells": 1049
     },
     {
@@ -83,6 +87,7 @@
         "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_protein_v3/pbmc_1k_protein_v3_fastqs.tar"
       },
       "truth": "none. The reference is STARsolo SJ at STAR/STARsolo defaults (UMI counts per junction and cell) on the same reads; cassette exons are the annotated triples of the GENCODE GTF. Cells: STARsolo EmptyDrops_CR.",
+      "data_kind": "real",
       "n_cells": 714
     },
     {
@@ -92,6 +97,7 @@
         "url": "https://cf.10xgenomics.com/samples/cell-exp/2.1.0/nuclei_2k/nuclei_2k_fastqs.tar"
       },
       "truth": "none. The reference is STARsolo SJ at STAR/STARsolo defaults (UMI counts per junction and cell) on the same reads; cassette exons are the annotated triples of the GENCODE GTF. Cells: STARsolo EmptyDrops_CR.",
+      "data_kind": "real",
       "n_cells": 2202
     },
     {
@@ -101,6 +107,7 @@
         "url": "https://cf.10xgenomics.com/samples/cell-vdj/3.0.0/vdj_v1_hs_pbmc2_5gex_protein/vdj_v1_hs_pbmc2_5gex_protein_fastqs.tar"
       },
       "truth": "none. The reference is STARsolo SJ at STAR/STARsolo defaults (UMI counts per junction and cell) on the same reads; cassette exons are the annotated triples of the GENCODE GTF. Cells: STARsolo EmptyDrops_CR.",
+      "data_kind": "real",
       "n_cells": 7453
     }
   ],

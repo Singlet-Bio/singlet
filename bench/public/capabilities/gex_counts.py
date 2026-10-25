@@ -62,7 +62,7 @@ def tools() -> list[dict]:
                "He et al. Alevin-fry unlocks rapid, accurate and memory-frugal quantification of single-cell RNA-seq data. Nat Methods 2022"),
         C.tool("cellranger-published", "2.1.0 / 3.0.0 (as published by 10x)", "competitor",
                C.cellranger_params(),
-               "https://www.10xgenomics.com/support/software/cell-ranger"),
+               "https://cf.10xgenomics.com/samples/"),
     ]
 
 

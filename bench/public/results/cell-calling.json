@@ -5,7 +5,7 @@
   "title": "Cell calling",
   "methods": "**Data and truth.** The cohort's 10x datasets from FASTQs, plus the Kang 2018 control lane. Truth for 10x datasets is the filtered barcodes 10x published (Cell Ranger 2.1 / 3.0), for Kang the authors' demuxlet table. Both are cutoff-based, so a barcode beyond the truth is not necessarily wrong.\n\n**Calls.** Singlet: the called_v2 column (EmptyDrops on the stored exon+intron counts, plateau ambient bound, knee fitted within DropletUtils' curve bounds, FDR 0.001, 10,000 draws, union with the stored knee call). STARsolo 2.7.11b EmptyDrops_CR in Cell Ranger 4+ emulation on the same reads. CellBender 0.3.2 on STARsolo's raw Gene matrix, expected cells and droplets read off the raw UMI curve (Cell Ranger 2.2 rule), other options at defaults.\n\n**Metrics.** Over the union of every tool's calls and the truth: recall, precision and Jaccard of each tool's calls against the truth. In the barnyard, also the share of each tool's called barcodes whose human fraction cannot be told from the ambient one.\n\n**Rules.** match_or_beat the best competitor on each metric; tolerance = half-width of the paired bootstrap 95% CI of the difference (barcodes resampled together). Precision and recall are both gated, so a method that trades one for the other will fail one of them.\n\n**Broader evidence.** The 42-sample validation of docs/called-v2.md (authors' calls in 9 public studies) is reported as an informational pooled metric; it was not run on the campaign binary.",
   "status": "final",
-  "generated_at": "2026-10-25T15:29:37+00:00",
+  "generated_at": "2026-10-25T15:54:33+00:00",
   "owner": "pipeline-benchmark",
   "singlet": {
     "version": "1.0.0",
@@ -43,7 +43,7 @@
       "name": "cellranger-published",
       "version": "2.1.0 / 3.0.0 (as published by 10x)",
       "role": "truth",
-      "url": "https://www.10xgenomics.com/support/software/cell-ranger",
+      "url": "https://cf.10xgenomics.com/samples/",
       "params": "Cell Ranger is not run. Comparator = the filtered matrix 10x publishes with each dataset (10x reference of the time, not 2024-A): pbmc1k_v3: Cell Ranger 3.0.0 https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v3/pbmc_1k_v3_filtered_feature_bc_matrix.h5; pbmc1k_v2: Cell Ranger 3.0.0 https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v2/pbmc_1k_v2_filtered_feature_bc_matrix.h5; neuron1k_v3: Cell Ranger 3.0.0 https://cf.10xgenomics.com/samples/cell-exp/3.0.0/neuron_1k_v3/neuron_1k_v3_filtered_feature_bc_matrix.h5; hgmm1k_v3: Cell Ranger 3.0.0 https://cf.10xgenomics.com/samples/cell-exp/3.0.0/hgmm_1k_v3/hgmm_1k_v3_filtered_feature_bc_matrix.h5; pbmc1k_cite_v3: Cell Ranger 3.0.0 https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_protein_v3/pbmc_1k_protein_v3_filtered_feature_bc_matrix.h5; nuclei2k_v2: Cell Ranger 2.1.0 https://cf.10xgenomics.com/samples/cell-exp/2.1.0/nuclei_2k/nuclei_2k_filtered_gene_bc_matrices.tar.gz; pbmc5p_v1: Cell Ranger 3.0.0 https://cf.10xgenomics.com/samples/cell-vdj/3.0.0/vdj_v1_hs_pbmc2_5gex_protein/vdj_v1_hs_pbmc2_5gex_protein_filtered_feature_bc_matrix.h5 (only the barcodes are used here)"
     },
     {
@@ -63,6 +63,7 @@
         "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v3/pbmc_1k_v3_fastqs.tar"
       },
       "truth": "the filtered barcodes 10x published with the dataset (Cell Ranger), a cutoff-based call",
+      "data_kind": "real",
       "n_cells": 1190
     },
     {
@@ -72,6 +73,7 @@
         "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v2/pbmc_1k_v2_fastqs.tar"
       },
       "truth": "the filtered barcodes 10x published with the dataset (Cell Ranger), a cutoff-based call",
+      "data_kind": "real",
       "n_cells": 1054
     },
     {
@@ -81,6 +83,7 @@
         "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/neuron_1k_v3/neuron_1k_v3_fastqs.tar"
       },
       "truth": "the filtered barcodes 10x published with the dataset (Cell Ranger), a cutoff-based call",
+      "data_kind": "real",
       "n_cells": 1355
     },
     {
@@ -90,6 +93,7 @@
         "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/hgmm_1k_v3/hgmm_1k_v3_fastqs.tar"
       },
       "truth": "the filtered barcodes 10x published with the dataset (Cell Ranger), a cutoff-based call; barnyard species composition for ambient-like calls",
+      "data_kind": "real",
       "n_cells": 1026
     },
     {
@@ -99,6 +103,7 @@
         "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_protein_v3/pbmc_1k_protein_v3_fastqs.tar"
       },
       "truth": "the filtered barcodes 10x published with the dataset (Cell Ranger), a cutoff-based call",
+      "data_kind": "real",
       "n_cells": 728
     },
     {
@@ -108,6 +113,7 @@
         "url": "https://cf.10xgenomics.com/samples/cell-exp/2.1.0/nuclei_2k/nuclei_2k_fastqs.tar"
       },
       "truth": "the filtered barcodes 10x published with the dataset (Cell Ranger), a cutoff-based call",
+      "data_kind": "real",
       "n_cells": 2376
     },
     {
@@ -117,6 +123,7 @@
         "url": "https://cf.10xgenomics.com/samples/cell-vdj/3.0.0/vdj_v1_hs_pbmc2_5gex_protein/vdj_v1_hs_pbmc2_5gex_protein_fastqs.tar"
       },
       "truth": "the filtered barcodes 10x published with the dataset (Cell Ranger), a cutoff-based call",
+      "data_kind": "real",
       "n_cells": 8399
     },
     {
@@ -133,6 +140,7 @@
         "url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE96583"
       },
       "truth": "the authors' demuxlet table for the control lane (GSE96583, 14,619 barcodes)",
+      "data_kind": "real",
       "n_cells": 16569
     }
   ],
@@ -2034,7 +2042,7 @@
     "CellBender stopped with an encoder assertion (fewer than 4 cells in a minibatch) at its defaults and again at a lower learning rate on some datasets (see provenance.json); those datasets have no CellBender column and no CellBender competitor value.",
     "CellBender's expected-cells and total-droplets parameters were derived from the raw UMI curve with a fixed rule, not tuned; CellBender ran only on the datasets that have a cellbender column in the artifacts.",
     "Wall time and memory in resources are from a shared cluster at differing thread counts and are not a speed comparison.",
-    "Cohort datasets assigned to cell-calling that this document does not cover (no run for them in this benchmark yet): pbmc5k_v4_d1, pbmc10k_5p_v2, mouse_brain_nuclei5k_v31, pbmc_multiome10k, pbmc10k_cite_v3, stoeckius2018_hashing, hgmm10k_v3, macosko2015_dropseq_mix, tenx_crispr_a375_10k, ding2020_pbmc1_smartseq2, ding2020_pbmc1_dropseq, ding2020_pbmc1_indrops, ding2020_pbmc1_seqwell, ding2020_pbmc1_celseq2, ding2020_pbmc1_10xv3, heart1k_v3."
+    "Cohort datasets assigned to cell-calling that this document does not cover (no run for them in this benchmark yet): pbmc5k_v4_d1, pbmc10k_5p_v2, mouse_brain_nuclei5k_v31, pbmc_multiome10k, pbmc10k_cite_v3, stoeckius2018_hashing, hgmm1k_v2, hgmm10k_v3, macosko2015_dropseq_mix, tenx_crispr_a375_10k, ding2020_pbmc1_smartseq2, ding2020_pbmc1_dropseq, ding2020_pbmc1_indrops, ding2020_pbmc1_seqwell, ding2020_pbmc1_celseq2, ding2020_pbmc1_10xv3, heart1k_v3."
   ],
   "conclusion": "On 8 datasets Singlet's called_v2 reaches Jaccard 0.83-0.95 with the truth set (recall 0.91-1.00, precision 0.88-0.98), compared with STARsolo EmptyDrops_CR and CellBender; 5 of 25 gating comparisons pass. The 10x truth sets come from Cell Ranger's own EmptyDrops-type call, which STARsolo's EmptyDrops_CR reproduces by construction; only the barnyard species check and the Kang demuxlet table are independent of that algorithm. Singlet loses 20 comparisons (see metrics)."
 }
