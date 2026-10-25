@@ -62,3 +62,21 @@ t = pd.DataFrame(rows)
 pd.set_option("display.width", 200)
 print(t.round(1).to_string(index=False))
 t.to_csv("cost_options_v2.csv", index=False)
+
+# --- Anvil (ACCESS) quote, all reads ---------------------------------------------------------------
+# Whole nodes (128 cores, 257 GB, charged all 128 cores): one genome in /dev/shm, 28 four-thread samples
+# (112 cores busy; the rest run the 1-core I/O stages). The non-host screen fits only if its indices are
+# memory-mapped once per node (26 GB); today each job reads its own 35 GB copy, which would leave ~6 jobs
+# per node. Per-core speed of Anvil's EPYC 7763 is taken equal to Clipper's 6230R until a pilot measures it.
+# MAP is the speedup of STAR mapping alone (10.8 of the 12.3 s/M slope at 4 threads is mapping).
+NODE_FILL = 128 / 112
+BAL = 112_226
+print("\nAnvil, all reads (SU = core-h x 128/112, retries included)")
+U = u.reads / 1e6
+for screen in ("noscreen", "screen"):
+    for MAP in (1.0, 1.5, 2.0, 3.0):
+        slope = S[screen] - 10.8 * (1 - 1 / MAP)
+        core_h = 4 * (F + slope * U) * PACK / 3600
+        su = core_h.sum() * RETRY * NODE_FILL
+        print(f"  {screen:8s} mapping x{MAP:.1f}: {su / 1e3:6.0f}k SU = {su / BAL:4.1f}x balance;"
+              f" {su / 128 / 24:5.0f} node-days -> {su / 128 / 24 / 30:4.0f} nodes for 30 days")
