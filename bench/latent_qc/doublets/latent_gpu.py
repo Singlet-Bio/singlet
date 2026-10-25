@@ -154,10 +154,10 @@ def knn_fraction(E, n_real, k):
     """For each of the first n_real rows of E: fraction of its k nearest neighbours (self excluded) that are simulated."""
     out = torch.zeros(n_real, device=DEV)
     for s in range(0, n_real, 4096):
-        dd = torch.cdist(E[s:s + 4096], E)
+        dd = torch.cdist(E[s:min(s + 4096, n_real)], E)
         dd[torch.arange(dd.shape[0]), torch.arange(s, s + dd.shape[0])] = float("inf")
         nb = dd.topk(k, largest=False).indices
-        out[s:s + 4096] = (nb >= n_real).float().mean(1)
+        out[s:s + dd.shape[0]] = (nb >= n_real).float().mean(1)
     return out.cpu().numpy()
 
 
