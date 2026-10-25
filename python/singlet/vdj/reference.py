@@ -3,8 +3,9 @@
 
 Every annotated ``TR_*_gene`` / ``IG_*_gene`` (V, D, J, C; pseudogenes excluded) gives one segment:
 
-* **V**: the spliced exons of the gene's canonical transcript (leader + V region, sense strand), the CDS frame and the
-  position of the second conserved cysteine (IMGT Cys104): the last in-frame TGT/TGC codon within the last 45 nt.
+* **V**: the spliced exons of the gene's canonical transcript from the CDS start (leader + V region, sense strand; the
+  5' UTR is cut, it varies between paralogs) and the position of the second conserved cysteine (IMGT Cys104): the last
+  in-frame TGT/TGC codon within the last 45 nt.
 * **J**: the exon, the frame in which the translation holds the F/W-G-X-G motif, and the position of that F/W codon
   (IMGT Phe/Trp118). The IMGT junction (``cdr3`` of Cell Ranger and TRUST4) runs from Cys104 to Phe/Trp118 inclusive.
 * **D**: the exon.
@@ -202,11 +203,14 @@ def _build_one(genome_fa: str, gtf: str, skip_contigs=frozenset()) -> List[Segme
                         off += (cds0 - a) if g["strand"] == "+" else (b - cds0)
                         break
                     off += b - a + 1
-                frame = off % 3
+                # start at the CDS (leader ATG): annotated 5' UTRs vary between paralogs (IGLV2-8 has 117 nt more
+                # than IGLV2-11) and would win k-mer votes from R1 reads that reach the transcript's 5' end
+                seq = seq[off:]
             if g["biotype"] not in BIOTYPES:
                 frame = _open_v_frame(seq)
                 if frame < 0:
                     continue
+                seq, frame = seq[frame:], 0
             anchor = _v_anchor(seq, frame)
         elif region == "J":
             anchor, frame = _j_anchor(seq)
@@ -257,7 +261,7 @@ def equivalence(segs: List[Segment], max_mismatch: int = 1) -> Dict[str, str]:
         for b in names[i + 1:]:
             sa, sb = core[a], core[b]
             L = min(len(sa), len(sb))
-            if L == 0 or abs(len(sa) - len(sb)) > 3:
+            if L == 0:
                 continue
             # align the 3' ends (Cys104): the leader length varies more than the V region
             if sum(x != y for x, y in zip(sa[-L:], sb[-L:])) <= max_mismatch and L >= 250:
