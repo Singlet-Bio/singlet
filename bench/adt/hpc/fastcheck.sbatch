@@ -26,7 +26,7 @@ import pandas as pd
 W = "/mnt/projects/debruinz_project/debruinz/singlet/bpub/artifacts/"
 for d in ("pbmc1k_cite_v3", "pbmc10k_cite_v3"):
     a = pd.read_parquet(W + f"adt/adt_{d}_singlet.parquet").set_index(["barcode", "feature"])["count"]
-    b = pd.read_parquet(W + f"adt_fastcheck/adt_{d}_singlet.parquet").set_index(["barcode", "feature"])["count"]
+    b = pd.read_parquet(W + f"../../state/adt/fastcheck/adt_{d}_singlet.parquet").set_index(["barcode", "feature"])["count"]
     j = pd.concat([a, b], axis=1, keys=["old", "new"]).fillna(0)
     print(d, "entries", len(j), "identical", bool((j.old == j.new).all()), "umis", j.old.sum(), j.new.sum())
 PY
