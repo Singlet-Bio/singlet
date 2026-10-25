@@ -11,7 +11,8 @@ Steps (:func:`run_library`):
    the read positions of Cys104 and Phe/Trp118. Reads with no segment hit are counted and dropped.
 3. **Barcodes and UMIs.** Cell barcodes are corrected against the whitelist with the ADT counting rules
    (:func:`singlet.adt.count.correct_barcodes`, Cell Ranger's 1-mismatch posterior), UMIs within a barcode with Cell
-   Ranger's ``correct_umis`` (:func:`singlet.adt.count.correct_umis`).
+   Ranger's ``correct_umis`` (:func:`singlet.adt.count.correct_umis`). Molecules with fewer mates than
+   ``umi_read_frac`` of the library's median (>= ``min_umi_reads``) are dropped: index hopping, chimeras, UMI errors.
 4. **Assembly.** Per (barcode, chain), the reads that reach the junction are assembled into junction contigs by greedy
    extension through their 19-mer graph weighted by distinct UMIs (``_kernels.assemble_group``). A UMI belongs to the
    contig whose specific k-mers most of its reads carry.
@@ -62,6 +63,8 @@ class Params:
     branch_frac: float = 0.20
     min_hits: int = 2  # exact 15-mer hits for a segment call on a read
     min_barcode_umis: int = 2  # barcodes with fewer V(D)J UMIs are not assembled
+    min_umi_reads: int = 2  # mates of a molecule, at least
+    umi_read_frac: float = 0.05  # and at least this share of the library's median mates per molecule
     threads: int = 8
 
 
@@ -269,6 +272,19 @@ def run_library(r1_paths: Sequence[str], r2_paths: Sequence[str], *, ref: Refere
     tgt = AC.correct_umis(gu >> np.uint64(2 * umi_len), gu & umask, greads, umi_len)
     mol = tgt[ginv]  # molecule id (index into gu) per usable mate
     st["umis"] = int(len(np.unique(tgt)))
+    # read support per molecule: a V(D)J library sequences each molecule hundreds of times, while UMIs with a few reads
+    # are index hopping, PCR chimeras and uncorrected UMI errors (in pbmc2 TCR, 1.5 reads per UMI for contigs Cell
+    # Ranger does not report against ~800 for those it does). The cut adapts to the library's depth.
+    mates_per_mol = np.bincount(mol, minlength=len(gu))
+    mm_ = mates_per_mol[mates_per_mol > 0]
+    med = float(np.median(mm_[mm_ >= 2])) if (mm_ >= 2).any() else 1.0
+    umi_thr = max(params.min_umi_reads, int(np.ceil(params.umi_read_frac * med)))
+    good = mates_per_mol >= umi_thr
+    st["umi_read_threshold"] = umi_thr
+    st["umi_reads_median"] = med
+    st["umis_low_support"] = int((mm_ < umi_thr).sum())
+    keep_m = good[mol]
+    sel, bci, mol = sel[keep_m], bci[keep_m], mol[keep_m]
     tm["barcodes_umis"] = time.time() - t1
 
     # barcodes worth assembling
