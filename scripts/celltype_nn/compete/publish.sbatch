@@ -13,7 +13,7 @@ source /mnt/projects/debruinz_project/debruinz/singlet/src/singlet-py/claude__ce
 : "${JOBS:?comma-separated job ids of the method arrays: name=id,...}" "${CONTRACT_DIR:?}"
 A=$WORK/bpub/artifacts/cell-type; mkdir -p $A $WORK/bpub/results
 RSS=$A/rss.tsv; : > $RSS
-for kv in ${JOBS//,/ }; do n=${kv%%=*}; j=${kv#*=}
+for kv in ${JOBS//[,+]/ }; do n=${kv%%=*}; j=${kv#*=}
   sacct -n -P -j $j -o MaxRSS | sed 's/K$//' | awk -v n=$n 'BEGIN{m=0} $1+0>m{m=$1+0} END{printf "%s\t%.2f\n", n, m/1048576}' >> $RSS
 done
 COMMIT=$(git -C $SRC rev-parse HEAD)
