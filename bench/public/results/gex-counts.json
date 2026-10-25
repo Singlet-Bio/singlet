@@ -1,0 +1,5089 @@
+{
+  "schema": "singlet.benchmark.capability",
+  "schema_version": "1.0.0",
+  "capability": "gex-counts",
+  "title": "Gene counts per cell",
+  "methods": "**Data.** The cohort's 10x datasets, each from its FASTQs on its own 2024-A reference (GRCh38, GRCm39 or the human+mouse barnyard): PBMC 3' v3 and v2, mouse neurons and nuclei, the barnyard, PBMC with antibodies, and 5' PBMC (first 60 M read pairs). The same FASTQs and GTF feed Singlet, STARsolo and alevin-fry.\n\n**Cells and genes.** Cells are the barcodes STARsolo EmptyDrops_CR calls, so the cell set does not depend on Singlet. A family is compared on the cells all its tools have and the genes all of them annotate (Ensembl ids).\n\n**Families.** Exonic UMI: Singlet exon_counts (spliced + ambiguous), STARsolo Gene, and the Cell Ranger matrix 10x published. Exon+intron UMI: Singlet exon+intron, STARsolo GeneFull, alevin-fry USA (S+U+A).\n\n**Measures, for every pair of tools.** The distance of the median per-cell UMI ratio from 1 (|ln ratio|); the median over cells of the Pearson r of log1p counts over genes; the Spearman rho of pseudobulk gene counts.\n\n**Gate.** Singlet's mean value against its competitors must be as good as the competitors' value against each other, within the half-width of the paired bootstrap 95% CI of the difference. Singlet is gated as a member of the cloud of existing tools, not as better than each. Per-reference values are in each metric's notes. With one competitor (5' Cell Ranger) the threshold comes from the other datasets.\n\n**Real truth.** pbmc1k_cite_v3 has antibody counts for the same cells: Spearman across cells between each protein and its coding gene, per tool.\n\n**Not compared.** scBaseCount: the 10x demo datasets are not in SRA, and the Kang lane is 3' v1, a chemistry scBaseCount does not process, so no equal-depth comparison exists.",
+  "status": "final",
+  "generated_at": "2026-10-25T15:28:24+00:00",
+  "owner": "pipeline-benchmark",
+  "singlet": {
+    "version": "1.0.0",
+    "commit": "02aa9b938b54e0f92bba00c44c07b883a8660aa2",
+    "branch": "prod/campaign",
+    "binary": "singlet-campaign",
+    "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+    "build_flags": "PGO, -O3 -DNDEBUG, -march=x86-64-v3"
+  },
+  "tools": [
+    {
+      "name": "singlet",
+      "version": "1.0.0",
+      "role": "singlet",
+      "url": "https://singlet.bio",
+      "params": "singlet encode --reads R1.fastq.gz R2.fastq.gz -o s.1fq; singlet s.1fq --ref-base $REF --genome-dir $REF/$SPECIES/star_2.7.11b --exons $REF/$SPECIES/genes/genes.gtf --out-prefix $OUT/ --threads 8 --pipeline --output-format mtx --raw-matrix"
+    },
+    {
+      "name": "starsolo-gene",
+      "version": "2.7.11b",
+      "role": "competitor",
+      "url": "https://github.com/alexdobin/STAR",
+      "citation": "Kaminow, Yunusov, Dobin. STARsolo: accurate, fast and versatile mapping/quantification of single-cell and single-nucleus RNA-seq data. bioRxiv 2021",
+      "params": "STAR --runThreadN 16 --genomeDir $GENOME --readFilesIn $R2 $R1 --readFilesCommand zcat --soloType CB_UMI_Simple --soloCBwhitelist $WHITELIST --soloCBlen 16 --soloUMIstart 17 --soloUMIlen $UMILEN --soloBarcodeReadLength 0 --soloStrand $STRAND --soloFeatures Gene GeneFull Velocyto SJ --soloCellFilter EmptyDrops_CR --soloCBmatchWLtype 1MM_multi_Nbase_pseudocounts --soloUMIfiltering MultiGeneUMI_CR --soloUMIdedup 1MM_CR --clipAdapterType CellRanger4 --outFilterScoreMin 30 --outSAMtype None (the STARsolo manual's Cell Ranger 4+ emulation; $UMILEN 12 for v3, 10 for v2 and 5'; $STRAND Forward, Reverse for 5')"
+    },
+    {
+      "name": "starsolo-genefull",
+      "version": "2.7.11b",
+      "role": "competitor",
+      "url": "https://github.com/alexdobin/STAR",
+      "params": "same STARsolo run as starsolo-gene; feature GeneFull (exons + introns)"
+    },
+    {
+      "name": "alevin-fry-usa",
+      "version": "0.18.3 (simpleaf 0.30)",
+      "role": "competitor",
+      "url": "https://github.com/COMBINE-lab/alevin-fry",
+      "citation": "He et al. Alevin-fry unlocks rapid, accurate and memory-frugal quantification of single-cell RNA-seq data. Nat Methods 2022",
+      "params": "simpleaf quant --reads1 $R1 --reads2 $R2 --index af_idx/index --t2g-map af_idx/index/t2g_3col.tsv --chemistry $CHEM(10xv3|10xv2|10xv2-5p) --expected-ori fw --resolution cr-like --unfiltered-pl $WHITELIST --threads 16; index: simpleaf index --ref-type spliced+unspliced --rlen 91 on the same FASTA and GTF"
+    },
+    {
+      "name": "cellranger-published",
+      "version": "2.1.0 / 3.0.0 (as published by 10x)",
+      "role": "competitor",
+      "url": "https://www.10xgenomics.com/support/software/cell-ranger",
+      "params": "Cell Ranger is not run. Comparator = the filtered matrix 10x publishes with each dataset (10x reference of the time, not 2024-A): pbmc1k_v3: Cell Ranger 3.0.0 https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v3/pbmc_1k_v3_filtered_feature_bc_matrix.h5; pbmc1k_v2: Cell Ranger 3.0.0 https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v2/pbmc_1k_v2_filtered_feature_bc_matrix.h5; neuron1k_v3: Cell Ranger 3.0.0 https://cf.10xgenomics.com/samples/cell-exp/3.0.0/neuron_1k_v3/neuron_1k_v3_filtered_feature_bc_matrix.h5; hgmm1k_v3: Cell Ranger 3.0.0 https://cf.10xgenomics.com/samples/cell-exp/3.0.0/hgmm_1k_v3/hgmm_1k_v3_filtered_feature_bc_matrix.h5; pbmc1k_cite_v3: Cell Ranger 3.0.0 https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_protein_v3/pbmc_1k_protein_v3_filtered_feature_bc_matrix.h5; nuclei2k_v2: Cell Ranger 2.1.0 https://cf.10xgenomics.com/samples/cell-exp/2.1.0/nuclei_2k/nuclei_2k_filtered_gene_bc_matrices.tar.gz; pbmc5p_v1: Cell Ranger 3.0.0 https://cf.10xgenomics.com/samples/cell-vdj/3.0.0/vdj_v1_hs_pbmc2_5gex_protein/vdj_v1_hs_pbmc2_5gex_protein_filtered_feature_bc_matrix.h5"
+    }
+  ],
+  "datasets": [
+    {
+      "id": "pbmc1k_v3",
+      "title": "10x PBMC 1k, 3' v3",
+      "accessions": {
+        "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v3/pbmc_1k_v3_fastqs.tar"
+      },
+      "truth": "none for counts. Agreement between independent tools run on the same FASTQs and reference. Cell set: barcodes called by STARsolo EmptyDrops_CR.",
+      "n_cells": 1230
+    },
+    {
+      "id": "pbmc1k_v2",
+      "title": "10x PBMC 1k, 3' v2",
+      "accessions": {
+        "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v2/pbmc_1k_v2_fastqs.tar"
+      },
+      "truth": "none for counts. Agreement between independent tools run on the same FASTQs and reference. Cell set: barcodes called by STARsolo EmptyDrops_CR.",
+      "n_cells": 1000
+    },
+    {
+      "id": "neuron1k_v3",
+      "title": "10x mouse E18 brain cells 1k, 3' v3",
+      "accessions": {
+        "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/neuron_1k_v3/neuron_1k_v3_fastqs.tar"
+      },
+      "truth": "none for counts. Agreement between independent tools run on the same FASTQs and reference. Cell set: barcodes called by STARsolo EmptyDrops_CR.",
+      "n_cells": 1258
+    },
+    {
+      "id": "hgmm1k_v3",
+      "title": "10x HEK293T + NIH3T3 1:1, 1k, 3' v3",
+      "accessions": {
+        "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/hgmm_1k_v3/hgmm_1k_v3_fastqs.tar"
+      },
+      "truth": "none for counts. Agreement between independent tools run on the same FASTQs and reference. Cell set: barcodes called by STARsolo EmptyDrops_CR.",
+      "n_cells": 1049,
+      "notes": "human + mouse reference; genes matched by Ensembl id"
+    },
+    {
+      "id": "pbmc1k_cite_v3",
+      "title": "10x PBMC 1k + TotalSeq-B (pbmc_1k_protein_v3)",
+      "accessions": {
+        "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_protein_v3/pbmc_1k_protein_v3_fastqs.tar"
+      },
+      "truth": "none for counts. Agreement between independent tools run on the same FASTQs and reference. Cell set: barcodes called by STARsolo EmptyDrops_CR.",
+      "n_cells": 714
+    },
+    {
+      "id": "nuclei2k_v2",
+      "title": "10x mouse brain nuclei 2k, 3' v2",
+      "accessions": {
+        "url": "https://cf.10xgenomics.com/samples/cell-exp/2.1.0/nuclei_2k/nuclei_2k_fastqs.tar"
+      },
+      "truth": "none for counts. Agreement between independent tools run on the same FASTQs and reference. Cell set: barcodes called by STARsolo EmptyDrops_CR.",
+      "n_cells": 2202
+    },
+    {
+      "id": "pbmc5p_v1",
+      "title": "10x PBMC 5' v1 + TotalSeq-C (vdj_v1_hs_pbmc2_5gex_protein), first 60M read pairs",
+      "accessions": {
+        "url": "https://cf.10xgenomics.com/samples/cell-vdj/3.0.0/vdj_v1_hs_pbmc2_5gex_protein/vdj_v1_hs_pbmc2_5gex_protein_fastqs.tar"
+      },
+      "truth": "none for counts. Agreement between independent tools run on the same FASTQs and reference. Cell set: barcodes called by STARsolo EmptyDrops_CR.",
+      "n_cells": 7453,
+      "notes": "first 60 M read pairs; the published Cell Ranger matrix (full 448 M pairs) is not compared"
+    }
+  ],
+  "metrics": [
+    {
+      "id": "umi_ratio_distance.exonic",
+      "name": "Per-cell UMI total, distance of the median ratio from 1, exonic UMI",
+      "unit": "|ln ratio|",
+      "category": "agreement",
+      "dataset": "pbmc1k_v3",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.019535,
+        "ci": [
+          0.019351,
+          0.019696
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-gene",
+          "value": 0.039108,
+          "ci": [
+            0.038716,
+            0.039643
+          ]
+        },
+        {
+          "tool": "cellranger-published",
+          "value": 0.039108,
+          "ci": [
+            0.038716,
+            0.039643
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.00038
+        },
+        "rationale": "gate = Singlet's mean |ln ratio| distance to STARsolo Gene, Cell Ranger (published) against the distance the competitors have from each other (0.0391); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0004"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Gene: ratio 0.992; Cell Ranger (published): ratio 1.031. Basis: cells with UMI in every tool (1220). Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "gene_corr.exonic",
+      "name": "Per-cell gene correlation, exonic UMI",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.98662,
+        "ci": [
+          0.98653,
+          0.986729
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-gene",
+          "value": 0.981813,
+          "ci": [
+            0.981676,
+            0.981944
+          ]
+        },
+        {
+          "tool": "cellranger-published",
+          "value": 0.981813,
+          "ci": [
+            0.981676,
+            0.981944
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000117
+        },
+        "rationale": "gate = Singlet's mean r distance to STARsolo Gene, Cell Ranger (published) against the distance the competitors have from each other (0.9818); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0001"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Gene: 0.9939; Cell Ranger (published): 0.9793. Basis: cells common to the family. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "pseudobulk_rho.exonic",
+      "name": "Pseudobulk gene Spearman rho, exonic UMI",
+      "unit": "rho",
+      "category": "agreement",
+      "dataset": "pbmc1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.981696,
+        "ci": [
+          0.98033,
+          0.982781
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-gene",
+          "value": 0.977041,
+          "ci": [
+            0.974741,
+            0.978909
+          ]
+        },
+        {
+          "tool": "cellranger-published",
+          "value": 0.977041,
+          "ci": [
+            0.974741,
+            0.978909
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001137
+        },
+        "rationale": "gate = Singlet's mean rho distance to STARsolo Gene, Cell Ranger (published) against the distance the competitors have from each other (0.9770); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0011"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Gene: 0.9926; Cell Ranger (published): 0.9708. Basis: 19527 genes with any UMI. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "umi_ratio_distance.total",
+      "name": "Per-cell UMI total, distance of the median ratio from 1, exon+intron UMI",
+      "unit": "|ln ratio|",
+      "category": "agreement",
+      "dataset": "pbmc1k_v3",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.030216,
+        "ci": [
+          0.029706,
+          0.030598
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-genefull",
+          "value": 0.057858,
+          "ci": [
+            0.057227,
+            0.058726
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.057858,
+          "ci": [
+            0.057227,
+            0.058726
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000649
+        },
+        "rationale": "gate = Singlet's mean |ln ratio| distance to STARsolo GeneFull, alevin-fry USA (S+U+A) against the distance the competitors have from each other (0.0579); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0006"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: ratio 1.024; alevin-fry USA (S+U+A): ratio 0.964. Basis: cells with UMI in every tool (1230). Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "gene_corr.total",
+      "name": "Per-cell gene correlation, exon+intron UMI",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.977252,
+        "ci": [
+          0.97705,
+          0.977469
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-genefull",
+          "value": 0.976565,
+          "ci": [
+            0.976271,
+            0.97679
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.976565,
+          "ci": [
+            0.976271,
+            0.97679
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000206
+        },
+        "rationale": "gate = Singlet's mean r distance to STARsolo GeneFull, alevin-fry USA (S+U+A) against the distance the competitors have from each other (0.9766); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0002"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9819; alevin-fry USA (S+U+A): 0.9726. Basis: cells common to the family. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "pseudobulk_rho.total",
+      "name": "Pseudobulk gene Spearman rho, exon+intron UMI",
+      "unit": "rho",
+      "category": "agreement",
+      "dataset": "pbmc1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.957307,
+        "ci": [
+          0.95564,
+          0.959042
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-genefull",
+          "value": 0.944649,
+          "ci": [
+            0.941739,
+            0.947512
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.944649,
+          "ci": [
+            0.941739,
+            0.947512
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001685
+        },
+        "rationale": "gate = Singlet's mean rho distance to STARsolo GeneFull, alevin-fry USA (S+U+A) against the distance the competitors have from each other (0.9446); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0017"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9480; alevin-fry USA (S+U+A): 0.9667. Basis: 29545 genes with any UMI. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "umi_ratio_distance.exonic",
+      "name": "Per-cell UMI total, distance of the median ratio from 1, exonic UMI",
+      "unit": "|ln ratio|",
+      "category": "agreement",
+      "dataset": "pbmc1k_v2",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.030657,
+        "ci": [
+          0.030267,
+          0.031056
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-gene",
+          "value": 0.027208,
+          "ci": [
+            0.026893,
+            0.027612
+          ]
+        },
+        {
+          "tool": "cellranger-published",
+          "value": 0.027208,
+          "ci": [
+            0.026893,
+            0.027612
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000562
+        },
+        "rationale": "gate = Singlet's mean |ln ratio| distance to STARsolo Gene, Cell Ranger (published) against the distance the competitors have from each other (0.0272); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0006"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Gene: ratio 1.017; Cell Ranger (published): ratio 1.045. Basis: cells with UMI in every tool (996). Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "gene_corr.exonic",
+      "name": "Per-cell gene correlation, exonic UMI",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.983917,
+        "ci": [
+          0.983779,
+          0.984039
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-gene",
+          "value": 0.984752,
+          "ci": [
+            0.984603,
+            0.984961
+          ]
+        },
+        {
+          "tool": "cellranger-published",
+          "value": 0.984752,
+          "ci": [
+            0.984603,
+            0.984961
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000184
+        },
+        "rationale": "gate = Singlet's mean r distance to STARsolo Gene, Cell Ranger (published) against the distance the competitors have from each other (0.9848); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0002"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Gene: 0.9895; Cell Ranger (published): 0.9783. Basis: cells common to the family. Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "pseudobulk_rho.exonic",
+      "name": "Pseudobulk gene Spearman rho, exonic UMI",
+      "unit": "rho",
+      "category": "agreement",
+      "dataset": "pbmc1k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.973171,
+        "ci": [
+          0.97116,
+          0.97519
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-gene",
+          "value": 0.97547,
+          "ci": [
+            0.972633,
+            0.978006
+          ]
+        },
+        {
+          "tool": "cellranger-published",
+          "value": 0.97547,
+          "ci": [
+            0.972633,
+            0.978006
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001934
+        },
+        "rationale": "gate = Singlet's mean rho distance to STARsolo Gene, Cell Ranger (published) against the distance the competitors have from each other (0.9755); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0019"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Gene: 0.9846; Cell Ranger (published): 0.9617. Basis: 17711 genes with any UMI. Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "umi_ratio_distance.total",
+      "name": "Per-cell UMI total, distance of the median ratio from 1, exon+intron UMI",
+      "unit": "|ln ratio|",
+      "category": "agreement",
+      "dataset": "pbmc1k_v2",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.081333,
+        "ci": [
+          0.080735,
+          0.082277
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-genefull",
+          "value": 0.161877,
+          "ci": [
+            0.160847,
+            0.162548
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.161877,
+          "ci": [
+            0.160847,
+            0.162548
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000746
+        },
+        "rationale": "gate = Singlet's mean |ln ratio| distance to STARsolo GeneFull, alevin-fry USA (S+U+A) against the distance the competitors have from each other (0.1619); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0007"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: ratio 1.080; alevin-fry USA (S+U+A): ratio 0.918. Basis: cells with UMI in every tool (1000). Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "gene_corr.total",
+      "name": "Per-cell gene correlation, exon+intron UMI",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.951917,
+        "ci": [
+          0.95136,
+          0.95237
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-genefull",
+          "value": 0.965286,
+          "ci": [
+            0.965007,
+            0.965811
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.965286,
+          "ci": [
+            0.965007,
+            0.965811
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000405
+        },
+        "rationale": "gate = Singlet's mean r distance to STARsolo GeneFull, alevin-fry USA (S+U+A) against the distance the competitors have from each other (0.9653); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0004"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9593; alevin-fry USA (S+U+A): 0.9446. Basis: cells common to the family. Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "pseudobulk_rho.total",
+      "name": "Pseudobulk gene Spearman rho, exon+intron UMI",
+      "unit": "rho",
+      "category": "agreement",
+      "dataset": "pbmc1k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.934388,
+        "ci": [
+          0.932045,
+          0.936273
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-genefull",
+          "value": 0.938616,
+          "ci": [
+            0.935799,
+            0.941226
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.938616,
+          "ci": [
+            0.935799,
+            0.941226
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.002153
+        },
+        "rationale": "gate = Singlet's mean rho distance to STARsolo GeneFull, alevin-fry USA (S+U+A) against the distance the competitors have from each other (0.9386); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0022"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9337; alevin-fry USA (S+U+A): 0.9351. Basis: 27824 genes with any UMI. Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "umi_ratio_distance.exonic",
+      "name": "Per-cell UMI total, distance of the median ratio from 1, exonic UMI",
+      "unit": "|ln ratio|",
+      "category": "agreement",
+      "dataset": "neuron1k_v3",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.064269,
+        "ci": [
+          0.06364,
+          0.064973
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-gene",
+          "value": 0.078108,
+          "ci": [
+            0.077065,
+            0.079231
+          ]
+        },
+        {
+          "tool": "cellranger-published",
+          "value": 0.078108,
+          "ci": [
+            0.077065,
+            0.079231
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000808
+        },
+        "rationale": "gate = Singlet's mean |ln ratio| distance to STARsolo Gene, Cell Ranger (published) against the distance the competitors have from each other (0.0781); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0008"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Gene: ratio 0.976; Cell Ranger (published): ratio 0.901. Basis: cells with UMI in every tool (1252). Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "gene_corr.exonic",
+      "name": "Per-cell gene correlation, exonic UMI",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "neuron1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.980555,
+        "ci": [
+          0.980109,
+          0.98107
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-gene",
+          "value": 0.978913,
+          "ci": [
+            0.978249,
+            0.979488
+          ]
+        },
+        {
+          "tool": "cellranger-published",
+          "value": 0.978913,
+          "ci": [
+            0.978249,
+            0.979488
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000301
+        },
+        "rationale": "gate = Singlet's mean r distance to STARsolo Gene, Cell Ranger (published) against the distance the competitors have from each other (0.9789); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0003"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Gene: 0.9912; Cell Ranger (published): 0.9699. Basis: cells common to the family. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "pseudobulk_rho.exonic",
+      "name": "Pseudobulk gene Spearman rho, exonic UMI",
+      "unit": "rho",
+      "category": "agreement",
+      "dataset": "neuron1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.986927,
+        "ci": [
+          0.985747,
+          0.988228
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-gene",
+          "value": 0.983956,
+          "ci": [
+            0.982034,
+            0.985635
+          ]
+        },
+        {
+          "tool": "cellranger-published",
+          "value": 0.983956,
+          "ci": [
+            0.982034,
+            0.985635
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001303
+        },
+        "rationale": "gate = Singlet's mean rho distance to STARsolo Gene, Cell Ranger (published) against the distance the competitors have from each other (0.9840); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0013"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Gene: 0.9944; Cell Ranger (published): 0.9795. Basis: 18918 genes with any UMI. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "umi_ratio_distance.total",
+      "name": "Per-cell UMI total, distance of the median ratio from 1, exon+intron UMI",
+      "unit": "|ln ratio|",
+      "category": "agreement",
+      "dataset": "neuron1k_v3",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.024301,
+        "ci": [
+          0.02369,
+          0.024859
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-genefull",
+          "value": 0.031318,
+          "ci": [
+            0.030739,
+            0.031714
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.031318,
+          "ci": [
+            0.030739,
+            0.031714
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000857
+        },
+        "rationale": "gate = Singlet's mean |ln ratio| distance to STARsolo GeneFull, alevin-fry USA (S+U+A) against the distance the competitors have from each other (0.0313); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0009"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: ratio 1.040; alevin-fry USA (S+U+A): ratio 1.010. Basis: cells with UMI in every tool (1258). Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "gene_corr.total",
+      "name": "Per-cell gene correlation, exon+intron UMI",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "neuron1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.978428,
+        "ci": [
+          0.978285,
+          0.978579
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-genefull",
+          "value": 0.96929,
+          "ci": [
+            0.968927,
+            0.969555
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.96929,
+          "ci": [
+            0.968927,
+            0.969555
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000243
+        },
+        "rationale": "gate = Singlet's mean r distance to STARsolo GeneFull, alevin-fry USA (S+U+A) against the distance the competitors have from each other (0.9693); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0002"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9798; alevin-fry USA (S+U+A): 0.9770. Basis: cells common to the family. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "pseudobulk_rho.total",
+      "name": "Pseudobulk gene Spearman rho, exon+intron UMI",
+      "unit": "rho",
+      "category": "agreement",
+      "dataset": "neuron1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.884049,
+        "ci": [
+          0.881309,
+          0.886752
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-genefull",
+          "value": 0.852466,
+          "ci": [
+            0.847674,
+            0.85618
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.852466,
+          "ci": [
+            0.847674,
+            0.85618
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.002763
+        },
+        "rationale": "gate = Singlet's mean rho distance to STARsolo GeneFull, alevin-fry USA (S+U+A) against the distance the competitors have from each other (0.8525); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0028"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.8443; alevin-fry USA (S+U+A): 0.9238. Basis: 43001 genes with any UMI. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "umi_ratio_distance.exonic",
+      "name": "Per-cell UMI total, distance of the median ratio from 1, exonic UMI",
+      "unit": "|ln ratio|",
+      "category": "agreement",
+      "dataset": "hgmm1k_v3",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.01045,
+        "ci": [
+          0.008188,
+          0.039177
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-gene",
+          "value": 0.013856,
+          "ci": [
+            0.007621,
+            0.074598
+          ]
+        },
+        {
+          "tool": "cellranger-published",
+          "value": 0.013856,
+          "ci": [
+            0.007621,
+            0.074598
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.025574
+        },
+        "rationale": "gate = Singlet's mean |ln ratio| distance to STARsolo Gene, Cell Ranger (published) against the distance the competitors have from each other (0.0139); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0256"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Gene: ratio 0.983; Cell Ranger (published): ratio 0.997. Basis: cells with UMI in every tool (1046). Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "gene_corr.exonic",
+      "name": "Per-cell gene correlation, exonic UMI",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "hgmm1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.983744,
+        "ci": [
+          0.983545,
+          0.984014
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-gene",
+          "value": 0.98403,
+          "ci": [
+            0.983525,
+            0.985156
+          ]
+        },
+        {
+          "tool": "cellranger-published",
+          "value": 0.98403,
+          "ci": [
+            0.983525,
+            0.985156
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000899
+        },
+        "rationale": "gate = Singlet's mean r distance to STARsolo Gene, Cell Ranger (published) against the distance the competitors have from each other (0.9840); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0009"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Gene: 0.9889; Cell Ranger (published): 0.9786. Basis: cells common to the family. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "pseudobulk_rho.exonic",
+      "name": "Pseudobulk gene Spearman rho, exonic UMI",
+      "unit": "rho",
+      "category": "agreement",
+      "dataset": "hgmm1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.976986,
+        "ci": [
+          0.975636,
+          0.978349
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-gene",
+          "value": 0.971822,
+          "ci": [
+            0.970097,
+            0.973966
+          ]
+        },
+        {
+          "tool": "cellranger-published",
+          "value": 0.971822,
+          "ci": [
+            0.970097,
+            0.973966
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001209
+        },
+        "rationale": "gate = Singlet's mean rho distance to STARsolo Gene, Cell Ranger (published) against the distance the competitors have from each other (0.9718); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0012"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Gene: 0.9900; Cell Ranger (published): 0.9640. Basis: 38986 genes with any UMI. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "umi_ratio_distance.total",
+      "name": "Per-cell UMI total, distance of the median ratio from 1, exon+intron UMI",
+      "unit": "|ln ratio|",
+      "category": "agreement",
+      "dataset": "hgmm1k_v3",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.021617,
+        "ci": [
+          0.019557,
+          0.031125
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-genefull",
+          "value": 0.009961,
+          "ci": [
+            0.004261,
+            0.025129
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.009961,
+          "ci": [
+            0.004261,
+            0.025129
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.005302
+        },
+        "rationale": "gate = Singlet's mean |ln ratio| distance to STARsolo GeneFull, alevin-fry USA (S+U+A) against the distance the competitors have from each other (0.0100); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0053"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: ratio 1.022; alevin-fry USA (S+U+A): ratio 1.022. Basis: cells with UMI in every tool (1049). Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "gene_corr.total",
+      "name": "Per-cell gene correlation, exon+intron UMI",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "hgmm1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.976911,
+        "ci": [
+          0.976501,
+          0.97745
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-genefull",
+          "value": 0.964171,
+          "ci": [
+            0.963108,
+            0.965341
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.964171,
+          "ci": [
+            0.963108,
+            0.965341
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000741
+        },
+        "rationale": "gate = Singlet's mean r distance to STARsolo GeneFull, alevin-fry USA (S+U+A) against the distance the competitors have from each other (0.9642); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0007"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9837; alevin-fry USA (S+U+A): 0.9701. Basis: cells common to the family. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "pseudobulk_rho.total",
+      "name": "Pseudobulk gene Spearman rho, exon+intron UMI",
+      "unit": "rho",
+      "category": "agreement",
+      "dataset": "hgmm1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.93446,
+        "ci": [
+          0.932933,
+          0.935761
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-genefull",
+          "value": 0.904064,
+          "ci": [
+            0.901571,
+            0.905972
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.904064,
+          "ci": [
+            0.901571,
+            0.905972
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001433
+        },
+        "rationale": "gate = Singlet's mean rho distance to STARsolo GeneFull, alevin-fry USA (S+U+A) against the distance the competitors have from each other (0.9041); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0014"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9177; alevin-fry USA (S+U+A): 0.9513. Basis: 62232 genes with any UMI. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "umi_ratio_distance.exonic",
+      "name": "Per-cell UMI total, distance of the median ratio from 1, exonic UMI",
+      "unit": "|ln ratio|",
+      "category": "agreement",
+      "dataset": "pbmc1k_cite_v3",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.020494,
+        "ci": [
+          0.020126,
+          0.020884
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-gene",
+          "value": 0.041171,
+          "ci": [
+            0.040586,
+            0.041946
+          ]
+        },
+        {
+          "tool": "cellranger-published",
+          "value": 0.041171,
+          "ci": [
+            0.040586,
+            0.041946
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000523
+        },
+        "rationale": "gate = Singlet's mean |ln ratio| distance to STARsolo Gene, Cell Ranger (published) against the distance the competitors have from each other (0.0412); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0005"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Gene: ratio 0.991; Cell Ranger (published): ratio 1.032. Basis: cells with UMI in every tool (713). Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "gene_corr.exonic",
+      "name": "Per-cell gene correlation, exonic UMI",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_cite_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.986837,
+        "ci": [
+          0.986595,
+          0.98707
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-gene",
+          "value": 0.981493,
+          "ci": [
+            0.981218,
+            0.981732
+          ]
+        },
+        {
+          "tool": "cellranger-published",
+          "value": 0.981493,
+          "ci": [
+            0.981218,
+            0.981732
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000195
+        },
+        "rationale": "gate = Singlet's mean r distance to STARsolo Gene, Cell Ranger (published) against the distance the competitors have from each other (0.9815); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0002"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Gene: 0.9939; Cell Ranger (published): 0.9798. Basis: cells common to the family. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "pseudobulk_rho.exonic",
+      "name": "Pseudobulk gene Spearman rho, exonic UMI",
+      "unit": "rho",
+      "category": "agreement",
+      "dataset": "pbmc1k_cite_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.982558,
+        "ci": [
+          0.98141,
+          0.983691
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-gene",
+          "value": 0.976491,
+          "ci": [
+            0.974196,
+            0.978487
+          ]
+        },
+        {
+          "tool": "cellranger-published",
+          "value": 0.976491,
+          "ci": [
+            0.974196,
+            0.978487
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001203
+        },
+        "rationale": "gate = Singlet's mean rho distance to STARsolo Gene, Cell Ranger (published) against the distance the competitors have from each other (0.9765); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0012"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Gene: 0.9936; Cell Ranger (published): 0.9715. Basis: 18406 genes with any UMI. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "umi_ratio_distance.total",
+      "name": "Per-cell UMI total, distance of the median ratio from 1, exon+intron UMI",
+      "unit": "|ln ratio|",
+      "category": "agreement",
+      "dataset": "pbmc1k_cite_v3",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.034365,
+        "ci": [
+          0.033656,
+          0.034983
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-genefull",
+          "value": 0.066537,
+          "ci": [
+            0.065435,
+            0.067982
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.066537,
+          "ci": [
+            0.065435,
+            0.067982
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001138
+        },
+        "rationale": "gate = Singlet's mean |ln ratio| distance to STARsolo GeneFull, alevin-fry USA (S+U+A) against the distance the competitors have from each other (0.0665); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0011"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: ratio 1.019; alevin-fry USA (S+U+A): ratio 0.951. Basis: cells with UMI in every tool (714). Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "gene_corr.total",
+      "name": "Per-cell gene correlation, exon+intron UMI",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_cite_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.97765,
+        "ci": [
+          0.97722,
+          0.978047
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-genefull",
+          "value": 0.977002,
+          "ci": [
+            0.976503,
+            0.977341
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.977002,
+          "ci": [
+            0.976503,
+            0.977341
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.00027
+        },
+        "rationale": "gate = Singlet's mean r distance to STARsolo GeneFull, alevin-fry USA (S+U+A) against the distance the competitors have from each other (0.9770); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0003"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9820; alevin-fry USA (S+U+A): 0.9733. Basis: cells common to the family. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "pseudobulk_rho.total",
+      "name": "Pseudobulk gene Spearman rho, exon+intron UMI",
+      "unit": "rho",
+      "category": "agreement",
+      "dataset": "pbmc1k_cite_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.957009,
+        "ci": [
+          0.955134,
+          0.958876
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-genefull",
+          "value": 0.946656,
+          "ci": [
+            0.943616,
+            0.949526
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.946656,
+          "ci": [
+            0.943616,
+            0.949526
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001742
+        },
+        "rationale": "gate = Singlet's mean rho distance to STARsolo GeneFull, alevin-fry USA (S+U+A) against the distance the competitors have from each other (0.9467); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0017"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9490; alevin-fry USA (S+U+A): 0.9650. Basis: 28289 genes with any UMI. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "umi_ratio_distance.exonic",
+      "name": "Per-cell UMI total, distance of the median ratio from 1, exonic UMI",
+      "unit": "|ln ratio|",
+      "category": "agreement",
+      "dataset": "nuclei2k_v2",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.009755,
+        "ci": [
+          0.008093,
+          0.011254
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-gene",
+          "value": 0.02327,
+          "ci": [
+            0.020572,
+            0.025254
+          ]
+        },
+        {
+          "tool": "cellranger-published",
+          "value": 0.02327,
+          "ci": [
+            0.020572,
+            0.025254
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001295
+        },
+        "rationale": "gate = Singlet's mean |ln ratio| distance to STARsolo Gene, Cell Ranger (published) against the distance the competitors have from each other (0.0233); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0013"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Gene: ratio 1.013; Cell Ranger (published): ratio 0.993. Basis: cells with UMI in every tool (2157). Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "gene_corr.exonic",
+      "name": "Per-cell gene correlation, exonic UMI",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "nuclei2k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.946994,
+        "ci": [
+          0.946536,
+          0.947415
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-gene",
+          "value": 0.920527,
+          "ci": [
+            0.920122,
+            0.921181
+          ]
+        },
+        {
+          "tool": "cellranger-published",
+          "value": 0.920527,
+          "ci": [
+            0.920122,
+            0.921181
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000411
+        },
+        "rationale": "gate = Singlet's mean r distance to STARsolo Gene, Cell Ranger (published) against the distance the competitors have from each other (0.9205); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0004"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Gene: 0.9618; Cell Ranger (published): 0.9322. Basis: cells common to the family. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "pseudobulk_rho.exonic",
+      "name": "Pseudobulk gene Spearman rho, exonic UMI",
+      "unit": "rho",
+      "category": "agreement",
+      "dataset": "nuclei2k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.976691,
+        "ci": [
+          0.974759,
+          0.978865
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-gene",
+          "value": 0.964186,
+          "ci": [
+            0.961375,
+            0.967022
+          ]
+        },
+        {
+          "tool": "cellranger-published",
+          "value": 0.964186,
+          "ci": [
+            0.961375,
+            0.967022
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.002283
+        },
+        "rationale": "gate = Singlet's mean rho distance to STARsolo Gene, Cell Ranger (published) against the distance the competitors have from each other (0.9642); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0023"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Gene: 0.9915; Cell Ranger (published): 0.9618. Basis: 17943 genes with any UMI. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "umi_ratio_distance.total",
+      "name": "Per-cell UMI total, distance of the median ratio from 1, exon+intron UMI",
+      "unit": "|ln ratio|",
+      "category": "agreement",
+      "dataset": "nuclei2k_v2",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.06141,
+        "ci": [
+          0.060775,
+          0.062159
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-genefull",
+          "value": 0.068025,
+          "ci": [
+            0.067105,
+            0.068633
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.068025,
+          "ci": [
+            0.067105,
+            0.068633
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000823
+        },
+        "rationale": "gate = Singlet's mean |ln ratio| distance to STARsolo GeneFull, alevin-fry USA (S+U+A) against the distance the competitors have from each other (0.0680); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0008"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: ratio 1.100; alevin-fry USA (S+U+A): ratio 1.028. Basis: cells with UMI in every tool (2202). Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "gene_corr.total",
+      "name": "Per-cell gene correlation, exon+intron UMI",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "nuclei2k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.944841,
+        "ci": [
+          0.944595,
+          0.945148
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-genefull",
+          "value": 0.960646,
+          "ci": [
+            0.960295,
+            0.960916
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.960646,
+          "ci": [
+            0.960295,
+            0.960916
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000275
+        },
+        "rationale": "gate = Singlet's mean r distance to STARsolo GeneFull, alevin-fry USA (S+U+A) against the distance the competitors have from each other (0.9606); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0003"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9478; alevin-fry USA (S+U+A): 0.9419. Basis: cells common to the family. Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "pseudobulk_rho.total",
+      "name": "Pseudobulk gene Spearman rho, exon+intron UMI",
+      "unit": "rho",
+      "category": "agreement",
+      "dataset": "nuclei2k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.867619,
+        "ci": [
+          0.864972,
+          0.870076
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-genefull",
+          "value": 0.853208,
+          "ci": [
+            0.849084,
+            0.856724
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.853208,
+          "ci": [
+            0.849084,
+            0.856724
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.002595
+        },
+        "rationale": "gate = Singlet's mean rho distance to STARsolo GeneFull, alevin-fry USA (S+U+A) against the distance the competitors have from each other (0.8532); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0026"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.8405; alevin-fry USA (S+U+A): 0.8947. Basis: 43969 genes with any UMI. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "umi_ratio_distance.exonic",
+      "name": "Per-cell UMI total, distance of the median ratio from 1, exonic UMI",
+      "unit": "|ln ratio|",
+      "category": "agreement",
+      "dataset": "pbmc5p_v1",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.010187,
+        "ci": [
+          0.010038,
+          0.010309
+        ]
+      },
+      "competitors": [],
+      "rule": {
+        "type": "threshold",
+        "value": 0.078108,
+        "rationale": "only one competitor (STARsolo Gene) on this dataset, so there is no competitor spread to measure; threshold = the largest competitor-vs-competitor value on the other datasets (0.0781)"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Gene: ratio 0.990. Basis: cells with UMI in every tool (7453).",
+      "pass": "pass"
+    },
+    {
+      "id": "gene_corr.exonic",
+      "name": "Per-cell gene correlation, exonic UMI",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc5p_v1",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.99426,
+        "ci": [
+          0.994223,
+          0.994297
+        ]
+      },
+      "competitors": [],
+      "rule": {
+        "type": "threshold",
+        "value": 0.920527,
+        "rationale": "only one competitor (STARsolo Gene) on this dataset, so there is no competitor spread to measure; threshold = the lowest competitor-vs-competitor value on the other datasets (0.9205)"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Gene: 0.9943. Basis: cells common to the family.",
+      "pass": "pass"
+    },
+    {
+      "id": "pseudobulk_rho.exonic",
+      "name": "Pseudobulk gene Spearman rho, exonic UMI",
+      "unit": "rho",
+      "category": "agreement",
+      "dataset": "pbmc5p_v1",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.992632,
+        "ci": [
+          0.991724,
+          0.993364
+        ]
+      },
+      "competitors": [],
+      "rule": {
+        "type": "threshold",
+        "value": 0.964186,
+        "rationale": "only one competitor (STARsolo Gene) on this dataset, so there is no competitor spread to measure; threshold = the lowest competitor-vs-competitor value on the other datasets (0.9642)"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Gene: 0.9926. Basis: 21782 genes with any UMI.",
+      "pass": "pass"
+    },
+    {
+      "id": "umi_ratio_distance.total",
+      "name": "Per-cell UMI total, distance of the median ratio from 1, exon+intron UMI",
+      "unit": "|ln ratio|",
+      "category": "agreement",
+      "dataset": "pbmc5p_v1",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.021681,
+        "ci": [
+          0.021508,
+          0.021863
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-genefull",
+          "value": 0.044452,
+          "ci": [
+            0.044037,
+            0.044784
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.044452,
+          "ci": [
+            0.044037,
+            0.044784
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.00026
+        },
+        "rationale": "gate = Singlet's mean |ln ratio| distance to STARsolo GeneFull, alevin-fry USA (S+U+A) against the distance the competitors have from each other (0.0445); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0003"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: ratio 1.024; alevin-fry USA (S+U+A): ratio 0.980. Basis: cells with UMI in every tool (7453). Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "gene_corr.total",
+      "name": "Per-cell gene correlation, exon+intron UMI",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc5p_v1",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.985819,
+        "ci": [
+          0.985739,
+          0.985899
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-genefull",
+          "value": 0.983523,
+          "ci": [
+            0.983453,
+            0.983605
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.983523,
+          "ci": [
+            0.983453,
+            0.983605
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 7.7e-05
+        },
+        "rationale": "gate = Singlet's mean r distance to STARsolo GeneFull, alevin-fry USA (S+U+A) against the distance the competitors have from each other (0.9835); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0001"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9871; alevin-fry USA (S+U+A): 0.9845. Basis: cells common to the family. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "pseudobulk_rho.total",
+      "name": "Pseudobulk gene Spearman rho, exon+intron UMI",
+      "unit": "rho",
+      "category": "agreement",
+      "dataset": "pbmc5p_v1",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.969678,
+        "ci": [
+          0.968111,
+          0.971449
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-genefull",
+          "value": 0.954302,
+          "ci": [
+            0.951347,
+            0.957222
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.954302,
+          "ci": [
+            0.951347,
+            0.957222
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001579
+        },
+        "rationale": "gate = Singlet's mean rho distance to STARsolo GeneFull, alevin-fry USA (S+U+A) against the distance the competitors have from each other (0.9543); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0016"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo GeneFull: 0.9636; alevin-fry USA (S+U+A): 0.9757. Basis: 26703 genes with any UMI. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "adt_rna_spearman.total",
+      "name": "Protein (CITE-seq) vs coding-gene RNA, Spearman across cells, exon+intron UMI",
+      "unit": "rho",
+      "category": "accuracy",
+      "dataset": "pbmc1k_cite_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.402493,
+        "ci": [
+          0.385894,
+          0.418255
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-genefull",
+          "value": 0.427566,
+          "ci": [
+            0.40712,
+            0.445002
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.397415,
+          "ci": [
+            0.378134,
+            0.413374
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.007052
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (cells resampled) of Singlet minus STARsolo GeneFull: 0.0071"
+      },
+      "notes": "truth = antibody UMI (CLR) of the same cells; mean over 12 protein-gene pairs (CD3E, CD4, CD8A, CD14, FCGR3A, NCAM1, CD19, IL2RA, PDCD1, IL7R, TIGIT where in the panel); RNA = log1p(UMI per 10,000)",
+      "pass": "fail"
+    },
+    {
+      "id": "adt_rna_spearman.exonic",
+      "name": "Protein (CITE-seq) vs coding-gene RNA, Spearman across cells, exonic UMI",
+      "unit": "rho",
+      "category": "accuracy",
+      "dataset": "pbmc1k_cite_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.38456,
+        "ci": [
+          0.366183,
+          0.399197
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-gene",
+          "value": 0.386371,
+          "ci": [
+            0.368085,
+            0.400635
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.002045
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (cells resampled) of Singlet minus STARsolo Gene: 0.0020"
+      },
+      "notes": "truth = antibody UMI (CLR) of the same cells; mean over 12 protein-gene pairs (CD3E, CD4, CD8A, CD14, FCGR3A, NCAM1, CD19, IL2RA, PDCD1, IL7R, TIGIT where in the panel); RNA = log1p(UMI per 10,000)",
+      "pass": "pass"
+    }
+  ],
+  "resources": [
+    {
+      "tool": "alevin-fry-usa",
+      "dataset": "pbmc1k_v3",
+      "wall_s": 111.1,
+      "max_rss_gb": 3.42,
+      "threads": 16,
+      "cpu_h": 0.443,
+      "node": "[run] cpu: Intel(R) Xeon(R) 6730P"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "pbmc1k_v3",
+      "wall_s": 791.8,
+      "max_rss_gb": 21.32,
+      "threads": 8,
+      "cpu_h": 0.831,
+      "node": "c004.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-gene",
+      "dataset": "pbmc1k_v3",
+      "wall_s": 348.3,
+      "max_rss_gb": 19.66,
+      "threads": 16,
+      "cpu_h": 0.835,
+      "node": "c100.clipper.gvsu.edu"
+    },
+    {
+      "tool": "alevin-fry-usa",
+      "dataset": "pbmc1k_v2",
+      "wall_s": 122.7,
+      "max_rss_gb": 3.42,
+      "threads": 16,
+      "cpu_h": 0.493,
+      "node": "[run] cpu: Intel(R) Xeon(R) 6730P"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "pbmc1k_v2",
+      "wall_s": 882.9,
+      "max_rss_gb": 20.86,
+      "threads": 8,
+      "cpu_h": 1.018,
+      "node": "c009.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-gene",
+      "dataset": "pbmc1k_v2",
+      "wall_s": 506.3,
+      "max_rss_gb": 18.77,
+      "threads": 16,
+      "cpu_h": 1.244,
+      "node": "c003.clipper.gvsu.edu"
+    },
+    {
+      "tool": "alevin-fry-usa",
+      "dataset": "neuron1k_v3",
+      "wall_s": 91.7,
+      "max_rss_gb": 2.74,
+      "threads": 16,
+      "cpu_h": 0.349,
+      "node": "[run] cpu: Intel(R) Xeon(R) Gold 6226 CPU @ 2.70GHz"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "neuron1k_v3",
+      "wall_s": 720.7,
+      "max_rss_gb": 29.62,
+      "threads": 8,
+      "cpu_h": 0.549,
+      "node": "c101.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-gene",
+      "dataset": "neuron1k_v3",
+      "wall_s": 425.2,
+      "max_rss_gb": 28.59,
+      "threads": 16,
+      "cpu_h": 0.677,
+      "node": "c100.clipper.gvsu.edu"
+    },
+    {
+      "tool": "alevin-fry-usa",
+      "dataset": "hgmm1k_v3",
+      "wall_s": 101.6,
+      "max_rss_gb": 5.88,
+      "threads": 16,
+      "cpu_h": 0.369,
+      "node": "[run] cpu: Intel(R) Xeon(R) Gold 6226 CPU @ 2.70GHz"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "hgmm1k_v3",
+      "wall_s": 793.0,
+      "max_rss_gb": 57.37,
+      "threads": 8,
+      "cpu_h": 0.514,
+      "node": "c004.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-gene",
+      "dataset": "hgmm1k_v3",
+      "wall_s": 441.8,
+      "max_rss_gb": 56.56,
+      "threads": 16,
+      "cpu_h": 0.604,
+      "node": "c101.clipper.gvsu.edu"
+    },
+    {
+      "tool": "alevin-fry-usa",
+      "dataset": "pbmc1k_cite_v3",
+      "wall_s": 91.7,
+      "max_rss_gb": 3.42,
+      "threads": 16,
+      "cpu_h": 0.347,
+      "node": "[run] cpu: Intel(R) Xeon(R) Gold 6226 CPU @ 2.70GHz"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "pbmc1k_cite_v3",
+      "wall_s": 563.8,
+      "max_rss_gb": 21.29,
+      "threads": 8,
+      "cpu_h": 0.594,
+      "node": "c007.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-gene",
+      "dataset": "pbmc1k_cite_v3",
+      "wall_s": 371.4,
+      "max_rss_gb": 19.63,
+      "threads": 16,
+      "cpu_h": 0.817,
+      "node": "c010.clipper.gvsu.edu"
+    },
+    {
+      "tool": "alevin-fry-usa",
+      "dataset": "nuclei2k_v2",
+      "wall_s": 523.6,
+      "max_rss_gb": 2.61,
+      "threads": 16,
+      "cpu_h": 0.586,
+      "node": "[run] cpu: Intel(R) Xeon(R) 6730P"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "nuclei2k_v2",
+      "wall_s": 1381.2,
+      "max_rss_gb": 29.11,
+      "threads": 8,
+      "cpu_h": 1.633,
+      "node": "c009.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-gene",
+      "dataset": "nuclei2k_v2",
+      "wall_s": 452.8,
+      "max_rss_gb": 27.42,
+      "threads": 16,
+      "cpu_h": 1.233,
+      "node": "c100.clipper.gvsu.edu"
+    },
+    {
+      "tool": "alevin-fry-usa",
+      "dataset": "pbmc5p_v1",
+      "wall_s": 62.3,
+      "max_rss_gb": 3.77,
+      "threads": 16,
+      "cpu_h": 0.192,
+      "node": "[run] cpu: Intel(R) Xeon(R) Gold 6226 CPU @ 2.70GHz"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "pbmc5p_v1",
+      "wall_s": 612.7,
+      "max_rss_gb": 20.86,
+      "threads": 8,
+      "cpu_h": 0.615,
+      "node": "c101.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-gene",
+      "dataset": "pbmc5p_v1",
+      "wall_s": 307.5,
+      "max_rss_gb": 18.77,
+      "threads": 16,
+      "cpu_h": 0.674,
+      "node": "c100.clipper.gvsu.edu"
+    }
+  ],
+  "figures": [
+    {
+      "id": "ratio_by_dataset",
+      "title": "Median per-cell UMI ratio",
+      "kind": "grouped_bar",
+      "caption": "Ratio of the first tool's per-cell UMI total to the second's, median over STARsolo-called cells. 1.0 is exact agreement.",
+      "x": {
+        "label": "dataset",
+        "categories": [
+          "pbmc1k_v3",
+          "pbmc1k_v2",
+          "neuron1k_v3",
+          "hgmm1k_v3",
+          "pbmc1k_cite_v3",
+          "nuclei2k_v2",
+          "pbmc5p_v1"
+        ]
+      },
+      "y": {
+        "label": "ratio",
+        "unit": "ratio",
+        "scale": "linear"
+      },
+      "reference_lines": [
+        {
+          "axis": "y",
+          "value": 1.0,
+          "label": "equal"
+        }
+      ],
+      "series": [
+        {
+          "name": "Singlet exonic / STARsolo Gene",
+          "tool": "singlet",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "nuclei2k_v2",
+            "pbmc5p_v1"
+          ],
+          "y": [
+            0.99164,
+            1.017134,
+            0.975868,
+            0.982565,
+            0.990777,
+            1.013005,
+            0.989865
+          ]
+        },
+        {
+          "name": "Singlet exon+intron / STARsolo GeneFull",
+          "tool": "singlet",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "nuclei2k_v2",
+            "pbmc5p_v1"
+          ],
+          "y": [
+            1.023758,
+            1.080438,
+            1.039827,
+            1.022148,
+            1.018795,
+            1.099959,
+            1.023571
+          ]
+        },
+        {
+          "name": "Singlet exon+intron / alevin-fry USA",
+          "tool": "singlet",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "nuclei2k_v2",
+            "pbmc5p_v1"
+          ],
+          "y": [
+            0.963722,
+            0.918237,
+            1.009594,
+            1.021556,
+            0.951125,
+            1.027931,
+            0.980136
+          ]
+        },
+        {
+          "name": "alevin-fry USA / STARsolo GeneFull",
+          "tool": "alevin-fry-usa",
+          "x": [],
+          "y": []
+        },
+        {
+          "name": "STARsolo Gene / Cell Ranger",
+          "tool": "starsolo-gene",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "nuclei2k_v2"
+          ],
+          "y": [
+            1.039883,
+            1.027582,
+            0.924864,
+            1.013953,
+            1.04203,
+            0.976999
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gene_corr_by_dataset",
+      "title": "Median per-cell gene correlation",
+      "kind": "grouped_bar",
+      "caption": "Pearson r of log1p UMI over shared genes, median over cells.",
+      "x": {
+        "label": "dataset",
+        "categories": [
+          "pbmc1k_v3",
+          "pbmc1k_v2",
+          "neuron1k_v3",
+          "hgmm1k_v3",
+          "pbmc1k_cite_v3",
+          "nuclei2k_v2",
+          "pbmc5p_v1"
+        ]
+      },
+      "y": {
+        "label": "r",
+        "unit": "r",
+        "scale": "linear",
+        "min": 0.8,
+        "max": 1
+      },
+      "series": [
+        {
+          "name": "Singlet exonic vs STARsolo Gene",
+          "tool": "singlet",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "nuclei2k_v2",
+            "pbmc5p_v1"
+          ],
+          "y": [
+            0.993932,
+            0.989527,
+            0.991205,
+            0.988916,
+            0.993876,
+            0.961818,
+            0.99426
+          ]
+        },
+        {
+          "name": "Singlet exon+intron vs STARsolo GeneFull",
+          "tool": "singlet",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "nuclei2k_v2",
+            "pbmc5p_v1"
+          ],
+          "y": [
+            0.981925,
+            0.959251,
+            0.979849,
+            0.983748,
+            0.982012,
+            0.947777,
+            0.987143
+          ]
+        },
+        {
+          "name": "alevin-fry USA vs STARsolo GeneFull",
+          "tool": "alevin-fry-usa",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "nuclei2k_v2",
+            "pbmc5p_v1"
+          ],
+          "y": [
+            0.976565,
+            0.965286,
+            0.96929,
+            0.964171,
+            0.977002,
+            0.960646,
+            0.983523
+          ]
+        },
+        {
+          "name": "STARsolo Gene vs Cell Ranger",
+          "tool": "starsolo-gene",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "nuclei2k_v2"
+          ],
+          "y": [
+            0.981813,
+            0.984752,
+            0.978913,
+            0.98403,
+            0.981493,
+            0.920527
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cell_totals_pbmc1k_v3",
+      "title": "Per-cell exon+intron UMI, pbmc1k_v3",
+      "kind": "scatter",
+      "caption": "Each point is a STARsolo-called cell.",
+      "x": {
+        "label": "STARsolo GeneFull UMI",
+        "unit": "UMI",
+        "scale": "log"
+      },
+      "y": {
+        "label": "Singlet exon+intron UMI",
+        "unit": "UMI",
+        "scale": "log"
+      },
+      "series": [
+        {
+          "name": "cells",
+          "tool": "singlet",
+          "x": [
+            12836,
+            9445,
+            6570,
+            4391,
+            9876,
+            12034,
+            8234,
+            18676,
+            24327,
+            10351,
+            8321,
+            15689,
+            10134,
+            4319,
+            25183,
+            8365,
+            20420,
+            19960,
+            24784,
+            8074,
+            11216,
+            4299,
+            9742,
+            16995,
+            8665,
+            7686,
+            7483,
+            9838,
+            7783,
+            18494,
+            4310,
+            5766,
+            1285,
+            5600,
+            5775,
+            25285,
+            14763,
+            8171,
+            25081,
+            12155,
+            20434,
+            34932,
+            579,
+            10365,
+            830,
+            9638,
+            25209,
+            24534,
+            12840,
+            8023,
+            12701,
+            10298,
+            9007,
+            9614,
+            11286,
+            8997,
+            21730,
+            10356,
+            19550,
+            1506,
+            3577,
+            13807,
+            7925,
+            26823,
+            16000,
+            16499,
+            3747,
+            24280,
+            16702,
+            9236,
+            5581,
+            13550,
+            10177,
+            10335,
+            13031,
+            7037,
+            7751,
+            8237,
+            8559,
+            10529,
+            9812,
+            7304,
+            4136,
+            11843,
+            9369,
+            7164,
+            12056,
+            8155,
+            8615,
+            10922,
+            12773,
+            1054,
+            7612,
+            9303,
+            672,
+            11641,
+            13485,
+            10637,
+            10259,
+            12736,
+            11122,
+            27963,
+            10726,
+            8964,
+            10870,
+            5108,
+            10591,
+            9345,
+            11327,
+            7870,
+            7815,
+            8244,
+            25593,
+            8059,
+            9161,
+            7263,
+            5714,
+            12767,
+            16593,
+            8875,
+            11687,
+            7814,
+            9886,
+            13775,
+            24868,
+            9629,
+            8843,
+            6960,
+            2869,
+            13514,
+            10632,
+            12092,
+            14910,
+            19151,
+            5422,
+            8041,
+            14226,
+            19951,
+            8439,
+            12889,
+            7065,
+            6785,
+            8275,
+            8400,
+            10461,
+            10309,
+            9291,
+            8963,
+            6324,
+            8148,
+            17555,
+            9320,
+            15708,
+            10035,
+            16790,
+            5274,
+            9264,
+            19071,
+            987,
+            6547,
+            7324,
+            514,
+            9561,
+            7142,
+            17337,
+            11503,
+            9225,
+            9469,
+            11347,
+            14054,
+            10981,
+            7500,
+            1975,
+            10344,
+            23961,
+            9432,
+            6573,
+            789,
+            7885,
+            9221,
+            6053,
+            7689,
+            14291,
+            10340,
+            19083,
+            6853,
+            546,
+            15709,
+            8865,
+            9220,
+            10402,
+            11401,
+            18022,
+            7511,
+            8846,
+            17542,
+            9200,
+            10315,
+            2091,
+            7792,
+            13166,
+            13179,
+            16008,
+            19026,
+            12083,
+            8706,
+            9874,
+            7960,
+            10476,
+            8255,
+            8844,
+            8437,
+            6760,
+            11759,
+            22828,
+            8986,
+            13933,
+            8087,
+            7368,
+            9963,
+            8083,
+            21875,
+            14287,
+            6850,
+            27817,
+            8795,
+            9097,
+            23151,
+            8462,
+            10540,
+            10622,
+            6344,
+            9840,
+            10496,
+            10655,
+            5192,
+            5820,
+            20481,
+            14546,
+            16051,
+            7108,
+            23128,
+            7512,
+            6775,
+            10685,
+            9780,
+            9116,
+            13615,
+            17787,
+            11666,
+            10763,
+            7759,
+            7486,
+            7974,
+            4089,
+            14384,
+            6277,
+            10567,
+            29814,
+            11861,
+            2904,
+            17185,
+            6808,
+            12021,
+            18739,
+            620,
+            10185,
+            12637,
+            10334,
+            8159,
+            8645,
+            22464,
+            9036,
+            7415,
+            10191,
+            16106,
+            12830,
+            12362,
+            23917,
+            9193,
+            12092,
+            10442,
+            4819,
+            9220,
+            15205,
+            20377,
+            24925,
+            12850,
+            10469,
+            13672,
+            9454,
+            10821,
+            12657,
+            7655,
+            11017,
+            8569,
+            5598,
+            682,
+            9993,
+            17674,
+            22641,
+            10698,
+            15361,
+            10793,
+            22402,
+            24990,
+            28358,
+            553,
+            11149,
+            5020,
+            732,
+            10814,
+            9343,
+            13122,
+            9249,
+            11326,
+            6222,
+            17212,
+            9044,
+            16487,
+            12828,
+            9798,
+            20815,
+            11557,
+            14661,
+            11648,
+            22890,
+            7790,
+            21305,
+            17232,
+            10649,
+            10958,
+            29570,
+            17560,
+            11209,
+            23975,
+            13675,
+            32925,
+            7080,
+            11072,
+            10429,
+            9681,
+            13127,
+            19326,
+            7185,
+            17497,
+            8488,
+            16098,
+            6350,
+            13491,
+            8390,
+            22242,
+            35128,
+            9448,
+            4149,
+            8604,
+            11011,
+            16325,
+            9890,
+            1216,
+            4957,
+            4994,
+            13057,
+            3416,
+            8263,
+            10041,
+            732,
+            6973,
+            21154,
+            10309,
+            12476,
+            9661,
+            20651,
+            6167,
+            11299,
+            17215,
+            20479,
+            24189,
+            8049,
+            11416,
+            8032,
+            10649,
+            8125,
+            24298,
+            9158,
+            1669,
+            20157,
+            13119,
+            9530,
+            17063,
+            6783,
+            21478,
+            13861,
+            597,
+            12362,
+            12881,
+            9048,
+            11151,
+            22437,
+            9901,
+            5885,
+            26014,
+            13190,
+            33390,
+            7129,
+            12503,
+            10234,
+            10693,
+            19299,
+            23493,
+            6007,
+            6276,
+            8447,
+            9511,
+            9052,
+            6289,
+            5084,
+            26524,
+            18870,
+            11493,
+            2665,
+            11378,
+            10380,
+            9289,
+            14618,
+            16753,
+            34893,
+            3163,
+            9046,
+            12486,
+            10563,
+            10492,
+            10846,
+            16843,
+            2228,
+            25629,
+            24969,
+            9440,
+            12354,
+            19225,
+            7886,
+            3919,
+            19663,
+            10042,
+            10436,
+            69024,
+            31939,
+            8085,
+            11692,
+            3862,
+            8418,
+            11057,
+            11944,
+            10445,
+            8818,
+            7358,
+            8734,
+            6378,
+            13582,
+            11292,
+            6182,
+            21638,
+            1670,
+            7250,
+            9748,
+            10609,
+            15161,
+            9482,
+            16537,
+            10843,
+            5698,
+            9529,
+            8637,
+            9017,
+            2601,
+            12676,
+            19168,
+            9168,
+            8969,
+            8314,
+            12126,
+            19675,
+            27820,
+            4995,
+            8183,
+            7284,
+            6439,
+            12271,
+            5070,
+            10714,
+            9521,
+            54938,
+            6020,
+            5049,
+            569,
+            14549,
+            949,
+            8370,
+            10088,
+            18032,
+            9135,
+            11446,
+            14297,
+            5448,
+            12521,
+            8682,
+            11085,
+            14609,
+            11238,
+            8720,
+            13429,
+            19204,
+            7007,
+            11403,
+            8392,
+            11404,
+            21769,
+            11118,
+            11176,
+            10578,
+            5955,
+            11467,
+            23629,
+            11466,
+            19639,
+            26921,
+            8450,
+            9603,
+            10903,
+            9326,
+            13409,
+            25507,
+            13521,
+            6530,
+            9746,
+            9986,
+            8486,
+            2306,
+            12316,
+            8277,
+            6738,
+            6330,
+            9450,
+            1051,
+            9537,
+            3863,
+            8234,
+            13085,
+            21818,
+            6634,
+            10222,
+            8264,
+            16455,
+            10415,
+            6563,
+            23071,
+            14931,
+            13210,
+            12630,
+            19656,
+            2820,
+            9159,
+            10516,
+            13249,
+            10201,
+            20809,
+            624,
+            6456,
+            12244,
+            1179,
+            8985,
+            7599,
+            12110,
+            11435,
+            874,
+            7037,
+            5747,
+            9256,
+            9195,
+            11910,
+            12396,
+            15747,
+            28459,
+            3801,
+            16136,
+            3879,
+            10746,
+            11967,
+            8242,
+            9819,
+            8778,
+            1066,
+            21118,
+            10465,
+            12741,
+            7922,
+            1745,
+            19538,
+            12958,
+            936,
+            17074,
+            12341,
+            12137,
+            9314,
+            19181,
+            11056,
+            16924,
+            11424,
+            9761,
+            876,
+            20964,
+            8609,
+            9618,
+            17848,
+            7019,
+            11709,
+            12858,
+            9800,
+            12021,
+            6580,
+            8295,
+            7492,
+            7638,
+            11183,
+            21857,
+            7208,
+            7678,
+            19630,
+            8602,
+            4463,
+            68421,
+            8892,
+            11224,
+            5462,
+            12641,
+            9663,
+            9686,
+            11113,
+            6408,
+            9775,
+            9223,
+            7188,
+            6966,
+            8698,
+            8086,
+            4624,
+            16676,
+            12155,
+            8823,
+            8696,
+            876,
+            10882,
+            4024,
+            9740,
+            9058,
+            2033,
+            9599,
+            8395,
+            8284,
+            11442,
+            7726,
+            8252,
+            9980,
+            8956,
+            11791,
+            8610,
+            24514,
+            8418,
+            23159,
+            10283,
+            7218,
+            21681,
+            17944,
+            10035,
+            16822,
+            12315,
+            7000,
+            1836,
+            7808,
+            8743,
+            9240,
+            10039,
+            3037,
+            18944,
+            15321,
+            8716,
+            7916,
+            9006,
+            3167,
+            4248,
+            18919,
+            20258,
+            12487,
+            10799,
+            15277,
+            13258,
+            11387,
+            14528,
+            7301,
+            29295,
+            24002,
+            15705,
+            8768,
+            10630,
+            24808,
+            21224,
+            9209,
+            8282,
+            11511,
+            15909,
+            17942,
+            4315,
+            17478,
+            4285,
+            11911,
+            13435,
+            5268,
+            789,
+            829,
+            9680,
+            9143,
+            7421,
+            710,
+            5992,
+            3497,
+            8911,
+            8867,
+            7677,
+            9370,
+            4375,
+            23797,
+            4634,
+            14910,
+            8875,
+            23336,
+            8639,
+            7641,
+            12464,
+            3255,
+            10289,
+            6199,
+            9136,
+            16008,
+            19850,
+            10293,
+            8184,
+            11693,
+            7974,
+            8105,
+            22059,
+            14080,
+            1896,
+            7975,
+            8730,
+            11315,
+            11736,
+            13074,
+            9623,
+            6367,
+            11788,
+            10422,
+            19597,
+            10616,
+            13957,
+            9180,
+            9053,
+            13073,
+            8087,
+            15600,
+            7215,
+            17122,
+            9017,
+            27272,
+            2172,
+            7068,
+            44313,
+            5912,
+            18964,
+            9136,
+            2853,
+            9714,
+            11920,
+            9098,
+            16439,
+            7353,
+            11080,
+            19369,
+            6359,
+            12706,
+            18002,
+            4819,
+            7716,
+            7746,
+            20817,
+            27029,
+            8829,
+            11633,
+            2892,
+            3907,
+            10017,
+            11646,
+            10102,
+            1595,
+            16977,
+            7463,
+            6665,
+            2990,
+            6366,
+            7679,
+            13767,
+            6968,
+            8296,
+            6800,
+            6192,
+            7799,
+            8557,
+            1038,
+            26109,
+            11836,
+            10507,
+            7795,
+            1978,
+            4730,
+            12530,
+            8454,
+            9797,
+            8821,
+            9012,
+            9785,
+            23545,
+            8781,
+            12381,
+            12391,
+            8658,
+            9611,
+            15270,
+            8406,
+            7534,
+            8225,
+            9676,
+            3931,
+            6752,
+            6660,
+            15353,
+            11042,
+            10946,
+            7525,
+            27439,
+            9685,
+            1628,
+            11274,
+            1229,
+            4715,
+            4126,
+            803,
+            7713,
+            8723,
+            18291,
+            11221,
+            26852,
+            3298,
+            845,
+            11963,
+            9444,
+            9304,
+            9233,
+            9242,
+            8581,
+            23221,
+            10262,
+            8032,
+            11440,
+            8952,
+            687,
+            9411,
+            7454,
+            10817,
+            3811,
+            7243,
+            10054,
+            8092,
+            2604,
+            8503,
+            5042,
+            8440,
+            11710,
+            21032,
+            11950,
+            10026,
+            10524,
+            12540,
+            14435,
+            14326,
+            1018,
+            11574,
+            1685,
+            13303,
+            9577,
+            843,
+            26204,
+            9779,
+            10308,
+            9864,
+            12787,
+            7038,
+            764,
+            10139,
+            6564,
+            10194,
+            12415,
+            19095,
+            15322,
+            10008,
+            8738,
+            21090,
+            7123,
+            5512,
+            10287,
+            10405,
+            9077,
+            4600,
+            21799,
+            8330,
+            14434,
+            23149,
+            10452,
+            14976,
+            7099,
+            32072,
+            41021,
+            1213,
+            8815,
+            8618,
+            13399,
+            10120,
+            9782,
+            10891,
+            16877,
+            28449,
+            11463,
+            21629,
+            6838,
+            11475,
+            21873,
+            13195,
+            10596,
+            9912,
+            11899,
+            550,
+            10058,
+            23108,
+            11184,
+            21848,
+            11493,
+            18962,
+            20018,
+            27195,
+            13078,
+            7775,
+            10884,
+            20562,
+            14663,
+            17819,
+            8840,
+            8807,
+            18569,
+            19827,
+            12283,
+            9154,
+            584,
+            8821,
+            10621,
+            8593,
+            6255,
+            7847,
+            8850,
+            10434,
+            905,
+            15624,
+            628,
+            12829,
+            14417,
+            5168,
+            11363,
+            627,
+            14482,
+            8771,
+            18223,
+            30413,
+            29934,
+            23408,
+            8482,
+            9820,
+            38368,
+            9398,
+            12636,
+            11062,
+            9208,
+            11415,
+            8737,
+            9227,
+            9663,
+            2138,
+            10824,
+            3882,
+            10064,
+            17145,
+            4909,
+            10194,
+            10179,
+            15465,
+            5671,
+            13313,
+            568,
+            8144,
+            9613,
+            8299,
+            20080,
+            15977,
+            6936,
+            8770,
+            28640,
+            21090,
+            21118,
+            6247,
+            8988,
+            23945,
+            13363,
+            11085,
+            11485,
+            12654,
+            19874,
+            22604,
+            9054,
+            708,
+            8222,
+            9054,
+            10370,
+            12205,
+            7507,
+            8621,
+            13408,
+            2792,
+            7882,
+            19880,
+            17051,
+            3387,
+            7225,
+            16071,
+            6553,
+            11733,
+            13093,
+            9628,
+            9328,
+            9698,
+            10631,
+            12806,
+            20701,
+            23312,
+            8403,
+            17517,
+            9715,
+            6324,
+            8258,
+            25069,
+            25378,
+            20111,
+            7365,
+            14358,
+            24952,
+            9430,
+            11424,
+            652,
+            5963,
+            5751,
+            8564,
+            7361,
+            15657,
+            5723,
+            12503,
+            7436,
+            10395,
+            9789,
+            11353,
+            10597,
+            10555,
+            8057,
+            10766,
+            5500,
+            8772,
+            12016,
+            5856,
+            9627,
+            1793,
+            5321,
+            9539,
+            7431,
+            877,
+            6013,
+            8035,
+            6926,
+            21079,
+            10595,
+            22882,
+            7521,
+            2961,
+            8698,
+            21001,
+            19872,
+            7174,
+            2534,
+            21177,
+            6312,
+            16062,
+            10812,
+            10473,
+            7639,
+            8414,
+            1917,
+            616,
+            21266,
+            15019,
+            9195,
+            18380,
+            11522,
+            12444,
+            9180,
+            28754,
+            8814,
+            7672,
+            9100,
+            11012,
+            12409,
+            8731,
+            9021,
+            4589,
+            7644,
+            12078,
+            10877,
+            23359,
+            4971,
+            8469,
+            33991,
+            9191,
+            6146,
+            6652,
+            8028,
+            30769,
+            25767,
+            7652,
+            17156,
+            10815,
+            6569,
+            23431,
+            13011,
+            10838,
+            7503,
+            9280,
+            3007,
+            9467,
+            9743,
+            9845,
+            7924,
+            7239,
+            14162,
+            9865,
+            10370,
+            10166,
+            7072,
+            11402,
+            9316,
+            4135,
+            1934,
+            16784,
+            10767,
+            11938,
+            990,
+            16996,
+            679,
+            5567,
+            7736,
+            13296,
+            681,
+            16195,
+            4154,
+            8981,
+            7815,
+            12004,
+            10185,
+            8344,
+            9386,
+            6748,
+            622,
+            18455,
+            17341,
+            14592,
+            23979,
+            544,
+            19950,
+            9812,
+            19755,
+            15381,
+            7451,
+            6654,
+            13417,
+            5621,
+            8862,
+            9408,
+            7530,
+            34261,
+            17482,
+            5209,
+            7445,
+            4382,
+            6151,
+            877,
+            15140,
+            13706,
+            706,
+            2851,
+            7402,
+            11394,
+            12216,
+            8086,
+            13071,
+            18116,
+            10513,
+            7434,
+            14850,
+            7135
+          ],
+          "y": [
+            12884,
+            9760,
+            6775,
+            4520,
+            10171,
+            12519,
+            8500,
+            18844,
+            24569,
+            10685,
+            8596,
+            15751,
+            10490,
+            4233,
+            25842,
+            8600,
+            20766,
+            20320,
+            25348,
+            8291,
+            11621,
+            4292,
+            9979,
+            17268,
+            8911,
+            7905,
+            7645,
+            10138,
+            7907,
+            18733,
+            4395,
+            5845,
+            1264,
+            5599,
+            5943,
+            25579,
+            14892,
+            8376,
+            25707,
+            12504,
+            20602,
+            35472,
+            574,
+            10738,
+            831,
+            10053,
+            25587,
+            24937,
+            13199,
+            8277,
+            13040,
+            10597,
+            9295,
+            9923,
+            11665,
+            9270,
+            21803,
+            10711,
+            19672,
+            1503,
+            3668,
+            13946,
+            8078,
+            27188,
+            16515,
+            16740,
+            3699,
+            24673,
+            16793,
+            9467,
+            5745,
+            13922,
+            10510,
+            10666,
+            13291,
+            7208,
+            7747,
+            8259,
+            8796,
+            10588,
+            9727,
+            7509,
+            4231,
+            11968,
+            9549,
+            7347,
+            12125,
+            8091,
+            8922,
+            11230,
+            12853,
+            1010,
+            7852,
+            9548,
+            673,
+            11976,
+            13746,
+            10847,
+            10578,
+            13183,
+            11482,
+            28348,
+            11045,
+            9189,
+            11215,
+            5233,
+            10986,
+            9670,
+            11743,
+            8091,
+            7823,
+            8503,
+            26005,
+            8238,
+            9426,
+            7453,
+            5756,
+            13086,
+            17096,
+            9104,
+            11980,
+            8119,
+            10194,
+            14185,
+            25383,
+            9934,
+            9069,
+            7148,
+            2846,
+            13929,
+            10751,
+            12470,
+            15401,
+            19376,
+            5537,
+            8272,
+            14658,
+            20294,
+            8680,
+            13286,
+            7321,
+            6820,
+            8547,
+            8618,
+            10794,
+            10414,
+            9559,
+            9262,
+            6330,
+            8444,
+            17839,
+            9577,
+            16207,
+            10346,
+            16902,
+            5392,
+            9585,
+            19557,
+            983,
+            6750,
+            7501,
+            495,
+            9890,
+            6595,
+            17698,
+            11834,
+            9550,
+            9683,
+            11762,
+            14606,
+            11330,
+            7629,
+            1936,
+            10704,
+            24708,
+            9620,
+            6778,
+            787,
+            8155,
+            9113,
+            5984,
+            7891,
+            14434,
+            10689,
+            19302,
+            6883,
+            549,
+            15899,
+            9121,
+            9546,
+            10371,
+            11776,
+            18395,
+            7480,
+            9175,
+            17711,
+            9425,
+            10698,
+            2107,
+            7765,
+            13434,
+            13612,
+            16170,
+            19380,
+            12441,
+            8928,
+            10127,
+            8166,
+            10768,
+            8489,
+            9046,
+            8713,
+            6965,
+            12086,
+            23047,
+            9309,
+            14411,
+            8341,
+            7511,
+            10060,
+            8391,
+            21983,
+            14296,
+            6998,
+            28322,
+            9005,
+            9280,
+            23409,
+            8714,
+            10782,
+            10903,
+            6550,
+            10157,
+            10715,
+            11001,
+            5315,
+            5785,
+            20501,
+            14699,
+            16382,
+            7113,
+            23462,
+            7651,
+            6784,
+            10803,
+            9715,
+            9243,
+            13955,
+            17971,
+            12020,
+            11069,
+            7938,
+            7703,
+            8167,
+            4204,
+            14797,
+            6477,
+            10835,
+            30155,
+            11482,
+            2964,
+            17564,
+            7074,
+            12442,
+            18983,
+            616,
+            10493,
+            13081,
+            10636,
+            8285,
+            8611,
+            22971,
+            9294,
+            7596,
+            10468,
+            16151,
+            13225,
+            12794,
+            24060,
+            9543,
+            12224,
+            10793,
+            4865,
+            9506,
+            15302,
+            20463,
+            25296,
+            13122,
+            10509,
+            14125,
+            9655,
+            11024,
+            12597,
+            7860,
+            11417,
+            8881,
+            5544,
+            684,
+            10277,
+            17870,
+            22870,
+            11022,
+            15431,
+            11115,
+            22580,
+            25389,
+            28942,
+            557,
+            11450,
+            5010,
+            726,
+            11148,
+            9618,
+            13522,
+            9541,
+            11714,
+            6166,
+            17229,
+            9026,
+            16705,
+            12949,
+            10095,
+            21080,
+            11937,
+            15204,
+            11958,
+            23197,
+            8034,
+            21513,
+            17674,
+            10970,
+            11233,
+            30439,
+            17843,
+            11275,
+            24421,
+            14069,
+            33555,
+            7289,
+            11371,
+            10759,
+            9992,
+            13360,
+            19731,
+            7356,
+            17684,
+            8771,
+            16633,
+            6414,
+            13510,
+            8613,
+            22599,
+            36175,
+            9668,
+            4220,
+            8830,
+            11376,
+            16479,
+            10210,
+            1217,
+            4911,
+            5012,
+            13438,
+            3480,
+            8470,
+            10355,
+            726,
+            7203,
+            21720,
+            10496,
+            12851,
+            9770,
+            20690,
+            6256,
+            11616,
+            17363,
+            20809,
+            24323,
+            8351,
+            11540,
+            8297,
+            10941,
+            8359,
+            24821,
+            9387,
+            1684,
+            20391,
+            13534,
+            9842,
+            17561,
+            6953,
+            21911,
+            13935,
+            595,
+            12715,
+            12955,
+            9309,
+            11497,
+            22727,
+            10211,
+            6074,
+            26609,
+            13359,
+            34314,
+            7091,
+            12885,
+            10512,
+            10862,
+            19666,
+            23816,
+            6050,
+            6413,
+            8592,
+            9788,
+            9236,
+            6441,
+            5241,
+            27180,
+            19085,
+            11820,
+            2639,
+            11752,
+            10700,
+            9495,
+            15039,
+            16552,
+            35383,
+            3260,
+            9194,
+            12866,
+            10733,
+            10736,
+            11173,
+            16963,
+            2261,
+            25649,
+            25670,
+            9728,
+            12691,
+            19288,
+            8047,
+            3955,
+            20184,
+            10315,
+            10803,
+            71645,
+            32611,
+            8341,
+            12011,
+            3677,
+            8645,
+            11020,
+            12296,
+            10572,
+            8827,
+            7579,
+            9029,
+            6510,
+            14033,
+            11611,
+            6361,
+            21911,
+            1707,
+            7494,
+            9737,
+            10962,
+            15334,
+            9705,
+            16668,
+            11240,
+            5846,
+            9783,
+            8943,
+            9296,
+            2645,
+            12734,
+            19283,
+            9410,
+            9205,
+            8497,
+            12117,
+            20047,
+            28021,
+            4992,
+            8345,
+            7395,
+            6550,
+            12596,
+            5232,
+            11085,
+            9752,
+            55801,
+            6171,
+            5085,
+            572,
+            14666,
+            947,
+            8575,
+            10268,
+            18315,
+            9398,
+            11838,
+            14796,
+            5636,
+            12903,
+            8737,
+            11367,
+            14741,
+            11560,
+            8923,
+            13512,
+            19440,
+            7102,
+            11770,
+            8620,
+            11591,
+            22286,
+            11379,
+            11433,
+            10883,
+            5958,
+            11816,
+            23992,
+            11616,
+            19557,
+            27146,
+            8559,
+            9622,
+            11205,
+            9591,
+            13646,
+            26110,
+            13951,
+            6776,
+            10072,
+            10305,
+            8714,
+            2333,
+            12280,
+            8550,
+            6940,
+            6463,
+            9635,
+            1075,
+            9800,
+            3878,
+            8494,
+            13450,
+            22062,
+            6600,
+            10496,
+            8350,
+            16522,
+            10728,
+            6617,
+            23439,
+            15425,
+            13316,
+            12908,
+            19763,
+            2770,
+            9405,
+            10823,
+            13266,
+            10148,
+            21037,
+            619,
+            6656,
+            12534,
+            1202,
+            9252,
+            7818,
+            12501,
+            11832,
+            818,
+            7251,
+            5739,
+            9536,
+            9187,
+            12320,
+            12721,
+            15918,
+            28930,
+            3886,
+            16197,
+            3992,
+            11117,
+            12294,
+            8504,
+            10069,
+            9032,
+            1047,
+            21589,
+            10670,
+            12790,
+            8148,
+            1656,
+            19706,
+            13440,
+            942,
+            17083,
+            12731,
+            12433,
+            9590,
+            19408,
+            11340,
+            17133,
+            11807,
+            10022,
+            872,
+            21495,
+            8816,
+            9886,
+            18088,
+            7214,
+            12063,
+            13309,
+            10132,
+            12365,
+            6752,
+            8560,
+            7746,
+            7862,
+            11547,
+            22280,
+            7247,
+            7844,
+            20044,
+            8847,
+            4557,
+            70034,
+            9176,
+            11596,
+            5409,
+            13088,
+            10074,
+            10014,
+            11425,
+            6537,
+            10118,
+            9443,
+            7433,
+            7148,
+            8940,
+            8345,
+            4669,
+            17224,
+            12543,
+            8875,
+            8715,
+            872,
+            11228,
+            4064,
+            9991,
+            9278,
+            2063,
+            9839,
+            8545,
+            8558,
+            11824,
+            7904,
+            8414,
+            10258,
+            9216,
+            12119,
+            8773,
+            24660,
+            8642,
+            23680,
+            10519,
+            7202,
+            22066,
+            17977,
+            10261,
+            16882,
+            12807,
+            7230,
+            1825,
+            8074,
+            8960,
+            9300,
+            10331,
+            3078,
+            19190,
+            15575,
+            9026,
+            8129,
+            8995,
+            3238,
+            4286,
+            18827,
+            20524,
+            12943,
+            11130,
+            15531,
+            13657,
+            11823,
+            14640,
+            7465,
+            29895,
+            24561,
+            15904,
+            9018,
+            10887,
+            25170,
+            21307,
+            9505,
+            8246,
+            11909,
+            16232,
+            18244,
+            4447,
+            17676,
+            4286,
+            12057,
+            13599,
+            5299,
+            770,
+            838,
+            9932,
+            8958,
+            7555,
+            711,
+            6109,
+            3571,
+            9134,
+            8870,
+            7918,
+            9607,
+            4357,
+            24106,
+            4684,
+            15270,
+            9145,
+            23658,
+            8972,
+            7848,
+            12613,
+            3283,
+            10248,
+            6292,
+            9472,
+            16563,
+            19924,
+            10649,
+            8446,
+            12004,
+            8257,
+            8333,
+            22337,
+            14167,
+            1906,
+            8175,
+            8773,
+            11672,
+            12103,
+            13231,
+            9964,
+            6523,
+            11863,
+            10364,
+            19882,
+            10713,
+            14297,
+            9412,
+            9305,
+            13402,
+            8341,
+            15724,
+            7379,
+            17337,
+            9364,
+            28127,
+            2129,
+            7076,
+            45929,
+            5970,
+            19388,
+            9409,
+            2800,
+            10063,
+            12267,
+            9309,
+            16678,
+            7529,
+            11052,
+            19682,
+            6334,
+            13065,
+            18022,
+            4924,
+            7983,
+            7964,
+            21060,
+            27817,
+            9119,
+            11982,
+            2893,
+            3980,
+            10310,
+            11974,
+            10421,
+            1530,
+            17129,
+            7671,
+            6957,
+            2878,
+            6569,
+            7935,
+            14118,
+            7184,
+            8224,
+            6781,
+            6331,
+            7952,
+            8869,
+            1035,
+            26859,
+            12230,
+            10811,
+            7964,
+            1966,
+            4890,
+            12707,
+            8728,
+            10123,
+            9110,
+            9257,
+            10104,
+            23861,
+            8928,
+            12795,
+            12466,
+            8799,
+            9614,
+            15620,
+            8645,
+            7743,
+            8474,
+            10027,
+            4042,
+            6940,
+            6807,
+            15864,
+            11395,
+            11260,
+            7708,
+            28281,
+            9912,
+            1589,
+            11684,
+            1233,
+            4851,
+            4145,
+            800,
+            7970,
+            9004,
+            18669,
+            11573,
+            27210,
+            3405,
+            855,
+            12066,
+            9654,
+            9544,
+            9244,
+            9442,
+            8804,
+            23512,
+            10632,
+            8198,
+            11659,
+            9224,
+            684,
+            9779,
+            7697,
+            11186,
+            3828,
+            7421,
+            10325,
+            8298,
+            2574,
+            8675,
+            5237,
+            8698,
+            11992,
+            21421,
+            12307,
+            10384,
+            10853,
+            12828,
+            14872,
+            14821,
+            1041,
+            11918,
+            1677,
+            13740,
+            9885,
+            843,
+            26570,
+            10079,
+            10586,
+            10196,
+            12850,
+            7123,
+            742,
+            10372,
+            6720,
+            10622,
+            12476,
+            19303,
+            15242,
+            10065,
+            8979,
+            21384,
+            7221,
+            5664,
+            10527,
+            10726,
+            9424,
+            4755,
+            21898,
+            8500,
+            14513,
+            23231,
+            10699,
+            15162,
+            7350,
+            32517,
+            42052,
+            1222,
+            9077,
+            8823,
+            13787,
+            10435,
+            10050,
+            11254,
+            17153,
+            28899,
+            11746,
+            21928,
+            7102,
+            11728,
+            22428,
+            13675,
+            10835,
+            10203,
+            12286,
+            564,
+            10379,
+            23357,
+            11472,
+            22129,
+            11891,
+            19119,
+            20250,
+            27911,
+            13477,
+            7955,
+            11245,
+            20791,
+            14983,
+            18109,
+            9073,
+            9078,
+            19098,
+            20094,
+            12252,
+            9383,
+            584,
+            9044,
+            10910,
+            8826,
+            6475,
+            8078,
+            9163,
+            10752,
+            895,
+            15555,
+            619,
+            12933,
+            14531,
+            5323,
+            11736,
+            625,
+            14474,
+            8983,
+            18525,
+            31010,
+            30550,
+            23878,
+            8694,
+            10135,
+            39168,
+            9729,
+            12956,
+            11393,
+            9529,
+            11797,
+            9043,
+            9495,
+            9913,
+            2163,
+            11182,
+            4014,
+            10355,
+            17309,
+            4891,
+            10467,
+            10496,
+            15573,
+            5855,
+            13470,
+            558,
+            8261,
+            9938,
+            8550,
+            20300,
+            16018,
+            7018,
+            8992,
+            29319,
+            21525,
+            21488,
+            6057,
+            9245,
+            24372,
+            13709,
+            11190,
+            11700,
+            13037,
+            20123,
+            22853,
+            9299,
+            711,
+            8462,
+            9256,
+            10624,
+            12483,
+            7702,
+            8877,
+            13766,
+            2737,
+            8120,
+            20138,
+            17166,
+            3499,
+            7487,
+            16098,
+            6539,
+            12064,
+            13178,
+            9922,
+            9569,
+            9945,
+            10987,
+            12921,
+            21004,
+            23675,
+            8630,
+            18007,
+            10063,
+            6259,
+            8310,
+            25146,
+            25934,
+            20199,
+            7510,
+            14347,
+            25450,
+            9670,
+            11700,
+            636,
+            6162,
+            5936,
+            8822,
+            7639,
+            15871,
+            5889,
+            12874,
+            7593,
+            10600,
+            10070,
+            11742,
+            10832,
+            10909,
+            8313,
+            11110,
+            5505,
+            9039,
+            12030,
+            5839,
+            9651,
+            1811,
+            5387,
+            9370,
+            7579,
+            869,
+            6151,
+            8272,
+            7149,
+            21310,
+            10874,
+            23194,
+            7786,
+            2855,
+            9001,
+            21420,
+            20403,
+            7281,
+            2573,
+            21565,
+            6489,
+            16192,
+            11238,
+            10813,
+            7887,
+            8271,
+            1908,
+            611,
+            21488,
+            15256,
+            9485,
+            18536,
+            11920,
+            12761,
+            9401,
+            29076,
+            9052,
+            7910,
+            9340,
+            11014,
+            12529,
+            8993,
+            9338,
+            4669,
+            7885,
+            12437,
+            11120,
+            23711,
+            4936,
+            8766,
+            35101,
+            9374,
+            6342,
+            6680,
+            8248,
+            30963,
+            26093,
+            7875,
+            17425,
+            10856,
+            6722,
+            23675,
+            13434,
+            11190,
+            7467,
+            9543,
+            2934,
+            9755,
+            10068,
+            10173,
+            7912,
+            7387,
+            14212,
+            10060,
+            10599,
+            10464,
+            7275,
+            11699,
+            9560,
+            4228,
+            1967,
+            17249,
+            11068,
+            12286,
+            993,
+            17125,
+            676,
+            5522,
+            7942,
+            13290,
+            693,
+            16534,
+            4171,
+            9245,
+            8035,
+            12341,
+            10150,
+            8540,
+            9661,
+            6992,
+            625,
+            18806,
+            17456,
+            14773,
+            24231,
+            562,
+            20344,
+            10085,
+            19924,
+            15533,
+            7625,
+            6839,
+            13597,
+            5593,
+            9064,
+            9785,
+            7812,
+            35335,
+            17548,
+            5155,
+            7652,
+            4377,
+            6231,
+            875,
+            15630,
+            14109,
+            702,
+            2919,
+            7591,
+            11736,
+            12247,
+            8293,
+            13382,
+            18440,
+            10880,
+            7651,
+            14974,
+            7366
+          ]
+        }
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "name": "hgmm1k_v3.cells.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/gex-counts/hgmm1k_v3.cells.tsv.gz",
+      "kind": "derived",
+      "sha256": "a50f35d5695a9bb97ebd451a791207b9d4692a2e29c3797a6c856b9f1ec7c9b6",
+      "bytes": 45810,
+      "format": "tsv",
+      "dataset": "hgmm1k_v3"
+    },
+    {
+      "name": "hgmm1k_v3.genes.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/gex-counts/hgmm1k_v3.genes.tsv.gz",
+      "kind": "derived",
+      "sha256": "2929af942e1c92c988facf964a46ece2117999cad990b91fd4616e17858384fb",
+      "bytes": 718282,
+      "format": "tsv",
+      "dataset": "hgmm1k_v3"
+    },
+    {
+      "name": "neuron1k_v3.cells.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/gex-counts/neuron1k_v3.cells.tsv.gz",
+      "kind": "derived",
+      "sha256": "7e23749d8248f9dab9aab273b8941de574f87c17bc769bdda54f79d311bd0aa2",
+      "bytes": 53556,
+      "format": "tsv",
+      "dataset": "neuron1k_v3"
+    },
+    {
+      "name": "neuron1k_v3.genes.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/gex-counts/neuron1k_v3.genes.tsv.gz",
+      "kind": "derived",
+      "sha256": "54d20f67f401c1f152d8bb6174560f87c554e7badf861537b2a7ed1dc43dbd8c",
+      "bytes": 455919,
+      "format": "tsv",
+      "dataset": "neuron1k_v3"
+    },
+    {
+      "name": "nuclei2k_v2.cells.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/gex-counts/nuclei2k_v2.cells.tsv.gz",
+      "kind": "derived",
+      "sha256": "5d87b475a6ccf27ba87ebd4b22db5c2e3d60013ec48fdc0b1bc53a0fe9771906",
+      "bytes": 87119,
+      "format": "tsv",
+      "dataset": "nuclei2k_v2"
+    },
+    {
+      "name": "nuclei2k_v2.genes.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/gex-counts/nuclei2k_v2.genes.tsv.gz",
+      "kind": "derived",
+      "sha256": "11f1a9a0e14e4b24395b547d0d1318891c0b42fb1722bbd1ce3946b3d1954a2f",
+      "bytes": 434727,
+      "format": "tsv",
+      "dataset": "nuclei2k_v2"
+    },
+    {
+      "name": "pbmc1k_cite_v3.adt.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/gex-counts/pbmc1k_cite_v3.adt.tsv.gz",
+      "kind": "derived",
+      "sha256": "deaf1eaab780cd11847b45305c7384d100417893940afddcf49fc7e224e02b1a",
+      "bytes": 40005,
+      "format": "tsv",
+      "dataset": "pbmc1k_cite_v3"
+    },
+    {
+      "name": "pbmc1k_cite_v3.cells.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/gex-counts/pbmc1k_cite_v3.cells.tsv.gz",
+      "kind": "derived",
+      "sha256": "39a98e802a0d540495b53cf6126e3f40885d6a1e1a76a6870c19c2f0cb6fc26f",
+      "bytes": 30376,
+      "format": "tsv",
+      "dataset": "pbmc1k_cite_v3"
+    },
+    {
+      "name": "pbmc1k_cite_v3.genes.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/gex-counts/pbmc1k_cite_v3.genes.tsv.gz",
+      "kind": "derived",
+      "sha256": "83ad448bf759b9a8bc6fe84c610965afc30746155e8a45677993a43a27e754eb",
+      "bytes": 282557,
+      "format": "tsv",
+      "dataset": "pbmc1k_cite_v3"
+    },
+    {
+      "name": "pbmc1k_v2.cells.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/gex-counts/pbmc1k_v2.cells.tsv.gz",
+      "kind": "derived",
+      "sha256": "8d575f3a0f7bf99fe47db1dc3c07069c3f2145a0b4c540918f8b47e879bc187f",
+      "bytes": 40817,
+      "format": "tsv",
+      "dataset": "pbmc1k_v2"
+    },
+    {
+      "name": "pbmc1k_v2.genes.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/gex-counts/pbmc1k_v2.genes.tsv.gz",
+      "kind": "derived",
+      "sha256": "a7b99ed0e2f3d7175423131479a33db1ea588f81e316ddcb4284be35e30e7df6",
+      "bytes": 267702,
+      "format": "tsv",
+      "dataset": "pbmc1k_v2"
+    },
+    {
+      "name": "pbmc1k_v3.cells.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/gex-counts/pbmc1k_v3.cells.tsv.gz",
+      "kind": "derived",
+      "sha256": "88dc2523f08f27fae5e998654680cabfe01f17c436b872e1dcf856e186bdc8f2",
+      "bytes": 50750,
+      "format": "tsv",
+      "dataset": "pbmc1k_v3"
+    },
+    {
+      "name": "pbmc1k_v3.genes.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/gex-counts/pbmc1k_v3.genes.tsv.gz",
+      "kind": "derived",
+      "sha256": "acab998227d663ab7424bdfd255b699bc31398007fad8f42d8dcc322af39c917",
+      "bytes": 304930,
+      "format": "tsv",
+      "dataset": "pbmc1k_v3"
+    },
+    {
+      "name": "pbmc5p_v1.cells.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/gex-counts/pbmc5p_v1.cells.tsv.gz",
+      "kind": "derived",
+      "sha256": "271356b68da7a57a09b4e9d0af15520b8ffd0b2b0b4f689cb69314b4557c7a17",
+      "bytes": 217511,
+      "format": "tsv",
+      "dataset": "pbmc5p_v1"
+    },
+    {
+      "name": "pbmc5p_v1.genes.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/gex-counts/pbmc5p_v1.genes.tsv.gz",
+      "kind": "derived",
+      "sha256": "52bae1feed421915c10378b383c890fa433a1ffd4c1c5a40061be8218f56c780",
+      "bytes": 278181,
+      "format": "tsv",
+      "dataset": "pbmc5p_v1"
+    },
+    {
+      "name": "provenance.json",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/gex-counts/provenance.json",
+      "kind": "derived",
+      "sha256": "1d6bedb06d4b47c9b415a7558df0c33415880d941b0d76b3b4915b70d71f103b",
+      "bytes": 31212,
+      "format": "json"
+    },
+    {
+      "name": "resources.json",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/gex-counts/resources.json",
+      "kind": "derived",
+      "sha256": "c320095e3b1b35bff0b27e17af014e5c8c49723276f51954ccb78da716a045f3",
+      "bytes": 7917,
+      "format": "json"
+    }
+  ],
+  "code": [
+    {
+      "path": "bench/public/capabilities/gex_counts.py",
+      "role": "metric",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/gex_counts.py"
+    },
+    {
+      "path": "bench/public/capabilities/_familycmp.py",
+      "role": "metric",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/_familycmp.py"
+    },
+    {
+      "path": "bench/public/capabilities/_pubcommon.py",
+      "role": "metric",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/_pubcommon.py"
+    },
+    {
+      "path": "bench/public/capabilities/extract/counts.py",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/extract/counts.py"
+    },
+    {
+      "path": "bench/public/capabilities/extract/pairstats.py",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/extract/pairstats.py"
+    },
+    {
+      "path": "bench/public/capabilities/extract/runio.py",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/extract/runio.py"
+    },
+    {
+      "path": "bench/public/capabilities/extract/run_extract.py",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/extract/run_extract.py"
+    },
+    {
+      "path": "bench/public/capabilities/clipper/starsolo_public.sbatch",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/clipper/starsolo_public.sbatch"
+    },
+    {
+      "path": "bench/public/capabilities/clipper/singlet_public.sbatch",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/clipper/singlet_public.sbatch"
+    }
+  ],
+  "reproduce": {
+    "module": "bench/public/capabilities/gex_counts.py",
+    "function": "compute",
+    "laptop_minutes": 3,
+    "clipper_command": "bash bench/public/capabilities/clipper/run_all.sh all"
+  },
+  "caveats": [
+    "Cell Ranger is the matrix 10x published with each dataset (versions 2.1.0 and 3.0.0, 10x references of the time, exonic UMIs), not a re-run on the 2024-A reference, so its comparisons also carry reference and annotation differences.",
+    "The 5' dataset is the first 60 M read pairs, so the published full-depth Cell Ranger matrix is left out for it; that dataset's exonic gate is a threshold borrowed from the other datasets, not a measured spread.",
+    "There is no ground truth for counts: every metric is agreement between tools, and the tolerance is the spread between the competitors. A tool can sit inside that spread and still be wrong where the competitors are.",
+    "The gate averages Singlet's distance to its competitors. It is looser than requiring Singlet to be at least as close to each competitor separately; the per-reference values are in the notes of each metric. Tool settings were fixed before any metric was computed and no Singlet parameter was tuned on these data.",
+    "Singlet's exon+intron definition counts reads that STARsolo GeneFull discards (reads overlapping two gene bodies), so totals above 1 against GeneFull are expected.",
+    "Wall time and memory in resources are from a shared cluster at differing thread counts (Singlet 8, STARsolo and alevin-fry 16) and are not a speed comparison.",
+    "Cohort datasets assigned to gex-counts that this document does not cover (no run for them in this benchmark yet): pbmc5k_v4_d1, pbmc10k_5p_v2, mouse_brain_nuclei5k_v31, pbmc_multiome10k, pbmc10k_cite_v3, macosko2015_dropseq_mix, tenx_crispr_a375_10k, norman2019_gem1, visium_mouse_brain_ant, ding2020_pbmc1_smartseq2, ding2020_pbmc1_dropseq, ding2020_pbmc1_indrops, ding2020_pbmc1_seqwell, ding2020_pbmc1_celseq2, ding2020_pbmc1_10xv3, segerstolpe2016_pancreas, heart1k_v3, tabula_muris_kidney_facs."
+  ],
+  "conclusion": "On 7 datasets (3' v2 and v3, 5', nuclei, mouse, barnyard), Singlet's exonic UMI per cell is 0.98-1.02 of STARsolo Gene's (median ratio; gene correlation 0.962-0.994). Exon+intron counts are 1.02-1.10 of STARsolo GeneFull's (r 0.948-0.987) and 0.92-1.03 of alevin-fry USA's. 36 of 44 gating metrics pass: Singlet sits inside the spread of the competitors, except 8 metrics (see metrics)."
+}

@@ -1,0 +1,2040 @@
+{
+  "schema": "singlet.benchmark.capability",
+  "schema_version": "1.0.0",
+  "capability": "cell-calling",
+  "title": "Cell calling",
+  "methods": "**Data and truth.** The cohort's 10x datasets from FASTQs, plus the Kang 2018 control lane. Truth for 10x datasets is the filtered barcodes 10x published (Cell Ranger 2.1 / 3.0), for Kang the authors' demuxlet table. Both are cutoff-based, so a barcode beyond the truth is not necessarily wrong.\n\n**Calls.** Singlet: the called_v2 column (EmptyDrops on the stored exon+intron counts, plateau ambient bound, knee fitted within DropletUtils' curve bounds, FDR 0.001, 10,000 draws, union with the stored knee call). STARsolo 2.7.11b EmptyDrops_CR in Cell Ranger 4+ emulation on the same reads. CellBender 0.3.2 on STARsolo's raw Gene matrix, expected cells and droplets read off the raw UMI curve (Cell Ranger 2.2 rule), other options at defaults.\n\n**Metrics.** Over the union of every tool's calls and the truth: recall, precision and Jaccard of each tool's calls against the truth. In the barnyard, also the share of each tool's called barcodes whose human fraction cannot be told from the ambient one.\n\n**Rules.** match_or_beat the best competitor on each metric; tolerance = half-width of the paired bootstrap 95% CI of the difference (barcodes resampled together). Precision and recall are both gated, so a method that trades one for the other will fail one of them.\n\n**Broader evidence.** The 42-sample validation of docs/called-v2.md (authors' calls in 9 public studies) is reported as an informational pooled metric; it was not run on the campaign binary.",
+  "status": "final",
+  "generated_at": "2026-10-25T15:29:37+00:00",
+  "owner": "pipeline-benchmark",
+  "singlet": {
+    "version": "1.0.0",
+    "commit": "02aa9b938b54e0f92bba00c44c07b883a8660aa2",
+    "branch": "prod/campaign",
+    "binary": "singlet-campaign",
+    "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+    "build_flags": "PGO, -O3 -DNDEBUG, -march=x86-64-v3"
+  },
+  "tools": [
+    {
+      "name": "singlet",
+      "version": "1.0.0",
+      "role": "singlet",
+      "url": "https://singlet.bio",
+      "params": "singlet encode --reads R1.fastq.gz R2.fastq.gz -o s.1fq; singlet s.1fq --ref-base $REF --genome-dir $REF/$SPECIES/star_2.7.11b --exons $REF/$SPECIES/genes/genes.gtf --out-prefix $OUT/ --threads 8 --pipeline --output-format mtx --raw-matrix  (calls = called_v2 column of cell_calls.tsv: EmptyDrops on the stored counts, FDR 0.001, 10,000 draws)"
+    },
+    {
+      "name": "starsolo-edcr",
+      "version": "2.7.11b",
+      "role": "competitor",
+      "url": "https://github.com/alexdobin/STAR",
+      "citation": "Lun et al. EmptyDrops: distinguishing cells from empty droplets in droplet-based single-cell RNA sequencing data. Genome Biol 2019 (EmptyDrops_CR is STARsolo's port of Cell Ranger's variant)",
+      "params": "STAR --runThreadN 16 --genomeDir $GENOME --readFilesIn $R2 $R1 --readFilesCommand zcat --soloType CB_UMI_Simple --soloCBwhitelist $WHITELIST --soloCBlen 16 --soloUMIstart 17 --soloUMIlen $UMILEN --soloBarcodeReadLength 0 --soloStrand $STRAND --soloFeatures Gene GeneFull Velocyto SJ --soloCellFilter EmptyDrops_CR --soloCBmatchWLtype 1MM_multi_Nbase_pseudocounts --soloUMIfiltering MultiGeneUMI_CR --soloUMIdedup 1MM_CR --clipAdapterType CellRanger4 --outFilterScoreMin 30 --outSAMtype None; calls = Solo.out/Gene/filtered (10x v1 for Kang: CB 14, UMI 10)"
+    },
+    {
+      "name": "cellbender",
+      "version": "0.3.2",
+      "role": "competitor",
+      "url": "https://github.com/broadinstitute/CellBender",
+      "citation": "Fleming et al. Unsupervised removal of systematic background noise from droplet-based single-cell experiments using CellBender. Nat Methods 2023",
+      "params": "cellbender remove-background --cuda --input <STARsolo Solo.out/Gene/raw> --output cb.h5 --expected-cells $EXP --total-droplets-included $TOT --fpr 0.01 --epochs 150; EXP = barcodes at or above 1/10 of the 99th percentile of the top 3000 barcodes' UMI (Cell Ranger 2.2 rule from the raw curve), TOT = max(3 x EXP, 10000); calls = cb_cell_barcodes.csv"
+    },
+    {
+      "name": "cellranger-published",
+      "version": "2.1.0 / 3.0.0 (as published by 10x)",
+      "role": "truth",
+      "url": "https://www.10xgenomics.com/support/software/cell-ranger",
+      "params": "Cell Ranger is not run. Comparator = the filtered matrix 10x publishes with each dataset (10x reference of the time, not 2024-A): pbmc1k_v3: Cell Ranger 3.0.0 https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v3/pbmc_1k_v3_filtered_feature_bc_matrix.h5; pbmc1k_v2: Cell Ranger 3.0.0 https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v2/pbmc_1k_v2_filtered_feature_bc_matrix.h5; neuron1k_v3: Cell Ranger 3.0.0 https://cf.10xgenomics.com/samples/cell-exp/3.0.0/neuron_1k_v3/neuron_1k_v3_filtered_feature_bc_matrix.h5; hgmm1k_v3: Cell Ranger 3.0.0 https://cf.10xgenomics.com/samples/cell-exp/3.0.0/hgmm_1k_v3/hgmm_1k_v3_filtered_feature_bc_matrix.h5; pbmc1k_cite_v3: Cell Ranger 3.0.0 https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_protein_v3/pbmc_1k_protein_v3_filtered_feature_bc_matrix.h5; nuclei2k_v2: Cell Ranger 2.1.0 https://cf.10xgenomics.com/samples/cell-exp/2.1.0/nuclei_2k/nuclei_2k_filtered_gene_bc_matrices.tar.gz; pbmc5p_v1: Cell Ranger 3.0.0 https://cf.10xgenomics.com/samples/cell-vdj/3.0.0/vdj_v1_hs_pbmc2_5gex_protein/vdj_v1_hs_pbmc2_5gex_protein_filtered_feature_bc_matrix.h5 (only the barcodes are used here)"
+    },
+    {
+      "name": "demuxlet-table",
+      "version": "GSE96583",
+      "role": "truth",
+      "url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE96583",
+      "citation": "Kang et al. Multiplexed droplet single-cell RNA-sequencing using natural genetic variation. Nat Biotechnol 2018",
+      "params": "the authors' table GSE96583_batch2.total.tsne.df.tsv.gz, rows of the control lane (all demuxlet singlet, doublet and ambiguous calls)"
+    }
+  ],
+  "datasets": [
+    {
+      "id": "pbmc1k_v3",
+      "title": "10x PBMC 1k, 3' v3",
+      "accessions": {
+        "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v3/pbmc_1k_v3_fastqs.tar"
+      },
+      "truth": "the filtered barcodes 10x published with the dataset (Cell Ranger), a cutoff-based call",
+      "n_cells": 1190
+    },
+    {
+      "id": "pbmc1k_v2",
+      "title": "10x PBMC 1k, 3' v2",
+      "accessions": {
+        "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v2/pbmc_1k_v2_fastqs.tar"
+      },
+      "truth": "the filtered barcodes 10x published with the dataset (Cell Ranger), a cutoff-based call",
+      "n_cells": 1054
+    },
+    {
+      "id": "neuron1k_v3",
+      "title": "10x mouse E18 brain cells 1k, 3' v3",
+      "accessions": {
+        "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/neuron_1k_v3/neuron_1k_v3_fastqs.tar"
+      },
+      "truth": "the filtered barcodes 10x published with the dataset (Cell Ranger), a cutoff-based call",
+      "n_cells": 1355
+    },
+    {
+      "id": "hgmm1k_v3",
+      "title": "10x HEK293T + NIH3T3 1:1, 1k, 3' v3",
+      "accessions": {
+        "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/hgmm_1k_v3/hgmm_1k_v3_fastqs.tar"
+      },
+      "truth": "the filtered barcodes 10x published with the dataset (Cell Ranger), a cutoff-based call; barnyard species composition for ambient-like calls",
+      "n_cells": 1026
+    },
+    {
+      "id": "pbmc1k_cite_v3",
+      "title": "10x PBMC 1k + TotalSeq-B (pbmc_1k_protein_v3)",
+      "accessions": {
+        "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_protein_v3/pbmc_1k_protein_v3_fastqs.tar"
+      },
+      "truth": "the filtered barcodes 10x published with the dataset (Cell Ranger), a cutoff-based call",
+      "n_cells": 728
+    },
+    {
+      "id": "nuclei2k_v2",
+      "title": "10x mouse brain nuclei 2k, 3' v2",
+      "accessions": {
+        "url": "https://cf.10xgenomics.com/samples/cell-exp/2.1.0/nuclei_2k/nuclei_2k_fastqs.tar"
+      },
+      "truth": "the filtered barcodes 10x published with the dataset (Cell Ranger), a cutoff-based call",
+      "n_cells": 2376
+    },
+    {
+      "id": "pbmc5p_v1",
+      "title": "10x PBMC 5' v1 + TotalSeq-C (vdj_v1_hs_pbmc2_5gex_protein), first 60M read pairs",
+      "accessions": {
+        "url": "https://cf.10xgenomics.com/samples/cell-vdj/3.0.0/vdj_v1_hs_pbmc2_5gex_protein/vdj_v1_hs_pbmc2_5gex_protein_fastqs.tar"
+      },
+      "truth": "the filtered barcodes 10x published with the dataset (Cell Ranger), a cutoff-based call",
+      "n_cells": 8399
+    },
+    {
+      "id": "kang2018_ctrl",
+      "title": "Kang 2018 demuxlet, batch 2 control lane (8 lupus donors)",
+      "accessions": {
+        "gse": "GSE96583",
+        "gsm": [
+          "GSM2560248"
+        ],
+        "srr": [
+          "SRR5398238"
+        ],
+        "url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE96583"
+      },
+      "truth": "the authors' demuxlet table for the control lane (GSE96583, 14,619 barcodes)",
+      "n_cells": 16569
+    }
+  ],
+  "metrics": [
+    {
+      "id": "recall",
+      "name": "Recall of the truth cells",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "pbmc1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.959083,
+        "ci": [
+          0.947771,
+          0.96964
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-edcr",
+          "value": 0.998363,
+          "ci": [
+            0.995898,
+            1.0
+          ]
+        },
+        {
+          "tool": "cellbender",
+          "value": 0.999182,
+          "ci": [
+            0.997511,
+            1.0
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.010592
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (barcodes resampled) of Singlet minus the best competitor (cellbender): 0.0106"
+      },
+      "notes": "truth: Cell Ranger filtered barcodes published by 10x, 1222 barcodes; 1190 called by Singlet, 1230 by starsolo-edcr, 1302 by cellbender",
+      "pass": "fail"
+    },
+    {
+      "id": "precision",
+      "name": "Precision against the truth cells",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "pbmc1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.984874,
+        "ci": [
+          0.977836,
+          0.991605
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-edcr",
+          "value": 0.99187,
+          "ci": [
+            0.986349,
+            0.996741
+          ]
+        },
+        {
+          "tool": "cellbender",
+          "value": 0.937788,
+          "ci": [
+            0.923588,
+            0.948601
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.005769
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (barcodes resampled) of Singlet minus the best competitor (starsolo-edcr): 0.0058"
+      },
+      "notes": "truth: Cell Ranger filtered barcodes published by 10x, 1222 barcodes; 1190 called by Singlet, 1230 by starsolo-edcr, 1302 by cellbender",
+      "pass": "fail"
+    },
+    {
+      "id": "jaccard",
+      "name": "Jaccard with the truth cells",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "pbmc1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.945161,
+        "ci": [
+          0.932955,
+          0.957194
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-edcr",
+          "value": 0.99026,
+          "ci": [
+            0.983657,
+            0.995933
+          ]
+        },
+        {
+          "tool": "cellbender",
+          "value": 0.937068,
+          "ci": [
+            0.92291,
+            0.947853
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.011956
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (barcodes resampled) of Singlet minus the best competitor (starsolo-edcr): 0.0120"
+      },
+      "notes": "truth: Cell Ranger filtered barcodes published by 10x, 1222 barcodes; 1190 called by Singlet, 1230 by starsolo-edcr, 1302 by cellbender",
+      "pass": "fail"
+    },
+    {
+      "id": "n_called",
+      "name": "Barcodes called by Singlet",
+      "unit": "barcodes",
+      "category": "coverage",
+      "dataset": "pbmc1k_v3",
+      "direction": "none",
+      "singlet": {
+        "value": 1190.0
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "truth 1222; starsolo-edcr 1230, cellbender 1302",
+      "pass": "na"
+    },
+    {
+      "id": "recall",
+      "name": "Recall of the truth cells",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "pbmc1k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.997992,
+        "ci": [
+          0.994939,
+          1.0
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-edcr",
+          "value": 1.0,
+          "ci": [
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "tool": "cellbender",
+          "value": 1.0,
+          "ci": [
+            1.0,
+            1.0
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.00253
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (barcodes resampled) of Singlet minus the best competitor (starsolo-edcr): 0.0025"
+      },
+      "notes": "truth: Cell Ranger filtered barcodes published by 10x, 996 barcodes; 1054 called by Singlet, 1000 by starsolo-edcr, 1083 by cellbender",
+      "pass": "pass"
+    },
+    {
+      "id": "precision",
+      "name": "Precision against the truth cells",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "pbmc1k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.943074,
+        "ci": [
+          0.930899,
+          0.957453
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-edcr",
+          "value": 0.996,
+          "ci": [
+            0.991959,
+            0.999016
+          ]
+        },
+        {
+          "tool": "cellbender",
+          "value": 0.919668,
+          "ci": [
+            0.90324,
+            0.93543
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.013447
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (barcodes resampled) of Singlet minus the best competitor (starsolo-edcr): 0.0134"
+      },
+      "notes": "truth: Cell Ranger filtered barcodes published by 10x, 996 barcodes; 1054 called by Singlet, 1000 by starsolo-edcr, 1083 by cellbender",
+      "pass": "fail"
+    },
+    {
+      "id": "jaccard",
+      "name": "Jaccard with the truth cells",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "pbmc1k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.941288,
+        "ci": [
+          0.929176,
+          0.955557
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-edcr",
+          "value": 0.996,
+          "ci": [
+            0.991959,
+            0.999016
+          ]
+        },
+        {
+          "tool": "cellbender",
+          "value": 0.919668,
+          "ci": [
+            0.90324,
+            0.93543
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.013241
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (barcodes resampled) of Singlet minus the best competitor (starsolo-edcr): 0.0132"
+      },
+      "notes": "truth: Cell Ranger filtered barcodes published by 10x, 996 barcodes; 1054 called by Singlet, 1000 by starsolo-edcr, 1083 by cellbender",
+      "pass": "fail"
+    },
+    {
+      "id": "n_called",
+      "name": "Barcodes called by Singlet",
+      "unit": "barcodes",
+      "category": "coverage",
+      "dataset": "pbmc1k_v2",
+      "direction": "none",
+      "singlet": {
+        "value": 1054.0
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "truth 996; starsolo-edcr 1000, cellbender 1083",
+      "pass": "na"
+    },
+    {
+      "id": "recall",
+      "name": "Recall of the truth cells",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "neuron1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.952344,
+        "ci": [
+          0.940938,
+          0.963739
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-edcr",
+          "value": 0.962337,
+          "ci": [
+            0.952618,
+            0.971618
+          ]
+        },
+        {
+          "tool": "cellbender",
+          "value": 0.997694,
+          "ci": [
+            0.994584,
+            1.0
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.010493
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (barcodes resampled) of Singlet minus the best competitor (cellbender): 0.0105"
+      },
+      "notes": "truth: Cell Ranger filtered barcodes published by 10x, 1301 barcodes; 1355 called by Singlet, 1258 by starsolo-edcr, 1470 by cellbender",
+      "pass": "fail"
+    },
+    {
+      "id": "precision",
+      "name": "Precision against the truth cells",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "neuron1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.914391,
+        "ci": [
+          0.897897,
+          0.927472
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-edcr",
+          "value": 0.995231,
+          "ci": [
+            0.990575,
+            0.998418
+          ]
+        },
+        {
+          "tool": "cellbender",
+          "value": 0.882993,
+          "ci": [
+            0.866027,
+            0.897717
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.014248
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (barcodes resampled) of Singlet minus the best competitor (starsolo-edcr): 0.0142"
+      },
+      "notes": "truth: Cell Ranger filtered barcodes published by 10x, 1301 barcodes; 1355 called by Singlet, 1258 by starsolo-edcr, 1470 by cellbender",
+      "pass": "fail"
+    },
+    {
+      "id": "jaccard",
+      "name": "Jaccard with the truth cells",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "neuron1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.874382,
+        "ci": [
+          0.856385,
+          0.89086
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-edcr",
+          "value": 0.957919,
+          "ci": [
+            0.948017,
+            0.966942
+          ]
+        },
+        {
+          "tool": "cellbender",
+          "value": 0.881195,
+          "ci": [
+            0.864914,
+            0.895433
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.015223
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (barcodes resampled) of Singlet minus the best competitor (starsolo-edcr): 0.0152"
+      },
+      "notes": "truth: Cell Ranger filtered barcodes published by 10x, 1301 barcodes; 1355 called by Singlet, 1258 by starsolo-edcr, 1470 by cellbender",
+      "pass": "fail"
+    },
+    {
+      "id": "n_called",
+      "name": "Barcodes called by Singlet",
+      "unit": "barcodes",
+      "category": "coverage",
+      "dataset": "neuron1k_v3",
+      "direction": "none",
+      "singlet": {
+        "value": 1355.0
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "truth 1301; starsolo-edcr 1258, cellbender 1470",
+      "pass": "na"
+    },
+    {
+      "id": "recall",
+      "name": "Recall of the truth cells",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "hgmm1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.960803,
+        "ci": [
+          0.947722,
+          0.973233
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-edcr",
+          "value": 1.0,
+          "ci": [
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "tool": "cellbender",
+          "value": 0.99044,
+          "ci": [
+            0.983744,
+            0.995732
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.012755
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (barcodes resampled) of Singlet minus the best competitor (starsolo-edcr): 0.0128"
+      },
+      "notes": "truth: Cell Ranger filtered barcodes published by 10x, 1046 barcodes; 1026 called by Singlet, 1049 by starsolo-edcr, 1060 by cellbender",
+      "pass": "fail"
+    },
+    {
+      "id": "precision",
+      "name": "Precision against the truth cells",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "hgmm1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.979532,
+        "ci": [
+          0.971526,
+          0.98738
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-edcr",
+          "value": 0.99714,
+          "ci": [
+            0.993314,
+            1.0
+          ]
+        },
+        {
+          "tool": "cellbender",
+          "value": 0.977358,
+          "ci": [
+            0.968761,
+            0.985379
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.008227
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (barcodes resampled) of Singlet minus the best competitor (starsolo-edcr): 0.0082"
+      },
+      "notes": "truth: Cell Ranger filtered barcodes published by 10x, 1046 barcodes; 1026 called by Singlet, 1049 by starsolo-edcr, 1060 by cellbender",
+      "pass": "fail"
+    },
+    {
+      "id": "jaccard",
+      "name": "Jaccard with the truth cells",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "hgmm1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.941893,
+        "ci": [
+          0.928002,
+          0.956482
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-edcr",
+          "value": 0.99714,
+          "ci": [
+            0.993314,
+            1.0
+          ]
+        },
+        {
+          "tool": "cellbender",
+          "value": 0.968224,
+          "ci": [
+            0.956963,
+            0.978028
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.014879
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (barcodes resampled) of Singlet minus the best competitor (starsolo-edcr): 0.0149"
+      },
+      "notes": "truth: Cell Ranger filtered barcodes published by 10x, 1046 barcodes; 1026 called by Singlet, 1049 by starsolo-edcr, 1060 by cellbender",
+      "pass": "fail"
+    },
+    {
+      "id": "ambient_like_fraction",
+      "name": "Called barcodes whose species mix is ambient-like",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "hgmm1k_v3",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.002924,
+        "ci": [
+          0.0,
+          0.006379
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-edcr",
+          "value": 0.0,
+          "ci": [
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "tool": "cellbender",
+          "value": 0.0,
+          "ci": [
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "tool": "cellranger-published",
+          "value": 0.0,
+          "ci": [
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.003189
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (barcodes resampled) of Singlet minus the best competitor (starsolo-edcr): 0.0032"
+      },
+      "notes": "barnyard (human + mouse): a called barcode is ambient-like when its human fraction is not significantly different (binomial, p >= 0.001) from that of uncalled barcodes with 1-100 UMI; in a mixed-species library such a barcode is most likely an empty droplet",
+      "pass": "pass"
+    },
+    {
+      "id": "n_called",
+      "name": "Barcodes called by Singlet",
+      "unit": "barcodes",
+      "category": "coverage",
+      "dataset": "hgmm1k_v3",
+      "direction": "none",
+      "singlet": {
+        "value": 1026.0
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "truth 1046; starsolo-edcr 1049, cellbender 1060",
+      "pass": "na"
+    },
+    {
+      "id": "recall",
+      "name": "Recall of the truth cells",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "pbmc1k_cite_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.985975,
+        "ci": [
+          0.97672,
+          0.993042
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-edcr",
+          "value": 1.0,
+          "ci": [
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "tool": "cellbender",
+          "value": 1.0,
+          "ci": [
+            1.0,
+            1.0
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.008161
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (barcodes resampled) of Singlet minus the best competitor (starsolo-edcr): 0.0082"
+      },
+      "notes": "truth: Cell Ranger filtered barcodes published by 10x, 713 barcodes; 728 called by Singlet, 714 by starsolo-edcr, 731 by cellbender",
+      "pass": "fail"
+    },
+    {
+      "id": "precision",
+      "name": "Precision against the truth cells",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "pbmc1k_cite_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.965659,
+        "ci": [
+          0.95237,
+          0.977367
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-edcr",
+          "value": 0.998599,
+          "ci": [
+            0.994433,
+            1.0
+          ]
+        },
+        {
+          "tool": "cellbender",
+          "value": 0.975376,
+          "ci": [
+            0.962912,
+            0.986312
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.012995
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (barcodes resampled) of Singlet minus the best competitor (starsolo-edcr): 0.0130"
+      },
+      "notes": "truth: Cell Ranger filtered barcodes published by 10x, 713 barcodes; 728 called by Singlet, 714 by starsolo-edcr, 731 by cellbender",
+      "pass": "fail"
+    },
+    {
+      "id": "jaccard",
+      "name": "Jaccard with the truth cells",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "pbmc1k_cite_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.952575,
+        "ci": [
+          0.936473,
+          0.966127
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-edcr",
+          "value": 0.998599,
+          "ci": [
+            0.994433,
+            1.0
+          ]
+        },
+        {
+          "tool": "cellbender",
+          "value": 0.975376,
+          "ci": [
+            0.962912,
+            0.986312
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.014889
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (barcodes resampled) of Singlet minus the best competitor (starsolo-edcr): 0.0149"
+      },
+      "notes": "truth: Cell Ranger filtered barcodes published by 10x, 713 barcodes; 728 called by Singlet, 714 by starsolo-edcr, 731 by cellbender",
+      "pass": "fail"
+    },
+    {
+      "id": "n_called",
+      "name": "Barcodes called by Singlet",
+      "unit": "barcodes",
+      "category": "coverage",
+      "dataset": "pbmc1k_cite_v3",
+      "direction": "none",
+      "singlet": {
+        "value": 728.0
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "truth 713; starsolo-edcr 714, cellbender 731",
+      "pass": "na"
+    },
+    {
+      "id": "recall",
+      "name": "Recall of the truth cells",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "nuclei2k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.909864,
+        "ci": [
+          0.897348,
+          0.921062
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-edcr",
+          "value": 0.917092,
+          "ci": [
+            0.904928,
+            0.92873
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.003923
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (barcodes resampled) of Singlet minus the best competitor (starsolo-edcr): 0.0039"
+      },
+      "notes": "truth: Cell Ranger filtered barcodes published by 10x, 2352 barcodes; 2376 called by Singlet, 2202 by starsolo-edcr",
+      "pass": "fail"
+    },
+    {
+      "id": "precision",
+      "name": "Precision against the truth cells",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "nuclei2k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.900673,
+        "ci": [
+          0.889719,
+          0.911769
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-edcr",
+          "value": 0.979564,
+          "ci": [
+            0.973509,
+            0.985256
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.010087
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (barcodes resampled) of Singlet minus the best competitor (starsolo-edcr): 0.0101"
+      },
+      "notes": "truth: Cell Ranger filtered barcodes published by 10x, 2352 barcodes; 2376 called by Singlet, 2202 by starsolo-edcr",
+      "pass": "fail"
+    },
+    {
+      "id": "jaccard",
+      "name": "Jaccard with the truth cells",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "nuclei2k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.826893,
+        "ci": [
+          0.811215,
+          0.841393
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-edcr",
+          "value": 0.899875,
+          "ci": [
+            0.887357,
+            0.911968
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.009623
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (barcodes resampled) of Singlet minus the best competitor (starsolo-edcr): 0.0096"
+      },
+      "notes": "truth: Cell Ranger filtered barcodes published by 10x, 2352 barcodes; 2376 called by Singlet, 2202 by starsolo-edcr",
+      "pass": "fail"
+    },
+    {
+      "id": "n_called",
+      "name": "Barcodes called by Singlet",
+      "unit": "barcodes",
+      "category": "coverage",
+      "dataset": "nuclei2k_v2",
+      "direction": "none",
+      "singlet": {
+        "value": 2376.0
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "truth 2352; starsolo-edcr 2202",
+      "pass": "na"
+    },
+    {
+      "id": "recall",
+      "name": "Recall of the truth cells",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "pbmc5p_v1",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.983773,
+        "ci": [
+          0.980908,
+          0.986085
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-edcr",
+          "value": 0.902277,
+          "ci": [
+            0.896317,
+            0.908278
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.005534
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (barcodes resampled) of Singlet minus the best competitor (starsolo-edcr): 0.0055"
+      },
+      "notes": "truth: Cell Ranger filtered barcodes published by 10x, 8258 barcodes; 8399 called by Singlet, 7453 by starsolo-edcr",
+      "pass": "pass"
+    },
+    {
+      "id": "precision",
+      "name": "Precision against the truth cells",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "pbmc5p_v1",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.967258,
+        "ci": [
+          0.963508,
+          0.97087
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-edcr",
+          "value": 0.999732,
+          "ci": [
+            0.99933,
+            1.0
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.003771
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (barcodes resampled) of Singlet minus the best competitor (starsolo-edcr): 0.0038"
+      },
+      "notes": "truth: Cell Ranger filtered barcodes published by 10x, 8258 barcodes; 8399 called by Singlet, 7453 by starsolo-edcr",
+      "pass": "fail"
+    },
+    {
+      "id": "jaccard",
+      "name": "Jaccard with the truth cells",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "pbmc5p_v1",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.952068,
+        "ci": [
+          0.947615,
+          0.955936
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-edcr",
+          "value": 0.902058,
+          "ci": [
+            0.896151,
+            0.908084
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.006596
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (barcodes resampled) of Singlet minus the best competitor (starsolo-edcr): 0.0066"
+      },
+      "notes": "truth: Cell Ranger filtered barcodes published by 10x, 8258 barcodes; 8399 called by Singlet, 7453 by starsolo-edcr",
+      "pass": "pass"
+    },
+    {
+      "id": "n_called",
+      "name": "Barcodes called by Singlet",
+      "unit": "barcodes",
+      "category": "coverage",
+      "dataset": "pbmc5p_v1",
+      "direction": "none",
+      "singlet": {
+        "value": 8399.0
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "truth 8258; starsolo-edcr 7453",
+      "pass": "na"
+    },
+    {
+      "id": "recall",
+      "name": "Recall of the truth cells",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "kang2018_ctrl",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.999863,
+        "ci": [
+          0.999657,
+          1.0
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-edcr",
+          "value": 0.998016,
+          "ci": [
+            0.997326,
+            0.998735
+          ]
+        },
+        {
+          "tool": "cellbender",
+          "value": 1.0,
+          "ci": [
+            1.0,
+            1.0
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000171
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (barcodes resampled) of Singlet minus the best competitor (cellbender): 0.0002"
+      },
+      "notes": "truth: demuxlet table (control lane), 14619 barcodes; 16569 called by Singlet, 14980 by starsolo-edcr, 16440 by cellbender",
+      "pass": "pass"
+    },
+    {
+      "id": "precision",
+      "name": "Precision against the truth cells",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "kang2018_ctrl",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.88219,
+        "ci": [
+          0.877825,
+          0.887255
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-edcr",
+          "value": 0.973965,
+          "ci": [
+            0.971448,
+            0.976637
+          ]
+        },
+        {
+          "tool": "cellbender",
+          "value": 0.889234,
+          "ci": [
+            0.884896,
+            0.893606
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.004044
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (barcodes resampled) of Singlet minus the best competitor (starsolo-edcr): 0.0040"
+      },
+      "notes": "truth: demuxlet table (control lane), 14619 barcodes; 16569 called by Singlet, 14980 by starsolo-edcr, 16440 by cellbender",
+      "pass": "fail"
+    },
+    {
+      "id": "jaccard",
+      "name": "Jaccard with the truth cells",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "kang2018_ctrl",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.882083,
+        "ci": [
+          0.877722,
+          0.88712
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-edcr",
+          "value": 0.972083,
+          "ci": [
+            0.969488,
+            0.974902
+          ]
+        },
+        {
+          "tool": "cellbender",
+          "value": 0.889234,
+          "ci": [
+            0.884896,
+            0.893606
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.004163
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (barcodes resampled) of Singlet minus the best competitor (starsolo-edcr): 0.0042"
+      },
+      "notes": "truth: demuxlet table (control lane), 14619 barcodes; 16569 called by Singlet, 14980 by starsolo-edcr, 16440 by cellbender",
+      "pass": "fail"
+    },
+    {
+      "id": "n_called",
+      "name": "Barcodes called by Singlet",
+      "unit": "barcodes",
+      "category": "coverage",
+      "dataset": "kang2018_ctrl",
+      "direction": "none",
+      "singlet": {
+        "value": 16569.0
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "truth 14619; starsolo-edcr 14980, cellbender 16440",
+      "pass": "na"
+    },
+    {
+      "id": "validation42_jaccard",
+      "name": "Jaccard against the authors' Cell Ranger calls, 42 public samples",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "pooled",
+      "direction": "none",
+      "singlet": {
+        "value": 0.882449
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "42 usable samples of 64 (18 public studies); truth is the authors' own Cell Ranger calls, available for 20 samples in 9 studies; studies weighted equally; Singlet's called_v2 (bounded knee, tail p-values, FDR 0.001) re-scored by the production kernel. Not run on the campaign binary; see docs/called-v2-truth.md. Reference points from docs/called-v2.md: stored knee call J = 0.55, Cell Ranger 3-like on stored data J = 0.70.",
+      "pass": "na"
+    },
+    {
+      "id": "validation42_recall",
+      "name": "Recall against the authors' Cell Ranger calls, 42 public samples",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "pooled",
+      "direction": "none",
+      "singlet": {
+        "value": 0.937741
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "42 usable samples of 64 (18 public studies); truth is the authors' own Cell Ranger calls, available for 20 samples in 9 studies; studies weighted equally; Singlet's called_v2 (bounded knee, tail p-values, FDR 0.001) re-scored by the production kernel. Not run on the campaign binary; see docs/called-v2-truth.md. Reference points from docs/called-v2.md: stored knee call J = 0.55, Cell Ranger 3-like on stored data J = 0.70.",
+      "pass": "na"
+    },
+    {
+      "id": "validation42_precision",
+      "name": "Precision against the authors' Cell Ranger calls, 42 public samples",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "pooled",
+      "direction": "none",
+      "singlet": {
+        "value": 0.939781
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "42 usable samples of 64 (18 public studies); truth is the authors' own Cell Ranger calls, available for 20 samples in 9 studies; studies weighted equally; Singlet's called_v2 (bounded knee, tail p-values, FDR 0.001) re-scored by the production kernel. Not run on the campaign binary; see docs/called-v2-truth.md. Reference points from docs/called-v2.md: stored knee call J = 0.55, Cell Ranger 3-like on stored data J = 0.70.",
+      "pass": "na"
+    }
+  ],
+  "resources": [
+    {
+      "tool": "cellbender",
+      "dataset": "pbmc1k_v3",
+      "wall_s": 670.1,
+      "max_rss_gb": 3.6,
+      "threads": 8,
+      "cpu_h": 0.2,
+      "notes": "GPU job"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "pbmc1k_v3",
+      "wall_s": 791.8,
+      "max_rss_gb": 21.32,
+      "threads": 8,
+      "cpu_h": 0.831,
+      "node": "c004.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-edcr",
+      "dataset": "pbmc1k_v3",
+      "wall_s": 348.3,
+      "max_rss_gb": 19.66,
+      "threads": 16,
+      "cpu_h": 0.835,
+      "node": "c100.clipper.gvsu.edu"
+    },
+    {
+      "tool": "cellbender",
+      "dataset": "pbmc1k_v2",
+      "wall_s": 573.5,
+      "max_rss_gb": 2.9,
+      "threads": 8,
+      "cpu_h": 0.171,
+      "notes": "GPU job"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "pbmc1k_v2",
+      "wall_s": 882.9,
+      "max_rss_gb": 20.86,
+      "threads": 8,
+      "cpu_h": 1.018,
+      "node": "c009.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-edcr",
+      "dataset": "pbmc1k_v2",
+      "wall_s": 506.3,
+      "max_rss_gb": 18.77,
+      "threads": 16,
+      "cpu_h": 1.244,
+      "node": "c003.clipper.gvsu.edu"
+    },
+    {
+      "tool": "cellbender",
+      "dataset": "neuron1k_v3",
+      "wall_s": 1040.6,
+      "max_rss_gb": 5.1,
+      "threads": 8,
+      "cpu_h": 0.307,
+      "notes": "GPU job"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "neuron1k_v3",
+      "wall_s": 720.7,
+      "max_rss_gb": 29.62,
+      "threads": 8,
+      "cpu_h": 0.549,
+      "node": "c101.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-edcr",
+      "dataset": "neuron1k_v3",
+      "wall_s": 425.2,
+      "max_rss_gb": 28.59,
+      "threads": 16,
+      "cpu_h": 0.677,
+      "node": "c100.clipper.gvsu.edu"
+    },
+    {
+      "tool": "cellbender",
+      "dataset": "hgmm1k_v3",
+      "wall_s": 1144.8,
+      "max_rss_gb": 5.21,
+      "threads": 8,
+      "cpu_h": 0.334,
+      "notes": "GPU job"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "hgmm1k_v3",
+      "wall_s": 793.0,
+      "max_rss_gb": 57.37,
+      "threads": 8,
+      "cpu_h": 0.514,
+      "node": "c004.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-edcr",
+      "dataset": "hgmm1k_v3",
+      "wall_s": 441.8,
+      "max_rss_gb": 56.56,
+      "threads": 16,
+      "cpu_h": 0.604,
+      "node": "c101.clipper.gvsu.edu"
+    },
+    {
+      "tool": "cellbender",
+      "dataset": "pbmc1k_cite_v3",
+      "wall_s": 643.5,
+      "max_rss_gb": 3.37,
+      "threads": 8,
+      "cpu_h": 0.188,
+      "notes": "GPU job"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "pbmc1k_cite_v3",
+      "wall_s": 563.8,
+      "max_rss_gb": 21.29,
+      "threads": 8,
+      "cpu_h": 0.594,
+      "node": "c007.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-edcr",
+      "dataset": "pbmc1k_cite_v3",
+      "wall_s": 371.4,
+      "max_rss_gb": 19.63,
+      "threads": 16,
+      "cpu_h": 0.817,
+      "node": "c010.clipper.gvsu.edu"
+    },
+    {
+      "tool": "cellbender",
+      "dataset": "nuclei2k_v2",
+      "wall_s": 38.8,
+      "max_rss_gb": 1.38,
+      "threads": 8,
+      "cpu_h": 0.011,
+      "notes": "GPU job"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "nuclei2k_v2",
+      "wall_s": 1381.2,
+      "max_rss_gb": 29.11,
+      "threads": 8,
+      "cpu_h": 1.633,
+      "node": "c009.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-edcr",
+      "dataset": "nuclei2k_v2",
+      "wall_s": 452.8,
+      "max_rss_gb": 27.42,
+      "threads": 16,
+      "cpu_h": 1.233,
+      "node": "c100.clipper.gvsu.edu"
+    },
+    {
+      "tool": "cellbender",
+      "dataset": "pbmc5p_v1",
+      "wall_s": 53.0,
+      "max_rss_gb": 1.54,
+      "threads": 8,
+      "cpu_h": 0.015,
+      "notes": "GPU job"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "pbmc5p_v1",
+      "wall_s": 612.7,
+      "max_rss_gb": 20.86,
+      "threads": 8,
+      "cpu_h": 0.615,
+      "node": "c101.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-edcr",
+      "dataset": "pbmc5p_v1",
+      "wall_s": 307.5,
+      "max_rss_gb": 18.77,
+      "threads": 16,
+      "cpu_h": 0.674,
+      "node": "c100.clipper.gvsu.edu"
+    },
+    {
+      "tool": "cellbender",
+      "dataset": "kang2018_ctrl",
+      "wall_s": 2248.1,
+      "max_rss_gb": 6.98,
+      "threads": 8,
+      "cpu_h": 0.748,
+      "notes": "GPU job"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "kang2018_ctrl",
+      "wall_s": 2933.9,
+      "max_rss_gb": 20.87,
+      "threads": 8,
+      "cpu_h": 2.057,
+      "node": "c004.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-edcr",
+      "dataset": "kang2018_ctrl",
+      "wall_s": 1055.6,
+      "max_rss_gb": 18.76,
+      "threads": 16,
+      "cpu_h": 1.911,
+      "node": "c004.clipper.gvsu.edu"
+    }
+  ],
+  "figures": [
+    {
+      "id": "jaccard_by_dataset",
+      "title": "Jaccard of called barcodes with the truth set",
+      "kind": "grouped_bar",
+      "caption": "Higher is better.",
+      "x": {
+        "label": "dataset",
+        "categories": [
+          "pbmc1k_v3",
+          "pbmc1k_v2",
+          "neuron1k_v3",
+          "hgmm1k_v3",
+          "pbmc1k_cite_v3",
+          "nuclei2k_v2",
+          "pbmc5p_v1",
+          "kang2018_ctrl"
+        ]
+      },
+      "y": {
+        "label": "jaccard",
+        "unit": "fraction",
+        "scale": "linear",
+        "min": 0,
+        "max": 1
+      },
+      "series": [
+        {
+          "name": "Singlet called_v2",
+          "tool": "singlet",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "nuclei2k_v2",
+            "pbmc5p_v1",
+            "kang2018_ctrl"
+          ],
+          "y": [
+            0.945161,
+            0.941288,
+            0.874382,
+            0.941893,
+            0.952575,
+            0.826893,
+            0.952068,
+            0.882083
+          ]
+        },
+        {
+          "name": "starsolo-edcr",
+          "tool": "starsolo-edcr",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "nuclei2k_v2",
+            "pbmc5p_v1",
+            "kang2018_ctrl"
+          ],
+          "y": [
+            0.99026,
+            0.996,
+            0.957919,
+            0.99714,
+            0.998599,
+            0.899875,
+            0.902058,
+            0.972083
+          ]
+        },
+        {
+          "name": "cellbender",
+          "tool": "cellbender",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "kang2018_ctrl"
+          ],
+          "y": [
+            0.937068,
+            0.919668,
+            0.881195,
+            0.968224,
+            0.975376,
+            0.889234
+          ]
+        }
+      ]
+    },
+    {
+      "id": "recall_by_dataset",
+      "title": "Recall of the truth cells",
+      "kind": "grouped_bar",
+      "caption": "Higher is better.",
+      "x": {
+        "label": "dataset",
+        "categories": [
+          "pbmc1k_v3",
+          "pbmc1k_v2",
+          "neuron1k_v3",
+          "hgmm1k_v3",
+          "pbmc1k_cite_v3",
+          "nuclei2k_v2",
+          "pbmc5p_v1",
+          "kang2018_ctrl"
+        ]
+      },
+      "y": {
+        "label": "recall",
+        "unit": "fraction",
+        "scale": "linear",
+        "min": 0,
+        "max": 1
+      },
+      "series": [
+        {
+          "name": "Singlet called_v2",
+          "tool": "singlet",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "nuclei2k_v2",
+            "pbmc5p_v1",
+            "kang2018_ctrl"
+          ],
+          "y": [
+            0.959083,
+            0.997992,
+            0.952344,
+            0.960803,
+            0.985975,
+            0.909864,
+            0.983773,
+            0.999863
+          ]
+        },
+        {
+          "name": "starsolo-edcr",
+          "tool": "starsolo-edcr",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "nuclei2k_v2",
+            "pbmc5p_v1",
+            "kang2018_ctrl"
+          ],
+          "y": [
+            0.998363,
+            1.0,
+            0.962337,
+            1.0,
+            1.0,
+            0.917092,
+            0.902277,
+            0.998016
+          ]
+        },
+        {
+          "name": "cellbender",
+          "tool": "cellbender",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "kang2018_ctrl"
+          ],
+          "y": [
+            0.999182,
+            1.0,
+            0.997694,
+            0.99044,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "precision_by_dataset",
+      "title": "Precision against the truth cells",
+      "kind": "grouped_bar",
+      "caption": "Higher is better.",
+      "x": {
+        "label": "dataset",
+        "categories": [
+          "pbmc1k_v3",
+          "pbmc1k_v2",
+          "neuron1k_v3",
+          "hgmm1k_v3",
+          "pbmc1k_cite_v3",
+          "nuclei2k_v2",
+          "pbmc5p_v1",
+          "kang2018_ctrl"
+        ]
+      },
+      "y": {
+        "label": "precision",
+        "unit": "fraction",
+        "scale": "linear",
+        "min": 0,
+        "max": 1
+      },
+      "series": [
+        {
+          "name": "Singlet called_v2",
+          "tool": "singlet",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "nuclei2k_v2",
+            "pbmc5p_v1",
+            "kang2018_ctrl"
+          ],
+          "y": [
+            0.984874,
+            0.943074,
+            0.914391,
+            0.979532,
+            0.965659,
+            0.900673,
+            0.967258,
+            0.88219
+          ]
+        },
+        {
+          "name": "starsolo-edcr",
+          "tool": "starsolo-edcr",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "nuclei2k_v2",
+            "pbmc5p_v1",
+            "kang2018_ctrl"
+          ],
+          "y": [
+            0.99187,
+            0.996,
+            0.995231,
+            0.99714,
+            0.998599,
+            0.979564,
+            0.999732,
+            0.973965
+          ]
+        },
+        {
+          "name": "cellbender",
+          "tool": "cellbender",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "kang2018_ctrl"
+          ],
+          "y": [
+            0.937788,
+            0.919668,
+            0.882993,
+            0.977358,
+            0.975376,
+            0.889234
+          ]
+        }
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "name": "hgmm1k_v3.barcodes.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/cell-calling/hgmm1k_v3.barcodes.tsv.gz",
+      "kind": "derived",
+      "sha256": "851f2c81f8864210a9523e7d245b693798ea19775c24602f5916022d9b296b42",
+      "bytes": 20764,
+      "format": "tsv",
+      "dataset": "hgmm1k_v3"
+    },
+    {
+      "name": "kang2018_ctrl.barcodes.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/cell-calling/kang2018_ctrl.barcodes.tsv.gz",
+      "kind": "derived",
+      "sha256": "611a9424d55c2a763f9582bd8566b4c0d7f327fc70dae3e1d8ec5c2715c6553e",
+      "bytes": 159294,
+      "format": "tsv",
+      "dataset": "kang2018_ctrl"
+    },
+    {
+      "name": "neuron1k_v3.barcodes.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/cell-calling/neuron1k_v3.barcodes.tsv.gz",
+      "kind": "derived",
+      "sha256": "dfd124a15110b25a2bba5b92d251618277fb51b5f899e723fa7bdf26031dbcbd",
+      "bytes": 19143,
+      "format": "tsv",
+      "dataset": "neuron1k_v3"
+    },
+    {
+      "name": "nuclei2k_v2.barcodes.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/cell-calling/nuclei2k_v2.barcodes.tsv.gz",
+      "kind": "derived",
+      "sha256": "77630f750d36c296c84e8da9f80e01821235dc791afa88c7e954afa43bf0a1c1",
+      "bytes": 27188,
+      "format": "tsv",
+      "dataset": "nuclei2k_v2"
+    },
+    {
+      "name": "pbmc1k_cite_v3.barcodes.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/cell-calling/pbmc1k_cite_v3.barcodes.tsv.gz",
+      "kind": "derived",
+      "sha256": "8bdf45a2738977a97c68b657889e4cc59a46e6375a823fb672ad65a6291ee0c6",
+      "bytes": 9503,
+      "format": "tsv",
+      "dataset": "pbmc1k_cite_v3"
+    },
+    {
+      "name": "pbmc1k_v2.barcodes.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/cell-calling/pbmc1k_v2.barcodes.tsv.gz",
+      "kind": "derived",
+      "sha256": "1a53fcd156465211f0934489ff509891ca66498737252732609df8b6b36a7ee6",
+      "bytes": 12720,
+      "format": "tsv",
+      "dataset": "pbmc1k_v2"
+    },
+    {
+      "name": "pbmc1k_v3.barcodes.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/cell-calling/pbmc1k_v3.barcodes.tsv.gz",
+      "kind": "derived",
+      "sha256": "19e8469686b126dbce09d43ad50a2b7572200208113020cd6243fa7bf86b7e29",
+      "bytes": 15997,
+      "format": "tsv",
+      "dataset": "pbmc1k_v3"
+    },
+    {
+      "name": "pbmc5p_v1.barcodes.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/cell-calling/pbmc5p_v1.barcodes.tsv.gz",
+      "kind": "derived",
+      "sha256": "134b9944b71b94e3c01c3d2a3331820ae413b63991bfe4a046a21c4c63e9279c",
+      "bytes": 85398,
+      "format": "tsv",
+      "dataset": "pbmc5p_v1"
+    },
+    {
+      "name": "provenance.json",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/cell-calling/provenance.json",
+      "kind": "derived",
+      "sha256": "1d6bedb06d4b47c9b415a7558df0c33415880d941b0d76b3b4915b70d71f103b",
+      "bytes": 31212,
+      "format": "json"
+    },
+    {
+      "name": "resources.json",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/cell-calling/resources.json",
+      "kind": "derived",
+      "sha256": "c320095e3b1b35bff0b27e17af014e5c8c49723276f51954ccb78da716a045f3",
+      "bytes": 7917,
+      "format": "json"
+    },
+    {
+      "name": "validation42.json",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/cell-calling/validation42.json",
+      "kind": "truth",
+      "sha256": "4f290e4229d26d83be4bb6b3ea487abf922f59788e8ccaf1d2731a738b17708a",
+      "bytes": 651,
+      "format": "json"
+    }
+  ],
+  "code": [
+    {
+      "path": "bench/public/capabilities/cell_calling.py",
+      "role": "metric",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/cell_calling.py"
+    },
+    {
+      "path": "bench/public/capabilities/_pubcommon.py",
+      "role": "metric",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/_pubcommon.py"
+    },
+    {
+      "path": "bench/public/capabilities/extract/cellcalling.py",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/extract/cellcalling.py"
+    },
+    {
+      "path": "bench/public/capabilities/extract/runio.py",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/extract/runio.py"
+    },
+    {
+      "path": "bench/public/capabilities/extract/run_extract.py",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/extract/run_extract.py"
+    },
+    {
+      "path": "bench/public/capabilities/clipper/starsolo_public.sbatch",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/clipper/starsolo_public.sbatch"
+    },
+    {
+      "path": "bench/public/capabilities/clipper/singlet_public.sbatch",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/clipper/singlet_public.sbatch"
+    },
+    {
+      "path": "bench/public/capabilities/clipper/cellbender_public.sbatch",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/clipper/cellbender_public.sbatch"
+    },
+    {
+      "path": "include/singlet/pileup/called_v2.h",
+      "role": "implementation",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/include/singlet/pileup/called_v2.h"
+    }
+  ],
+  "reproduce": {
+    "module": "bench/public/capabilities/cell_calling.py",
+    "function": "compute",
+    "laptop_minutes": 1,
+    "clipper_command": "bash bench/public/capabilities/clipper/run_all.sh cell-calling"
+  },
+  "caveats": [
+    "called_v2's parameters (plateau ambient bound, knee bounds, tail p-values, FDR 0.001) were chosen and corrected while looking at pbmc1k_v3, hgmm1k_v3, neuron1k_v3, nuclei2k_v2, pbmc5p_v1 and the Kang lane (docs/called-v2-truth.md). Those datasets are development data for this method, so these scores are not held-out; the 42-sample validation is broader but was also used to choose among variants.",
+    "The truth sets are themselves cutoff-based (Cell Ranger OrdMag / EmptyDrops-like, demuxlet on called cells). Barcodes called by Singlet beyond them are often real low-RNA cells (docs/called-v2-truth.md) and count against precision here.",
+    "The Cell Ranger truth for each 10x dataset is the matrix 10x published, not a re-run on the 2024-A reference. It is itself the output of a cell-calling algorithm (EmptyDrops-like, or OrdMag for Cell Ranger 2), and STARsolo EmptyDrops_CR is a port of it, so its agreement with that truth is partly by construction. The independent real truths are the barnyard species composition (hgmm1k_v3) and the Kang demuxlet table (genotype-based).",
+    "CellBender stopped with an encoder assertion (fewer than 4 cells in a minibatch) at its defaults and again at a lower learning rate on some datasets (see provenance.json); those datasets have no CellBender column and no CellBender competitor value.",
+    "CellBender's expected-cells and total-droplets parameters were derived from the raw UMI curve with a fixed rule, not tuned; CellBender ran only on the datasets that have a cellbender column in the artifacts.",
+    "Wall time and memory in resources are from a shared cluster at differing thread counts and are not a speed comparison.",
+    "Cohort datasets assigned to cell-calling that this document does not cover (no run for them in this benchmark yet): pbmc5k_v4_d1, pbmc10k_5p_v2, mouse_brain_nuclei5k_v31, pbmc_multiome10k, pbmc10k_cite_v3, stoeckius2018_hashing, hgmm10k_v3, macosko2015_dropseq_mix, tenx_crispr_a375_10k, ding2020_pbmc1_smartseq2, ding2020_pbmc1_dropseq, ding2020_pbmc1_indrops, ding2020_pbmc1_seqwell, ding2020_pbmc1_celseq2, ding2020_pbmc1_10xv3, heart1k_v3."
+  ],
+  "conclusion": "On 8 datasets Singlet's called_v2 reaches Jaccard 0.83-0.95 with the truth set (recall 0.91-1.00, precision 0.88-0.98), compared with STARsolo EmptyDrops_CR and CellBender; 5 of 25 gating comparisons pass. The 10x truth sets come from Cell Ranger's own EmptyDrops-type call, which STARsolo's EmptyDrops_CR reproduces by construction; only the barnyard species check and the Kang demuxlet table are independent of that algorithm. Singlet loses 20 comparisons (see metrics)."
+}
