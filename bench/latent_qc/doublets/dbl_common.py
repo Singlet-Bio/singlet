@@ -42,7 +42,8 @@ def save(name: str, X, genes, cells, label, species: str, meta: dict | None = No
                 X_shape=np.array(X.shape), genes=np.asarray(genes).astype(str), cells=np.asarray(cells).astype(str),
                 label=np.asarray(label).astype(np.int8), species=np.array(species), meta=np.array(json.dumps(meta or {})))
     for k, v in extras.items():
-        arrs[k if k.startswith("x_") else "x_" + k] = np.asarray(v)
+        v = np.asarray(v)
+        arrs[k if k.startswith("x_") else "x_" + k] = v.astype(str) if v.dtype == object else v
     np.savez(f"{DATA}/{name}/ds.npz", **arrs)
     print(f"{name}: {X.shape[0]} cells x {X.shape[1]} genes, {int(np.sum(label))} doublets ({np.mean(label):.3f}), {species}",
           flush=True)

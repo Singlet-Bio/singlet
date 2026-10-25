@@ -1,9 +1,9 @@
 # Convert the Xi & Li 2021 real-data .rds files (list(count matrix genes x cells, labels "singlet"/"doublet")) to
 # <out>/<name>/{matrix.mtx, genes.txt, cells.txt, labels.txt}. Usage: Rscript xili_convert.R IN_DIR OUT_DIR
 suppressPackageStartupMessages(library(Matrix))
-a <- commandArgs(TRUE); files <- list.files(a[1], pattern = "\.rds$", recursive = TRUE, full.names = TRUE)
+a <- commandArgs(TRUE); files <- list.files(a[1], pattern = "[.]rds$", recursive = TRUE, full.names = TRUE)
 for (f in files) {
-  nm <- sub("\.rds$", "", basename(f)); o <- file.path(a[2], nm)
+  nm <- sub("[.]rds$", "", basename(f)); o <- file.path(a[2], nm)
   x <- readRDS(f)
   cat("==", nm, class(x), length(x), "\n"); str(x, max.level = 1)
   m <- x[[1]]; lab <- as.character(x[[2]])
