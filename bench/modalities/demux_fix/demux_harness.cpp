@@ -121,6 +121,16 @@ static void apply_kv(singlet::DonorDemuxConfig& cfg, const std::string& k, const
     else if (k == "k_select_min_gain") cfg.k_select_min_gain = d;
     else if (k == "k_select_sep_min") cfg.k_select_sep_min = d;
     else if (k == "n_ward_inits") cfg.n_ward_inits = i;
+    else if (k == "staged_fit") cfg.staged_fit = i != 0;
+    else if (k == "explore_ward") cfg.explore_ward = i;
+    else if (k == "explore_legacy") cfg.explore_legacy = i;
+    else if (k == "explore_random") cfg.explore_random = i;
+    else if (k == "explore_top") cfg.explore_top = i;
+    else if (k == "explore_iters") cfg.explore_iters = i;
+    else if (k == "core_min_rel") cfg.core_min_rel = static_cast<float>(d);
+    else if (k == "split_merge_rounds") cfg.split_merge_rounds = i;
+    else if (k == "split_merge_iters") cfg.split_merge_iters = i;
+    else if (k == "split_merge_resplit_pairs") cfg.split_merge_resplit_pairs = i;
     else if (k == "min_donor_cells") cfg.min_donor_cells = i;
     else if (k == "min_donor_frac") cfg.min_donor_frac = static_cast<float>(d);
     else if (k == "geno_conc_hom") cfg.geno_conc_hom = static_cast<float>(d);
@@ -157,14 +167,27 @@ int main(int argc, char** argv) {
     std::vector<uint32_t> cell_indices;
     {
         auto lines = read_lines_gz(calls_path);
+        // column chosen by env CALLS_COL (default is_cell); a cell is TRUE / 1
+        const char* cc = getenv("CALLS_COL");
+        const std::string col = cc ? cc : "is_cell";
+        auto split = [](const std::string& l) {
+            std::vector<std::string> f;
+            size_t s = 0;
+            for (size_t t = 0; t <= l.size(); ++t)
+                if (t == l.size() || l[t] == '\t') { f.push_back(l.substr(s, t - s)); s = t + 1; }
+            return f;
+        };
+        size_t ci = 1;
+        if (!lines.empty()) {
+            auto h = split(lines[0]);
+            for (size_t i = 0; i < h.size(); ++i) if (h[i] == col) ci = i;
+        }
         for (size_t i = 1; i < lines.size(); ++i) {
-            const auto& l = lines[i];
-            const size_t t1 = l.find('\t');
-            if (t1 == std::string::npos) continue;
-            const size_t t2 = l.find('\t', t1 + 1);
-            const std::string flag = l.substr(t1 + 1, t2 == std::string::npos ? std::string::npos : t2 - t1 - 1);
+            auto f = split(lines[i]);
+            if (f.size() <= ci) continue;
+            const std::string& flag = f[ci];
             if (flag != "TRUE" && flag != "True" && flag != "1") continue;
-            auto it = bc_idx.find(l.substr(0, t1));
+            auto it = bc_idx.find(f[0]);
             if (it != bc_idx.end()) cell_indices.push_back(it->second);
         }
         std::sort(cell_indices.begin(), cell_indices.end());
@@ -176,6 +199,48 @@ int main(int argc, char** argv) {
     while (a < argc) {
         if (std::string(argv[a]) == "--") { ++a; continue; }
         if (a + 1 >= argc) break;
+        if (std::string(argv[a]) == "vbtruth" && a + 3 < argc) {
+            // vbtruth TAG TRUTH.tsv.gz K: diagnostic. Run VB from the truth partition (demuxlet singlets)
+            // on the called cells and print its ELBO, to compare with the ELBO of a fitted solution.
+            const std::string tag = argv[a + 1], truth = argv[a + 2];
+            const int K = atoi(argv[a + 3]);
+            a += 4;
+            auto cov = singlet::extract_covered_snps(ad.nrows, ad.ncols, ad.indptr.data(), ad.indices.data(),
+                ad.data.data(), dp.indptr.data(), dp.indices.data(), dp.data.data());
+            singlet::CoveredSNPData cu;
+            cu.n_covered_snps = cov.n_covered_snps;
+            cu.n_cells = static_cast<int>(cell_indices.size());
+            for (uint32_t idx : cell_indices) cu.cells.push_back(cov.cells[idx]);
+            std::unordered_map<std::string, int> donor_of;
+            std::unordered_map<std::string, int> ids;
+            for (const auto& l : read_lines_gz(truth)) {
+                std::vector<std::string> f;
+                size_t s = 0;
+                for (size_t t = 0; t <= l.size(); ++t)
+                    if (t == l.size() || l[t] == '\t') { f.push_back(l.substr(s, t - s)); s = t + 1; }
+                if (f.size() < 8 || f[7] != "singlet" || f[4] != "ctrl") continue;
+                if (!ids.count(f[3])) { const int n = static_cast<int>(ids.size()); ids[f[3]] = n; }
+                donor_of[f[0].substr(0, f[0].find('-'))] = ids[f[3]];
+            }
+            singlet::DonorDemuxConfig cfg;
+            cfg.threads = threads;
+            singlet::VBResult r;
+            r.elbo = -1e300; r.n_iter = 0;
+            r.beta_mu.assign(cu.n_covered_snps, std::vector<float>(K, 0.5f));
+            r.beta_sum.assign(cu.n_covered_snps, std::vector<float>(K, 2.0f));
+            r.id_prob.assign(cu.n_cells, std::vector<float>(K, 1.0f / K));
+            int nl = 0;
+            for (int i = 0; i < cu.n_cells; ++i) {
+                auto it = donor_of.find(barcodes[cell_indices[i]]);
+                if (it == donor_of.end() || it->second >= K) continue;
+                ++nl;
+                for (int k = 0; k < K; ++k) r.id_prob[i][k] = (k == it->second) ? 0.97f : 0.03f / (K - 1);
+            }
+            singlet::run_vb_inplace(cu, K, cfg, r, 300, threads);
+            std::cerr << "[harness] vbtruth " << tag << ": labelled=" << nl << " ELBO=" << r.elbo
+                      << " iters=" << r.n_iter << "\n";
+            continue;
+        }
         if (std::string(argv[a]) == "rescore" && a + 3 < argc) {
             // rescore TAG PREV_donor_assignments.tsv K [key=value ...]: rerun only the doublet stage
             // (hard donor weights from PREV's best_singlet) so doublet parameters can be swept quickly.

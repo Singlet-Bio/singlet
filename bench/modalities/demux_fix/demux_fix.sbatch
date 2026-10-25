@@ -18,10 +18,10 @@ PY=$W/envs/gpool/venv/bin/python
 export PATH=$W/envs/pbench/bin:$PATH
 mkdir -p $O
 x86_64-conda-linux-gnu-g++ -O2 -std=c++17 -pthread -I$J/inc $J/demux_harness.cpp -o $O/demux_harness
-D=$G/singlet_k8/donor
+D=$G/${RUNDIR:-singlet_k8}/${DDIR:-donor}; export CALLS_COL=${CALLS_COL:-is_cell}
 [ -f $W/modality-bench/demux_fix/subsets/d6.txt ] || (cd $J && $PY make_subsets.py $G/truth/GSE96583_batch2.total.tsne.df.tsv.gz $W/modality-bench/demux_fix/subsets)
 /usr/bin/time -v -o $O/time.txt $O/demux_harness $D/snp_ad.mtx.gz $D/snp_dp.mtx.gz $D/snp_ad_barcodes.tsv.gz \
-  $G/singlet_k8/cell_calls.tsv $O ${SLURM_CPUS_PER_TASK:-16} $RUNS
+  $G/${RUNDIR:-singlet_k8}/cell_calls.tsv $O ${SLURM_CPUS_PER_TASK:-16} $RUNS
 grep -E "Elapsed|Maximum resident" $O/time.txt || true
 
 # score: every run directory with a donor_assignments.tsv, plus vireo (the reference)

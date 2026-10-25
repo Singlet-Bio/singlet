@@ -19,6 +19,7 @@
 //   4. K-level early stopping when ELBO degrades for 2 consecutive K values.
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -30,6 +31,7 @@
 #include <random>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -67,13 +69,28 @@ struct DonorDemuxConfig {
     int   min_donor_cells = 15;        // a donor owns at least max(this, min_donor_frac * cells) cells
     float min_donor_frac = 0.004f;
     int   n_ward_inits = 4;            // extra Ward-seeded restarts in the final fit (K >= 2)
+    double split_merge_min_gain_rel = 1e-4; // candidate must beat the current ELBO by this fraction of |ELBO|
+    int   split_merge_rounds = 0;      // split-merge repair rounds after the final fit (0 = off)
+    int   split_merge_iters = 30;      // VB iterations per split-merge candidate
+    int   split_merge_merge_cands = 2; // closest component pairs tried as merge + split
+    int   split_merge_resplit_pairs = 10; // closest pairs whose pooled cells are re-split in two
     // ── Genotype doublet model (Vireo-style, see score_cells) ──────────────
     bool  detect_doublets = true;      // fill prob_doublet / "doublet" label (K >= 2)
     float doublet_threshold = 0.9f;    // prob_doublet above this -> label "doublet"
     float doublet_rate_per_1000 = 0.008f; // expected multiplet rate per 1000 cells (10x)
     float doublet_prior = -1.0f;       // >= 0 overrides the total multiplet prior
     int   doublet_rounds = 2;          // scoring rounds; round 2 refits genotypes without doublets
-    float doublet_temper = 0.2f;       // exponent on the read likelihood in the final doublet/donor posteriors:
+    bool  staged_fit = true;           // final fit: many cheap restarts on a reduced SNP set, best few refined
+    int   explore_ward = 16;           // ... Ward-seeded restarts
+    int   explore_legacy = 6;          // ... k-means++-seeded restarts
+    int   explore_random = 2;          // ... random restarts
+    int   explore_iters = 60;          // ... VB iterations per exploratory restart
+    int   explore_top = 2;             // ... restarts continued on the full SNP set
+    int   explore_full_iters = 40;     // ... VB iterations of that continuation
+    int   explore_min_snp_cells = 8;   // ... SNP must be seen in this many cells to enter the exploration
+    float core_min_rel = 0.35f;        // donors are fit on called cells with >= this x median SNP observations
+                                       // (0 = fit on all called cells); the rest are assigned afterwards
+    float doublet_temper = 0.2f;      // exponent on the read likelihood in the final doublet/donor posteriors:
                                        // UMIs of one cell are not independent draws (monoallelic bursts, PCR), so
                                        // the raw binomial is overconfident; 0.2 was fit on the Kang pool (see bench)
     int   doublet_min_snp_cells = 3;   // SNP must be seen in this many cells to be scored
@@ -1091,7 +1108,8 @@ static VBResult run_vb(
 static VBResult fit_vb_k(
     const CoveredSNPData& cov, int K, const DonorDemuxConfig& cfg,
     const std::vector<int>& kinds, int max_iter_pre, int max_iter,
-    int threads, const PcaCache* pca, uint64_t seed_base, bool quiet)
+    int threads, const PcaCache* pca, uint64_t seed_base, bool quiet,
+    std::vector<VBResult>* all_out = nullptr)
 {
     const int n_inits = std::max(1, static_cast<int>(kinds.size()));
     std::vector<VBResult> init_results(n_inits);
@@ -1138,6 +1156,10 @@ static VBResult fit_vb_k(
                       << (i == best ? "*" : "");
         std::cerr << "\n";
     }
+    if (all_out) {                       // caller wants every restart (staged search)
+        *all_out = std::move(init_results);
+        return VBResult();
+    }
     VBResult res = std::move(init_results[best]);
     if (max_iter > 0) run_vb_inplace(cov, K, cfg, res, max_iter, threads);
     return res;
@@ -1181,6 +1203,53 @@ static ReducedSNPs reduce_snps(const CoveredSNPData& src,
         }
     }
     return r;
+}
+
+// Staged restart search for one K. Exploration is cheap: many restarts on a reduced SNP set
+// (SNPs seen in >= cfg.explore_min_snp_cells called cells, a small fraction of the covered SNPs).
+// The best cfg.explore_top restarts by reduced-data ELBO are then continued on the full SNP set
+// from their cell posteriors, and the best of those is converged. VB has many poor local optima
+// (a donor split in two while two others share a component); the ELBO tells good from bad
+// reliably (the truth partition's ELBO is ~1.4% higher), but only if enough starts are tried.
+static VBResult fit_vb_k_staged(
+    const CoveredSNPData& cov, int K, const DonorDemuxConfig& cfg,
+    const PcaCache* pca, bool quiet)
+{
+    std::vector<int> all(cov.n_cells);
+    std::iota(all.begin(), all.end(), 0);
+    ReducedSNPs red = reduce_snps(cov, all, cfg.explore_min_snp_cells);
+    std::vector<int> kinds;
+    for (int i = 0; i < cfg.explore_ward; ++i) kinds.push_back(2);
+    for (int i = 0; i < cfg.explore_legacy; ++i) kinds.push_back(1);
+    for (int i = 0; i < cfg.explore_random; ++i) kinds.push_back(0);
+    std::vector<VBResult> all_res;
+    const auto t0 = std::chrono::steady_clock::now();
+    fit_vb_k(red.data, K, cfg, kinds, cfg.explore_iters, 0, cfg.threads, pca, cfg.seed + 4242ULL, true, &all_res);
+    std::vector<int> order(all_res.size());
+    std::iota(order.begin(), order.end(), 0);
+    std::sort(order.begin(), order.end(), [&](int a, int b) { return all_res[a].elbo > all_res[b].elbo; });
+    const int top = std::max(1, std::min<int>(cfg.explore_top, static_cast<int>(order.size())));
+    if (!quiet)
+        std::cerr << "[demux] K=" << K << " explored " << kinds.size() << " restarts on " << red.data.n_covered_snps
+                  << " SNPs in " << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count()
+                  << " s; reduced ELBO best " << all_res[order[0]].elbo << " (kind " << kinds[order[0]]
+                  << "), median " << all_res[order[order.size() / 2]].elbo << "\n";
+    VBResult best;
+    best.elbo = -std::numeric_limits<double>::infinity();
+    for (int t = 0; t < top; ++t) {
+        VBResult r;
+        r.elbo = -std::numeric_limits<double>::infinity();
+        r.n_iter = 0;
+        r.beta_mu.assign(cov.n_covered_snps, std::vector<float>(K, 0.5f));
+        r.beta_sum.assign(cov.n_covered_snps, std::vector<float>(K, 2.0f));
+        r.id_prob = std::move(all_res[order[t]].id_prob);
+        run_vb_inplace(cov, K, cfg, r, cfg.explore_full_iters, cfg.threads);
+        if (!quiet)
+            std::cerr << "[demux]   candidate " << t << " (kind " << kinds[order[t]] << "): full ELBO " << r.elbo << "\n";
+        if (r.elbo > best.elbo) best = std::move(r);
+    }
+    run_vb_inplace(cov, K, cfg, best, cfg.max_iter, cfg.threads);
+    return best;
 }
 
 // ============================================================================
@@ -1506,12 +1575,23 @@ static std::vector<double> mean_donor_weights(const std::vector<std::vector<floa
 static void doublet_stage(
     const CoveredSNPData& cov, int K, const DonorDemuxConfig& cfg,
     const std::vector<std::vector<float>>& q,
-    std::vector<CellScore>& score, float* eps_out = nullptr)
+    std::vector<CellScore>& score, float* eps_out = nullptr,
+    const CoveredSNPData* extra = nullptr, std::vector<CellScore>* extra_score = nullptr)
 {
+    // `extra`: more cells (same SNP index space) that were not used to fit the donors; they are
+    // scored at the end with genotypes built from all fitted cells.
     const int nc = cov.n_cells;
-    std::vector<int> all(nc);
+    const int ne = extra ? extra->n_cells : 0;
+    CoveredSNPData both;
+    if (ne > 0) {
+        both.n_covered_snps = cov.n_covered_snps;
+        both.n_cells = nc + ne;
+        both.cells = cov.cells;
+        both.cells.insert(both.cells.end(), extra->cells.begin(), extra->cells.end());
+    }
+    std::vector<int> all(nc + ne);
     std::iota(all.begin(), all.end(), 0);
-    ReducedSNPs red = reduce_snps(cov, all, cfg.doublet_min_snp_cells);
+    ReducedSNPs red = reduce_snps(ne > 0 ? both : cov, all, cfg.doublet_min_snp_cells);
     const CoveredSNPData& d = red.data;
 
     const std::vector<double> pi = mean_donor_weights(q, K);
@@ -1528,7 +1608,8 @@ static void doublet_stage(
     for (int r = 0; r < rounds; ++r) {
         for (int f = 0; f < 2; ++f) {
             if (fold_cells[f].empty()) continue;
-            std::vector<uint8_t> use(nc, 1);
+            std::vector<uint8_t> use(nc + ne, 1);
+            for (int c = nc; c < nc + ne; ++c) use[c] = 0;
             if (cfg.doublet_crossfit)
                 for (int c : fold_cells[f]) use[c] = 0;   // genotypes from the other half
             AlleleTables T = build_allele_tables(d, q, wp, &use, K, cfg);
@@ -1542,6 +1623,16 @@ static void doublet_stage(
             for (int c = 0; c < nc; ++c) w[c] = 1.0f - score[c].p_doublet;
             wp = &w;
         }
+    }
+    if (ne > 0 && extra_score) {
+        std::vector<float> wf(nc + ne, 0.0f);
+        for (int c = 0; c < nc; ++c) wf[c] = 1.0f - score[c].p_doublet;
+        std::vector<uint8_t> use(nc + ne, 0);
+        for (int c = 0; c < nc; ++c) use[c] = 1;
+        AlleleTables T = build_allele_tables(d, q, &wf, &use, K, cfg);
+        std::vector<int> ids(ne);
+        std::iota(ids.begin(), ids.end(), nc);
+        score_cells(d, ids, T, lps, lpp, cfg.threads, *extra_score, nullptr, nullptr, cfg.doublet_temper);
     }
 }
 
@@ -1804,6 +1895,146 @@ static int select_k_heldout(const CoveredSNPData& cov, const DonorDemuxConfig& c
 }
 
 // ============================================================================
+// Split-merge repair of a fitted K-donor VB model.
+//
+// VB from a PCA / random start often stops in a local optimum where two donors share one
+// component while a third donor is split over two (a "merge + split" away from the optimum).
+// Each round tries: merge the genotype-closest pair of components and split another
+// component in two (2-means on the PC scores of its cells), runs VB briefly from that
+// state, and keeps the best candidate if its ELBO beats the current converged ELBO.
+// ============================================================================
+static void split_merge_refine(const CoveredSNPData& cov, int K, const DonorDemuxConfig& cfg,
+                               VBResult& res, const PcaCache* pca)
+{
+    if (K < 3 || cfg.split_merge_rounds <= 0 || !pca || pca->scores.empty()) return;
+    const int nc = cov.n_cells, ns = cov.n_covered_snps;
+    const int dims = std::min(pca->n_pcs, pca_dims_for_k(K));
+    for (int round = 0; round < cfg.split_merge_rounds; ++round) {
+        // hard assignment and sizes
+        std::vector<int> hard(nc, 0), cnt(K, 0);
+        for (int c = 0; c < nc; ++c) {
+            int b = 0;
+            for (int k = 1; k < K; ++k) if (res.id_prob[c][k] > res.id_prob[c][b]) b = k;
+            hard[c] = b; ++cnt[b];
+        }
+        // genotype distance between components over SNPs both have evidence for
+        std::vector<double> num(static_cast<size_t>(K) * K, 0.0), den(static_cast<size_t>(K) * K, 0.0);
+        for (int j = 0; j < ns; ++j) {
+            const auto& mu = res.beta_mu[j];
+            const auto& sm = res.beta_sum[j];
+            for (int a = 0; a < K; ++a) {
+                if (sm[a] < 6.0f) continue;
+                for (int b = a + 1; b < K; ++b) {
+                    if (sm[b] < 6.0f) continue;
+                    const double w = std::min(sm[a], sm[b]);
+                    num[a * K + b] += w * std::fabs(mu[a] - mu[b]);
+                    den[a * K + b] += w;
+                }
+            }
+        }
+        std::vector<std::pair<double, std::pair<int, int>>> pairs;
+        for (int a = 0; a < K; ++a)
+            for (int b = a + 1; b < K; ++b)
+                if (den[a * K + b] > 0.0) pairs.push_back({num[a * K + b] / den[a * K + b], {a, b}});
+        std::sort(pairs.begin(), pairs.end());
+
+        // split labels per component (2-means on PC scores of its cells)
+        std::vector<std::vector<int>> members(K);
+        for (int c = 0; c < nc; ++c) members[hard[c]].push_back(c);
+        std::vector<std::vector<char>> split_lab(K);   // 0/1 per member
+        for (int m = 0; m < K; ++m) {
+            if (static_cast<int>(members[m].size()) < std::max(2 * cfg.min_donor_cells, 40)) continue;
+            std::vector<float> sc(members[m].size() * dims);
+            for (size_t i = 0; i < members[m].size(); ++i)
+                for (int p = 0; p < dims; ++p)
+                    sc[i * dims + p] = pca->scores[static_cast<size_t>(members[m][i]) * pca->n_pcs + p];
+            const auto lab = kmeans_plusplus(sc, static_cast<int>(members[m].size()), dims, 2, 30,
+                                             cfg.seed + 777ULL + m, dims);
+            split_lab[m].resize(lab.size());
+            int n1 = 0;
+            for (size_t i = 0; i < lab.size(); ++i) { split_lab[m][i] = static_cast<char>(lab[i]); n1 += lab[i]; }
+            if (n1 < cfg.min_donor_cells || static_cast<int>(lab.size()) - n1 < cfg.min_donor_cells)
+                split_lab[m].clear();
+        }
+
+        struct Cand { int a, b, m; VBResult r; };
+        std::vector<Cand> cands;
+        // (b) re-split: pool the cells of two components and cut them in two again by 2-means
+        // (fixes "three donors in two components": two comps hold {A1, A2+B} instead of {A, B})
+        for (size_t pi = 0; pi < pairs.size() && pi < static_cast<size_t>(cfg.split_merge_resplit_pairs); ++pi) {
+            const int a = pairs[pi].second.first, b = pairs[pi].second.second;
+            std::vector<int> mem;
+            for (int c = 0; c < nc; ++c) if (hard[c] == a || hard[c] == b) mem.push_back(c);
+            if (static_cast<int>(mem.size()) < 4 * cfg.min_donor_cells) continue;
+            std::vector<float> sc(mem.size() * dims);
+            for (size_t i = 0; i < mem.size(); ++i)
+                for (int p = 0; p < dims; ++p)
+                    sc[i * dims + p] = pca->scores[static_cast<size_t>(mem[i]) * pca->n_pcs + p];
+            const auto lab = kmeans_ward(sc, static_cast<int>(mem.size()), dims, 2,
+                                         cfg.seed + 991ULL + a * 31 + b, dims, 4);
+            Cand cd;
+            cd.a = a; cd.b = b; cd.m = -1;
+            cd.r.elbo = -std::numeric_limits<double>::infinity();
+            cd.r.n_iter = 0;
+            cd.r.beta_mu.assign(ns, std::vector<float>(K, 0.5f));
+            cd.r.beta_sum.assign(ns, std::vector<float>(K, 2.0f));
+            cd.r.id_prob = res.id_prob;
+            for (size_t i = 0; i < mem.size(); ++i) {
+                auto& q = cd.r.id_prob[mem[i]];
+                const float mass = q[a] + q[b];
+                q[a] = lab[i] == 0 ? mass : 0.0f;
+                q[b] = lab[i] == 0 ? 0.0f : mass;
+            }
+            cands.push_back(std::move(cd));
+        }
+        // (a) merge the closest pair and split another component
+        for (size_t pi = 0; pi < pairs.size() && pi < static_cast<size_t>(cfg.split_merge_merge_cands); ++pi) {
+            const auto& pr = pairs[pi];
+            for (int m = 0; m < K; ++m) {
+                if (split_lab[m].empty() || m == pr.second.first || m == pr.second.second) continue;
+                Cand cd;
+                cd.a = pr.second.first; cd.b = pr.second.second; cd.m = m;
+                cd.r.elbo = -std::numeric_limits<double>::infinity();
+                cd.r.n_iter = 0;
+                cd.r.beta_mu.assign(ns, std::vector<float>(K, 0.5f));
+                cd.r.beta_sum.assign(ns, std::vector<float>(K, 2.0f));
+                cd.r.id_prob = res.id_prob;
+                for (int c = 0; c < nc; ++c) {              // merge b into a
+                    cd.r.id_prob[c][cd.a] += cd.r.id_prob[c][cd.b];
+                    cd.r.id_prob[c][cd.b] = 0.0f;
+                }
+                for (size_t i = 0; i < members[m].size(); ++i)   // split m into m and b
+                    if (split_lab[m][i]) {
+                        auto& q = cd.r.id_prob[members[m][i]];
+                        q[cd.b] = q[m]; q[m] = 0.0f;
+                    }
+                cands.push_back(std::move(cd));
+            }
+        }
+        if (cands.empty()) break;
+
+        const int nw = std::max(1, std::min(cfg.threads, static_cast<int>(cands.size())));
+        std::vector<std::thread> ws;
+        std::atomic<int> next{0};
+        for (int w = 0; w < nw; ++w)
+            ws.emplace_back([&]() {
+                for (int i = next++; i < static_cast<int>(cands.size()); i = next++)
+                    run_vb_inplace(cov, K, cfg, cands[i].r, cfg.split_merge_iters, 1);
+            });
+        for (auto& t : ws) t.join();
+        int bi = 0;
+        for (size_t i = 1; i < cands.size(); ++i) if (cands[i].r.elbo > cands[bi].r.elbo) bi = static_cast<int>(i);
+        std::cerr << "[demux] split-merge round " << round + 1 << ": " << cands.size()
+                  << " candidates, best (merge " << cands[bi].a << "+" << cands[bi].b << ", split "
+                  << cands[bi].m << ") ELBO " << cands[bi].r.elbo << " vs current " << res.elbo << "\n";
+        if (!(cands[bi].r.elbo > res.elbo + cfg.split_merge_min_gain_rel * std::fabs(res.elbo))) break;
+        res = std::move(cands[bi].r);
+        run_vb_inplace(cov, K, cfg, res, cfg.max_iter, cfg.threads);
+        std::cerr << "[demux] split-merge accepted: ELBO " << res.elbo << "\n";
+    }
+}
+
+// ============================================================================
 // Extended demux result — carries assignments + VB posteriors for genotyping
 // ============================================================================
 struct DemuxResult {
@@ -1856,20 +2087,50 @@ inline DemuxResult run_demux(
     const bool use_cell_filter = !cell_indices.empty() &&
         cell_indices.size() < static_cast<size_t>(n_cells);
 
+    // Core / extra split of the called cells: low-depth called cells (few SNP observations) carry
+    // little genotype information, blur the donor components and push VB into local optima
+    // (two donors in one component, a third split in two). The donors are fit on the core cells
+    // (>= cfg.core_min_rel x the median number of SNP observations) and the remaining called
+    // cells are assigned afterwards like ambient barcodes, but keep status "cell".
+    std::vector<uint32_t> fit_idx, extra_idx;
+    if (use_cell_filter) {
+        fit_idx = cell_indices;
+        if (cfg.core_min_rel > 0.0f) {
+            std::vector<size_t> nobs;
+            nobs.reserve(cell_indices.size());
+            for (uint32_t idx : cell_indices) nobs.push_back(cov.cells[idx].snp_idx.size());
+            std::nth_element(nobs.begin(), nobs.begin() + nobs.size() / 2, nobs.end());
+            const double thr = cfg.core_min_rel * static_cast<double>(nobs[nobs.size() / 2]);
+            std::vector<uint32_t> core;
+            for (uint32_t idx : cell_indices) {
+                if (static_cast<double>(cov.cells[idx].snp_idx.size()) >= thr) core.push_back(idx);
+                else extra_idx.push_back(idx);
+            }
+            if (extra_idx.size() * 50 < cell_indices.size() || core.size() < 200) {
+                extra_idx.clear();                 // nothing worth separating
+            } else {
+                fit_idx = std::move(core);
+                std::cerr << "[demux] Core fit: " << fit_idx.size() << " cells with >= " << thr
+                          << " SNP observations; " << extra_idx.size()
+                          << " low-depth called cells are assigned afterwards\n";
+            }
+        }
+    }
+
     CoveredSNPData cov_filt;
     if (use_cell_filter) {
         // Share the same SNP index space as cov_all; only subset the cell list.
         cov_filt.n_covered_snps    = cov.n_covered_snps;
-        cov_filt.n_cells           = static_cast<int>(cell_indices.size());
+        cov_filt.n_cells           = static_cast<int>(fit_idx.size());
         cov_filt.covered_to_original = cov.covered_to_original;
-        cov_filt.cells.reserve(cell_indices.size());
-        for (uint32_t idx : cell_indices)
+        cov_filt.cells.reserve(fit_idx.size());
+        for (uint32_t idx : fit_idx)
             cov_filt.cells.push_back(cov.cells[idx]);
         std::cerr << "[demux] Cell filter: running VB on "
                   << cov_filt.n_cells << " called cells (of " << n_cells
                   << " total barcodes); "
                   << (n_cells - static_cast<uint32_t>(cov_filt.n_cells))
-                  << " ambient barcodes will be back-assigned post-convergence\n";
+                  << " other barcodes will be back-assigned post-convergence\n";
     }
     // VB model operates on this (filtered or full)
     const CoveredSNPData& cov_use = use_cell_filter ? cov_filt : cov;
@@ -1913,9 +2174,10 @@ inline DemuxResult run_demux(
             kinds.push_back(0);
         }
 
-        VBResult k_best_result = fit_vb_k(cov_use, K, cfg, kinds,
-                                          cfg.max_iter_pre, cfg.max_iter, cfg.threads,
-                                          &pca_full, cfg.seed, false);
+        VBResult k_best_result = (cfg.staged_fit && K > 1)
+            ? fit_vb_k_staged(cov_use, K, cfg, &pca_full, false)
+            : fit_vb_k(cov_use, K, cfg, kinds, cfg.max_iter_pre, cfg.max_iter, cfg.threads,
+                       &pca_full, cfg.seed, false);
 
         std::cerr << "[demux] K=" << K << ": ELBO=" << k_best_result.elbo
                   << " (" << k_best_result.n_iter << " iters)\n";
@@ -1938,14 +2200,25 @@ inline DemuxResult run_demux(
         prev1_k_elbo = best_elbo;
     }
 
+    if (best_k >= 3) {
+        split_merge_refine(cov_use, best_k, cfg, best_result, &pca_full);
+        best_elbo = best_result.elbo;
+    }
     std::cerr << "[demux] Best K=" << best_k << " (ELBO=" << best_elbo << ")\n";
 
     // ── Doublet model on the called cells ────────────────────────────────────
-    std::vector<CellScore> dbl;
+    std::vector<CellScore> dbl, dbl_extra;
     const bool have_dbl = cfg.detect_doublets && best_k >= 2;
     if (have_dbl) {
         const auto td = std::chrono::steady_clock::now();
-        doublet_stage(cov_use, best_k, cfg, best_result.id_prob, dbl, &demux_result.geno_error);
+        CoveredSNPData extra_cov;
+        if (!extra_idx.empty()) {
+            extra_cov.n_covered_snps = cov.n_covered_snps;
+            extra_cov.n_cells = static_cast<int>(extra_idx.size());
+            for (uint32_t idx : extra_idx) extra_cov.cells.push_back(cov.cells[idx]);
+        }
+        doublet_stage(cov_use, best_k, cfg, best_result.id_prob, dbl, &demux_result.geno_error,
+                      extra_idx.empty() ? nullptr : &extra_cov, &dbl_extra);
         // Re-fit the VB donor genotypes without the likely doublets (one extra round):
         // scale each cell's posterior by (1 - P(doublet)) for one M-step, then E-step.
         for (int c = 0; c < cov_use.n_cells; ++c) {
@@ -2009,8 +2282,8 @@ inline DemuxResult run_demux(
         }
     } else {
         // ── 1. Assign called cells from VB posteriors ─────────────────────────
-        for (size_t i = 0; i < cell_indices.size(); ++i) {
-            const uint32_t orig_c = cell_indices[i];
+        for (size_t i = 0; i < fit_idx.size(); ++i) {
+            const uint32_t orig_c = fit_idx[i];
             assignments[orig_c] = assign_from_probs(best_result.id_prob[i], "cell",
                                                     have_dbl ? &dbl[i] : nullptr);
             if (assignments[orig_c].label == "unassigned") ++n_unassigned_cells;
@@ -2037,7 +2310,9 @@ inline DemuxResult run_demux(
         }
 
         // Build called-cell set for O(1) skip
-        std::unordered_set<uint32_t> cell_set(cell_indices.begin(), cell_indices.end());
+        std::unordered_set<uint32_t> cell_set(fit_idx.begin(), fit_idx.end());
+        std::unordered_map<uint32_t, int> extra_pos;     // low-depth called cells (status "cell")
+        for (size_t i = 0; i < extra_idx.size(); ++i) extra_pos[extra_idx[i]] = static_cast<int>(i);
 
         std::vector<float> ll(best_k);
         for (uint32_t c = 0; c < n_cells; ++c) {
@@ -2073,6 +2348,15 @@ inline DemuxResult run_demux(
             const float inv = 1.0f / sm;
             for (int k = 0; k < best_k; ++k) probs[k] *= inv;
 
+            auto ep = extra_pos.find(c);
+            if (ep != extra_pos.end()) {
+                assignments[c] = assign_from_probs(probs, "cell",
+                    (have_dbl && ep->second < static_cast<int>(dbl_extra.size())) ? &dbl_extra[ep->second] : nullptr);
+                if (assignments[c].label == "unassigned") ++n_unassigned_cells;
+                else if (assignments[c].label == "doublet") ++n_doublet_cells;
+                else ++n_assigned_cells;
+                continue;
+            }
             assignments[c] = assign_from_probs(probs, "ambient", nullptr);
             if (assignments[c].label == "unassigned") ++n_unassigned_ambient;
             else ++n_assigned_ambient;
