@@ -152,3 +152,8 @@ except PipelineError as exc:
 - [`.1pz` format](format-1pz.md)
 - [`.1fq` format](format-1fq.md)
 - [Quickstart notebook](notebooks/pipeline_quickstart.ipynb)
+
+## Outputs added for the atlas re-run
+
+Public and private (`private/`) outputs, new members (ambient-corrected counts, poly(A) sites, junction flags,
+aligner-level per-cell QC) and changed defaults are listed in [pipeline-outputs.md](pipeline-outputs.md).
