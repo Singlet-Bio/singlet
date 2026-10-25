@@ -5,7 +5,9 @@
 // 14-mer prefix sort groups identical R2 sequences together.
 // Consecutive reads with identical numeric sequence skip alignment.
 // ~15-17% per-chunk hit rate, ~384KB/thread cache footprint.
+#ifndef SINGLET_NO_DEDUP_R2
 #define OPT_DEDUP_R2
+#endif
 
 #include "IncludeDefine.h"
 #include "Parameters.h"
