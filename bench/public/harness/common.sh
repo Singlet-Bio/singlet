@@ -1,6 +1,6 @@
 # Shared settings for the public benchmark harness on Clipper (sourced by every bench/public/harness/*.sbatch).
 WORK=/mnt/projects/debruinz_project/debruinz/singlet
-BP=$WORK/bench-public                       # data/, runs/, artifacts/, results/, logs of this program
+BP=$WORK/bpub                              # data/, runs/, artifacts/, results/, logs of this program
 PB=$WORK/pipeline-benchmark                 # pipeline-benchmark session's data and binaries (reused, read-only here)
 ENV=$WORK/envs/pbench                       # conda env: STAR 2.7.11b, samtools, bcftools, simpleaf/alevin-fry, python
 SRA=$WORK/envs/sratools/bin                 # prefetch / fasterq-dump / fastq-dump 3.x

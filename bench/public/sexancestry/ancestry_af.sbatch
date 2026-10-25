@@ -13,7 +13,7 @@
 # is written. Output: $BP/work/ancestry/af_leaveout.parquet and af_leaveout.json (counts, excluded ids).
 set -euo pipefail
 source /mnt/projects/debruinz_project/debruinz/singlet/src/singlet-py/claude__bench-public-cohort-485cf7/bench/public/harness/common.sh
-BPE=$WORK/envs/bench-public; export PATH=$BPE/bin:$PATH
+BPE=$WORK/envs/bpub; export PATH=$BPE/bin:$PATH
 O=$BP/work/ancestry; R=$WORK/data/1kgp_grch38; mkdir -p $O $R
 BASE=https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1000_genomes_project/release/20190312_biallelic_SNV_and_INDEL
 PANEL=https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/release/20130502/integrated_call_samples_v3.20130502.ALL.panel

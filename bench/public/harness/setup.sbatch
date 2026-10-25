@@ -11,7 +11,7 @@
 #  2. build Singlet's Python readers in place inside the runtime (the compute modules read bundles);
 #  3. whitelists: Singlet's bundled lists plus 10x's GEM-X 3' v4 list;
 #  4. R library with cellXY (GitHub, not Bioconductor) on top of the ambient env's R 4.4;
-#  5. somalier 0.3.6 binary, its 1000 Genomes labelled background and hg38 sites; env bench-public (bcftools, peddy);
+#  5. somalier 0.3.6 binary, its 1000 Genomes labelled background and hg38 sites; env bpub (bcftools, peddy);
 #  6. record the Singlet binary under test (path, sha256, source commit) in $BP/singlet_binary.json.
 set -euo pipefail
 WORK=/mnt/projects/debruinz_project/debruinz/singlet
@@ -38,7 +38,7 @@ R_LIBS=$RLIB $WORK/envs/ambient/bin/Rscript -e '
   if (!requireNamespace("cellXY", quietly = TRUE)) remotes::install_github("phipsonlab/cellXY", lib = lib, upgrade = "never")
   cat("cellXY", as.character(packageVersion("cellXY")), "\n")'
 
-T=$WORK/tools/bench-public; mkdir -p $T/somalier
+T=$WORK/tools/bpub; mkdir -p $T/somalier
 [ -x $T/somalier/somalier ] || { curl -sSL -o $T/somalier/somalier https://github.com/brentp/somalier/releases/download/v0.3.6/somalier && chmod +x $T/somalier/somalier; }
 [ -s $T/somalier/sites.hg38.vcf.gz ] || curl -sSL -o $T/somalier/sites.hg38.vcf.gz https://github.com/brentp/somalier/files/3412456/sites.hg38.vcf.gz
 [ -s $T/somalier/ancestry-labels-1kg.tsv ] || curl -sSL -o $T/somalier/ancestry-labels-1kg.tsv https://raw.githubusercontent.com/brentp/somalier/master/scripts/ancestry-labels-1kg.tsv
@@ -46,7 +46,7 @@ T=$WORK/tools/bench-public; mkdir -p $T/somalier
 $T/somalier/somalier 2>&1 | head -3 || true
 ls $T/somalier | head
 # bcftools / peddy / pysam for the ancestry and sex pipelines (pbench has no bcftools)
-BPE=$WORK/envs/bench-public
+BPE=$WORK/envs/bpub
 [ -x $BPE/bin/bcftools ] || MAMBA_ROOT_PREFIX=$WORK/tools/mm/root $WORK/tools/mm/bin/micromamba create -y -q -p $BPE   -c conda-forge -c bioconda --strict-channel-priority python=3.11 bcftools=1.21 samtools htslib peddy=0.4.8 pysam pandas pyarrow
 $BPE/bin/bcftools --version | head -1; $BPE/bin/python -c "import peddy; print('peddy', peddy.__version__)"
 

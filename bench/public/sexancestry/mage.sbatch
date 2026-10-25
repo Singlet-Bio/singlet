@@ -18,7 +18,7 @@
 #   sbatch --array=1-150%12 mage.sbatch
 set -euo pipefail
 source /mnt/projects/debruinz_project/debruinz/singlet/src/singlet-py/claude__bench-public-cohort-485cf7/bench/public/harness/common.sh
-BPE=$WORK/envs/bench-public; SOM=$WORK/tools/bench-public/somalier
+BPE=$WORK/envs/bpub; SOM=$WORK/tools/bpub/somalier
 IFS=$'\t' read -r RUN IND POP SUPER SEX NREADS BYTES FTP < <(tail -n +2 $SRC/bench/public/sexancestry/mage_subset.tsv | sed -n "${SLURM_ARRAY_TASK_ID}p")
 O=$BP/work/ancestry/mage; P=$O/private/$IND; mkdir -p $P $O/genecounts $O/timing
 [ -e $P/.done ] && { echo "$IND done"; exit 0; }
