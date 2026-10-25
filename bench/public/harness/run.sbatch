@@ -8,7 +8,7 @@
 #SBATCH --time=03:59:00
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%A_%a.out
 # Run ONE tool on ONE cohort dataset, from the same reads and the same reference as every other tool.
-#   sbatch --array=1-N%12 run.sbatch           (line N of $BP/work/tasks.tsv = "<dataset>\t<tool>", written by submit.sh)
+#   sbatch --array=1-N%12 run.sbatch           (line N of ${LIST_DIR:-$BP/work}/tasks.tsv = "<dataset>\t<tool>", written by submit.sh)
 #   sbatch run.sbatch <dataset> <tool>
 # Output: $BP/runs/<dataset>/<tool>/ with time.txt (GNU time -v), node.txt and the tool's outputs.
 # Core tools live here (singlet, starsolo, alevinfry, cellranger). Any other tool runs through its owner's hook,
@@ -17,7 +17,7 @@
 # alevin-fry USA mode, cr-like resolution. 16 threads, 96 GB for every tool so timings compare.
 set -euo pipefail
 source /mnt/projects/debruinz_project/debruinz/singlet/src/singlet-py/claude__bench-public-cohort-485cf7/bench/public/harness/common.sh
-if [ $# -ge 2 ]; then ID=$1; TOOL=$2; else IFS=$'\t' read -r ID TOOL < <(sed -n "${SLURM_ARRAY_TASK_ID}p" $BP/work/tasks.tsv); fi
+if [ $# -ge 2 ]; then ID=$1; TOOL=$2; else IFS=$'\t' read -r ID TOOL < <(sed -n "${SLURM_ARRAY_TASK_ID}p" ${LIST_DIR:-$BP/work}/tasks.tsv); fi
 cohort_row $ID
 T=${SLURM_CPUS_PER_TASK:-16}; D=$BP/data/$ID; O=$BP/runs/$ID/$TOOL
 [ -e $O/.done ] && { echo "[run] $ID $TOOL done already"; exit 0; }

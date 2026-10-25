@@ -8,7 +8,7 @@
 #SBATCH --time=03:59:00
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%A_%a.out
 # Download one cohort dataset into $BP/data/<id>/ and classify its FASTQs by library (libs.tsv: library, read, path).
-#   sbatch --array=1-N%4 fetch.sbatch            (N = lines of $BP/work/datasets.txt, written by submit.sh)
+#   sbatch --array=1-N%4 fetch.sbatch            (N = lines of ${LIST_DIR:-$BP/work}/datasets.txt, written by submit.sh)
 #   sbatch fetch.sbatch <dataset_id>
 # Sources: 10x tar (curl); GEO/SRA runs (prefetch + fasterq-dump, or fastq-dump -X when the cohort caps the reads; NCBI is
 # ~100x faster than ENA HTTPS from Clipper); Kang 2018 is a BAM only (reads rebuilt from CR/UR tags, as the genotype-pool
@@ -16,7 +16,7 @@
 # downloaded again.
 set -euo pipefail
 source /mnt/projects/debruinz_project/debruinz/singlet/src/singlet-py/claude__bench-public-cohort-485cf7/bench/public/harness/common.sh
-ID=${1:-$(sed -n "${SLURM_ARRAY_TASK_ID}p" $BP/work/datasets.txt)}
+ID=${1:-$(sed -n "${SLURM_ARRAY_TASK_ID}p" ${LIST_DIR:-$BP/work}/datasets.txt)}
 cohort_row $ID
 D=$BP/data/$ID; mkdir -p $D; cd $D
 [ -e .done ] && { echo "[fetch] $ID already fetched"; exit 0; }

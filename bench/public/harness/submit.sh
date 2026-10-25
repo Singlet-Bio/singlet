@@ -16,20 +16,21 @@ SPECIAL="cxg16 geo_sex21 mage150"
 if [ ${#DS[@]} -eq 0 ]; then
   mapfile -t DS < <(grep -v '^#' $COHORT | awk -F'\t' -v t=$TIER 'NR>1 && (t=="all" || $3==t) {print $1}')
 fi
-: > $BP/work/datasets.txt; : > $BP/work/tasks.tsv
+L=$BP/work/sub-$(date +%Y%m%d-%H%M%S); mkdir -p $L   # this submission's lists (arrays read them at run time)
+: > $L/datasets.txt; : > $L/tasks.tsv
 for d in "${DS[@]}"; do
   [[ " $SPECIAL " == *" $d "* ]] && { echo "skip $d (own pipeline: see cohort.md)"; continue; }
-  echo $d >> $BP/work/datasets.txt
+  echo $d >> $L/datasets.txt
   cohort_row $d
   for t in ${C[tools]//,/ }; do
     [ -n "$ONLY_TOOLS" ] && [[ " $ONLY_TOOLS " != *" $t "* ]] && continue
-    printf "%s\t%s\n" $d $t >> $BP/work/tasks.tsv
+    printf "%s\t%s\n" $d $t >> $L/tasks.tsv
   done
 done
-ND=$(wc -l < $BP/work/datasets.txt); NT=$(wc -l < $BP/work/tasks.tsv)
+ND=$(wc -l < $L/datasets.txt); NT=$(wc -l < $L/tasks.tsv)
 echo "$ND datasets, $NT runs"
-F=$(sbatch --parsable --partition=$PART --requeue --array=1-$ND%4 $H/fetch.sbatch)
-R=$(sbatch --parsable --partition=$PART --requeue --dependency=afterany:$F --array=1-$NT%12 $H/run.sbatch)
+F=$(sbatch --parsable --partition=$PART --requeue --array=1-$ND%4 --export=ALL,LIST_DIR=$L $H/fetch.sbatch)
+R=$(sbatch --parsable --partition=$PART --requeue --dependency=afterany:$F --array=1-$NT%12 --export=ALL,LIST_DIR=$L $H/run.sbatch)
 K=$(sbatch --parsable --partition=$PART --requeue --dependency=afterany:$R $H/collect.sbatch)
 echo "fetch $F  runs $R  collect $K"
 echo "$(date -Is) fetch=$F runs=$R collect=$K tier=$TIER n_runs=$NT" >> $BP/work/submissions.log
