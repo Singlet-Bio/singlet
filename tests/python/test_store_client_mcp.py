@@ -113,7 +113,9 @@ def test_singlet_load_gives_object_ranges_and_packs(env, root):
         and "python_code" not in out
     )
     assert info["format"] == "singlet-store" and len(info["rev"]) == 16
-    assert info["object"].endswith(".s1") and "/store/s/%s/" % G1 in info["object"].replace("\\", "/")
+    assert info["object"].endswith(".s1") and "/store/s/%s/" % G1 in info["object"].replace(
+        "\\", "/"
+    )
     assert set(info["members"]) >= {"cells", "exon_counts.1pz", "intron_counts.1pz", "summary.json"}
     assert set(info["packs"]) == {"exon", "intron"} and info["n_called"] == 40
     g = info["gene_level"]

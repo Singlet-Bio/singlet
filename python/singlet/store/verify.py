@@ -240,7 +240,7 @@ def verify(
     log=print,
     quick: bool = False,
 ) -> Report:
-    from .context import StudyContext, StoreContext
+    from .context import StoreContext, StudyContext
     from .packs import PackStore, pack_id
     from .rcp_adapter import load_recipes
     from .sample import StoreSample
@@ -250,7 +250,9 @@ def verify(
     leg = open_legacy(bundle_src)
     lnames = leg.names()
     root = os.path.join(store_dir, "store")
-    if not os.path.isdir(root) and os.path.isdir(os.path.join(store_dir, "v2")):  # DUAL: an output tree under the old v2/ prefix
+    if not os.path.isdir(root) and os.path.isdir(
+        os.path.join(store_dir, "v2")
+    ):  # DUAL: an output tree under the old v2/ prefix
         root = os.path.join(store_dir, "v2")
     study_leg = {n: leg.read(n) for n in lnames if not n.startswith("samples/")}
     if not gse and "manifest.json" in study_leg:
@@ -263,7 +265,11 @@ def verify(
     mpath = os.path.join(root, "m", gse + ".json")
     rep.check(os.path.exists(mpath), "manifest", "%s missing" % mpath)
     man = json.load(open(mpath, encoding="utf-8"))
-    rep.check(man.get("format") in ("singlet-store", "singlet-v2") and man.get("gse") == gse, "manifest", "format/gse")
+    rep.check(
+        man.get("format") in ("singlet-store", "singlet-v2") and man.get("gse") == gse,
+        "manifest",
+        "format/gse",
+    )
     rep.check(
         man.get("rev") == _rev([s["key"] for s in man["samples"]], man["study_files"]),
         "manifest",
@@ -375,7 +381,8 @@ def verify(
             "objects",
         )
         rep.check(
-            os.path.basename(ent["key"]) in tuple(hashlib.sha256(obj).digest()[:16].hex() + x for x in (".s1", ".s2")),
+            os.path.basename(ent["key"])
+            in tuple(hashlib.sha256(obj).digest()[:16].hex() + x for x in (".s1", ".s2")),
             g,
             "object name is not its digest16",
             "objects",
@@ -592,7 +599,9 @@ def verify(
         for mn, t in members.items():
             if t["flags"] & 1:
                 rep.check(
-                    mn in sp, "%s/%s" % (g, mn), "store legacy-flagged member not in the legacy bundle"
+                    mn in sp,
+                    "%s/%s" % (g, mn),
+                    "store legacy-flagged member not in the legacy bundle",
                 )
         # ---- cells table
         try:
@@ -727,7 +736,12 @@ def main(argv=None) -> int:
     )
     a = ap.parse_args(argv)
     rep = verify(
-        a.bundle, a.store, a.gse, a.samples.split(",") if a.samples else None, a.recipes, quick=a.quick
+        a.bundle,
+        a.store,
+        a.gse,
+        a.samples.split(",") if a.samples else None,
+        a.recipes,
+        quick=a.quick,
     )
     return 1 if rep.fail else 0
 

@@ -40,14 +40,18 @@ def test_singlet_v2_alias_warns_and_is_the_same_module_object():
         warnings.simplefilter("always")
         from singlet.v2 import cellcall  # noqa: PLC0415
 
-    assert any(issubclass(x.category, DeprecationWarning) and "singlet.store" in str(x.message) for x in w)
+    assert any(
+        issubclass(x.category, DeprecationWarning) and "singlet.store" in str(x.message) for x in w
+    )
     import singlet.store.cellcall as new
 
     assert cellcall is new
     import singlet.v2.cellcall as cellcall_again  # noqa: PLC0415
 
     assert cellcall_again is new
-    assert new.__spec__.name == "singlet.store.cellcall"  # the alias import did not clobber the real spec
+    assert (
+        new.__spec__.name == "singlet.store.cellcall"
+    )  # the alias import did not clobber the real spec
     # a second submodule, plain `import a.b.c as d`
     import singlet.v2.manifest as old_manifest
 
@@ -67,7 +71,9 @@ def test_old_python_names_are_aliases_of_the_new_ones():
     from singlet.features import io as features_io
 
     assert celllabels_io.read_v2 is celllabels_io.read_store
-    assert features_io.is_v2 is features_io.is_store and features_io.v2_gsms is features_io.store_gsms
+    assert (
+        features_io.is_v2 is features_io.is_store and features_io.v2_gsms is features_io.store_gsms
+    )
 
 
 @pytest.mark.parametrize("sub", ["migrate", "verify", "packs_build"])
@@ -86,7 +92,9 @@ def test_writers_emit_only_the_new_names():
     assert FORMAT == manifest.FORMAT == "singlet-store"
     assert PACKS_FORMAT == "singlet-store-packs"
     assert cellcall.COLUMNS == ("called_ed", "called_ed_fdr")
-    assert hasattr(migrate.Options(), "cell_call_ed") and not hasattr(migrate.Options(), "cell_call_v2")
+    assert hasattr(migrate.Options(), "cell_call_ed") and not hasattr(
+        migrate.Options(), "cell_call_v2"
+    )
     assert "store/ref/" in packs.REMOTE and "/v2/" not in packs.REMOTE
     idx = json.loads((pathlib.Path(packs.__file__).parent / "packs" / "index.json").read_text())
     assert idx["format"] == "singlet-store-packs"
@@ -109,7 +117,9 @@ def test_synthetic_writer_output_uses_store_prefix_s1_and_singlet_store(store_tr
     root, s, synth = store_tree
     man = json.loads((root / "store" / "m" / f"{synth.GSE}.json").read_text())
     assert man["format"] == "singlet-store" and man["manifest_version"] == 1
-    assert man["samples"] and all(x["key"].startswith("store/s/") and x["key"].endswith(".s1") for x in man["samples"])
+    assert man["samples"] and all(
+        x["key"].startswith("store/s/") and x["key"].endswith(".s1") for x in man["samples"]
+    )
     assert not (root / "v2").exists()
     assert all(p.suffix == ".s1" for p in (root / "store" / "s").rglob("*") if p.is_file())
     ref = json.loads((root / "store" / "ref" / "index.json").read_text())
@@ -139,7 +149,8 @@ def _to_old_tree(src: pathlib.Path, dst: pathlib.Path, gse: str) -> dict:
 
 def test_old_manifest_v2_keys_and_s2_objects_are_read(store_tree, tmp_path, monkeypatch):
     root, s, synth = store_tree
-    from singlet.store import client, transport as T
+    from singlet.store import client
+    from singlet.store import transport as T
 
     monkeypatch.setenv("SINGLET_CACHE_DIR", str(tmp_path / "cache"))
     old_root = tmp_path / "old"
@@ -147,11 +158,18 @@ def test_old_manifest_v2_keys_and_s2_objects_are_read(store_tree, tmp_path, monk
     client.clear_memory_cache()
 
     st_old = client.open_study(synth.GSE, transport=T.DirTransport(str(old_root)), force=True)
-    assert st_old.manifest_key == f"v2/m/{synth.GSE}.json"  # store/m/ was not there: the v2/m/ fallback answered
+    assert (
+        st_old.manifest_key == f"v2/m/{synth.GSE}.json"
+    )  # store/m/ was not there: the v2/m/ fallback answered
     assert st_old.doc["format"] == "singlet-v2"
     g = st_old.gsm_ids[0]
     assert st_old.samples[g].key.startswith("v2/s/") and st_old.samples[g].key.endswith(".s2")
-    assert st_old.samples[g].raw["called_ed"]["n_called_ed" if "n_called_ed" in st_old.samples[g].raw["called_ed"] else "n_called_v2"] == 3
+    assert (
+        st_old.samples[g].raw["called_ed"][
+            "n_called_ed" if "n_called_ed" in st_old.samples[g].raw["called_ed"] else "n_called_v2"
+        ]
+        == 3
+    )
 
     client.clear_memory_cache()
     st_new = client.open_study(synth.GSE, transport=T.DirTransport(str(root)), force=True)
@@ -187,7 +205,11 @@ def test_cells_table_reads_called_v2_column_as_called_ed():
     from singlet.store import cells
 
     t = cells.CellsTable(4)
-    t.add("barcode", cells.DT_STR if hasattr(cells, "DT_STR") else "str", ["AAAA", "CCCC", "GGGG", "TTTT"])
+    t.add(
+        "barcode",
+        cells.DT_STR if hasattr(cells, "DT_STR") else "str",
+        ["AAAA", "CCCC", "GGGG", "TTTT"],
+    )
     t.add("called", cells.DT_BOOL, np.array([1, 1, 0, 0], bool))
     t.add("called_v2", cells.DT_BOOL, np.array([1, 1, 1, 0], bool))
     t.add("called_v2_fdr", cells.DT_F32, np.array([0.0, 0.0, 0.01, np.nan], np.float32))

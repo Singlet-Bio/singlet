@@ -20,9 +20,8 @@ import hashlib
 import json
 from typing import Optional
 
-from . import util
+from . import FORMAT, FORMATS, util  # noqa: E402,F401  (FORMATS: DUAL, also accepts "singlet-v2")
 
-from . import FORMAT, FORMATS  # noqa: E402,F401  (FORMATS: DUAL, also accepts "singlet-v2")
 MANIFEST_VERSION = 1
 
 _DUMPS_VARIANTS = (

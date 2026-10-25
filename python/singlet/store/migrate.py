@@ -35,8 +35,8 @@ from . import packs as P
 from .codec import CodecError, EncodeOptions, PyCodec2, get_codec, parse_header
 from .context import (
     LegacyContext,
-    StudyContext,
     StoreContext,
+    StudyContext,
     rmatrix_to_csc,
 )
 from .legacy import LegacyBundle

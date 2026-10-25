@@ -31,6 +31,7 @@ def env(name: str, default: str = "") -> str:
         v = os.environ.get("SINGLET_V2_" + name)
     return default if v is None else v
 
+
 ZSTD_LEVEL = 19
 
 

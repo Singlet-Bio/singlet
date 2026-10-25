@@ -24,7 +24,9 @@ def load_script(name: str):
     key = f"_stores_{name}"
     if key in sys.modules:
         return sys.modules[key]
-    sys.path.insert(0, str(SCRIPTS))  # store_retire / store_publish import store_campaign next to them
+    sys.path.insert(
+        0, str(SCRIPTS)
+    )  # store_retire / store_publish import store_campaign next to them
     try:
         spec = importlib.util.spec_from_file_location(key, SCRIPTS / f"{name}.py")
         mod = importlib.util.module_from_spec(spec)

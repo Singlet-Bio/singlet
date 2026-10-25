@@ -1,4 +1,5 @@
 """scripts/store_rekey.py on a local stand-in for R2: copies, rewritten manifest and pack index, idempotent apply, verify."""
+
 import hashlib
 import importlib.util
 import json
@@ -26,16 +27,27 @@ def _seed(root: Path) -> dict:
         key = f"v2/s/{gsm}/{hashlib.sha256(body).hexdigest()[:32]}.s2"
         (b / key).parent.mkdir(parents=True, exist_ok=True)
         (b / key).write_bytes(body)
-        samples.append({"gsm": gsm, "key": key, "bytes": len(body), "sha256": hashlib.sha256(body).hexdigest()})
+        samples.append(
+            {"gsm": gsm, "key": key, "bytes": len(body), "sha256": hashlib.sha256(body).hexdigest()}
+        )
     pack = b"SPK2" + b"\0" * 60
     pid = hashlib.sha256(pack).hexdigest()[:32]
     (b / "v2/ref").mkdir(parents=True)
     (b / f"v2/ref/{pid}.pack").write_bytes(pack)
-    (b / "v2/ref/index.json").write_text(json.dumps({"format": "singlet-v2-packs", "version": 1, "packs": [{"id": pid}]}))
+    (b / "v2/ref/index.json").write_text(
+        json.dumps({"format": "singlet-v2-packs", "version": 1, "packs": [{"id": pid}]})
+    )
     (b / "v2/ledger").mkdir(parents=True)
     (b / f"v2/ledger/{GSE}.jsonl").write_text('{"type": "study"}\n')
-    m = {"format": "singlet-v2", "manifest_version": 1, "gse": GSE, "rev": M.compute_rev([s["key"] for s in samples], {}),
-         "study_files": {}, "samples": samples, "legacy": {"key": f"data/{GSE}/{GSE}.singlet", "ledger": f"v2/ledger/{GSE}.jsonl"}}
+    m = {
+        "format": "singlet-v2",
+        "manifest_version": 1,
+        "gse": GSE,
+        "rev": M.compute_rev([s["key"] for s in samples], {}),
+        "study_files": {},
+        "samples": samples,
+        "legacy": {"key": f"data/{GSE}/{GSE}.singlet", "ledger": f"v2/ledger/{GSE}.jsonl"},
+    }
     (b / "v2/m").mkdir(parents=True)
     (b / f"v2/m/{GSE}.json").write_bytes(M.dumps_manifest(m))
     return m
@@ -55,13 +67,20 @@ def test_plan_apply_verify(tmp_path, capsys):
     new = json.loads((b / f"store/m/{GSE}.json").read_bytes())
     assert new["format"] == "singlet-store" and new["rev"] != old["rev"]
     assert [s["key"] for s in new["samples"]] == [rk.new_key(s["key"]) for s in old["samples"]]
-    assert all(k.startswith("store/s/") and k.endswith(".s1") for k in (s["key"] for s in new["samples"]))
-    assert new["legacy"]["ledger"] == f"store/ledger/{GSE}.jsonl" and new["legacy"]["key"] == old["legacy"]["key"]
+    assert all(
+        k.startswith("store/s/") and k.endswith(".s1") for k in (s["key"] for s in new["samples"])
+    )
+    assert (
+        new["legacy"]["ledger"] == f"store/ledger/{GSE}.jsonl"
+        and new["legacy"]["key"] == old["legacy"]["key"]
+    )
     assert new["rev"] == M.compute_rev([s["key"] for s in new["samples"]], {})
     for s_old, s_new in zip(old["samples"], new["samples"]):
         assert (b / s_new["key"]).read_bytes() == (b / s_old["key"]).read_bytes()
     assert json.loads((b / "store/ref/index.json").read_bytes())["format"] == "singlet-store-packs"
-    assert (b / f"store/ledger/{GSE}.jsonl").read_bytes() == (b / f"v2/ledger/{GSE}.jsonl").read_bytes()
+    assert (b / f"store/ledger/{GSE}.jsonl").read_bytes() == (
+        b / f"v2/ledger/{GSE}.jsonl"
+    ).read_bytes()
     # the old tree is untouched
     assert before == {p: p.read_bytes() for p in (b / "v2").rglob("*") if p.is_file()}
     sql = (out / "catalog.sql").read_text()

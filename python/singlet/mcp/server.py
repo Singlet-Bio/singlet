@@ -611,7 +611,9 @@ def _store_sample_info(gse_id: str, gsm_id: str, if_rev: str | None = None) -> d
         return {"unchanged": True, "rev": st.rev}
     sm = st.samples.get(gsm_id)
     if sm is None:
-        return {"error": f"{gsm_id} is not a sample of {gse_id} in the store manifest (rev {st.rev})"}
+        return {
+            "error": f"{gsm_id} is not a sample of {gse_id} in the store manifest (rev {st.rev})"
+        }
     members = {
         n: [m.off, m.len, m.kind]
         for n, m in sm.members.items()

@@ -883,7 +883,9 @@ def test_ctx_whitelist_is_a_numpy_s_array_and_features_order_resolves():
     assert isinstance(wl, np.ndarray) and wl.dtype == np.dtype("S16") and len(wl) == 737280
     assert wl[0] == b"AAACCTGAGAAACCAT" and (wl[1:] > wl[:-1]).all()
     assert ctx.whitelist("737K-cratac-v1") is not None and ctx.whitelist("no-such-list") is None
-    fo = ctx.features_order()  # python/singlet/store/recipes_data/features_order_GRCm39-2024-A.u32.zst
+    fo = (
+        ctx.features_order()
+    )  # python/singlet/store/recipes_data/features_order_GRCm39-2024-A.u32.zst
     assert fo is not None and len(fo) == 78298 and len(set(fo.tolist())) == len(fo)
     assert StudyContext("GSE1", "GRCz11", {}).features_order() is None
 
@@ -912,7 +914,9 @@ def test_study_file_entries_roundtrip():
 def test_rev_is_stable_and_sensitive():
     sf = {"a.json": {"sha256": "11"}, "b.json": {"sha256": "22"}}
     r = M.compute_rev(["store/s/G1/x.s1", "store/s/G2/y.s1"], sf)
-    assert r == M.compute_rev(["store/s/G2/y.s1", "store/s/G1/x.s1"], dict(reversed(list(sf.items()))))
+    assert r == M.compute_rev(
+        ["store/s/G2/y.s1", "store/s/G1/x.s1"], dict(reversed(list(sf.items())))
+    )
     assert len(r) == 16
     assert r != M.compute_rev(["store/s/G1/x.s1", "store/s/G2/z.s1"], sf)
     sf2 = {"a.json": {"sha256": "11"}, "b.json": {"sha256": "23"}}

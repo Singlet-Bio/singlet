@@ -111,9 +111,7 @@ def _repo_include():
 
 
 def cache_dir():
-    d = util.env("RECIPES_CACHE") or os.path.join(
-        tempfile.gettempdir(), "singlet_store_recipes"
-    )
+    d = util.env("RECIPES_CACHE") or os.path.join(tempfile.gettempdir(), "singlet_store_recipes")
     os.makedirs(d, exist_ok=True)
     return d
 

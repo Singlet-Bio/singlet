@@ -79,7 +79,11 @@ def store_gsms(gse: str, base: Optional[str] = None) -> List[str]:
 
 
 def iter_samples(
-    gse: str, gsms: Optional[List[str]] = None, *, bundle: Optional[Path] = None, store: bool = False,
+    gse: str,
+    gsms: Optional[List[str]] = None,
+    *,
+    bundle: Optional[Path] = None,
+    store: bool = False,
     v2: Optional[bool] = None,  # DUAL: old name of store=
 ) -> Iterator[Tuple[str, object]]:
     """Yield (gsm, SampleInput or the exception raised while reading it)."""

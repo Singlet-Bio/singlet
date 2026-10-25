@@ -211,7 +211,8 @@ def test_rows_follow_the_ingest_code_for_columns_and_types():
         "stored": 2,
     }  # the catalog's names for the treatments
     assert (
-        mg["verified_at"] == "2026-10-22T01:00:00Z" and mg["ledger_key"] == "store/ledger/GSE1.jsonl"
+        mg["verified_at"] == "2026-10-22T01:00:00Z"
+        and mg["ledger_key"] == "store/ledger/GSE1.jsonl"
     )
 
 
@@ -235,7 +236,10 @@ def test_a_study_that_never_had_a_legacy_file_is_posted_as_retired():
     db = new_db()
     for st in camp.study_statements(rows)["sample"] + camp.study_statements(rows)["flip"]:
         db.executescript(st)
-    assert db.execute("select status, verify_ok from store_migration").fetchone()[:] == ("retired", 1)
+    assert db.execute("select status, verify_ok from store_migration").fetchone()[:] == (
+        "retired",
+        1,
+    )
     body = camp.post_payloads(man, rows)[-1]
     assert body["migration"]["status"] == "retired" and body["migration"]["verify_ok"] is True
 
@@ -423,7 +427,10 @@ def test_sql_is_idempotent_and_a_new_rev_replaces_the_old_one(tmp_path):
         assert len(got) == n and {r["rev"] for r in got} == {
             rev
         }  # the older rev's rows are gone after the flip
-        assert dump(db, "store_study")[0]["rev"] == rev and dump(db, "store_study")[0]["n_samples"] == n
+        assert (
+            dump(db, "store_study")[0]["rev"] == rev
+            and dump(db, "store_study")[0]["n_samples"] == n
+        )
     # during the load of rev 2 the rows of rev 1 were still there beside them (033): check the intermediate state
     db = new_db()
     for rev, n in (("1" * 16, 3), ("2" * 16, 2)):
@@ -951,7 +958,11 @@ def test_real_transcoder_and_verifier_end_to_end_on_two_samples(tmp_path):
     apply_files(db, out / "day01")
     assert db.execute("select count(*) from store_sample").fetchone()[0] == 2
     mg = dump(db, "store_migration")[0]
-    assert mg["status"] == "verified" and mg["verify_ok"] == 1 and mg["store_bytes"] == r["store_bytes"]
+    assert (
+        mg["status"] == "verified"
+        and mg["verify_ok"] == 1
+        and mg["store_bytes"] == r["store_bytes"]
+    )
     if (
         WEBSITE / "schema" / "033_v2_sample_rev_key.sql"
     ).exists():  # and in the website's own schema files

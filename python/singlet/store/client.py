@@ -350,7 +350,9 @@ class _PackResolver:
             idx = self._index_doc()
             ent = [e for e in idx.get("packs", []) if str(e.get("id", "")).startswith(hexid)]
             if len(ent) != 1:
-                raise PackError(f"pack {hexid} is not in {self.transport.url('store/ref/index.json')}")
+                raise PackError(
+                    f"pack {hexid} is not in {self.transport.url('store/ref/index.json')}"
+                )
             e = ent[0]
             r = self._ref_get(f"{e['id']}.pack")
             data = bytes(r.body)
@@ -485,7 +487,9 @@ class _MmapSource(_Source):
 
     def read(self, off, length, *, parallel=False):
         if off < 0 or off + length > self.size:
-            raise StoreError(f"{self.path}: range {off}+{length} outside the {self.size}-byte object")
+            raise StoreError(
+                f"{self.path}: range {off}+{length} outside the {self.size}-byte object"
+            )
         return self._mv[off : off + length]
 
     def close(self):
@@ -521,7 +525,9 @@ class _RemoteSource(_Source):
         if length <= 0:
             return b""
         if off < 0 or off + length > self.size:
-            raise StoreError(f"{self.key}: range {off}+{length} outside the {self.size}-byte object")
+            raise StoreError(
+                f"{self.key}: range {off}+{length} outside the {self.size}-byte object"
+            )
         if not parallel or self._pool is None or length < 2 * self.part_bytes:
             return self.transport.get(
                 self.key, (off, off + length - 1), expect_total=self.size
@@ -625,7 +631,15 @@ def open_study(
             doc = json.loads(bytes(t.get(key, None, kind="manifest").body).decode("utf-8"))
         except NotFound as e:
             if _prefix + 1 < len(PREFIXES):
-                return open_study(gse, base=base, force=force, transport=transport, concurrency=concurrency, verify=verify, _prefix=_prefix + 1)
+                return open_study(
+                    gse,
+                    base=base,
+                    force=force,
+                    transport=transport,
+                    concurrency=concurrency,
+                    verify=verify,
+                    _prefix=_prefix + 1,
+                )
             raise StudyNotFound(f"no store manifest for {gse} under {t.base}") from e
         source = {"origin": "local", "path": t.path(key), "etag": None}  # type: ignore[attr-defined]
     else:
@@ -639,7 +653,15 @@ def open_study(
             r = t.get(key, None, if_none_match=etag, kind="manifest")
         except NotFound as e:
             if _prefix + 1 < len(PREFIXES):
-                return open_study(gse, base=base, force=force, transport=transport, concurrency=concurrency, verify=verify, _prefix=_prefix + 1)
+                return open_study(
+                    gse,
+                    base=base,
+                    force=force,
+                    transport=transport,
+                    concurrency=concurrency,
+                    verify=verify,
+                    _prefix=_prefix + 1,
+                )
             raise StudyNotFound(
                 f"no store manifest for {gse} at {t.url(key)}: the study has not been migrated to the per-sample format (or the accession is wrong)"
             ) from e

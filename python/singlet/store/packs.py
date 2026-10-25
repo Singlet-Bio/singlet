@@ -751,9 +751,7 @@ def build_composite(
 
 # =============================================================================================== PackStore
 def user_cache_dir() -> str:
-    base = util.env("CACHE") or os.path.join(
-        os.path.expanduser("~"), ".cache", "singlet", "store"
-    )
+    base = util.env("CACHE") or os.path.join(os.path.expanduser("~"), ".cache", "singlet", "store")
     return os.path.join(base, "ref")
 
 
@@ -846,9 +844,7 @@ class PackStore:
         if len(ent) != 1:
             raise PackError("pack %s is not in the remote index" % hexid)
         e = ent[0]
-        req = urllib.request.Request(
-            remote + e["id"] + ".pack", headers={"User-Agent": USER_AGENT}
-        )
+        req = urllib.request.Request(remote + e["id"] + ".pack", headers={"User-Agent": USER_AGENT})
         data = urllib.request.urlopen(req, timeout=120).read()
         if hashlib.sha256(data).hexdigest() != e["sha256"] or pack_id(data).hex() != e["id"]:
             raise PackError("downloaded pack %s fails its checksum" % e["id"])

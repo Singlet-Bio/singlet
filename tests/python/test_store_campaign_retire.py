@@ -189,7 +189,9 @@ def test_archive_copies_verifies_lists_and_deletes_nothing(r2):
     assert len(e0["sha256"]) == 64 and e0["at"]
     led = [
         json.loads(x)
-        for x in (r2.root / PUB / "store" / "ledger" / f"{r2.gses[0]}.jsonl").read_text().splitlines()
+        for x in (r2.root / PUB / "store" / "ledger" / f"{r2.gses[0]}.jsonl")
+        .read_text()
+        .splitlines()
     ]
     assert led[-1]["event"] == "archived"
     # store objects untouched (only the ledgers gained a line)
@@ -468,7 +470,9 @@ def test_delete_removes_only_archived_retired_studies_and_keeps_everything_else(
     }  # store objects untouched
     led = [
         json.loads(x)
-        for x in (r2.root / PUB / "store" / "ledger" / f"{r2.gses[0]}.jsonl").read_text().splitlines()
+        for x in (r2.root / PUB / "store" / "ledger" / f"{r2.gses[0]}.jsonl")
+        .read_text()
+        .splitlines()
     ]
     assert led[-1]["event"] == "legacy-deleted" and led[-1]["verified_age_h"] == 30.0
     assert r2.delete(ages) == 0  # again: nothing left to do
@@ -486,7 +490,9 @@ def test_delete_checks_the_archive_the_legacy_object_and_the_store_objects_again
     C.put_legacy(
         r2.root, g1, ["GSM20001", "GSM20002", "GSM20003"], salt="rebuilt"
     )  # the legacy object changed after it was archived
-    (r2.root / PUB / "store" / "m" / f"{g2}.json").unlink()  # the store manifest of the third is gone
+    (
+        r2.root / PUB / "store" / "m" / f"{g2}.json"
+    ).unlink()  # the store manifest of the third is gone
     capsys.readouterr()
     assert r2.delete(good_ages(r2)) == 1
     out = capsys.readouterr().out
@@ -615,7 +621,9 @@ def test_the_three_steps_in_order_with_the_catalog_in_sqlite(r2, tmp_path, capsy
     out = tmp_path / "sql"
     assert camp.main(["retire-sql", "--list", str(r2.list), "--out", str(out)]) == 0
     _apply_sql(db, out)
-    db.execute("UPDATE store_migration SET updated_at = ?", (ago(minutes=2),))  # flipped 2 minutes ago
+    db.execute(
+        "UPDATE store_migration SET updated_at = ?", (ago(minutes=2),)
+    )  # flipped 2 minutes ago
     capsys.readouterr()
     assert (
         r2.delete(r2.ages(export(), "t2.csv")) == 0
@@ -662,7 +670,9 @@ def test_restore_puts_back_identical_bytes(r2, capsys):
     assert capsys.readouterr().out.count("already-present") == 3
     led = [
         json.loads(x)
-        for x in (r2.root / PUB / "store" / "ledger" / f"{r2.gses[0]}.jsonl").read_text().splitlines()
+        for x in (r2.root / PUB / "store" / "ledger" / f"{r2.gses[0]}.jsonl")
+        .read_text()
+        .splitlines()
     ]
     assert [
         e["event"] for e in led if e["event"] in ("archived", "legacy-deleted", "restored")

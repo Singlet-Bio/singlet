@@ -31,7 +31,6 @@ Layout recap (little-endian)::
 
 from __future__ import annotations
 
-import os
 import struct
 import zlib
 from concurrent.futures import ThreadPoolExecutor

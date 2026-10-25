@@ -15,7 +15,12 @@ Modules: :mod:`~singlet.celllabels.celltype` (marker guide + per-sample self-tra
 """
 
 from .celltype import CellTypeResult, annotate_cell_types
-from .io import SampleInput, read_legacy, read_store, read_v2  # noqa: F401  (read_v2: DUAL old name)
+from .io import (  # noqa: F401  (read_v2: DUAL old name)
+    SampleInput,
+    read_legacy,
+    read_store,
+    read_v2,
+)
 from .output import COLUMNS, PublicOutputError, assert_public_safe, write_labels
 from .pipeline import ANNOTATE_VERSION, annotate_sample, model_version
 from .sex import call_sex

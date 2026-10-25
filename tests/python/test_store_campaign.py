@@ -283,7 +283,9 @@ def test_verify_failure_uploads_nothing_for_that_study(env):
     assert rows[gses[0]]["status"] == "verify_failed" and rows[gses[0]]["verify"]["ok"] is False
     assert rows[gses[1]]["status"] == "ok"
     keys = [k for op, _b, k in env.store.ops if op == "put"]
-    assert not any("GSM10001" in k or "GSM10002" in k or k == f"store/m/{gses[0]}.json" for k in keys)
+    assert not any(
+        "GSM10001" in k or "GSM10002" in k or k == f"store/m/{gses[0]}.json" for k in keys
+    )
 
 
 def test_verify_sees_the_manifest_that_will_be_published(env):
@@ -309,7 +311,9 @@ def test_upload_failure_leaves_no_manifest_and_does_not_stop_the_shard(env):
     rows = env.rows_of()
     assert rows[gses[1]]["status"] == "upload_failed" and "disk on fire" in rows[gses[1]]["error"]
     assert rows[gses[0]]["status"] == rows[gses[2]]["status"] == "ok"
-    assert not (env.root / PUB / "store" / "m" / f"{gses[1]}.json").exists()  # invisible: no manifest
+    assert not (
+        env.root / PUB / "store" / "m" / f"{gses[1]}.json"
+    ).exists()  # invisible: no manifest
 
 
 def test_transient_upload_error_is_retried(env):

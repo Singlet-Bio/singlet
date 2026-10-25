@@ -120,7 +120,9 @@ class StoreSample:
             if cr.get("cells"):
                 cl = self.cells()
                 if cl is None:
-                    raise StoreError("matrix %r refers to the cells table, which is missing" % mi.name)
+                    raise StoreError(
+                        "matrix %r refers to the cells table, which is missing" % mi.name
+                    )
                 csc.colnames = cl.barcodes[a:b]
             elif "pack" in cr:
                 pk = self.packs.get(cr["pack"])

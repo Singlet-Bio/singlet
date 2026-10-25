@@ -11,7 +11,7 @@ import importlib.util
 import sys
 import warnings
 
-import singlet.store as _store
+import singlet.store as _store  # noqa: F401  (imported for its side effect: the package must exist before the alias hook)
 from singlet.store import *  # noqa: F401,F403
 from singlet.store import FORMAT  # noqa: F401
 
@@ -45,7 +45,9 @@ class _AliasFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
 
     def exec_module(self, module):
         mod, spec = _SAVED_SPECS.pop(module.__name__, (None, None))
-        if mod is not None:  # the import machinery overwrote __spec__ with the alias spec: put the real one back
+        if (
+            mod is not None
+        ):  # the import machinery overwrote __spec__ with the alias spec: put the real one back
             mod.__spec__ = spec
 
 

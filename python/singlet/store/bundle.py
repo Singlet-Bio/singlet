@@ -453,9 +453,7 @@ class StoreBundle(SingletBundle):
         raise NotImplementedError("a per-sample study is not a ZIP archive")
 
     def __repr__(self) -> str:
-        return (
-            f"StoreBundle({self.study.gse!r}, {len(self.study.gsm_ids)} GSMs, path={str(self.path)!r})"
-        )
+        return f"StoreBundle({self.study.gse!r}, {len(self.study.gsm_ids)} GSMs, path={str(self.path)!r})"
 
 
 V2Bundle = StoreBundle  # DUAL: old name, removed in the cleanup

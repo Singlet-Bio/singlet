@@ -232,7 +232,9 @@ def test_normalize_sidecar(tmp_path):
     data, entry = atlas.normalize_sidecar(
         str(p), gsm="GSM1", n_columns=20, called=called, cells_digest="ab" * 16, annot_version="a1"
     )
-    assert entry["key"] == atlas.sidecar_key("GSM1", data) and entry["key"].startswith("store/a/GSM1/")
+    assert entry["key"] == atlas.sidecar_key("GSM1", data) and entry["key"].startswith(
+        "store/a/GSM1/"
+    )
     assert entry["n_rows"] == 4 and entry["dropped"] == 1
     back = atlas.read_sidecar(data)
     assert back["col"].tolist() == [1, 3, 5, 7]
@@ -395,7 +397,9 @@ def test_feature_sidecar_normalize_and_manifest(built, tmp_path):
     data, entry = atlas.normalize_feature_sidecar(
         str(src), gsm="GSM9000001", specs=specs, n_columns=len(called), called=called
     )
-    assert entry["key"].startswith("store/cf/GSM9000001/test.") and entry["key"].endswith(".parquet")
+    assert entry["key"].startswith("store/cf/GSM9000001/test.") and entry["key"].endswith(
+        ".parquet"
+    )
     assert entry["method_version"] == "test-run-0" and entry["n_rows"] == int(called.sum())
     codes, ver = atlas.read_feature_sidecar(data, specs, np.flatnonzero(called))
     codes2, _ = atlas.read_feature_sidecar(str(src), specs, np.flatnonzero(called))
