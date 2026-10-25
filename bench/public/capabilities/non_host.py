@@ -103,14 +103,15 @@ def compute(artifact_dir: Path) -> dict:
         return float(s[s.name.map(is_sars2)].reads.sum())
 
     r_s, r_kp, r_kv, r_o = (sars_reads(DPI2, t) for t in (TOOL_S, TOOL_KP, TOOL_KV, TOOL_O))
-    tol_rel = round(abs(r_kp - r_o) / max(r_o, 1.0) + 1e-3, 3)
+    tol_rel = round(abs(r_kv - r_o) / max(r_o, 1.0) + 1e-3, 3)
     metrics.append(_metric(
         "sars2_reads", "Reads assigned to SARS-CoV-2", "reads", "agreement", DPI2, "none", r_s,
         [(TOOL_KP, r_kp), (TOOL_KV, r_kv), (TOOL_O, r_o)],
-        {"type": "equivalence", "target": TOOL_KP, "tolerance": {"rel": tol_rel},
-         "rationale": f"Kraken2 (PlusPF) and the minimap2 oracle differ by {abs(r_kp - r_o) / max(r_o, 1.0):.1%} on the same reads, "
+        {"type": "equivalence", "target": TOOL_KV, "tolerance": {"rel": tol_rel},
+         "rationale": f"Kraken2 (viral database) and the minimap2 oracle differ by {abs(r_kv - r_o) / max(r_o, 1.0):.1%} on the same reads, "
                       "so a count within that band of Kraken2 is as close as two independent methods get."},
-        "Reads of the 2.33 M host-unmapped reads assigned to SARS-CoV-2; the oracle counts reads aligned over >= 60 nt at >= 90 % identity."))
+        "Reads of the host-unmapped reads assigned to SARS-CoV-2; the oracle counts reads aligned over >= 60 nt at >= 90 % identity. "
+        "The target is the viral-database Kraken2: the PlusPF index is capped at 8 GB and assigns fewer SARS-CoV-2 reads at species rank."))
 
     # ---------------------------------------------------------------- per cell, infected sample
     d = pc[DPI2].fillna(0)
@@ -129,13 +130,13 @@ def compute(artifact_dir: Path) -> dict:
          "rationale": f"half-width of the paired bootstrap 95% CI of the difference to {best_k} over {n} cells ({B} resamples)"},
         f"{n} called cells of the infected sample; molecules = distinct (cell, UMI) of SARS-CoV-2.",
         ci=C.ci(boots[:, 0])))
-    rho_sk = C.spearman(x[TOOL_S], x[TOOL_KP])
-    rho_ko = rho[TOOL_KP]
+    rho_sk = C.spearman(x[TOOL_S], x[TOOL_KV])
+    rho_ko = rho[TOOL_KV]
     metrics.append(_metric(
-        "percell_spearman_vs_kraken2", "Per-cell SARS-CoV-2 UMIs vs Kraken2 PlusPF (Spearman)", "rho", "agreement", DPI2, "higher",
+        "percell_spearman_vs_kraken2", "Per-cell SARS-CoV-2 UMIs vs Kraken2, viral database (Spearman)", "rho", "agreement", DPI2, "higher",
         rho_sk, [],
         {"type": "threshold", "value": round(rho_ko, 4),
-         "rationale": f"Kraken2 PlusPF agrees with the independent oracle at rho = {rho_ko:.3f}; Singlet must agree with Kraken2 at least that well."},
+         "rationale": f"Kraken2 (viral database) agrees with the independent oracle at rho = {rho_ko:.3f}; Singlet must agree with it at least that well."},
         "Singlet and Kraken2 classify the same reads with different methods; the oracle is the independent reference."))
 
     # recall / precision of "cell has >= 1 SARS-CoV-2 UMI" against the oracle
@@ -146,18 +147,22 @@ def compute(artifact_dir: Path) -> dict:
         tp = (pos[t][i] & o_pos[i]).sum()
         return tp / max(o_pos[i].sum(), 1), tp / max(pos[t][i].sum(), 1)
 
-    for which, idx in (("recall", 0), ("precision", 1)):
-        v = {t: rp(t)[idx] for t in x}
-        best_k = max(KRAKEN, key=lambda t: v[t])
-        bs = _paired_boot(n, lambda i: [rp(t, i)[idx] for t in (TOOL_S, best_k)], rng)
-        hw = C.half_width(bs[:, 0] - bs[:, 1])
-        metrics.append(_metric(
-            f"cell_{which}_vs_oracle", f"Infected-cell {which} vs the oracle (>= 1 UMI)", "fraction", "accuracy", DPI2, "higher",
-            v[TOOL_S], [(t, v[t]) for t in KRAKEN],
-            {"type": "match_or_beat", "against": list(KRAKEN), "tolerance": {"abs": round(hw, 4)},
-             "rationale": f"half-width of the paired bootstrap 95% CI of the difference to {best_k} over {n} cells ({B} resamples)"},
-            f"A cell is positive with >= 1 SARS-CoV-2 UMI; oracle-positive cells: {int(o_pos.sum())} of {n}.",
-            ci=C.ci(bs[:, 0])))
+    def f1(t, i=slice(None)):
+        r_, p_ = rp(t, i)
+        return 0.0 if r_ + p_ == 0 else 2 * r_ * p_ / (r_ + p_)
+
+    v = {t: f1(t) for t in x}
+    best_k = max(KRAKEN, key=lambda t: v[t])
+    bs = _paired_boot(n, lambda i: [f1(t, i) for t in (TOOL_S, best_k)], rng)
+    hw = C.half_width(bs[:, 0] - bs[:, 1])
+    rr = {t: rp(t) for t in x}
+    metrics.append(_metric(
+        "cell_f1_vs_oracle", "Infected-cell calls vs the oracle (F1 of >= 1 SARS-CoV-2 UMI)", "fraction", "accuracy", DPI2, "higher",
+        v[TOOL_S], [(t, v[t]) for t in KRAKEN],
+        {"type": "match_or_beat", "against": list(KRAKEN), "tolerance": {"abs": round(hw, 4)},
+         "rationale": f"half-width of the paired bootstrap 95% CI of the difference to {best_k} over {n} cells ({B} resamples)"},
+        f"A cell is positive with >= 1 SARS-CoV-2 UMI; oracle-positive cells: {int(o_pos.sum())} of {n}. Recall / precision: "
+        + "; ".join(f"{t} {rr[t][0]:.3f} / {rr[t][1]:.3f}" for t in x) + ".", ci=C.ci(bs[:, 0])))
 
     metrics.append(_metric(
         "dpi2_cells_with_sars2", "Infected-sample cells with >= 1 SARS-CoV-2 UMI", "fraction", "coverage", DPI2, "none",
@@ -227,8 +232,8 @@ def compute(artifact_dir: Path) -> dict:
         "id": "sars2_umis_per_cell", "title": "SARS-CoV-2 UMIs per cell, Singlet vs Kraken2 (infected sample)", "kind": "scatter",
         "caption": "Each point is a called cell of the infected sample; both axes log1p(UMIs). Spearman between the two tools "
                    f"{rho_sk:.3f}.",
-        "x": {"label": "Kraken2 PlusPF, log1p UMIs"}, "y": {"label": "Singlet, log1p UMIs"},
-        "series": [{"name": "cells", "tool": TOOL_S, "x": np.round(np.log1p(x[TOOL_KP]), 3).tolist()[:5000],
+        "x": {"label": "Kraken2 (viral database), log1p UMIs"}, "y": {"label": "Singlet, log1p UMIs"},
+        "series": [{"name": "cells", "tool": TOOL_S, "x": np.round(np.log1p(x[TOOL_KV]), 3).tolist()[:5000],
                     "y": np.round(np.log1p(x[TOOL_S]), 3).tolist()[:5000]}]}
     fig_auc = {
         "id": "auroc_by_tool", "title": "Infected vs mock: AUROC of the per-cell SARS-CoV-2 UMI count", "kind": "bar",

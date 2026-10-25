@@ -23,7 +23,7 @@ for r in $SRRS; do
   prefetch --max-size u -O $SCR/sra $r > /dev/null 2>&1
   echo "[prep] $r prefetch $(( $(date +%s) - t0 )) s, $(stat -c %s $SCR/sra/$r/$r.sra) bytes"
   t0=$(date +%s)
-  fasterq-dump --split-files -e 16 -t $SCR/tmp -O $SCR/fq $SCR/sra/$r/$r.sra > $SCR/fqd.log 2>&1
+  fasterq-dump --split-files --include-technical -e 16 -t $SCR/tmp -O $SCR/fq $SCR/sra/$r/$r.sra > $SCR/fqd.log 2>&1
   echo "[prep] $r fasterq-dump $(( $(date +%s) - t0 )) s"; ls -la $SCR/fq
   for f in $SCR/fq/${r}*.fastq; do
     len=$(sed -n 2p $f | tr -d '\n' | wc -c)
