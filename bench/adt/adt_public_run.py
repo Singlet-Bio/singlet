@@ -2,7 +2,7 @@
 """Public ADT benchmark harness (results contract 1.0.0, capability ``adt``): every tool on the same antibody FASTQs.
 
     python -P bench/adt/adt_public_run.py --dataset pbmc1k_cite_v3 --tool singlet --data $WORK/data/adt_bench \
-        --out $WORK/bench-public/artifacts/adt [--threads 8]
+        --out $WORK/bpub/artifacts/adt [--threads 8]
 
 ``--tool prepare`` downloads the dataset (10x FASTQ tar, Cell Ranger 3.0 outputs) and writes the truth and shared inputs;
 every other tool reads them. Each tool runs as its own process under ``/usr/bin/time -v`` (the harness re-invokes itself with
@@ -59,7 +59,11 @@ WL_V2 = ("737K-august-2016.txt.gz", None)
 
 
 def sh(cmd, **kw):
-    return subprocess.run(cmd, check=True, capture_output=True, text=True, **kw)
+    r = subprocess.run(cmd, capture_output=True, text=True, **kw)
+    if r.returncode:
+        sys.stderr.write(f"{cmd[0]} failed ({r.returncode})\n--- stdout\n{r.stdout[-4000:]}\n--- stderr\n{r.stderr[-4000:]}\n")
+        raise subprocess.CalledProcessError(r.returncode, cmd)
+    return r
 
 
 def fetch(url, dest):
@@ -355,14 +359,15 @@ def main():
     if a.tool in VERSIONS:
         try:
             v = subprocess.run(VERSIONS[a.tool], capture_output=True, text=True)
-            ver = [x for x in (v.stdout + "\n" + v.stderr).splitlines() if x.strip()][-1].strip()
+            lines = [x.strip() for x in (v.stdout + "\n" + v.stderr).splitlines() if x.strip()]
+            ver = next((x for x in lines if re.search(r"\d+\.\d+", x) and "pkg_resources" not in x), lines[-1])
         except Exception:
             ver = "unknown"
     rec = {"tool": a.tool, "dataset": a.dataset, "wall_s": round(wall, 1),
            "max_rss_gb": round(int(m.group(1)) / 1024 ** 2, 3) if m else None, "threads": a.threads,
            "returncode": r.returncode, "version": ver, "command": " ".join(cmd),
            "singlet_commit": os.environ.get("SINGLET_COMMIT", ""),
-           "stderr_tail": r.stderr[-1500:] if r.returncode else ""}
+           "stderr_tail": r.stderr[-8000:] if r.returncode else ""}
     with open(os.path.join(a.out, f"resources_adt_{a.dataset}_{a.tool}.json"), "w") as f:
         json.dump(rec, f, indent=1)
     print(json.dumps({k: v for k, v in rec.items() if k != "stderr_tail"}))

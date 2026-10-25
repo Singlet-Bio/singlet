@@ -9,10 +9,10 @@
 # Public HTO benchmark (capability hto) on Howitt et al. 2023: prepare + every method per dataset, then the document.
 set -euo pipefail
 WORK=/mnt/projects/debruinz_project/debruinz/singlet
-SRC=$WORK/src/singlet-py/claude__adt-modality-0637a6
+SRC=${SRC:-$WORK/src/singlet-py/claude__adt-modality-0637a6}
 Z=$WORK/data/adt_bench/zenodo_8304003
 PUB=$WORK/state/adt/hto_zenodo/published
-OUT=$WORK/bench-public/artifacts/hto; mkdir -p $OUT
+OUT=$WORK/bpub/artifacts/hto; mkdir -p $OUT
 SCRATCH=/tmp/$USER-htopub-$SLURM_JOB_ID; mkdir -p $SCRATCH; trap 'rm -rf $SCRATCH' EXIT
 export PATH=$WORK/envs/adt-bench/bin:$PATH LD_LIBRARY_PATH=$WORK/envs/adt-bench/lib:$WORK/envs/adt/lib
 export PYTHONPATH=$SRC/python HOME=$WORK/cache/condahome SINGLET_COMMIT=$(git -C $SRC rev-parse HEAD)

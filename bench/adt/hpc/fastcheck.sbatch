@@ -16,14 +16,14 @@ git -C $WORK/repos/singlet-py.git fetch -q origin "+refs/heads/claude/adt-modali
 git -C $WORK/repos/singlet-py.git archive $REV | tar -x -C $SCR/src
 cp $WORK/src/singlet-py/claude__adt-modality-0637a6/python/singlet/_pz*.so $SCR/src/python/singlet/ 2>/dev/null || true
 export PATH=$WORK/envs/adt/bin:$PATH LD_LIBRARY_PATH=$WORK/envs/adt/lib PYTHONPATH=$SCR/src/python HOME=$WORK/cache/condahome
-OUT=$WORK/bench-public/artifacts/adt_fastcheck; mkdir -p $OUT
-cp $WORK/bench-public/artifacts/adt/adt_*_panel.tsv $OUT/
+OUT=$WORK/state/adt/fastcheck; mkdir -p $OUT
+cp $WORK/bpub/artifacts/adt/adt_*_panel.tsv $OUT/
 for D in pbmc1k_cite_v3 pbmc10k_cite_v3; do
   python -P $SCR/src/bench/adt/adt_public_run.py --dataset $D --tool singlet --data $WORK/data/adt_bench --out $OUT --scratch $SCR --threads 8
 done
 python - <<'PY'
 import pandas as pd
-W = "/mnt/projects/debruinz_project/debruinz/singlet/bench-public/artifacts/"
+W = "/mnt/projects/debruinz_project/debruinz/singlet/bpub/artifacts/"
 for d in ("pbmc1k_cite_v3", "pbmc10k_cite_v3"):
     a = pd.read_parquet(W + f"adt/adt_{d}_singlet.parquet").set_index(["barcode", "feature"])["count"]
     b = pd.read_parquet(W + f"adt_fastcheck/adt_{d}_singlet.parquet").set_index(["barcode", "feature"])["count"]

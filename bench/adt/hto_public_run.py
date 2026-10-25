@@ -2,7 +2,7 @@
 """Public HTO benchmark harness (results contract 1.0.0, capability ``hto``) on Howitt et al. 2023 (Zenodo 8304003).
 
     python -P bench/adt/hto_public_run.py --dataset howitt2023_bal1 --tool singlet --zenodo DIR --published PUBDIR \
-        --out $WORK/bench-public/artifacts/hto
+        --out $WORK/bpub/artifacts/hto
 
 ``--tool prepare`` writes ``hto_<dataset>_truth.parquet`` (``barcode``, ``capture``, ``genetic_donor``, ``truth_hashtag``)
 and ``hto_<dataset>_published.parquet`` (the paper's own calls of nine methods, one column each). Each method then runs on
