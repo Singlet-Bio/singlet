@@ -5,8 +5,8 @@
         --out $WORK/state/adt/hto_bench [--max-pools 20] [--methods singlet,htodemux,...]
 
 Truth comes from the GEX library, not from the hashtags: the pipeline's genotype-free donor demultiplexing
-(``samples/<GSM>/donor/donor_assignments.tsv``: ``cell``, ``donor_id``, ``cell_status``) gives each cell's donor and flags
-genotype doublets. Pools are used when they hold >= 2 donors with >= 200 genotype singlets each.
+(``samples/<GSM>/donor/donor_assignments.tsv``: ``cell``, ``donor_id`` = ``donorN`` / ``doublet`` / ``unassigned``,
+``cell_status`` = ``cell`` / ``ambient``) gives each called cell's donor and flags genotype doublets. Pools are used when they hold >= 2 donors with >= 200 genotype singlets each.
 
 Each hashtag is mapped to a donor once, independently of every method: for genotype singlets, the hashtag with the largest
 count relative to its ambient share (the cell's top hashtag), majority donor per hashtag; hashtags whose cells are < 80% one
@@ -77,7 +77,7 @@ def map_hashtags(hto, empties, dn):
     amb = empties.sum(axis=1).values.astype(float) + 1
     amb = amb / amb.sum()
     top = (hto.values / amb[:, None]).argmax(axis=0)
-    sing = dn["cell_status"].astype(str).str.lower().eq("singlet").values & dn["donor_id"].notna().values
+    sing = genotype_singlets(dn).values
     m, rep = {}, {}
     for k, name in enumerate(hto.index):
         sel = sing & (top == k)
@@ -92,11 +92,14 @@ def map_hashtags(hto, empties, dn):
     return m, rep
 
 
+def genotype_singlets(dn):
+    return dn["donor_id"].astype(str).str.startswith("donor")
+
+
 def score(calls, dn, hmap):
-    st = dn["cell_status"].astype(str).str.lower()
     donor = dn["donor_id"]
-    sing = st.eq("singlet") & donor.notna()
-    dbl = st.eq("doublet")
+    sing = genotype_singlets(dn)
+    dbl = donor.astype(str).str.lower().eq("doublet")
     c = calls["call"].reindex(dn.index)
     called_donor = c.map(hmap)
     scorable = sing & (c.isin(["Negative", "Doublet"]) | called_donor.notna())
@@ -132,8 +135,8 @@ def main():
         rec = {"gse": r.gse, "gsm": r.gsm, "used": False}
         try:
             hto, empties, dn, gex, rna_all = load_pool(a.data, r.gse, r.gsm)
-            sing = dn["cell_status"].astype(str).str.lower().eq("singlet")
-            per_donor = dn["donor_id"][sing].value_counts()
+            per_donor = dn["donor_id"][genotype_singlets(dn)].value_counts()
+            per_donor = per_donor[per_donor >= MIN_SINGLETS_PER_DONOR]
             rec.update(gex_gsm=gex, cells=hto.shape[1], hashtags=hto.shape[0], donors=int(len(per_donor)),
                        min_donor_singlets=int(per_donor.min()) if len(per_donor) else 0)
             if len(per_donor) < 2 or per_donor.min() < MIN_SINGLETS_PER_DONOR:

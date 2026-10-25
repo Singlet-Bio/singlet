@@ -5,7 +5,8 @@
 
 For every processed library that is a hashtag pool (``hto_umi_share`` >= 0.05 in ``qc.json``), opens the study bundle (central
 directory and one small member) and reads ``samples/<GEX GSM>/donor/donor_assignments.tsv``. A pool is usable as a benchmark
-when it has >= 2 donors and each hashtag's cells come mostly from one donor (the design pooled donors, one hashtag each).
+when it has >= 2 donors with >= 200 called cells each (``n_donors`` counts only those) and each hashtag's cells come mostly from
+one donor (checked by the benchmark itself).
 Writes one row per library: donors, assigned cells, and the donor-hashtag purity under the library's own hashtag calls.
 """
 
@@ -42,11 +43,14 @@ def main():
                 d = pd.read_csv(io.BytesIO(b.read(m)), sep="\t")
                 rec["donor_file"] = True
                 rec["donor_columns"] = ",".join(d.columns[:8])
-                dcol = next((c for c in d.columns if c.lower() in ("donor", "donor_id", "assignment", "best")), None)
-                if dcol:
-                    v = d[dcol].astype(str)
-                    rec["n_donors"] = int(v[~v.str.lower().isin(["doublet", "unassigned", "negative", "nan"])].nunique())
-                    rec["n_assigned"] = int((~v.str.lower().isin(["doublet", "unassigned", "negative", "nan"])).sum())
+                # genotype-free demux output: cell_status cell/ambient; donor_id donorN / doublet / unassigned
+                cells = d[d["cell_status"].astype(str).str.lower().eq("cell")] if "cell_status" in d else d
+                v = cells["donor_id"].astype(str)
+                donors = v[v.str.startswith("donor")].value_counts()
+                rec["n_donors"] = int((donors >= 200).sum())
+                rec["donor_cells"] = ",".join(f"{k}:{n}" for k, n in donors.items())
+                rec["genotype_doublets"] = int(v.str.lower().eq("doublet").sum())
+                rec["n_assigned"] = int(donors.sum())
         except Exception as e:  # recorded; the scan goes on
             rec["error"] = f"{type(e).__name__}: {e}"[:200]
         rows.append(rec)
