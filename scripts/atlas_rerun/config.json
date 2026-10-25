@@ -1,0 +1,92 @@
+{
+  "campaign": "atlas-rerun-2026",
+  "binary": {
+    "path": "/mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/bin/singlet-campaign",
+    "sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+    "commit": "prod/campaign 02aa9b9 (to be replaced by the pinned PGO build of step 0)"
+  },
+  "pipeline": {
+    "nonhost": true,
+    "stall_timeout_s": 10800,
+    "extra_args": []
+  },
+  "references": {
+    "Homo sapiens": "GRCh38-2024-A",
+    "Mus musculus": "GRCm39-2024-A",
+    "Homo sapiens; Mus musculus": "GRCh38-GRCm39-barnyard",
+    "*": "auto"
+  },
+  "policy": {
+    "order_within": {"a_empty": "accession", "b_strand": "accession", "c_skipped10x": "accession", "d_rest": "study_cells_desc"},
+    "study_unit": true,
+    "anvil_su_budget": 0,
+    "anvil_waves": ["d_rest"],
+    "anvil_max_sample_reads": 1.3e9,
+    "anvil_min_study_samples": 1,
+    "xl_reads": 1.3e9,
+    "retry_max": 1
+  },
+  "clusters": {
+    "clipper": {
+      "enabled": true,
+      "mode": "per_sample",
+      "account": "debruinz",
+      "root": "/mnt/projects/debruinz_project/debruinz/singlet/atlas-rerun/campaign",
+      "scratch": "/tmp",
+      "ref_base": "/mnt/projects/debruinz_project/cellarium/reference",
+      "whitelist_dir": "/mnt/projects/debruinz_project/debruinz/singlet/pipeline-benchmark/whitelists",
+      "sra_tools": "/mnt/projects/debruinz_project/debruinz/singlet/envs/pbench/bin",
+      "ncbi_home": "/mnt/projects/debruinz_project/debruinz/singlet/cache/condahome",
+      "python": "python3",
+      "cores": 300,
+      "bandwidth_MBps": 150,
+      "staging_cap_tb": 20,
+      "max_compute_inflight": 75,
+      "batch_size": 16,
+      "wall_safety": 1.6,
+      "io": {"partition": "short-cpu", "cpus": 2, "mem_gb": 16, "time": "03:59:00", "max_inflight": 24,
+             "array_throttle": 8, "requeue": false},
+      "io_long": {"partition": "cpu", "time": "2-00:00:00"},
+      "compute_classes": [
+        {"name": "s4", "threads": 4, "partition": "short-cpu", "time": "03:59:00", "mem_gb": 80},
+        {"name": "m8", "threads": 8, "partition": "short-cpu", "time": "03:59:00", "mem_gb": 96},
+        {"name": "l8", "threads": 8, "partition": "cpu", "time": "2-00:00:00", "mem_gb": 112},
+        {"name": "xl16", "threads": 16, "partition": "cpu", "time": "5-00:00:00", "mem_gb": 160}
+      ],
+      "controller": {"partition": "short-cpu", "time": "03:55:00", "mem_gb": 4, "interval_s": 600},
+      "sbatch_extra": []
+    },
+    "anvil": {
+      "enabled": false,
+      "mode": "node",
+      "budget": "su",
+      "su_cap": 0,
+      "su_floor": 5000,
+      "campaign_start": "2026-11-01",
+      "account": "bio260157",
+      "ssh": "x-zdebruine@anvil.rcac.purdue.edu",
+      "root": "/anvil/scratch/x-zdebruine/atlas-rerun/campaign",
+      "scratch": "/tmp",
+      "ref_base": "/anvil/projects/x-bio260157/reference",
+      "whitelist_dir": "/anvil/projects/x-bio260157/singlet_campaign/whitelists",
+      "sra_tools": "/anvil/projects/x-bio260157/singlet_campaign/sratools/bin",
+      "ncbi_home": "/anvil/projects/x-bio260157/singlet_campaign/ncbi_home",
+      "binary_source": "/anvil/projects/x-bio260157/singlet_campaign/bin/singlet-campaign",
+      "python": "python3",
+      "nonhost": false,
+      "cores": 512,
+      "bandwidth_MBps": 400,
+      "staging_cap_tb": 40,
+      "batch_size": 32,
+      "io": {"partition": "shared", "cpus": 1, "mem_gb": 1.9, "time": "06:00:00", "max_inflight": 64,
+             "array_throttle": 32},
+      "compute_classes": [
+        {"name": "n4", "threads": 4, "partition": "wholenode", "time": "24:00:00", "mem_gb": 0},
+        {"name": "n16", "threads": 16, "partition": "wholenode", "time": "24:00:00", "mem_gb": 0}
+      ],
+      "node": {"partition": "wholenode", "time": "24:00:00", "slot_cores": 112, "fill": 0.8, "max_nodes": 4},
+      "controller": {"partition": "shared", "time": "03:55:00", "mem_gb": 1.9, "interval_s": 900},
+      "sbatch_extra": []
+    }
+  }
+}
