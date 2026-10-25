@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <sstream>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -34,6 +35,7 @@
 #include "saturation.h"
 #include "saturation_curve.h"
 #include "cell_calling.h"
+#include "called_v2.h"
 #include "sex_calling.h"
 #include "cell_cycle.h"
 #include "ancestry.h"
@@ -216,6 +218,10 @@ struct ExportConfig {
     ProvenanceConfig provenance;       ///< N8: provenance manifest (written if input_file non-empty)
     // N5: EmptyDrops cell calling
     bool run_cell_calling = false;     ///< Run EmptyDrops cell calling after pileup
+    /// "called_v2" (default): CellRanger2.2 knee on the pileup's exon counts, then the called_v2 EmptyDrops call of
+    /// docs/called-v2.md on exon + intron gene counts. "star_solo": STARsolo's filtered barcodes, else the legacy
+    /// EmptyDrops chain (the behaviour before 2026-10). "emptydrops": the legacy chain without STARsolo.
+    std::string cell_caller = "called_v2";
     double fdr_threshold = 0.01;       ///< BH-FDR cutoff for cell calls (STARsolo EmptyDrops_CR default)
     uint64_t lower_umi = 100;          ///< Lower UMI bound for ambient pool estimation
     uint64_t min_umi_test = 500;       ///< Min UMI to be tested by EmptyDrops (STARsolo umiMin=500)
@@ -251,6 +257,9 @@ struct ExportStats {
     uint64_t n_called_cells = 0;  // called cells (0 when cell calling ran and found none)
     int exit_code = 0;            // 0=success, 4=zero_cells
     std::vector<std::string> failed_writes;  // .1pz outputs that could not be written
+    std::string cell_caller;      // method that produced the cell set
+    std::string cell_call_json;   // knee + called_v2 parameters (JSON object), empty for other methods
+    uint64_t n_knee_called = 0;   // knee ("called") set size when called_v2 ran
 };
 
 /// Export all pileup results to disk.
@@ -500,6 +509,55 @@ inline ExportStats export_results(const PileupEngine& engine,
         // now matches the feature space exactly (n_genes entries on both sides).
         auto gene_csc_for_ed = collapse_exon_to_gene(exon_csc, engine.gene_model());
 
+        // ── called_v2 (default): knee on pileup exon counts, then EmptyDrops on exon + intron genes ──────────
+        // The knee ("called") is STARsolo's CellRanger2.2 3000 0.99 10 rule, computed here on the pileup's own
+        // counts after strand resolution, so 5' libraries no longer get a knee from wrong-strand STARsolo counts.
+        bool used_called_v2 = false;
+        if (export_cfg.cell_caller == "called_v2" && export_cfg.forced_cells <= 0 &&
+            engine.exon_names().size() != exon_csc.nrows)
+            std::cerr << "[cell_calling] WARNING: exon feature names do not match the exon matrix; called_v2 "
+                         "skipped, using the legacy caller\n";
+        else if (export_cfg.cell_caller == "called_v2" && export_cfg.forced_cells <= 0) {
+            auto t_v2 = std::chrono::high_resolution_clock::now();
+            std::vector<int64_t> exon_tot(bc_totals.begin(), bc_totals.end());
+            int64_t knee_umi_min = 0;
+            std::vector<uint8_t> knee_called = calledv2::cellranger22(exon_tot, 3000, 0.99, 10, &knee_umi_min);
+            const bool with_introns = intron_csc.ncols == exon_csc.ncols && intron_csc.ncols > 0;
+            calledv2::GeneCounts gx = calledv2::gene_counts(exon_csc, engine.exon_names(),
+                                                              with_introns ? &intron_csc : nullptr,
+                                                              with_introns ? &engine.intron_names() : nullptr);
+            std::string proto = export_cfg.protocol_name;
+            if (proto.empty() || proto == "unknown") {
+                auto it = export_cfg.user_meta.find("protocol");
+                if (it != export_cfg.user_meta.end()) proto = it->second;
+            }
+            calledv2::Result cv = calledv2::call(gx, knee_called, proto, calledv2::Params(),
+                                                 std::max(1, export_cfg.threads));
+            cv.seconds = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - t_v2).count();
+            cc_result = CellCallResult{};
+            for (uint32_t j = 0; j < cv.called_v2.size(); ++j)
+                if (cv.called_v2[j]) cc_result.cell_indices.push_back(j);
+            cc_result.n_ambient = static_cast<uint32_t>(cv.n_ambient);
+            cc_result.ambient_total = static_cast<double>(cv.ambient_umi);
+            cell_caller_method = "called_v2";
+            result.n_knee_called = static_cast<uint64_t>(cv.n_called);
+            {
+                std::ostringstream js;
+                js << "{\n    \"knee\": {\"method\": \"CellRanger2.2\", \"counts\": \"pileup exon\", "
+                   << "\"n_expected\": 3000, \"max_percentile\": 0.99, \"max_min_ratio\": 10, \"umi_min\": "
+                   << knee_umi_min << ", \"n_called\": " << cv.n_called << "},\n    \"called_v2\": "
+                   << calledv2::params_json(cv, "    ") << "\n  }";
+                result.cell_call_json = js.str();
+            }
+            calledv2::write_cell_calls_tsv(out_prefix + "/cell_calls.tsv", barcodes, bc_totals, cv, knee_called);
+            std::cerr << "[cell_calling] called_v2: knee umi_min=" << knee_umi_min << " called=" << cv.n_called
+                      << " lower=" << cv.lower << " retain=" << cv.retain_total << " alpha=" << cv.alpha
+                      << " tested=" << cv.n_tested << " called_v2=" << cv.n_called_v2 << " (+" << cv.n_added
+                      << ")" << (cv.error.empty() ? std::string() : " note=" + cv.error) << " time=" << cv.seconds
+                      << "s\n";
+            used_called_v2 = true;
+        }
+
         // ── STAR Solo.out preferred cell caller ───────────────────────────────────
         // When STAR ran in CB_UMI_Simple mode (10x-style) it writes
         // Solo.out/Gene/filtered/barcodes.tsv — a knee-called, well-calibrated cell
@@ -507,7 +565,7 @@ inline ExportStats export_results(const PileupEngine& engine,
         // Fall back to EmptyDrops when the file is absent (CB_samTagOut protocols:
         // Drop-seq / sci-RNA / etc. do not produce Solo.out).
         bool used_star_solo = false;
-        {
+        if (!used_called_v2 && export_cfg.cell_caller != "emptydrops") {
             const std::string star_bc_path =
                 out_prefix + "/star_Solo.out/Gene/filtered/barcodes.tsv";
             std::ifstream star_bc_f(star_bc_path);
@@ -560,7 +618,7 @@ inline ExportStats export_results(const PileupEngine& engine,
         }
 
         auto t_cc0 = std::chrono::high_resolution_clock::now();
-        if (!used_star_solo) {
+        if (!used_star_solo && !used_called_v2) {
         if (export_cfg.forced_cells > 0) {
             // G-PERMITLIST: forced-cells — top-N barcodes by UMI count, skip EmptyDrops
             std::vector<uint32_t> order(exon_csc.ncols);
@@ -711,10 +769,12 @@ inline ExportStats export_results(const PileupEngine& engine,
         } // end if (!used_star_solo)
         auto t_cc1 = std::chrono::high_resolution_clock::now();
         double cc_s = std::chrono::duration<double>(t_cc1 - t_cc0).count();
-        singlet::write_cell_calls(out_prefix + "/cell_calls.tsv",
-                                  cc_result, barcodes, bc_totals,
-                                  export_cfg.fdr_threshold,
-                                  cell_caller_method);
+        if (!used_called_v2)
+            singlet::write_cell_calls(out_prefix + "/cell_calls.tsv",
+                                      cc_result, barcodes, bc_totals,
+                                      export_cfg.fdr_threshold,
+                                      cell_caller_method);
+        result.cell_caller = cell_caller_method;
         std::cerr << "[cell_calling] n_cells=" << cc_result.cell_indices.size()
                   << " cell_caller=" << cell_caller_method
                   << " time=" << cc_s << "s\n";

@@ -85,6 +85,7 @@
 #include "singlet/fq/sra_encoder.h"
 #include "singlet/fq/fastq_encoder.h"
 #include "singlet/fq/run_screen.h"
+#include "singlet/pileup/run_provenance.h"
 #include "singlet/star/star_api.h"  // star_main_impl() — bundled aligner
 #include "singlet/version.h"        // singlet::kVersion
 
@@ -2534,8 +2535,12 @@ static void usage(const char* prog) {
         << "  --no-umi-dedup         Disable UMI deduplication\n"
         << "  --cell-calling         Force EmptyDrops cell calling (default: auto when no --barcodes)\n"
         << "  --no-cell-calling      Disable EmptyDrops cell calling\n"
-        << "  --fdr-threshold F      FDR cutoff for cell calls [0.001]\n"
-        << "  --lower-umi N          Lower UMI bound for ambient pool [100]\n"
+        << "  --cell-caller M        called_v2 (default: CellRanger2.2 knee on pileup counts + EmptyDrops,\n"
+        << "                         docs/called-v2.md), star_solo or emptydrops (the legacy callers)\n"
+        << "  --fdr-threshold F      FDR cutoff for the legacy EmptyDrops caller [0.01]\n"
+        << "  --lower-umi N          Lower UMI bound for the legacy caller's ambient pool [100]\n"
+        << "  --runs-used A,B,...    Run accessions pooled into this input (recorded in pileup_stats.json)\n"
+        << "  --run-screen FILE      `singlet screen-runs --json` report; its runs_kept become runs_used\n"
         << "  --raw-matrix           Write raw_feature_bc_matrix/ (all barcodes) alongside filtered\n"
         << "  --metadata-json FILE   JSON file with GEO/pipeline metadata to embed in .1pz output\n"
         << "  --nonhost-db PATH      Viral sketch database (.snhskidx); auto-discovered from SINGLET_REF_BASE/nonhost/\n"
@@ -2624,6 +2629,11 @@ int main(int argc, char* argv[]) {
     int lower_umi_flag = 100;
     int forced_cells_flag = 0;           // --forced-cells N: skip EmptyDrops, take top-N by UMI
     int expect_cells_flag = 0;           // --expect-cells N: hint for cell calling knee detection
+    std::string cell_caller_flag = "called_v2"; // --cell-caller called_v2|star_solo|emptydrops
+    std::string runs_used_flag;          // --runs-used A,B,...
+    std::string run_screen_path;         // --run-screen screen.json
+    bool strand_from_user = false;       // --reverse-strand given
+    bool strand_from_header = false;     // .1fq header says 5' -> reverse strand
     bool write_raw_matrix = false;       // --raw-matrix: write raw_feature_bc_matrix/ alongside filtered
     bool variant_calling = false;
     int  vc_min_coverage = 10;
@@ -2707,7 +2717,7 @@ int main(int argc, char* argv[]) {
         else if (arg == "--umi-dedup-directional") config.umi_dedup_directional = true;
         else if (arg == "--no-umi-dedup-directional") { config.umi_dedup_directional = false; no_dir_dedup_explicit = true; }
         else if (arg == "--no-umi-dedup") config.umi_dedup = false;
-        else if (arg == "--reverse-strand") { config.reverse_strand = true; config.auto_strand = false; }
+        else if (arg == "--reverse-strand") { config.reverse_strand = true; config.auto_strand = false; strand_from_user = true; }
         else if (arg == "--guide-ref" && i+1 < argc) config.guide_ref_path = argv[++i]; // N18: CRISPR guide CSV
         else if (arg == "--feature-ref" && i+1 < argc) feature_ref_path = argv[++i]; // T4: CITE-seq ADT/HTO reference CSV
         else if (arg == "--cell-calling") cell_calling_flag = 1;
@@ -2716,6 +2726,15 @@ int main(int argc, char* argv[]) {
         else if (arg == "--lower-umi" && i+1 < argc) lower_umi_flag = std::atoi(argv[++i]);
         else if (arg == "--forced-cells" && i+1 < argc) forced_cells_flag = std::atoi(argv[++i]);
         else if (arg == "--expect-cells" && i+1 < argc) expect_cells_flag = std::atoi(argv[++i]);
+        else if (arg == "--cell-caller" && i+1 < argc) {
+            cell_caller_flag = argv[++i];
+            if (cell_caller_flag != "called_v2" && cell_caller_flag != "star_solo" && cell_caller_flag != "emptydrops") {
+                std::cerr << "ERROR: --cell-caller must be called_v2, star_solo or emptydrops\n";
+                return 1;
+            }
+        }
+        else if (arg == "--runs-used" && i+1 < argc) runs_used_flag = argv[++i];
+        else if (arg == "--run-screen" && i+1 < argc) run_screen_path = argv[++i];
         else if (arg == "--raw-matrix") write_raw_matrix = true;
         else if (arg == "--variant-calling") variant_calling = true;
         else if (arg == "--min-coverage" && i+1 < argc) vc_min_coverage = std::atoi(argv[++i]);
@@ -3385,15 +3404,11 @@ int main(int argc, char* argv[]) {
     bool needs_barcode_discovery = barcode_file.empty() &&
         (whitelist_file == "None" || whitelist_file == "none" || whitelist_auto_resolved);
     
+    // The engine itself is constructed after the .1fq header has been read (below, before Phase 0.9): the
+    // header can switch config.reverse_strand on for 5' protocols, and the engine copies its config.
     std::unique_ptr<singlet::PileupEngine> engine_ptr;
-    if (!needs_barcode_discovery && !is_atac_mode && !is_smart_seq2_mode && !is_bulk_rna_mode && !is_cite_seq_mode) {
-        engine_ptr = std::make_unique<singlet::PileupEngine>(config);
-        if (!engine_ptr->load_references()) {
-            std::cerr << "ERROR: Failed to load pileup references\n";
-            return 1;
-        }
-        std::cerr << "[singlet] References loaded: " << ref_sw.elapsed_s() << "s\n";
-    }
+    const bool construct_engine_early =
+        !needs_barcode_discovery && !is_atac_mode && !is_smart_seq2_mode && !is_bulk_rna_mode && !is_cite_seq_mode;
 
     // ── Phase 0.5: SRA streaming setup (FIFOs + native VDB reader) ──
     // If --sra is given, create two named FIFOs and fork a demuxer child
@@ -3878,6 +3893,7 @@ int main(int argc, char* argv[]) {
                 uint8_t pid = hdr.protocol_id;
                 if (pid == 4 || pid == 5 || pid == 14 || pid == 21) {
                     config.reverse_strand = true;
+                    strand_from_header = true;
                     std::cerr << "[singlet] 5' protocol detected → using reverse strand\n";
                 }
             }
@@ -4786,6 +4802,17 @@ int main(int argc, char* argv[]) {
         }
 
         std::cerr << "[singlet] .1fq decoded to temp files\n";
+    }
+
+    // ── Phase 0 (deferred): construct the pileup engine now that the .1fq header has set the strand ──
+    if (construct_engine_early && !engine_ptr) {
+        engine_ptr = std::make_unique<singlet::PileupEngine>(config);
+        if (!engine_ptr->load_references()) {
+            std::cerr << "ERROR: Failed to load pileup references\n";
+            return 1;
+        }
+        std::cerr << "[singlet] References loaded: " << ref_sw.elapsed_s() << "s (reverse_strand="
+                  << (config.reverse_strand ? "true" : "false") << ")\n";
     }
 
     // ── Phase 0.9: Barcode discovery for --whitelist None / auto-resolved whitelist without --barcodes ──
@@ -7971,6 +7998,7 @@ int main(int argc, char* argv[]) {
     export_cfg.lower_umi = static_cast<uint64_t>(lower_umi_flag);
     export_cfg.forced_cells = forced_cells_flag;
     export_cfg.expect_cells = expect_cells_flag;
+    export_cfg.cell_caller = cell_caller_flag;
     export_cfg.write_raw_matrix = write_raw_matrix;
     export_cfg.pileup_stats = &stats;
 
@@ -8428,6 +8456,33 @@ int main(int argc, char* argv[]) {
         "  \"strand_antisense\": " + std::to_string(stats.strand_antisense) + ",\n"
         "  \"counted_antisense_frac\": " + std::to_string(counted_anti) + ",\n"
         "  \"reverse_strand\": " + (config.reverse_strand ? "true" : "false") + ",\n";
+    {
+        // Provenance (atlas plan §6 item 5): which engine, binary, reference, cell call, runs and threads.
+        singlet::RunProvenance rp;
+        rp.engine_version = std::string("singlet-") + singlet::kVersion;
+        rp.binary_sha256 = singlet::self_binary_sha256();
+        rp.reference_build = export_cfg.reference_build;
+        rp.genome_dir = genome_dir;
+        rp.gtf_path = config.exon_gtf_path;
+        rp.threads = star_threads;
+        rp.runs_used = singlet::split_list(runs_used_flag);
+        if (!run_screen_path.empty()) {
+            rp.run_screen_json = run_screen_path;
+            if (rp.runs_used.empty()) rp.runs_used = singlet::runs_kept_from_screen_json(run_screen_path);
+        }
+        rp.cell_caller = export_stats.cell_caller;
+        rp.cell_call_json = export_stats.cell_call_json;
+        rp.reverse_strand = config.reverse_strand;
+        rp.strand_source = strand_retried                       ? "retry"
+                           : engine_ptr->strand_was_flipped()   ? "probe"
+                           : strand_from_user                   ? "user"
+                           : strand_from_header                 ? "header"
+                                                                : "default";
+        extra_json += "  \"cell_caller\": \"" + export_stats.cell_caller + "\",\n";
+        extra_json += "  \"n_called_knee\": " + std::to_string(export_stats.n_knee_called) + ",\n";
+        extra_json += "  \"n_called_cells\": " + std::to_string(export_stats.n_called_cells) + ",\n";
+        extra_json += "  \"provenance\": " + rp.json("  ") + ",\n";
+    }
     singlet::write_stats_json(out_prefix + "/pileup_stats.json",
                               stats, std::string("singlet-") + singlet::kVersion,
                               total_sw.elapsed_s(), extra_json);
