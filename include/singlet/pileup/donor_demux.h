@@ -1218,6 +1218,10 @@ static VBResult fit_vb_k_staged(
     std::vector<int> all(cov.n_cells);
     std::iota(all.begin(), all.end(), 0);
     ReducedSNPs red = reduce_snps(cov, all, cfg.explore_min_snp_cells);
+    if (red.data.n_covered_snps < std::max(200, 20 * K)) {      // sparse input: no reduction
+        red.data = cov;
+        red.data.covered_to_original.clear();
+    }
     std::vector<int> kinds;
     for (int i = 0; i < cfg.explore_ward; ++i) kinds.push_back(2);
     for (int i = 0; i < cfg.explore_legacy; ++i) kinds.push_back(1);
@@ -2174,7 +2178,7 @@ inline DemuxResult run_demux(
             kinds.push_back(0);
         }
 
-        VBResult k_best_result = (cfg.staged_fit && K > 1)
+        VBResult k_best_result = (cfg.staged_fit && K > 1 && cov_use.n_cells >= 200)
             ? fit_vb_k_staged(cov_use, K, cfg, &pca_full, false)
             : fit_vb_k(cov_use, K, cfg, kinds, cfg.max_iter_pre, cfg.max_iter, cfg.threads,
                        &pca_full, cfg.seed, false);
