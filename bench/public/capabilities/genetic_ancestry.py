@@ -103,6 +103,25 @@ def compute(artifact_dir: Path) -> dict:
                            "x": {"label": "read pairs (millions)", "scale": "log"}, "y": {"label": "accuracy", "min": 0, "max": 1},
                            "series": [{"name": t, "tool": t, "x": [float(L) for L in levels], "y": fig_series[t]} for t in tools]})
 
+    # ---- end-to-end single-cell pools of 1000 Genomes cell lines (Singlet demultiplexing -> per-donor ancestry)
+    lp = artifact_dir / "lcl_ancestry_calls.tsv"
+    if lp.exists():
+        lc = pd.read_csv(lp, sep="\t")
+        for ds, d in lc.groupby("dataset"):
+            vals = {}
+            for t in tools:
+                x = d[d["tool"] == t]
+                if ds == "osorio2019_lcl_mix":  # no per-cell truth: the two donors must carry EUR and AFR
+                    want = {"EUR", "AFR"}
+                    vals[t] = len(want & set(x["call"].dropna())) / 2 if len(x) == 2 else 0.0
+                else:
+                    vals[t] = float((x["call"] == x["super_population"]).mean()) if len(x) else None
+            if vals.get("singlet") is None:
+                continue
+            add("donor_accuracy", "Pool donors given their individual's super-population (single-cell, end to end)",
+                "fraction", "accuracy", ds, vals,
+                notes="Singlet 1.0.0 demultiplexes the pool (--n-donors 2); each tool then calls ancestry on each donor's reads")
+
     sx_path = artifact_dir / "sex_bulk_calls.tsv"
     if sx_path.exists():
         sx = pd.read_csv(sx_path, sep="\t")
@@ -136,7 +155,7 @@ def compute(artifact_dir: Path) -> dict:
         "generated_at": prov.get("generated_at") or now_iso(), "owner": "bench-public",
         "singlet": prov["singlet"], "tools": prov["tools"], "datasets": prov["datasets"],
         "metrics": metrics, "resources": prov["resources"], "figures": figures,
-        "artifacts": artifact_entries(artifact_dir, CAP, {"ancestry_calls.tsv": "derived", "sex_bulk_calls.tsv": "derived",
+        "artifacts": artifact_entries(artifact_dir, CAP, {"ancestry_calls.tsv": "derived", "sex_bulk_calls.tsv": "derived", "lcl_ancestry_calls.tsv": "derived",
                                                           "provenance.json": "derived"}),
         "code": [
             {"path": "python/singlet/celllabels/ancestry.py", "role": "implementation",
