@@ -178,7 +178,7 @@ METHODS = """**Inputs.** The same two FASTQ files per dataset (R1 barcode and UM
 
 **Hardware.** 16 threads and a 128 GB memory limit for every tool, on an exclusive Xeon Gold 6248 node, two repetitions with the tool order reversed in the second. Wall time is GNU time elapsed (Singlet: `singlet encode` plus the pipeline); CPU time is user plus system; peak memory is the RSS summed over the process tree, sampled at 1 Hz.
 
-**Tools.** Singlet: the pinned campaign binary with the campaign flags (counts, introns, junctions, sorted BAM, donor demux, mtDNA, ambient, doublets, cell calling), non-host screen off. STARsolo 2.7.11b with Gene, GeneFull, Velocyto and SJ and Cell Ranger 4+ settings, without a BAM (starsolo) and with a coordinate-sorted BAM carrying CB/UB tags (starsolo-bam). alevin-fry through simpleaf with a spliced+unspliced index (cr-like resolution). Cell Ranger is run only if it is installed under $WORK/tools; it was not in this run.
+**Tools.** Singlet: the pinned campaign binary with the campaign flags (counts, introns, junctions, sorted BAM, donor demux, mtDNA, ambient, doublets, cell calling), non-host screen off. STARsolo 2.7.11b with Gene, GeneFull, Velocyto and SJ and Cell Ranger 4+ settings, without a BAM (starsolo) and with a coordinate-sorted BAM carrying CB/UB tags (starsolo-bam). alevin-fry through simpleaf with a spliced+unspliced index (cr-like resolution). Cell Ranger is not run; its published matrices are the comparator elsewhere.
 
 **What is gated.** Runtime is shown, not gated: wall time, CPU-hours and memory are in the resources table and figures. Singlet does more work than a counting pipeline and alevin-fry is a pseudoaligner, so the page places each tool on a quality-versus-CPU plot. The gated metrics check that the alignments are the same work (unique-mapping share equals STARsolo's) and that the optimizations leave every count matrix and the junction table unchanged (md5 of the matrices, with the cache off or on, and across threads, shared genome, sort mode and packing).
 
@@ -197,7 +197,6 @@ def write_provenance(bp: Path, out: Path):
             return "?"
 
     sv = {"STAR": ver(["STAR", "--version"]), "simpleaf": ver(["simpleaf", "--version"]), "alevin-fry": ver(["alevin-fry", "--version"])}
-    cr = sorted(Path("/mnt/projects/debruinz_project/debruinz/singlet/tools").glob("cellranger-*/bin/cellranger"))
     tools = [
         {"name": "singlet", "version": "1.0.0", "role": "singlet", "params": "singlet encode --reads R1.fastq.gz R2.fastq.gz -o s.1fq; singlet s.1fq --ref-base <ref> --genome-dir <STAR index> --exons genes.gtf --threads 16 --pipeline --output-format mtx --raw-matrix"},
         {"name": "singlet-core", "version": "1.0.0", "role": "helper", "params": "as singlet without --pipeline"},
@@ -206,8 +205,9 @@ def write_provenance(bp: Path, out: Path):
         {"name": "starsolo-bam", "version": sv["STAR"], "role": "competitor", "params": "as starsolo with --outSAMtype BAM SortedByCoordinate --outSAMattributes NH HI nM AS CR UR CB UB GX GN sS sQ sM --limitBAMsortRAM 40000000000"},
         {"name": "alevinfry", "version": f"{sv['simpleaf']}; alevin-fry {sv['alevin-fry']}", "role": "competitor", "url": "https://github.com/COMBINE-lab/alevin-fry",
          "citation": "He et al. 2022 Nat Methods", "params": "simpleaf quant --reads1 R1 --reads2 R2 --index <spliced+unspliced index> --t2g-map t2g_3col.tsv --chemistry 10xv3|10xv2 --expected-ori fw --resolution cr-like --unfiltered-pl WL --threads 16"}]
-    if cr:
-        tools.append({"name": "cellranger", "version": cr[-1].parent.parent.name, "role": "competitor", "params": "cellranger count --create-bam=true --include-introns=true --localcores=16 --localmem=120"})
+    tools.append({"name": "cellranger", "version": "3.0.0 (pbmc_1k_v3), 2.1.0 (nuclei_2k_v2)", "role": "truth",
+                  "url": "https://www.10xgenomics.com/datasets/1-k-pbm-cs-from-a-healthy-donor-v-3-chemistry-3-standard-3-0-0",
+                  "params": "not run: 10x's published filtered matrices are the comparator for accuracy and agreement; Cell Ranger is left out of the timing"})
 
     def ds(i, t, acc):
         return {"id": i, "title": t, "accessions": acc, "truth": "none: timing and output agreement on identical reads"}
@@ -225,7 +225,7 @@ def write_provenance(bp: Path, out: Path):
         "caveats": [
             "Singlet runs more modules than the counting pipelines it is timed against (sorted BAM, junctions, donor demux, mtDNA, ambient, doublets, cell calling), and alevin-fry is a pseudoaligner that does not align to the genome: wall time and CPU-hours are not a like-for-like speed contest and are not gated.",
             "Singlet's wall time includes the FASTQ-to-.1fq encoding (a one-off per sample in the atlas pipeline).",
-            "Cell Ranger was not run: it is not installed on Clipper and this harness does not download it.",
+            "Cell Ranger is not in the timing: 10x software is neither installed nor run here; 10x's published matrices stand in as the comparator for accuracy and agreement (see gex-counts).",
             "STARsolo reads the gzip FASTQs through zcat (its documented usage); the STAR and alevin-fry indexes are prebuilt and untimed.",
             "The PR #22 and PR #34 binaries clip 11 bp from PBMC R2 reads (a 5' prefix false positive fixed in the campaign binary), so optimization rows of the star group are comparable with each other but not with the campaign rows.",
             "Peak memory sums RSS over the process tree, so pages of a genome shared by several processes (the packed and shared-genome runs) are counted once per process.",

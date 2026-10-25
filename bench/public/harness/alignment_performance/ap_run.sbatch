@@ -21,7 +21,7 @@
 #   starsolo       STARsolo 2.7.11b, Gene GeneFull Velocyto SJ, Cell Ranger 4+ settings, no BAM (the fastest STARsolo run)
 #   starsolo-bam   the same plus a coordinate-sorted BAM with CB/UB tags (what Singlet's STAR step also produces)
 #   alevinfry      simpleaf quant, spliced+unspliced index, cr-like resolution
-# Output: $BP/perf/DATASET/TOOL_rREP/{time.txt,mem.json,node.txt,...}. Cell Ranger is not installed on Clipper and is not run.
+# Output: $BP/perf/DATASET/TOOL_rREP/{time.txt,mem.json,node.txt,...}. Cell Ranger is not run (10x software is not installed or run; 10x's published matrices are the comparator elsewhere).
 set -eu
 source ${BP_SRC:-/mnt/projects/debruinz_project/debruinz/singlet/bench-public/src/singlet}/bench/public/harness/perf_common.sh
 DS=$1; REP=$2; TOOLS=${3:-"singlet singlet-core starsolo starsolo-bam alevinfry"}
@@ -77,16 +77,6 @@ run_tool() {
       timed $O/run simpleaf quant --reads1 $R1 --reads2 $R2 --index $PB/refs/$SPECIES/af_idx/index \
         --t2g-map $PB/refs/$SPECIES/af_idx/index/t2g_3col.tsv --chemistry $AFCHEM --expected-ori fw --resolution cr-like \
         --unfiltered-pl $WL --threads 16 --output $O/af > $O/run.log 2>&1 || rc=$?
-      ;;
-    cellranger)
-      # Runs only if Cell Ranger was installed under $WORK/tools by the 10x-EULA holder (this harness does not download it) together
-      # with a transcriptome built by `cellranger mkref` from the same genome FASTA and GTF at $WORK/tools/cellranger-refs/<species>.
-      CR=$(ls -d $WORK/tools/cellranger-*/bin/cellranger 2>/dev/null | tail -1); CRREF=$WORK/tools/cellranger-refs/$SPECIES
-      if [ -z "$CR" ] || [ ! -d "$CRREF" ]; then echo "[ap] cellranger not installed or no reference: skipped"; rm -rf $O; return 0; fi
-      mkdir -p $SCR/crfq; for m in R1 R2; do :; done
-      ln -s $R1 $SCR/crfq/s_S1_L001_R1_001.fastq.gz; ln -s $R2 $SCR/crfq/s_S1_L001_R2_001.fastq.gz
-      timed $O/run $CR count --id=cr --fastqs=$SCR/crfq --sample=s --transcriptome=$CRREF --create-bam=true --include-introns=true \
-        --localcores=16 --localmem=120 --disable-ui --output-dir=$O/out > $O/run.log 2>&1 || rc=$?
       ;;
     *) echo "unknown tool $tool"; return 2 ;;
   esac
