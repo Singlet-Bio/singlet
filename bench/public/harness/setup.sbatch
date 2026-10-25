@@ -16,7 +16,7 @@
 set -euo pipefail
 WORK=/mnt/projects/debruinz_project/debruinz/singlet
 BR=claude/bench-public-cohort-485cf7; BARE=$WORK/repos/singlet-py.git; SRC=$WORK/src/singlet-py/${BR//\//__}
-git -C $BARE fetch -q origin +refs/heads/$BR:refs/heads/$BR
+git -C $BARE fetch -q --update-head-ok origin +refs/heads/$BR:refs/heads/$BR
 [ -d $SRC ] || git -C $BARE worktree add -q $SRC $BR
 git -C $SRC reset -q --hard refs/heads/$BR; git -C $SRC log --oneline -1
 source $SRC/bench/public/harness/common.sh
