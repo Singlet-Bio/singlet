@@ -7,7 +7,6 @@
 #SBATCH --mem=96G
 #SBATCH --time=01:00:00
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
-#SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%A_%a.out
 set -euo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet
 git --git-dir=$W/repos/singlet-py.git fetch -q origin +refs/heads/study/latent-qc:refs/heads/study/latent-qc || true
