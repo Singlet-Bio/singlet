@@ -309,31 +309,46 @@ public:
         /// Molecules the pre-fix engine counted in both matrices: some read
         /// touched an exon and some read touched an intron of the same gene.
         uint64_t legacy_double = 0;
+        /// Molecules not emitted (molecule-level intron rules, pileup_engine.h).
+        uint64_t dropped = 0;
         uint64_t total() const { return spliced + unspliced + ambiguous; }
         MoleculeStats& operator+=(const MoleculeStats& o) {
             spliced += o.spliced; unspliced += o.unspliced;
             ambiguous += o.ambiguous; legacy_double += o.legacy_double;
+            dropped += o.dropped;
             return *this;
         }
     };
 
+    /// Diagnostic bits passed to record_read() (OR over a molecule's reads).
+    /// They never change a label; they describe what the reads looked like so a
+    /// molecule dump can be joined with other tools' calls (SINGLET_MOLECULE_DUMP).
+    static constexpr uint8_t kDiagMulti      = 1;   ///< read had NH > 1
+    static constexpr uint8_t kDiagSpliced    = 2;   ///< read has a CIGAR N gap
+    static constexpr uint8_t kDiagFlank      = 4;   ///< intronic part of an exon-touching read <= 5 bp
+    static constexpr uint8_t kDiagOtherGene  = 8;   ///< read also lies in another same-strand gene's exon/intron
+    static constexpr uint8_t kDiagAntisense  = 16;  ///< read also overlaps an opposite-strand gene
+    static constexpr uint8_t kDiagOutside    = 32;  ///< some aligned bases outside the gene body
+
     /// Record one read of a molecule. exon_idx / intron_idx are the features the
-    /// read hit (UINT32_MAX if none); flags are kRead* bits.
+    /// read hit (UINT32_MAX if none); flags are kRead* bits, diag kDiag* bits.
     void record_read(uint32_t bc_idx, uint32_t gene_idx, uint64_t umi_packed,
-                     uint32_t exon_idx, uint32_t intron_idx, uint8_t flags) {
+                     uint32_t exon_idx, uint32_t intron_idx, uint8_t flags,
+                     uint8_t diag = 0) {
         uint64_t key = (static_cast<uint64_t>(bc_idx) << 32) | gene_idx;
         auto& group = mol_groups_[key];
         for (auto& e : group) {
             if (e.packed == umi_packed) {
                 e.count++;
                 e.flags |= flags;
+                e.diag |= diag;
                 // smallest index, not first seen: read order (STAR threads) must not matter
                 e.exon_idx = std::min(e.exon_idx, exon_idx);
                 e.intron_idx = std::min(e.intron_idx, intron_idx);
                 return;
             }
         }
-        group.push_back({umi_packed, exon_idx, intron_idx, 1u, flags});
+        group.push_back({umi_packed, exon_idx, intron_idx, 1u, flags, diag});
     }
 
     /// True if (bc, gene) already has molecules here (used to route reads that
@@ -342,42 +357,32 @@ public:
         return mol_groups_.count((static_cast<uint64_t>(bc_idx) << 32) | gene_idx) != 0;
     }
 
-    /// Collapse UMIs (directional 1-Hamming when `directional`, exact otherwise),
-    /// label each molecule once and emit it.
-    ///   exon_acc.increment(exon_idx, bc)      spliced and ambiguous molecules
-    ///   intron_acc.increment(intron_idx, bc)  unspliced molecules
-    ///   on_ambiguous(bc, gene)                 ambiguous molecules (also in exon_acc)
-    template <typename ExonAccT, typename IntronAccT, typename AmbFn>
-    MoleculeStats finalize_molecules(ExonAccT& exon_acc, IntronAccT& intron_acc,
-                                     AmbFn&& on_ambiguous, int umi_len,
-                                     bool directional) const {
-        MoleculeStats st;
+    /// One collapsed molecule: the union of the evidence of every UMI merged into it.
+    struct Molecule {
+        uint64_t umi;         ///< 2-bit packed UMI of the component root
+        uint32_t bc;
+        uint32_t gene;
+        uint32_t exon_idx;    ///< smallest exon index over the merged reads
+        uint32_t intron_idx;  ///< smallest intron index over the merged reads
+        uint32_t count;       ///< reads
+        uint8_t  flags;       ///< OR of kRead*
+        uint8_t  diag;        ///< OR of kDiag*
+        MoleculeLabel label() const { return label_of(flags); }
+    };
+
+    /// Collapse UMIs per (barcode, gene) (directional 1-Hamming when
+    /// `directional`, exact otherwise) and append one Molecule per component.
+    void collapse_molecules(int umi_len, bool directional, std::vector<Molecule>& out) const {
         std::vector<MolEntry> sorted;
         std::vector<int> parent;
-        std::vector<uint8_t> comp_flags;
-        std::vector<uint32_t> comp_exon, comp_intron;
-
-        auto emit = [&](uint32_t bc, uint32_t gene, uint8_t flags,
-                        uint32_t exon_idx, uint32_t intron_idx) {
-            if ((flags & kReadTouchesExon) && (flags & kReadIntron)) st.legacy_double++;
-            switch (label_of(flags)) {
-                case MoleculeLabel::Spliced:
-                    exon_acc.increment(exon_idx, bc); st.spliced++; break;
-                case MoleculeLabel::Unspliced:
-                    intron_acc.increment(intron_idx, bc); st.unspliced++; break;
-                case MoleculeLabel::Ambiguous:
-                    exon_acc.increment(exon_idx, bc); on_ambiguous(bc, gene);
-                    st.ambiguous++; break;
-            }
-        };
-
+        std::vector<Molecule> comp;
         for (const auto& [key, entries] : mol_groups_) {
             const uint32_t bc = static_cast<uint32_t>(key >> 32);
             const uint32_t gene = static_cast<uint32_t>(key & 0xffffffffu);
 
             if (!directional || entries.size() == 1) {
                 for (const auto& e : entries)
-                    emit(bc, gene, e.flags, e.exon_idx, e.intron_idx);
+                    out.push_back({e.packed, bc, gene, e.exon_idx, e.intron_idx, e.count, e.flags, e.diag});
                 continue;
             }
 
@@ -401,19 +406,50 @@ public:
                         if (ri != rj) parent[rj] = ri;
                     }
 
-            // A molecule's evidence is the union over every UMI merged into it.
-            comp_flags.assign(n, 0);
-            comp_exon.assign(n, UINT32_MAX);
-            comp_intron.assign(n, UINT32_MAX);
-            for (int i = 0; i < n; ++i) {   // smallest feature index over the merged UMIs
+            // A molecule's evidence is the union over every UMI merged into it
+            // (smallest feature index over the merged UMIs).
+            comp.assign(n, Molecule{0, bc, gene, UINT32_MAX, UINT32_MAX, 0, 0, 0});
+            for (int i = 0; i < n; ++i) {
                 int r = find(i);
-                comp_flags[r] |= sorted[i].flags;
-                comp_exon[r] = std::min(comp_exon[r], sorted[i].exon_idx);
-                comp_intron[r] = std::min(comp_intron[r], sorted[i].intron_idx);
+                comp[r].flags |= sorted[i].flags;
+                comp[r].diag |= sorted[i].diag;
+                comp[r].count += sorted[i].count;
+                comp[r].exon_idx = std::min(comp[r].exon_idx, sorted[i].exon_idx);
+                comp[r].intron_idx = std::min(comp[r].intron_idx, sorted[i].intron_idx);
             }
             for (int i = 0; i < n; ++i)
-                if (find(i) == i) emit(bc, gene, comp_flags[i], comp_exon[i], comp_intron[i]);
+                if (find(i) == i) { comp[i].umi = sorted[i].packed; out.push_back(comp[i]); }
         }
+    }
+
+    /// Emit one labelled molecule:
+    ///   exon_acc.increment(exon_idx, bc)      spliced and ambiguous molecules
+    ///   intron_acc.increment(intron_idx, bc)  unspliced molecules
+    ///   on_ambiguous(bc, gene)                 ambiguous molecules (also in exon_acc)
+    template <typename ExonAccT, typename IntronAccT, typename AmbFn>
+    static void emit_molecule(const Molecule& m, ExonAccT& exon_acc, IntronAccT& intron_acc,
+                              AmbFn&& on_ambiguous, MoleculeStats& st) {
+        if ((m.flags & kReadTouchesExon) && (m.flags & kReadIntron)) st.legacy_double++;
+        switch (m.label()) {
+            case MoleculeLabel::Spliced:
+                exon_acc.increment(m.exon_idx, m.bc); st.spliced++; break;
+            case MoleculeLabel::Unspliced:
+                intron_acc.increment(m.intron_idx, m.bc); st.unspliced++; break;
+            case MoleculeLabel::Ambiguous:
+                exon_acc.increment(m.exon_idx, m.bc); on_ambiguous(m.bc, m.gene);
+                st.ambiguous++; break;
+        }
+    }
+
+    /// Collapse UMIs, label each molecule once and emit it (emit_molecule()).
+    template <typename ExonAccT, typename IntronAccT, typename AmbFn>
+    MoleculeStats finalize_molecules(ExonAccT& exon_acc, IntronAccT& intron_acc,
+                                     AmbFn&& on_ambiguous, int umi_len,
+                                     bool directional) const {
+        MoleculeStats st;
+        std::vector<Molecule> mols;
+        collapse_molecules(umi_len, directional, mols);
+        for (const auto& m : mols) emit_molecule(m, exon_acc, intron_acc, on_ambiguous, st);
         return st;
     }
 
@@ -428,6 +464,7 @@ private:
         uint32_t intron_idx;  ///< first intron a read of this UMI hit
         uint32_t count;       ///< reads with this exact UMI
         uint8_t  flags;       ///< OR of kRead* over those reads
+        uint8_t  diag;        ///< OR of kDiag* over those reads
     };
     std::unordered_map<uint64_t, std::vector<MolEntry>> mol_groups_;
 
