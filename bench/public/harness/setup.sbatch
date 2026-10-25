@@ -33,7 +33,7 @@ echo "0bfa4a0bea1d636e7ec1908aabb94307c53778185c12fc164da32dd085848131  $BP/whit
 wc -l $BP/whitelists/3M-3pgex-may-2023.txt
 
 RLIB=$WORK/envs/rlib-benchpublic; mkdir -p $RLIB
-R_LIBS=$RLIB $WORK/envs/ambient/bin/Rscript -e '
+PATH=$WORK/envs/ambient/bin:$PATH R_LIBS=$RLIB $WORK/envs/ambient/bin/Rscript -e '
   r <- "https://cloud.r-project.org"; lib <- Sys.getenv("R_LIBS")
   for (p in c("remotes", "BiocManager", "caret")) if (!requireNamespace(p, quietly = TRUE)) install.packages(p, lib = lib, repos = r)
   for (p in c("AnnotationDbi", "org.Hs.eg.db", "org.Mm.eg.db")) if (!requireNamespace(p, quietly = TRUE))
