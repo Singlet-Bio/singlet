@@ -25,11 +25,20 @@
 # Output: $PB/perf/<dataset>[_<tag>]/<config>_r<rep>/{time.txt,run.log,...}; concurrent configs write c1..c4.
 set -eu
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark
-REF=/mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A; GENOME=$REF/star_2.7.11b
 CFG=$1; DS=$2; REP=${3:-1}
+# The dataset's own reference (species column of bench/pipeline/datasets.tsv). Every dataset used to run on
+# GRCh38-2024-A: hgmm1k_v3 (human + mouse) lost its mouse cells and neuron1k_v3 / nuclei2k_v2 (mouse) aligned to the
+# wrong genome, so their cell calls were not comparable with the validation runs (runs/<ds>/*-t8).
+case $DS in
+  hgmm*) SPECIES=GRCh38-GRCm39-barnyard ;;
+  neuron*|nuclei*) SPECIES=GRCm39-2024-A ;;
+  pbmc*) SPECIES=GRCh38-2024-A ;;
+  *) SPECIES=${SPECIES:-}; [ -n "$SPECIES" ] || { echo "no reference for $DS: set SPECIES"; exit 2; } ;;
+esac
+REF=/mnt/projects/debruinz_project/cellarium/reference/$SPECIES; GENOME=$REF/star_2.7.11b
 O=$PB/perf/$DS${PERF_TAG:+_$PERF_TAG}/${CFG}_r$REP; rm -rf $O; mkdir -p $O
 SCR=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR; [ -n "${SHM:-}" ] && $BIN genome unload $GENOME >/dev/null 2>&1; [ -n "${NHSHM:-}" ] && $BIN nonhost unload >/dev/null 2>&1; true' EXIT
-echo "[perf] $CFG $DS r$REP node=$(hostname) cpu=$(lscpu | sed -n 's/^Model name: *//p') $(date -Is)" | tee $O/node.txt
+echo "[perf] $CFG $DS r$REP species=$SPECIES node=$(hostname) cpu=$(lscpu | sed -n 's/^Model name: *//p') $(date -Is)" | tee $O/node.txt
 ONEFQ=$PB/data/$DS/$DS.1fq
 [ -f $ONEFQ ] || { echo "missing $ONEFQ (run perf_encode.sbatch)"; exit 2; }
 cp $ONEFQ $SCR/s.1fq
