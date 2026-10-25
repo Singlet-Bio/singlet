@@ -10,7 +10,7 @@ One Parquet file per sample, ``<GSM>.celltype.parquet``, one row per called cell
     cell_type_label   string   CL name of that term
     cell_type_prob    float32  rolled-up probability of the call
     argmax_cl         string   output term with the most probability mass
-    argmax_prob       float32  its probability
+    argmax_prob       float32  its probability, calibrated for that term (a temperature of its own; top1_prob is the softmax mass)
     top1_cl .. top5_cl      string   the five output terms with the most mass, in order
     top1_prob .. top5_prob  float32  their probabilities (the rest of the mass is spread over the other terms)
     model_version     string   e.g. ``celltype-nn=0.1.0;census=2025-11-08;cl=2026-06-08``
@@ -103,8 +103,8 @@ def assert_public_safe(table) -> None:
     T = df[[f"top{i}_prob" for i in range(1, TOP_K + 1)]].to_numpy(np.float64)
     if (np.diff(T, axis=1) > 1e-6).any() or (T.sum(1) > 1 + 1e-4).any():
         raise PublicOutputError("top-k probabilities must be descending and sum to at most 1")
-    if not np.allclose(df["argmax_prob"].to_numpy(np.float64), T[:, 0], atol=1e-6):
-        raise PublicOutputError("argmax_prob must equal top1_prob")
+    if (df["argmax_cl"] != df["top1_cl"]).any():
+        raise PublicOutputError("argmax_cl must equal top1_cl")
     if not df["model_version"].map(lambda x: isinstance(x, str) and bool(_VERSION.match(x))).all():
         raise PublicOutputError("model_version: invalid")
 

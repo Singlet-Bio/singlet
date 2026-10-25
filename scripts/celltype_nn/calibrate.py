@@ -33,6 +33,7 @@ def main(argv=None) -> int:
     ap.add_argument("--data", type=Path, required=True)
     ap.add_argument("--model", type=Path, required=True, help="model directory")
     ap.add_argument("--grid", default="0.3,3.0,55")
+    ap.add_argument("--argmax-only", action="store_true", help="fit only the second temperature, for the argmax term's probability")
     a = ap.parse_args(argv)
 
     import pandas as pd
@@ -94,6 +95,36 @@ def main(argv=None) -> int:
 
     lo, hi, n = a.grid.split(",")
     grid = np.exp(np.linspace(np.log(float(lo)), np.log(float(hi)), int(n)))
+    if a.argmax_only:
+        # the argmax term's own probability (sidecar argmax_prob): a temperature never changes which term is the argmax, so
+        # this second temperature recalibrates that column without changing any label
+        cidx = torch.tensor([sp.cindex[t] for t in sp.terms], device=dev)
+
+        def ev_argmax(T, L):
+            p = torch.softmax(L / T, 1)
+            pm, j = p.max(1)
+            y = out[ti].gather(1, cidx[j][:, None]).ravel()
+            m = ~torch.isnan(y)
+            pm, y = pm[m], y[m]
+            e = 0.0
+            for b in range(10):
+                s = (pm >= b / 10) & ((pm < (b + 1) / 10) if b < 9 else (pm <= 1))
+                if s.any():
+                    e += float(s.float().mean()) * abs(float(pm[s].mean()) - float(y[s].mean()))
+            return dict(T=T, ece=e, checked=float(m.float().mean()), accuracy=float(y.mean()), mean_prob=float(pm.mean()))
+
+        rows = [dict(T=float(T), **{k: ev_argmax(float(T), L) for k, L in logits.items()}) for T in grid]
+        for r_ in rows:
+            r_["ece"] = (r_["clean"]["ece"] + r_["aug"]["ece"]) / 2
+        best = min(rows, key=lambda r_: r_["ece"])
+        meta_out = {k: v for k, v in meta.items() if k not in ("state", "config")}
+        meta_out["temperature_argmax"] = best["T"]
+        meta_out.setdefault("calibration", {})["argmax"] = dict(
+            method="argmax-term reliability (ECE, 10 bins) on validation collections, clean + augmented", temperature=best["T"])
+        M.save(net.cpu(), a.model / "model.pt", meta_out)
+        (a.model / "calibrate_argmax.json").write_text(json.dumps(dict(best=best, grid=rows), indent=1))
+        print(json.dumps(dict(best=best), indent=1), flush=True)
+        return 0
     rows = []
     for T in grid:
         r = {k: evaluate(float(T), L) for k, L in logits.items()}

@@ -78,11 +78,18 @@ class CellTypePredictor:
         am = P.argmax(1)
         top = np.argsort(-P, axis=1)[:, :k]
         terms = np.array(self.space.terms, dtype=object)
+        am_prob = P[np.arange(len(am)), am]
+        Ta = self.meta.get("temperature_argmax")
+        if Ta:
+            # the argmax term's probability under its own temperature (fitted on its reliability): p_a ∝ p^(T / T_argmax)
+            e = float(self.net.temperature) / float(Ta)
+            Q = np.power(np.clip(P, 1e-30, 1), e)
+            am_prob = Q[np.arange(len(am)), am] / Q.sum(1)
         return dict(
             call=call,
             call_prob=pj.astype(np.float32),
             argmax=terms[am],
-            argmax_prob=P[np.arange(len(am)), am].astype(np.float32),
+            argmax_prob=am_prob.astype(np.float32),
             topk=terms[top],
             topk_prob=np.take_along_axis(P, top, 1).astype(np.float32),
         )
