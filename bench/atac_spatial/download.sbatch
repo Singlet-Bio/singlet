@@ -16,7 +16,7 @@ get() { # url dir
   curl -sSfL --retry 5 -C - -o $f "$1" && touch $f.done && echo "ok $(du -h $f | cut -f1) $f"
 }
 ARC=https://cf.10xgenomics.com/samples/cell-arc/2.0.0
-for s in pbmc_granulocyte_sorted_3k; do
+for s in pbmc_granulocyte_sorted_3k pbmc_granulocyte_sorted_10k; do
   for x in summary.csv per_barcode_metrics.csv atac_fragments.tsv.gz atac_fragments.tsv.gz.tbi atac_peaks.bed \
            raw_feature_bc_matrix.h5 filtered_feature_bc_matrix.h5 atac_peak_annotation.tsv; do get $ARC/$s/${s}_$x $s; done
 done
@@ -37,6 +37,7 @@ for s in V1_Human_Lymph_Node V1_Breast_Cancer_Block_A_Section_1; do
 done
 # FASTQs last (large)
 get $ARC/pbmc_granulocyte_sorted_3k/pbmc_granulocyte_sorted_3k_fastqs.tar pbmc_granulocyte_sorted_3k
+get $ARC/pbmc_granulocyte_sorted_10k/pbmc_granulocyte_sorted_10k_fastqs.tar pbmc_granulocyte_sorted_10k
 get $SR/V1_Mouse_Brain_Sagittal_Anterior/V1_Mouse_Brain_Sagittal_Anterior_fastqs.tar V1_Mouse_Brain_Sagittal_Anterior
 get $CRA/atac_pbmc_5k_nextgem/atac_pbmc_5k_nextgem_fastqs.tar atac_pbmc_5k_nextgem
 for t in */*_fastqs.tar; do
