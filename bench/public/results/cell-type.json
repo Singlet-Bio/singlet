@@ -1,16 +1,16 @@
 {
  "schema": "singlet.benchmark.capability",
- "schema_version": "1.0.0",
+ "schema_version": "1.1.0",
  "capability": "cell-type",
  "title": "Cell type labels",
  "conclusion": "On 16 held-out studies with curated cell types (291,331 cells), with every tool trained on the same CELLxGENE reference, Singlet labels 74.4% of cells with the right lineage against 67.1% for CellTypist, 72.9% for scANVI, 62.7% for Seurat, 70.8% for SingleR. Its calibrated call cuts wrong calls to 25.1%.",
  "methods": "**Data.** cxg16: 16 GEO studies (66 samples, 13 human and 3 mouse) that CELLxGENE curators annotated with Cell Ontology terms. Author labels are moved onto Singlet's called cells by barcode, and only cells that both sides kept are scored (291,331 cells). Every tool reads Singlet's counts of these cells: exon plus intron, projected on one 6,000-gene vocabulary. **Reference.** Every tool learns from the same CELLxGENE Census 2025-11-08 training corpus. The corpus is a stratified sample of 2.6M primary droplet cells, and the 16 studies' collections are excluded. CellTypist and Singlet's network train on all of it; Seurat, SingleR and scANVI use a stratified subsample of at most 200 cells per term (145k human, 62k mouse cells), the scale they are designed for. Labels are the corpus's curated CL terms, so no tool needs a crosswalk. **Metrics.** Accuracy at depth d compares the depth-d ancestors of call and truth on the guide's tree (1 compartment, 2 lineage, 3 type, 4 subtype); a call that stops above depth d counts as wrong there. 'Wrong' is a call on another branch. Each study pools its samples, and values are means over studies with bootstrap CIs over studies. Calibration: ECE of each tool's probability against 'the truth lies in the call's subtree'. Abstention: area under each tool's risk-coverage curve. Robustness: depth-2 accuracy on studies whose tissue is thin in the reference. Runtime: CPU time per million cells to label a query once the reference is prepared. Singlet gives two labels per cell. The most probable term is compared with every competitor's label; the calibrated call, which backs off to the parent term when unsure, is scored for wrong calls and calibration.",
  "status": "draft",
- "generated_at": "2026-10-25T15:46:31+00:00",
+ "generated_at": "2026-10-25T15:50:44+00:00",
  "owner": "ensemble-classifier",
  "singlet": {
   "version": "1.0.0",
-  "commit": "763e5bce1cc4bb1019babb1fad35ea6c7719d0a5",
+  "commit": "002a335a057d55b88c66e5238b6a153b325a7030",
   "branch": "claude/celltype-nn"
  },
  "tools": [
@@ -72,10 +72,79 @@
    "title": "16 GEO studies with CELLxGENE curated cell types (66 samples)",
    "accessions": {
     "gse": "GSE125970;GSE130973;GSE131882;GSE144870;GSE157480;GSE161089;GSE164291;GSE166766;GSE184111;GSE185222;GSE185224;GSE185477;GSE201773;GSE260685;GSE270225;GSE280852",
+    "gsm": [
+     "GSM3587008",
+     "GSM3587009",
+     "GSM3587010",
+     "GSM3587011",
+     "GSM3587012",
+     "GSM3587013",
+     "GSM3758115",
+     "GSM3758116",
+     "GSM3758119",
+     "GSM3823939",
+     "GSM3823940",
+     "GSM3823941",
+     "GSM3823942",
+     "GSM3823943",
+     "GSM3823944",
+     "GSM4299783",
+     "GSM4299784",
+     "GSM4299785",
+     "GSM4299786",
+     "GSM4299787",
+     "GSM4299788",
+     "GSM4299789",
+     "GSM4766855",
+     "GSM4889466",
+     "GSM4889467",
+     "GSM4889468",
+     "GSM4889469",
+     "GSM5005819",
+     "GSM5005820",
+     "GSM5082289",
+     "GSM5082290",
+     "GSM5082291",
+     "GSM5082292",
+     "GSM5578032",
+     "GSM5578033",
+     "GSM5578034",
+     "GSM5578035",
+     "GSM5578036",
+     "GSM5578037",
+     "GSM5578038",
+     "GSM5578039",
+     "GSM5578040",
+     "GSM5578041",
+     "GSM5578042",
+     "GSM5578043",
+     "GSM5608427",
+     "GSM5608428",
+     "GSM5608429",
+     "GSM5608430",
+     "GSM5616002",
+     "GSM5655495",
+     "GSM5655497",
+     "GSM5655499",
+     "GSM6071111",
+     "GSM8122365",
+     "GSM8122366",
+     "GSM8122367",
+     "GSM8337506",
+     "GSM8337507",
+     "GSM8337508",
+     "GSM8337510",
+     "GSM8606565",
+     "GSM8606566",
+     "GSM8606567",
+     "GSM8606569",
+     "GSM8606570"
+    ],
     "other": [
      "CELLxGENE collections: see $WORK/jobs/annotate/bench_studies.json"
     ]
    },
+   "data_kind": "real",
    "truth": "CELLxGENE curators' Cell Ontology terms for the authors' labels, transferred to Singlet's called cells by barcode (scripts/annotate_truth_cxg.py)",
    "n_cells": 291331
   }
@@ -1329,8 +1398,8 @@
    "name": "provenance.json",
    "url": "https://data.singlet.bio/benchmarking/1.0.0/cell-type/provenance.json",
    "kind": "derived",
-   "sha256": "4c7aed32b9ee3ad19204f5467a38176580062b2f85efc6f1747992b88ab51aef",
-   "bytes": 10202,
+   "sha256": "6a0f1bc659a3a85a504edd31886a71983fb62ea697459d97231c430942a9f518",
+   "bytes": 11499,
    "format": "json"
   }
  ],
@@ -1338,47 +1407,47 @@
   {
    "path": "python/singlet/celltype_nn/predict.py",
    "role": "implementation",
-   "url": "https://github.com/Singlet-Bio/singlet/blob/763e5bce1cc4bb1019babb1fad35ea6c7719d0a5/python/singlet/celltype_nn/predict.py"
+   "url": "https://github.com/Singlet-Bio/singlet/blob/002a335a057d55b88c66e5238b6a153b325a7030/python/singlet/celltype_nn/predict.py"
   },
   {
    "path": "python/singlet/celltype_nn/model.py",
    "role": "implementation",
-   "url": "https://github.com/Singlet-Bio/singlet/blob/763e5bce1cc4bb1019babb1fad35ea6c7719d0a5/python/singlet/celltype_nn/model.py"
+   "url": "https://github.com/Singlet-Bio/singlet/blob/002a335a057d55b88c66e5238b6a153b325a7030/python/singlet/celltype_nn/model.py"
   },
   {
    "path": "scripts/celltype_nn/train.py",
    "role": "implementation",
-   "url": "https://github.com/Singlet-Bio/singlet/blob/763e5bce1cc4bb1019babb1fad35ea6c7719d0a5/scripts/celltype_nn/train.py"
+   "url": "https://github.com/Singlet-Bio/singlet/blob/002a335a057d55b88c66e5238b6a153b325a7030/scripts/celltype_nn/train.py"
   },
   {
    "path": "python/singlet/celllabels/celltype.py",
    "role": "implementation",
-   "url": "https://github.com/Singlet-Bio/singlet/blob/763e5bce1cc4bb1019babb1fad35ea6c7719d0a5/python/singlet/celllabels/celltype.py"
+   "url": "https://github.com/Singlet-Bio/singlet/blob/002a335a057d55b88c66e5238b6a153b325a7030/python/singlet/celllabels/celltype.py"
   },
   {
    "path": "scripts/celltype_nn/compete/run_py.py",
    "role": "harness",
-   "url": "https://github.com/Singlet-Bio/singlet/blob/763e5bce1cc4bb1019babb1fad35ea6c7719d0a5/scripts/celltype_nn/compete/run_py.py"
+   "url": "https://github.com/Singlet-Bio/singlet/blob/002a335a057d55b88c66e5238b6a153b325a7030/scripts/celltype_nn/compete/run_py.py"
   },
   {
    "path": "scripts/celltype_nn/compete/run_r.R",
    "role": "harness",
-   "url": "https://github.com/Singlet-Bio/singlet/blob/763e5bce1cc4bb1019babb1fad35ea6c7719d0a5/scripts/celltype_nn/compete/run_r.R"
+   "url": "https://github.com/Singlet-Bio/singlet/blob/002a335a057d55b88c66e5238b6a153b325a7030/scripts/celltype_nn/compete/run_r.R"
   },
   {
    "path": "scripts/celltype_nn/compete/export.py",
    "role": "harness",
-   "url": "https://github.com/Singlet-Bio/singlet/blob/763e5bce1cc4bb1019babb1fad35ea6c7719d0a5/scripts/celltype_nn/compete/export.py"
+   "url": "https://github.com/Singlet-Bio/singlet/blob/002a335a057d55b88c66e5238b6a153b325a7030/scripts/celltype_nn/compete/export.py"
   },
   {
    "path": "python/singlet/celltype_nn/benchmark.py",
    "role": "metric",
-   "url": "https://github.com/Singlet-Bio/singlet/blob/763e5bce1cc4bb1019babb1fad35ea6c7719d0a5/python/singlet/celltype_nn/benchmark.py"
+   "url": "https://github.com/Singlet-Bio/singlet/blob/002a335a057d55b88c66e5238b6a153b325a7030/python/singlet/celltype_nn/benchmark.py"
   },
   {
    "path": "bench/public/capabilities/cell_type.py",
    "role": "metric",
-   "url": "https://github.com/Singlet-Bio/singlet/blob/763e5bce1cc4bb1019babb1fad35ea6c7719d0a5/bench/public/capabilities/cell_type.py"
+   "url": "https://github.com/Singlet-Bio/singlet/blob/002a335a057d55b88c66e5238b6a153b325a7030/bench/public/capabilities/cell_type.py"
   }
  ],
  "reproduce": {
