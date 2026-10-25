@@ -1,0 +1,34 @@
+{
+ "format": "singlet-called-v2-golden/1",
+ "name": "synth_knee_below_plateau",
+ "description": "A Kang-like rank curve: ambient at 1-3 UMIs (plateau lower 7), a dense debris band at 8-14 UMIs whose drop-off is the sharpest bend among the totals > lower, an ambient shoulder of 15-~150 UMIs, called cells at 1,000-16,000 UMIs and low-RNA cells at 200-1,000. The unbounded knee lands at 8, so every tested barcode (the ambient shoulder included) was called.",
+ "source": "tests/data/called_v2_golden/generate.py synth_knee_below_plateau, numpy default_rng(3)",
+ "protocol": "10xv3",
+ "options": {},
+ "n_genes": 80,
+ "n_barcodes": 5910,
+ "n_called": 120,
+ "expected": {
+  "method": "singlet-emptydrops",
+  "version": "2.1",
+  "lower": 7,
+  "retain_total": 1088.0000000000002,
+  "alpha": 3786382.487450496,
+  "n_ambient": 4000,
+  "ambient_umi": 7988,
+  "n_tested": 85,
+  "n_tail": 30,
+  "n_called_v2": 150,
+  "n_added": 30
+ },
+ "knee_unbounded": 11.000000000000002,
+ "tolerance": {
+  "called_v2": "exact",
+  "lower": "exact",
+  "pvalue_monte_carlo": "exact (pvalue >= 1/(niters+1): (n_le + 1) / (niters + 1))",
+  "pvalue_tail_rel": 1e-06,
+  "fdr_rel": 1e-06,
+  "alpha_rel": 1e-06,
+  "retain_total_rel": 1e-09
+ }
+}
