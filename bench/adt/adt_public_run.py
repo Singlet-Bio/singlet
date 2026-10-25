@@ -266,8 +266,62 @@ def tool_citeseqcount(a):
     save_matrix(a, sub[keep], [names[i] for i in keep], bcs)
 
 
-TOOLS = {"singlet": tool_singlet, "kite": tool_kite, "citeseqcount": tool_citeseqcount}
-VERSIONS = {"kite": ["kb", "--version"], "citeseqcount": ["CITE-seq-Count", "--version"]}
+def tool_alevinfry(a):
+    """salmon 1.10 ``--features`` index + ``salmon alevin --sketch`` + alevin-fry (cr-like UMI resolution); 3' v3 feature
+    barcodes are listed feature-side in the permit list and translated to GEX barcodes afterwards."""
+    from scipy import sparse
+    from scipy.io import mmread
+
+    from singlet.adt import count as C
+    from singlet.adt import seq as S
+
+    b = os.environ.get("AFRY_BIN", "")
+    salmon, fry = os.path.join(b, "salmon"), os.path.join(b, "alevin-fry")
+    panel = pd.read_csv(os.path.join(a.out, f"adt_{a.dataset}_panel.tsv"), sep="	", dtype=str, keep_default_na=False)
+    bcs = [x.strip() for x in open(os.path.join(ddir(a), "barcodes.txt")) if x.strip()]
+    cfg = DATASETS[a.dataset]
+    d = os.path.join(a.scratch, "afry")
+    os.makedirs(d, exist_ok=True)
+    ft = os.path.join(d, "features.tsv")
+    panel[["feature", "sequence"]].to_csv(ft, sep="	", header=False, index=False)
+    t2g = os.path.join(d, "t2g.tsv")
+    pd.DataFrame({"a": panel.feature, "b": panel.feature}).to_csv(t2g, sep="	", header=False, index=False)
+    sh([salmon, "index", "-t", ft, "-i", f"{d}/idx", "--features", "-k7"])
+    r1, r2 = fastqs(a)
+    start = 11 if any(str(p).startswith(("5P", "^NNNNNNNNNN")) for p in panel.pattern) else 1
+    L = len(panel.sequence.iloc[0])
+    sh([salmon, "alevin", "-l", "ISR", "-i", f"{d}/idx", "-1"] + r1 + ["-2"] + r2 +
+       ["--read-geometry", f"2[{start}-{start + L - 1}]", "--bc-geometry", "1[1-16]",
+        "--umi-geometry", f"1[17-{16 + cfg['umi']}]", "-o", f"{d}/map", "-p", str(a.threads), "--sketch"])
+    if cfg["chem"] == "10xv3":
+        fb, gex = C.load_translation(wl(a, WL_V3[1]))
+        plist = S.decode(fb, 16)
+    else:
+        fb = gex = None
+        plist = C.load_barcode_list(wl(a, WL_V2[0]))
+    pl = os.path.join(d, "permit.txt")
+    open(pl, "w").write("
+".join(plist) + "
+")
+    sh([fry, "generate-permit-list", "-d", "fw", "-i", f"{d}/map", "-o", f"{d}/quant", "--unfiltered-pl", pl,
+        "--min-reads", "1"])
+    sh([fry, "collate", "-i", f"{d}/quant", "-r", f"{d}/map", "-t", str(a.threads)])
+    sh([fry, "quant", "-i", f"{d}/quant", "-o", f"{d}/res", "-t", str(a.threads), "-m", t2g, "-r", "cr-like"])
+    X = sparse.csr_matrix(mmread(f"{d}/res/alevin/quants_mat.mtx"))
+    rows = [x.strip() for x in open(f"{d}/res/alevin/quants_mat_rows.txt")]
+    names = [x.strip() for x in open(f"{d}/res/alevin/quants_mat_cols.txt")]
+    rc = S.encode_strings(rows, 16)[0]
+    if fb is not None:
+        rc = C.translate(rc, (fb, gex))[0]
+    idx = {bc: i for i, bc in enumerate(S.decode(rc, 16))}
+    pick = [idx.get(bc.split("-")[0]) for bc in bcs]
+    sub = sparse.vstack([X[i] if i is not None else sparse.csr_matrix((1, X.shape[1])) for i in pick]).T.tocsc()
+    save_matrix(a, sub, names, bcs)
+
+
+TOOLS = {"singlet": tool_singlet, "kite": tool_kite, "citeseqcount": tool_citeseqcount, "alevinfry": tool_alevinfry}
+VERSIONS = {"kite": ["kb", "--version"], "citeseqcount": ["CITE-seq-Count", "--version"],
+            "alevinfry": [os.path.join(os.environ.get("AFRY_BIN", ""), "alevin-fry"), "--version"]}
 
 
 def main():
