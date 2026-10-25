@@ -88,7 +88,7 @@ The earlier ancestry simulation (docs/cell_annotation.md 5.1) is not used on the
 | CITE-seq / hashing | pbmc1k_cite_v3, pbmc10k_cite_v3, stoeckius2018_hashing, tenx_cellplex_pbmc10k* | hashtag = donor, confirmed by genotype; protein markers |
 | genotype pool | kang2018_ctrl | demuxlet calls with genotypes |
 | barnyard | hgmm1k_v3, hgmm10k_v3, macosko2015_dropseq_mix | species of each read |
-| CRISPR | tenx_crispr_a375_10k, norman2019_gem1, replogle2022_k562_lane4* | published guide identities, target knock-down |
+| CRISPR | tenx_crispr_a375_10k, norman2019_gem1, replogle2022_k562_gg41* | published guide identities, target knock-down |
 | spatial | visium_mouse_brain_ant | Space Ranger, anatomy |
 | other protocols | ding2020_pbmc1_{smartseq2, dropseq, indrops, seqwell, celseq2, 10xv3}, segerstolpe2016_pancreas* | one PBMC sample, seven methods, curated cell types |
 | mouse | neuron1k_v3, heart1k_v3, (nuclei above), tabula_muris_kidney_facs* | Cell Ranger; Tabula Muris CL labels |

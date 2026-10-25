@@ -161,12 +161,12 @@ add(id="norman2019_gem1", group="crispr", tier="core", title="Norman 2019 K562 C
     truth="authors' guide identities (GSE133344_filtered_cell_identities.csv.gz); induced target expression",
     licence="GEO public data (cite paper)", capabilities="crispr-guides,gex-counts", tools="singlet,cellranger,starsolo",
     why="the most re-analysed Perturb-seq dataset (GEARS, CPA, scGen); amplified guide library rather than direct capture")
-add(id="replogle2022_k562_lane4", group="crispr", tier="extended", title="Replogle 2022 K562 essential-scale Perturb-seq, lane 4 (mRNA + sgRNA)",
-    species="human", reference=G, chemistry="10x-3p-v3", source="sra", other="PRJNA831566 KD6_seq1_essential lane_4", n_cells="",
+add(id="replogle2022_k562_gg41", group="crispr", tier="extended", title="Replogle 2022 K562 essential-scale Perturb-seq, gem group 41 (mRNA + sgRNA)",
+    species="human", reference=G, chemistry="10x-3p-v3", source="sra", other="PRJNA831566 gem group 41 (KD6_raw_files.csv: lane N = gem group N); sgRNA runs SRR19331010/11/13/14", n_cells="",
     read_pairs_m=255, read_pairs_used_m=255, fastq_gb=15.9,
     truth="published cell-to-guide assignments (figshare+ 10.25452/figshare.plus.20029387, CC BY 4.0)",
     licence="CC BY 4.0", capabilities="crispr-guides", tools="singlet,cellranger",
-    why="genome-scale Perturb-seq; lane-to-GEM-group mapping must be checked before use")
+    why="genome-scale Perturb-seq, one GEM group with published guide calls")
 add(id="gse145370_tcr", group="vdj", tier="core", title="GSE145370 ESCC TCR libraries (4 samples), 10x 5' V(D)J",
     species="human", reference=G, chemistry="10x-5p-vdj", source="geo", gse="GSE145370", gsm="GSM4317423;GSM4317424;GSM4317428;GSM4317429",
     srr="SRR11094260;SRR11094261;SRR11094265;SRR11094266", truth="authors' Cell Ranger 3.0.1 filtered_contig_annotations (GEO supplementary)",
