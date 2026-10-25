@@ -12,6 +12,7 @@
 #include "Chain.h"
 #include "ReadAlignChunk.h"
 #include "ReadAlign.h"
+#include "SeqCache.h"
 #include "Stats.h"
 #include "genomeGenerate.h"
 #include "outputSJ.h"
@@ -208,6 +209,9 @@ int star_main_impl(int argInN, char *argIn[])
     // this does not seem to work at the moment
     // P.inOut->logMain << "mlock value="<<mlockall(MCL_CURRENT|MCL_FUTURE) <<"\n"<<flush;
 
+    // sequence cache for the main mapping pass (after any 2-pass junction insertion)
+    g_seqCache = SeqCache::create(P, genomeMain.nGenome);
+
     // prepare chunks and spawn mapping threads
     ReadAlignChunk *RAchunk[P.runThreadN];
     for (int ii = 0; ii < P.runThreadN; ii++)
@@ -260,6 +264,12 @@ int star_main_impl(int argInN, char *argIn[])
     P.inOut->logMain << timeMonthDayTime(g_statsAll.timeFinishMap) << " ..... finished mapping\n"
                      << "RAM after mapping:\n"
                      << linuxProcMemory() << flush;
+    if (g_seqCache != nullptr)
+    {
+        P.inOut->logMain << g_seqCache->stats() << "\n" << flush;
+        delete g_seqCache;
+        g_seqCache = nullptr;
+    };
 
     // no need for genome anymore, free the memory
     genomeMain.freeMemory();

@@ -97,9 +97,6 @@ void ReadAlignChunk::mapChunk() {//map one chunk. Input reads stream has to be s
         sortChunkByPrefix(chunkIn, chunkInSizeBytesTotal, P.readNends);
     #endif
 
-    #ifdef OPT_DEDUP_R2
-    RA->dedupResetCache();
-    #endif
     
     RA->statsRA.resetN();
 
