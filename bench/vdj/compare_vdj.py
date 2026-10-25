@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 from typing import Dict
 
 import numpy as np
@@ -126,8 +125,14 @@ def _pairs_same(labels_a, labels_b):
             "clonotype_ari": float(adjusted_rand_score(labels_a, labels_b))}
 
 
-def compare(ref: pd.DataFrame, ref_cells: set, m: pd.DataFrame, gex: pd.DataFrame = None) -> Dict:
+def compare(ref: pd.DataFrame, ref_cells: set, m: pd.DataFrame, gex: pd.DataFrame = None, gex_cells: set = None,
+            equiv: Dict[str, str] = None) -> Dict:
     out = {}
+    if gex_cells is not None:
+        # V(D)J cells are called GEX cells with a productive contig (Singlet pairs every V(D)J library with its GEX
+        # sample); contigs on other barcodes are ambient or empty droplets
+        out["method_contigs_off_gex_cells"] = int((~m["barcode"].isin(gex_cells)).sum())
+        m = m[m["barcode"].isin(gex_cells)]
     m_in = m[m["barcode"].isin(ref_cells)]
     refk = set(zip(ref.barcode, ref.chain, ref.cdr3_nt))
     mk = set(zip(m_in.barcode, m_in.chain, m_in.cdr3_nt))
@@ -144,6 +149,10 @@ def compare(ref: pd.DataFrame, ref_cells: set, m: pd.DataFrame, gex: pd.DataFram
     out["cdr3_aa_accuracy"] = float((j.cdr3_r == j.cdr3_m).mean()) if len(j) else float("nan")
     ex = j[j.cdr3_nt_r == j.cdr3_nt_m]
     out["v_gene_agreement"] = float((ex.v_r == ex.v_m).mean()) if len(ex) else float("nan")
+    if equiv:
+        # genes reads cannot tell apart (identical or 1 nt apart up to Cys104) count as one
+        eq = lambda g: equiv.get(g, g)
+        out["v_gene_agreement_equivalent"] = float((ex.v_r.map(eq) == ex.v_m.map(eq)).mean()) if len(ex) else float("nan")
     out["j_gene_agreement"] = float((ex.j_r == ex.j_m).mean()) if len(ex) else float("nan")
     cg = ex[(ex.c_r != "") & (ex.c_m != "")]
     out["c_gene_agreement"] = float((cg.c_r == cg.c_m).mean()) if len(cg) else float("nan")
@@ -183,11 +192,19 @@ def main(argv=None):
     ap.add_argument("--trust4")
     ap.add_argument("--gex-labels")
     ap.add_argument("--chains", default=None, help="TCR or BCR: restrict every table to these chains")
+    ap.add_argument("--gex-cells", default=None, help="called GEX barcodes, one per line: V(D)J cells must be among them")
+    ap.add_argument("--vdj-ref", default=None, help="Singlet segment reference (V gene equivalence classes)")
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
     ref = load_cellranger(a.reference)
     cells = cellranger_cells(a.reference)
     gex = pd.read_csv(a.gex_labels) if a.gex_labels else None
+    gex_cells = set(ln.strip() for ln in open(a.gex_cells) if ln.strip()) if a.gex_cells else None
+    equiv = None
+    if a.vdj_ref:
+        from singlet.vdj import reference as VR
+
+        equiv = {norm_gene(k): v for k, v in VR.equivalence(VR.load(a.vdj_ref)).items()}
     keep = TCR if a.chains == "TCR" else BCR if a.chains == "BCR" else TCR | BCR
     ref = ref[ref.chain.isin(keep)]
     res = {"reference": a.reference, "chains": a.chains or "all"}
@@ -196,7 +213,7 @@ def main(argv=None):
         if path:
             t = loader(path)
             t = t[t.chain.isin(keep)]
-            res[name] = compare(ref, cells, t, gex)
+            res[name] = compare(ref, cells, t, gex, gex_cells, equiv)
     with open(a.out, "w") as f:
         json.dump(res, f, indent=1)
     print(json.dumps(res, indent=1))

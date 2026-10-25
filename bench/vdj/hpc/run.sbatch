@@ -43,7 +43,9 @@ if [[ " $METHODS " == *" trust4 "* ]]; then
   grep -E "Elapsed|Maximum resident" $O/trust4.time
 fi
 if [ ! -s $O/gex_lineage.csv ] && [ -s $D/gex_filtered.h5 ]; then python -P $SRC/bench/vdj/gex_lineage.py $D/gex_filtered.h5 $O/gex_lineage.csv; fi
+if [ ! -s $O/gex_cells.txt ] && [ -s $D/gex_filtered.h5 ]; then python -P $SRC/bench/crispr/h5_barcodes.py $D/gex_filtered.h5 $O/gex_cells.txt; fi
 python -P $SRC/bench/vdj/compare_vdj.py --reference $D/filtered_contig_annotations.csv --chains $CHAINS \
+  --vdj-ref $WORK/state/vdjc/ref/vdj_human.tsv.gz $( [ -s $O/gex_cells.txt ] && echo --gex-cells $O/gex_cells.txt ) \
   --singlet $O/singlet/contigs.csv --singlet-cells $O/singlet/cells.csv \
   $( [ -s $O/trust4/TRUST_barcode_report.tsv ] && echo --trust4 $O/trust4/TRUST_barcode_report.tsv ) \
   $( [ -s $O/gex_lineage.csv ] && echo --gex-labels $O/gex_lineage.csv ) --out $O/metrics.json
