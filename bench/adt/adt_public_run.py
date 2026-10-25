@@ -271,7 +271,6 @@ def tool_alevinfry(a):
     barcodes are listed feature-side in the permit list and translated to GEX barcodes afterwards."""
     from scipy import sparse
     from scipy.io import mmread
-
     from singlet.adt import count as C
     from singlet.adt import seq as S
 
