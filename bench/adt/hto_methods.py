@@ -80,14 +80,15 @@ def _normalise(values, names):
 # singlet
 # ---------------------------------------------------------------------------------------------------------------------
 
-def run_singlet(hto: pd.DataFrame, empties: pd.DataFrame | None, rna=None, workdir=None) -> pd.DataFrame:
-    """singlet's hashedDrops-style rule; ambient = empty-droplet row sums (called-cell row sums if no empties)."""
+def run_singlet(hto: pd.DataFrame, empties: pd.DataFrame | None, rna=None, workdir=None,
+                confident_min: float = 2.0) -> pd.DataFrame:
+    """singlet's hashedDrops-style rule; ambient = empty-droplet row sums, else estimated from the cells (bimodal)."""
     from singlet.adt.hto import hashed_drops
 
     t0 = time.perf_counter()
     X = hto.to_numpy(dtype=float)
-    ambient = (empties if empties is not None else hto).to_numpy(dtype=float).sum(axis=1)
-    call, lfc_top, _ = hashed_drops(X, ambient)
+    ambient = empties.to_numpy(dtype=float).sum(axis=1) if empties is not None and empties.shape[1] else None
+    call, lfc_top, _ = hashed_drops(X, ambient, confident_min=confident_min)
     names = list(hto.index)
     labels = [NEGATIVE if c == -1 else DOUBLET if c == -2 else names[int(c)] for c in call]
     return _finish(hto, labels, lfc_top, time.perf_counter() - t0)
