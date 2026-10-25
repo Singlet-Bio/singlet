@@ -1,6 +1,6 @@
 """Run ambient estimators on one library / gene view and score them against truth from a (possibly different) view.
 Usage: run_method.py LIB VIEW TRUTHVIEW SPEC [SPEC ...] [--tag T]
-SPEC: knn:k=30:tau=10:kappa=0[:latent=pca|vae] | cluster:tau=10:kappa=0[:latent=..] | marker:m=100 | marker:m=all
+SPEC: knn:k=30:tau=10:kappa=0[:latent=pca|vae][:hier=1] | cluster:tau=10:kappa=0[:latent=..] | marker:m=100 | marker:m=all
 Rows (score + wall seconds + peak RSS GB) are appended to $OUT/LIB/est_VIEW-TRUTHVIEW.csv; rho vectors saved as npy.
 VIEW = full -> scored against full-gene truth (and the correction table is written); A/B = gene-split (estimate on one gene half,
 truth from the other half, so estimator and truth noise are independent)."""
@@ -45,7 +45,7 @@ def main():
                 if latent == "vae":
                     Z = np.load(f"{atlib.DATA}/{lib}/vae_{view}.npy")
                 rho, rm, rh = methods.latent_knn(ds, latent=latent, mode=name, k=int(p.get("k", 30)), tau=float(p.get("tau", 10)),
-                                                 iters=int(p.get("iters", 3)), kappa=float(p.get("kappa", 0)), Z=Z)
+                                                 iters=int(p.get("iters", 3)), kappa=float(p.get("kappa", 0)), Z=Z, hier=p.get("hier", "0") == "1")
             elif name == "marker":
                 rho = methods.marker_oracle(ds, None if p["m"] == "all" else int(p["m"]))
             else:

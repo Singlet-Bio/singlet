@@ -76,7 +76,7 @@ def _solve_rho(rows, a_v, q_v, x, n, mu, kappa, r0=None, lo=1e-6, hi=0.6, it=25)
     return r
 
 
-def mixture(ds, W, tau=10.0, iters=3, kappa=0.0, block=400):
+def mixture(ds, W, tau=10.0, iters=3, kappa=0.0, block=400, Wc=None):
     """Returns rho, removed UMIs per cell from mouse genes / human genes (expected, by posterior ambient responsibility)."""
     n = ds.C.shape[1]
     Xt = ds.C.T.tocsr().astype(np.float32)  # cells x genes
@@ -85,11 +85,13 @@ def mixture(ds, W, tau=10.0, iters=3, kappa=0.0, block=400):
     Xt = Xt[:, keep].tocsr()
     a = ds.a[keep].astype(np.float32)
     S = (W @ Xt).tocsr()  # neighbours' summed counts
+    S2 = (Wc @ Xt).tocsr() if Wc is not None else None  # cluster-level counts: smoothing target of the kNN profile
     mouse = ds.gene_mouse[keep]
     rho = np.zeros(n)
     mu = 0.01
     for t in range(iters + 1):
         R = np.asarray(W @ (rho * Nc)).ravel()
+        R2 = np.asarray(Wc @ (rho * Nc)).ravel() if Wc is not None else None
         # global native profile
         tot_clip = np.asarray(Xt.sum(0)).ravel() - (rho * Nc).sum() * a
         g = np.maximum(tot_clip, 0); g = (g + 1e-6) / (g + 1e-6).sum()
@@ -101,7 +103,13 @@ def mixture(ds, W, tau=10.0, iters=3, kappa=0.0, block=400):
             Sb -= R[s:e, None].astype(np.float32) * a[None, :]
             np.maximum(Sb, 0, out=Sb)
             Z = Sb.sum(1)
-            q = (Sb + tau * g[None, :]) / (Z[:, None] + tau)
+            if S2 is None:
+                tgt = g[None, :]
+            else:
+                P = S2[s:e].toarray() - R2[s:e, None].astype(np.float32) * a[None, :]
+                np.maximum(P, 0, out=P)
+                tgt = (P + 1e-6 * g[None, :]) / (P.sum(1)[:, None] + 1e-6)
+            q = (Sb + tau * tgt) / (Z[:, None] + tau)
             Xb = Xt[s:e]
             rows = np.repeat(np.arange(e - s), np.diff(Xb.indptr))
             cols = Xb.indices
@@ -119,11 +127,12 @@ def mixture(ds, W, tau=10.0, iters=3, kappa=0.0, block=400):
     return rho, rm, rh
 
 
-def latent_knn(ds, latent="pca", mode="knn", k=30, tau=10.0, iters=3, kappa=0.0, Z=None):
+def latent_knn(ds, latent="pca", mode="knn", k=30, tau=10.0, iters=3, kappa=0.0, Z=None, hier=False):
     if Z is None:
         Z = pca_latent(ds)
     W = cluster_weights(Z) if mode == "cluster" else knn_weights(Z, k)
-    return mixture(ds, W, tau=tau, iters=iters, kappa=kappa)
+    Wc = cluster_weights(Z) if (hier and mode == "knn") else None  # hier: kNN profile smoothed towards its cluster profile
+    return mixture(ds, W, tau=tau, iters=iters, kappa=kappa, Wc=Wc)
 
 
 def marker_oracle(ds, m):
