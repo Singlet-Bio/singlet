@@ -9,6 +9,40 @@ checked on 2026-10-25:
 
 A blank `n_cells` means the source does not state one.
 
+**Version 2026-10-25b: 50 rows (45 core, 1 development, 4 extended).** Changes since the first version:
+- Added on request from the capability sessions:
+  - howitt2023_bal1/2/3 and howitt2023_cl (HTO with genotype truth);
+  - kang2018_b1_a/b/c (held-out pools, true K = 4, 4, 8);
+  - hgmm1k_v2 (held-out barnyard; hgmm_5k_v3 FASTQs return 403);
+  - gsm5815984 (489M pairs, depth);
+  - gse145370_tcr, plus V(D)J on pbmc5p_v1;
+  - tenx_crispr_a549_5k;
+  - atac_pbmc_5k_nextgem;
+  - pbmc_multiome3k (tier `development`: the ATAC session tunes on it).
+- New column `data_kind`.
+- 10x software is not run: its published outputs are the comparator.
+
+## Real data only
+
+Zach's rule: every published claim rests on real data with real ground truth. A simulated or otherwise derived result
+may only supplement a real-data result that shows the same effect. `contract.py` enforces it (CONTRACT.md 3.1).
+
+`data_kind` per row:
+- `real`: reads as deposited, including read caps and format conversion (Kang is rebuilt from its BAM).
+- `derived`: real reads recombined or thinned.
+- `simulated`: none in this cohort.
+
+The two derived rows, and what corroborates them:
+- **mage150**: real MAGE RNA-seq reads, thinned to single-cell donor depth. Corroborated by:
+  - osorio2019_lcl_mix: a real pool of two 1000 Genomes individuals of different ancestry, run end to end through
+    Singlet's demultiplexing and per-donor ancestry;
+  - the real atlas donors with self-reported ancestry (docs/cell_annotation.md 5.2).
+  The thinned results only count because those real single-cell results agree with them.
+- **lcl_gse230239**: an in-silico pool of two real libraries. Corroborated by geo_sex21 (real samples, GEO sex) for sex,
+  and by osorio2019_lcl_mix for ancestry.
+
+The earlier ancestry simulation (docs/cell_annotation.md 5.1) is not used on the page.
+
 ## How datasets were chosen
 
 1. **Popular.** We prefer datasets that the competitors' own papers and tutorials report on: the 10x PBMC 1k/10k sets,
@@ -120,18 +154,22 @@ sessions. Add rows in `make_cohort.py` and regenerate.
 | mage150 (8M pairs x 150) | 1,200 | 362 (about 130 streamed) | 30.0 | 0.2 |
 | **total, 33 datasets** | | **1,147** | **226** (~3,600 core-h) | |
 
-**Wall clock: about 19 h at 12 concurrent 16-thread tasks** (longest-first list scheduling), plus about 1 h for the
+**Updated budget (50 rows, 10x software not run): 45 core datasets, 1,255 GB, 215 task-hours, about 18 h at 12 concurrent
+tasks.** The table below is the first version's; `python bench/public/cohort_plan.py --markdown` prints the current one.
+
+**Wall clock (first version): about 19 h at 12 concurrent 16-thread tasks** (longest-first list scheduling), plus about 1 h for the
 largest download. The extended tier adds 4 datasets and 26 task-hours (21 h in total).
 
 The cost model is in `cohort_plan.py`. Its coefficients are the pipeline-benchmark `time -v` measurements, rounded up.
-Cell Ranger is costed at 0.8 h per 100M read pairs. It can only run once Zach accepts the 10x EULA; without it, the
-10x-published matrices stand in, as in `docs/pipeline-validation.md`. The largest single tasks (hgmm10k, A375 CRISPR,
+10x software (Cell Ranger, ARC, ATAC, vdj, Space Ranger) is not run. The outputs 10x published with each dataset are
+the comparator, with their version and source URL recorded (Zach, 2026-10-25). The largest single tasks (hgmm10k, A375 CRISPR,
 multiome) take under 6.5 h, so they need the `cpu` partition or a read cap to fit `short-cpu`'s 4 h limit.
 
 ## Known gaps and decisions
 
-- **Visium human lymph node** has no public reads ("to maintain donor anonymity"), so mouse brain is the spatial core.
-  Singlet's four campaign Visium BAMs (`docs/pipeline-validation.md`) can be added by the spatial session.
+- **Visium human lymph node** has no public reads ("to maintain donor anonymity"). Zach: pick another Visium dataset
+  with reads. visium_mouse_brain_ant is in the cohort; the spatial session is choosing a human Visium set with public
+  FASTQs and published Space Ranger outputs, to be added as a row.
 - **No public pooled scRNA-seq of many 1000 Genomes individuals exists.** Ancestry therefore uses three sources:
   - **MAGE** (Taylor et al. 2024): bulk RNA-seq of 731 1000 Genomes LCLs from all 26 populations, of which we use 150 (30
     per super-population, sex-balanced). Reads are thinned to single-cell donor depths.
