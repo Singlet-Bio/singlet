@@ -827,14 +827,26 @@ inline ExportStats export_results(const PileupEngine& engine,
         auto t_amb0 = std::chrono::high_resolution_clock::now();
         const bool amb_has_int = pileup_cfg.count_introns && intron_csc.data.size() > 0
                                  && intron_csc.ncols == exon_csc.ncols;
-        auto amb_gene_csc = amb_has_int
-            ? collapse_to_gene_counts(exon_csc, intron_csc, engine.gene_model())
-            : collapse_exon_to_gene(exon_csc, engine.gene_model());
         singlet::AmbientDecontConfig amb_cfg;
         amb_cfg.lower_umi = export_cfg.lower_umi;
         amb_cfg.threads = export_cfg.threads > 1 ? static_cast<uint32_t>(export_cfg.threads) : 0u;
-        auto amb = singlet::correct_ambient_gene_level(amb_gene_csc, cc_result.cell_indices, amb_cfg);
-        amb_gene_csc = decltype(amb_gene_csc)();  // release the all-barcode gene matrix
+        // Exon and intron gene counts enter as separate features (the soup is exon-rich, cells are 20-30% intronic);
+        // contamination is estimated from the exon features, the correction acts on both and is folded back to genes.
+        auto amb_exon_gene = collapse_exon_to_gene(exon_csc, engine.gene_model());
+        singlet::AmbientCorrectionResult amb;
+        if (amb_has_int) {
+            auto amb_intron_gene = [&]() {
+                // intron-only gene collapse = collapse of (no exon counts, intron counts)
+                std::decay_t<decltype(exon_csc)> zero_exon;
+                zero_exon.nrows = exon_csc.nrows; zero_exon.ncols = exon_csc.ncols;
+                zero_exon.indptr.assign(static_cast<size_t>(exon_csc.ncols) + 1, 0);
+                return collapse_to_gene_counts(zero_exon, intron_csc, engine.gene_model());
+            }();
+            amb = singlet::correct_ambient_gene_level_split(amb_exon_gene, amb_intron_gene, cc_result.cell_indices, amb_cfg);
+        } else {
+            amb = singlet::correct_ambient_gene_level(amb_exon_gene, cc_result.cell_indices, amb_cfg);
+        }
+        amb_exon_gene = decltype(amb_exon_gene)();  // release the all-barcode gene matrix
         {
             const auto& ids = engine.gene_ids();
             const auto& gnames = engine.gene_names();

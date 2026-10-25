@@ -204,6 +204,32 @@ int main() {
         CHECK(Rn.corrected.data == N.counts.data && Rn.corrected.indices == N.counts.indices, "no ambient pool -> counts unchanged");
     }
 
+    // exon / intron split API: intron = a third of every exon count (same ambient shape); result folds back to genes
+    {
+        CSCu32 I = S.counts;
+        for (auto& v : I.data) v = (v + 2) / 3;
+        AmbientCorrectionResult Rs = correct_ambient_gene_level_split(S.counts, I, S.cell_idx, cfg);
+        CHECK(Rs.ok && Rs.corrected.nrows == G && Rs.corrected.ncols == S.counts.ncols, "split API: genes x barcodes result");
+        std::vector<double> es;
+        for (const auto& c : Rs.contam) es.push_back(c.rho);
+        CHECK(pearson(es, tru) > 0.85, "split API: rho tracks the truth");
+        bool tot_ok = true, empty_ok = true;
+        for (size_t i = 0; i < S.cell_idx.size(); ++i) {
+            const uint32_t b = S.cell_idx[i];
+            uint64_t so = 0, sc = 0;
+            for (int32_t k = S.counts.indptr[b]; k < S.counts.indptr[b + 1]; ++k) so += S.counts.data[k];
+            for (int32_t k = I.indptr[b]; k < I.indptr[b + 1]; ++k) so += I.data[k];
+            for (int32_t k = Rs.corrected.indptr[b]; k < Rs.corrected.indptr[b + 1]; ++k) sc += Rs.corrected.data[k];
+            if (so - sc != Rs.contam[i].n_removed) tot_ok = false;
+        }
+        for (uint32_t b = 0; b < Rs.corrected.ncols; ++b)
+            if (!is_cell[b] && Rs.corrected.indptr[b + 1] != Rs.corrected.indptr[b]) empty_ok = false;
+        CHECK(tot_ok, "split API: folded integer totals equal N - n_removed");
+        CHECK(empty_ok, "split API: non-called barcodes empty");
+        double fs = 0; for (double f : Rs.profile.gene_fractions) fs += f;
+        CHECK(Rs.profile.gene_fractions.size() == G && std::fabs(fs - 1.0) < 1e-9, "split API: folded profile sums to 1");
+    }
+
     // tiny input (< 40 cells -> single cluster) does not crash
     {
         Synth T = make_synth(true, 5);

@@ -39,6 +39,7 @@ int main(int argc, char** argv) {
     if (argc > 11) cfg.use_off_estimator = std::stoi(argv[11]) != 0;
     if (argc > 12) cfg.off_prior_reads = std::stod(argv[12]);
     if (argc > 13) cfg.marker_fold = std::stod(argv[13]);
+    if (argc > 14) cfg.low_depth_frac = std::stod(argv[14]);
     size_t G, B, nnz, nc;
     { std::ifstream d(in + "/dims.txt"); d >> G >> B >> nnz >> nc; }
     auto t_load0 = std::chrono::steady_clock::now();
@@ -51,7 +52,29 @@ int main(int argc, char** argv) {
     M.indptr.assign(indptr.begin(), indptr.end());
     M.indices = std::move(indices); M.data = std::move(data);
     double t_load = std::chrono::duration<double>(std::chrono::steady_clock::now() - t_load0).count();
-    auto R = singlet::correct_ambient_gene_level(M, cells, cfg);
+    const std::string split_mode = argc > 15 ? argv[15] : "";   // "wrap": rows [0,G/2) exon, [G/2,G) intron -> split API
+    singlet::AmbientCorrectionResult R;
+    if (split_mode == "wrap") {
+        const uint32_t h = static_cast<uint32_t>(G / 2);
+        singlet::CSCu32 E, I;
+        E.nrows = I.nrows = h; E.ncols = I.ncols = M.ncols;
+        E.indptr.assign(B + 1, 0); I.indptr.assign(B + 1, 0);
+        for (size_t b = 0; b < B; ++b) {
+            for (int32_t k = M.indptr[b]; k < M.indptr[b + 1]; ++k) {
+                if (static_cast<uint32_t>(M.indices[k]) < h) { E.indices.push_back(M.indices[k]); E.data.push_back(M.data[k]); }
+                else { I.indices.push_back(M.indices[k] - static_cast<int32_t>(h)); I.data.push_back(M.data[k]); }
+            }
+            E.indptr[b + 1] = static_cast<int32_t>(E.indices.size()); I.indptr[b + 1] = static_cast<int32_t>(I.indices.size());
+        }
+        R = singlet::correct_ambient_gene_level_split(E, I, cells, cfg);
+    } else if (split_mode == "est_exon_half") {
+        cfg.estimate_features.assign(G, 0);
+        std::fill(cfg.estimate_features.begin(), cfg.estimate_features.begin() + G / 2, 1);
+        R = singlet::correct_ambient_gene_level(M, cells, cfg);
+    } else {
+        R = singlet::correct_ambient_gene_level(M, cells, cfg);
+    }
+    { std::ofstream nr(out + "/corr.nrows"); nr << R.corrected.nrows << '\n'; }
     std::cerr << "[harness] load=" << t_load << "s estimate+correct=" << R.seconds << "s clusters=" << R.n_clusters
               << " mean_rho=" << R.mean_rho << " median_rho=" << R.median_rho << " umi_weighted=" << R.umi_weighted_rho
               << " pool=" << R.profile.n_ambient_barcodes << "/" << static_cast<uint64_t>(R.profile.total_ambient_umi) << "\n";

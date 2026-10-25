@@ -75,6 +75,7 @@ struct CellContamination {
     uint32_t cluster      = 0;    ///< cluster of the cell
     uint32_t n_umi        = 0;    ///< observed UMIs (gene level)
     uint32_t n_removed    = 0;    ///< integer ambient UMIs removed in the corrected matrix
+    double   rho_total    = 0.0;  ///< ambient fraction of ALL the cell's UMIs (== rho unless the split exon/intron API ran)
 };
 
 // ── Ambient profile estimation ───────────────────────────────────────────────
@@ -163,6 +164,10 @@ struct AmbientDecontConfig {
     double   min_off_mass  = 0.01;      ///< min ambient mass of the off-gene set for the off-gene estimator
     double   off_prior_reads = 5.0;     ///< Gamma-prior pseudo-reads of the off-gene estimator (mean = c_k)
     double   outlier_z     = 5.0;       ///< robust z (MAD) of that cut; also requires rho > 2x the cluster median
+    std::vector<char> estimate_features;///< optional: features allowed to inform c_k / rho (empty = all); clustering, the
+                                        ///< native profiles and the correction always use every feature
+    double   low_depth_frac = 0.1;      ///< cells below this fraction of the median depth (the ambient-like barcodes a
+                                        ///< permissive cell caller keeps) are kept out of clustering and cluster statistics
     uint32_t cell_iters       = 30;     ///< per-cell EM iterations
     uint32_t threads          = 0;      ///< 0 = hardware_concurrency (results do not depend on it)
 };
@@ -173,6 +178,8 @@ struct AmbientCorrectionResult {
     CSCu32                         corrected;       ///< genes x all barcodes; non-empty columns only for called cells
     std::vector<double>            cluster_rho;     ///< c_k per cluster
     uint32_t n_clusters            = 0;
+    double   exon_profile_share    = 0.0;           ///< split API: share of the soup that is exon-derived
+    uint32_t n_low_depth_cells     = 0;             ///< cells below low_depth_frac x median depth (kept out of the fits)
     uint32_t n_outlier_cells       = 0;             ///< cells left out of the cluster statistics (doublet-like rho)
     uint32_t n_genes_detected_pool = 0;             ///< genes with >= 1 UMI in the ambient pool
     double   mean_rho              = 0.0;
@@ -440,18 +447,52 @@ inline void decontx_ambient_core(const ambient_detail::CellMat& X, const std::ve
     const size_t n = X.n_cells, G = X.n_genes;
     unsigned thr = cfg.threads ? cfg.threads : std::max(1u, std::thread::hardware_concurrency());
 
+    // Core / low-depth split: barcodes far below the typical cell depth look like soup and would form their own
+    // "native" profile, so clusters and cluster statistics come from the core cells only; low-depth cells are attached
+    // to the most likely cluster afterwards and get their own rho.
+    std::vector<char> low(n, 0);
+    size_t n_low = 0;
+    if (cfg.low_depth_frac > 0.0 && n >= 80) {
+        std::vector<double> t(X.tot);
+        std::nth_element(t.begin(), t.begin() + static_cast<std::ptrdiff_t>(n / 2), t.end());
+        const double floor_depth = cfg.low_depth_frac * t[n / 2];
+        for (size_t j = 0; j < n; ++j) if (X.tot[j] < floor_depth) { low[j] = 1; ++n_low; }
+        if (n - n_low < 40) { std::fill(low.begin(), low.end(), 0); n_low = 0; }
+    }
+    R.n_low_depth_cells = static_cast<uint32_t>(n_low);
+
     uint32_t K = 1;
-    std::vector<uint32_t> cl = quick_cluster(X, cfg, thr, K);
+    std::vector<uint32_t> cl(n, 0);
+    if (n_low == 0) {
+        cl = quick_cluster(X, cfg, thr, K);
+    } else {
+        CellMat Xc;
+        Xc.n_genes = X.n_genes;
+        std::vector<uint32_t> core;
+        Xc.ptr.push_back(0);
+        for (size_t j = 0; j < n; ++j) {
+            if (low[j]) continue;
+            core.push_back(static_cast<uint32_t>(j));
+            Xc.gene.insert(Xc.gene.end(), X.gene.begin() + static_cast<std::ptrdiff_t>(X.ptr[j]), X.gene.begin() + static_cast<std::ptrdiff_t>(X.ptr[j + 1]));
+            Xc.val.insert(Xc.val.end(), X.val.begin() + static_cast<std::ptrdiff_t>(X.ptr[j]), X.val.begin() + static_cast<std::ptrdiff_t>(X.ptr[j + 1]));
+            Xc.ptr.push_back(Xc.gene.size());
+            Xc.tot.push_back(X.tot[j]);
+        }
+        Xc.n_cells = static_cast<uint32_t>(core.size());
+        const std::vector<uint32_t> clc = quick_cluster(Xc, cfg, thr, K);
+        for (size_t i = 0; i < core.size(); ++i) cl[core[i]] = clc[i];
+    }
     R.n_clusters = K;
 
-    // per-cluster membership (cells in ascending order -> fixed summation order)
+    // per-cluster membership of the core cells (ascending order -> fixed summation order)
     std::vector<std::vector<uint32_t>> members(K);
-    for (size_t j = 0; j < n; ++j) members[cl[j]].push_back(static_cast<uint32_t>(j));
+    for (size_t j = 0; j < n; ++j) if (!low[j]) members[cl[j]].push_back(static_cast<uint32_t>(j));
 
     // cluster contamination c_k and native profile phi (gene-major: phi[g * K + k]); cells with use[j] == 0 are
     // left out of the cluster statistics (outlier round) but are still corrected with them.
     std::vector<double> ck(K, 0.0), phi(G * K, 0.0), rho(n, 0.0), offA(K, 0.0);
-    std::vector<char> use(n, 1), offmask(G * K, 0);   // offmask[g * K + k]: gene g is "not expressed" in cluster k
+    std::vector<char> use(n, 1), offmask(G * K, 0);
+    for (size_t j = 0; j < n; ++j) if (low[j]) use[j] = 0;   // offmask[g * K + k]: gene g is "not expressed" in cluster k
     std::vector<std::vector<double>> nkv(K);
     std::vector<double> Nkv(K, 0.0), inflv(K, 1.0);
     auto fit_clusters = [&]() {
@@ -495,10 +536,12 @@ inline void decontx_ambient_core(const ambient_detail::CellMat& X, const std::ve
             const double Nk = Nkv[k], infl = inflv[k];
             std::vector<char> mask(G, 0);
             double Aeff = 0.0;
+            const bool est_all = cfg.estimate_features.size() != G;
             for (size_t g = 0; g < G; ++g)
-                if (n_strong[g] - strong[g * K + k] > 0) { mask[g] = 1; Aeff += a[g]; }
+                if (n_strong[g] - strong[g * K + k] > 0 && (est_all || cfg.estimate_features[g])) { mask[g] = 1; Aeff += a[g]; }
             const bool have_mask = K > 1 && cfg.use_off_estimator && Aeff >= cfg.min_off_mass;
-            const double c = cluster_contamination(nk, Nk, infl, a, cfg, have_mask ? &mask : nullptr);
+            const double c = cluster_contamination(nk, Nk, infl, a, cfg,
+                                                   have_mask ? &mask : (est_all ? nullptr : &cfg.estimate_features));
             ck[k] = c;
             double tot = 0.0, A = 0.0;
             for (size_t g = 0; g < G; ++g) {
@@ -550,6 +593,23 @@ inline void decontx_ambient_core(const ambient_detail::CellMat& X, const std::ve
         });
     };
     fit_clusters();
+    if (n_low > 0) {
+        // attach each low-depth cell to the cluster whose mixture (1 - c_k) phi_k + c_k a explains its counts best
+        parallel_for(n, thr, [&](size_t j) {
+            if (!low[j]) return;
+            double best = -std::numeric_limits<double>::max();
+            uint32_t bk = 0;
+            for (uint32_t k = 0; k < K; ++k) {
+                double ll = 0.0;
+                for (size_t e = X.ptr[j]; e < X.ptr[j + 1]; ++e) {
+                    const uint32_t g = X.gene[e];
+                    ll += X.val[e] * std::log((1.0 - ck[k]) * phi[static_cast<size_t>(g) * K + k] + ck[k] * a[g]);
+                }
+                if (ll > best) { best = ll; bk = k; }
+            }
+            cl[j] = bk;
+        });
+    }
     fit_cells();
     // Outlier round: a doublet or damaged cell whose "ambient" fraction is far above its cluster's would drag the
     // cluster's c_k up and pollute its native profile. Flag cells with rho >> cluster median (robust z), refit without them.
@@ -727,6 +787,90 @@ inline AmbientCorrectionResult correct_ambient_gene_level(
     return R;
 }
 
+/// Exon and intron gene counts as separate features: the ambient profile, clusters, native profiles and the correction use
+/// both (the soup's intron share differs from a cell's), while c_k / rho are estimated from exon features only (cross-species
+/// or off-cluster intronic reads track nuclear content, not soup). Returns the result folded back to genes: corrected
+/// = exon part + intron part (still integer), profile = exon + intron fractions (sums to 1).
+/// @param exon_genes, intron_genes  genes x barcodes (same shape), e.g. collapse_exon_to_gene() / intron_to_gene()
+template <class CSC>
+inline AmbientCorrectionResult correct_ambient_gene_level_split(
+    const CSC& exon_genes, const CSC& intron_genes,
+    const std::vector<uint32_t>& cell_indices,
+    AmbientDecontConfig cfg = AmbientDecontConfig())
+{
+    const uint32_t G = exon_genes.nrows, B = exon_genes.ncols;
+    if (intron_genes.ncols != B || intron_genes.nrows != G || intron_genes.data.empty())
+        return correct_ambient_gene_level(exon_genes, cell_indices, cfg);
+    CSCu32 S;
+    S.nrows = 2 * G; S.ncols = B;
+    S.indptr.assign(static_cast<size_t>(B) + 1, 0);
+    S.indices.reserve(exon_genes.indices.size() + intron_genes.indices.size());
+    S.data.reserve(exon_genes.data.size() + intron_genes.data.size());
+    for (uint32_t b = 0; b < B; ++b) {
+        for (int32_t k = exon_genes.indptr[b]; k < exon_genes.indptr[b + 1]; ++k) {
+            S.indices.push_back(exon_genes.indices[k]);
+            S.data.push_back(static_cast<uint32_t>(exon_genes.data[k]));
+        }
+        for (int32_t k = intron_genes.indptr[b]; k < intron_genes.indptr[b + 1]; ++k) {
+            S.indices.push_back(static_cast<int32_t>(G) + intron_genes.indices[k]);
+            S.data.push_back(static_cast<uint32_t>(intron_genes.data[k]));
+        }
+        S.indptr[static_cast<size_t>(b) + 1] = static_cast<int32_t>(S.indices.size());
+    }
+    cfg.estimate_features.assign(2 * static_cast<size_t>(G), 0);
+    std::fill(cfg.estimate_features.begin(), cfg.estimate_features.begin() + G, 1);
+    AmbientCorrectionResult R = correct_ambient_gene_level(S, cell_indices, cfg);
+    // fold 2G -> G
+    for (uint32_t g = 0; g < G && !R.profile.gene_fractions.empty(); ++g) R.exon_profile_share += R.profile.gene_fractions[g];
+    if (!R.profile.gene_fractions.empty()) {
+        for (uint32_t g = 0; g < G; ++g) R.profile.gene_fractions[g] += R.profile.gene_fractions[G + g];
+        R.profile.gene_fractions.resize(G);
+    }
+    CSCu32 F;
+    F.nrows = G; F.ncols = B;
+    F.indptr.assign(static_cast<size_t>(B) + 1, 0);
+    std::vector<uint32_t> acc(G, 0);
+    std::vector<uint32_t> touched;
+    for (uint32_t b = 0; b < B; ++b) {
+        for (int32_t k = R.corrected.indptr[b]; k < R.corrected.indptr[b + 1]; ++k) {
+            const uint32_t g = static_cast<uint32_t>(R.corrected.indices[k]) % G;
+            if (acc[g] == 0) touched.push_back(g);
+            acc[g] += R.corrected.data[k];
+        }
+        std::sort(touched.begin(), touched.end());
+        for (uint32_t g : touched) { F.indices.push_back(static_cast<int32_t>(g)); F.data.push_back(acc[g]); acc[g] = 0; }
+        touched.clear();
+        F.indptr[static_cast<size_t>(b) + 1] = static_cast<int32_t>(F.indices.size());
+    }
+    R.corrected = std::move(F);
+    // Report rho on the exon scale (the scale of gene-count matrices and of cross-species truth): ambient exon UMIs
+    // over exon UMIs = rho_total * N_total * (exon share of the soup) / N_exon. rho_total stays in the record.
+    if (R.ok) {
+        double aex = 0.0;
+        // profile was folded (exon + intron); recompute the exon share from the unfolded stack's first half
+        aex = R.exon_profile_share;
+        std::vector<double> exon_umis(R.contam.size(), 0.0);
+        for (size_t i = 0; i < cell_indices.size(); ++i) {
+            const uint32_t b = cell_indices[i];
+            if (b >= B) continue;
+            for (int32_t k = exon_genes.indptr[b]; k < exon_genes.indptr[b + 1]; ++k) exon_umis[i] += static_cast<double>(exon_genes.data[k]);
+        }
+        double sum = 0.0;
+        std::vector<double> rhos;
+        for (size_t i = 0; i < R.contam.size(); ++i) {
+            auto& c = R.contam[i];
+            c.rho_total = c.rho;
+            if (exon_umis[i] > 0 && c.n_umi > 0)
+                c.rho = std::min(cfg.rho_max, c.rho_total * static_cast<double>(c.n_umi) * aex / exon_umis[i]);
+            sum += c.rho; rhos.push_back(c.rho);
+        }
+        R.mean_rho = sum / static_cast<double>(R.contam.size());
+        std::nth_element(rhos.begin(), rhos.begin() + static_cast<std::ptrdiff_t>(rhos.size() / 2), rhos.end());
+        R.median_rho = rhos[rhos.size() / 2];
+    }
+    return R;
+}
+
 // ── Legacy exon-level depth estimator ───────────────────────────────────────────
 
 /// Estimate contamination fraction rho per cell using the depth-based model (legacy, no gene information):
@@ -862,7 +1006,7 @@ inline void write_contamination_tsv(
         std::cerr << "[ambient] ERROR: cannot write " << outpath << "\n";
         return;
     }
-    out << "barcode\trho\tn_genes_used\tcluster\tn_umi\tn_ambient_umi_removed\n";
+    out << "barcode\trho\tn_genes_used\tcluster\tn_umi\tn_ambient_umi_removed\trho_total\n";
     const size_t n = std::min(contam.size(), cell_indices.size());
     for (size_t i = 0; i < n; ++i) {
         const uint32_t bc = cell_indices[i];
@@ -872,7 +1016,8 @@ inline void write_contamination_tsv(
             << contam[i].n_genes_used << '\t'
             << contam[i].cluster      << '\t'
             << contam[i].n_umi        << '\t'
-            << contam[i].n_removed    << '\n';
+            << contam[i].n_removed    << '\t'
+            << (contam[i].rho_total > 0.0 ? contam[i].rho_total : contam[i].rho) << '\n';
     }
 }
 
@@ -896,6 +1041,7 @@ inline void write_ambient_json(const std::string& outpath, const AmbientCorrecti
       << "  \"n_cells\": " << R.contam.size() << ",\n"
       << "  \"n_clusters\": " << R.n_clusters << ",\n"
       << "  \"n_outlier_cells\": " << R.n_outlier_cells << ",\n"
+      << "  \"n_low_depth_cells\": " << R.n_low_depth_cells << ",\n"
       << "  \"umis_observed\": " << R.umis_observed << ",\n"
       << "  \"umis_removed\": " << R.umis_removed << ",\n"
       << "  \"ambient_profile_n_barcodes\": " << R.profile.n_ambient_barcodes << ",\n"
