@@ -171,5 +171,40 @@ def compute(artifact_dir: Path) -> dict:
         "reproduce": {"module": "bench/public/capabilities/cell_type.py", "function": "compute", "laptop_minutes": 10,
                       "clipper_command": "see docs/celltype_nn.md section 9 (scripts/celltype_nn/compete/*.sbatch)"},
         "caveats": prov.get("caveats", []),
+        "reach": REACH,
     }
-    return C.finalize(doc)
+    doc = C.finalize(doc)
+    # quality against cost: resources[].tool names are the same as the metrics' tool names
+    for mid in ("accuracy_depth2", "call_wrong_rate"):
+        if any(m["id"] == mid for m in doc["metrics"]):
+            doc["figures"].append(C.pareto_figure(doc, mid, DATASET, "cpu_h"))
+    return doc
+
+
+# what each tool can produce at all (contract 1.1 reach panel)
+_OUT = [
+    ("Cell Ontology label per cell", dict(singlet="yes", CellTypist="yes", scANVI="yes", Seurat="yes", SingleR="yes")),
+    ("calibrated probability of the label", dict(singlet="yes", CellTypist="partial", scANVI="partial", Seurat="partial", SingleR="no")),
+    ("backs off to a parent term when unsure", dict(singlet="yes", CellTypist="no", scANVI="no", Seurat="no", SingleR="partial")),
+    ("probability over every Cell Ontology term, rolled up the ontology", dict(singlet="yes", CellTypist="partial", scANVI="partial",
+                                                                              Seurat="partial", SingleR="no")),
+    ("labels a new sample without retraining or a reference at query time", dict(singlet="yes", CellTypist="yes", scANVI="no",
+                                                                                 Seurat="no", SingleR="no")),
+    ("runs on CPU at atlas scale (under 1 CPU-hour per million cells)", dict(singlet="yes", CellTypist="yes", scANVI="no", Seurat="no",
+                                                                             SingleR="no")),
+]
+_NOTES = {
+    ("calibrated probability of the label", "CellTypist"): "logistic-regression probability, ECE 0.36 on cxg16",
+    ("calibrated probability of the label", "scANVI"): "soft prediction, ECE 0.51 on cxg16",
+    ("calibrated probability of the label", "Seurat"): "prediction.score.max, ECE 0.14 on cxg16",
+    ("backs off to a parent term when unsure", "SingleR"): "pruned.labels: abstains (no label), never names the parent",
+    ("probability over every Cell Ontology term, rolled up the ontology", "CellTypist"): "flat probabilities over its labels, no ontology roll-up",
+    ("probability over every Cell Ontology term, rolled up the ontology", "scANVI"): "flat probabilities over its labels, no ontology roll-up",
+    ("probability over every Cell Ontology term, rolled up the ontology", "Seurat"): "flat prediction scores over its labels",
+    ("labels a new sample without retraining or a reference at query time", "scANVI"): "scArches query training per sample",
+    ("labels a new sample without retraining or a reference at query time", "Seurat"): "anchors computed against the reference per sample",
+    ("labels a new sample without retraining or a reference at query time", "SingleR"): "correlates every cell with the reference",
+    ("runs on CPU at atlas scale (under 1 CPU-hour per million cells)", "scANVI"): "needs a GPU in practice; about 5 GPU-hours per million cells here (query training per sample)",
+}
+REACH = [dict(tool=t, output=o, supported=v, **({"note": _NOTES[(o, t)]} if (o, t) in _NOTES else {}))
+         for o, d in _OUT for t, v in d.items()]
