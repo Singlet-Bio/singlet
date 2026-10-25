@@ -155,3 +155,158 @@ Hyperparameters were chosen on the validation collections only. The sweep covere
 
 Rank with the wider network gave the best roll-up consistency at the same call depth (0.814 at depth 8.0, against 0.801 for
 the log baseline).
+
+## 5. Evaluation on Singlet's counts (phase 3)
+
+**Setup.** This is the benchmark of `docs/cell_annotation.md` section 3: the same 16 studies and 66 samples, 291,331 cells with
+author labels transferred by barcode, none of them in the training corpus (section 3).
+- Every method is scored on Singlet's own counts (exon + intron, as served) with `singlet.celllabels.evaluate` on the full
+  guide: depth-d accuracy, and the exact / coarse / finer / wrong fractions.
+- Means are over studies; each study pools its samples' cells.
+- The guide was rerun in the same harness, which gives 0.838/0.734/0.420/0.320 and wrong 0.336. The published figures
+  (0.842/0.747/0.428/0.320, 0.350) come from a different per-sample aggregation; the comparison below is like for like.
+- Commands: `bench.py` (one job per study for the members), then `bench_summary.py`.
+
+**Network.** `m1_notissue`: Census author terms plus ensemble refinements, rank inputs, augmentation, no tissue context.
+`network, τ` is the most specific term whose rolled-up probability is at least τ; the published call (`cell_type_cl`) uses
+τ = 0.5.
+
+| method | d1 | d2 | d3 | d4 | consistent | wrong | CL consistent | ECE |
+|---|---|---|---|---|---|---|---|---|
+| guide (bar to beat) | 0.838 | 0.734 | 0.420 | 0.320 | 0.582 | 0.336 | 0.501 | |
+| SingleR-style member | 0.877 | 0.741 | 0.380 | 0.428 | 0.634 | 0.344 | 0.475 | |
+| CellTypist member (crosswalk) | 0.277 | 0.202 | 0.082 | 0.085 | 0.180 | 0.220 | 0.601 | |
+| vote of the three members | 0.728 | 0.615 | 0.300 | 0.271 | 0.580 | 0.189 | 0.765 | |
+| **network, τ = 0.3** | **0.895** | **0.740** | 0.405 | **0.465** | 0.632 | 0.345 | 0.619 | |
+| network, τ = 0.4 | 0.850 | 0.698 | 0.372 | 0.409 | 0.619 | 0.298 | 0.682 | |
+| **network, τ = 0.5 (published call)** | 0.825 | 0.654 | 0.333 | 0.360 | **0.638** | **0.251** | 0.732 | 0.079 |
+| network, τ = 0.7 | 0.765 | 0.551 | 0.252 | 0.267 | 0.651 | 0.167 | 0.796 | |
+| network, argmax | 0.903 | 0.744 | 0.418 | 0.498 | 0.619 | 0.374 | 0.587 | |
+| network on exon-only counts | 0.798 | 0.607 | 0.297 | 0.340 | 0.633 | 0.227 | 0.750 | 0.102 |
+
+- **Against the bar.**
+  - At τ = 0.3 the network has the guide's error rate (0.345 against 0.336). At that rate it is ahead at depth 1 (+0.057),
+    depth 2 (+0.006) and depth 4 (+0.145), and 0.015 behind at depth 3.
+  - At τ = 0.5 it makes a quarter fewer wrong calls (0.251 against 0.336) and is more often consistent with the author
+    (0.638 against 0.582). It is 0.08-0.09 behind at depths 2-3, because it stops at the parent where it is unsure.
+  - The probability lets a user choose a point on this curve; the guide offers only one point.
+- **CellTypist** is weak alone: its crosswalk maps many labels to coarse terms, and many of those terms fall outside the
+  guide's nodes. Its value is as a voter.
+- **The SingleR-style member** is the strongest single member on Singlet's counts.
+- **Exon-only counts** cost 0.02-0.05 at every depth, about what the guide loses. Intronic reads still help.
+
+**Calibration** (the τ = 0.5 call: its rolled-up probability against "the truth lies inside the call's subtree"; 242,045
+checkable cells; ECE 0.079):
+
+| probability | cells | mean probability | observed |
+|---|---|---|---|
+| 0.5-0.6 | 84,378 | 0.542 | 0.697 |
+| 0.6-0.7 | 43,063 | 0.647 | 0.740 |
+| 0.7-0.8 | 32,338 | 0.748 | 0.739 |
+| 0.8-0.9 | 35,466 | 0.855 | 0.846 |
+| 0.9-1.0 | 47,800 | 0.941 | 0.970 |
+
+Above 0.7 the probability is right to within 0.03. Below 0.7 it is conservative: the true rate is higher than stated. The
+author-only model (`sweep_s6`) reached ECE 0.038 on the same benchmark, so the ensemble targets cost some calibration under
+the shift to Singlet's counts. On the validation collections the ECE is 0.021.
+
+**Per study** (d1/d2/d3, wrong in brackets):
+
+| study | tissue | cells | guide | SingleR-style | network τ = 0.5 | network τ = 0.3 |
+|---|---|---|---|---|---|---|
+| GSE125970 | colon / rectum / ileum epithelium | 8,809 | 1.00/0.79/0.15 (0.83) | 1.00/0.90/0.22 (0.78) | 1.00/0.93/0.19 (0.69) | 1.00/0.96/0.23 (0.73) |
+| GSE130973 | skin | 7,164 | 0.95/0.94/0.34 (0.26) | 0.92/0.87/0.31 (0.23) | 0.96/0.94/0.33 (0.20) | 0.97/0.96/0.41 (0.25) |
+| GSE131882 | kidney cortex, snRNA | 13,633 | 0.85/0.85/0.76 (0.16) | 1.00/0.99/0.90 (0.10) | 0.99/1.00/0.67 (0.10) | 1.00/1.00/0.71 (0.11) |
+| GSE144870 | thymus, Lin-CD34+ | 71,466 | 1.00/0.88/0.16 (0.57) | 1.00/0.97/0.30 (0.11) | 0.99/0.22/0.01 (0.24) | 0.99/0.53/0.01 (0.45) |
+| GSE157480 | mouse marrow / brain | 3,000 | 0.96/0.90/0.84 (0.15) | 0.96/0.95/0.81 (0.23) | 1.00/0.99/0.76 (0.19) | 1.00/0.99/0.81 (0.26) |
+| GSE161089 | airway basal cells | 4,970 | 1.00/-/- (0.00) | 0.99/-/- (0.00) | 0.63/-/- (0.00) | 0.98/-/- (0.00) |
+| GSE164291 | fallopian tube (species mix-up) | 5,467 | 0.18/0.18/0.10 (0.03) | 0.22/0.17/0.09 (0.83) | 0.18/0.17/0.10 (0.03) | 0.72/0.18/0.10 (0.27) |
+| GSE166766 | bronchial epithelium, culture | 49,280 | 1.00/0.92/0.53 (0.27) | 0.90/0.34/0.20 (0.18) | 0.90/0.27/0.16 (0.04) | 0.99/0.56/0.32 (0.21) |
+| GSE184111 | ureter | 23,935 | 0.98/0.86/0.55 (0.33) | 0.90/0.85/0.34 (0.30) | 0.95/0.49/0.19 (0.14) | 0.90/0.70/0.33 (0.30) |
+| GSE185222 | dental pulp | 4,686 | 0.35/0.64/0.52 (0.74) | 0.63/0.68/0.57 (0.43) | 0.36/0.70/0.57 (0.73) | 0.37/0.70/0.60 (0.74) |
+| GSE185224 | small intestine | 10,716 | 1.00/0.91/0.69 (0.26) | 1.00/0.91/0.59 (0.39) | 0.99/0.88/0.56 (0.16) | 1.00/0.93/0.67 (0.24) |
+| GSE185477 | liver | 1,545 | 0.89/0.88/0.45 (0.66) | 0.95/0.94/0.45 (0.71) | 0.95/0.94/0.42 (0.56) | 0.96/0.95/0.45 (0.70) |
+| GSE201773 | mouse ependyma | 4,133 | 0.67/0.26/0.25 (0.52) | 0.78/0.50/0.14 (0.70) | 0.71/0.14/0.04 (0.62) | 0.76/0.17/0.03 (0.83) |
+| GSE260685 | ovary | 19,380 | 0.80/0.43/0.15 (0.06) | 0.93/0.47/0.09 (0.07) | 0.71/0.36/0.07 (0.02) | 0.75/0.61/0.21 (0.07) |
+| GSE270225 | bladder | 28,365 | 0.90/0.77/0.18 (0.21) | 0.89/0.74/0.13 (0.18) | 0.91/0.81/0.30 (0.07) | 0.95/0.88/0.45 (0.11) |
+| GSE280852 | liver | 21,145 | 0.88/0.80/0.62 (0.32) | 0.98/0.83/0.56 (0.26) | 0.98/0.96/0.63 (0.21) | 0.98/0.97/0.75 (0.27) |
+
+The network beats the guide in bladder (where the guide fails on ambient smooth muscle), liver, skin, colon and kidney. It is
+far behind in two places:
+- **Thymic progenitors (GSE144870).** On the authors' own matrix of these cells, the network's argmax gets depth 2/3 =
+  0.98/0.93 (section 6). The loss is therefore reprocessing, not knowledge. The rank-correlation member is robust to that
+  shift; the network is not yet.
+- **Cultured bronchial epithelium (GSE166766).** On the authors' matrix the network is no better (argmax depth 2 0.73).
+  Census has few cultured airway cells, so this is a corpus gap.
+
+## 6. Same cells, two processings
+
+The network was run on the CELLxGENE author matrices of the benchmark cells (`bench_cxg.py`: raw counts from `raw.X`, the
+same cells by barcode core and label). Model `m1`:
+
+| counts | d1 | d2 | d3 | d4 | wrong |
+|---|---|---|---|---|---|
+| authors' matrices, τ = 0.5 | 0.883 | 0.654 | 0.369 | 0.292 | 0.229 |
+| authors' matrices, argmax | 0.897 | 0.736 | 0.493 | 0.440 | 0.347 |
+| Singlet's counts, τ = 0.5 | 0.799 | 0.606 | 0.323 | 0.357 | 0.257 |
+
+Reprocessing costs 0.05-0.08 at depths 1-3 on average, concentrated in the thymus. Kidney snRNA goes the other way: depth 1 is
+0.55 on the authors' exon-only nuclei counts against 0.99 on Singlet's exon + intron counts.
+
+## 7. Ablations (Singlet's counts, τ = 0.5 call)
+
+| model | d1 | d2 | d3 | d4 | wrong | ECE |
+|---|---|---|---|---|---|---|
+| author labels only (`sweep_s6`) | 0.822 | 0.574 | 0.302 | 0.382 | 0.227 | 0.038 |
+| + ensemble refinements (`m1_notissue`, the model above) | 0.825 | 0.654 | 0.333 | 0.360 | 0.251 | 0.079 |
+| + tissue context (`m1`) | 0.799 | 0.606 | 0.323 | 0.357 | 0.257 | 0.092 |
+| author labels + tissue context (`m0t`) | 0.801 | 0.575 | 0.307 | 0.349 | 0.231 | 0.092 |
+| ensemble + tissue context, no augmentation (`m1_noaug`) | 0.824 | 0.615 | 0.332 | 0.373 | 0.259 | 0.096 |
+
+- **Ensemble refinements** add 0.08 at depth 2 and 0.03 at depth 3.
+- **Tissue context** does not help: the network reads tissue from expression as well as from the GEO text. It is off by
+  default.
+- **Augmentation** leaves accuracy level but brings calibration error on Singlet's counts from 0.096 down to 0.079-0.092.
+- **Singlet pseudo-labels** (`m1p`: plus 491 non-benchmark Singlet studies labelled by the members' consensus, weight 0.5):
+  training was running when this report was written; its numbers go in the PR when they land.
+
+## 8. Atlas inference plan (phase 4, not run)
+
+`scripts/celltype_nn/infer_campaign.{py,sbatch}`. The plan and study shards come from `/api/manifest`, the same as the
+annotation campaign. Each array task runs the network on every called cell of its studies:
+- v2 studies are read by range requests; legacy bundles are downloaded to node-local scratch and deleted afterwards;
+- each task writes `<OUT>/<GSE>/<GSM>.celltype.parquet` and `<GSM>.celltype.json` (QC: cells, call counts, mean
+  probability, `barcode_digest`);
+- every table passes `assert_public_safe` before it is written;
+- a sample whose sidecar exists at the current `model_version` is skipped;
+- nothing is written to R2 or D1.
+
+**Smoke test** (Clipper job 784357, 4 CPUs, outputs in `$WORK/out/celltype_nn/smoke`): GSE145370 (v2, 14 samples, 40,614
+cells) and GSE149689 (legacy, 20 samples, 53,646 cells). Every file passed the guard.
+
+| | measured | atlas, 193.1M cells |
+|---|---|---|
+| prediction (projection + network, CPU) | 14.4 s for 94,260 cells on 4 threads: 0.17 CPU-h per M cells | 33 CPU-h |
+| reading, v2 (range requests) | 1.4 s for 40,614 cells | small |
+| reading, legacy (decode, after download) | 52 s for 53,646 cells on 4 threads: 1.1 CPU-h per M cells | about 210 CPU-h while studies are legacy |
+| sidecar size | 4.54 MB for 94,260 cells: 48 B per cell | 9.3 GB |
+
+This comes to about 250 CPU-hours, or about 5 hours of wall time at 50 concurrent 4-CPU tasks on `short-cpu`, plus the 1.5 TB
+of legacy downloads the annotation campaign also made. Clipper is enough; Anvil is not needed. A GPU is not needed either:
+prediction is 15% of the cost and reading is the rest. Running the network inside the next annotation campaign would read
+each study once for both.
+
+Commands, for Zach to approve; nothing has been submitted:
+
+```
+# plan (a job, not the login node): 1,982 human + mouse studies
+python scripts/celltype_nn/infer_campaign.py plan --shards 200 --out $OUT/plan.tsv
+# run, 50 at a time
+sbatch --array=0-199%50 --export=ALL,OUT=$OUT,MODEL=$WORK/data/celltype_nn/models/<final>/model.pt,\
+MODEL_VERSION="celltype-nn=0.1.0;census=2025-11-08;cl=2026-06-08" scripts/celltype_nn/infer_campaign.sbatch
+python scripts/celltype_nn/infer_campaign.py status --out $OUT
+```
+
+Ingest after the run is not part of this change. The cell index would read `cell_type_cl` / `cell_type_prob` like the label
+file's `cell_type_cl` / `cell_type_score`, plus the top-k columns as feature columns. It would also write `cell_feature` rows
+for the network's outputs and `sample_cell_summary` rows from the per-sample JSON.
