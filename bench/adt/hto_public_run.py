@@ -77,7 +77,6 @@ def run_tool(a):
 def run_singlet_shipped(hto, empties=None, rna=None, workdir=None):
     """The caller Singlet ships: ``singlet.adt.hto.call_hashtags``."""
     import numpy as np
-
     from singlet.adt.hto import call_hashtags
 
     X = hto.to_numpy(dtype=float)
