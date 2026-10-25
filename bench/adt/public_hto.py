@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""Capability ``hto`` for the public benchmark (results contract 1.0.0): ``compute(artifact_dir) -> capability document``.
+"""Capability ``hto`` for the public benchmark (results contract 1.1.0): ``compute(artifact_dir) -> capability document``.
 
 Artifacts come from ``bench/adt/hto_public_run.py`` (Howitt et al. 2023, Zenodo 8304003: three BAL batches with 8 donors
 each and a 3-line cell-line mix, vireo genotype truth). Metrics per dataset, rule ``match_or_beat`` against the best
@@ -114,9 +114,10 @@ def compute(artifact_dir) -> dict:
         if r.get("returncode", 0):
             continue
         resources.append({"tool": r["tool"], "dataset": r["dataset"], "wall_s": r["wall_s"],
-                          "max_rss_gb": r["max_rss_gb"], "threads": r["threads"],
+                          "max_rss_gb": r["max_rss_gb"], "threads": r["threads"], "cpu_h": r.get("cpu_h"),
                           "notes": "all captures of the dataset, one process; R methods include R and Seurat start-up"})
         commit = commit or r.get("singlet_commit")
+        resources[-1] = {k: v for k, v in resources[-1].items() if v is not None}
         cmds.setdefault(r["tool"], r.get("command", ""))
     metrics = []
     for ds, r in R.items():
@@ -168,9 +169,10 @@ def compute(artifact_dir) -> dict:
         "the dataset, averaged over hashtags; the second metric is the share of genetic doublets called a singlet. "
         "HTODemux and MULTIseqDemux (Seurat 5.5.1) and hashsolo (scanpy 1.12.4) were run here at their defaults; the other "
         "competitors are the paper's own calls, and re-scoring them with this code reproduces the paper's Table 1. "
-        "Singlet's caller is singlet.adt.hto.call_hashtags.")
+        "Singlet's caller is singlet.adt.hto.call_hashtags. Runtimes cover the four methods run here; they are drawn "
+        "against the F-score (pareto figures) and are not a pass/fail gate.")
     doc = {
-        "schema": "singlet.benchmark.capability", "schema_version": "1.0.0", "capability": CAPABILITY,
+        "schema": "singlet.benchmark.capability", "schema_version": "1.1.0", "capability": CAPABILITY,
         "title": "Hashtag demultiplexing (HTO)", "conclusion": conclusion, "methods": methods, "status": "draft",
         "generated_at": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"), "owner": "adt-modality",
         "singlet": {"version": "1.0.0", "commit": commit or "0" * 40, "branch": "claude/adt-modality-0637a6"},
@@ -178,7 +180,7 @@ def compute(artifact_dir) -> dict:
         "datasets": [{"id": ds, "title": TITLES.get(ds, ds),
                       "accessions": {"url": "https://zenodo.org/records/8304003",
                                      "other": ["doi:10.5281/zenodo.8304002", "doi:10.1093/nargab/lqad086"]},
-                      "truth": "vireo genetic donor per cell (Howitt et al. 2023)", "n_cells": R[ds]["n_cells"],
+                      "truth": "vireo genetic donor per cell (Howitt et al. 2023)", "data_kind": "real", "n_cells": R[ds]["n_cells"],
                       "notes": f"{R[ds]['tags']} tags; {R[ds]['genetic_doublets']} genetic doublets"} for ds in dss],
         "metrics": metrics, "resources": resources, "artifacts": artifacts,
         "figures": [{"id": f"{mid}_by_dataset", "title": t, "kind": "grouped_bar",
@@ -203,6 +205,11 @@ def compute(artifact_dir) -> dict:
             "Competitors from the paper's published calls were run by its authors with their versions and settings.",
         ],
     }
+    for ds in dss:
+        rs = [x for x in resources if x["dataset"] == ds]
+        field = "cpu_h" if rs and all("cpu_h" in x for x in rs) else "wall_s"
+        if any(m["id"] == "f_score" and m["dataset"] == ds for m in metrics) and len(rs) > 1:
+            doc["figures"].append(_contract().pareto_figure(doc, "f_score", ds, field))
     complete = bool(metrics) and all(m["singlet"]["value"] is not None for m in metrics) and len(dss) == 4
     doc["status"] = "final" if complete else "draft"
     return _contract().finalize(doc)

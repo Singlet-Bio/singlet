@@ -355,6 +355,7 @@ def main():
     r = subprocess.run(["/usr/bin/time", "-v"] + cmd, capture_output=True, text=True)
     wall = time.time() - t0
     m = re.search(r"Maximum resident set size \(kbytes\): (\d+)", r.stderr)
+    cpu = [re.search(rf"{k} time \(seconds\): ([\d.]+)", r.stderr) for k in ("User", "System")]
     ver = ""
     if a.tool in VERSIONS:
         try:
@@ -365,6 +366,7 @@ def main():
             ver = "unknown"
     rec = {"tool": a.tool, "dataset": a.dataset, "wall_s": round(wall, 1),
            "max_rss_gb": round(int(m.group(1)) / 1024 ** 2, 3) if m else None, "threads": a.threads,
+           "cpu_h": round(sum(float(c.group(1)) for c in cpu if c) / 3600, 5) if all(cpu) else None,
            "returncode": r.returncode, "version": ver, "command": " ".join(cmd),
            "singlet_commit": os.environ.get("SINGLET_COMMIT", ""),
            "stderr_tail": r.stderr[-8000:] if r.returncode else ""}

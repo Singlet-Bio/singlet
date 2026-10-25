@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""Capability ``adt`` for the public benchmark (results contract 1.0.0): ``compute(artifact_dir) -> capability document``.
+"""Capability ``adt`` for the public benchmark (results contract 1.1.0): ``compute(artifact_dir) -> capability document``.
 
 The artifacts are written by ``bench/adt/adt_public_run.py`` on Clipper (every tool on the same antibody FASTQs, scored
 on Cell Ranger's filtered cells). This function is the only place metrics are computed: the published
@@ -47,8 +47,9 @@ DATASET_META = {
 }
 TOOL_INFO = {
     "singlet": {"role": "singlet", "url": f"{REPO}/tree/main/python/singlet/adt"},
-    "cellranger": {"role": "truth", "version": "3.0.0",
-                   "params": "10x Genomics' published filtered_feature_bc_matrix.h5 (cellranger count with feature barcoding)"},
+    "cellranger": {"role": "truth", "version": "3.0.0", "url": "https://www.10xgenomics.com/datasets",
+                   "params": "not run here: the filtered_feature_bc_matrix.h5 10x Genomics published with each dataset "
+                             "(Cell Ranger 3.0.0 count with feature barcoding), downloaded from the dataset URLs below"},
     "kite": {"role": "competitor", "url": "https://github.com/pachterlab/kite",
              "citation": "Booeshaghi & Pachter (kallisto | bustools feature barcoding)"},
     "citeseqcount": {"role": "competitor", "url": "https://github.com/Hoohm/CITE-seq-Count",
@@ -56,7 +57,28 @@ TOOL_INFO = {
     "alevinfry": {"role": "competitor", "url": "https://github.com/COMBINE-lab/alevin-fry",
                   "citation": "He et al. 2022, alevin-fry"},
 }
+# public tool names (the cohort's): the harness's ``citeseqcount`` is ``cite-seq-count``
+PUBLIC_NAME = {"citeseqcount": "cite-seq-count"}
 N_BOOT = 200
+REACH = [  # (output, {tool: (supported, note)})
+    ("3' v3 TotalSeq-B feature barcodes translated to GEX barcodes",
+     {"singlet": ("yes", ""), "kite": ("yes", "kb count --workflow kite:10xFB"),
+      "cite-seq-count": ("no", "the harness whitelists the feature-side barcodes and maps them back"),
+      "alevinfry": ("no", "the harness translates the barcodes afterwards"), "cellranger": ("yes", "")}),
+    ("antibody panel identified from the reads when no feature reference is deposited",
+     {"singlet": ("yes", "TotalSeq catalog + GEO-harvested references; unresolved panels are flagged, not guessed"),
+      "kite": ("no", ""), "cite-seq-count": ("no", ""), "alevinfry": ("no", ""), "cellranger": ("no", "")}),
+    ("background QC from empty droplets and isotype controls, DSB-normalised layer",
+     {"singlet": ("yes", ""), "kite": ("no", ""), "cite-seq-count": ("no", ""), "alevinfry": ("no", ""),
+      "cellranger": ("no", "")}),
+    ("hashtag (HTO) demultiplexing calls",
+     {"singlet": ("yes", "capability hto"), "kite": ("no", "counts only"), "cite-seq-count": ("no", "counts only"),
+      "alevinfry": ("no", "counts only"), "cellranger": ("partial", "Cell Ranger multi from 7.0; not 3.0")}),
+]
+
+
+def pub(t):
+    return PUBLIC_NAME.get(t, t)
 RNA_DETECTED = (0.05, 0.90)
 
 
@@ -163,9 +185,9 @@ def compute(artifact_dir) -> dict:
         r = json.load(open(p))
         if r.get("returncode", 0) != 0:
             continue
-        resources.append({"tool": r["tool"], "dataset": r["dataset"], "wall_s": r["wall_s"],
+        resources.append({"tool": pub(r["tool"]), "dataset": r["dataset"], "wall_s": r["wall_s"],
                           "max_rss_gb": r["max_rss_gb"], "threads": r["threads"],
-                          "cpu_h": None, "notes": "same 8 threads and node type for every tool"})
+                          "cpu_h": r.get("cpu_h"), "notes": "same 8 threads and node type for every tool"})
         versions.setdefault(r["tool"], (r.get("version") or "unknown", r.get("command", "")))
         commit = commit or r.get("singlet_commit")
     resources = [{k: v for k, v in r.items() if v is not None} for r in resources]
@@ -185,10 +207,10 @@ def compute(artifact_dir) -> dict:
             if mid == "protein_rna_concordance" and "concordance_tol" in r:
                 rule["tolerance"] = {"abs": round(r["concordance_tol"], 4)}
                 rule["rationale"] = ("half-width of the bootstrap 95% CI (200 resamples of cells) of Singlet minus the best "
-                                     f"competitor ({r['concordance_best']})")
+                                     f"competitor ({pub(r['concordance_best'])})")
             m = {"id": mid, "name": name, "unit": unit, "category": cat, "dataset": ds, "direction": direction,
                  "singlet": {"value": None if sv is None or np.isnan(sv) else round(float(sv), 6)},
-                 "competitors": [{"tool": c["tool"], "value": round(float(c["value"]), 6)} for c in comps],
+                 "competitors": [{"tool": pub(c["tool"]), "value": round(float(c["value"]), 6)} for c in comps],
                  "rule": rule}
             if not m["competitors"]:
                 m["rule"] = {"type": "informational"}
@@ -198,7 +220,7 @@ def compute(artifact_dir) -> dict:
         info = dict(TOOL_INFO[t])
         ver, cmd = versions.get(t, (info.pop("version", "1.0.0" if t == "singlet" else "unknown"), ""))
         info.pop("version", None)
-        tools.append({"name": t, "version": "1.0.0" if t == "singlet" else ver, **info,
+        tools.append({"name": pub(t), "version": "1.0.0" if t == "singlet" else ver, **info,
                       **({"params": cmd} if cmd and "params" not in info else {})})
     artifacts = []
     for p in sorted(glob.glob(str(adir / "adt_*"))):
@@ -231,9 +253,13 @@ def compute(artifact_dir) -> dict:
         "over all cell x antibody entries, |total UMIs / Cell Ranger - 1|, share of identical entries, and protein-RNA "
         "concordance: the median Spearman rho between CLR protein and RNA per 10k (Cell Ranger's RNA for all tools) "
         "over antibodies whose gene is detected in 5-90% of cells. Isotype controls and PTPRC isoform antibodies are "
-        "excluded from concordance.")
+        "excluded from concordance. Exact matching versus pseudoalignment: Singlet, like Cell Ranger, matches each "
+        "read's feature barcode exactly or to its unique 1-mismatch neighbour and corrects cell barcodes and UMIs with "
+        "Cell Ranger's rules; kite and alevin-fry pseudoalign or sketch-map reads against an index of the panel, which is "
+        "fast, and differ from Cell Ranger mainly in barcode and UMI correction. Runtime is reported as a resource and "
+        "drawn against agreement (pareto figures), not used as a pass/fail gate.")
     doc = {
-        "schema": "singlet.benchmark.capability", "schema_version": "1.0.0", "capability": CAPABILITY,
+        "schema": "singlet.benchmark.capability", "schema_version": "1.1.0", "capability": CAPABILITY,
         "title": "Antibody-derived tags (CITE-seq)", "conclusion": conclusion, "methods": methods,
         "status": "draft", "generated_at": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
         "owner": "adt-modality",
@@ -241,7 +267,7 @@ def compute(artifact_dir) -> dict:
         "tools": tools,
         "datasets": [{"id": ds, "title": DATASET_META.get(ds, {}).get("title", ds),
                       "accessions": {"url": DATASET_META.get(ds, {}).get("url", "")},
-                      "truth": "Cell Ranger 3.0 feature-barcode counts published by 10x Genomics",
+                      "truth": "Cell Ranger 3.0 feature-barcode counts published by 10x Genomics", "data_kind": "real",
                       "n_cells": res[ds]["n_cells"],
                       "notes": f"{res[ds]['n_antibodies']} antibodies; {res[ds]['n_pairs']} antibody-gene pairs in the "
                                "concordance metric"} for ds in dss],
@@ -253,13 +279,20 @@ def compute(artifact_dir) -> dict:
         "reproduce": {"module": "bench/adt/public_adt.py", "function": "compute", "laptop_minutes": 3,
                       "clipper_command": "sbatch --array=0-2 bench/adt/hpc/adt_public.sbatch"},
         "caveats": [
-            "Cell Ranger itself was not re-run (its licence forbids redistribution on the cluster); its published 3.0 "
-            "output is the truth, so it has no resource row.",
+            "Cell Ranger itself was not re-run: the 3.0 output 10x published with each dataset is the truth, so it has "
+            "no resource row and no pareto point.",
             "pbmc1k_cite_v3's TotalSeq-B sequences predate BioLegend's current numbering (15 of its barcodes name other "
             "antibodies in BioLegend's list); every tool here uses 10x's own reference, so this does not affect the "
             "comparison, but read-identified panels must not name these sequences from the catalog.",
         ],
     }
+    doc["reach"] = [{"tool": t, "output": o, "supported": v[0], **({"note": v[1]} if v[1] else {})}
+                    for o, per in REACH for t, v in per.items() if t in {x["name"] for x in tools}]
+    for ds in dss:
+        rs = [x for x in resources if x["dataset"] == ds]
+        field = "cpu_h" if rs and all("cpu_h" in x for x in rs) else "wall_s"
+        if any(m["id"] == "count_pearson_log" and m["dataset"] == ds for m in metrics) and len(rs) > 1:
+            doc["figures"].append(_contract().pareto_figure(doc, "count_pearson_log", ds, field))
     complete = all(m["singlet"]["value"] is not None for m in metrics) and all(
         set(TOOLS) <= set(r["tools"]) for r in res.values()) and len(dss) == len(DATASET_META)
     doc["status"] = "final" if complete else "draft"
@@ -275,7 +308,7 @@ def figures(res, dss):
         for t in ["singlet", *COMPETITORS, "cellranger"]:
             xs = [ds for ds in dss if res[ds]["tools"].get(t, {}).get(mid) is not None]
             if xs:
-                series.append({"name": t, "tool": t, "x": xs, "y": [round(res[ds]["tools"][t][mid], 6) for ds in xs]})
+                series.append({"name": pub(t), "tool": pub(t), "x": xs, "y": [round(res[ds]["tools"][t][mid], 6) for ds in xs]})
         if series:
             out.append({"id": f"{mid}_by_dataset", "title": title, "kind": "grouped_bar",
                         "x": {"label": "dataset", "categories": dss}, "y": {"label": mid, "unit": unit},
