@@ -1,7 +1,8 @@
 #!/bin/bash
 #SBATCH --job-name=vdjc-dl-vdj
 #SBATCH --account=debruinz
-#SBATCH --partition=short-cpu
+#SBATCH --partition=scavenger
+#SBATCH --requeue
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=16G
 #SBATCH --time=03:59:00
