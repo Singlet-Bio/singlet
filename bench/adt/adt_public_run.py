@@ -277,15 +277,15 @@ def tool_alevinfry(a):
 
     b = os.environ.get("AFRY_BIN", "")
     salmon, fry = os.path.join(b, "salmon"), os.path.join(b, "alevin-fry")
-    panel = pd.read_csv(os.path.join(a.out, f"adt_{a.dataset}_panel.tsv"), sep="	", dtype=str, keep_default_na=False)
+    panel = pd.read_csv(os.path.join(a.out, f"adt_{a.dataset}_panel.tsv"), sep="\t", dtype=str, keep_default_na=False)
     bcs = [x.strip() for x in open(os.path.join(ddir(a), "barcodes.txt")) if x.strip()]
     cfg = DATASETS[a.dataset]
     d = os.path.join(a.scratch, "afry")
     os.makedirs(d, exist_ok=True)
     ft = os.path.join(d, "features.tsv")
-    panel[["feature", "sequence"]].to_csv(ft, sep="	", header=False, index=False)
+    panel[["feature", "sequence"]].to_csv(ft, sep="\t", header=False, index=False)
     t2g = os.path.join(d, "t2g.tsv")
-    pd.DataFrame({"a": panel.feature, "b": panel.feature}).to_csv(t2g, sep="	", header=False, index=False)
+    pd.DataFrame({"a": panel.feature, "b": panel.feature}).to_csv(t2g, sep="\t", header=False, index=False)
     sh([salmon, "index", "-t", ft, "-i", f"{d}/idx", "--features", "-k7"])
     r1, r2 = fastqs(a)
     start = 11 if any(str(p).startswith(("5P", "^NNNNNNNNNN")) for p in panel.pattern) else 1
@@ -300,9 +300,7 @@ def tool_alevinfry(a):
         fb = gex = None
         plist = C.load_barcode_list(wl(a, WL_V2[0]))
     pl = os.path.join(d, "permit.txt")
-    open(pl, "w").write("
-".join(plist) + "
-")
+    open(pl, "w").write("\n".join(plist) + "\n")
     sh([fry, "generate-permit-list", "-d", "fw", "-i", f"{d}/map", "-o", f"{d}/quant", "--unfiltered-pl", pl,
         "--min-reads", "1"])
     sh([fry, "collate", "-i", f"{d}/quant", "-r", f"{d}/map", "-t", str(a.threads)])
