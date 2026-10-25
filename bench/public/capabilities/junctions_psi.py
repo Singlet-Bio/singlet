@@ -193,7 +193,7 @@ def compute(artifact_dir: Path) -> dict:
     metrics = []
     for k, d in enumerate(ids):
         metrics += metrics_for(d, k, data[d])
-    resources = C.resource_rows(res, {"singlet": "singlet", "starsolo_default": "starsolo-sj", "starsolo": "starsolo-sj-cr"})
+    resources = C.resource_rows(res, {"singlet": "singlet", "starsolo_default": "starsolo-sj", "starsolo": "starsolo-sj-cr"}, ids)
     doc = {
         "schema": "singlet.benchmark.capability", "schema_version": "1.0.0", "capability": CAP,
         "title": "Splice junctions and PSI",
@@ -211,7 +211,7 @@ def compute(artifact_dir: Path) -> dict:
             "bench/public/capabilities/clipper/singlet_public.sbatch": "harness"}),
         "reproduce": {"module": "bench/public/capabilities/junctions_psi.py", "function": "compute", "laptop_minutes": 3,
                       "clipper_command": "bash bench/public/capabilities/clipper/run_all.sh junctions-psi"},
-        "caveats": _caveats(),
+        "caveats": _caveats() + C.cohort_gap_caveat(CAP, ids),
     }
     C.stamp(metrics)
     doc["conclusion"] = _conclusion(metrics, len(ids))

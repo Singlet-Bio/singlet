@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _familycmp as F  # noqa: E402
@@ -60,8 +61,7 @@ def tools() -> list[dict]:
         C.tool("alevin-fry-usa", "0.18.3 (simpleaf 0.30)", "competitor", AF_CMD, "https://github.com/COMBINE-lab/alevin-fry",
                "He et al. Alevin-fry unlocks rapid, accurate and memory-frugal quantification of single-cell RNA-seq data. Nat Methods 2022"),
         C.tool("cellranger-published", "2.1.0 / 3.0.0 (as published by 10x)", "competitor",
-               "not re-run: the filtered_feature_bc_matrix 10x publishes with each dataset (exonic UMIs; 10x reference of the time, "
-               "not 2024-A). Cell Ranger 8 on the 2024-A reference needs the 10x EULA, which is pending.",
+               C.cellranger_params(),
                "https://www.10xgenomics.com/support/software/cell-ranger"),
     ]
 
@@ -83,8 +83,8 @@ def compute(artifact_dir: Path) -> dict:
             s = F.collect(d, spec, cells[d], genes[d], k)
             if s is not None:
                 stats.append(s)
-    metrics = C.stamp(F.build_metrics(stats))
-    resources = C.resource_rows(res, {"singlet": "singlet", "starsolo": "starsolo-gene", "alevinfry": "alevin-fry-usa"})
+    metrics = C.stamp(F.build_metrics(stats) + adt_metrics(artifact_dir))
+    resources = C.resource_rows(res, {"singlet": "singlet", "starsolo": "starsolo-gene", "alevinfry": "alevin-fry-usa"}, ids)
     doc = {
         "schema": "singlet.benchmark.capability", "schema_version": "1.0.0", "capability": CAP,
         "title": "Gene counts per cell",
@@ -104,10 +104,64 @@ def compute(artifact_dir: Path) -> dict:
             "bench/public/capabilities/clipper/singlet_public.sbatch": "harness"}),
         "reproduce": {"module": "bench/public/capabilities/gex_counts.py", "function": "compute", "laptop_minutes": 3,
                       "clipper_command": "bash bench/public/capabilities/clipper/run_all.sh all"},
-        "caveats": _caveats(),
+        "caveats": _caveats() + C.cohort_gap_caveat(CAP, ids),
     }
     doc["conclusion"] = _conclusion(stats, metrics, len(ids))
     return C.finish(doc)
+
+
+def adt_metrics(artifact_dir: Path) -> list[dict]:
+    """Orthogonal real-data truth: for CITE-seq cells, the Spearman correlation across cells between a protein (CLR of its antibody
+    UMI) and the log-normalised UMI of the gene that codes for it, averaged over the proteins with a coding gene in the panel."""
+    p = artifact_dir / "pbmc1k_cite_v3.adt.tsv.gz"
+    if not p.exists():
+        return []
+    df = C.read_table(p, index_col=0)
+    adt_cols = [c for c in df.columns if c.startswith("adt:")]
+    lg = np.log1p(df[adt_cols].to_numpy(float))
+    clr = pd.DataFrame(lg - lg.mean(axis=1, keepdims=True), columns=[c[4:] for c in adt_cols], index=df.index)
+    out = []
+    for fam, singlet, comps, label in (("total", "singlet_total", ["starsolo_genefull", "alevinfry_total"], "exon+intron"),
+                                       ("exonic", "singlet_exon", ["starsolo_gene"], "exonic")):
+        vals, boots = {}, {}
+        n = len(df)
+        idx = C.boot_indices(n, offset=900 + len(comps), B=200)
+        for t in [singlet] + comps:
+            cols = [c for c in df.columns if c.startswith(f"rna:{t}:")]
+            if not cols:
+                break
+            tot = df[f"tot:{t}"].to_numpy(float)
+            per_pair, per_boot = [], []
+            for c in cols:
+                sym = c.split(":")[2]
+                prot = next((x for x in clr.columns if C_ADT_GENE.get(x.split("_")[0].lower()) == sym), None)
+                if prot is None:
+                    continue
+                x = clr[prot].to_numpy(float)
+                y = np.log1p(df[c].to_numpy(float) / np.maximum(tot, 1) * 1e4)
+                per_pair.append(C.spearman(x, y))
+                per_boot.append([C.spearman(x[i], y[i]) for i in idx])
+            if not per_pair:
+                break
+            vals[t] = float(np.nanmean(per_pair))
+            boots[t] = np.nanmean(np.array(per_boot), axis=0)
+            vals[f"{t}#n"] = len(per_pair)
+        if singlet not in vals or any(t not in vals for t in comps):
+            continue
+        best = max(comps, key=lambda t: vals[t])
+        hw = C.half_width(C.ci95(boots[singlet] - boots[best]))
+        rule = C.match_rule(hw, f"tolerance = half-width of the paired bootstrap 95% CI (cells resampled) of Singlet minus {LABEL[best]}: {hw:.4f}")
+        out.append(C.metric(
+            f"adt_rna_spearman.{fam}", f"Protein (CITE-seq) vs coding-gene RNA, Spearman across cells, {label} UMI", "rho", "accuracy",
+            "pbmc1k_cite_v3", "higher", vals[singlet], C.ci95(boots[singlet]),
+            [{"tool": DECL[t], "value": vals[t], "ci": C.ci95(boots[t])} for t in comps], rule,
+            notes=f"truth = antibody UMI (CLR) of the same cells; mean over {vals[singlet + '#n']} protein-gene pairs "
+                  "(CD3E, CD4, CD8A, CD14, FCGR3A, NCAM1, CD19, IL2RA, PDCD1, IL7R, TIGIT where in the panel); RNA = log1p(UMI per 10,000)"))
+    return out
+
+
+C_ADT_GENE = {"cd3": "CD3E", "cd4": "CD4", "cd8a": "CD8A", "cd14": "CD14", "cd16": "FCGR3A", "cd56": "NCAM1", "cd19": "CD19",
+              "cd25": "IL2RA", "pd-1": "PDCD1", "cd127": "IL7R", "tigit": "TIGIT", "cd15": "FUT4"}
 
 
 def _rng(vals):
@@ -159,13 +213,15 @@ def _methods() -> str:
         "**Gate.** Singlet's mean value against its competitors must be as good as the competitors' value against each other, within the "
         "half-width of the paired bootstrap 95% CI of the difference. Singlet is gated as a member of the cloud of existing tools, not as "
         "better than each. Per-reference values are in each metric's notes. With one competitor (5' Cell Ranger) the threshold comes from the other datasets.\n\n"
-        "**Not compared.** scBaseCount: no cohort dataset is in SRA, so no equal-depth comparison exists."
+        "**Real truth.** pbmc1k_cite_v3 has antibody counts for the same cells: Spearman across cells between each protein and its coding gene, per tool.\n\n"
+        "**Not compared.** scBaseCount: the 10x demo datasets are not in SRA, and the Kang lane is 3' v1, a chemistry scBaseCount does not "
+        "process, so no equal-depth comparison exists."
     )
 
 
 def _caveats() -> list[str]:
     return [
-        "Cell Ranger is the matrix 10x published with each dataset (versions 2.1.0 and 3.0.0, 10x references of the time, exonic UMIs), not a re-run on the 2024-A reference, so its comparisons also carry reference and annotation differences. Cell Ranger 8 is pending the 10x EULA.",
+        "Cell Ranger is the matrix 10x published with each dataset (versions 2.1.0 and 3.0.0, 10x references of the time, exonic UMIs), not a re-run on the 2024-A reference, so its comparisons also carry reference and annotation differences.",
         "The 5' dataset is the first 60 M read pairs, so the published full-depth Cell Ranger matrix is left out for it; that dataset's exonic gate is a threshold borrowed from the other datasets, not a measured spread.",
         "There is no ground truth for counts: every metric is agreement between tools, and the tolerance is the spread between the competitors. A tool can sit inside that spread and still be wrong where the competitors are.",
         "The gate averages Singlet's distance to its competitors. It is looser than requiring Singlet to be at least as close to each competitor separately; the per-reference values are in the notes of each metric. Tool settings were fixed before any metric was computed and no Singlet parameter was tuned on these data.",

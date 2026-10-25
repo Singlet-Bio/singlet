@@ -96,7 +96,48 @@ def extract_gex_counts(ctx: Ctx, out: Path) -> dict:
     g = pd.concat(genes_tables, axis=1)
     g.index.name = "gene"
     g.to_csv(out / f"{ctx.ds}.genes.tsv.gz", sep="\t", float_format="%.8g")
+    if ctx.ds == "pbmc1k_cite_v3":
+        note["adt_pairs"] = extract_adt_pairs(ctx, out, cells, {"singlet_exon": exon, "singlet_total": total, "starsolo_gene": gene,
+                                                              "starsolo_genefull": genefull, "alevinfry_total": af_total})
     return {"n_cells": len(cells), "n_exonic": int(masks["exonic"].sum()), "n_total": int(masks["total"].sum()), **note}
+
+
+# surface protein (10x TotalSeq-B panel name, lower case) -> gene symbol of the transcript that codes for it
+ADT_GENE = {"cd3": "CD3E", "cd4": "CD4", "cd8a": "CD8A", "cd14": "CD14", "cd16": "FCGR3A", "cd56": "NCAM1", "cd19": "CD19",
+            "cd25": "IL2RA", "pd-1": "PDCD1", "cd127": "IL7R", "tigit": "TIGIT", "cd15": "FUT4"}
+
+
+def extract_adt_pairs(ctx: Ctx, out: Path, cells: list[str], tools: dict) -> int:
+    """Orthogonal truth for gene counts: antibody counts (CITE-seq, Cell Ranger Antibody Capture) of the same cells next to each
+    tool's UMI for the gene that codes for the protein. Writes <ds>.adt.tsv.gz: adt:<protein> (raw antibody UMI, every protein
+    including isotype controls), tot:<tool> (the tool's total UMI over the cells) and rna:<tool>:<symbol>."""
+    import h5py
+    import scipy.sparse as sp
+
+    h5 = next(iter(sorted(ctx.data.glob("cellranger_*.h5"))))
+    with h5py.File(h5, "r") as f:
+        g = f["matrix"]
+        M = sp.csc_matrix((g["data"][:], g["indices"][:], g["indptr"][:]), shape=tuple(g["shape"][:]))
+        bcs = [R.bare(b.decode()) for b in g["barcodes"][:]]
+        ftype = np.array([x.decode() for x in g["features"]["feature_type"][:]])
+        names = [x.decode() for x in g["features"]["name"][:]]
+    sel = np.nonzero(ftype == "Antibody Capture")[0]
+    pos = {b: i for i, b in enumerate(bcs)}
+    keep = [i for i, c in enumerate(cells) if c in pos]
+    adt = M[sel][:, [pos[cells[i]] for i in keep]].toarray().T.astype(float)
+    feats = pd.read_csv(ctx.star_cr / "Solo.out" / "Gene" / "raw" / "features.tsv", sep="\t", header=None)
+    sym2id = {s: R.canon_gene(i) for i, s in zip(feats[0], feats[1])}
+    df = pd.DataFrame(adt, index=[cells[i] for i in keep], columns=[f"adt:{names[i]}" for i in sel])
+    for t, m in tools.items():
+        df[f"tot:{t}"] = np.asarray(m.X[keep].sum(axis=1)).ravel()
+        gpos = {gg: j for j, gg in enumerate(m.genes)}
+        for prot in [names[i] for i in sel]:
+            sym = ADT_GENE.get(prot.split("_")[0].lower())
+            if sym and sym in sym2id and sym2id[sym] in gpos:
+                df[f"rna:{t}:{sym}"] = np.asarray(m.X[keep][:, gpos[sym2id[sym]]].todense()).ravel()
+    df.index.name = "barcode"
+    df.to_csv(out / f"{ctx.ds}.adt.tsv.gz", sep="\t", float_format="%.6g")
+    return len(keep)
 
 
 def extract_spliced_unspliced(ctx: Ctx, out: Path) -> dict:

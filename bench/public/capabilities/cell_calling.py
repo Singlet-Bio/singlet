@@ -47,7 +47,7 @@ def tools(have_cb: bool) -> list[dict]:
         C.tool("cellbender", "0.3.2", "competitor", CB_CMD, "https://github.com/broadinstitute/CellBender",
                "Fleming et al. Unsupervised removal of systematic background noise from droplet-based single-cell experiments using CellBender. Nat Methods 2023"),
         C.tool("cellranger-published", "2.1.0 / 3.0.0 (as published by 10x)", "truth",
-               "not re-run: the barcodes of the filtered_feature_bc_matrix 10x publishes with each dataset", "https://www.10xgenomics.com/support/software/cell-ranger"),
+               C.cellranger_params() + " (only the barcodes are used here)", "https://www.10xgenomics.com/support/software/cell-ranger"),
         C.tool("demuxlet-table", "GSE96583", "truth", "the authors' table GSE96583_batch2.total.tsne.df.tsv.gz, rows of the control lane (all demuxlet singlet, doublet and ambiguous calls)",
                "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE96583", "Kang et al. Multiplexed droplet single-cell RNA-sequencing using natural genetic variation. Nat Biotechnol 2018"),
     ]
@@ -163,7 +163,7 @@ def compute(artifact_dir: Path) -> dict:
             "include/singlet/pileup/called_v2.h": "implementation"}),
         "reproduce": {"module": "bench/public/capabilities/cell_calling.py", "function": "compute", "laptop_minutes": 1,
                       "clipper_command": "bash bench/public/capabilities/clipper/run_all.sh cell-calling"},
-        "caveats": _caveats(ids, tabs),
+        "caveats": _caveats(ids, tabs) + C.cohort_gap_caveat(CAP, ids),
     }
     C.stamp(metrics)
     doc["conclusion"] = _conclusion(metrics, len(ids))
@@ -180,9 +180,10 @@ def _conclusion(metrics, n_ds) -> str:
     loses = sorted({f"{m['id']} on {m['dataset']}" for m in gating if m["pass"] == "fail"})
     s = (f"On {n_ds} datasets Singlet's called_v2 reaches Jaccard {j[0]:.2f}-{j[1]:.2f} with the truth set (recall {r[0]:.2f}-{r[1]:.2f}, "
          f"precision {p[0]:.2f}-{p[1]:.2f}), compared with STARsolo EmptyDrops_CR and CellBender; {n_pass} of {len(gating)} gating comparisons pass. "
-         "called_v2 favours recall: it calls more low-RNA barcodes than the truth sets contain.")
+         "The 10x truth sets come from Cell Ranger's own EmptyDrops-type call, which STARsolo's EmptyDrops_CR reproduces by construction; only the "
+         "barnyard species check and the Kang demuxlet table are independent of that algorithm.")
     if loses:
-        s += f" It loses {len(loses)} comparisons (see metrics)."
+        s += f" Singlet loses {len(loses)} comparisons (see metrics)."
     return s
 
 
@@ -209,7 +210,8 @@ def _caveats(ids, tabs) -> list[str]:
     cv = [
         "called_v2's parameters (plateau ambient bound, knee bounds, tail p-values, FDR 0.001) were chosen and corrected while looking at pbmc1k_v3, hgmm1k_v3, neuron1k_v3, nuclei2k_v2, pbmc5p_v1 and the Kang lane (docs/called-v2-truth.md). Those datasets are development data for this method, so these scores are not held-out; the 42-sample validation is broader but was also used to choose among variants.",
         "The truth sets are themselves cutoff-based (Cell Ranger OrdMag / EmptyDrops-like, demuxlet on called cells). Barcodes called by Singlet beyond them are often real low-RNA cells (docs/called-v2-truth.md) and count against precision here.",
-        "The Cell Ranger truth for each 10x dataset is the matrix 10x published, not a re-run on the 2024-A reference.",
+        "The Cell Ranger truth for each 10x dataset is the matrix 10x published, not a re-run on the 2024-A reference. It is itself the output of a cell-calling algorithm (EmptyDrops-like, or OrdMag for Cell Ranger 2), and STARsolo EmptyDrops_CR is a port of it, so its agreement with that truth is partly by construction. The independent real truths are the barnyard species composition (hgmm1k_v3) and the Kang demuxlet table (genotype-based).",
+        "CellBender stopped with an encoder assertion (fewer than 4 cells in a minibatch) at its defaults and again at a lower learning rate on some datasets (see provenance.json); those datasets have no CellBender column and no CellBender competitor value.",
         "CellBender's expected-cells and total-droplets parameters were derived from the raw UMI curve with a fixed rule, not tuned; CellBender ran only on the datasets that have a cellbender column in the artifacts." if any("cellbender" in t.columns for t in tabs.values()) else "CellBender was not run on every dataset; where its column is absent, only STARsolo EmptyDrops_CR competes.",
         "Wall time and memory in resources are from a shared cluster at differing thread counts and are not a speed comparison.",
     ]

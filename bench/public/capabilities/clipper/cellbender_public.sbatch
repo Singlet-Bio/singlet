@@ -41,6 +41,13 @@ mkdir -p $SCR/raw; for f in matrix.mtx barcodes.tsv features.tsv; do gzip -c $RA
 cd $SCR
 CMD=(cellbender remove-background --cuda --input $SCR/raw --output $SCR/cb.h5 --expected-cells $EXP --total-droplets-included $TOT --fpr 0.01 --epochs 150)
 echo "${CMD[*]}" >> $O/params.txt
-/usr/bin/time -v -o $O/time.txt apptainer exec --nv --bind $W --bind /tmp $SIF "${CMD[@]}" > $O/run.log 2>&1
+/usr/bin/time -v -o $O/time.txt apptainer exec --nv --bind $W --bind /tmp $SIF "${CMD[@]}" > $O/run.log 2>&1 || true
+if [ ! -s $SCR/cb_cell_barcodes.csv ]; then
+  # CellBender's own troubleshooting advice for the 'Fewer than 4 cells passed to encoder minibatch' assertion: lower learning rate
+  cp $O/run.log $O/run.default.log; cp $O/time.txt $O/time.default.txt
+  CMD+=(--learning-rate 0.00005)
+  echo "default run failed ($(tail -1 $O/run.default.log | cut -c1-120)); retried: ${CMD[*]}" >> $O/params.txt
+  /usr/bin/time -v -o $O/time.txt apptainer exec --nv --bind $W --bind /tmp $SIF "${CMD[@]}" > $O/run.log 2>&1 || true
+fi
 cp $SCR/cb_cell_barcodes.csv $SCR/cb_metrics.csv $O/ 2>/dev/null || true
 tail -3 $O/run.log; ls -la $O; wc -l $O/cb_cell_barcodes.csv

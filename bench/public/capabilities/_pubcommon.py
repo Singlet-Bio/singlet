@@ -149,6 +149,33 @@ def cohort_rows() -> dict[str, dict]:
     return contract.load_cohort(p) if p.exists() else {}
 
 
+_CR = "https://cf.10xgenomics.com/samples/"
+CELLRANGER_PUBLISHED = {  # dataset -> (Cell Ranger version that made it, URL of the published filtered matrix)
+    "pbmc1k_v3": ("3.0.0", _CR + "cell-exp/3.0.0/pbmc_1k_v3/pbmc_1k_v3_filtered_feature_bc_matrix.h5"),
+    "pbmc1k_v2": ("3.0.0", _CR + "cell-exp/3.0.0/pbmc_1k_v2/pbmc_1k_v2_filtered_feature_bc_matrix.h5"),
+    "neuron1k_v3": ("3.0.0", _CR + "cell-exp/3.0.0/neuron_1k_v3/neuron_1k_v3_filtered_feature_bc_matrix.h5"),
+    "hgmm1k_v3": ("3.0.0", _CR + "cell-exp/3.0.0/hgmm_1k_v3/hgmm_1k_v3_filtered_feature_bc_matrix.h5"),
+    "pbmc1k_cite_v3": ("3.0.0", _CR + "cell-exp/3.0.0/pbmc_1k_protein_v3/pbmc_1k_protein_v3_filtered_feature_bc_matrix.h5"),
+    "nuclei2k_v2": ("2.1.0", _CR + "cell-exp/2.1.0/nuclei_2k/nuclei_2k_filtered_gene_bc_matrices.tar.gz"),
+    "pbmc5p_v1": ("3.0.0", _CR + "cell-vdj/3.0.0/vdj_v1_hs_pbmc2_5gex_protein/vdj_v1_hs_pbmc2_5gex_protein_filtered_feature_bc_matrix.h5"),
+}
+
+
+def cellranger_params() -> str:
+    return ("Cell Ranger is not run. Comparator = the filtered matrix 10x publishes with each dataset (10x reference of the time, not 2024-A): "
+            + "; ".join(f"{d}: Cell Ranger {v} {u}" for d, (v, u) in CELLRANGER_PUBLISHED.items()))
+
+
+def cohort_gap_caveat(capability: str, ids: list[str]) -> list[str]:
+    """A caveat naming the cohort datasets assigned to this capability that the document does not cover."""
+    miss = [i for i, row in cohort_rows().items()
+            if capability in (row.get("capabilities") or "").split(",") and i not in ids]
+    if not miss:
+        return []
+    return [f"Cohort datasets assigned to {capability} that this document does not cover (no run for them in this benchmark yet): "
+            + ", ".join(miss) + "."]
+
+
 def dataset_entries(ids: list[str], truth: dict[str, str], n_cells: dict[str, int] | None = None,
                     notes: dict[str, str] | None = None) -> list[dict]:
     cohort = cohort_rows()
@@ -218,10 +245,12 @@ def match_rule(tol_abs: float | None, rationale: str | None, against="best") -> 
     return r
 
 
-def resource_rows(res: dict, tool_names: dict[str, str]) -> list[dict]:
+def resource_rows(res: dict, tool_names: dict[str, str], datasets: list[str] | None = None) -> list[dict]:
     """resources.json -> contract resources list. ``res``: {dataset: {tool_key: {wall_s, max_rss_gb, threads, cpu_h?, node?}}}."""
     rows = []
     for ds in DATASET_ORDER:
+        if datasets is not None and ds not in datasets:
+            continue
         for key, r in (res.get(ds) or {}).items():
             if key not in tool_names or r.get("wall_s") is None:
                 continue
