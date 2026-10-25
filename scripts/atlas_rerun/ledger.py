@@ -31,7 +31,7 @@ SAMPLE_COLUMNS = [
     "gsm", "gse", "wave", "cluster", "state", "attempt", "failures", "last_reason", "io_job", "compute_job",
     "node_job", "compute_class", "threads", "partition", "t_submitted", "t_io_start", "t_screened", "t_downloaded",
     "t_compute_start", "t_done", "io_s", "head_s", "prefetch_s", "decode_s", "screen_s", "pool_s", "compute_s",
-    "compute_maxrss_gb", "io_maxrss_gb", "reads_available", "reads_used", "runs_planned", "runs_kept",
+    "compute_maxrss_gb", "io_maxrss_gb", "reads_available", "reads_used", "pileup_total_reads", "runs_planned", "runs_kept",
     "runs_dropped", "chemistry", "sra_bytes", "staged_bytes", "binary_sha256", "out_dir", "private_dir",
     "manifest_sha256", "out_bytes", "n_cells", "node", "est_wall_s", "est_su",
 ]
@@ -190,7 +190,7 @@ class Ledger:
         elif ev == "done":
             s["state"] = "done"
             s["t_done"] = t
-            for k in ("compute_s", "compute_maxrss_gb", "reads_used", "binary_sha256", "out_dir", "private_dir",
+            for k in ("compute_s", "compute_maxrss_gb", "pileup_total_reads", "binary_sha256", "out_dir", "private_dir",
                       "manifest_sha256", "out_bytes", "n_cells"):
                 if e.get(k) is not None:
                     s[k] = e[k]

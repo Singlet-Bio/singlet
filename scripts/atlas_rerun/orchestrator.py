@@ -367,7 +367,8 @@ class Controller:
 
     def choose_class(self, row, s):
         classes = self.c["compute_classes"]
-        safety = float(self.c.get("wall_safety", 1.6))
+        # wall_scale: measured compute time / cost model on this cluster (status shows it); wall_safety: margin on top
+        safety = float(self.c.get("wall_safety", 1.6)) * float(self.c.get("wall_scale", 1.0))
         reads = row.get("reads_available") or C.MEDIAN_READS
         nonhost = self.c.get("nonhost", self.cfg.get("pipeline", {}).get("nonhost", True))
         idx = None
@@ -658,7 +659,7 @@ def write_handoff(ctl, gse, samples):
         "binary_commit": ctl.cfg["binary"].get("commit"), "pipeline": ctl.cfg.get("pipeline", {}),
         "ready_for_packing": bool(done),
         "samples": [{k: s.get(k) for k in ("gsm", "wave", "state", "out_dir", "manifest_sha256", "out_bytes",
-                                           "reads_available", "reads_used", "runs_planned", "runs_kept",
+                                           "reads_available", "reads_used", "pileup_total_reads", "runs_planned", "runs_kept",
                                            "runs_dropped", "chemistry", "n_cells", "binary_sha256", "attempt")}
                     for s in sorted(samples, key=lambda x: accession_key(x["gsm"]))],
         "parked": [{"gsm": s["gsm"], "reason": s.get("last_reason")} for s in samples if s["state"] == "parked"],
@@ -833,14 +834,14 @@ def cmd_dryrun(a):
         cls_count[cl["name"]] += 1
         k = r.get("study_wave") or r["wave"]
         agg[k]["n"] += 1
-        agg[k]["core_h"] += C.compute_core_h(r["reads_available"], nonhost, cl["threads"]) * C.RETRY
+        agg[k]["core_h"] += C.compute_core_h(r["reads_available"], nonhost, cl["threads"]) * C.RETRY * float(c.get("wall_scale", 1.0))
         agg[k]["io_core_h"] += C.io_wall_s(r["reads_available"], r["bases"]) * int(c["io"].get("cpus", 1)) / 3600
         agg[k]["sra"] += r["est_sra_bytes"] * C.RETRY
         agg[k]["su"] += r["est_su"]
     cores = float(c.get("cores", 300))
     bw = float(c.get("bandwidth_MBps", 150)) * 1e6
-    print("\nprojection (cost_model_v2 constants, STAR x%.2f, non-host %s, +20%% retries), %d cores, %.0f MB/s:" % (
-        C.STAR_SPEEDUP, "on" if nonhost else "off", cores, bw / 1e6))
+    print("\nprojection (cost_model_v2 constants x wall_scale %.2f, STAR x%.2f, non-host %s, +20%% retries), %d cores, "
+          "%.0f MB/s:" % (float(c.get("wall_scale", 1.0)), C.STAR_SPEEDUP, "on" if nonhost else "off", cores, bw / 1e6))
     print("%-14s %8s %10s %10s %10s %9s %9s %9s" % ("wave", "samples", "core-h", "io core-h", "SRA", "compute d",
                                                      "network d", "SU"))
     tot = Counter()

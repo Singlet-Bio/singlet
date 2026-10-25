@@ -51,6 +51,7 @@
       "max_compute_inflight": 10,
       "batch_size": 8,
       "wall_safety": 1.6,
+      "wall_scale": 2.0,
       "io": {
         "partition": "short-cpu",
         "cpus": 2,

@@ -403,7 +403,7 @@ def compute_stage(ctx, row, attempt, threads, shared_genome=False):
         out_dir, priv_dir, man_sha, out_bytes = collect_outputs(ctx, gse, gsm, out_tmp, sdir, log)
         stats = load_json_safe(os.path.join(out_dir, "pileup_stats.json")) or {}
         emit(root, "done", gsm, attempt=attempt, stage="compute", compute_s=round(secs, 1),
-             compute_maxrss_gb=maxrss, reads_used=first_key(stats, ("total_reads", "reads_total", "n_reads")),
+             compute_maxrss_gb=maxrss, pileup_total_reads=first_key(stats, ("total_reads", "reads_total", "n_reads")),
              n_cells=first_key(stats, ("n_called_cells", "n_cells_called", "cells_called", "n_cells")),
              binary_sha256=ctx.sha, out_dir=out_dir, private_dir=priv_dir, manifest_sha256=man_sha,
              out_bytes=out_bytes, wall_s=round(time.time() - t0, 1))

@@ -44,6 +44,7 @@
       "max_compute_inflight": 75,
       "batch_size": 16,
       "wall_safety": 1.6,
+      "wall_scale": 2.0,
       "io": {"partition": "short-cpu", "cpus": 2, "mem_gb": 16, "time": "03:59:00", "max_inflight": 24,
              "array_throttle": 8, "requeue": false},
       "io_long": {"partition": "cpu", "time": "2-00:00:00"},
