@@ -63,9 +63,9 @@ def dump(out):
     is_cell = np.array([b in called for b in bc])
     tot = np.asarray(Eg.sum(0)).ravel() + np.asarray(Ig.sum(0)).ravel()
     print("genes", len(genes), "barcodes", len(bc), "called", is_cell.sum(), flush=True)
-    for T in THRESH:
+    for T in [int(x) for x in os.environ.get("THRESH", " ".join(map(str, THRESH))).split()]:
         keep = np.flatnonzero(is_cell | (tot >= T)) if T else np.arange(len(bc))
-        d = f"{out}/in_T{T}"
+        d = f"{out}/in_T{T}{os.environ.get('TAG', '')}"
         os.makedirs(d, exist_ok=True)
         for tag, M in (("exon", Eg[:, keep]), ("intron", Ig[:, keep])):
             M = M.tocsc()
