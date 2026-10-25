@@ -52,6 +52,12 @@ if(SINGLET_STAR_EXTRA_FLAGS)
     target_compile_options(singlet_star PRIVATE ${_star_extra})
 endif()
 
+# Exact speedups (same output): lazy winBin reset (clear only the bins the previous read wrote,
+# not 2x94 KB per read) and transparent hugepages for the private genome arrays (TLB misses).
+# Measured on PBMC 10M reads, 4 threads: mapping -19% together. The SA_*PREFETCH flags measured
+# no gain and stay off.
+target_compile_definitions(singlet_star PRIVATE SA_LAZY_WINBIN SA_HUGEPAGES)
+
 # STAR's Makefile injects these via -D flags; reproduce them here.
 string(TIMESTAMP _STAR_BUILD_DATE "%Y-%m-%dT%H:%M:%S")
 target_compile_definitions(singlet_star PRIVATE
