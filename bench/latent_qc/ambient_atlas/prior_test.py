@@ -19,7 +19,7 @@ from aa_load import load_records
 rec_dir, meta_tsv, out = sys.argv[1], sys.argv[2], sys.argv[3]
 NF = int(sys.argv[4]) if len(sys.argv) > 4 else 20
 os.makedirs(out, exist_ok=True)
-S, M, genes, sym, gcl = load_records(rec_dir, meta_tsv)
+S, M, genes, sym, gcl = load_records(rec_dir, meta_tsv, org=os.environ.get("AA_ORG", "human"))
 use = ((S.poolA_umi >= 1000) & (S.poolB_umi >= 1000) & S.tissue_coarse.notna()).values
 print("samples", len(S), "usable", int(use.sum()), flush=True)
 dist = {q: {k: float(np.percentile(S[k], q)) for k in ("pool1_umi", "pool1_n", "pool2_umi", "pool2_n", "n_called", "med_called_umi")} for q in (10, 25, 50, 75, 90)}

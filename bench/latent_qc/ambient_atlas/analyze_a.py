@@ -16,7 +16,7 @@ rec_dir, meta_tsv, out = sys.argv[1], sys.argv[2], sys.argv[3]
 NUC_THR = float(sys.argv[4]) if len(sys.argv) > 4 else 0.35
 import os
 os.makedirs(out, exist_ok=True)
-S, M, genes, sym, gcl = load_records(rec_dir, meta_tsv)
+S, M, genes, sym, gcl = load_records(rec_dir, meta_tsv, org=os.environ.get("AA_ORG", "human"))
 S["nuclei"] = np.where(S.intron_frac_called > NUC_THR, "nuclei", "cells")
 print("samples", len(S), "core genes", len(genes), "pool_ok", int(S.pool_ok.sum()), flush=True)
 
