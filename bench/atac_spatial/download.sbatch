@@ -25,6 +25,10 @@ for s in pbmc_granulocyte_sorted_10k pbmc_unsorted_3k pbmc_unsorted_10k human_br
   get $ARC/$s/${s}_per_barcode_metrics.csv arc_pbm || echo "missing $s"
 done
 CRA=https://cf.10xgenomics.com/samples/cell-atac/1.2.0
+# scATAC whitelist rebuild (the bundled 737K-cratac-v1.txt was a copy of 737K-august-2016): singlecell.csv of public runs
+for s in atac_pbmc_10k_nextgem atac_pbmc_1k_nextgem atac_pbmc_5k_v1 atac_pbmc_10k_v1 atac_pbmc_1k_v1 atac_v1_pbmc_10k          atac_v1_pbmc_5k atac_hgmm_10k_nextgem atac_hgmm_5k_v1 atac_v1_E18_brain_fresh_5k atac_pbmc_500_nextgem; do
+  get $CRA/$s/${s}_singlecell.csv cratac_sc || echo "missing $s"
+done
 for s in atac_pbmc_5k_nextgem; do
   for x in summary.csv singlecell.csv fragments.tsv.gz fragments.tsv.gz.tbi peaks.bed; do get $CRA/$s/${s}_$x $s; done
 done
