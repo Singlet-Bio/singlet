@@ -100,7 +100,9 @@ def run_dir(tmp_path_factory):
     _write_calls(run, bc, ex_tot, M.sum(axis=0), is_cell, cv2, fdr.astype(np.float64))
     (run / "filtered_feature_bc_matrix").mkdir()
     with gzip.open(run / "filtered_feature_bc_matrix" / "barcodes.tsv.gz", "wt") as f:
-        f.write("".join(b + "\n" for b, c in zip(bc, cv2) if c))
+        f.write(
+            "".join(b + "-1\n" for b, c in zip(bc, cv2) if c)
+        )  # 10x GEM-well suffix, as the binary writes
     stats = {
         "provenance": {
             "cell_call": {
@@ -173,3 +175,11 @@ def test_filtered_matrix_not_called_v2_fails(run_dir, tmp_path):
         f.write("BC000000\n")
     r = EQ.compare(str(run))
     assert r["inputs"]["filtered_is_called_v2"] is False and not r["pass"]
+
+
+def test_knee_rounds_half_away_from_zero():
+    # nmax = 10865 -> nmin = 1086.5 -> 1087 (C++ std::round); Python's round() would give 1086
+    tot = np.array([10865] * 31 + [1087, 1086, 5], dtype=np.int64)
+    flags, umi_min = EQ.cellranger22(tot)
+    assert umi_min == 1087
+    assert flags.tolist() == [True] * 32 + [False, False]

@@ -73,8 +73,12 @@ def cellranger22(tot, n_expected=3000, max_percentile=0.99, max_min_ratio=10):
     s = np.sort(tot[tot > 0])[::-1]
     if len(s) == 0:
         return np.zeros(len(tot), bool), 0
-    nmax = s[min(len(s) - 1, int(round(n_expected * (1 - max_percentile))))]
-    nmin = max(int(round(nmax / max_min_ratio)), 1)
+
+    def cround(x):  # std::round (half away from zero), not Python's round-half-to-even
+        return int(np.floor(x + 0.5))
+
+    nmax = s[min(len(s) - 1, cround(n_expected * (1 - max_percentile)))]
+    nmin = max(cround(nmax / max_min_ratio), 1)
     return tot >= nmin, nmin
 
 
@@ -108,8 +112,11 @@ def stats_cell_call(run):
 
 
 def filtered_barcodes(run):
+    """Barcodes of filtered_feature_bc_matrix/ without the 10x GEM-well suffix ("-1") the binary appends there."""
     p = os.path.join(run, "filtered_feature_bc_matrix", "barcodes.tsv.gz")
-    return lines(p) if os.path.exists(p) else None
+    if not os.path.exists(p):
+        return None
+    return [b[:-2] if b.endswith("-1") else b for b in lines(p)]
 
 
 def compare(run):
