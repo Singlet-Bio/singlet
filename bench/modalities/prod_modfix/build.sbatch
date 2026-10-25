@@ -24,11 +24,11 @@ sed -i '/^#include "htslib\/htslib\/sam.h"/a extern "C" void sam_hdr_destroy(bam
 if [ "${SKIP_BIN:-0}" != 1 ]; then
   cmake -S $SCR/src -B $SCR/b -DSINGLET_BUILD_PIPELINE=ON -DCMAKE_BUILD_TYPE=Release -DSINGLET_GIT_COMMIT=$COMMIT > $SCR/c.log 2>&1 || { tail -30 $SCR/c.log; exit 1; }
   cmake --build $SCR/b --target singlet -j 16 > $SCR/b.log 2>&1 || { grep -m40 -B2 -A8 "error" $SCR/b.log; exit 1; }
-  grep -c "warning:" $SCR/b.log | sed 's/^/[build] pipeline warnings: /'
+  (grep -c "warning:" $SCR/b.log || true) | sed 's/^/[build] pipeline warnings: /'
   cp $SCR/b/src/pipeline/singlet $PB/bin/singlet-modfix.new && mv $PB/bin/singlet-modfix.new $PB/bin/singlet-modfix
   sha256sum $PB/bin/singlet-modfix
 fi
 cmake -S $SCR/src -B $SCR/t -DSINGLET_BUILD_TESTS=ON -DSINGLET_BUILD_PIPELINE=OFF > $SCR/tc.log 2>&1 || { tail -30 $SCR/tc.log; exit 1; }
 cmake --build $SCR/t -j 16 -k > $SCR/tb.log 2>&1 || { grep -m60 -B2 -A8 "error" $SCR/tb.log; echo "[build] TEST BUILD FAILED"; }
-grep "warning:" $SCR/tb.log | grep -E "doublet|demux|ambient|mt_|polya|sj_features|star_cell|prefix_probe|export|run_prov" | sort -u | head -40
+grep "warning:" $SCR/tb.log | grep -E "doublet|demux|ambient|mt_|polya|sj_features|star_cell|prefix_probe|export|run_prov" | sort -u | head -40 || true
 cd $SCR/t && PZ2_TEST_MAX_MB=8 ctest -j 16 --output-on-failure -E "test_pz2_roundtrip" 2>&1 | tail -60

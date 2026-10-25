@@ -43,3 +43,6 @@ python -P bench/prod_atlas/compare_runs.py $PB/runs/$ID/singlet-prod-t8 $O --jso
 python -P bench/modalities/prod_modfix/modfix_compare.py $PB/runs/$ID/singlet-prod-t8 $O --json $RES/$ID.$TAG.modfix_compare.json | cut -c1-5000
 grep -h -E "^\[(singlet|doublet|ambient|demux|donor|mt_|polya|sj_features|cell_qc|nonhost|barnyard|export)\]" $O/run.log | grep -v -E "^\[export\] (CSC|Standard)" | head -60
 ls -la $O $O/private 2>/dev/null | head -80
+if [ "$ID" = hgmm1k_v3 ]; then
+  $W/envs/ambient/bin/python -P bench/modalities/prod_modfix/hgmm_e2e.py $O $RES/hgmm1k_v3.e2e_ambient_doublets.json | head -80
+fi
