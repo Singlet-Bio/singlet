@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://singlet.bio/benchmarking/schema/index-1.json",
+  "title": "Singlet benchmark index (schema 1.x); written by bench/public/contract.py index",
+  "type": "object",
+  "required": ["schema", "schema_version", "generated_at", "overall", "n_capabilities", "n_pass", "capabilities"],
+  "properties": {
+    "schema": {"const": "singlet.benchmark.index"},
+    "schema_version": {"type": "string", "pattern": "^1\\.[0-9]+\\.[0-9]+$"},
+    "generated_at": {"type": "string"},
+    "singlet": {"type": "array", "items": {"type": "object", "properties": {
+      "commit": {"type": ["string", "null"]}, "version": {"type": ["string", "null"]}}}},
+    "overall": {"enum": ["pass", "fail", "incomplete"]},
+    "n_capabilities": {"type": "integer"},
+    "n_pass": {"type": "integer"},
+    "capabilities": {"type": "array", "items": {
+      "type": "object", "required": ["capability", "status", "n_metrics", "n_pass", "n_fail", "n_na"],
+      "properties": {
+        "capability": {"type": "string"}, "title": {"type": ["string", "null"]}, "file": {"type": ["string", "null"]},
+        "sha256": {"type": "string"}, "owner": {"type": ["string", "null"]},
+        "doc_status": {"enum": ["draft", "final", null]}, "valid": {"type": "boolean"},
+        "generated_at": {"type": ["string", "null"]}, "conclusion": {"type": ["string", "null"]},
+        "n_caveats": {"type": "integer"},
+        "status": {"enum": ["pass", "fail", "incomplete", "invalid", "missing"]},
+        "n_metrics": {"type": "integer"}, "n_pass": {"type": "integer"}, "n_fail": {"type": "integer"},
+        "n_na": {"type": "integer"}}}}
+  }
+}

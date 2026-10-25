@@ -1,0 +1,67 @@
+{
+  "schema": "singlet.benchmark.capability",
+  "schema_version": "1.0.0",
+  "capability": "chromosomal-sex",
+  "title": "Chromosomal sex (EXAMPLE: invented numbers that show the shape of a document)",
+  "conclusion": "EXAMPLE ONLY. Singlet's per-cell chromosomal sex agrees with known donor sex for 99.1% of cells in pooled 1000 Genomes cell lines, against 96.2% for cellXY and 94.8% for a fixed XIST/chrY threshold.",
+  "methods": "Example methods text. Say what the data are, what the truth is, how every tool was run (exact settings are in tools[].params), and how each metric is computed.",
+  "status": "draft",
+  "generated_at": "2026-10-25T12:00:00+00:00",
+  "owner": "bench-public",
+  "singlet": {"version": "1.0.0", "commit": "0000000000000000000000000000000000000000", "branch": "prod/campaign",
+              "binary": "singlet-prod"},
+  "tools": [
+    {"name": "singlet", "version": "1.0.0", "role": "singlet", "params": "singlet.celllabels sex (xist-chrY-split/2)"},
+    {"name": "cellXY", "version": "1.4.0", "role": "competitor", "url": "https://bioconductor.org/packages/cellXY",
+     "params": "classifySex(counts, genome = 'Hs')"},
+    {"name": "xist-chrY-threshold", "version": "n/a", "role": "competitor",
+     "params": "female if XIST > 0 and no chrY UMI; male if chrY > 0 and XIST = 0; otherwise unassigned"},
+    {"name": "1000genomes-panel", "version": "20130502", "role": "truth"}
+  ],
+  "datasets": [
+    {"id": "pbmc1k_v3", "title": "10x PBMC 1k, 3' v3", "accessions": {"url": "https://www.10xgenomics.com/datasets/1-k-pbm-cs-from-a-healthy-donor-v-3-chemistry-3-standard-3-0-0"},
+     "truth": "single donor; sex from expression consensus (example)"}
+  ],
+  "metrics": [
+    {"id": "per_cell_accuracy", "name": "Per-cell accuracy", "unit": "fraction", "category": "accuracy",
+     "dataset": "pbmc1k_v3", "direction": "higher",
+     "singlet": {"value": 0.991, "ci": [0.987, 0.994]},
+     "competitors": [{"tool": "cellXY", "value": 0.962}, {"tool": "xist-chrY-threshold", "value": 0.948}],
+     "rule": {"type": "match_or_beat", "against": "best", "tolerance": {"abs": 0.005},
+              "rationale": "half-width of the bootstrap 95% CI of the difference (example)"},
+     "pass": "pass"},
+    {"id": "cells_called", "name": "Cells given a label", "unit": "fraction", "category": "coverage",
+     "dataset": "pbmc1k_v3", "direction": "higher", "singlet": {"value": 0.97},
+     "competitors": [{"tool": "cellXY", "value": 0.71}],
+     "rule": {"type": "match_or_beat"}, "pass": "pass"},
+    {"id": "donor_accuracy", "name": "Donor-level accuracy", "unit": "fraction", "category": "accuracy",
+     "dataset": "pooled", "direction": "higher", "singlet": {"value": 1.0},
+     "rule": {"type": "threshold", "value": 1.0, "rationale": "every donor must be right"}, "pass": "pass"},
+    {"id": "n_cells", "name": "Cells scored", "unit": "cells", "category": "coverage", "dataset": "pooled",
+     "direction": "none", "singlet": {"value": 1183}, "rule": {"type": "informational"}, "pass": "na"}
+  ],
+  "resources": [
+    {"tool": "singlet", "dataset": "pooled", "wall_s": 12.4, "cpu_h": 0.003, "max_rss_gb": 1.1, "threads": 1},
+    {"tool": "cellXY", "dataset": "pooled", "wall_s": 48.0, "cpu_h": 0.013, "max_rss_gb": 3.2, "threads": 1}
+  ],
+  "figures": [
+    {"id": "accuracy_by_tool", "title": "Per-cell accuracy", "kind": "bar",
+     "x": {"label": "tool", "categories": ["singlet", "cellXY", "xist-chrY-threshold"]},
+     "y": {"label": "accuracy", "unit": "fraction", "min": 0, "max": 1},
+     "series": [{"name": "pbmc1k_v3", "x": ["singlet", "cellXY", "xist-chrY-threshold"], "y": [0.991, 0.962, 0.948]}]},
+    {"id": "confusion", "title": "Confusion (rows truth, columns call)", "kind": "heatmap",
+     "rows": ["female", "male"], "cols": ["female", "male", "ambiguous"], "z": [[590, 3, 2], [4, 580, 4]]}
+  ],
+  "artifacts": [
+    {"name": "sex_calls.tsv.gz", "url": "https://data.singlet.bio/benchmarking/1.0.0/chromosomal-sex/sex_calls.tsv.gz",
+     "kind": "derived", "format": "tsv"}
+  ],
+  "code": [
+    {"path": "python/singlet/celllabels/sex.py", "role": "implementation",
+     "url": "https://github.com/Singlet-Bio/singlet/blob/5c279cd/python/singlet/celllabels/sex.py"},
+    {"path": "bench/public/capabilities/chromosomal_sex.py", "role": "metric",
+     "url": "https://github.com/Singlet-Bio/singlet/blob/5c279cd/bench/public/capabilities/chromosomal_sex.py"}
+  ],
+  "reproduce": {"module": "bench/public/capabilities/chromosomal_sex.py", "function": "compute", "laptop_minutes": 2},
+  "caveats": ["This is an example document, not a result."]
+}

@@ -1,0 +1,3 @@
+# Singlet 1.0.0 public benchmark cohort. One row per dataset; see cohort.md for the reasoning. Columns are tab-separated.
+id	group	title	species	reference	chemistry	source	gse	gsm	srr	url	n_cells	read_pairs_m	fastq_gb	truth	licence	capabilities	why	est_task_h
+pbmc1k_v3	10x-3p	10x PBMC 1k, 3' v3	human	GRCh38-2024-A	10xv3	10x			https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v3/pbmc_1k_v3_fastqs.tar	1222	66.6	5.2	Cell Ranger 3.0 matrix; STARsolo/alevin-fry on the same reads	CC BY 4.0	gex-counts,spliced-unspliced,junctions-psi,cell-calling,alignment-performance,chromosomal-sex	the most used 3' v3 reference	3
