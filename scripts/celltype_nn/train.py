@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -52,11 +53,11 @@ def main(argv=None) -> int:
     ap.add_argument("--epochs", type=int, default=8)
     ap.add_argument("--batch", type=int, default=1024)
     ap.add_argument("--lr", type=float, default=1e-3)
-    ap.add_argument("--weight-decay", type=float, default=0.05)
-    ap.add_argument("--hidden", default="1024,512")
-    ap.add_argument("--dropout", type=float, default=0.2)
-    ap.add_argument("--input-dropout", type=float, default=0.1)
-    ap.add_argument("--transform", default="log", choices=["log", "logz", "rank"])
+    ap.add_argument("--weight-decay", type=float, default=0.1)
+    ap.add_argument("--hidden", default="2048", help="hidden layer sizes, e.g. 2048 or 2048x1024")
+    ap.add_argument("--dropout", type=float, default=0.4)
+    ap.add_argument("--input-dropout", type=float, default=0.3)
+    ap.add_argument("--transform", default="rank", choices=["log", "logz", "rank"])
     ap.add_argument("--tissue-context", action="store_true", help="feed the guide's tissue groups of Census tissue_general")
     ap.add_argument("--context-dropout", type=float, default=0.3, help="fraction of training cells shown without context")
     ap.add_argument("--ensemble-weight", type=float, default=0.5)
@@ -141,7 +142,8 @@ def main(argv=None) -> int:
     CTX = torch.from_numpy(tissue_context(ctx_text, groups)).to(dev) if groups else None
     ir = np.load(a.data / "intron_ratio.npy") if (a.data / "intron_ratio.npy").exists() else None
     aug = None if a.no_augment else Augmenter(len(vocab), ir, AugmentConfig(), dev, seed=a.seed)
-    hidden = tuple(int(h) for h in a.hidden.split(","))
+    # layer sizes as 2048,1024 or 2048x1024 (sbatch --export splits values on commas)
+    hidden = tuple(int(h) for h in re.split(r"[,x+]", a.hidden) if h)
     net = M.CellTypeNet(len(vocab), len(sp), hidden=hidden, dropout=a.dropout, input_dropout=a.input_dropout,
                         transform=a.transform, n_context=len(groups)).to(dev)
     opt = torch.optim.AdamW(net.parameters(), lr=a.lr, weight_decay=a.weight_decay)
