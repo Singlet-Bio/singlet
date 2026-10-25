@@ -71,7 +71,9 @@ def main(argv=None) -> int:
             except Exception as e:  # noqa: BLE001
                 print(f"{gse}/{ds}: {e}", flush=True)
                 continue
-            species = "mouse" if str(A.obs.get("organism_ontology_term_id", pd.Series(["NCBITaxon:9606"])).iloc[0]) == "NCBITaxon:10090" else "human"
+            # organism sits in uns in recent CELLxGENE schemas; the gene ids say it in every version
+            var0 = A.raw.var if A.raw is not None else A.var
+            species = "mouse" if str(var0.index[0]).startswith("ENSMUSG") else "human"
             core = np.array([split_barcode(str(b), 16)[0] for b in A.obs_names], dtype=object)
             lab = A.obs["cell_type_ontology_term_id"].astype(str).to_numpy()
             want = dict(zip(Td["core"], Td["cl_id"].astype(str)))
