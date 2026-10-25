@@ -6,9 +6,10 @@
 set -euo pipefail
 source /mnt/projects/debruinz_project/debruinz/singlet/src/singlet-py/claude__bench-public-cohort-485cf7/bench/public/harness/common.sh
 H=$SRC/bench/public/sexancestry; W=$BP/work/sex; mkdir -p $W
+PART=${PART:-scavenger}   # short-* partitions often hit the per-user node limit; scavenger jobs requeue on preemption
 ls -d $WORK/out/annotate_validation/run1/GSE* | xargs -n1 basename > $W/studies.txt
 N=$(wc -l < $W/studies.txt); echo "$N studies"
-E=$(sbatch --parsable --array=1-$N%8 $H/sex.sbatch extract)
-X=$(sbatch --parsable --dependency=afterany:$E --cpus-per-task=4 --mem=96G $H/sex.sbatch cellxy)
-K=$(sbatch --parsable --dependency=afterany:$X --cpus-per-task=4 --mem=32G $H/sex.sbatch collect)
+E=$(sbatch --parsable --partition=$PART --requeue --array=1-$N%8 $H/sex.sbatch extract)
+X=$(sbatch --parsable --partition=$PART --requeue --dependency=afterany:$E --cpus-per-task=4 --mem=96G $H/sex.sbatch cellxy)
+K=$(sbatch --parsable --partition=$PART --requeue --dependency=afterany:$X --cpus-per-task=4 --mem=32G $H/sex.sbatch collect)
 echo "extract $E  cellxy $X  collect $K" | tee -a $BP/work/submissions.log

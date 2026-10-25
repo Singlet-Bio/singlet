@@ -6,7 +6,7 @@
 # Tasks whose output exists (.done) exit at once, so the same command resumes a partial campaign.
 set -euo pipefail
 source /mnt/projects/debruinz_project/debruinz/singlet/src/singlet-py/claude__bench-public-cohort-485cf7/bench/public/harness/common.sh
-H=$SRC/bench/public/harness
+H=$SRC/bench/public/harness; PART=${PART:-scavenger}
 TIER=core; ONLY_TOOLS=""; DS=()
 while [ $# -gt 0 ]; do
   case $1 in --tier) TIER=$2; shift 2 ;; --tools) ONLY_TOOLS=$2; shift 2 ;; *) DS+=("$1"); shift ;; esac
@@ -28,8 +28,8 @@ for d in "${DS[@]}"; do
 done
 ND=$(wc -l < $BP/work/datasets.txt); NT=$(wc -l < $BP/work/tasks.tsv)
 echo "$ND datasets, $NT runs"
-F=$(sbatch --parsable --array=1-$ND%4 $H/fetch.sbatch)
-R=$(sbatch --parsable --dependency=afterany:$F --array=1-$NT%12 $H/run.sbatch)
-K=$(sbatch --parsable --dependency=afterany:$R $H/collect.sbatch)
+F=$(sbatch --parsable --partition=$PART --requeue --array=1-$ND%4 $H/fetch.sbatch)
+R=$(sbatch --parsable --partition=$PART --requeue --dependency=afterany:$F --array=1-$NT%12 $H/run.sbatch)
+K=$(sbatch --parsable --partition=$PART --requeue --dependency=afterany:$R $H/collect.sbatch)
 echo "fetch $F  runs $R  collect $K"
 echo "$(date -Is) fetch=$F runs=$R collect=$K tier=$TIER n_runs=$NT" >> $BP/work/submissions.log
