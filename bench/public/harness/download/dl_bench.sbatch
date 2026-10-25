@@ -88,7 +88,11 @@ for mode in $MODES; do
   export HOME=$D/home; mkdir -p $HOME/.ncbi; cp $WORK/cache/condahome/.ncbi/user-settings.mkfg $HOME/.ncbi/
   echo "[dl] $mode start $(date -Is)"
   t0=$(date +%s.%N)
-  for r in $RUNS; do stream_fn $mode $r $D & done; wait
+  ( for r in $RUNS; do stream_fn $mode $r $D & done; wait ) &
+  grp=$!
+  $PY -I $SRC/bench/public/harness/memwatch.py $grp $OUTB/$mode.mem.json &
+  mw=$!
+  wait $grp; wait $mw
   t1=$(date +%s.%N)
   : > $OUTB/$mode.streams.tsv
   for r in $RUNS; do
