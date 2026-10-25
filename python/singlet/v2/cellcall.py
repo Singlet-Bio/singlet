@@ -8,13 +8,17 @@ The stored ``called`` flag is STARsolo's default ``CellRanger2.2 3000 0.99 10`` 
 * counts: exon + intron, aggregated to genes (gene = feature name before the first ``_``);
 * ambient pool: uncalled barcodes with 0 < total <= ``lower``; ``lower`` = 3 x the mode of log10(total) among barcodes below
   half the 5th percentile of the called totals, clipped to [5, 100] (the plateau of the barcode-rank curve);
-* tested: uncalled barcodes with total > max(``lower``, 50); barcodes at or above the knee get p = 0 (``retain``);
+* tested: uncalled barcodes with total > max(``lower``, 50); barcodes at or above the knee get p = 0 (``retain``); the knee is
+  fitted within DropletUtils' curve bounds (``.find_curve_bounds``), as ``barcodeRanks`` does;
 * ambient profile: Good-Turing proportions of the pool's summed counts; Dirichlet-multinomial concentration ``alpha`` by maximum
   likelihood over the pool; Monte Carlo p-values from 10,000 Polya-urn paths (one path per draw, reseeded per draw, so the result
-  does not depend on threads); Benjamini-Hochberg over the tested barcodes; flag at FDR <= 0.001.
+  does not depend on threads); a barcode below every simulated path gets p = min(Phi(z), 1 / (niters + 1)), z from the mean and
+  sd of the simulated log-probabilities at its total; Benjamini-Hochberg over the tested barcodes; flag at FDR <= 0.001.
 
 The Monte Carlo loop needs numba (``pip install singlet-bio[migrate]``); everything else is numpy/scipy. Validated on 65 samples
-against the authors' Cell Ranger calls and hashtags (docs/called-v2.md); the reference implementation is bench/called_v2/.
+against the authors' Cell Ranger calls and hashtags (docs/called-v2.md) and against ground truth on six benchmark datasets
+(docs/called-v2-truth.md, reference bench/called_v2_truth/common.py). Golden vectors shared with the C++ port
+(include/singlet/pileup/called_v2.h): tests/data/called_v2_golden/.
 """
 
 from __future__ import annotations
@@ -25,7 +29,7 @@ from typing import Optional
 import numpy as np
 
 METHOD = "singlet-emptydrops"
-VERSION = "2.0"
+VERSION = "2.1"  # 2.1: knee within the DropletUtils curve bounds; tail p-values below every simulated path
 DEFAULTS = {
     "lower_rule": "plateau",
     "test_min": 50,
@@ -277,28 +281,57 @@ def bh(p: np.ndarray) -> np.ndarray:
 
 
 # ----------------------------------------------------------------------------------------------------------- bounds
-def knee(totals: np.ndarray, lower: int, exclude_from: int = 50) -> float:
-    """DropletUtils ``barcodeRanks`` knee: maximum curvature of log10 total vs log10 rank (average rank of ties) on totals
-    > ``lower``, after the top ``exclude_from`` unique totals."""
-    from scipy.interpolate import UnivariateSpline
-
+def _rank_curve(totals: np.ndarray, lower: float):
+    """Unique totals > ``lower`` (descending) and their average ranks among the nonzero totals (ties share the mean rank)."""
     t = np.sort(totals[totals > 0])[::-1]
-    if len(t) < 10:
-        return float("nan")
     u = np.unique(t)[::-1]  # descending unique totals
     first = np.searchsorted(-t, -u, side="left")
     last = np.searchsorted(-t, -u, side="right") - 1
     rr = (first + last) / 2 + 1
     keep = u > lower
-    u, rr = u[keep], rr[keep]
-    if len(u) <= exclude_from + 5:
+    return u[keep], rr[keep]
+
+
+def _spline_knee(xs: np.ndarray, ys: np.ndarray) -> float:
+    """Total at the minimum signed curvature of a cubic smoothing spline through (log10 rank, log10 total)."""
+    from scipy.interpolate import UnivariateSpline
+
+    spl = UnivariateSpline(xs, ys, k=3, s=len(xs) * np.var(ys) * 0.002)
+    d1 = spl.derivative(1)(xs)
+    d2 = spl.derivative(2)(xs)
+    return float(10 ** ys[np.argmin(d2 / (1 + d1**2) ** 1.5)])
+
+
+def curve_bounds(totals: np.ndarray, lower: float, exclude_from: int = 50) -> tuple:
+    """Indices ``(left, right)`` into ``_rank_curve(totals, lower)`` of DropletUtils' fit bounds (``.find_curve_bounds``):
+    on the (log10 rank, log10 total) points, ``right`` is the steepest drop and ``left`` the largest slope before it, both after
+    the points with log10 rank <= log10(``exclude_from``). ``None`` with fewer than 10 points."""
+    u, rr = _rank_curve(np.asarray(totals), lower)
+    if len(u) < 10:
+        return None
+    x, y = np.log10(rr), np.log10(u)
+    d1n = np.diff(y) / np.diff(x)
+    skip = min(len(d1n) - 1, int((x <= math.log10(exclude_from)).sum()))
+    d = d1n[skip:]
+    right = int(np.argmin(d))
+    left = int(np.argmax(d[: right + 1]))
+    return left + skip, right + skip
+
+
+def knee(totals: np.ndarray, lower: float, exclude_from: int = 50) -> float:
+    """DropletUtils ``barcodeRanks`` knee: maximum curvature of log10 total vs log10 rank (average rank of ties), fitted on the
+    totals > ``lower`` between the curve bounds (``curve_bounds``) only. Fewer than 6 points between the bounds: the total at
+    the left bound. Without the bounds the fit reaches into the ambient shoulder when ``lower`` is small, and the knee can land
+    just above ``lower`` (docs/called-v2-truth.md). Reference: bench/called_v2_truth/common.py ``knee_bounded``."""
+    totals = np.asarray(totals)
+    b = curve_bounds(totals, lower, exclude_from)
+    if b is None:
         return float("nan")
-    xs, ys = np.log10(rr)[exclude_from:], np.log10(u)[exclude_from:]
+    u, rr = _rank_curve(totals, lower)
+    x, y = np.log10(rr), np.log10(u)
+    xs, ys = x[b[0] : b[1] + 1], y[b[0] : b[1] + 1]
     try:
-        spl = UnivariateSpline(xs, ys, k=3, s=len(xs) * np.var(ys) * 0.002)
-        d1 = spl.derivative(1)(xs)
-        d2 = spl.derivative(2)(xs)
-        return float(10 ** ys[np.argmin(d2 / (1 + d1**2) ** 1.5)])
+        return _spline_knee(xs, ys) if len(xs) >= 6 else float(10 ** ys[0])
     except Exception:
         return float("nan")
 
@@ -325,6 +358,13 @@ def call(X, called: np.ndarray, protocol: Optional[str] = None, **over) -> tuple
     Returns ``(called_v2 bool[n], fdr float32[n] (NaN = not tested), params dict)``. ``params`` records everything needed to
     reproduce the call, including the fitted ``alpha`` and the ambient pool; ``params["validated"]`` is False for protocols
     without ground truth (inDrop, Drop-seq) and ``params["method"] == "stored-call"`` where the stored call is kept."""
+    cv2, pv, q, params = call_detail(X, called, protocol, **over)
+    return cv2, q.astype(np.float32), params
+
+
+def call_detail(X, called: np.ndarray, protocol: Optional[str] = None, **over) -> tuple:
+    """``call`` with the per-barcode p-values: ``(called_v2 bool[n], pvalue float64[n], fdr float64[n], params)``; p-value and
+    FDR are NaN where a barcode is not tested. Used by the golden vectors (tests/data/called_v2_golden/)."""
     P = {**DEFAULTS, **over}
     called = np.asarray(called, bool)
     n = len(called)
@@ -338,11 +378,12 @@ def call(X, called: np.ndarray, protocol: Optional[str] = None, **over) -> tuple
         "validated": validated,
         **P,
     }
-    fdr = np.full(n, np.nan, np.float32)
+    fdr = np.full(n, np.nan)
+    pvalue = np.full(n, np.nan)
     if fam == "combinatorial" or n == 0:
         params["method"] = "stored-call"
         params["n_called_v2"] = int(called.sum())
-        return called.copy(), fdr, params
+        return called.copy(), pvalue, fdr, params
     X = X.tocsc()
     tot = np.asarray(X.sum(axis=0)).ravel().astype(np.int64)
     lower = plateau_lower(tot, called) if P["lower_rule"] == "plateau" else int(P["lower_rule"])
@@ -362,7 +403,7 @@ def call(X, called: np.ndarray, protocol: Optional[str] = None, **over) -> tuple
     if ambient.sum() < 10 or tot[ambient].sum() < 100 or not test.any():
         params["error"] = "ambient pool too small" if test.any() else "nothing to test"
         params["n_called_v2"] = int(called.sum())
-        return called.copy(), fdr, params
+        return called.copy(), pvalue, fdr, params
     mc = _mc_kernel()
     asum = np.asarray(X[:, ambient].sum(axis=1)).ravel().astype(np.int64)
     prop = good_turing_proportions(asum)
@@ -370,18 +411,18 @@ def call(X, called: np.ndarray, protocol: Optional[str] = None, **over) -> tuple
     params["alpha"] = alpha
     ti = np.nonzero(test)[0]
     tt = tot[ti]
-    pv = np.full(len(ti), 1.0 / (P["niters"] + 1))
+    niters = int(P["niters"])
+    pv = np.full(len(ti), 1.0 / (niters + 1))
     sim = tt <= MAX_SIMULATED_TOTAL
     if retain is not None:
         pv[tt >= retain] = 0.0
         sim &= tt < retain
+    n_tail = 0
     if sim.any():
         lp = dm_logprob(X[:, ti[sim]], prop, alpha)
         ut = np.unique(tt[sim])
         prob, alias = alias_table(prop)
-        sims = mc(
-            prob, alias, prop, float(alpha), ut.astype(np.int64), int(P["niters"]), int(P["seed"])
-        )
+        sims = mc(prob, alias, prop, float(alpha), ut.astype(np.int64), niters, int(P["seed"]))
         sims.sort(axis=0)
         col = np.searchsorted(ut, tt[sim])
         n_le = np.fromiter(
@@ -389,11 +430,25 @@ def call(X, called: np.ndarray, protocol: Optional[str] = None, **over) -> tuple
             dtype=np.int64,
             count=len(lp),
         )
-        pv[sim] = (n_le + 1) / (P["niters"] + 1)
+        ps = (n_le + 1) / (niters + 1)
+        # below every simulated path: extrapolate the null tail with a normal approximation of the simulated log-probabilities
+        # at that total (mean, population sd), capped at the Monte Carlo floor 1 / (niters + 1). Without it BH can pass nothing
+        # when fewer than n_tested * fdr * (niters + 1) barcodes sit at the floor (docs/called-v2-truth.md).
+        floor = n_le == 0
+        if floor.any():
+            from scipy.stats import norm
+
+            mu, sd = sims.mean(axis=0), sims.std(axis=0)
+            z = (lp[floor] - mu[col[floor]]) / np.maximum(sd[col[floor]], 1e-12)
+            ps[floor] = np.minimum(norm.cdf(z), 1.0 / (niters + 1))
+            n_tail = int(floor.sum())
+        pv[sim] = ps
+    params["n_tail"] = n_tail
     q = bh(pv)
-    fdr[ti] = q.astype(np.float32)
+    pvalue[ti] = pv
+    fdr[ti] = q
     cv2 = called.copy()
     cv2[ti[q <= P["fdr"]]] = True
     params["n_called_v2"] = int(cv2.sum())
     params["n_added"] = int((cv2 & ~called).sum())
-    return cv2, fdr, params
+    return cv2, pvalue, fdr, params
