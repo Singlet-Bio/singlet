@@ -18,9 +18,14 @@ import torch.nn.functional as F
 
 
 class CellTypeNet(nn.Module):
-    def __init__(self, n_genes: int, n_terms: int, hidden=(1024, 512), dropout: float = 0.2, input_dropout: float = 0.1, transform: str = "log"):
+    def __init__(
+        self, n_genes: int, n_terms: int, hidden=(1024, 512), dropout: float = 0.2, input_dropout: float = 0.1, transform: str = "log",
+        n_context: int = 0,
+    ):
         super().__init__()
-        layers, d = [nn.Dropout(input_dropout)], n_genes
+        self.n_context = n_context
+        self.in_drop = nn.Dropout(input_dropout)
+        layers, d = [], n_genes + n_context
         for h in hidden:
             layers += [nn.Linear(d, h), nn.LayerNorm(h), nn.GELU(), nn.Dropout(dropout)]
             d = h
@@ -29,17 +34,25 @@ class CellTypeNet(nn.Module):
         self.register_buffer("temperature", torch.ones(()))
         self.transform = transform
         self.config = dict(n_genes=n_genes, n_terms=n_terms, hidden=list(hidden), dropout=dropout, input_dropout=input_dropout,
-                           transform=transform)
+                           transform=transform, n_context=n_context)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Logits (uncalibrated)."""
-        return self.head(self.body(x))
+    def _inputs(self, x: torch.Tensor, ctx: Optional[torch.Tensor]) -> torch.Tensor:
+        x = self.in_drop(x)
+        if self.n_context:
+            if ctx is None:
+                ctx = torch.zeros(x.shape[0], self.n_context, device=x.device, dtype=x.dtype)
+            x = torch.cat([x, ctx], 1)
+        return x
 
-    def embed(self, x: torch.Tensor) -> torch.Tensor:
-        return self.body(x)
+    def forward(self, x: torch.Tensor, ctx: Optional[torch.Tensor] = None) -> torch.Tensor:
+        """Logits (uncalibrated). ``ctx``: tissue-group multi-hot (cells x n_context); None = no context."""
+        return self.head(self.body(self._inputs(x, ctx)))
 
-    def proba(self, x: torch.Tensor) -> torch.Tensor:
-        return F.softmax(self.forward(x) / self.temperature, dim=1)
+    def embed(self, x: torch.Tensor, ctx: Optional[torch.Tensor] = None) -> torch.Tensor:
+        return self.body(self._inputs(x, ctx))
+
+    def proba(self, x: torch.Tensor, ctx: Optional[torch.Tensor] = None) -> torch.Tensor:
+        return F.softmax(self.forward(x, ctx) / self.temperature, dim=1)
 
 
 def credit_loss(logits: torch.Tensor, credit: torch.Tensor, weight: Optional[torch.Tensor] = None, eps: float = 1e-6):
@@ -78,6 +91,12 @@ def save(model: CellTypeNet, path, extra: dict) -> None:
 def load(path, map_location="cpu"):
     d = torch.load(path, map_location=map_location, weights_only=False)
     m = CellTypeNet(**d["config"])
-    m.load_state_dict(d["state"])
+    state = dict(d["state"])
+    # models saved before the context input kept the input dropout as body.0 (no parameters), so their layers sit one higher
+    if any(k.startswith("body.1.") for k in state) and not any(k.startswith("body.0.") for k in state):
+        state = {
+            (f"body.{int(k.split('.')[1]) - 1}." + k.split(".", 2)[2]) if k.startswith("body.") else k: v for k, v in state.items()
+        }
+    m.load_state_dict(state)
     m.eval()
     return m, d

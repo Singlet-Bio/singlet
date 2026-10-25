@@ -34,7 +34,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1] / "python"))
 sys.path.insert(0, str(HERE.parent))
 
-ALL = ["nn", "nn_argmax", "nn_exon", "guide", "celltypist", "singler", "vote"]
+ALL = ["nn", "nn_argmax", "nn_exon", "nn_no_tissue", "guide", "celltypist", "singler", "vote"]
 BINS = np.linspace(0, 1, 11)
 
 
@@ -144,7 +144,7 @@ def main(argv=None) -> int:
             calls, scores, extra = {}, {}, {}
             if any(m.startswith("nn") for m in methods):
                 t0 = time.time()
-                P = pred.predict(s.X, gene_ids, s.species, threads=a.threads)
+                P = pred.predict(s.X, gene_ids, s.species, tissue=s.tissue, threads=a.threads)
                 secs = time.time() - t0
                 summ = pred.summarise(P)
                 calls["nn"], scores["nn"] = summ["call"], summ["call_prob"]
@@ -156,8 +156,12 @@ def main(argv=None) -> int:
                                                        argmax=summ["argmax"][tr], argmax_prob=summ["argmax_prob"][tr],
                                                        top1=summ["topk"][tr, 0], top2=summ["topk"][tr, 1], top3=summ["topk"][tr, 2],
                                                        p1=summ["topk_prob"][tr, 0], p2=summ["topk_prob"][tr, 1], p3=summ["topk_prob"][tr, 2])))
+                if "nn_no_tissue" in methods and pred.net.n_context:
+                    Pn = pred.predict(s.X, gene_ids, s.species, tissue=None, threads=a.threads)
+                    sn = pred.summarise(Pn)
+                    calls["nn_no_tissue"], scores["nn_no_tissue"] = sn["call"], sn["call_prob"]
                 if "nn_exon" in methods and spl is not None:
-                    Pe = pred.predict(spl, gene_ids, s.species, threads=a.threads)
+                    Pe = pred.predict(spl, gene_ids, s.species, tissue=s.tissue, threads=a.threads)
                     se = pred.summarise(Pe)
                     calls["nn_exon"], scores["nn_exon"] = se["call"], se["call_prob"]
             if "guide" in methods or "vote" in methods:

@@ -93,7 +93,7 @@ def run(a) -> int:
                     if s.species not in ("human", "mouse") or s.X.shape[0] == 0:
                         continue
                     t1 = time.time()
-                    P = pred.predict(s.X, s.gene_ids, s.species, threads=a.threads)
+                    P = pred.predict(s.X, s.gene_ids, s.species, tissue=s.tissue, threads=a.threads)
                     tab = pred.table(P, s.gsm, s.col)
                     rec["s_predict"] += time.time() - t1
                     write_sidecar(tab, dst)

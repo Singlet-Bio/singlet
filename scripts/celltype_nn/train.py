@@ -56,6 +56,8 @@ def main(argv=None) -> int:
     ap.add_argument("--dropout", type=float, default=0.2)
     ap.add_argument("--input-dropout", type=float, default=0.1)
     ap.add_argument("--transform", default="log", choices=["log", "logz", "rank"])
+    ap.add_argument("--tissue-context", action="store_true", help="feed the guide's tissue groups of Census tissue_general")
+    ap.add_argument("--context-dropout", type=float, default=0.3, help="fraction of training cells shown without context")
     ap.add_argument("--ensemble-weight", type=float, default=0.5)
     ap.add_argument("--coarse-credit", type=float, default=0.25, help="beta: credit of an ancestor of the target = beta * IC ratio")
     ap.add_argument("--no-ensemble", action="store_true")
@@ -68,7 +70,8 @@ def main(argv=None) -> int:
     import torch
 
     from singlet.celltype_nn import model as M
-    from singlet.celltype_nn.features import AugmentConfig, Augmenter, GeneVocab, transform
+    from singlet.celllabels.guide import TISSUE_GROUPS
+    from singlet.celltype_nn.features import AugmentConfig, Augmenter, GeneVocab, tissue_context, transform
     from singlet.celltype_nn.ontology import TermSpace
 
     torch.manual_seed(a.seed)
@@ -113,11 +116,13 @@ def main(argv=None) -> int:
     print(f"{len(tr)} train / {len(va)} val cells, {len(sp)} terms, {len(vocab)} genes, "
           f"{int(pd.notna(refine[tr]).sum())} refined, device {dev}, {time.time() - t0:.0f}s", flush=True)
 
+    groups = [g for g in TISSUE_GROUPS if g not in ("tumor", "embryo")] if a.tissue_context else []
+    CTX = torch.from_numpy(tissue_context(obs["tissue_general"].to_numpy(object), groups)).to(dev) if groups else None
     ir = np.load(a.data / "intron_ratio.npy") if (a.data / "intron_ratio.npy").exists() else None
     aug = None if a.no_augment else Augmenter(len(vocab), ir, AugmentConfig(), dev, seed=a.seed)
     hidden = tuple(int(h) for h in a.hidden.split(","))
     net = M.CellTypeNet(len(vocab), len(sp), hidden=hidden, dropout=a.dropout, input_dropout=a.input_dropout,
-                        transform=a.transform).to(dev)
+                        transform=a.transform, n_context=len(groups)).to(dev)
     opt = torch.optim.AdamW(net.parameters(), lr=a.lr, weight_decay=a.weight_decay)
     train_b = Batches(X, tr, a.batch, a.seed)
     steps = a.epochs * len(train_b.order())
@@ -138,7 +143,7 @@ def main(argv=None) -> int:
                 c = c.to(dev, non_blocking=True)
                 if augment and aug is not None:
                     c = aug(c)
-                logits.append(net(transform(c, a.transform)))
+                logits.append(net(transform(c, a.transform), None if CTX is None else CTX[r.to(dev)]))
                 rows.append(r)
         net.train()
         return torch.cat(logits), torch.cat(rows).to(dev)
@@ -171,7 +176,10 @@ def main(argv=None) -> int:
             rows = rows.to(dev)
             if aug is not None:
                 c = aug(c)
-            logits = net(transform(c, a.transform))
+            cx = None
+            if CTX is not None:
+                cx = CTX[rows] * (torch.rand(len(rows), 1, device=dev) >= a.context_dropout).float()
+            logits = net(transform(c, a.transform), cx)
             loss = M.credit_loss(logits, credit[a_idx[rows]])
             rr = r_idx[rows]
             has = rr >= 0
@@ -213,6 +221,7 @@ def main(argv=None) -> int:
         dict(
             vocab=vocab.to_dict(),
             terms=sp.terms,
+            tissue_groups=groups,
             cl_version=sp.o.version,
             census=json.loads((a.data / "plan.json").read_text()).get("census_version"),
             args=vars(a) | {"data": str(a.data), "out": str(a.out)},

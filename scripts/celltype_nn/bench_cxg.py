@@ -84,7 +84,9 @@ def main(argv=None) -> int:
             var = A.raw.var if A.raw is not None else A.var
             X = sps.csr_matrix(Xr[np.flatnonzero(m)])
             gene_ids = [str(x) for x in var.index]
-            P = pred.predict(X, gene_ids, species, threads=a.threads)
+            # the dataset's curated tissue: the context the network was trained with
+            tissue = str(A.obs["tissue_general"].iloc[0]) if "tissue_general" in A.obs else ""
+            P = pred.predict(X, gene_ids, species, tissue=tissue, threads=a.threads)
             s = pred.summarise(P)
             truth = lab[m]
             g = Guide(list(var.get("feature_name", pd.Series(var.index)).astype(str)), species=species)

@@ -47,20 +47,28 @@ class CellTypePredictor:
             meta["model_version"] = version
         return cls(net, meta)
 
-    def predict(self, X, gene_ids: Sequence[str], species: str, batch: int = 8192, threads: Optional[int] = None) -> np.ndarray:
-        """Calibrated probabilities, cells x output terms. ``X``: raw counts (cells x genes); ``gene_ids``: Ensembl ids."""
+    def predict(
+        self, X, gene_ids: Sequence[str], species: str, tissue: Optional[str] = None, batch: int = 8192, threads: Optional[int] = None
+    ) -> np.ndarray:
+        """Calibrated probabilities, cells x output terms. ``X``: raw counts (cells x genes); ``gene_ids``: Ensembl ids;
+        ``tissue``: the sample's tissue text (as :func:`singlet.celllabels.io.tissue_text` gives it), used by models trained
+        with tissue context; None, or text naming no organ, means no context."""
         import torch
 
-        from .features import transform
+        from .features import tissue_context, transform
 
         if threads:
             torch.set_num_threads(threads)
         V = self.vocab.project(sps.csr_matrix(X), gene_ids, species)
+        ctx = None
+        if self.net.n_context:
+            ctx = torch.from_numpy(tissue_context([tissue], self.meta["tissue_groups"]))
         out = np.zeros((V.shape[0], len(self.space)), np.float32)
         with torch.no_grad():
             for s in range(0, V.shape[0], batch):
                 c = torch.from_numpy(V[s : s + batch].toarray())
-                out[s : s + batch] = self.net.proba(transform(c, self.net.transform)).numpy()
+                cx = None if ctx is None else ctx.expand(c.shape[0], -1)
+                out[s : s + batch] = self.net.proba(transform(c, self.net.transform), cx).numpy()
         return out
 
     def summarise(self, P: np.ndarray, threshold: float = 0.5, k: int = TOP_K) -> dict:

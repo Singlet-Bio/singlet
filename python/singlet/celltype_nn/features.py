@@ -159,3 +159,25 @@ class Augmenter:
         d = coin(cfg.p_dropout) * torch.rand(B, 1, device=dev) * cfg.dropout_max
         out = out * (torch.rand_like(out) >= d).float()
         return out
+
+
+def tissue_context(texts, groups: Sequence[str]) -> np.ndarray:
+    """Cells (or samples) x tissue groups multi-hot from free tissue text, through the guide's own matcher
+    (:func:`singlet.celllabels.guide.tissue_groups`), so training (Census ``tissue_general``) and inference (the GEO sample text
+    the guide reads) share one mapping. Text naming no known organ gives a zero row (no context)."""
+    from singlet.celllabels.guide import tissue_groups
+
+    gi = {g: i for i, g in enumerate(groups)}
+    cache: Dict[str, np.ndarray] = {}
+    out = np.zeros((len(texts), len(groups)), np.float32)
+    for r, t in enumerate(texts):
+        t = "" if t is None else str(t)
+        v = cache.get(t)
+        if v is None:
+            v = np.zeros(len(groups), np.float32)
+            for g in tissue_groups(t):
+                if g in gi:
+                    v[gi[g]] = 1
+            cache[t] = v
+        out[r] = v
+    return out

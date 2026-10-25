@@ -39,7 +39,7 @@ def main(argv=None) -> int:
     import torch
 
     from singlet.celltype_nn import model as M
-    from singlet.celltype_nn.features import AugmentConfig, Augmenter, transform
+    from singlet.celltype_nn.features import AugmentConfig, Augmenter, tissue_context, transform
     from singlet.celltype_nn.ontology import TermSpace
 
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -47,7 +47,7 @@ def main(argv=None) -> int:
     net = net.to(dev)
     sp = TermSpace(meta["terms"])
     X = sps.load_npz(a.data / "corpus_counts.npz").tocsr()
-    obs = pd.read_parquet(a.data / "corpus_obs.parquet", columns=["split"])
+    obs = pd.read_parquet(a.data / "corpus_obs.parquet", columns=["split", "tissue_general"])
     cells = pd.read_parquet(a.data / "space_cells.parquet", columns=["author_term"])
     au = cells["author_term"].to_numpy(object)
     va = np.flatnonzero((obs["split"].to_numpy() == "val") & pd.notna(au))
@@ -65,13 +65,16 @@ def main(argv=None) -> int:
     aug = Augmenter(X.shape[1], ir, AugmentConfig(), dev, seed=1)
     Rup = torch.from_numpy(sp.R).to(dev)
     key_c = torch.from_numpy(sp.ic_closure + 1e-6 * sp.depth_closure).to(dev)
+    groups = meta.get("tissue_groups") or []
+    CTX = torch.from_numpy(tissue_context(obs["tissue_general"].to_numpy(object)[va], groups)).to(dev) if groups else None
     net.eval()
     logits = {"clean": [], "aug": []}
     with torch.no_grad():
         for s in range(0, len(va), 8192):
             c = torch.from_numpy(X[va[s : s + 8192]].toarray().astype(np.float32)).to(dev)
-            logits["clean"].append(net(transform(c, net.transform)))
-            logits["aug"].append(net(transform(aug(c), net.transform)))
+            cx = None if CTX is None else CTX[s : s + 8192]
+            logits["clean"].append(net(transform(c, net.transform), cx))
+            logits["aug"].append(net(transform(aug(c), net.transform), cx))
     logits = {k: torch.cat(v) for k, v in logits.items()}
 
     def evaluate(T: float, L):
