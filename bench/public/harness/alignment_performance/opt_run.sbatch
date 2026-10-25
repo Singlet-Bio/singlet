@@ -39,7 +39,7 @@ export SINGLET_STALL_TIMEOUT=10800
 one() {  # NAME BIN THREADS ENV(k=v,...) EXTRA...  -> $O0/NAME_rREP
   local name=$1 bin=$2 thr=$3 envs=$4; shift 4
   local O=$O0/${name}_r$REP; rm -rf $O $O.keep; mkdir -p $O
-  echo "[opt] $name $(date -Is)" > $O/node.txt
+  echo "[opt] $(cpu_model) $(hostname) $(date -Is)" > $O/node.txt
   ( for kv in ${envs//,/ }; do export "$kv"; done
     cd $SCR; timed $O/run $bin $SCR/s.1fq --ref-base $REFBASE --genome-dir $GENOME --exons $GTF --out-prefix $O/out/ \
       --threads $thr --pipeline --output-format mtx --raw-matrix "$@" > $O/run.log 2>&1 ) || echo "exit $?" >> $O/run.log
@@ -77,7 +77,7 @@ else
         for i in 1 2 3 4; do ( cd $SCR; timed $O/c$i/run $BIN $SCR/s.1fq --ref-base $REFBASE --genome-dir $GENOME --exons $GTF \
             --out-prefix $O/c$i/out/ --threads 4 --pipeline --output-format mtx --raw-matrix --genome-shared on \
             --bam-sort-mode disk > $O/c$i.log 2>&1 ) & done; wait
-        echo "wall_all=$(( $(date +%s) - t0 ))" > $O/node.txt
+        echo "[opt] $(cpu_model) $(hostname) $(date -Is)" > $O/node.txt; echo "wall_all=$(( $(date +%s) - t0 ))" >> $O/node.txt
         mkdir -p $O.keep; cp $O/c1/out/star_Log.out $O/c1/out/star_Log.final.out $O.keep/ 2>/dev/null || true
         rm -rf $O/c?/out; $BIN genome unload $GENOME > /dev/null 2>&1; SHMBIN=""
         echo "[opt] x4_lean $(cat $O/node.txt)" ;;
