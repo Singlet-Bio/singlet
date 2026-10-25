@@ -1,3 +1,4 @@
+#include "StarProfile.h"
 #include "SeqCache.h"
 #include "Parameters.h"
 #include "Genome.h"
@@ -8,6 +9,9 @@
 #include <sstream>
 
 SeqCache *g_seqCache = nullptr;
+#ifdef STAR_PROFILE
+std::atomic<unsigned long long> g_prof[PROF_N];
+#endif
 
 namespace {
 inline uint64 mix64(uint64 x) {//splitmix64 finalizer

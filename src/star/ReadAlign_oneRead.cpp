@@ -1,3 +1,4 @@
+#include "StarProfile.h"
 #include "ReadAlign.h"
 #include "readLoad.h"
 #include "readBarcodeLoad.h"
@@ -12,6 +13,7 @@ int ReadAlign::oneRead() {//process one read: load, map, write
     //load read name, sequence, quality from the streams into internal arrays
     int readStatus[P.readNends];
 
+    PROF_T0(tLoad);
     for (uint32 im=0; im<P.readNends; im++) {
         readStatus[im] = readLoad(*(readInStream[im]), P, readLength[im], readLengthOriginal[im], readNameMates[im], Read0[im], Read1[im], Qual0[im], clipMates[im], iReadAll, readFilesIndex, readFilter, readNameExtra[im]);
         if (readStatus[im] != readStatus[0]) {//check if the end of file was reached or not for all files
@@ -22,6 +24,7 @@ int ReadAlign::oneRead() {//process one read: load, map, write
         };
     };
 
+    PROF_ADD(PROF_readLoad, tLoad);
     if (readStatus[0]==-1) {//finished with the stream
         return -1;
     };    
@@ -80,6 +83,7 @@ int ReadAlign::oneRead() {//process one read: load, map, write
     outFilterMismatchNmaxTotal=min(P.outFilterMismatchNmax, (uint) (P.outFilterMismatchNoverReadLmax*(readLength[0]+readLength[1])));
 
     //map the read, or take its alignment from the sequence cache (SeqCache.h)
+    PROF_T0(tMap);
     bool fromCache = false;
     uint64 seqHash = 0;
     bool cacheable = g_seqCache != nullptr && seqCacheable();
@@ -132,6 +136,7 @@ int ReadAlign::oneRead() {//process one read: load, map, write
         };
     };
     seqCacheBlob.clear();
+    PROF_ADD(PROF_map, tMap);
 
     if (P.pCh.out.bam && chimRecord) {//chimeric alignment was recorded in main BAM files, and it contains the representative portion, so non-chimeric aligmnent is not output
         return 0;
@@ -145,7 +150,9 @@ int ReadAlign::oneRead() {//process one read: load, map, write
     #endif
 
     //write out alignments
+    PROF_T0(tOut);
     outputAlignments();
+    PROF_ADD(PROF_output, tOut);
 
     {
     #ifdef DEBUG_OutputLastRead

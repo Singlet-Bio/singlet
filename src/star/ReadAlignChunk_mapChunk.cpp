@@ -1,3 +1,4 @@
+#include "StarProfile.h"
 #include "ReadAlignChunk.h"
 #include "GlobalVariables.h"
 #include "ThreadControl.h"
@@ -94,7 +95,11 @@ void ReadAlignChunk::mapChunk() {//map one chunk. Input reads stream has to be s
 
     #ifdef OPT_SORT_CHUNK_BY_PREFIX
     if (P.outSAMorder != "PairedKeepInputOrder")
+    {
+        PROF_T0(tSort);
         sortChunkByPrefix(chunkIn, chunkInSizeBytesTotal, P.readNends);
+        PROF_ADD(PROF_chunkSort, tSort);
+    }
     #endif
 
     

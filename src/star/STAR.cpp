@@ -1,3 +1,5 @@
+#include "StarProfile.h"
+#include <chrono>
 #include <sys/types.h>
 #include <sys/stat.h>
 #ifdef __linux__
@@ -211,6 +213,9 @@ int star_main_impl(int argInN, char *argIn[])
 
     // sequence cache for the main mapping pass (after any 2-pass junction insertion)
     g_seqCache = SeqCache::create(P, genomeMain.nGenome);
+#ifdef STAR_PROFILE
+    auto profClock0 = std::chrono::steady_clock::now(); unsigned long long profTsc0 = __rdtsc();
+#endif
 
     // prepare chunks and spawn mapping threads
     ReadAlignChunk *RAchunk[P.runThreadN];
@@ -264,6 +269,17 @@ int star_main_impl(int argInN, char *argIn[])
     P.inOut->logMain << timeMonthDayTime(g_statsAll.timeFinishMap) << " ..... finished mapping\n"
                      << "RAM after mapping:\n"
                      << linuxProcMemory() << flush;
+#ifdef STAR_PROFILE
+    {
+        double sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - profClock0).count();
+        double hz = (__rdtsc() - profTsc0) / sec;
+        const char *nm[PROF_N] = {"chunkRead", "chunkMutexWait", "chunkSort", "readLoad", "map", "output", "chunkWrite"};
+        P.inOut->logMain << "STAR_PROFILE wall=" << sec << "s threads=" << P.runThreadN;
+        for (int i = 0; i < PROF_N; i++)
+            P.inOut->logMain << " " << nm[i] << "=" << g_prof[i] / hz << "s";
+        P.inOut->logMain << "\n" << flush;
+    }
+#endif
     if (g_seqCache != nullptr)
     {
         P.inOut->logMain << g_seqCache->stats() << "\n" << flush;
