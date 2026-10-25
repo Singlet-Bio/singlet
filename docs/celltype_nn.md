@@ -267,8 +267,14 @@ Reprocessing costs 0.05-0.08 at depths 1-3 on average, concentrated in the thymu
 - **Tissue context** does not help: the network reads tissue from expression as well as from the GEO text. It is off by
   default.
 - **Augmentation** leaves accuracy level but brings calibration error on Singlet's counts from 0.096 down to 0.079-0.092.
-- **Singlet pseudo-labels** (`m1p`: plus 491 non-benchmark Singlet studies labelled by the members' consensus, weight 0.5):
-  training was running when this report was written; its numbers go in the PR when they land.
+- **Singlet pseudo-labels** (`m1p`). Training adds 1,241,338 cells from 491 non-benchmark Singlet studies, labelled by the
+  consensus of at least two members, at weight 0.5 (`singlet_pseudo.py`). At τ = 0.5 this gives 0.843/0.676/0.354/0.407,
+  wrong 0.329, ECE 0.039: deeper and better calibrated on Singlet's counts.
+  - But it makes more wrong calls at every threshold (τ = 0.3: 0.867/0.742/0.409/0.458, wrong 0.386). At a matched error
+    rate, `m1_notissue` is ahead: at τ = 0.3 it is 0.895/0.740/0.405/0.465 with wrong 0.345.
+  - The consensus carries the members' shared mistakes into training. It does not fix the thymus either (depth 2: 0.40).
+  - `m1_notissue` stays the default. `m1p` is the choice where calibration on Singlet's counts matters more than the error
+    rate.
 
 ## 8. Atlas inference plan (phase 4, not run)
 
