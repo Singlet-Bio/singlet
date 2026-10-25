@@ -18,7 +18,7 @@ O=$PB/runs/atacsp/chromap_$RUN; rm -rf $O; mkdir -p $O
 SCR=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
 R1=$(ls $FQ/${GLOB}*_R1_*.fastq.gz | sort | paste -sd,); R2=$(ls $FQ/${GLOB}*_R2_*.fastq.gz | sort | paste -sd,)
 R3=$(ls $FQ/${GLOB}*_R3_*.fastq.gz | sort | paste -sd,)
-grep -v '^#' $WL | cut -f1 > $SCR/wl.txt
+zcat -f $WL | grep -v '^#' | cut -f1 > $SCR/wl.txt
 # Barcode window and strand: the read format with the highest exact whitelist hit rate on 200k reads (the user of
 # Chromap has to choose it; Cell Ranger and Singlet detect it).
 if [ -z "${BCFMT:-}" ]; then
