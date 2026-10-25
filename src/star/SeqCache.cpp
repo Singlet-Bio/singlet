@@ -14,6 +14,7 @@ std::atomic<unsigned long long> g_prof[PROF_N];
 std::atomic<unsigned long long> g_profOutcome[6][2];
 std::atomic<unsigned long long> g_profClass[7][2];
 std::atomic<unsigned long long> g_profClassDetail[7][5];
+std::atomic<unsigned long long> g_profOutcomeDetail[6][7];
 #endif
 
 namespace {

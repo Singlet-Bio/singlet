@@ -18,6 +18,7 @@ extern "C" void __gcov_dump(void);
 #include "ReadAlignChunk.h"
 #include "ReadAlign.h"
 #include "SeqCache.h"
+#include "ShortExit.h"
 #include "Stats.h"
 #include "genomeGenerate.h"
 #include "outputSJ.h"
@@ -216,6 +217,7 @@ int star_main_impl(int argInN, char *argIn[])
 
     // sequence cache for the main mapping pass (after any 2-pass junction insertion)
     g_seqCache = SeqCache::create(P, genomeMain.nGenome);
+    g_shortExit = ShortExit::create(P);
 #ifdef STAR_PROFILE
     auto profClock0 = std::chrono::steady_clock::now(); unsigned long long profTsc0 = __rdtsc();
 #endif
@@ -282,7 +284,10 @@ int star_main_impl(int argInN, char *argIn[])
             P.inOut->logMain << " " << nm[i] << "=" << g_prof[i] / hz << "s";
         const char *on[6] = {"unique", "multi", "tooManyLoci", "tooShort", "otherUnmapped", "cacheHit"};
         for (int i = 0; i < 6; i++)
-            P.inOut->logMain << " " << on[i] << "=" << g_profOutcome[i][1] << "reads/" << g_profOutcome[i][0] / hz << "s";
+            P.inOut->logMain << " " << on[i] << "=" << g_profOutcome[i][1] << "reads/" << g_profOutcome[i][0] / hz << "s"
+                             << "[seed=" << g_profOutcomeDetail[i][0] / hz << ",win=" << g_profOutcomeDetail[i][1] / hz << ",stitch=" << g_profOutcomeDetail[i][2] / hz
+                             << ",mmp=" << g_profOutcomeDetail[i][3] << ",saSearch=" << g_profOutcomeDetail[i][4] << ",windows=" << g_profOutcomeDetail[i][5]
+                             << ",shortProven=" << g_profOutcomeDetail[i][6] << "]";
         const char *cn[7] = {"g1perfectU", "g1perfectS", "g1mm1U", "g1mm1S", "g1otherU", "g1otherS", "uniqueOther"};
         for (int i = 0; i < 7; i++)
             P.inOut->logMain << " " << cn[i] << "=" << g_profClass[i][1] << "reads/" << g_profClass[i][0] / hz << "s"
@@ -291,6 +296,12 @@ int star_main_impl(int argInN, char *argIn[])
         P.inOut->logMain << "\n" << flush;
     }
 #endif
+    if (g_shortExit != nullptr)
+    {
+        P.inOut->logMain << g_shortExit->stats() << "\n" << flush;
+        delete g_shortExit;
+        g_shortExit = nullptr;
+    }
     if (g_seqCache != nullptr)
     {
         P.inOut->logMain << g_seqCache->stats() << "\n" << flush;

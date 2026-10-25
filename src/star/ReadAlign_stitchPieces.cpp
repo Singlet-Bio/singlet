@@ -8,6 +8,7 @@
 #include "sjAlignSplit.h"
 #include "PackedArray.h"
 #include "GlobalVariables.h"
+#include "ShortExit.h"
 #include <time.h>
 
 void ReadAlign::stitchPieces(char **R, uint Lread) {
@@ -305,6 +306,17 @@ std::time(&timeStart);
     profCyc[1] = __rdtsc() - tWin;
 #endif
     PROF_T0(tStitch);
+    //"too short" early exit (ShortExit.h): if every window is bounded below the thresholds, stop after the first
+    //window with a positive transcript (on mode); verify mode stitches everything and checks the outcome later
+    bool shortExitStop = false;
+    if (g_shortExit != nullptr) {
+        g_shortExit->nBound++;
+        shortExitProven = shortExitBound(R, Lread);
+        if (shortExitProven) {
+            g_shortExit->nProven++;
+            shortExitStop = g_shortExit->mode == 1;
+        };
+    };
     trBest =trInit; //initialize next/best
     uint iW1=0;//index of non-empty windows
     uint trNtotal=0; //total number of recorded transcripts
@@ -374,6 +386,11 @@ std::time(&timeStart);
 
         trNtotal += nWinTr[iW1];
         iW1++;
+        if (shortExitStop && trBest->maxScore > 0) {//outcome fixed: "too short"
+            for (uint iW2=iW+1; iW2<nW; iW2++)
+                if (nWA[iW2]>0) g_shortExit->nWinSkipped++;
+            break;
+        };
     };
 
     nW=iW1;//only count windows that had alignments

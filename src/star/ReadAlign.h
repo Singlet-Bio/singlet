@@ -236,6 +236,12 @@ class ReadAlign {
 
         void stitchWindowSeeds (uint iW, uint iWrec, bool *WAexcl, char *R);//stitches all seeds in one window: iW
         void stitchPieces(char **R, uint Lread);
+        //exact early exit for "too short" reads (ShortExit.h)
+        bool shortExitProven = false;
+        bool shortExitBound(char **R, uint Lread);
+        std::vector<int64> shortExitDiag;
+        std::vector<int8_t> shortExitM;
+        std::vector<intScore> shortExitS, shortExitPrev;
 
         uint quantTranscriptome (Transcriptome *Tr, uint nAlignG, Transcript **alignG, Transcript *alignT);
 

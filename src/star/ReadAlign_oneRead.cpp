@@ -7,6 +7,7 @@
 #include "GlobalVariables.h"
 
 #include "SeqCache.h"
+#include "ShortExit.h"
 
 int ReadAlign::oneRead() {//process one read: load, map, write
 
@@ -85,6 +86,7 @@ int ReadAlign::oneRead() {//process one read: load, map, write
     //map the read, or take its alignment from the sequence cache (SeqCache.h)
     PROF_T0(tMap);
     bool fromCache = false;
+    shortExitProven = false;
     uint64 seqHash = 0;
     bool cacheable = g_seqCache != nullptr && seqCacheable();
     if (cacheable) {
@@ -111,6 +113,14 @@ int ReadAlign::oneRead() {//process one read: load, map, write
         multMapSelect();
 
         mappedFilter();
+
+        if (shortExitProven && g_shortExit->mode == 2) {//verify: a proven bound must end as "too short"
+            g_shortExit->nVerified++;
+            if (unmapType != 1 && g_shortExit->nVerifyFail++ < 20) {
+                P.inOut->logMain << "SHORTEXIT verify mismatch: read " << readName << " iRead " << iReadAll << " unmapType " << unmapType
+                                 << " nW " << nW << " nTr " << nTr << " maxScore " << trBest->maxScore << " nMatch " << trBest->nMatch << "\n" << flush;
+            };
+        };
 
         transformGenome();//for now genome transformation happens after multimapper selection, and mapping filter
 
@@ -150,6 +160,13 @@ int ReadAlign::oneRead() {//process one read: load, map, write
         int oc = fromCache ? 5 : unmapType==-1 ? (nTr==1 ? 0 : 1) : unmapType==3 ? 2 : unmapType==1 ? 3 : 4;
         g_profOutcome[oc][0] += __rdtsc() - tMap;
         g_profOutcome[oc][1]++;
+        if (!fromCache) {
+            for (int k=0; k<3; k++) g_profOutcomeDetail[oc][k] += profCyc[k];
+            g_profOutcomeDetail[oc][3] += profCnt[0];
+            g_profOutcomeDetail[oc][4] += profCnt[1];
+            if (profCyc[1] > 0) g_profOutcomeDetail[oc][5] += nWall;
+            if (shortExitProven) g_profOutcomeDetail[oc][6]++;
+        };
     }
 #endif
 
