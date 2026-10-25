@@ -87,8 +87,8 @@ struct TissueCall {
 };
 
 /// umis[i] = UMIs of spot i (slide order). beta = smoothing strength.
-inline TissueCall detect_tissue(const VisiumSlide& slide, const std::vector<uint64_t>& umis, double beta = 0.6,
-                                int smooth_iter = 20) {
+inline TissueCall detect_tissue(const VisiumSlide& slide, const std::vector<uint64_t>& umis, double beta = 1.0,
+                                int smooth_iter = 20, double logit_cap = 4.0) {
     TissueCall r;
     const size_t n = slide.size();
     r.in_tissue.assign(n, 0);
@@ -142,7 +142,19 @@ inline TissueCall detect_tissue(const VisiumSlide& slide, const std::vector<uint
     // Monotone in UMIs: a spot with more UMIs than a confident tissue spot is not "background" by the mixture tail.
     for (size_t i = 0; i < n; ++i) if (x[i] >= r.mean_high) p[i] = std::max(p[i], 0.5 + 0.5 * p[i]);
     const double pooled = std::sqrt(0.5 * (r.sd_low * r.sd_low + r.sd_high * r.sd_high));
-    r.separated = (r.mean_high - r.mean_low) > 2 * pooled;
+    r.separated = (r.mean_high - r.mean_low) > 2 * pooled && r.weight_high > 0 && r.weight_high < 1;
+    if (!r.separated) {
+        // One population: the slide is either fully covered by tissue or empty. Decide by its level.
+        std::vector<double> u(x);
+        std::nth_element(u.begin(), u.begin() + static_cast<long>(n / 2), u.end());
+        const bool covered = u[n / 2] >= std::log10(501.0);
+        for (size_t i = 0; i < n; ++i) {
+            r.in_tissue[i] = covered;
+            r.prob[i] = covered ? 1.f : 0.f;
+        }
+        r.n_tissue = covered ? static_cast<uint32_t>(n) : 0;
+        return r;
+    }
 
     // Hex neighbours.
     std::unordered_map<int64_t, uint32_t> at;
@@ -155,7 +167,12 @@ inline TissueCall detect_tissue(const VisiumSlide& slide, const std::vector<uint
             auto it = at.find(key(slide.row[i] + dr[k], slide.col[i] + dc[k]));
             if (it != at.end()) nb[i].push_back(it->second);
         }
-    auto logit = [](double v) { v = std::min(std::max(v, 1e-6), 1 - 1e-6); return std::log(v / (1 - v)); };
+    // The per-spot evidence is capped at +-logit_cap so that six concordant neighbours (field 6 * beta) can overrule an
+    // isolated spot however extreme its count: low-count spots inside tissue and specks of ambient RNA outside it.
+    auto logit = [&](double v) {
+        v = std::min(std::max(v, 1e-6), 1 - 1e-6);
+        return std::min(logit_cap, std::max(-logit_cap, std::log(v / (1 - v))));
+    };
     std::vector<double> q = p, lp(n);
     for (size_t i = 0; i < n; ++i) lp[i] = logit(p[i]);
     for (int it = 0; it < smooth_iter; ++it) {

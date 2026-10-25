@@ -162,6 +162,7 @@ add_pileup_test(test_wgs_assembly)
 # Spatial
 add_pileup_test(test_visium_spatial)
 add_pileup_test(test_visium_qc)
+add_pileup_test(test_visium_tissue)
 add_pileup_test(test_spatial_barcodes)
 add_pileup_test(test_spatial_multiome)
 
