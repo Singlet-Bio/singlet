@@ -84,6 +84,7 @@
 #include "singlet/fq/lib1fq.h"
 #include "singlet/fq/sra_encoder.h"
 #include "singlet/fq/fastq_encoder.h"
+#include "singlet/fq/run_screen.h"
 #include "singlet/star/star_api.h"  // star_main_impl() — bundled aligner
 #include "singlet/version.h"        // singlet::kVersion
 
@@ -2485,6 +2486,7 @@ static void usage(const char* prog) {
         << "  " << prog << " <file.1fq> [options]        Process .1fq → .1pz (align + pileup)\n"
         << "  " << prog << " download <SRR> [-o]         Stream SRA → .1fq archive\n"
         << "  " << prog << " encode --reads R1 R2 [-o]   Encode FASTQ pair → .1fq archive\n"
+        << "  " << prog << " screen-runs RUN1 [RUN2 ...]  Per-run screen (1M reads): chemistry, 5', feature barcodes\n"
         << "  " << prog << " decode <file.1fq> [--r1 R1 --r2 R2]  Decode .1fq → FASTQ\n"
         << "  " << prog << " genome load <genome-dir>    Load genome into shared RAM (~40s, once)\n"
         << "  " << prog << " genome unload <genome-dir>  Remove genome from shared RAM\n"
@@ -2581,6 +2583,8 @@ int main(int argc, char* argv[]) {
                 return cmd_nonhost(argc - 2, argv + 2);
             if (sub == "build-nonhost-db")
                 return cmd_build_nonhost_db(argc - 2, argv + 2);
+            if (sub == "screen-runs")
+                return singlet::fq::screen_runs_main(argc - 2, argv + 2);
             if (sub == "build-host-filter")
                 return cmd_build_host_filter(argc - 2, argv + 2);
         } catch (const std::exception& e) {
