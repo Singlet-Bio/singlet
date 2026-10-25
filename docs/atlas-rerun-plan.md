@@ -2,8 +2,11 @@
 
 Status: plan, 2026-10-24, branch `plan/atlas-rerun`. No production jobs were submitted for it. Only measurement probes ran:
 - ENA run reports;
-- three download timings;
-- a depth probe on three deep samples.
+- download benchmarks;
+- a depth probe on three deep samples;
+- a performance matrix with output-equivalence checks.
+
+**Route chosen (Zach, 2026-10-24): Clipper only, with the pipeline optimized first.**
 
 Code and inputs are in `bench/atlas_rerun/`.
 
@@ -11,7 +14,37 @@ Decision (Zach, 2026-10-24): re-run the atlas with the fixed pipeline (#22 + #25
 cap sampled across runs, before the v2 migration. Plan it first: cost on Clipper vs Anvil, schedule and order, with empty
 bundles and strand-affected samples first.
 
-<!-- SUMMARY -->
+## Summary
+
+- **What is re-run: 70,558 GEX samples.** Median 250M read pairs per sample, and 42% have more than one run. All reads of all
+  runs is 21.7 trillion pairs, 13× what the 2026 campaign read.
+- **Optimized pipeline, identical outputs.** Four changes:
+  - the download moves out of the compute job;
+  - 4-thread jobs;
+  - a determinism fix (now in #22);
+  - one shared genome per node.
+
+  Together they cut core-hours **1.5–1.7×** (1.8–2.3× if the non-host screen is deferred). Every count matrix is byte-identical
+  to the present setting.
+- **On Clipper the network sets the calendar, not the cores.** Downloads into Clipper top out at ~150 MB/s (~13 TB/day) from
+  NCBI and from AWS alike.
+
+| depth | present core-h | optimized core-h (screen / no screen) | Clipper calendar, optimized, 300 cores |
+|---|---|---|---|
+| full | 1,091k | 624k / 475k | ~145 days |
+| 200M cap | 561k | 357k / 282k | ~70 days |
+| 100M cap | 328k | 217k / 175k | ~39 days |
+| 50M cap | 189k | 130k / 108k | ~21 days |
+
+  Add ~1 week of preparation (merges, I/O stage, EmptyDrops, validation run).
+- **A 200M cap keeps 95–98% of cells and 63–77% of UMIs per cell** of full depth on the two deep samples probed. A
+  head-of-run cap is nearly unbiased (−2% UMIs).
+- **Modalities:**
+  - gene expression and ADT are equivalent to STARsolo / Cell Ranger, and gene expression to scBaseCount at equal depth;
+  - cell calling and strand are worse today; `called_v2` and #25 fix them in this re-run;
+  - the library-type screen is better than scBaseCount's;
+  - splice junctions, mtDNA, donor demultiplexing, doublets, ambient RNA and non-host are not benchmarked yet (§8).
+
 
 ## 1. What is re-run
 
@@ -63,159 +96,173 @@ GEX samples (70,558):
   candidates for a GSM that holds several libraries (for example GEX and ADT in one GEO sample). Their runs must not be
   pooled blindly; see the gates in §6.
 
-<!-- DEPTH -->
+### What a cap costs in counts
 
-## 3. Cost model
+`probe_depth.sbatch` ran STARsolo `GeneFull` with EmptyDrops_CR at 1/16 to all of the reads of two deep human 3' v3 samples.
+Reads were taken as every k-th pair across all runs.
 
-All rates are measured, not assumed.
-
-**Compute** (`docs/pipeline-validation.md` §4.8, 7 datasets, fixed engine, campaign flags):
-- Singlet uses **~50 CPU-s per million read pairs** for alignment + pileup + export, plus ~5 CPU-s per million for `.1fq`
-  encoding.
-- At 4 threads it runs at 81% CPU efficiency: **15–17 s of wall time per million read pairs**.
-- At 16 threads efficiency drops to ~42%: STAR scales, the export and cell-calling tail does not. So **4-thread jobs are the
-  unit** for cost.
-- Model per sample, with *U* = read pairs used (millions):
-
-  wall<sub>4 threads</sub> = 300 s + 17.5 s × *U*; core-hours = 4 × wall.
-- Cross-check against the 2026 campaign (52,756 samples, ~32M reads each): that campaign spent 1.56 reserved core-h per sample
-  including genome loads from NFS and optional screens. The model gives 0.94 for 32M, close to the hpc skill's rule of thumb
-  (≈1 SU for a 30M-read sample on 4 cores, mouse campaign).
-- The model is being checked at full depth on GSM5815984 (489M pairs, `probe_singlet.sbatch`); see §2.
-
-**Download** (`probe_download.sbatch`, three samples, 9 runs, Clipper compute nodes):
-- **~30 MB/s per SRA run** with `prefetch`, three in parallel without slowing;
-- SRA files are **0.44 bytes per base**.
-- With a cap, each run is read only up to its share of the cap (*U* × reads<sub>run</sub> / reads<sub>sample</sub>), so
-  download scales with *U*, not with the full depth. The first N spots of an SRA run are not ordered by cell, so a head-of-run
-  sample is close to a random one; §2 checks this against an every-k-th-read sample.
-
-**Options** (70,558 GEX samples):
-
-| option | read pairs used | samples capped | core-h | core-h + 20% retries | SRA download | p99 sample, 4 threads |
-|---|---|---|---|---|---|---|
-| full depth | 21.7 T | 0% | 446k | **535k** | 1.57 PB | 6.3 h (max 52 h) |
-| cap 300M pairs | 14.4 T | 43% | 303k | **364k** | 1.02 PB | 1.5 h |
-| cap 200M pairs | 10.8 T | 59% | 234k | **281k** | 0.76 PB | 1.1 h |
-| cap 150M pairs | 8.6 T | 67% | 191k | **229k** | 0.60 PB | 0.8 h |
-| cap 100M pairs | 6.1 T | 77% | 141k | **170k** | 0.42 PB | 0.6 h |
-| cap 50M pairs | 3.2 T | 85% | 86k | **103k** | 0.22 PB | 0.3 h |
-| *2026 campaign, for scale* | *1.7 T* | | *82k* | | | |
-
-Per wave, at a 200M cap / at full depth: a 18.7k / 35.0k core-h, b 17.7k / 34.1k, c 17.7k / 31.5k, d 180k / 345k.
-
-**Storage.**
-- Scratch per job: the sample's SRA files + `.1fq` + the sorted BAM in `/dev/shm`. That is ≤ 2.5 × 0.44 B/base, about
-  25–35 GB per job at a 200M cap, against 3.3 TB of node `/tmp`. Nothing is kept: SRA files and `.1fq` are deleted after
-  the sample is done, and no BAMs are kept.
-- Outputs: legacy-format results are ~30 MB per sample at 32M reads today. Assume ~60–100 MB per sample at 100–200M, which
-  is **4–7 TB** under `$WORK` (47 TB free) before v2 packing.
-- Full depth has 1% of samples over 1.3B pairs. Those need sharding by run or 16-thread jobs on the 5-day partitions; the
-  others fit `short-cpu`'s 4 h limit.
-
-## 4. Clipper vs Anvil
-
-### Clipper (free)
-
-**Capacity.** Clipper has no binding per-user limit: QOS allows 75 nodes per user. The limit is the shared hardware:
-- `cpu` / `short-cpu`: 12 nodes, 40–64 cores and 0.5–0.77 TB each, ~600 cores in all, shared with the lab;
-- preemptible `scavenger` adds idle GPU nodes, up to 22 nodes.
-
-**Observed today:**
-- one lab user held most of `short-cpu`;
-- our arrays ran 4–12 tasks at a time (`QOSMaxNodePerUserLimit` / `Priority` waits);
-- `scavenger` started jobs immediately on idle GPU nodes.
-
-Realistic sustained throughput is **100–200 cores** (25–50 four-thread jobs), with bursts to ~400 when the cluster is quiet.
-
-**Queues.**
-- `short-cpu` (4 h) starts faster than `cpu` (5 days) on the same nodes.
-- `scavenger` jobs can be preempted, so they need `--requeue` and idempotent per-sample outputs. The benchmark's jobs ran this
-  way.
-- Each job loads the STAR index from NFS (2–5 min). Node-local shared-memory genome loading (`singlet genome load`,
-  `--genome-shared`) amortises this when one job processes several samples in sequence.
-
-**Downloads.** ~30 MB/s per SRA run. Aggregate from Clipper is untested above 3 parallel streams. Plan on 0.5 GB/s, meaning
-~15–20 concurrent downloads, until a 20-stream probe says otherwise.
-
-### Anvil (ACCESS, `bio260157`)
-
-**Balance:** **112,226 SU** on 2026-10-24 (`mybalance`; 400,001 limit, 287,775 used).
-
-**Charging.** 1 SU = 1 core-hour on the reserved cores. On `shared`, the charge is max(cores, memory / 1.9 GB). A Singlet job
-holds the 30 GB STAR index privately: 17.7 GB RSS at 4 threads, so it is charged as ~9 cores, **2.3× the core-hours**.
-
-**The efficient shape is whole nodes:**
-- 128 cores / 257 GB per node;
-- the genome loaded once into `/dev/shm`;
-- 32 four-thread samples at a time, each ~4–6 GB without the genome;
-- SU ≈ core-hours.
-
-This needs a one-node pilot first: a few SU, to be approved.
-
-| option | SU (whole-node, + retries) | share of today's balance | Anvil nodes for a 14-day run |
-|---|---|---|---|
-| full depth | 535k | 476% | 12.4 |
-| cap 300M | 364k | 324% | 8.5 |
-| cap 200M | 281k | 250% | 6.5 |
-| cap 150M | 229k | 204% | 5.3 |
-| cap 100M | 170k | 151% | 3.9 |
-| cap 50M | 103k | 92% | 2.4 |
-
-**Only a 50M cap fits the current allocation, and it would use all of it.** Anything deeper needs one of:
-- a supplement or exchange of ACCESS credits (the PI can request on allocations.access-ci.org);
-- running most of the work on Clipper.
-
-Anvil's advantages are concurrency (hundreds of nodes) and faster networks to NCBI. Its maintenance outage
-**2026-11-07 00:00 – 11-08 18:00 EST** falls inside any schedule below.
-
-### Recommended split
-
-**Waves a–c run on Clipper.** These 16,578 samples are the urgent, visible part: empty studies, antisense samples, new 10x
-coverage.
-
-**Wave d runs on Clipper and on Anvil whole nodes in parallel.** Anvil is held to ~80k SU, keeping ~30k SU in reserve.
-
-Wall-clock days of computing after the gates, all core-hours including 20% retries:
-
-| cap | total core-h | waves a–c core-h | waves a–c on Clipper, 150 cores | all on Clipper, 150 / 200 cores | Clipper + 80k SU on Anvil, 150 / 200 cores |
-|---|---|---|---|---|---|
-| 300M | 364k | 84k | 23 d | 101 / 76 d | 79 / 59 d |
-| **200M** | 281k | 65k | 18 d | 78 / 59 d | **56 / 42 d** |
-| 150M | 229k | 53k | 15 d | 64 / 48 d | 41 / 31 d |
-| **100M** | 170k | 39k | 11 d | 47 / 35 d | **25 / 19 d** |
-| 50M | 103k | 24k | 7 d | 29 / 21 d | 7 / 5 d (fits Anvil alone) |
-| full | 535k | 121k | 34 d | 149 / 111 d | 126 / 95 d |
-- **Full depth is not recommended:**
-  - it is 2× the cost of a 200M cap;
-  - it takes 4–8 months on Clipper or 4.8× the Anvil balance;
-  - 1% of samples need >6 h each;
-  - the gain over a cap above saturation is small (§2).
-
-## 5. Order of work and schedule
-
-Calendar at a 200M cap. Clipper runs at ~150 cores; Anvil uses ≤80k SU on whole nodes after its pilot. Times are wall-clock
-time after each step's gate.
-
-| step | what | where | duration | gate to pass before the next step |
+| sample | read pairs used | cells | median UMIs/cell | saturation |
 |---|---|---|---|---|
-| 0 | merge #22 and #25 (CI green); add EmptyDrops calling and the provenance stamp (§6); pin the binary | — | ~1 week of PRs | build reproduces the benchmark numbers |
-| 1 | **50-sample validation run**: 7 benchmark datasets + 43 atlas samples across waves, protocols and species | Clipper | 1 day | matches the benchmark; strand right on all wave-b picks; EmptyDrops recall vs the authors ≥ 0.95 where they deposited calls |
-| 2 | one-node Anvil pilot: 32 samples, shared-memory genome | Anvil (~200 SU, ask first) | 1 day | SU per sample within 10% of the model |
-| 3 | **wave a** (empty studies, 5,276) | Clipper | ~6 days | republish per study as each finishes |
-| 4 | **wave b** (strand, 6,272) | Clipper | ~6 days | strand QC on every sample |
-| 5 | **wave c** (skipped 10x, 5,030) | Clipper | ~6 days | library-type and chemistry screen per run |
-| 6 | **wave d** (53,980), by study cells | Anvil from step 2 on; Clipper after wave c | ~5 weeks after wave c | rolling: per-study QC, then v2 publish |
+| GSM5815984 (adrenal, 2 runs) | 31M | 9,527 | 1,814 | 3% |
+| | 61M | 9,675 | 3,471 | 7% |
+| | 122M | 9,772 | 6,461 | 13% |
+| | 245M | 9,926 | 11,327 | 23% |
+| | **489M (all)** | **10,126** | **18,089** | 37% |
+| GSM7666314 (lymphoma, 2 runs) | 22M | 5,160 | 1,909 | 8% |
+| | 45M | 5,481 | 3,406 | 14% |
+| | 89M | 5,798 | 5,681 | 26% |
+| | 179M | 6,326 | 8,360 | 42% |
+| | **358M (all)** | **6,663** | **10,912** | 60% |
 
-**Total at 200M:** ~1 week of preparation plus ~8 weeks of computing (56 days) with both clusters. On Clipper alone it is
-~11 weeks.
+Deep GEO libraries are far from saturation, so UMIs per cell keep rising with depth:
 
-**Total at 100M:** ~1 week plus ~3.5 weeks (25 days) with both clusters, or ~7 weeks on Clipper alone.
+| cap | cells, share of full depth | UMIs per cell, share of full depth |
+|---|---|---|
+| ~200M | 95–98% | 63–77% |
+| ~100M | 87–96% | 36–52% |
+
+**A cap mostly costs counts per cell, not cells.**
+
+Taking the *first* quarter of each run instead of every 4th pair gave the same cells (5,778 vs 5,798) and 2% fewer median
+UMIs. So a head-of-run cap, the only kind that saves download, is nearly unbiased. The third probe sample (GSM5068934) was
+still downloading when this was written.
+
+## 3. Where the time goes, and what was optimized
+
+All measurements are on PBMC 3' v3 (66.6M read pairs) with Singlet's campaign flags, 16 reserved cores, each config run twice.
+Two CPU types took part: Xeon Gold 6230R and Xeon 6730P. Code: `bench/atlas_rerun/perf_run.sbatch`, `perf_summary.py`,
+`perf_equiv.py`, `dl_bench.sbatch`, `dl_equiv.sbatch`.
+
+**One sample at 4 threads (1,120 s):**
+
+| stage | seconds |
+|---|---|
+| STAR mapping (274M reads/h) | 718 |
+| BAM sort | ~100 |
+| STARsolo counting | ~45 |
+| genome load (from page cache) | 14 |
+| reference load | 30 |
+| BAM index | 18 |
+| barcode refresh | 25 |
+| pileup | 42 |
+| export | 14 |
+
+STAR is 87% of the time. Singlet's own stages (pileup, export) are 5%, so there is little to gain by optimizing Singlet's code.
+
+**Outside that run, the campaign had two more costs:**
+- **downloading:** a remote `singlet download` at a median 0.065M reads/s (campaign logs), about 15 s per million reads,
+  inside the same 4-core job;
+- **the non-host screen** (viral / bacterial / fungal), on by default.
+
+"Identical" below means the same matrices, byte for byte, as the present setting (`perf_equiv.py`: every count matrix, the
+barcode list and the stats JSON).
+
+| change | effect, per sample | outputs vs present | used in quote |
+|---|---|---|---|
+| **download in a separate 1-core stage**: `prefetch` then `singlet download <local .sra>` (1M reads/s) instead of remote VDB inside the 4-core job | removes ~15 s/M of idle 4-core time: **−45% of core-hours at full depth**. Download of one run: 163 s vs 1,054 s | decoded reads **identical** (`dl_equiv`) | yes |
+| **4 threads per sample** (vs 8 or 16) | core-h per sample 1.24 (4 threads) vs 1.59 (8) vs 1.85–2.41 (16) | identical after the determinism fix below | yes |
+| **determinism fix** (`umi_dedup.h`, pushed to #22) | none | the first fix gave slightly different feature-level matrices at 8/16 threads (0.13% of exon-feature entries, same totals); now **byte-identical** at 4/8/16 | yes |
+| native (`-march=native`) build | −2% (within noise) | identical | optional |
+| genome in shared memory (`--genome-shared`) | −1% time; one genome per node instead of one per job | identical | yes, for packing |
+| 4 samples on 16 cores (realistic packing) | +15% per sample vs one alone (memory bandwidth) | identical | yes (×1.15) |
+| **non-host screen off** | −27% time (1,120 vs 1,420 s), −35 GB RAM | non-host members absent | decision (§9) |
+| non-host indices cached in `/dev/shm` | no gain: the cost is screening 2.6M unmapped reads, not loading | identical | no |
+| disk-backed BAM sort (`--bam-sort-mode disk`) | none: 1,113 s vs 1,120 s; peak RSS 18.6 GB instead of a sort buffer sized to the job's memory | identical | yes |
+| STARsolo counting off + streaming pileup (`CB_samTagOut`, no sorted BAM) | would save ~15–18% of time | **not equivalent**: exact-only barcode matching, and a different stored barcode list | no (future work) |
+| cascade aligner (transcriptome first) | — | not equivalent by design (skips introns, junctions and mtDNA for routed reads) | no |
+
+**Memory is the hidden throughput limit.**
+- A present-style job holds the 30 GB genome, STAR's in-RAM sort buffer (sized from the job's memory; the 122M-pair probe was
+  killed at 48 GB) and, with the screen on, 35 GB of non-host indices.
+- The campaign requested 80 GB per 4-core job. On Clipper's nodes (40–64 cores, 0.5–0.77 TB) that leaves 25–60% of cores idle.
+- **Lean packing** (one shared genome per node + disk sort): 4 concurrent samples each peaked at 20 GB RSS, an upper bound since
+  it counts the shared genome pages. They ran at 1,338 s per sample (+19% vs one alone, in line with the ×1.15 packing factor),
+  with all 4 outputs identical. A node then needs ~30 GB once plus ≤20 GB per 4-core job, so every core of every Clipper node
+  can be used (a 64-core / 512 GB node: 16 jobs in ~350 GB).
+- With the non-host screen on, each job adds ~35 GB of indices (read into private memory today). That fits on the 768 GB nodes
+  but leaves ~40% of a 512 GB Granite Rapids node idle. Memory-mapping the indices (`MinSketchIndex::load`, one shared copy per
+  node) would remove that; it is a small code change, not yet made.
+
+**Network is the hard limit on Clipper.** Aggregate download into Clipper measured 116–160 MB/s, whatever the source:
+
+| test | aggregate |
+|---|---|
+| NCBI `prefetch`, 8 streams on one node | 125 MB/s |
+| NCBI `prefetch`, 16 streams on one node + 3 nodes × 4 streams | ~160 MB/s |
+| AWS S3 (`sra-pub-run-odp`), 16 streams | 116 MB/s |
+| ENA HTTPS | 2.5 MB/s |
+
+That is ~1.2 Gbit/s, or **~13 TB/day**, and it caps every Clipper-only schedule below. Two things could lift it:
+- a 24-hour test at 32 streams;
+- asking GVSU IT whether Clipper has (or can get) a Science-DMZ path. A 10 Gbit/s path would make the network irrelevant.
+
+SRA Lite (no base qualities, about half the bytes) was not available through the paths tested. It would also change the
+quality-filtered mtDNA / SNP calls.
+
+## 4. Quote: Clipper only, present vs optimized
+
+Model (`bench/atlas_rerun/cost_model_v2.py`), from the measurements above. Per sample, with *U* = read pairs used
+(millions):
+- compute wall = 300 s + 12.3 s × *U*, or 16.8 s × *U* with the non-host screen;
+- × 1.15 for packing, at 4 threads;
+- present: + 15 s × *U* of in-job remote download;
+- optimized: a 1-core I/O stage;
+- + 20% retries;
+- download volume = *U* × bases per pair × 0.44 B/base, at ~150 MB/s aggregate.
+
+Calendar days are max(compute at the given cores, download at 150 MB/s).
+
+| depth | pipeline | core-hours | download | download days | calendar, 200 cores | calendar, 300 cores | calendar, 400 cores |
+|---|---|---|---|---|---|---|---|
+| full | present | 1,091k | 1.9 PB | 145 | 227 | 152 | 145 |
+| full | **optimized** | 624k (screen) / 475k (no screen) | 1.9 PB | 145 | 145 | 145 | 145 |
+| 300M | present | 734k | 1.2 PB | 95 | 153 | 102 | 95 |
+| 300M | **optimized** | 456k / 357k | 1.2 PB | 95 | 95 | 95 | 95 |
+| 200M | present | 561k | 0.9 PB | 70 | 117 | 78 | 70 |
+| 200M | **optimized** | 357k / 282k | 0.9 PB | 70 | 74 / 70 | 70 | 70 |
+| 100M | present | 328k | 0.5 PB | 39 | 68 | 46 | 39 |
+| 100M | **optimized** | 217k / 175k | 0.5 PB | 39 | 45 / 39 | 39 | 39 |
+| 50M | present | 189k | 0.3 PB | 21 | 39 | 26 | 21 |
+| 50M | **optimized** | 130k / 108k | 0.3 PB | 21 | 27 / 23 | 21 | 21 |
+
+The "present" calendar assumes every reserved core is used. With present memory requests (80 GB per 4-core job) that is not
+possible on Clipper's nodes, so the true present calendar is 1.3–2.5× longer than shown.
+
+**How to read it:**
+1. **Optimizing cuts core-hours 1.5–1.7× at equal outputs, or 1.8–2.3× with the screen off.** The largest single gain is
+   moving the download out of the compute job.
+2. **On Clipper the calendar is set by the network, not the cores.** With the optimized pipeline, 300 cores keep up with a
+   150 MB/s link at every depth, with or without the screen. Full depth means ~5 months of downloading, a 200M cap ~10 weeks,
+   100M ~6 weeks, 50M ~3 weeks.
+3. **A faster link changes the answer.** At ~1 GB/s (a Science-DMZ path), compute sets the pace again: a 200M cap in ~7 weeks
+   at 300 cores (357k core-h with the screen), full depth in ~3 months.
+4. Capped samples stream only their share of each run (remote reads, ~5 MB/s per 1-core stream, ~30 streams to fill the
+   link). Uncapped samples are fetched whole and converted locally.
+
+Clipper capacity, for reference:
+- 576 cores on 12 `cpu` nodes (6 × 40 + 4 × 52 + 2 × 64; the two 64-core Granite Rapids nodes are ~22% faster);
+- 192 on 4 `bigmem` nodes (1.5 TB each);
+- preemptible `scavenger` GPU nodes.
+
+200–300 cores sustained is realistic without displacing the lab.
+
+## 5. Order of work and schedule (Clipper)
+
+| step | what | duration | gate |
+|---|---|---|---|
+| 0 | merge #22 (now deterministic) and #25; add the I/O stage, provenance and EmptyDrops calls (§6); pin the binary | ~1 week | benchmark numbers reproduced; 4/8/16-thread outputs identical |
+| 1 | 24-hour bandwidth test (32 streams) and a question to GVSU IT about the uplink | 1–2 days, in parallel with step 0 | sets the real calendar |
+| 2 | 50-sample validation run | 1 day | matches the benchmark; strand right on wave-b samples; EmptyDrops recall vs authors ≥ 0.95 |
+| 3 | wave a (5,276) → b (6,272) → c (5,030) | ~2.3 weeks at 200M, ~1.3 at 100M (download-bound) | per-study QC and republish as studies finish |
+| 4 | wave d (53,980), largest studies first | the rest of the calendar in §4 | rolling per-study QC, v2 publish |
+
+Waves a–c are 23% of the GEX samples and of the bytes, so they finish in about a quarter of the total calendar.
 
 **Within each wave:**
 - samples go in study order, so a study is republished as one unit;
-- each array task is one sample: download → per-run screen → encode → align + pileup → export → EmptyDrops → write results and
-  a ledger row;
+- two job types per sample: a 1-core I/O job (download, per-run screen, encode to node-local `.1fq`) and a 4-core compute job
+  (align + pileup → export → EmptyDrops → results and a ledger row), chained with `--dependency`;
+- the I/O pool is sized to fill the link (~30 streams), the compute pool to the cores free;
 - failures are retried once, then parked in a ledger for triage.
 
 ## 6. Prerequisites and gates
@@ -252,6 +299,14 @@ time after each step's gate.
 7. **Ledger.** One row per sample: status, reads, runs, chemistry, strand, cells, timing, cluster, retries. It lets the
    campaign be resumed, priced and audited. The 2026 campaign's `processing_status` and API status disagree in places, and
    the 557 empty studies slipped through.
+
+8. **Pinned, deterministic binary.** One binary (git commit + sha256) for the whole campaign. Before wave a, check that 4-, 8-
+   and 16-thread runs of the validation samples give byte-identical matrices (`perf_equiv.py`). They do for PBMC 3' v3 since
+   the determinism fix.
+9. **I/O stage.** A separate 1-core download job per sample: `prefetch` + local decode for uncapped samples, a streamed
+   head-of-run read for capped ones. Check that its decoded reads equal the present path (`dl_equiv.sbatch`).
+10. **Memory sizing.** Request memory from the measured peak of the chosen settings (§3), not the campaign's 80 GB, so whole
+    nodes can be used.
 
 ## 7. Hand-off to the v2 migration
 
@@ -324,7 +379,21 @@ regenerates these modalities anyway, but they should finish before the modalitie
 
 ## 9. Decisions needed
 
-<!-- DECISIONS -->
+1. **Depth cap.**
+   - **200M (recommended): ~10 weeks on Clipper.** It keeps nearly all cells and two-thirds or more of UMIs.
+   - 100M: ~6 weeks, keeps 36–52% of UMIs.
+   - Full depth: ~5 months at today's bandwidth.
+   - A faster uplink (decision 3) would make full depth ~3 months.
+2. **Non-host screen during the re-run.**
+   - It adds ~25% core-hours and 35 GB per job.
+   - At ≥300 cores it does not lengthen the calendar, which is set by the download.
+   - Running it later would mean downloading everything again.
+   - **Recommended: keep it on if ~300 cores are available, off if the campaign gets fewer.**
+3. **Ask GVSU IT about Clipper's uplink and run a 24-hour 32-stream bandwidth test.** This is the largest lever on the
+   calendar. Nothing else in this plan moves it.
+4. **Memory-lean packing** (shared genome, disk sort; optionally memory-mapped non-host indices, a small code change): adopt it
+   if §3 shows equal outputs at a tolerable time cost.
+5. **Anvil** stays out, as decided. One note: its faster network is the other way past the Clipper bandwidth ceiling.
 
 ## Reproducing
 
@@ -334,7 +403,11 @@ regenerates these modalities anyway, but they should finish before the modalitie
 | ENA run report per project | `fetch_runinfo.py` / `.sbatch` | Clipper |
 | runs for samples the project reports missed | `fetch_missing.py` / `.sbatch` | Clipper |
 | universe, waves, routes | `build_universe.py` | anywhere, on the pulled tables |
-| cost per option | `cost_model.py` | anywhere |
+| cost per option (first draft, Anvil-oriented) | `cost_model.py` | anywhere |
+| Clipper quote, present vs optimized | `cost_model_v2.py <universe.parquet>` | anywhere |
+| performance matrix | `perf_encode.sbatch`, `perf_run.sbatch <config> <dataset> <rep>`, `perf_summary.py` | Clipper |
+| output equivalence between configs | `perf_equiv.py` / `.sbatch` | Clipper |
+| download paths and aggregate bandwidth | `dl_bench.sbatch <mode> <SRR,...>`, `dl_equiv.sbatch` | Clipper |
 | download timing | `probe_download.sbatch <GSM> <SRR,...>` | Clipper |
 | depth saturation | `probe_depth.sbatch <GSM>` (array K = 1, 2, 4, 8, 16) | Clipper |
 
