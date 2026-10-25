@@ -1,0 +1,219 @@
+# SPDX-License-Identifier: MIT
+"""V(D)J segment reference built from a genome and its Ensembl / GENCODE annotation.
+
+Every annotated ``TR_*_gene`` / ``IG_*_gene`` (V, D, J, C; pseudogenes excluded) gives one segment:
+
+* **V**: the spliced exons of the gene's canonical transcript (leader + V region, sense strand), the CDS frame and the
+  position of the second conserved cysteine (IMGT Cys104): the last in-frame TGT/TGC codon within the last 45 nt.
+* **J**: the exon, the frame in which the translation holds the F/W-G-X-G motif, and the position of that F/W codon
+  (IMGT Phe/Trp118). The IMGT junction (``cdr3`` of Cell Ranger and TRUST4) runs from Cys104 to Phe/Trp118 inclusive.
+* **D**: the exon.
+* **C**: the spliced exons of the canonical transcript (the first exon is what V(D)J reads reach).
+
+No IMGT or vendor reference is involved, so the reference has the annotation's licence (Ensembl / GENCODE: unrestricted)
+and works for any species whose annotation has IG/TR biotypes. Built once per genome (``build``), stored as a small TSV
+(``data/vdj_<species>.tsv.gz``) and loaded with :func:`load`.
+"""
+
+from __future__ import annotations
+
+import gzip
+import os
+import re
+from dataclasses import dataclass
+from typing import Dict, List, Optional
+
+BIOTYPES = {f"{l}_{r}_gene" for l in ("TR", "IG") for r in ("V", "D", "J", "C")}
+CHAINS = ("TRA", "TRB", "TRG", "TRD", "IGH", "IGK", "IGL")
+_COMP = str.maketrans("ACGTNacgtn", "TGCANtgcan")
+CODON = {}
+_b = "TCAG"
+_aa = "FFLLSSSSYY**CC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG"
+for _i in range(64):
+    CODON[_b[_i // 16] + _b[(_i // 4) % 4] + _b[_i % 4]] = _aa[_i]
+J_MOTIF = re.compile(r"[FW]G.G")
+
+
+def revcomp(s: str) -> str:
+    return s.translate(_COMP)[::-1]
+
+
+def translate(s: str, frame: int = 0) -> str:
+    return "".join(CODON.get(s[i:i + 3], "X") for i in range(frame, len(s) - 2, 3))
+
+
+def chain_of(name: str) -> Optional[str]:
+    """TRAV12-1 -> TRA, IGHG1 -> IGH; TRDV genes inside the TRA locus keep their own name (TRDV1 -> TRD); TRAV..DV
+    genes (TRAV29/DV5) are TRA (they pair as alpha far more often)."""
+    p = name[:3].upper()
+    return p if p in CHAINS else None
+
+
+@dataclass
+class Segment:
+    name: str
+    gene_id: str
+    chain: str
+    region: str  # V D J C
+    seq: str  # sense strand
+    anchor: int  # V: Cys104 codon start; J: F/W118 codon start; -1 otherwise / not found
+    frame: int  # V: CDS frame of seq[0]; J: frame of the motif; -1 otherwise
+    contig: str = ""
+    start: int = 0  # 1-based genomic start of the first exon (for provenance)
+
+
+# ------------------------------------------------------------------------------------------------------- building
+def _attrs(s: str) -> Dict[str, str]:
+    out = {}
+    for m in re.finditer(r'(\S+) "([^"]*)"', s):
+        out.setdefault(m.group(1), m.group(2))
+    if 'tag "Ensembl_canonical"' in s:
+        out["_canonical"] = "1"
+    return out
+
+
+def _read_fasta(path: str, wanted: set) -> Dict[str, str]:
+    op = gzip.open if path.endswith(".gz") else open
+    seqs: Dict[str, List[str]] = {}
+    cur = None
+    with op(path, "rt") as f:
+        for ln in f:
+            if ln.startswith(">"):
+                name = ln[1:].split()[0]
+                cur = name if name in wanted else None
+                if cur:
+                    seqs[cur] = []
+            elif cur:
+                seqs[cur].append(ln.strip())
+    return {k: "".join(v).upper() for k, v in seqs.items()}
+
+
+def parse_gtf(gtf: str):
+    """-> {gene_id: dict(name, biotype, contig, strand, transcripts={tid: dict(exons, cds, canonical)})}"""
+    op = gzip.open if gtf.endswith(".gz") else open
+    genes: Dict[str, dict] = {}
+    with op(gtf, "rt") as f:
+        for ln in f:
+            if ln.startswith("#"):
+                continue
+            p = ln.rstrip("\n").split("\t")
+            if len(p) < 9 or p[2] not in ("exon", "CDS"):
+                continue
+            if "_gene" not in p[8]:
+                continue
+            a = _attrs(p[8])
+            bt = a.get("gene_type") or a.get("gene_biotype")
+            if bt not in BIOTYPES:
+                continue
+            gid = a["gene_id"].split(".")[0]
+            g = genes.setdefault(gid, {"name": a.get("gene_name", gid), "biotype": bt, "contig": p[0], "strand": p[6],
+                                       "transcripts": {}})
+            t = g["transcripts"].setdefault(a.get("transcript_id", gid), {"exons": [], "cds": [], "canonical": False})
+            t["canonical"] |= a.get("_canonical") == "1"
+            (t["exons"] if p[2] == "exon" else t["cds"]).append((int(p[3]), int(p[4])))
+    return genes
+
+
+def _spliced(chrom: str, exons, strand: str) -> str:
+    ex = sorted(exons)
+    s = "".join(chrom[a - 1:b] for a, b in ex)
+    return revcomp(s) if strand == "-" else s
+
+
+def _v_anchor(seq: str, frame: int) -> int:
+    lo = max(0, len(seq) - 45)
+    best = -1
+    for i in range(frame, len(seq) - 2, 3):
+        if i >= lo and seq[i:i + 3] in ("TGT", "TGC"):
+            best = i
+    return best
+
+
+def _j_anchor(seq: str):
+    for fr in range(3):
+        aa = translate(seq, fr)
+        m = J_MOTIF.search(aa)
+        if m:
+            return fr + 3 * m.start(), fr
+    return -1, -1
+
+
+def build(genome_fa: str, gtf: str) -> List[Segment]:
+    genes = parse_gtf(gtf)
+    chroms = _read_fasta(genome_fa, {g["contig"] for g in genes.values()})
+    out: List[Segment] = []
+    for gid, g in genes.items():
+        if g["contig"] not in chroms:
+            continue
+        region = g["biotype"][3]
+        chain = chain_of(g["name"])
+        if chain is None:
+            continue
+        ts = g["transcripts"]
+        tid = next((t for t, v in ts.items() if v["canonical"]), None) or sorted(ts)[0]
+        t = ts[tid]
+        chrom = chroms[g["contig"]]
+        seq = _spliced(chrom, t["exons"], g["strand"])
+        anchor, frame = -1, -1
+        if region == "V":
+            frame = 0
+            if t["cds"]:
+                # CDS frame relative to the spliced transcript start
+                ex = sorted(t["exons"], reverse=g["strand"] == "-")
+                cds0 = min(a for a, _ in t["cds"]) if g["strand"] == "+" else max(b for _, b in t["cds"])
+                off = 0
+                for a, b in ex:
+                    if a <= cds0 <= b:
+                        off += (cds0 - a) if g["strand"] == "+" else (b - cds0)
+                        break
+                    off += b - a + 1
+                frame = off % 3
+            anchor = _v_anchor(seq, frame)
+        elif region == "J":
+            anchor, frame = _j_anchor(seq)
+        start = min(a for a, _ in t["exons"])
+        out.append(Segment(g["name"], gid, chain, region, seq, anchor, frame, g["contig"], start))
+    out.sort(key=lambda s: (s.chain, "VDJC".index(s.region), s.name))
+    return out
+
+
+def write(segs: List[Segment], path: str, provenance: str = ""):
+    with gzip.open(path, "wt") as f:
+        if provenance:
+            f.write(f"# {provenance}\n")
+        f.write("name\tgene_id\tchain\tregion\tanchor\tframe\tcontig\tstart\tseq\n")
+        for s in segs:
+            f.write(f"{s.name}\t{s.gene_id}\t{s.chain}\t{s.region}\t{s.anchor}\t{s.frame}\t{s.contig}\t{s.start}\t{s.seq}\n")
+
+
+def load(path_or_species: str = "human") -> List[Segment]:
+    path = path_or_species
+    if not os.path.exists(path):
+        path = os.path.join(os.path.dirname(__file__), "data", f"vdj_{path_or_species}.tsv.gz")
+    out = []
+    with gzip.open(path, "rt") as f:
+        for ln in f:
+            if ln.startswith("#") or ln.startswith("name\t"):
+                continue
+            p = ln.rstrip("\n").split("\t")
+            out.append(Segment(p[0], p[1], p[2], p[3], p[8], int(p[4]), int(p[5]), p[6], int(p[7])))
+    return out
+
+
+def summary(segs: List[Segment]) -> Dict[str, Dict[str, int]]:
+    out: Dict[str, Dict[str, int]] = {}
+    for s in segs:
+        d = out.setdefault(s.chain, {})
+        d[s.region] = d.get(s.region, 0) + 1
+        if s.region in "VJ" and s.anchor < 0:
+            d[s.region + "_no_anchor"] = d.get(s.region + "_no_anchor", 0) + 1
+    return out
+
+
+if __name__ == "__main__":  # python -m singlet.vdj.reference GENOME.fa GTF OUT.tsv.gz
+    import json
+    import sys
+
+    segs = build(sys.argv[1], sys.argv[2])
+    write(segs, sys.argv[3], provenance=f"built from {os.path.basename(sys.argv[1])} + {os.path.basename(sys.argv[2])}")
+    print(json.dumps(summary(segs), indent=1))
