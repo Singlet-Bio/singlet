@@ -249,6 +249,17 @@ def test_transient_server_errors_are_retried(study_dir, env, monkeypatch):
         )  # (log order races the client)
 
 
+def test_clear_memory_cache_forgets_transports(study_dir, env, monkeypatch):
+    """A later server on a reused port must not inherit an earlier transport's connections or retry counts."""
+    root, s = study_dir
+    monkeypatch.setattr("time.sleep", lambda *_: None)
+    with rs.serve(str(root)) as (base, rec):
+        rec.fail_next.extend([503])
+        assert client.open_study(GSE, base=base).stats.retries == 1
+        client.clear_memory_cache()
+        assert client._transport_for(base).stats.retries == 0
+
+
 def test_wrong_object_size_is_refused(study_dir, env):
     root, s = study_dir
     with rs.serve(str(root), total_override=12345) as (base, rec):
