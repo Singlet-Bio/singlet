@@ -238,6 +238,41 @@ def load(path_or_species: str = "human") -> List[Segment]:
     return out
 
 
+def equivalence(segs: List[Segment], max_mismatch: int = 1) -> Dict[str, str]:
+    """V genes whose coding region up to Cys104 is identical or within ``max_mismatch`` substitutions (IGKV1-39 /
+    IGKV1D-39, TRBV6-2 / TRBV6-3 copies): reads cannot tell them apart, so tools name them by convention. Returns
+    name -> class label (the class's names joined by "|", sorted); genes in no class map to themselves."""
+    vs = [s for s in segs if s.region == "V" and s.anchor >= 0]
+    core = {s.name: s.seq[max(0, s.frame):s.anchor + 3] for s in vs}
+    parent = {n: n for n in core}
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    names = sorted(core)
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            sa, sb = core[a], core[b]
+            L = min(len(sa), len(sb))
+            if L == 0 or abs(len(sa) - len(sb)) > 3:
+                continue
+            # align the 3' ends (Cys104): the leader length varies more than the V region
+            if sum(x != y for x, y in zip(sa[-L:], sb[-L:])) <= max_mismatch and L >= 250:
+                parent[find(a)] = find(b)
+    groups: Dict[str, List[str]] = {}
+    for n in names:
+        groups.setdefault(find(n), []).append(n)
+    out = {}
+    for g in groups.values():
+        lab = "|".join(sorted(g))
+        for n in g:
+            out[n] = lab
+    return out
+
+
 def summary(segs: List[Segment]) -> Dict[str, Dict[str, int]]:
     out: Dict[str, Dict[str, int]] = {}
     for s in segs:
