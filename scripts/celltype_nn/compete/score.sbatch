@@ -8,7 +8,7 @@
 #SBATCH --time=01:00:00
 set -euo pipefail
 source /mnt/projects/debruinz_project/debruinz/singlet/src/singlet-py/claude__celltype-nn/scripts/celltype_nn/common.sh
-O=$D/compete
+O=$D/compete; mkdir -p $O/calls
 # Singlet's methods are written under calls_<model>/: link them in under calls/ with public names
 for m in nn nn_t0.3 nn_argmax guide; do [ -d $O/calls_m1_notissue/$m ] && ln -sfn $O/calls_m1_notissue/$m $O/calls/singlet_$m; done
 in_runtime python -u $SRC/scripts/celltype_nn/compete/score.py --compete $O --data $D --out $O/results.json
