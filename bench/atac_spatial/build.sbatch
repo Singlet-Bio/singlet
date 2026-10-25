@@ -35,5 +35,6 @@ if [ "${SKIP_BIN:-0}" != 1 ]; then
 fi
 cmake -S $SCR/src -B $SCR/t -DSINGLET_BUILD_TESTS=ON -DSINGLET_BUILD_PIPELINE=OFF > $SCR/tc.log 2>&1 || { tail -30 $SCR/tc.log; exit 1; }
 T="test_atac_fragment test_atac_peaks test_atac_qc test_atac_cell_caller test_atac_bin_counter test_atac_peak_caller test_atac_metrics test_visium_qc test_visium_spatial test_visium_tissue test_multiome_router"
+set +e +o pipefail
 for t in $T; do cmake --build $SCR/t --target $t -j 16 > $SCR/tb_$t.log 2>&1 || { grep -m30 -B2 -A8 "rror" $SCR/tb_$t.log | head -60; echo "[build] $t BUILD FAILED"; }; done
 cd $SCR/t && ctest --output-on-failure -R "atac|visium|multiome" 2>&1 | tail -40 || true

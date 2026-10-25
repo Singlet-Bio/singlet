@@ -528,3 +528,59 @@ name strings, not decoding, is the slowest step for a client, which is one more 
   or an SCX1-style variant, see the stream sizes below).
 * Pipeline: record strand, motif and maximum overhang per junction (STAR knows them), and count junction UMIs once per molecule, in line
   with the exon/intron fix under way.
+
+## 14. Chromatin (ATAC) and spatial members (PROPOSAL, 2026-10-25)
+
+Owner: the ATAC/spatial session (branch `claude/atac-spatial-benchmark-2ba7df`, report `docs/atac-spatial-benchmark.md`).
+Section 13 (ADT/HTO, branch `claude/adt-modality-0637a6`) set the pattern followed here: new members carry flag bit 0
+(legacy) clear, matrices are pz2 with `Cells` columns, attachment is at migration (preferred) or through a sidecar
+`v2/x/<GSM>/<modality>.<d16hex>.s2` referenced as `samples[i].extra_objects.<modality>`.
+
+### 14.1 ATAC
+
+The primary ATAC data is the fragment file. It stays an immutable per-sample object; nothing per fragment goes to D1.
+
+| member | kind | content |
+|---|---|---|
+| `atac_fragments.tsv.gz` | 3 (stored, as written) | bgzip fragments, Cell Ranger layout (`chrom start end barcode read_pairs`), barcodes in the sample's column space; with `atac_fragments.tsv.gz.tbi` (kind 3) so clients can range-read a region |
+| `atac_peaks.bed` | 3 (stored, zstd) | the sample's insertion peaks (`atac_peak_caller.h`), narrowPeak-like columns |
+| `atac_peak_counts.1pz` | 1 (pz2) | cut sites per peak x the sample's columns; rows `Inline` (`chr:start-end`, the order of `atac_peaks.bed`) |
+| `atac_gene_activity.1pz` | 1 (pz2) | fragments over gene body + 2 kb upstream, protein-coding genes x columns; rows `Inline` (`gene_id_gene_name`) |
+| `atac_summary.json` | 3 (stored, zstd) | `singlet-atac-summary/1`: barcode layout and whitelist, fragment counts, cell-call method, sample QC with thresholds and pass/fail |
+
+Per-barcode ATAC QC (`fragments`, `tss_enrichment`, `nucleosome_signal`, `frip`, `mito_fragments`, `duplicate_read_pairs`)
+are per-cell QC counts: tier-2 columns of the cells table (`docs/CELL-ARCHITECTURE.md`), from `atac_barcode_metrics.tsv`.
+
+* **Multiome.** ATAC barcodes are translated to GEX barcodes (ARC pairs list), so the ATAC members attach to the **GEX
+  sample** like ADT does, with columns = the GEX cells table. ATAC barcodes without a GEX column (no GEX reads) are dropped
+  from the matrices and counted in `atac_summary.json`; fragments keep them. The joint ARC-style cell call
+  (`mixture-gex-atac`) is a cells-table column `called_multiome`; `called` stays the GEX call.
+* **scATAC alone.** The ATAC library is its own sample. Its cells table comes from `atac_barcode_metrics.tsv` (columns =
+  barcodes with >= 100 fragments or called); `called` is the ATAC call. It has no `exon_counts` / `intron_counts`; readers
+  use `atac_gene_activity` where a gene matrix is needed and say so.
+* Libraries processed as RNA before this change (139 in `docs/library-type-screen.md`) are re-run with the ATAC path; their
+  RNA-mode objects are not migrated.
+
+`modalities=` (section 11): `atac` -> `atac_peak_counts.1pz` (`obsm["atac"]`, names in `uns["obsm_features"]["atac"]`;
+R `altExp("atac")`), `gene_activity` -> `atac_gene_activity.1pz` (`obsm["gene_activity"]`), `fragments` -> the fragment
+file and its index (not loaded into memory; the client returns a path / byte-range reader). Aliases: `peaks`, `chromatin` ->
+`atac`.
+
+### 14.2 Spatial (Visium)
+
+| member | kind | content |
+|---|---|---|
+| `spatial_positions.tsv` | 3 (stored, zstd) | one row per column of the cells table, in column order: `barcode, spot, array_row, array_col, in_tissue, tissue_prob, primary, umis` (+ `in_tissue_spaceranger, pxl_row_in_fullres, pxl_col_in_fullres` when the authors deposited Space Ranger positions) |
+| `spatial_summary.json` | 3 (stored, zstd) | `singlet-spatial-summary/1`: slide list, tissue method, mixture fit, agreement with Space Ranger when available, QC thresholds and pass/fail |
+| `spatial_image_lowres.png`, `spatial_scalefactors.json` | 3 (stored, as written) | optional, only when deposited by the authors (GEO supplementary); never generated |
+
+* Spot coordinates are a property of the slide, not a measurement: the slide spot list (`visium-v1_coordinates.tsv`, 4,992
+  spots) maps each barcode to `(array_row, array_col)`. Pixel coordinates exist only when the authors deposited them.
+* The called set of a Visium sample is its tissue spots (`in_tissue` & `primary`); `cell_calls.tsv` is rewritten with
+  `call_method = visium_tissue` and the migration takes `called` from it as for any sample. A spot is not a cell: the
+  sample-level `assay` is `Spatial` and cell counts of Visium samples are reported as spots.
+* Tier 1 gets sample-level spatial facts only (slide version, tissue spots, median UMIs per tissue spot, QC verdict).
+
+`modalities=`: `spatial` -> `spatial_positions.tsv`; Python `obsm["spatial"]` = `(array_col, array_row)` (scanpy /
+squidpy convention: x, y), `obs["in_tissue"]`, `obs["array_row"]`, `obs["array_col"]`, `uns["spatial"]` with the summary
+(and the image when present); R `colData` columns and `spatialCoords` for SpatialExperiment.
