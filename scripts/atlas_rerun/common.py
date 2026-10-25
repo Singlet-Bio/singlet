@@ -5,6 +5,7 @@ Standard library only (Python >= 3.8), so it runs with the system python3 of a c
 
 import gzip
 import hashlib
+import itertools
 import json
 import math
 import os
@@ -211,8 +212,12 @@ def fmt_dur(s):
 # single writer) and deletes the inbox files it has folded.
 
 
+_SEQ = itertools.count()  # orders this process's events when two land in the same clock tick
+
+
 def emit(root, event, gsm=None, **fields):
-    rec = {"t": round(now(), 3), "ts": iso(), "event": event}
+    t_ns = time.time_ns()
+    rec = {"t": round(t_ns / 1e9, 3), "ts": iso(), "event": event}
     if gsm:
         rec["gsm"] = gsm
     job = os.environ.get("SLURM_JOB_ID")
@@ -224,7 +229,8 @@ def emit(root, event, gsm=None, **fields):
     rec.update({k: v for k, v in fields.items() if v is not None})
     inbox = os.path.join(root, "inbox")
     os.makedirs(inbox, exist_ok=True)
-    name = "%.6f-%s-%s-%d-%s.json" % (rec["t"], (gsm or "campaign"), rec["host"], os.getpid(), event)
+    # zero-padded ns time, then a per-process sequence: inbox files sort in emission order even within one tick
+    name = "%020d-%08d-%s-%s-%d-%s.json" % (t_ns, next(_SEQ), (gsm or "campaign"), rec["host"], os.getpid(), event)
     tmp = os.path.join(inbox, "." + name + ".tmp")
     with open(tmp, "w", newline="\n") as fh:
         fh.write(json.dumps(rec, sort_keys=True, default=str) + "\n")

@@ -39,7 +39,7 @@ from collections import Counter, defaultdict
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import common as C  # noqa: E402
-from ledger import ACTIVE, TERMINAL, Ledger, read_tsv  # noqa: E402
+from ledger import TERMINAL, Ledger, read_tsv  # noqa: E402
 from slurm import FakeSlurm, RealSlurm, parse_elapsed, su_of_job  # noqa: E402
 
 ORCH = os.path.abspath(__file__)
@@ -818,7 +818,7 @@ def cmd_dryrun(a):
     print("dry run, cluster %s, plan %s (%d samples assigned), root %s" % (a.cluster, ctl.plan_meta.get("plan_id"),
                                                                           len(rows), root))
     # 1. what the first tick would submit
-    st = ctl.tick()
+    ctl.tick()
     print("\nfirst tick would submit %d sbatch calls (%s):" % (len(slurm.submitted), dict(ctl.stats)))
     for s in slurm.submitted[: a.show]:
         print("  " + " ".join(s["cmd"]))

@@ -7,8 +7,6 @@ import json
 import os
 import sys
 
-import pytest
-
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "..", "scripts", "atlas_rerun"))
 
@@ -32,14 +30,31 @@ def plan_rows(n_studies=3, per=2, wave="a_empty", cluster="clipper", reads=1e8):
     rows, pri = [], 0
     for i in range(n_studies):
         for j in range(per):
-            rows.append({"priority": pri, "gsm": "GSM%d%02d" % (i + 1, j), "gse": "GSE%d" % (i + 1), "wave": wave,
-                         "study_wave": wave, "study_rank": i, "sample_rank": j, "organism": "Homo sapiens",
-                         "reference": "GRCh38-2024-A", "reads_available": int(reads), "depth_unknown": 0,
-                         "bases": int(reads * 300), "n_runs": 1, "runs": "SRR%d%02d" % (i + 1, j),
-                         "run_reads": str(int(reads)), "est_wall_s": C.compute_wall_s(reads),
-                         "est_core_h": C.compute_core_h(reads), "est_su": C.anvil_su(reads),
-                         "est_sra_bytes": int(C.sra_bytes(reads, reads * 300)), "size_class": "S",
-                         "cluster": cluster})
+            rows.append(
+                {
+                    "priority": pri,
+                    "gsm": "GSM%d%02d" % (i + 1, j),
+                    "gse": "GSE%d" % (i + 1),
+                    "wave": wave,
+                    "study_wave": wave,
+                    "study_rank": i,
+                    "sample_rank": j,
+                    "organism": "Homo sapiens",
+                    "reference": "GRCh38-2024-A",
+                    "reads_available": int(reads),
+                    "depth_unknown": 0,
+                    "bases": int(reads * 300),
+                    "n_runs": 1,
+                    "runs": "SRR%d%02d" % (i + 1, j),
+                    "run_reads": str(int(reads)),
+                    "est_wall_s": C.compute_wall_s(reads),
+                    "est_core_h": C.compute_core_h(reads),
+                    "est_su": C.anvil_su(reads),
+                    "est_sra_bytes": int(C.sra_bytes(reads, reads * 300)),
+                    "size_class": "S",
+                    "cluster": cluster,
+                }
+            )
             pri += 1
     return rows
 
@@ -73,22 +88,64 @@ def test_plan_roundtrip(tmp_path):
 
 
 def test_assign_whole_studies_to_anvil_within_budget():
-    studies = [{"gse": "G%d" % i, "wave": "d_rest" if i >= 2 else "a_empty", "n": 3, "est_su": 100.0,
-                "max_reads": 5e8} for i in range(6)]
+    studies = [
+        {
+            "gse": "G%d" % i,
+            "wave": "d_rest" if i >= 2 else "a_empty",
+            "n": 3,
+            "est_su": 100.0,
+            "max_reads": 5e8,
+        }
+        for i in range(6)
+    ]
     studies[3]["max_reads"] = 2e9  # needs a 5-day partition: stays on Clipper
     a = O.assign_clusters(studies, {"anvil_su_budget": 250})
-    assert [a["G%d" % i] for i in range(6)] == ["clipper", "clipper", "anvil", "clipper", "anvil", "clipper"]
+    assert [a["G%d" % i] for i in range(6)] == [
+        "clipper",
+        "clipper",
+        "anvil",
+        "clipper",
+        "anvil",
+        "clipper",
+    ]
     assert set(O.assign_clusters(studies, {"anvil_su_budget": 0}).values()) == {"clipper"}
 
 
 def emit_ok(root, gsm, attempt=0, reads=1e8):
     C.emit(root, "downloading", gsm, attempt=attempt, stage="io")
-    C.emit(root, "screened", gsm, attempt=attempt, stage="io", runs_kept=["SRR1"], runs_dropped=[],
-           runs=[{"run": "SRR1", "keep": True, "reason": "ok"}])
-    C.emit(root, "downloaded", gsm, attempt=attempt, stage="io", sra_bytes=13e9, io_s=900, runs_kept=["SRR1"])
+    C.emit(
+        root,
+        "screened",
+        gsm,
+        attempt=attempt,
+        stage="io",
+        runs_kept=["SRR1"],
+        runs_dropped=[],
+        runs=[{"run": "SRR1", "keep": True, "reason": "ok"}],
+    )
+    C.emit(
+        root,
+        "downloaded",
+        gsm,
+        attempt=attempt,
+        stage="io",
+        sra_bytes=13e9,
+        io_s=900,
+        runs_kept=["SRR1"],
+    )
     C.emit(root, "running", gsm, attempt=attempt, stage="compute", threads=4)
-    C.emit(root, "done", gsm, attempt=attempt, stage="compute", compute_s=1500, out_dir="/x/" + gsm,
-           manifest_sha256="ab" * 32, reads_used=int(reads), binary_sha256="cd" * 32)
+    C.emit(
+        root,
+        "done",
+        gsm,
+        attempt=attempt,
+        stage="compute",
+        compute_s=1500,
+        out_dir="/x/" + gsm,
+        manifest_sha256="ab" * 32,
+        reads_used=int(reads),
+        binary_sha256="cd" * 32,
+    )
 
 
 def test_controller_lifecycle_retry_park_handoff(tmp_path):
@@ -105,7 +162,10 @@ def test_controller_lifecycle_retry_park_handoff(tmp_path):
     assert len(fake.submitted) == 2
     io_cmd, cmp_cmd = fake.submitted[0]["cmd"], fake.submitted[1]["cmd"]
     assert "--array=0-3%4" in io_cmd
-    assert any(x.startswith("--dependency=aftercorr:") for x in cmp_cmd) and "--kill-on-invalid-dep=yes" in cmp_cmd
+    assert (
+        any(x.startswith("--dependency=aftercorr:") for x in cmp_cmd)
+        and "--kill-on-invalid-dep=yes" in cmp_cmd
+    )
     L = Ledger(root)
     assert sum(1 for s in L.samples.values() if s.get("io_job")) == 4
 
@@ -128,7 +188,11 @@ def test_controller_lifecycle_retry_park_handoff(tmp_path):
     assert s["GSM200"]["attempt"] == 1 and s["GSM200"]["state"] == "downloaded"
     # its compute-only retry went out with more memory (oom escalation) and no I/O job
     retry = [x for x in fake.submitted[2:] if "ar-cmp-clipper-s4+mem" in " ".join(x["cmd"])]
-    assert retry and "--mem=144G" in retry[0]["cmd"] and not any("aftercorr" in c for c in retry[0]["cmd"])
+    assert (
+        retry
+        and "--mem=144G" in retry[0]["cmd"]
+        and not any("aftercorr" in c for c in retry[0]["cmd"])
+    )
     assert os.path.exists(os.path.join(root, "handoff", "GSE1.json"))
     h = json.load(open(os.path.join(root, "handoff", "GSE1.json")))
     assert h["ready_for_packing"] and [x["gsm"] for x in h["samples"]] == ["GSM100", "GSM101"]
@@ -173,7 +237,10 @@ def test_class_choice_and_escalation(tmp_path):
     cfg = make_cfg(tmp_path)
     path = write_plan(cfg, plan_rows())
     ctl = O.Controller(cfg, "clipper", FakeSlurm(), plan_path=path, log=lambda m: None)
-    pick = lambda reads, esc=None: ctl.choose_class({"reads_available": reads}, {"escalate": esc})["name"]
+
+    def pick(reads, esc=None):
+        return ctl.choose_class({"reads_available": reads}, {"escalate": esc})["name"]
+
     assert pick(1e8) == "s4"
     assert pick(8e8) in ("m8", "l8")
     assert pick(2e9) == "xl16"
@@ -239,19 +306,36 @@ def test_cancelled_chained_compute_is_resubmitted_not_failed(tmp_path):
     O.Controller(cfg, "clipper", fake, plan_path=path, log=lambda m: None).tick()
     C.emit(root, "downloading", "GSM100", attempt=0, stage="io")
     C.emit(root, "downloaded", "GSM100", attempt=0, stage="io", sra_bytes=1e9)
-    open(os.path.join(root, "bin", "singlet-" + cfg["binary"]["sha256"][:12]), "w").close()  # already installed
+    open(
+        os.path.join(root, "bin", "singlet-" + cfg["binary"]["sha256"][:12]), "w"
+    ).close()  # already installed
     s = ScriptedSlurm({"900000002_0": {"state": "CANCELLED", "elapsed_s": 0}})
     for _ in range(2):  # one tick of grace, then the release
         ctl = O.Controller(cfg, "clipper", s, plan_path=path, log=lambda m: None)
         ctl.tick()
     g = ctl.L.samples["GSM100"]
     assert g["failures"] == 0 and g["state"] == "downloaded"
-    assert any("ar-cmp-clipper" in " ".join(x["cmd"]) and not any("aftercorr" in c for c in x["cmd"])
-               for x in s.submitted)
+    assert any(
+        "ar-cmp-clipper" in " ".join(x["cmd"]) and not any("aftercorr" in c for c in x["cmd"])
+        for x in s.submitted
+    )
 
 
 def test_slurm_parsers():
     assert parse_elapsed("1-02:03:04") == 93784 and parse_elapsed("03:59:00") == 14340
     assert parse_mem_gb("96G") == 96 and abs(parse_mem_gb("7600M") - 7.6) < 1e-9
-    assert su_of_job({"elapsed_s": 3600, "alloc_cpus": 128, "req_mem_gb": 257, "partition": "wholenode"}) == 128
-    assert abs(su_of_job({"elapsed_s": 3600, "alloc_cpus": 1, "req_mem_gb": 3.8, "partition": "shared"}) - 2) < 1e-9
+    assert (
+        su_of_job(
+            {"elapsed_s": 3600, "alloc_cpus": 128, "req_mem_gb": 257, "partition": "wholenode"}
+        )
+        == 128
+    )
+    assert (
+        abs(
+            su_of_job(
+                {"elapsed_s": 3600, "alloc_cpus": 1, "req_mem_gb": 3.8, "partition": "shared"}
+            )
+            - 2
+        )
+        < 1e-9
+    )

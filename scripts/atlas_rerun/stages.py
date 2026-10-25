@@ -487,7 +487,7 @@ def write_manifest(d, name):
             total += b
             lines.append("%s  %d  %s" % (sha256_file(p), b, os.path.relpath(p, d).replace(os.sep, "/")))
     with open(os.path.join(d, name), "w", newline="\n") as fh:
-        fh.write("\n".join(sorted(lines, key=lambda l: l.split("  ", 2)[2])) + "\n")
+        fh.write("\n".join(sorted(lines, key=lambda ln: ln.split("  ", 2)[2])) + "\n")
     return total
 
 
