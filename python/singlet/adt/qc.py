@@ -237,7 +237,7 @@ def library_qc(M, panel: pd.DataFrame, called: np.ndarray, stats: dict, ambient:
     out["hto_umi_share"] = hshare
     if len(hto_rows) >= 2 and len(cells) and hshare >= HTO_MIN_SHARE:
         amb = Xe[hto_rows].sum(axis=1) if len(empties) else np.asarray(ambient)[hto_rows]
-        call, lt, ls = H.hashed_drops(Xc[hto_rows], amb)
+        call, lt, ls = H.call_hashtags(Xc[hto_rows], amb)
         hto_calls = (call, lt, ls)
         out["hto_singlet_share"] = float((call >= 0).mean())
         out["hto_doublet_share"] = float((call == -2).mean())

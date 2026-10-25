@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: MIT
 """Hashtag demultiplexing calls (per called cell): singlet with its hashtag, doublet, or negative.
 
+The caller Singlet uses is :func:`call_hashtags` (hashedDrops rule below with ``confident_min = 0.5`` plus a mixture-model
+doublet veto); it was chosen on a public benchmark with genotype truth (``docs/adt-modality.md``, HTO benchmark).
+
 Method: ``DropletUtils::hashedDrops`` (Lun et al.; Bioconductor), the ambient-aware rule:
 
 1. Ambient proportions per hashtag from the empty droplets; each cell's counts are divided by them, so a hashtag that
@@ -85,7 +88,7 @@ def hashed_drops(cells: np.ndarray, ambient: np.ndarray = None, confident_min: f
 
 SIDECAR_SCHEMA = "1"
 FEATURE_SET = "hto"
-METHOD_VERSION = "singlet-adt-hto/1 (hashedDrops rule; confident 2, doublet 2 + 3 MAD)"
+METHOD_VERSION = "singlet-adt-hto/2 (hashedDrops rule, confident 0.5, doublet 2 + 3 MAD; mixture doublet veto)"
 
 
 def feature_sidecar(gsm: str, cols, call, lfc_top, hashtag_names):
@@ -188,3 +191,18 @@ def mixture_calls(cells: np.ndarray, positive: float = MIX_POSITIVE, covariate: 
     srt = np.sort(post, axis=0)
     score = np.where(one, srt[-1] * (1 - srt[-2]), np.where(npos >= 2, srt[-2], 1 - srt[-1]))
     return call, score, post
+
+
+# ----------------------------------------------------------------------------------------------------------- default
+DEFAULT_RULE = "hashedDrops confident_min=0.5 + mixture doublet veto (covariate none, posterior 0.5)"
+
+
+def call_hashtags(cells: np.ndarray, ambient: np.ndarray = None):
+    """Singlet's hashtag caller: ``hashed_drops`` with ``confident_min = 0.5`` (Howitt et al.'s optimised setting), and a cell
+    becomes a doublet when the per-hashtag mixtures (:func:`mixture_calls`, no covariate) find two or more positive hashtags.
+    Chosen by leave-one-dataset-out on the Howitt et al. 2023 benchmark (``bench/adt/hto_select.py``; criterion: highest
+    mean F with <= 20% of genetic doublets called singlets on every training dataset). Same outputs as ``hashed_drops``."""
+    call, lfc_top, lfc_second = hashed_drops(cells, ambient, confident_min=0.5)
+    mcall, _, _ = mixture_calls(cells, covariate="none")
+    call = np.where(mcall == -2, -2, call)
+    return call, lfc_top, lfc_second
