@@ -168,8 +168,12 @@ multiome) take under 6.5 h, so they need the `cpu` partition or a read cap to fi
 ## Known gaps and decisions
 
 - **Visium human lymph node** has no public reads ("to maintain donor anonymity"). Zach: pick another Visium dataset
-  with reads. visium_mouse_brain_ant is in the cohort; the spatial session is choosing a human Visium set with public
-  FASTQs and published Space Ranger outputs, to be added as a row.
+  with reads. visium_ffpe_human_breast (Space Ranger 1.3, FFPE probe chemistry, 5.3 GB) is the only human Visium set
+  10x serves with FASTQs; it joins visium_mouse_brain_ant.
+- **Whitelists (found by the ATAC session).** Singlet's bundled `737K-cratac-v1.txt` is byte-identical to the 3' v2 list
+  `737K-august-2016.txt`. The real scATAC list was rebuilt from 12 public Cell Ranger ATAC runs (736,795 barcodes). The
+  ARC ATAC-to-GEX pair table was rebuilt from 7 public ARC runs. Both are owned by the ATAC session and must replace the
+  bundled files before atac/multiome results are final.
 - **No public pooled scRNA-seq of many 1000 Genomes individuals exists.** Ancestry therefore uses three sources:
   - **MAGE** (Taylor et al. 2024): bulk RNA-seq of 731 1000 Genomes LCLs from all 26 populations, of which we use 150 (30
     per super-population, sex-balanced). Reads are thinned to single-cell donor depths.

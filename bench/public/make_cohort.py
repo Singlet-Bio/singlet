@@ -185,6 +185,12 @@ add(id="visium_mouse_brain_ant", group="spatial", tier="core", title="10x Visium
     read_pairs_m=370, read_pairs_used_m=370, fastq_gb=31.0, truth="Space Ranger 1.0 spot matrix and tissue positions; anatomy",
     licence="CC BY 4.0", capabilities="spatial,gex-counts", tools="singlet,spaceranger,starsolo",
     why="the Visium dataset in the Seurat, Squidpy and cell2location tutorials (the human lymph node set has no public reads)")
+add(id="visium_ffpe_human_breast", group="spatial", tier="core", title="10x Visium FFPE human breast cancer (Space Ranger 1.3, probe chemistry)",
+    species="human", reference=G, chemistry="10x-visium-ffpe", source="10x",
+    url=CF + "spatial-exp/1.3.0/Visium_FFPE_Human_Breast_Cancer/Visium_FFPE_Human_Breast_Cancer_fastqs.tar", fastq_gb=5.3,
+    truth="Space Ranger 1.3 published spot matrix and image-based tissue positions", licence="CC BY 4.0", capabilities="spatial",
+    tools="singlet,spaceranger", why="the only human Visium dataset 10x serves with FASTQs (lymph node, heart, brain and "
+    "fresh-frozen breast return 403); replaces the human lymph node")
 # ---- other protocols, one PBMC sample with author cell types (Ding 2020, PBMC1)
 for pid, chem, gsm, rp, gb, why in [
     ("ding2020_pbmc1_smartseq2", "smartseq2", "GSM3836772-GSM3837155 (384 cells)", 375, 14.0, "plate-based full-length protocol without UMIs"),
