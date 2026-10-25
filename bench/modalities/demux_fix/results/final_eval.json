@@ -1,0 +1,80 @@
+{
+ "singlet_auto": {
+  "cells_called": 14404,
+  "truth_cells": 14619,
+  "cells_in_truth": 14402,
+  "truth_singlets": 12139,
+  "ari_all_singlets": 0.9582161951081424,
+  "ari_assigned_only": 0.9866913808068268,
+  "acc_assigned": 0.9819743935309974,
+  "unassigned_rate": 0.0031304061290056842,
+  "singlets_called_doublet": 0.01886481588269215,
+  "per_donor_recall": {
+   "101": 0.9574468085106383,
+   "1015": 0.9452460229374768,
+   "1016": 0.994128009395185,
+   "1039": 0.9387308533916849,
+   "107": 0.654296875,
+   "1244": 0.9951403887688985,
+   "1256": 0.9869816779170685,
+   "1488": 0.9769076305220884
+  },
+  "dbl_auroc_genotype": 0.968724446624266,
+  "dbl_auprc_genotype": 0.8968498533380874,
+  "dbl_recall_at_call": 0.8685857321652065,
+  "dbl_precision_at_call": 0.8193624557260921,
+  "n_donors_found": 8
+ },
+ "singlet_k8": {
+  "cells_called": 14404,
+  "truth_cells": 14619,
+  "cells_in_truth": 14402,
+  "truth_singlets": 12139,
+  "ari_all_singlets": 0.9582161951081424,
+  "ari_assigned_only": 0.9866913808068268,
+  "acc_assigned": 0.9819743935309974,
+  "unassigned_rate": 0.0031304061290056842,
+  "singlets_called_doublet": 0.01886481588269215,
+  "per_donor_recall": {
+   "101": 0.9574468085106383,
+   "1015": 0.9452460229374768,
+   "1016": 0.994128009395185,
+   "1039": 0.9387308533916849,
+   "107": 0.654296875,
+   "1244": 0.9951403887688985,
+   "1256": 0.9869816779170685,
+   "1488": 0.9769076305220884
+  },
+  "dbl_auroc_genotype": 0.968724446624266,
+  "dbl_auprc_genotype": 0.8968498533380874,
+  "dbl_recall_at_call": 0.8685857321652065,
+  "dbl_precision_at_call": 0.8193624557260921,
+  "n_donors_found": 8
+ },
+ "vireo": {
+  "cells_called": 14404,
+  "truth_cells": 14619,
+  "cells_in_truth": 14402,
+  "truth_singlets": 12139,
+  "ari_all_singlets": 0.9232509620243582,
+  "ari_assigned_only": 0.9573033976429854,
+  "acc_assigned": 0.9479976090854751,
+  "unassigned_rate": 0.01985336518658868,
+  "singlets_called_doublet": 0.015404893319054288,
+  "per_donor_recall": {
+   "101": 0.9657210401891253,
+   "1015": 0.8405475397706252,
+   "1016": 0.995302407516148,
+   "1039": 0.0,
+   "107": 0.892578125,
+   "1244": 0.9956803455723542,
+   "1256": 0.9879459980713597,
+   "1488": 0.9879518072289156
+  },
+  "dbl_auroc_genotype": 0.9500847556273747,
+  "dbl_auprc_genotype": 0.8423919286477767,
+  "dbl_recall_at_call": 0.7891113892365457,
+  "dbl_precision_at_call": 0.8214983713355049,
+  "n_donors_found": 8
+ }
+}
