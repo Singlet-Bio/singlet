@@ -22,6 +22,7 @@ three members).
 from __future__ import annotations
 
 import argparse
+import re
 import json
 import os
 import sys
@@ -101,7 +102,7 @@ def main(argv=None) -> int:
     from singlet.celltype_nn.ensemble import pool_celltypist, run_celltypist, vote
     from ensemble_run import load_singler
 
-    methods = [m for m in a.methods.split(",") if m]
+    methods = [m for m in re.split(r"[,+]", a.methods) if m]  # "+" too: sbatch --export splits values on commas
     onto = ontology()
     pred = CellTypePredictor.load(a.model)
     xws = json.loads((a.data / "celltypist_crosswalk.json").read_text()) if (a.data / "celltypist_crosswalk.json").exists() else {}
