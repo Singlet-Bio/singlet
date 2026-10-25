@@ -23,15 +23,6 @@ extract)
   rt python -u $SRC/bench/public/sexancestry/sex_extract.py --gse $GSE --sex-labels $LABELS --out $W --scratch $SCR
   ;;
 cellxy)
-  # species.txt for any sample extracted before the extractor wrote it (from samples.jsonl)
-  rt python -c "
-import json, pathlib
-w = pathlib.Path('$W')
-for l in open(w / 'samples.jsonl'):
-    s = json.loads(l); f = w / 'mtx' / s['gsm'] / 'species.txt'
-    if f.parent.exists() and not f.exists(): f.write_text(s['species'] + '
-')
-"
   export R_LIBS=$WORK/envs/rlib-benchpublic
   /usr/bin/time -v -o $W/cellxy.time.txt $WORK/envs/ambient/bin/Rscript $SRC/bench/public/sexancestry/cellxy.R $W
   ;;

@@ -11,7 +11,11 @@ for (d in list.dirs(file.path(work, "mtx"), recursive = FALSE)) {
   gsm <- basename(d)
   out <- file.path(work, "cellxy", paste0(gsm, ".tsv"))
   if (file.exists(out)) next
-  sp <- readLines(file.path(d, "species.txt"))
+  sf <- file.path(d, "species.txt")
+  if (file.exists(sf)) sp <- readLines(sf) else {   # extracted before species.txt existed: take it from samples.jsonl
+    recs <- lapply(readLines(file.path(work, "samples.jsonl")), jsonlite::fromJSON)
+    sp <- Filter(function(r) identical(r$gsm, gsm), recs)[[1]]$species
+  }
   genome <- if (identical(sp, "mouse")) "Mm" else "Hs"
   m <- readMM(gzfile(file.path(d, "matrix.mtx.gz")))
   genes <- readLines(file.path(d, "genes.tsv")); cols <- readLines(file.path(d, "cells.tsv"))
