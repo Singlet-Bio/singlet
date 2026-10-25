@@ -24,6 +24,8 @@ P=""; [ -n "${PROTO:-}" ] && P="--protocol $PROTO"
 /usr/bin/time -v -o $O/time_encode.txt $BIN encode --reads $READS $P -o $SCR/x.1fq > $O/encode.log 2>&1 || { tail -20 $O/encode.log; exit 1; }
 rm -f $SCR/R*.fastq.gz
 X=""; [ -n "${PAIRED_GEX:-}" ] && X="--paired-gex $PAIRED_GEX"
+# ATAC whitelists: the rebuilt scATAC list (the bundled 737K-cratac-v1.txt is the 3' v2 list) and the ARC pairs
+[ "$KIND" = atac ] && X="$X --atac-whitelist $PB/whitelists/atacsp/737K-cratac-v1.txt --atac-whitelist $PB/whitelists/737K-arc-v1-atac-gex.tsv.gz"
 [ "$KIND" = atac ] && export SINGLET_KEEP_ATAC_BAM=$O
 cd $SCR
 /usr/bin/time -v -o $O/time.txt $BIN $SCR/x.1fq --ref-base $REF --genome-dir $G/star_2.7.11b --exons $G/genes/genes.gtf \
