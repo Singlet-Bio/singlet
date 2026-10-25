@@ -1,0 +1,87 @@
+# `called_v2` golden vectors
+
+Inputs and expected outputs of the `called_v2` cell call (cellcall 2.1: docs/called-v2.md, docs/called-v2-truth.md), shared by
+the Python implementation (`python/singlet/v2/cellcall.py`, checked by `tests/python/test_v2_cellcall.py`) and the C++ port
+(`include/singlet/pileup/called_v2.h`). Both must reproduce every case with default parameters.
+
+Format id: `singlet-called-v2-golden/1`. All files are plain text with LF line endings (`.gitattributes`).
+
+## Cases
+
+| directory | what it exercises |
+|---|---|
+| `synth_knee_below_plateau` | Kang-like rank curve (plateau `lower` 7, a debris band at 8-14 UMIs): the unbounded 2.0 knee is 11, so all 85 tested barcodes were retained untested; the bounded knee is 1,088 and only the 30 low-RNA cells are called |
+| `synth_tail_extrapolation` | 830 tested barcodes, 30 low-RNA cells below every simulated path: without the tail extrapolation BH passes none of them at FDR 0.001 (fewer than n_tested / 10 at the Monte Carlo floor) |
+| `synth_mixed` | the unit-test simulation at small scale; the unbounded knee (176) is again inside the tested range, the bounded one 3,591 |
+| `real_hgmm1k_v3`, `real_neuron1k_v3`, `real_pbmc1k_v3` | 10x benchmark samples (pipeline-benchmark `singlet-modfix-t8` runs on Clipper), subsampled from the stored exon + intron counts (below) |
+
+`case.json` of each case has a one-line `description` and the `source`. `generate.py` rebuilds every case
+(`python -P generate.py synthetic OUT`, `python -P generate.py real NAME RUN_DIR OUT`); the real ones need the Singlet output
+folders on Clipper (`bench/called_v2_truth/verify.sbatch` runs both).
+
+Real cases are subsampled to stay small: a uniform 20% of the nonzero barcodes (which keeps the shape of the log-log rank
+curve), the 300 genes with the most counts over the kept uncalled barcodes, plus one last row `OTHER` that holds the sum of
+all other genes, so every barcode keeps its total. Called barcodes enter the call only through their totals (plateau `lower`
+and knee), so their counts are stored as a single entry in the `OTHER` row. The subsampled matrix is the input; the expected
+values are the call on that matrix, not on the full sample.
+
+## Files per case
+
+### `counts.mtx`: the input matrix
+
+MatrixMarket `coordinate integer general`, genes x barcodes, 1-based, entries sorted by column then row, no explicit zeros.
+This is exactly the matrix `call()` consumes: gene-level counts, exon + intron, after aggregation to genes (the C++
+`GeneCounts`). Barcodes with total 0 are left out (they never enter the call). Row names, where known, are in
+`case.json["genes"]` (real cases only); they play no part in the call.
+
+### `called.txt`: the stored `called` flag
+
+One line per barcode (column order of `counts.mtx`): `1` = in the stored `called` set, `0` = not.
+
+### `case.json`
+
+| key | content |
+|---|---|
+| `format` | `singlet-called-v2-golden/1` |
+| `protocol` | protocol string passed to the call (`10xv3`: droplet family, validated) |
+| `options` | parameter overrides; `{}` everywhere = defaults (plateau `lower`, test floor 50, FDR 0.001, knee retain, 10,000 iterations, seed 20261023) |
+| `n_genes`, `n_barcodes`, `n_called` | shape of `counts.mtx`, number of `1` in `called.txt` |
+| `expected.lower` | plateau `lower` (integer) |
+| `expected.retain_total` | the knee used for `retain` (within DropletUtils' curve bounds), or `null` when there is none (barcodes at or above it get p = 0) |
+| `expected.alpha` | Dirichlet-multinomial concentration (MLE over the ambient pool) |
+| `expected.n_ambient`, `expected.ambient_umi` | ambient pool: uncalled barcodes with 0 < total <= `lower`, and their summed UMIs |
+| `expected.n_tested` | uncalled barcodes with total > max(`lower`, 50) |
+| `expected.n_tail` | tested barcodes whose p-value came from the tail extrapolation |
+| `expected.n_called_v2`, `expected.n_added` | size of `called_v2`, and how many it adds to `called` |
+| `expected.method`, `expected.version` | `singlet-emptydrops`, `2.1` |
+| `knee_unbounded` | the 2.0 knee (spline over every total > `lower`), for reference only |
+| `tolerance` | how the tests compare (below) |
+| `description`, `source`, `genes` | provenance |
+
+JSON has no NaN: a missing number is `null`.
+
+### `expected.tsv`: the tested barcodes
+
+Tab-separated with a header line, one row per tested barcode in column order:
+
+| column | content |
+|---|---|
+| `col` | 0-based column in `counts.mtx` |
+| `total` | the barcode's total count (column sum) |
+| `pvalue` | the p-value: 0 at or above `retain_total`; `(n_le + 1) / (niters + 1)` from the Monte Carlo (n_le = simulated paths with log-probability <= the observed one at that total); `min(Phi(z), 1/(niters + 1))` when n_le = 0, with z = (observed - mean) / sd over the 10,000 simulated log-probabilities at that total (population sd); `1/(niters + 1)` above 50,000 UMIs (not simulated) |
+| `fdr` | Benjamini-Hochberg over the tested barcodes |
+| `called_v2` | `1` when fdr <= 0.001 |
+
+Numbers are the shortest decimal that round-trips a double (`repr`). Barcodes not listed are not tested: their p-value and FDR
+are NaN, and `called_v2` = `called`. So the full `called_v2` set = `called` OR (listed with `called_v2` = 1).
+
+## Comparing
+
+* `called_v2`, `lower`, the tested set, `n_*`: exact.
+* Monte Carlo p-values (`pvalue >= 1/(niters+1)`): exact, i.e. the same n_le. The C++ port draws with numba's MT19937
+  streams, so the simulated paths are the same.
+* Tail p-values: relative 1e-6 (the mean and sd are sums over 10,000 doubles, whose order may differ). FDR: relative 1e-6.
+* `alpha`: relative 1e-6 (bounded scalar minimisation, `xatol` 1e-4 in log alpha). `retain_total`: relative 1e-9 (it is
+  10^log10(total) of one of the observed totals).
+
+The expected values were generated on Clipper (Linux, numba 0.68) and checked on Windows (numba 0.64).

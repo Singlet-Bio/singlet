@@ -1,0 +1,2 @@
+# golden vectors are read byte-for-byte by the Python and C++ tests: keep LF on every platform
+* text eol=lf
