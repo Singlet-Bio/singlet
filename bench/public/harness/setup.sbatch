@@ -11,7 +11,7 @@
 #  2. build Singlet's Python readers in place inside the runtime (the compute modules read bundles);
 #  3. whitelists: Singlet's bundled lists plus 10x's GEM-X 3' v4 list;
 #  4. R library with cellXY (GitHub, not Bioconductor) on top of the ambient env's R 4.4;
-#  5. somalier 0.3.6 binary, its 1000 Genomes labelled background and hg38 sites; peddy into a pip --target dir;
+#  5. somalier 0.3.6 binary, its 1000 Genomes labelled background and hg38 sites; env bench-public (bcftools, peddy);
 #  6. record the Singlet binary under test (path, sha256, source commit) in $BP/singlet_binary.json.
 set -euo pipefail
 WORK=/mnt/projects/debruinz_project/debruinz/singlet
@@ -45,7 +45,10 @@ T=$WORK/tools/bench-public; mkdir -p $T/somalier
 [ -d $T/somalier/1kg-somalier ] || { curl -sSL -o $T/somalier/1kg.somalier.tar.gz "https://zenodo.org/record/3479773/files/1kg.somalier.tar.gz?download=1" && tar -xzf $T/somalier/1kg.somalier.tar.gz -C $T/somalier && rm $T/somalier/1kg.somalier.tar.gz; }
 $T/somalier/somalier 2>&1 | head -3 || true
 ls $T/somalier | head
-in_runtime bash -c "pip install -q --target $T/peddy peddy==0.4.8 && PYTHONPATH=$T/peddy python -c 'import peddy; print(\"peddy\", peddy.__version__)'"
+# bcftools / peddy / pysam for the ancestry and sex pipelines (pbench has no bcftools)
+BPE=$WORK/envs/bench-public
+[ -x $BPE/bin/bcftools ] || MAMBA_ROOT_PREFIX=$WORK/tools/mm/root $WORK/tools/mm/bin/micromamba create -y -q -p $BPE   -c conda-forge -c bioconda --strict-channel-priority python=3.11 bcftools=1.21 samtools htslib peddy=0.4.8 pysam pandas pyarrow
+$BPE/bin/bcftools --version | head -1; $BPE/bin/python -c "import peddy; print('peddy', peddy.__version__)"
 
 python3 - <<EOF
 import hashlib, json, subprocess
