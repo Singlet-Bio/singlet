@@ -144,7 +144,7 @@ def guide_kind(name: str, target: str) -> str:
     s = f"{name} {target}".lower()
     if "safe" in s and "target" in s:
         return "safe-targeting"
-    if any(w in s for w in _NT_WORDS) or target.strip().lower() in ("", "non-targeting", "nan", "none", "control", "na"):
+    if any(w in s for w in _NT_WORDS) or target.strip().lower() in ("", "non-targeting", "nontargeting", "non_targeting", "nt", "ntc", "nan", "none", "control", "negative", "na"):
         return "non-targeting"
     return "targeting"
 
