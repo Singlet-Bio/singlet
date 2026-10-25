@@ -109,10 +109,12 @@ def markdown(s: dict, tissues: dict) -> str:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("bench", type=Path)
+    ap.add_argument("bench", type=Path, nargs="+", help="one or more bench.py outputs (merged: e.g. one file per study)")
     ap.add_argument("--json", type=Path)
     a = ap.parse_args(argv)
-    b = json.loads(a.bench.read_text())
+    b = {"results": []}
+    for f in a.bench:
+        b["results"] += json.loads(f.read_text())["results"]
     s = summarise(b)
     tissues = {r["gse"]: r.get("cxg_tissue", "") for r in b["results"]}
     if a.json:
