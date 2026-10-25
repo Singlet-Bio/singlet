@@ -137,6 +137,13 @@ int ReadAlign::oneRead() {//process one read: load, map, write
     };
     seqCacheBlob.clear();
     PROF_ADD(PROF_map, tMap);
+#ifdef STAR_PROFILE
+    {
+        int oc = fromCache ? 5 : unmapType==-1 ? (nTr==1 ? 0 : 1) : unmapType==3 ? 2 : unmapType==1 ? 3 : 4;
+        g_profOutcome[oc][0] += __rdtsc() - tMap;
+        g_profOutcome[oc][1]++;
+    }
+#endif
 
     if (P.pCh.out.bam && chimRecord) {//chimeric alignment was recorded in main BAM files, and it contains the representative portion, so non-chimeric aligmnent is not output
         return 0;

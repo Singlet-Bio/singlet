@@ -280,6 +280,9 @@ int star_main_impl(int argInN, char *argIn[])
         P.inOut->logMain << "STAR_PROFILE wall=" << sec << "s threads=" << P.runThreadN;
         for (int i = 0; i < PROF_N; i++)
             P.inOut->logMain << " " << nm[i] << "=" << g_prof[i] / hz << "s";
+        const char *on[6] = {"unique", "multi", "tooManyLoci", "tooShort", "otherUnmapped", "cacheHit"};
+        for (int i = 0; i < 6; i++)
+            P.inOut->logMain << " " << on[i] << "=" << g_profOutcome[i][1] << "reads/" << g_profOutcome[i][0] / hz << "s";
         P.inOut->logMain << "\n" << flush;
     }
 #endif
