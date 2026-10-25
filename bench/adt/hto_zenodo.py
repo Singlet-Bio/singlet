@@ -107,14 +107,16 @@ def main():
     ap.add_argument("--zenodo", required=True)
     ap.add_argument("--published", default=None)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--methods", default="singlet,singlet_cm05,htodemux,multiseqdemux,hashsolo")
+    ap.add_argument("--methods", default="singlet,singlet_cm05,singlet_mixture,htodemux,multiseqdemux,hashsolo")
+    ap.add_argument("--variants", action="store_true", help="also run every Singlet variant in hto_methods.VARIANTS")
     a = ap.parse_args()
     os.makedirs(os.path.join(a.out, "calls"), exist_ok=True)
     rows = []
+    methods = a.methods.split(",") + (list(HM.VARIANTS) if a.variants else [])
     for name, caps, hmap in datasets(a.zenodo):
         truth = pd.concat([t for _, _, t in caps])
-        for m in a.methods.split(","):
-            fn = HM.METHODS.get(m.replace("_cm05", ""))
+        for m in methods:
+            fn = HM.VARIANTS.get(m) or HM.METHODS.get(m.replace("_cm05", ""))
             parts, secs = [], 0.0
             try:
                 for cap, h, _ in caps:

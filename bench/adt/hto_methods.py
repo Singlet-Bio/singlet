@@ -80,7 +80,7 @@ def _normalise(values, names):
 # singlet
 # ---------------------------------------------------------------------------------------------------------------------
 
-def run_singlet(hto: pd.DataFrame, empties: pd.DataFrame | None, rna=None, workdir=None,
+def run_singlet(hto: pd.DataFrame, empties: pd.DataFrame | None = None, rna=None, workdir=None,
                 confident_min: float = 2.0) -> pd.DataFrame:
     """singlet's hashedDrops-style rule; ambient = empty-droplet row sums, else estimated from the cells (bimodal)."""
     from singlet.adt.hto import hashed_drops
@@ -94,15 +94,48 @@ def run_singlet(hto: pd.DataFrame, empties: pd.DataFrame | None, rna=None, workd
     return _finish(hto, labels, lfc_top, time.perf_counter() - t0)
 
 
-def run_singlet_mixture(hto: pd.DataFrame, empties=None, rna=None, workdir=None) -> pd.DataFrame:
+def run_singlet_mixture(hto: pd.DataFrame, empties=None, rna=None, workdir=None, **kw) -> pd.DataFrame:
     """singlet's per-hashtag mixture-of-regressions caller (``singlet.adt.hto.mixture_calls``); cells only."""
     from singlet.adt.hto import mixture_calls
 
     t0 = time.perf_counter()
-    call, score, _ = mixture_calls(hto.to_numpy(dtype=float))
+    call, score, _ = mixture_calls(hto.to_numpy(dtype=float), **kw)
     names = list(hto.index)
     labels = [NEGATIVE if c == -1 else DOUBLET if c == -2 else names[int(c)] for c in call]
     return _finish(hto, labels, score, time.perf_counter() - t0)
+
+
+def run_singlet_hybrid(hto: pd.DataFrame, empties=None, rna=None, workdir=None, confident_min=0.5, **kw):
+    """hashedDrops singlets (``confident_min``) unless the mixture finds two positive hashtags (then doublet)."""
+    from singlet.adt.hto import hashed_drops, mixture_calls
+
+    t0 = time.perf_counter()
+    X = hto.to_numpy(dtype=float)
+    ambient = empties.to_numpy(dtype=float).sum(axis=1) if empties is not None and empties.shape[1] else None
+    call, lfc, _ = hashed_drops(X, ambient, confident_min=confident_min)
+    mcall, _, _ = mixture_calls(X, **kw)
+    call = np.where(mcall == -2, -2, call)
+    names = list(hto.index)
+    labels = [NEGATIVE if c == -1 else DOUBLET if c == -2 else names[int(c)] for c in call]
+    return _finish(hto, labels, lfc, time.perf_counter() - t0)
+
+
+def _variant(fn, **fixed):
+    def run(hto, empties=None, rna=None, workdir=None):
+        return fn(hto, empties, rna, workdir, **fixed)
+    return run
+
+
+# the fixed grid of Singlet variants compared by leave-one-dataset-out selection (bench/adt/hto_zenodo.py)
+VARIANTS = {}
+for _cov in ("others", "total", "none"):
+    for _pos in (0.5, 0.8):
+        for _sc in (False, True):
+            _tag = f"mix_{_cov}_p{int(_pos * 10)}{'_amb' if _sc else ''}"
+            VARIANTS[_tag] = _variant(run_singlet_mixture, covariate=_cov, positive=_pos, scale_ambient=_sc)
+            VARIANTS["hyb_" + _tag[4:]] = _variant(run_singlet_hybrid, covariate=_cov, positive=_pos, scale_ambient=_sc)
+VARIANTS["hd_cm05"] = _variant(run_singlet, confident_min=0.5)
+VARIANTS["hd_cm2"] = _variant(run_singlet, confident_min=2.0)
 
 
 # ---------------------------------------------------------------------------------------------------------------------

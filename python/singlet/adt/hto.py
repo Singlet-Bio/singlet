@@ -116,7 +116,7 @@ MIX_ITERS = 200
 def _mixture_one(y, z):
     """Two-component mixture of linear regressions of y on z (EM). Returns the posterior of the higher component."""
     n = len(y)
-    Z = np.column_stack([np.ones(n), z])
+    Z = np.column_stack([np.ones(n), z]) if np.std(z) > 0 else np.ones((n, 1))
     # init: split y at its 1-D 2-means boundary
     c = np.quantile(y, [0.25, 0.95])
     for _ in range(50):
@@ -148,26 +148,36 @@ def _mixture_one(y, z):
             break
         ll_old = ll
     # the positive component is the one with the higher mean at the median covariate
-    zm = np.median(z)
-    mu0 = params[0][0][0] + params[0][0][1] * zm
-    mu1 = params[1][0][0] + params[1][0][1] * zm
+    zrow = np.array([1.0, np.median(z)])[:Z.shape[1]]
+    mu0 = float(params[0][0] @ zrow)
+    mu1 = float(params[1][0] @ zrow)
     return r if mu1 >= mu0 else 1 - r
 
 
-def mixture_calls(cells: np.ndarray, positive: float = MIX_POSITIVE):
+def mixture_calls(cells: np.ndarray, positive: float = MIX_POSITIVE, covariate: str = "others",
+                  scale_ambient: bool = False):
     """Hashtag calls from per-hashtag mixtures (cells only, no empty droplets needed).
 
     For each hashtag, log1p counts are modelled as a two-component mixture of regressions on the cell's log1p count of all
     the other hashtags (a proxy for the cell's nonspecific binding, as demuxmix uses detected genes). A hashtag is positive
     in a cell when its posterior >= ``positive``. One positive hashtag: singlet; two or more: doublet; none: negative.
+    ``covariate``: ``others`` (default), ``total`` (log1p of all hashtags) or ``none``; ``scale_ambient`` divides each hashtag
+    by its ambient level (:func:`ambient_bimodal`) first.
     Returns (call: hashtag index / -1 negative / -2 doublet, score: posterior of the call, posteriors hashtags x cells)."""
     X = np.asarray(cells, dtype=float)
     k, n = X.shape
+    if scale_ambient:
+        X = X / np.maximum(ambient_bimodal(X), 1e-3)[:, None]
     tot = X.sum(axis=0)
     post = np.zeros_like(X)
     for j in range(k):
         y = np.log1p(X[j])
-        z = np.log1p(tot - X[j])
+        if covariate == "others":
+            z = np.log1p(tot - X[j])
+        elif covariate == "total":
+            z = np.log1p(tot)
+        else:
+            z = np.zeros(n)
         post[j] = _mixture_one(y, z) if n >= 20 and y.std() > 0 else 0.0
     pos = post >= positive
     npos = pos.sum(axis=0)
