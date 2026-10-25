@@ -78,10 +78,21 @@ run_tool() {
         --t2g-map $PB/refs/$SPECIES/af_idx/index/t2g_3col.tsv --chemistry $AFCHEM --expected-ori fw --resolution cr-like \
         --unfiltered-pl $WL --threads 16 --output $O/af > $O/run.log 2>&1 || rc=$?
       ;;
+    cellranger)
+      # Runs only if Cell Ranger was installed under $WORK/tools by the 10x-EULA holder (this harness does not download it) together
+      # with a transcriptome built by `cellranger mkref` from the same genome FASTA and GTF at $WORK/tools/cellranger-refs/<species>.
+      CR=$(ls -d $WORK/tools/cellranger-*/bin/cellranger 2>/dev/null | tail -1); CRREF=$WORK/tools/cellranger-refs/$SPECIES
+      if [ -z "$CR" ] || [ ! -d "$CRREF" ]; then echo "[ap] cellranger not installed or no reference: skipped"; rm -rf $O; return 0; fi
+      mkdir -p $SCR/crfq; for m in R1 R2; do :; done
+      ln -s $R1 $SCR/crfq/s_S1_L001_R1_001.fastq.gz; ln -s $R2 $SCR/crfq/s_S1_L001_R2_001.fastq.gz
+      timed $O/run $CR count --id=cr --fastqs=$SCR/crfq --sample=s --transcriptome=$CRREF --create-bam=true --include-introns=true \
+        --localcores=16 --localmem=120 --disable-ui --output-dir=$O/out > $O/run.log 2>&1 || rc=$?
+      ;;
     *) echo "unknown tool $tool"; return 2 ;;
   esac
   echo "exit $rc" > $O/exit.txt
   # keep the evidence that the alignments are comparable (reads, unique %) and drop the bulky outputs
+  grep -h SEQCACHE $O/out/star_Log.out 2>/dev/null | tail -3 > $O/seqcache.txt || true   # real cache statistics of this run
   for f in $O/out/Log.final.out $O/out/star_Log.final.out; do [ -f $f ] && cp $f $O/Log.final.out; done
   for s in $O/out/Solo.out $O/out/star_Solo.out; do
     [ -f $s/GeneFull/Summary.csv ] && cp $s/GeneFull/Summary.csv $O/GeneFull.Summary.csv

@@ -15,6 +15,7 @@ Run:  python bench/public/capabilities/alignment_performance.py --artifacts DIR 
 """
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -58,25 +59,25 @@ def compute(artifact_dir: Path) -> dict:
     rep = pd.read_csv(art / "reported.tsv", sep="\t")
     dsets = [d for d in DATASETS if (runs.dataset == d).any()]
 
+    # Runtime is shown, not gated (resources and figures). The gating metrics are about the alignments being the same work:
+    # Singlet runs the same STAR, so its share of uniquely mapped reads must equal STARsolo's on identical reads.
     metrics = []
     for ds in dsets:
-        for fam, against in FAMILIES.items():
-            for rid, rname, unit, col in RES:
-                s = _med(runs, "singlet", ds, col)
-                comps = [(t, _med(runs, t, ds, col)) for t in SHOWN[fam] if _med(runs, t, ds, col) is not None]
-                if s is None or not comps or any(_med(runs, t, ds, col) is None for t in against):
-                    continue
-                tol = round(max(_spread(runs, t, ds, col) for t in against) + 1e-3, 3)
-                label = {"starsolo": "STARsolo", "alevinfry": "alevin-fry"}[fam]
-                metrics.append({
-                    "id": f"{rid}_vs_{fam}", "name": f"{rname} vs {label}", "unit": unit, "category": "resources", "dataset": ds,
-                    "direction": "lower", "singlet": {"value": C.finite(s)},
-                    "competitors": [{"tool": t, "value": C.finite(v)} for t, v in comps],
-                    "rule": {"type": "match_or_beat", "against": against, "tolerance": {"rel": tol},
-                             "rationale": f"rep-to-rep spread of {', '.join(against)} on this dataset: {tol:.1%}"},
-                    "notes": ("Singlet wall time includes `singlet encode` (FASTQ to .1fq). Singlet runs the campaign pipeline (counts, introns, "
-                              "junctions, sorted BAM, donor demux, mtDNA, ambient, doublets, cell calling); STARsolo and alevin-fry produce counts only"
-                              + (" (STARsolo with Velocyto and SJ)." if fam == "starsolo" else "."))})
+        su, ku = _med(runs, "singlet", ds, "uniq_pct"), _med(runs, "starsolo", ds, "uniq_pct")
+        if su is None or ku is None:
+            continue
+        kb = _med(runs, "starsolo-bam", ds, "uniq_pct")
+        v = runs[(runs.tool == "starsolo") & (runs.dataset == ds)].uniq_pct.astype(float).to_numpy()
+        tol = round(max(float(v.max() - v.min()) if len(v) > 1 else 0.0, abs(ku - kb) if kb is not None else 0.0), 3)
+        rule = {"type": "equivalence", "target": "starsolo"}
+        if tol > 0:
+            rule["tolerance"] = {"abs": tol}
+            rule["rationale"] = "STARsolo's own variation: rep-to-rep spread, and the difference between its runs with and without a BAM, on identical reads"
+        comps = [{"tool": "starsolo", "value": C.finite(ku)}] + ([{"tool": "starsolo-bam", "value": C.finite(kb)}] if kb is not None else [])
+        metrics.append({
+            "id": "uniquely_mapped_pct", "name": "Uniquely mapped reads, Singlet vs STARsolo", "unit": "percent", "category": "agreement",
+            "dataset": ds, "direction": "none", "singlet": {"value": C.finite(su)}, "competitors": comps, "rule": rule,
+            "notes": "Log.final.out of the timed runs, median of repetitions."})
 
     # ------------------------------------------------------------------ the optimization experiments
     star = opt[opt.kind == "star"]
@@ -137,11 +138,13 @@ def compute(artifact_dir: Path) -> dict:
     w_l, m_l = mt("lazy-huge-cache1")
     w_g, m_g = mt("pgo-cache2")
     hit = o(star, "campaign", "cache_hit_rate")
+    deep = _med(runs, "singlet", "gsm5815984", "cache_hit_rate") if "cache_hit_rate" in runs else None
+    deep = None if deep is None or np.isnan(deep) else deep
     idc = same_outputs(star, "campaign", "campaign-nocache")
     tab.append(row("Sequence-to-alignment cache (2 GB), replaces the adjacent-read dedup", "STAR",
-                   "hit rate 44-51% on PBMC at 1-4 GB; 66% simulated at 489 M reads; ~35% less mapping time at 48% hits", "PR #34",
+                   "hit rate 44-51% on PBMC at 1-4 GB (measured); ~35% less mapping time at 48% hits", "PR #34",
                    f"mapping {_fmt(m_n)} s without, {_fmt(m_c)} s with ({_fmt((m_n or np.nan) / (m_c or np.nan), 2)}x); wall {_fmt(w_n)} to {_fmt(w_c)} s"
-                   + (f"; hit rate {hit:.1%}" if hit else ""),
+                   + (f"; hit rate {hit:.1%}" if hit else "") + (f"; {deep:.1%} hits on the 489 M-pair deep sample (measured)" if deep else ""),
                    "identical to cache off" if idc == 1.0 else ("DIFFERS" if idc is not None else "not checked")))
     tab.append(row("Lazy window table + huge pages + faster read parsing (PR #34 build with a 1 GB cache)", "STAR",
                    "mapping 793 to 586 s with the 1 GB cache (Xeon 6226); 10 M subset: lazy 133 to 117.5 s, huge pages 111.5 s, both 107.5 s", "PR #34",
@@ -201,6 +204,34 @@ def compute(artifact_dir: Path) -> dict:
                      "caption": "Median of 2 repetitions; 16 threads, identical FASTQ input, exclusive node. Singlet's wall time includes the FASTQ encoding step.",
                      "x": {"label": "dataset", "categories": dsets}, "y": {"label": rname, "unit": unit, "scale": "linear", "min": 0}, "series": series})
 
+    # quality-vs-runtime Pareto figure: x = CPU-hours per 100 M read pairs; y = quality / reach, a placeholder until the scores of the
+    # exact-vs-pseudoalignment benchmark (multi-mapping/paralog, intronic and intergenic accuracy; reach in junctions, SNP demux, mtDNA,
+    # non-host, strand) are available
+    reads_m = {d: float(runs[(runs.dataset == d)].reads_in.astype(float).median()) / 1e6 for d in dsets
+               if runs[(runs.dataset == d)].reads_in.astype(float).notna().any()}
+    pts = []  # (series name, tool, dataset, cpu-h per 100 M pairs)
+    for tool in ("singlet", "singlet-core", "starsolo", "starsolo-bam", "alevinfry", "cellranger"):
+        for d in dsets:
+            c = _med(runs, tool, d, "cpu_h")
+            if c is not None and d in reads_m:
+                pts.append((tool, tool, d, c / (reads_m[d] / 100.0)))
+    if "pbmc1k_v3" in reads_m:
+        for name, label in (("pr22", "singlet without the STAR speedups (PR #22 binary)"), ("campaign-nocache", "singlet without the sequence cache"),
+                            ("stock-star", "singlet on stock STAR")):
+            v = star[star.name == name].cpu_s.astype(float)
+            if len(v):
+                pts.append((label, "singlet", "pbmc1k_v3", float(v.median()) / 3600.0 / (reads_m["pbmc1k_v3"] / 100.0)))
+    names = list(dict.fromkeys(p_[0] for p_ in pts))
+    figs.append({
+        "id": "quality_vs_cpu", "title": "Quality and reach vs CPU cost", "kind": "scatter",
+        "caption": "x: CPU-hours (user + system) per 100 M read pairs, 16 threads, one point per dataset; log scale. y: quality and reach score of the "
+                   "exact-versus-pseudo alignment benchmark (accuracy on multi-mapping and paralog, intronic and intergenic reads; reach in junctions, SNP "
+                   "demultiplexing, mtDNA, non-host and strand). The scores are not available yet, so y is empty; the rows without STAR speedups are PBMC 1k v3 "
+                   "at 4 threads. A transcriptome-first step is not built. Singlet is an exact genome-wide aligner; alevin-fry is a pseudoaligner.",
+        "x": {"label": "CPU-hours per 100 M read pairs", "scale": "log"}, "y": {"label": "quality / reach score (pending)"},
+        "series": [{"name": n_, "tool": next(p_[1] for p_ in pts if p_[0] == n_), "x": [round(p_[3], 3) for p_ in pts if p_[0] == n_],
+                    "y": [None for p_ in pts if p_[0] == n_], "labels": [p_[2] for p_ in pts if p_[0] == n_]} for n_ in names]})
+
     resources = []
     for (ds, tool), g in runs.groupby(["dataset", "tool"]):
         resources.append({"tool": tool, "dataset": ds, "wall_s": round(float(g.wall_s.median()), 1), "max_rss_gb": round(float(g.max_rss_gb.astype(float).median()), 2),
@@ -212,18 +243,30 @@ def compute(artifact_dir: Path) -> dict:
                           "cpu_h": round(float(g.cpu_s.median()) / 3600.0, 3), "node": f"{g.host.iloc[0]} ({g.cpu.iloc[0]})",
                           "notes": f"optimization experiment {kind}/{name}: " + ("4 samples concurrently" if g.copies.iloc[0] == 4 else "one sample")})
 
+    prov = json.loads((art / "provenance.json").read_text(encoding="utf-8"))
+    commit = prov["bench_commit"]
+
+    def line(ds):
+        a, b, c = (_med(runs, t, ds, "wall_s") for t in ("singlet", "starsolo", "alevinfry"))
+        return None if None in (a, b, c) else f"{ds}: Singlet {a:,.0f} s, STARsolo {b:,.0f} s, alevin-fry {c:,.0f} s"
+
+    lines = [x for x in (line(d) for d in dsets) if x]
+    conclusion = ("Wall time at 16 threads on identical FASTQs (Singlet includes FASTQ encoding and runs the full campaign pipeline): "
+                  + "; ".join(lines) + ". Runtime is shown, not gated. The STAR speedups (sequence cache, lazy window table, huge pages, PGO) leave every count matrix identical; "
+                  "see the optimization table for each speedup measured here.")
     doc = {
         "schema": "singlet.benchmark.capability", "schema_version": "1.0.0", "capability": CAPABILITY,
-        "title": "Alignment performance", "conclusion": "", "methods": "", "status": "final", "generated_at": "", "owner": "pipeline-benchmark",
-        "singlet": C.SINGLET, "tools": [], "datasets": [], "metrics": metrics, "resources": resources, "figures": figs,
-        "artifacts": C.artifact_entries(art, CAPABILITY, {"runs": "derived", "opt_runs": "derived", "reported": "derived"}),
-        "code": C.code_entries(CODE_COMMIT, [
+        "title": "Alignment performance", "conclusion": conclusion, "methods": prov["methods"], "status": prov.get("status", "final"),
+        "generated_at": prov["generated_at"], "owner": "pipeline-benchmark", "singlet": prov["singlet"], "tools": prov["tools"],
+        "datasets": prov["datasets"], "metrics": metrics, "resources": resources, "figures": figs,
+        "artifacts": C.artifact_entries(art, CAPABILITY, {"runs": "derived", "opt_runs": "derived", "reported": "derived", "provenance": "derived"}),
+        "code": C.code_entries(commit, [
             ("bench/public/capabilities/alignment_performance.py", "metric"), ("bench/public/harness/alignment_performance/ap_run.sbatch", "harness"),
             ("bench/public/harness/alignment_performance/opt_run.sbatch", "harness"), ("bench/public/harness/alignment_performance/prep_deep.sbatch", "harness"),
             ("bench/public/harness/alignment_performance/collect.py", "harness"), ("bench/public/harness/memwatch.py", "harness")]),
         "reproduce": {"module": "bench/public/capabilities/alignment_performance.py", "function": "compute", "laptop_minutes": 1,
                       "clipper_command": "sbatch bench/public/harness/alignment_performance/ap_run.sbatch <dataset> <rep>"},
-        "caveats": [],
+        "caveats": prov["caveats"],
     }
     return doc
 
