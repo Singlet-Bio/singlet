@@ -339,7 +339,10 @@ def keep_copy(src, dst):
 
 # ── compute stage: the pinned binary on one staged sample ───────────────────────────────────────────────────────────
 
-EXCLUDE_OUT = re.compile(r"(\.bam$|\.bai$|\.csi$|_STARtmp|\.1fq$|^Aligned|\.sam$|core\.\d+$)")
+# never copied to out/: alignments, reads (STAR's unmapped mates are ~40% of a sample's raw bytes, the non-host read
+# dump is reads too), temp dirs and core files.
+EXCLUDE_OUT = re.compile(r"(\.bam$|\.bai$|\.csi$|_STARtmp|\.1fq$|^Aligned|\.sam$|core\.\d+$|Unmapped\.out\.mate\d$|"
+                         r"\.f(ast)?q(\.gz)?$)")
 
 
 def classify_failure(rc, text, maxrss_gb=None):
@@ -386,7 +389,7 @@ def compute_stage(ctx, row, attempt, threads, shared_genome=False):
         stats = load_json_safe(os.path.join(out_dir, "pileup_stats.json")) or {}
         emit(root, "done", gsm, attempt=attempt, stage="compute", compute_s=round(secs, 1),
              compute_maxrss_gb=maxrss, reads_used=first_key(stats, ("total_reads", "reads_total", "n_reads")),
-             n_cells=first_key(stats, ("n_cells_called", "cells_called", "n_cells", "called_cells")),
+             n_cells=first_key(stats, ("n_called_cells", "n_cells_called", "cells_called", "n_cells")),
              binary_sha256=ctx.sha, out_dir=out_dir, private_dir=priv_dir, manifest_sha256=man_sha,
              out_bytes=out_bytes, wall_s=round(time.time() - t0, 1))
         shutil.rmtree(sdir, ignore_errors=True)

@@ -6,5 +6,6 @@
 #   sbatch --account=debruinz --partition=short-cpu --cpus-per-task=1 --mem=4G --time=03:55:00 --job-name=ar-ctl-clipper \
 #     --output=<root>/slurm/%x-%j.out controller.sbatch <orchestrator.py> <config.json> clipper
 set -u
+export PYTHONUNBUFFERED=1
 ORCH=$1; CONFIG=$2; CLUSTER=$3; shift 3
 exec "${AR_PYTHON:-python3}" "$ORCH" controller --config "$CONFIG" --cluster "$CLUSTER" "$@"

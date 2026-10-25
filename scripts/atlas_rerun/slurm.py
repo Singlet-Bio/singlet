@@ -5,7 +5,8 @@ import re
 import subprocess
 import time
 
-JOB_PREFIX = "ar-"  # every campaign job name starts with this; squeue/sacct are filtered on it
+# every campaign job name starts with one of these; squeue/sacct are filtered on them (bench jobs such as ar-perf are not)
+JOB_PREFIX = ("ar-io-", "ar-cmp-", "ar-node-", "ar-ctl-")
 
 
 def _run(cmd, timeout=120):

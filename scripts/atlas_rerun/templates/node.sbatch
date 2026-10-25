@@ -6,6 +6,7 @@
 # The genome is unloaded on exit, including on SIGTERM (--signal=B:TERM@600 from the controller).
 #   sbatch [opts] node.sbatch <orchestrator.py> <config.json> <cluster> <batch.jsonl> <slot_cores>
 set -u
+export PYTHONUNBUFFERED=1
 ORCH=$1; CONFIG=$2; CLUSTER=$3; BATCH=$4; SLOTS=${5:-112}
 exec "${AR_PYTHON:-python3}" "$ORCH" node-stage --config "$CONFIG" --cluster "$CLUSTER" --batch "$BATCH" \
   --slot-cores "$SLOTS" --time-limit "${AR_TIME:-24:00:00}"
