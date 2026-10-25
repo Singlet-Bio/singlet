@@ -129,4 +129,11 @@ def test_demuxem(data):
 
 
 def test_methods_registry():
-    assert set(hm.METHODS) == {"singlet", "singlet_mixture", "htodemux", "multiseqdemux", "hashsolo", "demuxem"}
+    assert set(hm.METHODS) == {
+        "singlet",
+        "singlet_mixture",
+        "htodemux",
+        "multiseqdemux",
+        "hashsolo",
+        "demuxem",
+    }
