@@ -51,32 +51,28 @@ def cluster_weights(Z, seed=0):
     return W
 
 
-def _solve_rho(rows, a_v, q_v, x, n, mu, kappa, lo=1e-6, hi=0.6, it=40):
-    """Per-row max of sum x log(q + rho (a - q)) + Beta prior; g' is decreasing in rho -> safeguarded bisection/Newton."""
+def _solve_rho(rows, a_v, q_v, x, n, mu, kappa, r0=None, lo=1e-6, hi=0.6, it=25):
+    """Per-row max of sum x log(q + rho (a - q)) + Beta prior (concave): safeguarded Newton with a maintained bracket."""
     d = a_v - q_v
-    r = np.full(n, 0.01)
+    xd = x * d
+    r = np.full(n, 0.01) if r0 is None else np.clip(r0, 1e-4, 0.5)
     lo_ = np.full(n, lo); hi_ = np.full(n, hi)
     al = max(kappa * mu, 1e-9); be = max(kappa * (1 - mu), 1e-9)
-
-    def grad(rr):
-        den = q_v + rr[rows] * d
-        g = np.bincount(rows, weights=x * d / den, minlength=n)
-        g2 = -np.bincount(rows, weights=x * d * d / den ** 2, minlength=n)
-        if kappa > 0:
-            g = g + (al - 1) / rr - (be - 1) / (1 - rr)
-            g2 = g2 - (al - 1) / rr ** 2 - (be - 1) / (1 - rr) ** 2
-        return g, g2
-
     for _ in range(it):
-        g, g2 = grad(r)
+        t = xd / (q_v + r[rows] * d)
+        g = np.bincount(rows, weights=t, minlength=n)
+        g2 = -np.bincount(rows, weights=t * d / (q_v + r[rows] * d), minlength=n)
+        if kappa > 0:
+            g = g + (al - 1) / r - (be - 1) / (1 - r)
+            g2 = g2 - (al - 1) / r ** 2 - (be - 1) / (1 - r) ** 2
         lo_ = np.where(g > 0, r, lo_); hi_ = np.where(g <= 0, r, hi_)
         nr = r - g / np.minimum(g2, -1e-12)
         bad = ~((nr > lo_) & (nr < hi_)) | ~np.isfinite(nr)
         nr = np.where(bad, 0.5 * (lo_ + hi_), nr)
-        if np.max(np.abs(nr - r) / r) < 1e-4:
-            r = nr
-            break
+        done = np.max(np.abs(nr - r) / r) < 2e-3
         r = nr
+        if done:
+            break
     return r
 
 
@@ -112,7 +108,7 @@ def mixture(ds, W, tau=10.0, iters=3, kappa=0.0, block=400):
             x = Xb.data.astype(np.float64)
             qv = q[rows, cols].astype(np.float64)
             av = a[cols].astype(np.float64)
-            r = _solve_rho(rows, av, qv, x, e - s, mu, kappa if t > 0 else 0.0)
+            r = _solve_rho(rows, av, qv, x, e - s, mu, kappa if t > 0 else 0.0, r0=rho[s:e] if t > 0 else None)
             new_rho[s:e] = r
             post = r[rows] * av / ((1 - r[rows]) * qv + r[rows] * av)
             rem = x * post
