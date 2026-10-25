@@ -277,7 +277,11 @@ def run_library(r1_paths: Sequence[str], r2_paths: Sequence[str], *, ref: Refere
     # Ranger does not report against ~800 for those it does). The cut adapts to the library's depth.
     mates_per_mol = np.bincount(mol, minlength=len(gu))
     mm_ = mates_per_mol[mates_per_mol > 0]
-    med = float(np.median(mm_[mm_ >= 2])) if (mm_ >= 2).any() else 1.0
+    # the depth a typical read sits at: the read-weighted median (junk molecules can outnumber real ones, e.g. pbmc2 TCR
+    # with a median of 4 mates per molecule against ~800 per real molecule)
+    srt = np.sort(mm_)
+    cw = np.cumsum(srt)
+    med = float(srt[np.searchsorted(cw, cw[-1] / 2)]) if len(srt) else 1.0
     umi_thr = max(params.min_umi_reads, int(np.ceil(params.umi_read_frac * med)))
     good = mates_per_mol >= umi_thr
     st["umi_read_threshold"] = umi_thr
