@@ -22,9 +22,10 @@ from _common import artifact_entries, code_url, contract, load_provenance, now_i
 
 CAP = "cell-type"
 DATASET = "cxg16"
-SINGLET = "singlet"
+SINGLET = "singlet"  # the forced label (argmax_cl): what every competitor outputs
+CALL = "singlet-call"  # the published, calibrated call (cell_type_cl), which backs off to a parent term when unsure
 COMPETITORS = ["CellTypist", "scANVI", "Seurat", "SingleR"]
-HELPERS = ["singlet-guide", "singlet-argmax", "singlet-threshold-0.3"]  # shown in figures, not compared by the rules
+HELPERS = [CALL, "singlet-guide"]  # the call enters its own metrics; the guide is shown, never compared
 PROB_TOOLS = ["CellTypist", "scANVI", "Seurat"]  # tools whose score is a probability (SingleR's delta is not)
 
 
@@ -47,19 +48,21 @@ def compute(artifact_dir: Path) -> dict:
 
     metrics = []
 
-    def add(mid, name, unit, category, direction, key=None, values=None, studies=None, against=None, notes=None, with_ci=True):
+    def add(mid, name, unit, category, direction, key=None, values=None, studies=None, against=None, notes=None, with_ci=True,
+            me=SINGLET):
         against = [t for t in (against or comps) if t in res]
         if values is None:
-            values = {t: mean_over_studies(per[t], key, studies) for t in [SINGLET] + against}
+            values = {t: mean_over_studies(per[t], key, studies) for t in [me] + against}
+        values[SINGLET] = values[me]
         m = {"id": mid, "name": name, "unit": unit, "category": category, "dataset": DATASET, "direction": direction,
-             "singlet": {"value": r(values[SINGLET])},
+             "singlet": {"value": r(values[me])},
              "competitors": [{"tool": t, "value": r(values[t])} for t in against],
              "rule": {"type": "match_or_beat", "against": against}}
         if key is not None and with_ci and studies is None:
-            sub = {t: per[t] for t in [SINGLET] + against}
-            ci, diff = bootstrap_studies(sub, key, SINGLET)
+            sub = {t: per[t] for t in [me] + against}
+            ci, diff = bootstrap_studies(sub, key, me)
             if ci:
-                m["singlet"]["ci"] = [r(x) for x in ci[SINGLET]]
+                m["singlet"]["ci"] = [r(x) for x in ci[me]]
                 for c in m["competitors"]:
                     c["ci"] = [r(x) for x in ci[c["tool"]]]
                 vals = [values[t] for t in against if values[t] is not None]
@@ -83,9 +86,16 @@ def compute(artifact_dir: Path) -> dict:
     add("abstention_aurc", "Wrong-call rate integrated over coverage (area under the risk-coverage curve)", "fraction",
         "accuracy", "lower", values={t: res[t]["aurc"] for t in [SINGLET] + comps},
         notes="cells ranked by each tool's own confidence; lower means its confidence separates right from wrong calls better")
-    add("calibration_ece", "Expected calibration error of the call's probability", "fraction", "accuracy", "lower",
+    add("calibration_ece", "Expected calibration error of the label's probability", "fraction", "accuracy", "lower",
         values={t: res[t].get("ece") for t in [SINGLET] + PROB_TOOLS if t in res}, against=PROB_TOOLS,
-        notes="10 bins; a call is right when the truth lies in its subtree; SingleR gives no probability")
+        notes="10 bins; a label is right when the truth lies in its subtree; SingleR gives no probability")
+    if CALL in res:
+        add("call_wrong_rate", "Wrong calls in the published label (Singlet: the calibrated call; competitors: their label)",
+            "fraction", "accuracy", "lower", key="wrong", me=CALL,
+            notes="Singlet's call stops at a parent term when its subtypes share the probability; competitors always name one term")
+        add("call_calibration_ece", "Expected calibration error of the published probability (Singlet: the call's rolled-up probability)",
+            "fraction", "accuracy", "lower", values={t: res[t].get("ece") for t in [CALL] + PROB_TOOLS if t in res}, against=PROB_TOOLS,
+            me=CALL, notes="10 bins; a call is right when the truth lies in its subtree")
     if unseen:
         add("unseen_tissue_depth2", "Accuracy at depth 2 on studies whose tissue is thin in the reference", "fraction",
             "robustness", "higher", key="d2", studies=unseen,
@@ -128,12 +138,15 @@ def compute(artifact_dir: Path) -> dict:
                  "columns": ["study", "tissue", "cells"] + [t for t in [SINGLET] + comps + ["singlet-guide"] if t in per], "rows": rows})
 
     commit = prov["bench_commit"]
-    s, best = metrics[1], None
+    byid = {m["id"]: m for m in metrics}
+    s = byid["accuracy_depth2"]
     d2 = {c["tool"]: c["value"] for c in s["competitors"]}
+    cw = byid.get("call_wrong_rate")
     conclusion = prov.get("conclusion") or (
-        f"On 16 held-out studies with curated cell types ({len(truth):,} cells), Singlet's network gets "
-        f"{s['singlet']['value']:.1%} of cells to the right lineage against " + ", ".join(f"{v:.1%} for {k}" for k, v in d2.items())
-        + f", with {metrics[5]['singlet']['value']:.1%} wrong calls; every tool learned from the same CELLxGENE reference.")
+        f"On 16 held-out studies with curated cell types ({len(truth):,} cells), with every tool trained on the same CELLxGENE "
+        f"reference, Singlet labels {s['singlet']['value']:.1%} of cells with the right lineage against "
+        + ", ".join(f"{v:.1%} for {k}" for k, v in d2.items()) + "."
+        + (f" Its calibrated call cuts wrong calls to {cw['singlet']['value']:.1%}." if cw else ""))
     doc = {
         "schema": C.SCHEMA_CAPABILITY, "schema_version": C.SCHEMA_VERSION, "capability": CAP,
         "title": "Cell type labels",

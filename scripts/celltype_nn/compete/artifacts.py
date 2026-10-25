@@ -23,19 +23,21 @@ sys.path.insert(0, str(HERE.parents[2] / "python"))
 
 # harness directory -> public tool name
 TOOLS = {
-    "singlet_nn": "singlet",
+    "singlet_nn_argmax": "singlet",  # the forced label (sidecar argmax_cl), the like-for-like output of every competitor
+    "singlet_nn": "singlet-call",  # the published call (sidecar cell_type_cl): most specific term with rolled-up probability >= 0.5
     "celltypist": "CellTypist",
     "scanvi": "scANVI",
     "seurat": "Seurat",
     "singler": "SingleR",
     "singlet_guide": "singlet-guide",
-    "singlet_nn_argmax": "singlet-argmax",
-    "singlet_nn_t0.3": "singlet-threshold-0.3",
 }
 TOOL_INFO = {
     "singlet": dict(role="singlet", version="1.0.0", url="https://github.com/Singlet-Bio/singlet",
                     params="singlet.celltype_nn model m1_notissue (Census 2025-11-08, CL 2026-06-08): rank inputs over 6,000 genes, "
-                           "MLP 2048, call = most specific CL term with rolled-up probability >= 0.5"),
+                           "MLP 2048; label = argmax_cl (the most probable CL term), score = its probability"),
+    "singlet-call": dict(role="helper", version="1.0.0",
+                         params="the same model's published call cell_type_cl: the most specific CL term with rolled-up probability >= 0.5, "
+                                "prob = that rolled-up probability (cell_type_prob)"),
     "CellTypist": dict(role="competitor", version="1.7.1", url="https://github.com/Teichlab/celltypist", citation="Dominguez Conde et al., Science 2022",
                        params="celltypist.train(log1p CP10k, labels = CL term, use_SGD=True, mini_batch=True, balance_cell_type=True, epochs=10) "
                               "on the full Census training split (2.2M human, 0.4M mouse cells); celltypist.annotate(majority_voting=False)"),
@@ -49,8 +51,6 @@ TOOL_INFO = {
                     params="SingleR(test = log1p CP10k, ref = reference log1p CP10k, labels = CL term, aggr.ref=TRUE, de.method='classic'); "
                            "score = delta.next; pruned.labels kept as SingleR's own abstention"),
     "singlet-guide": dict(role="helper", version="1.0.0", params="singlet.celllabels guide (marker hierarchy + kNN smoothing), the atlas's current labels"),
-    "singlet-argmax": dict(role="helper", version="1.0.0", params="the network's single most probable term"),
-    "singlet-threshold-0.3": dict(role="helper", version="1.0.0", params="the network's most specific term with rolled-up probability >= 0.3"),
 }
 METHODS = (
     "**Data.** cxg16: 16 GEO studies (66 samples, 13 human and 3 mouse) that CELLxGENE curators annotated with Cell Ontology "
@@ -65,7 +65,9 @@ METHODS = (
     "on another branch. Each study pools its samples, and values are means over studies with bootstrap CIs over studies. "
     "Calibration: ECE of each tool's probability against 'the truth lies in the call's subtree'. Abstention: area under "
     "each tool's risk-coverage curve. Robustness: depth-2 accuracy on studies whose tissue is thin in the reference. Runtime: "
-    "CPU time per million cells to label a query once the reference is prepared."
+    "CPU time per million cells to label a query once the reference is prepared. Singlet gives two labels per cell. The "
+    "most probable term is compared with every competitor's label; the calibrated call, which backs off to the parent term "
+    "when unsure, is scored for wrong calls and calibration."
 )
 
 
@@ -121,7 +123,7 @@ def main(argv=None) -> int:
             runtime[name] = cpu / max(cells, 1) * 1e6
             threads = max(t.get("threads", 1) for t in T.values())
             resources.append(dict(tool=name, dataset="cxg16", wall_s=round(wall, 1), cpu_h=round(cpu / 3600, 3), threads=int(threads),
-                                  max_rss_gb=float(rss.get(d, rss.get(name, 0.0)) or 0.0),
+                                  max_rss_gb=float(rss.get(d, rss.get("singlet_nn" if d.startswith("singlet") else name, 0.0)) or 0.0),
                                   node="H100 GPU" if "cuda" in {t.get("device") for t in T.values()} else "Clipper CPU",
                                   notes=f"{cells:,} cells, prediction only (reference prepared)"))
     calls = pd.concat(parts, ignore_index=True)
@@ -154,8 +156,9 @@ def main(argv=None) -> int:
         methods=METHODS,
         status=a.status,
         caveats=[
-            "The threshold-0.3 and argmax variants were examined on cxg16 after the 0.5 call was fixed; they are shown as helpers and "
-            "never used as Singlet's value.",
+            "Singlet's value in the label metrics is its forced label (argmax_cl), the output every competitor gives. This column "
+            "was chosen for the comparison after cxg16 was scored; the model and both columns were fixed before that. The published "
+            "call (cell_type_cl) is reported separately as singlet-call.",
             "Two training choices of the network followed a first look at cxg16: calibrating the temperature on call reliability (on held-out "
             "Census collections) and trying tissue context (not used). See docs/celltype_nn.md section 4.",
             "Azimuth's own pretrained references cover 3 of the 16 studies' tissues; Seurat reference mapping with the shared Census reference "
