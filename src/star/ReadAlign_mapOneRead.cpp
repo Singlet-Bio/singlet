@@ -1,3 +1,4 @@
+#include "StarProfile.h"
 #include "ReadAlign.h"
 #include "SequenceFuns.h"
 #include "Stats.h"
@@ -41,6 +42,7 @@ int ReadAlign::mapOneRead() {
     uint seedSearchStartLmax=min(P.seedSearchStartLmax, // 50
                                   (uint) (P.seedSearchStartLmaxOverLread*(Lread-1))); // read length
     // align all good pieces
+    PROF_T0(tSeed);
     for (uint ip=0; ip<Nsplit; ip++) {
 
 
@@ -146,6 +148,7 @@ int ReadAlign::mapOneRead() {
         };
     };
 
+    PROF_ADD(PROF_seed, tSeed);
     #ifdef OFF_AFTER_SEEDING
         #warning OFF_AFTER_SEEDING
         return 0;

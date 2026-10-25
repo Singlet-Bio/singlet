@@ -276,7 +276,7 @@ int star_main_impl(int argInN, char *argIn[])
     {
         double sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - profClock0).count();
         double hz = (__rdtsc() - profTsc0) / sec;
-        const char *nm[PROF_N] = {"chunkRead", "chunkMutexWait", "chunkSort", "readLoad", "map", "output", "chunkWrite"};
+        const char *nm[PROF_N] = {"chunkRead", "chunkMutexWait", "chunkSort", "readLoad", "map", "output", "chunkWrite", "seed", "windows", "stitch"};
         P.inOut->logMain << "STAR_PROFILE wall=" << sec << "s threads=" << P.runThreadN;
         for (int i = 0; i < PROF_N; i++)
             P.inOut->logMain << " " << nm[i] << "=" << g_prof[i] / hz << "s";
