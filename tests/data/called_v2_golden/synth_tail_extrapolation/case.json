@@ -1,7 +1,7 @@
 {
  "format": "singlet-called-v2-golden/1",
  "name": "synth_tail_extrapolation",
- "description": "Many ambient-like tested barcodes (800 at 51-120 UMIs) and few uncalled low-RNA cells (30 at 150-400): the cells sit below every simulated path, but fewer than n_tested / 10 barcodes are at the Monte Carlo floor, so BH passes none of them at FDR 0.001 without the tail extrapolation.",
+ "description": "Ambient at 1-15 UMIs, many ambient-like tested barcodes (800 at 51-120 UMIs) and few uncalled low-RNA cells (30 at 150-400): the cells sit below every simulated path, but fewer than n_tested / 10 barcodes are at the Monte Carlo floor, so BH passes none of them at FDR 0.001 without the tail extrapolation.",
  "source": "tests/data/called_v2_golden/generate.py synth_tail, numpy default_rng(2)",
  "protocol": "10xv3",
  "options": {},
@@ -11,23 +11,23 @@
  "expected": {
   "method": "singlet-emptydrops",
   "version": "2.1",
-  "lower": 11,
+  "lower": 34,
   "retain_total": 2754.999999999999,
-  "alpha": 159.39078037004066,
+  "alpha": 338.9893967876551,
   "n_ambient": 3000,
-  "ambient_umi": 7487,
+  "ambient_umi": 24048,
   "n_tested": 830,
-  "n_tail": 85,
-  "n_called_v2": 145,
-  "n_added": 85
+  "n_tail": 30,
+  "n_called_v2": 90,
+  "n_added": 30
  },
  "knee_unbounded": 2675.0,
  "tolerance": {
   "called_v2": "exact",
   "lower": "exact",
   "pvalue_monte_carlo": "exact (pvalue >= 1/(niters+1): (n_le + 1) / (niters + 1))",
-  "pvalue_tail_rel": 1e-06,
-  "fdr_rel": 1e-06,
+  "pvalue_tail_log_rel": 1e-06,
+  "fdr_log_rel": 1e-06,
   "alpha_rel": 1e-06,
   "retain_total_rel": 1e-09
  }

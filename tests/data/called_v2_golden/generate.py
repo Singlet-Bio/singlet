@@ -147,7 +147,8 @@ def synth_knee_below_plateau(rng, G=80):
     t_sh = np.round(15 * np.exp(rng.exponential(1.0, 160))).astype(int)
     t_cell = np.round(10 ** rng.uniform(3, 4.2, 120)).astype(int)
     t_low = np.round(10 ** rng.uniform(2.3, 3, 30)).astype(int)
-    parts += [_draw_ambient(rng, t_amb, amb), _draw_ambient(rng, t_deb, amb), _draw_ambient(rng, t_sh, amb)]
+    # strong overdispersion (alpha 30): with 1-3 UMIs per ambient droplet a weaker one leaves the alpha MLE nearly flat
+    parts += [_draw_ambient(rng, t, amb, 30.0) for t in (t_amb, t_deb, t_sh)]
     called += [False] * (len(t_amb) + len(t_deb) + len(t_sh))
     parts.append(np.hstack([_draw(rng, t_cell[i::3], 0.9 * types[i] + 0.1 * amb) for i in range(3)]))
     called += [True] * len(t_cell)

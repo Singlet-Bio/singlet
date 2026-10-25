@@ -13,7 +13,7 @@
   "version": "2.1",
   "lower": 42,
   "retain_total": 3591.0000000000005,
-  "alpha": 325.2213089228896,
+  "alpha": 325.22130884434023,
   "n_ambient": 3000,
   "ambient_umi": 29827,
   "n_tested": 210,
@@ -26,8 +26,8 @@
   "called_v2": "exact",
   "lower": "exact",
   "pvalue_monte_carlo": "exact (pvalue >= 1/(niters+1): (n_le + 1) / (niters + 1))",
-  "pvalue_tail_rel": 1e-06,
-  "fdr_rel": 1e-06,
+  "pvalue_tail_log_rel": 1e-06,
+  "fdr_log_rel": 1e-06,
   "alpha_rel": 1e-06,
   "retain_total_rel": 1e-09
  }
