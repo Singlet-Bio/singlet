@@ -73,7 +73,8 @@ def classify(codes, off, k, ikm, isg, ips, seg_region, min_hits):
     """Best V / J / C segment per read. Region codes: 0 V, 1 D, 2 J, 3 C.
 
     Returns int32 arrays (n, 10): vseg, vhits, vdiag, jseg, jhits, jdiag, cseg, chits, cdiag (-1 / 0 when absent), and
-    1 in column 9 when the best C segment ties with another (TRBC1 / TRBC2, IGHG1-4 share most k-mers)."""
+    in column 9 tie flags: 1 C, 2 V, 4 J when the best segment of that region ties with another gene (TRBC1 / TRBC2,
+    IGHG1-4, TRBV6-2 / TRBV6-3 share most k-mers), so that the read does not vote for either."""
     n = len(off) - 1
     out = np.full((n, 10), -1, np.int32)
     mask = np.uint64((1 << (2 * k)) - 1)
@@ -136,8 +137,14 @@ def classify(codes, off, k, ikm, isg, ips, seg_region, min_hits):
                 out[r, col] = bseg[reg]
                 out[r, col + 1] = best[reg]
                 out[r, col + 2] = bdiag[reg]
+        flags = 0
         if best[3] >= min_hits and second[3] == best[3]:
-            out[r, 9] = 1
+            flags |= 1
+        if best[0] >= min_hits and second[0] == best[0]:
+            flags |= 2
+        if best[2] >= min_hits and second[2] == best[2]:
+            flags |= 4
+        out[r, 9] = flags
     return out
 
 

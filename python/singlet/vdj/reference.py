@@ -21,7 +21,7 @@ import gzip
 import os
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Sequence, Tuple
 
 BIOTYPES = {f"{l}_{r}_gene" for l in ("TR", "IG") for r in ("V", "D", "J", "C")}
 CHAINS = ("TRA", "TRB", "TRG", "TRD", "IGH", "IGK", "IGL")
@@ -32,6 +32,9 @@ _aa = "FFLLSSSSYY**CC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG"
 for _i in range(64):
     CODON[_b[_i // 16] + _b[(_i // 4) % 4] + _b[_i % 4]] = _aa[_i]
 J_MOTIF = re.compile(r"[FW]G.G")
+# a V segment named like one but annotated otherwise (GENCODE v44: TRBV11-2 is "lncRNA", TRBV21-1 a pseudogene) is kept
+# when its own sequence is an open V (start codon frame without a stop before an in-frame Cys104), as IMGT's ORFs are
+V_NAME = re.compile(r"^(TR[ABGD]|IG[HKL])V\d")
 
 
 def revcomp(s: str) -> str:
@@ -99,11 +102,11 @@ def parse_gtf(gtf: str):
             p = ln.rstrip("\n").split("\t")
             if len(p) < 9 or p[2] not in ("exon", "CDS"):
                 continue
-            if "_gene" not in p[8]:
+            if '_gene' not in p[8] and 'gene_name "TR' not in p[8] and 'gene_name "IG' not in p[8]:
                 continue
             a = _attrs(p[8])
             bt = a.get("gene_type") or a.get("gene_biotype")
-            if bt not in BIOTYPES:
+            if bt not in BIOTYPES and not V_NAME.match(a.get("gene_name", "")):
                 continue
             gid = a["gene_id"].split(".")[0]
             g = genes.setdefault(gid, {"name": a.get("gene_name", gid), "biotype": bt, "contig": p[0], "strand": p[6],
@@ -138,14 +141,46 @@ def _j_anchor(seq: str):
     return -1, -1
 
 
-def build(genome_fa: str, gtf: str) -> List[Segment]:
-    genes = parse_gtf(gtf)
+def _open_v_frame(seq: str) -> int:
+    """Frame of an unannotated V: the frame with a Cys104 anchor and no stop before it, preferring one that starts
+    with ATG; -1 when there is none (a real pseudogene)."""
+    best = -1
+    for fr in range(3):
+        anc = _v_anchor(seq, fr)
+        if anc < 0 or "*" in translate(seq[fr:anc + 3]):
+            continue
+        if seq[fr:fr + 3] == "ATG":
+            return fr
+        best = fr if best < 0 else best
+    return best
+
+
+def build(genome_fa: str, gtf: str, extra: Sequence[Tuple[str, str]] = ()) -> List[Segment]:
+    """Segments of the primary assembly, plus those of ``extra`` (genome, GTF) pairs (alternate haplotypes, as Cell
+    Ranger's ``-alts`` reference has: TRBV4-3, TRBV6-3, TRBV7-8 ... are only on GRCh38 alt loci) whose gene names
+    the primary assembly lacks."""
+    out = _build_one(genome_fa, gtf)
+    for g2, t2 in extra:
+        have = {s.name for s in out}
+        out += [s for s in _build_one(g2, t2, skip_contigs={s.contig for s in out}) if s.name not in have]
+    # one segment per name (an alt locus can repeat a gene in several haplotypes)
+    seen, uniq = set(), []
+    for s in out:
+        if s.name not in seen:
+            seen.add(s.name)
+            uniq.append(s)
+    uniq.sort(key=lambda s: (s.chain, "VDJC".index(s.region), s.name))
+    return uniq
+
+
+def _build_one(genome_fa: str, gtf: str, skip_contigs=frozenset()) -> List[Segment]:
+    genes = {k: g for k, g in parse_gtf(gtf).items() if g["contig"] not in skip_contigs}
     chroms = _read_fasta(genome_fa, {g["contig"] for g in genes.values()})
     out: List[Segment] = []
     for gid, g in genes.items():
         if g["contig"] not in chroms:
             continue
-        region = g["biotype"][3]
+        region = g["biotype"][3] if g["biotype"] in BIOTYPES else "V"
         chain = chain_of(g["name"])
         if chain is None:
             continue
@@ -168,12 +203,15 @@ def build(genome_fa: str, gtf: str) -> List[Segment]:
                         break
                     off += b - a + 1
                 frame = off % 3
+            if g["biotype"] not in BIOTYPES:
+                frame = _open_v_frame(seq)
+                if frame < 0:
+                    continue
             anchor = _v_anchor(seq, frame)
         elif region == "J":
             anchor, frame = _j_anchor(seq)
         start = min(a for a, _ in t["exons"])
         out.append(Segment(g["name"], gid, chain, region, seq, anchor, frame, g["contig"], start))
-    out.sort(key=lambda s: (s.chain, "VDJC".index(s.region), s.name))
     return out
 
 
@@ -210,10 +248,12 @@ def summary(segs: List[Segment]) -> Dict[str, Dict[str, int]]:
     return out
 
 
-if __name__ == "__main__":  # python -m singlet.vdj.reference GENOME.fa GTF OUT.tsv.gz
+if __name__ == "__main__":  # python -m singlet.vdj.reference GENOME.fa GTF OUT.tsv.gz [ALT_GENOME.fa ALT_GTF]
     import json
     import sys
 
-    segs = build(sys.argv[1], sys.argv[2])
-    write(segs, sys.argv[3], provenance=f"built from {os.path.basename(sys.argv[1])} + {os.path.basename(sys.argv[2])}")
+    extra = [(sys.argv[4], sys.argv[5])] if len(sys.argv) > 5 else []
+    segs = build(sys.argv[1], sys.argv[2], extra)
+    src = " + ".join(os.path.basename(x) for x in sys.argv[1:3] + sys.argv[4:6])
+    write(segs, sys.argv[3], provenance=f"built from {src}")
     print(json.dumps(summary(segs), indent=1))

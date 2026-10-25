@@ -212,9 +212,9 @@ def run_library(r1_paths: Sequence[str], r2_paths: Sequence[str], *, ref: Refere
         um = np.array([s[cb_len:cbu] for s in r1a[src[keep]]], dtype=f"S{umi_len}")
         cbs.append(cb)
         umis.append(um)
-        mm = np.empty((len(keep), 12), np.int32)
+        mm = np.empty((len(keep), 13), np.int32)
         mm[:, :9] = o[keep, :9]
-        mm[:, 6] = np.where(o[keep, 9] == 1, -1, o[keep, 6])  # a C call tied between genes does not vote
+        mm[:, 12] = o[keep, 9]  # tie flags: reads whose V / J / C ties between genes do not vote for a gene
         mm[:, 9] = chain[keep]
         mm[:, 10] = cys[keep]
         mm[:, 11] = np.where(informative[keep], fw[keep], -2)  # -2 marks a non-informative mate (no sequence kept)
@@ -345,6 +345,15 @@ def _best(values: np.ndarray, weights: np.ndarray):
     return int(u[w.argmax()])
 
 
+def _vote(meta: np.ndarray, col: int, tie_bit: int, fallback: bool = True) -> int:
+    """Gene with the most k-mer hits over reads whose call for that region is not a tie; with ``fallback``, all reads
+    when every read ties (identical genes, e.g. over a short read)."""
+    has = meta[:, col] >= 0
+    clean = has & ((meta[:, 12] & tie_bit) == 0)
+    use = clean if clean.any() or not fallback else has
+    return _best(meta[use, col], meta[use, col + 1].astype(float))
+
+
 def _mode_per_group(g: np.ndarray, n: int, values: np.ndarray, weights: np.ndarray) -> np.ndarray:
     """Per group 0..n-1, the value (>= 0) with the largest summed weight, -1 when the group has none."""
     out = np.full(n, -1, np.int64)
@@ -404,9 +413,9 @@ def _annotate(ref: Reference, groups, sel, mm, cell_of, mol, ubc, cb_len, params
         cinfo = []
         for p in range(P):
             on = mc == p
-            v = _best(meta[on, 0][meta[on, 0] >= 0], meta[on, 1][meta[on, 0] >= 0].astype(float))
-            j = _best(meta[on, 3][meta[on, 3] >= 0], meta[on, 4][meta[on, 3] >= 0].astype(float))
-            c = _best(meta[on, 6][meta[on, 6] >= 0], meta[on, 7][meta[on, 6] >= 0].astype(float))
+            v = _vote(meta[on], 0, 2)
+            j = _vote(meta[on], 3, 4)
+            c = _vote(meta[on], 6, 1, fallback=False)
             cinfo.append([v, j, c, int(len(np.unique(mmol[on]))), int(on.sum())])
         # unassigned molecules: to the contig with the same V gene, else to the only contig
         un = mc < 0
