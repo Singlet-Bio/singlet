@@ -133,20 +133,25 @@ def reliability_ceiling(ds):
     return dict(var_obs=float(vo), noise_var=float(nv), reliability=float(rel), pearson_ceiling=float(np.sqrt(rel)))
 
 
-def sim_ceiling(ds, smooth, nrep=20, seed=0):
-    """Simulate binomial cross-species counts for a smooth 'true' rho and correlate smooth rho with the noisy truth."""
+def split_half_truth(ds, seed=0, nrep=10):
+    """Real-data check of truth noise (no simulated contamination): randomly split each pure cell's observed UMIs into two halves
+    (exact hypergeometric split of the real reads), compute rho_true from each half, and correlate the halves across cells.
+    Spearman-Brown gives the reliability of the full-depth truth: 2r/(1+r)."""
     rng = np.random.default_rng(seed)
     m = ds.pure
     N = ds.N[m].astype(np.int64)
+    minor = np.where(ds.hum, ds.M, ds.H)[m].astype(np.int64)
     al = ds.alpha_other[m]
-    s = np.clip(smooth[m], 0, 1)
     sp_, pe_ = [], []
     for _ in range(nrep):
-        k = rng.binomial(N, np.clip(s * al, 0, 1))
-        obs = k / N / al
-        sp_.append(spearmanr(s, obs)[0])
-        pe_.append(pearsonr(s, obs)[0])
-    return float(np.mean(sp_)), float(np.mean(pe_))
+        n1 = N // 2
+        m1 = rng.hypergeometric(minor, N - minor, n1)
+        m2 = minor - m1
+        r1 = m1 / np.maximum(n1, 1) / al
+        r2 = m2 / np.maximum(N - n1, 1) / al
+        sp_.append(spearmanr(r1, r2)[0]); pe_.append(pearsonr(r1, r2)[0])
+    rs, rp = float(np.mean(sp_)), float(np.mean(pe_))
+    return dict(split_half_spearman=rs, split_half_pearson=rp, sb_spearman=2 * rs / (1 + rs), sb_pearson=2 * rp / (1 + rp))
 
 
 class Timer:
