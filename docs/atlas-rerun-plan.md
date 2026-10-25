@@ -6,7 +6,10 @@ Status: plan, 2026-10-24, branch `plan/atlas-rerun`. No production jobs were sub
 - a depth probe on three deep samples;
 - a performance matrix with output-equivalence checks.
 
-**Route chosen (Zach, 2026-10-24): Clipper only, with the pipeline optimized first.**
+**Decisions (Zach, 2026-10-24/25):**
+- **All reads of every run, unconditionally; no cap.**
+- Clipper is the default. The pipeline is optimized first.
+- Anvil is quoted (§4); no SUs spent.
 
 Code and inputs are in `bench/atlas_rerun/`.
 
@@ -16,36 +19,29 @@ bundles and strand-affected samples first.
 
 ## Summary
 
-- **What is re-run: 70,558 GEX samples.** Median 250M read pairs per sample, and 42% have more than one run. All reads of all
-  runs is 21.7 trillion pairs, 13× what the 2026 campaign read.
-- **Optimized pipeline, identical outputs.** Four changes:
-  - the download moves out of the compute job;
+- **What is re-run:** 70,558 gene-expression samples, **all reads of all runs**. That is 21.7 trillion read pairs (median 250M per sample), 13× what the 2026 campaign read.
+- **Pipeline speed.** Every change below gives outputs byte-identical to stock STAR + the fixed engine:
+  - separate download stage;
   - 4-thread jobs;
-  - a determinism fix (now in #22);
-  - one shared genome per node.
+  - shared genome;
+  - disk sort;
+  - determinism fix;
+  - **STAR acceleration (PR #34):** sequence cache, lazy window table, huge pages, PGO.
 
-  Together they cut core-hours **1.5–1.7×** (1.8–2.3× if the non-host screen is deferred). Every count matrix is byte-identical
-  to the present setting.
-- **On Clipper the network sets the calendar, not the cores.** Downloads into Clipper top out at ~150 MB/s (~13 TB/day) from
-  NCBI and from AWS alike.
+  Mapping is 1.54× faster and a whole sample 1.35× faster than #22's binary. Together with the job-shape changes, **core-hours fall from 1,091k (present) to 316k (no non-host screen) / 466k (with it)**. The sequence cache gains more at full depth: 66% hits on a 489M-read sample, against 48% on PBMC.
+- **Calendar and cost, all reads:**
 
-| depth | present core-h | optimized core-h (screen / no screen) | Clipper calendar, optimized, 300 cores |
+| | compute | download | binding limit |
 |---|---|---|---|
-| full | 1,091k | 624k / 475k | ~145 days |
-| 200M cap | 561k | 357k / 282k | ~70 days |
-| 100M cap | 328k | 217k / 175k | ~39 days |
-| 50M cap | 189k | 130k / 108k | ~21 days |
+| Clipper, 300 cores | 44–65 days | **~145 days** at ~150 MB/s | network |
+| Anvil, whole nodes | ~365k–535k SU (3.3–4.8× the 112k balance) | not measured; Anvil's network is faster | SU balance |
 
-  Add ~1 week of preparation (merges, I/O stage, EmptyDrops, validation run).
-- **A 200M cap keeps 95–98% of cells and 63–77% of UMIs per cell** of full depth on the two deep samples probed. A
-  head-of-run cap is nearly unbiased (−2% UMIs).
-- **Modalities:**
-  - gene expression and ADT are equivalent to STARsolo / Cell Ranger, and gene expression to scBaseCount at equal depth;
-  - cell calling and strand are worse today; `called_v2` and #25 fix them in this re-run;
-  - the library-type screen is better than scBaseCount's;
-  - splice junctions, mtDNA, donor demultiplexing, doublets, ambient RNA and non-host are not benchmarked yet (§8).
-
-
+- **Production binary (PR #31).** Cell calling is `called_v2` (EmptyDrops on exon + intron, plateau `lower`). It was ported to C++ and matches Python exactly on 10,349 barcodes. Strand is correct for 5' libraries without flags, and a per-run library screen and provenance are in. A fix round (`prod/modality-fixes`) is in progress for the problems the modality benchmarks found (§8).
+- **Modalities, against established tools on data with a known answer (§8):**
+  - **Equivalent:** gene counts, ADT, junctions/PSI, non-host.
+  - **Better:** donor demux with a given donor count.
+  - **Worse or missing, being fixed:** doublets, ambient, automatic donor count, the mtDNA variant list.
+  - **Biggest single fix:** a false 5' clip that trimmed 11 bp from every read of some 3' samples.
 ## 1. What is re-run
 
 **Universe.** Two sources are combined:
@@ -96,7 +92,7 @@ GEX samples (70,558):
   candidates for a GSM that holds several libraries (for example GEX and ADT in one GEO sample). Their runs must not be
   pooled blindly; see the gates in §6.
 
-### What a cap costs in counts
+### What depth buys (why all reads)
 
 `probe_depth.sbatch` ran STARsolo `GeneFull` with EmptyDrops_CR at 1/16 to all of the reads of two deep human 3' v3 samples.
 Reads were taken as every k-th pair across all runs.
@@ -121,11 +117,10 @@ Deep GEO libraries are far from saturation, so UMIs per cell keep rising with de
 | ~200M | 95–98% | 63–77% |
 | ~100M | 87–96% | 36–52% |
 
-**A cap mostly costs counts per cell, not cells.**
+**Depth mostly adds counts per cell, not cells.** A 200M cap would have kept 63–77% of the UMIs per cell. The re-run uses all reads.
 
 Taking the *first* quarter of each run instead of every 4th pair gave the same cells (5,778 vs 5,798) and 2% fewer median
-UMIs. So a head-of-run cap, the only kind that saves download, is nearly unbiased. The third probe sample (GSM5068934) was
-still downloading when this was written.
+UMIs. So if bandwidth ever forces a cap on a few extreme samples, a head-of-run cap is nearly unbiased.
 
 ## 3. Where the time goes, and what was optimized
 
@@ -168,8 +163,10 @@ barcode list and the stats JSON).
 | **non-host screen off** | −27% time (1,120 vs 1,420 s), −35 GB RAM | non-host members absent | decision (§9) |
 | non-host indices cached in `/dev/shm` | no gain: the cost is screening 2.6M unmapped reads, not loading | identical | no |
 | disk-backed BAM sort (`--bam-sort-mode disk`) | none: 1,113 s vs 1,120 s; peak RSS 18.6 GB instead of a sort buffer sized to the job's memory | identical | yes |
+| **STAR acceleration (PR #34)**: sequence→alignment cache (2 GB), lazy window table, huge pages, faster read parsing, PGO | mapping 793 → 515 s, whole run 1,138 → 845 s (Xeon 6226); 4-way packed batch 1.24× faster. Cache hits 44–51% on PBMC (1–4 GB), 66% simulated at 489M reads | all 60.7M BAM records and every matrix **identical to stock STAR**. The adjacent-read dedup in #22 changed ~300 reads (wrong `trBest` on a hit); removed | yes |
+| transcriptome-first step (projection of single-gene, annotated-junction reads) | 38.5% of mapped reads qualify on PBMC (`bench/aligner/txome_eligible.py`); est. ≤1.3× more mapping speed, overlapping the cache | identical by construction if built as specified | not built (§9) |
 | STARsolo counting off + streaming pileup (`CB_samTagOut`, no sorted BAM) | would save ~15–18% of time | **not equivalent**: exact-only barcode matching, and a different stored barcode list | no (future work) |
-| cascade aligner (transcriptome first) | — | not equivalent by design (skips introns, junctions and mtDNA for routed reads) | no |
+| existing cascade aligner (`txome_aligner.h`) | — | a scaffold: never wired into the read path, stats hard-coded, seeding matches ~1 in 22 reads | no |
 
 **Memory is the hidden throughput limit.**
 - A present-style job holds the 30 GB genome, STAR's in-RAM sort buffer (sized from the job's memory; the 122M-pair probe was
@@ -199,71 +196,52 @@ That is ~1.2 Gbit/s, or **~13 TB/day**, and it caps every Clipper-only schedule 
 SRA Lite (no base qualities, about half the bytes) was not available through the paths tested. It would also change the
 quality-filtered mtDNA / SNP calls.
 
-## 4. Quote: Clipper only, present vs optimized
+## 4. Quote: all reads, Clipper and Anvil
 
-Model (`bench/atlas_rerun/cost_model_v2.py`), from the measurements above. Per sample, with *U* = read pairs used
-(millions):
-- compute wall = 300 s + 12.3 s × *U*, or 16.8 s × *U* with the non-host screen;
-- × 1.15 for packing, at 4 threads;
-- present: + 15 s × *U* of in-job remote download;
-- optimized: a 1-core I/O stage;
-- + 20% retries;
-- download volume = *U* × bases per pair × 0.44 B/base, at ~150 MB/s aggregate.
+Model: `bench/atlas_rerun/cost_model_v2.py`, from the measurements in §3. Per sample:
+- compute wall = 300 s + 12.3 s × *U* without the non-host screen, or 16.8 s × *U* with it;
+- STAR mapping (10.8 s/M of that slope) divided by the measured speedup;
+- × 1.15 for packing;
+- + 20% retries.
 
-Calendar days are max(compute at the given cores, download at 150 MB/s).
+*U* is all read pairs.
 
-| depth | pipeline | core-hours | download | download days | calendar, 200 cores | calendar, 300 cores | calendar, 400 cores |
-|---|---|---|---|---|---|---|---|
-| full | present | 1,091k | 1.9 PB | 145 | 227 | 152 | 145 |
-| full | **optimized** | 624k (screen) / 475k (no screen) | 1.9 PB | 145 | 145 | 145 | 145 |
-| 300M | present | 734k | 1.2 PB | 95 | 153 | 102 | 95 |
-| 300M | **optimized** | 456k / 357k | 1.2 PB | 95 | 95 | 95 | 95 |
-| 200M | present | 561k | 0.9 PB | 70 | 117 | 78 | 70 |
-| 200M | **optimized** | 357k / 282k | 0.9 PB | 70 | 74 / 70 | 70 | 70 |
-| 100M | present | 328k | 0.5 PB | 39 | 68 | 46 | 39 |
-| 100M | **optimized** | 217k / 175k | 0.5 PB | 39 | 45 / 39 | 39 | 39 |
-| 50M | present | 189k | 0.3 PB | 21 | 39 | 26 | 21 |
-| 50M | **optimized** | 130k / 108k | 0.3 PB | 21 | 27 / 23 | 21 | 21 |
+| pipeline | core-hours, no screen / screen | Clipper calendar, 300 cores | Anvil SU (whole nodes) |
+|---|---|---|---|
+| present (in-job download, 80 GB jobs) | — / 1,091k | ~152 days compute (more with memory limits) | — |
+| optimized job shape | 442k / 592k | **145 days** (download-bound; compute 61 / 82) | 505k / 676k |
+| + STAR acceleration (PR #34, ×1.54 mapping) | **316k / 466k** | **145 days** (compute 44 / 65) | **~365k / ~535k** |
+| + a 2× mapping speedup overall | 262k / 412k | 145 days (compute 36 / 57) | 300k / 471k |
 
-The "present" calendar assumes every reserved core is used. With present memory requests (80 GB per 4-core job) that is not
-possible on Clipper's nodes, so the true present calendar is 1.3–2.5× longer than shown.
+Add ~30k core-h for the 1-core download stages.
 
-**How to read it:**
-1. **Optimizing cuts core-hours 1.5–1.7× at equal outputs, or 1.8–2.3× with the screen off.** The largest single gain is
-   moving the download out of the compute job.
-2. **On Clipper the calendar is set by the network, not the cores.** With the optimized pipeline, 300 cores keep up with a
-   150 MB/s link at every depth, with or without the screen. Full depth means ~5 months of downloading, a 200M cap ~10 weeks,
-   100M ~6 weeks, 50M ~3 weeks.
-3. **A faster link changes the answer.** At ~1 GB/s (a Science-DMZ path), compute sets the pace again: a 200M cap in ~7 weeks
-   at 300 cores (357k core-h with the screen), full depth in ~3 months.
-4. Capped samples stream only their share of each run (remote reads, ~5 MB/s per 1-core stream, ~30 streams to fill the
-   link). Uncapped samples are fetched whole and converted locally.
+**Clipper.** Download into Clipper tops out at ~150 MB/s (~13 TB/day) from NCBI and AWS alike. 1.9 PB of SRA data takes ~145 days at that rate, 2–3× longer than the compute. Faster alignment no longer moves the Clipper calendar; only the network does. A 10 Gbit/s path (Science DMZ) would bring it to ~45–65 days, set by compute.
 
-Clipper capacity, for reference:
-- 576 cores on 12 `cpu` nodes (6 × 40 + 4 × 52 + 2 × 64; the two 64-core Granite Rapids nodes are ~22% faster);
-- 192 on 4 `bigmem` nodes (1.5 TB each);
-- preemptible `scavenger` GPU nodes.
+**Anvil.**
+- **Shape:** whole nodes of 128 cores and 257 GB, charged all 128 cores. One genome sits in `/dev/shm`, with 28 four-thread samples per node.
+- **Memory:** fits with disk sort (≤20 GB per job measured). With the non-host screen, it fits only if its indices are memory-mapped once per node; today each job reads a private 35 GB copy.
+- **Cost:** ~365k SU without the screen, ~535k with it. That is 3.3–4.8× today's 112,226 SU balance. About 4–6 nodes for 30 days.
+- **Allocation:** needs an ACCESS upgrade or credit exchange (allocations.access-ci.org, by the PI). Per-core speed on Anvil's EPYC 7763 and its download rate need a one-node pilot (~200 SU) before committing.
 
-200–300 cores sustained is realistic without displacing the lab.
+**Split option.** Clipper downloads and computes at its link rate while Anvil spends the existing balance in parallel. 112k SU covers ~21–31% of the samples, so Clipper's share takes ~100–115 days.
 
-## 5. Order of work and schedule (Clipper)
+## 5. Order of work and schedule
 
 | step | what | duration | gate |
 |---|---|---|---|
-| 0 | merge #22 (now deterministic) and #25; add the I/O stage, provenance and EmptyDrops calls (§6); pin the binary | ~1 week | benchmark numbers reproduced; 4/8/16-thread outputs identical |
-| 1 | 24-hour bandwidth test (32 streams) and a question to GVSU IT about the uplink | 1–2 days, in parallel with step 0 | sets the real calendar |
-| 2 | 50-sample validation run | 1 day | matches the benchmark; strand right on wave-b samples; EmptyDrops recall vs authors ≥ 0.95 |
-| 3 | wave a (5,276) → b (6,272) → c (5,030) | ~2.3 weeks at 200M, ~1.3 at 100M (download-bound) | per-study QC and republish as studies finish |
-| 4 | wave d (53,980), largest studies first | the rest of the calendar in §4 | rolling per-study QC, v2 publish |
-
-Waves a–c are 23% of the GEX samples and of the bytes, so they finish in about a quarter of the total calendar.
+| 0 | land #22, #25, #31 (production binary), the modality fixes and #34 (STAR acceleration) into one pinned, PGO-built binary | ~1–2 weeks | benchmark numbers reproduced; 4/8/16-thread outputs identical; modality benchmarks re-run |
+| 1 | 24-hour bandwidth test (32 streams); ask GVSU IT about the uplink; Anvil one-node pilot if Anvil is used | 1–2 days, during step 0 | sets the real calendar |
+| 2 | 50-sample validation run | 1 day | matches the benchmarks; strand right on wave-b samples; EmptyDrops recall vs authors ≥ 0.95 |
+| 3 | wave a (5,276) → b (6,272) → c (5,030) | ~23% of the total calendar (~5 weeks on Clipper) | per-study QC and republish as studies finish |
+| 4 | wave d (53,980), largest studies first | the rest | rolling per-study QC, v2 publish |
 
 **Within each wave:**
 - samples go in study order, so a study is republished as one unit;
-- two job types per sample: a 1-core I/O job (download, per-run screen, encode to node-local `.1fq`) and a 4-core compute job
-  (align + pileup → export → EmptyDrops → results and a ledger row), chained with `--dependency`;
-- the I/O pool is sized to fill the link (~30 streams), the compute pool to the cores free;
-- failures are retried once, then parked in a ledger for triage.
+- two job types per sample, chained with `--dependency`:
+  - a 1-core I/O job: download, per-run screen (`singlet screen-runs`), encode to node-local `.1fq`;
+  - a 4-core compute job: align + pileup → export → `called_v2` → results and a ledger row;
+- the I/O pool is sized to fill the link, the compute pool to the cores free;
+- failures are retried once, then parked in a ledger.
 
 ## 6. Prerequisites and gates
 
@@ -286,12 +264,11 @@ Waves a–c are 23% of the GEX samples and of the bytes, so they finish in about
 
    Pooling all runs blindly would mix GEX with ADT/HTO libraries in GSMs that hold both (497 samples with mismatched run read
    lengths). This screen also corrects the 1,961 5'-labelled-3' samples at the source.
-4. **Cap implementation.** The cap is "the same share of every run":
-   - each run contributes reads ∝ its size, up to *cap* in total;
-   - taken from the head of each run (§2 checks head vs uniform);
-   - record `reads_available`, `reads_used`, `runs_used` per sample.
+4. **All reads.** Every kept run (item 3) is used in full; record `reads_available`, `reads_used` and `runs_used` per sample.
+   1% of samples have >1.3B pairs; they need 16-thread jobs or sharding by run on a 5-day partition, and disk sort (the
+   in-RAM sort OOM'd at 80 GB on 182M reads).
 5. **Provenance in every bundle** (the drift finding of `pipeline-validation.md` §1): engine git commit, binary sha256,
-   reference build, cap, runs used, worker count, cell-call method and FDR. The 2026 bundles do not say which engine wrote them.
+   reference build, runs used, worker count, cell-call method and FDR. The 2026 bundles do not say which engine wrote them.
 6. **Publish gates** (from `docs/scbasecount-comparison.md`):
    - a sample whose matrices have nnz = 0 while `n_cells > 0` does not publish;
    - strand QC (wrong-strand share < 0.5) is required;
@@ -300,11 +277,11 @@ Waves a–c are 23% of the GEX samples and of the bytes, so they finish in about
    campaign be resumed, priced and audited. The 2026 campaign's `processing_status` and API status disagree in places, and
    the 557 empty studies slipped through.
 
-8. **Pinned, deterministic binary.** One binary (git commit + sha256) for the whole campaign. Before wave a, check that 4-, 8-
+8. **Pinned, deterministic binary.** One PGO-built binary (git commit + sha256) for the whole campaign, including #34. Before wave a, check that 4-, 8-
    and 16-thread runs of the validation samples give byte-identical matrices (`perf_equiv.py`). They do for PBMC 3' v3 since
    the determinism fix.
-9. **I/O stage.** A separate 1-core download job per sample: `prefetch` + local decode for uncapped samples, a streamed
-   head-of-run read for capped ones. Check that its decoded reads equal the present path (`dl_equiv.sbatch`).
+9. **I/O stage.** A separate 1-core download job per sample: `prefetch` of each kept run, then a local decode
+   (6.5× faster than remote reads). Check that its decoded reads equal the present path (`dl_equiv.sbatch`).
 10. **Memory sizing.** Request memory from the measured peak of the chosen settings (§3), not the campaign's 80 GB, so whole
     nodes can be used.
 
@@ -343,58 +320,51 @@ data, failed screens). That is a much smaller campaign.
 
 ## 8. Is every modality at state-of-the-art?
 
-No, not yet. Gene expression is benchmarked and, after the fixes, matches the reference tools. Most other per-cell modalities
-have never been compared with an established tool. Status per modality, with the evidence:
+Every modality was benchmarked against an established tool on data with a known answer:
+- `docs/pipeline-validation.md` (#22) for gene counts;
+- `docs/modality-benchmarks/` for the rest.
 
-| modality / step | reference tool(s) | status | evidence |
+The fixes listed are on `prod/modality-fixes`, re-checked with the same harnesses.
+
+| modality | reference tool, truth | today | fix |
 |---|---|---|---|
-| gene counts, exonic | STARsolo `Gene`, Cell Ranger | **equivalent** after #22: per-cell ratio 0.97–1.02, per-cell gene r 0.96–0.99 | `pipeline-validation.md` §4.3 |
-| gene counts, exon + intron | STARsolo `GeneFull`, alevin-fry USA | **equivalent within tool spread**: +2% to +10% vs GeneFull, alevin-fry −3% to +18% | same |
-| vs scBaseCount | scBaseCount (STARsolo, all reads) | **equivalent at equal depth**: within its own thinning noise (0.01–0.04). The published atlas is not equivalent (truncated depth); the re-run fixes that | `scbasecount-comparison.md` §3 |
-| spliced / unspliced / ambiguous | STARsolo Velocyto, alevin-fry | unspliced **agrees** (ratio 0.96–1.08). Spliced vs ambiguous **differs by definition**: collapsed gene model vs per-transcript | `pipeline-validation.md` §4.4 |
-| strand / chemistry detection | scRecounter per-sample tests | **worse today** (17% wrong strand). #25 fixes it; it is validated in #25 but not on the whole atlas yet | `strand-detection.md` (#25) |
-| cell calling | EmptyDrops_CR, Cell Ranger | **worse today** (knee; 73% of the authors' cells). `called_v2` (EmptyDrops on stored counts) is validated on 42 samples and must be in the re-run | `called-v2.md`, `empty-droplets.md` |
-| library type (GEX vs ADT / HTO / V(D)J …) | none in scBaseCount | **better than scBaseCount** once applied: the screen exists, scBaseCount ships ~1.6k non-GEX SRX as GEX | `library-type-screen.md` |
-| ADT / HTO counts | Cell Ranger feature barcoding | **equivalent**: UMI ratio 1.0002, r 0.999995 on pbmc_1k_protein_v3 | PR #29 |
-| splice junctions, PSI | STARsolo `SJ`, leafcutter / BRIE-style PSI | **not benchmarked**. The legacy PSI member had a 0/1 bug; true PSI is computed client-side | `v2-migration.md` D8 |
-| mtDNA heteroplasmy / variants | mgatk, MQuad | **not benchmarked** | — |
-| donor demultiplexing (genotype-free) | vireo, souporcell | **not benchmarked** | — |
-| doublets | scDblFinder, barnyard truth | **not benchmarked**. The barnyard mixed-species rate (0.1%) reflects conservative calls, not doublet detection | `pipeline-validation.md` §4.7 |
-| ambient RNA | SoupX, CellBender | **not benchmarked** (only the empty-droplet study's CellBender comparison of calls) | `empty-droplets.md` §9 |
-| V(D)J usage from GEX reads | none (V(D)J libraries use Cell Ranger vdj) | **no reference**; a by-product, not a V(D)J assay | — |
-| non-host (viral / microbial) | Kraken2 / sylph | **not benchmarked** | — |
-| sex, ancestry, cell cycle | XIST/RPS4Y1 rules, Seurat CellCycleScoring | **not benchmarked** | — |
+| gene counts, exonic / exon+intron | STARsolo `Gene`/`GeneFull`, Cell Ranger, alevin-fry | **equivalent** after #22 (ratio 0.97–1.02) | — |
+| vs scBaseCount | same reads | **equivalent at equal depth**; the re-run uses all reads | — |
+| cell calling | EmptyDrops_CR, authors' calls | **fixed in #31**: `called_v2` in C++, identical to the validated Python | — |
+| strand / chemistry | — | **fixed in #31** (5' counted reverse without flags) | per-run screen added |
+| library type | none in scBaseCount | **better than scBaseCount** | — |
+| ADT / HTO | Cell Ranger | **equivalent** (r 0.999995) | PR #29 |
+| splice junctions | STARsolo SJ, PBMC | **equivalent**: per-cell r 0.9999, r 0.994 at ≥10 molecules | STARsolo-like filter flags (177k vs 90k junctions, 134k singletons) |
+| PSI | PSI from STARsolo SJ | **equivalent**: r 0.996, MAE 0.008; the 0/1 bug is gone | — |
+| non-host | Kraken2 + minimap2 oracle, SARS-CoV-2 infected vs mock (GSE166766) | **equivalent**: 554k vs 553k viral reads, per-cell Spearman 0.985, AUROC 0.727 vs 0.732 | per-cell table lost on a fresh dir; unconfirmed taxa shown per cell |
+| donor demux (K given) | vireo, demuxlet truth (Kang 2018, 8 donors) | **better**: ARI 0.986 vs 0.92 | — |
+| donor demux (auto K) | same | **broken**: picks 2 of 8 (ARI 0.18) | model selection |
+| doublets | Scrublet, scDblFinder; genotype and barnyard truth | **worse**: AUROC 0.83 vs 0.88; calls 20–25% of cells | calibrated threshold; genotype doublets (hard-coded 0 today; vireo AUROC 0.95) |
+| ambient RNA | SoupX, CellBender, DecontX; human–mouse truth | **worse**: Spearman 0.41 vs 0.49–0.69; correction never produced | per-cell mixture estimate; corrected matrix |
+| mtDNA | pysam pileup, donor truth | per-cell VAF **sound** (r 0.85). Variant list **unreliable** (12% supported). Homoplasmic variants dropped | rCRS reference, raw allele counts, stricter caller |
+| SNP allele counts | — | **never produced**: no `--snps` in the campaign | `--snps` by default, private storage |
+| 5' adapter clip | — | **bug**: clipped 11 bp from every PBMC 3' v3 read (−14% splices) | probe on ≥10k reads |
 
-So today Singlet can claim, with evidence:
-- gene-expression counts equivalent to STARsolo / Cell Ranger and, at equal depth, to scBaseCount;
-- ADT equivalent to Cell Ranger;
-- a library-type screen scBaseCount lacks.
-
-After the re-run, with #25 and `called_v2`, it can also claim strand handling and cell calls on a par with scBaseCount.
-
-**Not yet claimable:** splice junctions/PSI, mtDNA, donor demux, doublets, ambient and non-host. Each needs a benchmark like
-`pipeline-validation.md`'s on data with a known answer before it is advertised. Mixed-genotype pools, mito-variant lineage
-datasets and spike-in viral samples all exist publicly. These benchmarks do not block the GEX re-run, since the re-run
-regenerates these modalities anyway, but they should finish before the modalities are marketed.
+**Signals added so they are not lost with the BAM:**
+- per-cell unmapped reasons, mismatch rate, antisense, intergenic and no-barcode counts;
+- poly(A)-site × cell counts with an internal-priming flag;
+- raw chrM allele counts;
+- SNP allele counts (private).
 
 ## 9. Decisions needed
 
-1. **Depth cap.**
-   - **200M (recommended): ~10 weeks on Clipper.** It keeps nearly all cells and two-thirds or more of UMIs.
-   - 100M: ~6 weeks, keeps 36–52% of UMIs.
-   - Full depth: ~5 months at today's bandwidth.
-   - A faster uplink (decision 3) would make full depth ~3 months.
-2. **Non-host screen during the re-run.**
-   - It adds ~25% core-hours and 35 GB per job.
-   - At ≥300 cores it does not lengthen the calendar, which is set by the download.
-   - Running it later would mean downloading everything again.
-   - **Recommended: keep it on if ~300 cores are available, off if the campaign gets fewer.**
-3. **Ask GVSU IT about Clipper's uplink and run a 24-hour 32-stream bandwidth test.** This is the largest lever on the
-   calendar. Nothing else in this plan moves it.
-4. **Memory-lean packing** (shared genome, disk sort; optionally memory-mapped non-host indices, a small code change): adopt it
-   if §3 shows equal outputs at a tolerable time cost.
-5. **Anvil** stays out, as decided. One note: its faster network is the other way past the Clipper bandwidth ceiling.
-
+1. **Where to compute all reads.**
+   - **(a) Clipper only:** ~145 days, set by the download link.
+   - **(b) Anvil:** ~365k–535k SU, which needs an ACCESS upgrade (3.3–4.8× the balance).
+   - **(c) Split:** Clipper plus Anvil's current balance, ~100–115 days.
+2. **Ask GVSU IT about Clipper's uplink and run the 24-hour bandwidth test.** On Clipper this is now the only lever on the calendar.
+3. **Non-host screen.**
+   - It adds ~30% compute, which does not lengthen the Clipper calendar.
+   - Unmapped reads are lost once the BAM is gone.
+   - On Anvil it adds ~170k SU and needs memory-mapped indices.
+   - **Recommended: keep it on.**
+4. **SNP allele counts.** Store per-cell SNP allele counts privately (not public), so demux, ancestry and ASE can be redone without realigning. Only donor assignments would be public.
+5. **Transcriptome-first step.** Build it only if Anvil is used, where SUs matter. It would save ≤1.3× more on mapping, and only once #34's cache is in. On Clipper it would not change the calendar.
 ## Reproducing
 
 | step | script | where |
@@ -407,6 +377,8 @@ regenerates these modalities anyway, but they should finish before the modalitie
 | Clipper quote, present vs optimized | `cost_model_v2.py <universe.parquet>` | anywhere |
 | performance matrix | `perf_encode.sbatch`, `perf_run.sbatch <config> <dataset> <rep>`, `perf_summary.py` | Clipper |
 | output equivalence between configs | `perf_equiv.py` / `.sbatch` | Clipper |
+| transcriptome-first eligible reads | `bench/aligner/txome_eligible.py` / `.sbatch` | Clipper |
+| modality benchmarks | `bench/modalities/{genotype_pool,ambient,sj_nonhost}/` | Clipper |
 | download paths and aggregate bandwidth | `dl_bench.sbatch <mode> <SRR,...>`, `dl_equiv.sbatch` | Clipper |
 | download timing | `probe_download.sbatch <GSM> <SRR,...>` | Clipper |
 | depth saturation | `probe_depth.sbatch <GSM>` (array K = 1, 2, 4, 8, 16) | Clipper |

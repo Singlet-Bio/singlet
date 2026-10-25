@@ -80,3 +80,13 @@ for screen in ("noscreen", "screen"):
         su = core_h.sum() * RETRY * NODE_FILL
         print(f"  {screen:8s} mapping x{MAP:.1f}: {su / 1e3:6.0f}k SU = {su / BAL:4.1f}x balance;"
               f" {su / 128 / 24:5.0f} node-days -> {su / 128 / 24 / 30:4.0f} nodes for 30 days")
+
+# --- all reads, measured STAR speedup (PR #34: mapping 793 -> 515 s on PBMC, x1.54; deeper samples hit
+# the sequence cache more, 66% simulated at 489M reads vs 48% at 67M, so x1.54 is conservative) ----------
+print("\nClipper, all reads, optimized pipeline")
+for screen in ("noscreen", "screen"):
+    for MAP in (1.0, 1.54, 2.0):
+        slope = S[screen] - 10.8 * (1 - 1 / MAP)
+        core_h = (4 * (F + slope * U) * PACK / 3600).sum() * RETRY
+        print(f"  {screen:8s} mapping x{MAP:.2f}: {core_h / 1e3:5.0f}k core-h;"
+              f" compute days at 300 cores {core_h / 300 / 24:5.0f}; download days 145")
