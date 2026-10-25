@@ -5,42 +5,23 @@ stored `called` flag misses many real cells. Code: `bench/called_v2/`. The proto
 `validate.py` and `aggregate.py`, with per-sample results in `called-v2/samples.csv`, `called-v2/tables.md` and
 `called-v2/outliers.jsonl`. Nothing in `python/singlet/v2/` or the pipeline was changed.
 
-## Fix: version 2.1 (2026-10-25)
-
-`called_v2` 2.0 over-called (docs/called-v2-truth.md, on branch `plan/atlas-rerun`). The `retain` knee was fitted on every
-total above `lower`; DropletUtils' `barcodeRanks` first restricts the fit to its curve bounds (`.find_curve_bounds`). With
-the plateau `lower` (5-100) the ambient shoulder sat inside the fit, the knee could land just above `lower` (Kang lane 8,
-hgmm1k_v3 115, neuron1k_v3 76), and every tested barcode was then called without a test. Version 2.1 changes two things,
-nothing else (plateau `lower`, test floor 50, FDR 0.001, 10,000 paths, seed 20261023, union with `called` are unchanged):
-
-1. **Knee within DropletUtils' curve bounds.** On the (log10 rank, log10 total) points with total > `lower`,
-   `d1n = diff(y) / diff(x)`; `skip` = number of points with rank <= 50; `right = skip + argmin(d1n[skip:])` (the steepest
-   drop), `left = skip + argmax(d1n[skip:right+1])`. The same smoothing spline is fitted on `left..right` only (fewer than 6
-   points: the total at `left`).
-2. **Tail p-values at the Monte Carlo floor.** With 10,000 paths the smallest p is 1/10,001, so BH at FDR 0.001 passes none
-   of them when fewer than about n_tested / 10 sit there (small 10x samples). A tested barcode below every simulated path at
-   its total gets `p = min(Phi((lp - mean) / sd), 1/10,001)`, mean and sd (ddof 0) over the 10,000 simulated
-   log-probabilities at that total. All other p-values are unchanged.
-
-The parameters record `version: "2.1"`. Recommended calls (truth-check script): Kang lane 16,573 (was 17,004), hgmm1k_v3
-1,026 (1,919), neuron1k_v3 1,355 (2,758), nuclei2k_v2 2,376 (2,175), pbmc1k_v3 1,190 and pbmc5p_v1 8,399 (unchanged). On the
-42-sample validation the Jaccard against the authors is unchanged (0.882 vs 0.883). **The hashtag recall below (93%)
-depended on the bug**: in GSE108313/GSM2895282 the unbounded knee was 112 and 15,832 barcodes were auto-retained. At FDR
-0.001 the honest singlet recall is **81%** (19,212 cells, 11,302 singlets added), 87% at FDR 0.01.
-
-C++ check (Clipper, `bench/called_v2_truth/verify_cpp.sbatch`): the port run on the stored counts of the six truth-check
-runs (`cv2_stored`) gives exactly the script's recommended barcode sets on all six (Kang 16,573, hgmm1k_v3 1,026,
-neuron1k_v3 1,355, nuclei2k_v2 2,376, pbmc1k_v3 1,190, pbmc5p_v1 8,399), with every Monte Carlo p-value equal.
-`tests/cpp/test_called_v2.cpp` also reads the shared golden vectors (`tests/data/called_v2_golden/`, once present):
-discrete results exact, alpha to fminbound's `xatol` (the Good-Turing `np.polyfit` is not bit-exact, and on a flat
-likelihood that moves alpha by up to ~3e-5 relative, which moves Monte Carlo counts and tail p-values but not the call),
-and with alpha pinned to the reference value every Monte Carlo p exact and tail p to 1e-6. The vectors found one port gap,
-fixed here: FITPACK's restart with interpolation knots (`n == nmax`), which short curve-bounded fits reach.
-
-Status: the C++ port (`include/singlet/pileup/called_v2.h`, `knee_bounded`, tail p in `call`) carries 2.1 on
-`prod/atlas-rerun`. **`python/singlet/v2/cellcall.py` must receive the identical change** (owned by the v2 team; branch
-`fix/called-v2-knee-bounds`). Until it lands, the reference the C++ fixture is generated from is the patched copy
-`bench/called_v2_truth/cellcall_ref.py`.
+> **Correction (2026-10-25, cellcall 2.1).** The ground-truth study [`docs/called-v2-truth.md`](called-v2-truth.md) found
+> that the knee used for `retain` was fitted on every total above the plateau `lower`, without DropletUtils' curve bounds
+> (`.find_curve_bounds`). With `lower` at 5-100 the knee could land in the empty-droplet shoulder (Kang 2018 lane: knee 8;
+> hgmm1k_v3: 115; neuron1k_v3: 76), and then every tested barcode was called without a test. `called_v2` 2.1 fits the knee
+> within the curve bounds and extrapolates the null tail for barcodes below every simulated path (p = min(Phi(z), 1/10,001)).
+> Everything else is unchanged. The numbers below are corrected: the 42-sample study-weighted Jaccard is 0.882 (0.883 with
+> the bug; the fix changes per-study Jaccard in 2 of 9 studies), and the hashed-PBMC hashtag singlet recall is **81%, not
+> 93%**: the 93% depended on the bug. Per-dataset counts against ground truth:
+>
+> | dataset | truth | 2.0 (unbounded knee) | **2.1** | recall / precision (2.1) |
+> |---|---|---|---|---|
+> | Kang 2018 ctrl lane (demuxlet) | 14,619 | 17,004 | **16,573** | 1.000 / 0.882 |
+> | hgmm1k_v3 (Cell Ranger) | 1,046 | 1,919 | **1,026** | 0.961 / 0.980 |
+> | neuron1k_v3 (Cell Ranger) | 1,301 | 2,758 | **1,355** | 0.952 / 0.914 |
+> | nuclei2k_v2 (Cell Ranger 2) | 2,352 | 2,175 | **2,376** | 0.910 / 0.901 |
+> | pbmc1k_v3 (Cell Ranger) | 1,222 | 1,190 | **1,190** | 0.959 / 0.985 |
+> | pbmc5p_v1 (Cell Ranger) | 8,258 | 8,399 | **8,399** | 0.984 / 0.967 |
 
 ## Proposal
 
@@ -80,7 +61,8 @@ within 0.003 Jaccard of the defaults.
 ### Against the authors' Cell Ranger calls
 
 Studies weighted equally (per-sample values averaged within a study first). J = Jaccard, R = recall of the authors' cells,
-P = share of our cells the authors also called:
+P = share of our cells the authors also called. `called_v2` columns are 2.1, re-scored in `docs/called-v2-truth.md` (2.0
+gave 0.883 / 0.938 / 0.940 overall, GSE230559 0.791, GSE256089 0.913); the "added" column is from 2.0:
 
 | study | stored `called` J / R / P | Cell Ranger 3-like on stored data J | **`called_v2`** J / R / P | added (median per sample) |
 |---|---|---|---|---|
@@ -88,12 +70,12 @@ P = share of our cells the authors also called:
 | GSE179165 mouse gut | 0.41 / 0.41 / 0.99 | 0.55 | **0.82 / 0.99 / 0.83** | 6,642 |
 | GSE180113 macrophages | 0.60 / 0.60 / 1.00 | 0.67 | **0.92 / 0.92 / 1.00** | 5,859 |
 | GSE230451 mouse nuclei | 0.64 / 0.64 / 1.00 | 0.72 | **0.94 / 0.96 / 0.98** | 2,824 |
-| GSE230559 AML | 0.45 / 0.45 / 1.00 | 0.56 | **0.79 / 0.86 / 0.90** | 9,813 |
+| GSE230559 AML | 0.45 / 0.45 / 1.00 | 0.56 | **0.788 / 0.86 / 0.90** | 9,813 |
 | GSE246624 PBMC | 0.92 / 0.92 / 1.00 | 0.95 | **0.97 / 0.99 / 0.98** | 726 |
-| GSE256089 PBMC 5' | 0.63 / 0.63 / 0.99 | 0.77 | **0.91 / 0.92 / 0.99** | 5,150 |
+| GSE256089 PBMC 5' | 0.63 / 0.63 / 0.99 | 0.77 | **0.911 / 0.92 / 0.99** | 5,150 |
 | GSE274381 Seq-Well PBMC | 0.51 / 0.51 / 0.99 | 0.86 | **0.94 / 0.98 / 0.96** | 4,704 |
 | GSE292909 cell-line village | 0.55 / 0.55 / 1.00 | 0.59 | **0.90 / 0.90 / 1.00** | 8,953 |
-| **all (study-weighted)** | **0.55 / 0.55 / 1.00** | **0.70** | **0.88 / 0.94 / 0.94** | |
+| **all (study-weighted)** | **0.55 / 0.55 / 1.00** | **0.70** | **0.882 / 0.938 / 0.940** | |
 
 Leave one study out: choosing the best of the 480 variants on the other 8 studies picks the defaults' family in 7 of 9 cases
 (`lower` = plateau, test > 50, retain = knee, union; FDR 0.01). The other 2 pick `lower` = 20 with test > 100. On the held-out
@@ -120,15 +102,15 @@ The empty-droplet study found 14,920 uncalled barcodes carrying a single dominan
 | stored `called` | 2,950 | 548 | 3.8% | |
 | Cell Ranger 3-like on stored data | 3,615 | 848 | 5.8% | 300 / 143 / 169 |
 | EmptyDrops, `lower` = 100 (DropletUtils default) | 6,835 | 3,148 | 22% | 2,600 / 580 / 624 |
-| `called_v2` 2.0 (`lower` = 17 here; unbounded knee 112, see "Fix: version 2.1") | 21,818 | 13,600 | 93% | 13,052 / 1,148 / 4,481 |
-| **`called_v2` 2.1** (bounded knee 3,223) | **19,212** | | **81%** | **11,302 singlets** |
+| `called_v2` 2.0 (unbounded knee 112: 15,832 barcodes retained untested) | 21,818 | 13,600 | 93% | 13,052 / 1,148 / 4,481 |
+| **`called_v2` 2.1** (`lower` = 17 here, knee 3,223) | **19,212** | **11,850** | **81%** | **11,302 singlets of 16,262 added** |
+| `called_v2` 2.1, `called_v2_fdr` <= 0.01 | 20,462 | 12,672 | 87% | 12,124 singlets |
 
-The 2.0 row is kept for the record: 2,606 of its additions came from the knee bug (67% hashtag singlets, 31% negative), so its
-93% is not a property of the method. The paragraph below describes the 2.0 additions.
-
-69% of the added barcodes are confirmed stained single cells, and 6% are hashtag multiplets (super-loading makes doublets).
-The 24% that are "negative" have a median hashtag count of 707, 3.5x the empty-droplet level (203) but under the
-positive threshold (1,015). Many are probably weakly stained cells; none is confirmed either way. The called set itself is
+In 2.1, 70% of the added barcodes are confirmed stained single cells. The 2,606 barcodes that 2.0 added and 2.1 drops were
+67% hashtag singlets and 31% hashtag-negative: low-RNA cells that EmptyDrops cannot separate from ambient at FDR 0.001 in a
+super-loaded library (`docs/called-v2-truth.md`). The 2.0 shares (69% singlets, 6% hashtag multiplets, 24% "negative" with a
+median hashtag count of 707, 3.5x the empty-droplet level of 203 but under the positive threshold of 1,015) describe the
+larger 2.0 set. Many "negative" barcodes are probably weakly stained cells; none is confirmed either way. The called set itself is
 61% hashtag-negative: large unstained cells with a median 5,038 UMIs. So "negative" is not the same as "empty" in this
 library. The ambient bound decides this sample: with `lower` = 100 the ambient pool is mostly PBMC RNA and the PBMCs are
 untestable.
@@ -185,7 +167,7 @@ Per barcode, as optional columns of the v2 cells table (`docs/format-v2.md` 5.3 
 | `called_v2_fdr` | 5 (f32) | BH FDR of tested barcodes. NaN = not tested: in `called`, in the ambient pool, or below the test floor. A barcode at or above the knee has p = 0 |
 
 Per sample, in the manifest's sample record (or a `cell_call_v2` JSON in the sample object):
-`{"method": "singlet-emptydrops-v2.0", "counts": "exon+intron", "lower_rule": "plateau", "lower": 42, "test_min": 50,
+`{"method": "singlet-emptydrops", "version": "2.1", "counts": "exon+intron", "lower_rule": "plateau", "lower": 42, "test_min": 50,
 "retain": 584.0, "fdr": 0.001, "niters": 10000, "seed": 20261023, "alpha": 490.6, "n_ambient": 79379, "ambient_umi": ...,
 "n_tested": ..., "n_called_v2": 14725, "validated": true}`. Alpha and the ambient pool make the test reproducible even if
 low-UMI barcodes are later dropped. The p-value is not stored: FDR is what users threshold, and the call is deterministic.
@@ -266,6 +248,9 @@ outputs.
   sample, more in inDrop). A separate per-cell "ambient-like" flag would serve those.
 
 ## Reproduce
+
+The corrected numbers: `docs/called-v2-truth.md` ("Reproduce"). `bench/called_v2_truth/verify.sbatch` checks that
+`python/singlet/v2/cellcall.py` reproduces them and regenerates the golden vectors in `tests/data/called_v2_golden/`.
 
 On Clipper from this branch: `sbatch --array=0-17%9 --export=ALL,MODE=validate bench/called_v2/run.sbatch` (reads
 `$WORK/data/emptydrop`, fetched by `bench/empty_droplets/run.sbatch MODE=fetch`), then `MODE=aggregate` and `MODE=inspect`.

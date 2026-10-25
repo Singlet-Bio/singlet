@@ -148,3 +148,126 @@ def test_tiny_sample_records_an_error_and_keeps_the_call():
     E, In, called, _ = simulate(n_amb=5, n_big=30, n_low=5, G=50)
     cv2, fdr, params = CC.call(sp.csc_matrix(E + In), called, "10xv3", niters=200)
     assert (cv2 == called).all() and "error" in params
+
+
+# ----------------------------------------------------------------------------------------------------------- golden vectors
+# Shared with the C++ port (include/singlet/pileup/called_v2.h); layout in tests/data/called_v2_golden/README.md.
+GOLDEN = ROOT / "tests" / "data" / "called_v2_golden"
+GOLDEN_CASES = (
+    sorted(p.name for p in GOLDEN.iterdir() if (p / "case.json").is_file())
+    if GOLDEN.is_dir()
+    else []
+)
+
+
+def read_golden(name):
+    import json
+
+    d = GOLDEN / name
+    case = json.loads((d / "case.json").read_text())
+    with open(d / "counts.mtx") as fh:
+        line = fh.readline()
+        assert line.startswith("%%MatrixMarket matrix coordinate integer general")
+        while line.startswith("%"):
+            line = fh.readline()
+        m, n, nnz = (int(v) for v in line.split())
+        E = np.loadtxt(fh, dtype=np.int64, ndmin=2) if nnz else np.zeros((0, 3), np.int64)
+    assert E.shape == (nnz, 3)
+    X = sp.csc_matrix((E[:, 2], (E[:, 0] - 1, E[:, 1] - 1)), shape=(m, n))
+    called = np.loadtxt(d / "called.txt", dtype=np.int64, ndmin=1).astype(bool)
+    assert len(called) == n == case["n_barcodes"] and m == case["n_genes"]
+    exp = np.genfromtxt(
+        d / "expected.tsv", delimiter="\t", names=True, dtype=None, encoding=None, ndmin=1
+    )
+    return case, X, called, exp
+
+
+def log_close(a, b, tol):
+    """Zeros at the same places; elsewhere |ln a - ln b| <= tol * max(1, |ln b|)."""
+    a, b = np.asarray(a, float), np.asarray(b, float)
+    z = b == 0
+    if not np.array_equal(a == 0, z):
+        return False
+    la, lb = np.log(a[~z]), np.log(b[~z])
+    return bool(np.all(np.abs(la - lb) <= tol * np.maximum(1.0, np.abs(lb))))
+
+
+def test_golden_vectors_exist():
+    synth = {"synth_knee_below_plateau", "synth_tail_extrapolation", "synth_mixed"}
+    assert synth <= set(GOLDEN_CASES)
+    assert len(set(GOLDEN_CASES) - synth) >= 1  # real subsampled samples
+
+
+@pytest.mark.parametrize("name", GOLDEN_CASES)
+def test_golden_vector(name):
+    pytest.importorskip("numba")
+    case, X, called, exp = read_golden(name)
+    cv2, pv, q, params = CC.call_detail(X, called, case["protocol"], **case["options"])
+    e, tol = case["expected"], case["tolerance"]
+    niters = params["niters"]
+    assert params["lower"] == e["lower"]
+    assert (params["retain_total"] is None) == (e["retain_total"] is None)
+    if e["retain_total"] is not None:
+        assert params["retain_total"] == pytest.approx(
+            e["retain_total"], rel=tol["retain_total_rel"]
+        )
+    assert params["alpha"] == pytest.approx(e["alpha"], rel=tol["alpha_rel"])
+    for k in ("n_ambient", "ambient_umi", "n_tested", "n_tail", "n_called_v2", "n_added"):
+        assert params[k] == e[k], k
+    # tested barcodes: exactly the listed columns
+    tested = np.nonzero(np.isfinite(q))[0]
+    cols = exp["col"].astype(np.int64)
+    assert np.array_equal(tested, cols)
+    tot = np.asarray(X.sum(axis=0)).ravel()
+    assert np.array_equal(tot[cols], exp["total"])
+    # called set: exact
+    expect_cv2 = called.copy()
+    expect_cv2[cols[exp["called_v2"].astype(bool)]] = True
+    assert np.array_equal(cv2, expect_cv2)
+    # p-values: Monte Carlo values (n_le + 1) / (niters + 1) exactly; retained (0) and tail-extrapolated values on the log
+    # scale (a tail p of 1e-150 moves by |z| x the change in z, so its relative error is large while its log is stable)
+    ep, gp = exp["pvalue"], pv[cols]
+    mc = ep >= 1.0 / (niters + 1)
+    assert np.array_equal(np.round(gp[mc] * (niters + 1)), np.round(ep[mc] * (niters + 1)))
+    assert log_close(gp[~mc], ep[~mc], tol["pvalue_tail_log_rel"])
+    assert log_close(q[cols], exp["fdr"], tol["fdr_log_rel"])
+    # call() agrees (FDR as float32, NaN = not tested)
+    cv2b, fdrb, _ = CC.call(X, called, case["protocol"], **case["options"])
+    assert np.array_equal(cv2b, cv2) and np.array_equal(fdrb, q.astype(np.float32), equal_nan=True)
+
+
+def test_golden_knee_case_shows_the_unbounded_knee_bug():
+    case, X, called, _ = read_golden("synth_knee_below_plateau")
+    tot = np.asarray(X.sum(axis=0)).ravel()
+    lower = CC.plateau_lower(tot, called)
+    # the 2.0 knee (spline over all totals > lower) sat just above lower: every tested barcode would be retained untested
+    assert case["knee_unbounded"] < 2 * lower
+    assert CC.knee(tot, lower) > 50 * lower
+    tested = ~called & (tot > max(lower, 50))
+    assert (tot[tested] >= case["knee_unbounded"]).all()
+
+
+def test_golden_tail_case_needs_the_extrapolation():
+    case, _, _, exp = read_golden("synth_tail_extrapolation")
+    e = case["expected"]
+    # fewer barcodes at the Monte Carlo floor than BH needs at FDR 0.001 (k / n_tested >= 1 / (0.001 * 10001)) ...
+    assert e["n_tail"] * 0.001 * 10001 < e["n_tested"]
+    # ... yet the tail p-values let BH call them
+    added = exp["called_v2"].astype(bool)
+    assert e["n_added"] > 0 and (exp["pvalue"][added] < 1 / 10001).all()
+
+
+def test_knee_uses_the_curve_bounds():
+    rng = np.random.default_rng(5)
+    # ambient at 1-3, a debris band at 8-14 (its drop-off is the sharpest bend above lower = 7), cells at 1,000-16,000
+    tot = np.concatenate(
+        [
+            rng.integers(1, 4, 20000),
+            rng.integers(8, 15, 8000),
+            np.round(10 ** rng.uniform(3, 4.2, 600)).astype(int),
+        ]
+    )
+    b = CC.curve_bounds(tot, 7)
+    u, _ = CC._rank_curve(tot, 7)
+    assert u[b[0]] > u[b[1]] >= 8
+    assert CC.knee(tot, 7) > 500
