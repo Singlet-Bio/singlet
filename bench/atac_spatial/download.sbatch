@@ -37,7 +37,7 @@ for s in V1_Human_Lymph_Node V1_Breast_Cancer_Block_A_Section_1; do
 done
 # FASTQs last (large)
 get $ARC/pbmc_granulocyte_sorted_3k/pbmc_granulocyte_sorted_3k_fastqs.tar pbmc_granulocyte_sorted_3k
-get $ARC/pbmc_granulocyte_sorted_10k/pbmc_granulocyte_sorted_10k_fastqs.tar pbmc_granulocyte_sorted_10k
+get https://s3-us-west-2.amazonaws.com/10x.files/samples/cell-arc/2.0.0/pbmc_granulocyte_sorted_10k/pbmc_granulocyte_sorted_10k_fastqs.tar pbmc_granulocyte_sorted_10k
 get $SR/V1_Mouse_Brain_Sagittal_Anterior/V1_Mouse_Brain_Sagittal_Anterior_fastqs.tar V1_Mouse_Brain_Sagittal_Anterior
 get $CRA/atac_pbmc_5k_nextgem/atac_pbmc_5k_nextgem_fastqs.tar atac_pbmc_5k_nextgem
 for t in */*_fastqs.tar; do

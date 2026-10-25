@@ -199,9 +199,9 @@ inline int run_atac_from_bam(const AtacRunOptions& opt) {
                                       chrom_names[static_cast<size_t>(f.chrom_idx)].c_str(), f.start, f.end,
                                       out_bc[f.barcode_idx].c_str(), f.read_pairs);
                 buf.append(line, static_cast<size_t>(n));
-                if (buf.size() > (1u << 20) - 512) { bgzf_write(bz, buf.data(), buf.size()); buf.clear(); }
+                if (buf.size() > (1u << 20) - 512) { if (bgzf_write(bz, buf.data(), buf.size()) < 0) break; buf.clear(); }
             }
-            if (!buf.empty()) bgzf_write(bz, buf.data(), buf.size());
+            if (!buf.empty() && bgzf_write(bz, buf.data(), buf.size()) < 0) std::cerr << "[atac] ERROR: fragments write failed\n";
             bgzf_close(bz);
             if (tbx_index_build(path.c_str(), 0, &tbx_conf_bed) != 0)
                 std::cerr << "[atac] WARNING: tabix index failed\n";

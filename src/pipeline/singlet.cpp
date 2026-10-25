@@ -6124,6 +6124,9 @@ int main(int argc, char* argv[]) {
                 args.push_back("--alignIntronMax");      args.push_back("1");
                 args.push_back("--alignMatesGapMax");    args.push_back("2000");
                 args.push_back("--alignSJDBoverhangMin"); args.push_back("999");
+                // Fragments shorter than the read length read through into the adapter; their mates protrude past
+                // each other's start. Keep them as concordant pairs (Cell Ranger ATAC trims and keeps them).
+                args.push_back("--alignEndsProtrude"); args.push_back("100"); args.push_back("ConcordantPair");
 
                 // Sorted BAM output (required by ATACFragmentExtractor)
                 args.push_back("--outSAMtype");    args.push_back("BAM"); args.push_back("SortedByCoordinate");
