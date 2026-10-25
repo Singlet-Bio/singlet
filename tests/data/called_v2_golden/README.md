@@ -90,9 +90,12 @@ are NaN, and `called_v2` = `called`. So the full `called_v2` set = `called` OR (
 * `alpha`: relative 1e-6 (bounded scalar minimisation, `xatol` 1e-4 in log alpha; Linux/numpy 2.5 and Windows/numpy 2.2
   agree to 1e-7). `retain_total`: relative 1e-9 (it is 10^log10(total) of one of the observed totals).
 
-The synthetic ambient droplets are Dirichlet-multinomial (concentration 300). With purely multinomial ambient the alpha MLE
-sits at infinity, the likelihood is flat and the fitted alpha depends on rounding, which made the expected values differ
-between machines.
+The synthetic ambient droplets are Dirichlet-multinomial (concentration 300; 30 in the knee case, whose ambient droplets hold
+only 1-3 UMIs). With purely multinomial (or weakly overdispersed) ambient the alpha MLE sits at or near infinity, the
+likelihood is flat and the fitted alpha depends on rounding, which made the expected values differ between machines.
+
+The committed files are the reference, not `generate.py`'s output on any machine: numpy's gamma/multinomial streams differ
+slightly between numpy versions, so a rerun elsewhere can give a different (equally valid) synthetic input.
 
 The expected values were generated on Clipper (Linux, numpy 2.5, scipy 1.18, numba 0.68) and checked on Windows (numpy 2.2,
 scipy 1.15, numba 0.64).
