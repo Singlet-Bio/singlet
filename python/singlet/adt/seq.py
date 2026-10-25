@@ -52,7 +52,7 @@ def encode_strings(seqs, width: int):
 def decode(codes, L: int) -> list:
     codes = np.asarray(codes, dtype=np.uint64)
     out = []
-    for c in codes.tolist():
+    for c in [int(x) for x in np.ravel(codes)]:
         out.append("".join(BASES[(c >> (2 * (L - 1 - i))) & 3] for i in range(L)))
     return out
 

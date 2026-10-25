@@ -457,6 +457,15 @@ def _barcode_counts(pairs, r1_len, end, cb_len, max_reads=None):
     return (uniq[0], cnts[0]) if uniq else (np.zeros(0, f"S{cb_len}"), np.zeros(0, np.int64))
 
 
+def _constant(pairs, r1_paths=None, r2_paths=None):
+    """A pair-iterator factory: the given iterator (single pass only), or a fresh read of the FASTQ files."""
+
+    def factory():
+        return pairs if pairs is not None else iter_pairs(r1_paths, r2_paths)
+
+    return factory
+
+
 def count_library(
     r1_paths,
     r2_paths,
@@ -487,23 +496,18 @@ def count_library(
     r1_len = cb_len + umi_len
     end = offset + L
     nf = len(panel_sequences)
-    if pairs_factory is None:
-        if pairs is not None:
-            if shards:
-                raise ValueError("sharded counting reads the pairs twice: pass pairs_factory")
-
-            def pairs_factory(p=pairs):
-                return p
-
-        else:
-
-            def pairs_factory():
-                return iter_pairs(r1_paths, r2_paths)
-
+    if pairs_factory is not None:
+        factory = pairs_factory
+    elif pairs is not None:
+        if shards:
+            raise ValueError("sharded counting reads the pairs twice: pass pairs_factory")
+        factory = _constant(pairs)
+    else:
+        factory = _constant(None, r1_paths, r2_paths)
     st: dict = {}
     unm: dict = {}
     if not shards:
-        keys, reads, st0 = collapse_reads(pairs_factory(), r1_len, offset, L, max_reads=max_reads)
+        keys, reads, st0 = collapse_reads(factory(), r1_len, offset, L, max_reads=max_reads)
         st.update(st0)
         st["unique_keys"] = int(len(keys))
         cbk = np.ascontiguousarray(keys.view(np.uint8).reshape(len(keys), r1_len + L)[:, :cb_len])
@@ -521,7 +525,7 @@ def count_library(
     else:
         import tempfile
 
-        ucb, cb_reads = _barcode_counts(pairs_factory(), r1_len, end, cb_len, max_reads)
+        ucb, cb_reads = _barcode_counts(factory(), r1_len, end, cb_len, max_reads)
         cb_code, cb_valid, translated, n_corr = _barcode_map(
             ucb, cb_reads, cb_len, whitelist_codes, translation
         )
@@ -546,7 +550,7 @@ def count_library(
                 pieces[k].append(f)
             buf.clear()
 
-        for s1, s2 in pairs_factory():
+        for s1, s2 in factory():
             n += 1
             if len(s1) < r1_len or len(s2) < end:
                 n_short += 1
