@@ -111,30 +111,34 @@ def main():
     seen19 = {k: {w[1:] for w in v} for k, v in seen.items()}
 
     def cut(chrom_seq, r, off, L):
-        if r.strand == "+":
-            return chrom_seq[r.coord - 1 + off: r.coord - 1 + off + L]
-        return rc(chrom_seq[r.coord - 1 - off - L + 1: r.coord - 1 - off + 1])
+        # measured on the reads (bench/crispr/locate_replogle.py): a "-" id reads its protospacer on the + strand of
+        # hg19 at coord - 21 (19 nt), a "+" id on the - strand at coord + 3; the offset is searched per strand here
+        w = chrom_seq[r.coord + off: r.coord + off + L]
+        return w if r.strand == "-" else rc(w)
 
-    best = None
+    best = {}
     sample = g[(g.coord > 0) & (g.chrom != "")].sample(min(3000, len(g)), random_state=0)
-    for L in (19, 20):
-        pool = seen19 if L == 19 else seen
-        for off in range(-30, 31):
-            hit = 0
-            for r in sample.itertuples():
-                cs = chroms.get(r.chrom)
-                if cs is not None:
-                    hit += cut(cs, r, off, L) in pool[r.pos]
-            if best is None or hit > best[2]:
-                best = (L, off, hit)
-    L, off = best[0], best[1]
-    print(f"convention: {L} nt at offset {off}: {best[2]} / {len(sample)} sampled guides seen in the reads")
+    for strand in "+-":
+        sub = sample[sample.strand == strand]
+        for L in (19, 20):
+            pool = seen19 if L == 19 else seen
+            for off in range(-40, 41):
+                hit = 0
+                for r in sub.itertuples():
+                    cs = chroms.get(r.chrom)
+                    if cs is not None:
+                        hit += cut(cs, r, off, L) in pool[r.pos]
+                if strand not in best or hit > best[strand][2]:
+                    best[strand] = (L, off, hit, len(sub))
+    for strand, (L, off, hit, n) in best.items():
+        print(f"id strand {strand}: {L} nt at offset {off}: {hit} / {n} sampled guides seen in the reads")
     seqs = []
     for r in g.itertuples():
         cs = chroms.get(r.chrom)
-        if cs is None or r.coord < 0:
+        if cs is None or r.coord < 0 or r.strand not in best:
             seqs.append("")
             continue
+        L, off = best[r.strand][0], best[r.strand][1]
         p_ = cut(cs, r, off, L)
         if L == 19:  # the read window: the observed 5' base (G for U6 transcripts, often prepended) + 19 nt
             c = Counter(w[0] for w in seen[r.pos] if w[1:] == p_)
