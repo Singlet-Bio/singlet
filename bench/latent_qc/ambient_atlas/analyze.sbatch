@@ -14,5 +14,6 @@ case "$1" in
   a)     rt python $AA/analyze_a.py $O/rec $T $O/res_human $NUC ;;
   mouse) AA_ORG=mouse rt python $AA/analyze_a.py $O/rec $T $O/res_mouse $NUC ;;
   prior) rt python $AA/prior_test.py $O/rec $T $O/res_prior 20 ;;
+  targeted) rt python $AA/targeted.py $O/rec $T $O/res_human/targeted.csv ;;
   rho)   mkdir -p $O/res_rho; rt python $AA/rho_summary.py $O/rho $O/res_human/sample_summary.csv $O/res_rho ;;
 esac
