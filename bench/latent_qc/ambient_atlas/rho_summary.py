@@ -22,14 +22,14 @@ for f in glob.glob(f"{rho_dir}/GSM*_*.json"):
     rows.append({"gsm": gsm, **{f"{v}_{k}": x for k, x in d.items() if k != "method"}})
 R = pd.DataFrame(rows).groupby("gsm", as_index=False).first()
 D = S.merge(R, on="gsm", how="left")
-keep = ["gsm", "gse", "tissue_coarse", "tissue_label", "p_side", "chem", "nuclei", "intron_frac_called", "n_called", "med_called_umi",
+keep = ["gsm", "gse", "tissue_coarse", "tissue_label", "chem", "nuclei", "intron_frac_called", "n_called", "med_called_umi",
         "pool1_n", "pool1_umi", "pool2_n", "pool2_umi", "amb_mt", "amb_hb", "amb_malat1", "amb_rp", "amb_ig"] + \
        [c for c in D.columns if c.startswith(("prod_", "rule1_"))]
 D[keep].to_csv(f"{out}/rho_by_sample.csv", index=False, float_format="%.5g")
 print("samples with production result:", int(D.prod_ok.notna().sum()), "ok==1:", int((D.prod_ok == 1).sum()))
 print("runtime per sample (s, estimator / incl. load): median", D.prod_seconds.median(), D.prod_wall_seconds.median(),
       "p90", D.prod_seconds.quantile(.9), D.prod_wall_seconds.quantile(.9), "max", D.prod_wall_seconds.max())
-for col in ("tissue_coarse", "nuclei", "p_side", "chem"):
+for col in ("tissue_coarse", "nuclei", "chem"):
     for v in ("prod", "rule1"):
         g = D[D[f"{v}_ok"] == 1].groupby(col).agg(n=("gsm", "size"), median_of_mean_rho=(f"{v}_mean_rho", "median"),
                                                  q25=(f"{v}_mean_rho", lambda x: x.quantile(.25)), q75=(f"{v}_mean_rho", lambda x: x.quantile(.75)),

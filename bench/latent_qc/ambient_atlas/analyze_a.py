@@ -64,7 +64,7 @@ def marker_table(idx, label):
 allidx = np.arange(n)
 mo = marker_table(allidx, "all")
 cand = mo[(mo.n_eval >= max(30, 0.3 * n)) & (mo.mean_amb_cpm >= 50)].sort_values("median_log2enr", ascending=False)
-cand.head(500).to_csv(f"{out}/markers_overall.csv", index=False)
+cand.head(3000).to_csv(f"{out}/markers_overall.csv", index=False)
 print("TOP overall ambient-enriched (median log2 amb/cell):")
 print(cand.head(40)[["symbol", "cls", "n_eval", "median_log2enr", "frac_gt2x", "mean_amb_cpm", "mean_cell_cpm"]].to_string(index=False))
 print("class summary of top 200:", cand.head(200).cls.replace("", "other").value_counts().to_dict())
@@ -97,7 +97,7 @@ XA, XC = cpm(fa), cpm(fc)
 gsel = (fa.mean(0) * 1e6 > 5) | (fc.mean(0) * 1e6 > 5)
 print("genes for structure:", int(gsel.sum()))
 XA, XC = XA[:, gsel], XC[:, gsel]
-labels = {"tissue": Sok.tissue_coarse.values, "protocol": Sok.p_side.values, "nuclei": Sok.nuclei.values}
+labels = {"tissue": Sok.tissue_coarse.values, "chemistry": Sok.chem.values, "nuclei": Sok.nuclei.values}
 studies = Sok.gse.values
 
 
@@ -134,7 +134,7 @@ struct = pd.DataFrame(res)
 struct.to_csv(f"{out}/structure_knn.csv", index=False)
 print(struct.to_string(index=False))
 np.save(f"{out}/pc_ambient.npy", Z["ambient"][:, :2]); np.save(f"{out}/pc_cells.npy", Z["cells"][:, :2])
-Sok[["gsm", "gse", "tissue_coarse", "p_side", "nuclei"]].to_csv(f"{out}/pc_labels.csv", index=False)
+Sok[["gsm", "gse", "tissue_coarse", "chem", "nuclei"]].to_csv(f"{out}/pc_labels.csv", index=False)
 
 # eta^2 (adjusted) of tissue / study per gene, in the log-CPM space
 def adj_eta(X, lab):
