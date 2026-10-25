@@ -128,7 +128,7 @@ def test_controller_lifecycle_retry_park_handoff(tmp_path):
     assert s["GSM200"]["attempt"] == 1 and s["GSM200"]["state"] == "downloaded"
     # its compute-only retry went out with more memory (oom escalation) and no I/O job
     retry = [x for x in fake.submitted[2:] if "ar-cmp-clipper-s4+mem" in " ".join(x["cmd"])]
-    assert retry and "--mem=120G" in retry[0]["cmd"] and not any("aftercorr" in c for c in retry[0]["cmd"])
+    assert retry and "--mem=144G" in retry[0]["cmd"] and not any("aftercorr" in c for c in retry[0]["cmd"])
     assert os.path.exists(os.path.join(root, "handoff", "GSE1.json"))
     h = json.load(open(os.path.join(root, "handoff", "GSE1.json")))
     assert h["ready_for_packing"] and [x["gsm"] for x in h["samples"]] == ["GSM100", "GSM101"]

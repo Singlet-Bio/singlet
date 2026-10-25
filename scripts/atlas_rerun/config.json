@@ -49,10 +49,10 @@
              "array_throttle": 8, "requeue": false},
       "io_long": {"partition": "cpu", "time": "2-00:00:00"},
       "compute_classes": [
-        {"name": "s4", "threads": 4, "partition": "short-cpu", "time": "03:59:00", "mem_gb": 80},
-        {"name": "m8", "threads": 8, "partition": "short-cpu", "time": "03:59:00", "mem_gb": 96},
-        {"name": "l8", "threads": 8, "partition": "cpu", "time": "2-00:00:00", "mem_gb": 112},
-        {"name": "xl16", "threads": 16, "partition": "cpu", "time": "5-00:00:00", "mem_gb": 160}
+        {"name": "s4", "threads": 4, "partition": "short-cpu", "time": "03:59:00", "mem_gb": 96},
+        {"name": "m8", "threads": 8, "partition": "short-cpu", "time": "03:59:00", "mem_gb": 112},
+        {"name": "l8", "threads": 8, "partition": "cpu", "time": "2-00:00:00", "mem_gb": 128},
+        {"name": "xl16", "threads": 16, "partition": "cpu", "time": "5-00:00:00", "mem_gb": 192}
       ],
       "controller": {"partition": "short-cpu", "time": "03:55:00", "mem_gb": 4, "interval_s": 600},
       "sbatch_extra": []

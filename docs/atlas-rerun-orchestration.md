@@ -307,4 +307,64 @@ before anything over ~1,000 SU.
 
 ## 7. Smoke test on Clipper (2026-10-25)
 
-See §7 of the PR description for the run's numbers; the summary is kept here when the run finished.
+**Setup.**
+* 8 wave-a samples from 6 studies, through the real controller (`config.smoke.json`, root `$W/atlas-rerun/smoke`).
+* The binary was `pipeline-benchmark/bin/singlet-campaign`: prod/campaign 02aa9b9, sha256 261d3a50…. That is the
+  current best binary, not yet the final pinned PGO build.
+* Non-host screen on, SNP panel on.
+* The controller ran as a short-cpu job ticking every 2 min. I/O ran on 2 cores / 16 GB; compute on 4 threads / 80 GB
+  with a private genome.
+* Model = cost_model_v2 for one unpacked 4-thread sample: 300 s + 12.79 s per M pairs (screen on, STAR ×1.54).
+
+| sample | runs | pairs used | head screen | prefetch | decode | pool | compute | model | compute/model | peak RSS |
+|---|---|---|---|---|---|---|---|---|---|---|
+| GSM6996272 | 4 | 2.1M | 43 s | 12 s | 5 s | 5 s | 122 s | 326 s | 0.37 | 50 GB |
+| GSM6996273 | 4 | 1.8M | 39 s | 12 s | 5 s | 4 s | 142 s | 323 s | 0.44 | 50 GB |
+| GSM6996274 | 4 | 4.1M | 68 s | 21 s | 8 s | 9 s | 160 s | 352 s | 0.45 | 51 GB |
+| GSM6250705 | 1 | 61.5M | 9 s | 70 s | 38 s | – | 732 s | 1,087 s | 0.67 | 55 GB |
+| GSM7036403 | 1 | 111.6M | 21 s | 134 s | 102 s | – | 2,196 s | 1,727 s | **1.27** | 58 GB |
+| GSM6470208 (5′ v2) | 2 | 121.8M | 28 s | 158 s | 94 s | 670 s | 4,570 s | 1,858 s | **2.46** | 66 GB |
+| GSM7656149 (ENA: 0 reads) | 1 | 263.4M | 454 s (failed, fallback) | 711 s | 310 s | – | see PR | 3,669 s | | |
+| GSM7623467 | 1 | – | parked in 4 s: `download`'s gate saw split-seq (R1 = R2 = 151 bp, 0% whitelist) | | | | | | | |
+
+**What worked end to end.**
+* Plan → controller → chained arrays → events → ledger → hand-off: `handoff/GSE223815.json`, `GSE206325`,
+  `GSE224972` and `GSE200743`… were written when their samples finished.
+* Per-run screening and pooling of 4-run and 2-run samples, with runs_used provenance in `pileup_stats.json`.
+* Parking with a reason, without a retry.
+* Requeue after a failure.
+* `private/` split off (0700, PRIVATE.sha256), plus the sha256 manifests.
+* `pull` and `status` from the laptop.
+* Restarting the controller on new code mid-run.
+* `unpark` from staged reads.
+
+**Problems found and fixed during the run.**
+1. One run's remote head stream (`download --max-reads 1000000`) was OOM-killed at 16 GB twice; the engine does not
+   bound memory with `--max-reads` on that run.
+   * Fix: a run whose head cannot be read is now prefetched and judged by the full-run screen.
+   * Side effect: Slurm then flags the I/O job OUT_OF_MEMORY although it exited 0, and `aftercorr` cancelled the
+     compute task. The controller now resubmits compute alone (`released`, no failure count).
+2. `star_Unmapped.out.mate1/2` and `nonhost_reads.fq` were written to out/. They are reads: 40–75% of a sample's
+   output bytes (850 MB of 1.1 GB at 112M pairs). They are now excluded.
+3. Smaller fixes:
+   * epoch times lost precision in the TSV snapshots;
+   * the status rate window was wrong;
+   * pileup `total_reads` (alignment records, 1.4–2.7× the pairs) was overwriting `reads_used`;
+   * `encode` did not understand the `.1fq` header's protocol names, so `--protocol` is no longer passed.
+
+**Timing against the model.**
+* Small samples run faster than the model (0.4–0.7×): the fixed 300 s is overstated.
+* At 112–122M pairs the compute stage took **1.3–2.5× the model**. STAR's disk-backed BAM sort took 18 and 46 min,
+  against 10.5 and 14 min of mapping. The nodes were shared with other jobs' I/O on `/tmp`, and the 5′ sample has a
+  larger BAM (22 GB estimated).
+* The PBMC benchmark (66M pairs, an idle node) did not show this. Until the 50-sample validation measures it on more
+  samples, `wall_scale` = 2.0 in `config.json`. Class choice and `dryrun` use it.
+* At 2× the Clipper calendar becomes compute-bound: ~160 days at 300 cores against ~150 days of network. Anvil SU per
+  sample would double as well (the `est_su` column is unscaled).
+
+**Memory.**
+* Compute peaked at 50–66 GB RSS. sacct reports the 80 GB cgroup limit, because the page cache is counted.
+* I/O peaked at 3.4 GB for a plain run. Pooling (`encode` of 122M pairs) and the bad head stream reached the 16 GB
+  limit.
+
+**Network.** Prefetch reached ~38 MB/s per stream (26.9 GB in 711 s).
