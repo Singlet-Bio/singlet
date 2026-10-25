@@ -42,7 +42,7 @@ if [[ " $METHODS " == *" trust4 "* ]]; then
       --UMI $SCRATCH/R1.fq.gz --barcodeWhitelist $WL -t $T -o TRUST --od $O/trust4 ) > $O/trust4.log 2> $O/trust4.time || tail -20 $O/trust4.time
   grep -E "Elapsed|Maximum resident" $O/trust4.time
 fi
-[ -s $O/gex_lineage.csv ] || python -P $SRC/bench/vdj/gex_lineage.py $D/gex_filtered.h5 $O/gex_lineage.csv
+if [ ! -s $O/gex_lineage.csv ] && [ -s $D/gex_filtered.h5 ]; then python -P $SRC/bench/vdj/gex_lineage.py $D/gex_filtered.h5 $O/gex_lineage.csv; fi
 python -P $SRC/bench/vdj/compare_vdj.py --reference $D/filtered_contig_annotations.csv --chains $CHAINS \
   --singlet $O/singlet/contigs.csv --singlet-cells $O/singlet/cells.csv \
   $( [ -s $O/trust4/TRUST_barcode_report.tsv ] && echo --trust4 $O/trust4/TRUST_barcode_report.tsv ) \
