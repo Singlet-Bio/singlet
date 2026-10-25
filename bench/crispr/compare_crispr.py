@@ -77,13 +77,16 @@ def knockdown_stats(lab: pd.DataFrame, expr: dict, nt_target="non-targeting", ke
     for g in groups:
         sel = single & (lab["guide_ids"].to_numpy() == g)
         t = tg[sel][0]
-        if t not in expr or sel.sum() < min_cells or ctrl.sum() < min_cells:
+        if t not in expr or sel.sum() < min_cells:
             continue
         e = expr[t]
-        cm = e[ctrl].mean()
+        # control: non-targeting cells; a library without named non-targeting guides (Replogle 2022: they have no
+        # coordinates) uses the single-guide cells of every other target, the usual control of an essential-gene screen
+        c_ = ctrl if ctrl.sum() >= 20 else (single & (tg != t) & (tg != ""))
+        cm = e[c_].mean()
         if cm <= 0:
             continue
-        p = mannwhitneyu(e[sel], e[ctrl], alternative="less").pvalue
+        p = mannwhitneyu(e[sel], e[c_], alternative="less").pvalue
         rows.append({"guide": g, "target": t, "cells": int(sel.sum()), "knockdown": 1 - e[sel].mean() / cm, "p": p})
     df = pd.DataFrame(rows)
     if df.empty:
