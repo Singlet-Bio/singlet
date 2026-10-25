@@ -20,3 +20,10 @@ $ENV/bin/pip install -q zstandard
 $ENV/bin/pip install -q demuxEM==0.1.7.post1 || $ENV/bin/pip install -q demuxEM
 $ENV/bin/python -c "import scanpy, scanpy.external as sce, demuxEM; print('py ok', scanpy.__version__)"
 $ENV/bin/Rscript -e 'suppressMessages(library(Seurat)); cat("Seurat", as.character(packageVersion("Seurat")), "\n")'
+# competitor tools with old pins live in their own envs: CITE-seq-Count 1.4.5; salmon 1.10 (2.0 dropped --features) + alevin-fry
+for spec in "adt-csc:python=3.9 cite-seq-count=1.4.5" "adt-afry:salmon=1.10.3 alevin-fry=0.8.2"; do
+  E=$WORK/envs/${spec%%:*}; P=${spec#*:}
+  if [ ! -f $E/.ok ]; then rm -rf $E; mamba create -y -p $E -c conda-forge -c bioconda --strict-channel-priority $P && touch $E/.ok; fi
+done
+$WORK/envs/adt-csc/bin/CITE-seq-Count --version | tail -1
+$WORK/envs/adt-afry/bin/salmon --version; $WORK/envs/adt-afry/bin/alevin-fry --version
