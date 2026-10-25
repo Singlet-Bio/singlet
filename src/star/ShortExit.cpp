@@ -61,6 +61,15 @@ bool ReadAlign::shortExitBound(char **R, uint Lread) {
     const char *G = mapGen.G;
     const int64 nG = (int64) mapGen.nGenome;
 
+    //a seed is an exact match: a window holding a seed at least as long as both thresholds cannot be bounded below them
+    for (uint iW=0; iW<nW; iW++) {
+        for (uint ia=0; ia<nWA[iW]; ia++) {
+            uint64 l = WA[iW][ia][WA_Length];
+            if (l >= thrM && (intScore) l >= thrS)
+                return false;
+        };
+    };
+
     for (uint iW=0; iW<nW; iW++) {
         if (nWA[iW]==0) continue;
         //distinct seed diagonals, ascending

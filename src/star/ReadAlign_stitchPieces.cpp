@@ -58,6 +58,13 @@ void ReadAlign::stitchPieces(char **R, uint Lread) {
 
 
     nW=0; //number of windows
+#ifdef STAR_PROFILE
+    unsigned long long tSub = __rdtsc();
+    for (uint iP=0; iP<nP; iP++) {
+        if (PC[iP][PC_Nrep]<=P.winAnchorMultimapNmax) profWin[3] += PC[iP][PC_SAend]-PC[iP][PC_SAstart]+1;
+        profWin[4] += PC[iP][PC_SAend]-PC[iP][PC_SAstart]+1;
+    };
+#endif
     for (uint iP=0; iP<nP; iP++) {//scan through all anchor pieces, create alignment windows
         // np is number of pieces (stored seed alignments)
 
@@ -111,6 +118,9 @@ void ReadAlign::stitchPieces(char **R, uint Lread) {
             }; //for (uint iSA=PC[iP][PC_SAstart]; iSA<=PC[iP][PC_SAend]; iSA++) //scan through all alignments of this piece
         };//if (PC[iP][PC_Nrep]<=P.winAnchorMultimapNmax) //proceed if anchor
     };//for (uint iP=0; iP<nP; iP++) //scan through all anchor pieces, create alignment windows
+#ifdef STAR_PROFILE
+    {unsigned long long t = __rdtsc(); profWin[0] = t - tSub; tSub = t;}
+#endif
 
 
     for (uint iWin=0;iWin<nW;iWin++) {//extend windows with flanks
@@ -157,6 +167,9 @@ void ReadAlign::stitchPieces(char **R, uint Lread) {
     };
 
     nWall=nW;
+#ifdef STAR_PROFILE
+    {unsigned long long t = __rdtsc(); profWin[1] = t - tSub; tSub = t;}
+#endif
 
     #ifdef OFF_BEFORE_SEEDdistribution
         #warning OFF_BEFORE_SEEDdistribution
@@ -238,6 +251,9 @@ void ReadAlign::stitchPieces(char **R, uint Lread) {
 //         };
 //     };
 
+#ifdef STAR_PROFILE
+    {unsigned long long t = __rdtsc(); profWin[2] = t - tSub; tSub = t;}
+#endif
 #ifdef COMPILE_FOR_LONG_READS
 uint swWinCovMax=0;
 for (uint iW=0;iW<nW;iW++) {//check each window

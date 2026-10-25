@@ -116,7 +116,7 @@ int ReadAlign::oneRead() {//process one read: load, map, write
 
         if (shortExitProven && g_shortExit->mode == 2) {//verify: a proven bound must end as "too short"
             g_shortExit->nVerified++;
-            if (unmapType != 1 && g_shortExit->nVerifyFail++ < 20) {
+            if (!(unmapType == 1 || (unmapType == 0 && nW == 0)) && g_shortExit->nVerifyFail++ < 20) {
                 P.inOut->logMain << "SHORTEXIT verify mismatch: read " << readName << " iRead " << iReadAll << " unmapType " << unmapType
                                  << " nW " << nW << " nTr " << nTr << " maxScore " << trBest->maxScore << " nMatch " << trBest->nMatch << "\n" << flush;
             };
@@ -166,6 +166,7 @@ int ReadAlign::oneRead() {//process one read: load, map, write
             g_profOutcomeDetail[oc][4] += profCnt[1];
             if (profCyc[1] > 0) g_profOutcomeDetail[oc][5] += nWall;
             if (shortExitProven) g_profOutcomeDetail[oc][6]++;
+            for (int k=0; k<5; k++) g_profOutcomeDetail[oc][7+k] += profWin[k];
         };
     }
 #endif

@@ -26,6 +26,7 @@ int ReadAlign::mapOneRead() {
     resetN(); //reset aligns counters to 0
 #ifdef STAR_PROFILE
     profCyc[0]=profCyc[1]=profCyc[2]=0; profCnt[0]=profCnt[1]=profCnt[2]=0;
+    for (int k=0; k<5; k++) profWin[k]=0;
 #endif
 
     //reset/initialize a transcript
