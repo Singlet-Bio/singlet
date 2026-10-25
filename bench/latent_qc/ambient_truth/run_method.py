@@ -38,6 +38,9 @@ def main():
     for spec in specs:
         name, p = parse(spec)
         latent = p.get("latent", "pca")
+        if latent == "vae" and not os.path.exists(f"{atlib.DATA}/{lib}/vae_{view}.npy"):
+            print("SKIP (no VAE latent):", lib, view, spec, flush=True)
+            continue
         with atlib.Timer() as t:
             rm = rh = None
             if name in ("knn", "cluster"):
