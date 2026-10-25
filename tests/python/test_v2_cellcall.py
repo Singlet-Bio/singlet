@@ -154,7 +154,9 @@ def test_tiny_sample_records_an_error_and_keeps_the_call():
 # Shared with the C++ port (include/singlet/pileup/called_v2.h); layout in tests/data/called_v2_golden/README.md.
 GOLDEN = ROOT / "tests" / "data" / "called_v2_golden"
 GOLDEN_CASES = (
-    sorted(p.name for p in GOLDEN.iterdir() if (p / "case.json").is_file()) if GOLDEN.is_dir() else []
+    sorted(p.name for p in GOLDEN.iterdir() if (p / "case.json").is_file())
+    if GOLDEN.is_dir()
+    else []
 )
 
 
@@ -196,7 +198,9 @@ def test_golden_vector(name):
     assert params["lower"] == e["lower"]
     assert (params["retain_total"] is None) == (e["retain_total"] is None)
     if e["retain_total"] is not None:
-        assert params["retain_total"] == pytest.approx(e["retain_total"], rel=tol["retain_total_rel"])
+        assert params["retain_total"] == pytest.approx(
+            e["retain_total"], rel=tol["retain_total_rel"]
+        )
     assert params["alpha"] == pytest.approx(e["alpha"], rel=tol["alpha_rel"])
     for k in ("n_ambient", "ambient_umi", "n_tested", "n_tail", "n_called_v2", "n_added"):
         assert params[k] == e[k], k

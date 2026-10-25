@@ -25,7 +25,7 @@ TASK=${SLURM_ARRAY_TASK_ID:-0}
 SCRATCH=/tmp/${USER:-x}-${SLURM_JOB_ID:-x}-$TASK; mkdir -p "$SCRATCH" "$OUT/verify" "$OUT/golden"
 trap 'rm -rf "$SCRATCH" "$NUMBA_CACHE_DIR"' EXIT
 REPO=$W/repos/singlet-py.git
-git --git-dir=$REPO fetch -q origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+( flock 9; git --git-dir=$REPO fetch -q origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" ) 9>"$OUT/.fetch.lock"  # array tasks share the repo
 SHA=$(git --git-dir=$REPO rev-parse "origin/$BRANCH")
 mkdir -p $SCRATCH/src && git --git-dir=$REPO archive "$SHA" python bench/called_v2_truth tests/data/called_v2_golden/generate.py | tar -x -C $SCRATCH/src
 S=$SCRATCH/src
