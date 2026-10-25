@@ -34,7 +34,9 @@ MIN_OFFSET_FRACTION = 0.10  # reads matching the catalog exactly at the best off
 MIN_READS = 50  # support for a catalog barcode in the sample (called-cell reads)
 MIN_SHARE = 2e-4  # ... and at least this share of the matched reads
 UNEXPLAINED_MAX = 0.05
-ABUNDANT_SHARE = 1e-3  # an unmatched sequence this abundant (share of feature-like reads) counts as unexplained
+ABUNDANT_SHARE = (
+    1e-3  # an unmatched sequence this abundant (share of feature-like reads) counts as unexplained
+)
 
 
 def load_catalog(path: str = CATALOG_PATH) -> pd.DataFrame:
@@ -43,7 +45,9 @@ def load_catalog(path: str = CATALOG_PATH) -> pd.DataFrame:
 
 @dataclass
 class Panel:
-    features: pd.DataFrame  # id, name, sequence, kind, barcode_id, ensembl, source (+ reads in the discovery sample)
+    features: (
+        pd.DataFrame
+    )  # id, name, sequence, kind, barcode_id, ensembl, source (+ reads in the discovery sample)
     source: str  # study | catalog
     offset: int
     status: str  # ok | incomplete | unresolved
@@ -59,8 +63,13 @@ def read_feature_reference(path: str) -> pd.DataFrame:
     df = pd.read_csv(path, sep=None, engine="python", dtype=str, comment="#")
     cols = {c.lower().strip(): c for c in df.columns}
     if "sequence" in cols:
-        out = pd.DataFrame({"id": df[cols.get("id", cols["sequence"])], "name": df[cols.get("name", cols.get("id"))],
-                            "sequence": df[cols["sequence"]].str.upper().str.strip()})
+        out = pd.DataFrame(
+            {
+                "id": df[cols.get("id", cols["sequence"])],
+                "name": df[cols.get("name", cols.get("id"))],
+                "sequence": df[cols["sequence"]].str.upper().str.strip(),
+            }
+        )
         if "pattern" in cols:
             out["pattern"] = df[cols["pattern"]]
         if "feature_type" in cols:
@@ -83,7 +92,13 @@ def kind_of(name: str) -> str:
     n = name.lower()
     if "hashtag" in n or n.startswith("hto") or "hto" in n.split("_"):
         return "hashtag"
-    if "isotype" in n or ("igg" in n and "ctrl" in n) or "negctr" in n or "neg_ctr" in n or "negative control" in n:
+    if (
+        "isotype" in n
+        or ("igg" in n and "ctrl" in n)
+        or "negctr" in n
+        or "neg_ctr" in n
+        or "negative control" in n
+    ):
         return "isotype"
     return "antibody"
 
@@ -96,7 +111,9 @@ def annotate_from_catalog(ref: pd.DataFrame, cat: Optional[pd.DataFrame] = None)
     hit = out.sequence.isin(c.index)
     out["barcode_id"] = np.where(hit, out.sequence.map(c.barcode_id), "")
     out["ensembl"] = np.where(hit, out.sequence.map(c.ensembl), "")
-    out["kind"] = [c.kind.get(s) if s in c.index else kind_of(n) for s, n in zip(out.sequence, out.name)]
+    out["kind"] = [
+        c.kind.get(s) if s in c.index else kind_of(n) for s, n in zip(out.sequence, out.name)
+    ]
     out["catalog_specificity"] = np.where(hit, out.sequence.map(c.specificity), "")
     # a sequence the authors listed under several labels (sample pools) takes the catalog name
     if "aliases" in out:
@@ -106,7 +123,9 @@ def annotate_from_catalog(ref: pd.DataFrame, cat: Optional[pd.DataFrame] = None)
     return out
 
 
-def detect_offset(r2_seqs: Sequence[bytes], catalog_seqs: Sequence[str], offsets=OFFSETS) -> Dict[int, float]:
+def detect_offset(
+    r2_seqs: Sequence[bytes], catalog_seqs: Sequence[str], offsets=OFFSETS
+) -> Dict[int, float]:
     """Fraction of reads whose R2[off:off+L] is exactly a panel / catalog barcode, per offset (L = the most common
     barcode length; barcodes of other lengths are left out of this test)."""
     lens = pd.Series([len(x) for x in catalog_seqs]).value_counts()
@@ -114,7 +133,7 @@ def detect_offset(r2_seqs: Sequence[bytes], catalog_seqs: Sequence[str], offsets
     codes = np.sort(S.encode_strings([x for x in catalog_seqs if len(x) == L], L)[0])
     out = {}
     for off in offsets:
-        w = [s[off:off + L] for s in r2_seqs if len(s) >= off + L]
+        w = [s[off : off + L] for s in r2_seqs if len(s) >= off + L]
         if not w:
             out[off] = 0.0
             continue
@@ -124,7 +143,9 @@ def detect_offset(r2_seqs: Sequence[bytes], catalog_seqs: Sequence[str], offsets
 
 
 SPECIES = {"homo sapiens": "human", "mus musculus": "mouse", "rattus norvegicus": "rat"}
-IDENTITY_MAX = 0.10  # reads on catalog barcodes whose reactivity excludes the organism, or that were reused
+IDENTITY_MAX = (
+    0.10  # reads on catalog barcodes whose reactivity excludes the organism, or that were reused
+)
 
 
 def discover(feature_seqs: Sequence[bytes], cat: pd.DataFrame, organism: str = "") -> Panel:
@@ -154,23 +175,46 @@ def discover(feature_seqs: Sequence[bytes], cat: pd.DataFrame, organism: str = "
     um_c = cnt[unm]
     um_s = u[unm]
     order = np.argsort(-um_c)
-    abundant = [(um_s[i].decode(), int(um_c[i])) for i in order[:200] if um_c[i] >= ABUNDANT_SHARE * n]
+    abundant = [
+        (um_s[i].decode(), int(um_c[i])) for i in order[:200] if um_c[i] >= ABUNDANT_SHARE * n
+    ]
     panel_seqs = list(cat.sequence[keep]) if keep.any() else []
     kinds = {q: classify_unmatched(q, panel_seqs) for q, _ in abundant}
     other = [(q, c) for q, c in abundant if kinds[q] == "other"]
-    share = {k: sum(c for q, c in abundant if kinds[q] == k) / max(n, 1) for k in ("low_complexity", "shifted", "other")}
-    notes = {"reads": n, "matched_share": matched / max(n, 1), "unexplained_share": share["other"],
-             "low_complexity_share": share["low_complexity"], "shifted_share": share["shifted"],
-             "unexplained_top": other[:20], "n_catalog_hits": int(keep.sum())}
+    share = {
+        k: sum(c for q, c in abundant if kinds[q] == k) / max(n, 1)
+        for k in ("low_complexity", "shifted", "other")
+    }
+    notes = {
+        "reads": n,
+        "matched_share": matched / max(n, 1),
+        "unexplained_share": share["other"],
+        "low_complexity_share": share["low_complexity"],
+        "shifted_share": share["shifted"],
+        "unexplained_top": other[:20],
+        "n_catalog_hits": int(keep.sum()),
+    }
     sp = SPECIES.get(str(organism).split("|")[0].strip().lower(), "")
     sup = feats.reads_discovery.astype(float)
     tot = max(sup.sum(), 1.0)
-    react = feats.reactivity.fillna("").str.lower() if "reactivity" in feats else pd.Series("", index=feats.index)
-    mism = (react != "") & ~react.str.contains(sp) & (feats.kind != "isotype") if sp else pd.Series(False, index=feats.index)
-    reused = feats.reused.fillna("") != "" if "reused" in feats else pd.Series(False, index=feats.index)
+    react = (
+        feats.reactivity.fillna("").str.lower()
+        if "reactivity" in feats
+        else pd.Series("", index=feats.index)
+    )
+    mism = (
+        (react != "") & ~react.str.contains(sp) & (feats.kind != "isotype")
+        if sp
+        else pd.Series(False, index=feats.index)
+    )
+    reused = (
+        feats.reused.fillna("") != "" if "reused" in feats else pd.Series(False, index=feats.index)
+    )
     notes["reactivity_mismatch_share"] = float(sup[mism].sum() / tot)
-    notes["reactivity_mismatch"] = [f"{n} ({b}, {r})" for n, b, r in zip(feats.specificity[mism], feats.barcode_id[mism],
-                                                                        react[mism])][:20]
+    notes["reactivity_mismatch"] = [
+        f"{n} ({b}, {r})"
+        for n, b, r in zip(feats.specificity[mism], feats.barcode_id[mism], react[mism])
+    ][:20]
     notes["reused_share"] = float(sup[reused].sum() / tot)
     notes["reused"] = list(feats.reused[reused])[:20] if "reused" in feats else []
     if not keep.any():
@@ -181,12 +225,23 @@ def discover(feature_seqs: Sequence[bytes], cat: pd.DataFrame, organism: str = "
         status = "incomplete"
     else:
         status = "ok"
-    out = pd.DataFrame({
-        "id": [b if isinstance(b, str) and b else s for b, s in zip(feats.barcode_id, feats.sequence)],
-        "name": feats.specificity.values, "sequence": feats.sequence.values, "kind": feats.kind.values,
-        "barcode_id": feats.barcode_id.values, "ensembl": feats.ensembl.values, "clone": feats.clone.values,
-        "reactivity": feats.reactivity.values, "reads_discovery": feats.reads_discovery.values,
-        "reused": feats.reused.values if "reused" in feats else ""})
+    out = pd.DataFrame(
+        {
+            "id": [
+                b if isinstance(b, str) and b else s
+                for b, s in zip(feats.barcode_id, feats.sequence)
+            ],
+            "name": feats.specificity.values,
+            "sequence": feats.sequence.values,
+            "kind": feats.kind.values,
+            "barcode_id": feats.barcode_id.values,
+            "ensembl": feats.ensembl.values,
+            "clone": feats.clone.values,
+            "reactivity": feats.reactivity.values,
+            "reads_discovery": feats.reads_discovery.values,
+            "reused": feats.reused.values if "reused" in feats else "",
+        }
+    )
     out["source"] = "catalog"
     _dedupe_names(out)
     return Panel(out.reset_index(drop=True), "catalog", -1, status, notes)
@@ -200,7 +255,7 @@ def classify_unmatched(q: str, panel_seqs: Sequence[str]) -> str:
         return "low_complexity"
     for p in panel_seqs:
         L = min(len(p), len(q))
-        if q[1:L] == p[:L - 1] or q[:L - 1] == p[1:L]:
+        if q[1:L] == p[: L - 1] or q[: L - 1] == p[1:L]:
             return "shifted"
     return "other"
 
@@ -208,7 +263,12 @@ def classify_unmatched(q: str, panel_seqs: Sequence[str]) -> str:
 def _dedupe_names(df: pd.DataFrame):
     """Names must be unique within a panel: two clones of one target get their barcode id (else sequence) appended."""
     df["name"] = df["name"].astype(object).where(df["name"].notna(), df["sequence"]).astype(str)
-    ids = df["id"].astype(object).where(df["id"].notna() & (df["id"].astype(str) != ""), df["sequence"]).astype(str)
+    ids = (
+        df["id"]
+        .astype(object)
+        .where(df["id"].notna() & (df["id"].astype(str) != ""), df["sequence"])
+        .astype(str)
+    )
     dup = df.name.duplicated(keep=False)
     df.loc[dup, "name"] = [f"{n} ({i})" for n, i in zip(df.loc[dup, "name"], ids[dup])]
 

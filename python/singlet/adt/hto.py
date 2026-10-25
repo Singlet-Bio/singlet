@@ -55,7 +55,9 @@ def ambient_bimodal(cells: np.ndarray) -> np.ndarray:
     return out
 
 
-def hashed_drops(cells: np.ndarray, ambient: np.ndarray = None, confident_min: float = CONFIDENT_MIN):
+def hashed_drops(
+    cells: np.ndarray, ambient: np.ndarray = None, confident_min: float = CONFIDENT_MIN
+):
     """cells: hashtags x cells counts; ambient: per-hashtag counts in empty droplets (None: estimated from the cells with
     :func:`ambient_bimodal`). ``confident_min``: the log2 fold change for a confident singlet (DropletUtils default 2)."""
     X = np.asarray(cells, dtype=float)
@@ -88,7 +90,9 @@ def hashed_drops(cells: np.ndarray, ambient: np.ndarray = None, confident_min: f
 
 SIDECAR_SCHEMA = "1"
 FEATURE_SET = "hto"
-METHOD_VERSION = "singlet-adt-hto/2 (hashedDrops rule, confident 0.5, doublet 2 + 3 MAD; mixture doublet veto)"
+METHOD_VERSION = (
+    "singlet-adt-hto/2 (hashedDrops rule, confident 0.5, doublet 2 + 3 MAD; mixture doublet veto)"
+)
 
 
 def feature_sidecar(gsm: str, cols, call, lfc_top, hashtag_names):
@@ -104,10 +108,20 @@ def feature_sidecar(gsm: str, cols, call, lfc_top, hashtag_names):
     margin = np.clip(1 - np.power(2.0, -np.asarray(lfc_top, dtype=float)), 0, 1).astype(np.float32)
     margin[call == -1] = 0
     names = ["negative", "doublet"] + list(hashtag_names)
-    t = pa.table({"gsm": pa.array([gsm] * len(cat), pa.string()), "col": pa.array(np.asarray(cols, np.int64)),
-                  "hto/call": pa.array(cat), "hto/margin": pa.array(margin)})
-    md = {b"singlet_features_schema": SIDECAR_SCHEMA.encode(), b"feature_set": FEATURE_SET.encode(),
-          b"method_version": METHOD_VERSION.encode(), b"categories": "|".join(names).encode()}
+    t = pa.table(
+        {
+            "gsm": pa.array([gsm] * len(cat), pa.string()),
+            "col": pa.array(np.asarray(cols, np.int64)),
+            "hto/call": pa.array(cat),
+            "hto/margin": pa.array(margin),
+        }
+    )
+    md = {
+        b"singlet_features_schema": SIDECAR_SCHEMA.encode(),
+        b"feature_set": FEATURE_SET.encode(),
+        b"method_version": METHOD_VERSION.encode(),
+        b"categories": "|".join(names).encode(),
+    }
     return t.replace_schema_metadata(md), names
 
 
@@ -137,12 +151,14 @@ def _mixture_one(y, z):
             W = w + 1e-9
             beta = np.linalg.lstsq(Z * np.sqrt(W)[:, None], y * np.sqrt(W), rcond=None)[0]
             res = y - Z @ beta
-            var = max(float((W * res ** 2).sum() / W.sum()), 1e-4)
+            var = max(float((W * res**2).sum() / W.sum()), 1e-4)
             params.append((beta, var, float(w.mean())))
         dens = []
         for beta, var, pi in params:
             mu = Z @ beta
-            dens.append(np.log(max(pi, 1e-9)) - 0.5 * np.log(2 * np.pi * var) - 0.5 * (y - mu) ** 2 / var)
+            dens.append(
+                np.log(max(pi, 1e-9)) - 0.5 * np.log(2 * np.pi * var) - 0.5 * (y - mu) ** 2 / var
+            )
         dens = np.vstack(dens)
         m = dens.max(axis=0)
         ll = float((m + np.log(np.exp(dens - m).sum(axis=0))).sum())
@@ -151,14 +167,18 @@ def _mixture_one(y, z):
             break
         ll_old = ll
     # the positive component is the one with the higher mean at the median covariate
-    zrow = np.array([1.0, np.median(z)])[:Z.shape[1]]
+    zrow = np.array([1.0, np.median(z)])[: Z.shape[1]]
     mu0 = float(params[0][0] @ zrow)
     mu1 = float(params[1][0] @ zrow)
     return r if mu1 >= mu0 else 1 - r
 
 
-def mixture_calls(cells: np.ndarray, positive: float = MIX_POSITIVE, covariate: str = "others",
-                  scale_ambient: bool = False):
+def mixture_calls(
+    cells: np.ndarray,
+    positive: float = MIX_POSITIVE,
+    covariate: str = "others",
+    scale_ambient: bool = False,
+):
     """Hashtag calls from per-hashtag mixtures (cells only, no empty droplets needed).
 
     For each hashtag, log1p counts are modelled as a two-component mixture of regressions on the cell's log1p count of all
@@ -194,7 +214,9 @@ def mixture_calls(cells: np.ndarray, positive: float = MIX_POSITIVE, covariate: 
 
 
 # ----------------------------------------------------------------------------------------------------------- default
-DEFAULT_RULE = "hashedDrops confident_min=0.5 + mixture doublet veto (covariate none, posterior 0.5)"
+DEFAULT_RULE = (
+    "hashedDrops confident_min=0.5 + mixture doublet veto (covariate none, posterior 0.5)"
+)
 
 
 def call_hashtags(cells: np.ndarray, ambient: np.ndarray = None):

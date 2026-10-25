@@ -21,12 +21,14 @@ find them the same way.
 from __future__ import annotations
 
 import json
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Sequence
 
 import numpy as np
 
 PANEL_SCHEMA = "singlet-adt-panel/1"
-METHOD_VERSION = "singlet-adt-count/1 (cellranger-fb-logic; cb 1mm posterior 0.975; umi 1hd cellranger)"
+METHOD_VERSION = (
+    "singlet-adt-count/1 (cellranger-fb-logic; cb 1mm posterior 0.975; umi 1hd cellranger)"
+)
 MEMBERS = ("adt_counts.1pz", "hto_counts.1pz", "adt_panel.json")
 
 
@@ -37,8 +39,15 @@ def _csc_member(M, rownames: List[str], colnames: List[str]):
 
     M = M.tocsc()
     M.sort_indices()
-    csc = Csc(m=M.shape[0], n=M.shape[1], indptr=M.indptr.astype(np.int64), indices=M.indices.astype(np.uint32),
-              data=M.data.astype(np.uint32), rownames=list(rownames), colnames=list(colnames))
+    csc = Csc(
+        m=M.shape[0],
+        n=M.shape[1],
+        indptr=M.indptr.astype(np.int64),
+        indices=M.indices.astype(np.uint32),
+        data=M.data.astype(np.uint32),
+        rownames=list(rownames),
+        colnames=list(colnames),
+    )
     why = csc.check_canonical()
     if why:
         raise ValueError("not canonical: %s" % why)
@@ -46,8 +55,9 @@ def _csc_member(M, rownames: List[str], colnames: List[str]):
     return body, csc.digest()
 
 
-def build_members(M, panel, gex_barcodes: Sequence[str], library: Dict, ambient: np.ndarray,
-                  counting: Dict) -> Dict[str, tuple]:
+def build_members(
+    M, panel, gex_barcodes: Sequence[str], library: Dict, ambient: np.ndarray, counting: Dict
+) -> Dict[str, tuple]:
     """-> {name: (kind, body bytes, digest16 or None, meta)}; kind 'pz2' or 'stored'."""
     kinds = np.asarray(panel["kind"])
     ab = np.flatnonzero(kinds != "hashtag")
@@ -61,20 +71,58 @@ def build_members(M, panel, gex_barcodes: Sequence[str], library: Dict, ambient:
         if len(rows) == 0:
             continue
         body, dg = _csc_member(M[rows], [names[i] for i in rows], list(gex_barcodes))
-        out[mname] = ("pz2", body, dg, {"modality": "adt" if mname == "adt_counts.1pz" else "hto",
-                                         "panel": "adt_panel.json"})
+        out[mname] = (
+            "pz2",
+            body,
+            dg,
+            {"modality": "adt" if mname == "adt_counts.1pz" else "hto", "panel": "adt_panel.json"},
+        )
         for r, i in enumerate(rows):
             p = panel.iloc[i]
-            feats.append({"matrix": mname, "row": r, "name": names[i], "sequence": p["sequence"], "kind": p["kind"],
-                          **{k: (str(p[k]) if k in panel.columns and isinstance(p[k], str) else "")
-                             for k in ("barcode_id", "ensembl", "catalog_specificity", "clone", "source")},
-                          "ambient_umis": int(ambient[i])})
-    lib = {k: library.get(k) for k in ("verdict", "failed", "warned", "n_called", "median_umi_cells", "cell_empty_ratio",
-                                       "frac_valid_barcode", "frac_feature", "saturation", "rna_concordance",
-                                       "hto_singlet_share") if k in library}
-    doc = {"schema": PANEL_SCHEMA, "method": METHOD_VERSION, "counting": counting, "features": feats, "library": lib}
-    out["adt_panel.json"] = ("stored", json.dumps(doc, sort_keys=True, separators=(",", ":"), default=float).encode(),
-                             None, {"content": "application/json"})
+            feats.append(
+                {
+                    "matrix": mname,
+                    "row": r,
+                    "name": names[i],
+                    "sequence": p["sequence"],
+                    "kind": p["kind"],
+                    **{
+                        k: (str(p[k]) if k in panel.columns and isinstance(p[k], str) else "")
+                        for k in ("barcode_id", "ensembl", "catalog_specificity", "clone", "source")
+                    },
+                    "ambient_umis": int(ambient[i]),
+                }
+            )
+    lib = {
+        k: library.get(k)
+        for k in (
+            "verdict",
+            "failed",
+            "warned",
+            "n_called",
+            "median_umi_cells",
+            "cell_empty_ratio",
+            "frac_valid_barcode",
+            "frac_feature",
+            "saturation",
+            "rna_concordance",
+            "hto_singlet_share",
+        )
+        if k in library
+    }
+    doc = {
+        "schema": PANEL_SCHEMA,
+        "method": METHOD_VERSION,
+        "counting": counting,
+        "features": feats,
+        "library": lib,
+    }
+    out["adt_panel.json"] = (
+        "stored",
+        json.dumps(doc, sort_keys=True, separators=(",", ":"), default=float).encode(),
+        None,
+        {"content": "application/json"},
+    )
     return out
 
 

@@ -30,7 +30,9 @@ def clr(X: np.ndarray) -> np.ndarray:
     return np.log1p(X / gm)
 
 
-def empty_droplets(totals: np.ndarray, called: np.ndarray, min_total: int = 1, max_quantile: float = 0.99) -> np.ndarray:
+def empty_droplets(
+    totals: np.ndarray, called: np.ndarray, min_total: int = 1, max_quantile: float = 0.99
+) -> np.ndarray:
     """Background droplets for DSB: uncalled columns with an ADT total in [min_total, the background mode's upper tail].
 
     The mode is found on log10 totals of uncalled columns; droplets far above it (unannotated cells, doublets missed by
@@ -68,8 +70,12 @@ def _two_gauss_low_mean(v: np.ndarray, iters: int = 100) -> float:
     return float(m.min())
 
 
-def dsb(cells: np.ndarray, empties: np.ndarray, isotype_rows: Optional[np.ndarray] = None,
-        denoise: bool = True) -> np.ndarray:
+def dsb(
+    cells: np.ndarray,
+    empties: np.ndarray,
+    isotype_rows: Optional[np.ndarray] = None,
+    denoise: bool = True,
+) -> np.ndarray:
     """cells, empties: features x droplets (counts). Returns DSB values, features x cells."""
     lc = np.log(np.asarray(cells, dtype=np.float64) + DSB_PSEUDOCOUNT)
     le = np.log(np.asarray(empties, dtype=np.float64) + DSB_PSEUDOCOUNT)
@@ -91,7 +97,7 @@ def dsb(cells: np.ndarray, empties: np.ndarray, isotype_rows: Optional[np.ndarra
         comp = bg - bg.mean()
     # regress the technical component out of each protein (lm per protein, keep the intercept)
     c = comp - comp.mean()
-    denom = (c ** 2).sum()
+    denom = (c**2).sum()
     if denom == 0:
         return z
     beta = (z - z.mean(axis=1, keepdims=True)) @ c / denom

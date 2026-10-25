@@ -29,7 +29,6 @@ from __future__ import annotations
 import gzip
 import json
 import os
-from collections import Counter
 from dataclasses import dataclass, field
 from typing import Iterable, List, Optional, Sequence, Tuple
 
@@ -78,8 +77,13 @@ def iter_pairs(r1_paths: Sequence[str], r2_paths: Sequence[str]) -> Iterable[Tup
                     yield s1, s2
 
 
-def collapse_reads(pairs: Iterable[Tuple[bytes, bytes]], r1_len: int, offset: int, feat_len: int,
-                   max_reads: Optional[int] = None):
+def collapse_reads(
+    pairs: Iterable[Tuple[bytes, bytes]],
+    r1_len: int,
+    offset: int,
+    feat_len: int,
+    max_reads: Optional[int] = None,
+):
     """Unique ``R1[:r1_len] + R2[offset:offset+feat_len]`` keys and their read counts.
 
     Returns (keys ``S<r1_len+feat_len>``, counts int64, stats dict). Pairs with a short R1 or R2 are counted and skipped."""
@@ -179,7 +183,11 @@ class _FixedIndex:
             e = S.lookup(self.exact, fills.ravel()).reshape(fills.shape)
             hitn = (e >= 0).sum(axis=1)
             one = hitn == 1
-            pick = np.where(one, self.exact_idx[np.maximum(e, 0)][np.arange(len(rows)), (e >= 0).argmax(axis=1)], -1)
+            pick = np.where(
+                one,
+                self.exact_idx[np.maximum(e, 0)][np.arange(len(rows)), (e >= 0).argmax(axis=1)],
+                -1,
+            )
             pick[hitn > 1] = -2
             out[rows] = pick
             corr[rows[one]] = True
@@ -201,12 +209,14 @@ class FeatureIndex:
         self.groups = []
         for L in lens:
             idx = [i for i, x in enumerate(self.sequences) if len(x) == L]
-            self.groups.append((L, np.array(idx, dtype=np.int64), _FixedIndex([self.sequences[i] for i in idx])))
+            self.groups.append(
+                (L, np.array(idx, dtype=np.int64), _FixedIndex([self.sequences[i] for i in idx]))
+            )
 
     def assign(self, mat: np.ndarray):
         n = len(mat)
         if len(self.groups) == 1:
-            return self.groups[0][2].assign(mat[:, :self.L])
+            return self.groups[0][2].assign(mat[:, : self.L])
         exact = np.full(n, -1, np.int64)
         near = np.full(n, -1, np.int64)
         for L, idx, fx in self.groups:
@@ -225,7 +235,7 @@ class FeatureIndex:
 
 # ----------------------------------------------------------------------------------------------------------- barcodes
 def load_barcode_list(path: str) -> List[str]:
-    with (gzip.open(path, "rt") if path.endswith(".gz") else open(path)) as f:
+    with gzip.open(path, "rt") if path.endswith(".gz") else open(path) as f:
         return [ln.split()[0] for ln in f if ln.strip()]
 
 
@@ -235,7 +245,7 @@ def load_translation(path: str, reverse: bool = False) -> Tuple[np.ndarray, np.n
     Column 1 is taken as the GEX barcode and column 2 as the feature-side barcode; ``reverse`` swaps them (the
     orientation is checked on the data by :func:`best_translation`)."""
     gex, fb = [], []
-    with (gzip.open(path, "rt") if path.endswith(".gz") else open(path)) as f:
+    with gzip.open(path, "rt") if path.endswith(".gz") else open(path) as f:
         for ln in f:
             p = ln.split()
             if len(p) >= 2 and not p[0].startswith("#"):
@@ -335,9 +345,13 @@ class LibraryCounts:
     features: List[str]
     matrix: "object"  # scipy.sparse.csc_matrix, features x GEX columns, uint32
     ambient: np.ndarray  # UMIs per feature on whitelist barcodes outside the GEX columns
-    outside_totals: np.ndarray  # UMI totals of each whitelist barcode outside the GEX columns (descending)
+    outside_totals: (
+        np.ndarray
+    )  # UMI totals of each whitelist barcode outside the GEX columns (descending)
     stats: dict
-    unmatched: List[Tuple[str, int]]  # most frequent unmatched feature sequences (in valid barcodes) and reads
+    unmatched: List[
+        Tuple[str, int]
+    ]  # most frequent unmatched feature sequences (in valid barcodes) and reads
 
 
 def _barcode_map(ucb: np.ndarray, cb_reads: np.ndarray, cb_len: int, whitelist_codes, translation):
@@ -380,7 +394,7 @@ def _process(keys, reads, bmap, fx, cb_len, umi_len, n_features, st, unm):
         fs = np.ascontiguousarray(mat[um, r1_len:]).view(f"S{L}").ravel()
         u, inv = np.unique(fs, return_inverse=True)
         c = np.bincount(inv.ravel(), weights=reads[um]).astype(np.int64)
-        for i in np.argsort(-c)[:N_UNMATCHED_KEEP * 5]:
+        for i in np.argsort(-c)[: N_UNMATCHED_KEEP * 5]:
             unm[u[i]] = unm.get(u[i], 0) + int(c[i])
     keep = rv & (fidx >= 0)
     umi_codes, umi_bad = S.encode(mat[keep, cb_len:r1_len])
@@ -395,7 +409,11 @@ def _process(keys, reads, bmap, fx, cb_len, umi_len, n_features, st, unm):
     if umi_len > 12 or n_features >= 1024:
         raise ValueError("UMI > 12 nt or >= 1024 features do not fit the packed molecule key")
     ubc, bci = np.unique(bc, return_inverse=True)
-    key = (bci.ravel().astype(np.uint64) << np.uint64(34)) | (ft.astype(np.uint64) << np.uint64(24)) | umi_codes
+    key = (
+        (bci.ravel().astype(np.uint64) << np.uint64(34))
+        | (ft.astype(np.uint64) << np.uint64(24))
+        | umi_codes
+    )
     gu, ginv = np.unique(key, return_inverse=True)
     greads = np.bincount(ginv.ravel(), weights=rd, minlength=len(gu)).astype(np.int64)
     umi_mask = np.uint64((1 << (2 * umi_len)) - 1)
@@ -405,8 +423,11 @@ def _process(keys, reads, bmap, fx, cb_len, umi_len, n_features, st, unm):
     _add(st, "umis_before_correction", len(gu))
     _add(st, "molecules", len(mol))
     _add(st, "reads_usable", greads.sum())
-    return (ubc[(gu[mol] >> np.uint64(34)).astype(np.int64)],
-            ((gu[mol] >> np.uint64(24)) & np.uint64(1023)).astype(np.int64), mol_reads)
+    return (
+        ubc[(gu[mol] >> np.uint64(34)).astype(np.int64)],
+        ((gu[mol] >> np.uint64(24)) & np.uint64(1023)).astype(np.int64),
+        mol_reads,
+    )
 
 
 def _barcode_counts(pairs, r1_len, end, cb_len, max_reads=None):
@@ -436,10 +457,23 @@ def _barcode_counts(pairs, r1_len, end, cb_len, max_reads=None):
     return (uniq[0], cnts[0]) if uniq else (np.zeros(0, f"S{cb_len}"), np.zeros(0, np.int64))
 
 
-def count_library(r1_paths, r2_paths, *, cb_len: int, umi_len: int, offset: int, panel_sequences: Sequence[str],
-                  whitelist_codes: np.ndarray, gex_barcodes: Sequence[str], translation=None,
-                  max_reads: Optional[int] = None, pairs=None, shards: int = 0, tmpdir: Optional[str] = None,
-                  pairs_factory=None) -> LibraryCounts:
+def count_library(
+    r1_paths,
+    r2_paths,
+    *,
+    cb_len: int,
+    umi_len: int,
+    offset: int,
+    panel_sequences: Sequence[str],
+    whitelist_codes: np.ndarray,
+    gex_barcodes: Sequence[str],
+    translation=None,
+    max_reads: Optional[int] = None,
+    pairs=None,
+    shards: int = 0,
+    tmpdir: Optional[str] = None,
+    pairs_factory=None,
+) -> LibraryCounts:
     """Count one library. ``gex_barcodes``: the GEX sample's column barcodes in ``col`` order (16 nt, ``-1`` suffix ok).
 
     ``shards > 0`` bounds memory for large libraries: pass 1 counts reads per raw barcode and corrects every barcode
@@ -457,9 +491,15 @@ def count_library(r1_paths, r2_paths, *, cb_len: int, umi_len: int, offset: int,
         if pairs is not None:
             if shards:
                 raise ValueError("sharded counting reads the pairs twice: pass pairs_factory")
-            pairs_factory = (lambda p=pairs: p)
+
+            def pairs_factory(p=pairs):
+                return p
+
         else:
-            pairs_factory = (lambda: iter_pairs(r1_paths, r2_paths))
+
+            def pairs_factory():
+                return iter_pairs(r1_paths, r2_paths)
+
     st: dict = {}
     unm: dict = {}
     if not shards:
@@ -470,13 +510,21 @@ def count_library(r1_paths, r2_paths, *, cb_len: int, umi_len: int, offset: int,
         ucb, inv = np.unique(cbk.view(f"S{cb_len}").ravel(), return_inverse=True)
         cb_reads = np.bincount(inv.ravel(), weights=reads, minlength=len(ucb))
         del cbk, inv
-        cb_code, cb_valid, translated, n_corr = _barcode_map(ucb, cb_reads, cb_len, whitelist_codes, translation)
-        parts = [_process(keys, reads, (ucb, cb_code, cb_valid, translated), fx, cb_len, umi_len, nf, st, unm)]
+        cb_code, cb_valid, translated, n_corr = _barcode_map(
+            ucb, cb_reads, cb_len, whitelist_codes, translation
+        )
+        parts = [
+            _process(
+                keys, reads, (ucb, cb_code, cb_valid, translated), fx, cb_len, umi_len, nf, st, unm
+            )
+        ]
     else:
         import tempfile
 
         ucb, cb_reads = _barcode_counts(pairs_factory(), r1_len, end, cb_len, max_reads)
-        cb_code, cb_valid, translated, n_corr = _barcode_map(ucb, cb_reads, cb_len, whitelist_codes, translation)
+        cb_code, cb_valid, translated, n_corr = _barcode_map(
+            ucb, cb_reads, cb_len, whitelist_codes, translation
+        )
         bmap = (ucb, cb_code, cb_valid, translated)
         # shard by corrected barcode; invalid barcodes get their own shard (they still count in the read statistics)
         shard_of = np.where(cb_valid, (cb_code % np.uint64(shards)).astype(np.int64), shards)
@@ -533,7 +581,9 @@ def count_library(r1_paths, r2_paths, *, cb_len: int, umi_len: int, offset: int,
     m_bc = np.concatenate([p[0] for p in parts]) if parts else np.zeros(0, np.uint64)
     m_ft = np.concatenate([p[1] for p in parts]) if parts else np.zeros(0, np.int64)
     mol_reads = np.concatenate([p[2] for p in parts]) if parts else np.zeros(0, np.int64)
-    unmatched = sorted(((q.decode(), c) for q, c in unm.items()), key=lambda x: -x[1])[:N_UNMATCHED_KEEP]
+    unmatched = sorted(((q.decode(), c) for q, c in unm.items()), key=lambda x: -x[1])[
+        :N_UNMATCHED_KEEP
+    ]
 
     # GEX columns
     gb = [b.split("-")[0] for b in gex_barcodes]
@@ -545,8 +595,9 @@ def count_library(r1_paths, r2_paths, *, cb_len: int, umi_len: int, offset: int,
     col = np.where(col >= 0, go[np.maximum(col, 0)], -1)
     inside = col >= 0
     n_cols = len(gb)
-    M = sparse.coo_matrix((np.ones(inside.sum(), np.uint32), (m_ft[inside], col[inside])),
-                          shape=(nf, n_cols)).tocsc()
+    M = sparse.coo_matrix(
+        (np.ones(inside.sum(), np.uint32), (m_ft[inside], col[inside])), shape=(nf, n_cols)
+    ).tocsc()
     M.sum_duplicates()
     M.data = M.data.astype(np.uint32)
     st["molecules_in_gex_columns"] = int(inside.sum())
@@ -588,9 +639,17 @@ def best_translation(sample_cb, gex_codes_sorted, path):
 def save_npz(path: str, lc: LibraryCounts, extra: Optional[dict] = None):
     M = lc.matrix
     meta = dict(stats=lc.stats, unmatched=lc.unmatched, **(extra or {}))
-    np.savez_compressed(path, indptr=M.indptr, indices=M.indices, data=M.data, shape=np.array(M.shape),
-                        features=np.array(lc.features), ambient=lc.ambient, outside_totals=lc.outside_totals,
-                        meta=np.array(json.dumps(meta)))
+    np.savez_compressed(
+        path,
+        indptr=M.indptr,
+        indices=M.indices,
+        data=M.data,
+        shape=np.array(M.shape),
+        features=np.array(lc.features),
+        ambient=lc.ambient,
+        outside_totals=lc.outside_totals,
+        meta=np.array(json.dumps(meta)),
+    )
 
 
 def load_npz(path: str):

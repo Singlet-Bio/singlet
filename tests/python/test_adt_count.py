@@ -3,7 +3,6 @@
 
 import numpy as np
 import pytest
-
 from singlet.adt import count as C
 from singlet.adt import seq as S
 
@@ -43,8 +42,14 @@ def test_neighbours_are_hamming1():
 def test_feature_index_exact_h1_ambiguous_and_n():
     panel = ["AAAAAAAAAAAAAAA", "CCCCCCCCCCCCCCC", "AAAAAAAAAAAAAAC"]  # 0 and 2 are at distance 1
     fx = C.FeatureIndex(panel)
-    q = ["CCCCCCCCCCCCCCC", "CCCCCCCGCCCCCCC", "AAAAAAAAAAAAAAG", "GGGGGGGGGGGGGGG", "CCCCNCCCCCCCCCC",
-         "AAAAAAAAAAAAAAA"]
+    q = [
+        "CCCCCCCCCCCCCCC",
+        "CCCCCCCGCCCCCCC",
+        "AAAAAAAAAAAAAAG",
+        "GGGGGGGGGGGGGGG",
+        "CCCCNCCCCCCCCCC",
+        "AAAAAAAAAAAAAAA",
+    ]
     idx, corr = fx.assign(S.as_bytes_matrix(q, 15))
     # AAAA..G is a neighbour of both panel 0 and panel 2 -> ambiguous
     assert idx.tolist() == [1, 1, -2, -1, 1, 0]
@@ -77,7 +82,9 @@ def test_simulated_library_recovers_truth():
     wl = sorted(set(rand_seq(3000, 16)))
     wl_codes = np.sort(S.encode_strings(wl, 16)[0])
     cells = wl[:200]
-    gex = cells[:150] + wl[1000:1100]  # 50 cells missing from the GEX columns (they count as ambient)
+    gex = (
+        cells[:150] + wl[1000:1100]
+    )  # 50 cells missing from the GEX columns (they count as ambient)
     panel = rand_seq(12, 15)
     truth = RNG.poisson(8, size=(len(panel), len(cells)))
     pairs = []
@@ -95,8 +102,17 @@ def test_simulated_library_recovers_truth():
                         s2 = mutate(s2)
                     pairs.append(((c1 + u1).encode(), ("NNNNNNNNNN" + s2 + "TTTT").encode()))
     RNG.shuffle(pairs)
-    lc = C.count_library(None, None, cb_len=16, umi_len=12, offset=10, panel_sequences=panel,
-                         whitelist_codes=wl_codes, gex_barcodes=[g + "-1" for g in gex], pairs=iter(pairs))
+    lc = C.count_library(
+        None,
+        None,
+        cb_len=16,
+        umi_len=12,
+        offset=10,
+        panel_sequences=panel,
+        whitelist_codes=wl_codes,
+        gex_barcodes=[g + "-1" for g in gex],
+        pairs=iter(pairs),
+    )
     M = lc.matrix.toarray()
     assert M.shape == (len(panel), len(gex))
     got = M[:, :150]
@@ -112,8 +128,9 @@ def test_simulated_library_recovers_truth():
 
 
 def test_short_reads_are_skipped():
-    keys, counts, st = C.collapse_reads(iter([(b"A" * 28, b"C" * 30), (b"A" * 20, b"C" * 30), (b"A" * 28, b"C" * 12)]),
-                                        28, 10, 15)
+    keys, counts, st = C.collapse_reads(
+        iter([(b"A" * 28, b"C" * 30), (b"A" * 20, b"C" * 30), (b"A" * 28, b"C" * 12)]), 28, 10, 15
+    )
     assert st == {"reads": 3, "reads_short": 2}
     assert counts.tolist() == [1]
 
@@ -127,7 +144,13 @@ def test_empty_inputs(n):
 def test_mixed_length_panel():
     panel = ["ACGTACGTACGTACG", "TTTTTTTTTTTTTT", "GGGGGGGGGGGGGGG"]  # one 14-nt control
     fx = C.FeatureIndex(panel)
-    q = ["ACGTACGTACGTACG", "TTTTTTTTTTTTTTA", "TTTTTTTTTTTTTAC", "GGGGGGGGGGGGGGC", "CCCCCCCCCCCCCCC"]
+    q = [
+        "ACGTACGTACGTACG",
+        "TTTTTTTTTTTTTTA",
+        "TTTTTTTTTTTTTAC",
+        "GGGGGGGGGGGGGGC",
+        "CCCCCCCCCCCCCCC",
+    ]
     idx, corr = fx.assign(S.as_bytes_matrix(q, 15))
     assert idx.tolist() == [0, 1, 1, 2, -1]
     assert corr.tolist() == [False, False, True, True, False]
@@ -149,13 +172,30 @@ def test_sharded_equals_single_pass(tmp_path):
                     pairs.append(((c1 + u1).encode(), ("A" * 10 + fs + "TT").encode()))
     # unmatched feature reads and a barcode with N
     pairs += [((c + "ACGTACGTACGT").encode(), b"A" * 10 + b"GGGGGGGGGGGGGGG") for c in cells[:5]]
-    pairs += [(("N" + c[1:] + "ACGTACGTACGT").encode(), ("A" * 10 + panel[0]).encode()) for c in cells[:5]]
-    kw = dict(cb_len=16, umi_len=12, offset=10, panel_sequences=panel, whitelist_codes=wl_codes,
-              gex_barcodes=cells[:40] + wl[500:520])
+    pairs += [
+        (("N" + c[1:] + "ACGTACGTACGT").encode(), ("A" * 10 + panel[0]).encode()) for c in cells[:5]
+    ]
+    kw = dict(
+        cb_len=16,
+        umi_len=12,
+        offset=10,
+        panel_sequences=panel,
+        whitelist_codes=wl_codes,
+        gex_barcodes=cells[:40] + wl[500:520],
+    )
     a = C.count_library(None, None, pairs=iter(list(pairs)), **kw)
-    b = C.count_library(None, None, pairs_factory=lambda: iter(list(pairs)), shards=7, tmpdir=str(tmp_path), **kw)
+    b = C.count_library(
+        None, None, pairs_factory=lambda: iter(list(pairs)), shards=7, tmpdir=str(tmp_path), **kw
+    )
     assert (a.matrix.toarray() == b.matrix.toarray()).all()
     assert (a.ambient == b.ambient).all()
-    for k in ("reads", "reads_valid_barcode", "reads_feature_exact", "molecules", "reads_usable", "barcodes_corrected"):
+    for k in (
+        "reads",
+        "reads_valid_barcode",
+        "reads_feature_exact",
+        "molecules",
+        "reads_usable",
+        "barcodes_corrected",
+    ):
         assert a.stats[k] == b.stats[k], k
     assert dict(a.unmatched) == dict(b.unmatched)

@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 import pytest
 from scipy import sparse
-
 from singlet.adt import hto as H
 from singlet.adt import normalize as N
 from singlet.adt import panel as P
@@ -26,30 +25,55 @@ def synth(n_cells=400, n_empty=1500, hashtags=4):
     ambient = np.array([30, 20, 25, 5] + [10] * hashtags, float)
     X[:, n_cells:] = RNG.poisson(ambient[:, None] / ambient.sum() * 8, size=(k, n_empty))
     for j, t in enumerate(types):
-        X[:len(ab), j] = RNG.poisson(ambient[:len(ab)] / 10)
+        X[: len(ab), j] = RNG.poisson(ambient[: len(ab)] / 10)
         X[t, j] += RNG.poisson(300)
         if hashtags:
-            X[len(ab):, j] = RNG.poisson(3, hashtags)
+            X[len(ab) :, j] = RNG.poisson(3, hashtags)
             X[len(ab) + j % hashtags, j] += RNG.poisson(200)
-    genes = ["ENSG00000198851|CD3E", "ENSG00000177455|CD19", "ENSG00000170458|CD14", "ENSG00000000001|OTHER"]
+    genes = [
+        "ENSG00000198851|CD3E",
+        "ENSG00000177455|CD19",
+        "ENSG00000170458|CD14",
+        "ENSG00000000001|OTHER",
+    ]
     E = np.zeros((4, n_cells + n_empty), dtype=np.int64)
     E[3] = RNG.poisson(50, n_cells + n_empty)
     for j, t in enumerate(types):
         E[t, j] = RNG.poisson(5)
     names = ab + [f"Hashtag {i + 1}" for i in range(hashtags)]
-    panel = pd.DataFrame({"name": names, "sequence": [f"{'ACGT'[i % 4] * 14}{'ACGT'[i // 4]}" for i in range(k)],
-                          "kind": ["antibody"] * 3 + ["isotype"] + ["hashtag"] * hashtags,
-                          "ensembl": ["ENSG00000198851", "ENSG00000177455", "ENSG00000170458", ""] + [""] * hashtags,
-                          "barcode_id": [f"A{i:04d}" for i in range(k)]})
+    panel = pd.DataFrame(
+        {
+            "name": names,
+            "sequence": [f"{'ACGT'[i % 4] * 14}{'ACGT'[i // 4]}" for i in range(k)],
+            "kind": ["antibody"] * 3 + ["isotype"] + ["hashtag"] * hashtags,
+            "ensembl": ["ENSG00000198851", "ENSG00000177455", "ENSG00000170458", ""]
+            + [""] * hashtags,
+            "barcode_id": [f"A{i:04d}" for i in range(k)],
+        }
+    )
     called = np.zeros(n_cells + n_empty, bool)
     called[:n_cells] = True
     bcs = ["".join(RNG.choice(list("ACGT"), 16)) + "-1" for _ in range(n_cells + n_empty)]
-    return sparse.csc_matrix(X.astype(np.uint32)), panel, called, sparse.csc_matrix(E.astype(np.uint32)), genes, \
-        types, bcs
+    return (
+        sparse.csc_matrix(X.astype(np.uint32)),
+        panel,
+        called,
+        sparse.csc_matrix(E.astype(np.uint32)),
+        genes,
+        types,
+        bcs,
+    )
 
 
-STATS = {"reads": 1_000_000, "reads_valid_barcode": 900_000, "reads_feature_exact": 800_000,
-         "reads_feature_corrected": 20_000, "saturation": 0.6, "molecules": 300_000, "reads_usable": 780_000}
+STATS = {
+    "reads": 1_000_000,
+    "reads_valid_barcode": 900_000,
+    "reads_feature_exact": 800_000,
+    "reads_feature_corrected": 20_000,
+    "saturation": 0.6,
+    "molecules": 300_000,
+    "reads_usable": 780_000,
+}
 
 
 def test_library_qc_passes_and_concords():
@@ -62,7 +86,12 @@ def test_library_qc_passes_and_concords():
     assert lib["hto_singlet_share"] > 0.9
     assert lib["verdict"] in ("pass", "warn") and not lib["failed"]
     df = Q.cell_table(M, panel, res["cells"], res["hto"])
-    assert len(df) == called.sum() and set(df.columns) >= {"col", "adt_total", "hto_call", "isotype_share"}
+    assert len(df) == called.sum() and set(df.columns) >= {
+        "col",
+        "adt_total",
+        "hto_call",
+        "isotype_share",
+    }
     # hashtag calls are the designed hashtag
     assert (df.hto_call.values == np.arange(len(df)) % 4).mean() > 0.9
 
@@ -91,7 +120,9 @@ def test_clr_and_dsb_shapes_and_signal():
 
 def test_hashed_drops_doublets():
     amb = np.array([10, 10, 10.0])
-    cells = np.array([[200, 3, 2], [180, 190, 2], [1, 2, 3]]).T  # singlet, doublet, negative (columns)
+    cells = np.array(
+        [[200, 3, 2], [180, 190, 2], [1, 2, 3]]
+    ).T  # singlet, doublet, negative (columns)
     cells = np.hstack([cells] + [np.array([[150 + i, 2, 3]]).T for i in range(30)])
     call, lt, ls = H.hashed_drops(cells, amb)
     assert call[0] == 0 and call[1] == -2 and call[2] == -1
@@ -125,7 +156,9 @@ def test_members_roundtrip():
 def test_hto_feature_sidecar():
     pytest.importorskip("pyarrow")
     call = np.array([0, 1, -1, -2])
-    t, names = H.feature_sidecar("GSM1", np.array([3, 5, 8, 9]), call, np.array([3.0, 1.0, 0.2, 0.1]), ["H1", "H2"])
+    t, names = H.feature_sidecar(
+        "GSM1", np.array([3, 5, 8, 9]), call, np.array([3.0, 1.0, 0.2, 0.1]), ["H1", "H2"]
+    )
     assert t.column("hto/call").to_pylist() == [2, 3, 0, 1]
     m = t.column("hto/margin").to_pylist()
     assert m[2] == 0 and 0 < m[1] < m[0] < 1
@@ -161,17 +194,26 @@ def test_discover_flags_reused_and_cross_species_barcodes():
     pan = P.discover(feats, cat, organism="Homo sapiens")
     assert pan.status == "ambiguous"
     assert pan.notes["reused_share"] > 0.9
-    mouse_only = cat[(cat.reactivity == "Mouse") & (cat.reused == "") & (cat.kind == "antibody")].sequence.iloc[:2]
-    pan = P.discover([q.encode() for q in mouse_only for _ in range(300)], cat, organism="Homo sapiens")
+    mouse_only = cat[
+        (cat.reactivity == "Mouse") & (cat.reused == "") & (cat.kind == "antibody")
+    ].sequence.iloc[:2]
+    pan = P.discover(
+        [q.encode() for q in mouse_only for _ in range(300)], cat, organism="Homo sapiens"
+    )
     assert pan.status == "ambiguous" and pan.notes["reactivity_mismatch_share"] > 0.9
-    pan = P.discover([q.encode() for q in mouse_only for _ in range(300)], cat, organism="Mus musculus")
+    pan = P.discover(
+        [q.encode() for q in mouse_only for _ in range(300)], cat, organism="Mus musculus"
+    )
     assert pan.status == "ok"
 
 
 def test_modalities_vocabulary_has_adt_and_hto():
     from singlet.v2 import client
 
-    assert client.MODALITIES["adt"].members == (ST.MEMBERS[0],) and client.MODALITIES["adt"].slot == "obsm"
+    assert (
+        client.MODALITIES["adt"].members == (ST.MEMBERS[0],)
+        and client.MODALITIES["adt"].slot == "obsm"
+    )
     assert client.MODALITIES["hto"].members == (ST.MEMBERS[1],)
     for alias, name in (("protein", "adt"), ("cite", "adt"), ("hashtag", "hto")):
         assert client._MODALITY_ALIASES[alias] == name
@@ -181,8 +223,10 @@ def test_reference_with_repeated_sequences_and_missing_ids(tmp_path):
     cat = P.load_catalog()
     h1 = cat[cat.kind == "hashtag"].iloc[0]
     p = tmp_path / "ref.csv"
-    p.write_text("name,sequence\nControl 1-HTO,%s\nControl 2-HTO,%s\nCustomAb,ACGTTGCAACGTAGC\nCustomAb,TTTTGGGGCCCCAAA\n"
-                 % (h1.sequence, h1.sequence))
+    p.write_text(
+        "name,sequence\nControl 1-HTO,%s\nControl 2-HTO,%s\nCustomAb,ACGTTGCAACGTAGC\nCustomAb,TTTTGGGGCCCCAAA\n"
+        % (h1.sequence, h1.sequence)
+    )
     ref = P.annotate_from_catalog(P.read_feature_reference(str(p)), cat)
     assert ref.sequence.is_unique and ref.name.is_unique
     assert ref.name.iloc[0] == h1.specificity and "Control 2-HTO" in ref.aliases.iloc[0]

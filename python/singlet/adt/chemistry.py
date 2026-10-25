@@ -27,15 +27,23 @@ class Chemistry:
     name: str
     cb_len: int
     umi_len: int
-    whitelist: Optional[str]  # file name under WL_BASE, None = no whitelist (barcodes taken from the GEX columns)
-    translation: Optional[str] = None  # feature-barcode -> GEX barcode table, used only when the reads ask for it
+    whitelist: Optional[
+        str
+    ]  # file name under WL_BASE, None = no whitelist (barcodes taken from the GEX columns)
+    translation: Optional[str] = (
+        None  # feature-barcode -> GEX barcode table, used only when the reads ask for it
+    )
     supported: bool = True
 
 
 CHEMISTRIES = {
     "10xv2": Chemistry("10xv2", 16, 10, "737K-august-2016.txt.gz"),
-    "10xv3": Chemistry("10xv3", 16, 12, "3M-february-2018.txt.gz", "translation_3M-february-2018.txt.gz"),
-    "10xv4": Chemistry("10xv4", 16, 12, "3M-3pgex-may-2023.txt.gz", "translation_3M-3pgex-may-2023.txt.gz"),
+    "10xv3": Chemistry(
+        "10xv3", 16, 12, "3M-february-2018.txt.gz", "translation_3M-february-2018.txt.gz"
+    ),
+    "10xv4": Chemistry(
+        "10xv4", 16, 12, "3M-3pgex-may-2023.txt.gz", "translation_3M-3pgex-may-2023.txt.gz"
+    ),
     "10x5v1": Chemistry("10x5v1", 16, 10, "737K-august-2016.txt.gz"),
     "10x5v2": Chemistry("10x5v2", 16, 10, "737K-august-2016.txt.gz"),
     "10x5v3": Chemistry("10x5v3", 16, 12, "3M-5pgex-jan-2023.txt.gz"),
@@ -47,8 +55,16 @@ CHEMISTRIES = {
 # atlas protocol names -> chemistry. The atlas calls 5' v1/v2 libraries "10xv2" (same barcodes, same 16+10 R1), which is
 # right for counting: only the R2 offset differs, and that is measured.
 PROTOCOL_ALIASES = {
-    "10xv2": "10xv2", "10xv3-5p": "10x5v3", "10xv3": "10xv3", "10xv3.1": "10xv3", "10xv4": "10xv4", "10x5": "10x5v2", "10x5v1": "10x5v1",
-    "10x5v2": "10x5v2", "10x-5p": "10x5v2", "10x5p": "10x5v2",
+    "10xv2": "10xv2",
+    "10xv3-5p": "10x5v3",
+    "10xv3": "10xv3",
+    "10xv3.1": "10xv3",
+    "10xv4": "10xv4",
+    "10x5": "10x5v2",
+    "10x5v1": "10x5v1",
+    "10x5v2": "10x5v2",
+    "10x-5p": "10x5v2",
+    "10x5p": "10x5v2",
 }
 
 
