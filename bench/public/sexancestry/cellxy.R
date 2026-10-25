@@ -23,11 +23,15 @@ for (d in list.dirs(file.path(work, "mtx"), recursive = FALSE)) {
   # perCellQCFilters, 3-MAD outliers) depends on the block, so blocks are random subsets of >= 5000 cells.
   n <- ncol(m); set.seed(1); idx <- sample.int(n); nb <- max(1, floor(n / 5000)); blocks <- split(idx, rep_len(seq_len(nb), n))
   pq <- pn <- setNames(rep(NA_character_, n), colnames(m))
-  for (b in blocks) {
-    sub <- m[, b, drop = FALSE]
-    r1 <- classifySex(sub, genome = genome, qc = TRUE); pq[rownames(r1)] <- r1$prediction
-    r2 <- classifySex(sub, genome = genome, qc = FALSE); pn[rownames(r2)] <- r2$prediction
-  }
+  ok <- tryCatch({
+    for (b in blocks) {
+      sub <- m[, b, drop = FALSE]
+      r1 <- classifySex(sub, genome = genome, qc = TRUE); pq[rownames(r1)] <- r1$prediction
+      r2 <- classifySex(sub, genome = genome, qc = FALSE); pn[rownames(r2)] <- r2$prediction
+    }
+    TRUE
+  }, error = function(e) { message(gsm, ": classifySex failed: ", conditionMessage(e)); FALSE })
+  if (!ok) next   # no cellXY output: the sample is reported as left out, never scored with partial calls
   secs <- proc.time()[["elapsed"]] - t0
   write.table(data.frame(col = cols, pred_qc = pq, pred_noqc = pn), out, sep = "\t", quote = FALSE, row.names = FALSE)
   cat(sprintf('{"gsm": "%s", "n_cells": %d, "cellxy_s": %.2f}\n', gsm, n, secs),
