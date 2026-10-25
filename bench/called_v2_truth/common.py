@@ -112,8 +112,15 @@ def _spline_knee(xs, ys):
 
 
 def knee_current(totals, lower, exclude_from=50):
-    """What called_v2 uses today (cellcall.knee)."""
-    return CC.knee(np.asarray(totals), lower, exclude_from)
+    """What called_v2 2.0 used (cellcall.knee before the fix: the spline over every total > lower). Computed here, so the
+    study reproduces with the fixed cellcall (2.1, whose ``knee`` is ``knee_bounded``) as well."""
+    u, rr = _rank_curve(np.asarray(totals), lower)
+    if len(u) <= exclude_from + 5:
+        return float("nan")
+    try:
+        return _spline_knee(np.log10(rr)[exclude_from:], np.log10(u)[exclude_from:])
+    except Exception:
+        return float("nan")
 
 
 def knee_bounded(totals, lower, exclude_from=50, return_bounds=False):

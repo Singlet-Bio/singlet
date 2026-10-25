@@ -451,6 +451,8 @@ class LocalStore(StoreBase):
         self.ops: List[Tuple[str, str, str]] = []
         self.fail: Dict[Tuple[str, str], int] = {}  # (op, key) -> number of calls still to fail (fault injection)
         self._lock = threading.Lock()
+        # Final replaces and reads take this lock: on Windows a file cannot be replaced while another thread has it open.
+        self._io = threading.RLock()
 
     def _p(self, bucket: str, key: str) -> Path:
         return self.root / bucket / key
@@ -466,29 +468,38 @@ class LocalStore(StoreBase):
                 self.fail[(op, key)] = n - 1
                 raise OSError(f"injected failure: {op} {key}")
 
+    @staticmethod
+    def _tmp(dst: Path) -> Path:
+        # unique per writer: workers may store the same key (a shared pack) at the same time
+        return dst.with_name(f"{dst.name}.{os.getpid()}.{threading.get_ident()}.part")
+
     def _write_meta(self, bucket: str, key: str, meta: Dict[str, Any]) -> None:
         mp = self._mp(bucket, key)
         mp.parent.mkdir(parents=True, exist_ok=True)
-        mp.write_text(json.dumps(meta))
+        tmp = self._tmp(mp)
+        tmp.write_text(json.dumps(meta))
+        os.replace(tmp, mp)  # a concurrent head() never reads a half-written file
 
     def head(self, bucket: str, key: str) -> Optional[Head]:
         p = self._p(bucket, key)
-        if not p.is_file():
-            return None
-        mp = self._mp(bucket, key)
-        meta = json.loads(mp.read_text()) if mp.exists() else {}
-        etag = meta.get("etag") or hashlib.md5(p.read_bytes()).hexdigest()
-        return Head(p.stat().st_size, etag, dict(meta.get("metadata") or {}), meta.get("content_type"), meta.get("cache_control"))
+        with self._io:
+            if not p.is_file():
+                return None
+            mp = self._mp(bucket, key)
+            meta = json.loads(mp.read_text()) if mp.exists() else {}
+            etag = meta.get("etag") or hashlib.md5(p.read_bytes()).hexdigest()
+            return Head(p.stat().st_size, etag, dict(meta.get("metadata") or {}), meta.get("content_type"), meta.get("cache_control"))
 
     def read_range(self, bucket: str, key: str, start: int, end: int) -> bytes:
         self._log("read_range", bucket, key)
-        with open(self._p(bucket, key), "rb") as fh:
+        with self._io, open(self._p(bucket, key), "rb") as fh:
             fh.seek(start)
             return fh.read(end - start + 1)
 
     def get_bytes(self, bucket: str, key: str) -> bytes:
         self._log("get", bucket, key)
-        return self._p(bucket, key).read_bytes()
+        with self._io:
+            return self._p(bucket, key).read_bytes()
 
     def download(self, bucket: str, key: str, path: Path, *, if_match: Optional[str] = None, size: Optional[int] = None,
                  **_: Any) -> None:
@@ -498,30 +509,35 @@ class LocalStore(StoreBase):
             raise FileNotFoundError(f"{bucket}/{key}")
         if if_match and h.etag != if_match:
             raise LegacyChanged(f"{key} changed while it was being read")
-        shutil.copyfile(self._p(bucket, key), path)
+        with self._io:
+            shutil.copyfile(self._p(bucket, key), path)
 
     def list_keys(self, bucket: str, prefix: str) -> Iterator[Tuple[str, int]]:
         base = self.root / bucket
         if not base.is_dir():
             return
         for p in sorted(base.rglob("*")):
-            if p.is_file():
+            if p.is_file() and not p.name.endswith(".part"):  # a writer's temporary file is not an object
                 key = p.relative_to(base).as_posix()
                 if key.startswith(prefix):
-                    yield key, p.stat().st_size
+                    try:
+                        yield key, p.stat().st_size
+                    except FileNotFoundError:  # replaced or removed by a concurrent writer
+                        continue
 
     def _store(self, bucket: str, key: str, data_path: Optional[Path], data: Optional[bytes], etag: str, content_type: str,
                cache_control: str, metadata: Optional[Dict[str, str]]) -> None:
         dst = self._p(bucket, key)
         dst.parent.mkdir(parents=True, exist_ok=True)
-        tmp = dst.with_name(dst.name + ".part")
+        tmp = self._tmp(dst)
         if data_path is not None:
             shutil.copyfile(data_path, tmp)
         else:
             tmp.write_bytes(data or b"")
-        os.replace(tmp, dst)
-        self._write_meta(bucket, key, {"etag": etag, "content_type": content_type, "cache_control": cache_control,
-                                       "metadata": dict(metadata or {})})
+        with self._io:
+            os.replace(tmp, dst)
+            self._write_meta(bucket, key, {"etag": etag, "content_type": content_type, "cache_control": cache_control,
+                                           "metadata": dict(metadata or {})})
 
     def put_file(self, bucket: str, key: str, path: Path, *, content_type: str, cache_control: str,
                  metadata: Optional[Dict[str, str]] = None, part_size: int = PART_SIZE) -> str:
@@ -539,9 +555,10 @@ class LocalStore(StoreBase):
 
     def delete(self, bucket: str, key: str) -> None:
         self._log("delete", bucket, key)
-        for p in (self._p(bucket, key), self._mp(bucket, key)):
-            if p.exists():
-                p.unlink()
+        with self._io:
+            for p in (self._p(bucket, key), self._mp(bucket, key)):
+                if p.exists():
+                    p.unlink()
 
     def bucket_exists(self, bucket: str) -> bool:
         return (self.root / bucket).is_dir()
@@ -556,7 +573,8 @@ class LocalStore(StoreBase):
         h = self.head(src_bucket, src_key)
         if h is None:
             raise FileNotFoundError(f"{src_bucket}/{src_key}")
-        data = self._p(src_bucket, src_key).read_bytes()
+        with self._io:
+            data = self._p(src_bucket, src_key).read_bytes()
         multipart = len(data) > self.copy_single_max
         if multipart:  # like S3: the new object's ETag is the composite over the copied parts
             etag = composite_etag([hashlib.md5(data[i : i + self.copy_part]).digest() for i in range(0, len(data), self.copy_part)])
@@ -566,8 +584,11 @@ class LocalStore(StoreBase):
                 "storage_class": storage_class}
         dst = self._p(dst_bucket, dst_key)
         dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_bytes(data)
-        self._write_meta(dst_bucket, dst_key, meta)
+        tmp = self._tmp(dst)
+        tmp.write_bytes(data)
+        with self._io:
+            os.replace(tmp, dst)
+            self._write_meta(dst_bucket, dst_key, meta)
         return etag, multipart
 
 
