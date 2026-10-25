@@ -34,7 +34,7 @@ print(len(af), "panel sites")
 EOF
 rm -f $O/af.chr*.tsv.part
 # downloads in parallel first (one EBI stream is slow); curl -C - resumes partial files
-cat $O/vcf_names.txt | xargs -P 8 -I{} sh -c '[ -s "$0/{}.ok" ] || { curl -sSL --retry 5 -C - -o "$0/{}" "$1/{}" && touch "$0/{}.ok"; }' $R $BASE
+cat $O/vcf_names.txt | xargs -P 8 -I{} sh -c '[ -e "$0/{}.ok" ] || { curl -sSL --retry 5 -C - -o "$0/{}" "$1/{}" && touch "$0/{}.ok"; }' $R $BASE
 for f in $(cat $O/vcf_names.txt); do
   c=$(echo $f | grep -oE 'chr[0-9]+'); out=$O/af.$c.tsv
   [ -s $out ] && continue
