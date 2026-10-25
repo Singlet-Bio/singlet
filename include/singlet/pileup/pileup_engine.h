@@ -434,6 +434,8 @@ public:
         if (config_.count_mt) {
             mt_acc_.set_barcodes(barcodes_);
             mt_acc_.set_n_features(mt::MT_N_FEATURES);
+            mt_acc_rev_.set_barcodes(barcodes_);
+            mt_acc_rev_.set_n_features(mt::MT_N_FEATURES);
         }
 
         // N18: Initialize CRISPR guide accumulator
@@ -964,7 +966,8 @@ public:
             }
 
             // ── Inline chrM base pileup for heteroplasmy ──
-            if (config_.count_mt && is_chrm(tid)) {
+            // MAPQ gate: multimapped reads (NH>1, low MAPQ; e.g. NUMT-derived) reach this point, so require high_mapq here.
+            if (config_.count_mt && high_mapq && is_chrm(tid)) {
                 PROF_START(mt_pileup);
                 pileup_mt_bases(b, static_cast<uint32_t>(bc_idx), stats);
                 PROF_END(prof, mt_pileup);
@@ -1071,6 +1074,8 @@ public:
 
         // chrM allele counts (if count_mt enabled)
         SparseAccumulator<uint16_t> mt;
+        // chrM reverse-strand allele counts (subset of `mt`; forward = mt - mt_rev)
+        SparseAccumulator<uint16_t> mt_rev;
 
         // chrM indel events captured during CIGAR walk
         std::vector<mt::MtIndelEvent> mt_indels;
@@ -1219,6 +1224,8 @@ public:
             if (config_.count_mt) {
                 wc.mt.set_barcodes(barcodes_);
                 wc.mt.set_n_features(mt::MT_N_FEATURES);
+                wc.mt_rev.set_barcodes(barcodes_);
+                wc.mt_rev.set_n_features(mt::MT_N_FEATURES);
             }
             // N18: CRISPR guide worker init
             if (!guide_ref_.empty()) {
@@ -1452,6 +1459,7 @@ public:
         merge_accumulators(snp_dp_, workers, [](WorkerContext& w) -> SparseAccumulator<uint8_t>& { return w.snp_dp; });
         if (config_.count_mt) {
             merge_accumulators(mt_acc_, workers, [](WorkerContext& w) -> SparseAccumulator<uint16_t>& { return w.mt; });
+            merge_accumulators(mt_acc_rev_, workers, [](WorkerContext& w) -> SparseAccumulator<uint16_t>& { return w.mt_rev; });
             for (auto& wc : workers) {
                 mt_indels_.insert(mt_indels_.end(),
                     std::make_move_iterator(wc.mt_indels.begin()),
@@ -1570,6 +1578,8 @@ public:
     const SparseAccumulator<uint16_t>& introns() const { return intron_acc_; }
     const SparseAccumulator<uint16_t>& splice_junctions() const { return sj_acc_; }
     const SparseAccumulator<uint16_t>& mt_alleles() const { return mt_acc_; }
+    /// Reverse-strand subset of mt_alleles() (same feature layout); forward-strand = total - reverse.
+    const SparseAccumulator<uint16_t>& mt_alleles_rev() const { return mt_acc_rev_; }
     const std::vector<mt::MtIndelEvent>& mt_indels() const { return mt_indels_; }
 
     // N18: CRISPR guide counts accessor
@@ -1846,6 +1856,7 @@ private:
     SparseAccumulator<uint16_t> intron_acc_;
     SparseAccumulator<uint16_t> sj_acc_;
     SparseAccumulator<uint16_t> mt_acc_;   // chrM allele counts: feat = pos*4 + base
+    SparseAccumulator<uint16_t> mt_acc_rev_;  // chrM reverse-strand allele counts (same layout)
     std::vector<mt::MtIndelEvent> mt_indels_;  // chrM indels captured during CIGAR walk
     UmiDedup snp_umi_dedup_;  // UMI dedup for SNP positions
     UmiDedup sj_umi_dedup_;  // UMI dedup for splice junctions
@@ -2463,6 +2474,8 @@ private:
                         int8_t bidx = mt::BASE_TO_IDX[base_code];
                         if (bidx < 0) continue;
                         mt_acc_.increment(mt::mt_feature(rp, bidx), bc_idx);
+                        if (b->core.flag & BAM_FREVERSE)
+                            mt_acc_rev_.increment(mt::mt_feature(rp, bidx), bc_idx);
                         stats.mt_pileup_bases++;
                     }
                     ref_pos += len;
@@ -2514,6 +2527,8 @@ private:
                         int8_t bidx = mt::BASE_TO_IDX[base_code];
                         if (bidx < 0) continue;
                         wc.mt.increment(mt::mt_feature(rp, bidx), bc_idx);
+                        if (b->core.flag & BAM_FREVERSE)
+                            wc.mt_rev.increment(mt::mt_feature(rp, bidx), bc_idx);
                         wc.stats.mt_pileup_bases++;
                     }
                     ref_pos += len;
@@ -3190,7 +3205,8 @@ private:
         }
 
         // ── Inline chrM base pileup for heteroplasmy ──
-        if (config_.count_mt && is_chrm(tid)) {
+        // MAPQ gate: multimapped reads (NH>1, low MAPQ; e.g. NUMT-derived) reach this point, so require high_mapq here.
+        if (config_.count_mt && high_mapq && is_chrm(tid)) {
             pileup_mt_bases_parallel(wc, b, static_cast<uint32_t>(bc_idx));
         }
     }

@@ -138,11 +138,13 @@ add_pileup_test(test_summary_json)
 
 # Doublet / ambient / dedup
 add_pileup_test(test_doublet_detect_v2)
+add_pileup_test(test_doublet_calibration)   # v7 Scrublet-style scorer: planted doublets, rate-calibrated calls, determinism
 add_pileup_test(test_ambient_profile)
 add_pileup_test(test_read_dedup_stats)
 add_pileup_test(test_donor_demux_perf)
 add_pileup_test(test_wl_ambient)
 add_pileup_test(test_ambient_realistic)
+add_pileup_test(test_ambient_decontx)   # gene-level cluster-EM ambient estimator + integer corrected matrix
 add_pileup_test(test_sparse_accumulator)
 add_pileup_test(test_pseudocount_sensitivity)
 add_pileup_test(test_gray_zone)
@@ -150,6 +152,7 @@ add_pileup_test(test_mc_pvalue_calibration)
 
 # Modality-specific
 add_pileup_test(test_mt_events)
+add_pileup_test(test_mt_caller)   # reference-based, strand-aware chrM caller + private haplotype outputs
 add_pileup_test(test_rna_variant_caller)
 add_pileup_test(test_longread)
 add_pileup_test(test_methyl)
@@ -210,6 +213,7 @@ add_pileup_test(test_nonhost_sylph)
 add_pileup_test(test_1fq_header)
 add_pileup_test(test_cascade_stats)
 add_pileup_test(test_donor_k1_workaround)
+add_pileup_test(test_demux_doublet_autok)   # genotype doublets + held-out auto-K on synthetic pools
 add_pileup_test(test_feature_barcode_detect)
 add_pileup_test(test_ram_tier)
 add_pileup_test(test_species_short_r2)
