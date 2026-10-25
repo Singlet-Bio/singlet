@@ -3339,11 +3339,9 @@ int main(int argc, char* argv[]) {
             if (stat(cand.c_str(), &sst) == 0) {
                 config.snp_path = cand;
                 snp_panel_source = "default";
-                std::cerr << "[singlet] Default SNP panel (--pipeline): " << cand << "
-";
+                std::cerr << "[singlet] Default SNP panel (--pipeline): " << cand << "\n";
             } else {
-                std::cerr << "[singlet] WARNING: default SNP panel not found: " << cand << " (no donor demux)
-";
+                std::cerr << "[singlet] WARNING: default SNP panel not found: " << cand << " (no donor demux)\n";
             }
         }
     }
