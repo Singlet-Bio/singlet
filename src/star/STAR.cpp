@@ -1,5 +1,8 @@
 #include "StarProfile.h"
 #include <chrono>
+#ifdef SINGLET_PGO_GENERATE
+extern "C" void __gcov_dump(void);
+#endif
 #include <sys/types.h>
 #include <sys/stat.h>
 #ifdef __linux__
@@ -352,6 +355,12 @@ int star_main_impl(int argInN, char *argIn[])
     };
 
     delete P.inOut; // to close files
+
+#ifdef SINGLET_PGO_GENERATE
+    // profile-generate builds (src/star/pgo/pgo_build.sh): the pipeline's STAR child leaves with
+    // _exit(), which skips the gcov atexit handler, so write the profile here
+    __gcov_dump();
+#endif
 
     return 0;
 };
