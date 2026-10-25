@@ -25,7 +25,7 @@ import scipy.sparse as sp
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(ROOT, "python"))
-if os.environ.get("CELLCALL_REF"):  # another reference file, e.g. bench/called_v2_truth/cellcall_ref.py (VERSION 2.1)
+if os.environ.get("CELLCALL_REF"):  # another reference cellcall.py file
     import importlib.util
 
     _spec = importlib.util.spec_from_file_location("cellcall", os.environ["CELLCALL_REF"])

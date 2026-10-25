@@ -4,8 +4,8 @@
 // `called_v2`: the EmptyDrops cell call of docs/called-v2.md, ported from the reference implementation
 // python/singlet/v2/cellcall.py (call(), METHOD "singlet-emptydrops") so that the pipeline writes the same call the v2
 // migration computes from stored counts. VERSION "2.1" (docs/called-v2-truth.md) fits the retain knee between
-// DropletUtils' curve bounds (knee_bounded) and extrapolates the null tail for barcodes below every simulated path; until
-// the v2 team lands the identical change in cellcall.py the reference is bench/called_v2_truth/cellcall_ref.py.
+// DropletUtils' curve bounds (knee_bounded = cellcall.knee) and extrapolates the null tail for barcodes below every
+// simulated path. Shared golden vectors: tests/data/called_v2_golden/ (checked by tests/cpp/test_called_v2.cpp).
 //
 //   * counts: exon + intron per gene (gene = feature name before the first '_'), genes sorted by that key;
 //   * lower: the "plateau" rule; ambient pool: uncalled barcodes with 0 < total <= lower;
@@ -78,7 +78,7 @@ struct GeneCounts {
 
 struct Result {
     std::vector<uint8_t> called_v2;  ///< per barcode
-    std::vector<float> fdr;          ///< BH FDR (NaN = not tested)
+    std::vector<double> fdr;         ///< BH FDR (NaN = not tested; double since 2.1: tail p reach 1e-150)
     std::vector<double> pvalue;      ///< Monte Carlo p (NaN = not tested)
     std::vector<double> log_prob;    ///< DM log-probability of simulated barcodes (NaN otherwise)
     std::vector<int64_t> totals;     ///< exon + intron total per barcode
@@ -1333,7 +1333,7 @@ inline Result call(const GeneCounts& X, const std::vector<uint8_t>& called, cons
     auto fam = protocol_family(protocol);
     R.protocol_family = fam.first;
     R.validated = fam.second;
-    R.fdr.assign(n, std::numeric_limits<float>::quiet_NaN());
+    R.fdr.assign(n, nan);
     R.pvalue.assign(n, nan);
     R.log_prob.assign(n, nan);
     R.called_v2.assign(called.begin(), called.end());
@@ -1408,7 +1408,7 @@ inline Result call(const GeneCounts& X, const std::vector<uint8_t>& called, cons
     }
     std::vector<double> q = bh(pv);
     for (size_t i = 0; i < nt; ++i) {
-        R.fdr[ti[i]] = static_cast<float>(q[i]);
+        R.fdr[ti[i]] = q[i];
         R.pvalue[ti[i]] = pv[i];
         if (q[i] <= P.fdr) R.called_v2[ti[i]] = 1;
     }

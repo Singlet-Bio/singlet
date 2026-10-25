@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // tests/cpp/test_called_v2.cpp
 //
-// The C++ port of called_v2 (include/singlet/pileup/called_v2.h) against the Python reference (cellcall.call, VERSION
-// 2.1: bench/called_v2_truth/cellcall_ref.py until python/singlet/v2/cellcall.py carries the same change).
-// called_v2_fixture.h holds the reference output on two synthetic droplet samples that synth() below regenerates bit for
+// The C++ port of called_v2 (include/singlet/pileup/called_v2.h) against the Python reference
+// (python/singlet/v2/cellcall.py, VERSION 2.1). Every case of the shared golden vectors (tests/data/called_v2_golden/,
+// README there) is checked with the README's tolerances (golden_vectors below). called_v2_fixture.h holds the reference output on two synthetic droplet samples that synth() below regenerates bit for
 // bit (the second one exercises the 2.1 tail p-values), a barcode-rank curve on which the unbounded knee falls in the
 // ambient shoulder (the 2.1 curve bounds), plus reference values of the pieces (scipy gammaln, numba's RNG, scipy's
 // UnivariateSpline knots, numpy's quantile, the Good-Turing proportions). Regenerate it with
@@ -180,6 +180,13 @@ std::string json_str(const std::string& obj, const std::string& key) {
     return obj.substr(p + 1, obj.find('"', p + 1) - p - 1);
 }
 
+/// README "Comparing": |ln got - ln expected| <= tol * max(1, |ln expected|); zeros must match exactly.
+bool log_ok(double got, double want, double tol) {
+    if (want == 0 || got == 0) return got == want;
+    double lw = std::log(want), lg = std::log(got);
+    return std::fabs(lg - lw) <= tol * std::max(1.0, std::fabs(lw));
+}
+
 bool rel_ok(double got, double want, double tol) {
     if (std::isnan(want)) return std::isnan(got);
     if (want == 0) return got == 0;
@@ -243,25 +250,28 @@ void golden_case(const std::string& dir, const std::string& name) {
           "golden " + name + ": inputs read");
     const double floor_p = 1.0 / static_cast<double>(Params().niters + 1);
     const double alpha_ref = json_num(ex, "alpha");
-    // Two passes. "free": the call as the pipeline runs it; everything discrete must be exact, alpha agrees to
-    // fminbound's xatol (1e-4 in log alpha: the Good-Turing np.polyfit is not bit-exact, and on a flat likelihood a
-    // last-bit change moves the minimiser within its tolerance, which then shifts Monte Carlo counts and tail p).
-    // "pinned": alpha fixed to the reference value; then the README tolerances must hold for p-values and FDRs.
+    // README "Comparing": called_v2, lower, tested set, n_* exact; Monte Carlo and zero p exact; tail p and FDR on the log
+    // scale to 1e-6; alpha 1e-6 relative; retain_total 1e-9 relative. Two passes:
+    //   free   - the call as the pipeline runs it. Everything as the README, except tail p / FDR to 1e-5 on the log scale:
+    //            the Good-Turing np.polyfit (LAPACK gelsd) is not reproduced bit for bit, which moves alpha by up to ~7e-7
+    //            relative (inside the README's 1e-6) and a tail p at z ~ -30 by |z| x that (real_pbmc1k_v3: 2.2e-6).
+    //   pinned - alpha fixed to the reference value (Params::alpha_override): the README tolerances in full.
     for (int pass = 0; pass < 2; ++pass)
         for (int threads : {1, 4}) {
             Params P;
             if (pass == 1) P.alpha_override = alpha_ref;
+            const double log_tol = pass == 1 ? 1e-6 : 1e-5;
             Result R = call(X, called, json_str(cj, "protocol"), P, threads);
             const std::string t =
                 "golden " + name + (pass ? " pinned alpha" : " free") + " (threads=" + std::to_string(threads) + "): ";
             CHECK(R.lower == static_cast<int64_t>(json_num(ex, "lower")) && R.n_ambient == json_num(ex, "n_ambient") &&
-                      R.ambient_umi == json_num(ex, "ambient_umi") && R.n_tested == json_num(ex, "n_tested") &&
-                      rel_ok(R.retain_total, json_num(ex, "retain_total"), 1e-9),
-                  t + "lower, ambient pool, tested (exact), retain_total (1e-9)");
+                      R.ambient_umi == json_num(ex, "ambient_umi") && R.n_tested == json_num(ex, "n_tested"),
+                  t + "lower, ambient pool, n_tested (exact)");
+            CHECK(rel_ok(R.retain_total, json_num(ex, "retain_total"), 1e-9), t + "retain_total (1e-9)");
             if (pass == 0) {
                 std::printf("    %salpha C++ %.17g, reference %.17g (rel %.2g)\n", t.c_str(), R.alpha, alpha_ref,
                             R.alpha / alpha_ref - 1);
-                CHECK(rel_ok(R.alpha, alpha_ref, 1e-4), t + "alpha (fminbound xatol)");
+                CHECK(rel_ok(R.alpha, alpha_ref, 1e-6), t + "alpha (1e-6)");
             }
             CHECK(R.n_tail == json_num(ex, "n_tail") && R.n_called_v2 == json_num(ex, "n_called_v2") &&
                       R.n_added == json_num(ex, "n_added"),
@@ -269,28 +279,26 @@ void golden_case(const std::string& dir, const std::string& name) {
             int64_t ntested = 0;
             for (size_t j = 0; j < X.ncols; ++j) ntested += !std::isnan(R.pvalue[j]);
             int set_diff = 0, mc_diff = 0, tail_bad = 0, fdr_bad = 0;
-            double tail_rel = 0;
+            double tail_worst = 0;
             for (const Row& r : rows) {
                 set_diff += (R.called_v2[r.col] != r.cv2);
                 const double p = R.pvalue[r.col];
                 if (r.p > 0 && r.p < floor_p) {
-                    tail_bad += !rel_ok(p, r.p, 1e-6);
-                    tail_rel = std::max(tail_rel, std::fabs(p / r.p - 1));
-                } else if (!(p == r.p)) {
-                    ++mc_diff;
-                    if (pass == 1)
-                        std::printf("      col %d: p C++ %.17g, reference %.17g (%+.3f counts)\n", r.col, p, r.p,
-                                    (p - r.p) / floor_p);
+                    tail_bad += !log_ok(p, r.p, log_tol);
+                    if (p > 0)
+                        tail_worst = std::max(tail_worst, std::fabs(std::log(p) - std::log(r.p)) /
+                                                              std::max(1.0, std::fabs(std::log(r.p))));
+                } else {
+                    mc_diff += !(p == r.p);  // Monte Carlo (n_le + 1) / (niters + 1), or 0 at or above retain
                 }
-                fdr_bad += !rel_ok(R.fdr[r.col], r.q, 1e-6) && !(std::fabs(R.fdr[r.col] - r.q) < 1e-7);
+                fdr_bad += !log_ok(R.fdr[r.col], r.q, log_tol);
             }
-            std::printf("    %s%d called_v2, %d Monte Carlo p, %d tail p (max rel %.2g), %d FDR differ\n", t.c_str(),
-                        set_diff, mc_diff, tail_bad, tail_rel, fdr_bad);
+            std::printf("    %s%d called_v2, %d Monte Carlo p, %d tail p (worst log rel %.2g), %d FDR differ\n",
+                        t.c_str(), set_diff, mc_diff, tail_bad, tail_worst, fdr_bad);
             CHECK(ntested == static_cast<int64_t>(rows.size()) && set_diff == 0, t + "tested set and called_v2 (exact)");
-            if (pass == 1) {
-                CHECK(mc_diff == 0 && tail_bad == 0, t + "p-values (Monte Carlo exact, tail 1e-6)");
-                CHECK(fdr_bad == 0, t + "FDR (1e-6)");
-            }
+            CHECK(mc_diff == 0, t + "Monte Carlo and retained p-values (exact)");
+            CHECK(tail_bad == 0 && fdr_bad == 0,
+                  t + "tail p and FDR (log scale, " + (pass == 1 ? "1e-6" : "1e-5") + ")");
         }
 }
 

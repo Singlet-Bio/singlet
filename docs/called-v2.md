@@ -199,7 +199,7 @@ would need a `called_v2` bit to filter on.
 ## In the pipeline (C++ port, prod/atlas-rerun)
 
 `include/singlet/pileup/called_v2.h` is a port of `cellcall.call()` with the same parameters (version 2.1 since
-2026-10-25: bounded knee and tail p-values, see the top of this note). It is the pipeline's
+2026-10-25: bounded knee and tail p-values, see the correction at the top of this note). It is the pipeline's
 default cell caller (`--cell-caller called_v2`; `star_solo` and `emptydrops` keep the old callers):
 
 * The knee set `called` is STARsolo's `CellRanger2.2 3000 0.99 10` rule (`SoloFeature_cellFiltering.cpp`), computed
@@ -235,6 +235,31 @@ pinned venv (numpy 2.2 / scipy 1.15 / numba 0.64) and a newer env (numpy 2.5 / s
 against `cellcall.py` output (`bench/called_v2/make_cpp_fixture.py`). It requires identical `called_v2` sets and
 FDRs equal except for Monte Carlo ties. `bench/called_v2/equiv_cpp.py` runs the same comparison on real pipeline
 outputs.
+
+**Version 2.1 in C++** (2026-10-25). `knee_bounded()` (= `cellcall.knee`: the spline between DropletUtils' curve bounds,
+at least 6 points or the total at the left bound) gives `retain`; `knee()` keeps the 2.0 knee for reference. Barcodes below
+every simulated path get `p = min(Phi(z), 1/(niters+1))` (cephes `ndtr`, including its underflow to 0); the null mean and
+sd at each total are accumulated in the Monte Carlo kernel as exact fixed-point sums of deviations from path 0, so they do
+not depend on the thread count. Uncalled barcodes above 50,000 UMIs keep p = 1/(niters+1). The FDR is now kept in double
+(tail p reach 1e-200). `n_tail` is in the parameters. Both deviations from DropletUtils (the 6-point minimum, DropletUtils
+uses 4, and the tail extrapolation, DropletUtils keeps the floor) are intentional and pinned by the golden vectors.
+
+* Golden vectors (`tests/data/called_v2_golden/`): `test_called_v2.cpp` reads every case. Exact: `lower`, the ambient pool,
+  the tested set, `n_tail`, `called_v2`, every Monte Carlo and retained p. alpha agrees to 1e-6 (worst 6.9e-7, pbmc1k).
+  With alpha pinned to the reference value, tail p and FDR agree to 1e-6 on the log scale (worst 4e-14). Unpinned, the tail
+  p of `real_pbmc1k_v3` differ by up to 2.2e-6 on the log scale, so the free pass uses 1e-5 there. The cause is the
+  Good-Turing `np.polyfit`: LAPACK `gelsd` (SVD) is not reproduced bit for bit, a ~3-ulp change in the fitted line moves
+  alpha by up to ~7e-7 (fminbound's path), and a tail p at z near -30 moves by |z| times the change in z. Swapping the
+  port's line fit into the Python reproduces the C++ alpha exactly, so nothing else differs.
+* The vectors found a port gap, fixed here: when FITPACK's knot insertion reaches `n = nmax` it restarts with interior knots
+  placed as for interpolation and then smooths; the port returned NaN. Short curve-bounded fits reach it
+  (`synth_tail_extrapolation`: knee 2,755).
+* Stored counts (Clipper, `bench/called_v2_truth/verify_cpp.sbatch MODE=stored`, the `cv2_stored` driver on the runs the
+  truth-check script used): identical barcode sets to the script's recommended calls on all six datasets, Kang 16,573,
+  hgmm1k_v3 1,026, neuron1k_v3 1,355, nuclei2k_v2 2,376, pbmc1k_v3 1,190, pbmc5p_v1 8,399, with every Monte Carlo p equal.
+* Full pipeline (`singlet-prod-cv2`, 8 threads, `MODE=e2e`): pbmc1k_v3 1,196 and hgmm1k_v3 1,026, identical to
+  `cellcall.call` and to `cv2_stored` on the run's own stored counts. (pbmc1k_v3 calls 1,196 rather than 1,190 because this
+  branch's counts differ slightly from the `singlet-modfix` run the script used; the stored `prod-t4/t8` runs also call 1,196.)
 
 ## Limitations
 

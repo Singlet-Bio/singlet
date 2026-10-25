@@ -13,7 +13,7 @@
 #   MODE=stored : array 0-5, cv2_stored on the run the truth-check script used, compared with its recommended call
 #                 (state/called_v2_truth/datasets/<name>.barcodes.tsv.gz) by check_cpp.py
 #   MODE=e2e    : array 0-1 (pbmc1k_v3, hgmm1k_v3), full pipeline with singlet-prod-cv2 at 8 threads, then
-#                 equiv_cpp.py against cellcall_ref.py (2.1) and cv2_stored on the run's own stored counts
+#                 equiv_cpp.py against python/singlet/v2/cellcall.py (2.1) and cv2_stored on the run's own stored counts
 # Results: $W/state/called_v2_truth/cpp/
 set -euo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; ENV=$W/envs/pbench; PB=$W/pipeline-benchmark; MB=$W/modality-bench
@@ -66,7 +66,7 @@ case "$MODE" in
     grep -E "Elapsed \(wall" $O/time.txt
     grep -h "called_v2" $O/run.log | head -5
     cd $SRC
-    CELLCALL_REF=$SRC/bench/called_v2_truth/cellcall_ref.py python -P bench/called_v2/equiv_cpp.py $O --json $OUT/$ID.e2e_equiv.json \
+    python -P bench/called_v2/equiv_cpp.py $O --json $OUT/$ID.e2e_equiv.json \
       || echo "[cv2fix] equiv FAILED"
     $DRV $O $OUT/$ID.e2e_stored.tsv 8 > $OUT/$ID.e2e_stored_params.json
     python -P -c "
