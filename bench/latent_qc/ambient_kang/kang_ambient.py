@@ -57,8 +57,11 @@ def dump(out):
         return out_
 
     Eg, Ig = agg(E, ge), agg(I, gi)
-    cc = pd.read_csv(f"{RUN}/cell_calls.tsv", sep="\t")
-    called = set(cc.loc[cc.is_cell.astype(str).str.upper() == "TRUE", "barcode"].astype(str))
+    if os.environ.get("CELLS") == "run":  # the production run's own cell set (ambient_contamination.tsv = cc_result.cell_indices)
+        called = set(pd.read_csv(f"{RUN}/ambient_contamination.tsv", sep="\t").barcode.astype(str))
+    else:
+        cc = pd.read_csv(f"{RUN}/cell_calls.tsv", sep="\t")
+        called = set(cc.loc[cc.is_cell.astype(str).str.upper() == "TRUE", "barcode"].astype(str))
     bc = np.array(be)
     is_cell = np.array([b in called for b in bc])
     tot = np.asarray(Eg.sum(0)).ravel() + np.asarray(Ig.sum(0)).ravel()
