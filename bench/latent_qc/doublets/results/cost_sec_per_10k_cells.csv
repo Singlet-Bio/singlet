@@ -1,0 +1,11 @@
+method,sec_per_10k
+atlas_clf,16.83
+atlas_knn,1.27
+atlas_nnls,1.01
+ct_entropy,1.15
+ct_maxprob,1.15
+nnls,23.43
+prod,2.0
+scdblfinder,43.55
+scrublet,7.7
+solo,166.99

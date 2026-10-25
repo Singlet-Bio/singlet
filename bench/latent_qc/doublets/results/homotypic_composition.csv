@@ -1,0 +1,8 @@
+dataset,doublets,one_lineage,two_lineages,singlets_one_lineage,expected_same_lineage_pairs
+kang21,1598,0.257,0.41,0.398,0.862
+pbmc-1A-dm,120,0.0,0.192,0.01,1.0
+pbmc-1B-dm,130,0.015,0.238,0.04,0.96
+pbmc-1C-dm,316,0.019,0.203,0.024,0.966
+pbmc-2ctrl-dm,1598,0.043,0.213,0.07,0.977
+pbmc-2stim-dm,1631,0.018,0.379,0.021,0.992
+pbmc-ch,2545,0.223,0.172,0.298,0.971
