@@ -37,8 +37,10 @@ template <class F> void forEachScalar(Transcript &t, F f) {
 template <class F> void forEachRow(Transcript &t, uint64 iex, F f) {
     for (int k=0; k<EX_SIZE; k++) f(t.exons[iex][k]);
     if (iex+1 < t.nExons) {//junction iex joins exons iex and iex+1; the last exon has none (its slots are left uninitialised by stitching)
-        f(t.shiftSJ[iex][0]); f(t.shiftSJ[iex][1]);
         f(t.canonSJ[iex]); f(t.sjAnnot[iex]); f(t.sjStr[iex]);
+        if (t.canonSJ[iex] >= 0) {//shiftSJ is set for splice junctions only, not for indels (canonSJ<0)
+            f(t.shiftSJ[iex][0]); f(t.shiftSJ[iex][1]);
+        };
     };
 }
 struct Put {
