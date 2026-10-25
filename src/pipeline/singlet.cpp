@@ -70,6 +70,7 @@
 #include "singlet/pileup/atac_peaks.h"
 #include "singlet/pileup/atac_qc.h"
 #include "singlet/pileup/atac_cell_caller.h"
+#include "singlet/pileup/atac_pipeline.h"
 #include "singlet/pileup/adt_matcher.h"
 #include "singlet/pileup/adt_counter.h"
 #include "singlet/pileup/hto_demux.h"
@@ -2562,6 +2563,49 @@ static void usage(const char* prog) {
         << "  -h, --help             Show this help\n";
 }
 
+// `singlet atac --bam sorted.bam --out DIR [--gtf genes.gtf] [--whitelist W ...] [--paired-gex GEX_OUT_DIR]`
+// Re-runs the ATAC post-alignment (atac_pipeline.h) on a coordinate-sorted BAM whose QNAMEs carry "BC:<raw>_".
+static std::vector<std::string> default_atac_whitelists() {
+    std::vector<std::string> out;
+    char exe_buf[PATH_MAX];
+    ssize_t n = ::readlink("/proc/self/exe", exe_buf, sizeof(exe_buf) - 1);
+    if (n <= 0) return out;
+    exe_buf[n] = '\0';
+    std::string dir(exe_buf);
+    auto sl = dir.rfind('/');
+    if (sl != std::string::npos) dir.resize(sl);
+    for (const char* f : {"737K-cratac-v1.txt", "737K-arc-v1-atac-gex.tsv.gz"}) {
+        std::string c = dir + "/../whitelists/" + f;
+        struct stat st;
+        if (stat(c.c_str(), &st) == 0) out.push_back(c);
+    }
+    return out;
+}
+
+static int cmd_atac(int argc, char* argv[]) {
+    singlet::AtacRunOptions o;
+    for (int i = 0; i < argc; ++i) {
+        std::string a = argv[i];
+        auto next = [&]() -> std::string { return i + 1 < argc ? argv[++i] : std::string(); };
+        if (a == "--bam") o.bam = next();
+        else if (a == "--out") o.out_dir = next();
+        else if (a == "--gtf" || a == "--exons") o.gtf = next();
+        else if (a == "--whitelist") o.whitelists.push_back(next());
+        else if (a == "--paired-gex") o.paired_gex_dir = next();
+        else if (a == "--min-column-fragments") o.min_column_fragments = static_cast<uint32_t>(std::stoul(next()));
+        else if (a == "--q-cutoff") o.peaks.q_cutoff = std::stod(next());
+        else { std::cerr << "singlet atac: unknown argument " << a << "\n"; return 2; }
+    }
+    if (o.bam.empty() || o.out_dir.empty()) {
+        std::cerr << "usage: singlet atac --bam sorted.bam --out DIR [--gtf genes.gtf] [--whitelist W ...]"
+                     " [--paired-gex GEX_OUT_DIR]\n";
+        return 2;
+    }
+    if (o.whitelists.empty()) o.whitelists = default_atac_whitelists();
+    ::mkdir(o.out_dir.c_str(), 0755);
+    return singlet::run_atac_from_bam(o);
+}
+
 int main(int argc, char* argv[]) {
     // ── Subcommand dispatch ──
     if (argc >= 2) {
@@ -2571,6 +2615,8 @@ int main(int argc, char* argv[]) {
                 return cmd_download(argc - 2, argv + 2);
             if (sub == "encode")
                 return cmd_encode(argc - 2, argv + 2);
+            if (sub == "atac")
+                return cmd_atac(argc - 2, argv + 2);
             if (sub == "decode")
                 return cmd_decode(argc - 2, argv + 2);
             if (sub == "archive")
@@ -2630,6 +2676,8 @@ int main(int argc, char* argv[]) {
 
     std::string feature_ref_path;    // T4: CITE-seq ADT/HTO reference CSV
     std::string tissue_positions_path; // V2: Visium tissue_positions.csv
+    std::vector<std::string> atac_whitelists; // --atac-whitelist (repeatable); default: install whitelists
+    std::string atac_paired_gex;       // --paired-gex: Multiome GEX output dir for the joint cell call
     std::string metadata_json_path;  // GEO metadata JSON for .1pz embedding
     std::string tagged_bam_path;     // G-TAGGED-BAM: output path (empty = default)
     std::string nonhost_db_path;     // NONHOST-UNMAPPED-CAPTURE: primary (viral) screening index (legacy)
@@ -2720,6 +2768,8 @@ int main(int argc, char* argv[]) {
         else if (arg == "--dedup-stats") do_dedup_stats = true;
         else if (arg == "--optical-distance" && i+1 < argc) optical_distance = std::atoi(argv[++i]);
         else if (arg == "--tissue-positions" && i+1 < argc) tissue_positions_path = argv[++i]; // V2
+        else if (arg == "--atac-whitelist" && i+1 < argc) atac_whitelists.push_back(argv[++i]);
+        else if (arg == "--paired-gex" && i+1 < argc) atac_paired_gex = argv[++i];
         else if (arg == "--visium-min-umi" && i+1 < argc) visium_min_umi = static_cast<uint32_t>(std::atoi(argv[++i])); // V3
         else if (arg == "--threads" && i+1 < argc) { star_threads = std::atoi(argv[++i]); threads_specified = true; }
         else if (arg == "--sra" && i+1 < argc) sra_file = argv[++i];
@@ -4786,7 +4836,9 @@ int main(int argc, char* argv[]) {
 
     // ── Phase 0.9: Barcode discovery for --whitelist None / auto-resolved whitelist without --barcodes ──
     std::string auto_barcode_file;  // temp file for auto-discovered barcodes
-    if (barcode_file.empty() && (whitelist_file == "None" || whitelist_file == "none" || whitelist_auto_resolved)) {
+    // ATAC resolves barcodes after alignment against the ATAC whitelists (atac_barcodes.h), so it skips discovery.
+    if (!is_atac_mode && barcode_file.empty() &&
+        (whitelist_file == "None" || whitelist_file == "none" || whitelist_auto_resolved)) {
 
         // ── Shallow-library whitelist fallback helper ────────────────────────────
         // Called when the ≥100-reads filter produces 0 barcodes (shallow libraries
@@ -7111,164 +7163,26 @@ int main(int argc, char* argv[]) {
 
         // ── 2c-ATAC: Fragment extraction + bin counting (ATAC mode only) ──
         if (is_atac_mode) {
-            std::cerr << "[singlet] ATAC: extracting fragments from sorted BAM...\n";
+            std::cerr << "[singlet] ATAC: fragments, peaks, QC and cells from sorted BAM...\n";
             StopWatch atac_sw;
-
-            // Build barcode → index map from discovered/user-provided barcode file
-            std::unordered_map<std::string, uint32_t> atac_bc_map;
-            if (!barcode_file.empty() && barcode_file != "None" && barcode_file != "none") {
-                std::ifstream bcf(barcode_file);
-                std::string bc;
-                uint32_t idx = 0;
-                while (std::getline(bcf, bc)) {
-                    if (!bc.empty()) atac_bc_map[bc] = idx++;
-                }
-                std::cerr << "[singlet] ATAC: loaded " << atac_bc_map.size() << " barcodes\n";
+            singlet::AtacRunOptions atac_opt;
+            atac_opt.bam = parallel_bam_path;
+            atac_opt.out_dir = out_prefix;
+            if (!config.exon_gtf_path.empty() && config.exon_gtf_path != "None" && config.exon_gtf_path != "none")
+                atac_opt.gtf = config.exon_gtf_path;
+            atac_opt.whitelists = atac_whitelists.empty() ? default_atac_whitelists() : atac_whitelists;
+            atac_opt.paired_gex_dir = atac_paired_gex;
+            if (singlet::run_atac_from_bam(atac_opt) != 0) {
+                std::cerr << "[singlet] ERROR: ATAC post-alignment failed\n";
+                return 1;
             }
-
-            // Stream BAM records through ATACFragmentExtractor
-            singlet::ATACFragmentExtractor extractor;
-            extractor.set_barcode_map(atac_bc_map);
-
-            samFile*    bam_fp  = sam_open(parallel_bam_path.c_str(), "rb");
-            bam_hdr_t*  bam_hdr_atac = sam_hdr_read(bam_fp);
-            bam1_t*     rec     = bam_init1();
-            while (sam_read1(bam_fp, bam_hdr_atac, rec) >= 0)
-                extractor.process_record(rec, bam_hdr_atac);
-            bam_destroy1(rec);
-
-            extractor.finalise();
-
-            // Build chromosome sizes from BAM header (for bin counter)
-            std::vector<std::pair<std::string, int32_t>> chrom_sizes;
-            chrom_sizes.reserve(static_cast<size_t>(bam_hdr_atac->n_targets));
-            for (int ci = 0; ci < bam_hdr_atac->n_targets; ++ci)
-                chrom_sizes.emplace_back(bam_hdr_atac->target_name[ci],
-                                         static_cast<int32_t>(bam_hdr_atac->target_len[ci]));
-
-            bam_hdr_destroy(bam_hdr_atac);
-            sam_close(bam_fp);
-
-            std::cerr << "[singlet] ATAC: " << extractor.unique_fragments()
-                      << " unique fragments (" << extractor.duplicate_fragments()
-                      << " dupes)\n";
-
-            // Bin counting (500 bp bins)
-            singlet::ATACBinCounter counter;
-            counter.set_bin_width(500);
-            counter.set_chromosome_sizes(chrom_sizes);
-            counter.count_fragments(extractor.fragments());
-
-            const size_t n_cells = atac_bc_map.size();
-            auto csc = counter.to_csc(n_cells);
-
-            // Export: matrix, features, barcodes
-            singlet::write_mtx(out_prefix + "/atac_matrix.mtx",
-                               static_cast<uint32_t>(counter.total_bins()),
-                               static_cast<uint32_t>(n_cells),
-                               csc.indptr, csc.indices, csc.data);
-            auto feat_labels = counter.bin_features();
-            singlet::write_names(out_prefix + "/atac_features.tsv", feat_labels);
-            std::vector<std::string> bc_list(n_cells);
-            for (const auto& [bc, idx] : atac_bc_map) bc_list[idx] = bc;
-            singlet::write_names(out_prefix + "/atac_barcodes.tsv", bc_list);
-
-            // ── Write fragments.tsv.gz (BED-like: chrom, start, end, barcode, count) ──
-            {
-                const auto& frags = extractor.fragments();
-                const std::string frag_path = out_prefix + "/fragments.tsv.gz";
-                gzFile ftsv = gzopen(frag_path.c_str(), "wb");
-                if (!ftsv) {
-                    std::cerr << "[singlet] ERROR: could not open " << frag_path << " for writing\n";
-                } else {
-                    char buf[4096];
-                    for (const auto& f : frags) {
-                        int n = std::snprintf(buf, sizeof(buf), "%s\t%d\t%d\t%s\t1\n",
-                                             chrom_sizes[static_cast<size_t>(f.chrom_idx)].first.c_str(),
-                                             f.start, f.end,
-                                             bc_list[f.barcode_idx].c_str());
-                        if (n > 0) gzwrite(ftsv, buf, static_cast<unsigned>(n));
-                    }
-                    gzclose(ftsv);
-                    std::cerr << "[singlet] ATAC: wrote " << frags.size()
-                              << " fragments to fragments.tsv.gz\n";
+            if (const char* keep = std::getenv("SINGLET_KEEP_ATAC_BAM")) {
+                std::string dst = std::string(keep) + "/atac_sorted.bam";
+                if (std::rename(parallel_bam_path.c_str(), dst.c_str()) != 0) {
+                    std::string cmd = "cp '" + parallel_bam_path + "' '" + dst + "'";
+                    if (std::system(cmd.c_str()) != 0) std::cerr << "[singlet] WARNING: could not keep BAM\n";
                 }
-            }
-
-            // ── A3 TSS enrichment QC ──────────────────────────────────────────────
-            singlet::ATACQCComputer qc_computer;
-            {
-                std::unordered_map<std::string, int32_t> cmap;
-                cmap.reserve(chrom_sizes.size());
-                for (int32_t ci = 0; ci < static_cast<int32_t>(chrom_sizes.size()); ++ci)
-                    cmap[chrom_sizes[static_cast<size_t>(ci)].first] = ci;
-                qc_computer.set_chrom_map(cmap);
-            }
-            if (!config.exon_gtf_path.empty() &&
-                config.exon_gtf_path != "None" && config.exon_gtf_path != "none")
-                qc_computer.load_tss_from_gtf(config.exon_gtf_path);
-            qc_computer.compute(extractor.fragments(), extractor,
-                                static_cast<uint32_t>(n_cells), &counter);
-            qc_computer.write_qc_tsv(out_prefix + "/atac_qc.tsv", bc_list);
-
-            // ── A7 Cell calling ──────────────────────────────────────────────────
-            {
-                const auto& cell_qc = qc_computer.cell_qc();
-                std::vector<uint64_t> frag_counts(n_cells);
-                std::vector<double>   tss_scores(n_cells);
-                std::vector<double>   frip_scores(n_cells);
-                for (size_t i = 0; i < n_cells; ++i) {
-                    frag_counts[i] = cell_qc[i].total_fragments;
-                    tss_scores[i]  = static_cast<double>(cell_qc[i].tss_enrichment);
-                    frip_scores[i] = static_cast<double>(cell_qc[i].frip_approx);
-                }
-                singlet::AtacCellCaller caller;
-                std::vector<singlet::AtacCellCaller::CellCallResult> call_results;
-                auto summary = caller.call_cells(bc_list, frag_counts, tss_scores,
-                                                 frip_scores, call_results);
-                std::ofstream ctsv(out_prefix + "/atac_cells.tsv");
-                ctsv << "barcode\tis_cell\tunique_fragments\ttss_enrichment"
-                        "\tfrip\tfilter_reason\n";
-                for (const auto& r : call_results)
-                    ctsv << r.barcode << '\t'
-                         << static_cast<int>(r.is_cell) << '\t'
-                         << r.unique_fragments << '\t'
-                         << r.tss_enrichment << '\t'
-                         << r.frip << '\t'
-                         << r.filter_reason << '\n';
-                std::cerr << "[singlet] ATAC: " << summary.cells_called
-                          << "/" << summary.total_barcodes
-                          << " cells called (frag_threshold=" << summary.fragment_threshold
-                          << ", median_tss=" << summary.median_tss_cells << ")\n";
-            }
-
-            // ── A-PEAKS: Peak calling from aggregate bin counts ──────────────────
-            {
-                // Sum CSC across all cells to get per-bin aggregate counts
-                std::vector<uint32_t> bin_agg(counter.total_bins(), 0u);
-                for (size_t _k = 0; _k < csc.indices.size(); ++_k)
-                    bin_agg[static_cast<size_t>(csc.indices[_k])] +=
-                        static_cast<uint32_t>(csc.data[_k]);
-
-                // Build per-bin chrom and start arrays from chromosome sizes
-                constexpr int32_t kBinWidth = 500;
-                std::vector<std::string> bin_chroms;
-                std::vector<uint32_t>   bin_starts;
-                bin_chroms.reserve(counter.total_bins());
-                bin_starts.reserve(counter.total_bins());
-                for (const auto& [chrom, clen] : chrom_sizes) {
-                    for (int32_t b = 0; static_cast<int32_t>(b * kBinWidth) < clen; ++b) {
-                        bin_chroms.push_back(chrom);
-                        bin_starts.push_back(static_cast<uint32_t>(b * kBinWidth));
-                    }
-                }
-
-                auto peaks = singlet::call_peaks(bin_agg, bin_chroms, bin_starts);
-                if (singlet::write_peaks_bed(out_prefix + "/peaks.bed", peaks))
-                    std::cerr << "[singlet] ATAC peaks: " << peaks.size()
-                              << " peaks called, wrote peaks.bed\n";
-                else
-                    std::cerr << "[singlet] ATAC peaks: write_peaks_bed failed\n";
+                std::cerr << "[singlet] ATAC: kept BAM at " << dst << "\n";
             }
 
             // Cleanup temp BAM + BAI
@@ -7285,8 +7199,7 @@ int main(int argc, char* argv[]) {
                 rmdir(dec_dir2.c_str());
             }
 
-            std::cerr << "[singlet] ATAC: " << counter.total_bins() << " bins × "
-                      << n_cells << " cells, " << atac_sw.elapsed_s() << "s\n";
+            std::cerr << "[singlet] ATAC post-alignment: " << atac_sw.elapsed_s() << "s\n";
             std::cerr << "[singlet] ATAC outputs: " << out_prefix << "\n";
             std::cerr << "[singlet] Total: " << total_sw.elapsed_s() << "s\n";
             // Nonhost EM screening: screen STAR unmapped reads
