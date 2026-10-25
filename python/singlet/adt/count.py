@@ -391,26 +391,22 @@ def _process(keys, reads, bmap, fx, cb_len, umi_len, n_features, st, unm):
     _add(st, "reads_umi_n", rd[~ok].sum())
     bc, ft, rd, umi_codes = bc[ok], ft[ok], rd[ok], umi_codes[ok]
     # several observed (CB, UMI, feature) can land on one corrected key: sum them. Packed key:
-    # dense barcode index | feature (>= 10 bits; CRISPR libraries have thousands of guides) | UMI (2 bits per nt)
-    ubits = 2 * umi_len
-    fbits = max(10, int(n_features).bit_length())
+    # dense barcode index (30 bits) | feature (10 bits) | UMI (24 bits = 12 nt)
+    if umi_len > 12 or n_features >= 1024:
+        raise ValueError("UMI > 12 nt or >= 1024 features do not fit the packed molecule key")
     ubc, bci = np.unique(bc, return_inverse=True)
-    if ubits + fbits + max(1, int(len(ubc)).bit_length()) > 64:
-        raise ValueError("barcodes x features x UMIs do not fit the packed molecule key")
-    fshift = np.uint64(ubits)
-    bshift = np.uint64(ubits + fbits)
-    key = (bci.ravel().astype(np.uint64) << bshift) | (ft.astype(np.uint64) << fshift) | umi_codes
+    key = (bci.ravel().astype(np.uint64) << np.uint64(34)) | (ft.astype(np.uint64) << np.uint64(24)) | umi_codes
     gu, ginv = np.unique(key, return_inverse=True)
     greads = np.bincount(ginv.ravel(), weights=rd, minlength=len(gu)).astype(np.int64)
     umi_mask = np.uint64((1 << (2 * umi_len)) - 1)
-    tgt = correct_umis(gu >> fshift, gu & umi_mask, greads, umi_len)
+    tgt = correct_umis(gu >> np.uint64(24), gu & umi_mask, greads, umi_len)
     mol = np.unique(tgt)  # surviving molecules
     mol_reads = np.bincount(tgt, weights=greads, minlength=len(gu))[mol].astype(np.int64)
     _add(st, "umis_before_correction", len(gu))
     _add(st, "molecules", len(mol))
     _add(st, "reads_usable", greads.sum())
-    return (ubc[(gu[mol] >> bshift).astype(np.int64)],
-            ((gu[mol] >> fshift) & np.uint64((1 << fbits) - 1)).astype(np.int64), mol_reads)
+    return (ubc[(gu[mol] >> np.uint64(34)).astype(np.int64)],
+            ((gu[mol] >> np.uint64(24)) & np.uint64(1023)).astype(np.int64), mol_reads)
 
 
 def _barcode_counts(pairs, r1_len, end, cb_len, max_reads=None):

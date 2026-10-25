@@ -69,6 +69,13 @@ def read_feature_reference(path: str) -> pd.DataFrame:
         df = pd.read_csv(path, sep=None, engine="python", dtype=str, header=None)
         out = pd.DataFrame({"id": df[0], "name": df[0], "sequence": df[1].str.upper().str.strip()})
     out = out[out.sequence.str.fullmatch(r"[ACGT]+")].reset_index(drop=True)
+    out["name"] = out["name"].astype(object).where(out["name"].notna(), out["sequence"]).astype(str)
+    # one row per sequence: references that list a hashtag once per sample pool repeat its sequence under the
+    # sample's label; the first label names it and the others are kept as aliases
+    if out.sequence.duplicated().any():
+        al = out.groupby("sequence", sort=False)["name"].agg(lambda x: "|".join(dict.fromkeys(x)))
+        out = out.drop_duplicates("sequence", keep="first").reset_index(drop=True)
+        out["aliases"] = out.sequence.map(al)
     return out
 
 
@@ -91,6 +98,11 @@ def annotate_from_catalog(ref: pd.DataFrame, cat: Optional[pd.DataFrame] = None)
     out["ensembl"] = np.where(hit, out.sequence.map(c.ensembl), "")
     out["kind"] = [c.kind.get(s) if s in c.index else kind_of(n) for s, n in zip(out.sequence, out.name)]
     out["catalog_specificity"] = np.where(hit, out.sequence.map(c.specificity), "")
+    # a sequence the authors listed under several labels (sample pools) takes the catalog name
+    if "aliases" in out:
+        multi = out.aliases.fillna("").str.contains("|", regex=False) & hit
+        out.loc[multi, "name"] = out.loc[multi, "catalog_specificity"]
+    _dedupe_names(out)
     return out
 
 
@@ -170,7 +182,7 @@ def discover(feature_seqs: Sequence[bytes], cat: pd.DataFrame, organism: str = "
     else:
         status = "ok"
     out = pd.DataFrame({
-        "id": [b or s for b, s in zip(feats.barcode_id, feats.sequence)],
+        "id": [b if isinstance(b, str) and b else s for b, s in zip(feats.barcode_id, feats.sequence)],
         "name": feats.specificity.values, "sequence": feats.sequence.values, "kind": feats.kind.values,
         "barcode_id": feats.barcode_id.values, "ensembl": feats.ensembl.values, "clone": feats.clone.values,
         "reactivity": feats.reactivity.values, "reads_discovery": feats.reads_discovery.values,
@@ -194,9 +206,11 @@ def classify_unmatched(q: str, panel_seqs: Sequence[str]) -> str:
 
 
 def _dedupe_names(df: pd.DataFrame):
-    """Names must be unique within a panel: two clones of one target get their barcode id appended."""
+    """Names must be unique within a panel: two clones of one target get their barcode id (else sequence) appended."""
+    df["name"] = df["name"].astype(object).where(df["name"].notna(), df["sequence"]).astype(str)
+    ids = df["id"].astype(object).where(df["id"].notna() & (df["id"].astype(str) != ""), df["sequence"]).astype(str)
     dup = df.name.duplicated(keep=False)
-    df.loc[dup, "name"] = df.loc[dup, "name"] + " (" + df.loc[dup, "id"] + ")"
+    df.loc[dup, "name"] = [f"{n} ({i})" for n, i in zip(df.loc[dup, "name"], ids[dup])]
 
 
 def split_kinds(panel: pd.DataFrame):
