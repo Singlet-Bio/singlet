@@ -1,0 +1,2627 @@
+{
+  "schema": "singlet.benchmark.capability",
+  "schema_version": "1.0.0",
+  "capability": "spliced-unspliced",
+  "title": "Spliced and unspliced layers",
+  "methods": "**Data and cells.** The cohort's 10x datasets, each run from its FASTQs on its own 2024-A reference (see gex-counts). Cells are the barcodes STARsolo EmptyDrops_CR calls; a comparison uses the cells all three tools have and their shared genes.\n\n**Layers.** Singlet: unspliced = intron_counts, spliced + ambiguous = exon_counts (spliced = exon_counts - ambiguous_counts). STARsolo Velocyto: unspliced, and spliced + ambiguous. alevin-fry USA: U, and S + A.\n\n**Why spliced+ambiguous.** STARsolo labels a molecule against individual transcripts, so exonic reads compatible with an intron-retaining isoform become ambiguous; Singlet uses the collapsed gene model and calls them spliced; alevin-fry calls ambiguous every read compatible with both targets. Unspliced means the same in all three, and spliced + ambiguous is the rest of the molecules, so those two layers are gated. The ambiguous share of each tool is reported.\n\n**Measures, for every pair of tools.** The distance of the median per-cell UMI ratio from 1 (|ln ratio|); the median over cells of the Pearson r of log1p counts over genes; the Spearman rho of pseudobulk gene counts.\n\n**Gate.** Singlet's mean value against the two competitors (STARsolo Velocyto and alevin-fry USA) must be as good as the competitors' value against each other, within the half-width of the paired bootstrap 95% CI of the difference: Singlet is gated as a member of the cloud of existing tools. Per-reference values are in each metric's notes. All settings were fixed before the metrics were computed.",
+  "status": "final",
+  "generated_at": "2026-10-25T15:28:46+00:00",
+  "owner": "pipeline-benchmark",
+  "singlet": {
+    "version": "1.0.0",
+    "commit": "02aa9b938b54e0f92bba00c44c07b883a8660aa2",
+    "branch": "prod/campaign",
+    "binary": "singlet-campaign",
+    "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+    "build_flags": "PGO, -O3 -DNDEBUG, -march=x86-64-v3"
+  },
+  "tools": [
+    {
+      "name": "singlet",
+      "version": "1.0.0",
+      "role": "singlet",
+      "url": "https://singlet.bio",
+      "params": "singlet encode --reads R1.fastq.gz R2.fastq.gz -o s.1fq; singlet s.1fq --ref-base $REF --genome-dir $REF/$SPECIES/star_2.7.11b --exons $REF/$SPECIES/genes/genes.gtf --out-prefix $OUT/ --threads 8 --pipeline --output-format mtx --raw-matrix  (spliced = exon_counts - ambiguous_counts, unspliced = intron_counts)"
+    },
+    {
+      "name": "starsolo-velocyto",
+      "version": "2.7.11b",
+      "role": "competitor",
+      "url": "https://github.com/alexdobin/STAR",
+      "citation": "La Manno et al. RNA velocity of single cells. Nature 2018 (velocyto rules); Kaminow et al. bioRxiv 2021 (STARsolo)",
+      "params": "STAR --runThreadN 16 --genomeDir $GENOME --readFilesIn $R2 $R1 --readFilesCommand zcat --soloType CB_UMI_Simple --soloCBwhitelist $WHITELIST --soloCBlen 16 --soloUMIstart 17 --soloUMIlen $UMILEN --soloBarcodeReadLength 0 --soloStrand $STRAND --soloFeatures Gene GeneFull Velocyto SJ --soloCellFilter EmptyDrops_CR --soloCBmatchWLtype 1MM_multi_Nbase_pseudocounts --soloUMIfiltering MultiGeneUMI_CR --soloUMIdedup 1MM_CR --clipAdapterType CellRanger4 --outFilterScoreMin 30 --outSAMtype None (Velocyto layers: spliced, unspliced, ambiguous)"
+    },
+    {
+      "name": "alevin-fry-usa",
+      "version": "0.18.3 (simpleaf 0.30)",
+      "role": "competitor",
+      "url": "https://github.com/COMBINE-lab/alevin-fry",
+      "citation": "He et al. Nat Methods 2022",
+      "params": "simpleaf quant --reads1 $R1 --reads2 $R2 --index af_idx/index --t2g-map af_idx/index/t2g_3col.tsv --chemistry $CHEM --expected-ori fw --resolution cr-like --unfiltered-pl $WHITELIST --threads 16 (USA matrix: S, U, A blocks)"
+    }
+  ],
+  "datasets": [
+    {
+      "id": "pbmc1k_v3",
+      "title": "10x PBMC 1k, 3' v3",
+      "accessions": {
+        "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v3/pbmc_1k_v3_fastqs.tar"
+      },
+      "truth": "none. Agreement between independent tools run on the same FASTQs and reference. Unspliced and spliced+ambiguous are gated; spliced and ambiguous alone differ by definition and are reported.",
+      "n_cells": 1230
+    },
+    {
+      "id": "pbmc1k_v2",
+      "title": "10x PBMC 1k, 3' v2",
+      "accessions": {
+        "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v2/pbmc_1k_v2_fastqs.tar"
+      },
+      "truth": "none. Agreement between independent tools run on the same FASTQs and reference. Unspliced and spliced+ambiguous are gated; spliced and ambiguous alone differ by definition and are reported.",
+      "n_cells": 1000
+    },
+    {
+      "id": "neuron1k_v3",
+      "title": "10x mouse E18 brain cells 1k, 3' v3",
+      "accessions": {
+        "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/neuron_1k_v3/neuron_1k_v3_fastqs.tar"
+      },
+      "truth": "none. Agreement between independent tools run on the same FASTQs and reference. Unspliced and spliced+ambiguous are gated; spliced and ambiguous alone differ by definition and are reported.",
+      "n_cells": 1258
+    },
+    {
+      "id": "hgmm1k_v3",
+      "title": "10x HEK293T + NIH3T3 1:1, 1k, 3' v3",
+      "accessions": {
+        "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/hgmm_1k_v3/hgmm_1k_v3_fastqs.tar"
+      },
+      "truth": "none. Agreement between independent tools run on the same FASTQs and reference. Unspliced and spliced+ambiguous are gated; spliced and ambiguous alone differ by definition and are reported.",
+      "n_cells": 1049
+    },
+    {
+      "id": "pbmc1k_cite_v3",
+      "title": "10x PBMC 1k + TotalSeq-B (pbmc_1k_protein_v3)",
+      "accessions": {
+        "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_protein_v3/pbmc_1k_protein_v3_fastqs.tar"
+      },
+      "truth": "none. Agreement between independent tools run on the same FASTQs and reference. Unspliced and spliced+ambiguous are gated; spliced and ambiguous alone differ by definition and are reported.",
+      "n_cells": 714
+    },
+    {
+      "id": "nuclei2k_v2",
+      "title": "10x mouse brain nuclei 2k, 3' v2",
+      "accessions": {
+        "url": "https://cf.10xgenomics.com/samples/cell-exp/2.1.0/nuclei_2k/nuclei_2k_fastqs.tar"
+      },
+      "truth": "none. Agreement between independent tools run on the same FASTQs and reference. Unspliced and spliced+ambiguous are gated; spliced and ambiguous alone differ by definition and are reported.",
+      "n_cells": 2202
+    },
+    {
+      "id": "pbmc5p_v1",
+      "title": "10x PBMC 5' v1 + TotalSeq-C (vdj_v1_hs_pbmc2_5gex_protein), first 60M read pairs",
+      "accessions": {
+        "url": "https://cf.10xgenomics.com/samples/cell-vdj/3.0.0/vdj_v1_hs_pbmc2_5gex_protein/vdj_v1_hs_pbmc2_5gex_protein_fastqs.tar"
+      },
+      "truth": "none. Agreement between independent tools run on the same FASTQs and reference. Unspliced and spliced+ambiguous are gated; spliced and ambiguous alone differ by definition and are reported.",
+      "n_cells": 7453
+    }
+  ],
+  "metrics": [
+    {
+      "id": "umi_ratio_distance.unspliced",
+      "name": "Per-cell UMI total, distance of the median ratio from 1, unspliced UMI",
+      "unit": "|ln ratio|",
+      "category": "agreement",
+      "dataset": "pbmc1k_v3",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.021752,
+        "ci": [
+          0.01994,
+          0.023085
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.016344,
+          "ci": [
+            0.015399,
+            0.017233
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.016344,
+          "ci": [
+            0.015399,
+            0.017233
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.00177
+        },
+        "rationale": "gate = Singlet's mean |ln ratio| distance to STARsolo Velocyto unspliced, alevin-fry USA unspliced against the distance the competitors have from each other (0.0163); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0018"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: ratio 0.972; alevin-fry USA unspliced: ratio 0.985. Basis: cells with UMI in every tool (1229). Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "gene_corr.unspliced",
+      "name": "Per-cell gene correlation, unspliced UMI",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.949168,
+        "ci": [
+          0.948168,
+          0.949777
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.963669,
+          "ci": [
+            0.963144,
+            0.964122
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.963669,
+          "ci": [
+            0.963144,
+            0.964122
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000555
+        },
+        "rationale": "gate = Singlet's mean r distance to STARsolo Velocyto unspliced, alevin-fry USA unspliced against the distance the competitors have from each other (0.9637); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0006"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9585; alevin-fry USA unspliced: 0.9398. Basis: cells common to the family. Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "pseudobulk_rho.unspliced",
+      "name": "Pseudobulk gene Spearman rho, unspliced UMI",
+      "unit": "rho",
+      "category": "agreement",
+      "dataset": "pbmc1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.94733,
+        "ci": [
+          0.945611,
+          0.94892
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.962703,
+          "ci": [
+            0.96047,
+            0.964403
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.962703,
+          "ci": [
+            0.96047,
+            0.964403
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.00198
+        },
+        "rationale": "gate = Singlet's mean rho distance to STARsolo Velocyto unspliced, alevin-fry USA unspliced against the distance the competitors have from each other (0.9627); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0020"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9476; alevin-fry USA unspliced: 0.9471. Basis: 24730 genes with any UMI. Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "umi_ratio_distance.spliced_ambiguous",
+      "name": "Per-cell UMI total, distance of the median ratio from 1, spliced+ambiguous UMI",
+      "unit": "|ln ratio|",
+      "category": "agreement",
+      "dataset": "pbmc1k_v3",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.059942,
+        "ci": [
+          0.058884,
+          0.060788
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.116127,
+          "ci": [
+            0.114104,
+            0.118072
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.116127,
+          "ci": [
+            0.114104,
+            0.118072
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001343
+        },
+        "rationale": "gate = Singlet's mean |ln ratio| distance to STARsolo Velocyto spliced+ambiguous, alevin-fry USA spliced+ambiguous against the distance the competitors have from each other (0.1161); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0013"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: ratio 1.075; alevin-fry USA spliced+ambiguous: ratio 0.954. Basis: cells with UMI in every tool (1230). Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "gene_corr.spliced_ambiguous",
+      "name": "Per-cell gene correlation, spliced+ambiguous UMI",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.980074,
+        "ci": [
+          0.979837,
+          0.980232
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.97791,
+          "ci": [
+            0.97773,
+            0.97809
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.97791,
+          "ci": [
+            0.97773,
+            0.97809
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000153
+        },
+        "rationale": "gate = Singlet's mean r distance to STARsolo Velocyto spliced+ambiguous, alevin-fry USA spliced+ambiguous against the distance the competitors have from each other (0.9779); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0002"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9772; alevin-fry USA spliced+ambiguous: 0.9830. Basis: cells common to the family. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "pseudobulk_rho.spliced_ambiguous",
+      "name": "Pseudobulk gene Spearman rho, spliced+ambiguous UMI",
+      "unit": "rho",
+      "category": "agreement",
+      "dataset": "pbmc1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.964361,
+        "ci": [
+          0.962637,
+          0.965653
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.953519,
+          "ci": [
+            0.950529,
+            0.95619
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.953519,
+          "ci": [
+            0.950529,
+            0.95619
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001485
+        },
+        "rationale": "gate = Singlet's mean rho distance to STARsolo Velocyto spliced+ambiguous, alevin-fry USA spliced+ambiguous against the distance the competitors have from each other (0.9535); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0015"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9472; alevin-fry USA spliced+ambiguous: 0.9815. Basis: 22483 genes with any UMI. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "umi_ratio_distance.unspliced",
+      "name": "Per-cell UMI total, distance of the median ratio from 1, unspliced UMI",
+      "unit": "|ln ratio|",
+      "category": "agreement",
+      "dataset": "pbmc1k_v2",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.0608,
+        "ci": [
+          0.055992,
+          0.064938
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.027429,
+          "ci": [
+            0.02612,
+            0.028475
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.027429,
+          "ci": [
+            0.02612,
+            0.028475
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.004602
+        },
+        "rationale": "gate = Singlet's mean |ln ratio| distance to STARsolo Velocyto unspliced, alevin-fry USA unspliced against the distance the competitors have from each other (0.0274); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0046"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: ratio 1.077; alevin-fry USA unspliced: ratio 1.049. Basis: cells with UMI in every tool (1000). Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "gene_corr.unspliced",
+      "name": "Per-cell gene correlation, unspliced UMI",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.832062,
+        "ci": [
+          0.830848,
+          0.833403
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.918925,
+          "ci": [
+            0.917847,
+            0.920184
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.918925,
+          "ci": [
+            0.917847,
+            0.920184
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001129
+        },
+        "rationale": "gate = Singlet's mean r distance to STARsolo Velocyto unspliced, alevin-fry USA unspliced against the distance the competitors have from each other (0.9189); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0011"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.8446; alevin-fry USA unspliced: 0.8196. Basis: cells common to the family. Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "pseudobulk_rho.unspliced",
+      "name": "Pseudobulk gene Spearman rho, unspliced UMI",
+      "unit": "rho",
+      "category": "agreement",
+      "dataset": "pbmc1k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.877396,
+        "ci": [
+          0.874243,
+          0.881074
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.936845,
+          "ci": [
+            0.934233,
+            0.939036
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.936845,
+          "ci": [
+            0.934233,
+            0.939036
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.00307
+        },
+        "rationale": "gate = Singlet's mean rho distance to STARsolo Velocyto unspliced, alevin-fry USA unspliced against the distance the competitors have from each other (0.9368); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0031"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.8722; alevin-fry USA unspliced: 0.8826. Basis: 23206 genes with any UMI. Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "umi_ratio_distance.spliced_ambiguous",
+      "name": "Per-cell UMI total, distance of the median ratio from 1, spliced+ambiguous UMI",
+      "unit": "|ln ratio|",
+      "category": "agreement",
+      "dataset": "pbmc1k_v2",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.111816,
+        "ci": [
+          0.111058,
+          0.112618
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.222666,
+          "ci": [
+            0.220719,
+            0.224927
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.222666,
+          "ci": [
+            0.220719,
+            0.224927
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001639
+        },
+        "rationale": "gate = Singlet's mean |ln ratio| distance to STARsolo Velocyto spliced+ambiguous, alevin-fry USA spliced+ambiguous against the distance the competitors have from each other (0.2227); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0016"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: ratio 1.107; alevin-fry USA spliced+ambiguous: ratio 0.885. Basis: cells with UMI in every tool (1000). Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "gene_corr.spliced_ambiguous",
+      "name": "Per-cell gene correlation, spliced+ambiguous UMI",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.972594,
+        "ci": [
+          0.972315,
+          0.972868
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.976482,
+          "ci": [
+            0.976143,
+            0.976771
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.976482,
+          "ci": [
+            0.976143,
+            0.976771
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000232
+        },
+        "rationale": "gate = Singlet's mean r distance to STARsolo Velocyto spliced+ambiguous, alevin-fry USA spliced+ambiguous against the distance the competitors have from each other (0.9765); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0002"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9719; alevin-fry USA spliced+ambiguous: 0.9732. Basis: cells common to the family. Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "pseudobulk_rho.spliced_ambiguous",
+      "name": "Pseudobulk gene Spearman rho, spliced+ambiguous UMI",
+      "unit": "rho",
+      "category": "agreement",
+      "dataset": "pbmc1k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.954016,
+        "ci": [
+          0.951799,
+          0.956148
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.95864,
+          "ci": [
+            0.955599,
+            0.961485
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.95864,
+          "ci": [
+            0.955599,
+            0.961485
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001882
+        },
+        "rationale": "gate = Singlet's mean rho distance to STARsolo Velocyto spliced+ambiguous, alevin-fry USA spliced+ambiguous against the distance the competitors have from each other (0.9586); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0019"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9420; alevin-fry USA spliced+ambiguous: 0.9660. Basis: 20016 genes with any UMI. Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "umi_ratio_distance.unspliced",
+      "name": "Per-cell UMI total, distance of the median ratio from 1, unspliced UMI",
+      "unit": "|ln ratio|",
+      "category": "agreement",
+      "dataset": "neuron1k_v3",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.022441,
+        "ci": [
+          0.022004,
+          0.022734
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.011198,
+          "ci": [
+            0.010874,
+            0.011518
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.011198,
+          "ci": [
+            0.010874,
+            0.011518
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000538
+        },
+        "rationale": "gate = Singlet's mean |ln ratio| distance to STARsolo Velocyto unspliced, alevin-fry USA unspliced against the distance the competitors have from each other (0.0112); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0005"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: ratio 0.983; alevin-fry USA unspliced: ratio 0.972. Basis: cells with UMI in every tool (1258). Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "gene_corr.unspliced",
+      "name": "Per-cell gene correlation, unspliced UMI",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "neuron1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.978311,
+        "ci": [
+          0.978022,
+          0.978688
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.986905,
+          "ci": [
+            0.986692,
+            0.987193
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.986905,
+          "ci": [
+            0.986692,
+            0.987193
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000211
+        },
+        "rationale": "gate = Singlet's mean r distance to STARsolo Velocyto unspliced, alevin-fry USA unspliced against the distance the competitors have from each other (0.9869); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0002"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9809; alevin-fry USA unspliced: 0.9758. Basis: cells common to the family. Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "pseudobulk_rho.unspliced",
+      "name": "Pseudobulk gene Spearman rho, unspliced UMI",
+      "unit": "rho",
+      "category": "agreement",
+      "dataset": "neuron1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.923064,
+        "ci": [
+          0.920563,
+          0.92553
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.95134,
+          "ci": [
+            0.948862,
+            0.95336
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.95134,
+          "ci": [
+            0.948862,
+            0.95336
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.002536
+        },
+        "rationale": "gate = Singlet's mean rho distance to STARsolo Velocyto unspliced, alevin-fry USA unspliced against the distance the competitors have from each other (0.9513); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0025"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9293; alevin-fry USA unspliced: 0.9169. Basis: 31059 genes with any UMI. Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "umi_ratio_distance.spliced_ambiguous",
+      "name": "Per-cell UMI total, distance of the median ratio from 1, spliced+ambiguous UMI",
+      "unit": "|ln ratio|",
+      "category": "agreement",
+      "dataset": "neuron1k_v3",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.058448,
+        "ci": [
+          0.057916,
+          0.058991
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.054395,
+          "ci": [
+            0.053363,
+            0.055343
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.054395,
+          "ci": [
+            0.053363,
+            0.055343
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.00108
+        },
+        "rationale": "gate = Singlet's mean |ln ratio| distance to STARsolo Velocyto spliced+ambiguous, alevin-fry USA spliced+ambiguous against the distance the competitors have from each other (0.0544); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0011"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: ratio 1.089; alevin-fry USA spliced+ambiguous: ratio 1.032. Basis: cells with UMI in every tool (1258). Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "gene_corr.spliced_ambiguous",
+      "name": "Per-cell gene correlation, spliced+ambiguous UMI",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "neuron1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.967243,
+        "ci": [
+          0.966726,
+          0.967689
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.955469,
+          "ci": [
+            0.95477,
+            0.956175
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.955469,
+          "ci": [
+            0.95477,
+            0.956175
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000404
+        },
+        "rationale": "gate = Singlet's mean r distance to STARsolo Velocyto spliced+ambiguous, alevin-fry USA spliced+ambiguous against the distance the competitors have from each other (0.9555); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0004"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9662; alevin-fry USA spliced+ambiguous: 0.9683. Basis: cells common to the family. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "pseudobulk_rho.spliced_ambiguous",
+      "name": "Pseudobulk gene Spearman rho, spliced+ambiguous UMI",
+      "unit": "rho",
+      "category": "agreement",
+      "dataset": "neuron1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.892954,
+        "ci": [
+          0.889865,
+          0.895381
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.872806,
+          "ci": [
+            0.868067,
+            0.876942
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.872806,
+          "ci": [
+            0.868067,
+            0.876942
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.002816
+        },
+        "rationale": "gate = Singlet's mean rho distance to STARsolo Velocyto spliced+ambiguous, alevin-fry USA spliced+ambiguous against the distance the competitors have from each other (0.8728); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0028"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.8480; alevin-fry USA spliced+ambiguous: 0.9379. Basis: 32968 genes with any UMI. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "umi_ratio_distance.unspliced",
+      "name": "Per-cell UMI total, distance of the median ratio from 1, unspliced UMI",
+      "unit": "|ln ratio|",
+      "category": "agreement",
+      "dataset": "hgmm1k_v3",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.027862,
+        "ci": [
+          0.026663,
+          0.02969
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.00631,
+          "ci": [
+            0.005046,
+            0.007734
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.00631,
+          "ci": [
+            0.005046,
+            0.007734
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.00159
+        },
+        "rationale": "gate = Singlet's mean |ln ratio| distance to STARsolo Velocyto unspliced, alevin-fry USA unspliced against the distance the competitors have from each other (0.0063); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0016"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: ratio 1.028; alevin-fry USA unspliced: ratio 1.028. Basis: cells with UMI in every tool (1049). Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "gene_corr.unspliced",
+      "name": "Per-cell gene correlation, unspliced UMI",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "hgmm1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.971192,
+        "ci": [
+          0.970694,
+          0.97161
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.973964,
+          "ci": [
+            0.973395,
+            0.974439
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.973964,
+          "ci": [
+            0.973395,
+            0.974439
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000347
+        },
+        "rationale": "gate = Singlet's mean r distance to STARsolo Velocyto unspliced, alevin-fry USA unspliced against the distance the competitors have from each other (0.9740); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0003"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9794; alevin-fry USA unspliced: 0.9629. Basis: cells common to the family. Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "pseudobulk_rho.unspliced",
+      "name": "Pseudobulk gene Spearman rho, unspliced UMI",
+      "unit": "rho",
+      "category": "agreement",
+      "dataset": "hgmm1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.946296,
+        "ci": [
+          0.944889,
+          0.947618
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.950719,
+          "ci": [
+            0.949054,
+            0.952759
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.950719,
+          "ci": [
+            0.949054,
+            0.952759
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001729
+        },
+        "rationale": "gate = Singlet's mean rho distance to STARsolo Velocyto unspliced, alevin-fry USA unspliced against the distance the competitors have from each other (0.9507); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0017"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9572; alevin-fry USA unspliced: 0.9354. Basis: 47745 genes with any UMI. Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "umi_ratio_distance.spliced_ambiguous",
+      "name": "Per-cell UMI total, distance of the median ratio from 1, spliced+ambiguous UMI",
+      "unit": "|ln ratio|",
+      "category": "agreement",
+      "dataset": "hgmm1k_v3",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.029164,
+        "ci": [
+          0.026651,
+          0.038902
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.022129,
+          "ci": [
+            0.005972,
+            0.061286
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.022129,
+          "ci": [
+            0.005972,
+            0.061286
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.02932
+        },
+        "rationale": "gate = Singlet's mean |ln ratio| distance to STARsolo Velocyto spliced+ambiguous, alevin-fry USA spliced+ambiguous against the distance the competitors have from each other (0.0221); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0293"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: ratio 1.044; alevin-fry USA spliced+ambiguous: ratio 1.015. Basis: cells with UMI in every tool (1049). Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "gene_corr.spliced_ambiguous",
+      "name": "Per-cell gene correlation, spliced+ambiguous UMI",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "hgmm1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.970225,
+        "ci": [
+          0.969653,
+          0.971271
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.954527,
+          "ci": [
+            0.953909,
+            0.955873
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.954527,
+          "ci": [
+            0.953909,
+            0.955873
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000542
+        },
+        "rationale": "gate = Singlet's mean r distance to STARsolo Velocyto spliced+ambiguous, alevin-fry USA spliced+ambiguous against the distance the competitors have from each other (0.9545); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0005"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9737; alevin-fry USA spliced+ambiguous: 0.9668. Basis: cells common to the family. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "pseudobulk_rho.spliced_ambiguous",
+      "name": "Pseudobulk gene Spearman rho, spliced+ambiguous UMI",
+      "unit": "rho",
+      "category": "agreement",
+      "dataset": "hgmm1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.949961,
+        "ci": [
+          0.948545,
+          0.951285
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.928202,
+          "ci": [
+            0.926054,
+            0.930787
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.928202,
+          "ci": [
+            0.926054,
+            0.930787
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001434
+        },
+        "rationale": "gate = Singlet's mean rho distance to STARsolo Velocyto spliced+ambiguous, alevin-fry USA spliced+ambiguous against the distance the competitors have from each other (0.9282); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0014"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9267; alevin-fry USA spliced+ambiguous: 0.9733. Basis: 46609 genes with any UMI. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "umi_ratio_distance.unspliced",
+      "name": "Per-cell UMI total, distance of the median ratio from 1, unspliced UMI",
+      "unit": "|ln ratio|",
+      "category": "agreement",
+      "dataset": "pbmc1k_cite_v3",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.038475,
+        "ci": [
+          0.036808,
+          0.040374
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.006375,
+          "ci": [
+            0.005385,
+            0.007907
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.006375,
+          "ci": [
+            0.005385,
+            0.007907
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001955
+        },
+        "rationale": "gate = Singlet's mean |ln ratio| distance to STARsolo Velocyto unspliced, alevin-fry USA unspliced against the distance the competitors have from each other (0.0064); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0020"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: ratio 0.960; alevin-fry USA unspliced: ratio 0.965. Basis: cells with UMI in every tool (714). Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "gene_corr.unspliced",
+      "name": "Per-cell gene correlation, unspliced UMI",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_cite_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.948778,
+        "ci": [
+          0.947764,
+          0.950025
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.964109,
+          "ci": [
+            0.963341,
+            0.965205
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.964109,
+          "ci": [
+            0.963341,
+            0.965205
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000612
+        },
+        "rationale": "gate = Singlet's mean r distance to STARsolo Velocyto unspliced, alevin-fry USA unspliced against the distance the competitors have from each other (0.9641); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0006"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9572; alevin-fry USA unspliced: 0.9403. Basis: cells common to the family. Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "pseudobulk_rho.unspliced",
+      "name": "Pseudobulk gene Spearman rho, unspliced UMI",
+      "unit": "rho",
+      "category": "agreement",
+      "dataset": "pbmc1k_cite_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.943936,
+        "ci": [
+          0.941958,
+          0.945835
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.960682,
+          "ci": [
+            0.958906,
+            0.962329
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.960682,
+          "ci": [
+            0.958906,
+            0.962329
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001996
+        },
+        "rationale": "gate = Singlet's mean rho distance to STARsolo Velocyto unspliced, alevin-fry USA unspliced against the distance the competitors have from each other (0.9607); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0020"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9438; alevin-fry USA unspliced: 0.9440. Basis: 23624 genes with any UMI. Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "umi_ratio_distance.spliced_ambiguous",
+      "name": "Per-cell UMI total, distance of the median ratio from 1, spliced+ambiguous UMI",
+      "unit": "|ln ratio|",
+      "category": "agreement",
+      "dataset": "pbmc1k_cite_v3",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.062595,
+        "ci": [
+          0.061653,
+          0.063784
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.119737,
+          "ci": [
+            0.118464,
+            0.121635
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.119737,
+          "ci": [
+            0.118464,
+            0.121635
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.00127
+        },
+        "rationale": "gate = Singlet's mean |ln ratio| distance to STARsolo Velocyto spliced+ambiguous, alevin-fry USA spliced+ambiguous against the distance the competitors have from each other (0.1197); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0013"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: ratio 1.070; alevin-fry USA spliced+ambiguous: ratio 0.944. Basis: cells with UMI in every tool (714). Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "gene_corr.spliced_ambiguous",
+      "name": "Per-cell gene correlation, spliced+ambiguous UMI",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_cite_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.979209,
+        "ci": [
+          0.97895,
+          0.979508
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.978182,
+          "ci": [
+            0.977834,
+            0.978521
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.978182,
+          "ci": [
+            0.977834,
+            0.978521
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000241
+        },
+        "rationale": "gate = Singlet's mean r distance to STARsolo Velocyto spliced+ambiguous, alevin-fry USA spliced+ambiguous against the distance the competitors have from each other (0.9782); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0002"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9764; alevin-fry USA spliced+ambiguous: 0.9820. Basis: cells common to the family. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "pseudobulk_rho.spliced_ambiguous",
+      "name": "Pseudobulk gene Spearman rho, spliced+ambiguous UMI",
+      "unit": "rho",
+      "category": "agreement",
+      "dataset": "pbmc1k_cite_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.966552,
+        "ci": [
+          0.965134,
+          0.968269
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.957483,
+          "ci": [
+            0.955102,
+            0.960332
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.957483,
+          "ci": [
+            0.955102,
+            0.960332
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001444
+        },
+        "rationale": "gate = Singlet's mean rho distance to STARsolo Velocyto spliced+ambiguous, alevin-fry USA spliced+ambiguous against the distance the competitors have from each other (0.9575); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0014"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9517; alevin-fry USA spliced+ambiguous: 0.9814. Basis: 21138 genes with any UMI. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "umi_ratio_distance.unspliced",
+      "name": "Per-cell UMI total, distance of the median ratio from 1, unspliced UMI",
+      "unit": "|ln ratio|",
+      "category": "agreement",
+      "dataset": "nuclei2k_v2",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.027703,
+        "ci": [
+          0.027067,
+          0.028288
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.054207,
+          "ci": [
+            0.053236,
+            0.055193
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.054207,
+          "ci": [
+            0.053236,
+            0.055193
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000759
+        },
+        "rationale": "gate = Singlet's mean |ln ratio| distance to STARsolo Velocyto unspliced, alevin-fry USA unspliced against the distance the competitors have from each other (0.0542); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0008"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: ratio 1.046; alevin-fry USA unspliced: ratio 0.989. Basis: cells with UMI in every tool (2202). Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "gene_corr.unspliced",
+      "name": "Per-cell gene correlation, unspliced UMI",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "nuclei2k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.931231,
+        "ci": [
+          0.930343,
+          0.931841
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.964437,
+          "ci": [
+            0.964029,
+            0.964861
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.964437,
+          "ci": [
+            0.964029,
+            0.964861
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000469
+        },
+        "rationale": "gate = Singlet's mean r distance to STARsolo Velocyto unspliced, alevin-fry USA unspliced against the distance the competitors have from each other (0.9644); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0005"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9283; alevin-fry USA unspliced: 0.9341. Basis: cells common to the family. Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "pseudobulk_rho.unspliced",
+      "name": "Pseudobulk gene Spearman rho, unspliced UMI",
+      "unit": "rho",
+      "category": "agreement",
+      "dataset": "nuclei2k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.865613,
+        "ci": [
+          0.862464,
+          0.86843
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.926045,
+          "ci": [
+            0.923278,
+            0.927794
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.926045,
+          "ci": [
+            0.923278,
+            0.927794
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.003331
+        },
+        "rationale": "gate = Singlet's mean rho distance to STARsolo Velocyto unspliced, alevin-fry USA unspliced against the distance the competitors have from each other (0.9260); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0033"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.8679; alevin-fry USA unspliced: 0.8633. Basis: 32728 genes with any UMI. Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "umi_ratio_distance.spliced_ambiguous",
+      "name": "Per-cell UMI total, distance of the median ratio from 1, spliced+ambiguous UMI",
+      "unit": "|ln ratio|",
+      "category": "agreement",
+      "dataset": "nuclei2k_v2",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.187433,
+        "ci": [
+          0.185328,
+          0.189422
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.180891,
+          "ci": [
+            0.179548,
+            0.18238
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.180891,
+          "ci": [
+            0.179548,
+            0.18238
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001426
+        },
+        "rationale": "gate = Singlet's mean |ln ratio| distance to STARsolo Velocyto spliced+ambiguous, alevin-fry USA spliced+ambiguous against the distance the competitors have from each other (0.1809); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0014"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: ratio 1.323; alevin-fry USA spliced+ambiguous: ratio 1.100. Basis: cells with UMI in every tool (2202). Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "gene_corr.spliced_ambiguous",
+      "name": "Per-cell gene correlation, spliced+ambiguous UMI",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "nuclei2k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.882784,
+        "ci": [
+          0.882105,
+          0.883531
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.908794,
+          "ci": [
+            0.90828,
+            0.909397
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.908794,
+          "ci": [
+            0.90828,
+            0.909397
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000589
+        },
+        "rationale": "gate = Singlet's mean r distance to STARsolo Velocyto spliced+ambiguous, alevin-fry USA spliced+ambiguous against the distance the competitors have from each other (0.9088); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0006"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.8666; alevin-fry USA spliced+ambiguous: 0.8989. Basis: cells common to the family. Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "pseudobulk_rho.spliced_ambiguous",
+      "name": "Pseudobulk gene Spearman rho, spliced+ambiguous UMI",
+      "unit": "rho",
+      "category": "agreement",
+      "dataset": "nuclei2k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.86188,
+        "ci": [
+          0.858203,
+          0.864486
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.86421,
+          "ci": [
+            0.859027,
+            0.868286
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.86421,
+          "ci": [
+            0.859027,
+            0.868286
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.003123
+        },
+        "rationale": "gate = Singlet's mean rho distance to STARsolo Velocyto spliced+ambiguous, alevin-fry USA spliced+ambiguous against the distance the competitors have from each other (0.8642); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0031"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.8209; alevin-fry USA spliced+ambiguous: 0.9028. Basis: 32533 genes with any UMI. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "umi_ratio_distance.unspliced",
+      "name": "Per-cell UMI total, distance of the median ratio from 1, unspliced UMI",
+      "unit": "|ln ratio|",
+      "category": "agreement",
+      "dataset": "pbmc5p_v1",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.095231,
+        "ci": [
+          0.093411,
+          0.097096
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.199045,
+          "ci": [
+            0.19495,
+            0.203521
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.199045,
+          "ci": [
+            0.19495,
+            0.203521
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.00321
+        },
+        "rationale": "gate = Singlet's mean |ln ratio| distance to STARsolo Velocyto unspliced, alevin-fry USA unspliced against the distance the competitors have from each other (0.1990); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0032"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: ratio 1.098; alevin-fry USA unspliced: ratio 0.907. Basis: cells with UMI in every tool (7452). Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "gene_corr.unspliced",
+      "name": "Per-cell gene correlation, unspliced UMI",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc5p_v1",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.885341,
+        "ci": [
+          0.883942,
+          0.886523
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.922177,
+          "ci": [
+            0.921382,
+            0.923048
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.922177,
+          "ci": [
+            0.921382,
+            0.923048
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000907
+        },
+        "rationale": "gate = Singlet's mean r distance to STARsolo Velocyto unspliced, alevin-fry USA unspliced against the distance the competitors have from each other (0.9222); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0009"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9082; alevin-fry USA unspliced: 0.8625. Basis: cells common to the family. Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "pseudobulk_rho.unspliced",
+      "name": "Pseudobulk gene Spearman rho, unspliced UMI",
+      "unit": "rho",
+      "category": "agreement",
+      "dataset": "pbmc5p_v1",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.953296,
+        "ci": [
+          0.951098,
+          0.955164
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.961522,
+          "ci": [
+            0.959445,
+            0.963779
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.961522,
+          "ci": [
+            0.959445,
+            0.963779
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.002229
+        },
+        "rationale": "gate = Singlet's mean rho distance to STARsolo Velocyto unspliced, alevin-fry USA unspliced against the distance the competitors have from each other (0.9615); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0022"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto unspliced: 0.9643; alevin-fry USA unspliced: 0.9423. Basis: 22065 genes with any UMI. Competitor value = its mean distance to the other competitors.",
+      "pass": "fail"
+    },
+    {
+      "id": "umi_ratio_distance.spliced_ambiguous",
+      "name": "Per-cell UMI total, distance of the median ratio from 1, spliced+ambiguous UMI",
+      "unit": "|ln ratio|",
+      "category": "agreement",
+      "dataset": "pbmc5p_v1",
+      "direction": "lower",
+      "singlet": {
+        "value": 0.036401,
+        "ci": [
+          0.036156,
+          0.036639
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.072602,
+          "ci": [
+            0.072095,
+            0.073019
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.072602,
+          "ci": [
+            0.072095,
+            0.073019
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000318
+        },
+        "rationale": "gate = Singlet's mean |ln ratio| distance to STARsolo Velocyto spliced+ambiguous, alevin-fry USA spliced+ambiguous against the distance the competitors have from each other (0.0726); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0003"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: ratio 1.063; alevin-fry USA spliced+ambiguous: ratio 0.989. Basis: cells with UMI in every tool (7453). Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "gene_corr.spliced_ambiguous",
+      "name": "Per-cell gene correlation, spliced+ambiguous UMI",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc5p_v1",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.985404,
+        "ci": [
+          0.985328,
+          0.985479
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.982672,
+          "ci": [
+            0.982572,
+            0.982756
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.982672,
+          "ci": [
+            0.982572,
+            0.982756
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 6.9e-05
+        },
+        "rationale": "gate = Singlet's mean r distance to STARsolo Velocyto spliced+ambiguous, alevin-fry USA spliced+ambiguous against the distance the competitors have from each other (0.9827); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0001"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9803; alevin-fry USA spliced+ambiguous: 0.9906. Basis: cells common to the family. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "pseudobulk_rho.spliced_ambiguous",
+      "name": "Pseudobulk gene Spearman rho, spliced+ambiguous UMI",
+      "unit": "rho",
+      "category": "agreement",
+      "dataset": "pbmc5p_v1",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.982859,
+        "ci": [
+          0.981619,
+          0.983917
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-velocyto",
+          "value": 0.975882,
+          "ci": [
+            0.973894,
+            0.977453
+          ]
+        },
+        {
+          "tool": "alevin-fry-usa",
+          "value": 0.975882,
+          "ci": [
+            0.973894,
+            0.977453
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001058
+        },
+        "rationale": "gate = Singlet's mean rho distance to STARsolo Velocyto spliced+ambiguous, alevin-fry USA spliced+ambiguous against the distance the competitors have from each other (0.9759); tolerance = half-width of the paired bootstrap 95% CI of the difference: 0.0011"
+      },
+      "notes": "Singlet vs each competitor (S/competitor for ratios): STARsolo Velocyto spliced+ambiguous: 0.9753; alevin-fry USA spliced+ambiguous: 0.9904. Basis: 22047 genes with any UMI. Competitor value = its mean distance to the other competitors.",
+      "pass": "pass"
+    },
+    {
+      "id": "ambiguous_share",
+      "name": "Ambiguous share of molecules, Singlet",
+      "unit": "fraction",
+      "category": "agreement",
+      "dataset": "pbmc1k_v3",
+      "direction": "none",
+      "singlet": {
+        "value": 0.013553
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "STARsolo Velocyto 0.099, alevin-fry USA 0.469: the spliced / ambiguous boundary is defined differently by each tool (see methods); not gated.",
+      "pass": "na"
+    },
+    {
+      "id": "ambiguous_share",
+      "name": "Ambiguous share of molecules, Singlet",
+      "unit": "fraction",
+      "category": "agreement",
+      "dataset": "pbmc1k_v2",
+      "direction": "none",
+      "singlet": {
+        "value": 0.044232
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "STARsolo Velocyto 0.102, alevin-fry USA 0.446: the spliced / ambiguous boundary is defined differently by each tool (see methods); not gated.",
+      "pass": "na"
+    },
+    {
+      "id": "ambiguous_share",
+      "name": "Ambiguous share of molecules, Singlet",
+      "unit": "fraction",
+      "category": "agreement",
+      "dataset": "neuron1k_v3",
+      "direction": "none",
+      "singlet": {
+        "value": 0.011333
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "STARsolo Velocyto 0.067, alevin-fry USA 0.504: the spliced / ambiguous boundary is defined differently by each tool (see methods); not gated.",
+      "pass": "na"
+    },
+    {
+      "id": "ambiguous_share",
+      "name": "Ambiguous share of molecules, Singlet",
+      "unit": "fraction",
+      "category": "agreement",
+      "dataset": "hgmm1k_v3",
+      "direction": "none",
+      "singlet": {
+        "value": 0.00176
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "STARsolo Velocyto 0.083, alevin-fry USA 0.602: the spliced / ambiguous boundary is defined differently by each tool (see methods); not gated.",
+      "pass": "na"
+    },
+    {
+      "id": "ambiguous_share",
+      "name": "Ambiguous share of molecules, Singlet",
+      "unit": "fraction",
+      "category": "agreement",
+      "dataset": "pbmc1k_cite_v3",
+      "direction": "none",
+      "singlet": {
+        "value": 0.014724
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "STARsolo Velocyto 0.098, alevin-fry USA 0.459: the spliced / ambiguous boundary is defined differently by each tool (see methods); not gated.",
+      "pass": "na"
+    },
+    {
+      "id": "ambiguous_share",
+      "name": "Ambiguous share of molecules, Singlet",
+      "unit": "fraction",
+      "category": "agreement",
+      "dataset": "nuclei2k_v2",
+      "direction": "none",
+      "singlet": {
+        "value": 0.028422
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "STARsolo Velocyto 0.065, alevin-fry USA 0.321: the spliced / ambiguous boundary is defined differently by each tool (see methods); not gated.",
+      "pass": "na"
+    },
+    {
+      "id": "ambiguous_share",
+      "name": "Ambiguous share of molecules, Singlet",
+      "unit": "fraction",
+      "category": "agreement",
+      "dataset": "pbmc5p_v1",
+      "direction": "none",
+      "singlet": {
+        "value": 0.008457
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "STARsolo Velocyto 0.099, alevin-fry USA 0.422: the spliced / ambiguous boundary is defined differently by each tool (see methods); not gated.",
+      "pass": "na"
+    }
+  ],
+  "resources": [
+    {
+      "tool": "alevin-fry-usa",
+      "dataset": "pbmc1k_v3",
+      "wall_s": 111.1,
+      "max_rss_gb": 3.42,
+      "threads": 16,
+      "cpu_h": 0.443,
+      "node": "[run] cpu: Intel(R) Xeon(R) 6730P"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "pbmc1k_v3",
+      "wall_s": 791.8,
+      "max_rss_gb": 21.32,
+      "threads": 8,
+      "cpu_h": 0.831,
+      "node": "c004.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-velocyto",
+      "dataset": "pbmc1k_v3",
+      "wall_s": 348.3,
+      "max_rss_gb": 19.66,
+      "threads": 16,
+      "cpu_h": 0.835,
+      "node": "c100.clipper.gvsu.edu"
+    },
+    {
+      "tool": "alevin-fry-usa",
+      "dataset": "pbmc1k_v2",
+      "wall_s": 122.7,
+      "max_rss_gb": 3.42,
+      "threads": 16,
+      "cpu_h": 0.493,
+      "node": "[run] cpu: Intel(R) Xeon(R) 6730P"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "pbmc1k_v2",
+      "wall_s": 882.9,
+      "max_rss_gb": 20.86,
+      "threads": 8,
+      "cpu_h": 1.018,
+      "node": "c009.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-velocyto",
+      "dataset": "pbmc1k_v2",
+      "wall_s": 506.3,
+      "max_rss_gb": 18.77,
+      "threads": 16,
+      "cpu_h": 1.244,
+      "node": "c003.clipper.gvsu.edu"
+    },
+    {
+      "tool": "alevin-fry-usa",
+      "dataset": "neuron1k_v3",
+      "wall_s": 91.7,
+      "max_rss_gb": 2.74,
+      "threads": 16,
+      "cpu_h": 0.349,
+      "node": "[run] cpu: Intel(R) Xeon(R) Gold 6226 CPU @ 2.70GHz"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "neuron1k_v3",
+      "wall_s": 720.7,
+      "max_rss_gb": 29.62,
+      "threads": 8,
+      "cpu_h": 0.549,
+      "node": "c101.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-velocyto",
+      "dataset": "neuron1k_v3",
+      "wall_s": 425.2,
+      "max_rss_gb": 28.59,
+      "threads": 16,
+      "cpu_h": 0.677,
+      "node": "c100.clipper.gvsu.edu"
+    },
+    {
+      "tool": "alevin-fry-usa",
+      "dataset": "hgmm1k_v3",
+      "wall_s": 101.6,
+      "max_rss_gb": 5.88,
+      "threads": 16,
+      "cpu_h": 0.369,
+      "node": "[run] cpu: Intel(R) Xeon(R) Gold 6226 CPU @ 2.70GHz"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "hgmm1k_v3",
+      "wall_s": 793.0,
+      "max_rss_gb": 57.37,
+      "threads": 8,
+      "cpu_h": 0.514,
+      "node": "c004.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-velocyto",
+      "dataset": "hgmm1k_v3",
+      "wall_s": 441.8,
+      "max_rss_gb": 56.56,
+      "threads": 16,
+      "cpu_h": 0.604,
+      "node": "c101.clipper.gvsu.edu"
+    },
+    {
+      "tool": "alevin-fry-usa",
+      "dataset": "pbmc1k_cite_v3",
+      "wall_s": 91.7,
+      "max_rss_gb": 3.42,
+      "threads": 16,
+      "cpu_h": 0.347,
+      "node": "[run] cpu: Intel(R) Xeon(R) Gold 6226 CPU @ 2.70GHz"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "pbmc1k_cite_v3",
+      "wall_s": 563.8,
+      "max_rss_gb": 21.29,
+      "threads": 8,
+      "cpu_h": 0.594,
+      "node": "c007.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-velocyto",
+      "dataset": "pbmc1k_cite_v3",
+      "wall_s": 371.4,
+      "max_rss_gb": 19.63,
+      "threads": 16,
+      "cpu_h": 0.817,
+      "node": "c010.clipper.gvsu.edu"
+    },
+    {
+      "tool": "alevin-fry-usa",
+      "dataset": "nuclei2k_v2",
+      "wall_s": 523.6,
+      "max_rss_gb": 2.61,
+      "threads": 16,
+      "cpu_h": 0.586,
+      "node": "[run] cpu: Intel(R) Xeon(R) 6730P"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "nuclei2k_v2",
+      "wall_s": 1381.2,
+      "max_rss_gb": 29.11,
+      "threads": 8,
+      "cpu_h": 1.633,
+      "node": "c009.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-velocyto",
+      "dataset": "nuclei2k_v2",
+      "wall_s": 452.8,
+      "max_rss_gb": 27.42,
+      "threads": 16,
+      "cpu_h": 1.233,
+      "node": "c100.clipper.gvsu.edu"
+    },
+    {
+      "tool": "alevin-fry-usa",
+      "dataset": "pbmc5p_v1",
+      "wall_s": 62.3,
+      "max_rss_gb": 3.77,
+      "threads": 16,
+      "cpu_h": 0.192,
+      "node": "[run] cpu: Intel(R) Xeon(R) Gold 6226 CPU @ 2.70GHz"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "pbmc5p_v1",
+      "wall_s": 612.7,
+      "max_rss_gb": 20.86,
+      "threads": 8,
+      "cpu_h": 0.615,
+      "node": "c101.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-velocyto",
+      "dataset": "pbmc5p_v1",
+      "wall_s": 307.5,
+      "max_rss_gb": 18.77,
+      "threads": 16,
+      "cpu_h": 0.674,
+      "node": "c100.clipper.gvsu.edu"
+    }
+  ],
+  "figures": [
+    {
+      "id": "ambiguous_share",
+      "title": "Ambiguous share of molecules",
+      "kind": "grouped_bar",
+      "caption": "Pooled over the common cells. The spliced / ambiguous line is drawn differently by each tool.",
+      "x": {
+        "label": "dataset",
+        "categories": [
+          "pbmc1k_v3",
+          "pbmc1k_v2",
+          "neuron1k_v3",
+          "hgmm1k_v3",
+          "pbmc1k_cite_v3",
+          "nuclei2k_v2",
+          "pbmc5p_v1"
+        ]
+      },
+      "y": {
+        "label": "share of molecules",
+        "unit": "fraction",
+        "scale": "linear",
+        "min": 0,
+        "max": 1
+      },
+      "series": [
+        {
+          "name": "Singlet",
+          "tool": "singlet",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "nuclei2k_v2",
+            "pbmc5p_v1"
+          ],
+          "y": [
+            0.013553,
+            0.044232,
+            0.011333,
+            0.00176,
+            0.014724,
+            0.028422,
+            0.008457
+          ]
+        },
+        {
+          "name": "STARsolo Velocyto",
+          "tool": "starsolo-velocyto",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "nuclei2k_v2",
+            "pbmc5p_v1"
+          ],
+          "y": [
+            0.099201,
+            0.101931,
+            0.066525,
+            0.08346,
+            0.098328,
+            0.065314,
+            0.099316
+          ]
+        },
+        {
+          "name": "alevin-fry USA",
+          "tool": "alevin-fry-usa",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "nuclei2k_v2",
+            "pbmc5p_v1"
+          ],
+          "y": [
+            0.469486,
+            0.445796,
+            0.503573,
+            0.601851,
+            0.458545,
+            0.320503,
+            0.421859
+          ]
+        }
+      ]
+    },
+    {
+      "id": "unspliced_share",
+      "title": "Unspliced share of molecules",
+      "kind": "grouped_bar",
+      "caption": "Pooled over the common cells.",
+      "x": {
+        "label": "dataset",
+        "categories": [
+          "pbmc1k_v3",
+          "pbmc1k_v2",
+          "neuron1k_v3",
+          "hgmm1k_v3",
+          "pbmc1k_cite_v3",
+          "nuclei2k_v2",
+          "pbmc5p_v1"
+        ]
+      },
+      "y": {
+        "label": "share of molecules",
+        "unit": "fraction",
+        "scale": "linear",
+        "min": 0,
+        "max": 1
+      },
+      "series": [
+        {
+          "name": "Singlet",
+          "tool": "singlet",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "nuclei2k_v2",
+            "pbmc5p_v1"
+          ],
+          "y": [
+            0.324385,
+            0.228032,
+            0.336818,
+            0.21583,
+            0.343246,
+            0.6227,
+            0.104476
+          ]
+        },
+        {
+          "name": "STARsolo Velocyto",
+          "tool": "starsolo-velocyto",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "nuclei2k_v2",
+            "pbmc5p_v1"
+          ],
+          "y": [
+            0.346825,
+            0.232762,
+            0.358863,
+            0.221706,
+            0.368129,
+            0.675349,
+            0.100556
+          ]
+        },
+        {
+          "name": "alevin-fry USA",
+          "tool": "alevin-fry-usa",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "nuclei2k_v2",
+            "pbmc5p_v1"
+          ],
+          "y": [
+            0.317575,
+            0.199197,
+            0.350228,
+            0.212353,
+            0.338152,
+            0.646912,
+            0.117197
+          ]
+        }
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "name": "hgmm1k_v3.cells.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/spliced-unspliced/hgmm1k_v3.cells.tsv.gz",
+      "kind": "derived",
+      "sha256": "c1bdd8a74ebc64e84f8d226c0b8b2b1ad4e6618b1d621d6ea8e0de49c91a29d8",
+      "bytes": 66246,
+      "format": "tsv",
+      "dataset": "hgmm1k_v3"
+    },
+    {
+      "name": "hgmm1k_v3.genes.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/spliced-unspliced/hgmm1k_v3.genes.tsv.gz",
+      "kind": "derived",
+      "sha256": "e3a8eb3daf3a9525d3b740da4b88e99bb48c2641ed6edabf21b93da83394651c",
+      "bytes": 680400,
+      "format": "tsv",
+      "dataset": "hgmm1k_v3"
+    },
+    {
+      "name": "neuron1k_v3.cells.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/spliced-unspliced/neuron1k_v3.cells.tsv.gz",
+      "kind": "derived",
+      "sha256": "c2a7c196ef57dfa2f72ff18bfb6fb9708b351e16a423b52e27bcdd24a930215a",
+      "bytes": 77894,
+      "format": "tsv",
+      "dataset": "neuron1k_v3"
+    },
+    {
+      "name": "neuron1k_v3.genes.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/spliced-unspliced/neuron1k_v3.genes.tsv.gz",
+      "kind": "derived",
+      "sha256": "4ac853c74c3c3f57762427e36ef534f7385fa1331fa5e7b31f77b131be4e4790",
+      "bytes": 449032,
+      "format": "tsv",
+      "dataset": "neuron1k_v3"
+    },
+    {
+      "name": "nuclei2k_v2.cells.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/spliced-unspliced/nuclei2k_v2.cells.tsv.gz",
+      "kind": "derived",
+      "sha256": "69ca3bb1c7acdddc99ac226c58893688200039a08e36dae25132e246ae16aebc",
+      "bytes": 125144,
+      "format": "tsv",
+      "dataset": "nuclei2k_v2"
+    },
+    {
+      "name": "nuclei2k_v2.genes.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/spliced-unspliced/nuclei2k_v2.genes.tsv.gz",
+      "kind": "derived",
+      "sha256": "072824681f095ab18094d8873c67c58055c0e9775705ab280b338e4b5d3721bd",
+      "bytes": 433138,
+      "format": "tsv",
+      "dataset": "nuclei2k_v2"
+    },
+    {
+      "name": "pbmc1k_cite_v3.cells.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/spliced-unspliced/pbmc1k_cite_v3.cells.tsv.gz",
+      "kind": "derived",
+      "sha256": "5c89998280ddd67a6d0b4ab8b1b9b4ddf027bdfef9ba915f33ddaa5f903bc360",
+      "bytes": 44336,
+      "format": "tsv",
+      "dataset": "pbmc1k_cite_v3"
+    },
+    {
+      "name": "pbmc1k_cite_v3.genes.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/spliced-unspliced/pbmc1k_cite_v3.genes.tsv.gz",
+      "kind": "derived",
+      "sha256": "7de4130b40ac7aa63afaf9446d8044a0f8d0f255ec74e79933d5535887c6f922",
+      "bytes": 273084,
+      "format": "tsv",
+      "dataset": "pbmc1k_cite_v3"
+    },
+    {
+      "name": "pbmc1k_v2.cells.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/spliced-unspliced/pbmc1k_v2.cells.tsv.gz",
+      "kind": "derived",
+      "sha256": "b80d92f79e9922ce7562dda4077c8ad120f76568b5079bffdfb470c107b35d2f",
+      "bytes": 59740,
+      "format": "tsv",
+      "dataset": "pbmc1k_v2"
+    },
+    {
+      "name": "pbmc1k_v2.genes.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/spliced-unspliced/pbmc1k_v2.genes.tsv.gz",
+      "kind": "derived",
+      "sha256": "3b56b7860a8015662aa537674bb744a613c5265b5bf6ea14d6a6e224dc8b8fd5",
+      "bytes": 255522,
+      "format": "tsv",
+      "dataset": "pbmc1k_v2"
+    },
+    {
+      "name": "pbmc1k_v3.cells.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/spliced-unspliced/pbmc1k_v3.cells.tsv.gz",
+      "kind": "derived",
+      "sha256": "36a3ec36834023a430087be99ca173d1a1be8e5ffc5e8814ccab90694f938e9f",
+      "bytes": 75459,
+      "format": "tsv",
+      "dataset": "pbmc1k_v3"
+    },
+    {
+      "name": "pbmc1k_v3.genes.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/spliced-unspliced/pbmc1k_v3.genes.tsv.gz",
+      "kind": "derived",
+      "sha256": "022a7aa015d743e08f05286ec45ef9adaa7ec03808900957cd59cd3b16e77d00",
+      "bytes": 293132,
+      "format": "tsv",
+      "dataset": "pbmc1k_v3"
+    },
+    {
+      "name": "pbmc5p_v1.cells.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/spliced-unspliced/pbmc5p_v1.cells.tsv.gz",
+      "kind": "derived",
+      "sha256": "9337f110237931bfd28340d37b9a87f1829e79fc95b5dd968fa3ae652a8ccc52",
+      "bytes": 413682,
+      "format": "tsv",
+      "dataset": "pbmc5p_v1"
+    },
+    {
+      "name": "pbmc5p_v1.genes.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/spliced-unspliced/pbmc5p_v1.genes.tsv.gz",
+      "kind": "derived",
+      "sha256": "24c0d54f7f3f75df63b57e261bb8d87de32e0d80645301f31d8c28d9a627d1be",
+      "bytes": 282419,
+      "format": "tsv",
+      "dataset": "pbmc5p_v1"
+    },
+    {
+      "name": "provenance.json",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/spliced-unspliced/provenance.json",
+      "kind": "derived",
+      "sha256": "1d6bedb06d4b47c9b415a7558df0c33415880d941b0d76b3b4915b70d71f103b",
+      "bytes": 31212,
+      "format": "json"
+    },
+    {
+      "name": "resources.json",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/spliced-unspliced/resources.json",
+      "kind": "derived",
+      "sha256": "c320095e3b1b35bff0b27e17af014e5c8c49723276f51954ccb78da716a045f3",
+      "bytes": 7917,
+      "format": "json"
+    }
+  ],
+  "code": [
+    {
+      "path": "bench/public/capabilities/spliced_unspliced.py",
+      "role": "metric",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/spliced_unspliced.py"
+    },
+    {
+      "path": "bench/public/capabilities/_familycmp.py",
+      "role": "metric",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/_familycmp.py"
+    },
+    {
+      "path": "bench/public/capabilities/_pubcommon.py",
+      "role": "metric",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/_pubcommon.py"
+    },
+    {
+      "path": "bench/public/capabilities/extract/counts.py",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/extract/counts.py"
+    },
+    {
+      "path": "bench/public/capabilities/extract/pairstats.py",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/extract/pairstats.py"
+    },
+    {
+      "path": "bench/public/capabilities/extract/runio.py",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/extract/runio.py"
+    },
+    {
+      "path": "bench/public/capabilities/extract/run_extract.py",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/extract/run_extract.py"
+    },
+    {
+      "path": "bench/public/capabilities/clipper/starsolo_public.sbatch",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/clipper/starsolo_public.sbatch"
+    },
+    {
+      "path": "bench/public/capabilities/clipper/singlet_public.sbatch",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/clipper/singlet_public.sbatch"
+    }
+  ],
+  "reproduce": {
+    "module": "bench/public/capabilities/spliced_unspliced.py",
+    "function": "compute",
+    "laptop_minutes": 2,
+    "clipper_command": "bash bench/public/capabilities/clipper/run_all.sh spliced-unspliced"
+  },
+  "caveats": [
+    "Spliced-only and ambiguous-only layers are not gated: the three tools define the spliced / ambiguous boundary differently, so agreement there would measure definitions, not accuracy.",
+    "There is no ground truth for velocity layers; agreement between STARsolo and alevin-fry sets the tolerance, so a metric where the two competitors happen to agree closely is a strict test.",
+    "Singlet's collapsed gene model reports far fewer ambiguous molecules than STARsolo and alevin-fry; RNA velocity users who use only the spliced layer will see a different spliced / unspliced ratio.",
+    "The 5' dataset is the first 60 M read pairs; alevin-fry used expected orientation fw (simpleaf's own default for 10xv2-5p).",
+    "Wall time and memory in resources are from a shared cluster at differing thread counts and are not a speed comparison.",
+    "Cohort datasets assigned to spliced-unspliced that this document does not cover (no run for them in this benchmark yet): pbmc5k_v4_d1, mouse_brain_nuclei5k_v31."
+  ],
+  "conclusion": "On 7 datasets Singlet's unspliced UMI per cell is 0.96-1.10 of STARsolo Velocyto's and 0.91-1.05 of alevin-fry USA's (median ratio), and its spliced+ambiguous UMI 1.04-1.32 of STARsolo's; 18 of 42 gating metrics pass (Singlet inside the spread of the two competitors). Spliced and ambiguous alone are defined differently by each tool (ambiguous share: Singlet 0.2%-4.4%, STARsolo 6.5%-10.2%, alevin-fry 32.1%-60.2%) and are not gated."
+}

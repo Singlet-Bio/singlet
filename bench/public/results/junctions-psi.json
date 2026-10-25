@@ -1,0 +1,2677 @@
+{
+  "schema": "singlet.benchmark.capability",
+  "schema_version": "1.0.0",
+  "capability": "junctions-psi",
+  "title": "Splice junctions and PSI",
+  "methods": "**Data.** The cohort's 10x datasets from FASTQs on their 2024-A references. Cells: barcodes STARsolo EmptyDrops_CR calls.\n\n**Reference and competitor.** STARsolo is the only tool that counts junctions per cell with UMIs. It runs twice on the same reads: at STAR/STARsolo defaults (reference) and in the manual's Cell Ranger 4+ emulation (competitor). Singlet is compared with the reference; the Cell Ranger-emulation run is compared with the same reference. Singlet must be at least as close as that. The emulation's MultiGeneUMI_CR filter zeroes high-count junctions in overlapping genes, so it is not the natural reference for junctions.\n\n**Filtered set.** STAR passes junctions through its outSJfilter* rules. A tool's filtered set is the junctions that pass them (STARsolo: its SJ feature list; Singlet: star_sj_pass in sj_features.tsv, from Singlet's own STAR alignment) and have at least one UMI in the STARsolo-called cells. Singlet also counts junctions outside that set; they are not scored.\n\n**Metrics.** (1) Jaccard of the filtered sets. (2) Pearson r of log10(1 + UMI) summed over cells, over the union of the filtered sets. (3) Median over cells of the Pearson r of log1p junction UMI over junctions non-zero in either tool (reference junction list). (4) Pearson r across cells of the per-cell total junction UMI. (5) Cassette-exon PSI, pseudobulk, at least 20 UMI in every tool. (6) The same PSI per cell and event with at least 5 UMI. Cassette exons are annotated triples of consecutive exons (inclusion 1, inclusion 2, skipping) in the GTF; PSI = inclusion / (inclusion + skipping), inclusion = the mean of the two inclusion junctions.\n\n**Rule.** match_or_beat the Cell Ranger-emulation run; tolerance = half-width of the paired bootstrap 95% CI of the difference (junctions, events or cells resampled together). All settings were fixed before the metrics were computed.",
+  "status": "final",
+  "generated_at": "2026-10-25T15:29:34+00:00",
+  "owner": "pipeline-benchmark",
+  "singlet": {
+    "version": "1.0.0",
+    "commit": "02aa9b938b54e0f92bba00c44c07b883a8660aa2",
+    "branch": "prod/campaign",
+    "binary": "singlet-campaign",
+    "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+    "build_flags": "PGO, -O3 -DNDEBUG, -march=x86-64-v3"
+  },
+  "tools": [
+    {
+      "name": "singlet",
+      "version": "1.0.0",
+      "role": "singlet",
+      "url": "https://singlet.bio",
+      "params": "singlet encode --reads R1.fastq.gz R2.fastq.gz -o s.1fq; singlet s.1fq --ref-base $REF --genome-dir $REF/$SPECIES/star_2.7.11b --exons $REF/$SPECIES/genes/genes.gtf --out-prefix $OUT/ --threads 8 --pipeline --output-format mtx --raw-matrix  (sj_counts: molecules per junction and barcode; filtered set = star_sj_pass in sj_features.tsv)"
+    },
+    {
+      "name": "starsolo-sj",
+      "version": "2.7.11b",
+      "role": "truth",
+      "url": "https://github.com/alexdobin/STAR",
+      "citation": "Kaminow, Yunusov, Dobin. bioRxiv 2021 (STARsolo)",
+      "params": "STAR --runThreadN 16 --genomeDir $GENOME --readFilesIn $R2 $R1 --readFilesCommand zcat --soloType CB_UMI_Simple --soloCBwhitelist $WHITELIST --soloCBlen 16 --soloUMIstart 17 --soloUMIlen $UMILEN --soloBarcodeReadLength 0 --soloStrand $STRAND --soloFeatures SJ --outSAMtype None  (all other options at their defaults; $UMILEN 12 for v3, 10 for v2 and 5'; 10x v1: CB 14, UMI 10)"
+    },
+    {
+      "name": "starsolo-sj-cr",
+      "version": "2.7.11b",
+      "role": "competitor",
+      "url": "https://github.com/alexdobin/STAR",
+      "params": "STAR --runThreadN 16 --genomeDir $GENOME --readFilesIn $R2 $R1 --readFilesCommand zcat --soloType CB_UMI_Simple --soloCBwhitelist $WHITELIST --soloCBlen 16 --soloUMIstart 17 --soloUMIlen $UMILEN --soloBarcodeReadLength 0 --soloStrand $STRAND --soloFeatures Gene GeneFull Velocyto SJ --soloCellFilter EmptyDrops_CR --soloCBmatchWLtype 1MM_multi_Nbase_pseudocounts --soloUMIfiltering MultiGeneUMI_CR --soloUMIdedup 1MM_CR --clipAdapterType CellRanger4 --outFilterScoreMin 30 --outSAMtype None"
+    }
+  ],
+  "datasets": [
+    {
+      "id": "pbmc1k_v3",
+      "title": "10x PBMC 1k, 3' v3",
+      "accessions": {
+        "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v3/pbmc_1k_v3_fastqs.tar"
+      },
+      "truth": "none. The reference is STARsolo SJ at STAR/STARsolo defaults (UMI counts per junction and cell) on the same reads; cassette exons are the annotated triples of the GENCODE GTF. Cells: STARsolo EmptyDrops_CR.",
+      "n_cells": 1230
+    },
+    {
+      "id": "pbmc1k_v2",
+      "title": "10x PBMC 1k, 3' v2",
+      "accessions": {
+        "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v2/pbmc_1k_v2_fastqs.tar"
+      },
+      "truth": "none. The reference is STARsolo SJ at STAR/STARsolo defaults (UMI counts per junction and cell) on the same reads; cassette exons are the annotated triples of the GENCODE GTF. Cells: STARsolo EmptyDrops_CR.",
+      "n_cells": 1000
+    },
+    {
+      "id": "neuron1k_v3",
+      "title": "10x mouse E18 brain cells 1k, 3' v3",
+      "accessions": {
+        "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/neuron_1k_v3/neuron_1k_v3_fastqs.tar"
+      },
+      "truth": "none. The reference is STARsolo SJ at STAR/STARsolo defaults (UMI counts per junction and cell) on the same reads; cassette exons are the annotated triples of the GENCODE GTF. Cells: STARsolo EmptyDrops_CR.",
+      "n_cells": 1258
+    },
+    {
+      "id": "hgmm1k_v3",
+      "title": "10x HEK293T + NIH3T3 1:1, 1k, 3' v3",
+      "accessions": {
+        "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/hgmm_1k_v3/hgmm_1k_v3_fastqs.tar"
+      },
+      "truth": "none. The reference is STARsolo SJ at STAR/STARsolo defaults (UMI counts per junction and cell) on the same reads; cassette exons are the annotated triples of the GENCODE GTF. Cells: STARsolo EmptyDrops_CR.",
+      "n_cells": 1049
+    },
+    {
+      "id": "pbmc1k_cite_v3",
+      "title": "10x PBMC 1k + TotalSeq-B (pbmc_1k_protein_v3)",
+      "accessions": {
+        "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_protein_v3/pbmc_1k_protein_v3_fastqs.tar"
+      },
+      "truth": "none. The reference is STARsolo SJ at STAR/STARsolo defaults (UMI counts per junction and cell) on the same reads; cassette exons are the annotated triples of the GENCODE GTF. Cells: STARsolo EmptyDrops_CR.",
+      "n_cells": 714
+    },
+    {
+      "id": "nuclei2k_v2",
+      "title": "10x mouse brain nuclei 2k, 3' v2",
+      "accessions": {
+        "url": "https://cf.10xgenomics.com/samples/cell-exp/2.1.0/nuclei_2k/nuclei_2k_fastqs.tar"
+      },
+      "truth": "none. The reference is STARsolo SJ at STAR/STARsolo defaults (UMI counts per junction and cell) on the same reads; cassette exons are the annotated triples of the GENCODE GTF. Cells: STARsolo EmptyDrops_CR.",
+      "n_cells": 2202
+    },
+    {
+      "id": "pbmc5p_v1",
+      "title": "10x PBMC 5' v1 + TotalSeq-C (vdj_v1_hs_pbmc2_5gex_protein), first 60M read pairs",
+      "accessions": {
+        "url": "https://cf.10xgenomics.com/samples/cell-vdj/3.0.0/vdj_v1_hs_pbmc2_5gex_protein/vdj_v1_hs_pbmc2_5gex_protein_fastqs.tar"
+      },
+      "truth": "none. The reference is STARsolo SJ at STAR/STARsolo defaults (UMI counts per junction and cell) on the same reads; cassette exons are the annotated triples of the GENCODE GTF. Cells: STARsolo EmptyDrops_CR.",
+      "n_cells": 7453
+    }
+  ],
+  "metrics": [
+    {
+      "id": "filtered_junction_jaccard",
+      "name": "Filtered junction set Jaccard with STARsolo SJ",
+      "unit": "jaccard",
+      "category": "agreement",
+      "dataset": "pbmc1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.890594,
+        "ci": [
+          0.889103,
+          0.892333
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.822851,
+          "ci": [
+            0.820234,
+            0.825447
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.002805
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (junctions resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0028"
+      },
+      "notes": "junctions that pass STAR's filters and have a UMI in the 1230 STARsolo-called cells: Singlet 100614, STARsolo at defaults 92599, in Cell Ranger emulation 78286; Singlet also counts 71472 junctions in those cells that do not pass STAR's filters (not scored)",
+      "pass": "pass"
+    },
+    {
+      "id": "junction_count_corr",
+      "name": "Junction UMI correlation with STARsolo SJ (pseudobulk)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.954717,
+        "ci": [
+          0.952616,
+          0.956753
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.923221,
+          "ci": [
+            0.92113,
+            0.924932
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.002439
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (junctions resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0024"
+      },
+      "notes": "Pearson r of log10(1 + UMI summed over the STARsolo-called cells) over the 103278 junctions in any tool's filtered set",
+      "pass": "pass"
+    },
+    {
+      "id": "percell_junction_corr",
+      "name": "Per-cell junction correlation with STARsolo SJ",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.942256,
+        "ci": [
+          0.94124,
+          0.943488
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.843236,
+          "ci": [
+            0.840456,
+            0.845198
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001654
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (cells resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0017"
+      },
+      "notes": "median over 1184 cells of the Pearson r of log1p UMI over the junctions non-zero in either tool, on the reference junction list",
+      "pass": "pass"
+    },
+    {
+      "id": "percell_total_corr",
+      "name": "Per-cell total junction UMI, correlation across cells",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.999924,
+        "ci": [
+          0.99991,
+          0.999938
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.997972,
+          "ci": [
+            0.997468,
+            0.99838
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000444
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (cells resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0004"
+      },
+      "notes": "Pearson r across 1230 cells of the per-cell junction UMI total on the reference junction list; median ratio Singlet / STARsolo 1.043",
+      "pass": "pass"
+    },
+    {
+      "id": "cassette_psi_pseudobulk_r",
+      "name": "Cassette-exon PSI correlation with STARsolo-derived PSI (pseudobulk)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.995687,
+        "ci": [
+          0.990534,
+          0.998892
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.992843,
+          "ci": [
+            0.99122,
+            0.994684
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.004292
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (events resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0043"
+      },
+      "notes": "646 annotated cassette exons with at least 20 junction UMI (inclusion + skipping) in every tool; PSI = inclusion / (inclusion + skipping), inclusion = mean of the two inclusion junctions; mean absolute difference from STARsolo 0.0066",
+      "pass": "pass"
+    },
+    {
+      "id": "cassette_psi_percell_r",
+      "name": "Cassette-exon PSI correlation with STARsolo-derived PSI (per cell)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.999863,
+        "ci": [
+          0.999849,
+          0.999876
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.996609,
+          "ci": [
+            0.996296,
+            0.996899
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000299
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (cells resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0003"
+      },
+      "notes": "24827 cell x event entries (at least 5 junction UMI in every tool) from 1115 cells; CI resamples cells",
+      "pass": "pass"
+    },
+    {
+      "id": "filtered_junction_jaccard_vs_cr_emulation",
+      "name": "Filtered junction set Jaccard with STARsolo in Cell Ranger emulation",
+      "unit": "jaccard",
+      "category": "agreement",
+      "dataset": "pbmc1k_v3",
+      "direction": "none",
+      "singlet": {
+        "value": 0.744855
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "STARsolo at defaults against the same reference: 0.823. The reference here is STARsolo in Cell Ranger emulation, whose MultiGeneUMI_CR filter zeroes some high-count junctions; the gated metrics use STARsolo at defaults.",
+      "pass": "na"
+    },
+    {
+      "id": "junction_count_corr_vs_cr_emulation",
+      "name": "Junction UMI correlation with STARsolo in Cell Ranger emulation (pseudobulk)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_v3",
+      "direction": "none",
+      "singlet": {
+        "value": 0.891855
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "over the 102530 junctions in either filtered set. The reference here is STARsolo in Cell Ranger emulation, whose MultiGeneUMI_CR filter zeroes some high-count junctions; the gated metrics use STARsolo at defaults.",
+      "pass": "na"
+    },
+    {
+      "id": "cassette_psi_pseudobulk_r_vs_cr_emulation",
+      "name": "Cassette-exon PSI correlation with PSI from STARsolo in Cell Ranger emulation (pseudobulk)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_v3",
+      "direction": "none",
+      "singlet": {
+        "value": 0.988346
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "646 cassette exons with at least 20 UMI in both. The reference here is STARsolo in Cell Ranger emulation, whose MultiGeneUMI_CR filter zeroes some high-count junctions; the gated metrics use STARsolo at defaults.",
+      "pass": "na"
+    },
+    {
+      "id": "filtered_junction_jaccard",
+      "name": "Filtered junction set Jaccard with STARsolo SJ",
+      "unit": "jaccard",
+      "category": "agreement",
+      "dataset": "pbmc1k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.841703,
+        "ci": [
+          0.839309,
+          0.844389
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.739559,
+          "ci": [
+            0.736407,
+            0.742812
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.004393
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (junctions resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0044"
+      },
+      "notes": "junctions that pass STAR's filters and have a UMI in the 1000 STARsolo-called cells: Singlet 66116, STARsolo at defaults 58582, in Cell Ranger emulation 44219; Singlet also counts 56072 junctions in those cells that do not pass STAR's filters (not scored)",
+      "pass": "pass"
+    },
+    {
+      "id": "junction_count_corr",
+      "name": "Junction UMI correlation with STARsolo SJ (pseudobulk)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.94069,
+        "ci": [
+          0.937258,
+          0.94416
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.857045,
+          "ci": [
+            0.852249,
+            0.861181
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.004146
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (junctions resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0041"
+      },
+      "notes": "Pearson r of log10(1 + UMI summed over the STARsolo-called cells) over the 68166 junctions in any tool's filtered set",
+      "pass": "pass"
+    },
+    {
+      "id": "percell_junction_corr",
+      "name": "Per-cell junction correlation with STARsolo SJ",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.944067,
+        "ci": [
+          0.943231,
+          0.94475
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.734203,
+          "ci": [
+            0.731058,
+            0.736576
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.002286
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (cells resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0023"
+      },
+      "notes": "median over 999 cells of the Pearson r of log1p UMI over the junctions non-zero in either tool, on the reference junction list",
+      "pass": "pass"
+    },
+    {
+      "id": "percell_total_corr",
+      "name": "Per-cell total junction UMI, correlation across cells",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.999892,
+        "ci": [
+          0.999851,
+          0.999921
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.996406,
+          "ci": [
+            0.995802,
+            0.996848
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000519
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (cells resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0005"
+      },
+      "notes": "Pearson r across 1000 cells of the per-cell junction UMI total on the reference junction list; median ratio Singlet / STARsolo 1.040",
+      "pass": "pass"
+    },
+    {
+      "id": "cassette_psi_pseudobulk_r",
+      "name": "Cassette-exon PSI correlation with STARsolo-derived PSI (pseudobulk)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.99833,
+        "ci": [
+          0.997132,
+          0.999293
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.982095,
+          "ci": [
+            0.971357,
+            0.989626
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.008892
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (events resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0089"
+      },
+      "notes": "347 annotated cassette exons with at least 20 junction UMI (inclusion + skipping) in every tool; PSI = inclusion / (inclusion + skipping), inclusion = mean of the two inclusion junctions; mean absolute difference from STARsolo 0.0058",
+      "pass": "pass"
+    },
+    {
+      "id": "cassette_psi_percell_r",
+      "name": "Cassette-exon PSI correlation with STARsolo-derived PSI (per cell)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.999296,
+        "ci": [
+          0.999228,
+          0.999344
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.998284,
+          "ci": [
+            0.998056,
+            0.998513
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000226
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (cells resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0002"
+      },
+      "notes": "15958 cell x event entries (at least 5 junction UMI in every tool) from 956 cells; CI resamples cells",
+      "pass": "pass"
+    },
+    {
+      "id": "filtered_junction_jaccard_vs_cr_emulation",
+      "name": "Filtered junction set Jaccard with STARsolo in Cell Ranger emulation",
+      "unit": "jaccard",
+      "category": "agreement",
+      "dataset": "pbmc1k_v2",
+      "direction": "none",
+      "singlet": {
+        "value": 0.642476
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "STARsolo at defaults against the same reference: 0.740. The reference here is STARsolo in Cell Ranger emulation, whose MultiGeneUMI_CR filter zeroes some high-count junctions; the gated metrics use STARsolo at defaults.",
+      "pass": "na"
+    },
+    {
+      "id": "junction_count_corr_vs_cr_emulation",
+      "name": "Junction UMI correlation with STARsolo in Cell Ranger emulation (pseudobulk)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_v2",
+      "direction": "none",
+      "singlet": {
+        "value": 0.824641
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "over the 67176 junctions in either filtered set. The reference here is STARsolo in Cell Ranger emulation, whose MultiGeneUMI_CR filter zeroes some high-count junctions; the gated metrics use STARsolo at defaults.",
+      "pass": "na"
+    },
+    {
+      "id": "cassette_psi_pseudobulk_r_vs_cr_emulation",
+      "name": "Cassette-exon PSI correlation with PSI from STARsolo in Cell Ranger emulation (pseudobulk)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_v2",
+      "direction": "none",
+      "singlet": {
+        "value": 0.980167
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "347 cassette exons with at least 20 UMI in both. The reference here is STARsolo in Cell Ranger emulation, whose MultiGeneUMI_CR filter zeroes some high-count junctions; the gated metrics use STARsolo at defaults.",
+      "pass": "na"
+    },
+    {
+      "id": "filtered_junction_jaccard",
+      "name": "Filtered junction set Jaccard with STARsolo SJ",
+      "unit": "jaccard",
+      "category": "agreement",
+      "dataset": "neuron1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.955818,
+        "ci": [
+          0.954595,
+          0.957027
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.825281,
+          "ci": [
+            0.822845,
+            0.827378
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.002243
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (junctions resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0022"
+      },
+      "notes": "junctions that pass STAR's filters and have a UMI in the 1258 STARsolo-called cells: Singlet 102501, STARsolo at defaults 100245, in Cell Ranger emulation 83632; Singlet also counts 46696 junctions in those cells that do not pass STAR's filters (not scored)",
+      "pass": "pass"
+    },
+    {
+      "id": "junction_count_corr",
+      "name": "Junction UMI correlation with STARsolo SJ (pseudobulk)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "neuron1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.969098,
+        "ci": [
+          0.96656,
+          0.97135
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.937144,
+          "ci": [
+            0.935468,
+            0.938667
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.002577
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (junctions resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0026"
+      },
+      "notes": "Pearson r of log10(1 + UMI summed over the STARsolo-called cells) over the 104131 junctions in any tool's filtered set",
+      "pass": "pass"
+    },
+    {
+      "id": "percell_junction_corr",
+      "name": "Per-cell junction correlation with STARsolo SJ",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "neuron1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.888203,
+        "ci": [
+          0.884181,
+          0.891625
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.774999,
+          "ci": [
+            0.769315,
+            0.779219
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.003664
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (cells resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0037"
+      },
+      "notes": "median over 1253 cells of the Pearson r of log1p UMI over the junctions non-zero in either tool, on the reference junction list",
+      "pass": "pass"
+    },
+    {
+      "id": "percell_total_corr",
+      "name": "Per-cell total junction UMI, correlation across cells",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "neuron1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.915433,
+        "ci": [
+          0.840325,
+          0.955879
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.999614,
+          "ci": [
+            0.999364,
+            0.99978
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.057662
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (cells resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0577"
+      },
+      "notes": "Pearson r across 1258 cells of the per-cell junction UMI total on the reference junction list; median ratio Singlet / STARsolo 1.076",
+      "pass": "fail"
+    },
+    {
+      "id": "cassette_psi_pseudobulk_r",
+      "name": "Cassette-exon PSI correlation with STARsolo-derived PSI (pseudobulk)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "neuron1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.986263,
+        "ci": [
+          0.969386,
+          0.99828
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.98835,
+          "ci": [
+            0.980471,
+            0.994963
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.016446
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (events resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0164"
+      },
+      "notes": "635 annotated cassette exons with at least 20 junction UMI (inclusion + skipping) in every tool; PSI = inclusion / (inclusion + skipping), inclusion = mean of the two inclusion junctions; mean absolute difference from STARsolo 0.0084",
+      "pass": "pass"
+    },
+    {
+      "id": "cassette_psi_percell_r",
+      "name": "Cassette-exon PSI correlation with STARsolo-derived PSI (per cell)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "neuron1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.99996,
+        "ci": [
+          0.999946,
+          0.999972
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.997966,
+          "ci": [
+            0.997657,
+            0.998249
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000294
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (cells resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0003"
+      },
+      "notes": "7162 cell x event entries (at least 5 junction UMI in every tool) from 917 cells; CI resamples cells",
+      "pass": "pass"
+    },
+    {
+      "id": "filtered_junction_jaccard_vs_cr_emulation",
+      "name": "Filtered junction set Jaccard with STARsolo in Cell Ranger emulation",
+      "unit": "jaccard",
+      "category": "agreement",
+      "dataset": "neuron1k_v3",
+      "direction": "none",
+      "singlet": {
+        "value": 0.802322
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "STARsolo at defaults against the same reference: 0.825. The reference here is STARsolo in Cell Ranger emulation, whose MultiGeneUMI_CR filter zeroes some high-count junctions; the gated metrics use STARsolo at defaults.",
+      "pass": "na"
+    },
+    {
+      "id": "junction_count_corr_vs_cr_emulation",
+      "name": "Junction UMI correlation with STARsolo in Cell Ranger emulation (pseudobulk)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "neuron1k_v3",
+      "direction": "none",
+      "singlet": {
+        "value": 0.91589
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "over the 103274 junctions in either filtered set. The reference here is STARsolo in Cell Ranger emulation, whose MultiGeneUMI_CR filter zeroes some high-count junctions; the gated metrics use STARsolo at defaults.",
+      "pass": "na"
+    },
+    {
+      "id": "cassette_psi_pseudobulk_r_vs_cr_emulation",
+      "name": "Cassette-exon PSI correlation with PSI from STARsolo in Cell Ranger emulation (pseudobulk)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "neuron1k_v3",
+      "direction": "none",
+      "singlet": {
+        "value": 0.971151
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "635 cassette exons with at least 20 UMI in both. The reference here is STARsolo in Cell Ranger emulation, whose MultiGeneUMI_CR filter zeroes some high-count junctions; the gated metrics use STARsolo at defaults.",
+      "pass": "na"
+    },
+    {
+      "id": "filtered_junction_jaccard",
+      "name": "Filtered junction set Jaccard with STARsolo SJ",
+      "unit": "jaccard",
+      "category": "agreement",
+      "dataset": "hgmm1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.947492,
+        "ci": [
+          0.946244,
+          0.948509
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.911152,
+          "ci": [
+            0.909752,
+            0.912761
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001709
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (junctions resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0017"
+      },
+      "notes": "junctions that pass STAR's filters and have a UMI in the 1049 STARsolo-called cells: Singlet 140472, STARsolo at defaults 135583, in Cell Ranger emulation 124993; Singlet also counts 47854 junctions in those cells that do not pass STAR's filters (not scored)",
+      "pass": "pass"
+    },
+    {
+      "id": "junction_count_corr",
+      "name": "Junction UMI correlation with STARsolo SJ (pseudobulk)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "hgmm1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.968211,
+        "ci": [
+          0.966267,
+          0.970134
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.964894,
+          "ci": [
+            0.963486,
+            0.966022
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.00219
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (junctions resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0022"
+      },
+      "notes": "Pearson r of log10(1 + UMI summed over the STARsolo-called cells) over the 142457 junctions in any tool's filtered set",
+      "pass": "pass"
+    },
+    {
+      "id": "percell_junction_corr",
+      "name": "Per-cell junction correlation with STARsolo SJ",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "hgmm1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.920303,
+        "ci": [
+          0.919265,
+          0.921873
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.906502,
+          "ci": [
+            0.904762,
+            0.908922
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001614
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (cells resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0016"
+      },
+      "notes": "median over 1038 cells of the Pearson r of log1p UMI over the junctions non-zero in either tool, on the reference junction list",
+      "pass": "pass"
+    },
+    {
+      "id": "percell_total_corr",
+      "name": "Per-cell total junction UMI, correlation across cells",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "hgmm1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.999671,
+        "ci": [
+          0.999607,
+          0.999725
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.999881,
+          "ci": [
+            0.999855,
+            0.999901
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 4.8e-05
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (cells resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0000"
+      },
+      "notes": "Pearson r across 1049 cells of the per-cell junction UMI total on the reference junction list; median ratio Singlet / STARsolo 1.073",
+      "pass": "fail"
+    },
+    {
+      "id": "cassette_psi_pseudobulk_r",
+      "name": "Cassette-exon PSI correlation with STARsolo-derived PSI (pseudobulk)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "hgmm1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.990824,
+        "ci": [
+          0.982358,
+          0.99695
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.990966,
+          "ci": [
+            0.987239,
+            0.994476
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.00762
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (events resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0076"
+      },
+      "notes": "1187 annotated cassette exons with at least 20 junction UMI (inclusion + skipping) in every tool; PSI = inclusion / (inclusion + skipping), inclusion = mean of the two inclusion junctions; mean absolute difference from STARsolo 0.0080",
+      "pass": "pass"
+    },
+    {
+      "id": "cassette_psi_percell_r",
+      "name": "Cassette-exon PSI correlation with STARsolo-derived PSI (per cell)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "hgmm1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.999242,
+        "ci": [
+          0.999092,
+          0.999366
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.99409,
+          "ci": [
+            0.993763,
+            0.994449
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000367
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (cells resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0004"
+      },
+      "notes": "25900 cell x event entries (at least 5 junction UMI in every tool) from 900 cells; CI resamples cells",
+      "pass": "pass"
+    },
+    {
+      "id": "filtered_junction_jaccard_vs_cr_emulation",
+      "name": "Filtered junction set Jaccard with STARsolo in Cell Ranger emulation",
+      "unit": "jaccard",
+      "category": "agreement",
+      "dataset": "hgmm1k_v3",
+      "direction": "none",
+      "singlet": {
+        "value": 0.871277
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "STARsolo at defaults against the same reference: 0.911. The reference here is STARsolo in Cell Ranger emulation, whose MultiGeneUMI_CR filter zeroes some high-count junctions; the gated metrics use STARsolo at defaults.",
+      "pass": "na"
+    },
+    {
+      "id": "junction_count_corr_vs_cr_emulation",
+      "name": "Junction UMI correlation with STARsolo in Cell Ranger emulation (pseudobulk)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "hgmm1k_v3",
+      "direction": "none",
+      "singlet": {
+        "value": 0.937874
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "over the 141863 junctions in either filtered set. The reference here is STARsolo in Cell Ranger emulation, whose MultiGeneUMI_CR filter zeroes some high-count junctions; the gated metrics use STARsolo at defaults.",
+      "pass": "na"
+    },
+    {
+      "id": "cassette_psi_pseudobulk_r_vs_cr_emulation",
+      "name": "Cassette-exon PSI correlation with PSI from STARsolo in Cell Ranger emulation (pseudobulk)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "hgmm1k_v3",
+      "direction": "none",
+      "singlet": {
+        "value": 0.977693
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "1187 cassette exons with at least 20 UMI in both. The reference here is STARsolo in Cell Ranger emulation, whose MultiGeneUMI_CR filter zeroes some high-count junctions; the gated metrics use STARsolo at defaults.",
+      "pass": "na"
+    },
+    {
+      "id": "filtered_junction_jaccard",
+      "name": "Filtered junction set Jaccard with STARsolo SJ",
+      "unit": "jaccard",
+      "category": "agreement",
+      "dataset": "pbmc1k_cite_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.909587,
+        "ci": [
+          0.90754,
+          0.911293
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.811453,
+          "ci": [
+            0.809192,
+            0.813984
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.002999
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (junctions resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0030"
+      },
+      "notes": "junctions that pass STAR's filters and have a UMI in the 714 STARsolo-called cells: Singlet 87191, STARsolo at defaults 81099, in Cell Ranger emulation 67413; Singlet also counts 46983 junctions in those cells that do not pass STAR's filters (not scored)",
+      "pass": "pass"
+    },
+    {
+      "id": "junction_count_corr",
+      "name": "Junction UMI correlation with STARsolo SJ (pseudobulk)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_cite_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.958183,
+        "ci": [
+          0.955095,
+          0.96052
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.919579,
+          "ci": [
+            0.917086,
+            0.921703
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.002776
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (junctions resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0028"
+      },
+      "notes": "Pearson r of log10(1 + UMI summed over the STARsolo-called cells) over the 88972 junctions in any tool's filtered set",
+      "pass": "pass"
+    },
+    {
+      "id": "percell_junction_corr",
+      "name": "Per-cell junction correlation with STARsolo SJ",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_cite_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.935873,
+        "ci": [
+          0.933872,
+          0.937999
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.816279,
+          "ci": [
+            0.811054,
+            0.821321
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.004015
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (cells resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0040"
+      },
+      "notes": "median over 705 cells of the Pearson r of log1p UMI over the junctions non-zero in either tool, on the reference junction list",
+      "pass": "pass"
+    },
+    {
+      "id": "percell_total_corr",
+      "name": "Per-cell total junction UMI, correlation across cells",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_cite_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.999944,
+        "ci": [
+          0.999895,
+          0.999969
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.99851,
+          "ci": [
+            0.997737,
+            0.998973
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000602
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (cells resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0006"
+      },
+      "notes": "Pearson r across 714 cells of the per-cell junction UMI total on the reference junction list; median ratio Singlet / STARsolo 1.044",
+      "pass": "pass"
+    },
+    {
+      "id": "cassette_psi_pseudobulk_r",
+      "name": "Cassette-exon PSI correlation with STARsolo-derived PSI (pseudobulk)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_cite_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.998575,
+        "ci": [
+          0.99672,
+          0.999666
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.991735,
+          "ci": [
+            0.989118,
+            0.993874
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.002778
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (events resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0028"
+      },
+      "notes": "530 annotated cassette exons with at least 20 junction UMI (inclusion + skipping) in every tool; PSI = inclusion / (inclusion + skipping), inclusion = mean of the two inclusion junctions; mean absolute difference from STARsolo 0.0048",
+      "pass": "pass"
+    },
+    {
+      "id": "cassette_psi_percell_r",
+      "name": "Cassette-exon PSI correlation with STARsolo-derived PSI (per cell)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_cite_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.999844,
+        "ci": [
+          0.999817,
+          0.999869
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.997062,
+          "ci": [
+            0.996489,
+            0.997508
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.000495
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (cells resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0005"
+      },
+      "notes": "12185 cell x event entries (at least 5 junction UMI in every tool) from 561 cells; CI resamples cells",
+      "pass": "pass"
+    },
+    {
+      "id": "filtered_junction_jaccard_vs_cr_emulation",
+      "name": "Filtered junction set Jaccard with STARsolo in Cell Ranger emulation",
+      "unit": "jaccard",
+      "category": "agreement",
+      "dataset": "pbmc1k_cite_v3",
+      "direction": "none",
+      "singlet": {
+        "value": 0.745518
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "STARsolo at defaults against the same reference: 0.811. The reference here is STARsolo in Cell Ranger emulation, whose MultiGeneUMI_CR filter zeroes some high-count junctions; the gated metrics use STARsolo at defaults.",
+      "pass": "na"
+    },
+    {
+      "id": "junction_count_corr_vs_cr_emulation",
+      "name": "Junction UMI correlation with STARsolo in Cell Ranger emulation (pseudobulk)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_cite_v3",
+      "direction": "none",
+      "singlet": {
+        "value": 0.889133
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "over the 88572 junctions in either filtered set. The reference here is STARsolo in Cell Ranger emulation, whose MultiGeneUMI_CR filter zeroes some high-count junctions; the gated metrics use STARsolo at defaults.",
+      "pass": "na"
+    },
+    {
+      "id": "cassette_psi_pseudobulk_r_vs_cr_emulation",
+      "name": "Cassette-exon PSI correlation with PSI from STARsolo in Cell Ranger emulation (pseudobulk)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc1k_cite_v3",
+      "direction": "none",
+      "singlet": {
+        "value": 0.990102
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "530 cassette exons with at least 20 UMI in both. The reference here is STARsolo in Cell Ranger emulation, whose MultiGeneUMI_CR filter zeroes some high-count junctions; the gated metrics use STARsolo at defaults.",
+      "pass": "na"
+    },
+    {
+      "id": "filtered_junction_jaccard",
+      "name": "Filtered junction set Jaccard with STARsolo SJ",
+      "unit": "jaccard",
+      "category": "agreement",
+      "dataset": "nuclei2k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.930201,
+        "ci": [
+          0.928722,
+          0.931866
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.751299,
+          "ci": [
+            0.748785,
+            0.754441
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.003157
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (junctions resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0032"
+      },
+      "notes": "junctions that pass STAR's filters and have a UMI in the 2202 STARsolo-called cells: Singlet 80952, STARsolo at defaults 77199, in Cell Ranger emulation 60961; Singlet also counts 61235 junctions in those cells that do not pass STAR's filters (not scored)",
+      "pass": "pass"
+    },
+    {
+      "id": "junction_count_corr",
+      "name": "Junction UMI correlation with STARsolo SJ (pseudobulk)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "nuclei2k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.956384,
+        "ci": [
+          0.953601,
+          0.959199
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.836247,
+          "ci": [
+            0.832667,
+            0.839258
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.003768
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (junctions resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0038"
+      },
+      "notes": "Pearson r of log10(1 + UMI summed over the STARsolo-called cells) over the 83559 junctions in any tool's filtered set",
+      "pass": "pass"
+    },
+    {
+      "id": "percell_junction_corr",
+      "name": "Per-cell junction correlation with STARsolo SJ",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "nuclei2k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.415259,
+        "ci": [
+          0.403314,
+          0.42492
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.128447,
+          "ci": [
+            0.121865,
+            0.134879
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.010126
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (cells resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0101"
+      },
+      "notes": "median over 2090 cells of the Pearson r of log1p UMI over the junctions non-zero in either tool, on the reference junction list",
+      "pass": "pass"
+    },
+    {
+      "id": "percell_total_corr",
+      "name": "Per-cell total junction UMI, correlation across cells",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "nuclei2k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.999689,
+        "ci": [
+          0.999521,
+          0.999817
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.986086,
+          "ci": [
+            0.962386,
+            0.996346
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.016875
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (cells resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0169"
+      },
+      "notes": "Pearson r across 2202 cells of the per-cell junction UMI total on the reference junction list; median ratio Singlet / STARsolo 1.042",
+      "pass": "pass"
+    },
+    {
+      "id": "cassette_psi_pseudobulk_r",
+      "name": "Cassette-exon PSI correlation with STARsolo-derived PSI (pseudobulk)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "nuclei2k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.972474,
+        "ci": [
+          0.934744,
+          0.999868
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.993117,
+          "ci": [
+            0.985226,
+            0.997149
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.034075
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (events resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0341"
+      },
+      "notes": "152 annotated cassette exons with at least 20 junction UMI (inclusion + skipping) in every tool; PSI = inclusion / (inclusion + skipping), inclusion = mean of the two inclusion junctions; mean absolute difference from STARsolo 0.0133",
+      "pass": "pass"
+    },
+    {
+      "id": "cassette_psi_percell_r",
+      "name": "Cassette-exon PSI correlation with STARsolo-derived PSI (per cell)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "nuclei2k_v2",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.999122,
+        "ci": [
+          0.99837,
+          0.999846
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.951724,
+          "ci": [
+            0.934643,
+            0.965714
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.015789
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (cells resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0158"
+      },
+      "notes": "228 cell x event entries (at least 5 junction UMI in every tool) from 134 cells; CI resamples cells",
+      "pass": "pass"
+    },
+    {
+      "id": "filtered_junction_jaccard_vs_cr_emulation",
+      "name": "Filtered junction set Jaccard with STARsolo in Cell Ranger emulation",
+      "unit": "jaccard",
+      "category": "agreement",
+      "dataset": "nuclei2k_v2",
+      "direction": "none",
+      "singlet": {
+        "value": 0.710537
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "STARsolo at defaults against the same reference: 0.751. The reference here is STARsolo in Cell Ranger emulation, whose MultiGeneUMI_CR filter zeroes some high-count junctions; the gated metrics use STARsolo at defaults.",
+      "pass": "na"
+    },
+    {
+      "id": "junction_count_corr_vs_cr_emulation",
+      "name": "Junction UMI correlation with STARsolo in Cell Ranger emulation (pseudobulk)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "nuclei2k_v2",
+      "direction": "none",
+      "singlet": {
+        "value": 0.805281
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "over the 82964 junctions in either filtered set. The reference here is STARsolo in Cell Ranger emulation, whose MultiGeneUMI_CR filter zeroes some high-count junctions; the gated metrics use STARsolo at defaults.",
+      "pass": "na"
+    },
+    {
+      "id": "cassette_psi_pseudobulk_r_vs_cr_emulation",
+      "name": "Cassette-exon PSI correlation with PSI from STARsolo in Cell Ranger emulation (pseudobulk)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "nuclei2k_v2",
+      "direction": "none",
+      "singlet": {
+        "value": 0.967848
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "152 cassette exons with at least 20 UMI in both. The reference here is STARsolo in Cell Ranger emulation, whose MultiGeneUMI_CR filter zeroes some high-count junctions; the gated metrics use STARsolo at defaults.",
+      "pass": "na"
+    },
+    {
+      "id": "filtered_junction_jaccard",
+      "name": "Filtered junction set Jaccard with STARsolo SJ",
+      "unit": "jaccard",
+      "category": "agreement",
+      "dataset": "pbmc5p_v1",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.963351,
+        "ci": [
+          0.962372,
+          0.964153
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.905231,
+          "ci": [
+            0.90406,
+            0.906736
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001525
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (junctions resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0015"
+      },
+      "notes": "junctions that pass STAR's filters and have a UMI in the 7453 STARsolo-called cells: Singlet 181263, STARsolo at defaults 176809, in Cell Ranger emulation 160173; Singlet also counts 38289 junctions in those cells that do not pass STAR's filters (not scored)",
+      "pass": "pass"
+    },
+    {
+      "id": "junction_count_corr",
+      "name": "Junction UMI correlation with STARsolo SJ (pseudobulk)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc5p_v1",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.976495,
+        "ci": [
+          0.975247,
+          0.977795
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.964553,
+          "ci": [
+            0.963821,
+            0.965421
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001559
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (junctions resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0016"
+      },
+      "notes": "Pearson r of log10(1 + UMI summed over the STARsolo-called cells) over the 182441 junctions in any tool's filtered set",
+      "pass": "pass"
+    },
+    {
+      "id": "percell_junction_corr",
+      "name": "Per-cell junction correlation with STARsolo SJ",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc5p_v1",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.914785,
+        "ci": [
+          0.913924,
+          0.91532
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.794566,
+          "ci": [
+            0.792892,
+            0.796092
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.001392
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (cells resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0014"
+      },
+      "notes": "median over 7446 cells of the Pearson r of log1p UMI over the junctions non-zero in either tool, on the reference junction list",
+      "pass": "pass"
+    },
+    {
+      "id": "percell_total_corr",
+      "name": "Per-cell total junction UMI, correlation across cells",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc5p_v1",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.9999,
+        "ci": [
+          0.999874,
+          0.999921
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.999482,
+          "ci": [
+            0.999441,
+            0.999516
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 4.2e-05
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (cells resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0000"
+      },
+      "notes": "Pearson r across 7453 cells of the per-cell junction UMI total on the reference junction list; median ratio Singlet / STARsolo 1.028",
+      "pass": "pass"
+    },
+    {
+      "id": "cassette_psi_pseudobulk_r",
+      "name": "Cassette-exon PSI correlation with STARsolo-derived PSI (pseudobulk)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc5p_v1",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.997865,
+        "ci": [
+          0.99667,
+          0.99895
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.993888,
+          "ci": [
+            0.992006,
+            0.995455
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 0.002202
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (events resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0022"
+      },
+      "notes": "5244 annotated cassette exons with at least 20 junction UMI (inclusion + skipping) in every tool; PSI = inclusion / (inclusion + skipping), inclusion = mean of the two inclusion junctions; mean absolute difference from STARsolo 0.0045",
+      "pass": "pass"
+    },
+    {
+      "id": "cassette_psi_percell_r",
+      "name": "Cassette-exon PSI correlation with STARsolo-derived PSI (per cell)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc5p_v1",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.999771,
+        "ci": [
+          0.999757,
+          0.999782
+        ]
+      },
+      "competitors": [
+        {
+          "tool": "starsolo-sj-cr",
+          "value": 0.999766,
+          "ci": [
+            0.999739,
+            0.999786
+          ]
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "abs": 2.7e-05
+        },
+        "rationale": "tolerance = half-width of the paired bootstrap 95% CI (cells resampled) of Singlet minus STARsolo in Cell Ranger emulation: 0.0000"
+      },
+      "notes": "100851 cell x event entries (at least 5 junction UMI in every tool) from 6681 cells; CI resamples cells",
+      "pass": "pass"
+    },
+    {
+      "id": "filtered_junction_jaccard_vs_cr_emulation",
+      "name": "Filtered junction set Jaccard with STARsolo in Cell Ranger emulation",
+      "unit": "jaccard",
+      "category": "agreement",
+      "dataset": "pbmc5p_v1",
+      "direction": "none",
+      "singlet": {
+        "value": 0.87458
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "STARsolo at defaults against the same reference: 0.905. The reference here is STARsolo in Cell Ranger emulation, whose MultiGeneUMI_CR filter zeroes some high-count junctions; the gated metrics use STARsolo at defaults.",
+      "pass": "na"
+    },
+    {
+      "id": "junction_count_corr_vs_cr_emulation",
+      "name": "Junction UMI correlation with STARsolo in Cell Ranger emulation (pseudobulk)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc5p_v1",
+      "direction": "none",
+      "singlet": {
+        "value": 0.943338
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "over the 182140 junctions in either filtered set. The reference here is STARsolo in Cell Ranger emulation, whose MultiGeneUMI_CR filter zeroes some high-count junctions; the gated metrics use STARsolo at defaults.",
+      "pass": "na"
+    },
+    {
+      "id": "cassette_psi_pseudobulk_r_vs_cr_emulation",
+      "name": "Cassette-exon PSI correlation with PSI from STARsolo in Cell Ranger emulation (pseudobulk)",
+      "unit": "r",
+      "category": "agreement",
+      "dataset": "pbmc5p_v1",
+      "direction": "none",
+      "singlet": {
+        "value": 0.991044
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "5244 cassette exons with at least 20 UMI in both. The reference here is STARsolo in Cell Ranger emulation, whose MultiGeneUMI_CR filter zeroes some high-count junctions; the gated metrics use STARsolo at defaults.",
+      "pass": "na"
+    }
+  ],
+  "resources": [
+    {
+      "tool": "singlet",
+      "dataset": "pbmc1k_v3",
+      "wall_s": 791.8,
+      "max_rss_gb": 21.32,
+      "threads": 8,
+      "cpu_h": 0.831,
+      "node": "c004.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-sj-cr",
+      "dataset": "pbmc1k_v3",
+      "wall_s": 348.3,
+      "max_rss_gb": 19.66,
+      "threads": 16,
+      "cpu_h": 0.835,
+      "node": "c100.clipper.gvsu.edu"
+    },
+    {
+      "tool": "starsolo-sj",
+      "dataset": "pbmc1k_v3",
+      "wall_s": 209.1,
+      "max_rss_gb": 18.74,
+      "threads": 16,
+      "cpu_h": 0.802,
+      "node": "c101.clipper.gvsu.edu"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "pbmc1k_v2",
+      "wall_s": 882.9,
+      "max_rss_gb": 20.86,
+      "threads": 8,
+      "cpu_h": 1.018,
+      "node": "c009.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-sj-cr",
+      "dataset": "pbmc1k_v2",
+      "wall_s": 506.3,
+      "max_rss_gb": 18.77,
+      "threads": 16,
+      "cpu_h": 1.244,
+      "node": "c003.clipper.gvsu.edu"
+    },
+    {
+      "tool": "starsolo-sj",
+      "dataset": "pbmc1k_v2",
+      "wall_s": 310.4,
+      "max_rss_gb": 18.43,
+      "threads": 16,
+      "cpu_h": 1.198,
+      "node": "c003.clipper.gvsu.edu"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "neuron1k_v3",
+      "wall_s": 720.7,
+      "max_rss_gb": 29.62,
+      "threads": 8,
+      "cpu_h": 0.549,
+      "node": "c101.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-sj-cr",
+      "dataset": "neuron1k_v3",
+      "wall_s": 425.2,
+      "max_rss_gb": 28.59,
+      "threads": 16,
+      "cpu_h": 0.677,
+      "node": "c100.clipper.gvsu.edu"
+    },
+    {
+      "tool": "starsolo-sj",
+      "dataset": "neuron1k_v3",
+      "wall_s": 278.8,
+      "max_rss_gb": 27.48,
+      "threads": 16,
+      "cpu_h": 0.795,
+      "node": "c010.clipper.gvsu.edu"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "hgmm1k_v3",
+      "wall_s": 793.0,
+      "max_rss_gb": 57.37,
+      "threads": 8,
+      "cpu_h": 0.514,
+      "node": "c004.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-sj-cr",
+      "dataset": "hgmm1k_v3",
+      "wall_s": 441.8,
+      "max_rss_gb": 56.56,
+      "threads": 16,
+      "cpu_h": 0.604,
+      "node": "c101.clipper.gvsu.edu"
+    },
+    {
+      "tool": "starsolo-sj",
+      "dataset": "hgmm1k_v3",
+      "wall_s": 250.7,
+      "max_rss_gb": 55.19,
+      "threads": 16,
+      "cpu_h": 0.653,
+      "node": "c003.clipper.gvsu.edu"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "pbmc1k_cite_v3",
+      "wall_s": 563.8,
+      "max_rss_gb": 21.29,
+      "threads": 8,
+      "cpu_h": 0.594,
+      "node": "c007.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-sj-cr",
+      "dataset": "pbmc1k_cite_v3",
+      "wall_s": 371.4,
+      "max_rss_gb": 19.63,
+      "threads": 16,
+      "cpu_h": 0.817,
+      "node": "c010.clipper.gvsu.edu"
+    },
+    {
+      "tool": "starsolo-sj",
+      "dataset": "pbmc1k_cite_v3",
+      "wall_s": 145.7,
+      "max_rss_gb": 18.77,
+      "threads": 16,
+      "cpu_h": 0.543,
+      "node": "c101.clipper.gvsu.edu"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "nuclei2k_v2",
+      "wall_s": 1381.2,
+      "max_rss_gb": 29.11,
+      "threads": 8,
+      "cpu_h": 1.633,
+      "node": "c009.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-sj-cr",
+      "dataset": "nuclei2k_v2",
+      "wall_s": 452.8,
+      "max_rss_gb": 27.42,
+      "threads": 16,
+      "cpu_h": 1.233,
+      "node": "c100.clipper.gvsu.edu"
+    },
+    {
+      "tool": "starsolo-sj",
+      "dataset": "nuclei2k_v2",
+      "wall_s": 297.9,
+      "max_rss_gb": 26.78,
+      "threads": 16,
+      "cpu_h": 1.154,
+      "node": "c100.clipper.gvsu.edu"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "pbmc5p_v1",
+      "wall_s": 612.7,
+      "max_rss_gb": 20.86,
+      "threads": 8,
+      "cpu_h": 0.615,
+      "node": "c101.clipper.gvsu.edu",
+      "notes": "includes singlet encode (FASTQ to .1fq); the run also does donor demultiplexing, mtDNA, ambient and doublet steps that no competitor does"
+    },
+    {
+      "tool": "starsolo-sj-cr",
+      "dataset": "pbmc5p_v1",
+      "wall_s": 307.5,
+      "max_rss_gb": 18.77,
+      "threads": 16,
+      "cpu_h": 0.674,
+      "node": "c100.clipper.gvsu.edu"
+    },
+    {
+      "tool": "starsolo-sj",
+      "dataset": "pbmc5p_v1",
+      "wall_s": 235.3,
+      "max_rss_gb": 18.43,
+      "threads": 16,
+      "cpu_h": 0.84,
+      "node": "c010.clipper.gvsu.edu"
+    }
+  ],
+  "figures": [
+    {
+      "id": "filtered_junction_jaccard",
+      "title": "Filtered junction set, Jaccard with STARsolo SJ",
+      "kind": "grouped_bar",
+      "caption": "Higher is better. Reference: STARsolo at defaults. Competitor: STARsolo in Cell Ranger emulation, measured against the same reference.",
+      "x": {
+        "label": "dataset",
+        "categories": [
+          "pbmc1k_v3",
+          "pbmc1k_v2",
+          "neuron1k_v3",
+          "hgmm1k_v3",
+          "pbmc1k_cite_v3",
+          "nuclei2k_v2",
+          "pbmc5p_v1"
+        ]
+      },
+      "y": {
+        "label": "jaccard",
+        "unit": "jaccard",
+        "scale": "linear",
+        "min": 0,
+        "max": 1
+      },
+      "series": [
+        {
+          "name": "Singlet",
+          "tool": "singlet",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "nuclei2k_v2",
+            "pbmc5p_v1"
+          ],
+          "y": [
+            0.890594,
+            0.841703,
+            0.955818,
+            0.947492,
+            0.909587,
+            0.930201,
+            0.963351
+          ]
+        },
+        {
+          "name": "STARsolo in Cell Ranger emulation",
+          "tool": "starsolo-sj-cr",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "nuclei2k_v2",
+            "pbmc5p_v1"
+          ],
+          "y": [
+            0.822851,
+            0.739559,
+            0.825281,
+            0.911152,
+            0.811453,
+            0.751299,
+            0.905231
+          ]
+        }
+      ]
+    },
+    {
+      "id": "percell_junction_corr",
+      "title": "Per-cell junction correlation with STARsolo SJ",
+      "kind": "grouped_bar",
+      "caption": "Higher is better. Reference: STARsolo at defaults. Competitor: STARsolo in Cell Ranger emulation, measured against the same reference.",
+      "x": {
+        "label": "dataset",
+        "categories": [
+          "pbmc1k_v3",
+          "pbmc1k_v2",
+          "neuron1k_v3",
+          "hgmm1k_v3",
+          "pbmc1k_cite_v3",
+          "nuclei2k_v2",
+          "pbmc5p_v1"
+        ]
+      },
+      "y": {
+        "label": "r",
+        "unit": "r",
+        "scale": "linear",
+        "min": 0,
+        "max": 1
+      },
+      "series": [
+        {
+          "name": "Singlet",
+          "tool": "singlet",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "nuclei2k_v2",
+            "pbmc5p_v1"
+          ],
+          "y": [
+            0.942256,
+            0.944067,
+            0.888203,
+            0.920303,
+            0.935873,
+            0.415259,
+            0.914785
+          ]
+        },
+        {
+          "name": "STARsolo in Cell Ranger emulation",
+          "tool": "starsolo-sj-cr",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "nuclei2k_v2",
+            "pbmc5p_v1"
+          ],
+          "y": [
+            0.843236,
+            0.734203,
+            0.774999,
+            0.906502,
+            0.816279,
+            0.128447,
+            0.794566
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cassette_psi_pseudobulk_r",
+      "title": "Cassette-exon PSI correlation (pseudobulk)",
+      "kind": "grouped_bar",
+      "caption": "Higher is better. Reference: STARsolo at defaults. Competitor: STARsolo in Cell Ranger emulation, measured against the same reference.",
+      "x": {
+        "label": "dataset",
+        "categories": [
+          "pbmc1k_v3",
+          "pbmc1k_v2",
+          "neuron1k_v3",
+          "hgmm1k_v3",
+          "pbmc1k_cite_v3",
+          "nuclei2k_v2",
+          "pbmc5p_v1"
+        ]
+      },
+      "y": {
+        "label": "r",
+        "unit": "r",
+        "scale": "linear",
+        "min": 0,
+        "max": 1
+      },
+      "series": [
+        {
+          "name": "Singlet",
+          "tool": "singlet",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "nuclei2k_v2",
+            "pbmc5p_v1"
+          ],
+          "y": [
+            0.995687,
+            0.99833,
+            0.986263,
+            0.990824,
+            0.998575,
+            0.972474,
+            0.997865
+          ]
+        },
+        {
+          "name": "STARsolo in Cell Ranger emulation",
+          "tool": "starsolo-sj-cr",
+          "x": [
+            "pbmc1k_v3",
+            "pbmc1k_v2",
+            "neuron1k_v3",
+            "hgmm1k_v3",
+            "pbmc1k_cite_v3",
+            "nuclei2k_v2",
+            "pbmc5p_v1"
+          ],
+          "y": [
+            0.992843,
+            0.982095,
+            0.98835,
+            0.990966,
+            0.991735,
+            0.993117,
+            0.993888
+          ]
+        }
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "name": "hgmm1k_v3.cassette.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/hgmm1k_v3.cassette.tsv.gz",
+      "kind": "derived",
+      "sha256": "a4f1af07ba883fc1fdac9c4eb76966b69a1a78e3614ecc6de767ff6380c41086",
+      "bytes": 78204,
+      "format": "tsv",
+      "dataset": "hgmm1k_v3"
+    },
+    {
+      "name": "hgmm1k_v3.cells.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/hgmm1k_v3.cells.tsv.gz",
+      "kind": "derived",
+      "sha256": "c57244b0902d79c23a441515d79afd7056d8a9871c92ce5697a4ed2d9c352c05",
+      "bytes": 30006,
+      "format": "tsv",
+      "dataset": "hgmm1k_v3"
+    },
+    {
+      "name": "hgmm1k_v3.junctions.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/hgmm1k_v3.junctions.tsv.gz",
+      "kind": "derived",
+      "sha256": "17bf71dd08d0d86e5eac93d1a8c8b2dc614602522fda45718f59ef19ae90db4a",
+      "bytes": 2286241,
+      "format": "tsv",
+      "dataset": "hgmm1k_v3"
+    },
+    {
+      "name": "hgmm1k_v3.psi_cells.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/hgmm1k_v3.psi_cells.tsv.gz",
+      "kind": "derived",
+      "sha256": "ad2b767a14bb936cda1138d7c78aca920d283a4118d1504eaa56af0b05258915",
+      "bytes": 257771,
+      "format": "tsv",
+      "dataset": "hgmm1k_v3"
+    },
+    {
+      "name": "neuron1k_v3.cassette.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/neuron1k_v3.cassette.tsv.gz",
+      "kind": "derived",
+      "sha256": "d697959ce881bedb47ba4e813e502854ea72edb2b404bad78af5b95eacdd64b6",
+      "bytes": 49064,
+      "format": "tsv",
+      "dataset": "neuron1k_v3"
+    },
+    {
+      "name": "neuron1k_v3.cells.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/neuron1k_v3.cells.tsv.gz",
+      "kind": "derived",
+      "sha256": "2585abe43baf177d6e6784c8f907450cb2fddbb9594714e39a9de1c899f1fd13",
+      "bytes": 35567,
+      "format": "tsv",
+      "dataset": "neuron1k_v3"
+    },
+    {
+      "name": "neuron1k_v3.junctions.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/neuron1k_v3.junctions.tsv.gz",
+      "kind": "derived",
+      "sha256": "a2801f83fc4c63d1aae200393252ae0f86ab695b9fce64095d2c59e063b3da7f",
+      "bytes": 1693805,
+      "format": "tsv",
+      "dataset": "neuron1k_v3"
+    },
+    {
+      "name": "neuron1k_v3.psi_cells.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/neuron1k_v3.psi_cells.tsv.gz",
+      "kind": "derived",
+      "sha256": "5635ffd2dcaad356eb6b06719f8fa616b3e7d51c5f877cd7b6f16169e9e6e32c",
+      "bytes": 86641,
+      "format": "tsv",
+      "dataset": "neuron1k_v3"
+    },
+    {
+      "name": "nuclei2k_v2.cassette.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/nuclei2k_v2.cassette.tsv.gz",
+      "kind": "derived",
+      "sha256": "58e3606b2991cfbdc30ebc19452ec671291887ec7abfdfa7379dba7dcf0f10c4",
+      "bytes": 27250,
+      "format": "tsv",
+      "dataset": "nuclei2k_v2"
+    },
+    {
+      "name": "nuclei2k_v2.cells.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/nuclei2k_v2.cells.tsv.gz",
+      "kind": "derived",
+      "sha256": "fa2630868accc1fca84ac7a1a98eca53c97b99850e3de9ea5e52e7360e67bc03",
+      "bytes": 51197,
+      "format": "tsv",
+      "dataset": "nuclei2k_v2"
+    },
+    {
+      "name": "nuclei2k_v2.junctions.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/nuclei2k_v2.junctions.tsv.gz",
+      "kind": "derived",
+      "sha256": "e116a635827600254a1d5e83f6bba377b041f3b2e0347ee9f7242ecef2fafe6d",
+      "bytes": 1721448,
+      "format": "tsv",
+      "dataset": "nuclei2k_v2"
+    },
+    {
+      "name": "nuclei2k_v2.psi_cells.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/nuclei2k_v2.psi_cells.tsv.gz",
+      "kind": "derived",
+      "sha256": "41098bb2eb183e55bf0e4a2558d8825dada21f3093f4d63cc28775c5e411a60f",
+      "bytes": 4221,
+      "format": "tsv",
+      "dataset": "nuclei2k_v2"
+    },
+    {
+      "name": "pbmc1k_cite_v3.cassette.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/pbmc1k_cite_v3.cassette.tsv.gz",
+      "kind": "derived",
+      "sha256": "200f70f14d41d74847f2a6729d6d6d3aa8981c41fb8e383133580721923df1f6",
+      "bytes": 49261,
+      "format": "tsv",
+      "dataset": "pbmc1k_cite_v3"
+    },
+    {
+      "name": "pbmc1k_cite_v3.cells.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/pbmc1k_cite_v3.cells.tsv.gz",
+      "kind": "derived",
+      "sha256": "678cb3d8b1a337d8bd8e3249ab55c1ed0bd21ffb425fa48e1df780fb937feef2",
+      "bytes": 20231,
+      "format": "tsv",
+      "dataset": "pbmc1k_cite_v3"
+    },
+    {
+      "name": "pbmc1k_cite_v3.junctions.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/pbmc1k_cite_v3.junctions.tsv.gz",
+      "kind": "derived",
+      "sha256": "755becef7dece58066a67ba37fc343d8600c4c11d12a34e5010bd6aec7a23bf3",
+      "bytes": 1637715,
+      "format": "tsv",
+      "dataset": "pbmc1k_cite_v3"
+    },
+    {
+      "name": "pbmc1k_cite_v3.psi_cells.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/pbmc1k_cite_v3.psi_cells.tsv.gz",
+      "kind": "derived",
+      "sha256": "6d624a173725bae9f68aad2b6341e13bb173c68ca5971cb993bb9b5493ad4605",
+      "bytes": 110849,
+      "format": "tsv",
+      "dataset": "pbmc1k_cite_v3"
+    },
+    {
+      "name": "pbmc1k_v2.cassette.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/pbmc1k_v2.cassette.tsv.gz",
+      "kind": "derived",
+      "sha256": "d454aff09725522436ef5e3cfafc3120075b0e47ef0c815ba1f28d4c95593bef",
+      "bytes": 32625,
+      "format": "tsv",
+      "dataset": "pbmc1k_v2"
+    },
+    {
+      "name": "pbmc1k_v2.cells.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/pbmc1k_v2.cells.tsv.gz",
+      "kind": "derived",
+      "sha256": "ca09a7602bc2542d6dda55e5ed4194173abb4dfe201678cf52700ff55d96f1dd",
+      "bytes": 27227,
+      "format": "tsv",
+      "dataset": "pbmc1k_v2"
+    },
+    {
+      "name": "pbmc1k_v2.junctions.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/pbmc1k_v2.junctions.tsv.gz",
+      "kind": "derived",
+      "sha256": "f0e56512b1d8f215ad37713f28379bc783080e3ba09c577424820cded659d1e0",
+      "bytes": 1570373,
+      "format": "tsv",
+      "dataset": "pbmc1k_v2"
+    },
+    {
+      "name": "pbmc1k_v2.psi_cells.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/pbmc1k_v2.psi_cells.tsv.gz",
+      "kind": "derived",
+      "sha256": "fe1c172f8907a4cf2bf5ae8d4dfbd41e0fb6a88442839d168e89c561c057aad8",
+      "bytes": 175788,
+      "format": "tsv",
+      "dataset": "pbmc1k_v2"
+    },
+    {
+      "name": "pbmc1k_v3.cassette.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/pbmc1k_v3.cassette.tsv.gz",
+      "kind": "derived",
+      "sha256": "933e8c620d96235a35fac3458e597db71acb0b473e6d446ee6596db53a678f7e",
+      "bytes": 52929,
+      "format": "tsv",
+      "dataset": "pbmc1k_v3"
+    },
+    {
+      "name": "pbmc1k_v3.cells.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/pbmc1k_v3.cells.tsv.gz",
+      "kind": "derived",
+      "sha256": "982185c8c4cfab8c7bb9a4e441000df2f4016f1cc2f2957ba3eb50d83862d7f7",
+      "bytes": 33451,
+      "format": "tsv",
+      "dataset": "pbmc1k_v3"
+    },
+    {
+      "name": "pbmc1k_v3.junctions.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/pbmc1k_v3.junctions.tsv.gz",
+      "kind": "derived",
+      "sha256": "3b4ea3ca36e0472bb9633b6ab4071440873f840214968ee71b55c4f205dc54dc",
+      "bytes": 2067090,
+      "format": "tsv",
+      "dataset": "pbmc1k_v3"
+    },
+    {
+      "name": "pbmc1k_v3.psi_cells.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/pbmc1k_v3.psi_cells.tsv.gz",
+      "kind": "derived",
+      "sha256": "0768eb9fb1b018849210b7edc2d0910f29536679ef7cf9cd61ff423422fa15da",
+      "bytes": 217656,
+      "format": "tsv",
+      "dataset": "pbmc1k_v3"
+    },
+    {
+      "name": "pbmc5p_v1.cassette.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/pbmc5p_v1.cassette.tsv.gz",
+      "kind": "derived",
+      "sha256": "4630063dfba99ab4774991587d86e80423a89d208d1d43febdc56ec6be316c04",
+      "bytes": 259846,
+      "format": "tsv",
+      "dataset": "pbmc5p_v1"
+    },
+    {
+      "name": "pbmc5p_v1.cells.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/pbmc5p_v1.cells.tsv.gz",
+      "kind": "derived",
+      "sha256": "8e0859055311eed977e8af4ba4f4473871fd03b484fe83b3bb060602589c098d",
+      "bytes": 189412,
+      "format": "tsv",
+      "dataset": "pbmc5p_v1"
+    },
+    {
+      "name": "pbmc5p_v1.junctions.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/pbmc5p_v1.junctions.tsv.gz",
+      "kind": "derived",
+      "sha256": "420c9b4fb840b4a0e6dc3daa35dd656265c1f301e6db33d55f303496d93f1118",
+      "bytes": 2479312,
+      "format": "tsv",
+      "dataset": "pbmc5p_v1"
+    },
+    {
+      "name": "pbmc5p_v1.psi_cells.tsv.gz",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/pbmc5p_v1.psi_cells.tsv.gz",
+      "kind": "derived",
+      "sha256": "567e0bbfcb4c4bd421f2f79e66dbef93e4cc1b88d5234f826f7e511a8a0fe88a",
+      "bytes": 701853,
+      "format": "tsv",
+      "dataset": "pbmc5p_v1"
+    },
+    {
+      "name": "provenance.json",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/provenance.json",
+      "kind": "derived",
+      "sha256": "1d6bedb06d4b47c9b415a7558df0c33415880d941b0d76b3b4915b70d71f103b",
+      "bytes": 31212,
+      "format": "json"
+    },
+    {
+      "name": "resources.json",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/junctions-psi/resources.json",
+      "kind": "derived",
+      "sha256": "c320095e3b1b35bff0b27e17af014e5c8c49723276f51954ccb78da716a045f3",
+      "bytes": 7917,
+      "format": "json"
+    }
+  ],
+  "code": [
+    {
+      "path": "bench/public/capabilities/junctions_psi.py",
+      "role": "metric",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/junctions_psi.py"
+    },
+    {
+      "path": "bench/public/capabilities/_pubcommon.py",
+      "role": "metric",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/_pubcommon.py"
+    },
+    {
+      "path": "bench/public/capabilities/extract/junctions.py",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/extract/junctions.py"
+    },
+    {
+      "path": "bench/public/capabilities/extract/pairstats.py",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/extract/pairstats.py"
+    },
+    {
+      "path": "bench/public/capabilities/extract/runio.py",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/extract/runio.py"
+    },
+    {
+      "path": "bench/public/capabilities/extract/run_extract.py",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/extract/run_extract.py"
+    },
+    {
+      "path": "bench/public/capabilities/clipper/starsolo_public.sbatch",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/clipper/starsolo_public.sbatch"
+    },
+    {
+      "path": "bench/public/capabilities/clipper/singlet_public.sbatch",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/3638d65cf88f676d761e63769cb6fe664614e9af/bench/public/capabilities/clipper/singlet_public.sbatch"
+    }
+  ],
+  "reproduce": {
+    "module": "bench/public/capabilities/junctions_psi.py",
+    "function": "compute",
+    "laptop_minutes": 3,
+    "clipper_command": "bash bench/public/capabilities/clipper/run_all.sh junctions-psi"
+  },
+  "caveats": [
+    "There is only one junction-counting tool, STARsolo. Its default-settings run is the reference and its Cell Ranger-emulation run stands in for the competitor; the metrics say how close Singlet is to STARsolo relative to how far a second STARsolo configuration is, not how accurate either is against a biological truth.",
+    "The reference choice was made after looking at pbmc1k_v3: with the Cell Ranger emulation as reference, every Singlet metric scored below the default-settings run, because MultiGeneUMI_CR gives zero UMI to some of the highest-count junctions (overlapping genes). The default settings are STARsolo's documented defaults and were used for every dataset; the other orientation is not reported as a metric.",
+    "Singlet and STARsolo run separate STAR alignments (Singlet's inside its pipeline), so the junction sets differ in part through alignment settings, not only counting.",
+    "Singlet reports many more junctions than pass STAR's filters (most of them with a single molecule); those unfiltered junctions are excluded from every metric here.",
+    "Cassette-exon PSI uses annotated GENCODE triples only; novel exons and other event types (alternative donors and acceptors) are not scored. Singlet's own splice_psi output is not evaluated here.",
+    "Wall time and memory in resources are from a shared cluster at differing thread counts and are not a speed comparison.",
+    "Cohort datasets assigned to junctions-psi that this document does not cover (no run for them in this benchmark yet): pbmc5k_v4_d1, ding2020_pbmc1_smartseq2."
+  ],
+  "conclusion": "On 7 datasets, Singlet's filtered junction set overlaps STARsolo SJ (at defaults) at Jaccard 0.84-0.96, its per-cell junction counts correlate at a median 0.42-0.94 and cassette-exon PSI at r = 0.972-0.999 (pseudobulk). Each is compared with STARsolo in Cell Ranger emulation measured against the same reference; 40 of 42 comparisons pass. Against the Cell Ranger emulation as reference Singlet agrees less (reported, not gated): that filter zeroes some high-count junctions."
+}
