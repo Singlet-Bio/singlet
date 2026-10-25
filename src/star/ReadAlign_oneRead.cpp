@@ -185,6 +185,9 @@ int ReadAlign::oneRead() {//process one read: load, map, write
         };
         g_profClass[cls][0] += profMapCyc;
         g_profClass[cls][1]++;
+        for (int k=0; k<3; k++) g_profClassDetail[cls][k] += profCyc[k];
+        g_profClassDetail[cls][3] += profCnt[0];
+        g_profClassDetail[cls][4] += profCnt[1];
     };
 #endif
 

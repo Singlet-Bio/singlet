@@ -301,6 +301,9 @@ std::time(&timeStart);
     #endif
     //generate transcript for each window, choose the best
     PROF_ADD(PROF_windows, tWin);
+#ifdef STAR_PROFILE
+    profCyc[1] = __rdtsc() - tWin;
+#endif
     PROF_T0(tStitch);
     trBest =trInit; //initialize next/best
     uint iW1=0;//index of non-empty windows
@@ -375,6 +378,9 @@ std::time(&timeStart);
 
     nW=iW1;//only count windows that had alignments
     PROF_ADD(PROF_stitch, tStitch);
+#ifdef STAR_PROFILE
+    profCyc[2] = __rdtsc() - tStitch;
+#endif
 
 //     {//debug
 //         std::time(&timeFinish);

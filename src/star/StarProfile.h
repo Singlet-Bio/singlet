@@ -13,6 +13,8 @@ extern std::atomic<unsigned long long> g_profOutcome[6][2];
 //unique STAR-mapped reads by shape: {perfect, 1 mismatch, other} x {unspliced, spliced} for one-gene concordant,
 //annotated-junction, indel-free, non-chrM alignments; 6 = everything else unique
 extern std::atomic<unsigned long long> g_profClass[7][2];
+//per class: seed, windows, stitch cycles; MMP queries, SA binary searches
+extern std::atomic<unsigned long long> g_profClassDetail[7][5];
 #define PROF_T0(v) unsigned long long v = __rdtsc()
 #define PROF_ADD(i, v) g_prof[i] += __rdtsc() - (v)
 #else
