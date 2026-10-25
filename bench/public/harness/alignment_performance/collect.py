@@ -7,6 +7,7 @@ OUT_DIR  $ART/alignment-performance/: writes runs.tsv (one row per tool x datase
 Standard library only.
 """
 import csv
+import hashlib
 import json
 import re
 import sys
@@ -153,13 +154,15 @@ def collect_opt(bp: Path, out: Path):
                     continue
                 wall, cpu_s, rss, copies = t["wall_s"], t.get("user_s", 0) + t.get("sys_s", 0), mem(d / "run" / "mem.json"), 1
             ph = star_phases(keep / "star_Log.out")
-            rows.append({"kind": kdir.name, "name": name, "rep": rep, "host": host, "cpu": cpu, "copies": copies,
+            cs = keep / "checksums.txt"
+            sig = hashlib.md5(cs.read_bytes()).hexdigest()[:12] if cs.exists() and cs.stat().st_size else ""
+            rows.append({"outputs_sig": sig,"kind": kdir.name, "name": name, "rep": rep, "host": host, "cpu": cpu, "copies": copies,
                          "wall_s": round(wall, 2), "cpu_s": round(cpu_s, 1), "max_rss_gb": round(rss, 3) if rss else "",
                          "mapping_s": ph.get("mapping_s", ""), "solo_s": ph.get("solo_s", ""),
                          "cache_hit_rate": round(ph["cache_hit_rate"], 4) if "cache_hit_rate" in ph else "",
                          "seqcache_line": ph.get("seqcache", "")[:200]})
     cols = ["kind", "name", "rep", "host", "cpu", "copies", "wall_s", "cpu_s", "max_rss_gb", "mapping_s", "solo_s",
-            "cache_hit_rate", "seqcache_line"]
+            "cache_hit_rate", "outputs_sig", "seqcache_line"]
     with open(out / "opt_runs.tsv", "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=cols, delimiter="\t")
         w.writeheader()

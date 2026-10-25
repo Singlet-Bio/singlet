@@ -1,0 +1,28 @@
+id	level	optimization	metric	before	after	unit	platform	source	notes
+star_stock	star	stock STAR (adjacent-read dedup off), reference row	mapping_s	863	863	s	Xeon Gold 6226, 4 threads, paired runs, PBMC 1k v3 66.6 M pairs	PR #34	1 run
+star_stock	star	stock STAR (adjacent-read dedup off), reference row	whole_run_s	1209	1209	s	Xeon Gold 6226, 4 threads, paired runs, PBMC 1k v3 66.6 M pairs	PR #34	1 run
+star_pr22	star	binary of PR #22 (adjacent-read dedup on)	mapping_s	863	793	s	Xeon Gold 6226, 4 threads, paired runs, PBMC 1k v3 66.6 M pairs	PR #34	dedup was not exact: about 300 reads differ from stock STAR
+star_pr22	star	binary of PR #22 (adjacent-read dedup on)	whole_run_s	1209	1138	s	Xeon Gold 6226, 4 threads, paired runs, PBMC 1k v3 66.6 M pairs	PR #34
+star_lazy_huge_cache1	star	lazy winBin + huge pages + sequence cache 1 GB + faster read parsing	mapping_s	793	586	s	Xeon Gold 6226, 4 threads, paired runs, PBMC 1k v3 66.6 M pairs	PR #34	identical to stock STAR on 60,718,102 BAM records and all matrices; 1 run
+star_lazy_huge_cache1	star	lazy winBin + huge pages + sequence cache 1 GB + faster read parsing	whole_run_s	1138	912	s	Xeon Gold 6226, 4 threads, paired runs, PBMC 1k v3 66.6 M pairs	PR #34
+star_pgo_cache2	star	+ PGO build, sequence cache 2 GB (default)	mapping_s	793	515	s	Xeon Gold 6226, 4 threads, paired runs, PBMC 1k v3 66.6 M pairs	PR #34	1.54x mapping and 1.35x whole run vs the PR #22 binary; 1.68x mapping vs stock STAR
+star_pgo_cache2	star	+ PGO build, sequence cache 2 GB (default)	whole_run_s	1138	845	s	Xeon Gold 6226, 4 threads, paired runs, PBMC 1k v3 66.6 M pairs	PR #34
+star_pgo_cache4	star	+ PGO build, sequence cache 4 GB	mapping_s	793	502	s	Xeon Gold 6226, 4 threads, paired runs, PBMC 1k v3 66.6 M pairs	PR #34
+star_pgo_cache4	star	+ PGO build, sequence cache 4 GB	whole_run_s	1138	825	s	Xeon Gold 6226, 4 threads, paired runs, PBMC 1k v3 66.6 M pairs	PR #34
+sub_lazy	star	lazy winBin alone (10 M-read subset)	mapping_s	133	117.5	s	10 M reads, median of 2, same node	PR #34
+sub_huge	star	huge pages alone (10 M-read subset)	mapping_s	133	111.5	s	10 M reads, median of 2, same node	PR #34
+sub_lazy_huge	star	lazy winBin + huge pages (10 M-read subset)	mapping_s	133	107.5	s	10 M reads, median of 2, same node	PR #34
+sub_cache	star	+ sequence cache 1 GB, 39.5% hits (10 M-read subset)	mapping_s	107.5	94.5	s	10 M reads, median of 2, same node	PR #34
+sub_pgo	star	+ PGO (10 M-read subset)	mapping_s	94.5	85	s	10 M reads, median of 2, same node	PR #34	other node: 93 to 85 s; LTO measured no gain (93 s)
+sub_prefetch	star	software prefetch flags (10 M-read subset), not adopted	mapping_s	133	124.5	s	10 M reads, median of 2, same node	PR #34	no gain once lazy winBin and huge pages are on
+readload	star	faster read-name parsing in place	cpu_s_per_10m_reads	13.2	7.8	s	10 M reads	PR #34
+cache_hit_pbmc	star	sequence cache hit rate, PBMC 1k v3 full (1 GB / 2 GB / 4 GB)	hit_rate	0	0.48	fraction	66.6 M pairs	PR #34	44.0% at 1 GB, 48.0% at 2 GB, 51.2% at 4 GB; a perfect cache would reach 52.9%; the old adjacent-read dedup 14.9%
+cache_hit_deep	star	sequence cache hit rate, GSM5815984 full (simulated, perfect cache)	hit_rate	0	0.66	fraction	489 M pairs	PR #34, star-accel/hitrate_GSM5815984.json	a 16 M-read recency window reaches 46%; the old dedup 12%
+packing_x4	star	4 samples on 16 cores with one shared genome and disk sort (x4_lean)	batch_wall_s	1255	1015	s	Xeon Gold 6226, 16 cores, 4 concurrent copies	PR #34	1.24x; per-copy mapping 881 to 630 s (1.40x)
+job_download_stage	pipeline	download as a separate 1-core stage: prefetch then singlet download of the local .sra	run_download_s	1054	163	s	one 1.15 GB run	docs/atlas-rerun-plan.md section 3	removes ~15 s per million reads of idle 4-core time: -45% core-hours at full depth; decoded reads identical (dl_equiv)
+job_threads	pipeline	4 threads per sample instead of 8 or 16	core_hours_per_sample	1.59	1.24	core-h	PBMC 1k v3, 16 reserved cores	docs/atlas-rerun-plan.md section 3	1.85 to 2.41 core-h at 16 threads; outputs identical after the determinism fix
+job_shared_genome	pipeline	genome in shared memory (--genome-shared on)	wall_s	1	0.99	ratio	PBMC 1k v3	docs/atlas-rerun-plan.md section 3	-1% time, one genome per node instead of one per job; outputs identical
+job_disk_sort	pipeline	disk-backed BAM sort (--bam-sort-mode disk)	wall_s	1120	1113	s	PBMC 1k v3	docs/atlas-rerun-plan.md section 3	no time change; peak RSS 18.6 GB instead of a sort buffer sized to the job memory; outputs identical
+job_packing	pipeline	4 samples packed on 16 cores	wall_ratio	1	1.15	ratio	PBMC 1k v3	docs/atlas-rerun-plan.md section 3	+15% per sample vs one alone (memory bandwidth), lean packing +19%
+job_nonhost_off	pipeline	non-host screen off	wall_s	1420	1120	s	PBMC 1k v3, 4 threads	docs/atlas-rerun-plan.md section 3	-27% time and -35 GB RSS; the non-host members are absent
+job_nonhost_shm	pipeline	non-host indices cached in /dev/shm	wall_s	1420	1420	s	PBMC 1k v3, 4 threads	docs/atlas-rerun-plan.md section 3	no gain: the cost is screening the unmapped reads, not loading the indices

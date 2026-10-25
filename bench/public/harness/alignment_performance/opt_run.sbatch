@@ -36,6 +36,12 @@ cat $GENOME/* > /dev/null 2>&1 || true
 unset SINGLET_REF_BASE
 export SINGLET_STALL_TIMEOUT=10800
 
+sums() {  # $1 = output dir, $2 = file: md5 of the content of every count matrix and the junction table (equivalence between rows)
+  ( cd $1; find . -type f \( -name 'exon_counts.mtx.gz' -o -name 'intron_counts.mtx.gz' -o -name 'ambiguous_counts.mtx.gz' \
+        -o -name 'star_SJ.out.tab' -o -path './star_Solo.out/*/raw/*.mtx' -o -name 'sj_counts.mtx.gz' \) | sort |
+    while read -r f; do case $f in *.gz) h=$(zcat "$f" | md5sum | cut -c1-32) ;; *) h=$(md5sum < "$f" | cut -c1-32) ;; esac; echo "$f $h"; done ) > "$2"
+}
+
 one() {  # NAME BIN THREADS ENV(k=v,...) EXTRA...  -> $O0/NAME_rREP
   local name=$1 bin=$2 thr=$3 envs=$4; shift 4
   local O=$O0/${name}_r$REP; rm -rf $O $O.keep; mkdir -p $O
@@ -44,6 +50,7 @@ one() {  # NAME BIN THREADS ENV(k=v,...) EXTRA...  -> $O0/NAME_rREP
     cd $SCR; timed $O/run $bin $SCR/s.1fq --ref-base $REFBASE --genome-dir $GENOME --exons $GTF --out-prefix $O/out/ \
       --threads $thr --pipeline --output-format mtx --raw-matrix "$@" > $O/run.log 2>&1 ) || echo "exit $?" >> $O/run.log
   mkdir -p $O.keep; cp $O/out/star_Log.out $O/out/star_Log.final.out $O.keep/ 2>/dev/null || true
+  sums $O/out $O.keep/checksums.txt
   rm -rf $O/out
   echo "[opt] $name: $(grep -h Elapsed $O/run/time.txt | sed 's/.*): //') rss $(cat $O/run/mem.json 2>/dev/null)"
 }
@@ -79,6 +86,7 @@ else
             --bam-sort-mode disk > $O/c$i.log 2>&1 ) & done; wait
         echo "[opt] $(cpu_model) $(hostname) $(date -Is)" > $O/node.txt; echo "wall_all=$(( $(date +%s) - t0 ))" >> $O/node.txt
         mkdir -p $O.keep; cp $O/c1/out/star_Log.out $O/c1/out/star_Log.final.out $O.keep/ 2>/dev/null || true
+        sums $O/c1/out $O.keep/checksums.txt
         rm -rf $O/c?/out; $BIN genome unload $GENOME > /dev/null 2>&1; SHMBIN=""
         echo "[opt] x4_lean $(cat $O/node.txt)" ;;
     esac
