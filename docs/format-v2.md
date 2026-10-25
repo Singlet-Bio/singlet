@@ -578,3 +578,34 @@ catalog already uses for the list of modality names.
 follows the section 11 rule (a pz2 member with rows and columns). The vocabulary changes together in `client.py` (`MODALITIES`,
 `_MODALITY_ALIASES`), `r/R/v2.R` (`.v2_modality_members`, `.v2_modality_alias`) and the website's `v2-load-modalities.ts`; PR #14 landed
 first, so this branch adds `adt` / `hto` to the Python and R vocabularies; the website's list is a proposal for its owner. `uns["adt_panel"]` holds the parsed `adt_panel.json`.
+
+## 14. V(D)J and CRISPR guide members (PROPOSAL, 2026-10-25)
+
+Owner: the V(D)J + CRISPR session (branch `claude/vdj-crispr-benchmark-721d3a`, `python/singlet/vdj/`, `python/singlet/crispr/`,
+report `docs/vdj-crispr-modalities.md`). The rules of section 13 apply unchanged: these are new (non-legacy) members of the
+**GEX** sample, aligned to its `cells` table; a library is attached only when its QC passes, otherwise the manifest lists
+`samples[i].excluded_modalities.<vdj|crispr> = {reason, failed rules}`; several libraries of one GEX sample are merged
+(`counting.libraries` lists them); after migration they go to a sidecar `v2/x/<GSM>/<vdj|crispr>.<d16hex>.s2` referenced as
+`samples[i].extra_objects.<vdj|crispr>`.
+
+| member | kind | content |
+|---|---|---|
+| `vdj_contigs.parquet` | 3 (stored, zstd parquet) | one row per assembled contig with >= 1 junction UMI: `col` (cells-table column, -1 off the columns), `barcode`, `contig_id`, `chain`, `v_gene`, `d_gene`, `j_gene`, `c_gene`, `cdr3` (IMGT junction aa, Cys104..Phe/Trp118), `cdr3_nt`, `productive`, `full_length`, `umis`, `junction_umis`, `reads`, `high_confidence`, `kept`; sorted by `col` |
+| `vdj_summary.json` | 3 (stored) | `{"schema": "singlet-vdj/1", "method", "reference": {name, digest, source genome + GTF}, "counting": {libraries, runs, orientation, read statistics}, "library": {QC verdict, failed, warned, rules, metrics}}` |
+| `crispr_counts.1pz` | 1 (pz2) | guides x the sample's columns; u32 UMIs; rows `Inline` (guide ids, order of `crispr_guides.json`); cols `Cells` |
+| `crispr_guides.json` | 3 (stored) | `{"schema": "singlet-crispr-guides/1", "method", "geometry", "counting", "source", "guides": [{row, id, name, sequence, target_gene, target_gene_id, kind, ambient_umis}], "library": {QC}}` |
+
+* The existing legacy member `vdj_gene_usage.1pz` (gene-body UMIs over TR/IG genes counted from the GEX library) stays as it is;
+  it is a GEX-derived measurement, not a V(D)J library.
+* Contigs are raw data of the sample (`docs/CELL-ARCHITECTURE.md` section 1: VDJ is raw data in the `.s2` object). Per-cell
+  labels derived from them are cell metadata in feature sidecars: `<GSM>.features.vdj.parquet` (`col`, `receptor`, `paired`,
+  `clonotype_id`, `clonotype_size`, `excess_chains`, per-chain `*_cdr3` and `*_v`, `IGH_c`) and `<GSM>.features.crispr.parquet`
+  (`col`, `n_guides`, `guide_ids`, `target`, `class`). Sample-level summaries (V(D)J cells, pairing rate, clonotypes; guides
+  detected, assigned cells) go to D1 `sample_property`, never per cell.
+* Gene names are gene level (no alleles): the segment reference is built from the sample's own genome annotation
+  (`singlet.vdj.reference`), which carries one allele per gene. No germline genotype is derived or stored.
+* `modalities=` (section 11): `vdj_contigs` -> `vdj_contigs.parquet` as `uns["vdj_contigs"]` (Python) / `metadata(sce)$vdj_contigs`
+  (R), with the per-cell sidecar joined into `obs`; `crispr` -> `crispr_counts.1pz`, `obsm["crispr"]` / `altExp("crispr")`, aliases
+  `guides`, `sgrna`, `perturbation`. The vocabulary changes together in `client.py`, `r/R/v2.R` and the website's
+  `v2-load-modalities.ts`; this is a proposal for their owners (not wired on this branch). `vdj` keeps its current meaning
+  (`vdj_gene_usage.1pz`).
