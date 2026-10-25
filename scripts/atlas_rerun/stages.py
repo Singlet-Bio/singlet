@@ -25,6 +25,7 @@ import time
 from common import emit, now, sha256_file
 
 HEAD_READS = 1000000
+HEAD_TIMEOUT_S = 900
 
 
 class StageError(Exception):
@@ -104,6 +105,7 @@ def run(cmd, log, env=None, cwd=None, timeout=None):
         except OSError as e:
             fh.write("exec failed: %s\n" % e)
             rc = 127
+        fh.write("\n[rc=%s, %.1f s]\n" % (rc, time.time() - t0))
     return rc, time.time() - t0, tail(log)
 
 
@@ -167,40 +169,50 @@ def io_stage(ctx, row, attempt):
         if not runs:
             raise Parked("no_runs_known", "ENA lists no run for this sample")
         planned = dict(zip(runs, row.get("run_reads") or [0] * len(runs)))
-        # 1. screen the first 1M read pairs of every run, streamed (nothing of a dropped run is downloaded)
+        # 1. screen the first 1M read pairs of every run, streamed (nothing of a dropped run is downloaded). A run
+        #    whose remote head cannot be read (slow or flaky VDB streaming) is not dropped: it is prefetched and judged by
+        #    the full-run screen in step 3 instead.
         hdir = os.path.join(scr, "head")
         os.makedirs(hdir)
-        heads, pregate, t0 = [], {}, time.time()
+        heads, pregate, no_head, t0 = [], {}, [], time.time()
         for r in runs:
             out = os.path.join(hdir, r + ".1fq")
             rc, _ = retry(lambda: run([ctx.bin, "download", r, "--max-reads", str(HEAD_READS), "--vdb-threads", "2",
-                                    "--no-profile", "-o", out], log, env=ctx.env, cwd=scr, timeout=3600), tries=3)
+                                       "--no-profile", "-o", out], log, env=ctx.env, cwd=scr, timeout=HEAD_TIMEOUT_S),
+                          tries=2)
             if rc == 2:
                 pregate[r] = "non10x_pregate"  # `singlet download`'s non-10x gate: a run of another chemistry
             elif rc != 0 or not os.path.exists(out):
-                raise StageError("head_download_failed", "%s rc=%s %s" % (r, rc, tail(log, 1500)))
+                no_head.append(r)
             else:
                 heads.append(out)
         head_s = time.time() - t0
-        if not heads:
+        if not heads and not no_head:
             raise Parked("non10x", "every run rejected by the download gate: %s" % pregate)
+        hs, kept, dropped = {}, [], sorted(pregate)
         hjson = os.path.join(scr, "head_screen.json")
-        rc, _, out = run([ctx.bin, "screen-runs", "--json", hjson] + heads, log, env=ctx.env, cwd=scr)
-        hs = load_json_safe(hjson)
-        if rc == 6:
-            keep_copy(hjson, os.path.join(ctx.log_dir(gsm), "head_screen.json"))
-            raise Parked("no_gex_runs", "screen kept no run")
-        if rc != 0 or hs is None:
-            raise StageError("screen_failed", out)
-        kept = list(hs.get("runs_kept") or [])
-        dropped = list(hs.get("runs_dropped") or []) + sorted(pregate)
+        if heads:
+            rc, _, out = run([ctx.bin, "screen-runs", "--json", hjson] + heads, log, env=ctx.env, cwd=scr)
+            hs = load_json_safe(hjson)
+            if rc == 6 and not no_head:
+                keep_copy(hjson, os.path.join(ctx.log_dir(gsm), "head_screen.json"))
+                raise Parked("no_gex_runs", "screen kept no run")
+            if rc not in (0, 6) or hs is None:
+                raise StageError("screen_failed", out)
+            kept = list(hs.get("runs_kept") or [])
+            dropped += list(hs.get("runs_dropped") or [])
+        kept += no_head
         run_rows = [{"run": x.get("run_id"), "keep": bool(x.get("keep")), "reason": x.get("reason"),
                      "chemistry": x.get("chemistry"), "best_rate": x.get("best_rate"),
-                     "planned_reads": planned.get(x.get("run_id"))} for x in hs.get("runs", [])]
+                     "planned_reads": planned.get(x.get("run_id"))} for x in (hs or {}).get("runs", [])]
         run_rows += [{"run": r, "keep": False, "reason": why, "planned_reads": planned.get(r)} for r, why in pregate.items()]
+        run_rows += [{"run": r, "keep": True, "reason": "head_unavailable: judged on the full run",
+                      "planned_reads": planned.get(r)} for r in no_head]
         emit(root, "screened", gsm, attempt=attempt, stage="io", runs_kept=kept, runs_dropped=dropped,
-             chemistry=hs.get("majority_chemistry"), runs=run_rows, head_s=round(head_s, 1))
-        keep_copy(hjson, os.path.join(sdir, "head_screen.json"))
+             chemistry=(hs or {}).get("majority_chemistry"), runs=run_rows, head_s=round(head_s, 1),
+             head_unavailable=no_head or None)
+        if heads:
+            keep_copy(hjson, os.path.join(sdir, "head_screen.json"))
         # 2. prefetch each kept run to node-local scratch, decode it locally to the shared stage dir
         sra_total, prefetch_s, decode_s, per_run = 0, 0.0, 0.0, []
         for r in kept:
