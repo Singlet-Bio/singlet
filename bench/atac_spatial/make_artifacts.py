@@ -16,6 +16,7 @@ ap.add_argument("what", choices=["atac", "spatial"]); ap.add_argument("ds")
 ap.add_argument("--tenx-dir", required=True); ap.add_argument("--prefix", required=True)
 ap.add_argument("--kind", default="arc"); ap.add_argument("--singlet", required=True)
 ap.add_argument("--chromap"); ap.add_argument("--starsolo"); ap.add_argument("--out", required=True)
+ap.add_argument("--gex", help="Multiome: Singlet GEX run dir (cell_calls.tsv) for singlet_gex_called")
 ap.add_argument("--chrom", default="chr21")
 a = ap.parse_args()
 os.makedirs(a.out, exist_ok=True)
@@ -79,6 +80,10 @@ if a.what == "atac":
     j = t.join(s, how="outer")
     if c is not None:
         j = j.join(c, how="outer")
+    if a.gex:
+        cc = pd.read_csv(f"{a.gex}/cell_calls.tsv", sep="	", dtype={"barcode": str})
+        col = "called_v2" if "called_v2" in cc else "called"
+        j["singlet_gex_called"] = pd.Series(cc[col].astype(int).values, index=strip(cc.barcode)).reindex(j.index).fillna(0).astype(int)
     for col in ("tenx_is_cell", "singlet_is_cell"):
         j[col] = j[col].fillna(0).astype(int)
     big = (j.tenx_is_cell == 1) | (j.singlet_is_cell == 1) | (j.tenx_fragments.fillna(0) >= 100) | \
