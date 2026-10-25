@@ -215,9 +215,9 @@ class Ledger:
         elif ev == "released":
             if s["state"] in ("running", "downloaded"):
                 s["state"] = "downloaded"
-                s.pop("node_job", None)
+                s.pop("compute_job" if e.get("stage") == "compute" else "node_job", None)
         elif ev == "unpark":
-            s["state"] = "queued"
+            s["state"] = "downloaded" if e.get("from_stage") == "compute" else "queued"
             s["failures"] = 0
             s["attempt"] = int(s.get("attempt", 0)) + 1
             for k in ("io_job", "compute_job", "node_job", "escalate"):

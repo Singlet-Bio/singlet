@@ -323,6 +323,13 @@ class Controller:
             if stage == "node" and reason in ("timeout", "cancelled", "node_fail", "preempted"):
                 self.event("released", g, attempt=s.get("attempt"), stage="node", reason=reason)
                 continue
+            # the chained compute task never started although the reads are staged: Slurm marks an I/O job
+            # OUT_OF_MEMORY when any child process was OOM-killed (even one the stage recovered from), and aftercorr
+            # then cancels the compute task. Not a failure: the compute stage is submitted on its own next tick.
+            if stage == "compute" and state == "CANCELLED" and not a.get("elapsed_s") and s["state"] == "downloaded":
+                self.event("released", g, attempt=s.get("attempt"), stage="compute", reason="dependency_cancelled")
+                s.pop("missing_ticks", None)
+                continue
             self.event("lost", g, attempt=s.get("attempt"), stage=stage, reason=reason, job=job,
                        maxrss_gb=a.get("maxrss_gb"), elapsed_s=a.get("elapsed_s"))
             s.pop("missing_ticks", None)
@@ -1006,7 +1013,9 @@ def cmd_unpark(a):
     for g, s in L.samples.items():
         if s["state"] == "parked" and (want is None and a.reason and a.reason in (s.get("last_reason") or "") or
                                        want and g in want):
-            C.emit(root, "unpark", g, by="operator", note=a.note)
+            stage_root = cfg["clusters"][a.cluster].get("stage_root") or os.path.join(root, "stage")
+            staged = os.path.exists(os.path.join(stage_root, g, "sample.1fq"))
+            C.emit(root, "unpark", g, by="operator", note=a.note, from_stage="compute" if staged else None)
             n += 1
     print("unparked %d samples (applied at the next tick)" % n)
 

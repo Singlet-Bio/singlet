@@ -217,6 +217,39 @@ def test_anvil_node_mode_packs_staged_samples(tmp_path):
     assert 0 < sum(C.compute_core_h(3e8) for _ in in_node) <= cap
 
 
+class ScriptedSlurm(FakeSlurm):
+    """FakeSlurm whose queue is empty and whose sacct answers from a dict."""
+
+    def __init__(self, acct):
+        FakeSlurm.__init__(self)
+        self.dry = False
+        self._acct = acct
+
+    def acct(self, job_ids):
+        return {j: self._acct[j] for j in job_ids if j in self._acct}
+
+
+def test_cancelled_chained_compute_is_resubmitted_not_failed(tmp_path):
+    # Slurm marks an I/O job OUT_OF_MEMORY when a child was OOM-killed even if the stage recovered and staged the reads;
+    # aftercorr then cancels the compute task. The controller must resubmit compute alone, without a failure.
+    cfg = make_cfg(tmp_path)
+    path = write_plan(cfg, plan_rows(n_studies=1, per=1))
+    root = cfg["clusters"]["clipper"]["root"]
+    fake = FakeSlurm()
+    O.Controller(cfg, "clipper", fake, plan_path=path, log=lambda m: None).tick()
+    C.emit(root, "downloading", "GSM100", attempt=0, stage="io")
+    C.emit(root, "downloaded", "GSM100", attempt=0, stage="io", sra_bytes=1e9)
+    open(os.path.join(root, "bin", "singlet-" + cfg["binary"]["sha256"][:12]), "w").close()  # already installed
+    s = ScriptedSlurm({"900000002_0": {"state": "CANCELLED", "elapsed_s": 0}})
+    for _ in range(2):  # one tick of grace, then the release
+        ctl = O.Controller(cfg, "clipper", s, plan_path=path, log=lambda m: None)
+        ctl.tick()
+    g = ctl.L.samples["GSM100"]
+    assert g["failures"] == 0 and g["state"] == "downloaded"
+    assert any("ar-cmp-clipper" in " ".join(x["cmd"]) and not any("aftercorr" in c for c in x["cmd"])
+               for x in s.submitted)
+
+
 def test_slurm_parsers():
     assert parse_elapsed("1-02:03:04") == 93784 and parse_elapsed("03:59:00") == 14340
     assert parse_mem_gb("96G") == 96 and abs(parse_mem_gb("7600M") - 7.6) < 1e-9
