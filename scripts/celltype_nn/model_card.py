@@ -40,7 +40,13 @@ def main(argv=None) -> int:
     obs = pd.read_parquet(a.data / "corpus_obs.parquet", columns=["organism", "split", "tissue_general", "dataset_id", "collection_id"])
     bench = json.loads(a.bench.read_text())
     cxg = json.loads(a.cxg.read_text()) if a.cxg and a.cxg.exists() else None
-    version = a.version or f"celltype-nn={__version__};census={plan['census_version']};cl={terms.get('cl_version')}"
+    import re
+
+    m = re.search(r"\d{4}-\d{2}-\d{2}", str(terms.get("cl_version")))
+    cl = m.group(0) if m else str(terms.get("cl_version"))
+    calib = json.loads((a.model / "calibrate.json").read_text()) if (a.model / "calibrate.json").exists() else None
+    temperature = calib["best"]["T"] if calib else train["final"]["temperature"]
+    version = a.version or f"celltype-nn={__version__};census={plan['census_version']};cl={cl}"
     used = obs[obs["split"].isin(["train", "val"])]
     card = dict(
         model_version=version,
@@ -60,10 +66,11 @@ def main(argv=None) -> int:
             sampling=plan.get("filters"),
         ),
         weak_labels="refinements of the author label agreed by at least two of: Singlet guide, CellTypist 1.7.1 (16 models, CL crosswalk), SingleR-style correlation (rebuilt, cross-fitted by dataset)",
-        output_space=dict(n_terms=len(terms["terms"]), cl_version=terms.get("cl_version"), min_cells=terms.get("min_cells")),
+        output_space=dict(n_terms=len(terms["terms"]), cl_version=cl, min_cells=terms.get("min_cells")),
         inputs=dict(n_genes=len(vocab["genes"]), key="human Ensembl gene id; mouse via Ensembl one-to-one orthologs",
                     n_mouse_orthologs=len(vocab.get("mouse") or {}), transform="log1p(1e4 * c / sum over vocabulary)"),
-        training=dict(args=train.get("args"), temperature=train["final"]["temperature"], validation=train["final"]),
+        training=dict(args=train.get("args"), temperature=temperature, closure_nll_temperature=train["final"]["temperature"],
+                      calibration=None if calib is None else calib["best"], validation=train["final"]),
         benchmark_singlet_counts={m: dict(mean_over_studies=v["mean_over_studies"], calibration=v["pooled"].get("calibration"),
                                           s_per_million=v["pooled"].get("s_per_million"),
                                           s_per_million_with_read=v["pooled"].get("s_per_million_with_read"))
@@ -87,7 +94,8 @@ def main(argv=None) -> int:
         f"- Weak labels: {card['weak_labels']}.",
         f"- Output: {card['output_space']['n_terms']} CL terms (CL {card['output_space']['cl_version']}); inputs "
         f"{card['inputs']['n_genes']} genes ({card['inputs']['key']}).",
-        f"- Temperature {card['training']['temperature']:.3f}.",
+        f"- Temperature {card['training']['temperature']:.3f} (fitted on the reliability of the call, validation collections; "
+        f"closure-likelihood fit {card['training']['closure_nll_temperature']:.3f}).",
         f"- Singlet counts, 16 held-out studies, mean over studies: depth 1/2/3/4 = "
         + "/".join(f"{nn.get(f'd{d}', float('nan')):.3f}" for d in (1, 2, 3, 4))
         + f", wrong {nn.get('wrong', float('nan')):.3f}.",
