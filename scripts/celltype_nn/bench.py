@@ -211,8 +211,7 @@ def main(argv=None) -> int:
                     secs = extra.get("nn" if m.startswith("nn") else m, {}).get("seconds")
                     if secs is not None:
                         with open(a.save_calls / m.replace("@", "_t") / "timings.jsonl", "a") as f:
-                            f.write(json.dumps(dict(gse=gse, gsm=gsm, n_cells=len(s.col), seconds=secs, threads=a.threads, device="cpu")) + "
-")
+                            f.write(json.dumps(dict(gse=gse, gsm=gsm, n_cells=len(s.col), seconds=secs, threads=a.threads, device="cpu")) + "\n")
             for m in methods:
                 if m not in calls:
                     continue
