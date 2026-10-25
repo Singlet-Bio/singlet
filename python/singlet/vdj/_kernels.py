@@ -10,7 +10,7 @@ into uint64 (k <= 31) and sort like the strings.
 * :func:`assemble_group`: the reads of one (cell, chain) -> junction contigs (Cys104 ... Phe/Trp118) by greedy
   extension through the k-mer graph of the reads, weighted by distinct UMIs, from seed k-mers at Cys104 to terminal
   k-mers ending at Phe/Trp118; branches with enough UMI support are explored too (second alleles, dual alpha
-  chains, doublets). Then every read is assigned to the contig whose specific k-mers it holds.
+  chains, doublets). Then every read goes to the contig sharing most of its k-mers.
 """
 
 from __future__ import annotations
@@ -72,14 +72,15 @@ def build_index(seqs, k):
 def classify(codes, off, k, ikm, isg, ips, seg_region, min_hits):
     """Best V / J / C segment per read. Region codes: 0 V, 1 D, 2 J, 3 C.
 
-    Returns int32 arrays (n, 9): vseg, vhits, vdiag, jseg, jhits, jdiag, cseg, chits, cdiag (-1 / 0 when absent)."""
+    Returns int32 arrays (n, 10): vseg, vhits, vdiag, jseg, jhits, jdiag, cseg, chits, cdiag (-1 / 0 when absent), and
+    1 in column 9 when the best C segment ties with another (TRBC1 / TRBC2, IGHG1-4 share most k-mers)."""
     n = len(off) - 1
-    out = np.full((n, 9), -1, np.int32)
+    out = np.full((n, 10), -1, np.int32)
     mask = np.uint64((1 << (2 * k)) - 1)
     for r in prange(n):
         a = off[r]
         L = off[r + 1] - a
-        for t in (1, 4, 7):
+        for t in (1, 4, 7, 9):
             out[r, t] = 0
         if L < k:
             continue
@@ -110,6 +111,7 @@ def classify(codes, off, k, ikm, isg, ips, seg_region, min_hits):
             continue
         ks = np.sort(keys[:m])
         best = np.zeros(4, np.int64)
+        second = np.zeros(4, np.int64)
         bseg = np.full(4, -1, np.int64)
         bdiag = np.zeros(4, np.int64)
         j = 0
@@ -121,15 +123,21 @@ def classify(codes, off, k, ikm, isg, ips, seg_region, min_hits):
             seg = ks[j] >> 20
             reg = seg_region[seg]
             if cnt > best[reg]:
+                if bseg[reg] != seg:
+                    second[reg] = best[reg]
                 best[reg] = cnt
                 bseg[reg] = seg
                 bdiag[reg] = (ks[j] & ((1 << 20) - 1)) - DIAG_BIAS
+            elif seg != bseg[reg] and cnt > second[reg]:
+                second[reg] = cnt
             j = e
         for reg, col in ((0, 0), (2, 3), (3, 6)):
             if best[reg] >= min_hits:
                 out[r, col] = bseg[reg]
                 out[r, col + 1] = best[reg]
                 out[r, col + 2] = bdiag[reg]
+        if best[3] >= min_hits and second[3] == best[3]:
+            out[r, 9] = 1
     return out
 
 
@@ -141,8 +149,27 @@ def _find(sorted_arr, x):
     return -1
 
 
+@njit(cache=True)
+def _codon_at(codes, a, L, st, which):
+    """Codon check around an anchor: Cys (TGT/TGC) for ``which`` 0, Phe/Trp (TTT/TTC/TGG) for 1. Returns the start
+    among st, st-1, st+1 that holds it (an indel or a V allele can move the diagonal by one), or -1."""
+    for d in (0, -1, 1):
+        q = st + d
+        if q < 0 or q + 3 > L:
+            continue
+        c0, c1, c2 = codes[a + q], codes[a + q + 1], codes[a + q + 2]
+        if which == 0:
+            if c0 == 3 and c1 == 2 and (c2 == 3 or c2 == 1):
+                return q
+        else:
+            if c0 == 3 and ((c1 == 3 and (c2 == 3 or c2 == 1)) or (c1 == 2 and c2 == 2)):
+                return q
+    return -1
+
+
 @njit(cache=True, nogil=True)
-def assemble_group(codes, off, ridx, umi, cys, fw, ka, min_seed_umis, branch_frac, max_paths, max_len):
+def assemble_group(codes, off, ridx, umi, cys, fw, ka, min_seed_umis, seed_frac, min_branch_umis, branch_frac,
+                   max_paths, max_len):
     """Junction contigs of one (cell, chain).
 
     ``ridx``: read indices into ``off``; ``umi``: local UMI id per read (< 2**24); ``cys`` / ``fw``: read position of the
@@ -204,9 +231,12 @@ def assemble_group(codes, off, ridx, umi, cys, fw, ka, min_seed_umis, branch_fra
         a = off[r]
         L = off[r + 1] - a
         for which in range(2):
-            st = cys[t] if which == 0 else fw[t] + 3 - ka
             if (which == 0 and cys[t] < 0) or (which == 1 and fw[t] < 0):
                 continue
+            q = _codon_at(codes, a, L, cys[t] if which == 0 else fw[t], which)
+            if q < 0:
+                continue
+            st = q if which == 0 else q + 3 - ka
             if st < 0 or st + ka > L:
                 continue
             cur = np.uint64(0)
@@ -233,6 +263,9 @@ def assemble_group(codes, off, ridx, umi, cys, fw, ka, min_seed_umis, branch_fra
         if j >= 0:
             ssup[i] = su[j]
     order = np.argsort(-ssup)
+    seed_min = min_seed_umis
+    if len(ssup):
+        seed_min = max(min_seed_umis, int(np.ceil(seed_frac * ssup.max())))
 
     paths = np.zeros((max_paths, max_len), np.uint8)
     plen = np.zeros(max_paths, np.int32)
@@ -247,7 +280,7 @@ def assemble_group(codes, off, ridx, umi, cys, fw, ka, min_seed_umis, branch_fra
     if len(term) > 0:
         for oi in range(len(order)):
             si = order[oi]
-            if ssup[si] < min_seed_umis or np_ >= max_paths:
+            if ssup[si] < seed_min or np_ >= max_paths:
                 break
             # seed onto the stack
             sp = 0
@@ -295,7 +328,7 @@ def assemble_group(codes, off, ridx, umi, cys, fw, ka, min_seed_umis, branch_fra
                     bb = np.argmax(bs)
                     if bs[bb] == 0:
                         break
-                    thr = max(min_seed_umis, branch_frac * bs[bb])
+                    thr = max(min_branch_umis, branch_frac * bs[bb])
                     for b in range(4):
                         if b != bb and bs[b] >= thr and sp < MS:
                             for i in range(pl):
@@ -308,7 +341,8 @@ def assemble_group(codes, off, ridx, umi, cys, fw, ka, min_seed_umis, branch_fra
                     pl += 1
                     cur = ((cur << np.uint64(2)) | np.uint64(bb)) & mask
 
-    # read -> contig through contig-specific k-mers
+    # read -> the contig sharing most of its k-mers (strictly more than any other; -2 on a tie, -1 when none), so an
+    # error variant takes only the reads carrying its error
     cand = np.full(nr, -1, np.int32)
     if np_ == 0:
         return paths[:0], plen[:0], psup[:0], cand
@@ -329,29 +363,12 @@ def assemble_group(codes, off, ridx, umi, cys, fw, ka, min_seed_umis, branch_fra
     o = np.argsort(ck)
     ck = ck[o]
     cc = cc[o]
-    # keep k-mers owned by exactly one contig
-    spk = np.empty(m, np.uint64)
-    spc = np.empty(m, np.int32)
-    ns2 = 0
-    i = 0
-    while i < m:
-        e = i
-        one = True
-        while e < m and ck[e] == ck[i]:
-            if cc[e] != cc[i]:
-                one = False
-            e += 1
-        if one:
-            spk[ns2] = ck[i]
-            spc[ns2] = cc[i]
-            ns2 += 1
-        i = e
-    spk = spk[:ns2]
-    spc = spc[:ns2]
+    score = np.zeros(np_, np.int32)
     for t in range(nr):
         r = ridx[t]
         cur = np.uint64(0)
         valid = 0
+        score[:] = 0
         for i in range(off[r], off[r + 1]):
             c = codes[i]
             if c > 3:
@@ -361,11 +378,20 @@ def assemble_group(codes, off, ridx, umi, cys, fw, ka, min_seed_umis, branch_fra
             cur = ((cur << np.uint64(2)) | np.uint64(c)) & mask
             valid += 1
             if valid >= ka:
-                j = _find(spk, cur)
-                if j >= 0:
-                    q = spc[j]
-                    if cand[t] == -1:
-                        cand[t] = q
-                    elif cand[t] != q:
-                        cand[t] = -2
+                j = np.searchsorted(ck, cur)
+                while j < m and ck[j] == cur:
+                    score[cc[j]] += 1
+                    j += 1
+        b1 = -1
+        s1 = 0
+        s2 = 0
+        for q in range(np_):
+            if score[q] > s1:
+                s2 = s1
+                s1 = score[q]
+                b1 = q
+            elif score[q] > s2:
+                s2 = score[q]
+        if s1 > 0:
+            cand[t] = b1 if s1 > s2 else -2
     return paths[:np_], plen[:np_], psup[:np_], cand

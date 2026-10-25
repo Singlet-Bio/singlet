@@ -57,6 +57,8 @@ class Params:
     min_junction_umis: int = 1  # UMIs whose reads hold the contig's specific junction k-mers
     min_frac: float = 0.10  # of the barcode's top contig of the same chain
     min_seed_umis: int = 1
+    seed_frac: float = 0.05  # seeds below this share of the top seed's UMIs are error k-mers
+    min_branch_umis: int = 2
     branch_frac: float = 0.20
     min_hits: int = 2  # exact 15-mer hits for a segment call on a read
     min_barcode_umis: int = 2  # barcodes with fewer V(D)J UMIs are not assembled
@@ -211,7 +213,8 @@ def run_library(r1_paths: Sequence[str], r2_paths: Sequence[str], *, ref: Refere
         cbs.append(cb)
         umis.append(um)
         mm = np.empty((len(keep), 12), np.int32)
-        mm[:, :9] = o[keep]
+        mm[:, :9] = o[keep, :9]
+        mm[:, 6] = np.where(o[keep, 9] == 1, -1, o[keep, 6])  # a C call tied between genes does not vote
         mm[:, 9] = chain[keep]
         mm[:, 10] = cys[keep]
         mm[:, 11] = np.where(informative[keep], fw[keep], -2)  # -2 marks a non-informative mate (no sequence kept)
@@ -293,7 +296,8 @@ def run_library(r1_paths: Sequence[str], r2_paths: Sequence[str], *, ref: Refere
         mols = mol[rows]
         um_local, um_inv = np.unique(mols, return_inverse=True)
         res = K.assemble_group(seqc, soff, s_row[rows], um_inv.ravel().astype(np.int32), m_sel[rows, 10],
-                               m_sel[rows, 11], K_ASM, params.min_seed_umis, params.branch_frac, MAX_PATHS, MAX_JUNCTION)
+                               m_sel[rows, 11], K_ASM, params.min_seed_umis, params.seed_frac, params.min_branch_umis,
+                               params.branch_frac, MAX_PATHS, MAX_JUNCTION)
         return k, rows, res
 
     groups = []
@@ -419,6 +423,12 @@ def _annotate(ref: Reference, groups, sel, mm, cell_of, mol, ubc, cb_len, params
         for p in range(P):
             junc = "".join("ACGT"[b] for b in paths[p, :plen[p]])
             v, j, c, ju, nreads = cinfo[p]
+            if chname == "TRB" and j >= 0:
+                # V-D2-J2 joining deletes TRBC1 (it lies between the J1 and D2 clusters), so a TRBJ2 rearrangement
+                # can only use TRBC2; TRBC1 and TRBC2 differ at a few bases, so reads often cannot tell them apart
+                jn = ref.names[j]
+                cn = "TRBC2" if jn.startswith("TRBJ2") else ("TRBC1" if c < 0 else ref.names[c])
+                c = int(np.flatnonzero(ref.names == cn)[0]) if (ref.names == cn).any() else c
             aa = R.translate(junc)
             inframe = len(junc) % 3 == 0
             prod = (inframe and "*" not in aa and aa[:1] == "C" and aa[-1:] in ("F", "W"))
