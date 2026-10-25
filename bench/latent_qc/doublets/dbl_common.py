@@ -50,6 +50,7 @@ def save(name: str, X, genes, cells, label, species: str, meta: dict | None = No
 
 
 def put_score(name: str, method: str, score, seconds: float, **info) -> None:
+    method += os.environ.get("SCORE_SUFFIX", "")  # e.g. "_cpu" for a timing rerun on a CPU node
     os.makedirs(f"{SCORES}/{name}", exist_ok=True)
     np.save(f"{SCORES}/{name}/{method}.npy", np.asarray(score, np.float64))
     json.dump(dict(method=method, seconds=round(seconds, 2), **info), open(f"{SCORES}/{name}/{method}.json", "w"), default=str)

@@ -173,13 +173,17 @@ for n in PBMC:
         top[np.argsort(-sc, kind="stable")[:k]] = True
         for c in ("one_lineage", "two_lineages"):
             sel = (y == 1) & (cls == c)
-            a_ = pool.setdefault((m, c), [0, 0, 0])
+            if comp[-1]["singlets_one_lineage"] < 0.25:  # network not confident on this matrix: skip
+                continue
+            a_ = pool.setdefault((m, n, c), [0, 0, 0])
             a_[0] += int(top[sel].sum()); a_[1] += int(sel.sum()); a_[2] += 1
-for (m, c), (tp, nn_, nd) in pool.items():
-    hom_rows.append(dict(method=m, cls=c, datasets=nd, doublets=nn_, recall_at_truth_rate=tp / max(nn_, 1)))
+for (m, n, c), (tp, nn_, nd) in pool.items():
+    hom_rows.append(dict(method=m, dataset=n, cls=c, doublets=nn_, recall_at_truth_rate=tp / max(nn_, 1)))
 hom = pd.DataFrame(hom_rows)
 if len(hom):
-    hom = hom.pivot_table(index="method", columns="cls", values="recall_at_truth_rate").round(3).reset_index()
+    hom = hom.pivot_table(index="method", columns=["dataset", "cls"], values="recall_at_truth_rate").round(3)
+    hom.columns = [f"{a}:{b}" for a, b in hom.columns]
+    hom = hom.reset_index()
     hom.columns.name = None
 hom.to_csv(f"{OUT}/homotypic_real.csv", index=False)
 comp = pd.DataFrame(comp).round(3)
