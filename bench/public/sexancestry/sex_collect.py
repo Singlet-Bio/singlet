@@ -56,10 +56,22 @@ def main(argv=None) -> int:
         df = df.merge(cx.rename(columns={"pred_qc": "cellxy_qc", "pred_noqc": "cellxy_noqc"}), on="col", how="left")
         df.insert(0, "dataset", a.dataset)
         parts.append(df)
+    # in-silico pool of two 1000 Genomes donors of opposite sex (lcl_score.py): per-cell truth = the donor's sex
+    pool = a.work / "lcl_sex_cells.parquet"
+    pool_cx = a.work / "cellxy" / "lcl_gse230239_pool.tsv"
+    n_pool = 0
+    if pool.exists() and pool_cx.exists():
+        df = pd.read_parquet(pool).drop(columns=["barcode"], errors="ignore")
+        cx = pd.read_csv(pool_cx, sep="\t", dtype={"col": np.int64}, keep_default_na=False, na_values=["NA"])
+        df = df.merge(cx.rename(columns={"pred_qc": "cellxy_qc", "pred_noqc": "cellxy_noqc"}), on="col", how="left")
+        n_pool = len(df)
+        parts.append(df)
     cells = pd.concat(parts, ignore_index=True)
     for c in ("cellxy_qc", "cellxy_noqc"):
         cells[c] = cells[c].where(cells[c].isin(["Female", "Male"])).str.lower()
-    cells["truth_donor_sex"] = pd.array([None] * len(cells), dtype="string")
+    if "truth_donor_sex" not in cells:
+        cells["truth_donor_sex"] = None
+    cells["truth_donor_sex"] = cells["truth_donor_sex"].astype("string")
     t0 = time.perf_counter()
     x, y = cells["xist"].to_numpy(), cells["super_y"].to_numpy()
     _ = np.where((x > 0) & (y == 0), "female", np.where((y > 0) & (x == 0), "male", None))
@@ -68,7 +80,9 @@ def main(argv=None) -> int:
     kept = set(cells["gsm"])
     st = pd.DataFrame([{"dataset": a.dataset, "gse": s["gse"], "gsm": s["gsm"], "species": s["species"],
                         "truth": truth[s["gsm"]], "n_donors": s.get("n_donors", 0), "n_cells": s["n_cells"]}
-                       for s in samples if s["gsm"] in kept])
+                       for s in samples if s["gsm"] in kept]
+                      + ([{"dataset": "lcl_gse230239", "gse": "GSE230239", "gsm": "pool", "species": "human", "truth": "mixed",
+                           "n_donors": 2, "n_cells": n_pool}] if n_pool else []))
     st.to_csv(a.artifacts / "sex_samples.tsv", sep="\t", index=False)
 
     cx_t = [json.loads(l) for l in open(a.work / "cellxy_timing.jsonl")] if (a.work / "cellxy_timing.jsonl").exists() else []
@@ -87,7 +101,7 @@ def main(argv=None) -> int:
         if m:
             resources[1]["max_rss_gb"] = round(int(m.group(1)) / 1048576, 2)
     sb = json.loads(a.singlet_binary.read_text()) if a.singlet_binary and a.singlet_binary.exists() else {}
-    gses = sorted(set(st["gse"]))
+    gses = sorted(set(st.loc[st["dataset"] == a.dataset, "gse"]))
     prov = {
         "bench_commit": a.bench_commit,
         "status": "draft",
@@ -103,14 +117,23 @@ def main(argv=None) -> int:
             {"name": "geo-metadata", "version": "GEO sample characteristics", "role": "truth"},
         ],
         "datasets": [{"id": a.dataset, "title": f"{len(gses)} studies, {len(st)} samples with sex in GEO metadata",
-                      "accessions": {"gse": ";".join(gses), "gsm": list(st["gsm"])},
-                      "truth": "sex in GEO sample characteristics", "n_cells": int(n)}],
+                      "accessions": {"gse": ";".join(gses), "gsm": list(st.loc[st["dataset"] == a.dataset, "gsm"])},
+                      "truth": "sex in GEO sample characteristics", "n_cells": int(n - n_pool)}]
+                    + ([{"id": "lcl_gse230239", "data_kind": "derived",
+                         "title": "In-silico pool of HG00362 (female) and HG01277 (male) LCL libraries",
+                         "accessions": {"gse": "GSE230239", "gsm": ["GSM7208744", "GSM7208745"]},
+                         "truth": "1000 Genomes sex of the library each cell's barcode came from", "n_cells": int(n_pool)}]
+                       if n_pool else []),
         "resources": resources,
         "caveats": ["Counts are the atlas counts served today (pre-1.0 counting engine). The sex model only reads XIST and "
                     "chrY gene counts, which the 1.0 double-count fix changes by a few percent; re-run on 1.0 counts after "
                     "the atlas re-run."],
         "singlet_binary_seen": sb,
+        "left_out": sorted(p.name.replace(".error.txt", "") for p in (a.work / "cells").glob("*.error.txt")),
     }
+    if prov["left_out"]:
+        prov["caveats"].append(f"{len(prov['left_out'])} labelled samples were left out because their served atlas bundle has an "
+                               f"empty count matrix (a known atlas defect, re-run pending): {', '.join(prov['left_out'])}.")
     (a.artifacts / "provenance.json").write_text(json.dumps(prov, indent=1))
     print(f"{len(st)} samples, {n:,} cells -> {a.artifacts}")
     return 0

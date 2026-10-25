@@ -3,7 +3,7 @@
 #   Rscript cellxy.R <work>/sex          (every <work>/sex/mtx/<GSM>/ without a <work>/sex/cellxy/<GSM>.tsv)
 # Writes cellxy/<GSM>.tsv: col, pred_qc (classifySex default, qc = TRUE), pred_noqc (qc = FALSE), plus seconds per sample.
 # cellXY: phipsonlab/cellXY (GitHub; it is not in Bioconductor), installed by setup_r.sbatch.
-suppressPackageStartupMessages({ library(Matrix); library(cellXY) })
+suppressPackageStartupMessages({ library(Matrix); library(caret); library(cellXY) })   # caret: the models are caret train objects
 args <- commandArgs(trailingOnly = TRUE)
 work <- args[1]
 dir.create(file.path(work, "cellxy"), showWarnings = FALSE)
@@ -11,7 +11,11 @@ for (d in list.dirs(file.path(work, "mtx"), recursive = FALSE)) {
   gsm <- basename(d)
   out <- file.path(work, "cellxy", paste0(gsm, ".tsv"))
   if (file.exists(out)) next
-  sp <- readLines(file.path(d, "species.txt"))
+  sf <- file.path(d, "species.txt")
+  if (file.exists(sf)) sp <- readLines(sf) else {   # extracted before species.txt existed: take it from samples.jsonl
+    recs <- lapply(readLines(file.path(work, "samples.jsonl")), jsonlite::fromJSON)
+    sp <- Filter(function(r) identical(r$gsm, gsm), recs)[[1]]$species
+  }
   genome <- if (identical(sp, "mouse")) "Mm" else "Hs"
   m <- readMM(gzfile(file.path(d, "matrix.mtx.gz")))
   genes <- readLines(file.path(d, "genes.tsv")); cols <- readLines(file.path(d, "cells.tsv"))
@@ -23,11 +27,15 @@ for (d in list.dirs(file.path(work, "mtx"), recursive = FALSE)) {
   # perCellQCFilters, 3-MAD outliers) depends on the block, so blocks are random subsets of >= 5000 cells.
   n <- ncol(m); set.seed(1); idx <- sample.int(n); nb <- max(1, floor(n / 5000)); blocks <- split(idx, rep_len(seq_len(nb), n))
   pq <- pn <- setNames(rep(NA_character_, n), colnames(m))
-  for (b in blocks) {
-    sub <- m[, b, drop = FALSE]
-    r1 <- classifySex(sub, genome = genome, qc = TRUE); pq[rownames(r1)] <- r1$prediction
-    r2 <- classifySex(sub, genome = genome, qc = FALSE); pn[rownames(r2)] <- r2$prediction
-  }
+  ok <- tryCatch({
+    for (b in blocks) {
+      sub <- m[, b, drop = FALSE]
+      r1 <- classifySex(sub, genome = genome, qc = TRUE); pq[rownames(r1)] <- r1$prediction
+      r2 <- classifySex(sub, genome = genome, qc = FALSE); pn[rownames(r2)] <- r2$prediction
+    }
+    TRUE
+  }, error = function(e) { message(gsm, ": classifySex failed: ", conditionMessage(e)); FALSE })
+  if (!ok) next   # no cellXY output: the sample is reported as left out, never scored with partial calls
   secs <- proc.time()[["elapsed"]] - t0
   write.table(data.frame(col = cols, pred_qc = pq, pred_noqc = pn), out, sep = "\t", quote = FALSE, row.names = FALSE)
   cat(sprintf('{"gsm": "%s", "n_cells": %d, "cellxy_s": %.2f}\n', gsm, n, secs),

@@ -27,7 +27,9 @@ from typing import Any, Iterable
 
 SCHEMA_CAPABILITY = "singlet.benchmark.capability"
 SCHEMA_INDEX = "singlet.benchmark.index"
-SCHEMA_VERSION = "1.0.0"  # semver: a major bump breaks readers, minor adds optional fields
+SCHEMA_VERSION = "1.1.0"  # semver: a major bump breaks readers, minor adds optional fields
+# 1.1.0: datasets[].data_kind + metrics[].corroborated_by (real-data rule), reach[], figure kind "pareto",
+#        10x comparators must name the source of their published outputs
 
 CAPABILITIES: dict[str, str] = {
     # id -> owning session / person (who writes results/<id>.json)
@@ -59,7 +61,13 @@ DIRECTIONS = {"higher", "lower", "none"}
 RULE_TYPES = {"match_or_beat", "threshold", "equivalence", "informational"}
 CATEGORIES = {"accuracy", "agreement", "coverage", "resources", "robustness"}
 TOOL_ROLES = {"singlet", "competitor", "truth", "helper"}
-FIGURE_KINDS = {"bar", "grouped_bar", "scatter", "line", "box", "histogram", "heatmap", "table"}
+FIGURE_KINDS = {"bar", "grouped_bar", "scatter", "line", "box", "histogram", "heatmap", "table", "pareto"}
+# real: reads or values as deposited (read caps and format conversion allowed). derived: real reads recombined or
+# thinned (in-silico pools, downsampling). simulated: synthetic data. derived and simulated results must be corroborated
+# by a metric on real data, and a capability must rest on at least one gating metric on real data.
+DATA_KINDS = {"real", "derived", "simulated"}
+REACH = {"yes", "no", "partial"}
+TENX_TOOLS = re.compile(r"^(cell ?ranger|space ?ranger)", re.I)
 STATUSES = {"draft", "final"}
 ARTIFACT_KINDS = {"singlet_output", "competitor_output", "truth", "derived"}
 MAX_CONCLUSION_WORDS = 100
@@ -222,6 +230,7 @@ def validate(doc: dict, cohort: dict[str, dict] | None = None) -> list[str]:
         err("tools: one tool with role 'singlet' is required")
 
     datasets = need(doc, "datasets", "doc", list) or []
+    ds_kind: dict[str, str] = {}
     ds_ids = set()
     for i, d in enumerate(datasets):
         w = f"datasets[{i}]"
@@ -234,6 +243,13 @@ def validate(doc: dict, cohort: dict[str, dict] | None = None) -> list[str]:
         if acc and not any(acc.get(k) for k in ("gse", "gsm", "srr", "url", "other")):
             err(f"{w}.accessions: give at least one of gse/gsm/srr/url/other")
         need(d, "truth", w)
+        kind = d.get("data_kind", "real")
+        if kind not in DATA_KINDS:
+            err(f"{w}.data_kind must be one of {sorted(DATA_KINDS)}")
+        if did:
+            ds_kind[did] = kind
+            if cohort is not None and did in cohort and (cohort[did].get("data_kind") or "real") != kind:
+                err(f"{w}: data_kind {kind!r} but the cohort says {cohort[did].get('data_kind')!r}")
 
     metrics = need(doc, "metrics", "doc", list) or []
     seen = set()
@@ -313,6 +329,48 @@ def validate(doc: dict, cohort: dict[str, dict] | None = None) -> list[str]:
                 if m["pass"] != got:
                     err(f"{w}.pass is {m['pass']!r} but the rule gives {got!r}")
 
+    # ---- real-data rule: derived/simulated metrics need corroboration on real data; one gating metric must be real
+    def kind_of(dset):
+        if dset == "pooled":
+            vals = set(ds_kind.values()) or {"real"}
+            return "real" if "real" in vals else ("derived" if "derived" in vals else "simulated")
+        return ds_kind.get(dset, "real")
+
+    keys = {(m.get("id"), m.get("dataset")) for m in metrics}
+    real_gating = False
+    for i, m in enumerate(metrics):
+        k = kind_of(m.get("dataset"))
+        gating = (m.get("rule") or {}).get("type") not in (None, "informational")
+        if k == "real" and gating:
+            real_gating = True
+        if k != "real" and gating:
+            refs = m.get("corroborated_by") or []
+            if not refs:
+                err(f"metrics[{i}] ({m.get('id')}@{m.get('dataset')}): {k} data needs corroborated_by "
+                    "(metrics on real data that show the same effect)")
+            for ref in refs:
+                if "/" in str(ref):
+                    continue  # another capability's metric: checked by build_index
+                mid, _, dset = str(ref).partition("@")
+                if (mid, dset) not in keys:
+                    err(f"metrics[{i}].corroborated_by {ref!r}: no such metric (use 'id@dataset' or 'capability/id@dataset')")
+                elif kind_of(dset) != "real":
+                    err(f"metrics[{i}].corroborated_by {ref!r}: the corroborating metric is not on real data")
+    if metrics and not real_gating:
+        err("no gating metric rests on real data; derived or simulated results can only supplement real ones")
+
+    for i, rch in enumerate(doc.get("reach", [])):
+        w = f"reach[{i}]"
+        if rch.get("tool") not in tool_names:
+            err(f"{w}.tool {rch.get('tool')!r} not declared in tools")
+        need(rch, "output", w)
+        if rch.get("supported") not in REACH:
+            err(f"{w}.supported must be one of {sorted(REACH)}")
+
+    for i, t in enumerate(tools):
+        if t.get("role") == "competitor" and TENX_TOOLS.match(str(t.get("name", ""))) and not t.get("url"):
+            err(f"tools[{i}] ({t.get('name')}): a 10x comparator must give the source of its published outputs in url")
+
     res = need(doc, "resources", "doc", list) or []
     for i, r in enumerate(res):
         w = f"resources[{i}]"
@@ -342,6 +400,10 @@ def validate(doc: dict, cohort: dict[str, dict] | None = None) -> list[str]:
             if not isinstance(f.get("columns"), list) or not isinstance(f.get("rows"), list):
                 err(f"{w}: table needs 'columns' and 'rows' lists")
         elif kind in FIGURE_KINDS:
+            if kind == "pareto":
+                for ax in ("x", "y"):
+                    if not (f.get(ax) or {}).get("label"):
+                        err(f"{w}.{ax}.label required for a pareto figure (cost on x, quality on y)")
             series = f.get("series")
             if not isinstance(series, list) or (not series and not f.get("data_file")):
                 err(f"{w}.series (non-empty list) or data_file required")
@@ -392,6 +454,31 @@ def validate(doc: dict, cohort: dict[str, dict] | None = None) -> list[str]:
     return E
 
 
+def pareto_figure(doc: dict, metric_id: str, dataset: str, resource_field: str = "cpu_h", fig_id: str | None = None) -> dict:
+    """Quality against cost: one point per tool, x = resources[resource_field] on `dataset` (or 'pooled'), y = the metric.
+
+    Tool names must match between metrics[].competitors[].tool, resources[].tool and 'singlet'. A point is on the frontier
+    (series[].frontier) when no other tool is at most as costly and at least as good, and strictly better in one of them."""
+    m = next(x for x in doc["metrics"] if x["id"] == metric_id and x.get("dataset") == dataset)
+    hi = m["direction"] != "lower"
+    q = {"singlet": m["singlet"]["value"], **{c["tool"]: c.get("value") for c in m.get("competitors", [])}}
+    cost = {r["tool"]: r.get(resource_field) for r in doc.get("resources", []) if r.get("dataset") in (dataset, "pooled")}
+    pts = [(t, cost[t], v) for t, v in q.items() if v is not None and cost.get(t) is not None]
+
+    def better_or_equal(a, b):
+        return (a >= b) if hi else (a <= b)
+
+    def dominated(p):
+        return any(o[0] != p[0] and o[1] <= p[1] and better_or_equal(o[2], p[2]) and (o[1] < p[1] or o[2] != p[2])
+                   for o in pts)
+
+    unit = {"cpu_h": "CPU-hours", "wall_s": "seconds", "max_rss_gb": "GB"}.get(resource_field, resource_field)
+    return {"id": fig_id or f"pareto_{metric_id}_{dataset}", "kind": "pareto",
+            "title": f"{m['name']} against {unit} ({dataset})",
+            "x": {"label": resource_field, "unit": unit, "scale": "log"}, "y": {"label": m["name"], "unit": m["unit"]},
+            "series": [{"name": t, "tool": t, "x": [x], "y": [y], "frontier": not dominated((t, x, y))} for t, x, y in pts]}
+
+
 # ---------------------------------------------------------------------------------------------- index
 def finalize(doc: dict) -> dict:
     """Fill each metric's 'pass' from its rule (the only way 'pass' should be written)."""
@@ -427,6 +514,26 @@ def build_index(results_dir: str | Path) -> dict:
         if doc.get("singlet"):
             singlet.setdefault(doc["singlet"].get("commit"), doc["singlet"].get("version"))
     present = {c["capability"] for c in caps}
+    docs_by_cap = {}
+    for p in sorted(results_dir.glob("*.json")):
+        if p.name != "index.json":
+            d = json.loads(p.read_text(encoding="utf-8"))
+            docs_by_cap[d.get("capability")] = d
+    for c in caps:
+        d = docs_by_cap.get(c["capability"]) or {}
+        missing = []
+        for m in d.get("metrics", []):
+            for ref in m.get("corroborated_by") or []:
+                if "/" in str(ref):
+                    cap, _, rest = str(ref).partition("/")
+                    mid, _, dset = rest.partition("@")
+                    other = docs_by_cap.get(cap) or {}
+                    if not any(x.get("id") == mid and x.get("dataset") == dset for x in other.get("metrics", [])):
+                        missing.append(ref)
+        if missing:
+            c["unresolved_corroboration"] = missing
+            if c["status"] == "pass":
+                c["status"] = "incomplete"
     for cid in CAPABILITIES:
         if cid not in present:
             caps.append({"capability": cid, "title": None, "file": None, "owner": CAPABILITIES[cid],

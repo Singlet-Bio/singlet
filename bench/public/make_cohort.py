@@ -6,12 +6,13 @@ NCBI GEO and the ENA portal API. Blank n_cells means not stated by the source.
 import csv, sys
 CF = "https://cf.10xgenomics.com/samples/"
 S3 = "https://s3-us-west-2.amazonaws.com/10x.files/samples/"
-cols = ["id", "group", "tier", "title", "species", "reference", "chemistry", "source", "gse", "gsm", "srr", "url",
+cols = ["id", "group", "tier", "data_kind", "title", "species", "reference", "chemistry", "source", "gse", "gsm", "srr", "url",
         "n_cells", "read_pairs_m", "read_pairs_used_m", "fastq_gb", "truth", "licence", "capabilities", "tools", "why"]
 G = "GRCh38-2024-A"; M = "GRCm39-2024-A"; B = "GRCh38-GRCm39-barnyard"
 CORE_GEX = "singlet,starsolo,alevinfry,cellranger"
 R = []
 def add(**k):
+    k.setdefault("data_kind", "real")  # real | derived (real reads recombined or thinned) | simulated (never core)
     R.append({c: str(k.get(c, "")) for c in cols})
 
 # ---- 10x 3' chemistries
@@ -36,8 +37,10 @@ add(id="pbmc5p_v1", group="10x-5p", tier="core", title="10x PBMC 5' v1 + TotalSe
     species="human", reference=G, chemistry="10x-5p-v1", source="10x",
     url=CF + "cell-vdj/3.0.0/vdj_v1_hs_pbmc2_5gex_protein/vdj_v1_hs_pbmc2_5gex_protein_fastqs.tar", n_cells=7231,
     read_pairs_m=500, read_pairs_used_m=60, fastq_gb=42.9, truth="10x Cell Ranger matrix; ADT for cell type",
-    licence="CC BY 4.0", capabilities="gex-counts,cell-calling,alignment-performance,adt", tools=CORE_GEX,
-    why="5' chemistry exposes strand handling (Singlet's 5' strand bug was found here)")
+    licence="CC BY 4.0", capabilities="gex-counts,cell-calling,alignment-performance,adt,vdj", tools=CORE_GEX + ",cellranger-vdj,trust4",
+    why="5' chemistry exposes strand handling (Singlet's 5' strand bug was found here). Its TCR/BCR libraries are the separate "
+        "datasets vdj_v1_hs_pbmc2_t / _b (cell-vdj/3.0.0, 6.4 / 1.8 GB), with Cell Ranger 3.0 filtered_contig_annotations; "
+        "V(D)J tuning set (caveat)")
 add(id="pbmc10k_5p_v2", group="10x-5p", tier="core", title="10x PBMC 10k 5' v2 with TCR, BCR and antibodies (sc5p_v2_hs_PBMC_10k)",
     species="human", reference=G, chemistry="10x-5p-v2", source="10x",
     url=S3 + "cell-vdj/5.0.0/sc5p_v2_hs_PBMC_10k/sc5p_v2_hs_PBMC_10k_fastqs.tar", n_cells=10548, read_pairs_m=760,
@@ -89,7 +92,33 @@ add(id="tenx_cellplex_pbmc10k", group="hto", tier="extended", title="10x PBMC 10
     n_cells=13446, read_pairs_m=600, read_pairs_used_m=600, fastq_gb=50.2, truth="Cell Ranger multi CMO assignments; genotype demultiplexing of the two donors",
     licence="CC BY 4.0", capabilities="hto,donor-demux,doublets", tools="singlet,cellranger,htodemux,demuxem,vireo",
     why="10x's own sample-multiplexing chemistry (CMO), the commercial successor of hashtags")
+add(id="howitt2023_bal1", group="hto", tier="core", title="Howitt 2023 HTO benchmark, paediatric BAL batch 1 (8 donors, 8 TotalSeq-A hashtags, 2 captures)",
+    species="human", reference=G, chemistry="hto-counts", source="zenodo", other="10.5281/zenodo.8304003 (BAL_data.zip)", n_cells=24091,
+    fastq_gb=0.08, truth="vireo genetic donor per droplet, including genetic doublets; every competitor's published calls",
+    licence="CC BY 4.0", capabilities="hto,doublets", tools="singlet,htodemux,multiseqdemux,hashsolo,demuxmix,gmm-demux,hasheddrops",
+    why="the only public hashing benchmark with genotype truth and every competitor's calls (counts only: no reads)")
+add(id="howitt2023_bal2", group="hto", tier="core", title="Howitt 2023 HTO benchmark, paediatric BAL batch 2", species="human", reference=G,
+    chemistry="hto-counts", source="zenodo", other="10.5281/zenodo.8304003 (BAL_data.zip)", n_cells=48841, fastq_gb=0.08,
+    truth="vireo genetic donor per droplet, including genetic doublets", licence="CC BY 4.0", capabilities="hto,doublets",
+    tools="singlet,htodemux,multiseqdemux,hashsolo,demuxmix,gmm-demux,hasheddrops", why="as howitt2023_bal1")
+add(id="howitt2023_bal3", group="hto", tier="core", title="Howitt 2023 HTO benchmark, paediatric BAL batch 3", species="human", reference=G,
+    chemistry="hto-counts", source="zenodo", other="10.5281/zenodo.8304003 (BAL_data.zip)", n_cells=62306, fastq_gb=0.08,
+    truth="vireo genetic donor per droplet, including genetic doublets", licence="CC BY 4.0", capabilities="hto,doublets",
+    tools="singlet,htodemux,multiseqdemux,hashsolo,demuxmix,gmm-demux,hasheddrops", why="as howitt2023_bal1")
+add(id="howitt2023_cl", group="hto", tier="core", title="Howitt 2023 HTO benchmark, 3 lung cancer cell lines with MULTI-seq lipid tags (3 captures)",
+    species="human", reference=G, chemistry="hto-counts", source="zenodo", other="10.5281/zenodo.8304003 (cell_line_data.zip)",
+    n_cells=45977, fastq_gb=0.006, truth="vireo genetic identity per droplet, including genetic doublets", licence="CC BY 4.0",
+    capabilities="hto,doublets", tools="singlet,htodemux,multiseqdemux,hashsolo,demuxmix,gmm-demux,hasheddrops",
+    why="lipid-tag multiplexing with genotype truth")
 # ---- genotype pools
+for lane, gsm, srr, k, m in (("a", "GSM2560245", "SRR5398235", 4, 69.3), ("b", "GSM2560246", "SRR5398236", 4, 63.5),
+                             ("c", "GSM2560247", "SRR5398237", 8, 71.6)):
+    add(id=f"kang2018_b1_{lane}", group="genotype-pool", tier="core", title=f"Kang 2018 demuxlet, batch 1 lane {lane.upper()} ({k} donors)",
+        species="human", reference=G, chemistry="10x-3p-v1", source="geo", gse="GSE96583", gsm=gsm, srr=srr, fastq_gb=21, read_pairs_m=m, read_pairs_used_m=m,
+        truth="demuxlet donor and doublet calls with genotypes (GSE96583_batch1.total.tsne.df.tsv.gz)",
+        licence="GEO public data (cite paper)", capabilities="donor-demux,doublets,ambient-rna",
+        tools="singlet,vireo,souporcell,scrublet,scdblfinder",
+        why=f"held out from the demux/doublet fixes; true K = {k} tests donor-count selection; deposited as a BAM, reads rebuilt from it")
 add(id="kang2018_ctrl", group="genotype-pool", tier="core", title="Kang 2018 demuxlet, batch 2 control lane (8 lupus donors)",
     species="human", reference=G, chemistry="10x-3p-v1", source="geo", gse="GSE96583", gsm="GSM2560248", srr="SRR5398238",
     n_cells=14619, read_pairs_m=182, read_pairs_used_m=182, fastq_gb=23.8,
@@ -103,6 +132,11 @@ add(id="hgmm1k_v3", group="barnyard", tier="core", title="10x HEK293T + NIH3T3 1
     read_pairs_used_m=77, fastq_gb=4.9, truth="species of every read: cross-species UMIs measure ambient RNA, mixed cells are doublets",
     licence="CC BY 4.0", capabilities="cell-calling,ambient-rna,doublets,gex-counts", tools=CORE_GEX + ",soupx,decontx,cellbender,scrublet,scdblfinder",
     why="species mixing gives read-level truth for ambient RNA and heterotypic doublets")
+add(id="hgmm1k_v2", group="barnyard", tier="core", title="10x HEK293T + NIH3T3 1:1, 1k, 3' v2 (held out from the ambient/doublet fixes)",
+    species="human+mouse", reference=B, chemistry="10x-3p-v2", source="10x", url=CF + "cell-exp/3.0.0/hgmm_1k_v2/hgmm_1k_v2_fastqs.tar",
+    read_pairs_m=70, read_pairs_used_m=70, fastq_gb=5.8, truth="species per read", licence="CC BY 4.0",
+    capabilities="cell-calling,ambient-rna,doublets", tools=CORE_GEX + ",soupx,decontx,cellbender,scrublet,scdblfinder",
+    why="held-out barnyard in the older chemistry; hgmm_5k_v3 FASTQs return 403")
 add(id="hgmm10k_v3", group="barnyard", tier="core", title="10x HEK293T + NIH3T3 1:1, 10k, 3' v3", species="human+mouse", reference=B,
     chemistry="10x-3p-v3", source="10x", url=S3 + "cell-exp/3.0.0/hgmm_10k_v3/hgmm_10k_v3_fastqs.tar", n_cells=11456, read_pairs_m=675,
     read_pairs_used_m=675, fastq_gb=56.1, truth="species per read; ~4% heterotypic doublets at 10k cells",
@@ -133,6 +167,17 @@ add(id="replogle2022_k562_lane4", group="crispr", tier="extended", title="Replog
     truth="published cell-to-guide assignments (figshare+ 10.25452/figshare.plus.20029387, CC BY 4.0)",
     licence="CC BY 4.0", capabilities="crispr-guides", tools="singlet,cellranger",
     why="genome-scale Perturb-seq; lane-to-GEM-group mapping must be checked before use")
+add(id="gse145370_tcr", group="vdj", tier="core", title="GSE145370 ESCC TCR libraries (4 samples), 10x 5' V(D)J",
+    species="human", reference=G, chemistry="10x-5p-vdj", source="geo", gse="GSE145370", gsm="GSM4317423;GSM4317424;GSM4317428;GSM4317429",
+    srr="SRR11094260;SRR11094261;SRR11094265;SRR11094266", truth="authors' Cell Ranger 3.0.1 filtered_contig_annotations (GEO supplementary)",
+    licence="GEO public data (cite paper)", capabilities="vdj", tools="singlet,cellranger-vdj,trust4",
+    why="held-out V(D)J with the authors' own contig calls; the atlas pilot study")
+add(id="tenx_crispr_a549_5k", group="crispr", tier="core", title="10x A549 CRISPR 5k, 3' v3.1 direct capture (many guides)",
+    species="human", reference=G, chemistry="10x-3p-v3", source="10x",
+    url=CF + "cell-exp/6.0.0/SC3_v3_NextGem_DI_CRISPR_A549_5K_Multiplex/SC3_v3_NextGem_DI_CRISPR_A549_5K_Multiplex_fastqs.tar",
+    fastq_gb=20.2, read_pairs_m=240, read_pairs_used_m=240, truth="Cell Ranger 6.0 protospacer calls; target knock-down",
+    licence="CC BY 4.0", capabilities="crispr-guides,gex-counts", tools="singlet,cellranger",
+    why="many guides per screen, unlike the two-guide A375 set")
 # ---- spatial
 add(id="visium_mouse_brain_ant", group="spatial", tier="core", title="10x Visium mouse brain, sagittal anterior section 1 (Space Ranger 1.0)",
     species="mouse", reference=M, chemistry="10x-visium", source="10x",
@@ -182,6 +227,21 @@ add(id="cxg16", group="curated", tier="core", title="16 GEO studies with CELLxGE
     n_cells=332755, truth="author labels mapped to CL by CELLxGENE curators, transferred by barcode (scripts/annotate_truth_cxg.py)",
     licence="CELLxGENE CC BY 4.0; GEO public data", capabilities="cell-type,chromosomal-sex", tools="singlet,celltypist,azimuth,singler",
     why="held out from the guide's development; truth independent of every tool")
+add(id="atac_pbmc_5k_nextgem", group="multiome", tier="core", title="10x scATAC PBMC 5k Next GEM (Cell Ranger ATAC 1.2)",
+    species="human", reference=G, chemistry="10x-atac", source="10x",
+    url=CF + "cell-atac/1.2.0/atac_pbmc_5k_nextgem/atac_pbmc_5k_nextgem_fastqs.tar", fastq_gb=18.8,
+    truth="Cell Ranger ATAC 1.2 cell calls, fragments and peaks (published outputs)", licence="CC BY 4.0", capabilities="atac",
+    tools="singlet,cellranger-atac,snapatac2,macs3", why="standalone scATAC reference")
+add(id="pbmc_multiome3k", group="multiome", tier="development", title="10x Multiome PBMC 3k, granulocytes sorted out (ARC 2.0); tuning set",
+    species="human", reference=G, chemistry="10x-arc", source="10x",
+    url=CF + "cell-arc/2.0.0/pbmc_granulocyte_sorted_3k/pbmc_granulocyte_sorted_3k_fastqs.tar", fastq_gb=22.4,
+    truth="Cell Ranger ARC 2.0 published outputs", licence="CC BY 4.0", capabilities="atac,multiome", tools="singlet,cellranger-arc",
+    why="development data for ATAC/Multiome; pbmc_multiome10k stays held out")
+add(id="gsm5815984", group="depth", tier="core", title="GSE193672 Hs#14 testis, 10x 3', 2 runs (about 489M read pairs)",
+    species="human", reference=G, chemistry="10x-3p-v3", source="geo", gse="GSE193672", gsm="GSM5815984", srr="SRR17615087;SRR17615088",
+    read_pairs_m=489, read_pairs_used_m=489, truth="identical-read comparison with STARsolo", licence="GEO public data (cite paper)",
+    capabilities="alignment-performance,gex-counts", tools="singlet,starsolo,alevinfry",
+    why="runtime and memory at full atlas depth (the median atlas sample has about 200M pairs)")
 # ---- non-host
 add(id="ravindra2021_mock", group="non-host", tier="core", title="Ravindra 2021 human bronchial epithelium, mock (first 50M spots)",
     species="human", reference=G, chemistry="10x-3p-v3", source="geo", gse="GSE166766", gsm="GSM5082289", srr="SRR13711613",
@@ -193,13 +253,13 @@ add(id="ravindra2021_dpi2", group="non-host", tier="core", title="Ravindra 2021 
     licence="GEO public data (cite paper)", capabilities="non-host", tools="singlet,kraken2,minimap2-oracle",
     why="positive control: a known virus at known per-cell load")
 # ---- sex and ancestry
-add(id="geo_sex21", group="sex-ancestry", tier="core", title="21 atlas studies with donor sex in GEO metadata (167 samples, both sexes per study)",
+add(id="geo_sex21", group="sex-ancestry", tier="core", title="19 atlas studies with donor sex in GEO metadata (179 labelled samples, 171 with usable counts)",
     species="human+mouse", reference=f"{G};{M}", chemistry="mixed 10x", source="geo",
     gse="GSE130653;GSE143381;GSE145370;GSE155224;GSE157783;GSE176417;GSE179502;GSE193416;GSE207097;GSE209832;GSE220764;GSE221494;GSE228056;GSE240975;GSE254999;GSE262873;GSE267240;GSE292067;GSE316782",
-    n_cells=443530, truth="sex recorded in GEO sample characteristics", licence="GEO public data; Singlet counts CC0",
+    n_cells=472363, truth="sex recorded in GEO sample characteristics", licence="GEO public data; Singlet counts CC0",
     capabilities="chromosomal-sex", tools="singlet,cellxy,xist-chry-rule",
     why="real samples across protocols and tissues with independent sex labels (docs/cell_annotation.md section 4)")
-add(id="lcl_gse230239", group="sex-ancestry", tier="core", title="1000 Genomes LCLs HG00362 (FIN, female) and HG01277 (CLM, male), 10x 3' v3",
+add(id="lcl_gse230239", group="sex-ancestry", tier="core", data_kind="derived", title="1000 Genomes LCLs HG00362 (FIN, female) and HG01277 (CLM, male), 10x 3' v3",
     species="human", reference=G, chemistry="10x-3p-v3", source="geo", gse="GSE230239", gsm="GSM7208744;GSM7208745",
     srr="SRR24236331;SRR24236332;SRR24236333;SRR24236334", read_pairs_m=650, read_pairs_used_m=650, fastq_gb=24,
     truth="1000 Genomes sample panel: population, super-population, sex", licence="GEO public data (cite paper)",
@@ -211,7 +271,7 @@ add(id="osorio2019_lcl_mix", group="sex-ancestry", tier="core", title="Osorio 20
     licence="GEO public data (cite paper)", capabilities="genetic-ancestry,donor-demux,donor-snps,mtdna,chromosomal-sex",
     tools="singlet,vireo,souporcell,somalier,peddy,cellsnp-lite,mgatk",
     why="a two-donor pool of known 1000 Genomes individuals: demultiplexing, then ancestry per donor, end to end")
-add(id="mage150", group="sex-ancestry", tier="core", title="MAGE bulk RNA-seq of 1000 Genomes LCLs: 150 individuals, 26 populations (first 8M read pairs each)",
+add(id="mage150", group="sex-ancestry", tier="core", data_kind="derived", title="MAGE bulk RNA-seq of 1000 Genomes LCLs: 150 individuals, 26 populations (first 8M read pairs each)",
     species="human", reference=G, chemistry="bulk-rna-pe150", source="sra", other="PRJNA851328 (runs: bench/public/sexancestry/mage_subset.tsv)",
     n_cells="", read_pairs_m=3480, read_pairs_used_m=1200, fastq_gb=362,
     truth="1000 Genomes super-population, population and sex of each individual", licence="SRA public data (cite Taylor et al. 2024)",
@@ -219,13 +279,7 @@ add(id="mage150", group="sex-ancestry", tier="core", title="MAGE bulk RNA-seq of
     why="the only RNA-seq of 1000 Genomes individuals from every super-population; reads are thinned to single-cell donor depths")
 
 # ---- performance benchmarks (alignment-performance deep sample, download)
-add(id="gsm5815984", group="deep", tier="extended", title="GSM5815984 human adrenal, 10x 3' v3, two runs, all 489M read pairs (deep sample)",
-    species="human", reference=G, chemistry="10x-3p-v3", source="geo", gsm="GSM5815984", srr="SRR17615087;SRR17615088",
-    other="PRJNA797105", n_cells=10126, read_pairs_m=489.5, read_pairs_used_m=489.5, fastq_gb=95,
-    truth="no truth: timing on identical reads", licence="GEO public data (cite paper)", capabilities="alignment-performance",
-    tools="singlet,starsolo,alevinfry",
-    why="a deep library (37% saturation at full depth) where the sequence cache hits 66%; the depth the atlas re-run processes")
-add(id="sra_download_set", group="download", tier="core", title="Four 10x 3' GEX runs from the atlas re-run universe (SRA)",
+add(id="sra_download_set", group="download", tier="core", data_kind="real", title="Four 10x 3' GEX runs from the atlas re-run universe (SRA)",
     species="human", reference="", chemistry="10x-3p-v3", source="sra", srr="SRR24098804;SRR25032524;SRR20115176;SRR23322292",
     read_pairs_m=132.5, read_pairs_used_m=132.5, fastq_gb=14, truth="NCBI's own decode of the archive (prefetch + fasterq-dump)",
     licence="SRA public data", capabilities="download", tools="singlet,fasterq-dump,prefetch,aws-s3,ena-https",

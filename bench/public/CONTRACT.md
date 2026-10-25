@@ -1,4 +1,4 @@
-# Public benchmark results contract (schema 1.0.0)
+# Public benchmark results contract (schema 1.1.0)
 
 This contract is how every Singlet 1.0.0 benchmark reaches singlet.bio/benchmarking. Each capability writes one JSON
 file. The website, the notebook and CI read only these files.
@@ -51,7 +51,7 @@ Top-level fields (all required unless marked optional):
 | field | type | notes |
 |---|---|---|
 | `schema` | `"singlet.benchmark.capability"` | |
-| `schema_version` | string | `"1.0.0"` |
+| `schema_version` | string | `"1.1.0"` (1.0.0 documents stay readable) |
 | `capability` | id | from section 1 |
 | `title` | string | page heading, e.g. "Chromosomal sex" |
 | `conclusion` | string, at most 100 words | the claim the page leads with; state numbers, name competitors |
@@ -61,13 +61,14 @@ Top-level fields (all required unless marked optional):
 | `owner` | string | session or person responsible |
 | `singlet` | object | `version` ("1.0.0"), `commit` (40-hex SHA of the binary's source), optional `branch`, `binary`, `binary_sha256`, `build_flags` |
 | `tools` | list | every program in the comparison: `name`, `version`, `role` (`singlet` / `competitor` / `truth` / `helper`), optional `url`, `citation`, `params` (exact command line or settings) |
-| `datasets` | list | `id` (cohort id), `accessions` {`gse`, `gsm`[], `srr`[], `url`, `other`[]} (at least one), `truth` (what the ground truth is), optional `title`, `n_cells`, `notes` |
+| `datasets` | list | `id` (cohort id), `accessions` {`gse`, `gsm`[], `srr`[], `url`, `other`[]} (at least one), `truth` (what the ground truth is), `data_kind` (`real`, `derived` or `simulated`; default `real`; must match the cohort row; section 3.1), optional `title`, `n_cells`, `notes` |
 | `metrics` | list | section 3 |
 | `resources` | list | runtime and memory per tool and dataset: `tool`, `dataset` (or `"pooled"`), `wall_s`, `max_rss_gb`, `threads`, optional `cpu_h`, `node`, `notes` |
 | `figures` | list (optional) | section 4 |
 | `artifacts` | list (optional, but needed by the notebook) | section 5 |
 | `code` | list | `path`, `url` (GitHub `blob/<sha>/...` or `tree/<sha>/...`, pinned to a commit), optional `role` ("implementation", "harness", "metric") |
 | `reproduce` | object | `module` (repo path of a Python file), `function` (callable with signature `compute(artifact_dir: Path) -> dict`, returning a capability document), optional `laptop_minutes`, `clipper_command` |
+| `reach` | list (optional, 1.1) | what each tool can produce at all: `tool`, `output` (e.g. "unspliced counts", "junctions / PSI", "SNP-based donor demultiplexing", "mtDNA heteroplasmy", "non-host reads"), `supported` (`yes`, `no`, `partial`), optional `note`. The site draws it as a reach panel and a hub matrix |
 | `caveats` | list of strings (optional) | anything a careful reader should know. The index counts them. Do not hide a failure here: a metric that loses must be a failing metric |
 
 ## 3. Metrics and pass rules
@@ -118,6 +119,33 @@ data. "Looks close" is not a rationale.
 Runtime and memory always go in `resources`. They gate only if the owner also publishes them as metrics with category
 `resources`. This choice is deliberate: a speed claim should be stated, not implied by a table.
 
+### 3.1 Real data only (enforced)
+
+Zach's rule: *no simulated reads or simulated data for anything; always real data with ground truth, and if simulated
+data is needed, corroborate it with real data.*
+
+| `data_kind` | meaning | example |
+|---|---|---|
+| `real` | reads or values as deposited; read caps and format conversions allowed | pbmc1k_v3, Kang 2018 reads rebuilt from its BAM |
+| `derived` | real reads recombined or thinned | an in-silico pool of two real libraries, MAGE reads thinned to single-cell depth |
+| `simulated` | synthetic data | simulated genotypes or reads; never in the cohort's core tier |
+
+`contract.validate` enforces two things:
+
+- **Corroboration.** Every gating metric on a `derived` or `simulated` dataset must have `corroborated_by`. That is a list
+  of metrics on real data that show the same effect, written as `"id@dataset"` (same document) or
+  `"capability/id@dataset"` (another document, checked by `build_index`; while unresolved, the capability is shown as
+  `incomplete`).
+- **A real core.** A capability with no gating metric on real data is invalid.
+
+A dataset's `data_kind` must match its row in `cohort.tsv`, so the kind cannot be relabelled inside a document.
+
+### 3.2 10x comparators
+
+Cell Ranger, Space Ranger, Cell Ranger ARC / ATAC and Cell Ranger vdj comparisons use **the outputs 10x published with
+each dataset** (Zach, 2026-10-25). The tool entry gives the software version that produced them and, in `url`, where they
+were downloaded from. The validator rejects a 10x comparator without a `url`.
+
 ## 4. Figures
 
 The website renders figures from data, so every figure carries its own numbers:
@@ -130,8 +158,17 @@ The website renders figures from data, so every figure carries its own numbers:
              "err_lo": [0.987, 0.98], "err_hi": [0.994, 0.99]}]}
 ```
 
-- `kind`: `bar`, `grouped_bar`, `scatter`, `line`, `box`, `histogram`, `heatmap` (`rows`, `cols`, `z`) or `table`
-  (`columns`, `rows`).
+- `kind`: `bar`, `grouped_bar`, `scatter`, `line`, `box`, `histogram`, `heatmap` (`rows`, `cols`, `z`), `table`
+  (`columns`, `rows`) or `pareto` (1.1).
+- **`pareto`: quality against cost.** One series per tool with a single point: x is a resource (`cpu_h`, `wall_s` or
+  `max_rss_gb`) and y is an accuracy/agreement metric. `series[].frontier` is true when no other tool is both no more
+  costly and no worse. Build it with `contract.pareto_figure(doc, metric_id, dataset, "cpu_h")` so names and values come
+  from `metrics` and `resources`.
+  - Every capability where runtimes differ should include one. Zach's framing: Singlet is an exact genome-wide aligner,
+    pseudoaligners such as alevin-fry are faster, and the page shows that Singlet sits on the quality-reach-runtime
+    frontier.
+  - Runtime stays a resource, not a pass/fail gate, and `methods` should explain the exact-versus-pseudoalignment
+    trade-off where it applies.
 - `series[].tool` should match a tool name, so the site can colour each tool the same way on every page; Singlet is
   always tool role `singlet`.
 - Inline series have at most 5,000 points. Larger data goes in `data_file`, a path relative to `results/`
@@ -178,6 +215,7 @@ The notebook also accepts a local directory (`ARTIFACT_ROOT`).
 
 - **Same inputs for every tool:** the same FASTQs, the same reference (10x 2024-A GRCh38 / GRCm39, GENCODE v44 / M33),
   the same cells where a metric is per-cell (state which set), and the same threads and memory for timing.
+- **Real data with real ground truth** for every published claim (section 3.1).
 - **Competitors run at their documented defaults** or at their authors' recommended settings for that data type. Their
   exact command lines go in `tools[].params`.
 - **No tuning on the test truth.** A Singlet parameter chosen while looking at a cohort dataset's truth makes that

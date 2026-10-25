@@ -17,7 +17,7 @@ from pathlib import Path
 
 import numpy as np
 
-from _common import artifact_entries, bootstrap_ci, code_url, contract, load_provenance, now_iso, r
+from _common import artifact_entries, bootstrap_ci, bootstrap_diff_halfwidth, code_url, contract, load_provenance, now_iso, r
 
 CAP = "chromosomal-sex"
 TOOLS = {"singlet": "singlet_label", "cellXY": "cellxy_qc", "xist-chrY-rule": "rule"}
@@ -59,10 +59,10 @@ def compute(artifact_dir: Path) -> dict:
     calls = {t: _norm(cells[c].to_numpy(object)) for t, c in TOOLS.items()}
     # Singlet's own sample call is the donor group's call (the label most of its cells inherit), i.e. the same majority.
 
-    metrics, figures = [], []
+    metrics, figures, extra_caveats = [], [], []
     comp_names = [t for t in TOOLS if t != "singlet"]
 
-    def metric(mid, name, unit, category, dataset, vals, cis=None, rule=None, notes=None):
+    def metric(mid, name, unit, category, dataset, vals, cis=None, rule=None, notes=None, corroborated_by=None):
         m = {"id": mid, "name": name, "unit": unit, "category": category, "dataset": dataset, "direction": "higher",
              "singlet": {"value": r(vals["singlet"])},
              "competitors": [{"tool": t, "value": r(vals[t])} for t in comp_names],
@@ -73,6 +73,8 @@ def compute(artifact_dir: Path) -> dict:
                 c["ci"] = [r(x) for x in cis[c["tool"]]]
         if notes:
             m["notes"] = notes
+        if corroborated_by:
+            m["corroborated_by"] = corroborated_by
         metrics.append(m)
 
     # ---- GEO-metadata cohort: single-sex samples, truth = the sample's recorded sex
@@ -84,6 +86,7 @@ def compute(artifact_dir: Path) -> dict:
         gsm_cell = cells.loc[sel, "gsm"].to_numpy(object)
         acc_s, cov_s, acc_all, prec, cov = {}, {}, {}, {}, {}
         ci_all, ci_prec, ci_cov = {}, {}, {}
+        parts = {}  # per tool: (num, den) arrays per metric, for the paired noise margin
         sample_rows = []
         for t in TOOLS:
             lab = calls[t][sel]
@@ -101,16 +104,28 @@ def compute(artifact_dir: Path) -> dict:
             ci_all[t] = bootstrap_ci(gsm_cell, right.astype(float), np.ones(len(lab)))
             ci_prec[t] = bootstrap_ci(gsm_cell, (right & labelled).astype(float), labelled.astype(float))
             ci_cov[t] = bootstrap_ci(gsm_cell, labelled.astype(float), np.ones(len(lab)))
+            one = np.ones(len(lab))
+            parts[t] = {"cell_accuracy": (right.astype(float), one), "cell_precision": ((right & labelled).astype(float),
+                        labelled.astype(float)), "cell_coverage": (labelled.astype(float), one)}
             sample_rows.append((t, sc))
+
+        def margin(mid, vals):
+            """Paired bootstrap noise margin of Singlet against the best competitor on this metric."""
+            best = max((t for t in TOOLS if t != "singlet"), key=lambda t: vals[t])
+            hw = bootstrap_diff_halfwidth(gsm_cell, *parts["singlet"][mid], *parts[best][mid])
+            return {"type": "match_or_beat", "against": "best", "tolerance": {"abs": round(hw, 4)},
+                    "rationale": f"half-width of the paired 95% bootstrap CI (samples resampled) of Singlet minus {best}"}
         n_s, n_c = len(sm), int(sel.sum())
         metric("sample_accuracy", "Samples whose call matches the GEO metadata", "fraction", "accuracy", ds, acc_s,
                notes=f"{n_s} samples; a tool's sample call is the majority of its labelled cells (Singlet: the donor call)")
         metric("sample_called", "Samples given a call", "fraction", "coverage", ds, cov_s)
         metric("cell_accuracy", "Cells labelled with their sample's recorded sex (no call counts as wrong)", "fraction",
-               "accuracy", ds, acc_all, ci_all, notes=f"{n_c} cells; 95% CI: bootstrap over samples")
+               "accuracy", ds, acc_all, ci_all, notes=f"{n_c} cells; 95% CI: bootstrap over samples",
+               rule=margin("cell_accuracy", acc_all))
         metric("cell_precision", "Labelled cells that match their sample's recorded sex", "fraction", "accuracy", ds,
-               prec, ci_prec)
-        metric("cell_coverage", "Cells given a label", "fraction", "coverage", ds, cov, ci_cov)
+               prec, ci_prec, rule=margin("cell_precision", prec))
+        metric("cell_coverage", "Cells given a label", "fraction", "coverage", ds, cov, ci_cov,
+               rule=margin("cell_coverage", cov))
         figures.append({
             "id": f"{ds}_cells", "title": "Per-cell accuracy and coverage, GEO-metadata samples", "kind": "grouped_bar",
             "x": {"label": "metric", "categories": ["cell_accuracy", "cell_precision", "cell_coverage"]},
@@ -127,6 +142,11 @@ def compute(artifact_dir: Path) -> dict:
             for t, sc in sample_rows:
                 row += [sc.get(g), r(float((calls[t][sel][k] == tr).mean()) if k.any() else None, 3)]
             rows.append(row)
+        disagree = [r[0] for r in rows if all(r[4 + 2 * i] not in (None, r[2]) for i in range(len(TOOLS)))]
+        if disagree:
+            extra_caveats.append(f"{len(disagree)} samples are called the opposite of their GEO sex by every tool "
+                                 f"({', '.join(disagree)}); they are scored against GEO as recorded, so they lower every "
+                                 "tool's accuracy. The earlier validation (docs/cell_annotation.md section 4) found unambiguous XIST/chrY evidence against GEO for three of them, so these are probably metadata errors.")
         figures.append({"id": f"{ds}_samples", "title": "Per-sample calls", "kind": "table",
                         "columns": ["gsm", "gse", "GEO sex", "cells"] + sum(([f"{t} call", f"{t} cell acc."] for t in TOOLS), []),
                         "rows": rows})
@@ -136,7 +156,6 @@ def compute(artifact_dir: Path) -> dict:
     for ds in sorted(pool["dataset"].unique()) if len(pool) else []:
         sel = (cells["dataset"] == ds).to_numpy() & cells["truth_donor_sex"].notna().to_numpy()
         tr = cells.loc[sel, "truth_donor_sex"].to_numpy(object)
-        grp = cells.loc[sel, "gsm"].to_numpy(object)
         acc, prec, cov = {}, {}, {}
         for t in TOOLS:
             lab = calls[t][sel]
@@ -144,10 +163,13 @@ def compute(artifact_dir: Path) -> dict:
             acc[t] = float((lab == tr).mean())
             prec[t] = float((lab == tr)[lab_ok].mean()) if lab_ok.any() else float("nan")
             cov[t] = float(lab_ok.mean())
+        real = [f"{k}@{d}" for k in ("cell_accuracy", "cell_precision", "cell_coverage") for d in geo["dataset"].unique()]
         metric("cell_accuracy", "Cells labelled with their donor's sex (no call counts as wrong)", "fraction", "accuracy",
-               ds, acc, notes=f"{int(sel.sum())} cells of known donors")
-        metric("cell_precision", "Labelled cells that match their donor's sex", "fraction", "accuracy", ds, prec)
-        metric("cell_coverage", "Cells given a label", "fraction", "coverage", ds, cov)
+               ds, acc, notes=f"{int(sel.sum())} cells of known donors; the pool is one group (no donor information)",
+               corroborated_by=real[:1])
+        metric("cell_precision", "Labelled cells that match their donor's sex", "fraction", "accuracy", ds, prec,
+               corroborated_by=real[1:2])
+        metric("cell_coverage", "Cells given a label", "fraction", "coverage", ds, cov, corroborated_by=real[2:3])
 
     # ---- descriptive
     metrics.append({"id": "n_cells", "name": "Cells scored", "unit": "cells", "category": "coverage", "dataset": "pooled",
@@ -190,9 +212,27 @@ def compute(artifact_dir: Path) -> dict:
             {"path": "bench/public/capabilities/chromosomal_sex.py", "role": "metric",
              "url": code_url("bench/public/capabilities/chromosomal_sex.py", commit)},
         ],
+        "reach": [
+            {"tool": "singlet", "output": "per-cell chromosomal sex", "supported": "yes"},
+            {"tool": "cellXY", "output": "per-cell chromosomal sex", "supported": "yes"},
+            {"tool": "xist-chrY-rule", "output": "per-cell chromosomal sex", "supported": "partial",
+             "note": "only cells with XIST or chrY UMIs"},
+            {"tool": "singlet", "output": "label for every cell via its donor (genotype demultiplexing)", "supported": "yes"},
+            {"tool": "cellXY", "output": "label for every cell via its donor (genotype demultiplexing)", "supported": "no"},
+            {"tool": "xist-chrY-rule", "output": "label for every cell via its donor (genotype demultiplexing)", "supported": "no"},
+            {"tool": "singlet", "output": "flags male-female doublets (XIST and chrY in one cell)", "supported": "yes"},
+            {"tool": "cellXY", "output": "flags male-female doublets (XIST and chrY in one cell)", "supported": "yes",
+             "note": "findMfDoublet, a separate function"},
+            {"tool": "xist-chrY-rule", "output": "flags male-female doublets (XIST and chrY in one cell)", "supported": "no"},
+        ],
         "reproduce": {"module": "bench/public/capabilities/chromosomal_sex.py", "function": "compute",
                       "laptop_minutes": 2,
                       "clipper_command": "bash bench/public/sexancestry/submit_sex.sh"},
-        "caveats": prov.get("caveats", []),
+        "caveats": prov.get("caveats", []) + extra_caveats,
     }
+    for ds in sorted(geo["dataset"].unique()):
+        try:
+            doc["figures"].append(C.pareto_figure(doc, "cell_accuracy", ds, "wall_s"))
+        except (StopIteration, KeyError):
+            pass
     return C.finalize(doc)

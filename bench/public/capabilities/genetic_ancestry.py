@@ -42,7 +42,13 @@ def compute(artifact_dir: Path) -> dict:
     comps = [t for t in tools if t != "singlet"]
     metrics, figures = [], []
 
-    def add(mid, name, unit, category, dataset, vals, cis=None, notes=None, rule=None):
+    lp0 = artifact_dir / "lcl_ancestry_calls.tsv"
+    real_refs = []  # metrics on real single-cell pools that corroborate the derived (thinned bulk) results
+    if lp0.exists():
+        lc0 = pd.read_csv(lp0, sep="\t")
+        real_refs = [f"donor_accuracy@{d}" for d in sorted(set(lc0["dataset"])) if d == "osorio2019_lcl_mix"]
+
+    def add(mid, name, unit, category, dataset, vals, cis=None, notes=None, rule=None, corroborated_by=None):
         m = {"id": mid, "name": name, "unit": unit, "category": category, "dataset": dataset, "direction": "higher",
              "singlet": {"value": r(vals.get("singlet"))},
              "competitors": [{"tool": t, "value": r(vals.get(t))} for t in comps],
@@ -53,6 +59,8 @@ def compute(artifact_dir: Path) -> dict:
                 c["ci"] = [r(x) for x in cis[c["tool"]]]
         if notes:
             m["notes"] = notes
+        if corroborated_by:
+            m["corroborated_by"] = corroborated_by
         metrics.append(m)
 
     for ds in sorted(calls["dataset"].unique()):
@@ -78,10 +86,13 @@ def compute(artifact_dir: Path) -> dict:
             tag = f"{L}m"
             add(f"accuracy.{tag}", f"Individuals whose published label is their 1000 Genomes super-population ({L}M read pairs)",
                 "fraction", "accuracy", ds, acc_pub, cis_pub,
-                notes=f"{n} individuals; Singlet's label is 'admixed' below q = 0.8, which counts as wrong here; 95% Wilson CI")
+                notes=f"{n} individuals; Singlet's label is 'admixed' below q = 0.8, which counts as wrong here; 95% Wilson CI",
+                corroborated_by=real_refs)
             add(f"accuracy_top.{tag}", f"Most likely super-population correct ({L}M read pairs)", "fraction", "accuracy", ds,
-                acc_top, cis_top, notes="argmax of each tool's ancestry proportions or probabilities; no abstention")
-            add(f"named_precision.{tag}", f"Named calls that are correct ({L}M read pairs)", "fraction", "accuracy", ds, prec)
+                acc_top, cis_top, notes="argmax of each tool's ancestry proportions or probabilities; no abstention",
+                corroborated_by=real_refs)
+            add(f"named_precision.{tag}", f"Named calls that are correct ({L}M read pairs)", "fraction", "accuracy", ds, prec,
+                corroborated_by=real_refs)
             # per super-population accuracy at the deepest level
             if L == levels[-1]:
                 rows = []
@@ -122,7 +133,8 @@ def compute(artifact_dir: Path) -> dict:
                 continue
             add("donor_accuracy", "Pool donors given their individual's super-population (single-cell, end to end)",
                 "fraction", "accuracy", ds, vals,
-                notes="Singlet 1.0.0 demultiplexes the pool (--n-donors 2); each tool then calls ancestry on each donor's reads")
+                notes="Singlet 1.0.0 demultiplexes the pool (--n-donors 2); each tool then calls ancestry on each donor's reads",
+                corroborated_by=None if ds == "osorio2019_lcl_mix" else real_refs)
 
     sx_path = artifact_dir / "sex_bulk_calls.tsv"
     if sx_path.exists():
@@ -135,13 +147,27 @@ def compute(artifact_dir: Path) -> dict:
              "singlet": {"value": r(vals.get("singlet"))},
              "competitors": [{"tool": t, "value": r(vals[t])} for t in st if t != "singlet"],
              "rule": {"type": "match_or_beat", "against": "best"},
-             "notes": "bulk RNA of clonal LCLs: X-chromosome heterozygosity (peddy) is weak because of X inactivation"}
+             "notes": "bulk RNA of clonal LCLs: X-chromosome heterozygosity (peddy) is weak because of X inactivation",
+             "corroborated_by": ["chromosomal-sex/sample_accuracy@geo_sex21"]}
         metrics.append(m)
 
     metrics.append({"id": "n_individuals", "name": "Individuals scored", "unit": "individuals", "category": "coverage",
                     "dataset": "pooled", "direction": "none", "singlet": {"value": int(calls["individual"].nunique())},
                     "rule": {"type": "informational"}})
     commit = prov["bench_commit"]
+    datasets = [dict(d) for d in prov["datasets"]]
+    for d in datasets:
+        if d["id"] == "mage150":
+            d["data_kind"] = "derived"  # real reads thinned to single-cell depth
+    if lp0.exists():
+        have = {d["id"] for d in datasets}
+        lcl_ds = {"lcl_gse230239": {"id": "lcl_gse230239", "data_kind": "derived", "accessions": {"gse": "GSE230239",
+                  "gsm": ["GSM7208744", "GSM7208745"]}, "title": "In-silico pool of HG00362 (FIN) and HG01277 (CLM) LCL libraries",
+                  "truth": "1000 Genomes super-population of the library each cell came from"},
+                  "osorio2019_lcl_mix": {"id": "osorio2019_lcl_mix", "data_kind": "real", "accessions": {"gse": "GSE126321",
+                  "gsm": ["GSM3596322"], "srr": ["SRR8551678"]}, "title": "Real 1:1 pool of GM12878 (CEU) and GM18502 (YRI)",
+                  "truth": "1000 Genomes super-populations of the two pooled individuals (EUR, AFR)"}}
+        datasets += [v for k, v in lcl_ds.items() if k in set(lc0["dataset"]) and k not in have]
     head = [m for m in metrics if m["id"].startswith("accuracy.")]
     deep = head[-1] if head else None
     conclusion = prov.get("conclusion") or (
@@ -155,7 +181,7 @@ def compute(artifact_dir: Path) -> dict:
         "title": "Genetic ancestry per donor",
         "conclusion": conclusion, "methods": prov["methods"], "status": prov.get("status", "draft"),
         "generated_at": prov.get("generated_at") or now_iso(), "owner": "bench-public",
-        "singlet": prov["singlet"], "tools": prov["tools"], "datasets": prov["datasets"],
+        "singlet": prov["singlet"], "tools": prov["tools"], "datasets": datasets,
         "metrics": metrics, "resources": prov["resources"], "figures": figures,
         "artifacts": artifact_entries(artifact_dir, CAP, {"ancestry_calls.tsv": "derived", "sex_bulk_calls.tsv": "derived", "lcl_ancestry_calls.tsv": "derived",
                                                           "provenance.json": "derived"}),
@@ -169,6 +195,17 @@ def compute(artifact_dir: Path) -> dict:
              "url": code_url("bench/public/sexancestry/ancestry_score.py", commit)},
             {"path": "bench/public/capabilities/genetic_ancestry.py", "role": "metric",
              "url": code_url("bench/public/capabilities/genetic_ancestry.py", commit)},
+        ],
+        "reach": [
+            {"tool": "singlet", "output": "ancestry per donor of a pooled single-cell library (after demultiplexing)", "supported": "yes"},
+            {"tool": "somalier", "output": "ancestry per donor of a pooled single-cell library (after demultiplexing)", "supported": "partial",
+             "note": "needs a per-donor BAM, which another tool must produce"},
+            {"tool": "peddy", "output": "ancestry per donor of a pooled single-cell library (after demultiplexing)", "supported": "partial",
+             "note": "needs per-donor genotype calls"},
+            {"tool": "singlet", "output": "admixture proportions and an explicit 'admixed' label", "supported": "yes"},
+            {"tool": "somalier", "output": "admixture proportions and an explicit 'admixed' label", "supported": "no"},
+            {"tool": "peddy", "output": "admixture proportions and an explicit 'admixed' label", "supported": "no"},
+            {"tool": "singlet", "output": "published labels with no genotype in any public file", "supported": "yes"},
         ],
         "reproduce": {"module": "bench/public/capabilities/genetic_ancestry.py", "function": "compute", "laptop_minutes": 1,
                       "clipper_command": "bash bench/public/sexancestry/submit_ancestry.sh"},

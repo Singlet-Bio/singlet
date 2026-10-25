@@ -21,6 +21,7 @@ PANEL=https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/release/20130502/integrated_cal
 # test individuals: MAGE subset + the scRNA-seq LCL donors (lcl_gse230239, osorio2019_lcl_mix)
 { tail -n +2 $SRC/bench/public/sexancestry/mage_subset.tsv | cut -f2; printf "HG00362\nHG01277\nNA12878\nNA18502\n"; } | sort -u > $O/excluded.txt
 awk 'NR>1 {print $1"\t"$3}' $R/panel.txt | grep -vwFf $O/excluded.txt > $O/groups.txt   # sample <tab> super-population
+cut -f1 $O/groups.txt > $O/samples.txt
 echo "excluded $(wc -l < $O/excluded.txt), kept $(wc -l < $O/groups.txt) individuals"
 curl -sSL $BASE/ | grep -oE 'ALL\.chr[0-9]+\.shapeit2[^"]*phased\.vcf\.gz' | sort -u > $O/vcf_names.txt
 wc -l < $O/vcf_names.txt
@@ -31,12 +32,15 @@ af.to_csv("$O/targets.nochr.tsv", sep="\t", header=False, index=False)
 af.assign(chrom="chr" + af["chrom"].astype(str)).to_csv("$O/targets.chr.tsv", sep="\t", header=False, index=False)
 print(len(af), "panel sites")
 EOF
+rm -f $O/af.chr*.tsv.part
+# downloads in parallel first (one EBI stream is slow); curl -C - resumes partial files
+cat $O/vcf_names.txt | xargs -P 8 -I{} sh -c '[ -e "$0/{}.ok" ] || { curl -sSL --retry 5 -C - -o "$0/{}" "$1/{}" && touch "$0/{}.ok"; }' $R $BASE
 for f in $(cat $O/vcf_names.txt); do
   c=$(echo $f | grep -oE 'chr[0-9]+'); out=$O/af.$c.tsv
   [ -s $out ] && continue
-  [ -s $R/$f ] || curl -sSL --retry 5 -C - -o $R/$f $BASE/$f
+  [ -e $R/$f.ok ] || { echo "missing $f"; continue; }
   pre=$(bcftools view -h $R/$f | grep -m1 '^##contig' | grep -q 'ID=chr' && echo chr || echo nochr)
-  ( bcftools view --threads 2 -S $(cut -f1 $O/groups.txt | paste -sd, ) --force-samples -m2 -M2 -v snps -T $O/targets.$pre.tsv -Ou $R/$f \
+  ( bcftools view --threads 2 -S $O/samples.txt --force-samples -m2 -M2 -v snps -T $O/targets.$pre.tsv -Ou $R/$f \
     | bcftools +fill-tags -Ou -- -S $O/groups.txt -t AF \
     | bcftools query -f '%CHROM\t%POS\t%REF\t%ALT\t%AF_AFR\t%AF_AMR\t%AF_EAS\t%AF_EUR\t%AF_SAS\n' > $out.part && mv $out.part $out ) &
   while [ $(jobs -r | wc -l) -ge 7 ]; do sleep 5; done

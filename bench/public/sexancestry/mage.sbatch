@@ -26,7 +26,7 @@ SCR=/tmp/$USER-mage-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT
 G=$REF/GRCh38-2024-A; FA=$G/fasta/genome.fa; T=$SLURM_CPUS_PER_TASK
 echo "[mage] $IND $POP $SUPER $SEX $RUN $(date -Is) $(hostname)"
 t0=$(date +%s)
-prefetch -q -O $SCR $RUN && fasterq-dump -q -e $T -t $SCR -O $SCR $SCR/$RUN
+prefetch -q --max-size 500G -O $SCR $RUN && fasterq-dump -q -e $T -t $SCR -O $SCR $SCR/$RUN
 for i in 1 2; do head -n 32000000 $SCR/${RUN}_$i.fastq > $SCR/r$i.fq; rm $SCR/${RUN}_$i.fastq; done
 t1=$(date +%s)
 /usr/bin/time -v -o $O/timing/$IND.star.txt STAR --runThreadN $T --genomeDir $G/star_2.7.11b --readFilesIn $SCR/r1.fq $SCR/r2.fq \
