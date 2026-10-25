@@ -542,7 +542,7 @@ The primary ATAC data is the fragment file. It stays an immutable per-sample obj
 
 | member | kind | content |
 |---|---|---|
-| `atac_fragments.tsv.gz` | 3 (stored, as written) | bgzip fragments, Cell Ranger layout (`chrom start end barcode read_pairs`), barcodes in the sample's column space; with `atac_fragments.tsv.gz.tbi` (kind 3) so clients can range-read a region |
+| `atac_fragments.tsv.gz` | 5 (raw, as written) | bgzip fragments, Cell Ranger layout (`chrom start end barcode read_pairs`), barcodes in the sample's column space; with `atac_fragments.tsv.gz.tbi` (kind 5) so clients can range-read a region |
 | `atac_peaks.bed` | 3 (stored, zstd) | the sample's insertion peaks (`atac_peak_caller.h`), narrowPeak-like columns |
 | `atac_peak_counts.1pz` | 1 (pz2) | cut sites per peak x the sample's columns; rows `Inline` (`chr:start-end`, the order of `atac_peaks.bed`) |
 | `atac_gene_activity.1pz` | 1 (pz2) | fragments over gene body + 2 kb upstream, protein-coding genes x columns; rows `Inline` (`gene_id_gene_name`) |

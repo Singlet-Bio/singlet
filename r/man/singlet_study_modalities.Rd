@@ -13,7 +13,7 @@ singlet_study_modalities(x, gsm = NULL)
 }
 \value{
 A character vector: a subset of \code{counts}, \code{spliced}, \code{unspliced}, \code{splice_junctions},
-  \code{psi}, \code{mt}, \code{vdj}.
+  \code{psi}, \code{mt}, \code{vdj}, \code{atac}, \code{gene_activity}.
 }
 \description{
 The names \code{load(modalities = )} and \code{singlet_cells(modalities = )} accept that a study's samples carry,

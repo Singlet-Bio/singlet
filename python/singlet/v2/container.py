@@ -118,12 +118,15 @@ class S2Writer:
         level: int = util.ZSTD_LEVEL,
         crc32: Optional[int] = None,
         digest: Optional[bytes] = None,
+        as_written: bool = False,
     ) -> int:
-        """Store ``legacy_bytes`` as zstd (kind 3), or raw (kind 5) when zstd does not shrink it. Returns the kind used."""
+        """Store ``legacy_bytes`` as zstd (kind 3), or raw (kind 5) when zstd does not shrink it. Returns the kind used.
+        ``as_written`` always stores the bytes as they are (kind 5): already-compressed members (bgzip fragment files and
+        their tabix index) that clients read by byte range."""
         raw = bytes(legacy_bytes)
-        z = util.zstd_compress(raw, level) if raw else b""
+        z = util.zstd_compress(raw, level) if raw and not as_written else b""
         m = dict(meta or {})
-        if raw and len(z) < len(raw):
+        if raw and not as_written and len(z) < len(raw):
             kind, body = KIND_STORED, z
             m["zstd_level"] = level
         else:
