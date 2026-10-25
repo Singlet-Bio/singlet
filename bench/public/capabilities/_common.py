@@ -61,6 +61,21 @@ def bootstrap_ci(groups: np.ndarray, num: np.ndarray, den: np.ndarray, n_boot: i
     return [float(np.quantile(est, 0.025)), float(np.quantile(est, 0.975))]
 
 
+def bootstrap_diff_halfwidth(groups: np.ndarray, num_a, den_a, num_b, den_b, n_boot: int = 2000, seed: int = 0) -> float:
+    """Half-width of the paired 95% bootstrap CI of ratio_a - ratio_b (clusters resampled together for both tools).
+
+    Used as the tolerance of per-cell metrics: two tools whose difference is inside this sampling noise are reported as
+    matching. The margin is computed the same way for every metric and every tool, before looking at which tool wins."""
+    keys, inv = np.unique(groups, return_inverse=True)
+    sums = [np.bincount(inv, weights=np.asarray(x, float), minlength=len(keys)) for x in (num_a, den_a, num_b, den_b)]
+    rng = np.random.default_rng(seed)
+    idx = rng.integers(0, len(keys), size=(n_boot, len(keys)))
+    ra = sums[0][idx].sum(1) / np.maximum(sums[1][idx].sum(1), 1e-12)
+    rb = sums[2][idx].sum(1) / np.maximum(sums[3][idx].sum(1), 1e-12)
+    d = ra - rb
+    return float((np.quantile(d, 0.975) - np.quantile(d, 0.025)) / 2)
+
+
 def now_iso() -> str:
     return _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0).isoformat()
 

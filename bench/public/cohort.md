@@ -60,7 +60,7 @@ A blank `n_cells` means the source does not state one.
 | mouse | neuron1k_v3, heart1k_v3, (nuclei above), tabula_muris_kidney_facs* | Cell Ranger; Tabula Muris CL labels |
 | curated cell types | cxg16 (16 GEO studies, 66 samples) | CELLxGENE curator labels transferred by barcode |
 | non-host | ravindra2021_mock, ravindra2021_dpi2 | SARS-CoV-2 infected vs mock |
-| sex / ancestry | geo_sex21, lcl_gse230239, osorio2019_lcl_mix, mage150 | GEO sex; 1000 Genomes panel (population, super-population, sex) |
+| sex / ancestry | geo_sex21 (19 studies), lcl_gse230239, osorio2019_lcl_mix, mage150 | GEO sex; 1000 Genomes panel (population, super-population, sex) |
 
 ## Capability coverage
 

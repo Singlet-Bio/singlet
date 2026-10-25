@@ -193,10 +193,10 @@ add(id="ravindra2021_dpi2", group="non-host", tier="core", title="Ravindra 2021 
     licence="GEO public data (cite paper)", capabilities="non-host", tools="singlet,kraken2,minimap2-oracle",
     why="positive control: a known virus at known per-cell load")
 # ---- sex and ancestry
-add(id="geo_sex21", group="sex-ancestry", tier="core", title="21 atlas studies with donor sex in GEO metadata (167 samples, both sexes per study)",
+add(id="geo_sex21", group="sex-ancestry", tier="core", title="19 atlas studies with donor sex in GEO metadata (179 labelled samples, 171 with usable counts)",
     species="human+mouse", reference=f"{G};{M}", chemistry="mixed 10x", source="geo",
     gse="GSE130653;GSE143381;GSE145370;GSE155224;GSE157783;GSE176417;GSE179502;GSE193416;GSE207097;GSE209832;GSE220764;GSE221494;GSE228056;GSE240975;GSE254999;GSE262873;GSE267240;GSE292067;GSE316782",
-    n_cells=443530, truth="sex recorded in GEO sample characteristics", licence="GEO public data; Singlet counts CC0",
+    n_cells=472363, truth="sex recorded in GEO sample characteristics", licence="GEO public data; Singlet counts CC0",
     capabilities="chromosomal-sex", tools="singlet,cellxy,xist-chry-rule",
     why="real samples across protocols and tissues with independent sex labels (docs/cell_annotation.md section 4)")
 add(id="lcl_gse230239", group="sex-ancestry", tier="core", title="1000 Genomes LCLs HG00362 (FIN, female) and HG01277 (CLM, male), 10x 3' v3",
