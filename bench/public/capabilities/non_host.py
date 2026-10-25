@@ -20,6 +20,7 @@ Run:  python bench/public/capabilities/non_host.py --artifacts DIR [--out bench/
 """
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -235,20 +236,38 @@ def compute(artifact_dir: Path) -> dict:
         "x": {"label": "tool", "categories": [TOOL_S, TOOL_KP, TOOL_KV, TOOL_O]}, "y": {"label": "AUROC", "unit": "auroc", "min": 0.5, "max": 0.8},
         "series": [{"name": "infected vs mock", "x": [TOOL_S, TOOL_KP, TOOL_KV, TOOL_O], "y": [round(a[t], 4) for t in (TOOL_S, TOOL_KP, TOOL_KV, TOOL_O)]}]}
 
+    prov = json.loads((art / "provenance.json").read_text(encoding="utf-8"))
+    commit = prov["bench_commit"]
+    byid = {(m["id"], m["dataset"]): m for m in metrics}
+
+    def sv(mid, ds):
+        return byid[(mid, ds)]["singlet"]["value"]
+
+    def cv(mid, ds, tool):
+        return next(c["value"] for c in byid[(mid, ds)]["competitors"] if c["tool"] == tool)
+
+    conclusion = (
+        f"Singlet names SARS-CoV-2 in the infected sample and assigns {sv('sars2_reads', DPI2):,.0f} reads to it, against "
+        f"{cv('sars2_reads', DPI2, TOOL_KP):,.0f} for Kraken2 (PlusPF) and {cv('sars2_reads', DPI2, TOOL_O):,.0f} for the minimap2 oracle; "
+        f"per-cell UMIs correlate with the oracle at rho {sv('percell_spearman_vs_oracle', DPI2):.3f} (Kraken2 {cv('percell_spearman_vs_oracle', DPI2, TOOL_KP):.3f}) "
+        f"and separate infected from mock cells at AUROC {sv('auroc_infected_vs_mock', 'pooled'):.3f} (Kraken2 {cv('auroc_infected_vs_mock', 'pooled', TOOL_KP):.3f}, ceiling {a[TOOL_O]:.3f}). "
+        f"In the mock and PBMC samples Singlet calls {sv('mock_false_positive_species', MOCK):.0f} and {sv('pbmc_false_positive_species', PBMC):.0f} species.")
     doc = {
         "schema": "singlet.benchmark.capability", "schema_version": "1.0.0", "capability": CAPABILITY,
-        "title": "Non-host (viral and microbial) detection",
-        "conclusion": "", "methods": "", "status": "final", "generated_at": "", "owner": "pipeline-benchmark",
-        "singlet": C.SINGLET,
-        "tools": [], "datasets": [], "metrics": metrics, "resources": resources, "figures": [fig_species, fig_auc],
-        "artifacts": C.artifact_entries(art, CAPABILITY, {"percell_": "derived", "species": "derived", "meta": "derived", "resources": "derived"}),
-        "code": C.code_entries(CODE_COMMIT, [
+        "title": "Non-host (viral and microbial) detection", "conclusion": conclusion, "methods": prov["methods"],
+        "status": prov.get("status", "final"), "generated_at": prov["generated_at"], "owner": "pipeline-benchmark",
+        "singlet": prov["singlet"], "tools": prov["tools"], "datasets": prov["datasets"],
+        "metrics": metrics, "resources": resources, "figures": [fig_species, fig_auc],
+        "artifacts": C.artifact_entries(art, CAPABILITY, {"percell_": "derived", "species": "derived", "meta": "derived", "resources": "derived",
+                                                          "provenance": "derived"}),
+        "code": C.code_entries(commit, [
             ("bench/public/capabilities/non_host.py", "metric"), ("bench/public/harness/non_host/10_singlet.sbatch", "harness"),
-            ("bench/public/harness/non_host/20_kraken.sbatch", "harness"), ("bench/public/harness/non_host/30_oracle.sbatch", "harness"),
-            ("bench/public/harness/non_host/collect.py", "harness")]),
+            ("bench/public/harness/non_host/20_kraken.sbatch", "harness"), ("bench/public/harness/non_host/21_kraken_percell.sbatch", "harness"),
+            ("bench/public/harness/non_host/30_oracle.sbatch", "harness"), ("bench/public/harness/non_host/kraken_percell.py", "harness"),
+            ("bench/public/harness/non_host/oracle_percell.py", "harness"), ("bench/public/harness/non_host/collect.py", "harness")]),
         "reproduce": {"module": "bench/public/capabilities/non_host.py", "function": "compute", "laptop_minutes": 2,
-                      "clipper_command": "sbatch bench/public/harness/non_host/40_collect.sbatch"},
-        "caveats": [],
+                      "clipper_command": "sbatch bench/public/harness/collect_and_compute.sbatch non-host"},
+        "caveats": prov["caveats"],
     }
     return doc
 
