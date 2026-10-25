@@ -35,6 +35,20 @@ import pandas as pd
 REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO / "python"))
 LEVELS = ["0.5", "2", "8"]
+METHODS = (
+    "Truth: {n} individuals of the 1000 Genomes Project, 30 per super-population and sex-balanced, covering all 26 "
+    "populations, whose lymphoblastoid lines were RNA-sequenced by MAGE (Taylor et al. 2024, PRJNA851328). The first 8M "
+    "read pairs of each run were aligned once with STAR 2.7.11b to GRCh38-2024-A, then thinned to 2M and 0.5M pairs. "
+    "Every tool reads the same alignments at each depth. Singlet: singlet.celllabels.ancestry, supervised admixture with "
+    "fixed super-population allele frequencies at the pipeline's 1000 Genomes SNP panel. Its depth tables come from "
+    "bcftools mpileup (MAPQ 255, BQ 20). The frequencies were recomputed without the {n_ex} test individuals, so no tool "
+    "sees its own answer. The published label is the super-population with proportion q >= 0.8, otherwise 'admixed'. "
+    "somalier 0.3.6: extract at its hg38 sites, then ancestry against the labelled 1000 Genomes background minus the test "
+    "individuals. peddy 0.4.8: bcftools call at its GRCh38 sites, then peddy with its built-in background, which includes "
+    "the test individuals and so favours peddy. Metrics: accuracy of each tool's published label (an abstention counts as "
+    "wrong), accuracy of the most likely super-population, and precision of named calls, with 95% Wilson intervals. Donor "
+    "sex: Singlet's sex model on the sample's XIST and chrY gene counts, against peddy's sex check and the XIST/chrY rule."
+)
 
 
 def singlet_calls(mage: Path, af_path: Path, subset: pd.DataFrame) -> tuple[list[dict], float]:
@@ -84,7 +98,7 @@ def somalier_calls(mage: Path, sdir: Path, excluded: set, work: Path) -> tuple[l
     return rows, t
 
 
-def peddy_calls(mage: Path, subset: pd.DataFrame, work: Path, bcftools: str) -> tuple[list[dict], list[dict], float]:
+def peddy_calls(mage: Path, subset: pd.DataFrame, work: Path, bcftools: str, py: str) -> tuple[list[dict], list[dict], float]:
     rows, sexrows, t = [], [], 0.0
     work.mkdir(parents=True, exist_ok=True)
     for L in LEVELS:
@@ -101,7 +115,7 @@ def peddy_calls(mage: Path, subset: pd.DataFrame, work: Path, bcftools: str) -> 
                 ind = Path(v).name.replace(".vcf.gz", "")
                 fh.write(f"{ind}\t{ind}\t0\t0\t{1 if sx.get(ind) == 'male' else 2}\t-9\n")
         t0 = time.perf_counter()
-        subprocess.run([sys.executable, "-m", "peddy", "-p", "8", "--sites", "hg38", "--prefix", str(work / f"L{L}"),
+        subprocess.run([py, "-m", "peddy", "-p", "8", "--sites", "hg38", "--prefix", str(work / f"L{L}"),
                         str(merged), str(ped)], check=True, capture_output=True)
         t += time.perf_counter() - t0
         het = pd.read_csv(work / f"L{L}.het_check.csv")
@@ -165,6 +179,7 @@ def main(argv=None) -> int:
     ap.add_argument("--artifacts", type=Path, required=True)
     ap.add_argument("--bcftools", default="bcftools")
     ap.add_argument("--bench-commit", required=True)
+    ap.add_argument("--peddy-python", default=sys.executable, help="a Python with peddy installed")
     a = ap.parse_args(argv)
     a.artifacts.mkdir(parents=True, exist_ok=True)
     subset = pd.read_csv(REPO / "bench/public/sexancestry/mage_subset.tsv", sep="\t")
@@ -173,7 +188,7 @@ def main(argv=None) -> int:
     srows, ts = singlet_calls(a.mage, a.af, subset)
     mrows, tm = somalier_calls(a.mage, a.somalier_dir, excluded, work / "somalier")
     try:
-        prows, psex, tp = peddy_calls(a.mage, subset, work / "peddy", a.bcftools)
+        prows, psex, tp = peddy_calls(a.mage, subset, work / "peddy", a.bcftools, a.peddy_python)
     except (subprocess.CalledProcessError, FileNotFoundError, KeyError) as e:
         print("peddy failed:", e)
         prows, psex, tp = [], [], None
@@ -202,10 +217,34 @@ def main(argv=None) -> int:
                     "max_rss_gb": 0.0, "threads": 8, "notes": "bcftools call at peddy sites + peddy"})
     afj = json.loads((a.af.parent / "af_leaveout.json").read_text()) if (a.af.parent / "af_leaveout.json").exists() else {}
     som_v = subprocess.run([str(a.somalier_dir / "somalier")], capture_output=True, text=True).stderr[:80]
-    prov = {"bench_commit": a.bench_commit, "status": "draft", "resources": res,
-            "af_leaveout": {k: v for k, v in afj.items() if k != "excluded"}, "n_excluded": len(excluded),
-            "somalier_banner": som_v.strip()}
-    (a.artifacts / "provenance_scoring.json").write_text(json.dumps(prov, indent=1))
+    runs = subset["run_accession"].tolist()
+    prov = {
+        "bench_commit": a.bench_commit, "status": "draft", "resources": res,
+        "methods": METHODS.format(n=n, n_ex=len(excluded)),
+        "singlet": {"version": "1.0.0", "commit": a.bench_commit, "branch": "claude/bench-public-cohort-485cf7",
+                    "binary": "python: singlet.celllabels (ancestry 1kgp-supervised-admixture/1)"},
+        "tools": [
+            {"name": "singlet", "version": "1.0.0", "role": "singlet",
+             "params": "infer_ancestry(ad, dp, freqs): q_min 0.8, depth cap 8, >= 300 sites; leave-out 1000 Genomes frequencies"},
+            {"name": "somalier", "version": "0.3.6", "role": "competitor", "url": "https://github.com/brentp/somalier",
+             "params": "somalier extract -s sites.hg38.vcf.gz; somalier ancestry --labels (1000 Genomes minus test individuals)"},
+            {"name": "peddy", "version": "0.4.8", "role": "competitor", "url": "https://github.com/brentp/peddy",
+             "params": "bcftools mpileup/call -m at peddy GRCh38 sites; peddy --sites hg38 (built-in 1000 Genomes background)"},
+            {"name": "xist-chrY-rule", "version": "n/a", "role": "competitor", "params": "bulk sex: XIST > 0 and MSY = 0 female; MSY > 0 and XIST = 0 male"},
+            {"name": "1000genomes-panel", "version": "phase 3 (20130502)", "role": "truth"},
+        ],
+        "datasets": [{"id": "mage150", "title": f"MAGE LCL RNA-seq, {n} 1000 Genomes individuals (26 populations)",
+                      "accessions": {"srr": runs, "other": ["PRJNA851328"]},
+                      "truth": "1000 Genomes super-population and sex of each individual", "n_cells": 0}],
+        "af_leaveout": {k: v for k, v in afj.items() if k != "excluded"}, "n_excluded": len(excluded),
+        "somalier_banner": som_v.strip(),
+        "caveats": ["Bulk RNA-seq of cell lines stands in for single-cell donors: reads are thinned to 0.5M-8M pairs, the range "
+                    "of a donor's coverage in a single-cell library, but full-length bulk coverage spreads over more sites than "
+                    "3' single-cell reads.",
+                    "Depth tables come from bcftools mpileup on STAR alignments (MAPQ 255, BQ 20), the same input for every "
+                    "tool, not from Singlet's own pileup engine; the end-to-end single-cell runs are scored separately."],
+    }
+    (a.artifacts / "provenance.json").write_text(json.dumps(prov, indent=1))
     print(calls.groupby(["tool", "level"]).apply(lambda d: (d["top"] == d["super_population"]).mean()).round(3))
     return 0
 
