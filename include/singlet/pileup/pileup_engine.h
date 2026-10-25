@@ -1706,6 +1706,8 @@ public:
     const StrandEvidence& strand_probe() const { return strand_probe_; }
     /// Orientation the pass counted with (after any probe flip).
     bool reverse_strand() const { return config_.reverse_strand; }
+    /// Per-molecule dump path (diagnostics; "" = none). Defaults to SINGLET_MOLECULE_DUMP.
+    void set_molecule_dump(const std::string& path) { molecule_dump_ = path; }
     /// Carry the probe record of an earlier pass over to this (retry) engine.
     void keep_strand_probe(const PileupEngine& prev) {
         strand_probed_ = prev.strand_probed_;
@@ -3574,6 +3576,58 @@ public:
 /// when base.auto_strand is false (orientation forced by the user, or already retried). The
 /// old engine is kept if the new one cannot load its references.
 template <class RunFn>
+/// Gene-level layers of a finished pass, one line per (barcode, gene) with any count:
+/// barcode, gene_id, exon (spliced + ambiguous), intron (unspliced), ambiguous. Barcodes with
+/// fewer than `min_umi` molecules in total are left out. Used by the SINGLET_INTRON_SWEEP
+/// experiment (src/pipeline/singlet.cpp) to compare intron rules on one alignment.
+inline bool write_gene_layers_tsv(const PileupEngine& e, const std::string& path, uint32_t min_umi = 100) {
+    const auto& gm = e.gene_model();
+    const uint32_t ng = gm.n_genes();
+    auto ex = e.exons().to_csc();
+    auto in = e.introns().to_csc();
+    auto am = e.ambiguous().to_csc();
+    gzFile f = gzopen(path.c_str(), "wb1");
+    if (!f) return false;
+    gzputs(f, "barcode\tgene_id\texon\tintron\tambiguous\n");
+    std::vector<uint32_t> ge(ng), gi(ng), ga(ng);
+    std::vector<uint32_t> touched;
+    const auto& bcs = e.barcodes();
+    std::string line;
+    for (uint32_t c = 0; c < ex.ncols; ++c) {
+        touched.clear();
+        uint64_t tot = 0;
+        auto add = [&](const auto& m, std::vector<uint32_t>& v, bool exon_rows, bool intron_rows) {
+            if (c >= m.ncols) return;
+            for (int32_t k = m.indptr[c]; k < m.indptr[c + 1]; ++k) {
+                uint32_t r = static_cast<uint32_t>(m.indices[k]);
+                uint32_t g = exon_rows ? gm.exon_to_gene(r) : intron_rows ? gm.intron_to_gene(r) : r;
+                if (g >= ng) continue;
+                if (!ge[g] && !gi[g] && !ga[g]) touched.push_back(g);
+                v[g] += m.data[k];
+            }
+        };
+        add(ex, ge, true, false);
+        add(in, gi, false, true);
+        add(am, ga, false, false);
+        for (uint32_t g : touched) tot += ge[g] + gi[g];
+        if (tot >= min_umi && c < bcs.size()) {
+            std::sort(touched.begin(), touched.end());
+            for (uint32_t g : touched) {
+                line.clear();
+                line += bcs[c]; line += '\t'; line += gm.gene_ids()[g];
+                line += '\t'; line += std::to_string(ge[g]);
+                line += '\t'; line += std::to_string(gi[g]);
+                line += '\t'; line += std::to_string(ga[g]);
+                line += '\n';
+                gzwrite(f, line.data(), static_cast<unsigned>(line.size()));
+            }
+        }
+        for (uint32_t g : touched) ge[g] = gi[g] = ga[g] = 0;
+    }
+    gzclose(f);
+    return true;
+}
+
 inline bool rerun_if_wrong_strand(std::unique_ptr<PileupEngine>& engine, PileupConfig& base,
                                   PileupStats& stats, RunFn&& run) {
     if (!engine || !base.stranded || !base.auto_strand || base.exon_gtf_path.empty()) return false;

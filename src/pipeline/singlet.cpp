@@ -7794,6 +7794,38 @@ int main(int argc, char* argv[]) {
             }
         }
 
+        // ── 2c-sweep (experiment): SINGLET_INTRON_SWEEP=r1,r2,... re-runs the pileup on this
+        // BAM once per intron-rule value and writes <out>/intron_sweep/rules_<r>.tsv.gz
+        // (gene-level exon / intron / ambiguous per barcode). The run's own outputs are untouched.
+        if (const char* sweep = std::getenv("SINGLET_INTRON_SWEEP"); sweep && *sweep && engine_ptr) {
+            std::string dir = out_prefix + "/intron_sweep";
+            mkdir(dir.c_str(), 0755);
+            singlet::write_gene_layers_tsv(*engine_ptr, dir + "/main.tsv.gz");
+            std::string list(sweep);
+            size_t pos = 0;
+            while (pos <= list.size()) {
+                size_t comma = list.find(',', pos);
+                std::string item = list.substr(pos, comma == std::string::npos ? std::string::npos : comma - pos);
+                pos = (comma == std::string::npos) ? list.size() + 1 : comma + 1;
+                if (item.empty()) continue;
+                singlet::PileupConfig scfg = config;
+                scfg.intron_rules = static_cast<uint32_t>(std::strtoul(item.c_str(), nullptr, 0));
+                scfg.reverse_strand = engine_ptr->reverse_strand();
+                scfg.auto_strand = false;
+                StopWatch sw_sweep;
+                auto se = std::make_unique<singlet::PileupEngine>(scfg);
+                se->set_molecule_dump("");
+                if (!se->load_references()) { std::cerr << "[sweep] load_references failed\n"; break; }
+                se->keep_strand_probe(*engine_ptr);
+                auto sst = se->run_parallel(parallel_bam_path, star_threads);
+                singlet::write_gene_layers_tsv(*se, dir + "/rules_" + item + ".tsv.gz");
+                std::cerr << "[sweep] rules=" << item << " S=" << sst.molecules_spliced
+                          << " U=" << sst.molecules_unspliced << " A=" << sst.molecules_ambiguous
+                          << " dropped=" << sst.molecules_dropped_multigene_umi
+                          << " in " << sw_sweep.elapsed_s() << "s\n";
+            }
+        }
+
         // ── 2d: Delete temp BAM + BAI ──
         // Skip deletion if --tagged-bam is enabled; the BAM is still needed for
         // the second-pass tagged-BAM writer that runs after pileup export.
