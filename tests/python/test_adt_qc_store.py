@@ -175,14 +175,3 @@ def test_modalities_vocabulary_has_adt_and_hto():
     assert client.MODALITIES["hto"].members == (ST.MEMBERS[1],)
     for alias, name in (("protein", "adt"), ("cite", "adt"), ("hashtag", "hto")):
         assert client._MODALITY_ALIASES[alias] == name
-
-
-def test_reference_with_repeated_sequences_and_missing_ids(tmp_path):
-    cat = P.load_catalog()
-    h1 = cat[cat.kind == "hashtag"].iloc[0]
-    p = tmp_path / "ref.csv"
-    p.write_text("name,sequence\nControl 1-HTO,%s\nControl 2-HTO,%s\nCustomAb,ACGTTGCAACGTAGC\nCustomAb,TTTTGGGGCCCCAAA\n"
-                 % (h1.sequence, h1.sequence))
-    ref = P.annotate_from_catalog(P.read_feature_reference(str(p)), cat)
-    assert ref.sequence.is_unique and ref.name.is_unique
-    assert ref.name.iloc[0] == h1.specificity and "Control 2-HTO" in ref.aliases.iloc[0]

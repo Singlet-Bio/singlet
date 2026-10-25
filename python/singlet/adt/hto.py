@@ -29,36 +29,10 @@ def _mad(x):
     return m, 1.4826 * np.median(np.abs(x - m))
 
 
-def ambient_bimodal(cells: np.ndarray) -> np.ndarray:
-    """Ambient profile from called cells alone (no empty droplets), as ``DropletUtils::ambientProfileBimodal``: each hashtag's
-    log counts split into two groups (1-D k-means, k = 2); the ambient level is the mean count of the lower group."""
-    X = np.asarray(cells, dtype=float)
-    out = np.zeros(X.shape[0])
-    for i, row in enumerate(X):
-        v = np.log1p(row)
-        lo, hi = v.min(), v.max()
-        if hi - lo < 1e-9:
-            out[i] = row.mean()
-            continue
-        c = np.array([lo, hi])
-        for _ in range(100):
-            lab = np.abs(v[:, None] - c[None, :]).argmin(axis=1)
-            new = np.array([v[lab == j].mean() if (lab == j).any() else c[j] for j in (0, 1)])
-            if np.allclose(new, c):
-                break
-            c = new
-        low = lab == int(np.argmin(c))
-        out[i] = row[low].mean() if low.any() else row.mean()
-    return out
-
-
-def hashed_drops(cells: np.ndarray, ambient: np.ndarray = None, confident_min: float = CONFIDENT_MIN):
-    """cells: hashtags x cells counts; ambient: per-hashtag counts in empty droplets (None: estimated from the cells with
-    :func:`ambient_bimodal`). ``confident_min``: the log2 fold change for a confident singlet (DropletUtils default 2)."""
+def hashed_drops(cells: np.ndarray, ambient: np.ndarray):
+    """cells: hashtags x cells counts; ambient: per-hashtag counts in empty droplets."""
     X = np.asarray(cells, dtype=float)
     k, n = X.shape
-    if ambient is None:
-        ambient = ambient_bimodal(X)
     amb = np.asarray(ambient, dtype=float) + 1e-9
     amb = amb / amb.sum()
     # counts relative to the ambient proportions (an ambient-only hashtag then sits at the cell's ambient level)
@@ -77,7 +51,7 @@ def hashed_drops(cells: np.ndarray, ambient: np.ndarray = None, confident_min: f
     md, mad = _mad(lfc_second)
     doublet = (lfc_second > md + DOUBLET_NMADS * mad) & (lfc_second >= DOUBLET_MIN)
     mt, madt = _mad(lfc_top[~doublet]) if (~doublet).any() else (0.0, 0.0)
-    confident = (~doublet) & (lfc_top >= confident_min) & (lfc_top >= mt - CONFIDENT_NMADS * madt)
+    confident = (~doublet) & (lfc_top >= CONFIDENT_MIN) & (lfc_top >= mt - CONFIDENT_NMADS * madt)
     call[confident] = o[0][confident]
     call[doublet] = -2
     return call, lfc_top, lfc_second

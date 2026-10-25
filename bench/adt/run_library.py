@@ -18,7 +18,6 @@ Nothing is uploaded anywhere; FASTQs live in the job's scratch only.
 import argparse
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -106,9 +105,6 @@ def download_run(run, scratch, threads, log):
 
 def assign_reads(files, r1_len):
     """(R1, R2) among a run's files by read length: R1 is the shortest file with length >= CB+UMI, R2 the longest."""
-    # fasterq-dump writes unpaired leftovers to an unsuffixed SRR.fastq next to _1/_2: never pair it
-    if any(re.search(r"_\d\.fastq(\.gz)?$", f) for f in files):
-        files = [f for f in files if re.search(r"_\d\.fastq(\.gz)?$", f)]
     lens = {f: first_len(f) for f in files}
     cand1 = [f for f in files if lens[f] >= r1_len]
     if len(cand1) < 2:
