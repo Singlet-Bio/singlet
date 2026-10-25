@@ -49,7 +49,7 @@ add(id="pbmc10k_5p_v2", group="10x-5p", tier="core", title="10x PBMC 10k 5' v2 w
 add(id="nuclei2k_v2", group="nuclei", tier="core", title="10x mouse brain nuclei 2k, 3' v2", species="mouse", reference=M,
     chemistry="10x-3p-v2", source="10x", url=CF + "cell-exp/2.1.0/nuclei_2k/nuclei_2k_fastqs.tar", n_cells=2059,
     read_pairs_m=153, read_pairs_used_m=153, fastq_gb=12.7, truth="10x Cell Ranger matrix", licence="CC BY 4.0",
-    capabilities="gex-counts,spliced-unspliced,junctions-psi,cell-calling,ambient-rna", tools=CORE_GEX,
+    capabilities="gex-counts,spliced-unspliced,junctions-psi,cell-calling,ambient-rna,alignment-performance", tools=CORE_GEX,
     why="intron-rich single-nucleus data, where exon-only counting loses most molecules")
 add(id="mouse_brain_nuclei5k_v31", group="nuclei", tier="core", title="10x 5k adult mouse brain nuclei (CNIK), 3' v3.1",
     species="mouse", reference=M, chemistry="10x-3p-v3", source="10x",
@@ -217,6 +217,19 @@ add(id="mage150", group="sex-ancestry", tier="core", title="MAGE bulk RNA-seq of
     truth="1000 Genomes super-population, population and sex of each individual", licence="SRA public data (cite Taylor et al. 2024)",
     capabilities="genetic-ancestry,chromosomal-sex", tools="singlet,somalier,peddy",
     why="the only RNA-seq of 1000 Genomes individuals from every super-population; reads are thinned to single-cell donor depths")
+
+# ---- performance benchmarks (alignment-performance deep sample, download)
+add(id="gsm5815984", group="deep", tier="extended", title="GSM5815984 human adrenal, 10x 3' v3, two runs, all 489M read pairs (deep sample)",
+    species="human", reference=G, chemistry="10x-3p-v3", source="geo", gsm="GSM5815984", srr="SRR17615087;SRR17615088",
+    other="PRJNA797105", n_cells=10126, read_pairs_m=489.5, read_pairs_used_m=489.5, fastq_gb=95,
+    truth="no truth: timing on identical reads", licence="GEO public data (cite paper)", capabilities="alignment-performance",
+    tools="singlet,starsolo,alevinfry",
+    why="a deep library (37% saturation at full depth) where the sequence cache hits 66%; the depth the atlas re-run processes")
+add(id="sra_download_set", group="download", tier="core", title="Four 10x 3' GEX runs from the atlas re-run universe (SRA)",
+    species="human", reference="", chemistry="10x-3p-v3", source="sra", srr="SRR24098804;SRR25032524;SRR20115176;SRR23322292",
+    read_pairs_m=132.5, read_pairs_used_m=132.5, fastq_gb=14, truth="NCBI's own decode of the archive (prefetch + fasterq-dump)",
+    licence="SRA public data", capabilities="download", tools="singlet,fasterq-dump,prefetch,aws-s3,ena-https",
+    why="32 to 36 M read pairs and 1.2 to 3.4 GB each: large enough to measure throughput, small enough for repeated runs")
 
 with open(sys.argv[1], "w", newline="", encoding="utf-8") as fh:
     fh.write("# Singlet 1.0.0 public benchmark cohort. One row per dataset; cohort.md explains the choices and the budget.\n")

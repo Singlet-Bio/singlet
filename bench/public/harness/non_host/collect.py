@@ -46,9 +46,10 @@ def rss(p: Path) -> float:
 
 
 def read_nodes(p: Path) -> str:
-    t = p.read_text(errors="replace") if p.exists() else ""
-    m = re.search(r"node=(\S+?)(?:\.clipper\S*)? cpu=(.*?) 20\d\d-", t)
-    return f"{m.group(1)} ({m.group(2)})" if m else ""
+    t = p.read_text(errors="replace").splitlines()[0] if p.exists() and p.stat().st_size else ""
+    n = re.search(r"node=([^\s.]+)", t)
+    c = re.search(r"cpu=(.*?)(?: 20\d\d-\S+)?$", t)
+    return f"{n.group(1)} ({c.group(1).strip()})" if n and c else (n.group(1) if n else "")
 
 
 def main():

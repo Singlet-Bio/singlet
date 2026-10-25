@@ -6,7 +6,8 @@ KRAKEN_OUT / KRAKEN_REPORT   kraken2 --output / --report files for the cDNA mate
 BARCODE_MATE_FASTQ           the barcode mate (STAR *_Unmapped.out.mate2: cell barcode then UMI), same read order
 CELLS_TXT                    called-cell barcodes, one per line (the set every tool is scored on)
 Writes OUT_DIR/species.tsv (taxid, name, domain, reads) and OUT_DIR/percell.tsv.gz (barcode, taxid, name, domain, reads,
-umis). Reads classified below species rank are rolled up to their species; the host (Homo sapiens, taxid 9606) is dropped.
+umis). Reads classified below species rank are rolled up to their species. Reads assigned above species rank (genus,
+"cellular organisms", root, ...) are not species-level calls and are dropped, as are host reads (Homo sapiens, taxid 9606).
 The species and domain of every taxon come from the Kraken2 report itself (indentation = depth), so no taxonomy file is
 needed. A cell barcode matches a called cell exactly or with one mismatch (ambiguous one-mismatch matches are dropped);
 a molecule is a distinct (cell, UMI, species).
@@ -42,9 +43,8 @@ def load_report(path):
                     sp = t
                 if t[1] in ("D", "K", "R1") and not dom:
                     dom = t[2]
-            if sp is None:
-                sp = (taxid, rank, name)
-            out[taxid] = (sp[0], sp[2], dom)
+            # reads assigned above species rank (genus, family, "cellular organisms", root, ...) are not species-level calls
+            out[taxid] = (sp[0], sp[2], dom) if sp is not None else (None, name, dom)
             names[taxid] = name
     return out
 
@@ -67,7 +67,8 @@ def main():
                         cmap[n] = None
     r2sp = {}
     n_total = n_class = 0
-    with open(ko) as fh:
+    import gzip as _gz
+    with (_gz.open(ko, "rt") if ko.endswith(".gz") else open(ko)) as fh:
         for ln in fh:
             n_total += 1
             if ln[0] != "C":
@@ -75,7 +76,7 @@ def main():
             p = ln.split("\t")
             t = int(p[2])
             sp = tax.get(t)
-            if sp is None or sp[0] == 9606:
+            if sp is None or sp[0] is None or sp[0] == 9606:
                 continue
             r2sp[p[1]] = sp
             n_class += 1
