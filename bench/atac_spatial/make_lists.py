@@ -48,6 +48,27 @@ with gzip.open(f"{out}/737K-arc-v1-atac-gex.tsv.gz", "wt") as fo:
     for a, g in allp.sort_values("atac_barcode")[["atac_barcode", "gex_barcode"]].itertuples(index=False):
         fo.write(f"{a}\t{g}\n")
 
+# ── scATAC (Cell Ranger ATAC) whitelist from public singlecell.csv files ──
+# The bundled 737K-cratac-v1.txt is byte-identical to 737K-august-2016.txt (3' v2 GEX); this rebuilds the real list.
+sc = {}
+for f in sorted(glob.glob(f"{data}/cratac_sc/*_singlecell.csv") + glob.glob(f"{data}/atac_pbmc_5k_nextgem/*_singlecell.csv")):
+    d = pd.read_csv(f, usecols=["barcode", "is__cell_barcode"])
+    d = d[d.barcode != "NO_BARCODE"].copy()
+    d["barcode"] = d.barcode.str.replace("-1", "", regex=False)
+    sc[os.path.basename(f).replace("_singlecell.csv", "")] = d
+if sc:
+    allb = set(pd.concat(sc.values()).barcode)
+    old = set(l.strip() for l in open(f"{wl_dir}/737K-cratac-v1.txt") if l.strip())
+    loo = {}
+    for k, v in sc.items():
+        others = set(pd.concat([w for kk, w in sc.items() if kk != k]).barcode)
+        cells = v[v.is__cell_barcode == 1]
+        loo[k] = {"cells": int(len(cells)), "known_from_others": float(cells.barcode.isin(others).mean())}
+    rep["cratac"] = {"datasets": {k: int(len(v)) for k, v in sc.items()}, "union": len(allb),
+                     "overlap_with_bundled_737K-cratac-v1": len(allb & old), "leave_one_out": loo}
+    with open(f"{out}/737K-cratac-v1.txt", "w") as fo:
+        fo.write("\n".join(sorted(allb)) + "\n")
+
 # ── Visium v1 ──
 coords = {}
 for t in sorted(glob.glob(f"{data}/V1_*/*_spatial.tar.gz")):
