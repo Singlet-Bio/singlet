@@ -8,7 +8,7 @@
   collect   gather every sample's summary rows into OUT/ingest/sample_cell_summary.<k>.json, <= 2000 rows per file
 
 Studies: --gse GSE1 GSE2 ... or --list FILE (one study per line: "GSE" or "GSE GSM [GSM ...]" or "GSE path/to/bundle.singlet").
-v2 studies are read from data.singlet.bio; legacy studies from a local bundle or one downloaded to --scratch (deleted after the
+per-sample studies are read from data.singlet.bio; legacy studies from a local bundle or one downloaded to --scratch (deleted after the
 study unless --keep-bundles). --shard i --shards n takes every n-th study (Slurm arrays: scripts/features_run.sbatch). Samples
 whose sidecars exist are skipped unless --force. Nothing is uploaded: the ingest and R2 commands are printed by `collect`.
 
@@ -117,16 +117,16 @@ def cmd_run(a):
     for gse, gsms, bundle in read_list(a):
         fetched = None
         try:
-            v2 = bundle is None and FIO.is_v2(gse)
-            if not v2 and bundle is None:
+            is_st = bundle is None and FIO.is_store(gse)
+            if not is_st and bundle is None:
                 bundle = fetched = FIO.fetch_bundle(gse, scratch)
-            todo = gsms or (FIO.v2_gsms(gse) if v2 else FIO.bundle_gsms(bundle))
+            todo = gsms or (FIO.store_gsms(gse) if is_st else FIO.bundle_gsms(bundle))
             todo = [g for g in todo if a.force or not done(out, gse, g, sets)]
             if not todo:
                 log(gse=gse, status="done")
                 continue
             t = time.perf_counter()
-            for gsm, s in FIO.iter_samples(gse, todo, bundle=bundle, v2=v2):
+            for gsm, s in FIO.iter_samples(gse, todo, bundle=bundle, store=is_st):
                 read_s = time.perf_counter() - t
                 if isinstance(s, Exception):
                     log(
@@ -199,8 +199,8 @@ def cmd_collect(a):
         '-H "X-Ingest-Token: $INGEST_TOKEN" -H "Content-Type: application/json" --data-binary @$f; done'
     )
     print(
-        "  sidecars: the cell-index builder normalises them (singlet.v2.atlas.normalize_feature_sidecar -> "
-        "v2/cf/<GSM>/<set>.<d16>.parquet) and attaches them to the study manifest; see docs/cell_features.md"
+        "  sidecars: the cell-index builder normalises them (singlet.store.atlas.normalize_feature_sidecar -> "
+        "store/cf/<GSM>/<set>.<d16>.parquet) and attaches them to the study manifest; see docs/cell_features.md"
     )
 
 

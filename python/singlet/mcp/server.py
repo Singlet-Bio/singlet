@@ -8,7 +8,7 @@ Exposes these tools to any MCP client (Claude Desktop, Cursor, VS Code Copilot):
   - singlet_nl_search:  Natural-language search → interpreted filters + accessions
   - singlet_search:     Search processed single-cell datasets
   - singlet_qc:        Get QC metrics for a sample
-  - singlet_load:      Get download/access info for a sample (v2: object URL, member byte ranges, pack ids)
+  - singlet_load:      Get download/access info for a sample (store: object URL, member byte ranges, pack ids)
   - singlet_slice_cells: Select cells of a study by cell-table filters and fetch only their chunks
   - singlet_browse:    Browse samples with filters (organism, protocol, tissue, status)
   - singlet_protocols: Get protocol distribution and success rates
@@ -209,7 +209,7 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="singlet_load",
             description=(
-                "Get access information for loading a processed sample: the v2 sample object URL, the byte "
+                "Get access information for loading a processed sample: the store sample object URL, the byte "
                 "range of each member (an HTTP Range request fetches one member), the vocabulary pack ids and "
                 "the one-line singlet.load() call. Pass if_rev to get {unchanged:true} when the study has not changed."
             ),
@@ -596,33 +596,33 @@ async def _tool_qc(args: dict) -> dict:
     }
 
 
-def _v2_sample_info(gse_id: str, gsm_id: str, if_rev: str | None = None) -> dict | None:
-    """Download information for one sample from the study's v2 manifest, or None when the study has no v2 manifest.
+def _store_sample_info(gse_id: str, gsm_id: str, if_rev: str | None = None) -> dict | None:
+    """Download information for one sample from the study's store manifest, or None when the study has no store manifest.
 
     The answer is what a client needs to fetch the sample without further requests: the object URL and size, the byte range
     of every member, the pack ids, and the single coalesced range ``singlet.load`` issues for the gene-level matrices."""
-    from singlet.v2 import client as v2
+    from singlet.store import client as _store
 
     try:
-        st = v2.open_study(gse_id)
-    except v2.StudyNotFound:
+        st = _store.open_study(gse_id)
+    except _store.StudyNotFound:
         return None
     if if_rev and st.rev == if_rev:
         return {"unchanged": True, "rev": st.rev}
     sm = st.samples.get(gsm_id)
     if sm is None:
-        return {"error": f"{gsm_id} is not a sample of {gse_id} in the v2 manifest (rev {st.rev})"}
+        return {"error": f"{gsm_id} is not a sample of {gse_id} in the store manifest (rev {st.rev})"}
     members = {
         n: [m.off, m.len, m.kind]
         for n, m in sm.members.items()
         if not n.startswith("vector:") and not n.endswith("#csc")
     }
-    need = [sm.members[n] for n in (v2.CELLS, v2.EXON, v2.INTRON) if n in sm.members]
-    co = v2._coalesce([(m.off, m.len) for m in need])
+    need = [sm.members[n] for n in (_store.CELLS, _store.EXON, _store.INTRON) if n in sm.members]
+    co = _store._coalesce([(m.off, m.len) for m in need])
     return {
-        "format": "v2",
+        "format": "singlet-store",
         "rev": st.rev,
-        "manifest": st.transport.url(f"v2/m/{gse_id}.json"),
+        "manifest": st.transport.url(st.manifest_key),
         "object": st.transport.url(sm.key),
         "bytes": sm.bytes,
         "sha256": sm.sha256,
@@ -642,7 +642,7 @@ def _v2_sample_info(gse_id: str, gsm_id: str, if_rev: str | None = None) -> dict
 async def _tool_load(args: dict) -> dict:
     """Get load/access info for a sample.
 
-    For a migrated study (v2): the sample object URL, member byte ranges, pack ids, and the one-line load call.
+    For a migrated study (store): the sample object URL, member byte ranges, pack ids, and the one-line load call.
     Otherwise the legacy per-study bundle URL (deprecated)."""
     gsm_id = args["gsm_id"]
     sample = _lookup_gsm(gsm_id)
@@ -661,16 +661,16 @@ async def _tool_load(args: dict) -> dict:
         "load": f'singlet.load("{gsm_id}")',
         "web_url": f"https://singlet.bio/sample/{gsm_id}",
     }
-    v2 = None
+    store_info = None
     if gse_id:
         try:
-            v2 = _v2_sample_info(gse_id, gsm_id, args.get("if_rev"))
+            store_info = _store_sample_info(gse_id, gsm_id, args.get("if_rev"))
         except Exception as e:  # noqa: BLE001 - the data host being unreachable must not hide the catalog answer
-            out["v2_error"] = str(e)
-    if v2 is not None:
-        if v2.get("unchanged"):
-            return {"gsm_id": gsm_id, "gse_id": gse_id, **v2}
-        out["v2"] = v2
+            out["store_error"] = str(e)
+    if store_info is not None:
+        if store_info.get("unchanged"):
+            return {"gsm_id": gsm_id, "gse_id": gse_id, **store_info}
+        out["store"] = store_info
     else:
         from singlet._loader import _bundle_url
 
@@ -734,7 +734,7 @@ async def _tool_slice_cells(args: dict) -> dict:
     """Select cells by cell-table filters and read only the chunks that hold them; summary (and optional .h5ad)."""
     import numpy as np
 
-    from singlet.v2 import client as v2
+    from singlet.store import client as _store
 
     gse_id = args.get("gse_id")
     if not gse_id:
@@ -743,7 +743,7 @@ async def _tool_slice_cells(args: dict) -> dict:
         where = _parse_where(args.get("where"))
     except ValueError as e:
         return {"error": str(e)}
-    st = v2.open_study(gse_id)
+    st = _store.open_study(gse_id)
     r0, b0 = st.stats.requests, st.stats.bytes
     adata = st.cells(where, samples=args.get("samples"), max_cells=int(args.get("max_cells", 1000)))
     per = adata.obs["gsm_id"].value_counts().to_dict() if adata.n_obs else {}
@@ -765,7 +765,7 @@ async def _tool_slice_cells(args: dict) -> dict:
         adata.write_h5ad(path)
         out["saved"] = path
     out["load"] = (
-        f'singlet.v2.cells("{gse_id}", {args.get("where")!r}, samples={args.get("samples")!r}, max_cells={int(args.get("max_cells", 1000))})'
+        f'singlet.store.cells("{gse_id}", {args.get("where")!r}, samples={args.get("samples")!r}, max_cells={int(args.get("max_cells", 1000))})'
     )
     return out
 

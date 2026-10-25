@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// pz2 codec 1 core: class-order, lock-step multi-lane static rANS.  Format: docs/format-v2.md section 5.1.
+// pz2 codec 1 core: class-order, lock-step multi-lane static rANS.  Format: docs/format-store.md section 5.1.
 // Ported from bench/compression/kernels/w3_fast_*.h with: m up to 2^21 - 1, any u32 value (uniform fields wider than 16 bits are
 // coded as a low and a high part), integer-only frequency normalisation (bit-identical encoder output on every platform),
 // validated tables, and an end-of-stream integrity check.

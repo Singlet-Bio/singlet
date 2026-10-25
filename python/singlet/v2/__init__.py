@@ -1,7 +1,53 @@
 # SPDX-License-Identifier: MIT
-"""Singlet v2 data format: ``.s2`` sample objects, ``pz2`` matrices, packs, study manifests and the legacy migration.
+"""Deprecated alias of :mod:`singlet.store` (the per-sample format used to be called "v2").
 
-Specification: docs/format-v2.md. Decisions and workstreams: docs/v2-migration.md.
+DUAL (transition from the old name; removed in a later cleanup): ``import singlet.v2`` and ``from singlet.v2 import cellcall`` keep
+working and give the very same module objects as ``singlet.store`` / ``singlet.store.cellcall``.
 """
 
-FORMAT = "singlet-v2"
+import importlib
+import importlib.abc
+import importlib.util
+import sys
+import warnings
+
+import singlet.store as _store
+from singlet.store import *  # noqa: F401,F403
+from singlet.store import FORMAT  # noqa: F401
+
+warnings.warn(
+    "singlet.v2 is the old name of singlet.store and will be removed; import singlet.store instead",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
+_PREFIX = __name__ + "."
+_SAVED_SPECS: dict = {}
+
+
+class _AliasFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
+    """``singlet.v2.<sub>`` -> the module object ``singlet.store.<sub>`` (no copy)."""
+
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.startswith(_PREFIX):
+            try:
+                if importlib.util.find_spec("singlet.store." + fullname[len(_PREFIX) :]) is None:
+                    return None
+            except (ImportError, ValueError):
+                return None
+            return importlib.util.spec_from_loader(fullname, self)
+        return None
+
+    def create_module(self, spec):
+        mod = importlib.import_module("singlet.store." + spec.name[len(_PREFIX) :])
+        _SAVED_SPECS[mod.__name__] = (mod, mod.__spec__)
+        return mod
+
+    def exec_module(self, module):
+        mod, spec = _SAVED_SPECS.pop(module.__name__, (None, None))
+        if mod is not None:  # the import machinery overwrote __spec__ with the alias spec: put the real one back
+            mod.__spec__ = spec
+
+
+if not any(isinstance(f, _AliasFinder) for f in sys.meta_path):
+    sys.meta_path.append(_AliasFinder())

@@ -1,6 +1,8 @@
 # Renaming the per-sample format for Singlet 1.0.0 (no "v2" anywhere)
 
-Status: PLAN, for approval (2026-10-25). Nothing has been renamed yet, and no R2, D1 or Worker state has changed.
+Status: APPROVED 2026-10-25 (Zach) with extension `.s1`, decisions A keep magic bytes, B `called_v2` -> `called_ed`, C rename our own
+"v2" names only where trivial, E old Worker keeps `/v2/*` until cleanup. Implemented in this PR (P1) and website PR W1; the R2, D1
+and Worker steps (O1-O4) run only on the orchestrator's go-ahead.
 
 Decision being implemented (Zach): "Rename everything before 1.0.0, including the manifest format string, R2 paths and
 module names; plan it as one migration-safe change."
@@ -57,7 +59,7 @@ format string. A version, where one is needed, is a field (`manifest_version`, t
 | pack index format | `"format": "singlet-v2-packs"`, `"version": 1` | `"format": "singlet-store-packs"`, `"version": 1` |
 | legacy single-file format value in the API | `"singlet-v1"` | `"singlet-bundle"` (it also carries a version word) |
 | R2 prefix | `v2/` (`v2/s/`, `v2/m/`, `v2/ref/`, `v2/ledger/`, `v2/cidx/`, `v2/a/`, `v2/cf/`, `v2/x/`, `v2/cells/`) | `store/` with the same sub-prefixes (`store/s/`, `store/m/`, ...) |
-| sample object extension | `<d16>.s2` (also the `v2/x/<GSM>/adt.<d16>.s2` extra objects) | `<d16>.sgl` |
+| sample object extension | `<d16>.s2` (also the `v2/x/<GSM>/adt.<d16>.s2` extra objects) | `<d16>.s1` |
 | URL | `https://data.singlet.bio/v2/...` | `https://data.singlet.bio/store/...` |
 | cell index API | `POST /v2/cidx/query`, `/v2/cidx/gather`, `/v2/cidx/_part` | `POST /store/cidx/query`, ... |
 | data Worker | `workers/data-v2`, script `singlet-data-v2`, `X-Served-By: data-v2`, log prefix `data-v2:` | `workers/data`, script `singlet-data`, `X-Served-By: singlet-data`, log prefix `singlet-data:` |
@@ -193,7 +195,7 @@ The rules for the whole rename:
 * **Locating a study.** Try `store/m/<GSE>.json` first, then `v2/m/<GSE>.json`, then the legacy bundle (the existing
   `_LEGACY_FALLBACK_DEFAULT`).
 * **Manifest format.** Accept `format` in {`singlet-store`, `singlet-v2`}.
-* **Sample keys and packs.** Accept sample keys matching `^(store|v2)/s/GSM\d+/[0-9a-f]{32}\.(sgl|s2)$`. Fetch packs
+* **Sample keys and packs.** Accept sample keys matching `^(store|v2)/s/GSM\d+/[0-9a-f]{32}\.(s1|s2)$`. Fetch packs
   from the prefix of the manifest that named them.
 * **Cell call column.** Accept the old column name for the new one (`called_v2` read as `called_ed`, if Decision B is
   approved).
@@ -227,7 +229,7 @@ upload. It has three modes:
 
 | source | destination | how |
 |---|---|---|
-| `v2/s/GSM*/<d>.s2` (14) | `store/s/GSM*/<d>.sgl` | byte copy; sha256 must equal the source and D1 `v2_sample.sha256` |
+| `v2/s/GSM*/<d>.s2` (14) | `store/s/GSM*/<d>.s1` | byte copy; sha256 must equal the source and D1 `v2_sample.sha256` |
 | `v2/ref/<id>.pack` (161) | `store/ref/<id>.pack` | byte copy; sha256 must equal `index.json` |
 | `v2/ref/index.json` | `store/ref/index.json` | rewritten: `format: "singlet-store-packs"`, otherwise identical (no keys inside) |
 | `v2/ledger/GSE145370.jsonl` | `store/ledger/GSE145370.jsonl` | byte copy (a historical record; its key strings stay old) |
@@ -256,7 +258,7 @@ ALTER TABLE v2_migration RENAME TO store_migration;
 ALTER TABLE store_migration RENAME COLUMN v2_bytes TO store_bytes;
 -- index renames: DROP INDEX + CREATE INDEX with the new names
 UPDATE store_study     SET manifest_key = 'store/' || substr(manifest_key, 4) WHERE manifest_key LIKE 'v2/%';
-UPDATE store_sample    SET key = replace('store/' || substr(key, 4), '.s2', '.sgl') WHERE key LIKE 'v2/%';
+UPDATE store_sample    SET key = replace('store/' || substr(key, 4), '.s2', '.s1') WHERE key LIKE 'v2/%';
 -- rev: set to the recomputed rev of the rewritten manifest (written by store_rekey.py into the SQL it emits)
 CREATE VIEW v2_study     AS SELECT * FROM store_study;
 CREATE VIEW v2_sample    AS SELECT * FROM store_sample;
@@ -305,7 +307,7 @@ quotas reset once, which is harmless. The rate-limit namespace ids stay the same
 | step | repo / action | contents | needs before it | rollback |
 |---|---|---|---|---|
 | P0 | website: `docs/CELL-ARCHITECTURE.md` | canonical copy first (CLAUDE.md rule): `v2` → `store` in names and keys, plus a note on the transition. The canonical copy so far exists only on website PR #54 (`claude/ontology-filters-46958f`), not on main, so P0 is either a commit on #54 before it merges or a PR right after it. | — | revert PR |
-| P1 | singlet-bio PR | `git mv python/singlet/v2 python/singlet/store` and every import; the `singlet.v2` alias; constants `PREFIX = "store/"`, `EXT = ".sgl"`, `FORMAT = "singlet-store"`; dual read (3.1); `r/R/store.R` (no exported R name changes; conditions carry both the `singlet_store_*` and the `singlet_v2_*` classes until cleanup); old Python public names and env vars kept as deprecated aliases; scripts renamed; docs renamed with redirect stubs at the old paths; `called_v2` → `called_ed` (if B) in Python and R; `scripts/store_rekey.py`; tests (section 5). CELL-ARCHITECTURE copy synced from P0. | P0 | revert PR. No data is written. |
+| P1 | singlet-bio PR | `git mv python/singlet/v2 python/singlet/store` and every import; the `singlet.v2` alias; constants `PREFIX = "store/"`, `EXT = ".s1"`, `FORMAT = "singlet-store"`; dual read (3.1); `r/R/store.R` (no exported R name changes; conditions carry both the `singlet_store_*` and the `singlet_v2_*` classes until cleanup); old Python public names and env vars kept as deprecated aliases; scripts renamed; docs renamed with redirect stubs at the old paths; `called_v2` → `called_ed` (if B) in Python and R; `scripts/store_rekey.py`; tests (section 5). CELL-ARCHITECTURE copy synced from P0. | P0 | revert PR. No data is written. |
 | W1 | website PR | `workers/data` (dual prefix, new name, header); Pages: table names, `series.store` + alias, export columns, MCP text, env var fallback, ingest endpoint renamed (old path kept as an alias), D1 migration file, fixtures regenerated by P1's writer; smoke script | P1 merged (fixtures come from it) | revert PR |
 | O1 | R2 copy (`store_rekey.py --apply`, then `--verify`) | section 3.2 | P1 merged | delete `store/` keys |
 | O2 | deploy Worker `singlet-data` on `store/*` | section 3.4, steps 1-2 | W1 merged, O1 verified | delete the new script |
@@ -347,7 +349,7 @@ public name, and C1 removes it in 1.0.1.
 
 * **Old and new readers, both directions.**
   * Python and R unit tests read a fixture study in each tree: an old manifest (`singlet-v2`, `v2/` keys, `.s2`) and a
-    new one (`singlet-store`, `store/` keys, `.sgl`). Both must give identical matrices and obs.
+    new one (`singlet-store`, `store/` keys, `.s1`). Both must give identical matrices and obs.
   * A test asserts that writers never emit an old name: the manifest `format`, key prefix, extension, pack index
     `format`, and (if B) the cell call column.
 * **Alias.** `import singlet.v2.cellcall` works and warns. `singlet.v2.cellcall is singlet.store.cellcall`.
@@ -371,7 +373,7 @@ public name, and C1 removes it in 1.0.1.
 | work | touches | conflict | plan |
 |---|---|---|---|
 | prod/atlas-rerun #31, prod/campaign, prod/modality-fixes #36 (stacked) | adds `include/singlet/pileup/called_v2.h`, `tests/cpp/test_called_v2.cpp`, `bench/called_v2*/` (they import `singlet.v2.cellcall`), golden fixtures | none for P1: they do not edit `python/singlet/v2/`, and the alias keeps their imports working | land #31 / #36 first if they are ready. The C++ `called_v2` rename (P2) follows on main. The campaign must start from a commit that has P1 (and P2 if B), so the objects it writes carry only new names. |
-| ADT #29 | edits `docs/format-v2.md`, `python/singlet/v2/client.py`, `r/R/v2.R`; defines `v2/x/<GSM>/adt.<d16>.s2` | real conflict with the `git mv` | merge #29 before P1, or rebase #29 after P1. Git's rename detection carries edits across `git mv`. Its key becomes `store/x/<GSM>/adt.<d16>.sgl`. |
+| ADT #29 | edits `docs/format-v2.md`, `python/singlet/v2/client.py`, `r/R/v2.R`; defines `v2/x/<GSM>/adt.<d16>.s2` | real conflict with the `git mv` | merge #29 before P1, or rebase #29 after P1. Git's rename detection carries edits across `git mv`. Its key becomes `store/x/<GSM>/adt.<d16>.s1`. |
 | plan/atlas-rerun #30 | `bench/atlas_rerun/cost_model_v2.py` (a cost model revision) | none: it is a model version, not the format | rename optional, to `cost_model.py` |
 | cell index, junction table, labels interchange (merged into main via #13) | `singlet.v2.atlas`, `v2/cidx/`, `v2/a/`, `v2/cf/` | covered by P1 / W1 | nothing published under `v2/cidx/` yet. The first build is written to `store/cidx/`. |
 | website ontology #54 | new D1 tables (`sample_term`, `sample_property`, `cell_feature`, `sample_cell_summary`) | migration file numbering only | W1's migration takes the next free number after #54 |
@@ -394,5 +396,5 @@ public name, and C1 removes it in 1.0.1.
   * reword the two comments.
 
   The 10x chemistry names (`10xv2`) are fixed external names and never change.
-* **D. Extension `.sgl`.** Alternatives: `.sample`, or no extension (the key already says `s/`).
+* **D. Extension.** Decided: `.s1`.
 * **E. Old Worker.** Recommended: keep `singlet-data-v2` on `/v2/*` until cleanup (C1), rather than moving the route.

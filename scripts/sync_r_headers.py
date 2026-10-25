@@ -11,7 +11,7 @@ The R package must be self-contained, so the codec headers are staged into
 ``SINGLET_SPARSE_ACCUMULATOR_DEFINED`` guard, because R does not ship the
 sparse accumulator (the template under the guard is never instantiated there).
 
-The v2 matrix codec is staged verbatim too: ``include/singlet/pz2/pz2.h`` and
+The pz2 matrix codec is staged verbatim too: ``include/singlet/pz2/pz2.h`` and
 ``include/singlet/pz2/detail/*.h`` to ``r/inst/include/singlet/pz2/``, and the
 binding helpers ``src/bindings/common/singlet/pz2_client.h`` to
 ``r/inst/include/singlet/pz2_client.h``. A file that no longer exists in the
@@ -47,7 +47,7 @@ CLIENT_SRC = ROOT / "src" / "bindings" / "common" / "singlet" / "pz2_client.h"
 
 
 def pz2_files() -> dict:
-    """{relative path under r/inst/include/singlet: source path} for the v2 codec headers and the binding helpers."""
+    """{relative path under r/inst/include/singlet: source path} for the pz2 codec headers and the binding helpers."""
     files = {}
     if PZ2_SRC.is_dir():
         for p in sorted(PZ2_SRC.rglob("*.h")):

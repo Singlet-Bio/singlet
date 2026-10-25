@@ -175,7 +175,7 @@ step using PubMed cross-references.
 ## Per-GSM `.1pz` Files
 
 Each GSM directory stores the raw pipeline `.1pz` outputs verbatim (STORED in
-ZIP). The pipeline v1 format uses `TP1Z` magic; the v2 format uses `1PZ02`.
+ZIP). The pipeline v1 format uses `TP1Z` magic; the per-sample format uses `1PZ02`.
 Both are read by the in-tree codec (`include/singlet/pileup/pz_reader.h`).
 
 | File | Content |
