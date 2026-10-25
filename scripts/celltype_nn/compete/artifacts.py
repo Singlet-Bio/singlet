@@ -114,7 +114,9 @@ def main(argv=None) -> int:
                     c["pred_cl"] = c["pred_cl"].where(c["pred_cl"].astype(str).str.startswith("CL:"), None)
                     c["pruned"] = c["pruned"].where(c["pruned"].astype(str).str.startswith("CL:"), None)
                     parts.append(c.merge(truth[["gse", "gsm", "barcode"]][truth["gsm"] == r.gsm], on=["gse", "gsm", "barcode"]))
-        tf = base / "timings.jsonl"
+        tf = base / "timings_controlled.jsonl"  # timing.py: one exclusive node, same threads, tools back to back
+        if not tf.exists():
+            tf = base / "timings.jsonl"
         if tf.exists():
             T = {(t["gse"], t["gsm"]): t for t in (json.loads(x) for x in tf.read_text().splitlines() if x.strip())}
             cells = sum(t["n_cells"] for t in T.values())
