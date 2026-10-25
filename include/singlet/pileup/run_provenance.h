@@ -9,8 +9,10 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #ifndef SINGLET_GIT_COMMIT
@@ -146,6 +148,55 @@ inline std::string json_str(const std::string& s) {
     return o + "\"";
 }
 
+/// True for an output path (relative to the run directory) that must never reach a public object. Mirrors
+/// python/singlet/_restricted.py: private/ (genotype-bearing outputs), donor/ except donor_assignments.tsv, mt/ except
+/// mt_summary.tsv, ase_counts.tsv, snp_* and VCF files.
+inline bool is_private_output(const std::string& rel) {
+    if (rel.rfind("private/", 0) == 0) return true;
+    if (rel.rfind("donor/", 0) == 0) return rel != "donor/donor_assignments.tsv";
+    if (rel.rfind("mt/", 0) == 0) return rel != "mt/mt_summary.tsv";
+    if (rel == "ase_counts.tsv") return true;
+    const std::string name = rel.substr(rel.find_last_of('/') == std::string::npos ? 0 : rel.find_last_of('/') + 1);
+    if (name.rfind("snp_", 0) == 0) return true;
+    auto ends = [&](const char* suf) {
+        const size_t n = std::strlen(suf);
+        return name.size() >= n && name.compare(name.size() - n, n, suf) == 0;
+    };
+    return ends(".vcf") || ends(".vcf.gz") || ends(".bcf");
+}
+
+/// Inventory of the files in a run directory: {"n_public", "n_private", "bytes_public", "bytes_private", "files":
+/// [{"path", "bytes", "visibility"}]}. BAM files and STAR temporaries are left out.
+inline std::string outputs_inventory_json(const std::string& out_dir) {
+    namespace fs = std::filesystem;
+    std::vector<std::pair<std::string, uint64_t>> files;
+    std::error_code ec;
+    fs::path root(out_dir);
+    for (fs::recursive_directory_iterator it(root, ec), end; !ec && it != end; it.increment(ec)) {
+        if (!it->is_regular_file(ec)) continue;
+        std::string rel = fs::relative(it->path(), root, ec).generic_string();
+        if (ec) { ec.clear(); continue; }
+        if (rel.find("_STARtmp") != std::string::npos) continue;
+        if (rel.size() > 4 && (rel.compare(rel.size() - 4, 4, ".bam") == 0 || rel.compare(rel.size() - 4, 4, ".bai") == 0))
+            continue;
+        files.emplace_back(rel, static_cast<uint64_t>(it->file_size(ec)));
+    }
+    std::sort(files.begin(), files.end());
+    uint64_t np = 0, nv = 0, bp = 0, bv = 0;
+    std::ostringstream f;
+    for (size_t i = 0; i < files.size(); ++i) {
+        const bool priv = is_private_output(files[i].first);
+        (priv ? nv : np) += 1;
+        (priv ? bv : bp) += files[i].second;
+        f << (i ? ", " : "") << "{\"path\": " << json_str(files[i].first) << ", \"bytes\": " << files[i].second
+          << ", \"visibility\": \"" << (priv ? "private" : "public") << "\"}";
+    }
+    std::ostringstream o;
+    o << "{\"n_public\": " << np << ", \"n_private\": " << nv << ", \"bytes_public\": " << bp
+      << ", \"bytes_private\": " << bv << ", \"files\": [" << f.str() << "]}";
+    return o.str();
+}
+
 struct RunProvenance {
     std::string engine_version;
     std::string engine_commit = SINGLET_GIT_COMMIT;
@@ -160,6 +211,9 @@ struct RunProvenance {
     std::string cell_call_json;           ///< knee + called_v2 parameters
     bool reverse_strand = false;
     std::string strand_source;            ///< "header", "probe", "retry", "user", "default"
+    /// Further provenance fields as (key, raw JSON value): 5' clip decision, SNP panel, BAM sort mode, the output
+    /// inventory (public vs private members), ... Written after "cell_call" in insertion order.
+    std::vector<std::pair<std::string, std::string>> extra;
 
     /// The "provenance" object (no trailing comma).
     std::string json(const std::string& ind = "  ") const {
@@ -179,8 +233,9 @@ struct RunProvenance {
           << ind << "  \"reverse_strand\": " << (reverse_strand ? "true" : "false") << ",\n"
           << ind << "  \"strand_source\": " << json_str(strand_source) << ",\n"
           << ind << "  \"cell_caller\": " << json_str(cell_caller) << ",\n"
-          << ind << "  \"cell_call\": " << (cell_call_json.empty() ? std::string("null") : cell_call_json) << "\n"
-          << ind << "}";
+          << ind << "  \"cell_call\": " << (cell_call_json.empty() ? std::string("null") : cell_call_json);
+        for (const auto& kv : extra) o << ",\n" << ind << "  " << json_str(kv.first) << ": " << kv.second;
+        o << "\n" << ind << "}";
         return o.str();
     }
 };

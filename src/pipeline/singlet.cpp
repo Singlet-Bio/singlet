@@ -64,6 +64,7 @@
 #include "singlet/pileup/nonhost/nonhost_aligner.h"
 #include "singlet/pileup/nonhost/nonhost_cell_matrix.h"
 #include "singlet/pileup/tiny_dataset_guard.h"
+#include "singlet/fq/prefix_probe.h"
 #include "singlet/pileup/mega_sort_params.h"
 #include "singlet/pileup/atac_fragment.h"
 #include "singlet/pileup/atac_bin_counter.h"
@@ -1560,6 +1561,7 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
         std::cerr << "[nonhost] EM converged in " << n_em_iter
                   << " iterations, " << em_result.size() << " species above threshold\n";
 
+        std::vector<std::string> nonhost_missing_fasta;  // EM-confirmed species without a reference FASTA
         // ── Secondary alignment (NONHOST-SECONDARY-ALIGN) ────────────────────
         // For each EM-detected species, try seed-chain-extend alignment against
         // a per-species FASTA. Missing FASTAs are logged and skipped gracefully.
@@ -1580,10 +1582,12 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
                     if (stat(fna.c_str(), &fna_st) == 0)
                         std::cerr << "[nonhost] species_id=" << sa.species_id
                                   << " confirmed (FASTA found)\n";
-                    else
+                    else {
+                        nonhost_missing_fasta.push_back(fna);
                         std::cerr << "[nonhost] WARNING: species_id=" << sa.species_id
                                   << " confirmed by EM but no reference FASTA available"
                                      " for secondary alignment (" << fna << " not found)\n";
+                    }
                 }
                 singlet::nonhost::NonHostAligner sec_aligner(eff_ref_dir);
                 auto sec_results = sec_aligner.align(reads, em_result);
@@ -1605,13 +1609,18 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
 
                 std::unordered_map<uint32_t, singlet::nonhost::NonHostCategory> kmap_cell;
                 std::unordered_map<uint32_t, std::string> snames;
+                std::unordered_set<uint32_t> em_confirmed;
                 for (const auto& sa : em_result) {
                     kmap_cell[sa.species_id] = sa.kingdom;
                     snames[sa.species_id]    = species_name_lookup(sa.species_id);
+                    em_confirmed.insert(sa.species_id);
                 }
 
+                // Only EM-confirmed species are counted per cell (none confirmed -> empty table).
                 auto cell_mat = singlet::nonhost::NonHostCellMatrix::build(
-                    tagged, multi_hits, valid_barcodes, snames, kmap_cell);
+                    tagged, multi_hits, valid_barcodes, snames, kmap_cell, &em_confirmed);
+                // The directory must exist before the write (a fresh output dir lost the table).
+                std::filesystem::create_directories(out_prefix + "/nonhost");
                 cell_mat.write(out_prefix + "/nonhost");
                 std::cerr << "[nonhost] per-cell matrix: " << cell_mat.n_records()
                           << " cell\xc3\x97species records\n";
@@ -1689,6 +1698,11 @@ static void run_nonhost_em_screening(const std::string& viral_db_path,
                    << "  \"fungal_fraction\": "       << ff << ",\n"
                    << "  \"em_species_count\": "      << em_result.size() << ",\n"
                    << "  \"em_iterations\": "         << n_em_iter << ",\n"
+                   << "  \"per_cell_species\": \"em_confirmed_only\",\n"
+                   << "  \"missing_reference_fasta\": [";
+                for (size_t mi = 0; mi < nonhost_missing_fasta.size(); ++mi)
+                    jf << (mi ? ", " : "") << "\"" << nonhost_missing_fasta[mi] << "\"";
+                jf << "],\n"
                    << "  \"top_pathogens\": [\n";
 
                 size_t top_n = std::min(em_result.size(), static_cast<size_t>(10));
@@ -2550,10 +2564,13 @@ static void usage(const char* prog) {
         << "  --no-viral-screen      Disable viral screening\n"
         << "  --no-microbial-screen  Disable bacterial+fungal screening\n"
         << "  --nonhost-only         Screen only, skip Phase 2 alignment (future)\n"
-        << "  --bam-sort-mode MODE   BAM sort strategy: auto (default), memory, or disk\n"
+        << "  --bam-sort-mode MODE   BAM sort strategy: disk (default), auto, or memory\n"
         << "                         auto: picks mode based on estimated BAM size vs available RAM\n"
-        << "                         memory: force in-memory sort (current behaviour, fastest)\n"
-        << "                         disk: force disk-backed sort (prevents OOM on very large samples)\n\n"
+        << "                         memory: force in-memory sort (OOM-killed at 80 GB on 182M reads)\n"
+        << "                         disk: disk-backed sort (same output, no measured time penalty)\n"
+        << "  --no-clip5p            Never clip a constant 5' prefix from the cDNA read\n"
+        << "  --no-snps              In --pipeline mode, skip the default SNP panel (<ref-base>/pileup_indices)\n"
+        << "  --no-adapter-clip      Do not pass the protocol's 3' adapter / TSO to STAR (--clip3pAdapterSeq)\n\n"
         << "Legacy (deprecated — archive to .1fq first, then process):\n"
         << "  --reads R2 R1          FASTQ files (use 'singlet encode' instead)\n"
         << "  --sra FILE             SRA file (use 'singlet download' instead)\n"
@@ -2655,7 +2672,15 @@ int main(int argc, char* argv[]) {
     bool nonhost_only       = false; // --nonhost-only: screen but skip Phase 2 alignment (future)
     bool tagged_bam_enabled = false; // G-TAGGED-BAM: write tagged BAM after pileup
     uint32_t visium_min_umi = 100;     // V3: UMI threshold for tissue coverage metric
-    std::string bam_sort_mode = "auto"; // ADAPTIVE-BAM-SORT: auto|memory|disk
+    // ADAPTIVE-BAM-SORT: auto|memory|disk. Default disk: the in-RAM sort was OOM-killed at 80 GB on 182 M reads
+    // (Kang pool); disk sort gave identical output with no time penalty (docs/modality-benchmarks/genotype-pool.md).
+    std::string bam_sort_mode = "disk";
+    bool no_clip5p = false;              // --no-clip5p: never clip a constant 5' prefix from the cDNA read
+    bool no_adapter_clip = false;        // --no-adapter-clip: no STAR --clip3pAdapterSeq (protocol TSO / adapter)
+    std::string clip5p_probe_json;       // decision of the 5' prefix probe (provenance)
+    int clip5p_applied = 0;              // bases clipped from the cDNA read (metadata or probe; provenance)
+    bool no_default_snps = false;        // --no-snps: do not use the default SNP panel in --pipeline mode
+    std::string snp_panel_source = "none"; // "user", "default", "none" (provenance)
 
     // Track B cascade (T-L2-7 CLI flags)
     std::string cascade_mode = "off";    // --cascade {off,on,auto}
@@ -2676,7 +2701,10 @@ int main(int argc, char* argv[]) {
         else if (arg == "--barcodes" && i+1 < argc) { barcode_file = argv[++i]; user_provided_barcodes = true; }
         else if (arg == "--whitelist" && i+1 < argc) whitelist_file = argv[++i];
         else if (arg == "--exons" && i+1 < argc) config.exon_gtf_path = argv[++i];
-        else if (arg == "--snps" && i+1 < argc) config.snp_path = argv[++i];
+        else if (arg == "--snps" && i+1 < argc) { config.snp_path = argv[++i]; snp_panel_source = "user"; }
+        else if (arg == "--no-snps") no_default_snps = true;
+        else if (arg == "--no-clip5p") no_clip5p = true;
+        else if (arg == "--no-adapter-clip") no_adapter_clip = true;
         else if (arg == "--out-prefix" && i+1 < argc) out_prefix = argv[++i];
         else if (arg == "--star-threads" && i+1 < argc) { star_threads = std::atoi(argv[++i]); threads_specified = true; }
         else if (arg == "--pileup-threads" && i+1 < argc) pileup_threads = std::atoi(argv[++i]);
@@ -3292,6 +3320,33 @@ int main(int argc, char* argv[]) {
     config.threads = pileup_threads;
     config.umi_len = umi_len;
     if (pipeline_mode) config.count_mt = true;
+    if (pipeline_mode) config.count_polya = true;  // poly(A) site usage (3' protocols; skipped when reverse_strand)
+    // Default SNP panel in --pipeline mode (atlas re-run: donor demux and genotype doublets need it, and BAMs are
+    // deleted after each sample). Human: 1000G phase 3 AF >= 5% (chr-prefixed); mouse: Ensembl GRCm39 common SNPs.
+    // Resolved under --ref-base / SINGLET_REF_BASE as <ref_base>/pileup_indices/<panel>. Mixed-species references
+    // (barnyard) and other species get none. snp_ad / snp_dp go to <out>/private/ (never public).
+    if (pipeline_mode && config.snp_path.empty() && !no_default_snps && !genome_dir.empty()) {
+        std::string rb = ref_base;
+        if (rb.empty()) { const char* e = std::getenv("SINGLET_REF_BASE"); if (e && *e) rb = e; }
+        const bool human = genome_dir.find("GRCh38") != std::string::npos || genome_dir.find("hg38") != std::string::npos;
+        const bool mouse = genome_dir.find("GRCm39") != std::string::npos || genome_dir.find("mm39") != std::string::npos;
+        std::string panel;
+        if (human && !mouse) panel = "genome1K.phase3.SNP_AF5e2.chr1toX.hg38.sorted.chrprefix.vcf.gz";
+        else if (mouse && !human) panel = "mus_musculus.vcf.gz";
+        if (!rb.empty() && !panel.empty()) {
+            std::string cand = rb + "/pileup_indices/" + panel;
+            struct stat sst{};
+            if (stat(cand.c_str(), &sst) == 0) {
+                config.snp_path = cand;
+                snp_panel_source = "default";
+                std::cerr << "[singlet] Default SNP panel (--pipeline): " << cand << "
+";
+            } else {
+                std::cerr << "[singlet] WARNING: default SNP panel not found: " << cand << " (no donor demux)
+";
+            }
+        }
+    }
     if (pipeline_mode && !config.umi_dedup_directional && !no_dir_dedup_explicit) config.umi_dedup_directional = true;
 
     // ── Track B cascade validation (T-L2-7) ─────────────────────────────────
@@ -3559,7 +3614,7 @@ int main(int argc, char* argv[]) {
     std::thread fifo_writer_thread;    // Pass 2 writer (started after Phase 0.9)
     std::string fifo_r1_path;          // original R1 stream FIFO path (before reads_inverted swap)
     std::string fifo_r2_path;          // original R2 stream FIFO path
-    std::vector<std::string> fifo_first25_r2;  // first 25 R2 seqs captured in Pass 1
+    std::vector<std::string> fifo_first25_r2;  // R2 seqs sampled across all blocks in Pass 1 (prefix probe)
 
     // Hoisted from inner decode block so per-segment whitelist discovery
     // (Phase 0.9+) can read them after the onefq_mode block closes.
@@ -4435,6 +4490,9 @@ int main(int argc, char* argv[]) {
                 bc_freq_p1.resize(bc_dict_n_p1 + 1, 0);
             std::unordered_map<uint64_t, uint64_t> merged_bc_counts_p1;
 
+            const uint32_t probe_per_block_p1 =
+                std::max<uint32_t>(1u, (12000u + std::max<uint32_t>(total_blocks_p1, 1u) - 1u) /
+                                       std::max<uint32_t>(total_blocks_p1, 1u));
             for (uint32_t bi = 0; bi < total_blocks_p1; ++bi) {
                 uint64_t file_off_p1  = reader.block_offset(bi);
                 uint32_t comp_size_p1 = reader.block_comp_size(bi);
@@ -4460,12 +4518,17 @@ int main(int argc, char* argv[]) {
                 reader.decode_payload(raw_buf_p1.data(), raw_size_p1, bh_p1, blk_p1);
 
                 const bool has_dups_p1 = !blk_p1.dup_counts.empty();
+                const uint32_t probe_stride_p1 =
+                    std::max<uint32_t>(1u, blk_p1.n_reads / probe_per_block_p1);
                 for (uint32_t i = 0; i < blk_p1.n_reads; ++i) {
                     uint32_t repeat_p1 = has_dups_p1 ? blk_p1.dup_counts[i] : 1;
                     uint16_t r1len_p1  = blk_p1.r1_len(i);
                     uint16_t r2len_p1  = blk_p1.r2_len(i);
-                    // Capture first 25 R2 sequences from first block for prefix detection
-                    if (bi == 0 && fifo_first25_r2.size() < 25 && r2len_p1 > 0) {
+                    // Sample R2 sequences spread over all blocks for constant-prefix detection
+                    // (prefix_probe.h): the .1fq is barcode-sorted, so the first reads of a block are
+                    // duplicates of a few molecules and must not be used alone.
+                    if (r2len_p1 > 0 && (i % probe_stride_p1) == 0 &&
+                        fifo_first25_r2.size() < 20000) {
                         static constexpr char N2AP[5] = {'A','C','G','T','N'};
                         const uint8_t* r2s_p1 = blk_p1.r2_seq(i);
                         std::string seq_p1(r2len_p1, ' ');
@@ -4553,23 +4616,12 @@ int main(int argc, char* argv[]) {
                     if (s.size() > max_r2_len) max_r2_len = s.size();
                 }
             } else {
-                // File mode: read first 25 R2 sequences from the decoded FASTQ
-                FILE* r2_check = fopen(r2_tmp.c_str(), "r");
-                if (r2_check) {
-                    char line[4096];
-                    int lineno = 0;
-                    while (fgets(line, sizeof(line), r2_check) && lineno < 100) {
-                        if (lineno % 4 == 1) { // sequence line
-                            size_t len = strlen(line);
-                            if (len > 1) len--; // strip newline
-                            if (len > 0) has_seq = true;
-                            if (len > max_r2_len) max_r2_len = len;
-                            if (probe_seqs.size() < 25 && len > 0)
-                                probe_seqs.emplace_back(line, len);
-                        }
-                        ++lineno;
-                    }
-                    fclose(r2_check);
+                // File mode: sample R2 sequences at 1,000 positions spread through the decoded FASTQ
+                // (prefix_probe.h), not the first reads of a barcode-sorted file.
+                probe_seqs = singlet::fq::sample_fastq_spread(r2_tmp, 1000, 12);
+                for (const auto& s : probe_seqs) {
+                    has_seq = true;
+                    if (s.size() > max_r2_len) max_r2_len = s.size();
                 }
                 // B-G2-2: also verify R1 (barcode read) is non-empty
                 FILE* r1_check = fopen(r1_tmp.c_str(), "r");
@@ -4589,50 +4641,30 @@ int main(int argc, char* argv[]) {
                 }
             }
 
-                // Detect constant 5' prefix: count consecutive positions
-                // from position 0 where >75% of reads have the same base.
-                if (probe_seqs.size() >= 10 && max_r2_len >= 30) {
-                    int prefix_len = 0;
-                    for (size_t p = 0; p < max_r2_len; ++p) {
-                        int counts[256] = {};
-                        int total = 0;
-                        for (const auto& seq : probe_seqs) {
-                            if (p < seq.size()) {
-                                counts[static_cast<unsigned char>(seq[p])]++;
-                                total++;
-                            }
-                        }
-                        if (total < 5) break;
-                        int max_cnt = *std::max_element(counts, counts + 256);
-                        if (static_cast<double>(max_cnt) / total > 0.75) {
-                            prefix_len = static_cast<int>(p) + 1;
-                        } else {
-                            break;
-                        }
-                    }
-                    // Only clip if prefix is substantial (>10bp) — short TSO
-                    // prefixes (2-3bp GGG) are normal and should not be clipped.
-                    // Safety cap: skip clipping if it would leave <30bp remaining
-                    // (e.g. BD-Rhapsody targeted panels with 36bp R2).
-                    // Use max() to avoid overwriting a longer clip value from .1fq
-                    // metadata (written by the encode-time 1000-read detector).
-                    if (prefix_len > 10) {
-                        int remaining = static_cast<int>(max_r2_len) - prefix_len;
-                        if (remaining >= 15) {
-                            if (prefix_len > r2_clip5p) {
-                                r2_clip5p = prefix_len;
-                                std::cerr << "[singlet] WARNING: Detected " << prefix_len
-                                          << "bp constant 5' prefix in R2 reads.\n"
-                                          << "[singlet] Will trim " << prefix_len
-                                          << " bases from R2 5' end (file level; cDNA only).\n";
-                            }
-                        } else {
-                            std::cerr << "[singlet] WARNING: Detected " << prefix_len
-                                      << "bp constant 5' prefix in R2 (total " << max_r2_len
-                                      << "bp). Clipping would leave <15bp — skipping clip.\n";
-                        }
+                // Detect a constant 5' prefix on reads spread through the file (prefix_probe.h rules:
+                // >=1000 reads, >=80% one base per position, holds in both halves, >10 bp, not poly-A/T).
+                if (no_clip5p) {
+                    if (r2_clip5p > 0)
+                        std::cerr << "[singlet] --no-clip5p: ignoring clip5p_length=" << r2_clip5p << "\n";
+                    r2_clip5p = 0;
+                } else if (!probe_seqs.empty()) {
+                    auto pr = singlet::fq::detect_constant_prefix(probe_seqs);
+                    clip5p_probe_json = "{\"n_reads\": " + std::to_string(pr.n_reads) +
+                                        ", \"raw_prefix_len\": " + std::to_string(pr.raw_prefix_len) +
+                                        ", \"prefix_len\": " + std::to_string(pr.prefix_len) +
+                                        ", \"reason\": \"" + pr.reason + "\"}";
+                    std::cerr << "[singlet] 5' prefix probe: " << pr.n_reads << " reads, dominated prefix "
+                              << pr.raw_prefix_len << " bp, clip " << pr.prefix_len << " bp"
+                              << (pr.reason.empty() ? std::string() : " (" + pr.reason + ")") << "\n";
+                    if (pr.prefix_len > r2_clip5p) {
+                        r2_clip5p = pr.prefix_len;
+                        std::cerr << "[singlet] WARNING: Detected " << pr.prefix_len
+                                  << "bp constant 5' prefix in R2 reads.\n"
+                                  << "[singlet] Will trim " << pr.prefix_len
+                                  << " bases from R2 5' end (file level; cDNA only).\n";
                     }
                 }
+                clip5p_applied = r2_clip5p;
                 if (!has_seq || !has_r1_seq) {
                     const bool r2_empty = !has_seq;
                     const bool r1_empty = !has_r1_seq;
@@ -6573,6 +6605,9 @@ int main(int argc, char* argv[]) {
                     args.push_back("--soloCBstart");     args.push_back(cb_start_s.c_str());
                     args.push_back("--soloUMIstart");    args.push_back(umi_start_s.c_str());
                     args.push_back("--soloBarcodeReadLength"); args.push_back("0");
+                    // Per-barcode read fates (unmapped, antisense, mito, multi-mapped): parsed into
+                    // cell_qc_metrics.tsv by export (star_cell_read_stats.h); lost once the BAM is deleted.
+                    args.push_back("--soloCellReadStats"); args.push_back("Standard");
                 } else {
                     // CB_samTagOut fallback: whitelist-free or WL-missing protocols.
                     args.push_back("--soloType"); args.push_back("CB_samTagOut");
@@ -6968,7 +7003,7 @@ int main(int argc, char* argv[]) {
             // CellRanger4 mode relies on quality-score heuristics that break
             // when singlet decodes with --quality none (constant Phred=30),
             // causing 0% mapping on mouse 10xv3 and other samples.
-            if (!detected_adapter3p.empty()) {
+            if (!detected_adapter3p.empty() && !no_adapter_clip) {
                 args.push_back("--clip3pAdapterSeq");
                 args.push_back(detected_adapter3p.c_str());
                 args.push_back("--clip3pAdapterMMp");
@@ -8478,6 +8513,13 @@ int main(int argc, char* argv[]) {
                            : strand_from_user                   ? "user"
                            : strand_from_header                 ? "header"
                                                                 : "default";
+        rp.extra.emplace_back("clip5p", "{\"bases\": " + std::to_string(clip5p_applied) + ", \"disabled\": " +
+                                            (no_clip5p ? "true" : "false") + ", \"probe\": " +
+                                            (clip5p_probe_json.empty() ? std::string("null") : clip5p_probe_json) + "}");
+        rp.extra.emplace_back("snp_panel", "{\"source\": \"" + snp_panel_source + "\", \"path\": " +
+                                               singlet::json_str(config.snp_path) + "}");
+        rp.extra.emplace_back("bam_sort_mode", singlet::json_str(bam_sort_mode));
+        rp.extra.emplace_back("outputs", singlet::outputs_inventory_json(out_prefix));
         extra_json += "  \"cell_caller\": \"" + export_stats.cell_caller + "\",\n";
         extra_json += "  \"n_called_knee\": " + std::to_string(export_stats.n_knee_called) + ",\n";
         extra_json += "  \"n_called_cells\": " + std::to_string(export_stats.n_called_cells) + ",\n";

@@ -44,6 +44,7 @@
 #include "umi_dedup.h"
 #include "vdj_counter.h"
 #include "rrna_detect.h"
+#include "polya_sites.h"
 
 namespace singlet {
 
@@ -80,6 +81,7 @@ struct PileupConfig {
     bool reverse_strand = false;    // Invert strand filter (for 5' protocols)
     bool auto_strand = true;        // Probe orientation on nuclear exonic reads; may set or clear reverse_strand
     bool count_mt = false;          // Inline chrM allele pileup for heteroplasmy
+    bool count_polya = false;       // Record poly(A)-tailed read 3' ends (polya_sites.h); 3' protocols only
     bool aim_ancestry = true;          // N13: inject built-in AIM panel for ancestry classification
     std::string guide_ref_path;         // N18: CRISPR guide CSV (name,sequence); empty = disabled
     bool count_vdj = true;              // N17: V(D)J gene usage counting; requires exon_gtf_path
@@ -89,6 +91,32 @@ struct PileupConfig {
 };
 
 // Statistics collected during pileup
+/// Per-cell alignment QC from the BAM records of one barcode (primary, barcoded reads; lost once BAMs are deleted).
+struct CellAlignQC {
+    uint32_t multimapped = 0;    ///< reads with NH > 1
+    uint32_t unique = 0;         ///< reads with NH == 1
+    uint64_t mismatches = 0;     ///< sum of STAR nM over unique reads
+    uint64_t aligned_bases = 0;  ///< sum of M/=/X CIGAR lengths over unique reads (mismatch-rate denominator)
+    void merge(const CellAlignQC& o) {
+        multimapped += o.multimapped; unique += o.unique;
+        mismatches += o.mismatches; aligned_bases += o.aligned_bases;
+    }
+};
+
+inline void add_cell_align_qc(CellAlignQC& q, const bam1_t* b, int nh) {
+    if (nh > 1) { ++q.multimapped; return; }
+    ++q.unique;
+    if (const uint8_t* nm = bam_aux_get(b, "nM")) {
+        int64_t v = bam_aux2i(nm);
+        if (v > 0) q.mismatches += static_cast<uint64_t>(v);
+    }
+    const uint32_t* cig = bam_get_cigar(b);
+    for (uint32_t k = 0; k < b->core.n_cigar; ++k) {
+        const int op = bam_cigar_op(cig[k]);
+        if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) q.aligned_bases += bam_cigar_oplen(cig[k]);
+    }
+}
+
 struct PileupStats {
     uint64_t total_reads = 0;
     uint64_t mapped_reads = 0;
@@ -284,6 +312,7 @@ public:
         barcodes_.clear();
         bc_index_.map.clear();
         per_cell_reads_.clear();
+        per_cell_qc_.clear();
         return load_barcodes();
     }
 
@@ -411,6 +440,7 @@ public:
         // Initialize accumulators
         uint32_t n_barcodes = static_cast<uint32_t>(barcodes_.size());
         per_cell_reads_.assign(n_barcodes, 0);  // N20
+        per_cell_qc_.assign(n_barcodes, CellAlignQC{});
         snp_ad_.set_barcodes(barcodes_);
         snp_ad_.set_n_features(n_snps_loaded_);
         snp_dp_.set_barcodes(barcodes_);
@@ -679,6 +709,8 @@ public:
                 if (nh_tag) { nh = bam_aux2i(nh_tag); if (nh < 1) nh = 1; }
             }
             if (nh > 1) stats.multimapper_reads++;
+            if (static_cast<uint32_t>(bc_idx) < per_cell_qc_.size())
+                add_cell_align_qc(per_cell_qc_[static_cast<uint32_t>(bc_idx)], b, nh);
 
             bool high_mapq = (b->core.qual >= static_cast<uint8_t>(config_.min_mapq));
             if (!high_mapq && nh == 1) {
@@ -860,6 +892,12 @@ public:
                 ReadFeatures rf = classify_read(exon_gene, first_exon_idx, primary_multigene,
                                                 intron_overlaps, intron_gene, first_intron_idx,
                                                 stats);
+                if (nh == 1 && config_.count_polya && !config_.reverse_strand && rf.gene != UINT32_MAX) {
+                    uint64_t pk;
+                    if (polya_site_from_read(b, 6, 0.8, pk))
+                        polya_recs_.push_back({pk, rf.gene, static_cast<uint32_t>(bc_idx),
+                                               polya_umi_hash(umi_str, umi_len)});
+                }
                 if (nh == 1) {
                     // ── Unique read: count (molecules are labelled at finalize) ──
                     count_read(mol_store_, exon_acc_, intron_acc_, stats,
@@ -1127,6 +1165,8 @@ public:
         std::vector<uint32_t> intron_overlaps;
         // N20: per-cell read counts
         std::vector<uint32_t> cell_reads;
+        std::vector<CellAlignQC> cell_qc;  // per-cell alignment QC (multimappers, nM mismatches)
+        std::vector<PolyARecord> polya;    // poly(A)-tailed read ends (count_polya)
         // G-RRNA: per-worker rRNA detector
         singlet::RrnaDetector rrna_detector;
         // N22: per-worker WL ambient gene profile (populated when whitelist_path is set)
@@ -1240,6 +1280,7 @@ public:
             }
             wc.mm_buffer.reserve(100000);
             wc.cell_reads.assign(n_barcodes, 0);  // N20
+            wc.cell_qc.assign(n_barcodes, CellAlignQC{});
             // N22: WL ambient gene profile per worker
             if (!wl_amb_index_.empty() && has_gene_model_)
                 wc.wl_ambient_genes.assign(gene_model_.n_genes(), 0ULL);
@@ -1454,6 +1495,20 @@ public:
             for (uint32_t i = 0; i < n_barcodes && i < cr.size(); ++i)
                 per_cell_reads_[i] += cr[i];
         }
+        {
+            size_t np = polya_recs_.size();
+            for (int w = 0; w < n_workers; ++w) np += workers[w].polya.size();
+            polya_recs_.reserve(np);
+            for (int w = 0; w < n_workers; ++w) {
+                polya_recs_.insert(polya_recs_.end(), workers[w].polya.begin(), workers[w].polya.end());
+                std::vector<PolyARecord>().swap(workers[w].polya);
+            }
+        }
+        per_cell_qc_.assign(n_barcodes, CellAlignQC{});
+        for (int w = 0; w < n_workers; ++w) {
+            const auto& cq = workers[w].cell_qc;
+            for (uint32_t i = 0; i < n_barcodes && i < cq.size(); ++i) per_cell_qc_[i].merge(cq[i]);
+        }
         // SNP AD/DP
         merge_accumulators(snp_ad_, workers, [](WorkerContext& w) -> SparseAccumulator<uint8_t>& { return w.snp_ad; });
         merge_accumulators(snp_dp_, workers, [](WorkerContext& w) -> SparseAccumulator<uint8_t>& { return w.snp_dp; });
@@ -1593,6 +1648,11 @@ public:
     const std::vector<std::string>& barcodes() const { return barcodes_; }
     /// N20: per-barcode read counts (barcoded primary reads, pre-dedup)
     const std::vector<uint32_t>& per_cell_reads() const { return per_cell_reads_; }
+    /// Per-cell alignment QC over barcoded primary reads (multimappers, nM mismatches, aligned bases).
+    const std::vector<CellAlignQC>& per_cell_align_qc() const { return per_cell_qc_; }
+    /// Poly(A)-tailed read ends (count_polya); export clusters them (polya_sites.h). Mutable: export sorts in place.
+    std::vector<PolyARecord>& polya_records() const { return polya_recs_; }
+    const std::vector<std::string>& tid_to_chrom() const { return tid_to_chrom_; }
     /// N13: first SNP index belonging to the built-in AIM panel (UINT32_MAX if not injected)
     uint32_t aim_snp_start() const { return aim_snp_start_; }
     const std::vector<std::string>& snp_names() const { return snp_names_; }
@@ -1761,6 +1821,8 @@ private:
     }
     std::vector<std::string> barcodes_;
     std::vector<uint32_t> per_cell_reads_;  // N20: barcoded primary reads per cell (pre-dedup)
+    std::vector<CellAlignQC> per_cell_qc_;  // per-cell alignment QC (see CellAlignQC)
+    mutable std::vector<PolyARecord> polya_recs_;  // poly(A)-tailed read ends (count_polya)
     // Fast barcode lookup: C-string → index, no std::string construction
     struct BarcodeIndex {
         std::unordered_map<uint64_t, int32_t> map;
@@ -2969,6 +3031,8 @@ private:
         { uint8_t* nh_tag = bam_aux_get(b, "NH");
           if (nh_tag) { nh = bam_aux2i(nh_tag); if (nh < 1) nh = 1; } }
         if (nh > 1) wc.stats.multimapper_reads++;
+        if (static_cast<uint32_t>(bc_idx) < wc.cell_qc.size())
+            add_cell_align_qc(wc.cell_qc[static_cast<uint32_t>(bc_idx)], b, nh);
 
         bool high_mapq = (b->core.qual >= static_cast<uint8_t>(config_.min_mapq));
         if (!high_mapq && nh == 1) { wc.stats.low_mapq++; return; }
@@ -3115,6 +3179,12 @@ private:
             ReadFeatures rf = classify_read(exon_gene, first_exon_idx, primary_multigene,
                                             wc.intron_overlaps, intron_gene, first_intron_idx,
                                             wc.stats);
+            if (nh == 1 && config_.count_polya && !config_.reverse_strand && rf.gene != UINT32_MAX) {
+                uint64_t pk;
+                if (polya_site_from_read(b, 6, 0.8, pk))
+                    wc.polya.push_back({pk, rf.gene, static_cast<uint32_t>(bc_idx),
+                                        polya_umi_hash(umi_str, umi_len)});
+            }
             if (nh == 1) {
                 count_read(wc.mol_store, wc.exon, wc.intron, wc.stats,
                            static_cast<uint32_t>(bc_idx), rf, umi_str, umi_len);
