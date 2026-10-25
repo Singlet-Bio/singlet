@@ -96,7 +96,7 @@ def compute(artifact_dir: Path) -> dict:
             None, [], {"type": "informational"},
             notes=f"STARsolo Velocyto {s['starsolo'].get('A', float('nan')):.3f}, alevin-fry USA {s['alevinfry'].get('A', float('nan')):.3f}: "
                   "the spliced / ambiguous boundary is defined differently by each tool (see methods); not gated."))
-    resources = C.resource_rows(res, {"singlet": "singlet", "starsolo": "starsolo-velocyto", "alevinfry": "alevin-fry-usa"})
+    resources = C.resource_rows(res, {"singlet": "singlet", "starsolo": "starsolo-velocyto", "alevinfry": "alevin-fry-usa"}, ids)
     doc = {
         "schema": "singlet.benchmark.capability", "schema_version": "1.0.0", "capability": CAP,
         "title": "Spliced and unspliced layers",
@@ -114,7 +114,7 @@ def compute(artifact_dir: Path) -> dict:
             "bench/public/capabilities/clipper/singlet_public.sbatch": "harness"}),
         "reproduce": {"module": "bench/public/capabilities/spliced_unspliced.py", "function": "compute", "laptop_minutes": 2,
                       "clipper_command": "bash bench/public/capabilities/clipper/run_all.sh spliced-unspliced"},
-        "caveats": _caveats(),
+        "caveats": _caveats() + C.cohort_gap_caveat(CAP, ids),
     }
     doc["conclusion"] = _conclusion(stats, metrics, sh, len(ids))
     return C.finish(doc)
