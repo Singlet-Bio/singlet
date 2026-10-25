@@ -13,6 +13,7 @@ every other tool reads them. Each tool runs as its own process under ``/usr/bin/
 * ``adt_<dataset>_rna.parquet``: ``barcode``, ``gene``, ``count``: the RNA (Cell Ranger's matrix) of the genes the panel's
   antibodies map to, the same RNA for every tool's protein-RNA concordance;
 * ``adt_<dataset>_panel.tsv``: ``feature``, ``sequence``, ``gene``;
+* ``adt_<dataset>_cells.tsv``: ``barcode``, ``rna_total`` (the scored cells: Cell Ranger's filtered barcodes);
 * ``resources_adt_<dataset>_<tool>.json``: ``wall_s``, ``max_rss_gb``, ``threads``, command line, tool version.
 """
 
@@ -120,6 +121,9 @@ def prepare(a):
     rows = [gx[i] for i, s in enumerate(sym) if s in set(genes)]
     write_long(M[rows], list(ft.name.values[rows]), bcs, os.path.join(a.out, f"adt_{a.dataset}_rna.parquet"),
                cols=("barcode", "gene", "count"))
+    rna_total = np.asarray(M[gx].sum(axis=0)).ravel().astype(np.int64)
+    pd.DataFrame({"barcode": bcs, "rna_total": rna_total}).to_csv(
+        os.path.join(a.out, f"adt_{a.dataset}_cells.tsv"), sep="\t", index=False)
     with open(os.path.join(d, "barcodes.txt"), "w") as fh:
         fh.write("\n".join(bcs) + "\n")
     json.dump({"cells": len(bcs), "antibodies": len(ab), "cellranger_umis": int(M[ab].sum())},
@@ -350,6 +354,7 @@ def main():
     rec = {"tool": a.tool, "dataset": a.dataset, "wall_s": round(wall, 1),
            "max_rss_gb": round(int(m.group(1)) / 1024 ** 2, 3) if m else None, "threads": a.threads,
            "returncode": r.returncode, "version": ver, "command": " ".join(cmd),
+           "singlet_commit": os.environ.get("SINGLET_COMMIT", ""),
            "stderr_tail": r.stderr[-1500:] if r.returncode else ""}
     with open(os.path.join(a.out, f"resources_adt_{a.dataset}_{a.tool}.json"), "w") as f:
         json.dump(rec, f, indent=1)
