@@ -6,11 +6,11 @@ ENV=$WORK/envs/pbench                       # conda env: STAR 2.7.11b, samtools,
 SRA=$WORK/envs/sratools/bin                 # prefetch / fasterq-dump / fastq-dump 3.x
 REF=/mnt/projects/debruinz_project/cellarium/reference   # 10x 2024-A genomes + GENCODE v44 / M33, STAR 2.7.11b index
 SRC=${SRC:-$WORK/src/singlet-py/claude__bench-public-cohort-485cf7}   # this branch (harness + compute modules)
-# The Singlet 1.0.0 binary under test: built from prod/campaign (Singlet-Bio/singlet PR #31) by the pipeline-benchmark
+# The Singlet 1.0.0 binary under test: the PGO build of prod/campaign (Singlet-Bio/singlet PR #31) by the pipeline-benchmark
 # session. Its source tree gives the commit recorded in every result.
-SINGLET_BIN=${SINGLET_BIN:-$PB/bin/singlet-prod}
+SINGLET_BIN=${SINGLET_BIN:-$PB/bin/singlet-campaign}   # PGO build of prod/campaign 02aa9b9, sha256 261d3a50... (pipeline-benchmark, 2026-10-25)
 SINGLET_SRC=${SINGLET_SRC:-$WORK/src/singlet-py/prod__campaign}
-CELLRANGER=${CELLRANGER:-}                  # path to cellranger 9 once the 10x EULA is accepted; empty = use 10x's matrices
+CELLRANGER=${CELLRANGER:-}                  # empty (default): 10x published outputs are the comparator (Zach, 2026-10-25)
 export CONDA_PKGS_DIRS=$WORK/cache/conda_pkgs ALEVIN_FRY_HOME=$PB/af_home
 export PATH=$ENV/bin:$SRA:$PATH
 COHORT=$SRC/bench/public/cohort.tsv

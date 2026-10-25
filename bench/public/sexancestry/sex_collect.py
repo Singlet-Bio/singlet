@@ -119,7 +119,8 @@ def main(argv=None) -> int:
         "datasets": [{"id": a.dataset, "title": f"{len(gses)} studies, {len(st)} samples with sex in GEO metadata",
                       "accessions": {"gse": ";".join(gses), "gsm": list(st.loc[st["dataset"] == a.dataset, "gsm"])},
                       "truth": "sex in GEO sample characteristics", "n_cells": int(n - n_pool)}]
-                    + ([{"id": "lcl_gse230239", "title": "In-silico pool of HG00362 (female) and HG01277 (male) LCL libraries",
+                    + ([{"id": "lcl_gse230239", "data_kind": "derived",
+                         "title": "In-silico pool of HG00362 (female) and HG01277 (male) LCL libraries",
                          "accessions": {"gse": "GSE230239", "gsm": ["GSM7208744", "GSM7208745"]},
                          "truth": "1000 Genomes sex of the library each cell's barcode came from", "n_cells": int(n_pool)}]
                        if n_pool else []),

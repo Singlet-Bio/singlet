@@ -62,7 +62,7 @@ def compute(artifact_dir: Path) -> dict:
     metrics, figures, extra_caveats = [], [], []
     comp_names = [t for t in TOOLS if t != "singlet"]
 
-    def metric(mid, name, unit, category, dataset, vals, cis=None, rule=None, notes=None):
+    def metric(mid, name, unit, category, dataset, vals, cis=None, rule=None, notes=None, corroborated_by=None):
         m = {"id": mid, "name": name, "unit": unit, "category": category, "dataset": dataset, "direction": "higher",
              "singlet": {"value": r(vals["singlet"])},
              "competitors": [{"tool": t, "value": r(vals[t])} for t in comp_names],
@@ -73,6 +73,8 @@ def compute(artifact_dir: Path) -> dict:
                 c["ci"] = [r(x) for x in cis[c["tool"]]]
         if notes:
             m["notes"] = notes
+        if corroborated_by:
+            m["corroborated_by"] = corroborated_by
         metrics.append(m)
 
     # ---- GEO-metadata cohort: single-sex samples, truth = the sample's recorded sex
@@ -161,10 +163,13 @@ def compute(artifact_dir: Path) -> dict:
             acc[t] = float((lab == tr).mean())
             prec[t] = float((lab == tr)[lab_ok].mean()) if lab_ok.any() else float("nan")
             cov[t] = float(lab_ok.mean())
+        real = [f"{k}@{d}" for k in ("cell_accuracy", "cell_precision", "cell_coverage") for d in geo["dataset"].unique()]
         metric("cell_accuracy", "Cells labelled with their donor's sex (no call counts as wrong)", "fraction", "accuracy",
-               ds, acc, notes=f"{int(sel.sum())} cells of known donors")
-        metric("cell_precision", "Labelled cells that match their donor's sex", "fraction", "accuracy", ds, prec)
-        metric("cell_coverage", "Cells given a label", "fraction", "coverage", ds, cov)
+               ds, acc, notes=f"{int(sel.sum())} cells of known donors; the pool is one group (no donor information)",
+               corroborated_by=real[:1])
+        metric("cell_precision", "Labelled cells that match their donor's sex", "fraction", "accuracy", ds, prec,
+               corroborated_by=real[1:2])
+        metric("cell_coverage", "Cells given a label", "fraction", "coverage", ds, cov, corroborated_by=real[2:3])
 
     # ---- descriptive
     metrics.append({"id": "n_cells", "name": "Cells scored", "unit": "cells", "category": "coverage", "dataset": "pooled",
@@ -207,9 +212,27 @@ def compute(artifact_dir: Path) -> dict:
             {"path": "bench/public/capabilities/chromosomal_sex.py", "role": "metric",
              "url": code_url("bench/public/capabilities/chromosomal_sex.py", commit)},
         ],
+        "reach": [
+            {"tool": "singlet", "output": "per-cell chromosomal sex", "supported": "yes"},
+            {"tool": "cellXY", "output": "per-cell chromosomal sex", "supported": "yes"},
+            {"tool": "xist-chrY-rule", "output": "per-cell chromosomal sex", "supported": "partial",
+             "note": "only cells with XIST or chrY UMIs"},
+            {"tool": "singlet", "output": "label for every cell via its donor (genotype demultiplexing)", "supported": "yes"},
+            {"tool": "cellXY", "output": "label for every cell via its donor (genotype demultiplexing)", "supported": "no"},
+            {"tool": "xist-chrY-rule", "output": "label for every cell via its donor (genotype demultiplexing)", "supported": "no"},
+            {"tool": "singlet", "output": "flags male-female doublets (XIST and chrY in one cell)", "supported": "yes"},
+            {"tool": "cellXY", "output": "flags male-female doublets (XIST and chrY in one cell)", "supported": "yes",
+             "note": "findMfDoublet, a separate function"},
+            {"tool": "xist-chrY-rule", "output": "flags male-female doublets (XIST and chrY in one cell)", "supported": "no"},
+        ],
         "reproduce": {"module": "bench/public/capabilities/chromosomal_sex.py", "function": "compute",
                       "laptop_minutes": 2,
                       "clipper_command": "bash bench/public/sexancestry/submit_sex.sh"},
         "caveats": prov.get("caveats", []) + extra_caveats,
     }
+    for ds in sorted(geo["dataset"].unique()):
+        try:
+            doc["figures"].append(C.pareto_figure(doc, "cell_accuracy", ds, "wall_s"))
+        except (StopIteration, KeyError):
+            pass
     return C.finalize(doc)

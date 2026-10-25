@@ -37,6 +37,7 @@ bash bench/public/sexancestry/submit_sex.sh
 bash bench/public/sexancestry/submit_ancestry.sh
 ```
 
-The Singlet binary under test is `$PB/bin/singlet-prod` from `prod/campaign` (PR #31), unless `SINGLET_BIN` is set.
-Its sha256 and source commit are written to `$WORK/bpub/singlet_binary.json`. Cell Ranger runs only when `CELLRANGER`
-is set, which needs the 10x EULA accepted. Without it, the matrices 10x published with each dataset stand in.
+The Singlet binary under test is `$PB/bin/singlet-campaign` (PGO build of `prod/campaign` 02aa9b9, PR #31), unless `SINGLET_BIN` is set.
+Its sha256 and source commit are written to `$WORK/bpub/singlet_binary.json`. 10x comparisons (Cell Ranger, ARC, ATAC,
+vdj, Space Ranger) use the outputs 10x published with each dataset (Zach, 2026-10-25); `CELLRANGER` enables a real run
+later.
