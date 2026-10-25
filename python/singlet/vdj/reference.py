@@ -36,6 +36,8 @@ J_MOTIF = re.compile(r"[FW]G.G")
 # a V segment named like one but annotated otherwise (GENCODE v44: TRBV11-2 is "lncRNA", TRBV21-1 a pseudogene) is kept
 # when its own sequence is an open V (a frame with at most one stop before an in-frame Cys104), as IMGT's ORFs are
 V_NAME = re.compile(r"^(TR[ABGD]|IG[HKL])V\d")
+# orphons (IGKV1OR2-108, TRBV20OR9-2 ...): segment copies outside the loci, never rearranged; they only steal votes
+ORPHON = re.compile(r"OR\d", re.I)
 
 
 def revcomp(s: str) -> str:
@@ -184,7 +186,7 @@ def _build_one(genome_fa: str, gtf: str, skip_contigs=frozenset()) -> List[Segme
             continue
         region = g["biotype"][3] if g["biotype"] in BIOTYPES else "V"
         chain = chain_of(g["name"])
-        if chain is None:
+        if chain is None or ORPHON.search(g["name"]):
             continue
         ts = g["transcripts"]
         tid = next((t for t, v in ts.items() if v["canonical"]), None) or sorted(ts)[0]
