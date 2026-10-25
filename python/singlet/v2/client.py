@@ -538,9 +538,16 @@ _STUDY_TTL = 60.0
 
 
 def clear_memory_cache() -> None:
-    """Forget in-process manifests (not the disk cache)."""
+    """Forget in-process manifests and transports (kept-alive connections, request counters); not the disk cache."""
     with _STUDY_LOCK:
         _STUDY_CACHE.clear()
+    with _TRANSPORT_LOCK:
+        old = list(_TRANSPORTS.values())
+        _TRANSPORTS.clear()
+    for t in old:
+        close = getattr(t, "close", None)
+        if close is not None:
+            close()
 
 
 def _manifest_paths(gse: str) -> Tuple[Path, Path]:
