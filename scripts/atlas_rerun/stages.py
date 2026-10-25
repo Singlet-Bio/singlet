@@ -321,9 +321,12 @@ def pool_runs(ctx, inputs, out, scr, log):
             with open(dst, "ab") as o, open(src, "rb") as i:
                 shutil.copyfileobj(i, o, 16 << 20)
             os.remove(src)
+    # no --protocol: the .1fq header names protocols differently from encode's tags (10xv3-5p vs 10x-5p-v3), and
+    # encode's own detection on the pooled reads is the one `download` ran on each run
     cmd = [ctx.bin, "encode", "--reads", r1, r2, "-o", out, "--no-dedup", "--no-trim", "--quality", "none"]
-    if len(protos) == 1 and None not in protos and list(protos)[0] not in ("UNKNOWN", "unknown"):
-        cmd += ["--protocol", list(protos)[0]]
+    if len(protos) > 1:
+        with open(log, "a") as fh:
+            fh.write("[pool] WARNING: runs carry different protocols in their headers: %s\n" % sorted(map(str, protos)))
     rc, _, txt = run(cmd, log, env=ctx.env, cwd=scr)
     for f in (r1, r2):
         if os.path.exists(f):
