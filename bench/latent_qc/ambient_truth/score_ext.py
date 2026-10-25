@@ -41,7 +41,7 @@ for v in ("default", "background"):
     np.save(f"{out}/rho_{view}-{tview}_decontx_{v}.npy", t.rho.values)
     if view == tview:
         crows.append(atlib.correction_row(ds, f"decontx_{v}", t.rho.values, t.rem_m.values, t.rem_h.values))
-for df, nm in ((pd.DataFrame(rows), f"est_{view}-{tview}.csv"), (pd.DataFrame(crows), f"corr_{view}.csv")):
+for df, nm in ((pd.DataFrame(rows), f"ext_{view}-{tview}.csv"), (pd.DataFrame(crows), f"extcorr_{view}.csv")):
     if len(df):
         q = f"{out}/{nm}"
         df.to_csv(q, mode="a", header=not os.path.exists(q), index=False)
