@@ -20,7 +20,6 @@ from __future__ import annotations
 import argparse
 import glob
 import gzip
-import json
 import subprocess
 import sys
 from collections import Counter
@@ -61,7 +60,6 @@ def barcodes_by_run(data: Path, runs: dict, cb_len: int = 16, max_reads: int = 2
 
 def read_counts(run: Path):
     import scipy.io
-    import scipy.sparse as sps
 
     def one(stem):
         X = scipy.io.mmread(gzip.open(run / f"{stem}.mtx.gz")).tocsr()

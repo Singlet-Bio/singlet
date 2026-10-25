@@ -136,7 +136,6 @@ def compute(artifact_dir: Path) -> dict:
     for ds in sorted(pool["dataset"].unique()) if len(pool) else []:
         sel = (cells["dataset"] == ds).to_numpy() & cells["truth_donor_sex"].notna().to_numpy()
         tr = cells.loc[sel, "truth_donor_sex"].to_numpy(object)
-        grp = cells.loc[sel, "gsm"].to_numpy(object)
         acc, prec, cov = {}, {}, {}
         for t in TOOLS:
             lab = calls[t][sel]
