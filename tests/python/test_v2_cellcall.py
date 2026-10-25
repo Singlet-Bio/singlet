@@ -182,6 +182,16 @@ def read_golden(name):
     return case, X, called, exp
 
 
+def log_close(a, b, tol):
+    """Zeros at the same places; elsewhere |ln a - ln b| <= tol * max(1, |ln b|)."""
+    a, b = np.asarray(a, float), np.asarray(b, float)
+    z = b == 0
+    if not np.array_equal(a == 0, z):
+        return False
+    la, lb = np.log(a[~z]), np.log(b[~z])
+    return bool(np.all(np.abs(la - lb) <= tol * np.maximum(1.0, np.abs(lb))))
+
+
 def test_golden_vectors_exist():
     synth = {"synth_knee_below_plateau", "synth_tail_extrapolation", "synth_mixed"}
     assert synth <= set(GOLDEN_CASES)
@@ -214,12 +224,13 @@ def test_golden_vector(name):
     expect_cv2 = called.copy()
     expect_cv2[cols[exp["called_v2"].astype(bool)]] = True
     assert np.array_equal(cv2, expect_cv2)
-    # p-values: Monte Carlo values (n_le + 1) / (niters + 1) exactly, the tail extrapolation to a relative tolerance
+    # p-values: Monte Carlo values (n_le + 1) / (niters + 1) exactly; retained (0) and tail-extrapolated values on the log
+    # scale (a tail p of 1e-150 moves by |z| x the change in z, so its relative error is large while its log is stable)
     ep, gp = exp["pvalue"], pv[cols]
     mc = ep >= 1.0 / (niters + 1)
     assert np.array_equal(np.round(gp[mc] * (niters + 1)), np.round(ep[mc] * (niters + 1)))
-    assert np.allclose(gp[~mc], ep[~mc], rtol=tol["pvalue_tail_rel"], atol=0)
-    assert np.allclose(q[cols], exp["fdr"], rtol=tol["fdr_rel"], atol=0)
+    assert log_close(gp[~mc], ep[~mc], tol["pvalue_tail_log_rel"])
+    assert log_close(q[cols], exp["fdr"], tol["fdr_log_rel"])
     # call() agrees (FDR as float32, NaN = not tested)
     cv2b, fdrb, _ = CC.call(X, called, case["protocol"], **case["options"])
     assert np.array_equal(cv2b, cv2) and np.array_equal(fdrb, q.astype(np.float32), equal_nan=True)

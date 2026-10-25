@@ -93,8 +93,8 @@ def write_case(out, name, X, called, description, source, protocol="10xv3", gene
             "called_v2": "exact",
             "lower": "exact",
             "pvalue_monte_carlo": "exact (pvalue >= 1/(niters+1): (n_le + 1) / (niters + 1))",
-            "pvalue_tail_rel": 1e-6,
-            "fdr_rel": 1e-6,
+            "pvalue_tail_log_rel": 1e-6,
+            "fdr_log_rel": 1e-6,
             "alpha_rel": 1e-6,
             "retain_total_rel": 1e-9,
         },
@@ -122,6 +122,20 @@ def _draw(rng, totals, p):
     return np.array([rng.multinomial(int(t), p) for t in totals]).T
 
 
+AMBIENT_DM_ALPHA = 300.0
+
+
+def _draw_ambient(rng, totals, p, a=AMBIENT_DM_ALPHA):
+    """Dirichlet-multinomial droplets (concentration ``a``, as in real ambient pools: fitted alphas 44-4,200 in the benchmark
+    samples). Pure multinomial ambient would put the alpha MLE at infinity, where the flat likelihood makes the fitted value
+    depend on rounding."""
+    out = []
+    for t in totals:
+        g = rng.standard_gamma(a * p)
+        out.append(rng.multinomial(int(t), g / g.sum()))
+    return np.array(out).T
+
+
 def synth_knee_below_plateau(rng, G=80):
     """A Kang-like rank curve: ambient at 1-3 UMIs (plateau lower 7), a dense debris band at 8-14 UMIs whose drop-off is the
     sharpest bend among the totals > lower, an ambient shoulder of 15-~150 UMIs, called cells at 1,000-16,000 UMIs and low-RNA
@@ -133,7 +147,7 @@ def synth_knee_below_plateau(rng, G=80):
     t_sh = np.round(15 * np.exp(rng.exponential(1.0, 160))).astype(int)
     t_cell = np.round(10 ** rng.uniform(3, 4.2, 120)).astype(int)
     t_low = np.round(10 ** rng.uniform(2.3, 3, 30)).astype(int)
-    parts += [_draw(rng, t_amb, amb), _draw(rng, t_deb, amb), _draw(rng, t_sh, amb)]
+    parts += [_draw_ambient(rng, t_amb, amb), _draw_ambient(rng, t_deb, amb), _draw_ambient(rng, t_sh, amb)]
     called += [False] * (len(t_amb) + len(t_deb) + len(t_sh))
     parts.append(np.hstack([_draw(rng, t_cell[i::3], 0.9 * types[i] + 0.1 * amb) for i in range(3)]))
     called += [True] * len(t_cell)
@@ -143,16 +157,16 @@ def synth_knee_below_plateau(rng, G=80):
 
 
 def synth_tail(rng, G=40):
-    """Many ambient-like tested barcodes (800 at 51-120 UMIs) and few uncalled low-RNA cells (30 at 150-400): the cells sit
-    below every simulated path, but fewer than n_tested / 10 barcodes are at the Monte Carlo floor, so BH passes none of them
-    at FDR 0.001 without the tail extrapolation."""
+    """Ambient at 1-15 UMIs, many ambient-like tested barcodes (800 at 51-120 UMIs) and few uncalled low-RNA cells (30 at
+    150-400): the cells sit below every simulated path, but fewer than n_tested / 10 barcodes are at the Monte Carlo floor,
+    so BH passes none of them at FDR 0.001 without the tail extrapolation."""
     amb, types = _profiles(rng, G, 3)
     parts, called = [], []
-    t_amb = rng.integers(1, 5, 3000)
+    t_amb = rng.integers(1, 16, 3000)
     t_tst = rng.integers(51, 121, 800)
     t_cell = np.round(10 ** rng.uniform(3.4, 4, 60)).astype(int)
     t_low = rng.integers(150, 401, 30)
-    parts += [_draw(rng, t_amb, amb), _draw(rng, t_tst, amb)]
+    parts += [_draw_ambient(rng, t_amb, amb), _draw_ambient(rng, t_tst, amb)]
     called += [False] * (len(t_amb) + len(t_tst))
     parts.append(np.hstack([_draw(rng, t_cell[i::3], 0.9 * types[i] + 0.1 * amb) for i in range(3)]))
     called += [True] * len(t_cell)
@@ -170,7 +184,7 @@ def synth_mixed(rng, G=100):
     t_mid = rng.integers(51, 201, 150)
     t_cell = rng.integers(3000, 20000, 60)
     t_low = rng.integers(150, 601, 60)
-    parts += [_draw(rng, t_amb, amb), _draw(rng, t_mid, amb)]
+    parts += [_draw_ambient(rng, t_amb, amb), _draw_ambient(rng, t_mid, amb)]
     called += [False] * (len(t_amb) + len(t_mid))
     parts.append(np.hstack([_draw(rng, t_cell[i::3], 0.9 * types[i] + 0.1 * amb) for i in range(3)]))
     called += [True] * len(t_cell)

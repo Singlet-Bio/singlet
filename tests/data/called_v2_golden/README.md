@@ -13,15 +13,17 @@ Format id: `singlet-called-v2-golden/1`. All files are plain text with LF line e
 | `synth_knee_below_plateau` | Kang-like rank curve (plateau `lower` 7, a debris band at 8-14 UMIs): the unbounded 2.0 knee is 11, so all 85 tested barcodes were retained untested; the bounded knee is 1,088 and only the 30 low-RNA cells are called |
 | `synth_tail_extrapolation` | 830 tested barcodes, 30 low-RNA cells below every simulated path: without the tail extrapolation BH passes none of them at FDR 0.001 (fewer than n_tested / 10 at the Monte Carlo floor) |
 | `synth_mixed` | the unit-test simulation at small scale; the unbounded knee (176) is again inside the tested range, the bounded one 3,591 |
+| `real_hgmm1k_v3` | 45 called cells after subsampling, so the 50 excluded top ranks reach into the tail: an edge case for the curve bounds (knee 386, lower 100) |
 | `real_hgmm1k_v3`, `real_neuron1k_v3`, `real_pbmc1k_v3` | 10x benchmark samples (pipeline-benchmark `singlet-modfix-t8` runs on Clipper), subsampled from the stored exon + intron counts (below) |
 
 `case.json` of each case has a one-line `description` and the `source`. `generate.py` rebuilds every case
 (`python -P generate.py synthetic OUT`, `python -P generate.py real NAME RUN_DIR OUT`); the real ones need the Singlet output
 folders on Clipper (`bench/called_v2_truth/verify.sbatch` runs both).
 
-Real cases are subsampled to stay small: a uniform 20% of the nonzero barcodes (which keeps the shape of the log-log rank
-curve), the 300 genes with the most counts over the kept uncalled barcodes, plus one last row `OTHER` that holds the sum of
-all other genes, so every barcode keeps its total. Called barcodes enter the call only through their totals (plateau `lower`
+Real cases are subsampled to stay small: a uniform share of the nonzero barcodes (which keeps the shape of the log-log rank
+curve; hgmm1k 5%, neuron1k and pbmc1k 10%, seed 20261025), the genes with the most counts over the kept uncalled barcodes
+(hgmm1k 100, the others 150), plus one last row `OTHER` that holds the sum of all other genes, so every barcode keeps its
+total. Called barcodes enter the call only through their totals (plateau `lower`
 and knee), so their counts are stored as a single entry in the `OTHER` row. The subsampled matrix is the input; the expected
 values are the call on that matrix, not on the full sample.
 
@@ -80,8 +82,17 @@ are NaN, and `called_v2` = `called`. So the full `called_v2` set = `called` OR (
 * `called_v2`, `lower`, the tested set, `n_*`: exact.
 * Monte Carlo p-values (`pvalue >= 1/(niters+1)`): exact, i.e. the same n_le. The C++ port draws with numba's MT19937
   streams, so the simulated paths are the same.
-* Tail p-values: relative 1e-6 (the mean and sd are sums over 10,000 doubles, whose order may differ). FDR: relative 1e-6.
-* `alpha`: relative 1e-6 (bounded scalar minimisation, `xatol` 1e-4 in log alpha). `retain_total`: relative 1e-9 (it is
-  10^log10(total) of one of the observed totals).
+* p-values of 0 (retained) and FDRs of 0: exact.
+* Tail p-values and all FDRs, on the log scale: `|ln got - ln expected| <= 1e-6 * max(1, |ln expected|)`
+  (`tolerance.pvalue_tail_log_rel`, `tolerance.fdr_log_rel`). A tail p of 1e-150 has z near -26 and changes by |z| times
+  any change in z, so tiny differences in `alpha` or in the summation order of the mean and sd give relative differences of
+  up to 1e-4 between machines while ln p agrees to 1e-7.
+* `alpha`: relative 1e-6 (bounded scalar minimisation, `xatol` 1e-4 in log alpha; Linux/numpy 2.5 and Windows/numpy 2.2
+  agree to 1e-7). `retain_total`: relative 1e-9 (it is 10^log10(total) of one of the observed totals).
 
-The expected values were generated on Clipper (Linux, numba 0.68) and checked on Windows (numba 0.64).
+The synthetic ambient droplets are Dirichlet-multinomial (concentration 300). With purely multinomial ambient the alpha MLE
+sits at infinity, the likelihood is flat and the fitted alpha depends on rounding, which made the expected values differ
+between machines.
+
+The expected values were generated on Clipper (Linux, numpy 2.5, scipy 1.18, numba 0.68) and checked on Windows (numpy 2.2,
+scipy 1.15, numba 0.64).

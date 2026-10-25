@@ -13,13 +13,13 @@
   "version": "2.1",
   "lower": 42,
   "retain_total": 3591.0000000000005,
-  "alpha": 61173.69825032607,
+  "alpha": 325.2213089228896,
   "n_ambient": 3000,
   "ambient_umi": 29827,
   "n_tested": 210,
-  "n_tail": 60,
-  "n_called_v2": 120,
-  "n_added": 60
+  "n_tail": 62,
+  "n_called_v2": 122,
+  "n_added": 62
  },
  "knee_unbounded": 176.00000000000006,
  "tolerance": {
