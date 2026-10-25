@@ -218,6 +218,11 @@ int star_main_impl(int argInN, char *argIn[])
     // sequence cache for the main mapping pass (after any 2-pass junction insertion)
     g_seqCache = SeqCache::create(P, genomeMain.nGenome);
     g_shortExit = ShortExit::create(P);
+    {
+        const char *fa = getenv("SINGLET_STAR_FASTASSIGN");
+        g_starFastAssign = !(fa != nullptr && fa[0] == '0');
+        P.inOut->logMain << "FASTASSIGN: " << (g_starFastAssign ? "on" : "off") << "\n";
+    }
 #ifdef STAR_PROFILE
     auto profClock0 = std::chrono::steady_clock::now(); unsigned long long profTsc0 = __rdtsc();
 #endif

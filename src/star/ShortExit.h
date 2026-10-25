@@ -39,5 +39,6 @@ public:
 };
 
 extern ShortExit *g_shortExit;
+extern bool g_starFastAssign; //ReadAlign_stitchPieces.cpp
 
 #endif

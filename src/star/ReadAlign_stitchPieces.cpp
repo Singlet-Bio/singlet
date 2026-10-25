@@ -9,6 +9,9 @@
 #include "PackedArray.h"
 #include "GlobalVariables.h"
 #include "ShortExit.h"
+
+//exact: skip assignAlignToWindow calls for SA loci in bins without a window (SINGLET_STAR_FASTASSIGN=0 turns it off)
+bool g_starFastAssign = true;
 #include <time.h>
 
 void ReadAlign::stitchPieces(char **R, uint Lread) {
@@ -188,6 +191,35 @@ void ReadAlign::stitchPieces(char **R, uint Lread) {
 
         for (uint ii=0;ii<nW;ii++) {//initialize nWAP
             nWAP[ii]=0;
+        };
+
+        if (g_starFastAssign) {//same calls to assignAlignToWindow, minus the ones that return at once (no window in the bin)
+            //strand conversion depends only on the piece direction and the SA strand bit: precompute both cases
+            const uint rS0 = PC[iP][PC_rStart], rS1 = Lread - (aLength + rS0);
+            uint strOf[2], rsOf[2];
+            if (aDir==0) {strOf[0]=0; rsOf[0]=rS0; strOf[1]=1; rsOf[1]=rS1;}
+            else         {strOf[0]=1; rsOf[0]=rS1; strOf[1]=0; rsOf[1]=rS0;}
+            if (revertStrand) {strOf[0]=1-strOf[0]; strOf[1]=1-strOf[1];}
+            const uint sjG = mapGen.sjGstart, nG = mapGen.nGenome, gMask = mapGen.GstrandMask;
+            const uint sBit = mapGen.GstrandBit, wbn = P.winBinNbits;
+            const uint iSAend = PC[iP][PC_SAend];
+            for (uint iSA=PC[iP][PC_SAstart]; iSA<=iSAend; iSA++) {
+                uint a1 = mapGen.SA[iSA];
+                const uint s = a1 >> sBit;
+                a1 &= gMask;
+                if (s==1) a1 = nG - (aLength+a1); //SA reverse strand: position on the + strand
+                const uint aStr = strOf[s], aRstart = rsOf[s];
+                if (a1>=sjG) {//this is sj read: as below
+                    uint a1D, aLengthD, a1A, aLengthA, isj1;
+                    if (sjAlignSplit(a1, aLength, mapGen, a1D, aLengthD, a1A, aLengthA, isj1)) {
+                        assignAlignToWindow(a1D, aLengthD, aStr, aNrep, aFrag, aRstart, aAnchor, isj1);
+                        assignAlignToWindow(a1A, aLengthA, aStr, aNrep, aFrag, aRstart+aLengthD, aAnchor, isj1);
+                    };
+                } else if (winBin[aStr][a1>>wbn]!=uintWinBinMax) {
+                    assignAlignToWindow(a1, aLength, aStr, aNrep, aFrag, aRstart, aAnchor, -1);
+                };
+            };
+            continue;
         };
 
         for (uint iSA=PC[iP][PC_SAstart]; iSA<=PC[iP][PC_SAend]; iSA++) {//scan through all alignments
