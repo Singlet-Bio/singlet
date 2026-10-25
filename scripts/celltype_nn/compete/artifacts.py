@@ -148,7 +148,9 @@ def main(argv=None) -> int:
         singlet=dict(version="1.0.0", commit=a.commit, branch="claude/celltype-nn"),
         tools=[dict(name=n, **TOOL_INFO[n]) for n in TOOL_INFO if (calls["tool"] == n).any()],
         datasets=[dict(id="cxg16", title="16 GEO studies with CELLxGENE curated cell types (66 samples)",
-                       accessions=dict(gse=";".join(gses), other=[f"CELLxGENE collections: see $WORK/jobs/annotate/bench_studies.json"]),
+                       accessions=dict(gse=";".join(gses), gsm=sorted(samples["gsm"].astype(str).unique().tolist()),
+                                       other=["CELLxGENE collections: see $WORK/jobs/annotate/bench_studies.json"]),
+                       data_kind="real",
                        truth="CELLxGENE curators' Cell Ontology terms for the authors' labels, transferred to Singlet's called cells by barcode "
                              "(scripts/annotate_truth_cxg.py)", n_cells=int(len(truth)))],
         resources=resources,
