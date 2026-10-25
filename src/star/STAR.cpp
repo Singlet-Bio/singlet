@@ -283,6 +283,9 @@ int star_main_impl(int argInN, char *argIn[])
         const char *on[6] = {"unique", "multi", "tooManyLoci", "tooShort", "otherUnmapped", "cacheHit"};
         for (int i = 0; i < 6; i++)
             P.inOut->logMain << " " << on[i] << "=" << g_profOutcome[i][1] << "reads/" << g_profOutcome[i][0] / hz << "s";
+        const char *cn[7] = {"g1perfectU", "g1perfectS", "g1mm1U", "g1mm1S", "g1otherU", "g1otherS", "uniqueOther"};
+        for (int i = 0; i < 7; i++)
+            P.inOut->logMain << " " << cn[i] << "=" << g_profClass[i][1] << "reads/" << g_profClass[i][0] / hz << "s";
         P.inOut->logMain << "\n" << flush;
     }
 #endif

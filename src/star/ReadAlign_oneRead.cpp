@@ -144,6 +144,8 @@ int ReadAlign::oneRead() {//process one read: load, map, write
     seqCacheBlob.clear();
     PROF_ADD(PROF_map, tMap);
 #ifdef STAR_PROFILE
+    unsigned long long profMapCyc = __rdtsc() - tMap;
+    int profUnique = (!fromCache && unmapType==-1 && nTr==1) ? 1 : 0;
     {
         int oc = fromCache ? 5 : unmapType==-1 ? (nTr==1 ? 0 : 1) : unmapType==3 ? 2 : unmapType==1 ? 3 : 4;
         g_profOutcome[oc][0] += __rdtsc() - tMap;
@@ -166,6 +168,25 @@ int ReadAlign::oneRead() {//process one read: load, map, write
     PROF_T0(tOut);
     outputAlignments();
     PROF_ADD(PROF_output, tOut);
+#ifdef STAR_PROFILE
+    if (profUnique) {//unique, mapped by STAR: class by gene concordance and alignment shape (txome-first ceiling)
+        Transcript &t = *trBest;
+        bool gene1 = readAnnot.annotFeatures[SoloFeatureTypes::Gene].fSet.size()==1;
+        bool chrM = mapGen.chrName[t.Chr]=="chrM" || mapGen.chrName[t.Chr]=="MT";
+        uint64 cov = 0;
+        for (uint64 i=0; i<t.nExons; i++) cov += t.exons[i][EX_L];
+        bool annotSJ = true;
+        for (uint64 i=0; i+1<t.nExons; i++) if (t.canonSJ[i]<0 || t.sjAnnot[i]!=1) annotSJ = false;
+        int cls;
+        if (!gene1 || chrM || t.nDel>0 || t.nIns>0 || !annotSJ) cls = 6;
+        else {
+            int sub = (t.nMM==0 && cov==Lread) ? 0 : (t.nMM==1 && cov==Lread) ? 1 : 2;
+            cls = sub*2 + (t.nExons>1 ? 1 : 0);
+        };
+        g_profClass[cls][0] += profMapCyc;
+        g_profClass[cls][1]++;
+    };
+#endif
 
     {
     #ifdef DEBUG_OutputLastRead

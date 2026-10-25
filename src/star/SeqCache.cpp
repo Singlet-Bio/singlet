@@ -12,6 +12,7 @@ SeqCache *g_seqCache = nullptr;
 #ifdef STAR_PROFILE
 std::atomic<unsigned long long> g_prof[PROF_N];
 std::atomic<unsigned long long> g_profOutcome[6][2];
+std::atomic<unsigned long long> g_profClass[7][2];
 #endif
 
 namespace {
