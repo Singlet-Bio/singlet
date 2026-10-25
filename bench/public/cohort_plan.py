@@ -5,7 +5,9 @@
 
 Cost model (wall hours of one 16-thread Clipper task; R = read pairs used / 100M). The coefficients come from the
 pipeline-benchmark runs (docs/pipeline-validation.md, `time -v` on 16 threads), rounded up:
-  singlet 0.15 + 0.30 R | starsolo 0.10 + 0.30 R | alevinfry 0.05 + 0.06 R | cellranger family 0.20 + 0.80 R
+  singlet 0.15 + 0.30 R | starsolo 0.10 + 0.30 R | alevinfry 0.05 + 0.06 R
+  10x software (Cell Ranger, ARC, ATAC, vdj, Space Ranger): 10x's published outputs are the comparator (Zach,
+  2026-10-25), so only a fetch is costed
   plate protocols (one run per cell; genome kept in shared memory) add 0.5 h per tool
   every other tool (SoupX, vireo, somalier, ...): 0.5 h per dataset; download: fastq_gb / 0.1 GB/s (a 4-CPU task)
 Per-sample studies (cxg16, geo_sex21, mage150) are costed per sample below. Download tasks run alongside compute.
@@ -18,8 +20,8 @@ import heapq
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-LINEAR = {"singlet": (0.15, 0.30), "starsolo": (0.10, 0.30), "alevinfry": (0.05, 0.06), "cellranger": (0.20, 0.80),
-          "cellranger-arc": (0.20, 0.80), "cellranger-vdj": (0.10, 0.10), "spaceranger": (0.20, 0.80),
+LINEAR = {"singlet": (0.15, 0.30), "starsolo": (0.10, 0.30), "alevinfry": (0.05, 0.06), "cellranger": (0.02, 0.0),
+          "cellranger-arc": (0.02, 0.0), "cellranger-atac": (0.02, 0.0), "cellranger-vdj": (0.02, 0.0), "spaceranger": (0.02, 0.0),
           "star-featurecounts": (0.10, 0.30), "salmon": (0.05, 0.06), "dropseq-tools": (0.20, 0.40)}
 PLATE = {"smartseq2", "celseq2"}
 # studies made of many samples: (number of tasks, hours per task) for the whole row, all tools included

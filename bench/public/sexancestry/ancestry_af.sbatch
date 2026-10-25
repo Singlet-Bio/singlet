@@ -33,10 +33,12 @@ af.assign(chrom="chr" + af["chrom"].astype(str)).to_csv("$O/targets.chr.tsv", se
 print(len(af), "panel sites")
 EOF
 rm -f $O/af.chr*.tsv.part
+# downloads in parallel first (one EBI stream is slow); curl -C - resumes partial files
+cat $O/vcf_names.txt | xargs -P 8 -I{} sh -c '[ -e "$0/{}.ok" ] || { curl -sSL --retry 5 -C - -o "$0/{}" "$1/{}" && touch "$0/{}.ok"; }' $R $BASE
 for f in $(cat $O/vcf_names.txt); do
   c=$(echo $f | grep -oE 'chr[0-9]+'); out=$O/af.$c.tsv
   [ -s $out ] && continue
-  [ -s $R/$f ] || curl -sSL --retry 5 -C - -o $R/$f $BASE/$f
+  [ -e $R/$f.ok ] || { echo "missing $f"; continue; }
   pre=$(bcftools view -h $R/$f | grep -m1 '^##contig' | grep -q 'ID=chr' && echo chr || echo nochr)
   ( bcftools view --threads 2 -S $O/samples.txt --force-samples -m2 -M2 -v snps -T $O/targets.$pre.tsv -Ou $R/$f \
     | bcftools +fill-tags -Ou -- -S $O/groups.txt -t AF \

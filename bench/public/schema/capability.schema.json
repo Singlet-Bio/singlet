@@ -4,108 +4,652 @@
   "title": "Singlet benchmark capability result (schema 1.x)",
   "description": "Shape only. Semantic checks (pass recomputation, word limits, tool references, cohort ids) live in bench/public/contract.py:validate, which is authoritative.",
   "type": "object",
-  "required": ["schema", "schema_version", "capability", "title", "conclusion", "methods", "status", "generated_at",
-               "owner", "singlet", "tools", "datasets", "metrics", "resources", "code", "reproduce"],
+  "required": [
+    "schema",
+    "schema_version",
+    "capability",
+    "title",
+    "conclusion",
+    "methods",
+    "status",
+    "generated_at",
+    "owner",
+    "singlet",
+    "tools",
+    "datasets",
+    "metrics",
+    "resources",
+    "code",
+    "reproduce"
+  ],
   "properties": {
-    "schema": {"const": "singlet.benchmark.capability"},
-    "schema_version": {"type": "string", "pattern": "^1\\.[0-9]+\\.[0-9]+$"},
-    "capability": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
-    "title": {"type": "string"},
-    "conclusion": {"type": "string"},
-    "methods": {"type": "string"},
-    "status": {"enum": ["draft", "final"]},
-    "generated_at": {"type": "string", "format": "date-time"},
-    "owner": {"type": "string"},
+    "schema": {
+      "const": "singlet.benchmark.capability"
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+\\.[0-9]+$"
+    },
+    "capability": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "title": {
+      "type": "string"
+    },
+    "conclusion": {
+      "type": "string"
+    },
+    "methods": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "final"
+      ]
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "owner": {
+      "type": "string"
+    },
     "singlet": {
-      "type": "object", "required": ["version", "commit"],
+      "type": "object",
+      "required": [
+        "version",
+        "commit"
+      ],
       "properties": {
-        "version": {"type": "string"}, "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
-        "branch": {"type": "string"}, "binary": {"type": "string"},
-        "binary_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "build_flags": {"type": "string"}
+        "version": {
+          "type": "string"
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "branch": {
+          "type": "string"
+        },
+        "binary": {
+          "type": "string"
+        },
+        "binary_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "build_flags": {
+          "type": "string"
+        }
       }
     },
-    "tools": {"type": "array", "items": {
-      "type": "object", "required": ["name", "version", "role"],
-      "properties": {"name": {"type": "string"}, "version": {"type": "string"},
-                     "role": {"enum": ["singlet", "competitor", "truth", "helper"]},
-                     "url": {"type": "string"}, "citation": {"type": "string"}, "params": {"type": "string"}}}},
-    "datasets": {"type": "array", "items": {
-      "type": "object", "required": ["id", "accessions", "truth"],
-      "properties": {"id": {"type": "string"}, "title": {"type": "string"}, "truth": {"type": "string"},
-                     "n_cells": {"type": "integer"}, "notes": {"type": "string"},
-                     "accessions": {"type": "object", "properties": {
-                       "gse": {"type": "string"}, "gsm": {"type": "array", "items": {"type": "string"}},
-                       "srr": {"type": "array", "items": {"type": "string"}}, "url": {"type": "string"},
-                       "other": {"type": "array", "items": {"type": "string"}}}}}}},
-    "metrics": {"type": "array", "items": {"$ref": "#/$defs/metric"}},
-    "resources": {"type": "array", "items": {
-      "type": "object", "required": ["tool", "wall_s", "max_rss_gb", "threads"],
-      "properties": {"tool": {"type": "string"}, "dataset": {"type": "string"}, "wall_s": {"type": "number"},
-                     "cpu_h": {"type": ["number", "null"]}, "max_rss_gb": {"type": "number"},
-                     "threads": {"type": "number"}, "node": {"type": "string"}, "notes": {"type": "string"}}}},
-    "figures": {"type": "array", "items": {"$ref": "#/$defs/figure"}},
-    "artifacts": {"type": "array", "items": {
-      "type": "object", "required": ["name", "url", "kind"],
-      "properties": {"name": {"type": "string"}, "url": {"type": "string"},
-                     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "bytes": {"type": "integer"},
-                     "kind": {"enum": ["singlet_output", "competitor_output", "truth", "derived"]},
-                     "dataset": {"type": "string"}, "format": {"type": "string"}}}},
-    "code": {"type": "array", "items": {
-      "type": "object", "required": ["path", "url"],
-      "properties": {"path": {"type": "string"}, "role": {"type": "string"},
-                     "url": {"type": "string", "pattern": "^https://github\\.com/[^/]+/[^/]+/(blob|tree)/[0-9a-f]{7,40}/"}}}},
-    "reproduce": {"type": "object", "required": ["module", "function"],
-                  "properties": {"module": {"type": "string"}, "function": {"type": "string"},
-                                 "laptop_minutes": {"type": "number"}, "clipper_command": {"type": "string"}}},
-    "caveats": {"type": "array", "items": {"type": "string"}}
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "version",
+          "role"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "singlet",
+              "competitor",
+              "truth",
+              "helper"
+            ]
+          },
+          "url": {
+            "type": "string"
+          },
+          "citation": {
+            "type": "string"
+          },
+          "params": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "datasets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "accessions",
+          "truth"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "truth": {
+            "type": "string"
+          },
+          "n_cells": {
+            "type": "integer"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "accessions": {
+            "type": "object",
+            "properties": {
+              "gse": {
+                "type": "string"
+              },
+              "gsm": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "srr": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "url": {
+                "type": "string"
+              },
+              "other": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "data_kind": {
+            "enum": [
+              "real",
+              "derived",
+              "simulated"
+            ],
+            "description": "real: as deposited; derived: real reads recombined or thinned; simulated: synthetic. Default real."
+          }
+        }
+      }
+    },
+    "metrics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/metric"
+      }
+    },
+    "resources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "tool",
+          "wall_s",
+          "max_rss_gb",
+          "threads"
+        ],
+        "properties": {
+          "tool": {
+            "type": "string"
+          },
+          "dataset": {
+            "type": "string"
+          },
+          "wall_s": {
+            "type": "number"
+          },
+          "cpu_h": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "max_rss_gb": {
+            "type": "number"
+          },
+          "threads": {
+            "type": "number"
+          },
+          "node": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "figures": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/figure"
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "url",
+          "kind"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "singlet_output",
+              "competitor_output",
+              "truth",
+              "derived"
+            ]
+          },
+          "dataset": {
+            "type": "string"
+          },
+          "format": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "code": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "url"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "pattern": "^https://github\\.com/[^/]+/[^/]+/(blob|tree)/[0-9a-f]{7,40}/"
+          }
+        }
+      }
+    },
+    "reproduce": {
+      "type": "object",
+      "required": [
+        "module",
+        "function"
+      ],
+      "properties": {
+        "module": {
+          "type": "string"
+        },
+        "function": {
+          "type": "string"
+        },
+        "laptop_minutes": {
+          "type": "number"
+        },
+        "clipper_command": {
+          "type": "string"
+        }
+      }
+    },
+    "caveats": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "reach": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "tool",
+          "output",
+          "supported"
+        ],
+        "properties": {
+          "tool": {
+            "type": "string"
+          },
+          "output": {
+            "type": "string"
+          },
+          "supported": {
+            "enum": [
+              "yes",
+              "no",
+              "partial"
+            ]
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    }
   },
   "$defs": {
-    "value": {"type": ["number", "null"]},
+    "value": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
     "metric": {
       "type": "object",
-      "required": ["id", "name", "unit", "category", "dataset", "direction", "singlet", "rule"],
+      "required": [
+        "id",
+        "name",
+        "unit",
+        "category",
+        "dataset",
+        "direction",
+        "singlet",
+        "rule"
+      ],
       "properties": {
-        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_.-]*$"}, "name": {"type": "string"},
-        "unit": {"type": "string"}, "dataset": {"type": "string"},
-        "category": {"enum": ["accuracy", "agreement", "coverage", "resources", "robustness"]},
-        "direction": {"enum": ["higher", "lower", "none"]},
-        "singlet": {"type": "object", "required": ["value"],
-                    "properties": {"value": {"$ref": "#/$defs/value"},
-                                   "ci": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2}}},
-        "competitors": {"type": "array", "items": {
-          "type": "object", "required": ["tool", "value"],
-          "properties": {"tool": {"type": "string"}, "value": {"$ref": "#/$defs/value"},
-                         "ci": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
-                         "note": {"type": "string"}}}},
-        "rule": {
-          "type": "object", "required": ["type"],
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_.-]*$"
+        },
+        "name": {
+          "type": "string"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "dataset": {
+          "type": "string"
+        },
+        "category": {
+          "enum": [
+            "accuracy",
+            "agreement",
+            "coverage",
+            "resources",
+            "robustness"
+          ]
+        },
+        "direction": {
+          "enum": [
+            "higher",
+            "lower",
+            "none"
+          ]
+        },
+        "singlet": {
+          "type": "object",
+          "required": [
+            "value"
+          ],
           "properties": {
-            "type": {"enum": ["match_or_beat", "threshold", "equivalence", "informational"]},
-            "against": {"oneOf": [{"const": "best"}, {"type": "array", "items": {"type": "string"}}]},
-            "value": {"type": "number"}, "target": {"type": ["number", "string"]},
-            "tolerance": {"type": "object", "additionalProperties": false,
-                          "properties": {"abs": {"type": "number", "minimum": 0}, "rel": {"type": "number", "minimum": 0}}},
-            "rationale": {"type": "string"}}},
-        "pass": {"enum": ["pass", "fail", "na"]},
-        "notes": {"type": "string"}
+            "value": {
+              "$ref": "#/$defs/value"
+            },
+            "ci": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          }
+        },
+        "competitors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "tool",
+              "value"
+            ],
+            "properties": {
+              "tool": {
+                "type": "string"
+              },
+              "value": {
+                "$ref": "#/$defs/value"
+              },
+              "ci": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "note": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "rule": {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "match_or_beat",
+                "threshold",
+                "equivalence",
+                "informational"
+              ]
+            },
+            "against": {
+              "oneOf": [
+                {
+                  "const": "best"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
+            "value": {
+              "type": "number"
+            },
+            "target": {
+              "type": [
+                "number",
+                "string"
+              ]
+            },
+            "tolerance": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "abs": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "rel": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              }
+            },
+            "rationale": {
+              "type": "string"
+            }
+          }
+        },
+        "pass": {
+          "enum": [
+            "pass",
+            "fail",
+            "na"
+          ]
+        },
+        "notes": {
+          "type": "string"
+        },
+        "corroborated_by": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^([a-z0-9-]+/)?[a-z0-9][a-z0-9_.-]*@[A-Za-z0-9_.-]+$"
+          },
+          "description": "required for metrics on derived or simulated data: 'id@dataset' or 'capability/id@dataset' of metrics on real data"
+        }
       }
     },
-    "axis": {"type": "object", "properties": {
-      "label": {"type": "string"}, "unit": {"type": "string"}, "scale": {"enum": ["linear", "log"]},
-      "categories": {"type": "array"}, "min": {"type": "number"}, "max": {"type": "number"}}},
-    "figure": {
-      "type": "object", "required": ["id", "title", "kind"],
+    "axis": {
+      "type": "object",
       "properties": {
-        "id": {"type": "string"}, "title": {"type": "string"}, "caption": {"type": "string"},
-        "kind": {"enum": ["bar", "grouped_bar", "scatter", "line", "box", "histogram", "heatmap", "table"]},
-        "x": {"$ref": "#/$defs/axis"}, "y": {"$ref": "#/$defs/axis"},
-        "series": {"type": "array", "items": {"type": "object", "required": ["name", "y"], "properties": {
-          "name": {"type": "string"}, "tool": {"type": "string"}, "x": {"type": "array"},
-          "y": {"type": "array", "maxItems": 5000}, "text": {"type": "array"},
-          "err_lo": {"type": "array"}, "err_hi": {"type": "array"}}}},
-        "rows": {"type": "array"}, "cols": {"type": "array"}, "z": {"type": "array"},
-        "columns": {"type": "array"}, "data_file": {"type": "string"},
-        "reference_lines": {"type": "array"}, "highlight": {"type": "string"}
+        "label": {
+          "type": "string"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "scale": {
+          "enum": [
+            "linear",
+            "log"
+          ]
+        },
+        "categories": {
+          "type": "array"
+        },
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        }
+      }
+    },
+    "figure": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "kind"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "caption": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "bar",
+            "grouped_bar",
+            "scatter",
+            "line",
+            "box",
+            "histogram",
+            "heatmap",
+            "table",
+            "pareto"
+          ]
+        },
+        "x": {
+          "$ref": "#/$defs/axis"
+        },
+        "y": {
+          "$ref": "#/$defs/axis"
+        },
+        "series": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "y"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "tool": {
+                "type": "string"
+              },
+              "x": {
+                "type": "array"
+              },
+              "y": {
+                "type": "array",
+                "maxItems": 5000
+              },
+              "text": {
+                "type": "array"
+              },
+              "err_lo": {
+                "type": "array"
+              },
+              "err_hi": {
+                "type": "array"
+              },
+              "frontier": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "rows": {
+          "type": "array"
+        },
+        "cols": {
+          "type": "array"
+        },
+        "z": {
+          "type": "array"
+        },
+        "columns": {
+          "type": "array"
+        },
+        "data_file": {
+          "type": "string"
+        },
+        "reference_lines": {
+          "type": "array"
+        },
+        "highlight": {
+          "type": "string"
+        }
       }
     }
   }

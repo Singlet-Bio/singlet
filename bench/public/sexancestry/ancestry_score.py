@@ -232,7 +232,7 @@ def main(argv=None) -> int:
             {"name": "xist-chrY-rule", "version": "n/a", "role": "competitor", "params": "bulk sex: XIST > 0 and MSY = 0 female; MSY > 0 and XIST = 0 male"},
             {"name": "1000genomes-panel", "version": "phase 3 (20130502)", "role": "truth"},
         ],
-        "datasets": [{"id": "mage150", "title": f"MAGE LCL RNA-seq, {n} 1000 Genomes individuals (26 populations)",
+        "datasets": [{"id": "mage150", "data_kind": "derived", "title": f"MAGE LCL RNA-seq, {n} 1000 Genomes individuals (26 populations)",
                       "accessions": {"srr": runs, "other": ["PRJNA851328"]},
                       "truth": "1000 Genomes super-population and sex of each individual", "n_cells": 0}],
         "af_leaveout": {k: v for k, v in afj.items() if k != "excluded"}, "n_excluded": len(excluded),
