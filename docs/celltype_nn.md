@@ -316,3 +316,68 @@ python scripts/celltype_nn/infer_campaign.py status --out $OUT
 Ingest after the run is not part of this change. The cell index would read `cell_type_cl` / `cell_type_prob` like the label
 file's `cell_type_cl` / `cell_type_score`, plus the top-k columns as feature columns. It would also write `cell_feature` rows
 for the network's outputs and `sample_cell_summary` rows from the per-sample JSON.
+
+## 9. Comparison with CellTypist, scANVI, Seurat and SingleR (public benchmark, capability `cell-type`)
+
+The result is `bench/public/results/cell-type.json`, in the Singlet 1.0.0 contract (`bench/public/CONTRACT.md`). The module
+`bench/public/capabilities/cell_type.py` builds it from artifacts with `compute(artifact_dir)`, and the shared scoring is
+`singlet.celltype_nn.benchmark`.
+
+**Setup.**
+- **Dataset:** cxg16, the same 16 studies and 291,331 cells as section 5, scored on Singlet's counts. Every tool reads the
+  same counts on the same 6,000-gene vocabulary.
+- **Reference:** every tool learns from the same Census training corpus (benchmark collections excluded).
+  - CellTypist 1.7.1 (`celltypist.train`, SGD with mini-batches) and Singlet's network train on all of it.
+  - Seurat 5.0.0 reference mapping (the Azimuth method: FindTransferAnchors / TransferData), SingleR 2.0.0 (`aggr.ref`) and
+    scANVI (scvi-tools 1.4.2; scVI then scANVI, scArches query mapping) use a stratified subsample of at most 200 cells per
+    term: 145k human and 62k mouse cells.
+  - Labels are the curated CL terms, so no tool needs a crosswalk.
+- **How each tool was run:** the R tools run as published, in their own process (`scripts/celltype_nn/compete/run_r.R`,
+  Seurat 5 container image); the Python tools through `run_py.py`.
+- **Runtime:** Singlet and CellTypist are timed back to back in one job with the same 8 threads (`timing.py`). The slower
+  tools are timed as they ran.
+
+**Results** (mean over 16 studies; strict match-or-beat against the best competitor, no tolerance; 95% CIs, from a
+bootstrap over studies, are in the JSON):
+
+| metric | Singlet | CellTypist | scANVI | Seurat | SingleR | pass |
+|---|---|---|---|---|---|---|
+| accuracy, depth 1 (compartment) | **0.903** | 0.830 | 0.835 | 0.797 | 0.856 | yes |
+| accuracy, depth 2 (lineage) | **0.744** | 0.671 | 0.729 | 0.628 | 0.708 | yes |
+| accuracy, depth 3 (cell type) | **0.418** | 0.376 | 0.352 | 0.332 | 0.392 | yes |
+| accuracy, depth 4 (subtype) | **0.498** | 0.326 | 0.289 | 0.241 | 0.384 | yes |
+| consistent with the author's label | **0.619** | 0.582 | 0.565 | 0.519 | 0.586 | yes |
+| wrong (another branch), forced label | 0.374 | 0.397 | 0.380 | **0.369** | 0.380 | **no** |
+| risk-coverage AURC (lower is better) | **0.293** | 0.422 | 0.650 | 0.561 | 0.519 | yes |
+| ECE of the forced label's probability | 0.216 | 0.364 | 0.514 | **0.135** | - | **no** |
+| wrong, published label (Singlet: calibrated call) | **0.251** | 0.397 | 0.380 | 0.369 | 0.380 | yes |
+| ECE of the published probability (Singlet: call) | **0.079** | 0.364 | 0.514 | 0.135 | - | yes |
+| depth-2 accuracy, tissues thin in the reference (2 studies) | 0.507 | 0.457 | **0.615** | 0.449 | 0.532 | **no** |
+| CPU-seconds per million cells | **1,096** | 1,948 | 144,182 (GPU) | 18,937 | 533,230 | yes |
+
+**Reading.**
+- **Labels.** Singlet's forced label (`argmax_cl`) is the like-for-like comparison: every competitor names one term per cell.
+  It is the most accurate at every depth, by 0.015 (depth 2) to 0.11 (depth 4) over the best competitor.
+- **The calibrated call** (`cell_type_cl`, which backs off to the parent term when unsure) makes a third fewer wrong calls
+  than any competitor's label. Its probability is the best calibrated: ECE 0.079 against Seurat's 0.135.
+- **Fails, reported as fails:**
+  - **Forced-label wrong rate.** At 0.374 the forced label makes 0.005 more wrong calls than Seurat, which is inside every
+    CI. The rule is strict, so it fails.
+  - **Forced-label calibration.** The argmax term's probability is worse calibrated than Seurat's prediction score. Its own
+    temperature, fitted on the validation collections after this benchmark had been seen (section 4, disclosed), did not
+    help on Singlet's counts: 0.181 → 0.216. It is kept rather than tuned on the benchmark.
+  - **Tissues thin in the reference** (dental pulp GSE185222, mouse ependyma GSE201773). scANVI's integration
+    generalises better there. Only two studies fall in this group.
+- **Runtime.** Singlet labels a million cells in about 18 CPU-minutes, 1.8x faster than CellTypist, 17x faster than Seurat
+  mapping and about 500x faster than SingleR. scANVI needs a GPU and a per-sample query training.
+
+**Not covered yet.**
+- Azimuth's own pretrained references, which cover 3 of the 16 tissues; the Seurat mapping with the shared reference stands
+  in for the method.
+- The cohort's other cell-type datasets (Ding 2020 in 7 protocols, the 10x and mouse sets, Segerstolpe, Tabula Muris).
+  They need the harness's Singlet counts, which do not exist yet.
+
+**Reproduce** (Clipper):
+`scripts/celltype_nn/compete/{env,prep,scanvi_train,method,ours,timing,score,publish}.sbatch`. `export.py` writes the shared
+reference and queries; `artifacts.py` collects the per-cell calls (`$WORK/bpub/artifacts/cell-type/`, 39 MB);
+`publish.sbatch` runs `compute()` and the contract validator.
