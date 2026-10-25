@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 """Controlled runtime of the fast cell type tools: Singlet's network and CellTypist (the others are 10-300x slower), each
-labelling every benchmark sample's called cells in turn, on one exclusive node with the same thread count, from counts already
+labelling every benchmark sample's called cells in turn, back to back in one job with the same thread count, from counts already
 in memory (reading is not timed). Writes ``<compete>/calls/<tool>/timings_controlled.jsonl``, which
 ``artifacts.py`` prefers over the timings recorded while the comparison ran on shared nodes.
 

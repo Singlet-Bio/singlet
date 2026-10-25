@@ -1,10 +1,9 @@
 #!/bin/bash
-# Controlled runtime of Singlet's network and CellTypist (scripts/celltype_nn/compete/timing.py) on one exclusive node.
+# Controlled runtime of Singlet's network and CellTypist (scripts/celltype_nn/compete/timing.py) back to back in one job with the same 8 threads.
 #SBATCH --job-name=ctnn-time
 #SBATCH --account=debruinz
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
 #SBATCH --partition=short-bigmem
-#SBATCH --exclusive
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=96G
 #SBATCH --time=02:00:00
