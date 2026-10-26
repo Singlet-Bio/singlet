@@ -188,6 +188,17 @@ def _load(a):
     return out, sorted(json.loads((out / "plan.json").read_text(encoding="utf-8"))["items"], key=lambda i: ORDER[i["kind"]])
 
 
+def copy_object(st, src: str, dst: str, size: int) -> None:
+    """Server-side byte copy. On R2 the Content-Type / Cache-Control are set to what a store key gets (MetadataDirective
+    REPLACE), whatever the source carried; objects here are far below the 5 GB single-copy limit."""
+    if isinstance(st, camp.S3Store):
+        ctype, cache = camp.object_headers(dst)
+        st.c.copy_object(Bucket=BUCKET, Key=dst, CopySource={"Bucket": BUCKET, "Key": src}, MetadataDirective="REPLACE",
+                         ContentType=ctype, CacheControl=cache)
+    else:
+        st.copy(BUCKET, src, BUCKET, dst, size=size)
+
+
 def cmd_apply(a) -> int:
     st, (out, items) = open_store(a), _load(a)
     for it in items:
@@ -197,7 +208,7 @@ def cmd_apply(a) -> int:
                 if have.size == it["bytes"] and have.etag == it["etag"]:
                     continue
                 raise SystemExit(f"refusing to overwrite {it['dst']}: it exists with different content")
-            st.copy(BUCKET, it["src"], BUCKET, it["dst"], size=it["bytes"])
+            copy_object(st, it["src"], it["dst"], it["bytes"])
         else:
             body = (out / it["file"]).read_bytes()
             if have is not None:
@@ -241,6 +252,11 @@ def cmd_verify(a) -> int:
                 ok = st.get_bytes(BUCKET, it["dst"]) == (out / it["file"]).read_bytes()
             elif ok:
                 ok = h.etag == it["etag"]
+            if ok and isinstance(st, camp.S3Store):
+                want_ct, want_cc = camp.object_headers(it["dst"])
+                if (h.content_type, h.cache_control) != (want_ct, want_cc):
+                    print(f"headers {it['dst']}: {h.content_type!r} {h.cache_control!r}, expected {want_ct!r} {want_cc!r}")
+                    ok = False
         if ok and a.http and it.get("fetch") == "wrangler":
             print(f"not served over HTTP, not checked: {it['dst']}")
         elif ok and a.http:
