@@ -5,7 +5,7 @@ was used for development and is not scored. Reference: 10x GRCh38-2024-A for eve
 **Singlet 1.0.0.** `singlet encode` (R1, barcode read, R3), then the pipeline with STAR in paired-end DNA mode (no
 splicing) and the ATAC post-alignment step. That step detects the barcode window and corrects barcodes against the 10x
 whitelist; for Multiome it translates them to GEX barcodes. It then builds Tn5-shifted fragments (MAPQ ≥ 30,
-deduplicated) and calls peaks on cut sites with the MACS2 recipe Signac/ArchR use (q < 0.01). It also computes Cell
+deduplicated) and calls peaks on cut sites with the MACS2 recipe Signac/ArchR use (q < 0.05). It also computes Cell
 Ranger / ArchR / Signac QC definitions and calls cells with a mixture model on fragments in peaks (joint with GEX UMIs for
 Multiome). 16 threads.
 

@@ -57,7 +57,7 @@ An audit of the ATAC and Visium paths (2026-10-25) found these problems.
    sites:
    * a 200 bp tag around each cut site;
    * local lambda = max(genome-wide, 10 kb);
-   * Poisson p-values, Benjamini–Hochberg q < 0.01, summits;
+   * Poisson p-values, Benjamini–Hochberg q < 0.05 (the MACS2 default, which also gave the best peak F1 on the development data), summits;
    * computed on a 10 bp grid.
 4. **QC** (`atac_metrics.h`). Each metric follows a named tool's definition so it can be compared:
    * fragments, mito fragments, duplicates, and TSS fragments (±1 kb): Cell Ranger;

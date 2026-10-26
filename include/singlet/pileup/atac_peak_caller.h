@@ -38,7 +38,7 @@ struct InsertionPeakParams {
     int32_t ext = 200;           // tag width (shift -100, extsize 200)
     int32_t step = 10;           // grid step
     int32_t llocal = 10000;      // local lambda window
-    double q_cutoff = 0.01;      // BH q-value cutoff
+    double q_cutoff = 0.05;      // BH q-value cutoff (MACS2 default; best peak F1 on Multiome 3k development data)
     int32_t min_length = 200;    // MACS2 default min length = extsize
     int32_t max_gap = 30;        // merge regions closer than this
     double genome_size = 0;      // effective genome size; 0 = 0.87 x sum of chromosome lengths given

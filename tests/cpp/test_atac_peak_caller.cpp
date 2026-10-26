@@ -73,7 +73,7 @@ void test_synthetic_genome(std::vector<singlet::AtacPeak>& peaks_out, std::vecto
     for (const auto& p : planted) plant(p);
     plant(on_skipped);
 
-    singlet::InsertionPeakParams prm;  // defaults: q 0.01, min_length 200
+    singlet::InsertionPeakParams prm;  // defaults: q 0.05, min_length 200
     auto peaks = singlet::call_peaks_insertions(ins, chrom_len, skip, prm);
 
     for (const auto& p : planted) {
