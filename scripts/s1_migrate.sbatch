@@ -43,6 +43,7 @@
 #SBATCH --mem=64G
 #SBATCH --time=03:59:00
 #SBATCH --no-requeue
+# (scavenger runs pass --requeue: a full-mode task is safe to requeue, RESUME=1 skips every study already committed)
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%A_%a.out
 set -euo pipefail
 
@@ -251,7 +252,7 @@ case "$MODE" in
     ;;
   refs-index)
     need_creds
-    rt "${PY[@]}" "${CAMP[@]}" refs-index ${APPLY:+--apply} ${LOCAL_ROOT:+--local-root "$LOCAL_ROOT"}
+    rt "${PY[@]}" "${CAMP[@]}" refs-index ${APPLY:+--apply} ${MERGE_PREFIX:+--merge-prefix "$MERGE_PREFIX"} --scratch "$SCRATCH" ${LOCAL_ROOT:+--local-root "$LOCAL_ROOT"}
     ;;
   archive-dry)  # (A) read-only: what would be copied
     need_creds; need_shard

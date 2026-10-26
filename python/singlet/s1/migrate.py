@@ -351,6 +351,11 @@ def migrate_sample(
         base.meta = {"called_source": called_src, "whitelist": wl_id}
         if called is not None:
             _add_called_ed(base, basis_barcodes, ex_c, it_c, protocol, opts, gsm)
+    labels = None
+    if opts.labels is not None and base is not None:
+        labels = _label_cells(
+            base, gsm, gse, ex_c, it_c, basis_barcodes, study_bytes, lctx, mem, depth_members, opts
+        )
 
     # ---- 3. candidate cells columns from the recipes
     cand: dict[str, tuple] = {}  # name -> (dtype, values, contributor rel)
@@ -458,31 +463,20 @@ def migrate_sample(
     ledger = _ledger(gse, gsm, key, order, mem, infos, obj)
     stats = cells_final.stats() if cells_final is not None else {}
     extras = sample_extras(lctx, mem, summary, opts, gsm)
-    labels = None
-    if opts.labels is not None and cells_final is not None and basis_barcodes is not None:
+    if labels is not None and labels.get("status") == "computed":
         from . import labels_step as LS
 
         cinfo = next((i for i in infos if i.kind == C.KIND_CELLS), None)
-        labels = LS.label_sample(
+        LS.finalize_sidecar(
+            labels,
             gsm=gsm,
-            gse=gse,
-            exon=ex_c,
-            intron=it_c,
-            basis_barcodes=basis_barcodes,
+            n_columns=len(basis_barcodes),
             called=np.asarray(cells_final.called, bool),
             cells_digest=cinfo.digest.hex() if cinfo is not None else "",
-            vocab=_parse_json(study_bytes.get("feature_vocab.json")),
-            study_meta=_parse_json(study_bytes.get("study_meta.json")),
-            donor_tsv=lctx.member_bytes("donor/donor_assignments.tsv")
-            if "donor/donor_assignments.tsv" in mem
-            else (
-                lctx.member_bytes("donor_assignments.tsv")
-                if "donor_assignments.tsv" in mem
-                else None
-            ),
-            depth_members=depth_members() if callable(depth_members) else (depth_members or {}),
             opts=opts.labels,
         )
+    if labels is not None:
+        labels.pop("df", None)
         log(
             "  [%s] labels: %s%s, %.1fs"
             % (
@@ -614,6 +608,52 @@ def sample_extras(lctx: LegacyContext, mem: dict, summary: dict, opts: Options, 
     return out
 
 
+def _label_cells(
+    base, gsm, gse, ex_c, it_c, basis_barcodes, study_bytes, lctx, mem, depth_members, opts: Options
+):
+    """Per-cell labels (singlet.s1.labels_step) from the decoded matrices, written into the cells table as columns (every stored
+    barcode; empty / NaN without a label) with their vocabulary in the table's metadata. The sidecar for the cell index is finished
+    after the object is assembled. Returns the labeller's result (never raises)."""
+    from . import labels_step as LS
+
+    donor = None
+    for rel in ("donor/donor_assignments.tsv", "donor_assignments.tsv"):
+        if rel in mem:
+            donor = lctx.member_bytes(rel)
+            break
+    res = LS.label_sample(
+        gsm=gsm,
+        gse=gse,
+        exon=ex_c,
+        intron=it_c,
+        basis_barcodes=basis_barcodes,
+        called=np.asarray(base.called, bool),
+        cells_digest=None,
+        vocab=_parse_json(study_bytes.get("feature_vocab.json")),
+        study_meta=_parse_json(study_bytes.get("study_meta.json")),
+        donor_tsv=donor,
+        depth_members=depth_members() if callable(depth_members) else (depth_members or {}),
+        opts=opts.labels,
+    )
+    if res.get("status") == "computed":
+        try:
+            for name, dt, vals in LS.cells_columns(res["df"], base.n_rows):
+                base.add(name, dt, vals)
+            mv = sorted({x for x in res["df"]["model_version"].dropna().astype(str)})
+            base.meta["labels"] = {
+                "annot_version": opts.labels.annot_version,
+                "model_version": ";".join(mv),
+                "columns": [n for n, _ in LS.CELLS_LABEL_COLUMNS],
+                "cell_type": LS.CELL_TYPE_DISPLAY,
+            }
+        except Exception as e:  # noqa: BLE001  the labels never fail the transcode
+            for n, _ in LS.CELLS_LABEL_COLUMNS:
+                base.drop(n)
+            base.meta.pop("labels", None)
+            res.update(status="failed", reason="cells columns: %s: %s" % (type(e).__name__, e))
+    return res
+
+
 def _add_called_ed(base, barcodes, exon, intron, protocol, opts: Options, gsm: str) -> None:
     """Optional cells columns ``called_ed`` (bool) and ``called_ed_fdr`` (f32, NaN = not tested) plus the call's parameters in
     ``base.meta["called_ed"]`` (docs/called-ed.md)."""
@@ -713,7 +753,13 @@ def _assemble(gsm, order, mem, base, cand, lctx, opts: Options, basis_barcodes, 
                 for n in m.plan[2]:
                     if isinstance(n, str) and n.startswith("cells:"):
                         needed.add(n[6:])
-        cells_final = base.copy(only=[k for k in cand if k in needed] + list(cellcall.COLUMNS))
+        from .labels_step import CELLS_LABEL_COLUMNS
+
+        cells_final = base.copy(
+            only=[k for k in cand if k in needed]
+            + list(cellcall.COLUMNS)
+            + [n for n, _ in CELLS_LABEL_COLUMNS]
+        )
         for k in cand:
             if k in needed and not cells_final.has(k):
                 cells_final.add(k, cand[k][0], cand[k][1])
@@ -729,6 +775,7 @@ def _assemble(gsm, order, mem, base, cand, lctx, opts: Options, basis_barcodes, 
                 "called_source": base.meta.get("called_source"),
                 "whitelist": base.meta.get("whitelist"),
                 **({"called_ed": base.meta["called_ed"]} if "called_ed" in base.meta else {}),
+                **({"labels": base.meta["labels"]} if "labels" in base.meta else {}),
                 "ctx": facts,
             },
             flags=C.FLAG_ANNDATA,
@@ -1001,6 +1048,8 @@ def _manifest_member(info: C.MemberInfo, obj: bytes) -> dict:
         )
         if meta.get("called_ed") is not None:
             d["called_ed"] = meta["called_ed"]
+        if meta.get("labels") is not None:
+            d["labels"] = meta["labels"]
     return d
 
 
@@ -1124,6 +1173,10 @@ def _gse_of(bundle: LegacyBundle, files: dict, override: Optional[str]) -> str:
         return _safe_id(override, "study id")
     mf = _parse_json(files.get("manifest.json"))
     return _safe_id(mf.get("gse_id") or bundle.gse_hint or "GSE0", "study id")
+
+
+#: where the per-cell labels live (manifest "transcode.labels"): columns of each sample's cells table plus the cell-index sidecar
+LABELS_LAYOUT = "cells-table+sidecar/1"
 
 
 class PolicyWithheld(Exception):
@@ -1426,6 +1479,10 @@ def write_outputs(res: dict, opts: Options) -> dict:
         man["release_policy"] = opts.policy.manifest_block()
     if res.get("annotations") and opts.labels is not None:
         man["annotations_default"] = opts.labels.annot_version
+    if (
+        opts.labels is not None
+    ):  # what the campaign's resume compares: a study transcoded without labels in its cells tables is redone
+        man["transcode"] = {"labels": LABELS_LAYOUT}
     if (
         res.get("policy_report") is not None
     ):  # private audit trail, next to (never inside) the .s1 tree

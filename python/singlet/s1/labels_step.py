@@ -198,20 +198,18 @@ def label_sample(
     intron,
     basis_barcodes: List[str],
     called: np.ndarray,
-    cells_digest: str,
+    cells_digest: Optional[str],
     vocab: dict,
     study_meta: dict,
     donor_tsv: Optional[bytes],
     depth_members: Dict[str, bytes],
     opts: LabelOptions,
 ) -> dict:
-    """-> {"status": "ok"|"skipped"|"failed"|"over_budget", "reason", "sidecar": bytes, "entry": manifest entry, "coverage", "summary",
-    "seconds"}. Never raises."""
+    """-> {"status": "computed"|"ok"|"skipped"|"failed"|"over_budget", "reason", "df" (the label table), "coverage", "summary",
+    "seconds"}; with ``cells_digest`` the sidecar is finished too ("ok", "sidecar": bytes, "entry": manifest entry). Never raises."""
     from singlet.celllabels import io as LIO
     from singlet.celllabels import output as O
     from singlet.celllabels.pipeline import annotate_sample
-
-    from . import atlas
 
     t0 = time.time()
     res: dict = {"status": "skipped", "reason": "", "seconds": 0.0}
@@ -257,13 +255,48 @@ def label_sample(
             df, summary = annotate_sample(s, af_table=af, method=opts.method)
         s.donor_sites = {}  # the depth tables go no further
         O.assert_public_safe(df)
+        res.update(
+            status="computed", df=df, coverage=coverage(df), summary=_summary_public(summary)
+        )
+        if cells_digest is not None:
+            finalize_sidecar(
+                res,
+                gsm=gsm,
+                n_columns=len(basis_barcodes),
+                called=called,
+                cells_digest=cells_digest,
+                opts=opts,
+            )
+    except LabelBudget as e:
+        res.update(status="over_budget", reason=str(e))
+    except MemoryError:
+        res.update(status="over_budget", reason="out of memory")
+    except Exception as e:  # noqa: BLE001  the labeller must never fail the transcode
+        res.update(status="failed", reason="%s: %s" % (type(e).__name__, str(e)[:300]))
+    finally:
+        res["seconds"] = round(time.time() - t0, 3)
+    return res
+
+
+def finalize_sidecar(
+    res: dict, *, gsm: str, n_columns: int, called, cells_digest: str, opts: LabelOptions
+) -> dict:
+    """Turn a computed label table (``res["df"]``) into the canonical sidecar for the manifest, recording the digest of the finished
+    ``cells`` member. Sets ``status`` "ok" (or "failed" with a reason); never raises."""
+    from singlet.celllabels import output as O
+
+    from . import atlas
+
+    if res.get("status") != "computed":
+        return res
+    try:
         with tempfile.TemporaryDirectory() as td:
             p = os.path.join(td, gsm + ".labels.parquet")
-            O.write_labels(df, p)
+            O.write_labels(res["df"], p)
             data, entry = atlas.normalize_sidecar(
                 p,
                 gsm=gsm,
-                n_columns=len(basis_barcodes),
+                n_columns=n_columns,
                 called=np.asarray(called, bool),
                 cells_digest=cells_digest,
                 annot_version=opts.annot_version,
@@ -274,23 +307,43 @@ def label_sample(
             hits = O.scan_labels_file(cp)
         if hits:
             raise RuntimeError("genotype-like content in the label sidecar: %r" % hits[:3])
-        entry = dict(entry, cell_type=CELL_TYPE_DISPLAY)
-        res.update(
-            status="ok",
-            sidecar=data,
-            entry=entry,
-            coverage=coverage(df),
-            summary=_summary_public(summary),
-        )
-    except LabelBudget as e:
-        res.update(status="over_budget", reason=str(e))
-    except MemoryError:
-        res.update(status="over_budget", reason="out of memory")
-    except Exception as e:  # noqa: BLE001  the labeller must never fail the transcode
-        res.update(status="failed", reason="%s: %s" % (type(e).__name__, str(e)[:300]))
-    finally:
-        res["seconds"] = round(time.time() - t0, 3)
+        res.update(status="ok", sidecar=data, entry=dict(entry, cell_type=CELL_TYPE_DISPLAY))
+    except Exception as e:  # noqa: BLE001
+        res.update(status="failed", reason="sidecar: %s: %s" % (type(e).__name__, str(e)[:300]))
     return res
+
+
+#: label columns of the sample object's ``cells`` table (one row per stored barcode; empty / NaN where a barcode has no label)
+CELLS_LABEL_COLUMNS = (
+    ("cell_type_cl", "str"),
+    ("cell_type_label", "str"),
+    ("cell_type_score", "f32"),
+    ("cell_type_path", "str"),
+    *((f"cell_type_p{k}", "f32") for k in range(1, 7)),
+    ("sex_chrom", "str"),
+    ("sex_score", "f32"),
+    ("ancestry_hancestro", "str"),
+    ("ancestry_prob", "f32"),
+)
+
+
+def cells_columns(df, n_rows: int) -> list:
+    """[(name, dtype, values)] of the label columns for a cells table of ``n_rows`` barcodes (rows by ``df.col``)."""
+    from . import cells as CM
+
+    col = np.asarray(df["col"].to_numpy(), dtype=np.int64)
+    out = []
+    for name, kind in CELLS_LABEL_COLUMNS:
+        if kind == "str":
+            v = np.full(n_rows, "", dtype=object)
+            src = df[name].astype(object).where(df[name].notna(), "").to_numpy()
+            v[col] = [str(x) for x in src]
+            out.append((name, CM.DT_STR, list(v)))
+        else:
+            v = np.full(n_rows, np.nan, dtype=np.float32)
+            v[col] = df[name].to_numpy(dtype=np.float32, na_value=np.nan)
+            out.append((name, CM.DT_F32, v))
+    return out
 
 
 def coverage(df) -> dict:

@@ -1648,6 +1648,8 @@ def check_done(ctx: Ctx, gse: str, legacy: Head) -> Optional[dict]:
         return None
     if ctx.policy is not None and (m.get("release_policy") or {}).get("version") != ctx.policy.version:
         return None  # migrated under another policy version (or none): redo it
+    if ctx.labels and (m.get("transcode") or {}).get("labels") != "cells-table+sidecar/1":
+        return None  # transcoded without the labels in the cells tables: redo it
 
     def present(s: dict) -> bool:
         h = ctx.store.head(ctx.public, s.get("key", ""))
@@ -2314,6 +2316,36 @@ def cmd_refs_index(a: argparse.Namespace) -> int:
         todo.append((f"s1/ref/{p['id']}.pack", f))
     if bad:
         return 1
+    if getattr(a, "merge_prefix", None):
+        # packs published under an older prefix (the junction tables under v2/ref/): copied server-side (same bytes, same ids)
+        # and listed in the new index, so readers and the transcoder find every pack under s1/ref/
+        pre = a.merge_prefix.rstrip("/") + "/"
+        old = json.loads(store.get_bytes(a.public, pre + "index.json"))
+        have = {p["id"] for p in index["packs"]}
+        copied = 0
+        for e in old.get("packs", []):
+            if e["id"] in have:
+                continue
+            src, dst = f"{pre}{e['id']}.pack", f"s1/ref/{e['id']}.pack"
+            hs = store.head(a.public, src)
+            if hs is None or hs.size != e["bytes"]:
+                print(f"{src}: missing or of the wrong size", file=sys.stderr)
+                return 1
+            hd = store.head(a.public, dst)
+            if a.apply and (hd is None or hd.size != hs.size):
+                w.copy(a.public, src, a.public, dst, size=hs.size)
+                got = store.sha256_object(a.public, dst, hs.size)
+                if got != e["sha256"]:
+                    print(f"{dst}: sha256 after the copy differs from the index", file=sys.stderr)
+                    return 1
+                copied += 1
+            index["packs"].append(e)
+            have.add(e["id"])
+        index["format"] = "singlet-s1-packs"
+        idx_path = Path(a.scratch or tempfile.mkdtemp()) / "index.json"
+        idx_path.parent.mkdir(parents=True, exist_ok=True)
+        write_lf(idx_path, json.dumps(index, indent=1, sort_keys=False) + "\n")
+        print(f"merged {pre}index.json: {len(old.get('packs', []))} entries, {copied} packs copied to s1/ref/")
     todo.append((REFS_INDEX_KEY, idx_path))
     up = sk = 0
     for key, f in todo:
@@ -2461,6 +2493,8 @@ def build_parser() -> argparse.ArgumentParser:
     common(x)
     x.add_argument("--packs-dir", default=str(REPO / "python" / "singlet" / "s1" / "packs"))
     x.add_argument("--apply", action="store_true")
+    x.add_argument("--merge-prefix", help="also publish (server-side copies) every pack listed in <prefix>index.json, e.g. v2/ref/")
+    x.add_argument("--scratch", help="directory for the merged index.json")
     x.set_defaults(func=cmd_refs_index)
 
     t = sub.add_parser("retire-sql", help="step B of the retirement: SQL flipping s1_migration.status verified -> retired for the archived studies")

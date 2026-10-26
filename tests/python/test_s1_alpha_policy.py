@@ -388,6 +388,22 @@ def test_labels_are_written_as_referenced_sidecars_and_verified(tmp_path, pol):
     assert (
         len(lab) == 1 and lab[0]["status"] == "ok" and lab[0]["coverage"]["cells"] == s["n_called"]
     )
+    # the labels are also columns of the sample object's own cells table, equal to the sidecar on the called cells
+    import pyarrow.parquet as pq
+
+    from singlet.s1.labels_step import CELLS_LABEL_COLUMNS
+    from singlet.s1.sample import S1Sample
+
+    t = S1Sample((out / s["key"]).read_bytes(), MG.P.default_store()).cells()
+    assert all(t.has(n) for n, _ in CELLS_LABEL_COLUMNS)
+    assert s["members"]["cells"]["labels"]["annot_version"] == "a2026-10"
+    sc = pq.read_table(out / ent["key"]).to_pydict()
+    called = np.flatnonzero(np.asarray(t.column("called"), bool))
+    assert list(called) == sc["col"]
+    assert [t.column("sex_chrom")[i] for i in called] == [x or "" for x in sc["sex_chrom"]]
+    assert [t.column("cell_type_cl")[i] for i in called] == [x or "" for x in sc["cell_type_cl"]]
+    uncalled = np.flatnonzero(~np.asarray(t.column("called"), bool))
+    assert all(t.column("sex_chrom")[i] == "" for i in uncalled)
     rep = V.verify(
         str(b), str(out), None, None, TM.FakeRecipes(), log=lambda *a: None, policy=policy
     )
