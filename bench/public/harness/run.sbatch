@@ -33,11 +33,18 @@ export SINGLET_STALL_TIMEOUT=7200   # the stall watchdog can fire during STAR's 
 pick_gex() {
   local lib=${1:-gex} files f len
   R1=(); R2=()
-  mapfile -t files < <(awk -F'\t' -v l=$lib '$1==l {print $3}' $D/libs.tsv)
-  for f in "${files[@]}"; do
-    len=$(zcat -f "$f" 2>/dev/null | sed -n 2p | tr -d '\n' | wc -c)
-    if [ "$len" -le 30 ] && [ "$len" -ge 20 ]; then R1+=("$f"); elif [ "$len" -gt 30 ]; then R2+=("$f"); fi   # <20: index reads
-  done
+  if ! awk -F'\t' -v l=$lib '$1==l && $2!="R1" && $2!="R2"' $D/libs.tsv | grep -q .; then
+    # only R1/R2 files: trust the numbering (a barcode read can be sequenced long, e.g. 101 nt in GSE230239)
+    mapfile -t R1 < <(awk -F'\t' -v l=$lib '$1==l && $2=="R1" {print $3}' $D/libs.tsv)
+    mapfile -t R2 < <(awk -F'\t' -v l=$lib '$1==l && $2=="R2" {print $3}' $D/libs.tsv)
+  else
+    # index reads present (SRA numbering varies): the barcode read is the 20-30 nt one, the cDNA read the longer one
+    mapfile -t files < <(awk -F'\t' -v l=$lib '$1==l {print $3}' $D/libs.tsv)
+    for f in "${files[@]}"; do
+      len=$( (zcat -f "$f" 2>/dev/null || true) | head -2 | tail -1 | tr -d '\n' | wc -c)
+      if [ "$len" -le 30 ] && [ "$len" -ge 20 ]; then R1+=("$f"); elif [ "$len" -gt 30 ]; then R2+=("$f"); fi   # <20: index
+    done
+  fi
   [ ${#R1[@]} -gt 0 ] && [ ${#R1[@]} -eq ${#R2[@]} ] || { echo "cannot pair $lib reads in $D/libs.tsv"; exit 3; }
   R1CSV=$(IFS=,; echo "${R1[*]}"); R2CSV=$(IFS=,; echo "${R2[*]}")
 }
