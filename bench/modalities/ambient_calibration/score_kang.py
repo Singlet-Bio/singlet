@@ -6,7 +6,7 @@ lacks (at sites where the donor's pooled singlets are homozygous) came from othe
 pooled over groups of cells: (sum X - e sum N) / sum Q. Per-cell truth is noisy, so calibration is read on groups.
 
 usage:
-  score_kang.py truth RUN_DIR DUMP_DIR TRUTH_TSV LANE     LANE = ctrl (batch 2, stim == ctrl) or A / B / C (batch 1)
+  score_kang.py truth RUN_DIR DUMP_DIR TRUTH_TSV LANE     LANE = ctrl / stim (batch 2) or A / B / C (batch 1)
       -> DUMP_DIR/truth_cells.csv.gz (per confident singlet: barcode, celltype, X, N, Q) and truth_meta.json (error rate).
          Derived counts only; stays on Clipper (never committed: it is computed from private genotype data).
   score_kang.py score DUMP_DIR OUT_JSONL NAME=PREFIX [NAME=PREFIX ...]
@@ -39,8 +39,8 @@ def truth(run, dump, truth_tsv, lane):
     bcs = np.array(lines(f"{run}/private/snp_ad_barcodes.tsv.gz"))
     A = pd.read_csv(f"{run}/donor/donor_assignments.tsv", sep="\t").set_index("cell").reindex(bcs)
     t = pd.read_csv(truth_tsv, sep="\t", index_col=0)
-    if lane == "ctrl":
-        t = t[t["stim"] == "ctrl"]
+    if lane in ("ctrl", "stim"):
+        t = t[t["stim"] == lane]
         ct_col = "cell"
     else:
         t = t[t["batch"] == lane]

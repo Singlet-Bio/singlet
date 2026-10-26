@@ -169,6 +169,8 @@ struct AmbientDecontConfig {
     bool     use_off_estimator = true;  ///< rho from the cluster's marker-elsewhere "not expressed" genes (else full EM)
     double   marker_fold   = 1.25;      ///< a gene is a marker elsewhere if another cluster has it >= fold x ambient (+ z sd)
     double   min_off_mass  = 0.01;      ///< min ambient mass of the off-gene set for the off-gene estimator
+    double   offgene_min_expected = 0.0;///< off genes need N_k a_g >= this (expected cluster UMIs at rho = 1): a faint gene's
+                                        ///< single native reads otherwise pass the "+1" tolerance and inflate c_k in small clusters
     double   off_prior_reads = 5.0;     ///< Gamma-prior pseudo-reads of the off-gene estimator (mean = c_k)
     double   outlier_z     = 5.0;       ///< robust z (MAD) of that cut; also requires rho > 2x the cluster median
     std::vector<char> estimate_features;///< optional: features allowed to inform c_k / rho (empty = all); clustering, the
@@ -595,8 +597,11 @@ inline void decontx_ambient_core(const ambient_detail::CellMat& X, const std::ve
             mask.assign(G, 0);
             double Aeff = 0.0;
             const bool est_all = cfg.estimate_features.size() != G;
+            const double amin = Nk > 0 ? cfg.offgene_min_expected / Nk : 0.0;   // genes too faint to inform c_k
             for (size_t g = 0; g < G; ++g)
-                if (n_strong[g] - strong[g * K + k] > 0 && (est_all || cfg.estimate_features[g])) { mask[g] = 1; Aeff += a[g]; }
+                if (n_strong[g] - strong[g * K + k] > 0 && (est_all || cfg.estimate_features[g]) && a[g] >= amin) {
+                    mask[g] = 1; Aeff += a[g];
+                }
             const bool have_mask = K > 1 && cfg.use_off_estimator && Aeff >= cfg.min_off_mass;
             have_maskv[k] = have_mask ? 1 : 0;
             ck_raw[k] = cluster_contamination(nk, Nk, infl, a, cfg,

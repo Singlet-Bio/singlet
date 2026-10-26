@@ -1,0 +1,18 @@
+# sweep 3 (after the held-out b1 lanes failed at 7-10x): minimum expected cluster UMIs of an off gene (offgene_min_expected)
+# x cluster shrinkage; dev = Kang 2.1 + barnyard only
+v1 cluster_prior_reads=0
+m0_I10000 cluster_prior_reads=10000
+m30_I0 cluster_prior_reads=0 offgene_min_expected=30
+m100_I0 cluster_prior_reads=0 offgene_min_expected=100
+m300_I0 cluster_prior_reads=0 offgene_min_expected=300
+m1000_I0 cluster_prior_reads=0 offgene_min_expected=1000
+m3000_I0 cluster_prior_reads=0 offgene_min_expected=3000
+m30_I10000 cluster_prior_reads=10000 offgene_min_expected=30
+m100_I10000 cluster_prior_reads=10000 offgene_min_expected=100
+m300_I10000 cluster_prior_reads=10000 offgene_min_expected=300
+m1000_I10000 cluster_prior_reads=10000 offgene_min_expected=1000
+m3000_I10000 cluster_prior_reads=10000 offgene_min_expected=3000
+m300_I3000 cluster_prior_reads=3000 offgene_min_expected=300
+m1000_I3000 cluster_prior_reads=3000 offgene_min_expected=1000
+m300_I10000_s20 cluster_prior_reads=10000 offgene_min_expected=300 off_prior_reads=20
+m1000_I10000_s20 cluster_prior_reads=10000 offgene_min_expected=1000 off_prior_reads=20

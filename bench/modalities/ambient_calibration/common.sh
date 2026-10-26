@@ -32,11 +32,13 @@ py() {
     --env OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1} --env OPENBLAS_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1} $SIF python -I "$@"
 }
 # lane -> (bench-public run id, truth table, lane code)
-lane_run() { case $1 in ctrl) echo kang2018_ctrl;; A) echo kang2018_b1_a;; B) echo kang2018_b1_b;; C) echo kang2018_b1_c;; esac; }
+lane_run() { case $1 in ctrl) echo kang2018_ctrl;; A) echo kang2018_b1_a;; B) echo kang2018_b1_b;; C) echo kang2018_b1_c;; stim) echo kang2018_b2_stim;; esac; }
+# counts: the default run (stim has only the --n-donors 8 / auto runs; same binary, identical ambient output)
+lane_rundir() { case $1 in stim) echo $RUNS/kang2018_b2_stim/singlet_k8;; *) echo $RUNS/$(lane_run $1)/singlet;; esac; }
 # Genotype truth needs the right donor clustering: on lane 2.1 (8 donors) the default run's auto-K found 9 donors (one spurious
 # 108-cell donor), which deflates the truth to 1.47%; the --n-donors 8 rerun of the same binary has byte-identical counts and
 # ambient output (md5 of ambient_contamination.tsv) and gives 2.40% (PR #43, singlet_modfix: 2.48%). b1 A/B (4 donors) and C (8)
 # are called with the right K by default.
-lane_truth_run() { case $1 in ctrl) echo $RUNS/kang2018_ctrl/singlet_k8;; *) echo $RUNS/$(lane_run $1)/singlet;; esac; }
-lane_truth() { case $1 in ctrl) echo $TRUTH/GSE96583_batch2.total.tsne.df.tsv.gz;; *) echo $TRUTH/GSE96583_batch1.total.tsne.df.tsv.gz;; esac; }
+lane_truth_run() { case $1 in ctrl) echo $RUNS/kang2018_ctrl/singlet_k8;; *) lane_rundir $1;; esac; }
+lane_truth() { case $1 in ctrl|stim) echo $TRUTH/GSE96583_batch2.total.tsne.df.tsv.gz;; *) echo $TRUTH/GSE96583_batch1.total.tsne.df.tsv.gz;; esac; }
 BARNYARD="hgmm1k_v3_singlet hgmm1k_v3 hgmm5k_v3 hgmm10k_v3 hgmm1k_v2 hgmm6k_v2 hgmm12k_v2"

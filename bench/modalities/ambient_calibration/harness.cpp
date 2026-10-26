@@ -67,6 +67,8 @@ int main(int argc, char** argv) {
         else if (k == "cluster_prior_cells") cfg.cluster_prior_cells = std::stod(v);
         else if (k == "min_cluster_cells") cfg.min_cluster_cells = std::stoul(v);
         else if (k == "cluster_prior_reads") cfg.cluster_prior_reads = std::stod(v);
+        else if (k == "offgene_min_expected") cfg.offgene_min_expected = std::stod(v);
+        else if (k == "min_off_mass") cfg.min_off_mass = std::stod(v);
         else if (k == "low_depth_frac") cfg.low_depth_frac = std::stod(v);
         else if (k == "offgene_z") cfg.offgene_z = std::stod(v);
         else if (k == "marker_fold") cfg.marker_fold = std::stod(v);
