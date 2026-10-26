@@ -127,3 +127,19 @@ def test_deep_library_with_errors_keeps_true_junctions():
     found = {(b[:-2], c): n for b, c, n in kept[["barcode", "chain", "cdr3_nt"]].itertuples(index=False)}
     assert sum(found.get(k) == t[0] for k, t in truth.items()) == len(truth)
     assert kept.groupby(["barcode", "chain"]).size().max() == 1
+
+
+def test_junction_with_a_j_the_reference_lacks():
+    """GENCODE v44 has no TRAJ15: Phe/Trp118 is then found in the read upstream of the C region."""
+    segs = make_segments()
+    r1, r2, truth, cbs = simulate(segs)
+    missing = {"TRAJ1", "TRBJ1"}
+    ref = A.Reference([s for s in segs if s.name not in missing])
+    wl, _ = S.encode_strings(cbs, 16)
+    res = A.run_library([], [], ref=ref, cb_len=16, umi_len=10, whitelist_codes=np.sort(wl), chunks=[(r1, r2)],
+                        params=A.Params(threads=2), log=lambda *a: None)
+    kept = res.contigs[res.contigs.kept]
+    found = {(b[:-2], c): n for b, c, n in kept[["barcode", "chain", "cdr3_nt"]].itertuples(index=False)}
+    lacking = {k: t for k, t in truth.items() if t[2] in missing}
+    assert lacking, "the simulation should use the missing J genes"
+    assert sum(found.get(k) == t[0] for k, t in lacking.items()) >= 0.9 * len(lacking)

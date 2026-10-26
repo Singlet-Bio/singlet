@@ -207,10 +207,16 @@ def run_library(r1_paths: Sequence[str], r2_paths: Sequence[str], *, ref: Refere
         cys = np.where((o[:, 0] >= 0) & (ref.anchor[np.maximum(o[:, 0], 0)] >= 0) & (cys >= 0) & (cys + K_ASM <= L), cys, -1)
         fw = np.where(o[:, 3] >= 0, o[:, 5] + ref.anchor[np.maximum(o[:, 3], 0)], -1)
         fw = np.where((o[:, 3] >= 0) & (ref.anchor[np.maximum(o[:, 3], 0)] >= 0) & (fw + 3 - K_ASM >= 0) & (fw + 3 <= L), fw, -1)
+        # a J the reference lacks: Phe/Trp118 from the read, upstream of the C region
+        todo = np.flatnonzero((o[:, 3] < 0) & (o[:, 6] >= 0) & (o[:, 8] >= 30) & (o[:, 8] <= L))
+        if len(todo):
+            f2 = K.fw_from_c(codes, off, o[:, 8].astype(np.int64), todo)
+            ok2 = (f2 >= 0) & (f2 + 3 - K_ASM >= 0)
+            fw[todo[ok2]] = f2[ok2]
         # informative: reaches the junction (V 3' end in the read, or a J hit)
         v_end = np.where(o[:, 0] >= 0, o[:, 2] + np.array([len(ref.segs[i].seq) for i in range(len(ref.segs))],
                                                                   dtype=np.int32)[np.maximum(o[:, 0], 0)], -10 ** 6)
-        informative = anyhit & ((o[:, 3] >= 0) | ((o[:, 0] >= 0) & (v_end - 30 < L)))
+        informative = anyhit & ((o[:, 3] >= 0) | (fw >= 0) | ((o[:, 0] >= 0) & (v_end - 30 < L)))
         st["mates_informative"] += int(informative.sum())
         keep = np.flatnonzero(anyhit)
         r1a = np.array(r1, dtype=object)

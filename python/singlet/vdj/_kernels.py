@@ -519,3 +519,31 @@ def assemble_group(codes, off, ridx, umi, cys, fw, ka, min_seed_umis, seed_frac,
         if s1 > 0:
             cand[t] = b1 if s1 > s2 else -2
     return paths[:np_], plen[:np_], psup[:np_], cand
+
+
+@njit(cache=True, parallel=True)
+def fw_from_c(codes, off, cdiag, todo):
+    """Phe/Trp118 found in the read itself for reads with a C hit and no J call (a J gene the reference lacks: GENCODE
+    v44 has no TRAJ15): the F/W-G-X-G motif 20-60 nt upstream of the C region's start, in any frame; the one closest to
+    33 nt upstream (where J regions put it). Returns the F/W codon start in the read or -1, per entry of ``todo``."""
+    out = np.full(len(todo), -1, np.int32)
+    for t in prange(len(todo)):
+        r = todo[t]
+        a = off[r]
+        L = off[r + 1] - a
+        c0 = cdiag[r]
+        best = 1000
+        for q in range(max(0, c0 - 60), max(0, c0 - 20 + 1)):
+            if q + 12 > L:
+                break
+            # F/W codon, then G G N, any, G G N
+            c1, c2, c3 = codes[a + q], codes[a + q + 1], codes[a + q + 2]
+            fw_ok = c1 == 3 and ((c2 == 3 and (c3 == 3 or c3 == 1)) or (c2 == 2 and c3 == 2))
+            if not fw_ok:
+                continue
+            if codes[a + q + 3] == 2 and codes[a + q + 4] == 2 and codes[a + q + 9] == 2 and codes[a + q + 10] == 2:
+                d = abs((c0 - q) - 33)
+                if d < best:
+                    best = d
+                    out[t] = q
+    return out
