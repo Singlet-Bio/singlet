@@ -4,7 +4,7 @@
 #SBATCH --partition=short-cpu,cpu,scavenger
 #SBATCH --requeue
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=32G
+#SBATCH --mem=64G
 #SBATCH --time=02:00:00
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/bench-public/logs/%x-%j.out
 #   sbatch lossy_diagnose.sbatch [SRR ...]      default: SRR24098804 SRR25032524
@@ -25,6 +25,6 @@ for r in $RUNS; do
   fasterq-dump --split-files -e 8 -t tmp -O ref $SRA > /dev/null 2>&1
   R=$(ls -S ref/${r}_*.fastq | head -1)   # the cDNA file is the one with the longest reads (largest)
   echo "=========== $r  reference file $R"; grep -hE "trim|Trim|quality|Quality|dedup|swap" d.log | head -8
-  $PY -I $SRC/bench/public/harness/download/lossy_diagnose.py $R d.R2.fq l.R2.fq 8000000
+  $PY -I $SRC/bench/public/harness/download/lossy_diagnose.py $R d.R2.fq l.R2.fq
   rm -rf ref d.* l.*
 done 2>&1 | tee $BP/download/lossy_diagnose.txt
