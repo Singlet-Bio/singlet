@@ -69,10 +69,13 @@ def build_index(seqs, k):
 
 
 @njit(cache=True, parallel=True)
-def classify(codes, off, k, ikm, isg, ips, seg_region, min_hits):
+def classify(codes, off, k, ikm, isg, ips, seg_region, min_hits, seg_codes, seg_off):
     """Best V / J / C segment per read. Region codes: 0 V, 1 D, 2 J, 3 C.
 
-    Returns int32 arrays (n, 10): vseg, vhits, vdiag, jseg, jhits, jdiag, cseg, chits, cdiag (-1 / 0 when absent), and
+    Candidates come from exact k-mer hits; among those with at least a third of the top count, the segment with the
+    best ungapped alignment score on its diagonal (+1 match, -1 mismatch) is the call, and that score is its weight.
+
+    Returns int32 arrays (n, 10): vseg, vscore, vdiag, jseg, jscore, jdiag, cseg, cscore, cdiag (-1 / 0 when absent), and
     in column 9 tie flags: 1 C, 2 V, 4 J when the best segment of that region ties with another gene (TRBC1 / TRBC2,
     IGHG1-4, TRBV6-2 / TRBV6-3 share most k-mers), so that the read does not vote for either."""
     n = len(off) - 1
@@ -111,39 +114,63 @@ def classify(codes, off, k, ikm, isg, ips, seg_region, min_hits):
         if m == 0:
             continue
         ks = np.sort(keys[:m])
-        best = np.zeros(4, np.int64)
-        second = np.zeros(4, np.int64)
-        bseg = np.full(4, -1, np.int64)
-        bdiag = np.zeros(4, np.int64)
+        # runs of (segment, diagonal) with their k-mer count
+        rs = np.empty(m, np.int64)
+        rd = np.empty(m, np.int64)
+        rc = np.empty(m, np.int64)
+        nrun = 0
         j = 0
         while j < m:
             e = j
             while e < m and ks[e] == ks[j]:
                 e += 1
-            cnt = e - j
-            seg = ks[j] >> 20
-            reg = seg_region[seg]
-            if cnt > best[reg]:
-                if bseg[reg] != seg:
-                    second[reg] = best[reg]
-                best[reg] = cnt
-                bseg[reg] = seg
-                bdiag[reg] = (ks[j] & ((1 << 20) - 1)) - DIAG_BIAS
-            elif seg != bseg[reg] and cnt > second[reg]:
-                second[reg] = cnt
+            rs[nrun] = ks[j] >> 20
+            rd[nrun] = (ks[j] & ((1 << 20) - 1)) - DIAG_BIAS
+            rc[nrun] = e - j
+            nrun += 1
             j = e
-        for reg, col in ((0, 0), (2, 3), (3, 6)):
-            if best[reg] >= min_hits:
-                out[r, col] = bseg[reg]
-                out[r, col + 1] = best[reg]
-                out[r, col + 2] = bdiag[reg]
         flags = 0
-        if best[3] >= min_hits and second[3] == best[3]:
-            flags |= 1
-        if best[0] >= min_hits and second[0] == best[0]:
-            flags |= 2
-        if best[2] >= min_hits and second[2] == best[2]:
-            flags |= 4
+        for reg, col, bit in ((0, 0, 2), (2, 3, 4), (3, 6, 1)):
+            top = 0
+            for t in range(nrun):
+                if seg_region[rs[t]] == reg and rc[t] > top:
+                    top = rc[t]
+            if top < min_hits:
+                continue
+            # candidates with at least a third of the top k-mer count: the gene with most matching bases on its
+            # diagonal wins (an allelic SNP or a somatic mutation costs one base, but up to k exact k-mers)
+            b1 = -1
+            s1 = -10 ** 9
+            s2 = -10 ** 9
+            d1 = 0
+            seg1 = -1
+            for t in range(nrun):
+                sg_ = rs[t]
+                if seg_region[sg_] != reg or rc[t] < max(min_hits, top // 3):
+                    continue
+                d = rd[t]
+                so = seg_off[sg_]
+                sl = seg_off[sg_ + 1] - so
+                q0 = max(0, d)
+                q1 = min(L, d + sl)
+                sc = 0
+                for q in range(q0, q1):
+                    c = codes[a + q]
+                    if c > 3:
+                        continue
+                    sc += 1 if c == seg_codes[so + q - d] else -1
+                if sc > s1:
+                    if seg1 != sg_:
+                        s2 = s1
+                    s1, b1, d1, seg1 = sc, t, d, sg_
+                elif sg_ != seg1 and sc > s2:
+                    s2 = sc
+            if b1 >= 0 and s1 > 0:
+                out[r, col] = seg1
+                out[r, col + 1] = s1
+                out[r, col + 2] = d1
+                if s2 == s1:
+                    flags |= bit
         out[r, 9] = flags
     return out
 
