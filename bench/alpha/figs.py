@@ -108,7 +108,7 @@ def main():
         d = json.load(open(p))
         tab = d.get("_table") or []
         if tab:
-            T = pd.DataFrame(tab)
+            T = pd.DataFrame(tab).fillna(0.0)
             fig, ax = plt.subplots(figsize=(6.4, 3.4))
             x = np.arange(len(T))
             w = 0.26
