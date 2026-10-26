@@ -16,5 +16,6 @@ git -C $BARE fetch -q --update-head-ok origin +refs/heads/$BR:refs/heads/$BR
 git -C $SRC checkout -q --detach refs/heads/$BR; git -C $SRC log --oneline -1
 PY=${PY:-$W/envs/atacbench/bin/python}
 [ -x $PY ] || PY=$W/envs/adt-bench/bin/python
+$PY -c "import pyliftover" 2>/dev/null || $(dirname $PY)/pip install -q pyliftover
 S=$1; shift
 $PY $SRC/bench/atac_spatial/$S "$@"

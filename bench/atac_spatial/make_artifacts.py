@@ -18,6 +18,7 @@ ap.add_argument("--kind", default="arc"); ap.add_argument("--singlet", required=
 ap.add_argument("--chromap"); ap.add_argument("--starsolo"); ap.add_argument("--out", required=True)
 ap.add_argument("--gex", help="Multiome: Singlet GEX run dir (cell_calls.tsv) for singlet_gex_called")
 ap.add_argument("--chrom", default="chr21")
+ap.add_argument("--tenx-chain", help="UCSC chain to lift the 10x coordinates to GRCh38 (Cell Ranger ATAC 1.2 used hg19)")
 a = ap.parse_args()
 os.makedirs(a.out, exist_ok=True)
 T = lambda x: f"{a.tenx_dir}/{a.prefix}_{x}"
@@ -37,8 +38,25 @@ def time_of(p):
     return {"wall_s": round(sec, 1), "max_rss_gb": round(rss / 1048576, 2), "cpu_h": round(cpu / 3600, 3)}
 
 
-def write_bed(src, dst):
+LIFT = None
+if a.tenx_chain:
+    from pyliftover import LiftOver
+    LIFT = LiftOver(a.tenx_chain)
+
+
+def lift_interval(c, st, en):
+    """Lift [st, en) by its first and last base; None unless both land on the same chromosome and strand."""
+    p, q = LIFT.convert_coordinate(c, st), LIFT.convert_coordinate(c, en - 1)
+    if not p or not q or p[0][0] != q[0][0] or p[0][2] != "+" or q[0][2] != "+" or q[0][1] < p[0][1]:
+        return None
+    return p[0][0], p[0][1], q[0][1] + 1
+
+
+def write_bed(src, dst, lift=False):
     d = pd.read_csv(src, sep="\t", header=None, comment="#", usecols=[0, 1, 2])
+    if lift and LIFT is not None:
+        rows = [lift_interval(c, st, en) for c, st, en in d.itertuples(index=False)]
+        d = pd.DataFrame([r for r in rows if r], columns=[0, 1, 2])
     d.to_csv(dst, sep="\t", header=False, index=False, compression="gzip")
 
 
@@ -92,7 +110,7 @@ if a.what == "atac":
     j.index.name = "barcode"
     j.to_csv(f"{a.out}/atac_{ds}_barcodes.tsv.gz", sep="\t", compression="gzip")
 
-    write_bed(peak10, f"{a.out}/atac_{ds}_peaks_tenx.bed.gz")
+    write_bed(peak10, f"{a.out}/atac_{ds}_peaks_tenx.bed.gz", lift=True)
     write_bed(f"{a.singlet}/peaks.bed", f"{a.out}/atac_{ds}_peaks_singlet.bed.gz")
     if a.chromap and os.path.exists(f"{a.chromap}/comp/macs3_peaks.narrowPeak"):
         write_bed(f"{a.chromap}/comp/macs3_peaks.narrowPeak", f"{a.out}/atac_{ds}_peaks_chromap_macs3.bed.gz")
@@ -101,7 +119,7 @@ if a.what == "atac":
     cells = set(j.index[j.tenx_is_cell == 1])
     tr = dict(zip(j.tenx_atac_barcode.dropna(), j.tenx_atac_barcode.dropna().index)) if "tenx_atac_barcode" in j else {}
 
-    def frags(path, translate):
+    def frags(path, translate, lift=False):
         out = set(); lens = []
         with gzip.open(path, "rt") as fh:
             started = False
@@ -112,6 +130,11 @@ if a.what == "atac":
                     continue
                 started = True
                 ch, st, en, b = line.split("\t")[:4]
+                if lift and LIFT is not None:
+                    r = lift_interval(ch, int(st), int(en))
+                    if r is None or r[0] != a.chrom:
+                        continue
+                    st, en = r[1], r[2]
                 b = b.replace("-1", "")
                 if b not in cells:
                     b = translate.get(b, b)
@@ -119,8 +142,8 @@ if a.what == "atac":
                     out.add((int(st), int(en), b)); lens.append(int(en) - int(st))
         return out, np.array(lens)
 
-    F10, L10 = frags(frag10, tr)
-    conc = {"chromosome": a.chrom, "cells": len(cells), "tenx": len(F10),
+    F10, L10 = frags(frag10, tr, lift=True)
+    conc = {"chromosome": a.chrom, "cells": len(cells), "tenx": len(F10), "tenx_lifted_from": a.tenx_chain,
             "tenx_length_hist": np.histogram(L10, bins=[0, 50, 100, 147, 200, 294, 400, 600, 1000, 5000])[0].tolist()}
     for tool, path in (("singlet", f"{a.singlet}/fragments.tsv.gz"),
                        ("chromap", f"{a.chromap}/fragments.tsv.gz" if a.chromap else None)):
