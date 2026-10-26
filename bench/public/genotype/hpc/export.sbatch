@@ -16,6 +16,6 @@ L=$W/bench-public/code/public/genotype/lib; R=$W/bench-public/runs; T=$W/bench-p
 case $STEP in
   demux) mkdir -p $A/donor-demux; python -I $L/export_demux.py $R $T $A/donor-demux ;;
   snps)  mkdir -p $A/donor-snps; python -I $L/snp_concordance.py $R $T $A/donor-snps/donor_snps_counts.tsv kang2018_ctrl kang2018_stim kang2018_b1_a kang2018_b1_b kang2018_b1_c ;;
-  mt)    mkdir -p $A/mtdna; python -I $L/mt_eval.py $R $T $A/mtdna ;;
+  mt)    mkdir -p $A/mtdna; python -I $L/mt_eval.py $R $T $A/mtdna "${@:2}" ;;
 esac
 ls -la $A/donor-demux $A/donor-snps $A/mtdna 2>/dev/null

@@ -1,0 +1,1380 @@
+{
+ "schema": "singlet.benchmark.capability",
+ "schema_version": "1.1.0",
+ "capability": "donor-snps",
+ "title": "Donor SNP genotypes (metrics only)",
+ "conclusion": "At sites with >= 10 reads, Singlet's donor genotypes agree with truth at 0.961 over the held-out pools (vireo 0.978, cellsnp-pileup 0.993); truth is replicate-lane RNA genotypes (Kang) and 1000 Genomes genotypes (cell lines). Genotypes themselves are not published.",
+ "methods": "Truth is real. For the Kang lanes (no public genotypes exist) it is the genotype of each donor called from RNA reads of a second library of the same donors (batch 2: control and IFN-beta lanes; batch 1: lanes A and B against lane C), pooling the cells that the authors' demuxlet labelled as that donor, with a fixed binomial model (error 0.01, flat prior, posterior >= 0.99). For two cell-line pools it is the 1000 Genomes high-coverage genotypes of the cell lines' donors (HG00362, HG01277 as one-donor libraries; GM12878 + GM18502 as a real 1:1 mixture). Singlet runs end to end with its automatic donor count and the default 1000G panel (AF >= 5%); its per-donor genotypes are those of its own clusters. Vireo (K given) and souporcell (k given) are run on the same BAM, cells and panel; cellsnp-pileup genotypes the pooled reads of vireo's clusters (all cells for one-donor libraries). Clusters are matched to truth donors by cell overlap (Kang) or by genotype agreement (1000G). Concordance is the fraction of sites with a truth genotype and a tool call at which the genotype class (0/0, 0/1, 1/1) is identical; the dp10 stratum keeps sites where the tool's own donor-level depth is >= 10. Non-reference concordance and false-alt rate split the same table by truth class. The rule is match-or-beat against the best competitor, zero tolerance. No genotype, SNP or per-site count is published.",
+ "status": "final",
+ "generated_at": "2026-10-26T10:44:43+00:00",
+ "owner": "pipeline-benchmark",
+ "singlet": {
+  "version": "1.0.0",
+  "commit": "02aa9b938b54e0f92bba00c44c07b883a8660aa2",
+  "branch": "prod/campaign",
+  "binary": "singlet-campaign",
+  "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c"
+ },
+ "tools": [
+  {
+   "name": "singlet",
+   "version": "1.0.0",
+   "role": "singlet",
+   "params": "singlet-campaign POOL.1fq --ref-base /mnt/projects/debruinz_project/cellarium/reference --genome-dir /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/star_2.7.11b --exons /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/genes/genes.gtf --threads 16 --pipeline --n-donors -1 --tagged-bam possorted.bam --bam-sort-mode disk --output-format mtx --raw-matrix  (default SNP panel: 1000 Genomes phase 3, AF >= 5%, 7.35 M SNPs; --n-donors K only for the told-K comparison runs)"
+  },
+  {
+   "name": "vireo",
+   "version": "0.5.9",
+   "role": "competitor",
+   "url": "https://github.com/single-cell-genetics/vireo",
+   "citation": "Huang et al. 2019, Genome Biol 20:273",
+   "params": "cellsnp-lite as above, then vireo -c cellsnp -o OUT -N K -p 16 --randSeed {1,2,3} --noPlot (K = true K, defaults otherwise: nInit 50, doublet detection on); K estimate: vireo -N 12 --randSeed 1, K = donors holding >= 1% of cells"
+  },
+  {
+   "name": "souporcell",
+   "version": "2.5",
+   "role": "competitor",
+   "url": "https://github.com/wheaton5/souporcell",
+   "citation": "Heaton et al. 2020, Nat Methods 17:615",
+   "params": "souporcell_pipeline.py -i cells.bam -b barcodes.txt -f /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/fasta/genome.fa -t 16 -o OUT -k K --common_variants genome1K.phase3.SNP_AF5e2.chr1toX.hg38.sorted.chrprefix.vcf  (K = true K; remapping with minimap2 and every other option at its default; cells.bam = Singlet's tagged BAM restricted to the called cells)"
+  },
+  {
+   "name": "cellsnp-pileup",
+   "version": "1.2.3",
+   "role": "competitor",
+   "url": "https://github.com/single-cell-genetics/cellsnp-lite",
+   "params": "cellsnp-lite counts as above, summed over the cells of each cluster (vireo's labels; all cells for one-donor libraries), genotyped with the binomial model of the truth: error 0.01, flat prior, posterior >= 0.99"
+  },
+  {
+   "name": "1000genomes-highcov",
+   "version": "20220422",
+   "role": "truth",
+   "url": "https://www.internationalgenome.org/data-portal/data-collection/30x-grch38",
+   "params": "phased SNV/INDEL/SV callset of 3,202 samples, GRCh38"
+  },
+  {
+   "name": "kang-replicate-lane",
+   "version": "n/a",
+   "role": "truth",
+   "params": "pooled reads of the donor's cells in a second library of the same donors, binomial genotyping (error 0.01, posterior >= 0.99)"
+  }
+ ],
+ "datasets": [
+  {
+   "id": "kang2018_ctrl",
+   "title": "Kang 2018 batch 2 control lane (8 donors)",
+   "accessions": {
+    "gse": "GSE96583",
+    "gsm": [
+     "GSM2560248"
+    ],
+    "srr": [
+     "SRR5398238"
+    ]
+   },
+   "truth": "genotypes of each donor from the same donors' cells in the IFN-beta lane (kang2018_stim), labelled by the authors' demuxlet calls and genotyped from pooled reads",
+   "data_kind": "real",
+   "notes": "development data (PR #36 tuned Singlet's demultiplexing on this lane)"
+  },
+  {
+   "id": "kang2018_stim",
+   "title": "Kang 2018 batch 2 IFN-beta lane (8 donors)",
+   "accessions": {
+    "gse": "GSE96583",
+    "gsm": [
+     "GSM2560249"
+    ],
+    "srr": [
+     "SRR5398239"
+    ]
+   },
+   "truth": "genotypes of each donor from the same donors' cells in the control lane (kang2018_ctrl)",
+   "data_kind": "real"
+  },
+  {
+   "id": "kang2018_b1_a",
+   "title": "Kang 2018 batch 1 lane A (4 donors)",
+   "accessions": {
+    "gse": "GSE96583",
+    "gsm": [
+     "GSM2560245"
+    ],
+    "srr": [
+     "SRR5398235"
+    ]
+   },
+   "truth": "genotypes of each donor from the same donors' cells in lane C (kang2018_b1_c)",
+   "data_kind": "real"
+  },
+  {
+   "id": "kang2018_b1_b",
+   "title": "Kang 2018 batch 1 lane B (4 donors)",
+   "accessions": {
+    "gse": "GSE96583",
+    "gsm": [
+     "GSM2560246"
+    ],
+    "srr": [
+     "SRR5398236"
+    ]
+   },
+   "truth": "genotypes of each donor from the same donors' cells in lane C (kang2018_b1_c)",
+   "data_kind": "real"
+  },
+  {
+   "id": "kang2018_b1_c",
+   "title": "Kang 2018 batch 1 lane C (8 donors)",
+   "accessions": {
+    "gse": "GSE96583",
+    "gsm": [
+     "GSM2560247"
+    ],
+    "srr": [
+     "SRR5398237"
+    ]
+   },
+   "truth": "genotypes of each donor from the same donors' cells in lanes A and B",
+   "data_kind": "real"
+  }
+ ],
+ "metrics": [
+  {
+   "id": "genotype_concordance",
+   "name": "Genotype concordance with truth, every genotype the tool emits",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_ctrl",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.813752,
+    "ci": [
+     0.810074,
+     0.817375
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.87902
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 0.958632
+    }
+   ],
+   "notes": "Development lane: Singlet's demultiplexing was tuned here (donor genotypes are a by-product).",
+   "pass": "fail"
+  },
+  {
+   "id": "genotype_concordance",
+   "name": "Genotype concordance with truth, every genotype the tool emits",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_stim",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.76508,
+    "ci": [
+     0.761332,
+     0.768787
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.901881
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 0.989791
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "genotype_concordance",
+   "name": "Genotype concordance with truth, every genotype the tool emits",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_b1_a",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.907792,
+    "ci": [
+     0.901924,
+     0.913343
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.963937
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 0.986603
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "genotype_concordance",
+   "name": "Genotype concordance with truth, every genotype the tool emits",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_b1_b",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.890141,
+    "ci": [
+     0.884186,
+     0.895825
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.967007
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 0.991523
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "genotype_concordance",
+   "name": "Genotype concordance with truth, every genotype the tool emits",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_b1_c",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.754928,
+    "ci": [
+     0.74966,
+     0.760122
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.917821
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 0.989744
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "genotype_concordance",
+   "name": "Genotype concordance with truth, every genotype the tool emits",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "pooled",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.791285,
+    "ci": [
+     0.788711,
+     0.793836
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.918981
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 0.989627
+    }
+   ],
+   "notes": "Pooled over the held-out pools (development lane excluded).",
+   "pass": "fail"
+  },
+  {
+   "id": "genotype_concordance_dp10",
+   "name": "Genotype concordance with truth, sites where the donor has >= 10 reads",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_ctrl",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.963672,
+    "ci": [
+     0.96136,
+     0.96585
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.943573
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 0.961847
+    }
+   ],
+   "notes": "Development lane: Singlet's demultiplexing was tuned here (donor genotypes are a by-product).",
+   "pass": "pass"
+  },
+  {
+   "id": "genotype_concordance_dp10",
+   "name": "Genotype concordance with truth, sites where the donor has >= 10 reads",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_stim",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.951408,
+    "ci": [
+     0.94871,
+     0.95397
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.972921
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 0.993165
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "genotype_concordance_dp10",
+   "name": "Genotype concordance with truth, sites where the donor has >= 10 reads",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_b1_a",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.969144,
+    "ci": [
+     0.965063,
+     0.972761
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.982428
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 0.988775
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "genotype_concordance_dp10",
+   "name": "Genotype concordance with truth, sites where the donor has >= 10 reads",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_b1_b",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.975827,
+    "ci": [
+     0.972299,
+     0.978915
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.984735
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 0.992784
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "genotype_concordance_dp10",
+   "name": "Genotype concordance with truth, sites where the donor has >= 10 reads",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_b1_c",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.965255,
+    "ci": [
+     0.962006,
+     0.968236
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.982635
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 0.993176
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "genotype_concordance_dp10",
+   "name": "Genotype concordance with truth, sites where the donor has >= 10 reads",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "pooled",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.960943,
+    "ci": [
+     0.959292,
+     0.962529
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.978203
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 0.992519
+    }
+   ],
+   "notes": "Pooled over the held-out pools (development lane excluded).",
+   "pass": "fail"
+  },
+  {
+   "id": "nonref_concordance_dp10",
+   "name": "Concordance at truth non-reference sites, >= 10 reads",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_ctrl",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.968835
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.938414
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 0.964291
+    }
+   ],
+   "pass": "pass"
+  },
+  {
+   "id": "false_alt_rate_dp10",
+   "name": "Truth homozygous-reference sites called non-reference, >= 10 reads",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_ctrl",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.04418
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.048085
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 0.042018
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "sites_genotyped_dp10",
+   "name": "Truth sites genotyped at >= 10 reads",
+   "unit": "sites",
+   "category": "coverage",
+   "dataset": "kang2018_ctrl",
+   "direction": "higher",
+   "singlet": {
+    "value": 26701.0
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 23783.0
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 22672.0
+    }
+   ],
+   "notes": "Counts of site-donor pairs; a tool that genotypes fewer sites at the same confidence is less useful.",
+   "pass": "pass"
+  },
+  {
+   "id": "nonref_concordance_dp10",
+   "name": "Concordance at truth non-reference sites, >= 10 reads",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_stim",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.954956
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.959538
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 0.991667
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "false_alt_rate_dp10",
+   "name": "Truth homozygous-reference sites called non-reference, >= 10 reads",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_stim",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.053894
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.005668
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 0.004482
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "sites_genotyped_dp10",
+   "name": "Truth sites genotyped at >= 10 reads",
+   "unit": "sites",
+   "category": "coverage",
+   "dataset": "kang2018_stim",
+   "direction": "higher",
+   "singlet": {
+    "value": 25683.0
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 22933.0
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 21799.0
+    }
+   ],
+   "notes": "Counts of site-donor pairs; a tool that genotypes fewer sites at the same confidence is less useful.",
+   "pass": "pass"
+  },
+  {
+   "id": "nonref_concordance_dp10",
+   "name": "Concordance at truth non-reference sites, >= 10 reads",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_b1_a",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.970601
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.980345
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 0.987596
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "false_alt_rate_dp10",
+   "name": "Truth homozygous-reference sites called non-reference, >= 10 reads",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_b1_a",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.033034
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.01352
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 0.008979
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "sites_genotyped_dp10",
+   "name": "Truth sites genotyped at >= 10 reads",
+   "unit": "sites",
+   "category": "coverage",
+   "dataset": "kang2018_b1_a",
+   "direction": "higher",
+   "singlet": {
+    "value": 7778.0
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 6317.0
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 6147.0
+    }
+   ],
+   "notes": "Counts of site-donor pairs; a tool that genotypes fewer sites at the same confidence is less useful.",
+   "pass": "pass"
+  },
+  {
+   "id": "nonref_concordance_dp10",
+   "name": "Concordance at truth non-reference sites, >= 10 reads",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_b1_b",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.977221
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.980288
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 0.990881
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "false_alt_rate_dp10",
+   "name": "Truth homozygous-reference sites called non-reference, >= 10 reads",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_b1_b",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.026104
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.007173
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 0.003836
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "sites_genotyped_dp10",
+   "name": "Truth sites genotyped at >= 10 reads",
+   "unit": "sites",
+   "category": "coverage",
+   "dataset": "kang2018_b1_b",
+   "direction": "higher",
+   "singlet": {
+    "value": 8315.0
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 6682.0
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 6513.0
+    }
+   ],
+   "notes": "Counts of site-donor pairs; a tool that genotypes fewer sites at the same confidence is less useful.",
+   "pass": "pass"
+  },
+  {
+   "id": "nonref_concordance_dp10",
+   "name": "Concordance at truth non-reference sites, >= 10 reads",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_b1_c",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.968761
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.977943
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 0.992043
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "false_alt_rate_dp10",
+   "name": "Truth homozygous-reference sites called non-reference, >= 10 reads",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_b1_c",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.040376
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.008845
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 0.004808
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "sites_genotyped_dp10",
+   "name": "Truth sites genotyped at >= 10 reads",
+   "unit": "sites",
+   "category": "coverage",
+   "dataset": "kang2018_b1_c",
+   "direction": "higher",
+   "singlet": {
+    "value": 13297.0
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 11460.0
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 10990.0
+    }
+   ],
+   "notes": "Counts of site-donor pairs; a tool that genotypes fewer sites at the same confidence is less useful.",
+   "pass": "pass"
+  },
+  {
+   "id": "nonref_concordance_dp10",
+   "name": "Concordance at truth non-reference sites, >= 10 reads",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "pooled",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.963833
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.969953
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 0.99107
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "false_alt_rate_dp10",
+   "name": "Truth homozygous-reference sites called non-reference, >= 10 reads",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "pooled",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.043401
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.007584
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 0.005032
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "sites_genotyped_dp10",
+   "name": "Truth sites genotyped at >= 10 reads",
+   "unit": "sites",
+   "category": "coverage",
+   "dataset": "pooled",
+   "direction": "higher",
+   "singlet": {
+    "value": 55073.0
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 47392.0
+    },
+    {
+     "tool": "cellsnp-pileup",
+     "value": 45449.0
+    }
+   ],
+   "notes": "Counts of site-donor pairs; a tool that genotypes fewer sites at the same confidence is less useful.",
+   "pass": "pass"
+  }
+ ],
+ "resources": [
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_ctrl",
+   "wall_s": 2827.1,
+   "max_rss_gb": 22.35,
+   "threads": 16,
+   "cpu_h": 12.565,
+   "notes": "end to end from reads incl. alignment, K estimated"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_ctrl",
+   "wall_s": 1944.8,
+   "max_rss_gb": 29.42,
+   "threads": 16,
+   "cpu_h": 8.644,
+   "notes": "K given"
+  },
+  {
+   "tool": "cellsnp-lite",
+   "dataset": "kang2018_ctrl",
+   "wall_s": 1956.7,
+   "max_rss_gb": 0.89,
+   "threads": 16,
+   "cpu_h": 8.696,
+   "notes": "pileup on the shared BAM and panel (vireo input)"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_ctrl",
+   "wall_s": 45.3,
+   "max_rss_gb": 1.09,
+   "threads": 16,
+   "cpu_h": 0.201,
+   "notes": "K given, one seed, clustering only"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_ctrl",
+   "wall_s": 56.3,
+   "max_rss_gb": 1.52,
+   "threads": 16,
+   "cpu_h": 0.25,
+   "notes": "N = 12, clustering only"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_stim",
+   "wall_s": 2123.4,
+   "max_rss_gb": 31.17,
+   "threads": 16,
+   "cpu_h": 9.437,
+   "notes": "end to end from reads incl. alignment, K estimated"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_stim",
+   "wall_s": 2382.8,
+   "max_rss_gb": 32.91,
+   "threads": 16,
+   "cpu_h": 10.59,
+   "notes": "K given"
+  },
+  {
+   "tool": "cellsnp-lite",
+   "dataset": "kang2018_stim",
+   "wall_s": 662.2,
+   "max_rss_gb": 0.9,
+   "threads": 16,
+   "cpu_h": 2.943,
+   "notes": "pileup on the shared BAM and panel (vireo input)"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_stim",
+   "wall_s": 25.6,
+   "max_rss_gb": 0.96,
+   "threads": 16,
+   "cpu_h": 0.114,
+   "notes": "K given, one seed, clustering only"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_stim",
+   "wall_s": 35.3,
+   "max_rss_gb": 1.37,
+   "threads": 16,
+   "cpu_h": 0.157,
+   "notes": "N = 12, clustering only"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_b1_a",
+   "wall_s": 1405.3,
+   "max_rss_gb": 28.91,
+   "threads": 16,
+   "cpu_h": 6.246,
+   "notes": "end to end from reads incl. alignment, K estimated"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_b1_a",
+   "wall_s": 1320.3,
+   "max_rss_gb": 28.9,
+   "threads": 16,
+   "cpu_h": 5.868,
+   "notes": "K given"
+  },
+  {
+   "tool": "cellsnp-lite",
+   "dataset": "kang2018_b1_a",
+   "wall_s": 511.4,
+   "max_rss_gb": 0.61,
+   "threads": 16,
+   "cpu_h": 2.273,
+   "notes": "pileup on the shared BAM and panel (vireo input)"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_b1_a",
+   "wall_s": 7.1,
+   "max_rss_gb": 0.24,
+   "threads": 16,
+   "cpu_h": 0.032,
+   "notes": "K given, one seed, clustering only"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_b1_a",
+   "wall_s": 11.6,
+   "max_rss_gb": 0.47,
+   "threads": 16,
+   "cpu_h": 0.052,
+   "notes": "N = 12, clustering only"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_b1_b",
+   "wall_s": 1375.0,
+   "max_rss_gb": 28.97,
+   "threads": 16,
+   "cpu_h": 6.111,
+   "notes": "end to end from reads incl. alignment, K estimated"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_b1_b",
+   "wall_s": 1226.0,
+   "max_rss_gb": 26.32,
+   "threads": 16,
+   "cpu_h": 5.449,
+   "notes": "K given"
+  },
+  {
+   "tool": "cellsnp-lite",
+   "dataset": "kang2018_b1_b",
+   "wall_s": 399.8,
+   "max_rss_gb": 0.61,
+   "threads": 16,
+   "cpu_h": 1.777,
+   "notes": "pileup on the shared BAM and panel (vireo input)"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_b1_b",
+   "wall_s": 7.9,
+   "max_rss_gb": 0.25,
+   "threads": 16,
+   "cpu_h": 0.035,
+   "notes": "K given, one seed, clustering only"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_b1_b",
+   "wall_s": 11.8,
+   "max_rss_gb": 0.48,
+   "threads": 16,
+   "cpu_h": 0.052,
+   "notes": "N = 12, clustering only"
+  },
+  {
+   "tool": "souporcell",
+   "dataset": "kang2018_b1_b",
+   "wall_s": 845.4,
+   "max_rss_gb": 1.2,
+   "threads": 16,
+   "cpu_h": 3.757,
+   "notes": "remap + freebayes + vartrix + clustering, k given"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_b1_c",
+   "wall_s": 1117.4,
+   "max_rss_gb": 26.79,
+   "threads": 16,
+   "cpu_h": 4.966,
+   "notes": "end to end from reads incl. alignment, K estimated"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_b1_c",
+   "wall_s": 2249.9,
+   "max_rss_gb": 26.79,
+   "threads": 16,
+   "cpu_h": 10.0,
+   "notes": "K given"
+  },
+  {
+   "tool": "cellsnp-lite",
+   "dataset": "kang2018_b1_c",
+   "wall_s": 527.6,
+   "max_rss_gb": 0.65,
+   "threads": 16,
+   "cpu_h": 2.345,
+   "notes": "pileup on the shared BAM and panel (vireo input)"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_b1_c",
+   "wall_s": 23.0,
+   "max_rss_gb": 0.49,
+   "threads": 16,
+   "cpu_h": 0.102,
+   "notes": "K given, one seed, clustering only"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_b1_c",
+   "wall_s": 23.9,
+   "max_rss_gb": 0.66,
+   "threads": 16,
+   "cpu_h": 0.106,
+   "notes": "N = 12, clustering only"
+  },
+  {
+   "tool": "souporcell",
+   "dataset": "kang2018_b1_c",
+   "wall_s": 873.9,
+   "max_rss_gb": 1.24,
+   "threads": 16,
+   "cpu_h": 3.884,
+   "notes": "remap + freebayes + vartrix + clustering, k given"
+  }
+ ],
+ "figures": [
+  {
+   "id": "concordance_dp10_by_dataset",
+   "title": "Genotype concordance at >= 10 reads",
+   "kind": "grouped_bar",
+   "caption": "Fraction of truth genotypes reproduced, by dataset and tool.",
+   "x": {
+    "label": "dataset",
+    "categories": [
+     "kang2018_ctrl",
+     "kang2018_stim",
+     "kang2018_b1_a",
+     "kang2018_b1_b",
+     "kang2018_b1_c"
+    ]
+   },
+   "y": {
+    "label": "concordance",
+    "unit": "fraction",
+    "min": 0.5,
+    "max": 1
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      "kang2018_ctrl",
+      "kang2018_stim",
+      "kang2018_b1_a",
+      "kang2018_b1_b",
+      "kang2018_b1_c"
+     ],
+     "y": [
+      0.963672,
+      0.951408,
+      0.969144,
+      0.975827,
+      0.965255
+     ]
+    },
+    {
+     "name": "vireo",
+     "tool": "vireo",
+     "x": [
+      "kang2018_ctrl",
+      "kang2018_stim",
+      "kang2018_b1_a",
+      "kang2018_b1_b",
+      "kang2018_b1_c"
+     ],
+     "y": [
+      0.943573,
+      0.972921,
+      0.982428,
+      0.984735,
+      0.982635
+     ]
+    },
+    {
+     "name": "cellsnp-pileup",
+     "tool": "cellsnp-pileup",
+     "x": [
+      "kang2018_ctrl",
+      "kang2018_stim",
+      "kang2018_b1_a",
+      "kang2018_b1_b",
+      "kang2018_b1_c"
+     ],
+     "y": [
+      0.961847,
+      0.993165,
+      0.988775,
+      0.992784,
+      0.993176
+     ]
+    }
+   ]
+  }
+ ],
+ "artifacts": [
+  {
+   "name": "donor_snps_counts.tsv",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/donor-snps/donor_snps_counts.tsv",
+   "kind": "derived",
+   "sha256": "d5be9eb39d23b3e87769e676d016cc358c99aee56f5bc97010952fb4088076e5",
+   "bytes": 14979,
+   "format": "tsv"
+  },
+  {
+   "name": "provenance.json",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/donor-snps/provenance.json",
+   "kind": "singlet_output",
+   "sha256": "803c2d8a35e3d64f36a120ad730f82289351d955ccda872b4b67e18ade3d0b28",
+   "bytes": 7409,
+   "format": "json"
+  }
+ ],
+ "reach": [
+  {
+   "tool": "singlet",
+   "output": "donor genotypes without reference genotypes",
+   "supported": "yes",
+   "note": "private/donor/donor*.vcf, never published"
+  },
+  {
+   "tool": "vireo",
+   "output": "donor genotypes without reference genotypes",
+   "supported": "yes",
+   "note": "GT_donors.vireo.vcf.gz"
+  },
+  {
+   "tool": "souporcell",
+   "output": "donor genotypes without reference genotypes",
+   "supported": "yes",
+   "note": "cluster_genotypes.vcf"
+  },
+  {
+   "tool": "cellsnp-pileup",
+   "output": "donor genotypes without reference genotypes",
+   "supported": "partial",
+   "note": "genotypes pooled reads of clusters someone else defined; one donor, or vireo's labels"
+  }
+ ],
+ "code": [
+  {
+   "path": "include/singlet/pileup/donor_demux.h",
+   "role": "implementation",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/02aa9b938b54e0f92bba00c44c07b883a8660aa2/include/singlet/pileup/donor_demux.h"
+  },
+  {
+   "path": "bench/public/capabilities/donor_snps.py",
+   "role": "metric",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/bc855f76ee733b938d43e197cd9ede55c1221474/bench/public/capabilities/donor_snps.py"
+  },
+  {
+   "path": "bench/public/genotype",
+   "role": "harness",
+   "url": "https://github.com/Singlet-Bio/singlet/tree/bc855f76ee733b938d43e197cd9ede55c1221474/bench/public/genotype"
+  }
+ ],
+ "reproduce": {
+  "module": "bench/public/capabilities/donor_snps.py",
+  "function": "compute",
+  "laptop_minutes": 1,
+  "clipper_command": "sbatch bench/public/genotype/hpc/export.sbatch snps"
+ },
+ "caveats": [
+  "The genotypes, SNPs and per-site allele counts are private; the only artifact is a table of genotype-class counts.",
+  "Kang truth genotypes are called from RNA reads of a second library of the same donors (no public Kang genotypes exist): they are expression-limited and share RNA artefacts (editing, allele-specific expression) with the tested pool, so concordance is a lower bound for accuracy at sites both libraries cover and says nothing about unexpressed sites.",
+  "The 1000 Genomes truth is whole-genome sequencing of the cell-line donor; LCL-specific somatic differences from the reference individual exist but are small.",
+  "The panel is 1000 Genomes SNPs with allele frequency >= 5% (7.35 M sites); every tool sees the same panel.",
+  "Singlet emits a genotype at every covered panel site, however shallow, so its 'all' concordance includes 1-read sites; the dp10 metrics are the fair view for a user who filters.",
+  "The plain pileup baseline (cellsnp-pileup) is not a donor-demultiplexing method; it genotypes pooled reads of vireo's clusters (all cells for one-donor libraries) with the model used for the Kang truth."
+ ]
+}

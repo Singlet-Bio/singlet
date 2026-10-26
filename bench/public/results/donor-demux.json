@@ -1,0 +1,1277 @@
+{
+ "schema": "singlet.benchmark.capability",
+ "schema_version": "1.1.0",
+ "capability": "donor-demux",
+ "title": "Genotype-free donor demultiplexing and donor count",
+ "conclusion": "Without being told the donor count, Singlet finds the exact K in 6 of 6 held-out real pools (vireo with N = 12: 0 of 6); mean ARI 0.994 against 0.921 for vireo given the true K.",
+ "methods": "Real pools only, each with truth from the data's authors: five Kang 2018 lupus PBMC lanes (true K = 8, 8, 8, 4, 4; labels are demuxlet calls made with donor genotypes), the MAESTER K562 + BT142 cell-line mixture (K = 2) and a single-patient bone marrow (K = 1). Reads were rebuilt from the submitted Cell Ranger BAMs (Kang) or downloaded (MAESTER), and every tool sees the same tagged BAM and the same called cells: Singlet is run once end to end (STAR alignment, cell calling, demultiplexing, K estimated by the held-out-likelihood search), and cellsnp-lite, vireo and souporcell are run on its BAM and cell list with the same 1000 Genomes SNP panel. Vireo has no K search, so its K is the number of donors holding at least 1% of cells when it is given N = 12 (the documented way to over-specify N); the rule was fixed before the runs. Vireo (3 seeds) and souporcell get the true K for the accuracy metrics. Scores are on truth singlets: ARI over all of them, with unassigned and doublet calls as their own labels; coverage is the fraction given a donor; per-donor recall uses Hungarian matching. The ARI tolerance is vireo's seed-to-seed standard deviation. The K metric is the fraction of held-out pools with the exact true K, gated at 0.9. The Kang batch 2 control lane is development data and is reported separately; it is excluded from the pooled numbers.",
+ "status": "final",
+ "generated_at": "2026-10-26T10:44:42+00:00",
+ "owner": "pipeline-benchmark",
+ "singlet": {
+  "version": "1.0.0",
+  "commit": "02aa9b938b54e0f92bba00c44c07b883a8660aa2",
+  "branch": "prod/campaign",
+  "binary": "singlet-campaign",
+  "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+  "build_flags": "singlet-campaign POOL.1fq --ref-base /mnt/projects/debruinz_project/cellarium/reference --genome-dir /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/star_2.7.11b --exons /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/genes/genes.gtf --threads 16 --pipeline --n-donors -1 --tagged-bam possorted.bam --bam-sort-mode disk --output-format mtx --raw-matrix  (default SNP panel: 1000 Genomes phase 3, AF >= 5%, 7.35 M SNPs; --n-donors K only for the told-K comparison runs)"
+ },
+ "tools": [
+  {
+   "name": "singlet",
+   "version": "1.0.0",
+   "role": "singlet",
+   "params": "singlet-campaign POOL.1fq --ref-base /mnt/projects/debruinz_project/cellarium/reference --genome-dir /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/star_2.7.11b --exons /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/genes/genes.gtf --threads 16 --pipeline --n-donors -1 --tagged-bam possorted.bam --bam-sort-mode disk --output-format mtx --raw-matrix  (default SNP panel: 1000 Genomes phase 3, AF >= 5%, 7.35 M SNPs; --n-donors K only for the told-K comparison runs)"
+  },
+  {
+   "name": "vireo",
+   "version": "0.5.9",
+   "role": "competitor",
+   "url": "https://github.com/single-cell-genetics/vireo",
+   "citation": "Huang et al. 2019, Genome Biol 20:273",
+   "params": "cellsnp-lite as above, then vireo -c cellsnp -o OUT -N K -p 16 --randSeed {1,2,3} --noPlot (K = true K, defaults otherwise: nInit 50, doublet detection on); K estimate: vireo -N 12 --randSeed 1, K = donors holding >= 1% of cells"
+  },
+  {
+   "name": "cellsnp-lite",
+   "version": "1.2.3",
+   "role": "helper",
+   "url": "https://github.com/single-cell-genetics/cellsnp-lite",
+   "params": "cellsnp-lite -s possorted.bam -b barcodes.txt -O cellsnp -R genome1K.phase3.SNP_AF5e2.chr1toX.hg38.sorted.chrprefix.vcf.gz -p 16 --minMAF 0.1 --minCOUNT 20 --gzip --cellTAG CB --UMItag UB   (barcodes = Singlet's called cells; the cellSNP/vireo manuals' settings for vireo)"
+  },
+  {
+   "name": "souporcell",
+   "version": "2.5",
+   "role": "competitor",
+   "url": "https://github.com/wheaton5/souporcell",
+   "citation": "Heaton et al. 2020, Nat Methods 17:615",
+   "params": "souporcell_pipeline.py -i cells.bam -b barcodes.txt -f /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/fasta/genome.fa -t 16 -o OUT -k K --common_variants genome1K.phase3.SNP_AF5e2.chr1toX.hg38.sorted.chrprefix.vcf  (K = true K; remapping with minimap2 and every other option at its default; cells.bam = Singlet's tagged BAM restricted to the called cells)"
+  },
+  {
+   "name": "demuxlet-authors",
+   "version": "n/a",
+   "role": "truth",
+   "params": "donor calls published with the data (Kang 2018, GSE96583), made with donor genotypes"
+  },
+  {
+   "name": "maester-authors",
+   "version": "n/a",
+   "role": "truth",
+   "params": "cell-line labels and single patient of Miller 2022"
+  }
+ ],
+ "datasets": [
+  {
+   "id": "kang2018_ctrl",
+   "title": "Kang 2018 batch 2 control lane (8 lupus donors), 10x 3' v1",
+   "accessions": {
+    "gse": "GSE96583",
+    "gsm": [
+     "GSM2560248"
+    ],
+    "srr": [
+     "SRR5398238"
+    ]
+   },
+   "truth": "demuxlet donor and doublet calls with donor genotypes (authors; GSE96583_batch2.total.tsne.df)",
+   "data_kind": "real",
+   "n_cells": 14619,
+   "notes": "development data: Singlet's auto-K and mt caller were developed on this lane (PR #36)"
+  },
+  {
+   "id": "kang2018_stim",
+   "title": "Kang 2018 batch 2 IFN-beta lane (the same 8 donors)",
+   "accessions": {
+    "gse": "GSE96583",
+    "gsm": [
+     "GSM2560249"
+    ],
+    "srr": [
+     "SRR5398239"
+    ]
+   },
+   "truth": "demuxlet donor and doublet calls with donor genotypes (authors)",
+   "data_kind": "real",
+   "n_cells": 14446,
+   "notes": "same donors and chemistry as the development lane; stimulated with IFN-beta"
+  },
+  {
+   "id": "kang2018_b1_a",
+   "title": "Kang 2018 batch 1 lane A (4 donors)",
+   "accessions": {
+    "gse": "GSE96583",
+    "gsm": [
+     "GSM2560245"
+    ],
+    "srr": [
+     "SRR5398235"
+    ]
+   },
+   "truth": "demuxlet donor and doublet calls with donor genotypes (authors; GSE96583_batch1.total.tsne.df)",
+   "data_kind": "real",
+   "n_cells": 3639
+  },
+  {
+   "id": "kang2018_b1_b",
+   "title": "Kang 2018 batch 1 lane B (4 donors)",
+   "accessions": {
+    "gse": "GSE96583",
+    "gsm": [
+     "GSM2560246"
+    ],
+    "srr": [
+     "SRR5398236"
+    ]
+   },
+   "truth": "demuxlet donor and doublet calls with donor genotypes (authors)",
+   "data_kind": "real",
+   "n_cells": 4222
+  },
+  {
+   "id": "kang2018_b1_c",
+   "title": "Kang 2018 batch 1 lane C (8 donors, the donors of A and B)",
+   "accessions": {
+    "gse": "GSE96583",
+    "gsm": [
+     "GSM2560247"
+    ],
+    "srr": [
+     "SRR5398237"
+    ]
+   },
+   "truth": "demuxlet donor and doublet calls with donor genotypes (authors)",
+   "data_kind": "real",
+   "n_cells": 6075
+  },
+  {
+   "id": "maester_k562_bt142_3p",
+   "title": "MAESTER cell-line mixture (K562 + BT142), 10x 3' v3",
+   "accessions": {
+    "gse": "GSE182685"
+   },
+   "truth": "two real cell lines; the authors' cell labels (expression and mt-variant labels agree)",
+   "data_kind": "real",
+   "n_cells": 2380
+  },
+  {
+   "id": "maester_bpdcn712_3p",
+   "title": "MAESTER BPDCN712 bone marrow, 10x 3' v3 (one patient)",
+   "accessions": {
+    "gse": "GSE182685"
+   },
+   "truth": "a single patient: every called cell is one donor, K = 1",
+   "data_kind": "real",
+   "n_cells": 15690
+  }
+ ],
+ "metrics": [
+  {
+   "id": "k_correct_fraction",
+   "name": "Fraction of held-out pools with the right donor count (K estimated, not given)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "pooled",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0,
+    "ci": [
+     0.609657,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.9,
+    "rationale": "at most 1 miss in 10 pools; with 6 held-out pools this means every pool must be right. 'Highly accurate' was the requirement for the unknown-K claim"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.0
+    }
+   ],
+   "notes": "6 real pools, true K = kang2018_stim: 8, kang2018_b1_a: 4, kang2018_b1_b: 4, kang2018_b1_c: 8, maester_k562_bt142_3p: 2, maester_bpdcn712_3p: 1. Singlet estimates K with --n-donors -1; vireo has no K search, so K is the number of donors holding >= 1% of cells when it is run with -N 12.",
+   "pass": "pass"
+  },
+  {
+   "id": "k_correct_vs_vireo",
+   "name": "Right donor count vs vireo (N = 12, surplus donors pruned)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "pooled",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0,
+    "ci": [
+     0.609657,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.0
+    }
+   ],
+   "pass": "pass"
+  },
+  {
+   "id": "k_abs_error",
+   "name": "Mean absolute error of the estimated donor count",
+   "unit": "donors",
+   "category": "accuracy",
+   "dataset": "pooled",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.0
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 3.5
+    }
+   ],
+   "pass": "pass"
+  },
+  {
+   "id": "k_correct_dev",
+   "name": "Right donor count on the development lane (K = 8)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_ctrl",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.0
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.0
+    }
+   ],
+   "notes": "Singlet K = 9, vireo K = 9. Development data: Singlet's auto-K was tuned on this lane (PR #36).",
+   "pass": "pass"
+  },
+  {
+   "id": "ari",
+   "name": "Adjusted Rand index of donor labels (truth singlets)",
+   "unit": "ARI",
+   "category": "accuracy",
+   "dataset": "kang2018_ctrl",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.975566,
+    "ci": [
+     0.97282,
+     0.978944
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.002
+    },
+    "rationale": "0.002 = pooled seed-to-seed standard deviation of vireo's ARI (3 seeds per pool), the competitor's own run-to-run variation (floor 0.002)"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.903268
+    }
+   ],
+   "notes": "Singlet K estimated; competitors given the true K. Unassigned and doublet calls count as their own labels.",
+   "pass": "pass"
+  },
+  {
+   "id": "ari",
+   "name": "Adjusted Rand index of donor labels (truth singlets)",
+   "unit": "ARI",
+   "category": "accuracy",
+   "dataset": "kang2018_stim",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.976344,
+    "ci": [
+     0.972947,
+     0.979607
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.002
+    },
+    "rationale": "0.002 = pooled seed-to-seed standard deviation of vireo's ARI (3 seeds per pool), the competitor's own run-to-run variation (floor 0.002)"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.940064
+    }
+   ],
+   "notes": "Singlet K estimated; competitors given the true K. Unassigned and doublet calls count as their own labels.",
+   "pass": "pass"
+  },
+  {
+   "id": "ari",
+   "name": "Adjusted Rand index of donor labels (truth singlets)",
+   "unit": "ARI",
+   "category": "accuracy",
+   "dataset": "kang2018_b1_a",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.995663,
+    "ci": [
+     0.992824,
+     0.998161
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.002
+    },
+    "rationale": "0.002 = pooled seed-to-seed standard deviation of vireo's ARI (3 seeds per pool), the competitor's own run-to-run variation (floor 0.002)"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.9884
+    }
+   ],
+   "notes": "Singlet K estimated; competitors given the true K. Unassigned and doublet calls count as their own labels.",
+   "pass": "pass"
+  },
+  {
+   "id": "ari",
+   "name": "Adjusted Rand index of donor labels (truth singlets)",
+   "unit": "ARI",
+   "category": "accuracy",
+   "dataset": "kang2018_b1_b",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.996286,
+    "ci": [
+     0.993655,
+     0.99821
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.002
+    },
+    "rationale": "0.002 = pooled seed-to-seed standard deviation of vireo's ARI (3 seeds per pool), the competitor's own run-to-run variation (floor 0.002)"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.988608
+    },
+    {
+     "tool": "souporcell",
+     "value": 0.991376
+    }
+   ],
+   "notes": "Singlet K estimated; competitors given the true K. Unassigned and doublet calls count as their own labels.",
+   "pass": "pass"
+  },
+  {
+   "id": "ari",
+   "name": "Adjusted Rand index of donor labels (truth singlets)",
+   "unit": "ARI",
+   "category": "accuracy",
+   "dataset": "kang2018_b1_c",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.997162,
+    "ci": [
+     0.995279,
+     0.998525
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.002
+    },
+    "rationale": "0.002 = pooled seed-to-seed standard deviation of vireo's ARI (3 seeds per pool), the competitor's own run-to-run variation (floor 0.002)"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.98503
+    },
+    {
+     "tool": "souporcell",
+     "value": 0.98911
+    }
+   ],
+   "notes": "Singlet K estimated; competitors given the true K. Unassigned and doublet calls count as their own labels.",
+   "pass": "pass"
+  },
+  {
+   "id": "ari",
+   "name": "Adjusted Rand index of donor labels (truth singlets)",
+   "unit": "ARI",
+   "category": "accuracy",
+   "dataset": "maester_k562_bt142_3p",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.999101,
+    "ci": [
+     0.997221,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.002
+    },
+    "rationale": "0.002 = pooled seed-to-seed standard deviation of vireo's ARI (3 seeds per pool), the competitor's own run-to-run variation (floor 0.002)"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.701116
+    },
+    {
+     "tool": "souporcell",
+     "value": 0.701116
+    }
+   ],
+   "notes": "Singlet K estimated; competitors given the true K. Unassigned and doublet calls count as their own labels.",
+   "pass": "pass"
+  },
+  {
+   "id": "ari",
+   "name": "Adjusted Rand index of donor labels (one true donor: 1 only if every cell is in one cluster)",
+   "unit": "ARI",
+   "category": "accuracy",
+   "dataset": "maester_bpdcn712_3p",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0,
+    "ci": [
+     1.0,
+     1.0
+    ]
+   },
+   "rule": {
+    "type": "threshold",
+    "value": 0.95,
+    "rationale": "a one-donor pool has a single true class, so ARI is 1 when all cells share one label and falls with every cell split off or called doublet; 0.95 allows a few percent"
+   },
+   "notes": "vireo and souporcell need at least two donors and are not scored.",
+   "pass": "pass"
+  },
+  {
+   "id": "mean_ari_heldout",
+   "name": "Mean ARI over pools (held-out pools with K > 1)",
+   "unit": "ARI",
+   "category": "accuracy",
+   "dataset": "pooled",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.992911,
+    "ci": [
+     0.984255,
+     0.997957
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.002
+    },
+    "rationale": "0.002 = pooled seed-to-seed standard deviation of vireo's ARI"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.920644
+    }
+   ],
+   "pass": "pass"
+  },
+  {
+   "id": "mean_accuracy_assigned_heldout",
+   "name": "Mean accuracy of assigned cells over pools (held-out pools with K > 1)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "pooled",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.999819
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.002
+    },
+    "rationale": "0.002 = pooled seed-to-seed standard deviation of vireo's ARI"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.999861
+    }
+   ],
+   "pass": "pass"
+  },
+  {
+   "id": "mean_coverage_heldout",
+   "name": "Mean fraction of truth singlets given a donor (held-out pools with K > 1)",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "pooled",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.994495
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.002
+    },
+    "rationale": "0.002 = pooled seed-to-seed standard deviation of vireo's ARI"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.928017
+    }
+   ],
+   "pass": "pass"
+  },
+  {
+   "id": "min_donor_recall",
+   "name": "Recall of the worst-recalled donor in any held-out pool",
+   "unit": "fraction",
+   "category": "robustness",
+   "dataset": "pooled",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.925811
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.486656
+    }
+   ],
+   "notes": "A donor merged into another or never found gives 0.",
+   "pass": "pass"
+  }
+ ],
+ "resources": [
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_ctrl",
+   "wall_s": 2827.1,
+   "max_rss_gb": 22.35,
+   "threads": 16,
+   "cpu_h": 12.564889,
+   "notes": "end to end from reads incl. alignment, K estimated"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_ctrl",
+   "wall_s": 1944.8,
+   "max_rss_gb": 29.42,
+   "threads": 16,
+   "cpu_h": 8.643556,
+   "notes": "K given"
+  },
+  {
+   "tool": "cellsnp-lite",
+   "dataset": "kang2018_ctrl",
+   "wall_s": 1956.7,
+   "max_rss_gb": 0.89,
+   "threads": 16,
+   "cpu_h": 8.696444,
+   "notes": "pileup on the shared BAM and panel (vireo input)"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_ctrl",
+   "wall_s": 45.3,
+   "max_rss_gb": 1.09,
+   "threads": 16,
+   "cpu_h": 0.201333,
+   "notes": "K given, one seed, clustering only"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_ctrl",
+   "wall_s": 56.3,
+   "max_rss_gb": 1.52,
+   "threads": 16,
+   "cpu_h": 0.250222,
+   "notes": "N = 12, clustering only"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_stim",
+   "wall_s": 2123.4,
+   "max_rss_gb": 31.17,
+   "threads": 16,
+   "cpu_h": 9.437333,
+   "notes": "end to end from reads incl. alignment, K estimated"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_stim",
+   "wall_s": 2382.8,
+   "max_rss_gb": 32.91,
+   "threads": 16,
+   "cpu_h": 10.590222,
+   "notes": "K given"
+  },
+  {
+   "tool": "cellsnp-lite",
+   "dataset": "kang2018_stim",
+   "wall_s": 662.2,
+   "max_rss_gb": 0.9,
+   "threads": 16,
+   "cpu_h": 2.943111,
+   "notes": "pileup on the shared BAM and panel (vireo input)"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_stim",
+   "wall_s": 25.6,
+   "max_rss_gb": 0.96,
+   "threads": 16,
+   "cpu_h": 0.113778,
+   "notes": "K given, one seed, clustering only"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_stim",
+   "wall_s": 35.3,
+   "max_rss_gb": 1.37,
+   "threads": 16,
+   "cpu_h": 0.156889,
+   "notes": "N = 12, clustering only"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_b1_a",
+   "wall_s": 1405.3,
+   "max_rss_gb": 28.91,
+   "threads": 16,
+   "cpu_h": 6.245778,
+   "notes": "end to end from reads incl. alignment, K estimated"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_b1_a",
+   "wall_s": 1320.3,
+   "max_rss_gb": 28.9,
+   "threads": 16,
+   "cpu_h": 5.868,
+   "notes": "K given"
+  },
+  {
+   "tool": "cellsnp-lite",
+   "dataset": "kang2018_b1_a",
+   "wall_s": 511.4,
+   "max_rss_gb": 0.61,
+   "threads": 16,
+   "cpu_h": 2.272889,
+   "notes": "pileup on the shared BAM and panel (vireo input)"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_b1_a",
+   "wall_s": 7.1,
+   "max_rss_gb": 0.24,
+   "threads": 16,
+   "cpu_h": 0.031556,
+   "notes": "K given, one seed, clustering only"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_b1_a",
+   "wall_s": 11.6,
+   "max_rss_gb": 0.47,
+   "threads": 16,
+   "cpu_h": 0.051556,
+   "notes": "N = 12, clustering only"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_b1_b",
+   "wall_s": 1375.0,
+   "max_rss_gb": 28.97,
+   "threads": 16,
+   "cpu_h": 6.111111,
+   "notes": "end to end from reads incl. alignment, K estimated"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_b1_b",
+   "wall_s": 1226.0,
+   "max_rss_gb": 26.32,
+   "threads": 16,
+   "cpu_h": 5.448889,
+   "notes": "K given"
+  },
+  {
+   "tool": "cellsnp-lite",
+   "dataset": "kang2018_b1_b",
+   "wall_s": 399.8,
+   "max_rss_gb": 0.61,
+   "threads": 16,
+   "cpu_h": 1.776889,
+   "notes": "pileup on the shared BAM and panel (vireo input)"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_b1_b",
+   "wall_s": 7.9,
+   "max_rss_gb": 0.25,
+   "threads": 16,
+   "cpu_h": 0.035111,
+   "notes": "K given, one seed, clustering only"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_b1_b",
+   "wall_s": 11.8,
+   "max_rss_gb": 0.48,
+   "threads": 16,
+   "cpu_h": 0.052444,
+   "notes": "N = 12, clustering only"
+  },
+  {
+   "tool": "souporcell",
+   "dataset": "kang2018_b1_b",
+   "wall_s": 845.4,
+   "max_rss_gb": 1.2,
+   "threads": 16,
+   "cpu_h": 3.757333,
+   "notes": "remap + freebayes + vartrix + clustering, k given"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_b1_c",
+   "wall_s": 1117.4,
+   "max_rss_gb": 26.79,
+   "threads": 16,
+   "cpu_h": 4.966222,
+   "notes": "end to end from reads incl. alignment, K estimated"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_b1_c",
+   "wall_s": 2249.9,
+   "max_rss_gb": 26.79,
+   "threads": 16,
+   "cpu_h": 9.999556,
+   "notes": "K given"
+  },
+  {
+   "tool": "cellsnp-lite",
+   "dataset": "kang2018_b1_c",
+   "wall_s": 527.6,
+   "max_rss_gb": 0.65,
+   "threads": 16,
+   "cpu_h": 2.344889,
+   "notes": "pileup on the shared BAM and panel (vireo input)"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_b1_c",
+   "wall_s": 23.0,
+   "max_rss_gb": 0.49,
+   "threads": 16,
+   "cpu_h": 0.102222,
+   "notes": "K given, one seed, clustering only"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_b1_c",
+   "wall_s": 23.9,
+   "max_rss_gb": 0.66,
+   "threads": 16,
+   "cpu_h": 0.106222,
+   "notes": "N = 12, clustering only"
+  },
+  {
+   "tool": "souporcell",
+   "dataset": "kang2018_b1_c",
+   "wall_s": 873.9,
+   "max_rss_gb": 1.24,
+   "threads": 16,
+   "cpu_h": 3.884,
+   "notes": "remap + freebayes + vartrix + clustering, k given"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "maester_k562_bt142_3p",
+   "wall_s": 2844.5,
+   "max_rss_gb": 81.25,
+   "threads": 16,
+   "cpu_h": 12.642222,
+   "notes": "end to end from reads incl. alignment, K estimated"
+  },
+  {
+   "tool": "cellsnp-lite",
+   "dataset": "maester_k562_bt142_3p",
+   "wall_s": 640.4,
+   "max_rss_gb": 0.66,
+   "threads": 16,
+   "cpu_h": 2.846222,
+   "notes": "pileup on the shared BAM and panel (vireo input)"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "maester_k562_bt142_3p",
+   "wall_s": 16.3,
+   "max_rss_gb": 0.39,
+   "threads": 16,
+   "cpu_h": 0.072444,
+   "notes": "K given, one seed, clustering only"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "maester_k562_bt142_3p",
+   "wall_s": 34.4,
+   "max_rss_gb": 1.43,
+   "threads": 16,
+   "cpu_h": 0.152889,
+   "notes": "N = 12, clustering only"
+  },
+  {
+   "tool": "souporcell",
+   "dataset": "maester_k562_bt142_3p",
+   "wall_s": 693.6,
+   "max_rss_gb": 1.21,
+   "threads": 16,
+   "cpu_h": 3.082667,
+   "notes": "remap + freebayes + vartrix + clustering, k given"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "maester_bpdcn712_3p",
+   "wall_s": 5435.0,
+   "max_rss_gb": 90.68,
+   "threads": 16,
+   "cpu_h": 24.155556,
+   "notes": "end to end from reads incl. alignment, K estimated"
+  },
+  {
+   "tool": "cellsnp-lite",
+   "dataset": "maester_bpdcn712_3p",
+   "wall_s": 1331.6,
+   "max_rss_gb": 0.64,
+   "threads": 16,
+   "cpu_h": 5.918222,
+   "notes": "pileup on the shared BAM and panel (vireo input)"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "maester_bpdcn712_3p",
+   "wall_s": 9.3,
+   "max_rss_gb": 0.26,
+   "threads": 16,
+   "cpu_h": 0.041333,
+   "notes": "K given, one seed, clustering only"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "maester_bpdcn712_3p",
+   "wall_s": 28.0,
+   "max_rss_gb": 1.22,
+   "threads": 16,
+   "cpu_h": 0.124444,
+   "notes": "N = 12, clustering only"
+  }
+ ],
+ "figures": [
+  {
+   "id": "k_estimated_vs_true",
+   "title": "Estimated vs true donor count",
+   "kind": "scatter",
+   "caption": "One point per pool; the diagonal is correct.",
+   "x": {
+    "label": "true K",
+    "unit": "donors"
+   },
+   "y": {
+    "label": "estimated K",
+    "unit": "donors"
+   },
+   "reference_lines": [],
+   "series": [
+    {
+     "name": "Singlet",
+     "tool": "singlet",
+     "x": [
+      8,
+      8,
+      4,
+      4,
+      8,
+      2,
+      1
+     ],
+     "y": [
+      9,
+      8,
+      4,
+      4,
+      8,
+      2,
+      1
+     ]
+    },
+    {
+     "name": "vireo (N = 12)",
+     "tool": "vireo",
+     "x": [
+      8,
+      8,
+      4,
+      4,
+      8,
+      2,
+      1
+     ],
+     "y": [
+      9,
+      10,
+      7,
+      6,
+      9,
+      4,
+      12
+     ]
+    }
+   ]
+  },
+  {
+   "id": "ari_by_pool",
+   "title": "Donor-label ARI by pool",
+   "kind": "grouped_bar",
+   "caption": "Singlet estimates K; vireo and souporcell are given the true K.",
+   "x": {
+    "label": "pool",
+    "categories": [
+     "kang2018_ctrl",
+     "kang2018_stim",
+     "kang2018_b1_a",
+     "kang2018_b1_b",
+     "kang2018_b1_c",
+     "maester_k562_bt142_3p",
+     "maester_bpdcn712_3p"
+    ]
+   },
+   "y": {
+    "label": "ARI",
+    "unit": "ARI",
+    "min": 0,
+    "max": 1
+   },
+   "series": [
+    {
+     "name": "Singlet (K estimated)",
+     "tool": "singlet",
+     "x": [
+      "kang2018_ctrl",
+      "kang2018_stim",
+      "kang2018_b1_a",
+      "kang2018_b1_b",
+      "kang2018_b1_c",
+      "maester_k562_bt142_3p",
+      "maester_bpdcn712_3p"
+     ],
+     "y": [
+      0.975566,
+      0.976344,
+      0.995663,
+      0.996286,
+      0.997162,
+      0.999101,
+      1.0
+     ]
+    },
+    {
+     "name": "vireo (K given)",
+     "tool": "vireo",
+     "x": [
+      "kang2018_ctrl",
+      "kang2018_stim",
+      "kang2018_b1_a",
+      "kang2018_b1_b",
+      "kang2018_b1_c",
+      "maester_k562_bt142_3p",
+      "maester_bpdcn712_3p"
+     ],
+     "y": [
+      0.903268,
+      0.940064,
+      0.9884,
+      0.988608,
+      0.98503,
+      0.701116,
+      null
+     ]
+    },
+    {
+     "name": "souporcell (K given)",
+     "tool": "souporcell",
+     "x": [
+      "kang2018_ctrl",
+      "kang2018_stim",
+      "kang2018_b1_a",
+      "kang2018_b1_b",
+      "kang2018_b1_c",
+      "maester_k562_bt142_3p",
+      "maester_bpdcn712_3p"
+     ],
+     "y": [
+      null,
+      null,
+      null,
+      0.991376,
+      0.98911,
+      0.701116,
+      null
+     ]
+    }
+   ]
+  },
+  {
+   "id": "per_pool",
+   "title": "Per-pool results",
+   "kind": "table",
+   "columns": [
+    "pool",
+    "true K",
+    "Singlet K",
+    "vireo K (1%)",
+    "Singlet ARI",
+    "vireo ARI",
+    "souporcell ARI",
+    "Singlet coverage",
+    "Singlet min recall"
+   ],
+   "rows": [
+    [
+     "kang2018_ctrl",
+     8,
+     9,
+     9,
+     0.975566,
+     0.903268,
+     null,
+     0.988061,
+     0.888889
+    ],
+    [
+     "kang2018_stim",
+     8,
+     8,
+     10,
+     0.976344,
+     0.940064,
+     null,
+     0.981236,
+     0.925811
+    ],
+    [
+     "kang2018_b1_a",
+     4,
+     4,
+     7,
+     0.995663,
+     0.9884,
+     null,
+     0.996852,
+     0.993188
+    ],
+    [
+     "kang2018_b1_b",
+     4,
+     4,
+     6,
+     0.996286,
+     0.988608,
+     0.991376,
+     0.997254,
+     0.992473
+    ],
+    [
+     "kang2018_b1_c",
+     8,
+     8,
+     9,
+     0.997162,
+     0.98503,
+     0.98911,
+     0.997554,
+     0.995406
+    ],
+    [
+     "maester_k562_bt142_3p",
+     2,
+     2,
+     4,
+     0.999101,
+     0.701116,
+     0.701116,
+     0.99958,
+     0.999215
+    ],
+    [
+     "maester_bpdcn712_3p",
+     1,
+     1,
+     12,
+     1.0,
+     null,
+     null,
+     1.0,
+     1.0
+    ]
+   ]
+  }
+ ],
+ "reach": [
+  {
+   "tool": "singlet",
+   "output": "donor count estimated from the reads",
+   "supported": "yes",
+   "note": "--n-donors -1 (default): held-out likelihood search over K"
+  },
+  {
+   "tool": "vireo",
+   "output": "donor count estimated from the reads",
+   "supported": "no",
+   "note": "N must be given; over-specifying N leaves surplus donors, which is not a selection rule"
+  },
+  {
+   "tool": "souporcell",
+   "output": "donor count estimated from the reads",
+   "supported": "no",
+   "note": "k must be given"
+  },
+  {
+   "tool": "singlet",
+   "output": "donor labels without reference genotypes",
+   "supported": "yes",
+   "note": "also labels doublets"
+  },
+  {
+   "tool": "vireo",
+   "output": "donor labels without reference genotypes",
+   "supported": "yes",
+   "note": "needs a cellsnp-lite pileup first"
+  },
+  {
+   "tool": "souporcell",
+   "output": "donor labels without reference genotypes",
+   "supported": "yes",
+   "note": "remaps reads; slowest"
+  },
+  {
+   "tool": "singlet",
+   "output": "one command from reads to labels",
+   "supported": "yes",
+   "note": "alignment, cell calling, pileup and demultiplexing in one run"
+  }
+ ],
+ "artifacts": [
+  {
+   "name": "donor_demux_cells.tsv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/donor-demux/donor_demux_cells.tsv.gz",
+   "kind": "singlet_output",
+   "sha256": "34e382143738d996b2108896b1033b27908a416e3bf58b17f07ff1c9419f5988",
+   "bytes": 392500,
+   "format": "tsv"
+  },
+  {
+   "name": "donor_demux_pools.tsv",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/donor-demux/donor_demux_pools.tsv",
+   "kind": "derived",
+   "sha256": "076919fbe510d5d95172854c77f8ca7bbdc09b871566bf55669dfbe33d7a678b",
+   "bytes": 472,
+   "format": "tsv"
+  },
+  {
+   "name": "donor_demux_resources.tsv",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/donor-demux/donor_demux_resources.tsv",
+   "kind": "derived",
+   "sha256": "b185c8cf1a8113770b7d6d7abf1c838e324dbcc7ff9f10a30612d0b07cce6958",
+   "bytes": 1756,
+   "format": "tsv"
+  },
+  {
+   "name": "provenance.json",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/donor-demux/provenance.json",
+   "kind": "singlet_output",
+   "sha256": "6935e1869030ae1c2281fbb55a1c7778d7ca4c0cbd5830a6b02f36befc1d92a0",
+   "bytes": 9333,
+   "format": "json"
+  }
+ ],
+ "code": [
+  {
+   "path": "include/singlet/pileup/donor_demux.h",
+   "role": "implementation",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/02aa9b938b54e0f92bba00c44c07b883a8660aa2/include/singlet/pileup/donor_demux.h"
+  },
+  {
+   "path": "bench/public/capabilities/donor_demux.py",
+   "role": "metric",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/bc855f76ee733b938d43e197cd9ede55c1221474/bench/public/capabilities/donor_demux.py"
+  },
+  {
+   "path": "bench/public/genotype",
+   "role": "harness",
+   "url": "https://github.com/Singlet-Bio/singlet/tree/bc855f76ee733b938d43e197cd9ede55c1221474/bench/public/genotype"
+  }
+ ],
+ "reproduce": {
+  "module": "bench/public/capabilities/donor_demux.py",
+  "function": "compute",
+  "laptop_minutes": 2,
+  "clipper_command": "sbatch bench/public/genotype/hpc/export.sbatch demux"
+ },
+ "caveats": [
+  "Truth for the Kang lanes is demuxlet's call, not an independent array; its own errors are in every number.",
+  "The Kang batch 2 control lane is development data (auto-K and the mt caller were developed on it in PR #36). The batch 2 IFN-beta lane has the same donors and chemistry and is therefore only a weak hold-out; the strict hold-outs are the batch 1 lanes and the MAESTER pools.",
+  "True K takes the values 1, 2, 4 and 8 only; K = 3, 5, 6, 7 and K > 8 have no real pool with truth in the cohort. No simulated or in-silico pools are used.",
+  "Vireo has no K-selection procedure. Its K here is a prune-by-size rule on an N = 12 run (donors with >= 1% of cells); other rules would give other numbers. Souporcell cannot estimate K and is only scored with the true K.",
+  "The BPDCN pool has one patient; any donor label other than one cluster counts against the tool, and homotypic doublets cannot be told from singlets by genotype.",
+  "Kang FASTQs were rebuilt from mapped primary alignments of Cell Ranger BAMs, so unmapped reads are missing."
+ ]
+}

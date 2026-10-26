@@ -1,0 +1,1085 @@
+{
+ "schema": "singlet.benchmark.capability",
+ "schema_version": "1.1.0",
+ "capability": "mtdna",
+ "title": "Mitochondrial variants and donor haplotypes",
+ "conclusion": "Singlet's genotype-free per-donor mt haplotypes reach precision 0.89 and recall 0.91 against replicate-lane truth on held-out Kang lanes (mgatk on vireo clusters: 0.93 / 0.89). For MAESTER clone-defining variants the 3' per-cell VAF has mean AUROC 0.79 (mgatk 0.79).",
+ "methods": "Real data with real truth. (1) Kang 2018 lanes: each donor's homoplasmic mtDNA haplotype is taken from a second library of the same donors (cells labelled by the authors' demuxlet calls, mgatk allele counts, AF >= 0.9 and depth >= 20 against rCRS). Singlet's genotype-free per-donor mt variant files (from its own clusters) are compared with it, as are mgatk counts pooled by vireo's clusters, the pipeline a user would assemble. Precision is the share of predicted variants at covered truth positions that are in the truth; recall is the share of truth variants recovered. (2) MAESTER BPDCN712: 26 clone-defining mt variants whose positive cells were established from the paired mt-enriched library of the same cells; for each, the AUROC of the per-cell VAF from the standard 3' library separates positive cells from the other clone cells (both tools on the same alignments and cells; mgatk counts UMI-deduplicated molecules, Singlet counts reads). (3) MAESTER K562 + BT142: agreement of per-line allele fractions from the 3' library with the MAESTER fractions. Singlet is run end to end (default pipeline, automatic donor count); mgatk 0.9.0 runs on the chrM reads of Singlet's BAM for the same cells. Rules are match-or-beat against mgatk with zero tolerance; informational metrics have no competitor. Variants and counts stay private.",
+ "status": "final",
+ "generated_at": "2026-10-26T10:44:44+00:00",
+ "owner": "pipeline-benchmark",
+ "singlet": {
+  "version": "1.0.0",
+  "commit": "02aa9b938b54e0f92bba00c44c07b883a8660aa2",
+  "branch": "prod/campaign",
+  "binary": "singlet-campaign",
+  "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c"
+ },
+ "tools": [
+  {
+   "name": "singlet",
+   "version": "1.0.0",
+   "role": "singlet",
+   "params": "singlet-campaign POOL.1fq --ref-base /mnt/projects/debruinz_project/cellarium/reference --genome-dir /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/star_2.7.11b --exons /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/genes/genes.gtf --threads 16 --pipeline --n-donors -1 --tagged-bam possorted.bam --bam-sort-mode disk --output-format mtx --raw-matrix  (default SNP panel: 1000 Genomes phase 3, AF >= 5%, 7.35 M SNPs; --n-donors K only for the told-K comparison runs)"
+  },
+  {
+   "name": "mgatk",
+   "version": "0.9.0",
+   "role": "competitor",
+   "url": "https://github.com/caleblareau/mgatk",
+   "citation": "Lareau et al. 2021, Nat Biotechnol 39:451",
+   "params": "mgatk bcall -i chrM.bam -n POOL -o out -c 8 -bt CB -b barcodes.txt -ub UB -g rCRS (chrM reads of Singlet's tagged BAM; other options at their defaults: NHmax 1, NMmax 4, base quality 0)"
+  },
+  {
+   "name": "vireo",
+   "version": "0.5.9",
+   "role": "helper",
+   "params": "cellsnp-lite as above, then vireo -c cellsnp -o OUT -N K -p 16 --randSeed {1,2,3} --noPlot (K = true K, defaults otherwise: nInit 50, doublet detection on); K estimate: vireo -N 12 --randSeed 1, K = donors holding >= 1% of cells"
+  },
+  {
+   "name": "maester-authors",
+   "version": "n/a",
+   "role": "truth",
+   "url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE182685",
+   "params": "Miller et al. 2022: clone-defining variants, positive cells, per-line allele fractions"
+  },
+  {
+   "name": "kang-replicate-lane",
+   "version": "n/a",
+   "role": "truth",
+   "params": "homoplasmic mt variants of each donor in a second library of the same donors (cells labelled by demuxlet; mgatk counts; AF >= 0.9, depth >= 20 vs rCRS)"
+  }
+ ],
+ "datasets": [
+  {
+   "id": "kang2018_ctrl",
+   "title": "Kang 2018 batch 2 control lane (8 donors)",
+   "accessions": {
+    "gse": "GSE96583",
+    "gsm": [
+     "GSM2560248"
+    ],
+    "srr": [
+     "SRR5398238"
+    ]
+   },
+   "truth": "homoplasmic mt variants of each donor in a second library of the same donors (cells labelled by demuxlet; mgatk counts; AF >= 0.9, depth >= 20 vs rCRS)",
+   "data_kind": "real",
+   "notes": "development data"
+  },
+  {
+   "id": "kang2018_stim",
+   "title": "Kang 2018 batch 2 IFN-beta lane (8 donors)",
+   "accessions": {
+    "gse": "GSE96583",
+    "gsm": [
+     "GSM2560249"
+    ],
+    "srr": [
+     "SRR5398239"
+    ]
+   },
+   "truth": "homoplasmic mt variants of each donor in a second library of the same donors (cells labelled by demuxlet; mgatk counts; AF >= 0.9, depth >= 20 vs rCRS)",
+   "data_kind": "real"
+  },
+  {
+   "id": "kang2018_b1_a",
+   "title": "Kang 2018 batch 1 lane A (4 donors)",
+   "accessions": {
+    "gse": "GSE96583",
+    "gsm": [
+     "GSM2560245"
+    ],
+    "srr": [
+     "SRR5398235"
+    ]
+   },
+   "truth": "homoplasmic mt variants of each donor in a second library of the same donors (cells labelled by demuxlet; mgatk counts; AF >= 0.9, depth >= 20 vs rCRS)",
+   "data_kind": "real"
+  },
+  {
+   "id": "kang2018_b1_b",
+   "title": "Kang 2018 batch 1 lane B (4 donors)",
+   "accessions": {
+    "gse": "GSE96583",
+    "gsm": [
+     "GSM2560246"
+    ],
+    "srr": [
+     "SRR5398236"
+    ]
+   },
+   "truth": "homoplasmic mt variants of each donor in a second library of the same donors (cells labelled by demuxlet; mgatk counts; AF >= 0.9, depth >= 20 vs rCRS)",
+   "data_kind": "real"
+  },
+  {
+   "id": "kang2018_b1_c",
+   "title": "Kang 2018 batch 1 lane C (8 donors)",
+   "accessions": {
+    "gse": "GSE96583",
+    "gsm": [
+     "GSM2560247"
+    ],
+    "srr": [
+     "SRR5398237"
+    ]
+   },
+   "truth": "homoplasmic mt variants of each donor in a second library of the same donors (cells labelled by demuxlet; mgatk counts; AF >= 0.9, depth >= 20 vs rCRS)",
+   "data_kind": "real"
+  },
+  {
+   "id": "maester_bpdcn712_3p",
+   "title": "MAESTER BPDCN712 bone marrow, standard 10x 3' library",
+   "data_kind": "real",
+   "accessions": {
+    "gse": "GSE182685",
+    "srr": [
+     "SRR15598776"
+    ]
+   },
+   "truth": "26 clone-defining mt variants with positive cells from the paired MAESTER (mt-enriched) library of the same cells, authors' calls"
+  },
+  {
+   "id": "maester_k562_bt142_3p",
+   "title": "MAESTER K562 + BT142 mixture, standard 10x 3' library",
+   "data_kind": "real",
+   "accessions": {
+    "gse": "GSE182685",
+    "srr": [
+     "SRR15598773"
+    ]
+   },
+   "truth": "per-line allele fractions of mt variants from the paired MAESTER library, authors' cell-line labels"
+  }
+ ],
+ "metrics": [
+  {
+   "id": "haplotype_precision",
+   "name": "Donor mt-haplotype precision against replicate-lane truth",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_ctrl",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.789116
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "mgatk",
+     "value": 0.893805
+    }
+   ],
+   "notes": "Development lane: Singlet's mt caller was developed here (PR #36).",
+   "pass": "fail"
+  },
+  {
+   "id": "haplotype_recall",
+   "name": "Donor mt-haplotype recall against replicate-lane truth",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_ctrl",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.913386
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "mgatk",
+     "value": 0.795276
+    }
+   ],
+   "notes": "Development lane: Singlet's mt caller was developed here (PR #36).",
+   "pass": "pass"
+  },
+  {
+   "id": "haplotype_precision",
+   "name": "Donor mt-haplotype precision against replicate-lane truth",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_stim",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.850649
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "mgatk",
+     "value": 0.926829
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "haplotype_recall",
+   "name": "Donor mt-haplotype recall against replicate-lane truth",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_stim",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.909722
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "mgatk",
+     "value": 0.791667
+    }
+   ],
+   "pass": "pass"
+  },
+  {
+   "id": "haplotype_precision",
+   "name": "Donor mt-haplotype precision against replicate-lane truth",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_b1_a",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.911765
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "mgatk",
+     "value": 0.92233
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "haplotype_recall",
+   "name": "Donor mt-haplotype recall against replicate-lane truth",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_b1_a",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.920792
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "mgatk",
+     "value": 0.940594
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "haplotype_precision",
+   "name": "Donor mt-haplotype precision against replicate-lane truth",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_b1_b",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.909091
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "mgatk",
+     "value": 0.947368
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "haplotype_recall",
+   "name": "Donor mt-haplotype recall against replicate-lane truth",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_b1_b",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.909091
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "mgatk",
+     "value": 0.981818
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "haplotype_precision",
+   "name": "Donor mt-haplotype precision against replicate-lane truth",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_b1_c",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.89759
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "mgatk",
+     "value": 0.943396
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "haplotype_recall",
+   "name": "Donor mt-haplotype recall against replicate-lane truth",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "kang2018_b1_c",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.90303
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "mgatk",
+     "value": 0.909091
+    }
+   ],
+   "pass": "fail"
+  },
+  {
+   "id": "haplotype_precision",
+   "name": "Donor mt-haplotype precision against replicate-lane truth",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "pooled",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.886792,
+    "ci": [
+     0.854407,
+     0.918614
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "mgatk",
+     "value": 0.934389
+    }
+   ],
+   "notes": "Pooled over the donors of the held-out lanes (development lane excluded); CI resamples donors.",
+   "pass": "fail"
+  },
+  {
+   "id": "haplotype_recall",
+   "name": "Donor mt-haplotype recall against replicate-lane truth",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "pooled",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.909677,
+    "ci": [
+     0.892461,
+     0.924288
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "mgatk",
+     "value": 0.888172
+    }
+   ],
+   "notes": "Pooled over the donors of the held-out lanes (development lane excluded); CI resamples donors.",
+   "pass": "pass"
+  },
+  {
+   "id": "donor_pair_separation_agreement",
+   "name": "Donor pairs separated by mt haplotype exactly when the truth haplotypes separate them",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "pooled",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "mgatk",
+     "value": 1.0
+    }
+   ],
+   "notes": "68 donor pairs in the held-out lanes.",
+   "pass": "pass"
+  },
+  {
+   "id": "clonal_variant_auroc",
+   "name": "Per-cell VAF separates truth-positive cells of a clone-defining variant (mean AUROC over variants)",
+   "unit": "AUROC",
+   "category": "accuracy",
+   "dataset": "maester_bpdcn712_3p",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.794243,
+    "ci": [
+     0.71762,
+     0.858674
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "mgatk",
+     "value": 0.794303
+    }
+   ],
+   "notes": "13 of 26 author-validated clone-defining variants have >= 5 positive and >= 5 negative cells with >= 2 reads in the standard 3' library.",
+   "pass": "fail"
+  },
+  {
+   "id": "clonal_variants_evaluable",
+   "name": "Clone-defining variants with enough 3' coverage to score",
+   "unit": "variants",
+   "category": "coverage",
+   "dataset": "maester_bpdcn712_3p",
+   "direction": "none",
+   "singlet": {
+    "value": 13.0
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "pass": "na"
+  },
+  {
+   "id": "clonal_variants_in_variant_list",
+   "name": "Clone-defining variants listed in Singlet's heteroplasmic variant list",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "maester_bpdcn712_3p",
+   "direction": "none",
+   "singlet": {
+    "value": 0.192308
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "notes": "Singlet-only: mgatk has no variant list without its R step.",
+   "pass": "na"
+  },
+  {
+   "id": "clonal_call_sensitivity",
+   "name": "Share of truth-positive cells (>= 2 reads) Singlet flags heteroplasmic at the variant",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "maester_bpdcn712_3p",
+   "direction": "none",
+   "singlet": {
+    "value": 0.267399
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "pass": "na"
+  },
+  {
+   "id": "clonal_call_false_positive_rate",
+   "name": "Share of other clone cells (>= 2 reads) Singlet flags heteroplasmic at the variant",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "maester_bpdcn712_3p",
+   "direction": "none",
+   "singlet": {
+    "value": 0.0
+   },
+   "rule": {
+    "type": "informational"
+   },
+   "pass": "na"
+  },
+  {
+   "id": "line_af_pearson_k562",
+   "name": "Agreement of 3' allele fractions with MAESTER truth in K562 (Pearson r)",
+   "unit": "r",
+   "category": "accuracy",
+   "dataset": "maester_k562_bt142_3p",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.794563
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "mgatk",
+     "value": 0.794569
+    }
+   ],
+   "notes": "260 variant-line pairs with MAESTER AF >= 0.02 and >= 100 3' reads in both tools.",
+   "pass": "fail"
+  },
+  {
+   "id": "line_af_mae_k562",
+   "name": "Mean absolute error of 3' allele fractions against MAESTER truth in K562",
+   "unit": "AF",
+   "category": "accuracy",
+   "dataset": "maester_k562_bt142_3p",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.089091
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "mgatk",
+     "value": 0.092579
+    }
+   ],
+   "pass": "pass"
+  },
+  {
+   "id": "line_af_pearson_bt142",
+   "name": "Agreement of 3' allele fractions with MAESTER truth in BT142 (Pearson r)",
+   "unit": "r",
+   "category": "accuracy",
+   "dataset": "maester_k562_bt142_3p",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.647302
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "mgatk",
+     "value": 0.644748
+    }
+   ],
+   "notes": "210 variant-line pairs with MAESTER AF >= 0.02 and >= 100 3' reads in both tools.",
+   "pass": "pass"
+  },
+  {
+   "id": "line_af_mae_bt142",
+   "name": "Mean absolute error of 3' allele fractions against MAESTER truth in BT142",
+   "unit": "AF",
+   "category": "accuracy",
+   "dataset": "maester_k562_bt142_3p",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.069146
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "competitors": [
+    {
+     "tool": "mgatk",
+     "value": 0.072967
+    }
+   ],
+   "pass": "pass"
+  }
+ ],
+ "resources": [
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_ctrl",
+   "wall_s": 2827.1,
+   "max_rss_gb": 22.35,
+   "threads": 16,
+   "cpu_h": 12.565,
+   "notes": "end to end from reads incl. alignment, K estimated"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_ctrl",
+   "wall_s": 1944.8,
+   "max_rss_gb": 29.42,
+   "threads": 16,
+   "cpu_h": 8.644,
+   "notes": "K given"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_ctrl",
+   "wall_s": 45.3,
+   "max_rss_gb": 1.09,
+   "threads": 16,
+   "cpu_h": 0.201,
+   "notes": "K given, one seed, clustering only"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_ctrl",
+   "wall_s": 56.3,
+   "max_rss_gb": 1.52,
+   "threads": 16,
+   "cpu_h": 0.25,
+   "notes": "N = 12, clustering only"
+  },
+  {
+   "tool": "mgatk",
+   "dataset": "kang2018_ctrl",
+   "wall_s": 7303.0,
+   "max_rss_gb": 4.4,
+   "threads": 8,
+   "cpu_h": 16.229,
+   "notes": "chrM reads of the shared BAM, 8 threads"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_stim",
+   "wall_s": 2123.4,
+   "max_rss_gb": 31.17,
+   "threads": 16,
+   "cpu_h": 9.437,
+   "notes": "end to end from reads incl. alignment, K estimated"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_stim",
+   "wall_s": 2382.8,
+   "max_rss_gb": 32.91,
+   "threads": 16,
+   "cpu_h": 10.59,
+   "notes": "K given"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_stim",
+   "wall_s": 25.6,
+   "max_rss_gb": 0.96,
+   "threads": 16,
+   "cpu_h": 0.114,
+   "notes": "K given, one seed, clustering only"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_stim",
+   "wall_s": 35.3,
+   "max_rss_gb": 1.37,
+   "threads": 16,
+   "cpu_h": 0.157,
+   "notes": "N = 12, clustering only"
+  },
+  {
+   "tool": "mgatk",
+   "dataset": "kang2018_stim",
+   "wall_s": 6116.0,
+   "max_rss_gb": 4.22,
+   "threads": 8,
+   "cpu_h": 13.591,
+   "notes": "chrM reads of the shared BAM, 8 threads"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_b1_a",
+   "wall_s": 1405.3,
+   "max_rss_gb": 28.91,
+   "threads": 16,
+   "cpu_h": 6.246,
+   "notes": "end to end from reads incl. alignment, K estimated"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_b1_a",
+   "wall_s": 1320.3,
+   "max_rss_gb": 28.9,
+   "threads": 16,
+   "cpu_h": 5.868,
+   "notes": "K given"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_b1_a",
+   "wall_s": 7.1,
+   "max_rss_gb": 0.24,
+   "threads": 16,
+   "cpu_h": 0.032,
+   "notes": "K given, one seed, clustering only"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_b1_a",
+   "wall_s": 11.6,
+   "max_rss_gb": 0.47,
+   "threads": 16,
+   "cpu_h": 0.052,
+   "notes": "N = 12, clustering only"
+  },
+  {
+   "tool": "mgatk",
+   "dataset": "kang2018_b1_a",
+   "wall_s": 1726.0,
+   "max_rss_gb": 2.27,
+   "threads": 8,
+   "cpu_h": 3.836,
+   "notes": "chrM reads of the shared BAM, 8 threads"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_b1_b",
+   "wall_s": 1375.0,
+   "max_rss_gb": 28.97,
+   "threads": 16,
+   "cpu_h": 6.111,
+   "notes": "end to end from reads incl. alignment, K estimated"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_b1_b",
+   "wall_s": 1226.0,
+   "max_rss_gb": 26.32,
+   "threads": 16,
+   "cpu_h": 5.449,
+   "notes": "K given"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_b1_b",
+   "wall_s": 7.9,
+   "max_rss_gb": 0.25,
+   "threads": 16,
+   "cpu_h": 0.035,
+   "notes": "K given, one seed, clustering only"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_b1_b",
+   "wall_s": 11.8,
+   "max_rss_gb": 0.48,
+   "threads": 16,
+   "cpu_h": 0.052,
+   "notes": "N = 12, clustering only"
+  },
+  {
+   "tool": "mgatk",
+   "dataset": "kang2018_b1_b",
+   "wall_s": 1842.8,
+   "max_rss_gb": 2.57,
+   "threads": 8,
+   "cpu_h": 4.095,
+   "notes": "chrM reads of the shared BAM, 8 threads"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_b1_c",
+   "wall_s": 1117.4,
+   "max_rss_gb": 26.79,
+   "threads": 16,
+   "cpu_h": 4.966,
+   "notes": "end to end from reads incl. alignment, K estimated"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "kang2018_b1_c",
+   "wall_s": 2249.9,
+   "max_rss_gb": 26.79,
+   "threads": 16,
+   "cpu_h": 10.0,
+   "notes": "K given"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_b1_c",
+   "wall_s": 23.0,
+   "max_rss_gb": 0.49,
+   "threads": 16,
+   "cpu_h": 0.102,
+   "notes": "K given, one seed, clustering only"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "kang2018_b1_c",
+   "wall_s": 23.9,
+   "max_rss_gb": 0.66,
+   "threads": 16,
+   "cpu_h": 0.106,
+   "notes": "N = 12, clustering only"
+  },
+  {
+   "tool": "mgatk",
+   "dataset": "kang2018_b1_c",
+   "wall_s": 2946.9,
+   "max_rss_gb": 2.97,
+   "threads": 8,
+   "cpu_h": 6.549,
+   "notes": "chrM reads of the shared BAM, 8 threads"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "maester_k562_bt142_3p",
+   "wall_s": 2844.5,
+   "max_rss_gb": 81.25,
+   "threads": 16,
+   "cpu_h": 12.642,
+   "notes": "end to end from reads incl. alignment, K estimated"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "maester_k562_bt142_3p",
+   "wall_s": 16.3,
+   "max_rss_gb": 0.39,
+   "threads": 16,
+   "cpu_h": 0.072,
+   "notes": "K given, one seed, clustering only"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "maester_k562_bt142_3p",
+   "wall_s": 34.4,
+   "max_rss_gb": 1.43,
+   "threads": 16,
+   "cpu_h": 0.153,
+   "notes": "N = 12, clustering only"
+  },
+  {
+   "tool": "mgatk",
+   "dataset": "maester_k562_bt142_3p",
+   "wall_s": 1483.1,
+   "max_rss_gb": 3.78,
+   "threads": 8,
+   "cpu_h": 3.296,
+   "notes": "chrM reads of the shared BAM, 8 threads"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "maester_bpdcn712_3p",
+   "wall_s": 5435.0,
+   "max_rss_gb": 90.68,
+   "threads": 16,
+   "cpu_h": 24.156,
+   "notes": "end to end from reads incl. alignment, K estimated"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "maester_bpdcn712_3p",
+   "wall_s": 9.3,
+   "max_rss_gb": 0.26,
+   "threads": 16,
+   "cpu_h": 0.041,
+   "notes": "K given, one seed, clustering only"
+  },
+  {
+   "tool": "vireo",
+   "dataset": "maester_bpdcn712_3p",
+   "wall_s": 28.0,
+   "max_rss_gb": 1.22,
+   "threads": 16,
+   "cpu_h": 0.124,
+   "notes": "N = 12, clustering only"
+  },
+  {
+   "tool": "mgatk",
+   "dataset": "maester_bpdcn712_3p",
+   "wall_s": 974.4,
+   "max_rss_gb": 2.63,
+   "threads": 8,
+   "cpu_h": 2.165,
+   "notes": "chrM reads of the shared BAM, 8 threads"
+  }
+ ],
+ "figures": [
+  {
+   "id": "voi_auroc",
+   "title": "Clone-defining variants: per-cell VAF AUROC",
+   "kind": "scatter",
+   "caption": "One point per MAESTER BPDCN712 clone-defining variant (anonymised); above the diagonal Singlet separates truth-positive cells better than mgatk.",
+   "x": {
+    "label": "mgatk AUROC",
+    "min": 0.4,
+    "max": 1
+   },
+   "y": {
+    "label": "Singlet AUROC",
+    "min": 0.4,
+    "max": 1
+   },
+   "series": [
+    {
+     "name": "variants",
+     "tool": "singlet",
+     "x": [
+      0.833333,
+      0.912458,
+      0.749027,
+      0.6,
+      0.712154,
+      0.874393,
+      0.883516,
+      0.7,
+      0.937265,
+      0.492565,
+      0.697899,
+      0.933333,
+      1.0
+     ],
+     "y": [
+      0.833333,
+      0.912458,
+      0.749027,
+      0.6,
+      0.712154,
+      0.873786,
+      0.883333,
+      0.7,
+      0.937265,
+      0.492565,
+      0.697899,
+      0.933333,
+      1.0
+     ]
+    }
+   ]
+  }
+ ],
+ "artifacts": [
+  {
+   "name": "mt_haplotype_counts.tsv",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/mtdna/mt_haplotype_counts.tsv",
+   "kind": "derived",
+   "sha256": "82764fae577a44503e8373203313aff3badd24b54b3a17a28ea061e872d96513",
+   "bytes": 2634,
+   "format": "tsv"
+  },
+  {
+   "name": "mt_haplotype_pairs.tsv",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/mtdna/mt_haplotype_pairs.tsv",
+   "kind": "derived",
+   "sha256": "670b85dc77f2ccd953d9408ec46d8acebc3a8b353890f2754edb8277da0fa3f7",
+   "bytes": 5807,
+   "format": "tsv"
+  },
+  {
+   "name": "mt_voi_summary.tsv",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/mtdna/mt_voi_summary.tsv",
+   "kind": "derived",
+   "sha256": "fc3d41606fb52c0f718dc6b0fdbfcf47caa9d7ff5f5cc254326c2d9829a974a5",
+   "bytes": 1236,
+   "format": "tsv"
+  },
+  {
+   "name": "mt_linemix_stats.tsv",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/mtdna/mt_linemix_stats.tsv",
+   "kind": "derived",
+   "sha256": "9212f4948dbe4046833c7b9bdb8ee6293149e5562a20d539c1b3ba57ef8e59ce",
+   "bytes": 568,
+   "format": "tsv"
+  },
+  {
+   "name": "provenance.json",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/mtdna/provenance.json",
+   "kind": "singlet_output",
+   "sha256": "d97b60d10e0721484b59087fdd5e2a0b78efbe466e66bd80e59d981b1dfef73c",
+   "bytes": 8559,
+   "format": "json"
+  }
+ ],
+ "reach": [
+  {
+   "tool": "singlet",
+   "output": "per-donor homoplasmic mt haplotype without donor labels",
+   "supported": "yes",
+   "note": "private/mt/donor*_mt_variants.vcf, from its own clusters"
+  },
+  {
+   "tool": "mgatk",
+   "output": "per-donor homoplasmic mt haplotype without donor labels",
+   "supported": "no",
+   "note": "needs cluster labels from another tool (vireo here)"
+  },
+  {
+   "tool": "singlet",
+   "output": "per-cell heteroplasmy matrix from 3' scRNA-seq",
+   "supported": "yes",
+   "note": "mt_heteroplasmy"
+  },
+  {
+   "tool": "mgatk",
+   "output": "per-cell heteroplasmy matrix from 3' scRNA-seq",
+   "supported": "yes",
+   "note": "allele counts; variant calling needs its R step"
+  }
+ ],
+ "code": [
+  {
+   "path": "include/singlet/pileup/mt_heteroplasmy.h",
+   "role": "implementation",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/02aa9b938b54e0f92bba00c44c07b883a8660aa2/include/singlet/pileup/mt_heteroplasmy.h"
+  },
+  {
+   "path": "bench/public/capabilities/mtdna.py",
+   "role": "metric",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/bc855f76ee733b938d43e197cd9ede55c1221474/bench/public/capabilities/mtdna.py"
+  },
+  {
+   "path": "bench/public/genotype",
+   "role": "harness",
+   "url": "https://github.com/Singlet-Bio/singlet/tree/bc855f76ee733b938d43e197cd9ede55c1221474/bench/public/genotype"
+  }
+ ],
+ "reproduce": {
+  "module": "bench/public/capabilities/mtdna.py",
+  "function": "compute",
+  "laptop_minutes": 1,
+  "clipper_command": "sbatch bench/public/genotype/hpc/export.sbatch mt"
+ },
+ "caveats": [
+  "Haplotypes, variant positions, allele counts and per-site allele fractions are not published; the artifacts hold counts per donor, per anonymised variant and sufficient statistics only.",
+  "The Kang haplotype truth comes from a second library of the same donors, counted by mgatk, so mgatk-based predictions share its counting rules; recall is measured against every truth variant, including positions the tested lane barely covers.",
+  "Singlet's mt caller was developed on the Kang batch 2 control lane (PR #36); that lane is reported but kept out of the pooled numbers.",
+  "mgatk is run with its documented 10x settings (bcall, CB and UB tags, rCRS); its variant calling is an R step that was not run, so heteroplasmic variant lists are not compared, only its counts.",
+  "In standard 3' libraries mt reads cluster at transcript 3' ends; only the clone-defining variants with enough coverage are scorable, and the other variants of the MAESTER truth cannot be tested with this data type."
+ ]
+}

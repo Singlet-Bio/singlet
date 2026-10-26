@@ -75,6 +75,19 @@ def boot(values_fn, n_items: int, B: int = 300, seed: int = 7):
     return [float(np.percentile(vals, 2.5)), float(np.percentile(vals, 97.5))] if vals else [float("nan")] * 2
 
 
+def paired_halfwidth(stat_fn, n_items: int, B: int = 1000, seed: int = 11) -> float | None:
+    """Half-width of the percentile 95% CI of stat_fn(resampled indices): the noise of a paired difference, used as the
+    tolerance of a match-or-beat rule. None when it cannot be estimated."""
+    if n_items < 2:
+        return None
+    rng = np.random.default_rng(seed)
+    v = np.array([stat_fn(rng.integers(0, n_items, n_items)) for _ in range(B)], dtype=float)
+    v = v[np.isfinite(v)]
+    if len(v) < 10:
+        return None
+    return float((np.percentile(v, 97.5) - np.percentile(v, 2.5)) / 2.0)
+
+
 def now() -> str:
     return _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0).isoformat()
 

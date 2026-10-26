@@ -16,8 +16,8 @@ import pandas as pd
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE)); sys.path.insert(0, str(HERE.parent))
 import contract  # noqa: E402
-from _gcommon import (SINGLET_BINARY, SINGLET_BINARY_SHA256, SINGLET_COMMIT, artifact_entry, boot, code_url, now, r6,  # noqa: E402
-                      wilson)
+from _gcommon import (SINGLET_BINARY, SINGLET_BINARY_SHA256, SINGLET_COMMIT, artifact_entry, boot, code_url, now,  # noqa: E402
+                      paired_halfwidth, r6, wilson)
 
 CAP = "donor-snps"
 ART_BASE = "https://data.singlet.bio/benchmarking/1.0.0/donor-snps"
@@ -45,6 +45,19 @@ DATASETS = {
 TOOLS = {"singlet": "singlet", "vireo": "vireo", "souporcell": "souporcell", "cellsnp-pileup": "cellsnp-pileup"}
 COMPETITORS = ["vireo", "souporcell", "cellsnp-pileup"]
 CM = [f"t{t}_c{u}" for t in range(3) for u in range(3)]
+
+
+def _stat(c: np.ndarray, key: str):
+    n = c.sum()
+    if key == "conc":
+        return float(np.trace(c) / n) if n else np.nan
+    if key == "nonref_conc":
+        d = c[1:].sum()
+        return float((c[1, 1] + c[2, 2]) / d) if d else np.nan
+    if key == "false_alt":
+        d = c[0].sum()
+        return float((c[0, 1] + c[0, 2]) / d) if d else np.nan
+    raise KeyError(key)
 
 
 def _agg(df: pd.DataFrame) -> dict | None:
@@ -88,6 +101,24 @@ def compute(artifact_dir: Path) -> dict:
         metrics.append(m)
 
     rule = {"type": "match_or_beat", "against": "best"}
+
+    def trule(sel, stratum, key, comps, direction):
+        """match-or-beat with the paired bootstrap noise (over donors) of Singlet minus the best competitor as tolerance."""
+        vals = {t: v for t, v in comps.items() if v is not None}
+        if not vals:
+            return dict(rule)
+        best = (max if direction == "higher" else min)(vals, key=vals.get)
+        a = d[(d["dataset"].isin(sel)) & (d["tool"] == "singlet") & (d["stratum"] == stratum)].set_index(["pool", "donor"])
+        b = d[(d["dataset"].isin(sel)) & (d["tool"] == best) & (d["stratum"] == stratum)].set_index(["pool", "donor"])
+        idx = a.index.intersection(b.index)
+        if len(idx) < 4:
+            return dict(rule)
+        A = a.loc[idx][CM].values.reshape(-1, 3, 3); B = b.loc[idx][CM].values.reshape(-1, 3, 3)
+        hw = paired_halfwidth(lambda i: _stat(A[i].sum(0), key) - _stat(B[i].sum(0), key), len(idx))
+        if hw is None or hw <= 0:
+            return dict(rule)
+        return {"type": "match_or_beat", "against": "best", "tolerance": {"abs": round(hw, 4)},
+                "rationale": f"{round(hw, 4)} = half-width of the paired bootstrap 95% CI (over {len(idx)} donors) of the difference between Singlet and the best competitor, {best}"}
     for stratum, tag, nm in (("all", "", "every genotype the tool emits"), ("dp10", "_dp10", "sites where the donor has >= 10 reads")):
         for ds in datasets + (["pooled"] if len(held) > 1 else []):
             sel = held if ds == "pooled" else [ds]
@@ -97,7 +128,7 @@ def compute(artifact_dir: Path) -> dict:
             comps = {t: (S(sel, t, stratum)[0] or {}).get("conc") for t in COMPETITORS}
             ci = wilson(int(round(a["conc"] * a["n"])), a["n"]) if a["n"] else None
             M(f"genotype_concordance{tag}", f"Genotype concordance with truth, {nm}", "fraction", "accuracy", ds, "higher",
-              a["conc"], comps, rule, ci=ci,
+              a["conc"], comps, trule(sel, stratum, "conc", comps, "higher"), ci=ci,
               notes=("Pooled over the held-out pools (development lane excluded)." if ds == "pooled" else
                      "Development lane: Singlet's demultiplexing was tuned here (donor genotypes are a by-product)." if ds == DEV else None))
     for ds in datasets + (["pooled"] if len(held) > 1 else []):
@@ -108,7 +139,7 @@ def compute(artifact_dir: Path) -> dict:
         for key, id_, nm, direction in (("nonref_conc", "nonref_concordance_dp10", "Concordance at truth non-reference sites, >= 10 reads", "higher"),
                                         ("false_alt", "false_alt_rate_dp10", "Truth homozygous-reference sites called non-reference, >= 10 reads", "lower")):
             comps = {t: (S(sel, t, "dp10")[0] or {}).get(key) for t in COMPETITORS}
-            M(id_, nm, "fraction", "accuracy", ds, direction, a[key], comps, rule)
+            M(id_, nm, "fraction", "accuracy", ds, direction, a[key], comps, trule(sel, "dp10", key, comps, direction))
         comps = {t: ((S(sel, t, "dp10")[0] or {}).get("n") or None) for t in COMPETITORS}
         M("sites_genotyped_dp10", "Truth sites genotyped at >= 10 reads", "sites", "coverage", ds, "higher", float(a["n"]),
           {t: (float(v) if v else None) for t, v in comps.items()}, rule,

@@ -42,8 +42,12 @@ def main():
             print("skip", pool); continue
         T = P.load_truth(truth_dir, pool)
         labs = {"singlet_auto": DE.read_singlet(rd / "singlet_auto")["label"]}
+        # the cells every tool was given: Singlet's called cells (cell_calls.tsv, is_cell); donor_assignments.tsv also labels
+        # lower-confidence barcodes that the competitors never saw
+        cc = pd.read_csv(rd / "singlet_auto" / "cell_calls.tsv", sep="\t", usecols=["barcode", "is_cell"])
+        cellset = pd.Index(cc.loc[cc["is_cell"].astype(str).str.upper() == "TRUE", "barcode"].map(DE.norm_bc))
         if T is None:   # single-donor pool: every called cell is the donor
-            T = pd.DataFrame({"ind": "patient", "multiplets": "singlet"}, index=labs["singlet_auto"].index)
+            T = pd.DataFrame({"ind": "patient", "multiplets": "singlet"}, index=cellset)
         T = T[T["ind"] != "<NA>"]
         kt = P.pool_k(truth_dir, pool)
         told = rd / f"singlet_k{kt}"
@@ -58,7 +62,7 @@ def main():
         if (rd / "souporcell" / "out" / "clusters.tsv").exists():
             labs["souporcell"] = DE.read_souporcell(rd / "souporcell" / "out")["label"]
         df = T.rename(columns={"ind": "truth_donor", "multiplets": "truth_class"}).copy()
-        called = labs["singlet_auto"].index
+        called = cellset.intersection(labs["singlet_auto"].index)
         df = df.loc[df.index.intersection(called)]
         for k, v in labs.items():
             df[k] = v.reindex(df.index).fillna("not_called")
@@ -76,7 +80,8 @@ def main():
                              ("cellsnp-lite", rd / "vireo" / "cellsnp.time.txt", 16),
                              ("vireo_told", rd / "vireo" / f"vireo_k{kt}.s1.time.txt", 16),
                              ("vireo_n12", rd / "vireo" / "vireo_n12.time.txt", 16),
-                             ("souporcell", rd / "souporcell" / "soup.time.txt", 16)):
+                             ("souporcell", rd / "souporcell" / "soup.time.txt", 16),
+                             ("mgatk", rd / "mgatk" / "mgatk.time.txt", 8)):
             w, r = parse_time(f)
             if w is not None:
                 res.append(dict(tool=tool, pool=pool, wall_s=round(w, 1), max_rss_gb=round(r or 0, 2), threads=thr))

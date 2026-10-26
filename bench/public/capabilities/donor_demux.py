@@ -24,7 +24,6 @@ from _gcommon import (SINGLET_BINARY, SINGLET_BINARY_SHA256, SINGLET_COMMIT, REP
                      now, r6, wilson)
 
 CAP = "donor-demux"
-CODE_COMMIT = "0000000000000000000000000000000000000000"   # replaced by the harness commit when the file is written
 ART_BASE = "https://data.singlet.bio/benchmarking/1.0.0/donor-demux"
 K_THRESHOLD = 0.9
 HELD_OUT_NOTE = "kang2018_stim"
@@ -74,7 +73,7 @@ def _score_tool(g: pd.DataFrame, col: str):
 
 
 def _ari_ci(g: pd.DataFrame, col: str, B: int = 200):
-    t = g[g["truth_class"] == "singlet"]
+    t = g[(g["truth_class"] == "singlet") & ~g["truth_donor"].isin(DE.NO_DONOR)]
     t = t[t["truth_donor"].map(t["truth_donor"].value_counts()) >= DE.MIN_TRUTH_DONOR_CELLS]
     y, p = t["truth_donor"].values, t[col].values
     return boot(lambda idx: ari(y[idx], p[idx]), len(t), B=B)
@@ -93,10 +92,12 @@ def compute(artifact_dir: Path) -> dict:
         S[p] = {}
         S[p]["singlet"] = _score_tool(g, "singlet_auto")
         S[p]["singlet_told"] = _score_tool(g, "singlet_told")
-        seeds = [s for s in (_score_tool(g, f"vireo_told_s{i}") for i in (1, 2, 3)) if s]
+        k_pool = int(pools.loc[p, "k_true"])
+        # vireo and souporcell need at least two donors; with K = 1 they have nothing to separate and are not scored
+        seeds = [] if k_pool == 1 else [s for s in (_score_tool(g, f"vireo_told_s{i}") for i in (1, 2, 3)) if s]
         S[p]["vireo_seeds"] = seeds
         S[p]["vireo"] = {k: float(np.mean([s[k] for s in seeds])) for k in ("ari", "ari_assigned", "accuracy_assigned", "coverage", "min_donor_recall")} if seeds else None
-        S[p]["souporcell"] = _score_tool(g, "souporcell")
+        S[p]["souporcell"] = None if k_pool == 1 else _score_tool(g, "souporcell")
         ARI_CI[p] = _ari_ci(g, "singlet_auto")
 
     # tolerance for ARI: seed-to-seed standard deviation of vireo (the competitor's own run-to-run variation)
@@ -104,6 +105,7 @@ def compute(artifact_dir: Path) -> dict:
     tol_ari = float(max(np.sqrt(np.mean(np.square(sds))) if sds else 0.0, 0.0))
     tol_ari = round(max(tol_ari, 0.002), 4)
 
+    held2 = [p for p in held if int(pools.loc[p, "k_true"]) > 1]
     metrics = []
 
     def M(id_, name, unit, cat, ds, direction, sing, comps, rule, ci=None, notes=None):
@@ -143,6 +145,12 @@ def compute(artifact_dir: Path) -> dict:
     for p in order:
         s, v, so = S[p]["singlet"], S[p]["vireo"], S[p]["souporcell"]
         comps = {"vireo": v["ari"] if v else None, "souporcell": so["ari"] if so else None}
+        if kt[p] == 1:
+            M("ari", "Adjusted Rand index of donor labels (one true donor: 1 only if every cell is in one cluster)", "ARI", "accuracy", p, "higher",
+              s["ari"], {}, {"type": "threshold", "value": 0.95,
+                             "rationale": "a one-donor pool has a single true class, so ARI is 1 when all cells share one label and falls with every cell split off or called doublet; 0.95 allows a few percent"},
+              ci=ARI_CI[p], notes="vireo and souporcell need at least two donors and are not scored.")
+            continue
         M("ari", "Adjusted Rand index of donor labels (truth singlets)", "ARI", "accuracy", p, "higher", s["ari"], comps,
           {"type": "match_or_beat", "against": "best", "tolerance": {"abs": tol_ari},
            "rationale": f"{tol_ari} = pooled seed-to-seed standard deviation of vireo's ARI (3 seeds per pool), the competitor's own run-to-run variation (floor 0.002)"},
@@ -151,7 +159,7 @@ def compute(artifact_dir: Path) -> dict:
                         ("coverage", "Mean fraction of truth singlets given a donor", True)):
         def mean_of(tool):
             vals = []
-            for p in held:
+            for p in held2:
                 t = S[p][tool]
                 if t is None:
                     return None
@@ -160,12 +168,12 @@ def compute(artifact_dir: Path) -> dict:
         sv = mean_of("singlet")
         ci = None
         if key == "ari":
-            per = np.array([S[p]["singlet"]["ari"] for p in held]); ci = boot(lambda i: float(per[i].mean()), len(per))
-        M(f"mean_{key}_heldout", nm + " (held-out pools)", "fraction" if key != "ari" else "ARI", "accuracy" if key != "coverage" else "coverage",
+            per = np.array([S[p]["singlet"]["ari"] for p in held2]); ci = boot(lambda i: float(per[i].mean()), len(per))
+        M(f"mean_{key}_heldout", nm + " (held-out pools with K > 1)", "fraction" if key != "ari" else "ARI", "accuracy" if key != "coverage" else "coverage",
           "pooled", "higher", sv, {"vireo": mean_of("vireo"), "souporcell": mean_of("souporcell")},
           {"type": "match_or_beat", "against": "best", "tolerance": {"abs": tol_ari},
            "rationale": f"{tol_ari} = pooled seed-to-seed standard deviation of vireo's ARI"}, ci=ci)
-    mr = lambda tool: float(min(S[p][tool]["min_donor_recall"] for p in held)) if all(S[p][tool] for p in held) else None
+    mr = lambda tool: float(min(S[p][tool]["min_donor_recall"] for p in held2)) if all(S[p][tool] for p in held2) else None
     M("min_donor_recall", "Recall of the worst-recalled donor in any held-out pool", "fraction", "robustness", "pooled", "higher",
       mr("singlet"), {"vireo": mr("vireo"), "souporcell": mr("souporcell")},
       {"type": "match_or_beat", "against": "best"}, notes="A donor merged into another or never found gives 0.")
@@ -192,7 +200,7 @@ def compute(artifact_dir: Path) -> dict:
                        r6(S[p]["singlet"]["min_donor_recall"])] for p in order]}
 
     resources = []
-    for _, r in res.iterrows():
+    for _, r in res[res["tool"] != "mgatk"].iterrows():
         tool = {"singlet": "singlet", "singlet_told": "singlet", "cellsnp-lite": "cellsnp-lite", "vireo_told": "vireo",
                 "vireo_n12": "vireo", "souporcell": "souporcell"}[r["tool"]]
         resources.append({"tool": tool, "dataset": r["pool"], "wall_s": r6(r["wall_s"]), "max_rss_gb": r6(r["max_rss_gb"]),
@@ -222,18 +230,27 @@ def compute(artifact_dir: Path) -> dict:
              "params": "donor calls published with the data (Kang 2018, GSE96583), made with donor genotypes"},
             {"name": "maester-authors", "version": "n/a", "role": "truth", "params": "cell-line labels and single patient of Miller 2022"},
         ],
-        "datasets": [{"id": p, "title": DATASETS[p]["title"], "accessions": DATASETS[p]["accessions"], "truth": DATASETS[p]["truth"],
+        "datasets": [{"id": p, "title": DATASETS[p]["title"], "accessions": DATASETS[p]["accessions"], "truth": DATASETS[p]["truth"], "data_kind": "real",
                       "n_cells": int(pools.loc[p, "truth_cells"]) if not pd.isna(pools.loc[p, "truth_cells"]) else None,
                       **({"notes": "development data: Singlet's auto-K and mt caller were developed on this lane (PR #36)"} if p == DEV else
                          {"notes": "same donors and chemistry as the development lane; stimulated with IFN-beta"} if p == HELD_OUT_NOTE else {})}
                      for p in order],
         "metrics": metrics, "resources": resources, "figures": [k_fig, fig_ari, table],
+        "reach": [
+            {"tool": "singlet", "output": "donor count estimated from the reads", "supported": "yes", "note": "--n-donors -1 (default): held-out likelihood search over K"},
+            {"tool": "vireo", "output": "donor count estimated from the reads", "supported": "no", "note": "N must be given; over-specifying N leaves surplus donors, which is not a selection rule"},
+            {"tool": "souporcell", "output": "donor count estimated from the reads", "supported": "no", "note": "k must be given"},
+            {"tool": "singlet", "output": "donor labels without reference genotypes", "supported": "yes", "note": "also labels doublets"},
+            {"tool": "vireo", "output": "donor labels without reference genotypes", "supported": "yes", "note": "needs a cellsnp-lite pileup first"},
+            {"tool": "souporcell", "output": "donor labels without reference genotypes", "supported": "yes", "note": "remaps reads; slowest"},
+            {"tool": "singlet", "output": "one command from reads to labels", "supported": "yes", "note": "alignment, cell calling, pileup and demultiplexing in one run"},
+        ],
         "artifacts": [artifact_entry(art / f, f, "derived" if f.endswith("tsv") else "singlet_output", ART_BASE)
                       for f in ("donor_demux_cells.tsv.gz", "donor_demux_pools.tsv", "donor_demux_resources.tsv", "provenance.json")],
         "code": [
             {"path": "include/singlet/pileup/donor_demux.h", "role": "implementation", "url": code_url("include/singlet/pileup/donor_demux.h", SINGLET_COMMIT)},
-            {"path": "bench/public/capabilities/donor_demux.py", "role": "metric", "url": code_url("bench/public/capabilities/donor_demux.py", CODE_COMMIT)},
-            {"path": "bench/public/genotype", "role": "harness", "url": code_url("bench/public/genotype", CODE_COMMIT, tree=True)},
+            {"path": "bench/public/capabilities/donor_demux.py", "role": "metric", "url": code_url("bench/public/capabilities/donor_demux.py", prov["code_commit"])},
+            {"path": "bench/public/genotype", "role": "harness", "url": code_url("bench/public/genotype", prov["code_commit"], tree=True)},
         ],
         "reproduce": {"module": "bench/public/capabilities/donor_demux.py", "function": "compute", "laptop_minutes": 2,
                       "clipper_command": "sbatch bench/public/genotype/hpc/export.sbatch demux"},

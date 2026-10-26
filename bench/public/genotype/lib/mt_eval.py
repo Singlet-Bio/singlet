@@ -249,14 +249,14 @@ def run_voi(runs: Path, truth_dir: Path, out: Path):
             depth = site.sum(axis=1)
             vaf = np.divide(site[:, alt], depth, out=np.zeros_like(depth, dtype=float), where=depth > 0)
             scores[tool] = (depth, vaf, cnt.idx)
-        # cells with depth >= 3 in both tools
+        # cells with depth >= 2 in both tools
         okc = [c for c in universe if scores["singlet"][2].get(c) is not None and scores["mgatk"][2].get(c) is not None
-               and scores["singlet"][0][scores["singlet"][2][c]] >= 3 and scores["mgatk"][0][scores["mgatk"][2][c]] >= 3]
+               and scores["singlet"][0][scores["singlet"][2][c]] >= 2 and scores["mgatk"][0][scores["mgatk"][2][c]] >= 2]
         okp = [c for c in okc if c in posc]; okn = [c for c in okc if c not in posc]
         r["n_pos_eval"], r["n_neg_eval"] = len(okp), len(okn)
         for tool in ("singlet", "mgatk"):
             d, vf, ix = scores[tool]
-            r[f"auroc_{tool}"] = auroc(vf[[ix[c] for c in okp]], vf[[ix[c] for c in okn]]) if len(okp) >= 10 and len(okn) >= 10 else np.nan
+            r[f"auroc_{tool}"] = auroc(vf[[ix[c] for c in okp]], vf[[ix[c] for c in okn]]) if len(okp) >= 5 and len(okn) >= 5 else np.nan
         # Singlet per-cell heteroplasmy calls at this site
         if het is not None:
             fi = [i for i, f in enumerate(het[0]) if f.startswith(f"chrM:{p0 + 1}:") and f.endswith(">" + "ACGT"[alt])]
@@ -283,19 +283,22 @@ def run_linemix(runs: Path, truth_dir: Path, out: Path):
     sc = load_singlet_counts(rd / "singlet_auto", set(T.index)); mgc = load_mgatk(rd, pool)
     stats = []
     for line in ("K562", "BT142"):
-        cells = T.index[T["ind"] == line].tolist()
+        # cells every tool saw: truth cells of the line that are in both count tables
+        cells = [c for c in T.index[T["ind"] == line] if c in sc.idx and c in mgc.idx]
         pbs = {"singlet": sc.pseudobulk(cells), "mgatk": mgc.pseudobulk(cells)}
+        dsite = {t: b.sum(axis=1) for t, b in pbs.items()}
         col = f"mean_af.{line}"
-        sel = V[V[col] >= 0.02]
+        sel = V[V[col] >= 2.0]       # MAESTER reports mean_af in percent; keep variants with AF >= 2%
+        keep = [(p0, int(alt), taf / 100.0) for p0, alt, taf in zip(sel["p0"], sel["alt"], sel[col])
+                if dsite["singlet"][p0] >= 100 and dsite["mgatk"][p0] >= 100]
         for tool, pb in pbs.items():
             depth = pb.sum(axis=1)
-            x, y = [], []
-            for p0, alt, taf in zip(sel["p0"], sel["alt"], sel[col]):
-                if depth[p0] >= 100 and sc.pseudobulk(cells)[p0].sum() >= 100 and mgc.pseudobulk(cells)[p0].sum() >= 100:
-                    x.append(taf); y.append(pb[p0, int(alt)] / depth[p0])
-            x, y = np.array(x), np.array(y)
-            stats.append(dict(line=line, tool=tool, n=len(x), sx=x.sum(), sy=y.sum(), sxx=(x * x).sum(), syy=(y * y).sum(),
-                              sxy=(x * y).sum(), sabs=np.abs(x - y).sum(), n_within_005=int((np.abs(x - y) <= 0.05).sum())))
+            for blk in range(10):      # genome blocks of 1,700 positions: the unit of the bootstrap in the capability module
+                it = [(p0, alt, taf) for p0, alt, taf in keep if p0 // 1700 == blk]
+                x = np.array([t for _, _, t in it]); y = np.array([pb[p0, alt] / depth[p0] for p0, alt, _ in it])
+                stats.append(dict(line=line, tool=tool, block=blk, n=len(x), sx=x.sum(), sy=y.sum(), sxx=(x * x).sum(),
+                                  syy=(y * y).sum(), sxy=(x * y).sum(), sabs=np.abs(x - y).sum(),
+                                  n_within_005=int((np.abs(x - y) <= 0.05).sum())))
     pd.DataFrame(stats).to_csv(out / "mt_linemix_stats.tsv", sep="\t", index=False)
     print("linemix done", flush=True)
 

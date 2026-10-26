@@ -21,7 +21,8 @@ import pandas as pd
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE)); sys.path.insert(0, str(HERE.parent))
 import contract  # noqa: E402
-from _gcommon import (SINGLET_BINARY, SINGLET_BINARY_SHA256, SINGLET_COMMIT, artifact_entry, boot, code_url, now, r6)  # noqa: E402
+from _gcommon import (SINGLET_BINARY, SINGLET_BINARY_SHA256, SINGLET_COMMIT, artifact_entry, boot, code_url, now,
+                      paired_halfwidth, r6)  # noqa: E402
 
 CAP = "mtdna"
 ART_BASE = "https://data.singlet.bio/benchmarking/1.0.0/mtdna"
@@ -73,23 +74,45 @@ def compute(artifact_dir: Path) -> dict:
         metrics.append(m)
 
     rule = {"type": "match_or_beat", "against": "best"}
+
+    def trule(hw, what):
+        """match-or-beat with the measured noise of the difference as tolerance (half-width of its paired bootstrap 95% CI)."""
+        if hw is None or not np.isfinite(hw) or hw <= 0:
+            return dict(rule)
+        return {"type": "match_or_beat", "against": "best", "tolerance": {"abs": round(float(hw), 4)},
+                "rationale": f"{round(float(hw), 4)} = half-width of the paired bootstrap 95% CI of the difference between Singlet and mgatk, resampling {what}"}
+
     ds_k = [k for k in KANG if k in set(hap["pool"])]
     held = [k for k in ds_k if k != DEV]
+
+    def hap_tol(sel, which):
+        a = hap[(hap["pool"].isin(sel)) & (hap["tool"] == "singlet")].set_index(["pool", "donor"])
+        b = hap[(hap["pool"].isin(sel)) & (hap["tool"] == "mgatk+vireo")].set_index(["pool", "donor"])
+        idx = a.index.intersection(b.index)
+        if len(idx) < 4:
+            return None
+        A, B = a.loc[idx], b.loc[idx]
+        den = "n_pred_covered" if which == "precision" else "n_truth"
+
+        def f(i):
+            return (A["tp"].values[i].sum() / max(A[den].values[i].sum(), 1)) - (B["tp"].values[i].sum() / max(B[den].values[i].sum(), 1))
+        return paired_halfwidth(f, len(idx))
+
     for ds in ds_k + (["pooled"] if len(held) > 1 else []):
         sel = held if ds == "pooled" else [ds]
         sub = {t: hap[(hap["pool"].isin(sel)) & (hap["tool"] == t)] for t in TOOL_MAP}
         sp, sr = _hap(sub["singlet"]); mp_, mr = _hap(sub["mgatk+vireo"]) if len(sub["mgatk+vireo"]) else (None, None)
         ci_p = ci_r = None
-        if ds == "pooled":
-            x = sub["singlet"].reset_index(drop=True)
+        x = sub["singlet"].reset_index(drop=True)
+        if len(x) >= 4:
             ci_p = boot(lambda i: x.iloc[i]["tp"].sum() / max(x.iloc[i]["n_pred_covered"].sum(), 1), len(x))
             ci_r = boot(lambda i: x.iloc[i]["tp"].sum() / max(x.iloc[i]["n_truth"].sum(), 1), len(x))
         note = "Pooled over the donors of the held-out lanes (development lane excluded); CI resamples donors." if ds == "pooled" else (
             "Development lane: Singlet's mt caller was developed here (PR #36)." if ds == DEV else None)
         M("haplotype_precision", "Donor mt-haplotype precision against replicate-lane truth", "fraction", "accuracy", ds, "higher", sp,
-          {"mgatk": mp_}, rule, ci=ci_p, notes=note)
+          {"mgatk": mp_}, trule(hap_tol(sel, "precision"), "donors"), ci=ci_p, notes=note)
         M("haplotype_recall", "Donor mt-haplotype recall against replicate-lane truth", "fraction", "accuracy", ds, "higher", sr,
-          {"mgatk": mr}, rule, ci=ci_r, notes=note)
+          {"mgatk": mr}, trule(hap_tol(sel, "recall"), "donors"), ci=ci_r, notes=note)
     if len(pairs):
         pp = pairs[pairs["pool"].isin(held)] if held else pairs
         agr = {t: (pp[pp["tool"] == t]["agree"].mean() if (pp["tool"] == t).any() else None) for t in TOOL_MAP}
@@ -101,10 +124,11 @@ def compute(artifact_dir: Path) -> dict:
         ev = voi.dropna(subset=["auroc_singlet", "auroc_mgatk"])
         if len(ev):
             a_s, a_m = ev["auroc_singlet"].values, ev["auroc_mgatk"].values
+            hw = paired_halfwidth(lambda i: float((a_s[i] - a_m[i]).mean()), len(a_s)) if len(a_s) >= 4 else None
             M("clonal_variant_auroc", "Per-cell VAF separates truth-positive cells of a clone-defining variant (mean AUROC over variants)",
-              "AUROC", "accuracy", "maester_bpdcn712_3p", "higher", float(a_s.mean()), {"mgatk": float(a_m.mean())}, rule,
+              "AUROC", "accuracy", "maester_bpdcn712_3p", "higher", float(a_s.mean()), {"mgatk": float(a_m.mean())}, trule(hw, "variants"),
               ci=boot(lambda i: float(a_s[i].mean()), len(a_s)),
-              notes=f"{len(ev)} of {len(voi)} author-validated clone-defining variants have >= 10 positive and >= 10 negative cells with >= 3 reads in the standard 3' library.")
+              notes=f"{len(ev)} of {len(voi)} author-validated clone-defining variants have >= 5 positive and >= 5 negative cells with >= 2 reads in the standard 3' library.")
             M("clonal_variants_evaluable", "Clone-defining variants with enough 3' coverage to score", "variants", "coverage",
               "maester_bpdcn712_3p", "none", float(len(ev)), {}, {"type": "informational"})
         M("clonal_variants_in_variant_list", "Clone-defining variants listed in Singlet's heteroplasmic variant list", "fraction", "coverage",
@@ -113,22 +137,42 @@ def compute(artifact_dir: Path) -> dict:
         if "singlet_call_tp" in voi:
             tp, fp = voi["singlet_call_tp"].sum(), voi["singlet_call_fp"].sum()
             npos, nneg = voi["n_pos_eval"].sum(), voi["n_neg_eval"].sum()
-            M("clonal_call_sensitivity", "Share of truth-positive cells (>= 3 reads) Singlet flags heteroplasmic at the variant", "fraction",
+            M("clonal_call_sensitivity", "Share of truth-positive cells (>= 2 reads) Singlet flags heteroplasmic at the variant", "fraction",
               "accuracy", "maester_bpdcn712_3p", "none", float(tp / npos) if npos else None, {}, {"type": "informational"})
-            M("clonal_call_false_positive_rate", "Share of other clone cells (>= 3 reads) Singlet flags heteroplasmic at the variant", "fraction",
+            M("clonal_call_false_positive_rate", "Share of other clone cells (>= 2 reads) Singlet flags heteroplasmic at the variant", "fraction",
               "accuracy", "maester_bpdcn712_3p", "none", float(fp / nneg) if nneg else None, {}, {"type": "informational"})
 
-    if len(lm):
+    if len(lm) and "block" in lm:
+        def agg(df, blocks):
+            d = df[df["block"].isin(blocks)]
+            return {k: d[k].sum() for k in ("n", "sx", "sy", "sxx", "syy", "sxy", "sabs")}
+
         for line in ("K562", "BT142"):
             st = {t: lm[(lm["line"] == line) & (lm["tool"] == t)] for t in ("singlet", "mgatk")}
-            if all(len(v) for v in st.values()):
-                s, g = st["singlet"].iloc[0], st["mgatk"].iloc[0]
-                if s["n"] >= 5:
-                    M(f"line_af_pearson_{line.lower()}", f"Agreement of 3' allele fractions with MAESTER truth in {line} (Pearson r)",
-                      "r", "accuracy", "maester_k562_bt142_3p", "higher", _corr(s), {"mgatk": _corr(g)}, rule,
-                      notes=f"{int(s['n'])} variant-line pairs with MAESTER AF >= 0.02 and >= 100 3' reads in both tools.")
-                    M(f"line_af_mae_{line.lower()}", f"Mean absolute error of 3' allele fractions against MAESTER truth in {line}",
-                      "AF", "accuracy", "maester_k562_bt142_3p", "lower", float(s["sabs"] / s["n"]), {"mgatk": float(g["sabs"] / g["n"])}, rule)
+            if not all(len(v) for v in st.values()):
+                continue
+            allb = sorted(st["singlet"]["block"].unique())
+            s, g = agg(st["singlet"], allb), agg(st["mgatk"], allb)
+            if s["n"] < 5:
+                continue
+            nb = len(allb)
+
+            def dr(i):
+                bl = [allb[j] for j in i]
+                a_, b_ = agg(st["singlet"], bl), agg(st["mgatk"], bl)
+                return (_corr(a_) or 0) - (_corr(b_) or 0)
+
+            def dm(i):
+                bl = [allb[j] for j in i]
+                a_, b_ = agg(st["singlet"], bl), agg(st["mgatk"], bl)
+                return a_["sabs"] / max(a_["n"], 1) - b_["sabs"] / max(b_["n"], 1)
+            M(f"line_af_pearson_{line.lower()}", f"Agreement of 3' allele fractions with MAESTER truth in {line} (Pearson r)",
+              "r", "accuracy", "maester_k562_bt142_3p", "higher", _corr(s), {"mgatk": _corr(g)},
+              trule(paired_halfwidth(dr, nb), "genome blocks of 1,700 positions"),
+              notes=f"{int(s['n'])} variant-line pairs with MAESTER AF >= 0.02 and >= 100 3' reads in both tools.")
+            M(f"line_af_mae_{line.lower()}", f"Mean absolute error of 3' allele fractions against MAESTER truth in {line}",
+              "AF", "accuracy", "maester_k562_bt142_3p", "lower", float(s["sabs"] / s["n"]), {"mgatk": float(g["sabs"] / g["n"])},
+              trule(paired_halfwidth(dm, nb), "genome blocks of 1,700 positions"))
 
     ds_ids = [(k, KANG[k]) for k in ds_k]
     datasets = [{"id": k, "title": v[0], "accessions": v[1], "truth": HAP_TRUTH, "data_kind": "real",
