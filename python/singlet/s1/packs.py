@@ -44,7 +44,9 @@ MAGIC = b"SPK2"
 VERSION = 1
 KIND_VOCAB, KIND_WHITELIST, KIND_COMPOSITE = 1, 2, 3
 PKG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "packs")
-REMOTE = "https://data.singlet.bio/s1/ref/"
+# $SINGLET_S1_PACKS_REMOTE overrides the data host, e.g. file:///path/to/a/mirror/of/s1/ref/ for a cluster campaign, so hundreds of
+# transcoder processes do not each fetch the index and the junction tables over HTTPS at once
+REMOTE = util.env("PACKS_REMOTE") or "https://data.singlet.bio/s1/ref/"
 USER_AGENT = "singlet/1.0 (+https://singlet.bio)"
 
 
