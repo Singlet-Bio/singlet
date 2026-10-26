@@ -123,6 +123,50 @@ def parse_gtf(gtf: str):
     return genes
 
 
+SEGMENT_TYPES = {"V_gene_segment": "V", "D_gene_segment": "D", "J_gene_segment": "J", "C_gene_segment": "C"}
+
+
+def parse_gff(gff: str):
+    """NCBI RefSeq GFF3 (public domain) -> the :func:`parse_gtf` structure. RefSeq annotates IG / TR segments as
+    ``V_gene_segment`` / ``J_gene_segment`` ... features whose exons and CDS are children; a gene whose
+    ``gene_biotype`` is a pseudogene gets a non-segment biotype (the open-frame rule then decides)."""
+    op = gzip.open if gff.endswith(".gz") else open
+    genes: Dict[str, dict] = {}
+    pseudo = set()
+    seg_of: Dict[str, str] = {}
+    with op(gff, "rt") as f:
+        for ln in f:
+            if ln.startswith("#"):
+                continue
+            p = ln.rstrip("\n").split("\t")
+            if len(p) < 9:
+                continue
+            if "gene=TR" not in p[8] and "gene=IG" not in p[8] and "Name=TR" not in p[8] and "Name=IG" not in p[8]:
+                continue
+            a = dict(kv.split("=", 1) for kv in p[8].split(";") if "=" in kv)
+            if p[2] in ("gene", "pseudogene"):
+                if "pseudogene" in a.get("gene_biotype", "") or p[2] == "pseudogene":
+                    pseudo.add(a.get("Name", ""))
+                continue
+            if p[2] in SEGMENT_TYPES:
+                name = a.get("gene", "")
+                reg = SEGMENT_TYPES[p[2]]
+                gid = a.get("ID", name)
+                seg_of[gid] = gid
+                genes[gid] = {"name": name, "biotype": f"{name[:2]}_{reg}_gene", "contig": p[0], "strand": p[6],
+                              "transcripts": {gid: {"exons": [], "cds": [], "canonical": True}}}
+            elif p[2] in ("exon", "CDS") and a.get("Parent") in genes:
+                t = genes[a["Parent"]]["transcripts"][a["Parent"]]
+                (t["exons"] if p[2] == "exon" else t["cds"]).append((int(p[3]), int(p[4])))
+    for g in genes.values():
+        if g["name"] in pseudo:
+            g["biotype"] = "pseudogene"
+        t = next(iter(g["transcripts"].values()))
+        if not t["exons"]:
+            t["exons"] = list(t["cds"])
+    return {k: g for k, g in genes.items() if g["transcripts"][k]["exons"]}
+
+
 def _spliced(chrom: str, exons, strand: str) -> str:
     ex = sorted(exons)
     s = "".join(chrom[a - 1:b] for a, b in ex)
@@ -171,9 +215,10 @@ def _open_v_frame(seq: str) -> int:
 
 
 def build(genome_fa: str, gtf: str, extra: Sequence[Tuple[str, str]] = ()) -> List[Segment]:
-    """Segments of the primary assembly, plus those of ``extra`` (genome, GTF) pairs (alternate haplotypes, as Cell
-    Ranger's ``-alts`` reference has: TRBV4-3, TRBV6-3, TRBV7-8 ... are only on GRCh38 alt loci) whose gene names
-    the primary assembly lacks."""
+    """Segments of the primary assembly, plus those of ``extra`` (genome, annotation) pairs whose gene names the
+    primary assembly lacks: GENCODE's alternate-haplotype annotation, and NCBI RefSeq (a ``.gff`` / ``.gff.gz``
+    annotation), which has IG / TR segments GENCODE v44 lacks altogether (TRBV4-3, TRBV6-3, TRBV7-8, TRAJ15, IGHV1-8,
+    IGHV4-30-4 ...; Cell Ranger's and TRUST4's references have them from IMGT)."""
     out = _build_one(genome_fa, gtf)
     for g2, t2 in extra:
         have = {s.name for s in out}
@@ -189,7 +234,8 @@ def build(genome_fa: str, gtf: str, extra: Sequence[Tuple[str, str]] = ()) -> Li
 
 
 def _build_one(genome_fa: str, gtf: str, skip_contigs=frozenset()) -> List[Segment]:
-    genes = {k: g for k, g in parse_gtf(gtf).items() if g["contig"] not in skip_contigs}
+    parse = parse_gff if gtf.endswith((".gff", ".gff.gz", ".gff3", ".gff3.gz")) else parse_gtf
+    genes = {k: g for k, g in parse(gtf).items() if g["contig"] not in skip_contigs}
     chroms = _read_fasta(genome_fa, {g["contig"] for g in genes.values()})
     out: List[Segment] = []
     for gid, g in genes.items():
@@ -303,12 +349,12 @@ def summary(segs: List[Segment]) -> Dict[str, Dict[str, int]]:
     return out
 
 
-if __name__ == "__main__":  # python -m singlet.vdj.reference GENOME.fa GTF OUT.tsv.gz [ALT_GENOME.fa ALT_GTF]
+if __name__ == "__main__":  # python -m singlet.vdj.reference GENOME.fa GTF OUT.tsv.gz [GENOME2 ANNOTATION2 ...]
     import json
     import sys
 
-    extra = [(sys.argv[4], sys.argv[5])] if len(sys.argv) > 5 else []
+    extra = [(sys.argv[i], sys.argv[i + 1]) for i in range(4, len(sys.argv) - 1, 2)]
     segs = build(sys.argv[1], sys.argv[2], extra)
-    src = " + ".join(os.path.basename(x) for x in sys.argv[1:3] + sys.argv[4:6])
+    src = " + ".join(os.path.basename(x) for x in sys.argv[1:3] + sys.argv[4:])
     write(segs, sys.argv[3], provenance=f"built from {src}")
     print(json.dumps(summary(segs), indent=1))

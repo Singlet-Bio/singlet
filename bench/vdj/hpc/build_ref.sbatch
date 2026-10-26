@@ -5,7 +5,7 @@
 #SBATCH --requeue
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=24G
-#SBATCH --time=01:30:00
+#SBATCH --time=02:30:00
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
 # V(D)J segment references: GENCODE primary assembly (the pipeline's 2024-A reference) + the alternate-haplotype loci
 # (GENCODE "chr_patch_hapl_scaff" annotation on the full GRCh38.p14 / GRCm39 genome), like Cell Ranger's -alts reference.
@@ -27,4 +27,4 @@ python -P -m singlet.vdj.reference $R/GRCh38-2024-A/GRCh38.primary_assembly.geno
 python -P -m singlet.vdj.reference $R/GRCm39-2024-A/GRCm39.primary_assembly.genome.fa.gz \
   $R/GRCm39-2024-A/gencode.vM33.primary_assembly.annotation.gtf.gz $WORK/state/vdjc/ref/vdj_mouse.tsv.gz \
   $A/GRCm39.genome.fa.gz $A/gencode.vM33.chr_patch_hapl_scaff.annotation.gtf.gz
-zcat $WORK/state/vdjc/ref/vdj_human.tsv.gz | cut -f1 | grep -E "^TRBV(11-2|21-1|4-3|6-3|7-8|5-8)$" || true
+zcat $WORK/state/vdjc/ref/vdj_human.tsv.gz | cut -f1,7 | grep -E "^(TRBV(11-2|21-1|4-3|6-3|7-8|5-8|6-9)|TRAJ(8|15)|IGHV(1-8|4-30-4))\s" || true

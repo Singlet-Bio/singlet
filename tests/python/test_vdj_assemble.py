@@ -143,3 +143,18 @@ def test_junction_with_a_j_the_reference_lacks():
     lacking = {k: t for k, t in truth.items() if t[2] in missing}
     assert lacking, "the simulation should use the missing J genes"
     assert sum(found.get(k) == t[0] for k, t in lacking.items()) >= 0.9 * len(lacking)
+
+
+def test_refseq_gff_segments(tmp_path):
+    """RefSeq annotates IG / TR segments as V_gene_segment features with exon / CDS children."""
+    v = [s for s in make_segments() if s.region == "V"][0].seq
+    fa = tmp_path / "g.fa"
+    fa.write_text(">chrT test\n" + "A" * 10 + v + "C" * 90 + "\n")
+    gff = tmp_path / "a.gff"
+    gff.write_text("##gff-version 3\n"
+                   "chrT\tBestRefSeq\tgene\t1\t400\t.\t+\t.\tID=gene-TRBV99-1;Name=TRBV99-1;gene_biotype=V_segment\n"
+                   "chrT\tBestRefSeq\tV_gene_segment\t11\t310\t.\t+\t.\tID=id-TRBV99-1;Parent=gene-TRBV99-1;gene=TRBV99-1\n"
+                   "chrT\tBestRefSeq\texon\t11\t310\t.\t+\t.\tID=e1;Parent=id-TRBV99-1;gene=TRBV99-1\n"
+                   "chrT\tBestRefSeq\tCDS\t11\t310\t.\t+\t0\tID=c1;Parent=id-TRBV99-1;gene=TRBV99-1\n")
+    segs = R._build_one(str(fa), str(gff))
+    assert [(s.name, s.region, s.chain, s.anchor) for s in segs] == [("TRBV99-1", "V", "TRB", 288)]
