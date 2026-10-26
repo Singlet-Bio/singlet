@@ -148,7 +148,7 @@ def compute(artifact_dir: Path) -> dict:
         "code": [{"path": f, "url": code_url(f, commit),
                   "role": "metric" if "capabilities" in f else "harness" if "bench/" in f else "implementation"}
                  for f in files],
-        "reproduce": {"module": "bench/public/capabilities/atac.py", "function": "compute", "laptop_minutes": 6,
+        "reproduce": {"module": "bench/public/capabilities/atac.py", "function": "compute", "laptop_minutes": 13,
                       "clipper_command": "bash bench/atac_spatial/submit.sh"},
         "caveats": prov.get("caveats", []),
     }

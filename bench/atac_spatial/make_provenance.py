@@ -86,6 +86,40 @@ COHORT_DS = {
                                "truth": "Space Ranger 1.1.0 spot matrix; tissue positions from the H&E image"},
 }
 
+COMMON = [
+    "Binary: this branch (ATAC/Visium code) merged onto prod/modality-fixes, not yet part of the singlet-campaign build "
+    "the other capabilities use; the results describe the code that the merge will bring.",
+    "Barcode lists (scATAC whitelist, ARC ATAC-GEX pairs, visium-v1 spots) were rebuilt from 10x public datasets "
+    "(CC BY 4.0); the 737K-cratac-v1.txt bundled before this change is a copy of the 3' v2 list and matches ~1% of "
+    "scATAC barcodes.",
+]
+CAVEATS = {
+    "atac": COMMON + [
+        "Development data: Multiome PBMC 3k. The ATAC-only cell cut (density valley), STAR Extend5pOfReads12 and peak "
+        "q 0.05 were chosen on it. The 5k scATAC cell count of the first caller (6,895 vs Cell Ranger's 4,585) was seen "
+        "before the cell caller changed; the change was made on the 3k evidence only.",
+        "Cell Ranger ATAC 1.2 published the 5k outputs on hg19; its peaks and fragments are lifted to GRCh38 with UCSC's "
+        "hg19ToHg38 chain before comparison (both tools are scored against the same lifted set).",
+        "Peaks: on Multiome 10k Singlet recovers more Cell Ranger peaks (recall 0.786 vs 0.771) but fewer of its peaks "
+        "are Cell Ranger peaks (precision 0.878 vs 0.916); F1 0.830 vs 0.837 fails.",
+        "Runtime: Chromap is an approximate mapper specialised for chromatin; Singlet aligns with STAR as part of the "
+        "full pipeline and is ~1.8x slower (resources, not gated).",
+    ],
+    "multiome": COMMON + [
+        "The competitor intersects Singlet's own GEX call (EmptyDrops) with the ArchR filter on Chromap fragments; "
+        "STARsolo/EmptyDrops GEX calls were not run here.",
+    ],
+    "spatial": COMMON + [
+        "Spot counts use Singlet's general GEX counting. On GRCm39 it drops multimapping reads that overlap only one "
+        "gene, so mt-Co2, mt-Atp6, mt-Co3 and mt-Nd3 (covered by the chr1 NUMT) are nearly absent (mt-Co3: 71 vs Space "
+        "Ranger 1.7 M); STARsolo and Space Ranger keep them. This, not the Visium handling, drives the mouse count "
+        "failures and affects every mouse sample; reported for the gex-counts owner.",
+        "Tissue detection uses counts only; Space Ranger's call comes from the H&E image. Model constants were fixed on "
+        "synthetic data before any Visium run.",
+        "FFPE probe reads are antisense: STARsolo was run with --soloStrand Reverse; Singlet detected the strand itself.",
+    ],
+}
+
 for cap in ("atac", "multiome", "spatial"):
     d = Path(a.root) / cap
     if not d.exists():
@@ -98,7 +132,7 @@ for cap in ("atac", "multiome", "spatial"):
     prov = {"singlet": SINGLET, "status": a.status, "test_datasets": test,
             "dev_datasets": [x for x in dss if x == "pbmc_multiome3k"],
             "datasets": [dict(COHORT_DS[x], data_kind="real") for x in test],
-            "caveats": [], "methods": (Path(__file__).parent / f"methods_{cap}.md").read_text(encoding="utf-8")}
+            "caveats": CAVEATS[cap], "methods": (Path(__file__).parent / f"methods_{cap}.md").read_text(encoding="utf-8")}
     if cap == "spatial":
         prov["tools"] = [SINGLET_TOOL,
                          {"name": "starsolo", "version": "2.7.11b", "role": "competitor",
