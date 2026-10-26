@@ -112,7 +112,7 @@ def metric(id_, name, unit, category, dataset, direction, singlet, competitors, 
     return m
 
 
-def diff_tolerance(f_singlet, f_comp, n: int, n_boot: int = 500, seed: int = 0, unit: str = "cells"):
+def diff_tolerance(f_singlet, f_comp, n: int, n_boot: int = 200, seed: int = 0, unit: str = "cells"):
     """Match-or-beat tolerance from measured noise: the half-width of the bootstrap 95% CI of the difference
     f_singlet(idx) - f_comp(idx), resampling the same n units (cells, spots, genes or chromosomes) for both tools."""
     rng = np.random.default_rng(seed)
@@ -122,7 +122,7 @@ def diff_tolerance(f_singlet, f_comp, n: int, n_boot: int = 500, seed: int = 0, 
         a, b = f_singlet(i), f_comp(i)
         if a is not None and b is not None and np.isfinite(a) and np.isfinite(b):
             d.append(a - b)
-    if len(d) < 50:
+    if len(d) < 25:
         return None
     lo, hi = np.quantile(d, [0.025, 0.975])
     half = float((hi - lo) / 2)

@@ -87,13 +87,16 @@ def compute(artifact_dir: Path) -> dict:
                                 ("Singlet only", (s0.spaceranger_in_tissue == 0) & (s0.singlet_in_tissue == 1)),
                                 ("Space Ranger only", (s0.spaceranger_in_tissue == 1) & (s0.singlet_in_tissue == 0)))],
     }]
-    km = next(m for m in metrics if m["id"] == "tissue_kappa")
-    um = next(m for m in metrics if m["id"] == "spot_umis_spearman")
+    def val(mid, ds):
+        m = next(m for m in metrics if m["id"] == mid and m["dataset"] == ds)
+        return m["singlet"]["value"], m["competitors"][0]["value"]
+    parts = []
+    for ds in prov["test_datasets"]:
+        (us, uc), (ps, pc), (ks, kc) = val("spot_umis_spearman", ds), val("spot_profile_pearson", ds), val("tissue_kappa", ds)
+        parts.append(f"{ds}: UMIs per spot rho {us} vs {uc}, profiles r {ps} vs {pc} (STARsolo), tissue kappa {ks} vs {kc} (Otsu)")
     conclusion = prov.get("conclusion") or (
-        f"On the 10x Visium mouse brain section, Singlet's spot counts track Space Ranger (Spearman "
-        f"{um['singlet']['value']} vs {um['competitors'][0]['value']} for STARsolo), and its image-free tissue call agrees "
-        f"with Space Ranger's image-based one at kappa {km['singlet']['value']} (Otsu threshold "
-        f"{km['competitors'][0]['value']}).")
+        "Singlet's image-free tissue call beats a count threshold on both slides, but its spot counts trail STARsolo slightly "
+        "(shared GEX counting; mouse mito genes in the chr1 NUMT are lost). " + "; ".join(parts) + ".")
     kinds = {}
     for ds in prov["test_datasets"]:
         kinds.update({f"spatial_{ds}_spots.tsv.gz": "derived", f"spatial_{ds}_genes.tsv.gz": "derived"})

@@ -50,17 +50,21 @@ SINGLET_TOOL = {"name": "singlet", "version": "1.0.0", "role": "singlet",
 
 
 def resources(runs, tool_keys):
+    """One row per tool and dataset: every step from FASTQs to the compared outputs, summed (wall, CPU), max RSS.
+    Singlet: encode + pipeline; chromap+snapatac2: Chromap + MACS3 + SnapATAC2; starsolo: STARsolo."""
     out = []
     for r in runs:
         for key, tool in tool_keys:
-            t = (r.get(key) or {}).get("time")
-            if t:
-                out.append({"tool": tool, "dataset": r["dataset"], "wall_s": t["wall_s"], "max_rss_gb": t["max_rss_gb"],
-                            "threads": 16, "cpu_h": t["cpu_h"]})
-            te = (r.get(key) or {}).get("time_encode")
-            if te:
-                out.append({"tool": tool, "dataset": r["dataset"], "wall_s": te["wall_s"], "max_rss_gb": te["max_rss_gb"],
-                            "threads": 1, "cpu_h": te["cpu_h"], "notes": "FASTQ -> .1fq encode step"})
+            x = r.get(key) or {}
+            steps = {k: x[k] for k in ("time_encode", "time", "comparators_time") if x.get(k)}
+            if not steps:
+                continue
+            out.append({"tool": tool, "dataset": r["dataset"], "threads": 16,
+                        "wall_s": round(sum(t["wall_s"] for t in steps.values()), 1),
+                        "cpu_h": round(sum(t["cpu_h"] for t in steps.values()), 3),
+                        "max_rss_gb": max(t["max_rss_gb"] for t in steps.values()),
+                        "notes": "sum of " + ", ".join({"time_encode": "FASTQ encode", "time": "main run",
+                                                        "comparators_time": "MACS3 + SnapATAC2"}[k] for k in steps)})
     return out
 
 

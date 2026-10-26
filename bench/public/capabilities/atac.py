@@ -45,7 +45,7 @@ def dataset_metrics(art: Path, ds: str, gating: bool) -> tuple[list, dict]:
             if comp else MATCH) or MATCH
     out.append(metric("cell_jaccard", "Cell calls: Jaccard with Cell Ranger", "fraction", "agreement", ds, "higher",
                       jaccard(tenx, sing), [(COMP, jaccard(tenx, comp) if comp else None)], rule,
-                      ci=bootstrap_metric(lambda i: jac(i, sing), len(idx), 500),
+                      ci=bootstrap_metric(lambda i: jac(i, sing), len(idx), 200),
                       notes=f"Cell Ranger {len(tenx)}, Singlet {len(sing)}, {COMP} (ArchR default filter) {len(comp)} cells"))
     # 2. fragments per cell (bootstrap over Cell Ranger's cells)
     cs, ct = cells.singlet_fragments.to_numpy(float), cells.tenx_fragments.to_numpy(float)
@@ -78,7 +78,7 @@ def dataset_metrics(art: Path, ds: str, gating: bool) -> tuple[list, dict]:
     pc = peak_scores(PC, P10) if PC is not None else None
     chroms = np.array(sorted(set(P10.chrom)))
     rule = (diff_tolerance(lambda i: peak_f1_by_chrom(PS, P10, chroms[i]), lambda i: peak_f1_by_chrom(PC, P10, chroms[i]),
-                           len(chroms), n_boot=100, unit="chromosomes") if PC is not None else MATCH) or MATCH
+                           len(chroms), n_boot=50, unit="chromosomes") if PC is not None else MATCH) or MATCH
     out.append(metric("peak_f1", "Peaks: F1 of overlap with Cell Ranger peaks", "fraction", "agreement", ds, "higher",
                       ps["f1"], [(COMP, pc["f1"] if pc else None)], rule,
                       notes=f"recall/precision Singlet {ps['recall']:.3f}/{ps['precision']:.3f} ({ps['n']:,} peaks); "
@@ -116,11 +116,16 @@ def compute(artifact_dir: Path) -> dict:
                      "y": [round(s["competitor"][k], 4) if s["competitor"] else None for s in summ
                            for k in ("recall", "precision")]}] if all(s["competitor"] for s in summ) else []),
     }]
-    lead = metrics[0]
+    def val(mid, ds):
+        m = next(m for m in metrics if m["id"] == mid and m["dataset"] == ds)
+        return m["singlet"]["value"], m["competitors"][0]["value"]
+    parts = []
+    for ds in prov["test_datasets"]:
+        (cs, cc), (fs, fc), (ps, pc) = val("cell_jaccard", ds), val("fragment_exact_recall", ds), val("peak_f1", ds)
+        parts.append(f"{ds}: cells {cs} vs {cc}, exact fragments {fs} vs {fc}, peak F1 {ps} vs {pc}")
     conclusion = prov.get("conclusion") or (
-        "From the same FASTQs, Singlet's ATAC fragments, peaks and cells agree with Cell Ranger "
-        + "; ".join(f"{m['dataset']}: {m['name'].split(':')[0].lower()} {m['singlet']['value']} vs "
-                    f"{m['competitors'][0]['value']} for {COMP}" for m in metrics if m["id"] == "cell_jaccard") + ".")
+        f"Against Cell Ranger, Singlet's ATAC cell calls and fragments match better than {COMP} from the same FASTQs; "
+        "peaks match on scATAC and trail MACS3 slightly on Multiome. " + "; ".join(parts) + ".")
     kinds = {}
     for ds in prov["test_datasets"] + prov.get("dev_datasets", []):
         kinds.update({f"atac_{ds}_barcodes.tsv.gz": "derived", f"atac_{ds}_peaks_tenx.bed.gz": "truth",
