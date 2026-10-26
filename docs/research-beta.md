@@ -19,7 +19,7 @@ D1/R2/Worker changes except from the Alpha session.
    at the paths listed in each note.
 5. Work in priority order: open bugs (section 4), then the path to Beta (section 5).
 
-All notes in `docs/research-beta/` are copies made on 2026-10-26 from the feature branches and PR descriptions named in each file.
+All notes in `docs/research-beta/` are copies made at the stop on 2026-10-26 from the feature branches and PR descriptions named in each file.
 
 ## 1. Where everything is
 
@@ -29,7 +29,7 @@ All notes in `docs/research-beta/` are copies made on 2026-10-26 from the featur
 | Public benchmarks: contract, cohort, harness, notebook, sex, ancestry | [benchmarks.md](research-beta/benchmarks.md) | #40 |
 | Cell type | [cell-type.md](research-beta/cell-type.md) | #32 model and harness; #44 capability results |
 | ADT / HTO | [adt-hto.md](research-beta/adt-hto.md) | #29 |
-| V(D)J and CRISPR guides | [vdj-crispr.md](research-beta/vdj-crispr.md) | its draft PR |
+| V(D)J and CRISPR guides | [vdj-crispr.md](research-beta/vdj-crispr.md) | #51 |
 | ATAC / Multiome and spatial | [atac-spatial.md](research-beta/atac-spatial.md) | #48 |
 | mtDNA clonality / lineage | [mtdna.md](research-beta/mtdna.md) | #53 (full report docs/mtdna-lineage.md on bench/mtdna-lineage) |
 | Doublet / ambient models | | #43 |
