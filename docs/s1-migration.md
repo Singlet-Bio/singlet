@@ -141,6 +141,7 @@ campaign takes the policy JSON (`version`, `withheld_studies`, `excluded_samples
   | `doublet_scores` | `doublet_scores.tsv` |
   | `nonhost_per_cell` | `nonhost/*per_cell*`; the sample-level `nonhost_summary.json` and `nonhost_em_abundance.tsv` stay |
   | `splice_psi_legacy` | `splice_psi.1pz`; clients compute true PSI from `sj_counts` (D8) |
+  | `sex_call_legacy` | `sex_call.json`, the legacy pipeline call, for every species; replaced by the validated per-cell `sex_chrom` labels |
 
 - **Manifest:** `release_policy` holds `{name, version, omitted_layers}`, the generic layer names only. It never holds an excluded
   accession or a per-study count of them. The per-study record of what was dropped is `policy-audit.json`, next to the .s1 tree,

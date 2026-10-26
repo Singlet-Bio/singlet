@@ -79,7 +79,8 @@ KEEP, DROP = "GSM9001", "GSM9002"
         ("sj_counts.1pz", None),
         ("exon_counts.1pz", None),
         ("cell_calls.tsv", None),
-        ("sex_call.json", None),
+        ("sex_call.json", "sex_call_legacy"),
+        ("sex_call_extra.json", None),
         ("summary.json", None),
         ("pileup_stats.json", None),
         ("star_Solo.out/Gene/raw/matrix.mtx", None),
@@ -147,6 +148,7 @@ def _policy_bundle(tmp_path: Path, leak: bool = False) -> Path:
         "ambient_contamination.tsv": b"cell\trho\n",
         "nonhost/nonhost_per_cell.tsv": b"cell\ttaxon\n",
         "nonhost/nonhost_summary.json": b'{"screened": true}',
+        "sex_call.json": b'{"sex": "male"}',
         "pileup_stats.json": json.dumps(
             {
                 "total_reads": 1000,
@@ -280,6 +282,7 @@ def test_policy_transcode_drops_and_still_verifies(tmp_path, pol):
         "ambient_profile.tsv",
         "nonhost/nonhost_per_cell.tsv",
         "splice_psi.1pz",
+        "sex_call.json",
     ):
         assert r not in members, r
     for r in (

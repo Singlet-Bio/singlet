@@ -41,6 +41,7 @@ OMITTED_LAYERS = (
     "doublet_scores",  # doublet_scores.tsv
     "nonhost_per_cell",  # nonhost/*per_cell* (the sample-level nonhost summary and abundance stay)
     "splice_psi_legacy",  # splice_psi.1pz (0/1 values; clients compute true PSI from sj_counts, D8)
+    "sex_call_legacy",  # sex_call.json (legacy pipeline call; replaced by the validated per-cell sex_chrom labels)
 )
 
 _VARIANT = re.compile(r"\.(vcf|bcf)(\.gz)?$", re.IGNORECASE)
@@ -82,6 +83,8 @@ def omitted_layer(rel: str) -> Optional[str]:
         return "nonhost_per_cell"
     if rel == "splice_psi.1pz":
         return "splice_psi_legacy"
+    if name == "sex_call.json":
+        return "sex_call_legacy"
     return None
 
 
