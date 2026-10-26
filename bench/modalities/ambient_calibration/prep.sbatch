@@ -14,5 +14,5 @@ sleep $((SLURM_ARRAY_TASK_ID * 5)); af_sync
 LANES=(ctrl A B C); L=${LANES[$SLURM_ARRAY_TASK_ID]}; RUN=$RUNS/$(lane_run $L)/singlet; D=$AF/dump/$L
 B=$SRC/bench/modalities/ambient_calibration
 [ -f $D/dims.txt ] || py $B/dump_run.py $RUN $D
-[ -f $D/truth_meta.json ] || py $B/score_kang.py truth $RUN $D $(lane_truth $L) $L
+[ -f $D/truth_meta.json ] || py $B/score_kang.py truth $(lane_truth_run $L) $D $(lane_truth $L) $L
 cat $D/dims.txt $D/truth_meta.json
