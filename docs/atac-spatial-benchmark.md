@@ -8,7 +8,52 @@ Code: `include/singlet/pileup/atac_*.h`, `visium_tissue.h`, `src/pipeline/single
 `singlet atac` subcommand). Harness: `bench/atac_spatial/`. Storage proposal: `docs/format-v2.md` section 14. Public results:
 `bench/public/results/{atac,multiome,spatial}.json` (contract `bench/public/CONTRACT.md`).
 
-RESULTS_PLACEHOLDER
+## Results at a glance
+
+Each comparison starts from the same FASTQs, reference (10x 2024-A) and threads (16). Cell Ranger and Space Ranger are
+the truth (10x published outputs). The competitor is the open-source route a user would take:
+- ATAC: Chromap + MACS3 (Signac recipe) + SnapATAC2 / ArchR filter.
+- Visium: STARsolo with the same spot list; for tissue, an Otsu threshold.
+
+Tolerances are the half-width of the bootstrap 95% CI of the paired Singlet − competitor difference (section 4).
+
+| dataset | metric | Singlet | competitor | verdict |
+|---|---|---|---|---|
+| scATAC PBMC 5k (held out) | cell calls, Jaccard with Cell Ranger | **0.950** | 0.884 | pass |
+| | fragments per cell, Spearman | **0.9967** | 0.9966 | pass |
+| | Cell Ranger fragments reproduced exactly (chr21) | **0.912** | 0.906 | pass |
+| | peaks, F1 vs Cell Ranger | **0.897** | 0.892 | pass |
+| | TSS fragments per cell, Spearman | 0.994 | – (≥ 0.9) | pass |
+| Multiome PBMC 10k (held out) | see `bench/public/results/atac.json`, `multiome.json` | MO10K | | |
+| Multiome PBMC 3k (development) | joint cell calls, Jaccard with ARC | 0.987 | 0.960 | (dev) |
+| | ATAC→GEX barcode pairing identical to ARC | 1.000 | – | (dev) |
+| | exact fragments / peak F1 | 0.980 / 0.872 | 0.975 / 0.868 | (dev) |
+| Visium mouse brain | UMIs per tissue spot, Spearman with Space Ranger | 0.9948 | **0.9982** | fail |
+| | per-spot profile, median Pearson | 0.966 | **0.989** | fail |
+| | molecules per gene, Spearman | 0.976 | **0.984** | fail |
+| | tissue (no image), Cohen's κ with Space Ranger's image call | **0.850** | 0.776 | pass |
+| Visium FFPE human breast | UMIs per tissue spot, Spearman | 0.9995 | **0.9996** | fail |
+| | per-spot profile, median Pearson | 0.969 | **0.973** | fail |
+| | tissue κ | **0.840** | 0.827 | pass |
+
+Runtime, scATAC 5k (215 M read pairs), 16 threads:
+- Singlet (encode + STAR + post-alignment): 35 min wall, 2.7 CPU-h, 19 GB.
+- Chromap + MACS3 + SnapATAC2: 8 + 15 min, 1.6 CPU-h, 21 GB.
+
+Singlet is an exact genome-wide aligner run as part of the full single-cell pipeline. Chromap is a fast approximate mapper
+built for chromatin data. The difference is a resource, not a gate (Pareto figures in the contract documents).
+
+**What fails, and why.** Visium spot counts trail STARsolo slightly on both slides. The gap is in Singlet's gene
+counting, which Visium shares with every single-cell sample; it is not in the Visium handling.
+- On GRCm39, Singlet loses almost all molecules of mt-Co2, mt-Atp6, mt-Co3 and mt-Nd3, for example mt-Co3: 71 vs
+  Space Ranger's 1.7 M. These genes lie in the region covered by the chr1 NUMT, so their reads are 2-locus multimappers.
+  STARsolo and Cell Ranger count a multimapper that overlaps a single gene; Singlet drops it. The same loss appears in
+  every single-cell mouse run, for example neuron1k_v3: mt-Atp6 16 vs STARsolo 3,978. This is reported to the
+  orchestrator for the gex-counts owner.
+- On the FFPE probe slide (no mito probes), the remaining difference is under 0.5% in any metric.
+
+Visium handling itself works: spot assignment, strand auto-detection on FFPE, and the image-free tissue call, which beats
+the Otsu baseline on both slides.
 
 ## 1. What was wrong
 
@@ -117,4 +162,68 @@ Visium (`spatial_summary.json` → `qc`):
 
 ## 4. Benchmark design
 
-BENCH_PLACEHOLDER
+* **Datasets.** All are 10x Genomics public datasets (CC BY 4.0), as deposited.
+  * scATAC PBMC 5k Next GEM, Cell Ranger ATAC 1.2.0. Its outputs are on hg19; peaks and fragments are lifted to GRCh38
+    with UCSC's chain.
+  * Multiome PBMC 10k (granulocytes sorted out), Cell Ranger ARC 2.0.0.
+  * Multiome PBMC 3k, ARC 2.0.0: development data, not scored.
+  * Visium mouse brain sagittal anterior, Space Ranger 1.1.0.
+  * Visium FFPE human breast cancer, Space Ranger 1.3.0. It is the only human Visium dataset 10x serves with FASTQs.
+* **Held-out discipline.** Every parameter change after the first runs was chosen on Multiome 3k:
+  * the density-valley ATAC-only cell cut;
+  * STAR `Extend5pOfReads12`;
+  * peak q 0.05, from a sweep over 1e-4 to 0.05.
+
+  The 5k scATAC cell count (6,895 with the first caller) was seen before the cell caller changed, and the change was
+  made on 3k evidence alone. The Visium tissue-model constants were fixed on synthetic data before any Visium run.
+* **Tolerances.** Each match-or-beat rule carries the half-width of the bootstrap 95% CI of the paired difference
+  between Singlet and the competitor. The resampling unit is:
+  * called barcodes for cell calls;
+  * cells for per-cell correlations;
+  * spots for Visium;
+  * genes for gene totals;
+  * chromosomes for peaks.
+
+  Fragment recall uses 1.96 × the binomial SE.
+
+  These margins are tiny (≤ 0.007), so close calls are decided almost strictly.
+* **Harness.** `bench/atac_spatial/submit.sh` runs the whole benchmark on Clipper:
+  * download, comparator env, barcode lists and build;
+  * the Singlet runs;
+  * the Chromap and STARsolo comparators;
+  * `make_artifacts.py` (small per-barcode, per-spot and per-gene tables and peak BEDs) and `make_provenance.py`.
+
+  `bench/public/capabilities/{atac,multiome,spatial}.py` turn the artifacts into the contract documents in a few minutes
+  on a laptop.
+
+## 5. Barcode lists
+
+Rebuilt only from 10x public datasets (CC BY 4.0), never from 10x software. They are kept on Clipper
+(`pipeline-benchmark/whitelists/atacsp/`) and are not yet in git, pending the licence decision:
+
+| list | source | size | check |
+|---|---|---|---|
+| `visium-v1_coordinates.tsv` / `visium-v1.txt` | `tissue_positions_list.csv` of 3 Visium datasets | 4,992 spots | identical across the 3 slides; 97.5% of mouse-brain reads match; 7 barcodes shared with 3M-february-2018 |
+| `737K-arc-v1-atac-gex.tsv.gz` | `per_barcode_metrics.csv` of 7 ARC runs | 736,198 pairs (of 736,320 GEX barcodes) | leave-one-run-out: 100% of each run's cells known |
+| `737K-cratac-v1.txt` | `singlecell.csv` of 12 Cell Ranger ATAC runs | 736,795 | leave-one-run-out ≥ 99.95% of cells; the bundled file of that name is a copy of `737K-august-2016.txt` and shares 10,801 barcodes with it |
+
+## 6. Atlas implications
+
+* The atlas tags 756 samples as Spatial. Two issues affect them:
+  * Without the spot list, Visium libraries are detected as 3' v3, their spots are not corrected, and EmptyDrops
+    "calls" a few dozen spots.
+  * With the list installed, detection, spot correction, tissue calls and coordinates come out of the normal pipeline.
+* ATAC libraries processed as RNA (139 in `docs/library-type-screen.md`) and the Multiome ATAC halves need the ATAC
+  path: `--protocol 10x-atac` at encode, or detection from the Tn5 signature. Their RNA-mode objects should not be
+  migrated.
+* Mouse samples are affected by the chr1 NUMT mito-gene loss above. It changes pct_mt and mito-gene counts in every mouse
+  sample. It needs a fix in the GEX counting before the re-run.
+
+## 7. Open items
+
+* Licence answer for the three barcode lists, then bundle them, replacing the wrong `737K-cratac-v1.txt`.
+* Merge into the campaign binary. The results here use `singlet-atacsp`: this branch merged onto `prod/modality-fixes`.
+* Visium HD and Slide-seq are not handled: different barcode geometry and bin aggregation. Visium v2 / CytAssist slides
+  need their own spot lists, which no 10x public dataset with FASTQs supplies yet.
+* The `fragments` modality reader (byte-range region queries in the client) is specified (format-v2 section 14) but not
+  implemented.
