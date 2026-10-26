@@ -15,7 +15,10 @@ threads:
 - peaks: MACS3 as Signac's `CallPeaks` runs it;
 - cells: SnapATAC2 TSS enrichment plus ArchR's default cell filter (≥ 1,000 fragments, TSS enrichment ≥ 4).
 
-**Truth.** Cell Ranger's published cell calls, per-barcode metrics, fragments and peaks.
+**Truth.** Cell Ranger's published cell calls, per-barcode metrics, fragments and peaks. The Cell Ranger ATAC 1.2 outputs
+of the 5k dataset are on hg19; their peaks and fragments are lifted to GRCh38 with UCSC's hg19ToHg38 chain (both ends
+must land on the same chromosome and strand). Fragments or peaks that do not lift are dropped; this affects both tools
+the same way.
 
 **Metrics.** Each is computed per dataset.
 - Cell-call Jaccard with Cell Ranger.

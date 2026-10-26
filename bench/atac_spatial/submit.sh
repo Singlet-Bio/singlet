@@ -30,7 +30,9 @@ c5=$($S $L --dependency=afterok:$lists --export=ALL,RUN=atac_pbmc_5k_nextgem,FQ=
 sm=$($S $L --dependency=afterok:$lists $H/run_starsolo_visium.sbatch)
 sf=$($S $L --dependency=afterok:$lists --export=ALL,RUN=visium_ffpe_human_breast_rev,FQ=$F,GENOME=GRCh38-2024-A,STRAND=Reverse $H/run_starsolo_visium.sbatch)
 art() { $S $L --mem=64G --dependency=afterok:$1 $H/pyjob.sbatch make_artifacts.py "${@:2}"; }
-x1=$(art $a5:$c5 atac atac_pbmc_5k_nextgem --tenx-dir $D/atac_pbmc_5k_nextgem --prefix atac_pbmc_5k_nextgem --kind cratac --singlet $RN/atac_pbmc_5k_nextgem --chromap $RN/chromap_atac_pbmc_5k_nextgem --out $A/atac)
+# Cell Ranger ATAC 1.2 published hg19 coordinates for the 5k set: lift them to GRCh38 (UCSC chain, fetched by the job)
+mkdir -p $W/cache/liftover; [ -s $W/cache/liftover/hg19ToHg38.over.chain.gz ] || echo "fetch https://hgdownload.soe.ucsc.edu/goldenPath/hg19/liftOver/hg19ToHg38.over.chain.gz into $W/cache/liftover inside a job first"
+x1=$(art $a5:$c5 atac atac_pbmc_5k_nextgem --tenx-dir $D/atac_pbmc_5k_nextgem --prefix atac_pbmc_5k_nextgem --kind cratac --singlet $RN/atac_pbmc_5k_nextgem --chromap $RN/chromap_atac_pbmc_5k_nextgem --tenx-chain $W/cache/liftover/hg19ToHg38.over.chain.gz --out $A/atac)
 x2=$(art $a10:$c10 atac pbmc_multiome10k --tenx-dir $D/pbmc_granulocyte_sorted_10k --prefix pbmc_granulocyte_sorted_10k --kind arc --singlet $RN/pbmc_multiome10k_atac --chromap $RN/chromap_pbmc_multiome10k --gex $RN/pbmc_multiome10k_gex --out $A/atac)
 x3=$(art $a10:$c10 atac pbmc_multiome10k --tenx-dir $D/pbmc_granulocyte_sorted_10k --prefix pbmc_granulocyte_sorted_10k --kind arc --singlet $RN/pbmc_multiome10k_atac --chromap $RN/chromap_pbmc_multiome10k --gex $RN/pbmc_multiome10k_gex --out $A/multiome)
 x4=$(art $a3:$c3 atac pbmc_multiome3k --tenx-dir $D/pbmc_granulocyte_sorted_3k --prefix pbmc_granulocyte_sorted_3k --kind arc --singlet $RN/pbmc_multiome3k_atac --chromap $RN/chromap_pbmc_multiome3k --gex $RN/pbmc_multiome3k_gex --out $A/dev)
