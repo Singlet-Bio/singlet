@@ -183,12 +183,13 @@ def agreement(ours, ref) -> Dict[str, float]:
     rs = ref["class"].to_numpy() == "single"
     os_ = ours["class"].to_numpy() == "single"
     same = ours["guide_ids"].to_numpy() == ref["guide_ids"].to_numpy()
-    return {
+    out = {
         "cells": int(len(ref)),
         "ref_single": int(rs.sum()),
         "ours_single": int(os_.sum()),
         "recall_single": float((same & rs & os_).sum() / max(1, rs.sum())),
         "precision_single": float((same & rs & os_).sum() / max(1, (os_ & (ref["class"].to_numpy() != "unassigned")).sum())),
+        "f1_single": 0.0,
         "ref_contains_ours": float(np.mean([g in r.split("|") for g, r, o in zip(ours["guide_ids"], ref["guide_ids"], os_) if o])
                                    if os_.any() else 0.0),
         "assigned_ours": float((ours["class"] != "unassigned").mean()),
@@ -196,3 +197,6 @@ def agreement(ours, ref) -> Dict[str, float]:
         "multiple_ours": float((ours["class"] == "multiple").mean()),
         "multiple_ref": float((ref["class"] == "multiple").mean()),
     }
+    p_, r_ = out["precision_single"], out["recall_single"]
+    out["f1_single"] = float(2 * p_ * r_ / (p_ + r_)) if p_ + r_ > 0 else 0.0
+    return out

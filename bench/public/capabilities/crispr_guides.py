@@ -50,28 +50,35 @@ def compute(artifact_dir: Path) -> dict:
         S = res["singlet"]
         callers = [c for c in COMPETITORS if c in res and c != "cellranger_published"]
         ref_name = "published calls" if level == "target" else "Cell Ranger's protospacer calls"
-        metrics.append(_metric("single_recall", f"Cells with one {'target' if level == 'target' else 'guide'} in the "
-                               f"{ref_name} given the same single call", "fraction", "agreement", ds, "higher",
-                               S["recall_single"], [(COMPETITORS[c], res[c]["recall_single"]) for c in callers]))
-        metrics.append(_metric("single_precision", f"Single calls that the {ref_name} share", "fraction", "agreement",
-                               ds, "higher", S["precision_single"],
-                               [(COMPETITORS[c], res[c]["precision_single"]) for c in callers]))
+        unit_ = "target" if level == "target" else "guide"
+        metrics.append(_metric(
+            "single_call_f1", f"Single-{unit_} calls against the {ref_name}: F1 of recall (reference single cells given "
+            f"the same call) and precision (single calls the reference shares)", "fraction", "agreement", ds, "higher",
+            S["f1_single"], [(COMPETITORS[c], res[c]["f1_single"]) for c in callers],
+            notes="recall / precision: " + "; ".join(f"{n} {res[c]['recall_single']:.3f} / {res[c]['precision_single']:.3f}"
+                                                     for c, n in [("singlet", "singlet")] + [(c, COMPETITORS[c]) for c in callers])))
         kd_tools = [c for c in COMPETITORS if c in res and "kd_cells_scored" in res[c]]
         if "kd_cells_scored" in S:
             metrics.append(_metric("knockdown_cells", "Single-guide cells of scored guides (usable perturbed cells)",
                                    "cells", "coverage", ds, "higher", S["kd_cells_scored"],
                                    [(COMPETITORS[c], res[c]["kd_cells_scored"]) for c in kd_tools]))
-            metrics.append(_metric("knockdown_significant", f"Guides whose target is significantly {moved} in their "
-                                   "single-guide cells (one-sided Mann-Whitney vs controls, BH 0.05)", "fraction",
-                                   "accuracy", ds, "higher", S["kd_frac_guides_significant"],
-                                   [(COMPETITORS[c], res[c]["kd_frac_guides_significant"]) for c in kd_tools]))
-            metrics.append(_metric("knockdown_median", "Median knockdown of the target over scored guides", "fraction",
-                                   "accuracy", ds, "higher", S["kd_median_knockdown"],
-                                   [(COMPETITORS[c], res[c]["kd_median_knockdown"]) for c in kd_tools],
-                                   rule={"type": "match_or_beat", "against": "best", "tolerance": {"abs": 0.05},
-                                         "rationale": "the caller-to-caller spread of the median on these data (0.73-0.78 "
-                                                      "on A549, 0.84-0.85 on K562); a caller that assigns more "
-                                                      "low-UMI cells lowers the median without being wrong"}))
+            nsig = lambda m_: round(m_.get("kd_frac_guides_significant", 0) * m_.get("kd_guides_scored", 0))
+            metrics.append(_metric(
+                "knockdown_guides_significant", f"Guides whose target is significantly {moved} in their single-guide "
+                "cells (one-sided Mann-Whitney vs controls, BH 0.05; guides with >= 5 cells)", "guides", "accuracy", ds,
+                "higher", nsig(S), [(COMPETITORS[c], nsig(res[c])) for c in kd_tools],
+                notes="a count, not a share: a caller that assigns more cells scores more guides; shares: " + "; ".join(
+                    f"{n} {res[c]['kd_frac_guides_significant']:.3f} of {res[c]['kd_guides_scored']}"
+                    for c, n in [("singlet", "singlet")] + [(c, COMPETITORS[c]) for c in kd_tools])))
+            thr_kd = 1.0 if mode == "a" else 0.5
+            metrics.append(_metric(
+                "knockdown_median", "Median effect on the target over scored guides (" +
+                ("log2 induction, CRISPRa" if mode == "a" else "1 - expression / control") + ")",
+                "log2" if mode == "a" else "fraction", "accuracy", ds, "higher", S["kd_median_knockdown"], [],
+                rule={"type": "threshold", "value": thr_kd,
+                      "rationale": "a working screen and correct calls: half of the target removed (CRISPRi / knockout) or "
+                                   "doubled (CRISPRa) in the median guide"},
+                notes="other callers: " + "; ".join(f"{COMPETITORS[c]} {res[c]['kd_median_knockdown']:.3f}" for c in kd_tools)))
         mc = res.get("multiplet_check")
         if mc and mc["ref_extra_guides_in_those_cells"]["n"] >= 20:
             metrics.append(_metric(
@@ -99,7 +106,7 @@ def compute(artifact_dir: Path) -> dict:
                                    rule={"type": "threshold", "value": 0.98,
                                          "rationale": "counting is equivalent when the same rule gives the same calls; "
                                                       "2% allows thresholds that fall on a count Singlet differs by one"}))
-        cats = ["single_recall", "single_precision", "knockdown_significant"]
+        cats = ["single_recall", "single_precision", "knockdown_significant_share"]
         figures.append({"id": f"{ds}_callers", "title": f"Guide assignment, {ds}", "kind": "grouped_bar",
                         "x": {"label": "metric", "categories": cats},
                         "y": {"label": "fraction", "unit": "fraction", "min": 0, "max": 1},
