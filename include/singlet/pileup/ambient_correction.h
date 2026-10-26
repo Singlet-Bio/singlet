@@ -76,6 +76,9 @@ struct CellContamination {
     uint32_t n_umi        = 0;    ///< observed UMIs (gene level)
     uint32_t n_removed    = 0;    ///< integer ambient UMIs removed in the corrected matrix
     double   rho_total    = 0.0;  ///< ambient fraction of ALL the cell's UMIs (== rho unless the split exon/intron API ran)
+    double   off_reads    = 0.0;  ///< the cell's UMIs in its cluster's "not expressed" genes (off-gene estimator; else 0)
+    double   off_exposure = 0.0;  ///< N x ambient mass of those genes: expected off-gene UMIs at rho = 1
+    double   prior_rho    = 0.0;  ///< prior mean of rho (the cell's cluster c_k after cluster -> sample shrinkage)
 };
 
 // ── Ambient profile estimation ───────────────────────────────────────────────
@@ -168,6 +171,10 @@ struct AmbientDecontConfig {
                                         ///< native profiles and the correction always use every feature
     double   low_depth_frac = 0.1;      ///< cells below this fraction of the median depth (the ambient-like barcodes a
                                         ///< permissive cell caller keeps) are kept out of clustering and cluster statistics
+    double   cluster_prior_cells = 0.0; ///< pseudo-cells shrinking each cluster's c_k toward the sample rho (cell-weighted
+                                        ///< median of the c_k): c_k <- (n_k c_k + n0 c_s) / (n_k + n0); 0 = no shrinkage
+    uint32_t min_cluster_cells = 0;     ///< k-means clusters with fewer core cells are dissolved into the nearest remaining
+                                        ///< centroid (their native profile is borrowed from the neighbour); 0 = keep all
     uint32_t cell_iters       = 30;     ///< per-cell EM iterations
     uint32_t threads          = 0;      ///< 0 = hardware_concurrency (results do not depend on it)
 };
@@ -176,7 +183,13 @@ struct AmbientCorrectionResult {
     AmbientProfile                 profile;         ///< gene-level ambient profile
     std::vector<CellContamination> contam;          ///< one per called cell, in cell_indices order
     CSCu32                         corrected;       ///< genes x all barcodes; non-empty columns only for called cells
-    std::vector<double>            cluster_rho;     ///< c_k per cluster
+    std::vector<double>            cluster_rho;     ///< c_k per cluster (after cluster -> sample shrinkage)
+    std::vector<double>            cluster_rho_raw; ///< c_k per cluster before shrinkage
+    std::vector<uint32_t>          cluster_cells;   ///< core cells per cluster that entered the cluster statistics
+    std::vector<double>            cluster_off_mass;///< ambient mass of each cluster's "not expressed" gene set
+    double   sample_rho            = 0.0;           ///< shrinkage target: cell-weighted median of the raw c_k
+    uint32_t n_cells_input         = 0;             ///< cell_indices.size() as passed (before the guard)
+    uint32_t n_cells_dropped       = 0;             ///< duplicate or out-of-range cell indices dropped by the guard
     uint32_t n_clusters            = 0;
     double   exon_profile_share    = 0.0;           ///< split API: share of the soup that is exon-derived
     uint32_t n_low_depth_cells     = 0;             ///< cells below low_depth_frac x median depth (kept out of the fits)
@@ -397,6 +410,35 @@ inline std::vector<uint32_t> quick_cluster(const CellMat& X, const AmbientDecont
             if (cnt[k] > 0)
                 for (size_t c = 0; c < kp; ++c) C[static_cast<size_t>(k) * kp + c] = sum[static_cast<size_t>(k) * kp + c] / static_cast<double>(cnt[k]);
     }
+    // Small clusters: a native profile from a few dozen cells cannot tell weakly expressed native genes from soup (their
+    // c_k comes out high), so clusters below min_cluster_cells are dissolved, smallest first, into the nearest remaining
+    // centroid; the cells then borrow that neighbour's native profile and c_k.
+    if (cfg.min_cluster_cells > 0) {
+        std::vector<char> alive(K, 1);
+        for (;;) {
+            std::vector<size_t> cnt(K, 0);
+            for (size_t j = 0; j < n; ++j) ++cnt[cl[j]];
+            uint32_t n_alive = 0, s = K;
+            for (uint32_t k = 0; k < K; ++k) {
+                if (cnt[k] == 0) alive[k] = 0;
+                if (!alive[k]) continue;
+                ++n_alive;
+                if (cnt[k] < cfg.min_cluster_cells && (s == K || cnt[k] < cnt[s])) s = k;
+            }
+            if (s == K || n_alive <= 1) break;
+            alive[s] = 0;
+            for (size_t j = 0; j < n; ++j) {
+                if (cl[j] != s) continue;
+                double best = std::numeric_limits<double>::max(); uint32_t bk = cl[j];
+                for (uint32_t k = 0; k < K; ++k) {
+                    if (!alive[k]) continue;
+                    const double d = dist2(j, k);
+                    if (d < best) { best = d; bk = k; }
+                }
+                cl[j] = bk;
+            }
+        }
+    }
     // relabel to drop empty clusters
     std::vector<int32_t> remap(K, -1);
     uint32_t nk = 0;
@@ -490,7 +532,9 @@ inline void decontx_ambient_core(const ambient_detail::CellMat& X, const std::ve
 
     // cluster contamination c_k and native profile phi (gene-major: phi[g * K + k]); cells with use[j] == 0 are
     // left out of the cluster statistics (outlier round) but are still corrected with them.
-    std::vector<double> ck(K, 0.0), phi(G * K, 0.0), rho(n, 0.0), offA(K, 0.0);
+    std::vector<double> ck(K, 0.0), ck_raw(K, 0.0), ncells_k(K, 0.0), phi(G * K, 0.0), rho(n, 0.0), offA(K, 0.0);
+    std::vector<double> xo_v(n, 0.0), ex_v(n, 0.0);
+    double c_sample = 0.0;
     std::vector<char> use(n, 1), offmask(G * K, 0);
     for (size_t j = 0; j < n; ++j) if (low[j]) use[j] = 0;   // offmask[g * K + k]: gene g is "not expressed" in cluster k
     std::vector<std::vector<double>> nkv(K);
@@ -530,19 +574,49 @@ inline void decontx_ambient_core(const ambient_detail::CellMat& X, const std::ve
                 const double e = cfg.marker_fold * Nkv[k] * a[g];
                 if (nkv[k][g] >= e + cfg.offgene_z * std::sqrt(e * inflv[k]) + 1.0) { strong[g * K + k] = 1; ++n_strong[g]; }
             }
-        // C. c_k, native profile, off-gene set
+        // C1. raw c_k over the marker-elsewhere genes
+        std::vector<std::vector<char>> masks(K);
+        std::vector<char> have_maskv(K, 0);
         parallel_for(K, thr, [&](size_t k) {
             auto& nk = nkv[k];
             const double Nk = Nkv[k], infl = inflv[k];
-            std::vector<char> mask(G, 0);
+            auto& mask = masks[k];
+            mask.assign(G, 0);
             double Aeff = 0.0;
             const bool est_all = cfg.estimate_features.size() != G;
             for (size_t g = 0; g < G; ++g)
                 if (n_strong[g] - strong[g * K + k] > 0 && (est_all || cfg.estimate_features[g])) { mask[g] = 1; Aeff += a[g]; }
             const bool have_mask = K > 1 && cfg.use_off_estimator && Aeff >= cfg.min_off_mass;
-            const double c = cluster_contamination(nk, Nk, infl, a, cfg,
-                                                   have_mask ? &mask : (est_all ? nullptr : &cfg.estimate_features));
-            ck[k] = c;
+            have_maskv[k] = have_mask ? 1 : 0;
+            ck_raw[k] = cluster_contamination(nk, Nk, infl, a, cfg,
+                                              have_mask ? &mask : (est_all ? nullptr : &cfg.estimate_features));
+        });
+        // C2. cluster -> sample shrinkage: c_s = cell-weighted median of the raw c_k; pseudo-cells n0
+        {
+            std::vector<std::pair<double, double>> cw;   // (c_k, cells)
+            double wt = 0.0;
+            for (uint32_t k = 0; k < K; ++k) {
+                double nc = 0.0;
+                for (uint32_t j : members[k]) if (use[j]) nc += 1.0;
+                ncells_k[k] = nc;
+                if (nc > 0) { cw.emplace_back(ck_raw[k], nc); wt += nc; }
+            }
+            std::sort(cw.begin(), cw.end());
+            double acc = 0.0, cs = cw.empty() ? 0.0 : cw.back().first;
+            for (const auto& p : cw) { acc += p.second; if (acc >= 0.5 * wt) { cs = p.first; break; } }
+            c_sample = cs;
+            for (uint32_t k = 0; k < K; ++k) {
+                const double n0 = cfg.cluster_prior_cells;
+                ck[k] = n0 > 0.0 ? (ncells_k[k] * ck_raw[k] + n0 * cs) / (ncells_k[k] + n0) : ck_raw[k];
+            }
+        }
+        // C3. native profile and off-gene set given c_k
+        parallel_for(K, thr, [&](size_t k) {
+            auto& nk = nkv[k];
+            const double Nk = Nkv[k], infl = inflv[k];
+            const auto& mask = masks[k];
+            const bool have_mask = have_maskv[k] != 0;
+            const double c = ck[k];
             double tot = 0.0, A = 0.0;
             for (size_t g = 0; g < G; ++g) {
                 // native evidence only above the ambient expectation + z sd (same cut as the "not expressed" genes of
@@ -575,6 +649,7 @@ inline void decontx_ambient_core(const ambient_detail::CellMat& X, const std::ve
                     if (offmask[static_cast<size_t>(X.gene[e]) * K + k]) xo += X.val[e];
                 r = (xo + cfg.off_prior_reads) / (N * offA[k] + cfg.off_prior_reads / mu);
                 r = std::min(std::max(r, cfg.rho_min), cfg.rho_max);
+                xo_v[j] = xo; ex_v[j] = N * offA[k];
             } else if (N > 0) {
                 for (uint32_t it = 0; it < cfg.cell_iters; ++it) {
                     double S = 0.0;
@@ -634,6 +709,11 @@ inline void decontx_ambient_core(const ambient_detail::CellMat& X, const std::ve
         if (n_out > 0) { fit_clusters(); fit_cells(); }
     }
     R.cluster_rho = ck;
+    R.cluster_rho_raw = ck_raw;
+    R.sample_rho = c_sample;
+    R.cluster_off_mass = offA;
+    R.cluster_cells.assign(K, 0);
+    for (uint32_t k = 0; k < K; ++k) R.cluster_cells[k] = static_cast<uint32_t>(ncells_k[k]);
 
     // integer correction: expected native counts x_g (1 - r_g), largest-remainder rounding per cell
     corrected_vals.assign(X.gene.size(), 0);
@@ -675,6 +755,9 @@ inline void decontx_ambient_core(const ambient_detail::CellMat& X, const std::ve
         auto& c = R.contam[j];
         c.rho = rho[j];
         c.cluster = cl[j];
+        c.off_reads = xo_v[j];
+        c.off_exposure = ex_v[j];
+        c.prior_rho = ck[cl[j]];
         c.n_genes_used = static_cast<uint32_t>(X.ptr[j + 1] - X.ptr[j]);
         c.n_umi = static_cast<uint32_t>(std::min<double>(X.tot[j], std::numeric_limits<uint32_t>::max()));
         uint64_t kept = 0;
@@ -700,6 +783,7 @@ inline AmbientCorrectionResult correct_ambient_gene_level(
     using namespace ambient_detail;
     const auto t0 = std::chrono::steady_clock::now();
     AmbientCorrectionResult R;
+    R.n_cells_input = static_cast<uint32_t>(cell_indices.size());
     const uint32_t G = gene_counts.nrows, B = gene_counts.ncols;
     R.corrected.nrows = G;
     R.corrected.ncols = B;

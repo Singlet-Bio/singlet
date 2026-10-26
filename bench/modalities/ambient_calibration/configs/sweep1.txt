@@ -1,0 +1,24 @@
+# name  key=value ...   (defaults = production before this change: off_prior_reads=5, no cluster shrinkage, low_depth_frac=0.1)
+base
+base_knee cells=knee
+s20 off_prior_reads=20
+s100 off_prior_reads=100
+s300 off_prior_reads=300
+s1000 off_prior_reads=1000
+n50 cluster_prior_cells=50
+n200 cluster_prior_cells=200
+n1000 cluster_prior_cells=1000
+s100_n200 off_prior_reads=100 cluster_prior_cells=200
+s300_n200 off_prior_reads=300 cluster_prior_cells=200
+s100_n1000 off_prior_reads=100 cluster_prior_cells=1000
+s300_n1000 off_prior_reads=300 cluster_prior_cells=1000
+m50 min_cluster_cells=50
+m200 min_cluster_cells=200
+m500 min_cluster_cells=500
+ld25 low_depth_frac=0.25
+ld40 low_depth_frac=0.4
+ld40_knee low_depth_frac=0.4 cells=knee
+k8 n_clusters=8
+z2 offgene_z=2
+z5 offgene_z=5
+mf2 marker_fold=2
