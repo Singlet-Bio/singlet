@@ -545,8 +545,38 @@ class SraEncoder {
             if (!r2_const) r2_len = 0;
         }
 
-        if (!cfg.protocol_tag.empty()) {
-            const CandidateSpec* spec = find_protocol_spec(cfg.protocol_tag);
+        // ── One chemistry detector with `singlet screen-runs` ─────────────────
+        // When a 10x whitelist matches >= 30% of the probe reads' barcodes (R1 as read), the chemistry is the one
+        // screen-runs calls (run_screen.h: best whitelist family x 3'/5' evidence) and it is applied like an
+        // explicit --protocol, before detect_protocol() and its re-layout heuristics. They disagreed in the atlas
+        // smoke test: GSM6470208 (R1 28 bp, 737K list 84%) was 10x-5p-v3 for download (from the R1 length) and
+        // 10x-5p-v2 for screen-runs; SRR25751252 (R1 26 bp, 3M list 97%: v3 with a short R1) was celseq2 /
+        // 10x-3p-v2 for download and 10x-3p-v3 for screen-runs (the celseq2 .1fq then failed in STAR). A short R1
+        // keeps the barcode and shortens the UMI (writer truncation below).
+        std::string manual_tag = cfg.protocol_tag;
+        bool screen_rule = false;
+        if (manual_tag.empty() && cfg.metadata_protocol.empty() && !probe_spots.empty() && r1_len > 0) {
+            size_t n_with_r2 = 0;  // r2_len is 0 for a variable-length R2: count the reads that have one
+            for (const auto& sd : probe_spots) n_with_r2 += (sd.r2_len > 0);
+            if (n_with_r2 * 2 > probe_spots.size()) {
+                double chem_rate = 0.0;
+                const std::string chem = screen_10x_chemistry(probe_spots, cfg.whitelist_dirs, &chem_rate);
+                const CandidateSpec* cs = chem.empty() ? nullptr : find_protocol_spec(chem);
+                std::cerr << "[protocol_detect] screen-runs rule: "
+                          << (chem.empty() ? std::string("no 10x whitelist >= 30%") : chem)
+                          << " (best 10x whitelist " << static_cast<int>(chem_rate * 100) << "%, R1 " << r1_len
+                          << " bp)\n";
+                if (cs && r1_len >= cs->bc_offset + cs->bc_len) {
+                    manual_tag = cs->tag;
+                    screen_rule = true;
+                    stats.wl_match_rate = chem_rate;
+                    detected_proto.wl_match_rate = chem_rate;
+                }
+            }
+        }
+
+        if (!manual_tag.empty()) {
+            const CandidateSpec* spec = find_protocol_spec(manual_tag);
             if (spec) {
                 protocol_tag = spec->tag;
                 protocol_id = spec->protocol_id;
@@ -569,7 +599,7 @@ class SraEncoder {
                 detected_proto.bc_length = spec->bc_len;
                 detected_proto.umi_offset = spec->umi_offset;
                 detected_proto.umi_length = spec->umi_len;
-                detected_proto.confidence = Confidence::MANUAL;
+                detected_proto.confidence = screen_rule ? Confidence::HIGH : Confidence::MANUAL;
 
                 // ── Read orientation check for MANUAL protocol ──
                 // Some SRAs store cDNA as spot.1 (R1) and barcode as spot.2 (R2),
@@ -578,7 +608,7 @@ class SraEncoder {
                 // which orientation puts the barcode in R1.  Simple length
                 // heuristics fail when both reads are the same length (e.g. 2×148bp
                 // sci-RNA-seq3), so we score the library structure directly.
-                if (!probe_spots.empty() && probe_spots[0].r2_len > 0) {
+                if (!screen_rule && !probe_spots.empty() && probe_spots[0].r2_len > 0) {  // screen rule: R1 is the barcode read
                     auto orig_score = detect_protocol(probe_spots, r1_len, r2_len,
                                                       cfg.whitelist_dirs);
                     // Try swapped orientation
@@ -610,9 +640,9 @@ class SraEncoder {
                 }
             } else {
                 // Unknown tag — store as-is
-                protocol_tag = cfg.protocol_tag;
+                protocol_tag = manual_tag;
             }
-            confidence = Confidence::MANUAL;
+            confidence = screen_rule ? Confidence::HIGH : Confidence::MANUAL;
         } else {
             detected_proto = detect_protocol(probe_spots, r1_len, r2_len,
                                              cfg.whitelist_dirs);
@@ -1148,45 +1178,6 @@ class SraEncoder {
             }
         }
         // ─────────────────────────────────────────────────────────────────────
-
-        // ── One chemistry detector with `singlet screen-runs` ─────────────────
-        // When a 10x whitelist matches >= 30% of the probe reads' barcodes, the chemistry is the one screen-runs
-        // calls (run_screen.h: best whitelist family x 3'/5' evidence), whatever detect_protocol() said. They
-        // disagreed in the atlas smoke test: GSM6470208 (R1 28 bp, 737K list 84%) was 10x-5p-v3 for download
-        // (from the R1 length) and 10x-5p-v2 for screen-runs; SRR25751252 (R1 26 bp, 3M list 97%: v3 with a
-        // short R1) was celseq2 / 10x-3p-v2 for download and 10x-3p-v3 for screen-runs. A short R1 keeps the
-        // barcode and shortens the UMI (writer truncation below).
-        size_t n_with_r2 = 0;  // r2_len is 0 for a variable-length R2: count the reads that have one
-        for (const auto& sd : probe_spots) n_with_r2 += (sd.r2_len > 0);
-        if (cfg.protocol_tag.empty() && cfg.metadata_protocol.empty() && !probe_spots.empty() &&
-            r1_len > 0 && n_with_r2 * 2 > probe_spots.size()) {
-            double chem_rate = 0.0;
-            const std::string chem = screen_10x_chemistry(probe_spots, cfg.whitelist_dirs, &chem_rate);
-            const CandidateSpec* cs = chem.empty() ? nullptr : find_protocol_spec(chem);
-            std::cerr << "[protocol_detect] screen-runs rule: "
-                      << (chem.empty() ? std::string("no 10x whitelist >= 30%") : chem)
-                      << " (best 10x whitelist " << static_cast<int>(chem_rate * 100) << "%, R1 " << r1_len
-                      << " bp)\n";
-            if (cs && r1_len >= cs->bc_offset + cs->bc_len && cs->tag != protocol_tag) {
-                std::cerr << "[protocol_detect] " << protocol_tag << " (c=" << static_cast<int>(confidence)
-                          << ") -> " << cs->tag << " (screen-runs rule: best 10x whitelist "
-                          << cs->whitelist_file << " " << static_cast<int>(chem_rate * 100)
-                          << "% of probe barcodes)\n";
-                protocol_tag = cs->tag;
-                protocol_id  = cs->protocol_id;
-                confidence   = Confidence::HIGH;
-                stats.wl_match_rate = chem_rate;
-                detected_proto.tag         = cs->tag;
-                detected_proto.protocol_id = cs->protocol_id;
-                detected_proto.bc_offset   = cs->bc_offset;
-                detected_proto.bc_length   = cs->bc_len;
-                detected_proto.umi_offset  = cs->umi_offset;
-                detected_proto.umi_length  = cs->umi_len;
-                detected_proto.r1_length   = std::min<uint16_t>(cs->r1_len, r1_len);
-                detected_proto.wl_match_rate = chem_rate;
-                detected_proto.confidence  = Confidence::HIGH;
-            }
-        }
 
         // ── Re-segment probe spots if protocol R1 < observed R1 ──
         // This handles concatenated reads and over-sequenced R1.
