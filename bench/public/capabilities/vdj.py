@@ -177,18 +177,19 @@ def compute(artifact_dir: Path) -> dict:
                        "for 150-nt R1, else -u R2 --readFormat bc:0:15,um:16:25) --barcode R1 --UMI R1 "
                        "--barcodeWhitelist 737K-august-2016.txt -t 8"},
             {"name": "cellranger-vdj", "version": "3.0.0 / 5.0.0 / 3.0.1", "role": "truth",
+             "url": "https://cf.10xgenomics.com/samples/cell-vdj/",
              "params": "published filtered_contig_annotations.csv (10x datasets, GEO GSE145370 supplementary)"},
         ],
         "datasets": [
             {"id": "pbmc5p_v1", "title": "10x vdj_v1_hs_pbmc2 T and B libraries (5' v1, 150x150)",
              "accessions": {"url": "https://cf.10xgenomics.com/samples/cell-vdj/3.0.0/vdj_v1_hs_pbmc2_t/"},
-             "truth": "10x Cell Ranger 3.0.0 filtered contigs", "notes": "development data: assembler parameters were set while looking at it"},
+             "truth": "10x Cell Ranger 3.0.0 filtered contigs", "data_kind": "real", "notes": "development data: assembler parameters were set while looking at it"},
             {"id": "pbmc10k_5p_v2", "title": "10x sc5p_v2_hs_PBMC_10k T and B libraries (5' v2, 26x90)",
              "accessions": {"url": "https://cf.10xgenomics.com/samples/cell-vdj/5.0.0/sc5p_v2_hs_PBMC_10k/"},
-             "truth": "10x Cell Ranger 5.0.0 filtered contigs"},
+             "truth": "10x Cell Ranger 5.0.0 filtered contigs", "data_kind": "real"},
             {"id": "gse145370_tcr", "title": "GSE145370 ESCC TCR libraries S133A, S158A (10x 5' V(D)J)",
              "accessions": {"gse": "GSE145370", "gsm": ["GSM4317423", "GSM4317428"], "srr": ["SRR11094260", "SRR11094265"]},
-             "truth": "authors' Cell Ranger 3.0.1 filtered contigs (GEO supplementary)"},
+             "truth": "authors' Cell Ranger 3.0.1 filtered contigs (GEO supplementary)", "data_kind": "real"},
         ],
         "metrics": metrics, "resources": resources, "figures": figures,
         "artifacts": artifact_entries(artifact_dir, CAP, {p.name: ("truth" if "cellranger" in p.name or "gex" in p.name

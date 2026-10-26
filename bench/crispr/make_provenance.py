@@ -11,7 +11,8 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "vdj"))
 from make_artifacts import gnu_time  # noqa: E402
 
-RUNS = {"a549": "tenx_crispr_a549_5k", "replogle_k562_gg41": "replogle2022_k562_gg41"}
+RUNS = {"a549": "tenx_crispr_a549_5k", "a375": "tenx_crispr_a375_10k", "replogle_k562_gg41": "replogle2022_k562_gg41",
+        "norman2019_gem1": "norman2019_gem1"}
 
 
 def main():
