@@ -3,8 +3,8 @@
 #SBATCH --account=debruinz
 #SBATCH --partition=short-cpu,scavenger
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=48G
-#SBATCH --time=01:00:00
+#SBATCH --mem=96G
+#SBATCH --time=03:00:00
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
 #   sbatch export.sbatch <step>      step: demux | snps | mt
 # Builds the small public artifacts under $WORK/bench-public/artifacts/<capability>/ from the run directories.
@@ -18,4 +18,4 @@ case $STEP in
   snps)  mkdir -p $A/donor-snps; python -I $L/snp_concordance.py $R $T $A/donor-snps/donor_snps_counts.tsv kang2018_ctrl kang2018_stim kang2018_b1_a kang2018_b1_b kang2018_b1_c ;;
   mt)    mkdir -p $A/mtdna; python -I $L/mt_eval.py $R $T $A/mtdna ;;
 esac
-ls -la $A/*/
+ls -la $A/donor-demux $A/donor-snps $A/mtdna 2>/dev/null

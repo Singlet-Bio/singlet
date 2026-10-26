@@ -60,7 +60,7 @@ def load_truth(truth_dir: str | Path, pool: str) -> pd.DataFrame | None:
         t = pd.read_csv(Path(truth_dir) / f"GSE96583_{batch}.total.tsne.df.tsv.gz", sep="\t", index_col=0)
         t = t[t[col] == lane].copy()
         t.index = [i.split("-")[0] for i in t.index]
-        t["ind"] = t["ind"].astype("Int64").astype(str)
+        t["ind"] = t["ind"].map(lambda v: "<NA>" if pd.isna(v) else str(int(v)))
         return t[["ind", "multiplets"]]
     if pool == "maester_k562_bt142_3p":
         t = pd.read_csv(Path(truth_dir).parent / "maester_truth" / "celllinemix_cells.tsv", sep="\t").set_index("barcode")

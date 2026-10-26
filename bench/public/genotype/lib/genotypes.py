@@ -63,7 +63,7 @@ def pseudobulk(ad, dp, bcs, labels: dict[str, str]):
     """Sum AD / DP over the cells of each label. Returns {label: (ad_vec, dp_vec)}."""
     lab = np.array([labels.get(norm_bc(b)) for b in bcs], dtype=object)
     out = {}
-    for d in sorted({x for x in lab if x is not None}):
+    for d in sorted({x for x in lab if isinstance(x, str) and x != "<NA>"}):
         idx = np.where(lab == d)[0]
         out[d] = (np.asarray(ad[:, idx].sum(axis=1)).ravel(), np.asarray(dp[:, idx].sum(axis=1)).ravel())
     return out
