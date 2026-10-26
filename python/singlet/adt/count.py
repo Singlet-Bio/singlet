@@ -268,22 +268,6 @@ def _merge(uniq, cnts):
     cnts[:] = [s]
 
 
-def _barcode_counts(blocks, cb_len):
-    """Pass 1 of the sharded mode: reads per raw cell barcode (the same reads as the collapse keeps)."""
-    uniq, cnts = [], []
-    for mat, _, _ in blocks:
-        if len(mat):
-            u, c = np.unique(
-                np.ascontiguousarray(mat[:, :cb_len]).view(f"S{cb_len}").ravel(), return_counts=True
-            )
-            uniq.append(u)
-            cnts.append(c.astype(np.int64))
-            if len(uniq) > 8:
-                _merge(uniq, cnts)
-    _merge(uniq, cnts)
-    return (uniq[0], cnts[0]) if uniq else (np.zeros(0, f"S{cb_len}"), np.zeros(0, np.int64))
-
-
 # ----------------------------------------------------------------------------------------------------------- features
 @dataclass
 class _FixedIndex:
@@ -630,18 +614,17 @@ def count_library(
 ) -> LibraryCounts:
     """Count one library. ``gex_barcodes``: the GEX sample's column barcodes in ``col`` order (16 nt, ``-1`` suffix ok).
 
-    ``shards > 0`` bounds memory for large libraries: pass 1 counts reads per raw barcode and corrects every barcode
-    (the same prior as the single pass), pass 2 writes the collapsed keys to ``shards`` files by corrected barcode under
-    ``tmpdir`` and processes each alone. UMI correction never crosses barcodes, so the result is identical.
-    ``pairs_factory`` (a callable returning a fresh pair iterator) is needed for the two passes."""
+    ``shards > 0`` bounds memory for large libraries: the reads are read once, each block's collapsed keys are spilled
+    under ``tmpdir`` while reads per raw barcode are counted; every barcode is then corrected (the same prior as the
+    single pass), the spilled keys are re-sharded into ``shards`` files by corrected barcode, and each shard is processed
+    alone. UMI correction never crosses barcodes, so the result is identical. ``pairs_factory`` (a callable returning a
+    fresh pair iterator) may replace ``pairs``."""
     from scipy import sparse
 
     fx = FeatureIndex(list(panel_sequences))
     L = fx.L
     r1_len = cb_len + umi_len
     nf = len(panel_sequences)
-    if pairs is not None and shards and pairs_factory is None:
-        raise ValueError("sharded counting reads the pairs twice: pass pairs_factory")
 
     def blocks():
         if pairs_factory is not None:
@@ -671,15 +654,12 @@ def count_library(
     else:
         import tempfile
 
-        ucb, cb_reads = _barcode_counts(blocks(), cb_len)
-        cb_code, cb_valid, translated, n_corr = _barcode_map(
-            ucb, cb_reads, cb_len, whitelist_codes, translation
-        )
-        bmap = (ucb, cb_code, cb_valid, translated)
-        # shard by corrected barcode; invalid barcodes get their own shard (they still count in the read statistics)
-        shard_of = np.where(cb_valid, (cb_code % np.uint64(shards)).astype(np.int64), shards)
+        # one pass over the reads: each block's collapsed keys go to disk (spill) while reads per raw barcode are
+        # counted; then barcodes are corrected and the spilled keys are re-sharded by corrected barcode
         d = tempfile.mkdtemp(prefix="adt-shards-", dir=tmpdir)
-        pieces = {k: [] for k in range(shards + 1)}
+        spill = []
+        bu: List[np.ndarray] = []
+        bc_: List[np.ndarray] = []
         n = n_short = 0
         for mat, nk, short in blocks():
             n += nk
@@ -689,6 +669,30 @@ def count_library(
             u, c = np.unique(
                 np.ascontiguousarray(mat).view(f"S{r1_len + L}").ravel(), return_counts=True
             )
+            f = os.path.join(d, f"spill_{len(spill)}.npy")
+            np.save(f, u)
+            np.save(f + ".c.npy", c.astype(np.int64))
+            spill.append(f)
+            cbk = np.ascontiguousarray(u.view(np.uint8).reshape(len(u), r1_len + L)[:, :cb_len])
+            ub, ib = np.unique(cbk.view(f"S{cb_len}").ravel(), return_inverse=True)
+            bu.append(ub)
+            bc_.append(np.bincount(ib.ravel(), weights=c, minlength=len(ub)).astype(np.int64))
+            if len(bu) > 8:
+                _merge(bu, bc_)
+        _merge(bu, bc_)
+        ucb = bu[0] if bu else np.zeros(0, f"S{cb_len}")
+        cb_reads = bc_[0] if bc_ else np.zeros(0, np.int64)
+        cb_code, cb_valid, translated, n_corr = _barcode_map(
+            ucb, cb_reads, cb_len, whitelist_codes, translation
+        )
+        bmap = (ucb, cb_code, cb_valid, translated)
+        # shard by corrected barcode; invalid barcodes get their own shard (they still count in the read statistics)
+        shard_of = np.where(cb_valid, (cb_code % np.uint64(shards)).astype(np.int64), shards)
+        pieces = {k: [] for k in range(shards + 1)}
+        for f in spill:
+            u, c = np.load(f), np.load(f + ".c.npy")
+            os.remove(f)
+            os.remove(f + ".c.npy")
             cbk = np.ascontiguousarray(u.view(np.uint8).reshape(len(u), r1_len + L)[:, :cb_len])
             sh = shard_of[np.searchsorted(ucb, cbk.view(f"S{cb_len}").ravel())]
             for k in np.unique(sh):
