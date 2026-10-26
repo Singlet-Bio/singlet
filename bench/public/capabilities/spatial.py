@@ -21,7 +21,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import artifact_entries, code_url, contract, load_provenance, now_iso  # noqa: E402
-from _atacsp import bootstrap_metric, cohen_kappa, metric, otsu_threshold, read_tsv, spearman  # noqa: E402
+from _atacsp import bootstrap_metric, cohen_kappa, diff_tolerance, metric, otsu_threshold, read_tsv, spearman  # noqa: E402
 
 CAP = "spatial"
 MATCH = {"type": "match_or_beat", "against": "best"}
@@ -33,29 +33,34 @@ def dataset_metrics(art: Path, ds: str) -> tuple[list, dict]:
     tis = s[s.spaceranger_in_tissue == 1]
     has_solo = "starsolo_umis" in s
     out = []
-    out.append(metric("spot_umis_spearman", "UMIs per tissue spot: Spearman with Space Ranger", "rho", "accuracy", ds,
-                      "higher", spearman(tis.singlet_umis, tis.spaceranger_umis),
-                      [("starsolo", spearman(tis.starsolo_umis, tis.spaceranger_umis) if has_solo else None)], MATCH,
-                      notes=f"{len(tis)} Space Ranger tissue spots"))
-    out.append(metric("spot_genes_spearman", "Genes per tissue spot: Spearman with Space Ranger", "rho", "accuracy", ds,
-                      "higher", spearman(tis.singlet_genes, tis.spaceranger_genes),
-                      [("starsolo", spearman(tis.starsolo_genes, tis.spaceranger_genes) if has_solo else None)], MATCH))
-    out.append(metric("spot_profile_pearson", "Per-spot expression profile vs Space Ranger: median Pearson (log CPM)",
-                      "r", "accuracy", ds, "higher", float(np.nanmedian(tis.singlet_profile_r_vs_spaceranger)),
-                      [("starsolo", float(np.nanmedian(tis.starsolo_profile_r_vs_spaceranger)) if has_solo else None)],
-                      MATCH))
-    out.append(metric("gene_totals_spearman", "Molecules per gene over tissue spots: Spearman with Space Ranger", "rho",
-                      "accuracy", ds, "higher", spearman(g.singlet_tissue_total, g.spaceranger_tissue_total),
-                      [("starsolo", spearman(g.starsolo_tissue_total, g.spaceranger_tissue_total) if has_solo else None)],
-                      MATCH, notes=f"{len(g):,} genes"))
+
+    def cmp(id_, name, unit, col_s, col_c, ref, frame, stat, units, notes=None):
+        a, c, r = (frame[x].to_numpy(float) if x in frame else None for x in (col_s, col_c, ref))
+        f = (lambda v: lambda i: stat(v[i], r[i])) if r is not None else (lambda v: lambda i: stat(v[i]))
+        sv = f(a)(np.arange(len(frame))); cv = f(c)(np.arange(len(frame))) if c is not None else None
+        rule = (diff_tolerance(f(a), f(c), len(frame), unit=units) if c is not None else None) or MATCH
+        return metric(id_, name, unit, "accuracy", ds, "higher", sv, [("starsolo", cv)], rule, notes=notes)
+
+    out.append(cmp("spot_umis_spearman", "UMIs per tissue spot: Spearman with Space Ranger", "rho", "singlet_umis",
+                   "starsolo_umis", "spaceranger_umis", tis, spearman, "tissue spots", f"{len(tis)} Space Ranger tissue spots"))
+    out.append(cmp("spot_genes_spearman", "Genes per tissue spot: Spearman with Space Ranger", "rho", "singlet_genes",
+                   "starsolo_genes", "spaceranger_genes", tis, spearman, "tissue spots"))
+    out.append(cmp("spot_profile_pearson", "Per-spot expression profile vs Space Ranger: median Pearson (log CPM)", "r",
+                   "singlet_profile_r_vs_spaceranger", "starsolo_profile_r_vs_spaceranger", "_none_", tis,
+                   lambda v: float(np.nanmedian(v)), "tissue spots"))
+    out.append(cmp("gene_totals_spearman", "Molecules per gene over tissue spots: Spearman with Space Ranger", "rho",
+                   "singlet_tissue_total", "starsolo_tissue_total", "spaceranger_tissue_total", g, spearman, "genes",
+                   f"{len(g):,} genes"))
     # tissue detection, all slide spots
     y = s.spaceranger_in_tissue.to_numpy(int)
     x = np.log10(s.singlet_umis.to_numpy(float) + 1)
     otsu = (x > otsu_threshold(x)).astype(int)
     yi = s.singlet_in_tissue.to_numpy(int)
+    rule = diff_tolerance(lambda i: cohen_kappa(y[i], yi[i]), lambda i: cohen_kappa(y[i], otsu[i]), len(y),
+                          unit="slide spots") or MATCH
     out.append(metric("tissue_kappa", "Spots under tissue: Cohen's kappa with Space Ranger (image)", "kappa",
                       "agreement", ds, "higher", cohen_kappa(y, yi), [("otsu-umi-threshold", cohen_kappa(y, otsu))],
-                      MATCH, ci=bootstrap_metric(lambda i: cohen_kappa(y[i], yi[i]), len(y), 500),
+                      rule, ci=bootstrap_metric(lambda i: cohen_kappa(y[i], yi[i]), len(y), 500),
                       notes=f"Space Ranger {int(y.sum())}, Singlet {int(yi.sum())}, Otsu {int(otsu.sum())} tissue spots "
                             f"of {len(y)}; agreement Singlet {np.mean(y == yi):.3f}, Otsu {np.mean(y == otsu):.3f}"))
     summ = {"ds": ds, "spots": s, "otsu": otsu}

@@ -20,7 +20,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import artifact_entries, code_url, contract, load_provenance, now_iso  # noqa: E402
-from _atacsp import archr_default_cells, bootstrap_metric, jaccard, metric, read_tsv  # noqa: E402
+from _atacsp import archr_default_cells, bootstrap_metric, diff_tolerance, jaccard, metric, read_tsv  # noqa: E402
 
 CAP = "multiome"
 COMP = "per-modality-calls"
@@ -35,9 +35,12 @@ def dataset_metrics(art: Path, ds: str) -> list:
         if ("chromap_fragments" in b and gex) else set()
     out = []
     idx = np.array(sorted(tenx | sing | comp))
+    jac = lambda sel, other: jaccard(set(idx[sel]) & tenx, set(idx[sel]) & other)
+    rule = (diff_tolerance(lambda i: jac(i, sing), lambda i: jac(i, comp), len(idx), unit="called barcodes")
+            if comp else None) or {"type": "match_or_beat", "against": "best"}
     out.append(metric("joint_cell_jaccard", "Joint GEX+ATAC cell calls: Jaccard with Cell Ranger ARC", "fraction",
                       "agreement", ds, "higher", jaccard(tenx, sing), [(COMP, jaccard(tenx, comp) if comp else None)],
-                      {"type": "match_or_beat", "against": "best"},
+                      rule,
                       ci=bootstrap_metric(lambda i: jaccard(set(idx[i]) & tenx, set(idx[i]) & sing), len(idx), 500),
                       notes=f"ARC {len(tenx)}, Singlet {len(sing)}, competitor {len(comp)} cells"))
     # pairing: for ARC cells that Singlet also reports, is Singlet's ATAC barcode ARC's ATAC barcode?

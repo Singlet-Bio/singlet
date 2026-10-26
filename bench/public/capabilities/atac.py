@@ -21,8 +21,8 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import artifact_entries, code_url, contract, load_provenance, now_iso  # noqa: E402
-from _atacsp import (archr_default_cells, bootstrap_metric, jaccard, metric, peak_scores, read_bed, read_json,  # noqa: E402
-                     read_tsv, spearman)
+from _atacsp import (archr_default_cells, bootstrap_metric, diff_tolerance, jaccard, metric, peak_f1_by_chrom,  # noqa: E402
+                     peak_scores, read_bed, read_json, read_tsv, spearman)
 
 CAP = "atac"
 COMP = "chromap+snapatac2"
@@ -36,32 +36,49 @@ def dataset_metrics(art: Path, ds: str, gating: bool) -> tuple[list, dict]:
     comp = set(b.index[archr_default_cells(b.get("chromap_fragments"), b.get("chromap_tsse"))]) \
         if "chromap_fragments" in b else set()
     cells = b.loc[b.index.isin(tenx)]
-    rule = MATCH if gating else {"type": "match_or_beat", "against": "best"}
     out = []
-    # 1. cell calls
+    # 1. cell calls (bootstrap over the barcodes any tool calls)
     idx = np.array(sorted(tenx | sing | comp))
-    def jac_boot(sel):
-        s = set(idx[sel]); return jaccard(s & tenx, s & sing)
+    def jac(sel, other):
+        s = set(idx[sel]); return jaccard(s & tenx, s & other)
+    rule = (diff_tolerance(lambda i: jac(i, sing), lambda i: jac(i, comp), len(idx), unit="called barcodes")
+            if comp else MATCH) or MATCH
     out.append(metric("cell_jaccard", "Cell calls: Jaccard with Cell Ranger", "fraction", "agreement", ds, "higher",
                       jaccard(tenx, sing), [(COMP, jaccard(tenx, comp) if comp else None)], rule,
-                      ci=bootstrap_metric(jac_boot, len(idx), 500),
+                      ci=bootstrap_metric(lambda i: jac(i, sing), len(idx), 500),
                       notes=f"Cell Ranger {len(tenx)}, Singlet {len(sing)}, {COMP} (ArchR default filter) {len(comp)} cells"))
-    # 2. fragments per cell
+    # 2. fragments per cell (bootstrap over Cell Ranger's cells)
+    cs, ct = cells.singlet_fragments.to_numpy(float), cells.tenx_fragments.to_numpy(float)
+    cc = cells.chromap_fragments.to_numpy(float) if "chromap_fragments" in cells else None
+    rule = (diff_tolerance(lambda i: spearman(cs[i], ct[i]), lambda i: spearman(cc[i], ct[i]), len(cells))
+            if cc is not None else MATCH) or MATCH
     out.append(metric("fragments_per_cell_spearman", "Fragments per cell: Spearman with Cell Ranger", "rho",
-                      "accuracy", ds, "higher", spearman(cells.singlet_fragments, cells.tenx_fragments),
-                      [(COMP, spearman(cells.get("chromap_fragments"), cells.tenx_fragments))], rule,
+                      "accuracy", ds, "higher", spearman(cs, ct), [(COMP, spearman(cc, ct) if cc is not None else None)],
+                      rule,
                       notes="over Cell Ranger's cells; chrM excluded"))
     # 3. exact fragments
     fc = read_json(art / f"atac_{ds}_fragment_concordance.json")
     rec = lambda t: fc[t]["exact_shared"] / max(1, fc["tenx"]) if t in fc else None
+    rule = MATCH
+    if rec("singlet") is not None and rec("chromap") is not None:
+        n = fc["tenx"]; p1, p2 = rec("singlet"), rec("chromap")
+        half = 1.96 * float(np.sqrt(p1 * (1 - p1) / n + p2 * (1 - p2) / n))
+        rule = {"type": "match_or_beat", "against": "best", "tolerance": {"abs": round(half, 4)},
+                "rationale": f"1.96 x the binomial standard error of the difference of two proportions over the {n:,} "
+                             "Cell Ranger fragments (conservative: the two tools are scored on the same fragments)"}
     out.append(metric("fragment_exact_recall", f"Cell Ranger fragments reproduced exactly ({fc['chromosome']})",
                       "fraction", "accuracy", ds, "higher", rec("singlet"), [(COMP, rec("chromap"))], rule,
                       notes=f"{fc['tenx']:,} Cell Ranger fragments of its {fc['cells']} cells"))
     # 4. peaks
     P10 = read_bed(art / f"atac_{ds}_peaks_tenx.bed.gz")
-    ps = peak_scores(read_bed(art / f"atac_{ds}_peaks_singlet.bed.gz"), P10)
+    PS = read_bed(art / f"atac_{ds}_peaks_singlet.bed.gz")
+    ps = peak_scores(PS, P10)
     pc_path = art / f"atac_{ds}_peaks_chromap_macs3.bed.gz"
-    pc = peak_scores(read_bed(pc_path), P10) if pc_path.exists() else None
+    PC = read_bed(pc_path) if pc_path.exists() else None
+    pc = peak_scores(PC, P10) if PC is not None else None
+    chroms = np.array(sorted(set(P10.chrom)))
+    rule = (diff_tolerance(lambda i: peak_f1_by_chrom(PS, P10, chroms[i]), lambda i: peak_f1_by_chrom(PC, P10, chroms[i]),
+                           len(chroms), n_boot=100, unit="chromosomes") if PC is not None else MATCH) or MATCH
     out.append(metric("peak_f1", "Peaks: F1 of overlap with Cell Ranger peaks", "fraction", "agreement", ds, "higher",
                       ps["f1"], [(COMP, pc["f1"] if pc else None)], rule,
                       notes=f"recall/precision Singlet {ps['recall']:.3f}/{ps['precision']:.3f} ({ps['n']:,} peaks); "
@@ -126,7 +143,7 @@ def compute(artifact_dir: Path) -> dict:
         "code": [{"path": f, "url": code_url(f, commit),
                   "role": "metric" if "capabilities" in f else "harness" if "bench/" in f else "implementation"}
                  for f in files],
-        "reproduce": {"module": "bench/public/capabilities/atac.py", "function": "compute", "laptop_minutes": 2,
+        "reproduce": {"module": "bench/public/capabilities/atac.py", "function": "compute", "laptop_minutes": 6,
                       "clipper_command": "bash bench/atac_spatial/submit.sh"},
         "caveats": prov.get("caveats", []),
     }

@@ -110,3 +110,28 @@ def metric(id_, name, unit, category, dataset, direction, singlet, competitors, 
     if not m["competitors"]:
         del m["competitors"]
     return m
+
+
+def diff_tolerance(f_singlet, f_comp, n: int, n_boot: int = 500, seed: int = 0, unit: str = "cells"):
+    """Match-or-beat tolerance from measured noise: the half-width of the bootstrap 95% CI of the difference
+    f_singlet(idx) - f_comp(idx), resampling the same n units (cells, spots, genes or chromosomes) for both tools."""
+    rng = np.random.default_rng(seed)
+    d = []
+    for _ in range(n_boot):
+        i = rng.integers(0, n, n)
+        a, b = f_singlet(i), f_comp(i)
+        if a is not None and b is not None and np.isfinite(a) and np.isfinite(b):
+            d.append(a - b)
+    if len(d) < 50:
+        return None
+    lo, hi = np.quantile(d, [0.025, 0.975])
+    half = float((hi - lo) / 2)
+    return {"type": "match_or_beat", "against": "best", "tolerance": {"abs": round(half, 4)},
+            "rationale": f"half-width of the bootstrap 95% CI of the Singlet - competitor difference ({n_boot} resamples "
+                         f"of the {n} {unit}): differences smaller than this are not distinguishable on this dataset"}
+
+
+def peak_f1_by_chrom(P: pd.DataFrame, R: pd.DataFrame, chroms) -> float:
+    """Peak F1 restricted to a (bootstrap) multiset of chromosomes."""
+    Ps = pd.concat([P[P.chrom == c] for c in chroms]); Rs = pd.concat([R[R.chrom == c] for c in chroms])
+    return peak_scores(Ps.reset_index(drop=True), Rs.reset_index(drop=True))["f1"]
