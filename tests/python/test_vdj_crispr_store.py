@@ -60,3 +60,35 @@ def test_crispr_members_roundtrip():
     X, names = back["crispr"]
     assert names == ["g0", "g1"] and (X.toarray() == M.toarray()).all()
     assert back["guides"]["guides"][1]["kind"] == "non-targeting"
+
+
+def test_vdj_library_entry_point(tmp_path):
+    """FASTQs -> contigs, QC verdict, sidecar object and per-cell labels (singlet.vdj.library)."""
+    pytest.importorskip("dnaio")
+    pytest.importorskip("numba")
+    import gzip
+    import sys
+
+    sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent))
+    import test_vdj_assemble as T
+
+    from singlet.adt import seq as S
+    from singlet.vdj import assemble as A
+    from singlet.vdj import library as LIB
+
+    segs = T.make_segments()
+    r1, r2, truth, cbs = T.simulate(segs, n_cells=30)
+    p1, p2 = tmp_path / "x_R1_001.fastq.gz", tmp_path / "x_R2_001.fastq.gz"
+    for path, reads in ((p1, r1), (p2, r2)):
+        with gzip.open(path, "wt") as f:
+            for i, s in enumerate(reads):
+                f.write(f"@r{i}\n{s.decode()}\n+\n{'F' * len(s)}\n")
+    wl, _ = S.encode_strings(cbs, 16)
+    cols = [c + "-1" for c in cbs] + ["ACGTACGTACGTACGT-1"]
+    out = LIB.process_library([str(p1)], [str(p2)], gex_columns=cols, gex_called=cols[:-1],
+                              whitelist_codes=np.sort(wl), ref=A.Reference(segs), log=lambda *a: None)
+    assert out["qc"]["verdict"] in ("pass", "warn"), out["qc"]
+    assert out["qc"]["pairing_rate"] > 0.9
+    back = VS.read_members(VS.build_sidecar("GSM0", out["members"]))
+    assert (back["contigs"]["col"] >= 0).all()
+    assert len(out["labels"]) == len(cbs)

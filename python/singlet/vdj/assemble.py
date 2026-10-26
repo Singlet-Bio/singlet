@@ -224,10 +224,12 @@ def run_library(r1_paths: Sequence[str], r2_paths: Sequence[str], *, ref: Refere
             ok2 = (f2 >= 0) & (f2 + 3 - K_ASM >= 0)
             fw[todo[ok2]] = f2[ok2]
         # a V the reference lacks or that is too mutated: Cys104 from the read, upstream of F/W118
-        todo = np.flatnonzero((cys < 0) & (fw >= 0) & ((o[:, 0] < 0) | (ref.anchor[np.maximum(o[:, 0], 0)] < 0)))
+        # (only reads with no V call that hold >= 45 nt upstream of that Cys: a V is there but not recognised; reads
+        # that merely start near the junction would seed spurious Cys)
+        todo = np.flatnonzero((cys < 0) & (fw >= 0) & (o[:, 0] < 0) & (fw >= 45 + 24))
         if len(todo):
             c2 = K.cys_from_read(codes, off, fw.astype(np.int64), todo)
-            ok2 = (c2 >= 0) & (c2 + K_ASM <= L[todo])
+            ok2 = (c2 >= 45) & (c2 + K_ASM <= L[todo])
             cys[todo[ok2]] = c2[ok2]
         # informative: reaches the junction (V 3' end in the read, or a J hit)
         v_end = np.where(o[:, 0] >= 0, o[:, 2] + np.array([len(ref.segs[i].seq) for i in range(len(ref.segs))],
@@ -456,7 +458,21 @@ def _junction_j(ref: "Reference", chain: str, junction: str, voted: int) -> int:
             cands.append(i)
     if not cands:
         return voted
-    return voted if voted in cands else cands[0]
+    if voted >= 0:
+        # the read vote stands unless its J matches the junction's end clearly worse (> 2 nt): BCR junctions carry
+        # somatic mutations and D-derived bases where the read votes past F/W118 are the better evidence
+        s = ref.segs[voted]
+        g = s.seq[:s.anchor + 3]
+        mm = n = 0
+        for x, y in zip(reversed(junction), reversed(g)):
+            if x != y:
+                mm += 1
+                if mm > 1:
+                    break
+            n += 1
+        if n >= best - 2:
+            return voted
+    return cands[0]
 
 
 def _d_gene(ref: Reference, chain: str, junction: str) -> str:
