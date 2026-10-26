@@ -393,7 +393,6 @@ def test_labels_are_written_as_referenced_sidecars_and_verified(tmp_path, pol):
     )
     # the labels are also columns of the sample object's own cells table, equal to the sidecar on the called cells
     import pyarrow.parquet as pq
-
     from singlet.s1.labels_step import CELLS_LABEL_COLUMNS
     from singlet.s1.sample import S1Sample
 
