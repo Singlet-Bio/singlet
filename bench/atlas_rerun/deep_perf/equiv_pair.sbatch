@@ -26,7 +26,7 @@ run_side() {  # side bin env inputs
   mkdir -p $SCR/$side/out; cd $SCR/$side
   env SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=10800 SINGLET_REF_BASE=$REF SINGLET_KEEP_STAR_BAM=1 $envs \
     /usr/bin/time -v -o $O/time_$side.txt $PB/bin/$bin "${in[@]}" --ref-base $REF --genome-dir $G/star_2.7.11b \
-    --exons $G/genes/genes.gtf --out-prefix $SCR/$side/out/ --threads ${T:-8} --pipeline --output-format 1pz \
+    --exons $G/genes/genes.gtf --out-prefix $SCR/$side/out/ --threads ${T:-8} --pipeline --output-format ${FMT:-1pz} ${MTX_RAW:+--raw-matrix} \
     --bam-sort-mode disk --genome-shared off --tagged-bam "${SCREEN[@]}" > $O/run_$side.log 2>&1 || echo "exit $?" >> $O/run_$side.log
   grep -E "Elapsed|Maximum resident" $O/time_$side.txt | sed "s/^/[$side] /"
   grep -E "started sorting|finished success|STAR completed|indexed in|refresh|multi-run|Pileup:|\[singlet\] Total" $O/run_$side.log | sed "s/^/[$side] /"
@@ -41,5 +41,5 @@ done
 ls -la $SCR/a/out/*.bam $SCR/b/out/*.bam 2>/dev/null | awk '{print $5, $9}'
 mkdir -p $SCR/cmp; for s in a b; do rsync -a --exclude '*.bam' --exclude '*.bai' --exclude '*Unmapped.out.mate*' \
   --exclude '*.fq' --exclude '.multi_run' $SCR/$s/out/ $SCR/cmp/$s/; done
-PYTHONPATH=$W/envs/pylib-pysam $W/envs/pbench/bin/python -I ${EQUIV_PY:-$W/jobs/deep-perf/out_equiv.py} \
+PYTHONPATH=$W/envs/pylib-pysam $W/envs/pbench/bin/python ${EQUIV_PY:-$W/jobs/deep-perf/out_equiv.py} \
   $SCR/cmp/a $SCR/cmp/b ${BAMS:+--bam "${BAMS[@]}"} 2>&1 | tee $O/equiv.txt

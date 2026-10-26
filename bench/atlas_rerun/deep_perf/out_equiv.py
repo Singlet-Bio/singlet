@@ -78,6 +78,11 @@ def compare_dirs(a: Path, b: Path) -> int:
                 print(f"  DIFF {f} (unparsable json)")
         else:
             print(f"  DIFF {f} ({(a / f).stat().st_size} vs {(b / f).stat().st_size} bytes)")
+            if f.endswith((".tsv", ".csv", ".txt")) and (a / f).stat().st_size < 2_000_000:
+                la, lb = (a / f).read_text(errors="replace").splitlines(), (b / f).read_text(errors="replace").splitlines()
+                nd = [i for i in range(min(len(la), len(lb))) if la[i] != lb[i]]
+                print(f"    {len(nd)} of {len(la)}/{len(lb)} lines differ" +
+                      "".join(f"\n    a: {la[i][:160]}\n    b: {lb[i][:160]}" for i in nd[:2]))
         bad += 1
     print(f"files: {same} identical, {diff_soft} differ only in timings/paths, {bad} differ")
     return bad
@@ -107,10 +112,43 @@ def compare_bams(pa: str, pb: str) -> int:
         return bad + diff
 
 
+def compare_matrices(a: Path, b: Path) -> None:
+    """For runs written with --output-format mtx: per member, entries that differ after aligning features/barcodes."""
+    import gzip
+
+    import scipy.io
+    import scipy.sparse as sp
+
+    def lines(p):
+        with gzip.open(p, "rt") as f:
+            return [x.rstrip("\n") for x in f]
+
+    for mtx in sorted(a.glob("*.mtx.gz")):
+        m = mtx.name[:-len(".mtx.gz")]
+        if not (b / mtx.name).exists():
+            continue
+        try:
+            xa = sp.csr_matrix(scipy.io.mmread(str(mtx)))
+            xb = sp.csr_matrix(scipy.io.mmread(str(b / mtx.name)))
+            fa, fb = lines(a / f"{m}_features.tsv.gz"), lines(b / f"{m}_features.tsv.gz")
+            ba, bb = lines(a / f"{m}_barcodes.tsv.gz"), lines(b / f"{m}_barcodes.tsv.gz")
+        except (OSError, ValueError):
+            continue
+        fs, bs = sorted(set(fa) & set(fb)), sorted(set(ba) & set(bb))
+        ia = {f: i for i, f in enumerate(fa)}; ib = {f: i for i, f in enumerate(fb)}
+        ja = {c: i for i, c in enumerate(ba)}; jb = {c: i for i, c in enumerate(bb)}
+        A = xa[[ia[f] for f in fs]][:, [ja[c] for c in bs]]
+        B = xb[[ib[f] for f in fs]][:, [jb[c] for c in bs]]
+        d = abs(A - B)
+        print(f"  matrix {m}: barcodes {len(ba)}/{len(bb)} shared {len(bs)}, total {xa.sum():.0f}/{xb.sum():.0f}, "
+              f"nnz {A.nnz}/{B.nnz}, entries differing {d.nnz}, sum |diff| {d.sum():.0f}")
+
+
 def main(argv):
     a, b = Path(argv[1]), Path(argv[2])
     print(f"a = {a}\nb = {b}")
     bad = compare_dirs(a, b)
+    compare_matrices(a, b)
     if "--bam" in argv:
         rest = argv[argv.index("--bam") + 1:]
         for i in range(0, len(rest) - 1, 2):
