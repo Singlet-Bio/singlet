@@ -189,9 +189,7 @@ def test_archive_copies_verifies_lists_and_deletes_nothing(r2):
     assert len(e0["sha256"]) == 64 and e0["at"]
     led = [
         json.loads(x)
-        for x in (r2.root / PUB / "s1" / "ledger" / f"{r2.gses[0]}.jsonl")
-        .read_text()
-        .splitlines()
+        for x in (r2.root / PUB / "s1" / "ledger" / f"{r2.gses[0]}.jsonl").read_text().splitlines()
     ]
     assert led[-1]["event"] == "archived"
     # .s1 objects untouched (only the ledgers gained a line)
@@ -470,9 +468,7 @@ def test_delete_removes_only_archived_retired_studies_and_keeps_everything_else(
     }  # .s1 objects untouched
     led = [
         json.loads(x)
-        for x in (r2.root / PUB / "s1" / "ledger" / f"{r2.gses[0]}.jsonl")
-        .read_text()
-        .splitlines()
+        for x in (r2.root / PUB / "s1" / "ledger" / f"{r2.gses[0]}.jsonl").read_text().splitlines()
     ]
     assert led[-1]["event"] == "legacy-deleted" and led[-1]["verified_age_h"] == 30.0
     assert r2.delete(ages) == 0  # again: nothing left to do
@@ -666,9 +662,7 @@ def test_restore_puts_back_identical_bytes(r2, capsys):
     assert capsys.readouterr().out.count("already-present") == 3
     led = [
         json.loads(x)
-        for x in (r2.root / PUB / "s1" / "ledger" / f"{r2.gses[0]}.jsonl")
-        .read_text()
-        .splitlines()
+        for x in (r2.root / PUB / "s1" / "ledger" / f"{r2.gses[0]}.jsonl").read_text().splitlines()
     ]
     assert [
         e["event"] for e in led if e["event"] in ("archived", "legacy-deleted", "restored")

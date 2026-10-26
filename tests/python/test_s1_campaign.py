@@ -309,9 +309,7 @@ def test_upload_failure_leaves_no_manifest_and_does_not_stop_the_shard(env):
     rows = env.rows_of()
     assert rows[gses[1]]["status"] == "upload_failed" and "disk on fire" in rows[gses[1]]["error"]
     assert rows[gses[0]]["status"] == rows[gses[2]]["status"] == "ok"
-    assert not (
-        env.root / PUB / "s1" / "m" / f"{gses[1]}.json"
-    ).exists()  # invisible: no manifest
+    assert not (env.root / PUB / "s1" / "m" / f"{gses[1]}.json").exists()  # invisible: no manifest
 
 
 def test_transient_upload_error_is_retried(env):
