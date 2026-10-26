@@ -46,6 +46,7 @@ def main(argv=None):
     ap.add_argument("--umi-len", type=int, default=None)
     ap.add_argument("--shards", type=int, default=0)
     ap.add_argument("--tmp", default=None)
+    ap.add_argument("--reuse-counts", action="store_true", help="assign again from OUT/counts.npz (no counting)")
     a = ap.parse_args(argv)
 
     from singlet.adt import count as AC
@@ -96,16 +97,34 @@ def main(argv=None):
         trans, trep = AC.best_translation(cb, np.sort(gex_codes), a.translation)
     print(f"[run_crispr] translation {trep}", flush=True)
     t1 = time.time()
-    lc = CC.count_library(r1, r2, library=lib, geometry=geom, cb_len=16, umi_len=umi_len, whitelist_codes=wl_codes,
-                          gex_barcodes=cols, translation=trans, max_reads=a.max_reads, shards=a.shards, tmpdir=a.tmp)
-    t_count = time.time() - t1
-    AC.save_npz(os.path.join(a.out, "counts.npz"), lc, {"geometry": geom.describe(), "translation": trep})
+    npz = os.path.join(a.out, "counts.npz")
+    prev = os.path.join(a.out, "run.json")
+    if a.reuse_counts and os.path.exists(npz) and os.path.exists(prev):
+        # the callers changed, not the counting: reuse the counts (and their read statistics and timing)
+        M, feats, amb, outside, meta = AC.load_npz(npz)
+        lc = AC.LibraryCounts(feats, M, amb, outside, meta["stats"], meta.get("unmatched", []))
+        t_count = json.load(open(prev))["timings_s"]["count_s"]
+    else:
+        lc = CC.count_library(r1, r2, library=lib, geometry=geom, cb_len=16, umi_len=umi_len, whitelist_codes=wl_codes,
+                              gex_barcodes=cols, translation=trans, max_reads=a.max_reads, shards=a.shards, tmpdir=a.tmp)
+        t_count = time.time() - t1
+        AC.save_npz(npz, lc, {"geometry": geom.describe(), "translation": trep})
     cmask = np.array([c in called for c in cols])
     Mc = lc.matrix[:, np.flatnonzero(cmask)]
     p = AS.ambient_profile(lc.ambient)
+    # ambient load of a droplet: the uncalled GEX columns when there are many (empty droplets), else the barcodes
+    # outside the columns (libraries whose columns are only the published cells)
+    unc = np.flatnonzero(~cmask)
+    if len(unc) >= 1000:
+        b_empty = AS.ambient_load(np.asarray(lc.matrix[:, unc].sum(axis=0)).ravel())
+        b_src = f"0.95 quantile of {len(unc)} uncalled columns"
+    else:
+        b_empty = float(np.median(lc.outside_totals)) if len(lc.outside_totals) else 0.0
+        b_src = f"median of {len(lc.outside_totals)} barcodes outside the columns with >= 1 molecule"
+    print(f"[run_crispr] ambient load per droplet {b_empty:.2f} ({b_src})", flush=True)
     timings = {"count_s": t_count}
     res = {}
-    for name, fn in (("singlet", lambda: AS.call_ambient(Mc, p)), ("cellranger_gmm", lambda: AS.call_gmm(Mc)),
+    for name, fn in (("singlet", lambda: AS.call_ambient(Mc, p, b_empty)), ("cellranger_gmm", lambda: AS.call_gmm(Mc)),
                      ("poisson_gaussian", lambda: AS.call_poisson_gaussian(Mc))):
         t2 = time.time()
         C = fn()
@@ -116,6 +135,7 @@ def main(argv=None):
         lab.to_csv(os.path.join(a.out, f"assign_{name}.csv"), index=False)
         res[name] = lab["class"].value_counts().to_dict()
     run = {"guides": len(lib), "geometry": geom.describe(), "detected": det["candidates"], "translation": trep,
+           "ambient_load": b_empty, "ambient_load_source": b_src,
            "stats": lc.stats, "called_cells": int(cmask.sum()), "classes": res, "timings_s": timings,
            "wall_s": time.time() - t0, "peak_rss_gb": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6,
            "unmatched_top": lc.unmatched[:20]}

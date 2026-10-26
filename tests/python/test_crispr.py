@@ -75,7 +75,9 @@ def simulate_cells(n=3000, G_=40, moi_multi=0.08, amb_frac=0.04, seed=0):
             X[g, j] += rng.poisson(tot / max(1, k))
         X[:, j] += rng.poisson(amb_frac * tot * abund * G_ / 4 + 0.02)
     amb = rng.poisson(5000 * abund)
-    return sparse.csc_matrix(X), truth, amb
+    # empty droplets: ambient only
+    empties = rng.poisson(amb_frac * 30 * abund.sum() * G_ / 4 + 0.02 * G_, 5000)
+    return sparse.csc_matrix(X), truth, amb, empties
 
 
 def _f1(C, truth):
@@ -85,12 +87,22 @@ def _f1(C, truth):
 
 
 def test_callers_recover_truth():
-    X, truth, amb = simulate_cells()
+    X, truth, amb, emp = simulate_cells()
     p = AS.ambient_profile(amb)
-    f_amb = _f1(AS.call_ambient(X, p), truth)
+    f_amb = _f1(AS.call_ambient(X, p, AS.ambient_load(emp)), truth)
     f_gmm = _f1(AS.call_gmm(X), truth)
     f_pg = _f1(AS.call_poisson_gaussian(X), truth)
     assert f_amb > 0.95, (f_amb, f_gmm, f_pg)
     assert f_amb >= max(f_gmm, f_pg) - 0.01, (f_amb, f_gmm, f_pg)
-    lab = AS.summarize(AS.call_ambient(X, p), [f"g{i}" for i in range(X.shape[0])])
+    lab = AS.summarize(AS.call_ambient(X, p, AS.ambient_load(emp)), [f"g{i}" for i in range(X.shape[0])])
     assert set(lab["class"]) <= {"unassigned", "single", "multiple"}
+
+
+def test_two_guide_library_keeps_doublets():
+    """A375-like: two guides, ~8% doublets carrying both. The tested guide must not count in its own background."""
+    X, truth, amb, emp = simulate_cells(n=3000, G_=2, moi_multi=0.08, amb_frac=0.02, seed=4)
+    called = AS.call_ambient(X, AS.ambient_profile(amb), AS.ambient_load(emp)).toarray()
+    both_true = truth.all(axis=0)
+    assert both_true.sum() > 100
+    assert (called.all(axis=0) & both_true).sum() >= 0.8 * both_true.sum()
+    assert _f1(sparse.csc_matrix(called), truth) > 0.95

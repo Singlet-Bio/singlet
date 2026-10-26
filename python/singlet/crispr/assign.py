@@ -6,8 +6,8 @@ Three callers on the same guides x cells UMI matrix (``M``, scipy sparse, cells 
 * :func:`call_ambient` (**Singlet**, the stored call): every guide's UMIs in a cell are tested against what ambient guide
   molecules alone would give that cell. The ambient profile ``p`` (share of each guide among the molecules of empty
   droplets: whitelist barcodes outside the called cells) is measured on the library itself, so abundant guides need
-  more UMIs to be called than rare ones. A cell's ambient load ``b_c`` is the UMIs of the guides not called in it,
-  scaled by the ambient share of those guides (iterated: call, re-estimate, call). Guide ``g`` is called in cell ``c``
+  more UMIs to be called than rare ones. A cell's ambient load ``b_c`` is the larger of the empty droplets' load and
+  the cell's own estimate from its minor guides (never the tested one). Guide ``g`` is called in cell ``c``
   when ``x_gc >= min_umis`` and ``P(Poisson(b_c p_g) >= x_gc) < alpha / n_guides`` and ``x_gc >= min_share`` of the
   cell's guide UMIs.
 * :func:`call_gmm` (Cell Ranger's protospacer calling): per guide, a two-component Gaussian mixture on log10 UMIs of the
@@ -31,35 +31,49 @@ def ambient_profile(ambient_umis: np.ndarray, pseudo: float = 0.5) -> np.ndarray
     return a / a.sum()
 
 
-def call_ambient(M, p: np.ndarray, min_umis: int = 3, alpha: float = 1e-3, min_share: float = 0.05,
-                 iterations: int = 3):
-    """Ambient-calibrated Poisson test per (guide, cell). ``p``: ambient profile (:func:`ambient_profile`)."""
+def ambient_load(totals_empty: np.ndarray, q: float = 0.95) -> float:
+    """Guide UMIs an ambient-only droplet carries at most (quantile ``q`` of the empty droplets' totals, zeros
+    included): ambient RNA lands in every droplet at about the same rate, cells or not."""
+    t = np.asarray(totals_empty, dtype=np.float64)
+    return float(np.quantile(t, q)) if len(t) else 0.0
+
+
+def call_ambient(M, p: np.ndarray, b_empty: float = 0.0, min_umis: int = 3, alpha: float = 1e-3,
+                 min_share: float = 0.05, top: int = 2):
+    """Ambient-calibrated Poisson test per (guide, cell). ``p``: ambient profile (:func:`ambient_profile`);
+    ``b_empty``: the ambient load of a droplet (:func:`ambient_load` on the empty droplets).
+
+    A cell's ambient load is the larger of ``b_empty`` and the cell's own estimate: the UMIs of all its guides but
+    the ``top`` most abundant (real guides: one, two in a doublet or a dual-guide vector), scaled by the ambient share
+    of the guides counted. The cell's estimate never includes the guide being tested, so with few guides (A375: 2) a
+    real second guide is not explained away by itself."""
     from scipy import sparse
     from scipy.stats import poisson
 
     X = sparse.csc_matrix(M, dtype=np.float64)
     G = X.shape[0]
     tot = np.asarray(X.sum(axis=0)).ravel()
-    called = sparse.csc_matrix(X.shape, dtype=bool)
     thr = alpha / max(1, G)
     rows = X.indices
     cols = np.repeat(np.arange(X.shape[1]), np.diff(X.indptr))
     x = X.data
-    is_called = np.zeros(len(x), bool)
-    for _ in range(iterations):
-        # ambient load: UMIs of not-called guides / their ambient share
-        bg_umis = np.bincount(cols[~is_called], weights=x[~is_called], minlength=X.shape[1])
-        called_share = np.bincount(cols[is_called], weights=p[rows[is_called]], minlength=X.shape[1])
-        b = bg_umis / np.maximum(1e-9, 1 - called_share)
-        lam = b[cols] * p[rows]
-        # P(X >= x) for the ambient-only model; a guide's own UMIs inflate b only before its first call
-        pv = poisson.sf(x - 1, np.maximum(lam, 1e-12))
-        new = (x >= min_umis) & (pv < thr) & (x >= min_share * tot[cols])
-        if np.array_equal(new, is_called):
-            break
-        is_called = new
-    called = sparse.csc_matrix((is_called[is_called], (rows[is_called], cols[is_called])), shape=X.shape, dtype=bool)
-    return called
+    # rank of each entry within its cell (0 = most UMIs)
+    o = np.lexsort((-x, cols))
+    rank = np.empty(len(x), np.int64)
+    start = np.searchsorted(cols[o], np.arange(X.shape[1]))
+    rank[o] = np.arange(len(x)) - start[cols[o]]
+    rest = rank >= top
+    rest_umis = np.bincount(cols[rest], weights=x[rest], minlength=X.shape[1])
+    rest_share = np.bincount(cols[rest], weights=p[rows[rest]], minlength=X.shape[1])
+    # leave the tested guide out of the cell's estimate when it is among the rest
+    own = np.where(rest, x, 0.0)
+    own_p = np.where(rest, p[rows], 0.0)
+    b_cell = (rest_umis[cols] - own) / np.maximum(1e-9, rest_share[cols] - own_p)
+    b = np.maximum(b_empty, np.where(rest_share[cols] - own_p > 0.05, b_cell, 0.0))
+    lam = b * p[rows]
+    pv = poisson.sf(x - 1, np.maximum(lam, 1e-12))
+    is_called = (x >= min_umis) & (pv < thr) & (x >= min_share * tot[cols])
+    return sparse.csc_matrix((is_called[is_called], (rows[is_called], cols[is_called])), shape=X.shape, dtype=bool)
 
 
 def call_gmm(M, min_umis: int = 3, seed: int = 0):
