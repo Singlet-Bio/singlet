@@ -138,7 +138,9 @@ def aligned_matrix(
     if len(rows) != m:
         raise ValueError("%s lists %d features but %s has %d rows" % (features, len(rows), mtx, m))
     if len(bcs) != n:
-        raise ValueError("%s lists %d barcodes but %s has %d columns" % (barcodes, len(bcs), mtx, n))
+        raise ValueError(
+            "%s lists %d barcodes but %s has %d columns" % (barcodes, len(bcs), mtx, n)
+        )
     if len(set(bcs)) != len(bcs):
         raise ValueError("%s: duplicate barcodes" % barcodes)
     cells = list(cells_barcodes)
@@ -172,14 +174,23 @@ def aligned_matrix(
     return out, info
 
 
-def encode_matrix(name: str, csc: Csc, info: dict, codec=None, chunk_cols: int = 0, level: int = util.ZSTD_LEVEL) -> MemberSpec:
+def encode_matrix(
+    name: str, csc: Csc, info: dict, codec=None, chunk_cols: int = 0, level: int = util.ZSTD_LEVEL
+) -> MemberSpec:
     """pz2 member (inline row names, ``Cells`` column names) of an aligned matrix."""
     codec = codec or get_codec()
     eo = EncodeOptions(chunk_cols=chunk_cols, row_names="inline", col_names="cells", level=level)
     try:
         body = codec.encode(csc, eo)
-    except (ImportError, TypeError) as e:  # native module missing or built from older sources (signature mismatch)
-        warnings.warn(f"native pz2 encoder unusable ({e}); using the pure-Python codec", RuntimeWarning, stacklevel=2)
+    except (
+        ImportError,
+        TypeError,
+    ) as e:  # native module missing or built from older sources (signature mismatch)
+        warnings.warn(
+            f"native pz2 encoder unusable ({e}); using the pure-Python codec",
+            RuntimeWarning,
+            stacklevel=2,
+        )
         body = PyCodec2().encode(csc, eo)
     meta = {
         "m": csc.m,
@@ -220,7 +231,8 @@ def aligned_positions(path: str, cells_barcodes: Sequence[str]) -> "tuple[bytes,
     miss = [b for b in cells if b not in at]
     if miss:
         raise ValueError(
-            "%s lacks %d of the %d cells-table barcodes (first: %s)" % (path, len(miss), len(cells), miss[:3])
+            "%s lacks %d of the %d cells-table barcodes (first: %s)"
+            % (path, len(miss), len(cells), miss[:3])
         )
     out = ["\t".join(header)] + [body[at[b]] for b in cells]
     return ("\n".join(out) + "\n").encode("utf-8"), {
@@ -248,10 +260,19 @@ def add_section14_members(
     have = lambda f: os.path.isfile(p(f))  # noqa: E731
     out: List[MemberSpec] = []
     if have("fragments.tsv.gz"):
-        out.append(MemberSpec(ATAC_FRAGMENTS, "stored", data=_read_bytes(p("fragments.tsv.gz")), as_written=True))
+        out.append(
+            MemberSpec(
+                ATAC_FRAGMENTS, "stored", data=_read_bytes(p("fragments.tsv.gz")), as_written=True
+            )
+        )
         if have("fragments.tsv.gz.tbi"):
             out.append(
-                MemberSpec(ATAC_FRAGMENTS_TBI, "stored", data=_read_bytes(p("fragments.tsv.gz.tbi")), as_written=True)
+                MemberSpec(
+                    ATAC_FRAGMENTS_TBI,
+                    "stored",
+                    data=_read_bytes(p("fragments.tsv.gz.tbi")),
+                    as_written=True,
+                )
             )
     if have("peaks.bed"):
         out.append(MemberSpec(ATAC_PEAKS, "stored", data=_read_bytes(p("peaks.bed"))))
@@ -261,7 +282,9 @@ def add_section14_members(
         side = (prefix + "_features.tsv.gz", prefix + "_barcodes.tsv.gz")
         lacking = [f for f in side if not have(f)]
         if lacking:
-            raise ValueError("%s: %s present but %s missing" % (run_dir, prefix + ".mtx.gz", lacking))
+            raise ValueError(
+                "%s: %s present but %s missing" % (run_dir, prefix + ".mtx.gz", lacking)
+            )
         csc, info = aligned_matrix(p(prefix + ".mtx.gz"), p(side[0]), p(side[1]), cells_barcodes)
         out.append(encode_matrix(name, csc, info, codec, chunk_cols, level))
     if have(ATAC_SUMMARY):
@@ -274,7 +297,9 @@ def add_section14_members(
     return out
 
 
-def add_to_writer(w: S2Writer, specs: Sequence[MemberSpec], level: int = util.ZSTD_LEVEL) -> Dict[str, int]:
+def add_to_writer(
+    w: S2Writer, specs: Sequence[MemberSpec], level: int = util.ZSTD_LEVEL
+) -> Dict[str, int]:
     """Add the specs to an ``S2Writer`` (before ``build()``). Returns member name -> kind used (1 pz2, 3 zstd, 5 raw)."""
     from . import container as K
 
@@ -284,5 +309,7 @@ def add_to_writer(w: S2Writer, specs: Sequence[MemberSpec], level: int = util.ZS
             w.add_matrix(s.name, s.body, s.digest, s.meta, s.flags)
             kinds[s.name] = K.KIND_PZ2
         else:
-            kinds[s.name] = w.add_stored(s.name, s.data, s.meta, s.flags, level, as_written=s.as_written)
+            kinds[s.name] = w.add_stored(
+                s.name, s.data, s.meta, s.flags, level, as_written=s.as_written
+            )
     return kinds

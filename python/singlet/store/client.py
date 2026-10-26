@@ -92,7 +92,10 @@ PARTIAL_GAP = 256 << 10  # in the two-phase plan, ranges closer than this share 
 SJ, MT, VDJ = "sj_counts.1pz", "mt_heteroplasmy.1pz", "vdj_gene_usage.1pz"
 ATAC, GENE_ACT = "atac_peak_counts.1pz", "atac_gene_activity.1pz"
 SPATIAL_POS, SPATIAL_SUM = "spatial_positions.tsv", "spatial_summary.json"
-STORED_MEMBERS = (SPATIAL_POS, SPATIAL_SUM)  # stored blobs (kind 3 zstd / kind 5 raw), not pz2 matrices
+STORED_MEMBERS = (
+    SPATIAL_POS,
+    SPATIAL_SUM,
+)  # stored blobs (kind 3 zstd / kind 5 raw), not pz2 matrices
 
 
 # ================================================================================================================= modalities
@@ -104,7 +107,9 @@ class ModalitySpec:
     members: Tuple[str, ...]
     slot: str  # "X", "layers" or "obsm"
     description: str
-    optional: Tuple[str, ...] = ()  # fetched with the modality when the sample has them; never required
+    optional: Tuple[
+        str, ...
+    ] = ()  # fetched with the modality when the sample has them; never required
 
 
 MODALITIES: Dict[str, ModalitySpec] = {

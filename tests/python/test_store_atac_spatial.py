@@ -48,7 +48,11 @@ def _barcodes(prefix: str, n: int):
 def _write_mtx(path, dense):
     """Coordinate MatrixMarket gz of a features x barcodes dense integer array (the pipeline's write_mtx layout)."""
     r, c = np.nonzero(dense)
-    lines = ["%%MatrixMarket matrix coordinate integer general", "%", f"{dense.shape[0]} {dense.shape[1]} {len(r)}"]
+    lines = [
+        "%%MatrixMarket matrix coordinate integer general",
+        "%",
+        f"{dense.shape[0]} {dense.shape[1]} {len(r)}",
+    ]
     # column-major, as the pipeline writes it
     for j in np.unique(c):
         for i in r[c == j]:
@@ -89,16 +93,26 @@ def _make_run(run, cells_bc, seed, spatial: bool):
         out[name] = truth
     (run / "fragments.tsv.gz").write_bytes(gzip.compress(b"chr1\t100\t200\tAAAA\t1\n"))
     (run / "fragments.tsv.gz.tbi").write_bytes(b"TBI\x01fake-index")
-    (run / "peaks.bed").write_text("\n".join(f"chr1\t{1000 * i}\t{1000 * i + 500}" for i in range(1, 26)) + "\n")
-    (run / "atac_summary.json").write_text(json.dumps({"schema": "singlet-atac-summary/1", "qc": {"pass": True}}))
+    (run / "peaks.bed").write_text(
+        "\n".join(f"chr1\t{1000 * i}\t{1000 * i + 500}" for i in range(1, 26)) + "\n"
+    )
+    (run / "atac_summary.json").write_text(
+        json.dumps({"schema": "singlet-atac-summary/1", "qc": {"pass": True}})
+    )
     if spatial:
         order = list(reversed(range(N)))  # positions listed in another order than the cells table
         rows = ["barcode\tspot\tarray_row\tarray_col\tin_tissue\ttissue_prob\tprimary\tumis"]
         for i in order:
-            rows.append(f"{cells_bc[i]}\tS{i}\t{i // 8}\t{2 * (i % 8) + (i // 8) % 2}\t{int(i % 3 != 0)}\t0.9\t1\t{100 + i}")
-        rows.append("Q0000EXTRAROW\tSX\t99\t99\t0\t0.1\t0\t1")  # a spot that is no column of the cells table
+            rows.append(
+                f"{cells_bc[i]}\tS{i}\t{i // 8}\t{2 * (i % 8) + (i // 8) % 2}\t{int(i % 3 != 0)}\t0.9\t1\t{100 + i}"
+            )
+        rows.append(
+            "Q0000EXTRAROW\tSX\t99\t99\t0\t0.1\t0\t1"
+        )  # a spot that is no column of the cells table
         (run / "spatial_positions.tsv").write_text("\n".join(rows) + "\n")
-        (run / "spatial_summary.json").write_text(json.dumps({"schema": "singlet-spatial-summary/1", "tissue_spots": 27}))
+        (run / "spatial_summary.json").write_text(
+            json.dumps({"schema": "singlet-spatial-summary/1", "tissue_spots": 27})
+        )
     return out
 
 
@@ -124,7 +138,14 @@ def study(tmp_path_factory):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(obj)
         members = {
-            i.name: {"kind": i.kind, "flags": i.flags, "off": i.off, "len": i.len, "digest": i.digest.hex(), **i.meta.get("_", {})}
+            i.name: {
+                "kind": i.kind,
+                "flags": i.flags,
+                "off": i.off,
+                "len": i.len,
+                "digest": i.digest.hex(),
+                **i.meta.get("_", {}),
+            }
             for i in w.infos
         }
         from singlet import _pz2
@@ -132,7 +153,14 @@ def study(tmp_path_factory):
         for i in w.infos:
             if i.kind == K.KIND_PZ2:
                 h = _pz2.read_header(obj[i.off : i.off + 256])
-                members[i.name].update(m=h["m"], n=h["n"], nnz=h["nnz"], codec=h["codec"], chunk_cols=h["chunk_cols"], n_chunks=h["n_chunks"])
+                members[i.name].update(
+                    m=h["m"],
+                    n=h["n"],
+                    nnz=h["nnz"],
+                    codec=h["codec"],
+                    chunk_cols=h["chunk_cols"],
+                    n_chunks=h["n_chunks"],
+                )
         samples.append(M.sample_entry(gsm, key, obj, N, int(CALLED.sum()), members, {}))
         truth["bcs"] = bcs
         truth["obj"] = obj
@@ -141,10 +169,27 @@ def study(tmp_path_factory):
         "schema_version": "1.0",
         "gse_id": GSE,
         "series_title": "synthetic atac",
-        "gsm_meta": {g: {"gsm_id": g, "organism": "Homo sapiens", "protocol": "10xatac", "n_cells": int(CALLED.sum())} for g in (G1, G2)},
+        "gsm_meta": {
+            g: {
+                "gsm_id": g,
+                "organism": "Homo sapiens",
+                "protocol": "10xatac",
+                "n_cells": int(CALLED.sum()),
+            }
+            for g in (G1, G2)
+        },
     }
     sfiles = {"study_meta.json": M.study_file_entry(json.dumps(meta).encode())}
-    man = M.build_manifest(GSE, samples, sfiles, "GRCh38-2024-A", {"singlet_version": "test"}, {}, {}, "2026-10-25T00:00:00Z")
+    man = M.build_manifest(
+        GSE,
+        samples,
+        sfiles,
+        "GRCh38-2024-A",
+        {"singlet_version": "test"},
+        {},
+        {},
+        "2026-10-25T00:00:00Z",
+    )
     mp = root / "v2" / "m" / f"{GSE}.json"
     mp.parent.mkdir(parents=True, exist_ok=True)
     mp.write_bytes(M.dumps_manifest(man))
@@ -196,7 +241,10 @@ def test_object_members_and_kinds(study):
     root, truths, specs_by = study
     r = K.S2Reader(truths[G1]["obj"])
     m = r.members
-    assert m["atac_peak_counts.1pz"].kind == K.KIND_PZ2 and m["atac_gene_activity.1pz"].kind == K.KIND_PZ2
+    assert (
+        m["atac_peak_counts.1pz"].kind == K.KIND_PZ2
+        and m["atac_gene_activity.1pz"].kind == K.KIND_PZ2
+    )
     for n in ("atac_fragments.tsv.gz", "atac_fragments.tsv.gz.tbi"):
         assert m[n].kind == K.KIND_RAW  # as written: byte-range readable bgzip
     assert m["spatial_positions.tsv"].kind in (K.KIND_STORED, K.KIND_RAW)
@@ -233,7 +281,11 @@ def test_positions_already_aligned_are_stored_as_written(tmp_path):
 def test_vocabulary():
     assert client.normalize_modalities(["peaks"]) == ("atac",)
     assert client.normalize_modalities("chromatin") == ("atac",)
-    assert client.normalize_modalities(["spatial", "gene_activity", "atac"]) == ("atac", "gene_activity", "spatial")
+    assert client.normalize_modalities(["spatial", "gene_activity", "atac"]) == (
+        "atac",
+        "gene_activity",
+        "spatial",
+    )
     assert client.MODALITIES["atac"].members == ("atac_peak_counts.1pz",)
     assert client.MODALITIES["gene_activity"].members == ("atac_gene_activity.1pz",)
     assert client.MODALITIES["spatial"].members == ("spatial_positions.tsv",)
@@ -249,7 +301,10 @@ def test_read_back_all_three(study, env):
     order = _called_order(t["bcs"])
     assert ad.n_obs == int(CALLED.sum()) and ad.n_vars == 0 and ad.X is None
     assert list(ad.obs_names) == [f"{G1}_{t['bcs'][i]}" for i in order]
-    for k, key, feats in (("atac", "atac_peak_counts", t["peaks"]), ("gene_activity", "atac_gene_activity", t["genes"])):
+    for k, key, feats in (
+        ("atac", "atac_peak_counts", t["peaks"]),
+        ("gene_activity", "atac_gene_activity", t["genes"]),
+    ):
         m = ad.obsm[k].toarray()
         assert m.shape == (len(order), len(feats))
         assert list(ad.uns["obsm_features"][k]) == feats
@@ -275,7 +330,11 @@ def test_aliases_and_single_modality(study, env):
     root, truths, _ = study
     st = client.open_study(GSE, base=str(root))
     ad = st.to_anndata([G1], modalities="peaks")
-    assert list(ad.obsm.keys()) == ["atac"] and "spatial" not in ad.uns and "in_tissue" not in ad.obs.columns
+    assert (
+        list(ad.obsm.keys()) == ["atac"]
+        and "spatial" not in ad.uns
+        and "in_tissue" not in ad.obs.columns
+    )
     sub = client.modality_anndata(ad, "chromatin")
     assert sub.shape == (ad.n_obs, 25)
 
