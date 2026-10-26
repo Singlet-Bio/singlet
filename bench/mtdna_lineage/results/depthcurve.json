@@ -1,0 +1,88 @@
+{
+ "n_positive": 1397,
+ "bins": [
+  {
+   "chrM_reads_lo": 214.32222222222222,
+   "chrM_reads_hi": 1219.2177777777777,
+   "n": 140,
+   "mean_mol_depth": 3.3560758904322183,
+   "frac_own_site_covered": 0.7571428571428571,
+   "frac_own_alt": 0.7
+  },
+  {
+   "chrM_reads_lo": 1219.2177777777777,
+   "chrM_reads_hi": 1373.0,
+   "n": 140,
+   "mean_mol_depth": 4.322884388229309,
+   "frac_own_site_covered": 0.7714285714285715,
+   "frac_own_alt": 0.6071428571428571
+  },
+  {
+   "chrM_reads_lo": 1373.0,
+   "chrM_reads_hi": 1513.7133333333334,
+   "n": 139,
+   "mean_mol_depth": 4.7306958344242585,
+   "frac_own_site_covered": 0.7769784172661871,
+   "frac_own_alt": 0.5899280575539568
+  },
+  {
+   "chrM_reads_lo": 1513.7133333333334,
+   "chrM_reads_hi": 1678.171111111111,
+   "n": 140,
+   "mean_mol_depth": 5.034649905589613,
+   "frac_own_site_covered": 0.8071428571428572,
+   "frac_own_alt": 0.6857142857142857
+  },
+  {
+   "chrM_reads_lo": 1678.171111111111,
+   "chrM_reads_hi": 1817.7333333333333,
+   "n": 140,
+   "mean_mol_depth": 5.463068294491434,
+   "frac_own_site_covered": 0.8142857142857143,
+   "frac_own_alt": 0.6642857142857143
+  },
+  {
+   "chrM_reads_lo": 1817.7333333333333,
+   "chrM_reads_hi": 1995.6022222222227,
+   "n": 140,
+   "mean_mol_depth": 5.943502496055456,
+   "frac_own_site_covered": 0.8,
+   "frac_own_alt": 0.5857142857142857
+  },
+  {
+   "chrM_reads_lo": 1995.6022222222227,
+   "chrM_reads_hi": 2235.5555555555557,
+   "n": 140,
+   "mean_mol_depth": 6.449884465826889,
+   "frac_own_site_covered": 0.7785714285714286,
+   "frac_own_alt": 0.6142857142857143
+  },
+  {
+   "chrM_reads_lo": 2235.5555555555557,
+   "chrM_reads_hi": 2645.6088888888885,
+   "n": 139,
+   "mean_mol_depth": 7.379420526587964,
+   "frac_own_site_covered": 0.7985611510791367,
+   "frac_own_alt": 0.5611510791366906
+  },
+  {
+   "chrM_reads_lo": 2645.6088888888885,
+   "chrM_reads_hi": 4229.397777777778,
+   "n": 140,
+   "mean_mol_depth": 10.119418794133622,
+   "frac_own_site_covered": 0.8785714285714286,
+   "frac_own_alt": 0.6571428571428571
+  },
+  {
+   "chrM_reads_lo": 4229.397777777778,
+   "chrM_reads_hi": 40607.15555555555,
+   "n": 140,
+   "mean_mol_depth": 33.4869170481881,
+   "frac_own_site_covered": 1.0,
+   "frac_own_alt": 0.7785714285714286
+  }
+ ],
+ "overall_frac_own_alt": 0.6442376521116678,
+ "overall_frac_own_covered": 0.8181818181818182,
+ "median_chrM_reads": 1817.7333333333333
+}

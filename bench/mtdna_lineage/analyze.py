@@ -30,6 +30,14 @@ TRUTH = os.environ.get("MTL_TRUTH", f"{W}/data/maester/truth")
 MQUAD = os.environ.get("MTL_MQUAD", f"{W}/envs/mtl/bin/mquad")
 
 
+import time as _time
+_T0 = _time.time()
+
+
+def log(msg):
+    print(f"[{_time.time() - _T0:7.0f}s] {msg}", file=sys.stderr, flush=True)
+
+
 def bc(s):
     return s.split("-")[0]
 
@@ -145,8 +153,10 @@ def lines(root, out):
     mm, cm = load(root, "k562_maester", "umi3")
     P3, R3, PM = align(m3, c3, want), align(r3, c3, want), align(mm, cm, want)
     lab = np.array([truth[w] for w in want])
+    log("coverage")
     res["coverage"] = {"3p_umi": coverage_summary(P3), "3p_read": coverage_summary(R3), "maester_umi3": coverage_summary(PM)}
 
+    log("haplotype panel")
     # line haplotypes from MAESTER pseudobulk per RNA label (truth-informed reference panel)
     pbK, pbB = PM.pseudobulk(np.nonzero(lab == "K562")[0]), PM.pseudobulk(np.nonzero(lab == "BT142")[0])
     dK, dB = pbK.sum(1), pbB.sum(1)
@@ -189,6 +199,7 @@ def lines(root, out):
                        median_minor_fraction=float(np.nanmedian(np.minimum(w, 1 - w))) if ok.any() else None)
     res["haplotype_deconvolution"] = dec
 
+    log("k562 subclonal vois")
     # K562 subclonal variants (authors' rule, 3.4_TenX_K562_clones.R, on MAESTER umi3): mean cov > 100, q01 K562 < 1%,
     # q99 K562 > 2%, mean AF K562 > 5 x BT142.
     cand = M.candidate_sites(PM, ref, min_cells=3, min_alt=2)
@@ -203,14 +214,23 @@ def lines(root, out):
             vois.append((ps, b))
     vois = [v for v in vois if vname(*v, ref) not in ("7693C>T", "8251G>A")]  # not confirmed by bulk ATAC (authors)
     res["k562_subclonal_vois_maester"] = [vname(*v, ref) for v in vois]
+    log("vaf fidelity")
     res["vaf_fidelity"] = vaf_fidelity(P3, PM, vois, mask=iK)
-    res["variant_detection"] = detection(root, "k562_3p", P3, ref, vois, iK)
+    log("detection")
+    det = detection(root, "k562_3p", P3, ref, vois, iK)
+    res["variant_detection"] = {k: v for k, v in det.items() if not k.startswith("_")}
+    groups = donor_groups(root, "k562_3p", want)
+    from sklearn.metrics import adjusted_rand_score
+    ok = groups != "none"
+    res["singlet_demux_vs_rna"] = dict(frac_assigned=float(ok.mean()), ari=float(adjusted_rand_score(lab[ok], groups[ok])),
+                                       table=pd.crosstab(lab, groups).to_dict())
     res["singlet_outputs"] = singlet_outputs(root, "k562_3p", want, R3, PM, ref)
     for nm, (P, tool) in (("k562_3p", (P3, "mgatk")), ("k562_maester", (PM, "maegatk"))):
         fd = f"{root}/pile/{nm}/{tool}/final"
         if glob.glob(f"{fd}/*.A.txt.gz"):
             res[f"{nm}_vs_{tool}"] = tool_agreement(P, M.load_mgatk(fd, want), ref)
-    res["privacy"] = privacy(root, "k562_3p", P3, PM, ref, groups=lab, somatic=vois)
+    log("privacy")
+    res["privacy"] = privacy(P3, ref, groups, vois, det)
     M.dump(res, out)
 
 
@@ -376,7 +396,7 @@ def detection(root, name, P3, ref, truth_sites, mask=None):
         else:
             names = set(sv.iloc[:, 0].astype(str))
         out["singlet_public"] = dict(n_calls=len(names), recall=len(names & tset) / max(len(tset), 1),
-                                     found=sorted(names & tset))
+                                     found=sorted(names & tset), _names=names)
         priv = f"{root}/{name}/private/mt_sites.tsv"
         if os.path.exists(priv):
             ps = pd.read_csv(priv, sep="\t")
@@ -385,63 +405,87 @@ def detection(root, name, P3, ref, truth_sites, mask=None):
             ev = ps[ps.v.isin(tset)]
             out["singlet_truth_sites_evaluated"] = ev.drop(columns=["v"]).assign(v=ev.v).to_dict("records")
     st, (AD, DP) = M.mgatk_stats(P3, ref, M.candidate_sites(P3, ref, min_cells=2, min_alt=1))
+    log(f"  mgatk stats on {len(st)} candidates")
     mg = set(st.variant[st.mgatk_pass])
     out["mgatk_thresholds"] = dict(n_candidates=len(st), n_calls=len(mg), recall=len(mg & tset) / max(len(tset), 1),
                                    found=sorted(mg & tset),
                                    truth_stats=st[st.variant.isin(tset)][["variant", "mean_af", "vmr", "strand_correlation",
                                                                          "n_cells_conf_detected", "n_cells_alt"]].to_dict("records"))
     # MQuad on candidates with >= 2 cells carrying >= 2 alt molecules (keeps the run tractable)
-    keep = st[(st.n_cells_alt >= 2)].index.values
+    # MQuad input: candidates with >= 5 carrier cells and >= 10 alt molecules (all 30k candidates take ~1 h, and
+    # MQuad's minor-component rule needs several carrier cells anyway)
+    keep = st[(st.n_cells_alt >= 5) & ((st.alt_fwd + st.alt_rev) >= 10)].index.values
     names = list(st.variant.values[keep])
+    if os.environ.get("MTL_SKIP_MQUAD"):
+        out["mquad"] = dict(skipped=True)
+        out["_stats"], out["_mquad"] = st, set()
+        out["_singlet"] = out.get("singlet_public", {}).pop("_names", set())
+        return out
     with tempfile.TemporaryDirectory() as td:
+        log(f"  mquad on {len(names)} variants")
         passed, bic, cut = run_mquad(AD[:, keep], DP[:, keep], names, td, minDP=2)
     tb = bic[bic.variant.isin(tset)][["variant", "deltaBIC", "num_cells_minor_cpt"]].to_dict("records") if bic is not None else []
     out["mquad"] = dict(n_input=len(names), n_calls=len(passed), deltaBIC_cutoff=cut, truth_deltaBIC=tb, recall=len(set(passed) & tset) / max(len(tset), 1),
                         found=sorted(set(passed) & tset), top=passed[:30])
+    out["_stats"], out["_mquad"] = st, set(passed)
+    out["_singlet"] = out.get("singlet_public", {}).pop("_names", set())
     return out
 
 
-def privacy(root, name, P3, PM, ref, groups, somatic):
-    """Public / private split. Rules evaluated on candidate variable sites of the 3' library:
-       R0 Singlet today (public = its heteroplasmic call list);
-       R1 pseudobulk VAF < 0.9 (sample level);
-       R2 group VAF < 0.9 in every group (groups = donors; here the two cell lines) AND not a population polymorphism
-          (gnomAD v3.1 chrM AF_hom > 0 or AF_het > 0.001)."""
+def donor_groups(root, name, want):
+    """Singlet's own donor demux (donor_assignments.tsv): donor id per evaluation cell, 'none' otherwise."""
+    f = f"{root}/{name}/donor_assignments.tsv"
+    if not os.path.exists(f):
+        return np.array(["none"] * len(want))
+    d = pd.read_csv(f, sep="	")
+    d = d[(d.cell_status == "cell") & d.donor_id.astype(str).str.startswith("donor")]
+    m = dict(zip(d.cell.map(bc), d.donor_id))
+    return np.array([m.get(w, "none") for w in want])
+
+
+def privacy(P3, ref, groups, somatic, det):
+    """Public / private split, evaluated on the variable sites a caller could publish: Singlet's public list, MQuad's
+    calls, and candidates with pooled AF >= 0.5% in >= 5 cells. groups = Singlet's donor demux (per-donor
+    pseudobulks). Rules (public if):
+      R1  sample pseudobulk AF < 0.9
+      R2  AF < 0.9 in every donor pseudobulk
+      R3  R2 and not a common homoplasmic population variant (gnomAD v3.1 AF_hom >= 0.001)
+      R4  R2 and absent from gnomAD as homoplasmic and as heteroplasmic (AF_hom = 0, AF_het <= 0.001)"""
     gn = gnomad()
-    st, _ = M.mgatk_stats(P3, ref, M.candidate_sites(P3, ref, min_cells=3, min_alt=1))
-    pb = P3.pseudobulk()
-    dpb = pb.sum(1)
-    st["pb_af"] = [((pb[p - 1, M.BASES.index(a)] + pb[p - 1, M.BASES.index(a) + 4]) / max(dpb[p - 1], 1)) for p, a in zip(st.pos, st.alt)]
+    st = det["_stats"].copy()
+    pb = P3.pseudobulk(); dpb = pb.sum(1)
+    bi = st.alt.map(M.BASES.index).values; p0 = st.pos.values - 1
+    st["pb_af"] = (pb[p0, bi] + pb[p0, bi + 4]) / np.maximum(dpb[p0], 1)
     gmax = np.zeros(len(st))
-    for g in np.unique(groups):
+    for g in sorted(set(groups) - {"none"}):
         pg = P3.pseudobulk(np.nonzero(groups == g)[0]); dg = pg.sum(1)
-        afg = np.array([((pg[p - 1, M.BASES.index(a)] + pg[p - 1, M.BASES.index(a) + 4]) / dg[p - 1]) if dg[p - 1] >= 10 else 0
-                        for p, a in zip(st.pos, st.alt)])
+        afg = np.where(dg[p0] >= 10, (pg[p0, bi] + pg[p0, bi + 4]) / np.maximum(dg[p0], 1), 0)
         gmax = np.maximum(gmax, afg)
     st["group_max_af"] = gmax
     st["gnomad_af_hom"] = [gn.get(v, (0, 0))[0] for v in st.variant]
     st["gnomad_af_het"] = [gn.get(v, (0, 0))[1] for v in st.variant]
-    st["population"] = (st.gnomad_af_hom > 0) | (st.gnomad_af_het > 0.001)
-    st["germline_in_group"] = st.group_max_af >= 0.9
+    plaus = st.variant.isin(det["_mquad"] | det["_singlet"]) | ((st.pb_af >= 0.005) & (st.n_cells_alt >= 5))
+    st = st[plaus]
+    germ = st.group_max_af >= 0.9
+    common = st.gnomad_af_hom >= 0.001
+    inpop = (st.gnomad_af_hom > 0) | (st.gnomad_af_het > 0.001)
     som = {vname(*v, ref) for v in somatic}
-    r1 = st.pb_af < 0.9
-    r2 = (st.group_max_af < 0.9) & ~st.population
-    out = {}
-    for nm, rule in (("R1_pseudobulk_lt_0.9", r1), ("R2_group_lt_0.9_and_not_population", r2)):
-        pub = st[rule]
-        out[nm] = dict(n_public=int(rule.sum()), public_germline_in_a_group=int(pub.germline_in_group.sum()),
-                       public_population_polymorphisms=int(pub.population.sum()),
-                       somatic_truth_kept=len(set(pub.variant) & som), somatic_truth_total=len(som),
-                       leaked_examples=list(pub[pub.germline_in_group | pub.population].variant[:20]))
-    sing = f"{root}/{name}/mt_variants.tsv"
-    if os.path.exists(sing):
-        sv = pd.read_csv(sing, sep="\t"); c = {k.lower(): k for k in sv.columns}
-        names = {f"{int(r[c['pos']])}{ref[int(r[c['pos']]) - 1]}>{r[c['alt']]}" for _, r in sv.iterrows()}
+    rules = {"R1_pseudobulk_lt_0.9": st.pb_af < 0.9, "R2_every_donor_lt_0.9": st.group_max_af < 0.9,
+             "R3_R2_and_not_common_homoplasmic": (st.group_max_af < 0.9) & ~common,
+             "R4_R2_and_absent_from_gnomad": (st.group_max_af < 0.9) & ~inpop}
+    out = {"n_plausible_sites": int(len(st)), "n_donor_groups": int(len(set(groups) - {"none"})),
+           "n_germline_in_a_donor": int(germ.sum()), "n_common_homoplasmic_gnomad": int(common.sum())}
+    for nm, r in rules.items():
+        pub = st[r]
+        out[nm] = dict(n_public=int(r.sum()), leaked_donor_germline=int((germ & r).sum()),
+                       leaked_common_homoplasmic=int((common & r).sum()),
+                       somatic_truth_public=len(set(pub.variant) & som), somatic_truth_in_plausible=len(set(st.variant) & som),
+                       leaked_examples=list(pub[(germ | common)[r]].variant[:15]))
+    for nm, names in (("singlet_public_today", det["_singlet"]), ("mquad_calls", det["_mquad"])):
         sub = st[st.variant.isin(names)]
-        out["R0_singlet_public_list"] = dict(n_public=len(names), n_in_candidates=len(sub),
-                                             public_germline_in_a_group=int(sub.germline_in_group.sum()),
-                                             public_population_polymorphisms=int(sub.population.sum()),
-                                             population_examples=list(sub[sub.population].variant[:20]))
+        out[nm] = dict(n=len(names), donor_germline=int((sub.group_max_af >= 0.9).sum()),
+                       common_homoplasmic=int((sub.gnomad_af_hom >= 0.001).sum()),
+                       examples=list(sub[(sub.group_max_af >= 0.9) | (sub.gnomad_af_hom >= 0.001)].variant[:15]))
     return out
 
 
@@ -495,6 +539,7 @@ def bpdcn(root, out):
     res["homoplasmic_calls_written"] = {nm: write_hom_vcf(f"{root}/private_vcf/bpdcn_{nm}.vcf", P.pseudobulk(), ref)
                                         for nm, P in (("3p", P3), ("maester", PM))}
 
+    log("per-variant")
     # 1. per-variant sensitivity / specificity of the 3' library for the truth clone variants
     A3, D3, _, _ = M.site_matrices(P3, vois); Am, Dm, _, _ = M.site_matrices(PM, vois)
     A3, D3, Am, Dm = (x.toarray() for x in (A3, D3, Am, Dm))
@@ -518,9 +563,13 @@ def bpdcn(root, out):
 
     res["singlet_outputs"] = singlet_outputs(root, "bpdcn_3p", want, R3, PM, ref)
 
+    log("detection")
     # 2. variant discovery on the 3' library
-    res["variant_detection"] = detection(root, "bpdcn_3p", P3, ref, vois)
+    det = detection(root, "bpdcn_3p", P3, ref, vois)
+    res["variant_detection"] = {k: v for k, v in det.items() if not k.startswith("_")}
+    res["privacy"] = privacy(P3, ref, donor_groups(root, "bpdcn_3p", want), vois, det)
 
+    log("clones")
     # 3. clone calling: vireoSNP binomial mixture on (a) MAESTER, truth variants; (b) 3', truth variants (oracle
     #    selection: isolates the coverage limit); (c) 3', MQuad-selected variants (end to end)
     is_pos = truth != "none"
@@ -532,6 +581,7 @@ def bpdcn(root, out):
                     matched=M.matched_f1(t[t != "none"], p[t != "none"]))
     for nm, (A, D) in (("maester_truth_variants", (Am, Dm)), ("3p_truth_variants", (A3, D3))):
         As, Ds = sp.csc_matrix(A), sp.csc_matrix(D)
+        log(f"  vireo {nm}")
         fits, elbo, best = clone_calls(As, Ds, ks=range(10, 31, 4), n_init=20)
         lbl = fits[best][0]
         res["clones"][nm] = dict(k=best, elbo=elbo, **score(lbl, np.ones(len(lbl), bool)))
@@ -540,6 +590,7 @@ def bpdcn(root, out):
     res["frac_positive_cells_with_any_alt_3p"] = float((A3[is_pos].sum(1) > 0).mean())
     res["frac_positive_cells_with_own_alt_3p"] = own_alt(truth, A3, vnames)
 
+    log("thinning")
     # 4. MAESTER molecules thinned towards 3'-like depth (how much enrichment the clone calls need)
     ds = {}
     for frac in (1.0, 0.3, 0.1, 0.03, 0.01):
@@ -551,6 +602,7 @@ def bpdcn(root, out):
                                       frac_pos_any_site_covered=float((D[is_pos].sum(1) > 0).mean()))
     res["downsampling"] = ds
 
+    log("phasing")
     # 5. phasing and whole-genome deconvolution tests
     res["phasing"] = phasing(root, vois, vnames, truth, Am, Dm, want)
     M.dump(res, out)
@@ -566,6 +618,89 @@ def own_alt(truth, A, vnames):
         js = [idx[x.replace("_", "")] for x in str(t).split("-") if x.replace("_", "") in idx]
         hit.append(bool(js) and A[i, js].sum() > 0)
     return float(np.mean(hit)) if hit else None
+
+
+def phase2(root, out):
+    """Within-cell VAF equality of variant pairs that define one clone (a single phased haplotype predicts the same VAF
+    for both in every cell), BPDCN MAESTER molecules (umi3). Cells with >= MIN molecules at both sites."""
+    from scipy.stats import binomtest, chi2
+    ref = reference(root)
+    pos = pd.read_csv(f"{TRUTH}/4.4_positive_cells.txt", sep="	"); pos["bc"] = pos.cell.map(bc)
+    clone_of = pos.drop_duplicates("bc").set_index("bc").clone.to_dict()
+    mm, cm = load(root, "bpdcn_maester", "umi3")
+    want = [c for c in cm if c in clone_of]
+    PM = align(mm, cm, want)
+    truth = np.array([clone_of[c] for c in want])
+    res = {}
+    for t in sorted({t for t in truth if "-" in str(t)}):
+        a, b = [parse_v(x) for x in t.split("-")]
+        A, D, _, _ = M.site_matrices(PM, [a, b]); A, D = A.toarray(), D.toarray()
+        for mn in (5, 10):
+            cells = (truth == t) & (D[:, 0] >= mn) & (D[:, 1] >= mn)
+            if cells.sum() < 5:
+                continue
+            ka, na, kb, nb = A[cells, 0], D[cells, 0], A[cells, 1], D[cells, 1]
+            pa, pb = ka / na, kb / nb
+            pp = (ka + kb) / (na + nb)
+            var = pp * (1 - pp) * (1 / na + 1 / nb)
+            z2 = np.where(var > 0, (pa - pb) ** 2 / np.maximum(var, 1e-12), 0)
+            p = chi2.sf(z2, 1)
+            # pooled over cells: heterogeneity of the per-cell VAF difference
+            res[f"{t} (>= {mn} molecules)"] = dict(
+                n_cells=int(cells.sum()), vaf_a_median=float(np.median(pa)), vaf_b_median=float(np.median(pb)),
+                pearson_across_cells=float(np.corrcoef(pa, pb)[0, 1]) if cells.sum() > 2 and pa.std() > 0 and pb.std() > 0 else None,
+                frac_cells_unequal_p001=float((p < 0.001).mean()), frac_cells_unequal_bonf=float((p < 0.05 / cells.sum()).mean()),
+                median_abs_diff=float(np.median(np.abs(pa - pb))), pooled_chi2_p=float(chi2.sf(z2.sum(), int(cells.sum()))))
+    M.dump(res, out)
+
+
+def facts(root, out):
+    """Small numbers quoted in the doc: strand share of chrM molecules per library, median clone VAF per BPDCN clone
+    (MAESTER), reference bases per molecule (covered histogram), gnomAD common homoplasmic site count."""
+    res = {}
+    for nm, lv in (("k562_3p", "umi1"), ("bpdcn_3p", "umi1"), ("k562_maester", "umi3"), ("bpdcn_maester", "umi3")):
+        p, _ = load(root, nm, lv)
+        fwd, rev = p.c[:, :4].sum(), p.c[:, 4:].sum()
+        # per position majority-strand share, depth-weighted
+        pb = p.pseudobulk(); f, r = pb[:, :4].sum(1), pb[:, 4:].sum(1)
+        maj = np.maximum(f, r).sum() / max((f + r).sum(), 1)
+        sp_ = pd.read_csv(f"{root}/pile/{nm}/mt.span.tsv", sep="	")
+        cv = sp_[sp_.kind == "covered"]
+        med_cov = None
+        if len(cv):
+            cdf = np.cumsum(cv.n_molecules.values) / cv.n_molecules.sum()
+            med_cov = float(cv.bin.values[np.searchsorted(cdf, 0.5)])
+        res[nm] = dict(rev_share=float(rev / (fwd + rev)), per_position_majority_strand_share=float(maj),
+                       median_covered_bases_per_molecule=med_cov)
+    ref = reference(root)
+    pos = pd.read_csv(f"{TRUTH}/4.4_positive_cells.txt", sep="	"); pos["bc"] = pos.cell.map(bc)
+    clone_of = pos.drop_duplicates("bc").set_index("bc").clone.to_dict()
+    mm, cm = load(root, "bpdcn_maester", "umi3")
+    want = [c for c in cm if c in clone_of]
+    PM = align(mm, cm, want); truth = np.array([clone_of[c] for c in want])
+    med = {}
+    for t in sorted(set(truth)):
+        vs = [parse_v(x) for x in str(t).split("-")]
+        A, D, _, _ = M.site_matrices(PM, vs); A, D = A.toarray(), D.toarray()
+        m = truth == t
+        cell_vaf = A[m].sum(1) / np.maximum(D[m].sum(1), 1)
+        med[t] = float(np.median(cell_vaf[D[m].sum(1) >= 3])) if (D[m].sum(1) >= 3).any() else None
+    res["bpdcn_clone_median_vaf_maester"] = med
+    res["n_clones_median_vaf_ge_0.9"] = int(sum(v is not None and v >= 0.9 for v in med.values()))
+    gn = gnomad()
+    res["gnomad_af_hom_ge_0.001"] = int(sum(1 for v in gn.values() if v[0] >= 0.001))
+    res["gnomad_snvs"] = len(gn)
+    import importlib.metadata as im
+    res["versions"] = {k: im.version(k) for k in ("mquad", "vireoSNP", "mgatk") if _has(k)}
+    M.dump(res, out)
+
+
+def _has(k):
+    import importlib.metadata as im
+    try:
+        im.version(k); return True
+    except Exception:
+        return False
 
 
 def phasing(root, vois, vnames, truth, Am, Dm, want):
@@ -635,6 +770,39 @@ def co_observation(path, sites_path):
     return dict(molecules_with_any_site=int(len(cnt)), molecules_with_ge2_sites=int(multi.sum()),
                 frac_ge2=float(multi.mean()) if len(cnt) else None,
                 pair_distance_counts={str(k): v for k, v in sorted(pairs.items())[:50]})
+
+
+def depthcurve(root, out):
+    """Real-data depth curve: truth-positive BPDCN cells binned by their own 3' chrM depth (reads per cell, the unit of
+    the atlas survey), with the fraction that show >= 1 alt molecule at their clone's variant(s), and the fraction of
+    all cells covered at each truth variant. No thinning or simulation."""
+    ref = reference(root)
+    pos = pd.read_csv(f"{TRUTH}/4.4_positive_cells.txt", sep="	"); pos["bc"] = pos.cell.map(bc)
+    clone_of = pos.drop_duplicates("bc").set_index("bc").clone.to_dict()
+    vois = [parse_v(x.strip()) for x in open(f"{TRUTH}/4.2_vois.txt") if x.strip()]
+    vnames = [vname(*v, ref) for v in vois]
+    m3, c3 = load(root, "bpdcn_3p", "umi1"); r3, _ = load(root, "bpdcn_3p", "read")
+    want = [c for c in c3 if c in clone_of]
+    P3, R3 = align(m3, c3, want), align(r3, c3, want)
+    truth = np.array([clone_of[c] for c in want])
+    reads = np.bincount(R3.cell, weights=R3.depth(), minlength=R3.n_cells) / 90.0   # aligned bases / read length
+    mol = np.bincount(P3.cell, weights=P3.depth(), minlength=P3.n_cells) / M.L        # mean molecule depth
+    A3, D3, _, _ = M.site_matrices(P3, vois); A3, D3 = A3.toarray(), D3.toarray()
+    idx = {v: j for j, v in enumerate(vnames)}
+    own = []
+    for i, t in enumerate(truth):
+        js = [idx[x.replace("_", "")] for x in str(t).split("-") if x.replace("_", "") in idx]
+        own.append((A3[i, js].sum() > 0, D3[i, js].sum() > 0))
+    own = np.array(own)
+    edges = np.quantile(reads, np.linspace(0, 1, 11))
+    rows = []
+    for a, b in zip(edges[:-1], edges[1:]):
+        m = (reads >= a) & (reads <= b)
+        rows.append(dict(chrM_reads_lo=float(a), chrM_reads_hi=float(b), n=int(m.sum()), mean_mol_depth=float(mol[m].mean()),
+                         frac_own_site_covered=float(own[m, 1].mean()), frac_own_alt=float(own[m, 0].mean())))
+    M.dump(dict(n_positive=len(want), bins=rows,
+                overall_frac_own_alt=float(own[:, 0].mean()), overall_frac_own_covered=float(own[:, 1].mean()),
+                median_chrM_reads=float(np.median(reads))), out)
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -730,4 +898,4 @@ def size(root, out):
 
 if __name__ == "__main__":
     cmd, root, out = sys.argv[1:4]
-    {"lines": lines, "bpdcn": bpdcn, "size": size}[cmd](root, out)
+    {"lines": lines, "bpdcn": bpdcn, "size": size, "depthcurve": depthcurve, "phase2": phase2, "facts": facts}[cmd](root, out)

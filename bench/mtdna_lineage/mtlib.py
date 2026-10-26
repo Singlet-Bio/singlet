@@ -94,7 +94,8 @@ class Pile:
 
 def load_mgatk(final_dir: str, cells: list[str]) -> "Pile":
     """mgatk / maegatk plain-text output (-sr) as a Pile over `cells` (barcodes without -1).
-    {name}.{A,C,G,T}.txt.gz rows: pos(1-based), barcode, count_fw, qual_fw, count_rev, qual_rev."""
+    {name}.{A,C,G,T}.txt.gz rows: pos(1-based), barcode, count_fw, count_rev (mgatk 0.9; older versions and maegatk
+    interleave a mean base quality after each count, which is detected from the column count)."""
     import glob as _g
     import pandas as pd
     idx = {c: i for i, c in enumerate(cells)}
@@ -103,7 +104,10 @@ def load_mgatk(final_dir: str, cells: list[str]) -> "Pile":
         fs = [f for f in _g.glob(f"{final_dir}/*.{base}.txt.gz")]
         if not fs:
             continue
-        d = pd.read_csv(fs[0], header=None, usecols=[0, 1, 2, 4], names=["pos", "bc", "f", "r"])
+        ncol = len(pd.read_csv(fs[0], header=None, nrows=5).columns)
+        cols = [0, 1, 2, 4] if ncol >= 6 else [0, 1, 2, 3]
+        d = pd.read_csv(fs[0], header=None, usecols=cols)
+        d.columns = ["pos", "bc", "f", "r"]
         d["cell"] = d.bc.str.split("-").str[0].map(idx)
         d = d.dropna(subset=["cell"])
         parts.append((b, d))
