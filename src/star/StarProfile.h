@@ -15,8 +15,8 @@ extern std::atomic<unsigned long long> g_profOutcome[6][2];
 extern std::atomic<unsigned long long> g_profClass[7][2];
 //per class: seed, windows, stitch cycles; MMP queries, SA binary searches
 extern std::atomic<unsigned long long> g_profClassDetail[7][5];
-//per outcome: seed, windows, stitch cycles; MMP queries, SA searches, windows before stitching, reads with a proven
-//"too short" bound (ShortExit.h)
+//per outcome: seed, windows, stitch cycles; MMP queries, SA searches, windows before stitching, (unused),
+//window create / flank / assign cycles, SA loci of anchors / of all seeds
 extern std::atomic<unsigned long long> g_profOutcomeDetail[6][12];
 #define PROF_T0(v) unsigned long long v = __rdtsc()
 #define PROF_ADD(i, v) g_prof[i] += __rdtsc() - (v)

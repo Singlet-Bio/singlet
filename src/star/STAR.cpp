@@ -18,7 +18,7 @@ extern "C" void __gcov_dump(void);
 #include "ReadAlignChunk.h"
 #include "ReadAlign.h"
 #include "SeqCache.h"
-#include "ShortExit.h"
+#include "StarAccel.h"
 #include "Stats.h"
 #include "genomeGenerate.h"
 #include "outputSJ.h"
@@ -217,7 +217,6 @@ int star_main_impl(int argInN, char *argIn[])
 
     // sequence cache for the main mapping pass (after any 2-pass junction insertion)
     g_seqCache = SeqCache::create(P, genomeMain.nGenome);
-    g_shortExit = ShortExit::create(P);
     {
         const char *fa = getenv("SINGLET_STAR_FASTASSIGN");
         g_starFastAssign = !(fa != nullptr && fa[0] == '0');
@@ -304,12 +303,6 @@ int star_main_impl(int argInN, char *argIn[])
         P.inOut->logMain << "\n" << flush;
     }
 #endif
-    if (g_shortExit != nullptr)
-    {
-        P.inOut->logMain << g_shortExit->stats() << "\n" << flush;
-        delete g_shortExit;
-        g_shortExit = nullptr;
-    }
     if (g_seqCache != nullptr)
     {
         P.inOut->logMain << g_seqCache->stats() << "\n" << flush;
