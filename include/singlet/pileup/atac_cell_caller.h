@@ -288,6 +288,7 @@ struct MixtureCellCall {
     double mean[2][2] = {{0, 0}, {0, 0}};  // [component][dim], component 1 = cells
     double sd[2][2] = {{1, 1}, {1, 1}};
     double weight_cell = 0;
+    double threshold_log10 = 0;  // one dimension: the density valley used as the cut
     uint32_t n_candidates = 0, n_cells = 0;
     int iterations = 0;
 };
@@ -383,6 +384,32 @@ inline MixtureCellCall call_cells_mixture(const std::vector<std::vector<uint32_t
     }
     // Component 1 must be the high one in the ATAC dimension.
     const bool swap = r.mean[1][dl] < r.mean[0][dl];
+    // One dimension: the Gaussian boundary sits inside the heavy right tail of the noise mode, so the call uses the
+    // valley of the smoothed log-count density between the two component means instead (developed on Multiome 3k,
+    // where the boundary admitted ~400 barcodes with 100-300 fragments in peaks that ARC does not call).
+    if (r.dims == 1) {
+        const double lo = r.mean[swap ? 1 : 0][0], hi = r.mean[swap ? 0 : 1][0];
+        constexpr int kBins = 200;
+        const double bw = 0.08;  // kernel width, decades
+        double best = 1e300, thr = 0.5 * (lo + hi);
+        for (int b = 0; b <= kBins; ++b) {
+            const double g = lo + (hi - lo) * b / kBins;
+            double dens = 0;
+            for (size_t k = 0; k < m; ++k) {
+                const double z = (x[0][k] - g) / bw;
+                if (z > -5 && z < 5) dens += std::exp(-0.5 * z * z);
+            }
+            if (dens < best) { best = dens; thr = g; }
+        }
+        r.threshold_log10 = thr;
+        for (size_t k = 0; k < m; ++k)
+            if (x[0][k] >= thr && counts[0][idx[k]] >= min_count) { is_cell[idx[k]] = 1; ++r.n_cells; }
+        if (swap) {
+            std::swap(r.mean[0][0], r.mean[1][0]); std::swap(r.sd[0][0], r.sd[1][0]);
+            r.weight_cell = 1 - r.weight_cell;
+        }
+        return r;
+    }
     for (size_t k = 0; k < m; ++k) {
         const double pc = swap ? 1 - post[k] : post[k];
         bool ok = pc >= 0.5;

@@ -351,7 +351,9 @@ inline int run_atac_from_bam(const AtacRunOptions& opt) {
     js << "  \"unique_fragments\": " << ex.unique_fragments() << ",\n  \"duplicate_read_pairs\": " << ex.duplicate_fragments()
        << ",\n  \"low_mapq_pairs\": " << ex.low_mapq_reads() << ",\n  \"peaks\": " << peaks.size() << ",\n";
     js << "  \"cells\": " << call.n_cells << ",\n  \"cell_call\": {\"method\": \"" << (joint ? "mixture-gex-atac" : "mixture-atac")
-       << "\", \"candidates\": " << call.n_candidates << ", \"weight_cell\": " << json_num(call.weight_cell) << "},\n";
+       << "\", \"candidates\": " << call.n_candidates << ", \"weight_cell\": " << json_num(call.weight_cell)
+       << ", \"threshold_log10_peak_fragments\": " << (joint ? std::string("null") : json_num(call.threshold_log10))
+       << "},\n";
     js << "  \"median_fragments_per_cell\": " << json_num(median(nf)) << ",\n  \"median_frip\": " << json_num(median(fr))
        << ",\n  \"columns\": " << ncol << ",\n  \"qc\": {\n";
     for (size_t k = 0; k < rules.size(); ++k) {
