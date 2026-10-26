@@ -1156,8 +1156,10 @@ class SraEncoder {
         // (from the R1 length) and 10x-5p-v2 for screen-runs; SRR25751252 (R1 26 bp, 3M list 97%: v3 with a
         // short R1) was celseq2 / 10x-3p-v2 for download and 10x-3p-v3 for screen-runs. A short R1 keeps the
         // barcode and shortens the UMI (writer truncation below).
+        size_t n_with_r2 = 0;  // r2_len is 0 for a variable-length R2: count the reads that have one
+        for (const auto& sd : probe_spots) n_with_r2 += (sd.r2_len > 0);
         if (cfg.protocol_tag.empty() && cfg.metadata_protocol.empty() && !probe_spots.empty() &&
-            r1_len > 0 && r2_len > 0 && probe_spots[0].bc_len == 0) {
+            r1_len > 0 && n_with_r2 * 2 > probe_spots.size() && probe_spots[0].bc_len == 0) {
             double chem_rate = 0.0;
             const std::string chem = screen_10x_chemistry(probe_spots, cfg.whitelist_dirs, &chem_rate);
             const CandidateSpec* cs = chem.empty() ? nullptr : find_protocol_spec(chem);
