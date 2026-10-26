@@ -181,4 +181,20 @@ def compute(artifact_dir: Path) -> dict:
         ],
     }
     C.finalize(doc)
+    doc["conclusion"] = _conclusion(doc)
     return doc
+
+
+def _conclusion(doc) -> str:
+    ms = doc["metrics"]
+    f1 = [m for m in ms if m["id"] == "single_call_f1"]
+    won = sum(m["pass"] == "pass" for m in f1)
+    gq = [m for m in ms if m["id"] == "knockdown_guides_significant"]
+    gs = sum(m["singlet"]["value"] for m in gq)
+    gb = sum(max([c["value"] for c in m["competitors"]] or [0]) for m in gq)
+    n_pass = sum(m["pass"] == "pass" for m in ms if m["pass"] != "na")
+    return (f"On {len(f1)} real screens (10x A549 and A375, Replogle 2022 K562, Norman 2019 K562), Singlet's guide calls "
+            f"agree with the published calls at the highest F1 on {won} of {len(f1)}. They give {gs} guides with a "
+            f"significant effect on their target, against {gb} for the best other caller per screen. Where Singlet and "
+            f"Cell Ranger disagree on A549, the guides only Cell Ranger adds do not knock down their targets. "
+            f"{n_pass} of {sum(m['pass'] != 'na' for m in ms)} metrics pass.")

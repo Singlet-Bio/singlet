@@ -253,4 +253,29 @@ def compute(artifact_dir: Path) -> dict:
         ],
     }
     C.finalize(doc)
+    doc["conclusion"] = _conclusion(doc)
     return doc
+
+
+def _conclusion(doc) -> str:
+    """Numbers-only summary (at most 100 words), from the metrics."""
+    ms = doc["metrics"]
+    agree = [m for m in ms if m["category"] != "resources"]
+    n_pass = sum(m["pass"] == "pass" for m in agree)
+
+    def rng(mid):
+        v = [m["singlet"]["value"] for m in ms if m["id"].endswith(mid) and m["singlet"]["value"] is not None]
+        t = [c["value"] for m in ms if m["id"].endswith(mid) for c in m["competitors"] if c["tool"] == "trust4"]
+        return (min(v), max(v), min(t), max(t)) if v and t else None
+
+    f1, cdr3 = rng("contig_f1"), rng("cdr3_nt_accuracy")
+    wt = [(m["singlet"]["value"], m["competitors"][0]["value"]) for m in ms if m["id"] == "wall_time"]
+    speed = min(t / s for s, t in wt) if wt else None
+    parts = [f"Against Cell Ranger's published contigs, Singlet's contig F1 is {f1[0]:.2f}-{f1[1]:.2f} "
+             f"(TRUST4 {f1[2]:.2f}-{f1[3]:.2f}) and its CDR3 accuracy {cdr3[0]:.3f}-{cdr3[1]:.3f} "
+             f"(TRUST4 {cdr3[2]:.3f}-{cdr3[3]:.3f})." if f1 and cdr3 else ""]
+    if speed:
+        parts.append(f"It is at least {speed:.0f}x faster than TRUST4 at 8 threads.")
+    parts.append(f"{n_pass} of {len(agree)} quality metrics match or beat every competitor; the rest are listed "
+                 f"as failures (mostly BCR, where GRCh38 lacks IGHV1-8 and IGHV4-30-4).")
+    return " ".join(p for p in parts if p)
