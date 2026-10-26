@@ -36,6 +36,9 @@ J_MOTIF = re.compile(r"[FW]G.G")
 # a V segment named like one but annotated otherwise (GENCODE v44: TRBV11-2 is "lncRNA", TRBV21-1 a pseudogene) is kept
 # when its own sequence is an open V (a frame with at most one stop before an in-frame Cys104), as IMGT's ORFs are
 V_NAME = re.compile(r"^(TR[ABGD]|IG[HKL])V\d")
+# the same for J segments (GENCODE v44 lacks TRAJ8 and TRAJ15 as TR_J_gene; IMGT has them functional): kept when the
+# exon holds an F/W-G-X-G motif where a J region's 3' end puts it
+J_NAME = re.compile(r"^(TR[ABGD]|IG[HKL])J\d")
 # orphons (IGKV1OR2-108, TRBV20OR9-2 ...): segment copies outside the loci, never rearranged; they only steal votes
 ORPHON = re.compile(r"OR\d", re.I)
 
@@ -109,7 +112,7 @@ def parse_gtf(gtf: str):
                 continue
             a = _attrs(p[8])
             bt = a.get("gene_type") or a.get("gene_biotype")
-            if bt not in BIOTYPES and not V_NAME.match(a.get("gene_name", "")):
+            if bt not in BIOTYPES and not (V_NAME.match(a.get("gene_name", "")) or J_NAME.match(a.get("gene_name", ""))):
                 continue
             gid = a["gene_id"].split(".")[0]
             g = genes.setdefault(gid, {"name": a.get("gene_name", gid), "biotype": bt, "contig": p[0], "strand": p[6],
@@ -192,7 +195,7 @@ def _build_one(genome_fa: str, gtf: str, skip_contigs=frozenset()) -> List[Segme
     for gid, g in genes.items():
         if g["contig"] not in chroms:
             continue
-        region = g["biotype"][3] if g["biotype"] in BIOTYPES else "V"
+        region = g["biotype"][3] if g["biotype"] in BIOTYPES else ("J" if J_NAME.match(g["name"]) else "V")
         chain = chain_of(g["name"])
         if chain is None or ORPHON.search(g["name"]):
             continue
@@ -225,6 +228,8 @@ def _build_one(genome_fa: str, gtf: str, skip_contigs=frozenset()) -> List[Segme
             anchor = _v_anchor(seq, frame)
         elif region == "J":
             anchor, frame = _j_anchor(seq)
+            if g["biotype"] not in BIOTYPES and (anchor < 0 or not 20 <= len(seq) - anchor <= 50):
+                continue
         start = min(a for a, _ in t["exons"])
         out.append(Segment(g["name"], gid, chain, region, seq, anchor, frame, g["contig"], start))
     return out
