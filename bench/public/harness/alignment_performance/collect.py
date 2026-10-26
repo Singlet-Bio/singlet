@@ -92,9 +92,9 @@ def star_phases(p: Path) -> dict:
     if t_map and t_solo:
         d["solo_s"] = (t_solo - t_map).total_seconds()
     d["seqcache"] = cache
-    m = re.search(r"hits?[ =:]+(\d+)\D+(?:lookups?|total|of)[ =:]+(\d+)", cache)
-    if m and int(m.group(2)):
-        d["cache_hit_rate"] = int(m.group(1)) / int(m.group(2))
+    m = re.search(r"hit_rate=([0-9.]+)", cache)
+    if m:
+        d["cache_hit_rate"] = float(m.group(1))
     return d
 
 

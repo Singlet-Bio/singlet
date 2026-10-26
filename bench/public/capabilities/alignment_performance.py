@@ -74,11 +74,11 @@ def compute(artifact_dir: Path) -> dict:
         if tol > 0:
             rule["tolerance"] = {"abs": tol}
             rule["rationale"] = "STARsolo's own variation: rep-to-rep spread, and the difference between its runs with and without a BAM, on identical reads"
-        comps = [{"tool": "starsolo", "value": C.finite(ku)}] + ([{"tool": "starsolo-bam", "value": C.finite(kb)}] if kb is not None else [])
         metrics.append({
-            "id": "uniquely_mapped_pct", "name": "Uniquely mapped reads, Singlet vs STARsolo", "unit": "percent", "category": "agreement",
-            "dataset": ds, "direction": "none", "singlet": {"value": C.finite(su)}, "competitors": comps, "rule": rule,
-            "notes": "Log.final.out of the timed runs, median of repetitions."})
+            "id": "uniquely_mapped_pct", "name": "Uniquely mapped reads (Singlet)", "unit": "percent", "category": "agreement",
+            "dataset": ds, "direction": "none", "singlet": {"value": C.finite(su)}, "competitors": [], "rule": {"type": "informational"},
+            "notes": f"STARsolo {ku:.2f}%" + (f", STARsolo with BAM {kb:.2f}%" if kb is not None else "") + " on the same FASTQs. Not gated: Singlet's encoder collapses PCR duplicate read pairs and "
+                     "pre-corrects barcodes before STAR sees the reads, so the share of unique mappings is not computed on identical read sets."})
 
     # ------------------------------------------------------------------ the optimization experiments
     star = opt[opt.kind == "star"]
@@ -101,20 +101,31 @@ def compute(artifact_dir: Path) -> dict:
                         "category": "robustness", "dataset": "pbmc1k_v3", "direction": "higher", "singlet": {"value": ident}, "competitors": [],
                         "rule": {"type": "threshold", "value": 1.0, "rationale": "the cache is exact by construction: matrices and junction tables must be byte-identical"},
                         "notes": "md5 of the content of exon/intron/ambiguous counts, STARsolo raw matrices and star_SJ.out.tab, cache 2 GB vs off, same binary and node."})
-    if len(pipe):
-        base = pipe[pipe.name == "t4"].set_index("rep").outputs_sig
-        others = [n for n in pipe.name.unique() if n != "t4" and n != "t4_nonhost"]
+    def ident_vs(df, base_name, names):
+        bs = df[df.name == base_name].set_index("rep").outputs_sig
         oks = []
-        for n in others:
-            sn = pipe[pipe.name == n].set_index("rep").outputs_sig
-            for r in sn.index.intersection(base.index):
-                oks.append(str(sn[r]) == str(base[r]) and str(sn[r]) not in ("", "nan"))
-        if oks:
-            metrics.append({"id": "job_shape_outputs_identical", "name": "Threads, shared genome, sort mode and packing: outputs identical", "unit": "fraction",
-                            "category": "robustness", "dataset": "pbmc1k_v3", "direction": "higher", "singlet": {"value": float(np.mean(oks))},
-                            "competitors": [],
-                            "rule": {"type": "threshold", "value": 1.0, "rationale": "the pipeline is deterministic: 4, 8 and 16 threads, a shared genome, memory or disk sort and four concurrent samples give the same matrices"},
-                            "notes": f"configurations compared with t4: {', '.join(sorted(others))}."})
+        for n in names:
+            sn = df[df.name == n].set_index("rep").outputs_sig
+            for r in sn.index.intersection(bs.index):
+                oks.append(str(sn[r]) == str(bs[r]) and str(sn[r]) not in ("", "nan"))
+        return (float(np.mean(oks)) if oks else None), [n for n in names if (df.name == n).any()]
+
+    md5note = "md5 of the content of exon/intron/ambiguous counts, STARsolo raw matrices and star_SJ.out.tab; 2 repetitions."
+    for mid, mname, base_name, names, df, why, note in (
+            ("job_shape_outputs_identical", "Shared genome, memory sort, packing, non-host screen: outputs identical to the plain 4-thread run", "t4",
+             ["t4_shm", "t4_mem", "x4_lean", "t4_nonhost"], pipe,
+             "the same 4-thread run with a shared genome, an in-RAM sort, four concurrent samples or the non-host screen must give the same matrices", md5note),
+            ("thread_count_outputs_identical", "4, 8 and 16 threads: outputs identical", "t4", ["t8", "t16"], pipe,
+             "the pipeline is meant to be deterministic across thread counts (docs/atlas-rerun-plan.md section 3)",
+             md5note + " A mismatch means at least one of those files differs with the thread count."),
+            ("star_speedups_outputs_identical", "Lazy window table, huge pages, cache and PGO: outputs identical to stock STAR", "stock-star",
+             ["lazy-huge-cache1", "pgo-cache2"], star, "PR #34 states these builds give outputs identical to stock STAR",
+             "Same input and node type; " + md5note)):
+        v, used = ident_vs(df, base_name, names)
+        if v is not None:
+            metrics.append({"id": mid, "name": mname, "unit": "fraction", "category": "robustness", "dataset": "pbmc1k_v3", "direction": "higher",
+                            "singlet": {"value": v}, "competitors": [],
+                            "rule": {"type": "threshold", "value": 1.0, "rationale": why}, "notes": note + f" Compared with {base_name}: {', '.join(used)}."})
     for nm_, a_, b_, mid, mname in (("campaign", "pr22", None, "star_mapping_speedup_vs_pr22", "STAR mapping speedup of the campaign binary vs the PR #22 binary"),
                                    ("campaign-nocache", "campaign", None, "seqcache_mapping_speedup", "STAR mapping speedup from the sequence cache")):
         num, den = (o(star, "pr22", "mapping_s"), o(star, "campaign", "mapping_s")) if mid.startswith("star") else (o(star, "campaign-nocache", "mapping_s"), o(star, "campaign", "mapping_s"))

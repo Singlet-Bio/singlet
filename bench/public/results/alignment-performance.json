@@ -1,0 +1,1156 @@
+{
+  "schema": "singlet.benchmark.capability",
+  "schema_version": "1.0.0",
+  "capability": "alignment-performance",
+  "title": "Alignment performance",
+  "conclusion": "Wall time at 16 threads on identical FASTQs (Singlet includes FASTQ encoding and runs the full campaign pipeline): pbmc1k_v3: Singlet 633 s, STARsolo 474 s, alevin-fry 144 s; nuclei2k_v2: Singlet 1,008 s, STARsolo 646 s, alevin-fry 159 s; gsm5815984: Singlet 5,834 s, STARsolo 3,098 s, alevin-fry 967 s. Runtime is shown, not gated. The STAR speedups (sequence cache, lazy window table, huge pages, PGO) leave every count matrix identical; see the optimization table for each speedup measured here.",
+  "methods": "**Inputs.** The same two FASTQ files per dataset (R1 barcode and UMI, R2 cDNA, lanes concatenated and copied to node-local disk before the clock starts) for every tool: PBMC 1k v3 (66.6 M read pairs), mouse brain nuclei 2k v2 (3' v2) and GSM5815984, a deep human testis library (GSE193672 Hs#14; 489 M read pairs, 3' v3, both runs, all reads). Reference: 10x 2024-A (GENCODE v44 / M33); indexes are prebuilt and untimed.\n\n**Hardware.** 16 threads and a 128 GB memory limit for every tool, on an exclusive Xeon Gold 6248 node, two repetitions with the tool order reversed in the second. Wall time is GNU time elapsed (Singlet: `singlet encode` plus the pipeline); CPU time is user plus system; peak memory is the RSS summed over the process tree, sampled at 1 Hz.\n\n**Tools.** Singlet: the pinned campaign binary with the campaign flags (counts, introns, junctions, sorted BAM, donor demux, mtDNA, ambient, doublets, cell calling), non-host screen off. STARsolo 2.7.11b with Gene, GeneFull, Velocyto and SJ and Cell Ranger 4+ settings, without a BAM (starsolo) and with a coordinate-sorted BAM carrying CB/UB tags (starsolo-bam). alevin-fry through simpleaf with a spliced+unspliced index (cr-like resolution). Cell Ranger is not run; its published matrices are the comparator elsewhere.\n\n**Exact and pseudo alignment.** Singlet aligns every read to the genome (STAR, exact seed-and-extend with splicing), which is what lets it count introns, junctions, SNPs, mtDNA and non-host reads and write a BAM. alevin-fry is a pseudoaligner: it maps reads to a spliced+unspliced transcriptome index, which is much cheaper but sees only what that index contains. The plot places each tool on cost (CPU-hours) against quality; the reach matrix lists what each tool can produce at all.\n\n**What is gated.** Runtime is shown, not gated: wall time, CPU-hours and memory are in the resources table and figures. Singlet does more work than a counting pipeline and alevin-fry is a pseudoaligner, so the page places each tool on a quality-versus-CPU plot. The gated metrics check that the alignments are the same work (unique-mapping share equals STARsolo's) and that the optimizations leave every count matrix and the junction table unchanged (md5 of the matrices, with the cache off or on, and across threads, shared genome, sort mode and packing).",
+  "status": "final",
+  "generated_at": "2026-10-26T10:28:45+00:00",
+  "owner": "pipeline-benchmark",
+  "singlet": {
+    "version": "1.0.0",
+    "commit": "02aa9b938b54e0f92bba00c44c07b883a8660aa2",
+    "branch": "prod/campaign",
+    "binary": "singlet-campaign",
+    "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+    "build_flags": "PGO, -march=x86-64-v3"
+  },
+  "tools": [
+    {
+      "name": "singlet",
+      "version": "1.0.0",
+      "role": "singlet",
+      "params": "singlet encode --reads R1.fastq.gz R2.fastq.gz -o s.1fq; singlet s.1fq --ref-base <ref> --genome-dir <STAR index> --exons genes.gtf --threads 16 --pipeline --output-format mtx --raw-matrix"
+    },
+    {
+      "name": "singlet-core",
+      "version": "1.0.0",
+      "role": "helper",
+      "params": "as singlet without --pipeline"
+    },
+    {
+      "name": "starsolo",
+      "version": "?",
+      "role": "competitor",
+      "url": "https://github.com/alexdobin/STAR",
+      "citation": "Kaminow, Yunusov, Dobin 2021 bioRxiv",
+      "params": "STAR --runThreadN 16 --readFilesIn R2 R1 --readFilesCommand zcat --soloType CB_UMI_Simple --soloCBwhitelist WL --soloCBlen 16 --soloUMIlen 12|10 --soloFeatures Gene GeneFull Velocyto SJ --soloCellFilter EmptyDrops_CR --soloCBmatchWLtype 1MM_multi_Nbase_pseudocounts --soloUMIfiltering MultiGeneUMI_CR --soloUMIdedup 1MM_CR --clipAdapterType CellRanger4 --outFilterScoreMin 30 --outSAMtype None"
+    },
+    {
+      "name": "starsolo-bam",
+      "version": "?",
+      "role": "competitor",
+      "params": "as starsolo with --outSAMtype BAM SortedByCoordinate --outSAMattributes NH HI nM AS CR UR CB UB GX GN sS sQ sM --limitBAMsortRAM 40000000000"
+    },
+    {
+      "name": "alevinfry",
+      "version": "?; alevin-fry ?",
+      "role": "competitor",
+      "url": "https://github.com/COMBINE-lab/alevin-fry",
+      "citation": "He et al. 2022 Nat Methods",
+      "params": "simpleaf quant --reads1 R1 --reads2 R2 --index <spliced+unspliced index> --t2g-map t2g_3col.tsv --chemistry 10xv3|10xv2 --expected-ori fw --resolution cr-like --unfiltered-pl WL --threads 16"
+    },
+    {
+      "name": "cellranger",
+      "version": "3.0.0 (pbmc_1k_v3), 2.1.0 (nuclei_2k_v2)",
+      "role": "truth",
+      "url": "https://www.10xgenomics.com/datasets/1-k-pbm-cs-from-a-healthy-donor-v-3-chemistry-3-standard-3-0-0",
+      "params": "not run: 10x's published filtered matrices are the comparator for accuracy and agreement; Cell Ranger is left out of the timing"
+    }
+  ],
+  "datasets": [
+    {
+      "id": "pbmc1k_v3",
+      "title": "10x PBMC 1k, 3' v3",
+      "accessions": {
+        "url": "https://www.10xgenomics.com/datasets/1-k-pbm-cs-from-a-healthy-donor-v-3-chemistry-3-standard-3-0-0"
+      },
+      "truth": "none: timing and output agreement on identical reads",
+      "data_kind": "real"
+    },
+    {
+      "id": "nuclei2k_v2",
+      "title": "10x mouse brain nuclei 2k, 3' v2",
+      "accessions": {
+        "url": "https://www.10xgenomics.com/datasets/2-k-brain-nuclei-from-an-e18-mouse-2-standard-2-1-0"
+      },
+      "truth": "none: timing and output agreement on identical reads",
+      "data_kind": "real"
+    },
+    {
+      "id": "gsm5815984",
+      "title": "GSM5815984 (GSE193672 Hs#14) human testis, 10x 3' v3, all 489 M read pairs",
+      "accessions": {
+        "gse": "GSE193672",
+        "gsm": [
+          "GSM5815984"
+        ],
+        "srr": [
+          "SRR17615087",
+          "SRR17615088"
+        ]
+      },
+      "truth": "none: timing and output agreement on identical reads",
+      "data_kind": "real"
+    }
+  ],
+  "metrics": [
+    {
+      "id": "uniquely_mapped_pct",
+      "name": "Uniquely mapped reads, Singlet vs STARsolo",
+      "unit": "percent",
+      "category": "agreement",
+      "dataset": "pbmc1k_v3",
+      "direction": "none",
+      "singlet": {
+        "value": 87.98
+      },
+      "competitors": [
+        {
+          "tool": "starsolo",
+          "value": 88.6
+        },
+        {
+          "tool": "starsolo-bam",
+          "value": 88.6
+        }
+      ],
+      "rule": {
+        "type": "equivalence",
+        "target": "starsolo"
+      },
+      "notes": "Log.final.out of the timed runs, median of repetitions.",
+      "pass": "fail"
+    },
+    {
+      "id": "uniquely_mapped_pct",
+      "name": "Uniquely mapped reads, Singlet vs STARsolo",
+      "unit": "percent",
+      "category": "agreement",
+      "dataset": "nuclei2k_v2",
+      "direction": "none",
+      "singlet": {
+        "value": 75.09
+      },
+      "competitors": [
+        {
+          "tool": "starsolo",
+          "value": 77.91
+        },
+        {
+          "tool": "starsolo-bam",
+          "value": 77.91
+        }
+      ],
+      "rule": {
+        "type": "equivalence",
+        "target": "starsolo"
+      },
+      "notes": "Log.final.out of the timed runs, median of repetitions.",
+      "pass": "fail"
+    },
+    {
+      "id": "uniquely_mapped_pct",
+      "name": "Uniquely mapped reads, Singlet vs STARsolo",
+      "unit": "percent",
+      "category": "agreement",
+      "dataset": "gsm5815984",
+      "direction": "none",
+      "singlet": {
+        "value": 90.65
+      },
+      "competitors": [
+        {
+          "tool": "starsolo",
+          "value": 90.96
+        }
+      ],
+      "rule": {
+        "type": "equivalence",
+        "target": "starsolo"
+      },
+      "notes": "Log.final.out of the timed runs, median of repetitions.",
+      "pass": "fail"
+    },
+    {
+      "id": "seqcache_outputs_identical",
+      "name": "Sequence cache: every count matrix identical with the cache off",
+      "unit": "fraction",
+      "category": "robustness",
+      "dataset": "pbmc1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 1.0
+      },
+      "competitors": [],
+      "rule": {
+        "type": "threshold",
+        "value": 1.0,
+        "rationale": "the cache is exact by construction: matrices and junction tables must be byte-identical"
+      },
+      "notes": "md5 of the content of exon/intron/ambiguous counts, STARsolo raw matrices and star_SJ.out.tab, cache 2 GB vs off, same binary and node.",
+      "pass": "pass"
+    },
+    {
+      "id": "job_shape_outputs_identical",
+      "name": "Threads, shared genome, sort mode and packing: outputs identical",
+      "unit": "fraction",
+      "category": "robustness",
+      "dataset": "pbmc1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.6
+      },
+      "competitors": [],
+      "rule": {
+        "type": "threshold",
+        "value": 1.0,
+        "rationale": "the pipeline is deterministic: 4, 8 and 16 threads, a shared genome, memory or disk sort and four concurrent samples give the same matrices"
+      },
+      "notes": "configurations compared with t4: t16, t4_mem, t4_shm, t8, x4_lean.",
+      "pass": "fail"
+    },
+    {
+      "id": "star_mapping_speedup_vs_pr22",
+      "name": "STAR mapping speedup of the campaign binary vs the PR #22 binary",
+      "unit": "ratio",
+      "category": "resources",
+      "dataset": "pbmc1k_v3",
+      "direction": "none",
+      "singlet": {
+        "value": 1.379
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "Median of 2 paired repetitions, 4 threads, same node type. PR #34 reported 1.54x for the whole of its changes. The PR #22 binary clips 11 bp from PBMC R2 reads (the 5' prefix false positive fixed since), so it maps shorter reads: the speedup is understated.",
+      "pass": "na"
+    },
+    {
+      "id": "seqcache_mapping_speedup",
+      "name": "STAR mapping speedup from the sequence cache",
+      "unit": "ratio",
+      "category": "resources",
+      "dataset": "pbmc1k_v3",
+      "direction": "none",
+      "singlet": {
+        "value": 1.199
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "Median of 2 paired repetitions, 4 threads, same node type. PR #34 reported 1.54x for the whole of its changes.",
+      "pass": "na"
+    }
+  ],
+  "resources": [
+    {
+      "tool": "alevinfry",
+      "dataset": "gsm5815984",
+      "wall_s": 967.5,
+      "max_rss_gb": 4.02,
+      "threads": 16,
+      "cpu_h": 4.133,
+      "node": "c004.clipper.gvsu.edu (Intel(R) Xeon(R) Gold 6248 CPU @ 2.50GHz)",
+      "notes": "median of 2 repetitions; 128 GB limit"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "gsm5815984",
+      "wall_s": 5834.4,
+      "max_rss_gb": 63.05,
+      "threads": 16,
+      "cpu_h": 5.728,
+      "node": "c006.clipper.gvsu.edu (Intel(R) Xeon(R) Gold 6248 CPU @ 2.50GHz)",
+      "notes": "median of 2 repetitions; 128 GB limit"
+    },
+    {
+      "tool": "starsolo",
+      "dataset": "gsm5815984",
+      "wall_s": 3097.8,
+      "max_rss_gb": 41.59,
+      "threads": 16,
+      "cpu_h": 6.251,
+      "node": "c004.clipper.gvsu.edu (Intel(R) Xeon(R) Gold 6248 CPU @ 2.50GHz)",
+      "notes": "median of 2 repetitions; 128 GB limit"
+    },
+    {
+      "tool": "alevinfry",
+      "dataset": "nuclei2k_v2",
+      "wall_s": 159.3,
+      "max_rss_gb": 2.89,
+      "threads": 16,
+      "cpu_h": 0.656,
+      "node": "c004.clipper.gvsu.edu (Intel(R) Xeon(R) Gold 6248 CPU @ 2.50GHz)",
+      "notes": "median of 2 repetitions; 128 GB limit"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "nuclei2k_v2",
+      "wall_s": 1008.5,
+      "max_rss_gb": 36.25,
+      "threads": 16,
+      "cpu_h": 1.56,
+      "node": "c004.clipper.gvsu.edu (Intel(R) Xeon(R) Gold 6248 CPU @ 2.50GHz)",
+      "notes": "median of 2 repetitions; 128 GB limit"
+    },
+    {
+      "tool": "singlet-core",
+      "dataset": "nuclei2k_v2",
+      "wall_s": 983.6,
+      "max_rss_gb": 36.01,
+      "threads": 16,
+      "cpu_h": 1.547,
+      "node": "c004.clipper.gvsu.edu (Intel(R) Xeon(R) Gold 6248 CPU @ 2.50GHz)",
+      "notes": "median of 2 repetitions; 128 GB limit"
+    },
+    {
+      "tool": "starsolo",
+      "dataset": "nuclei2k_v2",
+      "wall_s": 646.1,
+      "max_rss_gb": 27.41,
+      "threads": 16,
+      "cpu_h": 1.743,
+      "node": "c004.clipper.gvsu.edu (Intel(R) Xeon(R) Gold 6248 CPU @ 2.50GHz)",
+      "notes": "median of 2 repetitions; 128 GB limit"
+    },
+    {
+      "tool": "starsolo-bam",
+      "dataset": "nuclei2k_v2",
+      "wall_s": 748.0,
+      "max_rss_gb": 28.15,
+      "threads": 16,
+      "cpu_h": 1.915,
+      "node": "c004.clipper.gvsu.edu (Intel(R) Xeon(R) Gold 6248 CPU @ 2.50GHz)",
+      "notes": "median of 2 repetitions; 128 GB limit"
+    },
+    {
+      "tool": "alevinfry",
+      "dataset": "pbmc1k_v3",
+      "wall_s": 144.5,
+      "max_rss_gb": 3.53,
+      "threads": 16,
+      "cpu_h": 0.567,
+      "node": "c004.clipper.gvsu.edu (Intel(R) Xeon(R) Gold 6248 CPU @ 2.50GHz)",
+      "notes": "median of 2 repetitions; 128 GB limit"
+    },
+    {
+      "tool": "singlet",
+      "dataset": "pbmc1k_v3",
+      "wall_s": 632.8,
+      "max_rss_gb": 29.02,
+      "threads": 16,
+      "cpu_h": 0.864,
+      "node": "c004.clipper.gvsu.edu (Intel(R) Xeon(R) Gold 6248 CPU @ 2.50GHz)",
+      "notes": "median of 2 repetitions; 128 GB limit"
+    },
+    {
+      "tool": "singlet-core",
+      "dataset": "pbmc1k_v3",
+      "wall_s": 581.7,
+      "max_rss_gb": 27.63,
+      "threads": 16,
+      "cpu_h": 0.832,
+      "node": "c004.clipper.gvsu.edu (Intel(R) Xeon(R) Gold 6248 CPU @ 2.50GHz)",
+      "notes": "median of 2 repetitions; 128 GB limit"
+    },
+    {
+      "tool": "starsolo",
+      "dataset": "pbmc1k_v3",
+      "wall_s": 474.1,
+      "max_rss_gb": 19.65,
+      "threads": 16,
+      "cpu_h": 1.096,
+      "node": "c004.clipper.gvsu.edu (Intel(R) Xeon(R) Gold 6248 CPU @ 2.50GHz)",
+      "notes": "median of 2 repetitions; 128 GB limit"
+    },
+    {
+      "tool": "starsolo-bam",
+      "dataset": "pbmc1k_v3",
+      "wall_s": 535.9,
+      "max_rss_gb": 20.33,
+      "threads": 16,
+      "cpu_h": 1.203,
+      "node": "c004.clipper.gvsu.edu (Intel(R) Xeon(R) Gold 6248 CPU @ 2.50GHz)",
+      "notes": "median of 2 repetitions; 128 GB limit"
+    }
+  ],
+  "figures": [
+    {
+      "id": "optimizations",
+      "title": "Each optimization, its reported effect and what this benchmark measures",
+      "kind": "table",
+      "caption": "Mapping time is STAR 'Finished loading the genome' to 'finished mapping' in the run log. Reported numbers are quoted from the PR #34 description and docs/atlas-rerun-plan.md (Xeon Gold 6226 for the STAR rows); the measured column uses 4 threads on an exclusive Xeon Gold 6248, median of 2 repetitions.",
+      "columns": [
+        "Optimization",
+        "Level",
+        "Reported",
+        "Reported by",
+        "Measured here (campaign binary, PBMC 1k v3, Xeon Gold 6248)",
+        "Output vs unoptimized"
+      ],
+      "rows": [
+        [
+          "Sequence-to-alignment cache (2 GB), replaces the adjacent-read dedup",
+          "STAR",
+          "hit rate 44-51% on PBMC at 1-4 GB (measured); ~35% less mapping time at 48% hits",
+          "PR #34",
+          "mapping 646 s without, 539 s with (1.20x); wall 1,057 to 912 s",
+          "identical to cache off"
+        ],
+        [
+          "Lazy window table + huge pages + faster read parsing (PR #34 build with a 1 GB cache)",
+          "STAR",
+          "mapping 793 to 586 s with the 1 GB cache (Xeon 6226); 10 M subset: lazy 133 to 117.5 s, huge pages 111.5 s, both 107.5 s",
+          "PR #34",
+          "mapping 744 s (PR #22 binary) to 548 s; wall 1,065 to 848 s",
+          "identical to stock STAR (reported)"
+        ],
+        [
+          "Profile-guided build (PGO), 2 GB cache",
+          "STAR",
+          "mapping 586 to 515 s; whole run 912 to 845 s; 10 M subset 94.5 to 85 s",
+          "PR #34",
+          "mapping 548 s to 495 s; wall 848 to 817 s",
+          "identical to stock STAR (reported)"
+        ],
+        [
+          "All STAR changes: the pinned campaign binary vs the PR #22 binary",
+          "STAR",
+          "mapping 793 to 515 s (1.54x); whole run 1,138 to 845 s (1.35x); stock STAR 863 s mapping (1.68x)",
+          "PR #34",
+          "mapping 744 to 539 s (1.38x); wall 1,065 to 912 s (1.17x); stock STAR 773 s mapping, 1,094 s wall",
+          "identical to stock STAR (reported); PR #22 binary differs on ~300 reads"
+        ],
+        [
+          "4 threads per sample instead of 8 or 16",
+          "pipeline",
+          "core-hours per sample 1.24 (4 threads), 1.59 (8), 1.85-2.41 (16)",
+          "atlas-rerun plan section 3",
+          "wall 904 / 631 / 500 s at 4 / 8 / 16 threads = 1.00 / 1.40 / 2.22 reserved core-hours",
+          "see job_shape_outputs_identical"
+        ],
+        [
+          "Genome in shared memory (--genome-shared on)",
+          "pipeline",
+          "-1% time; one genome per node instead of one per job",
+          "atlas-rerun plan section 3",
+          "wall 904 s to 952 s; peak RSS 23.0 to 22.8 GB (shared pages are counted per process)",
+          "identical"
+        ],
+        [
+          "Disk-backed BAM sort (the campaign default) instead of an in-RAM sort",
+          "pipeline",
+          "no time change; peak RSS 18.6 GB instead of a buffer sized to the job's memory",
+          "atlas-rerun plan section 3",
+          "wall 906 s (memory sort) vs 904 s (disk); peak RSS 23.0 vs 23.0 GB",
+          "identical"
+        ],
+        [
+          "Four samples packed on 16 cores with one shared genome and disk sort",
+          "pipeline",
+          "+15% per sample vs one alone (memory bandwidth); +19% in the lean-packing run",
+          "atlas-rerun plan section 3",
+          "four samples in 1,161 s (1.28x one alone); 1.29 core-hours per sample vs 1.00; peak RSS 22.9 GB (sum over the four, shared genome pages counted four times)",
+          "identical"
+        ],
+        [
+          "Non-host (viral, bacterial, fungal) screen on, the campaign default",
+          "pipeline",
+          "+27% time and +35 GB RSS vs off; indices cached in /dev/shm give no gain",
+          "atlas-rerun plan section 3",
+          "wall 904 s (off) to 998 s (on); peak RSS 23.0 to 53.1 GB",
+          "count matrices identical; non-host members added"
+        ],
+        [
+          "Download as a separate 1-core stage (prefetch, then singlet download of the local .sra)",
+          "pipeline",
+          "163 s vs 1,054 s for one 1.15 GB run; -45% core-hours at full depth; decoded reads identical",
+          "atlas-rerun plan section 3",
+          "measured in the download capability (bench/public/results/download.json)",
+          "decoded reads identical (reported)"
+        ]
+      ]
+    },
+    {
+      "id": "wall_by_dataset",
+      "title": "Wall time by dataset",
+      "kind": "grouped_bar",
+      "caption": "Median of 2 repetitions; 16 threads, identical FASTQ input, exclusive node. Singlet's wall time includes the FASTQ encoding step.",
+      "x": {
+        "label": "dataset",
+        "categories": [
+          "pbmc1k_v3",
+          "nuclei2k_v2",
+          "gsm5815984"
+        ]
+      },
+      "y": {
+        "label": "Wall time",
+        "unit": "s",
+        "scale": "linear",
+        "min": 0
+      },
+      "series": [
+        {
+          "name": "singlet",
+          "tool": "singlet",
+          "x": [
+            "pbmc1k_v3",
+            "nuclei2k_v2",
+            "gsm5815984"
+          ],
+          "y": [
+            632.815,
+            1008.485,
+            5834.435
+          ]
+        },
+        {
+          "name": "starsolo",
+          "tool": "starsolo",
+          "x": [
+            "pbmc1k_v3",
+            "nuclei2k_v2",
+            "gsm5815984"
+          ],
+          "y": [
+            474.09,
+            646.135,
+            3097.85
+          ]
+        },
+        {
+          "name": "starsolo-bam",
+          "tool": "starsolo-bam",
+          "x": [
+            "pbmc1k_v3",
+            "nuclei2k_v2",
+            "gsm5815984"
+          ],
+          "y": [
+            535.89,
+            748.005,
+            null
+          ]
+        },
+        {
+          "name": "alevinfry",
+          "tool": "alevinfry",
+          "x": [
+            "pbmc1k_v3",
+            "nuclei2k_v2",
+            "gsm5815984"
+          ],
+          "y": [
+            144.48,
+            159.32,
+            967.49
+          ]
+        },
+        {
+          "name": "singlet-core",
+          "tool": "singlet-core",
+          "x": [
+            "pbmc1k_v3",
+            "nuclei2k_v2",
+            "gsm5815984"
+          ],
+          "y": [
+            581.685,
+            983.62,
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cpu_by_dataset",
+      "title": "CPU time by dataset",
+      "kind": "grouped_bar",
+      "caption": "Median of 2 repetitions; 16 threads, identical FASTQ input, exclusive node. Singlet's wall time includes the FASTQ encoding step.",
+      "x": {
+        "label": "dataset",
+        "categories": [
+          "pbmc1k_v3",
+          "nuclei2k_v2",
+          "gsm5815984"
+        ]
+      },
+      "y": {
+        "label": "CPU time",
+        "unit": "core-hours",
+        "scale": "linear",
+        "min": 0
+      },
+      "series": [
+        {
+          "name": "singlet",
+          "tool": "singlet",
+          "x": [
+            "pbmc1k_v3",
+            "nuclei2k_v2",
+            "gsm5815984"
+          ],
+          "y": [
+            0.864,
+            1.56,
+            5.728
+          ]
+        },
+        {
+          "name": "starsolo",
+          "tool": "starsolo",
+          "x": [
+            "pbmc1k_v3",
+            "nuclei2k_v2",
+            "gsm5815984"
+          ],
+          "y": [
+            1.096,
+            1.743,
+            6.251
+          ]
+        },
+        {
+          "name": "starsolo-bam",
+          "tool": "starsolo-bam",
+          "x": [
+            "pbmc1k_v3",
+            "nuclei2k_v2",
+            "gsm5815984"
+          ],
+          "y": [
+            1.203,
+            1.915,
+            null
+          ]
+        },
+        {
+          "name": "alevinfry",
+          "tool": "alevinfry",
+          "x": [
+            "pbmc1k_v3",
+            "nuclei2k_v2",
+            "gsm5815984"
+          ],
+          "y": [
+            0.567,
+            0.656,
+            4.133
+          ]
+        },
+        {
+          "name": "singlet-core",
+          "tool": "singlet-core",
+          "x": [
+            "pbmc1k_v3",
+            "nuclei2k_v2",
+            "gsm5815984"
+          ],
+          "y": [
+            0.832,
+            1.547,
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rss_by_dataset",
+      "title": "Peak memory by dataset",
+      "kind": "grouped_bar",
+      "caption": "Median of 2 repetitions; 16 threads, identical FASTQ input, exclusive node. Singlet's wall time includes the FASTQ encoding step.",
+      "x": {
+        "label": "dataset",
+        "categories": [
+          "pbmc1k_v3",
+          "nuclei2k_v2",
+          "gsm5815984"
+        ]
+      },
+      "y": {
+        "label": "Peak memory",
+        "unit": "GB",
+        "scale": "linear",
+        "min": 0
+      },
+      "series": [
+        {
+          "name": "singlet",
+          "tool": "singlet",
+          "x": [
+            "pbmc1k_v3",
+            "nuclei2k_v2",
+            "gsm5815984"
+          ],
+          "y": [
+            29.018,
+            36.253,
+            63.055
+          ]
+        },
+        {
+          "name": "starsolo",
+          "tool": "starsolo",
+          "x": [
+            "pbmc1k_v3",
+            "nuclei2k_v2",
+            "gsm5815984"
+          ],
+          "y": [
+            19.653,
+            27.413,
+            41.594
+          ]
+        },
+        {
+          "name": "starsolo-bam",
+          "tool": "starsolo-bam",
+          "x": [
+            "pbmc1k_v3",
+            "nuclei2k_v2",
+            "gsm5815984"
+          ],
+          "y": [
+            20.326,
+            28.151,
+            null
+          ]
+        },
+        {
+          "name": "alevinfry",
+          "tool": "alevinfry",
+          "x": [
+            "pbmc1k_v3",
+            "nuclei2k_v2",
+            "gsm5815984"
+          ],
+          "y": [
+            3.529,
+            2.888,
+            4.019
+          ]
+        },
+        {
+          "name": "singlet-core",
+          "tool": "singlet-core",
+          "x": [
+            "pbmc1k_v3",
+            "nuclei2k_v2",
+            "gsm5815984"
+          ],
+          "y": [
+            27.634,
+            36.006,
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "id": "quality_vs_cpu",
+      "title": "Quality and reach vs CPU cost",
+      "kind": "scatter",
+      "caption": "x: CPU-hours (user + system) per 100 M read pairs, 16 threads, one point per dataset; log scale. y: quality and reach score of the exact-versus-pseudo alignment benchmark (accuracy on multi-mapping and paralog, intronic and intergenic reads; reach in junctions, SNP demultiplexing, mtDNA, non-host and strand). The scores are not available yet, so y is empty; the rows without STAR speedups are PBMC 1k v3 at 4 threads. A transcriptome-first step is not built. Singlet is an exact genome-wide aligner; alevin-fry is a pseudoaligner.",
+      "x": {
+        "label": "CPU-hours per 100 M read pairs",
+        "scale": "log"
+      },
+      "y": {
+        "label": "quality / reach score (pending)"
+      },
+      "series": [
+        {
+          "name": "singlet",
+          "tool": "singlet",
+          "x": [
+            1.297,
+            1.314,
+            1.17
+          ],
+          "y": [
+            null,
+            null,
+            null
+          ],
+          "labels": [
+            "pbmc1k_v3",
+            "nuclei2k_v2",
+            "gsm5815984"
+          ]
+        },
+        {
+          "name": "singlet-core",
+          "tool": "singlet-core",
+          "x": [
+            1.249,
+            1.303
+          ],
+          "y": [
+            null,
+            null
+          ],
+          "labels": [
+            "pbmc1k_v3",
+            "nuclei2k_v2"
+          ]
+        },
+        {
+          "name": "starsolo",
+          "tool": "starsolo",
+          "x": [
+            1.645,
+            1.467,
+            1.277
+          ],
+          "y": [
+            null,
+            null,
+            null
+          ],
+          "labels": [
+            "pbmc1k_v3",
+            "nuclei2k_v2",
+            "gsm5815984"
+          ]
+        },
+        {
+          "name": "starsolo-bam",
+          "tool": "starsolo-bam",
+          "x": [
+            1.806,
+            1.613
+          ],
+          "y": [
+            null,
+            null
+          ],
+          "labels": [
+            "pbmc1k_v3",
+            "nuclei2k_v2"
+          ]
+        },
+        {
+          "name": "alevinfry",
+          "tool": "alevinfry",
+          "x": [
+            0.851,
+            0.552,
+            0.844
+          ],
+          "y": [
+            null,
+            null,
+            null
+          ],
+          "labels": [
+            "pbmc1k_v3",
+            "nuclei2k_v2",
+            "gsm5815984"
+          ]
+        },
+        {
+          "name": "singlet without the STAR speedups (PR #22 binary)",
+          "tool": "singlet",
+          "x": [
+            1.437
+          ],
+          "y": [
+            null
+          ],
+          "labels": [
+            "pbmc1k_v3"
+          ]
+        },
+        {
+          "name": "singlet without the sequence cache",
+          "tool": "singlet",
+          "x": [
+            1.323
+          ],
+          "y": [
+            null
+          ],
+          "labels": [
+            "pbmc1k_v3"
+          ]
+        },
+        {
+          "name": "singlet on stock STAR",
+          "tool": "singlet",
+          "x": [
+            1.487
+          ],
+          "y": [
+            null
+          ],
+          "labels": [
+            "pbmc1k_v3"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pareto_uniquely_mapped_pct_pbmc1k_v3",
+      "kind": "pareto",
+      "title": "Uniquely mapped reads, Singlet vs STARsolo against CPU-hours (pbmc1k_v3)",
+      "x": {
+        "label": "cpu_h",
+        "unit": "CPU-hours",
+        "scale": "log"
+      },
+      "y": {
+        "label": "Uniquely mapped reads, Singlet vs STARsolo",
+        "unit": "percent"
+      },
+      "series": [
+        {
+          "name": "singlet",
+          "tool": "singlet",
+          "x": [
+            0.864
+          ],
+          "y": [
+            87.98
+          ],
+          "frontier": true
+        },
+        {
+          "name": "starsolo",
+          "tool": "starsolo",
+          "x": [
+            1.096
+          ],
+          "y": [
+            88.6
+          ],
+          "frontier": true
+        },
+        {
+          "name": "starsolo-bam",
+          "tool": "starsolo-bam",
+          "x": [
+            1.203
+          ],
+          "y": [
+            88.6
+          ],
+          "frontier": false
+        }
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "name": "opt_runs.tsv",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/alignment-performance/opt_runs.tsv",
+      "kind": "derived",
+      "sha256": "c566d327e0354c04b02f9644d81eb7d3ff0558fc6c0c61d39e015e1cc4fcc60f",
+      "bytes": 5691,
+      "format": "tsv"
+    },
+    {
+      "name": "provenance.json",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/alignment-performance/provenance.json",
+      "kind": "derived",
+      "sha256": "27a468901c0b03ab46fe86b82e4965044a1298cb145d297c31aa5922ad287ca5",
+      "bytes": 6850,
+      "format": "json"
+    },
+    {
+      "name": "reported.tsv",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/alignment-performance/reported.tsv",
+      "kind": "derived",
+      "sha256": "442c205538a18da836c664a0175d6daa47f206ae3ce211f459cc80f694c787d6",
+      "bytes": 4851,
+      "format": "tsv"
+    },
+    {
+      "name": "runs.tsv",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/alignment-performance/runs.tsv",
+      "kind": "derived",
+      "sha256": "c5abd1ee25f1015d47f6260002efb02a66d36e42431dc973379f8fb87d3a76a8",
+      "bytes": 5070,
+      "format": "tsv"
+    }
+  ],
+  "code": [
+    {
+      "path": "bench/public/capabilities/alignment_performance.py",
+      "role": "metric",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/65d1732e14ea078c51312e07b5e1f531e297df2f/bench/public/capabilities/alignment_performance.py"
+    },
+    {
+      "path": "bench/public/harness/alignment_performance/ap_run.sbatch",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/65d1732e14ea078c51312e07b5e1f531e297df2f/bench/public/harness/alignment_performance/ap_run.sbatch"
+    },
+    {
+      "path": "bench/public/harness/alignment_performance/opt_run.sbatch",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/65d1732e14ea078c51312e07b5e1f531e297df2f/bench/public/harness/alignment_performance/opt_run.sbatch"
+    },
+    {
+      "path": "bench/public/harness/alignment_performance/prep_deep.sbatch",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/65d1732e14ea078c51312e07b5e1f531e297df2f/bench/public/harness/alignment_performance/prep_deep.sbatch"
+    },
+    {
+      "path": "bench/public/harness/alignment_performance/collect.py",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/65d1732e14ea078c51312e07b5e1f531e297df2f/bench/public/harness/alignment_performance/collect.py"
+    },
+    {
+      "path": "bench/public/harness/memwatch.py",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/65d1732e14ea078c51312e07b5e1f531e297df2f/bench/public/harness/memwatch.py"
+    }
+  ],
+  "reproduce": {
+    "module": "bench/public/capabilities/alignment_performance.py",
+    "function": "compute",
+    "laptop_minutes": 1,
+    "clipper_command": "sbatch bench/public/harness/alignment_performance/ap_run.sbatch <dataset> <rep>"
+  },
+  "caveats": [
+    "Singlet runs more modules than the counting pipelines it is timed against (sorted BAM, junctions, donor demux, mtDNA, ambient, doublets, cell calling), and alevin-fry is a pseudoaligner that does not align to the genome: wall time and CPU-hours are not a like-for-like speed contest and are not gated.",
+    "Singlet's wall time includes the FASTQ-to-.1fq encoding (a one-off per sample in the atlas pipeline).",
+    "Cell Ranger is not in the timing: 10x software is neither installed nor run here; 10x's published matrices stand in as the comparator for accuracy and agreement (see gex-counts).",
+    "STARsolo reads the gzip FASTQs through zcat (its documented usage); the STAR and alevin-fry indexes are prebuilt and untimed.",
+    "The PR #22 and PR #34 binaries clip 11 bp from PBMC R2 reads (a 5' prefix false positive fixed in the campaign binary), so optimization rows of the star group are comparable with each other but not with the campaign rows.",
+    "Peak memory sums RSS over the process tree, so pages of a genome shared by several processes (the packed and shared-genome runs) are counted once per process.",
+    "Two repetitions per configuration."
+  ],
+  "reach": [
+    {
+      "tool": "singlet",
+      "output": "gene counts (exon, exon+intron)",
+      "supported": "yes",
+      "note": ""
+    },
+    {
+      "tool": "starsolo",
+      "output": "gene counts (exon, exon+intron)",
+      "supported": "yes",
+      "note": "Gene, GeneFull"
+    },
+    {
+      "tool": "alevinfry",
+      "output": "gene counts (exon, exon+intron)",
+      "supported": "yes",
+      "note": "spliced + unspliced + ambiguous (USA) mode"
+    },
+    {
+      "tool": "singlet",
+      "output": "unspliced / spliced layers",
+      "supported": "yes",
+      "note": ""
+    },
+    {
+      "tool": "starsolo",
+      "output": "unspliced / spliced layers",
+      "supported": "yes",
+      "note": "Velocyto"
+    },
+    {
+      "tool": "alevinfry",
+      "output": "unspliced / spliced layers",
+      "supported": "yes",
+      "note": "USA mode"
+    },
+    {
+      "tool": "singlet",
+      "output": "junction counts and PSI",
+      "supported": "yes",
+      "note": ""
+    },
+    {
+      "tool": "starsolo",
+      "output": "junction counts and PSI",
+      "supported": "partial",
+      "note": "SJ counts per cell; PSI computed afterwards"
+    },
+    {
+      "tool": "alevinfry",
+      "output": "junction counts and PSI",
+      "supported": "no",
+      "note": "no genome alignment"
+    },
+    {
+      "tool": "singlet",
+      "output": "SNP-based donor demultiplexing",
+      "supported": "yes",
+      "note": ""
+    },
+    {
+      "tool": "starsolo",
+      "output": "SNP-based donor demultiplexing",
+      "supported": "partial",
+      "note": "needs the BAM and a separate tool"
+    },
+    {
+      "tool": "alevinfry",
+      "output": "SNP-based donor demultiplexing",
+      "supported": "no",
+      "note": "no BAM"
+    },
+    {
+      "tool": "singlet",
+      "output": "mtDNA heteroplasmy",
+      "supported": "yes",
+      "note": ""
+    },
+    {
+      "tool": "starsolo",
+      "output": "mtDNA heteroplasmy",
+      "supported": "partial",
+      "note": "needs the BAM and a separate tool"
+    },
+    {
+      "tool": "alevinfry",
+      "output": "mtDNA heteroplasmy",
+      "supported": "no",
+      "note": "no BAM"
+    },
+    {
+      "tool": "singlet",
+      "output": "non-host (viral, microbial) reads",
+      "supported": "yes",
+      "note": ""
+    },
+    {
+      "tool": "starsolo",
+      "output": "non-host (viral, microbial) reads",
+      "supported": "partial",
+      "note": "unmapped reads can be extracted for a separate classifier"
+    },
+    {
+      "tool": "alevinfry",
+      "output": "non-host (viral, microbial) reads",
+      "supported": "no",
+      "note": "unmapped reads are not kept"
+    },
+    {
+      "tool": "singlet",
+      "output": "sorted BAM with cell and UMI tags",
+      "supported": "yes",
+      "note": ""
+    },
+    {
+      "tool": "starsolo",
+      "output": "sorted BAM with cell and UMI tags",
+      "supported": "yes",
+      "note": "starsolo-bam"
+    },
+    {
+      "tool": "alevinfry",
+      "output": "sorted BAM with cell and UMI tags",
+      "supported": "no",
+      "note": ""
+    }
+  ]
+}
