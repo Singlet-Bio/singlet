@@ -43,8 +43,8 @@ METHODS = (
     "bcftools mpileup (MAPQ 255, BQ 20). The frequencies were recomputed without the {n_ex} test individuals, so no tool "
     "sees its own answer. The published label is the super-population with proportion q >= 0.8, otherwise 'admixed'. "
     "somalier 0.3.6: extract at its hg38 sites, then ancestry against the labelled 1000 Genomes background minus the test "
-    "individuals. peddy 0.4.8: bcftools call at its GRCh38 sites, then peddy with its built-in background, which includes "
-    "the test individuals and so favours peddy. Metrics: accuracy of each tool's published label (an abstention counts as "
+    "individuals. peddy 0.4.8: bcftools call at its GRCh38 sites, then peddy with its built-in 1000 Genomes background "
+    "minus the test individuals (peddy_leaveout.py). Metrics: accuracy of each tool's published label (an abstention counts as "
     "wrong), accuracy of the most likely super-population, and precision of named calls, with 95% Wilson intervals. Donor "
     "sex: Singlet's sex model on the sample's XIST and chrY gene counts, against peddy's sex check and the XIST/chrY rule."
 )
@@ -97,7 +97,7 @@ def somalier_calls(mage: Path, sdir: Path, excluded: set, work: Path) -> tuple[l
     return rows, t
 
 
-def peddy_calls(mage: Path, subset: pd.DataFrame, work: Path, bcftools: str, py: str) -> tuple[list[dict], list[dict], float]:
+def peddy_calls(mage: Path, subset: pd.DataFrame, work: Path, bcftools: str, py: str, panel: Path, excluded: Path) -> tuple[list[dict], list[dict], float]:
     rows, sexrows, t = [], [], 0.0
     work.mkdir(parents=True, exist_ok=True)
     for L in LEVELS:
@@ -114,7 +114,7 @@ def peddy_calls(mage: Path, subset: pd.DataFrame, work: Path, bcftools: str, py:
                 ind = Path(v).name.replace(".vcf.gz", "")
                 fh.write(f"{ind}\t{ind}\t0\t0\t{1 if sx.get(ind) == 'male' else 2}\t-9\n")
         t0 = time.perf_counter()
-        subprocess.run([py, "-m", "peddy", "-p", "8", "--sites", "hg38", "--prefix", str(work / f"L{L}"),
+        subprocess.run([py, str(Path(__file__).with_name("peddy_leaveout.py")), str(panel), str(excluded), "--", "-p", "8", "--sites", "hg38", "--prefix", str(work / f"L{L}"),
                         str(merged), str(ped)], check=True, capture_output=True)
         t += time.perf_counter() - t0
         het = pd.read_csv(work / f"L{L}.het_check.csv")
@@ -179,6 +179,7 @@ def main(argv=None) -> int:
     ap.add_argument("--bcftools", default="bcftools")
     ap.add_argument("--bench-commit", required=True)
     ap.add_argument("--peddy-python", default=sys.executable, help="a Python with peddy installed")
+    ap.add_argument("--panel", type=Path, required=True, help="1000 Genomes phase 3 sample panel (peddy background order)")
     a = ap.parse_args(argv)
     a.artifacts.mkdir(parents=True, exist_ok=True)
     subset = pd.read_csv(REPO / "bench/public/sexancestry/mage_subset.tsv", sep="\t")
@@ -187,7 +188,7 @@ def main(argv=None) -> int:
     srows, ts = singlet_calls(a.mage, a.af, subset)
     mrows, tm = somalier_calls(a.mage, a.somalier_dir, excluded, work / "somalier")
     try:
-        prows, psex, tp = peddy_calls(a.mage, subset, work / "peddy", a.bcftools, a.peddy_python)
+        prows, psex, tp = peddy_calls(a.mage, subset, work / "peddy", a.bcftools, a.peddy_python, a.panel, a.excluded)
     except (subprocess.CalledProcessError, FileNotFoundError, KeyError) as e:
         print("peddy failed:", e)
         prows, psex, tp = [], [], None
@@ -228,7 +229,7 @@ def main(argv=None) -> int:
             {"name": "somalier", "version": "0.3.6", "role": "competitor", "url": "https://github.com/brentp/somalier",
              "params": "somalier extract -s sites.hg38.vcf.gz; somalier ancestry --labels (1000 Genomes minus test individuals)"},
             {"name": "peddy", "version": "0.4.8", "role": "competitor", "url": "https://github.com/brentp/peddy",
-             "params": "bcftools mpileup/call -m at peddy GRCh38 sites; peddy --sites hg38 (built-in 1000 Genomes background)"},
+             "params": "bcftools mpileup/call -m at peddy GRCh38 sites; peddy --sites hg38, built-in 1000 Genomes background minus the test individuals"},
             {"name": "xist-chrY-rule", "version": "n/a", "role": "competitor", "params": "bulk sex: XIST > 0 and MSY = 0 female; MSY > 0 and XIST = 0 male"},
             {"name": "1000genomes-panel", "version": "phase 3 (20130502)", "role": "truth"},
         ],
