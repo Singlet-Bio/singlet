@@ -1646,8 +1646,8 @@ def check_done(ctx: Ctx, gse: str, legacy: Head) -> Optional[dict]:
     lg = m.get("legacy") or {}
     if lg.get("etag") != legacy.etag or lg.get("bytes") != legacy.size or not m.get("samples"):
         return None
-    if ctx.policy is not None and (m.get("release_policy") or {}).get("version") != ctx.policy.version:
-        return None  # migrated under another policy version (or none): redo it
+    if ctx.policy is not None and (m.get("release_policy") or {}) != ctx.policy.manifest_block():
+        return None  # migrated under another policy version or layer list (or none): redo it
     if ctx.labels and (m.get("transcode") or {}).get("labels") != "cells-table+sidecar/1":
         return None  # transcoded without the labels in the cells tables: redo it
 
