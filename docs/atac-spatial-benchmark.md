@@ -24,7 +24,13 @@ Tolerances are the half-width of the bootstrap 95% CI of the paired Singlet − 
 | | Cell Ranger fragments reproduced exactly (chr21) | **0.912** | 0.906 | pass |
 | | peaks, F1 vs Cell Ranger | **0.897** | 0.892 | pass |
 | | TSS fragments per cell, Spearman | 0.994 | – (≥ 0.9) | pass |
-| Multiome PBMC 10k (held out) | see `bench/public/results/atac.json`, `multiome.json` | MO10K | | |
+| Multiome PBMC 10k (held out) | ATAC cell calls, Jaccard with ARC | **0.985** | 0.918 | pass |
+| | joint GEX+ATAC cell calls vs per-modality calls | **0.985** | 0.956 | pass |
+| | ATAC→GEX barcode pairing identical to ARC (11,894 cells) | 1.000 | – (≥ 0.999) | pass |
+| | fragments per cell, Spearman | 1.000 | 1.000 | pass |
+| | Cell Ranger fragments reproduced exactly (chr21) | **0.981** | 0.976 | pass |
+| | peaks, F1 vs ARC (recall / precision 0.786 / 0.878 vs 0.771 / 0.916) | 0.830 | **0.837** | **fail** |
+| | TSS fragments per cell, Spearman | 1.000 | – (≥ 0.9) | pass |
 | Multiome PBMC 3k (development) | joint cell calls, Jaccard with ARC | 0.987 | 0.960 | (dev) |
 | | ATAC→GEX barcode pairing identical to ARC | 1.000 | – | (dev) |
 | | exact fragments / peak F1 | 0.980 / 0.872 | 0.975 / 0.868 | (dev) |
@@ -36,14 +42,29 @@ Tolerances are the half-width of the bootstrap 95% CI of the paired Singlet − 
 | | per-spot profile, median Pearson | 0.969 | **0.973** | fail |
 | | tissue κ | **0.840** | 0.827 | pass |
 
-Runtime, scATAC 5k (215 M read pairs), 16 threads:
-- Singlet (encode + STAR + post-alignment): 35 min wall, 2.7 CPU-h, 19 GB.
-- Chromap + MACS3 + SnapATAC2: 8 + 15 min, 1.6 CPU-h, 21 GB.
+Contract status:
+- **multiome: pass.**
+- **atac: fail.** 9 of 10 metrics pass; the Multiome 10k peak F1 fails.
+- **spatial: fail.** Tissue detection passes on both slides; the 8 count metrics fail.
+
+Runtime, 16 threads, everything from FASTQs to the compared outputs:
+
+| dataset | Singlet | Chromap + MACS3 + SnapATAC2 |
+|---|---|---|
+| scATAC 5k (215 M read pairs) | 39 min wall, 3.0 CPU-h, 19 GB | 23 min, 1.6 CPU-h, 21 GB |
+| Multiome 10k ATAC | 84 min, 6.1 CPU-h, 19 GB | 47 min, 3.1 CPU-h, 21 GB |
 
 Singlet is an exact genome-wide aligner run as part of the full single-cell pipeline. Chromap is a fast approximate mapper
 built for chromatin data. The difference is a resource, not a gate (Pareto figures in the contract documents).
 
-**What fails, and why.** Visium spot counts trail STARsolo slightly on both slides. The gap is in Singlet's gene
+**What fails, and why.**
+
+ATAC peaks on Multiome 10k fail. Singlet's peak caller finds more of ARC's peaks than MACS3 does (recall 0.786 vs
+0.771), but more of its own peaks are not ARC peaks (precision 0.878 vs 0.916). The q cutoff (0.05) was chosen on the
+3k development set, where it won (0.872 vs 0.868). The held-out 10k shows that this precision/recall balance does not
+transfer. The likely fix is a minimum-signal filter on peak calls, to be chosen on development data again.
+
+Visium spot counts trail STARsolo slightly on both slides. The gap is in Singlet's gene
 counting, which Visium shares with every single-cell sample; it is not in the Visium handling.
 - On GRCm39, Singlet loses almost all molecules of mt-Co2, mt-Atp6, mt-Co3 and mt-Nd3, for example mt-Co3: 71 vs
   Space Ranger's 1.7 M. These genes lie in the region covered by the chr1 NUMT, so their reads are 2-locus multimappers.
