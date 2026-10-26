@@ -158,3 +158,22 @@ def test_refseq_gff_segments(tmp_path):
                    "chrT\tBestRefSeq\tCDS\t11\t310\t.\t+\t0\tID=c1;Parent=id-TRBV99-1;gene=TRBV99-1\n")
     segs = R._build_one(str(fa), str(gff))
     assert [(s.name, s.region, s.chain, s.anchor) for s in segs] == [("TRBV99-1", "V", "TRB", 288)]
+
+
+def test_junction_with_a_v_the_reference_lacks():
+    """GRCh38 has no IGHV1-8: Cys104 is then found in the read upstream of Phe/Trp118 (the V region's Y-Y-C end)."""
+    segs = make_segments()
+    for s in segs:  # give the synthetic V genes a real V end: ...TAT TAC TGT (Y Y C)
+        if s.region == "V":
+            s.seq = s.seq[:s.anchor - 6] + "TATTAC" + s.seq[s.anchor:]
+    r1, r2, truth, cbs = simulate(segs)
+    missing = {"TRAV1", "TRBV1"}
+    ref = A.Reference([s for s in segs if s.name not in missing])
+    wl, _ = S.encode_strings(cbs, 16)
+    res = A.run_library([], [], ref=ref, cb_len=16, umi_len=10, whitelist_codes=np.sort(wl), chunks=[(r1, r2)],
+                        params=A.Params(threads=2), log=lambda *a: None)
+    kept = res.contigs[res.contigs.kept]
+    found = {(b[:-2], c): n for b, c, n in kept[["barcode", "chain", "cdr3_nt"]].itertuples(index=False)}
+    lacking = {k: t for k, t in truth.items() if t[1] in missing}
+    assert lacking
+    assert sum(found.get(k) == t[0] for k, t in lacking.items()) >= 0.9 * len(lacking)

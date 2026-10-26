@@ -548,3 +548,28 @@ def fw_from_c(codes, off, cdiag, todo):
                     best = d
                     out[t] = q
     return out
+
+
+@njit(cache=True, parallel=True)
+def cys_from_read(codes, off, fw, todo):
+    """Cys104 found in the read itself for reads with a Phe/Trp118 and no anchored V call (a V gene the reference
+    lacks, GRCh38 has no IGHV1-8; or a V too mutated for exact k-mers): the in-frame TGT/TGC 24-93 nt upstream of the
+    F/W codon that follows a Tyr/Phe/His codon (the V region's "YYC" end); the most upstream one. -1 if none."""
+    out = np.full(len(todo), -1, np.int32)
+    for t in prange(len(todo)):
+        r = todo[t]
+        a = off[r]
+        f = fw[r]
+        for jl in range(93, 23, -3):  # junction length (Cys ... F/W inclusive) = jl + 3 - 3
+            q = f - jl + 3
+            if q < 3:
+                continue
+            c0, c1, c2 = codes[a + q], codes[a + q + 1], codes[a + q + 2]
+            if not (c0 == 3 and c1 == 2 and (c2 == 3 or c2 == 1)):
+                continue
+            p0, p1, p2 = codes[a + q - 3], codes[a + q - 2], codes[a + q - 1]
+            # TAY (Y), TTY (F), CAY (H)
+            if (p2 == 3 or p2 == 1) and ((p0 == 3 and p1 == 0) or (p0 == 3 and p1 == 3) or (p0 == 1 and p1 == 0)):
+                out[t] = q
+                break
+    return out

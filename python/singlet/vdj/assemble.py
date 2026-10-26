@@ -83,6 +83,8 @@ class Reference:
         self.chains = list(R.CHAINS)
         self.chain_id = np.array([self.chains.index(c) for c in self.chain], dtype=np.int8)
         self.d_segs = {c: [(s.name, s.seq) for s in segs if s.region == "D" and s.chain == c] for c in R.CHAINS}
+        self.j_by_chain = {c: [i for i, s in enumerate(segs) if s.region == "J" and s.chain == c and s.anchor >= 0]
+                           for c in R.CHAINS}
         # indistinguishable V genes (identical up to Cys104): one class, named by its first member, voting as one
         eq = R.equivalence(segs)
         first = {}
@@ -221,6 +223,12 @@ def run_library(r1_paths: Sequence[str], r2_paths: Sequence[str], *, ref: Refere
             f2 = K.fw_from_c(codes, off, o[:, 8].astype(np.int64), todo)
             ok2 = (f2 >= 0) & (f2 + 3 - K_ASM >= 0)
             fw[todo[ok2]] = f2[ok2]
+        # a V the reference lacks or that is too mutated: Cys104 from the read, upstream of F/W118
+        todo = np.flatnonzero((cys < 0) & (fw >= 0) & ((o[:, 0] < 0) | (ref.anchor[np.maximum(o[:, 0], 0)] < 0)))
+        if len(todo):
+            c2 = K.cys_from_read(codes, off, fw.astype(np.int64), todo)
+            ok2 = (c2 >= 0) & (c2 + K_ASM <= L[todo])
+            cys[todo[ok2]] = c2[ok2]
         # informative: reaches the junction (V 3' end in the read, or a J hit)
         v_end = np.where(o[:, 0] >= 0, o[:, 2] + np.array([len(ref.segs[i].seq) for i in range(len(ref.segs))],
                                                                   dtype=np.int32)[np.maximum(o[:, 0], 0)], -10 ** 6)
@@ -427,6 +435,30 @@ def _mode_per_group(g: np.ndarray, n: int, values: np.ndarray, weights: np.ndarr
     return out
 
 
+def _junction_j(ref: "Reference", chain: str, junction: str, voted: int) -> int:
+    """J gene of a junction by its germline 3' end: the J whose sequence up to the end of its F/W118 codon matches the
+    junction's end over the longest stretch (one mismatch allowed). The part of J left of F/W118 tells paralogs apart
+    (IGHJ4 ...YFDYW vs IGHJ5 ...NWFDPW) where reads past F/W118 often do not. The read vote breaks ties."""
+    best, cands = -1, []
+    for i in ref.j_by_chain.get(chain, ()):
+        s = ref.segs[i]
+        g = s.seq[:s.anchor + 3]
+        mm = n = 0
+        for x, y in zip(reversed(junction), reversed(g)):
+            if x != y:
+                mm += 1
+                if mm > 1:
+                    break
+            n += 1
+        if n > best:
+            best, cands = n, [i]
+        elif n == best:
+            cands.append(i)
+    if not cands:
+        return voted
+    return voted if voted in cands else cands[0]
+
+
 def _d_gene(ref: Reference, chain: str, junction: str) -> str:
     best, name = 0, ""
     for n, s in ref.d_segs.get(chain, []):
@@ -487,6 +519,8 @@ def _annotate(ref: Reference, groups, sel, mm, cell_of, mol, ubc, cb_len, params
         for p in range(P):
             junc = "".join("ACGT"[b] for b in paths[p, :plen[p]])
             v, j, c, ju, nreads = cinfo[p]
+            junc_ = "".join("ACGT"[b] for b in paths[p, :plen[p]])
+            j = _junction_j(ref, chname, junc_, j)
             if chname == "TRB" and j >= 0:
                 # V-D2-J2 joining deletes TRBC1 (it lies between the J1 and D2 clusters), so a TRBJ2 rearrangement
                 # can only use TRBC2; TRBC1 and TRBC2 differ at a few bases, so reads often cannot tell them apart
