@@ -25,7 +25,8 @@ def sha256(p):
 
 def ver(cmd):
     try:
-        return subprocess.run(cmd, capture_output=True, text=True, timeout=60).stdout.strip().splitlines()[0]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        return (r.stdout.strip() or r.stderr.strip()).splitlines()[0]
     except Exception:
         return "unknown"
 
