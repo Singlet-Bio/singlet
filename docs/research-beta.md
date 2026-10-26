@@ -33,7 +33,7 @@ All notes in `docs/research-beta/` are copies made on 2026-10-26 from the featur
 | ATAC / Multiome and spatial | [atac-spatial.md](research-beta/atac-spatial.md) | #48 |
 | mtDNA clonality / lineage | [mtdna.md](research-beta/mtdna.md) | its draft PR |
 | Doublet / ambient models | | #43 |
-| Rename "v2" to "store" (Singlet 1.0) | [rename.md](research-beta/rename.md) (runbook; nothing executed) | #39; zdebruine/singlet-website#67 |
+| Rename "v2" to "store" (Singlet 1.0) | [rename.md](research-beta/rename.md) (code merged; production ops not run) | #39 merged; zdebruine/singlet-website#67 open |
 | Benchmarking and roadmap pages | [website-benchmarking.md](research-beta/website-benchmarking.md) | zdebruine/singlet-website#66 (Beta preview) |
 | Ontology filters | [ontology.md](research-beta/ontology.md) | zdebruine/singlet-website#54 |
 
@@ -66,7 +66,7 @@ Every published number uses real data with real ground truth; simulation is only
 - Real data with real ground truth for every published metric.
 - Compare against 10x's published outputs; do not run 10x software. No MiXCR (licence key).
 - Bundle the Visium v1 spot list and the Multiome ATAC-GEX pairs rebuilt from 10x public CC BY 4.0 data, with attribution.
-- Rename "v2" to "store" with the `.s1` extension (keep magic bytes, `called_v2` to `called_ed`); deferred, runbook in #39/#67.
+- Rename "v2" to "store" with the `.s1` extension (keep magic bytes, `called_v2` to `called_ed`): code merged (#39); the R2/D1/Worker ops and website #67 are deferred (runbook in rename.md).
 - Speed is a Pareto trade-off against pseudo-aligners, not a gate.
 
 Open decisions: Anvil spend; non-host screen on or off in the re-run; GVSU uplink bandwidth test; storing SNP allele counts privately;
@@ -93,7 +93,7 @@ doublet combiner in 1.0.0; ancestry label for admixed Americans (AMR vs "admixed
 3. Exploratory screen on Clipper with the orchestrator (#42) on a diverse cohort; validate correctness and completeness.
 4. Full re-run of all samples (every run, all reads) on Clipper, with Anvil if approved; empty bundles (557 studies) and
    strand-affected samples (8,270) first.
-5. Run the rename (#39/#67) before writing new objects, then the storage migration, cell index build and Worker deploy.
+5. Run the rename ops (R2 copy, D1, Worker, website #67; code is merged) before writing new objects, then the storage migration, cell index build and Worker deploy.
 6. Publish beta.singlet.bio with the benchmark pages (#66) and roadmap; retire legacy data afterwards.
 
 ## 6. Lessons learned

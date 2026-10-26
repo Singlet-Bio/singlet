@@ -1,6 +1,6 @@
 # Rename "v2" to "store" (Singlet 1.0): runbook
 
-Deferred by Zach on 2026-10-26: nothing was executed in R2, D1 or any Worker. Plan: docs/rename-to-1-0.md on branch `claude/rename-to-1-0-447a9c`.
+Code part merged into main on 2026-10-26 (Singlet-Bio/singlet#39: `singlet.store`, `called_ed`, `.s1`; readers accept both names; `singlet.v2` stays as an alias). The production ops (R2 copy to `store/`, D1 rename, store Worker, website #67) are deferred: nothing was executed in R2, D1 or any Worker. Plan: docs/rename-to-1-0.md on branch `claude/rename-to-1-0-447a9c`.
 
 ## Singlet-Bio/singlet#39
 
