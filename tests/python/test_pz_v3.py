@@ -241,7 +241,7 @@ class TestOnePZFile:
 class TestTranspose:
     def test_transpose_storage(self, sample_matrix, tmp_path):
         path = str(tmp_path / "trans.1pz")
-        stats = singlepress.write_1pz(path, sample_matrix, store_transpose=True)
+        stats = singlepress.write_1pz(path, sample_matrix, s1_transpose=True)
         assert stats["has_transpose"] is True
 
         info = singlepress.info_1pz(path)
@@ -249,12 +249,12 @@ class TestTranspose:
 
         # File should be larger than without transpose
         path2 = str(tmp_path / "notrans.1pz")
-        stats2 = singlepress.write_1pz(path2, sample_matrix, store_transpose=False)
+        stats2 = singlepress.write_1pz(path2, sample_matrix, s1_transpose=False)
         assert stats["compressed_bytes"] > stats2["compressed_bytes"]
 
     def test_row_range_read(self, sample_matrix, tmp_path):
         path = str(tmp_path / "rowrange.1pz")
-        singlepress.write_1pz(path, sample_matrix, store_transpose=True)
+        singlepress.write_1pz(path, sample_matrix, s1_transpose=True)
 
         pz = singlepress.open_1pz(path)
         sub = pz.read(rows=(10, 50))

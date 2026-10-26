@@ -5,7 +5,7 @@
    The public per-sample host this module was written for
    (``https://data.singlet.bio/v1``) was retired. Public data is published in
    the per-sample format (one immutable ``.s1`` object per sample plus a study manifest
-   under ``https://data.singlet.bio/store/``; the per-study ``.singlet`` bundle is
+   under ``https://data.singlet.bio/s1/``; the per-study ``.singlet`` bundle is
    being retired). Use :func:`singlet.load`, :func:`singlet.download` or
    :func:`singlet.open_bundle` for it, and :func:`singlet.find` to search.
    :func:`fetch` still works against a self-hosted mirror of sample

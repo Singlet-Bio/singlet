@@ -142,8 +142,8 @@ has them instead.
 2. Summaries (<= 2000 rows per request):
    `for f in $OUT/ingest/sample_cell_summary.*.json; do curl -fsS -X POST https://singlet.bio/api/ingest/sample_cell_summary -H "X-Ingest-Token: $INGEST_TOKEN" -H "Content-Type: application/json" --data-binary @$f; done`
    The cell index's `--d1-export` writes the same rows from the shards; load one of the two, not both.
-3. Sidecars: `singlet.store.atlas.normalize_feature_sidecar` (cell-index branch) validates each file against the registry and the
-   sample's cells, returns the canonical bytes and key `store/cf/<GSM>/<set>.<d16>.parquet`; upload those to `singlet-data`
+3. Sidecars: `singlet.s1.atlas.normalize_feature_sidecar` (cell-index branch) validates each file against the registry and the
+   sample's cells, returns the canonical bytes and key `s1/cf/<GSM>/<set>.<d16>.parquet`; upload those to `singlet-data`
    (`wrangler r2 object put singlet-data/<key> --file <file> --remote`) and attach the entries to the study manifest with
    `attach_features`. The index builder reads the sidecars as shard columns.
 
@@ -176,5 +176,5 @@ libraries (the modalities vocabulary marks them; most atlas samples have none):
   to sample conditions through GEO metadata, so the per-cell value is the condition's `sample_property` (treated / control),
   not the tag name.
 - Both are `comparable = 'atlas'` categories; `sample_cell_summary` counts per category value.
-- Blocker: the store objects do not yet carry feature-barcode counts for most screens (the screen-atlas session is checking which
+- Blocker: the .s1 objects do not yet carry feature-barcode counts for most screens (the screen-atlas session is checking which
   studies have them).

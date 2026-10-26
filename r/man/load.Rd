@@ -24,7 +24,7 @@ singlet_load(
 \arguments{
 \item{x}{A character vector of GEO Series accessions (\code{"GSE..."}),
 GEO Sample accessions (\code{"GSM..."}) and/or paths to local
-\code{.singlet} bundles or store manifests. Length one or more. A sample
+\code{.singlet} bundles or .s1 manifests. Length one or more. A sample
 accession is resolved to its parent Series through the Singlet API; only
 that sample's members are fetched.}
 
@@ -41,8 +41,8 @@ remembered there, so a sample of an already cached study loads offline.}
 \item{legacy}{\code{TRUE} reads the legacy \code{.singlet} bundle of an
 accession (deprecated, being retired); the default reads the per-sample study. A
 local \code{.singlet} path is always read as a legacy bundle, and a local
-store manifest (\code{.json}, see \code{\link{download}}) as a per-sample study.
-When a study has no store manifest yet, \code{load()} stops with a message
+.s1 manifest (\code{.json}, see \code{\link{download}}) as a per-sample study.
+When a study has no .s1 manifest yet, \code{load()} stops with a message
 naming \code{legacy = TRUE}; setting the environment variable
 \code{SINGLET_LEGACY_FALLBACK=1} makes it fall back automatically.}
 

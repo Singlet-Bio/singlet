@@ -4,7 +4,7 @@
 #
 # Design principle: R users only ever handle GEO accession strings
 # (GSE.../GSM...) and local files. Public data is distributed in the per-sample format
-# (R/store.R): load() fetches only the members it needs with HTTP Range requests.
+# (R/s1.R): load() fetches only the members it needs with HTTP Range requests.
 # The legacy per-study `.singlet` bundle is read only with legacy = TRUE (or
 # through a local file path). The lower-level `.1pz` codec is never required in
 # the documented public API.
@@ -361,7 +361,7 @@ set_api_key <- function(key) {
 
 #' Download a study for offline use and return its local path
 #'
-#' Mirrors a study's store objects (the manifest, one \code{.s1} object per
+#' Mirrors a study's .s1 objects (the manifest, one \code{.s1} object per
 #' sample, and the vocabulary packs they use) from \url{https://data.singlet.bio}
 #' into the local cache, verifying each object against the manifest's sha256, and
 #' returns the path of the manifest. \code{\link{load}} then reads the local
@@ -382,8 +382,8 @@ set_api_key <- function(key) {
 #' @param legacy \code{TRUE} downloads the legacy \code{.singlet} bundle
 #'   (deprecated, being retired). The default \code{NULL} downloads the per-sample format and,
 #'   only when the environment variable \code{SINGLET_LEGACY_FALLBACK=1} is
-#'   set and the study has no store manifest yet, falls back to the legacy bundle.
-#' @return The path to the local manifest (\code{.../store/m/<GSE>.json}) or, with
+#'   set and the study has no .s1 manifest yet, falls back to the legacy bundle.
+#' @return The path to the local manifest (\code{.../s1/m/<GSE>.json}) or, with
 #'   \code{legacy = TRUE}, to the local \code{.singlet} file.
 #'
 #' @details
@@ -414,12 +414,12 @@ download <- function(accession, cache_dir = NULL, legacy = NULL) {
     }
     if (!isTRUE(legacy)) {
         gse <- .gse_of(acc, cache = .singlet_cache_dir(cache_dir))
-        out <- tryCatch(.store_download(gse, cache_dir = cache_dir),
-                        singlet_store_not_found = function(e) e)
+        out <- tryCatch(.s1_download(gse, cache_dir = cache_dir),
+                        singlet_s1_not_found = function(e) e)
         if (!inherits(out, "condition")) {
             return(out)
         }
-        if (!(is.null(legacy) && .store_legacy_fallback())) {
+        if (!(is.null(legacy) && .s1_legacy_fallback())) {
             stop(out)
         }
         if (nzchar(Sys.getenv("SINGLET_LEGACY_FALLBACK"))) {
@@ -453,7 +453,7 @@ singlet_download <- download
 #'
 #' @param x A character vector of GEO Series accessions (\code{"GSE..."}),
 #'   GEO Sample accessions (\code{"GSM..."}) and/or paths to local
-#'   \code{.singlet} bundles or store manifests. Length one or more. A sample
+#'   \code{.singlet} bundles or .s1 manifests. Length one or more. A sample
 #'   accession is resolved to its parent Series through the Singlet API; only
 #'   that sample's members are fetched.
 #' @param as Output class: \code{"sce"} (default) for a
@@ -462,8 +462,8 @@ singlet_download <- download
 #' @param legacy \code{TRUE} reads the legacy \code{.singlet} bundle of an
 #'   accession (deprecated, being retired); the default reads the per-sample study. A
 #'   local \code{.singlet} path is always read as a legacy bundle, and a local
-#'   store manifest (\code{.json}, see \code{\link{download}}) as a per-sample study.
-#'   When a study has no store manifest yet, \code{load()} stops with a message
+#'   .s1 manifest (\code{.json}, see \code{\link{download}}) as a per-sample study.
+#'   When a study has no .s1 manifest yet, \code{load()} stops with a message
 #'   naming \code{legacy = TRUE}; setting the environment variable
 #'   \code{SINGLET_LEGACY_FALLBACK=1} makes it fall back automatically.
 #' @param modalities Which matrices to download (per-sample studies: only those
@@ -576,9 +576,9 @@ load <- function(x, as = c("sce", "seurat"), cache_dir = NULL, legacy = NULL, mo
         gsms <- if (anyNA(gsms)) NULL else unique(gsms)
         t1 <- sel[[1L]]
         if (!is.null(t1$gse)) {
-            .store_load_gse(t1$gse, gsms, cache_dir = cache_dir, legacy = legacy, modalities = modalities)
+            .s1_load_gse(t1$gse, gsms, cache_dir = cache_dir, legacy = legacy, modalities = modalities)
         } else if (!is.null(t1$manifest)) {
-            .store_load_manifest(t1$manifest, gsms, modalities = modalities)
+            .s1_load_manifest(t1$manifest, gsms, modalities = modalities)
         } else {
             .legacy_modalities(.read_singlet_bundle(t1$path, gsms = gsms), modalities)
         }

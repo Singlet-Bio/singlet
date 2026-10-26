@@ -66,7 +66,7 @@ def main(argv=None) -> int:
         with SingletBundle(a.bundle) as b:
             gsms = list(b.gsm_ids)
     else:
-        from singlet.store import client as C
+        from singlet.s1 import client as C
 
         gsms = list(C.open_study(a.gse).samples)
     if a.gsm:
@@ -89,7 +89,7 @@ def main(argv=None) -> int:
                 s = (
                     IO.read_legacy(a.bundle, gsm, sidecar=a.sidecar)
                     if a.bundle
-                    else IO.read_store(a.gse, gsm, sidecar=a.sidecar)
+                    else IO.read_s1(a.gse, gsm, sidecar=a.sidecar)
                 )
             except ValueError as e:
                 if "no usable cells" in str(e) or "no called cells" in str(e):

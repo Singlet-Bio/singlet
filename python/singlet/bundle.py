@@ -3,9 +3,9 @@
 
 A .singlet file is a ZIP64 archive containing ALL processed GSMs for one GEO
 Series (GSE). Public distribution has moved to the per-sample format (one immutable object
-per sample, docs/format-store.md); :class:`SingletBundle` stays the reader for local
+per sample, docs/format-s1.md); :class:`SingletBundle` stays the reader for local
 legacy files and the packager for ``pack_gse``, and ``SingletBundle.open`` hands a
-store manifest, ``.s1`` object or accession to :class:`singlet.store.bundle.StoreBundle`,
+.s1 manifest, ``.s1`` object or accession to :class:`singlet.s1.bundle.S1Bundle`,
 which has the same interface.
 
 Bundle layout::
@@ -1381,15 +1381,15 @@ class SingletBundle:
         Returns
         -------
         SingletBundle
-            For a store manifest (``.json``), a ``.s1`` sample object or an accession, a
-            :class:`singlet.store.bundle.StoreBundle` (same interface).
+            For a .s1 manifest (``.json``), a ``.s1`` sample object or an accession, a
+            :class:`singlet.s1.bundle.S1Bundle` (same interface).
         """
         if cls is SingletBundle and restricted is None:
             p = Path(str(path)).expanduser()
             if p.exists() and p.suffix.lower() in (".json", ".s1", ".s2"):
-                from singlet.store.bundle import StoreBundle
+                from singlet.s1.bundle import S1Bundle
 
-                return StoreBundle.open(p)
+                return S1Bundle.open(p)
             if not p.exists() and re.match(r"^GSE[0-9]{1,9}$", str(path).strip(), re.I):
                 from singlet._loader import open_bundle
 
