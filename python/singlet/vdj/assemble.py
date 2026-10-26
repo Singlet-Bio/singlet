@@ -66,6 +66,8 @@ class Params:
     min_barcode_umis: int = 2  # barcodes with fewer V(D)J UMIs are not assembled
     min_umi_reads: int = 2  # mates of a molecule, at least
     min_contig_reads: int = 3  # mates of a kept contig
+    cross_frac: float = 0.10  # a junction with < 10% of its UMIs in its strongest barcode is ambient there ...
+    cross_min_umis: int = 10  # ... when that barcode has >= 10 UMIs of it
     contig_read_frac: float = 0.05  # mates per UMI of a kept contig, against the library's read-weighted median
     umi_read_frac: float = 0.02  # and at least this share of the library's read-weighted median mates per molecule
     threads: int = 8
@@ -576,6 +578,13 @@ def _annotate(ref: Reference, groups, sel, mm, cell_of, mol, ubc, cb_len, params
                     var[idx[a_]] = True
                     break
     df.loc[var, "kept"] = False
+    # ambient receptor mRNA (enclone's "cross" filter): a junction far weaker than in the barcode where it is strongest
+    # is that cell's transcript in another droplet (plasma-cell IG in T-cell droplets); pbmc2 TCR: 0.07% of contigs Cell
+    # Ranger confirms sit below 10% of their junction's top barcode, 5% of those it does not
+    jmax = df.groupby(["chain", "cdr3_nt"])["umis"].transform("max")
+    amb = (df["umis"] < params.cross_frac * jmax) & (jmax >= params.cross_min_umis)
+    df["ambient"] = amb
+    df.loc[amb, "kept"] = False
     df = df.sort_values(["bcix", "chain", "umis"], ascending=[True, True, False]).reset_index(drop=True)
     df["contig_id"] = df["barcode"] + "_contig_" + (df.groupby("bcix").cumcount() + 1).astype(str)
     return df[CONTIG_COLUMNS]

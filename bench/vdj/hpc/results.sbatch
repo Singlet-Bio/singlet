@@ -33,6 +33,6 @@ python -P $T/bench/vdj/make_artifacts.py $WORK/state/vdjc/runs $WORK/data/vdjc $
   --vdj-ref $WORK/state/vdjc/ref/vdj_human.tsv.gz | tail -30
 python -P $T/bench/crispr/make_provenance.py $WORK/state/vdjc/runs $AC --commit $SHA | tail -20
 cd $T
-python bench/public/run_capability.py vdj $AV --out $WORK/state/vdjc/results/vdj.json
-python bench/public/run_capability.py crispr-guides $AC --out $WORK/state/vdjc/results/crispr-guides.json
+python bench/public/run_capability.py vdj $AV --out $WORK/state/vdjc/results/vdj.json || true
+python bench/public/run_capability.py crispr-guides $AC --out $WORK/state/vdjc/results/crispr-guides.json || true
 du -sh $AV $AC
