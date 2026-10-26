@@ -257,3 +257,4 @@ Long-read and spike-in truth and the extra hgmm libraries are missing. Paths: `$
   - the `cell_calls.tsv` columns `called_v2` and `fdr` to `called_ed` and `called_ed_fdr`;
   - provenance keys.
   The Python store reads `called_v2` as `called_ed` until cleanup.
+- #31 state at stop: prod/atlas-rerun 8c3de82f (main merged, rename follow-ups above); CI status unknown.
