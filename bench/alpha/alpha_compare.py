@@ -268,7 +268,8 @@ def read_mtx(mtx, bcs, feats):
 try:
     base = f"{GEO}/{GSM[:-3]}nnn/{GSM}/suppl/"
     files = P["author_files"].split(";")
-    unz = lambda f, b: gzip.decompress(b) if b[:2] == b"" else b  # noqa: E731  (some ".gz" deposits are plain text)
+    GZ_MAGIC = bytes([0x1F, 0x8B])
+    unz = lambda f, b: gzip.decompress(b) if b[:2] == GZ_MAGIC else b  # noqa: E731  (some ".gz" deposits are plain text)
     if P["author_kind"] == "h5":
         A, a_bcs, a_ids, a_nm = read_10x_h5(http(base + files[0]))
     else:
