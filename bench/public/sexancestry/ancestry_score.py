@@ -121,7 +121,7 @@ def peddy_calls(mage: Path, subset: pd.DataFrame, work: Path, bcftools: str, py:
         for _, r in het.iterrows():
             rows.append(dict(individual=r["sample_id"], level=L, tool="peddy", call=r["ancestry-prediction"],
                              top=r["ancestry-prediction"], q_max=float(r["ancestry-prob"]), n_sites=None, note=None))
-        if L == "8":
+        if L == "8" and (work / f"L{L}.sex_check.csv").exists():  # peddy skips its sex check without chrX calls
             sc = pd.read_csv(work / f"L{L}.sex_check.csv")
             for _, r in sc.iterrows():
                 sexrows.append(dict(individual=r["sample_id"], tool="peddy", call=str(r["predicted_sex"]).lower()))
