@@ -140,6 +140,9 @@ def compare(ref: pd.DataFrame, ref_cells: set, m: pd.DataFrame, gex: pd.DataFram
     out["reference_contigs"] = len(refk)
     out["contig_recovery"] = len(refk & mk) / max(1, len(refk))
     out["extra_contigs"] = len(mk - refk) / max(1, len(refk))
+    out["contig_precision"] = len(refk & mk) / max(1, len(mk))
+    pr, rc = out["contig_precision"], out["contig_recovery"]
+    out["contig_f1"] = 2 * pr * rc / max(1e-12, pr + rc)
     rtop = ref.sort_values("umis", ascending=False).drop_duplicates(["barcode", "chain"])
     mtop = m_in.sort_values("umis", ascending=False).drop_duplicates(["barcode", "chain"])
     j = rtop.merge(mtop, on=["barcode", "chain"], suffixes=("_r", "_m"))
@@ -160,6 +163,20 @@ def compare(ref: pd.DataFrame, ref_cells: set, m: pd.DataFrame, gex: pd.DataFram
         ch = t.groupby("barcode")["chain"].agg(set)
         paired = ch.map(lambda s: bool(({"TRA", "TRB"} <= s) or ({"TRG", "TRD"} <= s) or ("IGH" in s and s & {"IGK", "IGL"})))
         out[f"pairing_rate_{name}"] = float(paired.sum() / max(1, len(ref_cells)))
+    # correct pairs: Cell Ranger cells with a pair whose top junction of both chains the method reproduces
+    def tops(t):
+        return {(b_, c_): n for b_, c_, n in zip(t.barcode, t.chain, t.cdr3_nt)}
+    rt, mt = tops(rtop), tops(mtop)
+    pairs = [("TRA", "TRB"), ("TRG", "TRD"), ("IGH", "IGK"), ("IGH", "IGL")]
+    n_pair = n_ok = 0
+    for bc in sorted(set(rtop.barcode)):
+        for x, y in pairs:
+            if (bc, x) in rt and (bc, y) in rt:
+                n_pair += 1
+                n_ok += mt.get((bc, x)) == rt[(bc, x)] and mt.get((bc, y)) == rt[(bc, y)]
+                break
+    out["reference_paired_cells"] = n_pair
+    out["correct_pairing"] = n_ok / max(1, n_pair)
     mcells = set(m.barcode)
     out["method_cells"] = len(mcells)
     out["cells_jaccard"] = len(mcells & ref_cells) / max(1, len(mcells | ref_cells))

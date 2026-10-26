@@ -39,8 +39,12 @@ METRICS = [
      "higher"),
     ("extra_contigs", "extra_contigs", "Contigs in Cell Ranger cells that Cell Ranger does not report, per its contig",
      "fraction", "agreement", "lower"),
-    ("pairing_rate_method", "pairing_rate", "Cell Ranger cells with a productive pair (TRA+TRB / IGH+IGK|L)", "fraction",
-     "coverage", "higher"),
+    ("contig_precision", "contig_precision", "Contigs in Cell Ranger cells that Cell Ranger also reports", "fraction",
+     "agreement", "higher"),
+    ("contig_f1", "contig_f1", "Contig F1 against Cell Ranger (precision and recovery)", "fraction", "agreement",
+     "higher"),
+    ("correct_pairing", "correct_pairing", "Cell Ranger paired cells whose top junctions of both chains are reproduced",
+     "fraction", "agreement", "higher"),
     ("clonotype_ari", "clonotype_ari", "Clonotypes (exact chain sets) vs Cell Ranger's, adjusted Rand index",
      "ARI", "agreement", "higher"),
     ("wrong_lineage_method", "wrong_lineage", "Contigs of the wrong lineage (TCR in GEX B cells, BCR in GEX T cells)",
@@ -117,7 +121,7 @@ def compute(artifact_dir: Path) -> dict:
                  "direction": direc, "singlet": {"value": r(res["singlet"][key])},
                  "competitors": [{"tool": t, "value": r(res[t][key])} for t in res if t != "singlet" and key in res[t]],
                  "rule": {"type": "match_or_beat", "against": "best"}}
-            if key in ("pairing_rate_method", "wrong_lineage_method"):
+            if key == "wrong_lineage_method":
                 # Cell Ranger's own value is a competitor here: these metrics do not use Cell Ranger as truth
                 ref_key = key.replace("_method", "_reference")
                 if ref_key in res["singlet"]:
