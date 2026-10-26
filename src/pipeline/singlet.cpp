@@ -7829,7 +7829,7 @@ int main(int argc, char* argv[]) {
         // ── 2d: Delete temp BAM + BAI ──
         // Skip deletion if --tagged-bam is enabled; the BAM is still needed for
         // the second-pass tagged-BAM writer that runs after pileup export.
-        if (!tagged_bam_enabled) {
+        if (!tagged_bam_enabled && !std::getenv("SINGLET_KEEP_BAM")) {  // SINGLET_KEEP_BAM: keep it (debugging)
             unlink(parallel_bam_path.c_str());
             unlink(parallel_bai_path.c_str());
         }
