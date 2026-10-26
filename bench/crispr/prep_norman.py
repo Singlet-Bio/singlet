@@ -78,7 +78,7 @@ def main():
         f"{a.data}/reference_gg{a.gemgroup}.csv", index=False)
     ident.loc[ident["split"] == "test", "barcode"].to_csv(f"{a.data}/test_cells.txt", index=False, header=False)
     print(f"{len(ident)} published cells ({(ident.split == 'test').sum()} test); {len(g)} GBCs named for "
-          f"{g.identity.nunique()} of {ident.guide_ids.nunique()} identities; read pairs scanned {n:,}")
+          f"{g.identity.nunique()} of {ident.guide_identity.nunique()} identities; read pairs scanned {n:,}")
 
 
 if __name__ == "__main__":
