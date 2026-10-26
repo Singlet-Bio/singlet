@@ -6,7 +6,7 @@
  "conclusion": "Singlet's genotype-free per-donor mt haplotypes reach precision 0.89 and recall 0.91 against replicate-lane truth on held-out Kang lanes (mgatk on vireo clusters: 0.93 / 0.89). For MAESTER clone-defining variants the 3' per-cell VAF has mean AUROC 0.79 (mgatk 0.79).",
  "methods": "Real data with real truth. (1) Kang 2018 lanes: each donor's homoplasmic mtDNA haplotype is taken from a second library of the same donors (cells labelled by the authors' demuxlet calls, mgatk allele counts, AF >= 0.9 and depth >= 20 against rCRS). Singlet's genotype-free per-donor mt variant files (from its own clusters) are compared with it, as are mgatk counts pooled by vireo's clusters, the pipeline a user would assemble. Precision is the share of predicted variants at covered truth positions that are in the truth; recall is the share of truth variants recovered. (2) MAESTER BPDCN712: 26 clone-defining mt variants whose positive cells were established from the paired mt-enriched library of the same cells; for each, the AUROC of the per-cell VAF from the standard 3' library separates positive cells from the other clone cells (both tools on the same alignments and cells; mgatk counts UMI-deduplicated molecules, Singlet counts reads). (3) MAESTER K562 + BT142: agreement of per-line allele fractions from the 3' library with the MAESTER fractions. Singlet is run end to end (default pipeline, automatic donor count); mgatk 0.9.0 runs on the chrM reads of Singlet's BAM for the same cells. Rules are match-or-beat against mgatk with zero tolerance; informational metrics have no competitor. Variants and counts stay private.",
  "status": "final",
- "generated_at": "2026-10-26T11:12:29+00:00",
+ "generated_at": "2026-10-26T11:14:04+00:00",
  "owner": "pipeline-benchmark",
  "singlet": {
   "version": "1.0.0",
@@ -1129,7 +1129,7 @@
    "name": "provenance.json",
    "url": "https://data.singlet.bio/benchmarking/1.0.0/mtdna/provenance.json",
    "kind": "singlet_output",
-   "sha256": "8054e37c0a6655840c5b45343aa8d6b35f8b0040e96dd99606cf5cd521013eae",
+   "sha256": "5d20a901ce0d946b81e75cf501b90b88cccd898016ed59427d5d6322fcfbdcd0",
    "bytes": 8559,
    "format": "json"
   }
@@ -1169,12 +1169,12 @@
   {
    "path": "bench/public/capabilities/mtdna.py",
    "role": "metric",
-   "url": "https://github.com/Singlet-Bio/singlet/blob/b81345b532cc14d9d616ff4ac373e8a2c812375a/bench/public/capabilities/mtdna.py"
+   "url": "https://github.com/Singlet-Bio/singlet/blob/3359b4a7b20362c05a436945ad8c1e78623ed835/bench/public/capabilities/mtdna.py"
   },
   {
    "path": "bench/public/genotype",
    "role": "harness",
-   "url": "https://github.com/Singlet-Bio/singlet/tree/b81345b532cc14d9d616ff4ac373e8a2c812375a/bench/public/genotype"
+   "url": "https://github.com/Singlet-Bio/singlet/tree/3359b4a7b20362c05a436945ad8c1e78623ed835/bench/public/genotype"
   }
  ],
  "reproduce": {

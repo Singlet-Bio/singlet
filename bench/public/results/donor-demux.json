@@ -6,7 +6,7 @@
  "conclusion": "Without being told the donor count, Singlet finds the exact K in 6 of 6 held-out real pools (vireo with N = 12: 0 of 6); mean ARI 0.994 against 0.986 for vireo given the true K.",
  "methods": "Real pools only, each with truth from the data's authors: five Kang 2018 lupus PBMC lanes (true K = 8, 8, 8, 4, 4; labels are demuxlet calls made with donor genotypes), the MAESTER K562 + BT142 cell-line mixture (K = 2) and a single-patient bone marrow (K = 1). Reads were rebuilt from the submitted Cell Ranger BAMs (Kang) or downloaded (MAESTER), and every tool sees the same tagged BAM and the same called cells: Singlet is run once end to end (STAR alignment, cell calling, demultiplexing, K estimated by the held-out-likelihood search), and cellsnp-lite, vireo and souporcell are run on its BAM and cell list with the same 1000 Genomes SNP panel. Vireo has no K search, so its K is the number of donors holding at least 1% of cells when it is given N = 12 (the documented way to over-specify N); the rule was fixed before the runs. Vireo (3 seeds) and souporcell get the true K for the accuracy metrics. Scores are on truth singlets: ARI over all of them, with unassigned and doublet calls as their own labels; coverage is the fraction given a donor; per-donor recall uses Hungarian matching. The ARI tolerance is vireo's seed-to-seed standard deviation. The K metric is the fraction of held-out pools with the exact true K, gated at 0.9. The Kang batch 2 control lane is development data and is reported separately; it is excluded from the pooled numbers.",
  "status": "final",
- "generated_at": "2026-10-26T11:12:15+00:00",
+ "generated_at": "2026-10-26T11:13:48+00:00",
  "owner": "pipeline-benchmark",
  "singlet": {
   "version": "1.0.0",
@@ -1302,7 +1302,7 @@
    "name": "provenance.json",
    "url": "https://data.singlet.bio/benchmarking/1.0.0/donor-demux/provenance.json",
    "kind": "singlet_output",
-   "sha256": "07c2948ef54de4a850e2720038d8c3e044ddb80a0e1af8eb041f4e7f4e88e50c",
+   "sha256": "4805aeac6fd2581414e70262cbea67d0dc7ba133757e0e3c000be5460b8bafc3",
    "bytes": 10213,
    "format": "json"
   }
@@ -1316,12 +1316,12 @@
   {
    "path": "bench/public/capabilities/donor_demux.py",
    "role": "metric",
-   "url": "https://github.com/Singlet-Bio/singlet/blob/b81345b532cc14d9d616ff4ac373e8a2c812375a/bench/public/capabilities/donor_demux.py"
+   "url": "https://github.com/Singlet-Bio/singlet/blob/3359b4a7b20362c05a436945ad8c1e78623ed835/bench/public/capabilities/donor_demux.py"
   },
   {
    "path": "bench/public/genotype",
    "role": "harness",
-   "url": "https://github.com/Singlet-Bio/singlet/tree/b81345b532cc14d9d616ff4ac373e8a2c812375a/bench/public/genotype"
+   "url": "https://github.com/Singlet-Bio/singlet/tree/3359b4a7b20362c05a436945ad8c1e78623ed835/bench/public/genotype"
   }
  ],
  "reproduce": {
@@ -1336,6 +1336,7 @@
   "True K takes the values 1, 2, 4 and 8 only; K = 3, 5, 6, 7 and K > 8 have no real pool with truth in the cohort. No simulated or in-silico pools are used.",
   "Vireo has no K-selection procedure. Its K here is a prune-by-size rule on an N = 12 run (donors with >= 1% of cells); other rules would give other numbers. Souporcell cannot estimate K and is only scored with the true K.",
   "The BPDCN pool has one patient; any donor label other than one cluster counts against the tool, and homotypic doublets cannot be told from singlets by genotype.",
-  "Kang FASTQs were rebuilt from mapped primary alignments of Cell Ranger BAMs, so unmapped reads are missing."
+  "Kang FASTQs were rebuilt from mapped primary alignments of Cell Ranger BAMs, so unmapped reads are missing.",
+  "Failure on the development lane: Singlet's automatic K is 9 for 8 donors (k_correct_dev). The extra component is a ~105-cell duplicate of one donor (its genotypes agree with that donor's at 0.88 of shared sites at >= 10 reads, against 0.60-0.68 between any two different donors and >= 0.96 for the same donor in two lanes). The held-out K search accepts it because select_k_heldout (include/singlet/pileup/donor_demux.h:1879-1880) takes any K whose count of 'valid' components rises with paired z > 4, and count_valid_components (line 1757) declares a component valid when held-out cells are better explained by it than by any other single donor or donor pair (mean log-likelihood ratio > 1 nat, z > 5); neither test compares genotypes, so a cell subpopulation of one donor that differs in coverage or ambient RNA passes."
  ]
 }

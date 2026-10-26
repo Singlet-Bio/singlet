@@ -6,7 +6,7 @@
  "conclusion": "At sites with >= 10 reads, Singlet's donor genotypes agree with truth at 0.961 over the held-out pools (vireo 0.978, cellsnp-pileup 0.993); truth is replicate-lane RNA genotypes (Kang) and 1000 Genomes genotypes (cell lines). Genotypes themselves are not published.",
  "methods": "Truth is real. For the Kang lanes (no public genotypes exist) it is the genotype of each donor called from RNA reads of a second library of the same donors (batch 2: control and IFN-beta lanes; batch 1: lanes A and B against lane C), pooling the cells that the authors' demuxlet labelled as that donor, with a fixed binomial model (error 0.01, flat prior, posterior >= 0.99). For two cell-line pools it is the 1000 Genomes high-coverage genotypes of the cell lines' donors (HG00362, HG01277 as one-donor libraries; GM12878 + GM18502 as a real 1:1 mixture). Singlet runs end to end with its automatic donor count and the default 1000G panel (AF >= 5%); its per-donor genotypes are those of its own clusters. Vireo (K given) and souporcell (k given) are run on the same BAM, cells and panel; cellsnp-pileup genotypes the pooled reads of vireo's clusters (all cells for one-donor libraries). Clusters are matched to truth donors by cell overlap (Kang) or by genotype agreement (1000G). Concordance is the fraction of sites with a truth genotype and a tool call at which the genotype class (0/0, 0/1, 1/1) is identical; the dp10 stratum keeps sites where the tool's own donor-level depth is >= 10. Non-reference concordance and false-alt rate split the same table by truth class. The rule is match-or-beat against the best competitor, zero tolerance. No genotype, SNP or per-site count is published.",
  "status": "final",
- "generated_at": "2026-10-26T11:12:16+00:00",
+ "generated_at": "2026-10-26T11:13:49+00:00",
  "owner": "pipeline-benchmark",
  "singlet": {
   "version": "1.0.0",
@@ -37,6 +37,13 @@
    "url": "https://github.com/wheaton5/souporcell",
    "citation": "Heaton et al. 2020, Nat Methods 17:615",
    "params": "souporcell_pipeline.py -i cells.bam -b barcodes.txt -f /mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/fasta/genome.fa -t 16 -o OUT -k K --common_variants genome1K.phase3.SNP_AF5e2.chr1toX.hg38.sorted.chrprefix.vcf  (K = true K; remapping with minimap2 and every other option at its default; cells.bam = Singlet's tagged BAM restricted to the called cells)"
+  },
+  {
+   "name": "cellsnp-lite",
+   "version": "1.2.3",
+   "role": "helper",
+   "url": "https://github.com/single-cell-genetics/cellsnp-lite",
+   "params": "cellsnp-lite -s possorted.bam -b barcodes.txt -O cellsnp -R genome1K.phase3.SNP_AF5e2.chr1toX.hg38.sorted.chrprefix.vcf.gz -p 16 --minMAF 0.1 --minCOUNT 20 --gzip --cellTAG CB --UMItag UB   (barcodes = Singlet's called cells; the cellSNP/vireo manuals' settings for vireo)"
   },
   {
    "name": "cellsnp-pileup",
@@ -1438,7 +1445,7 @@
    "name": "provenance.json",
    "url": "https://data.singlet.bio/benchmarking/1.0.0/donor-snps/provenance.json",
    "kind": "singlet_output",
-   "sha256": "a1060c21de0c0c5a7871cd53f9eb85dc7062125f4f984fbbe76069b1f9358567",
+   "sha256": "01b4cd316500d788bfadcb7e0316d031bb4788c2099354b6f37851cd1b132efa",
    "bytes": 8066,
    "format": "json"
   }
@@ -1478,12 +1485,12 @@
   {
    "path": "bench/public/capabilities/donor_snps.py",
    "role": "metric",
-   "url": "https://github.com/Singlet-Bio/singlet/blob/b81345b532cc14d9d616ff4ac373e8a2c812375a/bench/public/capabilities/donor_snps.py"
+   "url": "https://github.com/Singlet-Bio/singlet/blob/3359b4a7b20362c05a436945ad8c1e78623ed835/bench/public/capabilities/donor_snps.py"
   },
   {
    "path": "bench/public/genotype",
    "role": "harness",
-   "url": "https://github.com/Singlet-Bio/singlet/tree/b81345b532cc14d9d616ff4ac373e8a2c812375a/bench/public/genotype"
+   "url": "https://github.com/Singlet-Bio/singlet/tree/3359b4a7b20362c05a436945ad8c1e78623ed835/bench/public/genotype"
   }
  ],
  "reproduce": {
@@ -1498,6 +1505,7 @@
   "The 1000 Genomes truth is whole-genome sequencing of the cell-line donor; LCL-specific somatic differences from the reference individual exist but are small.",
   "The panel is 1000 Genomes SNPs with allele frequency >= 5% (7.35 M sites); every tool sees the same panel.",
   "Singlet emits a genotype at every covered panel site, however shallow, so its 'all' concordance includes 1-read sites; the dp10 metrics are the fair view for a user who filters.",
+  "Why Singlet trails the pileup baseline: write_donor_vcfs (include/singlet/pileup/donor_demux.h:2511-2513) calls the genotype from the VB posterior mean allele fraction with fixed cut-offs 0.1 and 0.9 at any depth, with no binomial error model and no ambient-RNA correction, which is consistent with the excess of homozygous-reference sites called non-reference (2.6-5.4% in the held-out lanes against 0.4-1.4% for the pileup); the exact mechanism (shallow sites, ambient reads of other donors, or AF shrinkage by the prior) was not isolated.",
   "The plain pileup baseline (cellsnp-pileup) is not a donor-demultiplexing method; it genotypes pooled reads of vireo's clusters (all cells for one-donor libraries) with the model used for the Kang truth."
  ]
 }
