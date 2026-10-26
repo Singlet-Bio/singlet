@@ -205,6 +205,7 @@ def lines(root, out):
     res["k562_subclonal_vois_maester"] = [vname(*v, ref) for v in vois]
     res["vaf_fidelity"] = vaf_fidelity(P3, PM, vois, mask=iK)
     res["variant_detection"] = detection(root, "k562_3p", P3, ref, vois, iK)
+    res["singlet_outputs"] = singlet_outputs(root, "k562_3p", want, R3, PM, ref)
     for nm, (P, tool) in (("k562_3p", (P3, "mgatk")), ("k562_maester", (PM, "maegatk"))):
         fd = f"{root}/pile/{nm}/{tool}/final"
         if glob.glob(f"{fd}/*.A.txt.gz"):
@@ -256,7 +257,88 @@ def vaf_fidelity(P3, PM, sites, mask=None, min_dp_m=20):
     return out
 
 
-def tool_agreement(p_ours, p_tool, ref):
+def singlet_outputs(root, name, want, P_read, PM, ref):
+    """Score Singlet's own outputs (singlet_export.py -> <name>/singlet_mt.npz): (a) its private read-level counts vs
+    mtpile read level (same counting rules) on the evaluation cells; (b) its public per-cell heteroplasmy values vs
+    the MAESTER VAF of the same cell and site."""
+    f = f"{root}/{name}/singlet_mt.npz"
+    if not os.path.exists(f):
+        return None
+    z = np.load(f)
+    out = {}
+    bcs = [bc(x) for x in z["counts_barcodes"]]
+    col_of = {b: i for i, b in enumerate(bcs)}
+    keep = [col_of.get(w, -1) for w in want]
+    n_bc = int(z["counts_shape"][1])
+    out["private_counts_barcodes"] = n_bc
+    out["private_counts_nnz_all_barcodes"] = int(len(z["counts_data"]))
+    # rebuild a Pile for the evaluation cells
+    def to_pile(prefix):
+        ip, ix, dt = z[f"{prefix}_indptr"], z[f"{prefix}_indices"], z[f"{prefix}_data"]
+        cells, feats, vals = [], [], []
+        for new, old in enumerate(keep):
+            if old < 0:
+                continue
+            sl = slice(ip[old], ip[old + 1])
+            cells.append(np.full(sl.stop - sl.start, new)); feats.append(ix[sl]); vals.append(dt[sl])
+        return np.concatenate(cells), np.concatenate(feats), np.concatenate(vals).astype(np.int64)
+    ct, ft, vt = to_pile("counts")
+    out["private_counts_nnz_eval_cells"] = int(len(vt))
+    cr, fr, vr = to_pile("rev")
+    key_t = ct * M.L * 4 + ft; key_r = cr * M.L * 4 + fr
+    o = np.argsort(key_t, kind="stable"); key_t, ct, ft, vt = key_t[o], ct[o], ft[o], vt[o]
+    rev = np.zeros(len(key_t), np.int64)
+    j = np.searchsorted(key_t, key_r); ok = (j < len(key_t)) & (key_t[np.minimum(j, len(key_t) - 1)] == key_r)
+    rev[j[ok]] = vr[ok]
+    pos, base = ft // 4, ft % 4
+    k2 = ct * M.L + pos
+    uk, inv = np.unique(k2, return_inverse=True)
+    c = np.zeros((len(uk), 8), np.int64)
+    np.add.at(c, (inv, base), vt - rev); np.add.at(c, (inv, base + 4), rev)
+    PS = M.Pile(len(want), (uk // M.L).astype(np.uint32), (uk % M.L).astype(np.uint32), c)
+    ag = tool_agreement(P_read, PS, ref, calls=False)
+    out["private_counts_vs_mtpile_read"] = ag
+    # public heteroplasmy matrix
+    if "het_data" in z:
+        sites = [str(x) for x in z["het_sites"]]
+        hbc = {bc(x): i for i, x in enumerate(z["het_barcodes"])}
+        ip, ix, dt = z["het_indptr"], z["het_indices"], z["het_data"].astype(np.float64) / 10000.0
+        sl = []
+        for t in sites:   # chrM:<pos>:<ref>><alt>
+            pp, ra = t.split(":")[1], t.split(":")[2]
+            sl.append((int(pp) - 1, M.BASES.index(ra[-1])))
+        Am, Dm, _, _ = M.site_matrices(PM, sl); Am, Dm = Am.toarray(), Dm.toarray()
+        A3, D3, _, _ = M.site_matrices(P_read, sl); D3 = D3.toarray()
+        v_s, v_m, zero, cov3 = [], [], 0, 0
+        for new, w in enumerate(want):
+            old = hbc.get(w)
+            if old is None:
+                continue
+            for k in range(ip[old], ip[old + 1]):
+                j_ = ix[k]
+                zero += dt[k] == 0
+                if Dm[new, j_] >= 20:
+                    v_s.append(dt[k]); v_m.append(Am[new, j_] / Dm[new, j_])
+        n_entries = int(sum(ip[hbc[w] + 1] - ip[hbc[w]] for w in want if w in hbc))
+        cov_pairs = int((D3 >= 1).sum())
+        v_s, v_m = np.array(v_s), np.array(v_m)
+        out["public_heteroplasmy"] = dict(
+            n_sites=len(sites), n_entries_eval_cells=n_entries, n_zero_entries=int(zero),
+            n_cell_site_pairs_covered_3p=cov_pairs,
+            frac_covered_pairs_stored=n_entries / max(cov_pairs, 1),
+            n_with_maester_dp20=int(len(v_s)),
+            pearson_vs_maester=float(np.corrcoef(v_s, v_m)[0, 1]) if len(v_s) > 2 else None,
+            mean_abs_diff_vs_maester=float(np.abs(v_s - v_m).mean()) if len(v_s) else None,
+            frac_maester_vaf_lt_001=float((v_m < 0.01).mean()) if len(v_m) else None)
+        # are Singlet's public sites supported by MAESTER pseudobulk?
+        pb = PM.pseudobulk(); d = pb.sum(1)
+        afm = [float((pb[p, b] + pb[p, b + 4]) / max(d[p], 1)) for p, b in sl]
+        out["public_sites_maester_pool_af"] = dict(zip(sites, afm))
+        out["public_sites_frac_maester_af_ge_0.005"] = float(np.mean(np.array(afm) >= 0.005))
+    return out
+
+
+def tool_agreement(p_ours, p_tool, ref, calls=True):
     """Per (cell, position, base) agreement of two count tensors over the same cells; and their mgatk-rule calls."""
     def keyed(p):
         k = p.cell.astype(np.int64) * M.L + p.pos
@@ -270,6 +352,9 @@ def tool_agreement(p_ours, p_tool, ref):
     out = dict(n_cell_pos_ours=int(len(ka)), n_cell_pos_tool=int(len(kb)), n_common=int(len(common)),
                depth_pearson=float(np.corrcoef(da, db)[0, 1]), depth_ratio_median=float(np.median(da / np.maximum(db, 1))),
                nonref_pearson=float(np.corrcoef(alt_a, alt_b)[0, 1]))
+    out["exact_cell_pos_base_match"] = float((ca[ia] == cb[ib]).all(1).mean())
+    if not calls:
+        return out
     sa, _ = M.mgatk_stats(p_ours, ref, M.candidate_sites(p_ours, ref, 3, 1))
     sb, _ = M.mgatk_stats(p_tool, ref, M.candidate_sites(p_tool, ref, 3, 1))
     A, B = set(sa.variant[sa.mgatk_pass]), set(sb.variant[sb.mgatk_pass])
@@ -430,6 +515,8 @@ def bpdcn(root, out):
         fd = f"{root}/pile/{nm}/{tool}/final"
         if glob.glob(f"{fd}/*.A.txt.gz"):
             res[f"{nm}_vs_{tool}"] = tool_agreement(P, M.load_mgatk(fd, want), ref)
+
+    res["singlet_outputs"] = singlet_outputs(root, "bpdcn_3p", want, R3, PM, ref)
 
     # 2. variant discovery on the 3' library
     res["variant_detection"] = detection(root, "bpdcn_3p", P3, ref, vois)

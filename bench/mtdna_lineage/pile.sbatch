@@ -6,7 +6,7 @@
 #SBATCH --mem=120G
 #SBATCH --time=03:59:00
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
-#   sbatch pile.sbatch <name> <bam> <cells.txt | auto:SINGLET_OUT:TRUTH_CELLS> [mgatk|maegatk|none]   (env SITES_FILE: 1-based positions)
+#   sbatch pile.sbatch <name> <bam> <cells.txt | auto:SINGLET_OUT:TRUTH_CELLS[:COLUMN]> [mgatk|maegatk|none]   (env SITES_FILE: 1-based positions)
 # Per-cell chrM allele counts from one BAM: mtpile (read and molecule level, strand) and a reference tool on the same
 # reads and cells: mgatk bcall (UMI-deduplicated, -ub UB) for the 3' libraries, maegatk bcall (UMI consensus, >= 3
 # reads, as the MAESTER authors ran it) for the MAESTER libraries.
@@ -19,7 +19,7 @@ O=$W/out/mtdna_lineage/pile/$NAME; mkdir -p $O
 BIN=/tmp/mtpile-$SLURM_JOB_ID
 $P/bin/x86_64-conda-linux-gnu-g++ -std=c++17 -O2 -I$P/include $J/mtpile.cpp -o $BIN -L$P/lib -lhts -Wl,-rpath,$P/lib
 case "$CELLS" in
-  auto:*) IFS=: read -r _ SOUT TRUTHC <<< "$CELLS"; bash $J/mkcells.sh $SOUT $TRUTHC $O/cells.txt ;;
+  auto:*) IFS=: read -r _ SOUT TRUTHC COL <<< "$CELLS"; bash $J/mkcells.sh $SOUT $TRUTHC $O/cells.txt $COL ;;
   *) cp $CELLS $O/cells.txt ;;
 esac
 [ -n "${SITES_FILE:-}" ] && cp $SITES_FILE $O/sites.txt
