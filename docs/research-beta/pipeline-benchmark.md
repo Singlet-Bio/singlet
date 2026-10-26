@@ -104,7 +104,7 @@ The campaign binary is Clipper `$PB/bin/singlet-campaign`: sha256 `261d3a50…`,
    - CITE exon+intron rho: 0.421 vs GeneFull 0.428 (exonic layer equal).
    - Rn18s-rs5 (exon priority) and LINC00486 (a repeat-like 5 kb window with ~2% mismatches, seen in both species) are the largest single genes.
    - Branch `fix/intron-assignment`.
-3. **Cell-calling truth.**
+3. **Cell-calling truth (provisionally resolved: called_v2 wins on independent truth; see §5).**
    - The 10x "truth" sets are Cell Ranger's own EmptyDrops-type calls, so they are circular against EmptyDrops_CR.
    - On independent Kang truth, called_v2 has recall 1.00 and precision 0.88, vs 0.97 for EmptyDrops_CR. Genotypes suggest about 73% of the extras are real low-RNA cells.
    - Branch `bench/cellcall-independent-truth` builds genotype- and species-confirmed truth (§5).
@@ -221,7 +221,16 @@ WORK = `/mnt/projects/debruinz_project/debruinz/singlet`; PB = `$WORK/pipeline-b
 
 Long-read and spike-in truth and the extra hgmm libraries are missing. Paths: `$WORK/exact-vs-pseudo/`.
 
-**Cell-calling independent truth** (`bench/cellcall-independent-truth`): see the agent's README on that branch. Its final report was still pending when this note was written.
+**Cell-calling independent truth** (`bench/cellcall-independent-truth`, 90c172e4; README `bench/cellcall_truth/README.md`). F1 on barcodes with at least 50 UMIs:
+
+| dataset | truth | called_v2 | CellBender | EmptyDrops_CR | Cell Ranger |
+|---|---|---|---|---|---|
+| Kang b2 ctrl | genotype | 0.991 | 0.985 | 0.954 | 0.942 |
+| hgmm1k_v3, damaged barcodes counted as non-cells | species | 0.915 | 0.892 | 0.897 | 0.899 |
+
+- On Kang, the confidence intervals of each difference exclude 0.
+- **Provisional verdict:** called_v2 wins. Its losses on the 10x-truth metrics come from Cell Ranger calling conservatively, so reframe those metrics as agreement with Cell Ranger instead of changing called_v2.
+- Not yet confirmed on hgmm5k_v3, hgmm1k_v2 or the batch-1 lanes: jobs 787567 and 787569, results in `$WORK/state/cellcall_truth/`.
 
 
 ## 6. Exact next steps, in order
