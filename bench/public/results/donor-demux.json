@@ -3,10 +3,10 @@
  "schema_version": "1.1.0",
  "capability": "donor-demux",
  "title": "Genotype-free donor demultiplexing and donor count",
- "conclusion": "Without being told the donor count, Singlet finds the exact K in 6 of 6 held-out real pools (vireo with N = 12: 0 of 6); mean ARI 0.994 against 0.921 for vireo given the true K.",
+ "conclusion": "Without being told the donor count, Singlet finds the exact K in 6 of 6 held-out real pools (vireo with N = 12: 0 of 6); mean ARI 0.994 against 0.986 for vireo given the true K.",
  "methods": "Real pools only, each with truth from the data's authors: five Kang 2018 lupus PBMC lanes (true K = 8, 8, 8, 4, 4; labels are demuxlet calls made with donor genotypes), the MAESTER K562 + BT142 cell-line mixture (K = 2) and a single-patient bone marrow (K = 1). Reads were rebuilt from the submitted Cell Ranger BAMs (Kang) or downloaded (MAESTER), and every tool sees the same tagged BAM and the same called cells: Singlet is run once end to end (STAR alignment, cell calling, demultiplexing, K estimated by the held-out-likelihood search), and cellsnp-lite, vireo and souporcell are run on its BAM and cell list with the same 1000 Genomes SNP panel. Vireo has no K search, so its K is the number of donors holding at least 1% of cells when it is given N = 12 (the documented way to over-specify N); the rule was fixed before the runs. Vireo (3 seeds) and souporcell get the true K for the accuracy metrics. Scores are on truth singlets: ARI over all of them, with unassigned and doublet calls as their own labels; coverage is the fraction given a donor; per-donor recall uses Hungarian matching. The ARI tolerance is vireo's seed-to-seed standard deviation. The K metric is the fraction of held-out pools with the exact true K, gated at 0.9. The Kang batch 2 control lane is development data and is reported separately; it is excluded from the pooled numbers.",
  "status": "final",
- "generated_at": "2026-10-26T10:44:42+00:00",
+ "generated_at": "2026-10-26T11:12:15+00:00",
  "owner": "pipeline-benchmark",
  "singlet": {
   "version": "1.0.0",
@@ -160,7 +160,7 @@
    },
    "truth": "a single patient: every called cell is one donor, K = 1",
    "data_kind": "real",
-   "n_cells": 15690
+   "n_cells": 1883
   }
  ],
  "metrics": [
@@ -271,10 +271,10 @@
    "dataset": "kang2018_ctrl",
    "direction": "higher",
    "singlet": {
-    "value": 0.975566,
+    "value": 0.97549,
     "ci": [
-     0.97282,
-     0.978944
+     0.971763,
+     0.979023
     ]
    },
    "rule": {
@@ -288,11 +288,15 @@
    "competitors": [
     {
      "tool": "vireo",
-     "value": 0.903268
+     "value": 0.920273
+    },
+    {
+     "tool": "souporcell",
+     "value": 0.990019
     }
    ],
    "notes": "Singlet K estimated; competitors given the true K. Unassigned and doublet calls count as their own labels.",
-   "pass": "pass"
+   "pass": "fail"
   },
   {
    "id": "ari",
@@ -302,10 +306,10 @@
    "dataset": "kang2018_stim",
    "direction": "higher",
    "singlet": {
-    "value": 0.976344,
+    "value": 0.976237,
     "ci": [
-     0.972947,
-     0.979607
+     0.97314,
+     0.978987
     ]
    },
    "rule": {
@@ -319,11 +323,15 @@
    "competitors": [
     {
      "tool": "vireo",
-     "value": 0.940064
+     "value": 0.95313
+    },
+    {
+     "tool": "souporcell",
+     "value": 0.984756
     }
    ],
    "notes": "Singlet K estimated; competitors given the true K. Unassigned and doublet calls count as their own labels.",
-   "pass": "pass"
+   "pass": "fail"
   },
   {
    "id": "ari",
@@ -333,10 +341,10 @@
    "dataset": "kang2018_b1_a",
    "direction": "higher",
    "singlet": {
-    "value": 0.995663,
+    "value": 0.995647,
     "ci": [
-     0.992824,
-     0.998161
+     0.992839,
+     0.998157
     ]
    },
    "rule": {
@@ -350,7 +358,11 @@
    "competitors": [
     {
      "tool": "vireo",
-     "value": 0.9884
+     "value": 0.99257
+    },
+    {
+     "tool": "souporcell",
+     "value": 0.996707
     }
    ],
    "notes": "Singlet K estimated; competitors given the true K. Unassigned and doublet calls count as their own labels.",
@@ -364,44 +376,9 @@
    "dataset": "kang2018_b1_b",
    "direction": "higher",
    "singlet": {
-    "value": 0.996286,
+    "value": 0.996281,
     "ci": [
-     0.993655,
-     0.99821
-    ]
-   },
-   "rule": {
-    "type": "match_or_beat",
-    "against": "best",
-    "tolerance": {
-     "abs": 0.002
-    },
-    "rationale": "0.002 = pooled seed-to-seed standard deviation of vireo's ARI (3 seeds per pool), the competitor's own run-to-run variation (floor 0.002)"
-   },
-   "competitors": [
-    {
-     "tool": "vireo",
-     "value": 0.988608
-    },
-    {
-     "tool": "souporcell",
-     "value": 0.991376
-    }
-   ],
-   "notes": "Singlet K estimated; competitors given the true K. Unassigned and doublet calls count as their own labels.",
-   "pass": "pass"
-  },
-  {
-   "id": "ari",
-   "name": "Adjusted Rand index of donor labels (truth singlets)",
-   "unit": "ARI",
-   "category": "accuracy",
-   "dataset": "kang2018_b1_c",
-   "direction": "higher",
-   "singlet": {
-    "value": 0.997162,
-    "ci": [
-     0.995279,
+     0.994382,
      0.998525
     ]
    },
@@ -416,11 +393,46 @@
    "competitors": [
     {
      "tool": "vireo",
-     "value": 0.98503
+     "value": 0.991693
     },
     {
      "tool": "souporcell",
-     "value": 0.98911
+     "value": 0.994467
+    }
+   ],
+   "notes": "Singlet K estimated; competitors given the true K. Unassigned and doublet calls count as their own labels.",
+   "pass": "pass"
+  },
+  {
+   "id": "ari",
+   "name": "Adjusted Rand index of donor labels (truth singlets)",
+   "unit": "ARI",
+   "category": "accuracy",
+   "dataset": "kang2018_b1_c",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.997142,
+    "ci": [
+     0.995122,
+     0.998534
+    ]
+   },
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.002
+    },
+    "rationale": "0.002 = pooled seed-to-seed standard deviation of vireo's ARI (3 seeds per pool), the competitor's own run-to-run variation (floor 0.002)"
+   },
+   "competitors": [
+    {
+     "tool": "vireo",
+     "value": 0.992216
+    },
+    {
+     "tool": "souporcell",
+     "value": 0.996305
     }
    ],
    "notes": "Singlet K estimated; competitors given the true K. Unassigned and doublet calls count as their own labels.",
@@ -434,9 +446,9 @@
    "dataset": "maester_k562_bt142_3p",
    "direction": "higher",
    "singlet": {
-    "value": 0.999101,
+    "value": 0.999153,
     "ci": [
-     0.997221,
+     0.997448,
      1.0
     ]
    },
@@ -451,11 +463,11 @@
    "competitors": [
     {
      "tool": "vireo",
-     "value": 0.701116
+     "value": 0.999153
     },
     {
      "tool": "souporcell",
-     "value": 0.701116
+     "value": 0.999153
     }
    ],
    "notes": "Singlet K estimated; competitors given the true K. Unassigned and doublet calls count as their own labels.",
@@ -491,10 +503,10 @@
    "dataset": "pooled",
    "direction": "higher",
    "singlet": {
-    "value": 0.992911,
+    "value": 0.992892,
     "ci": [
-     0.984255,
-     0.997957
+     0.984188,
+     0.997977
     ]
    },
    "rule": {
@@ -508,7 +520,11 @@
    "competitors": [
     {
      "tool": "vireo",
-     "value": 0.920644
+     "value": 0.985753
+    },
+    {
+     "tool": "souporcell",
+     "value": 0.994278
     }
    ],
    "pass": "pass"
@@ -521,7 +537,7 @@
    "dataset": "pooled",
    "direction": "higher",
    "singlet": {
-    "value": 0.999819
+    "value": 0.999817
    },
    "rule": {
     "type": "match_or_beat",
@@ -535,6 +551,10 @@
     {
      "tool": "vireo",
      "value": 0.999861
+    },
+    {
+     "tool": "souporcell",
+     "value": 1.0
     }
    ],
    "pass": "pass"
@@ -547,7 +567,7 @@
    "dataset": "pooled",
    "direction": "higher",
    "singlet": {
-    "value": 0.994495
+    "value": 0.994431
    },
    "rule": {
     "type": "match_or_beat",
@@ -560,7 +580,11 @@
    "competitors": [
     {
      "tool": "vireo",
-     "value": 0.928017
+     "value": 0.988117
+    },
+    {
+     "tool": "souporcell",
+     "value": 0.995181
     }
    ],
    "pass": "pass"
@@ -573,7 +597,7 @@
    "dataset": "pooled",
    "direction": "higher",
    "singlet": {
-    "value": 0.925811
+    "value": 0.924171
    },
    "rule": {
     "type": "match_or_beat",
@@ -582,11 +606,15 @@
    "competitors": [
     {
      "tool": "vireo",
-     "value": 0.486656
+     "value": 0.897989
+    },
+    {
+     "tool": "souporcell",
+     "value": 0.935229
     }
    ],
    "notes": "A donor merged into another or never found gives 0.",
-   "pass": "pass"
+   "pass": "fail"
   }
  ],
  "resources": [
@@ -636,6 +664,15 @@
    "notes": "N = 12, clustering only"
   },
   {
+   "tool": "souporcell",
+   "dataset": "kang2018_ctrl",
+   "wall_s": 2372.2,
+   "max_rss_gb": 1.32,
+   "threads": 16,
+   "cpu_h": 10.543111,
+   "notes": "remap + freebayes + vartrix + clustering, k given"
+  },
+  {
    "tool": "singlet",
    "dataset": "kang2018_stim",
    "wall_s": 2123.4,
@@ -681,6 +718,15 @@
    "notes": "N = 12, clustering only"
   },
   {
+   "tool": "souporcell",
+   "dataset": "kang2018_stim",
+   "wall_s": 2133.2,
+   "max_rss_gb": 1.14,
+   "threads": 16,
+   "cpu_h": 9.480889,
+   "notes": "remap + freebayes + vartrix + clustering, k given"
+  },
+  {
    "tool": "singlet",
    "dataset": "kang2018_b1_a",
    "wall_s": 1405.3,
@@ -724,6 +770,15 @@
    "threads": 16,
    "cpu_h": 0.051556,
    "notes": "N = 12, clustering only"
+  },
+  {
+   "tool": "souporcell",
+   "dataset": "kang2018_b1_a",
+   "wall_s": 916.3,
+   "max_rss_gb": 1.34,
+   "threads": 16,
+   "cpu_h": 4.072444,
+   "notes": "remap + freebayes + vartrix + clustering, k given"
   },
   {
    "tool": "singlet",
@@ -913,6 +968,15 @@
    "threads": 16,
    "cpu_h": 0.124444,
    "notes": "N = 12, clustering only"
+  },
+  {
+   "tool": "souporcell",
+   "dataset": "maester_bpdcn712_3p",
+   "wall_s": 995.5,
+   "max_rss_gb": 1.2,
+   "threads": 16,
+   "cpu_h": 4.424444,
+   "notes": "remap + freebayes + vartrix + clustering, k given"
   }
  ],
  "figures": [
@@ -1014,12 +1078,12 @@
       "maester_bpdcn712_3p"
      ],
      "y": [
-      0.975566,
-      0.976344,
-      0.995663,
-      0.996286,
-      0.997162,
-      0.999101,
+      0.97549,
+      0.976237,
+      0.995647,
+      0.996281,
+      0.997142,
+      0.999153,
       1.0
      ]
     },
@@ -1036,12 +1100,12 @@
       "maester_bpdcn712_3p"
      ],
      "y": [
-      0.903268,
-      0.940064,
-      0.9884,
-      0.988608,
-      0.98503,
-      0.701116,
+      0.920273,
+      0.95313,
+      0.99257,
+      0.991693,
+      0.992216,
+      0.999153,
       null
      ]
     },
@@ -1058,12 +1122,12 @@
       "maester_bpdcn712_3p"
      ],
      "y": [
-      null,
-      null,
-      null,
-      0.991376,
-      0.98911,
-      0.701116,
+      0.990019,
+      0.984756,
+      0.996707,
+      0.994467,
+      0.996305,
+      0.999153,
       null
      ]
     }
@@ -1090,66 +1154,66 @@
      8,
      9,
      9,
-     0.975566,
-     0.903268,
-     null,
-     0.988061,
-     0.888889
+     0.97549,
+     0.920273,
+     0.990019,
+     0.987974,
+     0.888403
     ],
     [
      "kang2018_stim",
      8,
      8,
      10,
-     0.976344,
-     0.940064,
-     null,
-     0.981236,
-     0.925811
+     0.976237,
+     0.95313,
+     0.984756,
+     0.981106,
+     0.924171
     ],
     [
      "kang2018_b1_a",
      4,
      4,
      7,
-     0.995663,
-     0.9884,
-     null,
-     0.996852,
-     0.993188
+     0.995647,
+     0.99257,
+     0.996707,
+     0.996842,
+     0.993169
     ],
     [
      "kang2018_b1_b",
      4,
      4,
      6,
-     0.996286,
-     0.988608,
-     0.991376,
-     0.997254,
-     0.992473
+     0.996281,
+     0.991693,
+     0.994467,
+     0.997248,
+     0.992449
     ],
     [
      "kang2018_b1_c",
      8,
      8,
      9,
-     0.997162,
-     0.98503,
-     0.98911,
-     0.997554,
-     0.995406
+     0.997142,
+     0.992216,
+     0.996305,
+     0.997538,
+     0.995392
     ],
     [
      "maester_k562_bt142_3p",
      2,
      2,
      4,
-     0.999101,
-     0.701116,
-     0.701116,
-     0.99958,
-     0.999215
+     0.999153,
+     0.999153,
+     0.999153,
+     0.999418,
+     0.99839
     ],
     [
      "maester_bpdcn712_3p",
@@ -1214,32 +1278,32 @@
    "name": "donor_demux_cells.tsv.gz",
    "url": "https://data.singlet.bio/benchmarking/1.0.0/donor-demux/donor_demux_cells.tsv.gz",
    "kind": "singlet_output",
-   "sha256": "34e382143738d996b2108896b1033b27908a416e3bf58b17f07ff1c9419f5988",
-   "bytes": 392500,
+   "sha256": "64af70444e2d6b396a673e87d2f5e5cec121d5e7df86bc2178099a53ab1c30fe",
+   "bytes": 299875,
    "format": "tsv"
   },
   {
    "name": "donor_demux_pools.tsv",
    "url": "https://data.singlet.bio/benchmarking/1.0.0/donor-demux/donor_demux_pools.tsv",
    "kind": "derived",
-   "sha256": "076919fbe510d5d95172854c77f8ca7bbdc09b871566bf55669dfbe33d7a678b",
-   "bytes": 472,
+   "sha256": "3d573f8f5087c05f4d348fc8ad77765de4696b8540ee9fc5955ddfcd8c2c526d",
+   "bytes": 470,
    "format": "tsv"
   },
   {
    "name": "donor_demux_resources.tsv",
    "url": "https://data.singlet.bio/benchmarking/1.0.0/donor-demux/donor_demux_resources.tsv",
    "kind": "derived",
-   "sha256": "b185c8cf1a8113770b7d6d7abf1c838e324dbcc7ff9f10a30612d0b07cce6958",
-   "bytes": 1756,
+   "sha256": "011128aa950aba2bfe521057586d7458aef9f8581679a9b04846de0c6b6bb53d",
+   "bytes": 1919,
    "format": "tsv"
   },
   {
    "name": "provenance.json",
    "url": "https://data.singlet.bio/benchmarking/1.0.0/donor-demux/provenance.json",
    "kind": "singlet_output",
-   "sha256": "6935e1869030ae1c2281fbb55a1c7778d7ca4c0cbd5830a6b02f36befc1d92a0",
-   "bytes": 9333,
+   "sha256": "07c2948ef54de4a850e2720038d8c3e044ddb80a0e1af8eb041f4e7f4e88e50c",
+   "bytes": 10213,
    "format": "json"
   }
  ],
@@ -1252,12 +1316,12 @@
   {
    "path": "bench/public/capabilities/donor_demux.py",
    "role": "metric",
-   "url": "https://github.com/Singlet-Bio/singlet/blob/bc855f76ee733b938d43e197cd9ede55c1221474/bench/public/capabilities/donor_demux.py"
+   "url": "https://github.com/Singlet-Bio/singlet/blob/b81345b532cc14d9d616ff4ac373e8a2c812375a/bench/public/capabilities/donor_demux.py"
   },
   {
    "path": "bench/public/genotype",
    "role": "harness",
-   "url": "https://github.com/Singlet-Bio/singlet/tree/bc855f76ee733b938d43e197cd9ede55c1221474/bench/public/genotype"
+   "url": "https://github.com/Singlet-Bio/singlet/tree/b81345b532cc14d9d616ff4ac373e8a2c812375a/bench/public/genotype"
   }
  ],
  "reproduce": {

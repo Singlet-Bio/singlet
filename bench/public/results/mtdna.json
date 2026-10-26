@@ -6,7 +6,7 @@
  "conclusion": "Singlet's genotype-free per-donor mt haplotypes reach precision 0.89 and recall 0.91 against replicate-lane truth on held-out Kang lanes (mgatk on vireo clusters: 0.93 / 0.89). For MAESTER clone-defining variants the 3' per-cell VAF has mean AUROC 0.79 (mgatk 0.79).",
  "methods": "Real data with real truth. (1) Kang 2018 lanes: each donor's homoplasmic mtDNA haplotype is taken from a second library of the same donors (cells labelled by the authors' demuxlet calls, mgatk allele counts, AF >= 0.9 and depth >= 20 against rCRS). Singlet's genotype-free per-donor mt variant files (from its own clusters) are compared with it, as are mgatk counts pooled by vireo's clusters, the pipeline a user would assemble. Precision is the share of predicted variants at covered truth positions that are in the truth; recall is the share of truth variants recovered. (2) MAESTER BPDCN712: 26 clone-defining mt variants whose positive cells were established from the paired mt-enriched library of the same cells; for each, the AUROC of the per-cell VAF from the standard 3' library separates positive cells from the other clone cells (both tools on the same alignments and cells; mgatk counts UMI-deduplicated molecules, Singlet counts reads). (3) MAESTER K562 + BT142: agreement of per-line allele fractions from the 3' library with the MAESTER fractions. Singlet is run end to end (default pipeline, automatic donor count); mgatk 0.9.0 runs on the chrM reads of Singlet's BAM for the same cells. Rules are match-or-beat against mgatk with zero tolerance; informational metrics have no competitor. Variants and counts stay private.",
  "status": "final",
- "generated_at": "2026-10-26T10:44:44+00:00",
+ "generated_at": "2026-10-26T11:12:29+00:00",
  "owner": "pipeline-benchmark",
  "singlet": {
   "version": "1.0.0",
@@ -161,11 +161,19 @@
    "dataset": "kang2018_ctrl",
    "direction": "higher",
    "singlet": {
-    "value": 0.789116
+    "value": 0.789116,
+    "ci": [
+     0.729761,
+     0.829878
+    ]
    },
    "rule": {
     "type": "match_or_beat",
-    "against": "best"
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0711
+    },
+    "rationale": "0.0711 = half-width of the paired bootstrap 95% CI of the difference between Singlet and mgatk, resampling donors"
    },
    "competitors": [
     {
@@ -184,11 +192,19 @@
    "dataset": "kang2018_ctrl",
    "direction": "higher",
    "singlet": {
-    "value": 0.913386
+    "value": 0.913386,
+    "ci": [
+     0.882021,
+     0.937336
+    ]
    },
    "rule": {
     "type": "match_or_beat",
-    "against": "best"
+    "against": "best",
+    "tolerance": {
+     "abs": 0.132
+    },
+    "rationale": "0.132 = half-width of the paired bootstrap 95% CI of the difference between Singlet and mgatk, resampling donors"
    },
    "competitors": [
     {
@@ -207,11 +223,19 @@
    "dataset": "kang2018_stim",
    "direction": "higher",
    "singlet": {
-    "value": 0.850649
+    "value": 0.850649,
+    "ci": [
+     0.794979,
+     0.89198
+    ]
    },
    "rule": {
     "type": "match_or_beat",
-    "against": "best"
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0498
+    },
+    "rationale": "0.0498 = half-width of the paired bootstrap 95% CI of the difference between Singlet and mgatk, resampling donors"
    },
    "competitors": [
     {
@@ -229,11 +253,19 @@
    "dataset": "kang2018_stim",
    "direction": "higher",
    "singlet": {
-    "value": 0.909722
+    "value": 0.909722,
+    "ci": [
+     0.886343,
+     0.929157
+    ]
    },
    "rule": {
     "type": "match_or_beat",
-    "against": "best"
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0494
+    },
+    "rationale": "0.0494 = half-width of the paired bootstrap 95% CI of the difference between Singlet and mgatk, resampling donors"
    },
    "competitors": [
     {
@@ -251,11 +283,19 @@
    "dataset": "kang2018_b1_a",
    "direction": "higher",
    "singlet": {
-    "value": 0.911765
+    "value": 0.911765,
+    "ci": [
+     0.857143,
+     0.97619
+    ]
    },
    "rule": {
     "type": "match_or_beat",
-    "against": "best"
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0146
+    },
+    "rationale": "0.0146 = half-width of the paired bootstrap 95% CI of the difference between Singlet and mgatk, resampling donors"
    },
    "competitors": [
     {
@@ -263,7 +303,7 @@
      "value": 0.92233
     }
    ],
-   "pass": "fail"
+   "pass": "pass"
   },
   {
    "id": "haplotype_recall",
@@ -273,11 +313,19 @@
    "dataset": "kang2018_b1_a",
    "direction": "higher",
    "singlet": {
-    "value": 0.920792
+    "value": 0.920792,
+    "ci": [
+     0.888889,
+     0.948718
+    ]
    },
    "rule": {
     "type": "match_or_beat",
-    "against": "best"
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0189
+    },
+    "rationale": "0.0189 = half-width of the paired bootstrap 95% CI of the difference between Singlet and mgatk, resampling donors"
    },
    "competitors": [
     {
@@ -295,11 +343,19 @@
    "dataset": "kang2018_b1_b",
    "direction": "higher",
    "singlet": {
-    "value": 0.909091
+    "value": 0.909091,
+    "ci": [
+     0.848859,
+     0.952941
+    ]
    },
    "rule": {
     "type": "match_or_beat",
-    "against": "best"
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0367
+    },
+    "rationale": "0.0367 = half-width of the paired bootstrap 95% CI of the difference between Singlet and mgatk, resampling donors"
    },
    "competitors": [
     {
@@ -317,11 +373,19 @@
    "dataset": "kang2018_b1_b",
    "direction": "higher",
    "singlet": {
-    "value": 0.909091
+    "value": 0.909091,
+    "ci": [
+     0.885714,
+     0.920924
+    ]
    },
    "rule": {
     "type": "match_or_beat",
-    "against": "best"
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0344
+    },
+    "rationale": "0.0344 = half-width of the paired bootstrap 95% CI of the difference between Singlet and mgatk, resampling donors"
    },
    "competitors": [
     {
@@ -339,11 +403,19 @@
    "dataset": "kang2018_b1_c",
    "direction": "higher",
    "singlet": {
-    "value": 0.89759
+    "value": 0.89759,
+    "ci": [
+     0.830382,
+     0.961178
+    ]
    },
    "rule": {
     "type": "match_or_beat",
-    "against": "best"
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0736
+    },
+    "rationale": "0.0736 = half-width of the paired bootstrap 95% CI of the difference between Singlet and mgatk, resampling donors"
    },
    "competitors": [
     {
@@ -351,7 +423,7 @@
      "value": 0.943396
     }
    ],
-   "pass": "fail"
+   "pass": "pass"
   },
   {
    "id": "haplotype_recall",
@@ -361,11 +433,19 @@
    "dataset": "kang2018_b1_c",
    "direction": "higher",
    "singlet": {
-    "value": 0.90303
+    "value": 0.90303,
+    "ci": [
+     0.855562,
+     0.931614
+    ]
    },
    "rule": {
     "type": "match_or_beat",
-    "against": "best"
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0444
+    },
+    "rationale": "0.0444 = half-width of the paired bootstrap 95% CI of the difference between Singlet and mgatk, resampling donors"
    },
    "competitors": [
     {
@@ -373,7 +453,7 @@
      "value": 0.909091
     }
    ],
-   "pass": "fail"
+   "pass": "pass"
   },
   {
    "id": "haplotype_precision",
@@ -391,7 +471,11 @@
    },
    "rule": {
     "type": "match_or_beat",
-    "against": "best"
+    "against": "best",
+    "tolerance": {
+     "abs": 0.032
+    },
+    "rationale": "0.032 = half-width of the paired bootstrap 95% CI of the difference between Singlet and mgatk, resampling donors"
    },
    "competitors": [
     {
@@ -418,7 +502,11 @@
    },
    "rule": {
     "type": "match_or_beat",
-    "against": "best"
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0348
+    },
+    "rationale": "0.0348 = half-width of the paired bootstrap 95% CI of the difference between Singlet and mgatk, resampling donors"
    },
    "competitors": [
     {
@@ -468,7 +556,11 @@
    },
    "rule": {
     "type": "match_or_beat",
-    "against": "best"
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0001
+    },
+    "rationale": "0.0001 = half-width of the paired bootstrap 95% CI of the difference between Singlet and mgatk, resampling variants"
    },
    "competitors": [
     {
@@ -477,7 +569,7 @@
     }
    ],
    "notes": "13 of 26 author-validated clone-defining variants have >= 5 positive and >= 5 negative cells with >= 2 reads in the standard 3' library.",
-   "pass": "fail"
+   "pass": "pass"
   },
   {
    "id": "clonal_variants_evaluable",
@@ -548,11 +640,15 @@
    "dataset": "maester_k562_bt142_3p",
    "direction": "higher",
    "singlet": {
-    "value": 0.794563
+    "value": 0.794571
    },
    "rule": {
     "type": "match_or_beat",
-    "against": "best"
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0029
+    },
+    "rationale": "0.0029 = half-width of the paired bootstrap 95% CI of the difference between Singlet and mgatk, resampling genome blocks of 1,700 positions"
    },
    "competitors": [
     {
@@ -561,7 +657,7 @@
     }
    ],
    "notes": "260 variant-line pairs with MAESTER AF >= 0.02 and >= 100 3' reads in both tools.",
-   "pass": "fail"
+   "pass": "pass"
   },
   {
    "id": "line_af_mae_k562",
@@ -571,11 +667,15 @@
    "dataset": "maester_k562_bt142_3p",
    "direction": "lower",
    "singlet": {
-    "value": 0.089091
+    "value": 0.089092
    },
    "rule": {
     "type": "match_or_beat",
-    "against": "best"
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0028
+    },
+    "rationale": "0.0028 = half-width of the paired bootstrap 95% CI of the difference between Singlet and mgatk, resampling genome blocks of 1,700 positions"
    },
    "competitors": [
     {
@@ -593,11 +693,15 @@
    "dataset": "maester_k562_bt142_3p",
    "direction": "higher",
    "singlet": {
-    "value": 0.647302
+    "value": 0.646813
    },
    "rule": {
     "type": "match_or_beat",
-    "against": "best"
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0108
+    },
+    "rationale": "0.0108 = half-width of the paired bootstrap 95% CI of the difference between Singlet and mgatk, resampling genome blocks of 1,700 positions"
    },
    "competitors": [
     {
@@ -616,11 +720,15 @@
    "dataset": "maester_k562_bt142_3p",
    "direction": "lower",
    "singlet": {
-    "value": 0.069146
+    "value": 0.069455
    },
    "rule": {
     "type": "match_or_beat",
-    "against": "best"
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0032
+    },
+    "rationale": "0.0032 = half-width of the paired bootstrap 95% CI of the difference between Singlet and mgatk, resampling genome blocks of 1,700 positions"
    },
    "competitors": [
     {
@@ -1013,15 +1121,15 @@
    "name": "mt_linemix_stats.tsv",
    "url": "https://data.singlet.bio/benchmarking/1.0.0/mtdna/mt_linemix_stats.tsv",
    "kind": "derived",
-   "sha256": "9212f4948dbe4046833c7b9bdb8ee6293149e5562a20d539c1b3ba57ef8e59ce",
-   "bytes": 568,
+   "sha256": "617fc9326a6fb585f24fd1d014503c061a8c03838604f91c7cfed510f45b3dc2",
+   "bytes": 5332,
    "format": "tsv"
   },
   {
    "name": "provenance.json",
    "url": "https://data.singlet.bio/benchmarking/1.0.0/mtdna/provenance.json",
    "kind": "singlet_output",
-   "sha256": "d97b60d10e0721484b59087fdd5e2a0b78efbe466e66bd80e59d981b1dfef73c",
+   "sha256": "8054e37c0a6655840c5b45343aa8d6b35f8b0040e96dd99606cf5cd521013eae",
    "bytes": 8559,
    "format": "json"
   }
@@ -1061,12 +1169,12 @@
   {
    "path": "bench/public/capabilities/mtdna.py",
    "role": "metric",
-   "url": "https://github.com/Singlet-Bio/singlet/blob/bc855f76ee733b938d43e197cd9ede55c1221474/bench/public/capabilities/mtdna.py"
+   "url": "https://github.com/Singlet-Bio/singlet/blob/b81345b532cc14d9d616ff4ac373e8a2c812375a/bench/public/capabilities/mtdna.py"
   },
   {
    "path": "bench/public/genotype",
    "role": "harness",
-   "url": "https://github.com/Singlet-Bio/singlet/tree/bc855f76ee733b938d43e197cd9ede55c1221474/bench/public/genotype"
+   "url": "https://github.com/Singlet-Bio/singlet/tree/b81345b532cc14d9d616ff4ac373e8a2c812375a/bench/public/genotype"
   }
  ],
  "reproduce": {

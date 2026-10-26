@@ -300,6 +300,15 @@ def _caveats(order, held, S, khat_s, khat_v, kt):
         "cannot be told from singlets by genotype.",
         "Kang FASTQs were rebuilt from mapped primary alignments of Cell Ranger BAMs, so unmapped reads are missing.",
     ]
+    if khat_s(DEV) != kt[DEV]:
+        c.append(
+            f"Failure on the development lane: Singlet's automatic K is {khat_s(DEV)} for {kt[DEV]} donors (k_correct_dev). The extra "
+            "component is a ~105-cell duplicate of one donor (its genotypes agree with that donor's at 0.88 of shared sites at >= 10 reads, "
+            "against 0.60-0.68 between any two different donors and >= 0.96 for the same donor in two lanes). The held-out K search "
+            "accepts it because select_k_heldout (include/singlet/pileup/donor_demux.h:1879-1880) takes any K whose count of 'valid' "
+            "components rises with paired z > 4, and count_valid_components (line 1757) declares a component valid when held-out cells "
+            "are better explained by it than by any other single donor or donor pair (mean log-likelihood ratio > 1 nat, z > 5); "
+            "neither test compares genotypes, so a cell subpopulation of one donor that differs in coverage or ambient RNA passes.")
     bad = [p for p in held if khat_s(p) != kt[p]]
     if bad:
         c.append("Singlet's donor count is wrong in " + ", ".join(bad) + "; see the metric k_correct_fraction. This is a failing result, "

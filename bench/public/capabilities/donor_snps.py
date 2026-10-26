@@ -160,6 +160,8 @@ def compute(artifact_dir: Path) -> dict:
              "citation": "Huang et al. 2019, Genome Biol 20:273", "params": prov["vireo_command"]},
             {"name": "souporcell", "version": "2.5", "role": "competitor", "url": "https://github.com/wheaton5/souporcell",
              "citation": "Heaton et al. 2020, Nat Methods 17:615", "params": prov["souporcell_command"]},
+            {"name": "cellsnp-lite", "version": "1.2.3", "role": "helper", "url": "https://github.com/single-cell-genetics/cellsnp-lite",
+             "params": prov["cellsnp_command"]},
             {"name": "cellsnp-pileup", "version": "1.2.3", "role": "competitor", "url": "https://github.com/single-cell-genetics/cellsnp-lite",
              "params": prov["pileup_command"]},
             {"name": "1000genomes-highcov", "version": "20220422", "role": "truth",
@@ -198,6 +200,11 @@ def compute(artifact_dir: Path) -> dict:
             "The panel is 1000 Genomes SNPs with allele frequency >= 5% (7.35 M sites); every tool sees the same panel.",
             "Singlet emits a genotype at every covered panel site, however shallow, so its 'all' concordance includes 1-read sites; "
             "the dp10 metrics are the fair view for a user who filters.",
+            "Why Singlet trails the pileup baseline: write_donor_vcfs (include/singlet/pileup/donor_demux.h:2511-2513) calls the genotype "
+            "from the VB posterior mean allele fraction with fixed cut-offs 0.1 and 0.9 at any depth, with no binomial error model and no "
+            "ambient-RNA correction, which is consistent with the excess of homozygous-reference sites called non-reference (2.6-5.4% "
+            "in the held-out lanes against 0.4-1.4% for the pileup); the exact mechanism (shallow sites, ambient reads of other donors, "
+            "or AF shrinkage by the prior) was not isolated.",
             "The plain pileup baseline (cellsnp-pileup) is not a donor-demultiplexing method; it genotypes pooled reads of vireo's clusters "
             "(all cells for one-donor libraries) with the model used for the Kang truth.",
         ],
