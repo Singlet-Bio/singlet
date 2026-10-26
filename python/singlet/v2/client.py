@@ -89,7 +89,10 @@ PART_BYTES = 16 << 20  # a single range larger than 2 parts is split and fetched
 PREFIX_HINT = 512 << 10  # first read of a member in the two-phase plan
 PARTIAL_GAP = 256 << 10  # in the two-phase plan, ranges closer than this share a request
 SJ, MT, VDJ = "sj_counts.1pz", "mt_heteroplasmy.1pz", "vdj_gene_usage.1pz"
-ADT, HTO = "adt_counts.1pz", "hto_counts.1pz"  # antibody / hashtag UMIs (docs/format-v2.md section 13)
+ADT, HTO = (
+    "adt_counts.1pz",
+    "hto_counts.1pz",
+)  # antibody / hashtag UMIs (docs/format-v2.md section 13)
 
 
 # ================================================================================================================= modalities
@@ -119,7 +122,9 @@ MODALITIES: Dict[str, ModalitySpec] = {
         ),
         ModalitySpec("mt", (MT,), "obsm", 'obsm["mt"]: chrM heteroplasmy per variant site'),
         ModalitySpec("vdj", (VDJ,), "obsm", 'obsm["vdj"]: V(D)J segment usage counts'),
-        ModalitySpec("adt", (ADT,), "obsm", 'obsm["adt"]: antibody UMIs (CITE-seq / TotalSeq), raw counts'),
+        ModalitySpec(
+            "adt", (ADT,), "obsm", 'obsm["adt"]: antibody UMIs (CITE-seq / TotalSeq), raw counts'
+        ),
         ModalitySpec("hto", (HTO,), "obsm", 'obsm["hto"]: hashtag UMIs, raw counts'),
     )
 }

@@ -51,15 +51,59 @@ THRESHOLDS = {
 }
 
 # antibody name -> gene symbol, for panels without an Ensembl id (study references) and as a cross-check
-CANONICAL = {"CD3": "CD3E", "CD4": "CD4", "CD8": "CD8A", "CD8a": "CD8A", "CD14": "CD14", "CD19": "CD19",
-             "CD20": "MS4A1", "CD56": "NCAM1", "CD16": "FCGR3A", "CD11c": "ITGAX", "CD11b": "ITGAM",
-             "CD25": "IL2RA", "CD127": "IL7R", "CD279": "PDCD1", "PD-1": "PDCD1", "CD45": "PTPRC",
-             "CD34": "CD34", "CD38": "CD38", "CD27": "CD27", "CD28": "CD28", "CD69": "CD69", "HLA-DR": "HLA-DRA",
-             "CD197": "CCR7", "CCR7": "CCR7", "CD161": "KLRB1", "CD1c": "CD1C", "CD123": "IL3RA", "CD141": "THBD",
-             "CD86": "CD86", "CD2": "CD2", "CD5": "CD5", "CD7": "CD7", "CD33": "CD33", "CD36": "CD36",
-             "CD44": "CD44", "CD62L": "SELL", "CD24": "CD24", "CD9": "CD9", "CD10": "MME", "CD15": "FUT4",
-             "CD26": "DPP4", "CD39": "ENTPD1", "CD57": "B3GAT1", "CD71": "TFRC", "CD95": "FAS", "CD103": "ITGAE",
-             "CD137": "TNFRSF9", "CD152": "CTLA4", "CD223": "LAG3", "TIGIT": "TIGIT", "CD366": "HAVCR2"}
+CANONICAL = {
+    "CD3": "CD3E",
+    "CD4": "CD4",
+    "CD8": "CD8A",
+    "CD8a": "CD8A",
+    "CD14": "CD14",
+    "CD19": "CD19",
+    "CD20": "MS4A1",
+    "CD56": "NCAM1",
+    "CD16": "FCGR3A",
+    "CD11c": "ITGAX",
+    "CD11b": "ITGAM",
+    "CD25": "IL2RA",
+    "CD127": "IL7R",
+    "CD279": "PDCD1",
+    "PD-1": "PDCD1",
+    "CD45": "PTPRC",
+    "CD34": "CD34",
+    "CD38": "CD38",
+    "CD27": "CD27",
+    "CD28": "CD28",
+    "CD69": "CD69",
+    "HLA-DR": "HLA-DRA",
+    "CD197": "CCR7",
+    "CCR7": "CCR7",
+    "CD161": "KLRB1",
+    "CD1c": "CD1C",
+    "CD123": "IL3RA",
+    "CD141": "THBD",
+    "CD86": "CD86",
+    "CD2": "CD2",
+    "CD5": "CD5",
+    "CD7": "CD7",
+    "CD33": "CD33",
+    "CD36": "CD36",
+    "CD44": "CD44",
+    "CD62L": "SELL",
+    "CD24": "CD24",
+    "CD9": "CD9",
+    "CD10": "MME",
+    "CD15": "FUT4",
+    "CD26": "DPP4",
+    "CD39": "ENTPD1",
+    "CD57": "B3GAT1",
+    "CD71": "TFRC",
+    "CD95": "FAS",
+    "CD103": "ITGAE",
+    "CD137": "TNFRSF9",
+    "CD152": "CTLA4",
+    "CD223": "LAG3",
+    "TIGIT": "TIGIT",
+    "CD366": "HAVCR2",
+}
 CANONICAL_MARKERS = ("CD3E", "CD4", "CD8A", "MS4A1", "CD14", "CD19", "NCAM1", "FCGR3A")
 UNINFORMATIVE_GENES = ("PTPRC",)  # isoform / allotype antibodies of a ubiquitous gene
 RNA_DETECTED = (0.05, 0.90)
@@ -108,8 +152,14 @@ def _spearman(a, b):
     return float(spearmanr(a, b)[0])
 
 
-def rna_concordance(adt_clr: np.ndarray, panel: pd.DataFrame, exon, genes: List[str], cell_cols: np.ndarray,
-                    min_frac: float = 0.05) -> pd.DataFrame:
+def rna_concordance(
+    adt_clr: np.ndarray,
+    panel: pd.DataFrame,
+    exon,
+    genes: List[str],
+    cell_cols: np.ndarray,
+    min_frac: float = 0.05,
+) -> pd.DataFrame:
     """Per antibody with a measured gene: Spearman(CLR ADT, log1p RNA per 10k) over called cells, plus a permutation null."""
     by_id, by_sym = gene_lookup(genes)
     E = exon[:, cell_cols]
@@ -127,7 +177,14 @@ def rna_concordance(adt_clr: np.ndarray, panel: pd.DataFrame, exon, genes: List[
                 gi = by_id[e.split(".")[0]]
                 break
         if gi is None:
-            nm = str(r.name).replace("Hu.", "").replace("Ms.", "").replace("Mm.", "").split(" (")[0].strip()
+            nm = (
+                str(r.name)
+                .replace("Hu.", "")
+                .replace("Ms.", "")
+                .replace("Mm.", "")
+                .split(" (")[0]
+                .strip()
+            )
             nm = nm.split("_")[0]  # 'CD4_RPA.T4' -> 'CD4'
             sym = CANONICAL.get(nm, CANONICAL.get(nm.upper(), nm))
             gi = by_sym.get(sym.upper())
@@ -139,13 +196,28 @@ def rna_concordance(adt_clr: np.ndarray, panel: pd.DataFrame, exon, genes: List[
         lg = np.log1p(g / lib * 1e4)
         a = adt_clr[i]
         gname = "_".join(str(genes[gi[0]]).split("_")[:2])
-        rows.append({"feature": r.name, "gene_row": gname, "rho": _spearman(a, lg),
-                     "rho_null": _spearman(rng.permutation(a), lg), "frac_rna_detected": float((g > 0).mean())})
+        rows.append(
+            {
+                "feature": r.name,
+                "gene_row": gname,
+                "rho": _spearman(a, lg),
+                "rho_null": _spearman(rng.permutation(a), lg),
+                "frac_rna_detected": float((g > 0).mean()),
+            }
+        )
     return pd.DataFrame(rows)
 
 
-def library_qc(M, panel: pd.DataFrame, called: np.ndarray, stats: dict, ambient: np.ndarray,
-               exon=None, genes: Optional[List[str]] = None, discovery: Optional[dict] = None) -> Dict:
+def library_qc(
+    M,
+    panel: pd.DataFrame,
+    called: np.ndarray,
+    stats: dict,
+    ambient: np.ndarray,
+    exon=None,
+    genes: Optional[List[str]] = None,
+    discovery: Optional[dict] = None,
+) -> Dict:
     """M: features x GEX columns (scipy sparse), panel rows in the same order, called: bool per column."""
     from . import hto as H
     from . import normalize as N
@@ -162,11 +234,19 @@ def library_qc(M, panel: pd.DataFrame, called: np.ndarray, stats: dict, ambient:
     ab_rows = np.flatnonzero(kinds == "antibody")
     reads = max(stats.get("reads", 0), 1)
     out = {
-        "n_columns": int(X.shape[1]), "n_called": int(len(cells)), "n_empty_droplets": int(len(empties)),
-        "n_features": int(X.shape[0]), "n_antibodies": int(len(ab_rows)), "n_isotypes": int(len(iso)),
-        "n_hashtags": int(len(hto_rows)), "reads": int(stats.get("reads", 0)),
+        "n_columns": int(X.shape[1]),
+        "n_called": int(len(cells)),
+        "n_empty_droplets": int(len(empties)),
+        "n_features": int(X.shape[0]),
+        "n_antibodies": int(len(ab_rows)),
+        "n_isotypes": int(len(iso)),
+        "n_hashtags": int(len(hto_rows)),
+        "reads": int(stats.get("reads", 0)),
         "frac_valid_barcode": stats.get("reads_valid_barcode", 0) / reads,
-        "frac_feature": (stats.get("reads_feature_exact", 0) + stats.get("reads_feature_corrected", 0)) / reads,
+        "frac_feature": (
+            stats.get("reads_feature_exact", 0) + stats.get("reads_feature_corrected", 0)
+        )
+        / reads,
         "saturation": stats.get("saturation"),
     }
     ct = totals[cells]
@@ -175,10 +255,16 @@ def library_qc(M, panel: pd.DataFrame, called: np.ndarray, stats: dict, ambient:
     in_cells = X[:, cells].sum()
     out["umis_in_cells"] = int(in_cells)
     out["frac_umis_in_cells"] = float(in_cells / max(stats.get("molecules", 1), 1))
-    out["frac_usable_in_cells"] = float(out["frac_umis_in_cells"] * stats.get("reads_usable", 0) / reads)
+    out["frac_usable_in_cells"] = float(
+        out["frac_umis_in_cells"] * stats.get("reads_usable", 0) / reads
+    )
     out["median_umi_cells"] = float(np.median(ct)) if len(ct) else 0.0
     out["median_umi_empty"] = float(np.median(et)) if len(et) else float("nan")
-    out["cell_empty_ratio"] = float(out["median_umi_cells"] / max(out["median_umi_empty"], 1.0)) if len(et) else float("nan")
+    out["cell_empty_ratio"] = (
+        float(out["median_umi_cells"] / max(out["median_umi_empty"], 1.0))
+        if len(et)
+        else float("nan")
+    )
     out["frac_cells_with_adt"] = float((ct >= MIN_CELL_UMI).mean()) if len(ct) else 0.0
     # uncalled columns as rich in ADT as a typical called cell: cells the GEX calling may have missed (reported only)
     if len(ct):
@@ -203,13 +289,19 @@ def library_qc(M, panel: pd.DataFrame, called: np.ndarray, stats: dict, ambient:
         det = (Xc.mean(axis=1) >= 2 * Xe.mean(axis=1)) & (Xc.mean(axis=1) > 0.1)
         out["panel_detected"] = float(det[ab_rows].mean()) if len(ab_rows) else None
         out["panel_detected_list"] = [panel.name.iloc[i] for i in ab_rows if det[i]]
-        out["enrichment_vs_empty_median"] = float(np.median((mc / np.maximum(me, 1e-9))[ab_rows])) if len(ab_rows) else None
+        out["enrichment_vs_empty_median"] = (
+            float(np.median((mc / np.maximum(me, 1e-9))[ab_rows])) if len(ab_rows) else None
+        )
     if discovery:
         out["panel_unexplained"] = discovery.get("unexplained_share")
         if (panel.get("source", pd.Series(["study"])) == "catalog").any():
-            out["panel_identity"] = max(discovery.get("reactivity_mismatch_share", 0.0), discovery.get("reused_share", 0.0))
-            out["panel_identity_detail"] = {"reactivity_mismatch": discovery.get("reactivity_mismatch", []),
-                                            "reused": discovery.get("reused", [])}
+            out["panel_identity"] = max(
+                discovery.get("reactivity_mismatch_share", 0.0), discovery.get("reused_share", 0.0)
+            )
+            out["panel_identity_detail"] = {
+                "reactivity_mismatch": discovery.get("reactivity_mismatch", []),
+                "reused": discovery.get("reused", []),
+            }
     # RNA concordance
     conc = None
     if exon is not None and genes and len(ab_rows) and len(cells) > 20:
@@ -217,16 +309,23 @@ def library_qc(M, panel: pd.DataFrame, called: np.ndarray, stats: dict, ambient:
         conc = rna_concordance(clr, panel, exon, genes, cells)
         if len(conc):
             gene = conc.gene_row.astype(str).str.split(r"[_|]", regex=True).str[-1].str.upper()
-            conc["informative"] = (~gene.isin(UNINFORMATIVE_GENES) & conc.frac_rna_detected.between(*RNA_DETECTED)
-                                   & conc.rho.notna())
+            conc["informative"] = (
+                ~gene.isin(UNINFORMATIVE_GENES)
+                & conc.frac_rna_detected.between(*RNA_DETECTED)
+                & conc.rho.notna()
+            )
             inf = conc[conc.informative]
             out["rna_concordance"] = float(np.median(inf.rho)) if len(inf) else None
             out["rna_concordance_null"] = float(np.nanmedian(inf.rho_null)) if len(inf) else None
             out["rna_pairs"] = int(len(inf))
             out["rna_pairs_all"] = int(conc.rho.notna().sum())
-            canon = conc[conc.gene_row.str.upper().isin(CANONICAL_MARKERS) |
-                         conc.gene_row.str.contains("|".join(CANONICAL_MARKERS), regex=True)]
-            out["rna_canonical"] = {r.feature: round(r.rho, 3) for r in canon.itertuples() if not np.isnan(r.rho)}
+            canon = conc[
+                conc.gene_row.str.upper().isin(CANONICAL_MARKERS)
+                | conc.gene_row.str.contains("|".join(CANONICAL_MARKERS), regex=True)
+            ]
+            out["rna_canonical"] = {
+                r.feature: round(r.rho, 3) for r in canon.itertuples() if not np.isnan(r.rho)
+            }
             if out["rna_pairs"] < MIN_PAIRS:
                 out["rna_concordance_rule"] = f"not assessable (< {MIN_PAIRS} informative pairs)"
     # HTO
@@ -237,12 +336,14 @@ def library_qc(M, panel: pd.DataFrame, called: np.ndarray, stats: dict, ambient:
     out["hto_umi_share"] = hshare
     if len(hto_rows) >= 2 and len(cells) and hshare >= HTO_MIN_SHARE:
         amb = Xe[hto_rows].sum(axis=1) if len(empties) else np.asarray(ambient)[hto_rows]
-        call, lt, ls = H.hashed_drops(Xc[hto_rows], amb)
+        call, lt, ls = H.call_hashtags(Xc[hto_rows], amb)
         hto_calls = (call, lt, ls)
         out["hto_singlet_share"] = float((call >= 0).mean())
         out["hto_doublet_share"] = float((call == -2).mean())
         out["hto_negative_share"] = float((call == -1).mean())
-        out["hto_counts"] = {panel.name.iloc[hto_rows[i]]: int((call == i).sum()) for i in range(len(hto_rows))}
+        out["hto_counts"] = {
+            panel.name.iloc[hto_rows[i]]: int((call == i).sum()) for i in range(len(hto_rows))
+        }
     # rules
     rules = {}
     for k in THRESHOLDS:
@@ -251,21 +352,38 @@ def library_qc(M, panel: pd.DataFrame, called: np.ndarray, stats: dict, ambient:
             v = None
         if k == "hto_singlet_share" and hto_calls is None:
             v = None
-        if k in ("frac_cells_with_adt", "median_umi_cells", "rna_concordance") and len(ab_rows) == 0:
+        if (
+            k in ("frac_cells_with_adt", "median_umi_cells", "rna_concordance")
+            and len(ab_rows) == 0
+        ):
             v = None  # hashtag-only library: judged by the hashtag rules
         rules[k] = _rule(k, v)
-        if k == "rna_concordance" and rules[k] == "fail" and out.get("rna_pairs", 0) < MIN_PAIRS_FAIL:
+        if (
+            k == "rna_concordance"
+            and rules[k] == "fail"
+            and out.get("rna_pairs", 0) < MIN_PAIRS_FAIL
+        ):
             rules[k] = "warn"
     # a failed hashtag demultiplexing withholds the hashtag calls, not the antibody counts of a mixed library
-    out["hto_calls_publishable"] = hto_calls is not None and rules.get("hto_singlet_share") != "fail"
+    out["hto_calls_publishable"] = (
+        hto_calls is not None and rules.get("hto_singlet_share") != "fail"
+    )
     if rules.get("hto_singlet_share") == "fail" and len(ab_rows):
         rules["hto_singlet_share"] = "warn"
         out["hto_failed"] = True
     out["rules"] = rules
-    out["verdict"] = "fail" if "fail" in rules.values() else ("warn" if "warn" in rules.values() else "pass")
+    out["verdict"] = (
+        "fail" if "fail" in rules.values() else ("warn" if "warn" in rules.values() else "pass")
+    )
     out["failed"] = [k for k, v in rules.items() if v == "fail"]
     out["warned"] = [k for k, v in rules.items() if v == "warn"]
-    return {"library": out, "concordance": conc, "hto": hto_calls, "cells": cells, "empties": empties}
+    return {
+        "library": out,
+        "concordance": conc,
+        "hto": hto_calls,
+        "cells": cells,
+        "empties": empties,
+    }
 
 
 def cell_table(M, panel: pd.DataFrame, cells: np.ndarray, hto=None) -> pd.DataFrame:
@@ -276,10 +394,21 @@ def cell_table(M, panel: pd.DataFrame, cells: np.ndarray, hto=None) -> pd.DataFr
     iso = np.flatnonzero(kinds == "isotype")
     A = X[np.concatenate([ab, iso])] if len(ab) + len(iso) else None
     tot = np.asarray(A.sum(axis=0)).ravel() if A is not None else np.zeros(len(cells))
-    df = pd.DataFrame({"col": cells.astype(np.int64), "adt_total": tot.astype(np.int64),
-                       "n_adt_detected": (np.asarray((X[ab] > 0).sum(axis=0)).ravel() if len(ab) else 0)})
+    df = pd.DataFrame(
+        {
+            "col": cells.astype(np.int64),
+            "adt_total": tot.astype(np.int64),
+            "n_adt_detected": (np.asarray((X[ab] > 0).sum(axis=0)).ravel() if len(ab) else 0),
+        }
+    )
     if len(iso):
-        df["isotype_share"] = (np.asarray(X[iso].sum(axis=0)).ravel() / np.maximum(tot, 1)).astype(np.float32)
+        df["isotype_share"] = (np.asarray(X[iso].sum(axis=0)).ravel() / np.maximum(tot, 1)).astype(
+            np.float32
+        )
     if hto is not None:
-        df["hto_call"], df["hto_lfc_top"], df["hto_lfc_second"] = hto[0], hto[1].astype(np.float32), hto[2].astype(np.float32)
+        df["hto_call"], df["hto_lfc_top"], df["hto_lfc_second"] = (
+            hto[0],
+            hto[1].astype(np.float32),
+            hto[2].astype(np.float32),
+        )
     return df

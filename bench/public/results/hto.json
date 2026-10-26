@@ -1,0 +1,1441 @@
+{
+ "schema": "singlet.benchmark.capability",
+ "schema_version": "1.0.0",
+ "capability": "hto",
+ "title": "Hashtag demultiplexing (HTO)",
+ "conclusion": "On the public Howitt et al. 2023 hashing benchmark with genotype truth, Singlet's hashtag calls reach mean F-scores of 0.919, 0.814, 0.752, 0.742 while calling few genetic doublets singlets; it does not beat the best competitor on every batch (see failing metrics).",
+ "methods": "Data: Howitt et al. 2023 (Zenodo 8304003): paediatric bronchoalveolar lavage, 3 batches of 8 genetically distinct donors with 8 TotalSeq-A hashtags (2 captures each), and 3 lung cancer cell lines with MULTI-seq lipid tags (3 captures). Truth: vireo genetic donor per cell (cellSNP-lite on 1000 Genomes common SNPs), including genetic doublets; donor i is hashtag i. As in the paper, each method runs on each capture separately on the called cells (no empty droplets are available), and the F-score per hashtag is tp / (tp + (fp + fn) / 2) over all cells of the dataset, averaged over hashtags; the second metric is the share of genetic doublets called a singlet. HTODemux and MULTIseqDemux (Seurat 5.5.1) and hashsolo (scanpy 1.12.4) were run here at their defaults; the other competitors are the paper's own calls, and re-scoring them with this code reproduces the paper's Table 1. Singlet's caller is singlet.adt.hto.call_hashtags.",
+ "status": "final",
+ "generated_at": "2026-10-25T14:46:10+00:00",
+ "owner": "adt-modality",
+ "singlet": {
+  "version": "1.0.0",
+  "commit": "5f9ba921f3523f074b2c4eed4dfe7742c3f5ac38",
+  "branch": "claude/adt-modality-0637a6"
+ },
+ "tools": [
+  {
+   "name": "singlet",
+   "version": "1.0.0",
+   "role": "singlet",
+   "params": "singlet.adt.hto.call_hashtags: hashedDrops rule (confident.min 0.5, doublet 2 + 3 MAD) with a per-hashtag mixture doublet veto; ambient from the cells (bimodal) when no empty droplets"
+  },
+  {
+   "name": "htodemux",
+   "version": "Seurat 5.5.1",
+   "role": "competitor",
+   "params": "NormalizeData(CLR, margin 2); HTODemux(positive.quantile 0.99)"
+  },
+  {
+   "name": "multiseqdemux",
+   "version": "Seurat 5.5.1",
+   "role": "competitor",
+   "params": "MULTIseqDemux(autoThresh = TRUE)"
+  },
+  {
+   "name": "hashsolo",
+   "version": "scanpy 1.12.4",
+   "role": "competitor",
+   "params": "scanpy.external.pp.hashsolo defaults"
+  },
+  {
+   "name": "vireo",
+   "version": "vireoSNP 0.5.6",
+   "role": "truth",
+   "citation": "Howitt et al. 2023: genetic donors per cell from cellSNP-lite + vireo"
+  },
+  {
+   "name": "demuxmix",
+   "version": "as published by Howitt et al. 2023",
+   "role": "competitor",
+   "citation": "Howitt et al. 2023 NAR Genom Bioinform 5:lqad086 (calls in Zenodo 8304003)",
+   "params": "the paper's own run"
+  },
+  {
+   "name": "gmm-demux",
+   "version": "as published by Howitt et al. 2023",
+   "role": "competitor",
+   "citation": "Howitt et al. 2023 NAR Genom Bioinform 5:lqad086 (calls in Zenodo 8304003)",
+   "params": "the paper's own run"
+  },
+  {
+   "name": "hasheddrops-optimised",
+   "version": "as published by Howitt et al. 2023",
+   "role": "competitor",
+   "citation": "Howitt et al. 2023 NAR Genom Bioinform 5:lqad086 (calls in Zenodo 8304003)",
+   "params": "the paper's own run (confident.min 0.5)"
+  },
+  {
+   "name": "hasheddrops",
+   "version": "as published by Howitt et al. 2023",
+   "role": "competitor",
+   "citation": "Howitt et al. 2023 NAR Genom Bioinform 5:lqad086 (calls in Zenodo 8304003)",
+   "params": "the paper's own run"
+  },
+  {
+   "name": "demultiplex",
+   "version": "as published by Howitt et al. 2023",
+   "role": "competitor",
+   "citation": "Howitt et al. 2023 NAR Genom Bioinform 5:lqad086 (calls in Zenodo 8304003)",
+   "params": "the paper's own run"
+  },
+  {
+   "name": "bff-raw",
+   "version": "as published by Howitt et al. 2023",
+   "role": "competitor",
+   "citation": "Howitt et al. 2023 NAR Genom Bioinform 5:lqad086 (calls in Zenodo 8304003)",
+   "params": "the paper's own run"
+  },
+  {
+   "name": "bff-cluster",
+   "version": "as published by Howitt et al. 2023",
+   "role": "competitor",
+   "citation": "Howitt et al. 2023 NAR Genom Bioinform 5:lqad086 (calls in Zenodo 8304003)",
+   "params": "the paper's own run"
+  }
+ ],
+ "datasets": [
+  {
+   "id": "howitt2023_bal1",
+   "title": "Howitt 2023 BAL batch 1 (8 donors, TotalSeq-A hashtags)",
+   "accessions": {
+    "url": "https://zenodo.org/records/8304003",
+    "other": [
+     "doi:10.5281/zenodo.8304002",
+     "doi:10.1093/nargab/lqad086"
+    ]
+   },
+   "truth": "vireo genetic donor per cell (Howitt et al. 2023)",
+   "n_cells": 24091,
+   "notes": "8 tags; 2041 genetic doublets"
+  },
+  {
+   "id": "howitt2023_bal2",
+   "title": "Howitt 2023 BAL batch 2 (8 donors, TotalSeq-A hashtags)",
+   "accessions": {
+    "url": "https://zenodo.org/records/8304003",
+    "other": [
+     "doi:10.5281/zenodo.8304002",
+     "doi:10.1093/nargab/lqad086"
+    ]
+   },
+   "truth": "vireo genetic donor per cell (Howitt et al. 2023)",
+   "n_cells": 48841,
+   "notes": "8 tags; 6463 genetic doublets"
+  },
+  {
+   "id": "howitt2023_bal3",
+   "title": "Howitt 2023 BAL batch 3 (8 donors, TotalSeq-A hashtags)",
+   "accessions": {
+    "url": "https://zenodo.org/records/8304003",
+    "other": [
+     "doi:10.5281/zenodo.8304002",
+     "doi:10.1093/nargab/lqad086"
+    ]
+   },
+   "truth": "vireo genetic donor per cell (Howitt et al. 2023)",
+   "n_cells": 62306,
+   "notes": "8 tags; 11004 genetic doublets"
+  },
+  {
+   "id": "howitt2023_cl",
+   "title": "Howitt 2023 lung cancer cell lines (3 lines, MULTI-seq lipid tags)",
+   "accessions": {
+    "url": "https://zenodo.org/records/8304003",
+    "other": [
+     "doi:10.5281/zenodo.8304002",
+     "doi:10.1093/nargab/lqad086"
+    ]
+   },
+   "truth": "vireo genetic donor per cell (Howitt et al. 2023)",
+   "n_cells": 45977,
+   "notes": "3 tags; 4945 genetic doublets"
+  }
+ ],
+ "metrics": [
+  {
+   "id": "f_score",
+   "name": "Mean F-score of singlet assignments (Howitt et al.)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "howitt2023_bal1",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.919182
+   },
+   "competitors": [
+    {
+     "tool": "htodemux",
+     "value": 0.899412
+    },
+    {
+     "tool": "multiseqdemux",
+     "value": 0.922534
+    },
+    {
+     "tool": "hashsolo",
+     "value": 0.923273
+    },
+    {
+     "tool": "demuxmix",
+     "value": 0.906651
+    },
+    {
+     "tool": "gmm-demux",
+     "value": 0.905441
+    },
+    {
+     "tool": "hasheddrops-optimised",
+     "value": 0.92961
+    },
+    {
+     "tool": "hasheddrops",
+     "value": 0.90748
+    },
+    {
+     "tool": "demultiplex",
+     "value": 0.906814
+    },
+    {
+     "tool": "bff-raw",
+     "value": 0.87899
+    },
+    {
+     "tool": "bff-cluster",
+     "value": 0.935239
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0028
+    },
+    "rationale": "half-width of the bootstrap 95% CI (200 resamples of cells) of Singlet minus the best competitor (bff-cluster)"
+   },
+   "pass": "fail"
+  },
+  {
+   "id": "doublets_called_singlet",
+   "name": "Genetic doublets called singlets",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "howitt2023_bal1",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.061734
+   },
+   "competitors": [
+    {
+     "tool": "htodemux",
+     "value": 0.069084
+    },
+    {
+     "tool": "multiseqdemux",
+     "value": 0.322881
+    },
+    {
+     "tool": "hashsolo",
+     "value": 0.124449
+    },
+    {
+     "tool": "demuxmix",
+     "value": 0.050955
+    },
+    {
+     "tool": "gmm-demux",
+     "value": 0.064184
+    },
+    {
+     "tool": "hasheddrops-optimised",
+     "value": 0.158256
+    },
+    {
+     "tool": "hasheddrops",
+     "value": 0.073983
+    },
+    {
+     "tool": "demultiplex",
+     "value": 0.063694
+    },
+    {
+     "tool": "bff-raw",
+     "value": 0.097501
+    },
+    {
+     "tool": "bff-cluster",
+     "value": 0.595786
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0089
+    },
+    "rationale": "half-width of the bootstrap 95% CI (200 resamples of cells) of Singlet minus the best competitor (demuxmix)"
+   },
+   "pass": "fail"
+  },
+  {
+   "id": "f_score",
+   "name": "Mean F-score of singlet assignments (Howitt et al.)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "howitt2023_bal2",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.813647
+   },
+   "competitors": [
+    {
+     "tool": "htodemux",
+     "value": 0.763521
+    },
+    {
+     "tool": "multiseqdemux",
+     "value": 0.794159
+    },
+    {
+     "tool": "hashsolo",
+     "value": 0.778907
+    },
+    {
+     "tool": "demuxmix",
+     "value": 0.832727
+    },
+    {
+     "tool": "gmm-demux",
+     "value": 0.770427
+    },
+    {
+     "tool": "hasheddrops-optimised",
+     "value": 0.845672
+    },
+    {
+     "tool": "hasheddrops",
+     "value": 0.61293
+    },
+    {
+     "tool": "demultiplex",
+     "value": 0.790855
+    },
+    {
+     "tool": "bff-raw",
+     "value": 0.538762
+    },
+    {
+     "tool": "bff-cluster",
+     "value": 0.118974
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0042
+    },
+    "rationale": "half-width of the bootstrap 95% CI (200 resamples of cells) of Singlet minus the best competitor (hasheddrops-optimised)"
+   },
+   "pass": "fail"
+  },
+  {
+   "id": "doublets_called_singlet",
+   "name": "Genetic doublets called singlets",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "howitt2023_bal2",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.086492
+   },
+   "competitors": [
+    {
+     "tool": "htodemux",
+     "value": 0.150704
+    },
+    {
+     "tool": "multiseqdemux",
+     "value": 0.270617
+    },
+    {
+     "tool": "hashsolo",
+     "value": 0.259477
+    },
+    {
+     "tool": "demuxmix",
+     "value": 0.097168
+    },
+    {
+     "tool": "gmm-demux",
+     "value": 0.139099
+    },
+    {
+     "tool": "hasheddrops-optimised",
+     "value": 0.412966
+    },
+    {
+     "tool": "hasheddrops",
+     "value": 0.187838
+    },
+    {
+     "tool": "demultiplex",
+     "value": 0.125019
+    },
+    {
+     "tool": "bff-raw",
+     "value": 0.247099
+    },
+    {
+     "tool": "bff-cluster",
+     "value": 0.712672
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0051
+    },
+    "rationale": "half-width of the bootstrap 95% CI (200 resamples of cells) of Singlet minus the best competitor (demuxmix)"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "f_score",
+   "name": "Mean F-score of singlet assignments (Howitt et al.)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "howitt2023_bal3",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.751696
+   },
+   "competitors": [
+    {
+     "tool": "htodemux",
+     "value": 0.68263
+    },
+    {
+     "tool": "multiseqdemux",
+     "value": 0.581495
+    },
+    {
+     "tool": "hashsolo",
+     "value": 0.735679
+    },
+    {
+     "tool": "demuxmix",
+     "value": 0.775075
+    },
+    {
+     "tool": "gmm-demux",
+     "value": 0.720182
+    },
+    {
+     "tool": "hasheddrops-optimised",
+     "value": 0.785027
+    },
+    {
+     "tool": "hasheddrops",
+     "value": 0.572908
+    },
+    {
+     "tool": "demultiplex",
+     "value": 0.624363
+    },
+    {
+     "tool": "bff-raw",
+     "value": 0.46605
+    },
+    {
+     "tool": "bff-cluster",
+     "value": 0.187793
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0029
+    },
+    "rationale": "half-width of the bootstrap 95% CI (200 resamples of cells) of Singlet minus the best competitor (hasheddrops-optimised)"
+   },
+   "pass": "fail"
+  },
+  {
+   "id": "doublets_called_singlet",
+   "name": "Genetic doublets called singlets",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "howitt2023_bal3",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.150582
+   },
+   "competitors": [
+    {
+     "tool": "htodemux",
+     "value": 0.312159
+    },
+    {
+     "tool": "multiseqdemux",
+     "value": 0.404308
+    },
+    {
+     "tool": "hashsolo",
+     "value": 0.306707
+    },
+    {
+     "tool": "demuxmix",
+     "value": 0.14004
+    },
+    {
+     "tool": "gmm-demux",
+     "value": 0.204108
+    },
+    {
+     "tool": "hasheddrops-optimised",
+     "value": 0.497365
+    },
+    {
+     "tool": "hasheddrops",
+     "value": 0.28008
+    },
+    {
+     "tool": "demultiplex",
+     "value": 0.208379
+    },
+    {
+     "tool": "bff-raw",
+     "value": 0.449473
+    },
+    {
+     "tool": "bff-cluster",
+     "value": 0.591149
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0044
+    },
+    "rationale": "half-width of the bootstrap 95% CI (200 resamples of cells) of Singlet minus the best competitor (demuxmix)"
+   },
+   "pass": "fail"
+  },
+  {
+   "id": "f_score",
+   "name": "Mean F-score of singlet assignments (Howitt et al.)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "howitt2023_cl",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.741962
+   },
+   "competitors": [
+    {
+     "tool": "htodemux",
+     "value": 0.583157
+    },
+    {
+     "tool": "multiseqdemux",
+     "value": 0.854964
+    },
+    {
+     "tool": "hashsolo",
+     "value": 0.806045
+    },
+    {
+     "tool": "demuxmix",
+     "value": 0.743049
+    },
+    {
+     "tool": "gmm-demux",
+     "value": 0.822759
+    },
+    {
+     "tool": "hasheddrops-optimised",
+     "value": 0.864006
+    },
+    {
+     "tool": "hasheddrops",
+     "value": 0.66322
+    },
+    {
+     "tool": "demultiplex",
+     "value": 0.827736
+    },
+    {
+     "tool": "bff-raw",
+     "value": 0.79118
+    },
+    {
+     "tool": "bff-cluster",
+     "value": 0.874303
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0037
+    },
+    "rationale": "half-width of the bootstrap 95% CI (200 resamples of cells) of Singlet minus the best competitor (bff-cluster)"
+   },
+   "pass": "fail"
+  },
+  {
+   "id": "doublets_called_singlet",
+   "name": "Genetic doublets called singlets",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "howitt2023_cl",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.13185
+   },
+   "competitors": [
+    {
+     "tool": "htodemux",
+     "value": 0.390293
+    },
+    {
+     "tool": "multiseqdemux",
+     "value": 0.707583
+    },
+    {
+     "tool": "hashsolo",
+     "value": 0.575935
+    },
+    {
+     "tool": "demuxmix",
+     "value": 0.213751
+    },
+    {
+     "tool": "gmm-demux",
+     "value": 0.246512
+    },
+    {
+     "tool": "hasheddrops-optimised",
+     "value": 0.674621
+    },
+    {
+     "tool": "hasheddrops",
+     "value": 0.275025
+    },
+    {
+     "tool": "demultiplex",
+     "value": 0.279879
+    },
+    {
+     "tool": "bff-raw",
+     "value": 0.37452
+    },
+    {
+     "tool": "bff-cluster",
+     "value": 0.831749
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.0095
+    },
+    "rationale": "half-width of the bootstrap 95% CI (200 resamples of cells) of Singlet minus the best competitor (demuxmix)"
+   },
+   "pass": "pass"
+  }
+ ],
+ "resources": [
+  {
+   "tool": "hashsolo",
+   "dataset": "howitt2023_bal1",
+   "wall_s": 7.53,
+   "max_rss_gb": 0.346,
+   "threads": 1,
+   "notes": "all captures of the dataset, one process; R methods include R and Seurat start-up"
+  },
+  {
+   "tool": "htodemux",
+   "dataset": "howitt2023_bal1",
+   "wall_s": 24.12,
+   "max_rss_gb": 0.542,
+   "threads": 1,
+   "notes": "all captures of the dataset, one process; R methods include R and Seurat start-up"
+  },
+  {
+   "tool": "multiseqdemux",
+   "dataset": "howitt2023_bal1",
+   "wall_s": 25.27,
+   "max_rss_gb": 0.56,
+   "threads": 1,
+   "notes": "all captures of the dataset, one process; R methods include R and Seurat start-up"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "howitt2023_bal1",
+   "wall_s": 6.88,
+   "max_rss_gb": 0.293,
+   "threads": 1,
+   "notes": "all captures of the dataset, one process; R methods include R and Seurat start-up"
+  },
+  {
+   "tool": "hashsolo",
+   "dataset": "howitt2023_bal2",
+   "wall_s": 7.5,
+   "max_rss_gb": 0.398,
+   "threads": 1,
+   "notes": "all captures of the dataset, one process; R methods include R and Seurat start-up"
+  },
+  {
+   "tool": "htodemux",
+   "dataset": "howitt2023_bal2",
+   "wall_s": 42.37,
+   "max_rss_gb": 0.654,
+   "threads": 1,
+   "notes": "all captures of the dataset, one process; R methods include R and Seurat start-up"
+  },
+  {
+   "tool": "multiseqdemux",
+   "dataset": "howitt2023_bal2",
+   "wall_s": 45.89,
+   "max_rss_gb": 0.652,
+   "threads": 1,
+   "notes": "all captures of the dataset, one process; R methods include R and Seurat start-up"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "howitt2023_bal2",
+   "wall_s": 8.1,
+   "max_rss_gb": 0.326,
+   "threads": 1,
+   "notes": "all captures of the dataset, one process; R methods include R and Seurat start-up"
+  },
+  {
+   "tool": "hashsolo",
+   "dataset": "howitt2023_bal3",
+   "wall_s": 7.84,
+   "max_rss_gb": 0.417,
+   "threads": 1,
+   "notes": "all captures of the dataset, one process; R methods include R and Seurat start-up"
+  },
+  {
+   "tool": "htodemux",
+   "dataset": "howitt2023_bal3",
+   "wall_s": 52.36,
+   "max_rss_gb": 0.718,
+   "threads": 1,
+   "notes": "all captures of the dataset, one process; R methods include R and Seurat start-up"
+  },
+  {
+   "tool": "multiseqdemux",
+   "dataset": "howitt2023_bal3",
+   "wall_s": 59.32,
+   "max_rss_gb": 0.716,
+   "threads": 1,
+   "notes": "all captures of the dataset, one process; R methods include R and Seurat start-up"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "howitt2023_bal3",
+   "wall_s": 7.87,
+   "max_rss_gb": 0.347,
+   "threads": 1,
+   "notes": "all captures of the dataset, one process; R methods include R and Seurat start-up"
+  },
+  {
+   "tool": "hashsolo",
+   "dataset": "howitt2023_cl",
+   "wall_s": 10.18,
+   "max_rss_gb": 0.383,
+   "threads": 1,
+   "notes": "all captures of the dataset, one process; R methods include R and Seurat start-up"
+  },
+  {
+   "tool": "htodemux",
+   "dataset": "howitt2023_cl",
+   "wall_s": 36.68,
+   "max_rss_gb": 0.586,
+   "threads": 1,
+   "notes": "all captures of the dataset, one process; R methods include R and Seurat start-up"
+  },
+  {
+   "tool": "multiseqdemux",
+   "dataset": "howitt2023_cl",
+   "wall_s": 37.31,
+   "max_rss_gb": 0.593,
+   "threads": 1,
+   "notes": "all captures of the dataset, one process; R methods include R and Seurat start-up"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "howitt2023_cl",
+   "wall_s": 7.07,
+   "max_rss_gb": 0.323,
+   "threads": 1,
+   "notes": "all captures of the dataset, one process; R methods include R and Seurat start-up"
+  }
+ ],
+ "artifacts": [
+  {
+   "name": "hto_howitt2023_bal1_hashsolo.parquet",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/hto/hto_howitt2023_bal1_hashsolo.parquet",
+   "sha256": "ccd56a10b6e841fe591b3e28430a2e434c720795050ba0eb79b95a2928a4fa1b",
+   "bytes": 244469,
+   "kind": "competitor_output",
+   "dataset": "howitt2023_bal1"
+  },
+  {
+   "name": "hto_howitt2023_bal1_htodemux.parquet",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/hto/hto_howitt2023_bal1_htodemux.parquet",
+   "sha256": "fae8e5133e3b07638a0256d746579333849a7f7609519713d1bc33c747a81bd1",
+   "bytes": 244469,
+   "kind": "competitor_output",
+   "dataset": "howitt2023_bal1"
+  },
+  {
+   "name": "hto_howitt2023_bal1_map.json",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/hto/hto_howitt2023_bal1_map.json",
+   "sha256": "6054f0287767e10f3f9a8a40cd56c7140481cafcf63eccbbcf0e2499f1328afd",
+   "bytes": 213,
+   "kind": "truth",
+   "dataset": "howitt2023_bal1"
+  },
+  {
+   "name": "hto_howitt2023_bal1_multiseqdemux.parquet",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/hto/hto_howitt2023_bal1_multiseqdemux.parquet",
+   "sha256": "7d20a979355d43c4994635c03c8c4b3ae2a818bdc769bb7821cc931ea6e5a63a",
+   "bytes": 244469,
+   "kind": "competitor_output",
+   "dataset": "howitt2023_bal1"
+  },
+  {
+   "name": "hto_howitt2023_bal1_published.parquet",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/hto/hto_howitt2023_bal1_published.parquet",
+   "sha256": "91653468601eb2b231eb1c1038735c7c91fcd8631428bc294791514498fa2f2e",
+   "bytes": 346587,
+   "kind": "competitor_output",
+   "dataset": "howitt2023_bal1"
+  },
+  {
+   "name": "hto_howitt2023_bal1_singlet.parquet",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/hto/hto_howitt2023_bal1_singlet.parquet",
+   "sha256": "254fd1a3ee31b646707ac6efd733ca0ac74df815ab0b080c5dd7ffe7da6cb6a6",
+   "bytes": 244469,
+   "kind": "singlet_output",
+   "dataset": "howitt2023_bal1"
+  },
+  {
+   "name": "hto_howitt2023_bal1_truth.parquet",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/hto/hto_howitt2023_bal1_truth.parquet",
+   "sha256": "417dd2d93a05f45ad9400942d909759d6944cc65313f914dcbfc21ee4dbaf97d",
+   "bytes": 257861,
+   "kind": "truth",
+   "dataset": "howitt2023_bal1"
+  },
+  {
+   "name": "hto_howitt2023_bal2_hashsolo.parquet",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/hto/hto_howitt2023_bal2_hashsolo.parquet",
+   "sha256": "6917ebb3592e2f511d2cb06ad592d2f74321e03b616f991b0844dd70a446daba",
+   "bytes": 469888,
+   "kind": "competitor_output",
+   "dataset": "howitt2023_bal2"
+  },
+  {
+   "name": "hto_howitt2023_bal2_htodemux.parquet",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/hto/hto_howitt2023_bal2_htodemux.parquet",
+   "sha256": "f6b31616d42990fc85c1ab432e891d16e434d26c0ea81e164bf8398193b52ac1",
+   "bytes": 469888,
+   "kind": "competitor_output",
+   "dataset": "howitt2023_bal2"
+  },
+  {
+   "name": "hto_howitt2023_bal2_map.json",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/hto/hto_howitt2023_bal2_map.json",
+   "sha256": "07f45260ab4b99dc6ee6fc5deadbe41a5a550681f123e2bb817b856108994d40",
+   "bytes": 213,
+   "kind": "truth",
+   "dataset": "howitt2023_bal2"
+  },
+  {
+   "name": "hto_howitt2023_bal2_multiseqdemux.parquet",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/hto/hto_howitt2023_bal2_multiseqdemux.parquet",
+   "sha256": "065cb73796929b83df8af3fa236334fb321a97f5280e9db3af3ecf959bd65a06",
+   "bytes": 469888,
+   "kind": "competitor_output",
+   "dataset": "howitt2023_bal2"
+  },
+  {
+   "name": "hto_howitt2023_bal2_published.parquet",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/hto/hto_howitt2023_bal2_published.parquet",
+   "sha256": "571a196090856798cacc934c123fa35d9672d485cafe81314e390032e91cd483",
+   "bytes": 660723,
+   "kind": "competitor_output",
+   "dataset": "howitt2023_bal2"
+  },
+  {
+   "name": "hto_howitt2023_bal2_singlet.parquet",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/hto/hto_howitt2023_bal2_singlet.parquet",
+   "sha256": "32a599f20933371b4eab5bfd95ca24366590f3ca16ad09573b7c84d0557b9574",
+   "bytes": 469886,
+   "kind": "singlet_output",
+   "dataset": "howitt2023_bal2"
+  },
+  {
+   "name": "hto_howitt2023_bal2_truth.parquet",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/hto/hto_howitt2023_bal2_truth.parquet",
+   "sha256": "d63b553e4d1416ef9f53054e89b1867dbf3ce1f35a5e32e5876fec55122c9746",
+   "bytes": 495811,
+   "kind": "truth",
+   "dataset": "howitt2023_bal2"
+  },
+  {
+   "name": "hto_howitt2023_bal3_hashsolo.parquet",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/hto/hto_howitt2023_bal3_hashsolo.parquet",
+   "sha256": "4a151dc53308603c8b9facb55b79f4c49c87d5c115eb0d375bdff2105d1937c9",
+   "bytes": 567445,
+   "kind": "competitor_output",
+   "dataset": "howitt2023_bal3"
+  },
+  {
+   "name": "hto_howitt2023_bal3_htodemux.parquet",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/hto/hto_howitt2023_bal3_htodemux.parquet",
+   "sha256": "34c173c95083f7ffa02c145680c9980e22e578f4ba7b34342b84f7a604a8e429",
+   "bytes": 567449,
+   "kind": "competitor_output",
+   "dataset": "howitt2023_bal3"
+  },
+  {
+   "name": "hto_howitt2023_bal3_map.json",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/hto/hto_howitt2023_bal3_map.json",
+   "sha256": "3bcfb3b325d0708bb8bf932e70dde3f2ddcb4e40a67caf7c65f0f1f3e28a837e",
+   "bytes": 213,
+   "kind": "truth",
+   "dataset": "howitt2023_bal3"
+  },
+  {
+   "name": "hto_howitt2023_bal3_multiseqdemux.parquet",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/hto/hto_howitt2023_bal3_multiseqdemux.parquet",
+   "sha256": "6ccfdb26a0450f93b2ddc24fd68bcba8b722452057f288c734d517e36d0ac1a7",
+   "bytes": 567444,
+   "kind": "competitor_output",
+   "dataset": "howitt2023_bal3"
+  },
+  {
+   "name": "hto_howitt2023_bal3_published.parquet",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/hto/hto_howitt2023_bal3_published.parquet",
+   "sha256": "6c74aa9c1956530a3f3f391c00ed79661b91202a1d4a7cf93d6e3120d981df53",
+   "bytes": 814241,
+   "kind": "competitor_output",
+   "dataset": "howitt2023_bal3"
+  },
+  {
+   "name": "hto_howitt2023_bal3_singlet.parquet",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/hto/hto_howitt2023_bal3_singlet.parquet",
+   "sha256": "d0db2ab8bbb890e3bd2f191cb1e5948923d913ad354428bb77b533aee5572604",
+   "bytes": 567452,
+   "kind": "singlet_output",
+   "dataset": "howitt2023_bal3"
+  },
+  {
+   "name": "hto_howitt2023_bal3_truth.parquet",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/hto/hto_howitt2023_bal3_truth.parquet",
+   "sha256": "3864e7246f78c15b2150d04fa352d7076acee5bea4dbc8ae18c591ff8b328937",
+   "bytes": 600239,
+   "kind": "truth",
+   "dataset": "howitt2023_bal3"
+  },
+  {
+   "name": "hto_howitt2023_cl_hashsolo.parquet",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/hto/hto_howitt2023_cl_hashsolo.parquet",
+   "sha256": "750d9c3a21874c7f50dab6bbf0535a152050e8a80d0f284af5e535e4742b8955",
+   "bytes": 445136,
+   "kind": "competitor_output",
+   "dataset": "howitt2023_cl"
+  },
+  {
+   "name": "hto_howitt2023_cl_htodemux.parquet",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/hto/hto_howitt2023_cl_htodemux.parquet",
+   "sha256": "ed160f90db0ec81c0b832a298256b82d4a6ec320a374a1bd721244414449afe9",
+   "bytes": 445131,
+   "kind": "competitor_output",
+   "dataset": "howitt2023_cl"
+  },
+  {
+   "name": "hto_howitt2023_cl_map.json",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/hto/hto_howitt2023_cl_map.json",
+   "sha256": "c75667c45ac76d3a8e833869101cd79a626d2ea20d3395e7af7db55f6a809d7e",
+   "bytes": 102,
+   "kind": "truth",
+   "dataset": "howitt2023_cl"
+  },
+  {
+   "name": "hto_howitt2023_cl_multiseqdemux.parquet",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/hto/hto_howitt2023_cl_multiseqdemux.parquet",
+   "sha256": "1dda5e399e6a4364ba4390299a62e3d8a228f9689f04032bff9134dd6a2265ab",
+   "bytes": 445134,
+   "kind": "competitor_output",
+   "dataset": "howitt2023_cl"
+  },
+  {
+   "name": "hto_howitt2023_cl_published.parquet",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/hto/hto_howitt2023_cl_published.parquet",
+   "sha256": "d648bec2dcb9094408ee65ebe79327767c55aa797757d6ea969a21434755bf47",
+   "bytes": 589384,
+   "kind": "competitor_output",
+   "dataset": "howitt2023_cl"
+  },
+  {
+   "name": "hto_howitt2023_cl_singlet.parquet",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/hto/hto_howitt2023_cl_singlet.parquet",
+   "sha256": "d121918862c448bf56e09ffceaa02697ed0044f0b21dc7c8fbbebeb043cf85bc",
+   "bytes": 445135,
+   "kind": "singlet_output",
+   "dataset": "howitt2023_cl"
+  },
+  {
+   "name": "hto_howitt2023_cl_truth.parquet",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/hto/hto_howitt2023_cl_truth.parquet",
+   "sha256": "9411d441b5756773e015bf8518bb199934c8ef8f368c68d6f7a729cb3881660b",
+   "bytes": 463856,
+   "kind": "truth",
+   "dataset": "howitt2023_cl"
+  }
+ ],
+ "figures": [
+  {
+   "id": "f_score_by_dataset",
+   "title": "Mean F-score",
+   "kind": "grouped_bar",
+   "x": {
+    "label": "dataset",
+    "categories": [
+     "howitt2023_bal1",
+     "howitt2023_bal2",
+     "howitt2023_bal3",
+     "howitt2023_cl"
+    ]
+   },
+   "y": {
+    "label": "f_score",
+    "unit": "fraction"
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      "howitt2023_bal1",
+      "howitt2023_bal2",
+      "howitt2023_bal3",
+      "howitt2023_cl"
+     ],
+     "y": [
+      0.919182,
+      0.813647,
+      0.751696,
+      0.741962
+     ]
+    },
+    {
+     "name": "htodemux",
+     "tool": "htodemux",
+     "x": [
+      "howitt2023_bal1",
+      "howitt2023_bal2",
+      "howitt2023_bal3",
+      "howitt2023_cl"
+     ],
+     "y": [
+      0.899412,
+      0.763521,
+      0.68263,
+      0.583157
+     ]
+    },
+    {
+     "name": "multiseqdemux",
+     "tool": "multiseqdemux",
+     "x": [
+      "howitt2023_bal1",
+      "howitt2023_bal2",
+      "howitt2023_bal3",
+      "howitt2023_cl"
+     ],
+     "y": [
+      0.922534,
+      0.794159,
+      0.581495,
+      0.854964
+     ]
+    },
+    {
+     "name": "hashsolo",
+     "tool": "hashsolo",
+     "x": [
+      "howitt2023_bal1",
+      "howitt2023_bal2",
+      "howitt2023_bal3",
+      "howitt2023_cl"
+     ],
+     "y": [
+      0.923273,
+      0.778907,
+      0.735679,
+      0.806045
+     ]
+    },
+    {
+     "name": "demuxmix",
+     "tool": "demuxmix",
+     "x": [
+      "howitt2023_bal1",
+      "howitt2023_bal2",
+      "howitt2023_bal3",
+      "howitt2023_cl"
+     ],
+     "y": [
+      0.906651,
+      0.832727,
+      0.775075,
+      0.743049
+     ]
+    },
+    {
+     "name": "gmm-demux",
+     "tool": "gmm-demux",
+     "x": [
+      "howitt2023_bal1",
+      "howitt2023_bal2",
+      "howitt2023_bal3",
+      "howitt2023_cl"
+     ],
+     "y": [
+      0.905441,
+      0.770427,
+      0.720182,
+      0.822759
+     ]
+    },
+    {
+     "name": "hasheddrops-optimised",
+     "tool": "hasheddrops-optimised",
+     "x": [
+      "howitt2023_bal1",
+      "howitt2023_bal2",
+      "howitt2023_bal3",
+      "howitt2023_cl"
+     ],
+     "y": [
+      0.92961,
+      0.845672,
+      0.785027,
+      0.864006
+     ]
+    },
+    {
+     "name": "hasheddrops",
+     "tool": "hasheddrops",
+     "x": [
+      "howitt2023_bal1",
+      "howitt2023_bal2",
+      "howitt2023_bal3",
+      "howitt2023_cl"
+     ],
+     "y": [
+      0.90748,
+      0.61293,
+      0.572908,
+      0.66322
+     ]
+    },
+    {
+     "name": "demultiplex",
+     "tool": "demultiplex",
+     "x": [
+      "howitt2023_bal1",
+      "howitt2023_bal2",
+      "howitt2023_bal3",
+      "howitt2023_cl"
+     ],
+     "y": [
+      0.906814,
+      0.790855,
+      0.624363,
+      0.827736
+     ]
+    },
+    {
+     "name": "bff-raw",
+     "tool": "bff-raw",
+     "x": [
+      "howitt2023_bal1",
+      "howitt2023_bal2",
+      "howitt2023_bal3",
+      "howitt2023_cl"
+     ],
+     "y": [
+      0.87899,
+      0.538762,
+      0.46605,
+      0.79118
+     ]
+    },
+    {
+     "name": "bff-cluster",
+     "tool": "bff-cluster",
+     "x": [
+      "howitt2023_bal1",
+      "howitt2023_bal2",
+      "howitt2023_bal3",
+      "howitt2023_cl"
+     ],
+     "y": [
+      0.935239,
+      0.118974,
+      0.187793,
+      0.874303
+     ]
+    }
+   ]
+  },
+  {
+   "id": "doublets_called_singlet_by_dataset",
+   "title": "Doublets called singlets",
+   "kind": "grouped_bar",
+   "x": {
+    "label": "dataset",
+    "categories": [
+     "howitt2023_bal1",
+     "howitt2023_bal2",
+     "howitt2023_bal3",
+     "howitt2023_cl"
+    ]
+   },
+   "y": {
+    "label": "doublets_called_singlet",
+    "unit": "fraction"
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      "howitt2023_bal1",
+      "howitt2023_bal2",
+      "howitt2023_bal3",
+      "howitt2023_cl"
+     ],
+     "y": [
+      0.061734,
+      0.086492,
+      0.150582,
+      0.13185
+     ]
+    },
+    {
+     "name": "htodemux",
+     "tool": "htodemux",
+     "x": [
+      "howitt2023_bal1",
+      "howitt2023_bal2",
+      "howitt2023_bal3",
+      "howitt2023_cl"
+     ],
+     "y": [
+      0.069084,
+      0.150704,
+      0.312159,
+      0.390293
+     ]
+    },
+    {
+     "name": "multiseqdemux",
+     "tool": "multiseqdemux",
+     "x": [
+      "howitt2023_bal1",
+      "howitt2023_bal2",
+      "howitt2023_bal3",
+      "howitt2023_cl"
+     ],
+     "y": [
+      0.322881,
+      0.270617,
+      0.404308,
+      0.707583
+     ]
+    },
+    {
+     "name": "hashsolo",
+     "tool": "hashsolo",
+     "x": [
+      "howitt2023_bal1",
+      "howitt2023_bal2",
+      "howitt2023_bal3",
+      "howitt2023_cl"
+     ],
+     "y": [
+      0.124449,
+      0.259477,
+      0.306707,
+      0.575935
+     ]
+    },
+    {
+     "name": "demuxmix",
+     "tool": "demuxmix",
+     "x": [
+      "howitt2023_bal1",
+      "howitt2023_bal2",
+      "howitt2023_bal3",
+      "howitt2023_cl"
+     ],
+     "y": [
+      0.050955,
+      0.097168,
+      0.14004,
+      0.213751
+     ]
+    },
+    {
+     "name": "gmm-demux",
+     "tool": "gmm-demux",
+     "x": [
+      "howitt2023_bal1",
+      "howitt2023_bal2",
+      "howitt2023_bal3",
+      "howitt2023_cl"
+     ],
+     "y": [
+      0.064184,
+      0.139099,
+      0.204108,
+      0.246512
+     ]
+    },
+    {
+     "name": "hasheddrops-optimised",
+     "tool": "hasheddrops-optimised",
+     "x": [
+      "howitt2023_bal1",
+      "howitt2023_bal2",
+      "howitt2023_bal3",
+      "howitt2023_cl"
+     ],
+     "y": [
+      0.158256,
+      0.412966,
+      0.497365,
+      0.674621
+     ]
+    },
+    {
+     "name": "hasheddrops",
+     "tool": "hasheddrops",
+     "x": [
+      "howitt2023_bal1",
+      "howitt2023_bal2",
+      "howitt2023_bal3",
+      "howitt2023_cl"
+     ],
+     "y": [
+      0.073983,
+      0.187838,
+      0.28008,
+      0.275025
+     ]
+    },
+    {
+     "name": "demultiplex",
+     "tool": "demultiplex",
+     "x": [
+      "howitt2023_bal1",
+      "howitt2023_bal2",
+      "howitt2023_bal3",
+      "howitt2023_cl"
+     ],
+     "y": [
+      0.063694,
+      0.125019,
+      0.208379,
+      0.279879
+     ]
+    },
+    {
+     "name": "bff-raw",
+     "tool": "bff-raw",
+     "x": [
+      "howitt2023_bal1",
+      "howitt2023_bal2",
+      "howitt2023_bal3",
+      "howitt2023_cl"
+     ],
+     "y": [
+      0.097501,
+      0.247099,
+      0.449473,
+      0.37452
+     ]
+    },
+    {
+     "name": "bff-cluster",
+     "tool": "bff-cluster",
+     "x": [
+      "howitt2023_bal1",
+      "howitt2023_bal2",
+      "howitt2023_bal3",
+      "howitt2023_cl"
+     ],
+     "y": [
+      0.595786,
+      0.712672,
+      0.591149,
+      0.831749
+     ]
+    }
+   ]
+  }
+ ],
+ "code": [
+  {
+   "path": "python/singlet/adt/hto.py",
+   "role": "implementation",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/5f9ba921f3523f074b2c4eed4dfe7742c3f5ac38/python/singlet/adt/hto.py"
+  },
+  {
+   "path": "bench/adt/hto_methods.py",
+   "role": "harness",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/5f9ba921f3523f074b2c4eed4dfe7742c3f5ac38/bench/adt/hto_methods.py"
+  },
+  {
+   "path": "bench/adt/hto_public_run.py",
+   "role": "harness",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/5f9ba921f3523f074b2c4eed4dfe7742c3f5ac38/bench/adt/hto_public_run.py"
+  },
+  {
+   "path": "bench/adt/public_hto.py",
+   "role": "metric",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/5f9ba921f3523f074b2c4eed4dfe7742c3f5ac38/bench/adt/public_hto.py"
+  },
+  {
+   "path": "bench/adt/hto_select.py",
+   "role": "harness",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/5f9ba921f3523f074b2c4eed4dfe7742c3f5ac38/bench/adt/hto_select.py"
+  }
+ ],
+ "reproduce": {
+  "module": "bench/adt/public_hto.py",
+  "function": "compute",
+  "laptop_minutes": 2,
+  "clipper_command": "sbatch bench/adt/hpc/hto_public.sbatch"
+ },
+ "caveats": [
+  "Development data: Singlet's caller was chosen among 26 fixed variants by leave-one-dataset-out selection on these four datasets (bench/adt/hto_select.py; criterion fixed in advance). The same variant won when BAL1, BAL2 or BAL3 was held out; with the cell lines held out a different variant was chosen. The values shown are the shipped variant's, so they are not fully held-out.",
+  "demuxEM is not compared: it needs RNA counts of empty droplets, which this benchmark does not include.",
+  "Competitors from the paper's published calls were run by its authors with their versions and settings."
+ ]
+}

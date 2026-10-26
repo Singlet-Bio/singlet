@@ -250,15 +250,14 @@ def process(row, a, out_dir, status):
 
     # count
     t2 = time.time()
-    wl = table[0] if table is not None else np.sort(S.encode_strings(C.load_barcode_list(wl_path), chem.cb_len)[0])
+    wl = table[0] if table is not None else C.load_barcode_codes(wl_path)
     # large libraries: two passes, keys sharded by corrected barcode (identical result, bounded memory)
     n_reads = int(row.get("read_count") or 0)
     shards = int(np.ceil(n_reads / SHARD_READS)) if n_reads > SHARD_ABOVE else 0
     status["shards"] = shards
     lc = C.count_library(r1s, r2s, cb_len=chem.cb_len, umi_len=chem.umi_len, offset=off,
                          panel_sequences=list(panel.sequence), whitelist_codes=wl, gex_barcodes=gx.barcodes,
-                         translation=table, shards=shards, tmpdir=a.scratch,
-                         pairs_factory=lambda: C.iter_pairs(r1s, r2s))
+                         translation=table, shards=shards, tmpdir=a.scratch)
     status["count_seconds"] = round(time.time() - t2, 1)
     os.makedirs(out_dir, exist_ok=True)
     C.save_npz(os.path.join(out_dir, "counts.npz"), lc, {"gsm": row["gsm"], "gex_gsm": gex_gsm, "offset": off,
@@ -382,7 +381,7 @@ def resolve_chemistry(gx, r1_len, atlas_chem, cache, status):
     pc, bad = S.encode_strings(probe, 16)
     share = {}
     for name in ("737K-august-2016.txt.gz", "3M-february-2018.txt.gz"):
-        wl = np.sort(S.encode_strings(C.load_barcode_list(C_fetch(name, cache)), 16)[0])
+        wl = C.load_barcode_codes(C_fetch(name, cache))
         share[name] = float((S.lookup(wl, pc[bad == 0]) >= 0).mean())
     best = max(share, key=share.get)
     if r1_len in (26, 27):

@@ -1,0 +1,328 @@
+[
+ {
+  "method": "singlet",
+  "seconds": 96.8,
+  "n_features_common": 17,
+  "umis": 3687052.0,
+  "umis_cellranger": 3686238.0,
+  "ratio": 1.000220821336007,
+  "pearson_log_entries": 0.9999945350082187,
+  "spearman_entries": 0.9999858450704437,
+  "pearson_cell_totals": 0.9999999458389589,
+  "median_per_cell_pearson": 0.9999999999999997,
+  "exact_entries": 0.9548717102549295,
+  "abs_diff_share": 0.00023167250730962027,
+  "per_feature_ratio": {
+   "CD3_TotalSeqB": 1.0002026206621277,
+   "CD4_TotalSeqB": 1.0002066597360049,
+   "CD8a_TotalSeqB": 1.0003417094871367,
+   "CD14_TotalSeqB": 1.000165715906761,
+   "CD15_TotalSeqB": 1.0004797579067795,
+   "CD16_TotalSeqB": 1.000446735395189,
+   "CD56_TotalSeqB": 1.0004142394822007,
+   "CD19_TotalSeqB": 1.00031232338856,
+   "CD25_TotalSeqB": 1.0004138828120381,
+   "CD45RA_TotalSeqB": 1.0001906419514675,
+   "CD45RO_TotalSeqB": 1.0002380385622471,
+   "PD-1_TotalSeqB": 1.0002838355645962,
+   "TIGIT_TotalSeqB": 1.0004726791453962,
+   "CD127_TotalSeqB": 1.0002205517469536,
+   "IgG2a_control_TotalSeqB": 1.0006208609271523,
+   "IgG1_control_TotalSeqB": 1.0006242197253432,
+   "IgG2b_control_TotalSeqB": 1.0
+  },
+  "notes": {
+   "offsets": {
+    "10": 0.6457
+   },
+   "offset": 10,
+   "translation": {
+    "forward": {
+     "direct": 0.00010028028339208086,
+     "translated": 0.5844786177365737,
+     "use": true
+    },
+    "reverse": {
+     "direct": 0.00010028028339208086,
+     "translated": 0.5844786177365737,
+     "use": true
+    },
+    "use": true,
+    "direct": 0.00010028028339208086,
+    "translated": 0.5844786177365737
+   },
+   "stats": {
+    "reads": 12606650,
+    "reads_short": 0,
+    "unique_keys": 7005356,
+    "reads_feature_exact": 11085168,
+    "reads_feature_corrected": 283060,
+    "reads_feature_ambiguous": 0,
+    "reads_feature_unmatched": 1238422,
+    "reads_valid_barcode": 12412684,
+    "reads_valid_barcode_feature": 11280254,
+    "reads_translated": 12412684,
+    "reads_umi_n": 2,
+    "umis_before_correction": 5965911,
+    "molecules": 5844631,
+    "reads_usable": 11280252,
+    "barcodes_observed": 294001,
+    "barcodes_corrected": 79173,
+    "molecules_in_gex_columns": 3687052,
+    "reads_in_gex_columns": 7112767,
+    "saturation": 0.481870529133569,
+    "saturation_gex_columns": 0.48162902004241104,
+    "outside_barcodes": 123559
+   }
+  }
+ },
+ {
+  "method": "singlet_discovered",
+  "seconds": 86.5,
+  "n_features_common": 14,
+  "umis": 2547173.0,
+  "umis_cellranger": 2546578.0,
+  "ratio": 1.0002336468782813,
+  "pearson_log_entries": 0.9999928947385197,
+  "spearman_entries": 0.9999837189999027,
+  "pearson_cell_totals": 0.9999999196539736,
+  "median_per_cell_pearson": 0.9999999999999998,
+  "exact_entries": 0.9574233620516931,
+  "abs_diff_share": 0.00024621276081078215,
+  "per_feature_ratio": {
+   "CD3_TotalSeqB": 1.0002026206621277,
+   "CD4_TotalSeqB": 1.0002066597360049,
+   "CD8a_TotalSeqB": 1.0003417094871367,
+   "CD14_TotalSeqB": 1.000165715906761,
+   "CD15_TotalSeqB": 1.0004797579067795,
+   "CD16_TotalSeqB": 1.000446735395189,
+   "CD56_TotalSeqB": 1.0004142394822007,
+   "CD19_TotalSeqB": 1.00031232338856,
+   "CD25_TotalSeqB": 1.0004138828120381,
+   "CD45RO_TotalSeqB": 1.0002380385622471,
+   "PD-1_TotalSeqB": 1.0002838355645962,
+   "TIGIT_TotalSeqB": 1.0004726791453962,
+   "CD127_TotalSeqB": 1.0002205517469536,
+   "IgG1_control_TotalSeqB": 1.0006242197253432
+  },
+  "notes": {
+   "offsets": {
+    "10": 0.6457
+   },
+   "offset": 10,
+   "translation": {
+    "forward": {
+     "direct": 0.00010028028339208086,
+     "translated": 0.5844786177365737,
+     "use": true
+    },
+    "reverse": {
+     "direct": 0.00010028028339208086,
+     "translated": 0.5844786177365737,
+     "use": true
+    },
+    "use": true,
+    "direct": 0.00010028028339208086,
+    "translated": 0.5844786177365737
+   },
+   "discovery": {
+    "status": "ambiguous",
+    "reads": 116569,
+    "matched_share": 0.6608961216103767,
+    "unexplained_share": 0.29283943415487823,
+    "low_complexity_share": 0.004366512537638652,
+    "shifted_share": 0.0,
+    "n_catalog_hits": 14,
+    "reactivity_mismatch_share": 0.0,
+    "reactivity_mismatch": [],
+    "reused_share": 1.0,
+    "reused": [
+     "10x pbmc_1k_protein_v3 (2018): CD4_TotalSeqB",
+     "10x pbmc_1k_protein_v3 (2018): CD3_TotalSeqB",
+     "10x pbmc_1k_protein_v3 (2018): CD14_TotalSeqB",
+     "10x pbmc_1k_protein_v3 (2018): CD8a_TotalSeqB",
+     "10x pbmc_1k_protein_v3 (2018): CD45RO_TotalSeqB",
+     "10x pbmc_1k_protein_v3 (2018): CD19_TotalSeqB",
+     "10x pbmc_1k_protein_v3 (2018): CD16_TotalSeqB",
+     "10x pbmc_1k_protein_v3 (2018): CD127_TotalSeqB",
+     "10x pbmc_1k_protein_v3 (2018): CD56_TotalSeqB",
+     "10x pbmc_1k_protein_v3 (2018): CD15_TotalSeqB",
+     "10x pbmc_1k_protein_v3 (2018): PD-1_TotalSeqB",
+     "10x pbmc_1k_protein_v3 (2018): CD25_TotalSeqB",
+     "10x pbmc_1k_protein_v3 (2018): TIGIT_TotalSeqB",
+     "10x pbmc_1k_protein_v3 (2018): IgG1_control_TotalSeqB"
+    ],
+    "unexplained_top": [
+     [
+      "GATGAGAACAGGTTT",
+      34007
+     ],
+     [
+      "CTCTATTCAGACCAG",
+      129
+     ]
+    ]
+   },
+   "stats": {
+    "reads": 12606650,
+    "reads_short": 0,
+    "unique_keys": 7005356,
+    "reads_feature_exact": 8010925,
+    "reads_feature_corrected": 211536,
+    "reads_feature_ambiguous": 0,
+    "reads_feature_unmatched": 4384189,
+    "reads_valid_barcode": 12412684,
+    "reads_valid_barcode_feature": 8158430,
+    "reads_translated": 12412684,
+    "reads_umi_n": 0,
+    "umis_before_correction": 4311147,
+    "molecules": 4229883,
+    "reads_usable": 8158430,
+    "barcodes_observed": 294001,
+    "barcodes_corrected": 79173,
+    "molecules_in_gex_columns": 2547173,
+    "reads_in_gex_columns": 4903246,
+    "saturation": 0.48153223107877374,
+    "saturation_gex_columns": 0.4805129092034134,
+    "outside_barcodes": 113157
+   },
+   "panel_vs_cellranger": {
+    "cr_only": [
+     "ATCACATCGTTGCCA",
+     "CTCTATTCAGACCAG",
+     "GATGAGAACAGGTTT"
+    ],
+    "discovered_only": []
+   }
+  }
+ },
+ {
+  "method": "kite",
+  "seconds": 98.7,
+  "n_features_common": 17,
+  "umis": 3791836.0,
+  "umis_cellranger": 3686238.0,
+  "ratio": 1.0286465496801889,
+  "pearson_log_entries": 0.9995623128718222,
+  "spearman_entries": 0.9988888441294956,
+  "pearson_cell_totals": 0.9999705428166117,
+  "median_per_cell_pearson": 0.9997459544101097,
+  "exact_entries": 0.5423644913785991,
+  "abs_diff_share": 0.02899161692761021,
+  "per_feature_ratio": {
+   "CD3_TotalSeqB": 1.0281734128175088,
+   "CD4_TotalSeqB": 1.0267712566550105,
+   "CD8a_TotalSeqB": 1.0280799771054643,
+   "CD14_TotalSeqB": 1.0282138353120935,
+   "CD15_TotalSeqB": 1.0240617042477027,
+   "CD16_TotalSeqB": 1.024553264604811,
+   "CD56_TotalSeqB": 1.0210226537216829,
+   "CD19_TotalSeqB": 1.029284035813082,
+   "CD25_TotalSeqB": 1.0267250044344587,
+   "CD45RA_TotalSeqB": 1.032799241668682,
+   "CD45RO_TotalSeqB": 1.0219432690953076,
+   "PD-1_TotalSeqB": 1.023747575571219,
+   "TIGIT_TotalSeqB": 1.0208924182265078,
+   "CD127_TotalSeqB": 1.0221470712565937,
+   "IgG2a_control_TotalSeqB": 1.0281456953642385,
+   "IgG1_control_TotalSeqB": 1.0218476903870162,
+   "IgG2b_control_TotalSeqB": 1.0242557883131203
+  }
+ },
+ {
+  "method": "alevin_fry",
+  "error": "error: unexpected argument '--features' found\n\nUsage: salmon index --transcripts <TRANSCRIPTS>... --index <INDEX>\n\nFor more information, try '--help'.\n\nnote: salmon 2.0 is the Rust rewrite and changed or removed some command-line options.\n      See the migration guide (MIGRATION.md) for the C++ \u2192 2.0 flag mapping, and note that\n      indices must be rebuilt for 2.0 (the index format changed).\n"
+ },
+ {
+  "method": "adt_counter_h_offset0-5",
+  "seconds": 20.0,
+  "n_features_common": 17,
+  "umis": 0.0,
+  "umis_cellranger": 3686238.0,
+  "ratio": 0.0,
+  "pearson_log_entries": NaN,
+  "spearman_entries": NaN,
+  "pearson_cell_totals": NaN,
+  "median_per_cell_pearson": null,
+  "exact_entries": 0.03225806451612903,
+  "abs_diff_share": 1.0,
+  "per_feature_ratio": {
+   "CD3_TotalSeqB": 0.0,
+   "CD4_TotalSeqB": 0.0,
+   "CD8a_TotalSeqB": 0.0,
+   "CD14_TotalSeqB": 0.0,
+   "CD15_TotalSeqB": 0.0,
+   "CD16_TotalSeqB": 0.0,
+   "CD56_TotalSeqB": 0.0,
+   "CD19_TotalSeqB": 0.0,
+   "CD25_TotalSeqB": 0.0,
+   "CD45RA_TotalSeqB": 0.0,
+   "CD45RO_TotalSeqB": 0.0,
+   "PD-1_TotalSeqB": 0.0,
+   "TIGIT_TotalSeqB": 0.0,
+   "CD127_TotalSeqB": 0.0,
+   "IgG2a_control_TotalSeqB": 0.0,
+   "IgG1_control_TotalSeqB": 0.0,
+   "IgG2b_control_TotalSeqB": 0.0
+  },
+  "notes": {
+   "lanes": [
+    {
+     "reads": 12606650,
+     "reads_barcode_exact": 842,
+     "matched": 0,
+     "ambiguous": 0,
+     "unmatched": 842,
+     "umis": 0,
+     "seconds": 17.3681
+    }
+   ]
+  }
+ },
+ {
+  "method": "adt_counter_h_offset0-10",
+  "seconds": 17.3,
+  "n_features_common": 17,
+  "umis": 62.0,
+  "umis_cellranger": 3686238.0,
+  "ratio": 1.6819315518965406e-05,
+  "pearson_log_entries": 0.04619286712887784,
+  "spearman_entries": 0.04554348215930104,
+  "pearson_cell_totals": -0.016466795914331093,
+  "median_per_cell_pearson": 0.5474726492792638,
+  "exact_entries": 0.03225806451612903,
+  "abs_diff_share": 0.999983180684481,
+  "per_feature_ratio": {
+   "CD3_TotalSeqB": 9.140781750124543e-06,
+   "CD4_TotalSeqB": 2.520240682985225e-06,
+   "CD8a_TotalSeqB": 3.417094871367735e-05,
+   "CD14_TotalSeqB": 2.8087441823886122e-05,
+   "CD15_TotalSeqB": 0.00018452227183821088,
+   "CD16_TotalSeqB": 1.718213058419244e-05,
+   "CD56_TotalSeqB": 5.1779935275080907e-05,
+   "CD19_TotalSeqB": 0.0,
+   "CD25_TotalSeqB": 5.9126116005439605e-05,
+   "CD45RA_TotalSeqB": 1.2356422780301038e-05,
+   "CD45RO_TotalSeqB": 2.4289649208886124e-05,
+   "PD-1_TotalSeqB": 0.00018922370973082928,
+   "TIGIT_TotalSeqB": 9.453582907922102e-05,
+   "CD127_TotalSeqB": 1.8379312246135748e-05,
+   "IgG2a_control_TotalSeqB": 0.0,
+   "IgG1_control_TotalSeqB": 0.00015605493133583021,
+   "IgG2b_control_TotalSeqB": 0.0005512679162072767
+  },
+  "notes": {
+   "lanes": [
+    {
+     "reads": 12606650,
+     "reads_barcode_exact": 842,
+     "matched": 124,
+     "ambiguous": 0,
+     "unmatched": 718,
+     "umis": 62,
+     "seconds": 17.3001
+    }
+   ]
+  }
+ }
+]

@@ -39,8 +39,11 @@ def data():
         truth.append("Doublet")
     cells = [f"CELL{j:04d}-1" for j in range(n)]
     hto = pd.DataFrame(X, index=TAGS, columns=cells)
-    empties = pd.DataFrame(rng.poisson(2, size=(4, N_EMPTY)), index=TAGS,
-                           columns=[f"EMPTY{j:04d}-1" for j in range(N_EMPTY)])
+    empties = pd.DataFrame(
+        rng.poisson(2, size=(4, N_EMPTY)),
+        index=TAGS,
+        columns=[f"EMPTY{j:04d}-1" for j in range(N_EMPTY)],
+    )
     return hto, empties, pd.Series(truth, index=cells)
 
 
@@ -76,8 +79,14 @@ def test_singlet_without_empties(data):
 @pytest.mark.parametrize("name", ["htodemux", "multiseqdemux"])
 def test_seurat_methods(data, name, tmp_path):
     import subprocess
-    ok = subprocess.run(["Rscript", "-e", "quit(status = !requireNamespace('Seurat', quietly = TRUE))"],
-                        capture_output=True).returncode == 0
+
+    ok = (
+        subprocess.run(
+            ["Rscript", "-e", "quit(status = !requireNamespace('Seurat', quietly = TRUE))"],
+            capture_output=True,
+        ).returncode
+        == 0
+    )
     if not ok:
         pytest.skip("R package Seurat not installed")
     hto, empties, truth = data
@@ -103,17 +112,28 @@ def test_demuxem(data):
     pytest.importorskip("pegasusio")
     import anndata as ad
     import scipy.sparse as sp
+
     hto, empties, truth = data
     rng = np.random.default_rng(2)
     barcodes = list(hto.columns) + list(empties.columns)
     ng = 200
     X = np.vstack([rng.poisson(5, (hto.shape[1], ng)), rng.poisson(0.05, (empties.shape[1], ng))])
-    rna = ad.AnnData(X=sp.csr_matrix(X.astype(np.float32)), obs=pd.DataFrame(index=barcodes),
-                     var=pd.DataFrame(index=[f"g{i}" for i in range(ng)]))
+    rna = ad.AnnData(
+        X=sp.csr_matrix(X.astype(np.float32)),
+        obs=pd.DataFrame(index=barcodes),
+        var=pd.DataFrame(index=[f"g{i}" for i in range(ng)]),
+    )
     res = hm.run_demuxem(hto, empties, rna)
     _check_shape(res, hto)
     assert _singlet_accuracy(res, truth) > 0.8
 
 
 def test_methods_registry():
-    assert set(hm.METHODS) == {"singlet", "htodemux", "multiseqdemux", "hashsolo", "demuxem"}
+    assert set(hm.METHODS) == {
+        "singlet",
+        "singlet_mixture",
+        "htodemux",
+        "multiseqdemux",
+        "hashsolo",
+        "demuxem",
+    }

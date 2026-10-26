@@ -99,7 +99,7 @@ def hto_sidecar(M, pan, hrows, gx, out):
     emp = np.flatnonzero(N.empty_droplets(totals, called))
     X = M[hrows].tocsc()
     amb = np.asarray(X[:, emp].sum(axis=1)).ravel()
-    call, lt, _ = H.hashed_drops(X[:, cells].toarray(), amb)
+    call, lt, _ = H.call_hashtags(X[:, cells].toarray(), amb)
     t, names = H.feature_sidecar(gx.gsm, cells, call, lt, list(pan.name.iloc[hrows]))
     import io
 

@@ -53,7 +53,6 @@ def count_library(r1_paths, r2_paths, *, library: GuideLibrary, geometry: Geomet
     if right:
         lc.unmatched = [(s[::-1], c) for s, c in lc.unmatched]
     lc.unmatched = [(s, c) for s, c in lc.unmatched if set(s) != {"N"}]
-    # sharded counting reads the pairs twice
-    lc.stats["reads_without_protospacer"] = int(tally.get("reads_without_protospacer", 0) // (2 if shards else 1))
+    lc.stats["reads_without_protospacer"] = int(tally.get("reads_without_protospacer", 0))
     lc.stats["geometry"] = geometry.describe()
     return lc
