@@ -182,8 +182,8 @@ multiome) take under 6.5 h, so they need the `cpu` partition or a read cap to fi
   - **The earlier simulation** (`docs/cell_annotation.md` 5.1).
   MAGE note: the HG00237 / NA11919 run swap is corrected in ENA (SRR37907958/9), and both individuals are excluded.
 - **Leakage control for ancestry.** The 150 MAGE individuals and the 4 LCL individuals are removed from the allele
-  frequency table Singlet uses, and from somalier's labelled 1000 Genomes background. peddy's built-in background cannot be
-  changed, so peddy keeps its advantage. That is conservative for Singlet.
+  frequency table Singlet uses, from somalier's labelled 1000 Genomes background, and from peddy's built-in background
+  (`sexancestry/peddy_leaveout.py` drops their rows after checking the panel order against peddy's own label vector).
 - **Stoeckius 2018** deposited no genotype calls. Truth is the hashtag, confirmed per cell by genotype demultiplexing
   (consensus of vireo and souporcell, both independent of Singlet). Its MixCellLines RNA run is empty in SRA and is not
   used.
