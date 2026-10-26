@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// pz2 codec 2 ("generic"): per chunk three zstd streams.  Any m, any values, any chunk shape.  Format: docs/format-v2.md 5.2.
+// pz2 codec 2 ("generic"): per chunk three zstd streams.  Any m, any values, any chunk shape.  Format: docs/format-store.md 5.2.
 //   chunk := STREAM(counts) STREAM(gaps) STREAM(values)      STREAM := u32 raw_len, u32 zstd_len, zstd frame (raw_len 0: no frame)
 //   counts : LEB128 of the number of non-zeros of each column of the chunk
 //   gaps   : for each column, for each element: LEB128(row - previous_row - 1), previous_row = -1 at the column start

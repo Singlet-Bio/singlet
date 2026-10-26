@@ -7,8 +7,8 @@
 read_singlet(path)
 }
 \arguments{
-\item{path}{Path to a local `.singlet` file (or to a local v2 manifest,
-\code{.../v2/m/<GSE>.json}, as returned by \code{\link{download}}).}
+\item{path}{Path to a local `.singlet` file (or to a local store manifest,
+\code{.../store/m/<GSE>.json}, as returned by \code{\link{download}}).}
 }
 \value{
 A \code{SingleCellExperiment} with one column per called cell

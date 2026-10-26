@@ -1,6 +1,6 @@
 # Which atlas samples are not gene-expression libraries?
 
-Screen for the v2 migration (2026-10-23). The empty-droplet study (`docs/empty-droplets.md`, draft PR #17) found that the v2 pilot
+Screen for the store migration (2026-10-23). The empty-droplet study (`docs/empty-droplets.md`, draft PR #17) found that the store pilot
 GSE145370 holds TCR-enriched V(D)J libraries processed as gene expression. This screen looks for the same mix-up across the whole
 atlas: V(D)J (TCR/BCR), hashtag (HTO), antibody (ADT/CITE-seq), CellPlex/MULTI-seq (CMO), CRISPR guide libraries, and also ATAC and
 other DNA libraries, deposited next to the mRNA libraries and processed as RNA.
@@ -42,7 +42,7 @@ What the table says:
 3. **892 flagged samples have an mRNA sibling that is not in the atlas** (701 distinct mRNA GSMs in 203 studies; the pilot's
    GSM4317409-22 are among them). 5,219 have their mRNA sibling in the atlas already.
 
-## Recommendations for the v2 migration
+## Recommendations for the store migration
 
 1. **Exclude high and medium samples from the gene-expression migration** (8,824). Do not write them as GEX sample objects; list
    them in the study manifest as excluded with the class, so the counts stay explainable. Where the mRNA sibling is in the atlas

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 """Latency, reads, bytes and cost of the cell-index endpoints against a running data Worker (local workerd or data.singlet.bio).
 
-    node <website>/workers/data-v2/scripts/local.mjs <data dir with v2/... and v2/cidx/...> 8799      # local workerd + seeded R2
+    node <website>/workers/data/scripts/local.mjs <data dir with store/... and store/cidx/...> 8799      # local workerd + seeded R2
     python -P bench/cidx/measure.py http://127.0.0.1:8799 > bench/cidx/results_local_pilot.json
 
 Each case runs ``repeat`` times; the first run is cold (empty Cache API and isolate memos for the objects it touches), the rest warm.
@@ -34,7 +34,7 @@ def main() -> None:
     base = sys.argv[1].rstrip("/")
     repeat = int(sys.argv[2]) if len(sys.argv) > 2 else 3
     os.environ["SINGLET_CACHE_DIR"] = tempfile.mkdtemp()
-    from singlet.v2 import atlas
+    from singlet.store import atlas
 
     out = {"base": base, "queries": [], "gathers": []}
     queries = [
@@ -50,7 +50,7 @@ def main() -> None:
     for name, q in queries:
         runs = []
         for _k in range(repeat):
-            dt, raw = post(base, "/v2/cidx/query", q)
+            dt, raw = post(base, "/store/cidx/query", q)
             r = json.loads(raw)
             runs.append({
                 "ms_client": round(dt * 1000, 1), "ms_worker": r.get("ms"), "reads": r.get("reads"), "bytes_read": r.get("bytes_read"),

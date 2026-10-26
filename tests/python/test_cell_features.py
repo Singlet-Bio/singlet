@@ -219,7 +219,7 @@ def test_write_roundtrip_and_metadata(tmp_path):
 
 
 def test_cell_index_reads_the_sidecar(tmp_path):
-    atlas = pytest.importorskip("singlet.v2.atlas")
+    atlas = pytest.importorskip("singlet.store.atlas")
     if not hasattr(atlas, "normalize_feature_sidecar"):
         pytest.skip("cell index (Singlet-Bio/singlet#15) not on this branch")
     s, r, t = _table()

@@ -4,7 +4,7 @@
 One Parquet file per sample, one row per called cell::
 
     gsm                 string   sample accession
-    col                 int64    column index of the cell in the sample's v2 ``cells`` table / matrix column order
+    col                 int64    column index of the cell in the sample's store ``cells`` table / matrix column order
     cell_type_cl        string   Cell Ontology id (null: no call)
     cell_type_label     string   Cell Ontology name of that id
     cell_type_score     float32  confidence of the call in [0, 1] (guide: product of the gating confidences on its path)

@@ -241,8 +241,8 @@ from singlet.fetch import default_base_url, default_cache_dir, fetch
 from singlet.find import find, find_load, set_api_key
 from singlet.pipeline import PipelineError, Run
 from singlet.pipeline import run as run_pipeline
-from singlet.v2.client import cells as cells  # v2: per-sample objects, cell slicing
-from singlet.v2.client import open_study as open_study
+from singlet.store.client import cells as cells  # per-sample objects, cell slicing
+from singlet.store.client import open_study as open_study
 
 __all__ = [
     # Browse

@@ -1,0 +1,179 @@
+{
+ "format": "singlet-store-packs",
+ "version": 1,
+ "packs": [
+  {
+   "id": "a34ebca652f38b28f0ab5c0ec2a13249",
+   "kind": "vocab",
+   "bytes": 1144318,
+   "sha256": "a34ebca652f38b28f0ab5c0ec2a132490dfdb58204f6340d02b6fdc529dd93b8",
+   "build": "GRCh38-2024-A",
+   "member": "exon",
+   "n": 310797,
+   "ship": true
+  },
+  {
+   "id": "fd3fcc82842baa3a1d4c8bc6a8f99b90",
+   "kind": "vocab",
+   "bytes": 147,
+   "sha256": "fd3fcc82842baa3a1d4c8bc6a8f99b909fc3e3d63550f2b7a8535c358df9c849",
+   "build": "GRCh38-2024-A",
+   "member": "intron",
+   "n": 272191,
+   "ship": true
+  },
+  {
+   "id": "b708a9dbd566355a876377babed1a4a1",
+   "kind": "vocab",
+   "bytes": 223,
+   "sha256": "b708a9dbd566355a876377babed1a4a1b23a5fd0220afe1fcffd42258690b045",
+   "build": "GRCh38-GRCm39-barnyard",
+   "member": "exon",
+   "n": 696825,
+   "ship": false
+  },
+  {
+   "id": "32bbdc195ae2486a1257e38d3c4c161e",
+   "kind": "vocab",
+   "bytes": 225,
+   "sha256": "32bbdc195ae2486a1257e38d3c4c161eaff94e392c999bdb129d639a562a1844",
+   "build": "GRCh38-GRCm39-barnyard",
+   "member": "intron",
+   "n": 579921,
+   "ship": false
+  },
+  {
+   "id": "cef1acaf465ebfc4ff7404f308966e92",
+   "kind": "vocab",
+   "bytes": 1529459,
+   "sha256": "cef1acaf465ebfc4ff7404f308966e92a602b306f397861a6d37faa2e1e61144",
+   "build": "GRCm39-2024-A",
+   "member": "exon",
+   "n": 386028,
+   "ship": true
+  },
+  {
+   "id": "15854e80854ce93702dc4c716e6a35c5",
+   "kind": "vocab",
+   "bytes": 147,
+   "sha256": "15854e80854ce93702dc4c716e6a35c549987ae308464879338ba6649e6a30c2",
+   "build": "GRCm39-2024-A",
+   "member": "intron",
+   "n": 307730,
+   "ship": true
+  },
+  {
+   "id": "b6abb72f333412054fd8d2afa76f35b4",
+   "kind": "vocab",
+   "bytes": 967845,
+   "sha256": "b6abb72f333412054fd8d2afa76f35b4db53be449d921cbc0d711efc199e8c5a",
+   "build": "GRCz11",
+   "member": "exon",
+   "n": 272316,
+   "ship": false
+  },
+  {
+   "id": "09243cc59ea1b0223dcbf071e1df34e3",
+   "kind": "vocab",
+   "bytes": 140,
+   "sha256": "09243cc59ea1b0223dcbf071e1df34e342fa0b448c3c9cc64f34e8b48a672bd0",
+   "build": "GRCz11",
+   "member": "intron",
+   "n": 239796,
+   "ship": false
+  },
+  {
+   "id": "ce5a05fc3282d0e3c39e0c7109619eb1",
+   "kind": "vocab",
+   "bytes": 879073,
+   "sha256": "ce5a05fc3282d0e3c39e0c7109619eb164124618ae6ff82ac164420302f32c38",
+   "build": "Mmul_10",
+   "member": "exon",
+   "n": 244671,
+   "ship": false
+  },
+  {
+   "id": "99a51e8db8bc54baede2092c8b828737",
+   "kind": "vocab",
+   "bytes": 141,
+   "sha256": "99a51e8db8bc54baede2092c8b8287371ad657ba06f68f2532a6480e52ce0172",
+   "build": "Mmul_10",
+   "member": "intron",
+   "n": 209239,
+   "ship": false
+  },
+  {
+   "id": "94e3bff7460f96e92311ff009efae582",
+   "kind": "vocab",
+   "bytes": 875198,
+   "sha256": "94e3bff7460f96e92311ff009efae58213183dd5c692053d1435d6ebd370290f",
+   "build": "mRatBN7.2",
+   "member": "exon",
+   "n": 243603,
+   "ship": false
+  },
+  {
+   "id": "0bcd2ceb31fc6cad695901e449f667cc",
+   "kind": "vocab",
+   "bytes": 143,
+   "sha256": "0bcd2ceb31fc6cad695901e449f667ccb22281a40d28e0c0d664a2412e0e3940",
+   "build": "mRatBN7.2",
+   "member": "intron",
+   "n": 213041,
+   "ship": false
+  },
+  {
+   "id": "b3961cb6986f392743ea332b879d1d5a",
+   "kind": "whitelist",
+   "bytes": 6619,
+   "sha256": "b3961cb6986f392743ea332b879d1d5aaab814d51e7da2584e760392e18cc265",
+   "protocol": "3M-february-2018",
+   "aliases": [
+    "3M-february-2018"
+   ],
+   "n": 3686400,
+   "k": 16,
+   "ship": true
+  },
+  {
+   "id": "88579b0570adecbc3f0e8602d65d243f",
+   "kind": "whitelist",
+   "bytes": 4453,
+   "sha256": "88579b0570adecbc3f0e8602d65d243fc2d64a2ddedabcc085b5ce43c41f1b69",
+   "protocol": "737K-april-2014",
+   "aliases": [
+    "737K-april-2014"
+   ],
+   "n": 737280,
+   "k": 14,
+   "ship": true
+  },
+  {
+   "id": "c46618191a313da3983d934abe51e751",
+   "kind": "whitelist",
+   "bytes": 3436,
+   "sha256": "c46618191a313da3983d934abe51e75187d9c3c7feb732c1d5465ecaa980ae64",
+   "protocol": "737K-august-2016",
+   "aliases": [
+    "737K-august-2016",
+    "737K-cratac-v1"
+   ],
+   "n": 737280,
+   "k": 16,
+   "ship": true
+  },
+  {
+   "id": "5b24205cb61a91db46ebbc980e8ee6bc",
+   "kind": "whitelist",
+   "bytes": 8684,
+   "sha256": "5b24205cb61a91db46ebbc980e8ee6bcd57e2487a6855223ee31abfad288d5e6",
+   "protocol": "gex_737K-arc-v1",
+   "aliases": [
+    "gex_737K-arc-v1"
+   ],
+   "n": 736320,
+   "k": 16,
+   "ship": true
+  }
+ ]
+}

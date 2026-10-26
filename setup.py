@@ -14,7 +14,7 @@ ext_modules = [
         # ANSI code page unless told otherwise.
         extra_compile_args=["/utf-8"] if sys.platform == "win32" else [],
     ),
-    # The v2 matrix codec (include/singlet/pz2/, header-only; the SIMD paths are chosen at run time, so no -march flag)
+    # The store matrix codec (include/singlet/pz2/, header-only; the SIMD paths are chosen at run time, so no -march flag)
     # and its client helpers (src/bindings/common/singlet/pz2_client.h).
     Pybind11Extension(
         "singlet._pz2",

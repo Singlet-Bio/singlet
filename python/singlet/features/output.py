@@ -4,7 +4,7 @@
 ``<GSM>.features.<feature set>.parquet``, one row per called cell::
 
     gsm         string   sample accession (one value per file)
-    col         int64    column of the cell in the sample's v2 ``cells`` table / matrix order (unique)
+    col         int64    column of the cell in the sample's store ``cells`` table / matrix order (unique)
     <name> ...  one column per registered feature of the set, in registry order:
                 float32 in [0, 1] (NaN = not computed) for kind 'score'; uint16 code into the feature's categories
                 (65535 = not computed) for 'category'; bool (null = not computed) for 'flag'
