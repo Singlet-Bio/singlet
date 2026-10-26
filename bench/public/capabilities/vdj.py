@@ -27,24 +27,16 @@ sys.path.insert(0, str(ROOT / "bench" / "vdj"))
 TOOLS = ("singlet", "trust4")
 METRICS = [
     # (key in compare(), id suffix, name, unit, category, direction)
-    ("contig_recovery", "contig_recovery", "Cell Ranger productive contigs found exactly (cell, chain, junction nt)",
-     "fraction", "agreement", "higher"),
+    ("contig_f1", "contig_f1", "Productive contigs (cell, chain, junction nt) against Cell Ranger's: F1 of recovery "
+     "and precision", "fraction", "agreement", "higher"),
     ("cdr3_nt_accuracy", "cdr3_nt_accuracy", "Top junction per cell and chain identical to Cell Ranger's (nt)",
      "fraction", "agreement", "higher"),
-    ("cell_chain_recovery", "cell_chain_recovery", "Cell Ranger cell-chains with a productive contig", "fraction",
-     "coverage", "higher"),
+    ("correct_pairing", "correct_pairing", "Cell Ranger paired cells whose top junctions of both chains are reproduced",
+     "fraction", "agreement", "higher"),
     ("v_gene_agreement_equivalent", "v_gene_agreement", "V gene as Cell Ranger's on identical junctions (indistinguishable genes as one)",
      "fraction", "agreement", "higher"),
     ("j_gene_agreement", "j_gene_agreement", "J gene as Cell Ranger's on identical junctions", "fraction", "agreement",
      "higher"),
-    ("extra_contigs", "extra_contigs", "Contigs in Cell Ranger cells that Cell Ranger does not report, per its contig",
-     "fraction", "agreement", "lower"),
-    ("contig_precision", "contig_precision", "Contigs in Cell Ranger cells that Cell Ranger also reports", "fraction",
-     "agreement", "higher"),
-    ("contig_f1", "contig_f1", "Contig F1 against Cell Ranger (precision and recovery)", "fraction", "agreement",
-     "higher"),
-    ("correct_pairing", "correct_pairing", "Cell Ranger paired cells whose top junctions of both chains are reproduced",
-     "fraction", "agreement", "higher"),
     ("clonotype_ari", "clonotype_ari", "Clonotypes (exact chain sets) vs Cell Ranger's, adjusted Rand index",
      "ARI", "agreement", "higher"),
     ("wrong_lineage_method", "wrong_lineage", "Contigs of the wrong lineage (TCR in GEX B cells, BCR in GEX T cells)",
@@ -121,6 +113,10 @@ def compute(artifact_dir: Path) -> dict:
                  "direction": direc, "singlet": {"value": r(res["singlet"][key])},
                  "competitors": [{"tool": t, "value": r(res[t][key])} for t in res if t != "singlet" and key in res[t]],
                  "rule": {"type": "match_or_beat", "against": "best"}}
+            if key == "contig_f1":
+                m["notes"] = "recovery / precision / extra contigs per Cell Ranger contig: " + "; ".join(
+                    f"{t} {res[t]['contig_recovery']:.3f} / {res[t]['contig_precision']:.3f} / {res[t]['extra_contigs']:.3f}"
+                    for t in res)
             if key == "wrong_lineage_method":
                 # Cell Ranger's own value is a competitor here: these metrics do not use Cell Ranger as truth
                 ref_key = key.replace("_method", "_reference")
