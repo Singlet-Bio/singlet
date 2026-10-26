@@ -80,9 +80,6 @@ class Reference:
         self.anchor = np.array([s.anchor for s in segs], dtype=np.int32)
         self.frame = np.array([s.frame for s in segs], dtype=np.int32)
         self.km, self.sg, self.ps = K.build_index([s.seq for s in segs], K_INDEX)
-        self.seg_codes = K.LUT[np.frombuffer("".join(s.seq for s in segs).encode(), dtype=np.uint8)]
-        self.seg_off = np.zeros(len(segs) + 1, np.int64)
-        self.seg_off[1:] = np.cumsum([len(s.seq) for s in segs])
         self.chains = list(R.CHAINS)
         self.chain_id = np.array([self.chains.index(c) for c in self.chain], dtype=np.int8)
         self.d_segs = {c: [(s.name, s.seq) for s in segs if s.region == "D" and s.chain == c] for c in R.CHAINS}
@@ -130,7 +127,7 @@ def _rc(s: bytes) -> bytes:
 
 def _classify(ref: Reference, seqs: List[bytes], min_hits: int):
     codes, off = _codes(seqs)
-    out = K.classify(codes, off, K_INDEX, ref.km, ref.sg, ref.ps, ref.region, min_hits, ref.seg_codes, ref.seg_off)
+    out = K.classify(codes, off, K_INDEX, ref.km, ref.sg, ref.ps, ref.region, min_hits)
     return codes, off, out
 
 
