@@ -9,7 +9,35 @@ Status 2026-10-26, V(D)J + CRISPR session. The branch is `claude/vdj-crispr-benc
 - **Tests:** `tests/python/test_vdj_assemble.py`, `test_crispr.py`, `test_vdj_crispr_store.py`.
 - **Storage:** `docs/format-v2.md` section 14.
 
-<!-- RESULTS -->
+## Results
+
+<!-- VDJ RESULTS -->
+
+### CRISPR guides (`bench/public/results/crispr-guides.json`: 21 of 21 metrics pass)
+
+Every caller below runs on Singlet's guide counts and the same called cells. The published calls are the reference.
+
+| screen | single-call F1: Singlet / CR-style GMM / Poisson-Gaussian | guides with significant knockdown (count): Singlet / best other | usable perturbed cells: Singlet / best other |
+|---|---|---|---|
+| 10x A549 5K (3' v3.1, 93 guides) | **0.936** / 0.912 / 0.872 | **59** / 58 (Cell Ranger) | **3,153** / 2,709 (Cell Ranger) |
+| 10x A375 10k (2 guides) | **0.998** / 0.997 / 0.773 | 1 / 1 | **4,552** / 4,369 (Cell Ranger) |
+| Replogle 2022 K562, gem group 41 (CRISPRi, 4,337 + 288 guides) | **0.919** / 0.894 / 0.876 | **204** / 191 | **2,935** / 2,698 |
+| Norman 2019 K562, gem group 1, held-out half (CRISPRa) | **0.904** / 0.899 / 0.902 | **90** / 88 | **3,105** / 3,088 |
+
+**Counting matches Cell Ranger.** On A549 Singlet counts 1.012 times Cell Ranger's guide UMIs (A375: 1.008). Cell
+Ranger's own per-guide thresholds, applied to Singlet's counts, reproduce 99.4% of its single-guide calls (A375: 99.9%).
+
+**Where Singlet and Cell Ranger disagree, the expression decides.** On A549, Cell Ranger calls 255 cells multiple that
+Singlet calls single.
+- The guide both callers keep leaves its target at **0.25x** control expression.
+- The guides only Cell Ranger adds leave theirs at **1.20x**, i.e. they are ambient molecules.
+
+On A375, a two-guide screen, Singlet calls 9.1% of cells multiple and Cell Ranger 8.9%. These are doublets; this is the
+case that shaped the caller's ambient-load rule.
+
+**Runtime.** Counting runs on one core in Python: 14 min for A549's guide library, 1 min for Norman's. Assignment takes
+under a second. Cell Ranger was not run, so there is no time for it.
+
 
 ## 1. What was wrong
 
