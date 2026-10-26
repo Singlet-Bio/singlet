@@ -23,13 +23,18 @@ export SINGLET_WHITELIST_DIR=$PB/whitelists SINGLET_STALL_TIMEOUT=10800 SINGLET_
 echo "[dp] $BINNAME $GSM $TAG node=$(hostname) cpus=$SLURM_CPUS_PER_TASK excl=${SLURM_JOB_EXCLUSIVE:-?} $(date -Is)" | tee $O/node.txt
 sha256sum $BIN | tee -a $O/node.txt
 squeue -w $(hostname -s) -h -o "%u %C %j" | sort | uniq -c | head -20 >> $O/node.txt || true
-DEV=$(df --output=source /tmp | tail -1 | sed 's#/dev/##')
-( while true; do
-    t=$(date +%s); cg=$(cat /sys/fs/cgroup/$(cut -d: -f3 /proc/self/cgroup | head -1)/memory.current 2>/dev/null || echo 0)
-    ds=$(awk -v d="${DEV##*/}" '$3==d{print $6, $10}' /proc/diskstats)
-    ps -u $USER -o pid=,pcpu=,rss=,comm= --sort=-rss | awk -v t=$t -v cg=$cg -v ds="$ds" 'NR<=3{printf "%s cg=%d ds=%s %s\n", t, cg/1048576, ds, $0}'
+# Job cgroup (v2) counters every 5 s: memory.current and anon (MB), CPU usage (s, cumulative), I/O bytes read and
+# written (MB, cumulative, all devices) -> monitor.tsv. Only this job's processes are counted.
+CG=/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup | head -1 | sed -E 's#(/job_[0-9]+).*#\1#')
+echo "cgroup $CG" >> $O/node.txt
+( echo -e "t\tmem_mb\tanon_mb\tcpu_s\tread_mb\twrite_mb"
+  while true; do
+    printf "%s\t%s\t%s\t%s\t%s\n" $(date +%s) \
+      $(( $(cat $CG/memory.current) / 1048576 )) $(( $(awk '$1=="anon"{print $2}' $CG/memory.stat) / 1048576 )) \
+      $(( $(awk '$1=="usage_usec"{print $2}' $CG/cpu.stat) / 1000000 )) \
+      "$(awk '{for(i=2;i<=NF;i++){split($i,a,"=");if(a[1]=="rbytes")r+=a[2];if(a[1]=="wbytes")w+=a[2]}}END{printf "%d\t%d", r/1048576, w/1048576}' $CG/io.stat)"
     sleep 5
-  done ) > $O/monitor.txt 2>&1 &
+  done ) > $O/monitor.tsv 2>&1 &
 MON=$!
 IN=()
 if [ -n "${INPUTS:-}" ]; then for f in $INPUTS; do IN+=($D/$f); done; else IN=($D/sample.1fq); fi
