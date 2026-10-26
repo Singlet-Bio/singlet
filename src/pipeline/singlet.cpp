@@ -536,22 +536,10 @@ static int cmd_download(int argc, char* argv[]) {
     ecfg.block_size  = block_size;
     ecfg.r2_maxlen   = r2_maxlen;
     ecfg.protocol_tag = (protocol_tag == "auto") ? "" : protocol_tag;
-    // Auto-discover whitelist dir from binary location when user didn't pass --whitelist-dir
-    if (whitelist_dirs.empty()) {
-        char buf[PATH_MAX];
-        ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
-        if (len > 0) {
-            buf[len] = '\0';
-            std::string exe_path(buf, len);
-            auto pos = exe_path.rfind('/');
-            if (pos != std::string::npos) {
-                std::string wl_dir = exe_path.substr(0, pos) + "/../whitelists";
-                struct stat st;
-                if (stat(wl_dir.c_str(), &st) == 0 && S_ISDIR(st.st_mode))
-                    whitelist_dirs.push_back(wl_dir);
-            }
-        }
-    }
+    // Whitelist dirs when the user didn't pass --whitelist-dir: $SINGLET_WHITELIST_DIR, then <binary>/../whitelists.
+    // The same list `screen-runs` uses, so download/encode and screen-runs see the same whitelists and agree on
+    // the chemistry (they disagreed on GSM6470208 when the binary was copied away from its whitelists).
+    if (whitelist_dirs.empty()) whitelist_dirs = singlet::fq::default_whitelist_dirs();
     ecfg.whitelist_dirs = whitelist_dirs;
     ecfg.no_dedup = no_dedup;
     ecfg.no_trim  = no_trim;
@@ -922,22 +910,10 @@ static int cmd_encode(int argc, char* argv[]) {
     ecfg.block_size = block_size;
     ecfg.r2_maxlen = r2_maxlen;
     ecfg.protocol_tag = (protocol_tag == "auto") ? "" : protocol_tag;
-    // Auto-discover whitelist dir from binary location when user didn't pass --whitelist-dir
-    if (whitelist_dirs.empty()) {
-        char buf[PATH_MAX];
-        ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
-        if (len > 0) {
-            buf[len] = '\0';
-            std::string exe_path(buf, len);
-            auto pos = exe_path.rfind('/');
-            if (pos != std::string::npos) {
-                std::string wl_dir = exe_path.substr(0, pos) + "/../whitelists";
-                struct stat st;
-                if (stat(wl_dir.c_str(), &st) == 0 && S_ISDIR(st.st_mode))
-                    whitelist_dirs.push_back(wl_dir);
-            }
-        }
-    }
+    // Whitelist dirs when the user didn't pass --whitelist-dir: $SINGLET_WHITELIST_DIR, then <binary>/../whitelists.
+    // The same list `screen-runs` uses, so download/encode and screen-runs see the same whitelists and agree on
+    // the chemistry (they disagreed on GSM6470208 when the binary was copied away from its whitelists).
+    if (whitelist_dirs.empty()) whitelist_dirs = singlet::fq::default_whitelist_dirs();
     ecfg.whitelist_dirs = whitelist_dirs;
     ecfg.no_dedup = no_dedup;
     ecfg.no_trim = no_trim;
@@ -3028,16 +3004,11 @@ int main(int argc, char* argv[]) {
                 }
             }
             if (!wl_name.empty()) {
-                // Resolve path: <binary-dir>/../whitelists/<file>
+                // Resolve path: $SINGLET_WHITELIST_DIR/<file>, then <binary-dir>/../whitelists/<file>
+                // (default_whitelist_dirs(), the list download and screen-runs use too).
                 bool resolved = false;
-                char exe_buf[PATH_MAX];
-                ssize_t exe_len = ::readlink("/proc/self/exe", exe_buf, sizeof(exe_buf)-1);
-                if (exe_len > 0) {
-                    exe_buf[exe_len] = '\0';
-                    std::string bin_dir(exe_buf);
-                    auto slp = bin_dir.rfind('/');
-                    if (slp != std::string::npos) bin_dir.resize(slp);
-                    std::string candidate = bin_dir + "/../whitelists/" + wl_name;
+                for (const auto& wl_dir : singlet::fq::default_whitelist_dirs()) {
+                    std::string candidate = wl_dir + "/" + wl_name;
                     struct stat wl_stat;
                     if (stat(candidate.c_str(), &wl_stat) == 0) {
                         whitelist_file = candidate;
@@ -3045,6 +3016,7 @@ int main(int argc, char* argv[]) {
                         resolved = true;
                         std::cerr << "[singlet] Auto-resolved whitelist: " << proto_tag
                                   << " → " << wl_name << "\n";
+                        break;
                     }
                 }
                 if (!resolved) {
