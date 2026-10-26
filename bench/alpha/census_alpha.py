@@ -173,7 +173,8 @@ out["strand"] = {"wrong_strand_fraction": q(ws.values), "share_above_0.5": float
 out["caveats"] = [
     "Mouse samples were not screened for wrong-strand counting (policy: 'mouse strand not yet classified'); some mouse 5' libraries in Alpha may be counted antisense.",
     "Cell counts are Singlet's knee-filter calls on reads capped at the first 30M of the first SRA run; they undercount relative to Cell Ranger / EmptyDrops (see the cell-recovery benchmark).",
-    "Every count matrix in Alpha comes from the atlas engine (v0.3.0, git 8e1803ba), which double-counts some molecules (+2% to +19% per cell vs the fixed engine).",
+    "Alpha matrices come from three builds of the atlas engine (engine_builds: v0.3.0 at 8e1803ba and 37e7cbdf, and b1335a8 reporting 1.0.0); all predate the molecule-count fix and double-count some molecules (+2% to +19% per cell vs the fixed engine). The campaign re-run benchmark uses 8e1803ba only.",
+    "summary.json could not be read for a few hundred samples (HTTP 404 or a moved member), most likely bundles being repacked while the census ran; they are missing from the reads distribution (see reads.coverage).",
 ]
 json.dump(out, open(OUTJ, "w"), indent=1)
 print(json.dumps({k: out[k] for k in ("levels", "reads", "strand")}, indent=1))
