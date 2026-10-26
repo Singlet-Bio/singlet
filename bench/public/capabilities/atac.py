@@ -130,4 +130,15 @@ def compute(artifact_dir: Path) -> dict:
                       "clipper_command": "bash bench/atac_spatial/submit.sh"},
         "caveats": prov.get("caveats", []),
     }
+    for m in metrics:
+        if m["id"] in ("fragments_per_cell_spearman", "peak_f1"):
+            doc["figures"].append(C.pareto_figure(doc, m["id"], m["dataset"], "cpu_h"))
+    doc["reach"] = [
+        {"tool": t, "output": o, "supported": s, "note": n} for t, o, s, n in (
+            ("singlet", "fragments, peaks, peak matrix, per-cell QC, cells", "yes", "from FASTQs, one pipeline run"),
+            ("singlet", "gene activity", "yes", "Signac GeneActivity definition"),
+            ("singlet", "Multiome ATAC-GEX pairing and joint cells", "yes", "--paired-gex"),
+            (COMP, "fragments, peaks, per-cell QC, cells", "yes", "three tools; read format chosen by the user"),
+            (COMP, "Multiome ATAC-GEX pairing", "partial", "Chromap's --barcode-translate refused the ARC pair table"),
+            ("cellranger-atac/arc", "fragments, peaks, peak matrix, cells", "yes", "10x EULA; published outputs used"))]
     return C.finalize(doc)

@@ -110,4 +110,15 @@ def compute(artifact_dir: Path) -> dict:
                       "clipper_command": "bash bench/atac_spatial/submit.sh"},
         "caveats": prov.get("caveats", []),
     }
+    for m in metrics:
+        if m["id"] in ("spot_umis_spearman", "spot_profile_pearson"):
+            doc["figures"].append(C.pareto_figure(doc, m["id"], m["dataset"], "cpu_h"))
+    doc["reach"] = [
+        {"tool": t, "output": o, "supported": s, "note": n} for t, o, s, n in (
+            ("singlet", "spot counts, spot coordinates", "yes", "visium-v1 spot list"),
+            ("singlet", "tissue detection without the image", "yes", "count mixture + hexagonal smoothing"),
+            ("singlet", "spliced / unspliced, junctions, mtDNA per spot", "yes", "same pipeline as single-cell"),
+            ("starsolo", "spot counts", "yes", "needs the spot list"),
+            ("starsolo", "tissue detection", "no", ""),
+            ("spaceranger", "spot counts, tissue detection from the image", "yes", "10x EULA; published outputs used"))]
     return C.finalize(doc)

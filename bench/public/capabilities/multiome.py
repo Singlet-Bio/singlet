@@ -23,7 +23,7 @@ from _common import artifact_entries, code_url, contract, load_provenance, now_i
 from _atacsp import archr_default_cells, bootstrap_metric, jaccard, metric, read_tsv  # noqa: E402
 
 CAP = "multiome"
-COMP = "gex-call AND archr-filter(chromap+snapatac2)"
+COMP = "per-modality-calls"
 
 
 def dataset_metrics(art: Path, ds: str) -> list:

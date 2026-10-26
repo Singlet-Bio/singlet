@@ -39,6 +39,11 @@ done
 for s in V1_Human_Lymph_Node V1_Breast_Cancer_Block_A_Section_1; do
   for x in metrics_summary.csv spatial.tar.gz raw_feature_bc_matrix.h5 filtered_feature_bc_matrix.h5; do get $SR/$s/${s}_$x $s; done
 done
+SR13=https://cf.10xgenomics.com/samples/spatial-exp/1.3.0
+for s in Visium_FFPE_Human_Breast_Cancer; do
+  for x in metrics_summary.csv spatial.tar.gz raw_feature_bc_matrix.h5 filtered_feature_bc_matrix.h5 probe_set.csv fastqs.tar; do
+    get $SR13/$s/${s}_$x $s || echo "missing $s $x"; done
+done
 # FASTQs last (large)
 get $ARC/pbmc_granulocyte_sorted_3k/pbmc_granulocyte_sorted_3k_fastqs.tar pbmc_granulocyte_sorted_3k
 get https://s3-us-west-2.amazonaws.com/10x.files/samples/cell-arc/2.0.0/pbmc_granulocyte_sorted_10k/pbmc_granulocyte_sorted_10k_fastqs.tar pbmc_granulocyte_sorted_10k

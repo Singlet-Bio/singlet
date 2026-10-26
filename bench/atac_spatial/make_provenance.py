@@ -72,6 +72,9 @@ COHORT_DS = {
     "pbmc_multiome3k": {"id": "pbmc_multiome3k", "title": "10x Multiome PBMC 3k, granulocytes sorted out (ARC 2.0), development",
                         "accessions": {"url": "https://cf.10xgenomics.com/samples/cell-arc/2.0.0/pbmc_granulocyte_sorted_3k/"},
                         "truth": "Cell Ranger ARC 2.0.0 published outputs"},
+    "visium_ffpe_human_breast": {"id": "visium_ffpe_human_breast", "title": "10x Visium FFPE human breast cancer (Space Ranger 1.3)",
+                                 "accessions": {"url": "https://cf.10xgenomics.com/samples/spatial-exp/1.3.0/Visium_FFPE_Human_Breast_Cancer/"},
+                                 "truth": "Space Ranger 1.3.0 spot matrix (probe set); tissue positions from the H&E image"},
     "visium_mouse_brain_ant": {"id": "visium_mouse_brain_ant", "title": "10x Visium mouse brain, sagittal anterior section 1",
                                "accessions": {"url": "https://cf.10xgenomics.com/samples/spatial-exp/1.1.0/V1_Mouse_Brain_Sagittal_Anterior/"},
                                "truth": "Space Ranger 1.1.0 spot matrix; tissue positions from the H&E image"},
@@ -88,7 +91,7 @@ for cap in ("atac", "multiome", "spatial"):
         test = [x for x in test if "multiome" in x]
     prov = {"singlet": SINGLET, "status": a.status, "test_datasets": test,
             "dev_datasets": [x for x in dss if x == "pbmc_multiome3k"],
-            "datasets": [COHORT_DS[x] for x in test],
+            "datasets": [dict(COHORT_DS[x], data_kind="real") for x in test],
             "caveats": [], "methods": (Path(__file__).parent / f"methods_{cap}.md").read_text(encoding="utf-8")}
     if cap == "spatial":
         prov["tools"] = [SINGLET_TOOL,
@@ -99,12 +102,18 @@ for cap in ("atac", "multiome", "spatial"):
                                     "--clipAdapterType CellRanger4 --outFilterScoreMin 30"},
                          {"name": "otsu-umi-threshold", "version": "n/a", "role": "competitor",
                           "params": "Otsu split of log10(UMIs + 1) over the 4,992 slide spots"},
-                         {"name": "spaceranger", "version": "1.1.0", "role": "truth", "params": "10x published outputs"}]
+                         {"name": "spaceranger", "version": "1.1.0", "role": "truth",
+                          "url": "https://www.10xgenomics.com/datasets", "params": "10x published outputs"}]
         prov["resources"] = resources(runs, [("singlet", "singlet"), ("starsolo", "starsolo")])
     else:
         prov["tools"] = [SINGLET_TOOL, CHROMAP,
                          {"name": "cellranger-atac/arc", "version": "ATAC 1.2.0 / ARC 2.0.0", "role": "truth",
-                          "params": "10x published outputs"}]
+                          "url": "https://www.10xgenomics.com/datasets", "params": "10x published outputs"}]
+        if cap == "multiome":
+            prov["tools"].append({"name": "per-modality-calls", "version": "n/a", "role": "competitor",
+                                  "params": "GEX cells (Singlet GEX run, called_v2 = EmptyDrops) AND ATAC cells (ArchR "
+                                            "default filter: >= 1000 fragments, TSS enrichment >= 4, on Chromap + "
+                                            "SnapATAC2 fragments)"})
         prov["resources"] = resources(runs, [("singlet", "singlet"), ("chromap", "chromap+snapatac2")])
     json.dump(prov, open(d / "provenance.json", "w"), indent=1)
     print(cap, test, len(prov["resources"]))
