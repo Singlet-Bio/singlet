@@ -84,6 +84,25 @@ def _prefixed(lib, d):
     return out
 
 
+NOISE_KEYS = ("contig_f1", "cdr3_nt_accuracy", "correct_pairing", "v_gene_agreement_equivalent", "j_gene_agreement")
+
+
+def _noise(CV, P, equiv, n=40, seed=0):
+    """95% half-width of the Singlet - TRUST4 difference per metric, by half-sampling the reference cells: the
+    difference is recomputed on random halves, and a half sample's variance is twice the full sample's for these
+    averages, so the half-width is 1.96 * sd / sqrt(2)."""
+    rng = np.random.default_rng(seed)
+    cells = np.array(sorted(P["cells"]))
+    diffs = {k: [] for k in NOISE_KEYS}
+    for _ in range(n):
+        half = set(rng.choice(cells, len(cells) // 2, replace=False))
+        sub = lambda t: t[t["barcode"].isin(half)] if t is not None else None
+        rs = {t: CV.compare(sub(P["ref"]), half, sub(P[t]), None, P["gex_cells"], equiv) for t in TOOLS}
+        for k in NOISE_KEYS:
+            diffs[k].append(rs["singlet"][k] - rs["trust4"][k])
+    return {k: float(1.96 * np.std(v, ddof=1) / np.sqrt(2)) for k, v in diffs.items()}
+
+
 def compute(artifact_dir: Path) -> dict:
     import compare_vdj as CV
 
@@ -105,6 +124,7 @@ def compute(artifact_dir: Path) -> dict:
         P = _pool(parts)
         res = {t: CV.compare(P["ref"], P["cells"], P[t], P["lineage"], P["gex_cells"], equiv) for t in TOOLS if P[t] is not None}
         results[(ds, chains)] = res
+        noise = _noise(CV, P, equiv) if all(P[t] is not None for t in TOOLS) else {}
         pre = chains.lower()
         for key, mid, name, unit, cat, direc in METRICS:
             if key not in res["singlet"]:
@@ -113,6 +133,12 @@ def compute(artifact_dir: Path) -> dict:
                  "direction": direc, "singlet": {"value": r(res["singlet"][key])},
                  "competitors": [{"tool": t, "value": r(res[t][key])} for t in res if t != "singlet" and key in res[t]],
                  "rule": {"type": "match_or_beat", "against": "best"}}
+            if key in noise:
+                hw = r(noise[key])
+                if hw and hw > 0:
+                    m["rule"]["tolerance"] = {"abs": hw}
+                    m["rule"]["rationale"] = ("95% half-width of the Singlet - TRUST4 difference, from 40 random halves of "
+                                              "the reference cells (1.96 sd / sqrt 2): a smaller gap is sampling noise")
             if key == "contig_f1":
                 m["notes"] = "recovery / precision / extra contigs per Cell Ranger contig: " + "; ".join(
                     f"{t} {res[t]['contig_recovery']:.3f} / {res[t]['contig_precision']:.3f} / {res[t]['extra_contigs']:.3f}"

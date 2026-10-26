@@ -1,135 +1,167 @@
 # V(D)J and CRISPR guide libraries as Singlet modalities
 
-Status 2026-10-25, V(D)J + CRISPR session. The branch is `claude/vdj-crispr-benchmark-721d3a`, stacked on the ADT branch (PR #29).
+Status 2026-10-26, V(D)J + CRISPR session. The branch is `claude/vdj-crispr-benchmark-721d3a`, stacked on the ADT branch
+(PR #29, whose counting core it reuses). Nothing has been written to R2 or D1.
 
-- Code: `python/singlet/vdj/` and `python/singlet/crispr/`.
-- Benchmark drivers and Clipper jobs: `bench/vdj/` and `bench/crispr/`.
-- Tests: `tests/python/test_vdj_assemble.py`, `test_crispr.py` and `test_vdj_crispr_store.py`.
-- Storage: `docs/format-v2.md` section 14.
-- Benchmark results contract: `bench/public/results/{vdj,crispr-guides}.json`.
-
-Nothing has been written to R2 or D1.
+- **Code:** `python/singlet/vdj/`, `python/singlet/crispr/`.
+- **Benchmark drivers and Clipper jobs:** `bench/vdj/`, `bench/crispr/`.
+- **Results contract:** `bench/public/capabilities/{vdj,crispr_guides}.py`, `bench/public/results/{vdj,crispr-guides}.json`.
+- **Tests:** `tests/python/test_vdj_assemble.py`, `test_crispr.py`, `test_vdj_crispr_store.py`.
+- **Storage:** `docs/format-v2.md` section 14.
 
 <!-- RESULTS -->
 
 ## 1. What was wrong
 
-The library-type screen (`docs/library-type-screen.md`) found 3,907 V(D)J libraries (TCR/BCR enriched) and 616 CRISPR
-guide libraries in the atlas, all processed as gene expression.
+The library-type screen (`docs/library-type-screen.md`) found 3,907 V(D)J (TCR/BCR enriched) and 616 CRISPR guide
+libraries in the atlas, all processed as gene expression.
 
 **V(D)J libraries.** V(D)J amplicons map well to the TR/IG loci, so 3,059 of these libraries pass atlas QC as if they were
-GEX samples. They inflate the cell counts.
+GEX samples. They inflate the cell counts. The pipeline's V(D)J code does not read a V(D)J library as one:
 
-The pipeline has two pieces of V(D)J code, and neither reads a V(D)J library as one:
+- **`vdj_gene_usage.1pz`** (`include/singlet/pileup/vdj_counter.h`) counts GEX reads over TR/IG gene bodies. It gives no
+  junctions and no clonotypes.
+- **`include/singlet/pileup/vdj_assembly.h`** is an unwired k-mer CDR3 extractor.
 
-- **`vdj_gene_usage.1pz`** (`include/singlet/pileup/vdj_counter.h`). It counts GEX reads over TR/IG gene bodies, and
-  gives no junctions and no clonotypes.
-- **`include/singlet/pileup/vdj_assembly.h`**. It is a k-mer CDR3 extractor that is never wired into the pipeline and has
-  only a unit test.
-
-**CRISPR guide libraries.** These have no counting path. Their reads do not map to transcripts, so the screen saw them as
-failed GEX samples.
+**CRISPR guide libraries.** These have no counting path at all.
 
 ## 2. V(D)J: method (`singlet.vdj`)
 
-### 2.1 Segment reference (`singlet.vdj.reference`)
+### 2.1 Segment reference (`singlet.vdj.reference`, packaged as `vdj/data/vdj_{human,mouse}.tsv.gz`)
 
-V, D, J and C segments are built from the same genome and GENCODE annotation the pipeline uses (GRCh38 / GENCODE v44,
-GRCm39 / vM33), so no IMGT or vendor reference is needed and the gene names are the GEX names.
+The V, D, J and C segments come from open annotations of the genome the pipeline uses: GRCh38 with GENCODE v44, and
+GRCm39 with vM33. No IMGT or vendor reference is needed (IMGT data is non-commercial). Gene names are the GEX names, with
+one allele per gene and no germline genotype.
 
-- **V segments**: the spliced leader + V exons, in the CDS frame. The anchor is Cys104, the last in-frame TGT/TGC
-  within 45 nt of the 3' end.
-- **J segments**: the frame whose translation holds F/W-G-X-G. The anchor is the F/W118 codon.
-- **D and C segments**: the exons.
+- **V segments:** the spliced leader + V exons from the CDS start. The 5' UTR is cut because its length varies between
+  paralogs (IGLV2-8 has 117 nt more than IGLV2-11), and R1 reads at the transcript's 5' end would vote for the longer
+  annotation. The anchor is Cys104, the last in-frame TGT/TGC within 45 nt of the 3' end.
+- **J segments:** the F/W-G-X-G motif where the J region's 3' end puts it, 25-45 nt before the splice donor. The motif can
+  sit in any frame. GENCODE's IGLJ3 exon carries a spurious motif 100 nt upstream.
+- **D and C segments:** the exons.
 
-GENCODE v44 loses some functional genes, which the builder adds back in two ways:
+**Gaps in GENCODE, and how they are filled.** GENCODE misses functional genes that Cell Ranger and TRUST4 have from
+IMGT. Three sources fill them:
+  1. **By name.** A gene named like a V or J segment but annotated otherwise is kept when its own sequence qualifies:
+     - for a V, an open frame with at most one stop codon before an in-frame Cys104;
+     - for a J, the motif at the J position.
 
-1. **By name.** TRBV11-2 is annotated `lncRNA` and TRBV21-1 a pseudogene. A gene named like a V segment is kept when
-   its own sequence is an open V: a frame with no stop codon before an in-frame Cys104, which is IMGT's ORF rule.
-2. **From alternate haplotypes.** TRBV4-3, TRBV6-3 and TRBV7-8 exist only on GRCh38 alt loci. Their segments come from
-   GENCODE's `chr_patch_hapl_scaff` annotation on the full genome, as in Cell Ranger's `-alts` reference.
+     This restores TRBV11-2 (`lncRNA` in GENCODE), TRBV21-1, TRAV35 (its reference allele has a stop) and TRAJ8.
+  2. **GENCODE's alternate-haplotype annotation:** IGHV3-42, IGHV7-40, IGLV1-41.
+  3. **NCBI RefSeq** GRCh38.p14 / GRCm39 (public domain, IG/TR `*_gene_segment` features): TRBV4-3, TRBV5-8, TRBV6-3,
+     TRBV6-9, TRBV7-8, TRAJ15.
+
+  With these, every V, J and C gene Cell Ranger calls in the benchmark TCR libraries is in the reference. In the BCR
+  libraries only IGHV1-8 and IGHV4-30-4 are missing (54 of 2,066 PBMC 10k BCR contigs). Neither GRCh38 annotation has
+  them.
+- **Orphons** (IGKV1OR2-108 ...) are excluded: they lie outside the loci.
+- **Equivalence classes.** V genes identical or one substitution apart up to Cys104 form one class, which is called by its
+  first member (`reference.equivalence`): TRBV6-2|TRBV6-3, IGKV1-39|IGKV1D-39, IGHV1-69|IGHV1-69D and 7 more. The
+  benchmark counts a class as one gene for every tool.
 
 ### 2.2 Reads to contigs (`singlet.vdj.assemble`)
 
-1. **Orientation.** A probe of the first 100,000 pairs classifies R2, its reverse complement and the R1 insert after the
-   barcode, UMI and template-switch oligo. Whatever hits segments is used. On 10x 5' V(D)J, R1 is sense and R2 antisense.
-   R1 inserts count only when reads are long, as in 150x150 runs.
-2. **Classification** (`_kernels.classify`, numba, parallel). Every mate is matched with exact 15-mers to the segment
-   index. The best V, J and C segment and diagonal follow from the hit votes, and they place Cys104 and F/W118 in the
-   read. When two genes tie on a read (TRBC1/TRBC2, IGHG1-4, TRBV6-2/6-3), the read gets a tie flag and does not vote
-   for either.
-3. **Barcodes and UMIs.** These use the ADT counting code, which is Cell Ranger's logic. Barcodes are corrected against
-   the whitelist with the 1-mismatch posterior of 0.975, and UMIs within a barcode with `correct_umis`.
-4. **Junction assembly** (`_kernels.assemble_group`, per barcode and chain).
-   - The k-mer graph uses 19-mers over the reads that reach the junction, and each k-mer is weighted by distinct UMIs.
-   - Seeds are the k-mers starting at a codon-checked Cys104. Seeds with under 5% of the top seed's UMIs are dropped as
-     error k-mers.
-   - Greedy extension runs to a terminal k-mer that ends at a codon-checked F/W118. Branches with >= 2 UMIs and >= 20% of
-     the best extension are explored too, which covers dual alpha chains and doublets.
-   - Each read goes to the contig sharing most of its k-mers. An error variant therefore gets only the reads that carry
-     its error, never those of the true junction.
-   - A UMI follows the majority of its reads.
+1. **Orientation.** A probe of the first 100,000 pairs classifies R2, its reverse complement and the R1 insert (after
+   barcode, UMI and template-switch oligo). On 10x 5' V(D)J, R1 is sense and R2 antisense. R1 inserts are used in
+   long-R1 runs (150x150).
+2. **Classification** (`_kernels.classify`, numba, parallel).
+   - Every mate is matched with exact 15-mers. The best V, J and C segment and diagonal place Cys104 and F/W118 in the
+     read.
+   - A read on which two *different* genes tie (TRBC1/TRBC2, IGHG1-4) does not vote for either. Members of one
+     equivalence class never tie.
+   - When the reference lacks the J gene, F/W118 is found in the read: the F/W-G-X-G motif 20-60 nt upstream of the C
+     region's start.
+3. **Barcodes and UMIs.** These follow Cell Ranger's logic through the ADT counting code: the 1-mismatch barcode
+   posterior of 0.975 and `correct_umis`. Two filters then remove molecules that are not what they seem:
+   - **Read support.** A molecule needs at least 2% of the library's read-weighted median mates per molecule. A V(D)J
+     library reads each molecule hundreds of times, so UMIs with a few reads are index hops, chimeras or uncorrected UMI
+     errors.
+   - **One chain per molecule.** Each molecule keeps only the majority chain of its mates. Mates of another chain are
+     chimeras, and as contigs of their own they carried other cells' junctions (2 reads each in pbmc2 TCR, against
+     ~3,800 for real contigs).
+4. **Junction assembly** (`_kernels.assemble_group`, per barcode and chain). The graph is built from the 19-mers of the
+   reads that reach the junction.
+   - **Seeds** start at a codon-checked Cys104.
+   - **Terminals** end at a codon-checked F/W118 followed by the Gly of F/W-G-X-G. A poly-T run (`...CTGTTTTTTGG`)
+     otherwise passes one base early.
+   - **Support is a per-UMI consensus.** At a seed, branch or terminal, each UMI votes for the alternative its reads hold
+     most often. Counting the UMIs that merely contain a k-mer does not work at V(D)J depth (~100 reads per UMI): almost
+     every UMI then holds some read with any given one-base error.
+   - **Exploration.** Branches with >= 2 UMI votes and >= 20% of the best are explored too, which covers dual alpha
+     chains and doublets.
+   - **Assignment.** Each read goes to the contig sharing most of its k-mers, so an error variant gets only the reads that
+     carry its error. A UMI follows the majority of its reads.
 5. **Annotation.**
-   - **V, J and C genes** come from the k-mer votes of all mates of the contig's UMIs. TRBJ2 implies TRBC2, because
-     V-D2-J2 joining deletes TRBC1.
-   - **D gene**: the longest exact match of at least 6 nt in the junction.
-   - **`cdr3`**: the IMGT junction (Cys104 ... F/W118), as Cell Ranger and TRUST4 report it.
-   - **Productivity**: in frame, no stop codon, and the conserved C and F/W.
-   - **UMI count**: UMIs over the junction, plus the chain's other UMIs that have the same V gene. This is close to Cell
-     Ranger's `umis`.
-6. **Contig filter.** A contig is kept when it has >= 2 UMIs (>= 1 over the junction) and >= 10% of the UMIs of the
-   barcode's top contig of the same chain.
+   - **V and C genes:** k-mer votes of all mates of the contig's UMIs, by equivalence class.
+   - **J gene:** the read vote, unless another J matches the junction's germline 3' end by more than 2 nt.
+   - **C-gene rule:** TRBJ2 implies TRBC2, because V-D2-J2 joining deletes TRBC1.
+   - **D gene:** the longest exact match of at least 6 nt.
+   - **`cdr3`:** the IMGT junction (Cys104 ... F/W118), as Cell Ranger and TRUST4 report it.
+   - **Productivity:** in frame, no stop codon, and the conserved C and F/W.
+6. **Contig filter.** A contig is kept when all of these hold:
+   - it has >= 1 UMI over the junction;
+   - its mates per UMI are >= 5% of the library's read-weighted median, and it has >= 3 mates;
+   - it has >= 20% of the UMIs of the barcode's top contig of the same chain;
+   - it is not within 2 substitutions of a stronger contig of the same cell and chain (an error variant).
 
 ### 2.3 Cells and clonotypes (`singlet.vdj.clonotype`)
 
-**Chains.** A cell's chains are its kept productive contigs, at most two per chain. A cell with more is flagged
-`excess_chains`.
+**V(D)J cells.** These are called GEX cells with a productive kept contig. Singlet always pairs a V(D)J library with its
+GEX sample (`singlet.vdj.library`).
 
-**Pairing.** A cell is paired when it has TRA+TRB, TRG+TRD, or IGH+IGK/L.
+**Chains.** A cell's chains are at most two per chain. A cell with more is flagged `excess_chains`.
 
-**T-cell clonotypes.** These are exact: the same set of (chain, V, J, junction nt).
-
-**B-cell clonotypes.** These are lineages, as in enclone. Two cells join when they have:
-- the same heavy V and J;
-- the same heavy junction length, with junctions within a 15% Hamming distance;
-- the same light V/J, when both cells have a light chain.
+**Clonotypes.**
+- **T cells:** exact clonotypes, i.e. the same set of (chain, V, J, junction nt).
+- **B cells:** enclone-style lineages. Two cells join when they have the same heavy V and J, heavy junctions of the same
+  length within 15% Hamming distance, and the same light V/J.
 
 ## 3. CRISPR guides: method (`singlet.crispr`)
 
 ### 3.1 Counting
 
-- **Protospacer window.** It is cut from R2 by the library geometry: before the scaffold anchor for direct capture, or
-  at a fixed offset. Cell Ranger `(BC)CONST` / `^N..(BC)` patterns are read.
-- **Geometry from the reads.** When no pattern is known (`detect_geometry`), the geometry is measured from the reads,
+- **Protospacer window.** It is cut from R2 by the library's geometry: before the scaffold anchor for direct capture, or
+  at a fixed offset. Cell Ranger patterns are read.
+- **Geometry from the reads.** When no pattern is given, the geometry is measured from the reads (`detect_geometry`),
   including dual-guide vectors with one scaffold variant per protospacer (Replogle 2022).
-- **Barcodes, UMIs and guides.** Everything else is the ADT counting core (Cell Ranger feature-barcoding logic):
+- **Counting core.** Everything else is the ADT counting core (Cell Ranger feature-barcoding logic):
   - an exact or unique Hamming-1 guide match;
   - whitelist barcode correction;
   - 3' v3 feature-barcode translation, decided from the reads;
   - `correct_umis`.
 - **Guide lengths.** Guides of 19 and 20 nt are matched right-aligned to the anchor.
-- **Matrix and ambient profile.** The matrix covers all GEX columns, called or not. Molecules on other whitelist
-  barcodes form the ambient profile.
+- **Matrix and ambient profile.** The matrix covers all GEX columns. Molecules on other whitelist barcodes form the
+  ambient profile.
 
 ### 3.2 Assignment
 
 **Singlet's caller** (`call_ambient`) tests every (guide, cell) against what ambient guide molecules alone would give that
 cell.
 
-- **Ambient profile.** The profile `p` is measured on the library's empty droplets.
-- **Ambient load.** A cell's ambient load `b_c` is the UMIs of its non-called guides, scaled by their ambient share. It
-  is estimated iteratively.
+- **Ambient profile.** The profile `p` (each guide's share of the empty droplets' molecules) is measured on the library
+  itself.
+- **Ambient load.** A cell's ambient load is the larger of two estimates:
+  - the empty droplets' load, the 95% quantile of their guide UMIs;
+  - the cell's own estimate: the UMIs of all its guides but the two most abundant (real guides: one, two in a doublet or
+    a dual-guide vector), scaled by their ambient share. The tested guide is never in its own background.
 - **Call rule.** A guide is called when all three hold:
   - `x >= 3`;
   - `P(Poisson(b_c p_g) >= x) < 0.001 / G`;
   - `x >= 5%` of the cell's guide UMIs.
-- **Effect.** Abundant guides need more UMIs than rare ones, and a deeply sequenced library does not turn ambient
-  molecules into multiplets.
 
-**Comparators**, run on the same matrix and the same cells:
+**Comparators**, run on the same counts and cells:
 
-- **Cell Ranger's per-guide two-component GMM** on log10 UMIs, calling cells with >= 3 UMIs.
+- **Cell Ranger's per-guide two-component GMM** on log10 UMIs, calling cells with >= 3 UMIs (reimplemented).
 - **A per-guide Poisson-Gaussian mixture** fitted by EM, in the style of Replogle 2022 and Norman 2019.
+- **Cell Ranger's published calls**, where 10x provides them.
+
+### 3.3 Guide references for the benchmark
+
+| dataset | guide reference |
+|---|---|
+| 10x A549 5K, A375 10k | Cell Ranger feature reference |
+| Replogle 2022 K562 gem group 41 | Table S1 has no sequences, so the 4,337 protospacers were rebuilt from the sgRNA ids, which encode strand and **hg19** coordinate (`bench/crispr/prep_replogle.py`). The convention was measured on the reads: a "-" id is 19 nt at coord - 21, a "+" id the reverse complement at coord + 3. 98% of these protospacers are seen in the reads. Non-targeting guides have no coordinate and are counted as "unidentified" windows. |
+| Norman 2019 gem group 1 | GEO gives identities but no guide-barcode sequences. The barcode -> identity table is learnt on a hash-chosen half of the published cells, and every caller is scored on the other half only. |
 
 ## 4. QC (pass/fail; a failing library is not attached)
 
@@ -159,12 +191,21 @@ CRISPR (`singlet.crispr.qc.THRESHOLDS`):
 | `frac_cells_assigned` | < 0.20 | < 0.50 |
 | `multiple_rate` | - | > 0.40 |
 
-## 5. Storage
+## 5. Storage and processing atlas libraries
 
 The layout is in `docs/format-v2.md` section 14 and follows the ADT rules: members of the GEX sample, aligned to its
 `cells` table.
 
 - **V(D)J:** `vdj_contigs.parquet` and `vdj_summary.json`.
 - **CRISPR:** `crispr_counts.1pz` (pz2) and `crispr_guides.json`.
-- **Per-cell labels:** clonotypes and guide calls go to feature sidecars keyed by `col`.
-- **Unchanged:** the legacy `vdj_gene_usage.1pz`.
+- **Per-cell labels:** feature sidecars keyed by `col`.
+
+The entry points are `python -m singlet.vdj.library` and `python -m singlet.crispr.library`. Each takes one library plus
+its GEX sample's columns and called cells, and writes the members as a sidecar `.s2`, the label sidecar and the QC
+verdict.
+
+For the atlas campaign (not run here):
+
+1. Process the 3,907 V(D)J libraries against their GEX siblings (the screen's pairing).
+2. Process the 616 guide libraries where a guide reference exists (study feature references, or a published table). A
+   library without one cannot be named; this branch reports such libraries but does not count them.
