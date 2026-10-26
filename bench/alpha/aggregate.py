@@ -267,8 +267,137 @@ RESOURCES = []
 ARTIFACTS = []
 
 
+ENGINE_DS = {"pbmc1k_v3": ("10x PBMC 1k, 3' v3", "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v3/pbmc_1k_v3_fastqs.tar"),
+             "pbmc1k_v2": ("10x PBMC 1k, 3' v2", "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v2/pbmc_1k_v2_fastqs.tar"),
+             "pbmc5p_v1": ("10x PBMC 5' v1 (first 60M read pairs)", "https://cf.10xgenomics.com/samples/cell-vdj/3.0.0/vdj_v1_hs_pbmc2_5gex_protein/vdj_v1_hs_pbmc2_5gex_protein_fastqs.tar"),
+             "pbmc1k_cite_v3": ("10x PBMC 1k + TotalSeq-B, 3' v3", "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_protein_v3/pbmc_1k_protein_v3_fastqs.tar"),
+             "neuron1k_v3": ("10x mouse E18 brain cells, 3' v3", "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/neuron_1k_v3/neuron_1k_v3_fastqs.tar"),
+             "nuclei2k_v2": ("10x mouse brain nuclei, 3' v2", "https://cf.10xgenomics.com/samples/cell-exp/2.1.0/nuclei_2k/nuclei_2k_fastqs.tar"),
+             "hgmm1k_v3": ("10x HEK293T + NIH3T3 barnyard, 3' v3", "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/hgmm_1k_v3/hgmm_1k_v3_fastqs.tar")}
+
+
+def engine_doc(E: dict, contract):
+    """B: the campaign engine at campaign settings on the 7 public 10x datasets of the pipeline benchmark."""
+    d = common("cell-calling", "The published atlas engine at campaign settings on public 10x data (Research Alpha)")
+    d["dataset_scope"] = ("7 public 10x datasets re-run with the campaign binary (v0.3.0, 8e1803ba) at the campaign settings: first 30M read pairs, "
+                          "--threads 4 --pipeline --output-format 1pz, human flags; this is how every Alpha sample was made")
+    d["tools"] = [d["tools"][0],
+                  {"name": "starsolo", "version": "2.7.11b", "role": "competitor", "url": "https://github.com/alexdobin/STAR",
+                   "params": "all reads; CB_UMI_Simple, --soloFeatures Gene GeneFull Velocyto --soloCellFilter EmptyDrops_CR --soloUMIdedup 1MM_CR --soloUMIfiltering MultiGeneUMI_CR --clipAdapterType CellRanger4 --outFilterScoreMin 30"},
+                  {"name": "cellranger-published", "version": "Cell Ranger 2.1-3.0 (as published by 10x)", "role": "competitor",
+                   "url": "https://www.10xgenomics.com/datasets (filtered_feature_bc_matrix.h5 of each dataset)"},
+                  {"name": "starsolo-thinning-noise-floor", "version": "n/a", "role": "truth",
+                   "params": "two independent binomial thinnings of STARsolo Gene per cell to the shared depth"},
+                  {"name": "adt-clusters", "version": "n/a", "role": "truth", "params": "Leiden clusters of CLR-normalised ADT counts (published Cell Ranger h5)"}]
+    d["tools"][0]["params"] = "singlet-alpha-8e1803b: head 30M read pairs -> singlet encode -> singlet --threads 4 --pipeline --output-format 1pz (+ --snps --cascade auto --txome-index --te-classify on --te-db for human); cell calls = STARsolo CellRanger2.2 knee"
+    d["datasets"] = [{"id": k, "title": ENGINE_DS[k][0], "accessions": {"url": ENGINE_DS[k][1]}, "data_kind": "real",
+                      "truth": {"hgmm1k_v3": "species of each cell (human/mouse UMI share); 10x's published Cell Ranger cells",
+                                "pbmc1k_cite_v3": "ADT-derived clusters; 10x's published Cell Ranger cells"}.get(k, "10x's published Cell Ranger cells; STARsolo on all reads")}
+                     for k in ENGINE_DS if k in E]
+    M, tab, res = [], [], []
+    for k, e in E.items():
+        c = e.get("calls", {})
+        a = c.get("alpha30m|cellranger_published")
+        s = c.get("starsolo_GeneFull|cellranger_published")
+        b = c.get("singlet-baseline-t4|cellranger_published")
+        if a:
+            tab.append({"dataset": k, "alpha30m": r4(a["recovery"]), "baseline_full": r4((b or {}).get("recovery")), "starsolo": r4((s or {}).get("recovery"))})
+            if s:
+                tol = r4(1 - s["jaccard"])
+                for key, nm in (("recovery", "10x's published cells recovered"), ("precision", "Singlet cells that are published cells")):
+                    M.append({"id": f"cell_{key}_vs_cellranger", "name": nm, "unit": "fraction", "category": "accuracy", "dataset": k,
+                              "direction": "higher", "singlet": {"value": r4(a[key])},
+                              "competitors": [{"tool": "starsolo", "value": r4(s[key]), "note": "EmptyDrops_CR on all reads"}],
+                              "rule": {"type": "match_or_beat", "tolerance": {"abs": tol},
+                                       "rationale": f"1 - Jaccard(STARsolo EmptyDrops_CR, published Cell Ranger) = {tol} on this dataset: the disagreement of two references that both emulate Cell Ranger"},
+                              "notes": f"same engine on all reads: {r4((b or {}).get(key))}"})
+        dmk = e.get("depth_matched", {}).get("alpha30m[exon] vs starsolo_Gene")
+        if dmk and dmk.get("cell_corr_depth_matched") is not None:
+            M.append({"id": "cell_corr_depth_matched_vs_starsolo_gene", "name": "Per-cell gene correlation with STARsolo Gene at equal depth",
+                      "unit": "pearson r", "category": "agreement", "dataset": k, "direction": "higher",
+                      "singlet": {"value": r4(dmk["cell_corr_depth_matched"])},
+                      "competitors": [{"tool": "starsolo-thinning-noise-floor", "value": r4(dmk["noise_floor"])}],
+                      "rule": {"type": "match_or_beat"}, "notes": f"raw (different depths): {r4(dmk.get('cell_corr_raw'))}; {dmk.get('n_cells')} cells"})
+        cg = e.get("concordance", {}).get("alpha30m[exon] vs starsolo_Gene[X]")
+        if cg:
+            M.append({"id": "umi_per_cell_ratio_vs_starsolo_gene", "name": "Exonic UMIs per cell, Singlet (30M reads) / STARsolo Gene (all reads)",
+                      "unit": "ratio", "category": "agreement", "dataset": k, "direction": "none", "singlet": {"value": r4(cg["cell_total_ratio_median"])},
+                      "rule": {"type": "equivalence", "target": 1.0, "tolerance": {"rel": 0.1},
+                               "rationale": "on identical reads the counting engine's exonic counts are within -3% to +2% of STARsolo Gene (docs/pipeline-validation.md 4.3); 10% leaves room for the atlas engine's double count"},
+                      "notes": f"pseudobulk rho {r4(cg['gene_pseudobulk_spearman'])}; reads used / available {r4(e.get('reads_used_over_available'))}"})
+        if e.get("reads_used_over_available") is not None:
+            M.append({"id": "reads_used_over_available", "name": "Reads used / reads in the dataset", "unit": "fraction", "category": "coverage",
+                      "dataset": k, "direction": "higher", "singlet": {"value": r4(e["reads_used_over_available"])}, "rule": {"type": "informational"}})
+        if e.get("alpha_wrong_strand_frac") is not None:
+            M.append({"id": "wrong_strand_fraction", "name": "Reads on the wrong strand", "unit": "fraction", "category": "robustness",
+                      "dataset": k, "direction": "lower", "singlet": {"value": r4(e["alpha_wrong_strand_frac"])},
+                      "rule": {"type": "threshold", "value": 0.5, "rationale": "the Alpha policy excludes samples with more than half of the strand-informative reads antisense"}})
+        by = e.get("barnyard")
+        if by and "alpha30m" in by:
+            comps = [t for t in ("starsolo_GeneFull", "cellranger_published") if t in by]
+            for key, nm in (("doublet_rate", "Mixed-species barcodes among called cells"), ("cross_species_frac_median", "Cross-species UMI share in singlets (median)")):
+                cv = {t: by[t][key] for t in comps}
+                tol = r4(abs(cv[comps[0]] - cv[comps[1]])) if len(comps) == 2 else 0.0
+                M.append({"id": f"barnyard_{key}", "name": nm, "unit": "fraction", "category": "accuracy", "dataset": k, "direction": "lower",
+                          "singlet": {"value": r4(by["alpha30m"][key])},
+                          "competitors": [{"tool": "starsolo" if t.startswith("starsolo") else "cellranger-published", "value": r4(v)} for t, v in cv.items()],
+                          "rule": {"type": "match_or_beat", "tolerance": {"abs": tol},
+                                   "rationale": "the STARsolo vs published Cell Ranger difference on the same dataset"}})
+        ar = e.get("ari_vs_adt")
+        if ar and "alpha30m" in ar:
+            comps = {"starsolo": ar.get("starsolo_GeneFull"), "cellranger-published": ar.get("cellranger_published")}
+            comps = {t: v for t, v in comps.items() if v is not None}
+            tol = r4(abs(list(comps.values())[0] - list(comps.values())[1])) if len(comps) == 2 else 0.0
+            M.append({"id": "rna_clusters_ari_vs_adt", "name": "RNA clusters vs ADT clusters (ARI)", "unit": "ARI", "category": "accuracy", "dataset": k,
+                      "direction": "higher", "singlet": {"value": r4(ar["alpha30m"])},
+                      "competitors": [{"tool": t, "value": r4(v)} for t, v in comps.items()],
+                      "rule": {"type": "match_or_beat", "tolerance": {"abs": tol}, "rationale": "the STARsolo vs published Cell Ranger difference on the same cells"}})
+        for t, nm in (("singlet-alpha30m", "singlet"), ("starsolo", "starsolo")):
+            r = (e.get("resources") or {}).get(t) or {}
+            if r.get("wall_s"):
+                res.append({"tool": nm, "dataset": k, "wall_s": r["wall_s"], "max_rss_gb": r.get("max_rss_gb") or 0.0,
+                            "threads": 4 if nm == "singlet" else 16, "cpu_h": r4(r["wall_s"] * (4 if nm == "singlet" else 16) / 3600),
+                            "notes": "Singlet on 30M reads at the campaign's 4 threads (encode not included); STARsolo on all reads at 16 threads (pipeline benchmark run)"})
+    d["metrics"] = M
+    d["resources"] = res
+    d["_table"] = tab
+    d["figures"] = [{"id": "engine_cell_recovery", "title": "Recovery of 10x's published cells", "kind": "grouped_bar",
+                     "x": {"label": "dataset", "categories": [t["dataset"] for t in tab]}, "y": {"label": "recovery", "unit": "fraction", "min": 0, "max": 1},
+                     "series": [{"name": "Singlet, 30M reads (as published)", "tool": "singlet", "x": [t["dataset"] for t in tab], "y": [t["alpha30m"] for t in tab]},
+                                {"name": "STARsolo EmptyDrops_CR, all reads", "tool": "starsolo", "x": [t["dataset"] for t in tab], "y": [t["starsolo"] for t in tab]}]}]
+    rec = [t["alpha30m"] for t in tab]
+    d["conclusion"] = (f"Re-run exactly as the atlas was made (campaign binary, first 30M reads, 4 threads) on {len(E)} public 10x datasets, Singlet recovers "
+                       f"{min(rec):.0%}-{max(rec):.0%} of 10x's published cells, against STARsolo EmptyDrops_CR on all reads. See metrics for counts, the barnyard and CITE-seq truth, "
+                       "and the 5' strand failure.")
+    d["methods"] = ("Seven public 10x datasets of the pipeline benchmark (docs/pipeline-validation.md 3) were re-run with the binary every Alpha sample reports "
+                    "(git 8e1803ba, v0.3.0-pilot-freeze), rebuilt with the benchmark's build patches, at the campaign settings of cellarium full_campaign/run_one.sbatch: "
+                    "the first 30M read pairs (head of the lane-sorted FASTQs, as `download --max-reads 30000000` keeps the head of a run), `--threads 4 --pipeline "
+                    "--output-format 1pz` and, for human, `--snps --cascade auto --txome-index --te-classify on --te-db`. STARsolo (Cell Ranger 4 emulation, EmptyDrops_CR) "
+                    "and 10x's published Cell Ranger matrices use all reads. Scoring reuses bench/pipeline/analysis (loaders, gene_concordance, barnyard, ADT clusters): "
+                    "calls vs published Cell Ranger; on cells called by Singlet and STARsolo, exonic UMIs per cell vs STARsolo Gene, per-cell log1p correlation after "
+                    "thinning both to the smaller total (noise floor: two thinnings of STARsolo); barnyard purity on called cells; ARI of RNA vs ADT clusters.")
+    d["caveats"] = ["The 30M-read head of lane-sorted demo FASTQs stands in for the head of an SRA run; read order inside SRA runs can differ.",
+                    "hgmm1k_v3 needed 120 GB (it was killed at the campaign's 64 GB); the campaign escalated memory per attempt in the same way.",
+                    "10x's published matrices are Cell Ranger 2-3 on an older reference; STARsolo uses the campaign reference.",
+                    "pbmc5p_v1 is the first 60M read pairs of the dataset, so the 30M cap is half of the benchmark input, not of the full library."]
+    if contract is not None:
+        d = contract.finalize(d)
+    return d
+
+
 def main():
     mode = sys.argv[1]
+    if mode == "engine":
+        out = Path(sys.argv[2])
+        E = {Path(p).stem: json.load(open(p)) for p in sorted(glob.glob(os.path.join(sys.argv[3], "*.json")))}
+        E = {k: v for k, v in E.items() if "error" not in v}
+        C = load_contract()
+        d = engine_doc(E, C)
+        tab = d.pop("_table")
+        print("valid" if not C.validate(d, None) else C.validate(d, None), C.capability_status(d))
+        d2 = dict(d)
+        (out / "alpha-engine-campaign.json").write_text(json.dumps({**d2, "_table": tab}, indent=1))
+        return
     if mode == "samples":
         src, out = sys.argv[2], Path(sys.argv[3])
         rows = [flatten(json.load(open(p))) for p in sorted(glob.glob(os.path.join(src, "GSM*.json")))]
@@ -287,8 +416,11 @@ def main():
     if eng:
         RESOURCES.extend(eng)
     else:
-        RESOURCES.append({"tool": "singlet", "dataset": "pooled", "wall_s": 1051.8, "max_rss_gb": 49.0, "threads": 4,
-                          "notes": "campaign median wall time per sample at 4 threads (27,578 GRCh38 samples); RSS from summary.json peak_rss_gb of a typical 30M-read sample"})
+        cen = json.load(open(out / "alpha_census.json"))
+        RESOURCES.append({"tool": "singlet", "dataset": "pooled", "wall_s": cen["wall_s_per_sample_4_threads"]["p50"],
+                          "max_rss_gb": cen["peak_rss_gb_per_sample"]["p50"], "threads": 4,
+                          "cpu_h": round(cen["wall_s_per_sample_4_threads"]["p50"] * 4 / 3600, 3),
+                          "notes": "median over the Alpha public samples of wall_seconds and peak_rss_gb in their summary.json (campaign, 4 threads)"})
     docs = build_docs(S, C)
     cohort = {}
     for k, d in docs.items():
