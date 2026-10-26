@@ -17,6 +17,8 @@ B=$SRC/bench/modalities/ambient_calibration; H=$AF/harness-$TAG; af_build $H
 O=$AF/est/$TAG; mkdir -p $O
 for L in $LANES; do
   D=$AF/dump/$L; specs=()
+  [ -f $D/prod_run.rho.f64 ] || py $B/dump_run.py prod $RUNS/$(lane_run $L)/singlet $D
+  specs+=("prod_run=$D/prod_run")
   while read -r name args; do
     [ -z "$name" ] || [ "${name:0:1}" = "#" ] && continue
     a=(${args}); extra=()

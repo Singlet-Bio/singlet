@@ -67,5 +67,15 @@ def main(run, out):
     print("genes", len(genes), "barcodes", len(bc), flush=True)
 
 
+def prod_rho(run, out):
+    """The run's own per-cell rho (ambient_contamination.tsv) as an estimate file: OUT_DIR/prod_run.rho.f64 + .cells.txt."""
+    P = pd.read_csv(f"{run}/ambient_contamination.tsv", sep="\t")
+    P.rho.values.astype(np.float64).tofile(f"{out}/prod_run.rho.f64")
+    P.barcode.astype(str).to_csv(f"{out}/prod_run.cells.txt", index=False, header=False)
+
+
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2])
+    if sys.argv[1] == "prod":
+        prod_rho(sys.argv[2], sys.argv[3])
+    else:
+        main(sys.argv[1], sys.argv[2])
