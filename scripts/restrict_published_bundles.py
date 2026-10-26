@@ -16,6 +16,12 @@ For each study, in this order:
 `restore` rebuilds the complete bundle from the public object plus the sidecar and uploads it over the public key
 (same members, same checksums and the original manifest; not the same bytes as the original zip).
 
+With --alpha-policy <alpha-policy.json> (the data.singlet.bio guard's policy) migrate makes the Research Alpha form instead:
+the wider private set (every mtDNA allele layer, ancestry_call.json) and every member of an excluded sample go to the
+sidecar, the public manifest.json and study_meta.json stop listing the excluded samples, and withheld studies are skipped
+(they are not served at all). When the study already has a sidecar, the complete bundle is first rebuilt from the public
+object and that sidecar, and the new sidecar replaces the old one, so it still holds everything the public file does not.
+
 Both commands are dry runs unless --apply is given; a dry run only reads (HEAD and the zip central directory) and prints
 the counts. Each completed study is appended to a JSONL ledger (--ledger), the record to cite.
 
@@ -24,6 +30,7 @@ of the job. Run it on a compute node with scratch for about three copies of the 
 
   python scripts/restrict_published_bundles.py migrate --gse-list gses.txt --private singlet-restricted --ledger ledger.jsonl [--apply]
   python scripts/restrict_published_bundles.py migrate --all --shard 0/8 --private singlet-restricted --ledger ledger-0.jsonl --apply
+  python scripts/restrict_published_bundles.py migrate --all --shard 0/64 --alpha-policy alpha-policy.json --private singlet-restricted --ledger ledger-0.jsonl --apply
   python scripts/restrict_published_bundles.py restore --gse GSE128639      --private singlet-restricted --ledger ledger.jsonl [--apply]
 """
 
@@ -56,10 +63,11 @@ def _load_restricted():
 
 
 _r = _load_restricted()
-redact_bundle, restore_bundle, restricted_summary = (
+redact_bundle, restore_bundle, restricted_summary, AlphaPolicy = (
     _r.redact_bundle,
     _r.restore_bundle,
     _r.restricted_summary,
+    _r.AlphaPolicy,
 )
 
 CHUNK = 64 * 1024 * 1024
@@ -219,9 +227,12 @@ class RangeFile(io.RawIOBase):
         return data
 
 
-def central_directory_summary(store, bucket: str, key: str, size: int) -> dict:
-    """restricted_summary() from the zip central directory only (ranged reads, not the whole object)."""
-    return restricted_summary(RangeFile(store, bucket, key, size))
+def central_directory_summary(store, bucket: str, key: str, size: int, alpha=None) -> dict:
+    """restricted_summary() from the zip central directory only (ranged reads, not the whole object).
+
+    With ``alpha`` it also reads manifest.json (a few KB) to see which excluded samples the bundle lists.
+    """
+    return restricted_summary(RangeFile(store, bucket, key, size), alpha)
 
 
 # ── commands ─────────────────────────────────────────────────────────────────
@@ -229,15 +240,25 @@ def central_directory_summary(store, bucket: str, key: str, size: int) -> dict:
 
 def cmd_migrate(store, gse: str, a, ledger: Path) -> str:
     pk, sk = public_key(gse), sidecar_key(gse)
+    alpha = getattr(a, "alpha", None)
+    if alpha is not None and gse in alpha.withheld:
+        return "withheld"
     size = store.size(a.public, pk)
     if size is None:
         return "missing"
-    summ = central_directory_summary(store, a.public, pk, size)
-    if summ["members"] == 0:
+    summ = central_directory_summary(store, a.public, pk, size, alpha)
+    if summ["members"] == 0 and not summ.get("excluded_samples"):
         return "nothing-restricted"
+    # Alpha: an existing sidecar is folded in (the complete bundle is rebuilt first), so it is replaced, not lost.
+    old_side = store.size(a.private, sk) if alpha is not None else None
     if not a.apply:
-        return f"would-split: {summ['members']} members, {summ['compressed_bytes']} of {size} bytes move to the sidecar"
+        extra = ""
+        if alpha is not None:
+            extra = f", {summ['excluded_samples']} excluded samples, sidecar {'exists' if old_side else 'new'}"
+        return f"would-split: {summ['members']} members, {summ['compressed_bytes']} of {size} bytes move to the sidecar{extra}"
+    t0 = time.time()
     etag = store.etag(a.public, pk)
+    side_etag = store.etag(a.private, sk) if old_side is not None else None
     with tempfile.TemporaryDirectory(dir=a.scratch) as td:
         src, dst, side = (
             Path(td) / "src.singlet",
@@ -248,12 +269,26 @@ def cmd_migrate(store, gse: str, a, ledger: Path) -> str:
         if src.stat().st_size != size:
             return "SKIPPED: download size differs from the object"
         h_src = sha256_file(src)
+        full = src
+        if old_side is not None:
+            prev, full = Path(td) / "prev-side.singlet", Path(td) / "full.singlet"
+            store.download(a.private, sk, prev)
+            if prev.stat().st_size != old_side:
+                return "SKIPPED: sidecar download size differs from the object"
+            restore_bundle(
+                src, prev, full
+            )  # verified against the original manifest the sidecar holds
+            prev.unlink()
         stats = redact_bundle(
-            src, dst, sidecar=side
+            full, dst, sidecar=side, alpha=alpha
         )  # refuses a corrupt source; reads both outputs back
+        if full != src:
+            full.unlink()
         h_side, h_pub = sha256_file(side), sha256_file(dst)
         if store.etag(a.public, pk) != etag:
             return "SKIPPED: public object changed while it was being split"
+        if side_etag is not None and store.etag(a.private, sk) != side_etag:
+            return "SKIPPED: sidecar changed while the study was being split"
 
         store.upload(side, a.private, sk)
         side_size = side.stat().st_size
@@ -296,6 +331,16 @@ def cmd_migrate(store, gse: str, a, ledger: Path) -> str:
                 "bytes_sidecar": side_size,
                 "removed": stats["removed"],
                 "removed_bytes": stats["removed_bytes"],
+                **(
+                    {
+                        "alpha_policy": alpha.version,
+                        "excluded_samples": stats["excluded_samples"],
+                        "bytes_sidecar_before": old_side,
+                    }
+                    if alpha is not None
+                    else {}
+                ),
+                "seconds": round(time.time() - t0, 1),
                 "sha256_original": h_src,
                 "sha256_public": h_pub,
                 "sha256_sidecar": h_side,
@@ -362,6 +407,10 @@ def main(argv=None) -> int:
     )
     ap.add_argument("--apply", action="store_true", help="write; without it only reads and prints")
     ap.add_argument("--local-root", help="use directories under this root instead of R2 (tests)")
+    ap.add_argument(
+        "--alpha-policy",
+        help="Research Alpha policy JSON (withheld_studies, excluded_samples); migrate makes the Alpha form",
+    )
     a = ap.parse_args(argv)
     if not (a.gse or a.gse_list or a.all):
         ap.error("give --gse, --gse-list or --all")
@@ -369,6 +418,7 @@ def main(argv=None) -> int:
         ap.error("--shard is I/N, e.g. 0/8")
     if a.public == a.private:
         ap.error("--private must differ from --public")
+    a.alpha = AlphaPolicy.load(a.alpha_policy) if a.alpha_policy else None
 
     store = LocalStore(Path(a.local_root)) if a.local_root else S3Store()
     ledger = Path(a.ledger)
@@ -383,7 +433,7 @@ def main(argv=None) -> int:
         ) as e:  # one bad study must not stop the shard; nothing public was changed for it
             msg = f"FAILED: {type(e).__name__}: {e}"
             log(ledger, {"gse": gse, "ok": False, "stage": "error", "error": msg[:300]})
-        n += not msg.startswith(("nothing-restricted", "missing"))
+        n += not msg.startswith(("nothing-restricted", "missing", "withheld"))
         bad += msg.startswith(("VERIFY", "UPLOAD", "SKIPPED", "FAILED"))
         print(f"{gse}\t{msg}", flush=True)
     return 1 if bad else 0

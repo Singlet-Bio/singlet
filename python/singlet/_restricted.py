@@ -66,6 +66,87 @@ def is_ancestry_call(arc_name: str) -> bool:
     return arc_name.rsplit("/", 1)[-1] == "ancestry_call.json"
 
 
+_MT_ALLELE_RE = re.compile(r"_mt_(consensus|variants)")
+_ALPHA_PRIVATE = frozenset(
+    {"ase_counts.tsv", "mt_heteroplasmy.1pz", "mt_variants.tsv", "ancestry_call.json"}
+)
+
+
+class AlphaPolicy:
+    """What a Research Alpha public bundle may hold; mirrors ``classify`` in the data-guard's ``policy.ts``.
+
+    ``withheld_studies`` are not served at all; ``excluded_samples`` (GSMs) are left out of every bundle.
+    """
+
+    def __init__(
+        self, withheld_studies=(), excluded_samples=(), version: Optional[str] = None
+    ) -> None:
+        self.withheld = frozenset(withheld_studies)
+        self.excluded = frozenset(excluded_samples)
+        self.version = version
+
+    @classmethod
+    def load(cls, path: Union[str, Path]) -> "AlphaPolicy":
+        d = json.loads(Path(path).read_text(encoding="utf-8"))
+        return cls(d.get("withheld_studies", []), d.get("excluded_samples", []), d.get("version"))
+
+    @staticmethod
+    def is_private_member(rel: str) -> bool:
+        """Germline or mtDNA allele data, for a path relative to ``samples/<GSM>/`` (or a bare member name)."""
+        if rel.startswith("donor/"):
+            return rel[len("donor/") :] not in _DONOR_PUBLIC
+        if rel.startswith("mt/"):
+            return rel[len("mt/") :] not in _MT_PUBLIC
+        if rel in _ALPHA_PRIVATE:
+            return True
+        name = rel.rsplit("/", 1)[-1]
+        return name.startswith("snp_") or bool(
+            _VARIANT_FILE_RE.search(name) or _MT_ALLELE_RE.search(name)
+        )
+
+    def classify(self, arc_name: str) -> str:
+        """``"excluded"``, ``"private"`` or ``"ok"`` for a full archive path."""
+        m = _SAMPLE_RE.match(arc_name)
+        if m and _gsm_of(arc_name) in self.excluded:
+            return "excluded"
+        rel = arc_name[m.end() :] if m else arc_name
+        return "private" if self.is_private_member(rel) else "ok"
+
+    def public_manifest(self, man: dict) -> dict:
+        """``man`` without the excluded samples (``gsm_ids``, ``n_gsms``, ``excluded_samples``)."""
+        out = dict(man)
+        out["gsm_ids"] = [g for g in man.get("gsm_ids", []) if g not in self.excluded]
+        out["n_gsms"] = len(out["gsm_ids"])
+        if isinstance(man.get("excluded_samples"), list):
+            out["excluded_samples"] = [
+                e
+                for e in man["excluded_samples"]
+                if not (isinstance(e, dict) and e.get("gsm_id") in self.excluded)
+            ]
+        return out
+
+    def public_study_meta(self, data: bytes) -> bytes:
+        """``study_meta.json`` without the excluded samples' ``gsm_meta`` entries (``data`` itself if none)."""
+        try:
+            meta = json.loads(data)
+        except ValueError:
+            return data
+        gm = meta.get("gsm_meta") if isinstance(meta, dict) else None
+        if not isinstance(gm, dict) or not set(gm) & self.excluded:
+            return data
+        meta["gsm_meta"] = {g: v for g, v in gm.items() if g not in self.excluded}
+        return json.dumps(meta, indent=2).encode()
+
+    def listed_excluded(self, man: dict, names) -> List[str]:
+        """Excluded GSMs that ``man`` lists or that have members among ``names``."""
+        seen = set(man.get("gsm_ids", []))
+        seen.update(
+            e.get("gsm_id") for e in man.get("excluded_samples") or [] if isinstance(e, dict)
+        )
+        seen.update(_gsm_of(n) for n in names)
+        return sorted(g for g in seen if g in self.excluded)
+
+
 def public_ancestry_call(data: bytes) -> bytes:
     """The public form of ``ancestry_call.json``: the group, its confidence and the coverage counts.
 
@@ -147,6 +228,7 @@ def redact_bundle(
     *,
     sidecar: Union[str, Path, None] = None,
     verify: bool = True,
+    alpha: Optional[AlphaPolicy] = None,
 ) -> Dict[str, int]:
     """Split the complete bundle ``src`` into a public bundle ``dst`` and, with ``sidecar``, a restricted sidecar.
 
@@ -158,8 +240,12 @@ def redact_bundle(
 
     Without ``sidecar`` the restricted members are dropped (the public form only).
 
+    With ``alpha`` the Research Alpha rules decide what is private (``ancestry_call.json`` goes to the sidecar whole),
+    every member of an excluded sample goes to the sidecar, and the public ``manifest.json`` and ``study_meta.json`` no
+    longer list those samples (the original ``study_meta.json`` goes to the sidecar).
+
     Returns counts: ``kept``, ``removed``, ``removed_bytes`` (compressed), ``bytes_in``, ``bytes_out``,
-    ``sidecar_bytes``.
+    ``sidecar_bytes``, ``excluded_samples``.
     """
     src, dst = Path(src), Path(dst)
     sidecar = Path(sidecar) if sidecar is not None else None
@@ -179,6 +265,7 @@ def redact_bundle(
         "bytes_in": src.stat().st_size,
         "bytes_out": 0,
         "sidecar_bytes": 0,
+        "excluded_samples": 0,
     }
     pub_sums: Dict[str, str] = {}
     res_sums: Dict[str, str] = {}
@@ -192,6 +279,12 @@ def redact_bundle(
         with zipfile.ZipFile(src, "r") as zin:
             old = json.loads(zin.read("manifest.json"))
             vouched = old.get("checksums") or {}
+            if alpha is not None:
+                stats["excluded_samples"] = len(alpha.listed_excluded(old, zin.namelist()))
+                if old.get("gsm_ids") and not alpha.public_manifest(old)["gsm_ids"]:
+                    raise ValueError(
+                        f"{src.name}: every sample is excluded; the study should be withheld"
+                    )
             with zipfile.ZipFile(tmp, "w", allowZip64=True) as zpub:
                 zres = zipfile.ZipFile(stmp, "w", allowZip64=True) if stmp else None
                 try:
@@ -199,7 +292,20 @@ def redact_bundle(
                         name = info.filename
                         if name.endswith("/") or name == "manifest.json":
                             continue
-                        if is_restricted_path(name):
+                        private = (
+                            alpha.classify(name) != "ok"
+                            if alpha is not None
+                            else is_restricted_path(name)
+                        )
+                        if alpha is not None and name == "study_meta.json":
+                            data = zin.read(name)
+                            digest = hashlib.sha256(data).hexdigest()
+                            pub = alpha.public_study_meta(data)
+                            pub_sums[name] = _put_bytes(zpub, name, pub, info.compress_type)
+                            if pub != data and zres is not None:
+                                res_sums[name] = _put_bytes(zres, name, data, info.compress_type)
+                            stats["kept"] += 1
+                        elif private:
                             stats["removed"] += 1
                             stats["removed_bytes"] += info.compress_size
                             if zres is not None:
@@ -224,11 +330,13 @@ def redact_bundle(
                             raise RuntimeError(
                                 f"{src.name}: {name} does not match its checksum in the source manifest"
                             )
-                    gsm_ids = list(old.get("gsm_ids", []))
-                    pub_man = dict(old)
+                    pub_man = alpha.public_manifest(old) if alpha is not None else dict(old)
+                    gsm_ids = list(pub_man.get("gsm_ids", []))
                     pub_man["included_files"] = _included(pub_sums, gsm_ids)
                     pub_man["checksums"] = pub_sums
                     pub_man["profile"] = PUBLIC_PROFILE
+                    if alpha is not None and alpha.version:
+                        pub_man["alpha_policy"] = alpha.version
                     zpub.writestr(
                         zipfile.ZipInfo("manifest.json"),
                         json.dumps(pub_man, indent=2).encode(),
@@ -244,7 +352,7 @@ def redact_bundle(
                     if zres is not None:
                         zres.close()
         if verify:
-            _verify_pair(tmp, stmp, old)
+            _verify_pair(tmp, stmp, old, alpha)
     except BaseException:
         _discard()
         raise
@@ -276,9 +384,26 @@ def _check_zip(path: Path, expect_profile: str) -> dict:
     return man
 
 
-def _verify_pair(public: Path, sidecar: Optional[Path], original: dict) -> None:
+def _verify_pair(
+    public: Path, sidecar: Optional[Path], original: dict, alpha: Optional[AlphaPolicy] = None
+) -> None:
     pub = _check_zip(public, PUBLIC_PROFILE)
-    leaked = [n for n in pub["checksums"] if is_restricted_path(n)]
+    if alpha is not None:
+        leaked = [n for n in pub["checksums"] if alpha.classify(n) != "ok"]
+        with zipfile.ZipFile(public) as z:
+            meta = (
+                json.loads(z.read("study_meta.json"))
+                if "study_meta.json" in pub["checksums"]
+                else {}
+            )
+        listed = set(alpha.listed_excluded(pub, pub["checksums"]))
+        listed |= (
+            set(pub.get("included_files") or {}) | set(meta.get("gsm_meta") or {})
+        ) & alpha.excluded
+        if listed:
+            raise RuntimeError(f"public archive still lists excluded sample {sorted(listed)[0]}")
+    else:
+        leaked = [n for n in pub["checksums"] if is_restricted_path(n)]
     if leaked:
         raise RuntimeError(f"public archive still holds {leaked[0]}")
     if sidecar is None:
@@ -352,12 +477,25 @@ def restore_bundle(
     return {"members": n, "bytes_out": dst.stat().st_size}
 
 
-def restricted_summary(src: Union[str, Path, Any]) -> Dict[str, Optional[int]]:
-    """How many members and compressed bytes of ``src`` are restricted (read-only; central directory only)."""
+def restricted_summary(
+    src: Union[str, Path, Any], alpha: Optional[AlphaPolicy] = None
+) -> Dict[str, Optional[int]]:
+    """How many members and compressed bytes of ``src`` are restricted (read-only; central directory only).
+
+    With ``alpha`` it uses the Research Alpha rules and also reads ``manifest.json`` to count the excluded samples the
+    bundle lists (``excluded_samples``).
+    """
     n = size = 0
+    out: Dict[str, Optional[int]] = {}
     with zipfile.ZipFile(src, "r") as z:
         for info in z.infolist():
-            if not info.filename.endswith("/") and is_restricted_path(info.filename):
+            name = info.filename
+            if name.endswith("/"):
+                continue
+            if alpha.classify(name) != "ok" if alpha is not None else is_restricted_path(name):
                 n += 1
                 size += info.compress_size
-    return {"members": n, "compressed_bytes": size}
+        if alpha is not None:
+            man = json.loads(z.read("manifest.json")) if "manifest.json" in z.namelist() else {}
+            out["excluded_samples"] = len(alpha.listed_excluded(man, z.namelist()))
+    return {"members": n, "compressed_bytes": size, **out}
