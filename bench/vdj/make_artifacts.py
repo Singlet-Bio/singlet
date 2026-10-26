@@ -77,8 +77,8 @@ def main(argv=None):
     for lib, (ds, chains) in libraries(a.data).items():
         R, D = os.path.join(a.runs, lib), os.path.join(a.data, lib)
         ref_csv = os.path.join(D, "filtered_contig_annotations.csv")
-        if not os.path.exists(ref_csv):
-            continue
+        if not os.path.exists(ref_csv) or not os.path.exists(os.path.join(R, "singlet", "contigs.csv")):
+            continue  # not downloaded or not run yet
         keep = CV.TCR if chains == "TCR" else CV.BCR
         ref = CV.load_cellranger(ref_csv)
         ref[ref.chain.isin(keep)][cols].to_csv(os.path.join(a.out, f"{lib}.cellranger.csv.gz"), index=False)

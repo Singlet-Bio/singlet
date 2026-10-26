@@ -122,6 +122,8 @@ def compute(artifact_dir: Path) -> dict:
                 "gex_cells": _load(artifact_dir, lib, "gex_cells.txt"), "lineage": _load(artifact_dir, lib, "gex_lineage.csv"),
                 **{t: _load(artifact_dir, lib, f"{t}.csv.gz") for t in TOOLS}}))
         P = _pool(parts)
+        if P["singlet"] is None or P["ref"] is None:
+            continue  # a library not run yet
         res = {t: CV.compare(P["ref"], P["cells"], P[t], P["lineage"], P["gex_cells"], equiv) for t in TOOLS if P[t] is not None}
         results[(ds, chains)] = res
         noise = _noise(CV, P, equiv) if all(P[t] is not None for t in TOOLS) else {}
