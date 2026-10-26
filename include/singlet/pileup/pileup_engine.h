@@ -99,6 +99,7 @@ constexpr uint32_t kUnique          = 1;    ///< a multi-mapped read (NH > 1) gi
 constexpr uint32_t kContained       = 2;    ///< an intron-touching read must lie inside its gene body
 constexpr uint32_t kNoSplicedIntron = 4;    ///< a spliced read (CIGAR N) gives no intronic evidence
 constexpr uint32_t kFlank           = 8;    ///< <= 5 intronic bases of an exon-touching read are exonic (velocyto MIN_FLANK)
+constexpr uint32_t kMtPrefer        = 256;  ///< multimapper split between a chrM gene and a nuclear gene (NUMT): count the chrM gene
 constexpr uint32_t kNoExonPriority  = 16;   ///< an exonic read of gene A inside an intron of gene B is not counted
 // Rules on molecules (applied after UMI collapse, over all genes of a cell)
 constexpr uint32_t kUmiGene         = 32;   ///< UMI in >1 gene of a cell: drop its unspliced/ambiguous molecules
@@ -168,6 +169,7 @@ struct PileupStats {
     uint64_t molecules_legacy_double = 0;  ///< would have been in both exon and intron matrices before the fix
     uint64_t molecules_dropped_multigene_umi = 0;  ///< intron_rule::kUmiGene*: molecules of UMIs in >1 gene
     uint32_t intron_rules = 0;                     ///< intron_rule::k* bits the run used
+    uint64_t mt_numt_rescued = 0;  ///< intron_rule::kMtPrefer: chrM/NUMT multimappers counted for the chrM gene
     uint64_t cross_gene_intron_reads = 0;  ///< exonic reads of one gene also in another gene's intron (old: counted for both)
     double wall_time_s = 0;
 };
@@ -1179,6 +1181,9 @@ public:
             bool gene_ambiguous = false;
             uint32_t first_gene  = UINT32_MAX;
             uint32_t second_gene = UINT32_MAX;  // conflicting gene for EM rescue
+            // intron_rule::kMtPrefer: the alignment that lies in a chrM gene
+            uint32_t mt_gene = UINT32_MAX, mt_exon = UINT32_MAX, mt_intron = UINT32_MAX;
+            uint8_t mt_flags = 0, mt_diag = 0;
         };
         std::unordered_map<uint64_t, MultiHitEntry> mm_buffer;
 
@@ -1504,8 +1509,11 @@ public:
             stats.rrna_reads_sampled += ws.rrna_reads_sampled;
         }
         stats.cross_gene_intron_reads = 0;
-        for (int w = 0; w < n_workers; ++w)
+        stats.mt_numt_rescued = 0;
+        for (int w = 0; w < n_workers; ++w) {
             stats.cross_gene_intron_reads += workers[w].stats.cross_gene_intron_reads;
+            stats.mt_numt_rescued += workers[w].stats.mt_numt_rescued;
+        }
         add_molecule_stats(stats, mol_stats);
 
         // G-EM: merge per-worker ambiguous reads into engine's ambig_reads_
@@ -2714,9 +2722,26 @@ private:
         return result;
     }
 
+    bool is_mt_gene(uint32_t g) const {
+        const std::string& c = gene_model_.genes()[g].chrom;
+        return c == "chrM" || c == "MT" || c == "chrMT";
+    }
+
     // Resolve a completed multi-hit entry using per-worker state
     void resolve_mm_parallel(WorkerContext& wc, typename WorkerContext::MultiHitEntry& e) {
         if (e.bc_idx < 0) return;
+        // A read aligning equally to a chrM gene and to a nuclear copy of it (NUMT, annotated as a
+        // pseudogene) comes from the mitochondrial genome (hundreds of copies per cell vs. one nuclear
+        // copy): count it for the chrM gene instead of dropping it as gene-ambiguous.
+        if (e.gene_ambiguous && e.mt_gene != UINT32_MAX && e.first_gene != UINT32_MAX &&
+            e.second_gene != UINT32_MAX && is_mt_gene(e.first_gene) != is_mt_gene(e.second_gene)) {
+            ReadFeatures rf{e.mt_gene, e.mt_exon, e.mt_intron, e.mt_flags,
+                            static_cast<uint8_t>(e.mt_diag | DirectionalUmiStore::kDiagMulti)};
+            count_read(wc.mol_store, wc.exon, wc.intron, wc.stats, static_cast<uint32_t>(e.bc_idx),
+                       rf, e.umi_len > 0 ? e.umi : nullptr, e.umi_len);
+            wc.stats.mt_numt_rescued++;
+            return;
+        }
         if (e.gene_ambiguous) {
             // G-EM: collect for post-pileup EM rescue
             if (e.first_gene != UINT32_MAX && e.second_gene != UINT32_MAX) {
@@ -3148,6 +3173,10 @@ private:
                                             if (it->second.second_gene == UINT32_MAX)
                                                 it->second.second_gene = hit.gene_idx;
                                         }
+                                        if ((config_.intron_rules & intron_rule::kMtPrefer) && is_mt_gene(hit.gene_idx)) {
+                                            it->second.mt_gene = hit.gene_idx; it->second.mt_exon = hit.exon_idx;
+                                            it->second.mt_flags = kExonicReadFlags;
+                                        }
                                         if (it->second.gene_idx == UINT32_MAX) {
                                             it->second.gene_idx = hit.gene_idx;
                                             it->second.exon_idx = hit.exon_idx;
@@ -3170,6 +3199,10 @@ private:
                                         entry.gene_idx = hit.gene_idx;
                                         entry.exon_idx = hit.exon_idx;
                                         entry.read_flags = kExonicReadFlags;
+                                        if ((config_.intron_rules & intron_rule::kMtPrefer) && is_mt_gene(hit.gene_idx)) {
+                                            entry.mt_gene = hit.gene_idx; entry.mt_exon = hit.exon_idx;
+                                            entry.mt_flags = kExonicReadFlags;
+                                        }
                                     }
                                 }
                             }
@@ -3405,6 +3438,10 @@ private:
                     entry.intron_idx = rf.intron_idx;
                     entry.read_flags = rf.flags;
                     entry.read_diag = rf.diag;
+                    if ((config_.intron_rules & intron_rule::kMtPrefer) && is_mt_gene(rf.gene)) {
+                        entry.mt_gene = rf.gene; entry.mt_exon = rf.exon_idx; entry.mt_intron = rf.intron_idx;
+                        entry.mt_flags = rf.flags; entry.mt_diag = rf.diag;
+                    }
                 }
                 if (umi_str && umi_len > 0) {
                     int clen = std::min(umi_len, 15);
