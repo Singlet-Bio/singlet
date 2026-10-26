@@ -62,7 +62,7 @@ def compute(artifact_dir: Path) -> dict:
     calls = pd.read_csv(artifact_dir / "ancestry_calls.tsv", sep="\t", dtype={"level": str})
     tools = [t for t in ["singlet", "somalier", "peddy"] if t in set(calls["tool"])]
     comps = [t for t in tools if t != "singlet"]
-    metrics, figures = [], []
+    metrics, figures, extra_caveats = [], [], []
 
     lp0 = artifact_dir / "lcl_ancestry_calls.tsv"
     sp0 = artifact_dir / "selfreport_calls.tsv"
@@ -186,6 +186,13 @@ def compute(artifact_dir: Path) -> dict:
     if sx_path.exists():
         sx = pd.read_csv(sx_path, sep="\t")
         sx = sx[sx["tool"] != "_counts"]
+        amb = sx[(sx["tool"] == "singlet") & (sx["call"] == "ambiguous")]
+        if len(amb):
+            extra_caveats.append(
+                f"Bulk donor sex: Singlet's per-cell model calls {len(amb)} of {int((sx['tool'] == 'singlet').sum())} MAGE "
+                f"individuals ambiguous ({', '.join(sorted(set(amb['sex_truth'])))} by 1000 Genomes). Bulk RNA of these cell lines "
+                "carries both XIST and reads on chrY genes with X homologs, which the single-cell model treats as a doublet "
+                "signature; the XIST/chrY rule fails on bulk for the same reason. Single-cell results are in chromosomal-sex.")
         st = [t for t in ["singlet", "peddy", "xist-chrY-rule"] if t in set(sx["tool"])]
         vals = {t: float((sx[sx["tool"] == t]["call"] == sx[sx["tool"] == t]["sex_truth"]).mean()) for t in st}
         m = {"id": "donor_sex_accuracy", "name": "Donor sex from RNA reads matches the 1000 Genomes record (8M read pairs)",
@@ -261,6 +268,6 @@ def compute(artifact_dir: Path) -> dict:
         ],
         "reproduce": {"module": "bench/public/capabilities/genetic_ancestry.py", "function": "compute", "laptop_minutes": 1,
                       "clipper_command": "bash bench/public/sexancestry/submit_ancestry.sh"},
-        "caveats": prov.get("caveats", []),
+        "caveats": prov.get("caveats", []) + extra_caveats,
     }
     return C.finalize(doc)
