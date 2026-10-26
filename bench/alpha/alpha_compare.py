@@ -240,6 +240,8 @@ def read_10x_h5(data):
         nm = [x.decode() for x in (feat["name"][()] if "name" in feat else (feat["gene_names"][()] if "gene_names" in feat else feat["id"][()]))]
         ftype = [x.decode() for x in feat["feature_type"][()]] if "feature_type" in feat else ["Gene Expression"] * len(ids)
     keep = np.array([t == "Gene Expression" for t in ftype])
+    if len(keep) != M.shape[0] or len(ids) != M.shape[0]:
+        raise ValueError(f"h5 features ({len(ids)}) do not match the matrix rows ({M.shape[0]})")
     return M[keep], bcs, [i for i, k in zip(ids, keep) if k], [n for n, k in zip(nm, keep) if k]
 
 
@@ -266,7 +268,7 @@ def read_mtx(mtx, bcs, feats):
 try:
     base = f"{GEO}/{GSM[:-3]}nnn/{GSM}/suppl/"
     files = P["author_files"].split(";")
-    unz = lambda f, b: gzip.decompress(b) if f.endswith(".gz") else b  # noqa: E731
+    unz = lambda f, b: gzip.decompress(b) if b[:2] == b"" else b  # noqa: E731  (some ".gz" deposits are plain text)
     if P["author_kind"] == "h5":
         A, a_bcs, a_ids, a_nm = read_10x_h5(http(base + files[0]))
     else:
