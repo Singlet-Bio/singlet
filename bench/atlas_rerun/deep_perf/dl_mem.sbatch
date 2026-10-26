@@ -29,3 +29,8 @@ tr '\r' '\n' < $SCR/dl.log | grep -v "reads (" | tail -30
 awk 'NR%10==1' $SCR/rss.txt | tail -60
 grep -E "Elapsed|Maximum resident" $SCR/time.txt
 ls -la $SCR/head.1fq 2>/dev/null && $BIN decode $SCR/head.1fq --header 2>&1 | head -5
+# digest of the decoded reads, to check that the head is the same across binaries
+if [ -f $SCR/head.1fq ]; then
+  $BIN decode $SCR/head.1fq --r1 $SCR/r1.fq --r2 $SCR/r2.fq > /dev/null 2>&1
+  echo "decoded sha256 R1 $(sha256sum < $SCR/r1.fq | cut -c1-16) R2 $(sha256sum < $SCR/r2.fq | cut -c1-16)"
+fi
