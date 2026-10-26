@@ -24,7 +24,7 @@ import re
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
 
-BIOTYPES = {f"{l}_{r}_gene" for l in ("TR", "IG") for r in ("V", "D", "J", "C")}
+BIOTYPES = {f"{lo}_{r}_gene" for lo in ("TR", "IG") for r in ("V", "D", "J", "C")}
 CHAINS = ("TRA", "TRB", "TRG", "TRD", "IGH", "IGK", "IGL")
 _COMP = str.maketrans("ACGTNacgtn", "TGCANtgcan")
 CODON = {}

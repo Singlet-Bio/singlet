@@ -4,7 +4,6 @@
 import numpy as np
 import pytest
 from scipy import sparse
-
 from singlet.adt import seq as S
 from singlet.crispr import assign as AS
 from singlet.crispr import count as CC

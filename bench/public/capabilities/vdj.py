@@ -18,8 +18,15 @@ import sys
 from pathlib import Path
 
 import numpy as np
-
-from _common import REPO_URL, artifact_entries, bootstrap_ci, code_url, contract, load_provenance, now_iso, r
+from _common import (
+    REPO_URL,
+    artifact_entries,
+    code_url,
+    contract,
+    load_provenance,
+    now_iso,
+    r,
+)
 
 CAP = "vdj"
 ROOT = Path(__file__).resolve().parents[3]
@@ -96,7 +103,8 @@ def _noise(CV, P, equiv, n=40, seed=0):
     diffs = {k: [] for k in NOISE_KEYS}
     for _ in range(n):
         half = set(rng.choice(cells, len(cells) // 2, replace=False))
-        sub = lambda t: t[t["barcode"].isin(half)] if t is not None else None
+        def sub(t, half=half):
+            return t[t["barcode"].isin(half)] if t is not None else None
         rs = {t: CV.compare(sub(P["ref"]), half, sub(P[t]), None, P["gex_cells"], equiv) for t in TOOLS}
         for k in NOISE_KEYS:
             diffs[k].append(rs["singlet"][k] - rs["trust4"][k])
@@ -216,7 +224,7 @@ def compute(artifact_dir: Path) -> dict:
              "accessions": {"url": "https://cf.10xgenomics.com/samples/cell-vdj/5.0.0/sc5p_v2_hs_PBMC_10k/"},
              "truth": "10x Cell Ranger 5.0.0 filtered contigs", "data_kind": "real"},
             {"id": "gse145370_tcr", "title": "GSE145370 ESCC TCR libraries held out from development (10x 5' V(D)J)",
-             "accessions": {"gse": "GSE145370", "other": sorted(l for l in prov["libraries"] if l.startswith("gse145370_"))},
+             "accessions": {"gse": "GSE145370", "other": sorted(x for x in prov["libraries"] if x.startswith("gse145370_"))},
              "truth": "authors' Cell Ranger 3.0.1 filtered contigs (GEO supplementary)", "data_kind": "real"},
             {"id": "tenx_pbmc10k_5pv2_controller", "title": "10x 10k PBMC 5' v2 (Chromium Controller) T and B libraries",
              "data_kind": "real", "accessions": {"url": "https://cf.10xgenomics.com/samples/cell-vdj/6.1.0/"

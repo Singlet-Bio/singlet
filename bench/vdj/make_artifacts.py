@@ -16,8 +16,6 @@ import json
 import os
 import sys
 
-import pandas as pd
-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import compare_vdj as CV  # noqa: E402
 

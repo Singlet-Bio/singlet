@@ -21,7 +21,6 @@ def main():
     a = ap.parse_args()
     from singlet.adt import count as AC
     from singlet.adt import seq as S
-    from singlet.vdj import _kernels as K
     from singlet.vdj import assemble as A
 
     want = {b[:16] for b in a.barcodes}
@@ -39,7 +38,8 @@ def main():
     # stage: classification of the reverse-complemented R2
     mates = [A._rc(s) for s in r2s]
     codes, off, o = A._classify(ref, mates, 2)
-    vn = lambda i: ref.names[i] if i >= 0 else "-"
+    def vn(i):
+        return ref.names[i] if i >= 0 else "-"
     from collections import Counter
 
     print("V calls", Counter(vn(i) for i in o[:, 0]).most_common(6))

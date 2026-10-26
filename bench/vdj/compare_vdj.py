@@ -27,7 +27,6 @@ import argparse
 import json
 from typing import Dict
 
-import numpy as np
 import pandas as pd
 
 TCR = {"TRA", "TRB", "TRG", "TRD"}
@@ -154,7 +153,8 @@ def compare(ref: pd.DataFrame, ref_cells: set, m: pd.DataFrame, gex: pd.DataFram
     out["v_gene_agreement"] = float((ex.v_r == ex.v_m).mean()) if len(ex) else float("nan")
     if equiv:
         # genes reads cannot tell apart (identical or 1 nt apart up to Cys104) count as one
-        eq = lambda g: equiv.get(g, g)
+        def eq(g):
+            return equiv.get(g, g)
         out["v_gene_agreement_equivalent"] = float((ex.v_r.map(eq) == ex.v_m.map(eq)).mean()) if len(ex) else float("nan")
     out["j_gene_agreement"] = float((ex.j_r == ex.j_m).mean()) if len(ex) else float("nan")
     cg = ex[(ex.c_r != "") & (ex.c_m != "")]

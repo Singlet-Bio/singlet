@@ -62,7 +62,8 @@ def compute(artifact_dir: Path) -> dict:
             metrics.append(_metric("knockdown_cells", "Single-guide cells of scored guides (usable perturbed cells)",
                                    "cells", "coverage", ds, "higher", S["kd_cells_scored"],
                                    [(COMPETITORS[c], res[c]["kd_cells_scored"]) for c in kd_tools]))
-            nsig = lambda m_: round(m_.get("kd_frac_guides_significant", 0) * m_.get("kd_guides_scored", 0))
+            def nsig(m_):
+                return round(m_.get("kd_frac_guides_significant", 0) * m_.get("kd_guides_scored", 0))
             metrics.append(_metric(
                 "knockdown_guides_significant", f"Guides whose target is significantly {moved} in their single-guide "
                 "cells (one-sided Mann-Whitney vs controls, BH 0.05; guides with >= 5 cells)", "guides", "accuracy", ds,

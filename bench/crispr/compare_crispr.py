@@ -123,13 +123,13 @@ def counting_concordance(cr_h5, counts, barcodes):
     bi = {b: i for i, b in enumerate(bc)}
     keep_r = [r for r in rows if ids[r] in fi]
     keep_c = [i for i, b in enumerate(barcodes) if b in bi]
-    C = A[keep_r][:, [bi[barcodes[i]] for i in keep_c]].toarray().astype(float)
-    O = X[[fi[ids[r]] for r in keep_r]][:, keep_c].toarray().astype(float)
-    nz = (C > 0) | (O > 0)
-    return {"guides": len(keep_r), "cells": len(keep_c), "umi_ratio": float(O.sum() / max(1, C.sum())),
-            "pearson_log1p": float(np.corrcoef(np.log1p(O[nz]), np.log1p(C[nz]))[0, 1]) if nz.sum() > 2 else float("nan"),
-            "entries_identical": float((O[nz] == C[nz]).mean()) if nz.any() else float("nan"),
-            "per_cell_total_ratio_median": float(np.median(O.sum(0)[C.sum(0) > 0] / C.sum(0)[C.sum(0) > 0]))}
+    Ref = A[keep_r][:, [bi[barcodes[i]] for i in keep_c]].toarray().astype(float)
+    Ours = X[[fi[ids[r]] for r in keep_r]][:, keep_c].toarray().astype(float)
+    nz = (Ref > 0) | (Ours > 0)
+    return {"guides": len(keep_r), "cells": len(keep_c), "umi_ratio": float(Ours.sum() / max(1, Ref.sum())),
+            "pearson_log1p": float(np.corrcoef(np.log1p(Ours[nz]), np.log1p(Ref[nz]))[0, 1]) if nz.sum() > 2 else float("nan"),
+            "entries_identical": float((Ours[nz] == Ref[nz]).mean()) if nz.any() else float("nan"),
+            "per_cell_total_ratio_median": float(np.median(Ours.sum(0)[Ref.sum(0) > 0] / Ref.sum(0)[Ref.sum(0) > 0]))}
 
 
 def multiplet_check(S, P, expr, gt, gk, cells):
@@ -157,8 +157,9 @@ def multiplet_check(S, P, expr, gt, gk, cells):
                 th = gt.get(h)
                 if h != sg and gk.get(h) == "targeting" and th in ref and th != t:
                     extra.append(expr[th][i] / ref[th])
-    f = lambda v: {"n": len(v), "mean_rel_expr": float(np.mean(v)) if v else float("nan"),
-                   "median_rel_expr": float(np.median(v)) if v else float("nan")}
+    def f(v):
+        return {"n": len(v), "mean_rel_expr": float(np.mean(v)) if v else float("nan"),
+                "median_rel_expr": float(np.median(v)) if v else float("nan")}
     return {"singlet_single_ref_single": f(clean), "singlet_guide_in_ref_multiple": f(kept),
             "ref_extra_guides_in_those_cells": f(extra)}
 
@@ -376,8 +377,8 @@ def evaluate(labs, ref, level, expr, kd_cells, gt, gk, mode="i"):
     if expr is not None and level == "guide":
         S = labs["singlet"].set_index("barcode").loc[kd_cells]
         for other in [k for k in labs if k != "singlet"]:
-            O = labs[other].set_index("barcode").loc[kd_cells]
-            for name, a_, b_ in (("singlet_only", S, O), (f"{other}_only", O, S)):
+            Oc = labs[other].set_index("barcode").loc[kd_cells]
+            for name, a_, b_ in (("singlet_only", S, Oc), (f"{other}_only", Oc, S)):
                 sel = (a_["class"] == "single") & (b_["class"] == "unassigned")
                 if sel.sum() < 5:
                     res.setdefault("discordant", {})[f"{name}_vs_{other}"] = {"cells": int(sel.sum())}

@@ -5,9 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from scipy import sparse
-
 from singlet.crispr import guides as G
-from singlet.crispr import qc as CQ
 from singlet.crispr import store as CS
 from singlet.vdj import clonotype as CL
 from singlet.vdj import qc as VQ
@@ -71,7 +69,6 @@ def test_vdj_library_entry_point(tmp_path):
 
     sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent))
     import test_vdj_assemble as T
-
     from singlet.adt import seq as S
     from singlet.vdj import assemble as A
     from singlet.vdj import library as LIB
