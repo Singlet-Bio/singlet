@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""Synthetic cell-index partition for the format benchmark (docs/format-v2-cell-index.md, "Format choice").
+"""Synthetic cell-index partition for the format benchmark (docs/format-store-cell-index.md, "Format choice").
 
 The pilot study has 41,614 called cells, too few to measure a shard format; this generator produces one realistic partition
 (one organism x one coarse cell-type group) with the per-cell distributions of 10x data: log-normal depth, feature counts

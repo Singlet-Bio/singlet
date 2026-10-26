@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // JS scan speed of the candidate shard formats (V8, as in a Worker). Needs hyparquet + hyparquet-compressors and the SCX reader
 // bundled from the website repo:
-//   npx esbuild <website>/workers/data-v2/src/scx.ts --format=esm --outfile=bench/cidx/.scx.mjs
+//   npx esbuild <website>/workers/data/src/scx.ts --format=esm --outfile=bench/cidx/.scx.mjs
 //   node bench/cidx/scan.mjs <dir>        (<dir>/fmt/* from formats.py)
 // Query: cells with umi_exon >= 1000 and ct == 101, returning (sample, col) of every match.
 import { readFileSync } from "node:fs";

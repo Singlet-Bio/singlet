@@ -34,7 +34,7 @@ sj = singlet.load("GSM5238385", modalities=["splice_junctions"])  # obsm["splice
 ```
 
 `modalities` takes `counts`, `spliced`, `unspliced`, `splice_junctions`, `psi`, `mt` and `vdj`
-(see `docs/format-v2.md`, section 11); R's `load()` and `singlet_cells()` take the same names.
+(see `docs/format-store.md`, section 11); R's `load()` and `singlet_cells()` take the same names.
 
 ## GPU-Accelerated Analysis
 
