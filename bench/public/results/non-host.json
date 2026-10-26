@@ -6,7 +6,7 @@
   "conclusion": "Singlet names SARS-CoV-2 in the infected sample and assigns 554,070 reads to it, against 359,472 for Kraken2 (PlusPF) and 488,083 for the minimap2 oracle; per-cell UMIs correlate with the oracle at rho 0.933 (Kraken2 0.829) and separate infected from mock cells at AUROC 0.733 (Kraken2 0.661, ceiling 0.708). In the mock and PBMC samples Singlet calls 0 and 0 species.",
   "methods": "**Data.** SARS-CoV-2-infected (2 days post infection) and mock human bronchial epithelial cells (GSE166766, 10x 3' v3, the first 50 M read pairs of each run) and the clean PBMC 1k v3 sample. Every tool is scored on the same cells: the cells called in an earlier STARsolo run of each sample (11,567 infected, 14,013 mock, 1,136 PBMC). The mock and PBMC samples carry no virus. For the infected sample the truth is a minimap2 alignment of the host-unmapped reads to NC_045512.2 (at least 60 nt aligned at 90% identity), counted per cell as distinct (cell, UMI) molecules; it is a read-level oracle, not an independent cell annotation, and not every infected cell carries virus, which bounds the best infected-vs-mock AUROC.\n\n**Singlet.** The pinned 1.0.0 binary with the campaign settings and the screen on: reads STAR cannot map to the host go to viral, bacterial and fungal k-mer screens behind a host Bloom filter, an EM over species keeps the confirmed ones, and the per-cell table lists confirmed species only. 16 threads.\n\n**Kraken2.** Run at its defaults (confidence 0) on the same host-unmapped reads, with two databases: the standard PlusPF index capped at 8 GB (k2_pluspf_08gb_20250402, contains human) and the viral-only index of the first benchmark (k2_viral 2024-06-05). Reads are rolled up to species; reads assigned above species rank and human reads are dropped. Per-cell attribution uses the barcode mate with one-mismatch correction to the called cells.\n\n**Calls.** A species is called in a sample when it reaches Singlet's own reporting floor, max(500, 0.5% of screened reads) reads. Singlet applies it internally; here it is applied to Kraken2 as well. A cell is positive for a tool when it has at least one UMI of a called species.\n\n**Metrics.** Tolerances are measured: the half-width of the paired bootstrap 95% CI of the difference to the best Kraken2 (200 resamples of cells), or the disagreement between Kraken2 and the oracle or between the two Kraken2 databases. Resources are for the whole Singlet pipeline from FASTQ against Kraken2 on the unmapped reads alone, so they are not comparable.",
   "status": "final",
-  "generated_at": "2026-10-25T14:43:21+00:00",
+  "generated_at": "2026-10-26T10:27:24+00:00",
   "owner": "pipeline-benchmark",
   "singlet": {
     "version": "1.0.0",
@@ -61,7 +61,8 @@
         ]
       },
       "truth": "SARS-CoV-2 infected; minimap2 oracle per read and cell",
-      "n_cells": 11567
+      "n_cells": 11567,
+      "data_kind": "real"
     },
     {
       "id": "ravindra2021_mock",
@@ -76,7 +77,8 @@
         ]
       },
       "truth": "uninfected",
-      "n_cells": 14013
+      "n_cells": 14013,
+      "data_kind": "real"
     },
     {
       "id": "pbmc1k_v3",
@@ -85,7 +87,8 @@
         "url": "https://www.10xgenomics.com/datasets/1-k-pbm-cs-from-a-healthy-donor-v-3-chemistry-3-standard-3-0-0"
       },
       "truth": "healthy donor PBMC, no non-host organism expected",
-      "n_cells": 1136
+      "n_cells": 1136,
+      "data_kind": "real"
     }
   ],
   "metrics": [
@@ -10631,7 +10634,7 @@
       "name": "provenance.json",
       "url": "https://data.singlet.bio/benchmarking/1.0.0/non-host/provenance.json",
       "kind": "derived",
-      "sha256": "e4c87150a2651e63369fb3854231261a29097ed53d47b43a59d0d3f0fbad90dd",
+      "sha256": "54d93fa86f0ab3db3e1d5c52d49b03f7e53dc3d44b47b960ec16d54ac5b5312b",
       "bytes": 5782,
       "format": "json"
     },
@@ -10656,42 +10659,42 @@
     {
       "path": "bench/public/capabilities/non_host.py",
       "role": "metric",
-      "url": "https://github.com/Singlet-Bio/singlet/blob/7eff69b001080811460279f261cfc5f59dd913f3/bench/public/capabilities/non_host.py"
+      "url": "https://github.com/Singlet-Bio/singlet/blob/a93996631989133cf2a74de4a3106f147358188e/bench/public/capabilities/non_host.py"
     },
     {
       "path": "bench/public/harness/non_host/10_singlet.sbatch",
       "role": "harness",
-      "url": "https://github.com/Singlet-Bio/singlet/blob/7eff69b001080811460279f261cfc5f59dd913f3/bench/public/harness/non_host/10_singlet.sbatch"
+      "url": "https://github.com/Singlet-Bio/singlet/blob/a93996631989133cf2a74de4a3106f147358188e/bench/public/harness/non_host/10_singlet.sbatch"
     },
     {
       "path": "bench/public/harness/non_host/20_kraken.sbatch",
       "role": "harness",
-      "url": "https://github.com/Singlet-Bio/singlet/blob/7eff69b001080811460279f261cfc5f59dd913f3/bench/public/harness/non_host/20_kraken.sbatch"
+      "url": "https://github.com/Singlet-Bio/singlet/blob/a93996631989133cf2a74de4a3106f147358188e/bench/public/harness/non_host/20_kraken.sbatch"
     },
     {
       "path": "bench/public/harness/non_host/21_kraken_percell.sbatch",
       "role": "harness",
-      "url": "https://github.com/Singlet-Bio/singlet/blob/7eff69b001080811460279f261cfc5f59dd913f3/bench/public/harness/non_host/21_kraken_percell.sbatch"
+      "url": "https://github.com/Singlet-Bio/singlet/blob/a93996631989133cf2a74de4a3106f147358188e/bench/public/harness/non_host/21_kraken_percell.sbatch"
     },
     {
       "path": "bench/public/harness/non_host/30_oracle.sbatch",
       "role": "harness",
-      "url": "https://github.com/Singlet-Bio/singlet/blob/7eff69b001080811460279f261cfc5f59dd913f3/bench/public/harness/non_host/30_oracle.sbatch"
+      "url": "https://github.com/Singlet-Bio/singlet/blob/a93996631989133cf2a74de4a3106f147358188e/bench/public/harness/non_host/30_oracle.sbatch"
     },
     {
       "path": "bench/public/harness/non_host/kraken_percell.py",
       "role": "harness",
-      "url": "https://github.com/Singlet-Bio/singlet/blob/7eff69b001080811460279f261cfc5f59dd913f3/bench/public/harness/non_host/kraken_percell.py"
+      "url": "https://github.com/Singlet-Bio/singlet/blob/a93996631989133cf2a74de4a3106f147358188e/bench/public/harness/non_host/kraken_percell.py"
     },
     {
       "path": "bench/public/harness/non_host/oracle_percell.py",
       "role": "harness",
-      "url": "https://github.com/Singlet-Bio/singlet/blob/7eff69b001080811460279f261cfc5f59dd913f3/bench/public/harness/non_host/oracle_percell.py"
+      "url": "https://github.com/Singlet-Bio/singlet/blob/a93996631989133cf2a74de4a3106f147358188e/bench/public/harness/non_host/oracle_percell.py"
     },
     {
       "path": "bench/public/harness/non_host/collect.py",
       "role": "harness",
-      "url": "https://github.com/Singlet-Bio/singlet/blob/7eff69b001080811460279f261cfc5f59dd913f3/bench/public/harness/non_host/collect.py"
+      "url": "https://github.com/Singlet-Bio/singlet/blob/a93996631989133cf2a74de4a3106f147358188e/bench/public/harness/non_host/collect.py"
     }
   ],
   "reproduce": {

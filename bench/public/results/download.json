@@ -1,0 +1,597 @@
+{
+  "schema": "singlet.benchmark.capability",
+  "schema_version": "1.0.0",
+  "capability": "download",
+  "title": "SRA download orchestration",
+  "conclusion": "Four concurrent streams of four 10x runs (132 M read pairs): Singlet's orchestrator I/O stage reaches 34 MB/s effective (611,997 read pairs/s) including two read screens, against 15 MB/s for the remote singlet download, 9 for fasterq-dump, 39 for prefetch plus fasterq-dump, 94 for AWS S3 (file only) and 4 for ENA. Completeness is scored against NCBI's decode.",
+  "methods": "**Runs.** Four 10x 3' GEX runs of the atlas re-run universe (SRR24098804, SRR25032524, SRR20115176, SRR23322292; NovaSeq, 31.9 to 35.9 M read pairs, 1.2 to 3.4 GB as .sra, 132 M read pairs in all), drawn at random from runs with two ENA FASTQ files and checked to pass `singlet download`'s 10x gate. Every tool fetches the same four runs.\n\n**Protocol.** Each tool fetches the four runs as four concurrent streams (one run each) from a Clipper compute node into node-local /tmp, from a fresh HOME so that no sra-tools cache is shared between tools. Tools run one after the other in a job; the order is reversed in the second of two repetitions and ENA runs in its own job. Clipper's link is shared with other users, so throughput varies between repetitions; the spread between repetitions is used as the tolerance. Per stream the clock runs from launch to the last byte decoded (scoring happens after the clock stops).\n\n**Throughput.** Effective: bytes of the run as an .sra file (the same denominator for every tool, the size the archive stores) divided by seconds until the tool has delivered its output, and read pairs per second. AWS S3 and prefetch only move the file; the other tools also decode. Singlet's orchestrator stage also screens the reads twice.\n\n**Completeness.** Truth is NCBI's own decode of the archive (`prefetch`, then `fasterq-dump --split-files`). A run is complete when the spot count of a tool's decoded output equals the archive's and the order-independent digest of its decoded sequences (a sum of per-read CRC32/Adler32 hashes) equals a decoded file of the truth. For AWS S3 the sha256 of the .sra must equal the prefetched file's. Singlet's default path trims poly(A) and adapters and drops base qualities by design, so identity is scored on the same code path with `--no-trim --quality full`.\n\n**Singlet.** `singlet` is the I/O stage of the campaign orchestrator (feat/campaign-orchestrator, stages.io_stage) for one run: a 1 M-read head download, `screen-runs`, `prefetch`, a local `singlet download`, and a second `screen-runs`. `singlet-prefetch-local` is the same without the screens; `singlet-remote` is the 2026 campaign's VDB streaming.",
+  "status": "final",
+  "generated_at": "2026-10-26T10:27:23+00:00",
+  "owner": "pipeline-benchmark",
+  "singlet": {
+    "version": "1.0.0",
+    "commit": "02aa9b938b54e0f92bba00c44c07b883a8660aa2",
+    "branch": "prod/campaign",
+    "binary": "singlet-campaign",
+    "binary_sha256": "261d3a50ed624572418d30489dfd58904323f6e0d8820bd5260dfe7fb5038e6c",
+    "build_flags": "PGO, -march=x86-64-v3"
+  },
+  "tools": [
+    {
+      "name": "singlet",
+      "version": "1.0.0",
+      "role": "singlet",
+      "params": "I/O stage of feat/campaign-orchestrator for one run: singlet download SRR --max-reads 1000000 --vdb-threads 2 --no-profile; singlet screen-runs; prefetch --max-size u -O sra SRR; singlet download sra/SRR/SRR.sra --vdb-threads 1 --no-profile -o SRR.1fq; singlet screen-runs"
+    },
+    {
+      "name": "singlet-prefetch-local",
+      "version": "1.0.0",
+      "role": "competitor",
+      "params": "prefetch --max-size u -O sra SRR; singlet download sra/SRR/SRR.sra -o SRR.1fq --no-profile (Singlet's own path without the screens)"
+    },
+    {
+      "name": "singlet-remote",
+      "version": "1.0.0",
+      "role": "competitor",
+      "params": "singlet download SRR -o SRR.1fq --no-profile (VDB streaming, the 2026 campaign path)"
+    },
+    {
+      "name": "fasterq-dump",
+      "version": "sra-tools 3.4.1",
+      "role": "competitor",
+      "url": "https://github.com/ncbi/sra-tools",
+      "params": "fasterq-dump --split-files -e 4 -t tmp -O fq SRR"
+    },
+    {
+      "name": "prefetch+fasterq-dump",
+      "version": "sra-tools 3.4.1",
+      "role": "competitor",
+      "url": "https://github.com/ncbi/sra-tools",
+      "params": "prefetch --max-size u -O sra SRR; fasterq-dump --split-files -e 4 -t tmp -O fq sra/SRR/SRR.sra"
+    },
+    {
+      "name": "aws-s3",
+      "version": "curl",
+      "role": "competitor",
+      "url": "https://registry.opendata.aws/ncbi-sra/",
+      "params": "curl -o SRR.sra https://sra-pub-run-odp.s3.amazonaws.com/sra/SRR/SRR"
+    },
+    {
+      "name": "ena-https",
+      "version": "curl",
+      "role": "competitor",
+      "url": "https://www.ebi.ac.uk/ena/",
+      "params": "curl -O https://<fastq_ftp of the ENA filereport> for every file of the run"
+    },
+    {
+      "name": "sra-toolkit-reference",
+      "version": "sra-tools 3.4.1",
+      "role": "truth",
+      "params": "prefetch --max-size u; fasterq-dump --split-files -e 16 of the archive"
+    }
+  ],
+  "datasets": [
+    {
+      "id": "sra_download_set",
+      "title": "Four 10x 3' GEX runs from the atlas re-run universe",
+      "accessions": {
+        "srr": [
+          "SRR24098804",
+          "SRR25032524",
+          "SRR20115176",
+          "SRR23322292"
+        ]
+      },
+      "truth": "NCBI's own decode of the archive (prefetch + fasterq-dump)",
+      "data_kind": "real"
+    }
+  ],
+  "metrics": [
+    {
+      "id": "aggregate_mb_s",
+      "name": "Aggregate throughput, 4 streams",
+      "unit": "MB/s",
+      "category": "resources",
+      "dataset": "sra_download_set",
+      "direction": "higher",
+      "singlet": {
+        "value": 33.67212436065735
+      },
+      "competitors": [
+        {
+          "tool": "singlet-prefetch-local",
+          "value": 62.31534664923392
+        },
+        {
+          "tool": "singlet-remote",
+          "value": 14.774121023677482
+        },
+        {
+          "tool": "fasterq-dump",
+          "value": 9.436919975160547
+        },
+        {
+          "tool": "prefetch+fasterq-dump",
+          "value": 39.27792945235606
+        },
+        {
+          "tool": "aws-s3",
+          "value": 93.60381716931536
+        },
+        {
+          "tool": "ena-https",
+          "value": 3.5988876436914667
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "rel": 0.233
+        },
+        "rationale": "rep-to-rep spread of the best competitor (aws-s3) on the same four runs: 23.3%"
+      },
+      "notes": "Archive bytes (.sra) of the four runs over the makespan of the four concurrent streams; median of 2 repetitions. AWS S3 and prefetch only move the file; every other tool also decodes, and Singlet's orchestrator stage also screens the reads.",
+      "pass": "fail"
+    },
+    {
+      "id": "per_stream_mb_s",
+      "name": "Per-stream throughput",
+      "unit": "MB/s",
+      "category": "resources",
+      "dataset": "sra_download_set",
+      "direction": "higher",
+      "singlet": {
+        "value": 12.817684200374892
+      },
+      "competitors": [
+        {
+          "tool": "singlet-prefetch-local",
+          "value": 19.21354719799321
+        },
+        {
+          "tool": "singlet-remote",
+          "value": 6.159753352344905
+        },
+        {
+          "tool": "fasterq-dump",
+          "value": 3.40951124719056
+        },
+        {
+          "tool": "prefetch+fasterq-dump",
+          "value": 13.11193072491373
+        },
+        {
+          "tool": "aws-s3",
+          "value": 37.38514484558446
+        },
+        {
+          "tool": "ena-https",
+          "value": 1.6074016860623663
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "rel": 0.698
+        },
+        "rationale": "rep-to-rep spread of the best competitor (aws-s3) on the same four runs: 69.8%"
+      },
+      "notes": "Median over the four streams, median of 2 repetitions.",
+      "pass": "pass"
+    },
+    {
+      "id": "aggregate_reads_s",
+      "name": "Aggregate decoded reads per second",
+      "unit": "reads/s",
+      "category": "resources",
+      "dataset": "sra_download_set",
+      "direction": "higher",
+      "singlet": {
+        "value": 611997.246206254
+      },
+      "competitors": [
+        {
+          "tool": "singlet-prefetch-local",
+          "value": 1132593.2435162452
+        },
+        {
+          "tool": "singlet-remote",
+          "value": 268522.45153183525
+        },
+        {
+          "tool": "fasterq-dump",
+          "value": 171517.81026964285
+        },
+        {
+          "tool": "prefetch+fasterq-dump",
+          "value": 713883.8168942947
+        },
+        {
+          "tool": "ena-https",
+          "value": 65410.46545665272
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "rel": 0.336
+        },
+        "rationale": "rep-to-rep spread of the best competitor (singlet-prefetch-local) on the same four runs: 33.6%"
+      },
+      "notes": "Read pairs delivered per second (AWS S3 delivers a file, not reads).",
+      "pass": "fail"
+    },
+    {
+      "id": "per_stream_reads_s",
+      "name": "Per-stream decoded reads per second",
+      "unit": "reads/s",
+      "category": "resources",
+      "dataset": "sra_download_set",
+      "direction": "higher",
+      "singlet": {
+        "value": 311091.4392829995
+      },
+      "competitors": [
+        {
+          "tool": "singlet-prefetch-local",
+          "value": 430416.2579393036
+        },
+        {
+          "tool": "singlet-remote",
+          "value": 129656.63550580227
+        },
+        {
+          "tool": "fasterq-dump",
+          "value": 75603.09680962254
+        },
+        {
+          "tool": "prefetch+fasterq-dump",
+          "value": 318966.66309785296
+        },
+        {
+          "tool": "ena-https",
+          "value": 32519.293569258698
+        }
+      ],
+      "rule": {
+        "type": "match_or_beat",
+        "against": "best",
+        "tolerance": {
+          "rel": 0.162
+        },
+        "rationale": "rep-to-rep spread of the best competitor (singlet-prefetch-local) on the same four runs: 16.2%"
+      },
+      "pass": "fail"
+    },
+    {
+      "id": "spot_count_match",
+      "name": "Runs whose decoded spot count equals the archive's",
+      "unit": "fraction",
+      "category": "coverage",
+      "dataset": "sra_download_set",
+      "direction": "higher",
+      "singlet": {
+        "value": 1.0
+      },
+      "competitors": [
+        {
+          "tool": "singlet-prefetch-local",
+          "value": 1.0
+        },
+        {
+          "tool": "singlet-remote",
+          "value": 1.0
+        },
+        {
+          "tool": "fasterq-dump",
+          "value": 1.0
+        },
+        {
+          "tool": "prefetch+fasterq-dump",
+          "value": 1.0
+        },
+        {
+          "tool": "ena-https",
+          "value": 0.75
+        }
+      ],
+      "rule": {
+        "type": "threshold",
+        "value": 1.0,
+        "rationale": "every spot of every run must be delivered"
+      },
+      "notes": "Singlet's default path (the orchestrator's I/O stage).",
+      "pass": "pass"
+    },
+    {
+      "id": "cdna_read_checksum_match",
+      "name": "Runs whose decoded cDNA reads are identical to the archive's",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "sra_download_set",
+      "direction": "higher",
+      "singlet": {
+        "value": 1.0
+      },
+      "competitors": [
+        {
+          "tool": "fasterq-dump",
+          "value": 1.0
+        },
+        {
+          "tool": "prefetch+fasterq-dump",
+          "value": 1.0
+        },
+        {
+          "tool": "aws-s3",
+          "value": 1.0
+        },
+        {
+          "tool": "ena-https",
+          "value": 0.25
+        }
+      ],
+      "rule": {
+        "type": "threshold",
+        "value": 1.0,
+        "rationale": "decoded cDNA reads (sequence digest) must equal NCBI's decode of the archive"
+      },
+      "notes": "Scored for Singlet's cDNA read (R2) with --no-trim --quality full. Competitor values score every file of their output.",
+      "pass": "pass"
+    },
+    {
+      "id": "cdna_identical_default_path",
+      "name": "Singlet default path: runs with cDNA reads identical to the archive's",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "sra_download_set",
+      "direction": "none",
+      "singlet": {
+        "value": 0.25
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "The default path trims poly(A) and adapters and drops base qualities by design, so the cDNA read differs from the archive.",
+      "pass": "na"
+    },
+    {
+      "id": "barcode_read_identical",
+      "name": "Singlet lossless: runs with barcode reads identical to the archive's",
+      "unit": "fraction",
+      "category": "accuracy",
+      "dataset": "sra_download_set",
+      "direction": "none",
+      "singlet": {
+        "value": 0.0
+      },
+      "competitors": [],
+      "rule": {
+        "type": "informational"
+      },
+      "notes": "The .1fq stores barcodes corrected to the whitelist (and may drop bases of the barcode read), so R1 differs from the archive even in the lossless configuration; R1 is not part of the completeness claim.",
+      "pass": "na"
+    }
+  ],
+  "resources": [
+    {
+      "tool": "singlet",
+      "dataset": "sra_download_set",
+      "wall_s": 222.3,
+      "max_rss_gb": 3.15,
+      "threads": 4,
+      "notes": "4 concurrent streams, one run each; wall = makespan; RSS summed over the streams' processes"
+    },
+    {
+      "tool": "singlet-prefetch-local",
+      "dataset": "sra_download_set",
+      "wall_s": 120.5,
+      "max_rss_gb": 2.95,
+      "threads": 4,
+      "notes": "4 concurrent streams, one run each; wall = makespan; RSS summed over the streams' processes"
+    },
+    {
+      "tool": "singlet-remote",
+      "dataset": "sra_download_set",
+      "wall_s": 494.2,
+      "max_rss_gb": 4.84,
+      "threads": 4,
+      "notes": "4 concurrent streams, one run each; wall = makespan; RSS summed over the streams' processes"
+    },
+    {
+      "tool": "fasterq-dump",
+      "dataset": "sra_download_set",
+      "wall_s": 1010.2,
+      "max_rss_gb": 2.78,
+      "threads": 4,
+      "notes": "4 concurrent streams, one run each; wall = makespan; RSS summed over the streams' processes"
+    },
+    {
+      "tool": "prefetch+fasterq-dump",
+      "dataset": "sra_download_set",
+      "wall_s": 311.8,
+      "max_rss_gb": 1.67,
+      "threads": 4,
+      "notes": "4 concurrent streams, one run each; wall = makespan; RSS summed over the streams' processes"
+    },
+    {
+      "tool": "aws-s3",
+      "dataset": "sra_download_set",
+      "wall_s": 79.1,
+      "max_rss_gb": 0.07,
+      "threads": 4,
+      "notes": "4 concurrent streams, one run each; wall = makespan; RSS summed over the streams' processes"
+    },
+    {
+      "tool": "ena-https",
+      "dataset": "sra_download_set",
+      "wall_s": 2031.2,
+      "max_rss_gb": 0.13,
+      "threads": 4,
+      "notes": "4 concurrent streams, one run each; wall = makespan; RSS summed over the streams' processes"
+    }
+  ],
+  "figures": [
+    {
+      "id": "throughput_by_tool",
+      "title": "Aggregate throughput of four concurrent streams",
+      "kind": "bar",
+      "caption": "Archive bytes per second until the tool has delivered its output; median of 2 repetitions.",
+      "x": {
+        "label": "tool",
+        "categories": [
+          "singlet",
+          "singlet-prefetch-local",
+          "singlet-remote",
+          "fasterq-dump",
+          "prefetch+fasterq-dump",
+          "aws-s3",
+          "ena-https"
+        ]
+      },
+      "y": {
+        "label": "MB/s",
+        "unit": "MB/s",
+        "min": 0
+      },
+      "series": [
+        {
+          "name": "aggregate",
+          "x": [
+            "singlet",
+            "singlet-prefetch-local",
+            "singlet-remote",
+            "fasterq-dump",
+            "prefetch+fasterq-dump",
+            "aws-s3",
+            "ena-https"
+          ],
+          "y": [
+            33.67,
+            62.32,
+            14.77,
+            9.44,
+            39.28,
+            93.6,
+            3.6
+          ]
+        },
+        {
+          "name": "per stream",
+          "x": [
+            "singlet",
+            "singlet-prefetch-local",
+            "singlet-remote",
+            "fasterq-dump",
+            "prefetch+fasterq-dump",
+            "aws-s3",
+            "ena-https"
+          ],
+          "y": [
+            12.82,
+            19.21,
+            6.16,
+            3.41,
+            13.11,
+            37.39,
+            1.61
+          ]
+        }
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "name": "digests.tsv",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/download/digests.tsv",
+      "kind": "derived",
+      "sha256": "53defe7bc1aa4c60222a2d9629d8b53a397bca51083a69d8410d7f47eeb9dfe8",
+      "bytes": 11865,
+      "format": "tsv"
+    },
+    {
+      "name": "memory.tsv",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/download/memory.tsv",
+      "kind": "derived",
+      "sha256": "ca80a1865ac93431c4a369aa17e2bcbf7f3cf680ad0e3ec4fb54ea999989745b",
+      "bytes": 410,
+      "format": "tsv"
+    },
+    {
+      "name": "provenance.json",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/download/provenance.json",
+      "kind": "derived",
+      "sha256": "24643f4c0f1735784aa5482f8a44dba6153c3005de751a522d252cf307f87084",
+      "bytes": 5690,
+      "format": "json"
+    },
+    {
+      "name": "reference.tsv",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/download/reference.tsv",
+      "kind": "truth",
+      "sha256": "4a6634cda0879da226db4f3e785915070bdc6a2a2aec105ffcdb6638e6f169d8",
+      "bytes": 582,
+      "format": "tsv"
+    },
+    {
+      "name": "sra_files.tsv",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/download/sra_files.tsv",
+      "kind": "truth",
+      "sha256": "78a2e11b2b927b25ed50a0793ed0fd90d4ff0950de61ae0545b836ee4053b92e",
+      "bytes": 352,
+      "format": "tsv"
+    },
+    {
+      "name": "streams.tsv",
+      "url": "https://data.singlet.bio/benchmarking/1.0.0/download/streams.tsv",
+      "kind": "derived",
+      "sha256": "c22d4aa3c92a8435d48d4651217e7959347d77c9685ae9c74f7096f9b15e820d",
+      "bytes": 6592,
+      "format": "tsv"
+    }
+  ],
+  "code": [
+    {
+      "path": "bench/public/capabilities/download.py",
+      "role": "metric",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/a93996631989133cf2a74de4a3106f147358188e/bench/public/capabilities/download.py"
+    },
+    {
+      "path": "bench/public/harness/download/dl_bench.sbatch",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/a93996631989133cf2a74de4a3106f147358188e/bench/public/harness/download/dl_bench.sbatch"
+    },
+    {
+      "path": "bench/public/harness/download/dl_reference.sbatch",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/a93996631989133cf2a74de4a3106f147358188e/bench/public/harness/download/dl_reference.sbatch"
+    },
+    {
+      "path": "bench/public/harness/download/fq_digest.py",
+      "role": "metric",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/a93996631989133cf2a74de4a3106f147358188e/bench/public/harness/download/fq_digest.py"
+    },
+    {
+      "path": "bench/public/harness/download/collect.py",
+      "role": "harness",
+      "url": "https://github.com/Singlet-Bio/singlet/blob/a93996631989133cf2a74de4a3106f147358188e/bench/public/harness/download/collect.py"
+    }
+  ],
+  "reproduce": {
+    "module": "bench/public/capabilities/download.py",
+    "function": "compute",
+    "laptop_minutes": 1,
+    "clipper_command": "sbatch bench/public/harness/download/dl_bench.sbatch <rep> \"<modes>\""
+  },
+  "caveats": [
+    "Clipper's uplink is shared with every other job and user, so absolute throughput varies with the time of day; the repetitions alternate tool order and the spread is the tolerance.",
+    "Four runs and two repetitions: a small sample of the network, not a bandwidth survey. The earlier 8 and 16 stream aggregate measurements (125 and 160 MB/s into Clipper) are in docs/atlas-rerun-plan.md and were not repeated.",
+    "AWS S3 and prefetch only move the archive file; they are not decoders, so their effective throughput is an upper bound on a decode-inclusive path.",
+    "Singlet's default path is lossy by design (poly(A) and adapter trimming, no base qualities); identity is scored on the lossless configuration of the same code path.",
+    "The reference decode uses fasterq-dump without technical reads; Singlet's R1 and R2 are matched to its files by content."
+  ]
+}

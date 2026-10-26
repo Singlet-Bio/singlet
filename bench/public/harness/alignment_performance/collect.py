@@ -174,7 +174,7 @@ def collect_opt(bp: Path, out: Path):
     print(f"opt_runs.tsv: {len(rows)} rows")
 
 
-METHODS = """**Inputs.** The same two FASTQ files per dataset (R1 barcode and UMI, R2 cDNA, lanes concatenated and copied to node-local disk before the clock starts) for every tool: PBMC 1k v3 (66.6 M read pairs), mouse brain nuclei 2k v2 (3' v2) and GSM5815984, a deep human testis library (GSE193672 Hs#14; 489 M read pairs, 3' v3, both runs, all reads). Reference: 10x 2024-A GRCh38 / GRCm39 (GENCODE v44 / M33); the STAR and alevin-fry indexes were built beforehand and are not timed.
+METHODS = """**Inputs.** The same two FASTQ files per dataset (R1 barcode and UMI, R2 cDNA, lanes concatenated and copied to node-local disk before the clock starts) for every tool: PBMC 1k v3 (66.6 M read pairs), mouse brain nuclei 2k v2 (3' v2) and GSM5815984, a deep human testis library (GSE193672 Hs#14; 489 M read pairs, 3' v3, both runs, all reads). Reference: 10x 2024-A (GENCODE v44 / M33); indexes are prebuilt and untimed.
 
 **Hardware.** 16 threads and a 128 GB memory limit for every tool, on an exclusive Xeon Gold 6248 node, two repetitions with the tool order reversed in the second. Wall time is GNU time elapsed (Singlet: `singlet encode` plus the pipeline); CPU time is user plus system; peak memory is the RSS summed over the process tree, sampled at 1 Hz.
 
@@ -182,9 +182,7 @@ METHODS = """**Inputs.** The same two FASTQ files per dataset (R1 barcode and UM
 
 **Exact and pseudo alignment.** Singlet aligns every read to the genome (STAR, exact seed-and-extend with splicing), which is what lets it count introns, junctions, SNPs, mtDNA and non-host reads and write a BAM. alevin-fry is a pseudoaligner: it maps reads to a spliced+unspliced transcriptome index, which is much cheaper but sees only what that index contains. The plot places each tool on cost (CPU-hours) against quality; the reach matrix lists what each tool can produce at all.
 
-**What is gated.** Runtime is shown, not gated: wall time, CPU-hours and memory are in the resources table and figures. Singlet does more work than a counting pipeline and alevin-fry is a pseudoaligner, so the page places each tool on a quality-versus-CPU plot. The gated metrics check that the alignments are the same work (unique-mapping share equals STARsolo's) and that the optimizations leave every count matrix and the junction table unchanged (md5 of the matrices, with the cache off or on, and across threads, shared genome, sort mode and packing).
-
-**Optimizations.** The table lists each Singlet STAR and job-shape optimization with its reported speedup (PR #34, docs/atlas-rerun-plan.md) next to what was re-measured here on PBMC 1k v3 at 4 threads. Cache hit rates are measured from the run logs."""
+**What is gated.** Runtime is shown, not gated: wall time, CPU-hours and memory are in the resources table and figures. Singlet does more work than a counting pipeline and alevin-fry is a pseudoaligner, so the page places each tool on a quality-versus-CPU plot. The gated metrics check that the alignments are the same work (unique-mapping share equals STARsolo's) and that the optimizations leave every count matrix and the junction table unchanged (md5 of the matrices, with the cache off or on, and across threads, shared genome, sort mode and packing)."""
 
 
 def write_provenance(bp: Path, out: Path):
