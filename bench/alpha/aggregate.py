@@ -246,7 +246,8 @@ def caveats(S):
          "Nuclei and 5' strata were assigned from GEO text (regular expressions on the sample record); some may be mislabelled.",
          "Mouse samples were not screened for wrong-strand counting before Alpha; wrong_strand_frac is reported per sample.",
          "reads_available counts every run of the sample in SRA (NCBI runinfo), including non-GEX runs of the same GSM where they exist; it overstates the GEX reads for multi-library samples.",
-         "The depth-matched correlation removes depth, not counting rules; it says the profiles agree at the atlas's depth, not that the atlas has the authors' depth."]
+         "The depth-matched correlation removes depth, not counting rules; it says the profiles agree at the atlas's depth, not that the atlas has the authors' depth. Both profiles are thinned to half the smaller per-cell total, so the correlations are lower than at full depth.",
+         "Published samples come from three engine builds (git " + ", ".join(f"{k[:8]}: {v}" for k, v in S.singlet_git_sha.fillna("unknown").value_counts().items()) + " in this set); singlet.commit names the build most samples report."]
     return c
 
 
