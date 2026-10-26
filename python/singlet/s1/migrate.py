@@ -39,7 +39,7 @@ from .context import (
     StudyContext,
     rmatrix_to_csc,
 )
-from .legacy import LegacyBundle
+from .legacy import LegacyBundle, entry_bytes
 from .matrix import Csc
 from .rcp_adapter import Recipes, load_recipes
 from .sample import S1Sample
@@ -73,6 +73,9 @@ class Options:
         junction_table=None,
         cell_call_ed: Optional[bool] = None,
         chunk_nnz_max: int = 0,
+        policy=None,
+        labels=None,
+        sample_facts: Optional[dict] = None,
     ):
         self.chunk_cols = chunk_cols
         # 0 = pz2 default budget (codec.DEFAULT_CHUNK_NNZ_MAX), -1 = none
@@ -96,6 +99,12 @@ class Options:
         )
         # called_ed (docs/called-ed.md): True = required (fails without numba), None = when numba is installed, False = never
         self.cell_call_ed = cell_call_ed
+        # release policy (singlet.s1.policy.Policy): excluded samples and withheld layers are dropped before anything is read
+        self.policy = policy
+        # per-cell labels (singlet.s1.labels_step.LabelOptions), computed from the decoded matrices; None = no labels
+        self.labels = labels
+        # per-sample facts from outside the bundle (gsm -> {library_type..., reads_available}), for the sample provenance block
+        self.sample_facts = sample_facts or {}
 
 
 # ================================================================================================ comparisons (migration side)
@@ -260,7 +269,13 @@ def _parse_json(b: Optional[bytes]) -> dict:
 
 
 def migrate_sample(
-    bundle: LegacyBundle, gsm: str, gse: str, reference_build: str, study_bytes: dict, opts: Options
+    bundle: LegacyBundle,
+    gsm: str,
+    gse: str,
+    reference_build: str,
+    study_bytes: dict,
+    opts: Options,
+    depth_members=None,
 ) -> dict:
     t0 = time.time()
     log = opts.log
@@ -442,11 +457,49 @@ def migrate_sample(
     legacy_bytes = sum(mem[r].entry.size for r in order)
     ledger = _ledger(gse, gsm, key, order, mem, infos, obj)
     stats = cells_final.stats() if cells_final is not None else {}
+    extras = sample_extras(lctx, mem, summary, opts, gsm)
+    labels = None
+    if opts.labels is not None and cells_final is not None and basis_barcodes is not None:
+        from . import labels_step as LS
+
+        cinfo = next((i for i in infos if i.kind == C.KIND_CELLS), None)
+        labels = LS.label_sample(
+            gsm=gsm,
+            gse=gse,
+            exon=ex_c,
+            intron=it_c,
+            basis_barcodes=basis_barcodes,
+            called=np.asarray(cells_final.called, bool),
+            cells_digest=cinfo.digest.hex() if cinfo is not None else "",
+            vocab=_parse_json(study_bytes.get("feature_vocab.json")),
+            study_meta=_parse_json(study_bytes.get("study_meta.json")),
+            donor_tsv=lctx.member_bytes("donor/donor_assignments.tsv")
+            if "donor/donor_assignments.tsv" in mem
+            else (
+                lctx.member_bytes("donor_assignments.tsv")
+                if "donor_assignments.tsv" in mem
+                else None
+            ),
+            depth_members=depth_members() if callable(depth_members) else (depth_members or {}),
+            opts=opts.labels,
+        )
+        log(
+            "  [%s] labels: %s%s, %.1fs"
+            % (
+                gsm,
+                labels["status"],
+                (" (" + labels["reason"] + ")") if labels.get("reason") else "",
+                labels["seconds"],
+            )
+        )
+    entry = M.sample_entry(gsm, key, obj, n_cols, n_called, members, stats)
+    entry.update(extras)
     res = {
         "gsm": gsm,
         "key": key,
         "obj": obj,
-        "entry": M.sample_entry(gsm, key, obj, n_cols, n_called, members, stats),
+        "entry": entry,
+        "labels": labels,
         "ledger": ledger,
         "legacy_bytes": legacy_bytes,
         "legacy_zip_bytes": sum(mem[r].entry.csize for r in order),
@@ -458,6 +511,107 @@ def migrate_sample(
         "pack_ids": _pack_ids(infos),
     }
     return res
+
+
+# ------------------------------------------------------------------------------------------------ sample provenance (manifest only)
+#: junctions with fewer molecules than this in the whole sample are not flagged as supported (see junction_support)
+JUNCTION_SUPPORT_MIN = 2
+_STAR_INPUT = re.compile(rb"Number of input reads \|\s*(\d+)")
+
+
+def strand_class(wf: Optional[float], chrm_share: Optional[float]) -> str:
+    """The strand classifier of PR #25 (fix/strand-detection) on wf = wrong_strand / (wrong_strand + exon_hits)."""
+    if wf is None:
+        return "insufficient"
+    if wf >= 0.7:
+        return "misoriented"
+    if wf >= 0.6:
+        return "likely_misoriented"
+    if wf > 0.5:
+        return "antisense_heavy"
+    if wf > 0.35 and (chrm_share or 0) > 0.15:
+        return "borderline"
+    return "ok"
+
+
+def junction_support(c: Csc, min_molecules: int = JUNCTION_SUPPORT_MIN) -> dict:
+    """Molecule totals of the junction rows of ``sj_counts.1pz`` (all stored barcodes): how many reach ``min_molecules``."""
+    if c is None or c.m == 0:
+        return {"n_junctions": 0}
+    tot = np.bincount(
+        np.asarray(c.indices, np.int64), weights=np.asarray(c.data, np.float64), minlength=c.m
+    )
+    q = np.percentile(tot, [50, 90, 99]) if c.m else [0, 0, 0]
+    return {
+        "n_junctions": int(c.m),
+        "min_molecules": int(min_molecules),
+        "n_supported": int((tot >= min_molecules).sum()),
+        "n_single_molecule": int((tot == 1).sum()),
+        "molecules_q50_q90_q99": [float(x) for x in q],
+        "note": "a junction is supported when the sample holds at least min_molecules UMIs for it across all stored barcodes; "
+        "single-molecule junctions are mostly noise. Use sj_counts with this threshold (true PSI: singlet.psi()).",
+    }
+
+
+def sample_extras(lctx: LegacyContext, mem: dict, summary: dict, opts: Options, gsm: str) -> dict:
+    """``provenance`` and ``junction_support`` for the manifest's sample entry: reads used / available, strand wrong-fraction and
+    class, library-type verdict, release policy version. Computed from members already in memory (seconds per sample)."""
+    ps = _parse_json(lctx.member_bytes("pileup_stats.json")) if "pileup_stats.json" in mem else {}
+    star = lctx.member_bytes("star_Log.final.out") if "star_Log.final.out" in mem else None
+    m = _STAR_INPUT.search(star or b"")
+    reads_used, src = None, None
+    if m:
+        reads_used, src = int(m.group(1)), "star_Log.final.out"
+    elif isinstance(ps.get("total_reads"), (int, float)):
+        reads_used, src = int(ps["total_reads"]), "pileup_stats.json"
+    elif isinstance(summary.get("n_input_reads"), (int, float)):
+        reads_used, src = int(summary["n_input_reads"]), "summary.json"
+    facts = opts.sample_facts.get(gsm, {})
+    ra = facts.get("reads_available")
+    prov: dict = {
+        "reads_used": reads_used,
+        "reads_used_source": src,
+        "reads_available": int(ra) if isinstance(ra, (int, float)) and ra == ra else None,
+        "reads_available_source": facts.get("reads_available_source")
+        if ra is not None
+        else "not recorded",
+    }
+    if prov["reads_used"] and prov["reads_available"]:
+        prov["reads_used_fraction"] = round(prov["reads_used"] / prov["reads_available"], 4)
+    ex, ws = ps.get("exon_hits"), ps.get("wrong_strand")
+    wf = None
+    if isinstance(ex, (int, float)) and isinstance(ws, (int, float)) and ex + ws > 0:
+        wf = float(ws) / float(ws + ex)
+    cm, mr = ps.get("chrm_reads"), ps.get("mapped_reads")
+    chrm = (
+        float(cm) / float(mr)
+        if isinstance(cm, (int, float)) and isinstance(mr, (int, float)) and mr
+        else None
+    )
+    prov["strand"] = {
+        "wrong_strand_fraction": None if wf is None else round(wf, 5),
+        "class": strand_class(wf, chrm),
+        "reverse_strand": ps.get("reverse_strand"),
+        "auto_flipped": ps.get("strand_auto_flipped"),
+        "classifier": "PR #25 thresholds (misoriented >= 0.7, likely 0.6-0.7)",
+    }
+    lt = facts.get("library_type")
+    if isinstance(lt, dict):
+        prov["library_type"] = dict(lt)
+    elif opts.policy is not None or opts.sample_facts:
+        prov["library_type"] = {
+            "verdict": "gene_expression",
+            "basis": "kept by the library-type screen (PR #21) of the release policy",
+        }
+    else:
+        prov["library_type"] = {"verdict": None, "basis": "no library-type screen applied"}
+    if opts.policy is not None:
+        prov["release_policy"] = opts.policy.version
+    out = {"provenance": prov}
+    sj = mem.get("sj_counts.1pz")
+    if sj is not None and sj.csc is not None:
+        out["junction_support"] = junction_support(sj.csc)
+    return out
 
 
 def _add_called_ed(base, barcodes, exon, intron, protocol, opts: Options, gsm: str) -> None:
@@ -972,6 +1126,20 @@ def _gse_of(bundle: LegacyBundle, files: dict, override: Optional[str]) -> str:
     return _safe_id(mf.get("gse_id") or bundle.gse_hint or "GSE0", "study id")
 
 
+class PolicyWithheld(Exception):
+    """The release policy withholds the whole study: nothing is written."""
+
+
+_DEPTH_TABLE = re.compile(r"^samples/(GSM\d+)/(donor/donor\d+_coverage\.tsv)$")
+
+
+def _read_entry(bundle: LegacyBundle, e) -> bytes:
+    """Bytes of an archive entry that is no longer in ``bundle.entries`` (a restricted member the policy dropped)."""
+    if bundle.kind == "dir":
+        return open(bundle._dirmap[e.path], "rb").read()
+    return entry_bytes(bundle.src.read, e)
+
+
 def migrate_bundle(
     src,
     out_dir: str,
@@ -989,6 +1157,33 @@ def migrate_bundle(
     reference_build = mf.get("reference_build") or _parse_json(
         study_raw.get("feature_vocab.json")
     ).get("reference_build", "")
+    # per-donor depth tables for the ancestry labels: located before the policy drops them, read later in memory only
+    depth_entries: dict = {}
+    if opts.labels is not None:
+        for p, e in bundle.entries.items():
+            mm = _DEPTH_TABLE.match(p)
+            if mm:
+                depth_entries.setdefault(mm.group(1), {})[mm.group(2)] = e
+    policy_report = None
+    if opts.policy is not None:
+        from . import policy as POL
+
+        if opts.policy.withholds(gse):
+            raise PolicyWithheld(gse)
+        policy_report = POL.apply_to_bundle(bundle, opts.policy, gse)
+        study_raw = {p: bundle.read(p) for p in bundle.study_paths()}
+        log(
+            "policy %s: %d samples excluded, %d members withheld (%s), %d study files rewritten"
+            % (
+                opts.policy.version,
+                len(policy_report.excluded_samples),
+                sum(policy_report.omitted_members.values()),
+                ", ".join(sorted(policy_report.omitted_members)) or "none",
+                len(policy_report.rewritten_study_files),
+            )
+        )
+        if not bundle.samples():
+            raise PolicyWithheld(gse + " (no sample left after the policy)")
     log(
         "migrate %s: %d members, %d samples, build %s"
         % (gse, len(bundle.entries), len(bundle.samples()), reference_build)
@@ -1003,11 +1198,45 @@ def migrate_bundle(
     pipeline: dict = {}
     pack_ids: set = set()
     gsms = [_safe_id(g, "sample id") for g in bundle.samples() if samples is None or g in samples]
+    n_labelled = 0
     for gsm in gsms:
-        r = migrate_sample(bundle, gsm, gse, reference_build, study_raw, opts)
+        dents = depth_entries.get(gsm, {})
+        r = migrate_sample(
+            bundle,
+            gsm,
+            gse,
+            reference_build,
+            study_raw,
+            opts,
+            depth_members=(lambda d=dents: {rel: _read_entry(bundle, e) for rel, e in d.items()}),
+        )
         os.makedirs(os.path.join(root, "s", gsm), exist_ok=True)
         with open(os.path.join(out_dir, r["key"]), "wb") as fh:
             fh.write(r["obj"])
+        lab = r.get("labels")
+        if lab is not None:
+            if lab["status"] == "ok":
+                ent = lab["entry"]
+                os.makedirs(os.path.join(root, "a", gsm), exist_ok=True)
+                with open(os.path.join(out_dir, ent["key"]), "wb") as fh:
+                    fh.write(lab["sidecar"])
+                r["entry"]["annotations"] = {
+                    opts.labels.annot_version: {k: v for k, v in ent.items() if k != "dropped"}
+                }
+                n_labelled += 1
+            ledger.append(
+                {
+                    "type": "labels",
+                    "gse": gse,
+                    "gsm": gsm,
+                    "status": lab["status"],
+                    "reason": lab.get("reason", ""),
+                    "seconds": lab.get("seconds"),
+                    "coverage": lab.get("coverage"),
+                    "key": (lab.get("entry") or {}).get("key"),
+                    "annot_version": opts.labels.annot_version,
+                }
+            )
         sample_entries.append(r["entry"])
         ledger.extend(r["ledger"])
         ledger.append(
@@ -1044,6 +1273,16 @@ def migrate_bundle(
         for pid in [ent.get("params", {}).get("pack")] if "recipe" in ent else []:
             if pid:
                 pack_ids.add(pid)
+    if bundle.crc_repaired:
+        ledger.append(
+            {
+                "type": "crc_repaired",
+                "gse": gse,
+                "members": list(bundle.crc_repaired),
+                "note": "central-directory CRC disagreed; data matched the local header CRC",
+            }
+        )
+        log("  members read on their local-header CRC: %s" % ", ".join(bundle.crc_repaired[:5]))
     legacy = {
         "key": "data/%s/%s.singlet" % (gse, gse),
         "etag": bundle.etag,
@@ -1067,6 +1306,8 @@ def migrate_bundle(
         "gsms": gsms,
         "bundle": bundle,
         "seconds": time.time() - t0,
+        "policy_report": policy_report,
+        "annotations": n_labelled,
     }
 
 
@@ -1179,11 +1420,29 @@ def write_outputs(res: dict, opts: Options) -> dict:
         res["legacy"],
         opts.created_at,
     )
+    if (
+        opts.policy is not None
+    ):  # version and generic layer names only; never an excluded accession or a count of them
+        man["release_policy"] = opts.policy.manifest_block()
+    if res.get("annotations") and opts.labels is not None:
+        man["annotations_default"] = opts.labels.annot_version
+    if (
+        res.get("policy_report") is not None
+    ):  # private audit trail, next to (never inside) the .s1 tree
+        with open(
+            os.path.join(os.path.dirname(root), "policy-audit.json"),
+            "w",
+            encoding="utf-8",
+            newline="\n",
+        ) as fh:
+            json.dump(res["policy_report"].to_json(), fh, indent=1, sort_keys=True)
     mpath = os.path.join(root, "m", gse + ".json")
     with open(mpath, "wb") as fh:
         fh.write(M.dumps_manifest(man))
     lpath = os.path.join(root, "ledger", gse + ".jsonl")
     ledger = list(res["ledger"])
+    if res.get("policy_report") is not None:
+        ledger.append({"type": "policy", "gse": gse, **res["policy_report"].public_summary()})
     ledger.append(
         {
             "type": "study",
@@ -1277,7 +1536,64 @@ def main(argv=None) -> int:
         action="store_true",
         help="do not compute called_ed (default: computed; needs numba, pip install 'singlet-bio[migrate]')",
     )
+    ap.add_argument(
+        "--policy",
+        help="release policy JSON (singlet.s1.policy): withheld study -> exit 3, nothing written; excluded samples and "
+        "withheld layers are left out of every output",
+    )
+    ap.add_argument(
+        "--sample-facts",
+        help="JSON {gsm: {library_type: {...}, reads_available: n, reads_available_source: str}} for the sample provenance block",
+    )
+    ap.add_argument(
+        "--labels",
+        action="store_true",
+        help="compute per-cell labels (cell type, sex, ancestry) into s1/a/",
+    )
+    ap.add_argument(
+        "--af",
+        help="1000 Genomes super-population allele frequencies (parquet) for the ancestry labels",
+    )
+    ap.add_argument(
+        "--restricted-sidecar",
+        help="restricted sidecar of the study (per-donor depth tables, read in memory only)",
+    )
+    ap.add_argument(
+        "--labels-timeout",
+        type=float,
+        default=1800.0,
+        help="seconds per sample before labels are skipped",
+    )
+    ap.add_argument(
+        "--labels-max-gb",
+        type=float,
+        default=24.0,
+        help="estimated memory per sample before labels are skipped",
+    )
+    ap.add_argument(
+        "--annot-version",
+        default=None,
+        help="annotation version name in the manifest (default a2026-10)",
+    )
     a = ap.parse_args(argv)
+    pol = None
+    if a.policy:
+        from .policy import Policy
+
+        pol = Policy.load(a.policy)
+    lab = None
+    if a.labels:
+        from .labels_step import ANNOT_VERSION, LabelOptions
+
+        lab = LabelOptions(
+            af_path=a.af,
+            restricted_sidecar=a.restricted_sidecar,
+            timeout_s=a.labels_timeout,
+            max_gb=a.labels_max_gb,
+            annot_version=a.annot_version or ANNOT_VERSION,
+            log=lambda *x: print(*x, file=sys.stderr, flush=True),
+        )
+    facts = json.load(open(a.sample_facts, encoding="utf-8")) if a.sample_facts else None
     opts = Options(
         chunk_cols=a.chunk_cols,
         chunk_nnz_max=a.chunk_nnz_max,
@@ -1286,8 +1602,17 @@ def main(argv=None) -> int:
         created_at=a.created_at,
         cell_call_ed=False if a.no_cell_call_ed else True,
         junction_table=_junction_arg(a.junction_table),
+        policy=pol,
+        labels=lab,
+        sample_facts=facts,
     )
-    res = migrate_bundle(a.bundle, a.out, a.gse, opts, a.samples.split(",") if a.samples else None)
+    try:
+        res = migrate_bundle(
+            a.bundle, a.out, a.gse, opts, a.samples.split(",") if a.samples else None
+        )
+    except PolicyWithheld as e:
+        print("withheld by the release policy: %s (nothing written)" % e)
+        return 3
     out = write_outputs(res, opts)
     t = res["totals"]
     print(

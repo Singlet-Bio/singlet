@@ -105,7 +105,14 @@ class _Lb:
         return e.size, e.crc32
 
 
-def open_legacy(src: str):
+def open_legacy(src: str, policy=None):
+    """The legacy view; with a release policy, the policy's filtered view of it (singlet.s1.policy.FilteredLegacy), read with the
+    package's own ZIP reader (it reads members by their local headers, so a bundle whose central directory disagrees about one
+    member's CRC is still readable member by member)."""
+    if policy is not None:
+        from .policy import FilteredLegacy
+
+        return FilteredLegacy(_Lb(src), policy)
     if os.path.isfile(src) and zipfile.is_zipfile(src):
         return _Zip(src)
     return _Lb(src)
@@ -230,6 +237,108 @@ def _col_sums(indptr, data, n):
     return out
 
 
+# ----------------------------------------------------------------------------------------------------------- release policy, labels
+def _check_policy(rep: Report, policy, leg, man: dict, man_bytes: bytes, gse: str) -> None:
+    """The manifest obeys the release policy: right version, no excluded sample or withheld layer, no excluded accession anywhere."""
+    from .policy import leak_check, omitted_layer
+
+    rp = man.get("release_policy") or {}
+    rep.check(
+        rp.get("version") == policy.version,
+        "policy",
+        "manifest release_policy.version != %s" % policy.version,
+        "policy",
+    )
+    rep.check(not policy.withholds(gse), "policy", "the study is withheld by the policy", "policy")
+    for s in man.get("samples", []):
+        g = s.get("gsm", "")
+        rep.check(not policy.excludes(g), "policy", "manifest lists an excluded sample", "policy")
+        bad = [n for n in (s.get("members") or {}) if omitted_layer(n) is not None]
+        rep.check(not bad, "policy:" + g, "withheld members in the object: %s" % bad[:3], "policy")
+        prov = s.get("provenance") or {}
+        rep.check(
+            prov.get("release_policy") == policy.version,
+            "policy:" + g,
+            "provenance.release_policy",
+            "policy",
+        )
+    excl = getattr(leg, "excl", set())
+    blobs = {"manifest": man_bytes}
+    for n in leg.names():
+        if not n.startswith("samples/"):
+            blobs["study:" + n] = leg.read(n)
+    rep.check(
+        not leak_check(blobs, excl),
+        "policy",
+        "an excluded accession appears in the manifest or a study file",
+        "policy",
+    )
+
+
+def _check_labels(rep: Report, man: dict, s1_dir: str) -> None:
+    """Every label sidecar the manifest references: present, size + sha256, exactly the sidecar schema, nothing genotype-like in its
+    decoded values, rows only for called cells, computed on this object's cells table."""
+    from .atlas import SIDECAR_COLUMNS
+
+    for s in man.get("samples", []):
+        for ver, ent in (s.get("annotations") or {}).items():
+            where = "%s/labels:%s" % (s.get("gsm"), ver)
+            p = os.path.join(s1_dir, ent.get("key", ""))
+            if not rep.check(
+                os.path.isfile(p), where, "sidecar %s missing" % ent.get("key"), "labels"
+            ):
+                continue
+            data = open(p, "rb").read()
+            rep.check(
+                len(data) == ent.get("bytes")
+                and hashlib.sha256(data).hexdigest() == ent.get("sha256"),
+                where,
+                "sidecar size/sha256 differ from the manifest",
+                "labels",
+            )
+            rep.check(
+                os.path.basename(p) == hashlib.sha256(data).digest()[:16].hex() + ".parquet",
+                where,
+                "sidecar name",
+                "labels",
+            )
+            try:
+                import pyarrow.parquet as pq
+
+                from singlet.celllabels.output import scan_labels_file
+
+                t = pq.read_table(p)
+                rep.check(
+                    list(t.column_names) == [n for n, _ in SIDECAR_COLUMNS],
+                    where,
+                    "sidecar columns %s" % t.column_names,
+                    "labels",
+                )
+                rep.check(
+                    not scan_labels_file(p), where, "genotype-like content in the sidecar", "labels"
+                )
+                rep.check(
+                    t.num_rows == ent.get("n_rows") and t.num_rows <= int(s.get("n_called") or 0),
+                    where,
+                    "row count",
+                    "labels",
+                )
+                cd = (s.get("members") or {}).get("cells", {}).get("digest")
+                rep.check(
+                    ent.get("cells_digest") == cd,
+                    where,
+                    "labels were computed on another cells table",
+                    "labels",
+                )
+            except Exception as ex:  # noqa: BLE001
+                rep.check(
+                    False,
+                    where,
+                    "cannot read the sidecar: %s: %s" % (type(ex).__name__, ex),
+                    "labels",
+                )
+
+
 # ----------------------------------------------------------------------------------------------------------- main check
 def verify(
     bundle_src: str,
@@ -239,6 +348,7 @@ def verify(
     recipes_spec=None,
     log=print,
     quick: bool = False,
+    policy=None,
 ) -> Report:
     from .context import S1Context, StudyContext
     from .packs import PackStore, pack_id
@@ -247,7 +357,7 @@ def verify(
 
     rep = Report()
     t0 = time.time()
-    leg = open_legacy(bundle_src)
+    leg = open_legacy(bundle_src, policy)
     lnames = leg.names()
     root = os.path.join(s1_dir, "s1")
     for old in ("store", "v2"):  # DUAL: an output tree under an old prefix
@@ -275,6 +385,10 @@ def verify(
         "manifest",
         "rev does not match the sample keys + study files",
     )
+
+    if policy is not None:
+        _check_policy(rep, policy, leg, man, open(mpath, "rb").read(), gse)
+    _check_labels(rep, man, s1_dir)
 
     # ---- packs: the ones shipped next to the objects
     ref_dir = os.path.join(root, "ref")
@@ -740,7 +854,16 @@ def main(argv=None) -> int:
     ap.add_argument(
         "--quick", action="store_true", help="skip the slow independent digest recomputation"
     )
+    ap.add_argument(
+        "--policy",
+        help="release policy JSON the store was transcoded under (compare against its filtered view)",
+    )
     a = ap.parse_args(argv)
+    pol = None
+    if a.policy:
+        from .policy import Policy
+
+        pol = Policy.load(a.policy)
     rep = verify(
         a.bundle,
         a.store,
@@ -748,6 +871,7 @@ def main(argv=None) -> int:
         a.samples.split(",") if a.samples else None,
         a.recipes,
         quick=a.quick,
+        policy=pol,
     )
     return 1 if rep.fail else 0
 

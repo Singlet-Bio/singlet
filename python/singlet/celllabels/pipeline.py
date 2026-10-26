@@ -15,7 +15,9 @@ from . import output as O
 from . import sex as SX
 from .io import SampleInput
 
-ANNOTATE_VERSION = "0.1.0"
+ANNOTATE_VERSION = (
+    "0.2.0"  # 0.2.0: full CL path with per-level confidences (label schema 2); models unchanged
+)
 
 
 def model_version(method: str = "guide") -> str:
@@ -73,6 +75,11 @@ def annotate_sample(
     # guide calls: product of the gating confidences along the path (better calibrated than the last step alone)
     score = ct.path_score if ct.method == "guide" and ct.path_score is not None else ct.score
     df["cell_type_score"] = np.where(ct.node > 0, score, np.nan).astype(np.float32)
+    df["cell_type_path"] = pd.array(ct.path_cl(), dtype="string")
+    if ct.level_conf is not None:  # guide calls: the confidence of every level of the path
+        for k, c in enumerate(O.LEVEL_COLUMNS):
+            v = ct.level_conf[:, k] if k < ct.level_conf.shape[1] else np.zeros(n, np.float32)
+            df[c] = np.where(v > 0, v, np.nan).astype(np.float32)
     summary["timings"]["cell_type_s"] = time.time() - t
     summary["cell_type"] = {k: v for k, v in ct.notes.items() if isinstance(v, (int, float, str))}
     vals, cnt = np.unique(np.asarray(ct.cl, dtype=object).astype(str), return_counts=True)

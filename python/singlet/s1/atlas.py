@@ -915,10 +915,17 @@ class Ontology:
         return tuple(reversed(path))
 
 
+def _merge_anc(anc: List[str], extra: Iterable[str]) -> List[str]:
+    """The ontology's ancestors in their order, then any further ones (sorted) the labeller's path names."""
+    have = set(anc)
+    return anc + sorted(set(extra) - have)
+
+
 def make_dict(
     terms: Iterable[Optional[str]],
     ontology: Optional[Ontology],
     labels: Optional[Dict[str, str]] = None,
+    extra_anc: Optional[Dict[str, Iterable[str]]] = None,
 ) -> List[dict]:
     """Dictionary of the distinct terms (code 0 = unknown). Codes follow the ontology's primary-parent DFS order (a term and its
     descendants get neighbouring codes), else lexical order. Each entry lists every ancestor so a query term matches its
@@ -940,7 +947,9 @@ def make_dict(
                 "code": i,
                 "id": t,
                 "label": labels.get(t) or (ontology.label(t) if ontology else None) or t,
-                "anc": list(ontology.ancestors(t)) if ontology else [],
+                "anc": _merge_anc(
+                    list(ontology.ancestors(t)) if ontology else [], (extra_anc or {}).get(t, ())
+                ),
             }
         )
     if len(out) > 65535:
@@ -1002,8 +1011,12 @@ SIDECAR_COLUMNS = (
     ("ancestry_hancestro", "string"),
     ("ancestry_prob", "float32"),
     ("model_version", "string"),
+    # label schema 2 (singlet.celllabels.output): the full CL path and the confidence of each level; absent in schema-1 files
+    ("cell_type_path", "string"),
+    *((f"cell_type_p{k}", "float32") for k in range(1, 7)),
 )
 _CL_RE = re.compile(r"^CL:\d{7}$")
+_CL_PATH_RE = re.compile(r"^CL:\d{7}(>CL:\d{7}){0,5}$")
 _HANC_RE = re.compile(r"^HANCESTRO:\d{4}$")
 
 
@@ -1080,6 +1093,8 @@ def normalize_sidecar(
         "ancestry_hancestro": strcol("ancestry_hancestro", _HANC_RE),
         "ancestry_prob": fcol("ancestry_prob"),
         "model_version": strcol("model_version"),
+        "cell_type_path": strcol("cell_type_path", _CL_PATH_RE),
+        **{f"cell_type_p{k}": fcol(f"cell_type_p{k}") for k in range(1, 7)},
     }
     keep = np.ones(len(col), bool)
     if called is not None:
@@ -1098,11 +1113,14 @@ def normalize_sidecar(
     mv = sorted({x for x in data["model_version"] if x})
     meta = {
         "format": "singlet-labels",
-        "version": "1",
+        "version": "2",
         "gsm": gsm,
         "annot_version": annot_version,
         "cells_digest": cells_digest or "",
         "model_version": ";".join(mv),
+        # cell type levels the API/UI show by default; deeper levels are shipped as previews (docs/cell_annotation.md 3)
+        "cell_type_default_levels": "1,2",
+        "cell_type_preview_from_level": "3",
     }
     table = pa.table(cols).replace_schema_metadata(
         {k.encode(): str(v).encode() for k, v in meta.items()}
@@ -1729,7 +1747,14 @@ def build_index(
                 a, b = a_.cats[i], b_.cats[j]
                 if a and b and a not in ct_labels:
                     ct_labels[a] = b
-    d_ct = make_dict((x for s in ok for x in lab_list(s, "cell_type_cl")), ont, ct_labels)
+    # the labeller's guide path (label schema 2: "CL:a>CL:b>CL:c") names every level of a call, so a query for a compartment or a
+    # lineage matches its deeper calls even without an ontology file
+    ct_anc: Dict[str, set] = {}
+    for s in ok:
+        for path in lab_list(s, "cell_type_path"):
+            parts = path.split(">")
+            ct_anc.setdefault(parts[-1], set()).update(parts[:-1])
+    d_ct = make_dict((x for s in ok for x in lab_list(s, "cell_type_cl")), ont, ct_labels, ct_anc)
     d_tissue = make_dict(
         (s.tissue for s in ok),
         ont,

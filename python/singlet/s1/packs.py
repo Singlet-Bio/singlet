@@ -30,6 +30,7 @@ import json
 import os
 import re
 import struct
+import threading
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -851,8 +852,11 @@ class PackStore:
         d = user_cache_dir()
         os.makedirs(d, exist_ok=True)
         path = os.path.join(d, e["id"] + ".pack")
-        with open(path, "wb") as fh:
+        # atomic: several transcoder processes may fetch the same pack into one cache at once, and a reader must never see half a file
+        tmp = "%s.%d.%d.part" % (path, os.getpid(), threading.get_ident())
+        with open(tmp, "wb") as fh:
             fh.write(data)
+        os.replace(tmp, path)
         self._files[e["id"]] = path
         return e["id"]
 
