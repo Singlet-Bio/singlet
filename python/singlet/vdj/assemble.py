@@ -223,14 +223,6 @@ def run_library(r1_paths: Sequence[str], r2_paths: Sequence[str], *, ref: Refere
             f2 = K.fw_from_c(codes, off, o[:, 8].astype(np.int64), todo)
             ok2 = (f2 >= 0) & (f2 + 3 - K_ASM >= 0)
             fw[todo[ok2]] = f2[ok2]
-        # a V the reference lacks or that is too mutated: Cys104 from the read, upstream of F/W118
-        # (only reads with no V call that hold >= 45 nt upstream of that Cys: a V is there but not recognised; reads
-        # that merely start near the junction would seed spurious Cys)
-        todo = np.flatnonzero((cys < 0) & (fw >= 0) & (o[:, 0] < 0) & (fw >= 45 + 24))
-        if len(todo):
-            c2 = K.cys_from_read(codes, off, fw.astype(np.int64), todo)
-            ok2 = (c2 >= 45) & (c2 + K_ASM <= L[todo])
-            cys[todo[ok2]] = c2[ok2]
         # informative: reaches the junction (V 3' end in the read, or a J hit)
         v_end = np.where(o[:, 0] >= 0, o[:, 2] + np.array([len(ref.segs[i].seq) for i in range(len(ref.segs))],
                                                                   dtype=np.int32)[np.maximum(o[:, 0], 0)], -10 ** 6)
