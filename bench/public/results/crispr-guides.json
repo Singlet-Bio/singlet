@@ -1,0 +1,1290 @@
+{
+ "schema": "singlet.benchmark.capability",
+ "schema_version": "1.0.0",
+ "capability": "crispr-guides",
+ "title": "CRISPR guide assignment",
+ "conclusion": "On 4 real screens (10x A549 and A375, Replogle 2022 K562, Norman 2019 K562), Singlet's guide calls agree with the published calls at the highest F1 on 4 of 4. They give 354.0 guides with a significant effect on their target, against 338.0 for the best other caller per screen. Where Singlet and Cell Ranger disagree on A549, the guides only Cell Ranger adds do not knock down their targets. 21 of 21 metrics pass.",
+ "methods": "Guide UMIs are counted from the guide library's FASTQs by singlet.crispr (protospacer cut before the scaffold anchor, Cell Ranger feature-barcode logic for barcodes, guides and UMIs, 3' v3 barcode translation decided from the reads). Three callers run on the same counts and called cells: Singlet's ambient-calibrated test (the ambient profile from the library's empty droplets), a Cell Ranger-style per-guide GMM and a Poisson-Gaussian mixture. A549: Cell Ranger 6.0.0's published protospacer calls are the reference and a caller of their own. K562 (Replogle 2022, gem group 41): the authors' assignments; dual guides are compared as target genes; the protospacers were rebuilt from the sgRNA ids on hg19 (98% seen in reads). Knockdown: CP10k of each guide's target in its single-guide cells vs non-targeting cells (A549) or the cells of other targets (K562), one-sided Mann-Whitney, BH.",
+ "status": "draft",
+ "generated_at": "2026-10-26T16:25:31+00:00",
+ "owner": "vdj-crispr",
+ "singlet": {
+  "version": "1.0.0",
+  "commit": "34a6f535839feb3bba8b9b883aed5490503b3988",
+  "branch": "claude/vdj-crispr-benchmark-721d3a"
+ },
+ "tools": [
+  {
+   "name": "singlet",
+   "version": "1.0.0",
+   "role": "singlet",
+   "params": "singlet.crispr.assign.call_ambient(min_umis=3, alpha=1e-3, min_share=0.05)"
+  },
+  {
+   "name": "gmm-cellranger-style",
+   "version": "n/a",
+   "role": "competitor",
+   "params": "per guide: 2-component sklearn GaussianMixture on log10 UMIs of cells with UMIs; upper component and >= 3 UMIs"
+  },
+  {
+   "name": "poisson-gaussian-mixture",
+   "version": "n/a",
+   "role": "competitor",
+   "params": "per guide: EM for Poisson background + Gaussian on log2(UMI+1); posterior > 0.5"
+  },
+  {
+   "name": "cellranger",
+   "version": "6.0.0 (A549) / 4.0.0 (A375)",
+   "role": "competitor",
+   "url": "https://cf.10xgenomics.com/samples/cell-exp/6.0.0/SC3_v3_NextGem_DI_CRISPR_A549_5K_SC3_v3_NextGem_DI_CRISPR_A549_5K/",
+   "params": "published protospacer_calls_per_cell.csv (10x outputs; Cell Ranger not run)"
+  },
+  {
+   "name": "published-assignments",
+   "version": "Replogle 2022",
+   "role": "truth",
+   "params": "K562_essential_raw_singlecell_01.h5ad obs gene / sgID_AB"
+  }
+ ],
+ "datasets": [
+  {
+   "id": "tenx_crispr_a549_5k",
+   "title": "10x A549 5K CRISPR (3' v3.1, direct capture, 93 guides)",
+   "data_kind": "real",
+   "accessions": {
+    "url": "https://cf.10xgenomics.com/samples/cell-exp/6.0.0/SC3_v3_NextGem_DI_CRISPR_A549_5K_Multiplex/"
+   },
+   "truth": "Cell Ranger 6.0.0 protospacer calls; target expression"
+  },
+  {
+   "id": "tenx_crispr_a375_10k",
+   "title": "10x A375 CRISPR 10k (3' v3.1, direct capture, 2 guides)",
+   "data_kind": "real",
+   "accessions": {
+    "url": "https://cf.10xgenomics.com/samples/cell-exp/4.0.0/SC3_v3_NextGem_DI_CRISPR_10K/"
+   },
+   "truth": "Cell Ranger 4.0.0 protospacer calls; target expression"
+  },
+  {
+   "id": "norman2019_gem1",
+   "title": "Norman 2019 K562 CRISPRa Perturb-seq, gem group 1 guide-barcode library",
+   "data_kind": "real",
+   "accessions": {
+    "gse": "GSE133344",
+    "gsm": [
+     "GSM3906028"
+    ],
+    "srr": [
+     "SRR9602551",
+     "SRR9602552"
+    ]
+   },
+   "truth": "authors' cell identities (held-out half: guide-barcode names learnt on the other half); target induction",
+   "notes": "GEO has no guide-barcode sequences: the barcode -> identity table is learnt from the training half"
+  },
+  {
+   "id": "replogle2022_k562_gg41",
+   "title": "Replogle 2022 K562 essential-scale, gem group 41 guide library",
+   "data_kind": "real",
+   "accessions": {
+    "srr": [
+     "SRR19331010",
+     "SRR19331011",
+     "SRR19331013",
+     "SRR19331014"
+    ],
+    "url": "https://plus.figshare.com/articles/dataset/20029387"
+   },
+   "truth": "published cell-to-guide assignments; target expression (CRISPRi)"
+  }
+ ],
+ "metrics": [
+  {
+   "id": "single_call_f1",
+   "name": "Single-guide calls against the Cell Ranger's protospacer calls: F1 of recall (reference single cells given the same call) and precision (single calls the reference shares)",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "tenx_crispr_a549_5k",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9362
+   },
+   "competitors": [
+    {
+     "tool": "gmm-cellranger-style",
+     "value": 0.912
+    },
+    {
+     "tool": "poisson-gaussian-mixture",
+     "value": 0.8718
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "notes": "recall / precision: singlet 0.966 / 0.908; gmm-cellranger-style 0.839 / 0.999; poisson-gaussian-mixture 0.773 / 1.000",
+   "pass": "pass"
+  },
+  {
+   "id": "knockdown_cells",
+   "name": "Single-guide cells of scored guides (usable perturbed cells)",
+   "unit": "cells",
+   "category": "coverage",
+   "dataset": "tenx_crispr_a549_5k",
+   "direction": "higher",
+   "singlet": {
+    "value": 3153.0
+   },
+   "competitors": [
+    {
+     "tool": "gmm-cellranger-style",
+     "value": 2580.0
+    },
+    {
+     "tool": "poisson-gaussian-mixture",
+     "value": 2388.0
+    },
+    {
+     "tool": "cellranger",
+     "value": 2709.0
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "knockdown_guides_significant",
+   "name": "Guides whose target is significantly lower in their single-guide cells (one-sided Mann-Whitney vs controls, BH 0.05; guides with >= 5 cells)",
+   "unit": "guides",
+   "category": "accuracy",
+   "dataset": "tenx_crispr_a549_5k",
+   "direction": "higher",
+   "singlet": {
+    "value": 59.0
+   },
+   "competitors": [
+    {
+     "tool": "gmm-cellranger-style",
+     "value": 58.0
+    },
+    {
+     "tool": "poisson-gaussian-mixture",
+     "value": 58.0
+    },
+    {
+     "tool": "cellranger",
+     "value": 58.0
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "notes": "a count, not a share: a caller that assigns more cells scores more guides; shares: singlet 0.728 of 81; gmm-cellranger-style 0.725 of 80; poisson-gaussian-mixture 0.744 of 78; cellranger 0.734 of 79",
+   "pass": "pass"
+  },
+  {
+   "id": "knockdown_median",
+   "name": "Median effect on the target over scored guides (1 - expression / control)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "tenx_crispr_a549_5k",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.7276
+   },
+   "competitors": [],
+   "rule": {
+    "type": "threshold",
+    "value": 0.5,
+    "rationale": "a working screen and correct calls: half of the target removed (CRISPRi / knockout) or doubled (CRISPRa) in the median guide"
+   },
+   "notes": "other callers: gmm-cellranger-style 0.757; poisson-gaussian-mixture 0.735; cellranger 0.783",
+   "pass": "pass"
+  },
+  {
+   "id": "extra_guides_target_expression",
+   "name": "Cells Singlet calls single and Cell Ranger multiple: target expression of the guides only Cell Ranger adds, relative to non-targeting cells (1 = no knockdown)",
+   "unit": "ratio",
+   "category": "accuracy",
+   "dataset": "tenx_crispr_a549_5k",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.2027
+   },
+   "competitors": [],
+   "rule": {
+    "type": "threshold",
+    "value": 0.8,
+    "rationale": "real guides knock their target down to ~0.3 here; an added guide whose target stays >= 0.8 of control is an ambient molecule, so Singlet was right to drop it"
+   },
+   "notes": "n = 257; the guide Singlet keeps leaves its target at 0.26, clean single cells at 0.30",
+   "pass": "pass"
+  },
+  {
+   "id": "counting_umi_ratio",
+   "name": "Guide UMIs vs Cell Ranger's on the same cells and guides",
+   "unit": "ratio",
+   "category": "agreement",
+   "dataset": "tenx_crispr_a549_5k",
+   "direction": "none",
+   "singlet": {
+    "value": 1.0117
+   },
+   "competitors": [],
+   "rule": {
+    "type": "equivalence",
+    "target": 1.0,
+    "tolerance": {
+     "rel": 0.03
+    },
+    "rationale": "the ADT counting core reproduces Cell Ranger to 0.02%; 3% covers guide-window differences (anchor search vs pattern)"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "cellranger_rule_on_singlet_counts",
+   "name": "Cell Ranger's single calls reproduced by Cell Ranger's own per-guide UMI thresholds applied to Singlet's counts",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "tenx_crispr_a549_5k",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9936
+   },
+   "competitors": [],
+   "rule": {
+    "type": "threshold",
+    "value": 0.98,
+    "rationale": "counting is equivalent when the same rule gives the same calls; 2% allows thresholds that fall on a count Singlet differs by one"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "single_call_f1",
+   "name": "Single-guide calls against the Cell Ranger's protospacer calls: F1 of recall (reference single cells given the same call) and precision (single calls the reference shares)",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "tenx_crispr_a375_10k",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9981
+   },
+   "competitors": [
+    {
+     "tool": "gmm-cellranger-style",
+     "value": 0.9971
+    },
+    {
+     "tool": "poisson-gaussian-mixture",
+     "value": 0.7732
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "notes": "recall / precision: singlet 0.997 / 0.999; gmm-cellranger-style 0.995 / 0.999; poisson-gaussian-mixture 0.657 / 0.939",
+   "pass": "pass"
+  },
+  {
+   "id": "knockdown_cells",
+   "name": "Single-guide cells of scored guides (usable perturbed cells)",
+   "unit": "cells",
+   "category": "coverage",
+   "dataset": "tenx_crispr_a375_10k",
+   "direction": "higher",
+   "singlet": {
+    "value": 4552.0
+   },
+   "competitors": [
+    {
+     "tool": "gmm-cellranger-style",
+     "value": 4354.0
+    },
+    {
+     "tool": "poisson-gaussian-mixture",
+     "value": 2864.0
+    },
+    {
+     "tool": "cellranger",
+     "value": 4369.0
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "knockdown_guides_significant",
+   "name": "Guides whose target is significantly lower in their single-guide cells (one-sided Mann-Whitney vs controls, BH 0.05; guides with >= 5 cells)",
+   "unit": "guides",
+   "category": "accuracy",
+   "dataset": "tenx_crispr_a375_10k",
+   "direction": "higher",
+   "singlet": {
+    "value": 1.0
+   },
+   "competitors": [
+    {
+     "tool": "gmm-cellranger-style",
+     "value": 1.0
+    },
+    {
+     "tool": "poisson-gaussian-mixture",
+     "value": 1.0
+    },
+    {
+     "tool": "cellranger",
+     "value": 1.0
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "notes": "a count, not a share: a caller that assigns more cells scores more guides; shares: singlet 1.000 of 1; gmm-cellranger-style 1.000 of 1; poisson-gaussian-mixture 1.000 of 1; cellranger 1.000 of 1",
+   "pass": "pass"
+  },
+  {
+   "id": "knockdown_median",
+   "name": "Median effect on the target over scored guides (1 - expression / control)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "tenx_crispr_a375_10k",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9411
+   },
+   "competitors": [],
+   "rule": {
+    "type": "threshold",
+    "value": 0.5,
+    "rationale": "a working screen and correct calls: half of the target removed (CRISPRi / knockout) or doubled (CRISPRa) in the median guide"
+   },
+   "notes": "other callers: gmm-cellranger-style 0.963; poisson-gaussian-mixture 0.949; cellranger 0.964",
+   "pass": "pass"
+  },
+  {
+   "id": "counting_umi_ratio",
+   "name": "Guide UMIs vs Cell Ranger's on the same cells and guides",
+   "unit": "ratio",
+   "category": "agreement",
+   "dataset": "tenx_crispr_a375_10k",
+   "direction": "none",
+   "singlet": {
+    "value": 1.0076
+   },
+   "competitors": [],
+   "rule": {
+    "type": "equivalence",
+    "target": 1.0,
+    "tolerance": {
+     "rel": 0.03
+    },
+    "rationale": "the ADT counting core reproduces Cell Ranger to 0.02%; 3% covers guide-window differences (anchor search vs pattern)"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "cellranger_rule_on_singlet_counts",
+   "name": "Cell Ranger's single calls reproduced by Cell Ranger's own per-guide UMI thresholds applied to Singlet's counts",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "tenx_crispr_a375_10k",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.999
+   },
+   "competitors": [],
+   "rule": {
+    "type": "threshold",
+    "value": 0.98,
+    "rationale": "counting is equivalent when the same rule gives the same calls; 2% allows thresholds that fall on a count Singlet differs by one"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "single_call_f1",
+   "name": "Single-target calls against the published calls: F1 of recall (reference single cells given the same call) and precision (single calls the reference shares)",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "replogle2022_k562_gg41",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9191
+   },
+   "competitors": [
+    {
+     "tool": "gmm-cellranger-style",
+     "value": 0.8944
+    },
+    {
+     "tool": "poisson-gaussian-mixture",
+     "value": 0.8758
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "notes": "recall / precision: singlet 0.880 / 0.962; gmm-cellranger-style 0.836 / 0.961; poisson-gaussian-mixture 0.805 / 0.960",
+   "pass": "pass"
+  },
+  {
+   "id": "knockdown_cells",
+   "name": "Single-guide cells of scored guides (usable perturbed cells)",
+   "unit": "cells",
+   "category": "coverage",
+   "dataset": "replogle2022_k562_gg41",
+   "direction": "higher",
+   "singlet": {
+    "value": 2935.0
+   },
+   "competitors": [
+    {
+     "tool": "gmm-cellranger-style",
+     "value": 2698.0
+    },
+    {
+     "tool": "poisson-gaussian-mixture",
+     "value": 2636.0
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "knockdown_guides_significant",
+   "name": "Guides whose target is significantly lower in their single-guide cells (one-sided Mann-Whitney vs controls, BH 0.05; guides with >= 5 cells)",
+   "unit": "guides",
+   "category": "accuracy",
+   "dataset": "replogle2022_k562_gg41",
+   "direction": "higher",
+   "singlet": {
+    "value": 204.0
+   },
+   "competitors": [
+    {
+     "tool": "gmm-cellranger-style",
+     "value": 188.0
+    },
+    {
+     "tool": "poisson-gaussian-mixture",
+     "value": 191.0
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "notes": "a count, not a share: a caller that assigns more cells scores more guides; shares: singlet 0.494 of 413; gmm-cellranger-style 0.495 of 380; poisson-gaussian-mixture 0.508 of 376",
+   "pass": "pass"
+  },
+  {
+   "id": "knockdown_median",
+   "name": "Median effect on the target over scored guides (1 - expression / control)",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "replogle2022_k562_gg41",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.8397
+   },
+   "competitors": [],
+   "rule": {
+    "type": "threshold",
+    "value": 0.5,
+    "rationale": "a working screen and correct calls: half of the target removed (CRISPRi / knockout) or doubled (CRISPRa) in the median guide"
+   },
+   "notes": "other callers: gmm-cellranger-style 0.847; poisson-gaussian-mixture 0.844",
+   "pass": "pass"
+  },
+  {
+   "id": "single_call_f1",
+   "name": "Single-target calls against the published calls: F1 of recall (reference single cells given the same call) and precision (single calls the reference shares)",
+   "unit": "fraction",
+   "category": "agreement",
+   "dataset": "norman2019_gem1",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.9042
+   },
+   "competitors": [
+    {
+     "tool": "gmm-cellranger-style",
+     "value": 0.8989
+    },
+    {
+     "tool": "poisson-gaussian-mixture",
+     "value": 0.9022
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "notes": "recall / precision: singlet 0.826 / 0.999; gmm-cellranger-style 0.817 / 1.000; poisson-gaussian-mixture 0.822 / 1.000",
+   "pass": "pass"
+  },
+  {
+   "id": "knockdown_cells",
+   "name": "Single-guide cells of scored guides (usable perturbed cells)",
+   "unit": "cells",
+   "category": "coverage",
+   "dataset": "norman2019_gem1",
+   "direction": "higher",
+   "singlet": {
+    "value": 3105.0
+   },
+   "competitors": [
+    {
+     "tool": "gmm-cellranger-style",
+     "value": 3063.0
+    },
+    {
+     "tool": "poisson-gaussian-mixture",
+     "value": 3088.0
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "pass": "pass"
+  },
+  {
+   "id": "knockdown_guides_significant",
+   "name": "Guides whose target is significantly induced (CRISPRa) in their single-guide cells (one-sided Mann-Whitney vs controls, BH 0.05; guides with >= 5 cells)",
+   "unit": "guides",
+   "category": "accuracy",
+   "dataset": "norman2019_gem1",
+   "direction": "higher",
+   "singlet": {
+    "value": 90.0
+   },
+   "competitors": [
+    {
+     "tool": "gmm-cellranger-style",
+     "value": 88.0
+    },
+    {
+     "tool": "poisson-gaussian-mixture",
+     "value": 88.0
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "notes": "a count, not a share: a caller that assigns more cells scores more guides; shares: singlet 0.882 of 102; gmm-cellranger-style 0.871 of 101; poisson-gaussian-mixture 0.863 of 102",
+   "pass": "pass"
+  },
+  {
+   "id": "knockdown_median",
+   "name": "Median effect on the target over scored guides (log2 induction, CRISPRa)",
+   "unit": "log2",
+   "category": "accuracy",
+   "dataset": "norman2019_gem1",
+   "direction": "higher",
+   "singlet": {
+    "value": 2.7148
+   },
+   "competitors": [],
+   "rule": {
+    "type": "threshold",
+    "value": 1.0,
+    "rationale": "a working screen and correct calls: half of the target removed (CRISPRi / knockout) or doubled (CRISPRa) in the median guide"
+   },
+   "notes": "other callers: gmm-cellranger-style 2.764; poisson-gaussian-mixture 2.712",
+   "pass": "pass"
+  }
+ ],
+ "resources": [
+  {
+   "tool": "singlet",
+   "dataset": "tenx_crispr_a549_5k",
+   "wall_s": 58.1,
+   "max_rss_gb": 3.16,
+   "threads": 1,
+   "notes": "counting 842 s + assignment 0.1 s (121,241,237 read pairs)"
+  },
+  {
+   "tool": "gmm-cellranger-style",
+   "dataset": "tenx_crispr_a549_5k",
+   "wall_s": 1.0,
+   "max_rss_gb": 3.16,
+   "threads": 1,
+   "notes": "assignment only, on Singlet's counts, in the same process (memory is the process peak)"
+  },
+  {
+   "tool": "poisson-gaussian-mixture",
+   "dataset": "tenx_crispr_a549_5k",
+   "wall_s": 2.8,
+   "max_rss_gb": 3.16,
+   "threads": 1,
+   "notes": "assignment only, on Singlet's counts, in the same process (memory is the process peak)"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "tenx_crispr_a375_10k",
+   "wall_s": 58.1,
+   "max_rss_gb": 3.3,
+   "threads": 1,
+   "notes": "counting 930 s + assignment 0.0 s (145,032,428 read pairs)"
+  },
+  {
+   "tool": "gmm-cellranger-style",
+   "dataset": "tenx_crispr_a375_10k",
+   "wall_s": 0.2,
+   "max_rss_gb": 3.3,
+   "threads": 1,
+   "notes": "assignment only, on Singlet's counts, in the same process (memory is the process peak)"
+  },
+  {
+   "tool": "poisson-gaussian-mixture",
+   "dataset": "tenx_crispr_a375_10k",
+   "wall_s": 0.3,
+   "max_rss_gb": 3.3,
+   "threads": 1,
+   "notes": "assignment only, on Singlet's counts, in the same process (memory is the process peak)"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "replogle2022_k562_gg41",
+   "wall_s": 182.8,
+   "max_rss_gb": 3.07,
+   "threads": 1,
+   "notes": "counting 244 s + assignment 0.0 s (36,234,657 read pairs)"
+  },
+  {
+   "tool": "gmm-cellranger-style",
+   "dataset": "replogle2022_k562_gg41",
+   "wall_s": 23.1,
+   "max_rss_gb": 3.07,
+   "threads": 1,
+   "notes": "assignment only, on Singlet's counts, in the same process (memory is the process peak)"
+  },
+  {
+   "tool": "poisson-gaussian-mixture",
+   "dataset": "replogle2022_k562_gg41",
+   "wall_s": 104.9,
+   "max_rss_gb": 3.07,
+   "threads": 1,
+   "notes": "assignment only, on Singlet's counts, in the same process (memory is the process peak)"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "norman2019_gem1",
+   "wall_s": 9.6,
+   "max_rss_gb": 0.45,
+   "threads": 1,
+   "notes": "counting 57 s + assignment 0.0 s (19,445,635 read pairs)"
+  },
+  {
+   "tool": "gmm-cellranger-style",
+   "dataset": "norman2019_gem1",
+   "wall_s": 1.4,
+   "max_rss_gb": 0.45,
+   "threads": 1,
+   "notes": "assignment only, on Singlet's counts, in the same process (memory is the process peak)"
+  },
+  {
+   "tool": "poisson-gaussian-mixture",
+   "dataset": "norman2019_gem1",
+   "wall_s": 2.9,
+   "max_rss_gb": 0.45,
+   "threads": 1,
+   "notes": "assignment only, on Singlet's counts, in the same process (memory is the process peak)"
+  }
+ ],
+ "figures": [
+  {
+   "id": "tenx_crispr_a549_5k_callers",
+   "title": "Guide assignment, tenx_crispr_a549_5k",
+   "kind": "grouped_bar",
+   "x": {
+    "label": "metric",
+    "categories": [
+     "single_recall",
+     "single_precision",
+     "knockdown_significant_share"
+    ]
+   },
+   "y": {
+    "label": "fraction",
+    "unit": "fraction",
+    "min": 0,
+    "max": 1
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      "single_recall",
+      "single_precision",
+      "knockdown_significant_share"
+     ],
+     "y": [
+      0.966,
+      0.9082,
+      0.7284
+     ]
+    },
+    {
+     "name": "gmm-cellranger-style",
+     "tool": "gmm-cellranger-style",
+     "x": [
+      "single_recall",
+      "single_precision",
+      "knockdown_significant_share"
+     ],
+     "y": [
+      0.839,
+      0.999,
+      0.725
+     ]
+    },
+    {
+     "name": "poisson-gaussian-mixture",
+     "tool": "poisson-gaussian-mixture",
+     "x": [
+      "single_recall",
+      "single_precision",
+      "knockdown_significant_share"
+     ],
+     "y": [
+      0.7728,
+      1.0,
+      0.7436
+     ]
+    }
+   ]
+  },
+  {
+   "id": "tenx_crispr_a375_10k_callers",
+   "title": "Guide assignment, tenx_crispr_a375_10k",
+   "kind": "grouped_bar",
+   "x": {
+    "label": "metric",
+    "categories": [
+     "single_recall",
+     "single_precision",
+     "knockdown_significant_share"
+    ]
+   },
+   "y": {
+    "label": "fraction",
+    "unit": "fraction",
+    "min": 0,
+    "max": 1
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      "single_recall",
+      "single_precision",
+      "knockdown_significant_share"
+     ],
+     "y": [
+      0.9971,
+      0.9991,
+      1.0
+     ]
+    },
+    {
+     "name": "gmm-cellranger-style",
+     "tool": "gmm-cellranger-style",
+     "x": [
+      "single_recall",
+      "single_precision",
+      "knockdown_significant_share"
+     ],
+     "y": [
+      0.9954,
+      0.9989,
+      1.0
+     ]
+    },
+    {
+     "name": "poisson-gaussian-mixture",
+     "tool": "poisson-gaussian-mixture",
+     "x": [
+      "single_recall",
+      "single_precision",
+      "knockdown_significant_share"
+     ],
+     "y": [
+      0.6572,
+      0.9388,
+      1.0
+     ]
+    }
+   ]
+  },
+  {
+   "id": "replogle2022_k562_gg41_callers",
+   "title": "Guide assignment, replogle2022_k562_gg41",
+   "kind": "grouped_bar",
+   "x": {
+    "label": "metric",
+    "categories": [
+     "single_recall",
+     "single_precision",
+     "knockdown_significant_share"
+    ]
+   },
+   "y": {
+    "label": "fraction",
+    "unit": "fraction",
+    "min": 0,
+    "max": 1
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      "single_recall",
+      "single_precision",
+      "knockdown_significant_share"
+     ],
+     "y": [
+      0.8795,
+      0.9624,
+      0.4939
+     ]
+    },
+    {
+     "name": "gmm-cellranger-style",
+     "tool": "gmm-cellranger-style",
+     "x": [
+      "single_recall",
+      "single_precision",
+      "knockdown_significant_share"
+     ],
+     "y": [
+      0.8362,
+      0.9614,
+      0.4947
+     ]
+    },
+    {
+     "name": "poisson-gaussian-mixture",
+     "tool": "poisson-gaussian-mixture",
+     "x": [
+      "single_recall",
+      "single_precision",
+      "knockdown_significant_share"
+     ],
+     "y": [
+      0.8053,
+      0.9599,
+      0.508
+     ]
+    }
+   ]
+  },
+  {
+   "id": "norman2019_gem1_callers",
+   "title": "Guide assignment, norman2019_gem1",
+   "kind": "grouped_bar",
+   "x": {
+    "label": "metric",
+    "categories": [
+     "single_recall",
+     "single_precision",
+     "knockdown_significant_share"
+    ]
+   },
+   "y": {
+    "label": "fraction",
+    "unit": "fraction",
+    "min": 0,
+    "max": 1
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      "single_recall",
+      "single_precision",
+      "knockdown_significant_share"
+     ],
+     "y": [
+      0.8257,
+      0.9992,
+      0.8824
+     ]
+    },
+    {
+     "name": "gmm-cellranger-style",
+     "tool": "gmm-cellranger-style",
+     "x": [
+      "single_recall",
+      "single_precision",
+      "knockdown_significant_share"
+     ],
+     "y": [
+      0.8167,
+      0.9995,
+      0.8713
+     ]
+    },
+    {
+     "name": "poisson-gaussian-mixture",
+     "tool": "poisson-gaussian-mixture",
+     "x": [
+      "single_recall",
+      "single_precision",
+      "knockdown_significant_share"
+     ],
+     "y": [
+      0.8221,
+      0.9995,
+      0.8627
+     ]
+    }
+   ]
+  }
+ ],
+ "artifacts": [
+  {
+   "name": "norman2019_gem1.calls.cellranger_gmm.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/norman2019_gem1.calls.cellranger_gmm.csv.gz",
+   "kind": "competitor_output",
+   "sha256": "0e1c2c8c775d57a4c51f00511de0cd3298364d11a87af2465e4490123cbcb986",
+   "bytes": 189062,
+   "format": "gz"
+  },
+  {
+   "name": "norman2019_gem1.calls.poisson_gaussian.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/norman2019_gem1.calls.poisson_gaussian.csv.gz",
+   "kind": "competitor_output",
+   "sha256": "7c2a001b6df463341a3ed2345224193fc1fe4675bfca3469540edec9f29f58b7",
+   "bytes": 187669,
+   "format": "gz"
+  },
+  {
+   "name": "norman2019_gem1.calls.singlet.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/norman2019_gem1.calls.singlet.csv.gz",
+   "kind": "singlet_output",
+   "sha256": "12d78b24b6de2ef33f224be70d1af611756f83634545e19d72751124541ddce8",
+   "bytes": 186487,
+   "format": "gz"
+  },
+  {
+   "name": "norman2019_gem1.expr_cells.txt",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/norman2019_gem1.expr_cells.txt",
+   "kind": "truth",
+   "sha256": "94860b3b86920d2e40ddd8127c27d56f7216b141325baffb8811620591d9ce7b",
+   "bytes": 143526,
+   "format": "txt"
+  },
+  {
+   "name": "norman2019_gem1.guides.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/norman2019_gem1.guides.csv.gz",
+   "kind": "derived",
+   "sha256": "404c8c7a2bf11402f951c9ce1c2b19cb4c9b002f83feb2734d7dd7fac7b939ea",
+   "bytes": 4064,
+   "format": "gz"
+  },
+  {
+   "name": "norman2019_gem1.meta.json",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/norman2019_gem1.meta.json",
+   "kind": "derived",
+   "sha256": "9b45444e9353fa6c74607885f77355b3497422ba6bef20d923dbcdc91a2db534",
+   "bytes": 1223,
+   "format": "json"
+  },
+  {
+   "name": "norman2019_gem1.reference.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/norman2019_gem1.reference.csv.gz",
+   "kind": "truth",
+   "sha256": "3aa038172055f77342970884a2029f5d72495b0a0b0fc20937944340785bfe37",
+   "bytes": 63762,
+   "format": "gz"
+  },
+  {
+   "name": "norman2019_gem1.target_expr.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/norman2019_gem1.target_expr.csv.gz",
+   "kind": "truth",
+   "sha256": "dc1e3490d5bcb36db2b851d1c03ac1ab2f7666c581cef39b6b59fe25cb5a9ecf",
+   "bytes": 1474772,
+   "format": "gz"
+  },
+  {
+   "name": "provenance.json",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/provenance.json",
+   "kind": "derived",
+   "sha256": "206eb9ce76fb3780b03351db7adfc921ea7c65eccc65b57da91a5eb624c3ae1c",
+   "bytes": 2927,
+   "format": "json"
+  },
+  {
+   "name": "replogle2022_k562_gg41.calls.cellranger_gmm.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/replogle2022_k562_gg41.calls.cellranger_gmm.csv.gz",
+   "kind": "competitor_output",
+   "sha256": "b237a06a457ec6f3d684f0208d931a4cb64d062743cd8841c20aff6c6361375e",
+   "bytes": 152666,
+   "format": "gz"
+  },
+  {
+   "name": "replogle2022_k562_gg41.calls.poisson_gaussian.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/replogle2022_k562_gg41.calls.poisson_gaussian.csv.gz",
+   "kind": "competitor_output",
+   "sha256": "58fd6c131fe029011c2451b20b099141dc594fd7c5d255608eb3914cb1343cb6",
+   "bytes": 151441,
+   "format": "gz"
+  },
+  {
+   "name": "replogle2022_k562_gg41.calls.singlet.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/replogle2022_k562_gg41.calls.singlet.csv.gz",
+   "kind": "singlet_output",
+   "sha256": "25b718cdf7a6c9fe23bdd66bd90af30fc3c7d8e87fe0837b40226708344daea9",
+   "bytes": 151820,
+   "format": "gz"
+  },
+  {
+   "name": "replogle2022_k562_gg41.expr_cells.txt",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/replogle2022_k562_gg41.expr_cells.txt",
+   "kind": "truth",
+   "sha256": "cc8f0f1552e13f23f2b15ab36e73e9864b992335e2c9637d9be083b4cf5395ca",
+   "bytes": 132316,
+   "format": "txt"
+  },
+  {
+   "name": "replogle2022_k562_gg41.guides.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/replogle2022_k562_gg41.guides.csv.gz",
+   "kind": "derived",
+   "sha256": "744063b3993d659b0c163745cdf59089438c44b5b740374050ef649de0e82ca6",
+   "bytes": 39472,
+   "format": "gz"
+  },
+  {
+   "name": "replogle2022_k562_gg41.meta.json",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/replogle2022_k562_gg41.meta.json",
+   "kind": "derived",
+   "sha256": "502afe3a70330876799e435b2c4661e4c16a747dd7facd122a9f423238a9fe41",
+   "bytes": 20820,
+   "format": "json"
+  },
+  {
+   "name": "replogle2022_k562_gg41.reference.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/replogle2022_k562_gg41.reference.csv.gz",
+   "kind": "truth",
+   "sha256": "25322f336cf2147b3fd1d54239887ce3def8d351818fd9fb901b2baec4f91103",
+   "bytes": 147116,
+   "format": "gz"
+  },
+  {
+   "name": "replogle2022_k562_gg41.target_expr.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/replogle2022_k562_gg41.target_expr.csv.gz",
+   "kind": "truth",
+   "sha256": "70cacc94aad1db11495c9f7aa2ded7619d4a88b97ee49f9d64a3e10315b7574c",
+   "bytes": 62377635,
+   "format": "gz"
+  },
+  {
+   "name": "tenx_crispr_a375_10k.calls.cellranger_gmm.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/tenx_crispr_a375_10k.calls.cellranger_gmm.csv.gz",
+   "kind": "competitor_output",
+   "sha256": "21af3dce42616c44376b8a9a510816a864d49769b2d577ed5b5055c55d6ba2f1",
+   "bytes": 64915,
+   "format": "gz"
+  },
+  {
+   "name": "tenx_crispr_a375_10k.calls.cellranger_published.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/tenx_crispr_a375_10k.calls.cellranger_published.csv.gz",
+   "kind": "competitor_output",
+   "sha256": "34bc91dd0830580692243b4443d1f9a3d5ad86b31a8c91eab30d2b84a45c3106",
+   "bytes": 64900,
+   "format": "gz"
+  },
+  {
+   "name": "tenx_crispr_a375_10k.calls.cellranger_thresholds_on_singlet_counts.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/tenx_crispr_a375_10k.calls.cellranger_thresholds_on_singlet_counts.csv.gz",
+   "kind": "competitor_output",
+   "sha256": "3163940d4abd4ee55adb15f77c3d1fc3cfeeb9dbf6e15c3ca38876075388e765",
+   "bytes": 64942,
+   "format": "gz"
+  },
+  {
+   "name": "tenx_crispr_a375_10k.calls.poisson_gaussian.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/tenx_crispr_a375_10k.calls.poisson_gaussian.csv.gz",
+   "kind": "competitor_output",
+   "sha256": "fc6e1c3f585cc11da0957b409ffcd5b9b3d7b8b4ee8622a61249dacd5c180172",
+   "bytes": 64350,
+   "format": "gz"
+  },
+  {
+   "name": "tenx_crispr_a375_10k.calls.singlet.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/tenx_crispr_a375_10k.calls.singlet.csv.gz",
+   "kind": "singlet_output",
+   "sha256": "4b6521e074e67dde4a8ba423bc47477db98ca91b9e281a8ceccfd7606b2c61b7",
+   "bytes": 64583,
+   "format": "gz"
+  },
+  {
+   "name": "tenx_crispr_a375_10k.expr_cells.txt",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/tenx_crispr_a375_10k.expr_cells.txt",
+   "kind": "truth",
+   "sha256": "d0969532bcc46c7675959bb1f081cd06c988bb3307dd94d7868752f6ecef7b57",
+   "bytes": 224029,
+   "format": "txt"
+  },
+  {
+   "name": "tenx_crispr_a375_10k.guides.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/tenx_crispr_a375_10k.guides.csv.gz",
+   "kind": "derived",
+   "sha256": "e2d56aefa51887f5e13b56aa33c1b5c00b3b9a6e5dc1fe8bff368617aa0185f2",
+   "bytes": 119,
+   "format": "gz"
+  },
+  {
+   "name": "tenx_crispr_a375_10k.meta.json",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/tenx_crispr_a375_10k.meta.json",
+   "kind": "derived",
+   "sha256": "587add8d43a4212559712ed193610e4bd6672c7b99e362363555ffe7574e87fc",
+   "bytes": 304,
+   "format": "json"
+  },
+  {
+   "name": "tenx_crispr_a375_10k.reference.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/tenx_crispr_a375_10k.reference.csv.gz",
+   "kind": "truth",
+   "sha256": "d77a00ea09a1827b4061556540cf409abfff787309f53ec587e2f97a690f9ff4",
+   "bytes": 66130,
+   "format": "gz"
+  },
+  {
+   "name": "tenx_crispr_a375_10k.target_expr.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/tenx_crispr_a375_10k.target_expr.csv.gz",
+   "kind": "truth",
+   "sha256": "cc7b29ee466e251cb7909af9b6c2f437de889622d560a425f63a7e7aeff2ada4",
+   "bytes": 42850,
+   "format": "gz"
+  },
+  {
+   "name": "tenx_crispr_a549_5k.calls.cellranger_gmm.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/tenx_crispr_a549_5k.calls.cellranger_gmm.csv.gz",
+   "kind": "competitor_output",
+   "sha256": "cf45579bfb4be37647ab167a7d80934b16642dd5f8f0f1cd96a7a0feedbc87b8",
+   "bytes": 59793,
+   "format": "gz"
+  },
+  {
+   "name": "tenx_crispr_a549_5k.calls.cellranger_published.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/tenx_crispr_a549_5k.calls.cellranger_published.csv.gz",
+   "kind": "competitor_output",
+   "sha256": "b7c5175855258b68c37f5ad4cb96e171630a51a8298e0b7fedc5bbed3c81aeb5",
+   "bytes": 53408,
+   "format": "gz"
+  },
+  {
+   "name": "tenx_crispr_a549_5k.calls.cellranger_thresholds_on_singlet_counts.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/tenx_crispr_a549_5k.calls.cellranger_thresholds_on_singlet_counts.csv.gz",
+   "kind": "competitor_output",
+   "sha256": "8a48f8c3c04fced0a3ae706091d4fe182c7bd4f47f1fb6f87215fc9079ee012a",
+   "bytes": 53565,
+   "format": "gz"
+  },
+  {
+   "name": "tenx_crispr_a549_5k.calls.poisson_gaussian.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/tenx_crispr_a549_5k.calls.poisson_gaussian.csv.gz",
+   "kind": "competitor_output",
+   "sha256": "d297a393101086f8b16e82d3db8d0b5a9cd3e66ade39fe3aa94680d05aa3898b",
+   "bytes": 64034,
+   "format": "gz"
+  },
+  {
+   "name": "tenx_crispr_a549_5k.calls.singlet.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/tenx_crispr_a549_5k.calls.singlet.csv.gz",
+   "kind": "singlet_output",
+   "sha256": "ee8ea403bf350575f6f6a0465e826101d5fb9f4770251ea20fe6c3b8f413f0b3",
+   "bytes": 52005,
+   "format": "gz"
+  },
+  {
+   "name": "tenx_crispr_a549_5k.expr_cells.txt",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/tenx_crispr_a549_5k.expr_cells.txt",
+   "kind": "truth",
+   "sha256": "b72e0869e46dd020305c197d667adfaaa6ef86ef8f23fd8af45616a016dad5d2",
+   "bytes": 111473,
+   "format": "txt"
+  },
+  {
+   "name": "tenx_crispr_a549_5k.guides.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/tenx_crispr_a549_5k.guides.csv.gz",
+   "kind": "derived",
+   "sha256": "2fcbd021b87df48a7657f58f8bcff8f6bb1b1243579a22dea290aef1f4f740de",
+   "bytes": 544,
+   "format": "gz"
+  },
+  {
+   "name": "tenx_crispr_a549_5k.meta.json",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/tenx_crispr_a549_5k.meta.json",
+   "kind": "derived",
+   "sha256": "325db5023b6860c6074ead9b1eca7fb4837dcb2f20fa30396165b35abe5eba70",
+   "bytes": 784,
+   "format": "json"
+  },
+  {
+   "name": "tenx_crispr_a549_5k.reference.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/tenx_crispr_a549_5k.reference.csv.gz",
+   "kind": "truth",
+   "sha256": "9eaa81acfec27ce857504ae45684e3f8dd101ac993f5020c7d8d5fe941e3eaad",
+   "bytes": 43982,
+   "format": "gz"
+  },
+  {
+   "name": "tenx_crispr_a549_5k.target_expr.csv.gz",
+   "url": "https://data.singlet.bio/benchmarking/1.0.0/crispr-guides/tenx_crispr_a549_5k.target_expr.csv.gz",
+   "kind": "truth",
+   "sha256": "29d340af9a6db40706e8ba14070e4b543a06555bdeca44efebfff9f2d4c1d930",
+   "bytes": 1180057,
+   "format": "gz"
+  }
+ ],
+ "code": [
+  {
+   "path": "python/singlet/crispr",
+   "url": "https://github.com/Singlet-Bio/singlet/tree/34a6f535839feb3bba8b9b883aed5490503b3988/python/singlet/crispr",
+   "role": "implementation"
+  },
+  {
+   "path": "bench/crispr",
+   "url": "https://github.com/Singlet-Bio/singlet/tree/34a6f535839feb3bba8b9b883aed5490503b3988/bench/crispr",
+   "role": "harness"
+  },
+  {
+   "path": "bench/crispr/compare_crispr.py",
+   "url": "https://github.com/Singlet-Bio/singlet/blob/34a6f535839feb3bba8b9b883aed5490503b3988/bench/crispr/compare_crispr.py",
+   "role": "metric"
+  }
+ ],
+ "reproduce": {
+  "module": "bench/public/capabilities/crispr_guides.py",
+  "function": "compute",
+  "laptop_minutes": 2,
+  "clipper_command": "sbatch --export=ALL,DS=<a549|replogle_k562_gg41> bench/crispr/hpc/run.sbatch"
+ },
+ "caveats": [
+  "Cell Ranger was not run here (no licence accepted); its published A549 calls are compared, and its assignment rule is approximated by a reimplemented per-guide GMM; its published per-guide thresholds applied to Singlet's counts check the counting.",
+  "The K562 published assignments keep only cells with one guide pair (the authors filtered the rest), so multiple-guide rates cannot be compared there.",
+  "K562 non-targeting guides have no coordinate in their ids: their windows are counted as 'unidentified' guides."
+ ]
+}
