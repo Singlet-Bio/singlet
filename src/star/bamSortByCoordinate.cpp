@@ -10,6 +10,10 @@
 #include <vector>
 #include <cstdlib>
 
+// The binary links the modern htslib, where bam_hdr_destroy() is an alias of sam_hdr_destroy() (bam_cat.c needs the
+// same declaration).
+extern "C" void sam_hdr_destroy(bam_hdr_t *h);
+
 // Singlet: the sorted bins are written straight into the final BAM, in bin order, as each worker finishes
 // (direct mode). Upstream STAR wrote every sorted bin to its own BGZF file under _STARtmp/BAMsort and then
 // concatenated them with bam_cat: two extra full passes (write + read) of the whole BAM on the node's disk, which
@@ -52,7 +56,7 @@ static void appendBamBody(BGZF *fp, const string &fn, Parameters &P) {
         };
         j=1;
     };
-    if (old!=NULL) bam_hdr_destroy(old);
+    if (old!=NULL) sam_hdr_destroy(old);
     bgzf_close(in);
 };
 
