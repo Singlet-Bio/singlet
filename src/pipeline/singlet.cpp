@@ -81,6 +81,7 @@
 #include "singlet/pileup/rna_variant_caller.h"
 #include "singlet/pileup/read_dedup_stats.h"
 #include "singlet/pileup/tagged_bam.h"
+#include "singlet/pileup/cb_tag_scan.h"
 #include "singlet/fq/sra_reader.h"
 #include "singlet/fq/lib1fq.h"
 #include "singlet/fq/sra_encoder.h"
@@ -7731,7 +7732,10 @@ int main(int argc, char* argv[]) {
             StopWatch cb_scan_sw;
             std::unordered_map<std::string, uint32_t> cb_freq;
             cb_freq.reserve(50000);
-            samFile*   cbf    = sam_open(parallel_bam_path.c_str(), "rb");
+            // Parallel over the indexed BAM when threads allow; the same map, insertion order included
+            // (include/singlet/pileup/cb_tag_scan.h). Serial scan otherwise.
+            const bool cb_parallel = singlet::cb_tag_counts_parallel(parallel_bam_path, star_threads, cb_freq);
+            samFile*   cbf    = cb_parallel ? nullptr : sam_open(parallel_bam_path.c_str(), "rb");
             if (cbf) {
                 bam_hdr_t* cbhdr = sam_hdr_read(cbf);
                 bam1_t*    crec  = bam_init1();
