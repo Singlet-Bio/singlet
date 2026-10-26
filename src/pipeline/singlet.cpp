@@ -87,6 +87,7 @@
 #include "singlet/fq/sra_encoder.h"
 #include "singlet/fq/fastq_encoder.h"
 #include "singlet/fq/run_screen.h"
+#include "singlet/fq/concat.h"
 #include "singlet/pileup/run_provenance.h"
 #include "singlet/star/star_api.h"  // star_main_impl() — bundled aligner
 #include "singlet/version.h"        // singlet::kVersion
@@ -2532,6 +2533,9 @@ static void usage(const char* prog) {
         << "  --lower-umi N          Lower UMI bound for the legacy caller's ambient pool [100]\n"
         << "  --runs-used A,B,...    Run accessions pooled into this input (recorded in pileup_stats.json)\n"
         << "  --run-screen FILE      `singlet screen-runs --json` report; its runs_kept become runs_used\n"
+        << "  A.1fq B.1fq ...        Several runs of one sample: read as one stream, in the order given\n"
+        << "                         (their blocks are concatenated on the output disk; no decode/re-encode)\n"
+        << "  --runs-dir DIR         Runs DIR/<run>.1fq for each run of --runs-used, else of --run-screen runs_kept\n"
         << "  --raw-matrix           Write raw_feature_bc_matrix/ (all barcodes) alongside filtered\n"
         << "  --metadata-json FILE   JSON file with GEO/pipeline metadata to embed in .1pz output\n"
         << "  --nonhost-db PATH      Viral sketch database (.snhskidx); auto-discovered from SINGLET_REF_BASE/nonhost/\n"
@@ -2607,6 +2611,8 @@ int main(int argc, char* argv[]) {
     std::string bam_file;
     std::string sra_file;
     std::string onefq_file;
+    std::vector<std::string> onefq_inputs;  // one .1fq per sequencing run of the sample (read as one stream)
+    std::string runs_dir;                   // --runs-dir: <dir>/<run>.1fq for each run of --runs-used / --run-screen
     std::vector<std::string> star_extra;
     int star_threads = 0;  // 0 = auto-detect
     bool threads_specified = false;
@@ -2751,11 +2757,12 @@ int main(int argc, char* argv[]) {
         else if (arg == "--visium-min-umi" && i+1 < argc) visium_min_umi = static_cast<uint32_t>(std::atoi(argv[++i])); // V3
         else if (arg == "--threads" && i+1 < argc) { star_threads = std::atoi(argv[++i]); threads_specified = true; }
         else if (arg == "--sra" && i+1 < argc) sra_file = argv[++i];
-        else if (arg == "--1fq" && i+1 < argc) onefq_file = argv[++i];
-        else if (arg[0] != '-' && onefq_file.empty() && arg.size() > 4 &&
+        else if (arg == "--1fq" && i+1 < argc) onefq_inputs.push_back(argv[++i]);
+        else if (arg[0] != '-' && arg.size() > 4 &&
                  arg.substr(arg.size() - 4) == ".1fq") {
-            onefq_file = arg;  // positional .1fq argument
+            onefq_inputs.push_back(arg);  // positional .1fq argument(s): one per run of the sample
         }
+        else if (arg == "--runs-dir" && i+1 < argc) runs_dir = argv[++i];
         else if (arg == "--star-extra" && i+1 < argc) {
             std::istringstream iss(argv[++i]);
             std::string token;
@@ -2900,6 +2907,59 @@ int main(int argc, char* argv[]) {
                       << (!bacterial_db_path.empty()  ? " bacterial=" + bacterial_db_path : "")
                       << (!fungal_db_path.empty()     ? " fungal="   + fungal_db_path    : "")
                       << "\n";
+        }
+    }
+
+    // ── Several runs of one sample ──
+    // `singlet A.1fq B.1fq ...`, or `--runs-dir DIR` with --runs-used / --run-screen (DIR/<run>.1fq for each run used,
+    // in that order). The runs' compressed blocks are concatenated into one .1fq on the output's (node-local) disk:
+    // the same reads in the same order as the old pooling (decode + re-encode), which this replaces.
+    std::string onefq_concat_path;  // removed when main() returns
+    struct ConcatCleanup {
+        std::string* p;
+        ~ConcatCleanup() {
+            if (!p->empty()) { unlink(p->c_str()); rmdir(p->substr(0, p->rfind('/')).c_str()); }
+        }
+    } concat_cleanup{&onefq_concat_path};
+    if (!runs_dir.empty()) {
+        std::vector<std::string> runs = singlet::split_list(runs_used_flag);
+        if (runs.empty() && !run_screen_path.empty()) runs = singlet::runs_kept_from_screen_json(run_screen_path);
+        if (runs.empty()) {
+            std::cerr << "ERROR: --runs-dir needs --runs-used A,B,... or --run-screen screen.json (runs_kept)\n";
+            return 1;
+        }
+        if (!onefq_inputs.empty()) {
+            std::cerr << "ERROR: give the runs either as .1fq arguments or with --runs-dir, not both\n";
+            return 1;
+        }
+        for (const auto& r : runs) onefq_inputs.push_back(runs_dir + "/" + r + ".1fq");
+    }
+    if (onefq_inputs.size() == 1) {
+        onefq_file = onefq_inputs[0];
+    } else if (onefq_inputs.size() > 1) {
+        const std::string cdir = out_prefix + "/.multi_run";
+        mkdir_p(cdir);
+        onefq_concat_path = cdir + "/sample.1fq";  // stem "sample", as the pooled file was named
+        StopWatch concat_sw;
+        try {
+            auto crep = singlet::fq::concat_1fq(onefq_inputs, onefq_concat_path);
+            for (const auto& w : crep.warnings) std::cerr << "[multi-run] WARNING: " << w << "\n";
+            std::cerr << "[multi-run] " << onefq_inputs.size() << " runs -> " << crep.reads << " reads, "
+                      << crep.blocks << " blocks in " << concat_sw.elapsed_s() << "s (" << onefq_concat_path << ")\n";
+        } catch (const std::exception& e) {
+            std::cerr << "ERROR: cannot read the runs as one sample: " << e.what() << "\n";
+            onefq_concat_path.clear();
+            return 1;
+        }
+        onefq_file = onefq_concat_path;
+        if (runs_used_flag.empty() && run_screen_path.empty()) {
+            // provenance: the run ids are the inputs' file stems
+            for (const auto& f : onefq_inputs) {
+                const auto sl = f.rfind('/');
+                std::string stem = (sl == std::string::npos) ? f : f.substr(sl + 1);
+                if (stem.size() > 4 && stem.substr(stem.size() - 4) == ".1fq") stem.resize(stem.size() - 4);
+                runs_used_flag += (runs_used_flag.empty() ? "" : ",") + stem;
+            }
         }
     }
 
@@ -7983,7 +8043,11 @@ int main(int argc, char* argv[]) {
 
     // ── N8: Populate provenance manifest ──
     export_cfg.provenance.singlet_version      = singlet::kVersion;
-    export_cfg.provenance.input_file            = onefq_file.empty() ? sra_file : onefq_file;
+    {
+        std::string in_files;  // every run of a multi-run sample, not the temporary concatenation
+        for (const auto& f : onefq_inputs) in_files += (in_files.empty() ? "" : ",") + f;
+        export_cfg.provenance.input_file = onefq_inputs.size() > 1 ? in_files : (onefq_file.empty() ? sra_file : onefq_file);
+    }
     export_cfg.provenance.input_reads           = stats.total_reads;
     export_cfg.provenance.genome_dir            = genome_dir;
     export_cfg.provenance.gtf_path              = config.exon_gtf_path;
