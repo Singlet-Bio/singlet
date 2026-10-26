@@ -502,6 +502,21 @@ def _annotate(ref: Reference, groups, sel, mm, cell_of, mol, ubc, cb_len, params
     df["high_confidence"] = ((df["junction_umis"] >= params.min_junction_umis) & (df["umis"] >= params.min_umis)
                              & (df["reads"] >= params.min_contig_reads) & (rpu >= params.contig_read_frac * med))
     df["kept"] = df["high_confidence"] & (df["umis"] >= params.min_frac * top)
+    # error variants: a junction within 2 substitutions of a stronger one of the same cell and chain (a second real
+    # chain differs in V, J and N region, i.e. at many positions)
+    df = df.sort_values(["bcix", "chain", "umis", "reads"], ascending=[True, True, False, False]).reset_index(drop=True)
+    var = np.zeros(len(df), bool)
+    for _, idx in df.groupby(["bcix", "chain"]).indices.items():
+        if len(idx) < 2:
+            continue
+        seqs = df["cdr3_nt"].to_numpy()[idx]
+        for a_ in range(1, len(idx)):
+            for b_ in range(a_):
+                if not var[idx[b_]] and len(seqs[a_]) == len(seqs[b_]) and \
+                        sum(x != y for x, y in zip(seqs[a_], seqs[b_])) <= 2:
+                    var[idx[a_]] = True
+                    break
+    df.loc[var, "kept"] = False
     df = df.sort_values(["bcix", "chain", "umis"], ascending=[True, True, False]).reset_index(drop=True)
     df["contig_id"] = df["barcode"] + "_contig_" + (df.groupby("bcix").cumcount() + 1).astype(str)
     return df[CONTIG_COLUMNS]
