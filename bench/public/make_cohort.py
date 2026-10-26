@@ -126,40 +126,6 @@ add(id="kang2018_ctrl", group="genotype-pool", tier="core", title="Kang 2018 dem
     licence="GEO public data (cite paper)", capabilities="donor-demux,doublets,mtdna,donor-snps,chromosomal-sex,genetic-ancestry",
     tools="singlet,vireo,souporcell,cellsnp-lite,scrublet,scdblfinder,mgatk",
     why="the standard genotype-pool benchmark (demuxlet, vireo, souporcell papers); deposited as a BAM, reads rebuilt from it")
-add(id="kang2018_stim", group="genotype-pool", tier="core", title="Kang 2018 demuxlet, batch 2 IFN-beta lane (the same 8 lupus donors)",
-    species="human", reference=G, chemistry="10x-3p-v1", source="geo", gse="GSE96583", gsm="GSM2560249", srr="SRR5398239",
-    n_cells=14446, read_pairs_m=172, read_pairs_used_m=172, fastq_gb=22.8,
-    truth="demuxlet donor and doublet calls with genotypes (GSE96583_batch2.total.tsne.df.tsv.gz); replicate library of the donors in kang2018_ctrl",
-    licence="GEO public data (cite paper)", capabilities="donor-demux,donor-snps,mtdna", tools="singlet,vireo,souporcell,cellsnp-lite,mgatk",
-    why="same donors as kang2018_ctrl in a second library: the donors' reads in one lane give independent genotype and mt-haplotype truth for the other")
-add(id="kang2018_b1_a", group="genotype-pool", tier="core", title="Kang 2018 demuxlet, batch 1 lane A (4 lupus donors)",
-    species="human", reference=G, chemistry="10x-3p-v1", source="geo", gse="GSE96583", gsm="GSM2560245", srr="SRR5398235",
-    n_cells=3639, read_pairs_m=187, read_pairs_used_m=187, fastq_gb=21.7,
-    truth="demuxlet donor and doublet calls with genotypes (GSE96583_batch1.total.tsne.df.tsv.gz)",
-    licence="GEO public data (cite paper)", capabilities="donor-demux,donor-snps,mtdna", tools="singlet,vireo,souporcell,cellsnp-lite,mgatk",
-    why="held-out real pool with K = 4 and donors not in batch 2 (the development lane); its donors are also in lane C")
-add(id="kang2018_b1_b", group="genotype-pool", tier="core", title="Kang 2018 demuxlet, batch 1 lane B (4 lupus donors)",
-    species="human", reference=G, chemistry="10x-3p-v1", source="geo", gse="GSE96583", gsm="GSM2560246", srr="SRR5398236",
-    n_cells=4246, read_pairs_m=165, read_pairs_used_m=165, fastq_gb=19.6,
-    truth="demuxlet donor and doublet calls with genotypes (GSE96583_batch1.total.tsne.df.tsv.gz)",
-    licence="GEO public data (cite paper)", capabilities="donor-demux,donor-snps,mtdna", tools="singlet,vireo,souporcell,cellsnp-lite,mgatk",
-    why="held-out real pool with K = 4; the other four donors of lane C")
-add(id="kang2018_b1_c", group="genotype-pool", tier="core", title="Kang 2018 demuxlet, batch 1 lane C (8 lupus donors = lanes A + B)",
-    species="human", reference=G, chemistry="10x-3p-v1", source="geo", gse="GSE96583", gsm="GSM2560247", srr="SRR5398237",
-    n_cells=6145, read_pairs_m=175, read_pairs_used_m=175, fastq_gb=20.8,
-    truth="demuxlet donor and doublet calls with genotypes (GSE96583_batch1.total.tsne.df.tsv.gz); replicate libraries of its donors: lanes A and B",
-    licence="GEO public data (cite paper)", capabilities="donor-demux,donor-snps,mtdna", tools="singlet,vireo,souporcell,cellsnp-lite,mgatk",
-    why="held-out real pool with K = 8 whose donors are in lanes A and B, which gives independent genotype truth")
-add(id="maester_k562_bt142_3p", group="genotype-pool", tier="core", title="MAESTER cell-line mixture K562 + BT142, standard 10x 3' library (SRR15598773)",
-    species="human", reference=G, chemistry="10x-3p-v3", source="geo", gse="GSE182685", srr="SRR15598773", n_cells=2401,
-    truth="the authors' cell-line labels (TenX_CellLineMix_Cells.rds: expression and mt-variant labels) and per-line variant allele fractions from the MAESTER library",
-    licence="GEO public data (cite paper)", capabilities="donor-demux,mtdna", tools="singlet,vireo,souporcell,cellsnp-lite,mgatk",
-    why="a real K = 2 mixture of two cell lines with high-coverage mt truth (MAESTER) for the same cells")
-add(id="maester_bpdcn712_3p", group="genotype-pool", tier="core", title="MAESTER BPDCN712 bone marrow, standard 10x 3' library (SRR15598776)",
-    species="human", reference=G, chemistry="10x-3p-v3", source="geo", gse="GSE182685", srr="SRR15598776", n_cells=1397,
-    truth="one patient (K = 1); 23 MAESTER clones and 26 clone-defining mt variants with positive cells (authors' calls, 4.2_vois / 4.4_positive_cells)",
-    licence="GEO public data (cite paper)", capabilities="donor-demux,mtdna", tools="singlet,vireo,souporcell,cellsnp-lite,mgatk",
-    why="real heteroplasmy truth (clonal mt variants validated by the MAESTER library of the same cells) and a real K = 1 pool")
 # ---- barnyard
 add(id="hgmm1k_v3", group="barnyard", tier="core", title="10x HEK293T + NIH3T3 1:1, 1k, 3' v3", species="human+mouse", reference=B,
     chemistry="10x-3p-v3", source="10x", url=CF + "cell-exp/3.0.0/hgmm_1k_v3/hgmm_1k_v3_fastqs.tar", n_cells=1046, read_pairs_m=77,
@@ -195,12 +161,12 @@ add(id="norman2019_gem1", group="crispr", tier="core", title="Norman 2019 K562 C
     truth="authors' guide identities (GSE133344_filtered_cell_identities.csv.gz); induced target expression",
     licence="GEO public data (cite paper)", capabilities="crispr-guides,gex-counts", tools="singlet,cellranger,starsolo",
     why="the most re-analysed Perturb-seq dataset (GEARS, CPA, scGen); amplified guide library rather than direct capture")
-add(id="replogle2022_k562_lane4", group="crispr", tier="extended", title="Replogle 2022 K562 essential-scale Perturb-seq, lane 4 (mRNA + sgRNA)",
-    species="human", reference=G, chemistry="10x-3p-v3", source="sra", other="PRJNA831566 KD6_seq1_essential lane_4", n_cells="",
+add(id="replogle2022_k562_gg41", group="crispr", tier="extended", title="Replogle 2022 K562 essential-scale Perturb-seq, gem group 41 (mRNA + sgRNA)",
+    species="human", reference=G, chemistry="10x-3p-v3", source="sra", other="PRJNA831566 gem group 41 (KD6_raw_files.csv: lane N = gem group N); sgRNA runs SRR19331010/11/13/14", n_cells="",
     read_pairs_m=255, read_pairs_used_m=255, fastq_gb=15.9,
     truth="published cell-to-guide assignments (figshare+ 10.25452/figshare.plus.20029387, CC BY 4.0)",
     licence="CC BY 4.0", capabilities="crispr-guides", tools="singlet,cellranger",
-    why="genome-scale Perturb-seq; lane-to-GEM-group mapping must be checked before use")
+    why="genome-scale Perturb-seq, one GEM group with published guide calls")
 add(id="gse145370_tcr", group="vdj", tier="core", title="GSE145370 ESCC TCR libraries (4 samples), 10x 5' V(D)J",
     species="human", reference=G, chemistry="10x-5p-vdj", source="geo", gse="GSE145370", gsm="GSM4317423;GSM4317424;GSM4317428;GSM4317429",
     srr="SRR11094260;SRR11094261;SRR11094265;SRR11094266", truth="authors' Cell Ranger 3.0.1 filtered_contig_annotations (GEO supplementary)",
@@ -219,6 +185,12 @@ add(id="visium_mouse_brain_ant", group="spatial", tier="core", title="10x Visium
     read_pairs_m=370, read_pairs_used_m=370, fastq_gb=31.0, truth="Space Ranger 1.0 spot matrix and tissue positions; anatomy",
     licence="CC BY 4.0", capabilities="spatial,gex-counts", tools="singlet,spaceranger,starsolo",
     why="the Visium dataset in the Seurat, Squidpy and cell2location tutorials (the human lymph node set has no public reads)")
+add(id="visium_ffpe_human_breast", group="spatial", tier="core", title="10x Visium FFPE human breast cancer (Space Ranger 1.3, probe chemistry)",
+    species="human", reference=G, chemistry="10x-visium-ffpe", source="10x",
+    url=CF + "spatial-exp/1.3.0/Visium_FFPE_Human_Breast_Cancer/Visium_FFPE_Human_Breast_Cancer_fastqs.tar", fastq_gb=5.3,
+    truth="Space Ranger 1.3 published spot matrix and image-based tissue positions", licence="CC BY 4.0", capabilities="spatial",
+    tools="singlet,spaceranger", why="the only human Visium dataset 10x serves with FASTQs (lymph node, heart, brain and "
+    "fresh-frozen breast return 403); replaces the human lymph node")
 # ---- other protocols, one PBMC sample with author cell types (Ding 2020, PBMC1)
 for pid, chem, gsm, rp, gb, why in [
     ("ding2020_pbmc1_smartseq2", "smartseq2", "GSM3836772-GSM3837155 (384 cells)", 375, 14.0, "plate-based full-length protocol without UMIs"),
@@ -258,6 +230,7 @@ add(id="tabula_muris_kidney_facs", group="mouse", tier="extended", title="Tabula
 add(id="cxg16", group="curated", tier="core", title="16 GEO studies with CELLxGENE curated cell types (66 samples)", species="human+mouse",
     reference=f"{G};{M}", chemistry="mixed 10x", source="geo",
     gse="GSE125970;GSE130973;GSE131882;GSE144870;GSE157480;GSE161089;GSE164291;GSE166766;GSE184111;GSE185222;GSE185224;GSE185477;GSE201773;GSE260685;GSE270225;GSE280852",
+    gsm="GSM3587008;GSM3587009;GSM3587010;GSM3587011;GSM3587012;GSM3587013;GSM3758115;GSM3758116;GSM3758119;GSM3823939;GSM3823940;GSM3823941;GSM3823942;GSM3823943;GSM3823944;GSM4299783;GSM4299784;GSM4299785;GSM4299786;GSM4299787;GSM4299788;GSM4299789;GSM4766855;GSM4889466;GSM4889467;GSM4889468;GSM4889469;GSM5005819;GSM5005820;GSM5082289;GSM5082290;GSM5082291;GSM5082292;GSM5578032;GSM5578033;GSM5578034;GSM5578035;GSM5578036;GSM5578037;GSM5578038;GSM5578039;GSM5578040;GSM5578041;GSM5578042;GSM5578043;GSM5608427;GSM5608428;GSM5608429;GSM5608430;GSM5616002;GSM5655495;GSM5655497;GSM5655499;GSM6071111;GSM8122365;GSM8122366;GSM8122367;GSM8337506;GSM8337507;GSM8337508;GSM8337510;GSM8606565;GSM8606566;GSM8606567;GSM8606569;GSM8606570",
     n_cells=332755, truth="author labels mapped to CL by CELLxGENE curators, transferred by barcode (scripts/annotate_truth_cxg.py)",
     licence="CELLxGENE CC BY 4.0; GEO public data", capabilities="cell-type,chromosomal-sex", tools="singlet,celltypist,azimuth,singler",
     why="held out from the guide's development; truth independent of every tool")
@@ -305,6 +278,11 @@ add(id="osorio2019_lcl_mix", group="sex-ancestry", tier="core", title="Osorio 20
     licence="GEO public data (cite paper)", capabilities="genetic-ancestry,donor-demux,donor-snps,mtdna,chromosomal-sex",
     tools="singlet,vireo,souporcell,somalier,peddy,cellsnp-lite,mgatk",
     why="a two-donor pool of known 1000 Genomes individuals: demultiplexing, then ancestry per donor, end to end")
+add(id="atlas_selfreport", group="sex-ancestry", tier="core", title="Atlas donors with self-reported race or ethnicity in GEO (docs/cell_annotation.md 5.2)",
+    species="human", reference=G, chemistry="mixed 10x", source="geo", gse="see selfreport_calls.tsv (2 studies)",
+    truth="self-reported race or ethnicity in GEO characteristics", licence="GEO public data; Singlet outputs CC0",
+    capabilities="genetic-ancestry", tools="singlet",
+    why="real single-cell donors scored end to end from the atlas's own donor depth tables; corroborates the thinned MAGE results")
 add(id="mage150", group="sex-ancestry", tier="core", data_kind="derived", title="MAGE bulk RNA-seq of 1000 Genomes LCLs: 150 individuals, 26 populations (first 8M read pairs each)",
     species="human", reference=G, chemistry="bulk-rna-pe150", source="sra", other="PRJNA851328 (runs: bench/public/sexancestry/mage_subset.tsv)",
     n_cells="", read_pairs_m=3480, read_pairs_used_m=1200, fastq_gb=362,

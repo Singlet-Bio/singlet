@@ -12,6 +12,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "capabilities"))
 from _gcommon import ari, contingency, hungarian  # noqa: E402
 
+MIN_TRUTH_DONOR_CELLS = 20
 UNASSIGNED = {"unassigned", "doublet", "NA", "nan", "None", ""}
 
 
@@ -76,6 +77,10 @@ def score(truth: pd.DataFrame, pred: pd.Series) -> dict:
     """truth: index barcode, columns ind, multiplets. pred: label per barcode (missing barcode = not called).
     Scored on the truth singlets (demuxlet class 'singlet'); 'doublet' / 'unassigned' / missing count as their own labels."""
     t = truth[truth["multiplets"] == "singlet"]
+    # demuxlet occasionally calls a handful of cells for a donor that is not in the lane (1 to 10 cells); a donor needs at
+    # least 20 truth singlets to count (the true K of every Kang lane is the number of donors above this size)
+    n_by = t["ind"].map(t["ind"].value_counts())
+    t = t[n_by >= MIN_TRUTH_DONOR_CELLS]
     p = pred.reindex(t.index).fillna("not_called").astype(str)
     called = p[~p.isin(UNASSIGNED | {"not_called"})]
     out = dict(n_truth_singlets=int(len(t)), n_scored=int(len(called)))

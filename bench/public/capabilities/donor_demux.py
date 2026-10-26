@@ -68,13 +68,14 @@ def _truth(g: pd.DataFrame) -> pd.DataFrame:
 
 
 def _score_tool(g: pd.DataFrame, col: str):
-    if col not in g.columns:
+    if col not in g.columns or (g[col] == "").all():
         return None
     return DE.score(_truth(g), g.set_index("barcode")[col])
 
 
 def _ari_ci(g: pd.DataFrame, col: str, B: int = 200):
     t = g[g["truth_class"] == "singlet"]
+    t = t[t["truth_donor"].map(t["truth_donor"].value_counts()) >= DE.MIN_TRUTH_DONOR_CELLS]
     y, p = t["truth_donor"].values, t[col].values
     return boot(lambda idx: ari(y[idx], p[idx]), len(t), B=B)
 
