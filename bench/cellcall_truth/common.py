@@ -212,6 +212,63 @@ def calibrate(llr_fn, pos_umis, neg_umis, n_sites, seed=7, n_neg=10000, min_rate
     return cal, n_min
 
 
+def ambient_window(umi, called_any, lo=10):
+    """The empty-droplet plateau: mode of the UMI-weighted log10 UMI histogram of barcodes no caller calls (>= lo UMIs), +- 2-fold.
+    Weighting by UMIs puts the mode where the ambient molecules are (the plateau), not at the very-low-UMI barcodes, which in
+    10x v3 data are dominated by barcode-error and swapped reads from single cells."""
+    sel = (~called_any) & (umi >= lo)
+    x = np.log10(umi[sel])
+    h, e = np.histogram(x, bins=60, weights=umi[sel])
+    k = int(np.argmax(h))
+    mode = 10 ** (0.5 * (e[k] + e[k + 1]))
+    return max(lo, mode / 2), mode * 2
+
+
+def mixture_densities(llr_fn, bar_umis, pos_umis, neg_umis, n_sites, cap=400, n_ref=400, seed=11):
+    """Per barcode: its LLR at depth d = min(depth, cap) (own UMIs thinned to cap) and the densities of that LLR under thinned
+    positives (f1) and pooled negatives (f0) at exactly depth d (Gaussian KDE of n_ref reference draws each, floored).
+    The ratio f1/f0 feeds a mixture estimate of the cell fraction of any group of barcodes (score.py), which works where single
+    barcodes are too shallow to classify."""
+    from scipy.stats import gaussian_kde
+    rng = np.random.default_rng(seed)
+    n = len(bar_umis)
+    dep = np.array([min(len(s), cap) for s, _ in bar_umis])
+    own = []
+    for s, a in bar_umis:
+        if len(s) > cap:
+            k = rng.choice(len(s), cap, replace=False)
+            s, a = s[k], a[k]
+        own.append((s, a))
+    llr = np.full(n, np.nan)
+    f1 = np.full(n, np.nan)
+    f0 = np.full(n, np.nan)
+    ok = dep >= 3
+    if ok.any():
+        llr[ok] = llr_fn(*to_csr([own[i] for i in np.nonzero(ok)[0]], n_sites))
+    psize = np.array([len(s) for s, _ in pos_umis])
+    for m in np.unique(dep[ok]):
+        elig = np.nonzero(psize >= m)[0]
+        if len(elig) < 30:
+            continue
+        pick = rng.choice(elig, min(n_ref, len(elig)), replace=len(elig) < n_ref)
+        P = thinned_positives([pos_umis[j] for j in pick], m, rng)
+        N = pooled_negatives(neg_umis, m, n_ref, rng)
+        lp = llr_fn(*to_csr(P, n_sites))
+        ln = llr_fn(*to_csr(N, n_sites))
+        idx = np.nonzero(ok & (dep == m))[0]
+        x = llr[idx]
+        for ref, out in ((lp, f1), (ln, f0)):
+            sd = ref.std()
+            if sd < 1e-9:
+                dens = np.where(np.abs(x - ref.mean()) < 1e-6, 1.0, 0.0)
+            else:
+                kde = gaussian_kde(ref)
+                dens = kde(x)
+            floor = 0.5 / (len(ref) * max(np.ptp(np.r_[ref, x]), 1.0))  # less than one reference draw's worth of mass
+            out[idx] = np.maximum(dens, floor)
+    return llr, dep, f1, f0
+
+
 def classify(llr, depth, cal, n_min):
     """cell / empty / unknown per barcode from its LLR and informative depth, with the calibration of the largest m <= depth."""
     out = np.full(len(llr), "unknown", dtype=object)

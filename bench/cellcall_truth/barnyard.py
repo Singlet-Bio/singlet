@@ -50,7 +50,9 @@ def main(ds, out):
     callers = [c for c in ("called_v2", "knee", "edcr", "cellbender", "cellranger") if c in t]
     anyc = t[callers].max(axis=1).to_numpy()
     allc = t[callers].min(axis=1).to_numpy()
-    emp = np.nonzero((t["umi_total"].to_numpy() >= 10) & (t["umi_total"].to_numpy() < 50) & (anyc == 0) & (n > 0))[0]
+    lo, hi = C.ambient_window(t["umi_total"].to_numpy(), anyc == 1)
+    print(f"[barnyard] ambient window {lo:.0f}-{hi:.0f} UMIs")
+    emp = np.nonzero((t["umi_total"].to_numpy() >= lo) & (t["umi_total"].to_numpy() <= hi) & (anyc == 0) & (n > 0))[0]
     e_half = rng.random(len(emp)) < 0.5
     e1, e2 = emp[e_half], emp[~e_half]
     h_amb = h[e1].sum() / n[e1].sum()
@@ -88,6 +90,11 @@ def main(ds, out):
     doublet = (truth != "cell") & (n >= 200) & (p_amb < 1e-6) & (frac > 0.1) & (frac < 0.9)
     truth = np.where(doublet, "cell", truth)
     t["species_umis"], t["human_share"], t["llr"] = n, frac, llr
+    mi = np.nonzero(((t["umi_total"].to_numpy() >= 50) | (anyc == 1)) & (n > 0))[0]
+    l2, d2, f1, f0 = C.mixture_densities(llr_fn, [umis(i) for i in mi], [umis(i) for i in pos], [umis(i) for i in e2], 1)
+    for name, v in (("llr_cap", l2), ("depth_cap", d2), ("f1", f1), ("f0", f0)):
+        t[name] = np.nan
+        t.loc[t.index[mi], name] = v
     t["model"] = np.where(doublet, "doublet", np.where(best % 2 == 1, "human", "mouse"))
     t["truth"] = truth
     ref = t.iloc[pos]
@@ -103,7 +110,7 @@ def main(ds, out):
     t.loc[t.index[e1], "calib_role"] = "ambient_fit"
     t.loc[t.index[e2], "calib_role"] = "negative"
     t.to_csv(os.path.join(out, f"{ds}.truth.tsv.gz"), sep="\t", index=False)
-    summ = dict(dataset=ds, kind="barnyard", ambient_human_share=float(h_amb), n_positives=len(pos), n_negatives_pool=len(e2),
+    summ = dict(dataset=ds, kind="barnyard", ambient_human_share=float(h_amb), ambient_window=[lo, hi], n_positives=len(pos), n_negatives_pool=len(e2),
                 n_min=n_min, calibration=cal.to_dict("records"), intact_reference=q, missing_from_universe=missing,
                 truth_counts=pd.Series(truth).value_counts().to_dict(), n_doublet=int(doublet.sum()),
                 truth_strict_counts=t["truth_strict"].value_counts().to_dict())

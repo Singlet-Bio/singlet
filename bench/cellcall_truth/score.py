@@ -77,6 +77,70 @@ def score_table(t, variant, seed=3, min_umi=50):
     return res
 
 
+def _em(f1, f0, iters=200):
+    pi = 0.5
+    for _ in range(iters):
+        post = pi * f1 / (pi * f1 + (1 - pi) * f0)
+        new = float(post.mean())
+        if abs(new - pi) < 1e-7:
+            break
+        pi = new
+    return pi, pi * f1 / (pi * f1 + (1 - pi) * f0)
+
+
+def mixture_score(t, min_umi=50, seed=5, nb=300):
+    """Cell fraction of each group of barcodes (caller-agreement pattern x UMI bin) by EM on the per-barcode densities f1 / f0
+    (common.mixture_densities); posterior P(cell) per barcode; expected precision / recall / F1 of each caller with bootstrap CIs.
+    'intact' variant: posterior times 1[not damaged]."""
+    callers = [c for c in CALLERS if c in t and c != "knee"]
+    callers_all = [c for c in CALLERS if c in t]
+    u = t[(t["umi_total"] >= min_umi) & np.isfinite(t["f1"]) & np.isfinite(t["f0"])].reset_index(drop=True)
+    pat = u[callers].astype(int).astype(str).agg("".join, axis=1)
+    grp = (pat + "|" + pd.cut(u["umi_total"], C.UMI_BINS, right=False).astype(str)).to_numpy()
+    f1, f0 = u["f1"].to_numpy(), u["f0"].to_numpy()
+    nd = (u["intact_state"] != "damaged").to_numpy()
+    calls = {c: u[c].to_numpy().astype(bool) for c in callers_all}
+
+    def run(ix):
+        post = np.zeros(len(ix))
+        g = grp[ix]
+        pis = {}
+        for k in np.unique(g):
+            m = g == k
+            pis[k], post[m] = _em(f1[ix][m], f0[ix][m])
+        out = {}
+        for v, w in (("lenient", post), ("intact", post * nd[ix])):
+            tot = w.sum()
+            for c in callers_all:
+                a = calls[c][ix]
+                tp = w[a].sum()
+                p, r = tp / max(a.sum(), 1), tp / max(tot, 1e-9)
+                out[(v, c)] = (p, r, 2 * p * r / max(p + r, 1e-12))
+        return out, pis, post
+    full, pis, post = run(np.arange(len(u)))
+    rng = np.random.default_rng(seed)
+    boots = [run(rng.integers(0, len(u), len(u)))[0] for _ in range(nb)]
+    res = {"n_universe": int(len(u)), "expected_cells": float(post.sum()), "expected_cells_intact": float((post * nd).sum()),
+           "groups": {}, "lenient": {}, "intact": {}}
+    for k, pi in pis.items():
+        m = grp == k
+        res["groups"][k] = {"n": int(m.sum()), "cell_fraction": float(pi), "median_umi": float(u.loc[m, "umi_total"].median()),
+                            "damaged_frac": float(1 - nd[m].mean())}
+    for (v, c), (p, r, f) in full.items():
+        bp = np.array([b[(v, c)] for b in boots])
+        e = {"n_called": int(calls[c].sum()), "precision": float(p), "recall": float(r), "f1": float(f),
+             "precision_ci": ci(bp[:, 0]), "recall_ci": ci(bp[:, 1]), "f1_ci": ci(bp[:, 2])}
+        if c != "called_v2":
+            bv = np.array([b[(v, "called_v2")] for b in boots])
+            e["f1_minus_called_v2_ci"] = ci(bp[:, 2] - bv[:, 2])
+            e["precision_minus_called_v2_ci"] = ci(bp[:, 0] - bv[:, 0])
+            e["recall_minus_called_v2_ci"] = ci(bp[:, 1] - bv[:, 1])
+        res[v][c] = e
+    # per-barcode posterior, for the extras analysis
+    u = u.assign(post=post)
+    return res, u[["barcode", "post"]]
+
+
 def coverage(t):
     bins = pd.cut(t["umi_total"], C.UMI_BINS, right=False)
     out = {}
@@ -94,6 +158,18 @@ def main(tdir, out_json, *dss):
     for ds in dss:
         t = pd.read_csv(os.path.join(tdir, f"{ds}.truth.tsv.gz"), sep="\t", dtype={"barcode": str})
         R[ds] = {"coverage": coverage(t), "lenient": score_table(t, "lenient"), "strict": score_table(t, "strict")}
+        if "f1" in t:
+            R[ds]["mixture"], pp = mixture_score(t)
+            pp.to_csv(os.path.join(tdir, f"{ds}.posterior.tsv.gz"), sep="\t", index=False)
+            mx = R[ds]["mixture"]
+            print(f"== {ds} [mixture] universe {mx['n_universe']} expected cells {mx['expected_cells']:.0f} (intact {mx['expected_cells_intact']:.0f})")
+            for v in ("lenient", "intact"):
+                for c, m in mx[v].items():
+                    print(f"  {v:8s} {c:15s} n={m['n_called']:6d} P={m['precision']:.4f} {np.round(m['precision_ci'], 4)} "
+                          f"R={m['recall']:.4f} {np.round(m['recall_ci'], 4)} F1={m['f1']:.4f} dF1={np.round(m.get('f1_minus_called_v2_ci', [np.nan]), 4)}")
+            for k, g in sorted(mx["groups"].items()):
+                if g["n"] >= 20:
+                    print(f"    group {k:40s} n={g['n']:6d} umi_med={g['median_umi']:8.0f} cell_frac={g['cell_fraction']:.3f} damaged={g['damaged_frac']:.2f}")
         for v in ("lenient", "strict"):
             o = R[ds][v]["overall"]
             print(f"== {ds} [{v}] decided {R[ds][v]['n_decided']} cells {R[ds][v]['n_cell']}")

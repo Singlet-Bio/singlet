@@ -41,11 +41,13 @@ def load_cellsnp(d):
 
 
 def genotype(A, D, e=0.05):
-    """A, D: donors x sites pooled counts -> dosage {0, 0.5, 1}, margin."""
+    """A, D: donors x sites pooled counts -> posterior-mean dosage (uniform prior over {0, 0.5, 1}), max posterior.
+    Uncertain genotypes become intermediate dosages, so they carry little weight instead of being dropped."""
     ps = np.array([e, 0.5, 1 - e])
     ll = np.stack([A * np.log(p) + (D - A) * np.log(1 - p) for p in ps])  # 3 x donors x sites
-    o = np.sort(ll, axis=0)
-    return np.array([0.0, 0.5, 1.0])[ll.argmax(0)], o[-1] - o[-2]
+    post = np.exp(ll - ll.max(0))
+    post /= post.sum(0)
+    return np.tensordot(np.array([0.0, 0.5, 1.0]), post, axes=1), post.max(0)
 
 
 def main(ds, csdir, authors, stim, out):
@@ -68,19 +70,24 @@ def main(ds, csdir, authors, stim, out):
         ix = [pos_of[b] for b in geno_cells.index[geno_cells["ind"] == d]]
         A[k] = np.asarray(AD[ix].sum(0)).ravel()
         Dd[k] = np.asarray(DP[ix].sum(0)).ravel()
-    G, margin = genotype(A, Dd)
-    keep = (Dd >= 10).all(0) & (margin >= 4).all(0) & (G.min(0) != G.max(0))
+    G, pmax = genotype(A, Dd)
+    conf = pmax >= 0.95
+    # informative: at least one confident hom-ref and one confident non-ref donor, or confident het vs confident hom
+    gc = np.where(conf, G, np.nan)
+    keep = (conf.sum(0) >= 2) & ((np.nanmax(gc, 0) - np.nanmin(gc, 0)) >= 0.45)
     G = G[:, keep]
     AD, DP = C.align(AD[:, keep], DP[:, keep])
     S = G.shape[1]
     eps = 0.01
-    P = np.where(G == 0, eps, np.where(G == 1, 1 - eps, 0.5))  # donors x sites
+    P = eps + (1 - 2 * eps) * G  # donors x sites, allele probability
     print(f"[geno] donors {donors}; sites kept {S} of {len(keep)}; genotype cells {len(geno_cells)}, calibration cells {len(cal_cells)}")
     # 3. ambient weights
     tt = t.set_index("barcode")
     callers = [c for c in ("called_v2", "knee", "edcr", "cellbender", "cellranger", "demuxlet_table") if c in tt]
     anyc = tt[callers].max(axis=1)
-    emp = tt[(tt["umi_total"] >= 10) & (tt["umi_total"] < 50) & (anyc == 0)].index
+    lo, hi = C.ambient_window(tt["umi_total"].to_numpy(), anyc.to_numpy() == 1)
+    print(f"[geno] ambient window {lo:.0f}-{hi:.0f} UMIs")
+    emp = tt[(tt["umi_total"] >= lo) & (tt["umi_total"] <= hi) & (anyc == 0)].index
     emp = np.array([b for b in emp if b in pos_of])
     e_half = rng.random(len(emp)) < 0.5
     e1 = [pos_of[b] for b in emp[e_half]]
@@ -136,6 +143,13 @@ def main(ds, csdir, authors, stim, out):
     t["contam"] = [desc[j][3] if j >= 0 else np.nan for j in best]
     t["truth"] = C.classify(np.nan_to_num(llr, nan=0.0), depth, cal, n_min)
     t.loc[~has, "truth"] = "unknown"
+    # mixture densities for barcodes that matter (>= 50 UMIs or called by anyone)
+    mix = has & ((t["umi_total"] >= 50).to_numpy() | (t[callers].max(axis=1) == 1).to_numpy())
+    mi = np.nonzero(mix)[0]
+    l2, d2, f1, f0 = C.mixture_densities(llr_fn, [C.umis_of(AD, DP, idx[i]) for i in mi], pos_umis, neg_umis, S)
+    for name, v in (("llr_cap", l2), ("depth_cap", d2), ("f1", f1), ("f0", f0)):
+        t[name] = np.nan
+        t.loc[t.index[mi], name] = v
     # 5. intact-cell flags against the calibration positives
     ref = tt.reindex(cal_cells.index)
     ref = ref[ref["umi_total"] >= 1500]
@@ -153,6 +167,7 @@ def main(ds, csdir, authors, stim, out):
     t.loc[t["barcode"].isin(emp[~e_half]), "calib_role"] = "negative"
     t.to_csv(os.path.join(out, f"{ds}.truth.tsv.gz"), sep="\t", index=False)
     summ = dict(dataset=ds, kind="genotype", donors=[str(d) for d in donors], n_sites=int(S), ambient_weights=w.tolist(),
+                ambient_window=[lo, hi],
                 cell_donor_shares=cell_frac.tolist(), n_genotype_cells=int(len(geno_cells)), n_positives=len(pos_umis),
                 n_negatives_pool=len(neg_umis), n_min=n_min, calibration=cal.to_dict("records"), intact_reference=q,
                 missing_from_universe=missing, truth_counts=t["truth"].value_counts().to_dict(),
