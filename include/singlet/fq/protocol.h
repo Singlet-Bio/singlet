@@ -12,7 +12,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
-#include <fstream>
 #include <iostream>
 #include <string>
 #include <sys/stat.h>
@@ -179,11 +178,9 @@ inline const std::vector<CandidateSpec>& known_protocols() {
 
         // ── 10x Visium (Spatial Transcriptomics) ──
         // R1(28bp): BC(16bp@0) + UMI(12bp@16), geometrically identical to 10x v3.
-        // Spot list visium-v1.txt (4,992 spots) is rebuilt from 10x public datasets (bench/atac_spatial/make_lists.py)
-        // and installed next to the other whitelists when available; it shares 7 barcodes with 3M-february-2018, so the
-        // hit rate separates Visium from 3' v3. When the file is not installed, detection falls back to 10x-3p-v3 as
-        // before (the candidate is treated as whitelist-free). Classified as SPATIAL_RNA.
-        {"10x-visium", 24, 28, 0, 16, 16, 12, "visium-v1.txt", "", 0, false},
+        // Spatial barcode WL (~4992 barcodes) is Space Ranger licensed — not bundled.
+        // Without WL, detection falls back to 10x-3p-v3. Classified as SPATIAL_RNA.
+        {"10x-visium", 24, 28, 0, 16, 16, 12, "", "", 0, false},
 
         // ── CITE-seq GEX ──
         // R1(28bp): CB(16bp@0) + UMI(12bp@16) — identical geometry to 10x-3p-v3.
@@ -548,14 +545,6 @@ ProtocolCandidate detect_protocol(
     // so it must never be chosen over one.
     // Enforces the stated intent in known_protocols(): "Without WL, detection falls
     // back to 10x-3p-v3."
-    // A whitelist named by a spec but not installed in any whitelist dir counts as no whitelist (for suppression).
-    auto wl_installed = [&](const std::string& f) {
-        for (const auto& dir : whitelist_dirs) {
-            std::ifstream probe(dir + "/" + f);
-            if (probe.good()) return true;
-        }
-        return false;
-    };
     std::unordered_set<uint64_t> wl_geometries;
     auto pack_geom5 = [](uint16_t r1, uint16_t bco, uint16_t bcl,
                          uint16_t umio, uint16_t umil) -> uint64_t {
@@ -590,7 +579,7 @@ ProtocolCandidate detect_protocol(
         // no-WL protocol cannot discriminate itself from the WL protocol no matter
         // how the structural scoring turns out, so it must never win over it.
         // Not applied to protocols with a linker (linker IS an independent signal).
-        if ((cand->whitelist_file.empty() || !wl_installed(cand->whitelist_file)) && cand->linker.empty()) {
+        if (cand->whitelist_file.empty() && cand->linker.empty()) {
             uint64_t g = pack_geom5(cand->r1_len, cand->bc_offset, cand->bc_len,
                                     cand->umi_offset, cand->umi_len);
             if (wl_geometries.count(g)) continue;  // geometry covered; fall back to WL protocol

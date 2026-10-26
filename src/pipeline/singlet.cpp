@@ -3225,6 +3225,24 @@ int main(int argc, char* argv[]) {
                 std::cerr << "[singlet] Feature-barcode-only (ADT/HTO) assay detected\n";
             if (is_visium_mode)
                 std::cerr << "[singlet] Visium spatial assay detected (assay_type=" << (int)eahdr.assay_type << ")\n";
+            // Visium: the spot list (visium-v1.txt, rebuilt from 10x public datasets) is the whitelist when installed,
+            // so STAR corrects spot barcodes. Protocol detection is unchanged: it cannot tell Visium from 3' v3.
+            if (is_visium_mode && (whitelist_file.empty() || whitelist_file == "None" || whitelist_file == "none")) {
+                char exe_buf[PATH_MAX];
+                ssize_t n = ::readlink("/proc/self/exe", exe_buf, sizeof(exe_buf) - 1);
+                if (n > 0) {
+                    exe_buf[n] = '\0';
+                    std::string dir(exe_buf);
+                    dir.resize(dir.rfind('/'));
+                    const std::string c = dir + "/../whitelists/visium-v1.txt";
+                    struct stat st;
+                    if (stat(c.c_str(), &st) == 0) {
+                        whitelist_file = c;
+                        whitelist_auto_resolved = true;
+                        std::cerr << "[singlet] Visium spot list: " << c << "\n";
+                    }
+                }
+            }
             if (is_smart_seq2_mode)
                 std::cerr << "[singlet] Smart-seq2/plate assay detected (assay_type=" << (int)eahdr.assay_type << ")\n";
             if (is_bulk_rna_mode)

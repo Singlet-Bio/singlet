@@ -105,7 +105,7 @@ where = ["python"]
 include = ["singlet*"]
 
 [tool.setuptools.package-data]
-singlet = ["celllabels/data/*.gz", "data/*.parquet", "data/whitelists/*.txt", "py.typed", "features/data/*.json", "features/data/*.parquet", "_singlepress*.so", "v2/packs/*.pack", "v2/packs/index.json", "v2/recipes_data/*.zst"]
+singlet = ["celllabels/data/*.gz", "data/*.parquet", "data/whitelists/*.txt", "data/whitelists/*.tsv", "data/whitelists/*.tsv.gz", "data/whitelists/ATTRIBUTION.md", "py.typed", "features/data/*.json", "features/data/*.parquet", "_singlepress*.so", "v2/packs/*.pack", "v2/packs/index.json", "v2/recipes_data/*.zst"]
 
 # The four large 10x whitelists (about 106 MB of 113 MB) are not shipped: singlet.whitelists
 # downloads them from the public Teichlab CDN on first use. The small ones, and 737K-april-2014

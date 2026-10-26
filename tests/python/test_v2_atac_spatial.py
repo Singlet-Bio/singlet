@@ -27,11 +27,13 @@ pytest.importorskip("singlet._pz2", reason="singlet._pz2 is not built")
 pytest.importorskip("zstandard")
 
 from singlet.v2 import cells as cells_mod  # noqa: E402
-from singlet.v2 import client  # noqa: E402
+from singlet.v2 import (
+    client,  # noqa: E402
+    util,  # noqa: E402
+)
 from singlet.v2 import container as K  # noqa: E402
 from singlet.v2 import manifest as M  # noqa: E402
 from singlet.v2 import modality_members as MM  # noqa: E402
-from singlet.v2 import util  # noqa: E402
 
 GSE = "GSE900002"
 G1, G2 = "GSM9100001", "GSM9100002"
@@ -309,6 +311,8 @@ def test_only_selected_members_are_read(study, env, monkeypatch):
     st = client.open_study(GSE, base=pathlib.Path(root).as_uri())
     with warnings.catch_warnings():
         warnings.simplefilter("error")
+        # anndata still reads pandas options that pandas 3.1 deprecates; that third-party warning is not under test
+        warnings.filterwarnings("ignore", message=r".*deprecated and will be removed in pandas.*")
         st.to_anndata([G1], modalities="gene_activity")
     sm = st.samples[G1]
     touched = set()

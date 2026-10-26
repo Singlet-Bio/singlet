@@ -1,0 +1,9 @@
+Singlet
+Copyright (c) Singlet contributors. Licensed under the terms in LICENSE.
+
+Third-party data
+----------------
+python/singlet/data/whitelists/visium-v1.txt, visium-v1_coordinates.tsv, 737K-arc-v1-atac-gex.tsv.gz and
+737K-cratac-v1.txt were rebuilt from 10x Genomics public datasets, licensed under Creative Commons Attribution 4.0
+International (CC BY 4.0). Source datasets, URLs, checksums and the rebuilding method:
+python/singlet/data/whitelists/ATTRIBUTION.md. 10x Genomics does not endorse this software.

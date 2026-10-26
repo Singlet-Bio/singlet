@@ -220,7 +220,7 @@ Visium (`spatial_summary.json` → `qc`):
 ## 5. Barcode lists
 
 Rebuilt only from 10x public datasets (CC BY 4.0), never from 10x software. They are kept on Clipper
-(`pipeline-benchmark/whitelists/atacsp/`) and are not yet in git, pending the licence decision:
+and bundled in `python/singlet/data/whitelists/` (approved by Zach), with sources, licence and checksums in `ATTRIBUTION.md` there:
 
 | list | source | size | check |
 |---|---|---|---|
@@ -233,7 +233,7 @@ Rebuilt only from 10x public datasets (CC BY 4.0), never from 10x software. They
 * The atlas tags 756 samples as Spatial. Two issues affect them:
   * Without the spot list, Visium libraries are detected as 3' v3, their spots are not corrected, and EmptyDrops
     "calls" a few dozen spots.
-  * With the list installed, detection, spot correction, tissue calls and coordinates come out of the normal pipeline.
+  * With the list installed and the assay known to be Visium (`--protocol 10x-visium` or metadata), spot correction, tissue calls and coordinates come out of the normal pipeline. Automatic Visium detection by spot hit rate is not in this change (an attempt broke two protocol tests and was reverted).
 * ATAC libraries processed as RNA (139 in `docs/library-type-screen.md`) and the Multiome ATAC halves need the ATAC
   path: `--protocol 10x-atac` at encode, or detection from the Tn5 signature. Their RNA-mode objects should not be
   migrated.
@@ -242,7 +242,7 @@ Rebuilt only from 10x public datasets (CC BY 4.0), never from 10x software. They
 
 ## 7. Open items
 
-* Licence answer for the three barcode lists, then bundle them, replacing the wrong `737K-cratac-v1.txt`.
+* Re-run the Visium / mouse numbers after the NUMT multimapper fix (pipeline-benchmark, `fix/intron-assignment`).
 * Merge into the campaign binary. The results here use `singlet-atacsp`: this branch merged onto `prod/modality-fixes`.
 * Visium HD and Slide-seq are not handled: different barcode geometry and bin aggregation. Visium v2 / CytAssist slides
   need their own spot lists, which no 10x public dataset with FASTQs supplies yet.
