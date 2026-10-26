@@ -32,7 +32,7 @@ target_include_directories(singlet_pz INTERFACE
 )
 target_link_libraries(singlet_pz INTERFACE ${ZSTD_LIBRARY})
 
-# singlet::pz2 — v2 sparse-matrix codec (header-only C++17; SIMD paths are runtime-dispatched, so NO -march flags are needed)
+# singlet::pz2 — store sparse-matrix codec (header-only C++17; SIMD paths are runtime-dispatched, so NO -march flags are needed)
 add_library(singlet_pz2 INTERFACE)
 add_library(Singlet::pz2 ALIAS singlet_pz2)
 target_include_directories(singlet_pz2 INTERFACE

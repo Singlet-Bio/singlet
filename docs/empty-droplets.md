@@ -1,12 +1,12 @@
 # Are Singlet's uncalled barcodes empty droplets?
 
-Study for the v2 decision "may v2 drop the matrix entries of uncalled barcodes?" (2026-10-23). Code: `bench/empty_droplets/`.
+Study for the store decision "may store drop the matrix entries of uncalled barcodes?" (2026-10-23). Code: `bench/empty_droplets/`.
 Data: 65 samples of 18 studies read from the legacy `.singlet` bundles, 49 of them usable as gene-expression libraries (the rest
 are hashtag/antibody/guide or TCR libraries processed as RNA, or Parse sub-libraries with a broken call; see "Samples").
 
 ## Verdict
 
-**No. The uncalled barcodes are not demonstrably empty, and v2 should not drop them.** In 47 of 49 usable samples, between
+**No. The uncalled barcodes are not demonstrably empty, and store should not drop them.** In 47 of 49 usable samples, between
 hundreds and ~18,000 uncalled barcodes per sample (median 3,317, i.e. 57% as many as the called cells) carry RNA from single cells:
 
 * their expression rejects "ambient RNA only" at FDR 1% against a depth-matched, overdispersion-aware null, and still does with
@@ -37,7 +37,7 @@ Two facts change the framing of the question:
    own counts (`export.h` takes `Solo.out/Gene/filtered/barcodes.tsv` whenever it exists; the pipeline's own EmptyDrops runs only
    for protocols without Solo.out). That rule is known to miss cells with little RNA, and it is what the data show: a single
    threshold on the stored totals reproduces the call to within 0-5% of barcodes in every sample (median 0.6%).
-2. **The v2 pilot GSE145370 is the wrong library type.** Its 14 samples (GSM4317423-36) are TCR-enriched V(D)J libraries
+2. **The store pilot GSE145370 is the wrong library type.** Its 14 samples (GSM4317423-36) are TCR-enriched V(D)J libraries
    ("S133_TCR Sample 1" ... in GEO); the mRNA libraries are GSM4317409-22 and are not in the bundle. The pilot's shallow counts,
    TRBV/TRAV cluster markers and large vdj member follow from that. Measurements on the pilot (29.9 MB -> 13 MB; 39-56% of
    entries in uncalled barcodes) describe amplicon libraries. Over the 49 usable gene-expression samples uncalled barcodes hold a
@@ -217,7 +217,7 @@ cell-like uncalled vs share of called): brain nuclei RGS1+ cluster 48% vs 4% and
 48% vs 5%; AML marrow cytotoxic T/NK (LCK, PRF1, CD160) 34% vs 4% and B cells (MS4A1, CXCR5) 29% vs 5%; neutrophil samples
 Retnlg/Mmp8 (4.4x) and Il1b/Cxcl2 (3.6x) clusters; PBMC plasma cells (IGHA1, TNFRSF17) 19% vs 0.3%; human/mouse lines a mouse
 B-lineage cluster 44% vs 5%; schwannoma T cells 21% vs 3%. Low-RNA cell types are what a UMI threshold drops, so dropping their
-barcodes would bias every composition estimate made from v2.
+barcodes would bias every composition estimate made from store.
 
 Some cell-like barcodes are damaged cells or fragments (one brain sample's enriched cluster is mitochondrial transcripts). They are
 still not empty droplets, and deciding whether they are cells belongs to whoever re-calls.
@@ -302,7 +302,7 @@ CellBender agrees in direction with every other caller: it keeps all of Singlet'
 
 ## Recommendation
 
-**Keep the matrix entries of every stored barcode in v2.** The cell call can be redone from stored data only if the uncalled
+**Keep the matrix entries of every stored barcode in store.** The cell call can be redone from stored data only if the uncalled
 barcodes that hold cells keep their profiles. Those barcodes start anywhere from ~20 to a few hundred UMIs depending on the
 sample, and in the hashed PBMC library they include the very plateau that looks ambient. No fixed rule drops much without
 dropping cells.
@@ -358,7 +358,7 @@ cells, so a default read never fetches them; the cell-index session already prop
 33% more than "called only", reads cost nothing extra, and nothing is irreversible.
 
 Follow-ups this study points to (not done here): fix the pilot (migrate the mRNA libraries GSM4317409-22, not the TCR ones);
-record the STARsolo filter actually used and consider an EmptyDrops-based `called_v2` flag computed from the stored data; screen
+record the STARsolo filter actually used and consider an EmptyDrops-based `called_ed` flag computed from the stored data; screen
 the atlas for feature-barcode and V(D)J libraries processed as RNA.
 
 ## Limitations
