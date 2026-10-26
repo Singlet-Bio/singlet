@@ -44,7 +44,9 @@ def compute(artifact_dir: Path) -> dict:
     metrics, figures = [], []
     for ds in prov["datasets"]:
         labs, ref, level, expr, kd_cells, gt, gk, meta = CC.read_artifacts(str(artifact_dir), ds)
-        res = CC.evaluate(labs, ref, level, expr, kd_cells, gt, gk)
+        mode = meta.get("mode", "i")
+        res = CC.evaluate(labs, ref, level, expr, kd_cells, gt, gk, mode)
+        moved = "induced (CRISPRa)" if mode == "a" else "lower"
         S = res["singlet"]
         callers = [c for c in COMPETITORS if c in res and c != "cellranger_published"]
         ref_name = "published calls" if level == "target" else "Cell Ranger's protospacer calls"
@@ -59,7 +61,7 @@ def compute(artifact_dir: Path) -> dict:
             metrics.append(_metric("knockdown_cells", "Single-guide cells of scored guides (usable perturbed cells)",
                                    "cells", "coverage", ds, "higher", S["kd_cells_scored"],
                                    [(COMPETITORS[c], res[c]["kd_cells_scored"]) for c in kd_tools]))
-            metrics.append(_metric("knockdown_significant", "Guides whose target is significantly lower in their "
+            metrics.append(_metric("knockdown_significant", f"Guides whose target is significantly {moved} in their "
                                    "single-guide cells (one-sided Mann-Whitney vs controls, BH 0.05)", "fraction",
                                    "accuracy", ds, "higher", S["kd_frac_guides_significant"],
                                    [(COMPETITORS[c], res[c]["kd_frac_guides_significant"]) for c in kd_tools]))

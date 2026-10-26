@@ -66,7 +66,10 @@ def _cp10k_targets(X, genes, targets):
     return out
 
 
-def knockdown_stats(lab: pd.DataFrame, expr: dict, nt_target="non-targeting", key="target", min_cells=5):
+def knockdown_stats(lab: pd.DataFrame, expr: dict, nt_target="non-targeting", key="target", min_cells=5, mode="i"):
+    """``mode`` "i" (CRISPRi / knockout): effect = 1 - mean / control mean, one-sided test for lower expression;
+    "a" (CRISPRa): effect = log2((mean + 0.01) / (control mean + 0.01)), one-sided test for higher expression (the
+    target is often silent in control cells)."""
     from scipy.stats import mannwhitneyu
 
     single = lab["class"].to_numpy() == "single"
@@ -84,10 +87,15 @@ def knockdown_stats(lab: pd.DataFrame, expr: dict, nt_target="non-targeting", ke
         # coordinates) uses the single-guide cells of every other target, the usual control of an essential-gene screen
         c_ = ctrl if ctrl.sum() >= 20 else (single & (tg != t) & (tg != ""))
         cm = e[c_].mean()
-        if cm <= 0:
-            continue
-        p = mannwhitneyu(e[sel], e[c_], alternative="less").pvalue
-        rows.append({"guide": g, "target": t, "cells": int(sel.sum()), "knockdown": 1 - e[sel].mean() / cm, "p": p})
+        if mode == "a":
+            p = mannwhitneyu(e[sel], e[c_], alternative="greater").pvalue
+            eff = float(np.log2((e[sel].mean() + 0.01) / (cm + 0.01)))
+        else:
+            if cm <= 0:
+                continue
+            p = mannwhitneyu(e[sel], e[c_], alternative="less").pvalue
+            eff = 1 - e[sel].mean() / cm
+        rows.append({"guide": g, "target": t, "cells": int(sel.sum()), "knockdown": eff, "p": p})
     df = pd.DataFrame(rows)
     if df.empty:
         return df, {"guides_scored": 0}
@@ -159,7 +167,9 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--run", required=True)
     ap.add_argument("--reference", required=True)
-    ap.add_argument("--ref-format", choices=["cellranger", "replogle"], required=True)
+    ap.add_argument("--ref-format", choices=["cellranger", "replogle", "norman"], required=True)
+    ap.add_argument("--mode", choices=["i", "a"], default="i", help="i: CRISPRi / knockout; a: CRISPRa")
+    ap.add_argument("--norman-dir", default=None, help="GSE133344 files (matrix, barcodes, genes) for expression")
     ap.add_argument("--gemgroup", default=None)
     ap.add_argument("--gex", default=None, help="10x h5 (cellranger format) for expression")
     ap.add_argument("--guides", required=True, help="feature reference CSV or guide table TSV")
@@ -188,8 +198,17 @@ def main(argv=None):
         ref["target"] = ref["guide_ids"].map(lambda s: "|".join(sorted({gt.get(x, x) for x in s.split("|")})))
         adata = None
         level = a.level or "guide"
-    else:
+    elif a.ref_format == "replogle":
         ref, adata = ref_replogle(a.reference, a.gemgroup)
+        level = a.level or "target"
+    else:
+        # Norman 2019: identities of the held-out half only (the guide-barcode names were learnt on the other half)
+        ref = pd.read_csv(a.reference, keep_default_na=False)
+        ref = ref[ref["split"] == "test"].drop(columns=["split"])
+        ref["n_guides"] = 1
+        ref["class"] = "single"
+        ref["guide_ids"] = ref["target"]
+        adata = None
         level = a.level or "target"
     labs = {}
     for c in CALLERS:
@@ -238,6 +257,19 @@ def main(argv=None):
         g = g[[c for c in base["barcode"] if c in set(g.obs_names)]]
         expr = _cp10k_targets(g.X, list(g.var_names), [t for t in lib.target_gene if t])
         kd_cells = list(g.obs_names)
+    elif a.norman_dir:
+        from scipy import io as sio
+
+        bcs = pd.read_csv(f"{a.norman_dir}/GSE133344_filtered_barcodes.tsv.gz", header=None)[0].astype(str).to_numpy()
+        genes = pd.read_csv(f"{a.norman_dir}/GSE133344_filtered_genes.tsv.gz", header=None, sep="	")
+        gnames = genes[genes.columns[-1]].astype(str).to_list()
+        X = sio.mmread(f"{a.norman_dir}/GSE133344_filtered_matrix.mtx.gz").tocsc()  # genes x cells
+        gg = str(a.gemgroup or 1)
+        pos = {b.split("-")[0] + "-1": i for i, b in enumerate(bcs) if b.split("-")[-1] == gg}
+        kd_cells = [c for c in ref["barcode"] if c in pos and c in set(base["barcode"])]
+        sub = X[:, [pos[c] for c in kd_cells]].T.tocsr()
+        tg = {t for x in lib.target_gene for t in str(x).split("+") if t and t != "non-targeting"}
+        expr = _cp10k_targets(sub, gnames, tg)
     elif adata is not None:
         obs_of = dict(zip(ref["barcode"], ref["_obs_name"]))
         kd_cells = [c for c in base["barcode"] if c in obs_of]
@@ -246,8 +278,8 @@ def main(argv=None):
         expr = _cp10k_targets(sub.X, genes, [t for t in set(lib.target_gene) if t])
     ref = ref.drop(columns=[c for c in ("_obs_name",) if c in ref])
     if a.artifacts:
-        write_artifacts(a.artifacts, a.dataset, labs, ref, level, expr, kd_cells, lib, counting_res)
-    res = evaluate(labs, ref, level, expr, kd_cells, gt, gk)
+        write_artifacts(a.artifacts, a.dataset, labs, ref, level, expr, kd_cells, lib, counting_res, a.mode)
+    res = evaluate(labs, ref, level, expr, kd_cells, gt, gk, a.mode)
     res["reference"] = os.path.basename(a.reference)
     if counting_res is not None:
         res["counting_vs_cellranger"] = counting_res
@@ -259,7 +291,7 @@ def main(argv=None):
 LABEL_COLUMNS = ["barcode", "guide_ids", "n_guides", "class", "target"]
 
 
-def write_artifacts(out, dataset, labs, ref, level, expr, kd_cells, lib, counting_res):
+def write_artifacts(out, dataset, labs, ref, level, expr, kd_cells, lib, counting_res, mode="i"):
     """Small tables the capability module recomputes every metric from (bench/public CONTRACT.md section 5)."""
     os.makedirs(out, exist_ok=True)
     for c, lab in labs.items():
@@ -275,7 +307,7 @@ def write_artifacts(out, dataset, labs, ref, level, expr, kd_cells, lib, countin
         with open(os.path.join(out, f"{dataset}.expr_cells.txt"), "w") as f:
             f.write("\n".join(kd_cells) + "\n")
     with open(os.path.join(out, f"{dataset}.meta.json"), "w") as f:
-        json.dump({"level": level, "counting_vs_cellranger": counting_res,
+        json.dump({"level": level, "mode": mode, "counting_vs_cellranger": counting_res,
                    "expr_targets": sorted(expr) if expr is not None else []}, f, indent=1, default=float)
 
 
@@ -303,7 +335,7 @@ def read_artifacts(d, dataset):
     return labs, ref, meta["level"], expr, kd_cells, gt, gk, meta
 
 
-def evaluate(labs, ref, level, expr, kd_cells, gt, gk):
+def evaluate(labs, ref, level, expr, kd_cells, gt, gk, mode="i"):
     """Every CRISPR metric from labels, the reference and target expression (the harness and the capability module)."""
     from singlet.crispr import assign as AS
 
@@ -337,7 +369,7 @@ def evaluate(labs, ref, level, expr, kd_cells, gt, gk):
             else:
                 K["kind"] = K["guide_ids"].map(lambda s: gk.get(s, "multiple") if "|" not in s else "multiple")
                 K["target"] = K["guide_ids"].map(lambda s: gt.get(s, ""))
-            df, kd = knockdown_stats(K, expr)
+            df, kd = knockdown_stats(K, expr, mode=mode)
             m.update({f"kd_{k}": v for k, v in kd.items()})
         res[c] = m
     # cells only one caller assigns: is their perturbation real?
