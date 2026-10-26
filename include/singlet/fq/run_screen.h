@@ -344,6 +344,43 @@ inline RunScreenReport screen_spots(std::vector<ScreenSpot> spots, const std::ve
     return r;
 }
 
+/// The 10x chemistry `screen-runs` calls for these reads (same whitelists, match rates and 3'/5' rule), or "" when
+/// no 10x whitelist reaches kScreenMinWhitelistRate, the reads look like a feature-barcode library, or the barcode
+/// read would have to be swapped. `download` / `encode` use it so that the .1fq header and screen-runs agree.
+/// SpotT needs r1_seq, r2_seq (numeric bases), r1_len, r2_len. Whitelists are loaded once per directory list.
+template <typename SpotT>
+inline std::string screen_10x_chemistry(const std::vector<SpotT>& spots, const std::vector<std::string>& dirs,
+                                        double* best_rate = nullptr) {
+    static std::vector<ScreenWhitelist> wls;
+    static std::vector<std::string> wl_dirs;
+    static bool wl_init = false;
+    if (!wl_init || wl_dirs != dirs) {
+        wls = screen_whitelist_specs();
+        for (auto& wl : wls) load_screen_whitelist(wl, dirs);
+        wl_dirs = dirs;
+        wl_init = true;
+    }
+    if (best_rate) *best_rate = 0.0;
+    bool any = false;
+    for (const auto& wl : wls) any = any || wl.loaded();
+    if (!any || spots.empty()) return "";
+    std::vector<ScreenSpot> ss;
+    ss.reserve(spots.size());
+    for (const auto& s : spots) {
+        ScreenSpot t;
+        t.r1_len = static_cast<uint16_t>(std::min<size_t>(s.r1_len, s.r1_seq.size()));
+        t.r2_len = static_cast<uint16_t>(std::min<size_t>(s.r2_len, s.r2_seq.size()));
+        t.r1_seq.assign(s.r1_seq.begin(), s.r1_seq.begin() + t.r1_len);
+        t.r2_seq.assign(s.r2_seq.begin(), s.r2_seq.begin() + t.r2_len);
+        ss.push_back(std::move(t));
+    }
+    RunScreenReport r = screen_spots(std::move(ss), wls, {});
+    if (best_rate) *best_rate = r.best_rate;
+    if (r.best_rate < kScreenMinWhitelistRate || r.reads_swapped || r.feature_barcode_like) return "";
+    if (r.chemistry.rfind("10x-", 0) != 0) return "";
+    return r.chemistry;
+}
+
 // ── input ──
 
 namespace detail {

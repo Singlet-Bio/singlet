@@ -31,6 +31,7 @@
 
 #include "lib1fq.h"
 #include "sra_reader.h"
+#include "run_screen.h"
 
 namespace singlet::fq {
 
@@ -1147,6 +1148,39 @@ class SraEncoder {
             }
         }
         // ─────────────────────────────────────────────────────────────────────
+
+        // ── One chemistry detector with `singlet screen-runs` ─────────────────
+        // When a 10x whitelist matches >= 30% of the probe reads' barcodes, the chemistry is the one screen-runs
+        // calls (run_screen.h: best whitelist family x 3'/5' evidence), whatever detect_protocol() said. They
+        // disagreed in the atlas smoke test: GSM6470208 (R1 28 bp, 737K list 84%) was 10x-5p-v3 for download
+        // (from the R1 length) and 10x-5p-v2 for screen-runs; SRR25751252 (R1 26 bp, 3M list 97%: v3 with a
+        // short R1) was celseq2 / 10x-3p-v2 for download and 10x-3p-v3 for screen-runs. A short R1 keeps the
+        // barcode and shortens the UMI (writer truncation below).
+        if (cfg.protocol_tag.empty() && cfg.metadata_protocol.empty() && !probe_spots.empty() &&
+            r1_len > 0 && r2_len > 0 && probe_spots[0].bc_len == 0) {
+            double chem_rate = 0.0;
+            const std::string chem = screen_10x_chemistry(probe_spots, cfg.whitelist_dirs, &chem_rate);
+            const CandidateSpec* cs = chem.empty() ? nullptr : find_protocol_spec(chem);
+            if (cs && r1_len >= cs->bc_offset + cs->bc_len && cs->tag != protocol_tag) {
+                std::cerr << "[protocol_detect] " << protocol_tag << " (c=" << static_cast<int>(confidence)
+                          << ") -> " << cs->tag << " (screen-runs rule: best 10x whitelist "
+                          << cs->whitelist_file << " " << static_cast<int>(chem_rate * 100)
+                          << "% of probe barcodes)\n";
+                protocol_tag = cs->tag;
+                protocol_id  = cs->protocol_id;
+                confidence   = Confidence::HIGH;
+                stats.wl_match_rate = chem_rate;
+                detected_proto.tag         = cs->tag;
+                detected_proto.protocol_id = cs->protocol_id;
+                detected_proto.bc_offset   = cs->bc_offset;
+                detected_proto.bc_length   = cs->bc_len;
+                detected_proto.umi_offset  = cs->umi_offset;
+                detected_proto.umi_length  = cs->umi_len;
+                detected_proto.r1_length   = std::min<uint16_t>(cs->r1_len, r1_len);
+                detected_proto.wl_match_rate = chem_rate;
+                detected_proto.confidence  = Confidence::HIGH;
+            }
+        }
 
         // ── Re-segment probe spots if protocol R1 < observed R1 ──
         // This handles concatenated reads and over-sequenced R1.
