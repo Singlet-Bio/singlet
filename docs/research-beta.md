@@ -9,21 +9,33 @@ on branches and draft PRs unless marked merged; nothing in this list changed R2,
 A freeze is in force until Alpha ships: no new cluster jobs on Clipper or Anvil, no release of held jobs, no website merges and no
 D1/R2/Worker changes except from the Alpha session.
 
+## How to resume
+
+1. Read this file, then the note for the area you pick (section 1). Each note states the goal, what was done, results, decisions,
+   open problems, the exact next steps and the Clipper job ids and paths of results left on the cluster.
+2. Check out the area's branch or PR (section 1); every branch is pushed and every PR is a draft that says its status.
+3. Before any cluster work, confirm the Research Alpha freeze has been lifted (singlet-agents `docs/RESEARCH_ALPHA_PLAN.md`).
+4. Clipper: one bridge only (`clipper.py status`), never `hpc/clipper/sync.sh`; results of jobs that finished after this handoff are
+   at the paths listed in each note.
+5. Work in priority order: open bugs (section 4), then the path to Beta (section 5).
+
+All notes in `docs/research-beta/` are copies made on 2026-10-26 from the feature branches and PR descriptions named in each file.
+
 ## 1. Where everything is
 
 | Area | Handoff note | PRs (Singlet-Bio/singlet unless noted) |
 |---|---|---|
-| Pipeline benchmark, production binary, re-run plan | `docs/research-beta/pipeline-benchmark.md` on `plan/atlas-rerun` | #30 plan; #31 production engine; #36 modality fixes; #34 STAR speedups; #41 fast window assignment; #42 re-run orchestrator; #45 ambient calibration; #46 intronic + NUMT; #47 deep samples; #22 / #25 superseded by #31 |
-| Public benchmarks: contract, cohort, harness, notebook, sex, ancestry | `docs/research-beta/benchmarks.md` on `claude/bench-public-cohort-485cf7` | #40 |
-| Cell type | `docs/research-beta/cell-type.md` | #32 model and harness; #44 capability results |
-| ADT / HTO | `docs/research-beta/adt-hto.md` | #29 |
-| V(D)J and CRISPR guides | `docs/research-beta/vdj-crispr.md` (on its branch) | its draft PR |
-| ATAC / Multiome and spatial | `docs/research-beta/atac-spatial.md` | #48 |
-| mtDNA clonality / lineage | `docs/research-beta/mtdna.md` (on its branch) | its draft PR |
+| Pipeline benchmark, production binary, re-run plan | [pipeline-benchmark.md](research-beta/pipeline-benchmark.md) | #30 plan; #31 production engine; #36 modality fixes; #34 STAR speedups; #41 fast window assignment; #42 re-run orchestrator; #45 ambient calibration; #46 intronic + NUMT; #47 deep samples; #22 / #25 superseded by #31 |
+| Public benchmarks: contract, cohort, harness, notebook, sex, ancestry | [benchmarks.md](research-beta/benchmarks.md) | #40 |
+| Cell type | [cell-type.md](research-beta/cell-type.md) | #32 model and harness; #44 capability results |
+| ADT / HTO | [adt-hto.md](research-beta/adt-hto.md) | #29 |
+| V(D)J and CRISPR guides | [vdj-crispr.md](research-beta/vdj-crispr.md) | its draft PR |
+| ATAC / Multiome and spatial | [atac-spatial.md](research-beta/atac-spatial.md) | #48 |
+| mtDNA clonality / lineage | [mtdna.md](research-beta/mtdna.md) | its draft PR |
 | Doublet / ambient models | | #43 |
-| Rename "v2" to "store" (Singlet 1.0) | runbook in both PR descriptions; nothing executed | #39; zdebruine/singlet-website#67 |
-| Benchmarking and roadmap pages | `docs/research-beta.md` (website repo) | zdebruine/singlet-website#66 (Beta preview) |
-| Ontology filters | handoff section in `docs/ONTOLOGY.md` (website repo) | zdebruine/singlet-website#54 |
+| Rename "v2" to "store" (Singlet 1.0) | [rename.md](research-beta/rename.md) (runbook; nothing executed) | #39; zdebruine/singlet-website#67 |
+| Benchmarking and roadmap pages | [website-benchmarking.md](research-beta/website-benchmarking.md) | zdebruine/singlet-website#66 (Beta preview) |
+| Ontology filters | [ontology.md](research-beta/ontology.md) | zdebruine/singlet-website#54 |
 
 Merged into main in this period: the per-sample storage format and clients (#13 with #12, #14, #15, #16, #18, #19, #23, #26, #28),
 the empty-droplet study (#17, with #20), the library-type screen (#21), the scBaseCount comparison (#27), CI that reports the
