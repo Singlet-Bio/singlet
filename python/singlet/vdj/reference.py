@@ -136,12 +136,20 @@ def _v_anchor(seq: str, frame: int) -> int:
 
 
 def _j_anchor(seq: str):
+    """F/W118 of a J exon: among F/W-G-X-G motifs in any frame, the one the J region's 3' end puts there (the J region
+    ends at the exon's splice donor, 25-45 nt after the F/W codon); some annotated J exons carry 100+ nt upstream
+    (GENCODE IGLJ1-3) where a spurious motif can sit in another frame."""
+    hits = []
     for fr in range(3):
         aa = translate(seq, fr)
-        m = J_MOTIF.search(aa)
-        if m:
-            return fr + 3 * m.start(), fr
-    return -1, -1
+        for m in re.finditer(r"(?=[FW]G.G)", aa):
+            pos = fr + 3 * m.start()
+            hits.append((abs((len(seq) - pos) - 33), -pos, pos, fr))
+    if not hits:
+        return -1, -1
+    near = [h for h in hits if 20 <= len(seq) - h[2] <= 50]
+    _, _, pos, fr = min(near or hits)
+    return pos, fr
 
 
 def _open_v_frame(seq: str) -> int:
