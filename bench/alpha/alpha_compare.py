@@ -17,7 +17,7 @@ Metrics (all per sample, written to OUT/<GSM>.json; per-barcode table to OUT/<GS
   * the Singlet layer that matches the authors' counting mode (exon only vs exon+intron, as Cell Ranger <7 / >=7) is
     inferred from which one's gene pseudobulk correlates better (log Pearson) with the authors'; both are reported.
   * per-cell gene-vector correlation (log1p Pearson, median over up to 2,000 shared cells), raw and depth-matched:
-    both profiles of a cell are binomially thinned to the smaller of the two totals; the noise floor is the same
+    both profiles of a cell are binomially thinned to half the smaller of the two totals; the noise floor is the same
     correlation between two independent thinnings of the authors' profile to that depth.
   * pseudobulk Spearman over common genes (shared cells).
   * reads_used / reads_available: reads Singlet processed (summary.json) over all SRA spots of the sample (NCBI runinfo,
@@ -386,7 +386,7 @@ if len(sh) >= 20 and len(common) >= 1000:
 
     gl = {"layer_matched": layer, "pseudobulk_log_pearson_by_layer": pb_fit, "n_cells": int(len(cells)), "n_genes": len(common)}
     for nm_, S in (("exon", Sx), ("exon_intron", St)):
-        tgt = np.minimum(S.sum(0), Am.sum(0))
+        tgt = np.floor(0.5 * np.minimum(S.sum(0), Am.sum(0)))  # half the smaller depth: both sides thinned, floor never trivially 1
         St_, At_, At2 = thin(S, tgt), thin(Am, tgt), thin(Am, tgt)
         gl[nm_] = {"cell_corr": corr_cols(S, Am), "cell_corr_depth_matched": corr_cols(St_, At_),
                    "cell_corr_noise_floor": corr_cols(At2, At_),

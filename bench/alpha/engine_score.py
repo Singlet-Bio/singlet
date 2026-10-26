@@ -114,7 +114,7 @@ R["resources"]["singlet-alpha30m"]["encode"] = loaders.load_time(runs / "singlet
 called = {t: set(a.obs_names[a.obs["is_cell"]]) for t, a in tools.items() if "is_cell" in a.obs and a.obs["is_cell"].any()}
 R["cell_calls"] = {t: len(s) for t, s in called.items()}
 calls = {}
-for t in ("alpha30m", "singlet-baseline-t4", "singlet-fixed"):
+for t in ("alpha30m", "singlet-baseline-t4", "singlet-fixed", "starsolo_GeneFull"):
     for ref in ("cellranger_published", "starsolo_GeneFull"):
         if t in called and ref in called:
             s, r = called[t], called[ref]
@@ -155,7 +155,7 @@ def depth_matched(a, la, b, lb, cells, n=1500, seed=0):
     B = C.subset(b, cells, genes)[:, genes]
     X = (A.X if la is None else A.layers[la]).toarray().astype(np.int64)
     Y = (B.X if lb is None else B.layers[lb]).toarray().astype(np.int64)
-    tgt = np.minimum(X.sum(1), Y.sum(1))
+    tgt = np.floor(0.5 * np.minimum(X.sum(1), Y.sum(1)))  # half the smaller depth: both sides are thinned, so the floor is never trivially 1
     th = lambda M: rng.binomial(M, np.clip(tgt / np.maximum(M.sum(1), 1), 0, 1)[:, None])  # noqa: E731
     Xt, Yt, Yt2 = th(X), th(Y), th(Y)
 

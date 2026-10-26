@@ -259,7 +259,7 @@ METHODS_A = (
     "**Singlet** values are read from the bundles exactly as data.singlet.bio serves them (exon_counts, intron_counts, cell_calls, summary.json), by HTTP "
     "ranges. **Truth** is the authors' deposited Cell Ranger matrix. Barcodes are matched on the 16-mer; genes on Ensembl ID (symbol when the deposit has none).\n\n"
     "**Metrics.** Recovery = Singlet-called & author / author; precision = Singlet-called & author / Singlet-called. On cells both called: UMIs per cell "
-    "(Singlet / author), per-cell gene correlation (log1p Pearson, up to 2,000 cells) after thinning both profiles of each cell to the smaller total, against "
+    "(Singlet / author), per-cell gene correlation (log1p Pearson, up to 2,000 cells) after thinning both profiles of each cell to half the smaller total, against "
     "a noise floor of two independent thinnings of the authors' profile; pseudobulk Spearman over common genes. Singlet's exon or exon+intron layer is used, "
     "whichever fits the authors' pseudobulk better (Cell Ranger <7 counts exons only). reads_used / reads_available = Singlet's input reads over all SRA "
     "spots of the sample (NCBI runinfo). Values are medians over samples with bootstrap 95% CIs, pooled and per stratum.")
@@ -375,7 +375,7 @@ def engine_doc(E: dict, contract):
                     "--output-format 1pz` and, for human, `--snps --cascade auto --txome-index --te-classify on --te-db`. STARsolo (Cell Ranger 4 emulation, EmptyDrops_CR) "
                     "and 10x's published Cell Ranger matrices use all reads. Scoring reuses bench/pipeline/analysis (loaders, gene_concordance, barnyard, ADT clusters): "
                     "calls vs published Cell Ranger; on cells called by Singlet and STARsolo, exonic UMIs per cell vs STARsolo Gene, per-cell log1p correlation after "
-                    "thinning both to the smaller total (noise floor: two thinnings of STARsolo); barnyard purity on called cells; ARI of RNA vs ADT clusters.")
+                    "thinning both to half the smaller total (noise floor: two thinnings of STARsolo); barnyard purity on called cells; ARI of RNA vs ADT clusters.")
     d["caveats"] = ["The 30M-read head of lane-sorted demo FASTQs stands in for the head of an SRA run; read order inside SRA runs can differ.",
                     "hgmm1k_v3 needed 120 GB (it was killed at the campaign's 64 GB); the campaign escalated memory per attempt in the same way.",
                     "10x's published matrices are Cell Ranger 2-3 on an older reference; STARsolo uses the campaign reference.",
