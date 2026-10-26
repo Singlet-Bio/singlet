@@ -12,7 +12,7 @@ set -euo pipefail
 D=/mnt/projects/debruinz_project/debruinz/singlet/data/atac-spatial; mkdir -p $D; cd $D
 get() { # url dir
   mkdir -p $2; local f=$2/${1##*/}
-  [ -s $f.done ] && return 0
+  [ -e $f.done ] && return 0
   curl -sSfL --retry 5 -C - -o $f "$1" && touch $f.done && echo "ok $(du -h $f | cut -f1) $f"
 }
 ARC=https://cf.10xgenomics.com/samples/cell-arc/2.0.0
