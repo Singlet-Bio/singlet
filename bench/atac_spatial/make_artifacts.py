@@ -204,11 +204,13 @@ else:
         common = set(g) if common is None else common & set(g)
     common = sorted(common)
     sub = {}
+    ci = {x: i for i, x in enumerate(common)}
     for k, (M, g) in tools.items():
-        gi = {}
-        for i, x in enumerate(g):
-            gi.setdefault(x, i)
-        sub[k] = M[[gi[x] for x in common]].tocsc()
+        # rows -> genes by summation: Singlet's exon_counts has one row per exon (the pipeline's collapse_exon_to_gene
+        # sums them); 10x / STARsolo matrices have one row per gene, so the sum is the identity there.
+        r = [i for i, x in enumerate(g) if x in ci]
+        G = sp.csr_matrix((np.ones(len(r)), ([ci[g[i]] for i in r], r)), shape=(len(common), M.shape[0]))
+        sub[k] = (G @ M).tocsc()
     out = pd.DataFrame(index=pd.Index(spots, name="spot"))
     out["array_row"] = pos.array_row; out["array_col"] = pos.array_col
     out["spaceranger_in_tissue"] = pos.in_tissue
