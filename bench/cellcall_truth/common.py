@@ -46,6 +46,20 @@ DATASETS = {
     "hgmm1k_v2": dict(kind="barnyard", run=f"{BP}/runs/hgmm1k_v2/singlet",
                       star=f"{STATE}/starsolo/hgmm1k_v2", cb=f"{STATE}/cellbender/hgmm1k_v2"),
 }
+for _l in "ABC":
+    DATASETS[f"kang_b1{_l}"] = dict(kind="genotype", run=f"{BP}/runs/kang2018_b1_{_l.lower()}/singlet",
+                                    star=f"{STATE}/starsolo/kang_b1{_l}", cb=f"{STATE}/cellbender/kang_b1{_l}")
+KANG_TABLE = {"kang_b2ctrl": (f"{W}/modality-bench/genotype_pool/truth/GSE96583_batch2.total.tsne.df.tsv.gz", "stim", "ctrl")}
+for _l in "ABC":
+    KANG_TABLE[f"kang_b1{_l}"] = (f"{BP}/data/kang_truth/GSE96583_batch1.total.tsne.df.tsv.gz", "batch", _l)
+
+
+def kang_table(ds):
+    path, col, val = KANG_TABLE[ds]
+    a = pd.read_csv(path, sep="\t", index_col=0)
+    a = a[a[col] == val]
+    a.index = a.index.map(strip)
+    return a
 
 
 def strip(b):
@@ -98,10 +112,8 @@ def gather_callers(ds, min_umi=10):
     crf = f"{STATE}/cellranger/{ds}.barcodes.tsv.gz"
     if os.path.exists(crf):
         calls["cellranger"] = set(map(strip, lines(crf)))
-    if ds == "kang_b2ctrl":
-        a = pd.read_csv(f"{W}/modality-bench/genotype_pool/truth/GSE96583_batch2.total.tsne.df.tsv.gz", sep="\t", index_col=0)
-        a = a[a["stim"] == "ctrl"]
-        calls["demuxlet_table"] = set(map(strip, a.index))
+    if ds in KANG_TABLE:
+        calls["demuxlet_table"] = set(kang_table(ds).index)
     union = set().union(*calls.values()) | set(t.loc[t["singlet_run"] == 1, "barcode"])
     t = t[(t["umi_total"] >= min_umi) | t["barcode"].isin(union)].copy()
     for k, s in calls.items():

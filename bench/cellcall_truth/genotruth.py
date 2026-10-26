@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 """Genotype truth for a donor-multiplexed lane (Kang 2018).
 
-    genotruth.py DS CELLSNP_DIR AUTHORS_TABLE STIM OUT_DIR
+    genotruth.py DS CELLSNP_DIR OUT_DIR      (authors' table and lane: common.KANG_TABLE)
 
 1. Universe and caller columns: common.gather_callers(DS).
 2. Donor genotypes from the authors' demuxlet singlets (their donor ids come from SNP-array genotypes): half of the singlets
@@ -50,15 +50,13 @@ def genotype(A, D, e=0.05):
     return np.tensordot(np.array([0.0, 0.5, 1.0]), post, axes=1), post.max(0)
 
 
-def main(ds, csdir, authors, stim, out):
+def main(ds, csdir, out):
     os.makedirs(out, exist_ok=True)
     rng = np.random.default_rng(1)
     t, missing = C.gather_callers(ds)
     bcs, AD, DP = load_cellsnp(csdir)
     pos_of = {b: i for i, b in enumerate(bcs)}
-    a = pd.read_csv(authors, sep="\t", index_col=0)
-    a = a[a["stim"] == stim]
-    a.index = a.index.map(C.strip)
+    a = C.kang_table(ds)
     sing = a[(a["multiplets"] == "singlet") & a.index.isin(pos_of)]
     half = rng.random(len(sing)) < 0.5
     geno_cells, cal_cells = sing[half], sing[~half]
@@ -177,4 +175,4 @@ def main(ds, csdir, authors, stim, out):
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:6])
+    main(*sys.argv[1:4])

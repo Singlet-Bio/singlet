@@ -12,7 +12,7 @@
 #   starsolo     array 0-1 (hgmm5k_v3, hgmm1k_v2): STARsolo 2.7.11b EmptyDrops_CR, Cell Ranger 4+ emulation -> $S/starsolo/<ds>
 #   cellbender   array 0-1, GPU (override partition): CellBender 0.3.2 on that STARsolo raw matrix -> $S/cellbender/<ds>
 #   kang_pileup  cellsnp-lite on every Kang b2 ctrl barcode with >= 10 UMIs (reference SNP sites) -> $S/kang_b2ctrl/cellsnp
-#   truth        array 0-3: genotruth.py / barnyard.py -> $S/truth/<ds>.truth.{tsv.gz,json}
+#   truth        array 0-6: genotruth.py / barnyard.py -> $S/truth/<ds>.truth.{tsv.gz,json}
 #   score        score.py -> $S/score.json
 set -euo pipefail
 W=/mnt/projects/debruinz_project/debruinz/singlet; PB=$W/pipeline-benchmark; BP=$W/bench-public
@@ -21,9 +21,10 @@ E=$W/envs/gpool; PY="$E/venv/bin/python -P"
 REF=/mnt/projects/debruinz_project/cellarium/reference
 MODE=${MODE:-truth}; TASK=${SLURM_ARRAY_TASK_ID:-0}
 SCR=/tmp/$USER-${SLURM_JOB_ID:-x}-$TASK; mkdir -p $SCR $S; trap 'rm -rf $SCR' EXIT
-DSS=(kang_b2ctrl hgmm1k_v3 hgmm5k_v3 hgmm1k_v2)
+DSS=(kang_b2ctrl hgmm1k_v3 hgmm5k_v3 hgmm1k_v2 kang_b1A kang_b1B kang_b1C)
 declare -A RUN=([kang_b2ctrl]=$PB/runs/kang2018_ctrl/singlet-public [hgmm1k_v3]=$PB/runs/hgmm1k_v3/singlet-public
-                [hgmm5k_v3]=$BP/runs/hgmm5k_v3/singlet [hgmm1k_v2]=$BP/runs/hgmm1k_v2/singlet)
+                [hgmm5k_v3]=$BP/runs/hgmm5k_v3/singlet [hgmm1k_v2]=$BP/runs/hgmm1k_v2/singlet
+                [kang_b1A]=$BP/runs/kang2018_b1_a/singlet [kang_b1B]=$BP/runs/kang2018_b1_b/singlet [kang_b1C]=$BP/runs/kang2018_b1_c/singlet)
 echo "[cct] mode=$MODE task=$TASK node=$(hostname) $(date -Is)"
 case $MODE in
   fetch)
@@ -37,7 +38,13 @@ case $MODE in
     U=https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM2560nnn/GSM2560248/suppl/
     curl -fsSL $U | grep -o 'GSM2560248_[^"<>]*' | sort -u
     curl -fsSL -o $S/cellranger/kang_b2ctrl.barcodes.tsv.gz ${U}GSM2560248_barcodes.tsv.gz && \
-      echo "kang_b2ctrl $(zcat $S/cellranger/kang_b2ctrl.barcodes.tsv.gz | wc -l) GEO lane barcodes" || echo "kang GEO barcodes not found" ;;
+      echo "kang_b2ctrl $(zcat $S/cellranger/kang_b2ctrl.barcodes.tsv.gz | wc -l) GEO lane barcodes" || echo "kang GEO barcodes not found"
+    # batch 1 lanes A, B, C (GSM2560245-7): saved per GSM, the lane is matched by overlap with the authors' table in fetch_b1 below
+    for g in GSM2560245 GSM2560246 GSM2560247; do
+      U=https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM2560nnn/$g/suppl/
+      for n in $(curl -fsSL $U | grep -o "${g}_[^\"<>]*barcodes[^\"<>]*" | sort -u); do
+        curl -fsSL -o $S/cellranger/$n $U$n && echo "$n $(zcat $S/cellranger/$n | wc -l)"; done
+    done ;;
   cv2)
     mkdir -p $S/cv2; export LD_LIBRARY_PATH=$W/envs/pbench/lib
     for ds in "${DSS[@]}"; do
@@ -63,7 +70,7 @@ case $MODE in
     /usr/bin/time -v -o time.txt "${CMD[@]}" > run.log 2>&1
     grep -E "Elapsed \(wall" time.txt; wc -l Solo.out/Gene/filtered/barcodes.tsv ;;
   cellbender)
-    SD=(hgmm5k_v3 hgmm1k_v2); ID=${SD[$TASK]}; RAW=$S/starsolo/$ID/Solo.out/Gene/raw; O=$S/cellbender/$ID; rm -rf $O; mkdir -p $O
+    SD=(hgmm5k_v3 hgmm1k_v2 kang_b1A kang_b1B kang_b1C); ID=${SD[$TASK]}; RAW=$S/starsolo/$ID/Solo.out/Gene/raw; O=$S/cellbender/$ID; rm -rf $O; mkdir -p $O
     SIF=$W/images/cellbender-0.3.2.sif; export APPTAINER_CACHEDIR=$W/cache/apptainer XDG_CACHE_HOME=$W/cache MPLCONFIGDIR=$W/cache/mpl
     read EXP TOT < <($W/envs/pbench/bin/python -I - "$RAW/matrix.mtx" <<'PY'
 import sys, numpy as np, scipy.io
@@ -85,25 +92,36 @@ PY
     fi
     cp $SCR/cb_cell_barcodes.csv $SCR/cb_metrics.csv $O/ 2>/dev/null || true; wc -l $O/cb_cell_barcodes.csv ;;
   kang_pileup)
-    O=$S/kang_b2ctrl; mkdir -p $O; cd $J
+    # array index into DSS (0 = kang_b2ctrl: reference-run SNP sites; 4-6 = batch-1 lanes: 1000 Genomes AF > 5% panel, sites with
+    # >= 20 UMIs and minor allele fraction >= 0.1 over the universe)
+    ds=${DSS[$TASK]}; O=$S/$ds; mkdir -p $O; cd $J
     PYTHONPATH=$J $PY -c "
 import common as C
-t, miss = C.gather_callers('kang_b2ctrl')
+t, miss = C.gather_callers('$ds')
 print('universe', len(t), 'missing', miss)
 open('$O/barcodes.txt', 'w').writelines(b + '-1\n' for b in t['barcode'])
 "
     rm -rf $O/cellsnp
-    apptainer exec --bind $W $E/cellsnp-lite.sif cellsnp-lite -s $G/singlet_k8/possorted.bam -b $O/barcodes.txt -O $O/cellsnp \
-      -R $G/ref_k8/cellsnp/cellSNP.base.vcf.gz -p 16 --minMAF 0 --minCOUNT 0 --cellTAG CB --UMItag UB > $O/cellsnp.log 2>&1
+    if [ $ds = kang_b2ctrl ]; then BAM=$G/singlet_k8/possorted.bam; SITES="-R $G/ref_k8/cellsnp/cellSNP.base.vcf.gz --minMAF 0 --minCOUNT 0"
+    else BAM=${RUN[$ds]}/possorted.bam; SITES="-R $G/ref/genome1K.phase3.SNP_AF5e2.chr1toX.hg38.vcf.gz --minMAF 0.1 --minCOUNT 20"; fi
+    apptainer exec --bind $W $E/cellsnp-lite.sif cellsnp-lite -s $BAM -b $O/barcodes.txt -O $O/cellsnp $SITES \
+      -p $SLURM_CPUS_PER_TASK --cellTAG CB --UMItag UB > $O/cellsnp.log 2>&1
     tail -2 $O/cellsnp.log; ls $O/cellsnp ;;
   truth)
     ds=${DSS[$TASK]}; mkdir -p $S/truth; cd $J
-    if [ $ds = kang_b2ctrl ]; then
-      $PY genotruth.py $ds $S/kang_b2ctrl/cellsnp $G/truth/GSE96583_batch2.total.tsne.df.tsv.gz ctrl $S/truth
+    if [[ $ds = kang* ]]; then
+      $PY genotruth.py $ds $S/$ds/cellsnp $S/truth
     else
       $PY barnyard.py $ds $S/truth
     fi ;;
   score)
     cd $J; $PY score.py $S/truth $S/score.json ;;
+  variants)
+    # cellcall.py = python/singlet/v2/cellcall.py (2.1) and kcommon.py = bench/called_v2_truth/common.py, both from origin/main, put
+    # next to these scripts
+    ds=${DSS[$TASK]}; cd $J; export NUMBA_NUM_THREADS=$SLURM_CPUS_PER_TASK NUMBA_CACHE_DIR=$W/cache/numba-cct
+    CELLCALL_DIR=$J $PY variants.py calls $ds $S/truth ;;
+  vscore)
+    cd $J; ls $S/truth/*.variants.tsv.gz | xargs -n1 basename | sed "s/.variants.tsv.gz//" | xargs $PY variants.py score $S/truth $S/variants.json ;;
 esac
 echo "[cct] done $(date -Is)"
