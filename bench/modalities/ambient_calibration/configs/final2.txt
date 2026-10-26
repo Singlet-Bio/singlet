@@ -1,0 +1,7 @@
+# held-out lanes: v1 (production before), v2 (chosen on Kang 2.1 + barnyard); diag_m1000 = post-hoc diagnostic only
+# (faint off genes removed; not selected on dev data, where it estimates 0.42x the genotype truth)
+v1 cluster_prior_reads=0
+v1_knee cluster_prior_reads=0 cells=knee
+v2
+v2_knee cells=knee
+diag_m1000 offgene_min_expected=1000
