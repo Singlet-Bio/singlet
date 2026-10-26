@@ -32,8 +32,11 @@ public:
     SraReader(const SraReader&) = delete;
     SraReader& operator=(const SraReader&) = delete;
 
-    // Open an SRA file/accession and prepare cursor on SEQUENCE table
-    void open(const char* path) {
+    // Open an SRA file/accession and prepare cursor on SEQUENCE table.
+    // with_names: also open the NAME column (only write_next_spot() needs it). Off by default: in GenericFastq
+    // ("sharq") runs read remotely, the first access of NAME pulls gigabytes (6.3 GB and 65 s for 10 rows of
+    // SRR25376447), once per reader, which OOM-killed `download --max-reads` heads at 16 GB.
+    void open(const char* path, bool with_names = false) {
         rc_t rc;
 
         rc = VDBManagerMakeRead(&mgr_, nullptr);
@@ -68,8 +71,11 @@ public:
         rc = VCursorAddColumn(cursor_, &col_read_start_, "(INSDC:coord:zero)READ_START");
         if (rc) throw std::runtime_error("VCursorAddColumn(READ_START) failed: rc=" + std::to_string(rc));
 
-        rc = VCursorAddColumn(cursor_, &col_name_, "(ascii)NAME");
-        if (rc) throw std::runtime_error("VCursorAddColumn(NAME) failed: rc=" + std::to_string(rc));
+        if (with_names) {
+            rc = VCursorAddColumn(cursor_, &col_name_, "(ascii)NAME");
+            if (rc) throw std::runtime_error("VCursorAddColumn(NAME) failed: rc=" + std::to_string(rc));
+            has_names_ = true;
+        }
 
         rc = VCursorOpen(cursor_);
         if (rc) throw std::runtime_error("VCursorOpen failed: rc=" + std::to_string(rc));
@@ -222,12 +228,14 @@ public:
         if (rc) return false;
 
         // --- NAME ---
-        const char* name_data;
-        uint32_t name_len;
-        rc = VCursorCellDataDirect(cursor_, row, col_name_,
-                                   &elem_bits, (const void**)&name_data,
-                                   &boff, &name_len);
-        if (rc) return false;
+        const char* name_data = "";
+        uint32_t name_len = 0;
+        if (has_names_) {
+            rc = VCursorCellDataDirect(cursor_, row, col_name_,
+                                       &elem_bits, (const void**)&name_data,
+                                       &boff, &name_len);
+            if (rc) return false;
+        }
 
         // Write FASTQ records
         if (n_reads >= 2 && read_len[0] > 0 && read_len[1] > 0) {
@@ -290,6 +298,7 @@ private:
     uint32_t col_read_len_   = 0;
     uint32_t col_read_start_ = 0;
     uint32_t col_name_       = 0;
+    bool     has_names_      = false;
 
     // Row iteration
     int64_t  first_row_   = 0;

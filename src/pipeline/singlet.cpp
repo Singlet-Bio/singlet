@@ -3583,7 +3583,7 @@ int main(int argc, char* argv[]) {
             int exit_code = 0;
             try {
                 SraReader reader;
-                reader.open(sra_file.c_str());
+                reader.open(sra_file.c_str(), /*with_names=*/true);  // FASTQ records carry the read names
                 std::cerr << "[sra-demux] Opened: " << reader.total_spots()
                           << " spots\n";
 
