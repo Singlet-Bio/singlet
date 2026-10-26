@@ -2,7 +2,7 @@
 // tests/cpp/test_called_v2.cpp
 //
 // The C++ port of called_v2 (include/singlet/pileup/called_v2.h) against the Python reference
-// (python/singlet/v2/cellcall.py, VERSION 2.1). Every case of the shared golden vectors (tests/data/called_v2_golden/,
+// (python/singlet/store/cellcall.py, VERSION 2.1). Every case of the shared golden vectors (tests/data/called_ed_golden/,
 // README there) is checked with the README's tolerances (golden_vectors below). called_v2_fixture.h holds the reference output on two synthetic droplet samples that synth() below regenerates bit for
 // bit (the second one exercises the 2.1 tail p-values), a barcode-rank curve on which the unbounded knee falls in the
 // ambient shoulder (the 2.1 curve bounds), plus reference values of the pieces (scipy gammaln, numba's RNG, scipy's
@@ -154,7 +154,7 @@ bool pv_agree(const Result& R, const int* tested, const double* ref, int64_t n, 
     return bad == 0 && mc_diff <= mc_tol;
 }
 
-// ── shared golden vectors (tests/data/called_v2_golden/, format singlet-called-v2-golden/1; README there) ──
+// ── shared golden vectors (tests/data/called_ed_golden/, format singlet-called-ed-golden/1; README there) ──
 
 std::string slurp(const std::string& path) {
     std::ifstream f(path, std::ios::binary);
@@ -275,7 +275,7 @@ void golden_case(const std::string& dir, const std::string& name) {
                             R.alpha / alpha_ref - 1);
                 CHECK(rel_ok(R.alpha, alpha_ref, alpha_tol), t + "alpha (case.json alpha_rel)");
             }
-            CHECK(R.n_tail == json_num(ex, "n_tail") && R.n_called_v2 == json_num(ex, "n_called_v2") &&
+            CHECK(R.n_tail == json_num(ex, "n_tail") && R.n_called_v2 == json_num(ex, "n_called_ed") &&
                       R.n_added == json_num(ex, "n_added"),
                   t + "n_tail, n_called_v2, n_added (exact)");
             int64_t ntested = 0;
@@ -304,12 +304,12 @@ void golden_case(const std::string& dir, const std::string& name) {
         }
 }
 
-/// Every case under tests/data/called_v2_golden/ (skipped, with a note, when the directory is absent).
+/// Every case under tests/data/called_ed_golden/ (skipped, with a note, when the directory is absent).
 void golden_vectors() {
 #ifdef CV2_GOLDEN_DIR
     const std::string root = CV2_GOLDEN_DIR;
 #else
-    const std::string root = "tests/data/called_v2_golden";
+    const std::string root = "tests/data/called_ed_golden";
 #endif
     namespace fs = std::filesystem;
     if (!fs::is_directory(root)) {
@@ -500,7 +500,7 @@ int main() {
         }
     }
 
-    // ── the golden vectors shared with python/singlet/v2/cellcall.py ──
+    // ── the golden vectors shared with python/singlet/store/cellcall.py ──
     golden_vectors();
 
     // combinatorial protocols keep the stored call

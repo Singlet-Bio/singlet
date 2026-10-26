@@ -3,8 +3,8 @@
 # their singlet_*() aliases.
 #
 # Design principle: R users only ever handle GEO accession strings
-# (GSE.../GSM...) and local files. Public data is distributed in the v2 format
-# (R/v2.R): load() fetches only the members it needs with HTTP Range requests.
+# (GSE.../GSM...) and local files. Public data is distributed in the per-sample format
+# (R/store.R): load() fetches only the members it needs with HTTP Range requests.
 # The legacy per-study `.singlet` bundle is read only with legacy = TRUE (or
 # through a local file path). The lower-level `.1pz` codec is never required in
 # the documented public API.
@@ -361,7 +361,7 @@ set_api_key <- function(key) {
 
 #' Download a study for offline use and return its local path
 #'
-#' Mirrors a study's v2 objects (the manifest, one \code{.s2} object per
+#' Mirrors a study's store objects (the manifest, one \code{.s1} object per
 #' sample, and the vocabulary packs they use) from \url{https://data.singlet.bio}
 #' into the local cache, verifying each object against the manifest's sha256, and
 #' returns the path of the manifest. \code{\link{load}} then reads the local
@@ -380,14 +380,14 @@ set_api_key <- function(key) {
 #'   \code{tools::R_user_dir("singlet", "cache")}, overridable with the
 #'   \code{SINGLET_CACHE_DIR} environment variable.
 #' @param legacy \code{TRUE} downloads the legacy \code{.singlet} bundle
-#'   (deprecated, being retired). The default \code{NULL} downloads v2 and,
+#'   (deprecated, being retired). The default \code{NULL} downloads the per-sample format and,
 #'   only when the environment variable \code{SINGLET_LEGACY_FALLBACK=1} is
-#'   set and the study has no v2 manifest yet, falls back to the legacy bundle.
-#' @return The path to the local manifest (\code{.../v2/m/<GSE>.json}) or, with
+#'   set and the study has no store manifest yet, falls back to the legacy bundle.
+#' @return The path to the local manifest (\code{.../store/m/<GSE>.json}) or, with
 #'   \code{legacy = TRUE}, to the local \code{.singlet} file.
 #'
 #' @details
-#' Objects are fetched from \code{<base>/v2/...}, where \code{<base>} is the
+#' Objects are fetched from \code{<base>/store/...}, where \code{<base>} is the
 #' \code{SINGLET_DATA_BASE} environment variable (default
 #' \code{https://data.singlet.bio}; a value ending in \code{/data} is
 #' accepted). \code{GSM} accessions are resolved with the API named by
@@ -414,12 +414,12 @@ download <- function(accession, cache_dir = NULL, legacy = NULL) {
     }
     if (!isTRUE(legacy)) {
         gse <- .gse_of(acc, cache = .singlet_cache_dir(cache_dir))
-        out <- tryCatch(.v2_download(gse, cache_dir = cache_dir),
-                        singlet_v2_not_found = function(e) e)
+        out <- tryCatch(.store_download(gse, cache_dir = cache_dir),
+                        singlet_store_not_found = function(e) e)
         if (!inherits(out, "condition")) {
             return(out)
         }
-        if (!(is.null(legacy) && .v2_legacy_fallback())) {
+        if (!(is.null(legacy) && .store_legacy_fallback())) {
             stop(out)
         }
         if (nzchar(Sys.getenv("SINGLET_LEGACY_FALLBACK"))) {
@@ -453,20 +453,20 @@ singlet_download <- download
 #'
 #' @param x A character vector of GEO Series accessions (\code{"GSE..."}),
 #'   GEO Sample accessions (\code{"GSM..."}) and/or paths to local
-#'   \code{.singlet} bundles or v2 manifests. Length one or more. A sample
+#'   \code{.singlet} bundles or store manifests. Length one or more. A sample
 #'   accession is resolved to its parent Series through the Singlet API; only
 #'   that sample's members are fetched.
 #' @param as Output class: \code{"sce"} (default) for a
 #'   \code{SingleCellExperiment}, or \code{"seurat"} for a \code{Seurat}
 #'   object.
 #' @param legacy \code{TRUE} reads the legacy \code{.singlet} bundle of an
-#'   accession (deprecated, being retired); the default reads the v2 study. A
+#'   accession (deprecated, being retired); the default reads the per-sample study. A
 #'   local \code{.singlet} path is always read as a legacy bundle, and a local
-#'   v2 manifest (\code{.json}, see \code{\link{download}}) as a v2 study.
-#'   When a study has no v2 manifest yet, \code{load()} stops with a message
+#'   store manifest (\code{.json}, see \code{\link{download}}) as a per-sample study.
+#'   When a study has no store manifest yet, \code{load()} stops with a message
 #'   naming \code{legacy = TRUE}; setting the environment variable
 #'   \code{SINGLET_LEGACY_FALLBACK=1} makes it fall back automatically.
-#' @param modalities Which matrices to download (v2 studies: only those
+#' @param modalities Which matrices to download (per-sample studies: only those
 #'   members' byte ranges are fetched). \code{"counts"} (assay \code{counts} =
 #'   spliced + unspliced; needs the exon and intron matrices),
 #'   \code{"spliced"} (assay, exon matrix only), \code{"unspliced"} (assay,
@@ -492,8 +492,8 @@ singlet_download <- download
 #'
 #' @details
 #' Downloads honor three environment variables: \code{SINGLET_DATA_BASE}
-#' (the host serving the data, default \code{https://data.singlet.bio}; v2
-#' objects are fetched from \code{<base>/v2/...}),
+#' (the host serving the data, default \code{https://data.singlet.bio}; the per-sample format
+#' objects are fetched from \code{<base>/store/...}),
 #' \code{SINGLET_API_BASE} (used to resolve \code{GSM} accessions, default
 #' \code{https://singlet.bio/api}) and \code{SINGLET_CACHE_DIR} (the on-disk
 #' cache location).
@@ -545,7 +545,7 @@ load <- function(x, as = c("sce", "seurat"), cache_dir = NULL, legacy = NULL, mo
         .require_seurat("load(as = \"seurat\")")
     }
 
-    # One entry per input: a v2 study (GSE) or a local file, plus, for a GSM
+    # One entry per input: a per-sample study (GSE) or a local file, plus, for a GSM
     # accession, the sample to keep (NA keeps the whole study). A legacy bundle
     # is fetched only with legacy = TRUE.
     targets <- lapply(seq_along(x), function(i) {
@@ -566,7 +566,7 @@ load <- function(x, as = c("sce", "seurat"), cache_dir = NULL, legacy = NULL, mo
 
     # Read each study or bundle once, however many of its samples were asked for.
     units <- vapply(targets, function(t) {
-        if (!is.null(t$gse)) paste0("v2:", t$gse)
+        if (!is.null(t$gse)) paste0("store:", t$gse)
         else if (!is.null(t$manifest)) paste0("manifest:", t$manifest)
         else t$path
     }, character(1))
@@ -576,9 +576,9 @@ load <- function(x, as = c("sce", "seurat"), cache_dir = NULL, legacy = NULL, mo
         gsms <- if (anyNA(gsms)) NULL else unique(gsms)
         t1 <- sel[[1L]]
         if (!is.null(t1$gse)) {
-            .v2_load_gse(t1$gse, gsms, cache_dir = cache_dir, legacy = legacy, modalities = modalities)
+            .store_load_gse(t1$gse, gsms, cache_dir = cache_dir, legacy = legacy, modalities = modalities)
         } else if (!is.null(t1$manifest)) {
-            .v2_load_manifest(t1$manifest, gsms, modalities = modalities)
+            .store_load_manifest(t1$manifest, gsms, modalities = modalities)
         } else {
             .legacy_modalities(.read_singlet_bundle(t1$path, gsms = gsms), modalities)
         }

@@ -10,7 +10,7 @@ Validation run 2026-10-23 on Clipper; every number below comes from the artefact
 | column | type | content |
 |---|---|---|
 | `gsm` | string | sample accession |
-| `col` | int64 | column of the cell in the sample's v2 `cells` table / matrix column order (legacy bundles: its column in `exon_counts.1pz`, the order `v2/migrate.py` gives the cells table) |
+| `col` | int64 | column of the cell in the sample's store `cells` table / matrix column order (legacy bundles: its column in `exon_counts.1pz`, the order `store/migrate.py` gives the cells table) |
 | `cell_type_cl`, `cell_type_label` | string | Cell Ontology id and name (CL 2026-06-08); null when the method abstains |
 | `cell_type_score` | float32 | confidence of the call, in [0, 1] (guide: product of the gating confidences along the path; a ranking, see 3) |
 | `sex_chrom` | string | `female` (PATO:0000383), `male` (PATO:0000384), `ambiguous` |
@@ -20,7 +20,7 @@ Validation run 2026-10-23 on Clipper; every number below comes from the artefact
 | `model_version` | string | versions of every model that produced the row |
 
 Plus `<GSM>.summary.json` for internal QC (counts per CL id, per-donor sex and ancestry, timings, and `barcode_digest`, the
-SHA-256 of the called barcodes in `col` order, so ingest can check that the rows line up with the v2 cells table).
+SHA-256 of the called barcodes in `col` order, so ingest can check that the rows line up with the store cells table).
 
 **Privacy.** Genotypes, allele depths, variant positions and anything per-site never reach a label file. Ancestry reads the
 per-donor depth tables from the restricted sidecar on the compute node, in memory, and returns only a group, its HANCESTRO id and
@@ -187,7 +187,7 @@ Same 16 studies, guide only (`bench3.json`):
 
 ## 4. Chromosomal sex: 157 samples with GEO sex metadata
 
-Validation run `out/annotate_validation/run1`: 21 studies (the v2 pilot GSE145370, 12 human and 8 mouse legacy studies whose GEO
+Validation run `out/annotate_validation/run1`: 21 studies (the store pilot GSE145370, 12 human and 8 mouse legacy studies whose GEO
 characteristics record sex, both sexes in each), 167 samples, 443,530 cells, through the campaign script itself
 (`scripts/annotate_campaign.py`, `scripts/annotate_validation_summary.py`).
 
@@ -303,7 +303,7 @@ million cells.
 | ancestry (incl. sidecar parsing) | 450 |
 
 With the guide as the cell-type method, one task spends about 2,040 s of wall clock per million cells, which is about 4.5
-CPU-hours per million cells at 8 threads. Reading the counts is now the largest stage. v2 studies, read by range requests, should
+CPU-hours per million cells at 8 threads. Reading the counts is now the largest stage. per-sample studies, read by range requests, should
 read faster; the legacy studies are downloaded whole.
 
 `scripts/annotate_campaign.py plan` takes its study list from `https://singlet.bio/api/manifest`. Human and mouse studies only:
@@ -370,7 +370,7 @@ Median covered sites per donor: 221k.
 **Measured cost:** 1,010 s of wall clock per million cells per 8-thread task (read 700, cell type 297, sex 7, ancestry 4).
 That is 2.2 CPU-hours per million cells, about 430 CPU-hours for the atlas.
 
-**Hand-over.** The cell index ingests these files (`singlet.v2.atlas.normalize_sidecar`). Nothing was written to R2 or D1.
+**Hand-over.** The cell index ingests these files (`singlet.store.atlas.normalize_sidecar`). Nothing was written to R2 or D1.
 
 ## 7. Findings for other owners
 
@@ -380,6 +380,6 @@ That is 2.2 CPU-hours per million cells, about 430 CPU-hours for the atlas.
   (section 4).
 - **`ancestry_call.json`:** the pipeline's 50-marker call disagrees with a 10^5-site call on 36 of 39 donors. The website should
   stop showing it once these labels are served.
-- **data.singlet.bio:** it answers 403 to Python's default urllib User-Agent; clients must send one (the v2 transport does).
+- **data.singlet.bio:** it answers 403 to Python's default urllib User-Agent; clients must send one (the store transport does).
 - **CELLxGENE truth (section 3):** Singlet's called cells and the authors' kept cells often differ. Matched fractions are listed in
   the benchmark manifest.

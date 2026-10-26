@@ -5,7 +5,7 @@
 // python/singlet/v2/cellcall.py (call(), METHOD "singlet-emptydrops") so that the pipeline writes the same call the v2
 // migration computes from stored counts. VERSION "2.1" (docs/called-v2-truth.md) fits the retain knee between
 // DropletUtils' curve bounds (knee_bounded = cellcall.knee) and extrapolates the null tail for barcodes below every
-// simulated path. Shared golden vectors: tests/data/called_v2_golden/ (checked by tests/cpp/test_called_v2.cpp).
+// simulated path. Shared golden vectors: tests/data/called_ed_golden/ (checked by tests/cpp/test_called_v2.cpp).
 //
 //   * counts: exon + intron per gene (gene = feature name before the first '_'), genes sorted by that key;
 //   * lower: the "plateau" rule; ambient pool: uncalled barcodes with 0 < total <= lower;

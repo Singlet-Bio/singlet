@@ -21,16 +21,16 @@ cached needs no network in later sessions.}
 \code{SINGLET_CACHE_DIR} environment variable.}
 
 \item{legacy}{\code{TRUE} downloads the legacy \code{.singlet} bundle
-(deprecated, being retired). The default \code{NULL} downloads v2 and,
+(deprecated, being retired). The default \code{NULL} downloads the per-sample format and,
 only when the environment variable \code{SINGLET_LEGACY_FALLBACK=1} is
-set and the study has no v2 manifest yet, falls back to the legacy bundle.}
+set and the study has no store manifest yet, falls back to the legacy bundle.}
 }
 \value{
-The path to the local manifest (\code{.../v2/m/<GSE>.json}) or, with
+The path to the local manifest (\code{.../store/m/<GSE>.json}) or, with
   \code{legacy = TRUE}, to the local \code{.singlet} file.
 }
 \description{
-Mirrors a study's v2 objects (the manifest, one \code{.s2} object per
+Mirrors a study's store objects (the manifest, one \code{.s1} object per
 sample, and the vocabulary packs they use) from \url{https://data.singlet.bio}
 into the local cache, verifying each object against the manifest's sha256, and
 returns the path of the manifest. \code{\link{load}} then reads the local
@@ -42,7 +42,7 @@ instead (and its path returned); use this when you want to reach individual
 modalities with \code{\link{singlet_read}} or \code{\link{singlet_raw_counts}}.
 
 
-Objects are fetched from \code{<base>/v2/...}, where \code{<base>} is the
+Objects are fetched from \code{<base>/store/...}, where \code{<base>} is the
 \code{SINGLET_DATA_BASE} environment variable (default
 \code{https://data.singlet.bio}; a value ending in \code{/data} is
 accepted). \code{GSM} accessions are resolved with the API named by

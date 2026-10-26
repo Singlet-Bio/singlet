@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""bench/called_v2/equiv_cpp.py: the regression check that a binary's cell_calls.tsv equals cellcall.call on that binary's
+"""bench/called_ed/equiv_cpp.py: the regression check that a binary's cell_calls.tsv equals cellcall.call on that binary's
 own stored counts, and that the inputs it handed the caller (per-barcode totals, knee set, filtered matrix) are the stored
 ones. A synthetic run directory in the binary's output layout; the Monte Carlo call needs numba (skipped without it)."""
 
@@ -23,7 +23,7 @@ sys.path.insert(0, str(ROOT / "python"))
 pytest.importorskip("numba")
 
 _spec = importlib.util.spec_from_file_location(
-    "equiv_cpp", ROOT / "bench" / "called_v2" / "equiv_cpp.py"
+    "equiv_cpp", ROOT / "bench" / "called_ed" / "equiv_cpp.py"
 )
 EQ = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(EQ)
