@@ -528,3 +528,84 @@ name strings, not decoding, is the slowest step for a client, which is one more 
   or an SCX1-style variant, see the stream sizes below).
 * Pipeline: record strand, motif and maximum overhang per junction (STAR knows them), and count junction UMIs once per molecule, in line
   with the exon/intron fix under way.
+
+## 13. Antibody-capture members: ADT (CITE-seq) and HTO (hashtags) (PROPOSAL, 2026-10-23)
+
+Owner: the ADT session (branch `claude/adt-modality-0637a6`, `python/singlet/adt/`, report `docs/adt-modality.md`). Section 11
+covers `modalities=`, section 12 the junction table.
+
+Antibody-capture libraries are sequenced separately from the gene-expression library of the same cells. Their counts are
+**not legacy members**: the pipeline never produced them (it processed these libraries as RNA, `docs/library-type-screen.md`).
+They are new members of the **GEX** sample, aligned to its `cells` table:
+
+| member | kind | content |
+|---|---|---|
+| `adt_counts.1pz` | 1 (pz2) | antibodies and isotype controls x the sample's columns; u32 UMIs; rows `Inline` (unique antibody names, the order of `adt_panel.json`); cols `Cells` (column `j` is `col` `j` of the cells table, called or not) |
+| `hto_counts.1pz` | 1 (pz2) | hashtags, same layout; only when the sample has hashtags |
+| `adt_panel.json` | 3 (stored, zstd) | `{"schema": "singlet-adt-panel/1", "method", "counting", "features": [...], "library": {...}}`: per row `matrix`, `row`, `name`, `sequence`, `kind` (`antibody` / `isotype` / `hashtag`), `barcode_id` (TotalSeq A/B/C number), `ensembl`, `catalog_specificity`, `source` (`study` reference or `catalog` identification), `ambient_umis`; counting facts (source libraries, chemistry, R2 offset, 3' v3 barcode translation, method version); the library QC verdict |
+
+Rules:
+
+* Member flags have bit 0 (legacy) clear. The names carry `.1pz` only to match the matrix members clients already key on (`sj_counts.1pz`, ...).
+* Every column of the cells table has a column in the ADT matrices. Uncalled columns hold the empty-droplet background that DSB
+  normalisation needs (section 13 of `docs/adt-modality.md`); columns without molecules are empty. Molecules on whitelist barcodes
+  outside the columns are summed into `ambient_umis`.
+* Several antibody-capture libraries of one GEX sample (an ADT and an HTO library, or several sequencing libraries of one pool) are
+  merged into one member per kind. `counting.libraries` lists the source GSMs and runs.
+* Normalised layers are not stored: `adt-clr-v1` (Seurat CLR, margin 2) and `adt-dsb-v1` (DSB with the uncalled columns as empty
+  droplets and the isotype controls) are client recipes in `singlet.adt.normalize`.
+* Per-cell hashtag calls (singlet hashtag / doublet / negative) are cell metadata. They go to a feature sidecar
+  `<GSM>.features.hto.parquet` (`docs/CELL-ARCHITECTURE.md` section 3), not into these members.
+* Only libraries whose QC passes are attached (`docs/adt-modality.md`, QC section); a failing library is listed in the manifest as
+  `samples[i].excluded_modalities.adt = {reason, failed rules}` so the counts stay explainable.
+
+Attachment (objects are immutable). Reviewed with the v2-modalities session (2026-10-24): the client reads every member of a sample
+from one object (`client._read_sample` takes ranges from `sm.members`), so option 1 needs only the vocabulary entries, while option 2
+needs a second source per sample in Python (`_read_sample`), R (`.v2_read_sample`), the MCP selection code and the website ingest
+validator (`functions/_shared/v2-catalog.ts` `parseSample`). The manifest key is `extra_objects`, not `modalities`, which the website
+catalog already uses for the list of modality names.
+
+1. **At migration** (preferred while the campaign is on hold): `v2/migrate.py` adds the three members to the GEX sample object it
+   writes. They then enter the object digest and the manifest's `members`.
+2. **After migration**: a sidecar object `v2/x/<GSM>/adt.<d16hex>.s2` (an ordinary `.s2` container holding only these members,
+   content-addressed like sample objects), referenced from the manifest as
+   `samples[i].extra_objects.adt = {"key": ..., "bytes": ..., "sha256": ..., "members": {name: {kind, off, len, digest, ...}}}`. Readers
+   treat members listed there exactly like members of the sample object. Re-processing writes a new sidecar and changes the manifest,
+   never a sample object.
+
+`modalities=` (section 11): `adt` -> `adt_counts.1pz` (+ `adt_panel.json`), Python `obsm["adt"]`, R `altExp("adt")`; `hto` ->
+`hto_counts.1pz`, `obsm["hto"]` / `altExp("hto")`. Aliases `protein`, `cite`, `antibody` -> `adt`; `hashtag` -> `hto`. Availability
+follows the section 11 rule (a pz2 member with rows and columns). The vocabulary changes together in `client.py` (`MODALITIES`,
+`_MODALITY_ALIASES`), `r/R/v2.R` (`.v2_modality_members`, `.v2_modality_alias`) and the website's `v2-load-modalities.ts`; PR #14 landed
+first, so this branch adds `adt` / `hto` to the Python and R vocabularies; the website's list is a proposal for its owner. `uns["adt_panel"]` holds the parsed `adt_panel.json`.
+
+## 14. V(D)J and CRISPR guide members (PROPOSAL, 2026-10-25)
+
+Owner: the V(D)J + CRISPR session (branch `claude/vdj-crispr-benchmark-721d3a`, `python/singlet/vdj/`, `python/singlet/crispr/`,
+report `docs/vdj-crispr-modalities.md`). The rules of section 13 apply unchanged: these are new (non-legacy) members of the
+**GEX** sample, aligned to its `cells` table; a library is attached only when its QC passes, otherwise the manifest lists
+`samples[i].excluded_modalities.<vdj|crispr> = {reason, failed rules}`; several libraries of one GEX sample are merged
+(`counting.libraries` lists them); after migration they go to a sidecar `v2/x/<GSM>/<vdj|crispr>.<d16hex>.s2` referenced as
+`samples[i].extra_objects.<vdj|crispr>`.
+
+| member | kind | content |
+|---|---|---|
+| `vdj_contigs.parquet` | 3 (stored, zstd parquet) | one row per assembled contig with >= 1 junction UMI: `col` (cells-table column, -1 off the columns), `barcode`, `contig_id`, `chain`, `v_gene`, `d_gene`, `j_gene`, `c_gene`, `cdr3` (IMGT junction aa, Cys104..Phe/Trp118), `cdr3_nt`, `productive`, `full_length`, `umis`, `junction_umis`, `reads`, `high_confidence`, `kept`; sorted by `col` |
+| `vdj_summary.json` | 3 (stored) | `{"schema": "singlet-vdj/1", "method", "reference": {name, digest, source genome + GTF}, "counting": {libraries, runs, orientation, read statistics}, "library": {QC verdict, failed, warned, rules, metrics}}` |
+| `crispr_counts.1pz` | 1 (pz2) | guides x the sample's columns; u32 UMIs; rows `Inline` (guide ids, order of `crispr_guides.json`); cols `Cells` |
+| `crispr_guides.json` | 3 (stored) | `{"schema": "singlet-crispr-guides/1", "method", "geometry", "counting", "source", "guides": [{row, id, name, sequence, target_gene, target_gene_id, kind, ambient_umis}], "library": {QC}}` |
+
+* The existing legacy member `vdj_gene_usage.1pz` (gene-body UMIs over TR/IG genes counted from the GEX library) stays as it is;
+  it is a GEX-derived measurement, not a V(D)J library.
+* Contigs are raw data of the sample (`docs/CELL-ARCHITECTURE.md` section 1: VDJ is raw data in the `.s2` object). Per-cell
+  labels derived from them are cell metadata in feature sidecars: `<GSM>.features.vdj.parquet` (`col`, `receptor`, `paired`,
+  `clonotype_id`, `clonotype_size`, `excess_chains`, per-chain `*_cdr3` and `*_v`, `IGH_c`) and `<GSM>.features.crispr.parquet`
+  (`col`, `n_guides`, `guide_ids`, `target`, `class`). Sample-level summaries (V(D)J cells, pairing rate, clonotypes; guides
+  detected, assigned cells) go to D1 `sample_property`, never per cell.
+* Gene names are gene level (no alleles): the segment reference is built from the sample's own genome annotation
+  (`singlet.vdj.reference`), which carries one allele per gene. No germline genotype is derived or stored.
+* `modalities=` (section 11): `vdj_contigs` -> `vdj_contigs.parquet` as `uns["vdj_contigs"]` (Python) / `metadata(sce)$vdj_contigs`
+  (R), with the per-cell sidecar joined into `obs`; `crispr` -> `crispr_counts.1pz`, `obsm["crispr"]` / `altExp("crispr")`, aliases
+  `guides`, `sgrna`, `perturbation`. The vocabulary changes together in `client.py`, `r/R/v2.R` and the website's
+  `v2-load-modalities.ts`; this is a proposal for their owners (not wired on this branch). `vdj` keeps its current meaning
+  (`vdj_gene_usage.1pz`).

@@ -438,9 +438,13 @@ print.singlet_study <- function(x, ...) {
     splice_junctions = "sj_counts.1pz",                    # altExp: reads per junction
     psi = "sj_counts.1pz",                                 # altExp: percent spliced in, computed from the junctions
     mt = "mt_heteroplasmy.1pz",
-    vdj = "vdj_gene_usage.1pz")
+    vdj = "vdj_gene_usage.1pz",
+    adt = "adt_counts.1pz",                                # altExp: antibody UMIs (CITE-seq / TotalSeq)
+    hto = "hto_counts.1pz")                                # altExp: hashtag UMIs
 .v2_modality_alias <- c(x = "counts", exon = "spliced", intron = "unspliced", junctions = "splice_junctions",
-                        sj = "splice_junctions", splice_psi = "psi", mt_heteroplasmy = "mt", vdj_gene_usage = "vdj")
+                        sj = "splice_junctions", splice_psi = "psi", mt_heteroplasmy = "mt", vdj_gene_usage = "vdj",
+                        protein = "adt", cite = "adt", antibody = "adt", adt_counts = "adt", hashtag = "hto",
+                        hashtags = "hto", hto_counts = "hto")
 .v2_gene_members <- c("exon_counts.1pz", "intron_counts.1pz")
 .v2_gene_modalities <- c("counts", "spliced", "unspliced")
 
@@ -494,7 +498,7 @@ print.singlet_study <- function(x, ...) {
 #' @param x A \code{singlet_study} or a GEO Series accession.
 #' @param gsm Optional sample accession: only that sample's modalities.
 #' @return A character vector: a subset of \code{counts}, \code{spliced}, \code{unspliced}, \code{splice_junctions},
-#'   \code{psi}, \code{mt}, \code{vdj}.
+#'   \code{psi}, \code{mt}, \code{vdj}, \code{adt}, \code{hto}.
 #' @export
 singlet_study_modalities <- function(x, gsm = NULL) {
     study <- if (inherits(x, "singlet_study")) x else singlet_study(x)

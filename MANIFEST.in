@@ -29,3 +29,4 @@ prune dist
 global-exclude *.pyc
 global-exclude __pycache__
 global-exclude *.so
+recursive-include python/singlet/vdj/data *.tsv.gz

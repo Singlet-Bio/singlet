@@ -1,0 +1,64 @@
+{
+ "criterion": "max mean F over training datasets; doublets called singlet <= 0.2 on each",
+ "held_out": [
+  {
+   "held_out": "BAL1",
+   "chosen_on_others": "hyb_none_p5",
+   "f_mean": 0.9191822430271006,
+   "doublets_called_singlet": 0.0617344439000489,
+   "best_published": "BFF_cluster",
+   "best_published_f": 0.9352388044239708,
+   "best_published_doublets_called_singlet": 0.5957863792258696
+  },
+  {
+   "held_out": "BAL2",
+   "chosen_on_others": "hyb_none_p5",
+   "f_mean": 0.8136468812571934,
+   "doublets_called_singlet": 0.086492341018103,
+   "best_published": "hashedDrops",
+   "best_published_f": 0.8456721259543892,
+   "best_published_doublets_called_singlet": 0.412966114807365
+  },
+  {
+   "held_out": "BAL3",
+   "chosen_on_others": "hyb_none_p5",
+   "f_mean": 0.7516964699764541,
+   "doublets_called_singlet": 0.1505816066884769,
+   "best_published": "hashedDrops",
+   "best_published_f": 0.7850274757519837,
+   "best_published_doublets_called_singlet": 0.4973645946928389
+  },
+  {
+   "held_out": "CL",
+   "chosen_on_others": "hyb_total_p8_amb",
+   "f_mean": 0.8768893514111141,
+   "doublets_called_singlet": 0.5712841253791708,
+   "best_published": "BFF_cluster",
+   "best_published_f": 0.8743030537567424,
+   "best_published_doublets_called_singlet": 0.8317492416582406
+  }
+ ],
+ "shipped_variant": "hyb_none_p5",
+ "shipped_variant_per_dataset": [
+  {
+   "dataset": "BAL1",
+   "f_mean": 0.9191822430271006,
+   "doublets_called_singlet": 0.0617344439000489
+  },
+  {
+   "dataset": "BAL2",
+   "f_mean": 0.8136468812571934,
+   "doublets_called_singlet": 0.086492341018103
+  },
+  {
+   "dataset": "BAL3",
+   "f_mean": 0.7516964699764541,
+   "doublets_called_singlet": 0.1505816066884769
+  },
+  {
+   "dataset": "CL",
+   "f_mean": 0.7419616732677206,
+   "doublets_called_singlet": 0.131850353892821
+  }
+ ]
+}
