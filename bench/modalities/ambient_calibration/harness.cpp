@@ -5,7 +5,8 @@
 //   IN_DIR with dims.txt of 6 fields "G B nnzE nnzI n_cells lower" -> exon.* / intron.* (split API, as in production)
 //          or of 4 fields "G B nnz n_cells"                     -> raw.* (single gene matrix; barnyard inputs)
 //   keys: cells=FILE.idx (uint32 cell columns instead of IN_DIR/cells.idx), threads, off_prior_reads, prior_strength,
-//         cluster_prior_cells, min_cluster_cells, low_depth_frac, offgene_z, marker_fold, n_clusters, lower_umi, outlier_round
+//         cluster_prior_reads, cluster_prior_cells, min_cluster_cells, low_depth_frac, offgene_z, marker_fold, n_clusters,
+//         lower_umi, outlier_round   (sweep2 also passed cluster_estimate_pooled / sample_target_pooled: removed, no effect)
 // writes OUT_PREFIX.rho.f64 .cluster.u32 .offx.f64 .offe.f64 .prior.f64 (cell order of the cells file) and OUT_PREFIX.json
 #include <chrono>
 #include <cstdio>
@@ -66,8 +67,6 @@ int main(int argc, char** argv) {
         else if (k == "cluster_prior_cells") cfg.cluster_prior_cells = std::stod(v);
         else if (k == "min_cluster_cells") cfg.min_cluster_cells = std::stoul(v);
         else if (k == "cluster_prior_reads") cfg.cluster_prior_reads = std::stod(v);
-        else if (k == "cluster_estimate_pooled") cfg.cluster_estimate_pooled = std::stoi(v) != 0;
-        else if (k == "sample_target_pooled") cfg.sample_target_pooled = std::stoi(v) != 0;
         else if (k == "low_depth_frac") cfg.low_depth_frac = std::stod(v);
         else if (k == "offgene_z") cfg.offgene_z = std::stod(v);
         else if (k == "marker_fold") cfg.marker_fold = std::stod(v);

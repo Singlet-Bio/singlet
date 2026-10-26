@@ -1,0 +1,5 @@
+# before / after on every lane: v1 = production before this change (no cluster shrinkage), v2 = new defaults
+v1 cluster_prior_reads=0
+v1_knee cluster_prior_reads=0 cells=knee
+v2
+v2_knee cells=knee

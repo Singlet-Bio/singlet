@@ -238,6 +238,75 @@ int main() {
         CHECK(Rt.n_clusters == 1 && Rt.contam.size() == 10, "10 cells -> one cluster, 10 records");
     }
 
+    // Cell-set guard: duplicate and out-of-range indices are ignored by the fit; records stay aligned with the input
+    {
+        std::vector<uint32_t> cells = S.cell_idx;
+        cells.push_back(S.cell_idx[0]);                 // duplicate
+        cells.push_back(S.counts.ncols + 5);            // out of range
+        AmbientCorrectionResult Rg = correct_ambient_gene_level(S.counts, cells, cfg);
+        CHECK(Rg.contam.size() == cells.size(), "guard: one record per input index");
+        CHECK(Rg.n_cells_dropped == 2, "guard: duplicate + out-of-range index counted");
+        bool same = true;
+        for (size_t i = 0; i < S.cell_idx.size(); ++i) same = same && Rg.contam[i].rho == R3.contam[i].rho;
+        CHECK(same, "guard: the fit is unchanged by ignored indices");
+        CHECK(Rg.contam[S.cell_idx.size()].rho == Rg.contam[0].rho, "guard: duplicate gets its first occurrence's record");
+        CHECK(Rg.contam.back().rho == 0.0 && Rg.contam.back().n_umi == 0, "guard: out-of-range index gets rho 0");
+        CHECK(R3.n_uncalled_above_pool == 0, "guard: full cell set leaves no uncalled barcode above the pool cap");
+        // a knee-like subset (drop the 25% shallowest cells): they fall in neither the pool nor the fit, and are counted
+        std::vector<std::pair<uint64_t, uint32_t>> depth;
+        for (size_t i = 0; i < S.cell_idx.size(); ++i) {
+            const uint32_t b = S.cell_idx[i];
+            uint64_t t = 0;
+            for (int32_t k = S.counts.indptr[b]; k < S.counts.indptr[b + 1]; ++k) t += S.counts.data[k];
+            depth.emplace_back(t, b);
+        }
+        std::sort(depth.begin(), depth.end());
+        std::vector<uint32_t> knee;
+        for (size_t i = depth.size() / 4; i < depth.size(); ++i) knee.push_back(depth[i].second);
+        std::sort(knee.begin(), knee.end());
+        AmbientCorrectionResult Rk = correct_ambient_gene_level(S.counts, knee, cfg);
+        CHECK(Rk.n_uncalled_above_pool == depth.size() / 4, "guard: a knee subset is flagged (uncalled barcodes above the pool cap)");
+        CHECK(Rk.profile.n_ambient_barcodes == R3.profile.n_ambient_barcodes, "guard: dropped cells do not enter the ambient pool");
+    }
+
+    // Two-level shrinkage: per-cell prior toward the cluster c_k, cluster c_k toward the sample rho
+    {
+        AmbientDecontConfig c0 = cfg;
+        c0.cluster_prior_reads = 0.0; c0.cluster_prior_cells = 0.0;
+        AmbientCorrectionResult A0 = correct_ambient_gene_level(S.counts, S.cell_idx, c0);
+        bool raw_ok = A0.cluster_rho.size() == A0.cluster_rho_raw.size();
+        for (size_t k = 0; raw_ok && k < A0.cluster_rho.size(); ++k) raw_ok = std::fabs(A0.cluster_rho[k] - A0.cluster_rho_raw[k]) < 1e-12;
+        CHECK(raw_ok, "shrinkage off: cluster c_k = raw c_k");
+        AmbientDecontConfig c1 = cfg;
+        c1.cluster_prior_reads = 1e12;
+        AmbientCorrectionResult A1 = correct_ambient_gene_level(S.counts, S.cell_idx, c1);
+        bool pooled_ok = A1.sample_rho > 0.0;
+        for (double c : A1.cluster_rho) pooled_ok = pooled_ok && std::fabs(c / A1.sample_rho - 1.0) < 1e-3;
+        CHECK(pooled_ok, "infinite cluster prior: every c_k equals the sample rho");
+        bool prior_ok = true;
+        for (const auto& c : A1.contam) prior_ok = prior_ok && std::fabs(c.prior_rho / A1.sample_rho - 1.0) < 1e-3;
+        CHECK(prior_ok, "infinite cluster prior: every cell's prior mean is the sample rho");
+        // per-cell prior strength: more pseudo-reads, less per-cell spread (information-weighted shrinkage)
+        auto sd = [](const AmbientCorrectionResult& r) {
+            double m = 0, v = 0;
+            for (const auto& c : r.contam) m += c.rho_total > 0 ? c.rho_total : c.rho;
+            m /= r.contam.size();
+            for (const auto& c : r.contam) { const double x = c.rho_total > 0 ? c.rho_total : c.rho; v += (x - m) * (x - m); }
+            return std::sqrt(v / r.contam.size());
+        };
+        AmbientDecontConfig cw = c1, cs = c1;
+        cw.off_prior_reads = 1.0; cs.off_prior_reads = 1e9;
+        const double sd_w = sd(correct_ambient_gene_level(S.counts, S.cell_idx, cw));
+        const double sd_s = sd(correct_ambient_gene_level(S.counts, S.cell_idx, cs));
+        std::cout << "  per-cell sd: weak prior " << sd_w << ", infinite prior " << sd_s << "\n";
+        CHECK(sd_s < 0.05 * sd_w, "infinite per-cell prior collapses rho onto the sample rho");
+        // minimum cluster size: small clusters dissolve, at least two remain
+        AmbientDecontConfig cm = cfg;
+        cm.min_cluster_cells = 1000;
+        AmbientCorrectionResult Am = correct_ambient_gene_level(S.counts, S.cell_idx, cm);
+        CHECK(Am.n_clusters == 2 && Am.ok, "min_cluster_cells dissolves small clusters but keeps two");
+    }
+
     // JSON / TSV writers run
     {
         write_ambient_json("ambient_decontx_test.json", R, cfg);
