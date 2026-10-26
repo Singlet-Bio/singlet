@@ -88,7 +88,66 @@ def compare_dirs(a: Path, b: Path) -> int:
     return bad
 
 
+def bam_body_digest(path: str):
+    """sha256 of the uncompressed BAM after its header (records only, in file order), the reference list, and the
+    header text without @PG/@CO lines. Independent of BGZF block layout and compression level."""
+    import struct
+    import zlib
+
+    h = hashlib.sha256()
+    buf = bytearray()
+    state = {"skip": None, "refs": None, "text": None}
+
+    def feed(data: bytes):
+        buf.extend(data)
+        if state["skip"] is None:
+            if len(buf) < 12:
+                return
+            l_text = struct.unpack_from("<i", buf, 4)[0]
+            if len(buf) < 12 + l_text:
+                return
+            n_ref = struct.unpack_from("<i", buf, 8 + l_text)[0]
+            off = 12 + l_text
+            refs = []
+            for _ in range(n_ref):
+                if len(buf) < off + 4:
+                    return
+                l_name = struct.unpack_from("<i", buf, off)[0]
+                if len(buf) < off + 4 + l_name + 4:
+                    return
+                refs.append((bytes(buf[off + 4:off + 3 + l_name]), struct.unpack_from("<i", buf, off + 4 + l_name)[0]))
+                off += 8 + l_name
+            text = bytes(buf[8:8 + l_text]).decode(errors="replace").rstrip("\0")
+            state["text"] = [l for l in text.splitlines() if not l.startswith(("@PG", "@CO"))]
+            state["refs"] = refs
+            state["skip"] = off
+            del buf[:off]
+        h.update(buf)
+        buf.clear()
+
+    with open(path, "rb") as f:
+        d = zlib.decompressobj(31)
+        while True:
+            chunk = f.read(1 << 24)
+            if not chunk:
+                break
+            while chunk:
+                feed(d.decompress(chunk))
+                if d.eof:
+                    chunk = d.unused_data
+                    d = zlib.decompressobj(31)
+                else:
+                    chunk = b""
+    return h.hexdigest(), state["refs"], state["text"]
+
+
 def compare_bams(pa: str, pb: str) -> int:
+    da, db = bam_body_digest(pa), bam_body_digest(pb)
+    if da == db:
+        print(f"BAM {Path(pa).name}: header and all records identical (sha256 of the uncompressed records {da[0][:16]})")
+        return 0
+    print(f"BAM {Path(pa).name}: uncompressed records differ (refs equal {da[1] == db[1]}, header equal {da[2] == db[2]})"
+          "; record-level diff:")
     import pysam
 
     with pysam.AlignmentFile(pa, "rb", check_sq=False) as A, pysam.AlignmentFile(pb, "rb", check_sq=False) as B:
@@ -108,6 +167,9 @@ def compare_bams(pa: str, pb: str) -> int:
                 diff += 1
                 if diff <= 5:
                     print(f"  record {n}: {ra.to_string()[:150] if ra else None}\n            {rb.to_string()[:150] if rb else None}")
+                if diff >= 1000:
+                    print("  (stopped after 1000 differing records)")
+                    break
         print(f"BAM {Path(pa).name}: {n} records, {diff} differ")
         return bad + diff
 
