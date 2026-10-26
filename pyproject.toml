@@ -151,6 +151,8 @@ omit = [
     "python/singlet/torch/*",
     # build-time generator of the shipped packs (run once per reference build, never at import)
     "python/singlet/store/packs_build.py",
+    # numba @njit kernels: compiled code is invisible to coverage; tests/python/test_vdj_assemble.py runs them through assemble.py
+    "python/singlet/vdj/_kernels.py",
 ]
 
 [tool.coverage.report]
