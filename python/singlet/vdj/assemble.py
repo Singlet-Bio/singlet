@@ -83,6 +83,14 @@ class Reference:
         self.chains = list(R.CHAINS)
         self.chain_id = np.array([self.chains.index(c) for c in self.chain], dtype=np.int8)
         self.d_segs = {c: [(s.name, s.seq) for s in segs if s.region == "D" and s.chain == c] for c in R.CHAINS}
+        # indistinguishable V genes (identical up to Cys104): one class, named by its first member, voting as one
+        eq = R.equivalence(segs)
+        first = {}
+        self.seg_class = np.arange(len(segs), dtype=np.int32)
+        for i, s in enumerate(segs):
+            lab = eq.get(s.name)
+            if lab and "|" in lab:
+                self.seg_class[i] = first.setdefault(lab, i)
 
     @classmethod
     def load(cls, species_or_path: str = "human"):
@@ -127,7 +135,7 @@ def _rc(s: bytes) -> bytes:
 
 def _classify(ref: Reference, seqs: List[bytes], min_hits: int):
     codes, off = _codes(seqs)
-    out = K.classify(codes, off, K_INDEX, ref.km, ref.sg, ref.ps, ref.region, min_hits)
+    out = K.classify(codes, off, K_INDEX, ref.km, ref.sg, ref.ps, ref.region, min_hits, ref.seg_class)
     return codes, off, out
 
 
@@ -226,6 +234,9 @@ def run_library(r1_paths: Sequence[str], r2_paths: Sequence[str], *, ref: Refere
         umis.append(um)
         mm = np.empty((len(keep), 13), np.int32)
         mm[:, :9] = o[keep, :9]
+        # gene votes by equivalence class (the anchors above used each read's own segment)
+        for col in (0, 3, 6):
+            mm[:, col] = np.where(mm[:, col] >= 0, ref.seg_class[np.maximum(mm[:, col], 0)], -1)
         mm[:, 12] = o[keep, 9]  # tie flags: reads whose V / J / C ties between genes do not vote for a gene
         mm[:, 9] = chain[keep]
         mm[:, 10] = cys[keep]

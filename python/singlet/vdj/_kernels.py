@@ -69,12 +69,13 @@ def build_index(seqs, k):
 
 
 @njit(cache=True, parallel=True)
-def classify(codes, off, k, ikm, isg, ips, seg_region, min_hits):
+def classify(codes, off, k, ikm, isg, ips, seg_region, min_hits, seg_class):
     """Best V / J / C segment per read. Region codes: 0 V, 1 D, 2 J, 3 C.
 
     Returns int32 arrays (n, 10): vseg, vhits, vdiag, jseg, jhits, jdiag, cseg, chits, cdiag (-1 / 0 when absent), and
     in column 9 tie flags: 1 C, 2 V, 4 J when the best segment of that region ties with another gene (TRBC1 / TRBC2,
-    IGHG1-4, TRBV6-2 / TRBV6-3 share most k-mers), so that the read does not vote for either."""
+    IGHG1-4 share most k-mers), so that the read does not vote for either. Genes of one equivalence class
+    (``seg_class``: identical up to Cys104, e.g. TRBV6-2 / TRBV6-3) never tie: they are one call."""
     n = len(off) - 1
     out = np.full((n, 10), -1, np.int32)
     mask = np.uint64((1 << (2 * k)) - 1)
@@ -124,12 +125,12 @@ def classify(codes, off, k, ikm, isg, ips, seg_region, min_hits):
             seg = ks[j] >> 20
             reg = seg_region[seg]
             if cnt > best[reg]:
-                if bseg[reg] != seg:
+                if bseg[reg] >= 0 and seg_class[bseg[reg]] != seg_class[seg]:
                     second[reg] = best[reg]
                 best[reg] = cnt
                 bseg[reg] = seg
                 bdiag[reg] = (ks[j] & ((1 << 20) - 1)) - DIAG_BIAS
-            elif seg != bseg[reg] and cnt > second[reg]:
+            elif seg_class[seg] != seg_class[bseg[reg]] and cnt > second[reg]:
                 second[reg] = cnt
             j = e
         for reg, col in ((0, 0), (2, 3), (3, 6)):
