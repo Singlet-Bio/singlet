@@ -178,6 +178,14 @@ def compute(artifact_dir: Path) -> dict:
             "The K562 published assignments keep only cells with one guide pair (the authors filtered the rest), so "
             "multiple-guide rates cannot be compared there.",
             "K562 non-targeting guides have no coordinate in their ids: their windows are counted as 'unidentified' guides.",
+            "The 10x A549 and A375 screens are development data: the caller's ambient-load rule was revised after A375 "
+            "(two guides), where a doublet's second guide had explained itself away. Nothing was set on the Replogle or "
+            "Norman screens.",
+            "Norman 2019: GEO has no guide-barcode sequences; the barcode -> identity table is learnt on a hash-chosen half "
+            "of the published cells and every caller is scored on the other half only.",
+            "Precision against Cell Ranger on A549 is 0.908 (the other callers 0.999-1.000): Singlet calls one guide where "
+            "Cell Ranger calls several; the guides only Cell Ranger adds leave their targets at 1.20x control expression "
+            "(extra_guides_target_expression), i.e. they are ambient molecules.",
         ],
     }
     for ds in prov["datasets"]:  # quality against cost (contract 1.1.0)
