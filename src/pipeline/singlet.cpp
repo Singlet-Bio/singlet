@@ -2575,7 +2575,7 @@ static std::vector<std::string> default_atac_whitelists() {
     std::string dir(exe_buf);
     auto sl = dir.rfind('/');
     if (sl != std::string::npos) dir.resize(sl);
-    for (const char* f : {"737K-cratac-v1.txt", "737K-arc-v1-atac-gex.tsv.gz"}) {
+    for (const char* f : {"737K-cratac-v1.txt.gz", "737K-cratac-v1.txt", "737K-arc-v1-atac-gex.tsv.gz"}) {
         std::string c = dir + "/../whitelists/" + f;
         struct stat st;
         if (stat(c.c_str(), &st) == 0) out.push_back(c);
