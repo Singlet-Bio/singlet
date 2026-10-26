@@ -10,6 +10,7 @@ from pathlib import Path
 ap = argparse.ArgumentParser()
 ap.add_argument("root"); ap.add_argument("commit"); ap.add_argument("binary")
 ap.add_argument("--status", default="draft")
+ap.add_argument("--base", default="", help="prod/modality-fixes commit the branch was merged onto for the build")
 a = ap.parse_args()
 ENV = "/mnt/projects/debruinz_project/debruinz/singlet/envs/atacbench/bin"
 
@@ -31,7 +32,7 @@ def ver(cmd):
 
 SINGLET = {"version": "1.0.0", "commit": a.commit, "branch": "claude/atac-spatial-benchmark-2ba7df",
            "binary": os.path.basename(a.binary), "binary_sha256": sha256(a.binary),
-           "build_flags": "-O3 -march=x86-64-v3 (CMake Release), merged onto prod/modality-fixes"}
+           "build_flags": f"CMake Release, -march=x86-64-v3; this branch merged onto prod/modality-fixes {a.base}".strip()}
 CHROMAP = {"name": "chromap+snapatac2", "version": f"chromap {ver([f'{ENV}/chromap', '--version'])}; "
            f"snapatac2 {ver([f'{ENV}/python', '-c', 'import snapatac2; print(snapatac2.__version__)'])}; "
            f"MACS3 {ver([f'{ENV}/macs3', '--version'])}",
