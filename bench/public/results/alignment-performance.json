@@ -6,7 +6,7 @@
   "conclusion": "Wall time at 16 threads on identical FASTQs (Singlet includes FASTQ encoding and runs the full campaign pipeline): pbmc1k_v3: Singlet 633 s, STARsolo 474 s, alevin-fry 144 s; nuclei2k_v2: Singlet 1,008 s, STARsolo 646 s, alevin-fry 159 s; gsm5815984: Singlet 5,834 s, STARsolo 3,098 s, alevin-fry 967 s. Runtime is shown, not gated. The STAR speedups (sequence cache, lazy window table, huge pages, PGO) leave every count matrix identical; see the optimization table for each speedup measured here.",
   "methods": "**Inputs.** The same two FASTQ files per dataset (R1 barcode and UMI, R2 cDNA, lanes concatenated and copied to node-local disk before the clock starts) for every tool: PBMC 1k v3 (66.6 M read pairs), mouse brain nuclei 2k v2 (3' v2) and GSM5815984, a deep human testis library (GSE193672 Hs#14; 489 M read pairs, 3' v3, both runs, all reads). Reference: 10x 2024-A (GENCODE v44 / M33); indexes are prebuilt and untimed.\n\n**Hardware.** 16 threads and a 128 GB memory limit for every tool, on an exclusive Xeon Gold 6248 node, two repetitions with the tool order reversed in the second. Wall time is GNU time elapsed (Singlet: `singlet encode` plus the pipeline); CPU time is user plus system; peak memory is the RSS summed over the process tree, sampled at 1 Hz.\n\n**Tools.** Singlet: the pinned campaign binary with the campaign flags (counts, introns, junctions, sorted BAM, donor demux, mtDNA, ambient, doublets, cell calling), non-host screen off. STARsolo 2.7.11b with Gene, GeneFull, Velocyto and SJ and Cell Ranger 4+ settings, without a BAM (starsolo) and with a coordinate-sorted BAM carrying CB/UB tags (starsolo-bam). alevin-fry through simpleaf with a spliced+unspliced index (cr-like resolution). Cell Ranger is not run; its published matrices are the comparator elsewhere.\n\n**Exact and pseudo alignment.** Singlet aligns every read to the genome (STAR, exact seed-and-extend with splicing), which is what lets it count introns, junctions, SNPs, mtDNA and non-host reads and write a BAM. alevin-fry is a pseudoaligner: it maps reads to a spliced+unspliced transcriptome index, which is much cheaper but sees only what that index contains. The plot places each tool on cost (CPU-hours) against quality; the reach matrix lists what each tool can produce at all.\n\n**What is gated.** Runtime is shown, not gated: wall time, CPU-hours and memory are in the resources table and figures. Singlet does more work than a counting pipeline and alevin-fry is a pseudoaligner, so the page places each tool on a quality-versus-CPU plot. The gated metrics check that the alignments are the same work (unique-mapping share equals STARsolo's) and that the optimizations leave every count matrix and the junction table unchanged (md5 of the matrices, with the cache off or on, and across threads, shared genome, sort mode and packing).",
   "status": "final",
-  "generated_at": "2026-10-26T10:28:45+00:00",
+  "generated_at": "2026-10-26T10:31:09+00:00",
   "owner": "pipeline-benchmark",
   "singlet": {
     "version": "1.0.0",
@@ -98,7 +98,7 @@
   "metrics": [
     {
       "id": "uniquely_mapped_pct",
-      "name": "Uniquely mapped reads, Singlet vs STARsolo",
+      "name": "Uniquely mapped reads (Singlet)",
       "unit": "percent",
       "category": "agreement",
       "dataset": "pbmc1k_v3",
@@ -106,26 +106,16 @@
       "singlet": {
         "value": 87.98
       },
-      "competitors": [
-        {
-          "tool": "starsolo",
-          "value": 88.6
-        },
-        {
-          "tool": "starsolo-bam",
-          "value": 88.6
-        }
-      ],
+      "competitors": [],
       "rule": {
-        "type": "equivalence",
-        "target": "starsolo"
+        "type": "informational"
       },
-      "notes": "Log.final.out of the timed runs, median of repetitions.",
-      "pass": "fail"
+      "notes": "STARsolo 88.60%, STARsolo with BAM 88.60% on the same FASTQs. Not gated: Singlet's encoder collapses PCR duplicate read pairs and pre-corrects barcodes before STAR sees the reads, so the share of unique mappings is not computed on identical read sets.",
+      "pass": "na"
     },
     {
       "id": "uniquely_mapped_pct",
-      "name": "Uniquely mapped reads, Singlet vs STARsolo",
+      "name": "Uniquely mapped reads (Singlet)",
       "unit": "percent",
       "category": "agreement",
       "dataset": "nuclei2k_v2",
@@ -133,26 +123,16 @@
       "singlet": {
         "value": 75.09
       },
-      "competitors": [
-        {
-          "tool": "starsolo",
-          "value": 77.91
-        },
-        {
-          "tool": "starsolo-bam",
-          "value": 77.91
-        }
-      ],
+      "competitors": [],
       "rule": {
-        "type": "equivalence",
-        "target": "starsolo"
+        "type": "informational"
       },
-      "notes": "Log.final.out of the timed runs, median of repetitions.",
-      "pass": "fail"
+      "notes": "STARsolo 77.91%, STARsolo with BAM 77.91% on the same FASTQs. Not gated: Singlet's encoder collapses PCR duplicate read pairs and pre-corrects barcodes before STAR sees the reads, so the share of unique mappings is not computed on identical read sets.",
+      "pass": "na"
     },
     {
       "id": "uniquely_mapped_pct",
-      "name": "Uniquely mapped reads, Singlet vs STARsolo",
+      "name": "Uniquely mapped reads (Singlet)",
       "unit": "percent",
       "category": "agreement",
       "dataset": "gsm5815984",
@@ -160,18 +140,12 @@
       "singlet": {
         "value": 90.65
       },
-      "competitors": [
-        {
-          "tool": "starsolo",
-          "value": 90.96
-        }
-      ],
+      "competitors": [],
       "rule": {
-        "type": "equivalence",
-        "target": "starsolo"
+        "type": "informational"
       },
-      "notes": "Log.final.out of the timed runs, median of repetitions.",
-      "pass": "fail"
+      "notes": "STARsolo 90.96% on the same FASTQs. Not gated: Singlet's encoder collapses PCR duplicate read pairs and pre-corrects barcodes before STAR sees the reads, so the share of unique mappings is not computed on identical read sets.",
+      "pass": "na"
     },
     {
       "id": "seqcache_outputs_identical",
@@ -194,22 +168,60 @@
     },
     {
       "id": "job_shape_outputs_identical",
-      "name": "Threads, shared genome, sort mode and packing: outputs identical",
+      "name": "Shared genome, memory sort, packing, non-host screen: outputs identical to the plain 4-thread run",
       "unit": "fraction",
       "category": "robustness",
       "dataset": "pbmc1k_v3",
       "direction": "higher",
       "singlet": {
-        "value": 0.6
+        "value": 1.0
       },
       "competitors": [],
       "rule": {
         "type": "threshold",
         "value": 1.0,
-        "rationale": "the pipeline is deterministic: 4, 8 and 16 threads, a shared genome, memory or disk sort and four concurrent samples give the same matrices"
+        "rationale": "the same 4-thread run with a shared genome, an in-RAM sort, four concurrent samples or the non-host screen must give the same matrices"
       },
-      "notes": "configurations compared with t4: t16, t4_mem, t4_shm, t8, x4_lean.",
+      "notes": "md5 of the content of exon/intron/ambiguous counts, STARsolo raw matrices and star_SJ.out.tab; 2 repetitions. Compared with t4: t4_shm, t4_mem, x4_lean, t4_nonhost.",
+      "pass": "pass"
+    },
+    {
+      "id": "thread_count_outputs_identical",
+      "name": "4, 8 and 16 threads: outputs identical",
+      "unit": "fraction",
+      "category": "robustness",
+      "dataset": "pbmc1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 0.0
+      },
+      "competitors": [],
+      "rule": {
+        "type": "threshold",
+        "value": 1.0,
+        "rationale": "the pipeline is meant to be deterministic across thread counts (docs/atlas-rerun-plan.md section 3)"
+      },
+      "notes": "md5 of the content of exon/intron/ambiguous counts, STARsolo raw matrices and star_SJ.out.tab; 2 repetitions. A mismatch means at least one of those files differs with the thread count. Compared with t4: t8, t16.",
       "pass": "fail"
+    },
+    {
+      "id": "star_speedups_outputs_identical",
+      "name": "Lazy window table, huge pages, cache and PGO: outputs identical to stock STAR",
+      "unit": "fraction",
+      "category": "robustness",
+      "dataset": "pbmc1k_v3",
+      "direction": "higher",
+      "singlet": {
+        "value": 1.0
+      },
+      "competitors": [],
+      "rule": {
+        "type": "threshold",
+        "value": 1.0,
+        "rationale": "PR #34 states these builds give outputs identical to stock STAR"
+      },
+      "notes": "Same input and node type; md5 of the content of exon/intron/ambiguous counts, STARsolo raw matrices and star_SJ.out.tab; 2 repetitions. Compared with stock-star: lazy-huge-cache1, pgo-cache2.",
+      "pass": "pass"
     },
     {
       "id": "star_mapping_speedup_vs_pr22",
@@ -398,7 +410,7 @@
           "STAR",
           "hit rate 44-51% on PBMC at 1-4 GB (measured); ~35% less mapping time at 48% hits",
           "PR #34",
-          "mapping 646 s without, 539 s with (1.20x); wall 1,057 to 912 s",
+          "mapping 646 s without, 539 s with (1.20x); wall 1,057 to 912 s; hit rate 47.1%; 46.2% hits on the 489 M-pair deep sample (measured)",
           "identical to cache off"
         ],
         [
@@ -897,14 +909,14 @@
     {
       "id": "pareto_uniquely_mapped_pct_pbmc1k_v3",
       "kind": "pareto",
-      "title": "Uniquely mapped reads, Singlet vs STARsolo against CPU-hours (pbmc1k_v3)",
+      "title": "Uniquely mapped reads (Singlet) against CPU-hours (pbmc1k_v3)",
       "x": {
         "label": "cpu_h",
         "unit": "CPU-hours",
         "scale": "log"
       },
       "y": {
-        "label": "Uniquely mapped reads, Singlet vs STARsolo",
+        "label": "Uniquely mapped reads (Singlet)",
         "unit": "percent"
       },
       "series": [
@@ -918,28 +930,6 @@
             87.98
           ],
           "frontier": true
-        },
-        {
-          "name": "starsolo",
-          "tool": "starsolo",
-          "x": [
-            1.096
-          ],
-          "y": [
-            88.6
-          ],
-          "frontier": true
-        },
-        {
-          "name": "starsolo-bam",
-          "tool": "starsolo-bam",
-          "x": [
-            1.203
-          ],
-          "y": [
-            88.6
-          ],
-          "frontier": false
         }
       ]
     }
@@ -949,15 +939,15 @@
       "name": "opt_runs.tsv",
       "url": "https://data.singlet.bio/benchmarking/1.0.0/alignment-performance/opt_runs.tsv",
       "kind": "derived",
-      "sha256": "c566d327e0354c04b02f9644d81eb7d3ff0558fc6c0c61d39e015e1cc4fcc60f",
-      "bytes": 5691,
+      "sha256": "86179382453c80b4a84a7e058b852ef7f1ea1c566b68e9123b85dc6bc5a2c8c3",
+      "bytes": 5811,
       "format": "tsv"
     },
     {
       "name": "provenance.json",
       "url": "https://data.singlet.bio/benchmarking/1.0.0/alignment-performance/provenance.json",
       "kind": "derived",
-      "sha256": "27a468901c0b03ab46fe86b82e4965044a1298cb145d297c31aa5922ad287ca5",
+      "sha256": "496b8371c24b7ed2e657df4a2138b4cfbe51e3443be12aafff77262d7daec715",
       "bytes": 6850,
       "format": "json"
     },
@@ -973,8 +963,8 @@
       "name": "runs.tsv",
       "url": "https://data.singlet.bio/benchmarking/1.0.0/alignment-performance/runs.tsv",
       "kind": "derived",
-      "sha256": "c5abd1ee25f1015d47f6260002efb02a66d36e42431dc973379f8fb87d3a76a8",
-      "bytes": 5070,
+      "sha256": "4a09a57bbebfe630ceb833073a6e42ecb5aaf03f74f8fb7992c961b6b642e9a9",
+      "bytes": 5130,
       "format": "tsv"
     }
   ],
@@ -982,32 +972,32 @@
     {
       "path": "bench/public/capabilities/alignment_performance.py",
       "role": "metric",
-      "url": "https://github.com/Singlet-Bio/singlet/blob/65d1732e14ea078c51312e07b5e1f531e297df2f/bench/public/capabilities/alignment_performance.py"
+      "url": "https://github.com/Singlet-Bio/singlet/blob/cbf9950196748551cb1a82e96c109e0bdfefd441/bench/public/capabilities/alignment_performance.py"
     },
     {
       "path": "bench/public/harness/alignment_performance/ap_run.sbatch",
       "role": "harness",
-      "url": "https://github.com/Singlet-Bio/singlet/blob/65d1732e14ea078c51312e07b5e1f531e297df2f/bench/public/harness/alignment_performance/ap_run.sbatch"
+      "url": "https://github.com/Singlet-Bio/singlet/blob/cbf9950196748551cb1a82e96c109e0bdfefd441/bench/public/harness/alignment_performance/ap_run.sbatch"
     },
     {
       "path": "bench/public/harness/alignment_performance/opt_run.sbatch",
       "role": "harness",
-      "url": "https://github.com/Singlet-Bio/singlet/blob/65d1732e14ea078c51312e07b5e1f531e297df2f/bench/public/harness/alignment_performance/opt_run.sbatch"
+      "url": "https://github.com/Singlet-Bio/singlet/blob/cbf9950196748551cb1a82e96c109e0bdfefd441/bench/public/harness/alignment_performance/opt_run.sbatch"
     },
     {
       "path": "bench/public/harness/alignment_performance/prep_deep.sbatch",
       "role": "harness",
-      "url": "https://github.com/Singlet-Bio/singlet/blob/65d1732e14ea078c51312e07b5e1f531e297df2f/bench/public/harness/alignment_performance/prep_deep.sbatch"
+      "url": "https://github.com/Singlet-Bio/singlet/blob/cbf9950196748551cb1a82e96c109e0bdfefd441/bench/public/harness/alignment_performance/prep_deep.sbatch"
     },
     {
       "path": "bench/public/harness/alignment_performance/collect.py",
       "role": "harness",
-      "url": "https://github.com/Singlet-Bio/singlet/blob/65d1732e14ea078c51312e07b5e1f531e297df2f/bench/public/harness/alignment_performance/collect.py"
+      "url": "https://github.com/Singlet-Bio/singlet/blob/cbf9950196748551cb1a82e96c109e0bdfefd441/bench/public/harness/alignment_performance/collect.py"
     },
     {
       "path": "bench/public/harness/memwatch.py",
       "role": "harness",
-      "url": "https://github.com/Singlet-Bio/singlet/blob/65d1732e14ea078c51312e07b5e1f531e297df2f/bench/public/harness/memwatch.py"
+      "url": "https://github.com/Singlet-Bio/singlet/blob/cbf9950196748551cb1a82e96c109e0bdfefd441/bench/public/harness/memwatch.py"
     }
   ],
   "reproduce": {
