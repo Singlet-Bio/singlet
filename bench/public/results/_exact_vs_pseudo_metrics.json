@@ -1,0 +1,1045 @@
+{
+ "_comment": "Draft fragment for alignment-performance.json (contract 1.1.0). Merge tools/datasets/metrics/resources/figures/reach/artifacts/caveats; methods is a paragraph to add. Pareto figures are built with contract.pareto_figure on the 'pooled' resources (per 100M pairs).",
+ "methods": "Exact versus pseudo-alignment. Singlet aligns every read to the genome with a STAR fork and counts from the alignments (pileup); alevin-fry (via simpleaf and piscem) maps reads by k-mer matching to a splici index of the annotated transcripts and introns. The genome-wide aligner costs more CPU and memory and places reads outside the annotation; the pseudoaligner is several times faster. This fragment measures both sides on real data. Truth: (1) species of origin in a human-mouse barnyard (hgmm1k_v3); (2) no chrY in female-derived HEK293T cells; (3) CITE-seq protein against RNA on the same PBMC cells. No simulated reads are used. All tools get the same FASTQs, the 10x 2024-A references, the same cells (published Cell Ranger barcodes) and, for timing, one node and 16 or 4 threads. 10x software was not run: Cell Ranger is the published 3.0.0 matrix (older references). Runtime is reported as CPU-hours per 100M read pairs with wall time secondary; Singlet includes its .1fq encode step, labelled.",
+ "tools": [
+  {
+   "name": "singlet",
+   "version": "1.0.0",
+   "role": "singlet",
+   "params": "singlet-campaign <sample>.1fq --ref-base REF --genome-dir STAR_2.7.11b_index --exons genes.gtf --out-prefix OUT/ --threads N --pipeline --output-format mtx --raw-matrix  (after `singlet encode`); counts = raw_feature_bc_matrix (exon+intron, each molecule once); exact genome-wide alignment by the STAR fork, then pileup. Encode step reported separately."
+  },
+  {
+   "name": "STARsolo",
+   "version": "2.7.11b",
+   "role": "competitor",
+   "url": "https://github.com/alexdobin/STAR",
+   "params": "STAR --soloType CB_UMI_Simple --soloCBlen 16 --soloUMIlen 12 --soloStrand Forward --soloFeatures Gene GeneFull Velocyto --soloCellFilter EmptyDrops_CR --soloCBmatchWLtype 1MM_multi_Nbase_pseudocounts --soloUMIfiltering MultiGeneUMI_CR --soloUMIdedup 1MM_CR --clipAdapterType CellRanger4 --outFilterScoreMin 30 --outSAMtype None; GeneFull scored (exon+intron)"
+  },
+  {
+   "name": "alevin-fry",
+   "version": "0.18.3 (simpleaf; piscem 0.23.0 index, piscem-rs 0.10.0 mapper)",
+   "role": "competitor",
+   "url": "https://github.com/COMBINE-lab/alevin-fry",
+   "params": "simpleaf quant --chemistry 10xv3 --expected-ori fw --resolution cr-like --unfiltered-pl 3M-february-2018.txt (splici index of the 10x 2024-A GTF, USA mode); counts = spliced+unspliced+ambiguous"
+  },
+  {
+   "name": "alevin-fry-em",
+   "version": "0.18.3",
+   "role": "competitor",
+   "url": "https://github.com/COMBINE-lab/alevin-fry",
+   "params": "same mapping and permit list as alevin-fry; alevin-fry quant -r cr-like-em (EM resolution of multi-gene UMIs); quant step timed separately"
+  },
+  {
+   "name": "cellranger-published",
+   "version": "3.0.0",
+   "role": "competitor",
+   "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/hgmm_1k_v3/hgmm_1k_v3_filtered_feature_bc_matrix.h5",
+   "params": "10x Genomics PUBLISHED Cell Ranger 3.0.0 filtered_feature_bc_matrix.h5 (not re-run; no 10x software was installed or run). Older references than the other tools: hg19+mm10 for hgmm1k_v3, GRCh38 (3.0.0) for pbmc1k_cite_v3: https://cf.10xgenomics.com/samples/cell-exp/3.0.0/hgmm_1k_v3/hgmm_1k_v3_filtered_feature_bc_matrix.h5 ; https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_protein_v3/pbmc_1k_protein_v3_filtered_feature_bc_matrix.h5. No runtime reported."
+  }
+ ],
+ "datasets": [
+  {
+   "id": "hgmm1k_v3",
+   "title": "10x HEK293T + NIH3T3 1:1, 1k, 3' v3 (77M read pairs)",
+   "data_kind": "real",
+   "accessions": {
+    "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/hgmm_1k_v3/hgmm_1k_v3_fastqs.tar"
+   },
+   "truth": "Species of origin: a cell is human or mouse (pure cells: >=90% of UMIs one species in the published Cell Ranger matrix). UMIs of the other species inside a pure cell are mapping errors or ambient RNA (identical for every tool on the same reads). Second truth: HEK293T is female-derived, so UMIs on non-PAR chrY genes in human cells are false positives.",
+   "notes": "1,046 Cell Ranger cells: 495 pure human, 544 pure mouse, 7 mixed."
+  },
+  {
+   "id": "pbmc1k_cite_v3",
+   "title": "10x PBMC 1k + TotalSeq-B (pbmc_1k_protein_v3), 3' v3",
+   "data_kind": "real",
+   "accessions": {
+    "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_protein_v3/pbmc_1k_protein_v3_fastqs.tar"
+   },
+   "truth": "Orthogonal assay: antibody-derived tags (protein) measured on the same cells. RNA of the matching gene should rank cells like the protein.",
+   "notes": "Cells = published Cell Ranger filtered barcodes; protein = Cell Ranger Antibody Capture counts, CLR-normalised."
+  },
+  {
+   "id": "pbmc1k_v3",
+   "title": "10x PBMC 1k, 3' v3 (66.6M read pairs)",
+   "data_kind": "real",
+   "accessions": {
+    "url": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v3/pbmc_1k_v3_fastqs.tar"
+   },
+   "truth": "No per-molecule truth. Used for runtime and memory (same reads, same node, same threads) and for read accounting.",
+   "notes": "Runtime dataset: 16 threads and 4 threads on one node."
+  }
+ ],
+ "metrics": [
+  {
+   "id": "evp_wrong_species_fraction",
+   "name": "UMIs of the wrong species in pure barnyard cells",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "hgmm1k_v3",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.004141281963731957,
+    "ci": [
+     0.003966811713281905,
+     0.004351466721540663
+    ]
+   },
+   "competitors": [
+    {
+     "tool": "STARsolo",
+     "value": 0.0032755230947720385,
+     "ci": [
+      0.0031070958129581607,
+      0.0034434401373963507
+     ]
+    },
+    {
+     "tool": "alevin-fry",
+     "value": 0.006334738265030927,
+     "ci": [
+      0.006183107485881145,
+      0.006494504869909871
+     ]
+    },
+    {
+     "tool": "alevin-fry-em",
+     "value": 0.006219329951084477,
+     "ci": [
+      0.006081256912137104,
+      0.006365367279926548
+     ]
+    },
+    {
+     "tool": "cellranger-published",
+     "value": 0.003454093060917605,
+     "ci": [
+      0.003299448169086046,
+      0.0036300845796033853
+     ]
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.00019232750412937925
+    },
+    "rationale": "half-width of Singlet's bootstrap 95% CI over cells"
+   },
+   "notes": "Real truth: species of the cell. Includes ambient RNA (shared by all tools); GeneFull-type counts (exon+intron) for Singlet, STARsolo and alevin-fry USA."
+  },
+  {
+   "id": "evp_cells_over_1pct_wrong_species",
+   "name": "Pure cells with >=1% wrong-species UMIs",
+   "unit": "fraction",
+   "category": "accuracy",
+   "dataset": "hgmm1k_v3",
+   "direction": "lower",
+   "singlet": {
+    "value": 0.1039461020211742
+   },
+   "competitors": [
+    {
+     "tool": "STARsolo",
+     "value": 0.08084696823869104
+    },
+    {
+     "tool": "alevin-fry",
+     "value": 0.1809432146294514
+    },
+    {
+     "tool": "alevin-fry-em",
+     "value": 0.16746871992300288
+    },
+    {
+     "tool": "cellranger-published",
+     "value": 0.10009624639076034
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.01
+    },
+    "rationale": "1 percentage point of cells: about 10 of 1,039 pure cells, the cell-level sampling noise of a 1k-cell run"
+   }
+  },
+  {
+   "id": "evp_chry_umi_per_million",
+   "name": "chrY UMIs per million human UMIs in female-derived HEK293T cells",
+   "unit": "UMI per million",
+   "category": "accuracy",
+   "dataset": "hgmm1k_v3",
+   "direction": "lower",
+   "singlet": {
+    "value": 16.3570166261639,
+    "ci": [
+     14.618147279600063,
+     18.108582435407033
+    ]
+   },
+   "competitors": [
+    {
+     "tool": "STARsolo",
+     "value": 5.2181365803380615,
+     "ci": [
+      4.22919655029823,
+      6.293731183575439
+     ]
+    },
+    {
+     "tool": "alevin-fry",
+     "value": 14.453335075051687,
+     "ci": [
+      12.63868975752391,
+      16.275914793780352
+     ]
+    },
+    {
+     "tool": "alevin-fry-em",
+     "value": 10.726327225137657,
+     "ci": [
+      9.059810735297091,
+      12.434695667881103
+     ]
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 1.7452175779034853
+    },
+    "rationale": "half-width of Singlet's bootstrap 95% CI over cells"
+   },
+   "notes": "Truth: no Y chromosome. Every UMI is a false positive (X/Y gametologs, Y-linked repeat loci). Published Cell Ranger is omitted: its hg19 gene ids do not map to the GRCh38 chrY list."
+  },
+  {
+   "id": "evp_accuracy_score",
+   "name": "Accuracy score: mean of each tool's value relative to the best tool",
+   "unit": "score (1 = best on every component)",
+   "category": "accuracy",
+   "dataset": "pooled",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.6985767235952224
+   },
+   "competitors": [
+    {
+     "tool": "STARsolo",
+     "value": 1.0
+    },
+    {
+     "tool": "alevin-fry",
+     "value": 0.6161648427862768
+    },
+    {
+     "tool": "alevin-fry-em",
+     "value": 0.6593103777704961
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.02
+    },
+    "rationale": "2% of the score: smaller than the bootstrap half-widths of the components (they are 5-10% relative)"
+   },
+   "notes": "Components (real truth each): barnyard wrong-species fraction, HEK293T chrY UMIs per million, CITE-seq mean RNA-protein Spearman (the gex-counts adt_rna_spearman.total definition, same pairs; Singlet 0.4215, STARsolo 0.4276, alevin-fry 0.4149). Each is scaled to the best of the four runnable tools (best/value for errors, value/best for correlation); equal weights."
+  },
+  {
+   "id": "evp_cpu_h_per_100m_pairs_16t",
+   "name": "CPU-hours per 100M pairs, 16 threads",
+   "unit": "CPU-hours per 100M read pairs",
+   "category": "resources",
+   "dataset": "pbmc1k_v3",
+   "direction": "lower",
+   "singlet": {
+    "value": 1.3423877247735572
+   },
+   "competitors": [
+    {
+     "tool": "STARsolo",
+     "value": 1.6716368211409187
+    },
+    {
+     "tool": "alevin-fry",
+     "value": 0.8014245735843625
+    },
+    {
+     "tool": "alevin-fry-em",
+     "value": 0.8139742680597357
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "rel": 0.1
+    },
+    "rationale": "10%: run-to-run variation of CPU time on a shared node (the four runs of one tool differ by up to 10%)"
+   },
+   "notes": "16 threads, same node, user+sys CPU. Singlet includes the .1fq encode step (labelled; in the campaign it runs on the 1-core download stage)."
+  },
+  {
+   "id": "evp_cpu_h_per_100m_pairs_4t",
+   "name": "CPU-hours per 100M pairs, 4 threads (the campaign setting)",
+   "unit": "CPU-hours per 100M read pairs",
+   "category": "resources",
+   "dataset": "pbmc1k_v3",
+   "direction": "lower",
+   "singlet": {
+    "value": 1.3321652916864388
+   },
+   "competitors": [
+    {
+     "tool": "STARsolo",
+     "value": 1.4861148837352847
+    },
+    {
+     "tool": "alevin-fry",
+     "value": 0.7333292390215778
+    },
+    {
+     "tool": "alevin-fry-em",
+     "value": 0.7458580799002821
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "rel": 0.1
+    },
+    "rationale": "10%: run-to-run variation of CPU time on a shared node (the four runs of one tool differ by up to 10%)"
+   },
+   "notes": "4 threads, same node, user+sys CPU. Singlet includes the .1fq encode step (labelled; in the campaign it runs on the 1-core download stage)."
+  },
+  {
+   "id": "evp_reads_placed_fraction",
+   "name": "Reads placed (aligned to the genome / mapped to the splici index)",
+   "unit": "fraction",
+   "category": "coverage",
+   "dataset": "pbmc1k_v3",
+   "direction": "higher",
+   "singlet": {
+    "value": 0.961336575944162
+   },
+   "competitors": [
+    {
+     "tool": "STARsolo",
+     "value": 0.961336575944162
+    },
+    {
+     "tool": "alevin-fry",
+     "value": 0.8737437724549756
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best",
+    "tolerance": {
+     "abs": 0.005
+    },
+    "rationale": "0.5 percentage point: unique+multi-mapped vs 'too many loci' accounting differs by about this much between STAR logs"
+   },
+   "notes": "Singlet uses the same STAR alignment (scoreMin 10 vs STARsolo 30, so slightly more reads are placed). Placed is not correct: see the accuracy metrics. No truth for the reads that only the genome aligner places."
+  },
+  {
+   "id": "evp_reach_count",
+   "name": "Documented outputs a tool produces (count of 'yes' in the reach table)",
+   "unit": "outputs",
+   "category": "coverage",
+   "dataset": "pooled",
+   "direction": "higher",
+   "singlet": {
+    "value": 12
+   },
+   "competitors": [
+    {
+     "tool": "STARsolo",
+     "value": 4
+    },
+    {
+     "tool": "alevin-fry",
+     "value": 2
+    }
+   ],
+   "rule": {
+    "type": "match_or_beat",
+    "against": "best"
+   },
+   "notes": "A count of capabilities, not of benchmarked ones: see reach[] notes for which have a measured metric."
+  }
+ ],
+ "resources": [
+  {
+   "tool": "singlet",
+   "dataset": "pbmc1k_v3",
+   "wall_s": 701.9000000000001,
+   "cpu_h": 0.8940555555555555,
+   "max_rss_gb": 22.80693817138672,
+   "threads": 16,
+   "notes": "incl. .1fq encode 131s wall / 0.086 CPU-h (done by the 1-core download stage in the campaign)"
+  },
+  {
+   "tool": "STARsolo",
+   "dataset": "pbmc1k_v3",
+   "wall_s": 473.5,
+   "cpu_h": 1.1133416666666667,
+   "max_rss_gb": 19.419078826904297,
+   "threads": 16
+  },
+  {
+   "tool": "alevin-fry",
+   "dataset": "pbmc1k_v3",
+   "wall_s": 138.49,
+   "cpu_h": 0.5337638888888889,
+   "max_rss_gb": 3.4195098876953125,
+   "threads": 16
+  },
+  {
+   "tool": "alevin-fry-em",
+   "dataset": "pbmc1k_v3",
+   "wall_s": 140.76000000000002,
+   "cpu_h": 0.5421222222222223,
+   "max_rss_gb": 3.4195098876953125,
+   "threads": 16,
+   "notes": "alevin-fry run plus the cr-like-em quant step"
+  },
+  {
+   "tool": "singlet",
+   "dataset": "pbmc1k_v3",
+   "wall_s": 1194.4,
+   "cpu_h": 0.8872472222222223,
+   "max_rss_gb": 20.495033264160156,
+   "threads": 4,
+   "notes": "4-thread run, same node"
+  },
+  {
+   "tool": "STARsolo",
+   "dataset": "pbmc1k_v3",
+   "wall_s": 1089.67,
+   "cpu_h": 0.9897805555555556,
+   "max_rss_gb": 17.41271209716797,
+   "threads": 4,
+   "notes": "4-thread run, same node"
+  },
+  {
+   "tool": "alevin-fry",
+   "dataset": "pbmc1k_v3",
+   "wall_s": 464.3,
+   "cpu_h": 0.48841111111111113,
+   "max_rss_gb": 3.1876907348632812,
+   "threads": 4,
+   "notes": "4-thread run, same node"
+  },
+  {
+   "tool": "alevin-fry-em",
+   "dataset": "pbmc1k_v3",
+   "wall_s": 473.21000000000004,
+   "cpu_h": 0.49675555555555556,
+   "max_rss_gb": 3.1876907348632812,
+   "threads": 4
+  },
+  {
+   "tool": "singlet",
+   "dataset": "pooled",
+   "wall_s": 1053.8740441393202,
+   "cpu_h": 1.3423877247735572,
+   "max_rss_gb": 22.80693817138672,
+   "threads": 16,
+   "notes": "incl. .1fq encode 131s wall / 0.086 CPU-h (done by the 1-core download stage in the campaign); normalised to 100M read pairs (pbmc1k_v3, 66.6M pairs, 16 threads)"
+  },
+  {
+   "tool": "STARsolo",
+   "dataset": "pooled",
+   "wall_s": 710.9408176377946,
+   "cpu_h": 1.6716368211409187,
+   "max_rss_gb": 19.419078826904297,
+   "threads": 16,
+   "notes": "normalised to 100M read pairs (pbmc1k_v3, 66.6M pairs, 16 threads)"
+  },
+  {
+   "tool": "alevin-fry",
+   "dataset": "pooled",
+   "wall_s": 207.9370513931535,
+   "cpu_h": 0.8014245735843625,
+   "max_rss_gb": 3.4195098876953125,
+   "threads": 16,
+   "notes": "normalised to 100M read pairs (pbmc1k_v3, 66.6M pairs, 16 threads)"
+  },
+  {
+   "tool": "alevin-fry-em",
+   "dataset": "pooled",
+   "wall_s": 211.34536323272647,
+   "cpu_h": 0.8139742680597357,
+   "max_rss_gb": 3.4195098876953125,
+   "threads": 16,
+   "notes": "alevin-fry run plus the cr-like-em quant step; normalised to 100M read pairs (pbmc1k_v3, 66.6M pairs, 16 threads)"
+  }
+ ],
+ "reach": [
+  {
+   "tool": "singlet",
+   "output": "gene counts (exon+intron, each molecule once)",
+   "supported": "yes",
+   "note": "all three; accuracy: evp_* metrics"
+  },
+  {
+   "tool": "STARsolo",
+   "output": "gene counts (exon+intron, each molecule once)",
+   "supported": "yes",
+   "note": ""
+  },
+  {
+   "tool": "alevin-fry",
+   "output": "gene counts (exon+intron, each molecule once)",
+   "supported": "yes",
+   "note": ""
+  },
+  {
+   "tool": "singlet",
+   "output": "spliced / unspliced / ambiguous molecule layers",
+   "supported": "yes",
+   "note": "Singlet: exon/intron/ambiguous (velocyto rules); STARsolo: Velocyto; alevin-fry: USA from the splici index. No real-truth benchmark in this fragment."
+  },
+  {
+   "tool": "STARsolo",
+   "output": "spliced / unspliced / ambiguous molecule layers",
+   "supported": "yes",
+   "note": ""
+  },
+  {
+   "tool": "alevin-fry",
+   "output": "spliced / unspliced / ambiguous molecule layers",
+   "supported": "yes",
+   "note": ""
+  },
+  {
+   "tool": "singlet",
+   "output": "per-cell splice-junction counts",
+   "supported": "yes",
+   "note": "Singlet vs STARsolo SJ: r=0.994 for junctions with >=10 molecules (docs/modality-benchmarks/junctions-nonhost.md); alevin-fry maps to transcripts and introns, never to junction coordinates."
+  },
+  {
+   "tool": "STARsolo",
+   "output": "per-cell splice-junction counts",
+   "supported": "partial",
+   "note": ""
+  },
+  {
+   "tool": "alevin-fry",
+   "output": "per-cell splice-junction counts",
+   "supported": "no",
+   "note": ""
+  },
+  {
+   "tool": "singlet",
+   "output": "PSI / cassette-exon inclusion",
+   "supported": "yes",
+   "note": "Cassette PSI from Singlet junction counts matches STARsolo-derived PSI: pseudobulk r=0.996, MAE 0.008 at coverage>=20. STARsolo gives junctions only."
+  },
+  {
+   "tool": "STARsolo",
+   "output": "PSI / cassette-exon inclusion",
+   "supported": "no",
+   "note": ""
+  },
+  {
+   "tool": "alevin-fry",
+   "output": "PSI / cassette-exon inclusion",
+   "supported": "no",
+   "note": ""
+  },
+  {
+   "tool": "singlet",
+   "output": "per-cell SNP allele counts and genotype-free donor demultiplexing",
+   "supported": "yes",
+   "note": "Singlet ARI 0.986 vs vireo 0.923 (Kang 2018, 8 donors, K given; auto-K was broken in the benchmarked build). STARsolo has --varVCF genotypes per cell but no demultiplexing. alevin-fry has no alignments, so no base-level evidence."
+  },
+  {
+   "tool": "STARsolo",
+   "output": "per-cell SNP allele counts and genotype-free donor demultiplexing",
+   "supported": "partial",
+   "note": ""
+  },
+  {
+   "tool": "alevin-fry",
+   "output": "per-cell SNP allele counts and genotype-free donor demultiplexing",
+   "supported": "no",
+   "note": ""
+  },
+  {
+   "tool": "singlet",
+   "output": "genotype-based doublet calls",
+   "supported": "partial",
+   "note": "Benchmarked build: prob_doublet hard-coded 0; filled in prod/modality-fixes, not re-benchmarked."
+  },
+  {
+   "tool": "STARsolo",
+   "output": "genotype-based doublet calls",
+   "supported": "no",
+   "note": ""
+  },
+  {
+   "tool": "alevin-fry",
+   "output": "genotype-based doublet calls",
+   "supported": "no",
+   "note": ""
+  },
+  {
+   "tool": "singlet",
+   "output": "mtDNA per-cell heteroplasmy",
+   "supported": "yes",
+   "note": "Singlet per-cell VAF r=0.85 vs read-level pileup; variant list was worse (12% supported) before modality-fixes."
+  },
+  {
+   "tool": "STARsolo",
+   "output": "mtDNA per-cell heteroplasmy",
+   "supported": "no",
+   "note": ""
+  },
+  {
+   "tool": "alevin-fry",
+   "output": "mtDNA per-cell heteroplasmy",
+   "supported": "no",
+   "note": ""
+  },
+  {
+   "tool": "singlet",
+   "output": "non-host (viral, microbial) reads from unmapped reads",
+   "supported": "yes",
+   "note": "Singlet vs Kraken2 per-cell SARS-CoV-2 UMIs Spearman 0.985; STARsolo can write unmapped reads but classifies none; alevin-fry discards unmapped reads."
+  },
+  {
+   "tool": "STARsolo",
+   "output": "non-host (viral, microbial) reads from unmapped reads",
+   "supported": "partial",
+   "note": ""
+  },
+  {
+   "tool": "alevin-fry",
+   "output": "non-host (viral, microbial) reads from unmapped reads",
+   "supported": "no",
+   "note": ""
+  },
+  {
+   "tool": "singlet",
+   "output": "library strand detection",
+   "supported": "partial",
+   "note": "Singlet probes strand; failed on 5' libraries in the atlas (17% of samples flagged, docs/pipeline-validation.md). STARsolo needs --soloStrand; simpleaf takes --expected-ori from the chemistry."
+  },
+  {
+   "tool": "STARsolo",
+   "output": "library strand detection",
+   "supported": "no",
+   "note": ""
+  },
+  {
+   "tool": "alevin-fry",
+   "output": "library strand detection",
+   "supported": "no",
+   "note": ""
+  },
+  {
+   "tool": "singlet",
+   "output": "read accounting: intergenic / antisense / intronic per cell",
+   "supported": "yes",
+   "note": "STAR assigns reads to the genome, so reads outside every annotated gene are counted (STARsolo Features.stats noNoFeature). piscem reads that miss the splici index are simply unmapped."
+  },
+  {
+   "tool": "STARsolo",
+   "output": "read accounting: intergenic / antisense / intronic per cell",
+   "supported": "partial",
+   "note": ""
+  },
+  {
+   "tool": "alevin-fry",
+   "output": "read accounting: intergenic / antisense / intronic per cell",
+   "supported": "no",
+   "note": ""
+  },
+  {
+   "tool": "singlet",
+   "output": "reads from unannotated / novel loci",
+   "supported": "partial",
+   "note": "Aligned to the genome and kept in the BAM; counts are still per annotated gene."
+  },
+  {
+   "tool": "STARsolo",
+   "output": "reads from unannotated / novel loci",
+   "supported": "partial",
+   "note": ""
+  },
+  {
+   "tool": "alevin-fry",
+   "output": "reads from unannotated / novel loci",
+   "supported": "no",
+   "note": ""
+  },
+  {
+   "tool": "singlet",
+   "output": "poly(A) site counts with internal-priming flag",
+   "supported": "yes",
+   "note": "polya_counts, polya_sites.tsv.gz (prod/modality-fixes); not benchmarked against an external truth yet."
+  },
+  {
+   "tool": "STARsolo",
+   "output": "poly(A) site counts with internal-priming flag",
+   "supported": "no",
+   "note": ""
+  },
+  {
+   "tool": "alevin-fry",
+   "output": "poly(A) site counts with internal-priming flag",
+   "supported": "no",
+   "note": ""
+  },
+  {
+   "tool": "singlet",
+   "output": "ambient RNA estimate per cell",
+   "supported": "yes",
+   "note": "ambient_contamination.tsv (Singlet); STARsolo and alevin-fry rely on external tools (SoupX, CellBender)."
+  },
+  {
+   "tool": "STARsolo",
+   "output": "ambient RNA estimate per cell",
+   "supported": "no",
+   "note": ""
+  },
+  {
+   "tool": "alevin-fry",
+   "output": "ambient RNA estimate per cell",
+   "supported": "no",
+   "note": ""
+  },
+  {
+   "tool": "singlet",
+   "output": "cell calling",
+   "supported": "yes",
+   "note": "Singlet called_v2 (EmptyDrops-like); STARsolo EmptyDrops_CR; alevin-fry permit list (knee or unfiltered whitelist)."
+  },
+  {
+   "tool": "STARsolo",
+   "output": "cell calling",
+   "supported": "yes",
+   "note": ""
+  },
+  {
+   "tool": "alevin-fry",
+   "output": "cell calling",
+   "supported": "partial",
+   "note": ""
+  },
+  {
+   "tool": "singlet",
+   "output": "coordinate-sorted BAM with CB/UB tags",
+   "supported": "yes",
+   "note": "Optional (--tagged-bam / --outSAMtype); enables external SNP, mtDNA and isoform tools."
+  },
+  {
+   "tool": "STARsolo",
+   "output": "coordinate-sorted BAM with CB/UB tags",
+   "supported": "yes",
+   "note": ""
+  },
+  {
+   "tool": "alevin-fry",
+   "output": "coordinate-sorted BAM with CB/UB tags",
+   "supported": "no",
+   "note": ""
+  }
+ ],
+ "figures": [
+  {
+   "id": "pareto_accuracy_vs_cpu_h_16t",
+   "kind": "pareto",
+   "title": "Accuracy score: mean of each tool's value relative to the best tool against CPU-hours (pooled)",
+   "x": {
+    "label": "cpu_h",
+    "unit": "CPU-hours",
+    "scale": "log"
+   },
+   "y": {
+    "label": "Accuracy score: mean of each tool's value relative to the best tool",
+    "unit": "score (1 = best on every component)"
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      1.3423877247735572
+     ],
+     "y": [
+      0.6985767235952224
+     ],
+     "frontier": true
+    },
+    {
+     "name": "STARsolo",
+     "tool": "STARsolo",
+     "x": [
+      1.6716368211409187
+     ],
+     "y": [
+      1.0
+     ],
+     "frontier": true
+    },
+    {
+     "name": "alevin-fry",
+     "tool": "alevin-fry",
+     "x": [
+      0.8014245735843625
+     ],
+     "y": [
+      0.6161648427862768
+     ],
+     "frontier": true
+    },
+    {
+     "name": "alevin-fry-em",
+     "tool": "alevin-fry-em",
+     "x": [
+      0.8139742680597357
+     ],
+     "y": [
+      0.6593103777704961
+     ],
+     "frontier": true
+    }
+   ]
+  },
+  {
+   "id": "pareto_accuracy_vs_wall_s_16t",
+   "kind": "pareto",
+   "title": "Accuracy score: mean of each tool's value relative to the best tool against seconds (pooled)",
+   "x": {
+    "label": "wall_s",
+    "unit": "seconds",
+    "scale": "log"
+   },
+   "y": {
+    "label": "Accuracy score: mean of each tool's value relative to the best tool",
+    "unit": "score (1 = best on every component)"
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      1053.8740441393202
+     ],
+     "y": [
+      0.6985767235952224
+     ],
+     "frontier": false
+    },
+    {
+     "name": "STARsolo",
+     "tool": "STARsolo",
+     "x": [
+      710.9408176377946
+     ],
+     "y": [
+      1.0
+     ],
+     "frontier": true
+    },
+    {
+     "name": "alevin-fry",
+     "tool": "alevin-fry",
+     "x": [
+      207.9370513931535
+     ],
+     "y": [
+      0.6161648427862768
+     ],
+     "frontier": true
+    },
+    {
+     "name": "alevin-fry-em",
+     "tool": "alevin-fry-em",
+     "x": [
+      211.34536323272647
+     ],
+     "y": [
+      0.6593103777704961
+     ],
+     "frontier": true
+    }
+   ]
+  },
+  {
+   "id": "pareto_accuracy_vs_cpu_h_4t",
+   "kind": "pareto",
+   "title": "Accuracy score: mean of each tool's value relative to the best tool against CPU-hours (pooled)",
+   "x": {
+    "label": "cpu_h",
+    "unit": "CPU-hours",
+    "scale": "log"
+   },
+   "y": {
+    "label": "Accuracy score: mean of each tool's value relative to the best tool",
+    "unit": "score (1 = best on every component)"
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      1.3321652916864388
+     ],
+     "y": [
+      0.6985767235952224
+     ],
+     "frontier": true
+    },
+    {
+     "name": "STARsolo",
+     "tool": "STARsolo",
+     "x": [
+      1.4861148837352847
+     ],
+     "y": [
+      1.0
+     ],
+     "frontier": true
+    },
+    {
+     "name": "alevin-fry",
+     "tool": "alevin-fry",
+     "x": [
+      0.7333292390215778
+     ],
+     "y": [
+      0.6161648427862768
+     ],
+     "frontier": true
+    },
+    {
+     "name": "alevin-fry-em",
+     "tool": "alevin-fry-em",
+     "x": [
+      0.7458580799002821
+     ],
+     "y": [
+      0.6593103777704961
+     ],
+     "frontier": true
+    }
+   ]
+  },
+  {
+   "id": "pareto_accuracy_vs_wall_s_4t",
+   "kind": "pareto",
+   "title": "Accuracy score: mean of each tool's value relative to the best tool against seconds (pooled)",
+   "x": {
+    "label": "wall_s",
+    "unit": "seconds",
+    "scale": "log"
+   },
+   "y": {
+    "label": "Accuracy score: mean of each tool's value relative to the best tool",
+    "unit": "score (1 = best on every component)"
+   },
+   "series": [
+    {
+     "name": "singlet",
+     "tool": "singlet",
+     "x": [
+      1793.3425820202365
+     ],
+     "y": [
+      0.6985767235952224
+     ],
+     "frontier": false
+    },
+    {
+     "name": "STARsolo",
+     "tool": "STARsolo",
+     "x": [
+      1636.0947851222295
+     ],
+     "y": [
+      1.0
+     ],
+     "frontier": true
+    },
+    {
+     "name": "alevin-fry",
+     "tool": "alevin-fry",
+     "x": [
+      697.1273952042831
+     ],
+     "y": [
+      0.6161648427862768
+     ],
+     "frontier": true
+    },
+    {
+     "name": "alevin-fry-em",
+     "tool": "alevin-fry-em",
+     "x": [
+      710.505394539347
+     ],
+     "y": [
+      0.6593103777704961
+     ],
+     "frontier": true
+    }
+   ]
+  }
+ ],
+ "artifacts": [],
+ "caveats": [
+  "DRAFT, wound down early. Real truth only (no simulated reads): barnyard species, HEK293T chrY, CITE-seq protein; nothing here is simulated.",
+  "Not measured: long-read-validated spliced/unspliced, isoforms or junction truth (no matched public short+long-read 10x dataset was confirmed); spike-ins (ERCC/SIRV) were not found in the cohort. Spliced/unspliced accuracy is therefore not claimed.",
+  "One barnyard dataset (hgmm1k_v3, 495 human + 544 mouse pure cells) and one CITE-seq dataset (pbmc1k_cite_v3); the chrY truth rests on HEK293T being female-derived (published karyotype, not checked in these reads). PBMC donors are male, so chrY is not scored there.",
+  "Cross-species UMIs include ambient RNA; it is shared by all tools on the same reads, so only differences between tools are interpretable. About 15.5k of Singlet's and 13.0k of STARsolo's wrong-species UMIs sit in one 5-kb window of human LINC00486 (chr2:32.915-32.920 Mb) seen at equal rates in human and mouse cells with 2% mismatches; 90% of the mouse-cell reads do not map to the mouse genome alone. Whether those molecules are real is unresolved; alevin-fry does not count them.",
+  "Cell Ranger is 10x's PUBLISHED 3.0.0 matrix (hg19+mm10 for hgmm1k_v3; GRCh38 3.0.0 for pbmc1k_cite_v3), not re-run, and has no runtime. Its chrY value is omitted (hg19 gene ids).",
+  "Timings: one node (b002 Xeon Gold 6226, shared with other jobs), 66.6M pairs, one run per tool and thread count. Singlet includes its .1fq encode step, which the campaign runs on the 1-core download stage. The resource metrics are expected to FAIL against alevin-fry: that is the cost of exact genome-wide alignment.",
+  "Per-cell artifacts are not yet uploaded: sha256 and urls are missing, so this fragment cannot be final."
+ ],
+ "resources_4t_pooled": [
+  {
+   "tool": "singlet",
+   "dataset": "pooled",
+   "wall_s": 1793.3425820202365,
+   "cpu_h": 1.3321652916864388,
+   "max_rss_gb": 20.495033264160156,
+   "threads": 4,
+   "notes": "4-thread run, same node"
+  },
+  {
+   "tool": "STARsolo",
+   "dataset": "pooled",
+   "wall_s": 1636.0947851222295,
+   "cpu_h": 1.4861148837352847,
+   "max_rss_gb": 17.41271209716797,
+   "threads": 4,
+   "notes": "4-thread run, same node"
+  },
+  {
+   "tool": "alevin-fry",
+   "dataset": "pooled",
+   "wall_s": 697.1273952042831,
+   "cpu_h": 0.7333292390215778,
+   "max_rss_gb": 3.1876907348632812,
+   "threads": 4,
+   "notes": "4-thread run, same node"
+  },
+  {
+   "tool": "alevin-fry-em",
+   "dataset": "pooled",
+   "wall_s": 710.505394539347,
+   "cpu_h": 0.7458580799002821,
+   "max_rss_gb": 3.1876907348632812,
+   "threads": 4
+  }
+ ]
+}

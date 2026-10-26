@@ -27,11 +27,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import loaders as L  # noqa: E402
 
 RNG = np.random.default_rng(20261025)
-CITE_PAIRS = [  # protein name in the 10x feature barcode reference -> gene symbol
-    ("CD3", "CD3E"), ("CD4", "CD4"), ("CD8a", "CD8A"), ("CD14", "CD14"), ("CD15", "FUT4"), ("CD16", "FCGR3A"),
-    ("CD56", "NCAM1"), ("CD19", "CD19"), ("CD25", "IL2RA"), ("CD45RA", "PTPRC"), ("CD45RO", "PTPRC"),
-    ("PD-1", "PDCD1"), ("TIGIT", "TIGIT"), ("CD127", "IL7R"),
-]
+# Protein -> gene map and pair rules are those of the published gex-counts metric `adt_rna_spearman` (bench/public/capabilities/gex_counts.py
+# at origin/bench/public-counts 772eb0cd): RNA = log1p(UMI per 10k, the tool's own total), protein = CLR over all antibodies, mean Spearman
+# across cells over the pairs every tool can score; no isoform-ambiguous pairs (CD45RA / CD45RO vs total PTPRC are not paired).
+C_ADT_GENE = {"cd3": "CD3E", "cd4": "CD4", "cd8a": "CD8A", "cd14": "CD14", "cd16": "FCGR3A", "cd56": "NCAM1", "cd19": "CD19",
+              "cd25": "IL2RA", "pd-1": "PDCD1", "cd127": "IL7R", "tigit": "TIGIT", "cd15": "FUT4"}
 
 
 def tool_set(runs, ds, layout):
@@ -165,9 +165,10 @@ def cite(ds, tools, cr, cr_all, out):
     res = {"n_cells": int(len(cr.barcodes)), "pairs": [], "tools": {}}
     all_tools = dict(tools); all_tools["cellranger-published"] = lambda: cr
     chosen = []
-    for prot, gene in CITE_PAIRS:
-        if prot in pnames:
-            chosen.append((prot, gene, pnames.index(prot)))
+    for pj, prot in enumerate(pnames):
+        g = C_ADT_GENE.get(prot.split("_")[0].lower())
+        if g:
+            chosen.append((prot, g, pj))
     per_tool = {}
     for name, load in all_tools.items():
         m = load(); X, present = align(m, cr.barcodes)
@@ -187,7 +188,8 @@ def cite(ds, tools, cr, cr_all, out):
         per_tool[name] = vals
     # use only pairs expressed (>=3% cells with UMI) in the Cell Ranger reference and present in every tool
     keys = [k for k in per_tool["cellranger-published"] if all(k in per_tool[t] for t in per_tool)]
-    keys = [k for k in keys if (per_tool["cellranger-published"][k][2] > 0).mean() >= 0.03]
+    # keep only pairs that every tool can score (a tool with zero counts for a gene has no correlation)
+    keys = [k for k in keys if all(not np.isnan(spearman(per_tool[t][k][0], per_tool[t][k][1])) for t in per_tool)]
     res["pairs"] = [list(k) for k in keys]
     n = len(cr.barcodes)
     for name in per_tool:
@@ -314,9 +316,7 @@ def main():
             tot = np.asarray(cr.X.sum(1)).ravel()
             fh = np.asarray(cr.X[:, [g.startswith("ENSG") for g in cr.genes]].sum(1)).ravel() / np.maximum(tot, 1)
             r["chrY"] = chry(ds, tools, cr, chrom, a.out, (tot >= 500) & (fh >= 0.9))
-        else:
-            tot = np.ones(len(cr.barcodes), bool)
-            r["chrY"] = chry(ds, tools, cr, chrom, a.out, tot)
+        # chrY is only a truth in the barnyard (HEK293T, female-derived); the PBMC donors are male (chrY in >90% of cells)
         if "cite" in ds:
             r["cite"] = cite(ds, tools, cr, h5, a.out)
         result[ds] = r

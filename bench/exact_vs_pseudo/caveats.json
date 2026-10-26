@@ -1,0 +1,9 @@
+[
+ "DRAFT, wound down early. Real truth only (no simulated reads): barnyard species, HEK293T chrY, CITE-seq protein; nothing here is simulated.",
+ "Not measured: long-read-validated spliced/unspliced, isoforms or junction truth (no matched public short+long-read 10x dataset was confirmed); spike-ins (ERCC/SIRV) were not found in the cohort. Spliced/unspliced accuracy is therefore not claimed.",
+ "One barnyard dataset (hgmm1k_v3, 495 human + 544 mouse pure cells) and one CITE-seq dataset (pbmc1k_cite_v3); the chrY truth rests on HEK293T being female-derived (published karyotype, not checked in these reads). PBMC donors are male, so chrY is not scored there.",
+ "Cross-species UMIs include ambient RNA; it is shared by all tools on the same reads, so only differences between tools are interpretable. About 15.5k of Singlet's and 13.0k of STARsolo's wrong-species UMIs sit in one 5-kb window of human LINC00486 (chr2:32.915-32.920 Mb) seen at equal rates in human and mouse cells with 2% mismatches; 90% of the mouse-cell reads do not map to the mouse genome alone. Whether those molecules are real is unresolved; alevin-fry does not count them.",
+ "Cell Ranger is 10x's PUBLISHED 3.0.0 matrix (hg19+mm10 for hgmm1k_v3; GRCh38 3.0.0 for pbmc1k_cite_v3), not re-run, and has no runtime. Its chrY value is omitted (hg19 gene ids).",
+ "Timings: one node (b002 Xeon Gold 6226, shared with other jobs), 66.6M pairs, one run per tool and thread count. Singlet includes its .1fq encode step, which the campaign runs on the 1-core download stage. The resource metrics are expected to FAIL against alevin-fry: that is the cost of exact genome-wide alignment.",
+ "Per-cell artifacts are not yet uploaded: sha256 and urls are missing, so this fragment cannot be final."
+]
