@@ -41,5 +41,5 @@ done
 ls -la $SCR/a/out/*.bam $SCR/b/out/*.bam 2>/dev/null | awk '{print $5, $9}'
 mkdir -p $SCR/cmp; for s in a b; do rsync -a --exclude '*.bam' --exclude '*.bai' --exclude '*Unmapped.out.mate*' \
   --exclude '*.fq' --exclude '.multi_run' $SCR/$s/out/ $SCR/cmp/$s/; done
-PYTHONPATH=$W/envs/pylib-pysam $W/envs/pbench/bin/python -I $W/src/singlet-py/perf__deep-samples/bench/atlas_rerun/deep_perf/out_equiv.py \
+PYTHONPATH=$W/envs/pylib-pysam $W/envs/pbench/bin/python -I ${EQUIV_PY:-$W/jobs/deep-perf/out_equiv.py} \
   $SCR/cmp/a $SCR/cmp/b ${BAMS:+--bam "${BAMS[@]}"} 2>&1 | tee $O/equiv.txt
