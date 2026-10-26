@@ -173,6 +173,11 @@ struct AmbientDecontConfig {
                                         ///< permissive cell caller keeps) are kept out of clustering and cluster statistics
     double   cluster_prior_cells = 0.0; ///< pseudo-cells shrinking each cluster's c_k toward the sample rho (cell-weighted
                                         ///< median of the c_k): c_k <- (n_k c_k + n0 c_s) / (n_k + n0); 0 = no shrinkage
+    double   cluster_prior_reads = 0.0; ///< Gamma prior of each cluster's c_k (mean c_s) in pseudo off-gene reads: weight
+                                        ///< of the cluster's own data = its off-gene exposure x c / (that + this); 0 = off
+    bool     cluster_estimate_pooled = false; ///< cluster c_k = pooled off-gene ratio over the native-cut off set
+                                        ///< (untrimmed) instead of the trimmed fixed point
+    bool     sample_target_pooled = false;    ///< c_s = cell-weighted median of the pooled off-gene ratios (else of raw c_k)
     uint32_t min_cluster_cells = 0;     ///< k-means clusters with fewer core cells are dissolved into the nearest remaining
                                         ///< centroid (their native profile is borrowed from the neighbour); 0 = keep all
     uint32_t cell_iters       = 30;     ///< per-cell EM iterations
@@ -425,7 +430,7 @@ inline std::vector<uint32_t> quick_cluster(const CellMat& X, const AmbientDecont
                 ++n_alive;
                 if (cnt[k] < cfg.min_cluster_cells && (s == K || cnt[k] < cnt[s])) s = k;
             }
-            if (s == K || n_alive <= 1) break;
+            if (s == K || n_alive <= 2) break;   // keep >= 2 clusters: the off-gene estimator needs markers elsewhere
             alive[s] = 0;
             for (size_t j = 0; j < n; ++j) {
                 if (cl[j] != s) continue;
@@ -453,9 +458,11 @@ inline std::vector<uint32_t> quick_cluster(const CellMat& X, const AmbientDecont
 /// expectation (trimmed MLE iterated from c = rho_max). n = cluster gene totals (cell-weighted), Nk its UMIs, infl the
 /// variance inflation of the weighting (1 for plain sums).
 inline double cluster_contamination(const std::vector<double>& n, double Nk, double infl, const std::vector<double>& a,
-                                    const AmbientDecontConfig& cfg, const std::vector<char>* mask = nullptr)
+                                    const AmbientDecontConfig& cfg, const std::vector<char>* mask = nullptr,
+                                    double* exposure = nullptr)
 {
     const size_t G = a.size();
+    if (exposure) *exposure = 0.0;
     if (Nk <= 0.0) return 0.0;
     // Iterate from above (c = rho_max): the first self-consistent value below the start. Iterating from a low
     // start gets stuck at a downward-biased fixed point (the upper cut then discards the informative genes).
@@ -471,6 +478,7 @@ inline double cluster_contamination(const std::vector<double>& n, double Nk, dou
         const double cn = den > 0 ? std::min(num / den, cfg.rho_max) : 0.0;
         const bool done = std::fabs(cn - c) <= 1e-4 * std::max(c, 1e-5);
         c = std::max(cn, 1e-6);
+        if (exposure) *exposure = den;
         if (done) break;
     }
     return std::min(c, cfg.rho_max);
@@ -533,7 +541,7 @@ inline void decontx_ambient_core(const ambient_detail::CellMat& X, const std::ve
     // cluster contamination c_k and native profile phi (gene-major: phi[g * K + k]); cells with use[j] == 0 are
     // left out of the cluster statistics (outlier round) but are still corrected with them.
     std::vector<double> ck(K, 0.0), ck_raw(K, 0.0), ncells_k(K, 0.0), phi(G * K, 0.0), rho(n, 0.0), offA(K, 0.0);
-    std::vector<double> xo_v(n, 0.0), ex_v(n, 0.0);
+    std::vector<double> xo_v(n, 0.0), ex_v(n, 0.0), expo_k(K, 0.0), pool_k(K, 0.0), pool_expo_k(K, 0.0);
     double c_sample = 0.0;
     std::vector<char> use(n, 1), offmask(G * K, 0);
     for (size_t j = 0; j < n; ++j) if (low[j]) use[j] = 0;   // offmask[g * K + k]: gene g is "not expressed" in cluster k
@@ -589,50 +597,72 @@ inline void decontx_ambient_core(const ambient_detail::CellMat& X, const std::ve
             const bool have_mask = K > 1 && cfg.use_off_estimator && Aeff >= cfg.min_off_mass;
             have_maskv[k] = have_mask ? 1 : 0;
             ck_raw[k] = cluster_contamination(nk, Nk, infl, a, cfg,
-                                              have_mask ? &mask : (est_all ? nullptr : &cfg.estimate_features));
+                                              have_mask ? &mask : (est_all ? nullptr : &cfg.estimate_features), &expo_k[k]);
         });
-        // C2. cluster -> sample shrinkage: c_s = cell-weighted median of the raw c_k; pseudo-cells n0
+        // C2. native profile and off-gene set given c (cluster totals nkv stay untouched, so this can run twice);
+        // also the cluster's pooled off-gene ratio: reads in its off genes over N_k x their ambient mass.
+        auto native_pass = [&](const std::vector<double>& cvec) {
+            parallel_for(K, thr, [&](size_t k) {
+                const auto& nk = nkv[k];
+                const double Nk = Nkv[k], infl = inflv[k];
+                const auto& mask = masks[k];
+                const bool have_mask = have_maskv[k] != 0;
+                const double c = cvec[k];
+                double tot = 0.0, A = 0.0, xoff = 0.0;
+                for (size_t g = 0; g < G; ++g) {
+                    // native evidence only above the ambient expectation + z sd (same cut as the "not expressed" genes of
+                    // cluster_contamination): the positive part of Poisson noise on off genes would otherwise leave a
+                    // native profile that keeps ~half of the ambient counts of every gene the cluster does not express.
+                    const double e = c * Nk * a[g];
+                    const bool native = nk[g] > e + cfg.offgene_z * std::sqrt(e * infl) + 1.0;
+                    const double nat = (native ? nk[g] - e : 0.0) + cfg.phi_pseudocount;
+                    phi[g * K + k] = nat; tot += nat;
+                    const bool off = have_mask && mask[g] && !native;
+                    offmask[g * K + k] = off ? 1 : 0;
+                    if (off) { A += a[g]; xoff += nk[g]; }
+                }
+                offA[k] = A;
+                pool_k[k] = (A > 0 && Nk > 0) ? xoff / (Nk * A) : c;
+                pool_expo_k[k] = Nk * A;
+                for (size_t g = 0; g < G; ++g) phi[g * K + k] /= tot;
+            });
+        };
+        // C3. cluster -> sample shrinkage. Sample rho c_s = cell-weighted median over clusters (of the raw c_k, or of the
+        // pooled off-gene ratios); each cluster's c_k becomes a Gamma-Poisson posterior with prior mean c_s and
+        // cluster_prior_reads pseudo off-gene reads (information = the cluster's off-gene exposure), and/or a
+        // cluster_prior_cells pseudo-cell average. Then the native profiles are recomputed with the shrunk c_k.
+        for (uint32_t k = 0; k < K; ++k) {
+            double nc = 0.0;
+            for (uint32_t j : members[k]) if (use[j]) nc += 1.0;
+            ncells_k[k] = nc;
+        }
+        const bool shrink = cfg.cluster_prior_reads > 0.0 || cfg.cluster_prior_cells > 0.0;
+        const bool pooled = cfg.cluster_estimate_pooled;
+        if (pooled || (shrink && cfg.sample_target_pooled)) native_pass(ck_raw);
+        std::vector<double> cbase(K);
+        for (uint32_t k = 0; k < K; ++k) cbase[k] = pooled ? pool_k[k] : ck_raw[k];
         {
+            const std::vector<double>& tsrc = cfg.sample_target_pooled ? pool_k : ck_raw;
             std::vector<std::pair<double, double>> cw;   // (c_k, cells)
             double wt = 0.0;
-            for (uint32_t k = 0; k < K; ++k) {
-                double nc = 0.0;
-                for (uint32_t j : members[k]) if (use[j]) nc += 1.0;
-                ncells_k[k] = nc;
-                if (nc > 0) { cw.emplace_back(ck_raw[k], nc); wt += nc; }
-            }
+            for (uint32_t k = 0; k < K; ++k)
+                if (ncells_k[k] > 0) { cw.emplace_back(tsrc[k], ncells_k[k]); wt += ncells_k[k]; }
             std::sort(cw.begin(), cw.end());
             double acc = 0.0, cs = cw.empty() ? 0.0 : cw.back().first;
             for (const auto& p : cw) { acc += p.second; if (acc >= 0.5 * wt) { cs = p.first; break; } }
-            c_sample = cs;
-            for (uint32_t k = 0; k < K; ++k) {
-                const double n0 = cfg.cluster_prior_cells;
-                ck[k] = n0 > 0.0 ? (ncells_k[k] * ck_raw[k] + n0 * cs) / (ncells_k[k] + n0) : ck_raw[k];
-            }
+            c_sample = std::max(cs, cfg.rho_min);
         }
-        // C3. native profile and off-gene set given c_k
-        parallel_for(K, thr, [&](size_t k) {
-            auto& nk = nkv[k];
-            const double Nk = Nkv[k], infl = inflv[k];
-            const auto& mask = masks[k];
-            const bool have_mask = have_maskv[k] != 0;
-            const double c = ck[k];
-            double tot = 0.0, A = 0.0;
-            for (size_t g = 0; g < G; ++g) {
-                // native evidence only above the ambient expectation + z sd (same cut as the "not expressed" genes of
-                // cluster_contamination): the positive part of Poisson noise on off genes would otherwise leave a
-                // native profile that keeps ~half of the ambient counts of every gene the cluster does not express.
-                const double e = c * Nk * a[g];
-                const bool native = nk[g] > e + cfg.offgene_z * std::sqrt(e * infl) + 1.0;
-                const double nat = (native ? nk[g] - e : 0.0) + cfg.phi_pseudocount;
-                nk[g] = nat; tot += nat;
-                const bool off = have_mask && mask[g] && !native;
-                offmask[g * K + k] = off ? 1 : 0;
-                if (off) A += a[g];
+        for (uint32_t k = 0; k < K; ++k) {
+            double c = cbase[k];
+            if (cfg.cluster_prior_reads > 0.0) {
+                const double ex = pooled ? pool_expo_k[k] : expo_k[k];
+                c = (c * ex + cfg.cluster_prior_reads) / (ex + cfg.cluster_prior_reads / c_sample);
             }
-            offA[k] = A;
-            for (size_t g = 0; g < G; ++g) phi[g * K + k] = nk[g] / tot;
-        });
+            if (cfg.cluster_prior_cells > 0.0)
+                c = (ncells_k[k] * c + cfg.cluster_prior_cells * c_sample) / (ncells_k[k] + cfg.cluster_prior_cells);
+            ck[k] = std::min(std::max(c, cfg.rho_min), cfg.rho_max);
+        }
+        native_pass(ck);
     };
     // per-cell rho given its cluster's phi and the ambient profile. Off-gene estimator: the cell's reads in the genes
     // its cluster does not express are all ambient, X_O ~ Poisson(rho N A_O); Gamma prior (mean c_k) gives

@@ -65,6 +65,9 @@ int main(int argc, char** argv) {
         else if (k == "prior_strength") cfg.prior_strength = std::stod(v);
         else if (k == "cluster_prior_cells") cfg.cluster_prior_cells = std::stod(v);
         else if (k == "min_cluster_cells") cfg.min_cluster_cells = std::stoul(v);
+        else if (k == "cluster_prior_reads") cfg.cluster_prior_reads = std::stod(v);
+        else if (k == "cluster_estimate_pooled") cfg.cluster_estimate_pooled = std::stoi(v) != 0;
+        else if (k == "sample_target_pooled") cfg.sample_target_pooled = std::stoi(v) != 0;
         else if (k == "low_depth_frac") cfg.low_depth_frac = std::stod(v);
         else if (k == "offgene_z") cfg.offgene_z = std::stod(v);
         else if (k == "marker_fold") cfg.marker_fold = std::stod(v);
