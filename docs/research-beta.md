@@ -31,7 +31,7 @@ All notes in `docs/research-beta/` are copies made on 2026-10-26 from the featur
 | ADT / HTO | [adt-hto.md](research-beta/adt-hto.md) | #29 |
 | V(D)J and CRISPR guides | [vdj-crispr.md](research-beta/vdj-crispr.md) | its draft PR |
 | ATAC / Multiome and spatial | [atac-spatial.md](research-beta/atac-spatial.md) | #48 |
-| mtDNA clonality / lineage | [mtdna.md](research-beta/mtdna.md) | its draft PR |
+| mtDNA clonality / lineage | [mtdna.md](research-beta/mtdna.md) | #53 (full report docs/mtdna-lineage.md on bench/mtdna-lineage) |
 | Doublet / ambient models | | #43 |
 | Rename "v2" to "store" (Singlet 1.0) | [rename.md](research-beta/rename.md) (code merged; production ops not run) | #39 merged; zdebruine/singlet-website#67 open |
 | Benchmarking and roadmap pages | [website-benchmarking.md](research-beta/website-benchmarking.md) | zdebruine/singlet-website#66 (Beta preview) |
