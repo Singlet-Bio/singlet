@@ -15,9 +15,10 @@ NAME=$1; D=$W/data/maester/$NAME; O=$W/out/mtdna_lineage/$NAME
 G=/mnt/projects/debruinz_project/cellarium/reference/GRCh38-2024-A/star_2.7.11b
 mkdir -p $O
 SCR=/tmp/$USER-$SLURM_JOB_ID; mkdir -p $SCR; trap 'rm -rf $SCR' EXIT; cd $SCR
+ulimit -n 65536 2>/dev/null || ulimit -n $(ulimit -Hn)   # STAR BAM sorting opens bins x threads files
 # all barcodes in the 10x v3 whitelist (STARsolo 1-mismatch correction); cells are selected later, from the 3' library
 WL=$W/pipeline-benchmark/whitelists/3M-february-2018.txt
-STAR --runThreadN 48 --genomeDir $G --readFilesIn $D/${NAME}_R2.fastq.gz $D/${NAME}_R1.fastq.gz --readFilesCommand "pigz -dc -p 4" \
+STAR --runThreadN $SLURM_CPUS_PER_TASK --genomeDir $G --readFilesIn $D/${NAME}_R2.fastq.gz $D/${NAME}_R1.fastq.gz --readFilesCommand "pigz -dc -p 4" \
   --soloType CB_UMI_Simple --soloCBwhitelist $WL --soloCBstart 1 --soloCBlen 16 --soloUMIstart 17 --soloUMIlen 12 \
   --soloBarcodeReadLength 0 --soloFeatures Gene --outSAMattributes NH HI nM AS CR UR CB UB \
   --outSAMtype BAM SortedByCoordinate --limitBAMsortRAM 200000000000 --outBAMsortingThreadN 16 --outFileNamePrefix $SCR/star/ > $O/star.log 2>&1

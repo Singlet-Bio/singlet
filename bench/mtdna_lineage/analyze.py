@@ -160,6 +160,12 @@ def lines(root, out):
         if bK != bB and aK[bK] / dK[ps] >= 0.9 and aB[bB] / dB[ps] >= 0.9:
             hap.append((ps, bK, bB))
     res["line_defining_sites"] = len(hap)
+    hv = {}
+    for g in ("K562", "BT142"):
+        gi = np.nonzero(lab == g)[0]
+        for nm, P in (("3p", P3), ("maester", PM)):
+            hv[f"{g}_{nm}"] = write_hom_vcf(f"{root}/private_vcf/k562mix_{g}_{nm}.vcf", P.pseudobulk(gi), ref)
+    res["homoplasmic_calls_written"] = hv
     res["line_defining_examples"] = [f"{ps + 1} K562:{M.BASES[a]} BT142:{M.BASES[b]} ref:{ref[ps]}" for ps, a, b in hap[:40]]
 
     def deconvolve(P, eps=0.01):
@@ -199,8 +205,31 @@ def lines(root, out):
     res["k562_subclonal_vois_maester"] = [vname(*v, ref) for v in vois]
     res["vaf_fidelity"] = vaf_fidelity(P3, PM, vois, mask=iK)
     res["variant_detection"] = detection(root, "k562_3p", P3, ref, vois, iK)
+    for nm, (P, tool) in (("k562_3p", (P3, "mgatk")), ("k562_maester", (PM, "maegatk"))):
+        fd = f"{root}/pile/{nm}/{tool}/final"
+        if glob.glob(f"{fd}/*.A.txt.gz"):
+            res[f"{nm}_vs_{tool}"] = tool_agreement(P, M.load_mgatk(fd, want), ref)
     res["privacy"] = privacy(root, "k562_3p", P3, PM, ref, groups=lab, somatic=vois)
     M.dump(res, out)
+
+
+def write_hom_vcf(path, pb, ref, min_dp=10, min_af=0.9):
+    """Homoplasmic calls (pseudobulk AF >= min_af vs rCRS) as a VCF for Haplogrep. PRIVATE: haplogroup-defining."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    d = pb.sum(1)
+    n = 0
+    with open(path, "w") as f:
+        f.write("##fileformat=VCFv4.2\n##contig=<ID=chrM,length=16569>\n")
+        f.write('##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">\n')
+        f.write("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tsample\n")
+        for ps in range(M.L):
+            if d[ps] < min_dp or ref[ps] not in "ACGT":
+                continue
+            a = pb[ps, :4] + pb[ps, 4:]
+            b = int(a.argmax())
+            if M.BASES[b] != ref[ps] and a[b] / d[ps] >= min_af:
+                f.write(f"chrM\t{ps + 1}\t.\t{ref[ps]}\t{M.BASES[b]}\t.\tPASS\t.\tGT\t1\n"); n += 1
+    return n
 
 
 def vaf_fidelity(P3, PM, sites, mask=None, min_dp_m=20):
@@ -224,6 +253,27 @@ def vaf_fidelity(P3, PM, sites, mask=None, min_dp_m=20):
     cov3 = (D3 >= 1)
     out["frac_cell_site_covered_3p"] = float(cov3[mask].mean() if mask is not None else cov3.mean())
     out["frac_cell_site_ge20_maester"] = float((Dm >= 20)[mask].mean() if mask is not None else (Dm >= 20).mean())
+    return out
+
+
+def tool_agreement(p_ours, p_tool, ref):
+    """Per (cell, position, base) agreement of two count tensors over the same cells; and their mgatk-rule calls."""
+    def keyed(p):
+        k = p.cell.astype(np.int64) * M.L + p.pos
+        return k, p.c[:, :4] + p.c[:, 4:]
+    ka, ca = keyed(p_ours); kb, cb = keyed(p_tool)
+    common, ia, ib = np.intersect1d(ka, kb, return_indices=True)
+    da, db = ca[ia].sum(1), cb[ib].sum(1)
+    refidx = np.array([M.BASES.find(x) for x in ref])
+    rb = refidx[common % M.L]
+    alt_a = da - ca[ia, rb]; alt_b = db - cb[ib, rb]
+    out = dict(n_cell_pos_ours=int(len(ka)), n_cell_pos_tool=int(len(kb)), n_common=int(len(common)),
+               depth_pearson=float(np.corrcoef(da, db)[0, 1]), depth_ratio_median=float(np.median(da / np.maximum(db, 1))),
+               nonref_pearson=float(np.corrcoef(alt_a, alt_b)[0, 1]))
+    sa, _ = M.mgatk_stats(p_ours, ref, M.candidate_sites(p_ours, ref, 3, 1))
+    sb, _ = M.mgatk_stats(p_tool, ref, M.candidate_sites(p_tool, ref, 3, 1))
+    A, B = set(sa.variant[sa.mgatk_pass]), set(sb.variant[sb.mgatk_pass])
+    out.update(mgatk_rule_calls_ours=len(A), mgatk_rule_calls_tool=len(B), mgatk_rule_calls_both=len(A & B))
     return out
 
 
@@ -357,6 +407,9 @@ def bpdcn(root, out):
     truth = np.array([clone_of.get(c, "none") for c in want])
     res["coverage"] = {"3p_umi": coverage_summary(P3), "3p_read": coverage_summary(R3), "maester_umi3": coverage_summary(PM)}
 
+    res["homoplasmic_calls_written"] = {nm: write_hom_vcf(f"{root}/private_vcf/bpdcn_{nm}.vcf", P.pseudobulk(), ref)
+                                        for nm, P in (("3p", P3), ("maester", PM))}
+
     # 1. per-variant sensitivity / specificity of the 3' library for the truth clone variants
     A3, D3, _, _ = M.site_matrices(P3, vois); Am, Dm, _, _ = M.site_matrices(PM, vois)
     A3, D3, Am, Dm = (x.toarray() for x in (A3, D3, Am, Dm))
@@ -372,6 +425,11 @@ def bpdcn(root, out):
                         frac_all_cells_covered_3p=float((D3[:, j] >= 1).mean())))
     res["per_variant_3p"] = per
     res["vaf_fidelity"] = vaf_fidelity(P3, PM, vois)
+
+    for nm, (P, tool) in (("bpdcn_3p", (P3, "mgatk")), ("bpdcn_maester", (PM, "maegatk"))):
+        fd = f"{root}/pile/{nm}/{tool}/final"
+        if glob.glob(f"{fd}/*.A.txt.gz"):
+            res[f"{nm}_vs_{tool}"] = tool_agreement(P, M.load_mgatk(fd, want), ref)
 
     # 2. variant discovery on the 3' library
     res["variant_detection"] = detection(root, "bpdcn_3p", P3, ref, vois)

@@ -14,7 +14,8 @@
 //                              count[b + 4*rev], b = A,C,G,T; pos 0-based
 //   OUT.sites.bin             (only with --sites; 1-based positions, one per line) molecule consensus at those sites:
 //                              'MTS1' u64 n, then n x {u32 cell, u32 umi, u16 site_index, u8 base, u8 reads(capped 255)}
-//   OUT.span.tsv              per-molecule covered span (max end - min start over all its fragments) histogram
+//   OUT.span.tsv              per-molecule histograms: span (max end - min start over its fragments, N skips
+//                             included), fragments, covered (reference bases read by its longest fragment)
 //   OUT.stats.json            read accounting
 #include <htslib/sam.h>
 #include <algorithm>
@@ -111,7 +112,7 @@ int main(int argc, char** argv) {
     std::vector<std::vector<MolObs>> posbuf(L);        // fragment consensus per position, flushed in order
     uint32_t next_flush = 0;
     std::unordered_map<uint64_t, std::pair<uint16_t, uint16_t>> span;  // molecule -> (min start, max end)
-    std::unordered_map<uint64_t, uint32_t> nfrag;
+    std::unordered_map<uint64_t, uint32_t> nfrag, covered;
     std::vector<uint8_t> site_rec;                    // packed site records
     uint64_t n_site = 0, n_mol_amb = 0, n_mol_ok = 0;
 
@@ -129,10 +130,19 @@ int main(int argc, char** argv) {
                 if (p >= L) continue;
                 posbuf[p].push_back({key, static_cast<uint8_t>(bi), g.rev, static_cast<uint16_t>(t)});
             }
-            uint16_t s = static_cast<uint16_t>(cur_start), e = static_cast<uint16_t>(std::min<int64_t>(cur_start + g.votes.size(), L));
-            auto it = span.find(key);
-            if (it == span.end()) span.emplace(key, std::make_pair(s, e));
-            else { it->second.first = std::min(it->second.first, s); it->second.second = std::max(it->second.second, e); }
+            // extent = first..last reference position read (includes N skips: STAR aligns some chrM reads with
+            // multi-kb N gaps); covered = reference positions read by the fragment (the read-length-limited quantity)
+            int64_t f0 = -1, f1 = -1; uint32_t ncov = 0;
+            for (size_t o = 0; o < g.votes.size(); ++o)
+                if (g.votes[o][0] + g.votes[o][1] + g.votes[o][2] + g.votes[o][3]) { if (f0 < 0) f0 = o; f1 = o; ++ncov; }
+            { auto& cv = covered[key]; cv = std::max(cv, ncov); }
+            if (f0 >= 0) {
+                uint16_t s = static_cast<uint16_t>(std::min<int64_t>(cur_start + f0, L - 1));
+                uint16_t e = static_cast<uint16_t>(std::min<int64_t>(cur_start + f1 + 1, L));
+                auto it = span.find(key);
+                if (it == span.end()) span.emplace(key, std::make_pair(s, e));
+                else { it->second.first = std::min(it->second.first, s); it->second.second = std::max(it->second.second, e); }
+            }
             nfrag[key]++;
         }
         frags.clear();
@@ -155,10 +165,10 @@ int main(int argc, char** argv) {
                         uint32_t umi = static_cast<uint32_t>(v[i].key & 0xffffffffu);
                         uint16_t si = static_cast<uint16_t>(site_of[next_flush]);
                         uint8_t bb = static_cast<uint8_t>(bi), nr = static_cast<uint8_t>(std::min<uint32_t>(t, 255));
-                        site_rec.insert(site_rec.end(), reinterpret_cast<uint8_t*>(&cell), reinterpret_cast<uint8_t*>(&cell) + 4);
-                        site_rec.insert(site_rec.end(), reinterpret_cast<uint8_t*>(&umi), reinterpret_cast<uint8_t*>(&umi) + 4);
-                        site_rec.insert(site_rec.end(), reinterpret_cast<uint8_t*>(&si), reinterpret_cast<uint8_t*>(&si) + 2);
-                        site_rec.push_back(bb); site_rec.push_back(nr); ++n_site;
+                        uint8_t buf[12];
+                        std::memcpy(buf, &cell, 4); std::memcpy(buf + 4, &umi, 4); std::memcpy(buf + 8, &si, 2);
+                        buf[10] = bb; buf[11] = nr;
+                        site_rec.insert(site_rec.end(), buf, buf + 12); ++n_site;
                     }
                 } else ++n_mol_amb;
                 i = j;
@@ -249,10 +259,13 @@ int main(int argc, char** argv) {
         std::map<uint32_t, uint64_t> h; std::map<uint32_t, uint64_t> hf;
         for (auto& kv : span) h[(kv.second.second - kv.second.first) / 10 * 10]++;
         for (auto& kv : nfrag) hf[std::min<uint32_t>(kv.second, 50)]++;
+        std::map<uint32_t, uint64_t> hc;
+        for (auto& kv : covered) hc[kv.second / 10 * 10]++;
         std::ofstream f(out + ".span.tsv");
         f << "kind\tbin\tn_molecules\n";
         for (auto& kv : h) f << "span\t" << kv.first << "\t" << kv.second << "\n";
         for (auto& kv : hf) f << "fragments\t" << kv.first << "\t" << kv.second << "\n";
+        for (auto& kv : hc) f << "covered\t" << kv.first << "\t" << kv.second << "\n";
     }
     std::ofstream js(out + ".stats.json");
     js << "{\"cells\": " << nc << ", \"reads_total\": " << n_total << ", \"reads_flag\": " << n_flag << ", \"reads_lowmapq\": " << n_mapq

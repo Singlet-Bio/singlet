@@ -92,6 +92,33 @@ class Pile:
         return out
 
 
+def load_mgatk(final_dir: str, cells: list[str]) -> "Pile":
+    """mgatk / maegatk plain-text output (-sr) as a Pile over `cells` (barcodes without -1).
+    {name}.{A,C,G,T}.txt.gz rows: pos(1-based), barcode, count_fw, qual_fw, count_rev, qual_rev."""
+    import glob as _g
+    import pandas as pd
+    idx = {c: i for i, c in enumerate(cells)}
+    parts = []
+    for b, base in enumerate(BASES):
+        fs = [f for f in _g.glob(f"{final_dir}/*.{base}.txt.gz")]
+        if not fs:
+            continue
+        d = pd.read_csv(fs[0], header=None, usecols=[0, 1, 2, 4], names=["pos", "bc", "f", "r"])
+        d["cell"] = d.bc.str.split("-").str[0].map(idx)
+        d = d.dropna(subset=["cell"])
+        parts.append((b, d))
+    keys = {}
+    for b, d in parts:
+        k = (d.cell.astype(np.int64).values * L + d.pos.values - 1)
+        keys[b] = (k, d.f.values.astype(np.int64), d.r.values.astype(np.int64))
+    allk = np.unique(np.concatenate([v[0] for v in keys.values()]))
+    c = np.zeros((len(allk), 8), np.int64)
+    for b, (k, f, r) in keys.items():
+        j = np.searchsorted(allk, k)
+        c[j, b] += f; c[j, b + 4] += r
+    return Pile(len(cells), (allk // L).astype(np.uint32), (allk % L).astype(np.uint32), c)
+
+
 def site_matrices(p: Pile, sites: list[tuple[int, int]]):
     """AD, DP (cells x sites, CSC) for sites [(pos0, alt_base_idx)]; plus fwd/rev alt counts."""
     order, ptr = p.by_pos()

@@ -16,7 +16,7 @@ if [ ! -x $E/bin/mgatk ]; then
     bioconductor-summarizedexperiment bioconductor-genomicranges samtools pysam numpy scipy pandas scikit-learn \
     zstandard pyreadr
 fi
-$E/bin/pip install -q mquad vireoSNP maegatk || $E/bin/pip install -q mquad vireoSNP
+$E/bin/pip install -q mquad vireoSNP maegatk bam-dedup || $E/bin/pip install -q mquad vireoSNP bam-dedup   # bam-dedup: mgatk 0.9 imports it, bioconda omits it
 $E/bin/mgatk --version || true
 $E/bin/python -c "import mquad, vireoSNP, pysam, pyreadr, zstandard; print('py ok', vireoSNP.__version__)"
 $E/bin/Rscript -e 'library(SummarizedExperiment); cat("R ok\n")'
