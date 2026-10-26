@@ -180,6 +180,11 @@ def compute(artifact_dir: Path) -> dict:
             "K562 non-targeting guides have no coordinate in their ids: their windows are counted as 'unidentified' guides.",
         ],
     }
+    for ds in prov["datasets"]:  # quality against cost (contract 1.1.0)
+        try:
+            doc["figures"].append(C.pareto_figure(doc, "single_call_f1", ds, "wall_s"))
+        except (StopIteration, KeyError):
+            pass
     C.finalize(doc)
     doc["conclusion"] = _conclusion(doc)
     return doc
@@ -190,8 +195,8 @@ def _conclusion(doc) -> str:
     f1 = [m for m in ms if m["id"] == "single_call_f1"]
     won = sum(m["pass"] == "pass" for m in f1)
     gq = [m for m in ms if m["id"] == "knockdown_guides_significant"]
-    gs = sum(m["singlet"]["value"] for m in gq)
-    gb = sum(max([c["value"] for c in m["competitors"]] or [0]) for m in gq)
+    gs = int(sum(m["singlet"]["value"] for m in gq))
+    gb = int(sum(max([c["value"] for c in m["competitors"]] or [0]) for m in gq))
     n_pass = sum(m["pass"] == "pass" for m in ms if m["pass"] != "na")
     return (f"On {len(f1)} real screens (10x A549 and A375, Replogle 2022 K562, Norman 2019 K562), Singlet's guide calls "
             f"agree with the published calls at the highest F1 on {won} of {len(f1)}. They give {gs} guides with a "

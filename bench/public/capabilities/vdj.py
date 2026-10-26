@@ -252,6 +252,12 @@ def compute(artifact_dir: Path) -> dict:
             "MiXCR was not run: it needs a licence key.",
         ],
     }
+    for (ds, chains) in sorted(groups):  # quality against cost (contract 1.1.0)
+        try:
+            doc["figures"].append(C.pareto_figure(doc, f"{chains.lower()}_contig_f1", ds, "wall_s",
+                                                  fig_id=f"pareto_{chains.lower()}_contig_f1_{ds}"))
+        except (StopIteration, KeyError):
+            pass
     C.finalize(doc)
     doc["conclusion"] = _conclusion(doc)
     return doc
