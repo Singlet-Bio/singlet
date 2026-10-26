@@ -21,7 +21,7 @@ python -P $SRC/bench/crispr/prep_norman.py $D --gemgroup 1
 cut -d, -f1 $D/reference_gg1.csv | tail -n +2 > $O/columns.txt
 /usr/bin/time -v python -P $SRC/bench/crispr/run_crispr.py --fastq-dir $D/fastqs --guide-table $D/guides.tsv \
   --pattern "(BC)CCTAGAGGGCCCG" --whitelist $WORK/pipeline-benchmark/whitelists/737K-august-2016.txt \
-  --cells $O/columns.txt --out $O/singlet --umi-len 10 2> $O/singlet.time | tail -5
+  --cells $O/columns.txt --out $O/singlet --umi-len 10 ${REUSE:+--reuse-counts} 2> $O/singlet.time | tail -5
 grep -E "Elapsed|Maximum resident" $O/singlet.time
 python -P $SRC/bench/crispr/compare_crispr.py --run $O/singlet --reference $D/reference_gg1.csv --ref-format norman \
   --mode a --gemgroup 1 --norman-dir $D --guides $D/guides.tsv --columns $O/columns.txt --out $O/metrics.json \

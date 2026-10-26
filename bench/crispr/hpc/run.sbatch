@@ -25,7 +25,7 @@ case $DS in
     python -P $SRC/bench/crispr/h5_barcodes.py $D/count_sample_feature_bc_matrix.h5 $O/called.txt
     $TIME python -P $SRC/bench/crispr/run_crispr.py --fastq-dir $D/fastqs --r1-glob "*_crispr_*_R1_*.fastq.gz" \
       --guides $D/count_feature_reference.csv --whitelist $WL --translation $TR --cells $O/columns.txt \
-      --called-file $O/called.txt --out $O/singlet --shards 16 --tmp $SCRATCH 2> $O/singlet.time | tail -5
+      --called-file $O/called.txt --out $O/singlet --shards 16 --tmp $SCRATCH ${REUSE:+--reuse-counts} 2> $O/singlet.time | tail -5
     grep -E "Elapsed|Maximum resident" $O/singlet.time
     python -P $SRC/bench/crispr/compare_crispr.py --run $O/singlet \
       --reference $D/crispr_analysis/crispr_analysis/protospacer_calls_per_cell.csv --ref-format cellranger \
@@ -40,7 +40,7 @@ case $DS in
     python -P $SRC/bench/crispr/h5_barcodes.py $D/filtered_feature_bc_matrix.h5 $O/called.txt
     $TIME python -P $SRC/bench/crispr/run_crispr.py --fastq-dir $D/fastqs --r1-glob "*rispr*_R1_*.fastq.gz" \
       --guides $FR --whitelist $WL --translation $TR --cells $O/columns.txt \
-      --called-file $O/called.txt --out $O/singlet --shards 16 --tmp $SCRATCH 2> $O/singlet.time | tail -5
+      --called-file $O/called.txt --out $O/singlet --shards 16 --tmp $SCRATCH ${REUSE:+--reuse-counts} 2> $O/singlet.time | tail -5
     grep -E "Elapsed|Maximum resident" $O/singlet.time
     python -P $SRC/bench/crispr/compare_crispr.py --run $O/singlet --reference $PC --ref-format cellranger \
       --gex $D/filtered_feature_bc_matrix.h5 --guides $FR ${TH:+--cr-thresholds $TH} --cr-h5 $D/filtered_feature_bc_matrix.h5 \
@@ -52,7 +52,7 @@ case $DS in
     # barcodes are the ambient profile. Dual guides: protospacer A before GTTTCAGAGC, B before GTTTAAGAGC.
     WL=$WORK/cache/adt/3M-february-2018.txt.gz; TR=$WORK/cache/adt/translation_3M-february-2018.txt.gz
     cut -d, -f1 $D/reference_gg41.csv | tail -n +2 > $O/columns.txt
-    $TIME python -P $SRC/bench/crispr/run_crispr.py --fastq-dir $D/fastqs --guide-table $D/guides.tsv       --pattern "(BC)GTTTCAGAGC|GTTTAAGAGC" --whitelist $WL --translation $TR --cells $O/columns.txt       --out $O/singlet --shards 16 --tmp $SCRATCH 2> $O/singlet.time | tail -5
+    $TIME python -P $SRC/bench/crispr/run_crispr.py --fastq-dir $D/fastqs --guide-table $D/guides.tsv       --pattern "(BC)GTTTCAGAGC|GTTTAAGAGC" --whitelist $WL --translation $TR --cells $O/columns.txt       --out $O/singlet --shards 16 --tmp $SCRATCH ${REUSE:+--reuse-counts} 2> $O/singlet.time | tail -5
     grep -E "Elapsed|Maximum resident" $O/singlet.time
     python -P $SRC/bench/crispr/compare_crispr.py --run $O/singlet --reference $D/K562_essential_raw_singlecell_01.h5ad       --ref-format replogle --gemgroup 41 --guides $D/guides.tsv --columns $O/columns.txt --out $O/metrics.json       --artifacts $WORK/bench-public/artifacts/crispr-guides --dataset replogle2022_k562_gg41 | head -60
     ;;
