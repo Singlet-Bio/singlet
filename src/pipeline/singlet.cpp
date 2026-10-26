@@ -7833,7 +7833,9 @@ int main(int argc, char* argv[]) {
         // ── 2d: Delete temp BAM + BAI ──
         // Skip deletion if --tagged-bam is enabled; the BAM is still needed for
         // the second-pass tagged-BAM writer that runs after pileup export.
-        if (!tagged_bam_enabled) {
+        // SINGLET_KEEP_STAR_BAM=1 keeps STAR's sorted BAM (record-level equivalence checks).
+        const char* keep_star_bam = std::getenv("SINGLET_KEEP_STAR_BAM");
+        if (!tagged_bam_enabled && !(keep_star_bam && *keep_star_bam == '1')) {
             unlink(parallel_bam_path.c_str());
             unlink(parallel_bai_path.c_str());
         }
