@@ -50,7 +50,7 @@ $T/somalier/somalier 2>&1 | head -3 || true
 ls $T/somalier | head
 # bcftools / peddy / pysam for the ancestry and sex pipelines (pbench has no bcftools)
 BPE=$WORK/envs/bpub
-[ -x $BPE/bin/bcftools ] || MAMBA_ROOT_PREFIX=$WORK/tools/mm/root $WORK/tools/mm/bin/micromamba create -y -q -p $BPE   -c conda-forge -c bioconda --strict-channel-priority python=3.11 bcftools=1.21 samtools htslib peddy=0.4.8 pysam pandas pyarrow
+[ -x $BPE/bin/bcftools ] || MAMBA_ROOT_PREFIX=$WORK/tools/mm/root $WORK/tools/mm/bin/micromamba create -y -q -p $BPE   -c conda-forge -c bioconda --strict-channel-priority python=3.11 bcftools=1.21 samtools htslib peddy=0.4.8 "numpy<2" pysam pandas pyarrow   # peddy 0.4.8 needs numpy 1.x (np.fromstring)
 $BPE/bin/bcftools --version | head -1; $BPE/bin/python -c "import peddy; print('peddy', peddy.__version__)"
 
 python3 - <<EOF
