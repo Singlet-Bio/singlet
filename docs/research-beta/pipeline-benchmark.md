@@ -248,3 +248,13 @@ Long-read and spike-in truth and the extra hgmm libraries are missing. Paths: `$
 4. **Cell calling:** decide from `bench/cellcall-independent-truth`. Either change called_v2 (on Python and C++ together, through the golden vectors) or reframe the 10x-truth metrics as agreement with Cell Ranger.
 5. **Re-run all public capability writers** against the new binary, then merge the benchmark branches into a PR into `claude/bench-public-cohort-485cf7`.
 6. **50-sample validation** through the orchestrator (PR #42), then several days of Clipper waves a–c. **Anvil only after Zach confirms.**
+
+## 7. After the 1.0.0 rename (main, PR #39)
+- `prod/atlas-rerun` (#31) is merged with main (8c3de82f): bench files moved to `bench/called_ed*`; the C++ test and CMake read `tests/data/called_ed_golden` with key `n_called_ed`.
+- The stacked branches (#36, `prod/campaign`, #41, #45, #46, #47) still need the same merge, via `prod/atlas-rerun`.
+- Decision B is not yet applied to the C++. Still to rename:
+  - `include/singlet/pileup/called_v2.h` to the called_ed name;
+  - the `cell_calls.tsv` columns `called_v2` and `fdr` to `called_ed` and `called_ed_fdr`;
+  - provenance keys.
+  The Python store reads `called_v2` as `called_ed` until cleanup.
+- #31 state at stop: prod/atlas-rerun 8c3de82f (main merged, rename follow-ups above); CI status unknown.
