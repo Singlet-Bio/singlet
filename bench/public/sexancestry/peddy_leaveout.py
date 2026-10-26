@@ -45,9 +45,10 @@ def main():
     if hasattr(PP, "pca"):
         PP.pca = ns["pca"]
 
-    from peddy.cli import cli
+    import runpy
+
     sys.argv = ["peddy"] + sys.argv[4:]
-    sys.exit(cli())
+    runpy.run_module("peddy", run_name="__main__", alter_sys=True)  # peddy/__main__.py: the same entry point as `python -m peddy`
 
 
 if __name__ == "__main__":
