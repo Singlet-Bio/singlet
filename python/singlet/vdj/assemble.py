@@ -54,9 +54,10 @@ CONTIG_COLUMNS = ["barcode", "contig_id", "chain", "v_gene", "d_gene", "j_gene",
 
 @dataclass
 class Params:
-    min_umis: int = 2  # UMIs of a kept contig (junction UMIs + UMIs of the same chain and V gene)
+    # filters set on the development data (10x pbmc2 TCR / BCR) only; the other benchmark libraries are held out
+    min_umis: int = 1  # UMIs of a kept contig (junction UMIs + UMIs of the same chain and V gene)
     min_junction_umis: int = 1  # UMIs whose reads hold the contig's specific junction k-mers
-    min_frac: float = 0.10  # of the barcode's top contig of the same chain
+    min_frac: float = 0.20  # of the barcode's top contig of the same chain
     min_seed_umis: int = 1
     seed_frac: float = 0.05  # seeds below this share of the top seed's UMIs are error k-mers
     min_branch_umis: int = 2
@@ -66,7 +67,7 @@ class Params:
     min_umi_reads: int = 2  # mates of a molecule, at least
     min_contig_reads: int = 3  # mates of a kept contig
     contig_read_frac: float = 0.05  # mates per UMI of a kept contig, against the library's read-weighted median
-    umi_read_frac: float = 0.05  # and at least this share of the library's median mates per molecule
+    umi_read_frac: float = 0.02  # and at least this share of the library's read-weighted median mates per molecule
     threads: int = 8
 
 
