@@ -1,0 +1,21 @@
+cat	gse	gsm	srx	org	tech	prep	protocol	assay	ws	sbc_cells	author	tissue
+h_3v3	GSE125422	GSM4105918	SRX6941572	Homo_sapiens	3_prime_gex	single_cell	10xv3	10x 3'	0.0240624961278748	5162	True	skin-derived Schwann cells
+h_3v3	GSE167880	GSM5114475	SRX10188843	Homo_sapiens	3_prime_gex	single_cell	10xv3	10x 3'	0.0317270087897237	5544	True	stem cell–derived pancreatic islet cells
+h_3v2	GSE232839	GSM7384410	SRX20433308	Homo_sapiens	3_prime_gex	single_cell	10xv2	10x 3'	0.0583038756485503	6471	True	blood
+h_3v2	GSE162632	GSM4955760	SRX9628647	Homo_sapiens	3_prime_gex	single_cell	10xv2	10x 3'	0.0663564575717131	9922	True	unsure (not specified in metadata)
+m_3v3	GSE253593	GSM8023943	SRX23306901	Mus_musculus	3_prime_gex	single_cell	10xv3	10x 3'	0.0385617192465472	2688	True	inguinal lymph node
+m_3v3	GSE201654	GSM6069069	SRX15013760	Mus_musculus	3_prime_gex	single_cell	10xv3	10x 3'	0.0250555495386256	4441	True	dorsal root ganglion
+h_5p_ok	GSE238137	GSM7659100	SRX21146096	Homo_sapiens	5_prime_gex	single_cell	10xv3_5prime	10x 5'	0.0580434686308023	10832	True	blood and liver
+h_5p_wrongstrand	GSE223026	GSM6938405	SRX19050195	Homo_sapiens	5_prime_gex	single_cell	10xv2	10x 3'	0.9271163805134988	5522	False	colorectal tumor
+h_5p_wrongstrand	GSE217245	GSM6710028	SRX18168467	Homo_sapiens	5_prime_gex	single_cell	10xv3_5prime	10x 5'	0.9943556628710128	1245	False	bone marrow mononuclear cells
+h_3p_label_5p_sbc	GSE285515	GSM8703727	SRX27208877	Homo_sapiens	5_prime_gex	single_cell	10xv3	10x 3'	0.8925542154785371	10974	True	lung
+nuclei_h	GSE215932	GSM6647601	SRX17918902	Homo_sapiens	3_prime_gex	single_nucleus	10xv3	10x 3'	0.0873321351314841	6910	True	ACP close to the hypothalamus
+nuclei_m	GSE273561	GSM8432344	SRX25524105	Mus_musculus	3_prime_gex	single_nucleus	10xv3	10x 3'	0.1246199942933665	7864	True	liver
+multiome	GSE192780	GSM5765322	SRX13555719	Homo_sapiens	multiome	single_cell	10x_suspect	10x (version unconfirmed)	0.0771114900555382	1859	True	high-grade serous ovarian carcinoma tumo
+zebrafish	GSE192742	GSM5764413	SRX13549231	Danio_rerio	3_prime_gex	single_cell	10xv3	10x 3'	0.9255727850594144	1267	False	liver
+macaque	GSE273228	GSM8424564	SRX25487533	Macaca_mulatta	3_prime_gex	single_cell	10xv3	10x 3'		848	False	lung vasculature, peripheral blood (PBMC
+rat	GSE282740	GSM8649651	SRX26850976	Rattus_norvegicus	3_prime_gex	single_cell	10xv3	10x 3'		7462	True	adipose-derived mesenchymal stromal cell
+vdj_lib	GSE266361	GSM8245702	SRX24425804	Mus_musculus	vdj	single_cell	10x-3p-v3	10x 3'		5871	False	tumour
+m_3p_wrongstrand	GSE169709	GSM5212885	SRX10457019	Mus_musculus	3_prime_gex	single_cell	10x_suspect	10x (version unconfirmed)	0.9186228774025004	1489	False	bone marrow
+citeseq	GSE262072	GSM8156975	SRX23973410	Homo_sapiens	3_prime_gex	single_cell	citeseq	CITE-seq	0.038461538461538464	2728	False	PBMCs
+h_3p_wrongstrand_sbc3p	GSE254890	GSM8059849	SRX23506400	Homo_sapiens	3_prime_gex	single_cell	10xv3	10x 3'	0.9332834276426041	6040	False	orthotopic tumor

@@ -45,7 +45,7 @@ def load_pool(data, gse, gsm):
     from singlet.adt import count as C
     from singlet.adt import gex as G
     from singlet.adt import normalize as N
-    from singlet.v2.legacy import LegacyBundle
+    from singlet.store.legacy import LegacyBundle
 
     d = os.path.join(data, gse, gsm)
     M, feats, amb, _, meta = C.load_npz(os.path.join(d, "counts.npz"))

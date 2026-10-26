@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
-// singlet::pz2 -- the v2 sparse-matrix member codec ("pz2"), header-only C++17.
+// singlet::pz2 -- the store sparse-matrix member codec ("pz2"), header-only C++17.
 //
-// Format: docs/format-v2.md section 4 (member layout) and section 5 (codecs).  Notes and status: bench/compression/notes/m_w1.md.
+// Format: docs/format-store.md section 4 (member layout) and section 5 (codecs).  Notes and status: bench/compression/notes/m_w1.md.
 //
 // What a pz2 member is: one CSC matrix (m rows = features, n columns = cells/barcodes, nnz non-zeros), cut into column
 // chunks that are independently decodable.  Layout, in byte order:
@@ -54,6 +54,10 @@ inline constexpr size_t kHeaderBytes = 256;              // fixed header size; m
 inline constexpr size_t kChunkRecBytes = 24;             // one chunk-index record
 inline constexpr uint32_t kRansMaxRows = (1u << 21) - 1; // codec 1 handles m <= kRansMaxRows (m < 2^21)
 inline constexpr uint32_t kMaxChunkNnz = 1u << 27;       // encoder never builds a chunk with more non-zeros than this
+/// Default EncodeOptions::chunk_nnz_max: a chunk ends before the column that would take it past this many non-zeros, so a
+/// chunk of densely populated columns (the called cells at the start of a UMI-ordered matrix) is not wider than the sparse
+/// rest. Readers never depend on it (chunk widths are writer choices, docs/format-store.md 4.2).
+inline constexpr uint32_t kDefaultChunkNnzMax = 49152;
 
 // ===========================================================================================================
 // enums
@@ -118,7 +122,7 @@ public:
 // ===========================================================================================================
 // small value types
 // ===========================================================================================================
-using PackId = std::array<uint8_t, 8>;  ///< first 8 bytes of a pack's digest16 (docs/format-v2.md section 6)
+using PackId = std::array<uint8_t, 8>;  ///< first 8 bytes of a pack's digest16 (docs/format-store.md section 6)
 
 struct Digest16 {
     std::array<uint8_t, 16> b{};
@@ -171,10 +175,14 @@ struct CSC {
 // ===========================================================================================================
 struct EncodeOptions {
     CodecId codec = CodecId::Auto;
-    /// Columns per chunk (the last chunk may be shorter, and a chunk is also cut when it reaches kMaxChunkNnz non-zeros).
-    /// 0 = library default: about `chunk_nnz_target` non-zeros per chunk (default_chunk_cols()).
+    /// Maximum columns per chunk (the header's nominal `chunk_cols`; a chunk is narrower when it reaches chunk_nnz_max or
+    /// kMaxChunkNnz non-zeros, or at the end). 0 = library default: about `chunk_nnz_target` non-zeros per chunk at the
+    /// matrix's mean column density (default_chunk_cols()).
     uint32_t chunk_cols = 0;
     uint32_t chunk_nnz_target = 0;   ///< target non-zeros per chunk when chunk_cols == 0; 0 = library default (see notes/m_w1.md)
+    /// A chunk ends before the column that would take it past this many non-zeros (a chunk always holds at least one column).
+    /// 0 = kDefaultChunkNnzMax; UINT32_MAX = no budget (fixed-width chunks of chunk_cols columns, the behaviour before).
+    uint32_t chunk_nnz_max = 0;
     uint8_t classes_per_octave = 4;  ///< codec 1 row-class resolution; 0 = exact frequency rank.  1, 2, 4, 8 are tested.
     uint8_t lanes = 32;              ///< codec 1 rANS lanes (16, 32 or 64).  The AVX paths are tuned for 32.
     uint8_t prob_bits = 10;          ///< codec 1 gap/flag table precision (8..12)
@@ -184,7 +192,7 @@ struct EncodeOptions {
     NamesSpec row_names;             ///< kind Inline needs a blob of m names; Pack/PackSubset need pack_id
     NamesSpec col_names;             ///< also allows NamesKind::Cells
     KvMap kv;
-    /// Canonical digest (docs/format-v2.md 4.6).  If `digest` is set it is stored as given.  Otherwise, when
+    /// Canonical digest (docs/format-store.md 4.6).  If `digest` is set it is stored as given.  Otherwise, when
     /// `compute_digest` is true, it is computed from the matrix, the logical names (NamesSpec::blob must then be present
     /// for rows and columns even when they are stored as Pack/Cells; if either is missing and its count > 0 the call throws
     /// BadArgument) and kv.  With compute_digest false the digest is left zero.
@@ -356,7 +364,7 @@ private:
 void decode(const uint8_t* member, size_t n, Output& out, const DecodeOptions& opt = DecodeOptions());
 
 // ===========================================================================================================
-// canonical digest (docs/format-v2.md 4.6)
+// canonical digest (docs/format-store.md 4.6)
 // ===========================================================================================================
 
 /// SHA-256 over the canonical content, first 16 bytes.  `m`, `n`, `nnz`, indptr/counts, indices, data come from `csc`;

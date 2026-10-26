@@ -9,7 +9,7 @@ recursive-include src/bindings *.cpp *.h *.hpp
 # only the .1pz codec headers: the extension includes nothing else (the rest of include/ is the C++ pipeline)
 include include/singlet/pileup/pz_reader.h
 include include/singlet/pileup/pz_writer.h
-# the v2 matrix codec (header-only) and the binding helpers
+# the pz2 matrix codec (header-only) and the binding helpers
 recursive-include include/singlet/pz2 *.h
 
 # Bundled package data

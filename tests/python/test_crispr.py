@@ -28,7 +28,10 @@ def test_parse_pattern():
 def test_extract_and_detect():
     guides = [rand(20) for _ in range(10)]
     sc = G.SCAFFOLDS["cr_default"]
-    reads = [(rand(RNG.integers(5, 15)) + guides[i % 10] + sc + rand(30)).encode()[:90] for i in range(500)]
+    reads = [
+        (rand(RNG.integers(5, 15)) + guides[i % 10] + sc + rand(30)).encode()[:90]
+        for i in range(500)
+    ]
     det = G.detect_geometry(reads, 20, guides)
     g = det["geometry"]
     assert g.anchor == sc[:12] and not g.reverse
@@ -40,8 +43,10 @@ def test_extract_and_detect():
 
 def test_count_library_variable_lengths():
     guides = [rand(20) for _ in range(6)] + [rand(19) for _ in range(2)]
-    lib = G.from_table([{"id": f"g{i}", "sequence": s, "target_gene": f"T{i}"} for i, s in enumerate(guides)], "t")
-    cells = S.decode(RNG.integers(0, 4 ** 16, 30, dtype=np.uint64), 16)
+    lib = G.from_table(
+        [{"id": f"g{i}", "sequence": s, "target_gene": f"T{i}"} for i, s in enumerate(guides)], "t"
+    )
+    cells = S.decode(RNG.integers(0, 4**16, 30, dtype=np.uint64), 16)
     truth = {c: i % len(guides) for i, c in enumerate(cells)}
     sc = G.SCAFFOLDS["cr_default"]
     pairs = []
@@ -49,10 +54,24 @@ def test_count_library_variable_lengths():
         for _ in range(int(RNG.integers(3, 8))):
             umi = rand(12)
             for _ in range(int(RNG.integers(1, 4))):
-                pairs.append(((c + umi).encode(), (rand(int(RNG.integers(3, 12))) + guides[gi] + sc).encode()))
+                pairs.append(
+                    (
+                        (c + umi).encode(),
+                        (rand(int(RNG.integers(3, 12))) + guides[gi] + sc).encode(),
+                    )
+                )
     wl, _ = S.encode_strings(cells, 16)
-    lc = CC.count_library([], [], library=lib, geometry=G.Geometry(20, anchor=sc[:12]), cb_len=16, umi_len=12,
-                          whitelist_codes=np.sort(wl), gex_barcodes=cells, pairs_factory=lambda: iter(pairs))
+    lc = CC.count_library(
+        [],
+        [],
+        library=lib,
+        geometry=G.Geometry(20, anchor=sc[:12]),
+        cb_len=16,
+        umi_len=12,
+        whitelist_codes=np.sort(wl),
+        gex_barcodes=cells,
+        pairs_factory=lambda: iter(pairs),
+    )
     M = lc.matrix.toarray()
     assert M.argmax(axis=0).tolist() == [truth[c] for c in cells]
     assert (M.sum(axis=0) > 0).all()
@@ -93,7 +112,9 @@ def test_callers_recover_truth():
     f_pg = _f1(AS.call_poisson_gaussian(X), truth)
     assert f_amb > 0.95, (f_amb, f_gmm, f_pg)
     assert f_amb >= max(f_gmm, f_pg) - 0.01, (f_amb, f_gmm, f_pg)
-    lab = AS.summarize(AS.call_ambient(X, p, AS.ambient_load(emp)), [f"g{i}" for i in range(X.shape[0])])
+    lab = AS.summarize(
+        AS.call_ambient(X, p, AS.ambient_load(emp)), [f"g{i}" for i in range(X.shape[0])]
+    )
     assert set(lab["class"]) <= {"unassigned", "single", "multiple"}
 
 

@@ -236,7 +236,7 @@ Findings:
 ![Benchmark](figures/adt/adt_benchmark.png)
 
 
-## 6. Storage as a v2 modality (`singlet.adt.store`, `docs/format-v2.md` section 13)
+## 6. Storage as a v2 modality (`singlet.adt.store`, `docs/format-store.md` section 13)
 
 Members of the **GEX** sample (the antibody library has no sample object of its own):
 

@@ -7,7 +7,7 @@ Status 2026-10-26, V(D)J + CRISPR session. The branch is `claude/vdj-crispr-benc
 - **Benchmark drivers and Clipper jobs:** `bench/vdj/`, `bench/crispr/`.
 - **Results contract:** `bench/public/capabilities/{vdj,crispr_guides}.py`, `bench/public/results/{vdj,crispr-guides}.json`.
 - **Tests:** `tests/python/test_vdj_assemble.py`, `test_crispr.py`, `test_vdj_crispr_store.py`.
-- **Storage:** `docs/format-v2.md` section 14.
+- **Storage:** `docs/format-store.md` section 14.
 
 ## Results
 
@@ -221,7 +221,7 @@ CRISPR (`singlet.crispr.qc.THRESHOLDS`):
 
 ## 5. Storage and processing atlas libraries
 
-The layout is in `docs/format-v2.md` section 14 and follows the ADT rules: members of the GEX sample, aligned to its
+The layout is in `docs/format-store.md` section 14 and follows the ADT rules: members of the GEX sample, aligned to its
 `cells` table.
 
 - **V(D)J:** `vdj_contigs.parquet` and `vdj_summary.json`.

@@ -38,8 +38,15 @@ def ambient_load(totals_empty: np.ndarray, q: float = 0.95) -> float:
     return float(np.quantile(t, q)) if len(t) else 0.0
 
 
-def call_ambient(M, p: np.ndarray, b_empty: float = 0.0, min_umis: int = 3, alpha: float = 1e-3,
-                 min_share: float = 0.05, top: int = 2):
+def call_ambient(
+    M,
+    p: np.ndarray,
+    b_empty: float = 0.0,
+    min_umis: int = 3,
+    alpha: float = 1e-3,
+    min_share: float = 0.05,
+    top: int = 2,
+):
     """Ambient-calibrated Poisson test per (guide, cell). ``p``: ambient profile (:func:`ambient_profile`);
     ``b_empty``: the ambient load of a droplet (:func:`ambient_load` on the empty droplets).
 
@@ -73,7 +80,9 @@ def call_ambient(M, p: np.ndarray, b_empty: float = 0.0, min_umis: int = 3, alph
     lam = b * p[rows]
     pv = poisson.sf(x - 1, np.maximum(lam, 1e-12))
     is_called = (x >= min_umis) & (pv < thr) & (x >= min_share * tot[cols])
-    return sparse.csc_matrix((is_called[is_called], (rows[is_called], cols[is_called])), shape=X.shape, dtype=bool)
+    return sparse.csc_matrix(
+        (is_called[is_called], (rows[is_called], cols[is_called])), shape=X.shape, dtype=bool
+    )
 
 
 def call_gmm(M, min_umis: int = 3, seed: int = 0):
@@ -169,7 +178,7 @@ def summarize(called, guide_ids: Sequence[str], targets: Optional[Sequence[str]]
     tg = np.asarray(targets) if targets is not None else None
     gl, tl = [], []
     for j in range(C.shape[1]):
-        rr = C.indices[C.indptr[j]:C.indptr[j + 1]]
+        rr = C.indices[C.indptr[j] : C.indptr[j + 1]]
         gl.append("|".join(ids[rr]))
         tl.append("|".join(sorted(set(tg[rr]))) if tg is not None else "")
     cls = np.where(n == 0, "unassigned", np.where(n == 1, "single", "multiple"))
@@ -188,10 +197,22 @@ def agreement(ours, ref) -> Dict[str, float]:
         "ref_single": int(rs.sum()),
         "ours_single": int(os_.sum()),
         "recall_single": float((same & rs & os_).sum() / max(1, rs.sum())),
-        "precision_single": float((same & rs & os_).sum() / max(1, (os_ & (ref["class"].to_numpy() != "unassigned")).sum())),
+        "precision_single": float(
+            (same & rs & os_).sum()
+            / max(1, (os_ & (ref["class"].to_numpy() != "unassigned")).sum())
+        ),
         "f1_single": 0.0,
-        "ref_contains_ours": float(np.mean([g in r.split("|") for g, r, o in zip(ours["guide_ids"], ref["guide_ids"], os_) if o])
-                                   if os_.any() else 0.0),
+        "ref_contains_ours": float(
+            np.mean(
+                [
+                    g in r.split("|")
+                    for g, r, o in zip(ours["guide_ids"], ref["guide_ids"], os_)
+                    if o
+                ]
+            )
+            if os_.any()
+            else 0.0
+        ),
         "assigned_ours": float((ours["class"] != "unassigned").mean()),
         "assigned_ref": float((ref["class"] != "unassigned").mean()),
         "multiple_ours": float((ours["class"] == "multiple").mean()),

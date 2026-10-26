@@ -1,7 +1,7 @@
 # ADT / HTO modality: research-beta handoff (2026-10-26)
 
 Branch `claude/adt-modality-0637a6`, PR #29 (draft, not merged). Design and QC report: `docs/adt-modality.md`;
-format: `docs/format-v2.md` §13. Nothing has been written to R2 or D1.
+format: `docs/format-store.md` §13. Nothing has been written to R2 or D1.
 
 ## What exists
 

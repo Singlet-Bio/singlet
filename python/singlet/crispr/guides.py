@@ -39,7 +39,9 @@ class Geometry:
     """Where the protospacer is in R2: ``anchor`` (constant sequence right after it, sense) or a fixed ``offset``."""
 
     length: int
-    anchor: Optional[str] = None  # protospacer = R2[pos - length : pos] where R2[pos:] starts with anchor; several
+    anchor: Optional[str] = (
+        None  # protospacer = R2[pos - length : pos] where R2[pos:] starts with anchor; several
+    )
     # anchors separated by "|" (dual-guide vectors: each protospacer has its own scaffold variant)
     offset: Optional[int] = None  # protospacer = R2[offset : offset + length]
     reverse: bool = False  # R2 is antisense (reverse-complement it first)
@@ -77,14 +79,16 @@ def extract(r2: bytes, g: Geometry) -> Optional[bytes]:
         for a in g.anchor.split("|"):
             i = s.find(a.encode())
             if i >= g.length:
-                return s[i - g.length:i]
+                return s[i - g.length : i]
         return None
     o = g.offset or 0
-    w = s[o:o + g.length]
+    w = s[o : o + g.length]
     return w if len(w) == g.length else None
 
 
-def detect_geometry(r2_sample: Sequence[bytes], length: int = 20, guides: Optional[Sequence[str]] = None) -> Dict:
+def detect_geometry(
+    r2_sample: Sequence[bytes], length: int = 20, guides: Optional[Sequence[str]] = None
+) -> Dict:
     """Measure the geometry from reads: share of reads with each scaffold anchor (both strands), and, with a guide list,
     the share of extracted windows that are guides (exact) for every candidate geometry. Returns the best and the table."""
     n = max(1, len(r2_sample))
@@ -101,12 +105,15 @@ def detect_geometry(r2_sample: Sequence[bytes], length: int = 20, guides: Option
         if gset:
             for off in range(0, 60):
                 g = Geometry(length, offset=off, reverse=rev)
-                ws = [s[off:off + length] for s in seqs]
+                ws = [s[off : off + length] for s in seqs]
                 hit = sum(w in gset for w in ws) / n
                 cands.append((hit, hit, g))
     cands.sort(key=lambda x: (-x[0], -x[1]))
     best = cands[0]
-    table = [{"geometry": c[2].describe(), "guide_rate": round(c[0], 4), "window_rate": round(c[1], 4)} for c in cands[:8]]
+    table = [
+        {"geometry": c[2].describe(), "guide_rate": round(c[0], 4), "window_rate": round(c[1], 4)}
+        for c in cands[:8]
+    ]
     return {"geometry": best[2], "guide_rate": best[0], "window_rate": best[1], "candidates": table}
 
 
@@ -133,18 +140,47 @@ class GuideLibrary:
     def to_frame(self):
         import pandas as pd
 
-        return pd.DataFrame({"id": self.ids, "name": self.names, "sequence": self.sequences,
-                             "target_gene": self.target_gene, "target_gene_id": self.target_gene_id, "kind": self.kind})
+        return pd.DataFrame(
+            {
+                "id": self.ids,
+                "name": self.names,
+                "sequence": self.sequences,
+                "target_gene": self.target_gene,
+                "target_gene_id": self.target_gene_id,
+                "kind": self.kind,
+            }
+        )
 
 
-_NT_WORDS = ("non-targeting", "nontargeting", "non_targeting", "negative_control", "neg_ctrl", "nt_", "scramble", "ntc")
+_NT_WORDS = (
+    "non-targeting",
+    "nontargeting",
+    "non_targeting",
+    "negative_control",
+    "neg_ctrl",
+    "nt_",
+    "scramble",
+    "ntc",
+)
 
 
 def guide_kind(name: str, target: str) -> str:
     s = f"{name} {target}".lower()
     if "safe" in s and "target" in s:
         return "safe-targeting"
-    if any(w in s for w in _NT_WORDS) or target.strip().lower() in ("", "non-targeting", "nontargeting", "non_targeting", "nt", "ntc", "nan", "none", "control", "negative", "na"):
+    if any(w in s for w in _NT_WORDS) or target.strip().lower() in (
+        "",
+        "non-targeting",
+        "nontargeting",
+        "non_targeting",
+        "nt",
+        "ntc",
+        "nan",
+        "none",
+        "control",
+        "negative",
+        "na",
+    ):
         return "non-targeting"
     return "targeting"
 

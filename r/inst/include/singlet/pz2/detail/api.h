@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// pz2 internals: public entry points (encode_matrix, Matrix, decode, canonical_digest).  Container layout: docs/format-v2.md 4.
+// pz2 internals: public entry points (encode_matrix, Matrix, decode, canonical_digest).  Container layout: docs/format-store.md 4.
 #pragma once
 
 namespace singlet {
@@ -521,10 +521,16 @@ struct Built {
     uint8_t kind = 0;
 };
 
+/// The per-chunk non-zero budget of EncodeOptions (UINT64_MAX = none).
+inline uint64_t chunk_budget(const EncodeOptions& opt) {
+    if (opt.chunk_nnz_max == UINT32_MAX) return UINT64_MAX;
+    return opt.chunk_nnz_max ? opt.chunk_nnz_max : kDefaultChunkNnzMax;
+}
+
 inline Built build_codec2(const CSC& in, const Analysis& a, uint32_t chunk_cols, const EncodeOptions& opt) {
     Built b;
     b.codec = CodecId::Generic;
-    b.first_col = r1::plan_chunks(a.ptr, in.n, chunk_cols, r1::kMaxChunkN / 2);
+    b.first_col = r1::plan_chunks(a.ptr, in.n, chunk_cols, r1::kMaxChunkN / 2, chunk_budget(opt));
     const size_t nch = b.first_col.size() - 1;
     b.blobs.resize(nch);
     b.chunk_nnz.resize(nch);
@@ -539,7 +545,7 @@ inline Built build_codec1(const CSC& in, const Analysis& a, uint32_t chunk_cols,
     r1::Codec1Params p;
     p.lanes = opt.lanes; p.pb = opt.prob_bits; p.pbv = opt.value_prob_bits; p.kind = opt.ctx_kind; p.cpo = opt.classes_per_octave;
     p.zlevel = opt.zstd_level; p.threads = resolve_threads(opt.threads, 8);
-    r1::Codec1Out o = r1::encode_codec1(in, a.ptr, a.val, chunk_cols, p);
+    r1::Codec1Out o = r1::encode_codec1(in, a.ptr, a.val, chunk_cols, p, chunk_budget(opt));
     Built b;
     b.codec = CodecId::Rans;
     b.tables = std::move(o.tables); b.rows = std::move(o.rows); b.blobs = std::move(o.blobs);

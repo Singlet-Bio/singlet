@@ -304,8 +304,8 @@ def pair_by_barcodes(gse, cands, r1s, r2s, a, n_reads=200_000):
     for 3' v3 feature barcodes) on each candidate's called barcodes (``cell_calls.tsv`` only, one small range each)."""
     from singlet.adt import count as C
     from singlet.adt import seq as S
-    from singlet.v2 import cells as cells_mod
-    from singlet.v2.legacy import LegacyBundle
+    from singlet.store import cells as cells_mod
+    from singlet.store.legacy import LegacyBundle
 
     cbs = []
     for i, (x, _) in enumerate(C.iter_pairs(r1s, r2s)):

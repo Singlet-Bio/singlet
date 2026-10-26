@@ -22,8 +22,9 @@ def cell_table(contigs, max_per_chain: int = 2):
     """One row per barcode with productive kept contigs: per chain the top junctions and genes, pairing flags."""
     import pandas as pd
 
-    d = contigs[contigs["kept"] & contigs["productive"]].sort_values(["barcode", "chain", "umis"],
-                                                                      ascending=[True, True, False])
+    d = contigs[contigs["kept"] & contigs["productive"]].sort_values(
+        ["barcode", "chain", "umis"], ascending=[True, True, False]
+    )
     d = d.assign(rank=d.groupby(["barcode", "chain"]).cumcount())
     excess = d[d["rank"] >= max_per_chain].groupby("barcode").size()
     d = d[d["rank"] < max_per_chain]
@@ -44,9 +45,16 @@ def cell_table(contigs, max_per_chain: int = 2):
         if f"{ch}_cdr3" not in out:
             out[f"{ch}_cdr3"] = np.nan
     has = {ch: out[f"{ch}_cdr3"].notna() for ch in TCR + BCR}
-    out["receptor"] = np.where(has["IGH"] | has["IGK"] | has["IGL"],
-                               np.where(has["TRA"] | has["TRB"], "mixed", "BCR"), "TCR")
-    out["paired"] = ((has["TRA"] & has["TRB"]) | (has["TRG"] & has["TRD"]) | (has["IGH"] & (has["IGK"] | has["IGL"])))
+    out["receptor"] = np.where(
+        has["IGH"] | has["IGK"] | has["IGL"],
+        np.where(has["TRA"] | has["TRB"], "mixed", "BCR"),
+        "TCR",
+    )
+    out["paired"] = (
+        (has["TRA"] & has["TRB"])
+        | (has["TRG"] & has["TRD"])
+        | (has["IGH"] & (has["IGK"] | has["IGL"]))
+    )
     out["excess_chains"] = out["barcode"].map(excess).fillna(0).astype(int)
     return out
 
@@ -94,7 +102,11 @@ def assign_clonotypes(cells):
         if isinstance(h, str):
             buckets.setdefault((r.get("IGH_v"), r.get("IGH_j"), len(h)), []).append(i)
         else:
-            lk = [r.get(f"{c}_cdr3_nt") for c in ("IGK", "IGL") if isinstance(r.get(f"{c}_cdr3_nt"), str)]
+            lk = [
+                r.get(f"{c}_cdr3_nt")
+                for c in ("IGK", "IGL")
+                if isinstance(r.get(f"{c}_cdr3_nt"), str)
+            ]
             buckets.setdefault(("light",) + tuple(sorted(lk)), []).append(i)
 
     def light(r):
@@ -112,7 +124,7 @@ def assign_clonotypes(cells):
         seqs = np.array([np.frombuffer(rows[i]["IGH_cdr3_nt"].encode(), np.uint8) for i in members])
         lights = [light(rows[i]) for i in members]
         for x in range(len(members)):
-            dist = (seqs[x + 1:] != seqs[x]).sum(axis=1)
+            dist = (seqs[x + 1 :] != seqs[x]).sum(axis=1)
             for y in np.flatnonzero(dist <= 0.15 * L) + x + 1:
                 lx, ly = lights[x], lights[y]
                 if lx is None or ly is None or lx == ly:

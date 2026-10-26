@@ -8,7 +8,7 @@ For each GEX sample with at least one processed library:
 * libraries whose QC verdict is ``pass`` or ``warn`` are merged: the panel is the union of their rows; a feature present
   in two libraries (e.g. hashtags amplified in both an ADT and an HTO library) is taken from the library where it has
   the most UMIs, and the choice is recorded;
-* ``v2/x/<GSM>/adt.<d16>.s2`` (sidecar object with ``adt_counts.1pz``, ``hto_counts.1pz``, ``adt_panel.json``) is
+* ``store/x/<GSM>/adt.<d16>.s2`` (sidecar object with ``adt_counts.1pz``, ``hto_counts.1pz``, ``adt_panel.json``) is
   written under ``<out>/objects/`` together with its manifest fragment ``samples[i].extra_objects.adt``;
 * failing libraries are listed in ``excluded.tsv`` with every failed rule.
 
@@ -107,7 +107,7 @@ def hto_sidecar(M, pan, hrows, gx, out):
     pq.write_table(t, bio)
     data = bio.getvalue()
     d16 = hashlib.sha256(data).digest()[:16].hex()
-    key = f"v2/cf/{gx.gsm}/hto.{d16}.parquet"
+    key = f"store/cf/{gx.gsm}/hto.{d16}.parquet"
     path = os.path.join(out, "objects", key)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "wb") as f:
@@ -153,12 +153,12 @@ def main():
                                    pan["_ambient"].astype(int).values, prov)
             buf = ST.build_sidecar(gex_gsm, mem)
             d16 = hashlib.sha256(buf).digest()[:16].hex()
-            key = f"v2/x/{gex_gsm}/adt.{d16}.s2"
+            key = f"store/x/{gex_gsm}/adt.{d16}.s1"
             path = os.path.join(a.out, "objects", key)
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "wb") as f:
                 f.write(buf)
-            from singlet.v2.container import S2Reader
+            from singlet.store.container import S2Reader
 
             r = S2Reader(buf)
             frag = {"key": key, "bytes": len(buf), "sha256": hashlib.sha256(buf).hexdigest(),
@@ -167,7 +167,7 @@ def main():
             with open(path + ".manifest.json", "w") as f:
                 json.dump({"gse": gse, "gsm": gex_gsm, "modalities": {"adt": frag}}, f, indent=1)
             plan.append({"gse": gse, "gsm": gex_gsm, "key": key, "path": path, "bytes": len(buf), "sha256": frag["sha256"]})
-            # per-cell hashtag calls on the merged matrix -> feature sidecar v2/cf/<GSM>/hto.<d16>.parquet
+            # per-cell hashtag calls on the merged matrix -> feature sidecar store/cf/<GSM>/hto.<d16>.parquet
             hrows = np.flatnonzero(pan.kind.values == "hashtag")
             called_cols = np.flatnonzero(np.asarray(gx.called, dtype=bool))
             hshare = float(M[hrows][:, called_cols].sum() / max(M[:, called_cols].sum(), 1)) if len(hrows) else 0.0

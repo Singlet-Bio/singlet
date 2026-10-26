@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""CRISPR guides as v2 members of the GEX sample (``docs/format-v2.md`` section 14), laid out like ``adt_counts.1pz``.
+"""CRISPR guides as store members of the GEX sample (``docs/format-store.md`` section 14), laid out like ``adt_counts.1pz``.
 
 * ``crispr_counts.1pz`` (kind 1, pz2): guides x the sample's columns, u32 UMIs; rows ``Inline`` (guide ids, the order
   of ``crispr_guides.json``), columns ``Cells`` (column ``j`` is ``col`` ``j`` of the cells table, called or not: the
@@ -22,28 +22,76 @@ import numpy as np
 from singlet.adt.store import _csc_member
 
 SCHEMA = "singlet-crispr-guides/1"
-METHOD_VERSION = ("singlet-crispr/1 (protospacer by anchor or offset; cellranger-fb-logic counting; "
-                  "ambient-calibrated Poisson assignment alpha 1e-3/G, >= 3 UMIs, >= 5% of the cell)")
+METHOD_VERSION = (
+    "singlet-crispr/1 (protospacer by anchor or offset; cellranger-fb-logic counting; "
+    "ambient-calibrated Poisson assignment alpha 1e-3/G, >= 3 UMIs, >= 5% of the cell)"
+)
 MEMBERS = ("crispr_counts.1pz", "crispr_guides.json")
 
 
-def build_members(M, library, gex_barcodes: Sequence[str], ambient: np.ndarray, geometry: str, counting: Dict,
-                  qc: Dict) -> Dict[str, tuple]:
+def build_members(
+    M,
+    library,
+    gex_barcodes: Sequence[str],
+    ambient: np.ndarray,
+    geometry: str,
+    counting: Dict,
+    qc: Dict,
+) -> Dict[str, tuple]:
     ids = list(library.ids)
     if len(set(ids)) != len(ids):
         raise ValueError("guide ids must be unique")
     body, dg = _csc_member(M, ids, list(gex_barcodes))
-    guides = [{"row": i, "id": ids[i], "name": library.names[i], "sequence": library.sequences[i],
-               "target_gene": library.target_gene[i], "target_gene_id": library.target_gene_id[i],
-               "kind": library.kind[i], "ambient_umis": int(ambient[i])} for i in range(len(ids))]
-    lib = {k: qc[k] for k in ("verdict", "failed", "warned", "frac_valid_barcode", "frac_guide", "frac_cells_assigned",
-                              "multiple_rate", "cell_empty_ratio", "guides_detected") if k in qc}
-    doc = {"schema": SCHEMA, "method": METHOD_VERSION, "geometry": geometry, "counting": counting,
-           "source": library.source, "guides": guides, "library": lib}
+    guides = [
+        {
+            "row": i,
+            "id": ids[i],
+            "name": library.names[i],
+            "sequence": library.sequences[i],
+            "target_gene": library.target_gene[i],
+            "target_gene_id": library.target_gene_id[i],
+            "kind": library.kind[i],
+            "ambient_umis": int(ambient[i]),
+        }
+        for i in range(len(ids))
+    ]
+    lib = {
+        k: qc[k]
+        for k in (
+            "verdict",
+            "failed",
+            "warned",
+            "frac_valid_barcode",
+            "frac_guide",
+            "frac_cells_assigned",
+            "multiple_rate",
+            "cell_empty_ratio",
+            "guides_detected",
+        )
+        if k in qc
+    }
+    doc = {
+        "schema": SCHEMA,
+        "method": METHOD_VERSION,
+        "geometry": geometry,
+        "counting": counting,
+        "source": library.source,
+        "guides": guides,
+        "library": lib,
+    }
     return {
-        "crispr_counts.1pz": ("pz2", body, dg, {"modality": "crispr", "panel": "crispr_guides.json"}),
-        "crispr_guides.json": ("stored", json.dumps(doc, sort_keys=True, separators=(",", ":"), default=float).encode(),
-                               None, {"content": "application/json"}),
+        "crispr_counts.1pz": (
+            "pz2",
+            body,
+            dg,
+            {"modality": "crispr", "panel": "crispr_guides.json"},
+        ),
+        "crispr_guides.json": (
+            "stored",
+            json.dumps(doc, sort_keys=True, separators=(",", ":"), default=float).encode(),
+            None,
+            {"content": "application/json"},
+        ),
     }
 
 
@@ -55,7 +103,7 @@ def cell_labels(labels, cols: np.ndarray):
 
 
 def build_sidecar(gsm: str, members: Dict[str, tuple]) -> bytes:
-    from singlet.v2.container import S2Writer
+    from singlet.store.container import S2Writer
 
     w = S2Writer(gsm)
     for name in MEMBERS:
@@ -70,8 +118,8 @@ def build_sidecar(gsm: str, members: Dict[str, tuple]) -> bytes:
 
 
 def read_members(buf: bytes):
-    from singlet.v2.codec import decode_any
-    from singlet.v2.container import S2Reader
+    from singlet.store.codec import decode_any
+    from singlet.store.container import S2Reader
 
     r = S2Reader(buf)
     out = {}

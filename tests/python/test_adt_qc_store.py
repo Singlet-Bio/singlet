@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""singlet.adt QC, normalisation, hashtag calls and v2 members on a synthetic sample."""
+"""singlet.adt QC, normalisation, hashtag calls and store members on a synthetic sample."""
 
 import json
 
@@ -208,7 +208,7 @@ def test_discover_flags_reused_and_cross_species_barcodes():
 
 
 def test_modalities_vocabulary_has_adt_and_hto():
-    from singlet.v2 import client
+    from singlet.store import client
 
     assert (
         client.MODALITIES["adt"].members == (ST.MEMBERS[0],)

@@ -2,10 +2,10 @@
 """singlet.bundle — Per-GSE .singlet bundle format (ZIP64), the legacy distribution unit.
 
 A .singlet file is a ZIP64 archive containing ALL processed GSMs for one GEO
-Series (GSE). Public distribution has moved to the v2 format (one immutable object
-per sample, docs/format-v2.md); :class:`SingletBundle` stays the reader for local
+Series (GSE). Public distribution has moved to the per-sample format (one immutable object
+per sample, docs/format-store.md); :class:`SingletBundle` stays the reader for local
 legacy files and the packager for ``pack_gse``, and ``SingletBundle.open`` hands a
-v2 manifest, ``.s2`` object or accession to :class:`singlet.v2.bundle.V2Bundle`,
+store manifest, ``.s1`` object or accession to :class:`singlet.store.bundle.StoreBundle`,
 which has the same interface.
 
 Bundle layout::
@@ -1381,15 +1381,15 @@ class SingletBundle:
         Returns
         -------
         SingletBundle
-            For a v2 manifest (``.json``), a ``.s2`` sample object or an accession, a
-            :class:`singlet.v2.bundle.V2Bundle` (same interface).
+            For a store manifest (``.json``), a ``.s1`` sample object or an accession, a
+            :class:`singlet.store.bundle.StoreBundle` (same interface).
         """
         if cls is SingletBundle and restricted is None:
             p = Path(str(path)).expanduser()
-            if p.exists() and p.suffix.lower() in (".json", ".s2"):
-                from singlet.v2.bundle import V2Bundle
+            if p.exists() and p.suffix.lower() in (".json", ".s1", ".s2"):
+                from singlet.store.bundle import StoreBundle
 
-                return V2Bundle.open(p)
+                return StoreBundle.open(p)
             if not p.exists() and re.match(r"^GSE[0-9]{1,9}$", str(path).strip(), re.I):
                 from singlet._loader import open_bundle
 

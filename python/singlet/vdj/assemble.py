@@ -48,8 +48,24 @@ MAX_JUNCTION = 150
 REGION = {"V": 0, "D": 1, "J": 2, "C": 3}
 _RC = bytes.maketrans(b"ACGTN", b"TGCAN")
 
-CONTIG_COLUMNS = ["barcode", "contig_id", "chain", "v_gene", "d_gene", "j_gene", "c_gene", "cdr3", "cdr3_nt", "productive",
-                  "full_length", "umis", "junction_umis", "reads", "high_confidence", "kept"]
+CONTIG_COLUMNS = [
+    "barcode",
+    "contig_id",
+    "chain",
+    "v_gene",
+    "d_gene",
+    "j_gene",
+    "c_gene",
+    "cdr3",
+    "cdr3_nt",
+    "productive",
+    "full_length",
+    "umis",
+    "junction_umis",
+    "reads",
+    "high_confidence",
+    "kept",
+]
 
 
 @dataclass
@@ -66,10 +82,16 @@ class Params:
     min_barcode_umis: int = 2  # barcodes with fewer V(D)J UMIs are not assembled
     min_umi_reads: int = 2  # mates of a molecule, at least
     min_contig_reads: int = 3  # mates of a kept contig
-    cross_frac: float = 0.10  # a junction with < 10% of its UMIs in its strongest barcode is ambient there ...
+    cross_frac: float = (
+        0.10  # a junction with < 10% of its UMIs in its strongest barcode is ambient there ...
+    )
     cross_min_umis: int = 10  # ... when that barcode has >= 10 UMIs of it
-    contig_read_frac: float = 0.05  # mates per UMI of a kept contig, against the library's read-weighted median
-    umi_read_frac: float = 0.02  # and at least this share of the library's read-weighted median mates per molecule
+    contig_read_frac: float = (
+        0.05  # mates per UMI of a kept contig, against the library's read-weighted median
+    )
+    umi_read_frac: float = (
+        0.02  # and at least this share of the library's read-weighted median mates per molecule
+    )
     threads: int = 8
 
 
@@ -84,9 +106,13 @@ class Reference:
         self.km, self.sg, self.ps = K.build_index([s.seq for s in segs], K_INDEX)
         self.chains = list(R.CHAINS)
         self.chain_id = np.array([self.chains.index(c) for c in self.chain], dtype=np.int8)
-        self.d_segs = {c: [(s.name, s.seq) for s in segs if s.region == "D" and s.chain == c] for c in R.CHAINS}
-        self.j_by_chain = {c: [i for i, s in enumerate(segs) if s.region == "J" and s.chain == c and s.anchor >= 0]
-                           for c in R.CHAINS}
+        self.d_segs = {
+            c: [(s.name, s.seq) for s in segs if s.region == "D" and s.chain == c] for c in R.CHAINS
+        }
+        self.j_by_chain = {
+            c: [i for i, s in enumerate(segs) if s.region == "J" and s.chain == c and s.anchor >= 0]
+            for c in R.CHAINS
+        }
         # indistinguishable V genes (identical up to Cys104): one class, named by its first member, voting as one
         eq = R.equivalence(segs)
         first = {}
@@ -102,8 +128,12 @@ class Reference:
 
 
 # ----------------------------------------------------------------------------------------------------------- reads
-def iter_chunks(r1_paths: Sequence[str], r2_paths: Sequence[str], chunk: int = CHUNK,
-                max_reads: Optional[int] = None) -> Iterable[Tuple[List[bytes], List[bytes]]]:
+def iter_chunks(
+    r1_paths: Sequence[str],
+    r2_paths: Sequence[str],
+    chunk: int = CHUNK,
+    max_reads: Optional[int] = None,
+) -> Iterable[Tuple[List[bytes], List[bytes]]]:
     import dnaio
 
     n = 0
@@ -139,27 +169,42 @@ def _rc(s: bytes) -> bytes:
 
 def _classify(ref: Reference, seqs: List[bytes], min_hits: int):
     codes, off = _codes(seqs)
-    out = K.classify(codes, off, K_INDEX, ref.km, ref.sg, ref.ps, ref.region, min_hits, ref.seg_class)
+    out = K.classify(
+        codes, off, K_INDEX, ref.km, ref.sg, ref.ps, ref.region, min_hits, ref.seg_class
+    )
     return codes, off, out
 
 
-def probe_orientation(ref: Reference, r1: List[bytes], r2: List[bytes], r1_start: int, min_hits: int = 2) -> Dict:
+def probe_orientation(
+    ref: Reference, r1: List[bytes], r2: List[bytes], r1_start: int, min_hits: int = 2
+) -> Dict:
     """Hit rates of R2, reverse-complemented R2 and the R1 insert (both strands) on a sample of pairs."""
     rates = {}
-    for name, seqs in (("r2", r2), ("r2_rc", [_rc(s) for s in r2]), ("r1", [s[r1_start:] for s in r1]),
-                       ("r1_rc", [_rc(s[r1_start:]) for s in r1])):
+    for name, seqs in (
+        ("r2", r2),
+        ("r2_rc", [_rc(s) for s in r2]),
+        ("r1", [s[r1_start:] for s in r1]),
+        ("r1_rc", [_rc(s[r1_start:]) for s in r1]),
+    ):
         _, _, o = _classify(ref, seqs, min_hits)
-        rates[name] = float(((o[:, 1] > 0) | (o[:, 4] > 0) | (o[:, 7] > 0)).mean()) if len(o) else 0.0
+        rates[name] = (
+            float(((o[:, 1] > 0) | (o[:, 4] > 0) | (o[:, 7] > 0)).mean()) if len(o) else 0.0
+        )
     r2_rc = rates["r2_rc"] >= rates["r2"]
     r1_use = max(rates["r1"], rates["r1_rc"]) >= 0.05
-    return {"rates": rates, "r2_rc": bool(r2_rc), "r1_use": bool(r1_use), "r1_rc": bool(rates["r1_rc"] > rates["r1"])}
+    return {
+        "rates": rates,
+        "r2_rc": bool(r2_rc),
+        "r1_use": bool(r1_use),
+        "r1_rc": bool(rates["r1_rc"] > rates["r1"]),
+    }
 
 
 def _r1_start(r1: List[bytes], cb_umi: int) -> int:
     """Insert start in R1: after barcode + UMI, plus the template-switch oligo when most reads carry it there."""
     if not r1 or len(r1[0]) <= cb_umi + len(TSO):
         return cb_umi
-    hit = sum(1 for s in r1[:20000] if s[cb_umi:cb_umi + len(TSO)] == TSO)
+    hit = sum(1 for s in r1[:20000] if s[cb_umi : cb_umi + len(TSO)] == TSO)
     return cb_umi + len(TSO) if hit > 0.3 * min(20000, len(r1)) else cb_umi
 
 
@@ -171,9 +216,19 @@ class LibraryResult:
     timings: Dict
 
 
-def run_library(r1_paths: Sequence[str], r2_paths: Sequence[str], *, ref: Reference, cb_len: int, umi_len: int,
-                whitelist_codes: np.ndarray, params: Params = Params(), max_reads: Optional[int] = None,
-                chunks: Optional[Iterable] = None, log=print) -> LibraryResult:
+def run_library(
+    r1_paths: Sequence[str],
+    r2_paths: Sequence[str],
+    *,
+    ref: Reference,
+    cb_len: int,
+    umi_len: int,
+    whitelist_codes: np.ndarray,
+    params: Params = Params(),
+    max_reads: Optional[int] = None,
+    chunks: Optional[Iterable] = None,
+    log=print,
+) -> LibraryResult:
     import pandas as pd
 
     from singlet.adt import count as AC
@@ -182,7 +237,9 @@ def run_library(r1_paths: Sequence[str], r2_paths: Sequence[str], *, ref: Refere
     t0 = time.time()
     tm: Dict[str, float] = {}
     st: Dict[str, int] = {"read_pairs": 0, "mates_with_segment": 0, "mates_informative": 0}
-    it = iter(chunks) if chunks is not None else iter_chunks(r1_paths, r2_paths, max_reads=max_reads)
+    it = (
+        iter(chunks) if chunks is not None else iter_chunks(r1_paths, r2_paths, max_reads=max_reads)
+    )
     cbu = cb_len + umi_len
     # stored per kept mate
     cbs: List[np.ndarray] = []
@@ -216,9 +273,23 @@ def run_library(r1_paths: Sequence[str], r2_paths: Sequence[str], *, ref: Refere
         chain = np.where(anyhit, ref.chain_id[np.maximum(seg_of, 0)], -1).astype(np.int8)
         L = (off[1:] - off[:-1]).astype(np.int32)
         cys = np.where(o[:, 0] >= 0, o[:, 2] + ref.anchor[np.maximum(o[:, 0], 0)], -1)
-        cys = np.where((o[:, 0] >= 0) & (ref.anchor[np.maximum(o[:, 0], 0)] >= 0) & (cys >= 0) & (cys + K_ASM <= L), cys, -1)
+        cys = np.where(
+            (o[:, 0] >= 0)
+            & (ref.anchor[np.maximum(o[:, 0], 0)] >= 0)
+            & (cys >= 0)
+            & (cys + K_ASM <= L),
+            cys,
+            -1,
+        )
         fw = np.where(o[:, 3] >= 0, o[:, 5] + ref.anchor[np.maximum(o[:, 3], 0)], -1)
-        fw = np.where((o[:, 3] >= 0) & (ref.anchor[np.maximum(o[:, 3], 0)] >= 0) & (fw + 3 - K_ASM >= 0) & (fw + 3 <= L), fw, -1)
+        fw = np.where(
+            (o[:, 3] >= 0)
+            & (ref.anchor[np.maximum(o[:, 3], 0)] >= 0)
+            & (fw + 3 - K_ASM >= 0)
+            & (fw + 3 <= L),
+            fw,
+            -1,
+        )
         # a J the reference lacks: Phe/Trp118 from the read, upstream of the C region
         todo = np.flatnonzero((o[:, 3] < 0) & (o[:, 6] >= 0) & (o[:, 8] >= 30) & (o[:, 8] <= L))
         if len(todo):
@@ -226,8 +297,14 @@ def run_library(r1_paths: Sequence[str], r2_paths: Sequence[str], *, ref: Refere
             ok2 = (f2 >= 0) & (f2 + 3 - K_ASM >= 0)
             fw[todo[ok2]] = f2[ok2]
         # informative: reaches the junction (V 3' end in the read, or a J hit)
-        v_end = np.where(o[:, 0] >= 0, o[:, 2] + np.array([len(ref.segs[i].seq) for i in range(len(ref.segs))],
-                                                                  dtype=np.int32)[np.maximum(o[:, 0], 0)], -10 ** 6)
+        v_end = np.where(
+            o[:, 0] >= 0,
+            o[:, 2]
+            + np.array([len(ref.segs[i].seq) for i in range(len(ref.segs))], dtype=np.int32)[
+                np.maximum(o[:, 0], 0)
+            ],
+            -(10**6),
+        )
         informative = anyhit & ((o[:, 3] >= 0) | (fw >= 0) | ((o[:, 0] >= 0) & (v_end - 30 < L)))
         st["mates_informative"] += int(informative.sum())
         keep = np.flatnonzero(anyhit)
@@ -241,16 +318,22 @@ def run_library(r1_paths: Sequence[str], r2_paths: Sequence[str], *, ref: Refere
         # gene votes by equivalence class (the anchors above used each read's own segment)
         for col in (0, 3, 6):
             mm[:, col] = np.where(mm[:, col] >= 0, ref.seg_class[np.maximum(mm[:, col], 0)], -1)
-        mm[:, 12] = o[keep, 9]  # tie flags: reads whose V / J / C ties between genes do not vote for a gene
+        mm[:, 12] = o[
+            keep, 9
+        ]  # tie flags: reads whose V / J / C ties between genes do not vote for a gene
         mm[:, 9] = chain[keep]
         mm[:, 10] = cys[keep]
-        mm[:, 11] = np.where(informative[keep], fw[keep], -2)  # -2 marks a non-informative mate (no sequence kept)
+        mm[:, 11] = np.where(
+            informative[keep], fw[keep], -2
+        )  # -2 marks a non-informative mate (no sequence kept)
         meta.append(mm)
         inf_idx = keep[informative[keep]]
         if len(inf_idx):
             starts = off[inf_idx]
-            lens = (off[inf_idx + 1] - starts)
-            idx = np.repeat(starts - np.concatenate([[0], np.cumsum(lens)[:-1]]), lens) + np.arange(lens.sum())
+            lens = off[inf_idx + 1] - starts
+            idx = np.repeat(starts - np.concatenate([[0], np.cumsum(lens)[:-1]]), lens) + np.arange(
+                lens.sum()
+            )
             seq_parts.append(codes[idx])
             seq_lens.append(lens)
     tm["read_and_classify"] = time.time() - t0
@@ -332,7 +415,9 @@ def run_library(r1_paths: Sequence[str], r2_paths: Sequence[str], *, ref: Refere
 
     # barcodes worth assembling
     cell_of = bci  # dense barcode index per usable mate
-    umis_per_bc = np.bincount(np.unique(np.stack([cell_of, mol], 1), axis=0)[:, 0], minlength=len(ubc))
+    umis_per_bc = np.bincount(
+        np.unique(np.stack([cell_of, mol], 1), axis=0)[:, 0], minlength=len(ubc)
+    )
     asm_bc = umis_per_bc >= params.min_barcode_umis
     st["barcodes_assembled"] = int(asm_bc.sum())
 
@@ -351,12 +436,24 @@ def run_library(r1_paths: Sequence[str], r2_paths: Sequence[str], *, ref: Refere
     ends = np.concatenate([bounds, [len(gi)]])
 
     def work(k):
-        rows = gi[starts[k]:ends[k]]
+        rows = gi[starts[k] : ends[k]]
         mols = mol[rows]
         um_local, um_inv = np.unique(mols, return_inverse=True)
-        res = K.assemble_group(seqc, soff, s_row[rows], um_inv.ravel().astype(np.int32), m_sel[rows, 10],
-                               m_sel[rows, 11], K_ASM, params.min_seed_umis, params.seed_frac, params.min_branch_umis,
-                               params.branch_frac, MAX_PATHS, MAX_JUNCTION)
+        res = K.assemble_group(
+            seqc,
+            soff,
+            s_row[rows],
+            um_inv.ravel().astype(np.int32),
+            m_sel[rows, 10],
+            m_sel[rows, 11],
+            K_ASM,
+            params.min_seed_umis,
+            params.seed_frac,
+            params.min_branch_umis,
+            params.branch_frac,
+            MAX_PATHS,
+            MAX_JUNCTION,
+        )
         return k, rows, res
 
     groups = []
@@ -438,7 +535,7 @@ def _junction_j(ref: "Reference", chain: str, junction: str, voted: int) -> int:
     best, cands = -1, []
     for i in ref.j_by_chain.get(chain, ()):
         s = ref.segs[i]
-        g = s.seq[:s.anchor + 3]
+        g = s.seq[: s.anchor + 3]
         mm = n = 0
         for x, y in zip(reversed(junction), reversed(g)):
             if x != y:
@@ -456,7 +553,7 @@ def _junction_j(ref: "Reference", chain: str, junction: str, voted: int) -> int:
         # the read vote stands unless its J matches the junction's end clearly worse (> 2 nt): BCR junctions carry
         # somatic mutations and D-derived bases where the read votes past F/W118 are the better evidence
         s = ref.segs[voted]
-        g = s.seq[:s.anchor + 3]
+        g = s.seq[: s.anchor + 3]
         mm = n = 0
         for x, y in zip(reversed(junction), reversed(g)):
             if x != y:
@@ -477,7 +574,7 @@ def _d_gene(ref: Reference, chain: str, junction: str) -> str:
         for ln in range(min(L, len(junction)), 5, -1):
             if ln <= best:
                 break
-            if any(s[i:i + ln] in junction for i in range(L - ln + 1)):
+            if any(s[i : i + ln] in junction for i in range(L - ln + 1)):
                 best, name = ln, n
                 break
     return name
@@ -527,9 +624,9 @@ def _annotate(ref: Reference, groups, sel, mm, cell_of, mol, ubc, cb_len, params
                 elif P == 1 and uv[i] < 0:
                     extra[0] += 1
         for p in range(P):
-            junc = "".join("ACGT"[b] for b in paths[p, :plen[p]])
+            junc = "".join("ACGT"[b] for b in paths[p, : plen[p]])
             v, j, c, ju, nreads = cinfo[p]
-            junc_ = "".join("ACGT"[b] for b in paths[p, :plen[p]])
+            junc_ = "".join("ACGT"[b] for b in paths[p, : plen[p]])
             j = _junction_j(ref, chname, junc_, j)
             if chname == "TRB" and j >= 0:
                 # V-D2-J2 joining deletes TRBC1 (it lies between the J1 and D2 clusters), so a TRBJ2 rearrangement
@@ -539,17 +636,28 @@ def _annotate(ref: Reference, groups, sel, mm, cell_of, mol, ubc, cb_len, params
                 c = int(np.flatnonzero(ref.names == cn)[0]) if (ref.names == cn).any() else c
             aa = R.translate(junc)
             inframe = len(junc) % 3 == 0
-            prod = (inframe and "*" not in aa and aa[:1] == "C" and aa[-1:] in ("F", "W"))
+            prod = inframe and "*" not in aa and aa[:1] == "C" and aa[-1:] in ("F", "W")
             if prod and j >= 0:
                 js = ref.segs[j]
                 # J frame continues the junction frame: the F/W codon of the junction is the J anchor codon
-                prod = js.anchor >= 0 and "*" not in R.translate(js.seq[js.anchor:], 0)[:4]
-            rows.append({"bcix": bcix, "chain": chname, "v_gene": ref.names[v] if v >= 0 else "",
-                         "d_gene": _d_gene(ref, chname, junc) if chname in ("TRB", "TRD", "IGH") else "",
-                         "j_gene": ref.names[j] if j >= 0 else "", "c_gene": ref.names[c] if c >= 0 else "",
-                         "cdr3": aa, "cdr3_nt": junc, "productive": bool(prod),
-                         "full_length": bool(v >= 0 and j >= 0), "junction_umis": ju,
-                         "umis": int(ju + extra[p]), "reads": nreads})
+                prod = js.anchor >= 0 and "*" not in R.translate(js.seq[js.anchor :], 0)[:4]
+            rows.append(
+                {
+                    "bcix": bcix,
+                    "chain": chname,
+                    "v_gene": ref.names[v] if v >= 0 else "",
+                    "d_gene": _d_gene(ref, chname, junc) if chname in ("TRB", "TRD", "IGH") else "",
+                    "j_gene": ref.names[j] if j >= 0 else "",
+                    "c_gene": ref.names[c] if c >= 0 else "",
+                    "cdr3": aa,
+                    "cdr3_nt": junc,
+                    "productive": bool(prod),
+                    "full_length": bool(v >= 0 and j >= 0),
+                    "junction_umis": ju,
+                    "umis": int(ju + extra[p]),
+                    "reads": nreads,
+                }
+            )
     if not rows:
         return pd.DataFrame(columns=CONTIG_COLUMNS)
     df = pd.DataFrame(rows)
@@ -560,12 +668,18 @@ def _annotate(ref: Reference, groups, sel, mm, cell_of, mol, ubc, cb_len, params
     srt = np.sort(rpu.to_numpy())
     w = np.cumsum(srt * df["umis"].to_numpy()[np.argsort(rpu.to_numpy())])
     med = float(srt[np.searchsorted(w, w[-1] / 2)]) if len(srt) and w[-1] > 0 else 0.0
-    df["high_confidence"] = ((df["junction_umis"] >= params.min_junction_umis) & (df["umis"] >= params.min_umis)
-                             & (df["reads"] >= params.min_contig_reads) & (rpu >= params.contig_read_frac * med))
+    df["high_confidence"] = (
+        (df["junction_umis"] >= params.min_junction_umis)
+        & (df["umis"] >= params.min_umis)
+        & (df["reads"] >= params.min_contig_reads)
+        & (rpu >= params.contig_read_frac * med)
+    )
     df["kept"] = df["high_confidence"] & (df["umis"] >= params.min_frac * top)
     # error variants: a junction within 2 substitutions of a stronger one of the same cell and chain (a second real
     # chain differs in V, J and N region, i.e. at many positions)
-    df = df.sort_values(["bcix", "chain", "umis", "reads"], ascending=[True, True, False, False]).reset_index(drop=True)
+    df = df.sort_values(
+        ["bcix", "chain", "umis", "reads"], ascending=[True, True, False, False]
+    ).reset_index(drop=True)
     var = np.zeros(len(df), bool)
     for _, idx in df.groupby(["bcix", "chain"]).indices.items():
         if len(idx) < 2:
@@ -573,8 +687,11 @@ def _annotate(ref: Reference, groups, sel, mm, cell_of, mol, ubc, cb_len, params
         seqs = df["cdr3_nt"].to_numpy()[idx]
         for a_ in range(1, len(idx)):
             for b_ in range(a_):
-                if not var[idx[b_]] and len(seqs[a_]) == len(seqs[b_]) and \
-                        sum(x != y for x, y in zip(seqs[a_], seqs[b_])) <= 2:
+                if (
+                    not var[idx[b_]]
+                    and len(seqs[a_]) == len(seqs[b_])
+                    and sum(x != y for x, y in zip(seqs[a_], seqs[b_])) <= 2
+                ):
                     var[idx[a_]] = True
                     break
     df.loc[var, "kept"] = False
@@ -585,6 +702,8 @@ def _annotate(ref: Reference, groups, sel, mm, cell_of, mol, ubc, cb_len, params
     amb = (df["umis"] < params.cross_frac * jmax) & (jmax >= params.cross_min_umis)
     df["ambient"] = amb
     df.loc[amb, "kept"] = False
-    df = df.sort_values(["bcix", "chain", "umis"], ascending=[True, True, False]).reset_index(drop=True)
+    df = df.sort_values(["bcix", "chain", "umis"], ascending=[True, True, False]).reset_index(
+        drop=True
+    )
     df["contig_id"] = df["barcode"] + "_contig_" + (df.groupby("bcix").cumcount() + 1).astype(str)
     return df[CONTIG_COLUMNS]

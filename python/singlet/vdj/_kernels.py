@@ -175,8 +175,12 @@ def _codon_at(codes, a, L, st, which):
         else:
             if q + 5 > L:
                 continue
-            if (c0 == 3 and ((c1 == 3 and (c2 == 3 or c2 == 1)) or (c1 == 2 and c2 == 2))
-                    and codes[a + q + 3] == 2 and codes[a + q + 4] == 2):
+            if (
+                c0 == 3
+                and ((c1 == 3 and (c2 == 3 or c2 == 1)) or (c1 == 2 and c2 == 2))
+                and codes[a + q + 3] == 2
+                and codes[a + q + 4] == 2
+            ):
                 return q
     return -1
 
@@ -215,8 +219,21 @@ def _vote(ek_lo, ek_hi, eu, ec, js, stamp, bestc, bestb, tie, touched, step):
 
 
 @njit(cache=True, nogil=True)
-def assemble_group(codes, off, ridx, umi, cys, fw, ka, min_seed_umis, seed_frac, min_branch_umis, branch_frac,
-                   max_paths, max_len):
+def assemble_group(
+    codes,
+    off,
+    ridx,
+    umi,
+    cys,
+    fw,
+    ka,
+    min_seed_umis,
+    seed_frac,
+    min_branch_umis,
+    branch_frac,
+    max_paths,
+    max_len,
+):
     """Junction contigs of one (cell, chain).
 
     ``ridx``: read indices into ``off``; ``umi``: local UMI id per read (< 2**24); ``cys`` / ``fw``: read position of the
@@ -333,7 +350,9 @@ def assemble_group(codes, off, ridx, umi, cys, fw, ka, min_seed_umis, seed_frac,
     # there (that k-mer is part of the true path). Each UMI votes for the terminal most of its reads give.
     tk_ = np.empty(nt, np.uint64)
     for i in range(nt):
-        tk_[i] = (np.uint64(term_u[i]) << np.uint64(40)) | term[i]  # (UMI, k-mer): ka <= 20 fits 40 bits
+        tk_[i] = (np.uint64(term_u[i]) << np.uint64(40)) | term[
+            i
+        ]  # (UMI, k-mer): ka <= 20 fits 40 bits
     tk_ = np.sort(tk_)
     tu = np.unique(term[:nt])
     tc = np.zeros(len(tu), np.int32)
@@ -542,10 +561,14 @@ def fw_from_c(codes, off, cdiag, todo):
             fw_ok = c1 == 3 and ((c2 == 3 and (c3 == 3 or c3 == 1)) or (c2 == 2 and c3 == 2))
             if not fw_ok:
                 continue
-            if codes[a + q + 3] == 2 and codes[a + q + 4] == 2 and codes[a + q + 9] == 2 and codes[a + q + 10] == 2:
+            if (
+                codes[a + q + 3] == 2
+                and codes[a + q + 4] == 2
+                and codes[a + q + 9] == 2
+                and codes[a + q + 10] == 2
+            ):
                 d = abs((c0 - q) - 33)
                 if d < best:
                     best = d
                     out[t] = q
     return out
-

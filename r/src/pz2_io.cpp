@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// singlet R package -- Rcpp binding for the v2 matrix codec (inst/include/singlet/pz2/) and the small v2 side formats a client
+// singlet R package -- Rcpp binding for the store matrix codec (inst/include/singlet/pz2/) and the small store side formats a client
 // has to read: sample cells tables ("CEL2"), vocabulary packs ("SPK2"/"SVP0") and barcode whitelists.
 //
 // Design: the R code does the I/O (HTTP ranges, files); this file only turns bytes into R objects.
@@ -10,7 +10,7 @@
 //     columns can be kept (the called cells); only chunks that cover the range are decoded; threads decode chunks in parallel.
 //   * pz2_cells_ decodes the columns of a cells table; pz2_pack_* decode vocabulary packs; pz2_sha256_ hashes a raw vector.
 //
-// Format: docs/format-v2.md.  Codec: bench/compression/notes/m_w1.md.
+// Format: docs/format-store.md.  Codec: bench/compression/notes/m_w1.md.
 
 #include <Rcpp.h>
 
@@ -118,7 +118,7 @@ struct Cur {
     const uint8_t* end;
     template <class T>
     T get() {
-        if (end - p < static_cast<ptrdiff_t>(sizeof(T))) Rcpp::stop("v2: truncated data");
+        if (end - p < static_cast<ptrdiff_t>(sizeof(T))) Rcpp::stop("store: truncated data");
         T v;
         std::memcpy(&v, p, sizeof(T));
         p += sizeof(T);
@@ -128,17 +128,17 @@ struct Cur {
 
 std::vector<uint8_t> zstd_frame(const uint8_t* p, size_t n) {
     unsigned long long sz = ZSTD_getFrameContentSize(p, n);
-    if (sz == ZSTD_CONTENTSIZE_ERROR) Rcpp::stop("v2: not a zstd frame");
-    if (sz == ZSTD_CONTENTSIZE_UNKNOWN) Rcpp::stop("v2: zstd frame without content size");
-    if (sz > (1ull << 32)) Rcpp::stop("v2: zstd frame too large");
+    if (sz == ZSTD_CONTENTSIZE_ERROR) Rcpp::stop("store: not a zstd frame");
+    if (sz == ZSTD_CONTENTSIZE_UNKNOWN) Rcpp::stop("store: zstd frame without content size");
+    if (sz > (1ull << 32)) Rcpp::stop("store: zstd frame too large");
     std::vector<uint8_t> out(static_cast<size_t>(sz));
     size_t r = sz ? ZSTD_decompress(out.data(), out.size(), p, n) : 0;
-    if (ZSTD_isError(r) || r != sz) Rcpp::stop("v2: zstd decompression failed");
+    if (ZSTD_isError(r) || r != sz) Rcpp::stop("store: zstd decompression failed");
     return out;
 }
 
 std::vector<uint8_t> zstd_take(Cur& c, uint32_t clen) {
-    if (static_cast<size_t>(c.end - c.p) < clen) Rcpp::stop("v2: truncated frame");
+    if (static_cast<size_t>(c.end - c.p) < clen) Rcpp::stop("store: truncated frame");
     std::vector<uint8_t> out = zstd_frame(c.p, clen);
     c.p += clen;
     return out;
@@ -151,7 +151,7 @@ std::vector<uint64_t> leb_all(const std::vector<uint8_t>& raw, size_t n) {
         uint64_t x = 0;
         int s = 0;
         for (;;) {
-            if (q >= raw.size() || s > 63) Rcpp::stop("v2: bad LEB128 stream");
+            if (q >= raw.size() || s > 63) Rcpp::stop("store: bad LEB128 stream");
             uint8_t b = raw[q++];
             x |= static_cast<uint64_t>(b & 127) << s;
             if (b < 128) break;
@@ -169,7 +169,7 @@ std::vector<uint64_t> pack_stream(Cur& c) {
     uint32_t cl = c.get<uint32_t>();
     std::vector<uint8_t> raw = zstd_take(c, cl);
     if (mode == 0) return leb_all(raw, n);
-    if (raw.size() != static_cast<size_t>(n) * 4) Rcpp::stop("v2: bad plane stream");
+    if (raw.size() != static_cast<size_t>(n) * 4) Rcpp::stop("store: bad plane stream");
     std::vector<uint64_t> v(n);
     for (uint32_t i = 0; i < n; ++i)
         v[i] = raw[i] | (static_cast<uint64_t>(raw[n + i]) << 8) | (static_cast<uint64_t>(raw[2 * static_cast<size_t>(n) + i]) << 16) |
@@ -233,7 +233,7 @@ uint64_t read_bits(const uint8_t* p, size_t nbytes, uint64_t bit0, int bits) {  
     uint64_t v = 0;
     for (int b = 0; b < bits; ++b) {
         uint64_t j = bit0 + static_cast<uint64_t>(b);
-        if ((j >> 3) >= nbytes) Rcpp::stop("v2: bit-packed column is truncated");
+        if ((j >> 3) >= nbytes) Rcpp::stop("store: bit-packed column is truncated");
         v |= static_cast<uint64_t>((p[j >> 3] >> (j & 7)) & 1) << b;
     }
     return v;

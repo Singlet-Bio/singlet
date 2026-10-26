@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""V(D)J as v2 members of the GEX sample (``docs/format-v2.md`` section 14), the ADT layout's rules.
+"""V(D)J as store members of the GEX sample (``docs/format-store.md`` section 14), the ADT layout's rules.
 
 Members:
 
@@ -14,8 +14,8 @@ Members:
 Per-cell labels (chains, pairing, clonotype) are cell metadata: :func:`cell_labels` builds the feature sidecar
 ``<GSM>.features.vdj.parquet`` (``docs/CELL-ARCHITECTURE.md`` section 3), keyed by ``col``.
 
-The members go into the GEX sample object at migration, or into a sidecar object ``v2/x/<GSM>/vdj.<d16>.s2`` referenced as
-``samples[i].extra_objects.vdj`` (the ADT route, ``docs/format-v2.md`` section 13).
+The members go into the GEX sample object at migration, or into a sidecar object ``store/x/<GSM>/vdj.<d16>.s2`` referenced as
+``samples[i].extra_objects.vdj`` (the ADT route, ``docs/format-store.md`` section 13).
 """
 
 from __future__ import annotations
@@ -29,9 +29,27 @@ import numpy as np
 SCHEMA = "singlet-vdj/1"
 METHOD_VERSION = "singlet-vdj/1 (15-mer segment index; 19-mer UMI-weighted junction graph; cb 1mm posterior 0.975; umi 1hd cellranger)"
 MEMBERS = ("vdj_contigs.parquet", "vdj_summary.json")
-LABEL_COLUMNS = ["col", "receptor", "paired", "clonotype_id", "clonotype_size", "excess_chains",
-                 "TRA_cdr3", "TRB_cdr3", "TRG_cdr3", "TRD_cdr3", "IGH_cdr3", "IGK_cdr3", "IGL_cdr3",
-                 "TRA_v", "TRB_v", "IGH_v", "IGK_v", "IGL_v", "IGH_c"]
+LABEL_COLUMNS = [
+    "col",
+    "receptor",
+    "paired",
+    "clonotype_id",
+    "clonotype_size",
+    "excess_chains",
+    "TRA_cdr3",
+    "TRB_cdr3",
+    "TRG_cdr3",
+    "TRD_cdr3",
+    "IGH_cdr3",
+    "IGK_cdr3",
+    "IGL_cdr3",
+    "TRA_v",
+    "TRB_v",
+    "IGH_v",
+    "IGK_v",
+    "IGL_v",
+    "IGH_c",
+]
 
 
 def _parquet(df) -> bytes:
@@ -51,20 +69,38 @@ def with_columns(df, gex_barcodes: Sequence[str]):
     return out
 
 
-def build_members(contigs, gex_barcodes: Sequence[str], library: Dict, counting: Dict, reference: Dict) -> Dict[str, tuple]:
+def build_members(
+    contigs, gex_barcodes: Sequence[str], library: Dict, counting: Dict, reference: Dict
+) -> Dict[str, tuple]:
     """-> {name: ('stored', body bytes, None, meta)}."""
     c = with_columns(contigs[contigs["junction_umis"] >= 1], gex_barcodes)
-    c = c.sort_values(["col", "barcode", "chain", "umis"], ascending=[True, True, True, False]).reset_index(drop=True)
+    c = c.sort_values(
+        ["col", "barcode", "chain", "umis"], ascending=[True, True, True, False]
+    ).reset_index(drop=True)
     for k in ("productive", "full_length", "high_confidence", "kept"):
         c[k] = c[k].astype(bool)
     for k in ("umis", "junction_umis", "reads"):
         c[k] = c[k].astype(np.int32)
-    doc = {"schema": SCHEMA, "method": METHOD_VERSION, "reference": reference, "counting": counting,
-           "library": {k: v for k, v in library.items() if not isinstance(v, (dict,)) or k == "rules"}}
+    doc = {
+        "schema": SCHEMA,
+        "method": METHOD_VERSION,
+        "reference": reference,
+        "counting": counting,
+        "library": {k: v for k, v in library.items() if not isinstance(v, (dict,)) or k == "rules"},
+    }
     return {
-        "vdj_contigs.parquet": ("stored", _parquet(c), None, {"content": "application/vnd.apache.parquet", "modality": "vdj"}),
-        "vdj_summary.json": ("stored", json.dumps(doc, sort_keys=True, separators=(",", ":"), default=float).encode(),
-                             None, {"content": "application/json"}),
+        "vdj_contigs.parquet": (
+            "stored",
+            _parquet(c),
+            None,
+            {"content": "application/vnd.apache.parquet", "modality": "vdj"},
+        ),
+        "vdj_summary.json": (
+            "stored",
+            json.dumps(doc, sort_keys=True, separators=(",", ":"), default=float).encode(),
+            None,
+            {"content": "application/json"},
+        ),
     }
 
 
@@ -79,7 +115,7 @@ def cell_labels(cells, gex_barcodes: Sequence[str]):
 
 
 def build_sidecar(gsm: str, members: Dict[str, tuple]) -> bytes:
-    from singlet.v2.container import S2Writer
+    from singlet.store.container import S2Writer
 
     w = S2Writer(gsm)
     for name in MEMBERS:
@@ -93,7 +129,7 @@ def read_members(buf: bytes):
     """Decode an object holding the V(D)J members: {'contigs': DataFrame, 'summary': dict}."""
     import pyarrow.parquet as pq
 
-    from singlet.v2.container import S2Reader
+    from singlet.store.container import S2Reader
 
     r = S2Reader(buf)
     out = {}

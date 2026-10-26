@@ -578,11 +578,7 @@ def _process(keys, reads, bmap, fx, cb_len, umi_len, n_features, st, unm):
         raise ValueError("barcodes x features x UMIs do not fit the packed molecule key")
     fshift = np.uint64(ubits)
     bshift = np.uint64(ubits + fbits)
-    key = (
-        (bci.ravel().astype(np.uint64) << bshift)
-        | (ft.astype(np.uint64) << fshift)
-        | umi_codes
-    )
+    key = (bci.ravel().astype(np.uint64) << bshift) | (ft.astype(np.uint64) << fshift) | umi_codes
     gu, ginv = np.unique(key, return_inverse=True)
     greads = np.bincount(ginv.ravel(), weights=rd, minlength=len(gu)).astype(np.int64)
     umi_mask = np.uint64((1 << (2 * umi_len)) - 1)

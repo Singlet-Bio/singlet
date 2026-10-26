@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""Diagnostics on a finished junction census (scripts/v2_junction_table.py), read-only:
+"""Diagnostics on a finished junction census (scripts/store_junction_table.py), read-only:
 
 * chromosome names of the census vs the GTF, and the coordinate offset that best matches annotated introns (mouse check);
 * for unannotated junctions in >= 2 samples, how many pass each (n_studies, umi_called) threshold, and what share of called UMIs the
@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
-from singlet.v2 import junctions as J  # noqa: E402
+from singlet.store import junctions as J  # noqa: E402
 
 run, build, gtf = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 cdir = run / f"census_{build}"

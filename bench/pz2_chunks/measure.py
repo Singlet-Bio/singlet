@@ -53,7 +53,7 @@ def best(f, k=3):
 
 def measure_pair(name: str, mats: dict, called: np.ndarray, rng) -> dict:
     from singlet import _pz2
-    from singlet.v2.matrix import Csc
+    from singlet.store.matrix import Csc
 
     res = {"sample": name, "n_columns": int(len(called)), "n_called": int(called.sum()), "budgets": {}}
     cc = np.flatnonzero(called)
@@ -99,7 +99,7 @@ def measure_pair(name: str, mats: dict, called: np.ndarray, rng) -> dict:
 
 
 def main() -> None:
-    from singlet.v2.verify import read_1pz
+    from singlet.store.verify import read_1pz
 
     ap = argparse.ArgumentParser()
     ap.add_argument("corpus")

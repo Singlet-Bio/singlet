@@ -48,7 +48,7 @@ def revcomp(s: str) -> str:
 
 
 def translate(s: str, frame: int = 0) -> str:
-    return "".join(CODON.get(s[i:i + 3], "X") for i in range(frame, len(s) - 2, 3))
+    return "".join(CODON.get(s[i : i + 3], "X") for i in range(frame, len(s) - 2, 3))
 
 
 def chain_of(name: str) -> Optional[str]:
@@ -108,22 +108,39 @@ def parse_gtf(gtf: str):
             p = ln.rstrip("\n").split("\t")
             if len(p) < 9 or p[2] not in ("exon", "CDS"):
                 continue
-            if '_gene' not in p[8] and 'gene_name "TR' not in p[8] and 'gene_name "IG' not in p[8]:
+            if "_gene" not in p[8] and 'gene_name "TR' not in p[8] and 'gene_name "IG' not in p[8]:
                 continue
             a = _attrs(p[8])
             bt = a.get("gene_type") or a.get("gene_biotype")
-            if bt not in BIOTYPES and not (V_NAME.match(a.get("gene_name", "")) or J_NAME.match(a.get("gene_name", ""))):
+            if bt not in BIOTYPES and not (
+                V_NAME.match(a.get("gene_name", "")) or J_NAME.match(a.get("gene_name", ""))
+            ):
                 continue
             gid = a["gene_id"].split(".")[0]
-            g = genes.setdefault(gid, {"name": a.get("gene_name", gid), "biotype": bt, "contig": p[0], "strand": p[6],
-                                       "transcripts": {}})
-            t = g["transcripts"].setdefault(a.get("transcript_id", gid), {"exons": [], "cds": [], "canonical": False})
+            g = genes.setdefault(
+                gid,
+                {
+                    "name": a.get("gene_name", gid),
+                    "biotype": bt,
+                    "contig": p[0],
+                    "strand": p[6],
+                    "transcripts": {},
+                },
+            )
+            t = g["transcripts"].setdefault(
+                a.get("transcript_id", gid), {"exons": [], "cds": [], "canonical": False}
+            )
             t["canonical"] |= a.get("_canonical") == "1"
             (t["exons"] if p[2] == "exon" else t["cds"]).append((int(p[3]), int(p[4])))
     return genes
 
 
-SEGMENT_TYPES = {"V_gene_segment": "V", "D_gene_segment": "D", "J_gene_segment": "J", "C_gene_segment": "C"}
+SEGMENT_TYPES = {
+    "V_gene_segment": "V",
+    "D_gene_segment": "D",
+    "J_gene_segment": "J",
+    "C_gene_segment": "C",
+}
 
 
 def parse_gff(gff: str):
@@ -141,7 +158,12 @@ def parse_gff(gff: str):
             p = ln.rstrip("\n").split("\t")
             if len(p) < 9:
                 continue
-            if "gene=TR" not in p[8] and "gene=IG" not in p[8] and "Name=TR" not in p[8] and "Name=IG" not in p[8]:
+            if (
+                "gene=TR" not in p[8]
+                and "gene=IG" not in p[8]
+                and "Name=TR" not in p[8]
+                and "Name=IG" not in p[8]
+            ):
                 continue
             a = dict(kv.split("=", 1) for kv in p[8].split(";") if "=" in kv)
             if p[2] in ("gene", "pseudogene"):
@@ -153,8 +175,13 @@ def parse_gff(gff: str):
                 reg = SEGMENT_TYPES[p[2]]
                 gid = a.get("ID", name)
                 seg_of[gid] = gid
-                genes[gid] = {"name": name, "biotype": f"{name[:2]}_{reg}_gene", "contig": p[0], "strand": p[6],
-                              "transcripts": {gid: {"exons": [], "cds": [], "canonical": True}}}
+                genes[gid] = {
+                    "name": name,
+                    "biotype": f"{name[:2]}_{reg}_gene",
+                    "contig": p[0],
+                    "strand": p[6],
+                    "transcripts": {gid: {"exons": [], "cds": [], "canonical": True}},
+                }
             elif p[2] in ("exon", "CDS") and a.get("Parent") in genes:
                 t = genes[a["Parent"]]["transcripts"][a["Parent"]]
                 (t["exons"] if p[2] == "exon" else t["cds"]).append((int(p[3]), int(p[4])))
@@ -169,7 +196,7 @@ def parse_gff(gff: str):
 
 def _spliced(chrom: str, exons, strand: str) -> str:
     ex = sorted(exons)
-    s = "".join(chrom[a - 1:b] for a, b in ex)
+    s = "".join(chrom[a - 1 : b] for a, b in ex)
     return revcomp(s) if strand == "-" else s
 
 
@@ -177,7 +204,7 @@ def _v_anchor(seq: str, frame: int) -> int:
     lo = max(0, len(seq) - 45)
     best = -1
     for i in range(frame, len(seq) - 2, 3):
-        if i >= lo and seq[i:i + 3] in ("TGT", "TGC"):
+        if i >= lo and seq[i : i + 3] in ("TGT", "TGC"):
             best = i
     return best
 
@@ -206,9 +233,9 @@ def _open_v_frame(seq: str) -> int:
     best = -1
     for fr in range(3):
         anc = _v_anchor(seq, fr)
-        if anc < 0 or translate(seq[fr:anc + 3]).count("*") > 1:
+        if anc < 0 or translate(seq[fr : anc + 3]).count("*") > 1:
             continue
-        if seq[fr:fr + 3] == "ATG":
+        if seq[fr : fr + 3] == "ATG":
             return fr
         best = fr if best < 0 else best
     return best
@@ -222,7 +249,11 @@ def build(genome_fa: str, gtf: str, extra: Sequence[Tuple[str, str]] = ()) -> Li
     out = _build_one(genome_fa, gtf)
     for g2, t2 in extra:
         have = {s.name for s in out}
-        out += [s for s in _build_one(g2, t2, skip_contigs={s.contig for s in out}) if s.name not in have]
+        out += [
+            s
+            for s in _build_one(g2, t2, skip_contigs={s.contig for s in out})
+            if s.name not in have
+        ]
     # one segment per name (an alt locus can repeat a gene in several haplotypes)
     seen, uniq = set(), []
     for s in out:
@@ -241,7 +272,11 @@ def _build_one(genome_fa: str, gtf: str, skip_contigs=frozenset()) -> List[Segme
     for gid, g in genes.items():
         if g["contig"] not in chroms:
             continue
-        region = g["biotype"][3] if g["biotype"] in BIOTYPES else ("J" if J_NAME.match(g["name"]) else "V")
+        region = (
+            g["biotype"][3]
+            if g["biotype"] in BIOTYPES
+            else ("J" if J_NAME.match(g["name"]) else "V")
+        )
         chain = chain_of(g["name"])
         if chain is None or ORPHON.search(g["name"]):
             continue
@@ -256,7 +291,11 @@ def _build_one(genome_fa: str, gtf: str, skip_contigs=frozenset()) -> List[Segme
             if t["cds"]:
                 # CDS frame relative to the spliced transcript start
                 ex = sorted(t["exons"], reverse=g["strand"] == "-")
-                cds0 = min(a for a, _ in t["cds"]) if g["strand"] == "+" else max(b for _, b in t["cds"])
+                cds0 = (
+                    min(a for a, _ in t["cds"])
+                    if g["strand"] == "+"
+                    else max(b for _, b in t["cds"])
+                )
                 off = 0
                 for a, b in ex:
                     if a <= cds0 <= b:
@@ -287,7 +326,9 @@ def write(segs: List[Segment], path: str, provenance: str = ""):
             f.write(f"# {provenance}\n")
         f.write("name\tgene_id\tchain\tregion\tanchor\tframe\tcontig\tstart\tseq\n")
         for s in segs:
-            f.write(f"{s.name}\t{s.gene_id}\t{s.chain}\t{s.region}\t{s.anchor}\t{s.frame}\t{s.contig}\t{s.start}\t{s.seq}\n")
+            f.write(
+                f"{s.name}\t{s.gene_id}\t{s.chain}\t{s.region}\t{s.anchor}\t{s.frame}\t{s.contig}\t{s.start}\t{s.seq}\n"
+            )
 
 
 def load(path_or_species: str = "human") -> List[Segment]:
@@ -309,7 +350,7 @@ def equivalence(segs: List[Segment], max_mismatch: int = 1) -> Dict[str, str]:
     IGKV1D-39, TRBV6-2 / TRBV6-3 copies): reads cannot tell them apart, so tools name them by convention. Returns
     name -> class label (the class's names joined by "|", sorted); genes in no class map to themselves."""
     vs = [s for s in segs if s.region == "V" and s.anchor >= 0]
-    core = {s.name: s.seq[max(0, s.frame):s.anchor + 3] for s in vs}
+    core = {s.name: s.seq[max(0, s.frame) : s.anchor + 3] for s in vs}
     parent = {n: n for n in core}
 
     def find(x):
@@ -320,7 +361,7 @@ def equivalence(segs: List[Segment], max_mismatch: int = 1) -> Dict[str, str]:
 
     names = sorted(core)
     for i, a in enumerate(names):
-        for b in names[i + 1:]:
+        for b in names[i + 1 :]:
             sa, sb = core[a], core[b]
             L = min(len(sa), len(sb))
             if L == 0:
@@ -349,7 +390,9 @@ def summary(segs: List[Segment]) -> Dict[str, Dict[str, int]]:
     return out
 
 
-if __name__ == "__main__":  # python -m singlet.vdj.reference GENOME.fa GTF OUT.tsv.gz [GENOME2 ANNOTATION2 ...]
+if (
+    __name__ == "__main__"
+):  # python -m singlet.vdj.reference GENOME.fa GTF OUT.tsv.gz [GENOME2 ANNOTATION2 ...]
     import json
     import sys
 

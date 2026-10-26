@@ -21,7 +21,7 @@ import pandas as pd
 
 
 def main():
-    from singlet.v2.legacy import LegacyBundle
+    from singlet.store.legacy import LegacyBundle
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", required=True)

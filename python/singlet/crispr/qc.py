@@ -51,13 +51,17 @@ def library_qc(lc, called_mask: np.ndarray, labels) -> Dict:
     m["guide_unexplained"] = max(0.0, 1 - feat / max(1, with_win))
     M = lc.matrix
     called_tot = np.asarray(M[:, np.flatnonzero(called_mask)].sum(axis=0)).ravel()
-    reads_cells = st.get("reads_in_gex_columns", 0) * (called_tot.sum() / max(1, st.get("molecules_in_gex_columns", 1)))
+    reads_cells = st.get("reads_in_gex_columns", 0) * (
+        called_tot.sum() / max(1, st.get("molecules_in_gex_columns", 1))
+    )
     m["frac_usable_in_cells"] = float(reads_cells / reads)
     empties = lc.outside_totals
     unc = np.asarray(M[:, np.flatnonzero(~called_mask)].sum(axis=0)).ravel()
     bg = np.concatenate([unc, empties]) if len(unc) + len(empties) else np.zeros(1)
     m["median_umi_cells"] = float(np.median(called_tot)) if len(called_tot) else 0.0
-    m["cell_empty_ratio"] = float(m["median_umi_cells"] / max(1.0, np.median(bg[bg > 0]) if (bg > 0).any() else 1.0))
+    m["cell_empty_ratio"] = float(
+        m["median_umi_cells"] / max(1.0, np.median(bg[bg > 0]) if (bg > 0).any() else 1.0)
+    )
     cls = labels["class"].to_numpy()
     m["frac_cells_assigned"] = float((cls != "unassigned").mean()) if len(cls) else 0.0
     m["multiple_rate"] = float((cls == "multiple").sum() / max(1, (cls != "unassigned").sum()))
@@ -69,7 +73,12 @@ def library_qc(lc, called_mask: np.ndarray, labels) -> Dict:
     return out
 
 
-def knockdown(expr_target: Dict[str, np.ndarray], labels, guide_targets: Dict[str, str], control_mask: np.ndarray) -> Dict:
+def knockdown(
+    expr_target: Dict[str, np.ndarray],
+    labels,
+    guide_targets: Dict[str, str],
+    control_mask: np.ndarray,
+) -> Dict:
     """Per guide: 1 - mean target expression in its single-guide cells / in non-targeting cells.
 
     ``expr_target``: gene -> normalised expression per cell (same cells as ``labels``); ``guide_targets``: guide id ->
@@ -85,5 +94,9 @@ def knockdown(expr_target: Dict[str, np.ndarray], labels, guide_targets: Dict[st
         sel = single & (gids == g)
         if sel.sum() < 5 or cm.mean() <= 0:
             continue
-        out[g] = {"target": t, "cells": int(sel.sum()), "knockdown": float(1 - e[sel].mean() / cm.mean())}
+        out[g] = {
+            "target": t,
+            "cells": int(sel.sum()),
+            "knockdown": float(1 - e[sel].mean() / cm.mean()),
+        }
     return out

@@ -41,7 +41,11 @@ TCR = ("TRA", "TRB", "TRG", "TRD")
 
 
 def rule(thresholds, metric, value) -> str:
-    if metric not in thresholds or value is None or (isinstance(value, float) and not np.isfinite(value)):
+    if (
+        metric not in thresholds
+        or value is None
+        or (isinstance(value, float) and not np.isfinite(value))
+    ):
         return "na"
     op, fail, warn = thresholds[metric]
     bad = (lambda t: value < t) if op == "<" else (lambda t: value > t)
@@ -56,18 +60,29 @@ def verdict(thresholds, metrics: Dict) -> Dict:
     rules = {k: rule(thresholds, k, v) for k, v in metrics.items() if k in thresholds}
     failed = sorted(k for k, r in rules.items() if r == "fail")
     warned = sorted(k for k, r in rules.items() if r == "warn")
-    return {"verdict": "fail" if failed else ("warn" if warned else "pass"), "failed": failed, "warned": warned,
-            "rules": rules}
+    return {
+        "verdict": "fail" if failed else ("warn" if warned else "pass"),
+        "failed": failed,
+        "warned": warned,
+        "rules": rules,
+    }
 
 
-def library_qc(contigs, cells, stats: Dict, gex_called: Optional[Sequence[str]] = None,
-               gex_columns: Optional[Sequence[str]] = None) -> Dict:
+def library_qc(
+    contigs,
+    cells,
+    stats: Dict,
+    gex_called: Optional[Sequence[str]] = None,
+    gex_columns: Optional[Sequence[str]] = None,
+) -> Dict:
     """``contigs``: :data:`singlet.vdj.assemble.CONTIG_COLUMNS` frame; ``cells``: :func:`singlet.vdj.clonotype.cell_table`
     (+ clonotypes); ``stats``: :class:`singlet.vdj.assemble.LibraryResult` stats."""
     mates = stats.get("read_pairs", 0) * (2 if stats.get("orientation", {}).get("r1_use") else 1)
     m: Dict = {}
     m["frac_on_target"] = stats.get("mates_with_segment", 0) / max(1, mates)
-    m["frac_valid_barcode"] = stats.get("mates_valid_barcode", 0) / max(1, stats.get("mates_with_segment", 0))
+    m["frac_valid_barcode"] = stats.get("mates_valid_barcode", 0) / max(
+        1, stats.get("mates_with_segment", 0)
+    )
     pk = contigs[contigs["kept"] & contigs["productive"]]
     m["productive_frac"] = float(len(pk) / max(1, int(contigs["kept"].sum())))
     strong = set(pk.loc[pk["umis"] >= VDJ_CELL_MIN_UMIS, "barcode"])

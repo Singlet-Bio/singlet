@@ -50,7 +50,7 @@ def recombine(segs, ch):
     js = [s for s in segs if s.chain == ch and s.region == "J"]
     c = [s for s in segs if s.chain == ch and s.region == "C"][0]
     v, j = vs[RNG.integers(len(vs))], js[RNG.integers(len(js))]
-    vt = v.seq[:v.anchor + 3 + RNG.integers(2, 8)]  # 3' trimming after Cys
+    vt = v.seq[: v.anchor + 3 + RNG.integers(2, 8)]  # 3' trimming after Cys
     jt0 = RNG.integers(0, 6)
     jt = j.seq[jt0:]
     # in-frame N region
@@ -60,7 +60,7 @@ def recombine(segs, ch):
     n += (-(base + n)) % 3
     while True:
         nreg = rand(n)
-        junction = vt[v.anchor:] + nreg + jt[:j.anchor - jt0 + 3]
+        junction = vt[v.anchor :] + nreg + jt[: j.anchor - jt0 + 3]
         if "*" not in R.translate(junction):
             break
     tx = rand(40) + vt + nreg + jt + c.seq
@@ -72,7 +72,7 @@ def rc(s):
 
 
 def simulate(segs, n_cells=40, mols=(3, 8), pairs_per_mol=(4, 12), r2_len=150, err=0.3):
-    cbs = S.decode(RNG.integers(0, 4 ** 16, n_cells * 2, dtype=np.uint64), 16)[:n_cells]
+    cbs = S.decode(RNG.integers(0, 4**16, n_cells * 2, dtype=np.uint64), 16)[:n_cells]
     r1, r2, truth = [], [], {}
     for cb in cbs:
         for ch in ("TRA", "TRB"):
@@ -82,11 +82,11 @@ def simulate(segs, n_cells=40, mols=(3, 8), pairs_per_mol=(4, 12), r2_len=150, e
                 umi = rand(10)
                 for _ in range(RNG.integers(*pairs_per_mol)):
                     f = int(RNG.integers(r2_len, len(tx) + 1))
-                    s2 = rc(tx[f - r2_len:f])
+                    s2 = rc(tx[f - r2_len : f])
                     s1 = cb + umi + "TTTCTTATATGGG" + tx[:111]
                     while RNG.random() < err:  # sequencing errors
                         p = int(RNG.integers(0, len(s2)))
-                        s2 = s2[:p] + RNG.choice([b for b in "ACGT" if b != s2[p]]) + s2[p + 1:]
+                        s2 = s2[:p] + RNG.choice([b for b in "ACGT" if b != s2[p]]) + s2[p + 1 :]
                     r1.append(s1.encode())
                     r2.append(s2.encode())
     o = RNG.permutation(len(r1))
@@ -98,14 +98,30 @@ def test_assembly_recovers_junctions(r2_len):
     segs = make_segments()
     ref = A.Reference(segs)
     # short R2 reaches the junction from fewer fragmentation points: real 26x91 V(D)J runs are sequenced deeper
-    r1, r2, truth, cbs = simulate(segs, r2_len=r2_len, pairs_per_mol=(4, 12) if r2_len >= 150 else (12, 30))
+    r1, r2, truth, cbs = simulate(
+        segs, r2_len=r2_len, pairs_per_mol=(4, 12) if r2_len >= 150 else (12, 30)
+    )
     wl, _ = S.encode_strings(cbs, 16)
-    res = A.run_library([], [], ref=ref, cb_len=16, umi_len=10, whitelist_codes=np.sort(wl), chunks=[(r1, r2)],
-                        params=A.Params(threads=2), log=lambda *a: None)
+    res = A.run_library(
+        [],
+        [],
+        ref=ref,
+        cb_len=16,
+        umi_len=10,
+        whitelist_codes=np.sort(wl),
+        chunks=[(r1, r2)],
+        params=A.Params(threads=2),
+        log=lambda *a: None,
+    )
     df = res.contigs
     kept = df[df.kept]
     assert res.stats["orientation"]["r2_rc"]
-    found = {(b[:-2], c): (n, v, j) for b, c, n, v, j in kept[["barcode", "chain", "cdr3_nt", "v_gene", "j_gene"]].itertuples(index=False)}
+    found = {
+        (b[:-2], c): (n, v, j)
+        for b, c, n, v, j in kept[["barcode", "chain", "cdr3_nt", "v_gene", "j_gene"]].itertuples(
+            index=False
+        )
+    }
     hit = sum(found.get(k, (None,))[0] == t[0] for k, t in truth.items())
     assert hit >= 0.95 * len(truth), (hit, len(truth))
     genes = sum(found.get(k, (0, 0, 0))[1:] == t[1:] for k, t in truth.items())
@@ -121,10 +137,21 @@ def test_deep_library_with_errors_keeps_true_junctions():
     ref = A.Reference(segs)
     r1, r2, truth, cbs = simulate(segs, n_cells=15, mols=(4, 8), pairs_per_mol=(80, 120), err=0.6)
     wl, _ = S.encode_strings(cbs, 16)
-    res = A.run_library([], [], ref=ref, cb_len=16, umi_len=10, whitelist_codes=np.sort(wl), chunks=[(r1, r2)],
-                        params=A.Params(threads=2), log=lambda *a: None)
+    res = A.run_library(
+        [],
+        [],
+        ref=ref,
+        cb_len=16,
+        umi_len=10,
+        whitelist_codes=np.sort(wl),
+        chunks=[(r1, r2)],
+        params=A.Params(threads=2),
+        log=lambda *a: None,
+    )
     kept = res.contigs[res.contigs.kept]
-    found = {(b[:-2], c): n for b, c, n in kept[["barcode", "chain", "cdr3_nt"]].itertuples(index=False)}
+    found = {
+        (b[:-2], c): n for b, c, n in kept[["barcode", "chain", "cdr3_nt"]].itertuples(index=False)
+    }
     assert sum(found.get(k) == t[0] for k, t in truth.items()) == len(truth)
     assert kept.groupby(["barcode", "chain"]).size().max() == 1
 
@@ -136,10 +163,21 @@ def test_junction_with_a_j_the_reference_lacks():
     missing = {"TRAJ1", "TRBJ1"}
     ref = A.Reference([s for s in segs if s.name not in missing])
     wl, _ = S.encode_strings(cbs, 16)
-    res = A.run_library([], [], ref=ref, cb_len=16, umi_len=10, whitelist_codes=np.sort(wl), chunks=[(r1, r2)],
-                        params=A.Params(threads=2), log=lambda *a: None)
+    res = A.run_library(
+        [],
+        [],
+        ref=ref,
+        cb_len=16,
+        umi_len=10,
+        whitelist_codes=np.sort(wl),
+        chunks=[(r1, r2)],
+        params=A.Params(threads=2),
+        log=lambda *a: None,
+    )
     kept = res.contigs[res.contigs.kept]
-    found = {(b[:-2], c): n for b, c, n in kept[["barcode", "chain", "cdr3_nt"]].itertuples(index=False)}
+    found = {
+        (b[:-2], c): n for b, c, n in kept[["barcode", "chain", "cdr3_nt"]].itertuples(index=False)
+    }
     lacking = {k: t for k, t in truth.items() if t[2] in missing}
     assert lacking, "the simulation should use the missing J genes"
     assert sum(found.get(k) == t[0] for k, t in lacking.items()) >= 0.9 * len(lacking)
@@ -151,11 +189,12 @@ def test_refseq_gff_segments(tmp_path):
     fa = tmp_path / "g.fa"
     fa.write_text(">chrT test\n" + "A" * 10 + v + "C" * 90 + "\n")
     gff = tmp_path / "a.gff"
-    gff.write_text("##gff-version 3\n"
-                   "chrT\tBestRefSeq\tgene\t1\t400\t.\t+\t.\tID=gene-TRBV99-1;Name=TRBV99-1;gene_biotype=V_segment\n"
-                   "chrT\tBestRefSeq\tV_gene_segment\t11\t310\t.\t+\t.\tID=id-TRBV99-1;Parent=gene-TRBV99-1;gene=TRBV99-1\n"
-                   "chrT\tBestRefSeq\texon\t11\t310\t.\t+\t.\tID=e1;Parent=id-TRBV99-1;gene=TRBV99-1\n"
-                   "chrT\tBestRefSeq\tCDS\t11\t310\t.\t+\t0\tID=c1;Parent=id-TRBV99-1;gene=TRBV99-1\n")
+    gff.write_text(
+        "##gff-version 3\n"
+        "chrT\tBestRefSeq\tgene\t1\t400\t.\t+\t.\tID=gene-TRBV99-1;Name=TRBV99-1;gene_biotype=V_segment\n"
+        "chrT\tBestRefSeq\tV_gene_segment\t11\t310\t.\t+\t.\tID=id-TRBV99-1;Parent=gene-TRBV99-1;gene=TRBV99-1\n"
+        "chrT\tBestRefSeq\texon\t11\t310\t.\t+\t.\tID=e1;Parent=id-TRBV99-1;gene=TRBV99-1\n"
+        "chrT\tBestRefSeq\tCDS\t11\t310\t.\t+\t0\tID=c1;Parent=id-TRBV99-1;gene=TRBV99-1\n"
+    )
     segs = R._build_one(str(fa), str(gff))
     assert [(s.name, s.region, s.chain, s.anchor) for s in segs] == [("TRBV99-1", "V", "TRB", 288)]
-
