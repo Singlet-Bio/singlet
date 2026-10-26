@@ -1159,10 +1159,14 @@ class SraEncoder {
         size_t n_with_r2 = 0;  // r2_len is 0 for a variable-length R2: count the reads that have one
         for (const auto& sd : probe_spots) n_with_r2 += (sd.r2_len > 0);
         if (cfg.protocol_tag.empty() && cfg.metadata_protocol.empty() && !probe_spots.empty() &&
-            r1_len > 0 && n_with_r2 * 2 > probe_spots.size() && probe_spots[0].bc_len == 0) {
+            r1_len > 0 && n_with_r2 * 2 > probe_spots.size()) {
             double chem_rate = 0.0;
             const std::string chem = screen_10x_chemistry(probe_spots, cfg.whitelist_dirs, &chem_rate);
             const CandidateSpec* cs = chem.empty() ? nullptr : find_protocol_spec(chem);
+            std::cerr << "[protocol_detect] screen-runs rule: "
+                      << (chem.empty() ? std::string("no 10x whitelist >= 30%") : chem)
+                      << " (best 10x whitelist " << static_cast<int>(chem_rate * 100) << "%, R1 " << r1_len
+                      << " bp)\n";
             if (cs && r1_len >= cs->bc_offset + cs->bc_len && cs->tag != protocol_tag) {
                 std::cerr << "[protocol_detect] " << protocol_tag << " (c=" << static_cast<int>(confidence)
                           << ") -> " << cs->tag << " (screen-runs rule: best 10x whitelist "
