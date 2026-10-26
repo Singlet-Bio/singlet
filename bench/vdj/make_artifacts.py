@@ -21,15 +21,26 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import compare_vdj as CV  # noqa: E402
 
-# library id -> (cohort dataset id, chains, run directory name)
+# library id -> (cohort dataset id, chains). pbmc5p_v1 and pbmc10k_5p_v2 are development data (the assembler was
+# debugged on them); GSE145370 S133A / S158A too, so they stay out of the contract. The GSE145370 libraries downloaded
+# after the code was frozen (bench/vdj/hpc/download_holdout.sbatch) and 10x's Chromium Controller set are held out.
 LIBRARIES = {
     "pbmc2_t": ("pbmc5p_v1", "TCR"),
     "pbmc2_b": ("pbmc5p_v1", "BCR"),
     "pbmc10k_t": ("pbmc10k_5p_v2", "TCR"),
     "pbmc10k_b": ("pbmc10k_5p_v2", "BCR"),
-    "gse145370_S133A": ("gse145370_tcr", "TCR"),
-    "gse145370_S158A": ("gse145370_tcr", "TCR"),
+    "ctrl10k_t": ("tenx_pbmc10k_5pv2_controller", "TCR"),
+    "ctrl10k_b": ("tenx_pbmc10k_5pv2_controller", "BCR"),
 }
+DEVELOPMENT_GSE = {"gse145370_S133A", "gse145370_S158A"}
+
+
+def libraries(data_dir):
+    out = dict(LIBRARIES)
+    for d in sorted(os.listdir(data_dir)):
+        if d.startswith("gse145370_") and d not in DEVELOPMENT_GSE and os.path.isdir(os.path.join(data_dir, d)):
+            out[d] = ("gse145370_tcr", "TCR")
+    return out
 
 
 def gnu_time(path):
@@ -63,7 +74,7 @@ def main(argv=None):
     prov = {"commit": a.commit, "libraries": {}, "resources": [],
             "equivalence": {CV.norm_gene(k): v for k, v in VR.equivalence(VR.load(a.vdj_ref)).items() if "|" in v}}
     cols = ["barcode", "chain", "cdr3_nt", "cdr3", "v", "j", "c", "umis"]
-    for lib, (ds, chains) in LIBRARIES.items():
+    for lib, (ds, chains) in libraries(a.data).items():
         R, D = os.path.join(a.runs, lib), os.path.join(a.data, lib)
         ref_csv = os.path.join(D, "filtered_contig_annotations.csv")
         if not os.path.exists(ref_csv):

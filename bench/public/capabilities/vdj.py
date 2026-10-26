@@ -213,9 +213,13 @@ def compute(artifact_dir: Path) -> dict:
             {"id": "pbmc10k_5p_v2", "title": "10x sc5p_v2_hs_PBMC_10k T and B libraries (5' v2, 26x90)",
              "accessions": {"url": "https://cf.10xgenomics.com/samples/cell-vdj/5.0.0/sc5p_v2_hs_PBMC_10k/"},
              "truth": "10x Cell Ranger 5.0.0 filtered contigs", "data_kind": "real"},
-            {"id": "gse145370_tcr", "title": "GSE145370 ESCC TCR libraries S133A, S158A (10x 5' V(D)J)",
-             "accessions": {"gse": "GSE145370", "gsm": ["GSM4317423", "GSM4317428"], "srr": ["SRR11094260", "SRR11094265"]},
+            {"id": "gse145370_tcr", "title": "GSE145370 ESCC TCR libraries held out from development (10x 5' V(D)J)",
+             "accessions": {"gse": "GSE145370", "other": sorted(l for l in prov["libraries"] if l.startswith("gse145370_"))},
              "truth": "authors' Cell Ranger 3.0.1 filtered contigs (GEO supplementary)", "data_kind": "real"},
+            {"id": "tenx_pbmc10k_5pv2_controller", "title": "10x 10k PBMC 5' v2 (Chromium Controller) T and B libraries",
+             "data_kind": "real", "accessions": {"url": "https://cf.10xgenomics.com/samples/cell-vdj/6.1.0/"
+                                                        "10k_PBMC_5pv2_nextgem_Chromium_Controller_Multiplex/"},
+             "truth": "10x Cell Ranger 6.1.0 filtered contigs", "notes": "held out: downloaded after the code was frozen"},
         ],
         "metrics": metrics, "resources": resources, "figures": figures,
         "artifacts": artifact_entries(artifact_dir, CAP, {p.name: ("truth" if "cellranger" in p.name or "gex" in p.name
@@ -230,9 +234,11 @@ def compute(artifact_dir: Path) -> dict:
         "caveats": [
             "Cell Ranger vdj was not run here (no licence accepted); its published outputs are the reference, so agreement "
             "metrics measure agreement with Cell Ranger, not with ground truth.",
-            "pbmc5p_v1 is development data (the assembler's error handling was tuned on it); pbmc10k_5p_v2 and GSE145370 are held out.",
-            "GRCh38 lacks TRBV4-3, TRBV6-3, TRBV7-8 and TRBV5-8 (Cell Ranger's reference has them from its alt-haplotype "
-            "curation); Singlet names those rearrangements by the closest GRCh38 gene, which lowers V gene agreement.",
+            "pbmc5p_v1 and pbmc10k_5p_v2 are development data: the assembler's filters and fixes were made while comparing "
+            "with their Cell Ranger contigs (and with GSE145370 S133A / S158A, which are therefore left out). The GSE145370 "
+            "libraries scored here and the Chromium Controller set were downloaded after the code was frozen.",
+            "Neither GENCODE nor RefSeq annotates IGHV1-8 and IGHV4-30-4 on GRCh38 (Cell Ranger and TRUST4 have them from "
+            "IMGT): their rearrangements are not assembled or named, which costs BCR pairing and V agreement.",
             "MiXCR was not run: it needs a licence key.",
         ],
     }
