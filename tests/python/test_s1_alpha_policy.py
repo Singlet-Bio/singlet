@@ -460,6 +460,34 @@ def test_species_without_a_model_get_no_sidecar(tmp_path, pol):
     assert r["status"] == "skipped" and "no label model" in r["reason"] and "sidecar" not in r
 
 
+def test_counts_on_a_non_human_mouse_build_get_no_labels_whatever_the_metadata_says():
+    """66 published samples on mRatBN7.2 / GRCz11 / Mmul_10 got human/mouse labels because their GEO metadata names Homo sapiens or
+    Mus musculus. The sample's reference build gates the models now; the GRCh38-GRCm39 barnyard carries both."""
+    from singlet.s1 import labels_step as LS
+
+    assert LS.species_of_build("GRCh38-2024-A") == {"human"}
+    assert LS.species_of_build("GRCm39-2024-A") == {"mouse"}
+    assert LS.species_of_build("GRCh38-GRCm39-barnyard") == {"human", "mouse"}
+    for build in ("mRatBN7.2", "GRCz11", "Mmul_10", "Sscrofa11.1"):
+        assert LS.species_of_build(build) == set()
+        r = LS.label_sample(
+            gsm=KEEP,
+            gse=GSE,
+            exon=None,
+            intron=None,
+            basis_barcodes=["A"],
+            called=np.array([True]),
+            cells_digest="",
+            vocab={},
+            study_meta={"gsm_meta": {KEEP: {"organism": "Homo sapiens"}}},
+            donor_tsv=None,
+            depth_members={},
+            opts=LS.LabelOptions(),
+            reference_build=build,
+        )
+        assert r["status"] == "skipped" and build in r["reason"] and "sidecar" not in r
+
+
 # ------------------------------------------------------------------------------------------------ the 14 bundles with a bad CRC
 def test_member_with_a_wrong_central_directory_crc_is_read_on_its_local_header(tmp_path):
     from singlet.s1.legacy import LegacyBundle, LegacyError

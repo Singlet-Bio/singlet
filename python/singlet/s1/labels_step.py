@@ -22,6 +22,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import signal
 import tempfile
 import time
@@ -190,6 +191,20 @@ def donor_sites_from_members(members: Dict[str, bytes]):
     return out
 
 
+_BUILD_SPECIES = (
+    (re.compile(r"GRCh\d+|hg\d+|CHM13", re.I), "human"),
+    (re.compile(r"GRCm\d+|mm\d+", re.I), "mouse"),
+)
+
+
+def species_of_build(build: Optional[str]) -> set:
+    """The labelled species a reference build carries: {'human'} for GRCh38-2024-A, {'mouse'} for GRCm39-2024-A, both for the
+    GRCh38-GRCm39 barnyard, none for mRatBN7.2, GRCz11, Mmul_10, Sscrofa11.1, ... The labeller's models are human and mouse only
+    (docs/cell_annotation.md)."""
+    b = str(build or "").strip()
+    return {sp for rx, sp in _BUILD_SPECIES if rx.search(b)}
+
+
 def label_sample(
     *,
     gsm: str,
@@ -204,6 +219,7 @@ def label_sample(
     donor_tsv: Optional[bytes],
     depth_members: Dict[str, bytes],
     opts: LabelOptions,
+    reference_build: Optional[str] = None,
 ) -> dict:
     """-> {"status": "computed"|"ok"|"skipped"|"failed"|"over_budget", "reason", "df" (the label table), "coverage", "summary",
     "seconds"}; with ``cells_digest`` the sidecar is finished too ("ok", "sidecar": bytes, "entry": manifest entry). Never raises."""
@@ -218,6 +234,11 @@ def label_sample(
         species = LIO.species_of(meta.get("organism", ""))
         if species is None:
             res["reason"] = "organism has no label model (%s)" % (meta.get("organism") or "unknown")
+            return res
+        if reference_build and species not in species_of_build(reference_build):
+            # the counts are on another genome (rat, zebrafish, macaque, ... in a study whose metadata names human or mouse):
+            # the human/mouse models do not apply, so the sample gets no labels rather than wrong ones
+            res["reason"] = "reference build %s has no %s label model" % (reference_build, species)
             return res
         n_called = int(np.asarray(called, bool).sum())
         if n_called == 0:

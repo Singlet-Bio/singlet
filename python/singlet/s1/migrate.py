@@ -296,6 +296,8 @@ def migrate_sample(
         k: v for k, v in (("reference_build", build), ("protocol_name", protocol)) if v
     }  # sample facts recipes may ask for
     lctx = LegacyContext(bundle, gsm, packs, gse, build, protocol, study_bytes)
+    # the sample's own build decides which label model applies (a study can mix species)
+    lctx.sample_build = str(summary.get("reference_build") or build or "")
     mem: dict[str, _Member] = {}
     order = []
     for rel, full in paths:
@@ -639,6 +641,7 @@ def _label_cells(
         donor_tsv=donor,
         depth_members=depth_members() if callable(depth_members) else (depth_members or {}),
         opts=opts.labels,
+        reference_build=getattr(lctx, "sample_build", "") or lctx.reference_build or None,
     )
     if res.get("status") == "computed":
         try:
