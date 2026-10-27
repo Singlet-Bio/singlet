@@ -20,6 +20,13 @@ with an exact genome aligner.
   H100** than a CPU node. Nothing is off limits: custom data structures, low-level CUDA, careful CPU↔GPU communication,
   cuSPARSE / CUB / nvCOMP where they help.
 
+**Target hardware and goal (Zach, 2026-10-27, after the exploration in `docs/gpu-engine/exploration.md`):**
+- **Hardware:** design for Clipper's H100 NVL nodes specifically.
+- **Goal:** the most performant pipeline those nodes allow that **reproduces the CPU engine's results**. Profile carefully
+  and optimise exhaustively to push H100 node performance to its maximum.
+- **Why:** GPU is a critical part of having more options for running analyses, beyond the Beta campaign.
+- **Plan:** microbenchmarks M1, M2 and M10 run first on Clipper, under the Alpha-first rules.
+
 **Relation to Research Beta.** This is a research track. It must not delay the Beta Software Freeze (BSF) for the CPU
 engine; see [rollout-plan.md](rollout-plan.md). If the GPU engine reaches equivalence before or during the campaign, it
 can take over from that point under the same release gate. "Same outputs" is the contract, not "same code".
