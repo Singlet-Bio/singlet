@@ -22,8 +22,14 @@ find "$B" -name '*.gcda' -delete
 cmake --build "$B" --target singlet -j "$JOBS" > "$B.build-gen.log" 2>&1
 
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-"$B/src/pipeline/singlet" "$TRAIN" --ref-base "$REFBASE" --genome-dir "$GENOME" --exons "$GTF" \
-  --out-prefix "$T/" --threads "$THREADS" --pipeline --output-format mtx > "$B.train.log" 2>&1
+IFS=: read -ra TRAINS <<< "$TRAIN"
+: > "$B.train.log"
+for k in "${!TRAINS[@]}"; do
+  mkdir -p "$T/$k"
+  "$B/src/pipeline/singlet" "${TRAINS[$k]}" --ref-base "$REFBASE" --genome-dir "$GENOME" --exons "$GTF" \
+    --out-prefix "$T/$k/" --threads "$THREADS" --pipeline --output-format mtx >> "$B.train.log" 2>&1
+  echo "pgo: trained on ${TRAINS[$k]}"
+done
 n=$(find "$B" -name '*.gcda' | wc -l)
 echo "pgo: training run wrote $n profile files"
 [ "$n" -gt 0 ] || { echo "pgo: no profile written"; exit 1; }
