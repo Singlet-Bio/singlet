@@ -584,3 +584,37 @@ def test_r2_throttling_is_retried_with_backoff_and_other_errors_are_not(monkeypa
     with pytest.raises(E):
         camp.r2_call(always, retries=3)
     assert len(n) == 4
+
+
+def test_sample_facts_never_carry_an_accession_into_the_manifest(tmp_path, pol):
+    """The library-type screen's text named an excluded library ("replace with mRNA library GSM..."): the transcoder drops accessions
+    from facts, and verify fails a manifest that names any accession the policy excludes, whatever wrote it."""
+    policy, _ = pol
+    b = _policy_bundle(tmp_path)
+    out = tmp_path / "out"
+    facts = {
+        KEEP: {
+            "library_type": {"verdict": "unconfirmed", "basis": f"replace with mRNA library {DROP}"}
+        }
+    }
+    opts = MG.Options(
+        recipes=TM.FakeRecipes(), log=lambda *a: None, policy=policy, sample_facts=facts
+    )
+    MG.write_outputs(MG.migrate_bundle(str(b), str(out), None, opts), opts)
+    mp = out / "s1" / "m" / f"{GSE}.json"
+    assert DROP.encode() not in mp.read_bytes()
+    assert (
+        "another library"
+        in json.loads(mp.read_text("utf-8"))["samples"][0]["provenance"]["library_type"]["basis"]
+    )
+    rep = V.verify(
+        str(b), str(out), None, None, TM.FakeRecipes(), log=lambda *a: None, policy=policy
+    )
+    assert rep.fail == 0, rep.items
+    m = json.loads(mp.read_text("utf-8"))
+    m["samples"][0]["note"] = f"see {DROP}"
+    mp.write_text(json.dumps(m, indent=1), encoding="utf-8")
+    rep = V.verify(
+        str(b), str(out), None, None, TM.FakeRecipes(), log=lambda *a: None, policy=policy
+    )
+    assert any("excluded or withheld accessions" in what for _s, _w, what in rep.items)

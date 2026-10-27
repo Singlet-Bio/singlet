@@ -273,6 +273,17 @@ def _check_policy(rep: Report, policy, leg, man: dict, man_bytes: bytes, gse: st
         "an excluded accession appears in the manifest or a study file",
         "policy",
     )
+    # and no accession the policy excludes or withholds anywhere in the manifest, whatever put it there (sample facts, notes, ...)
+    import re
+
+    found = {x.decode() for x in re.findall(rb"(?<![0-9A-Za-z])(GS[EM][0-9]+)(?![0-9])", man_bytes)}
+    named = sorted(x for x in found if x in policy.excluded or x in policy.withheld)
+    rep.check(
+        not named,
+        "policy",
+        "the manifest names %d excluded or withheld accessions" % len(named),
+        "policy",
+    )
 
 
 def _check_labels(rep: Report, man: dict, s1_dir: str) -> None:

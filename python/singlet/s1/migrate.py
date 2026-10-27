@@ -590,8 +590,13 @@ def sample_extras(lctx: LegacyContext, mem: dict, summary: dict, opts: Options, 
         "classifier": "PR #25 thresholds (misoriented >= 0.7, likely 0.6-0.7)",
     }
     lt = facts.get("library_type")
-    if isinstance(lt, dict):
-        prov["library_type"] = dict(lt)
+    if isinstance(
+        lt, dict
+    ):  # accessions are never copied from the facts (they may name excluded libraries)
+        prov["library_type"] = {
+            k: (re.sub(r"\bGS[EM]\d+", "another library", v) if isinstance(v, str) else v)
+            for k, v in lt.items()
+        }
     elif opts.policy is not None or opts.sample_facts:
         prov["library_type"] = {
             "verdict": "gene_expression",
