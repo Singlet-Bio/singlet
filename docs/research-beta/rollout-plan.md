@@ -148,17 +148,18 @@ Changes in order of value:
 - **Timebox for #1:** two weeks. If identity is not reached, sort in RAM where memory allows, and keep the disk sort
   elsewhere.
 
-**GPU alignment** (Zach asked, 2026-10-27): not orders of magnitude, and not for Beta.
-- **The bottleneck is memory latency.** STAR's seed search walks a ~30 GB suffix array with random, data-dependent access.
-  An H100's memory bandwidth (~3–4 TB/s) is ~10× a CPU node's, which caps a well-built GPU aligner at about 10× a node.
-- **Reported results match that cap:**
-  - NVIDIA's GPU STAR (Parabricks `rna_fq2bam`): users report ~8–9× on a 4-GPU node against CPU STAR, and none with some
-    parameter sets.
-  - Earlier GPU seed-and-extend aligners report ~10×.
-- **Clipper's scale:** Clipper has two H100 NVL GPUs. Two GPUs would equal a few CPU nodes, and Clipper is limited by its
-  network link, not by compute.
-- **Cost of a custom build:** months of work, and proving it identical to STAR for the freeze would be very hard.
-- **Revisit:** after Beta, for a GPU-rich allocation.
+**GPU engine (W11, research track; Zach, 2026-10-27).**
+- **Why:** two or three GPU nodes burden other Clipper users far less than ~20 CPU nodes.
+- **Goal:** design a GPU-native engine for ≥ 10× throughput per H100.
+- **Why it needs new algorithms:** a straight port of STAR is capped near 10× per node by memory latency (Parabricks'
+  GPU STAR reportedly ~8–9× on 4 GPUs). The 10× per GPU needs algorithmic change:
+  - align each distinct sequence once;
+  - sorted, coalesced index search;
+  - certified fast paths with exactness proofs;
+  - counting and pileup done by GPU sort and reduce.
+- **Brief:** [gpu-aligner-brief.md](gpu-aligner-brief.md).
+- **Relation to the BSF:** it does not gate the BSF. It can take over the campaign mid-way if it passes the same
+  equivalence and benchmark gates.
 
 ### 3c. Calendar and SU model
 
@@ -679,7 +680,8 @@ report.
 7. **Models.** Sonnet 5.5 for the workstreams, Opus 5.5 for orchestration, Haiku 5.5 for sweeps.
 8. **Storage.** No BAMs or reads are kept. About 10 TB of long-term storage, on Clipper only (§3d).
 9. **No Anvil work** of any kind until the campaign is ready to deploy.
-10. **GPU alignment** is not pursued for Beta (§3b).
+10. **GPU engine.** A design track (W11, [gpu-aligner-brief.md](gpu-aligner-brief.md)) aiming at 10× per H100. It
+    does not gate the BSF.
 
 **Still open:**
 1. **Non-host stage 2 (§3e).** Which viral, bacterial and vaccine references go into the curated set, and whether
