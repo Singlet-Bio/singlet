@@ -722,3 +722,24 @@ def test_gather_stream_parser(built):
         }
     with pytest.raises(atlas.IndexError_):
         atlas.read_gather_stream(io.BytesIO(b"SGA1\x10\x00\x00\x00{}"))
+
+
+def test_a_sample_without_a_count_matrix_is_skipped_not_an_error():
+    """Legacy samples whose bundle held only provenance/summary JSON (GSE229169, GSE83466, ...) have no cells table: the index
+    leaves them out and lists them as skipped; a sample with matrices but no cells table is still an error."""
+
+    def sample(members):
+        return atlas._SampleIn(
+            gsm="GSM1",
+            gse="GSE1",
+            key="s1/s/GSM1/x.s1",
+            bytes=1,
+            sha256=None,
+            n_columns=0,
+            members=members,
+        )
+
+    empty = atlas._load_sample(None, sample({"summary.json": {"kind": 0}}), None, None)
+    assert empty.skip and not empty.error and empty.cols is None
+    broken = atlas._load_sample(None, sample({"matrix_exon.1pz": {"kind": 1}}), None, None)
+    assert broken.error == "no cells table" and not broken.skip

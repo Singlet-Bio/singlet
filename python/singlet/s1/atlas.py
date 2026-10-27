@@ -1220,6 +1220,7 @@ class _SampleIn:
     label_version: str = ""
     plan_members: Dict[str, dict] = field(default_factory=dict)
     error: Optional[str] = None
+    skip: Optional[str] = None  # left out of the index on purpose (no cells to index), recorded, not an error
 
 
 def _transport(base: Optional[str]):
@@ -1291,7 +1292,11 @@ def _load_sample(
     try:
         cm = sm.members.get("cells")
         if not cm or int(cm.get("kind", 0)) != 2:
-            sm.error = "no cells table"
+            if not any(int(m.get("kind", 0)) == 1 for m in sm.members.values()):
+                # a legacy sample without a count matrix (its bundle held only provenance/summary JSON): nothing to index
+                sm.skip = "no cells table (the sample object holds no count matrix)"
+            else:
+                sm.error = "no cells table"
             return sm
         buf = _get(t, sm.key, int(cm["off"]), int(cm["len"]))
         mv = memoryview(buf)
@@ -1528,6 +1533,7 @@ class BuildResult:
     stats: dict
     errors: List[dict]
     d1: Dict[str, List[dict]] = field(default_factory=dict)
+    skipped: List[dict] = field(default_factory=list)  # samples left out on purpose: {gsm, gse, reason}
 
     def d1_export(self, out_dir: Union[str, Path]) -> List[str]:
         """Per-sample aggregates for the catalog (tier 1, docs CELL-ARCHITECTURE.md): ``sample_cell_summary.csv`` (the layout of the
@@ -1716,7 +1722,12 @@ def build_index(
         )
     log(f"read {len(loaded)} samples in {time.time() - t0:.1f}s")
     errors = [{"gsm": s.gsm, "gse": s.gse, "error": s.error} for s in loaded if s.error]
-    ok = [s for s in loaded if not s.error and s.cols is not None]
+    skipped = [
+        {"gsm": s.gsm, "gse": s.gse, "reason": s.skip} for s in loaded if s.skip and not s.error
+    ]
+    if skipped:
+        log(f"{len(skipped)} samples left out of the index (no cells to index): {skipped[0]}")
+    ok = [s for s in loaded if not s.error and not s.skip and s.cols is not None]
 
     # ---- ordinals: keep earlier ones, append the rest in (GSE, GSM) order
     prev = _previous_ordinals(t, previous)
@@ -2112,6 +2123,7 @@ def build_index(
     stats = {
         "samples": len(ok),
         "errors": len(errors),
+        "skipped": len(skipped),
         "cells": n_rows_total,
         "shard_bytes": sum(len(objects[k]) for k in shard_list),
         "directory_bytes": len(dblob),
@@ -2160,6 +2172,7 @@ def build_index(
             "cell_feature": [f.cell_feature_row() for f in fspecs],
             "cidx_sample": d1_samples,
         },
+        skipped=skipped,
     )
 
 

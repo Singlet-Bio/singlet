@@ -9,10 +9,12 @@
 # Needs the build of COMMIT from s1_migrate.sbatch (MODE=build) and ~/.config/singlet-r2.env.
 #SBATCH --job-name=stcidx
 #SBATCH --account=debruinz
-#SBATCH --partition=short-cpu
+# The whole atlas (7,461 studies, 52,893 samples, 237M cells) mirrors 646 GB and peaks near 200 GB of RAM: 192G was OOM-killed once
+# (788505) and used 201 GB the next time (788516). bigmem nodes have 1.5 TB and 3.3 TB of /tmp; a run takes about 3.5 h.
+#SBATCH --partition=bigmem
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=96G
-#SBATCH --time=03:59:00
+#SBATCH --mem=400G
+#SBATCH --time=10:00:00
 #SBATCH --no-requeue
 #SBATCH --output=/mnt/projects/debruinz_project/debruinz/singlet/logs/%x-%j.out
 set -euo pipefail
