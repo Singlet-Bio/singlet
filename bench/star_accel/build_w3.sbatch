@@ -39,8 +39,10 @@ cp $SCR/n/src/pipeline/singlet $PB/bin/$NAME-nopgo.new && mv $PB/bin/$NAME-nopgo
 
 echo "[build] 5' training sample (first 2M read pairs of pbmc5p_v1, encoded with bin/singlet-campaign)"
 D5=$PB/data/pbmc5p_v1/sub
-$PB/bin/singlet-campaign encode --reads $D5/sub_S1_L001_R1_001.fastq.gz $D5/sub_S1_L001_R2_001.fastq.gz \
-  --max-reads 2000000 -o $SCR/train5p.1fq > $SCR/enc5p.log 2>&1 || { tail -20 $SCR/enc5p.log; exit 1; }
+for r in R1 R2; do zcat $D5/sub_S1_L001_${r}_001.fastq.gz | head -n 8000000 > $SCR/t5_$r.fastq || true; done
+$PB/bin/singlet-campaign encode --reads $SCR/t5_R1.fastq $SCR/t5_R2.fastq -o $SCR/train5p.1fq > $SCR/enc5p.log 2>&1 \
+  || { tail -20 $SCR/enc5p.log; exit 1; }
+rm -f $SCR/t5_R1.fastq $SCR/t5_R2.fastq
 grep -E "Done|Protocol" $SCR/enc5p.log
 cp $PB/data/pbmc2m/pbmc2m.1fq $SCR/train3p.1fq
 
