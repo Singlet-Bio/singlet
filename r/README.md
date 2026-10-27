@@ -40,6 +40,10 @@ sce <- singlet_load("GSM4120733")
 # Several studies, combined on their shared gene axis
 sce <- singlet_load(c("GSE138867", "GSE146974"))
 
+# Per-cell labels are in colData (?singlet_labels); GEO sample fields are geo_*
+table(sce$cell_type, sce$sex_chrom)
+heart <- singlet_cells("GSE286650", cell_type == "cardiac muscle cell" & called_ed)
+
 # ...or as a Seurat object
 obj <- singlet_load("GSE138867", as = "seurat")
 

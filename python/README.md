@@ -55,6 +55,13 @@ pbmc1 = singlet.load("GSM4120733")
 # Load and concatenate several studies into ONE AnnData
 adata = singlet.load(["GSE138867", "GSE146974"])
 
+# Per-cell labels come with every per-sample study (docs/cell_annotation.md section 8)
+adata.obs[
+    ["cell_type", "cell_type_ontology_term_id", "sex_chrom", "ancestry_hancestro", "called_ed"]
+]
+# ... and can select cells before anything else is downloaded
+heart = singlet.cells("GSE286650", "cell_type == 'cardiac muscle cell' and sex_chrom == 'male'")
+
 # Load a local .singlet file
 adata = singlet.load("path/to/GSE138867.singlet")
 

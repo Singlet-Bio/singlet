@@ -67,7 +67,7 @@ Retired (raise NotImplementedError; their hosts were never in service):
     base_url, singlet.atlas.*
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 from singlet._aggregate import aggregate
 from singlet._ambient_rna_score import ambient_rna_score

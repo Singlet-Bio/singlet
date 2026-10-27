@@ -1,5 +1,24 @@
 # singlet (R) — NEWS
 
+## singlet 1.1.0
+
+### New features
+
+- `load()` / `singlet_load()` and `singlet_cells()` put the per-cell columns of every .s1 sample's cells table in
+  `colData`: `cell_type` and `cell_type_ontology_term_id` (the CL label at level <= 2 by default), the deepest call
+  (`cell_type_deepest*`), the CL path and per-level confidences, `sex_chrom`, `sex_score`, `ancestry_hancestro`,
+  `ancestry_prob`, `called`, `called_ed`, `called_ed_fdr`, and the QC, donor and mtDNA columns (categorical codes
+  decoded). New arguments `cell_type_level`, `cell_type_min_score` and `include_unvalidated`. See `?singlet_labels`.
+- `singlet_cells()` conditions can use those columns, e.g. `singlet_cells("GSE286650", cell_type == "T cell" & called_ed)`.
+
+### Changes
+
+- The curated GEO sample fields are now `geo_tissue`, `geo_cell_type`, `geo_disease`, `geo_sex` and `geo_age`
+  (previously `tissue`, `cell_type`, `disease`, `sex`, `age`), so `colData$cell_type` is the per-cell label.
+- `qc_doublet_score` is unvalidated and left out of `colData` unless `include_unvalidated = TRUE` or it is named in
+  `columns`.
+- Combining several studies whose `colData` columns differ fills the missing columns with `NA`.
+
 ## singlet 1.0.0
 
 ### New features

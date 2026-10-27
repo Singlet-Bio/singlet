@@ -57,7 +57,7 @@ NULL
             p <- system.file("extdata", "cl_names.tsv", package = "singlet")
             tab <- if (nzchar(p)) utils::read.delim(p, comment.char = "#", quote = "", stringsAsFactors = FALSE,
                                                     colClasses = "character") else data.frame(id = character(0), name = character(0))
-            cache <<- stats::setNames(tab$name, tab$id)
+            cache <<- structure(tab$name, names = tab$id)
         }
         cache
     }
@@ -120,7 +120,7 @@ NULL
     ct_id[rows] <- ids[cbind(code[rows], chosen[rows])]
     ct_score[rows] <- S[cbind(rows, chosen[rows])]
     names_cl <- .s1_cl_names()
-    local_names <- stats::setNames(deep_name, deep_id)
+    local_names <- structure(deep_name, names = deep_id)
     nm <- unname(names_cl[ct_id])
     miss <- is.na(nm) & !is.na(ct_id)
     nm[miss] <- unname(local_names[ct_id[miss]])

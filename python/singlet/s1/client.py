@@ -1635,7 +1635,8 @@ def _study_to_anndata(
 ) -> "anndata.AnnData":
     """AnnData of the called cells; ``obs`` carries the per-cell labels, cell calls and QC columns of the cells table
     (:mod:`singlet.s1.labels`: ``cell_type`` at level <= ``cell_type_level`` with path score >= ``cell_type_min_score``;
-    ``qc_doublet_score`` only with ``include_unvalidated``), then the GEO sample metadata."""
+    ``qc_doublet_score`` only with ``include_unvalidated``), then the GEO sample metadata. ``layers`` holds ``spliced`` and
+    ``unspliced``; anndata 0.13 and newer also list ``X`` itself under the key ``None``."""
     mods = normalize_modalities(modalities, layers=layers)
     gsms = _select_samples(study, samples, obs_filter)
     if not gsms:

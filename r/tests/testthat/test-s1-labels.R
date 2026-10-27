@@ -129,7 +129,7 @@ test_that("load() puts the labels in colData, matching the Python client", {
     with_labels_cache({
         mp <- file.path(root, "s1", "m", "GSE900001.json")
         expect_warning(sce <- load(mp), "skipped 1 of 3")
-        cd <- as.data.frame(SummarizedExperiment::colData(sce), check.names = FALSE)
+        cd <- as.data.frame(SummarizedExperiment::colData(sce))
         truth <- utils::read.delim(file.path(root, "truth_GSM9000001_labels.tsv"), na.strings = "NA", stringsAsFactors = FALSE,
                                    quote = "", colClasses = c(barcode = "character"))
         one <- cd[cd$gsm_id == "GSM9000001", , drop = FALSE]
@@ -149,7 +149,7 @@ test_that("load() puts the labels in colData, matching the Python client", {
         expect_true(nrow(three) == 25L && all(is.na(three$cell_type)) && all(is.na(three$called_ed)))
         sce2 <- suppressWarnings(load(mp, cell_type_level = 6L, cell_type_min_score = 0, include_unvalidated = TRUE))
         expect_true("qc_doublet_score" %in% names(SummarizedExperiment::colData(sce2)))
-        expect_identical(max(sce2$cell_type_level), 4L)
+        expect_identical(max(sce2$cell_type_level, na.rm = TRUE), 4L)
     })
 })
 
