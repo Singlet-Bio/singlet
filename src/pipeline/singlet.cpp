@@ -6983,8 +6983,10 @@ int main(int argc, char* argv[]) {
             args.push_back("CB");
             // Debug only (BAM-stream CB-correction replica test): extra STAR SAM attributes, e.g. SINGLET_EXTRA_SAM_ATTRS="CY UY".
             if (const char *extra_attrs = std::getenv("SINGLET_EXTRA_SAM_ATTRS")) {
+                static std::vector<std::string> extra_store;   // args holds const char*: keep the strings alive
                 std::istringstream extra_ss(extra_attrs);
-                for (std::string a; extra_ss >> a;) args.push_back(a);
+                for (std::string a; extra_ss >> a;) extra_store.push_back(a);
+                for (const auto &a : extra_store) args.push_back(a.c_str());
             }
 
             // Skip unmapped reads (pileup ignores them anyway)
