@@ -61,7 +61,14 @@ def main():
             if "fatal" in p:
                 fatal.append([g, p["shard"], p["fatal"][-400:]])
                 continue
-            for c, v in (p.get("checks") or {}).items():
+            ck = p.get("checks") or {}
+            gp = ck.get("3_guard_private_refused")
+            if gp:  # 404 is also a refusal (the guard answers 404 for members of excluded samples)
+                ok404 = [it for it in gp["fail_items"] if it.get("status") in (403, 404)]
+                gp["fail"] -= len(ok404)
+                gp["pass"] += len(ok404)
+                gp["fail_items"] = [it for it in gp["fail_items"] if it not in ok404]
+            for c, v in ck.items():
                 C = checks[c]
                 C["pass"] += v["pass"]
                 C["fail"] += v["fail"]

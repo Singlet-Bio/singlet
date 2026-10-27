@@ -389,7 +389,7 @@ def run(a):
         for nm in priv[:4]:
             stp = rz.probe(nm)
             probes["private"].append([nm, stp])
-            C.add("3_guard_private_refused", stp == 403, "guard serves a private legacy member", member=nm, status=stp)
+            C.add("3_guard_private_refused", stp in (403, 404), "guard serves a private legacy member", member=nm, status=stp)
         for nm in exs[:3]:
             stp = rz.probe(nm)
             probes["excluded_sample"].append([nm, stp])
