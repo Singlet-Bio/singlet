@@ -468,6 +468,8 @@ def test_counts_on_a_non_human_mouse_build_get_no_labels_whatever_the_metadata_s
     assert LS.species_of_build("GRCh38-2024-A") == {"human"}
     assert LS.species_of_build("GRCm39-2024-A") == {"mouse"}
     assert LS.species_of_build("GRCh38-GRCm39-barnyard") == {"human", "mouse"}
+    assert not LS.build_rules_out("toy", "human") and not LS.build_rules_out(None, "mouse")
+    assert LS.build_rules_out("GRCm39-2024-A", "human") and not LS.build_rules_out("GRCh38-GRCm39-barnyard", "mouse")
     for build in ("mRatBN7.2", "GRCz11", "Mmul_10", "Sscrofa11.1"):
         assert LS.species_of_build(build) == set()
         r = LS.label_sample(

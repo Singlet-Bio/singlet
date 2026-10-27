@@ -205,6 +205,23 @@ def species_of_build(build: Optional[str]) -> set:
     return {sp for rx, sp in _BUILD_SPECIES if rx.search(b)}
 
 
+# genome builds of species without a label model (the atlas has mRatBN7.2, GRCz11, Mmul_10, Sscrofa11.1)
+_OTHER_BUILD = re.compile(
+    r"mRatBN|Rnor|rn\d|GRCz|danRer|Mmul|rheMac|Sscrofa|susScr|GRCg|galGal|canFam|ROS_Cfam|ARS-UCD|bosTau|xenTro|Xenopus",
+    re.I,
+)
+
+
+def build_rules_out(build: Optional[str], species: str) -> bool:
+    """True when the reference build is of another genome than ``species`` (a human or mouse model): a human/mouse build of the
+    other species, or a known build of a species without a model. An unrecognised build name rules nothing out."""
+    b = str(build or "").strip()
+    named = species_of_build(b)
+    if named:
+        return species not in named
+    return bool(_OTHER_BUILD.search(b))
+
+
 def label_sample(
     *,
     gsm: str,
@@ -235,7 +252,7 @@ def label_sample(
         if species is None:
             res["reason"] = "organism has no label model (%s)" % (meta.get("organism") or "unknown")
             return res
-        if reference_build and species not in species_of_build(reference_build):
+        if build_rules_out(reference_build, species):
             # the counts are on another genome (rat, zebrafish, macaque, ... in a study whose metadata names human or mouse):
             # the human/mouse models do not apply, so the sample gets no labels rather than wrong ones
             res["reason"] = "reference build %s has no %s label model" % (reference_build, species)
