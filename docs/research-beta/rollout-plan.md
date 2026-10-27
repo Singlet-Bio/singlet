@@ -2,7 +2,7 @@
 
 Written 2026-10-27 by the orchestrating session after a five-part audit. The evidence, with file and line references, is in
 [audit-2026-10-27.md](audit-2026-10-27.md). This plan supersedes §5 ("Path to Research Beta") of
-[../research-beta.md](../research-beta.md). Nothing in it has been launched; §8 lists the decisions it needs.
+[../research-beta.md](../research-beta.md). Nothing in it has been launched. §8 lists the decisions taken on 2026-10-27 and those still open.
 
 ## 0. Decisions on record (Zach)
 
@@ -15,8 +15,17 @@ Written 2026-10-27 by the orchestrating session after a five-part audit. The evi
   starts. Re-running ~70k samples twice is not affordable.
 
 **Campaign**
-- **No SUs on downloads.** Downloads must not spend Anvil SUs; run them on the Anvil login nodes.
-- **Acceleration.** Make the remaining pipeline as fast as possible before launch.
+- **No SUs on downloads.** Downloads must not spend Anvil SUs; run them on the Anvil login nodes. **Approved by Amiya
+  (Purdue RCAC)** for the fetcher on login nodes (Zach, 2026-10-27). Keep it network-only and within the 2-core /
+  12 GiB cgroup.
+- **Acceleration.** Make the remaining pipeline as fast as possible before launch. FASTASSIGN (#41) goes in if its
+  outputs are equivalent, plus a rebuilt PGO binary.
+- **Scope and order.** Transcriptomics runs first, then the other modalities. **Every modality is developed and debugged
+  before anything runs at production scale** (2026-10-27): the BSF covers ADT/HTO, V(D)J/CRISPR, ATAC/Multiome/spatial,
+  mtDNA lineage and cell type as well as GEX.
+- **Alpha has priority on Clipper.** Development and benchmark jobs may run during the Alpha freeze only if they cannot
+  delay Alpha's jobs (§9).
+- **Models.** Sonnet 5.5 for the workstreams (the gruntwork); Opus 5.5 for orchestration only; Haiku 5.5 for sweeps.
 - **Depth.** All reads of every run; no cap.
 - **Clusters.** Clipper first, Anvil only after Zach confirms. State the SU estimate before anything over ~1,000 SU.
 
@@ -69,8 +78,8 @@ inbox event.
   - **Work queue:** it claims `fetchq/` tickets that the controller writes.
   - **Liveness:** it sends heartbeat events. If the fetcher dies, its samples go back to `released`, never `lost`.
 - **On Clipper:** the same fetch code, run as cheap 1–2 core I/O jobs as today. Free, but the jobs are network-only.
-- **Fallback, if the ACCESS help desk says no to login-node downloads:** a 1–2 core `shared` fetcher job, about 24 SU
-  per day.
+- **Policy:** approved by Amiya at Purdue RCAC (2026-10-27). Record the approval in the runbook. The fallback, a 1–2 core
+  `shared` fetcher job at ~24 SU per day, stays in the code for outages and login-node maintenance.
 
 **Compute tier.** The node job decodes each run on the node's spare cores. Each Anvil node has 16 cores outside the
 112 four-thread slots, so this costs about 0 extra SU. It then runs `screen-runs` and #47's concatenation
@@ -119,6 +128,20 @@ Changes in order of value:
 | 4 | **Serial stages:** pass 1 from the header, overlap the reference load, parallel CB refresh, 4 GB sequence cache | 4–5%: ~20–30k | identical |
 | 5 | **Packing:** shared genome plus mapped screen index; 1–2 threads or 1.3× oversubscription where memory allows | 20–30% of core-seconds where it applies | memory.peak at 28-way |
 
+**What retiring the sorted BAM changes** (Zach asked, 2026-10-27):
+- **Nothing published changes if the route holds.** The BAM is already deleted after pileup and never published.
+- **STAR's barcode correction must be rebuilt.** STAR writes the corrected CB/UB tags only while sorting. The pileup would
+  apply the same 1-mismatch correction with N-base pseudocounts from pass-1 exact counts. This is the main risk, and the
+  identity test must cover it.
+- **The pileup becomes one streaming pass in read order.** Counts and junctions don't need position order. SNP, mtDNA and
+  intron calls need per-position tallies kept in memory instead of walking a sorted file. That is cheap for chrM and a
+  fixed SNP panel; memory must be measured for whole-genome intron and SNP tallies.
+- **No random access.** The strand re-run and the strand probe can't reopen an index; strand comes from the header and
+  the run screen.
+- **Determinism.** Unsorted STAR output arrives in thread order, so every caller must be order-independent. That is the
+  same work as bug 5 (barcode-order dependence).
+- **Debugging.** A `--keep-sorted-bam` flag keeps today's path for the benchmark cohort and for IGV inspection.
+
 **Targets.**
 - **With #1:** ~250–330k core-h, with depth no longer penalised.
 - **Without #1:** ~330–420k.
@@ -146,6 +169,93 @@ Changes in order of value:
 supplement, or the GVSU link gives margin.
 
 **Rolling publication:** beta.singlet.bio fills study by study from the first week of the campaign.
+
+### 3d. Keeping reads so a re-run need not re-download (Zach asked, 2026-10-27)
+
+**Keep reads, not BAMs.**
+- A BAM is tied to one aligner and one reference, so any engine or reference change re-aligns anyway.
+- A BAM is also much larger than the reads it came from. The 5′ smoke sample at 122 M pairs had an estimated 22 GB BAM,
+  about 180 B per pair. A `.sra` file is about 50 B per pair (format-1fq.md §10).
+- The reads in `.1fq` are what a re-run needs. Decoding them takes seconds, and the network is then out of the picture.
+
+**Sizes for the whole atlas** (~1.58 PB of `.sra`, about 3×10¹³ read pairs):
+
+| What is kept | Atlas size | Note |
+|---|---|---|
+| Coordinate-sorted BAM | ~3–6 PB | 2–4× the download; not worth keeping |
+| `.1fq`, binned 4-level quality | ~0.63 PB | keeps what the SNP and mtDNA callers use |
+| `.1fq`, no quality | ~0.57 PB | enough for counts only |
+| `.1fq`, binned quality + dedup | ~0.35 PB | dedup must be proven lossless for UMI counting |
+
+The `.1fq` figures are format-1fq.md §10 design estimates. W4 measures them on the validation samples.
+
+**Where it could live:**
+- **Clipper project space:** about 47 TB free, no quota (figure from the clipper skill notes; re-check with `df`). That
+  holds ~7% of the atlas as `.1fq`.
+- **Anvil:**
+  - `$PROJECT` is 5 TB by default, more on request. It is deleted 90 days after the allocation ends.
+  - Scratch is purged after 30 days. Anvil has no archive tier.
+  - Anvil can hold a year of data only while the allocation is renewed, and only at TB scale, not PB.
+- **Open Storage Network** through ACCESS:
+  - 10–50 TB per request, at 1 ACCESS credit = 1 GB.
+  - Up to ~300 TB by asking OSN directly; beyond that, buying a pod.
+- **Cloudflare R2:** ~$0.015/GB-month, or $0.01 for infrequent access. 0.63 PB is ~$6–9k per month. Too expensive.
+- **A GVSU-hosted disk server or tape** (~0.7 PB usable): ask GVSU research computing for a price. This is probably the
+  cheapest path per TB-year.
+
+**Recommendation:**
+- Don't keep BAMs.
+- Keep binned-quality `.1fq` in a rolling cache on Clipper project space for:
+  - the benchmark and validation cohorts;
+  - deep and 5′ samples;
+  - anything that failed or was flagged.
+- Get a GVSU storage quote before the BSF. If ~0.7 PB is affordable, cache every sample, so a later re-run is limited by
+  compute rather than by Clipper's ~13 TB/day link.
+
+### 3e. Non-host screen: what it does and what it costs (Zach asked, 2026-10-27)
+
+**Not an aligner like STAR.** It is a k-mer sketch classifier in the style of sylph and Kraken2, run on the cDNA reads that
+STAR leaves unmapped (`include/singlet/pileup/nonhost/`). Steps:
+1. **Input:** STAR's unmapped mate 1 (cDNA) and mate 2 (barcode + UMI), capped at the first 20 M reads.
+2. **Sketch:** canonical 21-mer minimizers, window 11, for each read.
+3. **Host subtraction:** a ~313 MB Bloom filter of host-genome minimizers removes host k-mers. Reads with fewer than 5
+   non-host minimizers are `UNKNOWN`. These are mostly unmapped host repeats.
+4. **Lookup:** each read's minimizers are matched against the viral and microbial (bacterial + fungal) indexes. These are
+   flat sorted arrays, ~25 GB on disk; the fungal index alone has ~1.06 B entries. The match is a sort-merge scan over
+   the whole index, so its cost grows with the index size, not with the number of reads.
+5. **Abundance:** an EM, as in Bracken and sylph, turns per-read multi-hits into species abundances with HIGH, MEDIUM and
+   LOW confidence.
+6. **Confirmation:** a seed-chain check against each detected species' genome FASTA, if the FASTA is installed.
+7. **Per cell:** a cell × species matrix of reads and UMIs (`nonhost_per_cell.1pz`). Reads and UMIs are never published.
+
+**What it reports:** species (and kingdom) per cell. It gives no genes or transcripts (`n_genes` is always 0, because no
+annotation is loaded).
+
+**Transcript level would be feasible as an add-on:**
+- **How:** after the EM, align only the reads assigned to detected species against those species' annotated
+  transcriptomes. That gives a cell × microbial-gene matrix.
+- **Cost:** small, because it touches only detected-species reads (usually well under 1% of reads). A bacterial genome
+  indexes in about a second. It becomes expensive only for heavily contaminated samples with dozens of species, so cap
+  the number of species.
+- **Biology limits what it shows:**
+  - 10x 3′ and 5′ chemistries capture polyadenylated RNA. Polyadenylated viruses, such as SARS-CoV-2, HIV, EBV and
+    influenza mRNAs, are captured well, and their gene-level counts are informative.
+  - Bacterial mRNA is not polyadenylated, so bacterial gene profiles would be sparse and biased.
+- **Recommendation:** viral gene level for Beta if W7 can benchmark it on real infected-sample truth. Bacteria and fungi
+  stay at species level.
+
+**Making it cheap** (W3):
+- **Load cost:** today each job zero-fills and copies 25–35 GB of index into its own heap. Change this to one pre-merged
+  index file per node, memory-mapped read-only and shared through the page cache: loading becomes ~free, and per-job
+  memory drops by ~30 GB.
+- **Scan cost:** the whole-index scan is about 25 GB of sequential reads per job. Use binary-search lookup instead when a
+  sample has few unmapped reads (most 3′ samples), and keep the merge scan for large batches.
+- **Read count:** deduplicate identical unmapped reads (counting multiplicity) and drop low-complexity reads before the
+  sketch.
+- **Discarded dump:** stop writing `nonhost_reads.fq`.
+- **Cost model:** refit it from measured timers at 0.5, 2.6 and 20 M unmapped reads. Today's model charges 4.5 s per M
+  reads (~150k core-h); the audit estimates 10–47k.
+- **Target:** under 3% of the wall time and under 2 GB of extra RSS per job.
 
 ## 4. Alignment with Alpha
 
@@ -203,8 +313,10 @@ at this file. Each one:
 - writes a handoff note `docs/research-beta/ws-<id>.md` at every stop;
 - ends its turns with `wrap_up`.
 
-**Models.** Opus 5.5 where the work is deep C++ correctness; Sonnet 5.5 elsewhere; Haiku 5.5 for sweeps and
-checklists.
+**Models** (Zach, 2026-10-27):
+- Sonnet 5.5 for every workstream session.
+- Opus 5.5 only for the orchestrating session, which reviews designs and resolves cross-workstream questions.
+- Haiku 5.5 for sweeps and checklists.
 
 ### W1. Integration, naming and CI (Sonnet 5.5). Starts first.
 
@@ -235,7 +347,7 @@ checklists.
 - **Does not touch:** engine logic, `python/singlet/s1/` (other than the rename), or the website beyond CI.
 - **Clusters:** Clipper `debug-cpu` / `short-cpu` for the identity check only (decision 1).
 
-### W2. Engine correctness (Opus 5.5). After W1 phase A.
+### W2. Engine correctness (Sonnet 5.5). After W1 phase A.
 
 - **Goal:** every open correctness bug fixed and proven on real ground truth.
 - **Owns:**
@@ -260,7 +372,7 @@ checklists.
 - **Done when:** each fix has a real-data result in its PR, and 4/8/16 threads plus shuffled run and barcode order give
   identical outputs.
 
-### W3. Engine performance (Opus 5.5). After W1 phase A.
+### W3. Engine performance (Sonnet 5.5). After W1 phase A.
 
 - **Goal:** the lowest cost per sample with identical outputs (§3b).
 - **Owns:**
@@ -271,10 +383,12 @@ checklists.
   - `src/star/bench/`.
 - **Work:**
   1. Measure first (audit §3 "Measure first").
-  2. Read FASTASSIGN's identity logs. If identical, merge #41 and #47.
-  3. Non-host: a pre-merged, memory-mapped index; drop the dump.
+  2. Read FASTASSIGN's identity logs. Merge #41 only if its outputs are equivalent on real 3′, 5′ and deep data (Zach);
+     then merge #47.
+  3. Non-host, per §3e: a shared memory-mapped index, adaptive lookup, read dedup, no dump; measured against the
+     <3% wall and <2 GB RSS targets. Prototype viral gene-level counts, cost-capped.
   4. Serial-stage trims and the 4 GB sequence cache.
-  5. BAM retirement, timeboxed to two weeks with a fallback.
+  5. BAM retirement, timeboxed to two weeks with a fallback, with a `--keep-sorted-bam` debug path (§3b).
   6. Thread count and packing study (memory.peak at 28-way on Clipper; the Anvil numbers come from the pilot).
   7. PGO rebuild on 3′ + 5′ data and the final pin.
 - **Done when:**
@@ -298,10 +412,12 @@ checklists.
   4. Staging age, byte and file caps.
   5. Ship out/ before the purge.
   6. An SRA Lite option, used only on W7's verdict.
-  7. Draft the ACCESS help-desk question on login-node downloads, for Zach to send.
+  7. Record Amiya's login-node approval in the Anvil runbook, with the fetcher's limits (2 cores, 12 GiB, 4–8 streams).
   8. A login-node fetch bandwidth test of ~200 GB to `$SCRATCH` (no SUs; needs Zach's OK).
-  9. Re-run the Clipper smoke test **with whitelists** (decision 1).
-  10. Routing for non-GEX runs and Visium per decision 4.
+  9. Re-run the Clipper smoke test **with whitelists**, on terms that cannot delay Alpha (§9).
+  10. Routing for non-GEX runs and Visium, so each modality's runs are queued for its own campaign.
+  11. The reads cache (§3d): measure `.1fq` sizes on the validation samples, build a rolling cache on Clipper project
+      space, and make the planner use a cached `.1fq` before downloading.
 - **Done when:**
   - a dry run on both clusters shows the projection;
   - the fetcher survives a kill and restart without parking samples;
@@ -369,8 +485,17 @@ checklists.
      - Kang doublet artefacts;
      - the genotype cohort rows;
      - the extra hgmm libraries.
-  4. Measure SRA Lite on SNP and mtDNA truth.
-  5. Report pass or fail per layer.
+  4. **Doublet and empty-droplet benchmarks** (Zach requires both before the doublet combiner #43 is decided). Use real
+     truth only:
+     - **Doublets:** genotype cross-donor doublets (Kang and the genotype pools), HTO multiplets from hashed libraries, and
+       human-mouse barnyard mixtures. Compare against scDblFinder, DoubletFinder and Scrublet, plus 10x's published
+       outputs where they exist. Report heterotypic vs homotypic separately.
+     - **Empty droplets:** the independent-truth set (Kang genotype F1 0.991) plus barnyard and hashed libraries,
+       against CellBender, EmptyDrops_CR and Cell Ranger's published calls.
+  5. Measure SRA Lite on SNP and mtDNA truth.
+  6. Non-host: species-level truth (spike-ins or infected samples with orthogonal detection), and viral gene-level
+     truth if W3's prototype is kept.
+  7. Report pass or fail per layer.
 - **Done when:** every capability file is `final` at the pinned commit, and the gate file exists.
 
 ### W8. Independent QC and audit (Sonnet 5.5, with Haiku 5.5 sweeps). Starts now; continuous.
@@ -399,18 +524,28 @@ checklists.
   - weekly status into `docs/research-beta/campaign-status.md`.
 - **Single cluster owner:** W9 is the only session that submits campaign jobs.
 
-### Not launched now
+### W10. Other modalities to release quality (Sonnet 5.5, one session per modality). After W1 phase A.
 
-Each of these keeps its open PR and handoff note:
-- ADT/HTO (#29);
-- ATAC, Multiome and Visium (#48);
-- V(D)J and CRISPR (#51);
-- mtDNA lineage (#53);
-- the cell-type model (#32, #44);
-- the doublet and ambient study (#43).
+Zach (2026-10-27): every modality is developed and debugged before anything runs at production scale. Transcriptomics
+still runs first; the other modalities then run as campaigns on the same orchestrator and the same pinned software.
 
-They become follow-on campaigns on the same orchestrator once the GEX campaign is running (decision 4). The orchestrator
-records every dropped run with its library type, so they can be picked up without re-screening.
+| Session | PR and note | Done when |
+|---|---|---|
+| W10a ADT/HTO | #29, [adt-hto.md](adt-hto.md) | ADT counting matches published outputs; HTO demultiplexing passes on real hashed truth |
+| W10b V(D)J and CRISPR | #51, [vdj-crispr.md](vdj-crispr.md) | clonotypes and guide calls pass against 10x's published outputs; no MiXCR |
+| W10c ATAC, Multiome, spatial | #48, [atac-spatial.md](atac-spatial.md) | fragments, peaks and Visium spots pass; the correct scATAC whitelist ships |
+| W10d mtDNA lineage | #53, [mtdna.md](mtdna.md) | lineage calls pass on MAESTER or other real truth; deterministic |
+| W10e cell type | #32, #44, [cell-type.md](cell-type.md) | the model is re-validated on Beta counts at the pinned commit |
+
+**Rules for W10:**
+- **Rebase:** each session rebases its PR onto the Beta engine and owns only its modality's files.
+- **Shared engine files:** changes to them go through W2 (pileup) or W3 (STAR and plumbing) as reviewed PRs.
+- **Benchmarks:** each modality's capability page is written by W7 from real truth.
+- **Pacing:** at most two W10 sessions run at once, to keep token use down; the order is the table order.
+- **Doublet/ambient study (#43):** goes to W7 (doublet and empty-droplet benchmarks), then a decision.
+
+**The orchestrator** records every dropped run with its library type, so the modality campaigns pick their runs up without
+re-screening.
 
 ## 6. Sequencing
 
@@ -424,7 +559,11 @@ W6 design ───────────────► W6 deploy (approved) 
            W3 performance (after W1-A) ──────────► final pin (PGO)
            W7 benchmarks (after W1-A) ───────────► gate file at the pin
                           W5 (after #54) ────────► producer + policy
+           W10a-e modalities (after W1-A, two at a time) ──► every modality at release quality
 ```
+
+The BSF now includes every modality (decision on record, §0), so it moves later than "early Dec". W8 re-estimates the date
+once W10's sessions report their remaining work.
 
 **File ownership is disjoint.**
 - **W1:** CI, config and phase-A renames.
@@ -435,6 +574,7 @@ W6 design ───────────────► W6 deploy (approved) 
 - **W6:** website.
 - **W7:** `bench/public`.
 - **W8:** QC docs only.
+- **W10:** each modality's own files.
 
 **One shared file:** `pileup_engine.h`, where W3's change waits for W2's.
 
@@ -457,18 +597,21 @@ report.
 **Benchmarks**
 - [ ] Every capability JSON is `final` at the pinned commit, on real data with real truth, including the Pareto and reach
       panels.
+- [ ] Doublet and empty-droplet benchmarks are published, and the #43 combiner decision is taken from them.
+- [ ] Every modality (W10a–e) passes its benchmark at the pinned commit.
+- [ ] The non-host screen is under 3% of wall time and 2 GB of extra RSS, with identical tables.
 - [ ] The gate file is generated from those results, and the Beta policy is generated from the gate file, with its
       sha256 pinned.
 
 **Campaign**
-- [ ] The fetch tier runs on both clusters; the Anvil login-node use is confirmed with ACCESS, or the fallback is
-      chosen.
+- [ ] The fetch tier runs on both clusters within the login-node limits RCAC approved.
+- [ ] The reads-cache decision (§3d) is taken, with the GVSU storage quote in hand.
 - [ ] The staging age and byte/file caps work, and so does shipping before the purge.
 - [ ] The smoke test is green with whitelists, and the 50-sample validation is green.
 - [ ] A validation rerun is identical.
 - [ ] No reads, BAMs, genotypes or cluster paths appear in any public output (W8 scan).
-- [ ] The cost model is refitted, and the calendar and SU projection is approved by Zach. An ACCESS supplement has been
-      requested if needed.
+- [ ] The cost model is refitted, and the calendar and SU projection is approved by Zach. Extra ACCESS credits have
+      been requested if needed (§8).
 
 **Publication**
 - [ ] The `.s1` producer verifies all validation samples (`verify --policy beta`), and the clients read them back.
@@ -487,27 +630,33 @@ report.
 - [ ] The GVSU uplink inquiry has an answer.
 - [ ] The Anvil maintenance window has passed or is planned around.
 
-## 8. Decisions needed (Zach)
+## 8. Decisions
 
-1. **Freeze scope.** Can W1, W2, W3, W4 and W7 run development and benchmark jobs on Clipper (`debug-cpu` and
-   `short-cpu`, no atlas data) while Alpha finishes? Or should they wait until Alpha ships? *Recommended:* allow them;
-   they share the bridge, not the Alpha outputs.
-2. **Login-node downloads.**
-   - W4 drafts a short question to the ACCESS help desk about a 4–8-stream fetcher on one login node; you send it.
-   - Until it is answered, the 1–2 core `shared` fetcher is the fallback, at ~24 SU per day.
-   - *Recommended:* ask, so the campaign can't be killed by a policy surprise.
-3. **BAM retirement.** Attempt it, timeboxed to two weeks with a fallback? *Recommended:* yes. It is the largest single
-   saving, and it removes the depth penalty.
-4. **Campaign scope.**
-   - The GEX campaign first. ADT/HTO, ATAC, V(D)J and CRISPR follow as separate campaigns on the same orchestrator.
-   - Visium samples are parked until #48's spot path lands.
-   - *Recommended:* yes. Their runs are separate SRA objects and don't need the GEX campaign to wait.
-5. **Non-host screen.** Keep it on, once the memory-mapped index makes it cheap? *Recommended:* yes.
-6. **Doublet combiner (#43)** in Beta: yes or no. Decide after W7's doublet benchmark.
-7. **Budget.**
-   - Approve the ~200 SU one-node Anvil pilot after the Nov 6–8 outage.
-   - Consider asking ACCESS for a supplement now: each 100k SU moves ~0.5 PB off Clipper's link.
-8. **Models.** Opus 5.5 for W2 and W3; Sonnet 5.5 for the rest; Haiku 5.5 for sweeps.
+**Taken (Zach, 2026-10-27):**
+1. **Freeze scope.** Alpha finishes everything it needs on Clipper first. Development and benchmark jobs may run only on
+   terms that cannot delay Alpha (§9).
+2. **Login-node downloads.** Approved by Amiya (Purdue RCAC). No help-desk question is needed.
+3. **Acceleration.** FASTASSIGN goes in if equivalent, plus a rebuilt PGO binary. BAM retirement stays a two-week
+   timeboxed attempt, now that its implications are written down (§3b).
+4. **Scope.** Transcriptomics first, then the other modalities, but every modality is developed and debugged before any
+   production-scale run (W10).
+5. **Non-host screen.** Make it cheap and keep it on (§3e).
+6. **Doublets and empty droplets.** Both benchmarks come before the #43 decision (W7).
+7. **Models.** Sonnet 5.5 for the workstreams, Opus 5.5 for orchestration, Haiku 5.5 for sweeps.
+
+**Still open:**
+1. **Reads cache (§3d).** Ask GVSU research computing for a price on ~0.7 PB, then choose between a full cache and the
+   rolling Clipper cache.
+2. **Viral gene-level non-host counts:** in Beta or later (§3e).
+3. **Anvil pilot.** The ~200 SU one-node pilot after the Nov 6–8 outage.
+4. **More Anvil credits.** ACCESS allows a PI several Explore, Discover or Accelerate projects ("multiple requests
+   allowed"). Limits per project: Explore 400k, Discover 1.5M, Accelerate 3M credits. The credit limit of a project
+   type cannot be exceeded by supplements; the route to more is a higher tier.
+   - **A second project** must have a distinct research objective. For example, a benchmarking and methods project
+     separate from the atlas re-run. A second small project for the same campaign could be read as splitting to dodge the
+     limit.
+   - **The clean route:** upgrade the existing project to the next tier with a short proposal.
+   - Ask ACCESS (or Amiya) which route fits before applying. Each 100k SU moves ~0.5 PB off Clipper's link.
 
 ## 9. Rules for every workstream
 
@@ -524,6 +673,11 @@ report.
 - **One bridge.** Never run `hpc/clipper/sync.sh` while Alpha or campaign jobs run.
 - **Clipper jobs** use `short-cpu` or `debug-cpu` where they fit, and say how much compute they need before
   submitting.
+- **Alpha first.** Until Alpha ships, development and benchmark jobs:
+  - run with `--nice=10000`, so Alpha's jobs, also under account `debruinz`, start first;
+  - run with array throttles of `%4` or less;
+  - stay off any partition where Alpha has jobs pending.
+  Check `squeue -u $USER` before each submission, and stop submitting if an Alpha job is waiting on resources.
 
 **Process**
 - **Every change goes through a PR on `main`** with CI. Stacked branches are temporary.

@@ -77,6 +77,9 @@ Every published number uses real data with real ground truth; simulation is only
 - Alpha and Beta share one codebase; Beta gets its own R2 bucket, data Worker, D1 database and Pages branch at beta.singlet.bio,
   updated continuously as clusters deliver; the campaign starts only after the Beta Software Freeze (2026-10-27).
 - Downloads must not spend Anvil SUs: fetch on Anvil login nodes, compute on the nodes (2026-10-27).
+- Login-node fetching approved by Amiya (Purdue RCAC); every modality is developed and debugged before any
+  production-scale run, with transcriptomics run first; keep reads as `.1fq`, not BAMs; Sonnet for workstreams, Opus for
+  orchestration (2026-10-27; rollout-plan §8).
 - Speed is a Pareto trade-off against pseudo-aligners, not a gate.
 
 Open decisions: Anvil spend; non-host screen on or off in the re-run; GVSU uplink bandwidth test; storing SNP allele counts privately;
