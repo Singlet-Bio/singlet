@@ -11,10 +11,10 @@
   status  summarise the ledgers
           python scripts/annotate_campaign.py status --out $OUT
 
-``studies.tsv``: columns gse, bytes (legacy bundle size; 0 when unknown), store (1 if a store manifest exists). Build it from the catalog
-(D1 ``gse`` / ``store_study``) or from ``https://singlet.bio/api/manifest``; the planner balances shards by bytes.
+``studies.tsv``: columns gse, bytes (legacy bundle size; 0 when unknown), store (1 if a .s1 manifest exists). Build it from the catalog
+(D1 ``gse`` / ``s1_study``) or from ``https://singlet.bio/api/manifest``; the planner balances shards by bytes.
 
-Per study: a per-sample study is read through the store client from data.singlet.bio (range requests, nothing staged); a legacy study is
+Per study: a per-sample study is read through the .s1 client from data.singlet.bio (range requests, nothing staged); a legacy study is
 downloaded to node-local scratch, annotated, and deleted. When R2 credentials are present (``R2_ACCOUNT_ID``,
 ``R2_ACCESS_KEY_ID``, ``R2_SECRET_ACCESS_KEY``) the study's restricted sidecar (``singlet-restricted`` bucket,
 ``restricted/<GSE>/<GSE>.restricted.singlet``) is downloaded to scratch too, read for the per-donor SNP depths, and deleted with
@@ -42,7 +42,7 @@ sys.path.insert(0, str(HERE.parent / "python"))
 
 DATA_BASE = os.environ.get("SINGLET_DATA_BASE", "https://data.singlet.bio")
 RESTRICTED_BUCKET = os.environ.get("SINGLET_RESTRICTED_BUCKET", "singlet-restricted")
-# data.singlet.bio answers 403 to the default Python-urllib User-Agent (as the store transport notes)
+# data.singlet.bio answers 403 to the default Python-urllib User-Agent (as the .s1 transport notes)
 UA = {"User-Agent": "singlet-annotate/0.1 (+https://singlet.bio)"}
 
 
@@ -65,7 +65,7 @@ def studies_from_manifest(url: str = MANIFEST_URL):
         {
             "gse": m["gse_id"],
             "bytes": pd.to_numeric(m["bytes"], errors="coerce").fillna(0).astype("int64"),
-            "store": m["store_manifest_url"].fillna("").str.len().gt(0).astype(int),
+            "s1": m["s1_manifest_url"].fillna("").str.len().gt(0).astype(int),
             "organism": m["organism"],
             "n_cells": pd.to_numeric(m["n_cells"], errors="coerce").fillna(0).astype("int64"),
         }
@@ -77,7 +77,7 @@ def plan(a) -> int:
 
     df = studies_from_manifest() if a.studies is None else pd.read_csv(a.studies, sep="\t")
     df["bytes"] = df["bytes"].fillna(0).astype("int64")
-    df["store"] = df.get("store", 0)
+    df["s1"] = df.get("s1", 0)
     df = df.sort_values("bytes", ascending=False).reset_index(drop=True)
     load = [0] * a.shards
     shard = []
@@ -142,7 +142,7 @@ def _sidecar(gse: str, dst: Path) -> bool:
 def _has_store(gse: str) -> bool:
     try:
         with urllib.request.urlopen(
-            urllib.request.Request(f"{DATA_BASE}/store/m/{gse}.json", method="HEAD", headers=UA),
+            urllib.request.Request(f"{DATA_BASE}/s1/m/{gse}.json", method="HEAD", headers=UA),
             timeout=30,
         ) as r:
             return r.status == 200
@@ -178,8 +178,8 @@ def run(a) -> int:
             ]
             if a.af:
                 cmd += ["--af", str(a.af)]
-            is_st = bool(row.get("store", 0)) or _has_store(gse)
-            rec["source"] = "store" if is_st else "legacy"
+            is_st = bool(row.get("s1", 0)) or _has_store(gse)
+            rec["source"] = "s1" if is_st else "legacy"
             if not is_st:
                 bundle = work / f"{gse}.singlet"
                 _download(f"{DATA_BASE}/data/{gse}/{gse}.singlet", bundle)

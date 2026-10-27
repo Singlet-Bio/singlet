@@ -3,7 +3,7 @@
 Design note and prototype (2026-10-23). It follows the empty-droplet study (`docs/empty-droplets.md`), which showed that the
 stored `called` flag misses many real cells. Code: `bench/called_ed/`. The prototype is `call_ed.py`; the validation is
 `validate.py` and `aggregate.py`, with per-sample results in `called-ed/samples.csv`, `called-ed/tables.md` and
-`called-ed/outliers.jsonl`. Nothing in `python/singlet/store/` or the pipeline was changed.
+`called-ed/outliers.jsonl`. Nothing in `python/singlet/s1/` or the pipeline was changed.
 
 > **Correction (2026-10-25, cellcall 2.1).** The ground-truth study [`docs/called-ed-truth.md`](called-ed-truth.md) found
 > that the knee used for `retain` was fitted on every total above the plateau `lower`, without DropletUtils' curve bounds
@@ -26,7 +26,7 @@ stored `called` flag misses many real cells. Code: `bench/called_ed/`. The proto
 ## Proposal
 
 `called_ed` = the stored `called` set, plus every uncalled barcode that EmptyDrops (Lun et al. 2019) finds different from
-ambient RNA at BH FDR <= 0.001. The test runs on the counts a store sample already holds:
+ambient RNA at BH FDR <= 0.001. The test runs on the counts a .s1 sample already holds:
 
 | parameter | value | why |
 |---|---|---|
@@ -159,7 +159,7 @@ not this design: the plateau rule adapts to the new totals.
 
 ## What to store
 
-Per barcode, as optional columns of the store cells table (`docs/format-store.md` 5.3 allows them):
+Per barcode, as optional columns of the .s1 cells table (`docs/format-s1.md` 5.3 allows them):
 
 | column | dtype | content |
 |---|---|---|
@@ -177,7 +177,7 @@ one bitmap plus one f32 column that is NaN for most barcodes; under zstd this sh
 in the writer.
 
 **Recommendation: compute it in the migration and write it into the cells table.** There are three reasons.
-(1) store sample objects are immutable, so adding it later means a sidecar. Per-cell feature sidecars hold called cells only
+(1) .s1 sample objects are immutable, so adding it later means a sidecar. Per-cell feature sidecars hold called cells only
 (`docs/CELL-ARCHITECTURE.md`), which is the wrong shape for a flag about uncalled barcodes. (2) The ambient pool sits mostly
 below 20 UMIs (median `lower` = 42, ambient barcodes mostly < 10 UMIs). If store ever applies the "drop < 20 UMIs" floor from
 the empty-droplet study, the ambient pool is gone; then only the stored alpha and summed profile keep a re-call possible.
@@ -191,7 +191,7 @@ would need a `called_ed` bit to filter on.
 ## Decisions (Zach, 2026-10-23)
 
 1. Approved: `called_ed` as specified, computed in the migration and stored in the cells table (`called_ed`, `called_ed_fdr`).
-   Implementation: `python/singlet/store/cellcall.py` and `migrate.py` on branch `claude/called-v2-migration` (PR into
+   Implementation: `python/singlet/s1/cellcall.py` and `migrate.py` on branch `claude/called-v2-migration` (PR into
    `feat/singlet-v2`).
 2. `called` stays the default selection for now.
 3. inDrop and Drop-seq: stored with `validated: false` (as proposed; not separately decided).
@@ -210,7 +210,7 @@ would need a `called_ed` bit to filter on.
 ## Reproduce
 
 The corrected numbers: `docs/called-ed-truth.md` ("Reproduce"). `bench/called_ed_truth/verify.sbatch` checks that
-`python/singlet/store/cellcall.py` reproduces them and regenerates the golden vectors in `tests/data/called_ed_golden/`.
+`python/singlet/s1/cellcall.py` reproduces them and regenerates the golden vectors in `tests/data/called_ed_golden/`.
 
 On Clipper from this branch: `sbatch --array=0-17%9 --export=ALL,MODE=validate bench/called_ed/run.sbatch` (reads
 `$WORK/data/emptydrop`, fetched by `bench/empty_droplets/run.sbatch MODE=fetch`), then `MODE=aggregate` and `MODE=inspect`.

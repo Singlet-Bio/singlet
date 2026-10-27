@@ -5,7 +5,7 @@ page records what was wrong, what changed, the QC rules, and how the result comp
 ATAC and Space Ranger (published outputs), and with open-source pipelines run on the same FASTQs.
 
 Code: `include/singlet/pileup/atac_*.h`, `visium_tissue.h`, `src/pipeline/singlet.cpp` (ATAC branch, Visium block,
-`singlet atac` subcommand). Harness: `bench/atac_spatial/`. Storage proposal: `docs/format-store.md` section 14. Public results:
+`singlet atac` subcommand). Harness: `bench/atac_spatial/`. Storage proposal: `docs/format-s1.md` section 14. Public results:
 `bench/public/results/{atac,multiome,spatial}.json` (contract `bench/public/CONTRACT.md`).
 
 ## Results at a glance

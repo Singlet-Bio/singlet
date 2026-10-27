@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// singlet R package -- Rcpp binding for the store matrix codec (inst/include/singlet/pz2/) and the small store side formats a client
+// singlet R package -- Rcpp binding for the .s1 matrix codec (inst/include/singlet/pz2/) and the small .s1 side formats a client
 // has to read: sample cells tables ("CEL2"), vocabulary packs ("SPK2"/"SVP0") and barcode whitelists.
 //
 // Design: the R code does the I/O (HTTP ranges, files); this file only turns bytes into R objects.
@@ -10,7 +10,7 @@
 //     columns can be kept (the called cells); only chunks that cover the range are decoded; threads decode chunks in parallel.
 //   * pz2_cells_ decodes the columns of a cells table; pz2_pack_* decode vocabulary packs; pz2_sha256_ hashes a raw vector.
 //
-// Format: docs/format-store.md.  Codec: bench/compression/notes/m_w1.md.
+// Format: docs/format-s1.md.  Codec: bench/compression/notes/m_w1.md.
 
 #include <Rcpp.h>
 
