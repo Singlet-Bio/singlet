@@ -1220,7 +1220,8 @@ class _SampleIn:
     label_version: str = ""
     plan_members: Dict[str, dict] = field(default_factory=dict)
     error: Optional[str] = None
-    skip: Optional[str] = None  # left out of the index on purpose (no cells to index), recorded, not an error
+    # left out of the index on purpose (no cells to index): recorded, not an error
+    skip: Optional[str] = None
 
 
 def _transport(base: Optional[str]):
@@ -1533,7 +1534,8 @@ class BuildResult:
     stats: dict
     errors: List[dict]
     d1: Dict[str, List[dict]] = field(default_factory=dict)
-    skipped: List[dict] = field(default_factory=list)  # samples left out on purpose: {gsm, gse, reason}
+    # samples left out on purpose: {gsm, gse, reason}
+    skipped: List[dict] = field(default_factory=list)
 
     def d1_export(self, out_dir: Union[str, Path]) -> List[str]:
         """Per-sample aggregates for the catalog (tier 1, docs CELL-ARCHITECTURE.md): ``sample_cell_summary.csv`` (the layout of the
