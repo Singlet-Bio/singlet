@@ -234,6 +234,29 @@ class StoreBase:
         return h.hexdigest()
 
 
+_THROTTLE_CODES = frozenset({"429", "TooManyRequests", "SlowDown", "503", "ServiceUnavailable", "RequestLimitExceeded"})
+R2_RETRIES = 8  # on top of botocore's own adaptive retries
+
+
+def _throttled(e: BaseException) -> bool:
+    return _err_code(e) in _THROTTLE_CODES or _err_status(e) in (429, 503)
+
+
+def r2_call(fn, *a, retries: int = R2_RETRIES, base: float = 1.0, cap: float = 60.0, **kw):
+    """``fn(*a, **kw)``, retried on R2 throttling (429 / 503) with exponential backoff and full jitter. Anything else raises at once
+    (a 404, a failed precondition, ...). The campaign's 900 concurrent transcoders hit R2's request rate limit on HeadObject."""
+    import random
+
+    for attempt in range(retries + 1):
+        try:
+            return fn(*a, **kw)
+        except Exception as e:  # noqa: BLE001
+            if attempt == retries or not _throttled(e):
+                raise
+            time.sleep(random.uniform(0, min(cap, base * 2 ** attempt)))
+    raise AssertionError("unreachable")
+
+
 class S3Store(StoreBase):
     """Buckets of one R2 account over the S3 API. `client` and `transfer_config` are injectable for tests."""
 
@@ -246,7 +269,7 @@ class S3Store(StoreBase):
     # -- reads
     def head(self, bucket: str, key: str) -> Optional[Head]:
         try:
-            r = self.c.head_object(Bucket=bucket, Key=key)
+            r = r2_call(self.c.head_object, Bucket=bucket, Key=key)
         except Exception as e:  # noqa: BLE001
             if _not_found(e):
                 return None
@@ -260,10 +283,10 @@ class S3Store(StoreBase):
         )
 
     def read_range(self, bucket: str, key: str, start: int, end: int) -> bytes:
-        return self.c.get_object(Bucket=bucket, Key=key, Range=f"bytes={start}-{end}")["Body"].read()
+        return r2_call(self.c.get_object, Bucket=bucket, Key=key, Range=f"bytes={start}-{end}")["Body"].read()
 
     def get_bytes(self, bucket: str, key: str) -> bytes:
-        return self.c.get_object(Bucket=bucket, Key=key)["Body"].read()
+        return r2_call(self.c.get_object, Bucket=bucket, Key=key)["Body"].read()
 
     def download(self, bucket: str, key: str, path: Path, *, if_match: Optional[str] = None, size: Optional[int] = None,
                  part: int = 64 * MIB, threads: int = 8) -> None:
@@ -285,7 +308,7 @@ class S3Store(StoreBase):
                     kw: Dict[str, Any] = dict(Bucket=bucket, Key=key, Range=f"bytes={a}-{b}")
                     if if_match:
                         kw["IfMatch"] = f'"{if_match}"'
-                    body = self.c.get_object(**kw)["Body"]
+                    body = r2_call(self.c.get_object, **kw)["Body"]
                     got = 0
                     with open(path, "r+b") as fh:
                         fh.seek(a)
@@ -327,7 +350,7 @@ class S3Store(StoreBase):
         extra: Dict[str, Any] = {"ContentType": content_type, "CacheControl": cache_control}
         if metadata:
             extra["Metadata"] = dict(metadata)
-        self.c.upload_file(str(path), bucket, key, ExtraArgs=extra, Config=self._transfer_config(part_size))
+        r2_call(self.c.upload_file, str(path), bucket, key, ExtraArgs=extra, Config=self._transfer_config(part_size))
         h = self.head(bucket, key)
         if h is None:
             raise IOError(f"{bucket}/{key} not found after upload")
@@ -338,14 +361,14 @@ class S3Store(StoreBase):
         kw: Dict[str, Any] = dict(Bucket=bucket, Key=key, Body=data, ContentType=content_type, CacheControl=cache_control)
         if metadata:
             kw["Metadata"] = dict(metadata)
-        return str(self.c.put_object(**kw)["ETag"]).strip('"')
+        return str(r2_call(self.c.put_object, **kw)["ETag"]).strip('"')
 
     def delete(self, bucket: str, key: str) -> None:
-        self.c.delete_object(Bucket=bucket, Key=key)
+        r2_call(self.c.delete_object, Bucket=bucket, Key=key)
 
     def bucket_exists(self, bucket: str) -> bool:
         try:
-            self.c.head_bucket(Bucket=bucket)
+            r2_call(self.c.head_bucket, Bucket=bucket)
             return True
         except Exception as e:  # noqa: BLE001
             if _not_found(e) or _err_code(e) in ("NoSuchBucket",):
@@ -363,7 +386,7 @@ class S3Store(StoreBase):
         for attempt in (0, 1):
             try:
                 if size <= self.copy_single_max:
-                    r = self.c.copy_object(Bucket=dst_bucket, Key=dst_key, CopySource=src, MetadataDirective="COPY", **sc)
+                    r = r2_call(self.c.copy_object, Bucket=dst_bucket, Key=dst_key, CopySource=src, MetadataDirective="COPY", **sc)
                     return str((r.get("CopyObjectResult") or {}).get("ETag", "")).strip('"'), False
                 return self._copy_multipart(src, dst_bucket, dst_key, size, sc), True
             except Exception as e:  # noqa: BLE001
@@ -382,7 +405,7 @@ class S3Store(StoreBase):
             extra["CacheControl"] = head.cache_control
         if head is not None and head.meta:
             extra["Metadata"] = head.meta
-        up = self.c.create_multipart_upload(Bucket=dst_bucket, Key=dst_key, **extra)
+        up = r2_call(self.c.create_multipart_upload, Bucket=dst_bucket, Key=dst_key, **extra)
         uid = up["UploadId"]
         spans = [(i + 1, a, min(a + self.copy_part, size) - 1) for i, a in enumerate(range(0, size, self.copy_part))]
 
@@ -390,7 +413,7 @@ class S3Store(StoreBase):
             n, a, b = span
             for attempt in range(4):
                 try:
-                    r = self.c.upload_part_copy(Bucket=dst_bucket, Key=dst_key, UploadId=uid, PartNumber=n,
+                    r = r2_call(self.c.upload_part_copy, Bucket=dst_bucket, Key=dst_key, UploadId=uid, PartNumber=n,
                                                 CopySource=src, CopySourceRange=f"bytes={a}-{b}")
                     return {"PartNumber": n, "ETag": r["CopyPartResult"]["ETag"]}
                 except Exception:  # noqa: BLE001
@@ -402,7 +425,7 @@ class S3Store(StoreBase):
         try:
             with cf.ThreadPoolExecutor(4) as ex:
                 parts = list(ex.map(one, spans))
-            r = self.c.complete_multipart_upload(Bucket=dst_bucket, Key=dst_key, UploadId=uid, MultipartUpload={"Parts": parts})
+            r = r2_call(self.c.complete_multipart_upload, Bucket=dst_bucket, Key=dst_key, UploadId=uid, MultipartUpload={"Parts": parts})
         except Exception:
             try:
                 self.c.abort_multipart_upload(Bucket=dst_bucket, Key=dst_key, UploadId=uid)
@@ -420,7 +443,7 @@ def make_s3_client():
     endpoint = os.environ.get("R2_ENDPOINT") or f"https://{os.environ['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com"
     kw: Dict[str, Any] = dict(
         signature_version="s3v4",
-        retries={"max_attempts": 10, "mode": "adaptive"},
+        retries={"max_attempts": 12, "mode": "adaptive"},
         max_pool_connections=128,
         connect_timeout=30,
         read_timeout=120,

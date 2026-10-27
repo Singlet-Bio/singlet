@@ -552,3 +552,35 @@ def test_cell_index_dictionary_takes_levels_from_the_label_path():
         "CL:0000988"
     ]
     assert atlas.make_dict(["CL:0000084"], None)[1]["anc"] == []
+
+
+def test_r2_throttling_is_retried_with_backoff_and_other_errors_are_not(monkeypatch):
+    monkeypatch.setattr(camp.time, "sleep", lambda s: None)
+
+    class E(Exception):
+        def __init__(self, code, status):
+            self.response = {
+                "Error": {"Code": code},
+                "ResponseMetadata": {"HTTPStatusCode": status},
+            }
+
+    calls = []
+
+    def flaky():
+        calls.append(1)
+        if len(calls) < 4:
+            raise E("429", 429)
+        return "ok"
+
+    assert camp.r2_call(flaky) == "ok" and len(calls) == 4
+    with pytest.raises(E):
+        camp.r2_call(lambda: (_ for _ in ()).throw(E("NoSuchKey", 404)))
+    n = []
+
+    def always():
+        n.append(1)
+        raise E("SlowDown", 503)
+
+    with pytest.raises(E):
+        camp.r2_call(always, retries=3)
+    assert len(n) == 4
