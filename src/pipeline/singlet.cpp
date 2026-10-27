@@ -6981,6 +6981,11 @@ int main(int argc, char* argv[]) {
             args.push_back("NH"); args.push_back("nM");
             args.push_back("AS"); args.push_back("CR"); args.push_back("UR");
             args.push_back("CB");
+            // Debug only (BAM-stream CB-correction replica test): extra STAR SAM attributes, e.g. SINGLET_EXTRA_SAM_ATTRS="CY UY".
+            if (const char *extra_attrs = std::getenv("SINGLET_EXTRA_SAM_ATTRS")) {
+                std::istringstream extra_ss(extra_attrs);
+                for (std::string a; extra_ss >> a;) args.push_back(a);
+            }
 
             // Skip unmapped reads (pileup ignores them anyway)
             args.push_back("--outSAMunmapped"); args.push_back("None");
