@@ -1,11 +1,12 @@
 #!/bin/bash
 # Profile-guided build of the bundled STAR (the rest of singlet is built normally).
 #
-#   src/star/pgo/pgo_build.sh SRC_DIR BUILD_DIR TRAIN.1fq GENOME_DIR GTF REF_BASE [extra STAR flags]
+#   src/star/pgo/pgo_build.sh SRC_DIR BUILD_DIR TRAIN.1fq[:TRAIN2.1fq...] GENOME_DIR GTF REF_BASE [extra STAR flags]
 #
 # 1. builds singlet with the STAR objects instrumented (-fprofile-generate),
-# 2. runs the pipeline once on TRAIN.1fq (a ~2M-read 10x sample is enough: the profile is about
-#    which branches the aligner takes, not about volume),
+# 2. runs the pipeline once on each training .1fq (a ~2M-read 10x sample each is enough: the profile is
+#    about which branches the aligner takes, not about volume; give a 3' and a 5' sample, whose
+#    too-short and soft-clip paths differ; gcc sums the counts of all runs),
 # 3. rebuilds the STAR objects with -fprofile-use in the same BUILD_DIR (gcc finds the .gcda files
 #    next to the objects, so both builds must use the same directory).
 # The result is BUILD_DIR/src/pipeline/singlet. Profiles are build products: not committed.
