@@ -16,7 +16,7 @@
 // Structure: shards, each a ring buffer of entries (FIFO eviction, second chance: a hit on an entry
 // older than half the ring copies it to the head) plus a 2-way index of (hash, position).
 // Entries hold the 2-bit packed sequence and a varint encoding of the mapping result (~110 bytes
-// with the index). SINGLET_STAR_SEQCACHE_MB sets the size (default 2048, 0 = off); ring pages are
+// with the index). SINGLET_STAR_SEQCACHE_MB sets the size (default 4096, 0 = off); ring pages are
 // only touched as entries are written, so small samples use less.
 
 #include "IncludeDefine.h"

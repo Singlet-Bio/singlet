@@ -37,6 +37,7 @@
 #include <fcntl.h>
 #include <fstream>
 #include <zlib.h>
+#include <atomic>
 #include <future>
 #include <iomanip>
 #include <iostream>
@@ -81,6 +82,7 @@
 #include "singlet/pileup/rna_variant_caller.h"
 #include "singlet/pileup/read_dedup_stats.h"
 #include "singlet/pileup/tagged_bam.h"
+#include "singlet/pileup/cb_tag_scan.h"
 #include "singlet/fq/sra_reader.h"
 #include "singlet/fq/lib1fq.h"
 #include "singlet/fq/sra_encoder.h"
@@ -3452,6 +3454,27 @@ int main(int argc, char* argv[]) {
     std::cerr << "[singlet] Loading pileup references...\n";
     StopWatch ref_sw;
 
+    // Overlap STAR's genome load with Pass 1 and the reference load: read the private genome's index files once in
+    // the background so STAR's own read of them comes from the page cache. Reads only; changes no output.
+    // SINGLET_GENOME_PREFETCH=0 turns it off.
+    if (genome_load == "NoSharedMemory" && !genome_dir.empty()) {
+        const char* pf = std::getenv("SINGLET_GENOME_PREFETCH");
+        if (!(pf && pf[0] == '0')) {
+            std::thread([dir = genome_dir]() {
+                StopWatch pf_sw;
+                std::vector<char> buf(8u << 20);
+                uint64_t bytes = 0;
+                for (const char* name : {"SAindex", "Genome", "SA"}) {
+                    int fd = ::open((dir + "/" + name).c_str(), O_RDONLY);
+                    if (fd < 0) continue;
+                    for (ssize_t n; (n = ::read(fd, buf.data(), buf.size())) > 0;) bytes += static_cast<uint64_t>(n);
+                    ::close(fd);
+                }
+                std::cerr << "[singlet] Genome prefetch: " << (bytes >> 20) << " MB in " << pf_sw.elapsed_s() << "s\n";
+            }).detach();
+        }
+    }
+
     // If barcode discovery is needed (--whitelist None or auto-resolved whitelist, no --barcodes),
     // defer engine creation until after .1fq decode + barcode extraction.
     bool needs_barcode_discovery = barcode_file.empty() &&
@@ -4491,72 +4514,102 @@ int main(int argc, char* argv[]) {
             const uint32_t probe_per_block_p1 =
                 std::max<uint32_t>(1u, (12000u + std::max<uint32_t>(total_blocks_p1, 1u) - 1u) /
                                        std::max<uint32_t>(total_blocks_p1, 1u));
-            for (uint32_t bi = 0; bi < total_blocks_p1; ++bi) {
-                uint64_t file_off_p1  = reader.block_offset(bi);
-                uint32_t comp_size_p1 = reader.block_comp_size(bi);
-                singlet::fq::BlockHeader bh_p1;
-                ::pread(fd_p1, &bh_p1, sizeof(bh_p1), static_cast<off_t>(file_off_p1));
-                std::vector<uint8_t> comp_buf_p1(comp_size_p1);
-                ::pread(fd_p1, comp_buf_p1.data(), comp_size_p1,
-                        static_cast<off_t>(file_off_p1 + sizeof(bh_p1)));
-                size_t est_raw_p1 = static_cast<size_t>(bh_p1.n_reads) * 200;
-                std::vector<uint8_t> raw_buf_p1(est_raw_p1);
-                size_t raw_size_p1;
-                try {
-                    raw_size_p1 = singlet::fq::compress::decompress_block(
-                        codec_p1, comp_buf_p1.data(), comp_size_p1,
-                        raw_buf_p1.data(), raw_buf_p1.size());
-                } catch (...) {
-                    raw_buf_p1.resize(est_raw_p1 * 4);
-                    raw_size_p1 = singlet::fq::compress::decompress_block(
-                        codec_p1, comp_buf_p1.data(), comp_size_p1,
-                        raw_buf_p1.data(), raw_buf_p1.size());
-                }
-                singlet::fq::DecodedBlock blk_p1;
-                reader.decode_payload(raw_buf_p1.data(), raw_size_p1, bh_p1, blk_p1);
+            const bool count_keys_p1 = !has_i2_p1 && count_barcodes_in_decode && !has_bc_dict_p1;
+            if (count_keys_p1 && !complex_extra_segs.empty() && onefq_per_seg_counts.empty())
+                onefq_per_seg_counts.resize(complex_extra_segs.size());
 
-                const bool has_dups_p1 = !blk_p1.dup_counts.empty();
-                const uint32_t probe_stride_p1 =
-                    std::max<uint32_t>(1u, blk_p1.n_reads / probe_per_block_p1);
-                for (uint32_t i = 0; i < blk_p1.n_reads; ++i) {
-                    uint32_t repeat_p1 = has_dups_p1 ? blk_p1.dup_counts[i] : 1;
-                    uint16_t r1len_p1  = blk_p1.r1_len(i);
-                    uint16_t r2len_p1  = blk_p1.r2_len(i);
-                    // Sample R2 sequences spread over all blocks for constant-prefix detection
-                    // (prefix_probe.h): the .1fq is barcode-sorted, so the first reads of a block are
-                    // duplicates of a few molecules and must not be used alone.
-                    if (r2len_p1 > 0 && (i % probe_stride_p1) == 0 &&
-                        fifo_first25_r2.size() < 20000) {
-                        static constexpr char N2AP[5] = {'A','C','G','T','N'};
-                        const uint8_t* r2s_p1 = blk_p1.r2_seq(i);
-                        std::string seq_p1(r2len_p1, ' ');
-                        for (uint16_t j = 0; j < r2len_p1; ++j)
-                            seq_p1[j] = N2AP[r2s_p1[j]];
-                        fifo_first25_r2.push_back(std::move(seq_p1));
+            // Blocks are decoded in parallel (SINGLET_PASS1_THREADS, default --threads; 1 = serial order). Each block
+            // keeps its keys in first-occurrence order; the merge below walks the blocks in file order, so the maps get
+            // the same keys, counts and insertion sequence as the serial loop (same iteration order downstream), the
+            // dictionary counts are plain sums, and the R2 probe sample is the serial one (block order, first 20000).
+            struct Pass1Block {
+                std::vector<std::string> probe;
+                std::vector<std::pair<uint64_t, uint64_t>> keys;                // packed BC (or I2) key, count
+                std::vector<std::vector<std::pair<uint64_t, uint64_t>>> segs;   // CB_UMI_Complex extra segments
+            };
+            std::vector<Pass1Block> p1_blocks(total_blocks_p1);
+            int p1_threads = std::max(1, std::min<int>(star_threads > 0 ? star_threads : 1,
+                                                       static_cast<int>(std::max<uint32_t>(total_blocks_p1, 1u))));
+            if (const char* e = std::getenv("SINGLET_PASS1_THREADS"); e && std::atoi(e) > 0)
+                p1_threads = std::min(p1_threads, std::atoi(e));
+            std::vector<std::vector<uint64_t>> bc_freq_t(p1_threads);
+            std::atomic<uint32_t> p1_next{0};
+            auto pass1_worker = [&](int tid) {
+                std::vector<uint64_t>& freq = bc_freq_t[tid];
+                if (!bc_freq_p1.empty()) freq.assign(bc_freq_p1.size(), 0);
+                std::unordered_map<uint64_t, size_t> key_pos;
+                std::vector<std::unordered_map<uint64_t, size_t>> seg_pos(complex_extra_segs.size());
+                for (uint32_t bi; (bi = p1_next.fetch_add(1)) < total_blocks_p1;) {
+                    Pass1Block& out = p1_blocks[bi];
+                    key_pos.clear();
+                    for (auto& sp : seg_pos) sp.clear();
+                    if (count_keys_p1 && !complex_extra_segs.empty()) out.segs.resize(complex_extra_segs.size());
+                    uint64_t file_off_p1  = reader.block_offset(bi);
+                    uint32_t comp_size_p1 = reader.block_comp_size(bi);
+                    singlet::fq::BlockHeader bh_p1;
+                    ::pread(fd_p1, &bh_p1, sizeof(bh_p1), static_cast<off_t>(file_off_p1));
+                    std::vector<uint8_t> comp_buf_p1(comp_size_p1);
+                    ::pread(fd_p1, comp_buf_p1.data(), comp_size_p1,
+                            static_cast<off_t>(file_off_p1 + sizeof(bh_p1)));
+                    size_t est_raw_p1 = static_cast<size_t>(bh_p1.n_reads) * 200;
+                    std::vector<uint8_t> raw_buf_p1(est_raw_p1);
+                    size_t raw_size_p1;
+                    try {
+                        raw_size_p1 = singlet::fq::compress::decompress_block(
+                            codec_p1, comp_buf_p1.data(), comp_size_p1,
+                            raw_buf_p1.data(), raw_buf_p1.size());
+                    } catch (...) {
+                        raw_buf_p1.resize(est_raw_p1 * 4);
+                        raw_size_p1 = singlet::fq::compress::decompress_block(
+                            codec_p1, comp_buf_p1.data(), comp_size_p1,
+                            raw_buf_p1.data(), raw_buf_p1.size());
                     }
-                    // BC counting (same logic as file-decode pass)
-                    if (has_i2_p1) {
-                        if (!blk_p1.i2_data.empty() && i < blk_p1.i2_lengths.size() &&
-                            blk_p1.i2_lengths[i] > 0) {
-                            const uint8_t* bcp = blk_p1.i2_seq(i);
-                            uint16_t blen = blk_p1.i2_len(i);
-                            if (blen > 0 && blen <= 21) {
-                                uint64_t key = 0;
-                                for (uint16_t j = 0; j < blen; ++j) key = (key << 3) | bcp[j];
-                                merged_bc_counts_p1[key] += repeat_p1;
-                            }
+                    singlet::fq::DecodedBlock blk_p1;
+                    reader.decode_payload(raw_buf_p1.data(), raw_size_p1, bh_p1, blk_p1);
+
+                    auto add_key = [](std::vector<std::pair<uint64_t, uint64_t>>& v,
+                                      std::unordered_map<uint64_t, size_t>& pos, uint64_t key, uint64_t n) {
+                        auto it = pos.try_emplace(key, v.size()).first;
+                        if (it->second == v.size()) v.emplace_back(key, 0);
+                        v[it->second].second += n;
+                    };
+                    const bool has_dups_p1 = !blk_p1.dup_counts.empty();
+                    const uint32_t probe_stride_p1 =
+                        std::max<uint32_t>(1u, blk_p1.n_reads / probe_per_block_p1);
+                    for (uint32_t i = 0; i < blk_p1.n_reads; ++i) {
+                        uint32_t repeat_p1 = has_dups_p1 ? blk_p1.dup_counts[i] : 1;
+                        uint16_t r1len_p1  = blk_p1.r1_len(i);
+                        uint16_t r2len_p1  = blk_p1.r2_len(i);
+                        // Sample R2 sequences spread over all blocks for constant-prefix detection
+                        // (prefix_probe.h): the .1fq is barcode-sorted, so the first reads of a block are
+                        // duplicates of a few molecules and must not be used alone.
+                        if (r2len_p1 > 0 && (i % probe_stride_p1) == 0 && out.probe.size() < 20000) {
+                            static constexpr char N2AP[5] = {'A','C','G','T','N'};
+                            const uint8_t* r2s_p1 = blk_p1.r2_seq(i);
+                            std::string seq_p1(r2len_p1, ' ');
+                            for (uint16_t j = 0; j < r2len_p1; ++j)
+                                seq_p1[j] = N2AP[r2s_p1[j]];
+                            out.probe.push_back(std::move(seq_p1));
                         }
-                    } else if (count_barcodes_in_decode && !has_bc_dict_p1 &&
-                               r1len_p1 >= discover_bc_start_0 + discover_bc_len) {
-                        uint64_t key = 0;
-                        const uint8_t* bcs = blk_p1.r1_seq(i) + discover_bc_start_0;
-                        for (int j = 0; j < discover_bc_len; ++j)
-                            key = (key << 3) | bcs[j];
-                        merged_bc_counts_p1[key] += repeat_p1;
-                        // Extra segments for CB_UMI_Complex per-segment discovery
-                        if (!complex_extra_segs.empty()) {
-                            if (onefq_per_seg_counts.empty())
-                                onefq_per_seg_counts.resize(complex_extra_segs.size());
+                        // BC counting (same logic as file-decode pass)
+                        if (has_i2_p1) {
+                            if (!blk_p1.i2_data.empty() && i < blk_p1.i2_lengths.size() &&
+                                blk_p1.i2_lengths[i] > 0) {
+                                const uint8_t* bcp = blk_p1.i2_seq(i);
+                                uint16_t blen = blk_p1.i2_len(i);
+                                if (blen > 0 && blen <= 21) {
+                                    uint64_t key = 0;
+                                    for (uint16_t j = 0; j < blen; ++j) key = (key << 3) | bcp[j];
+                                    add_key(out.keys, key_pos, key, repeat_p1);
+                                }
+                            }
+                        } else if (count_keys_p1 && r1len_p1 >= discover_bc_start_0 + discover_bc_len) {
+                            uint64_t key = 0;
+                            const uint8_t* bcs = blk_p1.r1_seq(i) + discover_bc_start_0;
+                            for (int j = 0; j < discover_bc_len; ++j)
+                                key = (key << 3) | bcs[j];
+                            add_key(out.keys, key_pos, key, repeat_p1);
+                            // Extra segments for CB_UMI_Complex per-segment discovery
                             for (size_t ex = 0; ex < complex_extra_segs.size(); ++ex) {
                                 const auto& es = complex_extra_segs[ex];
                                 if (es.r1_start < 0 ||
@@ -4564,16 +4617,34 @@ int main(int argc, char* argv[]) {
                                 uint64_t ekey = 0;
                                 const uint8_t* ebcs = blk_p1.r1_seq(i) + es.r1_start;
                                 for (int j = 0; j < es.len; ++j) ekey = (ekey << 3) | ebcs[j];
-                                onefq_per_seg_counts[ex][ekey] += repeat_p1;
+                                add_key(out.segs[ex], seg_pos[ex], ekey, repeat_p1);
                             }
                         }
-                    }
-                    if (has_bc_dict_p1 && !blk_p1.bc_indices.empty() &&
-                        i < blk_p1.bc_indices.size()) {
-                        uint32_t idx = blk_p1.bc_indices[i];
-                        if (idx <= bc_dict_n_p1) bc_freq_p1[idx] += repeat_p1;
+                        if (has_bc_dict_p1 && !blk_p1.bc_indices.empty() &&
+                            i < blk_p1.bc_indices.size()) {
+                            uint32_t idx = blk_p1.bc_indices[i];
+                            if (idx <= bc_dict_n_p1 && !freq.empty()) freq[idx] += repeat_p1;
+                        }
                     }
                 }
+            };
+            {
+                std::vector<std::thread> p1_pool;
+                for (int t = 1; t < p1_threads; ++t) p1_pool.emplace_back(pass1_worker, t);
+                pass1_worker(0);
+                for (auto& th : p1_pool) th.join();
+            }
+            for (const auto& f : bc_freq_t)
+                for (size_t k = 0; k < f.size(); ++k) bc_freq_p1[k] += f[k];
+            for (auto& b : p1_blocks) {
+                for (auto& s : b.probe) {
+                    if (fifo_first25_r2.size() >= 20000) break;
+                    fifo_first25_r2.push_back(std::move(s));
+                }
+                for (const auto& [key, n] : b.keys) merged_bc_counts_p1[key] += n;
+                for (size_t ex = 0; ex < b.segs.size(); ++ex)
+                    for (const auto& [key, n] : b.segs[ex]) onefq_per_seg_counts[ex][key] += n;
+                b = Pass1Block{};
             }
 
             // Store BC data for Phase 0.9 fast paths
@@ -7731,7 +7802,13 @@ int main(int argc, char* argv[]) {
             StopWatch cb_scan_sw;
             std::unordered_map<std::string, uint32_t> cb_freq;
             cb_freq.reserve(50000);
-            samFile*   cbf    = sam_open(parallel_bam_path.c_str(), "rb");
+            // Parallel over the indexed BAM when threads allow; the same map, insertion order included
+            // (include/singlet/pileup/cb_tag_scan.h). Serial scan otherwise.
+            // SINGLET_CB_REFRESH_SERIAL=1 forces the serial scan (A/B checks).
+            const char* cb_serial_env = std::getenv("SINGLET_CB_REFRESH_SERIAL");
+            const bool cb_parallel = !(cb_serial_env && cb_serial_env[0] == '1') &&
+                                     singlet::cb_tag_counts_parallel(parallel_bam_path, star_threads, cb_freq);
+            samFile*   cbf    = cb_parallel ? nullptr : sam_open(parallel_bam_path.c_str(), "rb");
             if (cbf) {
                 bam_hdr_t* cbhdr = sam_hdr_read(cbf);
                 bam1_t*    crec  = bam_init1();
