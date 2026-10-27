@@ -148,6 +148,18 @@ Changes in order of value:
 - **Timebox for #1:** two weeks. If identity is not reached, sort in RAM where memory allows, and keep the disk sort
   elsewhere.
 
+**GPU alignment** (Zach asked, 2026-10-27): not orders of magnitude, and not for Beta.
+- **The bottleneck is memory latency.** STAR's seed search walks a ~30 GB suffix array with random, data-dependent access.
+  An H100's memory bandwidth (~3–4 TB/s) is ~10× a CPU node's, which caps a well-built GPU aligner at about 10× a node.
+- **Reported results match that cap:**
+  - NVIDIA's GPU STAR (Parabricks `rna_fq2bam`): users report ~8–9× on a 4-GPU node against CPU STAR, and none with some
+    parameter sets.
+  - Earlier GPU seed-and-extend aligners report ~10×.
+- **Clipper's scale:** Clipper has two H100 NVL GPUs. Two GPUs would equal a few CPU nodes, and Clipper is limited by its
+  network link, not by compute.
+- **Cost of a custom build:** months of work, and proving it identical to STAR for the freeze would be very hard.
+- **Revisit:** after Beta, for a GPU-rich allocation.
+
 ### 3c. Calendar and SU model
 
 **Assumptions:**
@@ -170,47 +182,26 @@ supplement, or the GVSU link gives margin.
 
 **Rolling publication:** beta.singlet.bio fills study by study from the first week of the campaign.
 
-### 3d. Keeping reads so a re-run need not re-download (Zach asked, 2026-10-27)
+### 3d. Long-term storage: no reads or BAMs kept (Zach, 2026-10-27)
 
-**Keep reads, not BAMs.**
-- A BAM is tied to one aligner and one reference, so any engine or reference change re-aligns anyway.
-- A BAM is also much larger than the reads it came from. The 5′ smoke sample at 122 M pairs had an estimated 22 GB BAM,
-  about 180 B per pair. A `.sra` file is about 50 B per pair (format-1fq.md §10).
-- The reads in `.1fq` are what a re-run needs. Decoding them takes seconds, and the network is then out of the picture.
+**Decision:** intermediate files are not kept. Even `.1fq` (~0.35–0.63 PB for the atlas) does not pay off. A coordinate-
+sorted BAM would be ~3–6 PB.
 
-**Sizes for the whole atlas** (~1.58 PB of `.sra`, about 3×10¹³ read pairs):
+**Budget:** about **10 TB** of long-term storage, on Clipper only. Anvil keeps nothing: `$PROJECT` is deleted 90 days
+after the allocation ends, and scratch is purged after 30 days.
 
-| What is kept | Atlas size | Note |
-|---|---|---|
-| Coordinate-sorted BAM | ~3–6 PB | 2–4× the download; not worth keeping |
-| `.1fq`, binned 4-level quality | ~0.63 PB | keeps what the SNP and mtDNA callers use |
-| `.1fq`, no quality | ~0.57 PB | enough for counts only |
-| `.1fq`, binned quality + dedup | ~0.35 PB | dedup must be proven lossless for UMI counting |
+**What the 10 TB is for:**
+- references and indexes;
+- private outputs: genotype and depth tables, and the restricted sidecars;
+- campaign ledgers and logs;
+- the **non-host read archive** (§3e). It is small: only reads assigned to a detected species, with their CB and UMI.
+  Estimated well under 1 TB for the atlas; W3 measures it on the validation samples.
 
-The `.1fq` figures are format-1fq.md §10 design estimates. W4 measures them on the validation samples.
-
-**Where it could live:**
-- **Clipper project space:** about 47 TB free, no quota (figure from the clipper skill notes; re-check with `df`). That
-  holds ~7% of the atlas as `.1fq`.
-- **Anvil:**
-  - `$PROJECT` is 5 TB by default, more on request. It is deleted 90 days after the allocation ends.
-  - Scratch is purged after 30 days. Anvil has no archive tier.
-  - Anvil can hold a year of data only while the allocation is renewed, and only at TB scale, not PB.
-- **Open Storage Network** through ACCESS:
-  - 10–50 TB per request, at 1 ACCESS credit = 1 GB.
-  - Up to ~300 TB by asking OSN directly; beyond that, buying a pod.
-- **Cloudflare R2:** ~$0.015/GB-month, or $0.01 for infrequent access. 0.63 PB is ~$6–9k per month. Too expensive.
-- **A GVSU-hosted disk server or tape** (~0.7 PB usable): ask GVSU research computing for a price. This is probably the
-  cheapest path per TB-year.
-
-**Recommendation:**
-- Don't keep BAMs.
-- Keep binned-quality `.1fq` in a rolling cache on Clipper project space for:
-  - the benchmark and validation cohorts;
-  - deep and 5′ samples;
-  - anything that failed or was flagged.
-- Get a GVSU storage quote before the BSF. If ~0.7 PB is affordable, cache every sample, so a later re-run is limited by
-  compute rather than by Clipper's ~13 TB/day link.
+**Consequences:**
+- A re-run means downloading again. That is why the software freeze has to be right the first time.
+- Re-download is free in money, but costs calendar time on Clipper's ~13 TB/day link.
+- Re-compressing reads strongly enough to change this (e.g. reference-based `.1fq` tier 2, ~0.4 GB per 100 M reads) is not
+  in Beta scope.
 
 ### 3e. Non-host screen: what it does and what it costs (Zach asked, 2026-10-27)
 
@@ -243,6 +234,46 @@ annotation is loaded).
   - Bacterial mRNA is not polyadenylated, so bacterial gene profiles would be sparse and biased.
 - **Recommendation:** viral gene level for Beta if W7 can benchmark it on real infected-sample truth. Bacteria and fungi
   stay at species level.
+
+**Genome positions per read: a two-stage design** (Zach asked, 2026-10-27)
+
+Goal: map each detected species' reads to its genome, so we can tell apart vaccine exposure, active infection, latent
+infection and contamination.
+
+*Stage 1, per sample, inside the campaign:* the sketch screen as above. It writes every read assigned to a detected
+species (cDNA, CB, UMI, species, score) to the private non-host read archive on Clipper. A cap per species and sample
+keeps the archive bounded.
+
+*Stage 2, batch per species, across samples:* after each campaign wave, for every species detected in at least one
+sample:
+- **References:** build a STAR index from a curated reference set: the reference genome plus major strains or
+  genotypes, with annotation.
+- **Alignment:** align all archived reads for that species from all samples in one job. STAR handles spliced viral
+  transcripts (HIV, EBV, HPV, adenovirus, herpesviruses).
+- **Outputs, per sample:**
+  - per-read genome positions;
+  - per-cell gene counts;
+  - coverage profile and strand;
+  - splice junctions;
+  - consensus variants (strain or lineage);
+  - virus–host chimeric reads, which mark integration sites.
+- **Cost:** small. A viral index builds in seconds, a bacterial one in about a minute, and the read sets are tiny.
+- **Complexity:** moderate, about one extra stage for the orchestrator. Batching is simpler than per-sample alignment,
+  because each species is indexed once.
+
+What it lets us distinguish (each needs real-truth validation by W7 before any label is published):
+
+| Situation | Signature |
+|---|---|
+| mRNA vaccine (e.g. BNT162b2, mRNA-1273) | reads match the codon-optimised vaccine spike sequence (added as its own reference), not the wild-type genome; spike only, no other ORFs |
+| Active SARS-CoV-2 infection | reads across many ORFs; leader–TRS subgenomic junctions show replication |
+| Latent herpesvirus (EBV, CMV) | latency gene programs (e.g. EBV LMP1/EBNA) without lytic genes |
+| Integrated retrovirus (HIV) | virus–host chimeric reads at integration sites, plus the expression pattern |
+| Viral vectors (lentivirus, AAV, gene therapy, lab constructs) | vector elements (WPRE, CMV promoter, transgene) and no wild-type genes |
+| Contamination | the same species and strain across unrelated studies or batches; reads spread evenly across barcodes, not in cells |
+
+The archive is private. Reads never reach public outputs. Only per-cell gene counts and per-sample summaries that pass W7
+become public layers.
 
 **Making it cheap** (W3):
 - **Load cost:** today each job zero-fills and copies 25–35 GB of index into its own heap. Change this to one pre-merged
@@ -388,7 +419,8 @@ at this file. Each one:
   3. Non-host, per §3e: a shared memory-mapped index, adaptive lookup, read dedup, no dump; measured against the
      <3% wall and <2 GB RSS targets. Prototype viral gene-level counts, cost-capped.
   4. Serial-stage trims and the 4 GB sequence cache.
-  5. BAM retirement, timeboxed to two weeks with a fallback, with a `--keep-sorted-bam` debug path (§3b).
+  5. BAM retirement: a separate session (W3b) follows [bam-stream-protocol.md](bam-stream-protocol.md), with a
+     stop rule at phase 2 and a two-week timebox for the prototype.
   6. Thread count and packing study (memory.peak at 28-way on Clipper; the Anvil numbers come from the pilot).
   7. PGO rebuild on 3′ + 5′ data and the final pin.
 - **Done when:**
@@ -416,8 +448,9 @@ at this file. Each one:
   8. A login-node fetch bandwidth test of ~200 GB to `$SCRATCH` (no SUs; needs Zach's OK).
   9. Re-run the Clipper smoke test **with whitelists**, on terms that cannot delay Alpha (§9).
   10. Routing for non-GEX runs and Visium, so each modality's runs are queued for its own campaign.
-  11. The reads cache (§3d): measure `.1fq` sizes on the validation samples, build a rolling cache on Clipper project
-      space, and make the planner use a cached `.1fq` before downloading.
+  11. Storage (§3d): keep only references, private outputs, ledgers and the non-host read archive, within ~10 TB on
+      Clipper, and delete staged reads after verification.
+  12. The non-host stage-2 batch job (§3e): one job per detected species after each wave, reading the archive.
 - **Done when:**
   - a dry run on both clusters shows the projection;
   - the fetcher survives a kill and restart without parking samples;
@@ -605,7 +638,8 @@ report.
 
 **Campaign**
 - [ ] The fetch tier runs on both clusters within the login-node limits RCAC approved.
-- [ ] The reads-cache decision (§3d) is taken, with the GVSU storage quote in hand.
+- [ ] Long-term storage stays within ~10 TB on Clipper (§3d), as measured on the validation samples.
+- [ ] The unsorted-BAM protocol ([bam-stream-protocol.md](bam-stream-protocol.md)) has reached its phase 6 decision.
 - [ ] The staging age and byte/file caps work, and so does shipping before the purge.
 - [ ] The smoke test is green with whitelists, and the 50-sample validation is green.
 - [ ] A validation rerun is identical.
@@ -643,10 +677,14 @@ report.
 5. **Non-host screen.** Make it cheap and keep it on (§3e).
 6. **Doublets and empty droplets.** Both benchmarks come before the #43 decision (W7).
 7. **Models.** Sonnet 5.5 for the workstreams, Opus 5.5 for orchestration, Haiku 5.5 for sweeps.
+8. **Storage.** No BAMs or reads are kept. About 10 TB of long-term storage, on Clipper only (§3d).
+9. **No Anvil work** of any kind until the campaign is ready to deploy.
+10. **GPU alignment** is not pursued for Beta (§3b).
 
 **Still open:**
-1. **Reads cache (§3d).** Ask GVSU research computing for a price on ~0.7 PB, then choose between a full cache and the
-   rolling Clipper cache.
+1. **Non-host stage 2 (§3e).** Which viral, bacterial and vaccine references go into the curated set, and whether
+   stage-2 gene counts and the vaccine, infection and latency signatures are public in Beta or only after W7 validates
+   them.
 2. **Viral gene-level non-host counts:** in Beta or later (§3e).
 3. **Anvil pilot.** The ~200 SU one-node pilot after the Nov 6–8 outage.
 4. **More Anvil credits.** ACCESS allows a PI several Explore, Discover or Accelerate projects ("multiple requests
@@ -669,7 +707,7 @@ report.
 **Clusters**
 - **Login nodes:**
   - **Clipper:** only `sbatch`, `squeue`, `sacct` and log reads.
-  - **Anvil:** the approved fetcher only.
+  - **Anvil:** nothing until the campaign is ready to deploy; then the approved fetcher only.
 - **One bridge.** Never run `hpc/clipper/sync.sh` while Alpha or campaign jobs run.
 - **Clipper jobs** use `short-cpu` or `debug-cpu` where they fit, and say how much compute they need before
   submitting.
