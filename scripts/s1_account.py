@@ -154,7 +154,7 @@ def main(argv=None) -> int:
 
     # ---- 2. release promises over every manifest in R2
     problems, n_members, all_samples = [], 0, []
-    nuclei_gsm, meta_org = set(), {}
+    nuclei_gsm, meta_org, pack_ids = set(), {}, set()
     older_hits = []
     for k in other:
         g = camp.RE_MANIFEST.match(k).group(1)
@@ -169,6 +169,10 @@ def main(argv=None) -> int:
         if found or pol.withholds(g):
             problems.append(f"{g}: manifest names {len(found)} withheld/excluded accessions{' (withheld study)' if pol.withholds(g) else ''}")
         m = json.loads(txt)
+        for v in (m.get("packs") or {}).values():
+            for x in v if isinstance(v, list) else [v]:
+                if isinstance(x, str) and re.fullmatch(r"[0-9a-f]{32}", x):
+                    pack_ids.add(x)
         for name in (m.get("study_files") or {}):
             if omitted_layer(name) or is_restricted_member(name):
                 problems.append(f"{g}: study file {name} is a withheld layer")
@@ -185,6 +189,23 @@ def main(argv=None) -> int:
             if NUCLEI.search(json.dumps(meta)) or NUCLEI.search(title):
                 nuclei_gsm.add(s["gsm"])
     rep["policy_scan"] = {"manifests": len(manifests), "samples": len(all_samples), "members": n_members, "problems": problems}
+
+    # reference packs: every pack a manifest names is listed in s1/ref/index.json and present under s1/ref/
+    idx = json.loads(st.get_bytes(a.bucket, camp.REFS_INDEX_KEY))
+    listed = {p["id"]: p for p in idx.get("packs", [])}
+    missing_idx, missing_obj = sorted(pack_ids - set(listed)), []
+    for pid in sorted(pack_ids | set(listed)):
+        h = st.head(a.bucket, f"s1/ref/{pid}.pack")
+        if h is None or (pid in listed and h.size != listed[pid]["bytes"]):
+            missing_obj.append(pid)
+    rep["refs"] = {
+        "index_format": idx.get("format"), "index_packs": len(listed), "packs_named_by_manifests": len(pack_ids),
+        "named_but_not_in_index": missing_idx, "missing_or_wrong_size_objects": missing_obj,
+        "kinds": dict(Counter(str(p.get("kind") or p.get("type") or "?") for p in listed.values())),
+    }
+    problems += [f"pack {x} named by a manifest is not in s1/ref/index.json" for x in missing_idx]
+    problems += [f"pack {x} is missing from s1/ref/ (or has the wrong size)" for x in missing_obj]
+    print(json.dumps(rep["refs"])[:2000], flush=True)
     print(f"policy scan: {len(manifests)} manifests, {len(all_samples)} samples, {n_members} members, {len(problems)} problems", flush=True)
 
     # random sample objects: the member list inside the object must match its manifest entry and hold no withheld layer
