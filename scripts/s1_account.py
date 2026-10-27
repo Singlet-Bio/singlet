@@ -340,7 +340,7 @@ def main(argv=None) -> int:
             "by_nuclei_heuristic": {k: {"samples": v[0], "no_fact": v[1], "ambiguous_cells": v[2], "cells": v[3], "ambiguous_share": round(v[2] / v[3], 4) if v[3] else None} for k, v in by_nuc.items()},
             "by_pool": {k: {"samples": v[0], "no_fact": v[1], "ambiguous_cells": v[2], "cells": v[3], "ambiguous_share": round(v[2] / v[3], 4) if v[3] else None} for k, v in by_mix.items()},
         }
-        print(json.dumps(rep["sex"], indent=1), flush=True)
+        print(f"sex: {tot} samples summarised (see {a.out})", flush=True)
 
     Path(a.out).write_text(json.dumps(rep, indent=1, default=str))
     with open(a.tsv, "w", newline="", encoding="utf-8") as fh:
