@@ -51,6 +51,23 @@ def test_cl_names_ship_with_the_package():
     assert names["CL:0000084"] == "T cell" and names["CL:0000988"] == "hematopoietic cell"
 
 
+def test_r_cl_names_table_is_current():
+    """r/inst/extdata/cl_names.tsv (the R client's CL names) is generated from the same ontology release."""
+    import importlib.util
+
+    script = pathlib.Path(__file__).resolve().parents[2] / "scripts" / "sync_cl_names.py"
+    out = script.parents[1] / "r" / "inst" / "extdata" / "cl_names.tsv"
+    if (
+        not script.exists() or not out.exists()
+    ):  # pragma: no cover - an installed package without the repo
+        pytest.skip("not a source checkout")
+    spec = importlib.util.spec_from_file_location("sync_cl_names", script)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    current = out.read_bytes().decode("utf-8").replace("\r\n", "\n")
+    assert current == mod.render(), "run python scripts/sync_cl_names.py"
+
+
 def test_default_level_and_score_rule():
     rows = [
         (T_PATH, (0.9, 0.8, 0.7, 0.6)),  # deeper than 2: cut at level 2
