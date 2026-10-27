@@ -64,7 +64,7 @@ def one(gse, scratch):
     ad = st.to_anndata()
     R["to_anndata_s"] = round(time.time() - t, 2)
     R["shape"] = list(ad.shape)
-    R["layers"] = sorted(ad.layers.keys())
+    R["layers"] = [repr(k) for k in ad.layers.keys()]
     R["obs_columns"] = list(ad.obs.columns)[:60]
     R["n_obs_equals_called"] = int(ad.n_obs) == R["n_called_manifest"]
     if "spliced" in ad.layers and "unspliced" in ad.layers:
@@ -89,7 +89,7 @@ def one(gse, scratch):
     g = max(gsms, key=lambda x: int(st.samples[x].raw.get("n_called") or 0))
     t = time.time()
     part = st.cells(where="n_umi_exon > 500", samples=[g], max_cells=200, layers=True)
-    R["partial"] = {"gsm": g, "shape": list(part.shape), "s": round(time.time() - t, 2), "layers": sorted(part.layers.keys())}
+    R["partial"] = {"gsm": g, "shape": list(part.shape), "s": round(time.time() - t, 2), "layers": [repr(k) for k in part.layers.keys()]}
     t = time.time()
     one_s = st.to_anndata(samples=[g])
     R["one_sample"] = {"gsm": g, "shape": list(one_s.shape), "s": round(time.time() - t, 2)}
