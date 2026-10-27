@@ -435,7 +435,7 @@ at this file. Each one:
   - `scripts/atlas_rerun/**`;
   - `bench/atlas_rerun/cost_model_v2.py`;
   - `docs/atlas-rerun-*.md`;
-  - Anvil `$PROJECT` setup (sra-tools, references, whitelists), which costs no SUs.
+  - Anvil `$PROJECT` setup (sra-tools, references, whitelists), deferred until the campaign is ready to deploy (§8).
 - **Work:**
   1. `fetch_stage` with prefetch or S3 and checksums.
   2. The `cmd_fetcher` daemon with tickets, heartbeat and `.part` files; `compute_stage.prepare_reads` (decode, screen,
@@ -445,7 +445,7 @@ at this file. Each one:
   5. Ship out/ before the purge.
   6. An SRA Lite option, used only on W7's verdict.
   7. Record Amiya's login-node approval in the Anvil runbook, with the fetcher's limits (2 cores, 12 GiB, 4–8 streams).
-  8. A login-node fetch bandwidth test of ~200 GB to `$SCRATCH` (no SUs; needs Zach's OK).
+  8. A login-node fetch bandwidth test of ~200 GB to `$SCRATCH`, only at deploy time and with Zach's OK.
   9. Re-run the Clipper smoke test **with whitelists**, on terms that cannot delay Alpha (§9).
   10. Routing for non-GEX runs and Visium, so each modality's runs are queued for its own campaign.
   11. Storage (§3d): keep only references, private outputs, ledgers and the non-host read archive, within ~10 TB on
