@@ -128,7 +128,7 @@ def main():
         fh.write("\t".join(cols + ["why", "n_shards"]) + "\n")
         with open(a.tasks, "w") as ft:
             for r in sorted(sel, key=lambda r: -r["bytes"]):
-                k = max(1, min(r["n_samples"], math.ceil(r["bytes"] / a.shard_bytes)))
+                k = max(1, min(r["n_samples"], max(math.ceil(r["bytes"] / a.shard_bytes), math.ceil(r["n_samples"] / 50))))
                 r["n_shards"] = k
                 for i in range(k):
                     ft.write(f"{r['gse']}\t{i}/{k}\t{r['organism']}\n")
