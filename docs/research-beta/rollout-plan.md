@@ -326,6 +326,7 @@ become public layers.
 | D2 non-expression libraries processed as RNA | runs dropped with a reason; modality campaigns later (decision 4) | W4 / W2 |
 | D3 empty matrices | publish gate in the adapter: nnz = 0 with cells is refused | W5 |
 | D4 molecule double count; counts depend on `--threads` | molecule labels (#22 in #31) plus the determinism fixes | W2 |
+| D4b non-host EM is not reproducible run to run: the same binary on the same sample gives 69 vs 71 iterations and slightly different abundances (job 789001, 2026-10-27); demux auto-K also depends on `--threads` (W11) | fixed-order EM reduction and a thread-independent demux split, checked by a rerun identity test | W2 |
 | D5 first run, 30 M reads | all reads, every run | W4 |
 | D6 conservative knee | `called_ed` (EmptyDrops-class) as the published call, after the truth decision | W2 / W7 |
 | D7 false 5′ clip | the #36 probe fix | W2 verifies |
