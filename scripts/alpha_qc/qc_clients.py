@@ -39,8 +39,7 @@ def legacy_totals(gse, gsm, scratch):
         r = _pz.read_1pz(p)
         ip = np.asarray(r["indptr"]).astype(np.int64)
         dt = np.asarray(r["data"]).astype(np.float64)
-        cs = np.add.reduceat(dt, ip[:-1]) if len(dt) else np.zeros(len(ip) - 1)
-        cs[np.diff(ip) == 0] = 0
+        cs = np.bincount(np.repeat(np.arange(len(ip) - 1), np.diff(ip)), weights=dt, minlength=len(ip) - 1)
         if names is None:
             names, tot = list(r["colnames"]), cs
         else:
@@ -97,9 +96,14 @@ def one(gse, scratch):
     try:
         t = time.time()
         lt = legacy_totals(gse, g, scratch)
-        bc = [str(x).split(":", 1)[-1] if str(x) not in lt else str(x) for x in one_s.obs_names]
-        if "barcode" in one_s.obs.columns:
-            bc = [str(x) for x in one_s.obs["barcode"]]
+        bc = []
+        for x in one_s.obs_names:
+            x = str(x)
+            for pre in (g + "_", g + ":", g + "-"):
+                if x.startswith(pre) and x not in lt:
+                    x = x[len(pre):]
+            bc.append(x)
+        R["legacy_crosscheck_obs_name_example"] = str(one_s.obs_names[0]) if one_s.n_obs else None
         x_tot = np.asarray(one_s.X.sum(axis=1)).ravel()
         lv = np.array([lt.get(b, np.nan) for b in bc])
         R["legacy_crosscheck"] = {"n": int(len(bc)), "matched_barcodes": int(np.isfinite(lv).sum()),
