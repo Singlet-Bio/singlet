@@ -486,7 +486,7 @@ def load(
         (recompute canonical matrix digests), ``whole_max`` (bytes below which a
         sample's members are fetched whole), ``base`` (data host),
         ``cell_type_level`` (deepest level of ``obs["cell_type"]``, default 2),
-        ``cell_type_min_score`` (minimum path score for it, default 0.5),
+        ``cell_type_min_score`` (extra minimum path score for it, default 0),
         ``include_unvalidated`` (also keep ``qc_doublet_score``).
 
     Returns

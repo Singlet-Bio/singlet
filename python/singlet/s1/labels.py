@@ -25,10 +25,12 @@ them into the columns users see:
 =================================== ============================================================================================
 
 **Default cell type level.** ``cell_type`` is the deepest level ``k <= cell_type_level`` (default 2, the levels the atlas shows
-by default) whose path score ``p1 * ... * pk`` is at least ``cell_type_min_score`` (default 0.5). Per-study accuracy of the
-labeller against CELLxGENE author labels is 0.84 at level 1, 0.75 at level 2, 0.43 at level 3 and 0.32 at level 4
-(docs/cell_annotation.md section 3), so levels 3 and deeper are previews: ask for them with ``cell_type_level=6`` or read the
-``cell_type_deepest*`` columns. The score ranks calls; it is optimistic above 0.9 and is not a calibrated probability.
+by default) that the labeller reached, i.e. whose gating passed the guide's own per-level thresholds (minimum score and margin,
+``singlet.celllabels.celltype``). ``cell_type_min_score`` (default 0: no extra threshold) additionally requires the path score
+``p1 * ... * pk`` to reach a value. Per-study accuracy of the labeller against CELLxGENE author labels, measured on exactly these
+calls, is 0.84 at level 1, 0.75 at level 2, 0.43 at level 3 and 0.32 at level 4 (docs/cell_annotation.md section 3), so levels 3
+and deeper are previews: ask for them with ``cell_type_level=6`` or read the ``cell_type_deepest*`` columns. The score ranks
+calls; it is optimistic above 0.9 and is not a calibrated probability.
 
 **Sex** agrees with GEO sample metadata for 153 of 156 called samples (98.1%; the three disagreements are GEO errors).
 **Ancestry** is computed only for human donors whose per-donor coverage tables exist (about 1% of cells); elsewhere it is missing.
@@ -49,8 +51,9 @@ import numpy as np
 
 #: the default level of ``cell_type`` (docs/cell_annotation.md: levels 1-2 are shown by default, 3+ are previews)
 CELL_TYPE_LEVEL = 2
-#: the minimum path score (product of the gating confidences down to the level) for ``cell_type``
-CELL_TYPE_MIN_SCORE = 0.5
+#: an extra minimum path score (product of the gating confidences down to the level) for ``cell_type``; 0 keeps every level the
+#: guide's gating reached, which is what the documented accuracy was measured on
+CELL_TYPE_MIN_SCORE = 0.0
 MAX_LEVELS = 6
 LEVEL_COLUMNS = tuple(f"cell_type_p{k}" for k in range(1, MAX_LEVELS + 1))
 #: stored label columns of the cells table (label schema 2)

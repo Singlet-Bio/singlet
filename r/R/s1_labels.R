@@ -8,8 +8,8 @@
 #' table into \code{colData}, in front of the GEO sample metadata:
 #' \describe{
 #'   \item{\code{cell_type}, \code{cell_type_ontology_term_id}}{Cell Ontology name and id at the default level: the deepest level
-#'     \code{k <= cell_type_level} (default 2) whose path score \code{p1 * ... * pk} is at least \code{cell_type_min_score}
-#'     (default 0.5); \code{NA} when no level passes.}
+#'     \code{k <= cell_type_level} (default 2) that the labeller's gating reached; with \code{cell_type_min_score > 0} (default 0)
+#'     the path score \code{p1 * ... * pk} must also reach that value. \code{NA} when the cell has no call.}
 #'   \item{\code{cell_type_level}, \code{cell_type_score}}{that level (1 compartment, 2 lineage, 3 cell type, 4+ subtype; 0 none) and
 #'     its path score.}
 #'   \item{\code{cell_type_deepest}, \code{cell_type_deepest_ontology_term_id}, \code{cell_type_deepest_level},
@@ -83,7 +83,7 @@ NULL
     v
 }
 
-.s1_cell_type_columns <- function(cols, n, level = 2L, min_score = 0.5) {
+.s1_cell_type_columns <- function(cols, n, level = 2L, min_score = 0) {
     if (is.null(cols$cell_type_path)) return(list())
     L <- .s1_label_max_levels
     path <- .s1_na_strings(cols$cell_type_path)
@@ -137,7 +137,7 @@ NULL
 # The colData columns (a named list of length-n vectors) of one sample's selected cells. `cols` are the stored cells-table
 # columns restricted to those cells; `cats` the labels of the categorical ones. `columns` keeps only those names (stored names
 # are accepted too); otherwise every column except the internal ones and, without `include_unvalidated`, the unvalidated ones.
-.s1_label_columns <- function(cols, n, cats = list(), cell_type_level = 2L, cell_type_min_score = 0.5,
+.s1_label_columns <- function(cols, n, cats = list(), cell_type_level = 2L, cell_type_min_score = 0,
                               include_unvalidated = FALSE, columns = NULL) {
     out <- .s1_cell_type_columns(cols, n, cell_type_level, cell_type_min_score)
     for (name in names(cols)) {

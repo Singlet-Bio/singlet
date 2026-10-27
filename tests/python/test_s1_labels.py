@@ -53,18 +53,24 @@ def test_cl_names_ship_with_the_package():
 
 def test_default_level_and_score_rule():
     rows = [
-        (T_PATH, (0.9, 0.8, 0.7, 0.6)),  # level 2 passes (0.72)
-        ("CL:0000988>CL:0000542", (0.9, 0.4)),  # level 2 fails (0.36): level 1
-        ("CL:0000066", (0.3,)),  # level 1 fails: no cell_type, the deepest call stays
+        (T_PATH, (0.9, 0.8, 0.7, 0.6)),  # deeper than 2: cut at level 2
+        ("CL:0000988>CL:0000542", (0.9, 0.4)),  # level 2
+        ("CL:0000066", (0.3,)),  # level 1 only
         ("", ()),  # no call at all
     ]
     c = L.cell_type_columns(_cols(rows), 4)
     names = L.cl_names()
-    assert list(c["cell_type_ontology_term_id"]) == ["CL:0000542", "CL:0000988", None, None]
-    assert list(c["cell_type"]) == [names["CL:0000542"], "hematopoietic cell", None, None]
-    assert list(c["cell_type_level"]) == [2, 1, 0, 0]
-    np.testing.assert_allclose(c["cell_type_score"][:2], [0.72, 0.9], rtol=1e-6)
-    assert np.isnan(c["cell_type_score"][2:]).all()
+    assert list(c["cell_type_ontology_term_id"]) == ["CL:0000542", "CL:0000542", "CL:0000066", None]
+    assert list(c["cell_type"]) == [names["CL:0000542"]] * 2 + [names["CL:0000066"], None]
+    assert list(c["cell_type_level"]) == [2, 2, 1, 0]
+    np.testing.assert_allclose(c["cell_type_score"][:3], [0.72, 0.36, 0.3], rtol=1e-6)
+    assert np.isnan(c["cell_type_score"][3])
+    # with an extra path-score threshold, a level counts only if its path score passes
+    s = L.cell_type_columns(_cols(rows), 4, min_score=0.5)
+    assert list(s["cell_type_ontology_term_id"]) == ["CL:0000542", "CL:0000988", None, None]
+    assert list(s["cell_type"])[1] == "hematopoietic cell"
+    assert list(s["cell_type_level"]) == [2, 1, 0, 0]
+    np.testing.assert_allclose(s["cell_type_score"][:2], [0.72, 0.9], rtol=1e-6)
     assert list(c["cell_type_deepest_ontology_term_id"]) == [
         "CL:0000624",
         "CL:0000542",
@@ -81,7 +87,7 @@ def test_level_and_min_score_options():
     assert list(deep["cell_type_ontology_term_id"]) == ["CL:0000624", "CL:0000066"]
     assert list(deep["cell_type_level"]) == [4, 1]
     one = L.cell_type_columns(_cols(rows), 2, level=1)
-    assert list(one["cell_type_ontology_term_id"]) == ["CL:0000988", None]
+    assert list(one["cell_type_ontology_term_id"]) == ["CL:0000988", "CL:0000066"]
     strict = L.cell_type_columns(_cols(rows), 2, min_score=0.8)
     assert list(strict["cell_type_ontology_term_id"]) == ["CL:0000988", None]
 
@@ -222,7 +228,7 @@ def test_to_anndata_obs_has_the_labels(labelled, env):
     col_of = {b: i for i, b in enumerate(t["barcodes"])}
     cols = np.array([col_of[n.split("_", 1)[1]] for n in one.index])
     pat = _truth_rows(s, G1, cols)
-    want_id = np.array(["CL:0000542", "CL:0000988", None, None], dtype=object)[pat]
+    want_id = np.array(["CL:0000542", "CL:0000542", "CL:0000066", None], dtype=object)[pat]
     got_id = (
         one["cell_type_ontology_term_id"]
         .astype(object)
@@ -272,8 +278,14 @@ def test_cells_where_on_labels(labelled, env):
     sub = st.cells("sex_chrom == 'female'", samples=["GSM9000001"])
     assert list(sub.obs["column"]) == [i for i in range(n) if i % 4 == 0]
     assert (sub.obs["cell_type_ontology_term_id"] == "CL:0000542").all()
-    lin = st.cells({"cell_type_ontology_term_id": "CL:0000988"}, samples=["GSM9000001"])
-    assert list(lin.obs["column"]) == [i for i in range(n) if i % 4 == 1]
+    epi = st.cells({"cell_type_ontology_term_id": "CL:0000066"}, samples=["GSM9000001"])
+    assert list(epi.obs["column"]) == [i for i in range(n) if i % 4 == 2]
+    hem = st.cells(
+        {"cell_type_ontology_term_id": "CL:0000988"},
+        samples=["GSM9000001"],
+        cell_type_min_score=0.5,
+    )
+    assert list(hem.obs["column"]) == [i for i in range(n) if i % 4 == 1]
     # the hidden column can still filter, and comes back only when asked for
     hi = st.cells("qc_doublet_score > 0.5", samples=["GSM9000001"])
     assert hi.n_obs > 0 and "qc_doublet_score" not in hi.obs.columns
@@ -324,7 +336,9 @@ def test_live_labels_from_data_singlet_bio(tmp_path, monkeypatch):
         "called_ed",
     ):
         assert c in obs.columns, c
-    assert "qc_doublet_score" not in obs.columns and None not in ad.layers.keys()
+    assert "qc_doublet_score" not in obs.columns
+    # anndata >= 0.13 lists X as the layer None; the client adds no other unnamed layer
+    assert [k for k in ad.layers.keys() if k is not None] == []
     assert obs["cell_type"].notna().mean() > 0.5
     assert obs["cell_type_ontology_term_id"].dropna().str.match(r"^CL:\d{7}$").all()
     assert set(obs["sex_chrom"].dropna().astype(str)) <= {"female", "male", "ambiguous"}

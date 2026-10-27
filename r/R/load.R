@@ -485,7 +485,7 @@ singlet_download <- download
 #'   remembered there, so a sample of an already cached study loads offline.
 #' @param cell_type_level,cell_type_min_score Per-sample studies: the deepest
 #'   level of \code{colData$cell_type} (default 2, compartment and lineage) and
-#'   the minimum path score for it (default 0.5). See \code{\link{singlet_labels}}.
+#'   an extra minimum path score for it (default 0, none). See \code{\link{singlet_labels}}.
 #' @param include_unvalidated Per-sample studies: also keep the unvalidated
 #'   \code{qc_doublet_score} in \code{colData}.
 #' @return A combined \code{SingleCellExperiment} (when \code{as = "sce"}) or
@@ -535,7 +535,7 @@ singlet_download <- download
 #'   \code{\link{find_load}}
 #' @export
 load <- function(x, as = c("sce", "seurat"), cache_dir = NULL, legacy = NULL, modalities = NULL, cell_type_level = 2L,
-                 cell_type_min_score = 0.5, include_unvalidated = FALSE) {
+                 cell_type_min_score = 0, include_unvalidated = FALSE) {
     lab <- list(cell_type_level = cell_type_level, cell_type_min_score = cell_type_min_score,
                 include_unvalidated = include_unvalidated)
     as <- match.arg(as)

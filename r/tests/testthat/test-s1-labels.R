@@ -29,20 +29,24 @@ test_that("the CL names table ships with the package", {
     expect_identical(unname(nm["CL:0000988"]), "hematopoietic cell")
 })
 
-test_that("cell_type is the deepest level <= 2 whose path score passes 0.5", {
+test_that("cell_type is the deepest level <= 2 the guide reached; min_score adds a path-score threshold", {
     cols <- stored_cols(c(T_PATH, "CL:0000988>CL:0000542", "CL:0000066", ""),
                         list(c(0.9, 0.8, 0.7, 0.6), c(0.9, 0.4), 0.3, numeric(0)))
     ct <- singlet:::.s1_cell_type_columns(cols, 4L)
-    expect_identical(ct$cell_type_ontology_term_id, c("CL:0000542", "CL:0000988", NA, NA))
-    expect_identical(ct$cell_type[[2]], "hematopoietic cell")
-    expect_identical(ct$cell_type_level, c(2L, 1L, 0L, 0L))
-    expect_equal(ct$cell_type_score[1:2], c(0.72, 0.9), tolerance = 1e-6)
+    expect_identical(ct$cell_type_ontology_term_id, c("CL:0000542", "CL:0000542", "CL:0000066", NA))
+    expect_identical(ct$cell_type_level, c(2L, 2L, 1L, 0L))
+    expect_equal(ct$cell_type_score[1:3], c(0.72, 0.36, 0.3), tolerance = 1e-6)
+    st <- singlet:::.s1_cell_type_columns(cols, 4L, min_score = 0.5)
+    expect_identical(st$cell_type_ontology_term_id, c("CL:0000542", "CL:0000988", NA, NA))
+    expect_identical(st$cell_type[[2]], "hematopoietic cell")
+    expect_identical(st$cell_type_level, c(2L, 1L, 0L, 0L))
+    expect_equal(st$cell_type_score[1:2], c(0.72, 0.9), tolerance = 1e-6)
     expect_identical(ct$cell_type_deepest_ontology_term_id, c("CL:0000624", "CL:0000542", "CL:0000066", NA))
     expect_identical(ct$cell_type_deepest_level, c(4L, 2L, 1L, 0L))
     deep <- singlet:::.s1_cell_type_columns(cols, 4L, level = 6L, min_score = 0)
     expect_identical(deep$cell_type_ontology_term_id, c("CL:0000624", "CL:0000542", "CL:0000066", NA))
     one <- singlet:::.s1_cell_type_columns(cols, 4L, level = 1L)
-    expect_identical(one$cell_type_ontology_term_id, c("CL:0000988", "CL:0000988", NA, NA))
+    expect_identical(one$cell_type_ontology_term_id, c("CL:0000988", "CL:0000988", "CL:0000066", NA))
 })
 
 test_that("label columns: order, categories, renames and the hidden doublet score", {

@@ -870,7 +870,7 @@ singlet_study_modalities <- function(x, gsm = NULL) {
 }
 
 .s1_read_study <- function(study, gsms = NULL, cell_order = "legacy", threads = 0L, concurrency = 4L, whole_max = 48 * 1024^2,
-                           modalities = NULL, cell_type_level = 2L, cell_type_min_score = 0.5, include_unvalidated = FALSE) {
+                           modalities = NULL, cell_type_level = 2L, cell_type_min_score = 0, include_unvalidated = FALSE) {
     .require_sce("load()")
     mods <- .s1_normalize_modalities(modalities)
     gene_axis <- any(mods %in% .s1_gene_modalities)
@@ -968,8 +968,8 @@ singlet_study_modalities <- function(x, gsm = NULL) {
 #' @param max_cells Keep at most this many cells per sample (the largest libraries first).
 #' @param as \code{"sce"} (default) or \code{"seurat"}.
 #' @param cache_dir Cache directory (see \code{\link{load}}).
-#' @param cell_type_level,cell_type_min_score Deepest level of \code{cell_type} (default 2) and the minimum path score for it
-#'   (default 0.5); see \code{\link{singlet_labels}}.
+#' @param cell_type_level,cell_type_min_score Deepest level of \code{cell_type} (default 2) and an extra minimum path score for
+#'   it (default 0, none); see \code{\link{singlet_labels}}.
 #' @param include_unvalidated Also keep \code{qc_doublet_score} (unvalidated) in \code{colData}.
 #' @return A \code{SingleCellExperiment} (or \code{Seurat}) with one column per selected cell named
 #'   \code{<GSM>_<barcode>}; \code{colData} has \code{gsm_id}, \code{matrix_column} (1-based column in the sample's
@@ -982,7 +982,7 @@ singlet_study_modalities <- function(x, gsm = NULL) {
 #' @export
 singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layers = FALSE, max_cells = NULL,
                           as = c("sce", "seurat"), cache_dir = NULL, modalities = NULL, cell_type_level = 2L,
-                          cell_type_min_score = 0.5, include_unvalidated = FALSE) {
+                          cell_type_min_score = 0, include_unvalidated = FALSE) {
     as <- match.arg(as)
     cond <- substitute(where)
     caller <- parent.frame()
