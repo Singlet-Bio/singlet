@@ -1,0 +1,10 @@
+{
+  "sex": "female",
+  "confidence": 1.0000,
+  "xist_cpm": 63.6192,
+  "y_marker_cpm": 0.0000,
+  "n_y_genes_detected": 0,
+  "xist_umis": 1066,
+  "y_marker_umis": 0,
+  "total_umis": 16755940
+}

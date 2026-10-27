@@ -1,0 +1,20 @@
+{
+  "method": "decontx_cluster_offgene_v1",
+  "estimated_contamination_fraction": 0.233006,
+  "mean_rho": 0.233006,
+  "median_rho": 0.174538,
+  "rho": 0.174538,
+  "umi_weighted_rho": 0.170571,
+  "n_cells": 1462,
+  "n_clusters": 8,
+  "n_outlier_cells": 8,
+  "n_low_depth_cells": 89,
+  "umis_observed": 5608855,
+  "umis_removed": 956706,
+  "ambient_profile_n_barcodes": 50000,
+  "ambient_profile_total_umis": 745460,
+  "ambient_profile_n_genes_detected": 28583,
+  "ambient_pool_max_umi": 100,
+  "prior_strength": 20,
+  "seconds": 0.185435
+}
