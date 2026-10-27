@@ -65,8 +65,19 @@ def main():
     R = {"policy_version": pol["version"], "n_manifests_listed": len(Lm)}
     gses = sorted(k.split("/")[2][:-5] for k in Lm)
 
+    cache = os.path.join(os.path.dirname(a.out), "manifests")
+    os.makedirs(cache, exist_ok=True)
+
     def one(g):
-        st, hdr, raw = H.get(f"s1/m/{g}.json")
+        cp = os.path.join(cache, g + ".json")
+        if os.path.exists(cp):
+            st, raw = 200, open(cp, "rb").read()
+        else:
+            st, hdr, raw = H.get(f"s1/m/{g}.json")
+            if st == 200:
+                with open(cp + ".part", "wb") as fh:
+                    fh.write(raw)
+                os.replace(cp + ".part", cp)
         r = {"gse": g, "status": st}
         if st != 200:
             return r, None
@@ -142,8 +153,11 @@ def main():
     used = Counter()
     for s in studies:
         for role, pid in (s.get("packs") or {}).items():
-            if pid:
-                used[pid] += 1
+            for x in (pid if isinstance(pid, list) else [pid]):
+                if isinstance(x, dict):
+                    x = x.get("id")
+                if x:
+                    used[x] += 1
     R["packs_missing"] = sorted(p for p in used if f"s1/ref/{p}.pack" not in Lr)
     R["packs_not_in_index"] = sorted(p for p in used if p not in index)
     # orphans

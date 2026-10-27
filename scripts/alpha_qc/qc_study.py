@@ -320,9 +320,13 @@ def run(a):
     index = {p["id"]: p for p in json.loads(idx_raw).get("packs", [])} if st_i == 200 else {}
     pack_dir = os.path.join(a.scratch, "packs")
     os.makedirs(pack_dir, exist_ok=True)
+    plist = []
     for role, pid in (man.get("packs") or {}).items():
-        if not pid:
-            continue
+        for x in (pid if isinstance(pid, list) else [pid]):
+            x = x.get("id") if isinstance(x, dict) else x
+            if x:
+                plist.append((role, x))
+    for role, pid in plist:
         dest = os.path.join(pack_dir, pid + ".pack")
         stp, n, sha, _ = H.download(f"s1/ref/{pid}.pack", dest)
         ok = stp == 200 and sha is not None and sha[:32] == pid
