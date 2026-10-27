@@ -47,6 +47,8 @@ def latest_rows(run_dirs):
             for ln in p.read_text("utf-8").splitlines():
                 if ln.strip():
                     r = json.loads(ln)
+                    if r.get("status") == "skipped_done" and r["gse"] in rows:
+                        continue  # a resumed task found the study done: the earlier row says how it was done
                     rows[r["gse"]] = r
                     source[r["gse"]] = str(d)
     return rows, source
@@ -97,6 +99,8 @@ def main(argv=None) -> int:
         st_, reason = "missing", "no results row"
         if pol.withholds(g):
             st_, reason = "withheld", "release policy"
+        elif r is not None and r["status"] == "withheld":
+            st_, reason = "withheld", (r.get("error") or "no sample left after the release policy")[:240]
         elif r is not None and r["status"] == "ok":
             if not (r.get("verify") or {}).get("ok"):
                 st_, reason = "failed", "not verified"
@@ -249,10 +253,10 @@ def main(argv=None) -> int:
             "ancestry_terms": [e.get("id") for e in dicts.get("ancestry", []) if e.get("id")],
             "organisms": [e.get("label") for e in dicts.get("organism", [])],
         }
-        samples = {}
+        samples = {}  # (gse, gsm): a GSM can belong to several series (SuperSeries / SubSeries)
         with open(cd / "cidx-d1" / "cidx_sample.csv", newline="", encoding="utf-8") as fh:
             for r in csv.DictReader(fh):
-                samples[r["gsm_id"]] = r
+                samples[(r["gse_id"], r["gsm_id"])] = r
         sexed = defaultdict(lambda: [0, 0])
         cov_s, cov_c, rejected, nrows = defaultdict(set), Counter(), [], 0
         with open(cd / "cidx-d1" / "sample_cell_summary.csv", newline="", encoding="utf-8") as fh:
@@ -266,10 +270,10 @@ def main(argv=None) -> int:
                     if len(rejected) < 50:
                         rejected.append(f"line {i}: {list(r.values())[:6]}")
                     continue
-                cov_s[subj].add(r["gsm_id"])
+                cov_s[subj].add((r["gse_id"], r["gsm_id"]))
                 cov_c[subj] += n
                 if subj == "sex":
-                    sexed[r["gsm_id"]][0 if r["item"] == FEMALE else 1] += n
+                    sexed[(r["gse_id"], r["gsm_id"])][0 if r["item"] == FEMALE else 1] += n
         rep["cidx"]["d1_check"] = {"label_rows": nrows, "rejected_by_loader_rules": rejected}
         rep["label_coverage_index"] = {
             "samples_in_index": len(samples),
@@ -281,22 +285,21 @@ def main(argv=None) -> int:
         rep["cidx"]["organism_counts"] = dict(orgs.most_common(12))
 
         # ---- sex: where a sample gets no sex fact (website rule: >= 20 sexed cells), and where cells stay ambiguous
-        def org_of(gsm):
-            o = (samples.get(gsm) or {}).get("organism") or ""
+        def org_of(g, gsm):
+            o = (samples.get((g, gsm)) or {}).get("organism") or ""
             return o if o and o != "unknown" else meta_org.get(gsm, "")
 
         sexable = re.compile(r"homo sapiens|mus musculus", re.IGNORECASE)
         cause, amb_cells, lab_cells = Counter(), 0, 0
-        by_umi, by_nuc, by_mix = defaultdict(lambda: [0, 0, 0]), defaultdict(lambda: [0, 0, 0]), defaultdict(lambda: [0, 0, 0])
-        indexed = set(samples)
+        by_umi, by_nuc, by_mix = (defaultdict(lambda: [0, 0, 0, 0]) for _ in range(3))
         for g, gsm, key, names in all_samples:
-            s = samples.get(gsm)
-            org = org_of(gsm)
+            s = samples.get((g, gsm))
+            org = org_of(g, gsm)
             if s is None:
-                cause["not in the index (no count matrix)" if gsm not in indexed else "?"] += 1
+                cause["not in the index (no count matrix)"] += 1
                 continue
             n = int(s["n_called"])
-            f, mm = sexed.get(gsm, (0, 0))
+            f, mm = sexed.get((g, gsm), (0, 0))
             if n == 0:
                 cause["0 called cells"] += 1
                 continue
@@ -318,6 +321,7 @@ def main(argv=None) -> int:
                 bucket[key_][0] += 1
                 bucket[key_][1] += 0 if fact else 1
                 bucket[key_][2] += amb
+                bucket[key_][3] += n
             if fact:
                 cause["sex fact"] += 1
             elif n < MIN_CELLS:
@@ -332,9 +336,9 @@ def main(argv=None) -> int:
             "labelled_human_mouse_cells": lab_cells,
             "ambiguous_cells": amb_cells,
             "ambiguous_cell_share": round(amb_cells / lab_cells, 4) if lab_cells else None,
-            "by_median_umi": {k: {"samples": v[0], "no_fact": v[1], "ambiguous_cells": v[2]} for k, v in sorted(by_umi.items())},
-            "by_nuclei_heuristic": {k: {"samples": v[0], "no_fact": v[1], "ambiguous_cells": v[2]} for k, v in by_nuc.items()},
-            "by_pool": {k: {"samples": v[0], "no_fact": v[1], "ambiguous_cells": v[2]} for k, v in by_mix.items()},
+            "by_median_umi": {k: {"samples": v[0], "no_fact": v[1], "ambiguous_cells": v[2], "cells": v[3], "ambiguous_share": round(v[2] / v[3], 4) if v[3] else None} for k, v in sorted(by_umi.items())},
+            "by_nuclei_heuristic": {k: {"samples": v[0], "no_fact": v[1], "ambiguous_cells": v[2], "cells": v[3], "ambiguous_share": round(v[2] / v[3], 4) if v[3] else None} for k, v in by_nuc.items()},
+            "by_pool": {k: {"samples": v[0], "no_fact": v[1], "ambiguous_cells": v[2], "cells": v[3], "ambiguous_share": round(v[2] / v[3], 4) if v[3] else None} for k, v in by_mix.items()},
         }
         print(json.dumps(rep["sex"], indent=1), flush=True)
 
