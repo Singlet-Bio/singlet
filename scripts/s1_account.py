@@ -153,7 +153,7 @@ def main(argv=None) -> int:
     rep["not_verified"] = [p for p in per if p["status"] not in ("verified", "withheld")]
     rep["crc_repaired_verified"] = [p["gse"] for p in ver if p["crc_repaired"]]
     rep["label_notes"] = [(p["gse"], p["label_notes"]) for p in ver if p["label_notes"]]
-    rep["stray_manifests"] = sorted(set(manifests) - {p["gse"] for p in ver})
+    rep["stray_manifests"] = sorted(set(manifests) - {p["gse"] for p in ver} - set(pol.withheld))
     print(json.dumps({k: rep[k] for k in ("listing", "manifests_in_r2", "final", "totals_verified")}, indent=1), flush=True)
 
     # ---- 2. release promises over every manifest in R2
@@ -166,7 +166,11 @@ def main(argv=None) -> int:
         if found or pol.withholds(g):
             older_hits.append(f"{k}: {len(found)} withheld/excluded accessions{' (withheld study)' if pol.withholds(g) else ''}")
     rep["older_prefix_scan"] = {"manifests": len(other), "hits": older_hits}
+    # manifests of studies the policy withholds (written under an earlier policy): listed for the Worker to block, not scanned
+    rep["withheld_manifests_in_r2"] = sorted(k for g, k in manifests.items() if pol.withholds(g))
     for g, k in sorted(manifests.items()):
+        if pol.withholds(g):
+            continue
         raw = docs.get(g) or st.get_bytes(a.bucket, k)
         txt = raw.decode("utf-8")
         found = sorted(set(ACC.findall(txt)) & bad_acc)

@@ -13,7 +13,8 @@
 #                     EXCLUDE_LIST=big.txt leaves the big studies to their own job (see notes/m_w6.md)
 #   MODE=summarize    aggregate the results files of RUNS (counts, bytes, per-stage throughput, projection)
 #   MODE=catalog-sql  SQL files (schema 032) from the rows of RUNS, in days of at most DAY_BUDGET (80000) estimated row writes
-#                     (FROM_R2=1: rebuild the rows from the manifests and ledgers in R2). The orchestrator applies them with wrangler.
+#                     (FROM_R2=1: rebuild the rows from the manifests and ledgers in R2; GSE_LIST=file: only those studies).
+#                     The orchestrator applies them with wrangler.
 #   MODE=catalog-post POST the manifests to /api/ingest/s1-study (needs ~/.config/singlet-ingest.env: INGEST_TOKEN; secondary route)
 #   MODE=refs-index   publish the reference packs and s1/ref/index.json from python/singlet/s1/packs (APPLY=1 to write). Run before the campaign.
 #   Retirement, three separate steps (notes/m_w6.md section 6), so the site never offers a dead legacy URL:
@@ -240,7 +241,7 @@ case "$MODE" in
   catalog-sql)
     mapfile -t RD < <(rows_args)
     if [ -n "${FROM_R2:-}" ]; then need_creds; rt "${PY[@]}" "${CAMP[@]}" catalog-sql --from-r2 --out "$OUT/sql" --day-budget "${DAY_BUDGET:-80000}" --schema "${D1_SCHEMA:-033}" ${LOCAL_ROOT:+--local-root "$LOCAL_ROOT"}
-    else rt "${PY[@]}" "${CAMP[@]}" catalog-sql --rows-dir "${RD[@]}" --out "$OUT/sql" --day-budget "${DAY_BUDGET:-80000}" --schema "${D1_SCHEMA:-033}"; fi
+    else rt "${PY[@]}" "${CAMP[@]}" catalog-sql --rows-dir "${RD[@]}" ${GSE_LIST:+--gse-list "$GSE_LIST"} --out "$OUT/sql" --day-budget "${DAY_BUDGET:-80000}" --schema "${D1_SCHEMA:-033}"; fi
     # one compressed file to bring back to the laptop (the whole atlas is about 200 MB of SQL, about 25 MB packed)
     tar --force-local -C "$OUT" -czf "$OUT/sql.tar.gz" sql && ls -l "$OUT/sql.tar.gz"
     ;;
