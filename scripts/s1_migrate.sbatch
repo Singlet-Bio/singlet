@@ -31,7 +31,7 @@
 # Research Alpha (docs/s1-migration.md, Research Alpha): ALPHA_POLICY=<policy json> (withheld studies skipped; excluded samples and withheld
 # layers never written; policy audit per study in $OUT/policy-audit/, private), SAMPLE_FACTS=<json> (provenance), LABELS=1 (per-cell
 # labels from the decoded counts into s1/a/; AF=<1kgp af parquet> for ancestry, RESTRICTED_BUCKET for the depth tables),
-# ALPHA_POLICY_SHA256=<hex> (refuse a policy file with other bytes). BRANCH=<the branch COMMIT is on>.
+# ALPHA_POLICY_SHA256=<hex> (refuse a policy file with other bytes). READBACK=sha256 re-reads every uploaded object. BRANCH=<the branch COMMIT is on>.
 # Needs: ~/.config/singlet-r2.env (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY), $WORK/images/python-3.12-bookworm.sif
 # (the clipper runtime image: compiler, Python headers), the bare clone $WORK/repos/singlet-py.git of singlet-bio.
 # A migrate process is one Python thread (its native encoder adds 4 threads for a few seconds per sample): a job runs
@@ -202,7 +202,7 @@ run_campaign() {  # run_campaign <mode> [extra args]
     ${WORKERS:+--workers "$WORKERS"} --io-threads "${IO_THREADS:-8}" --min-rate-mbs "${MIN_RATE_MBS:-0.4}" \
     --commit "$COMMIT" --task "$TASK" --deadline-epoch "$deadline" \
     ${EXCLUDE_LIST:+--exclude-list "$EXCLUDE_LIST"} ${LISTING:+--listing "$LISTING"} ${GSE_LIST:+--gse-list "$GSE_LIST"} \
-    ${KEEP_SCRATCH:+--keep-scratch "$KEEP_SCRATCH"} ${MIGRATE_TIMEOUT:+--migrate-timeout "$MIGRATE_TIMEOUT"} ${VERIFY_TIMEOUT:+--verify-timeout "$VERIFY_TIMEOUT"} \
+    ${KEEP_SCRATCH:+--keep-scratch "$KEEP_SCRATCH"} ${READBACK:+--readback "$READBACK"} ${MIGRATE_TIMEOUT:+--migrate-timeout "$MIGRATE_TIMEOUT"} ${VERIFY_TIMEOUT:+--verify-timeout "$VERIFY_TIMEOUT"} \
     ${LOCAL_ROOT:+--local-root "$LOCAL_ROOT"} ${MIGRATE_CMD:+--migrate-cmd "$MIGRATE_CMD"} ${VERIFY_CMD:+--verify-cmd "$VERIFY_CMD"}     ${ALPHA_POLICY:+--alpha-policy "$ALPHA_POLICY" --audit-dir "$OUT/policy-audit"} ${SAMPLE_FACTS:+--sample-facts "$SAMPLE_FACTS"}     ${LABELS:+--labels --labels-timeout "${LABELS_TIMEOUT:-1800}" --labels-max-gb "${LABELS_MAX_GB:-24}"}     ${LABELS:+${AF:+--af "$AF"}} ${LABELS:+--restricted-bucket "${RESTRICTED_BUCKET:-singlet-restricted}"} "$@"
 }
 
