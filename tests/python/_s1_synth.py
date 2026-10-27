@@ -126,10 +126,14 @@ class Synth:
         pad_between: int = 0,
         extras: bool = False,
         junction_table: bool = False,
+        labels: bool = False,
     ) -> "Synth":
         """``extras`` adds feature-level members: ``sj_counts.1pz`` (inline junction names; GSM9000001 and GSM9000003 have
         overlapping, different junction sets) and ``vdj_gene_usage.1pz`` (GSM9000001 only). ``junction_table`` stores the junction rows
-        as ids into a shared junction table (the 30 junctions both samples have; each sample's others go to ``sj_counts.1pz.local``)."""
+        as ids into a shared junction table (the 30 junctions both samples have; each sample's others go to ``sj_counts.1pz.local``).
+        ``labels`` adds the Research Alpha per-cell columns to GSM9000001's cells table (:meth:`label_columns`: cell type path and
+        per-level confidences, sex, ancestry, ``called_ed``, ``qc_doublet_score``, categorical ``don_donor_id`` / ``cyc_phase``
+        with their labels in recipe members of the manifest); GSM9000003 stays without them."""
         self.jx = None
         if extras and junction_table:
             from singlet.s1 import junctions as J
@@ -189,6 +193,11 @@ class Synth:
                 cells_mod.DT_U32,
                 np.diff(in_csc.indptr).astype(np.uint32) if has_intron else np.zeros(n, np.uint32),
             )
+            lab = None
+            if labels and gsm == "GSM9000001":
+                lab = self.label_columns(n, called)
+                for name, (dt, vals) in lab.items():
+                    ct.add(name, dt, vals)
             w.add_cells("cells", ct.encode(), ct.digest(), {"n_rows": n}, flags=K.FLAG_ANNDATA)
             w.add_matrix(
                 "exon_counts.1pz",
@@ -309,6 +318,8 @@ class Synth:
                         }
                     )
                 members[info.name] = d
+            if lab is not None:
+                members.update(self.label_recipe_members())
             samples.append(M.sample_entry(gsm, key, obj, n, int(called.sum()), members, {}))
             self.truth[gsm] = {
                 "barcodes": bcs,
@@ -323,6 +334,7 @@ class Synth:
                 "umi_exon": umi_e,
                 "object": obj,
                 "key": key,
+                "labels": None if lab is None else {k: v for k, (_dt, v) in lab.items()},
                 **extra_truth,
             }
         meta = {
@@ -368,6 +380,111 @@ class Synth:
         self._write_ref()
         return self
 
+    #: label patterns cycled over the cells: (path, per-level confidences, sex, ancestry)
+    LABEL_PATTERNS = (
+        (
+            "CL:0000988>CL:0000542>CL:0000084>CL:0000624",
+            (0.9, 0.8, 0.7, 0.6),
+            "female",
+            "HANCESTRO:0005",
+        ),
+        ("CL:0000988>CL:0000542", (0.9, 0.4), "male", "HANCESTRO:0005"),
+        ("CL:0000066", (0.3,), "ambiguous", ""),
+        ("", (), "", ""),
+    )
+    #: labels of the categorical columns (codes in the cells table)
+    LABEL_CATS = {"don_donor_id": ["donor0", "unassigned"], "cyc_phase": ["G1", "G2M"]}
+
+    def label_columns(self, n: int, called: np.ndarray) -> Dict[str, tuple]:
+        """{name: (dtype, values)} of the per-cell label and QC columns as the transcode writes them (labels_step.CELLS_LABEL_COLUMNS,
+        plus the EmptyDrops call, a doublet score, an mtDNA summary and two categorical columns stored as codes)."""
+        from singlet.s1.labels import cl_names
+
+        names = cl_names()
+        S, F = cells_mod.DT_STR, cells_mod.DT_F32
+        strs: Dict[str, list] = {
+            k: []
+            for k in (
+                "cell_type_cl",
+                "cell_type_label",
+                "cell_type_path",
+                "sex_chrom",
+                "ancestry_hancestro",
+            )
+        }
+        num = {
+            k: np.full(n, np.nan, np.float32)
+            for k in ("cell_type_score", "sex_score", "ancestry_prob")
+        }
+        lev = {f"cell_type_p{k}": np.full(n, np.nan, np.float32) for k in range(1, 7)}
+        for i in range(n):
+            path, ps, sex, anc = self.LABEL_PATTERNS[i % len(self.LABEL_PATTERNS)]
+            last = path.split(">")[-1] if path else ""
+            strs["cell_type_cl"].append(last)
+            strs["cell_type_label"].append(names.get(last, "") if last else "")
+            strs["cell_type_path"].append(path)
+            strs["sex_chrom"].append(sex)
+            strs["ancestry_hancestro"].append(anc)
+            for k, p in enumerate(ps):
+                lev[f"cell_type_p{k + 1}"][i] = p
+            if ps:
+                num["cell_type_score"][i] = float(np.prod(ps))
+            if sex:
+                num["sex_score"][i] = 0.99
+            if anc:
+                num["ancestry_prob"][i] = 0.97
+        cols: Dict[str, tuple] = {
+            "cell_type_cl": (S, strs["cell_type_cl"]),
+            "cell_type_label": (S, strs["cell_type_label"]),
+            "cell_type_score": (F, num["cell_type_score"]),
+            "cell_type_path": (S, strs["cell_type_path"]),
+            **{k: (F, v) for k, v in lev.items()},
+            "sex_chrom": (S, strs["sex_chrom"]),
+            "sex_score": (F, num["sex_score"]),
+            "ancestry_hancestro": (S, strs["ancestry_hancestro"]),
+            "ancestry_prob": (F, num["ancestry_prob"]),
+        }
+        idx = np.arange(n)
+        cols["called_ed"] = (cells_mod.DT_BOOL, np.asarray(called, bool) | (idx % 7 == 0))
+        cols["called_ed_fdr"] = (F, (idx % 10 / 1000.0).astype(np.float32))
+        cols["cyc_phase"] = (cells_mod.DT_U8, (idx % 2).astype(np.uint8))
+        cols["qc_doublet_score"] = (F, (idx % 5 / 5.0).astype(np.float32))
+        cols["don_donor_id"] = (cells_mod.DT_U8, (idx % 3 == 0).astype(np.uint8))
+        cols["mts_pct_heteroplasmic"] = (F, (idx % 4 / 4.0).astype(np.float32))
+        return cols
+
+    @classmethod
+    def label_recipe_members(cls) -> Dict[str, dict]:
+        """Derived members whose recipes give the categorical columns' labels (as the manifests on data.singlet.bio do)."""
+
+        def member(name, col):
+            return {
+                "kind": 4,
+                "flags": 1,
+                "off": 0,
+                "len": 0,
+                "digest": "0" * 32,
+                "recipe": "tsvcols-v1",
+                "params": {
+                    "h": None,
+                    "r": {"m": "all"},
+                    "c": [
+                        {
+                            "n": name,
+                            "s": "c",
+                            "c": col,
+                            "f": {"k": "cat", "labels": cls.LABEL_CATS[col]},
+                        }
+                    ],
+                },
+                "needs": ["cells:barcode", "cells:" + col],
+            }
+
+        return {
+            "donor/donor_assignments.tsv": member("donor_id", "don_donor_id"),
+            "cell_cycle_scores.tsv": member("phase", "cyc_phase"),
+        }
+
     def _write_ref(self):
         """s1/ref/<id>.pack + index.json as the server lays them out (clients without the wheel packs fetch them from here)."""
         from singlet.s1 import packs as P
@@ -404,8 +521,11 @@ if __name__ == "__main__":
     extras = (
         "--extras" in sys.argv[2:]
     )  # also the sj / vdj members, and truth_<GSM>_sj.mtx + truth_<GSM>_sj_names.txt
+    with_labels = (
+        "--labels" in sys.argv[2:]
+    )  # label columns on GSM9000001, and truth_<GSM>_labels.tsv
     os.makedirs(out, exist_ok=True)
-    s = Synth(out).build(extras=extras)
+    s = Synth(out).build(extras=extras, labels=with_labels)
     with open(os.path.join(out, "genes.txt"), "w") as fh:
         fh.write("\n".join("%s\t%s" % (g, n) for g, n in s.exon_pack.gene_table()) + "\n")
     for gsm, t in s.truth.items():
@@ -423,6 +543,15 @@ if __name__ == "__main__":
         scipy.io.mmwrite(os.path.join(out, "truth_%s.mtx" % gsm), ex + un if un is not None else ex)
         with open(os.path.join(out, "truth_%s_barcodes.txt" % gsm), "w") as fh:
             fh.write("\n".join(bcs[order]) + "\n")
+        if t.get("labels"):
+            from singlet.s1 import labels as SL
+
+            lab = {k: np.asarray(v)[cols] for k, v in t["labels"].items()}
+            obs = SL.to_frame([SL.obs_columns(lab, len(cols), cats=Synth.LABEL_CATS)])
+            obs.insert(0, "barcode", bcs[order])
+            obs.to_csv(
+                os.path.join(out, "truth_%s_labels.tsv" % gsm), sep="\t", index=False, na_rep="NA"
+            )
         if extras and "sj" in t:
             scipy.io.mmwrite(os.path.join(out, "truth_%s_sj.mtx" % gsm), t["sj"][:, cols])
             with open(os.path.join(out, "truth_%s_sj_names.txt" % gsm), "w") as fh:

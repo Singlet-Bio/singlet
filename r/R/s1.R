@@ -870,7 +870,7 @@ singlet_study_modalities <- function(x, gsm = NULL) {
 }
 
 .s1_read_study <- function(study, gsms = NULL, cell_order = "legacy", threads = 0L, concurrency = 4L, whole_max = 48 * 1024^2,
-                           modalities = NULL) {
+                           modalities = NULL, cell_type_level = 2L, cell_type_min_score = 0.5, include_unvalidated = FALSE) {
     .require_sce("load()")
     mods <- .s1_normalize_modalities(modalities)
     gene_axis <- any(mods %in% .s1_gene_modalities)
@@ -895,8 +895,7 @@ singlet_study_modalities <- function(x, gsm = NULL) {
     res <- lapply(targets, function(g) {
         tryCatch(
             .s1_read_sample(study, g, axis, NULL, n_genes, function(cells) which(cells$columns$called) - 1L,
-                            c("barcode", "called", "cc_pos", "cc_listed", "cc_pvalue"), threads, whole_max, concurrency,
-                            members = members),
+                            character(0), threads, whole_max, concurrency, members = members),
             singlet_s1_integrity = function(e) stop(e),
             error = function(e) list(skipped = paste("unreadable:", conditionMessage(e)))
         )
@@ -914,7 +913,12 @@ singlet_study_modalities <- function(x, gsm = NULL) {
         r$cn <- paste0(g, "_", r$cols$barcode[r$ord])
         ok[[g]] <- r
         info <- if (!is.null(gsm_meta_map) && g %in% names(gsm_meta_map)) gsm_meta_map[[g]] else list()
-        coldata_rows[[g]] <- .bundle_obs_frame(g, info, length(r$cn))
+        n <- length(r$cn)
+        cols <- lapply(r$cols, function(v) if (is.list(v)) v else v[r$ord])
+        lab <- .s1_label_columns(cols, n, .s1_label_categories(study$samples[[g]]$members), cell_type_level,
+                                 cell_type_min_score, include_unvalidated)
+        geo <- .bundle_obs_frame(g, info, n)
+        coldata_rows[[g]] <- c(list(gsm_id = rep(g, n)), lab, as.list(geo[setdiff(names(geo), "gsm_id")]))
     }
     if (length(ok) == 0L) {
         detail <- if (length(skipped) > 0L) paste0(": ", .describe_skipped(skipped)) else ""
@@ -925,7 +929,7 @@ singlet_study_modalities <- function(x, gsm = NULL) {
                 call. = FALSE)
     }
     parts <- .s1_assemble(ok, mods, axis, n_genes, explicit = !is.null(modalities))
-    coldata <- do.call(rbind, unname(coldata_rows))
+    coldata <- .s1_label_rbind(unname(coldata_rows))
     rownames(coldata) <- parts$cn
     sce <- .s1_make_sce(parts, coldata)
     S4Vectors::metadata(sce)$manifest <- list(
@@ -947,7 +951,8 @@ singlet_study_modalities <- function(x, gsm = NULL) {
 #' Cells of a study that satisfy a condition, without downloading the rest
 #'
 #' Reads the (small) cell table of each requested sample, evaluates \code{where} on its columns
-#' (\code{called}, \code{n_umi_exon}, \code{n_umi_intron}, \code{n_feat_exon}, \code{n_feat_intron}, ...) and fetches only the
+#' (\code{called}, \code{n_umi_exon}, \code{n_umi_intron}, \code{n_feat_exon}, \code{n_feat_intron}, ..., and the per-cell labels
+#' of \code{\link{singlet_labels}}, e.g. \code{cell_type == "T cell" & sex_chrom == "female"}) and fetches only the
 #' matrix chunks that contain the selected cells (a small sample is fetched whole, in one request). Counts are at gene level
 #' (spliced + unspliced), as in \code{\link{load}}.
 #'
@@ -956,16 +961,19 @@ singlet_study_modalities <- function(x, gsm = NULL) {
 #' @param where An unevaluated condition on the cell-table columns, e.g. \code{n_umi_exon > 5000 & called}; or a function of
 #'   the cell-table data frame returning a logical vector; or \code{NULL} for every cell.
 #' @param samples GSM accessions to restrict the Series to (default all).
-#' @param columns Cell-table columns to keep in \code{colData} (default all numeric ones).
+#' @param columns Columns to keep in \code{colData} (default all; see \code{\link{singlet_labels}}).
 #' @param layers Also return \code{spliced} and \code{unspliced} assays.
 #' @param modalities Which matrices to fetch (default \code{"counts"}, plus the layers with \code{layers = TRUE}); see
 #'   \code{\link{load}}. Only the chunk runs of those members that hold the selected cells are downloaded.
 #' @param max_cells Keep at most this many cells per sample (the largest libraries first).
 #' @param as \code{"sce"} (default) or \code{"seurat"}.
 #' @param cache_dir Cache directory (see \code{\link{load}}).
+#' @param cell_type_level,cell_type_min_score Deepest level of \code{cell_type} (default 2) and the minimum path score for it
+#'   (default 0.5); see \code{\link{singlet_labels}}.
+#' @param include_unvalidated Also keep \code{qc_doublet_score} (unvalidated) in \code{colData}.
 #' @return A \code{SingleCellExperiment} (or \code{Seurat}) with one column per selected cell named
 #'   \code{<GSM>_<barcode>}; \code{colData} has \code{gsm_id}, \code{matrix_column} (1-based column in the sample's
-#'   matrix) and the cell-table columns.
+#'   matrix) and the per-cell columns (\code{\link{singlet_labels}}).
 #' @examples
 #' \dontrun{
 #' deep <- singlet_cells("GSE145370", n_umi_exon > 5000, samples = "GSM4317426")
@@ -973,7 +981,8 @@ singlet_study_modalities <- function(x, gsm = NULL) {
 #' @seealso \code{\link{load}}, \code{\link{singlet_study}}
 #' @export
 singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layers = FALSE, max_cells = NULL,
-                          as = c("sce", "seurat"), cache_dir = NULL, modalities = NULL) {
+                          as = c("sce", "seurat"), cache_dir = NULL, modalities = NULL, cell_type_level = 2L,
+                          cell_type_min_score = 0.5, include_unvalidated = FALSE) {
     as <- match.arg(as)
     cond <- substitute(where)
     caller <- parent.frame()
@@ -997,8 +1006,11 @@ singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layer
     if (!is.null(modalities)) .s1_check_modalities(study, gsms, mods)
     axis <- if (any(mods %in% .s1_gene_modalities)) .s1_axis(study) else list(gene_id = character(0), gene_name = character(0))
     n_genes <- length(axis$gene_id)
-    keep_fun <- function(cells) {
-        df <- as.data.frame(cells$columns[vapply(cells$columns, function(v) is.numeric(v) || is.logical(v), NA)])
+    keep_fun <- function(cells, gsm) {
+        df <- as.data.frame(.s1_label_columns(cells$columns[setdiff(names(cells$columns), "barcode")], cells$n_rows,
+                                              .s1_label_categories(study$samples[[gsm]]$members), cell_type_level,
+                                              cell_type_min_score, include_unvalidated = TRUE),
+                            stringsAsFactors = FALSE, check.names = FALSE)
         m <- if (is.function(where_val)) {
             where_val(df)
         } else if (is.character(where_val) && length(where_val) == 1L) {
@@ -1013,8 +1025,8 @@ singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layer
         idx
     }
     res <- lapply(gsms, function(g) {
-        .s1_read_sample(study, g, axis, NULL, n_genes, keep_fun, c("barcode", "called", "n_umi_exon", "n_umi_intron", "n_feat_exon", "n_feat_intron",
-                                                                  if (!is.null(columns)) columns), 0L, members = .s1_members_for(mods))
+        .s1_read_sample(study, g, axis, NULL, n_genes, function(cells) keep_fun(cells, g), character(0), 0L,
+                        members = .s1_members_for(mods))
     })
     names(res) <- gsms
     ok <- Filter(function(r) is.null(r$skipped) && !.s1_sample_empty(r), res)
@@ -1028,13 +1040,12 @@ singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layer
     })
     parts <- .s1_assemble(ok, mods, axis, n_genes, explicit = !is.null(modalities))
     cn <- parts$cn
-    cd <- do.call(rbind, lapply(ok, function(r) {
-        keep <- setdiff(names(r$cols), "barcode")
-        if (!is.null(columns)) keep <- intersect(keep, columns)
-        d <- data.frame(gsm_id = rep(r$gsm, length(r$sel)), matrix_column = r$sel + 1L, stringsAsFactors = FALSE)
-        for (k in keep) if (is.numeric(r$cols[[k]]) || is.logical(r$cols[[k]])) d[[k]] <- r$cols[[k]]
-        d
-    }))
+    cd <- .s1_label_rbind(unname(lapply(ok, function(r) {
+        n <- length(r$sel)
+        c(list(gsm_id = rep(r$gsm, n), matrix_column = r$sel + 1L),
+          .s1_label_columns(r$cols, n, .s1_label_categories(study$samples[[r$gsm]]$members), cell_type_level,
+                            cell_type_min_score, include_unvalidated, columns))
+    })))
     rownames(cd) <- cn
     sce <- .s1_make_sce(parts, cd)
     S4Vectors::metadata(sce)$singlet_s1 <- list(gse = study$gse, rev = study$rev, modalities = mods)
@@ -1089,7 +1100,7 @@ singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layer
 
 # A per-sample study by accession; a study with no .s1 manifest stops with a message naming legacy = TRUE
 # (SINGLET_LEGACY_FALLBACK=1 falls back to the legacy bundle instead).
-.s1_load_gse <- function(gse, gsms = NULL, cache_dir = NULL, legacy = NULL, modalities = NULL) {
+.s1_load_gse <- function(gse, gsms = NULL, cache_dir = NULL, legacy = NULL, modalities = NULL, labels = list()) {
     study <- tryCatch(singlet_study(gse, cache_dir = cache_dir), singlet_s1_not_found = function(e) e)
     if (inherits(study, "condition")) {
         if (is.null(legacy) && .s1_legacy_fallback()) {
@@ -1101,7 +1112,7 @@ singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layer
         }
         stop(study)
     }
-    .s1_read_study(study, gsms, modalities = modalities)
+    do.call(.s1_read_study, c(list(study, gsms, modalities = modalities), labels))
 }
 
 # modalities= on a legacy bundle: it has been downloaded whole already, so only the gene assays are subset (with a warning);
@@ -1122,12 +1133,12 @@ singlet_cells <- function(x, where = NULL, samples = NULL, columns = NULL, layer
 }
 
 # A local manifest, .../s1/m/<GSE>.json (its objects are read from the same store/ tree; DUAL: v2/m/ trees too).
-.s1_load_manifest <- function(path, gsms = NULL, modalities = NULL) {
+.s1_load_manifest <- function(path, gsms = NULL, modalities = NULL, labels = list()) {
     p <- normalizePath(path, winslash = "/", mustWork = TRUE)
     if (basename(dirname(p)) != "m" || !(basename(dirname(dirname(p))) %in% c("s1", "store", "v2"))) {
         stop(sprintf("%s is not under a s1/m/ directory", path), call. = FALSE)
     }
     root <- dirname(dirname(dirname(p)))
     gse <- sub("\\.json$", "", basename(p), ignore.case = TRUE)
-    .s1_read_study(singlet_study(gse, base = root, force = TRUE), gsms, modalities = modalities)
+    do.call(.s1_read_study, c(list(singlet_study(gse, base = root, force = TRUE), gsms, modalities = modalities), labels))
 }

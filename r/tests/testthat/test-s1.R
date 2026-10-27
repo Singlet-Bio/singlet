@@ -15,7 +15,7 @@ s1_root <- local({
     function() {
         if (!is.null(cache)) return(cache)
         env <- Sys.getenv("SINGLET_S1_TEST_ROOT")
-        if (nzchar(env) && dir.exists(file.path(env, "store"))) {
+        if (nzchar(env) && dir.exists(file.path(env, "s1"))) {
             cache <<- normalizePath(env, winslash = "/")
             return(cache)
         }
@@ -27,7 +27,7 @@ s1_root <- local({
             system2(py, c("-P", shQuote(script), shQuote(out)), stdout = TRUE, stderr = TRUE,
                     env = c(paste0("PYTHONPATH=", normalizePath(file.path(testthat::test_path("..", "..", ".."), "python"), mustWork = FALSE)))),
             error = function(e) NULL))
-        if (is.null(res) || !dir.exists(file.path(out, "store"))) return(NA_character_)
+        if (is.null(res) || !dir.exists(file.path(out, "s1"))) return(NA_character_)
         cache <<- normalizePath(out, winslash = "/")
         cache
     }
@@ -113,7 +113,7 @@ test_that("load() of a local manifest reproduces the expected gene-level matrice
     root <- skip_if_no_s1()
     skip_if_not_installed("SingleCellExperiment")
     with_s1_cache({
-        mp <- file.path(root, "store", "m", paste0(GSE, ".json"))
+        mp <- file.path(root, "s1", "m", paste0(GSE, ".json"))
         expect_warning(sce <- load(mp), "skipped 1 of 3")
         expect_s4_class(sce, "SingleCellExperiment")
         expect_identical(sort(unique(sce$gsm_id)), c(G1, G3))
@@ -145,7 +145,7 @@ test_that("a GSM of the study loads alone; a study without usable cells says why
     root <- skip_if_no_s1()
     skip_if_not_installed("SingleCellExperiment")
     with_s1_cache({
-        mp <- file.path(root, "store", "m", paste0(GSE, ".json"))
+        mp <- file.path(root, "s1", "m", paste0(GSE, ".json"))
         st <- singlet_study(GSE, base = root)
         sce <- singlet:::.s1_read_study(st, G3)
         expect_identical(unique(sce$gsm_id), G3)

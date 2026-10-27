@@ -119,6 +119,7 @@ addopts = "-v --tb=short"
 markers = [
     "smoke: lightweight smoke tests for new features",
     "gpu: requires CUDA GPU and CuPy",
+    "live: reads data.singlet.bio (runs only with SINGLET_LIVE_TESTS=1)",
 ]
 filterwarnings = [
     "ignore:Sparse CSR tensor support is in beta:UserWarning",

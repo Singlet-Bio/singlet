@@ -483,8 +483,19 @@ singlet_download <- download
 #'   \code{SINGLET_CACHE_DIR} environment variable). Existing bundles are
 #'   reused rather than re-downloaded, and \code{GSM} lookups are
 #'   remembered there, so a sample of an already cached study loads offline.
+#' @param cell_type_level,cell_type_min_score Per-sample studies: the deepest
+#'   level of \code{colData$cell_type} (default 2, compartment and lineage) and
+#'   the minimum path score for it (default 0.5). See \code{\link{singlet_labels}}.
+#' @param include_unvalidated Per-sample studies: also keep the unvalidated
+#'   \code{qc_doublet_score} in \code{colData}.
 #' @return A combined \code{SingleCellExperiment} (when \code{as = "sce"}) or
 #'   \code{Seurat} object (when \code{as = "seurat"}) spanning all inputs.
+#'   For a per-sample study, \code{colData} holds the per-cell labels
+#'   (\code{cell_type}, \code{cell_type_ontology_term_id}, \code{sex_chrom},
+#'   \code{ancestry_hancestro}, ...), the cell calls (\code{called},
+#'   \code{called_ed}) and the QC columns of each sample, then the GEO sample
+#'   metadata (\code{organism}, ..., \code{geo_cell_type}, \code{geo_sex}, ...);
+#'   see \code{\link{singlet_labels}}.
 #'   Samples with no usable cells (for example an empty count matrix left by
 #'   a failed pipeline run) are skipped with a warning and listed, with the
 #'   reason, in \code{metadata(sce)$skipped_samples}
@@ -523,7 +534,10 @@ singlet_download <- download
 #' @seealso \code{\link{read_singlet}}, \code{\link{find}},
 #'   \code{\link{find_load}}
 #' @export
-load <- function(x, as = c("sce", "seurat"), cache_dir = NULL, legacy = NULL, modalities = NULL) {
+load <- function(x, as = c("sce", "seurat"), cache_dir = NULL, legacy = NULL, modalities = NULL, cell_type_level = 2L,
+                 cell_type_min_score = 0.5, include_unvalidated = FALSE) {
+    lab <- list(cell_type_level = cell_type_level, cell_type_min_score = cell_type_min_score,
+                include_unvalidated = include_unvalidated)
     as <- match.arg(as)
     x <- as.character(x)
     if (length(x) == 0L) {
@@ -576,9 +590,9 @@ load <- function(x, as = c("sce", "seurat"), cache_dir = NULL, legacy = NULL, mo
         gsms <- if (anyNA(gsms)) NULL else unique(gsms)
         t1 <- sel[[1L]]
         if (!is.null(t1$gse)) {
-            .s1_load_gse(t1$gse, gsms, cache_dir = cache_dir, legacy = legacy, modalities = modalities)
+            .s1_load_gse(t1$gse, gsms, cache_dir = cache_dir, legacy = legacy, modalities = modalities, labels = lab)
         } else if (!is.null(t1$manifest)) {
-            .s1_load_manifest(t1$manifest, gsms, modalities = modalities)
+            .s1_load_manifest(t1$manifest, gsms, modalities = modalities, labels = lab)
         } else {
             .legacy_modalities(.read_singlet_bundle(t1$path, gsms = gsms), modalities)
         }
@@ -609,6 +623,20 @@ singlet_load <- load
         stop("cannot combine bundles: no genes in common across inputs")
     }
     aligned <- lapply(sces, function(s) s[common, , drop = FALSE])
+    # per-sample studies can differ in their per-cell columns (a study without labels, without donor columns, ...):
+    # give every input the union, NA where it has none
+    cds <- lapply(aligned, SummarizedExperiment::colData)
+    all_cols <- unique(unlist(lapply(cds, colnames), use.names = FALSE))
+    if (!all(vapply(cds, function(cd) identical(colnames(cd), all_cols), NA))) {
+        proto <- list()
+        for (cd in cds) for (nm in colnames(cd)) if (is.null(proto[[nm]])) proto[[nm]] <- cd[[nm]][0]
+        aligned <- lapply(aligned, function(s) {
+            cd <- SummarizedExperiment::colData(s)
+            for (nm in setdiff(all_cols, colnames(cd))) cd[[nm]] <- rep(proto[[nm]][NA_integer_], ncol(s))
+            SummarizedExperiment::colData(s) <- cd[, all_cols, drop = FALSE]
+            s
+        })
+    }
     out <- do.call(SingleCellExperiment::cbind, aligned)
 
     # cbind() concatenates metadata lists, which would leave one
