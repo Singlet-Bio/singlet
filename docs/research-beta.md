@@ -19,6 +19,10 @@ D1/R2/Worker changes except from the Alpha session.
    at the paths listed in each note.
 5. Work in priority order: open bugs (section 4), then the path to Beta (section 5).
 
+**Since 2026-10-27, start from [research-beta/rollout-plan.md](research-beta/rollout-plan.md).** It defines workstreams W1-W9, the
+launch gate (Beta Software Freeze) and its checklist, and it supersedes section 5. Beta uses the same codebase as Alpha with its own
+R2 bucket, data Worker, D1 database and Pages branch at beta.singlet.bio.
+
 All notes in `docs/research-beta/` are copies made at the stop on 2026-10-26 from the feature branches and PR descriptions named in each file.
 
 ## 1. Where everything is
@@ -33,7 +37,8 @@ All notes in `docs/research-beta/` are copies made at the stop on 2026-10-26 fro
 | ATAC / Multiome and spatial | [atac-spatial.md](research-beta/atac-spatial.md) | #48 |
 | mtDNA clonality / lineage | [mtdna.md](research-beta/mtdna.md) | #53 (full report docs/mtdna-lineage.md on bench/mtdna-lineage) |
 | Doublet / ambient models | | #43 |
-| Rename "v2" to "store" (Singlet 1.0) | [rename.md](research-beta/rename.md) (code merged; production ops not run) | #39 merged; zdebruine/singlet-website#67 open |
+| **Rollout plan, workstreams and launch checklist (2026-10-27)** | [rollout-plan.md](research-beta/rollout-plan.md); evidence in [audit-2026-10-27.md](research-beta/audit-2026-10-27.md) | supersedes §5 below |
+| Rename "v2" to ".s1" (Singlet 1.0) | [rename.md](research-beta/rename.md) (history: done through Research Alpha, `s1/` prefix) | #39, #56 merged; zdebruine/singlet-website#73, #74 merged |
 | Benchmarking and roadmap pages | [website-benchmarking.md](research-beta/website-benchmarking.md) | zdebruine/singlet-website#66 (Beta preview) |
 | Ontology filters | [ontology.md](research-beta/ontology.md) | zdebruine/singlet-website#54 |
 
@@ -66,7 +71,12 @@ Every published number uses real data with real ground truth; simulation is only
 - Real data with real ground truth for every published metric.
 - Compare against 10x's published outputs; do not run 10x software. No MiXCR (licence key).
 - Bundle the Visium v1 spot list and the Multiome ATAC-GEX pairs rebuilt from 10x public CC BY 4.0 data, with attribution.
-- Rename "v2" to "store" with the `.s1` extension (keep magic bytes, `called_v2` to `called_ed`): code merged (#39); the R2/D1/Worker ops and website #67 are deferred (runbook in rename.md).
+- Rename "v2" to ".s1" (no "store" naming; keep magic bytes, `called_v2` to `called_ed`): code merged (#39, #56); the R2 `s1/`
+  prefix, D1 and Worker cutover were done through Research Alpha (zdebruine/singlet-website#74). The C++ `called_v2` rename is
+  still open on the production branches (rollout-plan W1).
+- Alpha and Beta share one codebase; Beta gets its own R2 bucket, data Worker, D1 database and Pages branch at beta.singlet.bio,
+  updated continuously as clusters deliver; the campaign starts only after the Beta Software Freeze (2026-10-27).
+- Downloads must not spend Anvil SUs: fetch on Anvil login nodes, compute on the nodes (2026-10-27).
 - Speed is a Pareto trade-off against pseudo-aligners, not a gate.
 
 Open decisions: Anvil spend; non-host screen on or off in the re-run; GVSU uplink bandwidth test; storing SNP allele counts privately;
@@ -86,6 +96,8 @@ doublet combiner in 1.0.0; ancestry label for admixed Americans (AMR vs "admixed
 10. Unmapped / non-host reads must never reach public outputs (the orchestrator excludes them; keep it that way).
 
 ## 5. Path to Research Beta
+
+Superseded on 2026-10-27 by [research-beta/rollout-plan.md](research-beta/rollout-plan.md); kept for history.
 
 1. Fix bugs 1-9 on the production branches; every page of the benchmark passes on the 52-dataset cohort (#40), using the
    contract and notebook.
