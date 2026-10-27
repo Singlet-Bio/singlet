@@ -1122,9 +1122,11 @@ The phases follow the brief's table (§6), filled in from this exploration:
 
 ---
 
-## 12. Measured results (M1, M2, M10)
+## 12. Measured results (M1, M2, M10, M3, M4, M6, M8, host timers)
 
-Run on Clipper on 2026-10-27, after §9 was written. Raw data and scripts: `bench/gpu/results/{m1,m2,m10}.json` (plus
+Run on Clipper on 2026-10-27, after §9 was written (§12.5 onwards: the second pass, same day). Raw data and scripts:
+`bench/gpu/results/` and `bench/gpu/jobs/*.sbatch`, plus per-benchmark folders `bench/gpu/{m3m4,m6,m8,host}/` and the STAR dump
+tool in `src/gpu/stardump/`. First pass: `bench/gpu/results/{m1,m2,m10}.json` (plus
 `m1_raw.jsonl`, `m1_knee.jsonl`, `m10_runs.json`, one `m2_*.json` per sample) and `bench/gpu/jobs/*.sbatch`.
 `bench/gpu/model_measured.py` re-runs the §7 model with the substitutions below.
 
@@ -1134,6 +1136,11 @@ Run on Clipper on 2026-10-27, after §9 was written. Raw data and scripts: `benc
 | M2 d, 3′ ≥ 66 M | 0.474 (pbmc1k_v3), 0.515 (263 M deep), 0.392 (GSM5411066, mouse), 0.298 (GSM7036403, v2), 0.369 (neuron1k_v3); **0.658 (nuclei2k_v2)** | ≤ 0.6 | **PASS for 5 of 6; FAIL for nuclei2k_v2** |
 | M2 d, 5′ | 0.306 (pbmc5p_v1), 0.303 (GSM6470208, 121 M) | ≤ 0.7 | **PASS** |
 | M10 W, 66–70 M sample | 201 and 143 core-s (export + non-host residual, an upper bound); export alone 122 and 51 | ≤ 120 core-s | **FAIL** as bounded (see caveats) |
+| M10b W, timed (6 samples) | pooled 2.18 core-s per M pairs (1.21–2.64); demux auto-K + non-host screen = 74% | node ≥ 20 M pairs/s | **PASS** with a persistent non-host index (every sample ≥ 20.7 M pairs/s per node; §12.9) |
+| M3 exact seed search | 323,688,051 of 323,688,051 seed records identical to STAR; ~1.0 G records/s | 100% identical; ≥ 300 M seeds/s | **PASS** (3.3× the rate gate) |
+| M4 certificates | 0 wrong; 16–23% of calls resolved | 0 mismatches; ≥ 50% certified | **PASS on exactness, FAIL on coverage**: dropped from the plan (§12.7) |
+| M6 dedup + count + UMI | 1.6–2.0 G pairs/s; matrices identical to the CPU engine; identical across batch sizes and runs | ≥ 1 G pairs/s; identical | **PASS** |
+| M8 ingest | 12–15 M pairs/s per decode thread, 0.085 core-s/M (0.175 with CRC); 50 M/s needs 5–6 threads | ≥ 50 M/s with ≤ 3 cores | **FAIL on cores**, irrelevant at the 14–18 M pairs/s per GPU the host allows (§12.10) |
 
 ### 12.1 M1: random-access roofline (H100 NVL, job 789081; knee 789085)
 
@@ -1492,19 +1499,19 @@ Details and the full table: `bench/gpu/host/README.md`, `bench/gpu/results/m10b_
   `--threads` 1 / 4 / 8 = 117.7 / 119.3 / 116.0; **eight concurrent copies on one node: 116.6–120.8 core-s each (< 3% more)**.
   The node had no other tenants. Host work therefore scales linearly with the number of samples in flight.
 
-**The host-side plan, with its measured capacity per GPU node.** A Clipper H100 node has 56 cores. M8 (§12.10) puts ingest
-at ~0.08 core-s per M pairs (~3 cores at 40 M pairs/s); with one core for orchestration, ~52 cores remain for host work.
-Capacity = 52 / W:
+**The host-side plan, with its measured capacity per GPU node.** A Clipper H100 node has 56 cores; one is kept for
+orchestration. Ingest (M8, §12.10) costs i = 0.085 core-s per M pairs (0.175 with the `.1fq` CRC check). The node's host
+capacity R solves R · (W + i) = 55 cores:
 
-| step | what moves | exact because | pooled W (core-s/M) | **node capacity, pooled** | worst sample |
+| step | what moves | exact because | pooled W (core-s/M) | **node capacity, pooled** (CRC off / on) | worst sample (CRC off / on) |
 |---|---|---|---|---|---|
-| 0 | nothing (today's CPU callers and export) | — | 2.18 | **23.9 M pairs/s** | 19.7 (263 M) |
-| 1 | persistent per-node service loads the non-host indices once | same index bytes | 1.86 | **27.9** | 21.0 |
-| 2 | non-host k-mer classify on the GPU (§4.12, M13) | same hash and minimizer rule, sort-merge | 1.43 | **36.3** | 26.0 |
-| 3 | demux fits (auto-K + final fit) on the GPU or a bit-exact parallel CPU path | serial-order sums per accumulator kept | 0.58 | **89.4** | 67.6 |
+| 0 | nothing (today's CPU callers and export) | — | 2.18 | **24.3 / 23.4 M pairs/s** | 20.2 / 19.5 (263 M) |
+| 1 | persistent per-node service loads the non-host indices once | same index bytes | 1.86 | **28.3 / 27.0** | 21.4 / 20.7 |
+| 2 | non-host k-mer classify on the GPU (§4.12, M13) | same hash and minimizer rule, sort-merge | 1.43 | **36.3 / 34.3** | 26.4 / 25.3 |
+| 3 | demux fits (auto-K + final fit) on the GPU or a bit-exact parallel CPU path | serial-order sums per accumulator kept | 0.58 | **82.7 / 72.8** | 64.3 / 58.2 |
 
-- **The ≥ 20 M pairs/s per node target is met by step 1 alone on every measured sample** (21.0–57 M pairs/s), and on the pooled
-  mix by step 0 (23.9). Step 1 is the persistent service the design already needs (§4.15); it costs nothing in exactness.
+- **The ≥ 20 M pairs/s per node target is met by step 1 on every measured sample** (worst 20.7 with CRC on, the 263 M sample),
+  and on the pooled mix already by step 0 (24.3). Step 1 is the persistent service the design already needs (§4.15); it costs nothing in exactness.
 - **Step 2** is the planned GPU non-host screen. Its GPU cost is unmeasured (M13), but the §7.2 model puts it at ≥ 500 M pairs/s,
   < 5% of GPU time. It adds 30% host headroom.
 - **Step 3 is not needed for the target.** It is the lever if callers grow (Beta adds callers) or if a node is shared. A
@@ -1518,11 +1525,76 @@ Capacity = 52 / W:
 - **Not on the host any more** (vs the CPU engine): STAR, BAM sort and index, CB refresh, pileup (`stage.pileup` alone is
   100–437 core-s per sample, 1.1–3.6 /M, more than all of W).
 
+### 12.10 M8: host→device ingest (Sonnet subagent; jobs 789223 single GPU, 789286 dual GPU)
+
+Details: `bench/gpu/m8/README.md`, `bench/gpu/results/m8.json`. `m8_ingest.cu`: N decode threads read `.1fq` blocks, zstd-decode
+and pack each pair into the GPU layout (R2 2-bit, CB+UMI 2-bit, a quality slot), fill a pinned ring of 4 × 256 MB, a copy
+stream does H2D, and a dummy kernel reads every byte and spins a set time per pair. The direct decoder was checked against
+the `.1fq` library's decoder on 150 M + 121.8 M reads (0 mismatches) and by host-vs-GPU checksums.
+
+**GSM7656149 (263 M pairs), sustained M pairs/s per GPU, kernel spin 0:**
+
+| decode threads | local NVMe, cold cache | shared filesystem, direct |
+|---|---|---|
+| 1 | 11.6 | 13.1 |
+| 2 | 21.5 | 24.7 |
+| 3 | 29.9 | 36.8 |
+| 4 | 38.3 | 47.9 |
+| 6 | 51.3 | 70.1 |
+
+- **Host cost: 0.085 core-s per M pairs** (5′ GSM6470208: 0.076), of which zstd ~43 ns and packing ~20 ns per pair per thread:
+  one thread sustains 12–15 M pairs/s, not the 67 M reads/s of `format-1fq.md` (that figure is decode only, without the
+  per-pair packing). **The library's CRC check doubles it to 0.175 core-s per M pairs.**
+- **§9 gate (≥ 50 M pairs/s with ≤ 3 cores, < 5% idle): FAIL on cores** (50 M/s needs 5–6 threads, ~4.4 cores). Idle is 0.02%
+  at 6 threads against a 20 ns/pair kernel. For this goal it does not matter: at 14–18 M pairs/s per GPU (§12.11) ingest
+  needs 1.2–1.5 cores per GPU (2.5–3.2 with CRC).
+- **PCIe: 12.3 GB/s pinned H2D** (D2H 14.3), not 53.8; both GPUs of a node sit behind one host link and get 6.2 GB/s each when
+  copying together. At 56 B per pair that is still > 100 M pairs/s per GPU.
+- **Dual GPU:** two pipelines run at the single-GPU rate each (6 threads: 49.1 and 44.5 M/s from NVMe; 64.5 M/s each from the
+  shared filesystem, 2.9 GB/s combined).
+- **Staging is not needed for rate:** reading the shared filesystem directly is no slower than cold local NVMe (NFS server
+  caching cannot be excluded: the file had been read that day).
+- The atlas `.1fq` files store no base qualities (`qual_mode` 0); the quality slot was filled synthetically (real payload
+  32 B/pair; within 3%). The mtDNA/SNP pileup's binned-quality input (§2) therefore does not exist in these files.
+
+### 12.11 End to end per node, with what is now measured
+
+| stage | where | measured rate per GPU (or node) | source |
+|---|---|---|---|
+| `.1fq` ingest (decode + pack + H2D) | host + PCIe | 12–15 M pairs/s per thread; 0.085 core-s/M (0.175 with CRC); H2D 12.3 GB/s | M8 |
+| read dedup (exact) | GPU | 3.5 G reads/s | M6 |
+| seed search, exact STAR port, no certificates | GPU | 166 M pairs/s (3′), 259 M (5′), 160 M (nuclei) | M3 (78–105 M distinct reads/s × 1/d) |
+| windows, stitch, extend, multimapper selection, annotation | GPU | **unmeasured** (M5) | — |
+| count sort, UMI collapse, CSR | GPU | 1.6–2.0 G pairs/s (with dedup) | M6 |
+| callers, export, non-host EM | host, 55 cores | 27.0–28.3 M pairs/s per node (step 1), 34.3–36.3 (step 2) | §12.9 |
+
+**What this says.**
+- **The node is host-bound at 27–36 M pairs/s** until M5 says otherwise, with two GPUs. Each GPU therefore has to deliver only
+  14–18 M pairs/s. Seeds plus dedup and counting take ~7 ns per pair (3′), so the stitch stage may use up to ~50 ns per pair,
+  i.e. **~100 ns per distinct read: M5 needs ≥ 10 M distinct reads/s per GPU** to keep the node host-bound. §9's 100 M
+  single-window reads/s was a target for headroom, not for this goal.
+- **Target ≥ 20 M pairs/s per node: met on the host side by measurement** (§12.9, step 1, every sample ≥ 20.7). The GPU side
+  is measured for every stage except M5; the earlier prototype (memory note, 2026-10-27) ran probe + stitch at 10–17 M reads/s
+  per GPU with a non-STAR stitcher, so the M5 requirement is in reach but not shown.
+- **Against a CPU node** (1.0–1.3 M pairs/s end to end): a GPU node at 27–36 M pairs/s is **21–36×** per node, or ~10–18× per
+  GPU. The campaign (20.6 T pairs) on 3 GPU nodes: 2.2–2.9 days of compute, below the input-supply bound (§7.4).
+- **The GPU is idle most of the time at this point.** Raising the host bound (step 2 then step 3, §12.9) is the way to use it;
+  step 3 lifts the host to ~73–83 M pairs/s per node, where the GPUs (and M5) would bind.
+
 ### 12.12 Open items
 
-- An engine timer for the non-host EM and for the demux phases outside the K fits, to split the residual.
-- `called_ed` timers (the logs show `called_v2`).
-- M2 on the spec's 8-sample same-study batches (3′ and 5′) once the atlas queue stages them.
-- M10 at 1k / 10k / 30k cells.
-- Whether the 76–80 GB fall in the M1 sweep is TLB reach or HBM pressure; it does not affect the design.
-- M3–M9, M11–M14 and the equivalence suite remain unrun.
+- **M5, the stitch port** (windows, `stitchPieces`, `stitchWindowAligns`, `extendAlign`, scoring, multimapper selection,
+  filters) is the remaining unmeasured GPU stage and the equivalence risk (A4). Requirement for the node goal: ≥ 10 M distinct
+  reads/s per GPU (§12.11). Truth for it: extend `stardump` to dump windows, aligns and transcripts (or STAR's SAM output of
+  the same distinct-read set). This also gives A3 (PC/WC/WA sizes, overflow share), still unmeasured.
+- **M13** (non-host screen on the GPU) for host step 2; **M7** (bit-exact barcode correction); **M9** (heavy reads; their cost is
+  inside the M3 rates, unseparated).
+- **Demux** (host step 3, optional): verify whether the K = 1 final-fit restarts are bit-identical; design the serial-order GPU
+  port if callers grow.
+- **Memory per in-flight export** on the host (~45 samples in flight per node at step 1).
+- **The atlas `.1fq` files carry no base qualities** (M8), so the CPU engine already runs the mtDNA and SNP pileup without real
+  base qualities; the "binned quality" payload of §4.10 and §4.13 can be dropped (32 B per pair instead of 53–56).
+- M2 on the spec's 8-sample same-study batches; M10 at 1k / 10k / 30k cells; `called_ed` timers (the campaign logs show
+  `called_v2`); the 76–80 GB fall in M1 (TLB or HBM pressure; does not affect the design).
+- M11 (LCP seed reuse, SBK), M12 (locator) and M14 (answer table): de-prioritised, the seed stage is no longer near the
+  bottleneck (§12.6).
