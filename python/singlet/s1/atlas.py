@@ -1605,6 +1605,25 @@ class BuildResult:
         return keys
 
 
+def _study_gsm_meta(doc: dict) -> dict:
+    """``gsm_meta`` of the manifest's ``study_meta.json``, whether the transcoder kept it as inline JSON or stored it (zstd, base64:
+    the file is not byte-reproducible with ``json.dumps``, as for most legacy bundles). {} when the study has none or it is unreadable.
+    """
+    ent = (doc.get("study_files") or {}).get("study_meta.json") or {}
+    try:
+        if "json" in ent:
+            sm = ent["json"]
+        elif "zstd_b64" in ent:
+            from .manifest import study_file_bytes
+
+            sm = json.loads(study_file_bytes(ent).decode("utf-8"))
+        else:
+            return {}
+        return dict((sm or {}).get("gsm_meta") or {})
+    except Exception:  # noqa: BLE001  metadata is optional: the samples are indexed with organism "unknown"
+        return {}
+
+
 def build_index(
     gses: Sequence[str],
     *,
@@ -1644,11 +1663,7 @@ def build_index(
             doc = json.loads(_get(t, f"s1/m/{gse}.json").decode("utf-8"))
         except Exception:  # DUAL: studies still published under the old v2/m/ prefix
             doc = json.loads(_get(t, f"v2/m/{gse}.json").decode("utf-8"))
-        gm = (
-            ((doc.get("study_files") or {}).get("study_meta.json") or {})
-            .get("json", {})
-            .get("gsm_meta", {})
-        )
+        gm = _study_gsm_meta(doc)
         av = annot_version or doc.get("annotations_default")
         for sd in doc["samples"]:
             g = sd["gsm"]

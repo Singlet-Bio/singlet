@@ -743,3 +743,18 @@ def test_a_sample_without_a_count_matrix_is_skipped_not_an_error():
     assert empty.skip and not empty.error and empty.cols is None
     broken = atlas._load_sample(None, sample({"matrix_exon.1pz": {"kind": 1}}), None, None)
     assert broken.error == "no cells table" and not broken.skip
+
+
+def test_organism_comes_from_a_stored_study_meta_too():
+    """Most legacy study_meta.json files are not reproducible by json.dumps (trailing newline, size), so the manifest stores them
+    zstd/base64 instead of inline: the index must read gsm_meta from either form, or every such sample is organism "unknown"."""
+    from singlet.s1 import manifest as M
+
+    meta = {"gsm_meta": {"GSM1": {"organism": "Homo sapiens"}}}
+    stored = M.study_file_entry((json.dumps(meta, indent=2) + "\n").encode())
+    inline = M.study_file_entry(json.dumps(meta, indent=2).encode())
+    assert "zstd_b64" in stored and "json" in inline
+    for ent in (stored, inline):
+        gm = atlas._study_gsm_meta({"study_files": {"study_meta.json": ent}})
+        assert gm["GSM1"]["organism"] == "Homo sapiens"
+    assert atlas._study_gsm_meta({}) == {}
