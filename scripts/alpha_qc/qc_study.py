@@ -239,7 +239,7 @@ def run(a):
         with op(a.sizes, "rt") as fh:
             for line in fh:
                 k, s = line.rstrip("\n").split("\t")[:2]
-                if k.startswith("s1/s/") or k.startswith("s1/a/"):
+                if (k.startswith("s1/s/") or k.startswith("s1/a/")) and s.isdigit():
                     sizes[k] = int(s)
     cl_ids, cl_names = load_obo_ids(a.cl)
     R["study"]["cl_ontology_loaded"] = cl_ids is not None and len(cl_ids) > 0
