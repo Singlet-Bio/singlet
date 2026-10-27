@@ -586,6 +586,36 @@ def test_r2_throttling_is_retried_with_backoff_and_other_errors_are_not(monkeypa
     assert len(n) == 4
 
 
+def test_r2_read_timeouts_are_retried_including_the_body_read(monkeypatch):
+    """GSE174324: a urllib3 ReadTimeoutError while streaming a depth table body ended its ancestry labels. The body read is inside
+    the retried call now, and read timeouts / dropped connections count as transient."""
+    monkeypatch.setattr(camp.time, "sleep", lambda s: None)
+
+    class ReadTimeoutError(Exception):
+        pass
+
+    class Body:
+        def __init__(self, fail):
+            self.fail = fail
+
+        def read(self):
+            if self.fail:
+                raise ReadTimeoutError('Read timeout on endpoint URL: "None"')
+            return b"depth"
+
+    class Client:
+        n = 0
+
+        def get_object(self, **kw):
+            Client.n += 1
+            return {"Body": Body(Client.n < 3)}
+
+    st = camp.S3Store(client=Client())
+    assert st.read_range("b", "k", 0, 4) == b"depth" and Client.n == 3
+    with pytest.raises(ValueError):
+        camp.r2_call(lambda: (_ for _ in ()).throw(ValueError("not transient")))
+
+
 def test_sample_facts_never_carry_an_accession_into_the_manifest(tmp_path, pol):
     """The library-type screen's text named an excluded library ("replace with mRNA library GSM..."): the transcoder drops accessions
     from facts, and verify fails a manifest that names any accession the policy excludes, whatever wrote it."""

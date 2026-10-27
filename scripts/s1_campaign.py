@@ -238,20 +238,33 @@ _THROTTLE_CODES = frozenset({"429", "TooManyRequests", "SlowDown", "503", "Servi
 R2_RETRIES = 8  # on top of botocore's own adaptive retries
 
 
+#: network failures worth another attempt: botocore / urllib3 read timeouts and dropped connections (class names, so the check needs
+#: neither library at import time). A read timeout while streaming a body (``Body.read()``) is not retried by botocore itself.
+_TRANSIENT_NAMES = frozenset({
+    "ReadTimeoutError", "ConnectTimeoutError", "ConnectionClosedError", "EndpointConnectionError", "ResponseStreamingError",
+    "IncompleteReadError", "ProtocolError", "IncompleteRead", "ConnectionResetError", "ConnectionError",
+})
+
+
 def _throttled(e: BaseException) -> bool:
     return _err_code(e) in _THROTTLE_CODES or _err_status(e) in (429, 503)
 
 
+def _transient(e: BaseException) -> bool:
+    return _throttled(e) or any(t.__name__ in _TRANSIENT_NAMES for t in type(e).__mro__)
+
+
 def r2_call(fn, *a, retries: int = R2_RETRIES, base: float = 1.0, cap: float = 60.0, **kw):
-    """``fn(*a, **kw)``, retried on R2 throttling (429 / 503) with exponential backoff and full jitter. Anything else raises at once
-    (a 404, a failed precondition, ...). The campaign's 900 concurrent transcoders hit R2's request rate limit on HeadObject."""
+    """``fn(*a, **kw)``, retried on R2 throttling (429 / 503) and on transient network failures (read timeouts, dropped
+    connections) with exponential backoff and full jitter. Anything else raises at once (a 404, a failed precondition, ...). The
+    campaign's 900 concurrent transcoders hit R2's request rate limit on HeadObject."""
     import random
 
     for attempt in range(retries + 1):
         try:
             return fn(*a, **kw)
         except Exception as e:  # noqa: BLE001
-            if attempt == retries or not _throttled(e):
+            if attempt == retries or not _transient(e):
                 raise
             time.sleep(random.uniform(0, min(cap, base * 2 ** attempt)))
     raise AssertionError("unreachable")
@@ -283,10 +296,11 @@ class S3Store(StoreBase):
         )
 
     def read_range(self, bucket: str, key: str, start: int, end: int) -> bytes:
-        return r2_call(self.c.get_object, Bucket=bucket, Key=key, Range=f"bytes={start}-{end}")["Body"].read()
+        # the body is read inside the retried call: a timeout while streaming it starts the request over
+        return r2_call(lambda: self.c.get_object(Bucket=bucket, Key=key, Range=f"bytes={start}-{end}")["Body"].read())
 
     def get_bytes(self, bucket: str, key: str) -> bytes:
-        return r2_call(self.c.get_object, Bucket=bucket, Key=key)["Body"].read()
+        return r2_call(lambda: self.c.get_object(Bucket=bucket, Key=key)["Body"].read())
 
     def download(self, bucket: str, key: str, path: Path, *, if_match: Optional[str] = None, size: Optional[int] = None,
                  part: int = 64 * MIB, threads: int = 8) -> None:
