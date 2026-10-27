@@ -10,7 +10,10 @@ load(
   as = c("sce", "seurat"),
   cache_dir = NULL,
   legacy = NULL,
-  modalities = NULL
+  modalities = NULL,
+  cell_type_level = 2L,
+  cell_type_min_score = 0,
+  include_unvalidated = FALSE
 )
 
 singlet_load(
@@ -18,7 +21,10 @@ singlet_load(
   as = c("sce", "seurat"),
   cache_dir = NULL,
   legacy = NULL,
-  modalities = NULL
+  modalities = NULL,
+  cell_type_level = 2L,
+  cell_type_min_score = 0,
+  include_unvalidated = FALSE
 )
 }
 \arguments{
@@ -58,10 +64,23 @@ returns counts, spliced and unspliced. A modality that no requested sample
 carries stops with a message listing what the study has (see
 \code{\link{singlet_study_modalities}}). A legacy bundle is downloaded
 whole and only subset, with a warning.}
+
+\item{cell_type_level, cell_type_min_score}{Per-sample studies: the deepest
+level of \code{colData$cell_type} (default 2, compartment and lineage) and
+an extra minimum path score for it (default 0, none). See \code{\link{singlet_labels}}.}
+
+\item{include_unvalidated}{Per-sample studies: also keep the unvalidated
+\code{qc_doublet_score} in \code{colData}.}
 }
 \value{
 A combined \code{SingleCellExperiment} (when \code{as = "sce"}) or
   \code{Seurat} object (when \code{as = "seurat"}) spanning all inputs.
+  For a per-sample study, \code{colData} holds the per-cell labels
+  (\code{cell_type}, \code{cell_type_ontology_term_id}, \code{sex_chrom},
+  \code{ancestry_hancestro}, ...), the cell calls (\code{called},
+  \code{called_ed}) and the QC columns of each sample, then the GEO sample
+  metadata (\code{organism}, ..., \code{geo_cell_type}, \code{geo_sex}, ...);
+  see \code{\link{singlet_labels}}.
   Samples with no usable cells (for example an empty count matrix left by
   a failed pipeline run) are skipped with a warning and listed, with the
   reason, in \code{metadata(sce)$skipped_samples}

@@ -57,6 +57,11 @@ adata = singlet.load(["GSE138867", "GSE146974"])
 # Subset genes by symbol or Ensembl id (var_names stay Ensembl ids)
 tcells = singlet.load("GSE138867", genes=["CD3E", "CD8A", "MS4A1"])
 
+# Per-cell labels come with every per-sample study (docs/cell_annotation.md section 8)
+adata.obs[["cell_type", "cell_type_ontology_term_id", "sex_chrom", "ancestry_hancestro", "called_ed"]]
+# ... and can select cells before anything else is downloaded
+heart = singlet.cells("GSE286650", "cell_type == 'cardiac muscle cell' and sex_chrom == 'male'")
+
 # Explore
 singlet.describe(adata)                     # quick summary stats
 

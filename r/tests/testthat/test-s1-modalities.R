@@ -13,7 +13,7 @@ storex_root <- local({
     function() {
         if (!is.null(cache)) return(cache)
         env <- Sys.getenv("SINGLET_S1_EXTRAS_ROOT")
-        if (nzchar(env) && dir.exists(file.path(env, "store"))) {
+        if (nzchar(env) && dir.exists(file.path(env, "s1"))) {
             cache <<- normalizePath(env, winslash = "/")
             return(cache)
         }

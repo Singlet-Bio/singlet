@@ -13,7 +13,10 @@ singlet_cells(
   max_cells = NULL,
   as = c("sce", "seurat"),
   cache_dir = NULL,
-  modalities = NULL
+  modalities = NULL,
+  cell_type_level = 2L,
+  cell_type_min_score = 0,
+  include_unvalidated = FALSE
 )
 }
 \arguments{
@@ -25,7 +28,7 @@ the cell-table data frame returning a logical vector; or \code{NULL} for every c
 
 \item{samples}{GSM accessions to restrict the Series to (default all).}
 
-\item{columns}{Cell-table columns to keep in \code{colData} (default all numeric ones).}
+\item{columns}{Columns to keep in \code{colData} (default all; see \code{\link{singlet_labels}}).}
 
 \item{layers}{Also return \code{spliced} and \code{unspliced} assays.}
 
@@ -37,15 +40,21 @@ the cell-table data frame returning a logical vector; or \code{NULL} for every c
 
 \item{modalities}{Which matrices to fetch (default \code{"counts"}, plus the layers with \code{layers = TRUE}); see
 \code{\link{load}}. Only the chunk runs of those members that hold the selected cells are downloaded.}
+
+\item{cell_type_level, cell_type_min_score}{Deepest level of \code{cell_type} (default 2) and an extra minimum path score for
+it (default 0, none); see \code{\link{singlet_labels}}.}
+
+\item{include_unvalidated}{Also keep \code{qc_doublet_score} (unvalidated) in \code{colData}.}
 }
 \value{
 A \code{SingleCellExperiment} (or \code{Seurat}) with one column per selected cell named
   \code{<GSM>_<barcode>}; \code{colData} has \code{gsm_id}, \code{matrix_column} (1-based column in the sample's
-  matrix) and the cell-table columns.
+  matrix) and the per-cell columns (\code{\link{singlet_labels}}).
 }
 \description{
 Reads the (small) cell table of each requested sample, evaluates \code{where} on its columns
-(\code{called}, \code{n_umi_exon}, \code{n_umi_intron}, \code{n_feat_exon}, \code{n_feat_intron}, ...) and fetches only the
+(\code{called}, \code{n_umi_exon}, \code{n_umi_intron}, \code{n_feat_exon}, \code{n_feat_intron}, ..., and the per-cell labels
+of \code{\link{singlet_labels}}, e.g. \code{cell_type == "T cell" & sex_chrom == "female"}) and fetches only the
 matrix chunks that contain the selected cells (a small sample is fetched whole, in one request). Counts are at gene level
 (spliced + unspliced), as in \code{\link{load}}.
 }

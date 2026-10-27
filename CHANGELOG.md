@@ -4,6 +4,35 @@ All notable changes to the singlet project.
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-10-27: Research Alpha per-cell labels in the clients
+
+Users install from GitHub `main` (`pip install "singlet-bio @ git+https://github.com/Singlet-Bio/singlet"`,
+`remotes::install_github("Singlet-Bio/singlet", subdir = "r")`); nothing is on PyPI or CRAN yet.
+
+- **The .s1 readers now return the per-cell labels, cell calls and QC columns.** `singlet.load()`,
+  `Study.to_anndata()`, `singlet.cells()` / `Study.cells()` and `load()` of a local `.s1` object put every column of the
+  sample's `cells` table in `obs` (R: `load()` / `singlet_load()` and `singlet_cells()` in `colData`), in front of the GEO
+  sample metadata. Before, `to_anndata()` returned only GEO metadata and `cells()` only the numeric count summaries.
+  - `cell_type`, `cell_type_ontology_term_id` (CELLxGENE naming): the CL label at the default level, the deepest level
+    `<= cell_type_level` (default 2: compartment, lineage) that the labeller reached; `cell_type_level`, `cell_type_score`
+    (path score down to that level). `cell_type_min_score=` adds a path-score threshold (default 0, none).
+  - `cell_type_deepest`, `cell_type_deepest_ontology_term_id`, `cell_type_deepest_level`, `cell_type_deepest_score`: the
+    deepest (preview) call, stored as `cell_type_label` / `cell_type_cl` / `cell_type_score`; `cell_type_path` and
+    `cell_type_p1`..`p6`.
+  - `sex_chrom`, `sex_score`, `ancestry_hancestro`, `ancestry_prob`, `called`, `called_ed`, `called_ed_fdr`, and the
+    `n_umi_*`, `n_feat_*`, `cyc_*`, `qc_*`, `don_*`, `mts_*` columns; categorical columns (donor ids, cell-cycle phase) are
+    decoded from the manifest's recipes instead of being returned as codes.
+  - `qc_doublet_score` is unvalidated and hidden unless `include_unvalidated=True` (R: `include_unvalidated = TRUE`) or it
+    is named in `columns=`; `where=` can still filter on it.
+  - `cells()` / `singlet_cells()` `where` conditions can use the labels (`"cell_type == 'T cell' and sex_chrom == 'female'"`).
+  - Accuracy notes and the column reference: `docs/cell_annotation.md` section 8.
+- **R: GEO curated metadata renamed** `tissue`, `cell_type`, `disease`, `sex`, `age` -> `geo_tissue`, `geo_cell_type`,
+  `geo_disease`, `geo_sex`, `geo_age` (also for legacy bundles), so `colData$cell_type` is the per-cell label.
+  Combining studies whose `colData` columns differ now fills the missing columns with `NA`.
+- **`layers[None]`:** anndata 0.13 lists `X` itself as the layer `None` (`adata.layers[None] is adata.X`); the client
+  adds only `spliced` and `unspliced`. Nothing to drop; iterate with `[k for k in adata.layers if k is not None]`.
+- R s1 tests read the test study from the `s1/` layout again (they had been skipping since the rename).
+
 - **Per-donor germline members are no longer packed into public bundles** (2026-10-20). `pack_gse` writes the public
   `.singlet` without the donor SNP depth matrices, per-donor genotype VCFs and coverage tables, allele-specific counts
   and donor mitochondrial consensus/variant files, and trims `ancestry_call.json` to the group, confidence and coverage

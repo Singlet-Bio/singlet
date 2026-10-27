@@ -484,14 +484,22 @@ def load(
         ``"barcode"`` or ``"column"``), ``concurrency`` (parallel samples and
         range requests, default 4), ``threads`` (decoder threads), ``verify``
         (recompute canonical matrix digests), ``whole_max`` (bytes below which a
-        sample's members are fetched whole), ``base`` (data host).
+        sample's members are fetched whole), ``base`` (data host),
+        ``cell_type_level`` (deepest level of ``obs["cell_type"]``, default 2),
+        ``cell_type_min_score`` (extra minimum path score for it, default 0),
+        ``include_unvalidated`` (also keep ``qc_doublet_score``).
 
     Returns
     -------
     anndata.AnnData
         Count matrix with obs metadata, var gene annotations, and uns study
         info. Samples whose count matrix is empty are skipped with a warning
-        and listed in ``adata.uns["skipped_samples"]``.
+        and listed in ``adata.uns["skipped_samples"]``. For a per-sample (.s1)
+        study, ``obs`` carries the per-cell labels (``cell_type``,
+        ``cell_type_ontology_term_id``, ``sex_chrom``, ``ancestry_hancestro``,
+        ...), the cell calls (``called``, ``called_ed``) and the QC columns of
+        each sample's cells table, then the GEO sample metadata; see
+        :mod:`singlet.s1.labels`.
 
     Examples
     --------
@@ -572,7 +580,19 @@ def load(
 
 
 _STORE_OPTIONS = frozenset(
-    {"samples", "cell_order", "concurrency", "threads", "verify", "whole_max", "base", "verbose"}
+    {
+        "samples",
+        "cell_order",
+        "concurrency",
+        "threads",
+        "verify",
+        "whole_max",
+        "base",
+        "verbose",
+        "cell_type_level",
+        "cell_type_min_score",
+        "include_unvalidated",
+    }
 )
 
 

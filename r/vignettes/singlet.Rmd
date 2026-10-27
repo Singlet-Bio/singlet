@@ -70,6 +70,28 @@ sce <- singlet_load("GSM4120733")
 unique(sce$gsm_id)
 ```
 
+## Per-cell labels
+
+Per-sample studies carry per-cell labels, cell calls and QC columns, and `colData` has them in front of the GEO sample
+metadata (`?singlet_labels`):
+
+```{r labels}
+sce <- singlet_load("GSE286650")
+table(sce$cell_type, sce$sex_chrom)          # CL label at level <= 2 (compartment, lineage)
+head(SummarizedExperiment::colData(sce)[, c("cell_type_ontology_term_id", "cell_type_deepest", "ancestry_hancestro", "called_ed")])
+# select cells by label before the matrices are downloaded
+cm <- singlet_cells("GSE286650", cell_type == "cardiac muscle cell" & sex_chrom == "male")
+```
+
+- `cell_type` / `cell_type_ontology_term_id`: per-study accuracy 0.84 at level 1 and 0.75 at level 2;
+  `cell_type_deepest*` holds the deeper call (0.43 / 0.32 at levels 3 / 4, a preview); `cell_type_level = 6L` puts it
+  in `cell_type`.
+- `sex_chrom`: chromosomal sex, 98.1% agreement with GEO sample metadata. `ancestry_hancestro`: continental HANCESTRO
+  category, human donors with coverage tables only.
+- `called` is the default cell call and `called_ed` the EmptyDrops call. `qc_doublet_score` is unvalidated and only
+  returned with `include_unvalidated = TRUE`.
+- The curated GEO fields are `geo_tissue`, `geo_cell_type`, `geo_disease`, `geo_sex` and `geo_age`.
+
 ## Combine several studies
 
 Give `singlet_load()` a vector of accessions (or local bundle paths, or a
