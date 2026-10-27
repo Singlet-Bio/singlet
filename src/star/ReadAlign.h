@@ -21,6 +21,11 @@
 
 class ReadAlign {
     public:
+#ifdef STAR_PROFILE
+        unsigned long long profCyc[3] = {0,0,0}; //this read: seed, windows, stitch cycles
+        unsigned long long profCnt[3] = {0,0,0}; //this read: MMP queries, SA binary searches, SAi-only/unique shortcuts
+        unsigned long long profWin[5] = {0,0,0,0,0}; //this read: window create, flank, assign cycles; SA entries scanned in create, assign
+#endif
         ReadAlign (Parameters& Pin, Genome &genomeIn, Transcriptome *TrIn, int iChunk);//allocate arrays
         int oneRead();
 

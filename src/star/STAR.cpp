@@ -18,6 +18,7 @@ extern "C" void __gcov_dump(void);
 #include "ReadAlignChunk.h"
 #include "ReadAlign.h"
 #include "SeqCache.h"
+#include "StarAccel.h"
 #include "Stats.h"
 #include "genomeGenerate.h"
 #include "outputSJ.h"
@@ -216,6 +217,11 @@ int star_main_impl(int argInN, char *argIn[])
 
     // sequence cache for the main mapping pass (after any 2-pass junction insertion)
     g_seqCache = SeqCache::create(P, genomeMain.nGenome);
+    {
+        const char *fa = getenv("SINGLET_STAR_FASTASSIGN");
+        g_starFastAssign = !(fa != nullptr && fa[0] == '0');
+        P.inOut->logMain << "FASTASSIGN: " << (g_starFastAssign ? "on" : "off") << "\n";
+    }
 #ifdef STAR_PROFILE
     auto profClock0 = std::chrono::steady_clock::now(); unsigned long long profTsc0 = __rdtsc();
 #endif
@@ -282,7 +288,18 @@ int star_main_impl(int argInN, char *argIn[])
             P.inOut->logMain << " " << nm[i] << "=" << g_prof[i] / hz << "s";
         const char *on[6] = {"unique", "multi", "tooManyLoci", "tooShort", "otherUnmapped", "cacheHit"};
         for (int i = 0; i < 6; i++)
-            P.inOut->logMain << " " << on[i] << "=" << g_profOutcome[i][1] << "reads/" << g_profOutcome[i][0] / hz << "s";
+            P.inOut->logMain << " " << on[i] << "=" << g_profOutcome[i][1] << "reads/" << g_profOutcome[i][0] / hz << "s"
+                             << "[seed=" << g_profOutcomeDetail[i][0] / hz << ",win=" << g_profOutcomeDetail[i][1] / hz << ",stitch=" << g_profOutcomeDetail[i][2] / hz
+                             << ",mmp=" << g_profOutcomeDetail[i][3] << ",saSearch=" << g_profOutcomeDetail[i][4] << ",windows=" << g_profOutcomeDetail[i][5]
+                             << ",shortProven=" << g_profOutcomeDetail[i][6]
+                             << ",winCreate=" << g_profOutcomeDetail[i][7] / hz << ",winFlank=" << g_profOutcomeDetail[i][8] / hz
+                             << ",winAssign=" << g_profOutcomeDetail[i][9] / hz << ",saAnchor=" << g_profOutcomeDetail[i][10]
+                             << ",saAll=" << g_profOutcomeDetail[i][11] << "]";
+        const char *cn[7] = {"g1perfectU", "g1perfectS", "g1mm1U", "g1mm1S", "g1otherU", "g1otherS", "uniqueOther"};
+        for (int i = 0; i < 7; i++)
+            P.inOut->logMain << " " << cn[i] << "=" << g_profClass[i][1] << "reads/" << g_profClass[i][0] / hz << "s"
+                             << "[seed=" << g_profClassDetail[i][0] / hz << ",win=" << g_profClassDetail[i][1] / hz << ",stitch=" << g_profClassDetail[i][2] / hz
+                             << ",mmp=" << g_profClassDetail[i][3] << ",saSearch=" << g_profClassDetail[i][4] << "]";
         P.inOut->logMain << "\n" << flush;
     }
 #endif

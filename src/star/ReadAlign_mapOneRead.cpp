@@ -24,6 +24,10 @@ int ReadAlign::mapOneRead() {
     };
 
     resetN(); //reset aligns counters to 0
+#ifdef STAR_PROFILE
+    profCyc[0]=profCyc[1]=profCyc[2]=0; profCnt[0]=profCnt[1]=profCnt[2]=0;
+    for (int k=0; k<5; k++) profWin[k]=0;
+#endif
 
     //reset/initialize a transcript
     trInit->reset();
@@ -149,6 +153,9 @@ int ReadAlign::mapOneRead() {
     };
 
     PROF_ADD(PROF_seed, tSeed);
+#ifdef STAR_PROFILE
+    profCyc[0] = __rdtsc() - tSeed;
+#endif
     #ifdef OFF_AFTER_SEEDING
         #warning OFF_AFTER_SEEDING
         return 0;
